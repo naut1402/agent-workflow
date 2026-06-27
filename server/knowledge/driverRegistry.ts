@@ -9,7 +9,7 @@ export async function loadKnowledgeConfig(devTeamRoot) {
   const configPath = path.join(devTeamRoot, 'knowledge.config.yaml')
   try {
     const raw = await fs.readFile(configPath, 'utf8')
-    const cfg = yaml.load(raw) || {}
+    const cfg: any = yaml.load(raw) || {}
     const driver = cfg.driver || 'file'
     if (!SUPPORTED.includes(driver)) {
       return { driver: 'file', warning: `unsupported driver "${driver}", using file` }

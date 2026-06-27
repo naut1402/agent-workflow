@@ -25,9 +25,9 @@ function sanitiseTags(tags) {
   return [...new Set(list.map((t) => String(t).trim().toLowerCase()).filter((t) => /^[a-z0-9][a-z0-9_-]{0,31}$/.test(t)))]
 }
 
-function parseEntryFile(raw, id, filePath) {
+function parseEntryFile(raw: string, id: string, filePath: string) {
   const lines = raw.split(/\r?\n/)
-  let fm = {}
+  let fm: any = {}
   let bodyStart = 0
   if (lines[0]?.trim() === '---') {
     const end = lines.findIndex((line, i) => i > 0 && line.trim() === '---')
@@ -105,9 +105,9 @@ async function walkEntries(base) {
   return entries
 }
 
-export function createFileDriver(devTeamRoot) {
+export function createFileDriver(devTeamRoot: string) {
   return {
-    async list({ tags, scope, query } = {}) {
+    async list({ tags, scope, query }: { tags?: any; scope?: string; query?: string } = {}) {
       const base = await ensureDirs(devTeamRoot)
       let entries = await walkEntries(base)
       if (scope && SCOPES.includes(scope)) {
@@ -141,7 +141,7 @@ export function createFileDriver(devTeamRoot) {
       return parseEntryFile(raw, `${realScope}/${sanitiseSlug(realSlug)}`, filePath)
     },
 
-    async write({ id, title, slug, scope = 'project', tags, content }) {
+    async write({ id, title, slug, scope = 'project', tags, content }: { id?: string; title?: string; slug?: string; scope?: string; tags?: any; content?: string }) {
       const base = await ensureDirs(devTeamRoot)
       let targetScope = scope
       let targetSlug = slug
@@ -164,7 +164,7 @@ export function createFileDriver(devTeamRoot) {
       return this.read(entryId)
     },
 
-    async upload({ filename, content, scope = 'project', tags, title }) {
+    async upload({ filename, content, scope = 'project', tags, title }: { filename: string; content: string; scope?: string; tags?: any; title?: string }) {
       if (Buffer.byteLength(content, 'utf8') > MAX_UPLOAD_BYTES) {
         throw new Error('file too large (max 512KB)')
       }
