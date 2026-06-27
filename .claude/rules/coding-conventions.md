@@ -8,6 +8,9 @@
 - `strict: false` ở giai đoạn đầu, **bật `strict` dần theo từng module** khi module đó đã có type vững.
 - Không dùng `enum` (ưu tiên union literal type). Không default export trừ khi framework yêu cầu (vd Vue SFC).
 
+## TS quirks đã gặp
+- **Discriminated union với discriminant kiểu boolean** (`{ok:true,...}|{ok:false,...}`): `if (!v.ok) return v` / `if (v.ok){}` **không narrow** đúng dưới vue-tsc (TS6) trong repo này. Dùng **`in`-operator narrowing** thay thế: `if ('error' in v) return v` (hoặc đặt discriminant là string literal `kind: 'ok'|'err'`).
+
 ## Type & validation — Zod là single source of truth
 - Định nghĩa schema bằng **Zod 1 lần**, suy ra type bằng `z.infer`. KHÔNG viết tay cặp `interface` + validator trùng nhau.
 - Validate ở **mọi biên I/O**: đọc state JSON, YAML pipeline, request body. Dùng `safeParse` để **giữ triết lý defensive** (parse fail → trả default, không throw).

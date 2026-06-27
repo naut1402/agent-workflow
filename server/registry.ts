@@ -18,33 +18,68 @@ import crypto from 'node:crypto'
 
 const REGISTRY_VERSION = 1
 
+export interface Project {
+  id: string
+  name: string
+  kind: string
+  path: string
+  addedAt: string
+  default: boolean
+}
+
+export interface Registry {
+  version: number
+  projects: Project[]
+}
+
+export type ValidateResult =
+  | { ok: true; path: string; name: string }
+  | { ok: false; status: number; error: string }
+
+export type AddResult =
+  | { ok: true; project: Project }
+  | { ok: false; status: number; error: string }
+
+export interface RegistryContext {
+  registry: {
+    list: typeof list
+    get: typeof get
+    add: typeof add
+    remove: typeof remove
+    validateProjectPath: typeof validateProjectPath
+    seedDefault: typeof seedDefault
+  }
+  defaultRoot: string | null
+  resolveProjectRoot: (projectId: string | null) => string | null
+}
+
 // ── Locations ─────────────────────────────────────────────────────────────────
 
 // Config home for the registry. Override with DEV_TEAM_DASHBOARD_HOME so the
 // store can live somewhere else (tests, multi-instance). Falls back to
 // `~/.dev-team-dashboard`.
-export function registryHome() {
+export function registryHome(): string {
   const override = process.env.DEV_TEAM_DASHBOARD_HOME
   if (override && override.trim()) return path.resolve(override.trim())
   return path.join(os.homedir(), '.dev-team-dashboard')
 }
 
-export function registryFile() {
+export function registryFile(): string {
   return path.join(registryHome(), 'projects.json')
 }
 
 // ── Load / save ────────────────────────────────────────────────────────────────
 
-function emptyRegistry() {
+function emptyRegistry(): Registry {
   return { version: REGISTRY_VERSION, projects: [] }
 }
 
 // Read the registry. Never throws: a missing or corrupt file is treated as an
 // empty registry (mirrors readState's resilience in devTeamApi.js) so the
 // server / MCP never crashes on a bad file.
-export function loadRegistry() {
+export function loadRegistry(): Registry {
   const file = registryFile()
-  let raw
+  let raw: string
   try {
     raw = fs.readFileSync(file, 'utf8')
   } catch {
@@ -58,7 +93,6 @@ export function loadRegistry() {
     return { version: data.version || REGISTRY_VERSION, projects: data.projects }
   } catch {
     // Corrupt JSON — warn and degrade gracefully instead of crashing.
-    // eslint-disable-next-line no-console
     console.warn(`[dev-team-dashboard] projects.json corrupt, treating as empty: ${file}`)
     return emptyRegistry()
   }
@@ -66,7 +100,7 @@ export function loadRegistry() {
 
 // Persist the registry atomically (write temp + rename), creating the config
 // home directory if it does not exist (idempotent).
-export function saveRegistry(reg) {
+export function saveRegistry(reg: Registry): Registry {
   const home = registryHome()
   fs.mkdirSync(home, { recursive: true })
   const file = registryFile()
@@ -83,7 +117,7 @@ export function saveRegistry(reg) {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function slug(name) {
+function slug(name: unknown): string {
   return String(name || '')
     .trim()
     .toLowerCase()
@@ -92,7 +126,7 @@ function slug(name) {
     .slice(0, 40) || 'project'
 }
 
-function shortHash(input) {
+function shortHash(input: unknown): string {
   return crypto.createHash('sha1').update(String(input)).digest('hex').slice(0, 8)
 }
 
@@ -101,7 +135,7 @@ function shortHash(input) {
 // Validate + canonicalise a user-supplied project path. Returns
 //   { ok: true, path: <canonical .dev-team-agent dir>, name: <derived> }
 // or { ok: false, status, error } on rejection. See design §4.2.
-export function validateProjectPath(input, name) {
+export function validateProjectPath(input: unknown, name?: unknown): ValidateResult {
   if (typeof input !== 'string' || !input.trim()) {
     return { ok: false, status: 400, error: 'path is required' }
   }
@@ -113,7 +147,7 @@ export function validateProjectPath(input, name) {
   }
 
   // 2. Resolve canonical path (guards against symlink escape, .. segments).
-  let abs
+  let abs: string
   try {
     abs = fs.realpathSync(path.resolve(raw))
   } catch {
@@ -121,7 +155,7 @@ export function validateProjectPath(input, name) {
   }
 
   // Must be a directory.
-  let stat
+  let stat: fs.Stats
   try {
     stat = fs.statSync(abs)
   } catch {
@@ -133,12 +167,12 @@ export function validateProjectPath(input, name) {
 
   // 3. Either the path itself IS `.dev-team-agent`, or it contains one
   //    (allow pointing at a project root — we then descend into it).
-  let workspace
+  let workspace: string
   if (path.basename(abs) === '.dev-team-agent') {
     workspace = abs
   } else {
     const inner = path.join(abs, '.dev-team-agent')
-    let innerCanonical
+    let innerCanonical: string
     try {
       innerCanonical = fs.realpathSync(inner)
       if (!fs.statSync(innerCanonical).isDirectory()) throw new Error('not dir')
@@ -158,21 +192,21 @@ export function validateProjectPath(input, name) {
   return { ok: true, path: workspace, name: derivedName }
 }
 
-function makeId(name, canonicalPath) {
+function makeId(name: string, canonicalPath: string): string {
   return `${slug(name)}-${shortHash(canonicalPath)}`
 }
 
 // ── CRUD ───────────────────────────────────────────────────────────────────────
 
 // List all registered projects + the default project id (if any).
-export function list() {
+export function list(): { projects: Project[]; defaultId: string | null } {
   const reg = loadRegistry()
   const def = reg.projects.find((p) => p.default)
   return { projects: reg.projects, defaultId: def ? def.id : null }
 }
 
 // Get one project by id (or null).
-export function get(id) {
+export function get(id: string | null | undefined): Project | null {
   if (!id) return null
   const reg = loadRegistry()
   return reg.projects.find((p) => p.id === id) || null
@@ -181,9 +215,10 @@ export function get(id) {
 // Add a project. Validates + canonicalises the path; idempotent on canonical
 // path (returns the existing entry instead of duplicating). Returns
 //   { ok: true, project } | { ok: false, status, error }
-export function add({ path: inputPath, name } = {}) {
+export function add({ path: inputPath, name }: { path?: string; name?: string } = {}): AddResult {
   const v = validateProjectPath(inputPath, name)
-  if (!v.ok) return v
+  // `in`-operator narrowing (boolean-discriminant narrowing misbehaves under vue-tsc here).
+  if ('error' in v) return v
 
   const reg = loadRegistry()
 
@@ -191,7 +226,7 @@ export function add({ path: inputPath, name } = {}) {
   const existing = reg.projects.find((p) => p.path === v.path)
   if (existing) return { ok: true, project: existing }
 
-  const project = {
+  const project: Project = {
     id: makeId(v.name, v.path),
     name: v.name,
     kind: 'local',
@@ -208,7 +243,9 @@ export function add({ path: inputPath, name } = {}) {
 // filesystem — only the registry entry. Refuses to remove the default entry
 // (a default must remain for backward-compat). Returns
 //   { ok: true, removed: true } | { ok: false, status, error }
-export function remove(id) {
+export function remove(
+  id: string | null | undefined,
+): { ok: true; removed: true } | { ok: false; status: number; error: string } {
   if (!id) return { ok: false, status: 400, error: 'id is required' }
   const reg = loadRegistry()
   const idx = reg.projects.findIndex((p) => p.id === id)
@@ -224,7 +261,7 @@ export function remove(id) {
 // Seed a default project from an explicit `.dev-team-agent` root (e.g.
 // DEV_TEAM_ROOT) when the registry is empty. Idempotent: does nothing if any
 // project is already registered. Returns the seeded project or null.
-export function seedDefault(devTeamRoot) {
+export function seedDefault(devTeamRoot: string | null | undefined): Project | null {
   if (!devTeamRoot) return null
   const reg = loadRegistry()
   if (reg.projects.length) return null
@@ -242,7 +279,10 @@ export function seedDefault(devTeamRoot) {
 //       2. registry entry with default: true
 //       3. opts.defaultRoot (e.g. Vite cwd/..)     ← legacy fallback
 // Design §4.3.
-export function resolveProjectRoot(projectId, opts = {}) {
+export function resolveProjectRoot(
+  projectId: string | null | undefined,
+  opts: { defaultRoot?: string | null } = {},
+): string | null {
   if (projectId) {
     const project = get(projectId)
     return project ? project.path : null
@@ -265,10 +305,12 @@ export function resolveProjectRoot(projectId, opts = {}) {
 // Build a `ctx` object for createApiHandler / MCP. `defaultRoot` is the legacy
 // fallback used when no project is selected and neither DEV_TEAM_ROOT nor a
 // registry default exists (preserves the old Vite `cwd/..` behaviour).
-export function createRegistryContext({ defaultRoot } = {}) {
+export function createRegistryContext(
+  { defaultRoot }: { defaultRoot?: string | null } = {},
+): RegistryContext {
   return {
     registry: { list, get, add, remove, validateProjectPath, seedDefault },
     defaultRoot: defaultRoot || null,
-    resolveProjectRoot: (projectId) => resolveProjectRoot(projectId, { defaultRoot }),
+    resolveProjectRoot: (projectId: string | null) => resolveProjectRoot(projectId, { defaultRoot }),
   }
 }
