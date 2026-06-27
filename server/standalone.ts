@@ -1,11 +1,11 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Standalone dev-team-dashboard server.
 //
-//   node server/standalone.js
+//   bun server/standalone.ts
 //
-// A neutral Node HTTP server that does NOT live inside any single
+// A neutral HTTP server that does NOT live inside any single
 // `.dev-team-agent/` workspace. It:
-//   - serves the built Vue SPA from `dist/` (run `npm run build` first),
+//   - serves the built Vue SPA from `dist/` (run `bun run build` first),
 //   - mounts the shared API handler (createApiHandler) at `/api/*`,
 //   - resolves each request's project via the shared ProjectRegistry
 //     (~/.dev-team-dashboard/projects.json),
@@ -17,6 +17,7 @@
 // Design ref: U0001 design.md §4.0 (architecture), §4.6 (run mode).
 
 import http from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -30,7 +31,7 @@ const distDir = path.resolve(__dirname, '..', 'dist')
 const HOST = process.env.DEV_TEAM_DASHBOARD_HOST || '127.0.0.1'
 const PORT = Number(process.env.DEV_TEAM_DASHBOARD_PORT || process.env.PORT || 5174)
 
-const CONTENT_TYPES = {
+const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
@@ -48,13 +49,12 @@ const CONTENT_TYPES = {
   '.map': 'application/json; charset=utf-8',
 }
 
-function contentType(filePath) {
+function contentType(filePath: string): string {
   return CONTENT_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream'
 }
 
 // Resolve a request pathname to a file inside distDir, blocking traversal.
-// Returns the absolute file path or null.
-function resolveStatic(pathname) {
+function resolveStatic(pathname: string): string | null {
   const clean = decodeURIComponent(pathname.split('?')[0])
   const rel = clean === '/' ? 'index.html' : clean.replace(/^\/+/, '')
   const target = path.resolve(distDir, rel)
@@ -62,8 +62,8 @@ function resolveStatic(pathname) {
   return target
 }
 
-async function serveStatic(req, res) {
-  const url = new URL(req.url, 'http://localhost')
+async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const url = new URL(req.url || '/', 'http://localhost')
   let target = resolveStatic(url.pathname)
 
   // SPA fallback: unknown non-asset path → index.html (so client routing works).
@@ -86,11 +86,11 @@ async function serveStatic(req, res) {
   } catch {
     res.statusCode = 404
     res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-    res.end('Not found. Did you run `npm run build` to produce dist/?')
+    res.end('Not found. Did you run `bun run build` to produce dist/?')
   }
 }
 
-function main() {
+function main(): void {
   // Seed default project from DEV_TEAM_ROOT when the registry is empty.
   if (process.env.DEV_TEAM_ROOT) {
     try {
@@ -98,7 +98,7 @@ function main() {
       if (seeded) {
         console.log(`[dev-team-dashboard] seeded default project from DEV_TEAM_ROOT → ${seeded.path}`)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn(`[dev-team-dashboard] could not seed DEV_TEAM_ROOT: ${err.message || err}`)
     }
   }
@@ -113,7 +113,7 @@ function main() {
       const handled = await apiHandler(req, res)
       if (handled) return
       await serveStatic(req, res)
-    } catch (err) {
+    } catch (err: any) {
       res.statusCode = 500
       res.setHeader('Content-Type', 'application/json; charset=utf-8')
       res.end(JSON.stringify({ error: String(err && err.message ? err.message : err) }))
@@ -123,7 +123,7 @@ function main() {
   server.listen(PORT, HOST, () => {
     const { projects } = list()
     if (!fs.existsSync(distDir)) {
-      console.warn(`[dev-team-dashboard] dist/ not found — run \`npm run build\` first (${distDir})`)
+      console.warn(`[dev-team-dashboard] dist/ not found — run \`bun run build\` first (${distDir})`)
     }
     console.log(`\n  dev-team-dashboard (standalone) → http://${HOST}:${PORT}`)
     console.log(`  registry: ${projects.length} project(s)`)
