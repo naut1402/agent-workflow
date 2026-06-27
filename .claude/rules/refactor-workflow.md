@@ -18,6 +18,7 @@ Branch setup môi trường: **`refactor/setup-environment`** (tách từ `refac
    - E2E → **chỉ chuyển đổi code, không cần xác nhận chạy** (làm sau cho đỡ tốn token).
 8. **Commit & push**.
 9. **Chờ CI/CD chạy và xác nhận kết quả** (job `test` phải xanh).
+10. **Nếu có thực hiện test (chạy thật)** → **comment kết quả test lên PR** (số test pass/fail, coverage, link CI run). Nội dung dài → bọc trong `<details>`. *(Chỉ comment khi test được CHẠY; bước migrate-only/e2e chưa chạy thì bỏ qua.)*
 
 ## Cấu trúc module đích
 

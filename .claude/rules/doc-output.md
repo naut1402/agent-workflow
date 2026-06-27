@@ -15,6 +15,11 @@ Quy ước xuất tài liệu trong quá trình refactor — để mọi agent/s
 - **Comment lên PR** (không chỉ để trong code). Nếu dài → bọc `<details><summary>…</summary>`.
 - Mỗi test case nêu: điều kiện đầu vào → hành vi mong đợi.
 
+## Kết quả test (khi có chạy test)
+- **Khi đã CHẠY test thật** (unit/integration/CI), **comment kết quả lên PR**: tổng số pass/fail, coverage nếu có, link tới CI run.
+- Nội dung dài → bọc `<details><summary>…</summary>`.
+- Không comment kết quả cho bước chỉ migrate code mà chưa chạy (vd e2e hoãn).
+
 ## Evidence
 - E2E/verify evidence ghi vào `docs/<task>-evidence/` (screenshot + `verify-results.json`) — giữ quy ước hiện có.
 - Coverage report: `coverage/frontend/` (vitest). CI upload artifact `test-evidence`.
