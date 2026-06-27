@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "serve": "bun server/standalone.js",
     "start": "vite build && bun server/standalone.js",
-    "mcp": "bun mcp/server.mjs",
+    "mcp": "bun mcp/server.ts",
     "typecheck": "vue-tsc --noEmit",
     "test": "bun test server mcp",
     "test:fe": "vitest run --coverage",
