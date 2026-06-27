@@ -1,3 +1,9 @@
 node_modules/
 dist/
 CLAUDE.local.md
+
+# Test / coverage artifacts
+coverage/
+playwright-report/
+test-results/
+.vite/

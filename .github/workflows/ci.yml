@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'refactor/**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck (vue-tsc)
+        run: bun run typecheck
+
+      - name: Unit + integration tests (backend, bun test)
+        run: bun run test
+
+      - name: Unit tests (frontend, vitest) + coverage
+        run: bun run test:fe
+
+      - name: Build
+        run: bun run build
+
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+
+      - name: E2E tests (playwright)
+        run: bun run test:e2e
+
+      - name: Upload coverage & reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-evidence
+          path: |
+            coverage/
+            playwright-report/
+            docs/**/verify-results.json
+          if-no-files-found: ignore
+          retention-days: 7
