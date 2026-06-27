@@ -12,12 +12,12 @@ async function readBody(req) {
   return body
 }
 
-function parseMultipart(ctype, body) {
+function parseMultipart(ctype: string, body: string) {
   const boundary = ctype.split('boundary=')[1]
   if (!boundary) return null
   const parts = body.split(`--${boundary}`)
-  const fields = {}
-  let file = null
+  const fields: Record<string, string> = {}
+  let file: { filename: string; content: string } | null = null
   for (const part of parts) {
     if (!part.includes('Content-Disposition')) continue
     const nameMatch = /name="([^"]+)"/.exec(part)
