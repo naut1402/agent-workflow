@@ -49,7 +49,8 @@ import {
   generateDraftFromNl,
   ensureDefaultTemplate,
 } from './agents/index.js'
-import { loadPipelineConfig, knownArtifactsFor } from './pipeline/index.js'
+import { loadPipelineConfig } from './pipeline/index.js'
+import { collectTasks, flowProfilePath } from './tasks/index.js'
 
 // Vite plugin: exposes a tiny read-only API over the `.dev-team-agent/` data
 // root so the dashboard can render orchestrator state without a separate server
@@ -61,122 +62,6 @@ import { loadPipelineConfig, knownArtifactsFor } from './pipeline/index.js'
 //   GET /api/pipeline-export?id=..  → structured phase-summary JSON (machine-readable)
 //   GET /api/profile                → orchestrator flow profile (future: editable)
 //   POST /api/profile               → persist profile (stub)
-
-// pipeline-export.json is machine-readable only — excluded from the UI artifact list.
-const MACHINE_FILES = new Set(['pipeline-export.json'])
-
-async function listArtifacts(taskDir, knownArtifacts) {
-  const out = {}
-  let entries = []
-  try {
-    entries = await fs.readdir(taskDir, { withFileTypes: true })
-  } catch {
-    return { artifacts: out, subtasks: [] }
-  }
-  const subtasks = []
-  for (const e of entries) {
-    if (e.isDirectory()) {
-      subtasks.push(e.name)
-      continue
-    }
-    if (MACHINE_FILES.has(e.name)) continue
-    if (e.name.endsWith('.md')) {
-      const meta = await statSafe(path.join(taskDir, e.name))
-      out[e.name] = { exists: true, mtime: meta.mtime, size: meta.size }
-    }
-  }
-  // Ensure known artifacts always appear (as not-yet-created) for a stable UI.
-  for (const name of knownArtifacts) {
-    if (!(name in out)) out[name] = { exists: false, mtime: null, size: 0 }
-  }
-  return { artifacts: out, subtasks }
-}
-
-async function readState(stateFile) {
-  try {
-    const raw = await fs.readFile(stateFile, 'utf8')
-    return { ok: true, state: JSON.parse(raw) }
-  } catch (err) {
-    return { ok: false, error: String(err && err.message ? err.message : err) }
-  }
-}
-
-async function collectTasks(root) {
-  const stateDir = path.join(root, '.dev-state')
-  const tasksDir = path.join(root, 'tasks')
-  const result = []
-
-  let stateFiles = []
-  try {
-    stateFiles = (await fs.readdir(stateDir)).filter((f) => f.endsWith('.json'))
-  } catch {
-    stateFiles = []
-  }
-
-  // Build the set of task ids from state files first, then fold in any task
-  // directories that have artifacts but no state yet (e.g. legacy / mid-init).
-  const ids = new Set(stateFiles.map((f) => f.replace(/\.json$/, '')))
-  try {
-    for (const e of await fs.readdir(tasksDir, { withFileTypes: true })) {
-      if (e.isDirectory()) ids.add(e.name)
-    }
-  } catch {
-    /* no tasks dir yet */
-  }
-
-  for (const id of [...ids].sort()) {
-    const stateFile = path.join(stateDir, `${id}.json`)
-    const stateMeta = await statSafe(stateFile)
-    const { ok, state, error } = stateMeta.exists
-      ? await readState(stateFile)
-      : { ok: false, state: null, error: 'no state file' }
-
-    const taskDir = path.join(tasksDir, id)
-    const cfg = await loadPipelineConfig(root, id)
-    const { artifacts, subtasks } = await listArtifacts(taskDir, knownArtifactsFor(cfg))
-
-    let qa = null
-    let qa_count = 0
-    if (artifacts['qa.md'] && artifacts['qa.md'].exists) {
-      try {
-        qa = await fs.readFile(path.join(taskDir, 'qa.md'), 'utf8')
-        // Count Q&A items: each question starts with a level-2 heading "## Q"
-        qa_count = (qa.match(/^##\s+Q\d/gm) || []).length
-      } catch {
-        qa = null
-      }
-    }
-
-    result.push({
-      task_id: id,
-      state_ok: ok,
-      state_error: ok ? null : error,
-      state_mtime: stateMeta.mtime,
-      // Spread known state fields with safe defaults so the UI never crashes on
-      // a partially-written file.
-      parent_task_id: state?.parent_task_id ?? null,
-      current_phase: state?.current_phase ?? null,
-      hitl_pending: state?.hitl_pending ?? null,
-      review_round: state?.review_round ?? 0,
-      auto_review: state?.auto_review ?? false,
-      doc_review_round: state?.doc_review_round ?? { investigate: 0, design: 0 },
-      inherit_from_parent: state?.inherit_from_parent ?? [],
-      export_json: state?.export_json ?? false,
-      artifacts,
-      subtasks,
-      pipeline: cfg,
-      has_qa: !!(artifacts['qa.md'] && artifacts['qa.md'].exists),
-      qa_count,
-      qa,
-    })
-  }
-  return result
-}
-
-// Resolve an artifact path safely inside tasks/<id>/, blocking traversal.
-function flowProfilePath(root, id) {
-  return path.join(root, 'flow-profiles', `${id}.json`)
-}
 
 // ── Core request handler (shared by Vite middleware + standalone server) ───────
 //
