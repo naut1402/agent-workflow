@@ -1,13 +1,26 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { registryHome } from '../registry.js'
-import { CREDENTIALS_VERSION, sanitiseCredentialId } from './types.js'
+import {
+  CREDENTIALS_VERSION,
+  sanitiseCredentialId,
+  type CredentialProfile,
+  type CredentialsStore,
+  type MutationResult,
+} from './types.js'
 
-function credentialsFile() {
+export type ResolvedSecret =
+  | { type: 'none' }
+  | { type: 'cli-session' }
+  | { type: 'env'; key: string; value: string | null }
+  | { type: 'file'; path: string }
+  | { type: 'unknown'; ref: string }
+
+function credentialsFile(): string {
   return path.join(registryHome(), 'credentials.json')
 }
 
-function emptyStore() {
+function emptyStore(): CredentialsStore {
   return {
     version: CREDENTIALS_VERSION,
     profiles: [
@@ -21,9 +34,9 @@ function emptyStore() {
   }
 }
 
-export function loadCredentials() {
+export function loadCredentials(): CredentialsStore {
   const file = credentialsFile()
-  let raw
+  let raw: string
   try {
     raw = fs.readFileSync(file, 'utf8')
   } catch {
@@ -39,7 +52,7 @@ export function loadCredentials() {
   }
 }
 
-export function saveCredentials(store) {
+export function saveCredentials(store: CredentialsStore): CredentialsStore {
   const home = registryHome()
   fs.mkdirSync(home, { recursive: true })
   const file = credentialsFile()
@@ -54,24 +67,24 @@ export function saveCredentials(store) {
   return store
 }
 
-export function listCredentials() {
+export function listCredentials(): CredentialProfile[] {
   return loadCredentials().profiles
 }
 
-export function getCredential(id) {
+export function getCredential(id: unknown): CredentialProfile | null {
   const clean = sanitiseCredentialId(id)
   if (!clean) return null
   return loadCredentials().profiles.find((p) => p.id === clean) || null
 }
 
-export function upsertCredential(profile) {
+export function upsertCredential(profile: any): MutationResult<{ profile: CredentialProfile }> {
   const id = sanitiseCredentialId(profile?.id)
   if (!id) return { ok: false, error: 'invalid credential id' }
   if (!profile.provider || typeof profile.provider !== 'string') {
     return { ok: false, error: 'provider is required' }
   }
   const store = loadCredentials()
-  const entry = {
+  const entry: CredentialProfile = {
     id,
     provider: profile.provider,
     label: String(profile.label || id).slice(0, 128),
@@ -84,7 +97,7 @@ export function upsertCredential(profile) {
   return { ok: true, profile: entry }
 }
 
-export function deleteCredential(id) {
+export function deleteCredential(id: unknown): MutationResult {
   const clean = sanitiseCredentialId(id)
   if (!clean) return { ok: false, status: 400, error: 'invalid id' }
   const store = loadCredentials()
@@ -99,7 +112,7 @@ export function deleteCredential(id) {
 }
 
 /** Resolve secretRef for provider runtime (never return raw secrets in API). */
-export function resolveSecretRef(profile) {
+export function resolveSecretRef(profile: CredentialProfile | undefined | null): ResolvedSecret {
   if (!profile?.secretRef) return { type: 'none' }
   const ref = profile.secretRef
   if (ref === 'cli-session') return { type: 'cli-session' }

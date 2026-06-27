@@ -1,13 +1,19 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { registryHome } from '../registry.js'
-import { RUNNERS_VERSION, sanitiseRunnerId } from './types.js'
+import {
+  RUNNERS_VERSION,
+  sanitiseRunnerId,
+  type RunnerConfig,
+  type RunnersStore,
+  type MutationResult,
+} from './types.js'
 
-function runnersFile() {
+function runnersFile(): string {
   return path.join(registryHome(), 'runners.json')
 }
 
-function defaultRunners() {
+function defaultRunners(): RunnersStore {
   return {
     version: RUNNERS_VERSION,
     defaultRunnerId: 'claude-code-local',
@@ -30,9 +36,9 @@ function defaultRunners() {
   }
 }
 
-export function loadRunners() {
+export function loadRunners(): RunnersStore {
   const file = runnersFile()
-  let raw
+  let raw: string
   try {
     raw = fs.readFileSync(file, 'utf8')
   } catch {
@@ -52,7 +58,7 @@ export function loadRunners() {
   }
 }
 
-export function saveRunners(store) {
+export function saveRunners(store: RunnersStore): RunnersStore {
   const home = registryHome()
   fs.mkdirSync(home, { recursive: true })
   const file = runnersFile()
@@ -71,18 +77,18 @@ export function saveRunners(store) {
   return store
 }
 
-export function listRunners() {
+export function listRunners(): { defaultRunnerId: string | null; runners: RunnerConfig[] } {
   const store = loadRunners()
   return { defaultRunnerId: store.defaultRunnerId, runners: store.runners }
 }
 
-export function getRunner(id) {
+export function getRunner(id: unknown): RunnerConfig | null {
   const clean = sanitiseRunnerId(id)
   if (!clean) return null
   return loadRunners().runners.find((r) => r.id === clean) || null
 }
 
-export function getDefaultRunner() {
+export function getDefaultRunner(): RunnerConfig | null {
   const store = loadRunners()
   const hit =
     store.runners.find((r) => r.id === store.defaultRunnerId && r.enabled !== false) ||
@@ -90,14 +96,14 @@ export function getDefaultRunner() {
   return hit || null
 }
 
-export function upsertRunner(runner) {
+export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig }> {
   const id = sanitiseRunnerId(runner?.id)
   if (!id) return { ok: false, error: 'invalid runner id' }
   if (!runner.provider) return { ok: false, error: 'provider is required' }
   if (!runner.credentialId) return { ok: false, error: 'credentialId is required' }
 
   const store = loadRunners()
-  const entry = {
+  const entry: RunnerConfig = {
     id,
     name: String(runner.name || id).slice(0, 128),
     provider: runner.provider,
@@ -118,12 +124,12 @@ export function upsertRunner(runner) {
   return { ok: true, runner: entry }
 }
 
-function sanitiseCredentialId(id) {
+function sanitiseCredentialId(id: unknown): string | null {
   if (typeof id !== 'string' || !id.trim()) return null
   return id.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || null
 }
 
-export function deleteRunner(id) {
+export function deleteRunner(id: unknown): MutationResult {
   const clean = sanitiseRunnerId(id)
   if (!clean) return { ok: false, status: 400, error: 'invalid id' }
   const store = loadRunners()
@@ -140,7 +146,7 @@ export function deleteRunner(id) {
   return { ok: true }
 }
 
-export function setDefaultRunner(id) {
+export function setDefaultRunner(id: unknown): MutationResult<{ defaultRunnerId: string }> {
   const clean = sanitiseRunnerId(id)
   if (!clean) return { ok: false, status: 400, error: 'invalid id' }
   const store = loadRunners()
@@ -152,8 +158,11 @@ export function setDefaultRunner(id) {
   return { ok: true, defaultRunnerId: clean }
 }
 
-export function substituteConfig(config, vars) {
-  const out = {}
+export function substituteConfig(
+  config: Record<string, unknown> | undefined,
+  vars: { projectRoot?: string },
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(config || {})) {
     if (typeof v === 'string') {
       out[k] = v.replace(/\$\{projectRoot\}/g, vars.projectRoot || '')

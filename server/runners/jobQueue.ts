@@ -6,29 +6,39 @@ import { getRunner, getDefaultRunner, substituteConfig } from './registry.js'
 import { getCredential } from './credentials.js'
 import { getProvider } from './providerRegistry.js'
 import { resolveAgent } from './agentResolver.js'
+import type { JobRecord, MutationResult } from './types.js'
 
-function jobsDir() {
+export interface SubmitJobInput {
+  runnerId?: string
+  agentRef: string
+  workspace: string
+  userPrompt?: string
+  promptRef?: string
+  produces?: string[]
+  metadata?: Record<string, unknown>
+}
+
+function jobsDir(): string {
   return path.join(registryHome(), 'jobs')
 }
 
-function jobFile(id) {
+function jobFile(id: string): string {
   return path.join(jobsDir(), `${id}.json`)
 }
 
-function ensureJobsDir() {
+function ensureJobsDir(): void {
   fs.mkdirSync(jobsDir(), { recursive: true })
 }
 
-export function loadJob(id) {
+export function loadJob(id: string): JobRecord | null {
   try {
-    const raw = fs.readFileSync(jobFile(id), 'utf8')
-    return JSON.parse(raw)
+    return JSON.parse(fs.readFileSync(jobFile(id), 'utf8'))
   } catch {
     return null
   }
 }
 
-function saveJob(job) {
+function saveJob(job: JobRecord): JobRecord {
   ensureJobsDir()
   const file = jobFile(job.id)
   const tmp = `${file}.tmp`
@@ -37,30 +47,30 @@ function saveJob(job) {
   return job
 }
 
-export function listJobs(limit = 20) {
+export function listJobs(limit = 20): JobRecord[] {
   ensureJobsDir()
   const files = fs.readdirSync(jobsDir()).filter((f) => f.endsWith('.json'))
   const jobs = files
-    .map((f) => {
+    .map((f): JobRecord | null => {
       try {
         return JSON.parse(fs.readFileSync(path.join(jobsDir(), f), 'utf8'))
       } catch {
         return null
       }
     })
-    .filter(Boolean)
+    .filter((j): j is JobRecord => Boolean(j))
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
   return jobs.slice(0, limit)
 }
 
 let running = false
-const queue = []
+const queue: string[] = []
 
-async function processQueue() {
+async function processQueue(): Promise<void> {
   if (running) return
   running = true
   while (queue.length) {
-    const jobId = queue.shift()
+    const jobId = queue.shift()!
     const job = loadJob(jobId)
     if (!job || job.status !== 'queued') continue
     await runJob(job)
@@ -68,7 +78,7 @@ async function processQueue() {
   running = false
 }
 
-async function runJob(job) {
+async function runJob(job: JobRecord): Promise<void> {
   const runner = getRunner(job.runnerId) || getDefaultRunner()
   if (!runner || runner.enabled === false) {
     saveJob({
@@ -109,20 +119,15 @@ async function runJob(job) {
     /* ignore */
   }
 
-  saveJob({
-    ...job,
-    status: 'running',
-    startedAt: new Date().toISOString(),
-    logPath,
-  })
+  saveJob({ ...job, status: 'running', startedAt: new Date().toISOString(), logPath })
 
   let userPrompt = job.userPrompt || ''
   if (!userPrompt && job.promptRef) {
     try {
       userPrompt = fs.readFileSync(job.promptRef, 'utf8')
-    } catch (err) {
+    } catch (err: any) {
       saveJob({
-        ...loadJob(job.id),
+        ...(loadJob(job.id) as JobRecord),
         status: 'failed',
         finishedAt: new Date().toISOString(),
         error: `cannot read prompt: ${err.message}`,
@@ -131,15 +136,15 @@ async function runJob(job) {
     }
   }
 
-  const projectRoot = job.metadata?.projectRoot || path.dirname(job.workspace)
-  const devTeamRoot = job.metadata?.devTeamRoot || job.workspace
+  const projectRoot = (job.metadata?.projectRoot as string) || path.dirname(job.workspace)
+  const devTeamRoot = (job.metadata?.devTeamRoot as string) || job.workspace
 
   let resolvedAgent
   try {
     resolvedAgent = await resolveAgent(job.agentRef, { projectRoot, devTeamRoot })
-  } catch (err) {
+  } catch (err: any) {
     saveJob({
-      ...loadJob(job.id),
+      ...(loadJob(job.id) as JobRecord),
       status: 'failed',
       finishedAt: new Date().toISOString(),
       error: String(err.message || err),
@@ -147,7 +152,7 @@ async function runJob(job) {
     return
   }
 
-  const runnerConfig = substituteConfig(runner.config, { projectRoot })
+  const runnerConfig = substituteConfig(runner.config, { projectRoot }) as Record<string, any>
 
   const result = await provider.execute(
     {
@@ -164,7 +169,7 @@ async function runJob(job) {
   )
 
   saveJob({
-    ...loadJob(job.id),
+    ...(loadJob(job.id) as JobRecord),
     status: result.ok ? 'succeeded' : 'failed',
     finishedAt: new Date().toISOString(),
     exitCode: result.exitCode,
@@ -174,20 +179,10 @@ async function runJob(job) {
   })
 }
 
-/**
- * @param {object} input
- * @param {string} [input.runnerId]
- * @param {string} input.agentRef
- * @param {string} input.workspace
- * @param {string} [input.userPrompt]
- * @param {string} [input.promptRef]
- * @param {string[]} [input.produces]
- * @param {Record<string, unknown>} [input.metadata]
- */
-export function submitJob(input) {
+export function submitJob(input: SubmitJobInput): JobRecord {
   const id = crypto.randomUUID()
   const runner = input.runnerId ? getRunner(input.runnerId) : getDefaultRunner()
-  const job = {
+  const job: JobRecord = {
     id,
     status: 'queued',
     runnerId: runner?.id || input.runnerId || 'unknown',
@@ -210,7 +205,11 @@ export function submitJob(input) {
   return job
 }
 
-export async function submitAndWait(input, pollMs = 500, maxWaitMs = 3_600_000) {
+export async function submitAndWait(
+  input: SubmitJobInput,
+  pollMs = 500,
+  maxWaitMs = 3_600_000,
+): Promise<JobRecord> {
   const job = submitJob(input)
   const deadline = Date.now() + maxWaitMs
   while (Date.now() < deadline) {
@@ -224,7 +223,7 @@ export async function submitAndWait(input, pollMs = 500, maxWaitMs = 3_600_000) 
   throw new Error('job wait timeout')
 }
 
-export function cancelJob(id) {
+export function cancelJob(id: string): MutationResult {
   const job = loadJob(id)
   if (!job) return { ok: false, status: 404, error: 'not found' }
   if (job.status === 'succeeded' || job.status === 'failed') {
