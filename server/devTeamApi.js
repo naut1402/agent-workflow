@@ -39,60 +39,7 @@ import {
   parseCatalogAgentId,
   resolveCatalogAgentPath,
 } from './catalog/index.js'
-
-// ── Rules helpers ────────────────────────────────────────────────────────────
-
-const RULE_CATEGORIES = ['coding', 'doc-writing', 'doc-review', 'test', 'git-pr', 'other']
-
-function inferRuleCategory(filePath, fileName) {
-  const lower = `${filePath} ${fileName}`.toLowerCase()
-  if (/coding|convention|style|guideline/.test(lower)) return 'coding'
-  if (/doc-writing|document_writing|investigate|design|writing/.test(lower)) return 'doc-writing'
-  if (/doc-review|code-review/.test(lower)) return 'doc-review'
-  if (/\btest\b|testing|test-spec/.test(lower)) return 'test'
-  if (/git|commit|\bpr\b|branch/.test(lower)) return 'git-pr'
-  return 'other'
-}
-
-async function walkRuleFiles(dir, scope, baseDir, out) {
-  for (const entry of await safeReadDir(dir)) {
-    const full = path.join(dir, entry.name)
-    if (entry.isDirectory()) {
-      await walkRuleFiles(full, scope, baseDir, out)
-      continue
-    }
-    if (!/\.(md|mdc)$/i.test(entry.name)) continue
-    const rel = path.relative(baseDir, full).replace(/\\/g, '/')
-    const name = entry.name.replace(/\.(md|mdc)$/i, '')
-    out.push({
-      id: `${scope}:${rel}`,
-      name,
-      path: rel,
-      scope,
-      category: inferRuleCategory(rel, entry.name),
-    })
-  }
-}
-
-async function buildRules(root) {
-  const projectRoot = path.dirname(root)
-  const rules = []
-
-  await walkRuleFiles(path.join(projectRoot, '.claude', 'rules'), 'project', projectRoot, rules)
-  await walkRuleFiles(path.join(homeDir(), '.cursor', 'rules'), 'global', homeDir(), rules)
-
-  rules.sort(
-    (a, b) =>
-      a.scope.localeCompare(b.scope)
-      || a.category.localeCompare(b.category)
-      || a.name.localeCompare(b.name),
-  )
-
-  const foundCategories = new Set(rules.map((r) => r.category))
-  const categories = RULE_CATEGORIES.filter((c) => foundCategories.has(c))
-
-  return { rules, categories }
-}
+import { buildRules } from './rules/index.js'
 
 // ── Profile helpers ──────────────────────────────────────────────────────────
 
