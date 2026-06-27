@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../lib/workflowSteps.js'
 import { useSortable } from '../lib/useSortable.js'
-import { slugifySectionKey } from '../lib/agentMarkdown.js'
+import { slugifySectionKey } from '../../shared/agentMarkdown.js'
 import {
   fetchPipelineConfig,
   fetchWorkflowStepTemplates,

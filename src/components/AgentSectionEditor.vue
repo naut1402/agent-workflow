@@ -5,7 +5,7 @@ import {
   getSectionTitle,
   slugifySectionKey,
   emptyDraft,
-} from '../lib/agentMarkdown.js'
+} from '../../shared/agentMarkdown.js'
 import { useSortable } from '../lib/useSortable.js'
 import { saveAgentTemplate } from '../api.js'
 import WorkflowSectionEditor from './WorkflowSectionEditor.vue'

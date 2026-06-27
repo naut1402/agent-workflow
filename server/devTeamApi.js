@@ -24,23 +24,20 @@ import {
   heuristicDraftFromDescription,
   emptyDraft,
   draftFromAgentMarkdown,
-} from '../src/lib/agentMarkdown.js'
+} from '../shared/agentMarkdown.js'
+import { parseFrontmatter } from '../shared/frontmatter.js'
+import { homeDir, safeReadDir, statSafe, readYamlSafe } from '../shared/fs.js'
+import { json } from '../shared/http.js'
+import {
+  sanitiseProfileName,
+  sanitiseAgentName,
+  resolveArtifact,
+  isPrivateHostname,
+} from '../shared/sanitize.js'
 
 // ── Catalog helpers ──────────────────────────────────────────────────────────
 
 // Parse YAML frontmatter from a markdown file (content between first --- fences).
-function parseFrontmatter(raw) {
-  const lines = raw.split(/\r?\n/)
-  if (lines[0]?.trim() !== '---') return {}
-  const end = lines.findIndex((line, i) => i > 0 && line.trim() === '---')
-  if (end < 0) return {}
-  try {
-    return yaml.load(lines.slice(1, end).join('\n')) || {}
-  } catch {
-    return {}
-  }
-}
-
 // Walk up from `startDir` looking for `.claude-plugin/marketplace.json`.
 async function findMarketplaceJson(startDir) {
   let dir = startDir
@@ -118,18 +115,6 @@ async function scanPlugin(pluginDir, source, pluginLabel, opts = {}) {
   }
 
   return { skills, agents }
-}
-
-function homeDir() {
-  return process.env.USERPROFILE || process.env.HOME || ''
-}
-
-async function safeReadDir(dir) {
-  try {
-    return await fs.readdir(dir, { withFileTypes: true })
-  } catch {
-    return []
-  }
 }
 
 async function scanSkillsFlatDir(skillsRoot, source, pluginLabel, opts = {}) {
@@ -536,21 +521,6 @@ function profilesDir(root) {
   return path.join(root, 'pipeline-profiles')
 }
 
-function sanitiseProfileName(name) {
-  if (typeof name !== 'string' || !name.trim()) return null
-  // Reject names containing path separators or null bytes.
-  if (/[\\/\0]/.test(name)) return null
-  const clean = name.trim().replace(/[^a-zA-Z0-9_\-. ]/g, '').slice(0, 64)
-  return clean || null
-}
-
-function sanitiseAgentName(name) {
-  if (typeof name !== 'string' || !name.trim()) return null
-  if (/[\\/\0]/.test(name)) return null
-  const clean = name.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
-  return clean || null
-}
-
 function customAgentsDir(root) {
   return path.join(root, 'custom-agents')
 }
@@ -621,14 +591,6 @@ async function readCustomAgent(root, name) {
   } catch {
     return null
   }
-}
-
-function isPrivateHostname(hostname) {
-  const h = (hostname || '').toLowerCase()
-  if (h === 'localhost' || h.endsWith('.local')) return true
-  if (/^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h)) return true
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true
-  return false
 }
 
 async function fetchUrlSafe(urlStr) {
@@ -766,16 +728,6 @@ function perTaskStepsReplace(baseSteps, per) {
   return !per.steps.some((s) => s.id && baseIds.has(s.id))
 }
 
-async function readYamlSafe(p) {
-  try {
-    const raw = await fs.readFile(p, 'utf8')
-    const doc = yaml.load(raw)
-    return doc && typeof doc === 'object' ? doc : null
-  } catch {
-    return null
-  }
-}
-
 // Resolve pipeline config: built-in default ← global pipeline.yaml (full step
 // replace) ← per-task tasks/<id>/pipeline.yaml (patch by id, or full replace).
 async function loadPipelineConfig(root, id) {
@@ -824,23 +776,6 @@ function knownArtifactsFor(cfg) {
     }
   }
   return [...set]
-}
-
-function json(res, status, body) {
-  const payload = JSON.stringify(body)
-  res.statusCode = status
-  res.setHeader('Content-Type', 'application/json; charset=utf-8')
-  res.setHeader('Cache-Control', 'no-store')
-  res.end(payload)
-}
-
-async function statSafe(p) {
-  try {
-    const s = await fs.stat(p)
-    return { exists: true, mtime: s.mtimeMs, size: s.size }
-  } catch {
-    return { exists: false, mtime: null, size: 0 }
-  }
 }
 
 // pipeline-export.json is machine-readable only — excluded from the UI artifact list.
@@ -955,13 +890,6 @@ async function collectTasks(root) {
 }
 
 // Resolve an artifact path safely inside tasks/<id>/, blocking traversal.
-function resolveArtifact(root, id, name) {
-  const taskDir = path.resolve(root, 'tasks', id)
-  const target = path.resolve(taskDir, name)
-  if (target !== taskDir && !target.startsWith(taskDir + path.sep)) return null
-  return target
-}
-
 function flowProfilePath(root, id) {
   return path.join(root, 'flow-profiles', `${id}.json`)
 }
