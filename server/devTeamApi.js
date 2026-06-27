@@ -21,8 +21,6 @@ import {
 import {
   parseAgentMarkdown,
   compileAgentMarkdown,
-  heuristicDraftFromDescription,
-  emptyDraft,
   draftFromAgentMarkdown,
 } from '../shared/agentMarkdown.js'
 import { parseFrontmatter } from '../shared/frontmatter.js'
@@ -32,7 +30,6 @@ import {
   sanitiseProfileName,
   sanitiseAgentName,
   resolveArtifact,
-  isPrivateHostname,
 } from '../shared/sanitize.js'
 import {
   buildCatalog,
@@ -40,158 +37,18 @@ import {
   resolveCatalogAgentPath,
 } from './catalog/index.js'
 import { buildRules } from './rules/index.js'
-
-// ── Profile helpers ──────────────────────────────────────────────────────────
-
-function profilesDir(root) {
-  return path.join(root, 'pipeline-profiles')
-}
-
-function customAgentsDir(root) {
-  return path.join(root, 'custom-agents')
-}
-
-function agentTemplatesDir(root) {
-  return path.join(root, 'agent-templates')
-}
-
-function workflowStepTemplatesDir(root) {
-  return path.join(root, 'workflow-step-templates')
-}
-
-async function scanCustomAgents(root) {
-  const dir = customAgentsDir(root)
-  const agents = []
-  for (const entry of await safeReadDir(dir)) {
-    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
-    const agentName = entry.name.replace(/\.md$/, '')
-    try {
-      const raw = await fs.readFile(path.join(dir, entry.name), 'utf8')
-      const draft = parseAgentMarkdown(raw, yaml)
-      agents.push({
-        id: `dashboard:${agentName}`,
-        name: agentName,
-        plugin: 'dashboard',
-        source: 'dashboard',
-        description: (draft.description || '').slice(0, 140),
-        skills: draft.skills || [],
-        editable: true,
-      })
-    } catch {
-      /* skip */
-    }
-  }
-  return agents
-}
-
-async function listCustomAgentMeta(root) {
-  const dir = customAgentsDir(root)
-  const agents = []
-  for (const entry of await safeReadDir(dir)) {
-    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
-    const name = entry.name.replace(/\.md$/, '')
-    try {
-      const raw = await fs.readFile(path.join(dir, entry.name), 'utf8')
-      const draft = parseAgentMarkdown(raw, yaml)
-      agents.push({
-        name,
-        description: draft.description || '',
-        model: draft.model || '',
-        editable: draft.created_by === 'dashboard' || draft.editable !== false,
-      })
-    } catch {
-      agents.push({ name, description: '', model: '', editable: true })
-    }
-  }
-  return agents.sort((a, b) => a.name.localeCompare(b.name))
-}
-
-async function readCustomAgent(root, name) {
-  const clean = sanitiseAgentName(name)
-  if (!clean) return null
-  const fp = path.join(customAgentsDir(root), `${clean}.md`)
-  try {
-    const content = await fs.readFile(fp, 'utf8')
-    const draft = parseAgentMarkdown(content, yaml)
-    return { name: clean, content, draft }
-  } catch {
-    return null
-  }
-}
-
-async function fetchUrlSafe(urlStr) {
-  let u
-  try {
-    u = new URL(urlStr)
-  } catch {
-    throw new Error('invalid URL')
-  }
-  if (u.protocol !== 'https:') throw new Error('only https URLs allowed')
-  if (isPrivateHostname(u.hostname)) throw new Error('private hosts not allowed')
-  const res = await fetch(urlStr, { redirect: 'follow', signal: AbortSignal.timeout(15000) })
-  if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
-  const text = await res.text()
-  if (text.length > 512_000) throw new Error('response too large')
-  return text
-}
-
-async function generateDraftFromNl(description) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (apiKey && description?.trim()) {
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 2048,
-          messages: [{
-            role: 'user',
-            content: `Tạo JSON AgentDraft cho agent Claude Code từ mô tả sau. Trả về CHỈ JSON hợp lệ với keys: name, description, model, skills (array), parameters (array of {name, description}), sections (object role/skills/workflow/guardrail/output), section_order.\n\nMô tả: ${description}`,
-          }],
-        }),
-        signal: AbortSignal.timeout(60000),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const text = data.content?.[0]?.text || ''
-        const match = text.match(/\{[\s\S]*\}/)
-        if (match) {
-          const parsed = JSON.parse(match[0])
-          return { ...emptyDraft(), ...parsed, sections: { ...emptyDraft().sections, ...parsed.sections } }
-        }
-      }
-    } catch {
-      /* fallback heuristic */
-    }
-  }
-  return heuristicDraftFromDescription(description || '')
-}
-
-async function ensureDefaultTemplate(root) {
-  const dir = agentTemplatesDir(root)
-  await fs.mkdir(dir, { recursive: true })
-  const fp = path.join(dir, 'default-agent.md')
-  try {
-    await fs.access(fp)
-  } catch {
-    const draft = emptyDraft({
-      name: 'default-agent',
-      description: 'Agent mẫu — chỉnh sửa theo nhu cầu',
-      sections: {
-        role: 'Mô tả vai trò của agent.',
-        workflow: '1. Bước đầu\n2. Bước tiếp theo',
-        guardrail: '- Tuân thủ project rules',
-        output: '- Ghi artifact vào task folder',
-      },
-    })
-    await fs.writeFile(fp, compileAgentMarkdown(draft, yaml), 'utf8')
-  }
-}
+import {
+  profilesDir,
+  customAgentsDir,
+  agentTemplatesDir,
+  workflowStepTemplatesDir,
+  scanCustomAgents,
+  listCustomAgentMeta,
+  readCustomAgent,
+  fetchUrlSafe,
+  generateDraftFromNl,
+  ensureDefaultTemplate,
+} from './agents/index.js'
 
 // Vite plugin: exposes a tiny read-only API over the `.dev-team-agent/` data
 // root so the dashboard can render orchestrator state without a separate server
