@@ -8,7 +8,9 @@ Branch setup môi trường: **`refactor/setup-environment`** (tách từ `refac
 1. **Checkout** `refactor/{module-name}/main` (tách từ `refactor/main`).
 2. **Migrate code** theo plan & cấu trúc đã thống nhất (xem `coding-conventions.md` + cấu trúc module bên dưới).
 3. **Commit & push**.
-4. **Tạo PR** (dùng `.github/pull_request_template.md`). PR body nêu rõ **Nội dung thay đổi**: tóm tắt các file TRƯỚC và SAU khi thay đổi.
+4. **Tạo PR** (dùng `.github/pull_request_template.md`). PR body:
+   - **Mở đầu bằng mục `## Issue`** liên kết issue tracking chung bằng từ khoá **không auto-close** (`Part of #<n>` / `Refs #<n>`) — **merge PR KHÔNG đóng issue** (xem `doc-output.md`).
+   - Nêu rõ **Nội dung thay đổi**: tóm tắt các file TRƯỚC và SAU khi thay đổi.
 5. **Tạo test view point & test case**.
 6. **Comment test view point & test case lên GitHub PR** (bọc trong `<details>` nếu quá dài).
 7. **Viết unit test + e2e test theo module**:

@@ -3,6 +3,14 @@ PR template cho quá trình refactor TS. Điền đầy đủ các mục.
 Mỗi PR module nên bám theo .claude/rules/refactor-workflow.md.
 -->
 
+## Issue
+<!--
+Liên kết issue tracking ở ĐẦU PR body.
+DÙNG từ khoá KHÔNG auto-close: "Refs #<n>" / "Part of #<n>".
+KHÔNG dùng Closes/Fixes/Resolves — merge PR KHÔNG được đóng issue tracking chung.
+-->
+Part of #
+
 ## Module / Phạm vi
 <!-- Tên module đang refactor, vd: server/pipeline, src/features/monitor -->
 

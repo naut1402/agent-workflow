@@ -4,6 +4,9 @@ Quy ước xuất tài liệu trong quá trình refactor — để mọi agent/s
 
 ## PR body
 - Theo `.github/pull_request_template.md`.
+- **Mục `## Issue` đặt ở ĐẦU PR body**, liên kết tới issue tracking chung (vd #2).
+  - **DÙNG từ khoá KHÔNG auto-close**: `Part of #<n>` / `Refs #<n>`.
+  - **KHÔNG dùng** `Closes` / `Fixes` / `Resolves` — **merge PR KHÔNG được đóng issue tracking chung** (issue sống suốt cả quá trình refactor, chỉ đóng khi toàn bộ migration xong).
 - Bắt buộc mục **Nội dung thay đổi**: bảng mapping file TRƯỚC → SAU (rename/split/new/delete).
 - Liệt kê loại test đã thêm/migrate.
 
