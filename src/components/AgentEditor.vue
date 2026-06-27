@@ -8,7 +8,7 @@ import {
   exportCustomAgent,
   fetchCatalog,
 } from '../api.js'
-import { emptyDraft } from '../lib/agentMarkdown.js'
+import { emptyDraft } from '../../shared/agentMarkdown.js'
 import AgentSectionEditor from './AgentSectionEditor.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'
 import AgentNlWizard from './AgentNlWizard.vue'

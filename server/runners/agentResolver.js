@@ -6,7 +6,7 @@ import {
   parseAgentMarkdown,
   ensureSectionOrder,
   getSectionTitle,
-} from '../../src/lib/agentMarkdown.js'
+} from '../../shared/agentMarkdown.js'
 
 function homeDir() {
   return process.env.HOME || process.env.USERPROFILE || os.homedir()
