@@ -9,7 +9,7 @@ import QaPanel from './features/monitor/components/QaPanel.vue'
 import ArtifactPanel from './features/monitor/components/ArtifactPanel.vue'
 import PipelineEditor from './features/pipeline-editor/components/PipelineEditor.vue'
 import AgentEditor from './features/agent-editor/components/AgentEditor.vue'
-import KnowledgePanel from './components/KnowledgePanel.vue'
+import KnowledgePanel from './features/knowledge/components/KnowledgePanel.vue'
 import RunnerConfigPanel from './components/RunnerConfigPanel.vue'
 import RailIcon from './shared/ui/RailIcon.vue'
 

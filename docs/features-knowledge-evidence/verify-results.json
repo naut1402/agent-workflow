@@ -1,0 +1,10 @@
+{
+  "feature": "features-knowledge",
+  "checks": [
+    {
+      "name": "switch to Knowledge mode → panel mounts",
+      "ok": true
+    }
+  ],
+  "capturedAt": "2026-06-28T02:43:26.753Z"
+}
