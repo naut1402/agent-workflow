@@ -1,0 +1,10 @@
+{
+  "feature": "features-agent-editor",
+  "checks": [
+    {
+      "name": "switch to Agent Editor mode → editor shell mounts",
+      "ok": true
+    }
+  ],
+  "capturedAt": "2026-06-28T02:35:48.605Z"
+}

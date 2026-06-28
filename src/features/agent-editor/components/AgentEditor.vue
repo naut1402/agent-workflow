@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import {
   fetchCustomAgents,
@@ -7,8 +7,8 @@ import {
   deleteCustomAgent,
   exportCustomAgent,
   fetchCatalog,
-} from '../api'
-import { emptyDraft } from '../../shared/agentMarkdown.js'
+} from '../../../api'
+import { emptyDraft } from '../../../../shared/agentMarkdown.js'
 import AgentSectionEditor from './AgentSectionEditor.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'
 import AgentNlWizard from './AgentNlWizard.vue'
