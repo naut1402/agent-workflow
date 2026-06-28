@@ -1,10 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 
 const props = defineProps({
-  rules: { type: Array, default: () => [] },
-  categories: { type: Array, default: () => [] },
-  steps: { type: Array, default: () => [] },
+  rules: { type: Array as () => any[], default: () => [] },
+  categories: { type: Array as () => any[], default: () => [] },
+  steps: { type: Array as () => any[], default: () => [] },
   highlightedCategory: { type: String, default: null },
 })
 

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 
@@ -8,7 +8,7 @@ const props = defineProps({
   previewState: {
     type: String,
     default: 'idle',
-    validator: (v) => ['idle', 'pending', 'active', 'done', 'hitl'].includes(v),
+    validator: (v: any) => ['idle', 'pending', 'active', 'done', 'hitl'].includes(v),
   },
 })
 

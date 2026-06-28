@@ -1,15 +1,15 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed, markRaw, onMounted, watch } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { fetchCatalog, fetchPipelineConfig, fetchRules, writePipelineConfig } from '../api'
-import { useLocalToggle } from '../shared/composables/useLocalToggle'
+import { fetchCatalog, fetchPipelineConfig, fetchRules, writePipelineConfig } from '../../../api'
+import { useLocalToggle } from '../../../shared/composables/useLocalToggle'
 import PipelineEditorNode from './PipelineEditorNode.vue'
 import CatalogPanel from './CatalogPanel.vue'
 import RulesPanel from './RulesPanel.vue'
 import StepConfigPanel from './StepConfigPanel.vue'
 import ProfileManager from './ProfileManager.vue'
-import RailIcon from '../shared/ui/RailIcon.vue'
+import RailIcon from '../../../shared/ui/RailIcon.vue'
 
 const props = defineProps({
   scope: { type: String, default: 'global' },
@@ -17,7 +17,7 @@ const props = defineProps({
   appSidebarCollapsed: { type: Boolean, default: false },
 })
 
-const nodeTypes = { pipelineEditor: markRaw(PipelineEditorNode) }
+const nodeTypes = { pipelineEditor: markRaw(PipelineEditorNode) } as any
 const {
   setNodes,
   setEdges,
@@ -33,7 +33,7 @@ const {
 const nodes = ref([])
 const edges = ref([])
 
-const catalog = ref({ skills: [], agents: [] })
+const catalog = ref<any>({ skills: [], agents: [] })
 const rulesData = ref({ rules: [], categories: [] })
 const leftTab = ref('catalog')
 const highlightedCategory = ref(null)
@@ -48,7 +48,7 @@ async function loadCatalog() {
   try {
     catalog.value = await fetchCatalog()
   } catch {
-    catalog.value = { skills: [], agents: [], error: true }
+    catalog.value = { skills: [], agents: [], error: true } as any
   }
 }
 
@@ -114,7 +114,7 @@ function buildFlowFromPipeline(pipeline) {
 }
 
 onConnect((params) => {
-  addEdges([{ ...params, markerEnd: { type: 'arrowclosed' } }])
+  addEdges([{ ...params, markerEnd: { type: 'arrowclosed' } }] as any)
 })
 
 onMounted(async () => {
@@ -371,7 +371,7 @@ const hasFanOut = computed(() => {
   for (const e of getEdges.value) {
     outDeg[e.source] = (outDeg[e.source] || 0) + 1
   }
-  return Object.values(outDeg).some((d) => d > 1)
+  return Object.values(outDeg).some((d: any) => d > 1)
 })
 
 const editorLayoutClass = computed(() => ({
