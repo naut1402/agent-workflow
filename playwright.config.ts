@@ -7,10 +7,10 @@ import path from 'node:path'
 // renders. Migrated incrementally from the legacy scripts/verify-*.mjs.
 const PORT = Number(process.env.E2E_PORT || 4319)
 const baseURL = process.env.E2E_BASE_URL || `http://127.0.0.1:${PORT}`
-const fixtureRoot = path.resolve(process.cwd(), 'e2e/fixtures/project/.dev-team-agent')
+const fixtureRoot = path.resolve(process.cwd(), 'test-e2e/fixtures/project/.dev-team-agent')
 
 export default defineConfig({
-  testDir: './e2e',
+  testDir: './test-e2e',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

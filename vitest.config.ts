@@ -15,9 +15,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    // Co-located *.test.ts / *.spec.ts next to source — mirrors module structure.
-    include: ['src/**/*.{test,spec}.ts', 'shared/**/*.{test,spec}.ts'],
-    exclude: ['node_modules', 'dist', 'e2e/**'],
+    // Unit tests live under tests/ mirroring the source tree. Vitest owns the
+    // frontend + shared subtrees; bun test owns tests/server + tests/mcp.
+    include: ['tests/src/**/*.{test,spec}.ts', 'tests/shared/**/*.{test,spec}.ts'],
+    exclude: ['node_modules', 'dist', 'test-e2e/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
