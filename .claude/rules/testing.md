@@ -29,6 +29,7 @@ Coverage là ưu tiên cao. Mỗi module refactor phải kèm test (unit + e2e).
 - Cập nhật threshold trong `vitest.config.ts` (frontend). Backend coverage qua `bun test --coverage`.
 
 ## E2E capture
-- **Module frontend**: BẮT BUỘC có bước **xác nhận capture từ e2e** — Playwright boot app thật (standalone + fixture `.dev-team-agent`) và screenshot mode liên quan vào `docs/<feature>-evidence/`. Spec này **chạy thật và gate CI** mỗi PR frontend (refactor hỏng import → SPA không mount → CI đỏ).
+- **Module frontend**: BẮT BUỘC có bước **xác nhận capture từ e2e** — Playwright boot app thật (standalone + fixture `.dev-team-agent`) và screenshot mode liên quan. Spec này **chạy thật và gate CI** mỗi PR frontend (refactor hỏng import → SPA không mount → CI đỏ).
+- **Ảnh capture KHÔNG ghi vào `docs/`** — chụp vào `testInfo.outputPath(...)` (thư mục test-results, gitignored) rồi `testInfo.attach(...)` để vào **playwright-report**; **đính ảnh vào comment kết quả test trên PR** (xem `doc-output.md`). CI upload `test-evidence` (coverage + playwright-report).
 - **Module backend**: e2e không bắt buộc; nếu chỉ migrate code chưa cần spec mới.
 - `bun run test:e2e` = `playwright test --pass-with-no-tests` (không có spec thì không chặn; có spec thì chạy).

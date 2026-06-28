@@ -20,9 +20,10 @@ Quy ước xuất tài liệu trong quá trình refactor — để mọi agent/s
 - Nội dung dài → bọc `<details><summary>…</summary>`.
 - Không comment kết quả cho bước chỉ migrate code mà chưa chạy (vd e2e hoãn).
 
-## Evidence
-- E2E/verify evidence ghi vào `docs/<task>-evidence/` (screenshot + `verify-results.json`) — giữ quy ước hiện có.
-- Coverage report: `coverage/frontend/` (vitest). CI upload artifact `test-evidence`.
+## Evidence (ảnh e2e)
+- **Ảnh screenshot e2e KHÔNG commit vào `docs/`.** Thay vào đó **đính kèm vào comment kết quả test trên PR** (kéo-thả ảnh vào comment, hoặc link tới artifact `test-evidence` / playwright-report của CI run).
+- Spec Playwright chụp vào **thư mục output của test (gitignored)** + `testInfo.attach(...)` để ảnh nằm trong **playwright-report** (CI upload artifact), KHÔNG ghi `docs/`.
+- Coverage report: `coverage/frontend/` (vitest). CI upload artifact `test-evidence` (coverage + playwright-report).
 
 ## Ngôn ngữ
 - Tài liệu & comment hướng người dùng/PR: **tiếng Việt**.

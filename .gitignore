@@ -8,6 +8,9 @@ playwright-report/
 test-results/
 .vite/
 
+# E2E evidence is attached to the playwright report / PR comment, never committed
+docs/*-evidence/
+
 # E2E runtime state (isolated registry home + mutable writes into the fixture)
 test-e2e/.runtime/
 test-e2e/fixtures/project/.dev-team-agent/custom-agents/
