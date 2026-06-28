@@ -27,6 +27,13 @@ test('sidebar switches across modes incl. runner (capture)', async ({ page }) =>
   await page.locator('button[title="Monitor"]').click()
   await expect(page.locator('.tasklist')).toBeVisible()
 
+  // Sidebar collapse toggle (ported from verify-ux UX1a).
+  const sidebar = page.locator('.sidebar')
+  await page.locator('.sidebar-toggle').click()
+  await expect(sidebar).toHaveClass(/sidebar-collapsed/)
+  await page.locator('.sidebar-toggle').click()
+  await expect(sidebar).not.toHaveClass(/sidebar-collapsed/)
+
   fs.writeFileSync(
     path.join(EVIDENCE, 'verify-results.json'),
     JSON.stringify(

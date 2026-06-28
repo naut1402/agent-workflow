@@ -11,17 +11,21 @@ Crucially, **this repo does not run the orchestrator** — it observes one. The 
 ## Commands
 
 ```bash
-pnpm install              # pnpm is the package manager (pnpm-workspace.yaml present)
-pnpm dev                  # Vite dev server on :5174, opens browser (single-project mode)
-pnpm build                # build SPA to dist/
-pnpm serve                # standalone Node server (server/standalone.js) on 127.0.0.1:5174 — needs dist/
-pnpm start                # build + serve
-pnpm mcp                  # run the MCP stdio server (mcp/server.mjs)
+bun install               # bun is the package manager (bun.lock present)
+bun run dev               # Vite dev server on :5174, opens browser (single-project mode)
+bun run build             # vue-tsc check + build SPA to dist/
+bun run serve             # standalone server (server/standalone.ts) on 127.0.0.1:5174 — needs dist/
+bun run start             # build + serve
+bun run mcp               # run the MCP stdio server (mcp/server.mjs)
 
-node scripts/verify-ux.mjs [baseUrl]   # Playwright verification scripts (see below)
+bun run typecheck         # vue-tsc --noEmit (type-gate)
+bun run test              # backend unit/integration: bun test (tests/server + tests/mcp)
+bun run test:fe           # frontend unit: vitest run --coverage (tests/src + tests/shared)
+bun run test:e2e          # e2e: @playwright/test (test-e2e/) — boots app + fixture, screenshots
+bun run test:all          # typecheck → bun test → vitest → playwright
 ```
 
-There is **no test runner, linter, or formatter configured**. "Tests" are standalone Playwright + raw-API verification scripts in `scripts/verify-*.mjs` — each launches headless Chromium against a running dev server (default base `http://localhost:5173`, pass a different base as argv) and writes screenshots + a `verify-results.json` into `docs/<task>-evidence/`. Run the dev server first, then run a verify script directly with `node`.
+**Testing** (post-TS migration): unit tests live under `tests/` mirroring the source tree — `tests/server` + `tests/mcp` on **bun test**, `tests/src` + `tests/shared` on **vitest** (jsdom). E2E specs are `test-e2e/*.spec.ts` (**@playwright/test**); `playwright.config.ts` boots the standalone server against the `test-e2e/fixtures/.dev-team-agent/` fixture and each spec screenshots its mode into `docs/<feature>-evidence/`. CI (`.github/workflows/ci.yml`) runs the full chain on every push/PR. The legacy `scripts/verify-*.mjs` were migrated into `test-e2e/`.
 
 ## The data root (`.dev-team-agent/`) — the central concept
 
