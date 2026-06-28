@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import {
   fetchKnowledgeList,
@@ -8,7 +8,7 @@ import {
   deleteKnowledgeEntry,
   uploadKnowledgeFile,
   fetchKnowledgeTags,
-} from '../api'
+} from '../../../api'
 
 const scope = ref('project')
 const tagFilter = ref('')
