@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import {
   fetchRunners,
@@ -9,7 +9,7 @@ import {
   submitJob,
   fetchJobs,
   fetchJob,
-} from '../api'
+} from '../../../api'
 
 const runners = ref([])
 const defaultRunnerId = ref('')
