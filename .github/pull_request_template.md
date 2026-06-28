@@ -31,16 +31,17 @@ Part of #
 </details>
 
 ## Loại test đã thêm/migrate
-- [ ] Unit (bun test — backend) co-located `*.test.ts`
-- [ ] Unit (vitest — frontend) co-located `*.test.ts`
+- [ ] Unit (bun test — backend) ở `tests/server` · `tests/mcp`
+- [ ] Unit (vitest — frontend) ở `tests/src` · `tests/shared`
 - [ ] Integration API (Hono `app.request`)
-- [ ] E2E (playwright) — *chỉ migrate code, chưa cần xác nhận chạy*
+- [ ] E2E (playwright) ở `test-e2e/` — chạy thật + gate CI; ảnh capture đính vào comment (không commit `docs/`)
 
 ## Checklist
 - [ ] Không thay đổi hành vi public (hoặc đã ghi rõ thay đổi)
-- [ ] Test xanh local
-- [ ] CI/CD xanh
+- [ ] Test xanh local · CI/CD xanh
 - [ ] Tuân thủ `.claude/rules/coding-conventions.md`
+- [ ] **Git hygiene** (`.claude/rules/git-hygiene.md`): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
+- [ ] Rename/move dùng `git mv`; KHÔNG còn bản cũ trùng (vd `.js` lẫn `.ts`); test không lạc khỏi `tests/`·`test-e2e/`
 
 ---
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
