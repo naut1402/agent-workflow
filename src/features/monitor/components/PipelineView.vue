@@ -1,8 +1,8 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, markRaw } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { phasesFromPipeline, phaseStatus, fetchFlowProfile, saveFlowProfile } from '../api'
+import { phasesFromPipeline, phaseStatus, fetchFlowProfile, saveFlowProfile } from '../../../api'
 import PipelineNode from './PipelineNode.vue'
 
 const props = defineProps({
@@ -64,7 +64,7 @@ const nodes = computed(() =>
   }),
 )
 
-const edges = computed(() =>
+const edges = computed((): any[] =>
   phases.value.slice(0, -1).map((p, i) => {
     const next = phases.value[i + 1]
     const isWaiting = p.hitl && props.task.hitl_pending === p.hitl

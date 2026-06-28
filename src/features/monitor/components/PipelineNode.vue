@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
 
 defineProps({

@@ -1,8 +1,8 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 
 const props = defineProps({
-  tasks: { type: Array, required: true },
+  tasks: { type: Array as () => any[], required: true },
   selectedId: { type: String, default: null },
   openArtifact: { type: Object, default: null }, // { taskId, name }
 })
