@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { marked } from 'marked'
-import { fetchArtifact } from '../api.js'
+import { fetchArtifact } from '../api'
 
 const props = defineProps({
   task: { type: Object, required: true },

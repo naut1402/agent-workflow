@@ -1,14 +1,15 @@
 import { ref } from 'vue'
+import type { Ref } from 'vue'
 
 /** Reorder list items via HTML5 drag-and-drop. */
-export function useSortable(listRef, onReorder) {
-  const dragIndex = ref(null)
+export function useSortable<T>(listRef: Ref<T[]>, onReorder?: (items: T[]) => void) {
+  const dragIndex = ref<number | null>(null)
 
-  function onDragStart(index) {
+  function onDragStart(index: number) {
     dragIndex.value = index
   }
 
-  function onDragOver(event, index) {
+  function onDragOver(event: DragEvent, index: number) {
     event.preventDefault()
     if (dragIndex.value === null || dragIndex.value === index) return
     const items = [...listRef.value]

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { fetchTasks, fetchProjects } from './api.js'
-import { useLocalToggle } from './lib/useLocalToggle.js'
+import { fetchTasks, fetchProjects } from './api'
+import { useLocalToggle } from './shared/composables/useLocalToggle'
 import TaskList from './components/TaskList.vue'
 import ProjectBar from './components/ProjectBar.vue'
 import PipelineView from './components/PipelineView.vue'
@@ -11,7 +11,7 @@ import PipelineEditor from './components/PipelineEditor.vue'
 import AgentEditor from './components/AgentEditor.vue'
 import KnowledgePanel from './components/KnowledgePanel.vue'
 import RunnerConfigPanel from './components/RunnerConfigPanel.vue'
-import RailIcon from './components/RailIcon.vue'
+import RailIcon from './shared/ui/RailIcon.vue'
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
 const PROJECT_KEY = 'dev-dashboard-selected-project'

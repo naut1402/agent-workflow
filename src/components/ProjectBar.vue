@@ -4,7 +4,7 @@
 // registry. Removing a project only detaches it from the dashboard — it never
 // touches files on disk.
 import { ref } from 'vue'
-import { addProject, removeProject } from '../api.js'
+import { addProject, removeProject } from '../api'
 
 const props = defineProps({
   projects: { type: Array, default: () => [] },

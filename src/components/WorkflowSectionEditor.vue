@@ -1,14 +1,14 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../lib/workflowSteps.js'
-import { useSortable } from '../lib/useSortable.js'
+import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../shared/lib/workflowSteps'
+import { useSortable } from '../shared/composables/useSortable'
 import { slugifySectionKey } from '../../shared/agentMarkdown.js'
 import {
   fetchPipelineConfig,
   fetchWorkflowStepTemplates,
   fetchWorkflowStepTemplate,
   saveWorkflowStepTemplate,
-} from '../api.js'
+} from '../api'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
-import { fetchKnowledgeList } from '../api.js'
+import { fetchKnowledgeList } from '../api'
 
 const props = defineProps({
   stepId: { type: String, default: null },

@@ -2,7 +2,7 @@
 import { ref, computed, watch, markRaw } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { phasesFromPipeline, phaseStatus, fetchFlowProfile, saveFlowProfile } from '../api.js'
+import { phasesFromPipeline, phaseStatus, fetchFlowProfile, saveFlowProfile } from '../api'
 import PipelineNode from './PipelineNode.vue'
 
 const props = defineProps({

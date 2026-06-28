@@ -8,7 +8,7 @@ import {
   deleteKnowledgeEntry,
   uploadKnowledgeFile,
   fetchKnowledgeTags,
-} from '../api.js'
+} from '../api'
 
 const scope = ref('project')
 const tagFilter = ref('')
