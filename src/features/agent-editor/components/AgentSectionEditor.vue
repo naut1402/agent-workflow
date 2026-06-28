@@ -1,13 +1,13 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 import {
   FIXED_SECTION_KEYS,
   getSectionTitle,
   slugifySectionKey,
   emptyDraft,
-} from '../../shared/agentMarkdown.js'
-import { useSortable } from '../shared/composables/useSortable'
-import { saveAgentTemplate } from '../api'
+} from '../../../../shared/agentMarkdown.js'
+import { useSortable } from '../../../shared/composables/useSortable'
+import { saveAgentTemplate } from '../../../api'
 import WorkflowSectionEditor from './WorkflowSectionEditor.vue'
 
 const props = defineProps({
@@ -187,8 +187,8 @@ async function saveSectionTemplate(key) {
         class="section-block"
         :class="{ collapsed: isCollapsed(key) }"
         draggable="true"
-        @dragstart="onDragStart(index)"
-        @dragover="onDragOver($event, index)"
+        @dragstart="onDragStart(Number(index))"
+        @dragover="onDragOver($event, Number(index))"
         @dragend="onDragEnd"
       >
         <div class="section-head">
@@ -237,7 +237,7 @@ async function saveSectionTemplate(key) {
             class="cfg-textarea"
             :value="draft.sections?.[key] || ''"
             rows="4"
-            @input="updateSection(key, $event.target.value)"
+            @input="updateSection(key, ($event.target as HTMLInputElement).value)"
           />
         </div>
       </div>

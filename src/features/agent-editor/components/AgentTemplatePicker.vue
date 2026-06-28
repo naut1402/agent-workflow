@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import {
   fetchAgentTemplates,
@@ -8,8 +8,8 @@ import {
   importAgentTemplateUrl,
   uploadAgentTemplate,
   deleteAgentTemplate,
-} from '../api'
-import { draftFromCatalogAgent } from '../../shared/agentMarkdown.js'
+} from '../../../api'
+import { draftFromCatalogAgent } from '../../../../shared/agentMarkdown.js'
 
 const emit = defineEmits(['apply-draft', 'close'])
 

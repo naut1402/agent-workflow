@@ -1,6 +1,6 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
-import { generateAgentDraft } from '../api'
+import { generateAgentDraft } from '../../../api'
 
 const emit = defineEmits(['apply-draft', 'close'])
 

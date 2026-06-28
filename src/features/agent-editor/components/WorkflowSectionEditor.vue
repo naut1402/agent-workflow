@@ -1,14 +1,14 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../shared/lib/workflowSteps'
-import { useSortable } from '../shared/composables/useSortable'
-import { slugifySectionKey } from '../../shared/agentMarkdown.js'
+import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../shared/lib/workflowSteps'
+import { useSortable } from '../../../shared/composables/useSortable'
+import { slugifySectionKey } from '../../../../shared/agentMarkdown.js'
 import {
   fetchPipelineConfig,
   fetchWorkflowStepTemplates,
   fetchWorkflowStepTemplate,
   saveWorkflowStepTemplate,
-} from '../api'
+} from '../../../api'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -253,14 +253,14 @@ async function saveStepTemplate(index) {
           class="cfg-input cfg-input-sm"
           :value="step.title"
           placeholder="Tiêu đề bước"
-          @input="updateStep(index, 'title', $event.target.value)"
+          @input="updateStep(index, 'title', ($event.target as HTMLInputElement).value)"
         />
         <textarea
           class="cfg-textarea"
           :value="step.body"
           rows="3"
           placeholder="Nội dung / hướng dẫn bước"
-          @input="updateStep(index, 'body', $event.target.value)"
+          @input="updateStep(index, 'body', ($event.target as HTMLInputElement).value)"
         />
       </div>
     </div>
