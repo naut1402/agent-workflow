@@ -25,7 +25,7 @@ bun run test:e2e          # e2e: @playwright/test (test-e2e/) — boots app + fi
 bun run test:all          # typecheck → bun test → vitest → playwright
 ```
 
-**Testing** (post-TS migration): unit tests live under `tests/` mirroring the source tree — `tests/server` + `tests/mcp` on **bun test**, `tests/src` + `tests/shared` on **vitest** (jsdom). E2E specs are `test-e2e/*.spec.ts` (**@playwright/test**); `playwright.config.ts` boots the standalone server against the `test-e2e/fixtures/.dev-team-agent/` fixture and each spec screenshots its mode into `docs/<feature>-evidence/`. CI (`.github/workflows/ci.yml`) runs the full chain on every push/PR. The legacy `scripts/verify-*.mjs` were migrated into `test-e2e/`.
+**Testing** (post-TS migration): unit tests live under `tests/` mirroring the source tree — `tests/server` + `tests/mcp` on **bun test**, `tests/src` + `tests/shared` on **vitest** (jsdom). E2E specs are `test-e2e/*.spec.ts` (**@playwright/test**); `playwright.config.ts` boots the standalone server against the `test-e2e/fixtures/.dev-team-agent/` fixture and each spec **attaches** its screenshot to the playwright report (`testInfo.attach`, via `test-e2e/_capture.ts`) — evidence is **not committed to `docs/`**; it ships in the CI `test-evidence` artifact and is attached to the PR result comment. CI (`.github/workflows/ci.yml`) runs the full chain on every push/PR. The legacy `scripts/verify-*.mjs` were migrated into `test-e2e/`.
 
 ## The data root (`.dev-team-agent/`) — the central concept
 

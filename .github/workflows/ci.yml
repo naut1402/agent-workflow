@@ -49,6 +49,5 @@ jobs:
           path: |
             coverage/
             playwright-report/
-            docs/**/verify-results.json
           if-no-files-found: ignore
           retention-days: 7
