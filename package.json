@@ -8,22 +8,39 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "serve": "node server/standalone.js",
-    "start": "vite build && node server/standalone.js",
-    "mcp": "node mcp/server.mjs"
+    "serve": "bun server/standalone.ts",
+    "start": "vite build && bun server/standalone.ts",
+    "mcp": "bun mcp/server.ts",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "bun test tests/server tests/mcp",
+    "test:fe": "vitest run --coverage",
+    "test:e2e": "playwright test --pass-with-no-tests",
+    "test:all": "bun run typecheck && bun run test && bun run test:fe && bun run test:e2e"
   },
   "dependencies": {
+    "@hono/node-server": "^2.0.6",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@vue-flow/core": "^1.41.0",
+    "hono": "^4.12.27",
     "js-yaml": "^4.1.0",
     "marked": "^12.0.2",
     "vue": "^3.4.21",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/bun": "^1.3.14",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^26.0.1",
     "@vitejs/plugin-vue": "^5.0.4",
+    "@vitest/coverage-v8": "^4.1.9",
+    "@vue/test-utils": "^2.4.11",
     "@vueuse/core": "^11.0.0",
+    "jsdom": "^29.1.1",
     "playwright": "^1.61.1",
-    "vite": "^5.2.8"
+    "typescript": "^6.0.3",
+    "vite": "^5.2.8",
+    "vitest": "^4.1.9",
+    "vue-tsc": "^3.3.5"
   }
 }

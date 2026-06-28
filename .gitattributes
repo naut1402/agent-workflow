@@ -1,0 +1,13 @@
+# Normalize line endings to LF in the repo (CI runs on Linux).
+# Prevents the CRLF churn warnings on Windows checkouts.
+* text=auto eol=lf
+
+# Binary assets — never normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+bun.lockb binary

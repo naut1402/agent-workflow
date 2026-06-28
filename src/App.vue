@@ -1,17 +1,18 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { fetchTasks, fetchProjects } from './api.js'
-import { useLocalToggle } from './lib/useLocalToggle.js'
-import TaskList from './components/TaskList.vue'
-import ProjectBar from './components/ProjectBar.vue'
-import PipelineView from './components/PipelineView.vue'
-import QaPanel from './components/QaPanel.vue'
-import ArtifactPanel from './components/ArtifactPanel.vue'
-import PipelineEditor from './components/PipelineEditor.vue'
-import AgentEditor from './components/AgentEditor.vue'
-import KnowledgePanel from './components/KnowledgePanel.vue'
-import RunnerConfigPanel from './components/RunnerConfigPanel.vue'
-import RailIcon from './components/RailIcon.vue'
+import { fetchProjects } from './api'
+import { useLocalToggle } from './shared/composables/useLocalToggle'
+import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
+import TaskList from './features/monitor/components/TaskList.vue'
+import ProjectBar from './features/monitor/components/ProjectBar.vue'
+import PipelineView from './features/monitor/components/PipelineView.vue'
+import QaPanel from './features/monitor/components/QaPanel.vue'
+import ArtifactPanel from './features/monitor/components/ArtifactPanel.vue'
+import PipelineEditor from './features/pipeline-editor/components/PipelineEditor.vue'
+import AgentEditor from './features/agent-editor/components/AgentEditor.vue'
+import KnowledgePanel from './features/knowledge/components/KnowledgePanel.vue'
+import RunnerConfigPanel from './features/runner/components/RunnerConfigPanel.vue'
+import RailIcon from './shared/ui/RailIcon.vue'
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
 const PROJECT_KEY = 'dev-dashboard-selected-project'
@@ -26,22 +27,17 @@ const editorTaskManual = ref('')
 
 const { state: sidebarCollapsed, toggle: toggleSidebar } = useLocalToggle(false)
 
-const POLL_MS = 1500
-
-const root = ref('')
-const tasks = ref([])
-const selectedId = ref(null)
-
 // Multi-project state. `selectedProjectId` (null = default project) drives which
 // project's tasks the monitor view polls; persisted to localStorage.
 const projects = ref([])
 const defaultProjectId = ref(null)
 const selectedProjectId = ref(loadSelectedProject())
-const error = ref(null)
-const lastUpdated = ref(null)
-const connected = ref(false)
 const openArtifact = ref(null)
-let timer = null
+
+// Task polling (root/tasks/selectedId + connection state + 1500ms loop) lives in
+// a composable so the shell stays thin and the loop is unit-testable.
+const { root, tasks, selectedId, error, lastUpdated, connected, poll, start, stop } =
+  useTaskPolling(() => selectedProjectId.value, 1500)
 
 const selected = computed(
   () => tasks.value.find((t) => t.task_id === selectedId.value) || null,
@@ -101,24 +97,6 @@ watch(sidebarCollapsed, (v) => {
   } catch { /* ignore */ }
 })
 
-async function poll() {
-  try {
-    const data = await fetchTasks(selectedProjectId.value)
-    root.value = data.root
-    tasks.value = data.tasks
-    connected.value = true
-    error.value = null
-    lastUpdated.value = new Date().toLocaleTimeString()
-    if (!selectedId.value && tasks.value.length) {
-      const needsAttention = tasks.value.find((t) => t.has_qa || t.hitl_pending)
-      selectedId.value = (needsAttention || tasks.value[0]).task_id
-    }
-  } catch (e) {
-    connected.value = false
-    error.value = String(e.message || e)
-  }
-}
-
 watch(selectedId, () => {
   openArtifact.value = null
 })
@@ -150,22 +128,17 @@ watch(editorScope, (scope) => {
 })
 
 watch(mode, async (m) => {
-  clearInterval(timer)
-  if (m === 'monitor') {
-    poll()
-    timer = setInterval(poll, POLL_MS)
-  } else {
-    await poll()
-  }
+  stop()
+  if (m === 'monitor') start()
+  else await poll()
 })
 
 onMounted(async () => {
   loadSidebarPref()
   await loadProjects()
-  poll()
-  timer = setInterval(poll, POLL_MS)
+  start()
 })
-onUnmounted(() => clearInterval(timer))
+onUnmounted(stop)
 </script>
 
 <template>

@@ -1,0 +1,18 @@
+{
+  "feature": "app-shell",
+  "checks": [
+    {
+      "name": "monitor task list mounts",
+      "ok": true
+    },
+    {
+      "name": "switch to Runner Config → panel mounts",
+      "ok": true
+    },
+    {
+      "name": "switch back to monitor → task list re-renders",
+      "ok": true
+    }
+  ],
+  "capturedAt": "2026-06-28T03:26:27.715Z"
+}

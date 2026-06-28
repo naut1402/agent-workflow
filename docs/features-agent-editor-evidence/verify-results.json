@@ -1,0 +1,18 @@
+{
+  "feature": "features-agent-editor",
+  "checks": [
+    {
+      "name": "editor shell mounts",
+      "ok": true
+    },
+    {
+      "name": "create + save custom agent → listed",
+      "ok": true
+    },
+    {
+      "name": "template picker + NL wizard modals open",
+      "ok": true
+    }
+  ],
+  "capturedAt": "2026-06-28T03:26:27.830Z"
+}

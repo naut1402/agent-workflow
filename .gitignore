@@ -1,3 +1,20 @@
 node_modules/
 dist/
 CLAUDE.local.md
+
+# Test / coverage artifacts
+coverage/
+playwright-report/
+test-results/
+.vite/
+
+# E2E runtime state (isolated registry home + mutable writes into the fixture)
+test-e2e/.runtime/
+test-e2e/fixtures/project/.dev-team-agent/custom-agents/
+test-e2e/fixtures/project/.dev-team-agent/agent-templates/
+test-e2e/fixtures/project/.dev-team-agent/pipeline-profiles/
+test-e2e/fixtures/project/.dev-team-agent/workflow-step-templates/
+test-e2e/fixtures/project/.dev-team-agent/flow-profiles/
+test-e2e/fixtures/project/.dev-team-agent/knowledge/
+test-e2e/fixtures/project/.dev-team-agent/knowledge.config.yaml
+test-e2e/fixtures/project/.dev-team-agent/pipeline.yaml

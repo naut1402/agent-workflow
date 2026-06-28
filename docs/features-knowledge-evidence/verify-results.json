@@ -1,0 +1,10 @@
+{
+  "feature": "features-knowledge",
+  "checks": [
+    {
+      "name": "knowledge panel mounts",
+      "ok": true
+    }
+  ],
+  "capturedAt": "2026-06-28T03:26:27.250Z"
+}
