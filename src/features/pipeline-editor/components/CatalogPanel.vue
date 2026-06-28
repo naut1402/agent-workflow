@@ -1,9 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useSearch } from '../shared/composables/useSearch'
+import { useSearch } from '../../../shared/composables/useSearch'
 
 const props = defineProps({
-  catalog: { type: Object, required: true }, // { skills: [], agents: [] }
+  catalog: { type: Object as () => any, required: true }, // { skills: [], agents: [] }
 })
 
 const activeTab = ref('agents') // 'agents' | 'skills' | 'rules'
@@ -26,10 +26,10 @@ function matchesSource(item) {
   return src === sourceFilter.value
 }
 
-const agentItems = computed(() =>
+const agentItems = computed<any[]>(() =>
   (props.catalog.agents || []).filter(matchesSource),
 )
-const skillItems = computed(() =>
+const skillItems = computed<any[]>(() =>
   (props.catalog.skills || []).filter(matchesSource),
 )
 
@@ -83,7 +83,7 @@ function onDragStart(event, item, type) {
         class="catalog-search"
         :value="agentQuery"
         placeholder="Search agents…"
-        @input="setAgentQuery($event.target.value)"
+        @input="setAgentQuery(($event.target as HTMLInputElement).value)"
       />
       <div class="catalog-list">
         <div
@@ -112,7 +112,7 @@ function onDragStart(event, item, type) {
         class="catalog-search"
         :value="skillQuery"
         placeholder="Search skills…"
-        @input="setSkillQuery($event.target.value)"
+        @input="setSkillQuery(($event.target as HTMLInputElement).value)"
       />
       <div class="catalog-list">
         <div

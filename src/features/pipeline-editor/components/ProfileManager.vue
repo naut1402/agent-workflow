@@ -1,6 +1,6 @@
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { fetchPipelineProfiles, fetchPipelineProfile, savePipelineProfile, deletePipelineProfile } from '../api'
+import { fetchPipelineProfiles, fetchPipelineProfile, savePipelineProfile, deletePipelineProfile } from '../../../api'
 
 const props = defineProps({
   currentPipeline: { type: Object, required: true },

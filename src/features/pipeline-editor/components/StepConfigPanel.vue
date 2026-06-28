@@ -1,12 +1,12 @@
-<script setup>
+<script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
-import { fetchKnowledgeList } from '../api'
+import { fetchKnowledgeList } from '../../../api'
 
 const props = defineProps({
   stepId: { type: String, default: null },
-  step: { type: Object, default: null },  // current step data
-  catalog: { type: Object, required: true },
-  ruleCategories: { type: Array, default: () => [] },
+  step: { type: Object as () => any, default: null },  // current step data
+  catalog: { type: Object as () => any, required: true },
+  ruleCategories: { type: Array as () => any[], default: () => [] },
 })
 
 const emit = defineEmits(['update', 'close'])
