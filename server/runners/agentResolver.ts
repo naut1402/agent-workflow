@@ -7,12 +7,13 @@ import {
   ensureSectionOrder,
   getSectionTitle,
 } from '../../shared/agentMarkdown.js'
+import type { ResolvedAgent } from './types.js'
 
-function homeDir() {
+function homeDir(): string {
   return process.env.HOME || process.env.USERPROFILE || os.homedir()
 }
 
-export function normalizeAgentRef(ref) {
+export function normalizeAgentRef(ref: unknown): unknown {
   if (typeof ref !== 'string') return ref
   if (ref.startsWith('dev-agent-teams:')) {
     return `repo:dev-agent-teams:${ref.slice('dev-agent-teams:'.length)}`
@@ -20,14 +21,14 @@ export function normalizeAgentRef(ref) {
   return ref
 }
 
-function parseCatalogAgentId(id) {
+function parseCatalogAgentId(id: unknown): { source: string; name: string } | null {
   if (typeof id !== 'string' || !id.includes(':')) return null
   const i = id.lastIndexOf(':')
   if (i <= 0) return null
   return { source: id.slice(0, i), name: id.slice(i + 1) }
 }
 
-async function safeAccess(p) {
+async function safeAccess(p: string): Promise<boolean> {
   try {
     await fs.access(p)
     return true
@@ -36,9 +37,9 @@ async function safeAccess(p) {
   }
 }
 
-async function findInPluginCache(pluginName, fileName) {
+async function findInPluginCache(pluginName: string, fileName: string): Promise<string | null> {
   const cacheRoot = path.join(homeDir(), '.claude', 'plugins', 'cache')
-  let bestPath = null
+  let bestPath: string | null = null
   let bestMtime = 0
   try {
     const markets = await fs.readdir(cacheRoot, { withFileTypes: true })
@@ -73,7 +74,11 @@ async function findInPluginCache(pluginName, fileName) {
   return bestPath
 }
 
-async function resolveAgentFilePath(projectRoot, devTeamRoot, agentRef) {
+async function resolveAgentFilePath(
+  projectRoot: string,
+  devTeamRoot: string,
+  agentRef: string,
+): Promise<string | null> {
   const id = normalizeAgentRef(agentRef)
   const parsed = parseCatalogAgentId(id)
   if (!parsed?.name) return null
@@ -99,8 +104,8 @@ async function resolveAgentFilePath(projectRoot, devTeamRoot, agentRef) {
   return null
 }
 
-function buildSystemPrompt(draft) {
-  const parts = []
+function buildSystemPrompt(draft: any): string {
+  const parts: string[] = []
   for (const key of ensureSectionOrder(draft)) {
     const content = draft.sections?.[key]
     if (content?.trim()) {
@@ -112,18 +117,17 @@ function buildSystemPrompt(draft) {
   return parts.join('\n\n')
 }
 
-/**
- * Resolve agentRef to provider-agnostic ResolvedAgent.
- * @param {string} agentRef
- * @param {{ projectRoot: string, devTeamRoot: string }} ctx
- */
-export async function resolveAgent(agentRef, ctx) {
+/** Resolve agentRef to a provider-agnostic ResolvedAgent. */
+export async function resolveAgent(
+  agentRef: string,
+  ctx: { projectRoot: string; devTeamRoot: string },
+): Promise<ResolvedAgent> {
   const agentPath = await resolveAgentFilePath(ctx.projectRoot, ctx.devTeamRoot, agentRef)
   if (!agentPath) {
     throw new Error(`agent file not found for ref: ${agentRef}`)
   }
   const raw = await fs.readFile(agentPath, 'utf8')
-  const draft = parseAgentMarkdown(raw, yaml)
+  const draft: any = parseAgentMarkdown(raw, yaml)
   return {
     ref: agentRef,
     name: draft.name || path.basename(agentPath, '.md'),

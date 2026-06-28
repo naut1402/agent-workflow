@@ -2,15 +2,23 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveSecretRef } from '../credentials.js'
+import type { CredentialProfile, ExecuteRequest, ExecuteResult, ResolvedAgent, RunnerProvider } from '../types.js'
 
-function buildPrompt(resolvedAgent, userPrompt) {
+interface ProcResult {
+  exitCode: number | null
+  stdout: string
+  stderr: string
+  killed: boolean
+}
+
+function buildPrompt(resolvedAgent: ResolvedAgent, userPrompt: string): string {
   const system = resolvedAgent.systemPrompt?.trim()
   if (!system) return userPrompt
   return `## Agent instructions\n\n${system}\n\n## Task\n\n${userPrompt}`
 }
 
 /** --bare only supports ANTHROPIC_API_KEY; cli-session needs OAuth/keychain. */
-function resolveEffectiveFlags(flags, credential) {
+function resolveEffectiveFlags(flags: unknown, credential: CredentialProfile): string[] {
   const list = Array.isArray(flags) ? [...flags] : []
   const auth = resolveSecretRef(credential)
   if (auth.type === 'cli-session') {
@@ -19,7 +27,7 @@ function resolveEffectiveFlags(flags, credential) {
   return list
 }
 
-function buildChildEnv(credential) {
+function buildChildEnv(credential: CredentialProfile): NodeJS.ProcessEnv {
   const env = { ...process.env }
   const auth = resolveSecretRef(credential)
   if (auth.type === 'env' && auth.key && auth.value) {
@@ -28,11 +36,8 @@ function buildChildEnv(credential) {
   return env
 }
 
-function formatFailure(procResult, logPath) {
-  const fromStreams = [procResult.stderr, procResult.stdout]
-    .filter(Boolean)
-    .join('\n')
-    .trim()
+function formatFailure(procResult: ProcResult, logPath?: string): string {
+  const fromStreams = [procResult.stderr, procResult.stdout].filter(Boolean).join('\n').trim()
   if (fromStreams) return fromStreams.slice(0, 1000)
   if (logPath && fs.existsSync(logPath)) {
     const log = fs.readFileSync(logPath, 'utf8').trim()
@@ -42,7 +47,14 @@ function formatFailure(procResult, logPath) {
   return `exit code ${procResult.exitCode ?? 'unknown'}`
 }
 
-function runProcess(cliPath, args, options) {
+interface RunProcessOptions {
+  cwd: string
+  env: NodeJS.ProcessEnv
+  timeoutMs: number
+  onLog?: (chunk: string) => void
+}
+
+function runProcess(cliPath: string, args: string[], options: RunProcessOptions): Promise<ProcResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(cliPath, args, {
       cwd: options.cwd,
@@ -84,22 +96,17 @@ function runProcess(cliPath, args, options) {
 
     child.on('close', (code) => {
       if (timer) clearTimeout(timer)
-      resolve({
-        exitCode: killed ? -1 : code,
-        stdout,
-        stderr,
-        killed,
-      })
+      resolve({ exitCode: killed ? -1 : code, stdout, stderr, killed })
     })
   })
 }
 
-export function createClaudeCodeCliProvider() {
+export function createClaudeCodeCliProvider(): RunnerProvider {
   return {
     providerId: 'claude-code-cli',
 
     validateRunnerConfig(config) {
-      const errors = []
+      const errors: string[] = []
       if (!config?.cliPath) errors.push('cliPath is required')
       return { ok: errors.length === 0, errors }
     },
@@ -110,14 +117,15 @@ export function createClaudeCodeCliProvider() {
     },
 
     capabilities() {
-      return {
-        supportsAgentFile: true,
-        supportsStreaming: false,
-        maxConcurrency: 1,
-      }
+      return { supportsAgentFile: true, supportsStreaming: false, maxConcurrency: 1 }
     },
 
-    async execute(req, runnerConfig, credential, onLog) {
+    async execute(
+      req: ExecuteRequest,
+      runnerConfig: Record<string, any>,
+      credential: CredentialProfile,
+      onLog?: (chunk: string) => void,
+    ): Promise<ExecuteResult> {
       const started = Date.now()
       const cliPath = String(runnerConfig.cliPath || 'claude')
       const flags = resolveEffectiveFlags(runnerConfig.flags, credential)
@@ -131,10 +139,10 @@ export function createClaudeCodeCliProvider() {
         args.push('--dangerously-skip-permissions')
       }
 
-      const logPath = req.metadata?.logPath
-      const logChunks = []
+      const logPath = req.metadata?.logPath as string | undefined
+      const logChunks: string[] = []
 
-      const wrappedOnLog = (chunk) => {
+      const wrappedOnLog = (chunk: string) => {
         logChunks.push(chunk)
         onLog?.(chunk)
         if (logPath) {
@@ -146,7 +154,7 @@ export function createClaudeCodeCliProvider() {
         }
       }
 
-      let procResult
+      let procResult: ProcResult
       try {
         procResult = await runProcess(cliPath, args, {
           cwd: req.workspace,
@@ -154,7 +162,7 @@ export function createClaudeCodeCliProvider() {
           timeoutMs: req.timeoutMs || runnerConfig.timeoutMs || 600_000,
           onLog: wrappedOnLog,
         })
-      } catch (err) {
+      } catch (err: any) {
         return {
           ok: false,
           exitCode: null,
@@ -164,7 +172,7 @@ export function createClaudeCodeCliProvider() {
         }
       }
 
-      const artifactsFound = []
+      const artifactsFound: string[] = []
       if (req.produces?.length) {
         for (const name of req.produces) {
           const fp = path.join(req.workspace, name)

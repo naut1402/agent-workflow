@@ -26,12 +26,12 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
     const b = await parseBody(c)
     if (!b.ok) return j(c, 400, { error: 'invalid JSON' })
     const result = upsertRunner(b.value.runner || b.value)
-    if (!result.ok) return j(c, 400, { error: result.error })
+    if ('error' in result) return j(c, 400, { error: result.error })
     return j(c, 200, { saved: true, runner: result.runner })
   })
   app.delete('/api/runners', (c) => {
     const result = deleteRunner(c.req.query('id') || '')
-    if (!result.ok) return j(c, result.status || 400, { error: result.error })
+    if ('error' in result) return j(c, result.status || 400, { error: result.error })
     return j(c, 200, { deleted: true, id: c.req.query('id') || '' })
   })
   app.all('/api/runners', (c) => j(c, 405, { error: 'method not allowed' }))
@@ -40,7 +40,7 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
     const b = await parseBody(c)
     if (!b.ok) return j(c, 400, { error: 'invalid JSON' })
     const result = setDefaultRunner(b.value.id || b.value.runnerId)
-    if (!result.ok) return j(c, result.status || 400, { error: result.error })
+    if ('error' in result) return j(c, result.status || 400, { error: result.error })
     return j(c, 200, { defaultRunnerId: result.defaultRunnerId })
   })
 
@@ -50,12 +50,12 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
     const b = await parseBody(c)
     if (!b.ok) return j(c, 400, { error: 'invalid JSON' })
     const result = upsertCredential(b.value.profile || b.value)
-    if (!result.ok) return j(c, 400, { error: result.error })
+    if ('error' in result) return j(c, 400, { error: result.error })
     return j(c, 200, { saved: true, profile: result.profile })
   })
   app.delete('/api/credentials', (c) => {
     const result = deleteCredential(c.req.query('id') || '')
-    if (!result.ok) return j(c, result.status || 400, { error: result.error })
+    if ('error' in result) return j(c, result.status || 400, { error: result.error })
     return j(c, 200, { deleted: true, id: c.req.query('id') || '' })
   })
   app.all('/api/credentials', (c) => j(c, 405, { error: 'method not allowed' }))
@@ -99,7 +99,7 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
   app.post('/api/jobs/:id/cancel', (c) => {
     const id = c.req.param('id')
     const result = cancelJob(id)
-    if (!result.ok) return j(c, result.status || 400, { error: result.error })
+    if ('error' in result) return j(c, result.status || 400, { error: result.error })
     return j(c, 200, { cancelled: true, id })
   })
   app.get('/api/jobs/:id', (c) => {
