@@ -32,6 +32,9 @@ export default defineConfig({
       DEV_TEAM_ROOT: fixtureRoot,
       DEV_TEAM_DASHBOARD_PORT: String(PORT),
       DEV_TEAM_DASHBOARD_HOST: '127.0.0.1',
+      // Isolate the registry/runners/jobs store so CRUD specs don't touch the
+      // developer's real ~/.dev-team-dashboard (and stay deterministic in CI).
+      DEV_TEAM_DASHBOARD_HOME: path.resolve(process.cwd(), 'test-e2e/.runtime/home'),
     },
   },
 })

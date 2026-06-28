@@ -19,6 +19,9 @@ test('pipeline editor mode mounts the canvas (capture)', async ({ page }) => {
   // VueFlow renders its pane once the resolved pipeline config loads.
   await expect(page.locator('.vue-flow')).toBeVisible({ timeout: 15_000 })
 
+  // UX2 (ported from verify-ux): no step-config panel until a node is selected.
+  expect(await page.locator('.step-config-panel').count()).toBe(0)
+
   await page.screenshot({ path: path.join(EVIDENCE, 'pipeline-editor.png'), fullPage: true })
 
   fs.writeFileSync(
