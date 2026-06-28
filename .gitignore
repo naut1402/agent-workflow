@@ -2,6 +2,10 @@ node_modules/
 dist/
 CLAUDE.local.md
 
+# Conversation exports (/export) — never commit
+ts-migration.txt
+*.export.txt
+
 # Test / coverage artifacts
 coverage/
 playwright-report/
