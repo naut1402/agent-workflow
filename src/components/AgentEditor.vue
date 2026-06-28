@@ -7,7 +7,7 @@ import {
   deleteCustomAgent,
   exportCustomAgent,
   fetchCatalog,
-} from '../api.js'
+} from '../api'
 import { emptyDraft } from '../../shared/agentMarkdown.js'
 import AgentSectionEditor from './AgentSectionEditor.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'

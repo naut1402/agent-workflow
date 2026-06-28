@@ -1,14 +1,17 @@
 import { defineConfig, devices } from '@playwright/test'
+import path from 'node:path'
 
-// E2E tests live in e2e/<feature>.spec.ts and exercise the full stack
-// (real server + a fixture .dev-team-agent/ root + a browser).
-// Migrated from the legacy scripts/verify-*.mjs scripts in a later phase.
-const PORT = Number(process.env.E2E_PORT || 5174)
-const baseURL = process.env.E2E_BASE_URL || `http://localhost:${PORT}`
+// E2E tests boot the full stack (standalone server serving the built SPA + a
+// fixture .dev-team-agent/ as DEV_TEAM_ROOT) and capture screenshots into
+// docs/<feature>-evidence/ as confirmation that each frontend refactor still
+// renders. Migrated incrementally from the legacy scripts/verify-*.mjs.
+const PORT = Number(process.env.E2E_PORT || 4319)
+const baseURL = process.env.E2E_BASE_URL || `http://127.0.0.1:${PORT}`
+const fixtureRoot = path.resolve(process.cwd(), 'e2e/fixtures/project/.dev-team-agent')
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['html', { open: 'never' }], ['list']] : 'list',
@@ -17,17 +20,18 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
-  projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-  ],
-  // webServer is intentionally disabled until real e2e specs land (e2e is
-  // deferred per refactor-workflow.md). Re-enable when migrating
-  // scripts/verify-*.mjs so Playwright boots the dev server for the suite:
-  //
-  // webServer: {
-  //   command: `vite --port ${PORT} --open false`,
-  //   url: baseURL,
-  //   reuseExistingServer: !process.env.CI,
-  //   timeout: 120_000,
-  // },
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // Build the SPA then serve it via the standalone server pointed at the fixture
+  // workspace. reuseExistingServer locally so repeated runs are fast.
+  webServer: {
+    command: 'bun run build && bun server/standalone.ts',
+    url: baseURL,
+    reuseExistingServer: !process.env.CI,
+    timeout: 180_000,
+    env: {
+      DEV_TEAM_ROOT: fixtureRoot,
+      DEV_TEAM_DASHBOARD_PORT: String(PORT),
+      DEV_TEAM_DASHBOARD_HOST: '127.0.0.1',
+    },
+  },
 })

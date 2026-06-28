@@ -1,11 +1,12 @@
-/**
- * Parse / compile workflow section markdown ↔ builder steps.
- */
+// Parse / compile workflow section markdown ↔ builder steps.
 
-/** @typedef {{ title: string, body: string, pipelineStepId?: string }} WorkflowStep */
+export interface WorkflowStep {
+  title: string
+  body: string
+  pipelineStepId?: string
+}
 
-/** @returns {WorkflowStep[]} */
-export function parseWorkflowMarkdown(text) {
+export function parseWorkflowMarkdown(text: string): WorkflowStep[] {
   const raw = (text || '').trim()
   if (!raw) return []
 
@@ -26,9 +27,9 @@ export function parseWorkflowMarkdown(text) {
     })
   }
 
-  const numbered = []
+  const numbered: WorkflowStep[] = []
   const lines = raw.split('\n')
-  let current = null
+  let current: WorkflowStep | null = null
   for (const line of lines) {
     const m = line.match(/^\s*(\d+)[.)]\s+(.+)$/)
     if (m) {
@@ -44,15 +45,16 @@ export function parseWorkflowMarkdown(text) {
   return [{ title: 'Bước 1', body: raw, pipelineStepId: '' }]
 }
 
-/** @param {WorkflowStep[]} steps */
-export function compileWorkflowMarkdown(steps) {
+export function compileWorkflowMarkdown(steps: WorkflowStep[]): string {
   return (steps || [])
     .filter((s) => (s.title || '').trim() || (s.body || '').trim())
     .map((s, i) => {
       const title = (s.title || '').trim() || `Bước ${i + 1}`
       let body = (s.body || '').trim()
       if (s.pipelineStepId) {
-        body = body ? `${body}\n\n<!-- pipeline_step:${s.pipelineStepId} -->` : `<!-- pipeline_step:${s.pipelineStepId} -->`
+        body = body
+          ? `${body}\n\n<!-- pipeline_step:${s.pipelineStepId} -->`
+          : `<!-- pipeline_step:${s.pipelineStepId} -->`
       }
       return `### Bước ${i + 1}: ${title}\n\n${body}`.trimEnd()
     })

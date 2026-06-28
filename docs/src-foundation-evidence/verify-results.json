@@ -1,0 +1,10 @@
+{
+  "feature": "src-foundation",
+  "checks": [
+    {
+      "name": "app shell mounts + monitor renders fixture task DEMO-1",
+      "ok": true
+    }
+  ],
+  "capturedAt": "2026-06-28T01:32:47.451Z"
+}

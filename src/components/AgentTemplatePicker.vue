@@ -8,7 +8,7 @@ import {
   importAgentTemplateUrl,
   uploadAgentTemplate,
   deleteAgentTemplate,
-} from '../api.js'
+} from '../api'
 import { draftFromCatalogAgent } from '../../shared/agentMarkdown.js'
 
 const emit = defineEmits(['apply-draft', 'close'])

@@ -9,7 +9,7 @@ import {
   submitJob,
   fetchJobs,
   fetchJob,
-} from '../api.js'
+} from '../api'
 
 const runners = ref([])
 const defaultRunnerId = ref('')
