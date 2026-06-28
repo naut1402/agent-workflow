@@ -5,7 +5,7 @@ Branch setup môi trường: **`refactor/setup-environment`** (tách từ `refac
 
 ## Trình tự cho MỖI module cần refactor
 
-1. **Checkout** `refactor/{module-name}/main` (tách từ `refactor/main`).
+1. **Tạo worktree riêng + branch** `refactor/{module-name}/main` (tách từ `refactor/main`) — mỗi instance 1 worktree, KHÔNG code chung cây chính (xem `worktree.md`).
 2. **Migrate code** theo plan & cấu trúc đã thống nhất (xem `coding-conventions.md` + cấu trúc module bên dưới).
 3. **Commit & push** — theo `git-hygiene.md`: soát `git status`/`git diff --staged`, stage có chọn lọc (KHÔNG `git add -A` mù), `git mv` khi rename, không để file dư/ngoài phạm vi.
 4. **Tạo PR** (dùng `.github/pull_request_template.md`). PR body:
