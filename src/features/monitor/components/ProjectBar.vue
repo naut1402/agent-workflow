@@ -1,13 +1,13 @@
-<script setup>
+<script setup lang="ts">
 // Sidebar project selector + CRUD. Lets the user switch the active project
 // (whose tasks the monitor view polls) and add/remove projects in the shared
 // registry. Removing a project only detaches it from the dashboard — it never
 // touches files on disk.
 import { ref } from 'vue'
-import { addProject, removeProject } from '../api'
+import { addProject, removeProject } from '../../../api'
 
 const props = defineProps({
-  projects: { type: Array, default: () => [] },
+  projects: { type: Array as () => any[], default: () => [] },
   defaultId: { type: String, default: null },
   selectedId: { type: String, default: null },
 })
