@@ -28,7 +28,8 @@
     "mcp/**/*",
     "src/**/*",
     "scripts/**/*",
-    "e2e/**/*",
+    "tests/**/*",
+    "test-e2e/**/*",
     "*.config.ts",
     "*.config.js"
   ],

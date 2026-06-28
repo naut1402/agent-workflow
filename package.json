@@ -12,7 +12,7 @@
     "start": "vite build && bun server/standalone.ts",
     "mcp": "bun mcp/server.ts",
     "typecheck": "vue-tsc --noEmit",
-    "test": "bun test server mcp",
+    "test": "bun test tests/server tests/mcp",
     "test:fe": "vitest run --coverage",
     "test:e2e": "playwright test --pass-with-no-tests",
     "test:all": "bun run typecheck && bun run test && bun run test:fe && bun run test:e2e"
