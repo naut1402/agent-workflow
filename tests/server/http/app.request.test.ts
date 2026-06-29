@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createApp } from '../../../server/http/app.js'
+import { readLogs } from '../../../server/logging/store.js'
 import type { RegistryContext } from '../../../server/registry.js'
 
 // Integration tests via Hono's app.request — no server boot, no node req/res
@@ -28,15 +29,23 @@ function fakeCtx(): RegistryContext {
   }
 }
 
+const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
+
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-appreq-'))
+  // Keep audit logs (emitted by mutation routes) inside the tmp root.
+  process.env.DEV_TEAM_DASHBOARD_HOME = path.join(root, '.home')
   fs.mkdirSync(path.join(root, '.dev-state'), { recursive: true })
   fs.mkdirSync(path.join(root, 'tasks', 'A1'), { recursive: true })
   fs.writeFileSync(path.join(root, '.dev-state', 'A1.json'), JSON.stringify({ current_phase: 'design' }))
   app = createApp(fakeCtx())
 })
 
-afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
+afterAll(() => {
+  if (prevHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
+  else process.env.DEV_TEAM_DASHBOARD_HOME = prevHome
+  fs.rmSync(root, { recursive: true, force: true })
+})
 
 describe('app.request routing', () => {
   test('GET /api/tasks → 200 with root + no-store header', async () => {
@@ -93,5 +102,36 @@ describe('app.request routing', () => {
       body: JSON.stringify({ scope: 'global' }),
     })
     expect(res.status).toBe(400)
+  })
+
+  // ── Logging endpoints ──────────────────────────────────────────────────────
+  test('GET /api/logs → 200 with no-store', async () => {
+    const res = await app.request('/api/logs')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(Array.isArray((await res.json()).entries)).toBe(true)
+  })
+
+  test('a mutation is recorded in the audit log', async () => {
+    const save = await app.request('/api/pipeline-profiles', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'audit-me', pipeline: { steps: [] } }),
+    })
+    expect(save.status).toBe(200)
+    await new Promise((r) => setTimeout(r, 20)) // emitAudit is fire-and-forget
+    const res = await app.request('/api/logs?type=audit')
+    const entries = (await res.json()).entries as any[]
+    expect(entries.some((e) => e.entity === 'pipeline-profile' && e.identifier === 'audit-me')).toBe(true)
+  })
+
+  test('GET /api/jobs/:id/log → 400 on bad id', async () => {
+    const res = await app.request('/api/jobs/not-a-uuid/log')
+    expect(res.status).toBe(400)
+  })
+
+  test('GET /api/jobs/:id/log → 200 empty for missing log', async () => {
+    const res = await app.request('/api/jobs/11111111-2222-4333-8444-555555555555/log')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ text: '', size: 0 })
   })
 })

@@ -31,6 +31,18 @@ export function resolveArtifact(root: string, id: string, name: string): string 
   return target
 }
 
+/**
+ * Validate a job id. Job ids are minted with `crypto.randomUUID()`, so a strict
+ * UUID-v4 shape both matches real ids and rejects path traversal (no separators,
+ * dots or null bytes can pass). Returns the lower-cased id, or null when invalid.
+ */
+export function sanitiseJobId(id: unknown): string | null {
+  if (typeof id !== 'string') return null
+  const v = id.trim().toLowerCase()
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v)) return null
+  return v
+}
+
 /** True for hostnames that resolve to private / loopback ranges (SSRF guard). */
 export function isPrivateHostname(hostname: string): boolean {
   const h = (hostname || '').toLowerCase()
