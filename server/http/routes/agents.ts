@@ -7,6 +7,7 @@ import { j, parseBody, unknownProject } from '../respond.js'
 import { parseAgentMarkdown, compileAgentMarkdown } from '../../../shared/agentMarkdown.js'
 import { safeReadDir } from '../../../shared/fs.js'
 import { sanitiseProfileName, sanitiseAgentName } from '../../../shared/sanitize.js'
+import { emitAudit } from '../../logging/store.js'
 import {
   customAgentsDir,
   agentTemplatesDir,
@@ -43,6 +44,7 @@ export function registerAgentRoutes(app: Hono<HonoEnv>): void {
     await fs.mkdir(customAgentsDir(root), { recursive: true })
     const content = compileAgentMarkdown({ ...draft, name: clean }, yaml)
     await fs.writeFile(path.join(customAgentsDir(root), `${clean}.md`), content, 'utf8')
+    emitAudit({ op: 'create', entity: 'custom-agent', identifier: clean, projectId: c.get('projectId') })
     return j(c, 200, { saved: true, name: clean })
   })
   app.delete('/api/custom-agents', async (c) => {
@@ -52,6 +54,7 @@ export function registerAgentRoutes(app: Hono<HonoEnv>): void {
     if (!name) return j(c, 400, { error: 'invalid name' })
     try {
       await fs.unlink(path.join(customAgentsDir(root), `${name}.md`))
+      emitAudit({ op: 'delete', entity: 'custom-agent', identifier: name, projectId: c.get('projectId') })
       return j(c, 200, { deleted: true, name })
     } catch {
       return j(c, 404, { error: 'not found' })
@@ -79,6 +82,7 @@ export function registerAgentRoutes(app: Hono<HonoEnv>): void {
       }
     }
     await fs.writeFile(dest, agent.content, 'utf8')
+    emitAudit({ op: 'export', entity: 'custom-agent', identifier: name, projectId: c.get('projectId') })
     return j(c, 200, { exported: true, path: `.claude/agents/${name}.md` })
   })
 
@@ -147,6 +151,7 @@ export function registerAgentRoutes(app: Hono<HonoEnv>): void {
       const clean = sanitiseAgentName(fileName) || 'uploaded-template'
       await fs.mkdir(tplDir, { recursive: true })
       await fs.writeFile(path.join(tplDir, `${clean}.md`), fileContent, 'utf8')
+      emitAudit({ op: 'create', entity: 'agent-template', identifier: clean, projectId: c.get('projectId') })
       return j(c, 200, { saved: true, name: clean })
     }
     const b = await parseBody(c)
@@ -163,6 +168,7 @@ export function registerAgentRoutes(app: Hono<HonoEnv>): void {
       const clean = sanitiseAgentName(parsed.name || draft.name || 'url-template') || 'url-template'
       await fs.mkdir(tplDir, { recursive: true })
       await fs.writeFile(path.join(tplDir, `${clean}.md`), text, 'utf8')
+      emitAudit({ op: 'create', entity: 'agent-template', identifier: clean, projectId: c.get('projectId') })
       return j(c, 200, { saved: true, name: clean, draft })
     }
     const draft = parsed.draft || parsed
@@ -170,6 +176,7 @@ export function registerAgentRoutes(app: Hono<HonoEnv>): void {
     if (!clean) return j(c, 400, { error: 'invalid template name' })
     await fs.mkdir(tplDir, { recursive: true })
     await fs.writeFile(path.join(tplDir, `${clean}.md`), compileAgentMarkdown(draft, yaml), 'utf8')
+    emitAudit({ op: 'create', entity: 'agent-template', identifier: clean, projectId: c.get('projectId') })
     return j(c, 200, { saved: true, name: clean })
   })
   app.delete('/api/agent-templates', async (c) => {
@@ -181,6 +188,7 @@ export function registerAgentRoutes(app: Hono<HonoEnv>): void {
     if (!name) return j(c, 400, { error: 'invalid name' })
     try {
       await fs.unlink(path.join(tplDir, `${name}.md`))
+      emitAudit({ op: 'delete', entity: 'agent-template', identifier: name, projectId: c.get('projectId') })
       return j(c, 200, { deleted: true, name })
     } catch {
       return j(c, 404, { error: 'not found' })
@@ -234,6 +242,7 @@ export function registerAgentRoutes(app: Hono<HonoEnv>): void {
     }
     await fs.mkdir(tplDir, { recursive: true })
     await fs.writeFile(path.join(tplDir, `${clean}.json`), JSON.stringify(payload, null, 2), 'utf8')
+    emitAudit({ op: 'create', entity: 'workflow-step-template', identifier: clean, projectId: c.get('projectId') })
     return j(c, 200, { saved: true, name: clean })
   })
   app.delete('/api/workflow-step-templates', async (c) => {
@@ -244,6 +253,7 @@ export function registerAgentRoutes(app: Hono<HonoEnv>): void {
     if (!name) return j(c, 400, { error: 'invalid name' })
     try {
       await fs.unlink(path.join(tplDir, `${name}.json`))
+      emitAudit({ op: 'delete', entity: 'workflow-step-template', identifier: name, projectId: c.get('projectId') })
       return j(c, 200, { deleted: true, name })
     } catch {
       return j(c, 404, { error: 'not found' })

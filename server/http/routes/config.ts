@@ -7,6 +7,7 @@ import { j, parseBody, unknownProject } from '../respond.js'
 import { statSafe } from '../../../shared/fs.js'
 import { sanitiseProfileName } from '../../../shared/sanitize.js'
 import { profilesDir } from '../../agents/index.js'
+import { emitAudit } from '../../logging/store.js'
 
 // Pipeline profiles (named reusable configs) + pipeline.yaml write.
 export function registerConfigRoutes(app: Hono<HonoEnv>): void {
@@ -52,6 +53,7 @@ export function registerConfigRoutes(app: Hono<HonoEnv>): void {
     }
     await fs.mkdir(dir, { recursive: true })
     await fs.writeFile(path.join(dir, `${name}.yaml`), yaml.dump(b.value.pipeline, { lineWidth: 120 }), 'utf8')
+    emitAudit({ op: 'create', entity: 'pipeline-profile', identifier: name, projectId: c.get('projectId') })
     return j(c, 200, { saved: true, name })
   })
 
@@ -63,6 +65,7 @@ export function registerConfigRoutes(app: Hono<HonoEnv>): void {
     if (!name) return j(c, 400, { error: 'invalid profile name' })
     try {
       await fs.unlink(path.join(dir, `${name}.yaml`))
+      emitAudit({ op: 'delete', entity: 'pipeline-profile', identifier: name, projectId: c.get('projectId') })
       return j(c, 200, { deleted: true, name })
     } catch {
       return j(c, 404, { error: 'profile not found' })
@@ -91,6 +94,13 @@ export function registerConfigRoutes(app: Hono<HonoEnv>): void {
     }
     const toWrite = scope === 'task' ? { ...pipeline, steps_replace: true } : pipeline
     await fs.writeFile(target, yaml.dump(toWrite, { lineWidth: 120 }), 'utf8')
+    emitAudit({
+      op: 'update',
+      entity: 'pipeline',
+      identifier: scope === 'task' ? taskId : 'global',
+      projectId: c.get('projectId'),
+      detail: { scope },
+    })
     return j(c, 200, { written: true, scope, target })
   })
 }
