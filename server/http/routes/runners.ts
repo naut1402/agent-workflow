@@ -2,6 +2,7 @@ import path from 'node:path'
 import type { Hono } from 'hono'
 import type { HonoEnv } from '../types.js'
 import { j, parseBody, unknownProject } from '../respond.js'
+import { emitAudit } from '../../logging/store.js'
 import {
   listRunners,
   upsertRunner,
@@ -27,11 +28,13 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
     if (!b.ok) return j(c, 400, { error: 'invalid JSON' })
     const result = upsertRunner(b.value.runner || b.value)
     if ('error' in result) return j(c, 400, { error: result.error })
+    emitAudit({ op: 'update', entity: 'runner', identifier: result.runner?.id ?? null, projectId: null })
     return j(c, 200, { saved: true, runner: result.runner })
   })
   app.delete('/api/runners', (c) => {
     const result = deleteRunner(c.req.query('id') || '')
     if ('error' in result) return j(c, result.status || 400, { error: result.error })
+    emitAudit({ op: 'delete', entity: 'runner', identifier: c.req.query('id') || '', projectId: null })
     return j(c, 200, { deleted: true, id: c.req.query('id') || '' })
   })
   app.all('/api/runners', (c) => j(c, 405, { error: 'method not allowed' }))
@@ -51,11 +54,14 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
     if (!b.ok) return j(c, 400, { error: 'invalid JSON' })
     const result = upsertCredential(b.value.profile || b.value)
     if ('error' in result) return j(c, 400, { error: result.error })
+    // Log the id only — never the secret payload.
+    emitAudit({ op: 'update', entity: 'credential', identifier: result.profile?.id ?? null, projectId: null })
     return j(c, 200, { saved: true, profile: result.profile })
   })
   app.delete('/api/credentials', (c) => {
     const result = deleteCredential(c.req.query('id') || '')
     if ('error' in result) return j(c, result.status || 400, { error: result.error })
+    emitAudit({ op: 'delete', entity: 'credential', identifier: c.req.query('id') || '', projectId: null })
     return j(c, 200, { deleted: true, id: c.req.query('id') || '' })
   })
   app.all('/api/credentials', (c) => j(c, 405, { error: 'method not allowed' }))

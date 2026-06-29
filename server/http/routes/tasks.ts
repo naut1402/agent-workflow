@@ -6,6 +6,7 @@ import { j, parseBody, unknownProject } from '../respond.js'
 import { resolveArtifact } from '../../../shared/sanitize.js'
 import { collectTasks, flowProfilePath } from '../../tasks/index.js'
 import { loadPipelineConfig } from '../../pipeline/index.js'
+import { emitAudit } from '../../logging/store.js'
 
 // Task state, artifacts, resolved pipeline config, profile & flow-profile.
 export function registerTaskRoutes(app: Hono<HonoEnv>): void {
@@ -97,6 +98,7 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
     await fs.mkdir(path.dirname(fp), { recursive: true })
     await fs.writeFile(fp, JSON.stringify(b.value, null, 2), 'utf8')
+    emitAudit({ op: 'update', entity: 'flow-profile', identifier: id, projectId: c.get('projectId') })
     return j(c, 200, { id, saved: true })
   })
 }

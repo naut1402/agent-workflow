@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer'
 import type { RegistryContext } from '../registry.js'
 import { json } from '../../shared/http.js'
 import { handleKnowledgeApi } from '../knowledge/knowledgeApi.js'
+import { appendRequestLog } from '../logging/store.js'
 import { createApp } from './app.js'
 
 // ── Node ⇆ Hono bridge ─────────────────────────────────────────────────────
@@ -45,9 +46,14 @@ export function createApiHandler(ctx: RegistryContext) {
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url || '/', 'http://localhost')
     if (!url.pathname.startsWith('/api/')) return false
+    // Single chokepoint for ALL /api/* traffic on both transports — the only
+    // layer above both the knowledge (node-res) and Hono branches. Request
+    // logging is fire-and-forget in `finally`, never awaited into the response.
+    const started = Date.now()
+    const projectId = url.searchParams.get('project') || null
+    let errored: string | null = null
     try {
       if (url.pathname.startsWith('/api/knowledge')) {
-        const projectId = url.searchParams.get('project') || null
         const root = ctx.resolveProjectRoot(projectId)
         if (!root) {
           json(res, 404, { error: 'unknown project', project: projectId })
@@ -59,7 +65,17 @@ export function createApiHandler(ctx: RegistryContext) {
       const response = await app.fetch(await nodeToWebRequest(req, url))
       await writeWebResponse(res, response)
     } catch (err: any) {
-      json(res, 500, { error: String(err && err.message ? err.message : err) })
+      errored = String(err && err.message ? err.message : err)
+      json(res, 500, { error: errored })
+    } finally {
+      appendRequestLog({
+        method: req.method || 'GET',
+        path: url.pathname,
+        projectId,
+        status: res.statusCode,
+        durationMs: Date.now() - started,
+        error: errored,
+      })
     }
     return true
   }
