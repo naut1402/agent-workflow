@@ -12,6 +12,8 @@ import PipelineEditor from './features/pipeline-editor/components/PipelineEditor
 import AgentEditor from './features/agent-editor/components/AgentEditor.vue'
 import KnowledgePanel from './features/knowledge/components/KnowledgePanel.vue'
 import RunnerConfigPanel from './features/runner/components/RunnerConfigPanel.vue'
+import LogsPanel from './features/logs/components/LogsPanel.vue'
+import TaskTimeline from './features/logs/components/TaskTimeline.vue'
 import RailIcon from './shared/ui/RailIcon.vue'
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
@@ -210,6 +212,15 @@ onUnmounted(stop)
           <RailIcon name="runner" />
           <span v-if="!sidebarCollapsed" class="mode-btn-label">Runner</span>
         </button>
+        <button
+          class="mode-btn rail-icon-btn"
+          :class="{ active: mode === 'logs' }"
+          title="Nhật ký"
+          @click="mode = 'logs'"
+        >
+          <RailIcon name="logs" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">Nhật ký</span>
+        </button>
       </div>
 
       <div v-if="mode === 'editor' && !sidebarCollapsed" class="editor-scope">
@@ -264,6 +275,7 @@ onUnmounted(stop)
         <span v-else-if="mode === 'agentEditor'" class="muted">agent editor — polling paused</span>
         <span v-else-if="mode === 'knowledge'" class="muted">knowledge — polling paused</span>
         <span v-else-if="mode === 'runner'" class="muted">runner config — polling paused</span>
+        <span v-else-if="mode === 'logs'" class="muted">nhật ký — polling paused</span>
       </footer>
     </aside>
 
@@ -285,6 +297,8 @@ onUnmounted(stop)
         <QaPanel v-if="selected.has_qa" :qa="selected.qa" />
 
         <PipelineView :task="selected" />
+
+        <TaskTimeline :task="selected" />
 
         <ArtifactPanel
           :task="selected"
@@ -316,6 +330,10 @@ onUnmounted(stop)
 
     <main v-else-if="mode === 'runner'" class="main main-editor">
       <RunnerConfigPanel />
+    </main>
+
+    <main v-else-if="mode === 'logs'" class="main main-editor">
+      <LogsPanel />
     </main>
 
     <main v-else-if="mode === 'agentEditor'" class="main main-editor">

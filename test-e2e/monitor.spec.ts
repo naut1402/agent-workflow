@@ -16,5 +16,8 @@ test('select task expands artifact list (capture)', async ({ page }, testInfo) =
   // The fixture task has investigate.md + design.md artifacts.
   await expect(page.locator('.file-item .file-name', { hasText: 'investigate.md' })).toBeVisible()
 
+  // The per-task activity timeline renders alongside the pipeline view.
+  await expect(page.locator('.task-timeline')).toBeVisible()
+
   await capture(page, testInfo, 'monitor-task-expanded')
 })
