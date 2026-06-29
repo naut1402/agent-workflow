@@ -1,0 +1,206 @@
+<script setup lang="ts">
+import { ref, onUnmounted, watch } from 'vue'
+import { fetchLogs, fetchJobs, fetchJobLog } from '../../../api'
+
+type Tab = 'audit' | 'request' | 'jobs'
+
+const tab = ref<Tab>('audit')
+const entries = ref<any[]>([])
+const jobs = ref<any[]>([])
+const selectedJobId = ref('')
+const jobLog = ref('')
+const jobLogTruncated = ref(false)
+const tailing = ref(false)
+const loading = ref(false)
+const error = ref('')
+
+let tailTimer: ReturnType<typeof setInterval> | null = null
+
+function stopTail() {
+  if (tailTimer) {
+    clearInterval(tailTimer)
+    tailTimer = null
+  }
+  tailing.value = false
+}
+
+async function loadLogs(type: 'audit' | 'request') {
+  loading.value = true
+  error.value = ''
+  try {
+    const data = await fetchLogs({ type, limit: 200 })
+    entries.value = data.entries || []
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadJobs() {
+  loading.value = true
+  error.value = ''
+  try {
+    const data = await fetchJobs(20)
+    jobs.value = data.jobs || []
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadJobLog(id: string) {
+  try {
+    const data = await fetchJobLog(id)
+    jobLog.value = data.text || ''
+    jobLogTruncated.value = Boolean(data.truncated)
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
+function selectJob(id: string) {
+  stopTail()
+  selectedJobId.value = id
+  jobLog.value = ''
+  loadJobLog(id)
+}
+
+function toggleTail() {
+  if (tailing.value) {
+    stopTail()
+    return
+  }
+  if (!selectedJobId.value) return
+  tailing.value = true
+  tailTimer = setInterval(() => {
+    if (selectedJobId.value) loadJobLog(selectedJobId.value)
+  }, 1500)
+}
+
+function selectTab(t: Tab) {
+  stopTail()
+  tab.value = t
+}
+
+// React to tab changes (covers both programmatic and click-driven switches).
+watch(
+  tab,
+  (t) => {
+    if (t === 'audit') loadLogs('audit')
+    else if (t === 'request') loadLogs('request')
+    else loadJobs()
+  },
+  { immediate: true },
+)
+
+onUnmounted(stopTail)
+</script>
+
+<template>
+  <div class="logs-panel">
+    <header class="logs-head">
+      <h2>Nhật ký</h2>
+      <p class="muted">Log tập trung (global ~/.dev-team-dashboard/logs/)</p>
+    </header>
+
+    <nav class="logs-tabs">
+      <button type="button" :class="{ active: tab === 'audit' }" @click="selectTab('audit')">Kiểm toán</button>
+      <button type="button" :class="{ active: tab === 'request' }" @click="selectTab('request')">Yêu cầu</button>
+      <button type="button" :class="{ active: tab === 'jobs' }" @click="selectTab('jobs')">Jobs</button>
+    </nav>
+
+    <div v-if="error" class="err-banner">{{ error }}</div>
+
+    <!-- Audit -->
+    <table v-if="tab === 'audit'" class="logs-table">
+      <thead>
+        <tr><th>Thời gian</th><th>Thao tác</th><th>Đối tượng</th><th>Định danh</th><th>Project</th></tr>
+      </thead>
+      <tbody>
+        <tr v-for="(e, i) in entries" :key="i">
+          <td>{{ e.iso }}</td>
+          <td>{{ e.op }}</td>
+          <td>{{ e.entity }}</td>
+          <td>{{ e.identifier }}</td>
+          <td>{{ e.projectId || '—' }}</td>
+        </tr>
+        <tr v-if="!entries.length && !loading"><td colspan="5" class="muted">Chưa có log.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- Request -->
+    <table v-else-if="tab === 'request'" class="logs-table">
+      <thead>
+        <tr><th>Thời gian</th><th>Method</th><th>Path</th><th>Status</th><th>ms</th><th>Project</th></tr>
+      </thead>
+      <tbody>
+        <tr v-for="(e, i) in entries" :key="i" :class="{ 'row-err': e.status >= 400 }">
+          <td>{{ e.iso }}</td>
+          <td>{{ e.method }}</td>
+          <td>{{ e.path }}</td>
+          <td>{{ e.status }}</td>
+          <td>{{ e.durationMs }}</td>
+          <td>{{ e.projectId || '—' }}</td>
+        </tr>
+        <tr v-if="!entries.length && !loading"><td colspan="6" class="muted">Chưa có log.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- Jobs -->
+    <div v-else class="jobs-layout">
+      <aside class="jobs-list">
+        <ul>
+          <li
+            v-for="j in jobs"
+            :key="j.id"
+            :class="{ active: j.id === selectedJobId }"
+            @click="selectJob(j.id)"
+          >
+            <strong>{{ j.id.slice(0, 8) }}…</strong>
+            <span class="muted">{{ j.status }}</span>
+          </li>
+          <li v-if="!jobs.length && !loading" class="muted">Chưa có job.</li>
+        </ul>
+      </aside>
+      <section class="job-log">
+        <div class="job-log-bar">
+          <button type="button" class="btn" :disabled="!selectedJobId" @click="toggleTail">
+            {{ tailing ? '⏹ Dừng tail' : '▶ Tail' }}
+          </button>
+          <span v-if="jobLogTruncated" class="muted">(đã cắt phần đầu)</span>
+        </div>
+        <pre v-if="selectedJobId">{{ jobLog || '(log trống)' }}</pre>
+        <p v-else class="muted">Chọn một job để xem log.</p>
+      </section>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.logs-panel { padding: 1rem 1.25rem; max-width: 1100px; }
+.logs-head h2 { margin: 0 0 0.25rem; font-size: 1.25rem; font-weight: 500; }
+.muted { color: var(--text-muted, #666); font-size: 0.85rem; }
+.logs-tabs { display: flex; gap: 0.25rem; margin: 0.75rem 0; border-bottom: 1px solid #ddd; }
+.logs-tabs button {
+  padding: 0.4rem 0.9rem; border: none; background: none; cursor: pointer;
+  border-bottom: 2px solid transparent; font-size: 0.9rem;
+}
+.logs-tabs button.active { border-bottom-color: #1d9e75; color: #1d9e75; font-weight: 500; }
+.logs-table { width: 100%; font-size: 0.82rem; border-collapse: collapse; }
+.logs-table th, .logs-table td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #eee; }
+.logs-table .row-err td { color: #c00; }
+.jobs-layout { display: grid; grid-template-columns: 200px 1fr; gap: 1rem; }
+.jobs-list ul { list-style: none; padding: 0; margin: 0; }
+.jobs-list li { padding: 0.4rem 0.5rem; border-radius: 6px; cursor: pointer; }
+.jobs-list li.active { background: var(--gray-light, #f1efe8); }
+.jobs-list li strong { display: block; font-size: 0.85rem; }
+.job-log-bar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+.btn { padding: 0.3rem 0.7rem; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+.job-log pre {
+  background: #1e1e1e; color: #d4d4d4; padding: 0.75rem; border-radius: 6px;
+  font-size: 0.78rem; max-height: 60vh; overflow: auto; white-space: pre-wrap;
+}
+.err-banner { background: #fee; padding: 0.5rem; border-radius: 6px; margin: 0.5rem 0; }
+</style>
