@@ -400,3 +400,19 @@ export async function fetchJobs(limit = 10) {
   if (!r.ok) throw new Error(`/api/jobs → ${r.status}`)
   return r.json()
 }
+
+// ── Logs (global request/audit log + job execution log) ─────────────────────
+
+export async function fetchLogs(
+  { type, project, limit }: { type?: string; project?: string; limit?: number } = {},
+) {
+  const r = await fetch(`/api/logs${qs({ type, project, limit })}`)
+  if (!r.ok) throw new Error(`/api/logs → ${r.status}`)
+  return r.json()
+}
+
+export async function fetchJobLog(id: string) {
+  const r = await fetch(`/api/jobs/${encodeURIComponent(id)}/log`)
+  if (!r.ok) throw new Error(`/api/jobs/${id}/log → ${r.status}`)
+  return r.json()
+}
