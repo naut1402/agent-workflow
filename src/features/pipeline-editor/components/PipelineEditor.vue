@@ -14,8 +14,42 @@ import RailIcon from '../../../shared/ui/RailIcon.vue'
 const props = defineProps({
   scope: { type: String, default: 'global' },
   taskId: { type: String, default: '' },
+  tasks: { type: Array as () => any[], default: () => [] },
   appSidebarCollapsed: { type: Boolean, default: false },
 })
+
+const emit = defineEmits(['update:scope', 'update:task-id'])
+
+const taskSelect = ref('')
+const taskManual = ref('')
+
+function onScopeChange(event) {
+  emit('update:scope', event.target.value)
+}
+
+function onTaskSelectChange() {
+  if (taskSelect.value === '__manual__') {
+    emit('update:task-id', taskManual.value)
+  } else {
+    emit('update:task-id', taskSelect.value)
+    taskManual.value = ''
+  }
+}
+
+watch(taskManual, (v) => {
+  if (taskSelect.value === '__manual__') emit('update:task-id', v)
+})
+
+watch(
+  () => props.scope,
+  (scope) => {
+    if (scope === 'global') {
+      taskSelect.value = ''
+      taskManual.value = ''
+      emit('update:task-id', '')
+    }
+  },
+)
 
 const nodeTypes = { pipelineEditor: markRaw(PipelineEditorNode) } as any
 const {
@@ -412,6 +446,32 @@ const editorLayoutClass = computed(() => ({
 
     <div class="editor-layout" :class="editorLayoutClass">
       <div class="editor-left" :class="{ 'editor-left-collapsed': editorLeftCollapsed }">
+        <div v-if="!editorLeftCollapsed" class="editor-scope-panel">
+          <label class="scope-label">Scope:</label>
+          <select :value="scope" class="scope-select cfg-input" @change="onScopeChange">
+            <option value="global">Global pipeline.yaml</option>
+            <option value="task">Per-task</option>
+          </select>
+          <template v-if="scope === 'task'">
+            <select
+              v-model="taskSelect"
+              class="scope-select cfg-input"
+              @change="onTaskSelectChange"
+            >
+              <option value="">— Chọn task —</option>
+              <option v-for="t in tasks" :key="t.task_id" :value="t.task_id">
+                {{ t.task_id }}
+              </option>
+              <option value="__manual__">Nhập thủ công…</option>
+            </select>
+            <input
+              v-if="taskSelect === '__manual__'"
+              v-model="taskManual"
+              class="scope-task-input cfg-input"
+              placeholder="Task ID"
+            />
+          </template>
+        </div>
         <div class="editor-left-tabs" :class="{ 'is-collapsed': editorLeftCollapsed }">
           <button
             type="button"
