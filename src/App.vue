@@ -3,17 +3,12 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { fetchProjects } from './api'
 import { useLocalToggle } from './shared/composables/useLocalToggle'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
-import TaskList from './features/monitor/components/TaskList.vue'
-import ProjectBar from './features/monitor/components/ProjectBar.vue'
-import PipelineView from './features/monitor/components/PipelineView.vue'
-import QaPanel from './features/monitor/components/QaPanel.vue'
-import ArtifactPanel from './features/monitor/components/ArtifactPanel.vue'
+import MonitorLayout from './features/monitor/components/MonitorLayout.vue'
 import PipelineEditor from './features/pipeline-editor/components/PipelineEditor.vue'
 import AgentEditor from './features/agent-editor/components/AgentEditor.vue'
 import KnowledgePanel from './features/knowledge/components/KnowledgePanel.vue'
 import RunnerConfigPanel from './features/runner/components/RunnerConfigPanel.vue'
 import LogsPanel from './features/logs/components/LogsPanel.vue'
-import TaskTimeline from './features/logs/components/TaskTimeline.vue'
 import RailIcon from './shared/ui/RailIcon.vue'
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
@@ -24,8 +19,6 @@ const mode = ref('monitor')
 
 const editorScope = ref('global')
 const editorTaskId = ref('')
-const editorTaskSelect = ref('')
-const editorTaskManual = ref('')
 
 const { state: sidebarCollapsed, toggle: toggleSidebar } = useLocalToggle(false)
 
@@ -108,27 +101,6 @@ function handleOpenArtifact({ taskId, name }) {
   openArtifact.value = { taskId, name }
 }
 
-function onEditorTaskSelectChange() {
-  if (editorTaskSelect.value === '__manual__') {
-    editorTaskId.value = editorTaskManual.value
-  } else {
-    editorTaskId.value = editorTaskSelect.value
-    editorTaskManual.value = ''
-  }
-}
-
-watch(editorTaskManual, (v) => {
-  if (editorTaskSelect.value === '__manual__') editorTaskId.value = v
-})
-
-watch(editorScope, (scope) => {
-  if (scope === 'global') {
-    editorTaskSelect.value = ''
-    editorTaskManual.value = ''
-    editorTaskId.value = ''
-  }
-})
-
 watch(mode, async (m) => {
   stop()
   if (m === 'monitor') start()
@@ -166,7 +138,7 @@ onUnmounted(stop)
       </header>
       <p v-if="!sidebarCollapsed" class="root" :title="root">{{ root || '…' }}</p>
 
-      <div class="mode-toggle" :class="{ 'mode-toggle-collapsed': sidebarCollapsed }">
+      <div class="mode-toggle">
         <button
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'monitor' }"
@@ -223,51 +195,6 @@ onUnmounted(stop)
         </button>
       </div>
 
-      <div v-if="mode === 'editor' && !sidebarCollapsed" class="editor-scope">
-        <label class="scope-label">Scope:</label>
-        <select v-model="editorScope" class="scope-select">
-          <option value="global">Global pipeline.yaml</option>
-          <option value="task">Per-task</option>
-        </select>
-        <template v-if="editorScope === 'task'">
-          <select
-            v-model="editorTaskSelect"
-            class="scope-select"
-            @change="onEditorTaskSelectChange"
-          >
-            <option value="">— Chọn task —</option>
-            <option v-for="t in tasks" :key="t.task_id" :value="t.task_id">
-              {{ t.task_id }}
-            </option>
-            <option value="__manual__">Nhập thủ công…</option>
-          </select>
-          <input
-            v-if="editorTaskSelect === '__manual__'"
-            v-model="editorTaskManual"
-            class="scope-task-input"
-            placeholder="Task ID"
-          />
-        </template>
-      </div>
-
-      <ProjectBar
-        v-if="mode === 'monitor' && !sidebarCollapsed"
-        :projects="projects"
-        :default-id="defaultProjectId"
-        :selected-id="selectedProjectId"
-        @select="onSelectProject"
-        @changed="onProjectsChanged"
-      />
-
-      <TaskList
-        v-if="mode === 'monitor' && !sidebarCollapsed"
-        :tasks="tasks"
-        :selected-id="selectedId"
-        :open-artifact="openArtifact"
-        @select="selectedId = $event"
-        @open-artifact="handleOpenArtifact"
-      />
-
       <footer v-if="!sidebarCollapsed" class="status">
         <span v-if="error" class="err">⚠ {{ error }}</span>
         <span v-else-if="lastUpdated && mode === 'monitor'">cập nhật {{ lastUpdated }}</span>
@@ -279,48 +206,33 @@ onUnmounted(stop)
       </footer>
     </aside>
 
-    <main v-if="mode === 'monitor'" class="main">
-      <template v-if="selected">
-        <div class="task-head">
-          <h2>
-            {{ selected.task_id }}
-            <span v-if="selected.parent_task_id" class="subtask">↳ subtask của {{ selected.parent_task_id }}</span>
-          </h2>
-          <div class="badges">
-            <span v-if="selected.auto_review" class="badge auto">auto-review</span>
-            <span v-if="selected.review_round" class="badge">review round {{ selected.review_round }}/2</span>
-            <span v-if="selected.hitl_pending" class="badge hitl">⏸ {{ selected.hitl_pending }}</span>
-            <span v-if="!selected.state_ok" class="badge err">state lỗi</span>
-          </div>
-        </div>
-
-        <QaPanel v-if="selected.has_qa" :qa="selected.qa" />
-
-        <PipelineView :task="selected" />
-
-        <TaskTimeline :task="selected" />
-
-        <ArtifactPanel
-          :task="selected"
-          :project-id="selectedProjectId"
-          :open-artifact="openArtifact && openArtifact.taskId === selected.task_id ? openArtifact : null"
-        />
-      </template>
-      <div v-else class="empty">
-        <p v-if="!tasks.length && connected">
-          Chưa có task nào trong <code>.dev-team-agent/.dev-state/</code>.<br />
-          Chạy <code>/dev-team-orchestrator &lt;task-id&gt;</code> để bắt đầu.
-        </p>
-        <p v-else-if="!connected">Đang kết nối tới dev server…</p>
-        <p v-else>Chọn một task ở bên trái.</p>
-      </div>
+    <main v-if="mode === 'monitor'" class="main main-editor">
+      <MonitorLayout
+        :projects="projects"
+        :default-project-id="defaultProjectId"
+        :selected-project-id="selectedProjectId"
+        :tasks="tasks"
+        :selected-id="selectedId"
+        :selected="selected"
+        :open-artifact="openArtifact"
+        :connected="connected"
+        :error="error"
+        :last-updated="lastUpdated"
+        @select-project="onSelectProject"
+        @projects-changed="onProjectsChanged"
+        @select-task="selectedId = $event"
+        @open-artifact="handleOpenArtifact"
+      />
     </main>
 
     <main v-else-if="mode === 'editor'" class="main main-editor">
       <PipelineEditor
         :scope="editorScope"
         :task-id="editorTaskId"
+        :tasks="tasks"
         :app-sidebar-collapsed="sidebarCollapsed"
+        @update:scope="editorScope = $event"
+        @update:task-id="editorTaskId = $event"
       />
     </main>
 

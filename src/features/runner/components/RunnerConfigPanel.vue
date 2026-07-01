@@ -165,7 +165,7 @@ async function smokeTest() {
 
     <div class="runner-layout">
       <aside class="runner-list">
-        <button type="button" class="btn" @click="newRunner">+ New</button>
+        <button type="button" class="btn-ghost btn-sm" @click="newRunner">+ New</button>
         <ul>
           <li
             v-for="r in runners"
@@ -182,44 +182,50 @@ async function smokeTest() {
 
       <section class="runner-form">
         <div class="field">
-          <label>ID</label>
-          <input v-model="draft.id" :disabled="!!selectedId" />
+          <label class="cfg-label">ID
+            <input v-model="draft.id" class="cfg-input" :disabled="!!selectedId" />
+          </label>
         </div>
         <div class="field">
-          <label>Name</label>
-          <input v-model="draft.name" />
+          <label class="cfg-label">Name
+            <input v-model="draft.name" class="cfg-input" />
+          </label>
         </div>
         <div class="field">
-          <label>Provider</label>
-          <select v-model="draft.provider">
-            <option v-for="p in providers" :key="p" :value="p">{{ p }}</option>
-          </select>
+          <label class="cfg-label">Provider
+            <select v-model="draft.provider" class="cfg-input">
+              <option v-for="p in providers" :key="p" :value="p">{{ p }}</option>
+            </select>
+          </label>
         </div>
         <div class="field">
-          <label>Credential</label>
-          <select v-model="draft.credentialId">
-            <option v-for="c in filteredCredentials" :key="c.id" :value="c.id">
-              {{ c.label }} ({{ c.id }})
-            </option>
-          </select>
+          <label class="cfg-label">Credential
+            <select v-model="draft.credentialId" class="cfg-input">
+              <option v-for="c in filteredCredentials" :key="c.id" :value="c.id">
+                {{ c.label }} ({{ c.id }})
+              </option>
+            </select>
+          </label>
         </div>
         <div class="field">
-          <label>CLI path</label>
-          <input v-model="draft.config.cliPath" />
+          <label class="cfg-label">CLI path
+            <input v-model="draft.config.cliPath" class="cfg-input" />
+          </label>
         </div>
         <div class="field">
-          <label>Allowed tools</label>
-          <input v-model="draft.config.allowedTools" />
+          <label class="cfg-label">Allowed tools
+            <input v-model="draft.config.allowedTools" class="cfg-input" />
+          </label>
         </div>
         <div class="field row">
           <label><input v-model="draft.enabled" type="checkbox" /> Enabled</label>
         </div>
 
         <div class="actions">
-          <button type="button" class="btn primary" :disabled="saving" @click="save">Lưu</button>
-          <button type="button" class="btn" :disabled="!selectedId" @click="makeDefault">Set default</button>
-          <button type="button" class="btn" :disabled="testing" @click="smokeTest">Smoke test</button>
-          <button type="button" class="btn danger" :disabled="!selectedId" @click="remove">Xóa</button>
+          <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">Lưu</button>
+          <button type="button" class="btn-ghost btn-sm" :disabled="!selectedId" @click="makeDefault">Set default</button>
+          <button type="button" class="btn-ghost btn-sm" :disabled="testing" @click="smokeTest">Smoke test</button>
+          <button type="button" class="btn-danger btn-sm" :disabled="!selectedId" @click="remove">Xóa</button>
         </div>
       </section>
     </div>
@@ -246,26 +252,44 @@ async function smokeTest() {
 <style scoped>
 .runner-config { padding: 1rem 1.25rem; max-width: 960px; }
 .runner-head h2 { margin: 0 0 0.25rem; font-size: 1.25rem; font-weight: 500; }
-.muted { color: var(--text-muted, #666); font-size: 0.85rem; }
+.muted { color: var(--muted); font-size: 0.85rem; }
 .runner-layout { display: grid; grid-template-columns: 200px 1fr; gap: 1rem; margin-top: 1rem; }
 .runner-list ul { list-style: none; padding: 0; margin: 0.5rem 0 0; }
 .runner-list li {
   padding: 0.5rem 0.6rem; border-radius: 6px; cursor: pointer; margin-bottom: 4px;
   border: 1px solid transparent;
 }
-.runner-list li.active { background: var(--gray-light, #f1efe8); border-color: #ccc; }
+.runner-list li.active { background: var(--panel-2); border-color: var(--accent); }
 .runner-list li strong { display: block; font-size: 0.9rem; }
 .field { margin-bottom: 0.75rem; }
-.field label { display: block; font-size: 0.8rem; margin-bottom: 0.25rem; }
-.field input, .field select { width: 100%; max-width: 400px; padding: 0.35rem 0.5rem; }
+.field .cfg-input { width: 100%; max-width: 400px; }
+.field .cfg-input:disabled { opacity: 0.5; }
 .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
-.btn { padding: 0.35rem 0.75rem; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
-.btn.primary { background: #1d9e75; color: #fff; border-color: #1d9e75; }
-.btn.danger { color: #c00; }
-.badge { font-size: 0.7rem; background: #e1f5ee; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
-.err-banner { background: #fee; padding: 0.5rem; border-radius: 6px; margin: 0.5rem 0; }
-.ok-banner { background: #efe; padding: 0.5rem; border-radius: 6px; margin: 0.5rem 0; }
+.badge {
+  font-size: 0.7rem;
+  background: rgba(74, 163, 255, 0.15);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+.err-banner {
+  background: rgba(248, 81, 73, 0.12);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 0.5rem;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+}
+.ok-banner {
+  background: rgba(63, 185, 80, 0.12);
+  border: 1px solid var(--done);
+  color: var(--done);
+  padding: 0.5rem;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+}
 .recent-jobs { margin-top: 2rem; }
 .recent-jobs table { width: 100%; font-size: 0.85rem; border-collapse: collapse; }
-.recent-jobs th, .recent-jobs td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #eee; }
+.recent-jobs th, .recent-jobs td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); }
 </style>
