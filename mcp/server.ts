@@ -18,7 +18,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { list, get, add, remove } from '../server/registry.js'
+import { list, get, add, addFromGit, remove } from '../server/registry.js'
 
 // Return `any` to stay decoupled from the SDK's literal content-type unions.
 export function ok(payload: unknown): any {
@@ -28,6 +28,24 @@ export function ok(payload: unknown): any {
 export function fail(message: unknown): any {
   return { isError: true, content: [{ type: 'text', text: String(message) }] }
 }
+
+export const AddProjectInput = z
+  .object({
+    path: z.string().optional(),
+    gitUrl: z.string().optional(),
+    branch: z.string().optional(),
+    name: z.string().optional(),
+  })
+  .superRefine((v, ctx) => {
+    const hasPath = Boolean(v.path?.trim())
+    const hasGit = Boolean(v.gitUrl?.trim())
+    if (hasPath === hasGit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'exactly one of path or gitUrl is required',
+      })
+    }
+  })
 
 // ── Tool handlers (exported for unit testing) ──────────────────────────────────
 
@@ -41,9 +59,13 @@ export function handleGetProject({ id }: { id: string }): any {
   return ok({ project })
 }
 
-export function handleAddProject({ path: inputPath, name }: { path: string; name?: string }): any {
-  const result = add({ path: inputPath, name })
-  // `in`-narrowing (boolean-discriminant narrowing misbehaves under vue-tsc).
+export async function handleAddProject(input: z.infer<typeof AddProjectInput>): Promise<any> {
+  const parsed = AddProjectInput.safeParse(input)
+  if (!parsed.success) return fail(parsed.error.issues[0]?.message || 'invalid input')
+  const body = parsed.data
+  const result = body.gitUrl
+    ? await addFromGit({ gitUrl: body.gitUrl, branch: body.branch, name: body.name })
+    : add({ path: body.path, name: body.name })
   if ('error' in result) return fail(result.error)
   return ok({ project: result.project })
 }
@@ -75,13 +97,15 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     'add_project',
-    'Register a dev-team workspace. `path` must be an absolute path to a '
-      + '`.dev-team-agent` directory (or a project root containing one). Idempotent.',
+    'Register a dev-team workspace. Provide `path` (absolute path to `.dev-team-agent`) '
+      + 'OR `gitUrl` (HTTPS). Idempotent.',
     {
-      path: z.string().describe('Absolute path to a .dev-team-agent dir or its project root.'),
-      name: z.string().optional().describe('Optional display name (defaults to the project folder name).'),
+      path: z.string().optional().describe('Absolute path to a .dev-team-agent dir or its project root.'),
+      gitUrl: z.string().optional().describe('HTTPS Git URL to shallow-clone.'),
+      branch: z.string().optional().describe('Git branch (default: main).'),
+      name: z.string().optional().describe('Optional display name.'),
     },
-    async ({ path: inputPath, name }) => handleAddProject({ path: inputPath, name }),
+    async (input) => handleAddProject(input),
   )
 
   server.tool(
