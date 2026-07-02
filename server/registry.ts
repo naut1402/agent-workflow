@@ -19,6 +19,10 @@ import { validateGitUrl } from '../shared/git/url.js'
 import { normalizeProject, type Project } from '../shared/schemas/project.js'
 import { withProjectSyncLock } from './git/syncLock.js'
 import {
+  pushGitWorkspace as pushGitWorkspaceImpl,
+  type PushResult,
+} from './git/push.js'
+import {
   cleanupWorkspace,
   cloneShallow,
   pullOrReclone,
@@ -27,7 +31,7 @@ import {
 
 const REGISTRY_VERSION = 1
 
-export type { Project }
+export type { Project, PushResult }
 
 export interface Registry {
   version: number
@@ -49,6 +53,7 @@ export interface RegistryContext {
     add: typeof add
     addFromGit: typeof addFromGit
     syncGitProject: typeof syncGitProject
+    pushGitWorkspace: typeof pushGitWorkspace
     remove: typeof remove
     validateProjectPath: typeof validateProjectPath
     seedDefault: typeof seedDefault
@@ -374,6 +379,15 @@ export async function syncGitProject(
   })
 }
 
+export async function pushGitWorkspace(
+  id: string,
+  opts?: { message?: string; runGit?: import('./git/workspace.js').RunGitFn },
+): Promise<PushResult> {
+  const project = get(id)
+  if (!project) return { ok: false, status: 404, error: 'unknown project' }
+  return pushGitWorkspaceImpl(project, opts)
+}
+
 // Remove a project from the registry by id. Does NOT touch the project's
 // filesystem — only the registry entry. Refuses to remove the default entry
 // (a default must remain for backward-compat). Returns
@@ -444,7 +458,7 @@ export function createRegistryContext(
   { defaultRoot }: { defaultRoot?: string | null } = {},
 ): RegistryContext {
   return {
-    registry: { list, get, add, addFromGit, syncGitProject, remove, validateProjectPath, seedDefault },
+    registry: { list, get, add, addFromGit, syncGitProject, pushGitWorkspace, remove, validateProjectPath, seedDefault },
     defaultRoot: defaultRoot || null,
     resolveProjectRoot: (projectId: string | null) => resolveProjectRoot(projectId, { defaultRoot }),
   }

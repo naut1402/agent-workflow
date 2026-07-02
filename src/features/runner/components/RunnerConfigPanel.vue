@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { isLocalDashboardHost } from '../../../shared/lib/host.js'
 import {
   fetchRunners,
   saveRunner,
@@ -44,6 +45,15 @@ function emptyRunner() {
 const filteredCredentials = computed(() =>
   credentials.value.filter((p) => p.provider === draft.value.provider),
 )
+
+const selectedCredential = computed(() =>
+  credentials.value.find((c) => c.id === draft.value.credentialId),
+)
+
+const showCliSessionWarning = computed(() => {
+  if (isLocalDashboardHost()) return false
+  return selectedCredential.value?.secretRef === 'cli-session'
+})
 
 async function load() {
   error.value = ''
@@ -161,6 +171,11 @@ async function smokeTest() {
     </header>
 
     <div v-if="error" class="err-banner">{{ error }}</div>
+    <div v-if="showCliSessionWarning" class="warn-banner" role="alert">
+      Credential <strong>cli-session</strong> cần phiên đăng nhập Claude Code trên máy này và
+      <strong>không hoạt động</strong> trên server headless. Trên server, dùng runner
+      <code>claude-code-server</code> với biến môi trường <code>ANTHROPIC_API_KEY</code>.
+    </div>
     <div v-if="message" class="ok-banner">{{ message }}</div>
 
     <div class="runner-layout">
@@ -280,6 +295,18 @@ async function smokeTest() {
   padding: 0.5rem;
   border-radius: 6px;
   margin: 0.5rem 0;
+}
+.warn-banner {
+  background: rgba(210, 153, 34, 0.12);
+  border: 1px solid #d29922;
+  color: #d29922;
+  padding: 0.5rem;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+.warn-banner code {
+  font-size: 0.85em;
 }
 .ok-banner {
   background: rgba(63, 185, 80, 0.12);

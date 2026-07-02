@@ -82,3 +82,68 @@ $DEV_TEAM_DASHBOARD_HOME/workspaces/<project-id>/
 - Gỡ project khỏi registry **không** xóa thư mục clone — operator có thể dọn thủ công.
 - Private repo / SSH URL chưa được hỗ trợ trong MVP (chỉ HTTPS public).
 - Đồng bộ thủ công: nút **Đồng bộ** trên UI, `POST /api/projects/:id/sync`, hoặc `bun run workspace:sync [--project=<id>]`.
+
+## 7. Runner server (Luồng A, #42)
+
+Dashboard **không** cài Claude Code — operator phải đảm bảo binary `claude` có trong `PATH` trên host/container.
+
+1. Set biến môi trường `ANTHROPIC_API_KEY` cho process dashboard (ví dụ trong `docker-compose.yml`).
+2. Preset sẵn có: runner `claude-code-server` (`flags: ['--bare']`) + credential `claude-server-env` (`env:ANTHROPIC_API_KEY`).
+3. Trên server production: UI **Runner → Set default** chọn `claude-code-server`, hoặc orchestrator truyền `--runner claude-code-server`.
+4. Smoke test: Runner panel → chọn `claude-code-server` → **Smoke test** → kỳ vọng `succeeded` khi env + CLI OK.
+5. Khi `ANTHROPIC_API_KEY` chưa set: job fail — kiểm tra log job và env container/host.
+
+**Lưu ý:** Credential `cli-session` cần phiên đăng nhập Claude Code trên máy local; trên server headless dashboard sẽ hiển thị cảnh báo — dùng `claude-code-server` thay thế.
+
+## 8. Dev push & server sync (Luồng B, #42)
+
+Workflow dev workstation:
+
+1. Chạy orchestrator local với runner mặc định `claude-code-local` + credential `cli-session`.
+2. Artifact ghi vào `.dev-team-agent/` trong repo git.
+3. Đẩy lên remote:
+
+```bash
+bun run workspace:push --project=<id>
+```
+
+4. Trên server: đồng bộ mirror bằng một trong các cách:
+   - UI nút **Đồng bộ**
+   - `bun run workspace:sync --project=<id>`
+   - `curl -X POST -H "Authorization: Bearer $TOKEN" "https://dashboard.example.com/api/projects/<id>/sync?project=<id>"`
+
+**Tuỳ chọn một lệnh:** gọi sync ngay sau push:
+
+```bash
+bun run workspace:push --project=<id> --sync-server=https://dashboard.example.com
+```
+
+Cần `DEV_TEAM_API_TOKEN` nếu server bật auth. Có thể set `DEV_TEAM_SERVER_URL` thay cho `--sync-server`.
+
+- Project id trên dev và server **nên trùng** khi cùng repo git.
+- `kind: 'local'` trên dev registry **được phép** push nếu `project.path` nằm trong git repo có remote `origin`.
+- Push chỉ stage/commit `.dev-team-agent/**` — không add toàn repo.
+
+## 9. Conflict policy (#42)
+
+- **Một task chỉ nên có một runner active** tại một thời điểm (dev local **hoặc** server headless).
+- MVP **không** có distributed lock — operator tránh chạy đồng thời cùng `task-id`.
+- Nếu push dev và server job ghi cùng artifact: last-write-wins trên git; server `sync` pull có thể ghi đè mirror local.
+
+## 10. Orchestrator chọn runner (#42)
+
+| Môi trường | Runner | Credential | CLI |
+|---|---|---|---|
+| Dev workstation | `claude-code-local` (default) | `cli-session` | `runner-cli.mjs submit ...` (không `--runner`) |
+| Server / CI headless | `claude-code-server` | `env:ANTHROPIC_API_KEY` | `runner-cli.mjs submit --runner claude-code-server ...` |
+| Remote SSH (#44) | `claude-code-ssh` | `file:` key | *Out of scope #42* |
+
+Gợi ý env orchestrator trên server (doc only): `DEV_TEAM_RUNNER_ID=claude-code-server`.
+
+### Bảng luồng A / B / C
+
+| Luồng | Mô tả | Task |
+|---|---|---|
+| A | Server chạy job headless | #42 |
+| B | Dev local + push artifact | #42 |
+| C | SSH remote runner | #44 (OUT) |
