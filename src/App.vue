@@ -222,6 +222,7 @@ onUnmounted(stop)
         @projects-changed="onProjectsChanged"
         @select-task="selectedId = $event"
         @open-artifact="handleOpenArtifact"
+        @qa-saved="poll"
       />
     </main>
 

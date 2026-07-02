@@ -43,6 +43,59 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     }
   })
 
+  app.put('/api/artifact', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const id = c.req.query('id') || ''
+    const name = c.req.query('name') || ''
+    if (!id || /[^\w\-]/.test(id)) return j(c, 400, { error: 'invalid task id' })
+    if (!name || !name.endsWith('.md') || name.includes('..') || name.startsWith('.')) {
+      return j(c, 400, { error: 'invalid artifact name' })
+    }
+    const target = resolveArtifact(root, id, name)
+    if (!target) return j(c, 400, { error: 'invalid path' })
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
+    const { content, mtime } = b.value as { content?: unknown; mtime?: unknown }
+    if (typeof content !== 'string') return j(c, 400, { error: 'content must be a string' })
+
+    let existingMtime: number | null = null
+    try {
+      const s = await fs.stat(target)
+      existingMtime = s.mtimeMs
+    } catch {
+      existingMtime = null
+    }
+
+    if (typeof mtime === 'number' && existingMtime != null && existingMtime !== mtime) {
+      try {
+        const current = await fs.readFile(target, 'utf8')
+        return j(c, 409, {
+          error: 'conflict',
+          id,
+          name,
+          content: current,
+          mtime: existingMtime,
+        })
+      } catch {
+        return j(c, 409, { error: 'conflict', id, name })
+      }
+    }
+
+    await fs.mkdir(path.dirname(target), { recursive: true })
+    const tmp = `${target}.tmp`
+    await fs.writeFile(tmp, content, 'utf8')
+    await fs.rename(tmp, target)
+    const s = await fs.stat(target)
+    emitAudit({
+      op: 'update',
+      entity: 'artifact',
+      identifier: `${id}/${name}`,
+      projectId: c.get('projectId'),
+    })
+    return j(c, 200, { id, name, content, mtime: s.mtimeMs })
+  })
+
   app.get('/api/profile', async (c) => {
     const root = c.get('root')
     if (!root) return unknownProject(c)
