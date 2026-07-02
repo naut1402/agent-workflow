@@ -33,6 +33,8 @@ beforeAll(async () => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-home-'))
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-root-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = home
+  // Golden tests must stay stable regardless of host env.
+  delete process.env.DEV_TEAM_API_TOKEN
   delete process.env.DEV_TEAM_ROOT
 
   // Minimal fixture: one task with live state + one artifact.

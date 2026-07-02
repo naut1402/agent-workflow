@@ -9,6 +9,7 @@ import { registerConfigRoutes } from './routes/config.js'
 import { registerCatalogRoutes } from './routes/catalog.js'
 import { registerAgentRoutes } from './routes/agents.js'
 import { registerLogRoutes } from './routes/logs.js'
+import { createAuthMiddleware } from './middleware/auth.js'
 
 // Build the Hono app for all /api/* routes except /api/knowledge (which stays
 // node-res based and is intercepted by the node adapter before Hono).
@@ -18,6 +19,10 @@ import { registerLogRoutes } from './routes/logs.js'
 // resolution), then each route reads c.get('root') and 404s when null.
 export function createApp(ctx: RegistryContext): Hono<HonoEnv> {
   const app = new Hono<HonoEnv>()
+
+  // Optional API token gate for server-ready runtime: enabled only when
+  // DEV_TEAM_API_TOKEN is set. `/api/health` is always public.
+  app.use('/api/*', createAuthMiddleware())
 
   app.use('/api/*', async (c, next) => {
     const projectId = c.req.query('project') || null
