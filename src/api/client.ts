@@ -125,20 +125,20 @@ export async function fetchRules() {
   return r.json()
 }
 
-export async function fetchPipelineProfiles() {
-  const r = await fetch('/api/pipeline-profiles')
+export async function fetchPipelineProfiles(projectId?: string) {
+  const r = await fetch(`/api/pipeline-profiles${qs({ project: projectId })}`)
   if (!r.ok) throw new Error(`/api/pipeline-profiles → ${r.status}`)
   return r.json()
 }
 
-export async function fetchPipelineProfile(name: string) {
-  const r = await fetch(`/api/pipeline-profiles?name=${encodeURIComponent(name)}`)
+export async function fetchPipelineProfile(name: string, projectId?: string) {
+  const r = await fetch(`/api/pipeline-profiles${qs({ name, project: projectId })}`)
   if (!r.ok) throw new Error(`/api/pipeline-profiles?name=${name} → ${r.status}`)
   return r.json()
 }
 
-export async function savePipelineProfile(name: string, pipeline: unknown) {
-  const r = await fetch('/api/pipeline-profiles', {
+export async function savePipelineProfile(name: string, pipeline: unknown, projectId?: string) {
+  const r = await fetch(`/api/pipeline-profiles${qs({ project: projectId })}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, pipeline }),
@@ -147,14 +147,19 @@ export async function savePipelineProfile(name: string, pipeline: unknown) {
   return r.json()
 }
 
-export async function deletePipelineProfile(name: string) {
-  const r = await fetch(`/api/pipeline-profiles?name=${encodeURIComponent(name)}`, { method: 'DELETE' })
+export async function deletePipelineProfile(name: string, projectId?: string) {
+  const r = await fetch(`/api/pipeline-profiles${qs({ name, project: projectId })}`, { method: 'DELETE' })
   if (!r.ok) throw new Error(`/api/pipeline-profiles DELETE → ${r.status}`)
   return r.json()
 }
 
-export async function writePipelineConfig(scope: string, pipeline: unknown, taskId?: string) {
-  const r = await fetch('/api/pipeline-config-write', {
+export async function writePipelineConfig(
+  scope: string,
+  pipeline: unknown,
+  taskId?: string,
+  projectId?: string,
+) {
+  const r = await fetch(`/api/pipeline-config-write${qs({ project: projectId })}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ scope, pipeline, taskId }),
