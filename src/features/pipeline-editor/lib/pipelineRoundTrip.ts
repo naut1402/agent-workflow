@@ -4,6 +4,18 @@ const CANVAS_STEP_KEYS = new Set([
   'produces', 'knowledge_inputs', 'hitl',
 ])
 
+/** Subfield hitl do StepConfigPanel quản lý — giữ lại phần còn lại (vd. retry) */
+const CANVAS_HITL_KEYS = new Set(['mode', 'gate_id', 'optional_doc_review', 'blocking'])
+
+function extractPreservedHitl(hitl: unknown): Record<string, unknown> | undefined {
+  if (!hitl || typeof hitl !== 'object') return undefined
+  const rest: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(hitl as Record<string, unknown>)) {
+    if (!CANVAS_HITL_KEYS.has(k)) rest[k] = v
+  }
+  return Object.keys(rest).length ? rest : undefined
+}
+
 export type PipelineMeta = {
   version?: number
   defaults?: Record<string, unknown>
@@ -32,6 +44,11 @@ export function extractStepPreservedMap(steps: unknown[]): StepPreservedMap {
     const id = String(s.id)
     const preserved: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(s)) {
+      if (k === 'hitl') {
+        const preservedHitl = extractPreservedHitl(v)
+        if (preservedHitl) preserved.hitl = preservedHitl
+        continue
+      }
       if (!CANVAS_STEP_KEYS.has(k)) preserved[k] = v
     }
     if (Object.keys(preserved).length) map[id] = preserved

@@ -41,6 +41,44 @@ describe('extractStepPreservedMap', () => {
     expect(map.investigator).toEqual({
       export_key: 'investigator',
       rule_fallback_skill: 'fallback',
+      hitl: { retry: { on: 'must_fix', max: 2 } },
+    })
+  })
+
+  it('round-trips hitl.retry via extractStepPreservedMap → buildStepFromNode', () => {
+    const steps = [
+      {
+        id: 'investigator',
+        name: 'Investigate',
+        agent: 'dev-agent-teams:investigator',
+        skills: ['survey-codebase'],
+        rule_category: 'doc-writing',
+        rule_required: true,
+        produces: ['investigate.md'],
+        knowledge_inputs: [],
+        export_key: 'investigator',
+        hitl: { mode: 'manual', gate_id: 'hitl-1', retry: { on: 'must_fix', max: 2 } },
+      },
+    ]
+    const preservedMap = extractStepPreservedMap(steps)
+    const rebuilt = buildStepFromNode(
+      {
+        label: 'Investigate',
+        agent: 'dev-agent-teams:investigator',
+        skills: ['survey-codebase'],
+        rule_category: 'doc-writing',
+        rule_required: true,
+        produces: ['investigate.md'],
+        knowledge_inputs: [],
+        hitl: { mode: 'manual', gate_id: 'hitl-1' },
+      },
+      'investigator',
+      preservedMap.investigator,
+    )
+    expect(rebuilt.hitl).toEqual({
+      retry: { on: 'must_fix', max: 2 },
+      mode: 'manual',
+      gate_id: 'hitl-1',
     })
   })
 })
