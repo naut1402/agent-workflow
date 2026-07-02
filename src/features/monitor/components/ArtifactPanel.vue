@@ -183,7 +183,7 @@ onUpdated(() => scheduleMermaid())
         <button type="button" class="btn-link" @click="reloadExternal">Tải lại</button>
       </p>
 
-      <p class="art-edit-hint">Click hoặc double-click vào section để sửa; blur để lưu tự động. <kbd>Esc</kbd> huỷ.</p>
+      <p class="art-edit-hint">Double-click vào section để sửa; blur để lưu tự động. <kbd>Esc</kbd> huỷ.</p>
 
       <div ref="viewRoot">
         <div v-if="blockMode" class="block-list">
@@ -212,9 +212,8 @@ onUpdated(() => scheduleMermaid())
               v-else
               class="md block-content md-editable"
               v-html="block.html"
-              title="Click để sửa section"
-              @click="startEdit(i, $event)"
-              @dblclick="startEdit(i, $event)"
+              title="Double-click để sửa section"
+              @dblclick.prevent="startEdit(i, $event)"
             />
           </details>
         </div>
@@ -237,9 +236,8 @@ onUpdated(() => scheduleMermaid())
             v-else
             class="md md-editable"
             v-html="html"
-            title="Click để sửa"
-            @click="startEdit('full', $event)"
-            @dblclick="startEdit('full', $event)"
+            title="Double-click để sửa"
+            @dblclick.prevent="startEdit('full', $event)"
           />
         </div>
       </div>

@@ -95,7 +95,7 @@ onUpdated(() => scheduleMermaid())
   <section class="qa">
     <div class="qa-head">⚠ Pipeline đang chờ trả lời câu hỏi blocking</div>
     <div class="qa-hint">
-      Click hoặc double-click vào nội dung bên dưới để sửa (blur để lưu), hoặc mở
+      Double-click vào nội dung bên dưới để sửa (blur để lưu), hoặc mở
       <code>.dev-team-agent/tasks/&lt;task-id&gt;/qa.md</code>, điền <code>Answer:</code> rồi gõ
       <code>done</code> cho orchestrator.
     </div>
@@ -119,9 +119,8 @@ onUpdated(() => scheduleMermaid())
         ref="viewRoot"
         class="md md-editable"
         v-html="html"
-        title="Click để sửa"
-        @click="startEdit('full', $event)"
-        @dblclick="startEdit('full', $event)"
+        title="Double-click để sửa"
+        @dblclick.prevent="startEdit('full', $event)"
       />
     </div>
   </section>
