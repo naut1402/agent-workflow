@@ -5,6 +5,8 @@ import { json } from '../../shared/http.js'
 import { handleKnowledgeApi } from '../knowledge/knowledgeApi.js'
 import { appendRequestLog } from '../logging/store.js'
 import { createApp } from './app.js'
+import crypto from 'node:crypto'
+import { AUTHORIZATION_HEADER, DEV_TEAM_TOKEN_HEADER } from '../../shared/schemas/auth.js'
 
 // ── Node ⇆ Hono bridge ─────────────────────────────────────────────────────
 //
@@ -53,6 +55,24 @@ export function createApiHandler(ctx: RegistryContext) {
     const projectId = url.searchParams.get('project') || null
     let errored: string | null = null
     try {
+      // Auth for the node-res knowledge routes (Hono middleware does not run there).
+      // When DEV_TEAM_API_TOKEN is unset, behavior stays unchanged (no auth).
+      const expected = process.env.DEV_TEAM_API_TOKEN?.trim() || ''
+      if (expected && url.pathname !== '/api/health') {
+        const authHeader = (req.headers[AUTHORIZATION_HEADER.toLowerCase()] as any) ?? null
+        const bearer = typeof authHeader === 'string' ? /^Bearer\s+(.+)\s*$/.exec(authHeader)?.[1] : null
+        const tokenHeader = (req.headers[DEV_TEAM_TOKEN_HEADER.toLowerCase()] as any) ?? null
+        const raw = typeof tokenHeader === 'string' ? tokenHeader.trim() : ''
+        const actual = bearer || raw || null
+        const a = actual ? Buffer.from(actual) : null
+        const b = Buffer.from(expected)
+        const ok = a != null && a.length === b.length && crypto.timingSafeEqual(a, b)
+        if (!ok && url.pathname.startsWith('/api/knowledge')) {
+          json(res, 401, { error: 'unauthorized' })
+          return true
+        }
+      }
+
       if (url.pathname.startsWith('/api/knowledge')) {
         const root = ctx.resolveProjectRoot(projectId)
         if (!root) {

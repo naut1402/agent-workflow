@@ -1,0 +1,12 @@
+node_modules
+.git
+.github
+.dev-team-agent
+coverage
+dist
+test-e2e
+tests
+docs
+*.log
+**/*.md
+
