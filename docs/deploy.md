@@ -5,7 +5,7 @@ Tài liệu này phục vụ **sub-issue #40 (Server-ready runtime)**: chạy da
 ## 1. Prerequisites
 
 - Docker + Docker Compose
-- (Tuỳ chọn) Reverse proxy / TLS: Caddy / Nginx / Traefik
+- (Tuỳ chọn) Reverse proxy / TLS: Caddy / Nginx / Traefik (tuỳ hạ tầng)
 
 ## 2. Biến môi trường
 
@@ -61,7 +61,11 @@ curl -i -H "Authorization: Bearer my-token" http://localhost:5174/api/tasks
 docker compose restart
 ```
 
-## 5. Reverse proxy (Caddy)
+## 5. Reverse proxy (tuỳ chọn)
 
-Xem file mẫu `deploy/Caddyfile.example`.
+PR #40 **không** ship sẵn config reverse proxy vì mỗi môi trường có lựa chọn khác nhau (Caddy/Nginx/Traefik/Cloudflare…).
+
+Nếu cần HTTPS:
+- Terminate TLS ở reverse proxy
+- Reverse proxy vào app tại `http://dashboard:5174` (trong compose) hoặc `http://127.0.0.1:5174` (nếu chạy bare)
 
