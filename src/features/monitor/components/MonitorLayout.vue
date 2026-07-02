@@ -18,7 +18,7 @@ defineProps({
   lastUpdated: { type: String, default: '' },
 })
 
-const emit = defineEmits(['select-project', 'projects-changed', 'select-task', 'open-artifact'])
+const emit = defineEmits(['select-project', 'projects-changed', 'select-task', 'open-artifact', 'qa-saved'])
 </script>
 
 <template>
@@ -54,7 +54,13 @@ const emit = defineEmits(['select-project', 'projects-changed', 'select-task', '
           </div>
         </div>
 
-        <QaPanel v-if="selected.has_qa" :qa="selected.qa" />
+        <QaPanel
+          v-if="selected.has_qa"
+          :qa="selected.qa"
+          :task-id="selected.task_id"
+          :project-id="selectedProjectId"
+          @saved="emit('qa-saved')"
+        />
 
         <PipelineView :task="selected" />
 

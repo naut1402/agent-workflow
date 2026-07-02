@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`dev-team-dashboard` — a Vue 3 + Vite SPA that visualizes the runtime state of the **dev-agent-teams orchestrator** (a Claude Code plugin pipeline that drives a dev task through investigate → design → implement → review → PR). The dashboard is read-only for task state, but read/write for *configuration* (pipelines, custom agents, templates, knowledge).
+`dev-team-dashboard` — a Vue 3 + Vite SPA that visualizes the runtime state of the **dev-agent-teams orchestrator** (a Claude Code plugin pipeline that drives a dev task through investigate → design → implement → review → PR). The dashboard is read-only for task *state* (`.dev-state/*.json`), but read/write for *configuration* (pipelines, custom agents, templates, knowledge) and **task artifact markdown** (`investigate.md`, `design.md`, `qa.md`, … via `PUT /api/artifact`).
 
 Crucially, **this repo does not run the orchestrator** — it observes one. The orchestrator writes filesystem state into a `.dev-team-agent/` workspace folder, and this dashboard reads it back. UI strings are in Vietnamese.
 

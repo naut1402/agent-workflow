@@ -27,6 +27,7 @@ export const AUDIT_ENTITIES = [
   'project',
   'runner',
   'credential',
+  'artifact',
 ] as const
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number]
 

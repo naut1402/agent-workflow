@@ -346,6 +346,33 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 }
 .md .mermaid svg { max-width: 100%; height: auto; }
 
+.art-toolbar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.art-editor {
+  width: 100%;
+  min-height: 320px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.art-message { font-size: 12px; color: var(--waiting); margin: 0 0 10px; }
+.art-warning { font-size: 12px; color: var(--waiting); margin: 0 0 10px; }
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+.btn-primary-sm {
+  color: var(--bg) !important;
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+.qa-toolbar { display: flex; gap: 6px; margin-bottom: 10px; }
+
 /* Flow profile editor modal */
 .modal-backdrop {
   position: fixed;

@@ -57,6 +57,28 @@ export async function fetchArtifact(id: string, name: string, projectId?: string
   return r.json()
 }
 
+export async function saveArtifact(
+  id: string,
+  name: string,
+  content: string,
+  projectId?: string,
+  mtime?: number,
+) {
+  const r = await fetch(`/api/artifact${qs({ id, name, project: projectId })}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, mtime }),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) {
+    const err = new Error(data.error || `/api/artifact PUT → ${r.status}`)
+    ;(err as any).status = r.status
+    ;(err as any).body = data
+    throw err
+  }
+  return data
+}
+
 export async function fetchPipelineExport(id: string, projectId?: string) {
   const r = await fetch(`/api/pipeline-export${qs({ id, project: projectId })}`)
   if (!r.ok) throw new Error(`/api/pipeline-export → ${r.status}`)
