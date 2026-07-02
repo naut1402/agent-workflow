@@ -2,48 +2,93 @@
 import { ref, computed, watch, nextTick, onUpdated } from 'vue'
 import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
 import { fetchArtifact, saveArtifact } from '../../../api'
+import {
+  splitMarkdownSections,
+  useInlineMarkdownEdit,
+} from '../composables/useInlineMarkdownEdit'
 
 const props = defineProps({
   task: { type: Object, required: true },
-  openArtifact: { type: Object, default: null }, // { taskId, name }
+  openArtifact: { type: Object, default: null },
   projectId: { type: String, default: null },
 })
 
 const content = ref('')
-const draftContent = ref('')
 const loadedKey = ref<string | null>(null)
 const loadedMtime = ref<number | null>(null)
 const blockMode = ref(false)
-const editMode = ref(false)
-const saving = ref(false)
 const message = ref('')
 const externalChange = ref(false)
 const viewRoot = ref<HTMLElement | null>(null)
 
+const {
+  editingSection,
+  sectionDraft,
+  saving,
+  editTextarea,
+  startEdit,
+  cancelEdit,
+  onBlur,
+  onKeydown,
+  isEditing,
+} = useInlineMarkdownEdit({
+  getContent: () => content.value,
+  setContent: (v) => { content.value = v },
+  onSave: async (nextContent) => {
+    if (!props.openArtifact) return
+    message.value = ''
+    const res = await saveArtifact(
+      props.openArtifact.taskId,
+      props.openArtifact.name,
+      nextContent,
+      props.projectId ?? undefined,
+      loadedMtime.value ?? undefined,
+    )
+    content.value = res.content
+    loadedMtime.value = res.mtime
+    message.value = 'Đã lưu.'
+    externalChange.value = false
+    await scheduleMermaid()
+  },
+})
+
 const html = computed(() => parseMarkdown(content.value || ''))
 
 const blocks = computed(() => {
-  if (!content.value) return []
-  const sections: { heading: string | null; html: string }[] = []
-  const parts = content.value.split(/^(?=##\s)/m)
-  for (const part of parts) {
-    if (!part.trim()) continue
-    const firstLine = part.split('\n')[0]
+  return splitMarkdownSections(content.value).map((source) => {
+    const firstLine = source.split('\n')[0]
     const isH2 = firstLine.startsWith('## ')
-    sections.push({
+    return {
       heading: isH2 ? firstLine.replace(/^##\s+/, '') : null,
-      html: parseMarkdown(part.trim()),
-    })
-  }
-  return sections
+      source,
+      html: parseMarkdown(source),
+    }
+  })
 })
 
-const isDirty = computed(() => editMode.value && draftContent.value !== content.value)
+function bindTextarea(el: HTMLTextAreaElement | null) {
+  editTextarea.value = el
+}
+
+async function handleBlur() {
+  try {
+    await onBlur()
+  } catch (e: any) {
+    if (e.status === 409 && e.body?.content != null) {
+      message.value = 'File đã thay đổi trên disk. Nhấn "Tải lại" để đồng bộ.'
+      content.value = e.body.content
+      loadedMtime.value = e.body.mtime
+      cancelEdit()
+    } else {
+      message.value = String(e.message || e)
+    }
+  }
+}
 
 async function load(taskId: string, name: string) {
   const key = `${taskId}/${name}`
   loadedKey.value = key
-  editMode.value = false
+  cancelEdit()
   message.value = ''
   externalChange.value = false
   try {
@@ -51,57 +96,9 @@ async function load(taskId: string, name: string) {
     if (loadedKey.value === key) {
       content.value = res.content
       loadedMtime.value = res.mtime
-      draftContent.value = res.content
     }
   } catch {
     if (loadedKey.value === key) content.value = ''
-  }
-}
-
-function enterEdit() {
-  draftContent.value = content.value
-  editMode.value = true
-  message.value = ''
-  externalChange.value = false
-}
-
-function cancelEdit() {
-  editMode.value = false
-  draftContent.value = content.value
-  message.value = ''
-  externalChange.value = false
-}
-
-async function save() {
-  if (!props.openArtifact) return
-  saving.value = true
-  message.value = ''
-  try {
-    const res = await saveArtifact(
-      props.openArtifact.taskId,
-      props.openArtifact.name,
-      draftContent.value,
-      props.projectId ?? undefined,
-      loadedMtime.value ?? undefined,
-    )
-    content.value = res.content
-    loadedMtime.value = res.mtime
-    draftContent.value = res.content
-    editMode.value = false
-    externalChange.value = false
-    message.value = 'Đã lưu.'
-    await scheduleMermaid()
-  } catch (e: any) {
-    if (e.status === 409 && e.body?.content != null) {
-      message.value = 'File đã thay đổi trên disk. Nhấn "Tải lại" để đồng bộ.'
-      content.value = e.body.content
-      loadedMtime.value = e.body.mtime
-      if (editMode.value) draftContent.value = e.body.content
-    } else {
-      message.value = String(e.message || e)
-    }
-  } finally {
-    saving.value = false
   }
 }
 
@@ -111,7 +108,7 @@ function reloadExternal() {
 }
 
 async function scheduleMermaid() {
-  if (editMode.value) return
+  if (isEditing()) return
   await nextTick()
   await renderMermaid(viewRoot.value)
 }
@@ -129,7 +126,7 @@ watch(
       content.value = ''
       loadedKey.value = null
       loadedMtime.value = null
-      editMode.value = false
+      cancelEdit()
     }
   },
   { immediate: true },
@@ -137,7 +134,7 @@ watch(
 
 watch(() => props.openArtifact?.name, () => {
   blockMode.value = false
-  editMode.value = false
+  cancelEdit()
 })
 
 watch(
@@ -147,7 +144,7 @@ watch(
   },
   (mtime) => {
     if (!props.openArtifact || !mtime || mtime === loadedMtime.value) return
-    if (editMode.value && isDirty.value) {
+    if (isEditing()) {
       externalChange.value = true
       return
     }
@@ -155,7 +152,7 @@ watch(
   },
 )
 
-watch([html, blockMode, editMode], () => scheduleMermaid())
+watch([html, blockMode, editingSection], () => scheduleMermaid())
 onUpdated(() => scheduleMermaid())
 </script>
 
@@ -167,23 +164,12 @@ onUpdated(() => scheduleMermaid())
       <div class="art-toolbar">
         <span class="art-title">{{ openArtifact.name }}</span>
         <div class="art-toolbar-actions">
+          <span v-if="saving" class="art-saving-hint">Đang lưu…</span>
           <button
-            v-if="!editMode"
-            class="btn-view-toggle"
-            @click="enterEdit"
-            title="Chỉnh sửa nội dung"
-          >✏️ Sửa</button>
-          <template v-else>
-            <button class="btn-view-toggle active" disabled>Đang sửa</button>
-            <button class="btn-view-toggle btn-primary-sm" :disabled="saving || !isDirty" @click="save">
-              {{ saving ? 'Đang lưu…' : 'Lưu' }}
-            </button>
-            <button class="btn-view-toggle" :disabled="saving" @click="cancelEdit">Huỷ</button>
-          </template>
-          <button
-            v-if="blocks.length > 1 && !editMode"
+            v-if="blocks.length > 1"
             class="btn-view-toggle"
             :class="{ active: blockMode }"
+            :disabled="isEditing()"
             @click="blockMode = !blockMode"
             :title="blockMode ? 'Chuyển sang Full view' : 'Chuyển sang Block view'"
           >{{ blockMode ? '📄 Full' : '🗂 Blocks' }}</button>
@@ -196,14 +182,9 @@ onUpdated(() => scheduleMermaid())
         <button type="button" class="btn-link" @click="reloadExternal">Tải lại</button>
       </p>
 
-      <textarea
-        v-if="editMode"
-        v-model="draftContent"
-        class="cfg-input art-editor"
-        spellcheck="false"
-      />
+      <p class="art-edit-hint">Click hoặc double-click vào section để sửa; blur để lưu tự động. <kbd>Esc</kbd> huỷ.</p>
 
-      <div v-else ref="viewRoot">
+      <div ref="viewRoot">
         <div v-if="blockMode" class="block-list">
           <details
             v-for="(block, i) in blocks"
@@ -213,10 +194,45 @@ onUpdated(() => scheduleMermaid())
             @toggle="onBlockToggle"
           >
             <summary v-if="block.heading">{{ block.heading }}</summary>
-            <div class="md block-content" v-html="block.html" />
+            <textarea
+              v-if="editingSection === i"
+              :ref="bindTextarea"
+              v-model="sectionDraft"
+              class="cfg-input art-editor art-section-editor"
+              spellcheck="false"
+              @blur="handleBlur"
+              @keydown="onKeydown"
+            />
+            <div
+              v-else
+              class="md block-content md-editable"
+              v-html="block.html"
+              title="Click để sửa section"
+              @click="startEdit(i, $event)"
+              @dblclick="startEdit(i, $event)"
+            />
           </details>
         </div>
-        <div v-else class="md" v-html="html" />
+
+        <template v-else>
+          <textarea
+            v-if="editingSection === 'full'"
+            :ref="bindTextarea"
+            v-model="sectionDraft"
+            class="cfg-input art-editor"
+            spellcheck="false"
+            @blur="handleBlur"
+            @keydown="onKeydown"
+          />
+          <div
+            v-else
+            class="md md-editable"
+            v-html="html"
+            title="Click để sửa"
+            @click="startEdit('full', $event)"
+            @dblclick="startEdit('full', $event)"
+          />
+        </template>
       </div>
     </template>
   </div>
