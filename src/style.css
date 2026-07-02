@@ -351,6 +351,39 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .art-saving-hint { font-size: 12px; color: var(--muted); }
 .md-editable { cursor: text; border-radius: 6px; transition: outline-color 0.15s; }
 .md-editable:hover { outline: 1px dashed var(--border); outline-offset: 4px; }
+.md-section-wrap { position: relative; }
+.md-save-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.md-save-indicator.saved {
+  color: var(--done);
+  background: rgba(63, 185, 80, 0.15);
+  box-shadow: 0 0 0 1px rgba(63, 185, 80, 0.25);
+  animation: md-save-flash 0.35s ease;
+}
+.md-save-indicator.saving {
+  color: var(--muted);
+  background: rgba(139, 151, 163, 0.12);
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 1px;
+}
+@keyframes md-save-flash {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+.block-item.md-section-wrap > .md-save-indicator { top: 10px; right: 10px; }
 .art-section-editor { min-height: 120px; margin: 8px 14px 14px; width: calc(100% - 28px); }
 .art-editor {
   width: 100%;

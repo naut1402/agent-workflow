@@ -3,6 +3,7 @@ import { ref, computed, watch, nextTick, onUpdated } from 'vue'
 import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
 import { saveArtifact } from '../../../api'
 import { useInlineMarkdownEdit } from '../composables/useInlineMarkdownEdit'
+import SectionSaveIndicator from './SectionSaveIndicator.vue'
 
 const props = defineProps({
   qa: { type: String, default: '' },
@@ -27,6 +28,8 @@ const {
   onBlur,
   onKeydown,
   isEditing,
+  showSavingIndicator,
+  showSavedIndicator,
 } = useInlineMarkdownEdit({
   getContent: () => content.value,
   setContent: (v) => { content.value = v },
@@ -42,7 +45,6 @@ const {
     )
     content.value = res.content
     loadedMtime.value = res.mtime
-    message.value = 'Đã lưu qa.md.'
     emit('saved')
     await scheduleMermaid()
   },
@@ -97,25 +99,30 @@ onUpdated(() => scheduleMermaid())
       <code>.dev-team-agent/tasks/&lt;task-id&gt;/qa.md</code>, điền <code>Answer:</code> rồi gõ
       <code>done</code> cho orchestrator.
     </div>
-    <p v-if="saving" class="art-saving-hint">Đang lưu…</p>
     <p v-if="message" class="art-message">{{ message }}</p>
-    <textarea
-      v-if="editingSection === 'full'"
-      :ref="bindTextarea"
-      v-model="sectionDraft"
-      class="cfg-input art-editor"
-      spellcheck="false"
-      @blur="handleBlur"
-      @keydown="onKeydown"
-    />
-    <div
-      v-else
-      ref="viewRoot"
-      class="md md-editable"
-      v-html="html"
-      title="Click để sửa"
-      @click="startEdit('full', $event)"
-      @dblclick="startEdit('full', $event)"
-    />
+    <div class="md-section-wrap">
+      <SectionSaveIndicator
+        :saving="showSavingIndicator('full')"
+        :saved="showSavedIndicator('full')"
+      />
+      <textarea
+        v-if="editingSection === 'full'"
+        :ref="bindTextarea"
+        v-model="sectionDraft"
+        class="cfg-input art-editor"
+        spellcheck="false"
+        @blur="handleBlur"
+        @keydown="onKeydown"
+      />
+      <div
+        v-else
+        ref="viewRoot"
+        class="md md-editable"
+        v-html="html"
+        title="Click để sửa"
+        @click="startEdit('full', $event)"
+        @dblclick="startEdit('full', $event)"
+      />
+    </div>
   </section>
 </template>

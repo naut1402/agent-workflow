@@ -19,7 +19,25 @@ export function useInlineMarkdownEdit(options: {
   const editingSection = ref<EditSection | null>(null)
   const sectionDraft = ref('')
   const saving = ref(false)
+  const savedSection = ref<EditSection | null>(null)
   const editTextarea = ref<HTMLTextAreaElement | null>(null)
+  let saveIndicatorTimer: ReturnType<typeof setTimeout> | null = null
+
+  function flashSaved(section: EditSection) {
+    savedSection.value = section
+    if (saveIndicatorTimer) clearTimeout(saveIndicatorTimer)
+    saveIndicatorTimer = setTimeout(() => {
+      if (savedSection.value === section) savedSection.value = null
+    }, 2500)
+  }
+
+  function showSavingIndicator(section: EditSection) {
+    return saving.value && editingSection.value === section
+  }
+
+  function showSavedIndicator(section: EditSection) {
+    return !saving.value && savedSection.value === section
+  }
 
   function getSectionSource(section: EditSection): string {
     if (section === 'full') return options.getContent()
@@ -52,6 +70,11 @@ export function useInlineMarkdownEdit(options: {
   function cancelEdit() {
     editingSection.value = null
     sectionDraft.value = ''
+    if (saveIndicatorTimer) {
+      clearTimeout(saveIndicatorTimer)
+      saveIndicatorTimer = null
+    }
+    savedSection.value = null
   }
 
   async function onBlur() {
@@ -66,6 +89,7 @@ export function useInlineMarkdownEdit(options: {
     saving.value = true
     try {
       await options.onSave(nextContent)
+      flashSaved(section)
       editingSection.value = null
     } catch (e) {
       saving.value = false
@@ -84,11 +108,14 @@ export function useInlineMarkdownEdit(options: {
     editingSection,
     sectionDraft,
     saving,
+    savedSection,
     editTextarea,
     startEdit,
     cancelEdit,
     onBlur,
     onKeydown,
     isEditing,
+    showSavingIndicator,
+    showSavedIndicator,
   }
 }

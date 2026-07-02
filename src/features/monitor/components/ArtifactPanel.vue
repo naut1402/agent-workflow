@@ -6,6 +6,7 @@ import {
   splitMarkdownSections,
   useInlineMarkdownEdit,
 } from '../composables/useInlineMarkdownEdit'
+import SectionSaveIndicator from './SectionSaveIndicator.vue'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -31,6 +32,8 @@ const {
   onBlur,
   onKeydown,
   isEditing,
+  showSavingIndicator,
+  showSavedIndicator,
 } = useInlineMarkdownEdit({
   getContent: () => content.value,
   setContent: (v) => { content.value = v },
@@ -46,7 +49,6 @@ const {
     )
     content.value = res.content
     loadedMtime.value = res.mtime
-    message.value = 'Đã lưu.'
     externalChange.value = false
     await scheduleMermaid()
   },
@@ -164,7 +166,6 @@ onUpdated(() => scheduleMermaid())
       <div class="art-toolbar">
         <span class="art-title">{{ openArtifact.name }}</span>
         <div class="art-toolbar-actions">
-          <span v-if="saving" class="art-saving-hint">Đang lưu…</span>
           <button
             v-if="blocks.length > 1"
             class="btn-view-toggle"
@@ -189,10 +190,14 @@ onUpdated(() => scheduleMermaid())
           <details
             v-for="(block, i) in blocks"
             :key="i"
-            class="block-item"
+            class="block-item md-section-wrap"
             :open="i < 3"
             @toggle="onBlockToggle"
           >
+            <SectionSaveIndicator
+              :saving="showSavingIndicator(i)"
+              :saved="showSavedIndicator(i)"
+            />
             <summary v-if="block.heading">{{ block.heading }}</summary>
             <textarea
               v-if="editingSection === i"
@@ -214,7 +219,11 @@ onUpdated(() => scheduleMermaid())
           </details>
         </div>
 
-        <template v-else>
+        <div v-else class="md-section-wrap">
+          <SectionSaveIndicator
+            :saving="showSavingIndicator('full')"
+            :saved="showSavedIndicator('full')"
+          />
           <textarea
             v-if="editingSection === 'full'"
             :ref="bindTextarea"
@@ -232,7 +241,7 @@ onUpdated(() => scheduleMermaid())
             @click="startEdit('full', $event)"
             @dblclick="startEdit('full', $event)"
           />
-        </template>
+        </div>
       </div>
     </template>
   </div>
