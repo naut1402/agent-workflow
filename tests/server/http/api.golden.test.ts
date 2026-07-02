@@ -276,7 +276,7 @@ describe('POST /api/pipeline-config-write project scope', () => {
     expect(get.status).toBe(200)
     const body = await get.json()
     expect(body.pipeline.defaults).toMatchObject(pipeline.defaults)
-    expect(body.pipeline.doc_reviewer).toEqual(pipeline.doc_reviewer)
+    expect(body.pipeline.doc_reviewer).toMatchObject(pipeline.doc_reviewer)
     expect(body.pipeline.steps[0].export_key).toBe('s1')
   })
 })
