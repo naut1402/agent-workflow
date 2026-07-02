@@ -16,6 +16,8 @@ function fakeCtx(): RegistryContext {
       list: () => ({ projects: [], defaultId: null }),
       get: () => null,
       add: () => ({ ok: false, status: 400, error: 'stub' }) as any,
+      addFromGit: async () => ({ ok: false, status: 400, error: 'stub' }) as any,
+      syncGitProject: async () => ({ ok: false, status: 400, error: 'stub' }) as any,
       remove: () => ({ ok: false, status: 400, error: 'stub' }) as any,
       validateProjectPath: (() => ({ ok: false, status: 400, error: 'stub' })) as any,
       seedDefault: () => null,
