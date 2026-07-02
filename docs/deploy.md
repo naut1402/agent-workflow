@@ -69,3 +69,16 @@ Nếu cần HTTPS:
 - Terminate TLS ở reverse proxy
 - Reverse proxy vào app tại `http://dashboard:5174` (trong compose) hoặc `http://127.0.0.1:5174` (nếu chạy bare)
 
+## 6. Git workspaces (#41)
+
+Khi đăng ký project bằng Git HTTPS URL, server shallow-clone repo vào:
+
+```
+$DEV_TEAM_DASHBOARD_HOME/workspaces/<project-id>/
+```
+
+- Cần binary `git` trong `PATH` (container image phải cài `git`, ví dụ `apt-get install -y git`).
+- Volume `dashboard-home` (hoặc thư mục tương đương) cần đủ dung lượng cho các clone.
+- Gỡ project khỏi registry **không** xóa thư mục clone — operator có thể dọn thủ công.
+- Private repo / SSH URL chưa được hỗ trợ trong MVP (chỉ HTTPS public).
+- Đồng bộ thủ công: nút **Đồng bộ** trên UI, `POST /api/projects/:id/sync`, hoặc `bun run workspace:sync [--project=<id>]`.

@@ -15,17 +15,19 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { validateGitUrl } from '../shared/git/url.js'
+import { normalizeProject, type Project } from '../shared/schemas/project.js'
+import { withProjectSyncLock } from './git/syncLock.js'
+import {
+  cleanupWorkspace,
+  cloneShallow,
+  pullOrReclone,
+  workspaceDir,
+} from './git/workspace.js'
 
 const REGISTRY_VERSION = 1
 
-export interface Project {
-  id: string
-  name: string
-  kind: string
-  path: string
-  addedAt: string
-  default: boolean
-}
+export type { Project }
 
 export interface Registry {
   version: number
@@ -45,6 +47,8 @@ export interface RegistryContext {
     list: typeof list
     get: typeof get
     add: typeof add
+    addFromGit: typeof addFromGit
+    syncGitProject: typeof syncGitProject
     remove: typeof remove
     validateProjectPath: typeof validateProjectPath
     seedDefault: typeof seedDefault
@@ -90,7 +94,8 @@ export function loadRegistry(): Registry {
     if (!data || typeof data !== 'object' || !Array.isArray(data.projects)) {
       return emptyRegistry()
     }
-    return { version: data.version || REGISTRY_VERSION, projects: data.projects }
+    const projects = (data.projects as unknown[]).map(normalizeProject)
+    return { version: data.version || REGISTRY_VERSION, projects }
   } catch {
     // Corrupt JSON — warn and degrade gracefully instead of crashing.
     console.warn(`[dev-team-dashboard] projects.json corrupt, treating as empty: ${file}`)
@@ -196,6 +201,18 @@ function makeId(name: string, canonicalPath: string): string {
   return `${slug(name)}-${shortHash(canonicalPath)}`
 }
 
+function inferNameFromGitUrl(url: string): string {
+  const pathname = new URL(url).pathname
+  const base = path.basename(pathname)
+  return base.replace(/\.git$/i, '') || 'project'
+}
+
+function resolveCloneRoot(project: Project): string {
+  const byWorkspace = workspaceDir(project.id)
+  if (fs.existsSync(byWorkspace)) return byWorkspace
+  return path.dirname(project.path)
+}
+
 // ── CRUD ───────────────────────────────────────────────────────────────────────
 
 // List all registered projects + the default project id (if any).
@@ -237,6 +254,124 @@ export function add({ path: inputPath, name }: { path?: string; name?: string } 
   reg.projects.push(project)
   saveRegistry(reg)
   return { ok: true, project }
+}
+
+export async function addFromGit({
+  gitUrl,
+  branch = 'main',
+  name,
+  runGit,
+}: {
+  gitUrl: string
+  branch?: string
+  name?: string
+  runGit?: import('./git/workspace.js').RunGitFn
+}): Promise<AddResult> {
+  const v = validateGitUrl(gitUrl)
+  if (!v.ok) return { ok: false, status: 400, error: 'error' in v ? v.error : 'invalid URL' }
+
+  const reg = loadRegistry()
+  const branchResolved = branch?.trim() || 'main'
+
+  const existing = reg.projects.find(
+    (p) => p.kind === 'git' && p.source?.url === v.normalizedUrl && p.source.branch === branchResolved,
+  )
+  if (existing) return { ok: true, project: existing }
+
+  const derivedName = name?.trim() || inferNameFromGitUrl(v.normalizedUrl)
+  const provisionalId = makeId(derivedName, `${v.normalizedUrl}#${branchResolved}`)
+  const cloneRoot = workspaceDir(provisionalId)
+
+  try {
+    await cloneShallow({
+      url: v.normalizedUrl,
+      branch: branchResolved,
+      targetDir: cloneRoot,
+      runGit,
+    })
+    const validated = validateProjectPath(cloneRoot, derivedName)
+    if ('error' in validated) {
+      cleanupWorkspace(cloneRoot)
+      return { ok: false, status: 400, error: validated.error }
+    }
+
+    const syncedAt = new Date().toISOString()
+    const project: Project = {
+      id: makeId(validated.name, validated.path),
+      name: validated.name,
+      kind: 'git',
+      path: validated.path,
+      addedAt: syncedAt,
+      default: reg.projects.length === 0,
+      source: {
+        type: 'git',
+        url: v.normalizedUrl,
+        branch: branchResolved,
+        lastSyncAt: syncedAt,
+      },
+    }
+
+    if (project.id !== provisionalId) {
+      const finalDir = workspaceDir(project.id)
+      fs.mkdirSync(path.dirname(finalDir), { recursive: true })
+      fs.renameSync(cloneRoot, finalDir)
+    }
+
+    reg.projects.push(project)
+    saveRegistry(reg)
+    return { ok: true, project }
+  } catch (e) {
+    cleanupWorkspace(cloneRoot)
+    const msg = String((e as Error)?.message || e)
+    return {
+      ok: false,
+      status: 400,
+      error: msg.includes('branch')
+        ? `git clone failed (branch '${branchResolved}'?): ${msg}`
+        : `git clone failed: ${msg}`,
+    }
+  }
+}
+
+export async function syncGitProject(
+  id: string,
+  runGit?: import('./git/workspace.js').RunGitFn,
+): Promise<AddResult & { syncedAt?: string }> {
+  return withProjectSyncLock(id, async () => {
+    const project = get(id)
+    if (!project) return { ok: false, status: 404, error: 'unknown project' }
+    if (project.kind !== 'git' || !project.source) {
+      return { ok: false, status: 400, error: 'not a git project' }
+    }
+
+    const cloneRoot = resolveCloneRoot(project)
+
+    try {
+      await pullOrReclone({
+        cloneRoot,
+        url: project.source.url,
+        branch: project.source.branch,
+        runGit,
+      })
+      const revalidated = validateProjectPath(cloneRoot)
+      if ('error' in revalidated) {
+        return { ok: false, status: 500, error: 'workspace invalid after sync' }
+      }
+
+      const reg = loadRegistry()
+      const idx = reg.projects.findIndex((p) => p.id === id)
+      const syncedAt = new Date().toISOString()
+      reg.projects[idx] = {
+        ...reg.projects[idx],
+        path: revalidated.path,
+        source: { ...project.source, lastSyncAt: syncedAt },
+      }
+      saveRegistry(reg)
+      return { ok: true, project: reg.projects[idx], syncedAt }
+    } catch (e) {
+      return { ok: false, status: 500, error: `sync failed: ${e}` }
+    }
+  })
 }
 
 // Remove a project from the registry by id. Does NOT touch the project's
@@ -309,7 +444,7 @@ export function createRegistryContext(
   { defaultRoot }: { defaultRoot?: string | null } = {},
 ): RegistryContext {
   return {
-    registry: { list, get, add, remove, validateProjectPath, seedDefault },
+    registry: { list, get, add, addFromGit, syncGitProject, remove, validateProjectPath, seedDefault },
     defaultRoot: defaultRoot || null,
     resolveProjectRoot: (projectId: string | null) => resolveProjectRoot(projectId, { defaultRoot }),
   }
