@@ -1,25 +1,25 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { marked } from 'marked'
+import { ref, computed, watch, nextTick, onUpdated } from 'vue'
+import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
 import { fetchArtifact } from '../../../api'
 
 const props = defineProps({
   task: { type: Object, required: true },
-  openArtifact: { type: Object, default: null }, // { taskId, name }
-  projectId: { type: String, default: null }, // active project (null = default)
+  openArtifact: { type: Object, default: null },
+  projectId: { type: String, default: null },
 })
 
 const content = ref('')
-const loadedKey = ref(null)
-const loadedMtime = ref(null)
+const loadedKey = ref<string | null>(null)
+const loadedMtime = ref<number | null>(null)
 const blockMode = ref(false)
+const viewRoot = ref<HTMLElement | null>(null)
 
-const html = computed(() => marked.parse(content.value || ''))
+const html = computed(() => parseMarkdown(content.value || ''))
 
-// Parse markdown into H2-level sections for block view (pre-rendered to HTML).
 const blocks = computed(() => {
   if (!content.value) return []
-  const sections = []
+  const sections: { heading: string | null; html: string }[] = []
   const parts = content.value.split(/^(?=##\s)/m)
   for (const part of parts) {
     if (!part.trim()) continue
@@ -27,13 +27,13 @@ const blocks = computed(() => {
     const isH2 = firstLine.startsWith('## ')
     sections.push({
       heading: isH2 ? firstLine.replace(/^##\s+/, '') : null,
-      html: marked.parse(part.trim()),
+      html: parseMarkdown(part.trim()),
     })
   }
   return sections
 })
 
-async function load(taskId, name) {
+async function load(taskId: string, name: string) {
   const key = `${taskId}/${name}`
   loadedKey.value = key
   try {
@@ -47,6 +47,16 @@ async function load(taskId, name) {
   }
 }
 
+async function scheduleMermaid() {
+  await nextTick()
+  await renderMermaid(viewRoot.value)
+}
+
+function onBlockToggle(ev: Event) {
+  const el = ev.target as HTMLDetailsElement
+  if (el.open) scheduleMermaid()
+}
+
 watch(
   () => props.openArtifact,
   (a) => {
@@ -56,10 +66,8 @@ watch(
   { immediate: true },
 )
 
-// Reset block mode when switching artifact.
 watch(() => props.openArtifact?.name, () => { blockMode.value = false })
 
-// Realtime: reload if the open file was modified on disk.
 watch(
   () => {
     if (!props.openArtifact) return null
@@ -71,6 +79,9 @@ watch(
     }
   },
 )
+
+watch([html, blockMode], () => scheduleMermaid())
+onUpdated(() => scheduleMermaid())
 </script>
 
 <template>
@@ -89,21 +100,21 @@ watch(
         >{{ blockMode ? '📄 Full' : '🗂 Blocks' }}</button>
       </div>
 
-      <!-- Block view: sections as collapsible <details> -->
-      <div v-if="blockMode" class="block-list">
-        <details
-          v-for="(block, i) in blocks"
-          :key="i"
-          class="block-item"
-          :open="i < 3"
-        >
-          <summary v-if="block.heading">{{ block.heading }}</summary>
-          <div class="md block-content" v-html="block.html" />
-        </details>
+      <div ref="viewRoot">
+        <div v-if="blockMode" class="block-list">
+          <details
+            v-for="(block, i) in blocks"
+            :key="i"
+            class="block-item"
+            :open="i < 3"
+            @toggle="onBlockToggle"
+          >
+            <summary v-if="block.heading">{{ block.heading }}</summary>
+            <div class="md block-content" v-html="block.html" />
+          </details>
+        </div>
+        <div v-else class="md" v-html="html" />
       </div>
-
-      <!-- Full view: single markdown blob -->
-      <div v-else class="md" v-html="html" />
     </template>
   </div>
 </template>
