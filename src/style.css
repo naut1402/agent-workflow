@@ -335,6 +335,16 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .md table { border-collapse: collapse; }
 .md th, .md td { border: 1px solid var(--border); padding: 5px 10px; }
 .md a { color: var(--accent); }
+.md .mermaid {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+.md .mermaid svg { max-width: 100%; height: auto; }
 
 /* Flow profile editor modal */
 .modal-backdrop {
