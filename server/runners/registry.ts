@@ -13,6 +13,21 @@ function runnersFile(): string {
   return path.join(registryHome(), 'runners.json')
 }
 
+export const BUILTIN_SERVER_RUNNER: RunnerConfig = {
+  id: 'claude-code-server',
+  name: 'Claude Code CLI (server headless)',
+  provider: 'claude-code-cli',
+  credentialId: 'claude-server-env',
+  enabled: true,
+  maxConcurrency: 1,
+  config: {
+    cliPath: 'claude',
+    flags: ['--bare'],
+    timeoutMs: 600_000,
+    allowedTools: 'Read,Write,Bash,Grep,Glob',
+  },
+}
+
 function defaultRunners(): RunnersStore {
   return {
     version: RUNNERS_VERSION,
@@ -32,8 +47,22 @@ function defaultRunners(): RunnersStore {
           allowedTools: 'Read,Write,Bash,Grep,Glob',
         },
       },
+      { ...BUILTIN_SERVER_RUNNER },
     ],
   }
+}
+
+function ensureBuiltinRunners(store: RunnersStore): RunnersStore {
+  const builtins = [BUILTIN_SERVER_RUNNER]
+  let changed = false
+  for (const b of builtins) {
+    if (!store.runners.some((r) => r.id === b.id)) {
+      store.runners.push({ ...b })
+      changed = true
+    }
+  }
+  if (changed) saveRunners(store)
+  return store
 }
 
 export function loadRunners(): RunnersStore {
@@ -42,19 +71,20 @@ export function loadRunners(): RunnersStore {
   try {
     raw = fs.readFileSync(file, 'utf8')
   } catch {
-    return defaultRunners()
+    return ensureBuiltinRunners(defaultRunners())
   }
   try {
     const data = JSON.parse(raw)
-    if (!data || !Array.isArray(data.runners)) return defaultRunners()
-    return {
+    if (!data || !Array.isArray(data.runners)) return ensureBuiltinRunners(defaultRunners())
+    const store: RunnersStore = {
       version: data.version || RUNNERS_VERSION,
       defaultRunnerId: data.defaultRunnerId || data.runners[0]?.id || 'claude-code-local',
       runners: data.runners,
     }
+    return ensureBuiltinRunners(store)
   } catch {
     console.warn(`[dev-team-dashboard] runners.json corrupt: ${file}`)
-    return defaultRunners()
+    return ensureBuiltinRunners(defaultRunners())
   }
 }
 

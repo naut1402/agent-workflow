@@ -92,11 +92,37 @@ describe('resolveSecretRef', () => {
 })
 
 describe('runners registry CRUD', () => {
-  test('default store has claude-code-local', () => {
+  test('default store has claude-code-local and claude-code-server', () => {
     const store = loadRunners()
     expect(store.defaultRunnerId).toBe('claude-code-local')
-    expect(store.runners[0].id).toBe('claude-code-local')
+    expect(store.runners.map((r) => r.id)).toEqual(['claude-code-local', 'claude-code-server'])
     expect(getDefaultRunner()?.id).toBe('claude-code-local')
+    const server = getRunner('claude-code-server')
+    expect(server?.config?.flags).toEqual(['--bare'])
+    expect(server?.credentialId).toBe('claude-server-env')
+  })
+  test('legacy runners.json without server preset gets merged on load', () => {
+    const legacy = {
+      version: 1,
+      defaultRunnerId: 'claude-code-local',
+      runners: [
+        {
+          id: 'claude-code-local',
+          name: 'Claude Code CLI (local)',
+          provider: 'claude-code-cli',
+          credentialId: 'claude-default',
+          enabled: true,
+          maxConcurrency: 1,
+          config: { cliPath: 'claude', flags: [], timeoutMs: 600_000 },
+        },
+      ],
+    }
+    fs.writeFileSync(path.join(home, 'runners.json'), JSON.stringify(legacy), 'utf8')
+    const store = loadRunners()
+    expect(store.runners.some((r) => r.id === 'claude-code-server')).toBe(true)
+    expect(store.defaultRunnerId).toBe('claude-code-local')
+    const persisted = JSON.parse(fs.readFileSync(path.join(home, 'runners.json'), 'utf8'))
+    expect(persisted.runners.some((r: { id: string }) => r.id === 'claude-code-server')).toBe(true)
   })
   test('upsert validates and persists', () => {
     expect(upsertRunner({ id: '' } as any)).toEqual({ ok: false, error: 'invalid runner id' })
@@ -105,12 +131,28 @@ describe('runners registry CRUD', () => {
     const res = upsertRunner({ id: 'r2', provider: 'claude-code-cli', credentialId: 'claude-default' } as any)
     expect(res.ok).toBe(true)
     expect(getRunner('r2')?.id).toBe('r2')
-    expect(listRunners().runners.length).toBe(2)
+    expect(listRunners().runners.length).toBe(3)
   })
   test('delete guards the last runner; setDefault validates', () => {
-    expect(deleteRunner('claude-code-local')).toMatchObject({ ok: false, status: 400 })
+    const solo = {
+      version: 1,
+      defaultRunnerId: 'claude-code-server',
+      runners: [
+        {
+          id: 'claude-code-server',
+          name: 'Claude Code CLI (server headless)',
+          provider: 'claude-code-cli',
+          credentialId: 'claude-server-env',
+          enabled: true,
+          maxConcurrency: 1,
+          config: { cliPath: 'claude', flags: ['--bare'], timeoutMs: 600_000 },
+        },
+      ],
+    }
+    fs.writeFileSync(path.join(home, 'runners.json'), JSON.stringify(solo), 'utf8')
+    expect(deleteRunner('claude-code-server')).toMatchObject({ ok: false, status: 400 })
     upsertRunner({ id: 'r2', provider: 'p', credentialId: 'claude-default' } as any)
-    expect(deleteRunner('r2')).toEqual({ ok: true })
+    expect(deleteRunner('claude-code-server')).toEqual({ ok: true })
     expect(setDefaultRunner('ghost')).toMatchObject({ ok: false, status: 404 })
     upsertRunner({ id: 'r3', provider: 'p', credentialId: 'claude-default' } as any)
     expect(setDefaultRunner('r3')).toEqual({ ok: true, defaultRunnerId: 'r3' })
@@ -118,14 +160,19 @@ describe('runners registry CRUD', () => {
 })
 
 describe('credentials CRUD', () => {
-  test('default profile + upsert + delete-last guard', () => {
-    expect(loadCredentials().profiles[0].id).toBe('claude-default')
+  test('default profiles include claude-server-env', () => {
+    const profiles = loadCredentials().profiles
+    expect(profiles.map((p) => p.id)).toEqual(['claude-default', 'claude-server-env'])
+    expect(getCredential('claude-server-env')?.secretRef).toBe('env:ANTHROPIC_API_KEY')
+  })
+  test('upsert + delete-last guard', () => {
     expect(getCredential('claude-default')?.provider).toBe('claude-code-cli')
     expect(upsertCredential({ id: 'c2' } as any)).toEqual({ ok: false, error: 'provider is required' })
     expect(upsertCredential({ id: 'c2', provider: 'p' } as any).ok).toBe(true)
-    expect(listCredentials().length).toBe(2)
+    expect(listCredentials().length).toBe(3)
     expect(deleteCredential('claude-default')).toEqual({ ok: true })
-    expect(deleteCredential('c2')).toMatchObject({ ok: false, status: 400 })
+    expect(deleteCredential('c2')).toEqual({ ok: true })
+    expect(deleteCredential('claude-server-env')).toMatchObject({ ok: false, status: 400 })
   })
 })
 

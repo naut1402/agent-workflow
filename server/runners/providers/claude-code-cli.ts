@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveSecretRef } from '../credentials.js'
+import { resolveEffectiveFlags } from '../flagUtils.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ResolvedAgent, RunnerProvider } from '../types.js'
 
 interface ProcResult {
@@ -15,16 +16,6 @@ function buildPrompt(resolvedAgent: ResolvedAgent, userPrompt: string): string {
   const system = resolvedAgent.systemPrompt?.trim()
   if (!system) return userPrompt
   return `## Agent instructions\n\n${system}\n\n## Task\n\n${userPrompt}`
-}
-
-/** --bare only supports ANTHROPIC_API_KEY; cli-session needs OAuth/keychain. */
-function resolveEffectiveFlags(flags: unknown, credential: CredentialProfile): string[] {
-  const list = Array.isArray(flags) ? [...flags] : []
-  const auth = resolveSecretRef(credential)
-  if (auth.type === 'cli-session') {
-    return list.filter((f) => f !== '--bare')
-  }
-  return list
 }
 
 function buildChildEnv(credential: CredentialProfile): NodeJS.ProcessEnv {
