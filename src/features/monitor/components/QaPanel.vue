@@ -1,12 +1,21 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { marked } from 'marked'
+import { computed, watch, nextTick, onUpdated, ref } from 'vue'
+import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
 
 const props = defineProps({
   qa: { type: String, default: '' },
 })
 
-const html = computed(() => marked.parse(props.qa || ''))
+const viewRoot = ref<HTMLElement | null>(null)
+const html = computed(() => parseMarkdown(props.qa || ''))
+
+async function scheduleMermaid() {
+  await nextTick()
+  await renderMermaid(viewRoot.value)
+}
+
+watch(html, () => scheduleMermaid())
+onUpdated(() => scheduleMermaid())
 </script>
 
 <template>
@@ -16,6 +25,6 @@ const html = computed(() => marked.parse(props.qa || ''))
       Mở <code>.dev-team-agent/tasks/&lt;task-id&gt;/qa.md</code>, điền <code>Answer:</code> rồi gõ
       <code>done</code> cho orchestrator.
     </div>
-    <div class="md" v-html="html"></div>
+    <div ref="viewRoot" class="md" v-html="html" />
   </section>
 </template>
