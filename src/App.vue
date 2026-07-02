@@ -231,6 +231,7 @@ onUnmounted(stop)
         :scope="editorScope"
         :task-id="editorTaskId"
         :tasks="tasks"
+        :project-id="selectedProjectId"
         :app-sidebar-collapsed="sidebarCollapsed"
         @update:scope="editorScope = $event"
         @update:task-id="editorTaskId = $event"

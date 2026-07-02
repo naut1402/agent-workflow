@@ -21,6 +21,7 @@ let server: http.Server
 let base: string
 let root: string
 let home: string
+let localProj: string
 const savedEnv = { ...process.env }
 
 function req(method: string, p: string, opts: { body?: string; headers?: Record<string, string> } = {}) {
@@ -42,6 +43,9 @@ beforeAll(async () => {
     JSON.stringify({ current_phase: 'design', hitl_pending: false, review_round: 0 }),
   )
   fs.writeFileSync(path.join(root, 'tasks', 'T1', 'investigate.md'), '# Investigate T1\n')
+
+  localProj = fs.mkdtempSync(path.join(home, 'local-proj-'))
+  fs.mkdirSync(path.join(localProj, '.dev-team-agent'), { recursive: true })
 
   const ctx = createRegistryContext({ defaultRoot: root })
   const handler = createApiHandler(ctx)
@@ -251,6 +255,52 @@ describe('GET /api/knowledge/tags', () => {
     const r = await req('GET', '/api/knowledge/tags')
     expect(r.status).toBe(200)
     expect(Array.isArray((await r.json()).tags)).toBe(true)
+  })
+})
+
+describe('POST /api/pipeline-config-write project scope', () => {
+  test('scoped project preserves defaults and doc_reviewer', async () => {
+    const added = await req('POST', '/api/projects', { body: JSON.stringify({ path: localProj }) })
+    const { project } = await added.json()
+    const pipeline = {
+      version: 1,
+      defaults: { auto_review: true, export_json: false },
+      steps: [{ id: 's1', name: 'S1', export_key: 's1' }],
+      doc_reviewer: { agent: 'a', rule_required: false },
+    }
+    const write = await req('POST', `/api/pipeline-config-write?project=${project.id}`, {
+      body: JSON.stringify({ scope: 'global', pipeline }),
+    })
+    expect(write.status).toBe(200)
+    const get = await req('GET', `/api/pipeline-config?project=${project.id}`)
+    expect(get.status).toBe(200)
+    const body = await get.json()
+    expect(body.pipeline.defaults).toMatchObject(pipeline.defaults)
+    expect(body.pipeline.doc_reviewer).toEqual(pipeline.doc_reviewer)
+    expect(body.pipeline.steps[0].export_key).toBe('s1')
+  })
+})
+
+describe('POST /api/pipeline-profiles project scope', () => {
+  test('POST pipeline-profile scopes to ?project=', async () => {
+    const projDir = fs.mkdtempSync(path.join(home, 'scoped-proj-'))
+    fs.mkdirSync(path.join(projDir, '.dev-team-agent'), { recursive: true })
+    const added = await req('POST', '/api/projects', { body: JSON.stringify({ path: projDir }) })
+    const { project } = await added.json()
+    const pipeline = {
+      version: 1,
+      defaults: { auto_review: true },
+      steps: [{ id: 's1', name: 'S1' }],
+      doc_reviewer: { agent: 'a', rule_required: false },
+    }
+    const save = await req('POST', `/api/pipeline-profiles?project=${project.id}`, {
+      body: JSON.stringify({ name: 'scoped', pipeline }),
+    })
+    expect(save.status).toBe(200)
+    const profilePath = path.join(projDir, '.dev-team-agent', 'pipeline-profiles', 'scoped.yaml')
+    expect(fs.existsSync(profilePath)).toBe(true)
+    const defaultProfilePath = path.join(root, 'pipeline-profiles', 'scoped.yaml')
+    expect(fs.existsSync(defaultProfilePath)).toBe(false)
   })
 })
 
