@@ -4,7 +4,7 @@
 // registry. Removing a project only detaches it from the dashboard — it never
 // touches files on disk.
 import { ref } from 'vue'
-import { addProject, removeProject } from '../../../api'
+import { addProject, addGitProject, removeProject, syncProject } from '../../../api'
 
 const props = defineProps({
   projects: { type: Array as () => any[], default: () => [] },
@@ -15,15 +15,21 @@ const props = defineProps({
 const emit = defineEmits(['select', 'changed'])
 
 const adding = ref(false)
+const addTab = ref<'local' | 'git'>('local')
 const newPath = ref('')
+const newGitUrl = ref('')
+const newBranch = ref('')
 const newName = ref('')
 const busy = ref(false)
 const errorMsg = ref('')
 
 function openAdd() {
   adding.value = true
+  addTab.value = 'local'
   errorMsg.value = ''
   newPath.value = ''
+  newGitUrl.value = ''
+  newBranch.value = ''
   newName.value = ''
 }
 
@@ -32,26 +38,60 @@ function cancelAdd() {
   errorMsg.value = ''
 }
 
+function formatSyncTime(iso?: string) {
+  if (!iso) return 'Chưa đồng bộ'
+  try {
+    return new Date(iso).toLocaleString('vi-VN')
+  } catch {
+    return iso
+  }
+}
+
 async function submitAdd() {
-  if (!newPath.value.trim()) {
-    errorMsg.value = 'Nhập đường dẫn tới .dev-team-agent (hoặc project root).'
+  if (addTab.value === 'local') {
+    if (!newPath.value.trim()) {
+      errorMsg.value = 'Nhập đường dẫn tới .dev-team-agent (hoặc project root).'
+      return
+    }
+  } else if (!newGitUrl.value.trim()) {
+    errorMsg.value = 'Nhập Git HTTPS URL (ví dụ https://github.com/org/repo.git).'
     return
   }
+
   busy.value = true
   errorMsg.value = ''
   try {
-    const { project } = await addProject(newPath.value.trim(), newName.value.trim() || undefined)
+    const { project } = addTab.value === 'git'
+      ? await addGitProject(
+          newGitUrl.value.trim(),
+          newBranch.value.trim() || undefined,
+          newName.value.trim() || undefined,
+        )
+      : await addProject(newPath.value.trim(), newName.value.trim() || undefined)
     adding.value = false
     emit('changed')
     if (project?.id) emit('select', project.id)
   } catch (e) {
-    errorMsg.value = String(e.message || e)
+    errorMsg.value = String((e as Error).message || e)
   } finally {
     busy.value = false
   }
 }
 
-async function onRemove(project) {
+async function onSync(project: { id: string }) {
+  busy.value = true
+  errorMsg.value = ''
+  try {
+    await syncProject(project.id)
+    emit('changed')
+  } catch (e) {
+    errorMsg.value = `Đồng bộ thất bại: ${String((e as Error).message || e)}`
+  } finally {
+    busy.value = false
+  }
+}
+
+async function onRemove(project: { id: string; name: string; default?: boolean }) {
   if (project.default) return
   if (!window.confirm(`Gỡ project "${project.name}" khỏi dashboard?\n(Không xoá file trên đĩa.)`)) return
   busy.value = true
@@ -61,7 +101,7 @@ async function onRemove(project) {
     emit('changed')
     if (props.selectedId === project.id) emit('select', null)
   } catch (e) {
-    errorMsg.value = String(e.message || e)
+    errorMsg.value = String((e as Error).message || e)
   } finally {
     busy.value = false
   }
@@ -84,8 +124,17 @@ async function onRemove(project) {
       >
         <button class="project-pick" type="button" @click="emit('select', p.id)">
           <span class="project-name">{{ p.name }}</span>
+          <span v-if="p.kind === 'git'" class="project-git-badge" title="Git workspace">git</span>
           <span v-if="p.default" class="project-default-badge">default</span>
         </button>
+        <button
+          v-if="p.kind === 'git'"
+          class="project-sync"
+          type="button"
+          :title="`Đồng bộ — ${formatSyncTime(p.source?.lastSyncAt)}`"
+          :disabled="busy"
+          @click="onSync(p)"
+        >↻</button>
         <button
           v-if="!p.default"
           class="project-remove"
@@ -98,12 +147,44 @@ async function onRemove(project) {
     </ul>
 
     <div v-if="adding" class="project-add-form">
-      <input
-        v-model="newPath"
-        class="project-input"
-        placeholder="Đường dẫn .dev-team-agent / project root"
-        @keyup.enter="submitAdd"
-      />
+      <div class="project-add-tabs">
+        <button
+          class="project-tab"
+          :class="{ active: addTab === 'local' }"
+          type="button"
+          @click="addTab = 'local'"
+        >Local</button>
+        <button
+          class="project-tab"
+          :class="{ active: addTab === 'git' }"
+          type="button"
+          @click="addTab = 'git'"
+        >Git URL</button>
+      </div>
+
+      <template v-if="addTab === 'local'">
+        <input
+          v-model="newPath"
+          class="project-input"
+          placeholder="Đường dẫn .dev-team-agent / project root"
+          @keyup.enter="submitAdd"
+        />
+      </template>
+      <template v-else>
+        <input
+          v-model="newGitUrl"
+          class="project-input"
+          placeholder="https://github.com/org/repo.git"
+          @keyup.enter="submitAdd"
+        />
+        <input
+          v-model="newBranch"
+          class="project-input"
+          placeholder="Nhánh (mặc định: main)"
+          @keyup.enter="submitAdd"
+        />
+      </template>
+
       <input
         v-model="newName"
         class="project-input"
@@ -172,6 +253,14 @@ async function onRemove(project) {
   overflow: hidden;
 }
 .project-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-git-badge {
+  font-size: 10px;
+  opacity: 0.75;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
 .project-default-badge {
   font-size: 10px;
   opacity: 0.6;
@@ -179,6 +268,17 @@ async function onRemove(project) {
   border-radius: 3px;
   padding: 0 4px;
 }
+.project-sync {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 0 5px;
+  font-size: 14px;
+}
+.project-sync:hover { opacity: 1; }
+.project-sync:disabled { opacity: 0.3; cursor: default; }
 .project-remove {
   background: none;
   border: none;
@@ -191,6 +291,18 @@ async function onRemove(project) {
 .project-remove:hover { opacity: 1; color: #ff8080; }
 .project-empty { opacity: 0.5; padding: 5px 6px; }
 .project-add-form { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.project-add-tabs { display: flex; gap: 4px; }
+.project-tab {
+  flex: 1;
+  border: 1px solid var(--border, #2a2a35);
+  background: none;
+  color: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.project-tab.active { background: rgba(120, 160, 255, 0.18); }
 .project-input {
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--border, #2a2a35);

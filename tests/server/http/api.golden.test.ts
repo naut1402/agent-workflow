@@ -21,6 +21,7 @@ let server: http.Server
 let base: string
 let root: string
 let home: string
+let localProj: string
 const savedEnv = { ...process.env }
 
 function req(method: string, p: string, opts: { body?: string; headers?: Record<string, string> } = {}) {
@@ -44,6 +45,9 @@ beforeAll(async () => {
     JSON.stringify({ current_phase: 'design', hitl_pending: false, review_round: 0 }),
   )
   fs.writeFileSync(path.join(root, 'tasks', 'T1', 'investigate.md'), '# Investigate T1\n')
+
+  localProj = fs.mkdtempSync(path.join(home, 'local-proj-'))
+  fs.mkdirSync(path.join(localProj, '.dev-team-agent'), { recursive: true })
 
   const ctx = createRegistryContext({ defaultRoot: root })
   const handler = createApiHandler(ctx)
@@ -237,6 +241,38 @@ describe('project registry routes', () => {
   test('PUT /api/projects → 405', async () => {
     const r = await req('PUT', '/api/projects')
     expect(r.status).toBe(405)
+  })
+  test('POST /api/projects local path → kind local', async () => {
+    const r = await req('POST', '/api/projects', {
+      body: JSON.stringify({ path: localProj }),
+    })
+    expect(r.status).toBe(201)
+    const body = await r.json()
+    expect(body.project.kind).toBe('local')
+    expect(body.project.source).toBeUndefined()
+  })
+  test('POST /api/projects invalid body path+gitUrl → 400', async () => {
+    const r = await req('POST', '/api/projects', {
+      body: JSON.stringify({ path: root, gitUrl: 'https://github.com/x/y.git' }),
+    })
+    expect(r.status).toBe(400)
+  })
+  test('POST /api/projects gitUrl http → 400', async () => {
+    const r = await req('POST', '/api/projects', {
+      body: JSON.stringify({ gitUrl: 'http://github.com/x/y.git' }),
+    })
+    expect(r.status).toBe(400)
+  })
+  test('POST /api/projects/:id/sync unknown → 404', async () => {
+    const r = await req('POST', '/api/projects/nope/sync')
+    expect(r.status).toBe(404)
+  })
+  test('POST /api/projects/:id/sync local → 400', async () => {
+    const added = await req('POST', '/api/projects', { body: JSON.stringify({ path: localProj }) })
+    const { project } = await added.json()
+    const r = await req('POST', `/api/projects/${project.id}/sync`)
+    expect(r.status).toBe(400)
+    expect((await r.json()).error).toBe('not a git project')
   })
 })
 

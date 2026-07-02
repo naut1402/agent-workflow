@@ -49,6 +49,27 @@ export async function addProject(path: string, name?: string) {
   return data
 }
 
+export async function addGitProject(gitUrl: string, branch?: string, name?: string) {
+  const r = await fetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gitUrl, branch, name }),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/projects POST → ${r.status}`)
+  return data
+}
+
+export async function syncProject(id: string) {
+  const r = await fetch(`/api/projects/${encodeURIComponent(id)}/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/projects/${id}/sync → ${r.status}`)
+  return data
+}
+
 export async function removeProject(id: string) {
   const r = await apiFetch(`/api/projects${qs({ id })}`, { method: 'DELETE' })
   const data = await r.json().catch(() => ({}))
