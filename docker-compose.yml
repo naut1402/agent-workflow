@@ -9,6 +9,8 @@ services:
       DEV_TEAM_DASHBOARD_HOME: "/data"
       DEV_TEAM_API_TOKEN: ${DEV_TEAM_API_TOKEN}
       DEV_TEAM_ENV: ${DEV_TEAM_ENV:-}
+      # Optional — chỉ cần khi dùng smoke test / orchestrator headless (Luồng A)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - dashboard-home:/data
       - workspaces:/workspaces
