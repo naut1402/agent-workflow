@@ -120,6 +120,50 @@ describe('GET /api/artifact', () => {
   })
 })
 
+describe('PUT /api/artifact', () => {
+  test('updates an artifact', async () => {
+    const getBefore = await req('GET', '/api/artifact?id=T1&name=investigate.md')
+    const before = await getBefore.json()
+    const next = '# Investigate T1\n\nUpdated via PUT\n'
+    const put = await req('PUT', '/api/artifact?id=T1&name=investigate.md', {
+      body: JSON.stringify({ content: next, mtime: before.mtime }),
+    })
+    expect(put.status).toBe(200)
+    const saved = await put.json()
+    expect(saved.content).toBe(next)
+    expect(saved.mtime).toBeGreaterThanOrEqual(before.mtime)
+
+    const getAfter = await req('GET', '/api/artifact?id=T1&name=investigate.md')
+    expect((await getAfter.json()).content).toBe(next)
+  })
+
+  test('rejects invalid task id', async () => {
+    const r = await req('PUT', '/api/artifact?id=bad/id&name=investigate.md', {
+      body: JSON.stringify({ content: 'x' }),
+    })
+    expect(r.status).toBe(400)
+  })
+
+  test('rejects non-md artifact name', async () => {
+    const r = await req('PUT', '/api/artifact?id=T1&name=secret.txt', {
+      body: JSON.stringify({ content: 'x' }),
+    })
+    expect(r.status).toBe(400)
+  })
+
+  test('409 on mtime conflict', async () => {
+    const get = await req('GET', '/api/artifact?id=T1&name=investigate.md')
+    const body = await get.json()
+    const put = await req('PUT', '/api/artifact?id=T1&name=investigate.md', {
+      body: JSON.stringify({ content: body.content + '\n', mtime: body.mtime - 1 }),
+    })
+    expect(put.status).toBe(409)
+    const conflict = await put.json()
+    expect(conflict.error).toBe('conflict')
+    expect(conflict.content).toContain('Investigate T1')
+  })
+})
+
 describe('GET /api/profile + POST', () => {
   test('GET → exists:false when no profile', async () => {
     const r = await req('GET', '/api/profile')
