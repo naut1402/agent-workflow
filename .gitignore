@@ -2,6 +2,16 @@ node_modules/
 dist/
 CLAUDE.local.md
 
+# Orchestrator runtime workspace — ignore mutable state, keep empty dirs in git
+/.dev-team-agent/*
+!/.dev-team-agent/.dev-state/
+/.dev-team-agent/.dev-state/*
+!/.dev-team-agent/.dev-state/.gitkeep
+!/.dev-team-agent/tasks/
+/.dev-team-agent/tasks/*
+!/.dev-team-agent/tasks/.gitkeep
+!/.dev-team-agent/README.md
+
 # Conversation exports (/export) — never commit
 ts-migration.txt
 *.export.txt
