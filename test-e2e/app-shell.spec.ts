@@ -5,7 +5,7 @@ import { capture } from './_capture'
 // Confirms the app shell + monitor mode still render after moving the API
 // client, composables and shared UI — if any import broke, the SPA would not
 // mount and these assertions would fail. Screenshot is attached to the report
-// (not committed to docs/) — see .claude/rules/doc-output.md.
+// (not committed to docs/) — see AGENTS.md (mục Doc output / Evidence).
 
 test('monitor mode renders the fixture task (capture)', async ({ page }, testInfo) => {
   await page.goto('/')

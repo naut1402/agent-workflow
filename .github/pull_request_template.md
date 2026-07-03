@@ -1,6 +1,8 @@
 <!--
-PR template cho quá trình refactor TS. Điền đầy đủ các mục.
-Mỗi PR module nên bám theo .claude/rules/refactor-workflow.md.
+PR template. Điền đầy đủ các mục.
+Quy ước hiện hành cho mọi agent: AGENTS.md (coding conventions, test, git hygiene, doc output).
+Kiến trúc + cấu trúc thư mục: docs/architecture.md.
+(Bối cảnh migration TS đã hoàn tất, lưu ở docs/history/refactor-workflow.md.)
 -->
 
 ## Issue
@@ -39,8 +41,8 @@ Part of #
 ## Checklist
 - [ ] Không thay đổi hành vi public (hoặc đã ghi rõ thay đổi)
 - [ ] Test xanh local · CI/CD xanh
-- [ ] Tuân thủ `.claude/rules/coding-conventions.md`
-- [ ] **Git hygiene** (`.claude/rules/git-hygiene.md`): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
+- [ ] Tuân thủ `AGENTS.md` §3 (coding conventions)
+- [ ] **Git hygiene** (`AGENTS.md` §7): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
 - [ ] Rename/move dùng `git mv`; KHÔNG còn bản cũ trùng (vd `.js` lẫn `.ts`); test không lạc khỏi `tests/`·`test-e2e/`
 
 ---
