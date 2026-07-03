@@ -12,8 +12,9 @@ services:
       # Optional — chỉ cần khi dùng smoke test / orchestrator headless (Luồng A)
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
+      # Registry, git clones (/data/workspaces/), SSH cache, jobs, logs
       - dashboard-home:/data
-      - workspaces:/workspaces
+      # SSH private keys for credential secretRef file:/keys/...
       - keys:/keys:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5174/api/health"]
@@ -23,6 +24,5 @@ services:
 
 volumes:
   dashboard-home:
-  workspaces:
   keys:
 
