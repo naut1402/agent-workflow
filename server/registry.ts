@@ -15,17 +15,25 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { validateGitUrl } from '../shared/git/url.js'
+import { AddSshProjectBodySchema, normalizeProject, type Project } from '../shared/schemas/project.js'
+import { getRunner } from './runners/registry.js'
+import { withProjectSyncLock } from './git/syncLock.js'
+import {
+  pushGitWorkspace as pushGitWorkspaceImpl,
+  type PushResult,
+} from './git/push.js'
+import { ensureDevTeamWorkspace } from './git/scaffold.js'
+import {
+  cleanupWorkspace,
+  cloneShallow,
+  pullOrReclone,
+  workspaceDir,
+} from './git/workspace.js'
 
 const REGISTRY_VERSION = 1
 
-export interface Project {
-  id: string
-  name: string
-  kind: string
-  path: string
-  addedAt: string
-  default: boolean
-}
+export type { Project, PushResult }
 
 export interface Registry {
   version: number
@@ -34,6 +42,15 @@ export interface Registry {
 
 export type ValidateResult =
   | { ok: true; path: string; name: string }
+  | { ok: false; status: number; error: string }
+
+export type ValidateSshResult =
+  | {
+      ok: true
+      path: string
+      name: string
+      remote: NonNullable<Project['remote']>
+    }
   | { ok: false; status: number; error: string }
 
 export type AddResult =
@@ -45,8 +62,13 @@ export interface RegistryContext {
     list: typeof list
     get: typeof get
     add: typeof add
+    addFromGit: typeof addFromGit
+    syncGitProject: typeof syncGitProject
+    pushGitWorkspace: typeof pushGitWorkspace
+    addSshProject: typeof addSshProject
     remove: typeof remove
     validateProjectPath: typeof validateProjectPath
+    validateSshProject: typeof validateSshProject
     seedDefault: typeof seedDefault
   }
   defaultRoot: string | null
@@ -90,7 +112,8 @@ export function loadRegistry(): Registry {
     if (!data || typeof data !== 'object' || !Array.isArray(data.projects)) {
       return emptyRegistry()
     }
-    return { version: data.version || REGISTRY_VERSION, projects: data.projects }
+    const projects = (data.projects as unknown[]).map(normalizeProject)
+    return { version: data.version || REGISTRY_VERSION, projects }
   } catch {
     // Corrupt JSON — warn and degrade gracefully instead of crashing.
     console.warn(`[dev-team-dashboard] projects.json corrupt, treating as empty: ${file}`)
@@ -196,6 +219,90 @@ function makeId(name: string, canonicalPath: string): string {
   return `${slug(name)}-${shortHash(canonicalPath)}`
 }
 
+function defaultArtifactCache(name: string): string {
+  return path.join(registryHome(), 'cache', `${slug(name)}-${shortHash(name + Date.now())}`)
+}
+
+function scaffoldArtifactCache(cachePath: string): void {
+  fs.mkdirSync(path.join(cachePath, '.dev-state'), { recursive: true })
+  fs.mkdirSync(path.join(cachePath, 'tasks'), { recursive: true })
+}
+
+function inferNameFromGitUrl(url: string): string {
+  const pathname = new URL(url).pathname
+  const base = path.basename(pathname)
+  return base.replace(/\.git$/i, '') || 'project'
+}
+
+function resolveCloneRoot(project: Project): string {
+  const byWorkspace = workspaceDir(project.id)
+  if (fs.existsSync(byWorkspace)) return byWorkspace
+  return path.dirname(project.path)
+}
+
+export function validateSshProject(input: unknown, name?: unknown): ValidateSshResult {
+  const parsed = AddSshProjectBodySchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, status: 400, error: parsed.error.issues.map((i) => i.message).join('; ') }
+  }
+  const body = parsed.data
+
+  const remotePath = body.remotePath.trim()
+  if (!remotePath.startsWith('/')) {
+    return { ok: false, status: 400, error: 'remotePath must be absolute POSIX path' }
+  }
+
+  const runner = getRunner(body.remote.runnerId)
+  if (!runner) {
+    return { ok: false, status: 404, error: `unknown runner: ${body.remote.runnerId}` }
+  }
+  if (runner.provider !== 'claude-code-ssh') {
+    return { ok: false, status: 400, error: 'runnerId must reference claude-code-ssh provider' }
+  }
+
+  const displayName =
+    (typeof name === 'string' && name.trim()) ||
+    body.name?.trim() ||
+    `${body.remote.host}-${slug(remotePath)}`
+
+  let artifactCache = body.remote.artifactCache?.trim()
+  if (!artifactCache) {
+    artifactCache = defaultArtifactCache(displayName)
+  }
+  if (!path.isAbsolute(artifactCache)) {
+    return { ok: false, status: 400, error: 'artifactCache must be absolute server path' }
+  }
+
+  return {
+    ok: true,
+    path: remotePath,
+    name: displayName,
+    remote: {
+      host: body.remote.host,
+      user: body.remote.user,
+      port: body.remote.port ?? 22,
+      runnerId: body.remote.runnerId,
+      artifactCache,
+    },
+  }
+}
+
+export function updateProjectRemoteSync(
+  projectId: string,
+  patch: { lastSyncedAt?: string; lastSyncError?: string | null },
+): void {
+  const reg = loadRegistry()
+  const idx = reg.projects.findIndex((p) => p.id === projectId)
+  if (idx < 0) return
+  const project = reg.projects[idx]
+  if (!project.remote) return
+  if (patch.lastSyncedAt) project.remote.lastSyncedAt = patch.lastSyncedAt
+  if (patch.lastSyncError === null) delete project.remote.lastSyncError
+  else if (patch.lastSyncError) project.remote.lastSyncError = patch.lastSyncError
+  reg.projects[idx] = { ...project }
+  saveRegistry(reg)
+}
+
 // ── CRUD ───────────────────────────────────────────────────────────────────────
 
 // List all registered projects + the default project id (if any).
@@ -233,6 +340,176 @@ export function add({ path: inputPath, name }: { path?: string; name?: string } 
     path: v.path,
     addedAt: new Date().toISOString(),
     default: reg.projects.length === 0, // first project becomes default
+  }
+  reg.projects.push(project)
+  saveRegistry(reg)
+  return { ok: true, project }
+}
+
+export async function addFromGit({
+  gitUrl,
+  branch = 'main',
+  name,
+  runGit,
+}: {
+  gitUrl: string
+  branch?: string
+  name?: string
+  runGit?: import('./git/workspace.js').RunGitFn
+}): Promise<AddResult> {
+  const v = validateGitUrl(gitUrl)
+  if (!v.ok) return { ok: false, status: 400, error: 'error' in v ? v.error : 'invalid URL' }
+
+  const reg = loadRegistry()
+  const branchResolved = branch?.trim() || 'main'
+
+  const existing = reg.projects.find(
+    (p) => p.kind === 'git' && p.source?.url === v.normalizedUrl && p.source.branch === branchResolved,
+  )
+  if (existing) return { ok: true, project: existing }
+
+  const derivedName = name?.trim() || inferNameFromGitUrl(v.normalizedUrl)
+  const provisionalId = makeId(derivedName, `${v.normalizedUrl}#${branchResolved}`)
+  const cloneRoot = workspaceDir(provisionalId)
+
+  try {
+    await cloneShallow({
+      url: v.normalizedUrl,
+      branch: branchResolved,
+      targetDir: cloneRoot,
+      runGit,
+    })
+    ensureDevTeamWorkspace(cloneRoot)
+    const validated = validateProjectPath(cloneRoot, derivedName)
+    if ('error' in validated) {
+      cleanupWorkspace(cloneRoot)
+      return { ok: false, status: 400, error: validated.error }
+    }
+
+    const syncedAt = new Date().toISOString()
+    const project: Project = {
+      id: makeId(validated.name, validated.path),
+      name: validated.name,
+      kind: 'git',
+      path: validated.path,
+      addedAt: syncedAt,
+      default: reg.projects.length === 0,
+      source: {
+        type: 'git',
+        url: v.normalizedUrl,
+        branch: branchResolved,
+        lastSyncAt: syncedAt,
+      },
+    }
+
+    if (project.id !== provisionalId) {
+      const finalDir = workspaceDir(project.id)
+      fs.mkdirSync(path.dirname(finalDir), { recursive: true })
+      fs.renameSync(cloneRoot, finalDir)
+      project.path = path.join(finalDir, '.dev-team-agent')
+    }
+
+    reg.projects.push(project)
+    saveRegistry(reg)
+    return { ok: true, project }
+  } catch (e) {
+    cleanupWorkspace(cloneRoot)
+    const msg = String((e as Error)?.message || e)
+    return {
+      ok: false,
+      status: 400,
+      error: msg.includes('branch')
+        ? `git clone failed (branch '${branchResolved}'?): ${msg}`
+        : `git clone failed: ${msg}`,
+    }
+  }
+}
+
+export async function syncGitProject(
+  id: string,
+  runGit?: import('./git/workspace.js').RunGitFn,
+): Promise<AddResult & { syncedAt?: string }> {
+  return withProjectSyncLock(id, async () => {
+    const project = get(id)
+    if (!project) return { ok: false, status: 404, error: 'unknown project' }
+    if (project.kind !== 'git' || !project.source) {
+      return { ok: false, status: 400, error: 'not a git project' }
+    }
+
+    const cloneRoot = resolveCloneRoot(project)
+
+    try {
+      await pullOrReclone({
+        cloneRoot,
+        url: project.source.url,
+        branch: project.source.branch,
+        runGit,
+      })
+      ensureDevTeamWorkspace(cloneRoot)
+      const revalidated = validateProjectPath(cloneRoot)
+      if ('error' in revalidated) {
+        return { ok: false, status: 500, error: 'workspace invalid after sync' }
+      }
+
+      const reg = loadRegistry()
+      const idx = reg.projects.findIndex((p) => p.id === id)
+      const syncedAt = new Date().toISOString()
+      reg.projects[idx] = {
+        ...reg.projects[idx],
+        path: revalidated.path,
+        source: { ...project.source, lastSyncAt: syncedAt },
+      }
+      saveRegistry(reg)
+      return { ok: true, project: reg.projects[idx], syncedAt }
+    } catch (e) {
+      return { ok: false, status: 500, error: `sync failed: ${e}` }
+    }
+  })
+}
+
+export async function pushGitWorkspace(
+  id: string,
+  opts?: { message?: string; runGit?: import('./git/workspace.js').RunGitFn },
+): Promise<PushResult> {
+  const project = get(id)
+  if (!project) return { ok: false, status: 404, error: 'unknown project' }
+  return pushGitWorkspaceImpl(project, opts)
+}
+
+export function addSshProject(body: unknown): AddResult {
+  const v = validateSshProject(body)
+  if ('error' in v) return v
+
+  const reg = loadRegistry()
+
+  const existing = reg.projects.find(
+    (p) =>
+      p.kind === 'ssh' &&
+      p.path === v.path &&
+      p.remote?.host === v.remote.host &&
+      p.remote?.user === v.remote.user,
+  )
+  if (existing) return { ok: true, project: existing }
+
+  const existingCache = reg.projects.find((p) => p.remote?.artifactCache === v.remote.artifactCache)
+  if (existingCache) return { ok: true, project: existingCache }
+
+  try {
+    fs.mkdirSync(v.remote.artifactCache, { recursive: true })
+    scaffoldArtifactCache(v.remote.artifactCache)
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { ok: false, status: 400, error: `cannot create artifact cache: ${message}` }
+  }
+
+  const project: Project = {
+    id: makeId(v.name, v.path),
+    name: v.name,
+    kind: 'ssh',
+    path: v.path,
+    remote: v.remote,
+    addedAt: new Date().toISOString(),
+    default: reg.projects.length === 0,
   }
   reg.projects.push(project)
   saveRegistry(reg)
@@ -285,7 +562,11 @@ export function resolveProjectRoot(
 ): string | null {
   if (projectId) {
     const project = get(projectId)
-    return project ? project.path : null
+    if (!project) return null
+    if (project.kind === 'ssh') {
+      return project.remote?.artifactCache ?? null
+    }
+    return project.path
   }
 
   // No project → default.
@@ -295,7 +576,10 @@ export function resolveProjectRoot(
   const { defaultId, projects } = list()
   if (defaultId) {
     const def = projects.find((p) => p.id === defaultId)
-    if (def) return def.path
+    if (def) {
+      if (def.kind === 'ssh') return def.remote?.artifactCache ?? null
+      return def.path
+    }
   }
 
   if (opts.defaultRoot) return opts.defaultRoot
@@ -309,7 +593,19 @@ export function createRegistryContext(
   { defaultRoot }: { defaultRoot?: string | null } = {},
 ): RegistryContext {
   return {
-    registry: { list, get, add, remove, validateProjectPath, seedDefault },
+    registry: {
+      list,
+      get,
+      add,
+      addFromGit,
+      syncGitProject,
+      pushGitWorkspace,
+      addSshProject,
+      remove,
+      validateProjectPath,
+      validateSshProject,
+      seedDefault,
+    },
     defaultRoot: defaultRoot || null,
     resolveProjectRoot: (projectId: string | null) => resolveProjectRoot(projectId, { defaultRoot }),
   }

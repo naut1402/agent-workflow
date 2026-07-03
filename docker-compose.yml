@@ -1,0 +1,28 @@
+services:
+  dashboard:
+    build: .
+    ports:
+      - "5174:5174"
+    environment:
+      DEV_TEAM_DASHBOARD_HOST: "0.0.0.0"
+      DEV_TEAM_DASHBOARD_PORT: "5174"
+      DEV_TEAM_DASHBOARD_HOME: "/data"
+      DEV_TEAM_API_TOKEN: ${DEV_TEAM_API_TOKEN}
+      DEV_TEAM_ENV: ${DEV_TEAM_ENV:-}
+      # Optional — chỉ cần khi dùng smoke test / orchestrator headless (Luồng A)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      # Registry, git clones (/data/workspaces/), SSH cache, jobs, logs
+      - dashboard-home:/data
+      # SSH private keys for credential secretRef file:/keys/...
+      - keys:/keys:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5174/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  dashboard-home:
+  keys:
+

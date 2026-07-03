@@ -4,6 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   add,
+  addFromGit,
+  addSshProject,
   createRegistryContext,
   get,
   list,
@@ -14,8 +16,13 @@ import {
   resolveProjectRoot,
   saveRegistry,
   seedDefault,
+  syncGitProject,
   validateProjectPath,
+  validateSshProject,
 } from '../../server/registry'
+import type { RunGitFn } from '../../server/git/workspace'
+import { upsertRunner } from '../../server/runners/registry'
+import { upsertCredential } from '../../server/runners/credentials'
 
 let home: string // registry config home (DEV_TEAM_DASHBOARD_HOME)
 let proj: string // a fake project root containing .dev-team-agent
@@ -57,6 +64,21 @@ describe('locations + load/save', () => {
     fs.mkdirSync(home, { recursive: true })
     fs.writeFileSync(registryFile(), '{not json')
     expect(loadRegistry()).toEqual({ version: 1, projects: [] })
+  })
+  test('legacy entry without kind normalizes to local', () => {
+    saveRegistry({
+      version: 1,
+      projects: [{
+        id: 'legacy',
+        name: 'Legacy',
+        path: workspace,
+        addedAt: 't',
+        default: true,
+      } as any],
+    })
+    const p = loadRegistry().projects[0]
+    expect(p.kind).toBe('local')
+    expect(p.source).toBeUndefined()
   })
 })
 
@@ -142,7 +164,162 @@ describe('createRegistryContext', () => {
   test('exposes registry CRUD + resolveProjectRoot bound to defaultRoot', () => {
     const ctx = createRegistryContext({ defaultRoot: '/legacy' })
     expect(typeof ctx.registry.list).toBe('function')
+    expect(typeof ctx.registry.addFromGit).toBe('function')
+    expect(typeof ctx.registry.syncGitProject).toBe('function')
+    expect(typeof ctx.registry.addSshProject).toBe('function')
     expect(ctx.defaultRoot).toBe('/legacy')
     expect(ctx.resolveProjectRoot(null)).toBe('/legacy') // empty registry → legacy fallback
+  })
+})
+
+describe('SSH projects', () => {
+  beforeEach(() => {
+    upsertCredential({
+      id: 'ssh-cred',
+      provider: 'claude-code-ssh',
+      label: 'Key',
+      secretRef: 'file:/tmp/key',
+    })
+    upsertRunner({
+      id: 'ssh-dev',
+      provider: 'claude-code-ssh',
+      credentialId: 'ssh-cred',
+      config: { host: 'dev', user: 'u', port: 22 },
+    })
+  })
+
+  test('T44-09 addSshProject validates and scaffolds cache', () => {
+    const cache = path.join(home, 'cache', 'ssh-test')
+    const v = validateSshProject({
+      kind: 'ssh',
+      remotePath: '/Users/dev/.dev-team-agent',
+      remote: { host: 'dev', user: 'u', runnerId: 'ssh-dev', artifactCache: cache },
+    })
+    expect(v.ok).toBe(true)
+
+    const added = addSshProject({
+      kind: 'ssh',
+      remotePath: '/Users/dev/.dev-team-agent',
+      name: 'Dev Mac',
+      remote: { host: 'dev', user: 'u', runnerId: 'ssh-dev', artifactCache: cache },
+    })
+    expect(added.ok).toBe(true)
+    if (added.ok) {
+      expect(added.project.kind).toBe('ssh')
+      expect(resolveProjectRoot(added.project.id)).toBe(cache)
+      expect(fs.existsSync(path.join(cache, '.dev-state'))).toBe(true)
+      expect(fs.existsSync(path.join(cache, 'tasks'))).toBe(true)
+    }
+  })
+
+  test('rejects non-POSIX remote path', () => {
+    const v = validateSshProject({
+      kind: 'ssh',
+      remotePath: 'C:\\Users\\dev',
+      remote: { host: 'dev', user: 'u', runnerId: 'ssh-dev' },
+    })
+    expect(v.ok).toBe(false)
+  })
+
+  test('local add regression unchanged', () => {
+    const r = add({ path: proj })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.project.kind).toBe('local')
+  })
+})
+
+function mockRunGit(): RunGitFn {
+  return async (args) => {
+    if (args[0] === 'clone') {
+      const targetDir = args[args.length - 1]
+      fs.mkdirSync(path.join(targetDir, '.dev-team-agent'), { recursive: true })
+      return { stdout: '', stderr: '' }
+    }
+    if (args[0] === 'pull') return { stdout: '', stderr: '' }
+    throw new Error(`unexpected: ${args.join(' ')}`)
+  }
+}
+
+describe('addFromGit + syncGitProject', () => {
+  test('addFromGit creates git project with source', async () => {
+    const r = await addFromGit({
+      gitUrl: 'https://github.com/org/my-repo.git',
+      branch: 'main',
+      runGit: mockRunGit(),
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.project.kind).toBe('git')
+      expect(r.project.source?.url).toBe('https://github.com/org/my-repo.git')
+      expect(r.project.source?.branch).toBe('main')
+      expect(r.project.path).toContain('.dev-team-agent')
+    }
+  })
+
+  test('idempotent on same url+branch', async () => {
+    const runGit = mockRunGit()
+    const first = await addFromGit({ gitUrl: 'https://github.com/org/repo.git', runGit })
+    const second = await addFromGit({ gitUrl: 'https://github.com/org/repo.git', runGit })
+    if (first.ok && second.ok) expect(second.project.id).toBe(first.project.id)
+  })
+
+  test('clone fail cleans up workspace', async () => {
+    const r = await addFromGit({
+      gitUrl: 'https://github.com/org/fail.git',
+      runGit: async () => {
+        throw new Error('branch not found')
+      },
+    })
+    expect(r.ok).toBe(false)
+    if ('error' in r) expect(r.error).toContain('git clone failed')
+  })
+
+  test('scaffolds .dev-team-agent when clone has no workspace', async () => {
+    const runGit: RunGitFn = async (args) => {
+      if (args[0] === 'clone') {
+        const targetDir = args[args.length - 1]
+        fs.mkdirSync(targetDir, { recursive: true })
+        return { stdout: '', stderr: '' }
+      }
+      throw new Error(`unexpected: ${args.join(' ')}`)
+    }
+    const r = await addFromGit({
+      gitUrl: 'https://github.com/org/bare-repo.git',
+      runGit,
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(fs.existsSync(path.join(r.project.path, '.dev-state'))).toBe(true)
+      expect(fs.existsSync(path.join(r.project.path, 'tasks'))).toBe(true)
+    }
+  })
+
+  test('syncGitProject updates lastSyncAt', async () => {
+    const added = await addFromGit({
+      gitUrl: 'https://github.com/org/sync.git',
+      runGit: mockRunGit(),
+    })
+    if (!added.ok) throw new Error('setup failed')
+    const before = added.project.source?.lastSyncAt
+    const synced = await syncGitProject(added.project.id, mockRunGit())
+    expect(synced.ok).toBe(true)
+    if (synced.ok) {
+      expect(synced.syncedAt).toBeTruthy()
+      expect(synced.project.source?.lastSyncAt).not.toBe(before)
+    }
+  })
+
+  test('syncGitProject rejects local project', async () => {
+    const local = add({ path: proj })
+    if (!local.ok) throw new Error('setup')
+    const r = await syncGitProject(local.project.id)
+    expect(r.ok).toBe(false)
+    if ('error' in r) expect(r.error).toBe('not a git project')
+  })
+
+  test('syncGitProject 404 unknown', async () => {
+    const r = await syncGitProject('missing-id')
+    expect(r.ok).toBe(false)
+    if ('error' in r) expect(r.status).toBe(404)
   })
 })

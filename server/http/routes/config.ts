@@ -8,9 +8,39 @@ import { statSafe } from '../../../shared/fs.js'
 import { sanitiseProfileName } from '../../../shared/sanitize.js'
 import { profilesDir } from '../../agents/index.js'
 import { emitAudit } from '../../logging/store.js'
+import { HealthResponseSchema } from '../../../shared/schemas/health.js'
+
+let cachedVersion: string | null = null
+
+async function readAppVersion(): Promise<string> {
+  if (cachedVersion) return cachedVersion
+  try {
+    const pkgPath = path.join(process.cwd(), 'package.json')
+    const raw = await fs.readFile(pkgPath, 'utf8')
+    const parsed = JSON.parse(raw)
+    const version = typeof parsed?.version === 'string' && parsed.version.trim() ? parsed.version.trim() : 'unknown'
+    cachedVersion = version
+    return version
+  } catch {
+    cachedVersion = 'unknown'
+    return cachedVersion
+  }
+}
 
 // Pipeline profiles (named reusable configs) + pipeline.yaml write.
 export function registerConfigRoutes(app: Hono<HonoEnv>): void {
+  app.get('/api/health', async (c) => {
+    const envRaw = process.env.DEV_TEAM_ENV?.trim() || ''
+    const body = {
+      ok: true as const,
+      version: await readAppVersion(),
+      ...(envRaw ? { env: envRaw } : {}),
+    }
+    const parsed = HealthResponseSchema.safeParse(body)
+    if (!parsed.success) return j(c, 500, { error: 'invalid health response' })
+    return j(c, 200, parsed.data)
+  })
+
   app.get('/api/pipeline-profiles', async (c) => {
     const root = c.get('root')
     if (!root) return unknownProject(c)
