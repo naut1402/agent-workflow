@@ -16,7 +16,13 @@ import {
   listJobs,
   cancelJob,
   listProviderIds,
+  getRunner,
+  getCredential,
 } from '../../runners/index.js'
+import { testSshConnection } from '../../workspace/sshSync.js'
+
+const testSshLastCall = new Map<string, number>()
+const TEST_SSH_RATE_MS = 5000
 
 // Runners, credentials & jobs — global (not per-project), except job submission
 // which needs the resolved `.dev-team-agent/` root.
@@ -45,6 +51,29 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
     const result = setDefaultRunner(b.value.id || b.value.runnerId)
     if ('error' in result) return j(c, result.status || 400, { error: result.error })
     return j(c, 200, { defaultRunnerId: result.defaultRunnerId })
+  })
+
+  app.post('/api/runners/:id/test-ssh', async (c) => {
+    const id = c.req.param('id')
+    const runner = getRunner(id)
+    if (!runner) return j(c, 404, { error: 'runner not found' })
+    if (runner.provider !== 'claude-code-ssh') {
+      return j(c, 400, { error: 'runner is not claude-code-ssh' })
+    }
+
+    const now = Date.now()
+    const last = testSshLastCall.get(id) ?? 0
+    if (now - last < TEST_SSH_RATE_MS) {
+      return j(c, 429, { error: 'rate limited' })
+    }
+    testSshLastCall.set(id, now)
+
+    const credential = getCredential(runner.credentialId)
+    if (!credential) return j(c, 400, { error: 'credential not found' })
+
+    const result = await testSshConnection({ runner, credential })
+    if ('error' in result) return j(c, 502, result)
+    return j(c, 200, result)
   })
 
   // ── Credentials ──────────────────────────────────────────────────────────
@@ -86,17 +115,40 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
     if (!parsed.agentRef || !parsed.workspace) {
       return j(c, 400, { error: 'agentRef and workspace are required' })
     }
-    const projectRoot = path.dirname(root)
+
+    const projectId = c.get('projectId') || parsed.metadata?.projectId || null
+    const project = projectId ? c.get('ctx').registry.get(projectId) : null
+    const isSsh = project?.kind === 'ssh'
+
+    let workspace: string
+    if (isSsh && project) {
+      workspace = parsed.workspace
+        ? path.isAbsolute(parsed.workspace)
+          ? parsed.workspace
+          : path.posix.join(project.path, parsed.workspace)
+        : project.path
+    } else {
+      workspace = path.isAbsolute(parsed.workspace)
+        ? parsed.workspace
+        : path.join(root, parsed.workspace)
+    }
+
+    const projectRoot = isSsh && project ? path.posix.dirname(project.path) : path.dirname(root)
+
     const job = submitJob({
       runnerId: parsed.runnerId,
       agentRef: parsed.agentRef,
-      workspace: path.isAbsolute(parsed.workspace)
-        ? parsed.workspace
-        : path.join(root, parsed.workspace),
+      workspace,
       userPrompt: parsed.userPrompt,
       promptRef: parsed.promptRef,
       produces: parsed.produces,
-      metadata: { projectRoot, devTeamRoot: root, ...parsed.metadata },
+      metadata: {
+        ...parsed.metadata,
+        projectRoot,
+        devTeamRoot: root,
+        projectId: project?.id,
+        remoteDevTeamRoot: isSsh && project ? project.path : undefined,
+      },
     })
     return j(c, 201, { job })
   })

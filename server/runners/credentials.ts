@@ -131,6 +131,28 @@ export function deleteCredential(id: unknown): MutationResult {
   return { ok: true }
 }
 
+/** Warn if SSH private key file permissions are too open (does not block). */
+export function validateSshKeyFile(keyPath: string): { ok: boolean; warn?: string } {
+  try {
+    if (!fs.existsSync(keyPath)) {
+      return { ok: false, warn: `SSH key not found: ${keyPath}` }
+    }
+    if (process.platform === 'win32') {
+      return { ok: true }
+    }
+    const mode = fs.statSync(keyPath).mode & 0o777
+    if (mode > 0o600) {
+      const msg = `SSH key ${keyPath} has mode ${mode.toString(8)} (recommended 600)`
+      console.warn(`[dev-team-dashboard] ${msg}`)
+      return { ok: true, warn: msg }
+    }
+    return { ok: true }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { ok: false, warn: message }
+  }
+}
+
 /** Resolve secretRef for provider runtime (never return raw secrets in API). */
 export function resolveSecretRef(profile: CredentialProfile | undefined | null): ResolvedSecret {
   if (!profile?.secretRef) return { type: 'none' }

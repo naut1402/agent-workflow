@@ -50,7 +50,7 @@ export async function addProject(path: string, name?: string) {
 }
 
 export async function addGitProject(gitUrl: string, branch?: string, name?: string) {
-  const r = await fetch('/api/projects', {
+  const r = await apiFetch('/api/projects', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ gitUrl, branch, name }),
@@ -61,12 +61,48 @@ export async function addGitProject(gitUrl: string, branch?: string, name?: stri
 }
 
 export async function syncProject(id: string) {
-  const r = await fetch(`/api/projects/${encodeURIComponent(id)}/sync`, {
+  const r = await apiFetch(`/api/projects/${encodeURIComponent(id)}/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   })
   const data = await r.json().catch(() => ({}))
   if (!r.ok) throw new Error(data.error || `/api/projects/${id}/sync → ${r.status}`)
+  return data
+}
+
+export async function testSshConnection(runnerId: string) {
+  const r = await apiFetch(`/api/runners/${encodeURIComponent(runnerId)}/test-ssh`, { method: 'POST' })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/runners/${runnerId}/test-ssh → ${r.status}`)
+  return data
+}
+
+export async function pullProjectCache(projectId: string) {
+  const r = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/pull-cache`, { method: 'POST' })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/projects/${projectId}/pull-cache → ${r.status}`)
+  return data
+}
+
+export async function addSshProject(body: {
+  kind: 'ssh'
+  remotePath: string
+  name?: string
+  remote: {
+    host: string
+    user: string
+    port?: number
+    runnerId: string
+    artifactCache?: string
+  }
+}) {
+  const r = await apiFetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/projects POST → ${r.status}`)
   return data
 }
 

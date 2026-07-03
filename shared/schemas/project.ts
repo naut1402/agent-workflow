@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const ProjectKind = z.enum(['local', 'git'])
+export const ProjectKind = z.enum(['local', 'git', 'ssh'])
 export type ProjectKind = z.infer<typeof ProjectKind>
 
 export const GitSource = z.object({
@@ -11,6 +11,17 @@ export const GitSource = z.object({
 })
 export type GitSource = z.infer<typeof GitSource>
 
+export const ProjectRemoteSshSchema = z.object({
+  host: z.string().min(1),
+  user: z.string().min(1),
+  port: z.number().int().positive().default(22),
+  runnerId: z.string().min(1),
+  artifactCache: z.string().min(1),
+  lastSyncedAt: z.string().datetime().optional(),
+  lastSyncError: z.string().optional(),
+})
+export type ProjectRemoteSsh = z.infer<typeof ProjectRemoteSshSchema>
+
 export const Project = z.object({
   id: z.string(),
   name: z.string(),
@@ -19,20 +30,37 @@ export const Project = z.object({
   addedAt: z.string(),
   default: z.boolean(),
   source: GitSource.optional(),
+  remote: ProjectRemoteSshSchema.optional(),
 })
 export type Project = z.infer<typeof Project>
 
-/** Normalize legacy entry thiếu kind/source khi đọc registry. */
+/** Normalize legacy entry thiếu kind/source/remote khi đọc registry. */
 export function normalizeProject(raw: unknown): Project {
   const base = Project.safeParse(raw)
   if (base.success) return base.data
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const kind = (o.kind === 'git' || o.kind === 'ssh' ? o.kind : 'local') as ProjectKind
   return Project.parse({
     ...o,
-    kind: o.kind ?? 'local',
-    source: o.kind === 'git' ? o.source : undefined,
+    kind,
+    source: kind === 'git' ? o.source : undefined,
+    remote: kind === 'ssh' ? o.remote : undefined,
   })
 }
+
+export const AddSshProjectBodySchema = z.object({
+  kind: z.literal('ssh'),
+  remotePath: z.string().min(1),
+  name: z.string().optional(),
+  remote: z.object({
+    host: z.string().min(1),
+    user: z.string().min(1),
+    port: z.number().int().positive().default(22),
+    runnerId: z.string().min(1),
+    artifactCache: z.string().optional(),
+  }),
+})
+export type AddSshProjectBody = z.infer<typeof AddSshProjectBodySchema>
 
 export const AddProjectRequest = z
   .object({
