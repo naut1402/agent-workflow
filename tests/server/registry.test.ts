@@ -176,10 +176,6 @@ describe('SSH projects', () => {
       remote: { host: 'dev', user: 'u', runnerId: 'ssh-dev', artifactCache: cache },
     })
     expect(v.ok).toBe(true)
-    if (v.ok) {
-      expect(fs.existsSync(path.join(cache, '.dev-state'))).toBe(true)
-      expect(fs.existsSync(path.join(cache, 'tasks'))).toBe(true)
-    }
 
     const added = addSshProject({
       kind: 'ssh',
@@ -191,6 +187,8 @@ describe('SSH projects', () => {
     if (added.ok) {
       expect(added.project.kind).toBe('ssh')
       expect(resolveProjectRoot(added.project.id)).toBe(cache)
+      expect(fs.existsSync(path.join(cache, '.dev-state'))).toBe(true)
+      expect(fs.existsSync(path.join(cache, 'tasks'))).toBe(true)
     }
   })
 
