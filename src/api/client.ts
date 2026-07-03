@@ -443,3 +443,39 @@ export async function fetchJobLog(id: string) {
   if (!r.ok) throw new Error(`/api/jobs/${id}/log → ${r.status}`)
   return r.json()
 }
+
+export async function testSshConnection(runnerId: string) {
+  const r = await fetch(`/api/runners/${encodeURIComponent(runnerId)}/test-ssh`, { method: 'POST' })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/runners/${runnerId}/test-ssh → ${r.status}`)
+  return data
+}
+
+export async function pullProjectCache(projectId: string) {
+  const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}/pull-cache`, { method: 'POST' })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/projects/${projectId}/pull-cache → ${r.status}`)
+  return data
+}
+
+export async function addSshProject(body: {
+  kind: 'ssh'
+  remotePath: string
+  name?: string
+  remote: {
+    host: string
+    user: string
+    port?: number
+    runnerId: string
+    artifactCache?: string
+  }
+}) {
+  const r = await fetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/projects POST → ${r.status}`)
+  return data
+}

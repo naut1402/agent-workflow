@@ -1,11 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { registryHome } from '../registry.js'
+import { registryHome, get as getProject } from '../registry.js'
 import { getRunner, getDefaultRunner, substituteConfig } from './registry.js'
 import { getCredential } from './credentials.js'
 import { getProvider } from './providerRegistry.js'
 import { resolveAgent } from './agentResolver.js'
+import { pullArtifacts } from '../workspace/sshSync.js'
 import type { JobRecord, MutationResult } from './types.js'
 
 export interface SubmitJobInput {
@@ -168,6 +169,21 @@ async function runJob(job: JobRecord): Promise<void> {
     credential,
   )
 
+  let pullResult: Awaited<ReturnType<typeof pullArtifacts>> | null = null
+  if (runner.provider === 'claude-code-ssh') {
+    const projectId = job.metadata?.projectId as string | undefined
+    if (projectId) {
+      const project = getProject(projectId)
+      if (project?.kind === 'ssh' && project.remote) {
+        const sshRunner = getRunner(project.remote.runnerId) ?? runner
+        pullResult = await pullArtifacts({ project, runner: sshRunner, credential })
+        if ('error' in pullResult && pullResult.error) {
+          console.warn(`[jobQueue] pullArtifacts failed for ${projectId}:`, pullResult.error)
+        }
+      }
+    }
+  }
+
   saveJob({
     ...(loadJob(job.id) as JobRecord),
     status: result.ok ? 'succeeded' : 'failed',
@@ -176,18 +192,20 @@ async function runJob(job: JobRecord): Promise<void> {
     error: result.error,
     logPath: result.logPath,
     artifactsFound: result.artifactsFound,
+    metadata: { ...job.metadata, lastPull: pullResult },
   })
 }
 
 export function submitJob(input: SubmitJobInput): JobRecord {
   const id = crypto.randomUUID()
   const runner = input.runnerId ? getRunner(input.runnerId) : getDefaultRunner()
+  const preserveWorkspace = Boolean(input.metadata?.remoteDevTeamRoot)
   const job: JobRecord = {
     id,
     status: 'queued',
     runnerId: runner?.id || input.runnerId || 'unknown',
     agentRef: input.agentRef,
-    workspace: path.resolve(input.workspace),
+    workspace: preserveWorkspace ? input.workspace : path.resolve(input.workspace),
     userPrompt: input.userPrompt,
     promptRef: input.promptRef ? path.resolve(input.promptRef) : undefined,
     produces: input.produces,

@@ -9,20 +9,22 @@ import {
   submitJob,
   fetchJobs,
   fetchJob,
+  testSshConnection,
 } from '../../../api'
 
-const runners = ref([])
+const runners = ref<any[]>([])
 const defaultRunnerId = ref('')
-const providers = ref([])
-const credentials = ref([])
+const providers = ref<string[]>([])
+const credentials = ref<any[]>([])
 const selectedId = ref('')
 const saving = ref(false)
 const testing = ref(false)
+const testingSsh = ref(false)
 const message = ref('')
 const error = ref('')
-const recentJobs = ref([])
+const recentJobs = ref<any[]>([])
 
-const draft = ref(emptyRunner())
+const draft = ref<any>(emptyRunner())
 
 function emptyRunner() {
   return {
@@ -40,6 +42,28 @@ function emptyRunner() {
     },
   }
 }
+
+function emptySshRunner() {
+  return {
+    id: 'ssh-runner',
+    name: 'SSH Remote Runner',
+    provider: 'claude-code-ssh',
+    credentialId: '',
+    enabled: true,
+    maxConcurrency: 1,
+    config: {
+      host: '',
+      user: '',
+      port: 22,
+      remoteCliPath: 'claude',
+      connectTimeoutMs: 30000,
+      rsyncTimeoutMs: 120000,
+      allowedTools: 'Read,Write,Bash,Grep,Glob',
+    },
+  }
+}
+
+const isSshProvider = computed(() => draft.value.provider === 'claude-code-ssh')
 
 const filteredCredentials = computed(() =>
   credentials.value.filter((p) => p.provider === draft.value.provider),
@@ -61,14 +85,14 @@ async function load() {
     if (!selectedId.value && runners.value.length) {
       selectRunner(runners.value.find((r) => r.id === defaultRunnerId.value) || runners.value[0])
     }
-  } catch (e) {
-    error.value = String(e.message || e)
+  } catch (e: unknown) {
+    error.value = String(e instanceof Error ? e.message : e)
   }
 }
 
 onMounted(load)
 
-function selectRunner(r) {
+function selectRunner(r: any) {
   selectedId.value = r.id
   draft.value = JSON.parse(JSON.stringify(r))
   message.value = ''
@@ -80,6 +104,22 @@ function newRunner() {
   message.value = ''
 }
 
+function newSshRunner() {
+  selectedId.value = ''
+  draft.value = emptySshRunner()
+  message.value = ''
+}
+
+function onProviderChange() {
+  if (draft.value.provider === 'claude-code-ssh' && !draft.value.config.host) {
+    draft.value.config = { ...emptySshRunner().config }
+  } else if (draft.value.provider === 'claude-code-cli' && !draft.value.config.cliPath) {
+    draft.value.config = { ...emptyRunner().config }
+  }
+  const cred = filteredCredentials.value[0]
+  if (cred) draft.value.credentialId = cred.id
+}
+
 async function save() {
   saving.value = true
   error.value = ''
@@ -89,8 +129,8 @@ async function save() {
     message.value = `Đã lưu ${draft.value.id}`
     await load()
     selectedId.value = draft.value.id
-  } catch (e) {
-    error.value = String(e.message || e)
+  } catch (e: unknown) {
+    error.value = String(e instanceof Error ? e.message : e)
   } finally {
     saving.value = false
   }
@@ -105,8 +145,8 @@ async function remove() {
     selectedId.value = ''
     draft.value = emptyRunner()
     await load()
-  } catch (e) {
-    error.value = String(e.message || e)
+  } catch (e: unknown) {
+    error.value = String(e instanceof Error ? e.message : e)
   }
 }
 
@@ -116,8 +156,26 @@ async function makeDefault() {
     await setDefaultRunner(draft.value.id)
     message.value = `Default: ${draft.value.id}`
     await load()
-  } catch (e) {
-    error.value = String(e.message || e)
+  } catch (e: unknown) {
+    error.value = String(e instanceof Error ? e.message : e)
+  }
+}
+
+async function testSsh() {
+  if (!selectedId.value) {
+    error.value = 'Lưu runner trước khi kiểm tra kết nối'
+    return
+  }
+  testingSsh.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    const result = await testSshConnection(selectedId.value)
+    message.value = `Kết nối SSH OK (${result.latencyMs}ms)`
+  } catch (e: unknown) {
+    error.value = `Kiểm tra SSH thất bại: ${e instanceof Error ? e.message : e}`
+  } finally {
+    testingSsh.value = false
   }
 }
 
@@ -145,8 +203,8 @@ async function smokeTest() {
       message.value += ` (xem log: ${current.logPath})`
     }
     await load()
-  } catch (e) {
-    error.value = String(e.message || e)
+  } catch (e: unknown) {
+    error.value = String(e instanceof Error ? e.message : e)
   } finally {
     testing.value = false
   }
@@ -165,7 +223,8 @@ async function smokeTest() {
 
     <div class="runner-layout">
       <aside class="runner-list">
-        <button type="button" class="btn-ghost btn-sm" @click="newRunner">+ New</button>
+        <button type="button" class="btn-ghost btn-sm" @click="newRunner">+ Local</button>
+        <button type="button" class="btn-ghost btn-sm" @click="newSshRunner">+ SSH</button>
         <ul>
           <li
             v-for="r in runners"
@@ -193,7 +252,7 @@ async function smokeTest() {
         </div>
         <div class="field">
           <label class="cfg-label">Provider
-            <select v-model="draft.provider" class="cfg-input">
+            <select v-model="draft.provider" class="cfg-input" @change="onProviderChange">
               <option v-for="p in providers" :key="p" :value="p">{{ p }}</option>
             </select>
           </label>
@@ -207,11 +266,48 @@ async function smokeTest() {
             </select>
           </label>
         </div>
-        <div class="field">
-          <label class="cfg-label">CLI path
-            <input v-model="draft.config.cliPath" class="cfg-input" />
-          </label>
-        </div>
+
+        <template v-if="isSshProvider">
+          <div class="field">
+            <label class="cfg-label">Host
+              <input v-model="draft.config.host" class="cfg-input" placeholder="dev-mac.internal" />
+            </label>
+          </div>
+          <div class="field">
+            <label class="cfg-label">User
+              <input v-model="draft.config.user" class="cfg-input" />
+            </label>
+          </div>
+          <div class="field">
+            <label class="cfg-label">Port
+              <input v-model.number="draft.config.port" type="number" class="cfg-input" />
+            </label>
+          </div>
+          <div class="field">
+            <label class="cfg-label">Remote CLI path
+              <input v-model="draft.config.remoteCliPath" class="cfg-input" />
+            </label>
+          </div>
+          <div class="field">
+            <label class="cfg-label">Known hosts file
+              <input v-model="draft.config.knownHostsFile" class="cfg-input" placeholder="tuỳ chọn" />
+            </label>
+          </div>
+          <div class="field">
+            <label class="cfg-label">Connect timeout (ms)
+              <input v-model.number="draft.config.connectTimeoutMs" type="number" class="cfg-input" />
+            </label>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="field">
+            <label class="cfg-label">CLI path
+              <input v-model="draft.config.cliPath" class="cfg-input" />
+            </label>
+          </div>
+        </template>
+
         <div class="field">
           <label class="cfg-label">Allowed tools
             <input v-model="draft.config.allowedTools" class="cfg-input" />
@@ -224,6 +320,15 @@ async function smokeTest() {
         <div class="actions">
           <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">Lưu</button>
           <button type="button" class="btn-ghost btn-sm" :disabled="!selectedId" @click="makeDefault">Set default</button>
+          <button
+            v-if="isSshProvider"
+            type="button"
+            class="btn-ghost btn-sm"
+            :disabled="testingSsh || !selectedId"
+            @click="testSsh"
+          >
+            {{ testingSsh ? 'Đang kiểm tra…' : 'Kiểm tra kết nối' }}
+          </button>
           <button type="button" class="btn-ghost btn-sm" :disabled="testing" @click="smokeTest">Smoke test</button>
           <button type="button" class="btn-danger btn-sm" :disabled="!selectedId" @click="remove">Xóa</button>
         </div>

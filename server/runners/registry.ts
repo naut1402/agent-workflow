@@ -8,6 +8,7 @@ import {
   type RunnersStore,
   type MutationResult,
 } from './types.js'
+import { getProvider } from './providerRegistry.js'
 
 function runnersFile(): string {
   return path.join(registryHome(), 'runners.json')
@@ -103,6 +104,12 @@ export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig
   if (!runner.credentialId) return { ok: false, error: 'credentialId is required' }
 
   const store = loadRunners()
+  const idx = store.runners.findIndex((r) => r.id === id)
+  const mergedConfig = {
+    ...(idx >= 0 ? store.runners[idx].config : {}),
+    ...(runner.config && typeof runner.config === 'object' ? runner.config : {}),
+  }
+
   const entry: RunnerConfig = {
     id,
     name: String(runner.name || id).slice(0, 128),
@@ -110,10 +117,20 @@ export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig
     credentialId: sanitiseCredentialId(runner.credentialId) || runner.credentialId,
     enabled: runner.enabled !== false,
     maxConcurrency: Number(runner.maxConcurrency) > 0 ? Number(runner.maxConcurrency) : 1,
-    config: runner.config && typeof runner.config === 'object' ? runner.config : {},
+    config: mergedConfig,
   }
 
-  const idx = store.runners.findIndex((r) => r.id === id)
+  const provider = getProvider(entry.provider)
+  if (provider) {
+    const validateConfig = { ...entry.config }
+    if (entry.provider === 'claude-code-cli' && !validateConfig.cliPath) {
+      validateConfig.cliPath = 'claude'
+    }
+    const validation = provider.validateRunnerConfig(validateConfig)
+    if (!validation.ok) {
+      return { ok: false, error: validation.errors.join('; ') }
+    }
+  }
   if (idx >= 0) store.runners[idx] = { ...store.runners[idx], ...entry }
   else store.runners.push(entry)
 
