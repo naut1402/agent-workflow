@@ -1,3 +1,6 @@
+> **Tài liệu lịch sử.** Quy trình migration TS đã hoàn tất; giữ lại để tham khảo bối cảnh.
+> Quy ước hiện hành: xem [`docs/architecture.md`](../architecture.md) + [`AGENTS.md`](../../AGENTS.md).
+
 # Refactor Workflow — Quy trình per-module
 
 Branch chung của toàn bộ refactor: **`refactor/main`** (đã tách từ `main`).
