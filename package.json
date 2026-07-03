@@ -11,6 +11,8 @@
     "serve": "bun server/standalone.ts",
     "start": "vite build && bun server/standalone.ts",
     "mcp": "bun mcp/server.ts",
+    "workspace:sync": "bun scripts/workspace-sync.ts",
+    "workspace:push": "bun scripts/workspace-push.ts",
     "typecheck": "vue-tsc --noEmit",
     "test": "bun test tests/server tests/mcp",
     "test:fe": "vitest run --coverage",

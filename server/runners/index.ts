@@ -17,6 +17,7 @@ export {
   upsertCredential,
   deleteCredential,
   resolveSecretRef,
+  validateSshKeyFile,
 } from './credentials.js'
 export { resolveAgent, resolveAgentFilePath, normalizeAgentRef } from './agentResolver.js'
 export { getProvider, listProviderIds } from './providerRegistry.js'

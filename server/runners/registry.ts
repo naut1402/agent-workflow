@@ -8,9 +8,25 @@ import {
   type RunnersStore,
   type MutationResult,
 } from './types.js'
+import { getProvider } from './providerRegistry.js'
 
 function runnersFile(): string {
   return path.join(registryHome(), 'runners.json')
+}
+
+export const BUILTIN_SERVER_RUNNER: RunnerConfig = {
+  id: 'claude-code-server',
+  name: 'Claude Code CLI (server headless)',
+  provider: 'claude-code-cli',
+  credentialId: 'claude-server-env',
+  enabled: true,
+  maxConcurrency: 1,
+  config: {
+    cliPath: 'claude',
+    flags: ['--bare'],
+    timeoutMs: 600_000,
+    allowedTools: 'Read,Write,Bash,Grep,Glob',
+  },
 }
 
 function defaultRunners(): RunnersStore {
@@ -32,8 +48,22 @@ function defaultRunners(): RunnersStore {
           allowedTools: 'Read,Write,Bash,Grep,Glob',
         },
       },
+      { ...BUILTIN_SERVER_RUNNER },
     ],
   }
+}
+
+function ensureBuiltinRunners(store: RunnersStore): RunnersStore {
+  const builtins = [BUILTIN_SERVER_RUNNER]
+  let changed = false
+  for (const b of builtins) {
+    if (!store.runners.some((r) => r.id === b.id)) {
+      store.runners.push({ ...b })
+      changed = true
+    }
+  }
+  if (changed) saveRunners(store)
+  return store
 }
 
 export function loadRunners(): RunnersStore {
@@ -42,19 +72,20 @@ export function loadRunners(): RunnersStore {
   try {
     raw = fs.readFileSync(file, 'utf8')
   } catch {
-    return defaultRunners()
+    return ensureBuiltinRunners(defaultRunners())
   }
   try {
     const data = JSON.parse(raw)
-    if (!data || !Array.isArray(data.runners)) return defaultRunners()
-    return {
+    if (!data || !Array.isArray(data.runners)) return ensureBuiltinRunners(defaultRunners())
+    const store: RunnersStore = {
       version: data.version || RUNNERS_VERSION,
       defaultRunnerId: data.defaultRunnerId || data.runners[0]?.id || 'claude-code-local',
       runners: data.runners,
     }
+    return ensureBuiltinRunners(store)
   } catch {
     console.warn(`[dev-team-dashboard] runners.json corrupt: ${file}`)
-    return defaultRunners()
+    return ensureBuiltinRunners(defaultRunners())
   }
 }
 
@@ -103,6 +134,12 @@ export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig
   if (!runner.credentialId) return { ok: false, error: 'credentialId is required' }
 
   const store = loadRunners()
+  const idx = store.runners.findIndex((r) => r.id === id)
+  const mergedConfig = {
+    ...(idx >= 0 ? store.runners[idx].config : {}),
+    ...(runner.config && typeof runner.config === 'object' ? runner.config : {}),
+  }
+
   const entry: RunnerConfig = {
     id,
     name: String(runner.name || id).slice(0, 128),
@@ -110,10 +147,20 @@ export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig
     credentialId: sanitiseCredentialId(runner.credentialId) || runner.credentialId,
     enabled: runner.enabled !== false,
     maxConcurrency: Number(runner.maxConcurrency) > 0 ? Number(runner.maxConcurrency) : 1,
-    config: runner.config && typeof runner.config === 'object' ? runner.config : {},
+    config: mergedConfig,
   }
 
-  const idx = store.runners.findIndex((r) => r.id === id)
+  const provider = getProvider(entry.provider)
+  if (provider) {
+    const validateConfig = { ...entry.config }
+    if (entry.provider === 'claude-code-cli' && !validateConfig.cliPath) {
+      validateConfig.cliPath = 'claude'
+    }
+    const validation = provider.validateRunnerConfig(validateConfig)
+    if (!validation.ok) {
+      return { ok: false, error: validation.errors.join('; ') }
+    }
+  }
   if (idx >= 0) store.runners[idx] = { ...store.runners[idx], ...entry }
   else store.runners.push(entry)
 
