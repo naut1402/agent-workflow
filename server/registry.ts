@@ -23,6 +23,7 @@ import {
   pushGitWorkspace as pushGitWorkspaceImpl,
   type PushResult,
 } from './git/push.js'
+import { ensureDevTeamWorkspace } from './git/scaffold.js'
 import {
   cleanupWorkspace,
   cloneShallow,
@@ -378,6 +379,7 @@ export async function addFromGit({
       targetDir: cloneRoot,
       runGit,
     })
+    ensureDevTeamWorkspace(cloneRoot)
     const validated = validateProjectPath(cloneRoot, derivedName)
     if ('error' in validated) {
       cleanupWorkspace(cloneRoot)
@@ -404,6 +406,7 @@ export async function addFromGit({
       const finalDir = workspaceDir(project.id)
       fs.mkdirSync(path.dirname(finalDir), { recursive: true })
       fs.renameSync(cloneRoot, finalDir)
+      project.path = path.join(finalDir, '.dev-team-agent')
     }
 
     reg.projects.push(project)
@@ -442,6 +445,7 @@ export async function syncGitProject(
         branch: project.source.branch,
         runGit,
       })
+      ensureDevTeamWorkspace(cloneRoot)
       const revalidated = validateProjectPath(cloneRoot)
       if ('error' in revalidated) {
         return { ok: false, status: 500, error: 'workspace invalid after sync' }

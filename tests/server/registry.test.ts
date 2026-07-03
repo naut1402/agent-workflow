@@ -274,6 +274,26 @@ describe('addFromGit + syncGitProject', () => {
     if ('error' in r) expect(r.error).toContain('git clone failed')
   })
 
+  test('scaffolds .dev-team-agent when clone has no workspace', async () => {
+    const runGit: RunGitFn = async (args) => {
+      if (args[0] === 'clone') {
+        const targetDir = args[args.length - 1]
+        fs.mkdirSync(targetDir, { recursive: true })
+        return { stdout: '', stderr: '' }
+      }
+      throw new Error(`unexpected: ${args.join(' ')}`)
+    }
+    const r = await addFromGit({
+      gitUrl: 'https://github.com/org/bare-repo.git',
+      runGit,
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(fs.existsSync(path.join(r.project.path, '.dev-state'))).toBe(true)
+      expect(fs.existsSync(path.join(r.project.path, 'tasks'))).toBe(true)
+    }
+  })
+
   test('syncGitProject updates lastSyncAt', async () => {
     const added = await addFromGit({
       gitUrl: 'https://github.com/org/sync.git',

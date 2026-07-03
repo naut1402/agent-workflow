@@ -155,7 +155,7 @@ Chạy MCP: `bun run mcp` — không cần HTTP server.
 | Lỗi API | Nguyên nhân | Cách xử lý |
 | --- | --- | --- |
 | `EACCES: permission denied, mkdir '/data/workspaces'` | Volume `/data` mount với owner `root`, process chạy user `app` | Rebuild image có `scripts/docker-entrypoint.sh` (tự `chown` `/data`), hoặc một lần trên host: `docker compose exec -u root dashboard chown -R app:app /data` |
-| `not a dev-team-agent workspace` | Repo clone OK nhưng thiếu thư mục `.dev-team-agent/` | Thêm workspace orchestrator vào repo trước khi onboard |
+| `not a dev-team-agent workspace` | Repo clone OK nhưng thiếu `.dev-team-agent/` *(bản cũ)* | Từ bản có auto-scaffold: server tự tạo `.dev-state/` + `tasks/` sau clone. Rebuild/redeploy nếu vẫn gặp lỗi |
 | `git clone failed (branch '…'?)` | Branch không tồn tại | Kiểm tra tên branch (mặc định `main`) |
 | `only https URLs allowed` | URL `http://` hoặc SSH git URL | Dùng HTTPS public |
 | `private hosts not allowed` | URL trỏ localhost / IP nội bộ | Dùng URL public |
