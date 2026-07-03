@@ -15,30 +15,24 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { AddSshProjectBodySchema, ProjectLegacySchema } from '../shared/schemas/project.js'
+import { validateGitUrl } from '../shared/git/url.js'
+import { AddSshProjectBodySchema, normalizeProject, type Project } from '../shared/schemas/project.js'
 import { getRunner } from './runners/registry.js'
+import { withProjectSyncLock } from './git/syncLock.js'
+import {
+  pushGitWorkspace as pushGitWorkspaceImpl,
+  type PushResult,
+} from './git/push.js'
+import {
+  cleanupWorkspace,
+  cloneShallow,
+  pullOrReclone,
+  workspaceDir,
+} from './git/workspace.js'
 
 const REGISTRY_VERSION = 1
 
-export interface ProjectRemote {
-  host: string
-  user: string
-  port?: number
-  runnerId: string
-  artifactCache: string
-  lastSyncedAt?: string
-  lastSyncError?: string
-}
-
-export interface Project {
-  id: string
-  name: string
-  kind: 'local' | 'ssh'
-  path: string
-  addedAt: string
-  default: boolean
-  remote?: ProjectRemote
-}
+export type { Project, PushResult }
 
 export interface Registry {
   version: number
@@ -54,7 +48,7 @@ export type ValidateSshResult =
       ok: true
       path: string
       name: string
-      remote: ProjectRemote
+      remote: NonNullable<Project['remote']>
     }
   | { ok: false; status: number; error: string }
 
@@ -67,6 +61,9 @@ export interface RegistryContext {
     list: typeof list
     get: typeof get
     add: typeof add
+    addFromGit: typeof addFromGit
+    syncGitProject: typeof syncGitProject
+    pushGitWorkspace: typeof pushGitWorkspace
     addSshProject: typeof addSshProject
     remove: typeof remove
     validateProjectPath: typeof validateProjectPath
@@ -79,6 +76,9 @@ export interface RegistryContext {
 
 // ── Locations ─────────────────────────────────────────────────────────────────
 
+// Config home for the registry. Override with DEV_TEAM_DASHBOARD_HOME so the
+// store can live somewhere else (tests, multi-instance). Falls back to
+// `~/.dev-team-dashboard`.
 export function registryHome(): string {
   const override = process.env.DEV_TEAM_DASHBOARD_HOME
   if (override && override.trim()) return path.resolve(override.trim())
@@ -95,15 +95,9 @@ function emptyRegistry(): Registry {
   return { version: REGISTRY_VERSION, projects: [] }
 }
 
-function parseProjectEntry(raw: unknown): Project | null {
-  const parsed = ProjectLegacySchema.safeParse(raw)
-  if (!parsed.success) {
-    console.warn('[dev-team-dashboard] skipping invalid project entry:', parsed.error.message)
-    return null
-  }
-  return parsed.data as Project
-}
-
+// Read the registry. Never throws: a missing or corrupt file is treated as an
+// empty registry (mirrors readState's resilience in devTeamApi.js) so the
+// server / MCP never crashes on a bad file.
 export function loadRegistry(): Registry {
   const file = registryFile()
   let raw: string
@@ -117,14 +111,17 @@ export function loadRegistry(): Registry {
     if (!data || typeof data !== 'object' || !Array.isArray(data.projects)) {
       return emptyRegistry()
     }
-    const projects = data.projects.map(parseProjectEntry).filter((p): p is Project => Boolean(p))
+    const projects = (data.projects as unknown[]).map(normalizeProject)
     return { version: data.version || REGISTRY_VERSION, projects }
   } catch {
+    // Corrupt JSON — warn and degrade gracefully instead of crashing.
     console.warn(`[dev-team-dashboard] projects.json corrupt, treating as empty: ${file}`)
     return emptyRegistry()
   }
 }
 
+// Persist the registry atomically (write temp + rename), creating the config
+// home directory if it does not exist (idempotent).
 export function saveRegistry(reg: Registry): Registry {
   const home = registryHome()
   fs.mkdirSync(home, { recursive: true })
@@ -143,45 +140,35 @@ export function saveRegistry(reg: Registry): Registry {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function slug(name: unknown): string {
-  return (
-    String(name || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'project'
-  )
+  return String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'project'
 }
 
 function shortHash(input: unknown): string {
   return crypto.createHash('sha1').update(String(input)).digest('hex').slice(0, 8)
 }
 
-function makeId(name: string, canonicalPath: string): string {
-  return `${slug(name)}-${shortHash(canonicalPath)}`
-}
-
-function defaultArtifactCache(name: string): string {
-  return path.join(registryHome(), 'cache', `${slug(name)}-${shortHash(name + Date.now())}`)
-}
-
-function scaffoldArtifactCache(cachePath: string): void {
-  fs.mkdirSync(path.join(cachePath, '.dev-state'), { recursive: true })
-  fs.mkdirSync(path.join(cachePath, 'tasks'), { recursive: true })
-}
-
 // ── Validation (shared by REST + MCP) ──────────────────────────────────────────
 
+// Validate + canonicalise a user-supplied project path. Returns
+//   { ok: true, path: <canonical .dev-team-agent dir>, name: <derived> }
+// or { ok: false, status, error } on rejection. See design §4.2.
 export function validateProjectPath(input: unknown, name?: unknown): ValidateResult {
   if (typeof input !== 'string' || !input.trim()) {
     return { ok: false, status: 400, error: 'path is required' }
   }
   const raw = input.trim()
 
+  // 1. Must be absolute.
   if (!path.isAbsolute(raw)) {
     return { ok: false, status: 400, error: 'path must be absolute' }
   }
 
+  // 2. Resolve canonical path (guards against symlink escape, .. segments).
   let abs: string
   try {
     abs = fs.realpathSync(path.resolve(raw))
@@ -189,6 +176,7 @@ export function validateProjectPath(input: unknown, name?: unknown): ValidateRes
     return { ok: false, status: 400, error: 'path not found' }
   }
 
+  // Must be a directory.
   let stat: fs.Stats
   try {
     stat = fs.statSync(abs)
@@ -199,6 +187,8 @@ export function validateProjectPath(input: unknown, name?: unknown): ValidateRes
     return { ok: false, status: 400, error: 'path must be a directory' }
   }
 
+  // 3. Either the path itself IS `.dev-team-agent`, or it contains one
+  //    (allow pointing at a project root — we then descend into it).
   let workspace: string
   if (path.basename(abs) === '.dev-team-agent') {
     workspace = abs
@@ -214,11 +204,39 @@ export function validateProjectPath(input: unknown, name?: unknown): ValidateRes
     workspace = innerCanonical
   }
 
+  // Derive display name: explicit name wins, else basename of the project root
+  // (the directory holding `.dev-team-agent`).
   const projectRoot = path.dirname(workspace)
-  const derivedName =
-    typeof name === 'string' && name.trim() ? name.trim() : path.basename(projectRoot) || 'project'
+  const derivedName = (typeof name === 'string' && name.trim())
+    ? name.trim()
+    : path.basename(projectRoot) || 'project'
 
   return { ok: true, path: workspace, name: derivedName }
+}
+
+function makeId(name: string, canonicalPath: string): string {
+  return `${slug(name)}-${shortHash(canonicalPath)}`
+}
+
+function defaultArtifactCache(name: string): string {
+  return path.join(registryHome(), 'cache', `${slug(name)}-${shortHash(name + Date.now())}`)
+}
+
+function scaffoldArtifactCache(cachePath: string): void {
+  fs.mkdirSync(path.join(cachePath, '.dev-state'), { recursive: true })
+  fs.mkdirSync(path.join(cachePath, 'tasks'), { recursive: true })
+}
+
+function inferNameFromGitUrl(url: string): string {
+  const pathname = new URL(url).pathname
+  const base = path.basename(pathname)
+  return base.replace(/\.git$/i, '') || 'project'
+}
+
+function resolveCloneRoot(project: Project): string {
+  const byWorkspace = workspaceDir(project.id)
+  if (fs.existsSync(byWorkspace)) return byWorkspace
+  return path.dirname(project.path)
 }
 
 export function validateSshProject(input: unknown, name?: unknown): ValidateSshResult {
@@ -286,24 +304,31 @@ export function updateProjectRemoteSync(
 
 // ── CRUD ───────────────────────────────────────────────────────────────────────
 
+// List all registered projects + the default project id (if any).
 export function list(): { projects: Project[]; defaultId: string | null } {
   const reg = loadRegistry()
   const def = reg.projects.find((p) => p.default)
   return { projects: reg.projects, defaultId: def ? def.id : null }
 }
 
+// Get one project by id (or null).
 export function get(id: string | null | undefined): Project | null {
   if (!id) return null
   const reg = loadRegistry()
   return reg.projects.find((p) => p.id === id) || null
 }
 
+// Add a project. Validates + canonicalises the path; idempotent on canonical
+// path (returns the existing entry instead of duplicating). Returns
+//   { ok: true, project } | { ok: false, status, error }
 export function add({ path: inputPath, name }: { path?: string; name?: string } = {}): AddResult {
   const v = validateProjectPath(inputPath, name)
+  // `in`-operator narrowing (boolean-discriminant narrowing misbehaves under vue-tsc here).
   if ('error' in v) return v
 
   const reg = loadRegistry()
 
+  // Idempotent: same canonical path → return existing entry.
   const existing = reg.projects.find((p) => p.path === v.path)
   if (existing) return { ok: true, project: existing }
 
@@ -313,11 +338,138 @@ export function add({ path: inputPath, name }: { path?: string; name?: string } 
     kind: 'local',
     path: v.path,
     addedAt: new Date().toISOString(),
-    default: reg.projects.length === 0,
+    default: reg.projects.length === 0, // first project becomes default
   }
   reg.projects.push(project)
   saveRegistry(reg)
   return { ok: true, project }
+}
+
+export async function addFromGit({
+  gitUrl,
+  branch = 'main',
+  name,
+  runGit,
+}: {
+  gitUrl: string
+  branch?: string
+  name?: string
+  runGit?: import('./git/workspace.js').RunGitFn
+}): Promise<AddResult> {
+  const v = validateGitUrl(gitUrl)
+  if (!v.ok) return { ok: false, status: 400, error: 'error' in v ? v.error : 'invalid URL' }
+
+  const reg = loadRegistry()
+  const branchResolved = branch?.trim() || 'main'
+
+  const existing = reg.projects.find(
+    (p) => p.kind === 'git' && p.source?.url === v.normalizedUrl && p.source.branch === branchResolved,
+  )
+  if (existing) return { ok: true, project: existing }
+
+  const derivedName = name?.trim() || inferNameFromGitUrl(v.normalizedUrl)
+  const provisionalId = makeId(derivedName, `${v.normalizedUrl}#${branchResolved}`)
+  const cloneRoot = workspaceDir(provisionalId)
+
+  try {
+    await cloneShallow({
+      url: v.normalizedUrl,
+      branch: branchResolved,
+      targetDir: cloneRoot,
+      runGit,
+    })
+    const validated = validateProjectPath(cloneRoot, derivedName)
+    if ('error' in validated) {
+      cleanupWorkspace(cloneRoot)
+      return { ok: false, status: 400, error: validated.error }
+    }
+
+    const syncedAt = new Date().toISOString()
+    const project: Project = {
+      id: makeId(validated.name, validated.path),
+      name: validated.name,
+      kind: 'git',
+      path: validated.path,
+      addedAt: syncedAt,
+      default: reg.projects.length === 0,
+      source: {
+        type: 'git',
+        url: v.normalizedUrl,
+        branch: branchResolved,
+        lastSyncAt: syncedAt,
+      },
+    }
+
+    if (project.id !== provisionalId) {
+      const finalDir = workspaceDir(project.id)
+      fs.mkdirSync(path.dirname(finalDir), { recursive: true })
+      fs.renameSync(cloneRoot, finalDir)
+    }
+
+    reg.projects.push(project)
+    saveRegistry(reg)
+    return { ok: true, project }
+  } catch (e) {
+    cleanupWorkspace(cloneRoot)
+    const msg = String((e as Error)?.message || e)
+    return {
+      ok: false,
+      status: 400,
+      error: msg.includes('branch')
+        ? `git clone failed (branch '${branchResolved}'?): ${msg}`
+        : `git clone failed: ${msg}`,
+    }
+  }
+}
+
+export async function syncGitProject(
+  id: string,
+  runGit?: import('./git/workspace.js').RunGitFn,
+): Promise<AddResult & { syncedAt?: string }> {
+  return withProjectSyncLock(id, async () => {
+    const project = get(id)
+    if (!project) return { ok: false, status: 404, error: 'unknown project' }
+    if (project.kind !== 'git' || !project.source) {
+      return { ok: false, status: 400, error: 'not a git project' }
+    }
+
+    const cloneRoot = resolveCloneRoot(project)
+
+    try {
+      await pullOrReclone({
+        cloneRoot,
+        url: project.source.url,
+        branch: project.source.branch,
+        runGit,
+      })
+      const revalidated = validateProjectPath(cloneRoot)
+      if ('error' in revalidated) {
+        return { ok: false, status: 500, error: 'workspace invalid after sync' }
+      }
+
+      const reg = loadRegistry()
+      const idx = reg.projects.findIndex((p) => p.id === id)
+      const syncedAt = new Date().toISOString()
+      reg.projects[idx] = {
+        ...reg.projects[idx],
+        path: revalidated.path,
+        source: { ...project.source, lastSyncAt: syncedAt },
+      }
+      saveRegistry(reg)
+      return { ok: true, project: reg.projects[idx], syncedAt }
+    } catch (e) {
+      return { ok: false, status: 500, error: `sync failed: ${e}` }
+    }
+  })
+}
+
+export async function pushGitWorkspace(
+  id: string,
+  opts?: { message?: string; runGit?: import('./git/workspace.js').RunGitFn },
+): Promise<PushResult> {
+  const project = get(id)
+  if (!project) return { ok: false, status: 404, error: 'unknown project' }
+  return pushGitWorkspaceImpl(project, opts)
 }
 
 export function addSshProject(body: unknown): AddResult {
@@ -360,6 +512,10 @@ export function addSshProject(body: unknown): AddResult {
   return { ok: true, project }
 }
 
+// Remove a project from the registry by id. Does NOT touch the project's
+// filesystem — only the registry entry. Refuses to remove the default entry
+// (a default must remain for backward-compat). Returns
+//   { ok: true, removed: true } | { ok: false, status, error }
 export function remove(
   id: string | null | undefined,
 ): { ok: true; removed: true } | { ok: false; status: number; error: string } {
@@ -375,6 +531,9 @@ export function remove(
   return { ok: true, removed: true }
 }
 
+// Seed a default project from an explicit `.dev-team-agent` root (e.g.
+// DEV_TEAM_ROOT) when the registry is empty. Idempotent: does nothing if any
+// project is already registered. Returns the seeded project or null.
 export function seedDefault(devTeamRoot: string | null | undefined): Project | null {
   if (!devTeamRoot) return null
   const reg = loadRegistry()
@@ -385,6 +544,14 @@ export function seedDefault(devTeamRoot: string | null | undefined): Project | n
 
 // ── Root resolution (backward-compat) ───────────────────────────────────────────
 
+// Resolve a projectId to an absolute `.dev-team-agent/` path.
+//   - explicit, known id → that project's path
+//   - explicit, unknown id → null (caller returns 404)
+//   - null/empty id → the DEFAULT project:
+//       1. DEV_TEAM_ROOT env (if set)              ← highest priority
+//       2. registry entry with default: true
+//       3. opts.defaultRoot (e.g. Vite cwd/..)     ← legacy fallback
+// Design §4.3.
 export function resolveProjectRoot(
   projectId: string | null | undefined,
   opts: { defaultRoot?: string | null } = {},
@@ -398,6 +565,7 @@ export function resolveProjectRoot(
     return project.path
   }
 
+  // No project → default.
   const envRoot = process.env.DEV_TEAM_ROOT
   if (envRoot && envRoot.trim()) return path.resolve(envRoot.trim())
 
@@ -414,6 +582,9 @@ export function resolveProjectRoot(
   return null
 }
 
+// Build a `ctx` object for createApiHandler / MCP. `defaultRoot` is the legacy
+// fallback used when no project is selected and neither DEV_TEAM_ROOT nor a
+// registry default exists (preserves the old Vite `cwd/..` behaviour).
 export function createRegistryContext(
   { defaultRoot }: { defaultRoot?: string | null } = {},
 ): RegistryContext {
@@ -422,6 +593,9 @@ export function createRegistryContext(
       list,
       get,
       add,
+      addFromGit,
+      syncGitProject,
+      pushGitWorkspace,
       addSshProject,
       remove,
       validateProjectPath,

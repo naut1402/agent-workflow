@@ -5,7 +5,7 @@ import { SshRunnerConfigSchema } from '../../shared/schemas/runner-ssh.js'
 import { resolveSecretRef } from '../runners/credentials.js'
 import { getRunner } from '../runners/registry.js'
 import type { CredentialProfile } from '../runners/types.js'
-import type { Project, ProjectRemote } from '../registry.js'
+import type { Project, ProjectRemoteSsh } from '../../shared/schemas/project.js'
 import { updateProjectRemoteSync } from '../registry.js'
 import type { RunnerConfig } from '../runners/types.js'
 
@@ -293,4 +293,4 @@ export function getRunnerForProject(project: Project): RunnerConfig | null {
   return getRunner(project.remote.runnerId)
 }
 
-export type { ProjectRemote }
+export type { ProjectRemoteSsh as ProjectRemote }

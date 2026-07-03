@@ -33,6 +33,8 @@ beforeAll(async () => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-home-'))
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-root-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = home
+  // Golden tests must stay stable regardless of host env.
+  delete process.env.DEV_TEAM_API_TOKEN
   delete process.env.DEV_TEAM_ROOT
 
   // Minimal fixture: one task with live state + one artifact.
@@ -239,6 +241,38 @@ describe('project registry routes', () => {
   test('PUT /api/projects → 405', async () => {
     const r = await req('PUT', '/api/projects')
     expect(r.status).toBe(405)
+  })
+  test('POST /api/projects local path → kind local', async () => {
+    const r = await req('POST', '/api/projects', {
+      body: JSON.stringify({ path: localProj }),
+    })
+    expect(r.status).toBe(201)
+    const body = await r.json()
+    expect(body.project.kind).toBe('local')
+    expect(body.project.source).toBeUndefined()
+  })
+  test('POST /api/projects invalid body path+gitUrl → 400', async () => {
+    const r = await req('POST', '/api/projects', {
+      body: JSON.stringify({ path: root, gitUrl: 'https://github.com/x/y.git' }),
+    })
+    expect(r.status).toBe(400)
+  })
+  test('POST /api/projects gitUrl http → 400', async () => {
+    const r = await req('POST', '/api/projects', {
+      body: JSON.stringify({ gitUrl: 'http://github.com/x/y.git' }),
+    })
+    expect(r.status).toBe(400)
+  })
+  test('POST /api/projects/:id/sync unknown → 404', async () => {
+    const r = await req('POST', '/api/projects/nope/sync')
+    expect(r.status).toBe(404)
+  })
+  test('POST /api/projects/:id/sync local → 400', async () => {
+    const added = await req('POST', '/api/projects', { body: JSON.stringify({ path: localProj }) })
+    const { project } = await added.json()
+    const r = await req('POST', `/api/projects/${project.id}/sync`)
+    expect(r.status).toBe(400)
+    expect((await r.json()).error).toBe('not a git project')
   })
 })
 

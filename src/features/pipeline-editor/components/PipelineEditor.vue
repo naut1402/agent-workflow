@@ -354,7 +354,6 @@ async function saveToFile() {
       props.scope,
       pipeline,
       props.taskId || undefined,
-      props.projectId ?? undefined,
     )
     saveMsg.value = '✓ Saved'
     setTimeout(() => { saveMsg.value = '' }, 2500)

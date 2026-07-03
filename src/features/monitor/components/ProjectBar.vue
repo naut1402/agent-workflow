@@ -1,6 +1,18 @@
 <script setup lang="ts">
+// Sidebar project selector + CRUD. Lets the user switch the active project
+// (whose tasks the monitor view polls) and add/remove projects in the shared
+// registry. Removing a project only detaches it from the dashboard — it never
+// touches files on disk.
 import { ref } from 'vue'
-import { addProject, addSshProject, removeProject, pullProjectCache, fetchRunners } from '../../../api'
+import {
+  addProject,
+  addGitProject,
+  addSshProject,
+  removeProject,
+  syncProject,
+  pullProjectCache,
+  fetchRunners,
+} from '../../../api'
 
 const props = defineProps({
   projects: { type: Array as () => any[], default: () => [] },
@@ -10,9 +22,11 @@ const props = defineProps({
 
 const emit = defineEmits(['select', 'changed'])
 
-const addTab = ref<'local' | 'ssh'>('local')
 const adding = ref(false)
+const addTab = ref<'local' | 'git' | 'ssh'>('local')
 const newPath = ref('')
+const newGitUrl = ref('')
+const newBranch = ref('')
 const newName = ref('')
 const sshRemotePath = ref('')
 const sshHost = ref('')
@@ -24,7 +38,7 @@ const busy = ref(false)
 const pullBusyId = ref<string | null>(null)
 const errorMsg = ref('')
 
-function formatSyncedAt(iso?: string) {
+function formatSyncTime(iso?: string) {
   if (!iso) return 'Chưa đồng bộ'
   try {
     return new Date(iso).toLocaleString('vi-VN')
@@ -47,14 +61,16 @@ async function loadSshRunners() {
 
 function openAdd() {
   adding.value = true
+  addTab.value = 'local'
   errorMsg.value = ''
   newPath.value = ''
+  newGitUrl.value = ''
+  newBranch.value = ''
   newName.value = ''
   sshRemotePath.value = ''
   sshHost.value = ''
   sshUser.value = ''
   sshPort.value = 22
-  addTab.value = 'local'
   loadSshRunners()
 }
 
@@ -63,20 +79,32 @@ function cancelAdd() {
   errorMsg.value = ''
 }
 
-async function submitAddLocal() {
-  if (!newPath.value.trim()) {
-    errorMsg.value = 'Nhập đường dẫn tới .dev-team-agent (hoặc project root).'
+async function submitAdd() {
+  if (addTab.value === 'local') {
+    if (!newPath.value.trim()) {
+      errorMsg.value = 'Nhập đường dẫn tới .dev-team-agent (hoặc project root).'
+      return
+    }
+  } else if (!newGitUrl.value.trim()) {
+    errorMsg.value = 'Nhập Git HTTPS URL (ví dụ https://github.com/org/repo.git).'
     return
   }
+
   busy.value = true
   errorMsg.value = ''
   try {
-    const { project } = await addProject(newPath.value.trim(), newName.value.trim() || undefined)
+    const { project } = addTab.value === 'git'
+      ? await addGitProject(
+          newGitUrl.value.trim(),
+          newBranch.value.trim() || undefined,
+          newName.value.trim() || undefined,
+        )
+      : await addProject(newPath.value.trim(), newName.value.trim() || undefined)
     adding.value = false
     emit('changed')
     if (project?.id) emit('select', project.id)
-  } catch (e: unknown) {
-    errorMsg.value = String(e instanceof Error ? e.message : e)
+  } catch (e) {
+    errorMsg.value = String((e as Error).message || e)
   } finally {
     busy.value = false
   }
@@ -104,27 +132,40 @@ async function submitAddSsh() {
     adding.value = false
     emit('changed')
     if (project?.id) emit('select', project.id)
-  } catch (e: unknown) {
-    errorMsg.value = String(e instanceof Error ? e.message : e)
+  } catch (e) {
+    errorMsg.value = String((e as Error).message || e)
   } finally {
     busy.value = false
   }
 }
 
-async function onPullCache(project: any) {
+async function onSync(project: { id: string }) {
+  busy.value = true
+  errorMsg.value = ''
+  try {
+    await syncProject(project.id)
+    emit('changed')
+  } catch (e) {
+    errorMsg.value = `Đồng bộ thất bại: ${String((e as Error).message || e)}`
+  } finally {
+    busy.value = false
+  }
+}
+
+async function onPullCache(project: { id: string }) {
   pullBusyId.value = project.id
   errorMsg.value = ''
   try {
     await pullProjectCache(project.id)
     emit('changed')
-  } catch (e: unknown) {
-    errorMsg.value = String(e instanceof Error ? e.message : e)
+  } catch (e) {
+    errorMsg.value = String((e as Error).message || e)
   } finally {
     pullBusyId.value = null
   }
 }
 
-async function onRemove(project: any) {
+async function onRemove(project: { id: string; name: string; default?: boolean }) {
   if (project.default) return
   if (!window.confirm(`Gỡ project "${project.name}" khỏi dashboard?\n(Không xoá file trên đĩa.)`)) return
   busy.value = true
@@ -133,8 +174,8 @@ async function onRemove(project: any) {
     await removeProject(project.id)
     emit('changed')
     if (props.selectedId === project.id) emit('select', null)
-  } catch (e: unknown) {
-    errorMsg.value = String(e instanceof Error ? e.message : e)
+  } catch (e) {
+    errorMsg.value = String((e as Error).message || e)
   } finally {
     busy.value = false
   }
@@ -157,20 +198,26 @@ async function onRemove(project: any) {
       >
         <button class="project-pick" type="button" @click="emit('select', p.id)">
           <span class="project-name">{{ p.name }}</span>
-          <span v-if="p.kind === 'ssh'" class="project-ssh-badge">SSH</span>
+          <span v-if="p.kind === 'git'" class="project-git-badge" title="Git workspace">git</span>
+          <span v-if="p.kind === 'ssh'" class="project-ssh-badge" title="SSH remote">SSH</span>
           <span v-if="p.default" class="project-default-badge">default</span>
         </button>
+        <button
+          v-if="p.kind === 'git'"
+          class="project-sync"
+          type="button"
+          :title="`Đồng bộ — ${formatSyncTime(p.source?.lastSyncAt)}`"
+          :disabled="busy"
+          @click="onSync(p)"
+        >↻</button>
         <button
           v-if="p.kind === 'ssh'"
           class="project-sync"
           type="button"
-          title="Đồng bộ cache"
-          aria-label="Đồng bộ cache"
+          :title="`Đồng bộ cache — ${formatSyncTime(p.remote?.lastSyncedAt)}`"
           :disabled="pullBusyId === p.id"
-          @click.stop="onPullCache(p)"
-        >
-          {{ pullBusyId === p.id ? '…' : '↻' }}
-        </button>
+          @click="onPullCache(p)"
+        >{{ pullBusyId === p.id ? '…' : '↻' }}</button>
         <button
           v-if="!p.default"
           class="project-remove"
@@ -182,23 +229,24 @@ async function onRemove(project: any) {
       <li v-if="!projects.length" class="project-empty">Chưa có project nào.</li>
     </ul>
 
-    <ul v-if="projects.some((p) => p.kind === 'ssh')" class="project-sync-info">
-      <li v-for="p in projects.filter((x) => x.kind === 'ssh')" :key="p.id + '-sync'" class="sync-line">
-        <span class="sync-name">{{ p.name }}:</span>
-        <span class="sync-at">{{ formatSyncedAt(p.remote?.lastSyncedAt) }}</span>
-      </li>
-    </ul>
-
     <div v-if="adding" class="project-add-form">
-      <div class="project-tabs">
+      <div class="project-add-tabs">
         <button
-          type="button"
+          class="project-tab"
           :class="{ active: addTab === 'local' }"
-          @click="addTab = 'local'"
-        >Đường dẫn local</button>
-        <button
           type="button"
+          @click="addTab = 'local'"
+        >Local</button>
+        <button
+          class="project-tab"
+          :class="{ active: addTab === 'git' }"
+          type="button"
+          @click="addTab = 'git'"
+        >Git URL</button>
+        <button
+          class="project-tab"
           :class="{ active: addTab === 'ssh' }"
+          type="button"
           @click="addTab = 'ssh'"
         >SSH remote</button>
       </div>
@@ -208,16 +256,43 @@ async function onRemove(project: any) {
           v-model="newPath"
           class="project-input"
           placeholder="Đường dẫn .dev-team-agent / project root"
-          @keyup.enter="submitAddLocal"
+          @keyup.enter="submitAdd"
         />
         <input
           v-model="newName"
           class="project-input"
           placeholder="Tên hiển thị (tuỳ chọn)"
-          @keyup.enter="submitAddLocal"
+          @keyup.enter="submitAdd"
         />
         <div class="project-add-actions">
-          <button class="project-btn primary" type="button" :disabled="busy" @click="submitAddLocal">
+          <button class="project-btn primary" type="button" :disabled="busy" @click="submitAdd">
+            {{ busy ? '…' : 'Thêm' }}
+          </button>
+          <button class="project-btn" type="button" :disabled="busy" @click="cancelAdd">Huỷ</button>
+        </div>
+      </template>
+
+      <template v-else-if="addTab === 'git'">
+        <input
+          v-model="newGitUrl"
+          class="project-input"
+          placeholder="https://github.com/org/repo.git"
+          @keyup.enter="submitAdd"
+        />
+        <input
+          v-model="newBranch"
+          class="project-input"
+          placeholder="Nhánh (mặc định: main)"
+          @keyup.enter="submitAdd"
+        />
+        <input
+          v-model="newName"
+          class="project-input"
+          placeholder="Tên hiển thị (tuỳ chọn)"
+          @keyup.enter="submitAdd"
+        />
+        <div class="project-add-actions">
+          <button class="project-btn primary" type="button" :disabled="busy" @click="submitAdd">
             {{ busy ? '…' : 'Thêm' }}
           </button>
           <button class="project-btn" type="button" :disabled="busy" @click="cancelAdd">Huỷ</button>
@@ -225,7 +300,11 @@ async function onRemove(project: any) {
       </template>
 
       <template v-else>
-        <input v-model="sshRemotePath" class="project-input" placeholder="Remote path (POSIX, vd /Users/dev/.../.dev-team-agent)" />
+        <input
+          v-model="sshRemotePath"
+          class="project-input"
+          placeholder="Remote path (POSIX, vd /Users/dev/.../.dev-team-agent)"
+        />
         <input v-model="sshHost" class="project-input" placeholder="Máy chủ (host)" />
         <input v-model="sshUser" class="project-input" placeholder="User SSH" />
         <input v-model.number="sshPort" type="number" class="project-input" placeholder="Cổng (port)" />
@@ -297,12 +376,21 @@ async function onRemove(project: any) {
   overflow: hidden;
 }
 .project-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-git-badge {
+  font-size: 10px;
+  opacity: 0.75;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
 .project-ssh-badge {
   font-size: 10px;
   background: rgba(255, 180, 80, 0.2);
   color: #ffb450;
   border-radius: 3px;
   padding: 0 4px;
+  flex-shrink: 0;
 }
 .project-default-badge {
   font-size: 10px;
@@ -316,11 +404,12 @@ async function onRemove(project: any) {
   border: none;
   color: inherit;
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0.6;
   padding: 0 5px;
   font-size: 14px;
 }
 .project-sync:hover { opacity: 1; }
+.project-sync:disabled { opacity: 0.3; cursor: default; }
 .project-remove {
   background: none;
   border: none;
@@ -332,22 +421,19 @@ async function onRemove(project: any) {
 }
 .project-remove:hover { opacity: 1; color: #ff8080; }
 .project-empty { opacity: 0.5; padding: 5px 6px; }
-.project-sync-info { list-style: none; margin: 6px 0 0; padding: 0; font-size: 11px; opacity: 0.75; }
-.sync-line { padding: 2px 6px; }
-.sync-name { margin-right: 4px; }
 .project-add-form { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
-.project-tabs { display: flex; gap: 4px; margin-bottom: 4px; }
-.project-tabs button {
+.project-add-tabs { display: flex; gap: 4px; }
+.project-tab {
   flex: 1;
   border: 1px solid var(--border, #2a2a35);
   background: none;
   color: inherit;
   border-radius: 4px;
   cursor: pointer;
-  padding: 4px;
+  padding: 3px 8px;
   font-size: 11px;
 }
-.project-tabs button.active { background: rgba(120, 160, 255, 0.22); }
+.project-tab.active { background: rgba(120, 160, 255, 0.18); }
 .project-input {
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--border, #2a2a35);

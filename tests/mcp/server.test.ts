@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { addFromGit } from '../../server/registry'
 import {
   createMcpServer,
   fail,
@@ -11,6 +12,7 @@ import {
   handleRemoveProject,
   ok,
 } from '../../mcp/server'
+import type { RunGitFn } from '../../server/git/workspace'
 
 let home: string
 let proj: string
@@ -48,8 +50,8 @@ describe('ok / fail envelopes', () => {
 })
 
 describe('tool handlers over a temp registry', () => {
-  test('add → list → get → remove flow', () => {
-    const added = handleAddProject({ path: proj })
+  test('add → list → get → remove flow', async () => {
+    const added = await handleAddProject({ path: proj })
     const project = payload(added).project
     expect(project.default).toBe(true)
 
@@ -65,8 +67,33 @@ describe('tool handlers over a temp registry', () => {
     expect(handleGetProject({ id: 'nope' }).isError).toBe(true)
   })
 
-  test('add invalid path → fail', () => {
-    expect(handleAddProject({ path: 'relative/x' }).isError).toBe(true)
+  test('add invalid path → fail', async () => {
+    expect((await handleAddProject({ path: 'relative/x' })).isError).toBe(true)
+  })
+
+  test('add gitUrl with mocked clone', async () => {
+    const runGit: RunGitFn = async (args) => {
+      if (args[0] === 'clone') {
+        const targetDir = args[args.length - 1]
+        fs.mkdirSync(path.join(targetDir, '.dev-team-agent'), { recursive: true })
+        return { stdout: '', stderr: '' }
+      }
+      return { stdout: '', stderr: '' }
+    }
+    const direct = await addFromGit({
+      gitUrl: 'https://github.com/org/mcp-repo.git',
+      runGit,
+    })
+    expect(direct.ok).toBe(true)
+    if (direct.ok) {
+      const listed = payload(handleListProjects())
+      expect(listed.projects.some((p: { id: string }) => p.id === direct.project.id)).toBe(true)
+    }
+  })
+
+  test('add requires path or gitUrl', async () => {
+    expect((await handleAddProject({})).isError).toBe(true)
+    expect((await handleAddProject({ path: proj, gitUrl: 'https://x' })).isError).toBe(true)
   })
 })
 

@@ -20,6 +20,13 @@ function credentialsFile(): string {
   return path.join(registryHome(), 'credentials.json')
 }
 
+export const BUILTIN_SERVER_CREDENTIAL: CredentialProfile = {
+  id: 'claude-server-env',
+  provider: 'claude-code-cli',
+  label: 'Anthropic API Key (env)',
+  secretRef: 'env:ANTHROPIC_API_KEY',
+}
+
 function emptyStore(): CredentialsStore {
   return {
     version: CREDENTIALS_VERSION,
@@ -30,8 +37,17 @@ function emptyStore(): CredentialsStore {
         label: 'Claude Code (logged-in CLI)',
         secretRef: 'cli-session',
       },
+      { ...BUILTIN_SERVER_CREDENTIAL },
     ],
   }
+}
+
+function ensureBuiltinCredentials(store: CredentialsStore): CredentialsStore {
+  if (!store.profiles.some((p) => p.id === 'claude-server-env')) {
+    store.profiles.push({ ...BUILTIN_SERVER_CREDENTIAL })
+    saveCredentials(store)
+  }
+  return store
 }
 
 export function loadCredentials(): CredentialsStore {
@@ -40,15 +56,19 @@ export function loadCredentials(): CredentialsStore {
   try {
     raw = fs.readFileSync(file, 'utf8')
   } catch {
-    return emptyStore()
+    return ensureBuiltinCredentials(emptyStore())
   }
   try {
     const data = JSON.parse(raw)
-    if (!data || !Array.isArray(data.profiles)) return emptyStore()
-    return { version: data.version || CREDENTIALS_VERSION, profiles: data.profiles }
+    if (!data || !Array.isArray(data.profiles)) return ensureBuiltinCredentials(emptyStore())
+    const store: CredentialsStore = {
+      version: data.version || CREDENTIALS_VERSION,
+      profiles: data.profiles,
+    }
+    return ensureBuiltinCredentials(store)
   } catch {
     console.warn(`[dev-team-dashboard] credentials.json corrupt: ${file}`)
-    return emptyStore()
+    return ensureBuiltinCredentials(emptyStore())
   }
 }
 

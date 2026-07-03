@@ -2,6 +2,7 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../types.js'
 import { j } from '../respond.js'
 import { emitAudit } from '../../logging/store.js'
+import { AddSshProjectBodySchema, parseAddProjectRequest } from '../../../shared/schemas/project.js'
 import { pullArtifacts, getRunnerForProject } from '../../workspace/sshSync.js'
 import { getCredential } from '../../runners/credentials.js'
 
@@ -20,28 +21,53 @@ export function registerRegistryRoutes(app: Hono<HonoEnv>): void {
     return j(c, 200, registry.list())
   })
 
+  app.post('/api/projects/:id/sync', async (c) => {
+    const id = c.req.param('id')
+    const { registry } = c.get('ctx')
+    const result = await registry.syncGitProject(id)
+    if ('error' in result) return j(c, result.status || 400, { error: result.error })
+    emitAudit({
+      op: 'update',
+      entity: 'project',
+      identifier: id,
+      projectId: id,
+      detail: { action: 'git-sync' },
+    })
+    return j(c, 200, { project: result.project, syncedAt: result.syncedAt })
+  })
+
   app.post('/api/projects', async (c) => {
     const { registry } = c.get('ctx')
-    let parsed: Record<string, unknown>
+    let raw: unknown
     try {
-      parsed = JSON.parse((await c.req.text()) || '{}')
+      raw = JSON.parse((await c.req.text()) || '{}')
     } catch {
       return j(c, 400, { error: 'invalid JSON' })
     }
 
-    const result =
-      parsed.kind === 'ssh'
-        ? registry.addSshProject(parsed)
-        : registry.add({ path: parsed.path as string, name: parsed.name as string | undefined })
+    const sshParsed = AddSshProjectBodySchema.safeParse(raw)
+    let resolved: Awaited<ReturnType<typeof registry.addFromGit>> | ReturnType<typeof registry.addSshProject>
+    if (sshParsed.success) {
+      resolved = registry.addSshProject(sshParsed.data)
+    } else {
+      const parsed = parseAddProjectRequest(raw)
+      if (!parsed.success) {
+        return j(c, 400, { error: parsed.error.issues[0]?.message || 'invalid body' })
+      }
+      const body = parsed.data
+      resolved = body.gitUrl
+        ? await registry.addFromGit({ gitUrl: body.gitUrl, branch: body.branch, name: body.name })
+        : registry.add({ path: body.path!, name: body.name })
+    }
 
-    if ('error' in result) return j(c, result.status || 400, { error: result.error })
+    if ('error' in resolved) return j(c, resolved.status || 400, { error: resolved.error })
     emitAudit({
       op: 'create',
       entity: 'project',
-      identifier: result.project?.id ?? null,
-      projectId: result.project?.id ?? null,
+      identifier: resolved.project?.id ?? null,
+      projectId: resolved.project?.id ?? null,
     })
-    return j(c, 201, { project: result.project })
+    return j(c, 201, { project: resolved.project })
   })
 
   app.post('/api/projects/:id/pull-cache', async (c) => {
