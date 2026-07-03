@@ -1,30 +1,14 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { resolveSecretRef } from '../credentials.js'
-import { resolveEffectiveFlags } from '../flagUtils.js'
-import type { CredentialProfile, ExecuteRequest, ExecuteResult, ResolvedAgent, RunnerProvider } from '../types.js'
+import type { CredentialProfile, ExecuteRequest, ExecuteResult, RunnerProvider } from '../types.js'
+import { buildChildEnv, buildClaudeArgv, buildPrompt } from './claude-shared.js'
 
 interface ProcResult {
   exitCode: number | null
   stdout: string
   stderr: string
   killed: boolean
-}
-
-function buildPrompt(resolvedAgent: ResolvedAgent, userPrompt: string): string {
-  const system = resolvedAgent.systemPrompt?.trim()
-  if (!system) return userPrompt
-  return `## Agent instructions\n\n${system}\n\n## Task\n\n${userPrompt}`
-}
-
-function buildChildEnv(credential: CredentialProfile): NodeJS.ProcessEnv {
-  const env = { ...process.env }
-  const auth = resolveSecretRef(credential)
-  if (auth.type === 'env' && auth.key && auth.value) {
-    env[auth.key] = auth.value
-  }
-  return env
 }
 
 function formatFailure(procResult: ProcResult, logPath?: string): string {
@@ -113,28 +97,17 @@ export function createClaudeCodeCliProvider(): RunnerProvider {
 
     async execute(
       req: ExecuteRequest,
-      runnerConfig: Record<string, any>,
+      runnerConfig: Record<string, unknown>,
       credential: CredentialProfile,
       onLog?: (chunk: string) => void,
     ): Promise<ExecuteResult> {
       const started = Date.now()
       const cliPath = String(runnerConfig.cliPath || 'claude')
-      const flags = resolveEffectiveFlags(runnerConfig.flags, credential)
       const prompt = buildPrompt(req.resolvedAgent, req.userPrompt)
-      const args = [...flags, '-p', prompt]
-
-      if (runnerConfig.allowedTools) {
-        args.push('--allowedTools', String(runnerConfig.allowedTools))
-      }
-      if (runnerConfig.dangerouslySkipPermissions) {
-        args.push('--dangerously-skip-permissions')
-      }
+      const args = buildClaudeArgv({ runnerConfig, credential, prompt })
 
       const logPath = req.metadata?.logPath as string | undefined
-      const logChunks: string[] = []
-
       const wrappedOnLog = (chunk: string) => {
-        logChunks.push(chunk)
         onLog?.(chunk)
         if (logPath) {
           try {
@@ -150,16 +123,17 @@ export function createClaudeCodeCliProvider(): RunnerProvider {
         procResult = await runProcess(cliPath, args, {
           cwd: req.workspace,
           env: buildChildEnv(credential),
-          timeoutMs: req.timeoutMs || runnerConfig.timeoutMs || 600_000,
+          timeoutMs: req.timeoutMs || (runnerConfig.timeoutMs as number) || 600_000,
           onLog: wrappedOnLog,
         })
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err)
         return {
           ok: false,
           exitCode: null,
           durationMs: Date.now() - started,
           logPath,
-          error: String(err.message || err),
+          error: message,
         }
       }
 

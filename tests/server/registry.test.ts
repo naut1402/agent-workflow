@@ -5,6 +5,7 @@ import path from 'node:path'
 import {
   add,
   addFromGit,
+  addSshProject,
   createRegistryContext,
   get,
   list,
@@ -17,8 +18,11 @@ import {
   seedDefault,
   syncGitProject,
   validateProjectPath,
+  validateSshProject,
 } from '../../server/registry'
 import type { RunGitFn } from '../../server/git/workspace'
+import { upsertRunner } from '../../server/runners/registry'
+import { upsertCredential } from '../../server/runners/credentials'
 
 let home: string // registry config home (DEV_TEAM_DASHBOARD_HOME)
 let proj: string // a fake project root containing .dev-team-agent
@@ -162,8 +166,65 @@ describe('createRegistryContext', () => {
     expect(typeof ctx.registry.list).toBe('function')
     expect(typeof ctx.registry.addFromGit).toBe('function')
     expect(typeof ctx.registry.syncGitProject).toBe('function')
+    expect(typeof ctx.registry.addSshProject).toBe('function')
     expect(ctx.defaultRoot).toBe('/legacy')
     expect(ctx.resolveProjectRoot(null)).toBe('/legacy') // empty registry → legacy fallback
+  })
+})
+
+describe('SSH projects', () => {
+  beforeEach(() => {
+    upsertCredential({
+      id: 'ssh-cred',
+      provider: 'claude-code-ssh',
+      label: 'Key',
+      secretRef: 'file:/tmp/key',
+    })
+    upsertRunner({
+      id: 'ssh-dev',
+      provider: 'claude-code-ssh',
+      credentialId: 'ssh-cred',
+      config: { host: 'dev', user: 'u', port: 22 },
+    })
+  })
+
+  test('T44-09 addSshProject validates and scaffolds cache', () => {
+    const cache = path.join(home, 'cache', 'ssh-test')
+    const v = validateSshProject({
+      kind: 'ssh',
+      remotePath: '/Users/dev/.dev-team-agent',
+      remote: { host: 'dev', user: 'u', runnerId: 'ssh-dev', artifactCache: cache },
+    })
+    expect(v.ok).toBe(true)
+
+    const added = addSshProject({
+      kind: 'ssh',
+      remotePath: '/Users/dev/.dev-team-agent',
+      name: 'Dev Mac',
+      remote: { host: 'dev', user: 'u', runnerId: 'ssh-dev', artifactCache: cache },
+    })
+    expect(added.ok).toBe(true)
+    if (added.ok) {
+      expect(added.project.kind).toBe('ssh')
+      expect(resolveProjectRoot(added.project.id)).toBe(cache)
+      expect(fs.existsSync(path.join(cache, '.dev-state'))).toBe(true)
+      expect(fs.existsSync(path.join(cache, 'tasks'))).toBe(true)
+    }
+  })
+
+  test('rejects non-POSIX remote path', () => {
+    const v = validateSshProject({
+      kind: 'ssh',
+      remotePath: 'C:\\Users\\dev',
+      remote: { host: 'dev', user: 'u', runnerId: 'ssh-dev' },
+    })
+    expect(v.ok).toBe(false)
+  })
+
+  test('local add regression unchanged', () => {
+    const r = add({ path: proj })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.project.kind).toBe('local')
   })
 })
 

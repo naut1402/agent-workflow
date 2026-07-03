@@ -4,7 +4,15 @@
 // registry. Removing a project only detaches it from the dashboard — it never
 // touches files on disk.
 import { ref } from 'vue'
-import { addProject, addGitProject, removeProject, syncProject } from '../../../api'
+import {
+  addProject,
+  addGitProject,
+  addSshProject,
+  removeProject,
+  syncProject,
+  pullProjectCache,
+  fetchRunners,
+} from '../../../api'
 
 const props = defineProps({
   projects: { type: Array as () => any[], default: () => [] },
@@ -15,13 +23,41 @@ const props = defineProps({
 const emit = defineEmits(['select', 'changed'])
 
 const adding = ref(false)
-const addTab = ref<'local' | 'git'>('local')
+const addTab = ref<'local' | 'git' | 'ssh'>('local')
 const newPath = ref('')
 const newGitUrl = ref('')
 const newBranch = ref('')
 const newName = ref('')
+const sshRemotePath = ref('')
+const sshHost = ref('')
+const sshUser = ref('')
+const sshPort = ref(22)
+const sshRunnerId = ref('')
+const sshRunners = ref<any[]>([])
 const busy = ref(false)
+const pullBusyId = ref<string | null>(null)
 const errorMsg = ref('')
+
+function formatSyncTime(iso?: string) {
+  if (!iso) return 'Chưa đồng bộ'
+  try {
+    return new Date(iso).toLocaleString('vi-VN')
+  } catch {
+    return iso
+  }
+}
+
+async function loadSshRunners() {
+  try {
+    const data = await fetchRunners()
+    sshRunners.value = (data.runners || []).filter((r: any) => r.provider === 'claude-code-ssh')
+    if (!sshRunnerId.value && sshRunners.value.length) {
+      sshRunnerId.value = sshRunners.value[0].id
+    }
+  } catch {
+    sshRunners.value = []
+  }
+}
 
 function openAdd() {
   adding.value = true
@@ -31,20 +67,16 @@ function openAdd() {
   newGitUrl.value = ''
   newBranch.value = ''
   newName.value = ''
+  sshRemotePath.value = ''
+  sshHost.value = ''
+  sshUser.value = ''
+  sshPort.value = 22
+  loadSshRunners()
 }
 
 function cancelAdd() {
   adding.value = false
   errorMsg.value = ''
-}
-
-function formatSyncTime(iso?: string) {
-  if (!iso) return 'Chưa đồng bộ'
-  try {
-    return new Date(iso).toLocaleString('vi-VN')
-  } catch {
-    return iso
-  }
 }
 
 async function submitAdd() {
@@ -78,6 +110,35 @@ async function submitAdd() {
   }
 }
 
+async function submitAddSsh() {
+  if (!sshRemotePath.value.trim() || !sshHost.value.trim() || !sshUser.value.trim() || !sshRunnerId.value) {
+    errorMsg.value = 'Điền remote path, host, user và chọn runner SSH.'
+    return
+  }
+  busy.value = true
+  errorMsg.value = ''
+  try {
+    const { project } = await addSshProject({
+      kind: 'ssh',
+      remotePath: sshRemotePath.value.trim(),
+      name: newName.value.trim() || undefined,
+      remote: {
+        host: sshHost.value.trim(),
+        user: sshUser.value.trim(),
+        port: sshPort.value || 22,
+        runnerId: sshRunnerId.value,
+      },
+    })
+    adding.value = false
+    emit('changed')
+    if (project?.id) emit('select', project.id)
+  } catch (e) {
+    errorMsg.value = String((e as Error).message || e)
+  } finally {
+    busy.value = false
+  }
+}
+
 async function onSync(project: { id: string }) {
   busy.value = true
   errorMsg.value = ''
@@ -88,6 +149,19 @@ async function onSync(project: { id: string }) {
     errorMsg.value = `Đồng bộ thất bại: ${String((e as Error).message || e)}`
   } finally {
     busy.value = false
+  }
+}
+
+async function onPullCache(project: { id: string }) {
+  pullBusyId.value = project.id
+  errorMsg.value = ''
+  try {
+    await pullProjectCache(project.id)
+    emit('changed')
+  } catch (e) {
+    errorMsg.value = String((e as Error).message || e)
+  } finally {
+    pullBusyId.value = null
   }
 }
 
@@ -125,6 +199,7 @@ async function onRemove(project: { id: string; name: string; default?: boolean }
         <button class="project-pick" type="button" @click="emit('select', p.id)">
           <span class="project-name">{{ p.name }}</span>
           <span v-if="p.kind === 'git'" class="project-git-badge" title="Git workspace">git</span>
+          <span v-if="p.kind === 'ssh'" class="project-ssh-badge" title="SSH remote">SSH</span>
           <span v-if="p.default" class="project-default-badge">default</span>
         </button>
         <button
@@ -135,6 +210,14 @@ async function onRemove(project: { id: string; name: string; default?: boolean }
           :disabled="busy"
           @click="onSync(p)"
         >↻</button>
+        <button
+          v-if="p.kind === 'ssh'"
+          class="project-sync"
+          type="button"
+          :title="`Đồng bộ cache — ${formatSyncTime(p.remote?.lastSyncedAt)}`"
+          :disabled="pullBusyId === p.id"
+          @click="onPullCache(p)"
+        >{{ pullBusyId === p.id ? '…' : '↻' }}</button>
         <button
           v-if="!p.default"
           class="project-remove"
@@ -160,6 +243,12 @@ async function onRemove(project: { id: string; name: string; default?: boolean }
           type="button"
           @click="addTab = 'git'"
         >Git URL</button>
+        <button
+          class="project-tab"
+          :class="{ active: addTab === 'ssh' }"
+          type="button"
+          @click="addTab = 'ssh'"
+        >SSH remote</button>
       </div>
 
       <template v-if="addTab === 'local'">
@@ -169,8 +258,21 @@ async function onRemove(project: { id: string; name: string; default?: boolean }
           placeholder="Đường dẫn .dev-team-agent / project root"
           @keyup.enter="submitAdd"
         />
+        <input
+          v-model="newName"
+          class="project-input"
+          placeholder="Tên hiển thị (tuỳ chọn)"
+          @keyup.enter="submitAdd"
+        />
+        <div class="project-add-actions">
+          <button class="project-btn primary" type="button" :disabled="busy" @click="submitAdd">
+            {{ busy ? '…' : 'Thêm' }}
+          </button>
+          <button class="project-btn" type="button" :disabled="busy" @click="cancelAdd">Huỷ</button>
+        </div>
       </template>
-      <template v-else>
+
+      <template v-else-if="addTab === 'git'">
         <input
           v-model="newGitUrl"
           class="project-input"
@@ -183,20 +285,41 @@ async function onRemove(project: { id: string; name: string; default?: boolean }
           placeholder="Nhánh (mặc định: main)"
           @keyup.enter="submitAdd"
         />
+        <input
+          v-model="newName"
+          class="project-input"
+          placeholder="Tên hiển thị (tuỳ chọn)"
+          @keyup.enter="submitAdd"
+        />
+        <div class="project-add-actions">
+          <button class="project-btn primary" type="button" :disabled="busy" @click="submitAdd">
+            {{ busy ? '…' : 'Thêm' }}
+          </button>
+          <button class="project-btn" type="button" :disabled="busy" @click="cancelAdd">Huỷ</button>
+        </div>
       </template>
 
-      <input
-        v-model="newName"
-        class="project-input"
-        placeholder="Tên hiển thị (tuỳ chọn)"
-        @keyup.enter="submitAdd"
-      />
-      <div class="project-add-actions">
-        <button class="project-btn primary" type="button" :disabled="busy" @click="submitAdd">
-          {{ busy ? '…' : 'Thêm' }}
-        </button>
-        <button class="project-btn" type="button" :disabled="busy" @click="cancelAdd">Huỷ</button>
-      </div>
+      <template v-else>
+        <input
+          v-model="sshRemotePath"
+          class="project-input"
+          placeholder="Remote path (POSIX, vd /Users/dev/.../.dev-team-agent)"
+        />
+        <input v-model="sshHost" class="project-input" placeholder="Máy chủ (host)" />
+        <input v-model="sshUser" class="project-input" placeholder="User SSH" />
+        <input v-model.number="sshPort" type="number" class="project-input" placeholder="Cổng (port)" />
+        <select v-model="sshRunnerId" class="project-input">
+          <option value="" disabled>Chọn runner SSH</option>
+          <option v-for="r in sshRunners" :key="r.id" :value="r.id">{{ r.name }} ({{ r.id }})</option>
+        </select>
+        <input v-model="newName" class="project-input" placeholder="Tên hiển thị (tuỳ chọn)" />
+        <div class="project-add-actions">
+          <button class="project-btn primary" type="button" :disabled="busy" @click="submitAddSsh">
+            {{ busy ? '…' : 'Thêm SSH project' }}
+          </button>
+          <button class="project-btn" type="button" :disabled="busy" @click="cancelAdd">Huỷ</button>
+        </div>
+      </template>
     </div>
 
     <p v-if="errorMsg" class="project-err">⚠ {{ errorMsg }}</p>
@@ -257,6 +380,14 @@ async function onRemove(project: { id: string; name: string; default?: boolean }
   font-size: 10px;
   opacity: 0.75;
   border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.project-ssh-badge {
+  font-size: 10px;
+  background: rgba(255, 180, 80, 0.2);
+  color: #ffb450;
   border-radius: 3px;
   padding: 0 4px;
   flex-shrink: 0;

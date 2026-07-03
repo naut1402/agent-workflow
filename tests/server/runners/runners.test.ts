@@ -184,6 +184,9 @@ describe('provider registry', () => {
     expect(typeof p?.execute).toBe('function')
     expect(getProvider('nope')).toBe(null)
   })
+  test('T44-08 claude-code-ssh also registered', () => {
+    expect(listProviderIds()).toContain('claude-code-ssh')
+  })
 })
 
 describe('job queue', () => {
