@@ -13,7 +13,7 @@ FROM oven/bun:1-alpine AS runtime
 WORKDIR /app
 
 # Tools are useful for future phases (#41/#44) but harmless for #40.
-RUN apk add --no-cache git openssh-client rsync wget \
+RUN apk add --no-cache git openssh-client rsync wget su-exec \
   && adduser -D -h /home/app app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -25,9 +25,13 @@ COPY package.json ./
 
 ENV DEV_TEAM_DASHBOARD_HOST=0.0.0.0
 ENV DEV_TEAM_DASHBOARD_PORT=5174
+ENV DEV_TEAM_DASHBOARD_HOME=/data
+
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 5174
-USER app
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["bun", "server/standalone.ts"]
 
