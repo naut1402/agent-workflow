@@ -33,7 +33,7 @@ export interface ProjectRemote {
 export interface Project {
   id: string
   name: string
-  kind: 'local' | 'ssh' | string
+  kind: 'local' | 'ssh'
   path: string
   addedAt: string
   default: boolean
@@ -254,14 +254,6 @@ export function validateSshProject(input: unknown, name?: unknown): ValidateSshR
     return { ok: false, status: 400, error: 'artifactCache must be absolute server path' }
   }
 
-  try {
-    fs.mkdirSync(artifactCache, { recursive: true })
-    scaffoldArtifactCache(artifactCache)
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err)
-    return { ok: false, status: 400, error: `cannot create artifact cache: ${message}` }
-  }
-
   return {
     ok: true,
     path: remotePath,
@@ -345,6 +337,14 @@ export function addSshProject(body: unknown): AddResult {
 
   const existingCache = reg.projects.find((p) => p.remote?.artifactCache === v.remote.artifactCache)
   if (existingCache) return { ok: true, project: existingCache }
+
+  try {
+    fs.mkdirSync(v.remote.artifactCache, { recursive: true })
+    scaffoldArtifactCache(v.remote.artifactCache)
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { ok: false, status: 400, error: `cannot create artifact cache: ${message}` }
+  }
 
   const project: Project = {
     id: makeId(v.name, v.path),

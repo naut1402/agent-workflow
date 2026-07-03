@@ -46,6 +46,7 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(home, { recursive: true, force: true })
   delete process.env.SSH_STUB_SCRIPT
+  delete process.env.SSH_STUB_LOG
 })
 
 describe('claude-code-ssh provider', () => {
@@ -75,13 +76,11 @@ describe('claude-code-ssh provider', () => {
     )
 
     expect(result.ok).toBe(true)
-    if (fs.existsSync(sshLog)) {
-      const log = fs.readFileSync(sshLog, 'utf8')
-      expect(log).toContain('/tmp/key')
-      expect(log).toContain('dev@dev-mac.internal')
-      expect(log).toContain('claude')
-      expect(log).toContain('/Users/dev/work/.dev-team-agent')
-    }
+    const log = fs.readFileSync(sshLog, 'utf8')
+    expect(log).toContain('/tmp/key')
+    expect(log).toContain('dev@dev-mac.internal')
+    expect(log).toContain('claude')
+    expect(log).toContain('/Users/dev/work/.dev-team-agent')
   })
 
   test('T44-08 listProviderIds still includes claude-code-cli', async () => {

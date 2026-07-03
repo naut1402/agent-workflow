@@ -143,11 +143,11 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
       promptRef: parsed.promptRef,
       produces: parsed.produces,
       metadata: {
+        ...parsed.metadata,
         projectRoot,
         devTeamRoot: root,
         projectId: project?.id,
         remoteDevTeamRoot: isSsh && project ? project.path : undefined,
-        ...parsed.metadata,
       },
     })
     return j(c, 201, { job })

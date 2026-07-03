@@ -101,7 +101,10 @@ export function createClaudeCodeSshProvider(deps?: { spawnFn?: SpawnFn }): Runne
       if (auth.type !== 'file') {
         return { ok: false, errors: ['SSH runner requires file: secretRef'] }
       }
-      validateSshKeyFile(auth.path)
+      const keyCheck = validateSshKeyFile(auth.path)
+      if (!keyCheck.ok) {
+        return { ok: false, errors: [keyCheck.warn || 'invalid SSH key file'] }
+      }
       return { ok: true, errors: [] }
     },
 

@@ -165,6 +165,7 @@ async function onRemove(project: any) {
           class="project-sync"
           type="button"
           title="Đồng bộ cache"
+          aria-label="Đồng bộ cache"
           :disabled="pullBusyId === p.id"
           @click.stop="onPullCache(p)"
         >
@@ -225,9 +226,9 @@ async function onRemove(project: any) {
 
       <template v-else>
         <input v-model="sshRemotePath" class="project-input" placeholder="Remote path (POSIX, vd /Users/dev/.../.dev-team-agent)" />
-        <input v-model="sshHost" class="project-input" placeholder="Host" />
+        <input v-model="sshHost" class="project-input" placeholder="Máy chủ (host)" />
         <input v-model="sshUser" class="project-input" placeholder="User SSH" />
-        <input v-model.number="sshPort" type="number" class="project-input" placeholder="Port" />
+        <input v-model.number="sshPort" type="number" class="project-input" placeholder="Cổng (port)" />
         <select v-model="sshRunnerId" class="project-input">
           <option value="" disabled>Chọn runner SSH</option>
           <option v-for="r in sshRunners" :key="r.id" :value="r.id">{{ r.name }} ({{ r.id }})</option>

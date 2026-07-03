@@ -6,7 +6,7 @@ if [[ -n "${SSH_STUB_LOG:-}" ]]; then
   printf '%s\n' "$*" >> "$SSH_STUB_LOG"
 fi
 
-remote_cmd="${@: -1}"
+remote_cmd="${*: -1}"
 if [[ "$remote_cmd" == *"echo ok"* ]] || [[ "$remote_cmd" == *"claude"* ]]; then
   exit 0
 fi

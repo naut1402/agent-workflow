@@ -5,6 +5,8 @@ import { emitAudit } from '../../logging/store.js'
 import { pullArtifacts, getRunnerForProject } from '../../workspace/sshSync.js'
 import { getCredential } from '../../runners/credentials.js'
 
+const pullCacheInFlight = new Set<string>()
+
 // Project registry CRUD — no per-project root needed.
 export function registerRegistryRoutes(app: Hono<HonoEnv>): void {
   app.get('/api/projects', (c) => {
@@ -56,9 +58,17 @@ export function registerRegistryRoutes(app: Hono<HonoEnv>): void {
     const credential = getCredential(runner.credentialId)
     if (!credential) return j(c, 400, { error: 'credential not found' })
 
-    const result = await pullArtifacts({ project, runner, credential })
-    if ('error' in result) return j(c, 502, result)
-    return j(c, 200, result)
+    if (pullCacheInFlight.has(id)) {
+      return j(c, 409, { error: 'pull already in progress' })
+    }
+    pullCacheInFlight.add(id)
+    try {
+      const result = await pullArtifacts({ project, runner, credential })
+      if ('error' in result) return j(c, 502, result)
+      return j(c, 200, result)
+    } finally {
+      pullCacheInFlight.delete(id)
+    }
   })
 
   app.delete('/api/projects', (c) => {

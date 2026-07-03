@@ -163,7 +163,7 @@ function buildRsyncSshTransport(config: ReturnType<typeof SshRunnerConfigSchema.
   const parts = [
     'ssh',
     '-i',
-    keyPath,
+    shellQuoteSingle(keyPath),
     '-p',
     String(config.port || 22),
     '-o',
@@ -265,7 +265,7 @@ export async function pullArtifacts(opts: {
 
     const args = ['-az', '-e', transport]
     if (item.delete) args.push('--delete')
-    args.push(remoteSrc, localDest.endsWith(path.sep) || item.rel.endsWith('/') ? localDest : localDest)
+    args.push(remoteSrc, localDest)
 
     try {
       const result = await execRsync(args, { timeoutMs })

@@ -269,32 +269,32 @@ async function smokeTest() {
 
         <template v-if="isSshProvider">
           <div class="field">
-            <label class="cfg-label">Host
+            <label class="cfg-label">Máy chủ (host)
               <input v-model="draft.config.host" class="cfg-input" placeholder="dev-mac.internal" />
             </label>
           </div>
           <div class="field">
-            <label class="cfg-label">User
+            <label class="cfg-label">User SSH
               <input v-model="draft.config.user" class="cfg-input" />
             </label>
           </div>
           <div class="field">
-            <label class="cfg-label">Port
+            <label class="cfg-label">Cổng (port)
               <input v-model.number="draft.config.port" type="number" class="cfg-input" />
             </label>
           </div>
           <div class="field">
-            <label class="cfg-label">Remote CLI path
+            <label class="cfg-label">Đường dẫn CLI remote
               <input v-model="draft.config.remoteCliPath" class="cfg-input" />
             </label>
           </div>
           <div class="field">
-            <label class="cfg-label">Known hosts file
+            <label class="cfg-label">File known_hosts
               <input v-model="draft.config.knownHostsFile" class="cfg-input" placeholder="tuỳ chọn" />
             </label>
           </div>
           <div class="field">
-            <label class="cfg-label">Connect timeout (ms)
+            <label class="cfg-label">Timeout kết nối (ms)
               <input v-model.number="draft.config.connectTimeoutMs" type="number" class="cfg-input" />
             </label>
           </div>

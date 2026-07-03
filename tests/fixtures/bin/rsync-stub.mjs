@@ -37,7 +37,7 @@ if (fixtureRoot && remotePath.startsWith('/')) {
   const rel = remotePath.replace(/^\//, '')
   const srcLocal = path.join(fixtureRoot, rel)
   if (fs.existsSync(srcLocal)) {
-    fs.mkdirSync(path.dirname(dest.endsWith(path.sep) ? dest : dest), { recursive: true })
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
     if (fs.statSync(srcLocal).isDirectory()) {
       fs.mkdirSync(dest, { recursive: true })
       for (const entry of fs.readdirSync(srcLocal)) {

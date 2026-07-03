@@ -16,7 +16,7 @@ Hướng dẫn cấu hình **Luồng C**: dashboard server điều phối job qu
 
 ## Luồng runtime
 
-```
+```text
 Submit job (?project=<ssh-id>)
   → execute qua ssh user@host 'cd <remoteWs> && claude ...'
   → post-job pullArtifacts (rsync .dev-state/ + tasks/ → artifactCache)

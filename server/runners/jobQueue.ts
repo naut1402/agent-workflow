@@ -176,7 +176,8 @@ async function runJob(job: JobRecord): Promise<void> {
       const project = getProject(projectId)
       if (project?.kind === 'ssh' && project.remote) {
         const sshRunner = getRunner(project.remote.runnerId) ?? runner
-        pullResult = await pullArtifacts({ project, runner: sshRunner, credential })
+        const pullCredential = getCredential(sshRunner.credentialId) ?? credential
+        pullResult = await pullArtifacts({ project, runner: sshRunner, credential: pullCredential })
         if ('error' in pullResult && pullResult.error) {
           console.warn(`[jobQueue] pullArtifacts failed for ${projectId}:`, pullResult.error)
         }

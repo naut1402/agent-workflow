@@ -56,6 +56,7 @@ afterEach(() => {
   delete process.env.SSH_STUB_SCRIPT
   delete process.env.RSYNC_STUB_SCRIPT
   delete process.env.RSYNC_STUB_FIXTURE
+  delete process.env.RSYNC_STUB_MODE
 })
 
 describe('sshSync', () => {
@@ -141,6 +142,7 @@ describe('sshSync', () => {
         artifactCache: path.join(home, 'cache', 'fail'),
       },
     })
+    expect(added.ok).toBe(true)
     if (!added.ok) return
     const { getRunner } = await import('../../../server/runners/registry.js')
     const { getCredential } = await import('../../../server/runners/credentials.js')
@@ -150,7 +152,6 @@ describe('sshSync', () => {
       credential: getCredential('ssh-cred')!,
     })
     expect(result.ok).toBe(false)
-    delete process.env.RSYNC_STUB_MODE
   })
 })
 
