@@ -2,6 +2,9 @@ node_modules/
 dist/
 CLAUDE.local.md
 
+# Orchestrator runtime workspace (local-only, not committed)
+/.dev-team-agent/
+
 # Conversation exports (/export) — never commit
 ts-migration.txt
 *.export.txt
