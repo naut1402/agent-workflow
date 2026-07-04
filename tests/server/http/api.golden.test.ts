@@ -274,6 +274,105 @@ describe('project registry routes', () => {
     expect(r.status).toBe(400)
     expect((await r.json()).error).toBe('not a git project')
   })
+
+  test('GET /api/projects?name= filters by name', async () => {
+    const registryPath = path.join(home, 'projects.json')
+    const seed = {
+      version: 1,
+      projects: [
+        {
+          id: 'aw-feat',
+          name: 'agent-workflow',
+          kind: 'git',
+          path: path.join(home, 'aw-feat', '.dev-team-agent'),
+          addedAt: new Date().toISOString(),
+          default: true,
+          source: {
+            type: 'git',
+            url: 'https://github.com/naut1402/agent-workflow.git',
+            branch: 'feat/U0003/main',
+          },
+        },
+        {
+          id: 'aw-main',
+          name: 'agent-workflow-1',
+          kind: 'git',
+          path: path.join(home, 'aw-main', '.dev-team-agent'),
+          addedAt: new Date().toISOString(),
+          default: false,
+          source: {
+            type: 'git',
+            url: 'https://github.com/naut1402/agent-workflow.git',
+            branch: 'main',
+          },
+        },
+        {
+          id: 'cc',
+          name: 'cc-plugin',
+          kind: 'git',
+          path: path.join(home, 'cc', '.dev-team-agent'),
+          addedAt: new Date().toISOString(),
+          default: false,
+          source: {
+            type: 'git',
+            url: 'https://github.com/naut1402/cc-plugin.git',
+            branch: 'main',
+          },
+        },
+      ],
+    }
+    fs.writeFileSync(registryPath, JSON.stringify(seed))
+
+    const byName = await req('GET', '/api/projects?name=agent-workflow')
+    expect(byName.status).toBe(200)
+    const named = await byName.json()
+    expect(named.projects).toHaveLength(1)
+    expect(named.projects[0].id).toBe('aw-feat')
+    expect(named.candidates[0].id).toBe('aw-feat')
+
+    const resolveBranch = await req(
+      'GET',
+      '/api/projects/resolve?gitUrl=https://github.com/naut1402/agent-workflow.git&branch=main',
+    )
+    expect(resolveBranch.status).toBe(200)
+    const resolved = await resolveBranch.json()
+    expect(resolved.project.id).toBe('aw-main')
+    expect(resolved.resolvedBy).toBe('gitUrl+branch')
+
+    const resolveAmbiguous = await req(
+      'GET',
+      '/api/projects/resolve?gitUrl=https://github.com/naut1402/agent-workflow.git',
+    )
+    expect(resolveAmbiguous.status).toBe(409)
+    const amb = await resolveAmbiguous.json()
+    expect(amb.candidates.length).toBe(2)
+
+    // Unique gitUrl: accept even when local branch differs from registered branch.
+    const resolveFeature = await req(
+      'GET',
+      '/api/projects/resolve?gitUrl=https://github.com/naut1402/cc-plugin.git&branch=feat/x',
+    )
+    expect(resolveFeature.status).toBe(200)
+    const feat = await resolveFeature.json()
+    expect(feat.project.id).toBe('cc')
+    expect(feat.resolvedBy).toBe('gitUrl')
+
+    const resolveMissing = await req(
+      'GET',
+      '/api/projects/resolve?gitUrl=https://github.com/naut1402/missing.git&branch=main',
+    )
+    expect(resolveMissing.status).toBe(404)
+
+    const resolveNoUrl = await req('GET', '/api/projects/resolve')
+    expect(resolveNoUrl.status).toBe(400)
+
+    const resolveInvalid = await req(
+      'GET',
+      '/api/projects/resolve?gitUrl=not-a-valid-url',
+    )
+    expect(resolveInvalid.status).toBe(400)
+    expect((await resolveInvalid.json()).error).toBe('invalid gitUrl')
+  })
 })
 
 describe('GET /api/rules', () => {
