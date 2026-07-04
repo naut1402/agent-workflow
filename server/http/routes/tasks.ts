@@ -9,6 +9,16 @@ import { applyHitlAction } from '../../tasks/state.js'
 import { loadPipelineConfig } from '../../pipeline/index.js'
 import { emitAudit } from '../../logging/store.js'
 import { TaskStatePatch } from '../../../shared/schemas/task.js'
+import { submitJob } from '../../runners/index.js'
+import {
+  loadArtifactActions,
+  matchActions,
+  findAction,
+  substitutePrompt,
+  artifactBase,
+  toActionView,
+} from '../../artifactActions/index.js'
+import { RunArtifactActionRequest } from '../../../shared/schemas/artifactAction.js'
 
 // Task state, artifacts, resolved pipeline config, profile & flow-profile.
 export function registerTaskRoutes(app: Hono<HonoEnv>): void {
@@ -186,5 +196,79 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       detail: { action: parsed.data.action, gate_id: parsed.data.gate_id },
     })
     return j(c, 200, { id, state: result.state, mtime: result.mtime })
+  })
+
+  // ── Artifact quick-actions ─────────────────────────────────────────────────
+  // List actions applicable to an artifact (or all when `?artifact=` omitted).
+  app.get('/api/artifact-actions', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const artifact = c.req.query('artifact') || ''
+    const actions = await loadArtifactActions(root)
+    const matched = artifact ? matchActions(actions, artifact) : actions
+    return j(c, 200, { artifact: artifact || null, actions: matched.map(toActionView) })
+  })
+
+  // Run a quick-action: build the prompt from its template + the artifact, then
+  // reuse the job queue (same path as POST /api/jobs) to submit it to a runner.
+  app.post('/api/artifact-actions/run', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
+    const parsed = RunArtifactActionRequest.safeParse(b.value)
+    if (!parsed.success) {
+      return j(c, 400, { error: 'invalid request', details: parsed.error.flatten() })
+    }
+    const { taskId, actionId, artifactName, runnerId } = parsed.data
+    if (/[^\w\-]/.test(taskId)) return j(c, 400, { error: 'invalid task id' })
+
+    const target = resolveArtifact(root, taskId, artifactName)
+    if (!target) return j(c, 400, { error: 'invalid artifact path' })
+
+    const actions = await loadArtifactActions(root)
+    const action = findAction(actions, actionId)
+    if (!action) return j(c, 404, { error: 'unknown action', actionId })
+    if (matchActions([action], artifactName).length === 0) {
+      return j(c, 400, { error: 'action does not apply to artifact' })
+    }
+
+    let content: string
+    try {
+      content = await fs.readFile(target, 'utf8')
+    } catch {
+      return j(c, 404, { error: 'artifact not found', taskId, artifactName })
+    }
+
+    const userPrompt = substitutePrompt(action.prompt_template, {
+      artifact_name: artifactName,
+      artifact_base: artifactBase(artifactName),
+    })
+
+    const job = submitJob({
+      runnerId,
+      agentRef: action.agent_ref,
+      workspace: path.join(root, 'tasks', taskId),
+      userPrompt,
+      produces: action.produces,
+      metadata: {
+        projectRoot: path.dirname(root),
+        devTeamRoot: root,
+        projectId: c.get('projectId') || undefined,
+        artifactAction: actionId,
+        taskId,
+        artifactName,
+        artifactBytes: content.length,
+      },
+    })
+
+    emitAudit({
+      op: 'update',
+      entity: 'artifact',
+      identifier: `${taskId}/${artifactName}#${actionId}`,
+      projectId: c.get('projectId'),
+      detail: { jobId: job.id, agentRef: action.agent_ref, action: actionId },
+    })
+    return j(c, 201, { job })
   })
 }
