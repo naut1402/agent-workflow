@@ -166,6 +166,26 @@ export async function saveArtifact(
   return data
 }
 
+export async function fetchArtifactActions(artifact: string, projectId?: string) {
+  const r = await apiFetch(`/api/artifact-actions${qs({ artifact, project: projectId })}`)
+  if (!r.ok) throw new Error(`/api/artifact-actions → ${r.status}`)
+  return r.json()
+}
+
+export async function runArtifactAction(
+  body: { taskId: string; actionId: string; artifactName: string; runnerId?: string },
+  projectId?: string,
+) {
+  const r = await apiFetch(`/api/artifact-actions/run${qs({ project: projectId })}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/artifact-actions/run → ${r.status}`)
+  return data
+}
+
 export async function fetchPipelineExport(id: string, projectId?: string) {
   const r = await apiFetch(`/api/pipeline-export${qs({ id, project: projectId })}`)
   if (!r.ok) throw new Error(`/api/pipeline-export → ${r.status}`)

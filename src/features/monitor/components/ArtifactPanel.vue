@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUpdated } from 'vue'
 import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
-import { fetchArtifact, saveArtifact } from '../../../api'
+import { fetchArtifact, saveArtifact, fetchArtifactActions } from '../../../api'
 import {
   splitMarkdownSections,
   useInlineMarkdownEdit,
 } from '../composables/useInlineMarkdownEdit'
+import { useArtifactAction } from '../composables/useArtifactAction'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 
 const props = defineProps({
@@ -53,6 +54,31 @@ const {
     await scheduleMermaid()
   },
 })
+
+// ── Quick actions ────────────────────────────────────────────────────────────
+const actions = ref<Array<{ id: string; label: string; agent_ref: string; confirm: boolean }>>([])
+
+const { runningActionId, error: actionError, run: runAction, clearError } = useArtifactAction({
+  getProjectId: () => props.projectId ?? null,
+  onReload: () => reloadExternal(),
+})
+
+async function loadActions(name: string) {
+  try {
+    const res = await fetchArtifactActions(name, props.projectId ?? undefined)
+    actions.value = Array.isArray(res.actions) ? res.actions : []
+  } catch {
+    actions.value = []
+  }
+}
+
+async function onActionClick(action: { id: string; label: string; confirm: boolean }) {
+  if (!props.openArtifact || isEditing() || runningActionId.value) return
+  if (action.confirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+    if (!window.confirm(`Chạy "${action.label}" trên ${props.openArtifact.name}?`)) return
+  }
+  await runAction(props.openArtifact.taskId, action.id, props.openArtifact.name)
+}
 
 const html = computed(() => parseMarkdown(content.value || ''))
 
@@ -123,11 +149,15 @@ function onBlockToggle(ev: Event) {
 watch(
   () => props.openArtifact,
   (a) => {
-    if (a) load(a.taskId, a.name)
-    else {
+    clearError()
+    if (a) {
+      load(a.taskId, a.name)
+      loadActions(a.name)
+    } else {
       content.value = ''
       loadedKey.value = null
       loadedMtime.value = null
+      actions.value = []
       cancelEdit()
     }
   },
@@ -167,6 +197,17 @@ onUpdated(() => scheduleMermaid())
         <span class="art-title">{{ openArtifact.name }}</span>
         <div class="art-toolbar-actions">
           <button
+            v-for="action in actions"
+            :key="action.id"
+            class="btn-quick-action"
+            :disabled="isEditing() || !!runningActionId"
+            :title="`Chạy agent ${action.agent_ref}`"
+            @click="onActionClick(action)"
+          >
+            <span v-if="runningActionId === action.id" class="qa-spinner">⏳ Đang chạy…</span>
+            <span v-else>{{ action.label }}</span>
+          </button>
+          <button
             v-if="blocks.length > 1"
             class="btn-view-toggle"
             :class="{ active: blockMode }"
@@ -177,6 +218,10 @@ onUpdated(() => scheduleMermaid())
         </div>
       </div>
 
+      <p v-if="actionError" class="art-warning">
+        {{ actionError }}
+        <button type="button" class="btn-link" @click="clearError">Ẩn</button>
+      </p>
       <p v-if="message" class="art-message">{{ message }}</p>
       <p v-if="externalChange" class="art-warning">
         File đã thay đổi trên disk trong lúc bạn sửa.
