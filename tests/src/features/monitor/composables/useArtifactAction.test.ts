@@ -80,4 +80,77 @@ describe('useArtifactAction', () => {
 
     expect(onReload).toHaveBeenCalledTimes(1)
   })
+
+  it('times out when the job never reaches a terminal state', async () => {
+    // Job stays queued forever; maxWaitMs should end the poll with an error.
+    stubApi({ id: 'job4', status: 'queued' }, [{ id: 'job4', status: 'queued' }])
+    const onReload = vi.fn()
+    const a = useArtifactAction({ getProjectId: () => null, onReload, pollMs: 1, maxWaitMs: 10 })
+
+    await a.run('T1', 'improve-doc', 'design.md')
+
+    expect(onReload).not.toHaveBeenCalled()
+    expect(a.error.value).toContain('Hết thời gian chờ job')
+    expect(a.runningActionId.value).toBeNull()
+  })
+
+  it('retries transient poll failures before succeeding', async () => {
+    // First job poll rejects (network blip), then it recovers and succeeds.
+    let jobCall = 0
+    const fetchMock = vi.fn(async (input: any, init: any = {}) => {
+      const url = String(input)
+      const method = (init.method || 'GET').toUpperCase()
+      if (url.includes('/api/artifact-actions/run') && method === 'POST') {
+        return { ok: true, status: 201, json: async () => ({ job: { id: 'job5', status: 'queued' } }) }
+      }
+      if (url.includes('/api/jobs/')) {
+        jobCall += 1
+        if (jobCall === 1) throw new Error('network blip')
+        return { ok: true, status: 200, json: async () => ({ job: { id: 'job5', status: 'succeeded' } }) }
+      }
+      throw new Error(`unexpected fetch: ${method} ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const onReload = vi.fn()
+    const a = useArtifactAction({ getProjectId: () => null, onReload, pollMs: 1, maxPollErrors: 3 })
+
+    await a.run('T1', 'improve-doc', 'design.md')
+
+    expect(onReload).toHaveBeenCalledTimes(1)
+    expect(a.error.value).toBeNull()
+  })
+
+  it('gives up after exceeding the transient failure budget', async () => {
+    const fetchMock = vi.fn(async (input: any, init: any = {}) => {
+      const url = String(input)
+      const method = (init.method || 'GET').toUpperCase()
+      if (url.includes('/api/artifact-actions/run') && method === 'POST') {
+        return { ok: true, status: 201, json: async () => ({ job: { id: 'job6', status: 'queued' } }) }
+      }
+      if (url.includes('/api/jobs/')) throw new Error('persistent outage')
+      throw new Error(`unexpected fetch: ${method} ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const onReload = vi.fn()
+    const a = useArtifactAction({ getProjectId: () => null, onReload, pollMs: 1, maxPollErrors: 2 })
+
+    await a.run('T1', 'improve-doc', 'design.md')
+
+    expect(onReload).not.toHaveBeenCalled()
+    expect(a.error.value).toContain('persistent outage')
+  })
+
+  it('scopes the running action to its own artifact', async () => {
+    stubApi({ id: 'job7', status: 'queued' }, [{ id: 'job7', status: 'queued' }])
+    const a = useArtifactAction({ getProjectId: () => null, onReload: vi.fn(), pollMs: 1, maxWaitMs: 50 })
+
+    const running = a.run('T1', 'improve-doc', 'design.md')
+
+    // While in flight, the running action is reported only for its own artifact.
+    expect(a.runningActionFor('T1', 'design.md')).toBe('improve-doc')
+    expect(a.runningActionFor('T1', 'investigate.md')).toBeNull()
+    await running
+  })
 })

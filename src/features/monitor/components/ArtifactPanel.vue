@@ -58,10 +58,28 @@ const {
 // ── Quick actions ────────────────────────────────────────────────────────────
 const actions = ref<Array<{ id: string; label: string; agent_ref: string; confirm: boolean }>>([])
 
-const { runningActionId, error: actionError, run: runAction, clearError } = useArtifactAction({
+const { runningActionId, runningActionFor, error: actionError, run: runAction, clearError } = useArtifactAction({
   getProjectId: () => props.projectId ?? null,
-  onReload: () => reloadExternal(),
+  // Only reload when the job's artifact is still the one on screen — the user
+  // may have switched artifacts while the job was polling.
+  onReload: (target) => {
+    if (
+      props.openArtifact &&
+      props.openArtifact.taskId === target.taskId &&
+      props.openArtifact.name === target.name
+    ) {
+      reloadExternal()
+    }
+  },
 })
+
+// Action running for the artifact currently on screen (null if the in-flight
+// job belongs to a different artifact), so the spinner lands on the right button.
+const runningHereActionId = computed(() =>
+  props.openArtifact
+    ? runningActionFor(props.openArtifact.taskId, props.openArtifact.name)
+    : null,
+)
 
 async function loadActions(name: string) {
   try {
@@ -204,7 +222,7 @@ onUpdated(() => scheduleMermaid())
             :title="`Chạy agent ${action.agent_ref}`"
             @click="onActionClick(action)"
           >
-            <span v-if="runningActionId === action.id" class="qa-spinner">⏳ Đang chạy…</span>
+            <span v-if="runningHereActionId === action.id" class="qa-spinner">⏳ Đang chạy…</span>
             <span v-else>{{ action.label }}</span>
           </button>
           <button
