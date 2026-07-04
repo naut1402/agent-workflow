@@ -40,7 +40,11 @@ beforeAll(async () => {
   fs.mkdirSync(path.join(root, 'tasks', 'T1'), { recursive: true })
   fs.writeFileSync(
     path.join(root, '.dev-state', 'T1.json'),
-    JSON.stringify({ current_phase: 'design', hitl_pending: false, review_round: 0 }),
+    JSON.stringify({ current_phase: 'investigator', hitl_pending: 'hitl-1', review_round: 0 }),
+  )
+  fs.writeFileSync(
+    path.join(root, 'pipeline.yaml'),
+    `version: 1\nsteps:\n  - id: investigator\n    name: Investigate\n    produces: [investigate.md]\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n    name: Design\n    produces: [design.md]\n    hitl: { mode: manual, gate_id: hitl-2 }\n`,
   )
   fs.writeFileSync(path.join(root, 'tasks', 'T1', 'investigate.md'), '# Investigate T1\n')
 
@@ -165,6 +169,34 @@ describe('PUT /api/artifact', () => {
     const conflict = await put.json()
     expect(conflict.error).toBe('conflict')
     expect(conflict.content).toContain('Investigate T1')
+  })
+})
+
+describe('PUT /api/task-state', () => {
+  test('approve advances phase', async () => {
+    const tasks = await req('GET', '/api/tasks')
+    const t1 = (await tasks.json()).tasks.find((t: any) => t.task_id === 'T1')
+    const put = await req('PUT', '/api/task-state?id=T1', {
+      body: JSON.stringify({ action: 'approve', gate_id: 'hitl-1', mtime: t1.state_mtime }),
+    })
+    expect(put.status).toBe(200)
+    const body = await put.json()
+    expect(body.state.hitl_pending).toBeNull()
+    expect(body.state.current_phase).toBe('designer')
+  })
+
+  test('invalid task id → 400', async () => {
+    const r = await req('PUT', '/api/task-state?id=bad/id', {
+      body: JSON.stringify({ action: 'approve', gate_id: 'hitl-1', mtime: 1 }),
+    })
+    expect(r.status).toBe(400)
+  })
+
+  test('missing mtime → 400', async () => {
+    const r = await req('PUT', '/api/task-state?id=T1', {
+      body: JSON.stringify({ action: 'approve', gate_id: 'hitl-1' }),
+    })
+    expect(r.status).toBe(400)
   })
 })
 
