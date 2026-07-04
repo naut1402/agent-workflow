@@ -233,17 +233,122 @@ actions:
 - Tạo custom agent hoàn toàn mới ngoài NL wizard (đã có Agent Editor).
 - Phân quyền multi-user trên HITL approve.
 
-## §7. Schedule
+## §7. Breakdown sub-issue (độc lập)
 
-| Phase | Nội dung | Ước tính |
-|---|---|---|
-| **P1** | API `task-state` + HITL click approve UI | 1–2 ngày |
-| **P2** | Agent build wizard (NL → save → job) | 1 ngày |
-| **P3** | `artifact-actions` config + toolbar + run API | 1–2 ngày |
-| **P4** | Tests + e2e capture | 1 ngày |
-| **P5** (optional) | Auto-submit step kế sau approve | 1 ngày |
+U0005 là epic. Mỗi sub-issue là **vertical slice** (API + UI + test riêng), merge được một mình, không chờ sub khác land trước — trừ optional phụ thuộc ghi rõ.
 
-**Thứ tự triển khai đề xuất**: P1 → P3 → P2 (HITL unblock pipeline sớm; quick actions giá trị cao trên artifact; wizard độc lập hơn).
+### Nguyên tắc tách
+
+| Nguyên tắc | Áp dụng |
+|---|---|
+| Một PR = một user-facing outcome | Không tách “chỉ backend” nếu UI không ship cùng |
+| Không chia sẻ file nóng giữa PR song song | Mỗi sub sở hữu file chính; shared nhỏ copy tạm hoặc extract sau |
+| Tái dùng API đã có | `POST /api/jobs`, `POST /api/custom-agents/generate` không thuộc epic |
+| Test nằm trong từng sub | Không có sub “chỉ viết test” |
+
+### Sơ đồ phụ thuộc
+
+```mermaid
+flowchart LR
+  U1[U0005-1 HITL approve]
+  U2[U0005-2 Quick actions]
+  U3[U0005-3 NL agent via runner]
+  U4[U0005-4 Auto-advance sau approve]
+  U1 -.->|optional| U4
+  U2 -.- U3
+```
+
+`U0005-1`, `U0005-2`, `U0005-3` **song song được**. `U0005-4` chỉ sau `U0005-1`.
+
+---
+
+### U0005-1 — Duyệt HITL trên pipeline flow
+
+**Outcome:** Click icon node `waiting` trên monitor → approve/reject → state cập nhật, poll UI phản ánh ngay.
+
+| | |
+|---|---|
+| **Scope** | `PUT /api/task-state`, `server/tasks/state.ts`, schema patch, `PipelineNode` click, modal approve/reject + feedback, `patchTaskState` API client |
+| **Không làm** | Auto-submit step kế; doc-review auto; job runner |
+| **File chính** | `server/tasks/state.ts` (mới), `server/http/routes/tasks.ts`, `shared/schemas/task.ts`, `PipelineNode.vue`, `PipelineView.vue`, `src/api/client.ts` |
+| **Done khi** | Fixture `hitl_pending=hitl-1` → click → approve → `hitl_pending=null`, `current_phase` = step kế; 409 khi mtime lệch; unit + e2e screenshot monitor |
+| **Ước tính** | 1–2 ngày |
+| **Độc lập** | ✅ Không phụ thuộc U0005-2/3 |
+
+---
+
+### U0005-2 — Quick actions trên artifact viewer
+
+**Outcome:** Mở artifact → toolbar hiện nút (vd. “Cải thiện tài liệu”) → submit job agent → reload artifact khi job xong.
+
+| | |
+|---|---|
+| **Scope** | `artifact-actions.yaml` + Zod schema, `GET /api/artifact-actions`, `POST /api/artifact-actions/run`, toolbar `ArtifactPanel`, composable poll job + reload |
+| **Không làm** | HITL; NL wizard; tạo agent mới |
+| **File chính** | `server/artifactActions/` (mới), `shared/schemas/artifactAction.ts`, routes tasks/config, `ArtifactPanel.vue`, `useArtifactAction.ts` (mới) |
+| **Done khi** | Seed action `improve-doc` match `investigate.md`/`design.md`; click → job queued; poll succeeded → content reload; fail → hiện lỗi; unit pattern/prompt + e2e (job mock nếu không có CLI) |
+| **Ước tính** | 1–2 ngày |
+| **Độc lập** | ✅ Chỉ cần `POST /api/jobs` đã có |
+
+**Ghi chú:** Poll job có thể inline trong composable; không bắt buộc extract shared với U0005-3.
+
+---
+
+### U0005-3 — Build agent từ NL qua runner
+
+**Outcome:** Từ monitor (hoặc entry rõ trên UI) mở wizard: mô tả NL → preview draft → lưu custom agent → chọn runner → chạy thử job.
+
+| | |
+|---|---|
+| **Scope** | `AgentBuildWizard.vue`, wire `generate` + save custom-agent + `submitJob`, chọn runner, hiển thị job status |
+| **Không làm** | Sửa generate backend (đã có); HITL; artifact-actions config |
+| **File chính** | `src/features/monitor/components/AgentBuildWizard.vue` (mới), `MonitorLayout.vue` (nút mở), tái dùng API client hiện có |
+| **Done khi** | Generate draft (heuristic hoặc API key); save agent; smoke job qua runner default; lỗi runner disabled có message rõ |
+| **Ước tính** | 1 ngày |
+| **Độc lập** | ✅ Chỉ cần generate + jobs API đã có |
+
+---
+
+### U0005-4 — (Optional) Auto-advance pipeline sau approve
+
+**Outcome:** Sau approve HITL, dashboard tự `submitJob` agent của step kế (dashboard-as-orchestrator-lite).
+
+| | |
+|---|---|
+| **Scope** | Hook sau `applyHitlAction` approve; resolve `step.agent` + prompt template tối thiểu; submit job; ghi metadata job vào state |
+| **Phụ thuộc** | **U0005-1** (bắt buộc) |
+| **Không làm** | Full orchestrator (retry, doc-review loop, Q&A HITL phức tạp) |
+| **Done khi** | Approve investigator gate → job designer queued (khi runner sẵn sàng) |
+| **Ước tính** | 1 ngày |
+| **Độc lập** | ❌ Sau U0005-1 |
+
+---
+
+### Không tách thành sub riêng
+
+| Việc | Lý do |
+|---|---|
+| “Chỉ viết test / e2e” | Gắn vào từng U0005-1/2/3 |
+| Remote sync / `orchestrator-remote.json` | Vận hành đã xong, không phải feature code |
+| Shared `useJobPoll` extract | Làm trong PR thứ hai nếu trùng code; không block |
+| SSE/WebSocket job progress | Out of scope epic; follow-up riêng |
+
+### Thứ tự ưu tiên (khi không chạy song song)
+
+1. **U0005-1** — unblock HITL trên dashboard (giá trị vận hành cao nhất)
+2. **U0005-2** — quick actions (dùng hàng ngày khi đọc doc)
+3. **U0005-3** — NL wizard (ít cấp bách hơn, Agent Editor đã có generate một phần)
+4. **U0005-4** — chỉ khi cần pipeline tự chạy sau approve
+
+### Cách mở subtask orchestrator
+
+```text
+/dev-team-orchestrator U0005-1 --subtask-of=U0005 --remote
+/dev-team-orchestrator U0005-2 --subtask-of=U0005 --remote
+/dev-team-orchestrator U0005-3 --subtask-of=U0005 --remote
+```
+
+Mỗi sub kế thừa `investigate.md` / `design.md` parent; implementer chỉ làm scope sub đó. Parent U0005 đóng khi 1–3 done (4 optional).
 
 ---
 
