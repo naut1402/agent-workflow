@@ -2,7 +2,7 @@
   "task_id": "U0005-3",
   "parent_task_id": "U0005",
   "current_phase": "reviewer",
-  "hitl_pending": null,
+  "hitl_pending": "hitl-3",
   "review_round": 1,
   "auto_review": false,
   "export_json": false,
