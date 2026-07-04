@@ -13,7 +13,7 @@ const STATUS_ICON = { done: '✓', active: '▶', waiting: '⏸', pending: '○'
     <Handle type="target" :position="Position.Left" />
     <div
       class="pnode-bubble"
-      :title="data.status === 'waiting' ? 'Click để duyệt' : undefined"
+      :title="data.status === 'waiting' ? 'Nhấn để duyệt' : undefined"
     >
       {{ STATUS_ICON[data.status] || '○' }}
     </div>

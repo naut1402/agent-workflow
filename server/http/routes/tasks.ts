@@ -170,7 +170,7 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       return j(c, 400, { error: 'invalid patch', details: parsed.error.flatten() })
     }
 
-    const result = await applyHitlAction(root, id, parsed.data, parsed.data.mtime)
+    const result = await applyHitlAction(root, id, parsed.data)
     if ('error' in result) {
       const body: Record<string, unknown> = { error: result.error, id }
       if (result.state) body.state = result.state

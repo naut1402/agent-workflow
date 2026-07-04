@@ -154,43 +154,60 @@ async function resetProfile() {
 
 // HITL approve/reject modal
 const hitlOpen = ref(false)
+const hitlTaskId = ref('')
 const hitlGateId = ref('')
 const hitlLabel = ref('')
+const hitlMtime = ref<number | null>(null)
 const hitlFeedback = ref('')
 const hitlBusy = ref(false)
 const hitlError = ref('')
 const hitlToast = ref('')
 
-function onNodeClick({ node }) {
-  if (node.data?.status !== 'waiting' || !node.data?.hitl) return
-  hitlGateId.value = node.data.hitl
-  hitlLabel.value = node.data.label || node.id
+const waitingPhase = computed(() =>
+  phases.value.find((p) => phaseStatus(p, props.task) === 'waiting' && p.hitl),
+)
+
+function openHitlModal(phase: { key: string; label: string; hitl: string | null }) {
+  if (!phase.hitl) return
+  hitlTaskId.value = props.task.task_id
+  hitlMtime.value = props.task.state_mtime ?? null
+  hitlGateId.value = phase.hitl
+  hitlLabel.value = phase.label || phase.key
   hitlFeedback.value = ''
   hitlError.value = ''
   hitlOpen.value = true
 }
 
+function onNodeClick({ node }) {
+  if (node.data?.status !== 'waiting' || !node.data?.hitl) return
+  openHitlModal({ key: node.id, label: node.data.label, hitl: node.data.hitl })
+}
+
 async function submitHitl(action: 'approve' | 'reject') {
+  if (hitlMtime.value == null) {
+    hitlError.value = 'Thiếu thời gian cập nhật state — vui lòng làm mới trang.'
+    return
+  }
   hitlBusy.value = true
   hitlError.value = ''
   try {
     await patchTaskState(
-      props.task.task_id,
+      hitlTaskId.value,
       {
         action,
         gate_id: hitlGateId.value,
         feedback: action === 'reject' ? hitlFeedback.value : undefined,
-        mtime: props.task.state_mtime,
+        mtime: hitlMtime.value,
       },
       props.projectId ?? undefined,
     )
     hitlOpen.value = false
-    hitlToast.value = action === 'approve' ? 'Đã duyệt phase.' : 'Đã từ chối — ghi feedback.'
+    hitlToast.value = action === 'approve' ? 'Đã duyệt bước.' : 'Đã từ chối — đã ghi phản hồi.'
     emit('hitl-action')
     setTimeout(() => { hitlToast.value = '' }, 3000)
   } catch (e: any) {
     if (e?.status === 409) {
-      hitlError.value = 'State đã thay đổi (conflict). Đang làm mới…'
+      hitlError.value = 'Trạng thái đã thay đổi. Đang làm mới…'
       emit('hitl-action')
     } else {
       hitlError.value = String(e.message || e)
@@ -205,6 +222,14 @@ async function submitHitl(action: 'approve' | 'reject') {
   <section class="pipeline-wrap">
     <div class="pipeline-toolbar">
       <span v-if="hitlToast" class="chip chip-ok">{{ hitlToast }}</span>
+      <button
+        v-if="waitingPhase"
+        type="button"
+        class="btn-edit-profile"
+        @click="openHitlModal(waitingPhase)"
+      >
+        ⏸ Duyệt HITL
+      </button>
       <span v-if="customProfile" class="chip chip-custom">flow profile tùy chỉnh</span>
       <button class="btn-edit-profile" @click="openEditor">⚙ flow profile</button>
     </div>
@@ -270,10 +295,10 @@ async function submitHitl(action: 'approve' | 'reject') {
           <button class="modal-close" @click="hitlOpen = false">✕</button>
         </div>
         <p class="modal-hint">
-          Gate <code>{{ hitlGateId }}</code> đang chờ duyệt cho task <strong>{{ task.task_id }}</strong>.
+          Cổng <code>{{ hitlGateId }}</code> đang chờ duyệt cho task <strong>{{ hitlTaskId }}</strong>.
         </p>
         <label class="hitl-feedback-label">
-          Feedback (khi từ chối)
+          Phản hồi (khi từ chối)
           <textarea v-model="hitlFeedback" class="profile-editor hitl-feedback" rows="3" />
         </label>
         <p v-if="hitlError" class="editor-error">{{ hitlError }}</p>

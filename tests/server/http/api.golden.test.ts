@@ -189,6 +189,13 @@ describe('PUT /api/task-state', () => {
 
   test('invalid task id → 400', async () => {
     const r = await req('PUT', '/api/task-state?id=bad/id', {
+      body: JSON.stringify({ action: 'approve', gate_id: 'hitl-1', mtime: 1 }),
+    })
+    expect(r.status).toBe(400)
+  })
+
+  test('missing mtime → 400', async () => {
+    const r = await req('PUT', '/api/task-state?id=T1', {
       body: JSON.stringify({ action: 'approve', gate_id: 'hitl-1' }),
     })
     expect(r.status).toBe(400)

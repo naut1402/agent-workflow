@@ -66,15 +66,17 @@ describe('applyHitlAction', () => {
       `version: 1\nsteps:\n  - id: designer\n    hitl: { mode: manual, gate_id: hitl-2 }\n  - id: implementer\n`,
       'utf8',
     )
-    await seedTask(root, 'T2', {
+    const stateFile = await seedTask(root, 'T2', {
       current_phase: 'designer',
       hitl_pending: 'hitl-2',
     })
+    const before = (await fs.stat(stateFile)).mtimeMs
 
     const result = await applyHitlAction(root, 'T2', {
       action: 'reject',
       gate_id: 'hitl-2',
       feedback: 'cần bổ sung §4',
+      mtime: before,
     })
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -106,10 +108,38 @@ describe('applyHitlAction', () => {
     expect(result.error).toBe('conflict')
   })
 
+  test('approve accepts legacy hitl_pending boolean', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    const stateFile = await seedTask(root, 'T5', {
+      current_phase: 'investigator',
+      hitl_pending: true,
+    })
+    const before = (await fs.stat(stateFile)).mtimeMs
+
+    const result = await applyHitlAction(root, 'T5', {
+      action: 'approve',
+      gate_id: 'hitl-1',
+      mtime: before,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.current_phase).toBe('designer')
+  })
+
   test('gate mismatch → 400', async () => {
     const root = await tmp()
-    await seedTask(root, 'T4', { current_phase: 'designer', hitl_pending: 'hitl-2' })
-    const result = await applyHitlAction(root, 'T4', { action: 'approve', gate_id: 'hitl-1' })
+    const stateFile = await seedTask(root, 'T4', { current_phase: 'designer', hitl_pending: 'hitl-2' })
+    const before = (await fs.stat(stateFile)).mtimeMs
+    const result = await applyHitlAction(root, 'T4', {
+      action: 'approve',
+      gate_id: 'hitl-1',
+      mtime: before,
+    })
     expect(result.ok).toBe(false)
     if (!('error' in result)) return
     expect(result.status).toBe(400)

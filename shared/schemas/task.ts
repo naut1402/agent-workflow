@@ -35,7 +35,7 @@ export const TaskStatePatch = z.object({
   action: z.enum(['approve', 'reject']),
   gate_id: z.string().min(1),
   feedback: z.string().optional(),
-  mtime: z.number().optional(),
+  mtime: z.number(),
 })
 
 export type TaskStatePatch = z.infer<typeof TaskStatePatch>

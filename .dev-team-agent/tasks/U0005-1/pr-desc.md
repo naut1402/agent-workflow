@@ -86,7 +86,7 @@ Part of #56 — sub-issue U0005-1: click icon pipeline `waiting` để approve/r
 
 ## Commit message đề xuất
 
-```
+```text
 feat(monitor): add PUT /api/task-state for dashboard HITL approve
 
 Refs: U0005-1
