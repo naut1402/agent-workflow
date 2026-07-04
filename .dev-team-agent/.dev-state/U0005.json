@@ -1,13 +1,14 @@
 {
   "task_id": "U0005",
   "parent_task_id": null,
-  "current_phase": "designer",
-  "hitl_pending": "hitl-2",
+  "current_phase": "completed",
+  "hitl_pending": null,
   "review_round": 0,
   "auto_review": false,
   "export_json": false,
-  "doc_review_round": {},
+  "doc_review_round": { "investigate": 0, "design": 0 },
   "inherit_from_parent": [],
+  "subtasks": ["U0005-1", "U0005-2", "U0005-3"],
   "remote_dashboard": {
     "serverUrl": "https://agent-workflow.bienhoa-hive.io.vn",
     "projectId": "agent-workflow-1-797abf08",
