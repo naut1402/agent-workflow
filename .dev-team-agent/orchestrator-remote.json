@@ -6,5 +6,8 @@
   "runnerId": null,
   "syncAfterState": true,
   "syncAfterStep": true,
-  "syncMessage": "chore(dev-team): sync orchestrator artifacts"
+  "syncMessage": "chore(dev-team): sync orchestrator artifacts",
+  "projectName": "agent-workflow-1",
+  "resolvedAt": "2026-07-04T14:49:33.059Z",
+  "resolvedBy": "projectId"
 }

@@ -180,6 +180,22 @@ async function onRemove(project: { id: string; name: string; default?: boolean }
     busy.value = false
   }
 }
+
+async function copyProjectId(id: string) {
+  try {
+    await navigator.clipboard.writeText(id)
+  } catch {
+    // Fallback for non-secure contexts
+    const ta = document.createElement('textarea')
+    ta.value = id
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+  }
+}
 </script>
 
 <template>
@@ -197,11 +213,20 @@ async function onRemove(project: { id: string; name: string; default?: boolean }
         :class="{ active: p.id === selectedId }"
       >
         <button class="project-pick" type="button" @click="emit('select', p.id)">
-          <span class="project-name">{{ p.name }}</span>
+          <span class="project-pick-text">
+            <span class="project-name">{{ p.name }}</span>
+            <span class="project-id" :title="p.id">{{ p.id }}</span>
+          </span>
           <span v-if="p.kind === 'git'" class="project-git-badge" title="Git workspace">git</span>
           <span v-if="p.kind === 'ssh'" class="project-ssh-badge" title="SSH remote">SSH</span>
           <span v-if="p.default" class="project-default-badge">default</span>
         </button>
+        <button
+          class="project-copy-id"
+          type="button"
+          :title="`Copy id: ${p.id}`"
+          @click.stop="copyProjectId(p.id)"
+        >⧉</button>
         <button
           v-if="p.kind === 'git'"
           class="project-sync"
@@ -374,8 +399,34 @@ async function onRemove(project: { id: string; name: string; default?: boolean }
   text-align: left;
   padding: 5px 6px;
   overflow: hidden;
+  min-width: 0;
+}
+.project-pick-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
 }
 .project-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-id {
+  font-size: 10px;
+  opacity: 0.55;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-copy-id {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.45;
+  padding: 0 4px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.project-copy-id:hover { opacity: 1; }
 .project-git-badge {
   font-size: 10px;
   opacity: 0.75;
