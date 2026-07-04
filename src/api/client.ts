@@ -287,8 +287,8 @@ export async function fetchCustomAgent(name: string) {
   return r.json()
 }
 
-export async function saveCustomAgent(draft: unknown) {
-  const r = await apiFetch('/api/custom-agents', {
+export async function saveCustomAgent(draft: unknown, projectId?: string) {
+  const r = await apiFetch(`/api/custom-agents${qs({ project: projectId })}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ draft }),
@@ -512,8 +512,8 @@ export async function fetchCredentials() {
   return r.json()
 }
 
-export async function submitJob(payload: unknown) {
-  const r = await apiFetch('/api/jobs', {
+export async function submitJob(payload: unknown, projectId?: string) {
+  const r = await apiFetch(`/api/jobs${qs({ project: projectId })}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -565,24 +565,32 @@ export interface BuildAndRunAgentInput {
   metadata?: Record<string, unknown>
 }
 
-// Persist a custom agent then submit a smoke job that runs it via `custom:<name>`.
+export interface BuildAndRunAgentResult {
+  name: string
+  job?: { id?: string; status?: string; logPath?: string; [key: string]: unknown }
+}
+
+// Persist a custom agent then submit a smoke job that runs it via `dashboard:<name>`.
 // Composes the existing `saveCustomAgent` + `submitJob` so the wizard has one
 // call, and so the compose logic is unit-testable without rendering.
 export async function buildAndRunAgent(
   input: BuildAndRunAgentInput,
-): Promise<{ name: string; job: any }> {
-  const saved = await saveCustomAgent(input.draft)
+): Promise<BuildAndRunAgentResult> {
+  const saved = await saveCustomAgent(input.draft, input.projectId)
   const name: string | undefined = saved?.name
   if (!name) throw new Error('Không lưu được custom agent (server không trả về tên).')
-  const res = await submitJob({
-    runnerId: input.runnerId,
-    agentRef: `custom:${name}`,
-    workspace: input.workspace,
-    userPrompt: input.userPrompt,
-    metadata: {
-      ...(input.metadata ?? {}),
-      ...(input.projectId ? { projectId: input.projectId } : {}),
+  const res = await submitJob(
+    {
+      runnerId: input.runnerId,
+      agentRef: `dashboard:${name}`,
+      workspace: input.workspace,
+      userPrompt: input.userPrompt,
+      metadata: {
+        ...(input.metadata ?? {}),
+        ...(input.projectId ? { projectId: input.projectId } : {}),
+      },
     },
-  })
+    input.projectId,
+  )
   return { name, job: res?.job }
 }
