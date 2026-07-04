@@ -2,14 +2,92 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../types.js'
 import { j } from '../respond.js'
 import { emitAudit } from '../../logging/store.js'
-import { AddSshProjectBodySchema, parseAddProjectRequest } from '../../../shared/schemas/project.js'
+import { AddSshProjectBodySchema, parseAddProjectRequest, type Project } from '../../../shared/schemas/project.js'
+import { normalizeGitUrlForMatch } from '../../../shared/git/url.js'
 import { pullArtifacts, getRunnerForProject } from '../../workspace/sshSync.js'
 import { getCredential } from '../../runners/credentials.js'
 
 const pullCacheInFlight = new Set<string>()
 
+function projectSummary(p: Project) {
+  return {
+    id: p.id,
+    name: p.name,
+    kind: p.kind,
+    default: Boolean(p.default),
+    source: p.source
+      ? { url: p.source.url, branch: p.source.branch ?? null }
+      : null,
+  }
+}
+
 // Project registry CRUD — no per-project root needed.
 export function registerRegistryRoutes(app: Hono<HonoEnv>): void {
+  app.get('/api/projects/resolve', (c) => {
+    const { registry } = c.get('ctx')
+    const gitUrl = (c.req.query('gitUrl') || '').trim()
+    const branch = (c.req.query('branch') || '').trim()
+    if (!gitUrl) return j(c, 400, { error: 'gitUrl is required' })
+
+    const want = normalizeGitUrlForMatch(gitUrl)
+    if (!want) return j(c, 400, { error: 'invalid gitUrl' })
+
+    const { projects, defaultId } = registry.list()
+    const urlMatches = projects.filter((p) => {
+      if (!p.source?.url) return false
+      const got = normalizeGitUrlForMatch(p.source.url)
+      return got !== null && got === want
+    })
+
+    if (branch) {
+      const branchMatches = urlMatches.filter((p) => (p.source?.branch || '') === branch)
+      if (branchMatches.length === 1) {
+        return j(c, 200, {
+          project: branchMatches[0],
+          resolvedBy: 'gitUrl+branch',
+          candidates: branchMatches.map(projectSummary),
+        })
+      }
+      if (branchMatches.length > 1) {
+        return j(c, 409, {
+          error: 'multiple projects match gitUrl+branch',
+          candidates: branchMatches.map(projectSummary),
+        })
+      }
+      // Branch miss: if exactly one URL match, accept it (feature branch → registered branch).
+      if (urlMatches.length === 1) {
+        return j(c, 200, {
+          project: urlMatches[0],
+          resolvedBy: 'gitUrl',
+          candidates: urlMatches.map(projectSummary),
+        })
+      }
+      if (urlMatches.length > 1) {
+        return j(c, 409, {
+          error: 'no project matches branch; multiple projects share gitUrl',
+          candidates: urlMatches.map(projectSummary),
+        })
+      }
+    } else if (urlMatches.length === 1) {
+      return j(c, 200, {
+        project: urlMatches[0],
+        resolvedBy: 'gitUrl',
+        candidates: urlMatches.map(projectSummary),
+      })
+    } else if (urlMatches.length > 1) {
+      return j(c, 409, {
+        error: 'multiple projects match gitUrl',
+        candidates: urlMatches.map(projectSummary),
+      })
+    }
+
+    return j(c, 404, {
+      error: 'no project matches gitUrl',
+      candidates: projects.map(projectSummary),
+      defaultId,
+    })
+  })
+
   app.get('/api/projects', (c) => {
     const { registry } = c.get('ctx')
     const id = c.req.query('id')
@@ -17,6 +95,16 @@ export function registerRegistryRoutes(app: Hono<HonoEnv>): void {
       const project = registry.get(id)
       if (!project) return j(c, 404, { error: 'unknown project', id })
       return j(c, 200, { project })
+    }
+    const name = (c.req.query('name') || '').trim()
+    if (name) {
+      const { projects, defaultId } = registry.list()
+      const matches = projects.filter((p) => p.name === name)
+      return j(c, 200, {
+        projects: matches,
+        defaultId,
+        candidates: matches.map(projectSummary),
+      })
     }
     return j(c, 200, registry.list())
   })

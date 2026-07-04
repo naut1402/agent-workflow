@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { validateGitUrl } from '../../../shared/git/url'
+import { normalizeGitUrlForMatch, validateGitUrl } from '../../../shared/git/url'
 
 describe('validateGitUrl', () => {
   it('accepts public https URL', () => {
@@ -29,5 +29,33 @@ describe('validateGitUrl', () => {
 
   it('rejects empty', () => {
     expect(validateGitUrl('  ').ok).toBe(false)
+  })
+})
+
+describe('normalizeGitUrlForMatch', () => {
+  it('matches https with and without .git', () => {
+    expect(normalizeGitUrlForMatch('https://github.com/org/repo.git')).toBe(
+      'github.com/org/repo',
+    )
+    expect(normalizeGitUrlForMatch('https://github.com/org/repo')).toBe('github.com/org/repo')
+  })
+
+  it('matches SCP-like SSH form', () => {
+    expect(normalizeGitUrlForMatch('git@github.com:org/repo.git')).toBe('github.com/org/repo')
+  })
+
+  it('is case-insensitive on host', () => {
+    expect(normalizeGitUrlForMatch('https://GitHub.com/Org/Repo.git')).toBe(
+      'github.com/org/repo',
+    )
+  })
+
+  it('returns null for empty', () => {
+    expect(normalizeGitUrlForMatch('')).toBe(null)
+  })
+
+  it('returns null for SCP-like SSH with empty repo path', () => {
+    expect(normalizeGitUrlForMatch('git@github.com:/')).toBe(null)
+    expect(normalizeGitUrlForMatch('git@github.com://')).toBe(null)
   })
 })
