@@ -29,7 +29,7 @@ afterEach(() => {
 })
 
 describe('buildAndRunAgent', () => {
-  it('saves the agent then submits a job with agentRef custom:<name>', async () => {
+  it('saves the agent then submits a job with agentRef dashboard:<name>', async () => {
     const { calls } = stubApi({ saved: true, name: 'code-reviewer' }, { job: { id: 'job1', status: 'queued' } })
 
     const res = await buildAndRunAgent({
@@ -47,8 +47,11 @@ describe('buildAndRunAgent', () => {
     expect(calls[0].url).toContain('/api/custom-agents')
     expect(calls[1].url).toContain('/api/jobs')
 
+    expect(calls[0].url).toContain('project=proj-b')
+    expect(calls[1].url).toContain('project=proj-b')
+
     const jobBody = calls[1].body
-    expect(jobBody.agentRef).toBe('custom:code-reviewer')
+    expect(jobBody.agentRef).toBe('dashboard:code-reviewer')
     expect(jobBody.workspace).toBe('tasks/T1')
     expect(jobBody.userPrompt).toBe('smoke')
     expect(jobBody.runnerId).toBe('r1')
@@ -79,6 +82,8 @@ describe('buildAndRunAgent', () => {
 
     await buildAndRunAgent({ draft: { name: 'a' }, userPrompt: 's', workspace: 'custom-agents' })
 
+    expect(calls[0].url).not.toContain('project=')
+    expect(calls[1].url).not.toContain('project=')
     expect(calls[1].body.metadata).toEqual({})
   })
 })
