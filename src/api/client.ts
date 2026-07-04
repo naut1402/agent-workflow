@@ -550,3 +550,39 @@ export async function fetchJobLog(id: string) {
   if (!r.ok) throw new Error(`/api/jobs/${id}/log → ${r.status}`)
   return r.json()
 }
+
+// ── Composed helpers ─────────────────────────────────────────────────────────
+
+export interface BuildAndRunAgentInput {
+  // AgentDraft to persist (name, description, skills, sections, …).
+  draft: unknown
+  // Smoke prompt sent to the runner to validate the freshly-built agent.
+  userPrompt: string
+  // Job workspace: task dir (`tasks/<id>`) when opened from a task, else sandbox.
+  workspace: string
+  runnerId?: string
+  projectId?: string
+  metadata?: Record<string, unknown>
+}
+
+// Persist a custom agent then submit a smoke job that runs it via `custom:<name>`.
+// Composes the existing `saveCustomAgent` + `submitJob` so the wizard has one
+// call, and so the compose logic is unit-testable without rendering.
+export async function buildAndRunAgent(
+  input: BuildAndRunAgentInput,
+): Promise<{ name: string; job: any }> {
+  const saved = await saveCustomAgent(input.draft)
+  const name: string | undefined = saved?.name
+  if (!name) throw new Error('Không lưu được custom agent (server không trả về tên).')
+  const res = await submitJob({
+    runnerId: input.runnerId,
+    agentRef: `custom:${name}`,
+    workspace: input.workspace,
+    userPrompt: input.userPrompt,
+    metadata: {
+      ...(input.metadata ?? {}),
+      ...(input.projectId ? { projectId: input.projectId } : {}),
+    },
+  })
+  return { name, job: res?.job }
+}
