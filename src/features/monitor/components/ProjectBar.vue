@@ -224,7 +224,7 @@ async function copyProjectId(id: string) {
         <button
           class="project-copy-id"
           type="button"
-          :title="`Copy id: ${p.id}`"
+          :title="`Sao chép id: ${p.id}`"
           @click.stop="copyProjectId(p.id)"
         >⧉</button>
         <button

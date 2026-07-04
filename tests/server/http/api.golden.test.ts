@@ -365,6 +365,13 @@ describe('project registry routes', () => {
 
     const resolveNoUrl = await req('GET', '/api/projects/resolve')
     expect(resolveNoUrl.status).toBe(400)
+
+    const resolveInvalid = await req(
+      'GET',
+      '/api/projects/resolve?gitUrl=not-a-valid-url',
+    )
+    expect(resolveInvalid.status).toBe(400)
+    expect((await resolveInvalid.json()).error).toBe('invalid gitUrl')
   })
 })
 

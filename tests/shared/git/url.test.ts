@@ -53,4 +53,9 @@ describe('normalizeGitUrlForMatch', () => {
   it('returns null for empty', () => {
     expect(normalizeGitUrlForMatch('')).toBe(null)
   })
+
+  it('returns null for SCP-like SSH with empty repo path', () => {
+    expect(normalizeGitUrlForMatch('git@github.com:/')).toBe(null)
+    expect(normalizeGitUrlForMatch('git@github.com://')).toBe(null)
+  })
 })

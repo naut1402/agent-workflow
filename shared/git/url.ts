@@ -32,6 +32,7 @@ export function normalizeGitUrlForMatch(urlStr: string): string | null {
   if (scp) {
     const host = scp[1].toLowerCase()
     const repoPath = scp[2].replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '')
+    if (!host || !repoPath) return null
     return `${host}/${repoPath}`.toLowerCase()
   }
 
