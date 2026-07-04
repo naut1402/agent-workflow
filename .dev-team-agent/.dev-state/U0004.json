@@ -1,0 +1,20 @@
+{
+  "task_id": "U0004",
+  "parent_task_id": null,
+  "current_phase": "completed",
+  "hitl_pending": null,
+  "review_round": 0,
+  "auto_review": false,
+  "export_json": false,
+  "doc_review_round": {},
+  "inherit_from_parent": [],
+  "implementation": {
+    "branch": "feat/U0004/pipeline-profile-roundtrip",
+    "worktree": null,
+    "commit": "480b589"
+  },
+  "pr_url": "https://github.com/naut1402/agent-workflow/pull/46",
+  "completed_via_pr": "https://github.com/naut1402/agent-workflow/pull/46",
+  "completed_at": "2026-07-02",
+  "merge_commit": "990b77d3b454961710f7f69c40ef59aed7090307"
+}

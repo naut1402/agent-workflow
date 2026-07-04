@@ -1,0 +1,97 @@
+version: 1
+defaults:
+  review_retry_max: 2
+  auto_review: false
+  export_json: false
+steps:
+  - export_key: investigator
+    id: investigator
+    name: Investigate
+    agent: dev-agent-teams:investigator
+    skills:
+      - survey-codebase
+    rule_category: doc-writing
+    rule_required: true
+    produces:
+      - investigate.md
+    knowledge_inputs: []
+    hitl:
+      mode: manual
+      gate_id: hitl-1
+      optional_doc_review: true
+  - export_key: designer
+    id: designer
+    name: Design
+    agent: dev-agent-teams:designer
+    skills:
+      - write-design
+    rule_category: doc-writing
+    rule_required: true
+    produces:
+      - design.md
+    knowledge_inputs: []
+    hitl:
+      mode: auto
+      gate_id: hitl-2
+      optional_doc_review: true
+      blocking: false
+  - rule_fallback_skill: coding-rules
+    export_key: implementer
+    id: implementer
+    name: Implement
+    agent: dev-agent-teams:implementer
+    skills:
+      - coding-rules
+    rule_category: coding
+    rule_required: false
+    produces:
+      - typecheck.md
+    knowledge_inputs: []
+    hitl:
+      mode: none
+  - rule_fallback_skill: coding-rules
+    export_key: reviewer
+    hitl:
+      retry:
+        'on': must_fix
+        restart_from: implementer
+        max: 2
+      mode: auto
+      gate_id: hitl-3
+      optional_doc_review: false
+      blocking: true
+    id: reviewer
+    name: Review
+    agent: dev-agent-teams:reviewer
+    skills:
+      - coding-rules
+      - write-tests
+    rule_category:
+      - coding
+      - test
+    rule_required: false
+    produces:
+      - review.md
+      - test-spec.md
+    knowledge_inputs: []
+  - rule_fallback_skill: create-pr
+    export_key: pr_creator
+    id: pr-creator
+    name: PR
+    agent: dev-agent-teams:pr-creator
+    skills:
+      - create-pr
+    rule_category: git-pr
+    rule_required: false
+    produces:
+      - pr-desc.md
+    knowledge_inputs: []
+    hitl:
+      mode: none
+doc_reviewer:
+  agent: dev-agent-teams:doc-reviewer
+  skills:
+    - doc-review
+  rule_category: doc-review
+  rule_required: false
+steps_replace: true

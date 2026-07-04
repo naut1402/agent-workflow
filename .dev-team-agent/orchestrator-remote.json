@@ -1,0 +1,10 @@
+{
+  "serverUrl": "https://agent-workflow.bienhoa-hive.io.vn",
+  "projectId": "agent-workflow-1-797abf08",
+  "apiToken": null,
+  "runnerMode": "local",
+  "runnerId": null,
+  "syncAfterState": true,
+  "syncAfterStep": true,
+  "syncMessage": "chore(dev-team): sync orchestrator artifacts"
+}

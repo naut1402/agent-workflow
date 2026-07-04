@@ -1,0 +1,16 @@
+{
+  "task_id": "U0003-4",
+  "parent_task_id": null,
+  "current_phase": "investigator",
+  "hitl_pending": null,
+  "review_round": 0,
+  "auto_review": false,
+  "export_json": false,
+  "doc_review_round": {},
+  "inherit_from_parent": [],
+  "github_issue": 43,
+  "github_parent": 39,
+  "github_epic": "F0003.4",
+  "depends_on": ["U0003"],
+  "issue_url": "https://github.com/naut1402/agent-workflow/issues/43"
+}

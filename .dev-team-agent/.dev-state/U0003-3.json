@@ -1,0 +1,20 @@
+{
+  "task_id": "U0003-3",
+  "parent_task_id": null,
+  "current_phase": "completed",
+  "hitl_pending": null,
+  "review_round": 0,
+  "auto_review": false,
+  "export_json": false,
+  "doc_review_round": {},
+  "inherit_from_parent": [],
+  "github_issue": 42,
+  "github_parent": 39,
+  "github_epic": "F0003.3",
+  "depends_on": ["U0003", "U0003-2"],
+  "issue_url": "https://github.com/naut1402/agent-workflow/issues/42",
+  "completed_via_pr": "https://github.com/naut1402/agent-workflow/pull/48",
+  "merged_at": "2026-07-02T18:04:38Z",
+  "merge_commit": "e8e1fdbf8ae063f7ee03a716bc103b261203d78f",
+  "completed_at": "2026-07-02"
+}
