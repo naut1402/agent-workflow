@@ -18,7 +18,7 @@ defineProps({
   lastUpdated: { type: String, default: '' },
 })
 
-const emit = defineEmits(['select-project', 'projects-changed', 'select-task', 'open-artifact', 'qa-saved'])
+const emit = defineEmits(['select-project', 'projects-changed', 'select-task', 'open-artifact', 'qa-saved', 'hitl-action'])
 </script>
 
 <template>
@@ -62,7 +62,11 @@ const emit = defineEmits(['select-project', 'projects-changed', 'select-task', '
           @saved="emit('qa-saved')"
         />
 
-        <PipelineView :task="selected" />
+        <PipelineView
+          :task="selected"
+          :project-id="selectedProjectId"
+          @hitl-action="emit('hitl-action')"
+        />
 
         <ArtifactPanel
           :task="selected"

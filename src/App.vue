@@ -223,6 +223,7 @@ onUnmounted(stop)
         @select-task="selectedId = $event"
         @open-artifact="handleOpenArtifact"
         @qa-saved="poll"
+        @hitl-action="poll"
       />
     </main>
 

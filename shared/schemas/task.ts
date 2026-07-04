@@ -30,6 +30,16 @@ export const TaskState = z
 
 export type TaskState = z.infer<typeof TaskState>
 
+/** Body for dashboard HITL approve/reject (`PUT /api/task-state`). */
+export const TaskStatePatch = z.object({
+  action: z.enum(['approve', 'reject']),
+  gate_id: z.string().min(1),
+  feedback: z.string().optional(),
+  mtime: z.number().optional(),
+})
+
+export type TaskStatePatch = z.infer<typeof TaskStatePatch>
+
 /** UI-facing projection of task state with the same safe defaults the API applies. */
 export interface TaskStateView {
   parent_task_id: string | null

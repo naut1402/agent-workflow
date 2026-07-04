@@ -2,12 +2,15 @@
 import { ref, computed, watch, markRaw } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { phasesFromPipeline, phaseStatus, fetchFlowProfile, saveFlowProfile } from '../../../api'
+import { phasesFromPipeline, phaseStatus, fetchFlowProfile, saveFlowProfile, patchTaskState } from '../../../api'
 import PipelineNode from './PipelineNode.vue'
 
 const props = defineProps({
   task: { type: Object, required: true },
+  projectId: { type: [String, null], default: null },
 })
+
+const emit = defineEmits(['hitl-action'])
 
 const nodeTypes = { pipeline: markRaw(PipelineNode) }
 
@@ -57,6 +60,7 @@ const nodes = computed(() =>
       data: {
         label: p.label,
         status: phaseStatus(p, props.task),
+        hitl: p.hitl,
         // Q&A badge only on the phase that's currently active (the one that created qa.md)
         qa_count: isActivePhase ? (props.task.qa_count ?? 0) : 0,
       },
@@ -147,11 +151,60 @@ async function resetProfile() {
     saving.value = false
   }
 }
+
+// HITL approve/reject modal
+const hitlOpen = ref(false)
+const hitlGateId = ref('')
+const hitlLabel = ref('')
+const hitlFeedback = ref('')
+const hitlBusy = ref(false)
+const hitlError = ref('')
+const hitlToast = ref('')
+
+function onNodeClick({ node }) {
+  if (node.data?.status !== 'waiting' || !node.data?.hitl) return
+  hitlGateId.value = node.data.hitl
+  hitlLabel.value = node.data.label || node.id
+  hitlFeedback.value = ''
+  hitlError.value = ''
+  hitlOpen.value = true
+}
+
+async function submitHitl(action: 'approve' | 'reject') {
+  hitlBusy.value = true
+  hitlError.value = ''
+  try {
+    await patchTaskState(
+      props.task.task_id,
+      {
+        action,
+        gate_id: hitlGateId.value,
+        feedback: action === 'reject' ? hitlFeedback.value : undefined,
+        mtime: props.task.state_mtime,
+      },
+      props.projectId ?? undefined,
+    )
+    hitlOpen.value = false
+    hitlToast.value = action === 'approve' ? 'Đã duyệt phase.' : 'Đã từ chối — ghi feedback.'
+    emit('hitl-action')
+    setTimeout(() => { hitlToast.value = '' }, 3000)
+  } catch (e: any) {
+    if (e?.status === 409) {
+      hitlError.value = 'State đã thay đổi (conflict). Đang làm mới…'
+      emit('hitl-action')
+    } else {
+      hitlError.value = String(e.message || e)
+    }
+  } finally {
+    hitlBusy.value = false
+  }
+}
 </script>
 
 <template>
   <section class="pipeline-wrap">
     <div class="pipeline-toolbar">
+      <span v-if="hitlToast" class="chip chip-ok">{{ hitlToast }}</span>
       <span v-if="customProfile" class="chip chip-custom">flow profile tùy chỉnh</span>
       <button class="btn-edit-profile" @click="openEditor">⚙ flow profile</button>
     </div>
@@ -167,6 +220,7 @@ async function resetProfile() {
         :nodes-draggable="true"
         :elements-selectable="false"
         @node-drag-stop="onNodeDragStop"
+        @node-click="onNodeClick"
         class="vflow"
       />
     </div>
@@ -201,6 +255,32 @@ async function resetProfile() {
           <button class="btn-ghost" @click="resetProfile" :disabled="saving">Reset về mặc định</button>
           <button class="btn-primary" @click="saveProfile" :disabled="saving">
             {{ saving ? 'Đang lưu…' : 'Lưu profile' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- HITL approve modal -->
+  <Teleport to="body">
+    <div v-if="hitlOpen" class="modal-backdrop" @click.self="hitlOpen = false">
+      <div class="modal">
+        <div class="modal-head">
+          <span>Duyệt HITL — {{ hitlLabel }}</span>
+          <button class="modal-close" @click="hitlOpen = false">✕</button>
+        </div>
+        <p class="modal-hint">
+          Gate <code>{{ hitlGateId }}</code> đang chờ duyệt cho task <strong>{{ task.task_id }}</strong>.
+        </p>
+        <label class="hitl-feedback-label">
+          Feedback (khi từ chối)
+          <textarea v-model="hitlFeedback" class="profile-editor hitl-feedback" rows="3" />
+        </label>
+        <p v-if="hitlError" class="editor-error">{{ hitlError }}</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" :disabled="hitlBusy" @click="submitHitl('reject')">Từ chối</button>
+          <button class="btn-primary" :disabled="hitlBusy" @click="submitHitl('approve')">
+            {{ hitlBusy ? 'Đang lưu…' : 'Duyệt' }}
           </button>
         </div>
       </div>

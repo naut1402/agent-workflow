@@ -121,6 +121,26 @@ export async function fetchTasks(projectId?: string) {
   return r.json()
 }
 
+export async function patchTaskState(
+  id: string,
+  body: { action: 'approve' | 'reject'; gate_id: string; feedback?: string; mtime?: number },
+  projectId?: string,
+) {
+  const r = await apiFetch(`/api/task-state${qs({ id, project: projectId })}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) {
+    const err = new Error(data.error || `/api/task-state PUT → ${r.status}`)
+    ;(err as any).status = r.status
+    ;(err as any).data = data
+    throw err
+  }
+  return data
+}
+
 export async function fetchArtifact(id: string, name: string, projectId?: string) {
   const r = await apiFetch(`/api/artifact${qs({ id, name, project: projectId })}`)
   if (!r.ok) throw new Error(`/api/artifact ${name} → ${r.status}`)
