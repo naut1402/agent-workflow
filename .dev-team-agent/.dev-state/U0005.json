@@ -9,6 +9,13 @@
   "doc_review_round": { "investigate": 0, "design": 0 },
   "inherit_from_parent": [],
   "subtasks": ["U0005-1", "U0005-2", "U0005-3"],
+  "epic_branch": "feat/U0005/dashboard-agent-integration",
+  "epic_issue": 56,
+  "sub_issues": {
+    "U0005-1": 57,
+    "U0005-2": 58,
+    "U0005-3": 59
+  },
   "remote_dashboard": {
     "serverUrl": "https://agent-workflow.bienhoa-hive.io.vn",
     "projectId": "agent-workflow-1-797abf08",
