@@ -1,0 +1,7 @@
+# U0005-1 — skip investigate/design (kế thừa parent U0005)
+version: 1
+steps:
+  - id: investigator
+    remove: true
+  - id: designer
+    remove: true

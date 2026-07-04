@@ -1,0 +1,16 @@
+{
+  "task_id": "U0005-1",
+  "parent_task_id": "U0005",
+  "current_phase": "implementer",
+  "hitl_pending": null,
+  "review_round": 0,
+  "auto_review": false,
+  "export_json": false,
+  "doc_review_round": {},
+  "inherit_from_parent": ["investigate.md", "design.md"],
+  "remote_dashboard": {
+    "serverUrl": "https://agent-workflow.bienhoa-hive.io.vn",
+    "projectId": "agent-workflow-1-797abf08",
+    "runnerMode": "local"
+  }
+}
