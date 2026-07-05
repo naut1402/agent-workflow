@@ -1,5 +1,0 @@
-blank_issues_enabled: true
-contact_links:
-  - name: Quy ước phát triển (AGENTS.md)
-    url: https://github.com/naut1402/agent-workflow/blob/main/AGENTS.md
-    about: Đọc quy ước commit/PR/issue & git workflow trước khi tạo task.

@@ -5,12 +5,6 @@ title: "[<TASK>] <type>: "
 labels: []
 ---
 
-<!--
-Prefix title: [<TASK>] <type>: <mô tả ngắn>   (type ∈ feat|fix|chore|docs|refactor|test)
-Gán label theo type: feat→enhancement · fix→bug · docs→documentation · chore→chore · refactor→refactor · test→test
-Feature lớn: tạo issue + plan TRƯỚC khi code; breakdown sub-task ở mục Artifact.
--->
-
 ## Mục tiêu
 <!-- Vấn đề cần giải quyết + kết quả mong đợi (1–3 câu). -->
 
