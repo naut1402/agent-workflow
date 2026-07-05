@@ -214,13 +214,6 @@ dưới `.dev-state/`/`tasks/` cũng bị xoá trên server (mirror); các file/
 mục tuỳ chọn khác (`pipeline.yaml`, `knowledge.config.yaml`,
 `project-rules.md`, `knowledge/`) không bị xoá nếu vắng mặt trong request.
 
-**Legacy: `kind: 'git'`** — project đã đăng ký trước đó bằng git vẫn hoạt
-động không đổi:
-
-```bash
-bun run workspace:push --project=<id>   # git add/commit/push .dev-team-agent/**
-```
-
 4. Server sync (một trong các cách):
    - UI nút **↻ Đồng bộ**
    - `bun run workspace:sync --project=<id>`
@@ -231,6 +224,13 @@ bun run workspace:push --project=<id>   # git add/commit/push .dev-team-agent/**
 - Push chỉ stage/commit `.dev-team-agent/**`.
 - `kind: 'git'`/`pushGitWorkspace()` không phải đường mặc định cho project
   mới — chỉ giữ cho project cũ đã đăng ký (backward-compat).
+
+**Legacy: `kind: 'git'`** — project đã đăng ký trước đó bằng git vẫn hoạt
+động không đổi:
+
+```bash
+bun run workspace:push --project=<id>   # git add/commit/push .dev-team-agent/**
+```
 
 ## 10. Conflict policy (#42)
 

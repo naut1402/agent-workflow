@@ -32,6 +32,16 @@ describe('resolveSafeArtifactPath', () => {
     expect(resolveSafeArtifactPath(root, '.dev-team-agent/tasks/U0001/design.md')).toBeNull()
   })
 
+  test('rejects bare whitelist prefixes with no filename after them', () => {
+    // Trạng thái thật sau `addApiProject`/`scaffoldArtifactCache`: `tasks/` và
+    // `.dev-state/` đã tồn tại sẵn dưới projectRoot. Nếu không reject, `writeArtifacts`
+    // sẽ ném `EISDIR` khi rename lên thẳng thư mục thay vì trả 400.
+    fs.mkdirSync(path.join(root, 'tasks'), { recursive: true })
+    fs.mkdirSync(path.join(root, '.dev-state'), { recursive: true })
+    expect(resolveSafeArtifactPath(root, 'tasks/')).toBeNull()
+    expect(resolveSafeArtifactPath(root, '.dev-state/')).toBeNull()
+  })
+
   test('accepts allowed exact files and prefixes', () => {
     expect(resolveSafeArtifactPath(root, 'tasks/U0001/design.md')).toBe(
       path.resolve(root, 'tasks/U0001/design.md'),

@@ -13,6 +13,7 @@
     "mcp": "bun mcp/server.ts",
     "workspace:sync": "bun scripts/workspace-sync.ts",
     "workspace:push": "bun scripts/workspace-push.ts",
+    "check:devteam-artifacts": "bun scripts/check-devteam-artifacts.ts",
     "typecheck": "vue-tsc --noEmit",
     "test": "bun test tests/server tests/mcp",
     "test:fe": "vitest run --coverage",

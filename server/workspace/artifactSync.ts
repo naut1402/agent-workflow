@@ -18,6 +18,12 @@ export function resolveSafeArtifactPath(projectRoot: string, relPath: string): s
   if (path.isAbsolute(relPath)) return null
   const normalized = path.posix.normalize(relPath.replace(/\\/g, '/'))
   if (normalized === '.' || normalized === '..' || normalized.startsWith('../')) return null
+  // Reject "bare" whitelist prefixes (vd. 'tasks/', '.dev-state/') — chúng
+  // trỏ thẳng vào thư mục prefix, không phải 1 file bên trong. Nếu lọt qua,
+  // `writeArtifacts()` sẽ `mkdirSync(path.dirname(...))` rồi `renameSync` đè
+  // lên chính thư mục đó → Node ném `EISDIR` không bắt được (500 thay vì
+  // 400 path-not-allowed).
+  if (normalized.endsWith('/')) return null
   if (!isArtifactPathAllowed(normalized)) return null
 
   const abs = path.resolve(projectRoot, normalized)

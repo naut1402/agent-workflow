@@ -35,3 +35,13 @@ export const SyncArtifactsRequestSchema = z.object({
   files: z.array(ArtifactFileSchema).min(0).max(2000),
 })
 export type SyncArtifactsRequest = z.infer<typeof SyncArtifactsRequestSchema>
+
+// Giới hạn tổng dung lượng `content` cộng dồn của cả request (không chỉ
+// từng file). Zod chỉ giới hạn per-file (5MB) và số lượng file (2000) — nếu
+// không có cap tổng, 1 request hợp lệ theo schema vẫn có thể lên tới hàng
+// chục GB. 50MB là đủ dư cho mọi artifact markdown/json thật hiện tại.
+export const ARTIFACT_SYNC_MAX_TOTAL_BYTES = 50_000_000
+
+export function totalArtifactContentLength(files: readonly ArtifactFile[]): number {
+  return files.reduce((sum, f) => sum + f.content.length, 0)
+}

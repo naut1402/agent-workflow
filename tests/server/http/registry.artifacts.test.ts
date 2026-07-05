@@ -83,4 +83,19 @@ describe('POST /api/projects (kind api) + POST /:id/artifacts', () => {
     const res = await request('POST', '/api/projects/anything/artifacts', { files: [] })
     expect(res.status).toBe(401)
   })
+
+  test('payload exceeding aggregate size cap (50MB total) → 400', async () => {
+    const created = await request('POST', '/api/projects', { kind: 'api', name: 'API Project 4' })
+    const { project } = await created.json()
+    // Mỗi file dưới giới hạn per-file (5MB, Zod) nhưng tổng cộng 11 * 5MB =
+    // 55MB > cap 50MB — không có giới hạn tổng nào trước đây bắt được case này.
+    const files = Array.from({ length: 11 }, (_, i) => ({
+      relPath: `knowledge/big-${i}.md`,
+      content: 'x'.repeat(5_000_000),
+    }))
+    const res = await request('POST', `/api/projects/${project.id}/artifacts`, { files })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/payload too large/)
+  })
 })

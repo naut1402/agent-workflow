@@ -8,7 +8,11 @@ import {
   parseAddProjectRequest,
   type Project,
 } from '../../../shared/schemas/project.js'
-import { SyncArtifactsRequestSchema } from '../../../shared/schemas/artifact-sync.js'
+import {
+  ARTIFACT_SYNC_MAX_TOTAL_BYTES,
+  SyncArtifactsRequestSchema,
+  totalArtifactContentLength,
+} from '../../../shared/schemas/artifact-sync.js'
 import { normalizeGitUrlForMatch } from '../../../shared/git/url.js'
 import { pullArtifacts, getRunnerForProject } from '../../workspace/sshSync.js'
 import { getCredential } from '../../runners/credentials.js'
@@ -144,6 +148,13 @@ export function registerRegistryRoutes(app: Hono<HonoEnv>): void {
     }
     const parsed = SyncArtifactsRequestSchema.safeParse(raw)
     if (!parsed.success) return j(c, 400, { error: parsed.error.issues[0]?.message || 'invalid body' })
+
+    const totalBytes = totalArtifactContentLength(parsed.data.files)
+    if (totalBytes > ARTIFACT_SYNC_MAX_TOTAL_BYTES) {
+      return j(c, 400, {
+        error: `payload too large: total content length ${totalBytes} exceeds ${ARTIFACT_SYNC_MAX_TOTAL_BYTES} bytes`,
+      })
+    }
 
     const result = await registry.syncArtifactsProject(id, parsed.data.files)
     if ('error' in result) return j(c, result.status || 400, { error: result.error })

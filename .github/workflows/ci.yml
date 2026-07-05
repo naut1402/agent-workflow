@@ -20,6 +20,14 @@ jobs:
         with:
           bun-version: latest
 
+      # Non-blocking cho tới khi docs/runbooks/cleanup-devteam-history.md chạy
+      # xong (dọn artifact thật khỏi lịch sử git — B0001 §7/Phần 2 chưa thực
+      # hiện). Bỏ `continue-on-error` ngay sau khi cleanup đó hoàn tất, nếu
+      # không guard này sẽ không bao giờ chặn được gì (xem review.md B0001).
+      - name: Guard — no real .dev-team-agent artifacts tracked
+        run: bun run check:devteam-artifacts
+        continue-on-error: true
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
