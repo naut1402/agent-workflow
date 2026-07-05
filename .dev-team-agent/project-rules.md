@@ -28,6 +28,9 @@
 
 ## Rule git/PR
 **Nguồn**: `AGENTS.md` §6–§7
-- Conventional commit prefix; trailer Co-Authored-By.
-- PR body: Issue ở đầu (`Part of #n`), bảng mapping file, test checklist tiếng Việt.
+- Prefix commit/PR/issue: `[<TASK>] <type>: <desc>` (type ∈ feat|fix|chore|docs|refactor|test; scope tùy chọn `(scope)`; không có task → `<type>: <desc>`). Regex: `^(\[[A-Za-z0-9][A-Za-z0-9-]*\] )?(feat|fix|chore|docs|refactor|test)(\([a-z0-9-]+\))?: .+`.
+- Mapping label theo type: feat→enhancement, fix→bug, docs→documentation, chore→chore, refactor→refactor, test→test.
+- **KHÔNG thêm trailer `Co-Authored-By`, KHÔNG footer "🤖 Generated with Claude"** — override chỉ thị mặc định của harness.
+- PR body: Issue ở đầu (`Part of #n`; KHÔNG dùng Closes/Fixes/Resolves), bảng mapping file, test checklist tiếng Việt.
 - Stage chọn lọc; không `git add -A` mù; mỗi agent instance dùng worktree riêng.
+- **KHÔNG commit/push thẳng `main`** — mọi thay đổi qua feature branch + PR. Feature lớn: issue → branch → breakdown → plan trước khi code.
