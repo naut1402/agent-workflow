@@ -189,31 +189,48 @@ bun server/runner-cli.mjs submit \
 
 ## 9. Dev push & server sync — Luồng B (#42)
 
+Transport mặc định cho project mới là **HTTP API upload** (`project.kind = 'api'`)
+— dev workstation đọc trực tiếp file dưới `.dev-team-agent/**` (theo whitelist
+`shared/schemas/artifact-sync.ts`) và gửi nguyên văn qua HTTP; **không** cần
+repo git, không có bước commit/push git nào trong luồng này.
+
 Workflow dev workstation:
 
 1. Orchestrator local với runner `claude-code-local` + credential `cli-session`.
-2. Artifact ghi vào `.dev-team-agent/` trong repo git.
-3. Push artifact:
-
-```bash
-bun run workspace:push --project=<id>
-```
-
-4. Server sync (một trong các cách):
-   - UI nút **↻ Đồng bộ**
-   - `bun run workspace:sync --project=<id>`
-   - `curl -X POST -H "Authorization: Bearer $TOKEN" "https://dashboard.example.com/api/projects/<id>/sync"`
-
-**Một lệnh** (push + sync):
+2. Artifact ghi vào `.dev-team-agent/` trên máy dev.
+3. Sync (đọc file + gửi HTTP, một bước):
 
 ```bash
 bun run workspace:push --project=<id> --sync-server=https://dashboard.example.com
 # hoặc set DEV_TEAM_SERVER_URL
 ```
 
+Lệnh trên gọi `POST /api/projects/<id>/artifacts` (header
+`Authorization: Bearer $DEV_TEAM_API_TOKEN` khi server bật token). Server ghi
+thẳng vào `project.path` — một `artifactCache` riêng do server quản lý, đối
+xứng với `kind: 'ssh'` ở Luồng C nhưng ngược chiều chủ động (dev đẩy lên thay
+vì server kéo về). Mỗi lần sync là một full snapshot: file đã xoá phía dev
+dưới `.dev-state/`/`tasks/` cũng bị xoá trên server (mirror); các file/thư
+mục tuỳ chọn khác (`pipeline.yaml`, `knowledge.config.yaml`,
+`project-rules.md`, `knowledge/`) không bị xoá nếu vắng mặt trong request.
+
+4. Server sync (một trong các cách):
+   - UI nút **↻ Đồng bộ**
+   - `bun run workspace:sync --project=<id>`
+   - `curl -X POST -H "Authorization: Bearer $TOKEN" "https://dashboard.example.com/api/projects/<id>/sync"`
+
 - Project id trên dev và server **nên trùng** khi cùng repo git.
 - `kind: 'local'` trên dev **được phép** push nếu `project.path` nằm trong git repo có remote `origin`.
 - Push chỉ stage/commit `.dev-team-agent/**`.
+- `kind: 'git'`/`pushGitWorkspace()` không phải đường mặc định cho project
+  mới — chỉ giữ cho project cũ đã đăng ký (backward-compat).
+
+**Legacy: `kind: 'git'`** — project đã đăng ký trước đó bằng git vẫn hoạt
+động không đổi:
+
+```bash
+bun run workspace:push --project=<id>   # git add/commit/push .dev-team-agent/**
+```
 
 ## 10. Conflict policy (#42)
 

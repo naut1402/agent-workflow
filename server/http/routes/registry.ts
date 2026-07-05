@@ -2,7 +2,17 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../types.js'
 import { j } from '../respond.js'
 import { emitAudit } from '../../logging/store.js'
-import { AddSshProjectBodySchema, parseAddProjectRequest, type Project } from '../../../shared/schemas/project.js'
+import {
+  AddApiProjectBodySchema,
+  AddSshProjectBodySchema,
+  parseAddProjectRequest,
+  type Project,
+} from '../../../shared/schemas/project.js'
+import {
+  ARTIFACT_SYNC_MAX_TOTAL_BYTES,
+  SyncArtifactsRequestSchema,
+  totalArtifactContentLength,
+} from '../../../shared/schemas/artifact-sync.js'
 import { normalizeGitUrlForMatch } from '../../../shared/git/url.js'
 import { pullArtifacts, getRunnerForProject } from '../../workspace/sshSync.js'
 import { getCredential } from '../../runners/credentials.js'
@@ -124,6 +134,45 @@ export function registerRegistryRoutes(app: Hono<HonoEnv>): void {
     return j(c, 200, { project: result.project, syncedAt: result.syncedAt })
   })
 
+  // Transport HTTP API upload (Luồng B) — dev machine đọc file dưới
+  // `.dev-team-agent/**` (whitelist) và gửi nguyên văn qua HTTP; server ghi
+  // thẳng vào project.path (artifactCache riêng của kind 'api').
+  app.post('/api/projects/:id/artifacts', async (c) => {
+    const id = c.req.param('id')
+    const { registry } = c.get('ctx')
+    let raw: unknown
+    try {
+      raw = JSON.parse((await c.req.text()) || '{}')
+    } catch {
+      return j(c, 400, { error: 'invalid JSON' })
+    }
+    const parsed = SyncArtifactsRequestSchema.safeParse(raw)
+    if (!parsed.success) return j(c, 400, { error: parsed.error.issues[0]?.message || 'invalid body' })
+
+    const totalBytes = totalArtifactContentLength(parsed.data.files)
+    if (totalBytes > ARTIFACT_SYNC_MAX_TOTAL_BYTES) {
+      return j(c, 400, {
+        error: `payload too large: total content length ${totalBytes} exceeds ${ARTIFACT_SYNC_MAX_TOTAL_BYTES} bytes`,
+      })
+    }
+
+    const result = await registry.syncArtifactsProject(id, parsed.data.files)
+    if ('error' in result) return j(c, result.status || 400, { error: result.error })
+    emitAudit({
+      op: 'update',
+      entity: 'project',
+      identifier: id,
+      projectId: id,
+      detail: { action: 'artifact-sync', filesWritten: result.filesWritten, filesDeleted: result.filesDeleted },
+    })
+    return j(c, 200, {
+      project: result.project,
+      syncedAt: result.syncedAt,
+      filesWritten: result.filesWritten,
+      filesDeleted: result.filesDeleted,
+    })
+  })
+
   app.post('/api/projects', async (c) => {
     const { registry } = c.get('ctx')
     let raw: unknown
@@ -133,9 +182,15 @@ export function registerRegistryRoutes(app: Hono<HonoEnv>): void {
       return j(c, 400, { error: 'invalid JSON' })
     }
 
+    const apiParsed = AddApiProjectBodySchema.safeParse(raw)
     const sshParsed = AddSshProjectBodySchema.safeParse(raw)
-    let resolved: Awaited<ReturnType<typeof registry.addFromGit>> | ReturnType<typeof registry.addSshProject>
-    if (sshParsed.success) {
+    let resolved:
+      | Awaited<ReturnType<typeof registry.addFromGit>>
+      | ReturnType<typeof registry.addSshProject>
+      | ReturnType<typeof registry.addApiProject>
+    if (apiParsed.success) {
+      resolved = registry.addApiProject(apiParsed.data)
+    } else if (sshParsed.success) {
       resolved = registry.addSshProject(sshParsed.data)
     } else {
       const parsed = parseAddProjectRequest(raw)

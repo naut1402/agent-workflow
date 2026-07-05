@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { triggerServerSync } from '../server/git/push.js'
 import { get, pushGitWorkspace } from '../server/registry.js'
+import { collectArtifactFiles } from '../server/workspace/artifactSync.js'
 
 function parseArg(prefix: string): string | undefined {
   for (const arg of process.argv.slice(2)) {
@@ -18,12 +19,45 @@ function parseRequired(prefix: string): string {
   return value
 }
 
+async function pushViaApi(opts: { projectId: string; devTeamRoot: string; syncUrl: string }): Promise<void> {
+  const files = collectArtifactFiles(opts.devTeamRoot)
+  const base = opts.syncUrl.replace(/\/$/, '')
+  const url = `${base}/api/projects/${encodeURIComponent(opts.projectId)}/artifacts`
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = process.env.DEV_TEAM_API_TOKEN?.trim()
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ files }) })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    console.error(`artifact sync failed: ${res.status} ${body}`.slice(0, 500))
+    process.exit(1)
+  }
+  const data = (await res.json()) as { filesWritten?: number; filesDeleted?: number }
+  console.log(
+    `${opts.projectId}: artifact sync OK (written=${data.filesWritten ?? 0}, deleted=${data.filesDeleted ?? 0})`,
+  )
+}
+
 async function main() {
   const projectId = parseRequired('--project=')
   const project = get(projectId)
   if (!project) {
     console.error(`unknown project: ${projectId}`)
     process.exit(1)
+  }
+
+  // `kind: 'api'` — transport HTTP API upload (mặc định cho project mới).
+  // `kind: 'git'` — giữ nguyên push git legacy (backward-compat cho project
+  // đã đăng ký trước đó).
+  if (project.kind === 'api') {
+    const syncUrl = parseArg('--sync-server=') ?? process.env.DEV_TEAM_SERVER_URL?.trim()
+    if (!syncUrl) {
+      console.error('kind "api" requires --sync-server=<url> or DEV_TEAM_SERVER_URL')
+      process.exit(1)
+    }
+    await pushViaApi({ projectId, devTeamRoot: project.path, syncUrl })
+    return
   }
 
   const result = await pushGitWorkspace(projectId, { message: parseArg('--message=') })

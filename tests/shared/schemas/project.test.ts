@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AddApiProjectBodySchema,
   AddProjectRequest,
   GitSource,
   Project,
@@ -9,9 +10,29 @@ import {
 } from '../../../shared/schemas/project'
 
 describe('ProjectKind', () => {
-  it('accepts local and git', () => {
+  it('accepts local, git, ssh, api', () => {
     expect(ProjectKind.parse('local')).toBe('local')
     expect(ProjectKind.parse('git')).toBe('git')
+    expect(ProjectKind.parse('ssh')).toBe('ssh')
+    expect(ProjectKind.parse('api')).toBe('api')
+  })
+})
+
+describe('AddApiProjectBodySchema', () => {
+  it('accepts minimal body (kind only)', () => {
+    expect(AddApiProjectBodySchema.safeParse({ kind: 'api' }).success).toBe(true)
+  })
+  it('accepts optional sourceUrl/branch/name', () => {
+    const parsed = AddApiProjectBodySchema.safeParse({
+      kind: 'api',
+      name: 'My Project',
+      sourceUrl: 'https://github.com/org/repo.git',
+      branch: 'main',
+    })
+    expect(parsed.success).toBe(true)
+  })
+  it('rejects wrong kind literal', () => {
+    expect(AddApiProjectBodySchema.safeParse({ kind: 'git' }).success).toBe(false)
   })
 })
 
@@ -45,6 +66,31 @@ describe('normalizeProject', () => {
     })
     expect(p.kind).toBe('git')
     expect(GitSource.parse(p.source).branch).toBe('main')
+  })
+
+  it('preserves apiSync for kind api, drops it for other kinds', () => {
+    const api = normalizeProject({
+      id: 'a',
+      name: 'A',
+      kind: 'api',
+      path: '/x/.dev-team-agent',
+      addedAt: 't',
+      default: false,
+      apiSync: { lastSyncedAt: '2020-01-01T00:00:00.000Z' },
+    })
+    expect(api.kind).toBe('api')
+    expect(api.apiSync?.lastSyncedAt).toBe('2020-01-01T00:00:00.000Z')
+
+    const local = normalizeProject({
+      id: 'b',
+      name: 'B',
+      kind: 'local',
+      path: '/y/.dev-team-agent',
+      addedAt: 't',
+      default: false,
+      apiSync: { lastSyncedAt: '2020-01-01T00:00:00.000Z' },
+    })
+    expect(local.apiSync).toBeUndefined()
   })
 })
 

@@ -28,6 +28,8 @@ function fakeCtx(): RegistryContext {
       validateProjectPath: (() => ({ ok: false, status: 400, error: 'stub' })) as any,
       validateSshProject: (() => ({ ok: false, status: 400, error: 'stub' })) as any,
       addSshProject: () => ({ ok: false, status: 400, error: 'stub' }) as any,
+      addApiProject: () => ({ ok: false, status: 400, error: 'stub' }) as any,
+      syncArtifactsProject: async () => ({ ok: false, status: 400, error: 'stub' }) as any,
       seedDefault: () => null,
     },
   }
