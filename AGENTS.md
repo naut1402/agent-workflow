@@ -250,9 +250,3 @@ git branch -d <branch-name>          # nếu đã merged
 git worktree list                    # kiểm tra các worktree còn mở
 ```
 - KHÔNG `git push` lại branch vừa merged (origin branch có thể đã bị xóa → tạo branch rác — xem §7).
-
----
-
-## 9. Lịch sử migration
-
-Quá trình migrate sang Bun + TypeScript + Hono (đã hoàn tất) được lưu ở [`docs/history/refactor-workflow.md`](docs/history/refactor-workflow.md) làm sử liệu — **không** phải quy trình hiện hành.
