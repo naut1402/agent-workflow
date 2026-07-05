@@ -7,7 +7,7 @@
 - Functional + ctx-injection; domain modules không biết HTTP; coupling chỉ đi xuống (`shared/` → domain → `http/`).
 - Frontend Vue 3 `<script setup lang="ts">`; logic suy diễn tách ra composable/lib.
 - UI strings tiếng Việt.
-- Comment code: **KHÔNG trích dẫn** số issue/PR, tên skill/agent — nêu thẳng nguyên nhân + chi tiết thay đổi.
+- Comment code viết theo lối manual (mô tả hành vi hiện hành); **KHÔNG trích** số issue/PR/tên người/tên agent; vẫn được trích dẫn/footnote tới tài liệu/spec ổn định khi cần.
 
 ## Rule viết tài liệu
 **Nguồn**: `AGENTS.md` §6 + template write-design
@@ -15,7 +15,7 @@
 - `investigate.md`: mô tả hiện trạng, call chain, blast radius, gap.
 - `design.md`: cấu trúc §1–§7 (Tổng quan, Investigation Summary, So sánh giải pháp, Implementation Details, Test Notes, Out of scope, Schedule).
 - Đủ chi tiết để implementer code không cần hỏi lại.
-- **KHÔNG trích dẫn** số issue, số PR, tên skill, tên agent (investigator/designer/implementer/reviewer/pr-creator...) trong nội dung tài liệu — chỉ nêu nguyên nhân (why) + chi tiết thay đổi (what). Ngoại lệ: mục Issue ở đầu PR body (`Part of #n`, §6.1) vẫn bắt buộc.
+- Trình bày theo lối manual: mô tả quy tắc/hành vi hiện hành, không thuật lại lịch sử thay đổi. **KHÔNG trích** số issue, số PR, tên người, tên skill/agent. Được trích dẫn/footnote tới tài liệu/spec ổn định khi giúp đáng tin & dễ đọc hơn. Ngoại lệ: mục Issue ở đầu PR body (`Part of #n`, §6.1) vẫn bắt buộc.
 
 ## Rule review doc
 **Nguồn**: Không tìm thấy rule riêng trong project
