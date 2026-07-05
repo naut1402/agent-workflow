@@ -1,12 +1,13 @@
 # Project Convention Rules
 
 ## Rule coding
-**Nguồn**: `AGENTS.md` §3
+**Nguồn**: `AGENTS.md` §3, §6.7
 - ESM thuần, TypeScript cho code mới; không dùng `enum`; không default export trừ khi framework yêu cầu.
 - Zod là single source of truth cho schema; validate ở mọi biên I/O với `safeParse`.
 - Functional + ctx-injection; domain modules không biết HTTP; coupling chỉ đi xuống (`shared/` → domain → `http/`).
 - Frontend Vue 3 `<script setup lang="ts">`; logic suy diễn tách ra composable/lib.
 - UI strings tiếng Việt.
+- Comment code: **KHÔNG trích dẫn** số issue/PR, tên skill/agent — nêu thẳng nguyên nhân + chi tiết thay đổi.
 
 ## Rule viết tài liệu
 **Nguồn**: `AGENTS.md` §6 + template write-design
@@ -14,6 +15,7 @@
 - `investigate.md`: mô tả hiện trạng, call chain, blast radius, gap.
 - `design.md`: cấu trúc §1–§7 (Tổng quan, Investigation Summary, So sánh giải pháp, Implementation Details, Test Notes, Out of scope, Schedule).
 - Đủ chi tiết để implementer code không cần hỏi lại.
+- **KHÔNG trích dẫn** số issue, số PR, tên skill, tên agent (investigator/designer/implementer/reviewer/pr-creator...) trong nội dung tài liệu — chỉ nêu nguyên nhân (why) + chi tiết thay đổi (what). Ngoại lệ: mục Issue ở đầu PR body (`Part of #n`, §6.1) vẫn bắt buộc.
 
 ## Rule review doc
 **Nguồn**: Không tìm thấy rule riêng trong project
