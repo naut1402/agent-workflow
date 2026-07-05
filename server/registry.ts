@@ -16,7 +16,13 @@ import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { validateGitUrl } from '../shared/git/url.js'
-import { AddSshProjectBodySchema, normalizeProject, type Project } from '../shared/schemas/project.js'
+import {
+  AddApiProjectBodySchema,
+  AddSshProjectBodySchema,
+  normalizeProject,
+  type Project,
+} from '../shared/schemas/project.js'
+import type { ArtifactFile } from '../shared/schemas/artifact-sync.js'
 import { getRunner } from './runners/registry.js'
 import { withProjectSyncLock } from './git/syncLock.js'
 import {
@@ -30,6 +36,7 @@ import {
   pullOrReclone,
   workspaceDir,
 } from './git/workspace.js'
+import { writeArtifacts } from './workspace/artifactSync.js'
 
 const REGISTRY_VERSION = 1
 
@@ -66,6 +73,8 @@ export interface RegistryContext {
     syncGitProject: typeof syncGitProject
     pushGitWorkspace: typeof pushGitWorkspace
     addSshProject: typeof addSshProject
+    addApiProject: typeof addApiProject
+    syncArtifactsProject: typeof syncArtifactsProject
     remove: typeof remove
     validateProjectPath: typeof validateProjectPath
     validateSshProject: typeof validateSshProject
@@ -516,6 +525,92 @@ export function addSshProject(body: unknown): AddResult {
   return { ok: true, project }
 }
 
+export function addApiProject(body: unknown): AddResult {
+  const parsed = AddApiProjectBodySchema.safeParse(body)
+  if (!parsed.success) {
+    return { ok: false, status: 400, error: parsed.error.issues.map((i) => i.message).join('; ') }
+  }
+  const b = parsed.data
+  const reg = loadRegistry()
+
+  if (b.sourceUrl) {
+    const branchResolved = b.branch?.trim() || 'main'
+    const existing = reg.projects.find(
+      (p) => p.kind === 'api' && p.source?.url === b.sourceUrl && p.source.branch === branchResolved,
+    )
+    if (existing) return { ok: true, project: existing } // idempotent, giống addFromGit
+  }
+
+  const displayName = b.name?.trim() || (b.sourceUrl ? inferNameFromGitUrl(b.sourceUrl) : 'project')
+  const cachePath = defaultArtifactCache(displayName)
+  try {
+    fs.mkdirSync(cachePath, { recursive: true })
+    scaffoldArtifactCache(cachePath)
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { ok: false, status: 400, error: `cannot create artifact cache: ${message}` }
+  }
+
+  const project: Project = {
+    id: makeId(displayName, cachePath),
+    name: displayName,
+    kind: 'api',
+    path: cachePath,
+    addedAt: new Date().toISOString(),
+    default: reg.projects.length === 0,
+    source: b.sourceUrl ? { type: 'git', url: b.sourceUrl, branch: b.branch?.trim() || 'main' } : undefined,
+  }
+  reg.projects.push(project)
+  saveRegistry(reg)
+  return { ok: true, project }
+}
+
+export function updateProjectApiSync(
+  projectId: string,
+  patch: { lastSyncedAt?: string; lastSyncError?: string | null },
+): void {
+  const reg = loadRegistry()
+  const idx = reg.projects.findIndex((p) => p.id === projectId)
+  if (idx < 0) return
+  const project = reg.projects[idx]
+  const apiSync = { ...(project.apiSync || {}) }
+  if (patch.lastSyncedAt) apiSync.lastSyncedAt = patch.lastSyncedAt
+  if (patch.lastSyncError === null) delete apiSync.lastSyncError
+  else if (patch.lastSyncError) apiSync.lastSyncError = patch.lastSyncError
+  reg.projects[idx] = { ...project, apiSync }
+  saveRegistry(reg)
+}
+
+export async function syncArtifactsProject(
+  id: string,
+  files: ArtifactFile[],
+): Promise<AddResult & { syncedAt?: string; filesWritten?: number; filesDeleted?: number }> {
+  return withProjectSyncLock(id, async () => {
+    const project = get(id)
+    if (!project) return { ok: false, status: 404, error: 'unknown project' }
+    if (project.kind !== 'api') {
+      return { ok: false, status: 400, error: 'project is not api-kind' }
+    }
+
+    const result = await writeArtifacts({ projectRoot: project.path, files })
+    // `in`-operator narrowing (boolean-discriminant narrowing misbehaves under vue-tsc here).
+    if ('error' in result) {
+      updateProjectApiSync(id, { lastSyncError: result.error })
+      return result
+    }
+
+    const syncedAt = new Date().toISOString()
+    updateProjectApiSync(id, { lastSyncedAt: syncedAt, lastSyncError: null })
+    return {
+      ok: true,
+      project: get(id)!,
+      syncedAt,
+      filesWritten: result.filesWritten,
+      filesDeleted: result.filesDeleted,
+    }
+  })
+}
+
 // Remove a project from the registry by id. Does NOT touch the project's
 // filesystem — only the registry entry. Refuses to remove the default entry
 // (a default must remain for backward-compat). Returns
@@ -601,6 +696,8 @@ export function createRegistryContext(
       syncGitProject,
       pushGitWorkspace,
       addSshProject,
+      addApiProject,
+      syncArtifactsProject,
       remove,
       validateProjectPath,
       validateSshProject,

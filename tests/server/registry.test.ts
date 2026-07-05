@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   add,
+  addApiProject,
   addFromGit,
   addSshProject,
   createRegistryContext,
@@ -16,6 +17,7 @@ import {
   resolveProjectRoot,
   saveRegistry,
   seedDefault,
+  syncArtifactsProject,
   syncGitProject,
   validateProjectPath,
   validateSshProject,
@@ -167,6 +169,8 @@ describe('createRegistryContext', () => {
     expect(typeof ctx.registry.addFromGit).toBe('function')
     expect(typeof ctx.registry.syncGitProject).toBe('function')
     expect(typeof ctx.registry.addSshProject).toBe('function')
+    expect(typeof ctx.registry.addApiProject).toBe('function')
+    expect(typeof ctx.registry.syncArtifactsProject).toBe('function')
     expect(ctx.defaultRoot).toBe('/legacy')
     expect(ctx.resolveProjectRoot(null)).toBe('/legacy') // empty registry → legacy fallback
   })
@@ -319,6 +323,53 @@ describe('addFromGit + syncGitProject', () => {
 
   test('syncGitProject 404 unknown', async () => {
     const r = await syncGitProject('missing-id')
+    expect(r.ok).toBe(false)
+    if ('error' in r) expect(r.status).toBe(404)
+  })
+})
+
+describe('addApiProject + syncArtifactsProject', () => {
+  test('addApiProject scaffolds an empty artifact cache', () => {
+    const r = addApiProject({ kind: 'api', name: 'My API Project' })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.project.kind).toBe('api')
+      expect(fs.existsSync(path.join(r.project.path, '.dev-state'))).toBe(true)
+      expect(fs.existsSync(path.join(r.project.path, 'tasks'))).toBe(true)
+    }
+  })
+
+  test('idempotent on same sourceUrl+branch', () => {
+    const first = addApiProject({ kind: 'api', sourceUrl: 'https://github.com/org/api-repo.git', branch: 'main' })
+    const second = addApiProject({ kind: 'api', sourceUrl: 'https://github.com/org/api-repo.git', branch: 'main' })
+    if (first.ok && second.ok) expect(second.project.id).toBe(first.project.id)
+  })
+
+  test('syncArtifactsProject writes files and updates apiSync.lastSyncedAt', async () => {
+    const added = addApiProject({ kind: 'api', name: 'Sync Target' })
+    if (!added.ok) throw new Error('setup failed')
+
+    const result = await syncArtifactsProject(added.project.id, [
+      { relPath: 'tasks/U0001/design.md', content: '# Design' },
+    ])
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.filesWritten).toBe(1)
+      expect(result.project.apiSync?.lastSyncedAt).toBeTruthy()
+    }
+    expect(fs.readFileSync(path.join(added.project.path, 'tasks/U0001/design.md'), 'utf8')).toBe('# Design')
+  })
+
+  test('syncArtifactsProject rejects non-api-kind project', async () => {
+    const local = add({ path: proj })
+    if (!local.ok) throw new Error('setup')
+    const r = await syncArtifactsProject(local.project.id, [])
+    expect(r.ok).toBe(false)
+    if ('error' in r) expect(r.error).toBe('project is not api-kind')
+  })
+
+  test('syncArtifactsProject 404 unknown id', async () => {
+    const r = await syncArtifactsProject('missing-id', [])
     expect(r.ok).toBe(false)
     if ('error' in r) expect(r.status).toBe(404)
   })

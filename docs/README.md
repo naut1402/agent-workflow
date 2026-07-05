@@ -18,7 +18,7 @@ Dashboard chuyển từ **local-first** (`127.0.0.1:5174`, registry tại `~/.de
 
 - Bind `0.0.0.0` (Docker / reverse proxy)
 - Auth tuỳ chọn qua `DEV_TEAM_API_TOKEN`
-- Project registry hỗ trợ `kind: local | git | ssh`
+- Project registry hỗ trợ `kind: local | git | ssh | api`
 - Job queue + runner providers (`claude-code-cli`, `claude-code-ssh`)
 
 ### Ba luồng runner
@@ -33,7 +33,8 @@ Dashboard chuyển từ **local-first** (`127.0.0.1:5174`, registry tại `~/.de
 ┌─────────────────────────────────────────────────────────────────┐
 │  Luồng B — Dev runner + sync (#42)                               │
 │  Dev machine → claude CLI local (cli-session OAuth)              │
-│  workspace:push → git remote → server workspace:sync             │
+│  workspace:push → HTTP POST /api/projects/:id/artifacts (kind: api)│
+│  Legacy: kind: git → git remote → server workspace:sync           │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
@@ -48,7 +49,8 @@ Dashboard chuyển từ **local-first** (`127.0.0.1:5174`, registry tại `~/.de
 | Tình huống | Luồng | Project kind |
 | --- | --- | --- |
 | CI/headless trên server, repo public HTTPS | A | `git` |
-| Dev giữ OAuth `cli-session`, artifact push git | B | `local` (dev) + `git` (server) |
+| Dev giữ OAuth `cli-session`, artifact sync qua HTTP API upload | B | `local` (dev) + `api` (server) |
+| Dev giữ OAuth `cli-session`, project cũ đã đăng ký kiểu git (legacy) | B | `local` (dev) + `git` (server) |
 | Workspace chỉ trên máy dev, dashboard tập trung | C | `ssh` |
 | Server không clone được repo (private network phức tạp) | C | `ssh` |
 

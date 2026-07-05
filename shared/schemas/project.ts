@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const ProjectKind = z.enum(['local', 'git', 'ssh'])
+export const ProjectKind = z.enum(['local', 'git', 'ssh', 'api'])
 export type ProjectKind = z.infer<typeof ProjectKind>
 
 export const GitSource = z.object({
@@ -22,6 +22,14 @@ export const ProjectRemoteSshSchema = z.object({
 })
 export type ProjectRemoteSsh = z.infer<typeof ProjectRemoteSshSchema>
 
+// Bookkeeping cho `kind: 'api'` — tách khỏi `source` (không phải git clone,
+// server tự quản lý một artifactCache riêng, dev chủ động push qua HTTP).
+export const ProjectApiSyncSchema = z.object({
+  lastSyncedAt: z.string().datetime().optional(),
+  lastSyncError: z.string().optional(),
+})
+export type ProjectApiSync = z.infer<typeof ProjectApiSyncSchema>
+
 export const Project = z.object({
   id: z.string(),
   name: z.string(),
@@ -31,22 +39,35 @@ export const Project = z.object({
   default: z.boolean(),
   source: GitSource.optional(),
   remote: ProjectRemoteSshSchema.optional(),
+  apiSync: ProjectApiSyncSchema.optional(),
 })
 export type Project = z.infer<typeof Project>
 
-/** Normalize legacy entry thiếu kind/source/remote khi đọc registry. */
+/** Normalize legacy entry thiếu kind/source/remote/apiSync khi đọc registry. */
 export function normalizeProject(raw: unknown): Project {
   const base = Project.safeParse(raw)
   if (base.success) return base.data
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
-  const kind = (o.kind === 'git' || o.kind === 'ssh' ? o.kind : 'local') as ProjectKind
+  const kind = (['git', 'ssh', 'api'].includes(o.kind as string) ? o.kind : 'local') as ProjectKind
   return Project.parse({
     ...o,
     kind,
-    source: kind === 'git' ? o.source : undefined,
+    source: kind === 'git' || kind === 'api' ? o.source : undefined,
     remote: kind === 'ssh' ? o.remote : undefined,
+    apiSync: kind === 'api' ? o.apiSync : undefined,
   })
 }
+
+// Đăng ký 1 project kind 'api'. `sourceUrl`/`branch` thuần tuý phục vụ
+// auto-resolve qua GET /api/projects/resolve (giống git-kind); KHÔNG dùng để
+// clone — server tự tạo 1 artifactCache rỗng (đối xứng addSshProject).
+export const AddApiProjectBodySchema = z.object({
+  kind: z.literal('api'),
+  name: z.string().optional(),
+  sourceUrl: z.string().url().optional(),
+  branch: z.string().optional(),
+})
+export type AddApiProjectBody = z.infer<typeof AddApiProjectBodySchema>
 
 export const AddSshProjectBodySchema = z.object({
   kind: z.literal('ssh'),
