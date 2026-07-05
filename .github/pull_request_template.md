@@ -1,8 +1,8 @@
 <!--
 PR template. Điền đầy đủ các mục.
+Title PR theo prefix: [<TASK>] <type>: <desc>  (type ∈ feat|fix|chore|docs|refactor|test) — gán label theo type.
 Quy ước hiện hành cho mọi agent: AGENTS.md (coding conventions, test, git hygiene, doc output).
 Kiến trúc + cấu trúc thư mục: docs/architecture.md.
-(Bối cảnh migration TS đã hoàn tất, lưu ở docs/history/refactor-workflow.md.)
 -->
 
 ## Issue
@@ -44,6 +44,3 @@ Part of #
 - [ ] Tuân thủ `AGENTS.md` §3 (coding conventions)
 - [ ] **Git hygiene** (`AGENTS.md` §7): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
 - [ ] Rename/move dùng `git mv`; KHÔNG còn bản cũ trùng (vd `.js` lẫn `.ts`); test không lạc khỏi `tests/`·`test-e2e/`
-
----
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
