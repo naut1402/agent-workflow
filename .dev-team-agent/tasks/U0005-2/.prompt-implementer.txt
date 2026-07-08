@@ -1,0 +1,34 @@
+Task: dev-agent-teams:implementer U0005-2
+
+Context:
+- Workspace: .dev-team-agent/tasks/U0005-2/
+- State: .dev-team-agent/.dev-state/U0005-2.json
+- Project rules: .dev-team-agent/project-rules.md
+- Pipeline step id: implementer
+- Step name: Implement
+- Parent task: U0005 (epic) — inherit investigate.md, design.md
+- Required artifacts: typecheck.md
+- Export JSON: false
+- Knowledge inputs: none
+
+Scope (U0005-2 — Quick actions trên artifact viewer):
+Outcome: Mở artifact → toolbar hiện nút (vd. "Cải thiện tài liệu") → submit job agent → reload artifact khi job xong.
+- Files chính (mỗi file U0005-2 sở hữu; KHÔNG đụng file của U0005-1 như PipelineNode/PipelineView/state.ts):
+  - server/artifactActions/index.ts (mới) — load YAML safe, match pattern
+  - shared/schemas/artifactAction.ts (mới) — Zod schema (safeParse ở biên)
+  - .dev-team-agent/artifact-actions.yaml (default seed) — action improve-doc
+  - server/http/routes/tasks.ts — thêm GET /api/artifact-actions?artifact=..., POST /api/artifact-actions/run { taskId, actionId, artifactName, runnerId? } → build prompt từ template + đọc artifact → submitJob
+  - src/api/client.ts — wrappers fetchArtifactActions(), runArtifactAction()
+  - src/features/monitor/components/ArtifactPanel.vue — toolbar render nút từ fetchArtifactActions(artifactName); loading state khi job chạy; auto reload khi succeeded; hiện lỗi khi failed
+  - src/features/monitor/composables/useArtifactAction.ts (mới) — submit → poll job (GET /api/jobs?id=) → fetchArtifact reload
+- Không làm: HITL approve; NL wizard; tạo agent mới. Chỉ tái dùng POST /api/jobs đã có.
+- Done khi: seed action improve-doc match investigate.md/design.md; click → job queued; poll succeeded → content reload; fail → hiện lỗi.
+
+Instructions:
+- Apply skills: coding-rules (rule_required=false → fallback skill coding-rules cho section coding)
+- Apply project-rules section(s): coding. Tuân thủ: ESM + TS, không enum, không default export (trừ framework), Zod single source of truth + safeParse ở mọi biên I/O, functional + ctx-injection (domain không biết HTTP), Vue 3 <script setup lang="ts">, logic tách ra composable/lib, UI strings tiếng Việt.
+- Test-first cho logic mới: viết unit backend (bun test, mirror tests/server/**) cho artifactActions pattern match + prompt substitution {{artifact_name}}/{{artifact_base}} + POST/GET route (golden nếu phù hợp); unit frontend (vitest, tests/src/**) cho useArtifactAction poll mock. Test chỉ đặt trong tests/ hoặc test-e2e/.
+- Sau khi code xong, chạy typecheck + test suite của dashboard app (skill verify-dashboard: bun typecheck / bun test / vitest tuỳ project) và GHI KẾT QUẢ đầy đủ (lệnh + output tóm tắt + pass/fail) vào .dev-team-agent/tasks/U0005-2/typecheck.md. Đây là artifact BẮT BUỘC của step này.
+- Chỉ ghi artifact khai báo cho step này (typecheck.md) + code/test thuộc scope. Stage chọn lọc; KHÔNG git add -A mù; git mv khi rename.
+- Commit sau khi xong theo conventional commit + trailer Co-Authored-By (feat(dashboard): ... hoặc phù hợp). Bạn đang ở worktree riêng cho U0005-2.
+- Nếu bị blocked bởi ambiguity, ghi .dev-team-agent/tasks/U0005-2/qa.md theo Q&A format và dừng.

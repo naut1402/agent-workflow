@@ -14,6 +14,19 @@ export function qs(params: Record<string, any> | null | undefined): string {
   return parts.length ? `?${parts.join('&')}` : ''
 }
 
+// Auth-aware fetch: attaches the API token when one is configured, else falls
+// back to a plain fetch (offline / no-token mode).
+async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const token = getApiToken()
+  if (!token) return fetch(input, init)
+
+  const headers = new Headers(init.headers || {})
+  if (!headers.has('Authorization') && !headers.has('X-Dev-Team-Token')) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+  return fetch(input, { ...init, headers })
+}
+
 // ── Project registry ───────────────────────────────────────────────────────────
 
 export async function fetchProjects() {

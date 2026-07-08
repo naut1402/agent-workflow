@@ -1,0 +1,27 @@
+Task: dev-agent-teams:reviewer U0005-2
+
+Context:
+- Workspace (ghi artifact vào đây): c:/Users/tuan1/workspace/agent-workflow/.dev-team-agent/tasks/U0005-2/
+- State: .dev-team-agent/.dev-state/U0005-2.json
+- Project rules: c:/Users/tuan1/workspace/agent-workflow/.dev-team-agent/project-rules.md
+- Pipeline step id: reviewer
+- Step name: Review
+- Required artifacts: review.md, test-spec.md
+- Export JSON: false
+- Knowledge inputs: none
+
+Diff cần review (U0005-2 vertical slice, đã commit trong worktree riêng):
+- Worktree path: c:/Users/tuan1/workspace/agent-workflow/.claude/worktrees/agent-a8fd44865051e150b
+- Commit: bd59928 (parent 2e6a753 = merge-base với main)
+- Xem diff: `git -C <worktree> diff 2e6a753 bd59928` (10 files, +723/-3). Đọc file source tại revision đó trong worktree.
+- Typecheck/test đã chạy: đọc .dev-team-agent/tasks/U0005-2/typecheck.md (typecheck pass, backend 260, frontend 133).
+
+Instructions:
+- Apply skills: coding-rules, write-tests (rule_required=false → fallback coding-rules).
+- Apply project-rules section(s): coding, test.
+- Review git diff + typecheck.md theo coding conventions (ESM+TS, không enum, không default export, Zod safeParse ở biên, functional/ctx-injection domain không biết HTTP, Vue 3 script setup, UI tiếng Việt) và test coverage.
+- Tạo review.md: findings phân loại [must]/[should]/[nit]; nếu có [must] chưa fix → điều kiện retry (restart_from implementer).
+- Tạo test-spec.md: đối chiếu §5 Test Notes design.md với test đã viết; liệt kê case còn thiếu (đặc biệt E2E Playwright bị bỏ qua) và mức độ bắt buộc.
+- Chỉ ghi review.md + test-spec.md vào canonical workspace. KHÔNG sửa code, KHÔNG commit.
+- Nếu blocked bởi ambiguity → ghi qa.md và dừng.
+- Trả về summary: số [must]/[should]/[nit], có blocking retry hay không.
