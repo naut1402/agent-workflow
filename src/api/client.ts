@@ -289,13 +289,8 @@ export async function fetchCustomAgent(name: string) {
   return r.json()
 }
 
-<<<<<<< HEAD
 export async function saveCustomAgent(draft: unknown, projectId?: string) {
   const r = await apiFetch(`/api/custom-agents${qs({ project: projectId })}`, {
-=======
-export async function saveCustomAgent(draft: unknown) {
-  const r = await apiFetch('/api/custom-agents', {
->>>>>>> 099759b (feat(F0003): Deploy dashboard lên server độc lập — multi-environment (#39) (#52))
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ draft }),
@@ -519,13 +514,8 @@ export async function fetchCredentials() {
   return r.json()
 }
 
-<<<<<<< HEAD
 export async function submitJob(payload: unknown, projectId?: string) {
   const r = await apiFetch(`/api/jobs${qs({ project: projectId })}`, {
-=======
-export async function submitJob(payload: unknown) {
-  const r = await apiFetch('/api/jobs', {
->>>>>>> 099759b (feat(F0003): Deploy dashboard lên server độc lập — multi-environment (#39) (#52))
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
