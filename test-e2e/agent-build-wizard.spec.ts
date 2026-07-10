@@ -24,7 +24,7 @@ test('agent build wizard: describe → preview (capture)', async ({ page }, test
   await page.goto('/')
   await page.waitForLoadState('networkidle')
 
-  await page.getByRole('button', { name: '⚡ Build agent' }).click()
+  await page.getByRole('button', { name: '⚡ Tạo agent' }).click()
   await expect(page.locator('.agent-build-wizard')).toBeVisible({ timeout: 15_000 })
 
   await page.locator('.agent-build-wizard textarea').fill('Agent review code cho E2E test')
