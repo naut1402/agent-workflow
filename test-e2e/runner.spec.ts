@@ -16,7 +16,7 @@ test('runner config: mount + save runner roundtrip (capture)', async ({ page }) 
   await page.locator('button[title="Runner Config"]').click()
   await expect(page.locator('.runner-config')).toBeVisible({ timeout: 15_000 })
 
-  await page.getByRole('button', { name: '+ New' }).click()
+  await page.getByRole('button', { name: '+ Thêm mới' }).click()
   const inputs = page.locator('.runner-form input')
   await inputs.nth(0).fill('e2e-runner')
   await inputs.nth(1).fill('E2E Runner')
