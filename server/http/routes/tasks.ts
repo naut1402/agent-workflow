@@ -20,6 +20,26 @@ import {
 } from '../../artifactActions/index.js'
 import { RunArtifactActionRequest } from '../../../shared/schemas/artifactAction.js'
 
+/** Serialize concurrent PUT /api/artifact for the same target (in-process). */
+const artifactWriteLocks = new Map<string, Promise<void>>()
+
+async function withArtifactWriteLock<T>(target: string, fn: () => Promise<T>): Promise<T> {
+  const prev = artifactWriteLocks.get(target) ?? Promise.resolve()
+  let release!: () => void
+  const gate = new Promise<void>((r) => {
+    release = r
+  })
+  const chain = prev.then(() => gate)
+  artifactWriteLocks.set(target, chain)
+  await prev
+  try {
+    return await fn()
+  } finally {
+    release()
+    if (artifactWriteLocks.get(target) === chain) artifactWriteLocks.delete(target)
+  }
+}
+
 // Task state, artifacts, resolved pipeline config, profile & flow-profile.
 export function registerTaskRoutes(app: Hono<HonoEnv>): void {
   app.get('/api/tasks', async (c) => {
@@ -71,41 +91,43 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     const { content, mtime } = b.value as { content?: unknown; mtime?: unknown }
     if (typeof content !== 'string') return j(c, 400, { error: 'content must be a string' })
 
-    let existingMtime: number | null = null
-    try {
-      const s = await fs.stat(target)
-      existingMtime = s.mtimeMs
-    } catch {
-      existingMtime = null
-    }
-
-    if (typeof mtime === 'number' && existingMtime != null && existingMtime !== mtime) {
+    return withArtifactWriteLock(target, async () => {
+      let existingMtime: number | null = null
       try {
-        const current = await fs.readFile(target, 'utf8')
-        return j(c, 409, {
-          error: 'conflict',
-          id,
-          name,
-          content: current,
-          mtime: existingMtime,
-        })
+        const s = await fs.stat(target)
+        existingMtime = s.mtimeMs
       } catch {
-        return j(c, 409, { error: 'conflict', id, name })
+        existingMtime = null
       }
-    }
 
-    await fs.mkdir(path.dirname(target), { recursive: true })
-    const tmp = `${target}.tmp`
-    await fs.writeFile(tmp, content, 'utf8')
-    await fs.rename(tmp, target)
-    const s = await fs.stat(target)
-    emitAudit({
-      op: 'update',
-      entity: 'artifact',
-      identifier: `${id}/${name}`,
-      projectId: c.get('projectId'),
+      if (typeof mtime === 'number' && existingMtime != null && existingMtime !== mtime) {
+        try {
+          const current = await fs.readFile(target, 'utf8')
+          return j(c, 409, {
+            error: 'conflict',
+            id,
+            name,
+            content: current,
+            mtime: existingMtime,
+          })
+        } catch {
+          return j(c, 409, { error: 'conflict', id, name })
+        }
+      }
+
+      await fs.mkdir(path.dirname(target), { recursive: true })
+      const tmp = `${target}.tmp`
+      await fs.writeFile(tmp, content, 'utf8')
+      await fs.rename(tmp, target)
+      const s = await fs.stat(target)
+      emitAudit({
+        op: 'update',
+        entity: 'artifact',
+        identifier: `${id}/${name}`,
+        projectId: c.get('projectId'),
+      })
+      return j(c, 200, { id, name, content, mtime: s.mtimeMs })
     })
-    return j(c, 200, { id, name, content, mtime: s.mtimeMs })
   })
 
   app.get('/api/profile', async (c) => {

@@ -46,7 +46,7 @@ const emit = defineEmits(['select-project', 'projects-changed', 'select-task', '
     <section class="monitor-content">
       <div class="monitor-toolbar">
         <button type="button" class="btn-build-agent" @click="wizardOpen = true">
-          ⚡ Build agent
+          ⚡ Tạo agent
         </button>
       </div>
       <template v-if="selected">

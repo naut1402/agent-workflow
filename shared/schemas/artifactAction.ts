@@ -33,12 +33,13 @@ export const ArtifactActionsFile = z
 export type ArtifactActionsFile = z.infer<typeof ArtifactActionsFile>
 
 /** UI-facing projection of an action (no prompt template / patterns leaked). */
-export interface ArtifactActionView {
-  id: string
-  label: string
-  agent_ref: string
-  confirm: boolean
-}
+export const ArtifactActionView = ArtifactAction.pick({
+  id: true,
+  label: true,
+  agent_ref: true,
+  confirm: true,
+})
+export type ArtifactActionView = z.infer<typeof ArtifactActionView>
 
 /** Body of `POST /api/artifact-actions/run`, validated at the HTTP boundary. */
 export const RunArtifactActionRequest = z.object({
