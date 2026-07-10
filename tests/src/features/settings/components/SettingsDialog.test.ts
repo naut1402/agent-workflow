@@ -1,9 +1,22 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SettingsDialog from '@/features/settings/components/SettingsDialog.vue'
+import {
+  STORAGE_KEY,
+  useAppSettings,
+} from '@/shared/composables/useAppSettings'
+
+beforeEach(() => {
+  localStorage.clear()
+  const { load } = useAppSettings()
+  load()
+})
 
 afterEach(() => {
   document.body.innerHTML = ''
+  localStorage.clear()
+  const { load } = useAppSettings()
+  load()
 })
 
 describe('SettingsDialog', () => {
@@ -33,5 +46,52 @@ describe('SettingsDialog', () => {
     w.unmount()
     expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function))
     removeSpy.mockRestore()
+  })
+
+  it('TC-SD-01: empty localStorage → Block radio checked', () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    const block = document.querySelector(
+      'input[name="artifactViewMode"][value="block"]',
+    ) as HTMLInputElement
+    const full = document.querySelector(
+      'input[name="artifactViewMode"][value="full"]',
+    ) as HTMLInputElement
+    expect(block.checked).toBe(true)
+    expect(full.checked).toBe(false)
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+
+  it('TC-SD-02: chọn Full → persist artifactViewMode full', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    const full = document.querySelector(
+      'input[name="artifactViewMode"][value="full"]',
+    ) as HTMLInputElement
+    full.checked = true
+    full.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({
+      artifactViewMode: 'full',
+    })
+  })
+
+  it('TC-SD-03: seed full → Full radio checked', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ artifactViewMode: 'full' }))
+    const { load } = useAppSettings()
+    load()
+    mount(SettingsDialog, { attachTo: document.body })
+    const full = document.querySelector(
+      'input[name="artifactViewMode"][value="full"]',
+    ) as HTMLInputElement
+    const block = document.querySelector(
+      'input[name="artifactViewMode"][value="block"]',
+    ) as HTMLInputElement
+    expect(full.checked).toBe(true)
+    expect(block.checked).toBe(false)
+  })
+
+  it('TC-SD-04: Esc vẫn emit close', async () => {
+    const w = mount(SettingsDialog, { attachTo: document.body })
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(w.emitted('close')).toHaveLength(1)
   })
 })

@@ -20,3 +20,10 @@ export function parseAppSettings(raw: unknown): AppSettings {
   const parsed = AppSettingsSchema.safeParse(raw)
   return parsed.success ? parsed.data : { ...DEFAULT_APP_SETTINGS }
 }
+
+/** Effective view mode: missing / invalid-at-runtime → 'block'. */
+export function resolveArtifactViewMode(
+  settings: Pick<AppSettings, 'artifactViewMode'> | null | undefined,
+): 'block' | 'full' {
+  return settings?.artifactViewMode === 'full' ? 'full' : 'block'
+}
