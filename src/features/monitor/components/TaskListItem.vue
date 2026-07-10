@@ -82,6 +82,7 @@ function sortedArtifacts(task: any) {
       <span v-if="task.has_qa" class="flag qa" title="có câu hỏi blocking">Q</span>
       <span v-else-if="task.hitl_pending" class="flag hitl" title="đang chờ duyệt">⏸</span>
       <button
+        v-if="task.state_ok"
         class="btn-archive"
         :title="task.archived ? 'Bỏ lưu trữ' : 'Lưu trữ task'"
         @click.stop="toggleArchive"

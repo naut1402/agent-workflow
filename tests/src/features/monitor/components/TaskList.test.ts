@@ -8,9 +8,10 @@ const tasks = [
     current_phase: 'designer',
     hitl_pending: null,
     has_qa: false,
+    state_ok: true,
     artifacts: { 'investigate.md': { exists: true }, 'design.md': { exists: false } },
   },
-  { task_id: 'F003', current_phase: null, hitl_pending: 'hitl-2', has_qa: false, artifacts: {} },
+  { task_id: 'F003', current_phase: null, hitl_pending: 'hitl-2', has_qa: false, state_ok: true, artifacts: {} },
 ]
 
 afterEach(() => {
@@ -54,6 +55,19 @@ describe('TaskList', () => {
     })
     const buttons = w.findAll('.btn-archive')
     expect(buttons.length).toBe(2)
+  })
+
+  it('hides the archive button when the task has no valid state file (state_ok: false)', () => {
+    const w = mount(TaskList, {
+      props: {
+        tasks: [
+          { ...tasks[0], state_ok: false },
+          { ...tasks[1] }, // state_ok: true, button shown
+        ],
+      },
+    })
+    const buttons = w.findAll('.btn-archive')
+    expect(buttons.length).toBe(1)
   })
 
   it('groups archived tasks into a collapsed <details> at the bottom, hidden from the main list', () => {
