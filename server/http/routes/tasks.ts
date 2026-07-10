@@ -5,10 +5,10 @@ import type { HonoEnv } from '../types.js'
 import { j, parseBody, unknownProject } from '../respond.js'
 import { resolveArtifact } from '../../../shared/sanitize.js'
 import { collectTasks, flowProfilePath } from '../../tasks/index.js'
-import { applyHitlAction } from '../../tasks/state.js'
+import { applyArchiveAction, applyHitlAction } from '../../tasks/state.js'
 import { loadPipelineConfig } from '../../pipeline/index.js'
 import { emitAudit } from '../../logging/store.js'
-import { TaskStatePatch } from '../../../shared/schemas/task.js'
+import { TaskArchivePatch, TaskStatePatch } from '../../../shared/schemas/task.js'
 import { submitJob } from '../../runners/index.js'
 import {
   loadArtifactActions,
@@ -216,6 +216,37 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       identifier: id,
       projectId: c.get('projectId'),
       detail: { action: parsed.data.action, gate_id: parsed.data.gate_id },
+    })
+    return j(c, 200, { id, state: result.state, mtime: result.mtime })
+  })
+
+  app.put('/api/task-archive', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const id = c.req.query('id') || ''
+    if (!id || /[^\w\-]/.test(id)) return j(c, 400, { error: 'invalid task id' })
+
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
+    const parsed = TaskArchivePatch.safeParse(b.value)
+    if (!parsed.success) {
+      return j(c, 400, { error: 'invalid patch', details: parsed.error.flatten() })
+    }
+
+    const result = await applyArchiveAction(root, id, parsed.data)
+    if ('error' in result) {
+      const body: Record<string, unknown> = { error: result.error, id }
+      if (result.state) body.state = result.state
+      if (result.mtime != null) body.mtime = result.mtime
+      return j(c, result.status, body)
+    }
+
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: c.get('projectId'),
+      detail: { action: parsed.data.archived ? 'archive' : 'unarchive' },
     })
     return j(c, 200, { id, state: result.state, mtime: result.mtime })
   })

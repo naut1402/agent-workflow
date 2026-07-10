@@ -129,6 +129,44 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .tasklist .flag.qa { color: var(--waiting); }
 .tasklist .flag.hitl { color: var(--accent); }
 
+.archived-group {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.archived-group > summary {
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  padding: 4px 0;
+}
+.archived-group > summary::before { content: '›'; margin-right: 4px; display: inline-block; transition: transform 0.15s; }
+.archived-group[open] > summary::before { transform: rotate(90deg); color: var(--accent); }
+
+.btn-archive {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  border-radius: 5px;
+  padding: 1px 6px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.btn-archive:hover { color: var(--accent); }
+.btn-archive svg,
+.btn-archive-detail svg {
+  transition: transform 0.15s ease;
+}
+.btn-archive:hover svg,
+.btn-archive-detail:hover svg {
+  transform: scale(1.15);
+}
+
 /* Collapsible file list inside each task */
 .file-list {
   list-style: none;
@@ -165,6 +203,21 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .badge.hitl { color: var(--accent); border-color: var(--accent); }
 .badge.auto { color: var(--done); }
 .badge.err { color: var(--danger); border-color: var(--danger); }
+
+.btn-archive-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 20px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn-archive-detail:hover { color: var(--accent); border-color: var(--accent); }
 
 /* Pipeline (VueFlow) */
 .pipeline-wrap { margin-bottom: 14px; }

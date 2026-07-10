@@ -25,6 +25,8 @@ export const TaskState = z
     doc_review_round: DocReviewRound.optional(),
     inherit_from_parent: z.array(z.string()).optional(),
     export_json: z.boolean().optional(),
+    archived: z.boolean().optional(),
+    archived_at: z.string().nullable().optional(),
   })
   .passthrough()
 
@@ -40,6 +42,14 @@ export const TaskStatePatch = z.object({
 
 export type TaskStatePatch = z.infer<typeof TaskStatePatch>
 
+/** Body for dashboard archive/unarchive of a completed task (`PUT /api/task-archive`). */
+export const TaskArchivePatch = z.object({
+  archived: z.boolean(),
+  mtime: z.number(),
+})
+
+export type TaskArchivePatch = z.infer<typeof TaskArchivePatch>
+
 /** UI-facing projection of task state with the same safe defaults the API applies. */
 export interface TaskStateView {
   parent_task_id: string | null
@@ -50,6 +60,8 @@ export interface TaskStateView {
   doc_review_round: { investigate: number; design: number } & Record<string, unknown>
   inherit_from_parent: string[]
   export_json: boolean
+  archived: boolean
+  archived_at: string | null
 }
 
 /**
@@ -68,5 +80,7 @@ export function parseTaskState(raw: unknown): TaskStateView {
     doc_review_round: { investigate: 0, design: 0, ...(s.doc_review_round ?? {}) },
     inherit_from_parent: s.inherit_from_parent ?? [],
     export_json: s.export_json ?? false,
+    archived: s.archived ?? false,
+    archived_at: s.archived_at ?? null,
   }
 }

@@ -19,6 +19,7 @@ const content = ref('')
 const loadedKey = ref<string | null>(null)
 const loadedMtime = ref<number | null>(null)
 const blockMode = ref(false)
+const openBlocks = ref<Set<number>>(new Set())
 const message = ref('')
 const externalChange = ref(false)
 const viewRoot = ref<HTMLElement | null>(null)
@@ -159,9 +160,36 @@ async function scheduleMermaid() {
   await renderMermaid(viewRoot.value)
 }
 
-function onBlockToggle(ev: Event) {
+function onBlockToggle(i: number, ev: Event) {
   const el = ev.target as HTMLDetailsElement
-  if (el.open) scheduleMermaid()
+  if (el.open) {
+    openBlocks.value.add(i)
+    scheduleMermaid()
+  } else {
+    openBlocks.value.delete(i)
+  }
+  openBlocks.value = new Set(openBlocks.value) // force reactivity — cùng pattern TaskList.vue
+}
+
+function openAllBlocks() {
+  openBlocks.value = new Set(blocks.value.map((_, i) => i))
+  scheduleMermaid()
+}
+
+function closeAllBlocks() {
+  openBlocks.value = new Set()
+}
+
+const allBlocksOpen = computed(
+  () => blocks.value.length > 0 && openBlocks.value.size === blocks.value.length,
+)
+
+function toggleAllBlocks() {
+  if (allBlocksOpen.value) {
+    closeAllBlocks()
+  } else {
+    openAllBlocks()
+  }
 }
 
 watch(
@@ -185,6 +213,12 @@ watch(
 watch(() => props.openArtifact?.name, () => {
   blockMode.value = false
   cancelEdit()
+})
+
+// Reset về mặc định (3 block đầu mở) mỗi khi content được (nạp) lại — cùng gốc
+// dữ liệu với `blocks` computed, nên seed lại khi artifact load xong.
+watch(content, () => {
+  openBlocks.value = new Set([0, 1, 2])
 })
 
 watch(
@@ -233,6 +267,13 @@ onUpdated(() => scheduleMermaid())
             @click="blockMode = !blockMode"
             :title="blockMode ? 'Chuyển sang Full view' : 'Chuyển sang Block view'"
           >{{ blockMode ? '📄 Full' : '🗂 Blocks' }}</button>
+          <button
+            v-if="blockMode"
+            class="btn-view-toggle"
+            :disabled="isEditing()"
+            :title="allBlocksOpen ? 'Đóng tất cả block' : 'Mở tất cả block'"
+            @click="toggleAllBlocks"
+          >{{ allBlocksOpen ? '▲' : '▼' }}</button>
         </div>
       </div>
 
@@ -254,8 +295,8 @@ onUpdated(() => scheduleMermaid())
             v-for="(block, i) in blocks"
             :key="i"
             class="block-item md-section-wrap"
-            :open="i < 3"
-            @toggle="onBlockToggle"
+            :open="openBlocks.has(i)"
+            @toggle="onBlockToggle(i, $event)"
           >
             <SectionSaveIndicator
               :saving="showSavingIndicator(i)"

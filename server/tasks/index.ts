@@ -111,6 +111,8 @@ export async function collectTasks(root: string): Promise<any[]> {
       doc_review_round: state?.doc_review_round ?? { investigate: 0, design: 0 },
       inherit_from_parent: state?.inherit_from_parent ?? [],
       export_json: state?.export_json ?? false,
+      archived: state?.archived ?? false,
+      archived_at: state?.archived_at ?? null,
       artifacts,
       subtasks,
       pipeline: cfg,

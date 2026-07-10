@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
-import { TaskStatePatch } from '../../shared/schemas/task.js'
+import { TaskArchivePatch, TaskStatePatch } from '../../shared/schemas/task.js'
 import { loadPipelineConfig } from '../pipeline/index.js'
 import { readState } from './index.js'
 
@@ -135,6 +135,52 @@ export async function applyHitlAction(
       state.current_phase = next ? next.id : 'completed'
       state.dashboard_approved_at = new Date().toISOString()
     }
+
+    const mtime = await writeStateAtomic(stateFile, state)
+    return { ok: true, state, mtime }
+  })
+}
+
+/**
+ * Archive/unarchive a task. Separate from `applyHitlAction` on purpose: archiving
+ * is not a HITL gate decision, so it doesn't validate `gate_id`/`hitl_pending` —
+ * the server accepts archiving any task regardless of `current_phase` (the
+ * completed-only restriction is a UI affordance, not a server-side invariant).
+ */
+export async function applyArchiveAction(
+  root: string,
+  taskId: string,
+  patch: TaskArchivePatch,
+): Promise<HitlApplyResult> {
+  const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
+
+  return withStateFileLock(stateFile, async () => {
+    const read = await readState(stateFile)
+    if (!read.ok) {
+      return { ok: false, error: 'state not found', status: 404 }
+    }
+
+    let currentMtime: number | null = null
+    try {
+      const s = await fs.stat(stateFile)
+      currentMtime = s.mtimeMs
+    } catch {
+      currentMtime = null
+    }
+
+    if (currentMtime != null && currentMtime !== patch.mtime) {
+      return {
+        ok: false,
+        error: 'conflict',
+        status: 409,
+        state: read.state,
+        mtime: currentMtime,
+      }
+    }
+
+    const state = { ...read.state } as Record<string, unknown>
+    state.archived = patch.archived
+    state.archived_at = patch.archived ? new Date().toISOString() : null
 
     const mtime = await writeStateAtomic(stateFile, state)
     return { ok: true, state, mtime }

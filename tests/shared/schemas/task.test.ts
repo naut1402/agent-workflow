@@ -12,6 +12,8 @@ describe('parseTaskState', () => {
       doc_review_round: { investigate: 0, design: 0 },
       inherit_from_parent: [],
       export_json: false,
+      archived: false,
+      archived_at: null,
     })
   })
 
@@ -42,6 +44,12 @@ describe('parseTaskState', () => {
       investigate: 3,
       design: 0,
     })
+  })
+
+  it('preserves archived/archived_at when provided', () => {
+    const v = parseTaskState({ archived: true, archived_at: '2024-01-01T00:00:00.000Z' })
+    expect(v.archived).toBe(true)
+    expect(v.archived_at).toBe('2024-01-01T00:00:00.000Z')
   })
 
   it('TaskState passes through unknown keys (forward-compatible)', () => {
