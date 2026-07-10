@@ -6,10 +6,11 @@ import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
 import AgentBuildWizard from './AgentBuildWizard.vue'
+import { patchTaskArchive } from '../../../api'
 
 const wizardOpen = ref(false)
 
-defineProps({
+const props = defineProps({
   projects: { type: Array, default: () => [] },
   defaultProjectId: { type: [String, null], default: null },
   selectedProjectId: { type: [String, null], default: null },
@@ -22,7 +23,36 @@ defineProps({
   lastUpdated: { type: String, default: '' },
 })
 
-const emit = defineEmits(['select-project', 'projects-changed', 'select-task', 'open-artifact', 'qa-saved', 'hitl-action'])
+const emit = defineEmits([
+  'select-project',
+  'projects-changed',
+  'select-task',
+  'open-artifact',
+  'qa-saved',
+  'hitl-action',
+  'task-archived',
+])
+
+const archiveError = ref('')
+
+async function toggleArchiveSelected() {
+  if (!props.selected) return
+  archiveError.value = ''
+  try {
+    await patchTaskArchive(
+      props.selected.task_id,
+      { archived: !props.selected.archived, mtime: props.selected.state_mtime },
+      props.selectedProjectId ?? undefined,
+    )
+    emit('task-archived')
+  } catch (e: any) {
+    if (e?.status === 409) {
+      emit('task-archived')
+    } else {
+      archiveError.value = String(e.message || e)
+    }
+  }
+}
 </script>
 
 <template>
@@ -39,8 +69,10 @@ const emit = defineEmits(['select-project', 'projects-changed', 'select-task', '
         :tasks="tasks"
         :selected-id="selectedId"
         :open-artifact="openArtifact"
+        :project-id="selectedProjectId"
         @select="emit('select-task', $event)"
         @open-artifact="emit('open-artifact', $event)"
+        @task-archived="emit('task-archived')"
       />
     </aside>
     <section class="monitor-content">
@@ -60,7 +92,13 @@ const emit = defineEmits(['select-project', 'projects-changed', 'select-task', '
             <span v-if="selected.review_round" class="badge">review round {{ selected.review_round }}/2</span>
             <span v-if="selected.hitl_pending" class="badge hitl">⏸ {{ selected.hitl_pending }}</span>
             <span v-if="!selected.state_ok" class="badge err">state lỗi</span>
+            <button
+              v-if="selected.current_phase === 'completed' || selected.archived"
+              class="btn-archive-detail"
+              @click="toggleArchiveSelected"
+            >{{ selected.archived ? '↩ Bỏ lưu trữ' : '🗄 Lưu trữ' }}</button>
           </div>
+          <p v-if="archiveError" class="art-warning">{{ archiveError }}</p>
         </div>
 
         <QaPanel

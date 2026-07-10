@@ -129,6 +129,27 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .tasklist .flag.qa { color: var(--waiting); }
 .tasklist .flag.hitl { color: var(--accent); }
 
+.archive-filter {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0 0 6px;
+  cursor: pointer;
+}
+.btn-archive {
+  font-size: 12px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 5px;
+  padding: 1px 6px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.btn-archive:hover { color: var(--accent); border-color: var(--accent); }
+
 /* Collapsible file list inside each task */
 .file-list {
   list-style: none;
@@ -165,6 +186,18 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .badge.hitl { color: var(--accent); border-color: var(--accent); }
 .badge.auto { color: var(--done); }
 .badge.err { color: var(--danger); border-color: var(--danger); }
+
+.btn-archive-detail {
+  font-size: 11px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 20px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn-archive-detail:hover { color: var(--accent); border-color: var(--accent); }
 
 /* Pipeline (VueFlow) */
 .pipeline-wrap { margin-bottom: 14px; }
