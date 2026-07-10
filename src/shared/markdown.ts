@@ -36,25 +36,38 @@ export async function renderMermaid(rootEl: HTMLElement | null | undefined): Pro
   const nodes = rootEl.querySelectorAll<HTMLElement>('.mermaid')
   if (!nodes.length) return
 
+  const theme = mermaidTheme()
+
+  // Short-circuit: skip nodes already rendered with the same source + same
+  // theme. Needed because ArtifactPanel calls this on EVERY re-render
+  // (onUpdated), including re-renders caused by the `task` prop changing
+  // identity every ~1500ms poll tick rather than the mermaid content actually
+  // changing — previously every such tick destroyed and redrew the existing
+  // SVG unconditionally, causing a visible flicker.
+  const toRender: HTMLElement[] = []
+  for (const node of nodes) {
+    const hasSvg = !!node.querySelector('svg')
+    const knownSrc = node.getAttribute('data-mermaid-src')
+    const knownTheme = node.getAttribute('data-mermaid-theme')
+    if (hasSvg && knownSrc && knownTheme === theme) continue // unchanged, keep the existing SVG
+
+    const src = knownSrc ?? node.textContent?.trim() ?? ''
+    if (!src) continue
+    node.setAttribute('data-mermaid-src', src)
+    node.setAttribute('data-mermaid-theme', theme)
+    if (hasSvg) node.textContent = src // source or theme really changed — reset before redrawing
+    node.removeAttribute('data-processed')
+    toRender.push(node)
+  }
+  if (!toRender.length) return
+
   if (!mermaidLoaded) {
     mermaidLoaded = await import('mermaid')
   }
-
-  const theme = mermaidTheme()
   if (activeTheme !== theme) {
     mermaidLoaded.default.initialize({ startOnLoad: false, theme, securityLevel: 'strict' })
     activeTheme = theme
   }
 
-  for (const node of nodes) {
-    const src = node.getAttribute('data-mermaid-src') ?? node.textContent?.trim() ?? ''
-    if (!src) continue
-    node.setAttribute('data-mermaid-src', src)
-    if (node.querySelector('svg')) {
-      node.textContent = src
-    }
-    node.removeAttribute('data-processed')
-  }
-
-  await mermaidLoaded.default.run({ nodes: Array.from(nodes) })
+  await mermaidLoaded.default.run({ nodes: toRender })
 }
