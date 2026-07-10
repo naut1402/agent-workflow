@@ -89,8 +89,40 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); }
 .dot.live { background: var(--done); box-shadow: 0 0 6px var(--done); }
 .root { font-size: 11px; color: var(--muted); margin: 6px 0 12px; word-break: break-all; }
-.status { margin-top: auto; font-size: 11px; color: var(--muted); padding-top: 10px; }
+.sidebar-footer {
+  margin-top: auto;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+.status { margin-top: 0; font-size: 11px; color: var(--muted); padding-top: 0; }
 .status .err { color: var(--danger); }
+.sidebar-collapsed .sidebar-footer {
+  width: 36px;
+  align-items: center;
+  border-top-color: var(--border);
+}
+.sidebar-collapsed .settings-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
+}
+.settings-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.settings-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
 
 /* Task list */
 .tasklist { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
