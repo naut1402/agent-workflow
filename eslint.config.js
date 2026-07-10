@@ -11,7 +11,7 @@ const noEnum = {
 const noDefaultExport = {
   selector: 'ExportDefaultDeclaration',
   message:
-    'Không dùng default export trừ *.vue / vite|vitest|playwright.config.* (AGENTS.md §3.1).',
+    'Không dùng default export trừ *.vue / vite.config.* / vitest.config.* / playwright.config.* / *.d.ts (AGENTS.md §3.1).',
 }
 
 /** MVP: recommended giữ nguyên nhưng hạ error → warn để CI xanh (không --max-warnings 0). */
@@ -54,12 +54,12 @@ export default tseslint.config(
 
   {
     files: [
-      'src/**/*.{ts,js}',
-      'server/**/*.{ts,js,mjs}',
-      'shared/**/*.{ts,js}',
-      'mcp/**/*.{ts,js}',
-      'tests/**/*.{ts,js}',
-      'test-e2e/**/*.{ts,js}',
+      'src/**/*.{ts,tsx,js}',
+      'server/**/*.{ts,tsx,js,mjs}',
+      'shared/**/*.{ts,tsx,js}',
+      'mcp/**/*.{ts,tsx,js}',
+      'tests/**/*.{ts,tsx,js}',
+      'test-e2e/**/*.{ts,tsx,js}',
     ],
     languageOptions: {
       globals: {
