@@ -96,7 +96,17 @@ async function toggleArchiveSelected() {
               v-if="selected.current_phase === 'completed' || selected.archived"
               class="btn-archive-detail"
               @click="toggleArchiveSelected"
-            >{{ selected.archived ? '↩ Bỏ lưu trữ' : '🗄 Lưu trữ' }}</button>
+            ><template v-if="selected.archived">↩ Bỏ lưu trữ</template><template v-else><svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.25"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              ><rect x="2" y="2" width="12" height="3" rx="1" /><path d="M3 5v7.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5" /><path d="M6.5 8.5h3" /></svg> Lưu trữ</template></button>
           </div>
           <p v-if="archiveError" class="art-warning">{{ archiveError }}</p>
         </div>

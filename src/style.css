@@ -139,6 +139,8 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   cursor: pointer;
 }
 .btn-archive {
+  display: inline-flex;
+  align-items: center;
   font-size: 12px;
   background: none;
   border: 1px solid var(--border);
@@ -188,6 +190,9 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .badge.err { color: var(--danger); border-color: var(--danger); }
 
 .btn-archive-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   background: var(--panel-2);
   border: 1px solid var(--border);

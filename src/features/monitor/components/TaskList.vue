@@ -110,7 +110,18 @@ function sortedArtifacts(task) {
           class="btn-archive"
           :title="t.archived ? 'Bỏ lưu trữ' : 'Lưu trữ task đã hoàn thành'"
           @click.stop="toggleArchive(t)"
-        >{{ t.archived ? '↩' : '🗄' }}</button>
+        ><template v-if="t.archived">↩</template><svg
+            v-else
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.25"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          ><rect x="2" y="2" width="12" height="3" rx="1" /><path d="M3 5v7.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5" /><path d="M6.5 8.5h3" /></svg></button>
       </div>
 
       <!-- Collapsible file list -->
