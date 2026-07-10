@@ -43,20 +43,20 @@ describe('TaskList', () => {
     expect(w.find('.flag.qa').exists()).toBe(true)
   })
 
-  it('shows the archive button only for completed (or already archived) tasks', () => {
+  it('shows the archive button for every task, regardless of current_phase', () => {
     const w = mount(TaskList, {
       props: {
         tasks: [
           { ...tasks[0], current_phase: 'completed' },
-          { ...tasks[1] },
+          { ...tasks[1] }, // current_phase: null, not completed
         ],
       },
     })
     const buttons = w.findAll('.btn-archive')
-    expect(buttons.length).toBe(1)
+    expect(buttons.length).toBe(2)
   })
 
-  it('hides archived tasks by default, shows them when "Hiện task đã lưu trữ" is ticked', async () => {
+  it('groups archived tasks into a collapsed <details> at the bottom, hidden from the main list', () => {
     const w = mount(TaskList, {
       props: {
         tasks: [
@@ -65,11 +65,53 @@ describe('TaskList', () => {
         ],
       },
     })
-    expect(w.findAll('.task-entry').length).toBe(1)
-    expect(w.find('.task-entry .id').text()).toBe('F003')
+    // Main list only shows the non-archived task.
+    const mainIds = w.findAll('.tasklist')[0].findAll('.task-entry .id').map((n) => n.text())
+    expect(mainIds).toEqual(['F003'])
 
-    await w.find('.archive-filter input').setValue(true)
-    expect(w.findAll('.task-entry').length).toBe(2)
+    // Archived group exists, collapsed by default, labelled with the count.
+    const group = w.find('.archived-group')
+    expect(group.exists()).toBe(true)
+    expect(group.element.hasAttribute('open')).toBe(false)
+    expect(group.find('summary').text()).toBe('Đã lưu trữ (1)')
+
+    // Task is present inside the group markup (native <details> keeps content in the
+    // DOM even when collapsed).
+    const archivedIds = group.findAll('.task-entry .id').map((n) => n.text())
+    expect(archivedIds).toEqual(['B4488'])
+  })
+
+  it('does not render the archived group when there are no archived tasks', () => {
+    const w = mount(TaskList, { props: { tasks } })
+    expect(w.find('.archived-group').exists()).toBe(false)
+  })
+
+  it('clicking unarchive from inside the archived group calls patchTaskArchive and emits task-archived', async () => {
+    const fetchMock = vi.fn(async (_input: any, _init: any = {}) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'B4488' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const w = mount(TaskList, {
+      props: {
+        tasks: [{ ...tasks[0], archived: true, state_mtime: 123 }],
+        projectId: 'proj-1',
+      },
+    })
+    const group = w.find('.archived-group')
+    await group.find('.btn-archive').trigger('click')
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toContain('/api/task-archive')
+    expect(String(url)).toContain('id=B4488')
+    expect(String(url)).toContain('project=proj-1')
+    expect(init.method).toBe('PUT')
+    expect(JSON.parse(init.body)).toEqual({ archived: false, mtime: 123 })
+    expect(w.emitted('task-archived')).toBeTruthy()
   })
 
   it('clicking the archive button calls patchTaskArchive and emits task-archived', async () => {

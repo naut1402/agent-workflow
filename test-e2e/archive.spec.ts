@@ -1,30 +1,37 @@
 import { test, expect } from '@playwright/test'
 import { capture } from './_capture'
 
-// E2E for the archive/unarchive flow (Tab Monitor): the fixture task DEMO-2 has
-// current_phase "completed" so it always shows an archive button. Archiving it
-// hides it from the default list; ticking "Hiện task đã lưu trữ" brings it back
-// with an unarchive button, and unarchiving restores the original state.
+// E2E for the archive/unarchive flow (Tab Monitor): the archive button shows for
+// every task regardless of current_phase. Archiving DEMO-2 moves it out of the
+// main list into the "Đã lưu trữ" collapsible group (collapsed by default);
+// opening the group reveals it with an unarchive button, and unarchiving
+// restores the original state.
 
-test('archive then unarchive a completed task (capture)', async ({ page }, testInfo) => {
+test('archive then unarchive a task (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
   await page.waitForLoadState('networkidle')
 
-  const row = page.locator('.task-entry', { hasText: 'DEMO-2' })
+  const mainList = page.locator('.tasklist').first()
+  const row = mainList.locator('.task-entry', { hasText: 'DEMO-2' })
   await expect(row).toBeVisible({ timeout: 15_000 })
 
   await row.locator('.btn-archive').click()
-  await expect(page.locator('.task-entry', { hasText: 'DEMO-2' })).toHaveCount(0)
+  await expect(mainList.locator('.task-entry', { hasText: 'DEMO-2' })).toHaveCount(0)
+
+  const group = page.locator('.archived-group')
+  await expect(group).toBeVisible()
+  await expect(group.locator('summary')).toContainText('Đã lưu trữ (1)')
+
+  const archivedRow = group.locator('.task-entry', { hasText: 'DEMO-2' })
+  await expect(archivedRow).toBeHidden() // collapsed by default
 
   await capture(page, testInfo, 'archive-hidden-after-archive')
 
-  await page.locator('.archive-filter input').check()
-  const archivedRow = page.locator('.task-entry', { hasText: 'DEMO-2' })
+  await group.locator('summary').click()
   await expect(archivedRow).toBeVisible()
 
   await capture(page, testInfo, 'archive-visible-with-filter')
 
   await archivedRow.locator('.btn-archive').click()
-  await page.locator('.archive-filter input').uncheck()
-  await expect(page.locator('.task-entry', { hasText: 'DEMO-2' })).toBeVisible()
+  await expect(mainList.locator('.task-entry', { hasText: 'DEMO-2' })).toBeVisible()
 })

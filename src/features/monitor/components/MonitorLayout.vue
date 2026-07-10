@@ -93,7 +93,6 @@ async function toggleArchiveSelected() {
             <span v-if="selected.hitl_pending" class="badge hitl">⏸ {{ selected.hitl_pending }}</span>
             <span v-if="!selected.state_ok" class="badge err">state lỗi</span>
             <button
-              v-if="selected.current_phase === 'completed' || selected.archived"
               class="btn-archive-detail"
               @click="toggleArchiveSelected"
             ><template v-if="selected.archived">↩ Bỏ lưu trữ</template><template v-else><svg
