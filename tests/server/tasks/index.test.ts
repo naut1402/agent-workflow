@@ -71,12 +71,28 @@ describe('collectTasks', () => {
     expect(b1.current_phase).toBe('design')
     expect(b1.review_round).toBe(2)
     expect(b1.artifacts['design.md'].exists).toBe(true)
+    expect(b1.archived).toBe(false) // safe default when state has no archived field
+    expect(b1.archived_at).toBeNull()
 
     const a0 = tasks.find((t) => t.task_id === 'A0')!
     expect(a0.state_ok).toBe(false)
     expect(a0.current_phase).toBeNull() // safe default
     expect(a0.has_qa).toBe(true)
     expect(a0.qa_count).toBe(2)
+  })
+
+  test('exposes archived + archived_at from state', async () => {
+    const root = await tmp()
+    await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+    await fs.writeFile(
+      path.join(root, '.dev-state', 'B2.json'),
+      '{"current_phase":"completed","archived":true,"archived_at":"2024-01-01T00:00:00.000Z"}',
+    )
+
+    const tasks = await collectTasks(root)
+    const b2 = tasks.find((t) => t.task_id === 'B2')!
+    expect(b2.archived).toBe(true)
+    expect(b2.archived_at).toBe('2024-01-01T00:00:00.000Z')
   })
 
   test('empty root → []', async () => {

@@ -224,6 +224,7 @@ onUnmounted(stop)
         @open-artifact="handleOpenArtifact"
         @qa-saved="poll"
         @hitl-action="poll"
+        @task-archived="poll"
       />
     </main>
 
