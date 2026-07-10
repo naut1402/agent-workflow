@@ -50,6 +50,28 @@ watch(taskManual, (v) => {
 })
 
 watch(
+  () => props.taskId,
+  (id) => {
+    if (!id) {
+      if (props.scope !== 'global') {
+        taskSelect.value = ''
+        taskManual.value = ''
+      }
+      return
+    }
+    const listed = props.tasks.some((t) => t.task_id === id)
+    if (listed) {
+      taskSelect.value = id
+      taskManual.value = ''
+    } else {
+      taskSelect.value = '__manual__'
+      taskManual.value = id
+    }
+  },
+  { immediate: true },
+)
+
+watch(
   () => props.scope,
   (scope) => {
     if (scope === 'global') {
@@ -491,7 +513,7 @@ const editorLayoutClass = computed(() => ({
               v-if="taskSelect === '__manual__'"
               v-model="taskManual"
               class="scope-task-input cfg-input"
-              placeholder="Task ID"
+              placeholder="Mã task"
             />
           </template>
         </div>

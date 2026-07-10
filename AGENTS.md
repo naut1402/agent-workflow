@@ -54,6 +54,14 @@ ESM thuần (`"type": "module"`); server import core Node có tiền tố `node:
 
 Không dùng `enum` (ưu tiên union literal type); không default export trừ khi framework bắt buộc (vd Vue SFC).
 
+Lint/format local & CI: `bun run lint` / `bun run lint:fix` / `bun run format`. ESLint (flat) map quy ước tối thiểu ở mức `warn` (chưa `--max-warnings 0`):
+
+| Quy ước | Rule |
+|---------|------|
+| Không TS `enum` | `no-restricted-syntax` → `TSEnumDeclaration` (không cấm `z.enum`) |
+| Không default export | `ExportDefaultDeclaration` — allowlist `*.vue`, `vite`/`vitest`/`playwright.config.*`, `*.d.ts` |
+| `<script setup lang="ts">` | `vue/block-lang` + `vue/component-api-style` |
+
 ### 3.2 Một quirk TypeScript đã gặp
 
 Discriminated union với discriminant kiểu boolean (`{ok:true,...}|{ok:false,...}`) — cách narrow quen thuộc (`if (!v.ok) return v`) **không hoạt động đúng** dưới vue-tsc (TS6) trong repo này. Dùng narrowing bằng toán tử `in`: `if ('error' in v) return v`, hoặc đổi discriminant sang string literal (`kind: 'ok'|'err'`).
@@ -103,7 +111,7 @@ Coverage ưu tiên cao — mỗi module refactor phải kèm test (unit + e2e).
 | Unit frontend | **vitest** (jsdom) | `src/**`, `shared/**` (composable, lib, schema, component @vue/test-utils) | `bun run test:fe` |
 | E2E | **@playwright/test** | full stack: server thật + fixture `.dev-team-agent/` + browser | `bun run test:e2e` |
 
-`bun run test:all` chạy tuần tự: typecheck → bun test → vitest → playwright.
+`bun run test:all` chạy tuần tự: typecheck → lint → bun test → vitest → playwright.
 
 ### 5.2 Layout test — gom vào `tests/` + `test-e2e/`
 

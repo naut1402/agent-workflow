@@ -25,7 +25,9 @@ bun run start             # build + serve
 bun run mcp               # MCP stdio server (mcp/server.ts)
 ```
 
-Chạy test: `bun run test` (backend) · `bun run test:fe` (frontend) · `bun run test:e2e` (e2e) · `bun run test:all` (đầy đủ). Chi tiết quy ước test: [`AGENTS.md` §5](AGENTS.md#5-test-coverage-first).
+Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`.
+
+Chạy test: `bun run test` (backend) · `bun run test:fe` (frontend) · `bun run test:e2e` (e2e) · `bun run test:all` (typecheck → lint → test → test:fe → e2e). Chi tiết quy ước test: [`AGENTS.md` §5](AGENTS.md#5-test-coverage-first).
 
 ## Khái niệm `.dev-team-agent/` (data root)
 

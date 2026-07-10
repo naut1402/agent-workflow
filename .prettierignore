@@ -1,0 +1,8 @@
+dist
+coverage
+playwright-report
+test-results
+.dev-team-agent
+node_modules
+logs
+bun.lock

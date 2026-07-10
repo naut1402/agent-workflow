@@ -29,11 +29,13 @@ async function loadLogs(type: 'audit' | 'request') {
   error.value = ''
   try {
     const data = await fetchLogs({ type, limit: 200 })
+    if (tab.value !== type) return
     entries.value = data.entries || []
   } catch (e: any) {
+    if (tab.value !== type) return
     error.value = String(e.message || e)
   } finally {
-    loading.value = false
+    if (tab.value === type) loading.value = false
   }
 }
 
@@ -42,20 +44,24 @@ async function loadJobs() {
   error.value = ''
   try {
     const data = await fetchJobs(20)
+    if (tab.value !== 'jobs') return
     jobs.value = data.jobs || []
   } catch (e: any) {
+    if (tab.value !== 'jobs') return
     error.value = String(e.message || e)
   } finally {
-    loading.value = false
+    if (tab.value === 'jobs') loading.value = false
   }
 }
 
 async function loadJobLog(id: string) {
   try {
     const data = await fetchJobLog(id)
+    if (selectedJobId.value !== id) return
     jobLog.value = data.text || ''
     jobLogTruncated.value = Boolean(data.truncated)
   } catch (e: any) {
+    if (selectedJobId.value !== id) return
     error.value = String(e.message || e)
   }
 }

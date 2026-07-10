@@ -44,6 +44,7 @@ const jobBadge = computed(() => {
 })
 
 function close() {
+  if (build.running.value) return
   emit('close')
 }
 </script>

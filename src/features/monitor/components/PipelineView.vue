@@ -178,6 +178,13 @@ function openHitlModal(phase: { key: string; label: string; hitl: string | null 
   hitlOpen.value = true
 }
 
+watch(
+  () => props.task.state_mtime,
+  (v) => {
+    if (hitlOpen.value) hitlMtime.value = v ?? null
+  },
+)
+
 function onNodeClick({ node }) {
   if (node.data?.status !== 'waiting' || !node.data?.hitl) return
   openHitlModal({ key: node.id, label: node.data.label, hitl: node.data.hitl })
@@ -208,6 +215,7 @@ async function submitHitl(action: 'approve' | 'reject') {
   } catch (e: any) {
     if (e?.status === 409) {
       hitlError.value = 'Trạng thái đã thay đổi. Đang làm mới…'
+      hitlMtime.value = e?.body?.mtime ?? props.task.state_mtime ?? null
       emit('hitl-action')
     } else {
       hitlError.value = String(e.message || e)

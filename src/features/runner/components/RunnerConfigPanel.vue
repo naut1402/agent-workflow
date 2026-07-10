@@ -165,7 +165,7 @@ async function smokeTest() {
 
     <div class="runner-layout">
       <aside class="runner-list">
-        <button type="button" class="btn-ghost btn-sm" @click="newRunner">+ New</button>
+        <button type="button" class="btn-ghost btn-sm" @click="newRunner">+ Thêm mới</button>
         <ul>
           <li
             v-for="r in runners"
@@ -223,8 +223,8 @@ async function smokeTest() {
 
         <div class="actions">
           <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">Lưu</button>
-          <button type="button" class="btn-ghost btn-sm" :disabled="!selectedId" @click="makeDefault">Set default</button>
-          <button type="button" class="btn-ghost btn-sm" :disabled="testing" @click="smokeTest">Smoke test</button>
+          <button type="button" class="btn-ghost btn-sm" :disabled="!selectedId" @click="makeDefault">Đặt mặc định</button>
+          <button type="button" class="btn-ghost btn-sm" :disabled="testing" @click="smokeTest">Kiểm tra kết nối</button>
           <button type="button" class="btn-danger btn-sm" :disabled="!selectedId" @click="remove">Xóa</button>
         </div>
       </section>
