@@ -26,6 +26,9 @@ jobs:
       - name: Typecheck (vue-tsc)
         run: bun run typecheck
 
+      - name: Lint (ESLint)
+        run: bun run lint
+
       - name: Unit + integration tests (backend, bun test)
         run: bun run test
 
