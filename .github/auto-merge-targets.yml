@@ -1,0 +1,18 @@
+# Branch nhận sync từ `main` (ngoài pattern auto-discover).
+#
+# Pattern cố định trong workflow `.github/workflows/sync-from-main.yml`:
+# mọi remote branch khớp `dev/**/main` (vd `dev/1.0.0/main`,
+# `dev/1.0.0/feat-F0007/main`) — không cần liệt kê ở đây.
+#
+# Thêm branch khác (epic/refactor main, …) vào `extra_targets` khi cần:
+#   extra_targets:
+#     - refactor/main
+#     - feat/U0003/main
+#
+# Kiểm tra: Actions → "Sync main into version/epic mains" → Run workflow.
+# Conflict → PR gắn label `auto-merge-conflict`.
+# Nút Update branch trên PR: bật bằng workflow_dispatch
+#   (input enable_update_branch=true) hoặc:
+#   gh api -X PATCH "repos/{owner}/{repo}" -f allow_update_branch=true
+
+extra_targets: []
