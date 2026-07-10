@@ -1,6 +1,12 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
+import process from 'node:process'
+
+// Node ≥25 ships incomplete built-in localStorage that shadows jsdom's.
+// Disable it so jsdom owns the global (vitest#8757 / node#60303).
+const nodeMajor = Number.parseInt(process.versions.node.split('.')[0], 10)
+const execArgv = nodeMajor >= 25 ? ['--no-webstorage'] : []
 
 // Frontend unit tests (Vue components, composables, src/ + shared/ logic).
 // Backend unit/integration tests run under `bun test` instead (see package.json).
@@ -15,6 +21,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    execArgv,
     // Unit tests live under tests/ mirroring the source tree. Vitest owns the
     // frontend + shared subtrees; bun test owns tests/server + tests/mcp.
     include: ['tests/src/**/*.{test,spec}.ts', 'tests/shared/**/*.{test,spec}.ts'],

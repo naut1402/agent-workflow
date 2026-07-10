@@ -3,6 +3,7 @@ import {
   AppSettingsSchema,
   DEFAULT_APP_SETTINGS,
   parseAppSettings,
+  resolveArtifactViewMode,
 } from '../../../shared/schemas/appSettings'
 
 describe('parseAppSettings', () => {
@@ -35,5 +36,21 @@ describe('parseAppSettings', () => {
 
   it('rejects invalid enum values → default', () => {
     expect(parseAppSettings({ theme: 'neon' })).toEqual(DEFAULT_APP_SETTINGS)
+  })
+})
+
+describe('resolveArtifactViewMode', () => {
+  it('TC-SC-01: {} / undefined / null → block', () => {
+    expect(resolveArtifactViewMode({})).toBe('block')
+    expect(resolveArtifactViewMode(undefined)).toBe('block')
+    expect(resolveArtifactViewMode(null)).toBe('block')
+  })
+
+  it("TC-SC-02: { artifactViewMode: 'block' } → block", () => {
+    expect(resolveArtifactViewMode({ artifactViewMode: 'block' })).toBe('block')
+  })
+
+  it("TC-SC-03: { artifactViewMode: 'full' } → full", () => {
+    expect(resolveArtifactViewMode({ artifactViewMode: 'full' })).toBe('full')
   })
 })

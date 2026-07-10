@@ -37,6 +37,15 @@ describe('useAppSettings', () => {
     })
   })
 
+  it("update({ artifactViewMode: 'full' }) persists under storage key", () => {
+    const { settings, update } = useAppSettings()
+    update({ artifactViewMode: 'full' })
+    expect(settings.value.artifactViewMode).toBe('full')
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({
+      artifactViewMode: 'full',
+    })
+  })
+
   it('corrupt JSON / invalid shape → default, no throw', () => {
     localStorage.setItem(STORAGE_KEY, '{not-json')
     const { load, settings } = useAppSettings()
