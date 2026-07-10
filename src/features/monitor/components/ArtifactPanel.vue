@@ -180,6 +180,18 @@ function closeAllBlocks() {
   openBlocks.value = new Set()
 }
 
+const allBlocksOpen = computed(
+  () => blocks.value.length > 0 && openBlocks.value.size === blocks.value.length,
+)
+
+function toggleAllBlocks() {
+  if (allBlocksOpen.value) {
+    closeAllBlocks()
+  } else {
+    openAllBlocks()
+  }
+}
+
 watch(
   () => props.openArtifact,
   (a) => {
@@ -259,16 +271,9 @@ onUpdated(() => scheduleMermaid())
             v-if="blockMode"
             class="btn-view-toggle"
             :disabled="isEditing()"
-            title="Mở tất cả block"
-            @click="openAllBlocks"
-          >▼ Mở tất cả</button>
-          <button
-            v-if="blockMode"
-            class="btn-view-toggle"
-            :disabled="isEditing()"
-            title="Đóng tất cả block"
-            @click="closeAllBlocks"
-          >▲ Đóng tất cả</button>
+            :title="allBlocksOpen ? 'Đóng tất cả block' : 'Mở tất cả block'"
+            @click="toggleAllBlocks"
+          >{{ allBlocksOpen ? '▲' : '▼' }}</button>
         </div>
       </div>
 

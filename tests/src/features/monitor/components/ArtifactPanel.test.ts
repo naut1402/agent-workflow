@@ -46,6 +46,16 @@ function findButtonByText(w: ReturnType<typeof mountPanel>, text: string) {
   return btn
 }
 
+// Nút toggle mở/đóng tất cả block giờ là icon-only — tìm theo `title` (tooltip),
+// không còn text "Mở tất cả"/"Đóng tất cả" trong nội dung nút.
+function findToggleAllButton(w: ReturnType<typeof mountPanel>) {
+  const btn = w
+    .findAll('button')
+    .find((b) => ['Mở tất cả block', 'Đóng tất cả block'].includes(b.attributes('title') ?? ''))
+  if (!btn) throw new Error('toggle-all button not found')
+  return btn
+}
+
 async function enableBlockMode(w: ReturnType<typeof mountPanel>) {
   await findButtonByText(w, '🗂 Blocks').trigger('click')
 }
@@ -69,30 +79,41 @@ describe('ArtifactPanel — block mode toggle all', () => {
     expect(detailsOpenStates(w)).toEqual([true, true, true, false])
   })
 
-  it('closes every block when "Đóng tất cả" is clicked', async () => {
+  it('opens every block when the toggle button is clicked while some are closed', async () => {
     stubFetch()
     const w = mountPanel()
     await flushPromises()
     await enableBlockMode(w)
 
-    await findButtonByText(w, 'Đóng tất cả').trigger('click')
+    // Default state: 3/4 blocks open → chưa phải "tất cả mở" → nút hiện "▼" / title mở-tất-cả.
+    const toggle = findToggleAllButton(w)
+    expect(toggle.attributes('title')).toBe('Mở tất cả block')
+    expect(toggle.text()).toBe('▼')
 
-    expect(detailsOpenStates(w)).toEqual([false, false, false, false])
-  })
-
-  it('opens every block when "Mở tất cả" is clicked', async () => {
-    stubFetch()
-    const w = mountPanel()
-    await flushPromises()
-    await enableBlockMode(w)
-
-    await findButtonByText(w, 'Đóng tất cả').trigger('click')
-    await findButtonByText(w, 'Mở tất cả').trigger('click')
+    await toggle.trigger('click')
 
     expect(detailsOpenStates(w)).toEqual([true, true, true, true])
   })
 
-  it('re-opens a block that was closed by hand once "Mở tất cả" is clicked', async () => {
+  it('closes every block when the toggle button is clicked while all are open', async () => {
+    stubFetch()
+    const w = mountPanel()
+    await flushPromises()
+    await enableBlockMode(w)
+
+    await findToggleAllButton(w).trigger('click') // mở hết trước
+    expect(detailsOpenStates(w)).toEqual([true, true, true, true])
+
+    const toggle = findToggleAllButton(w)
+    expect(toggle.attributes('title')).toBe('Đóng tất cả block')
+    expect(toggle.text()).toBe('▲')
+
+    await toggle.trigger('click')
+
+    expect(detailsOpenStates(w)).toEqual([false, false, false, false])
+  })
+
+  it('re-opens a block that was closed by hand once the toggle button is clicked', async () => {
     stubFetch()
     const w = mountPanel()
     await flushPromises()
@@ -105,8 +126,9 @@ describe('ArtifactPanel — block mode toggle all', () => {
     await first.trigger('toggle')
 
     expect(detailsOpenStates(w)[0]).toBe(false)
+    expect(findToggleAllButton(w).attributes('title')).toBe('Mở tất cả block')
 
-    await findButtonByText(w, 'Mở tất cả').trigger('click')
+    await findToggleAllButton(w).trigger('click')
 
     expect(detailsOpenStates(w)).toEqual([true, true, true, true])
   })
