@@ -1,0 +1,82 @@
+# Sync commits từ `main` vào mọi branch `dev/**/main` (+ extra_targets).
+#
+# Khi merge sạch → push trực tiếp lên target.
+# Khi conflict → mở PR (base=target, head=main) gắn label `auto-merge-conflict`.
+#
+# Token: ưu tiên secret AUTO_MERGE_TOKEN (PAT) nếu branch protection chặn
+# GITHUB_TOKEN; không có thì dùng github.token.
+#
+# Nút "Update branch" trên PR (repo setting allow_update_branch):
+#   - Chạy workflow_dispatch với input enable_update_branch=true, hoặc
+#   - gh api -X PATCH "repos/{owner}/{repo}" -f allow_update_branch=true
+#
+# Kiểm tra:
+#   1. Actions → "Sync main into version/epic mains" → Run workflow
+#   2. Job summary: synced / skipped / conflict-PR / failed
+#   3. Conflict → PR + label auto-merge-conflict
+#   4. Sau khi bật allow_update_branch, PR feature targeting version main
+#      (khi head behind base) hiện nút Update branch
+
+name: Sync main into version/epic mains
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      enable_update_branch:
+        description: 'Bật repo setting allow_update_branch (hiện nút Update branch trên PR)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: sync-from-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-update-branch:
+    if: github.event_name == 'workflow_dispatch' && inputs.enable_update_branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable allow_update_branch
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          gh api -X PATCH "repos/${{ github.repository }}" -f allow_update_branch=true
+          echo "Đã bật allow_update_branch=true (nút Update branch trên PR)."
+
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Ensure conflict label exists
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+        run: |
+          gh label create auto-merge-conflict \
+            --repo "${{ github.repository }}" \
+            --description "Sync main → target bị conflict — cần resolve tay" \
+            --color B60205 \
+            || true
+
+      - name: Discover targets and sync
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash .github/scripts/sync-from-main.sh
