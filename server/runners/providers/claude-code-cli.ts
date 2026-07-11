@@ -101,9 +101,19 @@ function runProcess(cliPath: string, args: string[], options: RunProcessOptions)
   })
 }
 
-export function createClaudeCodeCliProvider(): RunnerProvider {
+export interface LocalConsoleProviderOptions {
+  providerId: string
+  defaultCliPath: string
+  /** When true, append -p prompt and Claude-style allowedTools flags. */
+  claudeStyleArgs?: boolean
+}
+
+/** Shared local-console spawn provider (Claude / Cursor / Codex). */
+export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): RunnerProvider {
+  const claudeStyle = opts.claudeStyleArgs !== false && opts.providerId === 'claude-code-cli'
+
   return {
-    providerId: 'claude-code-cli',
+    providerId: opts.providerId,
 
     validateRunnerConfig(config) {
       const errors: string[] = []
@@ -117,7 +127,11 @@ export function createClaudeCodeCliProvider(): RunnerProvider {
     },
 
     capabilities() {
-      return { supportsAgentFile: true, supportsStreaming: false, maxConcurrency: 1 }
+      return {
+        supportsAgentFile: opts.providerId === 'claude-code-cli',
+        supportsStreaming: false,
+        maxConcurrency: 1,
+      }
     },
 
     async execute(
@@ -127,16 +141,22 @@ export function createClaudeCodeCliProvider(): RunnerProvider {
       onLog?: (chunk: string) => void,
     ): Promise<ExecuteResult> {
       const started = Date.now()
-      const cliPath = String(runnerConfig.cliPath || 'claude')
+      const cliPath = String(runnerConfig.cliPath || opts.defaultCliPath)
       const flags = resolveEffectiveFlags(runnerConfig.flags, credential)
       const prompt = buildPrompt(req.resolvedAgent, req.userPrompt)
-      const args = [...flags, '-p', prompt]
 
-      if (runnerConfig.allowedTools) {
-        args.push('--allowedTools', String(runnerConfig.allowedTools))
-      }
-      if (runnerConfig.dangerouslySkipPermissions) {
-        args.push('--dangerously-skip-permissions')
+      let args: string[]
+      if (claudeStyle || opts.claudeStyleArgs === true) {
+        args = [...flags, '-p', prompt]
+        if (runnerConfig.allowedTools) {
+          args.push('--allowedTools', String(runnerConfig.allowedTools))
+        }
+        if (runnerConfig.dangerouslySkipPermissions) {
+          args.push('--dangerously-skip-permissions')
+        }
+      } else {
+        // Generic local CLI: user flags + prompt as final arg.
+        args = [...flags, prompt]
       }
 
       const logPath = req.metadata?.logPath as string | undefined
@@ -191,4 +211,12 @@ export function createClaudeCodeCliProvider(): RunnerProvider {
       }
     },
   }
+}
+
+export function createClaudeCodeCliProvider(): RunnerProvider {
+  return createLocalConsoleProvider({
+    providerId: 'claude-code-cli',
+    defaultCliPath: 'claude',
+    claudeStyleArgs: true,
+  })
 }

@@ -3,10 +3,33 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { registryHome } from '../registry.js'
 import { getRunner, getDefaultRunner, substituteConfig } from './registry.js'
+import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
 import { getProvider } from './providerRegistry.js'
 import { resolveAgent } from './agentResolver.js'
-import type { JobRecord, MutationResult } from './types.js'
+import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
+
+function credentialForConnection(conn: Connection): CredentialProfile | null {
+  if (conn.kind === 'local-console') {
+    return {
+      id: 'cli-session-implicit',
+      provider: conn.providerId,
+      label: 'CLI session',
+      secretRef: 'cli-session',
+    }
+  }
+  if (!conn.credentialId) return null
+  return getCredential(conn.credentialId)
+}
+
+function mergeRunnerConfig(runnerConfig: Record<string, any>, conn: Connection): Record<string, any> {
+  return {
+    ...runnerConfig,
+    cliPath: conn.cliPath || runnerConfig.cliPath,
+    flags: Array.isArray(conn.flags) ? conn.flags : runnerConfig.flags || [],
+    ...(conn.config && typeof conn.config === 'object' ? conn.config : {}),
+  }
+}
 
 export interface SubmitJobInput {
   runnerId?: string
@@ -58,7 +81,7 @@ export function listJobs(limit = 20): JobRecord[] {
         return null
       }
     })
-    .filter((j): j is JobRecord => Boolean(j))
+    .filter((j): j is JobRecord => Boolean(j?.id))
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
   return jobs.slice(0, limit)
 }
@@ -90,24 +113,35 @@ async function runJob(job: JobRecord): Promise<void> {
     return
   }
 
-  const credential = getCredential(runner.credentialId)
+  const connection = getConnection(runner.connectionId)
+  if (!connection) {
+    saveJob({
+      ...job,
+      status: 'failed',
+      finishedAt: new Date().toISOString(),
+      error: `connection not found: ${runner.connectionId}`,
+    })
+    return
+  }
+
+  const credential = credentialForConnection(connection)
   if (!credential) {
     saveJob({
       ...job,
       status: 'failed',
       finishedAt: new Date().toISOString(),
-      error: `credential not found: ${runner.credentialId}`,
+      error: `credential not found for connection: ${runner.connectionId}`,
     })
     return
   }
 
-  const provider = getProvider(runner.provider)
+  const provider = getProvider(connection.providerId)
   if (!provider) {
     saveJob({
       ...job,
       status: 'failed',
       finishedAt: new Date().toISOString(),
-      error: `unknown provider: ${runner.provider}`,
+      error: `unknown provider: ${connection.providerId}`,
     })
     return
   }
@@ -152,7 +186,10 @@ async function runJob(job: JobRecord): Promise<void> {
     return
   }
 
-  const runnerConfig = substituteConfig(runner.config, { projectRoot }) as Record<string, any>
+  const runnerConfig = mergeRunnerConfig(
+    substituteConfig(runner.config, { projectRoot }) as Record<string, any>,
+    connection,
+  )
 
   const result = await provider.execute(
     {
