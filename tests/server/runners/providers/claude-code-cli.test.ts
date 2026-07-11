@@ -3,7 +3,10 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createLocalConsoleProvider } from '../../../../server/runners/providers/claude-code-cli.js'
+import {
+  buildClaudeInvocation,
+  createLocalConsoleProvider,
+} from '../../../../server/runners/providers/claude-code-cli.js'
 import type { CredentialProfile, ResolvedAgent } from '../../../../server/runners/types.js'
 
 // Runs the shared local-console provider against real short-lived shell
@@ -91,6 +94,136 @@ describe('createLocalConsoleProvider — job log structure', () => {
       const resultIdx = log.indexOf('=== Kết quả')
       expect(payloadIdx).toBeLessThan(responseIdx)
       expect(responseIdx).toBeLessThan(resultIdx)
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
+  // Regression: prompt must NOT be delivered as an argv element. On Windows the
+  // provider spawns with shell:true (to run the claude.cmd shim), and Node does
+  // not quote argv under shell:true there — cmd.exe would split a multi-line
+  // prompt on whitespace so `claude -p` only received the first token ("Bạn").
+  // The prompt now goes on stdin instead.
+  test('claude style: prompt delivered on stdin, never in argv', async () => {
+    const multiLinePrompt =
+      'Bạn đang ở thư mục task U0005-4.\n' +
+      'Đọc file design.md rồi cải thiện phần mô tả.\n' +
+      'Nhiều dòng có dấu cách tiếng Việt.'
+
+    const invocation = buildClaudeInvocation({
+      flags: ['--bare'],
+      prompt: multiLinePrompt,
+      allowedTools: 'Read,Edit',
+      dangerouslySkipPermissions: true,
+      sessionId: 'sess-123',
+    })
+
+    // Prompt lives only on stdin.
+    expect(invocation.stdinInput).toBe(multiLinePrompt)
+    // No argv element contains or equals the prompt (nor any of its tokens
+    // that would leak content).
+    for (const arg of invocation.args) {
+      expect(arg).not.toBe(multiLinePrompt)
+      expect(arg.includes('thư mục')).toBe(false)
+    }
+    // Flags/values are intact and in order; `-p` is a bare print-mode flag.
+    expect(invocation.args).toEqual([
+      '--bare',
+      '-p',
+      '--allowedTools',
+      'Read,Edit',
+      '--dangerously-skip-permissions',
+      '--session-id',
+      'sess-123',
+    ])
+  })
+
+  test('claude style: resume session id is emitted (mutually exclusive with session-id)', () => {
+    const invocation = buildClaudeInvocation({
+      flags: [],
+      prompt: 'nội dung bất kỳ',
+      resumeSessionId: 'resume-xyz',
+    })
+    expect(invocation.args).toEqual(['-p', '--resume', 'resume-xyz'])
+    expect(invocation.stdinInput).toBe('nội dung bất kỳ')
+  })
+
+  // Real spawn, cross-platform (no `claude` needed): use node itself as the
+  // fake CLI, pointing at a tiny script that echoes its argv and everything it
+  // read from stdin. Proves the multi-line Vietnamese prompt arrives on stdin
+  // in full and never leaks into argv. FAILS with the old code (prompt was
+  // args=[...,'-p',prompt]); PASSES after the stdin fix — OS-independent.
+  test('integration: real spawn pipes full multi-line prompt to stdin, not argv', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
+    try {
+      // Fake CLI written to a .mjs file (avoids -e inline-quoting hazards).
+      const fakeCli = path.join(home, 'fake-cli.mjs')
+      fs.writeFileSync(
+        fakeCli,
+        [
+          "process.stdout.write('ARGV:' + JSON.stringify(process.argv.slice(2)) + '\\n')",
+          "let data = ''",
+          "process.stdin.setEncoding('utf8')",
+          "process.stdin.on('data', (c) => { data += c })",
+          "process.stdin.on('end', () => {",
+          "  process.stdout.write('STDIN_START\\n' + data + '\\nSTDIN_END\\n')",
+          '})',
+          '',
+        ].join('\n'),
+        'utf8',
+      )
+
+      const multiLinePrompt =
+        'Bạn đang ở thư mục task U0005-4.\n' +
+        'Đọc file design.md rồi cải thiện phần mô tả.\n' +
+        'Nhiều dòng có dấu cách tiếng Việt.'
+
+      const provider = createLocalConsoleProvider({
+        providerId: 'claude-code-cli',
+        defaultCliPath: process.execPath,
+        claudeStyleArgs: true,
+      })
+
+      let output = ''
+      const result = await provider.execute(
+        {
+          jobId: 'job-stdin',
+          resolvedAgent,
+          userPrompt: multiLinePrompt,
+          workspace,
+          produces: [],
+          timeoutMs: 10000,
+        },
+        // flags = [fakeCli] → spawn `node <fakeCli> -p ...`; node runs the
+        // script and passes the remaining flags through as its argv.
+        { cliPath: process.execPath, flags: [fakeCli] },
+        credential,
+        (chunk) => {
+          output += chunk
+        },
+      )
+
+      expect(result.ok).toBe(true)
+      expect(result.exitCode).toBe(0)
+
+      // Whole prompt arrived on stdin — every line, verbatim.
+      expect(output).toContain('STDIN_START')
+      expect(output).toContain('STDIN_END')
+      expect(output).toContain(multiLinePrompt)
+      for (const line of multiLinePrompt.split('\n')) {
+        expect(output).toContain(line)
+      }
+
+      // argv carries only flags — no prompt content leaked in.
+      const argvLine = output.split('\n').find((l) => l.startsWith('ARGV:'))
+      expect(argvLine).toBeTruthy()
+      const argv = JSON.parse(argvLine!.slice('ARGV:'.length)) as string[]
+      expect(argv).toContain('-p')
+      expect(argv.some((a) => a === multiLinePrompt)).toBe(false)
+      expect(argv.some((a) => a.includes('thư mục'))).toBe(false)
+      expect(argv.some((a) => a.includes('Đọc'))).toBe(false)
     } finally {
       fs.rmSync(home, { recursive: true, force: true })
       fs.rmSync(workspace, { recursive: true, force: true })
