@@ -34,7 +34,10 @@ const {
   getContent: () => content.value,
   setContent: (v) => { content.value = v },
   onSave: async (nextContent) => {
-    if (!props.taskId) return
+    if (!props.taskId) {
+      message.value = 'Không xác định được task, không thể lưu.'
+      return
+    }
     message.value = ''
     const res = await saveArtifact(
       props.taskId,

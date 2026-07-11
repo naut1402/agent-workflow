@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { applyHitlAction, writeStateAtomic } from '../../../server/tasks/state'
+import { applyArchiveAction, applyHitlAction, writeStateAtomic } from '../../../server/tasks/state'
 
 let dirs: string[] = []
 async function tmp(): Promise<string> {
@@ -143,5 +143,58 @@ describe('applyHitlAction', () => {
     expect(result.ok).toBe(false)
     if (!('error' in result)) return
     expect(result.status).toBe(400)
+  })
+})
+
+describe('applyArchiveAction', () => {
+  test('archives a task, writing archived + archived_at', async () => {
+    const root = await tmp()
+    const stateFile = await seedTask(root, 'T6', { current_phase: 'completed' })
+    const before = (await fs.stat(stateFile)).mtimeMs
+
+    const result = await applyArchiveAction(root, 'T6', { archived: true, mtime: before })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.archived).toBe(true)
+    expect(typeof result.state.archived_at).toBe('string')
+    expect(Number.isNaN(Date.parse(result.state.archived_at as string))).toBe(false)
+  })
+
+  test('unarchives a task, clearing archived_at', async () => {
+    const root = await tmp()
+    const stateFile = await seedTask(root, 'T7', {
+      current_phase: 'completed',
+      archived: true,
+      archived_at: '2024-01-01T00:00:00.000Z',
+    })
+    const before = (await fs.stat(stateFile)).mtimeMs
+
+    const result = await applyArchiveAction(root, 'T7', { archived: false, mtime: before })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.archived).toBe(false)
+    expect(result.state.archived_at).toBeNull()
+  })
+
+  test('mtime conflict → 409', async () => {
+    const root = await tmp()
+    const stateFile = await seedTask(root, 'T8', { current_phase: 'completed' })
+    const before = (await fs.stat(stateFile)).mtimeMs
+
+    const result = await applyArchiveAction(root, 'T8', { archived: true, mtime: before - 1 })
+    expect(result.ok).toBe(false)
+    if (!('error' in result)) return
+    expect(result.status).toBe(409)
+    expect(result.error).toBe('conflict')
+  })
+
+  test('no state file → 404', async () => {
+    const root = await tmp()
+    await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+
+    const result = await applyArchiveAction(root, 'T9', { archived: true, mtime: Date.now() })
+    expect(result.ok).toBe(false)
+    if (!('error' in result)) return
+    expect(result.status).toBe(404)
   })
 })

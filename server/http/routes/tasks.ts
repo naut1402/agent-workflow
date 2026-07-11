@@ -5,10 +5,10 @@ import type { HonoEnv } from '../types.js'
 import { j, parseBody, unknownProject } from '../respond.js'
 import { resolveArtifact } from '../../../shared/sanitize.js'
 import { collectTasks, flowProfilePath } from '../../tasks/index.js'
-import { applyHitlAction } from '../../tasks/state.js'
+import { applyArchiveAction, applyHitlAction } from '../../tasks/state.js'
 import { loadPipelineConfig } from '../../pipeline/index.js'
 import { emitAudit } from '../../logging/store.js'
-import { TaskStatePatch } from '../../../shared/schemas/task.js'
+import { TaskArchivePatch, TaskStatePatch } from '../../../shared/schemas/task.js'
 import { submitJob } from '../../runners/index.js'
 import {
   loadArtifactActions,
@@ -19,6 +19,26 @@ import {
   toActionView,
 } from '../../artifactActions/index.js'
 import { RunArtifactActionRequest } from '../../../shared/schemas/artifactAction.js'
+
+/** Serialize concurrent PUT /api/artifact for the same target (in-process). */
+const artifactWriteLocks = new Map<string, Promise<void>>()
+
+async function withArtifactWriteLock<T>(target: string, fn: () => Promise<T>): Promise<T> {
+  const prev = artifactWriteLocks.get(target) ?? Promise.resolve()
+  let release!: () => void
+  const gate = new Promise<void>((r) => {
+    release = r
+  })
+  const chain = prev.then(() => gate)
+  artifactWriteLocks.set(target, chain)
+  await prev
+  try {
+    return await fn()
+  } finally {
+    release()
+    if (artifactWriteLocks.get(target) === chain) artifactWriteLocks.delete(target)
+  }
+}
 
 // Task state, artifacts, resolved pipeline config, profile & flow-profile.
 export function registerTaskRoutes(app: Hono<HonoEnv>): void {
@@ -71,41 +91,43 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     const { content, mtime } = b.value as { content?: unknown; mtime?: unknown }
     if (typeof content !== 'string') return j(c, 400, { error: 'content must be a string' })
 
-    let existingMtime: number | null = null
-    try {
-      const s = await fs.stat(target)
-      existingMtime = s.mtimeMs
-    } catch {
-      existingMtime = null
-    }
-
-    if (typeof mtime === 'number' && existingMtime != null && existingMtime !== mtime) {
+    return withArtifactWriteLock(target, async () => {
+      let existingMtime: number | null = null
       try {
-        const current = await fs.readFile(target, 'utf8')
-        return j(c, 409, {
-          error: 'conflict',
-          id,
-          name,
-          content: current,
-          mtime: existingMtime,
-        })
+        const s = await fs.stat(target)
+        existingMtime = s.mtimeMs
       } catch {
-        return j(c, 409, { error: 'conflict', id, name })
+        existingMtime = null
       }
-    }
 
-    await fs.mkdir(path.dirname(target), { recursive: true })
-    const tmp = `${target}.tmp`
-    await fs.writeFile(tmp, content, 'utf8')
-    await fs.rename(tmp, target)
-    const s = await fs.stat(target)
-    emitAudit({
-      op: 'update',
-      entity: 'artifact',
-      identifier: `${id}/${name}`,
-      projectId: c.get('projectId'),
+      if (typeof mtime === 'number' && existingMtime != null && existingMtime !== mtime) {
+        try {
+          const current = await fs.readFile(target, 'utf8')
+          return j(c, 409, {
+            error: 'conflict',
+            id,
+            name,
+            content: current,
+            mtime: existingMtime,
+          })
+        } catch {
+          return j(c, 409, { error: 'conflict', id, name })
+        }
+      }
+
+      await fs.mkdir(path.dirname(target), { recursive: true })
+      const tmp = `${target}.tmp`
+      await fs.writeFile(tmp, content, 'utf8')
+      await fs.rename(tmp, target)
+      const s = await fs.stat(target)
+      emitAudit({
+        op: 'update',
+        entity: 'artifact',
+        identifier: `${id}/${name}`,
+        projectId: c.get('projectId'),
+      })
+      return j(c, 200, { id, name, content, mtime: s.mtimeMs })
     })
-    return j(c, 200, { id, name, content, mtime: s.mtimeMs })
   })
 
   app.get('/api/profile', async (c) => {
@@ -194,6 +216,37 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       identifier: id,
       projectId: c.get('projectId'),
       detail: { action: parsed.data.action, gate_id: parsed.data.gate_id },
+    })
+    return j(c, 200, { id, state: result.state, mtime: result.mtime })
+  })
+
+  app.put('/api/task-archive', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const id = c.req.query('id') || ''
+    if (!id || /[^\w\-]/.test(id)) return j(c, 400, { error: 'invalid task id' })
+
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
+    const parsed = TaskArchivePatch.safeParse(b.value)
+    if (!parsed.success) {
+      return j(c, 400, { error: 'invalid patch', details: parsed.error.flatten() })
+    }
+
+    const result = await applyArchiveAction(root, id, parsed.data)
+    if ('error' in result) {
+      const body: Record<string, unknown> = { error: result.error, id }
+      if (result.state) body.state = result.state
+      if (result.mtime != null) body.mtime = result.mtime
+      return j(c, result.status, body)
+    }
+
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: c.get('projectId'),
+      detail: { action: parsed.data.archived ? 'archive' : 'unarchive' },
     })
     return j(c, 200, { id, state: result.state, mtime: result.mtime })
   })

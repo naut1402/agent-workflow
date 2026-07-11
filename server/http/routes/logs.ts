@@ -5,7 +5,7 @@ import { readLogs } from '../../logging/store.js'
 import { readJobLog } from '../../logging/jobLog.js'
 import type { LogType } from '../../../shared/schemas/log.js'
 
-// Read surface for the logging feature — global (not per-project).
+// Read surface for the logging feature â€” global (not per-project).
 //   GET /api/logs            request + audit log, filter by type/project/limit
 //   GET /api/jobs/:id/log     job execution log tail (traversal-guarded id)
 export function registerLogRoutes(app: Hono<HonoEnv>): void {
@@ -13,7 +13,8 @@ export function registerLogRoutes(app: Hono<HonoEnv>): void {
     const typeQ = c.req.query('type')
     const type = typeQ === 'request' || typeQ === 'audit' ? (typeQ as LogType) : undefined
     const project = c.req.query('project') || undefined
-    const limit = Number(c.req.query('limit')) || 200
+    const rawLimit = Number(c.req.query('limit'))
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 1000) : 200
     const entries = await readLogs({ type, project, limit })
     return j(c, 200, { entries })
   })

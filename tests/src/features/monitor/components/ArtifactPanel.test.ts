@@ -5,6 +5,7 @@ import {
   STORAGE_KEY,
   useAppSettings,
 } from '@/shared/composables/useAppSettings'
+import { fetchArtifact } from '@/api'
 
 const MD_TWO_H2 = `# Title
 
@@ -13,6 +14,19 @@ Body A
 
 ## Beta
 Body B
+`
+
+const MARKDOWN_FOUR = `## Block A
+Nội dung A
+
+## Block B
+Nội dung B
+
+## Block C
+Nội dung C
+
+## Block D
+Nội dung D
 `
 
 vi.mock('@/api', () => ({
@@ -66,6 +80,7 @@ afterEach(() => {
   localStorage.clear()
   const { load } = useAppSettings()
   load()
+  vi.unstubAllGlobals()
 })
 
 describe('ArtifactPanel view mode', () => {
@@ -118,5 +133,74 @@ describe('ArtifactPanel view mode', () => {
     await w.find('.btn-view-toggle').trigger('click')
     await flushPromises()
     expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
+  })
+})
+
+describe('ArtifactPanel — block mode toggle all', () => {
+  function findToggleAllButton(w: Awaited<ReturnType<typeof mountPanel>>) {
+    const btn = w
+      .findAll('button')
+      .find((b) => ['Mở tất cả block', 'Đóng tất cả block'].includes(b.attributes('title') ?? ''))
+    if (!btn) throw new Error('toggle-all button not found')
+    return btn
+  }
+
+  function detailsOpenStates(w: Awaited<ReturnType<typeof mountPanel>>): boolean[] {
+    return w.findAll('.block-item').map((d) => (d.element as HTMLDetailsElement).open)
+  }
+
+  beforeEach(() => {
+    vi.mocked(fetchArtifact).mockImplementation(async () => ({
+      content: MARKDOWN_FOUR,
+      mtime: 1,
+    }))
+    seedSettings('block')
+  })
+
+  it('opens the first 3 blocks by default when block mode is enabled', async () => {
+    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+    expect(detailsOpenStates(w)).toEqual([true, true, true, false])
+  })
+
+  it('opens every block when the toggle button is clicked while some are closed', async () => {
+    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+
+    const toggle = findToggleAllButton(w)
+    expect(toggle.attributes('title')).toBe('Mở tất cả block')
+    expect(toggle.text()).toBe('▼')
+
+    await toggle.trigger('click')
+
+    expect(detailsOpenStates(w)).toEqual([true, true, true, true])
+  })
+
+  it('closes every block when the toggle button is clicked while all are open', async () => {
+    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+
+    await findToggleAllButton(w).trigger('click')
+    expect(detailsOpenStates(w)).toEqual([true, true, true, true])
+
+    const toggle = findToggleAllButton(w)
+    expect(toggle.attributes('title')).toBe('Đóng tất cả block')
+    expect(toggle.text()).toBe('▲')
+
+    await toggle.trigger('click')
+
+    expect(detailsOpenStates(w)).toEqual([false, false, false, false])
+  })
+
+  it('re-opens a block that was closed by hand once the toggle button is clicked', async () => {
+    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+
+    const first = w.findAll('.block-item')[0]
+    ;(first.element as HTMLDetailsElement).open = false
+    await first.trigger('toggle')
+
+    expect(detailsOpenStates(w)[0]).toBe(false)
+    expect(findToggleAllButton(w).attributes('title')).toBe('Mở tất cả block')
+
+    await findToggleAllButton(w).trigger('click')
+
+    expect(detailsOpenStates(w)).toEqual([true, true, true, true])
   })
 })

@@ -1,12 +1,24 @@
-<script setup>
-defineProps({
-  name: {
-    type: String,
-    required: true,
-    validator: (v) => ['panelCollapse', 'panelExpand', 'monitor', 'pipeline', 'catalog', 'rules', 'agent', 'knowledge', 'runner', 'logs', 'settings'].includes(v),
-  },
-  size: { type: Number, default: 16 },
-})
+<script setup lang="ts">
+type RailIconName =
+  | 'panelCollapse'
+  | 'panelExpand'
+  | 'monitor'
+  | 'pipeline'
+  | 'catalog'
+  | 'rules'
+  | 'agent'
+  | 'knowledge'
+  | 'runner'
+  | 'logs'
+  | 'settings'
+
+withDefaults(
+  defineProps<{
+    name: RailIconName
+    size?: number
+  }>(),
+  { size: 16 },
+)
 </script>
 
 <template>

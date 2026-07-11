@@ -1,6 +1,6 @@
 // Thin fetch wrappers around the dev-server API exposed by server/devTeamApi.ts.
 
-import type { TaskStatePatch } from '../../shared/schemas/task'
+import type { TaskArchivePatch, TaskStatePatch } from '../../shared/schemas/task'
 import { getApiToken } from '../shared/lib/authToken.js'
 
 // Build a query string from key/value pairs, dropping null/undefined/empty and
@@ -76,6 +76,22 @@ export async function patchTaskState(id: string, body: TaskStatePatch, projectId
   const data = await r.json().catch(() => ({}))
   if (!r.ok) {
     const err = new Error(data.error || `Không thể cập nhật trạng thái task (mã lỗi ${r.status})`)
+    ;(err as any).status = r.status
+    ;(err as any).data = data
+    throw err
+  }
+  return data
+}
+
+export async function patchTaskArchive(id: string, body: TaskArchivePatch, projectId?: string) {
+  const r = await apiFetch(`/api/task-archive${qs({ id, project: projectId })}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) {
+    const err = new Error(data.error || `Không thể lưu trữ task (mã lỗi ${r.status})`)
     ;(err as any).status = r.status
     ;(err as any).data = data
     throw err
