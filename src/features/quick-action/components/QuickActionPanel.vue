@@ -24,6 +24,32 @@ const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const formError = ref('')
 const message = ref('')
+const showPromptHelp = ref(false)
+
+// Danh sách placeholder hỗ trợ trong `prompt_template` — khớp với
+// `substitutePrompt()` (server/artifactActions/index.ts). `{{selection}}` và
+// `{{selection_lines}}` chỉ có giá trị khi action được chạy từ selection
+// toolbar (tức action có gắn attach point "Text selection" và người dùng bôi
+// đen một đoạn trong artifact rồi bấm nút) — chạy từ title toolbar thì hai
+// placeholder này luôn rỗng.
+const PROMPT_PLACEHOLDERS: Array<{ token: string; desc: string; selectionOnly?: boolean }> = [
+  { token: '{{artifact_name}}', desc: 'Tên file artifact đầy đủ, ví dụ "design.md".' },
+  { token: '{{artifact_base}}', desc: 'Tên file artifact không có phần mở rộng, ví dụ "design".' },
+  {
+    token: '{{selection}}',
+    desc: 'Đoạn văn bản người dùng đã bôi đen trong artifact viewer.',
+    selectionOnly: true,
+  },
+  {
+    token: '{{selection_lines}}',
+    desc: 'Dòng (trong file gốc) tương ứng vùng đã chọn, dạng "12" hoặc "12-15".',
+    selectionOnly: true,
+  },
+]
+
+function togglePromptHelp() {
+  showPromptHelp.value = !showPromptHelp.value
+}
 
 function emptyDraft(): QuickActionDraft {
   return {
@@ -61,6 +87,7 @@ function openNew() {
   patternsText.value = ''
   formError.value = ''
   message.value = ''
+  showPromptHelp.value = false
   showForm.value = true
 }
 
@@ -70,12 +97,14 @@ function openEdit(a: QuickActionDraft) {
   patternsText.value = (a.artifact_patterns ?? []).join(', ')
   formError.value = ''
   message.value = ''
+  showPromptHelp.value = false
   showForm.value = true
 }
 
 function closeForm() {
   showForm.value = false
   editingId.value = null
+  showPromptHelp.value = false
 }
 
 function toggleAttach(value: string, checked: boolean) {
@@ -182,7 +211,16 @@ async function removeAction(a: QuickActionDraft) {
         <input v-model="draft.agent_ref" class="cfg-input" placeholder="để trống, hoặc project:my-agent" />
       </label>
       <label class="cfg-label">
-        prompt_template
+        <span class="qa-prompt-label-row">
+          prompt_template
+          <button
+            type="button"
+            class="btn-help-icon"
+            title="Xem danh sách placeholder hỗ trợ"
+            aria-label="Xem danh sách placeholder hỗ trợ trong prompt_template"
+            @click="togglePromptHelp"
+          >❓</button>
+        </span>
         <textarea
           v-model="draft.prompt_template"
           class="cfg-textarea"
@@ -190,6 +228,20 @@ async function removeAction(a: QuickActionDraft) {
           placeholder="Đọc {{artifact_name}} / {{artifact_base}} / {{selection}}…"
         />
       </label>
+      <div v-if="showPromptHelp" class="qa-prompt-help">
+        <p class="qa-prompt-help-title">Placeholder hỗ trợ trong prompt_template:</p>
+        <dl>
+          <div v-for="ph in PROMPT_PLACEHOLDERS" :key="ph.token" class="qa-prompt-help-item">
+            <dt><code>{{ ph.token }}</code></dt>
+            <dd>
+              {{ ph.desc }}
+              <span v-if="ph.selectionOnly" class="qa-prompt-help-note">
+                (chỉ có giá trị khi action gắn attach point "Text selection" và được chạy từ vùng đã chọn — trống nếu chạy từ title toolbar)
+              </span>
+            </dd>
+          </div>
+        </dl>
+      </div>
       <fieldset class="qa-attach-fieldset">
         <legend>Attach points</legend>
         <label v-for="opt in ATTACH_OPTIONS" :key="opt.value" class="qa-attach-option">
@@ -262,4 +314,31 @@ async function removeAction(a: QuickActionDraft) {
   gap: 14px;
 }
 .qa-attach-option { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.qa-prompt-label-row { display: inline-flex; align-items: center; gap: 4px; }
+.btn-help-icon {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 2px;
+  color: var(--muted);
+}
+.btn-help-icon:hover { color: inherit; }
+.qa-prompt-help {
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: -4px;
+}
+.qa-prompt-help-title { margin: 0 0 6px; }
+.qa-prompt-help dl { margin: 0; }
+.qa-prompt-help-item { margin-bottom: 6px; }
+.qa-prompt-help-item:last-child { margin-bottom: 0; }
+.qa-prompt-help-item dt { display: inline; }
+.qa-prompt-help-item dd { margin: 2px 0 0; }
+.qa-prompt-help-note { display: block; font-style: italic; }
 </style>

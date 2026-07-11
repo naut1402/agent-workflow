@@ -68,4 +68,39 @@ describe('QuickActionPanel', () => {
     expect((file as any).actions.map((a: any) => a.id)).toContain('new-action')
     expect(w.find('.qa-form').exists()).toBe(false) // closes on success
   })
+
+  it('prompt help icon toggles a placeholder reference, hidden by default', async () => {
+    const w = mount(QuickActionPanel, { props: { projectId: null } })
+    await flushPromises()
+
+    await w.get('button.btn-primary.btn-sm').trigger('click') // "+ New"
+    expect(w.find('.qa-prompt-help').exists()).toBe(false)
+
+    await w.get('.btn-help-icon').trigger('click')
+    expect(w.find('.qa-prompt-help').exists()).toBe(true)
+    const helpText = w.get('.qa-prompt-help').text()
+    expect(helpText).toContain('{{artifact_name}}')
+    expect(helpText).toContain('{{artifact_base}}')
+    expect(helpText).toContain('{{selection}}')
+    expect(helpText).toContain('{{selection_lines}}')
+    // Selection-only placeholders are called out as requiring the
+    // "Text selection" attach point.
+    expect(helpText).toContain('Text selection')
+
+    await w.get('.btn-help-icon').trigger('click') // click again → hides
+    expect(w.find('.qa-prompt-help').exists()).toBe(false)
+  })
+
+  it('prompt help resets to hidden when the form is reopened', async () => {
+    const w = mount(QuickActionPanel, { props: { projectId: null } })
+    await flushPromises()
+
+    await w.get('button.btn-primary.btn-sm').trigger('click')
+    await w.get('.btn-help-icon').trigger('click')
+    expect(w.find('.qa-prompt-help').exists()).toBe(true)
+
+    await w.get('.qa-form .btn-ghost').trigger('click') // Hủy
+    await w.get('button.btn-primary.btn-sm').trigger('click') // + New again
+    expect(w.find('.qa-prompt-help').exists()).toBe(false)
+  })
 })
