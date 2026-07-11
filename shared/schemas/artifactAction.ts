@@ -19,7 +19,14 @@ export const ArtifactAction = z
     id: z.string().min(1),
     label: z.string().min(1),
     artifact_patterns: z.array(z.string().min(1)).min(1),
-    agent_ref: z.string().min(1),
+    // Optional: empty means "run prompt_template as-is, no agent system prompt
+    // merged in" (server/runners/agentResolver.ts treats a blank ref as an
+    // ad-hoc agent). A non-empty ref must resolve to a real agent file with a
+    // role compatible with what prompt_template asks for — see improve-doc's
+    // history in server/artifactActions/default.ts for why binding a rigid
+    // pipeline agent (e.g. doc-reviewer, which explicitly refuses to edit the
+    // file it reviews) to a free-form "rewrite this doc" action breaks the job.
+    agent_ref: z.string().default(''),
     prompt_template: z.string().min(1),
     produces: z.array(z.string()).default([]),
     confirm: z.boolean().default(false),

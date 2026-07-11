@@ -178,8 +178,8 @@ async function removeAction(a: QuickActionDraft) {
         <input v-model="patternsText" class="cfg-input" placeholder="design.md, investigate.md, *.md" />
       </label>
       <label class="cfg-label">
-        agent_ref
-        <input v-model="draft.agent_ref" class="cfg-input" placeholder="dev-agent-teams:doc-reviewer" />
+        agent_ref (tuỳ chọn — để trống thì chạy thẳng prompt_template, không gắn vai trò agent riêng)
+        <input v-model="draft.agent_ref" class="cfg-input" placeholder="để trống, hoặc project:my-agent" />
       </label>
       <label class="cfg-label">
         prompt_template

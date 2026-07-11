@@ -65,6 +65,19 @@ describe('resolveAgent — system prompt assembly', () => {
   })
 })
 
+describe('resolveAgent — blank ref (ad-hoc, no agent file)', () => {
+  test('returns a stub with no system prompt instead of throwing', async () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-agent-project-'))
+    try {
+      const resolved = await resolveAgent('', { projectRoot, devTeamRoot: projectRoot })
+      expect(resolved.systemPrompt).toBe('')
+      expect(resolved.ref).toBe('')
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true })
+    }
+  })
+})
+
 function countOccurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1
 }

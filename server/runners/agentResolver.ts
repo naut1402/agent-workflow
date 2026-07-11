@@ -122,11 +122,18 @@ function buildSystemPrompt(draft: any): string {
   return parts.join('\n\n')
 }
 
-/** Resolve agentRef to a provider-agnostic ResolvedAgent. */
+/** Resolve agentRef to a provider-agnostic ResolvedAgent. A blank ref is a
+ * deliberate "no agent" job (e.g. a quick action whose prompt_template is
+ * already a complete, free-form instruction) — it runs with no system prompt
+ * merged in, just the job's own userPrompt (see buildPrompt in
+ * providers/claude-code-cli.ts). */
 export async function resolveAgent(
   agentRef: string,
   ctx: { projectRoot: string; devTeamRoot: string },
 ): Promise<ResolvedAgent> {
+  if (!agentRef?.trim()) {
+    return { ref: '', name: 'ad-hoc', description: '', systemPrompt: '', skills: [] }
+  }
   const agentPath = await resolveAgentFilePath(ctx.projectRoot, ctx.devTeamRoot, agentRef)
   if (!agentPath) {
     throw new Error(`agent file not found for ref: ${agentRef}`)

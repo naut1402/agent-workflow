@@ -30,6 +30,18 @@ const action = (over: Partial<ArtifactAction> = {}): ArtifactAction => ({
   ...over,
 })
 
+describe('DEFAULT_ARTIFACT_ACTIONS', () => {
+  test('improve-doc has no agent_ref — prompt_template is free-form, incompatible with a rigid pipeline agent', () => {
+    // Regression guard: this used to be 'dev-agent-teams:doc-reviewer', whose
+    // own instructions forbid editing the file it reviews and expect
+    // `$ARGUMENTS = <task-id> --doc=...` — contradicting this action's own
+    // "rewrite the file in place" prompt_template, which confused the runner
+    // into asking for clarification instead of doing the edit.
+    const improveDoc = DEFAULT_ARTIFACT_ACTIONS.find((a) => a.id === 'improve-doc')
+    expect(improveDoc?.agent_ref).toBe('')
+  })
+})
+
 describe('matchPattern', () => {
   test('exact filename match', () => {
     expect(matchPattern('design.md', 'design.md')).toBe(true)

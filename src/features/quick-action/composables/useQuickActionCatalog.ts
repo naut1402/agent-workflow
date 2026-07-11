@@ -68,7 +68,6 @@ export function useQuickActionCatalog(opts: { getProjectId: () => string | null 
     if (!id) return { ok: false, error: 'id không được để trống' }
     if (!draft.artifact_patterns.length) return { ok: false, error: 'cần ít nhất 1 artifact pattern' }
     if (!draft.label.trim()) return { ok: false, error: 'label không được để trống' }
-    if (!draft.agent_ref.trim()) return { ok: false, error: 'agent_ref không được để trống' }
     if (!draft.prompt_template.trim()) return { ok: false, error: 'prompt_template không được để trống' }
 
     const dupIdx = actions.value.findIndex((a) => a.id === id)

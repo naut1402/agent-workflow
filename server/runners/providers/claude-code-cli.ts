@@ -65,9 +65,12 @@ function describePayload(opts: {
     cli.push('<prompt — xem "--- Prompt ---" bên dưới>')
   }
   const agent = opts.resolvedAgent
+  const agentLabel = agent.ref
+    ? `${agent.ref}${agent.name ? ` (${agent.name})` : ''}`
+    : `${agent.name || 'ad-hoc'} — không gắn agent, chạy prompt trực tiếp`
   return [
     '=== Payload gửi cho runner ===',
-    `Agent: ${agent.ref}${agent.name ? ` (${agent.name})` : ''}${agent.model ? ` — model: ${agent.model}` : ''}`,
+    `Agent: ${agentLabel}${agent.model ? ` — model: ${agent.model}` : ''}`,
     `Workspace: ${opts.workspace}`,
     `CLI: ${cli.join(' ')}`,
     '--- Prompt ---',
