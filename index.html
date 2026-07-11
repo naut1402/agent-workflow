@@ -4,6 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dev Team Dashboard</title>
+    <script>
+      (function () {
+        var KEY = 'dev-dashboard-app-settings'
+        var pref = 'system'
+        try {
+          var raw = localStorage.getItem(KEY)
+          if (raw) {
+            var o = JSON.parse(raw)
+            if (o && (o.theme === 'light' || o.theme === 'dark' || o.theme === 'system')) {
+              pref = o.theme
+            }
+          }
+        } catch (e) {}
+        var resolved =
+          pref === 'light' || pref === 'dark'
+            ? pref
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light'
+        document.documentElement.setAttribute('data-theme', resolved)
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

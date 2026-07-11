@@ -267,7 +267,7 @@ async function smokeTest() {
 .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
 .badge {
   font-size: 0.7rem;
-  background: rgba(74, 163, 255, 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
   color: var(--accent);
   padding: 1px 6px;
   border-radius: 4px;

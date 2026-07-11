@@ -7,6 +7,8 @@ import {
   useInlineMarkdownEdit,
 } from '../composables/useInlineMarkdownEdit'
 import { useArtifactAction } from '../composables/useArtifactAction'
+import { useAppSettings } from '../../../shared/composables/useAppSettings'
+import { resolveArtifactViewMode } from '../../../../shared/schemas/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 
 const props = defineProps({
@@ -15,14 +17,20 @@ const props = defineProps({
   projectId: { type: String, default: null },
 })
 
+const { settings } = useAppSettings()
+
 const content = ref('')
 const loadedKey = ref<string | null>(null)
 const loadedMtime = ref<number | null>(null)
-const blockMode = ref(false)
+const blockMode = ref(resolveArtifactViewMode(settings.value) === 'block')
 const openBlocks = ref<Set<number>>(new Set())
 const message = ref('')
 const externalChange = ref(false)
 const viewRoot = ref<HTMLElement | null>(null)
+
+function applyDefaultViewMode() {
+  blockMode.value = resolveArtifactViewMode(settings.value) === 'block'
+}
 
 const {
   editingSection,
@@ -210,10 +218,18 @@ watch(
   { immediate: true },
 )
 
-watch(() => props.openArtifact?.name, () => {
-  blockMode.value = false
-  cancelEdit()
-})
+watch(
+  () =>
+    props.openArtifact
+      ? `${props.openArtifact.taskId}/${props.openArtifact.name}`
+      : null,
+  (key, prevKey) => {
+    if (key != null && key !== prevKey) {
+      applyDefaultViewMode()
+      cancelEdit()
+    }
+  },
+)
 
 // Reset về mặc định (3 block đầu mở) mỗi khi content được (nạp) lại — cùng gốc
 // dữ liệu với `blocks` computed, nên seed lại khi artifact load xong.

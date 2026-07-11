@@ -9,6 +9,7 @@ import AgentEditor from './features/agent-editor/components/AgentEditor.vue'
 import KnowledgePanel from './features/knowledge/components/KnowledgePanel.vue'
 import RunnerConfigPanel from './features/runner/components/RunnerConfigPanel.vue'
 import LogsPanel from './features/logs/components/LogsPanel.vue'
+import SettingsDialog from './features/settings/components/SettingsDialog.vue'
 import RailIcon from './shared/ui/RailIcon.vue'
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
@@ -16,6 +17,7 @@ const PROJECT_KEY = 'dev-dashboard-selected-project'
 
 // ── Mode ─────────────────────────────────────────────────────────────────────
 const mode = ref('monitor')
+const settingsOpen = ref(false)
 
 const editorScope = ref('global')
 const editorTaskId = ref('')
@@ -195,15 +197,28 @@ onUnmounted(stop)
         </button>
       </div>
 
-      <footer v-if="!sidebarCollapsed" class="status">
-        <span v-if="error" class="err">⚠ {{ error }}</span>
-        <span v-else-if="lastUpdated && mode === 'monitor'">cập nhật {{ lastUpdated }}</span>
-        <span v-else-if="mode === 'editor'" class="muted">editor mode — polling paused</span>
-        <span v-else-if="mode === 'agentEditor'" class="muted">agent editor — polling paused</span>
-        <span v-else-if="mode === 'knowledge'" class="muted">knowledge — polling paused</span>
-        <span v-else-if="mode === 'runner'" class="muted">runner config — polling paused</span>
-        <span v-else-if="mode === 'logs'" class="muted">nhật ký — polling paused</span>
-      </footer>
+      <div class="sidebar-footer">
+        <footer v-if="!sidebarCollapsed" class="status">
+          <span v-if="error" class="err">⚠ {{ error }}</span>
+          <span v-else-if="lastUpdated && mode === 'monitor'">cập nhật {{ lastUpdated }}</span>
+          <span v-else-if="mode === 'editor'" class="muted">editor mode — polling paused</span>
+          <span v-else-if="mode === 'agentEditor'" class="muted">agent editor — polling paused</span>
+          <span v-else-if="mode === 'knowledge'" class="muted">knowledge — polling paused</span>
+          <span v-else-if="mode === 'runner'" class="muted">runner config — polling paused</span>
+          <span v-else-if="mode === 'logs'" class="muted">nhật ký — polling paused</span>
+        </footer>
+        <button
+          type="button"
+          class="settings-btn mode-btn rail-icon-btn"
+          title="Cài đặt"
+          aria-haspopup="dialog"
+          :aria-expanded="settingsOpen"
+          @click="settingsOpen = true"
+        >
+          <RailIcon name="settings" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">Cài đặt</span>
+        </button>
+      </div>
     </aside>
 
     <main v-if="mode === 'monitor'" class="main main-editor">
@@ -255,5 +270,7 @@ onUnmounted(stop)
     <main v-else-if="mode === 'agentEditor'" class="main main-editor">
       <AgentEditor />
     </main>
+
+    <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
   </div>
 </template>
