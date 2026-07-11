@@ -4,10 +4,15 @@ import { z } from 'zod'
  * Declarative "quick action" attached to artifacts in the monitor viewer.
  * Loaded from `.dev-team-agent/artifact-actions.yaml`; each action maps an
  * artifact (matched by filename pattern) to an agent + prompt template that the
- * dashboard submits as a job.
+ * dashboard submits as a job. `attach_points` decides where in the UI the
+ * action surfaces (artifact title toolbar and/or the text-selection toolbar);
+ * an action can be attached to more than one point.
  *
  * The schema is permissive (`.passthrough()`) so a hand-edited YAML with extra
- * keys still parses, and defaults fill optional guard fields.
+ * keys still parses, and defaults fill optional guard fields. `attach_points`
+ * uses a plain string array (not a Zod enum) so unknown values from hand-edited
+ * YAML round-trip instead of failing validation; the UI only offers the two MVP
+ * values (`artifact-title` / `artifact-selection`).
  */
 export const ArtifactAction = z
   .object({
@@ -18,6 +23,8 @@ export const ArtifactAction = z
     prompt_template: z.string().min(1),
     produces: z.array(z.string()).default([]),
     confirm: z.boolean().default(false),
+    attach_points: z.array(z.string().min(1)).default(['artifact-title']),
+    runner_id: z.string().min(1).optional(),
   })
   .passthrough()
 
@@ -32,14 +39,24 @@ export const ArtifactActionsFile = z
 
 export type ArtifactActionsFile = z.infer<typeof ArtifactActionsFile>
 
+/** Body of `PUT /api/artifact-actions` — a full-catalog replace (CRUD save). */
+export const PutArtifactActionsRequest = ArtifactActionsFile
+export type PutArtifactActionsRequest = z.infer<typeof PutArtifactActionsRequest>
+
 /** UI-facing projection of an action (no prompt template / patterns leaked). */
 export const ArtifactActionView = ArtifactAction.pick({
   id: true,
   label: true,
   agent_ref: true,
   confirm: true,
+  attach_points: true,
+  runner_id: true,
 })
 export type ArtifactActionView = z.infer<typeof ArtifactActionView>
+
+// Max characters accepted for a selection-derived quick action, so a wildly
+// large selection can't balloon the job prompt / request payload.
+export const MAX_SELECTION_CHARS = 50_000
 
 /** Body of `POST /api/artifact-actions/run`, validated at the HTTP boundary. */
 export const RunArtifactActionRequest = z.object({
@@ -47,6 +64,7 @@ export const RunArtifactActionRequest = z.object({
   actionId: z.string().min(1),
   artifactName: z.string().min(1),
   runnerId: z.string().min(1).optional(),
+  selectedText: z.string().max(MAX_SELECTION_CHARS).optional(),
 })
 
 export type RunArtifactActionRequest = z.infer<typeof RunArtifactActionRequest>

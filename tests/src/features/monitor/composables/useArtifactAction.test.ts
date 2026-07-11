@@ -153,4 +153,35 @@ describe('useArtifactAction', () => {
     expect(a.runningActionFor('T1', 'investigate.md')).toBeNull()
     await running
   })
+
+  it('forwards selectedText and runnerId to the run request body', async () => {
+    const fetchMock = vi.fn(async (input: any, init: any = {}) => {
+      const url = String(input)
+      const method = (init.method || 'GET').toUpperCase()
+      if (url.includes('/api/artifact-actions/run') && method === 'POST') {
+        return { ok: true, status: 201, json: async () => ({ job: { id: 'job8', status: 'queued' } }) }
+      }
+      if (url.includes('/api/jobs/')) {
+        return { ok: true, status: 200, json: async () => ({ job: { id: 'job8', status: 'succeeded' } }) }
+      }
+      throw new Error(`unexpected fetch: ${method} ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const a = useArtifactAction({ getProjectId: () => null, onReload: vi.fn(), pollMs: 1 })
+    await a.run('T1', 'explain-selection', 'design.md', {
+      selectedText: 'đoạn bôi đen',
+      runnerId: 'r1',
+    })
+
+    const runCall = fetchMock.mock.calls.find(([input]: any) => String(input).includes('/run'))
+    const body = JSON.parse(runCall![1].body)
+    expect(body).toEqual({
+      taskId: 'T1',
+      actionId: 'explain-selection',
+      artifactName: 'design.md',
+      runnerId: 'r1',
+      selectedText: 'đoạn bôi đen',
+    })
+  })
 })

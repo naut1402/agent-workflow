@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUpdated } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, onUpdated, inject } from 'vue'
 import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
-import { fetchArtifact, saveArtifact, fetchArtifactActions } from '../../../api'
+import { fetchArtifact, saveArtifact, fetchArtifactActions, fetchRunners } from '../../../api'
 import {
   splitMarkdownSections,
   useInlineMarkdownEdit,
 } from '../composables/useInlineMarkdownEdit'
 import { useArtifactAction } from '../composables/useArtifactAction'
+import { useArtifactSelectionToolbar } from '../composables/useArtifactSelectionToolbar'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
 import { resolveArtifactViewMode } from '../../../../shared/schemas/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
@@ -18,6 +19,10 @@ const props = defineProps({
 })
 
 const { settings } = useAppSettings()
+
+// Provided by App.vue — lets the runner gate below send the user to Runner
+// mode without bubbling a custom event through Monitor/App.
+const navigateToMode = inject<((mode: string) => void) | undefined>('navigateToMode', undefined)
 
 const content = ref('')
 const loadedKey = ref<string | null>(null)
@@ -64,8 +69,46 @@ const {
   },
 })
 
-// ── Quick actions ────────────────────────────────────────────────────────────
-const actions = ref<Array<{ id: string; label: string; agent_ref: string; confirm: boolean }>>([])
+// ── Quick actions (title toolbar + selection toolbar) ───────────────────────
+interface QuickActionView {
+  id: string
+  label: string
+  agent_ref: string
+  confirm: boolean
+  attach_points?: string[]
+  runner_id?: string
+}
+
+// All actions matching the open artifact by pattern (unfiltered by attach
+// point); title/selection lists below split on `attach_points` client-side so
+// one fetch covers both toolbars.
+const actions = ref<QuickActionView[]>([])
+
+const titleActions = computed(() =>
+  actions.value.filter((a) => (a.attach_points ?? ['artifact-title']).includes('artifact-title')),
+)
+const selectionActions = computed(() =>
+  actions.value.filter((a) => (a.attach_points ?? []).includes('artifact-selection')),
+)
+
+// Runner "usable" gate for QuickAction (decision §4.2.1 #8): mirrors the Agent
+// Editor Build NL gate — a runner is usable unless explicitly disabled.
+const runners = ref<Array<{ id: string; name: string; enabled?: boolean }>>([])
+const hasUsableRunner = computed(() => runners.value.some((r) => r.enabled !== false))
+const gateError = ref('')
+
+async function loadRunners() {
+  try {
+    const res = await fetchRunners()
+    runners.value = Array.isArray(res?.runners) ? res.runners : []
+  } catch {
+    runners.value = []
+  }
+}
+
+function goToRunner() {
+  navigateToMode?.('runner')
+}
 
 const { runningActionId, runningActionFor, error: actionError, run: runAction, clearError } = useArtifactAction({
   getProjectId: () => props.projectId ?? null,
@@ -99,13 +142,65 @@ async function loadActions(name: string) {
   }
 }
 
-async function onActionClick(action: { id: string; label: string; confirm: boolean }) {
+async function onActionClick(action: QuickActionView) {
   if (!props.openArtifact || isEditing() || runningActionId.value) return
+  gateError.value = ''
+  if (!hasUsableRunner.value) {
+    gateError.value = 'Chưa có runner khả dụng.'
+    return
+  }
   if (action.confirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
     if (!window.confirm(`Chạy "${action.label}" trên ${props.openArtifact.name}?`)) return
   }
-  await runAction(props.openArtifact.taskId, action.id, props.openArtifact.name)
+  await runAction(props.openArtifact.taskId, action.id, props.openArtifact.name, {
+    runnerId: action.runner_id,
+  })
 }
+
+// ── Selection toolbar ────────────────────────────────────────────────────────
+const selectionToolbar = useArtifactSelectionToolbar({
+  getContainer: () => viewRoot.value,
+  isBlocked: () => isEditing() || !props.openArtifact,
+})
+
+const selectionToolbarStyle = computed(() => {
+  const r = selectionToolbar.rect.value
+  if (!r) return {}
+  return {
+    top: `${r.top + r.height + 6}px`,
+    left: `${r.left}px`,
+  }
+})
+
+async function onSelectionActionClick(action: QuickActionView) {
+  if (!props.openArtifact || isEditing() || runningActionId.value) return
+  gateError.value = ''
+  if (!hasUsableRunner.value) {
+    gateError.value = 'Chưa có runner khả dụng.'
+    return
+  }
+  const selectedText = selectionToolbar.text.value
+  if (!selectedText) {
+    selectionToolbar.hide()
+    return
+  }
+  if (action.confirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+    if (!window.confirm(`Chạy "${action.label}" trên đoạn đã chọn?`)) return
+  }
+  selectionToolbar.hide()
+  await runAction(props.openArtifact.taskId, action.id, props.openArtifact.name, {
+    runnerId: action.runner_id,
+    selectedText,
+  })
+}
+
+onMounted(() => {
+  loadRunners()
+  selectionToolbar.attach()
+})
+onUnmounted(() => {
+  selectionToolbar.detach()
+})
 
 const html = computed(() => parseMarkdown(content.value || ''))
 
@@ -265,7 +360,7 @@ onUpdated(() => scheduleMermaid())
         <span class="art-title">{{ openArtifact.name }}</span>
         <div class="art-toolbar-actions">
           <button
-            v-for="action in actions"
+            v-for="action in titleActions"
             :key="action.id"
             class="btn-quick-action"
             :disabled="isEditing() || !!runningActionId"
@@ -297,6 +392,11 @@ onUpdated(() => scheduleMermaid())
         {{ actionError }}
         <button type="button" class="btn-link" @click="clearError">Ẩn</button>
       </p>
+      <p v-if="gateError" class="art-warning">
+        {{ gateError }}
+        <button type="button" class="btn-link" @click="goToRunner">Mở cấu hình Runner</button>
+        <button type="button" class="btn-link" @click="gateError = ''">Ẩn</button>
+      </p>
       <p v-if="message" class="art-message">{{ message }}</p>
       <p v-if="externalChange" class="art-warning">
         File đã thay đổi trên disk trong lúc bạn sửa.
@@ -304,6 +404,25 @@ onUpdated(() => scheduleMermaid())
       </p>
 
       <p class="art-edit-hint">Double-click vào section để sửa; blur để lưu tự động. <kbd>Esc</kbd> huỷ.</p>
+
+      <Teleport to="body">
+        <div
+          v-if="selectionToolbar.visible.value && selectionActions.length"
+          class="selection-toolbar"
+          :style="selectionToolbarStyle"
+        >
+          <button
+            v-for="action in selectionActions"
+            :key="action.id"
+            type="button"
+            class="btn-quick-action"
+            :disabled="!!runningActionId"
+            :title="`Chạy agent ${action.agent_ref}`"
+            @mousedown.prevent
+            @click="onSelectionActionClick(action)"
+          >{{ action.label }}</button>
+        </div>
+      </Teleport>
 
       <div ref="viewRoot">
         <div v-if="blockMode" class="block-list">

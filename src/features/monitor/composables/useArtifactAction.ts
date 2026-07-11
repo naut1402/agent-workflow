@@ -82,14 +82,25 @@ export function useArtifactAction(opts: UseArtifactActionOptions) {
     }
   }
 
-  async function run(taskId: string, actionId: string, artifactName: string, runnerId?: string) {
+  async function run(
+    taskId: string,
+    actionId: string,
+    artifactName: string,
+    runOpts: { runnerId?: string; selectedText?: string } = {},
+  ) {
     if (runningActionId.value) return
     error.value = null
     runningActionId.value = actionId
     runningKey.value = targetKey(taskId, artifactName)
     try {
       const res = await runArtifactAction(
-        { taskId, actionId, artifactName, runnerId },
+        {
+          taskId,
+          actionId,
+          artifactName,
+          runnerId: runOpts.runnerId,
+          selectedText: runOpts.selectedText,
+        },
         opts.getProjectId() ?? undefined,
       )
       const jobId: string | undefined = res?.job?.id

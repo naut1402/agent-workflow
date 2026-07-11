@@ -7,6 +7,7 @@ type RailIconName =
   | 'catalog'
   | 'rules'
   | 'agent'
+  | 'quickAction'
   | 'knowledge'
   | 'runner'
   | 'logs'
@@ -70,6 +71,9 @@ withDefaults(
       <circle cx="8" cy="5.5" r="2.5" />
       <path d="M3 14c0-2.5 2.2-4 5-4s5 1.5 5 4" />
       <path d="M12 3.5l1.5 1.5M12 7.5l1.5-1.5" />
+    </template>
+    <template v-else-if="name === 'quickAction'">
+      <path d="M9 1.5 3 9h4l-1 5.5 6-8H8l1-5z" />
     </template>
     <template v-else-if="name === 'knowledge'">
       <path d="M3 2.5h10v11H3z" />

@@ -12,11 +12,14 @@ import { TaskArchivePatch, TaskStatePatch } from '../../../shared/schemas/task.j
 import { submitJob } from '../../runners/index.js'
 import {
   loadArtifactActions,
+  loadArtifactActionsFile,
   matchActions,
+  matchByAttach,
   findAction,
   substitutePrompt,
   artifactBase,
   toActionView,
+  saveArtifactActions,
 } from '../../artifactActions/index.js'
 import { RunArtifactActionRequest } from '../../../shared/schemas/artifactAction.js'
 
@@ -252,18 +255,41 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
   })
 
   // ── Artifact quick-actions ─────────────────────────────────────────────────
-  // List actions applicable to an artifact (or all when `?artifact=` omitted).
+  // `?artifact=` present → UI-facing subset filtered to that artifact (and
+  // optionally `?attach=`), used by the title toolbar / selection toolbar.
+  // `?artifact=` omitted → full catalog (all fields), used by the QuickAction
+  // CRUD panel.
   app.get('/api/artifact-actions', async (c) => {
     const root = c.get('root')
     if (!root) return unknownProject(c)
     const artifact = c.req.query('artifact') || ''
+    const attach = c.req.query('attach') || ''
+
+    if (!artifact) {
+      const file = await loadArtifactActionsFile(root)
+      return j(c, 200, { version: file.version, actions: file.actions })
+    }
+
     const actions = await loadArtifactActions(root)
-    const matched = artifact ? matchActions(actions, artifact) : actions
-    return j(c, 200, { artifact: artifact || null, actions: matched.map(toActionView) })
+    const matched = attach ? matchByAttach(actions, artifact, attach) : matchActions(actions, artifact)
+    return j(c, 200, { artifact, actions: matched.map(toActionView) })
   })
 
-  // Run a quick-action: build the prompt from its template + the artifact, then
-  // reuse the job queue (same path as POST /api/jobs) to submit it to a runner.
+  // Full-catalog replace (CRUD save from the QuickAction panel).
+  app.put('/api/artifact-actions', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
+    const result = await saveArtifactActions(root, b.value)
+    if ('error' in result) return j(c, 400, { error: result.error })
+    emitAudit({ op: 'update', entity: 'artifact-actions', identifier: 'catalog', projectId: c.get('projectId') })
+    return j(c, 200, { ok: true, version: result.version, actions: result.actions })
+  })
+
+  // Run a quick-action: build the prompt from its template + the artifact (and
+  // optional text selection), then reuse the job queue (same path as
+  // POST /api/jobs) to submit it to a runner.
   app.post('/api/artifact-actions/run', async (c) => {
     const root = c.get('root')
     if (!root) return unknownProject(c)
@@ -273,7 +299,7 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     if (!parsed.success) {
       return j(c, 400, { error: 'invalid request', details: parsed.error.flatten() })
     }
-    const { taskId, actionId, artifactName, runnerId } = parsed.data
+    const { taskId, actionId, artifactName, runnerId, selectedText } = parsed.data
     if (/[^\w\-]/.test(taskId)) return j(c, 400, { error: 'invalid task id' })
 
     const target = resolveArtifact(root, taskId, artifactName)
@@ -286,6 +312,17 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       return j(c, 400, { error: 'action does not apply to artifact' })
     }
 
+    // Selection-only actions (attached to `artifact-selection` but not
+    // `artifact-title`) can only ever be triggered from the selection toolbar,
+    // which always supplies the selected text — an empty/missing value here
+    // means the caller skipped the toolbar (or the selection vanished).
+    const attachPoints = action.attach_points ?? ['artifact-title']
+    const selectionOnly =
+      attachPoints.includes('artifact-selection') && !attachPoints.includes('artifact-title')
+    if (selectionOnly && !selectedText) {
+      return j(c, 400, { error: 'selection required' })
+    }
+
     let content: string
     try {
       content = await fs.readFile(target, 'utf8')
@@ -296,10 +333,13 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     const userPrompt = substitutePrompt(action.prompt_template, {
       artifact_name: artifactName,
       artifact_base: artifactBase(artifactName),
+      selection: selectedText ?? '',
     })
 
+    const resolvedRunnerId = runnerId ?? action.runner_id
+
     const job = submitJob({
-      runnerId,
+      runnerId: resolvedRunnerId,
       agentRef: action.agent_ref,
       workspace: path.join(root, 'tasks', taskId),
       userPrompt,
@@ -312,6 +352,8 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
         taskId,
         artifactName,
         artifactBytes: content.length,
+        hasSelection: Boolean(selectedText),
+        selectionChars: selectedText?.length ?? 0,
       },
     })
 

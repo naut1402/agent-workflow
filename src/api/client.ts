@@ -127,14 +127,43 @@ export async function saveArtifact(
   return data
 }
 
-export async function fetchArtifactActions(artifact: string, projectId?: string) {
-  const r = await apiFetch(`/api/artifact-actions${qs({ artifact, project: projectId })}`)
+export async function fetchArtifactActions(artifact: string, projectId?: string, attach?: string) {
+  const r = await apiFetch(`/api/artifact-actions${qs({ artifact, project: projectId, attach })}`)
   if (!r.ok) throw new Error(`/api/artifact-actions → ${r.status}`)
   return r.json()
 }
 
+// Full catalog (all fields, no `artifact` filter) — used by the QuickAction
+// CRUD panel to list/edit every action.
+export async function fetchArtifactActionsCatalog(projectId?: string) {
+  const r = await apiFetch(`/api/artifact-actions${qs({ project: projectId })}`)
+  if (!r.ok) throw new Error(`/api/artifact-actions → ${r.status}`)
+  return r.json()
+}
+
+// Full-catalog replace (create/edit/delete all funnel through one PUT).
+export async function saveArtifactActionsCatalog(
+  file: { version: number; actions: unknown[] },
+  projectId?: string,
+) {
+  const r = await apiFetch(`/api/artifact-actions${qs({ project: projectId })}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(file),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/artifact-actions PUT → ${r.status}`)
+  return data
+}
+
 export async function runArtifactAction(
-  body: { taskId: string; actionId: string; artifactName: string; runnerId?: string },
+  body: {
+    taskId: string
+    actionId: string
+    artifactName: string
+    runnerId?: string
+    selectedText?: string
+  },
   projectId?: string,
 ) {
   const r = await apiFetch(`/api/artifact-actions/run${qs({ project: projectId })}`, {

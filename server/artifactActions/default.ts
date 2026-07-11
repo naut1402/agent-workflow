@@ -19,5 +19,6 @@ export const DEFAULT_ARTIFACT_ACTIONS: ArtifactAction[] = [
     ].join('\n'),
     produces: [],
     confirm: true,
+    attach_points: ['artifact-title'],
   },
 ]
