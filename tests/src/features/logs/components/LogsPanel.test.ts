@@ -10,7 +10,17 @@ function stubFetch() {
   const mock = vi.fn(async (url: string) => {
     let body: any = {}
     if (url.includes('/api/jobs/')) body = { id: JOB_ID, text: 'hello job log', truncated: false }
-    else if (url.includes('/api/jobs')) body = { jobs: [{ id: JOB_ID, status: 'succeeded' }] }
+    else if (url.includes('/api/jobs'))
+      body = {
+        jobs: [
+          {
+            id: JOB_ID,
+            status: 'succeeded',
+            agentRef: 'project/quick-action-improve-doc',
+            metadata: { artifactName: 'design.md' },
+          },
+        ],
+      }
     else if (url.includes('/api/logs'))
       body = { entries: [{ type: 'audit', iso: '2026-01-01', op: 'create', entity: 'custom-agent', identifier: 'foo', projectId: null }] }
     return { ok: true, json: async () => body }
@@ -52,7 +62,12 @@ describe('LogsPanel', () => {
     await flushPromises()
     expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/jobs'))).toBe(true)
 
-    await w.find('.jobs-list li').trigger('click')
+    // List item shows agent + artifact context, not just the raw job id.
+    const item = w.find('.jobs-list li')
+    expect(item.text()).toContain('project/quick-action-improve-doc')
+    expect(item.text()).toContain('design.md')
+
+    await item.trigger('click')
     await flushPromises()
     expect(w.find('.job-log pre').text()).toContain('hello job log')
   })

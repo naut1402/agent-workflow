@@ -36,15 +36,61 @@ function buildChildEnv(credential: CredentialProfile): NodeJS.ProcessEnv {
   return env
 }
 
-function formatFailure(procResult: ProcResult, logPath?: string): string {
+function formatFailure(procResult: ProcResult): string {
   const fromStreams = [procResult.stderr, procResult.stdout].filter(Boolean).join('\n').trim()
   if (fromStreams) return fromStreams.slice(0, 1000)
-  if (logPath && fs.existsSync(logPath)) {
-    const log = fs.readFileSync(logPath, 'utf8').trim()
-    if (log) return log.slice(0, 1000)
-  }
   if (procResult.killed) return 'process timed out'
   return `exit code ${procResult.exitCode ?? 'unknown'}`
+}
+
+/** Payload header written to the job log before the process starts, so the raw
+ * log (as shown in LogsPanel) explains what was actually sent to the runner
+ * instead of just the interleaved stdout/stderr. */
+function describePayload(opts: {
+  resolvedAgent: ResolvedAgent
+  workspace: string
+  cliPath: string
+  flags: string[]
+  claudeStyle: boolean
+  allowedTools?: unknown
+  dangerouslySkipPermissions?: unknown
+  prompt: string
+}): string {
+  const cli = [opts.cliPath, ...opts.flags]
+  if (opts.claudeStyle) {
+    cli.push('-p', '<prompt — xem "--- Prompt ---" bên dưới>')
+    if (opts.allowedTools) cli.push('--allowedTools', String(opts.allowedTools))
+    if (opts.dangerouslySkipPermissions) cli.push('--dangerously-skip-permissions')
+  } else {
+    cli.push('<prompt — xem "--- Prompt ---" bên dưới>')
+  }
+  const agent = opts.resolvedAgent
+  return [
+    '=== Payload gửi cho runner ===',
+    `Agent: ${agent.ref}${agent.name ? ` (${agent.name})` : ''}${agent.model ? ` — model: ${agent.model}` : ''}`,
+    `Workspace: ${opts.workspace}`,
+    `CLI: ${cli.join(' ')}`,
+    '--- Prompt ---',
+    opts.prompt,
+    '',
+    '=== Phản hồi của runner (stdout/stderr) ===',
+    '',
+  ].join('\n')
+}
+
+/** Result footer appended after the process exits — the "what happened" summary
+ * that used to be dropped once ExecuteResult was returned. */
+function describeResult(result: ExecuteResult): string {
+  const lines = [
+    '',
+    '=== Kết quả ===',
+    `ok: ${result.ok}`,
+    `exitCode: ${result.exitCode ?? 'null'}`,
+    `durationMs: ${result.durationMs}`,
+  ]
+  if (result.artifactsFound?.length) lines.push(`artifactsFound: ${result.artifactsFound.join(', ')}`)
+  if (result.error) lines.push(`error: ${result.error}`)
+  return lines.join('\n') + '\n'
 }
 
 interface RunProcessOptions {
@@ -160,18 +206,31 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
       }
 
       const logPath = req.metadata?.logPath as string | undefined
-      const logChunks: string[] = []
+      const appendLog = (text: string) => {
+        if (!logPath) return
+        try {
+          fs.appendFileSync(logPath, text)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      appendLog(
+        describePayload({
+          resolvedAgent: req.resolvedAgent,
+          workspace: req.workspace,
+          cliPath,
+          flags,
+          claudeStyle: claudeStyle || opts.claudeStyleArgs === true,
+          allowedTools: runnerConfig.allowedTools,
+          dangerouslySkipPermissions: runnerConfig.dangerouslySkipPermissions,
+          prompt,
+        }),
+      )
 
       const wrappedOnLog = (chunk: string) => {
-        logChunks.push(chunk)
         onLog?.(chunk)
-        if (logPath) {
-          try {
-            fs.appendFileSync(logPath, chunk)
-          } catch {
-            /* ignore */
-          }
-        }
+        appendLog(chunk)
       }
 
       let procResult: ProcResult
@@ -183,13 +242,15 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
           onLog: wrappedOnLog,
         })
       } catch (err: any) {
-        return {
+        const result: ExecuteResult = {
           ok: false,
           exitCode: null,
           durationMs: Date.now() - started,
           logPath,
           error: String(err.message || err),
         }
+        appendLog(describeResult(result))
+        return result
       }
 
       const artifactsFound: string[] = []
@@ -201,14 +262,16 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
       }
 
       const ok = procResult.exitCode === 0 && !procResult.killed
-      return {
+      const result: ExecuteResult = {
         ok,
         exitCode: procResult.exitCode,
         durationMs: Date.now() - started,
         logPath,
         artifactsFound,
-        error: ok ? undefined : formatFailure(procResult, logPath),
+        error: ok ? undefined : formatFailure(procResult),
       }
+      appendLog(describeResult(result))
+      return result
     },
   }
 }
