@@ -94,4 +94,36 @@ describe('SettingsDialog', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(w.emitted('close')).toHaveLength(1)
   })
+
+  it('TC-TH-01: empty localStorage → Hệ thống radio checked', () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    const system = document.querySelector(
+      'input[name="theme"][value="system"]',
+    ) as HTMLInputElement
+    expect(system.checked).toBe(true)
+  })
+
+  it('TC-TH-02: chọn Sáng → persist theme light + data-theme', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    const light = document.querySelector(
+      'input[name="theme"][value="light"]',
+    ) as HTMLInputElement
+    light.checked = true
+    light.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).theme).toBe('light')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+  })
+
+  it('TC-TH-03: seed dark → Tối radio checked', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: 'dark' }))
+    const { load } = useAppSettings()
+    load()
+    mount(SettingsDialog, { attachTo: document.body })
+    const dark = document.querySelector(
+      'input[name="theme"][value="dark"]',
+    ) as HTMLInputElement
+    expect(dark.checked).toBe(true)
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+  })
 })

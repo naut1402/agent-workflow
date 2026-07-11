@@ -4,6 +4,7 @@ import {
   DEFAULT_APP_SETTINGS,
   parseAppSettings,
   resolveArtifactViewMode,
+  resolveThemePreference,
 } from '../../../shared/schemas/appSettings'
 
 describe('parseAppSettings', () => {
@@ -52,5 +53,19 @@ describe('resolveArtifactViewMode', () => {
 
   it("TC-SC-03: { artifactViewMode: 'full' } → full", () => {
     expect(resolveArtifactViewMode({ artifactViewMode: 'full' })).toBe('full')
+  })
+})
+
+describe('resolveThemePreference', () => {
+  it('missing → system', () => {
+    expect(resolveThemePreference({})).toBe('system')
+    expect(resolveThemePreference(undefined)).toBe('system')
+    expect(resolveThemePreference(null)).toBe('system')
+  })
+
+  it('keeps light / dark / system', () => {
+    expect(resolveThemePreference({ theme: 'light' })).toBe('light')
+    expect(resolveThemePreference({ theme: 'dark' })).toBe('dark')
+    expect(resolveThemePreference({ theme: 'system' })).toBe('system')
   })
 })

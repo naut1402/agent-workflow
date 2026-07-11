@@ -4,6 +4,7 @@ import {
   parseAppSettings,
   type AppSettings,
 } from '../../../shared/schemas/appSettings'
+import { applyThemeToDocument } from '../lib/theme'
 
 export const STORAGE_KEY = 'dev-dashboard-app-settings'
 
@@ -15,12 +16,13 @@ function load(): void {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw == null) {
       settings.value = { ...DEFAULT_APP_SETTINGS }
-      return
+    } else {
+      settings.value = parseAppSettings(JSON.parse(raw))
     }
-    settings.value = parseAppSettings(JSON.parse(raw))
   } catch {
     settings.value = { ...DEFAULT_APP_SETTINGS }
   }
+  applyThemeToDocument(settings.value)
 }
 
 function persist(): void {
@@ -34,6 +36,9 @@ function persist(): void {
 function update(patch: Partial<AppSettings>): void {
   settings.value = { ...settings.value, ...patch }
   persist()
+  if ('theme' in patch) {
+    applyThemeToDocument(settings.value)
+  }
 }
 
 /** Shared client preference store (singleton across callers). */

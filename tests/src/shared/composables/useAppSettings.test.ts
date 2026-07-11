@@ -86,4 +86,12 @@ describe('useAppSettings', () => {
     a.update({ theme: 'system' })
     expect(b.settings.value.theme).toBe('system')
   })
+
+  it('update theme applies data-theme on documentElement', () => {
+    const { update } = useAppSettings()
+    update({ theme: 'light' })
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+    update({ theme: 'dark' })
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+  })
 })

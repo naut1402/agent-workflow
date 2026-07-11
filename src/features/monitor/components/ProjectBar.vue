@@ -150,14 +150,14 @@ async function onRemove(project) {
   line-height: 1;
   padding: 2px 7px;
 }
-.project-add-btn:hover { background: rgba(255, 255, 255, 0.06); }
+.project-add-btn:hover { background: var(--hover-surface); }
 .project-list { list-style: none; margin: 0; padding: 0; }
 .project-item {
   display: flex;
   align-items: center;
   border-radius: 5px;
 }
-.project-item.active { background: rgba(120, 160, 255, 0.16); }
+.project-item.active { background: rgba(var(--accent-rgb), 0.16); }
 .project-pick {
   flex: 1;
   display: flex;
@@ -188,11 +188,11 @@ async function onRemove(project) {
   padding: 0 7px;
   font-size: 16px;
 }
-.project-remove:hover { opacity: 1; color: #ff8080; }
+.project-remove:hover { opacity: 1; color: var(--danger); }
 .project-empty { opacity: 0.5; padding: 5px 6px; }
 .project-add-form { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
 .project-input {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--input-surface);
   border: 1px solid var(--border, #2a2a35);
   border-radius: 4px;
   color: inherit;
@@ -209,7 +209,7 @@ async function onRemove(project) {
   padding: 4px 10px;
   font-size: 12px;
 }
-.project-btn.primary { background: rgba(120, 160, 255, 0.22); }
+.project-btn.primary { background: rgba(var(--accent-rgb), 0.22); }
 .project-btn:disabled { opacity: 0.5; cursor: default; }
-.project-err { color: #ff9090; font-size: 12px; margin: 6px 0 0; }
+.project-err { color: var(--danger); font-size: 12px; margin: 6px 0 0; }
 </style>
