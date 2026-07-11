@@ -18,6 +18,9 @@ export interface QuickActionDraft {
   confirm: boolean
   attach_points: string[]
   runner_id?: string
+  // When true the action runs against a scratch copy and the user reviews the
+  // proposed diff before it's written to the real artifact (approval flow).
+  require_approval?: boolean
   [key: string]: unknown
 }
 

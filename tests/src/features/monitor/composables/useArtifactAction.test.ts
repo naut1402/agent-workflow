@@ -44,6 +44,25 @@ describe('useArtifactAction', () => {
     expect(a.runningActionId.value).toBeNull()
   })
 
+  it('hands off to onAwaitingApproval (no reload, no error) when a require_approval job settles', async () => {
+    stubApi({ id: 'job-appr', status: 'queued' }, [
+      { id: 'job-appr', status: 'running' },
+      { id: 'job-appr', status: 'awaiting_approval' },
+    ])
+    const onReload = vi.fn()
+    const onAwaitingApproval = vi.fn()
+    const a = useArtifactAction({ getProjectId: () => null, onReload, onAwaitingApproval, pollMs: 1 })
+
+    await a.run('T1', 'improve-doc', 'design.md')
+
+    expect(onReload).not.toHaveBeenCalled()
+    expect(a.error.value).toBeNull()
+    const expected = { jobId: 'job-appr', target: { taskId: 'T1', name: 'design.md' } }
+    expect(onAwaitingApproval).toHaveBeenCalledWith(expected)
+    expect(a.pendingApproval.value).toEqual(expected)
+    expect(a.runningActionId.value).toBeNull()
+  })
+
   it('surfaces a message and skips reload when the job fails', async () => {
     stubApi({ id: 'job2', status: 'queued' }, [{ id: 'job2', status: 'failed', error: 'runner disabled' }])
     const onReload = vi.fn()

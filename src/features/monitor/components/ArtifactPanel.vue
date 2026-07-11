@@ -8,6 +8,7 @@ import {
 } from '../composables/useInlineMarkdownEdit'
 import { useArtifactAction } from '../composables/useArtifactAction'
 import { useArtifactSelectionToolbar } from '../composables/useArtifactSelectionToolbar'
+import ArtifactProposalReview from './ArtifactProposalReview.vue'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
 import { resolveArtifactViewMode } from '../../../../shared/schemas/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
@@ -110,7 +111,15 @@ function goToRunner() {
   navigateToMode?.('runner')
 }
 
-const { runningActionId, runningActionFor, error: actionError, run: runAction, clearError } = useArtifactAction({
+const {
+  runningActionId,
+  runningActionFor,
+  error: actionError,
+  run: runAction,
+  clearError,
+  pendingApproval,
+  clearPendingApproval,
+} = useArtifactAction({
   getProjectId: () => props.projectId ?? null,
   // Only reload when the job's artifact is still the one on screen — the user
   // may have switched artifacts while the job was polling.
@@ -123,7 +132,27 @@ const { runningActionId, runningActionFor, error: actionError, run: runAction, c
       reloadExternal()
     }
   },
+  // A require_approval job settled against a scratch copy — the diff-review modal
+  // opens off `pendingApproval` (set by the composable); nothing extra to do here.
 })
+
+// True when the pending-approval job still targets the artifact on screen, so a
+// stale review (user switched artifacts mid-run) doesn't pop open.
+const showProposalReview = computed(
+  () =>
+    !!pendingApproval.value &&
+    !!props.openArtifact &&
+    pendingApproval.value.target.taskId === props.openArtifact.taskId &&
+    pendingApproval.value.target.name === props.openArtifact.name,
+)
+
+function onProposalApproved() {
+  reloadExternal()
+  clearPendingApproval()
+}
+function onProposalDiscarded() {
+  clearPendingApproval()
+}
 
 // Action running for the artifact currently on screen (null if the in-flight
 // job belongs to a different artifact), so the spinner lands on the right button.
@@ -321,6 +350,7 @@ watch(
   () => props.openArtifact,
   (a) => {
     clearError()
+    clearPendingApproval()
     if (a) {
       load(a.taskId, a.name)
       loadActions(a.name)
@@ -426,6 +456,15 @@ onUpdated(() => scheduleMermaid())
       </p>
 
       <p class="art-edit-hint">Double-click vào section để sửa; blur để lưu tự động. <kbd>Esc</kbd> huỷ.</p>
+
+      <ArtifactProposalReview
+        v-if="showProposalReview && pendingApproval"
+        :job-id="pendingApproval.jobId"
+        :artifact-name="pendingApproval.target.name"
+        @approved="onProposalApproved"
+        @discarded="onProposalDiscarded"
+        @close="clearPendingApproval"
+      />
 
       <Teleport to="body">
         <div
