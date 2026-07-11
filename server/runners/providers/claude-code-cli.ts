@@ -55,6 +55,7 @@ function describePayload(opts: {
   allowedTools?: unknown
   dangerouslySkipPermissions?: unknown
   prompt: string
+  metadata?: Record<string, unknown>
 }): string {
   const cli = [opts.cliPath, ...opts.flags]
   if (opts.claudeStyle) {
@@ -68,17 +69,20 @@ function describePayload(opts: {
   const agentLabel = agent.ref
     ? `${agent.ref}${agent.name ? ` (${agent.name})` : ''}`
     : `${agent.name || 'ad-hoc'} — không gắn agent, chạy prompt trực tiếp`
-  return [
+  const lines = [
     '=== Payload gửi cho runner ===',
     `Agent: ${agentLabel}${agent.model ? ` — model: ${agent.model}` : ''}`,
     `Workspace: ${opts.workspace}`,
     `CLI: ${cli.join(' ')}`,
-    '--- Prompt ---',
-    opts.prompt,
-    '',
-    '=== Phản hồi của runner (stdout/stderr) ===',
-    '',
-  ].join('\n')
+  ]
+  if (opts.metadata?.hasSelection) {
+    const startLine = opts.metadata.selectionStartLine
+    const endLine = opts.metadata.selectionEndLine
+    const range = startLine != null ? ` — dòng ${startLine}${endLine && endLine !== startLine ? `-${endLine}` : ''}` : ''
+    lines.push(`Selection: ${opts.metadata.selectionChars ?? '?'} ký tự${range}`)
+  }
+  lines.push('--- Prompt ---', opts.prompt, '', '=== Phản hồi của runner (stdout/stderr) ===', '')
+  return lines.join('\n')
 }
 
 /** Result footer appended after the process exits — the "what happened" summary
@@ -228,6 +232,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
           allowedTools: runnerConfig.allowedTools,
           dangerouslySkipPermissions: runnerConfig.dangerouslySkipPermissions,
           prompt,
+          metadata: req.metadata,
         }),
       )
 

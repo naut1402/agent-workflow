@@ -62,15 +62,34 @@ export function artifactBase(name: string): string {
   return name.replace(/\.[^./\\]+$/, '')
 }
 
-/** Substitute `{{artifact_name}}` / `{{artifact_base}}` / `{{selection}}` placeholders in a template. */
+/**
+ * Substitute `{{artifact_name}}` / `{{artifact_base}}` / `{{selection}}` /
+ * `{{selection_lines}}` placeholders in a template. `selection_lines` is a
+ * plain "start-end" (or "start" when they're equal) string, empty when the
+ * line range wasn't computed — quick actions that want to always mention it
+ * should phrase around a possibly-empty value (e.g. "gần dòng {{selection_lines}}").
+ */
 export function substitutePrompt(
   template: string,
-  vars: { artifact_name: string; artifact_base: string; selection?: string },
+  vars: {
+    artifact_name: string
+    artifact_base: string
+    selection?: string
+    selectionStartLine?: number
+    selectionEndLine?: number
+  },
 ): string {
+  const lines =
+    vars.selectionStartLine != null
+      ? vars.selectionStartLine === vars.selectionEndLine
+        ? String(vars.selectionStartLine)
+        : `${vars.selectionStartLine}-${vars.selectionEndLine ?? vars.selectionStartLine}`
+      : ''
   return template
     .replace(/\{\{\s*artifact_name\s*\}\}/g, vars.artifact_name)
     .replace(/\{\{\s*artifact_base\s*\}\}/g, vars.artifact_base)
     .replace(/\{\{\s*selection\s*\}\}/g, vars.selection ?? '')
+    .replace(/\{\{\s*selection_lines\s*\}\}/g, lines)
 }
 
 /** Project an action to its UI-facing subset. */

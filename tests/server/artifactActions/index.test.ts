@@ -136,6 +136,29 @@ describe('findAction / artifactBase / substitutePrompt / toActionView', () => {
     })
     expect(withoutSelection).toBe('Cải thiện: ')
   })
+  test('substitutePrompt replaces {{selection_lines}} (range, single line, or empty)', () => {
+    const range = substitutePrompt('Sửa dòng {{selection_lines}}', {
+      artifact_name: 'design.md',
+      artifact_base: 'design',
+      selectionStartLine: 12,
+      selectionEndLine: 15,
+    })
+    expect(range).toBe('Sửa dòng 12-15')
+
+    const singleLine = substitutePrompt('Sửa dòng {{ selection_lines }}', {
+      artifact_name: 'design.md',
+      artifact_base: 'design',
+      selectionStartLine: 12,
+      selectionEndLine: 12,
+    })
+    expect(singleLine).toBe('Sửa dòng 12')
+
+    const absent = substitutePrompt('Sửa dòng {{selection_lines}}', {
+      artifact_name: 'design.md',
+      artifact_base: 'design',
+    })
+    expect(absent).toBe('Sửa dòng ')
+  })
   test('toActionView drops the template and patterns, keeps attach_points/runner_id', () => {
     expect(toActionView(action())).toEqual({
       id: 'improve-doc',

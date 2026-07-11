@@ -261,6 +261,25 @@ describe('POST /api/artifact-actions/run', () => {
     const { job } = await r.json()
     expect(job.metadata.hasSelection).toBe(true)
     expect(job.metadata.selectionChars).toBe('đoạn văn bôi đen'.length)
+    expect(job.metadata.selectionStartLine).toBeUndefined()
+    expect(job.metadata.selectionEndLine).toBeUndefined()
+  })
+
+  test('records selectionStartLine/selectionEndLine on the job when supplied', async () => {
+    const r = await req('POST', '/api/artifact-actions/run', {
+      body: JSON.stringify({
+        taskId: 'T1',
+        actionId: 'improve-doc',
+        artifactName: 'design.md',
+        selectedText: 'đoạn văn bôi đen',
+        selectionStartLine: 12,
+        selectionEndLine: 15,
+      }),
+    })
+    expect(r.status).toBe(201)
+    const { job } = await r.json()
+    expect(job.metadata.selectionStartLine).toBe(12)
+    expect(job.metadata.selectionEndLine).toBe(15)
   })
 
   describe('selection-only action', () => {

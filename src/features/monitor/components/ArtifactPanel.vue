@@ -161,6 +161,7 @@ async function onActionClick(action: QuickActionView) {
 const selectionToolbar = useArtifactSelectionToolbar({
   getContainer: () => viewRoot.value,
   isBlocked: () => isEditing() || !props.openArtifact,
+  getBlockRanges: () => blockLineRanges.value,
 })
 
 const selectionToolbarStyle = computed(() => {
@@ -187,10 +188,13 @@ async function onSelectionActionClick(action: QuickActionView) {
   if (action.confirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
     if (!window.confirm(`Chạy "${action.label}" trên đoạn đã chọn?`)) return
   }
+  const selectedLines = selectionToolbar.lines.value
   selectionToolbar.hide()
   await runAction(props.openArtifact.taskId, action.id, props.openArtifact.name, {
     runnerId: action.runner_id,
     selectedText,
+    selectionStartLine: selectedLines?.start,
+    selectionEndLine: selectedLines?.end,
   })
 }
 
@@ -202,8 +206,6 @@ onUnmounted(() => {
   selectionToolbar.detach()
 })
 
-const html = computed(() => parseMarkdown(content.value || ''))
-
 const blocks = computed(() => {
   return splitMarkdownSections(content.value).map((source) => {
     const firstLine = source.split('\n')[0]
@@ -213,6 +215,26 @@ const blocks = computed(() => {
       source,
       html: parseMarkdown(source),
     }
+  })
+})
+
+// 1-indexed start/end line of each block within the raw `content`, used to
+// give the selection toolbar a line range for the selected text (see
+// useArtifactSelectionToolbar's computeSelectionLines). `splitMarkdownSections`
+// slices `content` via a lookahead split (no characters consumed), so each
+// block's `source` is a literal, in-order substring of `content` — searching
+// sequentially from the previous block's end keeps this correct even if two
+// blocks happen to share identical text.
+const blockLineRanges = computed(() => {
+  const full = content.value
+  let searchFrom = 0
+  return blocks.value.map((block) => {
+    const idx = full.indexOf(block.source, searchFrom)
+    const start = idx >= 0 ? idx : searchFrom
+    searchFrom = start + block.source.length
+    const startLine = full.slice(0, start).split('\n').length
+    const lineCount = block.source.split('\n').length
+    return { startLine, endLine: startLine + lineCount - 1, source: block.source }
   })
 })
 
@@ -347,7 +369,7 @@ watch(
   },
 )
 
-watch([html, blockMode, editingSection], () => scheduleMermaid())
+watch([blocks, blockMode, editingSection], () => scheduleMermaid())
 onUpdated(() => scheduleMermaid())
 </script>
 
@@ -430,6 +452,7 @@ onUpdated(() => scheduleMermaid())
             v-for="(block, i) in blocks"
             :key="i"
             class="block-item md-section-wrap"
+            :data-block-index="i"
             :open="openBlocks.has(i)"
             @toggle="onBlockToggle(i, $event)"
           >
@@ -471,13 +494,17 @@ onUpdated(() => scheduleMermaid())
             @blur="handleBlur"
             @keydown="onKeydown"
           />
-          <div
-            v-else
-            class="md md-editable"
-            v-html="html"
-            title="Double-click để sửa"
-            @dblclick.prevent="startEdit('full', $event)"
-          />
+          <template v-else>
+            <div
+              v-for="(block, i) in blocks"
+              :key="i"
+              class="md md-editable"
+              :data-block-index="i"
+              v-html="block.html"
+              title="Double-click để sửa"
+              @dblclick.prevent="startEdit('full', $event)"
+            />
+          </template>
         </div>
       </div>
     </template>

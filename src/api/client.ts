@@ -163,6 +163,8 @@ export async function runArtifactAction(
     artifactName: string
     runnerId?: string
     selectedText?: string
+    selectionStartLine?: number
+    selectionEndLine?: number
   },
   projectId?: string,
 ) {

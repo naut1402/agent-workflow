@@ -72,6 +72,14 @@ export const RunArtifactActionRequest = z.object({
   artifactName: z.string().min(1),
   runnerId: z.string().min(1).optional(),
   selectedText: z.string().max(MAX_SELECTION_CHARS).optional(),
+  // 1-indexed line range of `selectedText` within the artifact's raw source,
+  // best-effort computed client-side (ArtifactPanel maps the DOM selection
+  // back to the containing markdown block's source — see
+  // useArtifactSelectionToolbar.ts). Lets the runner locate the selection in
+  // the file instead of only getting the bare (rendered-HTML) text, which
+  // can't be reliably re-found by search when it spans formatted markdown.
+  selectionStartLine: z.number().int().positive().optional(),
+  selectionEndLine: z.number().int().positive().optional(),
 })
 
 export type RunArtifactActionRequest = z.infer<typeof RunArtifactActionRequest>

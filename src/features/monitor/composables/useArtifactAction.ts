@@ -86,7 +86,12 @@ export function useArtifactAction(opts: UseArtifactActionOptions) {
     taskId: string,
     actionId: string,
     artifactName: string,
-    runOpts: { runnerId?: string; selectedText?: string } = {},
+    runOpts: {
+      runnerId?: string
+      selectedText?: string
+      selectionStartLine?: number
+      selectionEndLine?: number
+    } = {},
   ) {
     if (runningActionId.value) return
     error.value = null
@@ -100,6 +105,8 @@ export function useArtifactAction(opts: UseArtifactActionOptions) {
           artifactName,
           runnerId: runOpts.runnerId,
           selectedText: runOpts.selectedText,
+          selectionStartLine: runOpts.selectionStartLine,
+          selectionEndLine: runOpts.selectionEndLine,
         },
         opts.getProjectId() ?? undefined,
       )

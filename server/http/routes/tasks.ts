@@ -299,7 +299,8 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     if (!parsed.success) {
       return j(c, 400, { error: 'invalid request', details: parsed.error.flatten() })
     }
-    const { taskId, actionId, artifactName, runnerId, selectedText } = parsed.data
+    const { taskId, actionId, artifactName, runnerId, selectedText, selectionStartLine, selectionEndLine } =
+      parsed.data
     if (/[^\w\-]/.test(taskId)) return j(c, 400, { error: 'invalid task id' })
 
     const target = resolveArtifact(root, taskId, artifactName)
@@ -334,6 +335,8 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       artifact_name: artifactName,
       artifact_base: artifactBase(artifactName),
       selection: selectedText ?? '',
+      selectionStartLine,
+      selectionEndLine,
     })
 
     const resolvedRunnerId = runnerId ?? action.runner_id
@@ -354,6 +357,8 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
         artifactBytes: content.length,
         hasSelection: Boolean(selectedText),
         selectionChars: selectedText?.length ?? 0,
+        selectionStartLine,
+        selectionEndLine,
       },
     })
 
