@@ -105,6 +105,13 @@ async function resolveAgentFilePath(
 }
 
 function buildSystemPrompt(draft: any): string {
+  // `ensureSectionOrder` (shared/agentMarkdown.js) already appends 'unclassified'
+  // to the order whenever it has content — it's how the Agent Editor form shows
+  // a trailing "Chưa phân loại" box for headings it couldn't classify. Rendering
+  // it again here after the loop used to duplicate the whole catch-all block
+  // (agentRef `dev-agent-teams:doc-reviewer` reliably triggers this: the
+  // agent's intro paragraph + its "Đầu vào" heading aren't canonical sections,
+  // so they land in `unclassified` and were sent to the runner twice).
   const parts: string[] = []
   for (const key of ensureSectionOrder(draft)) {
     const content = draft.sections?.[key]
@@ -112,8 +119,6 @@ function buildSystemPrompt(draft: any): string {
       parts.push(`## ${getSectionTitle(key, draft)}\n\n${content.trim()}`)
     }
   }
-  const unclassified = draft.sections?.unclassified?.trim()
-  if (unclassified) parts.push(unclassified)
   return parts.join('\n\n')
 }
 
