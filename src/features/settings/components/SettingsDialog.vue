@@ -1,17 +1,27 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
-import { resolveArtifactViewMode } from '../../../../shared/schemas/appSettings'
+import {
+  resolveArtifactViewMode,
+  resolveThemePreference,
+  type ThemePreference,
+} from '../../../../shared/schemas/appSettings'
 
 const emit = defineEmits<{ close: [] }>()
 
 const { settings, load, update } = useAppSettings()
 
 const artifactViewMode = computed(() => resolveArtifactViewMode(settings.value))
+const theme = computed(() => resolveThemePreference(settings.value))
 
 function setArtifactViewMode(mode: 'block' | 'full') {
   if (artifactViewMode.value === mode) return
   update({ artifactViewMode: mode })
+}
+
+function setTheme(mode: ThemePreference) {
+  if (theme.value === mode) return
+  update({ theme: mode })
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -49,9 +59,45 @@ onUnmounted(() => {
           </button>
         </div>
         <div class="modal-body">
-          <p class="modal-hint">Tuỳ chọn giao diện sẽ được bổ sung ở phiên bản sau.</p>
           <section class="settings-section">
             <h3 class="settings-section-title">Giao diện</h3>
+            <p class="settings-section-desc">Chọn giao diện sáng, tối, hoặc theo hệ thống.</p>
+            <div
+              class="settings-radio-group"
+              role="radiogroup"
+              aria-label="Giao diện"
+            >
+              <label class="settings-radio">
+                <input
+                  type="radio"
+                  name="theme"
+                  value="system"
+                  :checked="theme === 'system'"
+                  @change="setTheme('system')"
+                />
+                Hệ thống
+              </label>
+              <label class="settings-radio">
+                <input
+                  type="radio"
+                  name="theme"
+                  value="light"
+                  :checked="theme === 'light'"
+                  @change="setTheme('light')"
+                />
+                Sáng
+              </label>
+              <label class="settings-radio">
+                <input
+                  type="radio"
+                  name="theme"
+                  value="dark"
+                  :checked="theme === 'dark'"
+                  @change="setTheme('dark')"
+                />
+                Tối
+              </label>
+            </div>
           </section>
           <section class="settings-section">
             <h3 class="settings-section-title">Artifact</h3>

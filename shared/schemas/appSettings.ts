@@ -13,6 +13,7 @@ export const AppSettingsSchema = z
   .passthrough()
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>
+export type ThemePreference = 'system' | 'light' | 'dark'
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {}
 
@@ -26,4 +27,13 @@ export function resolveArtifactViewMode(
   settings: Pick<AppSettings, 'artifactViewMode'> | null | undefined,
 ): 'block' | 'full' {
   return settings?.artifactViewMode === 'full' ? 'full' : 'block'
+}
+
+/** Effective theme preference: missing → 'system'. */
+export function resolveThemePreference(
+  settings: Pick<AppSettings, 'theme'> | null | undefined,
+): ThemePreference {
+  const t = settings?.theme
+  if (t === 'light' || t === 'dark' || t === 'system') return t
+  return 'system'
 }
