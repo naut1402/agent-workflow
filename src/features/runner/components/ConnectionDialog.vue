@@ -6,14 +6,7 @@ import {
   saveConnection,
   scanLocalCommands,
 } from '../../../api'
-
-type ConnectionKind = 'local-console' | 'ai-provider'
-
-interface ProviderEntry {
-  id: string
-  kind: ConnectionKind
-  label: string
-}
+import type { ConnectionKind, ProviderEntry } from '../types'
 
 interface RegisteredCommand {
   id: string

@@ -2,29 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { saveRunner, submitJob, fetchJob } from '../../../api'
 import ConnectionDialog from './ConnectionDialog.vue'
-
-interface RunnerDraft {
-  id: string
-  name: string
-  connectionId: string
-  enabled: boolean
-  maxConcurrency: number
-  config: {
-    timeoutMs: number
-    allowedTools: string
-  }
-}
-
-interface ConnectionOption {
-  id: string
-  label: string
-}
-
-interface ProviderEntry {
-  id: string
-  kind: string
-  label: string
-}
+import type { ConnectionOption, ProviderEntry, RunnerDraft } from '../types'
 
 const props = defineProps<{
   runner: RunnerDraft | null

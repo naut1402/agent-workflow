@@ -9,16 +9,17 @@ import {
   fetchJobs,
 } from '../../../api'
 import RunnerDialog from './RunnerDialog.vue'
+import type { ProviderEntry, RunnerDraft } from '../types'
 
-const runners = ref([])
+const runners = ref<RunnerDraft[]>([])
 const defaultRunnerId = ref('')
-const connections = ref([])
-const providers = ref([])
+const connections = ref<{ id: string; label: string }[]>([])
+const providers = ref<ProviderEntry[]>([])
 const message = ref('')
 const error = ref('')
-const recentJobs = ref([])
+const recentJobs = ref<any[]>([])
 const showRunnerDialog = ref(false)
-const editingRunner = ref(null)
+const editingRunner = ref<RunnerDraft | null>(null)
 
 async function load() {
   error.value = ''
@@ -30,10 +31,14 @@ async function load() {
     ])
     runners.value = rData.runners || []
     defaultRunnerId.value = rData.defaultRunnerId || ''
-    providers.value = rData.providers || cData.providers || []
+    providers.value = (rData.providers || cData.providers || []) as ProviderEntry[]
     connections.value = cData.connections || rData.connections || []
     recentJobs.value = jData.jobs || []
-  } catch (e) {
+    if (editingRunner.value?.id) {
+      const updated = runners.value.find((r) => r.id === editingRunner.value?.id)
+      if (updated) editingRunner.value = JSON.parse(JSON.stringify(updated))
+    }
+  } catch (e: any) {
     error.value = String(e.message || e)
   }
 }
@@ -46,7 +51,7 @@ function openNew() {
   message.value = ''
 }
 
-function openEdit(r) {
+function openEdit(r: RunnerDraft) {
   editingRunner.value = JSON.parse(JSON.stringify(r))
   showRunnerDialog.value = true
   message.value = ''
@@ -62,11 +67,11 @@ async function onSaved(runnerId: string) {
   await load()
 }
 
-function isEnabled(r): boolean {
+function isEnabled(r: RunnerDraft): boolean {
   return r.enabled !== false
 }
 
-async function toggleEnabled(r, e: Event) {
+async function toggleEnabled(r: RunnerDraft, e: Event) {
   e.stopPropagation()
   try {
     await saveRunner({ ...r, enabled: !isEnabled(r) })
@@ -77,7 +82,7 @@ async function toggleEnabled(r, e: Event) {
   }
 }
 
-async function makeDefault(r, e: Event) {
+async function makeDefault(r: RunnerDraft, e: Event) {
   e.stopPropagation()
   try {
     await setDefaultRunner(r.id)
@@ -88,7 +93,7 @@ async function makeDefault(r, e: Event) {
   }
 }
 
-async function remove(r, e: Event) {
+async function remove(r: RunnerDraft, e: Event) {
   e.stopPropagation()
   if (!confirm(`Xóa runner ${r.id}?`)) return
   try {
