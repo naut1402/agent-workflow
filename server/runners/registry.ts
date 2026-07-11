@@ -1,8 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { registryHome } from '../registry.js'
+import { ensureLegacyConnection } from './connections.js'
 import {
+  DEFAULT_CONNECTION_ID,
   RUNNERS_VERSION,
+  sanitiseConnectionId,
   sanitiseRunnerId,
   type RunnerConfig,
   type RunnersStore,
@@ -13,26 +16,47 @@ function runnersFile(): string {
   return path.join(registryHome(), 'runners.json')
 }
 
-function defaultRunners(): RunnersStore {
+function emptyRunners(): RunnersStore {
   return {
     version: RUNNERS_VERSION,
-    defaultRunnerId: 'claude-code-local',
-    runners: [
-      {
-        id: 'claude-code-local',
-        name: 'Claude Code CLI (local)',
-        provider: 'claude-code-cli',
-        credentialId: 'claude-default',
-        enabled: true,
-        maxConcurrency: 1,
-        config: {
-          cliPath: 'claude',
-          flags: [],
-          timeoutMs: 600_000,
-          allowedTools: 'Read,Write,Bash,Grep,Glob',
-        },
-      },
-    ],
+    defaultRunnerId: null,
+    runners: [],
+  }
+}
+
+function stripConnectionFieldsFromConfig(config: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...config }
+  delete out.cliPath
+  delete out.flags
+  return out
+}
+
+/** Normalize raw runner JSON (v1 provider+credentialId or v2 connectionId). */
+export function normalizeRunner(raw: any): RunnerConfig | null {
+  const id = sanitiseRunnerId(raw?.id)
+  if (!id) return null
+
+  let connectionId = sanitiseConnectionId(raw.connectionId)
+  const config =
+    raw.config && typeof raw.config === 'object' ? ({ ...raw.config } as Record<string, unknown>) : {}
+
+  if (!connectionId && raw.provider) {
+    connectionId = ensureLegacyConnection({
+      provider: raw.provider,
+      credentialId: raw.credentialId,
+      cliPath: typeof config.cliPath === 'string' ? config.cliPath : undefined,
+      flags: config.flags,
+    })
+  }
+  if (!connectionId) connectionId = DEFAULT_CONNECTION_ID
+
+  return {
+    id,
+    name: String(raw.name || id).slice(0, 128),
+    connectionId,
+    enabled: raw.enabled !== false,
+    maxConcurrency: Number(raw.maxConcurrency) > 0 ? Number(raw.maxConcurrency) : 1,
+    config: stripConnectionFieldsFromConfig(config),
   }
 }
 
@@ -42,19 +66,26 @@ export function loadRunners(): RunnersStore {
   try {
     raw = fs.readFileSync(file, 'utf8')
   } catch {
-    return defaultRunners()
+    // Chưa có file → danh sách trống (user tự tạo runner).
+    return emptyRunners()
   }
   try {
     const data = JSON.parse(raw)
-    if (!data || !Array.isArray(data.runners)) return defaultRunners()
+    if (!data || !Array.isArray(data.runners)) return emptyRunners()
+    const runners = data.runners.map(normalizeRunner).filter(Boolean) as RunnerConfig[]
+    // [] là trạng thái hợp lệ — không seed lại default.
+    const defaultRunnerId =
+      (data.defaultRunnerId && runners.some((r) => r.id === data.defaultRunnerId)
+        ? data.defaultRunnerId
+        : runners[0]?.id) || null
     return {
-      version: data.version || RUNNERS_VERSION,
-      defaultRunnerId: data.defaultRunnerId || data.runners[0]?.id || 'claude-code-local',
-      runners: data.runners,
+      version: RUNNERS_VERSION,
+      defaultRunnerId,
+      runners,
     }
   } catch {
     console.warn(`[dev-team-dashboard] runners.json corrupt: ${file}`)
-    return defaultRunners()
+    return emptyRunners()
   }
 }
 
@@ -99,18 +130,30 @@ export function getDefaultRunner(): RunnerConfig | null {
 export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig }> {
   const id = sanitiseRunnerId(runner?.id)
   if (!id) return { ok: false, error: 'invalid runner id' }
-  if (!runner.provider) return { ok: false, error: 'provider is required' }
-  if (!runner.credentialId) return { ok: false, error: 'credentialId is required' }
+
+  let connectionId = sanitiseConnectionId(runner.connectionId)
+  // Accept legacy payload during transition.
+  if (!connectionId && runner.provider) {
+    connectionId = ensureLegacyConnection({
+      provider: runner.provider,
+      credentialId: runner.credentialId,
+      cliPath: runner.config?.cliPath,
+      flags: runner.config?.flags,
+    })
+  }
+  if (!connectionId) return { ok: false, error: 'connectionId is required' }
 
   const store = loadRunners()
   const entry: RunnerConfig = {
     id,
     name: String(runner.name || id).slice(0, 128),
-    provider: runner.provider,
-    credentialId: sanitiseCredentialId(runner.credentialId) || runner.credentialId,
+    connectionId,
     enabled: runner.enabled !== false,
     maxConcurrency: Number(runner.maxConcurrency) > 0 ? Number(runner.maxConcurrency) : 1,
-    config: runner.config && typeof runner.config === 'object' ? runner.config : {},
+    config:
+      runner.config && typeof runner.config === 'object'
+        ? stripConnectionFieldsFromConfig({ ...runner.config })
+        : {},
   }
 
   const idx = store.runners.findIndex((r) => r.id === id)
@@ -124,18 +167,10 @@ export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig
   return { ok: true, runner: entry }
 }
 
-function sanitiseCredentialId(id: unknown): string | null {
-  if (typeof id !== 'string' || !id.trim()) return null
-  return id.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || null
-}
-
 export function deleteRunner(id: unknown): MutationResult {
   const clean = sanitiseRunnerId(id)
   if (!clean) return { ok: false, status: 400, error: 'invalid id' }
   const store = loadRunners()
-  if (store.runners.length <= 1) {
-    return { ok: false, status: 400, error: 'cannot delete last runner' }
-  }
   const idx = store.runners.findIndex((r) => r.id === clean)
   if (idx < 0) return { ok: false, status: 404, error: 'not found' }
   store.runners.splice(idx, 1)

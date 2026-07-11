@@ -473,6 +473,47 @@ export async function fetchCredentials() {
   return r.json()
 }
 
+export async function saveCredential(profile: unknown) {
+  const r = await fetch('/api/credentials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile }),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/credentials POST → ${r.status}`)
+  return data
+}
+
+export async function fetchConnections() {
+  const r = await fetch('/api/connections')
+  if (!r.ok) throw new Error(`/api/connections → ${r.status}`)
+  return r.json()
+}
+
+export async function saveConnection(connection: unknown) {
+  const r = await fetch('/api/connections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ connection }),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/connections POST → ${r.status}`)
+  return data
+}
+
+export async function deleteConnection(id: string) {
+  const r = await fetch(`/api/connections?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/connections DELETE → ${r.status}`)
+  return data
+}
+
+export async function scanLocalCommands() {
+  const r = await fetch('/api/connections/scan')
+  if (!r.ok) throw new Error(`/api/connections/scan → ${r.status}`)
+  return r.json()
+}
+
 export async function submitJob(payload: unknown, projectId?: string) {
   const r = await apiFetch(`/api/jobs${qs({ project: projectId })}`, {
     method: 'POST',

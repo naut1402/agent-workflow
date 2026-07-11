@@ -2,7 +2,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { sanitiseRunnerId, sanitiseCredentialId } from '../../../server/runners/types.js'
+import {
+  sanitiseRunnerId,
+  sanitiseCredentialId,
+  sanitiseConnectionId,
+  DEFAULT_CONNECTION_ID,
+} from '../../../server/runners/types.js'
 import {
   substituteConfig,
   normalizeAgentRef,
@@ -19,6 +24,14 @@ import {
   getCredential,
   upsertCredential,
   deleteCredential,
+  loadConnections,
+  listConnections,
+  getConnection,
+  upsertConnection,
+  deleteConnection,
+  ensureLegacyConnection,
+  listProviderCatalog,
+  scanLocalCommands,
   listProviderIds,
   getProvider,
   submitJob,
@@ -45,8 +58,7 @@ afterAll(() => {
   fs.rmSync(home, { recursive: true, force: true })
 })
 beforeEach(() => {
-  // Reset the store between tests so CRUD assertions are independent.
-  for (const f of ['runners.json', 'credentials.json']) {
+  for (const f of ['runners.json', 'credentials.json', 'connections.json']) {
     fs.rmSync(path.join(home, f), { force: true })
   }
 })
@@ -60,6 +72,7 @@ describe('id sanitisers', () => {
     expect(sanitiseRunnerId(123 as any)).toBe(null)
     expect(sanitiseRunnerId('x'.repeat(100))?.length).toBe(64)
     expect(sanitiseCredentialId('a/b')).toBe(null)
+    expect(sanitiseConnectionId('ok-id')).toBe('ok-id')
   })
 })
 
@@ -91,28 +104,136 @@ describe('resolveSecretRef', () => {
   })
 })
 
-describe('runners registry CRUD', () => {
-  test('default store has claude-code-local', () => {
-    const store = loadRunners()
-    expect(store.defaultRunnerId).toBe('claude-code-local')
-    expect(store.runners[0].id).toBe('claude-code-local')
-    expect(getDefaultRunner()?.id).toBe('claude-code-local')
+describe('connections CRUD', () => {
+  test('default store has claude-code-cli-local', () => {
+    const store = loadConnections()
+    expect(store.connections[0].id).toBe(DEFAULT_CONNECTION_ID)
+    expect(getConnection(DEFAULT_CONNECTION_ID)?.kind).toBe('local-console')
   })
-  test('upsert validates and persists', () => {
-    expect(upsertRunner({ id: '' } as any)).toEqual({ ok: false, error: 'invalid runner id' })
-    expect(upsertRunner({ id: 'r2' } as any)).toEqual({ ok: false, error: 'provider is required' })
-    expect(upsertRunner({ id: 'r2', provider: 'p' } as any)).toEqual({ ok: false, error: 'credentialId is required' })
-    const res = upsertRunner({ id: 'r2', provider: 'claude-code-cli', credentialId: 'claude-default' } as any)
+  test('upsert validates local-console and ai-provider', () => {
+    expect(upsertConnection({ id: '' } as any)).toEqual({ ok: false, error: 'invalid connection id' })
+    expect(upsertConnection({ id: 'c1', kind: 'local-console', providerId: 'cursor-cli' } as any)).toEqual({
+      ok: false,
+      error: 'cliPath is required for local-console',
+    })
+    expect(
+      upsertConnection({ id: 'c1', kind: 'ai-provider', providerId: 'anthropic-api' } as any),
+    ).toEqual({ ok: false, error: 'credentialId is required for ai-provider' })
+    const res = upsertConnection({
+      id: 'cursor-local',
+      kind: 'local-console',
+      providerId: 'cursor-cli',
+      cliPath: 'cursor',
+      label: 'Cursor',
+    })
     expect(res.ok).toBe(true)
-    expect(getRunner('r2')?.id).toBe('r2')
-    expect(listRunners().runners.length).toBe(2)
+    expect(listConnections().length).toBe(2)
   })
-  test('delete guards the last runner; setDefault validates', () => {
-    expect(deleteRunner('claude-code-local')).toMatchObject({ ok: false, status: 400 })
-    upsertRunner({ id: 'r2', provider: 'p', credentialId: 'claude-default' } as any)
-    expect(deleteRunner('r2')).toEqual({ ok: true })
+  test('delete guards the last connection', () => {
+    expect(deleteConnection(DEFAULT_CONNECTION_ID)).toMatchObject({ ok: false, status: 400 })
+    upsertConnection({
+      id: 'extra',
+      kind: 'local-console',
+      providerId: 'codex-cli',
+      cliPath: 'codex',
+    })
+    expect(deleteConnection('extra')).toEqual({ ok: true })
+  })
+  test('ensureLegacyConnection creates or reuses', () => {
+    const id = ensureLegacyConnection({
+      provider: 'claude-code-cli',
+      credentialId: 'claude-default',
+      cliPath: 'claude',
+    })
+    expect(id).toBe(DEFAULT_CONNECTION_ID)
+    const other = ensureLegacyConnection({ provider: 'cursor-cli', cliPath: 'cursor' })
+    expect(other).toBe('cursor-cli-migrated')
+    expect(getConnection(other)?.providerId).toBe('cursor-cli')
+  })
+  test('scanLocalCommands returns stable shape', () => {
+    const cmds = scanLocalCommands()
+    expect(cmds.length).toBe(3)
+    for (const c of cmds) {
+      expect(c).toMatchObject({
+        id: expect.any(String),
+        command: expect.any(String),
+        available: expect.any(Boolean),
+        providerId: expect.any(String),
+      })
+      expect('path' in c).toBe(true)
+    }
+  })
+  test('provider catalog includes kind metadata', () => {
+    const catalog = listProviderCatalog()
+    expect(catalog.find((p) => p.id === 'claude-code-cli')?.kind).toBe('local-console')
+    expect(catalog.find((p) => p.id === 'anthropic-api')?.kind).toBe('ai-provider')
+  })
+})
+
+describe('runners registry CRUD', () => {
+  test('empty store when no runners.json (no forced seed)', () => {
+    const store = loadRunners()
+    expect(store.runners).toEqual([])
+    expect(store.defaultRunnerId).toBe(null)
+    expect(getDefaultRunner()).toBe(null)
+  })
+  test('upsert validates and persists connectionId', () => {
+    expect(upsertRunner({ id: '' } as any)).toEqual({ ok: false, error: 'invalid runner id' })
+    expect(upsertRunner({ id: 'r2' } as any)).toEqual({ ok: false, error: 'connectionId is required' })
+    const res = upsertRunner({ id: 'r2', connectionId: DEFAULT_CONNECTION_ID } as any)
+    expect(res.ok).toBe(true)
+    expect(getRunner('r2')?.connectionId).toBe(DEFAULT_CONNECTION_ID)
+    expect(listRunners().runners.length).toBe(1)
+  })
+  test('legacy provider+credentialId migrates to connectionId', () => {
+    const res = upsertRunner({
+      id: 'legacy-r',
+      provider: 'claude-code-cli',
+      credentialId: 'claude-default',
+      config: { cliPath: 'claude', timeoutMs: 1000 },
+    } as any)
+    expect(res.ok).toBe(true)
+    expect(getRunner('legacy-r')?.connectionId).toBe(DEFAULT_CONNECTION_ID)
+    expect(getRunner('legacy-r')?.config).not.toHaveProperty('cliPath')
+  })
+  test('loadRunners migrates on-disk v1 runners.json', () => {
+    fs.writeFileSync(
+      path.join(home, 'runners.json'),
+      JSON.stringify({
+        version: 1,
+        defaultRunnerId: 'old',
+        runners: [
+          {
+            id: 'old',
+            name: 'Old',
+            provider: 'claude-code-cli',
+            credentialId: 'claude-default',
+            config: { cliPath: 'claude', flags: ['--print'] },
+          },
+        ],
+      }),
+      'utf8',
+    )
+    const store = loadRunners()
+    expect(store.runners[0].connectionId).toBe(DEFAULT_CONNECTION_ID)
+    expect(store.runners[0].config).not.toHaveProperty('cliPath')
+  })
+  test('empty runners.json [] is preserved (not re-seeded)', () => {
+    fs.writeFileSync(
+      path.join(home, 'runners.json'),
+      JSON.stringify({ version: 2, defaultRunnerId: null, runners: [] }),
+      'utf8',
+    )
+    expect(loadRunners().runners).toEqual([])
+  })
+  test('can delete last runner; setDefault validates', () => {
+    upsertRunner({ id: 'r1', connectionId: DEFAULT_CONNECTION_ID } as any)
+    expect(deleteRunner('r1')).toEqual({ ok: true })
+    expect(listRunners().runners).toEqual([])
+    expect(listRunners().defaultRunnerId).toBe(null)
+    expect(deleteRunner('ghost')).toMatchObject({ ok: false, status: 404 })
+    upsertRunner({ id: 'r3', connectionId: DEFAULT_CONNECTION_ID } as any)
     expect(setDefaultRunner('ghost')).toMatchObject({ ok: false, status: 404 })
-    upsertRunner({ id: 'r3', provider: 'p', credentialId: 'claude-default' } as any)
     expect(setDefaultRunner('r3')).toEqual({ ok: true, defaultRunnerId: 'r3' })
   })
 })
@@ -130,8 +251,10 @@ describe('credentials CRUD', () => {
 })
 
 describe('provider registry', () => {
-  test('claude-code-cli provider is registered', () => {
+  test('local-console providers are registered', () => {
     expect(listProviderIds()).toContain('claude-code-cli')
+    expect(listProviderIds()).toContain('cursor-cli')
+    expect(listProviderIds()).toContain('codex-cli')
     const p = getProvider('claude-code-cli')
     expect(p?.providerId).toBe('claude-code-cli')
     expect(typeof p?.execute).toBe('function')
@@ -145,6 +268,7 @@ describe('job queue', () => {
     expect(listJobs()).toEqual([])
   })
   test('submitJob returns a queued job; cancel finished/missing handled', () => {
+    upsertRunner({ id: 'claude-code-local', connectionId: DEFAULT_CONNECTION_ID } as any)
     const job = submitJob({ agentRef: 'noref', workspace: home })
     expect(job.status).toBe('queued')
     expect(job.runnerId).toBe('claude-code-local')

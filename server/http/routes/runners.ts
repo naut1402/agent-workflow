@@ -11,18 +11,28 @@ import {
   listCredentials,
   upsertCredential,
   deleteCredential,
+  listConnections,
+  upsertConnection,
+  deleteConnection,
+  listProviderCatalog,
+  scanLocalCommands,
   submitJob,
   loadJob,
   listJobs,
   cancelJob,
-  listProviderIds,
 } from '../../runners/index.js'
 
-// Runners, credentials & jobs — global (not per-project), except job submission
-// which needs the resolved `.dev-team-agent/` root.
+// Runners, connections, credentials & jobs — global (not per-project), except
+// job submission which needs the resolved `.dev-team-agent/` root.
 export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
   // ── Runners ──────────────────────────────────────────────────────────────
-  app.get('/api/runners', (c) => j(c, 200, { ...listRunners(), providers: listProviderIds() }))
+  app.get('/api/runners', (c) =>
+    j(c, 200, {
+      ...listRunners(),
+      providers: listProviderCatalog(),
+      connections: listConnections(),
+    }),
+  )
   app.post('/api/runners', async (c) => {
     const b = await parseBody(c)
     if (!b.ok) return j(c, 400, { error: 'invalid JSON' })
@@ -46,6 +56,37 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
     if ('error' in result) return j(c, result.status || 400, { error: result.error })
     return j(c, 200, { defaultRunnerId: result.defaultRunnerId })
   })
+
+  // ── Connections ──────────────────────────────────────────────────────────
+  app.get('/api/connections/scan', (c) => j(c, 200, { commands: scanLocalCommands() }))
+  app.get('/api/connections', (c) =>
+    j(c, 200, { connections: listConnections(), providers: listProviderCatalog() }),
+  )
+  app.post('/api/connections', async (c) => {
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON' })
+    const result = upsertConnection(b.value.connection || b.value)
+    if ('error' in result) return j(c, 400, { error: result.error })
+    emitAudit({
+      op: 'update',
+      entity: 'connection',
+      identifier: result.connection?.id ?? null,
+      projectId: null,
+    })
+    return j(c, 200, { saved: true, connection: result.connection })
+  })
+  app.delete('/api/connections', (c) => {
+    const result = deleteConnection(c.req.query('id') || '')
+    if ('error' in result) return j(c, result.status || 400, { error: result.error })
+    emitAudit({
+      op: 'delete',
+      entity: 'connection',
+      identifier: c.req.query('id') || '',
+      projectId: null,
+    })
+    return j(c, 200, { deleted: true, id: c.req.query('id') || '' })
+  })
+  app.all('/api/connections', (c) => j(c, 405, { error: 'method not allowed' }))
 
   // ── Credentials ──────────────────────────────────────────────────────────
   app.get('/api/credentials', (c) => j(c, 200, { profiles: listCredentials() }))

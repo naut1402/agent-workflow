@@ -7,11 +7,41 @@ export interface CredentialProfile {
   secretRef: string
 }
 
+export type ConnectionKind = 'local-console' | 'ai-provider'
+
+export interface Connection {
+  id: string
+  label: string
+  kind: ConnectionKind
+  /** Backend provider id: claude-code-cli | cursor-cli | codex-cli | … */
+  providerId: string
+  /** local-console: path CLI đã scan/chọn */
+  cliPath?: string
+  /** local-console: argv tuỳ chọn khi spawn */
+  flags?: string[]
+  /** ai-provider: trỏ credential profile */
+  credentialId?: string | null
+  config?: Record<string, unknown>
+}
+
+export interface ProviderCatalogEntry {
+  id: string
+  kind: ConnectionKind
+  label: string
+}
+
+export interface ScannedCommand {
+  id: string
+  command: string
+  path: string | null
+  available: boolean
+  providerId: string
+}
+
 export interface RunnerConfig {
   id: string
   name: string
-  provider: string
-  credentialId: string
+  connectionId: string
   enabled?: boolean
   maxConcurrency?: number
   config: Record<string, unknown>
@@ -78,6 +108,11 @@ export interface CredentialsStore {
   profiles: CredentialProfile[]
 }
 
+export interface ConnectionsStore {
+  version: number
+  connections: Connection[]
+}
+
 // A provider plugs a concrete execution backend (e.g. the Claude Code CLI) into
 // the runner plane behind a uniform contract.
 export interface RunnerProvider {
@@ -99,8 +134,11 @@ export type MutationOk<T> = { ok: true } & T
 export type MutationErr = { ok: false; status?: number; error: string }
 export type MutationResult<T = {}> = MutationOk<T> | MutationErr
 
-export const RUNNERS_VERSION = 1
+export const RUNNERS_VERSION = 2
 export const CREDENTIALS_VERSION = 1
+export const CONNECTIONS_VERSION = 1
+
+export const DEFAULT_CONNECTION_ID = 'claude-code-cli-local'
 
 export function sanitiseRunnerId(id: unknown): string | null {
   if (typeof id !== 'string' || !id.trim()) return null
@@ -110,5 +148,9 @@ export function sanitiseRunnerId(id: unknown): string | null {
 }
 
 export function sanitiseCredentialId(id: unknown): string | null {
+  return sanitiseRunnerId(id)
+}
+
+export function sanitiseConnectionId(id: unknown): string | null {
   return sanitiseRunnerId(id)
 }
