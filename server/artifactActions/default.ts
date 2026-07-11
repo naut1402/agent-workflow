@@ -19,13 +19,23 @@ export const DEFAULT_ARTIFACT_ACTIONS: ArtifactAction[] = [
     // clarification instead of doing the edit.
     agent_ref: '',
     prompt_template: [
-      'Đọc {{artifact_name}} trong thư mục task hiện tại và cải thiện độ rõ ràng,',
-      'cấu trúc và văn phong tiếng Việt của tài liệu.',
-      'Ghi đè trực tiếp lên {{artifact_name}}; nếu có điểm cần hỏi (blocking) thì',
-      'tạo {{artifact_base}}-improved.md và ghi rõ lý do thay vì ghi đè.',
+      'Bạn đang ở thư mục task. Mở file {{artifact_name}} bằng công cụ đọc file.',
+      'Nếu {{selection_lines}} có giá trị: chỉ tập trung cải thiện đoạn quanh dòng',
+      '{{selection_lines}} (nội dung đang chọn: "{{selection}}"), giữ nguyên phần',
+      'còn lại của file. Nếu {{selection_lines}} trống: cải thiện toàn bộ file.',
+      'Cải thiện độ rõ ràng, cấu trúc và văn phong tiếng Việt.',
+      'BẮT BUỘC ghi kết quả bằng cách GHI ĐÈ trực tiếp file {{artifact_name}} bằng',
+      'công cụ Write (stdout KHÔNG được lưu lại vào file). Không in giải thích,',
+      'không tạo file mới — chỉ ghi đè {{artifact_name}}.',
     ].join('\n'),
     produces: [],
     confirm: true,
-    attach_points: ['artifact-title'],
+    // Runs on both the title toolbar and the text-selection toolbar; the same
+    // template covers both modes ({{selection}}/{{selection_lines}} are empty
+    // when triggered from the title).
+    attach_points: ['artifact-title', 'artifact-selection'],
+    // Never writes straight to the real file: the agent edits a scratch copy and
+    // the user reviews the diff before it's applied (see jobQueue approval flow).
+    require_approval: true,
   },
 ]

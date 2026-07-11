@@ -40,6 +40,16 @@ describe('DEFAULT_ARTIFACT_ACTIONS', () => {
     const improveDoc = DEFAULT_ARTIFACT_ACTIONS.find((a) => a.id === 'improve-doc')
     expect(improveDoc?.agent_ref).toBe('')
   })
+
+  test('improve-doc runs the approval flow from both the title and selection toolbars', () => {
+    const improveDoc = DEFAULT_ARTIFACT_ACTIONS.find((a) => a.id === 'improve-doc')
+    expect(improveDoc?.require_approval).toBe(true)
+    expect(improveDoc?.attach_points).toEqual(['artifact-title', 'artifact-selection'])
+    // The prompt must tell the agent to write the file back (stdout isn't
+    // captured to disk) — the whole point of the edit landing in the scratch copy.
+    expect(improveDoc?.prompt_template).toContain('Write')
+    expect(improveDoc?.prompt_template).toContain('{{artifact_name}}')
+  })
 })
 
 describe('matchPattern', () => {
@@ -166,8 +176,10 @@ describe('findAction / artifactBase / substitutePrompt / toActionView', () => {
       agent_ref: 'dev-agent-teams:doc-reviewer',
       confirm: true,
       attach_points: ['artifact-title'],
+      require_approval: false,
     })
     expect(toActionView(action({ runner_id: 'r1' })).runner_id).toBe('r1')
+    expect(toActionView(action({ require_approval: true })).require_approval).toBe(true)
   })
 })
 

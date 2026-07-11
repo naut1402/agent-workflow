@@ -54,6 +54,8 @@ function describePayload(opts: {
   claudeStyle: boolean
   allowedTools?: unknown
   dangerouslySkipPermissions?: unknown
+  sessionId?: string
+  resumeSessionId?: string
   prompt: string
   metadata?: Record<string, unknown>
 }): string {
@@ -62,6 +64,8 @@ function describePayload(opts: {
     cli.push('-p', '<prompt — xem "--- Prompt ---" bên dưới>')
     if (opts.allowedTools) cli.push('--allowedTools', String(opts.allowedTools))
     if (opts.dangerouslySkipPermissions) cli.push('--dangerously-skip-permissions')
+    if (opts.sessionId) cli.push('--session-id', opts.sessionId)
+    if (opts.resumeSessionId) cli.push('--resume', opts.resumeSessionId)
   } else {
     cli.push('<prompt — xem "--- Prompt ---" bên dưới>')
   }
@@ -207,6 +211,10 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
         if (runnerConfig.dangerouslySkipPermissions) {
           args.push('--dangerously-skip-permissions')
         }
+        // Approval-flow session continuity — exactly one is ever set (see
+        // ExecuteRequest.sessionId/resumeSessionId doc comment).
+        if (req.sessionId) args.push('--session-id', req.sessionId)
+        if (req.resumeSessionId) args.push('--resume', req.resumeSessionId)
       } else {
         // Generic local CLI: user flags + prompt as final arg.
         args = [...flags, prompt]
@@ -231,6 +239,8 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
           claudeStyle: claudeStyle || opts.claudeStyleArgs === true,
           allowedTools: runnerConfig.allowedTools,
           dangerouslySkipPermissions: runnerConfig.dangerouslySkipPermissions,
+          sessionId: req.sessionId,
+          resumeSessionId: req.resumeSessionId,
           prompt,
           metadata: req.metadata,
         }),

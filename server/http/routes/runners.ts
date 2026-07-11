@@ -20,6 +20,10 @@ import {
   loadJob,
   listJobs,
   cancelJob,
+  getApprovalDiff,
+  approveJob,
+  discardJob,
+  sendJobFeedback,
 } from '../../runners/index.js'
 
 // Runners, connections, credentials & jobs — global (not per-project), except
@@ -154,5 +158,43 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
     const job = loadJob(id)
     if (!job) return j(c, 404, { error: 'not found' })
     return j(c, 200, { job })
+  })
+
+  // ── Approval flow (require_approval quick actions) ──────────────────────
+  // A job in `awaiting_approval` ran against a scratch copy — nothing on disk
+  // for real yet. `proposal` reads before/after; `approve` applies the scratch
+  // content to the real file; `discard` throws the scratch copy away;
+  // `feedback` resumes the same CLI session against the same scratch copy and
+  // returns a new job that itself becomes `awaiting_approval`.
+  app.get('/api/jobs/:id/proposal', (c) => {
+    const result = getApprovalDiff(c.req.param('id'))
+    if ('error' in result) return j(c, result.status || 400, { error: result.error })
+    return j(c, 200, result)
+  })
+  app.post('/api/jobs/:id/approve', (c) => {
+    const result = approveJob(c.req.param('id'))
+    if ('error' in result) return j(c, result.status || 400, { error: result.error })
+    emitAudit({
+      op: 'update',
+      entity: 'artifact',
+      identifier: `${result.job.applyTarget}/${result.job.approvalArtifact}`,
+      projectId: c.get('projectId'),
+      detail: { jobId: result.job.id, approved: true },
+    })
+    return j(c, 200, { job: result.job })
+  })
+  app.post('/api/jobs/:id/discard', (c) => {
+    const result = discardJob(c.req.param('id'))
+    if ('error' in result) return j(c, result.status || 400, { error: result.error })
+    return j(c, 200, { job: result.job })
+  })
+  app.post('/api/jobs/:id/feedback', async (c) => {
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
+    const feedback = typeof b.value?.feedback === 'string' ? b.value.feedback.trim() : ''
+    if (!feedback) return j(c, 400, { error: 'feedback must be a non-empty string' })
+    const result = sendJobFeedback(c.req.param('id'), feedback)
+    if ('error' in result) return j(c, result.status || 400, { error: result.error })
+    return j(c, 201, { job: result.job })
   })
 }

@@ -97,6 +97,7 @@ describe('GET /api/artifact-actions', () => {
       agent_ref: 'dev-agent-teams:doc-reviewer',
       confirm: false,
       attach_points: ['artifact-title'],
+      require_approval: false,
     })
     // Prompt template / patterns must not leak to the UI.
     expect(body.actions[0].prompt_template).toBeUndefined()

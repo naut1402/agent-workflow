@@ -65,6 +65,14 @@ export interface ExecuteRequest {
   produces?: string[]
   timeoutMs?: number
   metadata?: Record<string, unknown>
+  // Approval-flow session continuity (see jobQueue.ts submitApprovalJob /
+  // sendJobFeedback): exactly one of these is set for an approval job.
+  // `sessionId` picks a fresh conversation id for the CLI to persist
+  // (`--session-id`); `resumeSessionId` continues that exact conversation on a
+  // follow-up feedback round (`--resume`) so the agent remembers what it
+  // already proposed instead of starting over.
+  sessionId?: string
+  resumeSessionId?: string
 }
 
 export interface ExecuteResult {
@@ -76,7 +84,12 @@ export interface ExecuteResult {
   error?: string
 }
 
-export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+// `awaiting_approval`: an approval-flow job (see jobQueue.ts) finished
+// successfully against a scratch workspace copy — nothing has been written to
+// the real files yet. Resolved by approveJob (apply + succeeded),
+// discardJob (cancelled), or sendJobFeedback (spawns a new `awaiting_approval`
+// job continuing the same CLI session).
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'awaiting_approval'
 
 export interface JobRecord {
   id: string
@@ -95,6 +108,14 @@ export interface JobRecord {
   error?: string
   artifactsFound?: string[]
   metadata?: Record<string, unknown>
+  // Approval flow only (all undefined for a normal job):
+  sessionId?: string
+  /** Real (non-scratch) directory this job's proposed changes would apply to. */
+  applyTarget?: string
+  /** Artifact file (relative to `applyTarget`/`workspace`) under review. */
+  approvalArtifact?: string
+  /** The job this one continued via `--resume` (feedback round chain). */
+  parentJobId?: string
 }
 
 export interface RunnersStore {

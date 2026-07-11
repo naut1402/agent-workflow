@@ -9,7 +9,7 @@ import { applyArchiveAction, applyHitlAction } from '../../tasks/state.js'
 import { loadPipelineConfig } from '../../pipeline/index.js'
 import { emitAudit } from '../../logging/store.js'
 import { TaskArchivePatch, TaskStatePatch } from '../../../shared/schemas/task.js'
-import { submitJob } from '../../runners/index.js'
+import { submitJob, submitApprovalJob } from '../../runners/index.js'
 import {
   loadArtifactActions,
   loadArtifactActionsFile,
@@ -340,8 +340,7 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     })
 
     const resolvedRunnerId = runnerId ?? action.runner_id
-
-    const job = submitJob({
+    const jobInput = {
       runnerId: resolvedRunnerId,
       agentRef: action.agent_ref,
       workspace: path.join(root, 'tasks', taskId),
@@ -360,7 +359,10 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
         selectionStartLine,
         selectionEndLine,
       },
-    })
+    }
+    const job = action.require_approval
+      ? submitApprovalJob({ ...jobInput, approvalArtifact: artifactName })
+      : submitJob(jobInput)
 
     emitAudit({
       op: 'update',

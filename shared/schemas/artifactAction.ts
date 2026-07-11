@@ -32,6 +32,12 @@ export const ArtifactAction = z
     confirm: z.boolean().default(false),
     attach_points: z.array(z.string().min(1)).default(['artifact-title']),
     runner_id: z.string().min(1).optional(),
+    // When true, the job runs against a scratch copy of the task workspace
+    // instead of the real files — the user reviews the proposed result (and
+    // can send follow-up feedback into the same CLI session) before anything
+    // is written to the real artifact. See server/runners/jobQueue.ts
+    // `submitApprovalJob`/`approveJob`/`discardJob`/`sendJobFeedback`.
+    require_approval: z.boolean().default(false),
   })
   .passthrough()
 
@@ -58,6 +64,7 @@ export const ArtifactActionView = ArtifactAction.pick({
   confirm: true,
   attach_points: true,
   runner_id: true,
+  require_approval: true,
 })
 export type ArtifactActionView = z.infer<typeof ArtifactActionView>
 

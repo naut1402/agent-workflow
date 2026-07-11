@@ -100,6 +100,7 @@ export function toActionView(a: ArtifactAction): ArtifactActionView {
     agent_ref: a.agent_ref,
     confirm: a.confirm,
     attach_points: a.attach_points ?? ['artifact-title'],
+    require_approval: a.require_approval ?? false,
   }
   if (a.runner_id) view.runner_id = a.runner_id
   return view
