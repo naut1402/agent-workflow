@@ -69,7 +69,7 @@ describe('QuickActionPanel', () => {
     expect(w.find('.qa-form').exists()).toBe(false) // closes on success
   })
 
-  it('prompt help icon toggles a placeholder reference, hidden by default', async () => {
+  it('prompt help popover toggles a placeholder reference, hidden by default', async () => {
     const w = mount(QuickActionPanel, { props: { projectId: null } })
     await flushPromises()
 
@@ -77,6 +77,7 @@ describe('QuickActionPanel', () => {
     expect(w.find('.qa-prompt-help').exists()).toBe(false)
 
     await w.get('.btn-help-icon').trigger('click')
+    await flushPromises()
     expect(w.find('.qa-prompt-help').exists()).toBe(true)
     const helpText = w.get('.qa-prompt-help').text()
     expect(helpText).toContain('{{artifact_name}}')
@@ -86,9 +87,67 @@ describe('QuickActionPanel', () => {
     // Selection-only placeholders are called out as requiring the
     // "Text selection" attach point.
     expect(helpText).toContain('Text selection')
+    // The popover reminds that the prompt must overwrite the file (Write), since
+    // runner stdout is not persisted.
+    expect(helpText).toContain('Write')
 
     await w.get('.btn-help-icon').trigger('click') // click again → hides
+    await flushPromises()
     expect(w.find('.qa-prompt-help').exists()).toBe(false)
+  })
+
+  it('prompt help popover closes on an outside click', async () => {
+    const w = mount(QuickActionPanel, { props: { projectId: null }, attachTo: document.body })
+    await flushPromises()
+
+    await w.get('button.btn-primary.btn-sm').trigger('click')
+    await w.get('.btn-help-icon').trigger('click')
+    await flushPromises()
+    expect(w.find('.qa-prompt-help').exists()).toBe(true)
+
+    document.body.click() // click anywhere outside the popover / help button
+    await flushPromises()
+    expect(w.find('.qa-prompt-help').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('prompt help popover closes on Escape', async () => {
+    const w = mount(QuickActionPanel, { props: { projectId: null }, attachTo: document.body })
+    await flushPromises()
+
+    await w.get('button.btn-primary.btn-sm').trigger('click')
+    await w.get('.btn-help-icon').trigger('click')
+    await flushPromises()
+    expect(w.find('.qa-prompt-help').exists()).toBe(true)
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(w.find('.qa-prompt-help').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('persists require_approval when the checkbox is checked', async () => {
+    const w = mount(QuickActionPanel, { props: { projectId: null } })
+    await flushPromises()
+
+    await w.get('button.btn-primary.btn-sm').trigger('click')
+    const inputs = w.findAll('.qa-form input.cfg-input')
+    await inputs[0].setValue('appr-action') // id
+    await inputs[1].setValue('Cần duyệt') // label
+    await inputs[2].setValue('design.md') // patterns
+    await w.get('.qa-form textarea').setValue('Ghi đè {{artifact_name}} bằng Write')
+
+    // The require_approval checkbox is the last .qa-attach-option checkbox
+    // (after the two attach-point checkboxes and the confirm checkbox).
+    const checkboxes = w.findAll('.qa-attach-option input[type="checkbox"]')
+    await checkboxes[checkboxes.length - 1].setValue(true)
+
+    await w.get('.qa-form .btn-primary').trigger('click')
+    await flushPromises()
+
+    const [file] = vi.mocked(saveArtifactActionsCatalog).mock.calls[0]
+    const saved = (file as any).actions.find((a: any) => a.id === 'appr-action')
+    expect(saved.require_approval).toBe(true)
   })
 
   it('prompt help resets to hidden when the form is reopened', async () => {

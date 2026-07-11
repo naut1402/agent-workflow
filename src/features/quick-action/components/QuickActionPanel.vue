@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { fetchRunners } from '../../../api'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
 
@@ -47,9 +47,40 @@ const PROMPT_PLACEHOLDERS: Array<{ token: string; desc: string; selectionOnly?: 
   },
 ]
 
-function togglePromptHelp() {
-  showPromptHelp.value = !showPromptHelp.value
+// Floating help popover for the prompt_template placeholders. Rendered as an
+// absolutely-positioned overlay (does NOT push the fields below it down) that
+// closes on a second click of ❓, a click anywhere outside it, or Esc.
+const promptHelpRef = ref<HTMLElement | null>(null)
+const helpBtnRef = ref<HTMLElement | null>(null)
+
+function onDocClick(e: MouseEvent) {
+  const t = e.target as Node
+  if (promptHelpRef.value?.contains(t) || helpBtnRef.value?.contains(t)) return
+  closePromptHelp()
 }
+function onDocKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') closePromptHelp()
+}
+function openPromptHelp() {
+  showPromptHelp.value = true
+  // Defer binding so the click that opened the popover doesn't immediately
+  // close it via the capture-phase outside-click handler.
+  nextTick(() => {
+    document.addEventListener('click', onDocClick, true)
+    document.addEventListener('keydown', onDocKey)
+  })
+}
+function closePromptHelp() {
+  showPromptHelp.value = false
+  document.removeEventListener('click', onDocClick, true)
+  document.removeEventListener('keydown', onDocKey)
+}
+function togglePromptHelp() {
+  if (showPromptHelp.value) closePromptHelp()
+  else openPromptHelp()
+}
+
+onBeforeUnmount(closePromptHelp)
 
 function emptyDraft(): QuickActionDraft {
   return {
@@ -62,6 +93,7 @@ function emptyDraft(): QuickActionDraft {
     confirm: false,
     attach_points: ['artifact-title'],
     runner_id: undefined,
+    require_approval: false,
   }
 }
 
@@ -87,24 +119,29 @@ function openNew() {
   patternsText.value = ''
   formError.value = ''
   message.value = ''
-  showPromptHelp.value = false
+  closePromptHelp()
   showForm.value = true
 }
 
 function openEdit(a: QuickActionDraft) {
   editingId.value = a.id
-  draft.value = { ...a, produces: [...(a.produces ?? [])], attach_points: [...(a.attach_points ?? ['artifact-title'])] }
+  draft.value = {
+    ...a,
+    produces: [...(a.produces ?? [])],
+    attach_points: [...(a.attach_points ?? ['artifact-title'])],
+    require_approval: a.require_approval ?? false,
+  }
   patternsText.value = (a.artifact_patterns ?? []).join(', ')
   formError.value = ''
   message.value = ''
-  showPromptHelp.value = false
+  closePromptHelp()
   showForm.value = true
 }
 
 function closeForm() {
   showForm.value = false
   editingId.value = null
-  showPromptHelp.value = false
+  closePromptHelp()
 }
 
 function toggleAttach(value: string, checked: boolean) {
@@ -180,6 +217,7 @@ async function removeAction(a: QuickActionDraft) {
           <td class="muted">{{ (a.artifact_patterns ?? []).join(', ') }}</td>
           <td>
             <span v-for="ap in a.attach_points ?? ['artifact-title']" :key="ap" class="chip chip-xs">{{ ap }}</span>
+            <span v-if="a.require_approval" class="chip chip-xs chip-approval" title="Yêu cầu phê duyệt trước khi ghi">✓ phê duyệt</span>
           </td>
           <td class="muted">{{ a.runner_id || '(default)' }}</td>
           <td class="qa-row-actions">
@@ -214,12 +252,32 @@ async function removeAction(a: QuickActionDraft) {
         <span class="qa-prompt-label-row">
           prompt_template
           <button
+            ref="helpBtnRef"
             type="button"
             class="btn-help-icon"
             title="Xem danh sách placeholder hỗ trợ"
             aria-label="Xem danh sách placeholder hỗ trợ trong prompt_template"
+            :aria-expanded="showPromptHelp"
             @click="togglePromptHelp"
           >❓</button>
+          <div v-if="showPromptHelp" ref="promptHelpRef" class="qa-prompt-help" role="dialog">
+            <p class="qa-prompt-help-title">Placeholder hỗ trợ trong prompt_template:</p>
+            <dl>
+              <div v-for="ph in PROMPT_PLACEHOLDERS" :key="ph.token" class="qa-prompt-help-item">
+                <dt><code>{{ ph.token }}</code></dt>
+                <dd>
+                  {{ ph.desc }}
+                  <span v-if="ph.selectionOnly" class="qa-prompt-help-note">
+                    (chỉ có giá trị khi action gắn attach point "Text selection" và được chạy từ vùng đã chọn — trống nếu chạy từ title toolbar)
+                  </span>
+                </dd>
+              </div>
+            </dl>
+            <p class="qa-prompt-help-note qa-prompt-help-write">
+              Lưu ý: để action thực sự thay đổi file, prompt phải yêu cầu agent GHI ĐÈ file
+              (dùng công cụ Write) — stdout của runner KHÔNG được ghi lại vào file.
+            </p>
+          </div>
         </span>
         <textarea
           v-model="draft.prompt_template"
@@ -228,20 +286,6 @@ async function removeAction(a: QuickActionDraft) {
           placeholder="Đọc {{artifact_name}} / {{artifact_base}} / {{selection}}…"
         />
       </label>
-      <div v-if="showPromptHelp" class="qa-prompt-help">
-        <p class="qa-prompt-help-title">Placeholder hỗ trợ trong prompt_template:</p>
-        <dl>
-          <div v-for="ph in PROMPT_PLACEHOLDERS" :key="ph.token" class="qa-prompt-help-item">
-            <dt><code>{{ ph.token }}</code></dt>
-            <dd>
-              {{ ph.desc }}
-              <span v-if="ph.selectionOnly" class="qa-prompt-help-note">
-                (chỉ có giá trị khi action gắn attach point "Text selection" và được chạy từ vùng đã chọn — trống nếu chạy từ title toolbar)
-              </span>
-            </dd>
-          </div>
-        </dl>
-      </div>
       <fieldset class="qa-attach-fieldset">
         <legend>Attach points</legend>
         <label v-for="opt in ATTACH_OPTIONS" :key="opt.value" class="qa-attach-option">
@@ -263,6 +307,10 @@ async function removeAction(a: QuickActionDraft) {
       <label class="qa-attach-option">
         <input v-model="draft.confirm" type="checkbox" />
         Yêu cầu xác nhận trước khi chạy
+      </label>
+      <label class="qa-attach-option">
+        <input v-model="draft.require_approval" type="checkbox" />
+        Yêu cầu phê duyệt trước khi ghi (xem diff)
       </label>
 
       <div class="nl-actions">
@@ -314,7 +362,7 @@ async function removeAction(a: QuickActionDraft) {
   gap: 14px;
 }
 .qa-attach-option { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-.qa-prompt-label-row { display: inline-flex; align-items: center; gap: 4px; }
+.qa-prompt-label-row { position: relative; display: inline-flex; align-items: center; gap: 4px; }
 .btn-help-icon {
   border: none;
   background: none;
@@ -325,15 +373,26 @@ async function removeAction(a: QuickActionDraft) {
   color: var(--muted);
 }
 .btn-help-icon:hover { color: inherit; }
+/* Floating popover: overlays adjacent fields (does not push them down). */
 .qa-prompt-help {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  z-index: 20;
+  width: min(440px, 82vw);
+  max-height: 320px;
+  overflow-y: auto;
   font-size: 12px;
   color: var(--muted);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 10px;
-  margin-top: -4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
 }
+.qa-prompt-help-write { margin: 8px 0 0; padding-top: 6px; border-top: 1px solid var(--border); }
+.chip-approval { border-color: var(--accent); color: var(--accent); }
 .qa-prompt-help-title { margin: 0 0 6px; }
 .qa-prompt-help dl { margin: 0; }
 .qa-prompt-help-item { margin-bottom: 6px; }
