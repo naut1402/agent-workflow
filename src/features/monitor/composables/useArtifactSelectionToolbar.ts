@@ -51,6 +51,30 @@ function findBlockIndex(node: Node | null): number | null {
 }
 
 /**
+ * Fallback for when a range endpoint's container isn't inside any single
+ * block element — this is real, observed behavior (not just a hypothetical):
+ * browsers normalize a Range's start/end container to a shared ancestor
+ * rather than a specific descendant whenever the endpoint lands "between"
+ * children rather than inside one (e.g. Ctrl+A "select all" over the whole
+ * viewer, or dragging from just above the first block's text to just below
+ * the last one). When that ancestor sits *above* every `[data-block-index]`
+ * element (e.g. the viewer root itself), `findBlockIndex`'s `closest()` walk
+ * silently comes up empty even though the selection clearly overlaps real
+ * blocks. Recover by scanning every block element under `root` and keeping
+ * the ones the range actually intersects.
+ */
+function findBlockIndicesInRange(range: Range, root: HTMLElement): number[] {
+  if (typeof range.intersectsNode !== 'function') return []
+  const indices: number[] = []
+  root.querySelectorAll('[data-block-index]').forEach((el) => {
+    if (!range.intersectsNode(el)) return
+    const idx = Number(el.getAttribute('data-block-index'))
+    if (Number.isFinite(idx)) indices.push(idx)
+  })
+  return indices
+}
+
+/**
  * Best-effort line range for a selection: exact when it's fully inside one
  * block and the plain selected text can be found verbatim in that block's
  * raw markdown source (the common case — plain prose, no emphasis/links
@@ -59,9 +83,21 @@ function findBlockIndex(node: Node | null): number | null {
  * text, so an exact character offset isn't always recoverable). A selection
  * spanning multiple blocks always uses the coarser first-to-last-block range.
  */
-function computeSelectionLines(range: Range, text: string, blocks: BlockLineRange[]): SelectionLines | null {
-  const startIdx = findBlockIndex(range.startContainer)
-  const endIdx = findBlockIndex(range.endContainer)
+function computeSelectionLines(
+  range: Range,
+  text: string,
+  blocks: BlockLineRange[],
+  root: HTMLElement,
+): SelectionLines | null {
+  let startIdx = findBlockIndex(range.startContainer)
+  let endIdx = findBlockIndex(range.endContainer)
+  if (startIdx == null || endIdx == null) {
+    const found = findBlockIndicesInRange(range, root)
+    if (found.length) {
+      startIdx = Math.min(...found)
+      endIdx = Math.max(...found)
+    }
+  }
   if (startIdx == null || endIdx == null || !blocks[startIdx] || !blocks[endIdx]) return null
 
   if (startIdx === endIdx) {
@@ -126,7 +162,7 @@ export function useArtifactSelectionToolbar(opts: UseArtifactSelectionToolbarOpt
     text.value = t
     rect.value = { top: r.top, left: r.left, width: r.width, height: r.height }
     const blocks = opts.getBlockRanges?.() ?? []
-    lines.value = blocks.length ? computeSelectionLines(range, t, blocks) : null
+    lines.value = blocks.length ? computeSelectionLines(range, t, blocks, container) : null
     visible.value = true
   }
 

@@ -41,6 +41,21 @@ function blockEl(index: number, text: string): HTMLElement {
   return el
 }
 
+/** Stub `window.getSelection()` to return a *real* `Range` (built via
+ * `document.createRange()`), rather than the plain-object fake `getRangeAt()`
+ * used elsewhere in this file. Needed for the "container is above any block"
+ * regression test below, which relies on genuine `Range.intersectsNode()`
+ * behavior that a hand-rolled stub can't reproduce. */
+function stubRealSelection(text: string, range: Range) {
+  const fake = {
+    rangeCount: 1,
+    isCollapsed: false,
+    toString: () => text,
+    getRangeAt: () => range,
+  } as unknown as Selection
+  return vi.spyOn(window, 'getSelection').mockReturnValue(fake)
+}
+
 afterEach(() => vi.restoreAllMocks())
 
 describe('useArtifactSelectionToolbar', () => {
@@ -178,6 +193,79 @@ describe('useArtifactSelectionToolbar', () => {
       t.onSelectionChange()
 
       expect(t.lines.value).toEqual({ start: 1, end: 9 })
+    })
+
+    // Regression: real browsers don't always set a Range's start/end
+    // container to a node inside the nearest block — they normalize it to a
+    // shared ancestor whenever an endpoint falls "between" children rather
+    // than inside one (this is exactly what happens for Ctrl+A "select all",
+    // or dragging from just above the first block's text to just below the
+    // last). The container/offset-based stub above can't express that, so
+    // this test drives `onSelectionChange` with a genuine `Range` built via
+    // `document.createRange()` whose `startContainer`/`endContainer` is the
+    // *viewer root itself* — reproducing the reported "selection lines don't
+    // attach" bug. Before the `findBlockIndicesInRange` fallback, `closest()`
+    // on the root container found no `[data-block-index]` ancestor (the root
+    // has none, and walking further up finds nothing either), so
+    // `computeSelectionLines` returned `null` silently.
+    it('still resolves a line range when the range container sits above every block (e.g. select-all)', () => {
+      const container = document.createElement('div')
+      const block0 = blockEl(0, 'first block text')
+      const block1 = blockEl(1, 'second block text')
+      container.append(block0, block1)
+      document.body.appendChild(container)
+
+      const range = document.createRange()
+      range.setStart(container, 0)
+      range.setEnd(container, container.childNodes.length)
+      // jsdom's real Range doesn't implement layout-dependent methods.
+      ;(range as any).getBoundingClientRect = () => ({ top: 0, left: 0, width: 0, height: 0 })
+      stubRealSelection('first block text second block text', range)
+
+      const t = useArtifactSelectionToolbar({
+        getContainer: () => container,
+        isBlocked: () => false,
+        getBlockRanges: () => [
+          { startLine: 1, endLine: 2, source: 'first block text' },
+          { startLine: 3, endLine: 4, source: 'second block text' },
+        ],
+      })
+
+      t.onSelectionChange()
+
+      expect(t.visible.value).toBe(true)
+      expect(t.lines.value).toEqual({ start: 1, end: 4 })
+
+      container.remove()
+    })
+
+    // Same regression, but for a single-block "select all" — the fallback
+    // must still find the one block, not silently drop the range entirely.
+    it('resolves a single-block range when the container sits above that one block', () => {
+      const container = document.createElement('div')
+      const block0 = blockEl(0, 'only block text')
+      container.append(block0)
+      document.body.appendChild(container)
+
+      const range = document.createRange()
+      range.setStart(container, 0)
+      range.setEnd(container, container.childNodes.length)
+      ;(range as any).getBoundingClientRect = () => ({ top: 0, left: 0, width: 0, height: 0 })
+      stubRealSelection('only block text', range)
+
+      const t = useArtifactSelectionToolbar({
+        getContainer: () => container,
+        isBlocked: () => false,
+        getBlockRanges: () => [{ startLine: 5, endLine: 7, source: 'only block text' }],
+      })
+
+      t.onSelectionChange()
+
+      // Single block, exact verbatim match within it → precise single line
+      // (block starts at line 5, text is on the block's first line).
+      expect(t.lines.value).toEqual({ start: 5, end: 5 })
+
+      container.remove()
     })
   })
 
