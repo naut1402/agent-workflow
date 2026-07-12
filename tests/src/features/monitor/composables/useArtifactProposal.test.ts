@@ -28,6 +28,26 @@ describe('useArtifactProposal', () => {
     expect(rows.some((r) => r.type === 'add' && r.text === 'B')).toBe(true)
   })
 
+  it('normalizes CRLF vs LF so a pure line-ending mismatch is not shown as an all-changed diff', async () => {
+    // before is CRLF (real file on Windows), after is LF (agent wrote LF) but
+    // only line 2 actually changed — the diff must show just that one line.
+    vi.mocked(fetchProposal).mockResolvedValue({
+      artifactName: 'design.md',
+      before: 'a\r\nb\r\nc\r\n',
+      after: 'a\nB\nc\n',
+    })
+    const p = useArtifactProposal({ initialJobId: 'j1' })
+
+    await p.load()
+
+    const rows = p.diffRows.value
+    expect(rows.filter((r) => r.type === 'del')).toEqual([{ type: 'del', text: 'b' }])
+    expect(rows.filter((r) => r.type === 'add')).toEqual([{ type: 'add', text: 'B' }])
+    // a and c are unchanged context (not flagged as add/del despite CRLF↔LF).
+    expect(rows.some((r) => r.type === 'context' && r.text === 'a')).toBe(true)
+    expect(rows.some((r) => r.type === 'context' && r.text === 'c')).toBe(true)
+  })
+
   it('approve() applies the current job', async () => {
     vi.mocked(approveJob).mockResolvedValue({ job: {} })
     const p = useArtifactProposal({ initialJobId: 'j1' })

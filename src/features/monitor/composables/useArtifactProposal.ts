@@ -47,9 +47,15 @@ export function useArtifactProposal(opts: UseArtifactProposalOptions) {
   const statusText = ref('')
   const error = ref<string | null>(null)
 
+  // Normalize CRLF→LF before diffing so a pure line-ending mismatch (common
+  // when the real file is CRLF on Windows but the agent writes LF) doesn't make
+  // every line show as changed. Only affects the displayed diff — approve still
+  // applies the server's raw scratch content (which preserves the real EOL).
+  const normalizeEol = (s: string): string => s.replace(/\r\n/g, '\n')
+
   const diffRows = computed<DiffRow[]>(() => {
     const rows: DiffRow[] = []
-    for (const part of diffLines(before.value, after.value)) {
+    for (const part of diffLines(normalizeEol(before.value), normalizeEol(after.value))) {
       const type: DiffRow['type'] = part.added ? 'add' : part.removed ? 'del' : 'context'
       for (const text of toLines(part.value)) rows.push({ type, text })
     }

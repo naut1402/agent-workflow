@@ -331,9 +331,29 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       return j(c, 404, { error: 'artifact not found', taskId, artifactName })
     }
 
+    // Selection splice (only for require_approval selection runs): the agent
+    // improves ONLY the selected lines. We hand it a small scratch snippet file
+    // rather than the artifact, so it physically cannot touch other lines; the
+    // job queue splices the result back at `spliceRange`. `{{artifact_name}}` is
+    // resolved to that snippet file, so an unmodified "read/improve/overwrite
+    // {{artifact_name}}" template naturally operates on the snippet.
+    const SELECTION_FILE = '.quickaction-selection.md'
+    const useSplice = Boolean(action.require_approval && selectionStartLine != null && selectedText)
+    let spliceRange: { start: number; end: number } | undefined
+    let selectionSnippet: string | undefined
+    if (useSplice) {
+      const lineCount = content.split(/\r?\n/).length
+      const rawEnd = selectionEndLine ?? selectionStartLine!
+      const start = Math.min(Math.max(1, selectionStartLine!), lineCount)
+      const end = Math.min(Math.max(start, rawEnd), lineCount)
+      spliceRange = { start, end }
+      selectionSnippet = content.split(/\r?\n/).slice(start - 1, end).join('\n')
+    }
+
+    const promptArtifactName = useSplice ? SELECTION_FILE : artifactName
     const userPrompt = substitutePrompt(action.prompt_template, {
-      artifact_name: artifactName,
-      artifact_base: artifactBase(artifactName),
+      artifact_name: promptArtifactName,
+      artifact_base: artifactBase(promptArtifactName),
       selection: selectedText ?? '',
       selectionStartLine,
       selectionEndLine,
@@ -361,7 +381,13 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       },
     }
     const job = action.require_approval
-      ? submitApprovalJob({ ...jobInput, approvalArtifact: artifactName })
+      ? submitApprovalJob({
+          ...jobInput,
+          approvalArtifact: artifactName,
+          ...(useSplice
+            ? { spliceRange, selectionFile: SELECTION_FILE, selectionSnippet }
+            : {}),
+        })
       : submitJob(jobInput)
 
     emitAudit({
