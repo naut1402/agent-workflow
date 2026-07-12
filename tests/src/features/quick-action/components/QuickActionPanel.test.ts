@@ -20,6 +20,13 @@ vi.mock('@/api', () => ({
   })),
   saveArtifactActionsCatalog: vi.fn(async (file: any) => ({ ok: true, ...file })),
   fetchRunners: vi.fn(async () => ({ runners: [{ id: 'r1', name: 'Runner A' }], defaultRunnerId: 'r1' })),
+  fetchCatalog: vi.fn(async () => ({
+    skills: [],
+    agents: [
+      { id: 'dashboard:my-agent', name: 'my-agent', description: '' },
+      { id: 'repo:dev-agent-teams:doc-reviewer', name: 'doc-reviewer', description: '' },
+    ],
+  })),
 }))
 
 import { saveArtifactActionsCatalog } from '@/api'
@@ -27,37 +34,36 @@ import { saveArtifactActionsCatalog } from '@/api'
 afterEach(() => vi.clearAllMocks())
 
 describe('QuickActionPanel', () => {
-  it('lists the loaded catalog', async () => {
+  it('lists the loaded catalog (label / agent / attach, no id column)', async () => {
     const w = mount(QuickActionPanel, { props: { projectId: null } })
     await flushPromises()
 
-    expect(w.text()).toContain('improve-doc')
     expect(w.text()).toContain('✨ Cải thiện tài liệu')
+    expect(w.text()).toContain('dev-agent-teams:doc-reviewer') // agent column
     expect(w.text()).toContain('artifact-title')
   })
 
-  it('+ New opens an empty form; save validates a missing id', async () => {
+  it('+ New opens the editor dialog; save validates a missing label', async () => {
     const w = mount(QuickActionPanel, { props: { projectId: null } })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click') // "+ New"
+    expect(w.find('.qa-modal-overlay').exists()).toBe(true)
     expect(w.find('.qa-form').exists()).toBe(true)
 
     await w.get('.qa-form .btn-primary').trigger('click') // Lưu, with an empty draft
-    expect(w.find('.qa-form .err').text()).toContain('id')
+    expect(w.find('.qa-form .err').text()).toContain('label')
     expect(saveArtifactActionsCatalog).not.toHaveBeenCalled()
   })
 
-  it('creates a new quick action and persists the full catalog', async () => {
+  it('creates a new quick action, deriving the id from the label, and persists the catalog', async () => {
     const w = mount(QuickActionPanel, { props: { projectId: null } })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
-    const inputs = w.findAll('.qa-form input.cfg-input')
-    await inputs[0].setValue('new-action') // id
-    await inputs[1].setValue('Nút mới') // label
-    await inputs[2].setValue('design.md') // patterns
-    await inputs[3].setValue('dev-agent-teams:doc-reviewer') // agent_ref
+    const inputs = w.findAll('.qa-form input.cfg-input') // [0]=label, [1]=patterns (id removed, agent is a <select>)
+    await inputs[0].setValue('new-action') // label → derived id "new-action"
+    await inputs[1].setValue('design.md') // patterns
     await w.get('.qa-form textarea').setValue('Đọc {{artifact_name}}')
 
     await w.get('.qa-form .btn-primary').trigger('click')
@@ -67,6 +73,26 @@ describe('QuickActionPanel', () => {
     const [file] = vi.mocked(saveArtifactActionsCatalog).mock.calls[0]
     expect((file as any).actions.map((a: any) => a.id)).toContain('new-action')
     expect(w.find('.qa-form').exists()).toBe(false) // closes on success
+  })
+
+  it('binds agent_ref from the agent dropdown', async () => {
+    const w = mount(QuickActionPanel, { props: { projectId: null } })
+    await flushPromises()
+
+    await w.get('button.btn-primary.btn-sm').trigger('click')
+    const inputs = w.findAll('.qa-form input.cfg-input')
+    await inputs[0].setValue('with-agent')
+    await inputs[1].setValue('design.md')
+    await w.get('.qa-form textarea').setValue('Đọc {{artifact_name}}')
+    // The first <select.cfg-input> in the form is the agent dropdown.
+    await w.findAll('.qa-form select.cfg-input')[0].setValue('dashboard:my-agent')
+
+    await w.get('.qa-form .btn-primary').trigger('click')
+    await flushPromises()
+
+    const [file] = vi.mocked(saveArtifactActionsCatalog).mock.calls[0]
+    const saved = (file as any).actions.find((a: any) => a.id === 'with-agent')
+    expect(saved.agent_ref).toBe('dashboard:my-agent')
   })
 
   it('prompt help popover toggles a placeholder reference, hidden by default', async () => {
@@ -132,9 +158,8 @@ describe('QuickActionPanel', () => {
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
     const inputs = w.findAll('.qa-form input.cfg-input')
-    await inputs[0].setValue('appr-action') // id
-    await inputs[1].setValue('Cần duyệt') // label
-    await inputs[2].setValue('design.md') // patterns
+    await inputs[0].setValue('appr-action') // label → derived id "appr-action"
+    await inputs[1].setValue('design.md') // patterns
     await w.get('.qa-form textarea').setValue('Ghi đè {{artifact_name}} bằng Write')
 
     // The require_approval checkbox is the last .qa-attach-option checkbox
