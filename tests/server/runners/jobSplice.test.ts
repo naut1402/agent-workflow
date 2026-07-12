@@ -12,7 +12,13 @@ import {
   upsertConnection,
   registerProvider,
 } from '../../../server/runners/index.js'
-import { spliceLines, extractLines, detectEol, cleanAgentOutput } from '../../../server/runners/jobQueue.js'
+import {
+  spliceLines,
+  extractLines,
+  detectEol,
+  cleanAgentOutput,
+  findSelectionRange,
+} from '../../../server/runners/jobQueue.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../server/runners/types.js'
 
 // Selection splice (U0005-4): a selection quick action must only touch the
@@ -70,6 +76,41 @@ describe('spliceLines / extractLines / detectEol (pure)', () => {
     expect(cleanAgentOutput('```\nhello\n```')).toBe('hello')
     // A fence that is part of the content (not enclosing) is left alone.
     expect(cleanAgentOutput('text\n```js\ncode\n```\nmore')).toBe('text\n```js\ncode\n```\nmore')
+  })
+})
+
+describe('findSelectionRange (rendered selection → exact source line range)', () => {
+  const doc = [
+    '# Title', // 1
+    '', // 2
+    '## 1. Tổng quan', // 3
+    '', // 4
+    'Task gộp 3 vấn đề độc lập, cùng scope Tab Monitor (`src/features/monitor/`) của dashboard:', // 5
+    '', // 6
+    '- **A** — Đóng/mở panel: thêm nút.', // 7
+    'dòng thường không markdown', // 8
+  ].join('\n')
+
+  test('pins the exact line even when the rendered selection lost its backticks', () => {
+    // The viewer hands us the rendered text (no backticks); the source line has
+    // them. A naive indexOf would miss and fall back to the whole block.
+    const rendered = 'Task gộp 3 vấn đề độc lập, cùng scope Tab Monitor (src/features/monitor/) của dashboard:'
+    expect(findSelectionRange(doc, rendered)).toEqual({ start: 5, end: 5 })
+  })
+
+  test('matches a plain line and a bold line (markers stripped)', () => {
+    expect(findSelectionRange(doc, 'dòng thường không markdown')).toEqual({ start: 8, end: 8 })
+    expect(findSelectionRange(doc, 'A — Đóng/mở panel: thêm nút.')).toEqual({ start: 7, end: 7 })
+  })
+
+  test('spans multiple lines for a multi-line selection', () => {
+    const twoLines = '## 1. Tổng quan\n\nTask gộp 3 vấn đề độc lập'
+    expect(findSelectionRange(doc, twoLines)).toEqual({ start: 3, end: 5 })
+  })
+
+  test('returns null when the selection is not found (caller falls back to the viewer range)', () => {
+    expect(findSelectionRange(doc, 'văn bản không hề tồn tại trong tài liệu')).toBeNull()
+    expect(findSelectionRange(doc, '   ')).toBeNull()
   })
 })
 

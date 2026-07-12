@@ -125,6 +125,47 @@ export function spliceLines(base: string, start: number, end: number, replacemen
   return [...baseLines.slice(0, s - 1), ...replLines, ...baseLines.slice(e)].join(eol)
 }
 
+// Markdown-insensitive comparison key: drop inline markers (backticks,
+// emphasis) and collapse whitespace, so selected *rendered* text (which has had
+// its markdown stripped by the viewer, e.g. `code` → code) can still be located
+// in the raw markdown *source*.
+function normalizeForMatch(s: string): string {
+  return s
+    .replace(/[`*_~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Locate `selectedText` (as captured from the rendered viewer, so markdown
+ * syntax may be stripped) within the raw markdown `content`, returning the
+ * tightest 1-indexed inclusive source line range whose text matches. Returns
+ * null if no run of lines matches — the caller then falls back to the viewer's
+ * best-effort line range. This is what keeps a splice limited to the lines the
+ * user actually selected instead of the whole rendered block.
+ */
+export function findSelectionRange(content: string, selectedText: string): { start: number; end: number } | null {
+  const normSel = normalizeForMatch(selectedText)
+  if (!normSel) return null
+  const normLines = content.split(/\r?\n/).map(normalizeForMatch)
+  const MAX_SPAN = 400
+  let best: { start: number; end: number; span: number } | null = null
+  for (let i = 0; i < normLines.length; i++) {
+    if (!normLines[i]) continue // a match can't start on a blank/markup-only line
+    let acc = ''
+    for (let j = i; j < normLines.length && j - i <= MAX_SPAN; j++) {
+      if (normLines[j]) acc = acc ? `${acc} ${normLines[j]}` : normLines[j]
+      if (acc.includes(normSel)) {
+        const span = j - i
+        if (!best || span < best.span) best = { start: i + 1, end: j + 1, span }
+        break // smallest window starting at i
+      }
+      if (acc.length > normSel.length + 400) break // grown well past the target — give up on this start
+    }
+  }
+  return best ? { start: best.start, end: best.end } : null
+}
+
 /**
  * Strip a quick-action agent's stdout down to just the proposed content: trim
  * surrounding whitespace and unwrap a single enclosing markdown code fence (the

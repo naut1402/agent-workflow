@@ -9,7 +9,7 @@ import { applyArchiveAction, applyHitlAction } from '../../tasks/state.js'
 import { loadPipelineConfig } from '../../pipeline/index.js'
 import { emitAudit } from '../../logging/store.js'
 import { TaskArchivePatch, TaskStatePatch } from '../../../shared/schemas/task.js'
-import { submitJob, submitApprovalJob } from '../../runners/index.js'
+import { submitJob, submitApprovalJob, findSelectionRange, extractLines } from '../../runners/index.js'
 import {
   loadArtifactActions,
   loadArtifactActionsFile,
@@ -332,25 +332,39 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     }
 
     // Selection splice (only for require_approval selection runs): the agent's
-    // proposed content (its stdout) is spliced back into ONLY these lines of the
-    // artifact after the job runs, so no other line can change. The selected
-    // text reaches the agent via the template's `{{selection}}` placeholder.
+    // proposed content (its stdout) is spliced back into ONLY the source lines
+    // the user selected, so no other line can change.
+    //
+    // The line range from the viewer is best-effort (it maps a rendered-HTML
+    // selection back to source and falls back to the whole block when the
+    // rendered text can't be found verbatim — e.g. markdown stripped backticks).
+    // Re-locate the selection in the raw source here (markdown-insensitive) to
+    // pin the exact lines; fall back to the viewer's range only if that fails.
+    // Then hand the agent the SOURCE of that range (not the rendered text) so
+    // its improved output splices back cleanly and content/range always agree.
     const useSplice = Boolean(action.require_approval && selectionStartLine != null && selectedText)
     let spliceRange: { start: number; end: number } | undefined
+    let selectionForPrompt = selectedText ?? ''
     if (useSplice) {
       const lineCount = content.split(/\r?\n/).length
-      const rawEnd = selectionEndLine ?? selectionStartLine!
-      const start = Math.min(Math.max(1, selectionStartLine!), lineCount)
-      const end = Math.min(Math.max(start, rawEnd), lineCount)
-      spliceRange = { start, end }
+      const matched = findSelectionRange(content, selectedText!)
+      if (matched) {
+        spliceRange = matched
+      } else {
+        const rawEnd = selectionEndLine ?? selectionStartLine!
+        const start = Math.min(Math.max(1, selectionStartLine!), lineCount)
+        const end = Math.min(Math.max(start, rawEnd), lineCount)
+        spliceRange = { start, end }
+      }
+      selectionForPrompt = extractLines(content, spliceRange.start, spliceRange.end)
     }
 
     const userPrompt = substitutePrompt(action.prompt_template, {
       artifact_name: artifactName,
       artifact_base: artifactBase(artifactName),
-      selection: selectedText ?? '',
-      selectionStartLine,
-      selectionEndLine,
+      selection: selectionForPrompt,
+      selectionStartLine: spliceRange?.start ?? selectionStartLine,
+      selectionEndLine: spliceRange?.end ?? selectionEndLine,
     })
 
     const resolvedRunnerId = runnerId ?? action.runner_id

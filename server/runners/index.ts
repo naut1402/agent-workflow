@@ -43,6 +43,8 @@ export {
   getApprovalDiff,
   approveJob,
   discardJob,
+  findSelectionRange,
+  extractLines,
 } from './jobQueue.js'
 
 export type {
