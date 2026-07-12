@@ -82,6 +82,13 @@ export interface ExecuteResult {
   logPath?: string
   artifactsFound?: string[]
   error?: string
+  /**
+   * The runner's raw stdout. Quick-action approval jobs use this as the
+   * proposed content (the agent is told to "respond with the improved text"),
+   * so a prompt that prints its result instead of writing a file still produces
+   * a reviewable change. See jobQueue.ts runJob.
+   */
+  stdout?: string
 }
 
 // `awaiting_approval`: an approval-flow job (see jobQueue.ts) finished
@@ -116,15 +123,11 @@ export interface JobRecord {
   approvalArtifact?: string
   /** The job this one continued via `--resume` (feedback round chain). */
   parentJobId?: string
-  // Selection-splice approval only (see jobQueue.ts submitApprovalJob / runJob):
-  // when set, the agent improves ONLY a small scratch snippet file
-  // (`selectionFile`) and the server splices its result back into a copy of the
-  // real artifact at `spliceRange` — so every line outside the range stays
+  // Selection-splice approval only (see jobQueue.ts runJob): when set, the
+  // agent's output (stdout) is spliced back into a copy of the real artifact at
+  // this 1-indexed inclusive line range, so every line outside the range stays
   // byte-identical and the review diff is localized to the selection.
-  /** 1-indexed inclusive line range of the real artifact the splice replaces. */
   spliceRange?: { start: number; end: number }
-  /** Scratch-only file (relative to `workspace`) holding just the selected snippet the agent edits. */
-  selectionFile?: string
 }
 
 export interface RunnersStore {

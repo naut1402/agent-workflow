@@ -126,23 +126,43 @@ export function spliceLines(base: string, start: number, end: number, replacemen
 }
 
 /**
- * Splice the agent's improved snippet (from the scratch `selectionFile`) back
- * into the real artifact and write the full result to the scratch artifact, so
- * the approval diff (real vs scratch artifact) is limited to the selected lines.
- * Called after a successful selection-splice approval job, before it settles at
- * `awaiting_approval`. Throws on unreadable scratch/real paths.
+ * Strip a quick-action agent's stdout down to just the proposed content: trim
+ * surrounding whitespace and unwrap a single enclosing markdown code fence (the
+ * common "```markdown … ```" the model sometimes adds despite being asked not
+ * to). Best-effort — the user still reviews the diff before it's applied.
  */
-function applySpliceToScratch(job: JobRecord): void {
-  const range = job.spliceRange!
-  const improved = fs.readFileSync(path.join(job.workspace, job.selectionFile!), 'utf8')
-  let base = ''
-  try {
-    base = fs.readFileSync(path.join(job.applyTarget!, job.approvalArtifact!), 'utf8')
-  } catch {
-    base = '' // real artifact may not exist yet
+export function cleanAgentOutput(stdout: string): string {
+  const t = stdout.trim()
+  const fenced = t.match(/^```[^\n]*\n([\s\S]*?)\n?```$/)
+  return (fenced ? fenced[1] : t).trim()
+}
+
+/**
+ * Fold a successful approval job's proposed content (the agent's stdout) into
+ * the scratch artifact so the review diff (real vs scratch artifact) reflects
+ * the proposal. For a selection job (`spliceRange` set) the stdout is spliced
+ * into a copy of the real artifact at that line range — every other line stays
+ * byte-identical, incl. the original EOL. For a whole-file job the stdout
+ * replaces the scratch artifact outright; if the agent produced no stdout (a
+ * "write the file with your Write tool" style prompt), the scratch artifact the
+ * agent wrote is left as-is. Throws on unreadable/unwritable paths.
+ */
+function foldProposalIntoScratch(job: JobRecord, stdout: string): void {
+  const proposed = cleanAgentOutput(stdout)
+  const scratchArtifact = path.join(job.workspace, job.approvalArtifact!)
+  if (job.spliceRange) {
+    let base = ''
+    try {
+      base = fs.readFileSync(path.join(job.applyTarget!, job.approvalArtifact!), 'utf8')
+    } catch {
+      base = '' // real artifact may not exist yet
+    }
+    const spliced = spliceLines(base, job.spliceRange.start, job.spliceRange.end, proposed)
+    fs.writeFileSync(scratchArtifact, spliced, 'utf8')
+  } else if (proposed) {
+    fs.writeFileSync(scratchArtifact, proposed, 'utf8')
   }
-  const spliced = spliceLines(base, range.start, range.end, improved)
-  fs.writeFileSync(path.join(job.workspace, job.approvalArtifact!), spliced, 'utf8')
+  // else: whole-file job with no stdout — keep whatever the agent wrote.
 }
 
 export function loadJob(id: string): JobRecord | null {
@@ -305,12 +325,12 @@ async function runJob(job: JobRecord): Promise<void> {
   const isApprovalJob = Boolean(job.applyTarget && job.approvalArtifact)
   if (!result.ok && isApprovalJob) removeScratchWorkspace(job.workspace)
 
-  // Selection splice: the agent edited only the scratch snippet file; fold its
-  // result back into the real artifact so the scratch artifact — and thus the
-  // review diff — reflects only the selected line range.
-  if (result.ok && isApprovalJob && job.spliceRange && job.selectionFile) {
+  // Fold the agent's proposed content (stdout) into the scratch artifact so the
+  // review diff reflects the proposal — spliced into the selected line range for
+  // a selection job, or replacing the whole file otherwise.
+  if (result.ok && isApprovalJob) {
     try {
-      applySpliceToScratch(job)
+      foldProposalIntoScratch(job, result.stdout ?? '')
     } catch (err: any) {
       removeScratchWorkspace(job.workspace)
       saveJob({
@@ -318,7 +338,7 @@ async function runJob(job: JobRecord): Promise<void> {
         status: 'failed',
         finishedAt: new Date().toISOString(),
         exitCode: result.exitCode,
-        error: `cannot splice selection: ${err.message}`,
+        error: `cannot apply proposed content: ${err.message}`,
         logPath: result.logPath,
       })
       return
@@ -394,14 +414,11 @@ export interface SubmitApprovalJobInput extends SubmitJobInput {
   /** File (relative to `workspace`) the user will review/approve — e.g. `design.md`. */
   approvalArtifact: string
   /**
-   * Selection splice (optional): improve only lines `spliceRange` of the
-   * artifact. The agent edits `selectionFile` (seeded with `selectionSnippet`)
-   * instead of the artifact itself; the server splices the result back after
-   * the job runs. Omit for a whole-file approval.
+   * Selection splice (optional): the agent's proposed content (stdout) is
+   * spliced back into only these 1-indexed inclusive lines of the artifact
+   * after the job runs. Omit for a whole-file approval.
    */
   spliceRange?: { start: number; end: number }
-  selectionFile?: string
-  selectionSnippet?: string
 }
 
 /**
@@ -415,12 +432,6 @@ export function submitApprovalJob(input: SubmitApprovalJobInput): JobRecord {
   const runner = input.runnerId ? getRunner(input.runnerId) : getDefaultRunner()
   const realWorkspace = path.resolve(input.workspace)
   const scratch = copyWorkspaceForApproval(realWorkspace, id)
-  // Selection splice: seed the scratch snippet file with the selected lines so
-  // the agent has something to improve (it edits this file, not the artifact).
-  const isSplice = Boolean(input.spliceRange && input.selectionFile)
-  if (isSplice) {
-    fs.writeFileSync(path.join(scratch, input.selectionFile!), input.selectionSnippet ?? '', 'utf8')
-  }
   const job: JobRecord = {
     id,
     status: 'queued',
@@ -438,7 +449,7 @@ export function submitApprovalJob(input: SubmitApprovalJobInput): JobRecord {
     sessionId: crypto.randomUUID(),
     applyTarget: realWorkspace,
     approvalArtifact: input.approvalArtifact,
-    ...(isSplice ? { spliceRange: input.spliceRange, selectionFile: input.selectionFile } : {}),
+    ...(input.spliceRange ? { spliceRange: input.spliceRange } : {}),
   }
   saveJob(job)
   queue.push(id)
@@ -480,11 +491,8 @@ export function sendJobFeedback(id: string, feedback: string): MutationResult<{ 
     applyTarget: parent.applyTarget,
     approvalArtifact: parent.approvalArtifact,
     parentJobId: parent.id,
-    // Carry the splice contract so the feedback round re-splices its result the
-    // same way (the agent keeps editing the same scratch snippet file).
-    ...(parent.spliceRange && parent.selectionFile
-      ? { spliceRange: parent.spliceRange, selectionFile: parent.selectionFile }
-      : {}),
+    // Carry the splice range so the feedback round splices its result the same way.
+    ...(parent.spliceRange ? { spliceRange: parent.spliceRange } : {}),
   }
   saveJob(job)
   queue.push(id2)

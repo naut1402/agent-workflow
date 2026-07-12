@@ -12,17 +12,15 @@ import {
   upsertConnection,
   registerProvider,
 } from '../../../server/runners/index.js'
-import { spliceLines, extractLines, detectEol } from '../../../server/runners/jobQueue.js'
+import { spliceLines, extractLines, detectEol, cleanAgentOutput } from '../../../server/runners/jobQueue.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../server/runners/types.js'
 
 // Selection splice (U0005-4): a selection quick action must only touch the
-// picked lines. The agent improves a small scratch snippet file; the server
-// splices its result back into a copy of the real artifact at the selected line
+// picked lines. The agent RESPONDS with the improved text (stdout); the server
+// splices that back into a copy of the real artifact at the selected line
 // range, keeping every other line byte-identical (incl. original EOL). This
 // file unit-tests the splice helpers and drives one full splice approval round
-// via a stub provider that "improves" only the snippet file.
-
-const SELECTION_FILE = '.quickaction-selection.md'
+// via a stub provider that returns improved text on stdout.
 
 describe('spliceLines / extractLines / detectEol (pure)', () => {
   test('extractLines returns the 1-indexed inclusive range, joined with LF', () => {
@@ -65,6 +63,14 @@ describe('spliceLines / extractLines / detectEol (pure)', () => {
     expect(detectEol('a\r\nb')).toBe('\r\n')
     expect(detectEol('a\nb')).toBe('\n')
   })
+
+  test('cleanAgentOutput trims and unwraps a single enclosing code fence', () => {
+    expect(cleanAgentOutput('  hello \n')).toBe('hello')
+    expect(cleanAgentOutput('```markdown\nhello\nworld\n```')).toBe('hello\nworld')
+    expect(cleanAgentOutput('```\nhello\n```')).toBe('hello')
+    // A fence that is part of the content (not enclosing) is left alone.
+    expect(cleanAgentOutput('text\n```js\ncode\n```\nmore')).toBe('text\n```js\ncode\n```\nmore')
+  })
 })
 
 // ── Full splice approval round via a stub provider ──────────────────────────
@@ -77,9 +83,9 @@ interface Captured {
 }
 const captured: Captured[] = []
 
-// Stub "agent": improves ONLY the seeded snippet file (never the artifact),
-// writing a deterministic result derived from the prompt so we can assert the
-// splice without a real CLI.
+// Stub "agent": RESPONDS with a deterministic improved snippet on stdout
+// (derived from the prompt) — the server splices that in. It never writes the
+// artifact, mirroring a "respond with the edited content" style prompt.
 const stubProvider: RunnerProvider = {
   providerId: 'stub-splice',
   validateRunnerConfig: () => ({ ok: true, errors: [] }),
@@ -92,11 +98,7 @@ const stubProvider: RunnerProvider = {
       userPrompt: req.userPrompt,
       workspace: req.workspace,
     })
-    const snippet = path.join(req.workspace, SELECTION_FILE)
-    if (fs.existsSync(snippet)) {
-      fs.writeFileSync(snippet, `[${req.userPrompt}]`, 'utf8')
-    }
-    return { ok: true, exitCode: 0, durationMs: 1 }
+    return { ok: true, exitCode: 0, durationMs: 1, stdout: `[${req.userPrompt}]` }
   },
 }
 
@@ -125,7 +127,7 @@ function makeWorkspace(): string {
 }
 
 function submitSplice(ws: string, prompt: string) {
-  // Select lines 2-3 ("l2","l3"); server would extract this snippet from BASE.
+  // Select lines 2-3 ("l2","l3"); the agent's stdout is spliced into that range.
   return submitApprovalJob({
     runnerId: 'stub-splice-runner',
     agentRef: '',
@@ -133,8 +135,6 @@ function submitSplice(ws: string, prompt: string) {
     userPrompt: prompt,
     approvalArtifact: 'design.md',
     spliceRange: { start: 2, end: 3 },
-    selectionFile: SELECTION_FILE,
-    selectionSnippet: extractLines(BASE, 2, 3),
     metadata: {},
   })
 }
@@ -159,7 +159,6 @@ describe('selection splice — full approval round', () => {
     const ws = makeWorkspace()
     const job = submitSplice(ws, 'round1')
     expect(job.spliceRange).toEqual({ start: 2, end: 3 })
-    expect(job.selectionFile).toBe(SELECTION_FILE)
 
     const done = await settle(job.id)
     expect(done.status).toBe('awaiting_approval')
@@ -188,7 +187,6 @@ describe('selection splice — full approval round', () => {
     if ('error' in fb) throw new Error(fb.error)
     const child = fb.job
     expect(child.spliceRange).toEqual({ start: 2, end: 3 })
-    expect(child.selectionFile).toBe(SELECTION_FILE)
 
     await settle(child.id)
     const last = captured[captured.length - 1]

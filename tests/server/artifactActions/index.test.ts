@@ -45,9 +45,11 @@ describe('DEFAULT_ARTIFACT_ACTIONS', () => {
     const improveDoc = DEFAULT_ARTIFACT_ACTIONS.find((a) => a.id === 'improve-doc')
     expect(improveDoc?.require_approval).toBe(true)
     expect(improveDoc?.attach_points).toEqual(['artifact-title', 'artifact-selection'])
-    // The prompt must tell the agent to write the file back (stdout isn't
-    // captured to disk) — the whole point of the edit landing in the scratch copy.
-    expect(improveDoc?.prompt_template).toContain('Write')
+    // The agent RESPONDS with the improved content (stdout), which the server
+    // captures as the proposed edit and splices into the selected range. The
+    // template exposes both the selection and the artifact name so it works from
+    // the selection toolbar ({{selection}}) and the title toolbar ({{artifact_name}}).
+    expect(improveDoc?.prompt_template).toContain('{{selection}}')
     expect(improveDoc?.prompt_template).toContain('{{artifact_name}}')
   })
 })

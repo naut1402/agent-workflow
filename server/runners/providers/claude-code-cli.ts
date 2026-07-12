@@ -361,6 +361,9 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
         logPath,
         artifactsFound,
         error: ok ? undefined : formatFailure(procResult),
+        // Captured so an approval quick action can use "respond with the edited
+        // content" style prompts (stdout) instead of requiring a file write.
+        stdout: procResult.stdout,
       }
       appendLog(describeResult(result))
       return result
