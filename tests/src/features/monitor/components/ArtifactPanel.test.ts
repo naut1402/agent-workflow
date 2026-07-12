@@ -5,7 +5,7 @@ import {
   STORAGE_KEY,
   useAppSettings,
 } from '@/shared/composables/useAppSettings'
-import { fetchArtifact } from '@/api'
+import { fetchArtifact, fetchArtifactActions, fetchRunners, runArtifactAction } from '@/api'
 
 const MD_TWO_H2 = `# Title
 
@@ -32,6 +32,9 @@ Nội dung D
 vi.mock('@/api', () => ({
   fetchArtifact: vi.fn(async () => ({ content: MD_TWO_H2, mtime: 1 })),
   fetchArtifactActions: vi.fn(async () => ({ actions: [] })),
+  fetchRunners: vi.fn(async () => ({ runners: [], defaultRunnerId: null })),
+  runArtifactAction: vi.fn(async () => ({ job: { id: 'job1', status: 'succeeded' } })),
+  fetchJob: vi.fn(async () => ({ job: { id: 'job1', status: 'succeeded' } })),
   saveArtifact: vi.fn(async (_taskId: string, _name: string, content: string) => ({
     content,
     mtime: 2,
@@ -202,5 +205,84 @@ describe('ArtifactPanel — block mode toggle all', () => {
     await findToggleAllButton(w).trigger('click')
 
     expect(detailsOpenStates(w)).toEqual([true, true, true, true])
+  })
+})
+
+describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
+  afterEach(() => {
+    vi.mocked(fetchArtifactActions).mockReset()
+    vi.mocked(fetchArtifactActions).mockResolvedValue({ actions: [] })
+    vi.mocked(fetchRunners).mockReset()
+    vi.mocked(fetchRunners).mockResolvedValue({ runners: [], defaultRunnerId: null })
+  })
+
+  it('renders only title-attached actions on the title toolbar', async () => {
+    vi.mocked(fetchArtifactActions).mockResolvedValue({
+      actions: [
+        { id: 'a-title', label: 'Title action', agent_ref: 'x', confirm: false, attach_points: ['artifact-title'] },
+        {
+          id: 'a-selection',
+          label: 'Selection only',
+          agent_ref: 'x',
+          confirm: false,
+          attach_points: ['artifact-selection'],
+        },
+      ],
+    })
+    const w = await mountPanel({ taskId: 'DEMO-1', name: 'design.md' })
+
+    const titleButtons = w.findAll('.art-toolbar-actions .btn-quick-action')
+    expect(titleButtons).toHaveLength(1)
+    expect(titleButtons[0].text()).toContain('Title action')
+  })
+
+  it('treats a missing attach_points as title-only (pre-migration hand-edit)', async () => {
+    vi.mocked(fetchArtifactActions).mockResolvedValue({
+      actions: [{ id: 'legacy', label: 'Legacy', agent_ref: 'x', confirm: false }],
+    })
+    const w = await mountPanel({ taskId: 'DEMO-1', name: 'design.md' })
+
+    expect(w.findAll('.art-toolbar-actions .btn-quick-action')).toHaveLength(1)
+  })
+
+  it('gates a title action run behind a usable runner, with a CTA to Runner mode', async () => {
+    vi.mocked(fetchArtifactActions).mockResolvedValue({
+      actions: [{ id: 'a-title', label: 'Title action', agent_ref: 'x', confirm: false, attach_points: ['artifact-title'] }],
+    })
+    vi.mocked(fetchRunners).mockResolvedValue({ runners: [{ id: 'r1', name: 'A', enabled: false }], defaultRunnerId: null })
+    const navigateToMode = vi.fn()
+
+    const w = mount(ArtifactPanel, {
+      props: { task, openArtifact: { taskId: 'DEMO-1', name: 'design.md' }, projectId: null },
+      global: { provide: { navigateToMode } },
+    })
+    await flushPromises()
+
+    await w.find('.art-toolbar-actions .btn-quick-action').trigger('click')
+    await flushPromises()
+
+    expect(w.text()).toContain('Chưa có runner khả dụng')
+    expect(runArtifactAction).not.toHaveBeenCalled()
+
+    const ctaButtons = w.findAll('button').filter((b) => b.text().includes('Mở cấu hình Runner'))
+    expect(ctaButtons).toHaveLength(1)
+    await ctaButtons[0].trigger('click')
+    expect(navigateToMode).toHaveBeenCalledWith('runner')
+  })
+
+  it('runs a title action when a usable runner exists', async () => {
+    vi.mocked(fetchArtifactActions).mockResolvedValue({
+      actions: [{ id: 'a-title', label: 'Title action', agent_ref: 'x', confirm: false, attach_points: ['artifact-title'] }],
+    })
+    vi.mocked(fetchRunners).mockResolvedValue({ runners: [{ id: 'r1', name: 'A' }], defaultRunnerId: 'r1' })
+
+    const w = await mountPanel({ taskId: 'DEMO-1', name: 'design.md' })
+    await w.find('.art-toolbar-actions .btn-quick-action').trigger('click')
+    await flushPromises()
+
+    expect(runArtifactAction).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'DEMO-1', actionId: 'a-title', artifactName: 'design.md' }),
+      undefined,
+    )
   })
 })

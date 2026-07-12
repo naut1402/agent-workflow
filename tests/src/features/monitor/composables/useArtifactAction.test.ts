@@ -44,6 +44,25 @@ describe('useArtifactAction', () => {
     expect(a.runningActionId.value).toBeNull()
   })
 
+  it('hands off to onAwaitingApproval (no reload, no error) when a require_approval job settles', async () => {
+    stubApi({ id: 'job-appr', status: 'queued' }, [
+      { id: 'job-appr', status: 'running' },
+      { id: 'job-appr', status: 'awaiting_approval' },
+    ])
+    const onReload = vi.fn()
+    const onAwaitingApproval = vi.fn()
+    const a = useArtifactAction({ getProjectId: () => null, onReload, onAwaitingApproval, pollMs: 1 })
+
+    await a.run('T1', 'improve-doc', 'design.md')
+
+    expect(onReload).not.toHaveBeenCalled()
+    expect(a.error.value).toBeNull()
+    const expected = { jobId: 'job-appr', target: { taskId: 'T1', name: 'design.md' } }
+    expect(onAwaitingApproval).toHaveBeenCalledWith(expected)
+    expect(a.pendingApproval.value).toEqual(expected)
+    expect(a.runningActionId.value).toBeNull()
+  })
+
   it('surfaces a message and skips reload when the job fails', async () => {
     stubApi({ id: 'job2', status: 'queued' }, [{ id: 'job2', status: 'failed', error: 'runner disabled' }])
     const onReload = vi.fn()
@@ -152,5 +171,36 @@ describe('useArtifactAction', () => {
     expect(a.runningActionFor('T1', 'design.md')).toBe('improve-doc')
     expect(a.runningActionFor('T1', 'investigate.md')).toBeNull()
     await running
+  })
+
+  it('forwards selectedText and runnerId to the run request body', async () => {
+    const fetchMock = vi.fn(async (input: any, init: any = {}) => {
+      const url = String(input)
+      const method = (init.method || 'GET').toUpperCase()
+      if (url.includes('/api/artifact-actions/run') && method === 'POST') {
+        return { ok: true, status: 201, json: async () => ({ job: { id: 'job8', status: 'queued' } }) }
+      }
+      if (url.includes('/api/jobs/')) {
+        return { ok: true, status: 200, json: async () => ({ job: { id: 'job8', status: 'succeeded' } }) }
+      }
+      throw new Error(`unexpected fetch: ${method} ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const a = useArtifactAction({ getProjectId: () => null, onReload: vi.fn(), pollMs: 1 })
+    await a.run('T1', 'explain-selection', 'design.md', {
+      selectedText: 'đoạn bôi đen',
+      runnerId: 'r1',
+    })
+
+    const runCall = fetchMock.mock.calls.find(([input]: any) => String(input).includes('/run'))
+    const body = JSON.parse(runCall![1].body)
+    expect(body).toEqual({
+      taskId: 'T1',
+      actionId: 'explain-selection',
+      artifactName: 'design.md',
+      runnerId: 'r1',
+      selectedText: 'đoạn bôi đen',
+    })
   })
 })

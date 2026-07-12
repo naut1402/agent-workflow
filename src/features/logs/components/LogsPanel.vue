@@ -164,8 +164,8 @@ onUnmounted(stopTail)
             :class="{ active: j.id === selectedJobId }"
             @click="selectJob(j.id)"
           >
-            <strong>{{ j.id.slice(0, 8) }}…</strong>
-            <span class="muted">{{ j.status }}</span>
+            <strong>{{ j.agentRef || j.id.slice(0, 8) }}</strong>
+            <span class="muted">{{ j.metadata?.artifactName || j.id.slice(0, 8) }} · {{ j.status }}</span>
           </li>
           <li v-if="!jobs.length && !loading" class="muted">Chưa có job.</li>
         </ul>

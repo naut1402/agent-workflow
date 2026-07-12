@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
 import { fetchProjects } from './api'
 import { useLocalToggle } from './shared/composables/useLocalToggle'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
@@ -9,6 +9,7 @@ import AgentEditor from './features/agent-editor/components/AgentEditor.vue'
 import KnowledgePanel from './features/knowledge/components/KnowledgePanel.vue'
 import RunnerConfigPanel from './features/runner/components/RunnerConfigPanel.vue'
 import LogsPanel from './features/logs/components/LogsPanel.vue'
+import QuickActionPanel from './features/quick-action/components/QuickActionPanel.vue'
 import SettingsDialog from './features/settings/components/SettingsDialog.vue'
 import RailIcon from './shared/ui/RailIcon.vue'
 
@@ -23,6 +24,13 @@ const editorScope = ref('global')
 const editorTaskId = ref('')
 
 const { state: sidebarCollapsed, toggle: toggleSidebar } = useLocalToggle(false)
+
+// Central mode switch, so any nested wizard/panel (Agent Editor's Build NL
+// gate, ArtifactPanel's QuickAction gate) can send the user to Runner mode
+// without bubbling a custom event through every intermediate component.
+provide('navigateToMode', (m: string) => {
+  mode.value = m
+})
 
 // Multi-project state. `selectedProjectId` (null = default project) drives which
 // project's tasks the monitor view polls; persisted to localStorage.
@@ -170,6 +178,15 @@ onUnmounted(stop)
         </button>
         <button
           class="mode-btn rail-icon-btn"
+          :class="{ active: mode === 'quickAction' }"
+          title="Quick Action"
+          @click="mode = 'quickAction'"
+        >
+          <RailIcon name="quickAction" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">Quick Action</span>
+        </button>
+        <button
+          class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'knowledge' }"
           title="Knowledge"
           @click="mode = 'knowledge'"
@@ -203,6 +220,7 @@ onUnmounted(stop)
           <span v-else-if="lastUpdated && mode === 'monitor'">cập nhật {{ lastUpdated }}</span>
           <span v-else-if="mode === 'editor'" class="muted">editor mode — polling paused</span>
           <span v-else-if="mode === 'agentEditor'" class="muted">agent editor — polling paused</span>
+          <span v-else-if="mode === 'quickAction'" class="muted">quick action — polling paused</span>
           <span v-else-if="mode === 'knowledge'" class="muted">knowledge — polling paused</span>
           <span v-else-if="mode === 'runner'" class="muted">runner config — polling paused</span>
           <span v-else-if="mode === 'logs'" class="muted">nhật ký — polling paused</span>
@@ -253,6 +271,10 @@ onUnmounted(stop)
         @update:scope="editorScope = $event"
         @update:task-id="editorTaskId = $event"
       />
+    </main>
+
+    <main v-else-if="mode === 'quickAction'" class="main main-editor">
+      <QuickActionPanel :project-id="selectedProjectId" />
     </main>
 
     <main v-else-if="mode === 'knowledge'" class="main main-editor">

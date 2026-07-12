@@ -65,6 +65,14 @@ export interface ExecuteRequest {
   produces?: string[]
   timeoutMs?: number
   metadata?: Record<string, unknown>
+  // Approval-flow session continuity (see jobQueue.ts submitApprovalJob /
+  // sendJobFeedback): exactly one of these is set for an approval job.
+  // `sessionId` picks a fresh conversation id for the CLI to persist
+  // (`--session-id`); `resumeSessionId` continues that exact conversation on a
+  // follow-up feedback round (`--resume`) so the agent remembers what it
+  // already proposed instead of starting over.
+  sessionId?: string
+  resumeSessionId?: string
 }
 
 export interface ExecuteResult {
@@ -74,9 +82,21 @@ export interface ExecuteResult {
   logPath?: string
   artifactsFound?: string[]
   error?: string
+  /**
+   * The runner's raw stdout. Quick-action approval jobs use this as the
+   * proposed content (the agent is told to "respond with the improved text"),
+   * so a prompt that prints its result instead of writing a file still produces
+   * a reviewable change. See jobQueue.ts runJob.
+   */
+  stdout?: string
 }
 
-export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+// `awaiting_approval`: an approval-flow job (see jobQueue.ts) finished
+// successfully against a scratch workspace copy — nothing has been written to
+// the real files yet. Resolved by approveJob (apply + succeeded),
+// discardJob (cancelled), or sendJobFeedback (spawns a new `awaiting_approval`
+// job continuing the same CLI session).
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'awaiting_approval'
 
 export interface JobRecord {
   id: string
@@ -95,6 +115,19 @@ export interface JobRecord {
   error?: string
   artifactsFound?: string[]
   metadata?: Record<string, unknown>
+  // Approval flow only (all undefined for a normal job):
+  sessionId?: string
+  /** Real (non-scratch) directory this job's proposed changes would apply to. */
+  applyTarget?: string
+  /** Artifact file (relative to `applyTarget`/`workspace`) under review. */
+  approvalArtifact?: string
+  /** The job this one continued via `--resume` (feedback round chain). */
+  parentJobId?: string
+  // Selection-splice approval only (see jobQueue.ts runJob): when set, the
+  // agent's output (stdout) is spliced back into a copy of the real artifact at
+  // this 1-indexed inclusive line range, so every line outside the range stays
+  // byte-identical and the review diff is localized to the selection.
+  spliceRange?: { start: number; end: number }
 }
 
 export interface RunnersStore {

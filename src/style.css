@@ -476,6 +476,17 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .md .mermaid svg { max-width: 100%; height: auto; }
 
 .art-toolbar-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.selection-toolbar {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
 .art-edit-hint { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
 .art-saving-hint { font-size: 12px; color: var(--muted); }
 .md-editable { cursor: default; border-radius: 6px; transition: outline-color 0.15s; }

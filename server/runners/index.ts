@@ -31,8 +31,21 @@ export {
   scanLocalCommands,
 } from './connections.js'
 export { resolveAgent, resolveAgentFilePath, normalizeAgentRef } from './agentResolver.js'
-export { getProvider, listProviderIds } from './providerRegistry.js'
-export { submitJob, submitAndWait, loadJob, listJobs, cancelJob } from './jobQueue.js'
+export { getProvider, listProviderIds, registerProvider } from './providerRegistry.js'
+export {
+  submitJob,
+  submitAndWait,
+  loadJob,
+  listJobs,
+  cancelJob,
+  submitApprovalJob,
+  sendJobFeedback,
+  getApprovalDiff,
+  approveJob,
+  discardJob,
+  findSelectionRange,
+  extractLines,
+} from './jobQueue.js'
 
 export type {
   CredentialProfile,

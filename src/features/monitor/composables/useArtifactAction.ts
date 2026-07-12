@@ -17,11 +17,23 @@ export interface ArtifactTarget {
   name: string
 }
 
+// A job that finished against a scratch copy and is waiting for the user to
+// review the proposed diff (require_approval quick action). The caller opens the
+// review UI keyed by `jobId` and applies/discards from there.
+export interface PendingApproval {
+  jobId: string
+  target: ArtifactTarget
+}
+
 export interface UseArtifactActionOptions {
   getProjectId: () => string | null
   // Receives the artifact the job actually ran on so the caller can ignore the
   // reload if the user has since switched to a different artifact.
   onReload: (target: ArtifactTarget) => void | Promise<void>
+  // Called when a require_approval job settles at `awaiting_approval` instead of
+  // writing to the real file — the caller opens the diff-review UI. When omitted
+  // the pending approval is still exposed via the `pendingApproval` ref.
+  onAwaitingApproval?: (pending: PendingApproval) => void | Promise<void>
   pollMs?: number
   maxWaitMs?: number
   // How many consecutive transient poll failures to tolerate before giving up.
@@ -32,8 +44,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// A job stops being polled once it reaches any settled state. `awaiting_approval`
+// is a settled state too — the approval-flow job succeeded against its scratch
+// copy and is now waiting on the user — NOT a failure and NOT something to keep
+// polling until the deadline.
 function isTerminal(status?: string): boolean {
-  return status === 'succeeded' || status === 'failed' || status === 'cancelled'
+  return (
+    status === 'succeeded' ||
+    status === 'failed' ||
+    status === 'cancelled' ||
+    status === 'awaiting_approval'
+  )
 }
 
 function failureMessage(job: JobLike): string {
@@ -48,6 +69,8 @@ export function useArtifactAction(opts: UseArtifactActionOptions) {
   const runningKey = ref<string | null>(null)
   const error = ref<string | null>(null)
   const lastJobId = ref<string | null>(null)
+  // Set when a run settles at `awaiting_approval` — drives the diff-review UI.
+  const pendingApproval = ref<PendingApproval | null>(null)
 
   const pollMs = opts.pollMs ?? 1500
   const maxWaitMs = opts.maxWaitMs ?? 5 * 60 * 1000
@@ -82,21 +105,45 @@ export function useArtifactAction(opts: UseArtifactActionOptions) {
     }
   }
 
-  async function run(taskId: string, actionId: string, artifactName: string, runnerId?: string) {
+  async function run(
+    taskId: string,
+    actionId: string,
+    artifactName: string,
+    runOpts: {
+      runnerId?: string
+      selectedText?: string
+      selectionStartLine?: number
+      selectionEndLine?: number
+    } = {},
+  ) {
     if (runningActionId.value) return
     error.value = null
     runningActionId.value = actionId
     runningKey.value = targetKey(taskId, artifactName)
     try {
       const res = await runArtifactAction(
-        { taskId, actionId, artifactName, runnerId },
+        {
+          taskId,
+          actionId,
+          artifactName,
+          runnerId: runOpts.runnerId,
+          selectedText: runOpts.selectedText,
+          selectionStartLine: runOpts.selectionStartLine,
+          selectionEndLine: runOpts.selectionEndLine,
+        },
         opts.getProjectId() ?? undefined,
       )
       const jobId: string | undefined = res?.job?.id
       lastJobId.value = jobId ?? null
       if (!jobId) throw new Error('Không nhận được job id từ server')
       const final = await pollJob(jobId)
-      if (final.status === 'succeeded') {
+      if (final.status === 'awaiting_approval') {
+        // The agent proposed an edit against a scratch copy; hand off to the
+        // review UI instead of reloading (nothing was written yet) or erroring.
+        const pending: PendingApproval = { jobId, target: { taskId, name: artifactName } }
+        pendingApproval.value = pending
+        await opts.onAwaitingApproval?.(pending)
+      } else if (final.status === 'succeeded') {
         await opts.onReload({ taskId, name: artifactName })
       } else {
         error.value = failureMessage(final)
@@ -119,5 +166,19 @@ export function useArtifactAction(opts: UseArtifactActionOptions) {
     error.value = null
   }
 
-  return { runningActionId, runningKey, runningActionFor, error, lastJobId, run, clearError }
+  function clearPendingApproval() {
+    pendingApproval.value = null
+  }
+
+  return {
+    runningActionId,
+    runningKey,
+    runningActionFor,
+    error,
+    lastJobId,
+    pendingApproval,
+    run,
+    clearError,
+    clearPendingApproval,
+  }
 }

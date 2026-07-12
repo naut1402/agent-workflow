@@ -5,10 +5,7 @@ import TaskList from './TaskList.vue'
 import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
-import AgentBuildWizard from './AgentBuildWizard.vue'
 import { patchTaskArchive } from '../../../api'
-
-const wizardOpen = ref(false)
 
 const props = defineProps({
   projects: { type: Array, default: () => [] },
@@ -76,11 +73,6 @@ async function toggleArchiveSelected() {
       />
     </aside>
     <section class="monitor-content">
-      <div class="monitor-toolbar">
-        <button type="button" class="btn-build-agent" @click="wizardOpen = true">
-          ⚡ Tạo agent
-        </button>
-      </div>
       <template v-if="selected">
         <div class="task-head">
           <h2>
@@ -140,32 +132,5 @@ async function toggleArchiveSelected() {
         <p v-else>Chọn một task ở bên trái.</p>
       </div>
     </section>
-
-    <AgentBuildWizard
-      v-if="wizardOpen"
-      :project-id="selectedProjectId"
-      :task-id="selected ? selected.task_id : null"
-      @close="wizardOpen = false"
-    />
   </div>
 </template>
-
-<style scoped>
-.monitor-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0.4rem 0;
-}
-.btn-build-agent {
-  padding: 0.35rem 0.75rem;
-  border-radius: 6px;
-  border: 1px solid var(--border, #333);
-  background: var(--panel, #1e2028);
-  color: inherit;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-.btn-build-agent:hover {
-  border-color: var(--accent, #6ea8fe);
-}
-</style>

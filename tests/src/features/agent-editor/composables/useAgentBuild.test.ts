@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { useAgentBuild } from '@/features/monitor/composables/useAgentBuild'
+import { useAgentBuild } from '@/features/agent-editor/composables/useAgentBuild'
 
 // Drives the wizard composable against a stubbed fetch. Endpoints exercised:
 //   GET  /api/runners                → runner list + default
