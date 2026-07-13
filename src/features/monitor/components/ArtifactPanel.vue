@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, onUpdated, inject } from 'vue'
 import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
 import { fetchArtifact, saveArtifact, fetchArtifactActions, fetchRunners } from '../../../api'
@@ -177,11 +180,11 @@ async function onActionClick(action: QuickActionView) {
   if (!props.openArtifact || isEditing() || runningActionId.value) return
   gateError.value = ''
   if (!hasUsableRunner.value) {
-    gateError.value = 'Chưa có runner khả dụng.'
+    gateError.value = t('monitor.artifact.noRunner')
     return
   }
   if (action.confirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
-    if (!window.confirm(`Chạy "${action.label}" trên ${props.openArtifact.name}?`)) return
+    if (!window.confirm(t('monitor.artifact.confirmRun', { label: action.label, name: props.openArtifact.name }))) return
   }
   await runAction(props.openArtifact.taskId, action.id, props.openArtifact.name, {
     runnerId: action.runner_id,
@@ -208,7 +211,7 @@ async function onSelectionActionClick(action: QuickActionView) {
   if (!props.openArtifact || isEditing() || runningActionId.value) return
   gateError.value = ''
   if (!hasUsableRunner.value) {
-    gateError.value = 'Chưa có runner khả dụng.'
+    gateError.value = t('monitor.artifact.noRunner')
     return
   }
   const selectedText = selectionToolbar.text.value
@@ -217,7 +220,7 @@ async function onSelectionActionClick(action: QuickActionView) {
     return
   }
   if (action.confirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
-    if (!window.confirm(`Chạy "${action.label}" trên đoạn đã chọn?`)) return
+    if (!window.confirm(t('monitor.artifact.confirmRunSelection', { label: action.label }))) return
   }
   const selectedLines = selectionToolbar.lines.value
   selectionToolbar.hide()
@@ -276,7 +279,7 @@ async function handleBlur() {
     await onBlur()
   } catch (e: any) {
     if (e.status === 409 && e.body?.content != null) {
-      message.value = 'File đã thay đổi trên disk. Nhấn "Tải lại" để đồng bộ.'
+      message.value = t('monitor.artifact.conflictReload')
       content.value = e.body.content
       loadedMtime.value = e.body.mtime
       cancelEdit()
@@ -405,7 +408,7 @@ onUpdated(() => scheduleMermaid())
 
 <template>
   <div class="art-view">
-    <div v-if="!openArtifact" class="art-empty">Chọn một tài liệu từ danh sách bên trái.</div>
+    <div v-if="!openArtifact" class="art-empty">{{ t('monitor.artifact.empty') }}</div>
 
     <template v-else>
       <div class="art-toolbar">
@@ -416,10 +419,10 @@ onUpdated(() => scheduleMermaid())
             :key="action.id"
             class="btn-quick-action"
             :disabled="isEditing() || !!runningActionId"
-            :title="`Chạy agent ${action.agent_ref}`"
+            :title="t('monitor.artifact.runAgent', { agent: action.agent_ref })"
             @click="onActionClick(action)"
           >
-            <span v-if="runningHereActionId === action.id" class="qa-spinner">⏳ Đang chạy…</span>
+            <span v-if="runningHereActionId === action.id" class="qa-spinner">{{ t('monitor.artifact.running') }}</span>
             <span v-else>{{ action.label }}</span>
           </button>
           <button
@@ -428,13 +431,13 @@ onUpdated(() => scheduleMermaid())
             :class="{ active: blockMode }"
             :disabled="isEditing()"
             @click="blockMode = !blockMode"
-            :title="blockMode ? 'Chuyển sang Full view' : 'Chuyển sang Block view'"
+            :title="blockMode ? t('monitor.artifact.toFull') : t('monitor.artifact.toBlock')"
           >{{ blockMode ? '📄 Full' : '🗂 Blocks' }}</button>
           <button
             v-if="blockMode"
             class="btn-view-toggle"
             :disabled="isEditing()"
-            :title="allBlocksOpen ? 'Đóng tất cả block' : 'Mở tất cả block'"
+            :title="allBlocksOpen ? t('monitor.artifact.collapseAll') : t('monitor.artifact.expandAll')"
             @click="toggleAllBlocks"
           >{{ allBlocksOpen ? '▲' : '▼' }}</button>
         </div>
@@ -442,20 +445,20 @@ onUpdated(() => scheduleMermaid())
 
       <p v-if="actionError" class="art-warning">
         {{ actionError }}
-        <button type="button" class="btn-link" @click="clearError">Ẩn</button>
+        <button type="button" class="btn-link" @click="clearError">{{ t('monitor.artifact.hide') }}</button>
       </p>
       <p v-if="gateError" class="art-warning">
         {{ gateError }}
-        <button type="button" class="btn-link" @click="goToRunner">Mở cấu hình Runner</button>
-        <button type="button" class="btn-link" @click="gateError = ''">Ẩn</button>
+        <button type="button" class="btn-link" @click="goToRunner">{{ t('monitor.artifact.openRunner') }}</button>
+        <button type="button" class="btn-link" @click="gateError = ''">{{ t('monitor.artifact.hide') }}</button>
       </p>
       <p v-if="message" class="art-message">{{ message }}</p>
       <p v-if="externalChange" class="art-warning">
-        File đã thay đổi trên disk trong lúc bạn sửa.
-        <button type="button" class="btn-link" @click="reloadExternal">Tải lại</button>
+        {{ t('monitor.artifact.externalChanged') }}
+        <button type="button" class="btn-link" @click="reloadExternal">{{ t('monitor.artifact.reload') }}</button>
       </p>
 
-      <p class="art-edit-hint">Double-click vào section để sửa; blur để lưu tự động. <kbd>Esc</kbd> huỷ.</p>
+      <p class="art-edit-hint">{{ t('monitor.artifact.editHint') }} <kbd>Esc</kbd> {{ t('monitor.artifact.editHintEsc') }}</p>
 
       <ArtifactProposalReview
         v-if="showProposalReview && pendingApproval"
@@ -478,7 +481,7 @@ onUpdated(() => scheduleMermaid())
             type="button"
             class="btn-quick-action"
             :disabled="!!runningActionId"
-            :title="`Chạy agent ${action.agent_ref}`"
+            :title="t('monitor.artifact.runAgent', { agent: action.agent_ref })"
             @mousedown.prevent
             @click="onSelectionActionClick(action)"
           >{{ action.label }}</button>
@@ -517,7 +520,7 @@ onUpdated(() => scheduleMermaid())
               v-else
               class="md block-content md-editable"
               v-html="block.html"
-              title="Double-click để sửa section"
+              :title="t('monitor.artifact.editSectionTitle')"
               @dblclick.prevent="startEdit(i, $event)"
             />
           </details>
@@ -548,7 +551,7 @@ onUpdated(() => scheduleMermaid())
               class="md md-editable"
               :data-block-index="i"
               v-html="block.html"
-              title="Double-click để sửa"
+              :title="t('monitor.artifact.editTitle')"
               @dblclick.prevent="startEdit('full', $event)"
             />
           </template>

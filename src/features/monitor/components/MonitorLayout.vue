@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { ref } from 'vue'
 import ProjectBar from './ProjectBar.vue'
 import TaskList from './TaskList.vue'
@@ -77,18 +80,18 @@ async function toggleArchiveSelected() {
         <div class="task-head">
           <h2>
             {{ selected.task_id }}
-            <span v-if="selected.parent_task_id" class="subtask">↳ subtask của {{ selected.parent_task_id }}</span>
+            <span v-if="selected.parent_task_id" class="subtask">{{ t('monitor.layout.subtaskOf', { id: selected.parent_task_id }) }}</span>
           </h2>
           <div class="badges">
             <span v-if="selected.auto_review" class="badge auto">auto-review</span>
             <span v-if="selected.review_round" class="badge">review round {{ selected.review_round }}/2</span>
             <span v-if="selected.hitl_pending" class="badge hitl">⏸ {{ selected.hitl_pending }}</span>
-            <span v-if="!selected.state_ok" class="badge err">state lỗi</span>
+            <span v-if="!selected.state_ok" class="badge err">{{ t('monitor.layout.stateError') }}</span>
             <button
               v-if="selected.state_ok"
               class="btn-archive-detail"
               @click="toggleArchiveSelected"
-            ><template v-if="selected.archived">↩ Bỏ lưu trữ</template><template v-else><svg
+            ><template v-if="selected.archived">{{ t('monitor.layout.unarchive') }}</template><template v-else><svg
                 width="14"
                 height="14"
                 viewBox="0 0 16 16"
@@ -98,7 +101,7 @@ async function toggleArchiveSelected() {
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 aria-hidden="true"
-              ><rect x="2" y="2" width="12" height="3" rx="1" /><path d="M3 5v7.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5" /><path d="M6.5 8.5h3" /></svg> Lưu trữ</template></button>
+              ><rect x="2" y="2" width="12" height="3" rx="1" /><path d="M3 5v7.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5" /><path d="M6.5 8.5h3" /></svg> {{ t('monitor.layout.archive') }}</template></button>
           </div>
           <p v-if="archiveError" class="art-warning">{{ archiveError }}</p>
         </div>
@@ -125,11 +128,11 @@ async function toggleArchiveSelected() {
       </template>
       <div v-else class="empty">
         <p v-if="!tasks.length && connected">
-          Chưa có task nào trong <code>.dev-team-agent/.dev-state/</code>.<br />
-          Chạy <code>/dev-team-orchestrator &lt;task-id&gt;</code> để bắt đầu.
+          {{ t('monitor.layout.emptyNoTasks') }} <code>.dev-team-agent/.dev-state/</code>.<br />
+          {{ t('monitor.layout.emptyHint') }} <code>/dev-team-orchestrator &lt;task-id&gt;</code> {{ t('monitor.layout.emptyHintSuffix') }}
         </p>
-        <p v-else-if="!connected">Đang kết nối tới dev server…</p>
-        <p v-else>Chọn một task ở bên trái.</p>
+        <p v-else-if="!connected">{{ t('monitor.layout.connecting') }}</p>
+        <p v-else>{{ t('monitor.layout.selectTask') }}</p>
       </div>
     </section>
   </div>

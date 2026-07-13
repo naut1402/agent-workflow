@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, onUnmounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { fetchLogs, fetchJobs, fetchJobLog } from '../../../api'
+
+const { t } = useI18n()
 
 type Tab = 'audit' | 'request' | 'jobs'
 
@@ -107,14 +110,14 @@ onUnmounted(stopTail)
 <template>
   <div class="logs-panel">
     <header class="logs-head">
-      <h2>Nhật ký</h2>
-      <p class="muted">Log tập trung (global ~/.dev-team-dashboard/logs/)</p>
+      <h2>{{ t('logs.title') }}</h2>
+      <p class="muted">{{ t('logs.subtitle') }}</p>
     </header>
 
     <nav class="logs-tabs">
-      <button type="button" :class="{ active: tab === 'audit' }" @click="selectTab('audit')">Kiểm toán</button>
-      <button type="button" :class="{ active: tab === 'request' }" @click="selectTab('request')">Yêu cầu</button>
-      <button type="button" :class="{ active: tab === 'jobs' }" @click="selectTab('jobs')">Jobs</button>
+      <button type="button" :class="{ active: tab === 'audit' }" @click="selectTab('audit')">{{ t('logs.tabs.audit') }}</button>
+      <button type="button" :class="{ active: tab === 'request' }" @click="selectTab('request')">{{ t('logs.tabs.request') }}</button>
+      <button type="button" :class="{ active: tab === 'jobs' }" @click="selectTab('jobs')">{{ t('logs.tabs.jobs') }}</button>
     </nav>
 
     <div v-if="error" class="err-banner">{{ error }}</div>
@@ -122,7 +125,7 @@ onUnmounted(stopTail)
     <!-- Audit -->
     <table v-if="tab === 'audit'" class="logs-table">
       <thead>
-        <tr><th>Thời gian</th><th>Thao tác</th><th>Đối tượng</th><th>Định danh</th><th>Project</th></tr>
+        <tr><th>{{ t('logs.columns.time') }}</th><th>{{ t('logs.columns.op') }}</th><th>{{ t('logs.columns.entity') }}</th><th>{{ t('logs.columns.identifier') }}</th><th>{{ t('logs.columns.project') }}</th></tr>
       </thead>
       <tbody>
         <tr v-for="(e, i) in entries" :key="i">
@@ -132,14 +135,14 @@ onUnmounted(stopTail)
           <td>{{ e.identifier }}</td>
           <td>{{ e.projectId || '—' }}</td>
         </tr>
-        <tr v-if="!entries.length && !loading"><td colspan="5" class="muted">Chưa có log.</td></tr>
+        <tr v-if="!entries.length && !loading"><td colspan="5" class="muted">{{ t('logs.empty.log') }}</td></tr>
       </tbody>
     </table>
 
     <!-- Request -->
     <table v-else-if="tab === 'request'" class="logs-table">
       <thead>
-        <tr><th>Thời gian</th><th>Method</th><th>Path</th><th>Status</th><th>ms</th><th>Project</th></tr>
+        <tr><th>{{ t('logs.columns.time') }}</th><th>{{ t('logs.columns.method') }}</th><th>{{ t('logs.columns.path') }}</th><th>{{ t('logs.columns.status') }}</th><th>{{ t('logs.columns.ms') }}</th><th>{{ t('logs.columns.project') }}</th></tr>
       </thead>
       <tbody>
         <tr v-for="(e, i) in entries" :key="i" :class="{ 'row-err': e.status >= 400 }">
@@ -150,7 +153,7 @@ onUnmounted(stopTail)
           <td>{{ e.durationMs }}</td>
           <td>{{ e.projectId || '—' }}</td>
         </tr>
-        <tr v-if="!entries.length && !loading"><td colspan="6" class="muted">Chưa có log.</td></tr>
+        <tr v-if="!entries.length && !loading"><td colspan="6" class="muted">{{ t('logs.empty.log') }}</td></tr>
       </tbody>
     </table>
 
@@ -167,18 +170,18 @@ onUnmounted(stopTail)
             <strong>{{ j.agentRef || j.id.slice(0, 8) }}</strong>
             <span class="muted">{{ j.metadata?.artifactName || j.id.slice(0, 8) }} · {{ j.status }}</span>
           </li>
-          <li v-if="!jobs.length && !loading" class="muted">Chưa có job.</li>
+          <li v-if="!jobs.length && !loading" class="muted">{{ t('logs.empty.job') }}</li>
         </ul>
       </aside>
       <section class="job-log">
         <div class="job-log-bar">
           <button type="button" class="btn" :disabled="!selectedJobId" @click="toggleTail">
-            {{ tailing ? '⏹ Dừng tail' : '▶ Tail' }}
+            {{ tailing ? t('logs.jobs.tailStop') : t('logs.jobs.tailStart') }}
           </button>
-          <span v-if="jobLogTruncated" class="muted">(đã cắt phần đầu)</span>
+          <span v-if="jobLogTruncated" class="muted">{{ t('logs.jobs.truncated') }}</span>
         </div>
-        <pre v-if="selectedJobId">{{ jobLog || '(log trống)' }}</pre>
-        <p v-else class="muted">Chọn một job để xem log.</p>
+        <pre v-if="selectedJobId">{{ jobLog || t('logs.jobs.logEmpty') }}</pre>
+        <p v-else class="muted">{{ t('logs.jobs.selectPrompt') }}</p>
       </section>
     </div>
   </div>

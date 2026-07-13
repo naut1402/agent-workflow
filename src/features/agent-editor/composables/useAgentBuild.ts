@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { i18n } from '../../../shared/i18n'
 import { buildAndRunAgent, fetchJob, fetchRunners, generateAgentDraft } from '../../../api'
 
 // Drives the "Build agent từ NL" wizard end to end: generate a draft from a
@@ -44,7 +45,7 @@ export interface UseAgentBuildOptions {
   maxPollErrors?: number
 }
 
-const DEFAULT_SMOKE_PROMPT = 'Đây là smoke test. Hãy trả lời đúng một dòng: OK'
+const DEFAULT_SMOKE_PROMPT = () => i18n.global.t('agentEditor.build.smokePrompt')
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -55,8 +56,10 @@ function isTerminal(status?: string): boolean {
 }
 
 function failureMessage(job: JobLike): string {
-  if (job.status === 'cancelled') return 'Job đã bị huỷ.'
-  return job.error ? `Job thất bại: ${job.error}` : 'Job thất bại.'
+  if (job.status === 'cancelled') return i18n.global.t('agentEditor.build.jobCancelled')
+  return job.error
+    ? i18n.global.t('agentEditor.build.jobFailedWithError', { error: job.error })
+    : i18n.global.t('agentEditor.build.jobFailed')
 }
 
 export function useAgentBuild(opts: UseAgentBuildOptions) {
@@ -80,7 +83,7 @@ export function useAgentBuild(opts: UseAgentBuildOptions) {
   const pollMs = opts.pollMs ?? 1500
   const maxWaitMs = opts.maxWaitMs ?? 5 * 60 * 1000
   const maxPollErrors = opts.maxPollErrors ?? 3
-  const smokePrompt = opts.smokePrompt ?? DEFAULT_SMOKE_PROMPT
+  const smokePrompt = opts.smokePrompt ?? DEFAULT_SMOKE_PROMPT()
 
   // A runner is usable unless explicitly disabled (`enabled === false`), matching
   // the server's `getDefaultRunner` selection rule.
@@ -100,14 +103,14 @@ export function useAgentBuild(opts: UseAgentBuildOptions) {
         selectedRunnerId.value = preferred?.id ?? null
       }
     } catch (e: any) {
-      error.value = `Không tải được danh sách runner: ${String(e?.message || e)}`
+      error.value = i18n.global.t('agentEditor.build.loadRunnersFailed', { message: String(e?.message || e) })
     }
   }
 
   async function generate(): Promise<void> {
     if (generating.value) return
     if (!description.value.trim()) {
-      error.value = 'Nhập mô tả agent trước khi tạo draft.'
+      error.value = i18n.global.t('agentEditor.build.describeRequired')
       return
     }
     generating.value = true
@@ -117,7 +120,7 @@ export function useAgentBuild(opts: UseAgentBuildOptions) {
       draft.value = { ...(data?.draft ?? {}) } as AgentDraft
       step.value = 'preview'
     } catch (e: any) {
-      error.value = `Không tạo được draft: ${String(e?.message || e)}`
+      error.value = i18n.global.t('agentEditor.build.draftFailed', { message: String(e?.message || e) })
     } finally {
       generating.value = false
     }
@@ -147,14 +150,14 @@ export function useAgentBuild(opts: UseAgentBuildOptions) {
         // Tolerate transient network/5xx blips instead of failing the whole run.
         consecutiveErrors += 1
         if (consecutiveErrors > maxPollErrors) throw e
-        if (Date.now() >= deadline) return { status: 'failed', error: 'Hết thời gian chờ job' }
+        if (Date.now() >= deadline) return { status: 'failed', error: i18n.global.t('agentEditor.build.jobTimeout') }
         await sleep(pollMs)
         continue
       }
-      if (!job) throw new Error('Job không tồn tại')
+      if (!job) throw new Error(i18n.global.t('agentEditor.build.jobMissing'))
       jobStatus.value = job.status ?? null
       if (isTerminal(job.status)) return job
-      if (Date.now() >= deadline) return { ...job, status: 'failed', error: 'Hết thời gian chờ job' }
+      if (Date.now() >= deadline) return { ...job, status: 'failed', error: i18n.global.t('agentEditor.build.jobTimeout') }
       await sleep(pollMs)
     }
   }
@@ -162,12 +165,12 @@ export function useAgentBuild(opts: UseAgentBuildOptions) {
   async function buildAndRun(): Promise<void> {
     if (running.value) return
     if (!draft.value || !draft.value.name?.trim()) {
-      error.value = 'Draft agent thiếu tên — vui lòng chỉnh sửa trước khi lưu.'
+      error.value = i18n.global.t('agentEditor.build.draftNameRequired')
       return
     }
     if (!hasUsableRunner.value) {
       error.value =
-        'Chưa có runner khả dụng. Hãy bật hoặc cấu hình một runner ở tab Runner rồi thử lại.'
+        i18n.global.t('agentEditor.build.noRunner')
       return
     }
     running.value = true
@@ -187,7 +190,7 @@ export function useAgentBuild(opts: UseAgentBuildOptions) {
       savedName.value = res.name
       const id: string | undefined = res.job?.id
       jobId.value = id ?? null
-      if (!id) throw new Error('Không nhận được job id từ server.')
+      if (!id) throw new Error(i18n.global.t('agentEditor.build.noJobId'))
       const final = await pollJob(id)
       jobStatus.value = final.status ?? null
       jobLogPath.value = final.logPath ?? null

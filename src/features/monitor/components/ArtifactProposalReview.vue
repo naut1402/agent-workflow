@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { onMounted, ref } from 'vue'
 import { useArtifactProposal } from '../composables/useArtifactProposal'
 
@@ -46,7 +49,7 @@ async function onSendFeedback() {
       <div class="proposal-modal" role="dialog" aria-modal="true">
         <header class="proposal-head">
           <span class="proposal-title">
-            Xem lại đề xuất — <code>{{ proposal.artifactName.value || artifactName }}</code>
+            {{ t('monitor.proposal.reviewTitle') }} <code>{{ proposal.artifactName.value || artifactName }}</code>
           </span>
           <button type="button" class="btn-link" :disabled="proposal.busy.value" @click="emit('close')">✕</button>
         </header>
@@ -55,10 +58,10 @@ async function onSendFeedback() {
         <p v-if="proposal.statusText.value" class="proposal-status">⏳ {{ proposal.statusText.value }}</p>
 
         <div class="proposal-body">
-          <p v-if="proposal.loading.value" class="proposal-muted">Đang tải đề xuất…</p>
+          <p v-if="proposal.loading.value" class="proposal-muted">{{ t('monitor.proposal.loading') }}</p>
           <div v-else class="diff-view">
             <p v-if="!proposal.diffRows.value.length" class="proposal-muted">
-              Không có thay đổi nào so với file hiện tại.
+              {{ t('monitor.proposal.noChanges') }}
             </p>
             <pre v-else class="diff-pre"><code
             ><span
@@ -77,13 +80,13 @@ async function onSendFeedback() {
 
         <div class="proposal-feedback">
           <label class="cfg-label">
-            Gửi feedback cho agent (agent sẽ chỉnh tiếp trong cùng phiên):
+            {{ t('monitor.proposal.feedbackLabel') }}
             <textarea
               v-model="feedbackText"
               class="cfg-textarea"
               rows="3"
               :disabled="proposal.busy.value"
-              placeholder="Ví dụ: viết ngắn gọn hơn, giữ nguyên phần code…"
+              :placeholder="t('monitor.proposal.feedbackPlaceholder')"
             />
           </label>
           <button
@@ -91,17 +94,17 @@ async function onSendFeedback() {
             class="btn-ghost btn-sm"
             :disabled="proposal.busy.value || !feedbackText.trim()"
             @click="onSendFeedback"
-          >Gửi feedback</button>
+          >{{ t('monitor.proposal.sendFeedback') }}</button>
         </div>
 
         <footer class="proposal-actions">
           <button type="button" class="btn-primary" :disabled="proposal.busy.value || proposal.loading.value" @click="onApprove">
-            Phê duyệt
+            {{ t('monitor.proposal.approve') }}
           </button>
           <button type="button" class="btn-ghost btn-danger" :disabled="proposal.busy.value" @click="onDiscard">
-            Hủy bỏ
+            {{ t('monitor.proposal.discard') }}
           </button>
-          <button type="button" class="btn-ghost" :disabled="proposal.busy.value" @click="emit('close')">Đóng</button>
+          <button type="button" class="btn-ghost" :disabled="proposal.busy.value" @click="emit('close')">{{ t('monitor.proposal.close') }}</button>
         </footer>
       </div>
     </div>

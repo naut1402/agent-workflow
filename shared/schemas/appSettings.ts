@@ -9,11 +9,13 @@ export const AppSettingsSchema = z
     // Reserved names (optional) — UI controls land in later sub-tasks.
     artifactViewMode: z.enum(['block', 'full']).optional(),
     theme: z.enum(['system', 'light', 'dark']).optional(),
+    locale: z.enum(['vi', 'en']).optional(),
   })
   .passthrough()
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>
 export type ThemePreference = 'system' | 'light' | 'dark'
+export type LocalePreference = 'vi' | 'en'
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {}
 
@@ -36,4 +38,11 @@ export function resolveThemePreference(
   const t = settings?.theme
   if (t === 'light' || t === 'dark' || t === 'system') return t
   return 'system'
+}
+
+/** Effective UI locale: missing / invalid-at-runtime → 'vi' (default locale). */
+export function resolveLocale(
+  settings: Pick<AppSettings, 'locale'> | null | undefined,
+): LocalePreference {
+  return settings?.locale === 'en' ? 'en' : 'vi'
 }

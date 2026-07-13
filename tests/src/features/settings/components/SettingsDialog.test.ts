@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mountWithI18n as mount } from '../../../helpers/i18n'
 import SettingsDialog from '@/features/settings/components/SettingsDialog.vue'
 import {
   STORAGE_KEY,

@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { diffLines } from 'diff'
 import { fetchProposal, approveJob, discardJob, sendActionFeedback, fetchJob } from '../../../api'
+import { i18n } from '../../../shared/i18n'
 
 // Drives ArtifactProposalReview: fetches the before/after of an
 // `awaiting_approval` job, exposes a line-diff for rendering, and handles the
@@ -80,7 +81,7 @@ export function useArtifactProposal(opts: UseArtifactProposalOptions) {
   async function approve(): Promise<boolean> {
     busy.value = true
     error.value = null
-    statusText.value = 'Đang phê duyệt…'
+    statusText.value = i18n.global.t('monitor.proposal.approving')
     try {
       await approveJob(currentJobId.value)
       return true
@@ -96,7 +97,7 @@ export function useArtifactProposal(opts: UseArtifactProposalOptions) {
   async function discard(): Promise<boolean> {
     busy.value = true
     error.value = null
-    statusText.value = 'Đang hủy…'
+    statusText.value = i18n.global.t('monitor.proposal.discarding')
     try {
       await discardJob(currentJobId.value)
       return true
@@ -131,23 +132,23 @@ export function useArtifactProposal(opts: UseArtifactProposalOptions) {
   async function sendFeedback(feedback: string): Promise<void> {
     const text = feedback.trim()
     if (!text) {
-      error.value = 'Feedback không được để trống.'
+      error.value = i18n.global.t('monitor.proposal.feedbackRequired')
       return
     }
     busy.value = true
     error.value = null
-    statusText.value = 'Đang gửi feedback cho agent…'
+    statusText.value = i18n.global.t('monitor.proposal.sendingFeedback')
     try {
       const res = await sendActionFeedback(currentJobId.value, text)
       const newJobId: string | undefined = res?.job?.id
-      if (!newJobId) throw new Error('Không nhận được job mới từ server.')
-      statusText.value = 'Agent đang xử lý feedback…'
+      if (!newJobId) throw new Error(i18n.global.t('monitor.proposal.noJobId'))
+      statusText.value = i18n.global.t('monitor.proposal.processingFeedback')
       const outcome = await pollUntilAwaiting(newJobId)
       if (outcome !== 'awaiting_approval') {
         error.value =
           outcome === 'timeout'
-            ? 'Hết thời gian chờ agent xử lý feedback.'
-            : `Job feedback kết thúc với trạng thái "${outcome}".`
+            ? i18n.global.t('monitor.proposal.feedbackTimeout')
+            : i18n.global.t('monitor.proposal.feedbackOutcome', { outcome })
         return
       }
       currentJobId.value = newJobId

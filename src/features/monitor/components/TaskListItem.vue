@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { patchTaskArchive } from '../../../api'
 
 const props = defineProps({
@@ -11,6 +12,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['select', 'toggle-expand', 'open-artifact', 'task-archived'])
 
+const { t } = useI18n()
 const archiveError = ref('')
 
 async function toggleArchive() {
@@ -24,8 +26,6 @@ async function toggleArchive() {
     emit('task-archived')
   } catch (e: any) {
     if (e?.status === 409) {
-      // State changed elsewhere (mtime mismatch) — refresh instead of erroring,
-      // same pattern as the HITL 409 handling in PipelineView.vue.
       emit('task-archived')
     } else {
       archiveError.value = String(e.message || e)
@@ -38,14 +38,13 @@ function selectTask() {
   if (!props.isExpanded) emit('toggle-expand', props.task.task_id)
 }
 
-function phaseLabel(t: any) {
-  if (t.has_qa) return 'chờ Q&A'
-  if (t.hitl_pending) return t.hitl_pending
-  if (t.current_phase) return t.current_phase
+function phaseLabel(task: any) {
+  if (task.has_qa) return t('monitor.taskItem.waitingQa')
+  if (task.hitl_pending) return task.hitl_pending
+  if (task.current_phase) return task.current_phase
   return '—'
 }
 
-// Stable order matching ArtifactPanel's ORDER list.
 const ORDER = [
   'investigate.md', 'investigate-po.md',
   'design.md', 'design-po.md',
@@ -70,7 +69,6 @@ function sortedArtifacts(task: any) {
     class="task-entry"
     :class="{ active: task.task_id === selectedId, attention: task.has_qa }"
   >
-    <!-- Task header row -->
     <div class="task-row" @click="selectTask">
       <span
         class="expand-chevron"
@@ -79,12 +77,12 @@ function sortedArtifacts(task: any) {
       >›</span>
       <span class="id">{{ task.task_id }}</span>
       <span class="phase">{{ phaseLabel(task) }}</span>
-      <span v-if="task.has_qa" class="flag qa" title="có câu hỏi blocking">Q</span>
-      <span v-else-if="task.hitl_pending" class="flag hitl" title="đang chờ duyệt">⏸</span>
+      <span v-if="task.has_qa" class="flag qa" :title="t('monitor.taskItem.flagQa')">Q</span>
+      <span v-else-if="task.hitl_pending" class="flag hitl" :title="t('monitor.taskItem.flagHitl')">⏸</span>
       <button
         v-if="task.state_ok"
         class="btn-archive"
-        :title="task.archived ? 'Bỏ lưu trữ' : 'Lưu trữ task'"
+        :title="task.archived ? t('monitor.taskItem.unarchive') : t('monitor.taskItem.archive')"
         @click.stop="toggleArchive"
       ><template v-if="task.archived">↩</template><svg
           v-else
@@ -101,7 +99,6 @@ function sortedArtifacts(task: any) {
     </div>
     <p v-if="archiveError" class="art-warning">{{ archiveError }}</p>
 
-    <!-- Collapsible file list -->
     <ul v-if="isExpanded" class="file-list">
       <li
         v-for="it in sortedArtifacts(task)"

@@ -4,7 +4,10 @@
 // registry. Removing a project only detaches it from the dashboard — it never
 // touches files on disk.
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { addProject, removeProject } from '../../../api'
+
+const { t } = useI18n()
 
 const props = defineProps({
   projects: { type: Array as () => any[], default: () => [] },
@@ -34,7 +37,7 @@ function cancelAdd() {
 
 async function submitAdd() {
   if (!newPath.value.trim()) {
-    errorMsg.value = 'Nhập đường dẫn tới .dev-team-agent (hoặc project root).'
+    errorMsg.value = t('monitor.projectBar.pathRequired')
     return
   }
   busy.value = true
@@ -53,7 +56,7 @@ async function submitAdd() {
 
 async function onRemove(project) {
   if (project.default) return
-  if (!window.confirm(`Gỡ project "${project.name}" khỏi dashboard?\n(Không xoá file trên đĩa.)`)) return
+  if (!window.confirm(t('monitor.projectBar.confirmRemove', { name: project.name }))) return
   busy.value = true
   errorMsg.value = ''
   try {
@@ -72,7 +75,7 @@ async function onRemove(project) {
   <div class="project-bar">
     <div class="project-bar-head">
       <span class="project-bar-title">Projects</span>
-      <button class="project-add-btn" type="button" title="Thêm project" @click="openAdd">＋</button>
+      <button class="project-add-btn" type="button" :title="t('monitor.projectBar.addTitle')" @click="openAdd">＋</button>
     </div>
 
     <ul class="project-list">
@@ -90,31 +93,31 @@ async function onRemove(project) {
           v-if="!p.default"
           class="project-remove"
           type="button"
-          title="Gỡ khỏi dashboard"
+          :title="t('monitor.projectBar.removeTitle')"
           @click="onRemove(p)"
         >×</button>
       </li>
-      <li v-if="!projects.length" class="project-empty">Chưa có project nào.</li>
+      <li v-if="!projects.length" class="project-empty">{{ t('monitor.projectBar.empty') }}</li>
     </ul>
 
     <div v-if="adding" class="project-add-form">
       <input
         v-model="newPath"
         class="project-input"
-        placeholder="Đường dẫn .dev-team-agent / project root"
+        :placeholder="t('monitor.projectBar.pathPlaceholder')"
         @keyup.enter="submitAdd"
       />
       <input
         v-model="newName"
         class="project-input"
-        placeholder="Tên hiển thị (tuỳ chọn)"
+        :placeholder="t('monitor.projectBar.namePlaceholder')"
         @keyup.enter="submitAdd"
       />
       <div class="project-add-actions">
         <button class="project-btn primary" type="button" :disabled="busy" @click="submitAdd">
-          {{ busy ? '…' : 'Thêm' }}
+          {{ busy ? '…' : t('monitor.projectBar.add') }}
         </button>
-        <button class="project-btn" type="button" :disabled="busy" @click="cancelAdd">Huỷ</button>
+        <button class="project-btn" type="button" :disabled="busy" @click="cancelAdd">{{ t('monitor.projectBar.cancel') }}</button>
       </div>
     </div>
 

@@ -1,5 +1,6 @@
+import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import QaPanel from '@/features/monitor/components/QaPanel.vue'
 

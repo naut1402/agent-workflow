@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
+import { useLocale } from '../../../shared/composables/useLocale'
 import {
   resolveArtifactViewMode,
   resolveThemePreference,
@@ -9,7 +11,9 @@ import {
 
 const emit = defineEmits<{ close: [] }>()
 
+const { t } = useI18n()
 const { settings, load, update } = useAppSettings()
+const { locale, setLocale } = useLocale()
 
 const artifactViewMode = computed(() => resolveArtifactViewMode(settings.value))
 const theme = computed(() => resolveThemePreference(settings.value))
@@ -48,11 +52,11 @@ onUnmounted(() => {
         aria-labelledby="settings-dialog-title"
       >
         <div class="modal-head">
-          <span id="settings-dialog-title">Cài đặt</span>
+          <span id="settings-dialog-title">{{ t('settings.title') }}</span>
           <button
             type="button"
             class="modal-close"
-            aria-label="Đóng"
+            :aria-label="t('settings.close')"
             @click="emit('close')"
           >
             ✕
@@ -60,12 +64,12 @@ onUnmounted(() => {
         </div>
         <div class="modal-body">
           <section class="settings-section">
-            <h3 class="settings-section-title">Giao diện</h3>
-            <p class="settings-section-desc">Chọn giao diện sáng, tối, hoặc theo hệ thống.</p>
+            <h3 class="settings-section-title">{{ t('settings.theme.title') }}</h3>
+            <p class="settings-section-desc">{{ t('settings.theme.desc') }}</p>
             <div
               class="settings-radio-group"
               role="radiogroup"
-              aria-label="Giao diện"
+              :aria-label="t('settings.theme.title')"
             >
               <label class="settings-radio">
                 <input
@@ -75,7 +79,7 @@ onUnmounted(() => {
                   :checked="theme === 'system'"
                   @change="setTheme('system')"
                 />
-                Hệ thống
+                {{ t('settings.theme.system') }}
               </label>
               <label class="settings-radio">
                 <input
@@ -85,7 +89,7 @@ onUnmounted(() => {
                   :checked="theme === 'light'"
                   @change="setTheme('light')"
                 />
-                Sáng
+                {{ t('settings.theme.light') }}
               </label>
               <label class="settings-radio">
                 <input
@@ -95,17 +99,17 @@ onUnmounted(() => {
                   :checked="theme === 'dark'"
                   @change="setTheme('dark')"
                 />
-                Tối
+                {{ t('settings.theme.dark') }}
               </label>
             </div>
           </section>
           <section class="settings-section">
-            <h3 class="settings-section-title">Artifact</h3>
-            <p class="settings-section-desc">Chế độ xem mặc định khi mở tài liệu mới.</p>
+            <h3 class="settings-section-title">{{ t('settings.artifact.title') }}</h3>
+            <p class="settings-section-desc">{{ t('settings.artifact.desc') }}</p>
             <div
               class="settings-radio-group"
               role="radiogroup"
-              aria-label="Chế độ xem artifact mặc định"
+              :aria-label="t('settings.artifact.groupLabel')"
             >
               <label class="settings-radio">
                 <input
@@ -115,7 +119,7 @@ onUnmounted(() => {
                   :checked="artifactViewMode === 'block'"
                   @change="setArtifactViewMode('block')"
                 />
-                Block theo H2
+                {{ t('settings.artifact.block') }}
               </label>
               <label class="settings-radio">
                 <input
@@ -125,7 +129,37 @@ onUnmounted(() => {
                   :checked="artifactViewMode === 'full'"
                   @change="setArtifactViewMode('full')"
                 />
-                Full
+                {{ t('settings.artifact.full') }}
+              </label>
+            </div>
+          </section>
+          <section class="settings-section">
+            <h3 class="settings-section-title">{{ t('common.language.title') }}</h3>
+            <p class="settings-section-desc">{{ t('common.language.desc') }}</p>
+            <div
+              class="settings-radio-group"
+              role="radiogroup"
+              :aria-label="t('common.language.title')"
+            >
+              <label class="settings-radio">
+                <input
+                  type="radio"
+                  name="locale"
+                  value="vi"
+                  :checked="locale === 'vi'"
+                  @change="setLocale('vi')"
+                />
+                {{ t('common.language.vi') }}
+              </label>
+              <label class="settings-radio">
+                <input
+                  type="radio"
+                  name="locale"
+                  value="en"
+                  :checked="locale === 'en'"
+                  @change="setLocale('en')"
+                />
+                {{ t('common.language.en') }}
               </label>
             </div>
           </section>

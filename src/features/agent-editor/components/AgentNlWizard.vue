@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { computed, inject, onMounted } from 'vue'
 import { useAgentBuild } from '../composables/useAgentBuild'
 
@@ -46,8 +49,8 @@ const skillsText = computed<string>({
 
 const jobBadge = computed(() => {
   const s = build.jobStatus.value
-  if (!s) return { label: 'đang khởi tạo…', cls: 'pending' }
-  if (s === 'succeeded') return { label: 'thành công', cls: 'ok' }
+  if (!s) return { label: t('agentEditor.nl.statusInit'), cls: 'pending' }
+  if (s === 'succeeded') return { label: t('agentEditor.nl.statusOk'), cls: 'ok' }
   if (s === 'failed' || s === 'cancelled') return { label: s, cls: 'err' }
   return { label: s, cls: 'pending' }
 })
@@ -71,50 +74,50 @@ function close() {
 <template>
   <div class="agent-nl-wizard">
     <div class="nl-wizard-head">
-      <h3 class="picker-title">Build từ mô tả (NL)</h3>
+      <h3 class="picker-title">{{ t('agentEditor.nl.title') }}</h3>
       <button type="button" class="modal-close" @click="close">✕</button>
     </div>
 
     <ol class="wizard-steps">
-      <li :class="{ current: build.step.value === 'describe', done: build.step.value !== 'describe' }">1. Mô tả</li>
-      <li :class="{ current: build.step.value === 'preview', done: build.step.value === 'run' }">2. Xem lại draft</li>
-      <li :class="{ current: build.step.value === 'run' }">3. Lưu &amp; chạy thử</li>
+      <li :class="{ current: build.step.value === 'describe', done: build.step.value !== 'describe' }">{{ t('agentEditor.nl.stepDescribe') }}</li>
+      <li :class="{ current: build.step.value === 'preview', done: build.step.value === 'run' }">{{ t('agentEditor.nl.stepPreview') }}</li>
+      <li :class="{ current: build.step.value === 'run' }">{{ t('agentEditor.nl.stepRun') }}</li>
     </ol>
 
     <!-- Step 1: describe -->
     <section v-if="build.step.value === 'describe'" class="wizard-body">
       <p class="muted">
-        Nhập mô tả agent bằng tiếng Việt/Anh. Hệ thống tạo draft (heuristic hoặc API nếu có
+        {{ t('agentEditor.nl.describeHint') }}
         <code>ANTHROPIC_API_KEY</code>).
       </p>
       <textarea
         v-model="build.description.value"
         class="cfg-textarea"
         rows="6"
-        placeholder="Ví dụ: Agent review code PHP theo coding conventions, kiểm tra bảo mật SQL/XSS…"
+        :placeholder="t('agentEditor.nl.describePlaceholder')"
       />
       <p v-if="build.error.value" class="err">{{ build.error.value }}</p>
       <div class="nl-actions">
         <button type="button" class="btn-primary" :disabled="build.generating.value" @click="build.generate()">
-          {{ build.generating.value ? 'Đang tạo…' : 'Generate draft' }}
+          {{ build.generating.value ? t('agentEditor.nl.generating') : t('agentEditor.nl.generate') }}
         </button>
-        <button type="button" class="btn-ghost" @click="close">Hủy</button>
+        <button type="button" class="btn-ghost" @click="close">{{ t('agentEditor.nl.cancel') }}</button>
       </div>
     </section>
 
     <!-- Step 2: preview & edit -->
     <section v-else-if="build.step.value === 'preview' && build.draft.value" class="wizard-body">
-      <p class="muted">Kiểm tra và chỉnh sửa draft trước khi lưu.</p>
+      <p class="muted">{{ t('agentEditor.nl.previewHint') }}</p>
       <label class="cfg-label">
-        Tên agent
+        {{ t('agentEditor.nl.nameLabel') }}
         <input v-model="build.draft.value.name" class="cfg-input" type="text" placeholder="ten-agent" />
       </label>
       <label class="cfg-label">
-        Mô tả
+        {{ t('agentEditor.nl.descriptionLabel') }}
         <input v-model="build.draft.value.description" class="cfg-input" type="text" />
       </label>
       <label class="cfg-label">
-        Skills (phân tách bằng dấu phẩy)
+        {{ t('agentEditor.nl.skillsLabel') }}
         <input v-model="skillsText" class="cfg-input" type="text" placeholder="run-phpstan, coding-rules" />
       </label>
       <details v-if="build.draft.value.sections" class="sections-preview">
@@ -129,7 +132,7 @@ function close() {
         Runner
         <select v-model="build.selectedRunnerId.value" class="cfg-input">
           <option v-if="!build.usableRunners.value.length" :value="null" disabled>
-            (chưa có runner khả dụng)
+            {{ t('agentEditor.nl.noRunnerParen') }}
           </option>
           <option v-for="r in build.usableRunners.value" :key="r.id" :value="r.id">
             {{ r.name || r.id }}
@@ -137,22 +140,22 @@ function close() {
         </select>
       </label>
       <p v-if="!build.hasUsableRunner.value" class="err">
-        Chưa có runner khả dụng.
-        <button type="button" class="btn-link" @click="goToRunner">Mở Runner</button>
-        để bật/cấu hình, rồi thử lại.
+        {{ t('agentEditor.nl.noRunner') }}
+        <button type="button" class="btn-link" @click="goToRunner">{{ t('agentEditor.nl.openRunner') }}</button>
+        {{ t('agentEditor.nl.noRunnerSuffix') }}
       </p>
 
       <p v-if="build.error.value" class="err">{{ build.error.value }}</p>
       <div class="nl-actions">
-        <button type="button" class="btn-ghost" @click="build.backToDescribe()">← Quay lại</button>
-        <button type="button" class="btn-primary" @click="applyToEditor">Áp dụng vào editor</button>
+        <button type="button" class="btn-ghost" @click="build.backToDescribe()">{{ t('agentEditor.nl.back') }}</button>
+        <button type="button" class="btn-primary" @click="applyToEditor">{{ t('agentEditor.nl.applyEditor') }}</button>
         <button
           type="button"
           class="btn-primary"
           :disabled="build.running.value || !build.hasUsableRunner.value"
           @click="build.buildAndRun()"
         >
-          Lưu &amp; chạy thử →
+          {{ t('agentEditor.nl.saveAndRun') }}
         </button>
       </div>
     </section>
@@ -164,20 +167,20 @@ function close() {
         <span class="job-badge" :class="jobBadge.cls">{{ jobBadge.label }}</span>
       </p>
       <p v-if="build.jobId.value" class="muted">Job: <code>{{ build.jobId.value }}</code></p>
-      <p v-if="build.running.value" class="muted">Đang chờ runner hoàn tất…</p>
+      <p v-if="build.running.value" class="muted">{{ t('agentEditor.nl.waitingRunner') }}</p>
       <p v-if="build.jobError.value" class="err">{{ build.jobError.value }}</p>
       <p v-if="build.jobLogPath.value" class="muted">Log: <code>{{ build.jobLogPath.value }}</code></p>
       <p v-if="build.jobStatus.value === 'succeeded'" class="chip chip-ok">
-        Agent đã lưu và chạy thử thành công.
+        {{ t('agentEditor.nl.success') }}
       </p>
       <div class="nl-actions">
         <button type="button" class="btn-ghost" :disabled="build.running.value" @click="build.backToPreview()">
-          ← Sửa draft
+          {{ t('agentEditor.nl.editDraft') }}
         </button>
         <button type="button" class="btn-primary" :disabled="build.running.value" @click="applyToEditor">
-          Áp dụng vào editor
+          {{ t('agentEditor.nl.applyEditor') }}
         </button>
-        <button type="button" class="btn-ghost" :disabled="build.running.value" @click="close">Đóng</button>
+        <button type="button" class="btn-ghost" :disabled="build.running.value" @click="close">{{ t('agentEditor.nl.close') }}</button>
       </div>
     </section>
   </div>

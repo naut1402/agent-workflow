@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { ref, computed, watch, markRaw } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
@@ -121,7 +124,7 @@ async function saveProfile() {
   try {
     parsed = JSON.parse(editorJson.value)
   } catch (e) {
-    editorError.value = `JSON không hợp lệ: ${e.message}`
+    editorError.value = `${t('monitor.pipeline.invalidJson', { message: e.message })}`
     return
   }
   saving.value = true
@@ -192,7 +195,7 @@ function onNodeClick({ node }) {
 
 async function submitHitl(action: 'approve' | 'reject') {
   if (hitlMtime.value == null) {
-    hitlError.value = 'Thiếu thời gian cập nhật state — vui lòng làm mới trang.'
+    hitlError.value = t('monitor.pipeline.missingMtime')
     return
   }
   hitlBusy.value = true
@@ -209,12 +212,12 @@ async function submitHitl(action: 'approve' | 'reject') {
       props.projectId ?? undefined,
     )
     hitlOpen.value = false
-    hitlToast.value = action === 'approve' ? 'Đã duyệt bước.' : 'Đã từ chối — đã ghi phản hồi.'
+    hitlToast.value = action === 'approve' ? t('monitor.pipeline.approved') : t('monitor.pipeline.rejected')
     emit('hitl-action')
     setTimeout(() => { hitlToast.value = '' }, 3000)
   } catch (e: any) {
     if (e?.status === 409) {
-      hitlError.value = 'Trạng thái đã thay đổi. Đang làm mới…'
+      hitlError.value = t('monitor.pipeline.stateChanged')
       hitlMtime.value = e?.body?.mtime ?? props.task.state_mtime ?? null
       emit('hitl-action')
     } else {
@@ -236,9 +239,9 @@ async function submitHitl(action: 'approve' | 'reject') {
         class="btn-edit-profile"
         @click="openHitlModal(waitingPhase)"
       >
-        ⏸ Duyệt HITL
+        {{ t('monitor.pipeline.hitlTitle') }}
       </button>
-      <span v-if="customProfile" class="chip chip-custom">flow profile tùy chỉnh</span>
+      <span v-if="customProfile" class="chip chip-custom">{{ t('monitor.pipeline.customProfile') }}</span>
       <button class="btn-edit-profile" @click="openEditor">⚙ flow profile</button>
     </div>
 
@@ -263,7 +266,7 @@ async function submitHitl(action: 'approve' | 'reject') {
         doc-review {{ doc }}: {{ n }}
       </span>
       <span v-if="task.inherit_from_parent?.length" class="chip">
-        kế thừa: {{ task.inherit_from_parent.join(', ') }}
+        {{ t('monitor.pipeline.inherit', { list: task.inherit_from_parent.join(', ') }) }}
       </span>
       <span v-if="task.subtasks?.length" class="chip">
         subtask: {{ task.subtasks.join(', ') }}
@@ -280,14 +283,14 @@ async function submitHitl(action: 'approve' | 'reject') {
           <button class="modal-close" @click="editorOpen = false">✕</button>
         </div>
         <p class="modal-hint">
-          Định nghĩa các phase và vị trí node. Kéo node trên canvas để cập nhật <code>x</code>/<code>y</code> tự động.
+          {{ t('monitor.pipeline.editorHint') }} <code>x</code>/<code>y</code> {{ t('monitor.pipeline.editorHintSuffix') }}
         </p>
         <textarea class="profile-editor" v-model="editorJson" spellcheck="false" />
         <p v-if="editorError" class="editor-error">{{ editorError }}</p>
         <div class="modal-actions">
-          <button class="btn-ghost" @click="resetProfile" :disabled="saving">Reset về mặc định</button>
+          <button class="btn-ghost" @click="resetProfile" :disabled="saving">{{ t('monitor.pipeline.resetDefault') }}</button>
           <button class="btn-primary" @click="saveProfile" :disabled="saving">
-            {{ saving ? 'Đang lưu…' : 'Lưu profile' }}
+            {{ saving ? t('monitor.pipeline.saving') : t('monitor.pipeline.saveProfile') }}
           </button>
         </div>
       </div>
@@ -299,21 +302,21 @@ async function submitHitl(action: 'approve' | 'reject') {
     <div v-if="hitlOpen" class="modal-backdrop" @click.self="hitlOpen = false">
       <div class="modal">
         <div class="modal-head">
-          <span>Duyệt HITL — {{ hitlLabel }}</span>
+          <span>{{ t('monitor.pipeline.hitlHeading', { label: hitlLabel }) }}</span>
           <button class="modal-close" @click="hitlOpen = false">✕</button>
         </div>
         <p class="modal-hint">
-          Cổng <code>{{ hitlGateId }}</code> đang chờ duyệt cho task <strong>{{ hitlTaskId }}</strong>.
+          {{ t('monitor.pipeline.hitlWaiting') }} <code>{{ hitlGateId }}</code> {{ t('monitor.pipeline.hitlWaitingMid') }} <strong>{{ hitlTaskId }}</strong>.
         </p>
         <label class="hitl-feedback-label">
-          Phản hồi (khi từ chối)
+          {{ t('monitor.pipeline.feedbackLabel') }}
           <textarea v-model="hitlFeedback" class="profile-editor hitl-feedback" rows="3" />
         </label>
         <p v-if="hitlError" class="editor-error">{{ hitlError }}</p>
         <div class="modal-actions">
-          <button class="btn-ghost" :disabled="hitlBusy" @click="submitHitl('reject')">Từ chối</button>
+          <button class="btn-ghost" :disabled="hitlBusy" @click="submitHitl('reject')">{{ t('monitor.pipeline.reject') }}</button>
           <button class="btn-primary" :disabled="hitlBusy" @click="submitHitl('approve')">
-            {{ hitlBusy ? 'Đang lưu…' : 'Duyệt' }}
+            {{ hitlBusy ? t('monitor.pipeline.saving') : t('monitor.pipeline.approve') }}
           </button>
         </div>
       </div>

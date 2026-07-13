@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
+import { mountWithI18n as mount } from '../../../helpers/i18n'
 import KnowledgePanel from '@/features/knowledge/components/KnowledgePanel.vue'
 
 /** Lightweight stub — avoid mounting Toast UI Editor in jsdom. */
