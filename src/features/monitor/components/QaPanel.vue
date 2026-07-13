@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUpdated } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
 import { saveArtifact } from '../../../api'
 import {
@@ -8,6 +9,8 @@ import {
 } from '../composables/useInlineMarkdownEdit'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
+
+const { t } = useI18n()
 
 const props = defineProps({
   qa: { type: String, default: '' },
@@ -39,7 +42,7 @@ const {
   setContent: (v) => { content.value = v },
   onSave: async (nextContent) => {
     if (!props.taskId) {
-      message.value = 'Không xác định được task, không thể lưu.'
+      message.value = t('monitor.qa.noTask')
       return
     }
     message.value = ''
@@ -68,7 +71,7 @@ async function handleBlur() {
     if (e.status === 409 && e.body?.content != null) {
       content.value = e.body.content
       loadedMtime.value = e.body.mtime
-      message.value = 'File đã thay đổi trên disk — nội dung đã được tải lại.'
+      message.value = t('monitor.qa.reloaded')
       cancelEdit()
     } else {
       message.value = String(e.message || e)
@@ -98,10 +101,11 @@ onUpdated(() => scheduleMermaid())
 
 <template>
   <section class="qa">
-    <div class="qa-head">⚠ Pipeline đang chờ trả lời câu hỏi blocking</div>
+    <div class="qa-head">{{ t('monitor.qa.head') }}</div>
     <div class="qa-hint">
-      Double-click vào nội dung bên dưới để sửa (blur để lưu), hoặc mở
-      <code>.dev-team-agent/tasks/&lt;task-id&gt;/qa.md</code>, điền <code>Answer:</code> rồi gõ
+      {{ t('monitor.qa.hintBefore') }}
+      <code>.dev-team-agent/tasks/&lt;task-id&gt;/qa.md</code>{{ t('monitor.qa.hintAfter') }}
+      <code>Answer:</code> {{ t('monitor.qa.hintThen') }}
       <code>done</code> cho orchestrator.
     </div>
     <p v-if="message" class="art-message">{{ message }}</p>
@@ -128,7 +132,7 @@ onUpdated(() => scheduleMermaid())
         ref="viewRoot"
         class="md md-editable"
         v-html="html"
-        title="Double-click để sửa"
+        :title="t('monitor.qa.editTitle')"
         @dblclick.prevent="startEdit('full', $event)"
       />
     </div>
