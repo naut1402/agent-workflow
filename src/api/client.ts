@@ -2,6 +2,7 @@
 
 import type { TaskArchivePatch, TaskStatePatch } from '../../shared/schemas/task'
 import { getApiToken } from '../shared/lib/authToken.js'
+import { i18n } from '../shared/i18n'
 
 // Build a query string from key/value pairs, dropping null/undefined/empty and
 // URL-encoding values. Used to append the optional `?project=<id>` selector.
@@ -75,7 +76,7 @@ export async function patchTaskState(id: string, body: TaskStatePatch, projectId
   })
   const data = await r.json().catch(() => ({}))
   if (!r.ok) {
-    const err = new Error(data.error || `Không thể cập nhật trạng thái task (mã lỗi ${r.status})`)
+    const err = new Error(data.error || i18n.global.t('common.errors.updateTaskStatus', { status: r.status }))
     ;(err as any).status = r.status
     ;(err as any).data = data
     throw err
@@ -91,7 +92,7 @@ export async function patchTaskArchive(id: string, body: TaskArchivePatch, proje
   })
   const data = await r.json().catch(() => ({}))
   if (!r.ok) {
-    const err = new Error(data.error || `Không thể lưu trữ task (mã lỗi ${r.status})`)
+    const err = new Error(data.error || i18n.global.t('common.errors.archiveTask', { status: r.status }))
     ;(err as any).status = r.status
     ;(err as any).data = data
     throw err
@@ -652,7 +653,7 @@ export async function buildAndRunAgent(
 ): Promise<BuildAndRunAgentResult> {
   const saved = await saveCustomAgent(input.draft, input.projectId)
   const name: string | undefined = saved?.name
-  if (!name) throw new Error('Không lưu được custom agent (server không trả về tên).')
+  if (!name) throw new Error(i18n.global.t('common.errors.saveCustomAgent'))
   const res = await submitJob(
     {
       runnerId: input.runnerId,
