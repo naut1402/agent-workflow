@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { fetchRunners, fetchCatalog } from '../../../api'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
+
+const { t } = useI18n()
 
 // CRUD panel for the artifact-actions catalog (Correction B / F0005): create,
 // edit, delete a "quick action" — the prompt/agent/attach-point/runner binding
@@ -35,20 +38,20 @@ const showPromptHelp = ref(false)
 // toolbar (tức action có gắn attach point "Text selection" và người dùng bôi
 // đen một đoạn trong artifact rồi bấm nút) — chạy từ title toolbar thì hai
 // placeholder này luôn rỗng.
-const PROMPT_PLACEHOLDERS: Array<{ token: string; desc: string; selectionOnly?: boolean }> = [
-  { token: '{{artifact_name}}', desc: 'Tên file artifact đầy đủ, ví dụ "design.md".' },
-  { token: '{{artifact_base}}', desc: 'Tên file artifact không có phần mở rộng, ví dụ "design".' },
+const PROMPT_PLACEHOLDERS = computed<Array<{ token: string; desc: string; selectionOnly?: boolean }>>(() => [
+  { token: '{{artifact_name}}', desc: t('quickAction.promptHelp.placeholders.artifactName') },
+  { token: '{{artifact_base}}', desc: t('quickAction.promptHelp.placeholders.artifactBase') },
   {
     token: '{{selection}}',
-    desc: 'Đoạn văn bản người dùng đã bôi đen trong artifact viewer.',
+    desc: t('quickAction.promptHelp.placeholders.selection'),
     selectionOnly: true,
   },
   {
     token: '{{selection_lines}}',
-    desc: 'Dòng (trong file gốc) tương ứng vùng đã chọn, dạng "12" hoặc "12-15".',
+    desc: t('quickAction.promptHelp.placeholders.selectionLines'),
     selectionOnly: true,
   },
-]
+])
 
 // Floating help popover for the prompt_template placeholders. Rendered as an
 // absolutely-positioned overlay (does NOT push the fields below it down) that
@@ -191,7 +194,7 @@ function toggleAttach(value: string, checked: boolean) {
 async function saveForm() {
   formError.value = ''
   if (!draft.value.label.trim()) {
-    formError.value = 'label không được để trống'
+    formError.value = t('quickAction.errors.labelRequired')
     return
   }
   draft.value.artifact_patterns = patternsText.value
@@ -209,27 +212,27 @@ async function saveForm() {
   }
   const ok = await catalog.persist(catalog.actions.value)
   if (!ok) {
-    formError.value = catalog.error.value || 'Lưu thất bại'
+    formError.value = catalog.error.value || t('quickAction.errors.saveFailed')
     return
   }
-  message.value = `Đã lưu "${draft.value.label}"`
+  message.value = t('quickAction.messages.saved', { label: draft.value.label })
   closeForm()
 }
 
 async function removeAction(a: QuickActionDraft) {
-  if (typeof window !== 'undefined' && !window.confirm(`Xóa quick action "${a.label}"?`)) return
+  if (typeof window !== 'undefined' && !window.confirm(t('quickAction.confirm.remove', { label: a.label }))) return
   catalog.remove(a.id)
   const ok = await catalog.persist(catalog.actions.value)
-  if (ok) message.value = `Đã xóa "${a.label}"`
+  if (ok) message.value = t('quickAction.messages.removed', { label: a.label })
 }
 </script>
 
 <template>
   <div class="quick-action-panel">
     <header class="qa-panel-head">
-      <h2>Quick Action</h2>
+      <h2>{{ t('quickAction.title') }}</h2>
       <p class="muted">
-        CRUD các quick action gắn vào artifact viewer (title toolbar / selection toolbar).
+        {{ t('quickAction.subtitle') }}
       </p>
     </header>
 
@@ -253,20 +256,20 @@ async function removeAction(a: QuickActionDraft) {
       </thead>
       <tbody>
         <tr v-if="!catalog.actions.value.length">
-          <td colspan="6" class="muted qa-empty">Chưa có quick action nào.</td>
+          <td colspan="6" class="muted qa-empty">{{ t('quickAction.empty') }}</td>
         </tr>
         <tr v-for="a in catalog.actions.value" :key="a.id">
           <td>{{ a.label }}</td>
           <td class="muted">{{ (a.artifact_patterns ?? []).join(', ') }}</td>
-          <td class="muted">{{ a.agent_ref || '(prompt trực tiếp)' }}</td>
+          <td class="muted">{{ a.agent_ref || t('quickAction.directPrompt') }}</td>
           <td>
             <span v-for="ap in a.attach_points ?? ['artifact-title']" :key="ap" class="chip chip-xs">{{ ap }}</span>
-            <span v-if="a.require_approval" class="chip chip-xs chip-approval" title="Yêu cầu phê duyệt trước khi ghi">✓ phê duyệt</span>
+            <span v-if="a.require_approval" class="chip chip-xs chip-approval" :title="t('quickAction.approvalBadgeTitle')">{{ t('quickAction.approvalBadge') }}</span>
           </td>
           <td class="muted">{{ a.runner_id || '(default)' }}</td>
           <td class="qa-row-actions">
-            <button type="button" class="btn-ghost btn-sm" @click="openEdit(a)">Sửa</button>
-            <button type="button" class="btn-ghost btn-sm btn-danger" @click="removeAction(a)">Xóa</button>
+            <button type="button" class="btn-ghost btn-sm" @click="openEdit(a)">{{ t('quickAction.actions.edit') }}</button>
+            <button type="button" class="btn-ghost btn-sm btn-danger" @click="removeAction(a)">{{ t('quickAction.actions.delete') }}</button>
           </td>
         </tr>
       </tbody>
@@ -275,28 +278,28 @@ async function removeAction(a: QuickActionDraft) {
     <div v-if="showForm" class="qa-modal-overlay" @click.self="closeForm">
       <div class="qa-form" role="dialog" aria-modal="true">
         <div class="qa-form-head">
-          <h3>{{ editingId ? `Sửa "${draft.label || editingId}"` : 'Quick action mới' }}</h3>
-          <button type="button" class="btn-link qa-form-close" aria-label="Đóng" @click="closeForm">✕</button>
+          <h3>{{ editingId ? t('quickAction.form.editTitle', { name: draft.label || editingId }) : t('quickAction.form.newTitle') }}</h3>
+          <button type="button" class="btn-link qa-form-close" :aria-label="t('quickAction.form.close')" @click="closeForm">✕</button>
         </div>
         <p v-if="formError" class="err">{{ formError }}</p>
 
         <div class="qa-form-body">
           <label class="cfg-label">
             label
-            <input v-model="draft.label" class="cfg-input" placeholder="✨ Cải thiện tài liệu" />
+            <input v-model="draft.label" class="cfg-input" :placeholder="t('quickAction.form.labelPlaceholder')" />
           </label>
           <label class="cfg-label">
-            artifact_patterns (phân tách bằng dấu phẩy)
+            {{ t('quickAction.form.patternsLabel') }}
             <input v-model="patternsText" class="cfg-input" placeholder="design.md, investigate.md, *.md" />
           </label>
           <label class="cfg-label">
-            agent (tuỳ chọn — để "prompt trực tiếp" thì chạy thẳng prompt_template, không gắn agent)
+            {{ t('quickAction.form.agentLabel') }}
             <select v-model="draft.agent_ref" class="cfg-input">
-              <option value="">(prompt trực tiếp — không gắn agent)</option>
+              <option value="">{{ t('quickAction.form.agentNone') }}</option>
               <option
                 v-if="draft.agent_ref && !agentIds.has(draft.agent_ref)"
                 :value="draft.agent_ref"
-              >{{ draft.agent_ref }} (hiện tại)</option>
+              >{{ t('quickAction.form.agentCurrent', { ref: draft.agent_ref }) }}</option>
               <option v-for="a in agents" :key="a.id" :value="a.id">
                 {{ a.name ? `${a.name} — ${a.id}` : a.id }}
               </option>
@@ -309,27 +312,26 @@ async function removeAction(a: QuickActionDraft) {
                 ref="helpBtnRef"
                 type="button"
                 class="btn-help-icon"
-                title="Xem danh sách placeholder hỗ trợ"
-                aria-label="Xem danh sách placeholder hỗ trợ trong prompt_template"
+                :title="t('quickAction.form.promptHelpTitleAttr')"
+                :aria-label="t('quickAction.form.promptHelpAria')"
                 :aria-expanded="showPromptHelp"
                 @click="togglePromptHelp"
               >❓</button>
               <div v-if="showPromptHelp" ref="promptHelpRef" class="qa-prompt-help" role="dialog">
-                <p class="qa-prompt-help-title">Placeholder hỗ trợ trong prompt_template:</p>
+                <p class="qa-prompt-help-title">{{ t('quickAction.promptHelp.heading') }}</p>
                 <dl>
                   <div v-for="ph in PROMPT_PLACEHOLDERS" :key="ph.token" class="qa-prompt-help-item">
                     <dt><code>{{ ph.token }}</code></dt>
                     <dd>
                       {{ ph.desc }}
                       <span v-if="ph.selectionOnly" class="qa-prompt-help-note">
-                        (chỉ có giá trị khi action gắn attach point "Text selection" và được chạy từ vùng đã chọn — trống nếu chạy từ title toolbar)
+                        {{ t('quickAction.promptHelp.selectionNote') }}
                       </span>
                     </dd>
                   </div>
                 </dl>
                 <p class="qa-prompt-help-note qa-prompt-help-write">
-                  Lưu ý: để action thực sự thay đổi file, prompt phải yêu cầu agent GHI ĐÈ file
-                  (dùng công cụ Write) — stdout của runner KHÔNG được ghi lại vào file.
+                  {{ t('quickAction.promptHelp.writeNote') }}
                 </p>
               </div>
             </span>
@@ -337,7 +339,7 @@ async function removeAction(a: QuickActionDraft) {
               v-model="draft.prompt_template"
               class="cfg-textarea"
               rows="4"
-              placeholder="Đọc {{artifact_name}} / {{artifact_base}} / {{selection}}…"
+              :placeholder="t('quickAction.form.promptPlaceholder')"
             />
           </label>
           <fieldset class="qa-attach-fieldset">
@@ -352,7 +354,7 @@ async function removeAction(a: QuickActionDraft) {
             </label>
           </fieldset>
           <label class="cfg-label">
-            runner (optional — mặc định dùng runner mặc định của hệ thống)
+            {{ t('quickAction.form.runnerLabel') }}
             <select v-model="draft.runner_id" class="cfg-input">
               <option :value="undefined">(default)</option>
               <option v-for="r in runners" :key="r.id" :value="r.id">{{ r.name || r.id }}</option>
@@ -360,19 +362,19 @@ async function removeAction(a: QuickActionDraft) {
           </label>
           <label class="qa-attach-option">
             <input v-model="draft.confirm" type="checkbox" />
-            Yêu cầu xác nhận trước khi chạy
+            {{ t('quickAction.form.confirmOption') }}
           </label>
           <label class="qa-attach-option">
             <input v-model="draft.require_approval" type="checkbox" />
-            Yêu cầu phê duyệt trước khi ghi (xem diff)
+            {{ t('quickAction.form.approvalOption') }}
           </label>
         </div>
 
         <div class="nl-actions">
           <button type="button" class="btn-primary" :disabled="catalog.saving.value" @click="saveForm">
-            {{ catalog.saving.value ? 'Đang lưu…' : 'Lưu' }}
+            {{ catalog.saving.value ? t('quickAction.form.saving') : t('quickAction.form.save') }}
           </button>
-          <button type="button" class="btn-ghost" @click="closeForm">Hủy</button>
+          <button type="button" class="btn-ghost" @click="closeForm">{{ t('quickAction.form.cancel') }}</button>
         </div>
       </div>
     </div>

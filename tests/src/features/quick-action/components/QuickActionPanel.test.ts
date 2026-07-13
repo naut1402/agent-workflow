@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
+import { mountWithI18n } from '../../../helpers/i18n'
 import QuickActionPanel from '@/features/quick-action/components/QuickActionPanel.vue'
 
 vi.mock('@/api', () => ({
@@ -35,7 +36,7 @@ afterEach(() => vi.clearAllMocks())
 
 describe('QuickActionPanel', () => {
   it('lists the loaded catalog (label / agent / attach, no id column)', async () => {
-    const w = mount(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
     await flushPromises()
 
     expect(w.text()).toContain('✨ Cải thiện tài liệu')
@@ -44,7 +45,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('+ New opens the editor dialog; save validates a missing label', async () => {
-    const w = mount(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click') // "+ New"
@@ -57,7 +58,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('creates a new quick action, deriving the id from the label, and persists the catalog', async () => {
-    const w = mount(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -76,7 +77,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('binds agent_ref from the agent dropdown', async () => {
-    const w = mount(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -96,7 +97,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('prompt help popover toggles a placeholder reference, hidden by default', async () => {
-    const w = mount(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click') // "+ New"
@@ -123,7 +124,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('prompt help popover closes on an outside click', async () => {
-    const w = mount(QuickActionPanel, { props: { projectId: null }, attachTo: document.body })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, attachTo: document.body })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -138,7 +139,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('prompt help popover closes on Escape', async () => {
-    const w = mount(QuickActionPanel, { props: { projectId: null }, attachTo: document.body })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, attachTo: document.body })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -153,7 +154,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('persists require_approval when the checkbox is checked', async () => {
-    const w = mount(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -176,7 +177,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('prompt help resets to hidden when the form is reopened', async () => {
-    const w = mount(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
