@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, markRaw, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { fetchCatalog, fetchPipelineConfig, fetchRules, writePipelineConfig } from '../../../api'
@@ -18,6 +19,8 @@ import {
   type PipelineMeta,
   type StepPreservedMap,
 } from '../lib/pipelineRoundTrip'
+
+const { t } = useI18n()
 
 const props = defineProps({
   scope: { type: String, default: 'global' },
@@ -465,7 +468,7 @@ const editorLayoutClass = computed(() => ({
       />
 
       <div v-if="hasFanOut" class="fanout-warning" role="status">
-        Orchestrator chạy tuần tự — nhánh song song sẽ được sắp xếp theo thứ tự topo khi lưu
+        {{ t('pipelineEditor.toolbar.fanOutWarning') }}
       </div>
 
       <div class="editor-toolbar-actions">
@@ -503,17 +506,17 @@ const editorLayoutClass = computed(() => ({
               class="scope-select cfg-input"
               @change="onTaskSelectChange"
             >
-              <option value="">— Chọn task —</option>
-              <option v-for="t in tasks" :key="t.task_id" :value="t.task_id">
-                {{ t.task_id }}
+              <option value="">{{ t('pipelineEditor.scope.selectTask') }}</option>
+              <option v-for="task in tasks" :key="task.task_id" :value="task.task_id">
+                {{ task.task_id }}
               </option>
-              <option value="__manual__">Nhập thủ công…</option>
+              <option value="__manual__">{{ t('pipelineEditor.scope.manualEntry') }}</option>
             </select>
             <input
               v-if="taskSelect === '__manual__'"
               v-model="taskManual"
               class="scope-task-input cfg-input"
-              placeholder="Mã task"
+              :placeholder="t('pipelineEditor.scope.taskIdPlaceholder')"
             />
           </template>
         </div>
@@ -521,7 +524,7 @@ const editorLayoutClass = computed(() => ({
           <button
             type="button"
             class="editor-left-collapse-btn rail-icon-btn"
-            :title="editorLeftCollapsed ? 'Mở catalog & rules' : 'Thu gọn catalog'"
+            :title="editorLeftCollapsed ? t('pipelineEditor.leftPanel.expandTitle') : t('pipelineEditor.leftPanel.collapseTitle')"
             :aria-expanded="!editorLeftCollapsed"
             @click="toggleEditorLeft"
           >
@@ -549,7 +552,7 @@ const editorLayoutClass = computed(() => ({
             <button
               class="editor-left-tab editor-left-tab-icon rail-icon-btn"
               :class="{ active: leftTab === 'catalog' }"
-              title="Catalog — mở panel"
+              :title="t('pipelineEditor.leftPanel.catalogOpenTitle')"
               @click="openLeftTab('catalog')"
             >
               <RailIcon name="catalog" />
@@ -557,7 +560,7 @@ const editorLayoutClass = computed(() => ({
             <button
               class="editor-left-tab editor-left-tab-icon rail-icon-btn"
               :class="{ active: leftTab === 'rules' }"
-              title="Rules — mở panel"
+              :title="t('pipelineEditor.leftPanel.rulesOpenTitle')"
               @click="openLeftTab('rules')"
             >
               <RailIcon name="rules" />
@@ -612,7 +615,7 @@ const editorLayoutClass = computed(() => ({
             <strong>{{ previewActiveStep.index }}/{{ previewActiveStep.total }}</strong>
             {{ previewActiveStep.label }}
             <span v-if="previewActiveStep.agent" class="preview-banner-agent">({{ previewActiveStep.agent }})</span>
-            <span v-if="previewHitlPause" class="preview-banner-hitl">— chờ HITL</span>
+            <span v-if="previewHitlPause" class="preview-banner-hitl">{{ t('pipelineEditor.preview.waitingHitl') }}</span>
           </template>
           <template v-else>Simulation — no files written</template>
           &nbsp;

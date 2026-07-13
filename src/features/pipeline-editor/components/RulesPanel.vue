@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   rules: { type: Array as () => any[], default: () => [] },
@@ -68,7 +71,7 @@ function onRuleClick(rule) {
             <div v-if="stepsForRule(rule).length" class="rules-item-steps">
               → {{ stepsForRule(rule).map((s) => s.id || s.name).join(', ') }}
             </div>
-            <div v-else class="rules-item-steps muted">— không dùng bởi step nào</div>
+            <div v-else class="rules-item-steps muted">{{ t('pipelineEditor.rules.noStepUsing') }}</div>
           </div>
         </div>
       </template>
