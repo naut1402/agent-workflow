@@ -52,11 +52,11 @@ onUnmounted(() => {
         aria-labelledby="settings-dialog-title"
       >
         <div class="modal-head">
-          <span id="settings-dialog-title">Cài đặt</span>
+          <span id="settings-dialog-title">{{ t('settings.title') }}</span>
           <button
             type="button"
             class="modal-close"
-            aria-label="Đóng"
+            :aria-label="t('settings.close')"
             @click="emit('close')"
           >
             ✕
@@ -64,12 +64,12 @@ onUnmounted(() => {
         </div>
         <div class="modal-body">
           <section class="settings-section">
-            <h3 class="settings-section-title">Giao diện</h3>
-            <p class="settings-section-desc">Chọn giao diện sáng, tối, hoặc theo hệ thống.</p>
+            <h3 class="settings-section-title">{{ t('settings.theme.title') }}</h3>
+            <p class="settings-section-desc">{{ t('settings.theme.desc') }}</p>
             <div
               class="settings-radio-group"
               role="radiogroup"
-              aria-label="Giao diện"
+              :aria-label="t('settings.theme.title')"
             >
               <label class="settings-radio">
                 <input
@@ -79,7 +79,7 @@ onUnmounted(() => {
                   :checked="theme === 'system'"
                   @change="setTheme('system')"
                 />
-                Hệ thống
+                {{ t('settings.theme.system') }}
               </label>
               <label class="settings-radio">
                 <input
@@ -89,7 +89,7 @@ onUnmounted(() => {
                   :checked="theme === 'light'"
                   @change="setTheme('light')"
                 />
-                Sáng
+                {{ t('settings.theme.light') }}
               </label>
               <label class="settings-radio">
                 <input
@@ -99,17 +99,17 @@ onUnmounted(() => {
                   :checked="theme === 'dark'"
                   @change="setTheme('dark')"
                 />
-                Tối
+                {{ t('settings.theme.dark') }}
               </label>
             </div>
           </section>
           <section class="settings-section">
-            <h3 class="settings-section-title">Artifact</h3>
-            <p class="settings-section-desc">Chế độ xem mặc định khi mở tài liệu mới.</p>
+            <h3 class="settings-section-title">{{ t('settings.artifact.title') }}</h3>
+            <p class="settings-section-desc">{{ t('settings.artifact.desc') }}</p>
             <div
               class="settings-radio-group"
               role="radiogroup"
-              aria-label="Chế độ xem artifact mặc định"
+              :aria-label="t('settings.artifact.groupLabel')"
             >
               <label class="settings-radio">
                 <input
@@ -119,7 +119,7 @@ onUnmounted(() => {
                   :checked="artifactViewMode === 'block'"
                   @change="setArtifactViewMode('block')"
                 />
-                Block theo H2
+                {{ t('settings.artifact.block') }}
               </label>
               <label class="settings-radio">
                 <input
@@ -129,7 +129,7 @@ onUnmounted(() => {
                   :checked="artifactViewMode === 'full'"
                   @change="setArtifactViewMode('full')"
                 />
-                Full
+                {{ t('settings.artifact.full') }}
               </label>
             </div>
           </section>

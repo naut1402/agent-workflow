@@ -1,3 +1,20 @@
-// Namespace skeleton — filled by the `settings` module i18n slice (see epic #94).
-// Keep the export; slices add keys here + matching keys in en/settings.ts.
-export const settings = {}
+// Strings for the settings module (SettingsDialog). The language section
+// reuses common.language.* — those keys are NOT duplicated here.
+export const settings = {
+  title: 'Cài đặt',
+  close: 'Đóng',
+  theme: {
+    title: 'Giao diện',
+    desc: 'Chọn giao diện sáng, tối, hoặc theo hệ thống.',
+    system: 'Hệ thống',
+    light: 'Sáng',
+    dark: 'Tối',
+  },
+  artifact: {
+    title: 'Artifact',
+    desc: 'Chế độ xem mặc định khi mở tài liệu mới.',
+    groupLabel: 'Chế độ xem artifact mặc định',
+    block: 'Block theo H2',
+    full: 'Full',
+  },
+}
