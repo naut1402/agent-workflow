@@ -4,7 +4,28 @@ import {
   splitMarkdownSections,
   joinMarkdownSections,
   useInlineMarkdownEdit,
+  bindFocusableEditRef,
 } from '../../../../src/features/monitor/composables/useInlineMarkdownEdit'
+
+describe('bindFocusableEditRef', () => {
+  it('assigns targets that expose focus()', () => {
+    const target = ref<{ focus(): void } | null>(null)
+    const bind = bindFocusableEditRef(target)
+    const focus = vi.fn()
+    bind({ focus } as unknown as Element)
+    expect(target.value).toEqual({ focus })
+    bind(null)
+    expect(target.value).toBeNull()
+  })
+
+  it('clears when el has no focus()', () => {
+    const target = ref<{ focus(): void } | null>(null)
+    const bind = bindFocusableEditRef(target)
+    target.value = { focus: vi.fn() }
+    bind({} as Element)
+    expect(target.value).toBeNull()
+  })
+})
 
 describe('splitMarkdownSections', () => {
   it('splits on H2 headings', () => {

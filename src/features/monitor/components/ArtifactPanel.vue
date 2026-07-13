@@ -3,9 +3,9 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted, onUpdated, inje
 import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
 import { fetchArtifact, saveArtifact, fetchArtifactActions, fetchRunners } from '../../../api'
 import {
+  bindFocusableEditRef,
   splitMarkdownSections,
   useInlineMarkdownEdit,
-  type FocusableEditTarget,
 } from '../composables/useInlineMarkdownEdit'
 import { useArtifactAction } from '../composables/useArtifactAction'
 import { useArtifactSelectionToolbar } from '../composables/useArtifactSelectionToolbar'
@@ -269,9 +269,7 @@ const blockLineRanges = computed(() => {
   })
 })
 
-function bindEditor(el: FocusableEditTarget | null) {
-  editTextarea.value = el
-}
+const bindEditor = bindFocusableEditRef(editTextarea)
 
 async function handleBlur() {
   try {

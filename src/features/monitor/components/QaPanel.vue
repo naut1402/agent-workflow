@@ -3,8 +3,8 @@ import { ref, computed, watch, nextTick, onUpdated } from 'vue'
 import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
 import { saveArtifact } from '../../../api'
 import {
+  bindFocusableEditRef,
   useInlineMarkdownEdit,
-  type FocusableEditTarget,
 } from '../composables/useInlineMarkdownEdit'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
@@ -59,9 +59,7 @@ const {
 
 const html = computed(() => parseMarkdown(content.value || ''))
 
-function bindEditor(el: FocusableEditTarget | null) {
-  editTextarea.value = el
-}
+const bindEditor = bindFocusableEditRef(editTextarea)
 
 async function handleBlur() {
   try {

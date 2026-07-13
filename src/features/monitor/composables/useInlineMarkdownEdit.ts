@@ -1,9 +1,20 @@
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, type ComponentPublicInstance, type Ref } from 'vue'
 
 export type EditSection = 'full' | number
 
 /** Focusable edit target (e.g. MarkdownTextEditor expose). */
 export type FocusableEditTarget = { focus(): void }
+
+/** VNodeRef-compatible binder for MarkdownTextEditor (and similar) exposes. */
+export function bindFocusableEditRef(
+  target: Ref<FocusableEditTarget | null>,
+): (el: Element | ComponentPublicInstance | null) => void {
+  return (el) => {
+    const candidate = el as unknown as FocusableEditTarget | null
+    target.value =
+      candidate != null && typeof candidate.focus === 'function' ? candidate : null
+  }
+}
 
 export function splitMarkdownSections(source: string): string[] {
   if (!source.trim()) return []
