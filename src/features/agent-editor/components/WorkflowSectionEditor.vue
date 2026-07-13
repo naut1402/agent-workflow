@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { ref, computed, onMounted, watch } from 'vue'
 import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../shared/lib/workflowSteps'
 import { useSortable } from '../../../shared/composables/useSortable'
@@ -144,23 +147,23 @@ function removeStep(index) {
 async function saveStepTemplate(index) {
   const step = steps.value[index]
   if (!step?.title?.trim() && !step?.body?.trim()) {
-    emit('error', 'Step trống — không lưu được template')
+    emit('error', t('agentEditor.workflow.emptyStepError'))
     return
   }
   const defaultName = `step-${slugifySectionKey(step.title || `buoc-${index + 1}`)}`
-  const name = prompt('Tên template workflow step:', defaultName)
+  const name = prompt(t('agentEditor.workflow.promptTemplateName'), defaultName)
   if (!name?.trim()) return
 
   savingIdx.value = index
   try {
     const result = await saveWorkflowStepTemplate({
       name: name.trim(),
-      title: step.title || `Bước ${index + 1}`,
+      title: step.title || t('agentEditor.workflow.defaultStepTitle', { n: index + 1 }),
       body: step.body || '',
       pipeline_step_id: step.pipelineStepId || '',
     })
     await loadTemplates()
-    emit('message', `Đã lưu workflow step template → ${result.name}`)
+    emit('message', t('agentEditor.workflow.savedTemplate', { name: result.name }))
   } catch (e) {
     emit('error', String(e.message || e))
   } finally {
@@ -178,7 +181,7 @@ async function saveStepTemplate(index) {
         :class="{ active: tab === 'direct' }"
         @click="switchTab('direct')"
       >
-        Nhập trực tiếp
+        {{ t('agentEditor.workflow.directInput') }}
       </button>
       <button
         type="button"
@@ -201,27 +204,27 @@ async function saveStepTemplate(index) {
     <div v-else class="workflow-tab-panel workflow-builder">
       <div class="workflow-builder-toolbar">
         <select v-model="selectedPipelineStep" class="cfg-input cfg-input-sm">
-          <option value="">+ Từ pipeline step…</option>
+          <option value="">{{ t('agentEditor.workflow.fromPipeline') }}</option>
           <option v-for="ps in pipelineSteps" :key="ps.id" :value="ps.id">
             {{ ps.name }}
           </option>
         </select>
         <button type="button" class="btn-ghost btn-sm" :disabled="!selectedPipelineStep" @click="addPipelineStep">
-          Thêm
+          {{ t('agentEditor.workflow.add') }}
         </button>
         <select v-model="selectedTemplate" class="cfg-input cfg-input-sm">
-          <option value="">+ Từ template step…</option>
-          <option v-for="t in templates" :key="t.name" :value="t.name">
-            {{ t.name }}
+          <option value="">{{ t('agentEditor.workflow.fromTemplate') }}</option>
+          <option v-for="tpl in templates" :key="tpl.name" :value="tpl.name">
+            {{ tpl.name }}
           </option>
         </select>
         <button type="button" class="btn-ghost btn-sm" :disabled="!selectedTemplate" @click="addFromTemplate">
-          Thêm
+          {{ t('agentEditor.workflow.add') }}
         </button>
-        <button type="button" class="btn-ghost btn-sm" @click="addEmptyStep">+ Step trống</button>
+        <button type="button" class="btn-ghost btn-sm" @click="addEmptyStep">{{ t('agentEditor.workflow.addEmpty') }}</button>
       </div>
 
-      <p v-if="!steps.length" class="muted workflow-builder-empty">Chưa có bước — thêm từ pipeline, template hoặc step trống.</p>
+      <p v-if="!steps.length" class="muted workflow-builder-empty">{{ t('agentEditor.workflow.empty') }}</p>
 
       <div
         v-for="(step, index) in steps"
@@ -234,7 +237,7 @@ async function saveStepTemplate(index) {
       >
         <div class="workflow-builder-step-head">
           <span class="drag-handle">⋮⋮</span>
-          <span class="workflow-step-num">Bước {{ index + 1 }}</span>
+          <span class="workflow-step-num">{{ t('agentEditor.workflow.stepNum', { n: index + 1 }) }}</span>
           <span v-if="step.pipelineStepId" class="chip chip-xs">{{ step.pipelineStepId }}</span>
           <div class="section-head-actions">
             <button
@@ -243,7 +246,7 @@ async function saveStepTemplate(index) {
               :disabled="savingIdx === index"
               @click="saveStepTemplate(index)"
             >
-              {{ savingIdx === index ? '…' : 'Lưu template' }}
+              {{ savingIdx === index ? '…' : t('agentEditor.workflow.saveTemplate') }}
             </button>
             <button type="button" class="btn-ghost btn-sm btn-danger" @click="removeStep(index)">✕</button>
           </div>
@@ -251,7 +254,7 @@ async function saveStepTemplate(index) {
         <input
           class="cfg-input cfg-input-sm"
           :value="step.title"
-          placeholder="Tiêu đề bước"
+          :placeholder="t('agentEditor.workflow.titlePlaceholder')"
           @input="updateStep(index, 'title', ($event.target as HTMLInputElement).value)"
         />
         <MarkdownTextEditor
