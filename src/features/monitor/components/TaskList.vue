@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import TaskListItem from './TaskListItem.vue'
 
 const props = defineProps({
@@ -9,6 +10,7 @@ const props = defineProps({
   projectId: { type: String, default: null },
 })
 const emit = defineEmits(['select', 'open-artifact', 'task-archived'])
+const { t } = useI18n()
 
 // Track which tasks have their file list expanded.
 const expanded = ref(new Set())
@@ -47,7 +49,7 @@ const archivedTasks = computed(() => props.tasks.filter((t) => t.archived))
     />
   </ul>
   <details v-if="archivedTasks.length" class="archived-group">
-    <summary>Đã lưu trữ ({{ archivedTasks.length }})</summary>
+    <summary>{{ t('monitor.taskList.archivedSummary', { count: archivedTasks.length }) }}</summary>
     <ul class="tasklist">
       <TaskListItem
         v-for="t in archivedTasks"

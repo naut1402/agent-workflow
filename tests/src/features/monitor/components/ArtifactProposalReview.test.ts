@@ -1,5 +1,6 @@
+import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 
 vi.mock('@/api', () => ({
   fetchProposal: vi.fn(async () => ({ artifactName: 'design.md', before: 'old line\n', after: 'new line\n' })),

@@ -1,5 +1,5 @@
+import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
 import SectionSaveIndicator from '@/features/monitor/components/SectionSaveIndicator.vue'
 
 describe('SectionSaveIndicator', () => {

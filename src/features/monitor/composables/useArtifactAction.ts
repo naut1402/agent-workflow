@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { runArtifactAction, fetchJob } from '../../../api'
+import { i18n } from '../../../shared/i18n'
 
 // Drives an artifact quick-action end to end: submit the job, poll
 // `GET /api/jobs?id=` until it settles, then invoke `onReload` on success so the
@@ -58,8 +59,10 @@ function isTerminal(status?: string): boolean {
 }
 
 function failureMessage(job: JobLike): string {
-  if (job.status === 'cancelled') return 'Job đã bị huỷ.'
-  return job.error ? `Job thất bại: ${job.error}` : 'Job thất bại.'
+  if (job.status === 'cancelled') return i18n.global.t('monitor.job.cancelled')
+  return job.error
+    ? i18n.global.t('monitor.job.failedWithError', { error: job.error })
+    : i18n.global.t('monitor.job.failed')
 }
 
 export function useArtifactAction(opts: UseArtifactActionOptions) {
@@ -94,13 +97,15 @@ export function useArtifactAction(opts: UseArtifactActionOptions) {
         // action on a single hiccup.
         consecutiveErrors += 1
         if (consecutiveErrors > maxPollErrors) throw e
-        if (Date.now() >= deadline) return { status: 'failed', error: 'Hết thời gian chờ job' }
+        if (Date.now() >= deadline)
+          return { status: 'failed', error: i18n.global.t('monitor.job.timeout') }
         await sleep(pollMs)
         continue
       }
-      if (!job) throw new Error('Job không tồn tại')
+      if (!job) throw new Error(i18n.global.t('monitor.job.missing'))
       if (isTerminal(job.status)) return job
-      if (Date.now() >= deadline) return { ...job, status: 'failed', error: 'Hết thời gian chờ job' }
+      if (Date.now() >= deadline)
+        return { ...job, status: 'failed', error: i18n.global.t('monitor.job.timeout') }
       await sleep(pollMs)
     }
   }
@@ -135,7 +140,7 @@ export function useArtifactAction(opts: UseArtifactActionOptions) {
       )
       const jobId: string | undefined = res?.job?.id
       lastJobId.value = jobId ?? null
-      if (!jobId) throw new Error('Không nhận được job id từ server')
+      if (!jobId) throw new Error(i18n.global.t('monitor.job.noJobId'))
       const final = await pollJob(jobId)
       if (final.status === 'awaiting_approval') {
         // The agent proposed an edit against a scratch copy; hand off to the

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
+import { useI18n } from 'vue-i18n'
 
 defineProps({
   data: { type: Object, required: true },
 })
 
+const { t } = useI18n()
 const STATUS_ICON = { done: '✓', active: '▶', waiting: '⏸', pending: '○' }
 </script>
 
@@ -13,13 +15,17 @@ const STATUS_ICON = { done: '✓', active: '▶', waiting: '⏸', pending: '○'
     <Handle type="target" :position="Position.Left" />
     <div
       class="pnode-bubble"
-      :title="data.status === 'waiting' ? 'Nhấn để duyệt' : undefined"
+      :title="data.status === 'waiting' ? t('monitor.pipelineNode.clickToApprove') : undefined"
     >
       {{ STATUS_ICON[data.status] || '○' }}
     </div>
     <div class="pnode-label">{{ data.label }}</div>
     <div class="pnode-sub">{{ data.status }}</div>
-    <span v-if="data.qa_count > 0" class="qa-badge" :title="`${data.qa_count} câu hỏi blocking`">
+    <span
+      v-if="data.qa_count > 0"
+      class="qa-badge"
+      :title="t('monitor.pipelineNode.qaCount', { count: data.qa_count })"
+    >
       {{ data.qa_count }}Q
     </span>
     <Handle type="source" :position="Position.Right" />
