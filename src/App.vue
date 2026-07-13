@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { fetchProjects } from './api'
 import { useLocalToggle } from './shared/composables/useLocalToggle'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
@@ -15,6 +16,8 @@ import RailIcon from './shared/ui/RailIcon.vue'
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
 const PROJECT_KEY = 'dev-dashboard-selected-project'
+
+const { t } = useI18n()
 
 // ── Mode ─────────────────────────────────────────────────────────────────────
 const mode = ref('monitor')
@@ -132,18 +135,18 @@ onUnmounted(stop)
         <button
           type="button"
           class="sidebar-toggle rail-icon-btn"
-          :title="sidebarCollapsed ? 'Mở sidebar' : 'Thu gọn sidebar'"
+          :title="sidebarCollapsed ? t('common.sidebar.expand') : t('common.sidebar.collapse')"
           :aria-expanded="!sidebarCollapsed"
           @click="toggleSidebar"
         >
           <RailIcon :name="sidebarCollapsed ? 'panelExpand' : 'panelCollapse'" />
         </button>
-        <h1 v-if="!sidebarCollapsed">Dev Team</h1>
+        <h1 v-if="!sidebarCollapsed">{{ t('common.brand') }}</h1>
         <span
           v-if="!sidebarCollapsed"
           class="dot"
           :class="{ live: connected }"
-          :title="connected ? 'live' : 'disconnected'"
+          :title="connected ? t('common.sidebar.connected') : t('common.sidebar.disconnected')"
         ></span>
       </header>
       <p v-if="!sidebarCollapsed" class="root" :title="root">{{ root || '…' }}</p>
@@ -152,89 +155,89 @@ onUnmounted(stop)
         <button
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'monitor' }"
-          title="Monitor"
+          :title="t('common.modes.monitor')"
           @click="mode = 'monitor'"
         >
           <RailIcon name="monitor" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">Monitor</span>
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.monitor') }}</span>
         </button>
         <button
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'editor' }"
-          title="Pipeline Editor"
+          :title="t('common.modes.pipelineEditor')"
           @click="mode = 'editor'"
         >
           <RailIcon name="pipeline" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">Pipeline Editor</span>
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.pipelineEditor') }}</span>
         </button>
         <button
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'agentEditor' }"
-          title="Agent Editor"
+          :title="t('common.modes.agentEditor')"
           @click="mode = 'agentEditor'"
         >
           <RailIcon name="agent" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">Agent Editor</span>
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.agentEditor') }}</span>
         </button>
         <button
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'quickAction' }"
-          title="Quick Action"
+          :title="t('common.modes.quickAction')"
           @click="mode = 'quickAction'"
         >
           <RailIcon name="quickAction" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">Quick Action</span>
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.quickAction') }}</span>
         </button>
         <button
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'knowledge' }"
-          title="Knowledge"
+          :title="t('common.modes.knowledge')"
           @click="mode = 'knowledge'"
         >
           <RailIcon name="knowledge" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">Knowledge</span>
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.knowledge') }}</span>
         </button>
         <button
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'runner' }"
-          title="Runner Config"
+          :title="t('common.modes.runnerConfig')"
           @click="mode = 'runner'"
         >
           <RailIcon name="runner" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">Runner</span>
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.runner') }}</span>
         </button>
         <button
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'logs' }"
-          title="Nhật ký"
+          :title="t('common.modes.logs')"
           @click="mode = 'logs'"
         >
           <RailIcon name="logs" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">Nhật ký</span>
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.logs') }}</span>
         </button>
       </div>
 
       <div class="sidebar-footer">
         <footer v-if="!sidebarCollapsed" class="status">
           <span v-if="error" class="err">⚠ {{ error }}</span>
-          <span v-else-if="lastUpdated && mode === 'monitor'">cập nhật {{ lastUpdated }}</span>
-          <span v-else-if="mode === 'editor'" class="muted">editor mode — polling paused</span>
-          <span v-else-if="mode === 'agentEditor'" class="muted">agent editor — polling paused</span>
-          <span v-else-if="mode === 'quickAction'" class="muted">quick action — polling paused</span>
-          <span v-else-if="mode === 'knowledge'" class="muted">knowledge — polling paused</span>
-          <span v-else-if="mode === 'runner'" class="muted">runner config — polling paused</span>
-          <span v-else-if="mode === 'logs'" class="muted">nhật ký — polling paused</span>
+          <span v-else-if="lastUpdated && mode === 'monitor'">{{ t('common.status.updated', { time: lastUpdated }) }}</span>
+          <span v-else-if="mode === 'editor'" class="muted">{{ t('common.status.paused.editor') }}</span>
+          <span v-else-if="mode === 'agentEditor'" class="muted">{{ t('common.status.paused.agentEditor') }}</span>
+          <span v-else-if="mode === 'quickAction'" class="muted">{{ t('common.status.paused.quickAction') }}</span>
+          <span v-else-if="mode === 'knowledge'" class="muted">{{ t('common.status.paused.knowledge') }}</span>
+          <span v-else-if="mode === 'runner'" class="muted">{{ t('common.status.paused.runner') }}</span>
+          <span v-else-if="mode === 'logs'" class="muted">{{ t('common.status.paused.logs') }}</span>
         </footer>
         <button
           type="button"
           class="settings-btn mode-btn rail-icon-btn"
-          title="Cài đặt"
+          :title="t('common.sidebar.settings')"
           aria-haspopup="dialog"
           :aria-expanded="settingsOpen"
           @click="settingsOpen = true"
         >
           <RailIcon name="settings" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">Cài đặt</span>
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.sidebar.settings') }}</span>
         </button>
       </div>
     </aside>

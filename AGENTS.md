@@ -80,9 +80,14 @@ Domain module không biết gì về HTTP — chỉ nhận `ctx`/`root`, trả d
 
 `<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables}` + `src/shared/{ui,composables,lib}`; API wrapper tập trung ở `src/api/`.
 
-### 3.6 Ngôn ngữ UI
+### 3.6 Ngôn ngữ UI (i18n)
 
-UI strings tiếng Việt — giữ nguyên quy ước hiện tại.
+UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **Tiếng Việt (`vi`) là locale mặc định** và là **nguồn chân lý cho message schema** — các locale khác (vd `en`) được gắn type theo `vi` nên thiếu key là lỗi compile, không phải fallback runtime.
+
+- Hub dùng chung ở `src/shared/i18n/`; message tách theo **namespace per-feature** (`common`, `monitor`, `agentEditor`, `knowledge`, `runner`, `logs`, `pipelineEditor`, `quickAction`, `settings`) — mỗi feature chỉ sửa namespace của mình.
+- Trong `<script setup>`: `const { t } = useI18n()`. Ngoài component (vd `src/api/`): `i18n.global.t(...)`.
+- Locale hiện tại lưu trong `AppSettings.locale` (localStorage, chung store với theme); đổi qua `useLocale()`.
+- Test mount component có `t()`: dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`) để cài i18n plugin.
 
 ---
 

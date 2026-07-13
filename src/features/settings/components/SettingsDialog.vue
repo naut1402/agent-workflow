@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
+import { useLocale } from '../../../shared/composables/useLocale'
 import {
   resolveArtifactViewMode,
   resolveThemePreference,
@@ -9,7 +11,9 @@ import {
 
 const emit = defineEmits<{ close: [] }>()
 
+const { t } = useI18n()
 const { settings, load, update } = useAppSettings()
+const { locale, setLocale } = useLocale()
 
 const artifactViewMode = computed(() => resolveArtifactViewMode(settings.value))
 const theme = computed(() => resolveThemePreference(settings.value))
@@ -126,6 +130,36 @@ onUnmounted(() => {
                   @change="setArtifactViewMode('full')"
                 />
                 Full
+              </label>
+            </div>
+          </section>
+          <section class="settings-section">
+            <h3 class="settings-section-title">{{ t('common.language.title') }}</h3>
+            <p class="settings-section-desc">{{ t('common.language.desc') }}</p>
+            <div
+              class="settings-radio-group"
+              role="radiogroup"
+              :aria-label="t('common.language.title')"
+            >
+              <label class="settings-radio">
+                <input
+                  type="radio"
+                  name="locale"
+                  value="vi"
+                  :checked="locale === 'vi'"
+                  @change="setLocale('vi')"
+                />
+                {{ t('common.language.vi') }}
+              </label>
+              <label class="settings-radio">
+                <input
+                  type="radio"
+                  name="locale"
+                  value="en"
+                  :checked="locale === 'en'"
+                  @change="setLocale('en')"
+                />
+                {{ t('common.language.en') }}
               </label>
             </div>
           </section>
