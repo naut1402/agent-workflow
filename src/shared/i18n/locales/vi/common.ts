@@ -16,6 +16,7 @@ export const common = {
     quickAction: 'Quick Action',
     knowledge: 'Knowledge',
     runner: 'Runner',
+    runnerConfig: 'Runner Config',
     logs: 'Nhật ký',
   },
   status: {

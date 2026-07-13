@@ -200,7 +200,7 @@ onUnmounted(stop)
         <button
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'runner' }"
-          :title="t('common.modes.runner')"
+          :title="t('common.modes.runnerConfig')"
           @click="mode = 'runner'"
         >
           <RailIcon name="runner" />
