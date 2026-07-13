@@ -5,6 +5,7 @@ import { fetchArtifact, saveArtifact, fetchArtifactActions, fetchRunners } from 
 import {
   splitMarkdownSections,
   useInlineMarkdownEdit,
+  type FocusableEditTarget,
 } from '../composables/useInlineMarkdownEdit'
 import { useArtifactAction } from '../composables/useArtifactAction'
 import { useArtifactSelectionToolbar } from '../composables/useArtifactSelectionToolbar'
@@ -12,6 +13,7 @@ import ArtifactProposalReview from './ArtifactProposalReview.vue'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
 import { resolveArtifactViewMode } from '../../../../shared/schemas/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
+import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -267,7 +269,7 @@ const blockLineRanges = computed(() => {
   })
 })
 
-function bindTextarea(el: HTMLTextAreaElement | null) {
+function bindEditor(el: FocusableEditTarget | null) {
   editTextarea.value = el
 }
 
@@ -500,15 +502,19 @@ onUpdated(() => scheduleMermaid())
               :saved="showSavedIndicator(i)"
             />
             <summary v-if="block.heading">{{ block.heading }}</summary>
-            <textarea
+            <div
               v-if="editingSection === i"
-              :ref="bindTextarea"
-              v-model="sectionDraft"
-              class="cfg-input art-editor art-section-editor"
-              spellcheck="false"
-              @blur="handleBlur"
-              @keydown="onKeydown"
-            />
+              class="art-editor art-section-editor"
+              @keydown.capture="onKeydown"
+            >
+              <MarkdownTextEditor
+                :ref="bindEditor"
+                v-model="sectionDraft"
+                height="240px"
+                autofocus
+                @blur="handleBlur"
+              />
+            </div>
             <div
               v-else
               class="md block-content md-editable"
@@ -524,15 +530,19 @@ onUpdated(() => scheduleMermaid())
             :saving="showSavingIndicator('full')"
             :saved="showSavedIndicator('full')"
           />
-          <textarea
+          <div
             v-if="editingSection === 'full'"
-            :ref="bindTextarea"
-            v-model="sectionDraft"
-            class="cfg-input art-editor"
-            spellcheck="false"
-            @blur="handleBlur"
-            @keydown="onKeydown"
-          />
+            class="art-editor"
+            @keydown.capture="onKeydown"
+          >
+            <MarkdownTextEditor
+              :ref="bindEditor"
+              v-model="sectionDraft"
+              height="320px"
+              autofocus
+              @blur="handleBlur"
+            />
+          </div>
           <template v-else>
             <div
               v-for="(block, i) in blocks"

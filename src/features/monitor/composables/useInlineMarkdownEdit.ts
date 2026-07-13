@@ -2,6 +2,9 @@ import { ref, nextTick } from 'vue'
 
 export type EditSection = 'full' | number
 
+/** Focusable edit target (e.g. MarkdownTextEditor expose). */
+export type FocusableEditTarget = { focus(): void }
+
 export function splitMarkdownSections(source: string): string[] {
   if (!source.trim()) return []
   return source.split(/^(?=##\s)/m).filter((p) => p.trim())
@@ -20,7 +23,7 @@ export function useInlineMarkdownEdit(options: {
   const sectionDraft = ref('')
   const saving = ref(false)
   const savedSection = ref<EditSection | null>(null)
-  const editTextarea = ref<HTMLTextAreaElement | null>(null)
+  const editTextarea = ref<FocusableEditTarget | null>(null)
   let saveIndicatorTimer: ReturnType<typeof setTimeout> | null = null
 
   function flashSaved(section: EditSection) {
@@ -56,7 +59,11 @@ export function useInlineMarkdownEdit(options: {
   function shouldIgnoreClick(target: EventTarget | null): boolean {
     const el = target as HTMLElement | null
     if (!el) return false
-    return Boolean(el.closest('a, button, summary, input, textarea, select, .mermaid'))
+    return Boolean(
+      el.closest(
+        'a, button, summary, input, textarea, select, .mermaid, .toastui-editor-defaultUI',
+      ),
+    )
   }
 
   function startEdit(section: EditSection = 'full', e?: MouseEvent) {

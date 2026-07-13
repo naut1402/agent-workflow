@@ -2,8 +2,12 @@
 import { ref, computed, watch, nextTick, onUpdated } from 'vue'
 import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
 import { saveArtifact } from '../../../api'
-import { useInlineMarkdownEdit } from '../composables/useInlineMarkdownEdit'
+import {
+  useInlineMarkdownEdit,
+  type FocusableEditTarget,
+} from '../composables/useInlineMarkdownEdit'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
+import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
 
 const props = defineProps({
   qa: { type: String, default: '' },
@@ -55,7 +59,7 @@ const {
 
 const html = computed(() => parseMarkdown(content.value || ''))
 
-function bindTextarea(el: HTMLTextAreaElement | null) {
+function bindEditor(el: FocusableEditTarget | null) {
   editTextarea.value = el
 }
 
@@ -108,15 +112,19 @@ onUpdated(() => scheduleMermaid())
         :saving="showSavingIndicator('full')"
         :saved="showSavedIndicator('full')"
       />
-      <textarea
+      <div
         v-if="editingSection === 'full'"
-        :ref="bindTextarea"
-        v-model="sectionDraft"
-        class="cfg-input art-editor"
-        spellcheck="false"
-        @blur="handleBlur"
-        @keydown="onKeydown"
-      />
+        class="art-editor"
+        @keydown.capture="onKeydown"
+      >
+        <MarkdownTextEditor
+          :ref="bindEditor"
+          v-model="sectionDraft"
+          height="320px"
+          autofocus
+          @blur="handleBlur"
+        />
+      </div>
       <div
         v-else
         ref="viewRoot"
