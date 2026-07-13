@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   fetchRunners,
   saveRunner,
@@ -10,6 +11,8 @@ import {
 } from '../../../api'
 import RunnerDialog from './RunnerDialog.vue'
 import type { ProviderEntry, RunnerDraft } from '../types'
+
+const { t } = useI18n()
 
 const runners = ref<RunnerDraft[]>([])
 const defaultRunnerId = ref('')
@@ -63,7 +66,7 @@ function closeDialog() {
 }
 
 async function onSaved(runnerId: string) {
-  message.value = `Đã lưu ${runnerId}`
+  message.value = t('runner.messages.saved', { id: runnerId })
   await load()
 }
 
@@ -75,7 +78,9 @@ async function toggleEnabled(r: RunnerDraft, e: Event) {
   e.stopPropagation()
   try {
     await saveRunner({ ...r, enabled: !isEnabled(r) })
-    message.value = isEnabled(r) ? `Đã tắt ${r.id}` : `Đã bật ${r.id}`
+    message.value = isEnabled(r)
+      ? t('runner.messages.disabled', { id: r.id })
+      : t('runner.messages.enabled', { id: r.id })
     await load()
   } catch (err: any) {
     error.value = String(err.message || err)
@@ -95,10 +100,10 @@ async function makeDefault(r: RunnerDraft, e: Event) {
 
 async function remove(r: RunnerDraft, e: Event) {
   e.stopPropagation()
-  if (!confirm(`Xóa runner ${r.id}?`)) return
+  if (!confirm(t('runner.messages.confirmDelete', { id: r.id }))) return
   try {
     await deleteRunner(r.id)
-    message.value = 'Đã xóa'
+    message.value = t('runner.messages.deleted')
     if (editingRunner.value?.id === r.id) closeDialog()
     await load()
   } catch (err: any) {
@@ -110,19 +115,19 @@ async function remove(r: RunnerDraft, e: Event) {
 <template>
   <div class="runner-config">
     <header class="runner-head">
-      <h2>Runner Config</h2>
-      <p class="muted">Quản lý AI Agent Runner (global ~/.dev-team-dashboard/)</p>
+      <h2>{{ t('runner.panel.title') }}</h2>
+      <p class="muted">{{ t('runner.panel.subtitle') }}</p>
     </header>
 
     <div v-if="error" class="err-banner">{{ error }}</div>
     <div v-if="message" class="ok-banner">{{ message }}</div>
 
     <div class="runner-toolbar">
-      <button type="button" class="btn-primary btn-sm" @click="openNew">+ Thêm runner</button>
+      <button type="button" class="btn-primary btn-sm" @click="openNew">{{ t('runner.panel.addRunner') }}</button>
     </div>
 
     <ul class="runner-list">
-      <li v-if="!runners.length" class="empty muted">Chưa có runner. Bấm «+ Thêm runner» để tạo.</li>
+      <li v-if="!runners.length" class="empty muted">{{ t('runner.panel.empty') }}</li>
       <li
         v-for="r in runners"
         :key="r.id"
@@ -138,8 +143,8 @@ async function remove(r: RunnerDraft, e: Event) {
             type="button"
             class="icon-btn"
             :class="{ active: isEnabled(r) }"
-            :title="isEnabled(r) ? 'Tắt runner' : 'Bật runner'"
-            :aria-label="isEnabled(r) ? 'Tắt runner' : 'Bật runner'"
+            :title="isEnabled(r) ? t('runner.toggle.disable') : t('runner.toggle.enable')"
+            :aria-label="isEnabled(r) ? t('runner.toggle.disable') : t('runner.toggle.enable')"
             @click="toggleEnabled(r, $event)"
           >
             <!-- power -->
@@ -165,8 +170,8 @@ async function remove(r: RunnerDraft, e: Event) {
             class="icon-btn"
             :class="{ active: r.id === defaultRunnerId }"
             :disabled="r.id === defaultRunnerId"
-            title="Đặt làm mặc định"
-            aria-label="Đặt làm mặc định"
+            :title="t('runner.panel.makeDefault')"
+            :aria-label="t('runner.panel.makeDefault')"
             @click="makeDefault(r, $event)"
           >
             <!-- star -->
@@ -183,8 +188,8 @@ async function remove(r: RunnerDraft, e: Event) {
           <button
             type="button"
             class="icon-btn danger"
-            title="Xóa runner"
-            aria-label="Xóa runner"
+            :title="t('runner.panel.deleteRunner')"
+            :aria-label="t('runner.panel.deleteRunner')"
             @click="remove(r, $event)"
           >
             <!-- trash -->
@@ -203,7 +208,7 @@ async function remove(r: RunnerDraft, e: Event) {
     </ul>
 
     <section v-if="recentJobs.length" class="recent-jobs">
-      <h3>Jobs gần đây</h3>
+      <h3>{{ t('runner.panel.recentJobs') }}</h3>
       <table>
         <thead>
           <tr><th>ID</th><th>Status</th><th>Agent</th><th>Created</th></tr>

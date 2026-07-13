@@ -1,3 +1,80 @@
-// Namespace skeleton — filled by the `runner` module i18n slice (see epic #94).
-// Keep the export; slices add keys here + matching keys in en/runner.ts.
-export const runner = {}
+// UI strings for the `runner` feature (Runner Config panel + runner/connection
+// dialogs). Vietnamese is the source of truth for the message schema.
+export const runner = {
+  panel: {
+    title: 'Runner Config',
+    subtitle: 'Quản lý AI Agent Runner (global ~/.dev-team-dashboard/)',
+    addRunner: '+ Thêm runner',
+    empty: 'Chưa có runner. Bấm «+ Thêm runner» để tạo.',
+    makeDefault: 'Đặt làm mặc định',
+    deleteRunner: 'Xóa runner',
+    recentJobs: 'Jobs gần đây',
+  },
+  toggle: {
+    enable: 'Bật runner',
+    disable: 'Tắt runner',
+  },
+  status: {
+    on: 'Đang bật',
+    off: 'Đang tắt',
+  },
+  fields: {
+    name: 'Tên runner',
+    status: 'Trạng thái',
+    connectionPlaceholder: 'Chọn connection…',
+  },
+  actions: {
+    save: 'Lưu',
+    saving: 'Đang lưu…',
+    cancel: 'Huỷ',
+    test: 'Kiểm tra',
+    testing: 'Đang kiểm tra…',
+    refresh: 'Refresh',
+  },
+  dialog: {
+    addTitle: 'Thêm runner',
+    editTitle: 'Sửa runner',
+  },
+  a11y: {
+    close: 'Đóng',
+  },
+  messages: {
+    saved: 'Đã lưu {id}',
+    enabled: 'Đã bật {id}',
+    disabled: 'Đã tắt {id}',
+    deleted: 'Đã xóa',
+    confirmDelete: 'Xóa runner {id}?',
+    connectionAdded: 'Đã thêm connection {id}',
+  },
+  errors: {
+    nameRequired: 'Nhập tên runner',
+    connectionRequired: 'Chọn connection',
+    saveBeforeTest: 'Lưu runner trước khi kiểm tra',
+    cliPathRequired: 'Nhập CLI path',
+    connLabelRequired: 'Nhập tên kết nối',
+    commandRequired: 'Chọn command hoặc đăng ký command mới',
+  },
+  connectionDialog: {
+    title: 'Thêm connection',
+    labelField: 'Tên kết nối',
+    kind: 'Loại',
+    kindGroup: 'Loại connection',
+    scanning: 'Đang quét…',
+    register: 'Đăng ký…',
+    commandPlaceholder: 'Chọn command…',
+    notOnPath: ' (không có trên PATH)',
+    custom: ' · tuỳ chỉnh',
+    credentialPlaceholder: 'Chọn credential…',
+    credLabelField: 'Tên',
+    saveCredential: 'Lưu credential',
+    saveConnection: 'Lưu connection',
+  },
+  registerDialog: {
+    title: 'Đăng ký command',
+    commandField: 'Tên command',
+    commandPlaceholder: 'vd. claude (tuỳ chọn)',
+    pathPlaceholder: 'claude hoặc đường dẫn đầy đủ',
+    flagsField: 'Params / flags (tuỳ chọn)',
+    addToList: 'Thêm vào danh sách',
+  },
+}

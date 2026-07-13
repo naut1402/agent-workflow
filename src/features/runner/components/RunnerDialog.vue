@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { saveRunner, submitJob, fetchJob } from '../../../api'
 import ConnectionDialog from './ConnectionDialog.vue'
 import type { ConnectionOption, ProviderEntry, RunnerDraft } from '../types'
@@ -15,6 +16,8 @@ const emit = defineEmits<{
   saved: [runnerId: string]
   refreshed: []
 }>()
+
+const { t } = useI18n()
 
 const draft = ref(emptyDraft())
 const isEdit = computed(() => Boolean(props.runner?.id))
@@ -69,11 +72,11 @@ async function save() {
   message.value = ''
   try {
     if (!draft.value.name.trim()) {
-      error.value = 'Nhập tên runner'
+      error.value = t('runner.errors.nameRequired')
       return
     }
     if (!draft.value.connectionId) {
-      error.value = 'Chọn connection'
+      error.value = t('runner.errors.connectionRequired')
       return
     }
     const payload = {
@@ -93,7 +96,7 @@ async function save() {
 
 async function smokeTest() {
   if (!draft.value.id) {
-    error.value = 'Lưu runner trước khi kiểm tra'
+    error.value = t('runner.errors.saveBeforeTest')
     return
   }
   testing.value = true
@@ -126,7 +129,7 @@ async function smokeTest() {
 async function onConnectionSaved(connectionId: string) {
   emit('refreshed')
   draft.value.connectionId = connectionId
-  message.value = `Đã thêm connection ${connectionId}`
+  message.value = t('runner.messages.connectionAdded', { id: connectionId })
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -147,8 +150,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         aria-labelledby="runner-dialog-title"
       >
         <div class="modal-head">
-          <span id="runner-dialog-title">{{ isEdit ? 'Sửa runner' : 'Thêm runner' }}</span>
-          <button type="button" class="modal-close" aria-label="Đóng" @click="emit('close')">✕</button>
+          <span id="runner-dialog-title">{{ isEdit ? t('runner.dialog.editTitle') : t('runner.dialog.addTitle') }}</span>
+          <button type="button" class="modal-close" :aria-label="t('runner.a11y.close')" @click="emit('close')">✕</button>
         </div>
 
         <div class="modal-body">
@@ -156,7 +159,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <div v-if="message" class="ok-banner">{{ message }}</div>
 
           <div class="field">
-            <label class="cfg-label">Tên runner
+            <label class="cfg-label">{{ t('runner.fields.name') }}
               <input v-model="draft.name" class="cfg-input" placeholder="vd. Claude local" />
             </label>
           </div>
@@ -165,7 +168,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <label class="cfg-label">Connection</label>
             <div class="connection-row">
               <select v-model="draft.connectionId" class="cfg-input">
-                <option value="" disabled>Chọn connection…</option>
+                <option value="" disabled>{{ t('runner.fields.connectionPlaceholder') }}</option>
                 <option v-for="c in connections" :key="c.id" :value="c.id">
                   {{ c.label }} ({{ c.id }})
                 </option>
@@ -173,7 +176,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <button
                 type="button"
                 class="btn-ghost btn-sm conn-add"
-                title="Thêm connection"
+                :title="t('runner.connectionDialog.title')"
                 @click="showConnectionDialog = true"
               >
                 +
@@ -188,13 +191,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           </div>
 
           <div class="field enable-row">
-            <span class="cfg-label">Trạng thái</span>
+            <span class="cfg-label">{{ t('runner.fields.status') }}</span>
             <button
               type="button"
               class="icon-btn"
               :class="{ active: draft.enabled }"
-              :title="draft.enabled ? 'Tắt runner' : 'Bật runner'"
-              :aria-label="draft.enabled ? 'Tắt runner' : 'Bật runner'"
+              :title="draft.enabled ? t('runner.toggle.disable') : t('runner.toggle.enable')"
+              :aria-label="draft.enabled ? t('runner.toggle.disable') : t('runner.toggle.enable')"
               @click="draft.enabled = !draft.enabled"
             >
               <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
@@ -214,7 +217,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 />
               </svg>
             </button>
-            <span class="muted">{{ draft.enabled ? 'Đang bật' : 'Đang tắt' }}</span>
+            <span class="muted">{{ draft.enabled ? t('runner.status.on') : t('runner.status.off') }}</span>
           </div>
 
           <div class="modal-actions">
@@ -225,12 +228,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               :disabled="testing"
               @click="smokeTest"
             >
-              {{ testing ? 'Đang kiểm tra…' : 'Kiểm tra' }}
+              {{ testing ? t('runner.actions.testing') : t('runner.actions.test') }}
             </button>
             <span class="spacer" />
-            <button type="button" class="btn-ghost btn-sm" @click="emit('close')">Huỷ</button>
+            <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
             <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
-              {{ saving ? 'Đang lưu…' : 'Lưu' }}
+              {{ saving ? t('runner.actions.saving') : t('runner.actions.save') }}
             </button>
           </div>
         </div>

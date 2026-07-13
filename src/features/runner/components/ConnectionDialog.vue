@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   fetchCredentials,
   saveCredential,
@@ -33,6 +34,8 @@ const emit = defineEmits<{
   close: []
   saved: [connectionId: string]
 }>()
+
+const { t } = useI18n()
 
 const kind = ref<ConnectionKind>('local-console')
 const label = ref('')
@@ -153,7 +156,7 @@ function confirmRegisterCommand() {
   registerError.value = ''
   const path = registerDraft.value.path.trim()
   if (!path) {
-    registerError.value = 'Nhập CLI path'
+    registerError.value = t('runner.errors.cliPathRequired')
     return
   }
   const command =
@@ -218,14 +221,14 @@ async function save() {
   error.value = ''
   try {
     if (!label.value.trim()) {
-      error.value = 'Nhập tên kết nối'
+      error.value = t('runner.errors.connLabelRequired')
       return
     }
 
     if (kind.value === 'local-console') {
       const cmd = selectedCommand.value
       if (!cmd) {
-        error.value = 'Chọn command hoặc đăng ký command mới'
+        error.value = t('runner.errors.commandRequired')
         return
       }
       const resolvedProvider = cmd.providerId
@@ -290,22 +293,22 @@ onUnmounted(() => {
         aria-labelledby="connection-dialog-title"
       >
         <div class="modal-head">
-          <span id="connection-dialog-title">Thêm connection</span>
-          <button type="button" class="modal-close" aria-label="Đóng" @click="emit('close')">✕</button>
+          <span id="connection-dialog-title">{{ t('runner.connectionDialog.title') }}</span>
+          <button type="button" class="modal-close" :aria-label="t('runner.a11y.close')" @click="emit('close')">✕</button>
         </div>
 
         <div class="modal-body">
           <div v-if="error" class="err-banner">{{ error }}</div>
 
           <div class="field">
-            <label class="cfg-label">Tên kết nối
+            <label class="cfg-label">{{ t('runner.connectionDialog.labelField') }}
               <input v-model="label" class="cfg-input" placeholder="vd. Claude local" />
             </label>
           </div>
 
           <div class="field">
-            <span class="cfg-label">Loại</span>
-            <div class="kind-radios" role="radiogroup" aria-label="Loại connection">
+            <span class="cfg-label">{{ t('runner.connectionDialog.kind') }}</span>
+            <div class="kind-radios" role="radiogroup" :aria-label="t('runner.connectionDialog.kindGroup')">
               <label class="kind-radio">
                 <input v-model="kind" type="radio" value="local-console" />
                 Local console
@@ -323,17 +326,17 @@ onUnmounted(() => {
                 <label class="cfg-label" for="conn-command">Command</label>
                 <div class="row-btns">
                   <button type="button" class="btn-ghost btn-sm" :disabled="scanning" @click="refreshScan">
-                    {{ scanning ? 'Đang quét…' : 'Refresh' }}
+                    {{ scanning ? t('runner.connectionDialog.scanning') : t('runner.actions.refresh') }}
                   </button>
                   <button type="button" class="btn-ghost btn-sm" @click="openRegisterCommand">
-                    Đăng ký…
+                    {{ t('runner.connectionDialog.register') }}
                   </button>
                 </div>
               </div>
               <select id="conn-command" v-model="selectedCommandId" class="cfg-input">
-                <option value="" disabled>Chọn command…</option>
+                <option value="" disabled>{{ t('runner.connectionDialog.commandPlaceholder') }}</option>
                 <option v-for="c in commandOptions" :key="c.id" :value="c.id">
-                  {{ c.command }}{{ c.available ? '' : ' (không có trên PATH)' }}{{ c.custom ? ' · tuỳ chỉnh' : '' }}
+                  {{ c.command }}{{ c.available ? '' : t('runner.connectionDialog.notOnPath') }}{{ c.custom ? t('runner.connectionDialog.custom') : '' }}
                 </option>
               </select>
               <p v-if="selectedCommand" class="muted path-hint">{{ selectedCommand.path }}</p>
@@ -358,7 +361,7 @@ onUnmounted(() => {
                 </div>
               </div>
               <select v-model="credentialId" class="cfg-input">
-                <option value="" disabled>Chọn credential…</option>
+                <option value="" disabled>{{ t('runner.connectionDialog.credentialPlaceholder') }}</option>
                 <option v-for="c in filteredCredentials" :key="c.id" :value="c.id">
                   {{ c.label }} ({{ c.id }})
                 </option>
@@ -378,7 +381,7 @@ onUnmounted(() => {
                 </label>
               </div>
               <div class="field">
-                <label class="cfg-label">Tên
+                <label class="cfg-label">{{ t('runner.connectionDialog.credLabelField') }}
                   <input v-model="newCred.label" class="cfg-input" />
                 </label>
               </div>
@@ -387,14 +390,14 @@ onUnmounted(() => {
                   <input v-model="newCred.secretRef" class="cfg-input" placeholder="env:ANTHROPIC_API_KEY" />
                 </label>
               </div>
-              <button type="button" class="btn-primary btn-sm" @click="saveNewCredential">Lưu credential</button>
+              <button type="button" class="btn-primary btn-sm" @click="saveNewCredential">{{ t('runner.connectionDialog.saveCredential') }}</button>
             </div>
           </template>
 
           <div class="modal-actions">
-            <button type="button" class="btn-ghost btn-sm" @click="emit('close')">Huỷ</button>
+            <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
             <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
-              {{ saving ? 'Đang lưu…' : 'Lưu connection' }}
+              {{ saving ? t('runner.actions.saving') : t('runner.connectionDialog.saveConnection') }}
             </button>
           </div>
         </div>
@@ -414,11 +417,11 @@ onUnmounted(() => {
         aria-labelledby="register-command-title"
       >
         <div class="modal-head">
-          <span id="register-command-title">Đăng ký command</span>
+          <span id="register-command-title">{{ t('runner.registerDialog.title') }}</span>
           <button
             type="button"
             class="modal-close"
-            aria-label="Đóng"
+            :aria-label="t('runner.a11y.close')"
             @click="showRegisterCommand = false"
           >
             ✕
@@ -427,8 +430,8 @@ onUnmounted(() => {
         <div class="modal-body">
           <div v-if="registerError" class="err-banner">{{ registerError }}</div>
           <div class="field">
-            <label class="cfg-label">Tên command
-              <input v-model="registerDraft.command" class="cfg-input" placeholder="vd. claude (tuỳ chọn)" />
+            <label class="cfg-label">{{ t('runner.registerDialog.commandField') }}
+              <input v-model="registerDraft.command" class="cfg-input" :placeholder="t('runner.registerDialog.commandPlaceholder')" />
             </label>
           </div>
           <div class="field">
@@ -436,18 +439,18 @@ onUnmounted(() => {
               <input
                 v-model="registerDraft.path"
                 class="cfg-input"
-                placeholder="claude hoặc đường dẫn đầy đủ"
+                :placeholder="t('runner.registerDialog.pathPlaceholder')"
               />
             </label>
           </div>
           <div class="field">
-            <label class="cfg-label">Params / flags (tuỳ chọn)
+            <label class="cfg-label">{{ t('runner.registerDialog.flagsField') }}
               <input v-model="registerDraft.flagsText" class="cfg-input" placeholder="vd. --print" />
             </label>
           </div>
           <div class="modal-actions">
-            <button type="button" class="btn-ghost btn-sm" @click="showRegisterCommand = false">Huỷ</button>
-            <button type="button" class="btn-primary btn-sm" @click="confirmRegisterCommand">Thêm vào danh sách</button>
+            <button type="button" class="btn-ghost btn-sm" @click="showRegisterCommand = false">{{ t('runner.actions.cancel') }}</button>
+            <button type="button" class="btn-primary btn-sm" @click="confirmRegisterCommand">{{ t('runner.registerDialog.addToList') }}</button>
           </div>
         </div>
       </div>
