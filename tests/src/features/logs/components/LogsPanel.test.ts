@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import LogsPanel from '@/features/logs/components/LogsPanel.vue'
+import { mountWithI18n } from '../../../helpers/i18n'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -32,7 +33,7 @@ function stubFetch() {
 describe('LogsPanel', () => {
   it('mounts and loads the audit log by default', async () => {
     const fetchMock = stubFetch()
-    const w = mount(LogsPanel)
+    const w = mountWithI18n(LogsPanel)
     await flushPromises()
 
     expect(w.find('.logs-panel').exists()).toBe(true)
@@ -43,7 +44,7 @@ describe('LogsPanel', () => {
 
   it('switching to the request tab fetches request logs', async () => {
     const fetchMock = stubFetch()
-    const w = mount(LogsPanel)
+    const w = mountWithI18n(LogsPanel)
     await flushPromises()
 
     await w.findAll('.logs-tabs button')[1].trigger('click') // "Yêu cầu"
@@ -55,7 +56,7 @@ describe('LogsPanel', () => {
 
   it('jobs tab lists jobs and shows the selected job log', async () => {
     const fetchMock = stubFetch()
-    const w = mount(LogsPanel)
+    const w = mountWithI18n(LogsPanel)
     await flushPromises()
 
     await w.findAll('.logs-tabs button')[2].trigger('click') // "Jobs"

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { deriveTimeline, type TimelineEvent } from '../composables/useTaskTimeline'
+
+const { t } = useI18n()
 
 const props = defineProps<{ task: any }>()
 
@@ -13,7 +16,7 @@ const ICON: Record<TimelineEvent['kind'], string> = {
 }
 
 function fmt(ts: number | null): string {
-  if (ts == null) return 'hiện tại'
+  if (ts == null) return t('logs.timeline.now')
   try {
     return new Date(ts).toLocaleString()
   } catch {
@@ -24,8 +27,8 @@ function fmt(ts: number | null): string {
 
 <template>
   <section class="task-timeline">
-    <h3>Dòng thời gian hoạt động</h3>
-    <p v-if="!events.length" class="muted">Chưa có hoạt động nào.</p>
+    <h3>{{ t('logs.timeline.heading') }}</h3>
+    <p v-if="!events.length" class="muted">{{ t('logs.timeline.empty') }}</p>
     <ol v-else>
       <li v-for="(e, i) in events" :key="i" :class="['tl-item', `tl-${e.kind}`]">
         <span class="tl-icon">{{ ICON[e.kind] }}</span>
