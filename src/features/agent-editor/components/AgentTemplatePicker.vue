@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { ref, onMounted } from 'vue'
 import {
   fetchAgentTemplates,
@@ -51,7 +54,7 @@ async function copyCatalogAgent(agent) {
   } catch (e) {
     emit('apply-draft', draftFromCatalogAgent(agent))
     emit('close')
-    error.value = `Copy fallback (không đọc được file gốc): ${e.message || e}`
+    error.value = t('agentEditor.template.copyFallback', { message: e.message || e })
   }
 }
 
@@ -79,7 +82,7 @@ async function onFileChange(event) {
 }
 
 async function removeTemplate(name) {
-  if (!confirm(`Xóa template "${name}"?`)) return
+  if (!confirm(t('agentEditor.template.confirmDelete', { name }))) return
   await deleteAgentTemplate(name)
   templates.value = (await fetchAgentTemplates()).templates || []
 }
@@ -91,16 +94,16 @@ async function removeTemplate(name) {
     <p v-if="error" class="err">{{ error }}</p>
 
     <section class="picker-section">
-      <h4>Từ template</h4>
+      <h4>{{ t('agentEditor.template.fromTemplate') }}</h4>
       <select v-model="templateName" class="cfg-input">
         <option v-for="t in templates" :key="t.name" :value="t.name">{{ t.name }}</option>
       </select>
-      <button type="button" class="btn-primary btn-sm" @click="loadTemplate(templateName)">Dùng template</button>
-      <button type="button" class="btn-ghost btn-sm" @click="removeTemplate(templateName)">Xóa template</button>
+      <button type="button" class="btn-primary btn-sm" @click="loadTemplate(templateName)">{{ t('agentEditor.template.useTemplate') }}</button>
+      <button type="button" class="btn-ghost btn-sm" @click="removeTemplate(templateName)">{{ t('agentEditor.template.deleteTemplate') }}</button>
     </section>
 
     <section class="picker-section">
-      <h4>Sao chép từ catalog</h4>
+      <h4>{{ t('agentEditor.template.fromCatalog') }}</h4>
       <div class="catalog-copy-list">
         <button
           v-for="a in (catalog.agents || []).slice(0, 12)"
@@ -120,12 +123,12 @@ async function removeTemplate(name) {
     </section>
 
     <section class="picker-section">
-      <h4>Từ URL (https)</h4>
+      <h4>{{ t('agentEditor.template.fromUrl') }}</h4>
       <input v-model="urlInput" class="cfg-input" placeholder="https://..." />
-      <input v-model="urlName" class="cfg-input cfg-input-sm" placeholder="Tên template (optional)" />
+      <input v-model="urlName" class="cfg-input cfg-input-sm" :placeholder="t('agentEditor.template.namePlaceholder')" />
       <button type="button" class="btn-primary btn-sm" @click="importUrl">Import</button>
     </section>
 
-    <button type="button" class="btn-ghost" @click="emit('close')">Đóng</button>
+    <button type="button" class="btn-ghost" @click="emit('close')">{{ t('agentEditor.actions.close') }}</button>
   </div>
 </template>

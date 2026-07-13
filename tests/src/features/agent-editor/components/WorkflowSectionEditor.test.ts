@@ -1,5 +1,6 @@
+import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { compileWorkflowMarkdown, parseWorkflowMarkdown } from '@/shared/lib/workflowSteps'
 import WorkflowSectionEditor from '@/features/agent-editor/components/WorkflowSectionEditor.vue'

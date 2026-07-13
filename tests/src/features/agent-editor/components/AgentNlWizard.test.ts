@@ -1,5 +1,6 @@
+import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import AgentNlWizard from '@/features/agent-editor/components/AgentNlWizard.vue'
 
 // Correction A (F0005): the wizard is now multi-step (describe → preview →
