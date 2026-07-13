@@ -8,6 +8,7 @@ import {
 } from '../../../../shared/agentMarkdown.js'
 import { useSortable } from '../../../shared/composables/useSortable'
 import { saveAgentTemplate } from '../../../api'
+import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
 import WorkflowSectionEditor from './WorkflowSectionEditor.vue'
 
 const props = defineProps({
@@ -232,12 +233,11 @@ async function saveSectionTemplate(key) {
             @message="emit('message', $event)"
             @error="emit('error', $event)"
           />
-          <textarea
+          <MarkdownTextEditor
             v-else
-            class="cfg-textarea"
-            :value="draft.sections?.[key] || ''"
-            rows="4"
-            @input="updateSection(key, ($event.target as HTMLInputElement).value)"
+            :model-value="draft.sections?.[key] || ''"
+            height="180px"
+            @update:model-value="updateSection(key, $event)"
           />
         </div>
       </div>
