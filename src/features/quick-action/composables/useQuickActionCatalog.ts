@@ -1,5 +1,10 @@
 import { ref } from 'vue'
 import { fetchArtifactActionsCatalog, saveArtifactActionsCatalog } from '../../../api'
+import { i18n } from '../../../shared/i18n'
+
+// Plain (non-component) module → resolve strings via the app i18n singleton
+// rather than useI18n(). `t` reflects the active locale at call time.
+const t = i18n.global.t
 
 // Drives the QuickAction CRUD panel: loads the full artifact-actions catalog
 // (`GET /api/artifact-actions` without `?artifact=`), lets the caller
@@ -68,14 +73,14 @@ export function useQuickActionCatalog(opts: { getProjectId: () => string | null 
   /** Validate + insert/replace a draft by id in local state (does not save). */
   function upsert(draft: QuickActionDraft, editingId: string | null): UpsertResult {
     const id = draft.id.trim()
-    if (!id) return { ok: false, error: 'id không được để trống' }
-    if (!draft.artifact_patterns.length) return { ok: false, error: 'cần ít nhất 1 artifact pattern' }
-    if (!draft.label.trim()) return { ok: false, error: 'label không được để trống' }
-    if (!draft.prompt_template.trim()) return { ok: false, error: 'prompt_template không được để trống' }
+    if (!id) return { ok: false, error: t('quickAction.errors.idRequired') }
+    if (!draft.artifact_patterns.length) return { ok: false, error: t('quickAction.errors.patternRequired') }
+    if (!draft.label.trim()) return { ok: false, error: t('quickAction.errors.labelRequired') }
+    if (!draft.prompt_template.trim()) return { ok: false, error: t('quickAction.errors.promptRequired') }
 
     const dupIdx = actions.value.findIndex((a) => a.id === id)
     if (dupIdx >= 0 && actions.value[dupIdx].id !== editingId) {
-      return { ok: false, error: `id "${id}" đã tồn tại` }
+      return { ok: false, error: t('quickAction.errors.idExists', { id }) }
     }
 
     const editIdx = editingId ? actions.value.findIndex((a) => a.id === editingId) : -1
