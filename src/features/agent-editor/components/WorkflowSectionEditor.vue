@@ -9,6 +9,7 @@ import {
   fetchWorkflowStepTemplate,
   saveWorkflowStepTemplate,
 } from '../../../api'
+import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -80,9 +81,9 @@ function syncBuilderToMarkdown() {
   emit('update:modelValue', compileWorkflowMarkdown(steps.value))
 }
 
-function onDirectInput(event) {
-  directText.value = event.target.value
-  emit('update:modelValue', directText.value)
+function onDirectUpdate(value: string) {
+  directText.value = value
+  emit('update:modelValue', value)
 }
 
 function updateStep(index, field, value) {
@@ -190,12 +191,10 @@ async function saveStepTemplate(index) {
     </div>
 
     <div v-if="tab === 'direct'" class="workflow-tab-panel">
-      <textarea
-        class="cfg-textarea"
-        :value="directText"
-        rows="8"
-        placeholder="### Bước 1: ...&#10;&#10;Nội dung bước..."
-        @input="onDirectInput"
+      <MarkdownTextEditor
+        :model-value="directText"
+        height="240px"
+        @update:model-value="onDirectUpdate"
       />
     </div>
 
@@ -255,12 +254,10 @@ async function saveStepTemplate(index) {
           placeholder="Tiêu đề bước"
           @input="updateStep(index, 'title', ($event.target as HTMLInputElement).value)"
         />
-        <textarea
-          class="cfg-textarea"
-          :value="step.body"
-          rows="3"
-          placeholder="Nội dung / hướng dẫn bước"
-          @input="updateStep(index, 'body', ($event.target as HTMLInputElement).value)"
+        <MarkdownTextEditor
+          :model-value="step.body"
+          height="160px"
+          @update:model-value="updateStep(index, 'body', $event)"
         />
       </div>
     </div>
