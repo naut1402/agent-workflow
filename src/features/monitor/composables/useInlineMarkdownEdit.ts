@@ -1,6 +1,20 @@
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, type ComponentPublicInstance, type Ref } from 'vue'
 
 export type EditSection = 'full' | number
+
+/** Focusable edit target (e.g. MarkdownTextEditor expose). */
+export type FocusableEditTarget = { focus(): void }
+
+/** VNodeRef-compatible binder for MarkdownTextEditor (and similar) exposes. */
+export function bindFocusableEditRef(
+  target: Ref<FocusableEditTarget | null>,
+): (el: Element | ComponentPublicInstance | null) => void {
+  return (el) => {
+    const candidate = el as unknown as FocusableEditTarget | null
+    target.value =
+      candidate != null && typeof candidate.focus === 'function' ? candidate : null
+  }
+}
 
 export function splitMarkdownSections(source: string): string[] {
   if (!source.trim()) return []
@@ -20,7 +34,7 @@ export function useInlineMarkdownEdit(options: {
   const sectionDraft = ref('')
   const saving = ref(false)
   const savedSection = ref<EditSection | null>(null)
-  const editTextarea = ref<HTMLTextAreaElement | null>(null)
+  const editTextarea = ref<FocusableEditTarget | null>(null)
   let saveIndicatorTimer: ReturnType<typeof setTimeout> | null = null
 
   function flashSaved(section: EditSection) {
@@ -56,7 +70,11 @@ export function useInlineMarkdownEdit(options: {
   function shouldIgnoreClick(target: EventTarget | null): boolean {
     const el = target as HTMLElement | null
     if (!el) return false
-    return Boolean(el.closest('a, button, summary, input, textarea, select, .mermaid'))
+    return Boolean(
+      el.closest(
+        'a, button, summary, input, textarea, select, .mermaid, .toastui-editor-defaultUI',
+      ),
+    )
   }
 
   function startEdit(section: EditSection = 'full', e?: MouseEvent) {

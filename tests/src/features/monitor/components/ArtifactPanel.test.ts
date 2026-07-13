@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
 import ArtifactPanel from '@/features/monitor/components/ArtifactPanel.vue'
 import {
   STORAGE_KEY,
@@ -28,6 +29,31 @@ Nội dung C
 ## Block D
 Nội dung D
 `
+
+/** Lightweight stub — avoid mounting Toast UI Editor in jsdom. */
+const MarkdownTextEditorStub = defineComponent({
+  name: 'MarkdownTextEditor',
+  props: {
+    modelValue: { type: String, default: '' },
+    height: { type: String, default: '320px' },
+    autofocus: { type: Boolean, default: false },
+  },
+  emits: ['update:modelValue', 'blur'],
+  setup(props, { emit, expose }) {
+    expose({ focus: () => {} })
+    return () =>
+      h('textarea', {
+        class: 'mock-md-editor',
+        'data-testid': 'markdown-text-editor',
+        'data-height': props.height,
+        value: props.modelValue,
+        onInput: (e: Event) => {
+          emit('update:modelValue', (e.target as HTMLTextAreaElement).value)
+        },
+        onBlur: () => emit('blur'),
+      })
+  },
+})
 
 vi.mock('@/api', () => ({
   fetchArtifact: vi.fn(async () => ({ content: MD_TWO_H2, mtime: 1 })),
@@ -69,6 +95,9 @@ async function mountPanel(openArtifact: { taskId: string; name: string } | null)
       task,
       openArtifact,
       projectId: null,
+    },
+    global: {
+      stubs: { MarkdownTextEditor: MarkdownTextEditorStub },
     },
   })
   await flushPromises()
@@ -136,6 +165,31 @@ describe('ArtifactPanel view mode', () => {
     await w.find('.btn-view-toggle').trigger('click')
     await flushPromises()
     expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
+  })
+})
+
+describe('ArtifactPanel — MarkdownTextEditor inline edit', () => {
+  it('dblclick in full view mounts MarkdownTextEditor instead of raw textarea', async () => {
+    seedSettings('full')
+    const w = await mountPanel({ taskId: 'DEMO-1', name: 'investigate.md' })
+
+    await w.find('.md-editable').trigger('dblclick')
+    await flushPromises()
+
+    expect(w.find('.mock-md-editor').exists()).toBe(true)
+    expect(w.find('textarea.cfg-input.art-editor').exists()).toBe(false)
+    expect(w.find('.mock-md-editor').attributes('data-height')).toBe('320px')
+  })
+
+  it('dblclick a block mounts MarkdownTextEditor for that section', async () => {
+    seedSettings('block')
+    const w = await mountPanel({ taskId: 'DEMO-1', name: 'investigate.md' })
+
+    await w.find('.block-content.md-editable').trigger('dblclick')
+    await flushPromises()
+
+    expect(w.find('.mock-md-editor').exists()).toBe(true)
+    expect(w.find('.mock-md-editor').attributes('data-height')).toBe('240px')
   })
 })
 
@@ -254,7 +308,10 @@ describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
 
     const w = mount(ArtifactPanel, {
       props: { task, openArtifact: { taskId: 'DEMO-1', name: 'design.md' }, projectId: null },
-      global: { provide: { navigateToMode } },
+      global: {
+        provide: { navigateToMode },
+        stubs: { MarkdownTextEditor: MarkdownTextEditorStub },
+      },
     })
     await flushPromises()
 

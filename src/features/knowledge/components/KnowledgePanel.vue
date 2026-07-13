@@ -9,6 +9,7 @@ import {
   uploadKnowledgeFile,
   fetchKnowledgeTags,
 } from '../../../api'
+import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
 
 const scope = ref('project')
 const tagFilter = ref('')
@@ -281,7 +282,7 @@ onMounted(loadList)
         </label>
         <label class="cfg-label knowledge-content-label">
           Nội dung (Markdown)
-          <textarea v-model="draft.content" class="knowledge-textarea" spellcheck="false" />
+          <MarkdownTextEditor v-model="draft.content" height="400px" />
         </label>
         <div class="knowledge-editor-actions">
           <button class="btn-primary btn-sm" @click="save">Lưu</button>

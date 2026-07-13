@@ -4,7 +4,28 @@ import {
   splitMarkdownSections,
   joinMarkdownSections,
   useInlineMarkdownEdit,
+  bindFocusableEditRef,
 } from '../../../../src/features/monitor/composables/useInlineMarkdownEdit'
+
+describe('bindFocusableEditRef', () => {
+  it('assigns targets that expose focus()', () => {
+    const target = ref<{ focus(): void } | null>(null)
+    const bind = bindFocusableEditRef(target)
+    const focus = vi.fn()
+    bind({ focus } as unknown as Element)
+    expect(target.value).toEqual({ focus })
+    bind(null)
+    expect(target.value).toBeNull()
+  })
+
+  it('clears when el has no focus()', () => {
+    const target = ref<{ focus(): void } | null>(null)
+    const bind = bindFocusableEditRef(target)
+    target.value = { focus: vi.fn() }
+    bind({} as Element)
+    expect(target.value).toBeNull()
+  })
+})
 
 describe('splitMarkdownSections', () => {
   it('splits on H2 headings', () => {
@@ -120,5 +141,28 @@ describe('useInlineMarkdownEdit', () => {
     const event = { target: anchor } as unknown as MouseEvent
     startEdit('full', event)
     expect(editingSection.value).toBeNull()
+  })
+
+  it('ignores click inside Toast UI editor chrome when starting edit', () => {
+    const { startEdit, editingSection } = setup()
+    const ui = document.createElement('div')
+    ui.className = 'toastui-editor-defaultUI'
+    const inner = document.createElement('div')
+    ui.appendChild(inner)
+    document.body.appendChild(ui)
+    const event = { target: inner } as unknown as MouseEvent
+    startEdit('full', event)
+    expect(editingSection.value).toBeNull()
+    ui.remove()
+  })
+
+  it('startEdit focuses the bound edit target', async () => {
+    const { nextTick } = await import('vue')
+    const { startEdit, editTextarea } = setup('hello')
+    const focus = vi.fn()
+    editTextarea.value = { focus }
+    startEdit('full')
+    await nextTick()
+    expect(focus).toHaveBeenCalled()
   })
 })
