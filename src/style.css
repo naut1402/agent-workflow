@@ -810,10 +810,17 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   border-radius: 4px;
   width: 26px;
   height: 24px;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
   cursor: pointer;
   font-family: inherit;
+  padding: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 .mermaid-toolbar button:hover { color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
 

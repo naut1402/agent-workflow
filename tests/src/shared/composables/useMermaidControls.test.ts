@@ -30,6 +30,14 @@ describe('attachMermaidControls', () => {
     expect(root.querySelectorAll('.mermaid-toolbar')).toHaveLength(1)
   })
 
+  it('zoom-reset button uses an icon (not the wrapping «100%» label)', () => {
+    const root = makeRoot()
+    attachMermaidControls(root, { onToggleFullscreen: vi.fn() })
+    const reset = root.querySelector<HTMLButtonElement>('[data-act="zoom-reset"]')!
+    expect(reset.textContent?.trim()).toBe('↺')
+    expect(reset.textContent).not.toContain('100%')
+  })
+
   it('zoom-in / zoom-out / zoom-reset update the mermaid node transform', () => {
     const root = makeRoot()
     attachMermaidControls(root, { onToggleFullscreen: vi.fn() })
