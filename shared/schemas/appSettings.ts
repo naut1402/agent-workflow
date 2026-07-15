@@ -10,6 +10,8 @@ export const AppSettingsSchema = z
     artifactViewMode: z.enum(['block', 'full']).optional(),
     theme: z.enum(['system', 'light', 'dark']).optional(),
     locale: z.enum(['vi', 'en']).optional(),
+    hideMissingArtifacts: z.boolean().optional(),
+    collapseTaskExpandOnOutside: z.boolean().optional(),
   })
   .passthrough()
 
@@ -45,4 +47,18 @@ export function resolveLocale(
   settings: Pick<AppSettings, 'locale'> | null | undefined,
 ): LocalePreference {
   return settings?.locale === 'en' ? 'en' : 'vi'
+}
+
+/** Effective "hide missing artifacts" preference: missing → true (hide by default). */
+export function resolveHideMissingArtifacts(
+  settings: Pick<AppSettings, 'hideMissingArtifacts'> | null | undefined,
+): boolean {
+  return settings?.hideMissingArtifacts !== false
+}
+
+/** Effective "collapse task file-list on outside click" preference: missing → false. */
+export function resolveCollapseTaskExpandOnOutside(
+  settings: Pick<AppSettings, 'collapseTaskExpandOnOutside'> | null | undefined,
+): boolean {
+  return settings?.collapseTaskExpandOnOutside === true
 }

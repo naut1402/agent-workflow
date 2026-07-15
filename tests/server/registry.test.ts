@@ -101,16 +101,38 @@ describe('CRUD', () => {
     expect(get('missing')).toBeNull()
     expect(get(null)).toBeNull()
   })
-  test('remove: refuses default, 404 unknown, removes non-default', () => {
+  test('remove: 404 unknown, removes non-default without touching the default', () => {
     const first = add({ path: proj })
-    expect(remove(first.ok ? first.project.id : '').ok).toBe(false) // default
     expect(remove('nope')).toMatchObject({ ok: false, status: 404 })
-    // add a second (non-default) and remove it
+    // add a second (non-default) and remove it — default is untouched.
     const proj2 = fs.mkdtempSync(path.join(os.tmpdir(), 'reg-proj2-'))
     fs.mkdirSync(path.join(proj2, '.dev-team-agent'), { recursive: true })
     const second = add({ path: proj2 })
     if (second.ok) expect(remove(second.project.id)).toEqual({ ok: true, removed: true })
+    const remaining = list().projects
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0].id).toBe(first.ok ? first.project.id : '')
+    expect(remaining[0].default).toBe(true)
     fs.rmSync(proj2, { recursive: true, force: true })
+  })
+
+  test('remove: removing the default promotes the next remaining project', () => {
+    const first = add({ path: proj })
+    const proj2 = fs.mkdtempSync(path.join(os.tmpdir(), 'reg-proj2-'))
+    fs.mkdirSync(path.join(proj2, '.dev-team-agent'), { recursive: true })
+    const second = add({ path: proj2 })
+    expect(remove(first.ok ? first.project.id : '')).toEqual({ ok: true, removed: true })
+    const remaining = list().projects
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0].id).toBe(second.ok ? second.project.id : '')
+    expect(remaining[0].default).toBe(true)
+    fs.rmSync(proj2, { recursive: true, force: true })
+  })
+
+  test('remove: removing the only (default) project leaves an empty, valid registry', () => {
+    const first = add({ path: proj })
+    expect(remove(first.ok ? first.project.id : '')).toEqual({ ok: true, removed: true })
+    expect(list()).toEqual({ projects: [], defaultId: null })
   })
 })
 

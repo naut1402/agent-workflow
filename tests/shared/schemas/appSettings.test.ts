@@ -4,6 +4,8 @@ import {
   DEFAULT_APP_SETTINGS,
   parseAppSettings,
   resolveArtifactViewMode,
+  resolveCollapseTaskExpandOnOutside,
+  resolveHideMissingArtifacts,
   resolveThemePreference,
 } from '../../../shared/schemas/appSettings'
 
@@ -67,5 +69,50 @@ describe('resolveThemePreference', () => {
     expect(resolveThemePreference({ theme: 'light' })).toBe('light')
     expect(resolveThemePreference({ theme: 'dark' })).toBe('dark')
     expect(resolveThemePreference({ theme: 'system' })).toBe('system')
+  })
+})
+
+describe('resolveHideMissingArtifacts', () => {
+  it('missing / undefined / null → true (hide by default)', () => {
+    expect(resolveHideMissingArtifacts({})).toBe(true)
+    expect(resolveHideMissingArtifacts(undefined)).toBe(true)
+    expect(resolveHideMissingArtifacts(null)).toBe(true)
+  })
+
+  it('explicit true → true', () => {
+    expect(resolveHideMissingArtifacts({ hideMissingArtifacts: true })).toBe(true)
+  })
+
+  it('explicit false → false', () => {
+    expect(resolveHideMissingArtifacts({ hideMissingArtifacts: false })).toBe(false)
+  })
+})
+
+describe('resolveCollapseTaskExpandOnOutside', () => {
+  it('missing / undefined / null → false (off by default)', () => {
+    expect(resolveCollapseTaskExpandOnOutside({})).toBe(false)
+    expect(resolveCollapseTaskExpandOnOutside(undefined)).toBe(false)
+    expect(resolveCollapseTaskExpandOnOutside(null)).toBe(false)
+  })
+
+  it('explicit true → true', () => {
+    expect(resolveCollapseTaskExpandOnOutside({ collapseTaskExpandOnOutside: true })).toBe(true)
+  })
+
+  it('explicit false → false', () => {
+    expect(resolveCollapseTaskExpandOnOutside({ collapseTaskExpandOnOutside: false })).toBe(false)
+  })
+})
+
+describe('AppSettingsSchema — new optional fields (mục 1, 7)', () => {
+  it('safeParse succeeds on an old-shaped object missing the new fields', () => {
+    const parsed = AppSettingsSchema.safeParse({ theme: 'dark' })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('accepts the new fields when present', () => {
+    expect(
+      parseAppSettings({ hideMissingArtifacts: false, collapseTaskExpandOnOutside: true }),
+    ).toEqual({ hideMissingArtifacts: false, collapseTaskExpandOnOutside: true })
   })
 })

@@ -2,6 +2,7 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import TaskList from '@/features/monitor/components/TaskList.vue'
+import { STORAGE_KEY, useAppSettings } from '@/shared/composables/useAppSettings'
 
 const tasks = [
   {
@@ -15,9 +16,19 @@ const tasks = [
   { task_id: 'F003', current_phase: null, hitl_pending: 'hitl-2', has_qa: false, state_ok: true, artifacts: {} },
 ]
 
+function seedSettings(patch: Record<string, unknown> = {}) {
+  localStorage.clear()
+  if (Object.keys(patch).length) localStorage.setItem(STORAGE_KEY, JSON.stringify(patch))
+  const { load } = useAppSettings()
+  load()
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  localStorage.clear()
+  const { load } = useAppSettings()
+  load()
 })
 
 describe('TaskList', () => {
@@ -31,6 +42,7 @@ describe('TaskList', () => {
   })
 
   it('emits select + expands artifacts on row click', async () => {
+    seedSettings({ hideMissingArtifacts: false })
     const w = mount(TaskList, { props: { tasks } })
     await w.find('.task-row').trigger('click')
     expect(w.emitted('select')?.[0]).toEqual(['B4488'])
@@ -38,6 +50,65 @@ describe('TaskList', () => {
     const files = w.findAll('.file-item .file-name').map((n) => n.text())
     expect(files).toContain('investigate.md')
     expect(files).toContain('design.md')
+  })
+
+  it('phase is blank (not "—") when the task has no current_phase/hitl_pending/has_qa', () => {
+    const w = mount(TaskList, {
+      props: { tasks: [{ ...tasks[0], current_phase: null, hitl_pending: null, has_qa: false }] },
+    })
+    expect(w.find('.task-entry .phase').text()).toBe('')
+  })
+
+  describe('hide missing artifacts (mục 1)', () => {
+    it('hides files with exists:false by default and shows a toggle with the hidden count', async () => {
+      seedSettings()
+      const w = mount(TaskList, { props: { tasks } })
+      await w.find('.task-row').trigger('click')
+
+      const files = w.findAll('.file-item .file-name').map((n) => n.text())
+      expect(files).toEqual(['investigate.md'])
+      expect(files).not.toContain('design.md')
+
+      const toggle = w.find('.file-list-toggle')
+      expect(toggle.exists()).toBe(true)
+      expect(toggle.text()).toBe('Hiện file thiếu (1)')
+    })
+
+    it('clicking the toggle reveals hidden files and persists the preference', async () => {
+      seedSettings()
+      const w = mount(TaskList, { props: { tasks } })
+      await w.find('.task-row').trigger('click')
+
+      await w.find('.file-list-toggle').trigger('click')
+
+      const files = w.findAll('.file-item .file-name').map((n) => n.text())
+      expect(files).toEqual(['investigate.md', 'design.md'])
+      expect(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')).toMatchObject({
+        hideMissingArtifacts: false,
+      })
+      expect(w.find('.file-list-toggle').text()).toBe('Ẩn file chưa có')
+    })
+
+    it('does not render the toggle for a task with no artifacts at all', async () => {
+      seedSettings()
+      const w = mount(TaskList, { props: { tasks: [tasks[1]] } })
+      await w.find('.task-row').trigger('click')
+      expect(w.find('.file-list-toggle').exists()).toBe(false)
+    })
+  })
+
+  describe('collapseAll expose (mục 7)', () => {
+    it('collapses every expanded task file list when called', async () => {
+      seedSettings()
+      const w = mount(TaskList, { props: { tasks } })
+      await w.find('.task-row').trigger('click')
+      expect(w.find('.file-list').exists()).toBe(true)
+
+      ;(w.vm as any).collapseAll()
+      await w.vm.$nextTick()
+
+      expect(w.find('.file-list').exists()).toBe(false)
+    })
   })
 
   it('flags a task with pending Q&A', () => {

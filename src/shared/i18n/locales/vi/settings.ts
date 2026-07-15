@@ -17,4 +17,9 @@ export const settings = {
     block: 'Block theo H2',
     full: 'Full',
   },
+  taskList: {
+    title: 'Danh sách task',
+    desc: 'Tuỳ chọn hành vi danh sách task ở Monitor mode.',
+    collapseOnOutsideClick: 'Tự thu gọn file-list khi click ra ngoài',
+  },
 }

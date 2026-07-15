@@ -55,8 +55,10 @@ async function submitAdd() {
 }
 
 async function onRemove(project) {
-  if (project.default) return
-  if (!window.confirm(t('monitor.projectBar.confirmRemove', { name: project.name }))) return
+  const confirmMsg = project.default
+    ? t('monitor.projectBar.confirmRemoveDefault', { name: project.name })
+    : t('monitor.projectBar.confirmRemove', { name: project.name })
+  if (!window.confirm(confirmMsg)) return
   busy.value = true
   errorMsg.value = ''
   try {
@@ -90,7 +92,6 @@ async function onRemove(project) {
           <span v-if="p.default" class="project-default-badge">default</span>
         </button>
         <button
-          v-if="!p.default"
           class="project-remove"
           type="button"
           :title="t('monitor.projectBar.removeTitle')"

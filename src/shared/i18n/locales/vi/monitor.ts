@@ -11,9 +11,15 @@ export const monitor = {
     emptyHintSuffix: 'để bắt đầu.',
     connecting: 'Đang kết nối tới dev server…',
     selectTask: 'Chọn một task ở bên trái.',
+    collapseSubSidebar: 'Thu gọn danh sách task',
+    expandSubSidebar: 'Mở rộng danh sách task',
   },
   taskList: {
     archivedSummary: 'Đã lưu trữ ({count})',
+  },
+  fileList: {
+    hideMissing: 'Ẩn file chưa có',
+    showMissing: 'Hiện file thiếu ({count})',
   },
   taskItem: {
     waitingQa: 'chờ Q&A',
@@ -33,6 +39,8 @@ export const monitor = {
     pathRequired: 'Nhập đường dẫn tới .dev-team-agent (hoặc project root).',
     confirmRemove:
       'Gỡ project "{name}" khỏi dashboard?\n(Không xoá file trên đĩa.)',
+    confirmRemoveDefault:
+      'Gỡ project "{name}" (đang là mặc định) khỏi dashboard?\nProject khác sẽ tự động trở thành mặc định.\n(Không xoá file trên đĩa.)',
   },
   pipeline: {
     hitlTitle: '⏸ Duyệt HITL',
@@ -93,6 +101,11 @@ export const monitor = {
     confirmRun: 'Chạy "{label}" trên {name}?',
     confirmRunSelection: 'Chạy "{label}" trên đoạn đã chọn?',
     conflictReload: 'File đã thay đổi trên disk. Nhấn "Tải lại" để đồng bộ.',
+    zoomIn: 'Phóng to',
+    zoomOut: 'Thu nhỏ',
+    zoomReset: 'Về 100%',
+    fullscreen: 'Toàn màn hình',
+    exitFullscreen: 'Thoát toàn màn hình',
   },
   proposal: {
     reviewTitle: 'Xem lại đề xuất —',

@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, onUpdated, inject } from 'vue'
+import { useFullscreen } from '@vueuse/core'
 import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
 import { fetchArtifact, saveArtifact, fetchArtifactActions, fetchRunners } from '../../../api'
 import {
@@ -14,6 +15,7 @@ import { useArtifactAction } from '../composables/useArtifactAction'
 import { useArtifactSelectionToolbar } from '../composables/useArtifactSelectionToolbar'
 import ArtifactProposalReview from './ArtifactProposalReview.vue'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
+import { attachMermaidControls } from '../../../shared/composables/useMermaidControls'
 import { resolveArtifactViewMode } from '../../../../shared/schemas/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
@@ -38,6 +40,13 @@ const openBlocks = ref<Set<number>>(new Set())
 const message = ref('')
 const externalChange = ref(false)
 const viewRoot = ref<HTMLElement | null>(null)
+const fullscreenTarget = ref<HTMLElement | null>(null)
+const { toggle: toggleFullscreen } = useFullscreen(fullscreenTarget)
+
+function onToggleMermaidFullscreen(wrapEl: HTMLElement) {
+  fullscreenTarget.value = wrapEl
+  toggleFullscreen()
+}
 
 function applyDefaultViewMode() {
   blockMode.value = resolveArtifactViewMode(settings.value) === 'block'
@@ -315,6 +324,7 @@ async function scheduleMermaid() {
   if (isEditing()) return
   await nextTick()
   await renderMermaid(viewRoot.value)
+  attachMermaidControls(viewRoot.value, { onToggleFullscreen: onToggleMermaidFullscreen })
 }
 
 function onBlockToggle(i: number, ev: Event) {
@@ -381,10 +391,10 @@ watch(
   },
 )
 
-// Reset về mặc định (3 block đầu mở) mỗi khi content được (nạp) lại — cùng gốc
-// dữ liệu với `blocks` computed, nên seed lại khi artifact load xong.
+// Mở toàn bộ block mỗi khi content được (nạp) lại — cùng gốc dữ liệu với
+// `blocks` computed, nên seed lại khi artifact load xong.
 watch(content, () => {
-  openBlocks.value = new Set([0, 1, 2])
+  openBlocks.value = new Set(blocks.value.map((_, i) => i))
 })
 
 watch(

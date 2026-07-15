@@ -9,8 +9,9 @@ const props = defineProps({
   openArtifact: { type: Object, default: null }, // { taskId, name }
   isExpanded: { type: Boolean, default: false },
   projectId: { type: String, default: null },
+  hideMissing: { type: Boolean, default: true },
 })
-const emit = defineEmits(['select', 'toggle-expand', 'open-artifact', 'task-archived'])
+const emit = defineEmits(['select', 'toggle-expand', 'open-artifact', 'task-archived', 'toggle-hide-missing'])
 
 const { t } = useI18n()
 const archiveError = ref('')
@@ -42,7 +43,7 @@ function phaseLabel(task: any) {
   if (task.has_qa) return t('monitor.taskItem.waitingQa')
   if (task.hitl_pending) return task.hitl_pending
   if (task.current_phase) return task.current_phase
-  return '—'
+  return ''
 }
 
 const ORDER = [
@@ -52,7 +53,7 @@ const ORDER = [
   'qa.md',
 ]
 
-function sortedArtifacts(task: any) {
+function allSortedArtifacts(task: any) {
   const a = task.artifacts || {}
   const names = Object.keys(a)
   names.sort((x, y) => {
@@ -61,6 +62,17 @@ function sortedArtifacts(task: any) {
     return (ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy) || x.localeCompare(y)
   })
   return names.map((name) => ({ name, ...a[name] }))
+}
+
+function sortedArtifacts(task: any) {
+  const all = allSortedArtifacts(task)
+  return props.hideMissing ? all.filter((it) => it.exists) : all
+}
+
+// Always counted against the UNFILTERED list so the toggle keeps reporting
+// how many files are hidden even while hideMissing is on.
+function hiddenCount(task: any) {
+  return allSortedArtifacts(task).length - sortedArtifacts(task).length
 }
 </script>
 
@@ -100,6 +112,15 @@ function sortedArtifacts(task: any) {
     <p v-if="archiveError" class="art-warning">{{ archiveError }}</p>
 
     <ul v-if="isExpanded" class="file-list">
+      <li
+        v-if="allSortedArtifacts(task).length"
+        class="file-list-toggle"
+        @click.stop="emit('toggle-hide-missing')"
+      >{{
+        hideMissing && hiddenCount(task) > 0
+          ? t('monitor.fileList.showMissing', { count: hiddenCount(task) })
+          : t('monitor.fileList.hideMissing')
+      }}</li>
       <li
         v-for="it in sortedArtifacts(task)"
         :key="it.name"

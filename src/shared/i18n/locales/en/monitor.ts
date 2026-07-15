@@ -10,9 +10,15 @@ export const monitor = {
     emptyHintSuffix: 'to get started.',
     connecting: 'Connecting to the dev server…',
     selectTask: 'Select a task on the left.',
+    collapseSubSidebar: 'Collapse task list',
+    expandSubSidebar: 'Expand task list',
   },
   taskList: {
     archivedSummary: 'Archived ({count})',
+  },
+  fileList: {
+    hideMissing: 'Hide missing files',
+    showMissing: 'Show missing files ({count})',
   },
   taskItem: {
     waitingQa: 'waiting on Q&A',
@@ -32,6 +38,8 @@ export const monitor = {
     pathRequired: 'Enter a path to .dev-team-agent (or project root).',
     confirmRemove:
       'Remove project "{name}" from the dashboard?\n(Does not delete files on disk.)',
+    confirmRemoveDefault:
+      'Remove project "{name}" (currently the default) from the dashboard?\nAnother project will automatically become the default.\n(Does not delete files on disk.)',
   },
   pipeline: {
     hitlTitle: '⏸ Review HITL',
@@ -91,6 +99,11 @@ export const monitor = {
     confirmRun: 'Run "{label}" on {name}?',
     confirmRunSelection: 'Run "{label}" on the selected range?',
     conflictReload: 'File changed on disk. Click "Reload" to sync.',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    zoomReset: 'Reset to 100%',
+    fullscreen: 'Fullscreen',
+    exitFullscreen: 'Exit fullscreen',
   },
   proposal: {
     reviewTitle: 'Review proposal —',
