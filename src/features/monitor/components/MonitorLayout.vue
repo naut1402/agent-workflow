@@ -2,13 +2,20 @@
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
-import { ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { onClickOutside } from '@vueuse/core'
 import ProjectBar from './ProjectBar.vue'
 import TaskList from './TaskList.vue'
 import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
+import RailIcon from '../../../shared/ui/RailIcon.vue'
 import { patchTaskArchive } from '../../../api'
+import { useLocalToggle } from '../../../shared/composables/useLocalToggle'
+import { useAppSettings } from '../../../shared/composables/useAppSettings'
+import { resolveCollapseTaskExpandOnOutside } from '../../../../shared/schemas/appSettings'
+
+const SUB_SIDEBAR_KEY = 'dev-dashboard-monitor-subsidebar-collapsed'
 
 const props = defineProps({
   projects: { type: Array, default: () => [] },
@@ -35,6 +42,36 @@ const emit = defineEmits([
 
 const archiveError = ref('')
 
+// Sub-sidebar collapse (mục 5) — cùng pattern App.vue (sidebar chính):
+// useLocalToggle + localStorage key riêng.
+const { state: subSidebarCollapsed, toggle: toggleSubSidebar } = useLocalToggle(false)
+
+onMounted(() => {
+  try {
+    if (localStorage.getItem(SUB_SIDEBAR_KEY) === '1') subSidebarCollapsed.value = true
+  } catch { /* ignore */ }
+})
+
+watch(subSidebarCollapsed, (v) => {
+  try {
+    localStorage.setItem(SUB_SIDEBAR_KEY, v ? '1' : '0')
+  } catch { /* ignore */ }
+})
+
+// Setting mục 7 — auto-collapse file-list mở của TaskList khi click ra ngoài
+// vùng .monitor-sub-sidebar (kể cả click vào artifact panel bên phải).
+const subSidebarRef = ref<HTMLElement | null>(null)
+const taskListRef = ref<InstanceType<typeof TaskList> | null>(null)
+const { settings } = useAppSettings()
+
+onClickOutside(subSidebarRef, () => {
+  if (resolveCollapseTaskExpandOnOutside(settings.value)) taskListRef.value?.collapseAll()
+})
+
+const monitorLayoutClass = computed(() => ({
+  'monitor-layout--sub-collapsed': subSidebarCollapsed.value,
+}))
+
 async function toggleArchiveSelected() {
   if (!props.selected) return
   archiveError.value = ''
@@ -56,24 +93,36 @@ async function toggleArchiveSelected() {
 </script>
 
 <template>
-  <div class="monitor-layout">
-    <aside class="monitor-sub-sidebar">
-      <ProjectBar
-        :projects="projects"
-        :default-id="defaultProjectId"
-        :selected-id="selectedProjectId"
-        @select="emit('select-project', $event)"
-        @changed="emit('projects-changed')"
-      />
-      <TaskList
-        :tasks="tasks"
-        :selected-id="selectedId"
-        :open-artifact="openArtifact"
-        :project-id="selectedProjectId"
-        @select="emit('select-task', $event)"
-        @open-artifact="emit('open-artifact', $event)"
-        @task-archived="emit('task-archived')"
-      />
+  <div class="monitor-layout" :class="monitorLayoutClass">
+    <aside ref="subSidebarRef" class="monitor-sub-sidebar" :class="{ 'monitor-sub-sidebar--collapsed': subSidebarCollapsed }">
+      <button
+        type="button"
+        class="monitor-sub-sidebar-collapse-btn rail-icon-btn"
+        :title="subSidebarCollapsed ? t('monitor.layout.expandSubSidebar') : t('monitor.layout.collapseSubSidebar')"
+        :aria-expanded="!subSidebarCollapsed"
+        @click="toggleSubSidebar"
+      >
+        <RailIcon :name="subSidebarCollapsed ? 'panelExpand' : 'panelCollapse'" />
+      </button>
+      <template v-if="!subSidebarCollapsed">
+        <ProjectBar
+          :projects="projects"
+          :default-id="defaultProjectId"
+          :selected-id="selectedProjectId"
+          @select="emit('select-project', $event)"
+          @changed="emit('projects-changed')"
+        />
+        <TaskList
+          ref="taskListRef"
+          :tasks="tasks"
+          :selected-id="selectedId"
+          :open-artifact="openArtifact"
+          :project-id="selectedProjectId"
+          @select="emit('select-task', $event)"
+          @open-artifact="emit('open-artifact', $event)"
+          @task-archived="emit('task-archived')"
+        />
+      </template>
     </aside>
     <section class="monitor-content">
       <template v-if="selected">

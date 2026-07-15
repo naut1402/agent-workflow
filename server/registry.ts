@@ -240,8 +240,10 @@ export function add({ path: inputPath, name }: { path?: string; name?: string } 
 }
 
 // Remove a project from the registry by id. Does NOT touch the project's
-// filesystem — only the registry entry. Refuses to remove the default entry
-// (a default must remain for backward-compat). Returns
+// filesystem — only the registry entry. Removing the default project promotes
+// the next remaining project (if any) to default so a default stays set
+// whenever the registry is non-empty; removing the last project leaves an
+// empty (still valid) registry. Returns
 //   { ok: true, removed: true } | { ok: false, status, error }
 export function remove(
   id: string | null | undefined,
@@ -250,10 +252,9 @@ export function remove(
   const reg = loadRegistry()
   const idx = reg.projects.findIndex((p) => p.id === id)
   if (idx < 0) return { ok: false, status: 404, error: 'unknown project' }
-  if (reg.projects[idx].default) {
-    return { ok: false, status: 400, error: 'cannot remove the default project' }
-  }
+  const wasDefault = reg.projects[idx].default
   reg.projects.splice(idx, 1)
+  if (wasDefault && reg.projects.length) reg.projects[0].default = true
   saveRegistry(reg)
   return { ok: true, removed: true }
 }

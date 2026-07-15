@@ -272,6 +272,32 @@ describe('project registry routes', () => {
     const r = await req('PUT', '/api/projects')
     expect(r.status).toBe(405)
   })
+  test('DELETE /api/projects → removing the default promotes the next project', async () => {
+    const projA = fs.mkdtempSync(path.join(home, 'del-proj-a-'))
+    fs.mkdirSync(path.join(projA, '.dev-team-agent'), { recursive: true })
+    const projB = fs.mkdtempSync(path.join(home, 'del-proj-b-'))
+    fs.mkdirSync(path.join(projB, '.dev-team-agent'), { recursive: true })
+
+    const addedA = await req('POST', '/api/projects', { body: JSON.stringify({ path: projA }) })
+    const { project: a } = await addedA.json()
+    const addedB = await req('POST', '/api/projects', { body: JSON.stringify({ path: projB }) })
+    const { project: b } = await addedB.json()
+    expect(a.default).toBe(true)
+    expect(b.default).toBe(false)
+
+    const del = await req('DELETE', `/api/projects?id=${a.id}`)
+    expect(del.status).toBe(200)
+    expect((await del.json()).removed).toBe(true)
+
+    const after = await req('GET', '/api/projects')
+    const body = await after.json()
+    expect(body.defaultId).toBe(b.id)
+    expect(body.projects.map((p: any) => p.id)).toEqual([b.id])
+  })
+  test('DELETE /api/projects → unknown id → 404', async () => {
+    const r = await req('DELETE', '/api/projects?id=nope')
+    expect(r.status).toBe(404)
+  })
 })
 
 describe('GET /api/rules', () => {

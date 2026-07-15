@@ -5,6 +5,7 @@ import { useAppSettings } from '../../../shared/composables/useAppSettings'
 import { useLocale } from '../../../shared/composables/useLocale'
 import {
   resolveArtifactViewMode,
+  resolveCollapseTaskExpandOnOutside,
   resolveThemePreference,
   type ThemePreference,
 } from '../../../../shared/schemas/appSettings'
@@ -17,6 +18,7 @@ const { locale, setLocale } = useLocale()
 
 const artifactViewMode = computed(() => resolveArtifactViewMode(settings.value))
 const theme = computed(() => resolveThemePreference(settings.value))
+const collapseOnOutsideClick = computed(() => resolveCollapseTaskExpandOnOutside(settings.value))
 
 function setArtifactViewMode(mode: 'block' | 'full') {
   if (artifactViewMode.value === mode) return
@@ -26,6 +28,10 @@ function setArtifactViewMode(mode: 'block' | 'full') {
 function setTheme(mode: ThemePreference) {
   if (theme.value === mode) return
   update({ theme: mode })
+}
+
+function toggleCollapseOnOutsideClick() {
+  update({ collapseTaskExpandOnOutside: !collapseOnOutsideClick.value })
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -132,6 +138,18 @@ onUnmounted(() => {
                 {{ t('settings.artifact.full') }}
               </label>
             </div>
+          </section>
+          <section class="settings-section">
+            <h3 class="settings-section-title">{{ t('settings.taskList.title') }}</h3>
+            <p class="settings-section-desc">{{ t('settings.taskList.desc') }}</p>
+            <label class="settings-checkbox">
+              <input
+                type="checkbox"
+                :checked="collapseOnOutsideClick"
+                @change="toggleCollapseOnOutsideClick"
+              />
+              {{ t('settings.taskList.collapseOnOutsideClick') }}
+            </label>
           </section>
           <section class="settings-section">
             <h3 class="settings-section-title">{{ t('common.language.title') }}</h3>

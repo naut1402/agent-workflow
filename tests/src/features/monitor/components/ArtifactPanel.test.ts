@@ -215,28 +215,13 @@ describe('ArtifactPanel — block mode toggle all', () => {
     seedSettings('block')
   })
 
-  it('opens the first 3 blocks by default when block mode is enabled', async () => {
+  it('opens every block by default when block mode is enabled (mục 4)', async () => {
     const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
-    expect(detailsOpenStates(w)).toEqual([true, true, true, false])
-  })
-
-  it('opens every block when the toggle button is clicked while some are closed', async () => {
-    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
-
-    const toggle = findToggleAllButton(w)
-    expect(toggle.attributes('title')).toBe('Mở tất cả block')
-    expect(toggle.text()).toBe('▼')
-
-    await toggle.trigger('click')
-
     expect(detailsOpenStates(w)).toEqual([true, true, true, true])
   })
 
-  it('closes every block when the toggle button is clicked while all are open', async () => {
+  it('shows the "collapse all" toggle by default since every block starts open', async () => {
     const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
-
-    await findToggleAllButton(w).trigger('click')
-    expect(detailsOpenStates(w)).toEqual([true, true, true, true])
 
     const toggle = findToggleAllButton(w)
     expect(toggle.attributes('title')).toBe('Đóng tất cả block')
@@ -245,6 +230,21 @@ describe('ArtifactPanel — block mode toggle all', () => {
     await toggle.trigger('click')
 
     expect(detailsOpenStates(w)).toEqual([false, false, false, false])
+  })
+
+  it('re-opens every block once closed via the toggle button', async () => {
+    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+
+    await findToggleAllButton(w).trigger('click')
+    expect(detailsOpenStates(w)).toEqual([false, false, false, false])
+
+    const toggle = findToggleAllButton(w)
+    expect(toggle.attributes('title')).toBe('Mở tất cả block')
+    expect(toggle.text()).toBe('▼')
+
+    await toggle.trigger('click')
+
+    expect(detailsOpenStates(w)).toEqual([true, true, true, true])
   })
 
   it('re-opens a block that was closed by hand once the toggle button is clicked', async () => {

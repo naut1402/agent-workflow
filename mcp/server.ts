@@ -87,7 +87,7 @@ export function createMcpServer(): McpServer {
   server.tool(
     'remove_project',
     'Remove a project from the registry by id. Does NOT delete any files on disk. '
-      + 'Refuses to remove the default project.',
+      + 'Removing the default project promotes the next remaining project (if any) to default.',
     { id: z.string().describe('Project id to remove.') },
     async ({ id }) => handleRemoveProject({ id }),
   )

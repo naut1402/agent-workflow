@@ -16,4 +16,9 @@ export const settings = {
     block: 'Block by H2',
     full: 'Full',
   },
+  taskList: {
+    title: 'Task list',
+    desc: 'Task list behaviour preferences in Monitor mode.',
+    collapseOnOutsideClick: 'Auto-collapse the file list on outside click',
+  },
 }
