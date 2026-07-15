@@ -21,4 +21,10 @@ export const settings = {
     desc: 'Task list behaviour preferences in Monitor mode.',
     collapseOnOutsideClick: 'Auto-collapse the file list on outside click',
   },
+  sidebar: {
+    title: 'Sidebar',
+    desc: 'Auto-collapse sidebars when clicking outside the sidebar area.',
+    collapseAppOnOutsideClick: 'Auto-collapse the main sidebar on outside click',
+    collapseMonitorSubOnOutsideClick: 'Auto-collapse the Monitor sub-sidebar on outside click',
+  },
 }

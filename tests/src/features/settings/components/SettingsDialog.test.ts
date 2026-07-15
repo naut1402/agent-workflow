@@ -126,4 +126,34 @@ describe('SettingsDialog', () => {
     expect(dark.checked).toBe(true)
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
   })
+
+  it('sidebar section: toggling checkboxes persists collapse-on-outside prefs', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    expect(document.body.textContent).toContain('Sidebar')
+
+    const labels = Array.from(document.querySelectorAll('.settings-checkbox'))
+    const appLabel = labels.find((el) =>
+      el.textContent?.includes('Tự thu gọn sidebar chính'),
+    ) as HTMLElement
+    const monitorLabel = labels.find((el) =>
+      el.textContent?.includes('Tự thu gọn sub-sidebar Monitor'),
+    ) as HTMLElement
+    expect(appLabel).toBeTruthy()
+    expect(monitorLabel).toBeTruthy()
+
+    const appCb = appLabel.querySelector('input') as HTMLInputElement
+    const monitorCb = monitorLabel.querySelector('input') as HTMLInputElement
+    expect(appCb.checked).toBe(false)
+    expect(monitorCb.checked).toBe(false)
+
+    appCb.checked = true
+    appCb.dispatchEvent(new Event('change', { bubbles: true }))
+    monitorCb.checked = true
+    monitorCb.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+    expect(stored.collapseAppSidebarOnOutside).toBe(true)
+    expect(stored.collapseMonitorSubSidebarOnOutside).toBe(true)
+  })
 })

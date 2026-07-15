@@ -48,28 +48,10 @@ const archivedTasks = computed(() => props.tasks.filter((t) => t.archived))
 </script>
 
 <template>
-  <ul class="tasklist">
-    <TaskListItem
-      v-for="t in activeTasks"
-      :key="t.task_id"
-      :task="t"
-      :selected-id="selectedId"
-      :open-artifact="openArtifact"
-      :is-expanded="expanded.has(t.task_id)"
-      :project-id="projectId"
-      :hide-missing="hideMissing"
-      @select="emit('select', $event)"
-      @toggle-expand="toggleExpand"
-      @open-artifact="emit('open-artifact', $event)"
-      @task-archived="emit('task-archived')"
-      @toggle-hide-missing="toggleHideMissing"
-    />
-  </ul>
-  <details v-if="archivedTasks.length" class="archived-group">
-    <summary>{{ t('monitor.taskList.archivedSummary', { count: archivedTasks.length }) }}</summary>
-    <ul class="tasklist">
+  <div class="tasklist-panel">
+    <ul class="tasklist tasklist--active">
       <TaskListItem
-        v-for="t in archivedTasks"
+        v-for="t in activeTasks"
         :key="t.task_id"
         :task="t"
         :selected-id="selectedId"
@@ -84,5 +66,25 @@ const archivedTasks = computed(() => props.tasks.filter((t) => t.archived))
         @toggle-hide-missing="toggleHideMissing"
       />
     </ul>
-  </details>
+    <details v-if="archivedTasks.length" class="archived-group">
+      <summary>{{ t('monitor.taskList.archivedSummary', { count: archivedTasks.length }) }}</summary>
+      <ul class="tasklist tasklist--archived">
+        <TaskListItem
+          v-for="t in archivedTasks"
+          :key="t.task_id"
+          :task="t"
+          :selected-id="selectedId"
+          :open-artifact="openArtifact"
+          :is-expanded="expanded.has(t.task_id)"
+          :project-id="projectId"
+          :hide-missing="hideMissing"
+          @select="emit('select', $event)"
+          @toggle-expand="toggleExpand"
+          @open-artifact="emit('open-artifact', $event)"
+          @task-archived="emit('task-archived')"
+          @toggle-hide-missing="toggleHideMissing"
+        />
+      </ul>
+    </details>
+  </div>
 </template>

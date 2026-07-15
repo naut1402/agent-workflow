@@ -152,7 +152,8 @@ describe('TaskList', () => {
       },
     })
     // Main list only shows the non-archived task.
-    const mainIds = w.findAll('.tasklist')[0].findAll('.task-entry .id').map((n) => n.text())
+    expect(w.find('.tasklist-panel').exists()).toBe(true)
+    const mainIds = w.find('.tasklist--active').findAll('.task-entry .id').map((n) => n.text())
     expect(mainIds).toEqual(['F003'])
 
     // Archived group exists, collapsed by default, labelled with the count.
@@ -162,7 +163,8 @@ describe('TaskList', () => {
     expect(group.find('summary').text()).toBe('Đã lưu trữ (1)')
 
     // Task is present inside the group markup (native <details> keeps content in the
-    // DOM even when collapsed).
+    // DOM even when collapsed) — list is scrollable via .tasklist--archived.
+    expect(group.find('.tasklist--archived').exists()).toBe(true)
     const archivedIds = group.findAll('.task-entry .id').map((n) => n.text())
     expect(archivedIds).toEqual(['B4488'])
   })

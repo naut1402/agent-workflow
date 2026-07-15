@@ -22,4 +22,10 @@ export const settings = {
     desc: 'Tuỳ chọn hành vi danh sách task ở Monitor mode.',
     collapseOnOutsideClick: 'Tự thu gọn file-list khi click ra ngoài',
   },
+  sidebar: {
+    title: 'Sidebar',
+    desc: 'Tự động thu gọn thanh bên khi click ra ngoài vùng sidebar.',
+    collapseAppOnOutsideClick: 'Tự thu gọn sidebar chính khi click ra ngoài',
+    collapseMonitorSubOnOutsideClick: 'Tự thu gọn sub-sidebar Monitor khi click ra ngoài',
+  },
 }

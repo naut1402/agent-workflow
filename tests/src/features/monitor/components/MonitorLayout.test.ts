@@ -114,3 +114,37 @@ describe('MonitorLayout — auto-collapse task file-list on outside click (mục
     w.unmount()
   })
 })
+
+describe('MonitorLayout — auto-collapse sub-sidebar on outside click', () => {
+  it('does not collapse the sub-sidebar when the setting is off', async () => {
+    seedAppSettings()
+    const outside = document.createElement('div')
+    document.body.appendChild(outside)
+
+    const w = mount(MonitorLayout, { attachTo: document.body, props: { tasks } })
+    expect(w.find('.monitor-sub-sidebar').classes()).not.toContain('monitor-sub-sidebar--collapsed')
+    await flushMacrotask()
+
+    dispatchOutsideClick(outside)
+    await w.vm.$nextTick()
+
+    expect(w.find('.monitor-sub-sidebar').classes()).not.toContain('monitor-sub-sidebar--collapsed')
+    w.unmount()
+  })
+
+  it('collapses the sub-sidebar when the setting is on and click is outside', async () => {
+    seedAppSettings({ collapseMonitorSubSidebarOnOutside: true })
+    const outside = document.createElement('div')
+    document.body.appendChild(outside)
+
+    const w = mount(MonitorLayout, { attachTo: document.body, props: { tasks } })
+    await flushMacrotask()
+
+    dispatchOutsideClick(outside)
+    await w.vm.$nextTick()
+
+    expect(w.find('.monitor-sub-sidebar').classes()).toContain('monitor-sub-sidebar--collapsed')
+    expect(localStorage.getItem(SUB_SIDEBAR_KEY)).toBe('1')
+    w.unmount()
+  })
+})

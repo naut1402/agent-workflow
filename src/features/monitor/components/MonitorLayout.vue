@@ -13,7 +13,10 @@ import RailIcon from '../../../shared/ui/RailIcon.vue'
 import { patchTaskArchive } from '../../../api'
 import { useLocalToggle } from '../../../shared/composables/useLocalToggle'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
-import { resolveCollapseTaskExpandOnOutside } from '../../../../shared/schemas/appSettings'
+import {
+  resolveCollapseMonitorSubSidebarOnOutside,
+  resolveCollapseTaskExpandOnOutside,
+} from '../../../../shared/schemas/appSettings'
 
 const SUB_SIDEBAR_KEY = 'dev-dashboard-monitor-subsidebar-collapsed'
 
@@ -66,6 +69,9 @@ const { settings } = useAppSettings()
 
 onClickOutside(subSidebarRef, () => {
   if (resolveCollapseTaskExpandOnOutside(settings.value)) taskListRef.value?.collapseAll()
+  if (resolveCollapseMonitorSubSidebarOnOutside(settings.value)) {
+    subSidebarCollapsed.value = true
+  }
 })
 
 const monitorLayoutClass = computed(() => ({

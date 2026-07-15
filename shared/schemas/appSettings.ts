@@ -12,6 +12,8 @@ export const AppSettingsSchema = z
     locale: z.enum(['vi', 'en']).optional(),
     hideMissingArtifacts: z.boolean().optional(),
     collapseTaskExpandOnOutside: z.boolean().optional(),
+    collapseAppSidebarOnOutside: z.boolean().optional(),
+    collapseMonitorSubSidebarOnOutside: z.boolean().optional(),
   })
   .passthrough()
 
@@ -61,4 +63,18 @@ export function resolveCollapseTaskExpandOnOutside(
   settings: Pick<AppSettings, 'collapseTaskExpandOnOutside'> | null | undefined,
 ): boolean {
   return settings?.collapseTaskExpandOnOutside === true
+}
+
+/** Effective "collapse main app sidebar on outside click" preference: missing → false. */
+export function resolveCollapseAppSidebarOnOutside(
+  settings: Pick<AppSettings, 'collapseAppSidebarOnOutside'> | null | undefined,
+): boolean {
+  return settings?.collapseAppSidebarOnOutside === true
+}
+
+/** Effective "collapse monitor sub-sidebar on outside click" preference: missing → false. */
+export function resolveCollapseMonitorSubSidebarOnOutside(
+  settings: Pick<AppSettings, 'collapseMonitorSubSidebarOnOutside'> | null | undefined,
+): boolean {
+  return settings?.collapseMonitorSubSidebarOnOutside === true
 }
