@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { onClickOutside } from '@vueuse/core'
 import { fetchProjects } from './api'
 import { useLocalToggle } from './shared/composables/useLocalToggle'
+import { useAppSettings } from './shared/composables/useAppSettings'
+import { resolveCollapseAppSidebarOnOutside } from '../shared/schemas/appSettings'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
 import MonitorLayout from './features/monitor/components/MonitorLayout.vue'
 import PipelineEditor from './features/pipeline-editor/components/PipelineEditor.vue'
@@ -27,6 +30,12 @@ const editorScope = ref('global')
 const editorTaskId = ref('')
 
 const { state: sidebarCollapsed, toggle: toggleSidebar } = useLocalToggle(false)
+const sidebarRef = ref<HTMLElement | null>(null)
+const { settings } = useAppSettings()
+
+onClickOutside(sidebarRef, () => {
+  if (resolveCollapseAppSidebarOnOutside(settings.value)) sidebarCollapsed.value = true
+})
 
 // Central mode switch, so any nested wizard/panel (Agent Editor's Build NL
 // gate, ArtifactPanel's QuickAction gate) can send the user to Runner mode
@@ -130,7 +139,7 @@ onUnmounted(stop)
 
 <template>
   <div class="layout" :class="{ 'layout-editor': mode === 'editor' }">
-    <aside class="sidebar" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+    <aside ref="sidebarRef" class="sidebar" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
       <header class="brand" :class="{ 'brand-collapsed': sidebarCollapsed }">
         <button
           type="button"

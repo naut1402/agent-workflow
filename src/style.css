@@ -182,7 +182,20 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 }
 
 /* Task list */
-.tasklist { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+.tasklist-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.tasklist { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; }
+.tasklist--active { flex: 1 1 auto; }
+.tasklist--archived {
+  flex: 1 1 auto;
+  max-height: min(40vh, 280px);
+  overflow-y: auto;
+}
 
 .task-entry {
   border-radius: 7px;
@@ -222,6 +235,14 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   margin-top: 8px;
   border-top: 1px solid var(--border);
   padding-top: 6px;
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: min(45vh, 320px);
+}
+.archived-group[open] {
+  min-height: 0;
 }
 .archived-group > summary {
   font-size: 11px;
@@ -230,6 +251,7 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   user-select: none;
   list-style: none;
   padding: 4px 0;
+  flex-shrink: 0;
 }
 .archived-group > summary::before { content: '›'; margin-right: 4px; display: inline-block; transition: transform 0.15s; }
 .archived-group[open] > summary::before { transform: rotate(90deg); color: var(--accent); }
@@ -723,6 +745,10 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .monitor-sub-sidebar.monitor-sub-sidebar--collapsed {
   padding: 10px 6px;
   align-items: center;
+}
+.monitor-sub-sidebar .tasklist-panel {
+  flex: 1;
+  min-height: 0;
 }
 .monitor-sub-sidebar .tasklist {
   flex: 1;

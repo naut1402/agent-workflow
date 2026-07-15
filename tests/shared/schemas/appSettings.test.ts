@@ -4,6 +4,8 @@ import {
   DEFAULT_APP_SETTINGS,
   parseAppSettings,
   resolveArtifactViewMode,
+  resolveCollapseAppSidebarOnOutside,
+  resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
   resolveHideMissingArtifacts,
   resolveThemePreference,
@@ -104,6 +106,29 @@ describe('resolveCollapseTaskExpandOnOutside', () => {
   })
 })
 
+describe('resolveCollapseAppSidebarOnOutside', () => {
+  it('missing → false', () => {
+    expect(resolveCollapseAppSidebarOnOutside({})).toBe(false)
+    expect(resolveCollapseAppSidebarOnOutside(undefined)).toBe(false)
+  })
+
+  it('explicit true → true', () => {
+    expect(resolveCollapseAppSidebarOnOutside({ collapseAppSidebarOnOutside: true })).toBe(true)
+  })
+})
+
+describe('resolveCollapseMonitorSubSidebarOnOutside', () => {
+  it('missing → false', () => {
+    expect(resolveCollapseMonitorSubSidebarOnOutside({})).toBe(false)
+  })
+
+  it('explicit true → true', () => {
+    expect(
+      resolveCollapseMonitorSubSidebarOnOutside({ collapseMonitorSubSidebarOnOutside: true }),
+    ).toBe(true)
+  })
+})
+
 describe('AppSettingsSchema — new optional fields (mục 1, 7)', () => {
   it('safeParse succeeds on an old-shaped object missing the new fields', () => {
     const parsed = AppSettingsSchema.safeParse({ theme: 'dark' })
@@ -112,7 +137,17 @@ describe('AppSettingsSchema — new optional fields (mục 1, 7)', () => {
 
   it('accepts the new fields when present', () => {
     expect(
-      parseAppSettings({ hideMissingArtifacts: false, collapseTaskExpandOnOutside: true }),
-    ).toEqual({ hideMissingArtifacts: false, collapseTaskExpandOnOutside: true })
+      parseAppSettings({
+        hideMissingArtifacts: false,
+        collapseTaskExpandOnOutside: true,
+        collapseAppSidebarOnOutside: true,
+        collapseMonitorSubSidebarOnOutside: true,
+      }),
+    ).toEqual({
+      hideMissingArtifacts: false,
+      collapseTaskExpandOnOutside: true,
+      collapseAppSidebarOnOutside: true,
+      collapseMonitorSubSidebarOnOutside: true,
+    })
   })
 })

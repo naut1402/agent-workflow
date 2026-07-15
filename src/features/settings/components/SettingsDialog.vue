@@ -5,6 +5,8 @@ import { useAppSettings } from '../../../shared/composables/useAppSettings'
 import { useLocale } from '../../../shared/composables/useLocale'
 import {
   resolveArtifactViewMode,
+  resolveCollapseAppSidebarOnOutside,
+  resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
   resolveThemePreference,
   type ThemePreference,
@@ -19,6 +21,12 @@ const { locale, setLocale } = useLocale()
 const artifactViewMode = computed(() => resolveArtifactViewMode(settings.value))
 const theme = computed(() => resolveThemePreference(settings.value))
 const collapseOnOutsideClick = computed(() => resolveCollapseTaskExpandOnOutside(settings.value))
+const collapseAppSidebarOnOutside = computed(() =>
+  resolveCollapseAppSidebarOnOutside(settings.value),
+)
+const collapseMonitorSubSidebarOnOutside = computed(() =>
+  resolveCollapseMonitorSubSidebarOnOutside(settings.value),
+)
 
 function setArtifactViewMode(mode: 'block' | 'full') {
   if (artifactViewMode.value === mode) return
@@ -32,6 +40,16 @@ function setTheme(mode: ThemePreference) {
 
 function toggleCollapseOnOutsideClick() {
   update({ collapseTaskExpandOnOutside: !collapseOnOutsideClick.value })
+}
+
+function toggleCollapseAppSidebarOnOutside() {
+  update({ collapseAppSidebarOnOutside: !collapseAppSidebarOnOutside.value })
+}
+
+function toggleCollapseMonitorSubSidebarOnOutside() {
+  update({
+    collapseMonitorSubSidebarOnOutside: !collapseMonitorSubSidebarOnOutside.value,
+  })
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -149,6 +167,26 @@ onUnmounted(() => {
                 @change="toggleCollapseOnOutsideClick"
               />
               {{ t('settings.taskList.collapseOnOutsideClick') }}
+            </label>
+          </section>
+          <section class="settings-section">
+            <h3 class="settings-section-title">{{ t('settings.sidebar.title') }}</h3>
+            <p class="settings-section-desc">{{ t('settings.sidebar.desc') }}</p>
+            <label class="settings-checkbox">
+              <input
+                type="checkbox"
+                :checked="collapseAppSidebarOnOutside"
+                @change="toggleCollapseAppSidebarOnOutside"
+              />
+              {{ t('settings.sidebar.collapseAppOnOutsideClick') }}
+            </label>
+            <label class="settings-checkbox">
+              <input
+                type="checkbox"
+                :checked="collapseMonitorSubSidebarOnOutside"
+                @change="toggleCollapseMonitorSubSidebarOnOutside"
+              />
+              {{ t('settings.sidebar.collapseMonitorSubOnOutsideClick') }}
             </label>
           </section>
           <section class="settings-section">
