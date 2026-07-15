@@ -40,12 +40,12 @@ export function attachMermaidControls(
     const toolbar = document.createElement('div')
     toolbar.className = 'mermaid-toolbar'
     const fullscreenBtn = fullscreenSupported()
-      ? '<button type="button" data-act="fullscreen">⛶</button>'
+      ? '<button type="button" data-act="fullscreen" title="Fullscreen" aria-label="Fullscreen">⛶</button>'
       : ''
     toolbar.innerHTML = `
-      <button type="button" data-act="zoom-out">−</button>
-      <button type="button" data-act="zoom-reset">100%</button>
-      <button type="button" data-act="zoom-in">+</button>
+      <button type="button" data-act="zoom-out" title="−" aria-label="Zoom out">−</button>
+      <button type="button" data-act="zoom-reset" title="Reset zoom" aria-label="Reset zoom">↺</button>
+      <button type="button" data-act="zoom-in" title="+" aria-label="Zoom in">+</button>
       ${fullscreenBtn}`
     wrap.appendChild(toolbar)
 
