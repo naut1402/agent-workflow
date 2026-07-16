@@ -458,7 +458,7 @@ onUnmounted(() => {
   </Teleport>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .connection-dialog { max-width: 520px; width: min(520px, 94vw); }
 .register-command-dialog { max-width: 440px; width: min(440px, 92vw); }
 .nested-backdrop { z-index: 1100; }
