@@ -266,25 +266,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   gap: 0.5rem;
 }
 .enable-row .cfg-label { margin: 0; }
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: transform 0.12s ease, color 0.12s ease;
-}
-.icon-btn:hover {
-  color: var(--text);
-  transform: scale(1.15);
-}
-.icon-btn.active { color: var(--accent); }
 .modal-actions {
   display: flex;
   flex-wrap: wrap;
