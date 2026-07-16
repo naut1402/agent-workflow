@@ -1,6 +1,6 @@
 # Quy ước UI button
 
-Quy ước dùng chung cho người và AI agent khi thêm/sửa nút trên dashboard. Class chuẩn nằm ở `src/style.css`.
+Quy ước dùng chung cho người và AI agent khi thêm/sửa nút trên dashboard. Class chuẩn nằm ở `src/styles/_shell.scss` (entry `src/styles/main.scss`).
 
 ## Nguyên tắc
 

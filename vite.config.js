@@ -19,6 +19,13 @@ const root = process.env.DEV_TEAM_ROOT
 
 export default defineConfig({
   plugins: [vue(), devTeamApi({ root })],
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: 'modern-compiler',
+      },
+    },
+  },
   server: {
     port: 5174,
     strictPort: false,
