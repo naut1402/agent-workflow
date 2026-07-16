@@ -4,6 +4,7 @@ Nguồn quy ước duy nhất cho mọi AI agent làm việc trong repo, bất k
 
 - Chạy dự án / quickstart: [`README.md`](README.md).
 - Kiến trúc chi tiết + cấu trúc thư mục đầy đủ: [`docs/architecture.md`](docs/architecture.md).
+- i18n / đối ứng text UI: [`docs/i18n.md`](docs/i18n.md).
 - Quy ước riêng của Claude Code (nếu có): [`CLAUDE.md`](CLAUDE.md).
 
 ---
@@ -88,6 +89,7 @@ UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **
 - Trong `<script setup>`: `const { t } = useI18n()`. Ngoài component (vd `src/api/`): `i18n.global.t(...)`.
 - Locale hiện tại lưu trong `AppSettings.locale` (localStorage, chung store với theme); đổi qua `useLocale()`.
 - Test mount component có `t()`: dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`) để cài i18n plugin.
+- **Khi thêm/sửa text UI**: luôn cân nhắc và **đối ứng đủ** — thêm cùng key vào `locales/vi/<namespace>.ts` và mọi locale khác (vd `en`); không chỉ sửa component mà bỏ sót message file. Chi tiết + checklist: [`docs/i18n.md`](docs/i18n.md).
 
 ---
 
