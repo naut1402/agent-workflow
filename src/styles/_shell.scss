@@ -286,3 +286,8 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .btn-danger:hover { background: var(--danger); color: #fff; }
 
 .muted { color: var(--muted); font-size: 12px; }
+
+/* Main content area (all modes) */
+.main { flex: 1; overflow-y: auto; padding: 22px 28px; }
+.empty { color: var(--muted); margin-top: 40px; text-align: center; line-height: 1.7; }
+.main-editor { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
