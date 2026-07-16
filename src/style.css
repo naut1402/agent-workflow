@@ -676,6 +676,33 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .btn-primary:hover:not(:disabled) { opacity: 0.85; }
 .btn-primary:disabled { opacity: 0.4; cursor: default; }
 
+/* Icon action button — borderless default, scale on hover (see docs/ui-buttons.md) */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+.icon-btn:hover:not(:disabled) {
+  color: var(--text);
+  transform: scale(1.15);
+}
+.icon-btn.active { color: var(--accent); }
+.icon-btn.danger:hover:not(:disabled) { color: var(--danger); }
+.icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 /* ── Mode toggle (sidebar) ──────────────────────────────────────────────── */
 .mode-toggle {
   display: flex;

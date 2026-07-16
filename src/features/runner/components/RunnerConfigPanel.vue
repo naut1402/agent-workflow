@@ -265,30 +265,6 @@ async function remove(r: RunnerDraft, e: Event) {
   gap: 0.15rem;
   flex-shrink: 0;
 }
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: transform 0.12s ease, color 0.12s ease;
-}
-.icon-btn:hover:not(:disabled) {
-  color: var(--text);
-  transform: scale(1.15);
-}
-.icon-btn.active { color: var(--accent); }
-.icon-btn.danger:hover:not(:disabled) { color: var(--danger); }
-.icon-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
 .err-banner {
   background: rgba(248, 81, 73, 0.12);
   border: 1px solid var(--danger);

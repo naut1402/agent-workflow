@@ -37,7 +37,7 @@ agent-workflow/
 ├── mcp/        # MCP stdio server (project-registry CRUD)
 ├── tests/      # unit tests mirror cây source (bun test + vitest)
 ├── test-e2e/   # @playwright/test specs + fixtures/.dev-team-agent/
-├── docs/       # Tài liệu người đọc: architecture.md; history/ (sử liệu)
+├── docs/       # Tài liệu: architecture.md; i18n.md; ui-buttons.md; history/ (sử liệu)
 └── .claude/    # settings.local.json (bật MCP) + rules/ (rule project cho orchestrator)
 ```
 
@@ -80,6 +80,8 @@ Domain module không biết gì về HTTP — chỉ nhận `ctx`/`root`, trả d
 ### 3.5 Frontend (Vue 3)
 
 `<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables}` + `src/shared/{ui,composables,lib}`; API wrapper tập trung ở `src/api/`.
+
+- Quy ước button (ưu tiên icon-btn, default không viền, hover scale): [`docs/ui-buttons.md`](docs/ui-buttons.md).
 
 ### 3.6 Ngôn ngữ UI (i18n)
 
