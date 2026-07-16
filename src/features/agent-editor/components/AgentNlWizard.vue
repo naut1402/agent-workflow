@@ -186,7 +186,7 @@ function close() {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .nl-wizard-head {
   display: flex;
   align-items: center;
