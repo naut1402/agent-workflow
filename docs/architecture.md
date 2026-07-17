@@ -103,7 +103,7 @@ Domain module nhận `ctx`/`root`, trả data thuần; tầng HTTP mới biết 
 
 ### 3.3 Styling
 
-Entry SCSS: `src/styles/main.scss` (import từ `src/main.ts`). Partials: `_tokens.scss` (CSS custom properties theme), `_shell.scss` (layout/sidebar/mode/modal/btn dùng chung), `_legacy-rest.scss` (CSS feature chưa tách — xoá dần theo module). Theme runtime qua `data-theme` + CSS variables; một số SFC còn `<style scoped>`.
+Entry SCSS: `src/styles/main.scss` (import từ `src/main.ts`). Partials: `_tokens.scss` (CSS custom properties theme), `_shell.scss` (layout/sidebar/mode/modal/btn dùng chung), `_legacy-rest.scss` (CSS feature chưa tách — xoá dần theo module). Theme runtime qua `data-theme` + CSS variables; một số SFC còn `<style scoped>`. Khảo sát & kế hoạch áp dụng SCSS: [`scss-adoption.md`](scss-adoption.md).
 
 ---
 
