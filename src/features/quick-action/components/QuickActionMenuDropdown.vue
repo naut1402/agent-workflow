@@ -78,3 +78,44 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick, true))
     </div>
   </div>
 </template>
+
+<style scoped>
+.qa-menu-dropdown { position: relative; display: inline-flex; }
+.qa-menu-trigger { display: inline-flex; align-items: center; gap: 4px; }
+.qa-menu-caret { font-size: 10px; opacity: 0.75; }
+.qa-menu-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.qa-menu-item {
+  text-align: left;
+  font-size: 12px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.qa-menu-item:hover:not(:disabled) { background: rgba(var(--accent-rgb), 0.1); color: var(--accent); }
+.qa-menu-item:disabled { opacity: 0.45; cursor: default; }
+.qa-menu-nested-group { padding: 4px 0 2px; }
+.qa-menu-nested-label {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 10px 4px;
+  font-weight: 600;
+}
+.qa-menu-item-nested { padding-left: 18px; }
+</style>
