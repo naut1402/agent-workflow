@@ -126,7 +126,7 @@ async function onRemove(project) {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .project-bar {
   border-bottom: 1px solid var(--border, #2a2a35);
   padding: 8px 10px;
