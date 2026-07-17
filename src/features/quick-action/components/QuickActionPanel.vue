@@ -714,8 +714,14 @@ async function removeAction(a: QuickActionDraft) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: nowrap;
 }
-.qa-form-head h3 { margin: 0; }
+.qa-form-head h3 {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.qa-form-head .icon-btn { flex-shrink: 0; }
 /* The fields scroll inside the dialog so the header/footer stay put. */
 .qa-form-body {
   flex: 1 1 auto;

@@ -19,7 +19,7 @@ export const quickAction = {
     manage: 'Manage menus',
     dialogTitle: 'Quick Action menu tree',
     dialogHint:
-      'Rename / reorder / delete menu groups. Attach an action to a menu from the create/edit quick-action form (POC: session-only save).',
+      'Rename / reorder / delete menu groups. Attach an action to a menu from the create/edit quick-action form.',
     addGroup: 'Add group',
     moveUp: 'Up',
     moveDown: 'Down',

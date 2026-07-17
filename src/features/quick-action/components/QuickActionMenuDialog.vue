@@ -15,8 +15,10 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+/** Deep-clone menu tree. `toRaw` only unwraps the top proxy; nested nodes stay
+ * reactive and break `structuredClone` — use JSON round-trip so reopen works. */
 function cloneMenus(menus: ArtifactMenuNode[]): ArtifactMenuNode[] {
-  return structuredClone(toRaw(menus))
+  return JSON.parse(JSON.stringify(toRaw(menus))) as ArtifactMenuNode[]
 }
 
 const localMenus = ref<ArtifactMenuNode[]>(cloneMenus(props.menus))
@@ -245,6 +247,29 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 </template>
 
 <style scoped>
+.qa-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.qa-form-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+.qa-form-head h3 {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.qa-form-head .icon-btn { flex-shrink: 0; }
 .qa-menu-dialog {
   background: var(--panel);
   border: 1px solid var(--border);

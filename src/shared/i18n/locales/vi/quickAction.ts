@@ -21,7 +21,7 @@ export const quickAction = {
     manage: 'Quản lý menu',
     dialogTitle: 'Quản lý menu Quick Action',
     dialogHint:
-      'Đổi tên / sắp xếp / xóa nhóm menu. Gắn action vào menu ngay trên form tạo/sửa quick action (POC: lưu tạm trong phiên).',
+      'Đổi tên / sắp xếp / xóa nhóm menu. Gắn action vào menu ngay trên form tạo/sửa quick action.',
     addGroup: 'Thêm nhóm',
     moveUp: 'Lên',
     moveDown: 'Xuống',
