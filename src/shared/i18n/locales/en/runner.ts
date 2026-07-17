@@ -24,6 +24,9 @@ export const runner: Messages['runner'] = {
     name: 'Runner name',
     status: 'Status',
     connectionPlaceholder: 'Select connection…',
+    allowedTools: 'Allowed tools',
+    consoleHint:
+      'Console command: plain argv (cliPath + flags + prompt args). No allowedTools / agent_ref / system prompt.',
   },
   actions: {
     save: 'Save',

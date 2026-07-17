@@ -55,7 +55,12 @@ export const quickAction = {
     promptHelpAria: 'Xem danh sách placeholder hỗ trợ trong prompt_template',
     promptPlaceholder:
       "Đọc {'{'}{'{'}artifact_name{'}'}{'}'} / {'{'}{'{'}artifact_base{'}'}{'}'} / {'{'}{'{'}selection{'}'}{'}'}…",
-    runnerLabel: 'runner (optional — mặc định dùng runner mặc định của hệ thống)',
+    runnerLabel: 'runner (tuỳ chọn — mặc định dùng runner mặc định của hệ thống)',
+    consoleRunnerHint:
+      'Runner console-command: không gắn agent_ref / system prompt. prompt_template được shell-split thành argv bổ sung.',
+    consoleArgsLabel: 'args (prompt_template → argv)',
+    consoleArgsPlaceholder:
+      "vd. --file {'{'}{'{'}artifact_name{'}'}{'}'}  hoặc  \"{'{'}{'{'}selection{'}'}{'}'}\"",
     confirmOption: 'Yêu cầu xác nhận trước khi chạy',
     approvalOption: 'Yêu cầu phê duyệt trước khi ghi (xem diff)',
     saving: 'Đang lưu…',
@@ -64,10 +69,13 @@ export const quickAction = {
   },
   promptHelp: {
     heading: 'Placeholder hỗ trợ trong prompt_template:',
+    consoleHeading: 'Placeholder hỗ trợ trong args (shell-split thành argv):',
     selectionNote:
       '(chỉ có giá trị khi action gắn attach point "Text selection" và được chạy từ vùng đã chọn — trống nếu chạy từ title toolbar)',
     writeNote:
       'Lưu ý: để action thực sự thay đổi file, prompt phải yêu cầu agent GHI ĐÈ file (dùng công cụ Write) — stdout của runner KHÔNG được ghi lại vào file.',
+    consoleWriteNote:
+      'Console command: argv = connection.flags + shell-split(prompt). Không gửi --allowedTools hay system prompt.',
     placeholders: {
       artifactName: 'Tên file artifact đầy đủ, ví dụ "design.md".',
       artifactBase: 'Tên file artifact không có phần mở rộng, ví dụ "design".',

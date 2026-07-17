@@ -54,6 +54,11 @@ export const quickAction = {
     promptPlaceholder:
       "Read {'{'}{'{'}artifact_name{'}'}{'}'} / {'{'}{'{'}artifact_base{'}'}{'}'} / {'{'}{'{'}selection{'}'}{'}'}…",
     runnerLabel: 'runner (optional — defaults to the system default runner)',
+    consoleRunnerHint:
+      'Console-command runner: no agent_ref / system prompt. prompt_template is shell-split into extra argv.',
+    consoleArgsLabel: 'args (prompt_template → argv)',
+    consoleArgsPlaceholder:
+      "e.g. --file {'{'}{'{'}artifact_name{'}'}{'}'}  or  \"{'{'}{'{'}selection{'}'}{'}'}\"",
     confirmOption: 'Require confirmation before running',
     approvalOption: 'Require approval before writing (view diff)',
     saving: 'Saving…',
@@ -62,10 +67,13 @@ export const quickAction = {
   },
   promptHelp: {
     heading: 'Placeholders supported in prompt_template:',
+    consoleHeading: 'Placeholders supported in args (shell-split into argv):',
     selectionNote:
       '(only has a value when the action has the "Text selection" attach point and is run from a selection — empty when run from the title toolbar)',
     writeNote:
       "Note: for an action to actually change a file, the prompt must ask the agent to OVERWRITE the file (using the Write tool) — the runner's stdout is NOT written back to the file.",
+    consoleWriteNote:
+      'Console command: argv = connection.flags + shell-split(prompt). No --allowedTools or system prompt is sent.',
     placeholders: {
       artifactName: 'The full artifact file name, e.g. "design.md".',
       artifactBase: 'The artifact file name without its extension, e.g. "design".',

@@ -328,7 +328,13 @@ async function runJob(job: JobRecord): Promise<void> {
 
   let resolvedAgent
   try {
-    resolvedAgent = await resolveAgent(job.agentRef, { projectRoot, devTeamRoot })
+    // Console-command providers never merge an agent system prompt — ignore any
+    // agentRef the client may still send.
+    if (connection.providerId === 'console-command') {
+      resolvedAgent = await resolveAgent('', { projectRoot, devTeamRoot })
+    } else {
+      resolvedAgent = await resolveAgent(job.agentRef, { projectRoot, devTeamRoot })
+    }
   } catch (err: any) {
     saveJob({
       ...(loadJob(job.id) as JobRecord),

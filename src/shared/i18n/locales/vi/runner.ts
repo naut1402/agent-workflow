@@ -22,6 +22,9 @@ export const runner = {
     name: 'Tên runner',
     status: 'Trạng thái',
     connectionPlaceholder: 'Chọn connection…',
+    allowedTools: 'Allowed tools',
+    consoleHint:
+      'Console command: chạy argv thuần (cliPath + flags + args từ prompt). Không dùng allowedTools / agent_ref / system prompt.',
   },
   actions: {
     save: 'Lưu',

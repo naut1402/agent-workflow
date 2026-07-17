@@ -24,6 +24,7 @@ const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
   { id: 'claude-code-cli', kind: 'local-console', label: 'Claude Code CLI' },
   { id: 'cursor-cli', kind: 'local-console', label: 'Cursor CLI' },
   { id: 'codex-cli', kind: 'local-console', label: 'Codex CLI' },
+  { id: 'console-command', kind: 'local-console', label: 'Console command' },
   { id: 'anthropic-api', kind: 'ai-provider', label: 'Anthropic API' },
 ]
 

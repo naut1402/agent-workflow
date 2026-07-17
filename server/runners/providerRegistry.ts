@@ -1,6 +1,7 @@
 import { createClaudeCodeCliProvider } from './providers/claude-code-cli.js'
 import { createCursorCliProvider } from './providers/cursor-cli.js'
 import { createCodexCliProvider } from './providers/codex-cli.js'
+import { createConsoleCommandProvider } from './providers/console-command.js'
 import type { RunnerProvider } from './types.js'
 
 const providers = new Map<string, RunnerProvider>()
@@ -12,6 +13,7 @@ function register(provider: RunnerProvider): void {
 register(createClaudeCodeCliProvider())
 register(createCursorCliProvider())
 register(createCodexCliProvider())
+register(createConsoleCommandProvider())
 
 /**
  * Register (or replace) a provider at runtime. Built-in providers are registered
