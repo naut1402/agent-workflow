@@ -188,4 +188,19 @@ describe('QuickActionPanel', () => {
     await w.get('button.btn-primary.btn-sm').trigger('click') // + New again
     expect(w.find('.qa-prompt-help').exists()).toBe(false)
   })
+
+  it('menu manager dialog can open, close, and reopen without error', async () => {
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    await flushPromises()
+
+    const manageBtn = w.get('button[aria-label="Quản lý menu"]')
+    await manageBtn.trigger('click')
+    expect(w.find('.qa-menu-dialog').exists()).toBe(true)
+
+    await w.get('.qa-menu-dialog .btn-ghost').trigger('click')
+    expect(w.find('.qa-menu-dialog').exists()).toBe(false)
+
+    await manageBtn.trigger('click')
+    expect(w.find('.qa-menu-dialog').exists()).toBe(true)
+  })
 })

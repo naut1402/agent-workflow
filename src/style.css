@@ -593,7 +593,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   background: var(--accent) !important;
   border-color: var(--accent) !important;
 }
-.qa-toolbar { display: flex; gap: 6px; margin-bottom: 10px; }
 
 /* Flow profile editor modal */
 .modal-backdrop {
@@ -702,6 +701,30 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   opacity: 0.45;
   cursor: default;
 }
+
+/* Text quick-action trigger (docs/ui-buttons.md: label bắt buộc). Shared by
+   Monitor ArtifactPanel + QuickActionMenuDropdown — keep global with .icon-btn. */
+.btn-quick-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 8px;
+  min-height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+.btn-quick-action:hover:not(:disabled) {
+  color: var(--text);
+  transform: scale(1.15);
+}
+.btn-quick-action:disabled { opacity: 0.45; cursor: default; }
 
 /* ── Mode toggle (sidebar) ──────────────────────────────────────────────── */
 .mode-toggle {
