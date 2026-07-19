@@ -45,6 +45,16 @@ Dùng `<button type="button" class="icon-btn">` + SVG bên trong.
 <button type="button" class="btn-ghost btn-sm">Xóa</button>
 ```
 
+## Class chuẩn: `.btn-quick-action`
+
+Nút **có nhãn chữ** (label bắt buộc) cho quick action — cùng triết lý borderless + hover scale với `.icon-btn`. Dùng chung Monitor (`ArtifactPanel`) và menu dropdown quick action. Class nằm ở `src/styles/_shell.scss`.
+
+```html
+<button type="button" class="btn-quick-action" :title="..." :aria-label="...">
+  {{ label }}
+</button>
+```
+
 ## Khi nào được dùng text button
 
 Chỉ khi nhãn chữ là bắt buộc để hiểu hành động:
@@ -52,6 +62,7 @@ Chỉ khi nhãn chữ là bắt buộc để hiểu hành động:
 - CTA xác nhận trong modal (`Lưu` / `Hủy`) — `.btn-primary` / `.btn-ghost`
 - Submit form dài cần nhãn rõ
 - Link-style inline — `.btn-link`
+- Quick action có nhãn — `.btn-quick-action` (xem trên)
 
 Không thêm border mặc định cho action icon mới; không dùng `.btn-ghost` làm mặc định cho row/toolbar action có thể biểu diễn bằng icon.
 

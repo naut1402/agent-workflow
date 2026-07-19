@@ -14,6 +14,9 @@ import {
 import { useArtifactAction } from '../composables/useArtifactAction'
 import { useArtifactSelectionToolbar } from '../composables/useArtifactSelectionToolbar'
 import ArtifactProposalReview from './ArtifactProposalReview.vue'
+import QuickActionMenuDropdown from '../../quick-action/components/QuickActionMenuDropdown.vue'
+import { pocMenus } from '../../quick-action/lib/pocMenuStore'
+import { splitActionsByMenu } from '../../quick-action/lib/menuTree'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
 import { attachMermaidControls } from '../../../shared/composables/useMermaidControls'
 import { resolveArtifactViewMode } from '../../../../shared/schemas/appSettings'
@@ -105,6 +108,9 @@ const titleActions = computed(() =>
 const selectionActions = computed(() =>
   actions.value.filter((a) => (a.attach_points ?? []).includes('artifact-selection')),
 )
+
+const titleToolbar = computed(() => splitActionsByMenu(titleActions.value, pocMenus.value))
+const selectionToolbarMenu = computed(() => splitActionsByMenu(selectionActions.value, pocMenus.value))
 
 // Runner "usable" gate for QuickAction (decision §4.2.1 #8): mirrors the Agent
 // Editor Build NL gate — a runner is usable unless explicitly disabled.
@@ -198,6 +204,16 @@ async function onActionClick(action: QuickActionView) {
   await runAction(props.openArtifact.taskId, action.id, props.openArtifact.name, {
     runnerId: action.runner_id,
   })
+}
+
+async function onMenuActionRun(actionId: string) {
+  const action = actions.value.find((a) => a.id === actionId)
+  if (action) await onActionClick(action)
+}
+
+async function onMenuSelectionRun(actionId: string) {
+  const action = actions.value.find((a) => a.id === actionId)
+  if (action) await onSelectionActionClick(action)
 }
 
 // ── Selection toolbar ────────────────────────────────────────────────────────
@@ -424,12 +440,22 @@ onUpdated(() => scheduleMermaid())
       <div class="art-toolbar">
         <span class="art-title">{{ openArtifact.name }}</span>
         <div class="art-toolbar-actions">
+          <QuickActionMenuDropdown
+            v-for="root in titleToolbar.tree"
+            :key="root.id"
+            :node="root"
+            :disabled="isEditing() || !!runningActionId"
+            :running-action-id="runningHereActionId"
+            @run="(id) => onMenuActionRun(id)"
+          />
           <button
-            v-for="action in titleActions"
+            v-for="action in titleToolbar.flat"
             :key="action.id"
+            type="button"
             class="btn-quick-action"
             :disabled="isEditing() || !!runningActionId"
             :title="t('monitor.artifact.runAgent', { agent: action.agent_ref })"
+            :aria-label="action.label"
             @click="onActionClick(action)"
           >
             <span v-if="runningHereActionId === action.id" class="qa-spinner">{{ t('monitor.artifact.running') }}</span>
@@ -481,17 +507,26 @@ onUpdated(() => scheduleMermaid())
 
       <Teleport to="body">
         <div
-          v-if="selectionToolbar.visible.value && selectionActions.length"
+          v-if="selectionToolbar.visible.value && (selectionToolbarMenu.flat.length || selectionToolbarMenu.tree.length)"
           class="selection-toolbar"
           :style="selectionToolbarStyle"
         >
+          <QuickActionMenuDropdown
+            v-for="root in selectionToolbarMenu.tree"
+            :key="`sel-${root.id}`"
+            :node="root"
+            :disabled="!!runningActionId"
+            :running-action-id="runningHereActionId"
+            @run="(id) => onMenuSelectionRun(id)"
+          />
           <button
-            v-for="action in selectionActions"
+            v-for="action in selectionToolbarMenu.flat"
             :key="action.id"
             type="button"
             class="btn-quick-action"
             :disabled="!!runningActionId"
             :title="t('monitor.artifact.runAgent', { agent: action.agent_ref })"
+            :aria-label="action.label"
             @mousedown.prevent
             @click="onSelectionActionClick(action)"
           >{{ action.label }}</button>
