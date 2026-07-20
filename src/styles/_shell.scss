@@ -1,0 +1,317 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 0.85em; }
+
+.layout { display: flex; height: 100vh; }
+
+/* Sidebar */
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  transition: width 0.2s ease, padding 0.2s ease;
+  overflow: hidden;
+}
+.sidebar.sidebar-collapsed {
+  width: 56px;
+  padding: 10px;
+  overflow: visible;
+  align-items: center;
+  gap: 6px;
+}
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand.brand-collapsed {
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  width: 36px;
+}
+.brand h1 { font-size: 16px; margin: 0; letter-spacing: 0.5px; white-space: nowrap; }
+.rail-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.rail-icon { display: block; flex-shrink: 0; }
+.sidebar-toggle {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+.sidebar-toggle:hover { color: var(--text); border-color: var(--accent); background: rgba(var(--accent-rgb), 0.08); }
+.sidebar-collapsed .mode-toggle {
+  width: 36px;
+  align-items: center;
+  overflow-y: visible;
+  flex: none;
+}
+.sidebar-collapsed .mode-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
+}
+.sidebar-collapsed .sidebar-toggle {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+.mode-btn-label { line-height: 1; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); }
+.dot.live { background: var(--done); box-shadow: 0 0 6px var(--done); }
+.root { font-size: 11px; color: var(--muted); margin: 6px 0 12px; word-break: break-all; }
+.sidebar-footer {
+  margin-top: auto;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+.status { margin-top: 0; font-size: 11px; color: var(--muted); padding-top: 0; }
+.status .err { color: var(--danger); }
+.sidebar-collapsed .sidebar-footer {
+  width: 36px;
+  align-items: center;
+  border-top-color: var(--border);
+}
+.sidebar-collapsed .settings-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
+}
+.settings-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.settings-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.settings-section-desc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.settings-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.settings-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.settings-radio input[type='radio'] {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  margin-top: 10px;
+}
+.settings-checkbox input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: min(640px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+  gap: 10px;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 15px;
+}
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+}
+.modal-close:hover { color: var(--text); }
+.modal-hint { margin: 0; font-size: 12px; color: var(--muted); }
+
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.btn-ghost {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 7px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+}
+.btn-ghost:hover:not(:disabled) { border-color: var(--text); color: var(--text); }
+.btn-ghost:disabled { opacity: 0.4; cursor: default; }
+
+.btn-primary {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  border-radius: 7px;
+  padding: 6px 16px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+.btn-primary:hover:not(:disabled) { opacity: 0.85; }
+.btn-primary:disabled { opacity: 0.4; cursor: default; }
+
+/* Icon action button — borderless default, scale on hover (see docs/ui-buttons.md) */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+.icon-btn:hover:not(:disabled) {
+  color: var(--text);
+  transform: scale(1.15);
+}
+.icon-btn.active { color: var(--accent); }
+.icon-btn.danger:hover:not(:disabled) { color: var(--danger); }
+.icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Text quick-action trigger (docs/ui-buttons.md: label bắt buộc). Shared by
+   Monitor ArtifactPanel + QuickActionMenuDropdown — keep global with .icon-btn. */
+.btn-quick-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 8px;
+  min-height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+.btn-quick-action:hover:not(:disabled) {
+  color: var(--text);
+  transform: scale(1.15);
+}
+.btn-quick-action:disabled { opacity: 0.45; cursor: default; }
+
+/* ── Mode toggle (sidebar) ──────────────────────────────────────────────── */
+.mode-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 8px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.mode-btn {
+  flex: none;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.mode-btn:hover:not(.active) { border-color: var(--accent); color: var(--text); }
+
+/* ── Extra button sizes ─────────────────────────────────────────────────── */
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-xs { padding: 2px 8px; font-size: 11px; }
+.btn-danger {
+  background: rgba(248,81,73,0.15);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.btn-danger:hover { background: var(--danger); color: #fff; }
+
+.muted { color: var(--muted); font-size: 12px; }
+
+/* Main content area (all modes) */
+.main { flex: 1; overflow-y: auto; padding: 22px 28px; }
+.empty { color: var(--muted); margin-top: 40px; text-align: center; line-height: 1.7; }
+.main-editor { padding: 0; overflow: hidden; display: flex; flex-direction: column; }

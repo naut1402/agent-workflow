@@ -187,29 +187,69 @@ onUnmounted(stopTail)
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .logs-panel { padding: 1rem 1.25rem; max-width: 1100px; }
 .logs-head h2 { margin: 0 0 0.25rem; font-size: 1.25rem; font-weight: 500; }
-.muted { color: var(--text-muted, #666); font-size: 0.85rem; }
-.logs-tabs { display: flex; gap: 0.25rem; margin: 0.75rem 0; border-bottom: 1px solid #ddd; }
-.logs-tabs button {
-  padding: 0.4rem 0.9rem; border: none; background: none; cursor: pointer;
-  border-bottom: 2px solid transparent; font-size: 0.9rem;
+.muted { color: var(--text-muted); font-size: 0.85rem; }
+.logs-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
 }
-.logs-tabs button.active { border-bottom-color: #1d9e75; color: #1d9e75; font-weight: 500; }
+.logs-tabs button {
+  padding: 0.4rem 0.9rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.logs-tabs button.active {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+  font-weight: 500;
+}
 .logs-table { width: 100%; font-size: 0.82rem; border-collapse: collapse; }
-.logs-table th, .logs-table td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #eee; }
-.logs-table .row-err td { color: #c00; }
+.logs-table th,
+.logs-table td {
+  text-align: left;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.logs-table .row-err td { color: var(--danger); }
 .jobs-layout { display: grid; grid-template-columns: 200px 1fr; gap: 1rem; }
 .jobs-list ul { list-style: none; padding: 0; margin: 0; }
 .jobs-list li { padding: 0.4rem 0.5rem; border-radius: 6px; cursor: pointer; }
-.jobs-list li.active { background: var(--gray-light, #f1efe8); }
+.jobs-list li.active { background: var(--panel-2); }
 .jobs-list li strong { display: block; font-size: 0.85rem; }
 .job-log-bar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
-.btn { padding: 0.3rem 0.7rem; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
-.job-log pre {
-  background: #1e1e1e; color: #d4d4d4; padding: 0.75rem; border-radius: 6px;
-  font-size: 0.78rem; max-height: 60vh; overflow: auto; white-space: pre-wrap;
+.btn {
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
 }
-.err-banner { background: #fee; padding: 0.5rem; border-radius: 6px; margin: 0.5rem 0; }
+.job-log pre {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.err-banner {
+  background: var(--panel-2);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  padding: 0.5rem;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+}
 </style>

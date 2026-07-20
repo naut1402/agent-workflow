@@ -284,7 +284,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   </Teleport>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .runner-dialog { max-width: 520px; width: min(520px, 94vw); }
 .field { margin-bottom: 0.75rem; }
 .field .cfg-input { width: 100%; }

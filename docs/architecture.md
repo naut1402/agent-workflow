@@ -101,6 +101,10 @@ Domain module nhận `ctx`/`root`, trả data thuần; tầng HTTP mới biết 
 
 `src/shared/` gồm: `composables/*` (`useAsyncState`, `useDrop`, `useLocalToggle`, `useSearch`, `useSortable`), `lib/workflowSteps.ts`, `markdown.ts`, `ui/RailIcon.vue`.
 
+### 3.3 Styling
+
+Entry SCSS: `src/styles/main.scss` (import từ `src/main.ts`). Partials: `_tokens.scss` (CSS custom properties theme), `_shell.scss` (layout/sidebar/mode/modal/btn dùng chung), `_<module>.scss` theo feature (`monitor`, `pipeline-editor`, `agent-editor`, `knowledge`, …). Theme runtime qua `data-theme` + CSS variables; SFC feature dùng `<style scoped lang="scss">` khi đã migrate. Khảo sát & kế hoạch: [`scss-adoption.md`](scss-adoption.md).
+
 ---
 
 ## 4. MCP server

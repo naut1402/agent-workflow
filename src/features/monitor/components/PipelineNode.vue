@@ -32,7 +32,7 @@ const STATUS_ICON = { done: '✓', active: '▶', waiting: '⏸', pending: '○'
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .pnode-waiting .pnode-bubble {
   cursor: pointer;
 }

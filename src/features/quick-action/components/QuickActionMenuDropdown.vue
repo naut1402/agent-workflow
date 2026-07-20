@@ -79,7 +79,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick, true))
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .qa-menu-dropdown { position: relative; display: inline-flex; }
 .qa-menu-trigger { display: inline-flex; align-items: center; gap: 4px; }
 .qa-menu-caret { font-size: 10px; opacity: 0.75; }

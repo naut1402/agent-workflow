@@ -1,6 +1,6 @@
 import { createApp } from 'vue'
 import App from './App.vue'
-import './style.css'
+import './styles/main.scss'
 import { useAppSettings } from './shared/composables/useAppSettings'
 import { applyThemeToDocument, watchSystemTheme } from './shared/lib/theme'
 import { resolveThemePreference, resolveLocale } from '../shared/schemas/appSettings'

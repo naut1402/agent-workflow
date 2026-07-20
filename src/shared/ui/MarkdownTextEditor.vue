@@ -172,7 +172,7 @@ const rootClass = computed(() => ({
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .md-text-editor {
   width: 100%;
   min-height: 0;

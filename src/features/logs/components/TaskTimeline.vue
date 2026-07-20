@@ -40,10 +40,10 @@ function fmt(ts: number | null): string {
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .task-timeline { margin-top: 1.5rem; }
 .task-timeline h3 { font-size: 1rem; font-weight: 500; margin: 0 0 0.5rem; }
-.muted { color: var(--text-muted, #666); font-size: 0.85rem; }
+.muted { color: var(--text-muted); font-size: 0.85rem; }
 .task-timeline ol { list-style: none; padding: 0; margin: 0; }
 .tl-item {
   display: grid;
@@ -51,12 +51,12 @@ function fmt(ts: number | null): string {
   gap: 0.5rem;
   align-items: baseline;
   padding: 0.3rem 0.4rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
 }
 .tl-icon { text-align: center; }
 .tl-label { font-weight: 500; }
-.tl-detail { color: var(--text-muted, #666); font-size: 0.78rem; }
-.tl-time { color: var(--text-muted, #888); font-size: 0.78rem; white-space: nowrap; }
-.tl-hitl .tl-label { color: #b8860b; }
+.tl-detail { color: var(--text-muted); font-size: 0.78rem; }
+.tl-time { color: var(--text-muted); font-size: 0.78rem; white-space: nowrap; }
+.tl-hitl .tl-label { color: var(--waiting); }
 </style>

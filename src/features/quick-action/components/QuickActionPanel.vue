@@ -699,7 +699,7 @@ async function removeAction(a: QuickActionDraft) {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .quick-action-panel {
   padding: 16px;
   max-width: 880px;

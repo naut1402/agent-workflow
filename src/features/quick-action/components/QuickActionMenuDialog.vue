@@ -246,7 +246,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .qa-modal-overlay {
   position: fixed;
   inset: 0;
