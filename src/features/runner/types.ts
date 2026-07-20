@@ -21,6 +21,7 @@ export interface RunnerDraft {
   maxConcurrency: number
   config: {
     timeoutMs: number
-    allowedTools: string
+    /** Claude Code CLI only — omitted for console-command / other providers. */
+    allowedTools?: string
   }
 }

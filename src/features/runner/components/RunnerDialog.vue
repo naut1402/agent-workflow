@@ -41,6 +41,17 @@ function emptyDraft(): RunnerDraft {
   }
 }
 
+const selectedConnection = computed(
+  () => props.connections.find((c) => c.id === draft.value.connectionId) || null,
+)
+
+const selectedProviderId = computed(() => selectedConnection.value?.providerId || '')
+
+/** Claude Code CLI is the only local provider that understands --allowedTools. */
+const showsAllowedTools = computed(() => selectedProviderId.value === 'claude-code-cli')
+
+const isConsoleCommand = computed(() => selectedProviderId.value === 'console-command')
+
 function slugify(text: string): string {
   const s = text
     .trim()
@@ -60,11 +71,28 @@ watch(
     if (!draft.value.connectionId && props.connections.length) {
       draft.value.connectionId = props.connections[0].id
     }
+    if (!draft.value.config) draft.value.config = { timeoutMs: 600000 }
     error.value = ''
     message.value = ''
   },
   { immediate: true },
 )
+
+function buildSavePayload(): RunnerDraft {
+  const config: RunnerDraft['config'] = {
+    timeoutMs: draft.value.config?.timeoutMs ?? 600000,
+  }
+  // Only persist allowedTools for Claude Code CLI — other providers ignore / reject it.
+  if (showsAllowedTools.value && draft.value.config?.allowedTools) {
+    config.allowedTools = draft.value.config.allowedTools
+  }
+  return {
+    ...draft.value,
+    id: isEdit.value ? draft.value.id : slugify(draft.value.name),
+    name: draft.value.name.trim(),
+    config,
+  }
+}
 
 async function save() {
   saving.value = true
@@ -79,11 +107,7 @@ async function save() {
       error.value = t('runner.errors.connectionRequired')
       return
     }
-    const payload = {
-      ...draft.value,
-      id: isEdit.value ? draft.value.id : slugify(draft.value.name),
-      name: draft.value.name.trim(),
-    }
+    const payload = buildSavePayload()
     await saveRunner(payload)
     emit('saved', payload.id)
     emit('close')
@@ -103,12 +127,22 @@ async function smokeTest() {
   error.value = ''
   message.value = ''
   try {
-    const { job } = await submitJob({
-      runnerId: draft.value.id,
-      agentRef: 'dev-agent-teams:investigator',
-      workspace: '.',
-      userPrompt: 'Reply with exactly: OK',
-    })
+    // Console command: no agent ref / system prompt — just run the registered CLI.
+    const { job } = await submitJob(
+      isConsoleCommand.value
+        ? {
+            runnerId: draft.value.id,
+            agentRef: '',
+            workspace: '.',
+            userPrompt: '',
+          }
+        : {
+            runnerId: draft.value.id,
+            agentRef: 'dev-agent-teams:investigator',
+            workspace: '.',
+            userPrompt: 'Reply with exactly: OK',
+          },
+    )
     message.value = `Job ${job.id} — ${job.status}`
     let current = job
     for (let i = 0; i < 120; i++) {
@@ -182,10 +216,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 +
               </button>
             </div>
+            <p v-if="isConsoleCommand" class="muted hint">{{ t('runner.fields.consoleHint') }}</p>
           </div>
 
-          <div class="field">
-            <label class="cfg-label">Allowed tools
+          <div v-if="showsAllowedTools" class="field">
+            <label class="cfg-label">{{ t('runner.fields.allowedTools') }}
               <input v-model="draft.config.allowedTools" class="cfg-input" />
             </label>
           </div>
@@ -260,6 +295,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 }
 .connection-row .cfg-input { flex: 1; }
 .conn-add { flex-shrink: 0; min-width: 2rem; font-size: 1.1rem; line-height: 1; }
+.hint { margin: 0.35rem 0 0; font-size: 0.8rem; }
 .enable-row {
   display: flex;
   align-items: center;
@@ -290,4 +326,5 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   border-radius: 6px;
   margin-bottom: 0.75rem;
 }
+.muted { color: var(--muted); }
 </style>

@@ -65,7 +65,7 @@ Domain module nhận `ctx`/`root`, trả data thuần; tầng HTTP mới biết 
 | Tasks | `server/tasks/index.ts` | Liệt kê task, đọc state + artifact. |
 | Rules | `server/rules/index.ts` | Đọc rule project (`.claude/rules/*`). |
 | Knowledge | `server/knowledge/{knowledgeApi,driverRegistry,fileDriver}.ts` | Driver pluggable sau `getKnowledgeDriver(root)`; hiện chỉ có driver `file`. |
-| Runners | `server/runners/{agentResolver,connections,credentials,index,jobQueue,providerRegistry,registry,types}.ts` + `providers/{claude-code-cli,cursor-cli,codex-cli}.ts` | Điều phối job runner. Runner chọn **connection** (local-console hoặc ai-provider); provider CLI: `claude-code-cli`, `cursor-cli`, `codex-cli`. |
+| Runners | `server/runners/{agentResolver,connections,credentials,index,jobQueue,providerRegistry,registry,types}.ts` + `providers/{claude-code-cli,cursor-cli,codex-cli,console-command}.ts` | Điều phối job runner. Runner chọn **connection** (local-console hoặc ai-provider); provider CLI: `claude-code-cli`, `cursor-cli`, `codex-cli`, `console-command` (argv thuần, không agent/`allowedTools`). |
 | Logging | `server/logging/{jobLog,store}.ts` | Nhật ký job + request log. |
 | CLI | `server/runner-cli.mjs` (còn `.mjs`) | Runner CLI. |
 

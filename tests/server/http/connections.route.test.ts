@@ -55,6 +55,9 @@ describe('connections & runners HTTP API', () => {
     expect(body.providers.some((p: any) => p.id === 'claude-code-cli' && p.kind === 'local-console')).toBe(
       true,
     )
+    expect(body.providers.some((p: any) => p.id === 'console-command' && p.kind === 'local-console')).toBe(
+      true,
+    )
     expect(body.providers.some((p: any) => p.id === 'anthropic-api' && p.kind === 'ai-provider')).toBe(true)
   })
 

@@ -31,7 +31,9 @@ const ATTACH_OPTIONS = [
 ]
 
 const catalog = useQuickActionCatalog({ getProjectId: () => props.projectId ?? null })
-const runners = ref<Array<{ id: string; name: string }>>([])
+const runners = ref<Array<{ id: string; name: string; connectionId?: string }>>([])
+const connections = ref<Array<{ id: string; providerId?: string }>>([])
+const defaultRunnerId = ref<string | null>(null)
 const agents = ref<Array<{ id: string; name?: string; description?: string }>>([])
 const agentIds = computed(() => new Set(agents.value.map((a) => a.id)))
 
@@ -129,6 +131,20 @@ function emptyDraft(): QuickActionDraft {
 const draft = ref<QuickActionDraft>(emptyDraft())
 const patternsText = ref('')
 
+/** Effective runner for the draft (explicit pick, else system default). */
+const effectiveRunnerId = computed(
+  () => draft.value.runner_id || defaultRunnerId.value || runners.value[0]?.id || '',
+)
+
+const effectiveProviderId = computed(() => {
+  const runner = runners.value.find((r) => r.id === effectiveRunnerId.value)
+  if (!runner?.connectionId) return ''
+  return connections.value.find((c) => c.id === runner.connectionId)?.providerId || ''
+})
+
+/** Console-command runners: no agent_ref / system prompt — prompt is extra CLI argv. */
+const isConsoleCommandRunner = computed(() => effectiveProviderId.value === 'console-command')
+
 // Derive a stable action id from the label (the id field is no longer entered).
 // Strip diacritics/emoji/punctuation to an ascii kebab slug; ensure uniqueness
 // against the existing catalog. Only used when creating — an edited action
@@ -156,8 +172,12 @@ async function loadRunnerOptions() {
   try {
     const res = await fetchRunners()
     runners.value = Array.isArray(res?.runners) ? res.runners : []
+    connections.value = Array.isArray(res?.connections) ? res.connections : []
+    defaultRunnerId.value = res?.defaultRunnerId || null
   } catch {
     runners.value = []
+    connections.value = []
+    defaultRunnerId.value = null
   }
 }
 
@@ -315,6 +335,11 @@ async function saveForm() {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
+
+  // Console-command runners cannot bind an agent (no system prompt merge).
+  if (isConsoleCommandRunner.value) {
+    draft.value.agent_ref = ''
+  }
 
   // id is derived from the label (create) or kept as-is (edit).
   draft.value.id = editingId.value ?? deriveId(draft.value.label)
@@ -488,6 +513,16 @@ async function removeAction(a: QuickActionDraft) {
             <input v-model="patternsText" class="cfg-input" placeholder="design.md, investigate.md, *.md" />
           </label>
           <label class="cfg-label">
+            {{ t('quickAction.form.runnerLabel') }}
+            <select v-model="draft.runner_id" class="cfg-input">
+              <option :value="undefined">{{ t('quickAction.runnerDefault') }}</option>
+              <option v-for="r in runners" :key="r.id" :value="r.id">{{ r.name || r.id }}</option>
+            </select>
+          </label>
+          <p v-if="isConsoleCommandRunner" class="muted qa-menu-select-hint">
+            {{ t('quickAction.form.consoleRunnerHint') }}
+          </p>
+          <label v-if="!isConsoleCommandRunner" class="cfg-label">
             {{ t('quickAction.form.agentLabel') }}
             <select v-model="draft.agent_ref" class="cfg-input">
               <option value="">{{ t('quickAction.form.agentNone') }}</option>
@@ -502,7 +537,7 @@ async function removeAction(a: QuickActionDraft) {
           </label>
           <label class="cfg-label">
             <span class="qa-prompt-label-row">
-              prompt_template
+              {{ isConsoleCommandRunner ? t('quickAction.form.consoleArgsLabel') : 'prompt_template' }}
               <button
                 ref="helpBtnRef"
                 type="button"
@@ -518,7 +553,13 @@ async function removeAction(a: QuickActionDraft) {
                 </svg>
               </button>
               <div v-if="showPromptHelp" ref="promptHelpRef" class="qa-prompt-help" role="dialog">
-                <p class="qa-prompt-help-title">{{ t('quickAction.promptHelp.heading') }}</p>
+                <p class="qa-prompt-help-title">
+                  {{
+                    isConsoleCommandRunner
+                      ? t('quickAction.promptHelp.consoleHeading')
+                      : t('quickAction.promptHelp.heading')
+                  }}
+                </p>
                 <dl>
                   <div v-for="ph in PROMPT_PLACEHOLDERS" :key="ph.token" class="qa-prompt-help-item">
                     <dt><code>{{ ph.token }}</code></dt>
@@ -531,7 +572,11 @@ async function removeAction(a: QuickActionDraft) {
                   </div>
                 </dl>
                 <p class="qa-prompt-help-note qa-prompt-help-write">
-                  {{ t('quickAction.promptHelp.writeNote') }}
+                  {{
+                    isConsoleCommandRunner
+                      ? t('quickAction.promptHelp.consoleWriteNote')
+                      : t('quickAction.promptHelp.writeNote')
+                  }}
                 </p>
               </div>
             </span>
@@ -539,7 +584,11 @@ async function removeAction(a: QuickActionDraft) {
               v-model="draft.prompt_template"
               class="cfg-textarea"
               rows="4"
-              :placeholder="t('quickAction.form.promptPlaceholder')"
+              :placeholder="
+                isConsoleCommandRunner
+                  ? t('quickAction.form.consoleArgsPlaceholder')
+                  : t('quickAction.form.promptPlaceholder')
+              "
             />
           </label>
           <fieldset class="qa-attach-fieldset">
@@ -577,13 +626,6 @@ async function removeAction(a: QuickActionDraft) {
             </button>
           </div>
           <p class="muted qa-menu-select-hint">{{ t('quickAction.form.menuHint') }}</p>
-          <label class="cfg-label">
-            {{ t('quickAction.form.runnerLabel') }}
-            <select v-model="draft.runner_id" class="cfg-input">
-              <option :value="undefined">{{ t('quickAction.runnerDefault') }}</option>
-              <option v-for="r in runners" :key="r.id" :value="r.id">{{ r.name || r.id }}</option>
-            </select>
-          </label>
           <label class="qa-attach-option">
             <input v-model="draft.confirm" type="checkbox" />
             {{ t('quickAction.form.confirmOption') }}

@@ -13,7 +13,7 @@ export interface Connection {
   id: string
   label: string
   kind: ConnectionKind
-  /** Backend provider id: claude-code-cli | cursor-cli | codex-cli | … */
+  /** Backend provider id: claude-code-cli | cursor-cli | codex-cli | console-command | … */
   providerId: string
   /** local-console: path CLI đã scan/chọn */
   cliPath?: string
