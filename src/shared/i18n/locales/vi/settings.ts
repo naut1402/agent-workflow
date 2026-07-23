@@ -3,6 +3,9 @@
 export const settings = {
   title: 'Cài đặt',
   close: 'Đóng',
+  groups: {
+    general: 'Chung',
+  },
   theme: {
     title: 'Giao diện',
     desc: 'Chọn giao diện sáng, tối, hoặc theo hệ thống.',

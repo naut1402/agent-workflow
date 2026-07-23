@@ -15,6 +15,12 @@ test('settings dialog: open/close expanded + collapsed (capture)', async ({ page
   await expect(page.locator('.modal-backdrop .settings-dialog')).toBeVisible()
   await expect(page.getByRole('dialog', { name: 'Cài đặt' })).toBeVisible()
 
+  // TC-E2E-01: 2-pane layout
+  await expect(page.locator('.settings-dialog .settings-nav')).toBeVisible()
+  await expect(page.locator('.settings-dialog .settings-pane')).toBeVisible()
+  await expect(page.locator('.settings-nav-item[data-group="general"]')).toBeVisible()
+  await expect(page.locator('.settings-nav-item[data-group="general"]')).toHaveText('Chung')
+
   // Still on monitor — task list remains (mode unchanged).
   await expect(page.locator('.tasklist')).toBeVisible()
 
@@ -41,4 +47,36 @@ test('settings dialog: open/close expanded + collapsed (capture)', async ({ page
   await expect(page.locator('.settings-dialog')).toBeVisible()
   await page.locator('.modal-backdrop').click({ position: { x: 4, y: 4 } })
   await expect(page.locator('.settings-dialog')).toHaveCount(0)
+})
+
+// B0001: short viewport — pane scrolls, head stays visible in dialog frame.
+test('settings dialog: overflow body scroll at short viewport (capture)', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 400 })
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await expect(page.locator('.tasklist')).toBeVisible({ timeout: 15_000 })
+
+  await page.locator('button[title="Cài đặt"]').click()
+  const dialog = page.locator('.modal-backdrop .settings-dialog')
+  await expect(dialog).toBeVisible()
+
+  const head = dialog.locator('.modal-head')
+  const pane = dialog.locator('.settings-pane.modal-body')
+  await expect(head).toBeVisible()
+  await expect(pane).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Cài đặt' })).toBeVisible()
+
+  // TC-E2E-02: overflow on settings-pane
+  const scrollable = await pane.evaluate((el) => el.scrollHeight > el.clientHeight)
+  expect(scrollable).toBe(true)
+
+  // Head stays inside the dialog box (not pushed off-frame by tall content).
+  const dialogBox = await dialog.boundingBox()
+  const headBox = await head.boundingBox()
+  expect(dialogBox).toBeTruthy()
+  expect(headBox).toBeTruthy()
+  expect(headBox!.y).toBeGreaterThanOrEqual(dialogBox!.y - 1)
+  expect(headBox!.y + headBox!.height).toBeLessThanOrEqual(dialogBox!.y + dialogBox!.height + 1)
+
+  await capture(page, testInfo, 'settings-dialog-overflow')
 })
