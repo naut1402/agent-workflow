@@ -147,4 +147,24 @@ describe('MonitorLayout — auto-collapse sub-sidebar on outside click', () => {
     expect(localStorage.getItem(SUB_SIDEBAR_KEY)).toBe('1')
     w.unmount()
   })
+
+  it('does not collapse when the click lands inside a teleported .modal-backdrop', async () => {
+    seedAppSettings({ collapseMonitorSubSidebarOnOutside: true })
+    const modal = document.createElement('div')
+    modal.className = 'modal-backdrop'
+    const item = document.createElement('button')
+    item.className = 'folder-picker-item'
+    modal.appendChild(item)
+    document.body.appendChild(modal)
+
+    const w = mount(MonitorLayout, { attachTo: document.body, props: { tasks } })
+    await flushMacrotask()
+
+    dispatchOutsideClick(item)
+    await w.vm.$nextTick()
+
+    expect(w.find('.monitor-sub-sidebar').classes()).not.toContain('monitor-sub-sidebar--collapsed')
+    expect(w.find('.project-bar').exists()).toBe(true)
+    w.unmount()
+  })
 })
