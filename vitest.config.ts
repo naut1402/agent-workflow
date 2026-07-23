@@ -1,17 +1,27 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 
 // Node ≥25 ships incomplete built-in localStorage that shadows jsdom's.
 // Disable it so jsdom owns the global (vitest#8757 / node#60303).
 const nodeMajor = Number.parseInt(process.versions.node.split('.')[0], 10)
 const execArgv = nodeMajor >= 25 ? ['--no-webstorage'] : []
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const { version: appVersion } = JSON.parse(
+  readFileSync(path.join(__dirname, 'package.json'), 'utf8'),
+)
+
 // Frontend unit tests (Vue components, composables, src/ + shared/ logic).
 // Backend unit/integration tests run under `bun test` instead (see package.json).
 export default defineConfig({
   plugins: [vue()],
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   resolve: {
     alias: {
       '@shared': path.resolve(__dirname, 'shared'),

@@ -97,6 +97,26 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   padding: 0;
   justify-content: center;
 }
+.app-version {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  user-select: text;
+  white-space: nowrap;
+}
+.sidebar:not(.sidebar-collapsed) .app-version {
+  text-align: left;
+  padding-left: 2px;
+}
+.sidebar-collapsed .app-version {
+  font-size: 9px;
+  max-width: 36px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .settings-section {
   margin-top: 12px;
   padding-top: 10px;

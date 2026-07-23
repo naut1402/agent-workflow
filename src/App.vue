@@ -16,6 +16,7 @@ import LogsPanel from './features/logs/components/LogsPanel.vue'
 import QuickActionPanel from './features/quick-action/components/QuickActionPanel.vue'
 import SettingsDialog from './features/settings/components/SettingsDialog.vue'
 import RailIcon from './shared/ui/RailIcon.vue'
+import { APP_VERSION } from './shared/lib/appVersion'
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
 const PROJECT_KEY = 'dev-dashboard-selected-project'
@@ -248,6 +249,10 @@ onUnmounted(stop)
           <RailIcon name="settings" />
           <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.sidebar.settings') }}</span>
         </button>
+        <span
+          class="app-version"
+          :title="t('common.sidebar.version', { version: APP_VERSION })"
+        >v{{ APP_VERSION }}</span>
       </div>
     </aside>
 

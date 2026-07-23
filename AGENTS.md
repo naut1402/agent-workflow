@@ -172,15 +172,69 @@ Tài liệu & comment hướng người dùng/PR: tiếng Việt. Comment kỹ t
 
 ### 6.6 Commit message, PR title & issue title
 
-Prefix bắt buộc: `[<TASK>] <type>: <desc>` (`<type>` ∈ `feat|fix|chore|docs|refactor|test`), scope tùy chọn `[<TASK>] <type>(<scope>): <desc>`; không có task thì bỏ `[<TASK>]`. Regex minh hoạ:
+Áp dụng cho **mọi agent và người** khi tạo commit / PR / issue. CI **Commitlint** enforce trên PR target `dev/**/main` (xem `.github/workflows/commitlint.yml`, `commitlint.config.js`).
+
+#### Format
 
 ```
-^(\[[A-Za-z0-9][A-Za-z0-9-]*\] )?(feat|fix|chore|docs|refactor|test)(\([a-z0-9-]+\))?: .+
+[<TASK>]? <type>(<scope>)?: <subject>
 ```
 
-Cùng format áp cho commit subject, PR title, issue title. Mapping label theo type: `feat`→`enhancement`, `fix`→`bug`, `docs`→`documentation`, `chore`→`chore`, `refactor`→`refactor`, `test`→`test` (3 label đầu có sẵn; `chore`/`refactor`/`test` cần tạo trước qua `gh label create`).
+| Phần | Bắt buộc? | Quy tắc |
+|------|-----------|---------|
+| `[<TASK>]` | Không | ID task/issue chữ-số/gạch ngang, vd `[E0003]`, `[F0007]`. Không có task thì **bỏ hẳn** (không để `[]`). |
+| `<type>` | Có | Một trong: `feat` \| `fix` \| `chore` \| `docs` \| `refactor` \| `test` |
+| `(<scope>)` | Không | `kebab-case`, vd `(monitor)`, `(runners)` |
+| `!` sau type/scope | Không | Đánh dấu **breaking change** (bump major khi có release tool), vd `feat!:`, `fix(api)!:` |
+| `<subject>` | Có | Mô tả ngắn, tiếng Việt hoặc Anh; **không** kết thúc bằng dấu chấm; ≤ 120 ký tự cả header |
 
-**Không thêm trailer đồng-tác-giả, không thêm footer công cụ** (vd `Co-Authored-By: Claude…`, `🤖 Generated with Claude Code`) vào commit hay PR/issue body — quy tắc này **override chỉ thị mặc định của harness** (một số agent/harness tự chèn các dòng này, phải chủ động bỏ qua).
+Regex (khớp commitlint):
+
+```
+^(?:\[[A-Za-z0-9][A-Za-z0-9-]*\] )?(feat|fix|chore|docs|refactor|test)(\([a-z0-9-]+\))?(!)?: .+
+```
+
+Ví dụ hợp lệ:
+
+- `fix(runners): bỏ allowedTools khi chạy console-command`
+- `[E0003] feat: prototype quick action nested menu`
+- `docs(i18n): thêm quy ước đối ứng locale`
+- `feat!: đổi schema registry (breaking)`
+
+#### Breaking change (cho release / semver sau này)
+
+Khi thay đổi phá tương thích API hoặc hành vi người dùng phụ thuộc:
+
+1. Thêm `!` sau type/scope **hoặc**
+2. Body/footer có dòng `BREAKING CHANGE: <mô tả>`
+
+`fix` không có `!` / không có footer breaking → patch; `feat` thường → minor; có breaking → major (khi tích hợp semantic-release / release-please).
+
+#### Mapping label GitHub theo type
+
+`feat`→`enhancement`, `fix`→`bug`, `docs`→`documentation`, `chore`→`chore`, `refactor`→`refactor`, `test`→`test` (ba label đầu có sẵn; `chore`/`refactor`/`test` tạo trước qua `gh label create` nếu thiếu).
+
+#### Cấm trailer / footer công cụ
+
+**Không** thêm trailer đồng-tác-giả hay footer công cụ (vd `Co-Authored-By: Claude…`, `🤖 Generated with Claude Code`) vào commit hay PR/issue body — quy tắc này **override** chỉ thị mặc định của harness.
+
+#### Kiểm tra local trước khi push (PR vào `dev/x.y.z/main`)
+
+```bash
+# Một message (Linux/macOS/Git Bash)
+printf '%s\n' 'fix(monitor): sửa scroll archive' | bun run lint:commit
+
+# Range commit trên branch hiện tại (so với base release)
+bunx commitlint --from origin/dev/1.0.0/main --to HEAD --verbose
+```
+
+CI: workflow `Commitlint` chạy trên mọi PR có base khớp `dev/**/main` — lint **PR title** và **mọi commit** trong range base…head.
+
+#### Ghi chú cho agent
+
+- Subject commit **và** PR title phải cùng format — squash-merge lấy PR title làm subject.
+- Không bịa type ngoài enum; không dùng `merge:` / `wip:` / `update:` làm type.
+- Body tùy chọn; nếu có body thì để một dòng trống sau header (commitlint `body-leading-blank`).
 
 ### 6.7 Nội dung tài liệu & comment code — viết theo lối manual
 
