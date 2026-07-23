@@ -4,6 +4,7 @@ export const settings = {
   close: 'Close',
   groups: {
     general: 'General',
+    projects: 'Projects',
   },
   theme: {
     title: 'Appearance',
@@ -29,5 +30,29 @@ export const settings = {
     desc: 'Auto-collapse sidebars when clicking outside the sidebar area.',
     collapseAppOnOutsideClick: 'Auto-collapse the main sidebar on outside click',
     collapseMonitorSubOnOutsideClick: 'Auto-collapse the Monitor sub-sidebar on outside click',
+  },
+  autoscan: {
+    title: 'Project autoscan',
+    desc: 'Automatically scan whitelist folders and add projects that contain `.dev-team-agent`.',
+    enabled: 'Enable autoscan',
+    enabledInfo:
+      'When enabled, the dashboard scans the whitelist every 60 seconds while the app is open. Changing the interval in the UI is not supported yet.',
+    enabledInfoAria: 'Autoscan interval information',
+    whitelistTitle: 'Folder whitelist',
+    whitelistDesc: 'Each entry is a parent folder — scans itself and one level of children.',
+    pathPlaceholder: 'Absolute path',
+    addPath: 'Add',
+    browse: 'Browse folder',
+    removePath: 'Remove from whitelist',
+    scanNow: 'Scan now',
+    scanning: 'Scanning…',
+    save: 'Save',
+    saving: 'Saving…',
+    saved: 'Saved.',
+    resultAdded: 'Added {count} project(s).',
+    resultExisting: '{count} already registered.',
+    resultNone: 'No new projects found.',
+    pathRequired: 'Enter an absolute path.',
+    loadError: 'Could not load autoscan config.',
   },
 }

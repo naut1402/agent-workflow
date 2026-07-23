@@ -5,6 +5,7 @@ export const settings = {
   close: 'Đóng',
   groups: {
     general: 'Chung',
+    projects: 'Projects',
   },
   theme: {
     title: 'Giao diện',
@@ -30,5 +31,29 @@ export const settings = {
     desc: 'Tự động thu gọn thanh bên khi click ra ngoài vùng sidebar.',
     collapseAppOnOutsideClick: 'Tự thu gọn sidebar chính khi click ra ngoài',
     collapseMonitorSubOnOutsideClick: 'Tự thu gọn sub-sidebar Monitor khi click ra ngoài',
+  },
+  autoscan: {
+    title: 'Autoscan project',
+    desc: 'Tự động quét thư mục trong whitelist và thêm project có `.dev-team-agent`.',
+    enabled: 'Bật autoscan',
+    enabledInfo:
+      'Khi bật, dashboard tự quét whitelist mỗi 60 giây trong lúc ứng dụng đang mở. Chưa hỗ trợ đổi khoảng thời gian trên UI.',
+    enabledInfoAria: 'Thông tin về khoảng thời gian autoscan',
+    whitelistTitle: 'Whitelist thư mục',
+    whitelistDesc: 'Mỗi mục là thư mục cha — quét chính nó và một cấp thư mục con.',
+    pathPlaceholder: 'Đường dẫn tuyệt đối',
+    addPath: 'Thêm',
+    browse: 'Chọn thư mục',
+    removePath: 'Xoá khỏi whitelist',
+    scanNow: 'Quét ngay',
+    scanning: 'Đang quét…',
+    save: 'Lưu',
+    saving: 'Đang lưu…',
+    saved: 'Đã lưu.',
+    resultAdded: 'Đã thêm {count} project.',
+    resultExisting: '{count} đã có sẵn.',
+    resultNone: 'Không tìm thấy project mới.',
+    pathRequired: 'Nhập đường dẫn tuyệt đối.',
+    loadError: 'Không tải được cấu hình autoscan.',
   },
 }

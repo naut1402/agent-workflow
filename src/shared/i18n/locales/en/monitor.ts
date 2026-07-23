@@ -33,6 +33,7 @@ export const monitor = {
     empty: 'No projects yet.',
     pathPlaceholder: 'Path to .dev-team-agent / project root',
     namePlaceholder: 'Display name (optional)',
+    browse: 'Browse folder',
     add: 'Add',
     cancel: 'Cancel',
     pathRequired: 'Enter a path to .dev-team-agent (or project root).',

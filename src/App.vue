@@ -2,10 +2,11 @@
 import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onClickOutside } from '@vueuse/core'
-import { fetchProjects } from './api'
+import { fetchProjects, fetchAutoscanConfig, runAutoscan } from './api'
 import { useLocalToggle } from './shared/composables/useLocalToggle'
 import { useAppSettings } from './shared/composables/useAppSettings'
 import { resolveCollapseAppSidebarOnOutside } from '../shared/schemas/appSettings'
+import { resolveAutoscanIntervalMs } from '../shared/schemas/autoscan'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
 import MonitorLayout from './features/monitor/components/MonitorLayout.vue'
 import PipelineEditor from './features/pipeline-editor/components/PipelineEditor.vue'
@@ -34,9 +35,14 @@ const { state: sidebarCollapsed, toggle: toggleSidebar } = useLocalToggle(false)
 const sidebarRef = ref<HTMLElement | null>(null)
 const { settings } = useAppSettings()
 
-onClickOutside(sidebarRef, () => {
-  if (resolveCollapseAppSidebarOnOutside(settings.value)) sidebarCollapsed.value = true
-})
+// Ignore teleported modals so clicks inside them do not collapse the rail.
+onClickOutside(
+  sidebarRef,
+  () => {
+    if (resolveCollapseAppSidebarOnOutside(settings.value)) sidebarCollapsed.value = true
+  },
+  { ignore: ['.modal-backdrop'] },
+)
 
 // Central mode switch, so any nested wizard/panel (Agent Editor's Build NL
 // gate, ArtifactPanel's QuickAction gate) can send the user to Runner mode
@@ -109,6 +115,56 @@ function onProjectsChanged() {
   loadProjects()
 }
 
+/** Exposed so SettingsDialog can refresh the sidebar after an autoscan run. */
+provide('reloadProjects', loadProjects)
+
+let autoscanTimer: ReturnType<typeof setInterval> | null = null
+
+async function tickAutoscan() {
+  try {
+    const data = await fetchAutoscanConfig()
+    const cfg = data.config || {}
+    if (!cfg.enabled || !Array.isArray(cfg.whitelist) || !cfg.whitelist.length) return
+    await runAutoscan()
+    await loadProjects()
+  } catch {
+    /* ignore — autoscan must not break the shell */
+  }
+}
+
+function stopAutoscanLoop() {
+  if (autoscanTimer) {
+    clearInterval(autoscanTimer)
+    autoscanTimer = null
+  }
+}
+
+async function startAutoscanLoop() {
+  stopAutoscanLoop()
+  let interval = 60_000
+  try {
+    const data = await fetchAutoscanConfig()
+    const cfg = data.config || {}
+    interval = resolveAutoscanIntervalMs(cfg)
+    if (cfg.enabled && Array.isArray(cfg.whitelist) && cfg.whitelist.length) {
+      await tickAutoscan()
+    }
+  } catch {
+    /* ignore */
+  }
+  autoscanTimer = setInterval(() => {
+    void tickAutoscan()
+  }, interval)
+}
+
+function onAutoscanChanged() {
+  void startAutoscanLoop()
+}
+
+function onProjectsChangedEvent() {
+  void loadProjects()
+}
+
 watch(sidebarCollapsed, (v) => {
   try {
     localStorage.setItem(SIDEBAR_KEY, v ? '1' : '0')
@@ -134,8 +190,16 @@ onMounted(async () => {
   loadSidebarPref()
   await loadProjects()
   start()
+  window.addEventListener('dev-dashboard:autoscan-changed', onAutoscanChanged)
+  window.addEventListener('dev-dashboard:projects-changed', onProjectsChangedEvent)
+  void startAutoscanLoop()
 })
-onUnmounted(stop)
+onUnmounted(() => {
+  stop()
+  stopAutoscanLoop()
+  window.removeEventListener('dev-dashboard:autoscan-changed', onAutoscanChanged)
+  window.removeEventListener('dev-dashboard:projects-changed', onProjectsChangedEvent)
+})
 </script>
 
 <template>

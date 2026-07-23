@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, inject, onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { onClickOutside } from '@vueuse/core'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
 import { useLocale } from '../../../shared/composables/useLocale'
 import {
@@ -11,6 +12,12 @@ import {
   resolveThemePreference,
   type ThemePreference,
 } from '../../../../shared/schemas/appSettings'
+import {
+  fetchAutoscanConfig,
+  saveAutoscanConfig,
+  runAutoscan,
+} from '../../../api'
+import FolderPickerDialog from '../../../shared/ui/FolderPickerDialog.vue'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -18,17 +25,34 @@ const { t } = useI18n()
 const { settings, load, update } = useAppSettings()
 const { locale, setLocale } = useLocale()
 
-type SettingsGroupId = 'general'
+/** Optional: App.vue provides this so scan can refresh the project list. */
+const reloadProjects = inject<(() => void | Promise<void>) | undefined>('reloadProjects', undefined)
+
+type SettingsGroupId = 'general' | 'projects'
 
 const selectedGroup = ref<SettingsGroupId>('general')
 
 const GROUPS: { id: SettingsGroupId; labelKey: string }[] = [
   { id: 'general', labelKey: 'settings.groups.general' },
+  { id: 'projects', labelKey: 'settings.groups.projects' },
 ]
+
+const autoscanInfoOpen = ref(false)
+const autoscanInfoWrapRef = ref<HTMLElement | null>(null)
 
 function selectGroup(id: SettingsGroupId) {
   selectedGroup.value = id
+  autoscanInfoOpen.value = false
 }
+
+function toggleAutoscanInfo(e?: Event) {
+  e?.stopPropagation()
+  autoscanInfoOpen.value = !autoscanInfoOpen.value
+}
+
+onClickOutside(autoscanInfoWrapRef, () => {
+  autoscanInfoOpen.value = false
+})
 
 const artifactViewMode = computed(() => resolveArtifactViewMode(settings.value))
 const theme = computed(() => resolveThemePreference(settings.value))
@@ -64,12 +88,123 @@ function toggleCollapseMonitorSubSidebarOnOutside() {
   })
 }
 
+// ── Autoscan (server-backed) ─────────────────────────────────────────────────
+
+const autoscanEnabled = ref(false)
+const whitelist: Ref<string[]> = ref([])
+const draftPath = ref('')
+const pickerOpen = ref(false)
+const autoscanBusy = ref(false)
+const autoscanMsg = ref('')
+const autoscanErr = ref('')
+
+async function loadAutoscan() {
+  autoscanErr.value = ''
+  try {
+    const data = await fetchAutoscanConfig()
+    const cfg = data.config || {}
+    autoscanEnabled.value = Boolean(cfg.enabled)
+    whitelist.value = Array.isArray(cfg.whitelist) ? [...cfg.whitelist] : []
+  } catch {
+    autoscanErr.value = t('settings.autoscan.loadError')
+  }
+}
+
+async function persistAutoscan() {
+  autoscanBusy.value = true
+  autoscanMsg.value = ''
+  autoscanErr.value = ''
+  try {
+    const data = await saveAutoscanConfig({
+      enabled: autoscanEnabled.value,
+      whitelist: whitelist.value,
+    })
+    const cfg = data.config || {}
+    autoscanEnabled.value = Boolean(cfg.enabled)
+    whitelist.value = Array.isArray(cfg.whitelist) ? [...cfg.whitelist] : []
+    autoscanMsg.value = t('settings.autoscan.saved')
+    window.dispatchEvent(new CustomEvent('dev-dashboard:autoscan-changed'))
+  } catch (e) {
+    autoscanErr.value = String((e as Error).message || e)
+  } finally {
+    autoscanBusy.value = false
+  }
+}
+
+function toggleAutoscanEnabled() {
+  autoscanEnabled.value = !autoscanEnabled.value
+  void persistAutoscan()
+}
+
+function addWhitelistPath(path?: string) {
+  const p = (path ?? draftPath.value).trim()
+  if (!p) {
+    autoscanErr.value = t('settings.autoscan.pathRequired')
+    return
+  }
+  if (!whitelist.value.includes(p)) whitelist.value = [...whitelist.value, p]
+  draftPath.value = ''
+  autoscanErr.value = ''
+  void persistAutoscan()
+}
+
+function removeWhitelistPath(path: string) {
+  whitelist.value = whitelist.value.filter((x) => x !== path)
+  void persistAutoscan()
+}
+
+function onWhitelistPicked(path: string) {
+  pickerOpen.value = false
+  addWhitelistPath(path)
+}
+
+async function scanNow() {
+  autoscanBusy.value = true
+  autoscanMsg.value = ''
+  autoscanErr.value = ''
+  try {
+    // Persist first so server whitelist matches UI.
+    await saveAutoscanConfig({
+      enabled: autoscanEnabled.value,
+      whitelist: whitelist.value,
+    })
+    const data = await runAutoscan(whitelist.value)
+    const report = data.report || {}
+    const added = Array.isArray(report.added) ? report.added.length : 0
+    const existing = Array.isArray(report.existing) ? report.existing.length : 0
+    if (added > 0) {
+      autoscanMsg.value = t('settings.autoscan.resultAdded', { count: added })
+    } else if (existing > 0) {
+      autoscanMsg.value = t('settings.autoscan.resultExisting', { count: existing })
+    } else {
+      autoscanMsg.value = t('settings.autoscan.resultNone')
+    }
+    await reloadProjects?.()
+    window.dispatchEvent(new CustomEvent('dev-dashboard:projects-changed'))
+  } catch (e) {
+    autoscanErr.value = String((e as Error).message || e)
+  } finally {
+    autoscanBusy.value = false
+  }
+}
+
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') emit('close')
+  if (e.key === 'Escape') {
+    if (pickerOpen.value) {
+      pickerOpen.value = false
+      return
+    }
+    if (autoscanInfoOpen.value) {
+      autoscanInfoOpen.value = false
+      return
+    }
+    emit('close')
+  }
 }
 
 onMounted(() => {
   load()
+  void loadAutoscan()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -248,9 +383,132 @@ onUnmounted(() => {
                 </label>
               </section>
             </template>
+
+            <template v-else-if="selectedGroup === 'projects'">
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.autoscan.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.autoscan.desc') }}</p>
+                <div class="settings-checkbox-row">
+                  <label class="settings-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="autoscanEnabled"
+                      :disabled="autoscanBusy"
+                      @change="toggleAutoscanEnabled"
+                    />
+                    {{ t('settings.autoscan.enabled') }}
+                  </label>
+                  <div ref="autoscanInfoWrapRef" class="settings-info-wrap">
+                    <button
+                      type="button"
+                      class="icon-btn settings-info-btn"
+                      :class="{ active: autoscanInfoOpen }"
+                      :aria-expanded="autoscanInfoOpen"
+                      :aria-controls="'autoscan-info-tip'"
+                      :aria-label="t('settings.autoscan.enabledInfoAria')"
+                      @click="toggleAutoscanInfo"
+                    >
+                      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                        <circle
+                          cx="8"
+                          cy="8"
+                          r="6.25"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.25"
+                        />
+                        <circle cx="8" cy="5.2" r="0.9" fill="currentColor" />
+                        <path fill="currentColor" d="M7.25 7h1.5v4.75h-1.5z" />
+                      </svg>
+                    </button>
+                    <div
+                      v-if="autoscanInfoOpen"
+                      id="autoscan-info-tip"
+                      class="settings-info-tip"
+                      role="tooltip"
+                    >
+                      {{ t('settings.autoscan.enabledInfo') }}
+                    </div>
+                  </div>
+                </div>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.autoscan.whitelistTitle') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.autoscan.whitelistDesc') }}</p>
+                <ul class="settings-whitelist">
+                  <li v-for="p in whitelist" :key="p" class="settings-whitelist-item">
+                    <code class="settings-whitelist-path" :title="p">{{ p }}</code>
+                    <button
+                      type="button"
+                      class="icon-btn danger"
+                      :title="t('settings.autoscan.removePath')"
+                      :aria-label="t('settings.autoscan.removePath')"
+                      :disabled="autoscanBusy"
+                      @click="removeWhitelistPath(p)"
+                    >
+                      ×
+                    </button>
+                  </li>
+                  <li v-if="!whitelist.length" class="settings-whitelist-empty">
+                    {{ t('settings.autoscan.pathPlaceholder') }}
+                  </li>
+                </ul>
+                <div class="settings-whitelist-add">
+                  <input
+                    v-model="draftPath"
+                    class="settings-input"
+                    :placeholder="t('settings.autoscan.pathPlaceholder')"
+                    :disabled="autoscanBusy"
+                    @keyup.enter="addWhitelistPath()"
+                  />
+                  <button
+                    type="button"
+                    class="icon-btn"
+                    :title="t('settings.autoscan.browse')"
+                    :aria-label="t('settings.autoscan.browse')"
+                    :disabled="autoscanBusy"
+                    @click="pickerOpen = true"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="currentColor"
+                        d="M2 3h5l1 1h6v9H2V3zm1 2v7h10V5H3z"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-ghost btn-sm"
+                    :disabled="autoscanBusy"
+                    @click="addWhitelistPath()"
+                  >
+                    {{ t('settings.autoscan.addPath') }}
+                  </button>
+                </div>
+                <div class="settings-autoscan-actions">
+                  <button
+                    type="button"
+                    class="btn-primary"
+                    :disabled="autoscanBusy || !whitelist.length"
+                    @click="scanNow"
+                  >
+                    {{ autoscanBusy ? t('settings.autoscan.scanning') : t('settings.autoscan.scanNow') }}
+                  </button>
+                </div>
+                <p v-if="autoscanMsg" class="settings-autoscan-msg">{{ autoscanMsg }}</p>
+                <p v-if="autoscanErr" class="settings-autoscan-err">⚠ {{ autoscanErr }}</p>
+              </section>
+            </template>
           </div>
         </div>
       </div>
     </div>
+
+    <FolderPickerDialog
+      v-if="pickerOpen"
+      :initial-path="draftPath.trim() || undefined"
+      @select="onWhitelistPicked"
+      @close="pickerOpen = false"
+    />
   </Teleport>
 </template>

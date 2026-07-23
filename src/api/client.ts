@@ -60,6 +60,48 @@ export async function removeProject(id: string) {
   return data
 }
 
+// ── Filesystem browse + autoscan ─────────────────────────────────────────────
+
+export async function browseFs(dirPath?: string) {
+  const r = await fetch(`/api/fs/browse${qs({ path: dirPath ?? '' })}`)
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/fs/browse → ${r.status}`)
+  return data
+}
+
+export async function fetchAutoscanConfig() {
+  const r = await fetch('/api/autoscan')
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/autoscan → ${r.status}`)
+  return data
+}
+
+export async function saveAutoscanConfig(config: {
+  enabled?: boolean
+  whitelist?: string[]
+  intervalMs?: number
+}) {
+  const r = await fetch('/api/autoscan', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/autoscan PUT → ${r.status}`)
+  return data
+}
+
+export async function runAutoscan(whitelist?: string[]) {
+  const r = await fetch('/api/autoscan/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(whitelist ? { whitelist } : {}),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/autoscan/run → ${r.status}`)
+  return data
+}
+
 // ── Task / artifact reads (project-scoped) ──────────────────────────────────────
 
 export async function fetchTasks(projectId?: string) {

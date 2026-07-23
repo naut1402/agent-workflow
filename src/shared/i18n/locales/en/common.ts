@@ -40,4 +40,15 @@ export const common = {
     archiveTask: 'Could not archive task (error {status})',
     saveCustomAgent: 'Could not save custom agent (server returned no name).',
   },
+  folderPicker: {
+    title: 'Choose folder',
+    close: 'Close',
+    up: 'Go up',
+    roots: 'Drives / roots',
+    loading: 'Loading…',
+    empty: 'No subfolders.',
+    cancel: 'Cancel',
+    select: 'Select this folder',
+    selectDirRequired: 'Open a folder before selecting.',
+  },
 }

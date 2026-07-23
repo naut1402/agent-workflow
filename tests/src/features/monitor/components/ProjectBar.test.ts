@@ -28,6 +28,12 @@ describe('ProjectBar — remove default project (mục 2)', () => {
     expect(items[1].find('.project-remove').exists()).toBe(true)
   })
 
+  it('shows browse button in the add form', async () => {
+    const w = mount(ProjectBar, { props: { projects, defaultId: 'p-default', selectedId: null } })
+    await w.find('.project-add-btn').trigger('click')
+    expect(w.find('.project-browse-btn').exists()).toBe(true)
+  })
+
   it('clicking remove on the default project calls removeProject (no longer blocked)', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
     const w = mount(ProjectBar, { props: { projects, defaultId: 'p-default', selectedId: null } })

@@ -34,6 +34,7 @@ export const monitor = {
     empty: 'Chưa có project nào.',
     pathPlaceholder: 'Đường dẫn .dev-team-agent / project root',
     namePlaceholder: 'Tên hiển thị (tuỳ chọn)',
+    browse: 'Chọn thư mục',
     add: 'Thêm',
     cancel: 'Huỷ',
     pathRequired: 'Nhập đường dẫn tới .dev-team-agent (hoặc project root).',
