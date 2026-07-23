@@ -65,7 +65,7 @@ Domain module nhận `ctx`/`root`, trả data thuần; tầng HTTP mới biết 
 | Tasks | `server/tasks/index.ts` | Liệt kê task, đọc state + artifact. |
 | Rules | `server/rules/index.ts` | Đọc rule project (`.claude/rules/*`). |
 | Knowledge | `server/knowledge/{knowledgeApi,driverRegistry,fileDriver}.ts` | Driver pluggable sau `getKnowledgeDriver(root)`; hiện chỉ có driver `file`. |
-| Runners | `server/runners/{agentResolver,connections,credentials,index,jobQueue,providerRegistry,registry,types}.ts` + `providers/{claude-code-cli,cursor-cli,codex-cli}.ts` | Điều phối job runner. Runner chọn **connection** (local-console hoặc ai-provider); provider CLI: `claude-code-cli`, `cursor-cli`, `codex-cli`. |
+| Runners | `server/runners/{agentResolver,connections,credentials,index,jobQueue,providerRegistry,registry,types}.ts` + `providers/{claude-code-cli,cursor-cli,codex-cli,console-command}.ts` | Điều phối job runner. Runner chọn **connection** (local-console hoặc ai-provider); provider CLI: `claude-code-cli`, `cursor-cli`, `codex-cli`, `console-command` (argv thuần, không agent/`allowedTools`). |
 | Logging | `server/logging/{jobLog,store}.ts` | Nhật ký job + request log. |
 | CLI | `server/runner-cli.mjs` (còn `.mjs`) | Runner CLI. |
 
@@ -103,7 +103,7 @@ Domain module nhận `ctx`/`root`, trả data thuần; tầng HTTP mới biết 
 
 ### 3.3 Styling
 
-Entry SCSS: `src/styles/main.scss` (import từ `src/main.ts`). Partials: `_tokens.scss` (CSS custom properties theme), `_shell.scss` (layout/sidebar/mode/modal/btn dùng chung), `_legacy-rest.scss` (CSS feature chưa tách — xoá dần theo module). Theme runtime qua `data-theme` + CSS variables; một số SFC còn `<style scoped>`. Khảo sát & kế hoạch áp dụng SCSS: [`scss-adoption.md`](scss-adoption.md).
+Entry SCSS: `src/styles/main.scss` (import từ `src/main.ts`). Partials: `_tokens.scss` (CSS custom properties theme), `_shell.scss` (layout/sidebar/mode/modal/btn dùng chung), `_<module>.scss` theo feature (`monitor`, `pipeline-editor`, `agent-editor`, `knowledge`, …). Theme runtime qua `data-theme` + CSS variables; SFC feature dùng `<style scoped lang="scss">` khi đã migrate. Khảo sát & kế hoạch: [`scss-adoption.md`](scss-adoption.md).
 
 ---
 

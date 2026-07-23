@@ -111,7 +111,7 @@ async function onSendFeedback() {
   </Teleport>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .proposal-overlay {
   position: fixed;
   inset: 0;

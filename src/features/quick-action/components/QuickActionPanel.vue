@@ -3,6 +3,15 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchRunners, fetchCatalog } from '../../../api'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
+import QuickActionMenuDialog from './QuickActionMenuDialog.vue'
+import { pocMenus } from '../lib/pocMenuStore'
+import type { ArtifactMenuNode } from '../lib/menuTypes'
+import {
+  addMenuGroup,
+  findActionMenuId,
+  listMenuGroupOptions,
+  setActionMenuMembership,
+} from '../lib/menuTree'
 
 const { t } = useI18n()
 
@@ -22,15 +31,31 @@ const ATTACH_OPTIONS = [
 ]
 
 const catalog = useQuickActionCatalog({ getProjectId: () => props.projectId ?? null })
-const runners = ref<Array<{ id: string; name: string }>>([])
+const runners = ref<Array<{ id: string; name: string; connectionId?: string }>>([])
+const connections = ref<Array<{ id: string; providerId?: string }>>([])
+const defaultRunnerId = ref<string | null>(null)
 const agents = ref<Array<{ id: string; name?: string; description?: string }>>([])
 const agentIds = computed(() => new Set(agents.value.map((a) => a.id)))
 
 const showForm = ref(false)
+const showMenuDialog = ref(false)
+const showCreateMenuDialog = ref(false)
 const editingId = ref<string | null>(null)
+const isCopyDraft = ref(false)
 const formError = ref('')
 const message = ref('')
 const showPromptHelp = ref(false)
+/** Empty string = independent flat button on Monitor toolbar. */
+const draftMenuId = ref('')
+const createMenuLabel = ref('')
+const createMenuParentId = ref('')
+const createMenuError = ref('')
+
+const menuGroupOptions = computed(() => listMenuGroupOptions(pocMenus.value))
+
+function menuOptionLabel(opt: { label: string; depth: number }): string {
+  return `${'— '.repeat(opt.depth)}${opt.label}`
+}
 
 // Danh sách placeholder hỗ trợ trong `prompt_template` — khớp với
 // `substitutePrompt()` (server/artifactActions/index.ts). `{{selection}}` và
@@ -106,6 +131,20 @@ function emptyDraft(): QuickActionDraft {
 const draft = ref<QuickActionDraft>(emptyDraft())
 const patternsText = ref('')
 
+/** Effective runner for the draft (explicit pick, else system default). */
+const effectiveRunnerId = computed(
+  () => draft.value.runner_id || defaultRunnerId.value || runners.value[0]?.id || '',
+)
+
+const effectiveProviderId = computed(() => {
+  const runner = runners.value.find((r) => r.id === effectiveRunnerId.value)
+  if (!runner?.connectionId) return ''
+  return connections.value.find((c) => c.id === runner.connectionId)?.providerId || ''
+})
+
+/** Console-command runners: no agent_ref / system prompt — prompt is extra CLI argv. */
+const isConsoleCommandRunner = computed(() => effectiveProviderId.value === 'console-command')
+
 // Derive a stable action id from the label (the id field is no longer entered).
 // Strip diacritics/emoji/punctuation to an ascii kebab slug; ensure uniqueness
 // against the existing catalog. Only used when creating — an edited action
@@ -133,8 +172,12 @@ async function loadRunnerOptions() {
   try {
     const res = await fetchRunners()
     runners.value = Array.isArray(res?.runners) ? res.runners : []
+    connections.value = Array.isArray(res?.connections) ? res.connections : []
+    defaultRunnerId.value = res?.defaultRunnerId || null
   } catch {
     runners.value = []
+    connections.value = []
+    defaultRunnerId.value = null
   }
 }
 
@@ -154,16 +197,41 @@ onMounted(async () => {
 })
 
 function openNew() {
+  isCopyDraft.value = false
   editingId.value = null
   draft.value = emptyDraft()
   patternsText.value = ''
+  draftMenuId.value = ''
   formError.value = ''
   message.value = ''
   closePromptHelp()
+  closeCreateMenuDialog()
+  showForm.value = true
+}
+
+function openCopy(a: QuickActionDraft) {
+  editingId.value = null
+  isCopyDraft.value = true
+  draft.value = {
+    ...a,
+    id: '',
+    label: `${a.label} (copy)`,
+    produces: [...(a.produces ?? [])],
+    attach_points: [...(a.attach_points ?? ['artifact-title'])],
+    require_approval: a.require_approval ?? false,
+  }
+  patternsText.value = (a.artifact_patterns ?? []).join(', ')
+  // Copy does not inherit menu membership — user picks again (or leave independent).
+  draftMenuId.value = ''
+  formError.value = ''
+  message.value = ''
+  closePromptHelp()
+  closeCreateMenuDialog()
   showForm.value = true
 }
 
 function openEdit(a: QuickActionDraft) {
+  isCopyDraft.value = false
   editingId.value = a.id
   draft.value = {
     ...a,
@@ -172,16 +240,82 @@ function openEdit(a: QuickActionDraft) {
     require_approval: a.require_approval ?? false,
   }
   patternsText.value = (a.artifact_patterns ?? []).join(', ')
+  draftMenuId.value = findActionMenuId(pocMenus.value, a.id) ?? ''
   formError.value = ''
   message.value = ''
   closePromptHelp()
+  closeCreateMenuDialog()
   showForm.value = true
 }
 
 function closeForm() {
   showForm.value = false
   editingId.value = null
+  isCopyDraft.value = false
+  draftMenuId.value = ''
   closePromptHelp()
+  closeCreateMenuDialog()
+}
+
+function openMenuDialog() {
+  showMenuDialog.value = true
+}
+
+function closeMenuDialog() {
+  showMenuDialog.value = false
+}
+
+function saveMenus(menus: ArtifactMenuNode[]) {
+  pocMenus.value = menus
+  message.value = t('quickAction.menu.save')
+  showMenuDialog.value = false
+}
+
+function deriveMenuId(label: string): string {
+  const base = `menu-${slugify(label) || 'group'}`
+  const taken = new Set<string>()
+  function walk(nodes: ArtifactMenuNode[]) {
+    for (const n of nodes) {
+      taken.add(n.id)
+      if (n.children?.length) walk(n.children)
+    }
+  }
+  walk(pocMenus.value)
+  if (!taken.has(base)) return base
+  let n = 2
+  while (taken.has(`${base}-${n}`)) n++
+  return `${base}-${n}`
+}
+
+function openCreateMenuDialog() {
+  createMenuLabel.value = ''
+  createMenuParentId.value = ''
+  createMenuError.value = ''
+  showCreateMenuDialog.value = true
+}
+
+function closeCreateMenuDialog() {
+  showCreateMenuDialog.value = false
+  createMenuLabel.value = ''
+  createMenuParentId.value = ''
+  createMenuError.value = ''
+}
+
+function saveCreateMenu() {
+  createMenuError.value = ''
+  const label = createMenuLabel.value.trim()
+  if (!label) {
+    createMenuError.value = t('quickAction.menu.createNameRequired')
+    return
+  }
+  const id = deriveMenuId(label)
+  pocMenus.value = addMenuGroup(pocMenus.value, {
+    id,
+    label,
+    parentId: createMenuParentId.value || null,
+  })
+  draftMenuId.value = id
+  closeCreateMenuDialog()
 }
 
 function toggleAttach(value: string, checked: boolean) {
@@ -202,6 +336,11 @@ async function saveForm() {
     .map((s) => s.trim())
     .filter(Boolean)
 
+  // Console-command runners cannot bind an agent (no system prompt merge).
+  if (isConsoleCommandRunner.value) {
+    draft.value.agent_ref = ''
+  }
+
   // id is derived from the label (create) or kept as-is (edit).
   draft.value.id = editingId.value ?? deriveId(draft.value.label)
 
@@ -215,6 +354,12 @@ async function saveForm() {
     formError.value = catalog.error.value || t('quickAction.errors.saveFailed')
     return
   }
+  pocMenus.value = setActionMenuMembership(
+    pocMenus.value,
+    draft.value.id,
+    draft.value.label,
+    draftMenuId.value || null,
+  )
   message.value = t('quickAction.messages.saved', { label: draft.value.label })
   closeForm()
 }
@@ -223,7 +368,10 @@ async function removeAction(a: QuickActionDraft) {
   if (typeof window !== 'undefined' && !window.confirm(t('quickAction.confirm.remove', { label: a.label }))) return
   catalog.remove(a.id)
   const ok = await catalog.persist(catalog.actions.value)
-  if (ok) message.value = t('quickAction.messages.removed', { label: a.label })
+  if (ok) {
+    pocMenus.value = setActionMenuMembership(pocMenus.value, a.id, a.label, null)
+    message.value = t('quickAction.messages.removed', { label: a.label })
+  }
 }
 </script>
 
@@ -240,7 +388,18 @@ async function removeAction(a: QuickActionDraft) {
     <p v-if="message" class="ok-msg">{{ message }}</p>
 
     <div class="qa-toolbar">
-      <button type="button" class="btn-primary btn-sm" @click="openNew">+ New</button>
+      <button type="button" class="btn-primary btn-sm" @click="openNew">{{ t('quickAction.newAction') }}</button>
+      <button
+        type="button"
+        class="icon-btn"
+        :title="t('quickAction.menu.manage')"
+        :aria-label="t('quickAction.menu.manage')"
+        @click="openMenuDialog"
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M2.5 4h11M2.5 8h11M2.5 12h7" />
+        </svg>
+      </button>
     </div>
 
     <table class="qa-table">
@@ -266,10 +425,55 @@ async function removeAction(a: QuickActionDraft) {
             <span v-for="ap in a.attach_points ?? ['artifact-title']" :key="ap" class="chip chip-xs">{{ ap }}</span>
             <span v-if="a.require_approval" class="chip chip-xs chip-approval" :title="t('quickAction.approvalBadgeTitle')">{{ t('quickAction.approvalBadge') }}</span>
           </td>
-          <td class="muted">{{ a.runner_id || '(default)' }}</td>
+          <td class="muted">{{ a.runner_id || t('quickAction.runnerDefault') }}</td>
           <td class="qa-row-actions">
-            <button type="button" class="btn-ghost btn-sm" @click="openEdit(a)">{{ t('quickAction.actions.edit') }}</button>
-            <button type="button" class="btn-ghost btn-sm btn-danger" @click="removeAction(a)">{{ t('quickAction.actions.delete') }}</button>
+            <button
+              type="button"
+              class="icon-btn"
+              :title="t('quickAction.actions.copy')"
+              :aria-label="t('quickAction.actions.copy')"
+              @click="openCopy(a)"
+            >
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <rect x="5.5" y="5.5" width="7" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
+                <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M3.5 10.5V3.5h7" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              :title="t('quickAction.actions.edit')"
+              :aria-label="t('quickAction.actions.edit')"
+              @click="openEdit(a)"
+            >
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M3.5 12.5l1.2-4.2 6.3-6.3 2.1 2.1-6.3 6.3zM9.5 3.5l2.1 2.1"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="icon-btn danger"
+              :title="t('quickAction.actions.delete')"
+              :aria-label="t('quickAction.actions.delete')"
+              @click="removeAction(a)"
+            >
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                  d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
+                />
+              </svg>
+            </button>
           </td>
         </tr>
       </tbody>
@@ -278,8 +482,24 @@ async function removeAction(a: QuickActionDraft) {
     <div v-if="showForm" class="qa-modal-overlay" @click.self="closeForm">
       <div class="qa-form" role="dialog" aria-modal="true">
         <div class="qa-form-head">
-          <h3>{{ editingId ? t('quickAction.form.editTitle', { name: draft.label || editingId }) : t('quickAction.form.newTitle') }}</h3>
-          <button type="button" class="btn-link qa-form-close" :aria-label="t('quickAction.form.close')" @click="closeForm">✕</button>
+          <h3>{{
+            isCopyDraft
+              ? t('quickAction.form.copyTitle', { name: draft.label.replace(/ \(copy\)$/, '') })
+              : editingId
+                ? t('quickAction.form.editTitle', { name: draft.label || editingId })
+                : t('quickAction.form.newTitle')
+          }}</h3>
+          <button
+            type="button"
+            class="icon-btn"
+            :title="t('quickAction.form.close')"
+            :aria-label="t('quickAction.form.close')"
+            @click="closeForm"
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
         </div>
         <p v-if="formError" class="err">{{ formError }}</p>
 
@@ -293,6 +513,16 @@ async function removeAction(a: QuickActionDraft) {
             <input v-model="patternsText" class="cfg-input" placeholder="design.md, investigate.md, *.md" />
           </label>
           <label class="cfg-label">
+            {{ t('quickAction.form.runnerLabel') }}
+            <select v-model="draft.runner_id" class="cfg-input">
+              <option :value="undefined">{{ t('quickAction.runnerDefault') }}</option>
+              <option v-for="r in runners" :key="r.id" :value="r.id">{{ r.name || r.id }}</option>
+            </select>
+          </label>
+          <p v-if="isConsoleCommandRunner" class="muted qa-menu-select-hint">
+            {{ t('quickAction.form.consoleRunnerHint') }}
+          </p>
+          <label v-if="!isConsoleCommandRunner" class="cfg-label">
             {{ t('quickAction.form.agentLabel') }}
             <select v-model="draft.agent_ref" class="cfg-input">
               <option value="">{{ t('quickAction.form.agentNone') }}</option>
@@ -307,18 +537,29 @@ async function removeAction(a: QuickActionDraft) {
           </label>
           <label class="cfg-label">
             <span class="qa-prompt-label-row">
-              prompt_template
+              {{ isConsoleCommandRunner ? t('quickAction.form.consoleArgsLabel') : 'prompt_template' }}
               <button
                 ref="helpBtnRef"
                 type="button"
-                class="btn-help-icon"
+                class="icon-btn btn-help-icon"
                 :title="t('quickAction.form.promptHelpTitleAttr')"
                 :aria-label="t('quickAction.form.promptHelpAria')"
                 :aria-expanded="showPromptHelp"
                 @click="togglePromptHelp"
-              >❓</button>
+              >
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+                  <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M8 7.2v3.3M8 5.2v.8" />
+                </svg>
+              </button>
               <div v-if="showPromptHelp" ref="promptHelpRef" class="qa-prompt-help" role="dialog">
-                <p class="qa-prompt-help-title">{{ t('quickAction.promptHelp.heading') }}</p>
+                <p class="qa-prompt-help-title">
+                  {{
+                    isConsoleCommandRunner
+                      ? t('quickAction.promptHelp.consoleHeading')
+                      : t('quickAction.promptHelp.heading')
+                  }}
+                </p>
                 <dl>
                   <div v-for="ph in PROMPT_PLACEHOLDERS" :key="ph.token" class="qa-prompt-help-item">
                     <dt><code>{{ ph.token }}</code></dt>
@@ -331,7 +572,11 @@ async function removeAction(a: QuickActionDraft) {
                   </div>
                 </dl>
                 <p class="qa-prompt-help-note qa-prompt-help-write">
-                  {{ t('quickAction.promptHelp.writeNote') }}
+                  {{
+                    isConsoleCommandRunner
+                      ? t('quickAction.promptHelp.consoleWriteNote')
+                      : t('quickAction.promptHelp.writeNote')
+                  }}
                 </p>
               </div>
             </span>
@@ -339,11 +584,15 @@ async function removeAction(a: QuickActionDraft) {
               v-model="draft.prompt_template"
               class="cfg-textarea"
               rows="4"
-              :placeholder="t('quickAction.form.promptPlaceholder')"
+              :placeholder="
+                isConsoleCommandRunner
+                  ? t('quickAction.form.consoleArgsPlaceholder')
+                  : t('quickAction.form.promptPlaceholder')
+              "
             />
           </label>
           <fieldset class="qa-attach-fieldset">
-            <legend>Attach points</legend>
+            <legend>{{ t('quickAction.attachPoints') }}</legend>
             <label v-for="opt in ATTACH_OPTIONS" :key="opt.value" class="qa-attach-option">
               <input
                 type="checkbox"
@@ -353,13 +602,30 @@ async function removeAction(a: QuickActionDraft) {
               {{ opt.label }}
             </label>
           </fieldset>
-          <label class="cfg-label">
-            {{ t('quickAction.form.runnerLabel') }}
-            <select v-model="draft.runner_id" class="cfg-input">
-              <option :value="undefined">(default)</option>
-              <option v-for="r in runners" :key="r.id" :value="r.id">{{ r.name || r.id }}</option>
-            </select>
-          </label>
+          <div class="qa-menu-select-row">
+            <label class="cfg-label qa-menu-select-field">
+              {{ t('quickAction.form.menuLabel') }}
+              <select v-model="draftMenuId" class="cfg-input" data-testid="qa-menu-select">
+                <option value="">{{ t('quickAction.form.menuNone') }}</option>
+                <option v-for="opt in menuGroupOptions" :key="opt.id" :value="opt.id">
+                  {{ menuOptionLabel(opt) }}
+                </option>
+              </select>
+            </label>
+            <button
+              type="button"
+              class="icon-btn"
+              :title="t('quickAction.form.addMenu')"
+              :aria-label="t('quickAction.form.addMenu')"
+              data-testid="qa-add-menu"
+              @click="openCreateMenuDialog"
+            >
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M8 3.5v9M3.5 8h9" />
+              </svg>
+            </button>
+          </div>
+          <p class="muted qa-menu-select-hint">{{ t('quickAction.form.menuHint') }}</p>
           <label class="qa-attach-option">
             <input v-model="draft.confirm" type="checkbox" />
             {{ t('quickAction.form.confirmOption') }}
@@ -378,16 +644,68 @@ async function removeAction(a: QuickActionDraft) {
         </div>
       </div>
     </div>
+
+    <div v-if="showCreateMenuDialog" class="qa-modal-overlay qa-create-menu-overlay" @click.self="closeCreateMenuDialog">
+      <div class="qa-create-menu-dialog" role="dialog" aria-modal="true" :aria-label="t('quickAction.menu.createTitle')">
+        <div class="qa-form-head">
+          <h3>{{ t('quickAction.menu.createTitle') }}</h3>
+          <button
+            type="button"
+            class="icon-btn"
+            :title="t('quickAction.form.close')"
+            :aria-label="t('quickAction.form.close')"
+            @click="closeCreateMenuDialog"
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
+        <p v-if="createMenuError" class="err">{{ createMenuError }}</p>
+        <label class="cfg-label">
+          {{ t('quickAction.menu.createNameLabel') }}
+          <input
+            v-model="createMenuLabel"
+            class="cfg-input"
+            data-testid="qa-create-menu-name"
+            :placeholder="t('quickAction.menu.createNamePlaceholder')"
+          />
+        </label>
+        <label class="cfg-label">
+          {{ t('quickAction.menu.createParentLabel') }}
+          <select v-model="createMenuParentId" class="cfg-input" data-testid="qa-create-menu-parent">
+            <option value="">{{ t('quickAction.menu.createParentNone') }}</option>
+            <option v-for="opt in menuGroupOptions" :key="opt.id" :value="opt.id">
+              {{ menuOptionLabel(opt) }}
+            </option>
+          </select>
+        </label>
+        <div class="nl-actions">
+          <button type="button" class="btn-primary" data-testid="qa-create-menu-save" @click="saveCreateMenu">
+            {{ t('quickAction.menu.createSave') }}
+          </button>
+          <button type="button" class="btn-ghost" @click="closeCreateMenuDialog">{{ t('quickAction.form.cancel') }}</button>
+        </div>
+      </div>
+    </div>
+
+    <QuickActionMenuDialog
+      v-if="showMenuDialog"
+      :menus="pocMenus"
+      :actions="catalog.actions.value.map((a) => ({ id: a.id, label: a.label }))"
+      @save="saveMenus"
+      @close="closeMenuDialog"
+    />
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .quick-action-panel {
   padding: 16px;
   max-width: 880px;
 }
 .qa-panel-head { margin-bottom: 12px; }
-.qa-toolbar { margin-bottom: 10px; }
+.qa-toolbar { margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
 .qa-table {
   width: 100%;
   border-collapse: collapse;
@@ -401,7 +719,7 @@ async function removeAction(a: QuickActionDraft) {
   vertical-align: top;
 }
 .qa-empty { text-align: center; }
-.qa-row-actions { display: flex; gap: 6px; white-space: nowrap; }
+.qa-row-actions { display: flex; gap: 2px; white-space: nowrap; align-items: center; }
 
 /* Editor is a modal dialog: resizable and always bounded by the viewport. */
 .qa-modal-overlay {
@@ -438,9 +756,14 @@ async function removeAction(a: QuickActionDraft) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: nowrap;
 }
-.qa-form-head h3 { margin: 0; }
-.qa-form-close { font-size: 15px; }
+.qa-form-head h3 {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.qa-form-head .icon-btn { flex-shrink: 0; }
 /* The fields scroll inside the dialog so the header/footer stay put. */
 .qa-form-body {
   flex: 1 1 auto;
@@ -458,17 +781,26 @@ async function removeAction(a: QuickActionDraft) {
   gap: 14px;
 }
 .qa-attach-option { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-.qa-prompt-label-row { position: relative; display: inline-flex; align-items: center; gap: 4px; }
-.btn-help-icon {
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
-  padding: 0 2px;
-  color: var(--muted);
+.qa-menu-select-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
 }
-.btn-help-icon:hover { color: inherit; }
+.qa-menu-select-field { flex: 1 1 auto; margin: 0; }
+.qa-menu-select-hint { margin: -4px 0 0; font-size: 12px; }
+.qa-create-menu-overlay { z-index: 1100; }
+.qa-create-menu-dialog {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  width: min(420px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+.qa-prompt-label-row { position: relative; display: inline-flex; align-items: center; gap: 4px; }
 /* Floating popover: overlays adjacent fields (does not push them down). */
 .qa-prompt-help {
   position: absolute;

@@ -108,9 +108,11 @@ function inferProviderFromPath(pathOrCmd: string): string {
   const base = pathOrCmd.replace(/\\/g, '/').split('/').pop()?.replace(/\.exe$/i, '') || ''
   const known = scanned.value.find((c) => c.command === base || c.id === base)
   if (known) return known.providerId
+  if (/^claude$/i.test(base)) return 'claude-code-cli'
   if (/cursor/i.test(base)) return 'cursor-cli'
   if (/codex/i.test(base)) return 'codex-cli'
-  return 'claude-code-cli'
+  // Generic shell/CLI binary — not an AI agent runner.
+  return 'console-command'
 }
 
 async function loadCredentials() {
@@ -458,7 +460,7 @@ onUnmounted(() => {
   </Teleport>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .connection-dialog { max-width: 520px; width: min(520px, 94vw); }
 .register-command-dialog { max-width: 440px; width: min(440px, 92vw); }
 .nested-backdrop { z-index: 1100; }

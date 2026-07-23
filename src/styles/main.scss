@@ -1,3 +1,6 @@
 @use "./tokens";
 @use "./shell";
-@use "./legacy-rest";
+@use "./monitor";
+@use "./pipeline-editor";
+@use "./agent-editor";
+@use "./knowledge";

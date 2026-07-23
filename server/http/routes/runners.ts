@@ -128,7 +128,8 @@ export function registerRunnerRoutes(app: Hono<HonoEnv>): void {
     const b = await parseBody(c)
     if (!b.ok) return j(c, 400, { error: 'invalid JSON' })
     const parsed = b.value
-    if (!parsed.agentRef || !parsed.workspace) {
+    // agentRef may be '' for console-command / direct-prompt jobs (no agent file).
+    if (typeof parsed.agentRef !== 'string' || !parsed.workspace) {
       return j(c, 400, { error: 'agentRef and workspace are required' })
     }
     const projectRoot = path.dirname(root)

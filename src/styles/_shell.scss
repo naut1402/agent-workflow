@@ -239,6 +239,30 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   cursor: default;
 }
 
+/* Text quick-action trigger (docs/ui-buttons.md: label bắt buộc). Shared by
+   Monitor ArtifactPanel + QuickActionMenuDropdown — keep global with .icon-btn. */
+.btn-quick-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 8px;
+  min-height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+.btn-quick-action:hover:not(:disabled) {
+  color: var(--text);
+  transform: scale(1.15);
+}
+.btn-quick-action:disabled { opacity: 0.45; cursor: default; }
+
 /* ── Mode toggle (sidebar) ──────────────────────────────────────────────── */
 .mode-toggle {
   display: flex;
@@ -286,3 +310,8 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .btn-danger:hover { background: var(--danger); color: #fff; }
 
 .muted { color: var(--muted); font-size: 12px; }
+
+/* Main content area (all modes) */
+.main { flex: 1; overflow-y: auto; padding: 22px 28px; }
+.empty { color: var(--muted); margin-top: 40px; text-align: center; line-height: 1.7; }
+.main-editor { padding: 0; overflow: hidden; display: flex; flex-direction: column; }

@@ -21,7 +21,7 @@ test('quick action: CRUD → title button + selection toolbar (capture)', async 
   await expect(page.locator('.quick-action-panel')).toBeVisible({ timeout: 15_000 })
 
   // ── Create a title-attached action ──────────────────────────────────────
-  await page.getByRole('button', { name: '+ New' }).click()
+  await page.locator('.qa-toolbar .btn-primary').click()
   await expect(page.locator('.qa-form')).toBeVisible()
   const titleFormInputs = page.locator('.qa-form input.cfg-input') // [0]=label, [1]=patterns
   await titleFormInputs.nth(0).fill('QA Title E2E')
@@ -35,7 +35,7 @@ test('quick action: CRUD → title button + selection toolbar (capture)', async 
   await capture(page, testInfo, 'quick-action-panel')
 
   // ── Create a selection-only action ──────────────────────────────────────
-  await page.getByRole('button', { name: '+ New' }).click()
+  await page.locator('.qa-toolbar .btn-primary').click()
   const selFormInputs = page.locator('.qa-form input.cfg-input')
   await selFormInputs.nth(0).fill('QA Selection E2E')
   await selFormInputs.nth(1).fill('design.md')

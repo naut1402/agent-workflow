@@ -236,7 +236,7 @@ async function remove(r: RunnerDraft, e: Event) {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .runner-config { padding: 1rem 1.25rem; max-width: 960px; }
 .runner-head h2 { margin: 0 0 0.25rem; font-size: 1.25rem; font-weight: 500; }
 .muted { color: var(--muted); font-size: 0.85rem; }

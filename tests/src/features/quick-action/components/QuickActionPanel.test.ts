@@ -20,7 +20,11 @@ vi.mock('@/api', () => ({
     ],
   })),
   saveArtifactActionsCatalog: vi.fn(async (file: any) => ({ ok: true, ...file })),
-  fetchRunners: vi.fn(async () => ({ runners: [{ id: 'r1', name: 'Runner A' }], defaultRunnerId: 'r1' })),
+  fetchRunners: vi.fn(async () => ({
+    runners: [{ id: 'r1', name: 'Runner A', connectionId: 'conn-claude' }],
+    connections: [{ id: 'conn-claude', providerId: 'claude-code-cli' }],
+    defaultRunnerId: 'r1',
+  })),
   fetchCatalog: vi.fn(async () => ({
     skills: [],
     agents: [
@@ -85,8 +89,9 @@ describe('QuickActionPanel', () => {
     await inputs[0].setValue('with-agent')
     await inputs[1].setValue('design.md')
     await w.get('.qa-form textarea').setValue('Đọc {{artifact_name}}')
-    // The first <select.cfg-input> in the form is the agent dropdown.
-    await w.findAll('.qa-form select.cfg-input')[0].setValue('dashboard:my-agent')
+    // Form order: runner select, then agent select, then menu select.
+    const selects = w.findAll('.qa-form select.cfg-input')
+    await selects[1].setValue('dashboard:my-agent')
 
     await w.get('.qa-form .btn-primary').trigger('click')
     await flushPromises()
@@ -94,6 +99,39 @@ describe('QuickActionPanel', () => {
     const [file] = vi.mocked(saveArtifactActionsCatalog).mock.calls[0]
     const saved = (file as any).actions.find((a: any) => a.id === 'with-agent')
     expect(saved.agent_ref).toBe('dashboard:my-agent')
+  })
+
+  it('hides agent_ref and clears it when runner is console-command', async () => {
+    const { fetchRunners } = await import('@/api')
+    vi.mocked(fetchRunners).mockResolvedValueOnce({
+      runners: [{ id: 'sh1', name: 'Shell', connectionId: 'conn-sh' }],
+      connections: [{ id: 'conn-sh', providerId: 'console-command' }],
+      defaultRunnerId: 'sh1',
+    } as any)
+
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    await flushPromises()
+
+    await w.get('button.btn-primary.btn-sm').trigger('click')
+    expect(w.text()).toContain('console-command')
+    // Agent dropdown is not rendered for console-command runners.
+    const selects = w.findAll('.qa-form select.cfg-input')
+    // runner + menu only (no agent select)
+    expect(selects.length).toBe(2)
+
+    const inputs = w.findAll('.qa-form input.cfg-input')
+    await inputs[0].setValue('shell-action')
+    await inputs[1].setValue('design.md')
+    await w.get('.qa-form textarea').setValue('--file {{artifact_name}}')
+    await selects[0].setValue('sh1')
+
+    await w.get('.qa-form .btn-primary').trigger('click')
+    await flushPromises()
+
+    const [file] = vi.mocked(saveArtifactActionsCatalog).mock.calls[0]
+    const saved = (file as any).actions.find((a: any) => a.id === 'shell-action')
+    expect(saved.agent_ref).toBe('')
+    expect(saved.runner_id).toBe('sh1')
   })
 
   it('prompt help popover toggles a placeholder reference, hidden by default', async () => {
@@ -187,5 +225,20 @@ describe('QuickActionPanel', () => {
     await w.get('.qa-form .btn-ghost').trigger('click') // Hủy
     await w.get('button.btn-primary.btn-sm').trigger('click') // + New again
     expect(w.find('.qa-prompt-help').exists()).toBe(false)
+  })
+
+  it('menu manager dialog can open, close, and reopen without error', async () => {
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    await flushPromises()
+
+    const manageBtn = w.get('button[aria-label="Quản lý menu"]')
+    await manageBtn.trigger('click')
+    expect(w.find('.qa-menu-dialog').exists()).toBe(true)
+
+    await w.get('.qa-menu-dialog .btn-ghost').trigger('click')
+    expect(w.find('.qa-menu-dialog').exists()).toBe(false)
+
+    await manageBtn.trigger('click')
+    expect(w.find('.qa-menu-dialog').exists()).toBe(true)
   })
 })
