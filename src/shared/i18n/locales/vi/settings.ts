@@ -5,6 +5,7 @@ export const settings = {
   close: 'Đóng',
   groups: {
     general: 'Chung',
+    projects: 'Projects',
   },
   theme: {
     title: 'Giao diện',
@@ -37,6 +38,7 @@ export const settings = {
     enabled: 'Bật autoscan',
     enabledInfo:
       'Khi bật, dashboard tự quét whitelist mỗi 60 giây trong lúc ứng dụng đang mở. Chưa hỗ trợ đổi khoảng thời gian trên UI.',
+    enabledInfoAria: 'Thông tin về khoảng thời gian autoscan',
     whitelistTitle: 'Whitelist thư mục',
     whitelistDesc: 'Mỗi mục là thư mục cha — quét chính nó và một cấp thư mục con.',
     pathPlaceholder: 'Đường dẫn tuyệt đối',

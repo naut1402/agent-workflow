@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { onClickOutside } from '@vueuse/core'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
 import { useLocale } from '../../../shared/composables/useLocale'
 import {
@@ -27,17 +28,31 @@ const { locale, setLocale } = useLocale()
 /** Optional: App.vue provides this so scan can refresh the project list. */
 const reloadProjects = inject<(() => void | Promise<void>) | undefined>('reloadProjects', undefined)
 
-type SettingsGroupId = 'general'
+type SettingsGroupId = 'general' | 'projects'
 
 const selectedGroup = ref<SettingsGroupId>('general')
 
 const GROUPS: { id: SettingsGroupId; labelKey: string }[] = [
   { id: 'general', labelKey: 'settings.groups.general' },
+  { id: 'projects', labelKey: 'settings.groups.projects' },
 ]
+
+const autoscanInfoOpen = ref(false)
+const autoscanInfoWrapRef = ref<HTMLElement | null>(null)
 
 function selectGroup(id: SettingsGroupId) {
   selectedGroup.value = id
+  autoscanInfoOpen.value = false
 }
+
+function toggleAutoscanInfo(e?: Event) {
+  e?.stopPropagation()
+  autoscanInfoOpen.value = !autoscanInfoOpen.value
+}
+
+onClickOutside(autoscanInfoWrapRef, () => {
+  autoscanInfoOpen.value = false
+})
 
 const artifactViewMode = computed(() => resolveArtifactViewMode(settings.value))
 const theme = computed(() => resolveThemePreference(settings.value))
@@ -177,6 +192,10 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     if (pickerOpen.value) {
       pickerOpen.value = false
+      return
+    }
+    if (autoscanInfoOpen.value) {
+      autoscanInfoOpen.value = false
       return
     }
     emit('close')
@@ -363,6 +382,9 @@ onUnmounted(() => {
                   {{ t('settings.sidebar.collapseMonitorSubOnOutsideClick') }}
                 </label>
               </section>
+            </template>
+
+            <template v-else-if="selectedGroup === 'projects'">
               <section class="settings-section">
                 <h3 class="settings-section-title">{{ t('settings.autoscan.title') }}</h3>
                 <p class="settings-section-desc">{{ t('settings.autoscan.desc') }}</p>
@@ -376,25 +398,38 @@ onUnmounted(() => {
                     />
                     {{ t('settings.autoscan.enabled') }}
                   </label>
-                  <button
-                    type="button"
-                    class="icon-btn settings-info-btn"
-                    :title="t('settings.autoscan.enabledInfo')"
-                    :aria-label="t('settings.autoscan.enabledInfo')"
-                  >
-                    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-                      <circle
-                        cx="8"
-                        cy="8"
-                        r="6.25"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.25"
-                      />
-                      <circle cx="8" cy="5.2" r="0.9" fill="currentColor" />
-                      <path fill="currentColor" d="M7.25 7h1.5v4.75h-1.5z" />
-                    </svg>
-                  </button>
+                  <div ref="autoscanInfoWrapRef" class="settings-info-wrap">
+                    <button
+                      type="button"
+                      class="icon-btn settings-info-btn"
+                      :class="{ active: autoscanInfoOpen }"
+                      :aria-expanded="autoscanInfoOpen"
+                      :aria-controls="'autoscan-info-tip'"
+                      :aria-label="t('settings.autoscan.enabledInfoAria')"
+                      @click="toggleAutoscanInfo"
+                    >
+                      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                        <circle
+                          cx="8"
+                          cy="8"
+                          r="6.25"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.25"
+                        />
+                        <circle cx="8" cy="5.2" r="0.9" fill="currentColor" />
+                        <path fill="currentColor" d="M7.25 7h1.5v4.75h-1.5z" />
+                      </svg>
+                    </button>
+                    <div
+                      v-if="autoscanInfoOpen"
+                      id="autoscan-info-tip"
+                      class="settings-info-tip"
+                      role="tooltip"
+                    >
+                      {{ t('settings.autoscan.enabledInfo') }}
+                    </div>
+                  </div>
                 </div>
               </section>
               <section class="settings-section">

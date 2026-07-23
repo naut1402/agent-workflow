@@ -4,6 +4,7 @@ export const settings = {
   close: 'Close',
   groups: {
     general: 'General',
+    projects: 'Projects',
   },
   theme: {
     title: 'Appearance',
@@ -36,6 +37,7 @@ export const settings = {
     enabled: 'Enable autoscan',
     enabledInfo:
       'When enabled, the dashboard scans the whitelist every 60 seconds while the app is open. Changing the interval in the UI is not supported yet.',
+    enabledInfoAria: 'Autoscan interval information',
     whitelistTitle: 'Folder whitelist',
     whitelistDesc: 'Each entry is a parent folder — scans itself and one level of children.',
     pathPlaceholder: 'Absolute path',
