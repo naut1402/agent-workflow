@@ -1,10 +1,10 @@
 import type { ArtifactAction } from '../../shared/schemas/artifactAction.js'
 
-// Built-in default catalog, used when a project has no `artifact-actions.yaml`.
-// Mirrors the seed shipped as `.dev-team-agent/artifact-actions.yaml`; kept as a
+// Built-in default catalog, used when the dashboard-global
+// `artifact-actions.yaml` (under `~/.dev-team-dashboard/`) is missing. Kept as a
 // self-contained literal for the same reason as DEFAULT_PIPELINE — the viewer is
 // copied out of the plugin tree and can't read a bundled asset at runtime. A
-// project YAML fully replaces this list (declarative override, no code change).
+// valid global YAML fully replaces this list (declarative override).
 export const DEFAULT_ARTIFACT_ACTIONS: ArtifactAction[] = [
   {
     id: 'improve-doc',

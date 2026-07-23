@@ -4,8 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { fetchRunners, fetchCatalog } from '../../../api'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
 import QuickActionMenuDialog from './QuickActionMenuDialog.vue'
-import { pocMenus } from '../lib/pocMenuStore'
-import type { ArtifactMenuNode } from '../lib/menuTypes'
+import type { ArtifactMenuNode } from '../../../../shared/schemas/artifactAction'
 import {
   addMenuGroup,
   findActionMenuId,
@@ -51,7 +50,7 @@ const createMenuLabel = ref('')
 const createMenuParentId = ref('')
 const createMenuError = ref('')
 
-const menuGroupOptions = computed(() => listMenuGroupOptions(pocMenus.value))
+const menuGroupOptions = computed(() => listMenuGroupOptions(catalog.menus.value))
 
 function menuOptionLabel(opt: { label: string; depth: number }): string {
   return `${'— '.repeat(opt.depth)}${opt.label}`
@@ -240,7 +239,7 @@ function openEdit(a: QuickActionDraft) {
     require_approval: a.require_approval ?? false,
   }
   patternsText.value = (a.artifact_patterns ?? []).join(', ')
-  draftMenuId.value = findActionMenuId(pocMenus.value, a.id) ?? ''
+  draftMenuId.value = findActionMenuId(catalog.menus.value, a.id) ?? ''
   formError.value = ''
   message.value = ''
   closePromptHelp()
@@ -265,8 +264,12 @@ function closeMenuDialog() {
   showMenuDialog.value = false
 }
 
-function saveMenus(menus: ArtifactMenuNode[]) {
-  pocMenus.value = menus
+async function saveMenus(menus: ArtifactMenuNode[]) {
+  const ok = await catalog.persist(undefined, menus)
+  if (!ok) {
+    message.value = catalog.error.value || t('quickAction.errors.saveFailed')
+    return
+  }
   message.value = t('quickAction.menu.save')
   showMenuDialog.value = false
 }
@@ -280,7 +283,7 @@ function deriveMenuId(label: string): string {
       if (n.children?.length) walk(n.children)
     }
   }
-  walk(pocMenus.value)
+  walk(catalog.menus.value)
   if (!taken.has(base)) return base
   let n = 2
   while (taken.has(`${base}-${n}`)) n++
@@ -309,7 +312,7 @@ function saveCreateMenu() {
     return
   }
   const id = deriveMenuId(label)
-  pocMenus.value = addMenuGroup(pocMenus.value, {
+  catalog.menus.value = addMenuGroup(catalog.menus.value, {
     id,
     label,
     parentId: createMenuParentId.value || null,
@@ -349,17 +352,17 @@ async function saveForm() {
     formError.value = result.error
     return
   }
-  const ok = await catalog.persist(catalog.actions.value)
-  if (!ok) {
-    formError.value = catalog.error.value || t('quickAction.errors.saveFailed')
-    return
-  }
-  pocMenus.value = setActionMenuMembership(
-    pocMenus.value,
+  const nextMenus = setActionMenuMembership(
+    catalog.menus.value,
     draft.value.id,
     draft.value.label,
     draftMenuId.value || null,
   )
+  const ok = await catalog.persist(catalog.actions.value, nextMenus)
+  if (!ok) {
+    formError.value = catalog.error.value || t('quickAction.errors.saveFailed')
+    return
+  }
   message.value = t('quickAction.messages.saved', { label: draft.value.label })
   closeForm()
 }
@@ -367,9 +370,9 @@ async function saveForm() {
 async function removeAction(a: QuickActionDraft) {
   if (typeof window !== 'undefined' && !window.confirm(t('quickAction.confirm.remove', { label: a.label }))) return
   catalog.remove(a.id)
-  const ok = await catalog.persist(catalog.actions.value)
+  const nextMenus = setActionMenuMembership(catalog.menus.value, a.id, a.label, null)
+  const ok = await catalog.persist(catalog.actions.value, nextMenus)
   if (ok) {
-    pocMenus.value = setActionMenuMembership(pocMenus.value, a.id, a.label, null)
     message.value = t('quickAction.messages.removed', { label: a.label })
   }
 }
@@ -691,7 +694,7 @@ async function removeAction(a: QuickActionDraft) {
 
     <QuickActionMenuDialog
       v-if="showMenuDialog"
-      :menus="pocMenus"
+      :menus="catalog.menus.value"
       :actions="catalog.actions.value.map((a) => ({ id: a.id, label: a.label }))"
       @save="saveMenus"
       @close="closeMenuDialog"

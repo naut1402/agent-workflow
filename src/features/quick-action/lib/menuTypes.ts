@@ -1,7 +1,2 @@
-/** POC / E0003 — menu node shape (production will move to shared/schemas). */
-export type ArtifactMenuNode = {
-  id: string
-  label: string
-  action_id?: string
-  children?: ArtifactMenuNode[]
-}
+/** Re-export catalog menu node type (Zod source of truth in shared/schemas). */
+export type { ArtifactMenuNode } from '../../../../shared/schemas/artifactAction'

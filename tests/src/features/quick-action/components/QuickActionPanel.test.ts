@@ -6,6 +6,7 @@ import QuickActionPanel from '@/features/quick-action/components/QuickActionPane
 vi.mock('@/api', () => ({
   fetchArtifactActionsCatalog: vi.fn(async () => ({
     version: 1,
+    menus: [],
     actions: [
       {
         id: 'improve-doc',
@@ -77,6 +78,7 @@ describe('QuickActionPanel', () => {
     expect(saveArtifactActionsCatalog).toHaveBeenCalled()
     const [file] = vi.mocked(saveArtifactActionsCatalog).mock.calls[0]
     expect((file as any).actions.map((a: any) => a.id)).toContain('new-action')
+    expect((file as any).menus).toEqual([])
     expect(w.find('.qa-form').exists()).toBe(false) // closes on success
   })
 
@@ -240,5 +242,24 @@ describe('QuickActionPanel', () => {
 
     await manageBtn.trigger('click')
     expect(w.find('.qa-menu-dialog').exists()).toBe(true)
+  })
+
+  it('persists menus in the same catalog save', async () => {
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    await flushPromises()
+
+    await w.get('button[aria-label="Quản lý menu"]').trigger('click')
+    await w.get('.qa-menu-dialog-toolbar .icon-btn').trigger('click')
+    await w.get('.qa-menu-editor .cfg-input').setValue('Nhóm tài liệu')
+    await w.get('.qa-menu-dialog .btn-primary').trigger('click')
+    await flushPromises()
+
+    const [file] = vi.mocked(saveArtifactActionsCatalog).mock.calls[0]
+    expect((file as any).menus).toEqual([
+      expect.objectContaining({
+        label: 'Nhóm tài liệu',
+        children: [],
+      }),
+    ])
   })
 })

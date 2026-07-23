@@ -186,20 +186,27 @@ describe('findAction / artifactBase / substitutePrompt / toActionView', () => {
 })
 
 describe('loadArtifactActions', () => {
-  let root: string
+  let home: string
+  const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
+
   beforeAll(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'aa-root-'))
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'aa-home-'))
+    process.env.DEV_TEAM_DASHBOARD_HOME = home
   })
-  afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
+  afterAll(() => {
+    if (prevHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
+    else process.env.DEV_TEAM_DASHBOARD_HOME = prevHome
+    fs.rmSync(home, { recursive: true, force: true })
+  })
 
   test('falls back to the built-in default when the file is missing', async () => {
-    const loaded = await loadArtifactActions(root)
+    const loaded = await loadArtifactActions()
     expect(loaded).toEqual(DEFAULT_ARTIFACT_ACTIONS)
     expect(loaded[0].id).toBe('improve-doc')
   })
   test('parses a valid YAML and applies defaults (overriding the built-in)', async () => {
     fs.writeFileSync(
-      path.join(root, 'artifact-actions.yaml'),
+      path.join(home, 'artifact-actions.yaml'),
       [
         'version: 1',
         'actions:',
@@ -210,7 +217,7 @@ describe('loadArtifactActions', () => {
         '    prompt_template: "Đọc {{artifact_name}}"',
       ].join('\n'),
     )
-    const loaded = await loadArtifactActions(root)
+    const loaded = await loadArtifactActions()
     expect(loaded).toHaveLength(1)
     expect(loaded[0].id).toBe('improve-doc')
     expect(loaded[0].produces).toEqual([])
@@ -218,14 +225,14 @@ describe('loadArtifactActions', () => {
   })
   test('falls back to the built-in default on schema mismatch (missing required field)', async () => {
     fs.writeFileSync(
-      path.join(root, 'artifact-actions.yaml'),
+      path.join(home, 'artifact-actions.yaml'),
       'version: 1\nactions:\n  - id: broken\n',
     )
-    expect(await loadArtifactActions(root)).toEqual(DEFAULT_ARTIFACT_ACTIONS)
+    expect(await loadArtifactActions()).toEqual(DEFAULT_ARTIFACT_ACTIONS)
   })
   test('migrates a pre-QuickAction YAML (no attach_points) to title-only', async () => {
     fs.writeFileSync(
-      path.join(root, 'artifact-actions.yaml'),
+      path.join(home, 'artifact-actions.yaml'),
       [
         'version: 1',
         'actions:',
@@ -236,28 +243,40 @@ describe('loadArtifactActions', () => {
         '    prompt_template: "Đọc {{artifact_name}}"',
       ].join('\n'),
     )
-    const loaded = await loadArtifactActions(root)
+    const loaded = await loadArtifactActions()
     expect(loaded[0].attach_points).toEqual(['artifact-title'])
   })
 })
 
 describe('loadArtifactActionsFile', () => {
-  let root: string
+  let home: string
+  const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
+
   beforeAll(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'aa-file-root-'))
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'aa-file-home-'))
+    process.env.DEV_TEAM_DASHBOARD_HOME = home
   })
-  afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
+  afterAll(() => {
+    if (prevHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
+    else process.env.DEV_TEAM_DASHBOARD_HOME = prevHome
+    fs.rmSync(home, { recursive: true, force: true })
+  })
 
   test('falls back to the built-in default catalog + version 1 when missing', async () => {
-    const file = await loadArtifactActionsFile(root)
+    const file = await loadArtifactActionsFile()
     expect(file.version).toBe(1)
     expect(file.actions).toEqual(DEFAULT_ARTIFACT_ACTIONS)
+    expect(file.menus).toEqual([])
   })
   test('returns the full (unfiltered) action fields for CRUD, not the UI view', async () => {
     fs.writeFileSync(
-      path.join(root, 'artifact-actions.yaml'),
+      path.join(home, 'artifact-actions.yaml'),
       [
         'version: 3',
+        'menus:',
+        '  - id: docs',
+        '    label: "Tài liệu"',
+        '    children: []',
         'actions:',
         '  - id: a1',
         '    label: "Action 1"',
@@ -268,8 +287,9 @@ describe('loadArtifactActionsFile', () => {
         '    runner_id: r1',
       ].join('\n'),
     )
-    const file = await loadArtifactActionsFile(root)
+    const file = await loadArtifactActionsFile()
     expect(file.version).toBe(3)
+    expect(file.menus).toEqual([{ id: 'docs', label: 'Tài liệu', children: [] }])
     expect(file.actions[0].prompt_template).toBe('Đọc {{artifact_name}}')
     expect(file.actions[0].runner_id).toBe('r1')
     expect(file.actions[0].attach_points).toEqual(['artifact-selection'])
@@ -277,35 +297,45 @@ describe('loadArtifactActionsFile', () => {
 })
 
 describe('saveArtifactActions', () => {
-  let root: string
-  beforeAll(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'aa-save-root-'))
-  })
-  afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
+  let home: string
+  const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
 
-  test('writes a valid catalog to disk, readable back via loadArtifactActionsFile', async () => {
-    const result = await saveArtifactActions(root, {
+  beforeAll(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'aa-save-home-'))
+    process.env.DEV_TEAM_DASHBOARD_HOME = home
+  })
+  afterAll(() => {
+    if (prevHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
+    else process.env.DEV_TEAM_DASHBOARD_HOME = prevHome
+    fs.rmSync(home, { recursive: true, force: true })
+  })
+
+  test('writes a valid catalog to dashboard home, readable back via loadArtifactActionsFile', async () => {
+    const result = await saveArtifactActions({
       version: 2,
+      menus: [{ id: 'docs', label: 'Tài liệu', children: [] }],
       actions: [action({ id: 'a1' }), action({ id: 'a2', attach_points: ['artifact-selection'] })],
     })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('expected ok')
     expect(result.actions.map((a) => a.id)).toEqual(['a1', 'a2'])
+    expect(fs.existsSync(path.join(home, 'artifact-actions.yaml'))).toBe(true)
 
-    const reloaded = await loadArtifactActionsFile(root)
+    const reloaded = await loadArtifactActionsFile()
     expect(reloaded.version).toBe(2)
+    expect(reloaded.menus).toEqual([{ id: 'docs', label: 'Tài liệu', children: [] }])
     expect(reloaded.actions.map((a) => a.id)).toEqual(['a1', 'a2'])
     expect(reloaded.actions[1].attach_points).toEqual(['artifact-selection'])
   })
   test('rejects a schema-invalid body without touching disk', async () => {
-    const before = await loadArtifactActionsFile(root)
-    const result = await saveArtifactActions(root, { version: 1, actions: [{ id: 'bad' }] })
+    const before = await loadArtifactActionsFile()
+    const result = await saveArtifactActions({ version: 1, actions: [{ id: 'bad' }] })
     expect(result.ok).toBe(false)
-    const after = await loadArtifactActionsFile(root)
+    const after = await loadArtifactActionsFile()
     expect(after).toEqual(before)
   })
   test('rejects duplicate action ids', async () => {
-    const result = await saveArtifactActions(root, {
+    const result = await saveArtifactActions({
       version: 1,
       actions: [action({ id: 'dup' }), action({ id: 'dup' })],
     })

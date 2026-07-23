@@ -58,7 +58,7 @@ const MarkdownTextEditorStub = defineComponent({
 
 vi.mock('@/api', () => ({
   fetchArtifact: vi.fn(async () => ({ content: MD_TWO_H2, mtime: 1 })),
-  fetchArtifactActions: vi.fn(async () => ({ actions: [] })),
+  fetchArtifactActions: vi.fn(async () => ({ actions: [], menus: [] })),
   fetchRunners: vi.fn(async () => ({ runners: [], defaultRunnerId: null })),
   runArtifactAction: vi.fn(async () => ({ job: { id: 'job1', status: 'succeeded' } })),
   fetchJob: vi.fn(async () => ({ job: { id: 'job1', status: 'succeeded' } })),
@@ -268,13 +268,14 @@ describe('ArtifactPanel — block mode toggle all', () => {
 describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
   afterEach(() => {
     vi.mocked(fetchArtifactActions).mockReset()
-    vi.mocked(fetchArtifactActions).mockResolvedValue({ actions: [] })
+    vi.mocked(fetchArtifactActions).mockResolvedValue({ actions: [], menus: [] })
     vi.mocked(fetchRunners).mockReset()
     vi.mocked(fetchRunners).mockResolvedValue({ runners: [], defaultRunnerId: null })
   })
 
   it('renders only title-attached actions on the title toolbar', async () => {
     vi.mocked(fetchArtifactActions).mockResolvedValue({
+      menus: [],
       actions: [
         { id: 'a-title', label: 'Title action', agent_ref: 'x', confirm: false, attach_points: ['artifact-title'] },
         {
@@ -295,6 +296,7 @@ describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
 
   it('treats a missing attach_points as title-only (pre-migration hand-edit)', async () => {
     vi.mocked(fetchArtifactActions).mockResolvedValue({
+      menus: [],
       actions: [{ id: 'legacy', label: 'Legacy', agent_ref: 'x', confirm: false }],
     })
     const w = await mountPanel({ taskId: 'DEMO-1', name: 'design.md' })
@@ -304,6 +306,7 @@ describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
 
   it('gates a title action run behind a usable runner, with a CTA to Runner mode', async () => {
     vi.mocked(fetchArtifactActions).mockResolvedValue({
+      menus: [],
       actions: [{ id: 'a-title', label: 'Title action', agent_ref: 'x', confirm: false, attach_points: ['artifact-title'] }],
     })
     vi.mocked(fetchRunners).mockResolvedValue({ runners: [{ id: 'r1', name: 'A', enabled: false }], defaultRunnerId: null })
@@ -332,6 +335,7 @@ describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
 
   it('runs a title action when a usable runner exists', async () => {
     vi.mocked(fetchArtifactActions).mockResolvedValue({
+      menus: [],
       actions: [{ id: 'a-title', label: 'Title action', agent_ref: 'x', confirm: false, attach_points: ['artifact-title'] }],
     })
     vi.mocked(fetchRunners).mockResolvedValue({ runners: [{ id: 'r1', name: 'A' }], defaultRunnerId: 'r1' })
@@ -344,5 +348,23 @@ describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
       expect.objectContaining({ taskId: 'DEMO-1', actionId: 'a-title', artifactName: 'design.md' }),
       undefined,
     )
+  })
+
+  it('renders dropdown menus from the catalog response', async () => {
+    vi.mocked(fetchArtifactActions).mockResolvedValue({
+      menus: [
+        {
+          id: 'docs',
+          label: 'Tài liệu',
+          children: [{ id: 'leaf-a-title', label: 'Title action', action_id: 'a-title' }],
+        },
+      ],
+      actions: [{ id: 'a-title', label: 'Title action', agent_ref: 'x', confirm: false, attach_points: ['artifact-title'] }],
+    })
+    const w = await mountPanel({ taskId: 'DEMO-1', name: 'design.md' })
+
+    expect(w.find('.qa-menu-trigger').exists()).toBe(true)
+    expect(w.find('.qa-menu-trigger').text()).toContain('Tài liệu')
+    expect(w.findAll('.art-toolbar-actions .btn-quick-action')).toHaveLength(1) // menu trigger only
   })
 })

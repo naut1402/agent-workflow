@@ -50,10 +50,18 @@ beforeAll(async () => {
 
   fs.mkdirSync(path.join(root, 'tasks', 'T1'), { recursive: true })
   fs.writeFileSync(path.join(root, 'tasks', 'T1', 'design.md'), '# Design T1\n')
+  // Catalog is dashboard-global (same home as runners), not under project root.
   fs.writeFileSync(
-    path.join(root, 'artifact-actions.yaml'),
+    path.join(home, 'artifact-actions.yaml'),
     [
       'version: 1',
+      'menus:',
+      '  - id: docs',
+      '    label: "Tài liệu"',
+      '    children:',
+      '      - id: leaf-improve-doc',
+      '        label: "✨ Cải thiện tài liệu"',
+      '        action_id: improve-doc',
       'actions:',
       '  - id: improve-doc',
       '    label: "✨ Cải thiện tài liệu"',
@@ -101,6 +109,13 @@ describe('GET /api/artifact-actions', () => {
     })
     // Prompt template / patterns must not leak to the UI.
     expect(body.actions[0].prompt_template).toBeUndefined()
+    expect(body.menus).toEqual([
+      {
+        id: 'docs',
+        label: 'Tài liệu',
+        children: [{ id: 'leaf-improve-doc', label: '✨ Cải thiện tài liệu', action_id: 'improve-doc' }],
+      },
+    ])
   })
   test('returns no actions for a non-matching artifact', async () => {
     const r = await req('GET', '/api/artifact-actions?artifact=qa.md')
@@ -126,6 +141,13 @@ describe('GET /api/artifact-actions', () => {
     // Full fields (prompt_template / patterns) are present for the CRUD form.
     expect(body.actions[0].prompt_template).toContain('{{artifact_name}}')
     expect(body.actions[0].artifact_patterns).toContain('design.md')
+    expect(body.menus).toEqual([
+      {
+        id: 'docs',
+        label: 'Tài liệu',
+        children: [{ id: 'leaf-improve-doc', label: '✨ Cải thiện tài liệu', action_id: 'improve-doc' }],
+      },
+    ])
   })
 })
 
@@ -134,6 +156,13 @@ describe('PUT /api/artifact-actions', () => {
     const putRes = await req('PUT', '/api/artifact-actions', {
       body: JSON.stringify({
         version: 2,
+        menus: [
+          {
+            id: 'docs',
+            label: 'Tài liệu',
+            children: [{ id: 'leaf-note', label: 'Ghi chú', action_id: 'note' }],
+          },
+        ],
         actions: [
           {
             id: 'note',
@@ -150,16 +179,37 @@ describe('PUT /api/artifact-actions', () => {
     const putBody = await putRes.json()
     expect(putBody.ok).toBe(true)
     expect(putBody.actions[0].id).toBe('note')
+    expect(putBody.menus).toEqual([
+      {
+        id: 'docs',
+        label: 'Tài liệu',
+        children: [{ id: 'leaf-note', label: 'Ghi chú', action_id: 'note' }],
+      },
+    ])
 
     const getRes = await req('GET', '/api/artifact-actions')
     const getBody = await getRes.json()
     expect(getBody.version).toBe(2)
     expect(getBody.actions.map((a: { id: string }) => a.id)).toEqual(['note'])
+    expect(getBody.menus).toEqual([
+      {
+        id: 'docs',
+        label: 'Tài liệu',
+        children: [{ id: 'leaf-note', label: 'Ghi chú', action_id: 'note' }],
+      },
+    ])
 
     // Restore the fixture catalog used by the other describe blocks below.
     await req('PUT', '/api/artifact-actions', {
       body: JSON.stringify({
         version: 1,
+        menus: [
+          {
+            id: 'docs',
+            label: 'Tài liệu',
+            children: [{ id: 'leaf-improve-doc', label: '✨ Cải thiện tài liệu', action_id: 'improve-doc' }],
+          },
+        ],
         actions: [
           {
             id: 'improve-doc',
