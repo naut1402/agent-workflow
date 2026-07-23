@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
 import { useLocale } from '../../../shared/composables/useLocale'
@@ -17,6 +17,18 @@ const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
 const { settings, load, update } = useAppSettings()
 const { locale, setLocale } = useLocale()
+
+type SettingsGroupId = 'general'
+
+const selectedGroup = ref<SettingsGroupId>('general')
+
+const GROUPS: { id: SettingsGroupId; labelKey: string }[] = [
+  { id: 'general', labelKey: 'settings.groups.general' },
+]
+
+function selectGroup(id: SettingsGroupId) {
+  selectedGroup.value = id
+}
 
 const artifactViewMode = computed(() => resolveArtifactViewMode(settings.value))
 const theme = computed(() => resolveThemePreference(settings.value))
@@ -86,139 +98,157 @@ onUnmounted(() => {
             ✕
           </button>
         </div>
-        <div class="modal-body">
-          <section class="settings-section">
-            <h3 class="settings-section-title">{{ t('settings.theme.title') }}</h3>
-            <p class="settings-section-desc">{{ t('settings.theme.desc') }}</p>
-            <div
-              class="settings-radio-group"
-              role="radiogroup"
-              :aria-label="t('settings.theme.title')"
+        <div class="settings-layout">
+          <nav class="settings-nav" :aria-label="t('settings.title')">
+            <button
+              v-for="g in GROUPS"
+              :key="g.id"
+              type="button"
+              class="settings-nav-item"
+              :class="{ active: selectedGroup === g.id }"
+              :data-group="g.id"
+              :aria-current="selectedGroup === g.id ? 'page' : undefined"
+              @click="selectGroup(g.id)"
             >
-              <label class="settings-radio">
-                <input
-                  type="radio"
-                  name="theme"
-                  value="system"
-                  :checked="theme === 'system'"
-                  @change="setTheme('system')"
-                />
-                {{ t('settings.theme.system') }}
-              </label>
-              <label class="settings-radio">
-                <input
-                  type="radio"
-                  name="theme"
-                  value="light"
-                  :checked="theme === 'light'"
-                  @change="setTheme('light')"
-                />
-                {{ t('settings.theme.light') }}
-              </label>
-              <label class="settings-radio">
-                <input
-                  type="radio"
-                  name="theme"
-                  value="dark"
-                  :checked="theme === 'dark'"
-                  @change="setTheme('dark')"
-                />
-                {{ t('settings.theme.dark') }}
-              </label>
-            </div>
-          </section>
-          <section class="settings-section">
-            <h3 class="settings-section-title">{{ t('settings.artifact.title') }}</h3>
-            <p class="settings-section-desc">{{ t('settings.artifact.desc') }}</p>
-            <div
-              class="settings-radio-group"
-              role="radiogroup"
-              :aria-label="t('settings.artifact.groupLabel')"
-            >
-              <label class="settings-radio">
-                <input
-                  type="radio"
-                  name="artifactViewMode"
-                  value="block"
-                  :checked="artifactViewMode === 'block'"
-                  @change="setArtifactViewMode('block')"
-                />
-                {{ t('settings.artifact.block') }}
-              </label>
-              <label class="settings-radio">
-                <input
-                  type="radio"
-                  name="artifactViewMode"
-                  value="full"
-                  :checked="artifactViewMode === 'full'"
-                  @change="setArtifactViewMode('full')"
-                />
-                {{ t('settings.artifact.full') }}
-              </label>
-            </div>
-          </section>
-          <section class="settings-section">
-            <h3 class="settings-section-title">{{ t('settings.taskList.title') }}</h3>
-            <p class="settings-section-desc">{{ t('settings.taskList.desc') }}</p>
-            <label class="settings-checkbox">
-              <input
-                type="checkbox"
-                :checked="collapseOnOutsideClick"
-                @change="toggleCollapseOnOutsideClick"
-              />
-              {{ t('settings.taskList.collapseOnOutsideClick') }}
-            </label>
-          </section>
-          <section class="settings-section">
-            <h3 class="settings-section-title">{{ t('settings.sidebar.title') }}</h3>
-            <p class="settings-section-desc">{{ t('settings.sidebar.desc') }}</p>
-            <label class="settings-checkbox">
-              <input
-                type="checkbox"
-                :checked="collapseAppSidebarOnOutside"
-                @change="toggleCollapseAppSidebarOnOutside"
-              />
-              {{ t('settings.sidebar.collapseAppOnOutsideClick') }}
-            </label>
-            <label class="settings-checkbox">
-              <input
-                type="checkbox"
-                :checked="collapseMonitorSubSidebarOnOutside"
-                @change="toggleCollapseMonitorSubSidebarOnOutside"
-              />
-              {{ t('settings.sidebar.collapseMonitorSubOnOutsideClick') }}
-            </label>
-          </section>
-          <section class="settings-section">
-            <h3 class="settings-section-title">{{ t('common.language.title') }}</h3>
-            <p class="settings-section-desc">{{ t('common.language.desc') }}</p>
-            <div
-              class="settings-radio-group"
-              role="radiogroup"
-              :aria-label="t('common.language.title')"
-            >
-              <label class="settings-radio">
-                <input
-                  type="radio"
-                  name="locale"
-                  value="vi"
-                  :checked="locale === 'vi'"
-                  @change="setLocale('vi')"
-                />
-                {{ t('common.language.vi') }}
-              </label>
-              <label class="settings-radio">
-                <input
-                  type="radio"
-                  name="locale"
-                  value="en"
-                  :checked="locale === 'en'"
-                  @change="setLocale('en')"
-                />
-                {{ t('common.language.en') }}
-              </label>
-            </div>
-          </section>
+              {{ t(g.labelKey) }}
+            </button>
+          </nav>
+          <div class="settings-pane modal-body">
+            <template v-if="selectedGroup === 'general'">
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.theme.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.theme.desc') }}</p>
+                <div
+                  class="settings-radio-group"
+                  role="radiogroup"
+                  :aria-label="t('settings.theme.title')"
+                >
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="theme"
+                      value="system"
+                      :checked="theme === 'system'"
+                      @change="setTheme('system')"
+                    />
+                    {{ t('settings.theme.system') }}
+                  </label>
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="theme"
+                      value="light"
+                      :checked="theme === 'light'"
+                      @change="setTheme('light')"
+                    />
+                    {{ t('settings.theme.light') }}
+                  </label>
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="theme"
+                      value="dark"
+                      :checked="theme === 'dark'"
+                      @change="setTheme('dark')"
+                    />
+                    {{ t('settings.theme.dark') }}
+                  </label>
+                </div>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('common.language.title') }}</h3>
+                <p class="settings-section-desc">{{ t('common.language.desc') }}</p>
+                <div
+                  class="settings-radio-group"
+                  role="radiogroup"
+                  :aria-label="t('common.language.title')"
+                >
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="locale"
+                      value="vi"
+                      :checked="locale === 'vi'"
+                      @change="setLocale('vi')"
+                    />
+                    {{ t('common.language.vi') }}
+                  </label>
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="locale"
+                      value="en"
+                      :checked="locale === 'en'"
+                      @change="setLocale('en')"
+                    />
+                    {{ t('common.language.en') }}
+                  </label>
+                </div>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.artifact.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.artifact.desc') }}</p>
+                <div
+                  class="settings-radio-group"
+                  role="radiogroup"
+                  :aria-label="t('settings.artifact.groupLabel')"
+                >
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="artifactViewMode"
+                      value="block"
+                      :checked="artifactViewMode === 'block'"
+                      @change="setArtifactViewMode('block')"
+                    />
+                    {{ t('settings.artifact.block') }}
+                  </label>
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="artifactViewMode"
+                      value="full"
+                      :checked="artifactViewMode === 'full'"
+                      @change="setArtifactViewMode('full')"
+                    />
+                    {{ t('settings.artifact.full') }}
+                  </label>
+                </div>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.taskList.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.taskList.desc') }}</p>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="collapseOnOutsideClick"
+                    @change="toggleCollapseOnOutsideClick"
+                  />
+                  {{ t('settings.taskList.collapseOnOutsideClick') }}
+                </label>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.sidebar.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.sidebar.desc') }}</p>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="collapseAppSidebarOnOutside"
+                    @change="toggleCollapseAppSidebarOnOutside"
+                  />
+                  {{ t('settings.sidebar.collapseAppOnOutsideClick') }}
+                </label>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="collapseMonitorSubSidebarOnOutside"
+                    @change="toggleCollapseMonitorSubSidebarOnOutside"
+                  />
+                  {{ t('settings.sidebar.collapseMonitorSubOnOutsideClick') }}
+                </label>
+              </section>
+            </template>
+          </div>
         </div>
       </div>
     </div>

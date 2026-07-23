@@ -2,6 +2,9 @@
 export const settings = {
   title: 'Settings',
   close: 'Close',
+  groups: {
+    general: 'General',
+  },
   theme: {
     title: 'Appearance',
     desc: 'Choose a light, dark, or system theme.',

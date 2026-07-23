@@ -20,6 +20,24 @@ afterEach(() => {
 })
 
 describe('SettingsDialog', () => {
+  it('TC-U-01: nav General + all sections visible on pane', () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    const nav = document.querySelector('.settings-nav') as HTMLElement
+    const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
+    expect(nav).toBeTruthy()
+    expect(pane).toBeTruthy()
+    expect(nav.textContent).toContain('Chung')
+    expect(
+      document.querySelector('.settings-nav-item.active[data-group="general"]'),
+    ).toBeTruthy()
+    const text = pane.textContent ?? ''
+    expect(text).toContain('Giao diện')
+    expect(text).toContain('Ngôn ngữ')
+    expect(text).toContain('Artifact')
+    expect(text).toContain('Danh sách task')
+    expect(text).toContain('Sidebar')
+  })
+
   it('mounts backdrop + title «Cài đặt»', () => {
     mount(SettingsDialog, { attachTo: document.body })
     expect(document.querySelector('.modal-backdrop')).toBeTruthy()
@@ -89,7 +107,7 @@ describe('SettingsDialog', () => {
     expect(block.checked).toBe(false)
   })
 
-  it('TC-SD-04: Esc vẫn emit close', async () => {
+  it('TC-SD-04 / TC-U-03: Esc vẫn emit close', async () => {
     const w = mount(SettingsDialog, { attachTo: document.body })
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(w.emitted('close')).toHaveLength(1)

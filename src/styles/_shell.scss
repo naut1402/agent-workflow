@@ -97,53 +97,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   padding: 0;
   justify-content: center;
 }
-.settings-section {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-.settings-section-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-.settings-section-desc {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-.settings-radio-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
-.settings-radio {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text);
-  cursor: pointer;
-}
-.settings-radio input[type='radio'] {
-  margin: 0;
-  accent-color: var(--accent);
-}
-.settings-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text);
-  cursor: pointer;
-  margin-top: 10px;
-}
-.settings-checkbox input[type='checkbox'] {
-  margin: 0;
-  accent-color: var(--accent);
-}
 
 .modal-backdrop {
   position: fixed;
