@@ -1,5 +1,8 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { devTeamApi } from './server/devTeamApi.js'
 
 // The dashboard is scaffolded into `.dev-team-agent/viewer/`, so the data root
@@ -11,7 +14,11 @@ import { devTeamApi } from './server/devTeamApi.js'
 // no `?project=<id>` is given) — preserving the legacy single-project behaviour.
 // Multi-project support comes from the shared ProjectRegistry, exercised here
 // too via `?project=` (see server/devTeamApi.js → createApiHandler).
-import path from 'node:path'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const { version: appVersion } = JSON.parse(
+  readFileSync(path.join(__dirname, 'package.json'), 'utf8'),
+)
 
 const root = process.env.DEV_TEAM_ROOT
   ? path.resolve(process.env.DEV_TEAM_ROOT)
@@ -19,6 +26,11 @@ const root = process.env.DEV_TEAM_ROOT
 
 export default defineConfig({
   plugins: [vue(), devTeamApi({ root })],
+  // Inject package.json version so the UI can display it without bundling the
+  // whole package.json. Change version only in package.json — this follows.
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   css: {
     preprocessorOptions: {
       scss: {

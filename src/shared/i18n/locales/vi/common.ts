@@ -8,6 +8,7 @@ export const common = {
     connected: 'live',
     disconnected: 'disconnected',
     settings: 'Cài đặt',
+    version: 'Phiên bản {version}',
   },
   modes: {
     monitor: 'Monitor',
