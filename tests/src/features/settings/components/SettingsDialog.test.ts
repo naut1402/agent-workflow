@@ -6,6 +6,20 @@ import {
   useAppSettings,
 } from '@/shared/composables/useAppSettings'
 
+vi.mock('@/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api')>()
+  return {
+    ...actual,
+    fetchAutoscanConfig: vi.fn(async () => ({
+      config: { enabled: false, whitelist: [], intervalMs: 60_000 },
+    })),
+    saveAutoscanConfig: vi.fn(async (c: object) => ({ config: c })),
+    runAutoscan: vi.fn(async () => ({
+      report: { added: [], existing: [], skipped: [], errors: [], hits: [], scanned: 0 },
+    })),
+  }
+})
+
 beforeEach(() => {
   localStorage.clear()
   const { load } = useAppSettings()
@@ -27,6 +41,7 @@ describe('SettingsDialog', () => {
     expect(nav).toBeTruthy()
     expect(pane).toBeTruthy()
     expect(nav.textContent).toContain('Chung')
+    expect(nav.textContent).toContain('Projects')
     expect(
       document.querySelector('.settings-nav-item.active[data-group="general"]'),
     ).toBeTruthy()
@@ -173,5 +188,18 @@ describe('SettingsDialog', () => {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
     expect(stored.collapseAppSidebarOnOutside).toBe(true)
     expect(stored.collapseMonitorSubSidebarOnOutside).toBe(true)
+  })
+
+  it('shows Projects group and autoscan section when selected', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    const projectsNav = document.querySelector(
+      '.settings-nav-item[data-group="projects"]',
+    ) as HTMLButtonElement
+    expect(projectsNav).toBeTruthy()
+    projectsNav.click()
+    await Promise.resolve()
+    const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
+    expect(pane.textContent).toContain('Autoscan')
+    expect(pane.textContent).toContain('Whitelist')
   })
 })

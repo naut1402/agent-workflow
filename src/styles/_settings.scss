@@ -107,3 +107,76 @@
   margin: 0;
   accent-color: var(--accent);
 }
+
+.settings-whitelist {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.settings-whitelist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-whitelist-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  background: var(--input-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 8px;
+}
+
+.settings-whitelist-empty {
+  opacity: 0.5;
+  font-size: 12px;
+  padding: 6px 0;
+}
+
+.settings-whitelist-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  min-width: 0;
+}
+
+.settings-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: inherit;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.settings-autoscan-actions {
+  margin-top: 12px;
+}
+
+.settings-autoscan-msg {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings-autoscan-err {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--danger);
+}

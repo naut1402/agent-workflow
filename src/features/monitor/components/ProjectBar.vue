@@ -6,6 +6,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { addProject, removeProject } from '../../../api'
+import FolderPickerDialog from '../../../shared/ui/FolderPickerDialog.vue'
 
 const { t } = useI18n()
 
@@ -22,6 +23,7 @@ const newPath = ref('')
 const newName = ref('')
 const busy = ref(false)
 const errorMsg = ref('')
+const pickerOpen = ref(false)
 
 function openAdd() {
   adding.value = true
@@ -33,6 +35,12 @@ function openAdd() {
 function cancelAdd() {
   adding.value = false
   errorMsg.value = ''
+  pickerOpen.value = false
+}
+
+function onPicked(path: string) {
+  newPath.value = path
+  pickerOpen.value = false
 }
 
 async function submitAdd() {
@@ -48,7 +56,7 @@ async function submitAdd() {
     emit('changed')
     if (project?.id) emit('select', project.id)
   } catch (e) {
-    errorMsg.value = String(e.message || e)
+    errorMsg.value = String((e as Error).message || e)
   } finally {
     busy.value = false
   }
@@ -66,7 +74,7 @@ async function onRemove(project) {
     emit('changed')
     if (props.selectedId === project.id) emit('select', null)
   } catch (e) {
-    errorMsg.value = String(e.message || e)
+    errorMsg.value = String((e as Error).message || e)
   } finally {
     busy.value = false
   }
@@ -102,12 +110,29 @@ async function onRemove(project) {
     </ul>
 
     <div v-if="adding" class="project-add-form">
-      <input
-        v-model="newPath"
-        class="project-input"
-        :placeholder="t('monitor.projectBar.pathPlaceholder')"
-        @keyup.enter="submitAdd"
-      />
+      <div class="project-path-row">
+        <input
+          v-model="newPath"
+          class="project-input"
+          :placeholder="t('monitor.projectBar.pathPlaceholder')"
+          @keyup.enter="submitAdd"
+        />
+        <button
+          type="button"
+          class="icon-btn project-browse-btn"
+          :title="t('monitor.projectBar.browse')"
+          :aria-label="t('monitor.projectBar.browse')"
+          :disabled="busy"
+          @click="pickerOpen = true"
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M2 3h5l1 1h6v9H2V3zm1 2v7h10V5H3z"
+            />
+          </svg>
+        </button>
+      </div>
       <input
         v-model="newName"
         class="project-input"
@@ -123,6 +148,13 @@ async function onRemove(project) {
     </div>
 
     <p v-if="errorMsg" class="project-err">⚠ {{ errorMsg }}</p>
+
+    <FolderPickerDialog
+      v-if="pickerOpen"
+      :initial-path="newPath.trim() || undefined"
+      @select="onPicked"
+      @close="pickerOpen = false"
+    />
   </div>
 </template>
 
@@ -195,6 +227,13 @@ async function onRemove(project) {
 .project-remove:hover { opacity: 1; color: var(--danger); }
 .project-empty { opacity: 0.5; padding: 5px 6px; }
 .project-add-form { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.project-path-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.project-path-row .project-input { flex: 1; min-width: 0; }
+.project-browse-btn { flex-shrink: 0; }
 .project-input {
   background: var(--input-surface);
   border: 1px solid var(--border, #2a2a35);

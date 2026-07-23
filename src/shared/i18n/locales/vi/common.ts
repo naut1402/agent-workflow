@@ -42,4 +42,15 @@ export const common = {
     archiveTask: 'Không thể lưu trữ task (mã lỗi {status})',
     saveCustomAgent: 'Không lưu được custom agent (server không trả về tên).',
   },
+  folderPicker: {
+    title: 'Chọn thư mục',
+    close: 'Đóng',
+    up: 'Lên thư mục cha',
+    roots: 'Ổ đĩa / gốc',
+    loading: 'Đang tải…',
+    empty: 'Không có thư mục con.',
+    cancel: 'Huỷ',
+    select: 'Chọn thư mục này',
+    selectDirRequired: 'Hãy mở một thư mục trước khi chọn.',
+  },
 }
