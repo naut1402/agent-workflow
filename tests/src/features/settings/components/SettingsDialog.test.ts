@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n as mount } from '../../../helpers/i18n'
 import SettingsDialog from '@/features/settings/components/SettingsDialog.vue'
 import {
@@ -198,7 +199,7 @@ describe('SettingsDialog', () => {
     ) as HTMLButtonElement
     expect(projectsNav).toBeTruthy()
     projectsNav.click()
-    await Promise.resolve()
+    await flushPromises()
 
     const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
     expect(pane.textContent).toContain('Autoscan')
@@ -209,7 +210,7 @@ describe('SettingsDialog', () => {
     expect(document.querySelector('.settings-info-tip')).toBeNull()
 
     info.click()
-    await Promise.resolve()
+    await flushPromises()
     const tip = document.querySelector('.settings-info-tip') as HTMLElement
     expect(tip).toBeTruthy()
     expect(tip.textContent).toContain('60')
