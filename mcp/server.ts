@@ -18,6 +18,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
+import { APP_VERSION } from '../shared/appVersion.js'
 import { list, get, add, remove } from '../server/registry.js'
 
 // Return `any` to stay decoupled from the SDK's literal content-type unions.
@@ -57,7 +58,7 @@ export function handleRemoveProject({ id }: { id: string }): any {
 // ── Server wiring ──────────────────────────────────────────────────────────────
 
 export function createMcpServer(): McpServer {
-  const server = new McpServer({ name: 'dev-team-dashboard', version: '0.1.0' })
+  const server = new McpServer({ name: 'dev-team-dashboard', version: APP_VERSION })
 
   server.tool(
     'list_projects',

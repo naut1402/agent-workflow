@@ -6,6 +6,7 @@ export const common = {
     connected: 'live',
     disconnected: 'disconnected',
     settings: 'Settings',
+    version: 'Version {version}',
   },
   modes: {
     monitor: 'Monitor',
