@@ -463,19 +463,45 @@ onUpdated(() => scheduleMermaid())
           </button>
           <button
             v-if="blocks.length > 1"
-            class="btn-view-toggle"
+            type="button"
+            class="icon-btn btn-view-mode"
             :class="{ active: blockMode }"
             :disabled="isEditing()"
-            @click="blockMode = !blockMode"
             :title="blockMode ? t('monitor.artifact.toFull') : t('monitor.artifact.toBlock')"
-          >{{ blockMode ? '📄 Full' : '🗂 Blocks' }}</button>
+            :aria-label="blockMode ? t('monitor.artifact.toFull') : t('monitor.artifact.toBlock')"
+            @click="blockMode = !blockMode"
+          >
+            <!-- full view (document) when in block mode — click switches to full -->
+            <svg v-if="blockMode" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <rect x="3" y="2" width="10" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+              <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" />
+            </svg>
+            <!-- block view (stacked sections) when in full mode — click switches to blocks -->
+            <svg v-else viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <rect x="2.5" y="2.5" width="11" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
+              <rect x="2.5" y="9.5" width="11" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
+            </svg>
+          </button>
           <button
             v-if="blockMode"
-            class="btn-view-toggle"
+            type="button"
+            class="icon-btn"
             :disabled="isEditing()"
             :title="allBlocksOpen ? t('monitor.artifact.collapseAll') : t('monitor.artifact.expandAll')"
+            :aria-label="allBlocksOpen ? t('monitor.artifact.collapseAll') : t('monitor.artifact.expandAll')"
             @click="toggleAllBlocks"
-          >{{ allBlocksOpen ? '▲' : '▼' }}</button>
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                :d="allBlocksOpen ? 'M4 10l4-4 4 4' : 'M4 6l4 4 4-4'"
+              />
+            </svg>
+          </button>
         </div>
       </div>
 

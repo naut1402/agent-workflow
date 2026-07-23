@@ -162,7 +162,7 @@
   margin-bottom: 8px;
 }
 
-.btn-edit-profile {
+.btn-hitl {
   margin-left: auto;
   font-size: 11px;
   background: var(--panel);
@@ -173,9 +173,7 @@
   cursor: pointer;
   font-family: inherit;
 }
-.btn-edit-profile:hover { color: var(--accent); border-color: var(--accent); }
-
-.chip-custom { color: var(--active); border-color: var(--active); }
+.btn-hitl:hover { color: var(--accent); border-color: var(--accent); }
 
 .vflow-container {
   height: 180px;
@@ -277,18 +275,6 @@
   color: var(--muted);
   flex: 1;
 }
-.btn-view-toggle {
-  font-size: 11px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  border-radius: 6px;
-  padding: 3px 10px;
-  cursor: pointer;
-  font-family: inherit;
-}
-.btn-view-toggle:hover, .btn-view-toggle.active { color: var(--accent); border-color: var(--accent); }
-
 /* Block view */
 .block-list { display: flex; flex-direction: column; gap: 6px; }
 .block-item {

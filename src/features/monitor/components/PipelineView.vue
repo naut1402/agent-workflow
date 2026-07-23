@@ -103,58 +103,6 @@ function onNodeDragStop({ node }) {
   })
 }
 
-// Profile editor modal.
-const editorOpen = ref(false)
-const editorJson = ref('')
-const editorError = ref('')
-const saving = ref(false)
-
-function openEditor() {
-  const profile = customProfile.value ?? {
-    phases: phases.value.map((p) => ({ key: p.key, x: p.x, y: p.y })),
-  }
-  editorJson.value = JSON.stringify(profile, null, 2)
-  editorError.value = ''
-  editorOpen.value = true
-}
-
-async function saveProfile() {
-  editorError.value = ''
-  let parsed
-  try {
-    parsed = JSON.parse(editorJson.value)
-  } catch (e) {
-    editorError.value = `${t('monitor.pipeline.invalidJson', { message: e.message })}`
-    return
-  }
-  saving.value = true
-  try {
-    await saveFlowProfile(props.task.task_id, parsed)
-    customProfile.value = parsed
-    editorOpen.value = false
-  } catch (e) {
-    editorError.value = String(e.message || e)
-  } finally {
-    saving.value = false
-  }
-}
-
-async function resetProfile() {
-  saving.value = true
-  try {
-    const defaultProfile = {
-      phases: phasesFromPipeline(props.task.pipeline).map((p, i) => ({ key: p.key, x: i * NODE_SPACING, y: NODE_Y })),
-    }
-    await saveFlowProfile(props.task.task_id, defaultProfile)
-    customProfile.value = null
-    editorOpen.value = false
-  } catch (e) {
-    editorError.value = String(e.message || e)
-  } finally {
-    saving.value = false
-  }
-}
-
 // HITL approve/reject modal
 const hitlOpen = ref(false)
 const hitlTaskId = ref('')
@@ -231,18 +179,16 @@ async function submitHitl(action: 'approve' | 'reject') {
 
 <template>
   <section class="pipeline-wrap">
-    <div class="pipeline-toolbar">
+    <div v-if="hitlToast || waitingPhase" class="pipeline-toolbar">
       <span v-if="hitlToast" class="chip chip-ok">{{ hitlToast }}</span>
       <button
         v-if="waitingPhase"
         type="button"
-        class="btn-edit-profile"
+        class="btn-hitl"
         @click="openHitlModal(waitingPhase)"
       >
         {{ t('monitor.pipeline.hitlTitle') }}
       </button>
-      <span v-if="customProfile" class="chip chip-custom">{{ t('monitor.pipeline.customProfile') }}</span>
-      <button class="btn-edit-profile" @click="openEditor">⚙ flow profile</button>
     </div>
 
     <div class="vflow-container">
@@ -261,10 +207,10 @@ async function submitHitl(action: 'approve' | 'reject') {
       />
     </div>
 
-    <section class="meta-row">
-      <span v-for="(n, doc) in (task.doc_review_round || {})" :key="doc" class="chip">
-        doc-review {{ doc }}: {{ n }}
-      </span>
+    <section
+      v-if="task.inherit_from_parent?.length || task.subtasks?.length"
+      class="meta-row"
+    >
       <span v-if="task.inherit_from_parent?.length" class="chip">
         {{ t('monitor.pipeline.inherit', { list: task.inherit_from_parent.join(', ') }) }}
       </span>
@@ -273,29 +219,6 @@ async function submitHitl(action: 'approve' | 'reject') {
       </span>
     </section>
   </section>
-
-  <!-- Flow profile editor modal -->
-  <Teleport to="body">
-    <div v-if="editorOpen" class="modal-backdrop" @click.self="editorOpen = false">
-      <div class="modal">
-        <div class="modal-head">
-          <span>Flow Profile — {{ task.task_id }}</span>
-          <button class="modal-close" @click="editorOpen = false">✕</button>
-        </div>
-        <p class="modal-hint">
-          {{ t('monitor.pipeline.editorHint') }} <code>x</code>/<code>y</code> {{ t('monitor.pipeline.editorHintSuffix') }}
-        </p>
-        <textarea class="profile-editor" v-model="editorJson" spellcheck="false" />
-        <p v-if="editorError" class="editor-error">{{ editorError }}</p>
-        <div class="modal-actions">
-          <button class="btn-ghost" @click="resetProfile" :disabled="saving">{{ t('monitor.pipeline.resetDefault') }}</button>
-          <button class="btn-primary" @click="saveProfile" :disabled="saving">
-            {{ saving ? t('monitor.pipeline.saving') : t('monitor.pipeline.saveProfile') }}
-          </button>
-        </div>
-      </div>
-    </div>
-  </Teleport>
 
   <!-- HITL approve modal -->
   <Teleport to="body">

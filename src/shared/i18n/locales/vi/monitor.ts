@@ -44,13 +44,7 @@ export const monitor = {
   },
   pipeline: {
     hitlTitle: '⏸ Duyệt HITL',
-    customProfile: 'flow profile tùy chỉnh',
     inherit: 'kế thừa: {list}',
-    editorHint:
-      'Định nghĩa các phase và vị trí node. Kéo node trên canvas để cập nhật',
-    editorHintSuffix: 'tự động.',
-    resetDefault: 'Reset về mặc định',
-    saveProfile: 'Lưu profile',
     saving: 'Đang lưu…',
     hitlHeading: 'Duyệt HITL — {label}',
     hitlWaiting: 'Cổng',
@@ -58,7 +52,6 @@ export const monitor = {
     feedbackLabel: 'Phản hồi (khi từ chối)',
     reject: 'Từ chối',
     approve: 'Duyệt',
-    invalidJson: 'JSON không hợp lệ: {message}',
     missingMtime: 'Thiếu thời gian cập nhật state — vui lòng làm mới trang.',
     approved: 'Đã duyệt bước.',
     rejected: 'Đã từ chối — đã ghi phản hồi.',

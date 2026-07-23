@@ -135,7 +135,7 @@ describe('ArtifactPanel view mode', () => {
     const w = await mountPanel({ taskId: 'DEMO-1', name: 'investigate.md' })
     expect(w.find('.block-list').exists()).toBe(true)
 
-    await w.find('.btn-view-toggle').trigger('click')
+    await w.find('.btn-view-mode').trigger('click')
     await flushPromises()
     expect(w.find('.block-list').exists()).toBe(false)
 
@@ -147,7 +147,7 @@ describe('ArtifactPanel view mode', () => {
   it('TC-AP-04: same name, different taskId → re-apply default', async () => {
     seedSettings('block')
     const w = await mountPanel({ taskId: 'DEMO-1', name: 'investigate.md' })
-    await w.find('.btn-view-toggle').trigger('click')
+    await w.find('.btn-view-mode').trigger('click')
     await flushPromises()
     expect(w.find('.block-list').exists()).toBe(false)
 
@@ -163,7 +163,7 @@ describe('ArtifactPanel view mode', () => {
     seedSettings('block')
     const before = localStorage.getItem(STORAGE_KEY)
     const w = await mountPanel({ taskId: 'DEMO-1', name: 'investigate.md' })
-    await w.find('.btn-view-toggle').trigger('click')
+    await w.find('.btn-view-mode').trigger('click')
     await flushPromises()
     expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
   })
@@ -225,7 +225,8 @@ describe('ArtifactPanel — block mode toggle all', () => {
 
     const toggle = findToggleAllButton(w)
     expect(toggle.attributes('title')).toBe('Đóng tất cả block')
-    expect(toggle.text()).toBe('▲')
+    expect(toggle.attributes('aria-label')).toBe('Đóng tất cả block')
+    expect(toggle.find('svg').exists()).toBe(true)
 
     await toggle.trigger('click')
 
@@ -240,7 +241,8 @@ describe('ArtifactPanel — block mode toggle all', () => {
 
     const toggle = findToggleAllButton(w)
     expect(toggle.attributes('title')).toBe('Mở tất cả block')
-    expect(toggle.text()).toBe('▼')
+    expect(toggle.attributes('aria-label')).toBe('Mở tất cả block')
+    expect(toggle.find('svg').exists()).toBe(true)
 
     await toggle.trigger('click')
 
