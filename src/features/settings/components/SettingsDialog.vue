@@ -27,13 +27,12 @@ const { locale, setLocale } = useLocale()
 /** Optional: App.vue provides this so scan can refresh the project list. */
 const reloadProjects = inject<(() => void | Promise<void>) | undefined>('reloadProjects', undefined)
 
-type SettingsGroupId = 'general' | 'projects'
+type SettingsGroupId = 'general'
 
 const selectedGroup = ref<SettingsGroupId>('general')
 
 const GROUPS: { id: SettingsGroupId; labelKey: string }[] = [
   { id: 'general', labelKey: 'settings.groups.general' },
-  { id: 'projects', labelKey: 'settings.groups.projects' },
 ]
 
 function selectGroup(id: SettingsGroupId) {
@@ -364,21 +363,39 @@ onUnmounted(() => {
                   {{ t('settings.sidebar.collapseMonitorSubOnOutsideClick') }}
                 </label>
               </section>
-            </template>
-
-            <template v-else-if="selectedGroup === 'projects'">
               <section class="settings-section">
                 <h3 class="settings-section-title">{{ t('settings.autoscan.title') }}</h3>
                 <p class="settings-section-desc">{{ t('settings.autoscan.desc') }}</p>
-                <label class="settings-checkbox">
-                  <input
-                    type="checkbox"
-                    :checked="autoscanEnabled"
-                    :disabled="autoscanBusy"
-                    @change="toggleAutoscanEnabled"
-                  />
-                  {{ t('settings.autoscan.enabled') }}
-                </label>
+                <div class="settings-checkbox-row">
+                  <label class="settings-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="autoscanEnabled"
+                      :disabled="autoscanBusy"
+                      @change="toggleAutoscanEnabled"
+                    />
+                    {{ t('settings.autoscan.enabled') }}
+                  </label>
+                  <button
+                    type="button"
+                    class="icon-btn settings-info-btn"
+                    :title="t('settings.autoscan.enabledInfo')"
+                    :aria-label="t('settings.autoscan.enabledInfo')"
+                  >
+                    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r="6.25"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.25"
+                      />
+                      <circle cx="8" cy="5.2" r="0.9" fill="currentColor" />
+                      <path fill="currentColor" d="M7.25 7h1.5v4.75h-1.5z" />
+                    </svg>
+                  </button>
+                </div>
               </section>
               <section class="settings-section">
                 <h3 class="settings-section-title">{{ t('settings.autoscan.whitelistTitle') }}</h3>

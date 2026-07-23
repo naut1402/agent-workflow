@@ -3,7 +3,12 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { browseDirectory } from '../../server/fsBrowse'
-import { loadAutoscanConfig, saveAutoscanConfig, autoscanFile } from '../../server/autoscan/config'
+import {
+  loadAutoscanConfig,
+  saveAutoscanConfig,
+  dashboardSettingsFile,
+  autoscanFile,
+} from '../../server/autoscan/config'
 import { runAutoscan } from '../../server/autoscan/scan'
 import { add, list, createRegistryContext } from '../../server/registry'
 import { createApp } from '../../server/http/app'
@@ -27,7 +32,7 @@ afterEach(() => {
 })
 
 describe('autoscan config', () => {
-  test('load default when missing; save round-trips', () => {
+  test('load default when missing; save round-trips into settings.json', () => {
     const cfg = loadAutoscanConfig()
     expect(cfg.enabled).toBe(false)
     expect(cfg.whitelist).toEqual([])
@@ -37,8 +42,23 @@ describe('autoscan config', () => {
       intervalMs: 30_000,
     })
     expect(savedCfg.whitelist).toEqual([workspaceParent])
-    expect(fs.existsSync(autoscanFile())).toBe(true)
+    expect(fs.existsSync(dashboardSettingsFile())).toBe(true)
+    const disk = JSON.parse(fs.readFileSync(dashboardSettingsFile(), 'utf8'))
+    expect(disk.autoscan.enabled).toBe(true)
     expect(loadAutoscanConfig()).toEqual(savedCfg)
+  })
+
+  test('migrates legacy autoscan.json on load', () => {
+    fs.mkdirSync(home, { recursive: true })
+    fs.writeFileSync(
+      autoscanFile(),
+      JSON.stringify({ enabled: true, whitelist: [workspaceParent], intervalMs: 15_000 }),
+      'utf8',
+    )
+    const cfg = loadAutoscanConfig()
+    expect(cfg.enabled).toBe(true)
+    expect(cfg.whitelist).toEqual([workspaceParent])
+    expect(cfg.intervalMs).toBe(15_000)
   })
 })
 

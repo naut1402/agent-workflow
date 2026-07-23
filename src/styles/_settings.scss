@@ -108,6 +108,26 @@
   accent-color: var(--accent);
 }
 
+.settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.settings-checkbox-row .settings-checkbox {
+  margin-top: 0;
+}
+
+.settings-info-btn {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.settings-info-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+
 .settings-whitelist {
   list-style: none;
   margin: 10px 0 0;

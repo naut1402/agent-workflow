@@ -41,7 +41,7 @@ describe('SettingsDialog', () => {
     expect(nav).toBeTruthy()
     expect(pane).toBeTruthy()
     expect(nav.textContent).toContain('Chung')
-    expect(nav.textContent).toContain('Projects')
+    expect(nav.textContent).not.toContain('Projects')
     expect(
       document.querySelector('.settings-nav-item.active[data-group="general"]'),
     ).toBeTruthy()
@@ -51,6 +51,7 @@ describe('SettingsDialog', () => {
     expect(text).toContain('Artifact')
     expect(text).toContain('Danh sách task')
     expect(text).toContain('Sidebar')
+    expect(text).toContain('Autoscan')
   })
 
   it('mounts backdrop + title «Cài đặt»', () => {
@@ -190,16 +191,13 @@ describe('SettingsDialog', () => {
     expect(stored.collapseMonitorSubSidebarOnOutside).toBe(true)
   })
 
-  it('shows Projects group and autoscan section when selected', async () => {
+  it('shows autoscan section with info icon in General', () => {
     mount(SettingsDialog, { attachTo: document.body })
-    const projectsNav = document.querySelector(
-      '.settings-nav-item[data-group="projects"]',
-    ) as HTMLButtonElement
-    expect(projectsNav).toBeTruthy()
-    projectsNav.click()
-    await Promise.resolve()
     const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
     expect(pane.textContent).toContain('Autoscan')
     expect(pane.textContent).toContain('Whitelist')
+    const info = document.querySelector('.settings-info-btn') as HTMLButtonElement
+    expect(info).toBeTruthy()
+    expect(info.title).toContain('60')
   })
 })

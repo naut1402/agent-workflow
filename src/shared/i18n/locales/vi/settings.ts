@@ -5,7 +5,6 @@ export const settings = {
   close: 'Đóng',
   groups: {
     general: 'Chung',
-    projects: 'Projects',
   },
   theme: {
     title: 'Giao diện',
@@ -33,9 +32,11 @@ export const settings = {
     collapseMonitorSubOnOutsideClick: 'Tự thu gọn sub-sidebar Monitor khi click ra ngoài',
   },
   autoscan: {
-    title: 'Autoscan',
+    title: 'Autoscan project',
     desc: 'Tự động quét thư mục trong whitelist và thêm project có `.dev-team-agent`.',
     enabled: 'Bật autoscan',
+    enabledInfo:
+      'Khi bật, dashboard tự quét whitelist mỗi 60 giây trong lúc ứng dụng đang mở. Chưa hỗ trợ đổi khoảng thời gian trên UI.',
     whitelistTitle: 'Whitelist thư mục',
     whitelistDesc: 'Mỗi mục là thư mục cha — quét chính nó và một cấp thư mục con.',
     pathPlaceholder: 'Đường dẫn tuyệt đối',

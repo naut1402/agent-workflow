@@ -1,13 +1,14 @@
 import { z } from 'zod'
 
-/** Server-side autoscan config (`~/.dev-team-dashboard/autoscan.json`). */
+/** Server-side autoscan block inside global dashboard settings.json. */
 export const AutoscanConfigSchema = z.object({
   enabled: z.boolean().default(false),
   /** Absolute directories to scan for project roots containing `.dev-team-agent`. */
   whitelist: z.array(z.string()).default([]),
-  /** Client poll interval when enabled (ms). Missing → 60_000. */
+  /** Client poll interval when enabled (ms). Missing → 60_000. Not exposed in UI yet. */
   intervalMs: z.number().int().positive().max(3_600_000).optional(),
 })
+
 
 export type AutoscanConfig = z.infer<typeof AutoscanConfigSchema>
 
