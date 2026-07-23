@@ -35,9 +35,14 @@ const { state: sidebarCollapsed, toggle: toggleSidebar } = useLocalToggle(false)
 const sidebarRef = ref<HTMLElement | null>(null)
 const { settings } = useAppSettings()
 
-onClickOutside(sidebarRef, () => {
-  if (resolveCollapseAppSidebarOnOutside(settings.value)) sidebarCollapsed.value = true
-})
+// Ignore teleported modals so clicks inside them do not collapse the rail.
+onClickOutside(
+  sidebarRef,
+  () => {
+    if (resolveCollapseAppSidebarOnOutside(settings.value)) sidebarCollapsed.value = true
+  },
+  { ignore: ['.modal-backdrop'] },
+)
 
 // Central mode switch, so any nested wizard/panel (Agent Editor's Build NL
 // gate, ArtifactPanel's QuickAction gate) can send the user to Runner mode

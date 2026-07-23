@@ -67,12 +67,19 @@ const subSidebarRef = ref<HTMLElement | null>(null)
 const taskListRef = ref<InstanceType<typeof TaskList> | null>(null)
 const { settings } = useAppSettings()
 
-onClickOutside(subSidebarRef, () => {
-  if (resolveCollapseTaskExpandOnOutside(settings.value)) taskListRef.value?.collapseAll()
-  if (resolveCollapseMonitorSubSidebarOnOutside(settings.value)) {
-    subSidebarCollapsed.value = true
-  }
-})
+// Ignore teleported modals (FolderPicker, Settings, …): clicks there are outside
+// the sub-sidebar DOM but must not collapse it — otherwise v-if unmounts ProjectBar
+// and closes the picker mid-navigation.
+onClickOutside(
+  subSidebarRef,
+  () => {
+    if (resolveCollapseTaskExpandOnOutside(settings.value)) taskListRef.value?.collapseAll()
+    if (resolveCollapseMonitorSubSidebarOnOutside(settings.value)) {
+      subSidebarCollapsed.value = true
+    }
+  },
+  { ignore: ['.modal-backdrop'] },
+)
 
 const monitorLayoutClass = computed(() => ({
   'monitor-layout--sub-collapsed': subSidebarCollapsed.value,
