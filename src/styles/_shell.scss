@@ -171,6 +171,13 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   justify-content: space-between;
   font-weight: 600;
   font-size: 15px;
+  flex-shrink: 0;
+}
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .modal-close {
   background: none;
