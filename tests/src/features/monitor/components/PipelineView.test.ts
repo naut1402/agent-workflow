@@ -129,7 +129,7 @@ describe('PipelineView — click a node to run/chain a step', () => {
     expect(document.body.querySelector('.modal .btn-primary')?.textContent).toContain('Ghi đè')
   })
 
-  it('does not warn when no artifact in the run range exists yet', async () => {
+  it('does not warn when current_phase has no existing artifact yet', async () => {
     const task = { task_id: 'T8', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
     const w = mountPipeline(task)
     await flushPromises()
@@ -138,6 +138,26 @@ describe('PipelineView — click a node to run/chain a step', () => {
     await flushPromises()
 
     expect(document.body.querySelector('.modal .btn-primary')?.textContent).not.toContain('Ghi đè')
+  })
+
+  it('clicking a far pending node only warns about current_phase\'s own artifact, not other phases in between', async () => {
+    // current_phase = investigator (no artifact yet); design.md already exists
+    // (from an earlier run of designer, a phase this click won't itself run) —
+    // it belongs to a different phase, so it must NOT appear in the warning.
+    const task = {
+      task_id: 'T9',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: { 'design.md': { exists: true } },
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-implementer"]').trigger('click')
+    await flushPromises()
+
+    expect(document.body.querySelector('.modal .btn-primary')?.textContent).not.toContain('Ghi đè')
+    expect(document.body.textContent).not.toContain('design.md')
   })
 
   it('clicking a waiting (HITL) node opens the approve modal instead of running', async () => {

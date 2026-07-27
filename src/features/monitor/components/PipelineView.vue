@@ -213,27 +213,24 @@ async function runStep(node: { id: string }) {
   }
 }
 
-// Run confirmation (click active/pending node → confirm before submitting,
-// warning louder if any step in the range [current_phase..clicked node]
-// already has an artifact on disk that a rerun would overwrite).
+// Run confirmation (click active/pending node → confirm before submitting).
+// The overwrite warning only ever covers `current_phase`'s own artifact — that
+// is the one step guaranteed to run on this click. Steps further along a
+// chain (when clicking a future pending node) are conditional on the chain
+// actually reaching them (it can stop early at a gate or a failure), so
+// warning about their artifacts here would misattribute an overwrite risk to
+// a phase that never touches that file, or that may not even run yet.
 const runConfirmOpen = ref(false)
 const runConfirmNode = ref<{ id: string; label: string } | null>(null)
 const runConfirmOverwrite = ref<string[]>([])
 
-function stepsInvolvedFor(nodeId: string) {
-  const targetIdx = phases.value.findIndex((p) => p.key === nodeId)
-  const curIdx = phases.value.findIndex((p) => p.key === props.task.current_phase)
-  if (targetIdx < 0) return []
-  if (curIdx < 0) return [phases.value[targetIdx]]
-  const [from, to] = curIdx <= targetIdx ? [curIdx, targetIdx] : [targetIdx, curIdx]
-  return phases.value.slice(from, to + 1)
-}
-
 function openRunConfirm(node: { id: string; label: string }) {
   runConfirmNode.value = node
-  runConfirmOverwrite.value = stepsInvolvedFor(node.id)
-    .filter((p) => p.artifact && props.task.artifacts?.[p.artifact]?.exists)
-    .map((p) => p.artifact as string)
+  const currentPhase = phases.value.find((p) => p.key === props.task.current_phase)
+  runConfirmOverwrite.value =
+    currentPhase?.artifact && props.task.artifacts?.[currentPhase.artifact]?.exists
+      ? [currentPhase.artifact]
+      : []
   runConfirmOpen.value = true
 }
 
