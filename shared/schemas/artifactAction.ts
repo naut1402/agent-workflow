@@ -57,6 +57,8 @@ export type ArtifactMenuNode = {
   children?: ArtifactMenuNode[]
 }
 
+// Recursive Zod + vue-tsc: inferred object `_type` widens required keys to
+// optional, so assert the lazy schema to the hand-written node type.
 export const ArtifactMenuNodeSchema: z.ZodType<ArtifactMenuNode> = z.lazy(() =>
   z.object({
     id: z.string().min(1),
@@ -64,7 +66,7 @@ export const ArtifactMenuNodeSchema: z.ZodType<ArtifactMenuNode> = z.lazy(() =>
     action_id: z.string().min(1).optional(),
     children: z.array(ArtifactMenuNodeSchema).optional(),
   }),
-)
+) as z.ZodType<ArtifactMenuNode>
 
 export const ArtifactActionsFile = z
   .object({
