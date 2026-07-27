@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import JobLogStream from '../../../shared/ui/JobLogStream.vue'
 import KnowledgePickerDialog from '../../../shared/ui/KnowledgePickerDialog.vue'
+import WizardStepper from '../../../shared/ui/WizardStepper.vue'
 import { CREATE_TASK_STEPS, useCreateTask } from '../composables/useCreateTask'
 
 const props = defineProps<{
@@ -29,6 +30,7 @@ const {
   taskIdError,
   previewSummary,
   canNext,
+  maxReachableStep,
   submittedJobId,
   createdTaskId,
   firstStepLabel,
@@ -39,6 +41,7 @@ const {
   fetchIssue,
   next,
   back,
+  goToStep,
   toggleKnowledge,
   submit,
 } = useCreateTask({
@@ -47,13 +50,12 @@ const {
 
 const showingLog = computed(() => Boolean(submittedJobId.value && form.value.run))
 
-const stepTitle = computed(() => {
-  const s = step.value
-  if (s === 1) return t('monitor.createTask.stepSource')
-  if (s === 2) return t('monitor.createTask.stepPipeline')
-  if (s === 3) return t('monitor.createTask.stepKnowledge')
-  return t('monitor.createTask.stepPreview')
-})
+const steps = computed(() => [
+  { key: 'source', label: t('monitor.createTask.stepSource') },
+  { key: 'pipeline', label: t('monitor.createTask.stepPipeline') },
+  { key: 'knowledge', label: t('monitor.createTask.stepKnowledge') },
+  { key: 'preview', label: t('monitor.createTask.stepPreview') },
+])
 
 async function onOpen() {
   await loadMeta()
@@ -81,13 +83,30 @@ watch(
   },
 )
 
+/** Step 1 with source=issue only stores a URL — the prompt arrives via fetch. */
+function needsIssueFetch() {
+  return step.value === 1 && form.value.source === 'issue' && !issueLoaded.value
+}
+
 async function handleNext() {
-  if (step.value === 1 && form.value.source === 'issue' && !issueLoaded.value) {
+  if (needsIssueFetch()) {
     await fetchIssue()
     if (issueLoaded.value) next()
     return
   }
   next()
+}
+
+/**
+ * Stepper click. Leaving step 1 forward on the issue tab must still fetch first,
+ * otherwise the jump lands on preview with an empty prompt.
+ */
+async function handleStepJump(target: number) {
+  if (target > step.value && needsIssueFetch()) {
+    await fetchIssue()
+    if (!issueLoaded.value) return
+  }
+  goToStep(target)
 }
 
 async function handleSubmit() {
@@ -134,7 +153,8 @@ onUnmounted(() => {
         :aria-label="t('monitor.createTask.title')"
       >
         <div class="modal-head">
-          <span>{{ t('monitor.createTask.title') }} — {{ stepTitle }}</span>
+          <!-- Step name lives in the stepper below; keep the head to title + counter. -->
+          <span>{{ t('monitor.createTask.title') }}</span>
           <span class="create-task-step">{{ step }}/{{ CREATE_TASK_STEPS }}</span>
           <button
             type="button"
@@ -145,6 +165,17 @@ onUnmounted(() => {
             ✕
           </button>
         </div>
+
+        <WizardStepper
+          v-if="!showingLog"
+          class="create-task-stepper"
+          :steps="steps"
+          :current="step"
+          :max-reachable="maxReachableStep"
+          :disabled="loading"
+          :aria-label="t('monitor.createTask.stepperLabel')"
+          @go="handleStepJump"
+        />
 
         <div class="modal-body create-task-body">
           <div v-if="error" class="err-banner">⚠ {{ error }}</div>
@@ -384,6 +415,13 @@ onUnmounted(() => {
   margin-right: 8px;
   font-size: 12px;
   opacity: 0.65;
+}
+
+/* Sits between head and the scrollable body — must not shrink or scroll away. */
+.create-task-stepper {
+  flex: 0 0 auto;
+  padding: 6px 0 8px;
+  border-bottom: 1px solid var(--border);
 }
 
 .create-task-body {

@@ -147,6 +147,7 @@ export const monitor = {
     creating: 'Đang tạo…',
     done: 'Xong',
     loading: 'Đang tải…',
+    stepperLabel: 'Các bước tạo task',
     stepSource: 'Nguồn prompt',
     stepPipeline: 'Pipeline',
     stepKnowledge: 'Knowledge',

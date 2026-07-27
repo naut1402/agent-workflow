@@ -86,3 +86,33 @@ test('create task from Prompt tab (capture)', async ({ page }, testInfo) => {
   expect(requestMd).toContain('E2E prompt — tạo task từ dashboard')
   expect(requestMd).toContain('created_by: dashboard')
 })
+
+test('stepper skips the optional steps straight to preview (capture)', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+
+  await page.getByRole('button', { name: 'Tạo task mới' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Tạo task' })
+  await expect(dialog).toBeVisible({ timeout: 15_000 })
+
+  const stepper = dialog.getByRole('navigation', { name: 'Các bước tạo task' })
+  const previewStep = stepper.getByRole('button', { name: /Xem trước/ })
+
+  // Locked until the source step is satisfied.
+  await expect(previewStep).toBeDisabled()
+
+  await dialog.getByLabel('Task ID').fill(TASK_ID)
+  await dialog.getByLabel('Prompt').fill('E2E prompt — nhảy bước bằng stepper')
+  await expect(previewStep).toBeEnabled()
+
+  // One click instead of three "Tiếp".
+  await previewStep.click()
+  await expect(dialog.locator('code', { hasText: TASK_ID })).toBeVisible()
+  await capture(page, testInfo, 'create-task-stepper-jump')
+
+  // Backward jump still works from preview.
+  await stepper.getByRole('button', { name: /Pipeline/ }).click()
+  await expect(dialog.getByLabel('Profile pipeline')).toBeVisible()
+})

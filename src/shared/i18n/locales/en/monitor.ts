@@ -146,6 +146,7 @@ export const monitor = {
     creating: 'Creating…',
     done: 'Done',
     loading: 'Loading…',
+    stepperLabel: 'Create task steps',
     stepSource: 'Prompt source',
     stepPipeline: 'Pipeline',
     stepKnowledge: 'Knowledge',
