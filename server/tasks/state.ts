@@ -142,45 +142,6 @@ export async function applyHitlAction(
 }
 
 /**
- * Advance `current_phase` to the next step after a dashboard-triggered "run
- * step" job succeeds — but only for a step that has no HITL gate of its own
- * (`hitl` null in the pipeline config). A gated step still requires an
- * explicit approve/reject through `applyHitlAction`; this function only fills
- * the gap for gate-less steps, which nothing else advances today.
- *
- * No-ops (returns null) if `current_phase` no longer matches `stepId` (raced
- * by another action) or the step still has a gate — callers should treat a
- * null result as "nothing to do", not an error.
- */
-export async function advanceStepOnJobSuccess(
-  root: string,
-  taskId: string,
-  stepId: string,
-): Promise<{ state: Record<string, unknown>; mtime: number } | null> {
-  const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
-
-  return withStateFileLock(stateFile, async () => {
-    const read = await readState(stateFile)
-    if (!read.ok) return null
-
-    const state = { ...read.state } as Record<string, unknown>
-    if (String(state.current_phase ?? '') !== stepId) return null
-
-    const pipeline = await loadPipelineConfig(root, taskId)
-    const steps = pipeline.steps || []
-    const stepIdx = stepIndex(steps, stepId)
-    const currentStep = stepIdx >= 0 ? steps[stepIdx] : null
-    if (!currentStep || currentStep.hitl?.gate_id) return null
-
-    const next = steps[stepIdx + 1]
-    state.current_phase = next ? next.id : 'completed'
-
-    const mtime = await writeStateAtomic(stateFile, state)
-    return { state, mtime }
-  })
-}
-
-/**
  * Archive/unarchive a task. Separate from `applyHitlAction` on purpose: archiving
  * is not a HITL gate decision, so it doesn't validate `gate_id`/`hitl_pending` —
  * the server accepts archiving any task regardless of `current_phase` (the

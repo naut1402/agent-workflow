@@ -142,29 +142,6 @@ export async function patchTaskArchive(id: string, body: TaskArchivePatch, proje
   return data
 }
 
-// Trigger the task's current step to run (clicking a node on the pipeline
-// flow). `targetStepId` opts into server-side chaining across gate-less
-// steps until it reaches that step, hits a HITL gate, or a job fails.
-export async function runPipelineStep(
-  id: string,
-  body: { targetStepId?: string; runnerId?: string },
-  projectId?: string,
-) {
-  const r = await apiFetch(`/api/tasks/${encodeURIComponent(id)}/run-step${qs({ project: projectId })}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const data = await r.json().catch(() => ({}))
-  if (!r.ok) {
-    const err = new Error(data.error || `/api/tasks/${id}/run-step → ${r.status}`)
-    ;(err as any).status = r.status
-    ;(err as any).data = data
-    throw err
-  }
-  return data
-}
-
 export async function fetchArtifact(id: string, name: string, projectId?: string) {
   const r = await fetch(`/api/artifact${qs({ id, name, project: projectId })}`)
   if (!r.ok) throw new Error(`/api/artifact ${name} → ${r.status}`)

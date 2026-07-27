@@ -262,8 +262,6 @@
   font-size: 11px; color: var(--muted); background: var(--panel);
   border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px;
 }
-.chip-ok { color: var(--accent); border-color: var(--accent); }
-.chip-err { color: var(--danger); border-color: var(--danger); }
 
 /* QA */
 .qa { background: rgba(227,179,65,0.08); border: 1px solid var(--waiting); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }

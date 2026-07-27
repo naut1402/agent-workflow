@@ -13,8 +13,6 @@ import { reapOrphanedRunningJobs } from './pidReaper.js'
 import { mintSessionId } from './sessionCapture.js'
 import { recordSessionUsage, resolveSessionPlan, type SessionMode } from './sessionLedger.js'
 import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
-import { advanceStepOnJobSuccess } from '../tasks/state.js'
-import { loadPipelineConfig } from '../pipeline/index.js'
 
 function credentialForConnection(conn: Connection): CredentialProfile | null {
   if (conn.kind === 'local-console') {
@@ -482,60 +480,6 @@ async function runJob(job: JobRecord): Promise<void> {
     artifactsFound: result.artifactsFound,
     pid: null,
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
-  })
-
-  if (result.ok && !isApprovalJob) {
-    await advancePipelineStepChain(job)
-  }
-}
-
-/**
- * Dashboard "run step" jobs tag `metadata.pipelineStepId` (the step the job
- * just ran) and, for a chained run, `metadata.chainTarget` (the step the user
- * clicked). On success, advance `current_phase` past any gate-less step and —
- * only while chasing a `chainTarget` not yet reached — keep submitting the
- * next gate-less step's job automatically. A HITL gate (or a step id we don't
- * recognise) stops the chain; the user resumes it via the existing approve
- * flow or another click.
- */
-async function advancePipelineStepChain(job: JobRecord): Promise<void> {
-  const taskId = typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined
-  const devTeamRoot = typeof job.metadata?.devTeamRoot === 'string' ? job.metadata.devTeamRoot : undefined
-  const pipelineStepId = typeof job.metadata?.pipelineStepId === 'string' ? job.metadata.pipelineStepId : undefined
-  const chainTarget = typeof job.metadata?.chainTarget === 'string' ? job.metadata.chainTarget : undefined
-  if (!taskId || !devTeamRoot || !pipelineStepId) return
-
-  const advanced = await advanceStepOnJobSuccess(devTeamRoot, taskId, pipelineStepId)
-  // Stop once the clicked node itself has run, even if it advanced further —
-  // the user only asked to reach `chainTarget`, not run past it.
-  if (!advanced || !chainTarget || pipelineStepId === chainTarget) return
-
-  const nextStepId = String(advanced.state.current_phase ?? '')
-  if (!nextStepId || nextStepId === 'completed' || nextStepId === pipelineStepId) return
-  if (advanced.state.hitl_pending) return // gate reached — wait for approve/reject
-
-  const pipeline = await loadPipelineConfig(devTeamRoot, taskId)
-  const nextStep = (pipeline.steps || []).find((s: any) => s.id === nextStepId)
-  if (!nextStep?.agent) return
-
-  const workspace = path.join(devTeamRoot, 'tasks', taskId)
-  let userPrompt = ''
-  try {
-    userPrompt = fs.readFileSync(path.join(workspace, 'request.md'), 'utf8')
-  } catch {
-    return // no request.md — leave the chain to stop rather than run with an empty prompt
-  }
-
-  submitJob({
-    runnerId: job.runnerId === 'unknown' ? undefined : job.runnerId,
-    agentRef: nextStep.agent,
-    workspace,
-    userPrompt,
-    metadata: {
-      ...job.metadata,
-      pipelineStepId: nextStepId,
-      chainTarget,
-    },
   })
 }
 
