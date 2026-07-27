@@ -8,6 +8,9 @@ import { useAppSettings } from './shared/composables/useAppSettings'
 import { resolveCollapseAppSidebarOnOutside } from '../shared/schemas/appSettings'
 import { resolveAutoscanIntervalMs } from '../shared/schemas/autoscan'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
+import { useNotifications } from './features/notifications/composables/useNotifications'
+import ToastHost from './features/notifications/components/ToastHost.vue'
+import NotificationBell from './features/notifications/components/NotificationBell.vue'
 import MonitorLayout from './features/monitor/components/MonitorLayout.vue'
 import PipelineEditor from './features/pipeline-editor/components/PipelineEditor.vue'
 import AgentEditor from './features/agent-editor/components/AgentEditor.vue'
@@ -68,6 +71,17 @@ const { root, tasks, selectedId, error, lastUpdated, connected, poll, start, sto
 const selected = computed(
   () => tasks.value.find((t) => t.task_id === selectedId.value) || null,
 )
+
+// HITL-pending / QA-ready notifications, derived from the same polled `tasks`
+// list — no separate transport needed, orchestrator- and dashboard-run tasks
+// both surface these flags through `.dev-state/<id>.json` via `/api/tasks`.
+const { toasts, history, unreadCount, dismissToast, markRead, markAllRead } = useNotifications(tasks)
+
+function onNotificationSelect(event: { id: string; taskId: string }) {
+  markRead(event.id)
+  mode.value = 'monitor'
+  selectedId.value = event.taskId
+}
 
 function loadSidebarPref() {
   try {
@@ -304,6 +318,12 @@ onUnmounted(() => {
       </div>
 
       <div class="sidebar-footer">
+        <NotificationBell
+          :unread-count="unreadCount"
+          :history="history"
+          @mark-all-read="markAllRead"
+          @select="onNotificationSelect"
+        />
         <footer v-if="!sidebarCollapsed" class="status">
           <span v-if="error" class="err">⚠ {{ error }}</span>
           <span v-else-if="lastUpdated && mode === 'monitor'">{{ t('common.status.updated', { time: lastUpdated }) }}</span>
@@ -386,6 +406,8 @@ onUnmounted(() => {
     <main v-else-if="mode === 'agentEditor'" class="main main-editor">
       <AgentEditor />
     </main>
+
+    <ToastHost :toasts="toasts" @dismiss="dismissToast" @select="onNotificationSelect" />
 
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
     <CreateTaskDialog
