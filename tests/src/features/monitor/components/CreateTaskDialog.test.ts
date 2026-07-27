@@ -89,6 +89,112 @@ describe('CreateTaskDialog', () => {
     expect(w.emitted('created')?.[0]).toEqual([{ taskId: 'F0010', jobId: null }])
   })
 
+  it('locks stepper jumps until task id and prompt are filled', async () => {
+    mountDialog()
+    await flushPromises()
+
+    const stepBtns = () => [...document.querySelectorAll('.wizard-stepper-btn')]
+    expect(stepBtns()).toHaveLength(4)
+    // Step 1 is current (never navigable); 2-4 locked behind the source gate.
+    expect(stepBtns().every((b) => b.hasAttribute('disabled'))).toBe(true)
+
+    const taskInput = new DOMWrapper(document.querySelector('.create-task-body input.cfg-input')!)
+    await taskInput.setValue('F0010')
+    const prompt = new DOMWrapper(document.querySelector('.create-task-body textarea')!)
+    await prompt.setValue('Brief')
+    await flushPromises()
+
+    expect(stepBtns()[0].hasAttribute('disabled')).toBe(true) // still the current step
+    expect(stepBtns()[3].hasAttribute('disabled')).toBe(false)
+  })
+
+  it('jumps straight from source to preview via the stepper', async () => {
+    mountDialog({ projectId: 'p1' })
+    await flushPromises()
+
+    const taskInput = new DOMWrapper(document.querySelector('.create-task-body input.cfg-input')!)
+    await taskInput.setValue('F0010')
+    const prompt = new DOMWrapper(document.querySelector('.create-task-body textarea')!)
+    await prompt.setValue('Brief')
+    await flushPromises()
+
+    const previewStep = document.querySelectorAll('.wizard-stepper-btn')[3] as HTMLButtonElement
+    previewStep.click()
+    await flushPromises()
+
+    // Landed on step 4: preview summary rendered and submit button available.
+    expect(document.querySelector('.create-task-preview')).toBeTruthy()
+    const submit = [...document.querySelectorAll('button.btn-primary')].find((b) =>
+      b.textContent?.includes('Tạo task'),
+    )
+    expect(submit).toBeTruthy()
+  })
+
+  it('fetches the issue before a stepper jump off the issue tab', async () => {
+    vi.mocked(fetchGithubIssue).mockResolvedValue({
+      issue: {
+        title: 'Issue title',
+        body: 'Body',
+        url: 'https://github.com/o/r/issues/1',
+        prompt: '# Issue title\n\nBody',
+      },
+    })
+
+    mountDialog()
+    await flushPromises()
+
+    const taskInput = new DOMWrapper(document.querySelector('.create-task-body input.cfg-input')!)
+    await taskInput.setValue('F0010')
+    ;(document.querySelectorAll('.create-task-tab')[1] as HTMLButtonElement).click()
+    await flushPromises()
+
+    const urlInput = new DOMWrapper(
+      document.querySelectorAll('.create-task-body input.cfg-input')[1]!,
+    )
+    await urlInput.setValue('https://github.com/o/r/issues/1')
+    await flushPromises()
+
+    // Jump forward without pressing "Tải issue" — the dialog must fetch for us,
+    // otherwise preview would render an empty prompt.
+    ;(document.querySelectorAll('.wizard-stepper-btn')[3] as HTMLButtonElement).click()
+    await flushPromises()
+
+    expect(fetchGithubIssue).toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Issue title')
+  })
+
+  it('hides the stepper once the run log is streaming', async () => {
+    vi.mocked(createTask).mockResolvedValue({
+      task: { taskId: 'F0010' },
+      job: { id: 'job-1' },
+    })
+
+    mountDialog({ projectId: 'p1' })
+    await flushPromises()
+
+    const taskInput = new DOMWrapper(document.querySelector('.create-task-body input.cfg-input')!)
+    await taskInput.setValue('F0010')
+    const prompt = new DOMWrapper(document.querySelector('.create-task-body textarea')!)
+    await prompt.setValue('Brief')
+    await flushPromises()
+    ;(document.querySelectorAll('.wizard-stepper-btn')[3] as HTMLButtonElement).click()
+    await flushPromises()
+
+    const runToggle = document.querySelector(
+      '.create-task-body input[type="checkbox"]',
+    ) as HTMLInputElement
+    await new DOMWrapper(runToggle).setValue(true)
+    await flushPromises()
+    ;(
+      [...document.querySelectorAll('button.btn-primary')].find((b) =>
+        b.textContent?.includes('Tạo task'),
+      ) as HTMLButtonElement
+    ).click()
+    await flushPromises()
+
+    expect(document.querySelector('.wizard-stepper')).toBeNull()
+  })
+
   it('fetches GitHub issue on issue tab before advancing', async () => {
     vi.mocked(fetchGithubIssue).mockResolvedValue({
       issue: {

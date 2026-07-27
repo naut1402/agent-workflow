@@ -64,20 +64,29 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     }),
   )
 
+  const sourceStepSatisfied = computed(() =>
+    canAdvanceFromSourceStep(
+      form.value.taskId,
+      form.value.source,
+      form.value.prompt,
+      form.value.issueUrl,
+      issueLoaded.value,
+    ),
+  )
+
   const canNext = computed(() => {
-    if (step.value === 1) {
-      return canAdvanceFromSourceStep(
-        form.value.taskId,
-        form.value.source,
-        form.value.prompt,
-        form.value.issueUrl,
-        issueLoaded.value,
-      )
-    }
+    if (step.value === 1) return sourceStepSatisfied.value
     if (step.value === 2) return true
     if (step.value === 3) return true
     return false
   })
+
+  /**
+   * Highest step reachable by a forward jump. Step 1 is the only real gate —
+   * pipeline (2) and knowledge (3) are optional and always advance — so once the
+   * source step is satisfied, every later step is fair game.
+   */
+  const maxReachableStep = computed(() => (sourceStepSatisfied.value ? CREATE_TASK_STEPS : 1))
 
   function reset() {
     step.value = 1
@@ -169,6 +178,18 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     if (step.value > 1) step.value -= 1
   }
 
+  /**
+   * Jump straight to a step (stepper click). Backward is always allowed; forward
+   * only within `maxReachableStep`. Returns false when the jump was rejected.
+   */
+  function goToStep(target: number): boolean {
+    if (!Number.isInteger(target) || target < 1 || target > CREATE_TASK_STEPS) return false
+    if (target === step.value) return false
+    if (target > step.value && target > maxReachableStep.value) return false
+    step.value = target
+    return true
+  }
+
   function toggleKnowledge(id: string) {
     const list = form.value.knowledgeInputs
     const i = list.indexOf(id)
@@ -223,6 +244,7 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     taskIdError,
     previewSummary,
     canNext,
+    maxReachableStep,
     submittedJobId,
     createdTaskId,
     firstStepLabel,
@@ -233,6 +255,7 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     fetchIssue,
     next,
     back,
+    goToStep,
     toggleKnowledge,
     addKnowledge,
     submit,
