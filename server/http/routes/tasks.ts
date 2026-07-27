@@ -255,36 +255,45 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
   })
 
   // ── Artifact quick-actions ─────────────────────────────────────────────────
+  // Catalog is dashboard-global (`~/.dev-team-dashboard/artifact-actions.yaml`)
+  // — GET/PUT do not need a project root (same pattern as /api/runners).
   // `?artifact=` present → UI-facing subset filtered to that artifact (and
   // optionally `?attach=`), used by the title toolbar / selection toolbar.
   // `?artifact=` omitted → full catalog (all fields), used by the QuickAction
   // CRUD panel.
   app.get('/api/artifact-actions', async (c) => {
-    const root = c.get('root')
-    if (!root) return unknownProject(c)
     const artifact = c.req.query('artifact') || ''
     const attach = c.req.query('attach') || ''
 
     if (!artifact) {
-      const file = await loadArtifactActionsFile(root)
-      return j(c, 200, { version: file.version, actions: file.actions })
+      const file = await loadArtifactActionsFile()
+      return j(c, 200, { version: file.version, actions: file.actions, menus: file.menus })
     }
 
-    const actions = await loadArtifactActions(root)
-    const matched = attach ? matchByAttach(actions, artifact, attach) : matchActions(actions, artifact)
-    return j(c, 200, { artifact, actions: matched.map(toActionView) })
+    const file = await loadArtifactActionsFile()
+    const matched = attach
+      ? matchByAttach(file.actions, artifact, attach)
+      : matchActions(file.actions, artifact)
+    return j(c, 200, {
+      artifact,
+      actions: matched.map(toActionView),
+      menus: file.menus,
+    })
   })
 
   // Full-catalog replace (CRUD save from the QuickAction panel).
   app.put('/api/artifact-actions', async (c) => {
-    const root = c.get('root')
-    if (!root) return unknownProject(c)
     const b = await parseBody(c)
     if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
-    const result = await saveArtifactActions(root, b.value)
+    const result = await saveArtifactActions(b.value)
     if ('error' in result) return j(c, 400, { error: result.error })
-    emitAudit({ op: 'update', entity: 'artifact-actions', identifier: 'catalog', projectId: c.get('projectId') })
-    return j(c, 200, { ok: true, version: result.version, actions: result.actions })
+    emitAudit({ op: 'update', entity: 'artifact-actions', identifier: 'catalog', projectId: null })
+    return j(c, 200, {
+      ok: true,
+      version: result.version,
+      actions: result.actions,
+      menus: result.menus,
+    })
   })
 
   // Run a quick-action: build the prompt from its template + the artifact (and
@@ -306,7 +315,7 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     const target = resolveArtifact(root, taskId, artifactName)
     if (!target) return j(c, 400, { error: 'invalid artifact path' })
 
-    const actions = await loadArtifactActions(root)
+    const actions = await loadArtifactActions()
     const action = findAction(actions, actionId)
     if (!action) return j(c, 404, { error: 'unknown action', actionId })
     if (matchActions([action], artifactName).length === 0) {

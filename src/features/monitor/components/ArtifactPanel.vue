@@ -15,8 +15,8 @@ import { useArtifactAction } from '../composables/useArtifactAction'
 import { useArtifactSelectionToolbar } from '../composables/useArtifactSelectionToolbar'
 import ArtifactProposalReview from './ArtifactProposalReview.vue'
 import QuickActionMenuDropdown from '../../quick-action/components/QuickActionMenuDropdown.vue'
-import { pocMenus } from '../../quick-action/lib/pocMenuStore'
 import { splitActionsByMenu } from '../../quick-action/lib/menuTree'
+import type { ArtifactMenuNode } from '../../../../shared/schemas/artifactAction'
 import { useAppSettings } from '../../../shared/composables/useAppSettings'
 import { attachMermaidControls } from '../../../shared/composables/useMermaidControls'
 import { resolveArtifactViewMode } from '../../../../shared/schemas/appSettings'
@@ -101,6 +101,7 @@ interface QuickActionView {
 // point); title/selection lists below split on `attach_points` client-side so
 // one fetch covers both toolbars.
 const actions = ref<QuickActionView[]>([])
+const menus = ref<ArtifactMenuNode[]>([])
 
 const titleActions = computed(() =>
   actions.value.filter((a) => (a.attach_points ?? ['artifact-title']).includes('artifact-title')),
@@ -109,8 +110,8 @@ const selectionActions = computed(() =>
   actions.value.filter((a) => (a.attach_points ?? []).includes('artifact-selection')),
 )
 
-const titleToolbar = computed(() => splitActionsByMenu(titleActions.value, pocMenus.value))
-const selectionToolbarMenu = computed(() => splitActionsByMenu(selectionActions.value, pocMenus.value))
+const titleToolbar = computed(() => splitActionsByMenu(titleActions.value, menus.value))
+const selectionToolbarMenu = computed(() => splitActionsByMenu(selectionActions.value, menus.value))
 
 // Runner "usable" gate for QuickAction (decision §4.2.1 #8): mirrors the Agent
 // Editor Build NL gate — a runner is usable unless explicitly disabled.
@@ -186,8 +187,10 @@ async function loadActions(name: string) {
   try {
     const res = await fetchArtifactActions(name, props.projectId ?? undefined)
     actions.value = Array.isArray(res.actions) ? res.actions : []
+    menus.value = Array.isArray(res.menus) ? res.menus : []
   } catch {
     actions.value = []
+    menus.value = []
   }
 }
 
@@ -388,6 +391,7 @@ watch(
       loadedKey.value = null
       loadedMtime.value = null
       actions.value = []
+      menus.value = []
       cancelEdit()
     }
   },

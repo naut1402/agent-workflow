@@ -2,19 +2,29 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import yaml from 'js-yaml'
 import { readYamlSafe } from '../../shared/fs.js'
+import { registryHome } from '../registry.js'
 import {
   ArtifactActionsFile,
   type ArtifactAction,
   type ArtifactActionView,
+  type ArtifactMenuNode,
 } from '../../shared/schemas/artifactAction.js'
 import { DEFAULT_ARTIFACT_ACTIONS } from './default.js'
 
 export { DEFAULT_ARTIFACT_ACTIONS } from './default.js'
 
 const DEFAULT_CATALOG_VERSION = 1
+const DEFAULT_MENUS: ArtifactMenuNode[] = []
 
-// Domain module for artifact quick-actions. Pure + ctx-injected: it takes the
-// resolved `.dev-team-agent/` root and knows nothing about HTTP.
+// Domain module for artifact quick-actions. Catalog is dashboard-global
+// (`~/.dev-team-dashboard/artifact-actions.yaml`, override via
+// DEV_TEAM_DASHBOARD_HOME) — shared across projects, like runners.json.
+// HTTP routes that *run* an action still need the project `.dev-team-agent/`
+// root to resolve the artifact file / agent.
+
+function catalogFile(): string {
+  return path.join(registryHome(), 'artifact-actions.yaml')
+}
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -118,57 +128,67 @@ export function normalizeAction(a: ArtifactAction): ArtifactAction {
 }
 
 /**
- * Load & validate `<root>/artifact-actions.yaml`, returning the full catalog
- * file (version + normalized actions). Falls back to the built-in
+ * Load & validate the dashboard-global catalog
+ * (`~/.dev-team-dashboard/artifact-actions.yaml`). Falls back to the built-in
  * DEFAULT_ARTIFACT_ACTIONS when the file is missing, unreadable, or fails
  * schema validation — a broken/absent config must never crash a request nor
- * leave the toolbar empty (mirrors the DEFAULT_PIPELINE fallback in
- * `loadPipelineConfig`). A valid YAML fully replaces the default (declarative
- * override) — never merged with the built-in seed.
+ * leave the toolbar empty. A valid YAML fully replaces the default
+ * (declarative override) — never merged with the built-in seed.
  */
-export async function loadArtifactActionsFile(root: string): Promise<ArtifactActionsFile> {
-  const raw = await readYamlSafe(path.join(root, 'artifact-actions.yaml'))
-  if (!raw) {
-    return { version: DEFAULT_CATALOG_VERSION, actions: DEFAULT_ARTIFACT_ACTIONS.map(normalizeAction) }
+function emptyCatalog(): ArtifactActionsFile {
+  return {
+    version: DEFAULT_CATALOG_VERSION,
+    actions: DEFAULT_ARTIFACT_ACTIONS.map(normalizeAction),
+    menus: [...DEFAULT_MENUS],
   }
+}
+
+export async function loadArtifactActionsFile(): Promise<ArtifactActionsFile> {
+  const raw = await readYamlSafe(catalogFile())
+  if (!raw) return emptyCatalog()
   const parsed = ArtifactActionsFile.safeParse(raw)
-  if (!parsed.success) {
-    return { version: DEFAULT_CATALOG_VERSION, actions: DEFAULT_ARTIFACT_ACTIONS.map(normalizeAction) }
+  if (!parsed.success) return emptyCatalog()
+  return {
+    version: parsed.data.version,
+    actions: parsed.data.actions.map(normalizeAction),
+    menus: parsed.data.menus ?? [],
   }
-  return { version: parsed.data.version, actions: parsed.data.actions.map(normalizeAction) }
 }
 
 /** Convenience wrapper over `loadArtifactActionsFile` for callers that only need the action list. */
-export async function loadArtifactActions(root: string): Promise<ArtifactAction[]> {
-  return (await loadArtifactActionsFile(root)).actions
+export async function loadArtifactActions(): Promise<ArtifactAction[]> {
+  return (await loadArtifactActionsFile()).actions
 }
 
 export type SaveArtifactActionsResult =
-  | { ok: true; version: number; actions: ArtifactAction[] }
+  | { ok: true; version: number; actions: ArtifactAction[]; menus: ArtifactMenuNode[] }
   | { ok: false; error: string }
 
 /**
  * Validate + persist a full-catalog replace (`PUT /api/artifact-actions`).
  * Rejects a schema-invalid body or duplicate action ids without touching disk;
- * on success, writes `<root>/artifact-actions.yaml` atomically (temp file +
- * rename), mirroring `saveRunners` / the artifact PUT route.
+ * on success, writes `registryHome()/artifact-actions.yaml` atomically
+ * (temp file + rename), mirroring `saveRunners`.
+ * Scope: dashboard-global (shared across projects), not per-project / per-task.
  */
-export async function saveArtifactActions(root: string, body: unknown): Promise<SaveArtifactActionsResult> {
+export async function saveArtifactActions(body: unknown): Promise<SaveArtifactActionsResult> {
   const parsed = ArtifactActionsFile.safeParse(body)
   if (!parsed.success) return { ok: false, error: 'invalid request' }
 
   const actions = parsed.data.actions.map(normalizeAction)
+  const menus = parsed.data.menus ?? []
   const seen = new Set<string>()
   for (const a of actions) {
     if (seen.has(a.id)) return { ok: false, error: `duplicate action id: ${a.id}` }
     seen.add(a.id)
   }
 
-  const file = { version: parsed.data.version, actions }
-  const target = path.join(root, 'artifact-actions.yaml')
+  const file: ArtifactActionsFile = { version: parsed.data.version, actions, menus }
+  const home = registryHome()
+  const target = catalogFile()
   const tmp = `${target}.tmp`
-  await fs.mkdir(root, { recursive: true })
+  await fs.mkdir(home, { recursive: true })
   await fs.writeFile(tmp, yaml.dump(file, { lineWidth: 120 }), 'utf8')
   await fs.rename(tmp, target)
-  return { ok: true, version: file.version, actions }
+  return { ok: true, version: file.version, actions, menus }
 }

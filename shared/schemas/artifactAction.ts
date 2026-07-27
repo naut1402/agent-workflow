@@ -2,11 +2,13 @@ import { z } from 'zod'
 
 /**
  * Declarative "quick action" attached to artifacts in the monitor viewer.
- * Loaded from `.dev-team-agent/artifact-actions.yaml`; each action maps an
- * artifact (matched by filename pattern) to an agent + prompt template that the
- * dashboard submits as a job. `attach_points` decides where in the UI the
- * action surfaces (artifact title toolbar and/or the text-selection toolbar);
- * an action can be attached to more than one point.
+ * Loaded from the dashboard-global catalog
+ * (`~/.dev-team-dashboard/artifact-actions.yaml`, override via
+ * `DEV_TEAM_DASHBOARD_HOME`); each action maps an artifact (matched by filename
+ * pattern) to an agent + prompt template that the dashboard submits as a job.
+ * `attach_points` decides where in the UI the action surfaces (artifact title
+ * toolbar and/or the text-selection toolbar); an action can be attached to more
+ * than one point. Catalog is shared across projects (like runners).
  *
  * The schema is permissive (`.passthrough()`) so a hand-edited YAML with extra
  * keys still parses, and defaults fill optional guard fields. `attach_points`
@@ -43,10 +45,34 @@ export const ArtifactAction = z
 
 export type ArtifactAction = z.infer<typeof ArtifactAction>
 
+/**
+ * Nested menu tree for Monitor toolbars (title / selection). Groups have
+ * `children`; leaves point at a catalog action via `action_id`.
+ * YAML without `menus` stays valid — defaults to `[]` (flat toolbar buttons).
+ */
+export type ArtifactMenuNode = {
+  id: string
+  label: string
+  action_id?: string
+  children?: ArtifactMenuNode[]
+}
+
+// Recursive Zod + vue-tsc: inferred object `_type` widens required keys to
+// optional, so assert the lazy schema to the hand-written node type.
+export const ArtifactMenuNodeSchema: z.ZodType<ArtifactMenuNode> = z.lazy(() =>
+  z.object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    action_id: z.string().min(1).optional(),
+    children: z.array(ArtifactMenuNodeSchema).optional(),
+  }),
+) as z.ZodType<ArtifactMenuNode>
+
 export const ArtifactActionsFile = z
   .object({
     version: z.number(),
     actions: z.array(ArtifactAction).default([]),
+    menus: z.array(ArtifactMenuNodeSchema).default([]),
   })
   .passthrough()
 

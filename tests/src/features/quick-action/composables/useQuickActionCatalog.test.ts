@@ -38,12 +38,13 @@ afterEach(() => {
 
 describe('useQuickActionCatalog', () => {
   it('load() populates version + actions from the full catalog', async () => {
-    stubApi({ getBody: { version: 3, actions: [draft()] } })
+    stubApi({ getBody: { version: 3, actions: [draft()], menus: [{ id: 'docs', label: 'Docs', children: [] }] } })
     const c = useQuickActionCatalog({ getProjectId: () => null })
     await c.load()
 
     expect(c.version.value).toBe(3)
     expect(c.actions.value).toHaveLength(1)
+    expect(c.menus.value).toEqual([{ id: 'docs', label: 'Docs', children: [] }])
     expect(c.error.value).toBeNull()
   })
 
@@ -88,13 +89,14 @@ describe('useQuickActionCatalog', () => {
     expect(c.actions.value.map((a) => a.id)).toEqual(['a2'])
   })
 
-  it('persist() PUTs the given list and updates local state from the response', async () => {
+  it('persist() PUTs actions + menus and updates local state from the response', async () => {
     stubApi({})
     const c = useQuickActionCatalog({ getProjectId: () => null })
-    const ok = await c.persist([draft({ id: 'a1' })])
+    const ok = await c.persist([draft({ id: 'a1' })], [{ id: 'docs', label: 'Docs', children: [] }])
 
     expect(ok).toBe(true)
     expect(c.actions.value.map((a) => a.id)).toEqual(['a1'])
+    expect(c.menus.value).toEqual([{ id: 'docs', label: 'Docs', children: [] }])
     expect(c.error.value).toBeNull()
   })
 

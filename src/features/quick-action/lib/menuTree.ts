@@ -1,4 +1,4 @@
-import type { ArtifactMenuNode } from './menuTypes'
+import type { ArtifactMenuNode } from '../../../../shared/schemas/artifactAction'
 
 export type MenuGroupOption = { id: string; label: string; depth: number }
 

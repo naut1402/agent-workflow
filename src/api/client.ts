@@ -171,25 +171,29 @@ export async function saveArtifact(
 }
 
 export async function fetchArtifactActions(artifact: string, projectId?: string, attach?: string) {
+  // Catalog is dashboard-global; `project` is unused for GET but kept optional
+  // for callers that still pass it (harmless qs).
   const r = await apiFetch(`/api/artifact-actions${qs({ artifact, project: projectId, attach })}`)
   if (!r.ok) throw new Error(`/api/artifact-actions → ${r.status}`)
   return r.json()
 }
 
 // Full catalog (all fields, no `artifact` filter) — used by the QuickAction
-// CRUD panel to list/edit every action.
-export async function fetchArtifactActionsCatalog(projectId?: string) {
-  const r = await apiFetch(`/api/artifact-actions${qs({ project: projectId })}`)
+// CRUD panel to list/edit every action. Dashboard-global (no project qs).
+export async function fetchArtifactActionsCatalog() {
+  const r = await apiFetch('/api/artifact-actions')
   if (!r.ok) throw new Error(`/api/artifact-actions → ${r.status}`)
   return r.json()
 }
 
 // Full-catalog replace (create/edit/delete all funnel through one PUT).
-export async function saveArtifactActionsCatalog(
-  file: { version: number; actions: unknown[] },
-  projectId?: string,
-) {
-  const r = await apiFetch(`/api/artifact-actions${qs({ project: projectId })}`, {
+// Includes nested `menus`. Dashboard-global under `~/.dev-team-dashboard/`.
+export async function saveArtifactActionsCatalog(file: {
+  version: number
+  actions: unknown[]
+  menus?: unknown[]
+}) {
+  const r = await apiFetch('/api/artifact-actions', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(file),

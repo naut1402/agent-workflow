@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { fetchArtifactActionsCatalog, saveArtifactActionsCatalog } from '../../../api'
 import { i18n } from '../../../shared/i18n'
+import type { ArtifactMenuNode } from '../../../../shared/schemas/artifactAction'
 
 // Plain (non-component) module → resolve strings via the app i18n singleton
 // rather than useI18n(). `t` reflects the active locale at call time.
@@ -12,6 +13,8 @@ const t = i18n.global.t
 // via `PUT /api/artifact-actions` (full-catalog replace — the server is the
 // schema source of truth, this composable only does cheap client-side
 // uniqueness/required-field checks before sending).
+// Catalog scope is dashboard-global: `~/.dev-team-dashboard/artifact-actions.yaml`
+// (actions + nested menus), shared across projects — same home as runners.
 
 export interface QuickActionDraft {
   id: string
@@ -31,9 +34,10 @@ export interface QuickActionDraft {
 
 export type UpsertResult = { ok: true } | { ok: false; error: string }
 
-export function useQuickActionCatalog(opts: { getProjectId: () => string | null }) {
+export function useQuickActionCatalog(_opts?: { getProjectId?: () => string | null }) {
   const version = ref(1)
   const actions = ref<QuickActionDraft[]>([])
+  const menus = ref<ArtifactMenuNode[]>([])
   const loading = ref(false)
   const saving = ref(false)
   const error = ref<string | null>(null)
@@ -42,9 +46,10 @@ export function useQuickActionCatalog(opts: { getProjectId: () => string | null 
     loading.value = true
     error.value = null
     try {
-      const res = await fetchArtifactActionsCatalog(opts.getProjectId() ?? undefined)
+      const res = await fetchArtifactActionsCatalog()
       version.value = typeof res?.version === 'number' ? res.version : 1
       actions.value = Array.isArray(res?.actions) ? res.actions : []
+      menus.value = Array.isArray(res?.menus) ? res.menus : []
     } catch (e: any) {
       error.value = String(e?.message || e)
     } finally {
@@ -52,15 +57,22 @@ export function useQuickActionCatalog(opts: { getProjectId: () => string | null 
     }
   }
 
-  async function persist(next: QuickActionDraft[]): Promise<boolean> {
+  async function persist(
+    nextActions?: QuickActionDraft[],
+    nextMenus?: ArtifactMenuNode[],
+  ): Promise<boolean> {
     saving.value = true
     error.value = null
+    const actionsToSave = nextActions ?? actions.value
+    const menusToSave = nextMenus ?? menus.value
     try {
-      const res = await saveArtifactActionsCatalog(
-        { version: version.value, actions: next },
-        opts.getProjectId() ?? undefined,
-      )
-      actions.value = Array.isArray(res?.actions) ? res.actions : next
+      const res = await saveArtifactActionsCatalog({
+        version: version.value,
+        actions: actionsToSave,
+        menus: menusToSave,
+      })
+      actions.value = Array.isArray(res?.actions) ? res.actions : actionsToSave
+      menus.value = Array.isArray(res?.menus) ? res.menus : menusToSave
       return true
     } catch (e: any) {
       error.value = String(e?.message || e)
@@ -94,5 +106,5 @@ export function useQuickActionCatalog(opts: { getProjectId: () => string | null 
     actions.value = actions.value.filter((a) => a.id !== id)
   }
 
-  return { version, actions, loading, saving, error, load, persist, upsert, remove }
+  return { version, actions, menus, loading, saving, error, load, persist, upsert, remove }
 }
