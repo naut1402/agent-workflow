@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
 import { useNotifications } from '@/features/notifications/composables/useNotifications'
+import { useAppSettings } from '@/shared/composables/useAppSettings'
+
+vi.mock('@/features/notifications/lib/sound', () => ({ playNotificationSound: vi.fn() }))
+vi.mock('@/features/notifications/lib/browserNotification', () => ({ sendBrowserNotification: vi.fn() }))
+
+import { playNotificationSound } from '@/features/notifications/lib/sound'
+import { sendBrowserNotification } from '@/features/notifications/lib/browserNotification'
 
 function makeStorage() {
   const store = new Map<string, string>()
@@ -18,6 +25,8 @@ function makeStorage() {
 
 beforeEach(() => {
   vi.stubGlobal('localStorage', makeStorage())
+  useAppSettings().load() // reset the singleton settings store to {} (fresh storage)
+  vi.clearAllMocks()
 })
 
 afterEach(() => {
@@ -27,12 +36,11 @@ afterEach(() => {
 describe('useNotifications', () => {
   it('notifies only on the false→true transition, not on repeated polls', async () => {
     const tasks = ref<any[]>([{ task_id: 't1', hitl_pending: false, has_qa: false }])
-    const { history, toasts } = useNotifications(tasks)
+    const { history } = useNotifications(tasks)
 
     tasks.value = [{ task_id: 't1', hitl_pending: 'implement', has_qa: false }]
     await nextTick()
     expect(history.value).toHaveLength(1)
-    expect(toasts.value).toHaveLength(1)
     expect(history.value[0]).toMatchObject({ id: 't1:hitl_pending', taskId: 't1', kind: 'hitl_pending', detail: 'implement', read: false })
 
     // Same flag still true on the next poll tick — must not re-notify.
@@ -53,9 +61,9 @@ describe('useNotifications', () => {
     expect(history.value.map((e) => e.id).sort()).toEqual(['t1:hitl_pending', 't1:qa_ready'])
   })
 
-  it('markRead / markAllRead update unreadCount and clear matching toasts', async () => {
+  it('markRead / markAllRead update unreadCount', async () => {
     const tasks = ref<any[]>([{ task_id: 't1', hitl_pending: false, has_qa: false }])
-    const { history, toasts, unreadCount, markRead, markAllRead } = useNotifications(tasks)
+    const { history, unreadCount, markRead, markAllRead } = useNotifications(tasks)
 
     tasks.value = [{ task_id: 't1', hitl_pending: 'implement', has_qa: true }]
     await nextTick()
@@ -63,11 +71,10 @@ describe('useNotifications', () => {
 
     markRead('t1:hitl_pending')
     expect(unreadCount.value).toBe(1)
-    expect(toasts.value.find((t) => t.id === 't1:hitl_pending')).toBeUndefined()
+    expect(history.value.find((e) => e.id === 't1:hitl_pending')?.read).toBe(true)
 
     markAllRead()
     expect(unreadCount.value).toBe(0)
-    expect(toasts.value).toHaveLength(0)
   })
 
   it('caps history length at 50', async () => {
@@ -95,7 +102,70 @@ describe('useNotifications', () => {
     await nextTick()
 
     expect(second.history.value[0]).toMatchObject({ id: 't1:hitl_pending', read: true })
-    expect(second.toasts.value).toHaveLength(0)
     expect(second.unreadCount.value).toBe(0)
+  })
+
+  it('respects the master notificationsEnabled switch', async () => {
+    useAppSettings().update({ notificationsEnabled: false })
+    const tasks = ref<any[]>([{ task_id: 't1', hitl_pending: false, has_qa: false }])
+    const { history } = useNotifications(tasks)
+
+    tasks.value = [{ task_id: 't1', hitl_pending: 'implement', has_qa: true }]
+    await nextTick()
+    expect(history.value).toHaveLength(0)
+  })
+
+  it('respects per-event-kind toggles independently', async () => {
+    useAppSettings().update({ notifyQaReady: false })
+    const tasks = ref<any[]>([{ task_id: 't1', hitl_pending: false, has_qa: false }])
+    const { history } = useNotifications(tasks)
+
+    tasks.value = [{ task_id: 't1', hitl_pending: 'implement', has_qa: true }]
+    await nextTick()
+
+    expect(history.value.map((e) => e.kind)).toEqual(['hitl_pending'])
+  })
+
+  it('sends a browser notification only when notifyBrowserEnabled is on', async () => {
+    useAppSettings().update({ notifyBrowserEnabled: true })
+    const tasks = ref<any[]>([{ task_id: 't1', hitl_pending: false, has_qa: false }])
+    useNotifications(tasks)
+
+    tasks.value = [{ task_id: 't1', hitl_pending: 'implement', has_qa: false }]
+    await nextTick()
+
+    expect(sendBrowserNotification).toHaveBeenCalledTimes(1)
+    expect(sendBrowserNotification).toHaveBeenCalledWith('t1:hitl_pending', expect.any(String))
+  })
+
+  it('does not send a browser notification when the setting is off', async () => {
+    const tasks = ref<any[]>([{ task_id: 't1', hitl_pending: false, has_qa: false }])
+    useNotifications(tasks)
+
+    tasks.value = [{ task_id: 't1', hitl_pending: 'implement', has_qa: false }]
+    await nextTick()
+
+    expect(sendBrowserNotification).not.toHaveBeenCalled()
+  })
+
+  it('plays a sound only when notifySoundEnabled is on', async () => {
+    useAppSettings().update({ notifySoundEnabled: true })
+    const tasks = ref<any[]>([{ task_id: 't1', hitl_pending: false, has_qa: false }])
+    useNotifications(tasks)
+
+    tasks.value = [{ task_id: 't1', hitl_pending: 'implement', has_qa: false }]
+    await nextTick()
+
+    expect(playNotificationSound).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not play a sound when the setting is off', async () => {
+    const tasks = ref<any[]>([{ task_id: 't1', hitl_pending: false, has_qa: false }])
+    useNotifications(tasks)
+
+    tasks.value = [{ task_id: 't1', hitl_pending: 'implement', has_qa: false }]
+    await nextTick()
+
+    expect(playNotificationSound).not.toHaveBeenCalled()
   })
 })

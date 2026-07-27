@@ -6,10 +6,9 @@ export const notifications = {
     empty: 'No notifications yet.',
     markAllRead: 'Mark all read',
   },
-  toast: {
+  message: {
     hitlPending: 'Task {taskId} is waiting for approval (HITL)',
     qaReady: 'Task {taskId} has QA ready',
-    close: 'Dismiss notification',
   },
   flag: {
     unread: 'Unread',

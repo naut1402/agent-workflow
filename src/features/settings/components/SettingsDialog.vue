@@ -9,6 +9,11 @@ import {
   resolveCollapseAppSidebarOnOutside,
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
+  resolveNotificationsEnabled,
+  resolveNotifyBrowserEnabled,
+  resolveNotifyHitlPending,
+  resolveNotifyQaReady,
+  resolveNotifySoundEnabled,
   resolveThemePreference,
   type ThemePreference,
 } from '../../../../shared/schemas/appSettings'
@@ -28,13 +33,14 @@ const { locale, setLocale } = useLocale()
 /** Optional: App.vue provides this so scan can refresh the project list. */
 const reloadProjects = inject<(() => void | Promise<void>) | undefined>('reloadProjects', undefined)
 
-type SettingsGroupId = 'general' | 'projects'
+type SettingsGroupId = 'general' | 'projects' | 'notifications'
 
 const selectedGroup = ref<SettingsGroupId>('general')
 
 const GROUPS: { id: SettingsGroupId; labelKey: string }[] = [
   { id: 'general', labelKey: 'settings.groups.general' },
   { id: 'projects', labelKey: 'settings.groups.projects' },
+  { id: 'notifications', labelKey: 'settings.groups.notifications' },
 ]
 
 const autoscanInfoOpen = ref(false)
@@ -86,6 +92,47 @@ function toggleCollapseMonitorSubSidebarOnOutside() {
   update({
     collapseMonitorSubSidebarOnOutside: !collapseMonitorSubSidebarOnOutside.value,
   })
+}
+
+// ── Notifications ────────────────────────────────────────────────────────────
+
+const notificationsEnabled = computed(() => resolveNotificationsEnabled(settings.value))
+const notifyHitlPending = computed(() => resolveNotifyHitlPending(settings.value))
+const notifyQaReady = computed(() => resolveNotifyQaReady(settings.value))
+const notifyBrowserEnabled = computed(() => resolveNotifyBrowserEnabled(settings.value))
+const notifySoundEnabled = computed(() => resolveNotifySoundEnabled(settings.value))
+const notifyBrowserPermissionErr = ref(false)
+
+function toggleNotificationsEnabled() {
+  update({ notificationsEnabled: !notificationsEnabled.value })
+}
+
+function toggleNotifyHitlPending() {
+  update({ notifyHitlPending: !notifyHitlPending.value })
+}
+
+function toggleNotifyQaReady() {
+  update({ notifyQaReady: !notifyQaReady.value })
+}
+
+async function toggleNotifyBrowserEnabled() {
+  notifyBrowserPermissionErr.value = false
+  if (notifyBrowserEnabled.value) {
+    update({ notifyBrowserEnabled: false })
+    return
+  }
+  if (typeof Notification === 'undefined') return
+  const permission =
+    Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
+  if (permission === 'granted') {
+    update({ notifyBrowserEnabled: true })
+  } else {
+    notifyBrowserPermissionErr.value = true
+  }
+}
+
+function toggleNotifySoundEnabled() {
+  update({ notifySoundEnabled: !notifySoundEnabled.value })
 }
 
 // ── Autoscan (server-backed) ─────────────────────────────────────────────────
@@ -497,6 +544,69 @@ onUnmounted(() => {
                 </div>
                 <p v-if="autoscanMsg" class="settings-autoscan-msg">{{ autoscanMsg }}</p>
                 <p v-if="autoscanErr" class="settings-autoscan-err">⚠ {{ autoscanErr }}</p>
+              </section>
+            </template>
+
+            <template v-else-if="selectedGroup === 'notifications'">
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.notifications.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.notifications.desc') }}</p>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="notificationsEnabled"
+                    @change="toggleNotificationsEnabled"
+                  />
+                  {{ t('settings.notifications.enabled') }}
+                </label>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.notifications.events.title') }}</h3>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="notifyHitlPending"
+                    :disabled="!notificationsEnabled"
+                    @change="toggleNotifyHitlPending"
+                  />
+                  {{ t('settings.notifications.events.hitlPending') }}
+                </label>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="notifyQaReady"
+                    :disabled="!notificationsEnabled"
+                    @change="toggleNotifyQaReady"
+                  />
+                  {{ t('settings.notifications.events.qaReady') }}
+                </label>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.notifications.browser.title') }}</h3>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="notifyBrowserEnabled"
+                    :disabled="!notificationsEnabled"
+                    @change="toggleNotifyBrowserEnabled"
+                  />
+                  {{ t('settings.notifications.browser.enabled') }}
+                </label>
+                <p v-if="notifyBrowserPermissionErr" class="settings-autoscan-err">
+                  ⚠ {{ t('settings.notifications.browser.permissionDenied') }}
+                </p>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.notifications.sound.title') }}</h3>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="notifySoundEnabled"
+                    :disabled="!notificationsEnabled"
+                    @change="toggleNotifySoundEnabled"
+                  />
+                  {{ t('settings.notifications.sound.enabled') }}
+                </label>
               </section>
             </template>
           </div>

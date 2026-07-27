@@ -5,6 +5,7 @@ export const settings = {
   groups: {
     general: 'General',
     projects: 'Projects',
+    notifications: 'Notifications',
   },
   theme: {
     title: 'Appearance',
@@ -54,5 +55,24 @@ export const settings = {
     resultNone: 'No new projects found.',
     pathRequired: 'Enter an absolute path.',
     loadError: 'Could not load autoscan config.',
+  },
+  notifications: {
+    title: 'Notifications',
+    desc: 'Turn notifications on/off and pick which events you want to receive.',
+    enabled: 'Enable notifications',
+    events: {
+      title: 'Event types',
+      hitlPending: 'HITL pending',
+      qaReady: 'QA ready',
+    },
+    browser: {
+      title: 'Browser notifications',
+      enabled: 'Enable native browser notifications',
+      permissionDenied: 'The browser denied notification permission — grant it in your browser settings.',
+    },
+    sound: {
+      title: 'Sound',
+      enabled: 'Play a sound on new notifications',
+    },
   },
 }

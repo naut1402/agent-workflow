@@ -1,9 +1,19 @@
 import { type Ref, computed, ref, watch } from 'vue'
+import { i18n } from '../../../shared/i18n'
+import { useAppSettings } from '../../../shared/composables/useAppSettings'
+import {
+  resolveNotificationsEnabled,
+  resolveNotifyBrowserEnabled,
+  resolveNotifyHitlPending,
+  resolveNotifyQaReady,
+  resolveNotifySoundEnabled,
+} from '../../../../shared/schemas/appSettings'
 import type { NotificationEvent, NotificationKind } from '../lib/notificationTypes'
+import { sendBrowserNotification } from '../lib/browserNotification'
+import { playNotificationSound } from '../lib/sound'
 
 const READ_KEY = 'dashboard.notifications.read'
 const HISTORY_CAP = 50
-const TOAST_TTL_MS = 6000
 
 function loadReadIds(): Set<string> {
   try {
@@ -23,21 +33,30 @@ function saveReadIds(ids: Set<string>) {
   }
 }
 
+// Plain (non-component) composable → resolve strings via the app i18n
+// singleton (see useQuickActionCatalog.ts) rather than useI18n(), since this
+// is also called from unit tests without a mounted component/i18n plugin.
+const t = i18n.global.t
+
 /**
  * Derives HITL-pending / QA-ready notifications from the polled `tasks` list
  * (no backend endpoint — both orchestrator- and dashboard-run tasks already
  * surface these flags through `.dev-state/<id>.json` via `/api/tasks`).
  * Only edge transitions (flag flips to true) produce a NotificationEvent, so
  * a task that stays `hitl_pending` across many poll ticks doesn't re-notify.
+ * Respects the user's notification settings (master switch, per-event-kind
+ * opt-out, native browser notification, sound).
  */
 export function useNotifications(tasks: Ref<any[]>) {
+  const { settings } = useAppSettings()
   const readIds = loadReadIds()
   const history = ref<NotificationEvent[]>([])
-  const toasts = ref<NotificationEvent[]>([])
   let prevFlags = new Map<string, { hitl: boolean; qa: boolean }>()
 
-  function dismissToast(id: string) {
-    toasts.value = toasts.value.filter((e) => e.id !== id)
+  function message(kind: NotificationKind, taskId: string) {
+    return kind === 'qa_ready'
+      ? t('notifications.message.qaReady', { taskId })
+      : t('notifications.message.hitlPending', { taskId })
   }
 
   function pushEvent(taskId: string, kind: NotificationKind, detail: string | null) {
@@ -45,27 +64,29 @@ export function useNotifications(tasks: Ref<any[]>) {
     const read = readIds.has(id)
     const event: NotificationEvent = { id, taskId, kind, detail, createdAt: new Date().toISOString(), read }
     history.value = [event, ...history.value.filter((e) => e.id !== id)].slice(0, HISTORY_CAP)
-    if (!read) {
-      toasts.value = [...toasts.value, event]
-      setTimeout(() => dismissToast(id), TOAST_TTL_MS)
-    }
+    if (read) return
+    if (resolveNotifyBrowserEnabled(settings.value)) sendBrowserNotification(id, message(kind, taskId))
+    if (resolveNotifySoundEnabled(settings.value)) playNotificationSound()
   }
 
   watch(
     tasks,
     (list) => {
+      const notificationsEnabled = resolveNotificationsEnabled(settings.value)
+      const notifyHitl = resolveNotifyHitlPending(settings.value)
+      const notifyQa = resolveNotifyQaReady(settings.value)
       const nextFlags = new Map<string, { hitl: boolean; qa: boolean }>()
-      for (const t of list || []) {
-        const taskId = t.task_id
+      for (const task of list || []) {
+        const taskId = task.task_id
         if (!taskId) continue
-        const hitl = Boolean(t.hitl_pending)
-        const qa = Boolean(t.has_qa)
+        const hitl = Boolean(task.hitl_pending)
+        const qa = Boolean(task.has_qa)
         nextFlags.set(taskId, { hitl, qa })
         const prev = prevFlags.get(taskId)
-        if (hitl && !prev?.hitl) {
-          pushEvent(taskId, 'hitl_pending', typeof t.hitl_pending === 'string' ? t.hitl_pending : null)
+        if (hitl && !prev?.hitl && notificationsEnabled && notifyHitl) {
+          pushEvent(taskId, 'hitl_pending', typeof task.hitl_pending === 'string' ? task.hitl_pending : null)
         }
-        if (qa && !prev?.qa) {
+        if (qa && !prev?.qa && notificationsEnabled && notifyQa) {
           pushEvent(taskId, 'qa_ready', null)
         }
       }
@@ -85,15 +106,13 @@ export function useNotifications(tasks: Ref<any[]>) {
       readIds.add(id)
       saveReadIds(readIds)
     }
-    dismissToast(id)
   }
 
   function markAllRead() {
     history.value = history.value.map((e) => (e.read ? e : { ...e, read: true }))
     for (const e of history.value) readIds.add(e.id)
     saveReadIds(readIds)
-    toasts.value = []
   }
 
-  return { history, toasts, unreadCount, dismissToast, markRead, markAllRead }
+  return { history, unreadCount, markRead, markAllRead }
 }

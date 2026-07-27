@@ -9,7 +9,7 @@ import { resolveCollapseAppSidebarOnOutside } from '../shared/schemas/appSetting
 import { resolveAutoscanIntervalMs } from '../shared/schemas/autoscan'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
 import { useNotifications } from './features/notifications/composables/useNotifications'
-import ToastHost from './features/notifications/components/ToastHost.vue'
+import FloatingNotificationIcon from './features/notifications/components/FloatingNotificationIcon.vue'
 import NotificationBell from './features/notifications/components/NotificationBell.vue'
 import MonitorLayout from './features/monitor/components/MonitorLayout.vue'
 import PipelineEditor from './features/pipeline-editor/components/PipelineEditor.vue'
@@ -75,7 +75,7 @@ const selected = computed(
 // HITL-pending / QA-ready notifications, derived from the same polled `tasks`
 // list — no separate transport needed, orchestrator- and dashboard-run tasks
 // both surface these flags through `.dev-state/<id>.json` via `/api/tasks`.
-const { toasts, history, unreadCount, dismissToast, markRead, markAllRead } = useNotifications(tasks)
+const { history, unreadCount, markRead, markAllRead } = useNotifications(tasks)
 
 function onNotificationSelect(event: { id: string; taskId: string }) {
   markRead(event.id)
@@ -407,7 +407,12 @@ onUnmounted(() => {
       <AgentEditor />
     </main>
 
-    <ToastHost :toasts="toasts" @dismiss="dismissToast" @select="onNotificationSelect" />
+    <FloatingNotificationIcon
+      :unread-count="unreadCount"
+      :history="history"
+      @mark-all-read="markAllRead"
+      @select="onNotificationSelect"
+    />
 
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
     <CreateTaskDialog

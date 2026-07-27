@@ -32,7 +32,7 @@ describe('NotificationBell', () => {
 
     await wrapper.find('.bell-btn').trigger('click')
     expect(wrapper.find('.bell-dropdown').exists()).toBe(true)
-    expect(wrapper.findAll('.bell-item')).toHaveLength(1)
+    expect(wrapper.findAll('.notification-list-item')).toHaveLength(1)
   })
 
   it('emits select when an item is clicked and markAllRead on the header button', async () => {
@@ -41,17 +41,17 @@ describe('NotificationBell', () => {
     })
     await wrapper.find('.bell-btn').trigger('click')
 
-    await wrapper.find('.bell-item').trigger('click')
+    await wrapper.find('.notification-list-item').trigger('click')
     expect(wrapper.emitted('select')?.[0]?.[0]).toMatchObject({ id: 't1:qa_ready' })
 
-    await wrapper.find('.bell-mark-all').trigger('click')
+    await wrapper.find('.notification-list-mark-all').trigger('click')
     expect(wrapper.emitted('markAllRead')).toHaveLength(1)
   })
 
   it('shows the empty state when history is empty', async () => {
     const wrapper = mountWithI18n(NotificationBell, { props: { unreadCount: 0, history: [] } })
     await wrapper.find('.bell-btn').trigger('click')
-    expect(wrapper.find('.bell-empty').exists()).toBe(true)
-    expect(wrapper.find('.bell-mark-all').exists()).toBe(false)
+    expect(wrapper.find('.notification-list-empty').exists()).toBe(true)
+    expect(wrapper.find('.notification-list-mark-all').exists()).toBe(false)
   })
 })

@@ -1,5 +1,6 @@
-// Notifications feature — bell dropdown (sidebar-footer) + transient toast
-// stack (global overlay, visible across all shell modes).
+// Notifications feature — bell dropdown (sidebar-footer) + floating icon
+// (global overlay, top-left, visible across all shell modes while unread).
+// `.notification-list*` is the shared dropdown-content styling used by both.
 
 .notification-bell {
   position: relative;
@@ -34,7 +35,55 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   z-index: 20;
 }
-.bell-dropdown-header {
+
+.floating-notification {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 50;
+}
+.floating-notification-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+.floating-notification-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+.floating-notification-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.notification-list-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -43,7 +92,7 @@
   font-size: 12px;
   color: var(--text);
 }
-.bell-mark-all {
+.notification-list-mark-all {
   background: none;
   border: none;
   color: var(--accent);
@@ -51,17 +100,17 @@
   cursor: pointer;
   padding: 0;
 }
-.bell-empty {
+.notification-list-empty {
   padding: 12px 10px;
   font-size: 12px;
   color: var(--muted);
 }
-.bell-list {
+.notification-list-items {
   list-style: none;
   margin: 0;
   padding: 0;
 }
-.bell-item {
+.notification-list-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -71,55 +120,18 @@
   cursor: pointer;
   border-bottom: 1px solid var(--border);
 }
-.bell-item:last-child { border-bottom: none; }
-.bell-item:hover { background: var(--hover-surface); }
-.bell-item.unread { background: var(--accent-dim); }
-.bell-item-message {
+.notification-list-item:last-child { border-bottom: none; }
+.notification-list-item:hover { background: var(--hover-surface); }
+.notification-list-item.unread { background: var(--accent-dim); }
+.notification-list-item-message {
   flex: 1;
   min-width: 0;
   overflow-wrap: break-word;
 }
-.bell-item-dot {
+.notification-list-item-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
   flex-shrink: 0;
 }
-
-.toast-host {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 320px;
-}
-.toast-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text);
-}
-.toast-item.qa_ready { border-left: 3px solid var(--done); }
-.toast-item.hitl_pending { border-left: 3px solid var(--waiting); }
-.toast-glyph { flex-shrink: 0; }
-.toast-message { flex: 1; min-width: 0; overflow-wrap: break-word; }
-.toast-close {
-  background: none;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-}
-.toast-close:hover { color: var(--text); }
