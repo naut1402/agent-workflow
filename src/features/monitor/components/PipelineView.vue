@@ -2,10 +2,18 @@
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
-import { ref, computed, watch, markRaw } from 'vue'
+import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { phasesFromPipeline, phaseStatus, fetchFlowProfile, saveFlowProfile, patchTaskState } from '../../../api'
+import {
+  phasesFromPipeline,
+  phaseStatus,
+  fetchFlowProfile,
+  saveFlowProfile,
+  patchTaskState,
+  runPipelineStep,
+  fetchJob,
+} from '../../../api'
 import PipelineNode from './PipelineNode.vue'
 
 const props = defineProps({
@@ -66,6 +74,7 @@ const nodes = computed(() =>
         hitl: p.hitl,
         // Q&A badge only on the phase that's currently active (the one that created qa.md)
         qa_count: isActivePhase ? (props.task.qa_count ?? 0) : 0,
+        running: runningStepId.value === p.key,
       },
     }
   }),
@@ -136,9 +145,117 @@ watch(
   },
 )
 
+// Run-step (click a node to run/chain to it)
+const runningStepId = ref<string | null>(null)
+const runError = ref('')
+const runToast = ref('')
+let runPollTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearRunPoll() {
+  if (runPollTimer != null) {
+    clearTimeout(runPollTimer)
+    runPollTimer = null
+  }
+}
+
+watch(() => props.task.task_id, () => {
+  clearRunPoll()
+  runningStepId.value = null
+  runError.value = ''
+})
+
+onBeforeUnmount(clearRunPoll)
+
+async function pollRunStepJob(jobId: string) {
+  clearRunPoll()
+  try {
+    const { job } = await fetchJob(jobId)
+    if (job?.status === 'succeeded') {
+      runningStepId.value = null
+      runToast.value = t('monitor.pipeline.stepSucceeded')
+      emit('hitl-action')
+      setTimeout(() => { runToast.value = '' }, 4000)
+      return
+    }
+    if (job?.status === 'failed' || job?.status === 'cancelled') {
+      runningStepId.value = null
+      runError.value = job.error ? String(job.error) : t('monitor.pipeline.stepFailed')
+      emit('hitl-action')
+      return
+    }
+    runPollTimer = setTimeout(() => pollRunStepJob(jobId), 2000)
+  } catch (e: any) {
+    runningStepId.value = null
+    runError.value = String(e.message || e)
+  }
+}
+
+async function runStep(node: { id: string }) {
+  if (runningStepId.value) return
+  runError.value = ''
+  runningStepId.value = props.task.current_phase
+  try {
+    const { job } = await runPipelineStep(
+      props.task.task_id,
+      { targetStepId: node.id },
+      props.projectId ?? undefined,
+    )
+    runToast.value = t('monitor.pipeline.stepStarted')
+    setTimeout(() => { runToast.value = '' }, 3000)
+    pollRunStepJob(job.id)
+  } catch (e: any) {
+    runningStepId.value = null
+    if (e?.status === 409) {
+      runError.value = t('monitor.pipeline.stepAlreadyRunning')
+    } else {
+      runError.value = String(e.message || e)
+    }
+  }
+}
+
+// Run confirmation (click active/pending node → confirm before submitting).
+// The dialog is framed around the clicked node ("run this phase"), so the
+// overwrite warning checks that same node's own artifact — the one that
+// would actually be rewritten if/when the run reaches it. Other phases in
+// between (current_phase or intermediate chain steps) are a different node's
+// concern and are not this dialog's business.
+const runConfirmOpen = ref(false)
+const runConfirmNode = ref<{ id: string; label: string } | null>(null)
+const runConfirmOverwrite = ref<string[]>([])
+
+function openRunConfirm(node: { id: string; label: string }) {
+  runConfirmNode.value = node
+  const clickedPhase = phases.value.find((p) => p.key === node.id)
+  runConfirmOverwrite.value =
+    clickedPhase?.artifact && props.task.artifacts?.[clickedPhase.artifact]?.exists
+      ? [clickedPhase.artifact]
+      : []
+  runConfirmOpen.value = true
+}
+
+function cancelRunConfirm() {
+  runConfirmOpen.value = false
+  runConfirmNode.value = null
+  runConfirmOverwrite.value = []
+}
+
+function confirmRunStep() {
+  const node = runConfirmNode.value
+  runConfirmOpen.value = false
+  runConfirmNode.value = null
+  runConfirmOverwrite.value = []
+  if (node) runStep(node)
+}
+
 function onNodeClick({ node }) {
-  if (node.data?.status !== 'waiting' || !node.data?.hitl) return
-  openHitlModal({ key: node.id, label: node.data.label, hitl: node.data.hitl })
+  if (node.data?.status === 'waiting' && node.data?.hitl) {
+    openHitlModal({ key: node.id, label: node.data.label, hitl: node.data.hitl })
+    return
+  }
+  if (node.data?.status === 'active' || node.data?.status === 'pending') {
+    if (runningStepId.value) return
+    openRunConfirm({ id: node.id, label: node.data.label })
+  }
 }
 
 async function submitHitl(action: 'approve' | 'reject') {
@@ -179,8 +296,10 @@ async function submitHitl(action: 'approve' | 'reject') {
 
 <template>
   <section class="pipeline-wrap">
-    <div v-if="hitlToast || waitingPhase" class="pipeline-toolbar">
+    <div v-if="hitlToast || runToast || runError || waitingPhase" class="pipeline-toolbar">
       <span v-if="hitlToast" class="chip chip-ok">{{ hitlToast }}</span>
+      <span v-if="runToast" class="chip chip-ok">{{ runToast }}</span>
+      <span v-if="runError" class="chip chip-err">{{ runError }}</span>
       <button
         v-if="waitingPhase"
         type="button"
@@ -240,6 +359,28 @@ async function submitHitl(action: 'approve' | 'reject') {
           <button class="btn-ghost" :disabled="hitlBusy" @click="submitHitl('reject')">{{ t('monitor.pipeline.reject') }}</button>
           <button class="btn-primary" :disabled="hitlBusy" @click="submitHitl('approve')">
             {{ hitlBusy ? t('monitor.pipeline.saving') : t('monitor.pipeline.approve') }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Run-step confirm modal -->
+  <Teleport to="body">
+    <div v-if="runConfirmOpen" class="modal-backdrop" @click.self="cancelRunConfirm">
+      <div class="modal">
+        <div class="modal-head">
+          <span>{{ t('monitor.pipeline.runConfirmHeading', { label: runConfirmNode?.label ?? '' }) }}</span>
+          <button class="modal-close" @click="cancelRunConfirm">✕</button>
+        </div>
+        <p class="modal-hint">{{ t('monitor.pipeline.runConfirmBody') }}</p>
+        <p v-if="runConfirmOverwrite.length" class="editor-error">
+          {{ t('monitor.pipeline.runConfirmOverwriteWarning', { files: runConfirmOverwrite.join(', ') }) }}
+        </p>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="cancelRunConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
+          <button class="btn-primary" @click="confirmRunStep">
+            {{ runConfirmOverwrite.length ? t('monitor.pipeline.runConfirmRunOverwrite') : t('monitor.pipeline.runConfirmRun') }}
           </button>
         </div>
       </div>

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { applyArchiveAction, applyHitlAction, writeStateAtomic } from '../../../server/tasks/state'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, writeStateAtomic } from '../../../server/tasks/state'
 
 let dirs: string[] = []
 async function tmp(): Promise<string> {
@@ -143,6 +143,84 @@ describe('applyHitlAction', () => {
     expect(result.ok).toBe(false)
     if (!('error' in result)) return
     expect(result.status).toBe(400)
+  })
+})
+
+describe('advanceStepOnJobSuccess', () => {
+  test('advances current_phase past a gate-less step', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: implementer\n  - id: reviewer\n    hitl: { mode: manual, gate_id: hitl-3 }\n`,
+      'utf8',
+    )
+    await seedTask(root, 'T10', { current_phase: 'implementer' })
+
+    const result = await advanceStepOnJobSuccess(root, 'T10', 'implementer')
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('reviewer')
+  })
+
+  test('advances to completed when the gate-less step is last', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: implementer\n  - id: pr-creator\n`,
+      'utf8',
+    )
+    await seedTask(root, 'T11', { current_phase: 'pr-creator' })
+
+    const result = await advanceStepOnJobSuccess(root, 'T11', 'pr-creator')
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('completed')
+  })
+
+  test('opens the HITL gate instead of advancing when the step has one', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'T12', { current_phase: 'investigator' })
+
+    const result = await advanceStepOnJobSuccess(root, 'T12', 'investigator')
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('investigator')
+    expect(result?.state.hitl_pending).toBe('hitl-1')
+  })
+
+  test('no-ops when a gate is already pending', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'T12b', { current_phase: 'investigator', hitl_pending: 'hitl-1' })
+
+    const result = await advanceStepOnJobSuccess(root, 'T12b', 'investigator')
+    expect(result).toBeNull()
+  })
+
+  test('no-ops when current_phase has already moved on (race)', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: implementer\n  - id: reviewer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'T13', { current_phase: 'reviewer' })
+
+    const result = await advanceStepOnJobSuccess(root, 'T13', 'implementer')
+    expect(result).toBeNull()
+  })
+
+  test('missing state file → null', async () => {
+    const root = await tmp()
+    await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+    const result = await advanceStepOnJobSuccess(root, 'T14', 'implementer')
+    expect(result).toBeNull()
   })
 })
 

@@ -4,14 +4,15 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../types.js'
 import { j, parseBody, unknownProject } from '../respond.js'
 import { resolveArtifact } from '../../../shared/sanitize.js'
-import { collectTasks, flowProfilePath, createTask } from '../../tasks/index.js'
+import { collectTasks, flowProfilePath, createTask, readState } from '../../tasks/index.js'
 import { applyArchiveAction, applyHitlAction } from '../../tasks/state.js'
 import { loadPipelineConfig } from '../../pipeline/index.js'
 import { emitAudit } from '../../logging/store.js'
 import { TaskArchivePatch, TaskStatePatch } from '../../../shared/schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from '../../../shared/schemas/taskCreate.js'
+import { RunStepRequest } from '../../../shared/schemas/runStep.js'
 import { fetchGithubIssue } from '../../github/index.js'
-import { submitJob, submitApprovalJob, findSelectionRange, extractLines } from '../../runners/index.js'
+import { submitJob, submitApprovalJob, findSelectionRange, extractLines, listJobs } from '../../runners/index.js'
 import {
   loadArtifactActions,
   loadArtifactActionsFile,
@@ -480,6 +481,82 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       },
       ...(job ? { job } : {}),
     })
+  })
+
+  // Dashboard-triggered execution of a task's current step (clicking a node on
+  // the pipeline flow). `targetStepId` opts into chaining: on each job
+  // success, jobQueue.ts advances `current_phase` past gate-less steps and
+  // keeps submitting the next one until it reaches `targetStepId`, hits a
+  // HITL gate, or a job fails. See server/tasks/state.ts (advanceStepOnJobSuccess)
+  // and server/runners/jobQueue.ts (advancePipelineStepChain).
+  app.post('/api/tasks/:id/run-step', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const id = c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return j(c, 400, { error: 'invalid task id' })
+
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
+    const parsed = RunStepRequest.safeParse(b.value)
+    if (!parsed.success) {
+      return j(c, 400, { error: 'invalid request', details: parsed.error.flatten() })
+    }
+
+    const stateFile = path.join(root, '.dev-state', `${id}.json`)
+    const read = await readState(stateFile)
+    if (!read.ok) return j(c, 404, { error: 'task not found', taskId: id })
+    const state = read.state as Record<string, unknown>
+    if (state.hitl_pending) {
+      return j(c, 400, { error: 'task is waiting for HITL approval', taskId: id })
+    }
+
+    const stepId = String(state.current_phase ?? '')
+    const pipeline = await loadPipelineConfig(root, id)
+    const step = (pipeline.steps || []).find((s: any) => s.id === stepId)
+    if (!step?.agent) {
+      return j(c, 400, { error: 'no runnable current step', taskId: id, stepId })
+    }
+
+    const existing = listJobs(50).find(
+      (j) =>
+        j.metadata?.taskId === id &&
+        (j.status === 'queued' || j.status === 'running'),
+    )
+    if (existing) return j(c, 409, { error: 'step already running', taskId: id, job: existing })
+
+    const requestFile = path.join(root, 'tasks', id, 'request.md')
+    let userPrompt: string
+    try {
+      userPrompt = await fs.readFile(requestFile, 'utf8')
+    } catch {
+      return j(c, 404, { error: 'request.md not found', taskId: id })
+    }
+
+    const body = parsed.data
+    const job = submitJob({
+      runnerId: body.runnerId ?? undefined,
+      agentRef: step.agent,
+      workspace: path.join(root, 'tasks', id),
+      userPrompt,
+      metadata: {
+        projectRoot: path.dirname(root),
+        devTeamRoot: root,
+        projectId: c.get('projectId') || undefined,
+        taskId: id,
+        pipelineStepId: stepId,
+        ...(body.targetStepId ? { chainTarget: body.targetStepId } : {}),
+      },
+    })
+
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: c.get('projectId'),
+      detail: { action: 'run-step', stepId, jobId: job.id },
+    })
+
+    return j(c, 201, { job })
   })
 
   app.post('/api/github/issue', async (c) => {

@@ -8,16 +8,30 @@ defineProps({
 
 const { t } = useI18n()
 const STATUS_ICON = { done: '✓', active: '▶', waiting: '⏸', pending: '○' }
+
+function bubbleTitle(data: Record<string, any>): string | undefined {
+  if (data.running) return t('monitor.pipelineNode.running')
+  if (data.status === 'waiting') return t('monitor.pipelineNode.clickToApprove')
+  if (data.status === 'active' || data.status === 'pending') return t('monitor.pipelineNode.clickToRun')
+  return undefined
+}
 </script>
 
 <template>
-  <div class="pnode" :class="[data.status, { 'pnode-waiting': data.status === 'waiting' }]">
+  <div
+    class="pnode"
+    :class="[
+      data.status,
+      {
+        'pnode-waiting': data.status === 'waiting',
+        'pnode-runnable': !data.running && (data.status === 'active' || data.status === 'pending'),
+        'pnode-running': data.running,
+      },
+    ]"
+  >
     <Handle type="target" :position="Position.Left" />
-    <div
-      class="pnode-bubble"
-      :title="data.status === 'waiting' ? t('monitor.pipelineNode.clickToApprove') : undefined"
-    >
-      {{ STATUS_ICON[data.status] || '○' }}
+    <div class="pnode-bubble" :title="bubbleTitle(data)">
+      {{ data.running ? '⏳' : (STATUS_ICON[data.status] || '○') }}
     </div>
     <div class="pnode-label">{{ data.label }}</div>
     <div class="pnode-sub">{{ data.status }}</div>
@@ -33,10 +47,24 @@ const STATUS_ICON = { done: '✓', active: '▶', waiting: '⏸', pending: '○'
 </template>
 
 <style scoped lang="scss">
-.pnode-waiting .pnode-bubble {
+.pnode-waiting .pnode-bubble,
+.pnode-runnable .pnode-bubble {
   cursor: pointer;
 }
-.pnode-waiting .pnode-bubble:hover {
+.pnode-waiting .pnode-bubble:hover,
+.pnode-runnable .pnode-bubble:hover {
   filter: brightness(1.15);
+}
+.pnode-running .pnode-bubble {
+  animation: pnode-running-pulse 1.2s ease-in-out infinite;
+}
+@keyframes pnode-running-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 </style>
