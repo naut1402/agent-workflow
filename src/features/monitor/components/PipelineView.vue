@@ -214,22 +214,21 @@ async function runStep(node: { id: string }) {
 }
 
 // Run confirmation (click active/pending node → confirm before submitting).
-// The overwrite warning only ever covers `current_phase`'s own artifact — that
-// is the one step guaranteed to run on this click. Steps further along a
-// chain (when clicking a future pending node) are conditional on the chain
-// actually reaching them (it can stop early at a gate or a failure), so
-// warning about their artifacts here would misattribute an overwrite risk to
-// a phase that never touches that file, or that may not even run yet.
+// The dialog is framed around the clicked node ("run this phase"), so the
+// overwrite warning checks that same node's own artifact — the one that
+// would actually be rewritten if/when the run reaches it. Other phases in
+// between (current_phase or intermediate chain steps) are a different node's
+// concern and are not this dialog's business.
 const runConfirmOpen = ref(false)
 const runConfirmNode = ref<{ id: string; label: string } | null>(null)
 const runConfirmOverwrite = ref<string[]>([])
 
 function openRunConfirm(node: { id: string; label: string }) {
   runConfirmNode.value = node
-  const currentPhase = phases.value.find((p) => p.key === props.task.current_phase)
+  const clickedPhase = phases.value.find((p) => p.key === node.id)
   runConfirmOverwrite.value =
-    currentPhase?.artifact && props.task.artifacts?.[currentPhase.artifact]?.exists
-      ? [currentPhase.artifact]
+    clickedPhase?.artifact && props.task.artifacts?.[clickedPhase.artifact]?.exists
+      ? [clickedPhase.artifact]
       : []
   runConfirmOpen.value = true
 }

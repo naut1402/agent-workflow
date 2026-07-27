@@ -112,7 +112,11 @@ describe('PipelineView — click a node to run/chain a step', () => {
     expect(runPipelineStep).toHaveBeenCalledWith('T2', { targetStepId: 'implementer' }, undefined)
   })
 
-  it('warns about overwriting an artifact that already exists for a step in the run range', async () => {
+  it('warns about overwriting the clicked node\'s own artifact when it already exists (e.g. rerunning after a HITL reject)', async () => {
+    // current_phase === the clicked node here (investigator) — the realistic
+    // case an active node still has an existing artifact: it was rejected via
+    // HITL, hitl_pending cleared, current_phase stays put, and the artifact
+    // from the earlier attempt is still on disk.
     const task = {
       task_id: 'T7',
       current_phase: 'investigator',
@@ -129,7 +133,7 @@ describe('PipelineView — click a node to run/chain a step', () => {
     expect(document.body.querySelector('.modal .btn-primary')?.textContent).toContain('Ghi đè')
   })
 
-  it('does not warn when current_phase has no existing artifact yet', async () => {
+  it('does not warn when the clicked node has no existing artifact yet', async () => {
     const task = { task_id: 'T8', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
     const w = mountPipeline(task)
     await flushPromises()
@@ -140,15 +144,16 @@ describe('PipelineView — click a node to run/chain a step', () => {
     expect(document.body.querySelector('.modal .btn-primary')?.textContent).not.toContain('Ghi đè')
   })
 
-  it('clicking a far pending node only warns about current_phase\'s own artifact, not other phases in between', async () => {
-    // current_phase = investigator (no artifact yet); design.md already exists
-    // (from an earlier run of designer, a phase this click won't itself run) —
-    // it belongs to a different phase, so it must NOT appear in the warning.
+  it('clicking a far pending node ignores another phase\'s existing artifact (e.g. current_phase\'s)', async () => {
+    // A `pending` node can never itself already have an existing artifact —
+    // phaseStatus would classify it as `done` instead (and done nodes aren't
+    // clickable) — so the only way this scenario differs from "no warning" is
+    // if some *other* phase's artifact leaked into the check. It must not.
     const task = {
-      task_id: 'T9',
+      task_id: 'T10',
       current_phase: 'investigator',
       hitl_pending: null,
-      artifacts: { 'design.md': { exists: true } },
+      artifacts: { 'investigate.md': { exists: true } },
     }
     const w = mountPipeline(task)
     await flushPromises()
@@ -157,7 +162,7 @@ describe('PipelineView — click a node to run/chain a step', () => {
     await flushPromises()
 
     expect(document.body.querySelector('.modal .btn-primary')?.textContent).not.toContain('Ghi đè')
-    expect(document.body.textContent).not.toContain('design.md')
+    expect(document.body.textContent).not.toContain('investigate.md')
   })
 
   it('clicking a waiting (HITL) node opens the approve modal instead of running', async () => {
