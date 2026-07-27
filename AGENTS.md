@@ -29,19 +29,19 @@ Chi tiết đầy đủ luồng dữ liệu, domain module, frontend: [`docs/arc
 
 ```
 agent-workflow/
-├── index.html, vite.config.js (còn .js), package.json, tsconfig.json,
-│   vitest.config.ts, playwright.config.ts, bun.lock
+├── index.html, vite.config.ts, package.json, tsconfig.json,
+│   vitest.config.ts, playwright.config.ts, eslint.config.js, bun.lock
 ├── src/        # Vue 3 frontend (SPA, feature-module theo mode)
 ├── server/     # Backend: Hono app (http/) + domain modules + registry + knowledge
 ├── shared/     # Type + helper dùng chung repo-root (Zod schemas, fs/http/…)
 ├── mcp/        # MCP stdio server (project-registry CRUD)
 ├── tests/      # unit tests mirror cây source (bun test + vitest)
 ├── test-e2e/   # @playwright/test specs + fixtures/.dev-team-agent/
-├── docs/       # Tài liệu: architecture.md; i18n.md; ui-buttons.md; history/ (sử liệu)
+├── docs/       # Tài liệu: architecture.md; i18n.md; ui-buttons.md; scss-adoption.md — không chứa evidence test / tài liệu theo task
 └── .claude/    # settings.local.json (bật MCP) + rules/ (rule project cho orchestrator)
 ```
 
-Ngoại lệ cố ý chưa chuyển `.ts`: `shared/agentMarkdown.js`, `vite.config.js`, `server/runner-cli.mjs` — ghi đúng đuôi khi tham chiếu.
+Ngoại lệ cố ý chưa chuyển `.ts`: `shared/agentMarkdown.js`, `server/runner-cli.mjs` — ghi đúng đuôi khi tham chiếu. Tooling config: `vite`/`vitest`/`playwright` dùng `.ts`; `eslint.config.js` giữ `.js` (flat config ESM, tránh loader TS).
 
 ---
 
@@ -49,7 +49,7 @@ Ngoại lệ cố ý chưa chuyển `.ts`: `shared/agentMarkdown.js`, `vite.conf
 
 ### 3.1 Ngôn ngữ & module
 
-ESM thuần (`"type": "module"`); server import core Node có tiền tố `node:`. Code mới/migrate dùng TypeScript — migration TS cơ bản đã xong, chỉ còn `shared/agentMarkdown.js` và `vite.config.js` chưa chuyển nên `tsconfig.json` vẫn giữ `allowJs: true`.
+ESM thuần (`"type": "module"`); server import core Node có tiền tố `node:`. Code mới/migrate dùng TypeScript — migration TS cơ bản đã xong, chỉ còn `shared/agentMarkdown.js` (và `server/runner-cli.mjs`) chưa chuyển nên `tsconfig.json` vẫn giữ `allowJs: true`.
 
 `tsconfig.json` hiện **chưa bật strict** (`strict: false`, `checkJs: false` toàn cục) — hướng đi là bật `strict` dần theo từng module khi module đó đã có type vững, đừng coi cả repo đã strict.
 

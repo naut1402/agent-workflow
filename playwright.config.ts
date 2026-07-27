@@ -2,9 +2,8 @@ import { defineConfig, devices } from '@playwright/test'
 import path from 'node:path'
 
 // E2E tests boot the full stack (standalone server serving the built SPA + a
-// fixture .dev-team-agent/ as DEV_TEAM_ROOT) and capture screenshots into
-// docs/<feature>-evidence/ as confirmation that each frontend refactor still
-// renders. Migrated incrementally from the legacy scripts/verify-*.mjs.
+// fixture .dev-team-agent/ as DEV_TEAM_ROOT). Screenshots go to testInfo.outputPath
+// + attach (playwright-report), not docs/.
 const PORT = Number(process.env.E2E_PORT || 4319)
 const baseURL = process.env.E2E_BASE_URL || `http://127.0.0.1:${PORT}`
 const fixtureRoot = path.resolve(process.cwd(), 'test-e2e/fixtures/project/.dev-team-agent')

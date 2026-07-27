@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { capture } from './_capture'
+import { capturePage } from './_capture'
 
 // E2E capture for the features/monitor module. Confirms the moved monitor
 // components (TaskList → file list → ArtifactPanel) still wire up after the
@@ -16,5 +16,5 @@ test('select task expands artifact list (capture)', async ({ page }, testInfo) =
   // The fixture task has investigate.md + design.md artifacts.
   await expect(page.locator('.file-item .file-name', { hasText: 'investigate.md' })).toBeVisible()
 
-  await capture(page, testInfo, 'monitor-task-expanded')
+  await capturePage(page, testInfo, 'monitor-task-expanded')
 })
