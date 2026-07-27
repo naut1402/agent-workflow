@@ -92,6 +92,8 @@ Domain module nhận `ctx`/`root`, trả data thuần; tầng HTTP mới biết 
 | `runner` | `src/features/runner/` | `RunnerConfigPanel`, `ConnectionDialog` |
 | `logs` (Nhật ký) | `src/features/logs/` | `LogsPanel`, `TaskTimeline`; composable `useTaskTimeline.ts` |
 
+- `src/features/notifications/` — không phải mode, mount xuyên suốt cả 6 mode trong `App.vue` (bell trong `sidebar-footer`, `FloatingNotificationIcon` overlay góc trên-trái toàn cục, ẩn khi `unreadCount` về 0). Badge cho HITL-pending/QA-ready **client-only**, suy ra từ chính `tasks` ref đã poll qua `useTaskPolling.ts` (diff `hitl_pending`/`has_qa` qua các lần poll để bắt cạnh chuyển false→true) — không có endpoint/schema backend riêng, vì `.dev-state/<task-id>.json` đã phản ánh đồng nhất cả task chạy từ orchestrator lẫn task chạy từ runner của dashboard (`server/runners/jobQueue.ts`). Trạng thái đã đọc lưu `localStorage`. Composable `useNotifications.ts` đọc `shared/schemas/appSettings.ts` (`notificationsEnabled`, `notifyHitlPending`, `notifyQaReady`, `notifyBrowserEnabled`, `notifySoundEnabled` — cấu hình ở Settings › Thông báo) để bật/tắt notify theo loại sự kiện, browser `Notification` API (`lib/browserNotification.ts`), và âm thanh Web Audio API (`lib/sound.ts`). Component dropdown dùng chung `components/NotificationList.vue`.
+
 ### 3.1 API layer
 
 - `src/api/{client.ts, phase.ts, index.ts}` — wrapper `fetch` mỏng cho mọi endpoint + query builder `?project=`.

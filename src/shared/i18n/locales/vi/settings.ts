@@ -6,6 +6,7 @@ export const settings = {
   groups: {
     general: 'Chung',
     projects: 'Projects',
+    notifications: 'Thông báo',
   },
   theme: {
     title: 'Giao diện',
@@ -55,5 +56,24 @@ export const settings = {
     resultNone: 'Không tìm thấy project mới.',
     pathRequired: 'Nhập đường dẫn tuyệt đối.',
     loadError: 'Không tải được cấu hình autoscan.',
+  },
+  notifications: {
+    title: 'Thông báo',
+    desc: 'Bật/tắt thông báo và chọn loại sự kiện muốn nhận.',
+    enabled: 'Bật thông báo',
+    events: {
+      title: 'Loại sự kiện',
+      hitlPending: 'HITL đang chờ duyệt',
+      qaReady: 'QA đã sẵn sàng',
+    },
+    browser: {
+      title: 'Thông báo trình duyệt',
+      enabled: 'Bật thông báo native của trình duyệt',
+      permissionDenied: 'Trình duyệt từ chối quyền thông báo — vào cài đặt trình duyệt để cấp quyền.',
+    },
+    sound: {
+      title: 'Âm thanh',
+      enabled: 'Phát âm thanh khi có thông báo mới',
+    },
   },
 }

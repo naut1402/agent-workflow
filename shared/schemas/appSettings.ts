@@ -14,6 +14,11 @@ export const AppSettingsSchema = z
     collapseTaskExpandOnOutside: z.boolean().optional(),
     collapseAppSidebarOnOutside: z.boolean().optional(),
     collapseMonitorSubSidebarOnOutside: z.boolean().optional(),
+    notificationsEnabled: z.boolean().optional(),
+    notifyHitlPending: z.boolean().optional(),
+    notifyQaReady: z.boolean().optional(),
+    notifyBrowserEnabled: z.boolean().optional(),
+    notifySoundEnabled: z.boolean().optional(),
   })
   .passthrough()
 
@@ -77,4 +82,39 @@ export function resolveCollapseMonitorSubSidebarOnOutside(
   settings: Pick<AppSettings, 'collapseMonitorSubSidebarOnOutside'> | null | undefined,
 ): boolean {
   return settings?.collapseMonitorSubSidebarOnOutside === true
+}
+
+/** Effective "notifications enabled" (master switch): missing → true. */
+export function resolveNotificationsEnabled(
+  settings: Pick<AppSettings, 'notificationsEnabled'> | null | undefined,
+): boolean {
+  return settings?.notificationsEnabled !== false
+}
+
+/** Effective "notify on HITL pending" preference: missing → true. */
+export function resolveNotifyHitlPending(
+  settings: Pick<AppSettings, 'notifyHitlPending'> | null | undefined,
+): boolean {
+  return settings?.notifyHitlPending !== false
+}
+
+/** Effective "notify on QA ready" preference: missing → true. */
+export function resolveNotifyQaReady(
+  settings: Pick<AppSettings, 'notifyQaReady'> | null | undefined,
+): boolean {
+  return settings?.notifyQaReady !== false
+}
+
+/** Effective "browser (native) notification" preference: missing → false (opt-in, needs OS permission). */
+export function resolveNotifyBrowserEnabled(
+  settings: Pick<AppSettings, 'notifyBrowserEnabled'> | null | undefined,
+): boolean {
+  return settings?.notifyBrowserEnabled === true
+}
+
+/** Effective "notification sound" preference: missing → false (opt-in). */
+export function resolveNotifySoundEnabled(
+  settings: Pick<AppSettings, 'notifySoundEnabled'> | null | undefined,
+): boolean {
+  return settings?.notifySoundEnabled === true
 }

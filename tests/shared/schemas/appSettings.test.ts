@@ -8,6 +8,11 @@ import {
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
   resolveHideMissingArtifacts,
+  resolveNotificationsEnabled,
+  resolveNotifyBrowserEnabled,
+  resolveNotifyHitlPending,
+  resolveNotifyQaReady,
+  resolveNotifySoundEnabled,
   resolveThemePreference,
 } from '../../../shared/schemas/appSettings'
 
@@ -126,6 +131,41 @@ describe('resolveCollapseMonitorSubSidebarOnOutside', () => {
     expect(
       resolveCollapseMonitorSubSidebarOnOutside({ collapseMonitorSubSidebarOnOutside: true }),
     ).toBe(true)
+  })
+})
+
+describe('resolveNotificationsEnabled', () => {
+  it('missing → true (on by default)', () => {
+    expect(resolveNotificationsEnabled({})).toBe(true)
+    expect(resolveNotificationsEnabled(undefined)).toBe(true)
+  })
+
+  it('explicit false → false', () => {
+    expect(resolveNotificationsEnabled({ notificationsEnabled: false })).toBe(false)
+  })
+})
+
+describe('resolveNotifyHitlPending / resolveNotifyQaReady', () => {
+  it('missing → true (on by default)', () => {
+    expect(resolveNotifyHitlPending({})).toBe(true)
+    expect(resolveNotifyQaReady({})).toBe(true)
+  })
+
+  it('explicit false → false', () => {
+    expect(resolveNotifyHitlPending({ notifyHitlPending: false })).toBe(false)
+    expect(resolveNotifyQaReady({ notifyQaReady: false })).toBe(false)
+  })
+})
+
+describe('resolveNotifyBrowserEnabled / resolveNotifySoundEnabled', () => {
+  it('missing → false (opt-in)', () => {
+    expect(resolveNotifyBrowserEnabled({})).toBe(false)
+    expect(resolveNotifySoundEnabled({})).toBe(false)
+  })
+
+  it('explicit true → true', () => {
+    expect(resolveNotifyBrowserEnabled({ notifyBrowserEnabled: true })).toBe(true)
+    expect(resolveNotifySoundEnabled({ notifySoundEnabled: true })).toBe(true)
   })
 })
 

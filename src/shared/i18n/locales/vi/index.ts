@@ -7,6 +7,7 @@ import { logs } from './logs'
 import { pipelineEditor } from './pipelineEditor'
 import { quickAction } from './quickAction'
 import { settings } from './settings'
+import { notifications } from './notifications'
 
 // Vietnamese is the default locale and the source of truth for the message
 // schema (see `Messages`). Other locales are typed against it, so a missing key
@@ -21,6 +22,7 @@ export const vi = {
   pipelineEditor,
   quickAction,
   settings,
+  notifications,
 }
 
 export type Messages = typeof vi
