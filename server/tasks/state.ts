@@ -142,14 +142,18 @@ export async function applyHitlAction(
 }
 
 /**
- * Advance `current_phase` to the next step after a dashboard-triggered "run
- * step" job succeeds — but only for a step that has no HITL gate of its own
- * (`hitl` null in the pipeline config). A gated step still requires an
- * explicit approve/reject through `applyHitlAction`; this function only fills
- * the gap for gate-less steps, which nothing else advances today.
+ * Update task state after a dashboard-triggered "run step" job succeeds —
+ * fills the bookkeeping gap that only the external orchestrator CLI used to
+ * cover:
+ * - Gate-less step: advance `current_phase` to the next step (or
+ *   `'completed'`) straight away, same as `applyHitlAction`'s approve branch.
+ * - Gated step: the artifact is now ready for review, so open the gate
+ *   (`hitl_pending = gate_id`) instead of advancing — `current_phase` stays on
+ *   this step until the user approves/rejects via `applyHitlAction`, same as
+ *   if the orchestrator had run it.
  *
  * No-ops (returns null) if `current_phase` no longer matches `stepId` (raced
- * by another action) or the step still has a gate — callers should treat a
+ * by another action) or a gate is already pending — callers should treat a
  * null result as "nothing to do", not an error.
  */
 export async function advanceStepOnJobSuccess(
@@ -165,15 +169,21 @@ export async function advanceStepOnJobSuccess(
 
     const state = { ...read.state } as Record<string, unknown>
     if (String(state.current_phase ?? '') !== stepId) return null
+    if (state.hitl_pending) return null
 
     const pipeline = await loadPipelineConfig(root, taskId)
     const steps = pipeline.steps || []
     const stepIdx = stepIndex(steps, stepId)
     const currentStep = stepIdx >= 0 ? steps[stepIdx] : null
-    if (!currentStep || currentStep.hitl?.gate_id) return null
+    if (!currentStep) return null
 
-    const next = steps[stepIdx + 1]
-    state.current_phase = next ? next.id : 'completed'
+    const gateId = currentStep.hitl?.gate_id
+    if (gateId) {
+      state.hitl_pending = gateId
+    } else {
+      const next = steps[stepIdx + 1]
+      state.current_phase = next ? next.id : 'completed'
+    }
 
     const mtime = await writeStateAtomic(stateFile, state)
     return { state, mtime }

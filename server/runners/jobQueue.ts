@@ -492,11 +492,12 @@ async function runJob(job: JobRecord): Promise<void> {
 /**
  * Dashboard "run step" jobs tag `metadata.pipelineStepId` (the step the job
  * just ran) and, for a chained run, `metadata.chainTarget` (the step the user
- * clicked). On success, advance `current_phase` past any gate-less step and —
- * only while chasing a `chainTarget` not yet reached — keep submitting the
- * next gate-less step's job automatically. A HITL gate (or a step id we don't
- * recognise) stops the chain; the user resumes it via the existing approve
- * flow or another click.
+ * clicked). On success, `advanceStepOnJobSuccess` either advances
+ * `current_phase` past a gate-less step or opens the step's HITL gate — and
+ * only while chasing a `chainTarget` not yet reached, this keeps submitting
+ * the next gate-less step's job automatically. A HITL gate (or a step id we
+ * don't recognise) stops the chain; the user resumes it via the existing
+ * approve flow or another click.
  */
 async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   const taskId = typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined

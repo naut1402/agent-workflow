@@ -175,7 +175,7 @@ describe('advanceStepOnJobSuccess', () => {
     expect(result?.state.current_phase).toBe('completed')
   })
 
-  test('does not advance a step that has a HITL gate', async () => {
+  test('opens the HITL gate instead of advancing when the step has one', async () => {
     const root = await tmp()
     await fs.writeFile(
       path.join(root, 'pipeline.yaml'),
@@ -185,6 +185,21 @@ describe('advanceStepOnJobSuccess', () => {
     await seedTask(root, 'T12', { current_phase: 'investigator' })
 
     const result = await advanceStepOnJobSuccess(root, 'T12', 'investigator')
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('investigator')
+    expect(result?.state.hitl_pending).toBe('hitl-1')
+  })
+
+  test('no-ops when a gate is already pending', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'T12b', { current_phase: 'investigator', hitl_pending: 'hitl-1' })
+
+    const result = await advanceStepOnJobSuccess(root, 'T12b', 'investigator')
     expect(result).toBeNull()
   })
 

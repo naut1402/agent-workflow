@@ -172,9 +172,9 @@ async function pollRunStepJob(jobId: string) {
     const { job } = await fetchJob(jobId)
     if (job?.status === 'succeeded') {
       runningStepId.value = null
-      runToast.value = t('monitor.pipeline.stepStarted')
+      runToast.value = t('monitor.pipeline.stepSucceeded')
       emit('hitl-action')
-      setTimeout(() => { runToast.value = '' }, 3000)
+      setTimeout(() => { runToast.value = '' }, 4000)
       return
     }
     if (job?.status === 'failed' || job?.status === 'cancelled') {
@@ -213,13 +213,52 @@ async function runStep(node: { id: string }) {
   }
 }
 
+// Run confirmation (click active/pending node → confirm before submitting,
+// warning louder if any step in the range [current_phase..clicked node]
+// already has an artifact on disk that a rerun would overwrite).
+const runConfirmOpen = ref(false)
+const runConfirmNode = ref<{ id: string; label: string } | null>(null)
+const runConfirmOverwrite = ref<string[]>([])
+
+function stepsInvolvedFor(nodeId: string) {
+  const targetIdx = phases.value.findIndex((p) => p.key === nodeId)
+  const curIdx = phases.value.findIndex((p) => p.key === props.task.current_phase)
+  if (targetIdx < 0) return []
+  if (curIdx < 0) return [phases.value[targetIdx]]
+  const [from, to] = curIdx <= targetIdx ? [curIdx, targetIdx] : [targetIdx, curIdx]
+  return phases.value.slice(from, to + 1)
+}
+
+function openRunConfirm(node: { id: string; label: string }) {
+  runConfirmNode.value = node
+  runConfirmOverwrite.value = stepsInvolvedFor(node.id)
+    .filter((p) => p.artifact && props.task.artifacts?.[p.artifact]?.exists)
+    .map((p) => p.artifact as string)
+  runConfirmOpen.value = true
+}
+
+function cancelRunConfirm() {
+  runConfirmOpen.value = false
+  runConfirmNode.value = null
+  runConfirmOverwrite.value = []
+}
+
+function confirmRunStep() {
+  const node = runConfirmNode.value
+  runConfirmOpen.value = false
+  runConfirmNode.value = null
+  runConfirmOverwrite.value = []
+  if (node) runStep(node)
+}
+
 function onNodeClick({ node }) {
   if (node.data?.status === 'waiting' && node.data?.hitl) {
     openHitlModal({ key: node.id, label: node.data.label, hitl: node.data.hitl })
     return
   }
   if (node.data?.status === 'active' || node.data?.status === 'pending') {
-    runStep(node)
+    if (runningStepId.value) return
+    openRunConfirm({ id: node.id, label: node.data.label })
   }
 }
 
@@ -324,6 +363,28 @@ async function submitHitl(action: 'approve' | 'reject') {
           <button class="btn-ghost" :disabled="hitlBusy" @click="submitHitl('reject')">{{ t('monitor.pipeline.reject') }}</button>
           <button class="btn-primary" :disabled="hitlBusy" @click="submitHitl('approve')">
             {{ hitlBusy ? t('monitor.pipeline.saving') : t('monitor.pipeline.approve') }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Run-step confirm modal -->
+  <Teleport to="body">
+    <div v-if="runConfirmOpen" class="modal-backdrop" @click.self="cancelRunConfirm">
+      <div class="modal">
+        <div class="modal-head">
+          <span>{{ t('monitor.pipeline.runConfirmHeading', { label: runConfirmNode?.label ?? '' }) }}</span>
+          <button class="modal-close" @click="cancelRunConfirm">✕</button>
+        </div>
+        <p class="modal-hint">{{ t('monitor.pipeline.runConfirmBody') }}</p>
+        <p v-if="runConfirmOverwrite.length" class="editor-error">
+          {{ t('monitor.pipeline.runConfirmOverwriteWarning', { files: runConfirmOverwrite.join(', ') }) }}
+        </p>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="cancelRunConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
+          <button class="btn-primary" @click="confirmRunStep">
+            {{ runConfirmOverwrite.length ? t('monitor.pipeline.runConfirmRunOverwrite') : t('monitor.pipeline.runConfirmRun') }}
           </button>
         </div>
       </div>

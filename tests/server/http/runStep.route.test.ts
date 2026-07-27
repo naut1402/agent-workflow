@@ -144,11 +144,12 @@ describe('POST /api/tasks/:id/run-step', () => {
     const { job } = await res.json()
     await settle(job.id)
     // implementer → reviewer chained automatically; reviewer has a gate so the
-    // chain must not reach pr-creator on its own.
+    // chain must not reach pr-creator on its own — instead its gate opens.
     await waitForPhase('R2', (p) => p === 'reviewer')
     await sleep(50)
     const state = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'R2.json'), 'utf8'))
     expect(state.current_phase).toBe('reviewer')
+    expect(state.hitl_pending).toBe('hitl-3')
   })
 
   test('chains all the way to the target when no gate is in between', async () => {

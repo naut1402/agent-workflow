@@ -44,13 +44,22 @@ function mountPipeline(task: Record<string, any>) {
   })
 }
 
+// Run-confirm / HITL modals are Teleported to <body> — not inside the
+// wrapper's own root element — so they're queried/clicked via the raw DOM.
+async function clickModalButton(selector: string) {
+  const btn = document.body.querySelector(selector) as HTMLElement | null
+  expect(btn).not.toBeNull()
+  btn!.click()
+  await flushPromises()
+}
+
 afterEach(() => {
   vi.clearAllMocks()
+  document.body.innerHTML = ''
 })
 
 describe('PipelineView — click a node to run/chain a step', () => {
-  it('clicking the active node runs it (targetStepId = itself)', async () => {
-    vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-1', status: 'queued' } })
+  it('clicking the active node opens a confirm dialog instead of running immediately', async () => {
     const task = { task_id: 'T1', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
     const w = mountPipeline(task)
     await flushPromises()
@@ -58,10 +67,38 @@ describe('PipelineView — click a node to run/chain a step', () => {
     await w.find('[data-testid="node-investigator"]').trigger('click')
     await flushPromises()
 
+    expect(runPipelineStep).not.toHaveBeenCalled()
+    expect(document.body.querySelector('.modal-backdrop')).not.toBeNull()
+    expect(document.body.textContent).toContain('Chạy step')
+  })
+
+  it('confirming the dialog runs the step (targetStepId = itself)', async () => {
+    vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-1', status: 'queued' } })
+    const task = { task_id: 'T1', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+    await clickModalButton('.modal .btn-primary')
+
     expect(runPipelineStep).toHaveBeenCalledWith('T1', { targetStepId: 'investigator' }, undefined)
   })
 
-  it('clicking a future pending node chains toward it', async () => {
+  it('cancelling the confirm dialog does not run the step', async () => {
+    const task = { task_id: 'T1', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+    await clickModalButton('.modal .btn-ghost')
+
+    expect(runPipelineStep).not.toHaveBeenCalled()
+    expect(document.body.querySelector('.modal-backdrop')).toBeNull()
+  })
+
+  it('clicking a future pending node opens a confirm dialog, then chains toward it once confirmed', async () => {
     vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-2', status: 'queued' } })
     const task = { task_id: 'T2', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
     const w = mountPipeline(task)
@@ -69,8 +106,38 @@ describe('PipelineView — click a node to run/chain a step', () => {
 
     await w.find('[data-testid="node-implementer"]').trigger('click')
     await flushPromises()
+    expect(runPipelineStep).not.toHaveBeenCalled()
 
+    await clickModalButton('.modal .btn-primary')
     expect(runPipelineStep).toHaveBeenCalledWith('T2', { targetStepId: 'implementer' }, undefined)
+  })
+
+  it('warns about overwriting an artifact that already exists for a step in the run range', async () => {
+    const task = {
+      task_id: 'T7',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: { 'investigate.md': { exists: true } },
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('investigate.md')
+    expect(document.body.querySelector('.modal .btn-primary')?.textContent).toContain('Ghi đè')
+  })
+
+  it('does not warn when no artifact in the run range exists yet', async () => {
+    const task = { task_id: 'T8', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+
+    expect(document.body.querySelector('.modal .btn-primary')?.textContent).not.toContain('Ghi đè')
   })
 
   it('clicking a waiting (HITL) node opens the approve modal instead of running', async () => {
@@ -101,20 +168,24 @@ describe('PipelineView — click a node to run/chain a step', () => {
     await flushPromises()
 
     expect(runPipelineStep).not.toHaveBeenCalled()
-    expect(w.find('.modal-backdrop').exists()).toBe(false)
+    expect(document.body.querySelector('.modal-backdrop')).toBeNull()
   })
 
-  it('does not submit a second run while one is already in flight for this task', async () => {
+  it('does not open a second confirm dialog while a run is already in flight for this task', async () => {
     vi.mocked(runPipelineStep).mockReturnValue(new Promise(() => {})) // never resolves
     const task = { task_id: 'T5', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
     const w = mountPipeline(task)
     await flushPromises()
 
     await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+    await clickModalButton('.modal .btn-primary')
+
     await w.find('[data-testid="node-implementer"]').trigger('click')
     await flushPromises()
 
     expect(runPipelineStep).toHaveBeenCalledTimes(1)
+    expect(document.body.querySelector('.modal-backdrop')).toBeNull()
   })
 
   it('shows an error chip when run-step fails (e.g. 409 already running)', async () => {
@@ -127,6 +198,7 @@ describe('PipelineView — click a node to run/chain a step', () => {
 
     await w.find('[data-testid="node-investigator"]').trigger('click')
     await flushPromises()
+    await clickModalButton('.modal .btn-primary')
 
     expect(w.find('.chip-err').exists()).toBe(true)
   })
