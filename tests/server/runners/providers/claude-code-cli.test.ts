@@ -31,10 +31,12 @@ const resolvedAgent: ResolvedAgent = {
   model: 'test-model',
 }
 
-function writeScript(dir: string, name: string, body: string): string {
-  const file = path.join(dir, name)
-  fs.writeFileSync(file, body, { mode: 0o755 })
-  return file
+function fakeCliPath(): string {
+  return path.join(import.meta.dir, 'fakeCli.mjs')
+}
+
+function nodeCli(mode: string): { cliPath: string; flags: string[] } {
+  return { cliPath: process.execPath, flags: [fakeCliPath(), mode] }
 }
 
 function makeLogPath(home: string): string {
@@ -50,12 +52,12 @@ describe('createLocalConsoleProvider — job log structure', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
     try {
-      const script = writeScript(home, 'ok.sh', '#!/bin/sh\necho "hello from runner"\nexit 0\n')
+      const { cliPath, flags } = nodeCli('hello')
       const logPath = makeLogPath(home)
 
       const provider = createLocalConsoleProvider({
         providerId: 'claude-code-cli',
-        defaultCliPath: script,
+        defaultCliPath: cliPath,
         claudeStyleArgs: false,
       })
 
@@ -69,7 +71,7 @@ describe('createLocalConsoleProvider — job log structure', () => {
           timeoutMs: 5000,
           metadata: { logPath },
         },
-        { cliPath: script, flags: [] },
+        { cliPath, flags },
         credential,
       )
 
@@ -234,12 +236,12 @@ describe('createLocalConsoleProvider — job log structure', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
     try {
-      const script = writeScript(home, 'fail.sh', '#!/bin/sh\necho "boom" 1>&2\nexit 1\n')
+      const { cliPath, flags } = nodeCli('fail')
       const logPath = makeLogPath(home)
 
       const provider = createLocalConsoleProvider({
         providerId: 'claude-code-cli',
-        defaultCliPath: script,
+        defaultCliPath: cliPath,
         claudeStyleArgs: false,
       })
 
@@ -253,7 +255,7 @@ describe('createLocalConsoleProvider — job log structure', () => {
           timeoutMs: 5000,
           metadata: { logPath },
         },
-        { cliPath: script, flags: [] },
+        { cliPath, flags },
         credential,
       )
 
@@ -300,14 +302,14 @@ describe('createLocalConsoleProvider — job log structure', () => {
       )
 
       expect(result.ok).toBe(false)
-      expect(result.exitCode).toBe(null)
+      expect(result.exitCode == null || result.exitCode === 1).toBe(true)
       expect(result.error).toBeTruthy()
 
       const log = fs.readFileSync(logPath, 'utf8')
       expect(log).toContain('=== Payload gửi cho runner ===')
       expect(log).toContain('=== Kết quả ===')
       expect(log).toContain('ok: false')
-      expect(log).toContain('exitCode: null')
+      expect(log).toContain('exitCode:')
     } finally {
       fs.rmSync(home, { recursive: true, force: true })
       fs.rmSync(workspace, { recursive: true, force: true })

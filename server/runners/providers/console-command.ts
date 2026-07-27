@@ -117,6 +117,7 @@ function runProcess(
     env: NodeJS.ProcessEnv
     timeoutMs: number
     onLog?: (chunk: string) => void
+    onStart?: (info: { pid: number | null }) => void
   },
 ): Promise<ProcResult> {
   return new Promise((resolve, reject) => {
@@ -126,6 +127,8 @@ function runProcess(
       shell: process.platform === 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
     })
+
+    options.onStart?.({ pid: child.pid ?? null })
 
     let stdout = ''
     let stderr = ''
@@ -191,7 +194,7 @@ export function createConsoleCommandProvider(): RunnerProvider {
       }
     },
 
-    async execute(req: ExecuteRequest, runnerConfig: Record<string, any>, _credential, onLog?): Promise<ExecuteResult> {
+    async execute(req: ExecuteRequest, runnerConfig: Record<string, any>, _credential, onLog?, onStart?): Promise<ExecuteResult> {
       const started = Date.now()
       const cliPath = String(runnerConfig.cliPath || 'sh')
       const flags = Array.isArray(runnerConfig.flags) ? runnerConfig.flags.map(String) : []
@@ -229,6 +232,7 @@ export function createConsoleCommandProvider(): RunnerProvider {
           env: { ...process.env },
           timeoutMs: req.timeoutMs || runnerConfig.timeoutMs || 600_000,
           onLog: wrappedOnLog,
+          onStart,
         })
       } catch (err: any) {
         const result: ExecuteResult = {

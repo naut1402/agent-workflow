@@ -2,6 +2,12 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveSecretRef } from '../credentials.js'
+import {
+  buildCursorJsonArgs,
+  parseCursorJsonOutput,
+  prepareSessionInvocation,
+  type SessionCaptureMode,
+} from '../sessionCapture.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ResolvedAgent, RunnerProvider } from '../types.js'
 
 interface ProcResult {
@@ -153,6 +159,7 @@ interface RunProcessOptions {
   env: NodeJS.ProcessEnv
   timeoutMs: number
   onLog?: (chunk: string) => void
+  onStart?: (info: { pid: number | null }) => void
   /** When set, written to the child's stdin (then stdin is closed) instead of
    * being passed as an argv element. Required for the claude headless prompt:
    * on Windows we must spawn with `shell: true` (to run the `claude.cmd` shim,
@@ -169,9 +176,13 @@ function runProcess(cliPath: string, args: string[], options: RunProcessOptions)
     const child = spawn(cliPath, args, {
       cwd: options.cwd,
       env: options.env,
+      // win32: shell:true runs the .cmd shim; child.pid is cmd.exe — cancel must
+      // use taskkill /T to kill the whole tree (see jobQueue cancelJob).
       shell: process.platform === 'win32',
       stdio: ['pipe', 'pipe', 'pipe'],
     })
+
+    options.onStart?.({ pid: child.pid ?? null })
 
     if (options.stdinInput != null && child.stdin) {
       // Guard against EPIPE / write-after-end (e.g. the CLI exits before
@@ -226,11 +237,14 @@ export interface LocalConsoleProviderOptions {
   defaultCliPath: string
   /** When true, append -p prompt and Claude-style allowedTools flags. */
   claudeStyleArgs?: boolean
+  /** How this provider captures/presets CLI session ids. */
+  sessionCapture?: SessionCaptureMode
 }
 
 /** Shared local-console spawn provider (Claude / Cursor / Codex). */
 export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): RunnerProvider {
   const claudeStyle = opts.claudeStyleArgs !== false && opts.providerId === 'claude-code-cli'
+  const sessionCapture: SessionCaptureMode = opts.sessionCapture ?? 'none'
 
   return {
     providerId: opts.providerId,
@@ -259,37 +273,36 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
       runnerConfig: Record<string, any>,
       credential: CredentialProfile,
       onLog?: (chunk: string) => void,
+      onStart?: (info: { pid: number | null }) => void,
     ): Promise<ExecuteResult> {
       const started = Date.now()
       const cliPath = String(runnerConfig.cliPath || opts.defaultCliPath)
       const flags = resolveEffectiveFlags(runnerConfig.flags, credential)
       const prompt = buildPrompt(req.resolvedAgent, req.userPrompt)
 
+      const sessionPlan = prepareSessionInvocation({
+        capture: sessionCapture,
+        sessionId: req.sessionId,
+        resumeSessionId: req.resumeSessionId,
+      })
+
       const useClaudeStyle = claudeStyle || opts.claudeStyleArgs === true
       let args: string[]
       let stdinInput: string | undefined
       if (useClaudeStyle) {
-        // Claude headless: prompt goes to stdin (see buildClaudeInvocation), so
-        // it never becomes an argv element that shell:true would mangle on
-        // Windows. args holds only whitespace-free flags/values.
         const invocation = buildClaudeInvocation({
           flags,
           prompt,
           allowedTools: runnerConfig.allowedTools,
           dangerouslySkipPermissions: runnerConfig.dangerouslySkipPermissions,
-          sessionId: req.sessionId,
-          resumeSessionId: req.resumeSessionId,
+          sessionId: sessionPlan.sessionId,
+          resumeSessionId: sessionPlan.resumeSessionId,
         })
         args = invocation.args
         stdinInput = invocation.stdinInput
+      } else if (sessionCapture === 'parse-json') {
+        args = buildCursorJsonArgs(flags, prompt)
       } else {
-        // Generic local CLI (Cursor/Codex): user flags + prompt as final arg.
-        // NOTE: this shares the claude Windows argv-quoting hazard — a
-        // multi-line/whitespace prompt can be split by cmd.exe under
-        // shell:true. We keep argv delivery here because these CLIs are not
-        // verified to read the prompt from stdin; passing it on stdin could
-        // hang a CLI that only reads argv. Follow-up: confirm per-CLI stdin
-        // support, then migrate. (Out of scope for the claude-code-cli fix.)
         args = [...flags, prompt]
       }
 
@@ -312,8 +325,8 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
           claudeStyle: useClaudeStyle,
           allowedTools: runnerConfig.allowedTools,
           dangerouslySkipPermissions: runnerConfig.dangerouslySkipPermissions,
-          sessionId: req.sessionId,
-          resumeSessionId: req.resumeSessionId,
+          sessionId: sessionPlan.sessionId,
+          resumeSessionId: sessionPlan.resumeSessionId,
           prompt,
           metadata: req.metadata,
         }),
@@ -331,6 +344,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
           env: buildChildEnv(credential),
           timeoutMs: req.timeoutMs || runnerConfig.timeoutMs || 600_000,
           onLog: wrappedOnLog,
+          onStart,
           stdinInput,
         })
       } catch (err: any) {
@@ -354,6 +368,15 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
       }
 
       const ok = procResult.exitCode === 0 && !procResult.killed
+      let stdout = procResult.stdout
+      let capturedSessionId: string | null | undefined = sessionPlan.presetSessionId ?? undefined
+
+      if (sessionCapture === 'parse-json') {
+        const parsed = parseCursorJsonOutput(procResult.stdout)
+        if (parsed.result != null) stdout = parsed.result
+        if (parsed.session_id) capturedSessionId = parsed.session_id
+      }
+
       const result: ExecuteResult = {
         ok,
         exitCode: procResult.exitCode,
@@ -361,9 +384,8 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
         logPath,
         artifactsFound,
         error: ok ? undefined : formatFailure(procResult),
-        // Captured so an approval quick action can use "respond with the edited
-        // content" style prompts (stdout) instead of requiring a file write.
-        stdout: procResult.stdout,
+        stdout,
+        sessionId: capturedSessionId,
       }
       appendLog(describeResult(result))
       return result
@@ -376,5 +398,6 @@ export function createClaudeCodeCliProvider(): RunnerProvider {
     providerId: 'claude-code-cli',
     defaultCliPath: 'claude',
     claudeStyleArgs: true,
+    sessionCapture: 'preset-uuid',
   })
 }

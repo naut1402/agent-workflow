@@ -6,5 +6,6 @@ export function createCodexCliProvider(): RunnerProvider {
     providerId: 'codex-cli',
     defaultCliPath: 'codex',
     claudeStyleArgs: false,
+    sessionCapture: 'none',
   })
 }

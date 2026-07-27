@@ -89,6 +89,8 @@ export interface ExecuteResult {
    * a reviewable change. See jobQueue.ts runJob.
    */
   stdout?: string
+  /** Captured CLI session id (preset-uuid or parse-json providers). */
+  sessionId?: string | null
 }
 
 // `awaiting_approval`: an approval-flow job (see jobQueue.ts) finished
@@ -111,6 +113,8 @@ export interface JobRecord {
   startedAt: string | null
   finishedAt: string | null
   exitCode: number | null
+  /** OS pid of the spawned process tree root (cmd.exe on win32 shell spawn). */
+  pid?: number | null
   logPath?: string
   error?: string
   artifactsFound?: string[]
@@ -158,6 +162,7 @@ export interface RunnerProvider {
     runnerConfig: Record<string, any>,
     credential: CredentialProfile,
     onLog?: (chunk: string) => void,
+    onStart?: (info: { pid: number | null }) => void,
   ): Promise<ExecuteResult>
 }
 

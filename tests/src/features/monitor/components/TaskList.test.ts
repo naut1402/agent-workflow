@@ -34,11 +34,18 @@ afterEach(() => {
 describe('TaskList', () => {
   it('renders one row per task with id + phase label', () => {
     const w = mount(TaskList, { props: { tasks } })
+    expect(w.find('.tasklist-head').exists()).toBe(true)
     const ids = w.findAll('.task-entry .id').map((n) => n.text())
     expect(ids).toEqual(['B4488', 'F003'])
     // phaseLabel: current_phase when present, else hitl_pending
     const phases = w.findAll('.task-entry .phase').map((n) => n.text())
     expect(phases).toEqual(['designer', 'hitl-2'])
+  })
+
+  it('emits create-task when + button is clicked', async () => {
+    const w = mount(TaskList, { props: { tasks } })
+    await w.find('.tasklist-head .icon-btn').trigger('click')
+    expect(w.emitted('create-task')).toBeTruthy()
   })
 
   it('emits select + expands artifacts on row click', async () => {
