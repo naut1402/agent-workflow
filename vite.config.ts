@@ -10,7 +10,7 @@ import { devTeamApi } from './server/devTeamApi.js'
 // In dev mode this `root` becomes the ctx.defaultRoot (the project served when
 // no `?project=<id>` is given) — preserving the legacy single-project behaviour.
 // Multi-project support comes from the shared ProjectRegistry, exercised here
-// too via `?project=` (see server/devTeamApi.js → createApiHandler).
+// too via `?project=` (see server/devTeamApi.ts → createApiHandler).
 import path from 'node:path'
 
 const root = process.env.DEV_TEAM_ROOT

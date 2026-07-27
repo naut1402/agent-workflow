@@ -42,9 +42,6 @@ export default tseslint.config(
       'node_modules/**',
       'logs/**',
       'test-e2e/.runtime/**',
-      // scratch / ad-hoc scripts ở root — không thuộc scope app
-      'test-api.mjs',
-      'test-registry.mjs',
     ],
   },
 
