@@ -58,9 +58,14 @@ export const monitor = {
     approved: 'Step approved.',
     rejected: 'Rejected — feedback recorded.',
     stateChanged: 'State changed. Refreshing…',
+    stepStarted: 'Step started.',
+    stepFailed: 'Step failed.',
+    stepAlreadyRunning: 'A step is already running for this task — please wait.',
   },
   pipelineNode: {
     clickToApprove: 'Click to approve',
+    clickToRun: 'Click to run this step',
+    running: 'Running…',
     qaCount: '{count} blocking questions',
   },
   qa: {

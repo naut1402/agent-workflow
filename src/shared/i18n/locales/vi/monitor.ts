@@ -59,9 +59,14 @@ export const monitor = {
     approved: 'Đã duyệt bước.',
     rejected: 'Đã từ chối — đã ghi phản hồi.',
     stateChanged: 'Trạng thái đã thay đổi. Đang làm mới…',
+    stepStarted: 'Đã bắt đầu chạy step.',
+    stepFailed: 'Step chạy thất bại.',
+    stepAlreadyRunning: 'Task đang có step chạy — vui lòng đợi.',
   },
   pipelineNode: {
     clickToApprove: 'Nhấn để duyệt',
+    clickToRun: 'Nhấn để chạy step này',
+    running: 'Đang chạy…',
     qaCount: '{count} câu hỏi blocking',
   },
   qa: {
