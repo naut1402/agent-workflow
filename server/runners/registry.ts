@@ -70,7 +70,9 @@ export function loadRunners(): RunnersStore {
     return emptyRunners()
   }
   try {
-    const data = JSON.parse(raw)
+    // Strip UTF-8 BOM (e.g. PowerShell Set-Content -Encoding utf8) so parse
+    // does not fail and silently return an empty runner list.
+    const data = JSON.parse(raw.replace(/^\uFEFF/, ''))
     if (!data || !Array.isArray(data.runners)) return emptyRunners()
     const runners = data.runners.map(normalizeRunner).filter(Boolean) as RunnerConfig[]
     // [] là trạng thái hợp lệ — không seed lại default.

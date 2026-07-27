@@ -63,6 +63,30 @@ beforeEach(() => {
   }
 })
 
+describe('loadRunners', () => {
+  test('strips UTF-8 BOM so PowerShell-saved runners.json still loads', () => {
+    const payload = {
+      version: 2,
+      defaultRunnerId: 'claude-code-local',
+      runners: [
+        {
+          id: 'claude-code-local',
+          name: 'Claude Code CLI (local)',
+          connectionId: 'claude-code-cli-local',
+          enabled: true,
+          config: {},
+        },
+      ],
+    }
+    const bom = Buffer.from([0xef, 0xbb, 0xbf])
+    const body = Buffer.from(JSON.stringify(payload), 'utf8')
+    fs.writeFileSync(path.join(home, 'runners.json'), Buffer.concat([bom, body]))
+    const store = loadRunners()
+    expect(store.runners).toHaveLength(1)
+    expect(store.defaultRunnerId).toBe('claude-code-local')
+  })
+})
+
 describe('id sanitisers', () => {
   test('strips unsafe chars, caps length, rejects empty/slash', () => {
     expect(sanitiseRunnerId('  My Runner!@# ')).toBe('MyRunner')

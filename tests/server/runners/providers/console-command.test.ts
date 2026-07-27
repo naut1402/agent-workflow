@@ -25,10 +25,12 @@ const resolvedAgent: ResolvedAgent = {
   skills: [],
 }
 
-function writeScript(dir: string, name: string, body: string): string {
-  const file = path.join(dir, name)
-  fs.writeFileSync(file, body, { mode: 0o755 })
-  return file
+function fakeCliPath(): string {
+  return path.join(import.meta.dir, 'fakeCli.mjs')
+}
+
+function nodeCli(extraFlags: string[] = []): { cliPath: string; flags: string[] } {
+  return { cliPath: process.execPath, flags: [fakeCliPath(), ...extraFlags] }
 }
 
 function makeLogPath(home: string): string {
@@ -69,12 +71,7 @@ describe('createConsoleCommandProvider', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-console-'))
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
     try {
-      // Echo argv[1..] so we can assert what was actually passed.
-      const script = writeScript(
-        home,
-        'echo-args.sh',
-        '#!/bin/sh\nprintf "%s\\n" "$@"\nexit 0\n',
-      )
+      const { cliPath, flags: cliFlags } = nodeCli(['echo-args'])
       const logPath = makeLogPath(home)
       const provider = createConsoleCommandProvider()
 
@@ -82,15 +79,15 @@ describe('createConsoleCommandProvider', () => {
         {
           jobId: 'job-console-1',
           resolvedAgent,
-          userPrompt: '--file design.md "hello world"',
+          userPrompt: '--file design.md hello-world',
           workspace,
           produces: [],
           timeoutMs: 5000,
           metadata: { logPath },
         },
         {
-          cliPath: script,
-          flags: ['--json'],
+          cliPath,
+          flags: [...cliFlags, '--json'],
           allowedTools: 'Read,Write,Bash',
         },
         credential,
@@ -98,7 +95,7 @@ describe('createConsoleCommandProvider', () => {
 
       expect(result.ok).toBe(true)
       expect(result.exitCode).toBe(0)
-      expect(result.stdout?.trim().split('\n')).toEqual(['--json', '--file', 'design.md', 'hello world'])
+      expect(result.stdout?.trim().split('\n')).toEqual(['--json', '--file', 'design.md', 'hello-world'])
 
       const log = fs.readFileSync(logPath, 'utf8')
       expect(log).toContain('Mode: console-command')
@@ -117,7 +114,7 @@ describe('createConsoleCommandProvider', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-console-'))
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
     try {
-      const script = writeScript(home, 'ok.sh', '#!/bin/sh\necho ok\nexit 0\n')
+      const { cliPath, flags } = nodeCli(['ok'])
       const provider = createConsoleCommandProvider()
       const result = await provider.execute(
         {
@@ -127,7 +124,7 @@ describe('createConsoleCommandProvider', () => {
           workspace,
           timeoutMs: 5000,
         },
-        { cliPath: script, flags: [] },
+        { cliPath, flags },
         credential,
       )
       expect(result.ok).toBe(true)

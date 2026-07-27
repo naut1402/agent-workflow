@@ -9,8 +9,8 @@ test('sidebar switches across modes incl. runner (capture)', async ({ page }, te
   await page.goto('/')
   await page.waitForLoadState('networkidle')
 
-  // Monitor (default) → task list present.
-  await expect(page.locator('.tasklist')).toBeVisible({ timeout: 15_000 })
+  // Monitor (default) → active task list present.
+  await expect(page.locator('.tasklist--active')).toBeVisible({ timeout: 15_000 })
 
   // Correction A (F0005): the Monitor-only NL build entry is gone — "Build NL"
   // now lives solely in Agent Editor.
@@ -29,7 +29,7 @@ test('sidebar switches across modes incl. runner (capture)', async ({ page }, te
 
   // Back to monitor — polling resumes, task list renders again.
   await page.locator('button[title="Monitor"]').click()
-  await expect(page.locator('.tasklist')).toBeVisible()
+  await expect(page.locator('.tasklist--active')).toBeVisible()
 
   // Sidebar collapse toggle (ported from verify-ux UX1a).
   const sidebar = page.locator('.sidebar')

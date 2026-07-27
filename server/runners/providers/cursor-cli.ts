@@ -6,5 +6,6 @@ export function createCursorCliProvider(): RunnerProvider {
     providerId: 'cursor-cli',
     defaultCliPath: 'cursor',
     claudeStyleArgs: false,
+    sessionCapture: 'parse-json',
   })
 }

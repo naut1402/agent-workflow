@@ -11,7 +11,7 @@ const props = defineProps({
   openArtifact: { type: Object, default: null }, // { taskId, name }
   projectId: { type: String, default: null },
 })
-const emit = defineEmits(['select', 'open-artifact', 'task-archived'])
+const emit = defineEmits(['select', 'open-artifact', 'task-archived', 'create-task'])
 const { t } = useI18n()
 const { settings, update } = useAppSettings()
 
@@ -49,6 +49,23 @@ const archivedTasks = computed(() => props.tasks.filter((t) => t.archived))
 
 <template>
   <div class="tasklist-panel">
+    <div class="tasklist-head">
+      <span class="tasklist-head-label">{{ t('monitor.taskList.title') }}</span>
+      <button
+        type="button"
+        class="icon-btn"
+        :title="t('monitor.taskList.createTask')"
+        :aria-label="t('monitor.taskList.createTask')"
+        @click="emit('create-task')"
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M8 2.5a.75.75 0 0 1 .75.75V7h3.75a.75.75 0 0 1 0 1.5H8.75v3.75a.75.75 0 0 1-1.5 0V8.5H3.5a.75.75 0 0 1 0-1.5h3.75V3.25A.75.75 0 0 1 8 2.5z"
+          />
+        </svg>
+      </button>
+    </div>
     <ul class="tasklist tasklist--active">
       <TaskListItem
         v-for="t in activeTasks"

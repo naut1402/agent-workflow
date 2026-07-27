@@ -128,3 +128,6 @@ export async function collectTasks(root: string): Promise<any[]> {
 export function flowProfilePath(root: string, id: string): string {
   return path.join(root, 'flow-profiles', `${id}.json`)
 }
+
+export { createTask, renderRequestMarkdown } from './create.js'
+export type { CreateTaskInput, CreateTaskResult, CreatedTask } from './create.js'

@@ -1,12 +1,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { spawn } from 'node:child_process'
+import os from 'node:os'
 import { registryHome } from '../registry.js'
 import { getRunner, getDefaultRunner, substituteConfig } from './registry.js'
 import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
 import { getProvider } from './providerRegistry.js'
 import { resolveAgent } from './agentResolver.js'
+import { reapOrphanedRunningJobs } from './pidReaper.js'
+import { mintSessionId } from './sessionCapture.js'
+import { recordSessionUsage, resolveSessionPlan, type SessionMode } from './sessionLedger.js'
 import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
 
 function credentialForConnection(conn: Connection): CredentialProfile | null {
@@ -39,7 +44,13 @@ export interface SubmitJobInput {
   promptRef?: string
   produces?: string[]
   metadata?: Record<string, unknown>
+  /** Explicit session control for pipeline resume (additive — optional). */
+  sessionMode?: SessionMode
+  sessionId?: string
 }
+
+// Reap orphaned running jobs once when the module loads (server restart).
+reapOrphanedRunningJobs()
 
 function jobsDir(): string {
   return path.join(registryHome(), 'jobs')
@@ -306,7 +317,7 @@ async function runJob(job: JobRecord): Promise<void> {
     /* ignore */
   }
 
-  saveJob({ ...job, status: 'running', startedAt: new Date().toISOString(), logPath })
+  saveJob({ ...job, status: 'running', startedAt: new Date().toISOString(), logPath, pid: null })
 
   let userPrompt = job.userPrompt || ''
   if (!userPrompt && job.promptRef) {
@@ -350,6 +361,59 @@ async function runJob(job: JobRecord): Promise<void> {
     connection,
   )
 
+  const taskId = typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined
+  const projectId = typeof job.metadata?.projectId === 'string' ? job.metadata.projectId : undefined
+  const inputSessionMode = job.metadata?.inputSessionMode as SessionMode | undefined
+  const inputSessionId = typeof job.metadata?.inputSessionId === 'string' ? job.metadata.inputSessionId : undefined
+
+  let execSessionId: string | undefined
+  let execResumeSessionId: string | undefined
+  let sessionStaleReason: string | undefined
+
+  if (job.applyTarget && job.approvalArtifact) {
+    execSessionId = job.sessionId && !job.parentJobId ? job.sessionId : undefined
+    execResumeSessionId = job.sessionId && job.parentJobId ? job.sessionId : undefined
+  } else if (taskId && projectId && inputSessionMode && inputSessionMode !== 'none') {
+    const plan = resolveSessionPlan({
+      projectId,
+      taskId,
+      sessionMode: inputSessionMode,
+      sessionId: inputSessionId,
+      providerId: connection.providerId,
+      runnerId: runner.id,
+      connectionId: connection.id,
+      workspace: job.workspace,
+      host: os.hostname(),
+      model: resolvedAgent.model,
+      stepId: typeof job.metadata?.stepId === 'string' ? job.metadata.stepId : undefined,
+    })
+    sessionStaleReason = plan.staleReason
+    if (plan.sessionMode === 'resume' && plan.resumeSessionId) {
+      execResumeSessionId = plan.resumeSessionId
+    } else if (plan.sessionMode === 'new') {
+      execSessionId = plan.sessionId || mintSessionId()
+      recordSessionUsage({
+        projectId,
+        taskId,
+        sessionId: execSessionId,
+        providerId: connection.providerId,
+        runnerId: runner.id,
+        connectionId: connection.id,
+        workspace: job.workspace,
+        model: resolvedAgent.model,
+        stepId: typeof job.metadata?.stepId === 'string' ? job.metadata.stepId : undefined,
+        forceNew: true,
+        staleReason: sessionStaleReason,
+      })
+    }
+  }
+
+  const onStart = (info: { pid: number | null }) => {
+    const current = loadJob(job.id)
+    if (!current || current.status !== 'running') return
+    saveJob({ ...current, pid: info.pid ?? null })
+  }
+
   const result = await provider.execute(
     {
       jobId: job.id,
@@ -359,15 +423,29 @@ async function runJob(job: JobRecord): Promise<void> {
       produces: job.produces,
       timeoutMs: runnerConfig.timeoutMs,
       metadata: { ...job.metadata, logPath },
-      // Approval flow: a job continuing a prior approval thread (`parentJobId`
-      // set) resumes that same CLI session; the thread's first job instead
-      // establishes a fresh one. Both are no-ops for a normal (non-approval) job.
-      sessionId: job.sessionId && !job.parentJobId ? job.sessionId : undefined,
-      resumeSessionId: job.sessionId && job.parentJobId ? job.sessionId : undefined,
+      sessionId: execSessionId,
+      resumeSessionId: execResumeSessionId,
     },
     runnerConfig,
     credential,
+    undefined,
+    onStart,
   )
+
+  const capturedSessionId = result.sessionId ?? execSessionId ?? execResumeSessionId
+  if (taskId && projectId && inputSessionMode && inputSessionMode !== 'none' && capturedSessionId) {
+    recordSessionUsage({
+      projectId,
+      taskId,
+      sessionId: capturedSessionId,
+      providerId: connection.providerId,
+      runnerId: runner.id,
+      connectionId: connection.id,
+      workspace: job.workspace,
+      model: resolvedAgent.model,
+      stepId: typeof job.metadata?.stepId === 'string' ? job.metadata.stepId : undefined,
+    })
+  }
 
   const isApprovalJob = Boolean(job.applyTarget && job.approvalArtifact)
   if (!result.ok && isApprovalJob) removeScratchWorkspace(job.workspace)
@@ -400,12 +478,20 @@ async function runJob(job: JobRecord): Promise<void> {
     error: result.error,
     logPath: result.logPath,
     artifactsFound: result.artifactsFound,
+    pid: null,
+    ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
   })
 }
 
 export function submitJob(input: SubmitJobInput): JobRecord {
   const id = crypto.randomUUID()
   const runner = input.runnerId ? getRunner(input.runnerId) : getDefaultRunner()
+
+  let sessionMode = input.sessionMode
+  if (!sessionMode && input.metadata?.createTaskRun && input.metadata?.taskId) {
+    sessionMode = 'new'
+  }
+
   const job: JobRecord = {
     id,
     status: 'queued',
@@ -419,7 +505,11 @@ export function submitJob(input: SubmitJobInput): JobRecord {
     startedAt: null,
     finishedAt: null,
     exitCode: null,
-    metadata: input.metadata || {},
+    pid: null,
+    metadata: {
+      ...(input.metadata || {}),
+      ...(sessionMode ? { inputSessionMode: sessionMode, inputSessionId: input.sessionId } : {}),
+    },
   }
   saveJob(job)
   queue.push(id)
@@ -453,7 +543,20 @@ export function cancelJob(id: string): MutationResult {
   if (job.status === 'succeeded' || job.status === 'failed') {
     return { ok: false, status: 400, error: 'job already finished' }
   }
-  saveJob({ ...job, status: 'cancelled', finishedAt: new Date().toISOString() })
+
+  if (job.pid != null && job.pid > 0) {
+    try {
+      if (process.platform === 'win32') {
+        spawn('taskkill', ['/PID', String(job.pid), '/T', '/F'], { stdio: 'ignore' })
+      } else {
+        process.kill(job.pid, 'SIGTERM')
+      }
+    } catch {
+      /* process may already be gone */
+    }
+  }
+
+  saveJob({ ...job, status: 'cancelled', finishedAt: new Date().toISOString(), pid: null })
   return { ok: true }
 }
 

@@ -46,6 +46,19 @@ export {
   findSelectionRange,
   extractLines,
 } from './jobQueue.js'
+export { reapOrphanedRunningJobs, isPidAlive } from './pidReaper.js'
+export {
+  loadTaskSessionLedger,
+  resolveSessionPlan,
+  recordSessionUsage,
+  isSessionEntryValid,
+} from './sessionLedger.js'
+export {
+  parseCursorJsonOutput,
+  buildCursorJsonArgs,
+  prepareSessionInvocation,
+  mintSessionId,
+} from './sessionCapture.js'
 
 export type {
   CredentialProfile,

@@ -16,6 +16,7 @@ import RunnerConfigPanel from './features/runner/components/RunnerConfigPanel.vu
 import LogsPanel from './features/logs/components/LogsPanel.vue'
 import QuickActionPanel from './features/quick-action/components/QuickActionPanel.vue'
 import SettingsDialog from './features/settings/components/SettingsDialog.vue'
+import CreateTaskDialog from './features/monitor/components/CreateTaskDialog.vue'
 import RailIcon from './shared/ui/RailIcon.vue'
 import { APP_VERSION } from './shared/lib/appVersion'
 
@@ -57,6 +58,7 @@ const projects = ref([])
 const defaultProjectId = ref(null)
 const selectedProjectId = ref(loadSelectedProject())
 const openArtifact = ref(null)
+const createTaskOpen = ref(false)
 
 // Task polling (root/tasks/selectedId + connection state + 1500ms loop) lives in
 // a composable so the shell stays thin and the loop is unit-testable.
@@ -178,6 +180,16 @@ watch(selectedId, () => {
 function handleOpenArtifact({ taskId, name }) {
   selectedId.value = taskId
   openArtifact.value = { taskId, name }
+}
+
+function onCreateTaskOpen() {
+  createTaskOpen.value = true
+}
+
+async function onTaskCreated({ taskId }: { taskId: string; jobId: string | null }) {
+  createTaskOpen.value = false
+  await poll()
+  selectedId.value = taskId
 }
 
 watch(mode, async (m) => {
@@ -339,6 +351,7 @@ onUnmounted(() => {
         @qa-saved="poll"
         @hitl-action="poll"
         @task-archived="poll"
+        @create-task="onCreateTaskOpen"
       />
     </main>
 
@@ -375,5 +388,11 @@ onUnmounted(() => {
     </main>
 
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
+    <CreateTaskDialog
+      v-if="createTaskOpen"
+      :project-id="selectedProjectId"
+      @close="createTaskOpen = false"
+      @created="onTaskCreated"
+    />
   </div>
 </template>

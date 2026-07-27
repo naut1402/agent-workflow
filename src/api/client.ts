@@ -666,10 +666,44 @@ export async function fetchLogs(
   return r.json()
 }
 
-export async function fetchJobLog(id: string) {
-  const r = await fetch(`/api/jobs/${encodeURIComponent(id)}/log`)
-  if (!r.ok) throw new Error(`/api/jobs/${id}/log → ${r.status}`)
-  return r.json()
+export interface FetchJobLogOptions {
+  /** Byte cursor the client already consumed. */
+  offset?: number
+  /** Long-poll wait hint (ms) for delta log endpoint. */
+  wait?: number
+}
+
+export async function fetchJobLog(id: string, opts: FetchJobLogOptions = {}) {
+  const r = await fetch(
+    `/api/jobs/${encodeURIComponent(id)}/log${qs({ offset: opts.offset, wait: opts.wait })}`,
+  )
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/jobs/${id}/log → ${r.status}`)
+  return data
+}
+
+// ── Create task (dashboard scaffold) ─────────────────────────────────────────
+
+export async function createTask(payload: unknown, projectId?: string) {
+  const r = await apiFetch(`/api/tasks${qs({ project: projectId })}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/tasks POST → ${r.status}`)
+  return data
+}
+
+export async function fetchGithubIssue(url: string, projectId?: string) {
+  const r = await apiFetch(`/api/github/issue${qs({ project: projectId })}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/github/issue POST → ${r.status}`)
+  return data
 }
 
 // ── Composed helpers ─────────────────────────────────────────────────────────

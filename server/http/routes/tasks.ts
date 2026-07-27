@@ -4,11 +4,13 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../types.js'
 import { j, parseBody, unknownProject } from '../respond.js'
 import { resolveArtifact } from '../../../shared/sanitize.js'
-import { collectTasks, flowProfilePath } from '../../tasks/index.js'
+import { collectTasks, flowProfilePath, createTask } from '../../tasks/index.js'
 import { applyArchiveAction, applyHitlAction } from '../../tasks/state.js'
 import { loadPipelineConfig } from '../../pipeline/index.js'
 import { emitAudit } from '../../logging/store.js'
 import { TaskArchivePatch, TaskStatePatch } from '../../../shared/schemas/task.js'
+import { CreateTaskRequest, GithubIssueRequest } from '../../../shared/schemas/taskCreate.js'
+import { fetchGithubIssue } from '../../github/index.js'
 import { submitJob, submitApprovalJob, findSelectionRange, extractLines } from '../../runners/index.js'
 import {
   loadArtifactActions,
@@ -413,5 +415,82 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       detail: { jobId: job.id, agentRef: action.agent_ref, action: actionId },
     })
     return j(c, 201, { job })
+  })
+
+  app.post('/api/tasks', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
+    const parsed = CreateTaskRequest.safeParse(b.value)
+    if (!parsed.success) {
+      return j(c, 400, { error: 'invalid request', details: parsed.error.flatten() })
+    }
+    const body = parsed.data
+    const result = await createTask(root, {
+      taskId: body.taskId,
+      source: body.source,
+      prompt: body.prompt,
+      issueUrl: body.issueUrl,
+      parentTaskId: body.parentTaskId,
+      profileName: body.profileName,
+      pipeline: body.pipeline,
+      knowledgeInputs: body.knowledgeInputs,
+      autoReview: body.autoReview,
+      exportJson: body.exportJson,
+    })
+    if ('error' in result) return j(c, result.status, { error: result.error, taskId: body.taskId })
+
+    emitAudit({
+      op: 'create',
+      entity: 'task-state',
+      identifier: result.taskId,
+      projectId: c.get('projectId'),
+    })
+
+    let job: ReturnType<typeof submitJob> | undefined
+    if (body.run) {
+      const agentRef = result.firstStep?.agent
+      if (typeof agentRef !== 'string' || !agentRef) {
+        return j(c, 400, { error: 'pipeline has no first-step agent', taskId: result.taskId })
+      }
+      job = submitJob({
+        runnerId: body.runnerId ?? undefined,
+        agentRef,
+        workspace: path.join(root, 'tasks', result.taskId),
+        userPrompt: result.requestContent,
+        metadata: {
+          projectRoot: path.dirname(root),
+          devTeamRoot: root,
+          projectId: c.get('projectId') || undefined,
+          taskId: result.taskId,
+          createTaskRun: true,
+        },
+      })
+    }
+
+    return j(c, 201, {
+      task: {
+        taskId: result.taskId,
+        state: result.state,
+        pipeline: result.pipeline,
+        firstStep: result.firstStep,
+        requestFile: result.requestFile,
+        pipelineFile: result.pipelineFile,
+      },
+      ...(job ? { job } : {}),
+    })
+  })
+
+  app.post('/api/github/issue', async (c) => {
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
+    const parsed = GithubIssueRequest.safeParse(b.value)
+    if (!parsed.success) {
+      return j(c, 400, { error: 'invalid request', details: parsed.error.flatten() })
+    }
+    const result = await fetchGithubIssue(parsed.data.url)
+    if ('error' in result) return j(c, result.status, { error: result.error })
+    return j(c, 200, { issue: result.issue })
   })
 }
