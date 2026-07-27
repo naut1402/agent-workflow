@@ -1,28 +1,16 @@
 import { test, expect } from '@playwright/test'
-import fs from 'node:fs'
-import path from 'node:path'
+import { capturePage } from './_capture'
 
 // E2E for the features/knowledge module — ported from scripts/verify-knowledge.mjs.
 // Covers the knowledge REST roundtrip (create → list → tags → delete) and the
-// UI mount, with a capture into docs/<feature>-evidence/.
+// UI mount; screenshot attaches via testInfo (not docs/).
 
-const EVIDENCE = path.resolve(process.cwd(), 'docs', 'features-knowledge-evidence')
-
-test('knowledge mode mounts the panel (capture)', async ({ page }) => {
-  fs.mkdirSync(EVIDENCE, { recursive: true })
+test('knowledge mode mounts the panel (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   await page.getByRole('button', { name: 'Knowledge' }).click()
   await expect(page.locator('.knowledge-panel')).toBeVisible({ timeout: 15_000 })
-  await page.screenshot({ path: path.join(EVIDENCE, 'knowledge.png'), fullPage: true })
-  fs.writeFileSync(
-    path.join(EVIDENCE, 'verify-results.json'),
-    JSON.stringify(
-      { feature: 'features-knowledge', checks: [{ name: 'knowledge panel mounts', ok: true }], capturedAt: new Date().toISOString() },
-      null,
-      2,
-    ),
-  )
+  await capturePage(page, testInfo, 'knowledge')
 })
 
 test('knowledge REST roundtrip: create → list → tags → delete', async ({ request }, testInfo) => {
