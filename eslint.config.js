@@ -58,8 +58,8 @@ export default tseslint.config(
       'server/**/*.{ts,tsx,js,mjs}',
       'shared/**/*.{ts,tsx,js}',
       'mcp/**/*.{ts,tsx,js}',
-      'tests/**/*.{ts,tsx,js}',
-      'test-e2e/**/*.{ts,tsx,js}',
+      'tests/**/*.{ts,tsx,js,mjs}',
+      'test-e2e/**/*.{ts,tsx,js,mjs}',
     ],
     languageOptions: {
       globals: {
