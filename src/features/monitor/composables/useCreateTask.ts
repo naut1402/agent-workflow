@@ -17,12 +17,14 @@ export function emptyCreateTaskForm() {
     source: 'prompt' as TaskSource,
     prompt: '',
     issueUrl: '',
-    profileName: '' as string | null,
+    /** '' = dùng pipeline mặc định (builtin/global), khớp `<option value="">`. */
+    profileName: '',
     knowledgeInputs: [] as string[],
     autoReview: false,
     exportJson: false,
     run: false,
-    runnerId: '' as string | null,
+    /** '' = chưa chọn; loadMeta gán defaultRunnerId / runner đầu. */
+    runnerId: '',
   }
 }
 
@@ -89,6 +91,15 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     createdTaskId.value = null
   }
 
+  function pickDefaultRunnerId(
+    list: { id: string }[],
+    defaultRunnerId: string | null | undefined,
+  ): string {
+    if (!list.length) return ''
+    if (defaultRunnerId && list.some((r) => r.id === defaultRunnerId)) return defaultRunnerId
+    return list[0].id
+  }
+
   async function loadMeta() {
     const projectId = opts.getProjectId() ?? undefined
     try {
@@ -98,13 +109,22 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
       ])
       profiles.value = (profData.profiles || []).map((p: { name: string }) => ({ name: p.name }))
       runners.value = (runData.runners || []).filter((r: { enabled?: boolean }) => r.enabled !== false)
-      if (!form.value.runnerId && runners.value.length) {
-        form.value.runnerId = runners.value[0].id
-      }
-    } catch {
+      // Luôn gắn lại default khi mở dialog (kể cả sau reset form).
+      form.value.runnerId = pickDefaultRunnerId(runners.value, runData.defaultRunnerId)
+      if (!form.value.profileName) form.value.profileName = ''
+    } catch (e: unknown) {
       profiles.value = []
       runners.value = []
+      form.value.runnerId = ''
+      error.value = String((e as Error)?.message ?? e)
     }
+  }
+
+  /** Khi bật "Chạy ngay", đảm bảo runnerId khớp option thật (tránh select trống). */
+  function ensureRunnerSelected() {
+    if (!form.value.run) return
+    if (form.value.runnerId && runners.value.some((r) => r.id === form.value.runnerId)) return
+    form.value.runnerId = pickDefaultRunnerId(runners.value, undefined)
   }
 
   async function refreshFirstStepLabel() {
@@ -208,6 +228,7 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     firstStepLabel,
     reset,
     loadMeta,
+    ensureRunnerSelected,
     refreshFirstStepLabel,
     fetchIssue,
     next,

@@ -287,6 +287,13 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
       })
 
       const useClaudeStyle = claudeStyle || opts.claudeStyleArgs === true
+      // Headless `-p` with no TTY will hang forever if Claude waits for an
+      // interactive tool-permission prompt. Default skip-permissions on unless
+      // the runner config explicitly sets dangerouslySkipPermissions: false.
+      const skipPermissions =
+        useClaudeStyle &&
+        runnerConfig.dangerouslySkipPermissions !== false &&
+        runnerConfig.dangerouslySkipPermissions !== 'false'
       let args: string[]
       let stdinInput: string | undefined
       if (useClaudeStyle) {
@@ -294,7 +301,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
           flags,
           prompt,
           allowedTools: runnerConfig.allowedTools,
-          dangerouslySkipPermissions: runnerConfig.dangerouslySkipPermissions,
+          dangerouslySkipPermissions: skipPermissions,
           sessionId: sessionPlan.sessionId,
           resumeSessionId: sessionPlan.resumeSessionId,
         })
@@ -324,7 +331,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
           flags,
           claudeStyle: useClaudeStyle,
           allowedTools: runnerConfig.allowedTools,
-          dangerouslySkipPermissions: runnerConfig.dangerouslySkipPermissions,
+          dangerouslySkipPermissions: skipPermissions,
           sessionId: sessionPlan.sessionId,
           resumeSessionId: sessionPlan.resumeSessionId,
           prompt,
@@ -337,6 +344,13 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
         appendLog(chunk)
       }
 
+      const wrappedOnStart = (info: { pid: number | null }) => {
+        onStart?.(info)
+        // So the UI delta stream is not stuck on an empty "=== Phản hồi ==="
+        // section while the CLI is still thinking / using tools.
+        appendLog(`[runner] process started pid=${info.pid ?? 'null'} — chờ stdout/stderr…\n`)
+      }
+
       let procResult: ProcResult
       try {
         procResult = await runProcess(cliPath, args, {
@@ -344,7 +358,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
           env: buildChildEnv(credential),
           timeoutMs: req.timeoutMs || runnerConfig.timeoutMs || 600_000,
           onLog: wrappedOnLog,
-          onStart,
+          onStart: wrappedOnStart,
           stdinInput,
         })
       } catch (err: any) {

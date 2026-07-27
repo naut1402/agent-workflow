@@ -182,6 +182,7 @@ export const monitor = {
     previewKnowledge: 'Knowledge',
     runNow: 'Run first step now',
     runner: 'Runner',
+    runnerPlaceholder: 'Select a runner…',
     noRunner: 'No runner available — disable "Run now" or configure a runner.',
     errors: {
       required: 'Task ID must not be empty.',

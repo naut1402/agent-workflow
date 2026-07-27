@@ -34,6 +34,7 @@ const {
   firstStepLabel,
   reset,
   loadMeta,
+  ensureRunnerSelected,
   refreshFirstStepLabel,
   fetchIssue,
   next,
@@ -61,6 +62,13 @@ async function onOpen() {
 watch(
   () => form.value.profileName,
   () => void refreshFirstStepLabel(),
+)
+
+watch(
+  () => form.value.run,
+  (run) => {
+    if (run) ensureRunnerSelected()
+  },
 )
 
 watch(
@@ -223,7 +231,7 @@ onUnmounted(() => {
             <label class="cfg-label">
               {{ t('monitor.createTask.profile') }}
               <select v-model="form.profileName" class="cfg-input">
-                <option :value="null">{{ t('monitor.createTask.profileDefault') }}</option>
+                <option value="">{{ t('monitor.createTask.profileDefault') }}</option>
                 <option v-for="p in profiles" :key="p.name" :value="p.name">
                   {{ p.name }}
                 </option>
@@ -295,7 +303,10 @@ onUnmounted(() => {
               </label>
               <label v-if="form.run" class="cfg-label">
                 {{ t('monitor.createTask.runner') }}
-                <select v-model="form.runnerId" class="cfg-input">
+                <select v-model="form.runnerId" class="cfg-input" required>
+                  <option value="" disabled>
+                    {{ t('monitor.createTask.runnerPlaceholder') }}
+                  </option>
                   <option v-for="r in runners" :key="r.id" :value="r.id">{{ r.name }}</option>
                 </select>
               </label>

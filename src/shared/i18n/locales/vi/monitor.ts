@@ -183,6 +183,7 @@ export const monitor = {
     previewKnowledge: 'Knowledge',
     runNow: 'Chạy ngay bước đầu',
     runner: 'Runner',
+    runnerPlaceholder: 'Chọn runner…',
     noRunner: 'Chưa có runner khả dụng — tắt "Chạy ngay" hoặc cấu hình runner.',
     errors: {
       required: 'Task ID không được để trống.',
