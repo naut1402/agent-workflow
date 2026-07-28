@@ -18,6 +18,9 @@
   --text-muted: #8b97a3;
   --hover-surface: rgba(255, 255, 255, 0.06);
   --input-surface: rgba(0, 0, 0, 0.25);
+  --scrollbar-size: 8px;
+  --scrollbar-thumb: rgba(215, 221, 228, 0.18);
+  --scrollbar-thumb-hover: rgba(215, 221, 228, 0.34);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -40,4 +43,6 @@
   --text-muted: #5c6b7a;
   --hover-surface: rgba(0, 0, 0, 0.04);
   --input-surface: #eef1f6;
+  --scrollbar-thumb: rgba(26, 35, 50, 0.2);
+  --scrollbar-thumb-hover: rgba(26, 35, 50, 0.36);
 }
