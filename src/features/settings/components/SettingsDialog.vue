@@ -677,26 +677,28 @@ onUnmounted(() => {
                     <span class="settings-token-mask" :title="t('settings.githubTokens.tokenSet')">
                       ••••••••
                     </span>
-                    <button
-                      type="button"
-                      class="icon-btn"
-                      :title="t('settings.githubTokens.edit')"
-                      :aria-label="t('settings.githubTokens.edit')"
-                      :disabled="githubTokensBusy"
-                      @click="beginEditGithubToken(row)"
-                    >
-                      ✎
-                    </button>
-                    <button
-                      type="button"
-                      class="icon-btn danger"
-                      :title="t('settings.githubTokens.remove')"
-                      :aria-label="t('settings.githubTokens.remove')"
-                      :disabled="githubTokensBusy"
-                      @click="removeGithubToken(row.repo)"
-                    >
-                      ×
-                    </button>
+                    <span class="icon-btn-group">
+                      <button
+                        type="button"
+                        class="icon-btn icon-btn-inline"
+                        :title="t('settings.githubTokens.edit')"
+                        :aria-label="t('settings.githubTokens.edit')"
+                        :disabled="githubTokensBusy"
+                        @click="beginEditGithubToken(row)"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        class="icon-btn icon-btn-inline danger"
+                        :title="t('settings.githubTokens.remove')"
+                        :aria-label="t('settings.githubTokens.remove')"
+                        :disabled="githubTokensBusy"
+                        @click="removeGithubToken(row.repo)"
+                      >
+                        ×
+                      </button>
+                    </span>
                   </li>
                   <li v-if="!githubTokenRows.length" class="settings-whitelist-empty">
                     {{ t('settings.githubTokens.empty') }}
