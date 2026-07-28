@@ -215,4 +215,34 @@ describe('SettingsDialog', () => {
     expect(tip).toBeTruthy()
     expect(tip.textContent).toContain('60')
   })
+
+  it('notifications position: dropdown defaults to both; change persists', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    const notifNav = document.querySelector(
+      '.settings-nav-item[data-group="notifications"]',
+    ) as HTMLButtonElement
+    expect(notifNav).toBeTruthy()
+    notifNav.click()
+    await flushPromises()
+
+    const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
+    expect(pane.textContent).toContain('Vị trí hiển thị')
+
+    const trigger = document.querySelector('.c-select-trigger') as HTMLButtonElement
+    expect(trigger).toBeTruthy()
+    expect(trigger.textContent).toContain('Cả sidebar và icon nổi')
+
+    trigger.click()
+    await flushPromises()
+    const options = Array.from(document.querySelectorAll('.c-select-option')) as HTMLElement[]
+    expect(options).toHaveLength(3)
+    const floating = options.find((el) => el.textContent?.includes('Chỉ icon nổi'))
+    expect(floating).toBeTruthy()
+    floating!.click()
+    await Promise.resolve()
+
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({
+      notificationUiPlacement: 'floating',
+    })
+  })
 })

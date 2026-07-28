@@ -13,8 +13,10 @@ import {
   resolveNotifyBrowserEnabled,
   resolveNotifyHitlPending,
   resolveNotifyQaReady,
+  resolveNotificationUiPlacement,
   resolveNotifySoundEnabled,
   resolveThemePreference,
+  type NotificationUiPlacement,
   type ThemePreference,
 } from '../../../../shared/schemas/appSettings'
 import {
@@ -23,6 +25,7 @@ import {
   runAutoscan,
 } from '../../../api'
 import FolderPickerDialog from '../../../shared/ui/FolderPickerDialog.vue'
+import CSelect from '../../../shared/ui/CSelect.vue'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -101,6 +104,7 @@ const notifyHitlPending = computed(() => resolveNotifyHitlPending(settings.value
 const notifyQaReady = computed(() => resolveNotifyQaReady(settings.value))
 const notifyBrowserEnabled = computed(() => resolveNotifyBrowserEnabled(settings.value))
 const notifySoundEnabled = computed(() => resolveNotifySoundEnabled(settings.value))
+const notificationUiPlacement = computed(() => resolveNotificationUiPlacement(settings.value))
 const notifyBrowserPermissionErr = ref(false)
 
 function toggleNotificationsEnabled() {
@@ -133,6 +137,18 @@ async function toggleNotifyBrowserEnabled() {
 
 function toggleNotifySoundEnabled() {
   update({ notifySoundEnabled: !notifySoundEnabled.value })
+}
+
+const notificationUiPlacementOptions = computed(() => [
+  { value: 'both', label: t('settings.notifications.position.both') },
+  { value: 'sidebar', label: t('settings.notifications.position.sidebar') },
+  { value: 'floating', label: t('settings.notifications.position.floating') },
+])
+
+function onNotificationUiPlacementUpdate(value: string) {
+  if (value === 'sidebar' || value === 'floating' || value === 'both') {
+    update({ notificationUiPlacement: value as NotificationUiPlacement })
+  }
 }
 
 // ── Autoscan (server-backed) ─────────────────────────────────────────────────
@@ -559,6 +575,19 @@ onUnmounted(() => {
                   />
                   {{ t('settings.notifications.enabled') }}
                 </label>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.notifications.position.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.notifications.position.desc') }}</p>
+                <div class="settings-select-wrap">
+                  <CSelect
+                    :model-value="notificationUiPlacement"
+                    :options="notificationUiPlacementOptions"
+                    :disabled="!notificationsEnabled"
+                    :aria-label="t('settings.notifications.position.title')"
+                    @update:model-value="onNotificationUiPlacementUpdate"
+                  />
+                </div>
               </section>
               <section class="settings-section">
                 <h3 class="settings-section-title">{{ t('settings.notifications.events.title') }}</h3>

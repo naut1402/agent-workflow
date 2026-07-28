@@ -82,7 +82,7 @@ Domain module không biết gì về HTTP — chỉ nhận `ctx`/`root`, trả d
 `<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables}` + `src/shared/{ui,composables,lib}`; API wrapper tập trung ở `src/api/`.
 
 - Quy ước button (ưu tiên icon-btn, default không viền, hover scale): [`docs/ui-buttons.md`](docs/ui-buttons.md).
-
+- **Custom UI primitives** trong `src/shared/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.
 ### 3.6 Ngôn ngữ UI (i18n)
 
 UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **Tiếng Việt (`vi`) là locale mặc định** và là **nguồn chân lý cho message schema** — các locale khác (vd `en`) được gắn type theo `vi` nên thiếu key là lỗi compile, không phải fallback runtime.
