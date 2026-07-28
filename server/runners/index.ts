@@ -53,6 +53,7 @@ export {
   resolveSessionPlan,
   recordSessionUsage,
   isSessionEntryValid,
+  closeTaskSession,
 } from './sessionLedger.js'
 export {
   parseCursorJsonOutput,
