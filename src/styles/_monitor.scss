@@ -288,6 +288,11 @@
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
 }
+/* Đứng đầu toolbar, trước tên artifact — cùng mép trái với nút collapse panel */
+.btn-toggle-all-blocks {
+  order: -1;
+  margin-right: -4px;
+}
 .art-title {
   font-family: ui-monospace, monospace;
   font-size: 13px;

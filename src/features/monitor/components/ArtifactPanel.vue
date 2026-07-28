@@ -442,6 +442,28 @@ onUpdated(() => scheduleMermaid())
 
     <template v-else>
       <div class="art-toolbar">
+        <!-- Thu gọn/mở rộng toàn bộ block đặt bên trái toolbar, cùng vị trí với
+             nút collapse của sub-sidebar và panel trái Pipeline Editor. -->
+        <button
+          v-if="blockMode"
+          type="button"
+          class="icon-btn btn-toggle-all-blocks"
+          :disabled="isEditing()"
+          :title="allBlocksOpen ? t('monitor.artifact.collapseAll') : t('monitor.artifact.expandAll')"
+          :aria-label="allBlocksOpen ? t('monitor.artifact.collapseAll') : t('monitor.artifact.expandAll')"
+          @click="toggleAllBlocks"
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              :d="allBlocksOpen ? 'M4 10l4-4 4 4' : 'M4 6l4 4 4-4'"
+            />
+          </svg>
+        </button>
         <span class="art-title">{{ openArtifact.name }}</span>
         <div class="art-toolbar-actions">
           <QuickActionMenuDropdown
@@ -484,26 +506,6 @@ onUpdated(() => scheduleMermaid())
             <svg v-else viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
               <rect x="2.5" y="2.5" width="11" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
               <rect x="2.5" y="9.5" width="11" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
-            </svg>
-          </button>
-          <button
-            v-if="blockMode"
-            type="button"
-            class="icon-btn"
-            :disabled="isEditing()"
-            :title="allBlocksOpen ? t('monitor.artifact.collapseAll') : t('monitor.artifact.expandAll')"
-            :aria-label="allBlocksOpen ? t('monitor.artifact.collapseAll') : t('monitor.artifact.expandAll')"
-            @click="toggleAllBlocks"
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                :d="allBlocksOpen ? 'M4 10l4-4 4 4' : 'M4 6l4 4 4-4'"
-              />
             </svg>
           </button>
         </div>
