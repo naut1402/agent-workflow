@@ -219,6 +219,23 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   cursor: default;
 }
 
+/* Inline row actions inside lists — no hover scale (overflow/scrollbar). */
+.icon-btn.icon-btn-inline {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+}
+.icon-btn.icon-btn-inline:hover:not(:disabled) {
+  transform: none;
+}
+
+.icon-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+
 /* Text quick-action trigger (docs/ui-buttons.md: label bắt buộc). Shared by
    Monitor ArtifactPanel + QuickActionMenuDropdown — keep global with .icon-btn. */
 .btn-quick-action {

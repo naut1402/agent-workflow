@@ -601,16 +601,18 @@ onUnmounted(() => {
                 <ul class="settings-whitelist">
                   <li v-for="p in whitelist" :key="p" class="settings-whitelist-item">
                     <code class="settings-whitelist-path" :title="p">{{ p }}</code>
-                    <button
-                      type="button"
-                      class="icon-btn danger"
-                      :title="t('settings.autoscan.removePath')"
-                      :aria-label="t('settings.autoscan.removePath')"
-                      :disabled="autoscanBusy"
-                      @click="removeWhitelistPath(p)"
-                    >
-                      ×
-                    </button>
+                    <span class="icon-btn-group">
+                      <button
+                        type="button"
+                        class="icon-btn icon-btn-inline danger"
+                        :title="t('settings.autoscan.removePath')"
+                        :aria-label="t('settings.autoscan.removePath')"
+                        :disabled="autoscanBusy"
+                        @click="removeWhitelistPath(p)"
+                      >
+                        ×
+                      </button>
+                    </span>
                   </li>
                   <li v-if="!whitelist.length" class="settings-whitelist-empty">
                     {{ t('settings.autoscan.pathPlaceholder') }}
