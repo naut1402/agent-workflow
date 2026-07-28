@@ -119,13 +119,16 @@ export interface JobRecord {
   error?: string
   artifactsFound?: string[]
   metadata?: Record<string, unknown>
-  // Approval flow only (all undefined for a normal job):
+  // `sessionId`/`parentJobId` are shared by two independent feedback flows:
+  // approval (`sendJobFeedback`, keyed by `jobId`) and task-chat-resume
+  // (`sendTaskFeedback`, keyed by `taskId`, see jobQueue.ts). Only
+  // `applyTarget`/`approvalArtifact` below are approval-flow only.
   sessionId?: string
-  /** Real (non-scratch) directory this job's proposed changes would apply to. */
+  /** Real (non-scratch) directory this job's proposed changes would apply to (approval flow only). */
   applyTarget?: string
-  /** Artifact file (relative to `applyTarget`/`workspace`) under review. */
+  /** Artifact file (relative to `applyTarget`/`workspace`) under review (approval flow only). */
   approvalArtifact?: string
-  /** The job this one continued via `--resume` (feedback round chain). */
+  /** The job this one continued via `--resume` (approval feedback round, or a task-chat-feedback round). */
   parentJobId?: string
   // Selection-splice approval only (see jobQueue.ts runJob): when set, the
   // agent's output (stdout) is spliced back into a copy of the real artifact at
