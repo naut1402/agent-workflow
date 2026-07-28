@@ -23,7 +23,10 @@ import {
   fetchAutoscanConfig,
   saveAutoscanConfig,
   runAutoscan,
+  fetchGithubTokensConfig,
+  saveGithubTokensConfig,
 } from '../../../api'
+import { parseGithubRepoRef } from '../../../../shared/schemas/githubTokens'
 import FolderPickerDialog from '../../../shared/ui/FolderPickerDialog.vue'
 import CSelect from '../../../shared/ui/CSelect.vue'
 
@@ -251,6 +254,102 @@ async function scanNow() {
   }
 }
 
+// ── GitHub repo tokens (server-backed) ───────────────────────────────────────
+
+type GithubTokenRow = { repo: string; token: string }
+
+const githubTokenRows: Ref<GithubTokenRow[]> = ref([])
+const draftRepo = ref('')
+const draftToken = ref('')
+/** When set, the add form updates this existing slug instead of only appending. */
+const editingRepo = ref<string | null>(null)
+const githubTokensBusy = ref(false)
+const githubTokensMsg = ref('')
+const githubTokensErr = ref('')
+
+async function loadGithubTokens() {
+  githubTokensErr.value = ''
+  try {
+    const data = await fetchGithubTokensConfig()
+    const cfg = data.config || {}
+    githubTokenRows.value = Array.isArray(cfg.repos)
+      ? cfg.repos.map((e: GithubTokenRow) => ({
+          repo: String(e.repo ?? ''),
+          token: String(e.token ?? ''),
+        }))
+      : []
+  } catch {
+    githubTokensErr.value = t('settings.githubTokens.loadError')
+  }
+}
+
+async function persistGithubTokens() {
+  githubTokensBusy.value = true
+  githubTokensMsg.value = ''
+  githubTokensErr.value = ''
+  try {
+    const data = await saveGithubTokensConfig({ repos: githubTokenRows.value })
+    const cfg = data.config || {}
+    githubTokenRows.value = Array.isArray(cfg.repos)
+      ? cfg.repos.map((e: GithubTokenRow) => ({
+          repo: String(e.repo ?? ''),
+          token: String(e.token ?? ''),
+        }))
+      : []
+    githubTokensMsg.value = t('settings.githubTokens.saved')
+  } catch (e) {
+    githubTokensErr.value = String((e as Error).message || e)
+  } finally {
+    githubTokensBusy.value = false
+  }
+}
+
+function clearGithubTokenDraft() {
+  draftRepo.value = ''
+  draftToken.value = ''
+  editingRepo.value = null
+  githubTokensErr.value = ''
+}
+
+function beginEditGithubToken(row: GithubTokenRow) {
+  editingRepo.value = row.repo
+  draftRepo.value = row.repo
+  draftToken.value = row.token
+  githubTokensErr.value = ''
+  githubTokensMsg.value = ''
+}
+
+function saveGithubTokenDraft() {
+  const rawRepo = draftRepo.value.trim()
+  const token = draftToken.value.trim()
+  if (!rawRepo) {
+    githubTokensErr.value = t('settings.githubTokens.repoRequired')
+    return
+  }
+  const slug = parseGithubRepoRef(rawRepo)
+  if (!slug) {
+    githubTokensErr.value = t('settings.githubTokens.repoInvalid')
+    return
+  }
+  if (!token) {
+    githubTokensErr.value = t('settings.githubTokens.tokenRequired')
+    return
+  }
+  const skip = new Set(
+    [editingRepo.value, slug].filter((s): s is string => Boolean(s)).map((s) => s.toLowerCase()),
+  )
+  const without = githubTokenRows.value.filter((r) => !skip.has(r.repo.toLowerCase()))
+  githubTokenRows.value = [...without, { repo: slug, token }]
+  clearGithubTokenDraft()
+  void persistGithubTokens()
+}
+
+function removeGithubToken(repo: string) {
+  if (editingRepo.value === repo) clearGithubTokenDraft()
+  githubTokenRows.value = githubTokenRows.value.filter((r) => r.repo !== repo)
+  void persistGithubTokens()
+}
+
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     if (pickerOpen.value) {
@@ -268,6 +367,7 @@ function onKeydown(e: KeyboardEvent) {
 onMounted(() => {
   load()
   void loadAutoscan()
+  void loadGithubTokens()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -501,16 +601,18 @@ onUnmounted(() => {
                 <ul class="settings-whitelist">
                   <li v-for="p in whitelist" :key="p" class="settings-whitelist-item">
                     <code class="settings-whitelist-path" :title="p">{{ p }}</code>
-                    <button
-                      type="button"
-                      class="icon-btn danger"
-                      :title="t('settings.autoscan.removePath')"
-                      :aria-label="t('settings.autoscan.removePath')"
-                      :disabled="autoscanBusy"
-                      @click="removeWhitelistPath(p)"
-                    >
-                      ×
-                    </button>
+                    <span class="icon-btn-group">
+                      <button
+                        type="button"
+                        class="icon-btn icon-btn-inline danger"
+                        :title="t('settings.autoscan.removePath')"
+                        :aria-label="t('settings.autoscan.removePath')"
+                        :disabled="autoscanBusy"
+                        @click="removeWhitelistPath(p)"
+                      >
+                        ×
+                      </button>
+                    </span>
                   </li>
                   <li v-if="!whitelist.length" class="settings-whitelist-empty">
                     {{ t('settings.autoscan.pathPlaceholder') }}
@@ -560,6 +662,90 @@ onUnmounted(() => {
                 </div>
                 <p v-if="autoscanMsg" class="settings-autoscan-msg">{{ autoscanMsg }}</p>
                 <p v-if="autoscanErr" class="settings-autoscan-err">⚠ {{ autoscanErr }}</p>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.githubTokens.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.githubTokens.desc') }}</p>
+                <ul class="settings-whitelist settings-github-tokens">
+                  <li
+                    v-for="row in githubTokenRows"
+                    :key="row.repo"
+                    class="settings-whitelist-item"
+                    :class="{ 'is-editing': editingRepo === row.repo }"
+                  >
+                    <code class="settings-whitelist-path" :title="row.repo">{{ row.repo }}</code>
+                    <span class="settings-token-mask" :title="t('settings.githubTokens.tokenSet')">
+                      ••••••••
+                    </span>
+                    <span class="icon-btn-group">
+                      <button
+                        type="button"
+                        class="icon-btn icon-btn-inline"
+                        :title="t('settings.githubTokens.edit')"
+                        :aria-label="t('settings.githubTokens.edit')"
+                        :disabled="githubTokensBusy"
+                        @click="beginEditGithubToken(row)"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        class="icon-btn icon-btn-inline danger"
+                        :title="t('settings.githubTokens.remove')"
+                        :aria-label="t('settings.githubTokens.remove')"
+                        :disabled="githubTokensBusy"
+                        @click="removeGithubToken(row.repo)"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </li>
+                  <li v-if="!githubTokenRows.length" class="settings-whitelist-empty">
+                    {{ t('settings.githubTokens.empty') }}
+                  </li>
+                </ul>
+                <div class="settings-whitelist-add settings-github-tokens-add">
+                  <input
+                    v-model="draftRepo"
+                    class="settings-input"
+                    :placeholder="t('settings.githubTokens.repoPlaceholder')"
+                    :disabled="githubTokensBusy"
+                    autocomplete="off"
+                    @keyup.enter="saveGithubTokenDraft()"
+                  />
+                  <input
+                    v-model="draftToken"
+                    class="settings-input"
+                    type="password"
+                    :placeholder="t('settings.githubTokens.tokenPlaceholder')"
+                    :disabled="githubTokensBusy"
+                    autocomplete="off"
+                    @keyup.enter="saveGithubTokenDraft()"
+                  />
+                  <button
+                    type="button"
+                    class="btn-ghost btn-sm"
+                    :disabled="githubTokensBusy"
+                    @click="saveGithubTokenDraft()"
+                  >
+                    {{
+                      editingRepo
+                        ? t('settings.githubTokens.saveEdit')
+                        : t('settings.githubTokens.add')
+                    }}
+                  </button>
+                  <button
+                    v-if="editingRepo"
+                    type="button"
+                    class="btn-ghost btn-sm"
+                    :disabled="githubTokensBusy"
+                    @click="clearGithubTokenDraft()"
+                  >
+                    {{ t('settings.githubTokens.cancelEdit') }}
+                  </button>
+                </div>
+                <p v-if="githubTokensMsg" class="settings-autoscan-msg">{{ githubTokensMsg }}</p>
+                <p v-if="githubTokensErr" class="settings-autoscan-err">⚠ {{ githubTokensErr }}</p>
               </section>
             </template>
 

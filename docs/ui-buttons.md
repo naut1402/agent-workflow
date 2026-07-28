@@ -17,6 +17,9 @@ Dùng `<button type="button" class="icon-btn">` + SVG bên trong.
 | (không) | Action thường |
 | `.active` | Trạng thái bật / được chọn (màu `--accent`) |
 | `.danger` | Action phá hủy — hover dùng `--danger` |
+| `.icon-btn-inline` | Action trong hàng danh sách (row) — **không** scale khi hover (tránh đẩy layout / hiện scrollbar). Gom cụm nút bằng `.icon-btn-group` (gap 0). |
+
+Hover scale (`scale(1.15)`) chỉ dùng cho toolbar / standalone. Nút nằm cạnh nhau trong list item dùng `.icon-btn-inline`.
 
 ### Accessibility & i18n
 

@@ -8,6 +8,7 @@ import {
   DEFAULT_DASHBOARD_SETTINGS,
   parseDashboardSettings,
   resolveAutoscanFromDashboard,
+  resolveGithubTokensFromDashboard,
   type DashboardSettings,
 } from '../../shared/schemas/dashboardSettings.js'
 import {
@@ -15,6 +16,10 @@ import {
   parseAutoscanConfig,
   type AutoscanConfig,
 } from '../../shared/schemas/autoscan.js'
+import {
+  parseGithubTokensConfig,
+  type GithubTokensConfig,
+} from '../../shared/schemas/githubTokens.js'
 import { registryHome } from '../registry.js'
 
 export function dashboardSettingsFile(): string {
@@ -48,6 +53,7 @@ export function loadDashboardSettings(): DashboardSettings {
 
   return {
     autoscan: { ...DEFAULT_AUTOSCAN_CONFIG, whitelist: [] },
+    githubTokens: { repos: [] },
   }
 }
 
@@ -80,6 +86,20 @@ export function saveAutoscanConfig(config: AutoscanConfig): AutoscanConfig {
     autoscan: normalised,
   })
   return resolveAutoscanFromDashboard(saved)
+}
+
+export function loadGithubTokensConfig(): GithubTokensConfig {
+  return resolveGithubTokensFromDashboard(loadDashboardSettings())
+}
+
+export function saveGithubTokensConfig(config: GithubTokensConfig): GithubTokensConfig {
+  const current = loadDashboardSettings()
+  const normalised = parseGithubTokensConfig(config)
+  const saved = saveDashboardSettings({
+    ...current,
+    githubTokens: normalised,
+  })
+  return resolveGithubTokensFromDashboard(saved)
 }
 
 // Re-export default shape for callers that only need the empty template.

@@ -226,3 +226,21 @@
 .settings-select-wrap {
   margin-top: 10px;
 }
+
+.settings-token-mask {
+  flex: 0 0 auto;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  opacity: 0.55;
+  padding: 0 4px;
+}
+
+.settings-github-tokens .settings-whitelist-item.is-editing {
+  outline: 1px solid var(--accent, #6a9);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+.settings-github-tokens-add {
+  flex-wrap: wrap;
+}

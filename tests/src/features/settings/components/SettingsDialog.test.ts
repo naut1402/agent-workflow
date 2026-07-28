@@ -18,6 +18,10 @@ vi.mock('@/api', async (importOriginal) => {
     runAutoscan: vi.fn(async () => ({
       report: { added: [], existing: [], skipped: [], errors: [], hits: [], scanned: 0 },
     })),
+    fetchGithubTokensConfig: vi.fn(async () => ({
+      config: { repos: [{ repo: 'acme/app', token: 'ghp_old' }] },
+    })),
+    saveGithubTokensConfig: vi.fn(async (c: object) => ({ config: c })),
   }
 })
 
@@ -204,6 +208,20 @@ describe('SettingsDialog', () => {
     const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
     expect(pane.textContent).toContain('Autoscan')
     expect(pane.textContent).toContain('Whitelist')
+    expect(pane.textContent).toContain('Token GitHub')
+    expect(pane.textContent).toContain('acme/app')
+
+    const editBtn = Array.from(document.querySelectorAll('.settings-github-tokens .icon-btn')).find(
+      (el) => (el as HTMLElement).getAttribute('aria-label') === 'Sửa',
+    ) as HTMLButtonElement
+    expect(editBtn).toBeTruthy()
+    editBtn.click()
+    await flushPromises()
+    expect((document.querySelector('.settings-github-tokens-add input') as HTMLInputElement).value).toBe(
+      'acme/app',
+    )
+    expect(pane.textContent).toContain('Cập nhật')
+    expect(pane.textContent).toContain('Huỷ')
 
     const info = document.querySelector('.settings-info-btn') as HTMLButtonElement
     expect(info).toBeTruthy()

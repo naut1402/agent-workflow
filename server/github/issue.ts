@@ -1,4 +1,6 @@
 import { fetchUrlSafe } from '../agents/fetch.js'
+import { loadGithubTokensConfig } from '../autoscan/config.js'
+import { resolveGithubTokenForRepo } from '../../shared/schemas/githubTokens.js'
 
 export interface GithubIssuePreview {
   number: number
@@ -43,8 +45,22 @@ export function buildIssuePrompt(issue: {
 }
 
 /**
+ * Resolve auth token for a repo: per-repo dashboard setting first, then `GITHUB_TOKEN`.
+ * Exported for unit tests.
+ */
+export function resolveIssueFetchToken(owner: string, repo: string): string | null {
+  return resolveGithubTokenForRepo(
+    loadGithubTokensConfig(),
+    owner,
+    repo,
+    process.env.GITHUB_TOKEN,
+  )
+}
+
+/**
  * Fetch a GitHub issue for preview before scaffolding a task.
  * Uses `fetchUrlSafe` (https-only, SSRF guards) against the REST API.
+ * Private repos need a token (Settings → GitHub tokens, or env `GITHUB_TOKEN`).
  */
 export async function fetchGithubIssue(url: string): Promise<FetchGithubIssueResult> {
   const parsed = parseGithubIssueUrl(url)
@@ -57,7 +73,7 @@ export async function fetchGithubIssue(url: string): Promise<FetchGithubIssueRes
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
   }
-  const token = process.env.GITHUB_TOKEN
+  const token = resolveIssueFetchToken(parsed.owner, parsed.repo)
   if (token) headers.Authorization = `Bearer ${token}`
 
   try {
