@@ -235,6 +235,12 @@
   padding: 0 4px;
 }
 
+.settings-github-tokens .settings-whitelist-item.is-editing {
+  outline: 1px solid var(--accent, #6a9);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
 .settings-github-tokens-add {
   flex-wrap: wrap;
 }
