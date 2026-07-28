@@ -9,15 +9,21 @@ function mountNode(data: Record<string, any>) {
 }
 
 describe('PipelineNode', () => {
-  it('active status is clickable (pnode-runnable) and shows the run tooltip', () => {
-    const w = mountNode({ label: 'Implement', status: 'active' })
+  it('runnable=true is clickable and shows the run tooltip', () => {
+    const w = mountNode({ label: 'Implement', status: 'active', runnable: true })
     expect(w.find('.pnode').classes()).toContain('pnode-runnable')
     expect(w.find('.pnode-bubble').attributes('title')).toBe('Nhấn để chạy step này')
   })
 
-  it('pending status is clickable (pnode-runnable)', () => {
-    const w = mountNode({ label: 'Review', status: 'pending' })
+  it('pending + runnable shows the run affordance', () => {
+    const w = mountNode({ label: 'Review', status: 'pending', runnable: true })
     expect(w.find('.pnode').classes()).toContain('pnode-runnable')
+  })
+
+  it('active without runnable has no run affordance (e.g. broken state / in-flight)', () => {
+    const w = mountNode({ label: 'Implement', status: 'active', runnable: false })
+    expect(w.find('.pnode').classes()).not.toContain('pnode-runnable')
+    expect(w.find('.pnode-bubble').attributes('title')).toBeUndefined()
   })
 
   it('waiting status keeps the existing approve affordance, not the run one', () => {
@@ -35,7 +41,7 @@ describe('PipelineNode', () => {
   })
 
   it('running=true shows the running class/icon and overrides the runnable affordance', () => {
-    const w = mountNode({ label: 'Implement', status: 'active', running: true })
+    const w = mountNode({ label: 'Implement', status: 'active', running: true, runnable: false })
     expect(w.find('.pnode').classes()).toContain('pnode-running')
     expect(w.find('.pnode').classes()).not.toContain('pnode-runnable')
     expect(w.find('.pnode-bubble').text()).toBe('⏳')

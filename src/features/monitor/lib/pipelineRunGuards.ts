@@ -1,0 +1,29 @@
+/**
+ * Pure guards for "click a pipeline node to run/chain".
+ * Kept out of PipelineView so unit tests don't need VueFlow.
+ */
+
+/** True when the task state file is readable enough to drive a run. */
+export function canRunWithTaskState(task: { state_ok?: boolean } | null | undefined): boolean {
+  return task?.state_ok !== false
+}
+
+/**
+ * Only the current phase and phases after it may be clicked to run.
+ * A past pending/done node must not submit — the server always starts from
+ * `current_phase`, so clicking a past id would re-run the current step and
+ * look like "I clicked design but implement ran".
+ */
+export function isRunnableTarget(
+  phaseKeys: string[],
+  currentPhase: string | null | undefined,
+  targetStepId: string,
+): boolean {
+  if (!phaseKeys.length) return false
+  const targetIdx = phaseKeys.indexOf(targetStepId)
+  if (targetIdx < 0) return false
+  if (!currentPhase) return targetIdx === 0
+  const currentIdx = phaseKeys.indexOf(currentPhase)
+  if (currentIdx < 0) return false
+  return targetIdx >= currentIdx
+}
