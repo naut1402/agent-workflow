@@ -15,10 +15,13 @@ const {
   confirming,
   error,
   showLongChatNudge,
+  catalogAgentIds,
+  catalogError,
   selectEntity,
   sendMessage,
   confirm,
   cancel,
+  findInvalidPipelineAgentRefs,
 } = useNlChatSession({ getProjectId: () => props.projectId ?? undefined })
 
 const draftText = ref('')
@@ -42,8 +45,31 @@ function onSelectEntity(type: NlChatEntityType): void {
   selectEntity(type)
 }
 
+// design.md §4.4: pipeline draft's steps[].agent must be validated against
+// fetchCatalog() before "Xác nhận" is allowed — see useNlChatSession.ts.
+// Re-parses the (possibly user-edited) draftText live so the button reacts
+// as soon as the user fixes/breaks a ref, not just at the moment the agent
+// first returned the draft.
+const pipelineAgentError = computed<string | null>(() => {
+  if (entityType.value !== 'pipeline' || step.value !== 'previewDraft') return null
+  if (catalogError.value) return catalogError.value
+  if (!catalogAgentIds.value) return 'Đang kiểm tra danh sách agent hợp lệ...'
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(draftText.value)
+  } catch {
+    // Invalid JSON is already surfaced via draftParseError on confirm attempt.
+    return null
+  }
+  const invalid = findInvalidPipelineAgentRefs(parsed)
+  return invalid.length > 0 ? `Agent không tồn tại trong catalog: ${invalid.join(', ')}` : null
+})
+
 const canConfirm = computed(
-  () => step.value === 'previewDraft' && (entityType.value !== 'pipeline' || pipelineName.value.trim().length > 0),
+  () =>
+    step.value === 'previewDraft' &&
+    (entityType.value !== 'pipeline' || pipelineName.value.trim().length > 0) &&
+    (entityType.value !== 'pipeline' || !pipelineAgentError.value),
 )
 
 function onConfirm(): void {
@@ -112,6 +138,7 @@ function onClose(): void {
         </label>
         <textarea v-model="draftText" class="nl-chat-draft-textarea" rows="14"></textarea>
         <p v-if="draftParseError" class="nl-chat-error">{{ draftParseError }}</p>
+        <p v-if="entityType === 'pipeline' && pipelineAgentError" class="nl-chat-error">{{ pipelineAgentError }}</p>
         <div class="nl-chat-preview-actions">
           <button type="button" :disabled="!canConfirm || confirming" @click="onConfirm">Xác nhận & tạo</button>
           <button type="button" @click="onCancel">Huỷ</button>

@@ -6,6 +6,7 @@ import { useNlChatSession } from '@/features/nl-chat/composables/useNlChatSessio
 //   POST /api/nl-chat/sessions/:id/messages → { job }
 //   GET  /api/jobs/:id                     → { job } (poll)
 //   GET  /api/nl-chat/sessions/:id         → { kind, draft|text }
+//   GET  /api/catalog                      → { skills, agents } (pipeline draft agent-ref guard)
 //   POST /api/tasks | /api/pipeline-profiles | /api/custom-agents → confirm
 //   POST /api/nl-chat/sessions/:id/cancel  → { cancelled: true }
 
@@ -15,6 +16,7 @@ function stubApi(opts: {
   jobStates?: any[]
   turn?: any
   confirmOk?: boolean
+  catalog?: any
 }) {
   let jobCall = 0
   const fetchMock = vi.fn(async (input: any, init: any = {}) => {
@@ -35,6 +37,9 @@ function stubApi(opts: {
     }
     if (url.includes('/api/nl-chat/sessions/') && method === 'GET') {
       return { ok: true, status: 200, json: async () => opts.turn ?? { status: 'ready', kind: 'question', text: '?' } }
+    }
+    if (url.includes('/api/catalog') && method === 'GET') {
+      return { ok: true, status: 200, json: async () => opts.catalog ?? { skills: [], agents: [{ id: 'agent-a' }, { id: 'agent-b' }] } }
     }
     if (url.includes('/api/jobs/') && method === 'GET') {
       const states = opts.jobStates ?? [{ id: 'jobZ', status: 'succeeded' }]
@@ -132,6 +137,54 @@ describe('useNlChatSession', () => {
 
     expect(s.step.value).toBe('error')
     expect(s.error.value).toBeTruthy()
+  })
+
+  it('confirm(pipeline) blocks and errors when a draft.steps[].agent ref is not in the catalog', async () => {
+    stubApi({
+      turn: { status: 'ready', kind: 'draft', draft: { steps: [{ agent: 'agent-a' }, { agent: 'ghost-agent' }] } },
+      catalog: { skills: [], agents: [{ id: 'agent-a' }, { id: 'agent-b' }] },
+    })
+    const s = make()
+    s.selectEntity('pipeline')
+    await s.sendMessage('tạo pipeline 2 bước')
+    expect(s.step.value).toBe('previewDraft')
+
+    // catalog fetch fired by sendMessage's draft branch is async — wait for it to land.
+    await new Promise((r) => setTimeout(r, 5))
+
+    await s.confirm({ steps: [{ agent: 'agent-a' }, { agent: 'ghost-agent' }] })
+
+    expect(s.step.value).toBe('previewDraft')
+    expect(s.error.value).toContain('ghost-agent')
+  })
+
+  it('confirm(pipeline) succeeds when every draft.steps[].agent ref is in the catalog', async () => {
+    stubApi({
+      turn: { status: 'ready', kind: 'draft', draft: { steps: [{ agent: 'agent-a' }, { agent: 'agent-b' }] } },
+      catalog: { skills: [], agents: [{ id: 'agent-a' }, { id: 'agent-b' }] },
+      confirmOk: true,
+    })
+    const s = make()
+    s.pipelineName.value = 'my-pipeline'
+    s.selectEntity('pipeline')
+    await s.sendMessage('tạo pipeline hợp lệ')
+    await new Promise((r) => setTimeout(r, 5))
+
+    await s.confirm({ steps: [{ agent: 'agent-a' }, { agent: 'agent-b' }] })
+
+    expect(s.step.value).toBe('done')
+    expect(s.error.value).toBeNull()
+  })
+
+  it('confirm(task)/confirm(agent) are unaffected by the pipeline agent-ref guard', async () => {
+    stubApi({ turn: { status: 'ready', kind: 'draft', draft: { taskId: 't1', prompt: 'p' } }, confirmOk: true })
+    const s = make()
+    s.selectEntity('task')
+    await s.sendMessage('m')
+
+    await s.confirm({ taskId: 't1', prompt: 'p edited' })
+
+    expect(s.step.value).toBe('done')
   })
 
   it('cancel resets to selectEntity', async () => {

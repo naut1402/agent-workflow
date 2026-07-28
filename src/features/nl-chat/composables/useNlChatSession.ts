@@ -5,6 +5,7 @@ import {
   fetchNlChatTurn,
   cancelNlChat,
   fetchJob,
+  fetchCatalog,
   createTask,
   savePipelineProfile,
   saveCustomAgent,
@@ -63,6 +64,18 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   const turnCount = ref(0)
   const showLongChatNudge = ref(false)
 
+  // design.md §4.4 edge case "Pipeline draft tham chiếu agent ref không có
+  // trong catalog": `CreateTaskPipeline` stays `.passthrough()` (no Zod
+  // tightening — §3.1), so this client-side guard is the ONLY thing that
+  // stops a pipeline draft with a bogus `steps[].agent` ref from reaching
+  // "Xác nhận". Loaded once per pipeline draft (catalog rarely changes
+  // mid-session); re-validated against the live-edited draft right before
+  // `confirm()` actually calls `savePipelineProfile()` as a hard safety net,
+  // in addition to `ChatWindow.vue` disabling the button reactively.
+  const catalogAgentIds = ref<Set<string> | null>(null)
+  const catalogError = ref<string | null>(null)
+  const loadingCatalog = ref(false)
+
   const pollMs = opts.pollMs ?? 1200
   const maxWaitMs = opts.maxWaitMs ?? 5 * 60 * 1000
   const nudgeAfterTurns = opts.nudgeAfterTurns ?? 8
@@ -83,6 +96,42 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
       if (Date.now() >= deadline) return { ...job, status: 'failed', error: 'timeout waiting for job' }
       await sleep(pollMs)
     }
+  }
+
+  async function loadCatalogIfNeeded(): Promise<void> {
+    if (catalogAgentIds.value || loadingCatalog.value) return
+    loadingCatalog.value = true
+    catalogError.value = null
+    try {
+      const catalog = await fetchCatalog()
+      const rawAgents: unknown = catalog?.agents
+      const ids: string[] = Array.isArray(rawAgents)
+        ? rawAgents
+            .filter((a: unknown): a is { id: string } => !!a && typeof a === 'object' && typeof (a as { id?: unknown }).id === 'string')
+            .map((a) => a.id)
+        : []
+      catalogAgentIds.value = new Set(ids)
+    } catch {
+      catalogError.value = 'Không tải được danh sách agent để kiểm tra — vui lòng thử lại.'
+    } finally {
+      loadingCatalog.value = false
+    }
+  }
+
+  /** Returns the `steps[].agent` refs in `pipelineDraft` that are not in the loaded catalog. */
+  function findInvalidPipelineAgentRefs(pipelineDraft: Record<string, unknown> | null): string[] {
+    if (!pipelineDraft || !catalogAgentIds.value) return []
+    const steps = Array.isArray((pipelineDraft as { steps?: unknown }).steps)
+      ? ((pipelineDraft as { steps: unknown[] }).steps as unknown[])
+      : []
+    const invalid: string[] = []
+    for (const s of steps) {
+      const agentRef = s && typeof s === 'object' ? (s as { agent?: unknown }).agent : undefined
+      if (typeof agentRef === 'string' && agentRef && !catalogAgentIds.value.has(agentRef)) {
+        invalid.push(agentRef)
+      }
+    }
+    return invalid
   }
 
   async function sendMessage(text: string): Promise<void> {
@@ -112,6 +161,9 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
       if (turn.kind === 'draft') {
         draft.value = (turn.draft ?? {}) as Record<string, unknown>
         step.value = 'previewDraft'
+        if (entityType.value === 'pipeline') {
+          void loadCatalogIfNeeded()
+        }
       } else {
         messages.value.push({ role: 'assistant', text: turn.text || '' })
       }
@@ -125,6 +177,23 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
 
   async function confirm(editedDraft: Record<string, unknown>): Promise<void> {
     if (confirming.value || !entityType.value) return
+    // Hard safety net (design.md §4.4): even if the UI button is somehow
+    // clickable, never let a pipeline draft with an invalid agent ref reach
+    // savePipelineProfile(). Re-check against the actual edited draft, not
+    // just the original one from the agent.
+    if (entityType.value === 'pipeline') {
+      if (!catalogAgentIds.value) {
+        error.value = catalogError.value || 'Chưa kiểm tra được danh sách agent hợp lệ — vui lòng thử lại.'
+        step.value = 'previewDraft'
+        return
+      }
+      const invalid = findInvalidPipelineAgentRefs(editedDraft)
+      if (invalid.length > 0) {
+        error.value = `Pipeline tham chiếu agent không tồn tại trong catalog: ${invalid.join(', ')}`
+        step.value = 'previewDraft'
+        return
+      }
+    }
     confirming.value = true
     step.value = 'confirming'
     error.value = null
@@ -169,6 +238,9 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     error.value = null
     turnCount.value = 0
     showLongChatNudge.value = false
+    catalogAgentIds.value = null
+    catalogError.value = null
+    loadingCatalog.value = false
   }
 
   return {
@@ -184,11 +256,15 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     error,
     turnCount,
     showLongChatNudge,
+    catalogAgentIds,
+    catalogError,
+    loadingCatalog,
     // actions
     selectEntity,
     sendMessage,
     confirm,
     cancel,
     reset,
+    findInvalidPipelineAgentRefs,
   }
 }
