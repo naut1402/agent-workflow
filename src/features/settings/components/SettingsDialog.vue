@@ -23,6 +23,8 @@ import {
   fetchAutoscanConfig,
   saveAutoscanConfig,
   runAutoscan,
+  fetchGithubTokensConfig,
+  saveGithubTokensConfig,
 } from '../../../api'
 import FolderPickerDialog from '../../../shared/ui/FolderPickerDialog.vue'
 import CSelect from '../../../shared/ui/CSelect.vue'
@@ -251,6 +253,83 @@ async function scanNow() {
   }
 }
 
+// ── GitHub repo tokens (server-backed) ───────────────────────────────────────
+
+type GithubTokenRow = { repo: string; token: string }
+
+const githubTokenRows: Ref<GithubTokenRow[]> = ref([])
+const draftRepo = ref('')
+const draftToken = ref('')
+const githubTokensBusy = ref(false)
+const githubTokensMsg = ref('')
+const githubTokensErr = ref('')
+
+async function loadGithubTokens() {
+  githubTokensErr.value = ''
+  try {
+    const data = await fetchGithubTokensConfig()
+    const cfg = data.config || {}
+    githubTokenRows.value = Array.isArray(cfg.repos)
+      ? cfg.repos.map((e: GithubTokenRow) => ({
+          repo: String(e.repo ?? ''),
+          token: String(e.token ?? ''),
+        }))
+      : []
+  } catch {
+    githubTokensErr.value = t('settings.githubTokens.loadError')
+  }
+}
+
+async function persistGithubTokens() {
+  githubTokensBusy.value = true
+  githubTokensMsg.value = ''
+  githubTokensErr.value = ''
+  try {
+    const data = await saveGithubTokensConfig({ repos: githubTokenRows.value })
+    const cfg = data.config || {}
+    githubTokenRows.value = Array.isArray(cfg.repos)
+      ? cfg.repos.map((e: GithubTokenRow) => ({
+          repo: String(e.repo ?? ''),
+          token: String(e.token ?? ''),
+        }))
+      : []
+    githubTokensMsg.value = t('settings.githubTokens.saved')
+  } catch (e) {
+    githubTokensErr.value = String((e as Error).message || e)
+  } finally {
+    githubTokensBusy.value = false
+  }
+}
+
+function addGithubToken() {
+  const repo = draftRepo.value.trim()
+  const token = draftToken.value.trim()
+  if (!repo) {
+    githubTokensErr.value = t('settings.githubTokens.repoRequired')
+    return
+  }
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
+    githubTokensErr.value = t('settings.githubTokens.repoInvalid')
+    return
+  }
+  if (!token) {
+    githubTokensErr.value = t('settings.githubTokens.tokenRequired')
+    return
+  }
+  const slug = repo.toLowerCase()
+  const without = githubTokenRows.value.filter((r) => r.repo.toLowerCase() !== slug)
+  githubTokenRows.value = [...without, { repo: slug, token }]
+  draftRepo.value = ''
+  draftToken.value = ''
+  githubTokensErr.value = ''
+  void persistGithubTokens()
+}
+
+function removeGithubToken(repo: string) {
+  githubTokenRows.value = githubTokenRows.value.filter((r) => r.repo !== repo)
+  void persistGithubTokens()
+}
+
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     if (pickerOpen.value) {
@@ -268,6 +347,7 @@ function onKeydown(e: KeyboardEvent) {
 onMounted(() => {
   load()
   void loadAutoscan()
+  void loadGithubTokens()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -560,6 +640,64 @@ onUnmounted(() => {
                 </div>
                 <p v-if="autoscanMsg" class="settings-autoscan-msg">{{ autoscanMsg }}</p>
                 <p v-if="autoscanErr" class="settings-autoscan-err">⚠ {{ autoscanErr }}</p>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.githubTokens.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.githubTokens.desc') }}</p>
+                <ul class="settings-whitelist settings-github-tokens">
+                  <li
+                    v-for="row in githubTokenRows"
+                    :key="row.repo"
+                    class="settings-whitelist-item"
+                  >
+                    <code class="settings-whitelist-path" :title="row.repo">{{ row.repo }}</code>
+                    <span class="settings-token-mask" :title="t('settings.githubTokens.tokenSet')">
+                      ••••••••
+                    </span>
+                    <button
+                      type="button"
+                      class="icon-btn danger"
+                      :title="t('settings.githubTokens.remove')"
+                      :aria-label="t('settings.githubTokens.remove')"
+                      :disabled="githubTokensBusy"
+                      @click="removeGithubToken(row.repo)"
+                    >
+                      ×
+                    </button>
+                  </li>
+                  <li v-if="!githubTokenRows.length" class="settings-whitelist-empty">
+                    {{ t('settings.githubTokens.empty') }}
+                  </li>
+                </ul>
+                <div class="settings-whitelist-add settings-github-tokens-add">
+                  <input
+                    v-model="draftRepo"
+                    class="settings-input"
+                    :placeholder="t('settings.githubTokens.repoPlaceholder')"
+                    :disabled="githubTokensBusy"
+                    autocomplete="off"
+                    @keyup.enter="addGithubToken()"
+                  />
+                  <input
+                    v-model="draftToken"
+                    class="settings-input"
+                    type="password"
+                    :placeholder="t('settings.githubTokens.tokenPlaceholder')"
+                    :disabled="githubTokensBusy"
+                    autocomplete="off"
+                    @keyup.enter="addGithubToken()"
+                  />
+                  <button
+                    type="button"
+                    class="btn-ghost btn-sm"
+                    :disabled="githubTokensBusy"
+                    @click="addGithubToken()"
+                  >
+                    {{ t('settings.githubTokens.add') }}
+                  </button>
+                </div>
+                <p v-if="githubTokensMsg" class="settings-autoscan-msg">{{ githubTokensMsg }}</p>
+                <p v-if="githubTokensErr" class="settings-autoscan-err">⚠ {{ githubTokensErr }}</p>
               </section>
             </template>
 

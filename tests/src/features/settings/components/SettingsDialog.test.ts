@@ -18,6 +18,10 @@ vi.mock('@/api', async (importOriginal) => {
     runAutoscan: vi.fn(async () => ({
       report: { added: [], existing: [], skipped: [], errors: [], hits: [], scanned: 0 },
     })),
+    fetchGithubTokensConfig: vi.fn(async () => ({
+      config: { repos: [] },
+    })),
+    saveGithubTokensConfig: vi.fn(async (c: object) => ({ config: c })),
   }
 })
 
@@ -204,6 +208,8 @@ describe('SettingsDialog', () => {
     const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
     expect(pane.textContent).toContain('Autoscan')
     expect(pane.textContent).toContain('Whitelist')
+    expect(pane.textContent).toContain('Token GitHub')
+    expect(pane.textContent).toContain('Chưa có token')
 
     const info = document.querySelector('.settings-info-btn') as HTMLButtonElement
     expect(info).toBeTruthy()

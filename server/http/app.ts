@@ -11,6 +11,7 @@ import { registerAgentRoutes } from './routes/agents.js'
 import { registerLogRoutes } from './routes/logs.js'
 import { registerFsRoutes } from './routes/fs.js'
 import { registerAutoscanRoutes } from './routes/autoscan.js'
+import { registerGithubTokensRoutes } from './routes/githubTokens.js'
 
 // Build the Hono app for all /api/* routes except /api/knowledge (which stays
 // node-res based and is intercepted by the node adapter before Hono).
@@ -32,6 +33,7 @@ export function createApp(ctx: RegistryContext): Hono<HonoEnv> {
   registerRegistryRoutes(app)
   registerFsRoutes(app)
   registerAutoscanRoutes(app)
+  registerGithubTokensRoutes(app)
   registerRunnerRoutes(app)
   // After runners: /api/jobs/:id/log must coexist with /api/jobs/:id (Hono picks
   // the more specific route).

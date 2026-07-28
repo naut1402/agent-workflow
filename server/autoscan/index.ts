@@ -1,6 +1,8 @@
 export {
   loadAutoscanConfig,
   saveAutoscanConfig,
+  loadGithubTokensConfig,
+  saveGithubTokensConfig,
   loadDashboardSettings,
   saveDashboardSettings,
   autoscanFile,

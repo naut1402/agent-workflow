@@ -102,6 +102,26 @@ export async function runAutoscan(whitelist?: string[]) {
   return data
 }
 
+export async function fetchGithubTokensConfig() {
+  const r = await fetch('/api/github/tokens')
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/github/tokens → ${r.status}`)
+  return data
+}
+
+export async function saveGithubTokensConfig(config: {
+  repos?: { repo: string; token: string }[]
+}) {
+  const r = await fetch('/api/github/tokens', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/github/tokens PUT → ${r.status}`)
+  return data
+}
+
 // ── Task / artifact reads (project-scoped) ──────────────────────────────────────
 
 export async function fetchTasks(projectId?: string) {
