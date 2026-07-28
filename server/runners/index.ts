@@ -40,6 +40,7 @@ export {
   cancelJob,
   submitApprovalJob,
   sendJobFeedback,
+  sendTaskFeedback,
   getApprovalDiff,
   approveJob,
   discardJob,

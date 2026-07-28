@@ -11,7 +11,7 @@ import { getProvider } from './providerRegistry.js'
 import { resolveAgent } from './agentResolver.js'
 import { reapOrphanedRunningJobs } from './pidReaper.js'
 import { mintSessionId } from './sessionCapture.js'
-import { recordSessionUsage, resolveSessionPlan, type SessionMode } from './sessionLedger.js'
+import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, type SessionMode } from './sessionLedger.js'
 import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
 import { advanceStepOnJobSuccess } from '../tasks/state.js'
 import { loadPipelineConfig } from '../pipeline/index.js'
@@ -49,6 +49,8 @@ export interface SubmitJobInput {
   /** Explicit session control for pipeline resume (additive — optional). */
   sessionMode?: SessionMode
   sessionId?: string
+  /** The job this one continues/follows-up on (e.g. a task-chat-feedback round). */
+  parentJobId?: string
 }
 
 // Reap orphaned running jobs once when the module loads (server restart).
@@ -450,6 +452,7 @@ async function runJob(job: JobRecord): Promise<void> {
   }
 
   const isApprovalJob = Boolean(job.applyTarget && job.approvalArtifact)
+  const isChatFeedback = Boolean(job.metadata?.isChatFeedback)
   if (!result.ok && isApprovalJob) removeScratchWorkspace(job.workspace)
 
   // Fold the agent's proposed content (stdout) into the scratch artifact so the
@@ -484,7 +487,7 @@ async function runJob(job: JobRecord): Promise<void> {
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
   })
 
-  if (result.ok && !isApprovalJob) {
+  if (result.ok && !isApprovalJob && !isChatFeedback) {
     await advancePipelineStepChain(job)
   }
 }
@@ -527,13 +530,20 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
     return // no request.md — leave the chain to stop rather than run with an empty prompt
   }
 
+  // Drop `isChatFeedback` before spreading `job.metadata` into the next step's
+  // job — it marks only the job it was set on (a chat-resume round), and would
+  // otherwise leak forward onto every step the chain submits afterwards,
+  // wrongly suppressing advancePipelineStepChain for all of them.
+  const { isChatFeedback: _isChatFeedback, ...carryMetadata } = job.metadata || {}
+
   submitJob({
     runnerId: job.runnerId === 'unknown' ? undefined : job.runnerId,
     agentRef: nextStep.agent,
     workspace,
     userPrompt,
+    sessionMode: 'resume',
     metadata: {
-      ...job.metadata,
+      ...carryMetadata,
       pipelineStepId: nextStepId,
       chainTarget,
     },
@@ -567,6 +577,7 @@ export function submitJob(input: SubmitJobInput): JobRecord {
       ...(input.metadata || {}),
       ...(sessionMode ? { inputSessionMode: sessionMode, inputSessionId: input.sessionId } : {}),
     },
+    ...(input.parentJobId ? { parentJobId: input.parentJobId } : {}),
   }
   saveJob(job)
   queue.push(id)
@@ -705,6 +716,58 @@ export function sendJobFeedback(id: string, feedback: string): MutationResult<{ 
   queue.push(id2)
   processQueue().catch((err) => {
     console.error('[jobQueue]', err)
+  })
+  return { ok: true, job }
+}
+
+/**
+ * Continue the conversation with the agent on a task's most recent finished
+ * (non-approval) job, resuming the CLI session recorded in the task's session
+ * ledger (`sessionLedger.ts`) — the task-scoped counterpart to
+ * `sendJobFeedback` (approval flow, keyed by `jobId`). Runs against the real
+ * (non-scratch) workspace, and does not itself advance `current_phase`; the
+ * job it submits is tagged `metadata.isChatFeedback` so `runJob()` skips
+ * `advancePipelineStepChain` for it (see edge cases in design.md §4.4).
+ */
+export function sendTaskFeedback(
+  taskId: string,
+  projectId: string,
+  feedback: string,
+): MutationResult<{ job: JobRecord }> {
+  const active = listJobs(50).find(
+    (j) => j.metadata?.taskId === taskId && (j.status === 'queued' || j.status === 'running'),
+  )
+  if (active) return { ok: false, status: 409, error: 'step already running' }
+
+  const parent = listJobs(200)
+    .filter(
+      (j) =>
+        j.metadata?.taskId === taskId &&
+        !j.applyTarget &&
+        (j.status === 'succeeded' || j.status === 'failed'),
+    )
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0]
+  if (!parent) return { ok: false, status: 400, error: 'no completed job to give feedback on' }
+
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  if (!ledger.sessions.some((s) => s.status === 'open')) {
+    return { ok: false, status: 400, error: 'no resumable session for this task' }
+  }
+
+  const { isChatFeedback: _isChatFeedback, ...parentMetadata } = parent.metadata || {}
+  const job = submitJob({
+    runnerId: parent.runnerId === 'unknown' ? undefined : parent.runnerId,
+    agentRef: parent.agentRef,
+    workspace: parent.workspace,
+    userPrompt: feedback,
+    produces: parent.produces,
+    sessionMode: 'resume',
+    metadata: {
+      ...parentMetadata,
+      parentJobId: parent.id,
+      isChatFeedback: true,
+    },
+    parentJobId: parent.id,
   })
   return { ok: true, job }
 }

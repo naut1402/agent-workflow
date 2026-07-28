@@ -11,8 +11,16 @@ import { emitAudit } from '../../logging/store.js'
 import { TaskArchivePatch, TaskStatePatch } from '../../../shared/schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from '../../../shared/schemas/taskCreate.js'
 import { RunStepRequest } from '../../../shared/schemas/runStep.js'
+import { TaskFeedbackRequest } from '../../../shared/schemas/taskFeedback.js'
 import { fetchGithubIssue } from '../../github/index.js'
-import { submitJob, submitApprovalJob, findSelectionRange, extractLines, listJobs } from '../../runners/index.js'
+import {
+  submitJob,
+  submitApprovalJob,
+  sendTaskFeedback,
+  findSelectionRange,
+  extractLines,
+  listJobs,
+} from '../../runners/index.js'
 import {
   loadArtifactActions,
   loadArtifactActionsFile,
@@ -542,6 +550,11 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       agentRef: step.agent,
       workspace: path.join(root, 'tasks', id),
       userPrompt,
+      // Resume the task's ledger session (if any) instead of always running
+      // with no session — resolveSessionPlan() falls back to 'new' on its own
+      // if the ledger has no valid open entry, so this is safe from the first
+      // run-step call onward. See jobQueue.ts sendTaskFeedback / design F0011.
+      sessionMode: 'resume',
       metadata: {
         projectRoot: path.dirname(root),
         devTeamRoot: root,
@@ -561,6 +574,43 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     })
 
     return j(c, 201, { job })
+  })
+
+  // Task-scoped chat resume: continue the CLI session of the task's most
+  // recent finished (non-approval) job with follow-up feedback. Separate from
+  // POST /api/jobs/:id/feedback (approval flow, keyed by jobId) — this route
+  // is keyed by taskId since the UI operates on the task, not a specific job
+  // id. See server/runners/jobQueue.ts (sendTaskFeedback) and design F0011.
+  app.post('/api/tasks/:id/feedback', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const id = c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return j(c, 400, { error: 'invalid task id' })
+
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
+    const parsed = TaskFeedbackRequest.safeParse(b.value)
+    if (!parsed.success) {
+      return j(c, 400, { error: 'invalid request', details: parsed.error.flatten() })
+    }
+
+    const stateFile = path.join(root, '.dev-state', `${id}.json`)
+    const read = await readState(stateFile)
+    if (!read.ok) return j(c, 404, { error: 'task not found', taskId: id })
+
+    const projectId = c.get('projectId') || ''
+    const result = sendTaskFeedback(id, projectId, parsed.data.feedback)
+    if ('error' in result) return j(c, result.status || 400, { error: result.error, taskId: id })
+
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: c.get('projectId'),
+      detail: { action: 'feedback', jobId: result.job.id },
+    })
+
+    return j(c, 201, { job: result.job })
   })
 
   app.post('/api/github/issue', async (c) => {
