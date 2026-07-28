@@ -1,5 +1,5 @@
 // Notifications feature — bell dropdown (sidebar-footer) + floating icon
-// (global overlay, top-left, visible across all shell modes while unread).
+// (global overlay, top-right, visible across all shell modes while unread).
 // `.notification-list*` is the shared dropdown-content styling used by both.
 
 .notification-bell {
@@ -39,7 +39,7 @@
 .floating-notification {
   position: fixed;
   top: 16px;
-  left: 16px;
+  right: 16px;
   z-index: 50;
 }
 .floating-notification-btn {
@@ -73,7 +73,7 @@
 .floating-notification-dropdown {
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
+  right: 0;
   width: 280px;
   max-height: 320px;
   overflow-y: auto;
