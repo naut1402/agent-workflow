@@ -26,6 +26,7 @@ import {
   fetchGithubTokensConfig,
   saveGithubTokensConfig,
 } from '../../../api'
+import { parseGithubRepoRef } from '../../../../shared/schemas/githubTokens'
 import FolderPickerDialog from '../../../shared/ui/FolderPickerDialog.vue'
 import CSelect from '../../../shared/ui/CSelect.vue'
 
@@ -302,13 +303,14 @@ async function persistGithubTokens() {
 }
 
 function addGithubToken() {
-  const repo = draftRepo.value.trim()
+  const rawRepo = draftRepo.value.trim()
   const token = draftToken.value.trim()
-  if (!repo) {
+  if (!rawRepo) {
     githubTokensErr.value = t('settings.githubTokens.repoRequired')
     return
   }
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
+  const slug = parseGithubRepoRef(rawRepo)
+  if (!slug) {
     githubTokensErr.value = t('settings.githubTokens.repoInvalid')
     return
   }
@@ -316,7 +318,6 @@ function addGithubToken() {
     githubTokensErr.value = t('settings.githubTokens.tokenRequired')
     return
   }
-  const slug = repo.toLowerCase()
   const without = githubTokenRows.value.filter((r) => r.repo.toLowerCase() !== slug)
   githubTokenRows.value = [...without, { repo: slug, token }]
   draftRepo.value = ''

@@ -1,9 +1,34 @@
 import { describe, expect, it } from 'vitest'
 import {
   normaliseRepoSlug,
+  parseGithubRepoRef,
   parseGithubTokensConfig,
   resolveGithubTokenForRepo,
 } from '../../../shared/schemas/githubTokens'
+
+describe('parseGithubRepoRef', () => {
+  it('accepts bare owner/repo', () => {
+    expect(parseGithubRepoRef('Owner/Repo')).toBe('owner/repo')
+  })
+
+  it('accepts HTTPS repo / issue / .git URLs', () => {
+    expect(parseGithubRepoRef('https://github.com/Owner/Repo')).toBe('owner/repo')
+    expect(parseGithubRepoRef('https://github.com/Owner/Repo/')).toBe('owner/repo')
+    expect(parseGithubRepoRef('https://www.github.com/Owner/Repo.git')).toBe('owner/repo')
+    expect(parseGithubRepoRef('https://github.com/Owner/Repo/issues/42')).toBe('owner/repo')
+    expect(parseGithubRepoRef('https://github.com/Owner/Repo/pull/9#discussion')).toBe('owner/repo')
+  })
+
+  it('accepts SSH URLs', () => {
+    expect(parseGithubRepoRef('git@github.com:Owner/Repo.git')).toBe('owner/repo')
+  })
+
+  it('rejects non-github refs', () => {
+    expect(parseGithubRepoRef('bad')).toBeNull()
+    expect(parseGithubRepoRef('https://gitlab.com/o/r')).toBeNull()
+    expect(parseGithubRepoRef('')).toBeNull()
+  })
+})
 
 describe('parseGithubTokensConfig', () => {
   it('returns empty repos for invalid input', () => {
@@ -11,11 +36,11 @@ describe('parseGithubTokensConfig', () => {
     expect(parseGithubTokensConfig('x')).toEqual({ repos: [] })
   })
 
-  it('normalises slugs and dedupes (last wins)', () => {
+  it('normalises slugs/URLs and dedupes (last wins)', () => {
     const parsed = parseGithubTokensConfig({
       repos: [
         { repo: 'Owner/Repo', token: 'tok-a' },
-        { repo: 'owner/repo', token: 'tok-b' },
+        { repo: 'https://github.com/owner/repo/issues/1', token: 'tok-b' },
         { repo: 'bad', token: 'x' },
         { repo: 'other/repo', token: '  tok-c  ' },
       ],
@@ -47,7 +72,8 @@ describe('resolveGithubTokenForRepo', () => {
 })
 
 describe('normaliseRepoSlug', () => {
-  it('lowercases and trims slashes', () => {
+  it('parses URLs to owner/repo', () => {
+    expect(normaliseRepoSlug('https://github.com/Owner/Repo')).toBe('owner/repo')
     expect(normaliseRepoSlug(' /Owner/Repo/ ')).toBe('owner/repo')
   })
 })
