@@ -19,12 +19,15 @@ export const AppSettingsSchema = z
     notifyQaReady: z.boolean().optional(),
     notifyBrowserEnabled: z.boolean().optional(),
     notifySoundEnabled: z.boolean().optional(),
+    /** Where to show notification UI icons. Missing → 'both'. */
+    notificationUiPlacement: z.enum(['sidebar', 'floating', 'both']).optional(),
   })
   .passthrough()
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type LocalePreference = 'vi' | 'en'
+export type NotificationUiPlacement = 'sidebar' | 'floating' | 'both'
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {}
 
@@ -117,4 +120,29 @@ export function resolveNotifySoundEnabled(
   settings: Pick<AppSettings, 'notifySoundEnabled'> | null | undefined,
 ): boolean {
   return settings?.notifySoundEnabled === true
+}
+
+/** Effective notification UI placement: missing / invalid → 'both'. */
+export function resolveNotificationUiPlacement(
+  settings: Pick<AppSettings, 'notificationUiPlacement'> | null | undefined,
+): NotificationUiPlacement {
+  const p = settings?.notificationUiPlacement
+  if (p === 'sidebar' || p === 'floating' || p === 'both') return p
+  return 'both'
+}
+
+/** Effective "show notification bell in sidebar". */
+export function resolveNotifyShowSidebar(
+  settings: Pick<AppSettings, 'notificationUiPlacement'> | null | undefined,
+): boolean {
+  const p = resolveNotificationUiPlacement(settings)
+  return p === 'sidebar' || p === 'both'
+}
+
+/** Effective "show floating notification icon". */
+export function resolveNotifyShowFloating(
+  settings: Pick<AppSettings, 'notificationUiPlacement'> | null | undefined,
+): boolean {
+  const p = resolveNotificationUiPlacement(settings)
+  return p === 'floating' || p === 'both'
 }

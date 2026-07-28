@@ -12,6 +12,9 @@ import {
   resolveNotifyBrowserEnabled,
   resolveNotifyHitlPending,
   resolveNotifyQaReady,
+  resolveNotificationUiPlacement,
+  resolveNotifyShowFloating,
+  resolveNotifyShowSidebar,
   resolveNotifySoundEnabled,
   resolveThemePreference,
 } from '../../../shared/schemas/appSettings'
@@ -166,6 +169,43 @@ describe('resolveNotifyBrowserEnabled / resolveNotifySoundEnabled', () => {
   it('explicit true → true', () => {
     expect(resolveNotifyBrowserEnabled({ notifyBrowserEnabled: true })).toBe(true)
     expect(resolveNotifySoundEnabled({ notifySoundEnabled: true })).toBe(true)
+  })
+})
+
+describe('resolveNotifyShowSidebar / resolveNotifyShowFloating', () => {
+  it('missing → both surfaces on (placement both)', () => {
+    expect(resolveNotifyShowSidebar({})).toBe(true)
+    expect(resolveNotifyShowFloating({})).toBe(true)
+    expect(resolveNotifyShowSidebar(undefined)).toBe(true)
+    expect(resolveNotifyShowFloating(null)).toBe(true)
+  })
+
+  it('sidebar → only sidebar', () => {
+    expect(resolveNotifyShowSidebar({ notificationUiPlacement: 'sidebar' })).toBe(true)
+    expect(resolveNotifyShowFloating({ notificationUiPlacement: 'sidebar' })).toBe(false)
+  })
+
+  it('floating → only floating', () => {
+    expect(resolveNotifyShowSidebar({ notificationUiPlacement: 'floating' })).toBe(false)
+    expect(resolveNotifyShowFloating({ notificationUiPlacement: 'floating' })).toBe(true)
+  })
+
+  it('both → both surfaces', () => {
+    expect(resolveNotifyShowSidebar({ notificationUiPlacement: 'both' })).toBe(true)
+    expect(resolveNotifyShowFloating({ notificationUiPlacement: 'both' })).toBe(true)
+  })
+})
+
+describe('resolveNotificationUiPlacement', () => {
+  it('missing / invalid → both', () => {
+    expect(resolveNotificationUiPlacement({})).toBe('both')
+    expect(resolveNotificationUiPlacement(undefined)).toBe('both')
+  })
+
+  it('keeps sidebar / floating / both', () => {
+    expect(resolveNotificationUiPlacement({ notificationUiPlacement: 'sidebar' })).toBe('sidebar')
+    expect(resolveNotificationUiPlacement({ notificationUiPlacement: 'floating' })).toBe('floating')
+    expect(resolveNotificationUiPlacement({ notificationUiPlacement: 'both' })).toBe('both')
   })
 })
 

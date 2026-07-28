@@ -1,5 +1,5 @@
 // Notifications feature — bell dropdown (sidebar-footer) + floating icon
-// (global overlay, top-left, visible across all shell modes while unread).
+// (global overlay, top-right, visible across all shell modes while unread).
 // `.notification-list*` is the shared dropdown-content styling used by both.
 
 .notification-bell {
@@ -7,6 +7,10 @@
 }
 .bell-btn {
   position: relative;
+}
+.bell-btn.has-unread .bell-icon {
+  transform-origin: top center;
+  animation: notification-bell-ring 1.5s ease-in-out infinite;
 }
 .bell-badge {
   position: absolute;
@@ -39,7 +43,7 @@
 .floating-notification {
   position: fixed;
   top: 16px;
-  left: 16px;
+  right: 16px;
   z-index: 50;
 }
 .floating-notification-btn {
@@ -55,6 +59,11 @@
   color: var(--text);
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  animation: notification-float-pulse 1.5s ease-in-out infinite;
+}
+.floating-notification-btn .bell-icon {
+  transform-origin: top center;
+  animation: notification-bell-ring 1.5s ease-in-out infinite;
 }
 .floating-notification-badge {
   position: absolute;
@@ -73,7 +82,7 @@
 .floating-notification-dropdown {
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
+  right: 0;
   width: 280px;
   max-height: 320px;
   overflow-y: auto;
@@ -81,6 +90,53 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+@keyframes notification-bell-ring {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+  8% {
+    transform: rotate(14deg) scale(1.18);
+  }
+  16% {
+    transform: rotate(-12deg) scale(1.22);
+  }
+  24% {
+    transform: rotate(10deg) scale(1.16);
+  }
+  32% {
+    transform: rotate(-8deg) scale(1.12);
+  }
+  40% {
+    transform: rotate(4deg) scale(1.06);
+  }
+  48%,
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+@keyframes notification-float-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  20% {
+    transform: scale(1.12);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bell-btn.has-unread .bell-icon,
+  .floating-notification-btn,
+  .floating-notification-btn .bell-icon {
+    animation: none;
+  }
 }
 
 .notification-list-header {

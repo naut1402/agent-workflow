@@ -61,6 +61,13 @@ export const settings = {
     title: 'Thông báo',
     desc: 'Bật/tắt thông báo và chọn loại sự kiện muốn nhận.',
     enabled: 'Bật thông báo',
+    position: {
+      title: 'Vị trí hiển thị',
+      desc: 'Chọn nơi hiện icon thông báo.',
+      sidebar: 'Chỉ trong sidebar',
+      floating: 'Chỉ icon nổi (góc trên-phải)',
+      both: 'Cả sidebar và icon nổi',
+    },
     events: {
       title: 'Loại sự kiện',
       hitlPending: 'HITL đang chờ duyệt',

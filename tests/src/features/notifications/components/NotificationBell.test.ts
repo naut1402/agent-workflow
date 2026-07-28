@@ -19,9 +19,12 @@ describe('NotificationBell', () => {
   it('shows the unread badge only when there are unread notifications', async () => {
     const wrapper = mountWithI18n(NotificationBell, { props: { unreadCount: 0, history: [] } })
     expect(wrapper.find('.bell-badge').exists()).toBe(false)
+    expect(wrapper.find('.bell-btn').classes()).not.toContain('has-unread')
 
     await wrapper.setProps({ unreadCount: 3 })
     expect(wrapper.find('.bell-badge').text()).toBe('3')
+    expect(wrapper.find('.bell-btn').classes()).toContain('has-unread')
+    expect(wrapper.find('.bell-icon').exists()).toBe(true)
   })
 
   it('opens the dropdown on click and lists history entries', async () => {

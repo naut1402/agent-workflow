@@ -5,7 +5,11 @@ import { onClickOutside } from '@vueuse/core'
 import { fetchProjects, fetchAutoscanConfig, runAutoscan } from './api'
 import { useLocalToggle } from './shared/composables/useLocalToggle'
 import { useAppSettings } from './shared/composables/useAppSettings'
-import { resolveCollapseAppSidebarOnOutside } from '../shared/schemas/appSettings'
+import {
+  resolveCollapseAppSidebarOnOutside,
+  resolveNotifyShowFloating,
+  resolveNotifyShowSidebar,
+} from '../shared/schemas/appSettings'
 import { resolveAutoscanIntervalMs } from '../shared/schemas/autoscan'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
 import { useNotifications } from './features/notifications/composables/useNotifications'
@@ -76,6 +80,9 @@ const selected = computed(
 // list — no separate transport needed, orchestrator- and dashboard-run tasks
 // both surface these flags through `.dev-state/<id>.json` via `/api/tasks`.
 const { history, unreadCount, markRead, markAllRead } = useNotifications(tasks)
+
+const showSidebarNotification = computed(() => resolveNotifyShowSidebar(settings.value))
+const showFloatingNotification = computed(() => resolveNotifyShowFloating(settings.value))
 
 function onNotificationSelect(event: { id: string; taskId: string }) {
   markRead(event.id)
@@ -319,6 +326,7 @@ onUnmounted(() => {
 
       <div class="sidebar-footer">
         <NotificationBell
+          v-if="showSidebarNotification"
           :unread-count="unreadCount"
           :history="history"
           @mark-all-read="markAllRead"
@@ -408,6 +416,7 @@ onUnmounted(() => {
     </main>
 
     <FloatingNotificationIcon
+      v-if="showFloatingNotification"
       :unread-count="unreadCount"
       :history="history"
       @mark-all-read="markAllRead"

@@ -60,6 +60,13 @@ export const settings = {
     title: 'Notifications',
     desc: 'Turn notifications on/off and pick which events you want to receive.',
     enabled: 'Enable notifications',
+    position: {
+      title: 'Display position',
+      desc: 'Choose where notification icons appear.',
+      sidebar: 'Sidebar only',
+      floating: 'Floating icon only (top-right)',
+      both: 'Both sidebar and floating',
+    },
     events: {
       title: 'Event types',
       hitlPending: 'HITL pending',
