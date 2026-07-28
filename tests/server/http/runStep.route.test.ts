@@ -218,3 +218,25 @@ describe('POST /api/tasks/:id/run-step', () => {
     await settle(firstJob.id)
   })
 })
+
+describe('POST /api/tasks with run:true', () => {
+  test('tags pipelineStepId so a successful first-step job advances current_phase', async () => {
+    const res = await app.request('/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify({
+        taskId: 'CREATE1',
+        source: 'prompt',
+        prompt: 'do the thing',
+        run: true,
+        runnerId: 'stub-runner-run-step',
+      }),
+    })
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.job?.metadata?.pipelineStepId).toBe('implementer')
+    expect(body.job?.metadata?.createTaskRun).toBe(true)
+    await settle(body.job.id)
+    // Root pipeline's first step (implementer) is gate-less → advance to reviewer.
+    await waitForPhase('CREATE1', (p) => p === 'reviewer')
+  })
+})

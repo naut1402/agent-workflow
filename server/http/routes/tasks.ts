@@ -465,6 +465,10 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
           devTeamRoot: root,
           projectId: c.get('projectId') || undefined,
           taskId: result.taskId,
+          // Same bookkeeping as run-step — without this, jobQueue's
+          // advancePipelineStepChain no-ops and current_phase stays stuck
+          // on the first step after a successful "Chạy ngay" create.
+          pipelineStepId: result.firstStep.id,
           createTaskRun: true,
         },
       })

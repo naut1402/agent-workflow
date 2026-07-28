@@ -12,7 +12,7 @@ const STATUS_ICON = { done: '✓', active: '▶', waiting: '⏸', pending: '○'
 function bubbleTitle(data: Record<string, any>): string | undefined {
   if (data.running) return t('monitor.pipelineNode.running')
   if (data.status === 'waiting') return t('monitor.pipelineNode.clickToApprove')
-  if (data.status === 'active' || data.status === 'pending') return t('monitor.pipelineNode.clickToRun')
+  if (data.runnable) return t('monitor.pipelineNode.clickToRun')
   return undefined
 }
 </script>
@@ -24,7 +24,7 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
       data.status,
       {
         'pnode-waiting': data.status === 'waiting',
-        'pnode-runnable': !data.running && (data.status === 'active' || data.status === 'pending'),
+        'pnode-runnable': !!data.runnable,
         'pnode-running': data.running,
       },
     ]"

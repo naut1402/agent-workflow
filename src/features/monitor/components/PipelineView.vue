@@ -13,8 +13,10 @@ import {
   patchTaskState,
   runPipelineStep,
   fetchJob,
+  fetchJobs,
 } from '../../../api'
 import PipelineNode from './PipelineNode.vue'
+import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -61,20 +63,35 @@ const phases = computed(() => {
   }))
 })
 
+const phaseKeys = computed(() => phases.value.map((p) => p.key))
+
 const nodes = computed(() =>
   phases.value.map((p, i) => {
     const isActivePhase = props.task.current_phase === p.key
+    const status = phaseStatus(p, props.task)
+    const running = runningStepId.value === p.key
+    const stateOk = canRunWithTaskState(props.task)
+    const inScope = isRunnableTarget(phaseKeys.value, props.task.current_phase, p.key)
+    // Click-to-run only for current/future active|pending nodes, when state
+    // is healthy and no in-flight run is already tracked for this task.
+    const runnable =
+      stateOk &&
+      !runningStepId.value &&
+      !running &&
+      inScope &&
+      (status === 'active' || status === 'pending')
     return {
       id: p.key,
       type: 'pipeline',
       position: { x: p.x ?? i * NODE_SPACING, y: p.y ?? NODE_Y },
       data: {
         label: p.label,
-        status: phaseStatus(p, props.task),
+        status,
         hitl: p.hitl,
         // Q&A badge only on the phase that's currently active (the one that created qa.md)
         qa_count: isActivePhase ? (props.task.qa_count ?? 0) : 0,
-        running: runningStepId.value === p.key,
+        running,
+        runnable,
       },
     }
   }),
@@ -158,11 +175,35 @@ function clearRunPoll() {
   }
 }
 
+/** Adopt any queued/running job for this task (e.g. "Chạy ngay" on create). */
+async function syncInFlightRun() {
+  if (!props.task?.task_id || !canRunWithTaskState(props.task)) return
+  try {
+    const data = await fetchJobs(50)
+    const jobs = Array.isArray(data?.jobs) ? data.jobs : []
+    const inflight = jobs.find(
+      (j: any) =>
+        j?.metadata?.taskId === props.task.task_id &&
+        (j.status === 'queued' || j.status === 'running'),
+    )
+    if (!inflight?.id) return
+    const stepId =
+      (typeof inflight.metadata?.pipelineStepId === 'string' && inflight.metadata.pipelineStepId) ||
+      props.task.current_phase ||
+      null
+    runningStepId.value = stepId
+    if (runPollTimer == null) pollRunStepJob(inflight.id)
+  } catch {
+    /* best-effort — missing jobs list must not break the pipeline view */
+  }
+}
+
 watch(() => props.task.task_id, () => {
   clearRunPoll()
   runningStepId.value = null
   runError.value = ''
-})
+  syncInFlightRun()
+}, { immediate: true })
 
 onBeforeUnmount(clearRunPoll)
 
@@ -183,6 +224,13 @@ async function pollRunStepJob(jobId: string) {
       emit('hitl-action')
       return
     }
+    // Keep the spinner on the step the job is actually executing (server
+    // always runs current_phase / metadata.pipelineStepId), not the chain target.
+    const liveStep =
+      (typeof job?.metadata?.pipelineStepId === 'string' && job.metadata.pipelineStepId) ||
+      props.task.current_phase ||
+      runningStepId.value
+    runningStepId.value = liveStep
     runPollTimer = setTimeout(() => pollRunStepJob(jobId), 2000)
   } catch (e: any) {
     runningStepId.value = null
@@ -192,8 +240,17 @@ async function pollRunStepJob(jobId: string) {
 
 async function runStep(node: { id: string }) {
   if (runningStepId.value) return
+  if (!canRunWithTaskState(props.task)) {
+    runError.value = t('monitor.pipeline.stepStateError')
+    return
+  }
+  if (!isRunnableTarget(phaseKeys.value, props.task.current_phase, node.id)) {
+    runError.value = t('monitor.pipeline.stepPastNode')
+    return
+  }
   runError.value = ''
-  runningStepId.value = props.task.current_phase
+  // Spinner tracks the step that will actually execute first (current_phase).
+  runningStepId.value = props.task.current_phase || node.id
   try {
     const { job } = await runPipelineStep(
       props.task.task_id,
@@ -252,9 +309,24 @@ function onNodeClick({ node }) {
     openHitlModal({ key: node.id, label: node.data.label, hitl: node.data.hitl })
     return
   }
-  if (node.data?.status === 'active' || node.data?.status === 'pending') {
-    if (runningStepId.value) return
+  // Prefer the precomputed `runnable` flag (state_ok, in-flight, current/future).
+  if (node.data?.runnable) {
     openRunConfirm({ id: node.id, label: node.data.label })
+    return
+  }
+  if (node.data?.status !== 'active' && node.data?.status !== 'pending') return
+  if (runningStepId.value) {
+    runError.value = t('monitor.pipeline.stepAlreadyRunning')
+    return
+  }
+  if (!canRunWithTaskState(props.task)) {
+    runError.value = t('monitor.pipeline.stepStateError')
+    return
+  }
+  // Past pending node while current is further ahead — explain instead of
+  // silently starting current_phase (which looks like "clicked design, ran implement").
+  if (!isRunnableTarget(phaseKeys.value, props.task.current_phase, node.id)) {
+    runError.value = t('monitor.pipeline.stepPastNode')
   }
 }
 

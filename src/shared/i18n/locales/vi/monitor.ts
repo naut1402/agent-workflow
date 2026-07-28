@@ -63,6 +63,8 @@ export const monitor = {
     stepSucceeded: 'Step đã chạy xong — pipeline đã cập nhật.',
     stepFailed: 'Step chạy thất bại.',
     stepAlreadyRunning: 'Task đang có step chạy — vui lòng đợi.',
+    stepStateError: 'Task đang lỗi state — không thể chạy step. Hãy sửa/xoá state rồi thử lại.',
+    stepPastNode: 'Chỉ chạy được node hiện tại hoặc các bước phía sau — không chạy lại bước đã qua bằng cách click node cũ.',
     runConfirmHeading: 'Chạy step — {label}',
     runConfirmBody: 'Bấm "Chạy" sẽ gọi agent để thực hiện step này ngay.',
     runConfirmOverwriteWarning: '⚠ Các artifact sau đã tồn tại và sẽ bị GHI ĐÈ nếu chạy lại: {files}',

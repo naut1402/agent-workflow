@@ -62,6 +62,8 @@ export const monitor = {
     stepSucceeded: 'Step finished — pipeline updated.',
     stepFailed: 'Step failed.',
     stepAlreadyRunning: 'A step is already running for this task — please wait.',
+    stepStateError: 'Task state is broken — cannot run a step. Fix or delete the state file and retry.',
+    stepPastNode: 'Only the current step or later steps can be run — clicking an earlier node will not re-run it.',
     runConfirmHeading: 'Run step — {label}',
     runConfirmBody: 'Clicking "Run" calls the agent to execute this step now.',
     runConfirmOverwriteWarning: '⚠ These artifacts already exist and will be OVERWRITTEN if you run again: {files}',

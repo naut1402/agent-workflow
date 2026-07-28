@@ -2,7 +2,7 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import PipelineView from '@/features/monitor/components/PipelineView.vue'
-import { runPipelineStep } from '@/api'
+import { fetchJob, fetchJobs, runPipelineStep } from '@/api'
 
 vi.mock('@/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api')>()
@@ -13,6 +13,7 @@ vi.mock('@/api', async (importOriginal) => {
     patchTaskState: vi.fn(),
     runPipelineStep: vi.fn(),
     fetchJob: vi.fn(),
+    fetchJobs: vi.fn(async () => ({ jobs: [] })),
   }
 })
 
@@ -213,6 +214,30 @@ describe('PipelineView — click a node to run/chain a step', () => {
     expect(document.body.querySelector('.modal-backdrop')).toBeNull()
   })
 
+  it('blocks click-to-run while an existing job for the task is still queued/running', async () => {
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [
+        {
+          id: 'job-create',
+          status: 'running',
+          metadata: { taskId: 'T13', pipelineStepId: 'investigator' },
+        },
+      ],
+    } as any)
+    vi.mocked(fetchJob).mockReturnValue(new Promise(() => {})) // keep polling
+
+    const task = { task_id: 'T13', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+
+    expect(runPipelineStep).not.toHaveBeenCalled()
+    expect(document.body.querySelector('.modal-backdrop')).toBeNull()
+    expect(w.find('.chip-err').exists()).toBe(true)
+  })
+
   it('shows an error chip when run-step fails (e.g. 409 already running)', async () => {
     const err: any = new Error('step already running')
     err.status = 409
@@ -225,6 +250,45 @@ describe('PipelineView — click a node to run/chain a step', () => {
     await flushPromises()
     await clickModalButton('.modal .btn-primary')
 
+    expect(w.find('.chip-err').exists()).toBe(true)
+  })
+
+  it('does not open run confirm when task state is broken (state_ok: false)', async () => {
+    const task = {
+      task_id: 'T11',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: {},
+      state_ok: false,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+
+    expect(runPipelineStep).not.toHaveBeenCalled()
+    expect(document.body.querySelector('.modal-backdrop')).toBeNull()
+    expect(w.find('.chip-err').exists()).toBe(true)
+  })
+
+  it('clicking a past pending node (before current_phase) does not run current step', async () => {
+    // implementer is active; designer has no artifact → pending, but before current.
+    // Must not submit (server would start implementer and look like "clicked design, ran implement").
+    const task = {
+      task_id: 'T12',
+      current_phase: 'implementer',
+      hitl_pending: null,
+      artifacts: { 'investigate.md': { exists: true } },
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-designer"]').trigger('click')
+    await flushPromises()
+
+    expect(runPipelineStep).not.toHaveBeenCalled()
+    expect(document.body.querySelector('.modal-backdrop')).toBeNull()
     expect(w.find('.chip-err').exists()).toBe(true)
   })
 })
