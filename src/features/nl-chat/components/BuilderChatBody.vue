@@ -45,7 +45,17 @@ function onSend(): void {
   const text = inputText.value.trim()
   if (!text) return
   inputText.value = ''
+  nextTick(autoGrow)
   void sendMessage(text)
+}
+
+const inputRef = ref<HTMLTextAreaElement | null>(null)
+/** Grow with the text up to the CSS max-height, then scroll. */
+function autoGrow(): void {
+  const el = inputRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
 }
 
 // design.md §4.4: pipeline draft's steps[].agent must be validated against
@@ -168,12 +178,16 @@ watch([() => messages.value.length, () => sending.value], async () => {
       <p v-if="step === 'done'" class="nl-chat-done">Đã tạo thành công.</p>
     </div>
     <form class="nl-chat-input-row" @submit.prevent="onSend">
-      <input
+      <textarea
+        ref="inputRef"
         v-model="inputText"
-        type="text"
+        rows="1"
         placeholder="Nhập tin nhắn..."
+        title="Enter để gửi, Shift+Enter để xuống dòng"
         :disabled="sending || step === 'done'"
-      />
+        @input="autoGrow"
+        @keydown.enter.exact.prevent="onSend"
+      ></textarea>
       <button type="submit" :disabled="sending || !inputText.trim() || step === 'done'">Gửi</button>
     </form>
   </template>

@@ -69,7 +69,17 @@ function onSend(): void {
   const text = inputText.value
   if (!text.trim()) return
   inputText.value = ''
+  nextTick(autoGrow)
   void chat.send(text).then(scrollToEnd)
+}
+
+const inputRef = ref<HTMLTextAreaElement | null>(null)
+/** Grow with the text up to the CSS max-height, then scroll. */
+function autoGrow(): void {
+  const el = inputRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
 }
 
 const placeholder = computed(() =>
@@ -163,12 +173,16 @@ onUnmounted(() => chat.stop())
     </div>
 
     <form class="nl-chat-input-row" @submit.prevent="onSend">
-      <input
+      <textarea
+        ref="inputRef"
         v-model="inputText"
-        type="text"
+        rows="1"
         :placeholder="placeholder"
+        title="Enter để gửi, Shift+Enter để xuống dòng"
         :disabled="!chat.canSend.value || chat.sending.value"
-      />
+        @input="autoGrow"
+        @keydown.enter.exact.prevent="onSend"
+      ></textarea>
       <button type="submit" :disabled="!chat.canSend.value || chat.sending.value || !inputText.trim()">
         Gửi
       </button>

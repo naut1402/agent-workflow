@@ -131,6 +131,10 @@
 }
 .nl-chat-message {
   padding: 6px 10px;
+  /* Explicit size: without it a plain-text bubble inherited the app font while
+     the rendered-markdown one had its own, so user messages looked oversized. */
+  font-size: 12px;
+  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -220,9 +224,10 @@
 }
 .nl-chat-input-row {
   display: flex;
+  align-items: flex-end;
   gap: 6px;
 }
-.nl-chat-input-row input,
+.nl-chat-input-row textarea,
 .nl-chat-pipeline-name input,
 .nl-chat-draft-textarea {
   background: var(--input-surface);
@@ -231,9 +236,16 @@
   border-radius: 6px;
   padding: 5px 8px;
 }
-.nl-chat-input-row input {
+/* Multi-line composer: grows with the text (Enter sends, Shift+Enter newline). */
+.nl-chat-input-row textarea {
   flex: 1;
   min-width: 0;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: none;
+  overflow-y: auto;
+  max-height: 120px;
 }
 .nl-chat-input-row button,
 .nl-chat-preview-actions button {

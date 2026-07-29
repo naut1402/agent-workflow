@@ -23,8 +23,6 @@ const emit = defineEmits<{
   minimize: []
   /** Hide and forget the context (next open starts the creation assistant). */
   close: []
-  /** Switch back to the creation assistant without closing. */
-  builder: []
 }>()
 
 const context = computed<ChatContext>(() => props.context ?? { mode: 'builder' })
@@ -235,18 +233,6 @@ const anchorStyle = computed(() => {
         </svg>
       </span>
 
-      <button
-        v-if="context.mode === 'task'"
-        type="button"
-        class="nl-chat-icon-btn"
-        title="Trợ lý tạo mới"
-        aria-label="Trợ lý tạo mới"
-        @click="emit('builder')"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
-        </svg>
-      </button>
       <!-- Minimize hides the whole window (keeping this chat), matching what
            clicking the floating icon does — a header-only strip looked broken. -->
       <button

@@ -139,7 +139,6 @@ onUnmounted(() => {
     :visible="open"
     @minimize="close"
     @close="onClose"
-    @builder="resetToBuilder"
   />
 </template>
 

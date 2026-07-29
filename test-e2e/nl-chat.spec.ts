@@ -26,7 +26,7 @@ test('nl chat: themed window docks to the draggable icon (capture)', async ({ pa
   await expect(win).toBeVisible()
 
   // (3) free-form chat right away — the input row is there, no entity picker.
-  await expect(win.locator('.nl-chat-input-row input')).toBeVisible()
+  await expect(win.locator('.nl-chat-input-row textarea')).toBeVisible()
   await expect(win).not.toContainText('Bạn muốn tạo gì?')
 
   // (1) window background follows the theme's --panel token in BOTH themes —
@@ -90,8 +90,18 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
   // Idle: no status icon at all (it only appears when something is happening).
   await expect(win.locator('.nl-chat-status')).toHaveCount(0)
 
-  await win.locator('.nl-chat-input-row input').fill('tạo task sửa bug đăng nhập')
-  await win.locator('.nl-chat-input-row button').click()
+  // Multi-line composer: Shift+Enter adds a line and the box grows; Enter sends.
+  const composer = win.locator('.nl-chat-input-row textarea')
+  const oneLine = (await composer.boundingBox())!.height
+  await composer.click()
+  await composer.type('dòng 1')
+  await composer.press('Shift+Enter')
+  await composer.type('dòng 2')
+  expect(await composer.inputValue()).toContain('\n')
+  expect((await composer.boundingBox())!.height).toBeGreaterThan(oneLine)
+
+  await composer.fill('tạo task sửa bug đăng nhập')
+  await composer.press('Enter')
 
   // While the turn is in flight: busy status icon (spinner) + typing indicator.
   await expect(win.locator('.nl-chat-status')).toHaveClass(/is-busy/)
@@ -188,7 +198,7 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
 
   // Sending is blocked while the step runs: the input is disabled and its
   // placeholder carries the reason (no separate warning line).
-  const input = win.locator('.nl-chat-input-row input')
+  const input = win.locator('.nl-chat-input-row textarea')
   await expect(input).toBeDisabled()
   await expect(input).toHaveAttribute('placeholder', /Step đang chạy/)
 
