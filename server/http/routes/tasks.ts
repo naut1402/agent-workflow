@@ -13,6 +13,7 @@ import { CreateTaskRequest, GithubIssueRequest } from '../../../shared/schemas/t
 import { RunStepRequest } from '../../../shared/schemas/runStep.js'
 import { TaskFeedbackRequest } from '../../../shared/schemas/taskFeedback.js'
 import { fetchGithubIssue } from '../../github/index.js'
+import { getTaskChatState } from '../../chat/taskChat.js'
 import {
   submitJob,
   submitApprovalJob,
@@ -599,7 +600,9 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     if (!read.ok) return j(c, 404, { error: 'task not found', taskId: id })
 
     const projectId = c.get('projectId') || ''
-    const result = sendTaskFeedback(id, projectId, parsed.data.feedback)
+    const result = sendTaskFeedback(id, projectId, parsed.data.feedback, {
+      stepId: parsed.data.stepId ?? undefined,
+    })
     if ('error' in result) return j(c, result.status || 400, { error: result.error, taskId: id })
 
     emitAudit({
@@ -607,10 +610,30 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       entity: 'task-state',
       identifier: id,
       projectId: c.get('projectId'),
-      detail: { action: 'feedback', jobId: result.job.id },
+      detail: { action: 'feedback', jobId: result.job.id, stepId: parsed.data.stepId ?? undefined },
     })
 
     return j(c, 201, { job: result.job })
+  })
+
+  // Conversation history of the CLI session a step ran under, read from the
+  // runner's own transcript — also the live view of a step still running (the
+  // CLI appends to the transcript as it works). `from` is a turn cursor: pass
+  // back the previous response's `total` to fetch only what is new.
+  app.get('/api/tasks/:id/chat', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const id = c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return j(c, 400, { error: 'invalid task id' })
+
+    const stepId = c.req.query('stepId') || undefined
+    const rawFrom = Number(c.req.query('from'))
+    const state = getTaskChatState(c.get('projectId') || '', id, {
+      stepId,
+      fromIndex: Number.isFinite(rawFrom) && rawFrom > 0 ? rawFrom : 0,
+      includeToolActivity: c.req.query('tools') !== '0',
+    })
+    return j(c, 200, state)
   })
 
   app.post('/api/github/issue', async (c) => {

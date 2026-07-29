@@ -19,6 +19,17 @@ import { loadPipelineConfig } from '../pipeline/index.js'
 /** Cap on the stdout persisted for NL chat jobs — a chat reply/draft is small. */
 const NL_CHAT_STDOUT_LIMIT = 64 * 1024
 
+/**
+ * The pipeline step a job belongs to. Pipeline run-step jobs tag
+ * `pipelineStepId`; ad-hoc/quick-action jobs use `stepId`.
+ */
+export function stepIdOf(job: JobRecord): string | undefined {
+  const meta = job.metadata || {}
+  if (typeof meta.stepId === 'string' && meta.stepId) return meta.stepId
+  if (typeof meta.pipelineStepId === 'string' && meta.pipelineStepId) return meta.pipelineStepId
+  return undefined
+}
+
 function credentialForConnection(conn: Connection): CredentialProfile | null {
   if (conn.kind === 'local-console') {
     return {
@@ -377,6 +388,11 @@ async function runJob(job: JobRecord): Promise<void> {
   let execResumeSessionId: string | undefined
   let sessionStaleReason: string | undefined
 
+  // Reading only `metadata.stepId` left every ledger entry's `stepIds` empty
+  // for pipeline jobs (they tag `pipelineStepId`), so per-step session lookup
+  // had nothing to match on — see stepIdOf().
+  const jobStepId = stepIdOf(job)
+
   if (job.applyTarget && job.approvalArtifact) {
     execSessionId = job.sessionId && !job.parentJobId ? job.sessionId : undefined
     execResumeSessionId = job.sessionId && job.parentJobId ? job.sessionId : undefined
@@ -392,7 +408,7 @@ async function runJob(job: JobRecord): Promise<void> {
       workspace: job.workspace,
       host: os.hostname(),
       model: resolvedAgent.model,
-      stepId: typeof job.metadata?.stepId === 'string' ? job.metadata.stepId : undefined,
+      stepId: jobStepId,
     })
     sessionStaleReason = plan.staleReason
     if (plan.sessionMode === 'resume' && plan.resumeSessionId) {
@@ -408,11 +424,21 @@ async function runJob(job: JobRecord): Promise<void> {
         connectionId: connection.id,
         workspace: job.workspace,
         model: resolvedAgent.model,
-        stepId: typeof job.metadata?.stepId === 'string' ? job.metadata.stepId : undefined,
+        stepId: jobStepId,
         forceNew: true,
         staleReason: sessionStaleReason,
       })
     }
+  }
+
+  // Record the session id on the job BEFORE the CLI runs: the chat surface
+  // finds the runner's live transcript by session id, and the ledger is only
+  // updated after the job finishes (`recordSessionUsage` below) — too late to
+  // watch a run in progress.
+  const plannedSessionId = execSessionId ?? execResumeSessionId
+  if (plannedSessionId && !job.applyTarget) {
+    const current = loadJob(job.id)
+    if (current) saveJob({ ...current, sessionId: plannedSessionId })
   }
 
   const onStart = (info: { pid: number | null }) => {
@@ -450,7 +476,7 @@ async function runJob(job: JobRecord): Promise<void> {
       connectionId: connection.id,
       workspace: job.workspace,
       model: resolvedAgent.model,
-      stepId: typeof job.metadata?.stepId === 'string' ? job.metadata.stepId : undefined,
+      stepId: jobStepId,
     })
   }
 
@@ -739,20 +765,25 @@ export function sendTaskFeedback(
   taskId: string,
   projectId: string,
   feedback: string,
+  opts: { stepId?: string } = {},
 ): MutationResult<{ job: JobRecord }> {
   const active = listJobs(50).find(
     (j) => j.metadata?.taskId === taskId && (j.status === 'queued' || j.status === 'running'),
   )
   if (active) return { ok: false, status: 409, error: 'step already running' }
 
-  const parent = listJobs(200)
+  const finished = listJobs(200)
     .filter(
       (j) =>
         j.metadata?.taskId === taskId &&
         !j.applyTarget &&
         (j.status === 'succeeded' || j.status === 'failed'),
     )
-    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0]
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+  // Chatting from a step's popover must land in THAT step's session, not
+  // whatever ran last — prefer the newest finished job of the requested step
+  // (its metadata carries the session/workspace the resume plan reuses).
+  const parent = (opts.stepId ? finished.find((j) => stepIdOf(j) === opts.stepId) : undefined) ?? finished[0]
   if (!parent) return { ok: false, status: 400, error: 'no completed job to give feedback on' }
 
   const ledger = loadTaskSessionLedger(projectId, taskId)
@@ -768,6 +799,10 @@ export function sendTaskFeedback(
     userPrompt: feedback,
     produces: parent.produces,
     sessionMode: 'resume',
+    // Resume the exact CLI session this step ran under when we know it —
+    // `resolveSessionPlan` still validates it and falls back to a fresh
+    // session if the entry no longer applies.
+    sessionId: parent.sessionId,
     metadata: {
       ...parentMetadata,
       parentJobId: parent.id,

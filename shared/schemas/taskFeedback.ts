@@ -8,6 +8,12 @@ import { z } from 'zod'
  */
 export const TaskFeedbackRequest = z.object({
   feedback: z.string().min(1),
+  /**
+   * Pipeline step the chat was opened from. Targets that step's session (its
+   * newest finished job) instead of whatever ran last — see
+   * `sendTaskFeedback(..., { stepId })`.
+   */
+  stepId: z.string().min(1).max(200).nullish(),
 })
 
 export type TaskFeedbackRequest = z.infer<typeof TaskFeedbackRequest>

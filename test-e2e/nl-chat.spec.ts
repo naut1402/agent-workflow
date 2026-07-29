@@ -125,3 +125,60 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
   await win.locator('.nl-chat-icon-btn[title="Mở rộng"]').click()
   await expect(body).toBeVisible()
 })
+
+test('pipeline node popover opens a step-scoped runner chat (capture)', async ({ page }, testInfo) => {
+  // The chat endpoint is stubbed: the fixture project has no CLI session, and a
+  // real one would need a configured runner. Shape mirrors GET /api/tasks/:id/chat.
+  await page.route(/\/api\/tasks\/[^/]+\/chat/, (route) => {
+    const url = new URL(route.request().url())
+    route.fulfill({
+      json: {
+        taskId: 'DEMO-1',
+        stepId: url.searchParams.get('stepId'),
+        sessionId: 'sess-e2e',
+        transcriptFound: true,
+        total: 3,
+        turns: [
+          { index: 0, role: 'user', text: 'chạy step design' },
+          { index: 1, role: 'tool', tool: 'Read', text: 'docs/design.md' },
+          { index: 2, role: 'assistant', text: 'Đã cập nhật design.md theo pipeline hiện tại.' },
+        ],
+        running: { jobId: 'job-e2e', stepId: url.searchParams.get('stepId'), startedAt: null },
+        canSend: false,
+        blockedReason: 'stepRunning',
+      },
+    })
+  })
+
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await page.locator('.task-row', { hasText: 'DEMO-1' }).click()
+
+  const node = page.locator('.pnode', { hasText: 'Design' }).first()
+  await expect(node).toBeVisible({ timeout: 15_000 })
+
+  // The chat button only exists on hover.
+  await expect(node.locator('.pnode-chat-btn')).toHaveCount(0)
+  await node.hover()
+  await expect(node.locator('.pnode-chat-btn')).toBeVisible()
+  await node.locator('.pnode-chat-btn').click()
+
+  const win = page.locator('.nl-chat-window')
+  await expect(win).toBeVisible()
+  await expect(win.locator('.nl-chat-title')).toHaveText('Chat với runner')
+  // Scope line names the task + step, and the header reports the live runner.
+  await expect(win.locator('.task-chat-scope')).toContainText('DEMO-1')
+  await expect(win.locator('.nl-chat-status')).toHaveClass(/is-busy/)
+  await expect(win.locator('.nl-chat-status-text')).toContainText('Runner đang chạy')
+
+  // History from the session: both roles plus the tool-activity line.
+  await expect(win.locator('.nl-chat-message-user')).toContainText('chạy step design')
+  await expect(win.locator('.nl-chat-message-assistant')).toContainText('Đã cập nhật design.md')
+  await expect(win.locator('.task-chat-activity')).toContainText('Read')
+
+  // Sending is blocked while the step runs, and the reason is stated.
+  await expect(win.locator('.nl-chat-input-row input')).toBeDisabled()
+  await expect(win.locator('.task-chat-blocked')).toContainText('Step đang chạy')
+
+  await capture(page, testInfo, 'nl-chat-runner-session')
+})

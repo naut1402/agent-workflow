@@ -77,6 +77,8 @@ export const monitor = {
     clickToRun: 'Nhấn để chạy step này',
     running: 'Đang chạy…',
     qaCount: '{count} câu hỏi blocking',
+    chat: 'Chat',
+    chatWithRunner: 'Chat với runner của step này',
   },
   qa: {
     head: '⚠ Pipeline đang chờ trả lời câu hỏi blocking',

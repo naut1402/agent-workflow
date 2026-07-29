@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive } from 'vue'
 import ChatWindow from './ChatWindow.vue'
+import { useChatSurface } from '../composables/useChatSurface'
 
 // Floating chat icon, bottom-right by default, draggable — the single UI
 // anchor for the NL chat surface shared by Task/Pipeline/Agent creation
@@ -11,7 +12,9 @@ defineProps<{ projectId?: string | null }>()
 const POSITION_KEY = 'dev-dashboard-nlchat-position'
 const DEFAULT_POSITION = { right: 24, bottom: 24 }
 
-const open = ref(false)
+// Open state + context live in a module-level composable so a pipeline node's
+// popover can open this same window scoped to its step.
+const { open, context, toggle, close, resetToBuilder } = useChatSurface()
 const position = reactive(loadPosition())
 
 let dragging = false
@@ -71,7 +74,10 @@ function onClick(): void {
     dragMoved = false
     return
   }
-  open.value = !open.value
+  // Clicking the icon always means "the creation assistant" — a step-scoped
+  // chat is only ever opened from that step's popover.
+  if (!open.value) resetToBuilder()
+  toggle()
 }
 
 onMounted(() => {
@@ -110,7 +116,13 @@ onUnmounted(() => {
       <path d="M8.5 10.5h7M8.5 13.5h4.5" />
     </svg>
   </button>
-  <ChatWindow v-if="open" :project-id="projectId" :anchor="position" @close="open = false" />
+  <ChatWindow
+    v-if="open"
+    :project-id="projectId"
+    :anchor="position"
+    :context="context"
+    @close="close"
+  />
 </template>
 
 <style scoped>

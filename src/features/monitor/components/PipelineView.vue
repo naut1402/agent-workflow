@@ -86,6 +86,10 @@ const nodes = computed(() =>
       position: { x: p.x ?? i * NODE_SPACING, y: p.y ?? NODE_Y },
       data: {
         label: p.label,
+        // Identity of the step, so the node's hover popover can open a chat
+        // scoped to this step's runner session.
+        taskId: props.task.task_id,
+        stepId: p.key,
         status,
         hitl: p.hitl,
         // Q&A badge only on the phase that's currently active (the one that created qa.md)
