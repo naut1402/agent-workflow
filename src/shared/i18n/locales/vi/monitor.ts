@@ -77,6 +77,7 @@ export const monitor = {
     clickToRun: 'Nhấn để chạy step này',
     running: 'Đang chạy…',
     qaCount: '{count} câu hỏi blocking',
+    run: 'Chạy step',
     chat: 'Chat',
     chatWithRunner: 'Chat với runner của step này',
   },

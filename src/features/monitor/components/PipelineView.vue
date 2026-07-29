@@ -86,7 +86,7 @@ const nodes = computed(() =>
       position: { x: p.x ?? i * NODE_SPACING, y: p.y ?? NODE_Y },
       data: {
         label: p.label,
-        // Identity of the step, so the node's hover popover can open a chat
+        // Identity of the step, so the node's corner actions can open a chat
         // scoped to this step's runner session.
         taskId: props.task.task_id,
         stepId: p.key,
@@ -96,6 +96,9 @@ const nodes = computed(() =>
         qa_count: isActivePhase ? (props.task.qa_count ?? 0) : 0,
         running,
         runnable,
+        // The node's Run button goes through the same confirm dialog as
+        // clicking the node, so both paths share the overwrite warning.
+        onRun: () => openRunConfirm({ id: p.key, label: p.label }),
       },
     }
   }),

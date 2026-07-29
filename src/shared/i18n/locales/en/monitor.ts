@@ -76,6 +76,7 @@ export const monitor = {
     clickToRun: 'Click to run this step',
     running: 'Running…',
     qaCount: '{count} blocking questions',
+    run: 'Run step',
     chat: 'Chat',
     chatWithRunner: "Chat with this step's runner",
   },

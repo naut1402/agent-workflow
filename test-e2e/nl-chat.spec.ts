@@ -157,9 +157,8 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
   const node = page.locator('.pnode', { hasText: 'Design' }).first()
   await expect(node).toBeVisible({ timeout: 15_000 })
 
-  // The chat button only exists on hover.
-  await expect(node.locator('.pnode-chat-btn')).toHaveCount(0)
-  await node.hover()
+  // Pinned in the node's corner — visible without hovering, so moving the
+  // cursor to it can never make it disappear.
   await expect(node.locator('.pnode-chat-btn')).toBeVisible()
   await node.locator('.pnode-chat-btn').click()
 
@@ -181,4 +180,31 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
   await expect(win.locator('.task-chat-blocked')).toContainText('Step đang chạy')
 
   await capture(page, testInfo, 'nl-chat-runner-session')
+})
+
+test('step node corner actions: run opens the confirm dialog, chat sits next to it (capture)', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await page.locator('.task-row', { hasText: 'DEMO-1' }).click()
+
+  // The fixture task's current phase is `designer`, so that node is runnable.
+  const runnableNode = page.locator('.pnode.active').first()
+  await expect(runnableNode).toBeVisible({ timeout: 15_000 })
+  await expect(runnableNode.locator('.pnode-run-btn')).toBeVisible()
+  await expect(runnableNode.locator('.pnode-chat-btn')).toBeVisible()
+
+  // A finished (done) node cannot run — only the chat action is offered.
+  const doneNode = page.locator('.pnode.done').first()
+  await expect(doneNode.locator('.pnode-chat-btn')).toBeVisible()
+  await expect(doneNode.locator('.pnode-run-btn')).toHaveCount(0)
+
+  await capture(page, testInfo, 'pipeline-node-actions')
+
+  // Run goes through the same confirm dialog as clicking the node.
+  await runnableNode.locator('.pnode-run-btn').click()
+  await expect(page.locator('.modal-backdrop')).toBeVisible()
+  await page.locator('.modal-backdrop .btn-ghost').click()
+  await expect(page.locator('.modal-backdrop')).toHaveCount(0)
 })
