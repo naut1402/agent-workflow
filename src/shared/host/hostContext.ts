@@ -1,5 +1,6 @@
 import { shallowReactive, type Component } from 'vue'
 import type { RailIconName } from '../ui/RailIcon.vue'
+import { i18n } from '../i18n'
 
 export interface ModeDescriptor {
   id: string
@@ -50,9 +51,14 @@ export interface HostContext {
   }
   i18n: {
     /**
-     * Reserved seam — not yet wired to `createI18n()`. Namespaces are still
-     * registered statically via `src/shared/i18n/locales/{vi,en}/index.ts`.
-     * See design.md §6 (E0004-01, Việc 2+).
+     * Wired to `createI18n()` via `mergeLocaleMessage` (E0004-02, issue #159
+     * Việc 2+). Namespaces still ALSO stay registered statically in
+     * `src/shared/i18n/locales/{vi,en}/index.ts` — that object is `Messages`,
+     * the compile-time schema every typed `t()` call is checked against
+     * (see `shared/i18n/types.ts`); dropping a namespace from it would break
+     * typing for every `t('<namespace>.*')` call site. `merge` proves the
+     * runtime seam works end-to-end for built-ins that call it, without
+     * sacrificing that type safety — see design.md (E0004-02) §4.1 Commit 9.
      */
     merge(locale: string, namespace: string, messages: Record<string, unknown>): void
   }
@@ -110,6 +116,10 @@ export function createHostContext(): HostContext {
     apiFacades.set(domain, facade)
   }
 
+  function mergeI18n(locale: string, namespace: string, messages: Record<string, unknown>): void {
+    i18n.global.mergeLocaleMessage(locale, { [namespace]: messages })
+  }
+
   return {
     modes,
     floatings,
@@ -118,7 +128,7 @@ export function createHostContext(): HostContext {
     registerFloating,
     registerRailAction,
     events: { on, emit },
-    i18n: { merge: () => {} },
+    i18n: { merge: mergeI18n },
     api: { register: registerApi, get: (domain) => apiFacades.get(domain) },
   }
 }
