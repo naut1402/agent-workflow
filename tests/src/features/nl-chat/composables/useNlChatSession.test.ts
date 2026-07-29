@@ -198,6 +198,28 @@ describe('useNlChatSession', () => {
     expect(s.error.value).toBeNull()
   })
 
+  it('normalizes a pipeline draft (step ids) for both the preview and the saved profile', async () => {
+    const fetchMock = stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'pipeline', draft: { steps: [{ agent: 'agent-a' }] } },
+      catalog: { skills: [], agents: [{ id: 'agent-a' }] },
+      confirmOk: true,
+    })
+    const s = make()
+    s.pipelineName.value = 'p1'
+    await s.sendMessage('tạo pipeline')
+    await new Promise((r) => setTimeout(r, 5))
+
+    // Preview shows what will be saved: ids present, not the bare agent-only step.
+    expect(s.draft.value).toMatchObject({ version: 1, steps: [{ id: 'agent-a', name: 'agent-a' }] })
+
+    // A user who edits the ids back out still gets a reopenable profile.
+    await s.confirm({ steps: [{ agent: 'agent-a' }] })
+    const body = JSON.parse(
+      fetchMock.mock.calls.find(([url]: any[]) => String(url).includes('/api/pipeline-profiles'))![1].body,
+    )
+    expect(body.pipeline.steps[0].id).toBe('agent-a')
+  })
+
   it('confirm(task)/confirm(agent) are unaffected by the pipeline agent-ref guard', async () => {
     stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { taskId: 't1', prompt: 'p' } }, confirmOk: true })
     const s = make()

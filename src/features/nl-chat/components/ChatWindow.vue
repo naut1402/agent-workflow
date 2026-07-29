@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useNlChatSession, type NlChatEntityType } from '../composables/useNlChatSession'
 
 const props = defineProps<{
@@ -118,24 +118,112 @@ const ENTITY_LABELS: Record<NlChatEntityType, string> = {
   pipeline: 'Pipeline',
   agent: 'Agent',
 }
+
+const minimized = ref(false)
+
+// A turn is a CLI round trip that can take tens of seconds, so "đang suy nghĩ"
+// alone reads as frozen — the elapsed counter is the progress signal.
+const waitingSeconds = ref(0)
+let waitTimer: ReturnType<typeof setInterval> | null = null
+
+watch(
+  () => sending.value || confirming.value,
+  (busy) => {
+    if (waitTimer) {
+      clearInterval(waitTimer)
+      waitTimer = null
+    }
+    waitingSeconds.value = 0
+    if (busy) waitTimer = setInterval(() => (waitingSeconds.value += 1), 1000)
+  },
+)
+
+onUnmounted(() => {
+  if (waitTimer) clearInterval(waitTimer)
+})
+
+type ChatStatus = 'idle' | 'busy' | 'done' | 'error'
+
+const status = computed<ChatStatus>(() => {
+  if (sending.value || confirming.value) return 'busy'
+  if (step.value === 'error' || error.value) return 'error'
+  if (step.value === 'done') return 'done'
+  return 'idle'
+})
+
+const statusText = computed(() => {
+  switch (status.value) {
+    case 'busy':
+      return confirming.value
+        ? `Đang tạo… ${waitingSeconds.value}s`
+        : `Agent đang suy nghĩ… ${waitingSeconds.value}s`
+    case 'error':
+      return 'Có lỗi'
+    case 'done':
+      return 'Hoàn tất'
+    default:
+      return 'Sẵn sàng'
+  }
+})
+
+// Keep the newest message in view as the conversation grows.
+const messagesRef = ref<HTMLElement | null>(null)
+watch(
+  [() => messages.value.length, () => sending.value, minimized],
+  async () => {
+    await nextTick()
+    const el = messagesRef.value
+    if (el) el.scrollTop = el.scrollHeight
+  },
+)
 </script>
 
 <template>
-  <div ref="windowRef" class="nl-chat-window" role="dialog" aria-label="Trò chuyện tạo mới" :style="anchorStyle">
+  <div
+    ref="windowRef"
+    class="nl-chat-window"
+    :class="{ 'is-minimized': minimized }"
+    role="dialog"
+    aria-label="Trò chuyện tạo mới"
+    :style="anchorStyle"
+  >
     <header class="nl-chat-header">
       <span class="nl-chat-title">Trợ lý tạo mới</span>
-      <button type="button" class="nl-chat-close" title="Đóng" @click="onClose">×</button>
+      <span class="nl-chat-status" :class="`is-${status}`">
+        <span class="nl-chat-status-dot" aria-hidden="true"></span>
+        <span class="nl-chat-status-text">{{ statusText }}</span>
+      </span>
+      <button
+        type="button"
+        class="nl-chat-icon-btn"
+        :title="minimized ? 'Mở rộng' : 'Thu nhỏ'"
+        :aria-expanded="!minimized"
+        @click="minimized = !minimized"
+      >
+        {{ minimized ? '▢' : '—' }}
+      </button>
+      <button type="button" class="nl-chat-icon-btn" title="Đóng" @click="onClose">×</button>
     </header>
 
-    <div class="nl-chat-body">
+    <div v-show="!minimized" class="nl-chat-body">
       <template v-if="step === 'chatting' || step === 'confirming' || step === 'done' || step === 'error'">
-        <div class="nl-chat-messages">
+        <div ref="messagesRef" class="nl-chat-messages">
           <p v-if="messages.length === 0" class="nl-chat-hint">
             Mô tả điều bạn muốn — mình sẽ hỏi thêm nếu thiếu, rồi dựng draft Task, Pipeline hoặc Agent cho bạn.
           </p>
-          <p v-for="(m, i) in messages" :key="i" class="nl-chat-message" :class="`nl-chat-message-${m.role}`">
-            {{ m.text }}
-          </p>
+          <div v-for="(m, i) in messages" :key="i" class="nl-chat-row" :class="`nl-chat-row-${m.role}`">
+            <span class="nl-chat-role">{{ m.role === 'user' ? 'Bạn' : 'Trợ lý' }}</span>
+            <p class="nl-chat-message" :class="`nl-chat-message-${m.role}`">{{ m.text }}</p>
+          </div>
+          <div v-if="sending" class="nl-chat-row nl-chat-row-assistant">
+            <span class="nl-chat-role">Trợ lý</span>
+            <p class="nl-chat-message nl-chat-message-assistant nl-chat-typing" aria-live="polite">
+              <span class="nl-chat-dot"></span>
+              <span class="nl-chat-dot"></span>
+              <span class="nl-chat-dot"></span>
+              <span class="nl-chat-typing-label">{{ waitingSeconds }}s</span>
+            </p>
+          </div>
           <p v-if="showLongChatNudge" class="nl-chat-nudge">
             Có thể mô tả gọn lại giúp mình không?
           </p>
@@ -187,25 +275,66 @@ const ENTITY_LABELS: Record<NlChatEntityType, string> = {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   z-index: 1000;
 }
+.nl-chat-window.is-minimized {
+  max-height: none;
+}
 .nl-chat-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
+}
+.nl-chat-window.is-minimized .nl-chat-header {
+  border-bottom: none;
 }
 .nl-chat-title {
   font-weight: 600;
 }
-.nl-chat-close {
+.nl-chat-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.nl-chat-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.nl-chat-status.is-busy .nl-chat-status-dot {
+  background: var(--accent);
+  animation: nl-chat-pulse 1.2s ease-in-out infinite;
+}
+.nl-chat-status.is-done .nl-chat-status-dot {
+  background: var(--ok);
+}
+.nl-chat-status.is-error .nl-chat-status-dot {
+  background: var(--danger);
+}
+@keyframes nl-chat-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.nl-chat-icon-btn {
   background: none;
   border: none;
   color: var(--muted);
   cursor: pointer;
-  font-size: 18px;
+  font-size: 15px;
   line-height: 1;
+  padding: 2px 4px;
 }
-.nl-chat-close:hover {
+.nl-chat-icon-btn:hover {
   color: var(--text);
 }
 .nl-chat-body {
@@ -226,17 +355,76 @@ const ENTITY_LABELS: Record<NlChatEntityType, string> = {
   color: var(--muted);
   font-size: 12px;
 }
-.nl-chat-message-user {
+/* User right, assistant left — the offset (plus max-width and the role label)
+   is what makes the two sides readable at a glance. */
+.nl-chat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 85%;
+}
+.nl-chat-row-user {
   align-self: flex-end;
-  background: var(--accent-dim);
-  border-radius: 8px;
+  align-items: flex-end;
+  text-align: right;
+}
+.nl-chat-row-assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.nl-chat-role {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.nl-chat-message {
   padding: 6px 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.nl-chat-message-user {
+  background: var(--accent-dim);
+  border-radius: 10px 10px 2px 10px;
 }
 .nl-chat-message-assistant {
-  align-self: flex-start;
   background: var(--panel-2);
-  border-radius: 8px;
-  padding: 6px 10px;
+  border-radius: 10px 10px 10px 2px;
+}
+.nl-chat-typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.nl-chat-typing-label {
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.nl-chat-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: nl-chat-bounce 1.1s ease-in-out infinite;
+}
+.nl-chat-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.nl-chat-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes nl-chat-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
 .nl-chat-input-row {
   display: flex;

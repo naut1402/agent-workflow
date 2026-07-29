@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { normalizePipelineDraft } from '../lib/pipelineDraft'
 import {
   startNlChat,
   sendNlChatMessage,
@@ -178,7 +179,11 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
           return
         }
         entityType.value = resolved
-        draft.value = (turn.draft ?? {}) as Record<string, unknown>
+        const raw = (turn.draft ?? {}) as Record<string, unknown>
+        // Normalize before preview so what the user reviews is exactly what
+        // gets saved — an id-less pipeline profile cannot be reopened in the
+        // Pipeline Editor (see lib/pipelineDraft.ts).
+        draft.value = resolved === 'pipeline' ? normalizePipelineDraft(raw) : raw
         step.value = 'previewDraft'
         if (resolved === 'pipeline') {
           void loadCatalogIfNeeded()
@@ -221,7 +226,9 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
       if (entityType.value === 'task') {
         await createTask(editedDraft, projectId)
       } else if (entityType.value === 'pipeline') {
-        await savePipelineProfile(pipelineName.value, editedDraft, projectId)
+        // Re-normalize: the preview textarea is editable, so a user can drop
+        // the step ids the Pipeline Editor needs back out of the draft.
+        await savePipelineProfile(pipelineName.value, normalizePipelineDraft(editedDraft), projectId)
       } else {
         await saveCustomAgent(editedDraft, projectId)
       }

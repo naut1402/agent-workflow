@@ -55,8 +55,10 @@ function schemaHintFor(entityType?: NlChatEntityType | null): string {
       ].join('\n')
     case 'pipeline':
       return [
-        'entityType = pipeline: JSON phải theo shape CreateTaskPipeline: { "steps": [ ... ] }.',
+        'entityType = pipeline: JSON phải theo shape CreateTaskPipeline: { "version": 1, "steps": [ ... ] }.',
+        'Mỗi step BẮT BUỘC có "id" (slug kebab-case, duy nhất trong pipeline) và "name" — Pipeline Editor dùng "id" làm khoá node, thiếu thì profile lưu ra không mở lại được.',
         'Mỗi step phải dùng field "agent" là một ref NẰM TRONG danh sách catalog agent hợp lệ đã cung cấp ở lượt đầu tiên — không được bịa ref không có trong danh sách.',
+        'Các field optional khác của step: skills, produces, knowledge_inputs (mảng), hitl ({ "mode": "none" | ... }).',
       ].join('\n')
     case 'agent':
       return [
