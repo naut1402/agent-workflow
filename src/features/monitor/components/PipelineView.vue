@@ -80,6 +80,12 @@ const nodes = computed(() =>
       !running &&
       inScope &&
       (status === 'active' || status === 'pending')
+    // "Already ran" — the only steps with a CLI session to chat with. Artifact
+    // existence is checked directly (not via `status`) so a step that ran and
+    // FAILED still offers chat: it stays `active` (current_phase never moved),
+    // which is exactly when talking to the runner matters most.
+    const artifactDone = p.artifact ? Boolean(props.task.artifacts?.[p.artifact]?.exists) : false
+    const executed = artifactDone || status === 'done' || status === 'waiting' || running
     return {
       id: p.key,
       type: 'pipeline',
@@ -96,6 +102,7 @@ const nodes = computed(() =>
         qa_count: isActivePhase ? (props.task.qa_count ?? 0) : 0,
         running,
         runnable,
+        executed,
         // The node's Run button goes through the same confirm dialog as
         // clicking the node, so both paths share the overwrite warning.
         onRun: () => openRunConfirm({ id: p.key, label: p.label }),

@@ -200,6 +200,11 @@ test('step node corner actions: run opens the confirm dialog, chat sits next to 
   await expect(doneNode.locator('.pnode-chat-btn')).toBeVisible()
   await expect(doneNode.locator('.pnode-run-btn')).toHaveCount(0)
 
+  // A step that never ran has no CLI session → run only, no chat.
+  const pendingNode = page.locator('.pnode.pending').first()
+  await expect(pendingNode.locator('.pnode-run-btn')).toBeVisible()
+  await expect(pendingNode.locator('.pnode-chat-btn')).toHaveCount(0)
+
   await capture(page, testInfo, 'pipeline-node-actions')
 
   // Run goes through the same confirm dialog as clicking the node.

@@ -292,3 +292,53 @@ describe('PipelineView — click a node to run/chain a step', () => {
     expect(w.find('.chip-err').exists()).toBe(true)
   })
 })
+
+// The chat action on a node is gated on `data.executed` — only a step with a CLI
+// session has history to replay. VueFlow is stubbed, so the flag is asserted on
+// the node data PipelineView hands it.
+describe('PipelineView — node data for the chat action', () => {
+  function nodeData(w: any, id: string) {
+    return w.findComponent({ name: 'VueFlow' }).props('nodes').find((n: any) => n.id === id).data
+  }
+
+  it('marks a step executed once its artifact exists, and passes the step identity', async () => {
+    const task = {
+      task_id: 'T20',
+      current_phase: 'implementer',
+      hitl_pending: null,
+      artifacts: { 'investigate.md': { exists: true } },
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    expect(nodeData(w, 'investigator')).toMatchObject({ taskId: 'T20', stepId: 'investigator', executed: true })
+    // Never ran → no chat history to show.
+    expect(nodeData(w, 'reviewer').executed).toBe(false)
+  })
+
+  it('a step waiting at its HITL gate counts as executed', async () => {
+    const task = { task_id: 'T21', current_phase: 'designer', hitl_pending: 'hitl-1', artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    const investigator = nodeData(w, 'investigator')
+    expect(investigator.status).toBe('waiting')
+    expect(investigator.executed).toBe(true)
+  })
+
+  it('a step that ran and failed stays active but still counts as executed', async () => {
+    // current_phase never advanced, yet the artifact from that run exists.
+    const task = {
+      task_id: 'T22',
+      current_phase: 'designer',
+      hitl_pending: null,
+      artifacts: { 'design.md': { exists: true } },
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    const designer = nodeData(w, 'designer')
+    expect(designer.status).toBe('active')
+    expect(designer.executed).toBe(true)
+  })
+})

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import { useI18n } from 'vue-i18n'
 import { useChatSurface } from '../../nl-chat/composables/useChatSurface'
@@ -10,13 +11,18 @@ const props = defineProps({
 const { t } = useI18n()
 const { openTaskChat } = useChatSurface()
 
-// Action row pinned to the node's top-right corner. It is always visible (a
-// hover-only popover sitting outside the node lost hover the moment the cursor
-// travelled to it, so the button vanished before it could be clicked).
+// Actions sit ON the node's top border (the border runs through their middle)
+// and are always visible — a hover-only popover outside the node lost hover the
+// moment the cursor travelled to it, so the button vanished before it could be
+// clicked. Run is centred on the node, chat sits at the top-right corner.
 //
 // Run mirrors what clicking the node does, and shows under exactly the same
-// condition (`data.runnable`); chat opens the floating window scoped to
-// (taskId, stepId) so it replays that CLI session's history.
+// condition (`data.runnable`).
+//
+// Chat only appears for a step that has actually run (`data.executed`, computed
+// in PipelineView) — a step that never ran has no CLI session, so there is no
+// history to replay.
+const hasRunHistory = computed(() => Boolean(props.data.taskId) && Boolean(props.data.executed))
 
 function onRun(): void {
   props.data.onRun?.()
@@ -56,7 +62,7 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
       <button
         v-if="data.runnable"
         type="button"
-        class="pnode-action pnode-run-btn"
+        class="pnode-action pnode-action-center pnode-run-btn"
         :title="t('monitor.pipelineNode.clickToRun')"
         :aria-label="t('monitor.pipelineNode.run')"
         @click.stop="onRun"
@@ -66,9 +72,9 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
         </svg>
       </button>
       <button
-        v-if="data.taskId"
+        v-if="hasRunHistory"
         type="button"
-        class="pnode-action pnode-chat-btn"
+        class="pnode-action pnode-action-right pnode-chat-btn"
         :title="t('monitor.pipelineNode.chatWithRunner')"
         :aria-label="t('monitor.pipelineNode.chat')"
         @click.stop="onChat"
@@ -109,16 +115,20 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
 .pnode {
   position: relative;
 }
-/* Pinned inside the node's top-right corner — always reachable, no hover race. */
+/* Always reachable (no hover race): the buttons straddle the node's top border,
+   which passes through their vertical middle. */
 .pnode-actions {
   position: absolute;
-  top: 3px;
-  right: 4px;
-  display: flex;
-  gap: 2px;
+  inset: 0;
+  pointer-events: none;
   z-index: 5;
 }
 .pnode-action {
+  position: absolute;
+  /* The containing block is the padding box, so -1px lifts the button by half
+     the node's 2px border — its middle then lands on the border line. */
+  top: -1px;
+  pointer-events: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -131,6 +141,14 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
   color: var(--text);
   opacity: 0.75;
   cursor: pointer;
+}
+.pnode-action-center {
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.pnode-action-right {
+  right: 4px;
+  transform: translateY(-50%);
 }
 .pnode-action:hover {
   opacity: 1;

@@ -40,16 +40,28 @@ describe('PipelineNode', () => {
     expect(w.find('.pnode-bubble').attributes('title')).toBeUndefined()
   })
 
-  // Corner actions: always rendered (a hover-only popover outside the node was
+  // Node actions: always rendered (a hover-only popover outside the node was
   // unreachable — the cursor left the node before arriving at the button).
-  describe('corner actions', () => {
-    it('chat button shows without hovering, whenever the node knows its task', () => {
-      const w = mountNode({ label: 'Design', status: 'done', taskId: 'DEMO-1', stepId: 'design' })
-      expect(w.find('.pnode-chat-btn').exists()).toBe(true)
+  describe('node actions', () => {
+    it('chat shows only for a step that already ran (data.executed)', () => {
+      const ran = mountNode({ label: 'Design', status: 'done', taskId: 'DEMO-1', stepId: 'design', executed: true })
+      expect(ran.find('.pnode-chat-btn').exists()).toBe(true)
+    })
+
+    it('no chat for a step that never ran — there is no session history to show', () => {
+      for (const data of [
+        { status: 'pending', executed: false },
+        { status: 'active', runnable: true, executed: false },
+      ]) {
+        const w = mountNode({ label: 'Review', taskId: 'DEMO-1', stepId: 'review', ...data })
+        expect(w.find('.pnode-chat-btn').exists()).toBe(false)
+      }
     })
 
     it('no chat button when the node has no task context', () => {
-      expect(mountNode({ label: 'Design', status: 'done' }).find('.pnode-chat-btn').exists()).toBe(false)
+      expect(mountNode({ label: 'Design', status: 'done', executed: true }).find('.pnode-chat-btn').exists()).toBe(
+        false,
+      )
     })
 
     it('run button appears under exactly the same condition as click-to-run', () => {
@@ -59,11 +71,16 @@ describe('PipelineNode', () => {
       expect(mountNode({ label: 'Investigate', status: 'done' }).find('.pnode-run-btn').exists()).toBe(false)
     })
 
-    it('run sits before chat in the same row', () => {
-      const w = mountNode({ label: 'Implement', status: 'active', runnable: true, taskId: 'DEMO-1' })
-      const classes = w.findAll('.pnode-actions .pnode-action').map((b) => b.classes().join(' '))
-      expect(classes[0]).toContain('pnode-run-btn')
-      expect(classes[1]).toContain('pnode-chat-btn')
+    it('run is centred on the node, chat pinned right — both on the top border', () => {
+      const w = mountNode({
+        label: 'Design',
+        status: 'active',
+        runnable: true,
+        executed: true,
+        taskId: 'DEMO-1',
+      })
+      expect(w.find('.pnode-run-btn').classes()).toContain('pnode-action-center')
+      expect(w.find('.pnode-chat-btn').classes()).toContain('pnode-action-right')
     })
 
     it('run button calls data.onRun (same confirm dialog as clicking the node)', async () => {
