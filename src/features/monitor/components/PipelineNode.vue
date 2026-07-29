@@ -135,28 +135,31 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
   width: 19px;
   height: 19px;
   padding: 0;
-  border-radius: 5px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
-  opacity: 0.75;
+  /* Borderless + hover scale, per docs/ui-buttons.md (.icon-btn). */
+  border: none;
+  background: transparent;
+  color: var(--muted);
   cursor: pointer;
+  transition: transform 0.12s ease, color 0.12s ease;
 }
+.pnode-action:hover {
+  color: var(--text);
+}
+/* The positioning transform is repeated in each hover rule so the scale
+   composes with it instead of replacing it. */
 .pnode-action-center {
   left: 50%;
   transform: translate(-50%, -50%);
+}
+.pnode-action-center:hover {
+  transform: translate(-50%, -50%) scale(1.15);
 }
 .pnode-action-right {
   right: 4px;
   transform: translateY(-50%);
 }
-.pnode-action:hover {
-  opacity: 1;
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.pnode-run-btn {
-  color: var(--active);
+.pnode-action-right:hover {
+  transform: translateY(-50%) scale(1.15);
 }
 .pnode-waiting .pnode-bubble,
 .pnode-runnable .pnode-bubble {
