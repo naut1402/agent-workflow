@@ -23,6 +23,21 @@ function buildPrompt(resolvedAgent: ResolvedAgent, userPrompt: string): string {
   return `## Agent instructions\n\n${system}\n\n## Task\n\n${userPrompt}`
 }
 
+/**
+ * A chat round resumes the SAME agent's session (`sendTaskFeedback` copies
+ * `agentRef` from the parent job), so the agent's instructions are already in
+ * the conversation — re-sending the whole system prompt with every message is
+ * pure noise and tokens.
+ *
+ * Keyed on `isChatFeedback` only, deliberately: that flag is stripped when
+ * `advancePipelineStepChain` carries metadata into the next step, whereas
+ * `parentJobId` leaks forward — and a pipeline step resuming the previous
+ * step's session runs a DIFFERENT agent, whose instructions must be sent.
+ */
+function shouldSendAgentInstructions(req: ExecuteRequest): boolean {
+  return !(req.resumeSessionId && req.metadata?.isChatFeedback === true)
+}
+
 export interface ClaudeInvocationInput {
   flags: string[]
   prompt: string
@@ -278,7 +293,9 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
       const started = Date.now()
       const cliPath = String(runnerConfig.cliPath || opts.defaultCliPath)
       const flags = resolveEffectiveFlags(runnerConfig.flags, credential)
-      const prompt = buildPrompt(req.resolvedAgent, req.userPrompt)
+      const prompt = shouldSendAgentInstructions(req)
+        ? buildPrompt(req.resolvedAgent, req.userPrompt)
+        : req.userPrompt
 
       const sessionPlan = prepareSessionInvocation({
         capture: sessionCapture,

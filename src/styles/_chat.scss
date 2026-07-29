@@ -17,9 +17,6 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   z-index: 1000;
 }
-.nl-chat-window.is-minimized {
-  max-height: none;
-}
 .nl-chat-header {
   display: flex;
   align-items: center;
@@ -27,52 +24,49 @@
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
 }
-.nl-chat-window.is-minimized .nl-chat-header {
-  border-bottom: none;
-}
 .nl-chat-title {
   font-weight: 600;
-  white-space: nowrap;
-}
-.nl-chat-status {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 5px;
   margin-right: auto;
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-}
-.nl-chat-status-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.nl-chat-status-dot {
+/* Badge instead of a prose title: the icon says which chat this is, the title
+   text is then free to carry the task/step identity. */
+.nl-chat-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--muted);
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--accent-dim);
+  color: var(--accent);
 }
-.nl-chat-status.is-busy .nl-chat-status-dot {
-  background: var(--accent);
-  animation: nl-chat-pulse 1.2s ease-in-out infinite;
+/* Icon-only status (a coloured dot + text read as online/offline). */
+.nl-chat-status {
+  display: flex;
+  align-items: center;
+  flex: none;
+  color: var(--muted);
 }
-.nl-chat-status.is-done .nl-chat-status-dot {
-  background: var(--ok);
+.nl-chat-status.is-busy {
+  color: var(--accent);
 }
-.nl-chat-status.is-error .nl-chat-status-dot {
-  background: var(--danger);
+.nl-chat-status.is-done {
+  color: var(--ok);
 }
-@keyframes nl-chat-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 1;
+.nl-chat-status.is-error {
+  color: var(--danger);
+}
+.nl-chat-spinner {
+  animation: nl-chat-spin 0.9s linear infinite;
+}
+@keyframes nl-chat-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 .nl-chat-icon-btn {
@@ -140,6 +134,33 @@
 .nl-chat-message-assistant {
   background: var(--panel-2);
   border-radius: 10px 10px 10px 2px;
+}
+/* Runner replies render as markdown through the shared `.md` styles
+   (src/styles/_monitor.scss) — scaled down for the chat bubble. */
+.nl-chat-message.md {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.nl-chat-message.md :first-child {
+  margin-top: 0;
+}
+.nl-chat-message.md :last-child {
+  margin-bottom: 0;
+}
+.nl-chat-message.md pre {
+  padding: 8px;
+  font-size: 11px;
+}
+.nl-chat-message.md ul,
+.nl-chat-message.md ol {
+  padding-left: 18px;
+  margin: 4px 0;
+}
+.nl-chat-message.md h1,
+.nl-chat-message.md h2,
+.nl-chat-message.md h3 {
+  font-size: 13px;
+  margin: 6px 0 4px;
 }
 .nl-chat-typing {
   display: flex;

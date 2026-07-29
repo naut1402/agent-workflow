@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTaskChat } from '../composables/useTaskChat'
+import { parseMarkdown } from '../../../shared/markdown'
 
 // Body of the floating chat window when it is scoped to a pipeline step: the
 // runner's own conversation history (CLI session transcript) plus an input that
@@ -12,6 +13,8 @@ const props = defineProps<{
   stepId?: string
   stepLabel?: string
   projectId?: string | null
+  /** False while the window is minimized — polling pauses instead of running unseen. */
+  active?: boolean
 }>()
 const emit = defineEmits<{
   status: [{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string }]
@@ -30,8 +33,14 @@ const COLLAPSE_CHARS = 240
 
 const messagesRef = ref<HTMLElement | null>(null)
 
-function isCollapsed(turn: { index: number; text: string }): boolean {
-  return turn.text.length > COLLAPSE_CHARS && !expanded.value.has(turn.index)
+/** Only user turns collapse: a step's prompt is a whole file, and slicing
+ *  markdown mid-syntax would render broken. */
+function canCollapse(turn: { role: string; text: string }): boolean {
+  return turn.role === 'user' && turn.text.length > COLLAPSE_CHARS
+}
+
+function isCollapsed(turn: { index: number; role: string; text: string }): boolean {
+  return canCollapse(turn) && !expanded.value.has(turn.index)
 }
 
 function toggle(index: number): void {
@@ -41,8 +50,13 @@ function toggle(index: number): void {
   expanded.value = next
 }
 
-function shown(turn: { index: number; text: string }): string {
+function shown(turn: { index: number; role: string; text: string }): string {
   return isCollapsed(turn) ? `${turn.text.slice(0, COLLAPSE_CHARS)}…` : turn.text
+}
+
+/** Runner replies are markdown (lists, code fences, headings) — render them. */
+function renderMarkdown(text: string): string {
+  return parseMarkdown(text)
 }
 
 async function scrollToEnd(): Promise<void> {
@@ -87,20 +101,24 @@ watch(
   },
 )
 
+// Minimized: the component stays mounted (so the conversation is still there on
+// reopen) but must not keep polling in the background.
+watch(
+  () => props.active !== false,
+  (visible) => {
+    if (visible) void chat.start().then(scrollToEnd)
+    else chat.stop()
+  },
+)
+
 onMounted(() => {
-  void chat.start().then(scrollToEnd)
+  if (props.active !== false) void chat.start().then(scrollToEnd)
 })
 onUnmounted(() => chat.stop())
 </script>
 
 <template>
   <div class="task-chat">
-    <p class="task-chat-scope">
-      <strong>{{ taskId }}</strong>
-      <span v-if="stepLabel || stepId"> · {{ stepLabel || stepId }}</span>
-      <span v-if="chat.running.value" class="task-chat-live">đang chạy</span>
-    </p>
-
     <div ref="messagesRef" class="nl-chat-messages">
       <p v-if="chat.loading.value" class="nl-chat-hint">Đang tải hội thoại của runner…</p>
       <p v-else-if="!chat.sessionId.value" class="nl-chat-hint">
@@ -120,13 +138,14 @@ onUnmounted(() => chat.stop())
         </p>
         <div v-else class="nl-chat-row" :class="`nl-chat-row-${turn.role}`">
           <span class="nl-chat-role">{{ turn.role === 'user' ? 'Bạn' : 'Runner' }}</span>
-          <p class="nl-chat-message" :class="`nl-chat-message-${turn.role}`">{{ shown(turn) }}</p>
-          <button
-            v-if="turn.text.length > COLLAPSE_CHARS"
-            type="button"
-            class="task-chat-more"
-            @click="toggle(turn.index)"
-          >
+          <!-- eslint-disable-next-line vue/no-v-html -- agent markdown, same trust level as artifacts -->
+          <div
+            v-if="turn.role === 'assistant'"
+            class="nl-chat-message nl-chat-message-assistant md"
+            v-html="renderMarkdown(turn.text)"
+          ></div>
+          <p v-else class="nl-chat-message" :class="`nl-chat-message-${turn.role}`">{{ shown(turn) }}</p>
+          <button v-if="canCollapse(turn)" type="button" class="task-chat-more" @click="toggle(turn.index)">
             {{ isCollapsed(turn) ? 'Xem thêm' : 'Thu lại' }}
           </button>
         </div>
@@ -165,19 +184,6 @@ onUnmounted(() => chat.stop())
   flex-direction: column;
   gap: 8px;
   min-height: 0;
-}
-.task-chat-scope {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--muted);
-}
-.task-chat-live {
-  color: var(--accent);
-  background: var(--accent-dim);
-  border-radius: 999px;
-  padding: 1px 6px;
 }
 .task-chat-activity {
   align-self: stretch;

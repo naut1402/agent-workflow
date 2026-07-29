@@ -67,7 +67,7 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
         :aria-label="t('monitor.pipelineNode.run')"
         @click.stop="onRun"
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M8 5.5v13l11-6.5z" />
         </svg>
       </button>
@@ -80,8 +80,8 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
         @click.stop="onChat"
       >
         <svg
-          width="12"
-          height="12"
+          width="15"
+          height="15"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -132,8 +132,8 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 19px;
-  height: 19px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   /* Borderless + hover scale, per docs/ui-buttons.md (.icon-btn). */
   border: none;

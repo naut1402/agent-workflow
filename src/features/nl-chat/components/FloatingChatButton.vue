@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import ChatWindow from './ChatWindow.vue'
 import { useChatSurface } from '../composables/useChatSurface'
 
@@ -16,6 +16,14 @@ const DEFAULT_POSITION = { right: 24, bottom: 24 }
 // popover can open this same window scoped to its step.
 const { open, context, toggle, close, resetToBuilder } = useChatSurface()
 const position = reactive(loadPosition())
+
+// Once opened, the window stays mounted and is only hidden — minimizing must
+// not throw away an in-progress creation chat (its messages live in the body's
+// composable). `open` is forwarded so a hidden task chat stops polling.
+const everOpened = ref(open.value)
+watch(open, (v) => {
+  if (v) everOpened.value = true
+})
 
 let dragging = false
 let dragMoved = false
@@ -74,10 +82,16 @@ function onClick(): void {
     dragMoved = false
     return
   }
-  // Clicking the icon always means "the creation assistant" — a step-scoped
-  // chat is only ever opened from that step's popover.
-  if (!open.value) resetToBuilder()
+  // Show/hide only — the context is preserved, so reopening after a minimize
+  // resumes the same runner chat instead of resetting it to the builder. The
+  // × button is what forgets the context.
   toggle()
+}
+
+/** × — hide and drop the step context, so the next open is the creation flow. */
+function onClose(): void {
+  close()
+  resetToBuilder()
 }
 
 onMounted(() => {
@@ -117,11 +131,15 @@ onUnmounted(() => {
     </svg>
   </button>
   <ChatWindow
-    v-if="open"
+    v-if="everOpened"
+    v-show="open"
     :project-id="projectId"
     :anchor="position"
     :context="context"
-    @close="close"
+    :visible="open"
+    @minimize="close"
+    @close="onClose"
+    @builder="resetToBuilder"
   />
 </template>
 

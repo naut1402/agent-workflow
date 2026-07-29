@@ -87,15 +87,15 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
   const win = page.locator('.nl-chat-window')
   await expect(win).toBeVisible({ timeout: 15_000 })
 
-  // Status indicator is present and idle before anything is sent.
-  await expect(win.locator('.nl-chat-status')).toHaveClass(/is-idle/)
-  await expect(win.locator('.nl-chat-status-text')).toHaveText('Sẵn sàng')
+  // Idle: no status icon at all (it only appears when something is happening).
+  await expect(win.locator('.nl-chat-status')).toHaveCount(0)
 
   await win.locator('.nl-chat-input-row input').fill('tạo task sửa bug đăng nhập')
   await win.locator('.nl-chat-input-row button').click()
 
-  // While the turn is in flight: busy status + typing indicator.
+  // While the turn is in flight: busy status icon (spinner) + typing indicator.
   await expect(win.locator('.nl-chat-status')).toHaveClass(/is-busy/)
+  await expect(win.locator('.nl-chat-status .nl-chat-spinner')).toBeVisible()
   await expect(win.locator('.nl-chat-typing')).toBeVisible()
   await capture(page, testInfo, 'nl-chat-thinking')
 
@@ -103,7 +103,7 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
     timeout: 15_000,
   })
   await expect(win.locator('.nl-chat-typing')).toHaveCount(0)
-  await expect(win.locator('.nl-chat-status')).toHaveClass(/is-idle/)
+  await expect(win.locator('.nl-chat-status')).toHaveCount(0)
 
   const userRow = (await win.locator('.nl-chat-row-user').boundingBox())!
   const assistantRow = (await win.locator('.nl-chat-row-assistant').boundingBox())!
@@ -114,16 +114,15 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
 
   await capture(page, testInfo, 'nl-chat-message-sides')
 
-  // Minimize collapses the body but keeps the header (and its status) visible.
-  const body = win.locator('.nl-chat-body')
-  await expect(body).toBeVisible()
+  // Minimize hides the whole window (not a header-only strip), and the icon
+  // brings the SAME conversation back — messages are not re-fetched/reset.
   await win.locator('.nl-chat-icon-btn[title="Thu nhỏ"]').click()
-  await expect(body).toBeHidden()
-  await expect(win.locator('.nl-chat-status')).toBeVisible()
+  await expect(win).toBeHidden()
   await capture(page, testInfo, 'nl-chat-minimized')
 
-  await win.locator('.nl-chat-icon-btn[title="Mở rộng"]').click()
-  await expect(body).toBeVisible()
+  await page.locator('.nl-chat-fab').click()
+  await expect(win).toBeVisible()
+  await expect(win.locator('.nl-chat-message-assistant')).toHaveText('Bạn muốn đặt taskId là gì?')
 })
 
 test('pipeline node popover opens a step-scoped runner chat (capture)', async ({ page }, testInfo) => {
@@ -141,7 +140,12 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
         turns: [
           { index: 0, role: 'user', text: 'chạy step design' },
           { index: 1, role: 'tool', tool: 'Read', text: 'docs/design.md' },
-          { index: 2, role: 'assistant', text: 'Đã cập nhật design.md theo pipeline hiện tại.' },
+          {
+            index: 2,
+            role: 'assistant',
+            // Markdown: the reply must render, not show raw ** / - / ` syntax.
+            text: '**Đã cập nhật** design.md:\n\n- thêm §4\n- sửa `steps[].agent`',
+          },
         ],
         running: { jobId: 'job-e2e', stepId: url.searchParams.get('stepId'), startedAt: null },
         canSend: false,
@@ -164,15 +168,22 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
 
   const win = page.locator('.nl-chat-window')
   await expect(win).toBeVisible()
-  await expect(win.locator('.nl-chat-title')).toHaveText('Chat với runner')
-  // Scope line names the task + step, and the header reports the live runner.
-  await expect(win.locator('.task-chat-scope')).toContainText('DEMO-1')
+  // Badge icon replaces the prose title; the title carries task + step instead.
+  await expect(win.locator('.nl-chat-badge.is-task')).toBeVisible()
+  await expect(win.locator('.nl-chat-title')).toContainText('DEMO-1')
+  await expect(win.locator('.nl-chat-title')).toContainText('Design')
+  // Live runner: icon-only status, label kept as the tooltip.
   await expect(win.locator('.nl-chat-status')).toHaveClass(/is-busy/)
-  await expect(win.locator('.nl-chat-status-text')).toContainText('Runner đang chạy')
+  await expect(win.locator('.nl-chat-status')).toHaveAttribute('title', /Runner đang chạy/)
 
   // History from the session: both roles plus the tool-activity line.
   await expect(win.locator('.nl-chat-message-user')).toContainText('chạy step design')
-  await expect(win.locator('.nl-chat-message-assistant')).toContainText('Đã cập nhật design.md')
+  const reply = win.locator('.nl-chat-message-assistant')
+  await expect(reply).toContainText('Đã cập nhật')
+  await expect(reply.locator('strong')).toHaveText('Đã cập nhật')
+  await expect(reply.locator('li')).toHaveCount(2)
+  await expect(reply.locator('code')).toHaveText('steps[].agent')
+  await expect(reply).not.toContainText('**')
   await expect(win.locator('.task-chat-activity')).toContainText('Read')
 
   // Sending is blocked while the step runs, and the reason is stated.
