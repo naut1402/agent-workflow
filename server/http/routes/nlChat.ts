@@ -35,8 +35,11 @@ export function registerNlChatRoutes(app: Hono<HonoEnv>): void {
     await ensureNlChatBuilderAgent(root)
 
     const projectId = c.get('projectId') || ''
+    const entityType = parsed.data.entityType ?? undefined
     let extraContext: string | undefined
-    if (parsed.data.entityType === 'pipeline') {
+    // Auto mode may end up drafting a pipeline, so the catalog refs must be in
+    // the turn-1 context there too — not only when 'pipeline' was pinned.
+    if (entityType === 'pipeline' || !entityType) {
       const catalog = await buildCatalog(root, { scanCustomAgents })
       const refs = (catalog.agents || [])
         .map((a: any) => a?.id)
@@ -46,7 +49,7 @@ export function registerNlChatRoutes(app: Hono<HonoEnv>): void {
 
     const { chatSessionId, job } = startNlChatSession({
       projectId,
-      entityType: parsed.data.entityType,
+      entityType,
       message: parsed.data.message,
       runnerId: parsed.data.runnerId ?? undefined,
       extraContext,
@@ -58,7 +61,7 @@ export function registerNlChatRoutes(app: Hono<HonoEnv>): void {
       entity: 'nl-chat-session',
       identifier: chatSessionId,
       projectId: c.get('projectId'),
-      detail: { entityType: parsed.data.entityType, jobId: job.id },
+      detail: { entityType: entityType ?? 'auto', jobId: job.id },
     })
 
     return j(c, 201, { chatSessionId, job })

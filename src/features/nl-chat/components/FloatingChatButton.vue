@@ -95,25 +95,46 @@ onUnmounted(() => {
     @pointerdown="onPointerDown"
     @click="onClick"
   >
-    💬
+    <svg
+      width="26"
+      height="26"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.6"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20.5 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 20.5 12z" />
+      <path d="M8.5 10.5h7M8.5 13.5h4.5" />
+    </svg>
   </button>
-  <ChatWindow v-if="open" :project-id="projectId" @close="open = false" />
+  <ChatWindow v-if="open" :project-id="projectId" :anchor="position" @close="open = false" />
 </template>
 
 <style scoped>
+/* No filled background per UI review — a bare, draggable glyph that inherits
+   the theme's text color instead of a blue circle. */
 .nl-chat-fab {
   position: fixed;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   border: none;
-  background: var(--color-accent, #3b6fe0);
-  color: #fff;
-  font-size: 22px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
   cursor: grab;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
   z-index: 999;
   touch-action: none;
+}
+.nl-chat-fab:hover {
+  background: var(--hover-surface);
+  color: var(--accent);
 }
 .nl-chat-fab:active {
   cursor: grabbing;

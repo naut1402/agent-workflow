@@ -9,9 +9,16 @@ import { z } from 'zod'
 export const NL_CHAT_ENTITY_TYPES = ['task', 'pipeline', 'agent'] as const
 export type NlChatEntityType = (typeof NL_CHAT_ENTITY_TYPES)[number]
 
-/** Body for `POST /api/nl-chat/sessions` (starts a new chat session). */
+/**
+ * Body for `POST /api/nl-chat/sessions` (starts a new chat session).
+ *
+ * `entityType` is optional: the chat surface opens as a normal conversation
+ * and lets the agent infer what the user wants to create (task / pipeline /
+ * agent) — see design.md F0012 §4.2 "auto mode". Callers that already know
+ * the target entity may still pin it.
+ */
 export const StartNlChatRequest = z.object({
-  entityType: z.enum(NL_CHAT_ENTITY_TYPES),
+  entityType: z.enum(NL_CHAT_ENTITY_TYPES).nullish(),
   message: z.string().min(1).max(20_000),
   runnerId: z.string().min(1).nullish(),
 })

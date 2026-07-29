@@ -11,16 +11,18 @@ import {
   saveCustomAgent,
 } from '../../../api'
 
-// Drives the floating NL chat surface end to end: pick an entity type, chat
-// multi-turn with the `nl-chat-builder` agent (via the job runner) until it
-// hands back a draft, let the user tweak the draft, then persist it through
+// Drives the floating NL chat surface end to end: the user just chats (no
+// "what do you want to create?" picker — the agent infers the entity type and
+// reports it with the draft), multi-turn with the `nl-chat-builder` agent (via
+// the job runner) until it hands back a draft, let the user tweak the draft,
+// then persist it through
 // the SAME create APIs the existing dialogs use (createTask /
 // savePipelineProfile / saveCustomAgent) — see design.md F0012 §4.2.
 // Kept as a composable (no render needed) so the state machine is
 // unit-testable by mocking the API client, same pattern as useAgentBuild.ts.
 
 export type NlChatEntityType = 'task' | 'pipeline' | 'agent'
-export type NlChatStep = 'selectEntity' | 'chatting' | 'previewDraft' | 'confirming' | 'done' | 'error'
+export type NlChatStep = 'chatting' | 'previewDraft' | 'confirming' | 'done' | 'error'
 
 export interface NlChatMessage {
   role: 'user' | 'assistant'
@@ -51,7 +53,7 @@ function isTerminal(status?: string): boolean {
 }
 
 export function useNlChatSession(opts: UseNlChatSessionOptions) {
-  const step = ref<NlChatStep>('selectEntity')
+  const step = ref<NlChatStep>('chatting')
   const entityType = ref<NlChatEntityType | null>(null)
   const messages = ref<NlChatMessage[]>([])
   const draft = ref<Record<string, unknown> | null>(null)
@@ -80,6 +82,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   const maxWaitMs = opts.maxWaitMs ?? 5 * 60 * 1000
   const nudgeAfterTurns = opts.nudgeAfterTurns ?? 8
 
+  /** Pin the entity type up front (optional — the agent otherwise infers it). */
   function selectEntity(type: NlChatEntityType): void {
     entityType.value = type
     step.value = 'chatting'
@@ -135,7 +138,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   }
 
   async function sendMessage(text: string): Promise<void> {
-    if (sending.value || !text.trim() || !entityType.value) return
+    if (sending.value || !text.trim()) return
     sending.value = true
     error.value = null
     messages.value.push({ role: 'user', text })
@@ -143,7 +146,10 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
       const projectId = opts.getProjectId()
       const res = chatSessionId.value
         ? await sendNlChatMessage(chatSessionId.value, text, projectId)
-        : await startNlChat({ entityType: entityType.value, message: text, runnerId: opts.runnerId }, projectId)
+        : await startNlChat(
+            { entityType: entityType.value ?? undefined, message: text, runnerId: opts.runnerId },
+            projectId,
+          )
 
       if (!chatSessionId.value && res?.chatSessionId) chatSessionId.value = res.chatSessionId
       const jobId: string | undefined = res?.job?.id
@@ -159,9 +165,22 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
       showLongChatNudge.value = turnCount.value >= nudgeAfterTurns
 
       if (turn.kind === 'draft') {
+        // In free-chat mode the agent reports which entity the draft is for;
+        // a pinned entityType (selectEntity) still wins if the agent omits it.
+        const resolved = (turn.entityType ?? entityType.value) as NlChatEntityType | null | undefined
+        if (resolved !== 'task' && resolved !== 'pipeline' && resolved !== 'agent') {
+          // Draft with no usable entity type — stay in chat and ask, instead
+          // of stranding the user on a preview we cannot persist.
+          messages.value.push({
+            role: 'assistant',
+            text: 'Mình chưa rõ bạn muốn tạo Task, Pipeline hay Agent — bạn nói rõ giúp mình nhé?',
+          })
+          return
+        }
+        entityType.value = resolved
         draft.value = (turn.draft ?? {}) as Record<string, unknown>
         step.value = 'previewDraft'
-        if (entityType.value === 'pipeline') {
+        if (resolved === 'pipeline') {
           void loadCatalogIfNeeded()
         }
       } else {
@@ -227,7 +246,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   }
 
   function reset(): void {
-    step.value = 'selectEntity'
+    step.value = 'chatting'
     entityType.value = null
     messages.value = []
     draft.value = null

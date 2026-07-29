@@ -37,8 +37,25 @@ export function parseBuilderOutput(stdout: string): BuilderTurn {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return { kind: 'question', text: DRAFT_PARSE_ERROR_MESSAGE }
     }
-    return { kind: 'draft', draft: parsed as Record<string, unknown> }
+    return unwrapDraft(parsed as Record<string, unknown>)
   } catch {
     return { kind: 'question', text: DRAFT_PARSE_ERROR_MESSAGE }
   }
+}
+
+function isEntityType(v: unknown): v is NlChatEntityType {
+  return v === 'task' || v === 'pipeline' || v === 'agent'
+}
+
+/**
+ * In auto mode (no `entityType` pinned by the caller) the agent wraps its
+ * draft as `{ entityType, draft }` so the client knows which create API to
+ * call. A bare draft object (pinned mode) is returned as-is.
+ */
+function unwrapDraft(parsed: Record<string, unknown>): BuilderTurn {
+  const { entityType, draft } = parsed as { entityType?: unknown; draft?: unknown }
+  if (isEntityType(entityType) && draft && typeof draft === 'object' && !Array.isArray(draft)) {
+    return { kind: 'draft', entityType, draft: draft as Record<string, unknown> }
+  }
+  return { kind: 'draft', draft: parsed }
 }

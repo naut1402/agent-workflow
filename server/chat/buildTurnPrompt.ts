@@ -1,7 +1,12 @@
 import type { NlChatEntityType } from './parseBuilderOutput.js'
 
 export interface BuildTurnPromptInput {
-  entityType: NlChatEntityType
+  /**
+   * Target entity, when the caller pinned one. Omitted (auto mode) for the
+   * floating chat surface: the user just chats, and the agent decides which
+   * of task/pipeline/agent the draft is for.
+   */
+  entityType?: NlChatEntityType | null
   /** 1-based turn counter within the chat session. */
   turnIndex: number
   /** The user's latest message for this turn. */
@@ -21,7 +26,26 @@ const OUTPUT_CONTRACT_HEADER = [
   '- Nếu đã đủ thông tin để chốt draft: dòng ĐẦU TIÊN của output phải là chính xác `===DRAFT_READY===`, theo sau là một fenced code block ```json chứa draft.',
 ].join('\n')
 
-function schemaHintFor(entityType: NlChatEntityType): string {
+const AUTO_MODE_HEADER = [
+  'Người dùng đang chat tự do — CHƯA chọn sẵn loại đối tượng cần tạo.',
+  'Bạn phải tự suy ra người dùng muốn tạo `task`, `pipeline` hay `agent` từ nội dung hội thoại;',
+  'nếu chưa rõ thì hỏi lại bằng văn bản thuần (đây cũng là câu hỏi bình thường, không phải form).',
+  'Nếu người dùng chỉ hỏi han/trao đổi mà chưa muốn tạo gì, cứ trả lời như một trợ lý bình thường — KHÔNG ép chốt draft.',
+  'Khi chốt draft, JSON trong code block phải là wrapper: { "entityType": "task" | "pipeline" | "agent", "draft": { ...draft đúng schema của entityType đó... } }.',
+].join('\n')
+
+function schemaHintFor(entityType?: NlChatEntityType | null): string {
+  if (!entityType) {
+    return [
+      AUTO_MODE_HEADER,
+      '',
+      schemaHintFor('task'),
+      '',
+      schemaHintFor('pipeline'),
+      '',
+      schemaHintFor('agent'),
+    ].join('\n')
+  }
   switch (entityType) {
     case 'task':
       return [
@@ -63,7 +87,10 @@ export function buildTurnPrompt(input: BuildTurnPromptInput): string {
     parts.push('')
     parts.push(`Người dùng (lượt 1): ${input.message}`)
   } else {
-    parts.push(`(Nhắc lại ngắn gọn output contract: nếu đủ thông tin, dòng đầu tiên phải là ${'`'}===DRAFT_READY===${'`'} theo sau là fenced ${'```'}json chứa draft đúng schema ${input.entityType}; nếu chưa đủ, chỉ hỏi lại bằng văn bản thuần.)`)
+    const draftShape = input.entityType
+      ? `draft đúng schema ${input.entityType}`
+      : 'wrapper { "entityType": ..., "draft": ... } đúng schema của entityType bạn đã suy ra'
+    parts.push(`(Nhắc lại ngắn gọn output contract: nếu đủ thông tin, dòng đầu tiên phải là ${'`'}===DRAFT_READY===${'`'} theo sau là fenced ${'```'}json chứa ${draftShape}; nếu chưa đủ, chỉ hỏi lại bằng văn bản thuần.)`)
     parts.push('')
     parts.push(`Người dùng (lượt ${input.turnIndex}): ${input.message}`)
   }

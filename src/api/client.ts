@@ -743,7 +743,7 @@ export async function createTask(payload: unknown, projectId?: string) {
 // sendTaskFeedback), not a direct LLM API call — see design.md F0012 §2.
 
 export async function startNlChat(
-  input: { entityType: 'task' | 'pipeline' | 'agent'; message: string; runnerId?: string },
+  input: { entityType?: 'task' | 'pipeline' | 'agent'; message: string; runnerId?: string },
   projectId?: string,
 ) {
   const r = await apiFetch(`/api/nl-chat/sessions${qs({ project: projectId })}`, {

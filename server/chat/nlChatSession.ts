@@ -39,7 +39,8 @@ function entityTypeOf(job: JobRecord | undefined): NlChatEntityType | null {
 
 export interface StartNlChatSessionInput {
   projectId: string
-  entityType: NlChatEntityType
+  /** Omitted for the free-form chat surface — the agent infers the entity itself. */
+  entityType?: NlChatEntityType | null
   message: string
   runnerId?: string
   /** Extra system context appended to turn 1 only (e.g. valid catalog agent refs for a pipeline draft). */
@@ -87,7 +88,7 @@ export function startNlChatSession(input: StartNlChatSessionInput): NlChatSessio
       projectRoot: path.dirname(input.devTeamRoot),
       devTeamRoot: input.devTeamRoot,
       isNlChat: true,
-      entityType: input.entityType,
+      ...(input.entityType ? { entityType: input.entityType } : {}),
     },
   })
 
@@ -106,8 +107,10 @@ export function continueNlChatSession(
   message: string,
 ): MutationResult<{ job: JobRecord }> {
   const jobs = findChatJobs(chatSessionId)
+  // A session is known by having at least one tagged job — `entityType` may be
+  // absent (auto mode), so it can no longer double as the existence check.
+  if (jobs.length === 0) return { ok: false, status: 404, error: 'unknown chat session' }
   const entityType = entityTypeOf(jobs[jobs.length - 1])
-  if (!entityType) return { ok: false, status: 404, error: 'unknown chat session' }
 
   const prompt = buildTurnPrompt({
     entityType,

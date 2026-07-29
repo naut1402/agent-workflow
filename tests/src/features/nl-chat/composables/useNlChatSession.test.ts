@@ -67,17 +67,15 @@ afterEach(() => {
 })
 
 describe('useNlChatSession', () => {
-  it('selectEntity moves to chatting', () => {
+  it('opens straight into a normal chat — no entity picker step', () => {
     const s = make()
-    s.selectEntity('task')
-    expect(s.entityType.value).toBe('task')
     expect(s.step.value).toBe('chatting')
+    expect(s.entityType.value).toBeNull()
   })
 
   it('sendMessage on a fresh session starts a chat and appends the assistant question', async () => {
     stubApi({ turn: { status: 'ready', kind: 'question', text: 'Bạn muốn đặt tên task là gì?' } })
     const s = make()
-    s.selectEntity('task')
     await s.sendMessage('tạo task sửa bug')
 
     expect(s.chatSessionId.value).toBe('nlchat-abc')
@@ -87,19 +85,48 @@ describe('useNlChatSession', () => {
   })
 
   it('sendMessage moves to previewDraft once the agent returns a draft', async () => {
-    stubApi({ turn: { status: 'ready', kind: 'draft', draft: { taskId: 't1', prompt: 'p' } } })
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { taskId: 't1', prompt: 'p' } } })
     const s = make()
-    s.selectEntity('task')
     await s.sendMessage('đủ thông tin rồi')
 
     expect(s.step.value).toBe('previewDraft')
     expect(s.draft.value).toEqual({ taskId: 't1', prompt: 'p' })
   })
 
+  it('adopts the entity type the agent reports with the draft', async () => {
+    stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'agent', draft: { name: 'a' } },
+    })
+    const s = make()
+    await s.sendMessage('tạo cho mình một agent')
+
+    expect(s.entityType.value).toBe('agent')
+    expect(s.step.value).toBe('previewDraft')
+  })
+
+  it('a draft with no entity type keeps the chat open and asks instead of previewing', async () => {
+    stubApi({ turn: { status: 'ready', kind: 'draft', draft: { foo: 1 } } })
+    const s = make()
+    await s.sendMessage('m')
+
+    expect(s.step.value).toBe('chatting')
+    expect(s.entityType.value).toBeNull()
+    expect(s.messages.value[1].role).toBe('assistant')
+  })
+
+  it('a pinned entity type still wins when the agent omits it', async () => {
+    stubApi({ turn: { status: 'ready', kind: 'draft', draft: { taskId: 't1', prompt: 'p' } }, confirmOk: true })
+    const s = make()
+    s.selectEntity('task')
+    await s.sendMessage('m')
+
+    expect(s.step.value).toBe('previewDraft')
+    expect(s.entityType.value).toBe('task')
+  })
+
   it('sendMessage on an existing session calls the messages endpoint, not sessions', async () => {
     const fetchMock = stubApi({ turn: { status: 'ready', kind: 'question', text: 'again?' } })
     const s = make()
-    s.selectEntity('agent')
     await s.sendMessage('lượt 1')
     fetchMock.mockClear()
     await s.sendMessage('lượt 2')
@@ -111,7 +138,6 @@ describe('useNlChatSession', () => {
   it('a failed job surfaces an error and moves to the error step', async () => {
     stubApi({ jobStates: [{ id: 'jobZ', status: 'failed', error: 'runner disabled' }] })
     const s = make()
-    s.selectEntity('task')
     await s.sendMessage('m')
 
     expect(s.step.value).toBe('error')
@@ -119,9 +145,8 @@ describe('useNlChatSession', () => {
   })
 
   it('confirm(task) posts the edited draft then moves to done', async () => {
-    stubApi({ turn: { status: 'ready', kind: 'draft', draft: { taskId: 't1', prompt: 'p' } }, confirmOk: true })
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { taskId: 't1', prompt: 'p' } }, confirmOk: true })
     const s = make()
-    s.selectEntity('task')
     await s.sendMessage('m')
     await s.confirm({ taskId: 't1', prompt: 'p edited' })
 
@@ -129,9 +154,8 @@ describe('useNlChatSession', () => {
   })
 
   it('confirm surfaces a failed create without throwing', async () => {
-    stubApi({ turn: { status: 'ready', kind: 'draft', draft: { taskId: 't1', prompt: 'p' } }, confirmOk: false })
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { taskId: 't1', prompt: 'p' } }, confirmOk: false })
     const s = make()
-    s.selectEntity('task')
     await s.sendMessage('m')
     await s.confirm({ taskId: 't1', prompt: 'p' })
 
@@ -141,11 +165,10 @@ describe('useNlChatSession', () => {
 
   it('confirm(pipeline) blocks and errors when a draft.steps[].agent ref is not in the catalog', async () => {
     stubApi({
-      turn: { status: 'ready', kind: 'draft', draft: { steps: [{ agent: 'agent-a' }, { agent: 'ghost-agent' }] } },
+      turn: { status: 'ready', kind: 'draft', entityType: 'pipeline', draft: { steps: [{ agent: 'agent-a' }, { agent: 'ghost-agent' }] } },
       catalog: { skills: [], agents: [{ id: 'agent-a' }, { id: 'agent-b' }] },
     })
     const s = make()
-    s.selectEntity('pipeline')
     await s.sendMessage('tạo pipeline 2 bước')
     expect(s.step.value).toBe('previewDraft')
 
@@ -160,13 +183,12 @@ describe('useNlChatSession', () => {
 
   it('confirm(pipeline) succeeds when every draft.steps[].agent ref is in the catalog', async () => {
     stubApi({
-      turn: { status: 'ready', kind: 'draft', draft: { steps: [{ agent: 'agent-a' }, { agent: 'agent-b' }] } },
+      turn: { status: 'ready', kind: 'draft', entityType: 'pipeline', draft: { steps: [{ agent: 'agent-a' }, { agent: 'agent-b' }] } },
       catalog: { skills: [], agents: [{ id: 'agent-a' }, { id: 'agent-b' }] },
       confirmOk: true,
     })
     const s = make()
     s.pipelineName.value = 'my-pipeline'
-    s.selectEntity('pipeline')
     await s.sendMessage('tạo pipeline hợp lệ')
     await new Promise((r) => setTimeout(r, 5))
 
@@ -177,9 +199,8 @@ describe('useNlChatSession', () => {
   })
 
   it('confirm(task)/confirm(agent) are unaffected by the pipeline agent-ref guard', async () => {
-    stubApi({ turn: { status: 'ready', kind: 'draft', draft: { taskId: 't1', prompt: 'p' } }, confirmOk: true })
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { taskId: 't1', prompt: 'p' } }, confirmOk: true })
     const s = make()
-    s.selectEntity('task')
     await s.sendMessage('m')
 
     await s.confirm({ taskId: 't1', prompt: 'p edited' })
@@ -187,14 +208,13 @@ describe('useNlChatSession', () => {
     expect(s.step.value).toBe('done')
   })
 
-  it('cancel resets to selectEntity', async () => {
+  it('cancel resets back to an empty chat', async () => {
     stubApi({ turn: { status: 'ready', kind: 'question', text: '?' } })
     const s = make()
-    s.selectEntity('pipeline')
     await s.sendMessage('m')
     await s.cancel()
 
-    expect(s.step.value).toBe('selectEntity')
+    expect(s.step.value).toBe('chatting')
     expect(s.chatSessionId.value).toBeNull()
     expect(s.messages.value).toEqual([])
   })

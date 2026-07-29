@@ -2,7 +2,11 @@
 import { computed, ref, watch } from 'vue'
 import { useNlChatSession, type NlChatEntityType } from '../composables/useNlChatSession'
 
-const props = defineProps<{ projectId?: string | null }>()
+const props = defineProps<{
+  projectId?: string | null
+  /** Live position of the floating icon — the window docks above it and follows while dragging. */
+  anchor?: { right: number; bottom: number }
+}>()
 const emit = defineEmits<{ close: [] }>()
 
 const {
@@ -17,7 +21,6 @@ const {
   showLongChatNudge,
   catalogAgentIds,
   catalogError,
-  selectEntity,
   sendMessage,
   confirm,
   cancel,
@@ -39,10 +42,6 @@ function onSend(): void {
   if (!text) return
   inputText.value = ''
   void sendMessage(text)
-}
-
-function onSelectEntity(type: NlChatEntityType): void {
-  selectEntity(type)
 }
 
 // design.md §4.4: pipeline draft's steps[].agent must be validated against
@@ -90,27 +89,50 @@ function onCancel(): void {
 function onClose(): void {
   emit('close')
 }
+
+const WINDOW_WIDTH = 340
+/** Vertical space taken by the icon itself plus a small gap. */
+const ANCHOR_OFFSET = 48
+const VIEWPORT_MARGIN = 8
+
+const windowRef = ref<HTMLElement | null>(null)
+/** Height assumed before the element is mounted (max-height: 70vh). */
+const FALLBACK_HEIGHT_RATIO = 0.7
+
+// The window is anchored to the (draggable) icon rather than pinned to the
+// viewport corner, so moving the icon moves the chat with it. Clamped so it
+// never leaves the viewport when the icon is dragged to an edge.
+const anchorStyle = computed(() => {
+  const anchor = props.anchor ?? { right: 24, bottom: 24 }
+  const height = windowRef.value?.offsetHeight || window.innerHeight * FALLBACK_HEIGHT_RATIO
+  const maxRight = Math.max(VIEWPORT_MARGIN, window.innerWidth - WINDOW_WIDTH - VIEWPORT_MARGIN)
+  const maxBottom = Math.max(VIEWPORT_MARGIN, window.innerHeight - height - VIEWPORT_MARGIN)
+  return {
+    right: `${Math.min(Math.max(anchor.right, VIEWPORT_MARGIN), maxRight)}px`,
+    bottom: `${Math.min(anchor.bottom + ANCHOR_OFFSET, maxBottom)}px`,
+  }
+})
+
+const ENTITY_LABELS: Record<NlChatEntityType, string> = {
+  task: 'Task',
+  pipeline: 'Pipeline',
+  agent: 'Agent',
+}
 </script>
 
 <template>
-  <div class="nl-chat-window" role="dialog" aria-label="Tạo mới bằng ngôn ngữ tự nhiên">
+  <div ref="windowRef" class="nl-chat-window" role="dialog" aria-label="Trò chuyện tạo mới" :style="anchorStyle">
     <header class="nl-chat-header">
-      <span class="nl-chat-title">Tạo mới bằng chat</span>
+      <span class="nl-chat-title">Trợ lý tạo mới</span>
       <button type="button" class="nl-chat-close" title="Đóng" @click="onClose">×</button>
     </header>
 
     <div class="nl-chat-body">
-      <div v-if="step === 'selectEntity'" class="nl-chat-select-entity">
-        <p>Bạn muốn tạo gì?</p>
-        <div class="nl-chat-entity-buttons">
-          <button type="button" @click="onSelectEntity('task')">Task</button>
-          <button type="button" @click="onSelectEntity('pipeline')">Pipeline</button>
-          <button type="button" @click="onSelectEntity('agent')">Agent</button>
-        </div>
-      </div>
-
-      <template v-else-if="step === 'chatting' || step === 'confirming' || step === 'done' || step === 'error'">
+      <template v-if="step === 'chatting' || step === 'confirming' || step === 'done' || step === 'error'">
         <div class="nl-chat-messages">
+          <p v-if="messages.length === 0" class="nl-chat-hint">
+            Mô tả điều bạn muốn — mình sẽ hỏi thêm nếu thiếu, rồi dựng draft Task, Pipeline hoặc Agent cho bạn.
+          </p>
           <p v-for="(m, i) in messages" :key="i" class="nl-chat-message" :class="`nl-chat-message-${m.role}`">
             {{ m.text }}
           </p>
@@ -124,7 +146,7 @@ function onClose(): void {
           <input
             v-model="inputText"
             type="text"
-            placeholder="Nhập mô tả..."
+            placeholder="Nhập tin nhắn..."
             :disabled="sending || step === 'done'"
           />
           <button type="submit" :disabled="sending || !inputText.trim() || step === 'done'">Gửi</button>
@@ -132,6 +154,7 @@ function onClose(): void {
       </template>
 
       <div v-else-if="step === 'previewDraft'" class="nl-chat-preview">
+        <p v-if="entityType" class="nl-chat-entity-badge">Draft {{ ENTITY_LABELS[entityType] }}</p>
         <label v-if="entityType === 'pipeline'" class="nl-chat-pipeline-name">
           Tên pipeline
           <input v-model="pipelineName" type="text" placeholder="Tên profile pipeline" />
@@ -149,19 +172,19 @@ function onClose(): void {
 </template>
 
 <style scoped>
+/* Theme tokens only (see src/styles/_tokens.scss) — the panel must follow the
+   light/dark theme instead of the previous hardcoded white surface. */
 .nl-chat-window {
   position: fixed;
-  right: 24px;
-  bottom: 88px;
   width: 340px;
   max-height: 70vh;
   display: flex;
   flex-direction: column;
-  background: var(--color-surface, #fff);
-  color: var(--color-text, #111);
-  border: 1px solid var(--color-border, #ddd);
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   z-index: 1000;
 }
 .nl-chat-header {
@@ -169,7 +192,7 @@ function onClose(): void {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border, #ddd);
+  border-bottom: 1px solid var(--border);
 }
 .nl-chat-title {
   font-weight: 600;
@@ -177,19 +200,19 @@ function onClose(): void {
 .nl-chat-close {
   background: none;
   border: none;
+  color: var(--muted);
   cursor: pointer;
   font-size: 18px;
   line-height: 1;
+}
+.nl-chat-close:hover {
+  color: var(--text);
 }
 .nl-chat-body {
   padding: 10px 12px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-.nl-chat-entity-buttons {
-  display: flex;
   gap: 8px;
 }
 .nl-chat-messages {
@@ -199,15 +222,19 @@ function onClose(): void {
   max-height: 40vh;
   overflow-y: auto;
 }
+.nl-chat-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
 .nl-chat-message-user {
   align-self: flex-end;
-  background: var(--color-accent-soft, #e6f0ff);
+  background: var(--accent-dim);
   border-radius: 8px;
   padding: 6px 10px;
 }
 .nl-chat-message-assistant {
   align-self: flex-start;
-  background: var(--color-surface-muted, #f3f3f3);
+  background: var(--panel-2);
   border-radius: 8px;
   padding: 6px 10px;
 }
@@ -215,27 +242,80 @@ function onClose(): void {
   display: flex;
   gap: 6px;
 }
+.nl-chat-input-row input,
+.nl-chat-pipeline-name input,
+.nl-chat-draft-textarea {
+  background: var(--input-surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
 .nl-chat-input-row input {
   flex: 1;
+  min-width: 0;
+}
+.nl-chat-input-row button,
+.nl-chat-preview-actions button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.nl-chat-input-row button:hover:not(:disabled),
+.nl-chat-preview-actions button:hover:not(:disabled) {
+  background: var(--hover-surface);
+  border-color: var(--accent);
+}
+.nl-chat-input-row button:disabled,
+.nl-chat-preview-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.nl-chat-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.nl-chat-entity-badge {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.nl-chat-pipeline-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
 }
 .nl-chat-draft-textarea {
   width: 100%;
-  font-family: monospace;
+  font-family: ui-monospace, monospace;
   font-size: 12px;
+  resize: vertical;
 }
 .nl-chat-preview-actions {
   display: flex;
   gap: 8px;
 }
 .nl-chat-error {
-  color: var(--color-danger, #c0392b);
+  color: var(--danger);
 }
 .nl-chat-nudge {
   font-style: italic;
-  opacity: 0.8;
+  color: var(--muted);
 }
 .nl-chat-done {
-  color: var(--color-success, #2a9d5c);
+  color: var(--ok);
   font-weight: 600;
 }
 </style>

@@ -138,6 +138,24 @@ describe('continueNlChatSession', () => {
     expect(lastReq.userPrompt).toContain('chỉ dùng agent implementer')
   })
 
+  test('auto mode (no entityType pinned) still resumes the session', async () => {
+    nextStdout = 'Bạn muốn tạo gì?'
+    const { chatSessionId, job } = startNlChatSession({
+      projectId: 'P2b',
+      message: 'chào bạn',
+      runnerId: 'stub-runner-nlchat',
+      devTeamRoot: root,
+    })
+    expect(job.metadata?.entityType).toBeUndefined()
+    await settle(job.id)
+
+    const result = continueNlChatSession(chatSessionId, 'P2b', 'mình muốn tạo một task')
+    expect(result.ok).toBe(true)
+    if ('error' in result) throw new Error(result.error)
+    await settle(result.job.id)
+    expect(captured[captured.length - 1].userPrompt).toContain('mình muốn tạo một task')
+  })
+
   test('unknown chat session id → error result, no throw', () => {
     const result = continueNlChatSession('nlchat-doesnotexist', 'P2', 'hi')
     expect(result).toMatchObject({ ok: false, status: 404 })

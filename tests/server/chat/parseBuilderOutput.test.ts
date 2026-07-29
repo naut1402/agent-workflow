@@ -33,6 +33,18 @@ describe('parseBuilderOutput', () => {
     expect(turn).toEqual({ kind: 'draft', draft: { taskId: 't1', prompt: 'p', extra: true } })
   })
 
+  test('auto mode: { entityType, draft } wrapper → draft carries the inferred entity type', () => {
+    const stdout = '===DRAFT_READY===\n```json\n{"entityType": "pipeline", "draft": {"steps": [{"agent": "a"}]}}\n```'
+    const turn = parseBuilderOutput(stdout)
+    expect(turn).toEqual({ kind: 'draft', entityType: 'pipeline', draft: { steps: [{ agent: 'a' }] } })
+  })
+
+  test('wrapper with an unknown entityType is treated as a bare draft, not unwrapped', () => {
+    const stdout = '===DRAFT_READY===\n```json\n{"entityType": "widget", "draft": {"a": 1}}\n```'
+    const turn = parseBuilderOutput(stdout)
+    expect(turn).toEqual({ kind: 'draft', draft: { entityType: 'widget', draft: { a: 1 } } })
+  })
+
   test('empty stdout → empty question text, not a throw', () => {
     const turn = parseBuilderOutput('')
     expect(turn).toEqual({ kind: 'question', text: '' })

@@ -27,6 +27,21 @@ describe('buildTurnPrompt', () => {
     },
   )
 
+  test('auto mode (no entityType): turn 1 gives all 3 schemas and asks for the wrapper draft', () => {
+    const prompt = buildTurnPrompt({ turnIndex: 1, message: 'tôi cần một pipeline review' })
+    expect(prompt).toContain('===DRAFT_READY===')
+    expect(prompt).toContain('entityType = task')
+    expect(prompt).toContain('entityType = pipeline')
+    expect(prompt).toContain('entityType = agent')
+    expect(prompt).toContain('"draft"')
+  })
+
+  test('auto mode: turn > 1 still reminds the wrapper contract', () => {
+    const prompt = buildTurnPrompt({ turnIndex: 2, message: 'tiếp' })
+    expect(prompt).toContain('===DRAFT_READY===')
+    expect(prompt).toContain('entityType')
+  })
+
   test('turn > 1 ignores extraContext (only relevant for turn 1)', () => {
     const prompt = buildTurnPrompt({ entityType: 'pipeline', turnIndex: 2, message: 'm', extraContext: 'SHOULD_NOT_APPEAR' })
     expect(prompt).not.toContain('SHOULD_NOT_APPEAR')
