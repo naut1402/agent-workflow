@@ -5,6 +5,8 @@ import { useAppSettings } from './shared/composables/useAppSettings'
 import { applyThemeToDocument, watchSystemTheme } from './shared/lib/theme'
 import { resolveThemePreference, resolveLocale } from '../shared/schemas/appSettings'
 import { i18n, setI18nLocale } from './shared/i18n'
+import { HostPlugin } from './shared/host/vuePlugin'
+import { BUILTIN_PLUGINS } from './bootstrap/builtinPlugins'
 
 const { settings, load } = useAppSettings()
 load()
@@ -16,4 +18,4 @@ watchSystemTheme(() => {
   }
 })
 
-createApp(App).use(i18n).mount('#app')
+createApp(App).use(i18n).use(HostPlugin, { plugins: BUILTIN_PLUGINS }).mount('#app')

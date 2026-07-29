@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type RailIconName =
+export type RailIconName =
   | 'panelCollapse'
   | 'panelExpand'
   | 'monitor'
