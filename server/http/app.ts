@@ -12,6 +12,7 @@ import { registerLogRoutes } from './routes/logs.js'
 import { registerFsRoutes } from './routes/fs.js'
 import { registerAutoscanRoutes } from './routes/autoscan.js'
 import { registerGithubTokensRoutes } from './routes/githubTokens.js'
+import { registerNlChatRoutes } from './routes/nlChat.js'
 
 // Build the Hono app for all /api/* routes except /api/knowledge (which stays
 // node-res based and is intercepted by the node adapter before Hono).
@@ -42,6 +43,7 @@ export function createApp(ctx: RegistryContext): Hono<HonoEnv> {
   registerConfigRoutes(app)
   registerCatalogRoutes(app)
   registerAgentRoutes(app)
+  registerNlChatRoutes(app)
 
   app.notFound((c) => j(c, 404, { error: 'unknown endpoint' }))
   app.onError((err, c) => j(c, 500, { error: String((err as any)?.message ?? err) }))

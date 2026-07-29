@@ -164,6 +164,53 @@ describe('sendTaskFeedback — normal flow', () => {
     expect(state.current_phase).toBe('reviewer')
   })
 
+  test('stepId targets that step\'s job/session instead of whatever ran last', async () => {
+    seedTask('T7', 'implementer')
+    const implJob = runStepLikeJob('T7', 'implementer', 'new')
+    await settle(implJob.id)
+    await waitForPhase('T7', (p) => p === 'reviewer')
+    const reviewJob = runStepLikeJob('T7', 'reviewer', 'resume')
+    await settle(reviewJob.id)
+
+    // Newest finished job is the reviewer one, but the chat was opened from the
+    // implementer node — the feedback round must continue THAT job.
+    const result = sendTaskFeedback('T7', 'P1', 'về step implementer', { stepId: 'implementer' })
+    expect(result.ok).toBe(true)
+    if ('error' in result) throw new Error(result.error)
+    expect(result.job.parentJobId).toBe(implJob.id)
+    expect(result.job.metadata?.pipelineStepId).toBe('implementer')
+    await settle(result.job.id)
+
+    // No stepId → newest finished job, as before.
+    const fallback = sendTaskFeedback('T7', 'P1', 'chung chung')
+    if ('error' in fallback) throw new Error(fallback.error)
+    expect(fallback.job.parentJobId).not.toBe(implJob.id)
+    await settle(fallback.job.id)
+  })
+
+  test('an unknown stepId falls back to the newest finished job rather than failing', async () => {
+    seedTask('T8', 'implementer')
+    const first = runStepLikeJob('T8', 'implementer', 'new')
+    await settle(first.id)
+    await waitForPhase('T8', (p) => p === 'reviewer')
+
+    const result = sendTaskFeedback('T8', 'P1', 'hi', { stepId: 'does-not-exist' })
+    expect(result.ok).toBe(true)
+    if ('error' in result) throw new Error(result.error)
+    expect(result.job.parentJobId).toBe(first.id)
+    await settle(result.job.id)
+  })
+
+  test('the ledger records the pipeline step so per-step session lookup can match', async () => {
+    seedTask('T9', 'implementer')
+    const job = runStepLikeJob('T9', 'implementer', 'new')
+    await settle(job.id)
+
+    const ledger = loadTaskSessionLedger('P1', 'T9')
+    const open = ledger.sessions.find((s) => s.status === 'open')
+    expect(open?.stepIds).toContain('implementer')
+  })
+
   test('a chat-feedback job can itself be the parent of a further feedback round', async () => {
     seedTask('T2', 'implementer')
     const first = runStepLikeJob('T2', 'implementer', 'new')

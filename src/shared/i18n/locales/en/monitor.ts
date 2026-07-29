@@ -76,6 +76,9 @@ export const monitor = {
     clickToRun: 'Click to run this step',
     running: 'Running…',
     qaCount: '{count} blocking questions',
+    run: 'Run step',
+    chat: 'Chat',
+    chatWithRunner: "Chat with this step's runner",
   },
   qa: {
     head: '⚠ Pipeline is waiting for answers to blocking questions',

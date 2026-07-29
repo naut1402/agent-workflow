@@ -33,6 +33,7 @@ export const AUDIT_ENTITIES = [
   'artifact',
   'artifact-actions',
   'task-state',
+  'nl-chat-session',
 ] as const
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number]
 

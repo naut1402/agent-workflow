@@ -206,3 +206,54 @@ describe('POST /api/tasks/:id/feedback', () => {
     await settle(job.id)
   })
 })
+
+// GET /api/tasks/:id/chat — the runner conversation the chat window replays.
+// The transcript itself is the CLI's file (see sessionTranscript.test.ts); here
+// only the route contract and the block reasons the UI depends on are checked.
+describe('GET /api/tasks/:id/chat', () => {
+  test('400 for an invalid task id', async () => {
+    const res = await app.request(`/api/tasks/..%2Fetc/chat?project=${PROJECT_ID}`)
+    expect(res.status).toBe(400)
+  })
+
+  test('blockedReason noCompletedJob before anything has run', async () => {
+    seedTask('C1', { current_phase: 'implementer' })
+    const res = await app.request(`/api/tasks/C1/chat?project=${PROJECT_ID}`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toMatchObject({ taskId: 'C1', canSend: false, blockedReason: 'noCompletedJob' })
+    expect(body.turns).toEqual([])
+  })
+
+  test('after a step finished: canSend, and the session id is reported', async () => {
+    seedTask('C2', { current_phase: 'implementer' })
+    const stepRes = await runStep('C2')
+    const { job } = await stepRes.json()
+    await settle(job.id)
+
+    const res = await app.request(`/api/tasks/C2/chat?project=${PROJECT_ID}&stepId=implementer`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toMatchObject({ taskId: 'C2', stepId: 'implementer', canSend: true })
+    expect(body.sessionId).toBeTruthy()
+    // No real CLI ran, so there is no transcript file on disk for that session.
+    expect(body.transcriptFound).toBe(false)
+  })
+
+  test('reports the running job so the UI can show a live step', async () => {
+    gated = true
+    seedTask('C3', { current_phase: 'implementer' })
+    const stepRes = await runStep('C3')
+    const { job } = await stepRes.json()
+    for (let i = 0; i < 200 && loadJob(job.id)?.status !== 'running'; i++) await sleep(5)
+
+    const res = await app.request(`/api/tasks/C3/chat?project=${PROJECT_ID}`)
+    const body = await res.json()
+    expect(body.running).toMatchObject({ jobId: job.id, stepId: 'implementer' })
+    expect(body).toMatchObject({ canSend: false, blockedReason: 'stepRunning' })
+
+    gated = false
+    resolveGate?.()
+    await settle(job.id)
+  })
+})
