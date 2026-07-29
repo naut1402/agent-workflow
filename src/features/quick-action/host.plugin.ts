@@ -1,6 +1,7 @@
 import type { DashboardPlugin } from '@shared/host/contract'
 import type { HostContext } from '../../shared/host/hostContext'
 import QuickActionPanel from './components/QuickActionPanel.vue'
+import { quickActionApi } from './api'
 
 /** Thin registration wrapper — no change to `QuickActionPanel.vue` itself. */
 export const quickActionPlugin: DashboardPlugin<HostContext> = {
@@ -13,5 +14,6 @@ export const quickActionPlugin: DashboardPlugin<HostContext> = {
       entry: QuickActionPanel,
       pausedStatusKey: 'common.status.paused.quickAction',
     })
+    ctx.api.register('quick-action', quickActionApi)
   },
 }
