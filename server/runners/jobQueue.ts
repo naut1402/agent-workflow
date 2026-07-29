@@ -16,6 +16,9 @@ import type { Connection, CredentialProfile, JobRecord, MutationResult } from '.
 import { advanceStepOnJobSuccess } from '../tasks/state.js'
 import { loadPipelineConfig } from '../pipeline/index.js'
 
+/** Cap on the stdout persisted for NL chat jobs — a chat reply/draft is small. */
+const NL_CHAT_STDOUT_LIMIT = 64 * 1024
+
 function credentialForConnection(conn: Connection): CredentialProfile | null {
   if (conn.kind === 'local-console') {
     return {
@@ -484,6 +487,9 @@ async function runJob(job: JobRecord): Promise<void> {
     logPath: result.logPath,
     artifactsFound: result.artifactsFound,
     pid: null,
+    // NL chat reads the agent's reply from here: the log file also contains the
+    // payload/prompt framing, which must never be shown as the chat answer.
+    ...(job.metadata?.isNlChat ? { stdout: (result.stdout ?? '').slice(0, NL_CHAT_STDOUT_LIMIT) } : {}),
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
   })
 

@@ -35,6 +35,10 @@ interface Captured {
 }
 const captured: Captured[] = []
 let nextStdout = ''
+/** When set, written to the job log instead of `nextStdout` (runner framing tests). */
+let nextLog: string | null = null
+/** Simulates a job recorded before `stdout` was persisted on the job record. */
+let omitStdout = false
 
 const stubProvider: RunnerProvider = {
   providerId: PROVIDER_ID,
@@ -46,12 +50,12 @@ const stubProvider: RunnerProvider = {
     const logPath = req.metadata?.logPath as string | undefined
     if (logPath) {
       try {
-        fs.writeFileSync(logPath, nextStdout, 'utf8')
+        fs.writeFileSync(logPath, nextLog ?? nextStdout, 'utf8')
       } catch {
         /* ignore */
       }
     }
-    return { ok: true, exitCode: 0, durationMs: 1, stdout: nextStdout, logPath }
+    return { ok: true, exitCode: 0, durationMs: 1, ...(omitStdout ? {} : { stdout: nextStdout }), logPath }
   },
 }
 
@@ -89,6 +93,8 @@ afterAll(() => {
 beforeEach(() => {
   captured.length = 0
   nextStdout = ''
+  nextLog = null
+  omitStdout = false
 })
 
 describe('startNlChatSession', () => {
@@ -192,6 +198,62 @@ describe('getNlChatTurn', () => {
     await settle(job.id)
     const turn = getNlChatTurn(chatSessionId)
     expect(turn).toMatchObject({ status: 'ready', kind: 'draft', draft: { taskId: 't1', prompt: 'p' } })
+  })
+
+  test('returns only the agent answer, never the runner log framing', async () => {
+    nextStdout = 'Xin chào! Bạn muốn tạo gì?'
+    nextLog = [
+      '=== Payload gửi cho runner ===',
+      'Agent: dashboard:nl-chat-builder (nl-chat-builder) — model: claude-sonnet-4-6',
+      '--- Prompt ---',
+      'Output contract (BẮT BUỘC tuân theo ở MỌI lượt trả lời): ...',
+      '',
+      '=== Phản hồi của runner (stdout/stderr) ===',
+      '',
+      '[runner] process started pid=18216 — chờ stdout/stderr…',
+      nextStdout,
+      '',
+      '=== Kết quả ===',
+      'ok: true',
+      'exitCode: 0',
+    ].join('\n')
+    const { chatSessionId, job } = startNlChatSession({
+      projectId: 'P4b',
+      message: 'hello',
+      runnerId: 'stub-runner-nlchat',
+      devTeamRoot: root,
+    })
+    await settle(job.id)
+
+    expect(getNlChatTurn(chatSessionId)).toMatchObject({ status: 'ready', kind: 'question', text: nextStdout })
+  })
+
+  test('falls back to the log body (framing stripped) when the job has no stdout', async () => {
+    omitStdout = true
+    nextStdout = 'Bạn muốn đặt tên task là gì?'
+    nextLog = [
+      '=== Payload gửi cho runner ===',
+      '--- Prompt ---',
+      'Người dùng (lượt 1): tạo task',
+      '',
+      '=== Phản hồi của runner (stdout/stderr) ===',
+      '',
+      '[runner] process started pid=1 — chờ stdout/stderr…',
+      nextStdout,
+      '',
+      '=== Kết quả ===',
+      'ok: true',
+    ].join('\n')
+    const { chatSessionId, job } = startNlChatSession({
+      projectId: 'P4c',
+      message: 'tạo task',
+      runnerId: 'stub-runner-nlchat',
+      devTeamRoot: root,
+    })
+    await settle(job.id)
+
+    const turn = getNlChatTurn(chatSessionId)
+    expect(turn).toMatchObject({ status: 'ready', kind: 'question', text: nextStdout })
   })
 
   test('unknown chat session id → error', () => {

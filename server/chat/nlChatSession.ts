@@ -135,13 +135,39 @@ export function getNlChatTurn(chatSessionId: string): NlChatTurnResult {
     return { status: 'error', error: last.error || `job ${last.status}` }
   }
 
-  let stdout = ''
+  return { status: 'ready', ...parseBuilderOutput(agentStdoutOf(last)) }
+}
+
+const RESPONSE_HEADER = '=== Phản hồi của runner (stdout/stderr) ==='
+const RESULT_HEADER = '=== Kết quả ==='
+
+/**
+ * The agent's own answer for this turn. `job.stdout` is the CLI's raw stdout,
+ * persisted for NL chat jobs precisely for this. The log file is only a
+ * fallback (jobs from before that was persisted): it also holds the payload +
+ * full prompt, so the framing must be stripped — otherwise the chat surface
+ * echoes the whole runner log back at the user.
+ */
+function agentStdoutOf(job: JobRecord): string {
+  if (typeof job.stdout === 'string' && job.stdout.trim()) return job.stdout
+
+  let log = ''
   try {
-    stdout = last.logPath ? fs.readFileSync(last.logPath, 'utf8') : ''
+    log = job.logPath ? fs.readFileSync(job.logPath, 'utf8') : ''
   } catch {
-    stdout = ''
+    return ''
   }
-  return { status: 'ready', ...parseBuilderOutput(stdout) }
+
+  const start = log.indexOf(RESPONSE_HEADER)
+  if (start < 0) return ''
+  let body = log.slice(start + RESPONSE_HEADER.length)
+  const end = body.indexOf(RESULT_HEADER)
+  if (end >= 0) body = body.slice(0, end)
+  return body
+    .split('\n')
+    .filter((line) => !line.startsWith('[runner] '))
+    .join('\n')
+    .trim()
 }
 
 /** Close the session's ledger entry and best-effort remove its scratch workspace. */

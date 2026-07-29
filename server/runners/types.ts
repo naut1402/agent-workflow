@@ -118,6 +118,12 @@ export interface JobRecord {
   logPath?: string
   error?: string
   artifactsFound?: string[]
+  /**
+   * The CLI's raw stdout, persisted only for NL chat jobs
+   * (`metadata.isNlChat`) and capped — the chat surface must show the agent's
+   * answer, not the job log, which also holds the payload/prompt framing.
+   */
+  stdout?: string
   metadata?: Record<string, unknown>
   // `sessionId`/`parentJobId` are shared by two independent feedback flows:
   // approval (`sendJobFeedback`, keyed by `jobId`) and task-chat-resume
