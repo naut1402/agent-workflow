@@ -14,7 +14,6 @@ import { resolveAutoscanIntervalMs } from '../shared/schemas/autoscan'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
 import { useNotifications } from './features/notifications/composables/useNotifications'
 import NotificationBell from './features/notifications/components/NotificationBell.vue'
-import SettingsDialog from './features/settings/components/SettingsDialog.vue'
 import CreateTaskDialog from './features/monitor/components/CreateTaskDialog.vue'
 import RailIcon from './shared/ui/RailIcon.vue'
 import { APP_VERSION } from './shared/lib/appVersion'
@@ -27,10 +26,11 @@ const { t } = useI18n()
 
 // ── Mode (registry-driven — built-ins register via HostContext, see
 // src/features/*/host.plugin.ts and issue #159) ────────────────────────────
-const { modes, floatings } = useHostContext()
+const { modes, floatings, railActions } = useHostContext()
 const mode = ref(modes.find((m) => m.default)?.id ?? modes[0]?.id ?? 'monitor')
 const activeMode = computed(() => modes.find((m) => m.id === mode.value) ?? null)
-const settingsOpen = ref(false)
+const openRailAction = ref<string | null>(null)
+const activeRailAction = computed(() => railActions.find((a) => a.id === openRailAction.value) ?? null)
 
 /**
  * `t()`'s type is narrowed to the vi message schema (see shared/i18n/types.ts)
@@ -363,15 +363,17 @@ onUnmounted(() => {
           <span v-else-if="activeMode?.pausedStatusKey" class="muted">{{ tr(activeMode.pausedStatusKey) }}</span>
         </footer>
         <button
+          v-for="a in railActions"
+          :key="a.id"
           type="button"
           class="settings-btn mode-btn rail-icon-btn"
-          :title="t('common.sidebar.settings')"
+          :title="tr(a.labelKey)"
           aria-haspopup="dialog"
-          :aria-expanded="settingsOpen"
-          @click="settingsOpen = true"
+          :aria-expanded="openRailAction === a.id"
+          @click="openRailAction = a.id"
         >
-          <RailIcon name="settings" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.sidebar.settings') }}</span>
+          <RailIcon :name="a.icon" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ tr(a.labelKey) }}</span>
         </button>
         <span
           class="app-version"
@@ -397,7 +399,11 @@ onUnmounted(() => {
       />
     </template>
 
-    <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
+    <component
+      :is="activeRailAction.entry"
+      v-if="activeRailAction"
+      @close="openRailAction = null"
+    />
     <CreateTaskDialog
       v-if="createTaskOpen"
       :project-id="selectedProjectId"

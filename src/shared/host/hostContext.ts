@@ -24,11 +24,26 @@ export interface FloatingDescriptor {
   entry: Component
 }
 
+/**
+ * A rail button that opens `entry` as an on-demand dialog (not a full mode
+ * panel, not an always-visible floating icon) — e.g. Settings. See
+ * design.md (E0004-02) §3.3 for why `registerFloating` doesn't fit here
+ * (DOM position: rail sidebar vs. page-level overlay).
+ */
+export interface RailActionDescriptor {
+  id: string
+  labelKey: string
+  icon: RailIconName
+  entry: Component
+}
+
 export interface HostContext {
   modes: ModeDescriptor[]
   floatings: FloatingDescriptor[]
+  railActions: RailActionDescriptor[]
   registerMode(descriptor: ModeDescriptor): void
   registerFloating(descriptor: FloatingDescriptor): void
+  registerRailAction(descriptor: RailActionDescriptor): void
   events: {
     on(topic: string, fn: (payload: unknown) => void): () => void
     emit(topic: string, payload: unknown): void
@@ -51,6 +66,7 @@ export interface HostContext {
 export function createHostContext(): HostContext {
   const modes = shallowReactive<ModeDescriptor[]>([])
   const floatings = shallowReactive<FloatingDescriptor[]>([])
+  const railActions = shallowReactive<RailActionDescriptor[]>([])
   const apiFacades = new Map<string, unknown>()
   const listeners = new Map<string, Set<(payload: unknown) => void>>()
 
@@ -66,6 +82,13 @@ export function createHostContext(): HostContext {
       throw new Error(`HostContext: floating "${descriptor.id}" already registered`)
     }
     floatings.push(descriptor)
+  }
+
+  function registerRailAction(descriptor: RailActionDescriptor): void {
+    if (railActions.some((a) => a.id === descriptor.id)) {
+      throw new Error(`HostContext: rail action "${descriptor.id}" already registered`)
+    }
+    railActions.push(descriptor)
   }
 
   function on(topic: string, fn: (payload: unknown) => void): () => void {
@@ -90,8 +113,10 @@ export function createHostContext(): HostContext {
   return {
     modes,
     floatings,
+    railActions,
     registerMode,
     registerFloating,
+    registerRailAction,
     events: { on, emit },
     i18n: { merge: () => {} },
     api: { register: registerApi, get: (domain) => apiFacades.get(domain) },
