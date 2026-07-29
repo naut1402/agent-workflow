@@ -140,6 +140,9 @@
 .nl-chat-message.md {
   font-size: 12px;
   line-height: 1.5;
+  /* The plain-text bubble keeps newlines with pre-wrap; on rendered HTML that
+     would turn every newline BETWEEN tags into a blank line. */
+  white-space: normal;
 }
 .nl-chat-message.md :first-child {
   margin-top: 0;
@@ -154,6 +157,17 @@
 .nl-chat-message.md ul,
 .nl-chat-message.md ol {
   padding-left: 18px;
+  margin: 4px 0;
+}
+/* marked emits <p> inside <li> for loose lists — its default margins turn a
+   3-item list into a wall of gaps inside a small bubble. */
+.nl-chat-message.md li {
+  margin: 2px 0;
+}
+.nl-chat-message.md li > p {
+  margin: 0;
+}
+.nl-chat-message.md p {
   margin: 4px 0;
 }
 .nl-chat-message.md h1,

@@ -162,8 +162,6 @@ onUnmounted(() => chat.stop())
       </p>
     </div>
 
-    <p v-if="chat.blockedText.value" class="task-chat-blocked">{{ chat.blockedText.value }}</p>
-
     <form class="nl-chat-input-row" @submit.prevent="onSend">
       <input
         v-model="inputText"
@@ -210,10 +208,6 @@ onUnmounted(() => chat.stop())
   cursor: pointer;
   font-size: 11px;
   padding: 0;
-}
-.task-chat-blocked {
-  font-size: 11px;
-  color: var(--waiting);
 }
 .is-pending {
   opacity: 0.6;

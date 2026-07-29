@@ -70,9 +70,8 @@ const anchorStyle = computed(() => {
 <template>
   <div ref="windowRef" class="nl-chat-window" role="dialog" :aria-label="title" :style="anchorStyle">
     <header class="nl-chat-header">
-      <span class="nl-chat-badge" :class="`is-${context.mode}`" aria-hidden="true">
+      <span v-if="context.mode === 'task'" class="nl-chat-badge is-task" aria-hidden="true">
         <svg
-          v-if="context.mode === 'task'"
           width="14"
           height="14"
           viewBox="0 0 24 24"
@@ -84,9 +83,6 @@ const anchorStyle = computed(() => {
         >
           <path d="M20.5 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 20.5 12z" />
           <path d="M8.5 10.5h7M8.5 13.5h4.5" />
-        </svg>
-        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
         </svg>
       </span>
       <span class="nl-chat-title">{{ title }}</span>

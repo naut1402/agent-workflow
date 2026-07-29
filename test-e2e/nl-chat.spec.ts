@@ -186,9 +186,11 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
   await expect(reply).not.toContainText('**')
   await expect(win.locator('.task-chat-activity')).toContainText('Read')
 
-  // Sending is blocked while the step runs, and the reason is stated.
-  await expect(win.locator('.nl-chat-input-row input')).toBeDisabled()
-  await expect(win.locator('.task-chat-blocked')).toContainText('Step đang chạy')
+  // Sending is blocked while the step runs: the input is disabled and its
+  // placeholder carries the reason (no separate warning line).
+  const input = win.locator('.nl-chat-input-row input')
+  await expect(input).toBeDisabled()
+  await expect(input).toHaveAttribute('placeholder', /Step đang chạy/)
 
   await capture(page, testInfo, 'nl-chat-runner-session')
 })
