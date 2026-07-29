@@ -1,6 +1,7 @@
 import type { DashboardPlugin } from '@shared/host/contract'
 import type { HostContext } from '../../shared/host/hostContext'
 import LogsPanel from './components/LogsPanel.vue'
+import { logsApi } from './api'
 
 /** Thin registration wrapper — no change to `LogsPanel.vue` itself. */
 export const logsPlugin: DashboardPlugin<HostContext> = {
@@ -13,5 +14,6 @@ export const logsPlugin: DashboardPlugin<HostContext> = {
       entry: LogsPanel,
       pausedStatusKey: 'common.status.paused.logs',
     })
+    ctx.api.register('logs', logsApi)
   },
 }
