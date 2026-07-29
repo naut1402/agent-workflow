@@ -5,7 +5,7 @@ import {
   fetchPipelineProfiles,
   savePipelineProfile,
   writePipelineConfig,
-} from '../../../src/api/client'
+} from '../../../src/api/resources/pipeline'
 
 describe('pipeline API client project scope', () => {
   afterEach(() => {
