@@ -6,8 +6,12 @@
    light/dark theme instead of the previous hardcoded white surface. */
 .nl-chat-window {
   position: fixed;
+  /* Width/height come from the inline resize state (ChatWindow.vue); these are
+     only the pre-mount fallback. */
   width: 340px;
-  max-height: 70vh;
+  height: 60vh;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
   display: flex;
   flex-direction: column;
   background: var(--panel);
@@ -83,7 +87,9 @@
 }
 .nl-chat-body {
   padding: 10px 12px;
-  overflow-y: auto;
+  /* Takes the height the user resized to; the message list scrolls inside. */
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -92,7 +98,8 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 40vh;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 .nl-chat-hint {
@@ -251,6 +258,44 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.nl-chat-draft-textarea {
+  flex: 1 1 auto;
+  min-height: 120px;
+}
+
+/* Resize grips, one per corner. The window is anchored bottom-right, so the
+   bottom/right corners shift the anchor offset while growing — see
+   ChatWindow.vue onResizeMove(). */
+.nl-chat-resize {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  z-index: 2;
+  touch-action: none;
+}
+.nl-chat-resize.is-tl {
+  top: -3px;
+  left: -3px;
+  cursor: nwse-resize;
+}
+.nl-chat-resize.is-tr {
+  top: -3px;
+  right: -3px;
+  cursor: nesw-resize;
+}
+.nl-chat-resize.is-bl {
+  bottom: -3px;
+  left: -3px;
+  cursor: nesw-resize;
+}
+.nl-chat-resize.is-br {
+  bottom: -3px;
+  right: -3px;
+  cursor: nwse-resize;
 }
 .nl-chat-entity-badge {
   align-self: flex-start;

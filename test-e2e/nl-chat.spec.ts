@@ -226,3 +226,53 @@ test('step node corner actions: run opens the confirm dialog, chat sits next to 
   await page.locator('.modal-backdrop .btn-ghost').click()
   await expect(page.locator('.modal-backdrop')).toHaveCount(0)
 })
+
+test('nl chat: resize by dragging corners, size persists across reloads (capture)', async ({ page }, testInfo) => {
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await page.locator('.nl-chat-fab').click()
+
+  const win = page.locator('.nl-chat-window')
+  await expect(win).toBeVisible({ timeout: 15_000 })
+  const before = (await win.boundingBox())!
+
+  async function dragCorner(corner: string, dx: number, dy: number) {
+    const grip = (await win.locator(`.nl-chat-resize.is-${corner}`).boundingBox())!
+    const x = grip.x + grip.width / 2
+    const y = grip.y + grip.height / 2
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    await page.mouse.move(x + dx, y + dy, { steps: 8 })
+    await page.mouse.up()
+    return (await win.boundingBox())!
+  }
+
+  // Top-left grip: dragging up/left grows both dimensions, right/bottom stay put.
+  const grown = await dragCorner('tl', -80, -60)
+  expect(grown.width).toBeGreaterThan(before.width + 50)
+  expect(grown.height).toBeGreaterThan(before.height + 40)
+  expect(Math.round(grown.x + grown.width)).toBe(Math.round(before.x + before.width))
+
+  await capture(page, testInfo, 'nl-chat-resized')
+
+  // Bottom-right grip: dragging right/down also grows, by shifting the anchored
+  // edges outward — so the right edge moves right (until it hits the viewport
+  // margin, which is why the left edge is not asserted to stay put).
+  const grown2 = await dragCorner('br', 40, 30)
+  expect(grown2.width).toBeGreaterThan(grown.width + 20)
+  expect(grown2.x + grown2.width).toBeGreaterThan(grown.x + grown.width)
+
+  // Never smaller than the floor, however far the grip is dragged inward.
+  const shrunk = await dragCorner('tl', 900, 900)
+  expect(shrunk.width).toBeGreaterThanOrEqual(260)
+  expect(shrunk.height).toBeGreaterThanOrEqual(220)
+
+  // Size survives a reload (localStorage), like the icon position.
+  const resized = await dragCorner('tl', -120, -90)
+  await page.reload()
+  await page.waitForLoadState('networkidle')
+  await page.locator('.nl-chat-fab').click()
+  const restored = (await page.locator('.nl-chat-window').boundingBox())!
+  expect(Math.round(restored.width)).toBe(Math.round(resized.width))
+  expect(Math.round(restored.height)).toBe(Math.round(resized.height))
+})

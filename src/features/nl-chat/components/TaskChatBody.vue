@@ -181,6 +181,8 @@ onUnmounted(() => chat.stop())
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* Fills the (resizable) window body; the message list scrolls inside. */
+  flex: 1 1 auto;
   min-height: 0;
 }
 .task-chat-activity {
