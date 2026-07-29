@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import BuilderChatBody from './BuilderChatBody.vue'
 import TaskChatBody from './TaskChatBody.vue'
 import type { ChatContext } from '../composables/useChatSurface'
+import { fetchRunners } from '../../../api'
 
 // Shell of the floating chat window: position (docked to the draggable icon),
 // header, and one of two bodies —
@@ -38,8 +39,85 @@ const title = computed(() => {
 
 type Status = { kind: 'idle' | 'busy' | 'done' | 'error'; text: string }
 const status = ref<Status>({ kind: 'idle', text: 'Sẵn sàng' })
-// A body switch leaves the old body's status on screen otherwise.
-watch(context, () => (status.value = { kind: 'idle', text: 'Sẵn sàng' }))
+
+interface RunnerInfo {
+  id: string
+  name: string
+  enabled: boolean
+}
+
+/** Runner of the step being chatted with (task mode), reported by the body. */
+const stepRunner = ref<RunnerInfo | null>(null)
+/** Runner a builder job would use — `submitJob` with no runnerId takes the default. */
+const defaultRunner = ref<RunnerInfo | null>(null)
+const runnerLoaded = ref(false)
+
+// A body switch leaves the old body's status/runner on screen otherwise.
+watch(context, () => {
+  status.value = { kind: 'idle', text: 'Sẵn sàng' }
+  stepRunner.value = null
+})
+
+async function loadDefaultRunner(): Promise<void> {
+  if (runnerLoaded.value) return
+  runnerLoaded.value = true
+  try {
+    const data = await fetchRunners()
+    const runners: any[] = Array.isArray(data?.runners) ? data.runners : []
+    const picked =
+      runners.find((r) => r?.id === data?.defaultRunnerId) ?? runners.find((r) => r?.enabled !== false)
+    if (picked) {
+      defaultRunner.value = {
+        id: picked.id,
+        name: picked.name || picked.id,
+        enabled: picked.enabled !== false,
+      }
+    }
+  } catch {
+    /* best-effort: the popover just omits the runner row */
+  }
+}
+
+const infoOpen = ref(false)
+
+function onInfoEnter(): void {
+  infoOpen.value = true
+  // Only the builder needs a lookup; task mode gets its runner from the body.
+  if (context.value.mode !== 'task') void loadDefaultRunner()
+}
+
+const activeRunner = computed<RunnerInfo | null>(() =>
+  context.value.mode === 'task' ? stepRunner.value : defaultRunner.value,
+)
+
+const runnerStatusText = computed(() => {
+  const runner = activeRunner.value
+  if (!runner) return 'chưa xác định'
+  if (!runner.enabled) return 'đã tắt'
+  return status.value.kind === 'busy' ? 'đang chạy' : 'sẵn sàng'
+})
+
+/** Rows of the info popover: what context this chat is bound to. */
+const infoRows = computed(() => {
+  const rows: { label: string; value: string }[] = [
+    { label: 'Project', value: props.projectId || 'mặc định' },
+  ]
+  const ctx = context.value
+  if (ctx.mode === 'task') {
+    rows.push({ label: 'Task', value: ctx.taskId })
+    const step = ctx.stepLabel || ctx.stepId
+    if (step) rows.push({ label: 'Step', value: step })
+  } else {
+    rows.push({ label: 'Chế độ', value: 'Tạo mới bằng chat (chưa gắn task)' })
+  }
+  rows.push({
+    label: 'Runner',
+    value: activeRunner.value
+      ? `${activeRunner.value.name} (${runnerStatusText.value})`
+      : runnerStatusText.value,
+  })
+  return rows
+})
 
 const DEFAULT_WIDTH = 340
 const DEFAULT_HEIGHT_RATIO = 0.6
@@ -199,6 +277,38 @@ const anchorStyle = computed(() => {
       </span>
       <span class="nl-chat-title">{{ title }}</span>
 
+      <!-- Info: which project/task/step/runner this chat is bound to. -->
+      <span
+        class="nl-chat-info"
+        @pointerenter="onInfoEnter"
+        @pointerleave="infoOpen = false"
+        @focusin="onInfoEnter"
+        @focusout="infoOpen = false"
+      >
+        <button type="button" class="nl-chat-icon-btn" title="Thông tin context" aria-label="Thông tin context">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 11v5.5" />
+            <path d="M12 7.6v.6" />
+          </svg>
+        </button>
+        <div v-if="infoOpen" class="nl-chat-info-popover" role="tooltip">
+          <p v-for="row in infoRows" :key="row.label" class="nl-chat-info-row">
+            <span class="nl-chat-info-label">{{ row.label }}</span>
+            <span class="nl-chat-info-value">{{ row.value }}</span>
+          </p>
+        </div>
+      </span>
+
       <!-- Status is icon-only (the old text + coloured dot read as an
            online/offline indicator); the label survives as the tooltip. -->
       <span v-if="status.kind !== 'idle'" class="nl-chat-status" :class="`is-${status.kind}`" :title="status.text">
@@ -265,6 +375,7 @@ const anchorStyle = computed(() => {
         :project-id="projectId"
         :active="visible !== false"
         @status="status = $event"
+        @runner="stepRunner = $event"
       />
       <BuilderChatBody v-else :project-id="projectId" @status="status = $event" @close="emit('close')" />
     </div>

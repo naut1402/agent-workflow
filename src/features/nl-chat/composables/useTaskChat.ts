@@ -21,6 +21,12 @@ export interface TaskChatTurn {
 
 export type TaskChatBlockedReason = 'stepRunning' | 'noCompletedJob' | 'noSession'
 
+export interface TaskChatRunner {
+  id: string
+  name: string
+  enabled: boolean
+}
+
 export interface UseTaskChatOptions {
   getTaskId: () => string
   getStepId: () => string | undefined
@@ -43,6 +49,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
   const sessionId = ref<string | null>(null)
   const transcriptFound = ref(false)
   const running = ref<{ jobId: string; stepId?: string } | null>(null)
+  const runner = ref<TaskChatRunner | null>(null)
   const canSend = ref(false)
   const blockedReason = ref<TaskChatBlockedReason | null>(null)
   const staleReason = ref<string | null>(null)
@@ -75,6 +82,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     sessionId.value = data?.sessionId ?? null
     transcriptFound.value = Boolean(data?.transcriptFound)
     running.value = data?.running ?? null
+    runner.value = data?.runner ?? null
     canSend.value = Boolean(data?.canSend)
     blockedReason.value = data?.blockedReason ?? null
     staleReason.value = data?.staleReason ?? null
@@ -152,6 +160,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     sessionId,
     transcriptFound,
     running,
+    runner,
     canSend,
     blockedReason,
     blockedText,

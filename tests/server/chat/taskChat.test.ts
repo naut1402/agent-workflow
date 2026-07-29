@@ -5,6 +5,7 @@ import path from 'node:path'
 import { encodeWorkspacePath } from '../../../server/chat/sessionTranscript'
 import { getTaskChatState, resolveChatSession } from '../../../server/chat/taskChat'
 import { saveTaskSessionLedger, type SessionEntry } from '../../../server/runners/sessionLedger'
+import { upsertConnection, upsertRunner } from '../../../server/runners/index'
 import type { JobRecord } from '../../../server/runners/types'
 
 // getTaskChatState mirrors sendTaskFeedback's guard order so the UI can explain
@@ -193,6 +194,32 @@ describe('getTaskChatState', () => {
     const state = getTaskChatState(PROJECT, TASK)
     expect(state.canSend).toBe(true)
     expect(state.blockedReason).toBeUndefined()
+  })
+
+  test('reports the runner of the step, resolved from the registry', () => {
+    // Registered runner → name + enabled from the registry.
+    upsertConnection({ id: 'conn-chat', kind: 'local-console', providerId: 'stub-taskchat', cliPath: 'stub' })
+    upsertRunner({ id: 'runner-chat', name: 'Runner chính', connectionId: 'conn-chat', config: {} })
+    writeJob({ id: 'j1', runnerId: 'runner-chat', sessionId: 's1' })
+
+    expect(getTaskChatState(PROJECT, TASK).runner).toEqual({
+      id: 'runner-chat',
+      name: 'Runner chính',
+      enabled: true,
+    })
+  })
+
+  test('a runner id no longer in the registry is reported as disabled, not hidden', () => {
+    writeJob({ id: 'j1', runnerId: 'runner-deleted', sessionId: 's1' })
+    expect(getTaskChatState(PROJECT, TASK).runner).toEqual({
+      id: 'runner-deleted',
+      name: 'runner-deleted',
+      enabled: false,
+    })
+  })
+
+  test('no job for the task → no runner to report', () => {
+    expect(getTaskChatState(PROJECT, TASK).runner).toBeNull()
   })
 
   test('approval-flow jobs are ignored — they are not part of the task conversation', () => {

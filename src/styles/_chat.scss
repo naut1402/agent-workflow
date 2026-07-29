@@ -73,6 +73,44 @@
     transform: rotate(360deg);
   }
 }
+/* Info affordance: hover reveals which project/task/step/runner this chat is
+   bound to, without spending header width on it. */
+.nl-chat-info {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+.nl-chat-info-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 3;
+  min-width: 200px;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  font-size: 11px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+}
+.nl-chat-info-row {
+  display: flex;
+  gap: 8px;
+}
+.nl-chat-info-label {
+  flex: none;
+  width: 62px;
+  color: var(--muted);
+}
+.nl-chat-info-value {
+  overflow-wrap: anywhere;
+}
 .nl-chat-icon-btn {
   background: none;
   border: none;

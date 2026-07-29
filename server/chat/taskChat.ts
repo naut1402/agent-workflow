@@ -1,4 +1,4 @@
-import { listJobs, loadTaskSessionLedger, stepIdOf } from '../runners/index.js'
+import { getRunner, listJobs, loadTaskSessionLedger, stepIdOf } from '../runners/index.js'
 import type { JobRecord, SessionEntry } from '../runners/index.js'
 import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.js'
 
@@ -23,6 +23,13 @@ export interface TaskChatRunningJob {
   startedAt: string | null
 }
 
+/** Runner behind this chat, so the UI can name it (and say if it is disabled). */
+export interface TaskChatRunner {
+  id: string
+  name: string
+  enabled: boolean
+}
+
 export interface TaskChatState {
   taskId: string
   /** The step this view is scoped to, when opened from a pipeline node. */
@@ -35,6 +42,7 @@ export interface TaskChatState {
   /** Total turns in the transcript — pass back as `fromIndex` to poll. */
   total: number
   running: TaskChatRunningJob | null
+  runner: TaskChatRunner | null
   canSend: boolean
   blockedReason?: TaskChatBlockedReason
   /** Set when the ledger entry we would resume is no longer usable. */
@@ -119,6 +127,14 @@ export function getTaskChatState(
       })
     : { turns: [], total: 0, file: null }
 
+  // The runner that ran (or is running) this step — the running job wins, else
+  // the newest job of the step/task, mirroring resolveChatSession()'s order.
+  const runnerJob =
+    runningJob ??
+    (opts.stepId ? jobs.find((j) => stepIdOf(j) === opts.stepId) : undefined) ??
+    jobs[0]
+  const runnerConfig = runnerJob ? getRunner(runnerJob.runnerId) : null
+
   return {
     taskId,
     stepId: opts.stepId,
@@ -129,6 +145,12 @@ export function getTaskChatState(
     running: runningJob
       ? { jobId: runningJob.id, stepId: stepIdOf(runningJob), startedAt: runningJob.startedAt }
       : null,
+    runner: runnerConfig
+      ? { id: runnerConfig.id, name: runnerConfig.name || runnerConfig.id, enabled: runnerConfig.enabled !== false }
+      : runnerJob
+        ? // Job recorded a runner id that no longer exists in the registry.
+          { id: runnerJob.runnerId, name: runnerJob.runnerId, enabled: false }
+        : null,
     canSend: !blockedReason,
     ...(blockedReason ? { blockedReason } : {}),
     ...(resolved.staleReason ? { staleReason: resolved.staleReason } : {}),

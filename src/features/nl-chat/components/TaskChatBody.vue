@@ -18,6 +18,8 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   status: [{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string }]
+  /** Runner behind this step's session — shown in the header's info popover. */
+  runner: [{ id: string; name: string; enabled: boolean } | null]
 }>()
 
 const chat = useTaskChat({
@@ -99,6 +101,7 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
 })
 
 watch(status, (s) => emit('status', s), { immediate: true })
+watch(chat.runner, (r) => emit('runner', r), { immediate: true })
 
 watch([() => chat.turns.value.length, () => chat.pending.value.length], scrollToEnd)
 

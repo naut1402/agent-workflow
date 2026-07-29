@@ -158,6 +158,7 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
           },
         ],
         running: { jobId: 'job-e2e', stepId: url.searchParams.get('stepId'), startedAt: null },
+        runner: { id: 'runner-e2e', name: 'Runner E2E', enabled: true },
         canSend: false,
         blockedReason: 'stepRunning',
       },
@@ -202,7 +203,24 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
   await expect(input).toBeDisabled()
   await expect(input).toHaveAttribute('placeholder', /Step đang chạy/)
 
+  // Info icon after the title: hover shows what this chat is bound to.
+  const info = win.locator('.nl-chat-info')
+  await expect(win.locator('.nl-chat-info-popover')).toHaveCount(0)
+  await info.hover()
+  const popover = win.locator('.nl-chat-info-popover')
+  await expect(popover).toBeVisible()
+  await expect(popover).toContainText('Project')
+  await expect(popover).toContainText('DEMO-1')
+  await expect(popover).toContainText('Design')
+  // Runner name + live status (the stub reports a running job).
+  await expect(popover).toContainText('Runner E2E')
+  await expect(popover).toContainText('đang chạy')
+
   await capture(page, testInfo, 'nl-chat-runner-session')
+
+  // Leaving the icon hides it again.
+  await win.locator('.nl-chat-title').hover()
+  await expect(popover).toHaveCount(0)
 })
 
 test('step node corner actions: run opens the confirm dialog, chat sits next to it (capture)', async ({
