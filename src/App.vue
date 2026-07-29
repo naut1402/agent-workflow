@@ -13,34 +13,28 @@ import {
 import { resolveAutoscanIntervalMs } from '../shared/schemas/autoscan'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
 import { useNotifications } from './features/notifications/composables/useNotifications'
+import FloatingNotificationIcon from './features/notifications/components/FloatingNotificationIcon.vue'
 import NotificationBell from './features/notifications/components/NotificationBell.vue'
+import MonitorLayout from './features/monitor/components/MonitorLayout.vue'
+import PipelineEditor from './features/pipeline-editor/components/PipelineEditor.vue'
+import AgentEditor from './features/agent-editor/components/AgentEditor.vue'
+import KnowledgePanel from './features/knowledge/components/KnowledgePanel.vue'
+import RunnerConfigPanel from './features/runner/components/RunnerConfigPanel.vue'
+import LogsPanel from './features/logs/components/LogsPanel.vue'
+import QuickActionPanel from './features/quick-action/components/QuickActionPanel.vue'
 import SettingsDialog from './features/settings/components/SettingsDialog.vue'
 import CreateTaskDialog from './features/monitor/components/CreateTaskDialog.vue'
 import RailIcon from './shared/ui/RailIcon.vue'
 import { APP_VERSION } from './shared/lib/appVersion'
-import { useHostContext } from './shared/host/useHostContext'
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
 const PROJECT_KEY = 'dev-dashboard-selected-project'
 
 const { t } = useI18n()
 
-// ── Mode (registry-driven — built-ins register via HostContext, see
-// src/features/*/host.plugin.ts and issue #159) ────────────────────────────
-const { modes, floatings } = useHostContext()
-const mode = ref(modes.find((m) => m.default)?.id ?? modes[0]?.id ?? 'monitor')
-const activeMode = computed(() => modes.find((m) => m.id === mode.value) ?? null)
+// ── Mode ─────────────────────────────────────────────────────────────────────
+const mode = ref('monitor')
 const settingsOpen = ref(false)
-
-/**
- * `t()`'s type is narrowed to the vi message schema (see shared/i18n/types.ts)
- * so it can only take literal keys known at compile time — but mode labels
- * come from the registry as plain `string`. Built-ins are trusted, in-repo
- * code (not user input), so the escape hatch is a deliberate, narrow one.
- */
-function tr(key: string): string {
-  return t(key as any)
-}
 
 const editorScope = ref('global')
 const editorTaskId = ref('')
@@ -219,77 +213,6 @@ async function onTaskCreated({ taskId }: { taskId: string; jobId: string | null 
   selectedId.value = taskId
 }
 
-// Per-mode props/listeners the panel mount below binds via `v-bind`/`v-on`.
-// This stays in App.vue (not the host.plugin.ts registration files) because
-// the bound state (projects/tasks/selection/…) is owned by the shell, not by
-// the individual feature modules — see design.md §4.2.
-const activeModeBindings = computed(() => {
-  switch (mode.value) {
-    case 'monitor':
-      return {
-        props: {
-          projects: projects.value,
-          defaultProjectId: defaultProjectId.value,
-          selectedProjectId: selectedProjectId.value,
-          tasks: tasks.value,
-          selectedId: selectedId.value,
-          selected: selected.value,
-          openArtifact: openArtifact.value,
-          connected: connected.value,
-          error: error.value,
-          lastUpdated: lastUpdated.value,
-        },
-        listeners: {
-          'select-project': onSelectProject,
-          'projects-changed': onProjectsChanged,
-          'select-task': (id: string) => {
-            selectedId.value = id
-          },
-          'open-artifact': handleOpenArtifact,
-          'qa-saved': poll,
-          'hitl-action': poll,
-          'task-archived': poll,
-          'create-task': onCreateTaskOpen,
-        },
-      }
-    case 'editor':
-      return {
-        props: {
-          scope: editorScope.value,
-          taskId: editorTaskId.value,
-          tasks: tasks.value,
-          projectId: selectedProjectId.value,
-          appSidebarCollapsed: sidebarCollapsed.value,
-        },
-        listeners: {
-          'update:scope': (v: string) => {
-            editorScope.value = v
-          },
-          'update:taskId': (v: string) => {
-            editorTaskId.value = v
-          },
-        },
-      }
-    case 'quickAction':
-      return { props: { projectId: selectedProjectId.value }, listeners: {} }
-    default:
-      return { props: {}, listeners: {} }
-  }
-})
-
-// Per-floating props/listeners, same rationale as `activeModeBindings` above.
-// `show: false` hides the floating even though it stays registered (kept in
-// sync with the existing `showFloatingNotification` setting toggle).
-const floatingBindingsMap = computed<
-  Record<string, { show?: boolean; props: Record<string, unknown>; listeners: Record<string, unknown> }>
->(() => ({
-  notifications: {
-    show: showFloatingNotification.value,
-    props: { unreadCount: unreadCount.value, history: history.value },
-    listeners: { 'mark-all-read': markAllRead, select: onNotificationSelect },
-  },
-}))
-
 watch(mode, async (m) => {
   stop()
   if (m === 'monitor') start()
@@ -337,15 +260,67 @@ onUnmounted(() => {
 
       <div class="mode-toggle">
         <button
-          v-for="m in modes"
-          :key="m.id"
           class="mode-btn rail-icon-btn"
-          :class="{ active: mode === m.id }"
-          :title="tr(m.titleKey ?? m.labelKey)"
-          @click="mode = m.id"
+          :class="{ active: mode === 'monitor' }"
+          :title="t('common.modes.monitor')"
+          @click="mode = 'monitor'"
         >
-          <RailIcon :name="m.icon" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ tr(m.labelKey) }}</span>
+          <RailIcon name="monitor" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.monitor') }}</span>
+        </button>
+        <button
+          class="mode-btn rail-icon-btn"
+          :class="{ active: mode === 'editor' }"
+          :title="t('common.modes.pipelineEditor')"
+          @click="mode = 'editor'"
+        >
+          <RailIcon name="pipeline" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.pipelineEditor') }}</span>
+        </button>
+        <button
+          class="mode-btn rail-icon-btn"
+          :class="{ active: mode === 'agentEditor' }"
+          :title="t('common.modes.agentEditor')"
+          @click="mode = 'agentEditor'"
+        >
+          <RailIcon name="agent" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.agentEditor') }}</span>
+        </button>
+        <button
+          class="mode-btn rail-icon-btn"
+          :class="{ active: mode === 'quickAction' }"
+          :title="t('common.modes.quickAction')"
+          @click="mode = 'quickAction'"
+        >
+          <RailIcon name="quickAction" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.quickAction') }}</span>
+        </button>
+        <button
+          class="mode-btn rail-icon-btn"
+          :class="{ active: mode === 'knowledge' }"
+          :title="t('common.modes.knowledge')"
+          @click="mode = 'knowledge'"
+        >
+          <RailIcon name="knowledge" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.knowledge') }}</span>
+        </button>
+        <button
+          class="mode-btn rail-icon-btn"
+          :class="{ active: mode === 'runner' }"
+          :title="t('common.modes.runnerConfig')"
+          @click="mode = 'runner'"
+        >
+          <RailIcon name="runner" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.runner') }}</span>
+        </button>
+        <button
+          class="mode-btn rail-icon-btn"
+          :class="{ active: mode === 'logs' }"
+          :title="t('common.modes.logs')"
+          @click="mode = 'logs'"
+        >
+          <RailIcon name="logs" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.logs') }}</span>
         </button>
       </div>
 
@@ -360,7 +335,12 @@ onUnmounted(() => {
         <footer v-if="!sidebarCollapsed" class="status">
           <span v-if="error" class="err">⚠ {{ error }}</span>
           <span v-else-if="lastUpdated && mode === 'monitor'">{{ t('common.status.updated', { time: lastUpdated }) }}</span>
-          <span v-else-if="activeMode?.pausedStatusKey" class="muted">{{ tr(activeMode.pausedStatusKey) }}</span>
+          <span v-else-if="mode === 'editor'" class="muted">{{ t('common.status.paused.editor') }}</span>
+          <span v-else-if="mode === 'agentEditor'" class="muted">{{ t('common.status.paused.agentEditor') }}</span>
+          <span v-else-if="mode === 'quickAction'" class="muted">{{ t('common.status.paused.quickAction') }}</span>
+          <span v-else-if="mode === 'knowledge'" class="muted">{{ t('common.status.paused.knowledge') }}</span>
+          <span v-else-if="mode === 'runner'" class="muted">{{ t('common.status.paused.runner') }}</span>
+          <span v-else-if="mode === 'logs'" class="muted">{{ t('common.status.paused.logs') }}</span>
         </footer>
         <button
           type="button"
@@ -380,22 +360,68 @@ onUnmounted(() => {
       </div>
     </aside>
 
-    <main v-if="activeMode" class="main main-editor">
-      <component
-        :is="activeMode.entry"
-        v-bind="activeModeBindings.props"
-        v-on="activeModeBindings.listeners"
+    <main v-if="mode === 'monitor'" class="main main-editor">
+      <MonitorLayout
+        :projects="projects"
+        :default-project-id="defaultProjectId"
+        :selected-project-id="selectedProjectId"
+        :tasks="tasks"
+        :selected-id="selectedId"
+        :selected="selected"
+        :open-artifact="openArtifact"
+        :connected="connected"
+        :error="error"
+        :last-updated="lastUpdated"
+        @select-project="onSelectProject"
+        @projects-changed="onProjectsChanged"
+        @select-task="selectedId = $event"
+        @open-artifact="handleOpenArtifact"
+        @qa-saved="poll"
+        @hitl-action="poll"
+        @task-archived="poll"
+        @create-task="onCreateTaskOpen"
       />
     </main>
 
-    <template v-for="f in floatings" :key="f.id">
-      <component
-        v-if="floatingBindingsMap[f.id]?.show !== false"
-        :is="f.entry"
-        v-bind="floatingBindingsMap[f.id]?.props"
-        v-on="floatingBindingsMap[f.id]?.listeners"
+    <main v-else-if="mode === 'editor'" class="main main-editor">
+      <PipelineEditor
+        :scope="editorScope"
+        :task-id="editorTaskId"
+        :tasks="tasks"
+        :project-id="selectedProjectId"
+        :app-sidebar-collapsed="sidebarCollapsed"
+        @update:scope="editorScope = $event"
+        @update:task-id="editorTaskId = $event"
       />
-    </template>
+    </main>
+
+    <main v-else-if="mode === 'quickAction'" class="main main-editor">
+      <QuickActionPanel :project-id="selectedProjectId" />
+    </main>
+
+    <main v-else-if="mode === 'knowledge'" class="main main-editor">
+      <KnowledgePanel />
+    </main>
+
+    <main v-else-if="mode === 'runner'" class="main main-editor">
+      <RunnerConfigPanel />
+    </main>
+
+    <main v-else-if="mode === 'logs'" class="main main-editor">
+      <LogsPanel />
+    </main>
+
+    <main v-else-if="mode === 'agentEditor'" class="main main-editor">
+      <AgentEditor />
+    </main>
+
+    <FloatingNotificationIcon
+      v-if="showFloatingNotification"
+      :unread-count="unreadCount"
+      :history="history"
+      @mark-all-read="markAllRead"
+      @select="onNotificationSelect"
+    />
 
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
     <CreateTaskDialog
