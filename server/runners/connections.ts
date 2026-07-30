@@ -16,8 +16,6 @@ import {
 
 const LOCAL_COMMANDS: Array<{ id: string; command: string; providerId: string; label: string }> = [
   { id: 'claude', command: 'claude', providerId: 'claude-code-cli', label: 'Claude Code CLI' },
-  // Cursor Agent CLI primary entrypoint is `agent` (`cursor-agent` is a legacy alias).
-  // Do not scan `cursor` — that is the IDE binary, not the agent CLI.
   { id: 'cursor', command: 'agent', providerId: 'cursor-cli', label: 'Cursor CLI' },
   { id: 'codex', command: 'codex', providerId: 'codex-cli', label: 'Codex CLI' },
 ]

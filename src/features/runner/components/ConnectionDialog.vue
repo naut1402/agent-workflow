@@ -114,10 +114,8 @@ function inferProviderFromPath(pathOrCmd: string): string {
   const known = scanned.value.find((c) => c.command === base || c.id === base)
   if (known) return known.providerId
   if (/^claude$/i.test(base)) return 'claude-code-cli'
-  // Cursor Agent CLI: `agent` (primary), `cursor-agent` (alias). Avoid bare `cursor` (IDE).
   if (/^(agent|cursor-agent)$/i.test(base) || /cursor-agent/i.test(pathOrCmd)) return 'cursor-cli'
   if (/codex/i.test(base)) return 'codex-cli'
-  // Generic shell/CLI binary — not an AI agent runner.
   return 'console-command'
 }
 
