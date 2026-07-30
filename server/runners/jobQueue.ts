@@ -504,6 +504,30 @@ async function runJob(job: JobRecord): Promise<void> {
     }
   }
 
+  // Advance current_phase (and optionally chain the next step) while this job
+  // is still `running`, then mark succeeded — so the UI cannot submit another
+  // run-step against a stale phase between "job done" and "phase advanced".
+  // Chat-feedback jobs skip advance (they must not move the pipeline cursor).
+  if (result.ok && !isApprovalJob && !isChatFeedback) {
+    try {
+      await advancePipelineStepChain(job)
+    } finally {
+      saveJob({
+        ...(loadJob(job.id) as JobRecord),
+        status: 'succeeded',
+        finishedAt: new Date().toISOString(),
+        exitCode: result.exitCode,
+        error: result.error,
+        logPath: result.logPath,
+        artifactsFound: result.artifactsFound,
+        pid: null,
+        ...(job.metadata?.isNlChat ? { stdout: (result.stdout ?? '').slice(0, NL_CHAT_STDOUT_LIMIT) } : {}),
+        ...(capturedSessionId ? { sessionId: capturedSessionId } : {}),
+      })
+    }
+    return
+  }
+
   saveJob({
     ...(loadJob(job.id) as JobRecord),
     status: result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed',
@@ -518,10 +542,6 @@ async function runJob(job: JobRecord): Promise<void> {
     ...(job.metadata?.isNlChat ? { stdout: (result.stdout ?? '').slice(0, NL_CHAT_STDOUT_LIMIT) } : {}),
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
   })
-
-  if (result.ok && !isApprovalJob && !isChatFeedback) {
-    await advancePipelineStepChain(job)
-  }
 }
 
 /**
@@ -573,7 +593,8 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
     agentRef: nextStep.agent,
     workspace,
     userPrompt,
-    sessionMode: 'resume',
+    // Fresh CLI session per step — do not resume the previous step's context.
+    sessionMode: 'new',
     metadata: {
       ...carryMetadata,
       pipelineStepId: nextStepId,
