@@ -14,7 +14,7 @@ Nguồn quy ước duy nhất cho mọi AI agent làm việc trong repo, bất k
 `dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **dev-agent-teams orchestrator khác** — repo này không chạy orchestrator, chỉ quan sát. Với *state* từng task (`.dev-state/*.json`) thì chỉ đọc; với *config* (pipeline, custom agent, template, knowledge) và **artifact markdown** thì đọc/ghi được (ghi qua `PUT /api/artifact`).
 
 - **Backend**: một app Hono duy nhất chạy trên 2 transport. Sửa route ở `server/http/routes/*.ts`; domain logic (không biết gì về HTTP) ở `server/<module>/`. `server/http/createApiHandler.ts` là cầu nối Node ⇆ Hono — riêng `/api/knowledge` bị `handleKnowledgeApi` chặn **trước Hono**. `server/devTeamApi.ts` chỉ là shim re-export.
-- **Frontend**: feature-module `src/features/<mode>/` (6 mode: monitor / pipeline editor / agent editor / knowledge / runner / logs); API wrapper ở `src/api/`, phần dùng chung ở `src/shared/`.
+- **Frontend**: feature-module `src/features/<mode>/` (7 mode: monitor / pipeline editor / agent editor / knowledge / runner / logs / quick-action; cộng notifications + nl-chat không phải mode rail); API wrapper ở `src/api/`, phần dùng chung ở `src/shared/`.
 - **Data root** `.dev-team-agent/`, 2 run mode: dev đọc từ `cwd/..`/`DEV_TEAM_ROOT`; standalone đọc qua `ProjectRegistry` (`~/.dev-team-dashboard/projects.json`, `?project=<id>`).
 - **Pipeline config xếp lớp**: `DEFAULT_PIPELINE` (`server/pipeline/default.ts`) ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`, lớp sau đè lớp trước.
 - **MCP** (`mcp/server.ts`, `bun run mcp`): CRUD project-registry qua `server/registry.ts`, không cần HTTP server.
