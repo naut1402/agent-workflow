@@ -46,12 +46,24 @@ describe('sessionCapture', () => {
     expect(inv.args).toEqual(['-p', '--resume', 'resume-abc'])
   })
 
-  test('cursor parse-json: buildCursorJsonArgs adds -p and --output-format json', () => {
+  test('cursor parse-json: buildCursorJsonArgs adds -p, --output-format json, and --trust', () => {
     const args = buildCursorJsonArgs(['--model', 'x'], 'do task')
     expect(args).toContain('-p')
     expect(args).toContain('--output-format')
     expect(args).toContain('json')
+    expect(args).toContain('--trust')
     expect(args[args.length - 1]).toBe('do task')
+  })
+
+  test('cursor parse-json: does not duplicate --trust when already set', () => {
+    const args = buildCursorJsonArgs(['--trust', '-p'], 'do task')
+    expect(args.filter((f) => f === '--trust')).toHaveLength(1)
+  })
+
+  test('cursor parse-json: skips --trust when --yolo or -f present', () => {
+    expect(buildCursorJsonArgs(['--yolo'], 'x')).not.toContain('--trust')
+    expect(buildCursorJsonArgs(['-f'], 'x')).not.toContain('--trust')
+    expect(buildCursorJsonArgs(['--force'], 'x')).not.toContain('--trust')
   })
 
   test('parseCursorJsonOutput extracts session_id and result', () => {

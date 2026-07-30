@@ -29,6 +29,12 @@ export function buildCursorJsonArgs(flags: string[], prompt: string): string[] {
   if (!base.some((f) => f === '--output-format' || f.startsWith('--output-format='))) {
     base.push('--output-format', 'json')
   }
+  const hasTrust =
+    base.includes('--trust') ||
+    base.includes('--yolo') ||
+    base.includes('-f') ||
+    base.includes('--force')
+  if (!hasTrust) base.push('--trust')
   base.push(prompt)
   return base
 }

@@ -16,7 +16,7 @@ import {
 
 const LOCAL_COMMANDS: Array<{ id: string; command: string; providerId: string; label: string }> = [
   { id: 'claude', command: 'claude', providerId: 'claude-code-cli', label: 'Claude Code CLI' },
-  { id: 'cursor', command: 'cursor', providerId: 'cursor-cli', label: 'Cursor CLI' },
+  { id: 'cursor', command: 'agent', providerId: 'cursor-cli', label: 'Cursor CLI' },
   { id: 'codex', command: 'codex', providerId: 'codex-cli', label: 'Codex CLI' },
 ]
 
