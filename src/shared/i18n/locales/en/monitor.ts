@@ -88,6 +88,12 @@ export const monitor = {
     editTitle: 'Double-click to edit',
     noTask: 'Could not determine task; cannot save.',
     reloaded: 'File changed on disk — content was reloaded.',
+    other: 'Other',
+    otherPlaceholder: 'Type your answer…',
+    submit: 'Submit',
+    submitting: 'Submitting…',
+    submitError409: 'Step is running — please retry Submit shortly.',
+    submitError400: 'No session left to resume — this step needs to run again.',
   },
   saveIndicator: {
     saving: 'Saving',
