@@ -105,11 +105,17 @@ function buildConnectionId(resolvedProvider: string): string {
 }
 
 function inferProviderFromPath(pathOrCmd: string): string {
-  const base = pathOrCmd.replace(/\\/g, '/').split('/').pop()?.replace(/\.exe$/i, '') || ''
+  const base =
+    pathOrCmd
+      .replace(/\\/g, '/')
+      .split('/')
+      .pop()
+      ?.replace(/\.(exe|cmd|bat|ps1)$/i, '') || ''
   const known = scanned.value.find((c) => c.command === base || c.id === base)
   if (known) return known.providerId
   if (/^claude$/i.test(base)) return 'claude-code-cli'
-  if (/cursor/i.test(base)) return 'cursor-cli'
+  // Cursor Agent CLI: `agent` (primary), `cursor-agent` (alias). Avoid bare `cursor` (IDE).
+  if (/^(agent|cursor-agent)$/i.test(base) || /cursor-agent/i.test(pathOrCmd)) return 'cursor-cli'
   if (/codex/i.test(base)) return 'codex-cli'
   // Generic shell/CLI binary — not an AI agent runner.
   return 'console-command'
@@ -163,7 +169,7 @@ function confirmRegisterCommand() {
   }
   const command =
     registerDraft.value.command.trim() ||
-    path.replace(/\\/g, '/').split('/').pop()?.replace(/\.exe$/i, '') ||
+    path.replace(/\\/g, '/').split('/').pop()?.replace(/\.(exe|cmd|bat|ps1)$/i, '') ||
     'custom'
   const id = `custom-${slugify(command)}-${Date.now().toString(36).slice(-4)}`
   const entry: RegisteredCommand = {

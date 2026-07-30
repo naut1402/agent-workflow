@@ -94,7 +94,7 @@ describe('connections & runners HTTP API', () => {
           label: 'Cursor',
           kind: 'local-console',
           providerId: 'cursor-cli',
-          cliPath: 'cursor',
+          cliPath: 'agent',
           flags: ['--print'],
         },
       }),

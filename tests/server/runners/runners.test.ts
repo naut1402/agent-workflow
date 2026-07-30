@@ -147,7 +147,7 @@ describe('connections CRUD', () => {
       id: 'cursor-local',
       kind: 'local-console',
       providerId: 'cursor-cli',
-      cliPath: 'cursor',
+      cliPath: 'agent',
       label: 'Cursor',
     })
     expect(res.ok).toBe(true)
@@ -170,13 +170,16 @@ describe('connections CRUD', () => {
       cliPath: 'claude',
     })
     expect(id).toBe(DEFAULT_CONNECTION_ID)
-    const other = ensureLegacyConnection({ provider: 'cursor-cli', cliPath: 'cursor' })
+    const other = ensureLegacyConnection({ provider: 'cursor-cli', cliPath: 'agent' })
     expect(other).toBe('cursor-cli-migrated')
     expect(getConnection(other)?.providerId).toBe('cursor-cli')
+    expect(getConnection(other)?.cliPath).toBe('agent')
   })
-  test('scanLocalCommands returns stable shape', () => {
+  test('scanLocalCommands returns Cursor CLI as agent', () => {
     const cmds = scanLocalCommands()
     expect(cmds.length).toBe(3)
+    const cursor = cmds.find((c) => c.id === 'cursor')
+    expect(cursor).toMatchObject({ command: 'agent', providerId: 'cursor-cli' })
     for (const c of cmds) {
       expect(c).toMatchObject({
         id: expect.any(String),

@@ -4,7 +4,7 @@ import type { RunnerProvider } from '../types.js'
 export function createCursorCliProvider(): RunnerProvider {
   return createLocalConsoleProvider({
     providerId: 'cursor-cli',
-    defaultCliPath: 'cursor',
+    defaultCliPath: 'agent',
     claudeStyleArgs: false,
     sessionCapture: 'parse-json',
   })
