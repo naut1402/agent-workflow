@@ -5,7 +5,7 @@ import type { HonoEnv } from '../types.js'
 import { j, parseBody, unknownProject } from '../respond.js'
 import { resolveArtifact } from '../../../shared/sanitize.js'
 import { collectTasks, flowProfilePath, createTask, readState } from '../../tasks/index.js'
-import { applyArchiveAction, applyHitlAction } from '../../tasks/state.js'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction } from '../../tasks/state.js'
 import { loadPipelineConfig } from '../../pipeline/index.js'
 import { emitAudit } from '../../logging/store.js'
 import { TaskArchivePatch, TaskStatePatch } from '../../../shared/schemas/task.js'
@@ -516,18 +516,11 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     }
 
     const stateFile = path.join(root, '.dev-state', `${id}.json`)
-    const read = await readState(stateFile)
+    let read = await readState(stateFile)
     if (!read.ok) return j(c, 404, { error: 'task not found', taskId: id })
-    const state = read.state as Record<string, unknown>
+    let state = read.state as Record<string, unknown>
     if (state.hitl_pending) {
       return j(c, 400, { error: 'task is waiting for HITL approval', taskId: id })
-    }
-
-    const stepId = String(state.current_phase ?? '')
-    const pipeline = await loadPipelineConfig(root, id)
-    const step = (pipeline.steps || []).find((s: any) => s.id === stepId)
-    if (!step?.agent) {
-      return j(c, 400, { error: 'no runnable current step', taskId: id, stepId })
     }
 
     const existing = listJobs(50).find(
@@ -536,6 +529,34 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
         (j.status === 'queued' || j.status === 'running'),
     )
     if (existing) return j(c, 409, { error: 'step already running', taskId: id, job: existing })
+
+    // Heal a stuck cursor: job already succeeded for current_phase but
+    // advance never ran (e.g. crash between succeed and advance on older
+    // builds). Advance once, then re-read so we submit the next step.
+    let stepId = String(state.current_phase ?? '')
+    const lastSucceeded = listJobs(200).find(
+      (j) =>
+        j.metadata?.taskId === id &&
+        j.status === 'succeeded' &&
+        !j.applyTarget &&
+        j.metadata?.pipelineStepId === stepId,
+    )
+    if (lastSucceeded && stepId) {
+      await advanceStepOnJobSuccess(root, id, stepId)
+      read = await readState(stateFile)
+      if (!read.ok) return j(c, 404, { error: 'task not found', taskId: id })
+      state = read.state as Record<string, unknown>
+      if (state.hitl_pending) {
+        return j(c, 400, { error: 'task is waiting for HITL approval', taskId: id })
+      }
+      stepId = String(state.current_phase ?? '')
+    }
+
+    const pipeline = await loadPipelineConfig(root, id)
+    const step = (pipeline.steps || []).find((s: any) => s.id === stepId)
+    if (!step?.agent) {
+      return j(c, 400, { error: 'no runnable current step', taskId: id, stepId })
+    }
 
     const requestFile = path.join(root, 'tasks', id, 'request.md')
     let userPrompt: string
@@ -551,11 +572,9 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       agentRef: step.agent,
       workspace: path.join(root, 'tasks', id),
       userPrompt,
-      // Resume the task's ledger session (if any) instead of always running
-      // with no session — resolveSessionPlan() falls back to 'new' on its own
-      // if the ledger has no valid open entry, so this is safe from the first
-      // run-step call onward. See jobQueue.ts sendTaskFeedback / design F0011.
-      sessionMode: 'resume',
+      // Fresh CLI session per pipeline step — avoids accumulating prior-step context.
+      // Chat follow-up keeps resume via sendTaskFeedback (F0011), not run-step.
+      sessionMode: 'new',
       metadata: {
         projectRoot: path.dirname(root),
         devTeamRoot: root,
