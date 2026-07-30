@@ -7,7 +7,7 @@
 ## Kiến trúc 1 phút
 
 - **Backend:** một request handler duy nhất (app **Hono**) chạy trên **2 transport** — Vite middleware (dev) và Node standalone server.
-- **Frontend:** SPA **6 mode** — `monitor` / pipeline editor / agent editor / knowledge / runner / logs.
+- **Frontend:** SPA **7 mode** — `monitor` / pipeline editor / agent editor / knowledge / runner / logs / quick action (cộng surface thông báo + NL chat không tính là mode).
 - **Khái niệm cốt lõi:** thư mục dữ liệu **`.dev-team-agent/`** ("data root") mà mọi thao tác đọc/ghi đều scope vào.
 
 → Chi tiết kiến trúc: [`docs/architecture.md`](docs/architecture.md).
