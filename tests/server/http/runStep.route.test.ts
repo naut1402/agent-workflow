@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createApp } from '../../../server/http/app.js'
 import type { RegistryContext } from '../../../server/registry.js'
-import { loadJob, registerProvider, upsertConnection, upsertRunner } from '../../../server/runners/index.js'
+import { loadJob, listJobs, registerProvider, upsertConnection, upsertRunner } from '../../../server/runners/index.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../server/runners/types.js'
 
 // Route-level contract for POST /api/tasks/:id/run-step — clicking a pipeline
@@ -130,6 +130,7 @@ describe('POST /api/tasks/:id/run-step', () => {
     expect(res.status).toBe(201)
     const { job } = await res.json()
     expect(job.metadata.pipelineStepId).toBe('implementer')
+    expect(job.metadata.inputSessionMode).toBe('new')
     await settle(job.id)
     await waitForPhase('R1', (p) => p === 'reviewer')
   })
@@ -216,6 +217,124 @@ describe('POST /api/tasks/:id/run-step', () => {
     gated = false
     resolveGate?.()
     await settle(firstJob.id)
+  })
+
+  test('tags inputSessionMode new so each step starts a fresh CLI session', async () => {
+    seedTask('R7', { current_phase: 'implementer' })
+    const res = await app.request('/api/tasks/R7/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step' }),
+    })
+    expect(res.status).toBe(201)
+    const { job } = await res.json()
+    expect(job.metadata.inputSessionMode).toBe('new')
+    await settle(job.id)
+  })
+
+  test('advances current_phase before marking the job succeeded (no stale-phase window)', async () => {
+    seedTask('R8', { current_phase: 'implementer' })
+    const res = await app.request('/api/tasks/R8/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step' }),
+    })
+    expect(res.status).toBe(201)
+    const { job } = await res.json()
+    const stateFile = path.join(root, '.dev-state', 'R8.json')
+    let sawSucceeded = false
+    for (let i = 0; i < 400; i++) {
+      const j = loadJob(job.id)
+      if (!j) {
+        await sleep(5)
+        continue
+      }
+      if (j.status === 'succeeded') {
+        sawSucceeded = true
+        const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
+        // Phase must already have moved by the time status is succeeded.
+        expect(state.current_phase).not.toBe('implementer')
+        expect(state.current_phase).toBe('reviewer')
+        break
+      }
+      await sleep(5)
+    }
+    expect(sawSucceeded).toBe(true)
+  })
+
+  test('heals a stuck current_phase when a prior succeeded job already ran that step', async () => {
+    seedTask('R9', { current_phase: 'implementer' })
+    // Simulate crash-between-succeed-and-advance: job finished for
+    // implementer but current_phase never moved.
+    const stuckJobId = crypto.randomUUID()
+    const jobsDir = path.join(root, '.home', 'jobs')
+    fs.mkdirSync(jobsDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(jobsDir, `${stuckJobId}.json`),
+      JSON.stringify({
+        id: stuckJobId,
+        status: 'succeeded',
+        runnerId: 'stub-runner-run-step',
+        agentRef: ' ',
+        workspace: path.join(root, 'tasks', 'R9'),
+        userPrompt: 'do the thing',
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        exitCode: 0,
+        pid: null,
+        metadata: {
+          taskId: 'R9',
+          pipelineStepId: 'implementer',
+          devTeamRoot: root,
+        },
+      }),
+      'utf8',
+    )
+
+    const res = await app.request('/api/tasks/R9/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step', targetStepId: 'pr-creator' }),
+    })
+    expect(res.status).toBe(201)
+    const { job } = await res.json()
+    // Heal advanced implementer → reviewer; new job must start at reviewer
+    // (gated) rather than re-running implementer.
+    expect(job.metadata.pipelineStepId).toBe('reviewer')
+    await settle(job.id)
+    const state = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'R9.json'), 'utf8'))
+    expect(state.current_phase).toBe('reviewer')
+    expect(state.hitl_pending).toBe('hitl-3')
+  })
+
+  test('chained step jobs also use inputSessionMode new', async () => {
+    seedTask('R10', { current_phase: 'implementer' })
+    fs.mkdirSync(path.join(root, 'tasks', 'R10'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'tasks', 'R10', 'pipeline.yaml'),
+      [
+        'steps_replace: true',
+        'steps:',
+        "  - id: implementer",
+        "    agent: ' '",
+        "  - id: pr-creator",
+        "    agent: ' '",
+      ].join('\n'),
+      'utf8',
+    )
+    const res = await app.request('/api/tasks/R10/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step', targetStepId: 'pr-creator' }),
+    })
+    expect(res.status).toBe(201)
+    const { job } = await res.json()
+    expect(job.metadata.inputSessionMode).toBe('new')
+    await settle(job.id)
+    await waitForPhase('R10', (p) => p === 'completed')
+    // Find the chained pr-creator job and assert it also started fresh.
+    const chained = listJobs(50).find(
+      (j) => j.metadata?.taskId === 'R10' && j.metadata?.pipelineStepId === 'pr-creator',
+    )
+    expect(chained).toBeTruthy()
+    expect(chained?.metadata?.inputSessionMode).toBe('new')
   })
 })
 
