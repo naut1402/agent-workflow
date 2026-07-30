@@ -11,10 +11,24 @@ import { getProvider } from './providerRegistry.js'
 import { resolveAgent } from './agentResolver.js'
 import { reapOrphanedRunningJobs } from './pidReaper.js'
 import { mintSessionId } from './sessionCapture.js'
-import { recordSessionUsage, resolveSessionPlan, type SessionMode } from './sessionLedger.js'
+import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, type SessionMode } from './sessionLedger.js'
 import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
 import { advanceStepOnJobSuccess } from '../tasks/state.js'
 import { loadPipelineConfig } from '../pipeline/index.js'
+
+/** Cap on the stdout persisted for NL chat jobs — a chat reply/draft is small. */
+const NL_CHAT_STDOUT_LIMIT = 64 * 1024
+
+/**
+ * The pipeline step a job belongs to. Pipeline run-step jobs tag
+ * `pipelineStepId`; ad-hoc/quick-action jobs use `stepId`.
+ */
+export function stepIdOf(job: JobRecord): string | undefined {
+  const meta = job.metadata || {}
+  if (typeof meta.stepId === 'string' && meta.stepId) return meta.stepId
+  if (typeof meta.pipelineStepId === 'string' && meta.pipelineStepId) return meta.pipelineStepId
+  return undefined
+}
 
 function credentialForConnection(conn: Connection): CredentialProfile | null {
   if (conn.kind === 'local-console') {
@@ -49,6 +63,8 @@ export interface SubmitJobInput {
   /** Explicit session control for pipeline resume (additive — optional). */
   sessionMode?: SessionMode
   sessionId?: string
+  /** The job this one continues/follows-up on (e.g. a task-chat-feedback round). */
+  parentJobId?: string
 }
 
 // Reap orphaned running jobs once when the module loads (server restart).
@@ -372,6 +388,11 @@ async function runJob(job: JobRecord): Promise<void> {
   let execResumeSessionId: string | undefined
   let sessionStaleReason: string | undefined
 
+  // Reading only `metadata.stepId` left every ledger entry's `stepIds` empty
+  // for pipeline jobs (they tag `pipelineStepId`), so per-step session lookup
+  // had nothing to match on — see stepIdOf().
+  const jobStepId = stepIdOf(job)
+
   if (job.applyTarget && job.approvalArtifact) {
     execSessionId = job.sessionId && !job.parentJobId ? job.sessionId : undefined
     execResumeSessionId = job.sessionId && job.parentJobId ? job.sessionId : undefined
@@ -387,7 +408,7 @@ async function runJob(job: JobRecord): Promise<void> {
       workspace: job.workspace,
       host: os.hostname(),
       model: resolvedAgent.model,
-      stepId: typeof job.metadata?.stepId === 'string' ? job.metadata.stepId : undefined,
+      stepId: jobStepId,
     })
     sessionStaleReason = plan.staleReason
     if (plan.sessionMode === 'resume' && plan.resumeSessionId) {
@@ -403,11 +424,21 @@ async function runJob(job: JobRecord): Promise<void> {
         connectionId: connection.id,
         workspace: job.workspace,
         model: resolvedAgent.model,
-        stepId: typeof job.metadata?.stepId === 'string' ? job.metadata.stepId : undefined,
+        stepId: jobStepId,
         forceNew: true,
         staleReason: sessionStaleReason,
       })
     }
+  }
+
+  // Record the session id on the job BEFORE the CLI runs: the chat surface
+  // finds the runner's live transcript by session id, and the ledger is only
+  // updated after the job finishes (`recordSessionUsage` below) — too late to
+  // watch a run in progress.
+  const plannedSessionId = execSessionId ?? execResumeSessionId
+  if (plannedSessionId && !job.applyTarget) {
+    const current = loadJob(job.id)
+    if (current) saveJob({ ...current, sessionId: plannedSessionId })
   }
 
   const onStart = (info: { pid: number | null }) => {
@@ -445,11 +476,12 @@ async function runJob(job: JobRecord): Promise<void> {
       connectionId: connection.id,
       workspace: job.workspace,
       model: resolvedAgent.model,
-      stepId: typeof job.metadata?.stepId === 'string' ? job.metadata.stepId : undefined,
+      stepId: jobStepId,
     })
   }
 
   const isApprovalJob = Boolean(job.applyTarget && job.approvalArtifact)
+  const isChatFeedback = Boolean(job.metadata?.isChatFeedback)
   if (!result.ok && isApprovalJob) removeScratchWorkspace(job.workspace)
 
   // Fold the agent's proposed content (stdout) into the scratch artifact so the
@@ -472,6 +504,30 @@ async function runJob(job: JobRecord): Promise<void> {
     }
   }
 
+  // Advance current_phase (and optionally chain the next step) while this job
+  // is still `running`, then mark succeeded — so the UI cannot submit another
+  // run-step against a stale phase between "job done" and "phase advanced".
+  // Chat-feedback jobs skip advance (they must not move the pipeline cursor).
+  if (result.ok && !isApprovalJob && !isChatFeedback) {
+    try {
+      await advancePipelineStepChain(job)
+    } finally {
+      saveJob({
+        ...(loadJob(job.id) as JobRecord),
+        status: 'succeeded',
+        finishedAt: new Date().toISOString(),
+        exitCode: result.exitCode,
+        error: result.error,
+        logPath: result.logPath,
+        artifactsFound: result.artifactsFound,
+        pid: null,
+        ...(job.metadata?.isNlChat ? { stdout: (result.stdout ?? '').slice(0, NL_CHAT_STDOUT_LIMIT) } : {}),
+        ...(capturedSessionId ? { sessionId: capturedSessionId } : {}),
+      })
+    }
+    return
+  }
+
   saveJob({
     ...(loadJob(job.id) as JobRecord),
     status: result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed',
@@ -481,12 +537,11 @@ async function runJob(job: JobRecord): Promise<void> {
     logPath: result.logPath,
     artifactsFound: result.artifactsFound,
     pid: null,
+    // NL chat reads the agent's reply from here: the log file also contains the
+    // payload/prompt framing, which must never be shown as the chat answer.
+    ...(job.metadata?.isNlChat ? { stdout: (result.stdout ?? '').slice(0, NL_CHAT_STDOUT_LIMIT) } : {}),
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
   })
-
-  if (result.ok && !isApprovalJob) {
-    await advancePipelineStepChain(job)
-  }
 }
 
 /**
@@ -527,13 +582,21 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
     return // no request.md — leave the chain to stop rather than run with an empty prompt
   }
 
+  // Drop `isChatFeedback` before spreading `job.metadata` into the next step's
+  // job — it marks only the job it was set on (a chat-resume round), and would
+  // otherwise leak forward onto every step the chain submits afterwards,
+  // wrongly suppressing advancePipelineStepChain for all of them.
+  const { isChatFeedback: _isChatFeedback, ...carryMetadata } = job.metadata || {}
+
   submitJob({
     runnerId: job.runnerId === 'unknown' ? undefined : job.runnerId,
     agentRef: nextStep.agent,
     workspace,
     userPrompt,
+    // Fresh CLI session per step — do not resume the previous step's context.
+    sessionMode: 'new',
     metadata: {
-      ...job.metadata,
+      ...carryMetadata,
       pipelineStepId: nextStepId,
       chainTarget,
     },
@@ -567,6 +630,7 @@ export function submitJob(input: SubmitJobInput): JobRecord {
       ...(input.metadata || {}),
       ...(sessionMode ? { inputSessionMode: sessionMode, inputSessionId: input.sessionId } : {}),
     },
+    ...(input.parentJobId ? { parentJobId: input.parentJobId } : {}),
   }
   saveJob(job)
   queue.push(id)
@@ -705,6 +769,67 @@ export function sendJobFeedback(id: string, feedback: string): MutationResult<{ 
   queue.push(id2)
   processQueue().catch((err) => {
     console.error('[jobQueue]', err)
+  })
+  return { ok: true, job }
+}
+
+/**
+ * Continue the conversation with the agent on a task's most recent finished
+ * (non-approval) job, resuming the CLI session recorded in the task's session
+ * ledger (`sessionLedger.ts`) — the task-scoped counterpart to
+ * `sendJobFeedback` (approval flow, keyed by `jobId`). Runs against the real
+ * (non-scratch) workspace, and does not itself advance `current_phase`; the
+ * job it submits is tagged `metadata.isChatFeedback` so `runJob()` skips
+ * `advancePipelineStepChain` for it (see edge cases in design.md §4.4).
+ */
+export function sendTaskFeedback(
+  taskId: string,
+  projectId: string,
+  feedback: string,
+  opts: { stepId?: string } = {},
+): MutationResult<{ job: JobRecord }> {
+  const active = listJobs(50).find(
+    (j) => j.metadata?.taskId === taskId && (j.status === 'queued' || j.status === 'running'),
+  )
+  if (active) return { ok: false, status: 409, error: 'step already running' }
+
+  const finished = listJobs(200)
+    .filter(
+      (j) =>
+        j.metadata?.taskId === taskId &&
+        !j.applyTarget &&
+        (j.status === 'succeeded' || j.status === 'failed'),
+    )
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+  // Chatting from a step's popover must land in THAT step's session, not
+  // whatever ran last — prefer the newest finished job of the requested step
+  // (its metadata carries the session/workspace the resume plan reuses).
+  const parent = (opts.stepId ? finished.find((j) => stepIdOf(j) === opts.stepId) : undefined) ?? finished[0]
+  if (!parent) return { ok: false, status: 400, error: 'no completed job to give feedback on' }
+
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  if (!ledger.sessions.some((s) => s.status === 'open')) {
+    return { ok: false, status: 400, error: 'no resumable session for this task' }
+  }
+
+  const { isChatFeedback: _isChatFeedback, ...parentMetadata } = parent.metadata || {}
+  const job = submitJob({
+    runnerId: parent.runnerId === 'unknown' ? undefined : parent.runnerId,
+    agentRef: parent.agentRef,
+    workspace: parent.workspace,
+    userPrompt: feedback,
+    produces: parent.produces,
+    sessionMode: 'resume',
+    // Resume the exact CLI session this step ran under when we know it —
+    // `resolveSessionPlan` still validates it and falls back to a fresh
+    // session if the entry no longer applies.
+    sessionId: parent.sessionId,
+    metadata: {
+      ...parentMetadata,
+      parentJobId: parent.id,
+      isChatFeedback: true,
+    },
+    parentJobId: parent.id,
   })
   return { ok: true, job }
 }

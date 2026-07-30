@@ -5,14 +5,23 @@ import type { HonoEnv } from '../types.js'
 import { j, parseBody, unknownProject } from '../respond.js'
 import { resolveArtifact } from '../../../shared/sanitize.js'
 import { collectTasks, flowProfilePath, createTask, readState } from '../../tasks/index.js'
-import { applyArchiveAction, applyHitlAction } from '../../tasks/state.js'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction } from '../../tasks/state.js'
 import { loadPipelineConfig } from '../../pipeline/index.js'
 import { emitAudit } from '../../logging/store.js'
 import { TaskArchivePatch, TaskStatePatch } from '../../../shared/schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from '../../../shared/schemas/taskCreate.js'
 import { RunStepRequest } from '../../../shared/schemas/runStep.js'
+import { TaskFeedbackRequest } from '../../../shared/schemas/taskFeedback.js'
 import { fetchGithubIssue } from '../../github/index.js'
-import { submitJob, submitApprovalJob, findSelectionRange, extractLines, listJobs } from '../../runners/index.js'
+import { getTaskChatState } from '../../chat/taskChat.js'
+import {
+  submitJob,
+  submitApprovalJob,
+  sendTaskFeedback,
+  findSelectionRange,
+  extractLines,
+  listJobs,
+} from '../../runners/index.js'
 import {
   loadArtifactActions,
   loadArtifactActionsFile,
@@ -507,18 +516,11 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     }
 
     const stateFile = path.join(root, '.dev-state', `${id}.json`)
-    const read = await readState(stateFile)
+    let read = await readState(stateFile)
     if (!read.ok) return j(c, 404, { error: 'task not found', taskId: id })
-    const state = read.state as Record<string, unknown>
+    let state = read.state as Record<string, unknown>
     if (state.hitl_pending) {
       return j(c, 400, { error: 'task is waiting for HITL approval', taskId: id })
-    }
-
-    const stepId = String(state.current_phase ?? '')
-    const pipeline = await loadPipelineConfig(root, id)
-    const step = (pipeline.steps || []).find((s: any) => s.id === stepId)
-    if (!step?.agent) {
-      return j(c, 400, { error: 'no runnable current step', taskId: id, stepId })
     }
 
     const existing = listJobs(50).find(
@@ -527,6 +529,34 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
         (j.status === 'queued' || j.status === 'running'),
     )
     if (existing) return j(c, 409, { error: 'step already running', taskId: id, job: existing })
+
+    // Heal a stuck cursor: job already succeeded for current_phase but
+    // advance never ran (e.g. crash between succeed and advance on older
+    // builds). Advance once, then re-read so we submit the next step.
+    let stepId = String(state.current_phase ?? '')
+    const lastSucceeded = listJobs(200).find(
+      (j) =>
+        j.metadata?.taskId === id &&
+        j.status === 'succeeded' &&
+        !j.applyTarget &&
+        j.metadata?.pipelineStepId === stepId,
+    )
+    if (lastSucceeded && stepId) {
+      await advanceStepOnJobSuccess(root, id, stepId)
+      read = await readState(stateFile)
+      if (!read.ok) return j(c, 404, { error: 'task not found', taskId: id })
+      state = read.state as Record<string, unknown>
+      if (state.hitl_pending) {
+        return j(c, 400, { error: 'task is waiting for HITL approval', taskId: id })
+      }
+      stepId = String(state.current_phase ?? '')
+    }
+
+    const pipeline = await loadPipelineConfig(root, id)
+    const step = (pipeline.steps || []).find((s: any) => s.id === stepId)
+    if (!step?.agent) {
+      return j(c, 400, { error: 'no runnable current step', taskId: id, stepId })
+    }
 
     const requestFile = path.join(root, 'tasks', id, 'request.md')
     let userPrompt: string
@@ -542,6 +572,9 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       agentRef: step.agent,
       workspace: path.join(root, 'tasks', id),
       userPrompt,
+      // Fresh CLI session per pipeline step — avoids accumulating prior-step context.
+      // Chat follow-up keeps resume via sendTaskFeedback (F0011), not run-step.
+      sessionMode: 'new',
       metadata: {
         projectRoot: path.dirname(root),
         devTeamRoot: root,
@@ -561,6 +594,65 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
     })
 
     return j(c, 201, { job })
+  })
+
+  // Task-scoped chat resume: continue the CLI session of the task's most
+  // recent finished (non-approval) job with follow-up feedback. Separate from
+  // POST /api/jobs/:id/feedback (approval flow, keyed by jobId) — this route
+  // is keyed by taskId since the UI operates on the task, not a specific job
+  // id. See server/runners/jobQueue.ts (sendTaskFeedback) and design F0011.
+  app.post('/api/tasks/:id/feedback', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const id = c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return j(c, 400, { error: 'invalid task id' })
+
+    const b = await parseBody(c)
+    if (!b.ok) return j(c, 400, { error: 'invalid JSON body' })
+    const parsed = TaskFeedbackRequest.safeParse(b.value)
+    if (!parsed.success) {
+      return j(c, 400, { error: 'invalid request', details: parsed.error.flatten() })
+    }
+
+    const stateFile = path.join(root, '.dev-state', `${id}.json`)
+    const read = await readState(stateFile)
+    if (!read.ok) return j(c, 404, { error: 'task not found', taskId: id })
+
+    const projectId = c.get('projectId') || ''
+    const result = sendTaskFeedback(id, projectId, parsed.data.feedback, {
+      stepId: parsed.data.stepId ?? undefined,
+    })
+    if ('error' in result) return j(c, result.status || 400, { error: result.error, taskId: id })
+
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: c.get('projectId'),
+      detail: { action: 'feedback', jobId: result.job.id, stepId: parsed.data.stepId ?? undefined },
+    })
+
+    return j(c, 201, { job: result.job })
+  })
+
+  // Conversation history of the CLI session a step ran under, read from the
+  // runner's own transcript — also the live view of a step still running (the
+  // CLI appends to the transcript as it works). `from` is a turn cursor: pass
+  // back the previous response's `total` to fetch only what is new.
+  app.get('/api/tasks/:id/chat', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const id = c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return j(c, 400, { error: 'invalid task id' })
+
+    const stepId = c.req.query('stepId') || undefined
+    const rawFrom = Number(c.req.query('from'))
+    const state = getTaskChatState(c.get('projectId') || '', id, {
+      stepId,
+      fromIndex: Number.isFinite(rawFrom) && rawFrom > 0 ? rawFrom : 0,
+      includeToolActivity: c.req.query('tools') !== '0',
+    })
+    return j(c, 200, state)
   })
 
   app.post('/api/github/issue', async (c) => {

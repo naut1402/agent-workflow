@@ -8,4 +8,4 @@ export { scanCustomAgents, listCustomAgentMeta, readCustomAgent } from './store.
 export { fetchUrlSafe } from './fetch.js'
 export type { FetchUrlSafeOptions } from './fetch.js'
 export { generateDraftFromNl } from './generate.js'
-export { ensureDefaultTemplate } from './templates.js'
+export { ensureDefaultTemplate, ensureNlChatBuilderAgent } from './templates.js'

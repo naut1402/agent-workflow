@@ -185,6 +185,48 @@ export async function runPipelineStep(
   return data
 }
 
+// Runner chat for a task/step: conversation history read from the CLI session
+// transcript (also the live view while the step runs). `from` is a turn cursor
+// — pass the previous response's `total` to fetch only new turns.
+export async function fetchTaskChat(
+  id: string,
+  opts: { stepId?: string; from?: number } = {},
+  projectId?: string,
+) {
+  const r = await fetch(
+    `/api/tasks/${encodeURIComponent(id)}/chat${qs({
+      project: projectId,
+      stepId: opts.stepId,
+      from: opts.from ? String(opts.from) : undefined,
+    })}`,
+  )
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/tasks/${id}/chat → ${r.status}`)
+  return data
+}
+
+// Send a message straight into the step's CLI session (resumes it). 409 while a
+// job for the task is still running, 400 when there is no resumable session.
+export async function sendTaskFeedback(
+  id: string,
+  feedback: string,
+  opts: { stepId?: string } = {},
+  projectId?: string,
+) {
+  const r = await apiFetch(`/api/tasks/${encodeURIComponent(id)}/feedback${qs({ project: projectId })}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feedback, stepId: opts.stepId }),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) {
+    const err = new Error(data.error || `/api/tasks/${id}/feedback → ${r.status}`)
+    ;(err as any).status = r.status
+    throw err
+  }
+  return data
+}
+
 export async function fetchArtifact(id: string, name: string, projectId?: string) {
   const r = await fetch(`/api/artifact${qs({ id, name, project: projectId })}`)
   if (!r.ok) throw new Error(`/api/artifact ${name} → ${r.status}`)
@@ -735,6 +777,57 @@ export async function createTask(payload: unknown, projectId?: string) {
   })
   const data = await r.json().catch(() => ({}))
   if (!r.ok) throw new Error(data.error || `/api/tasks POST → ${r.status}`)
+  return data
+}
+
+// ── NL chat surface (F0012) ──────────────────────────────────────────────────
+// Draft generation goes through the real agent runner CLI (submitJob/
+// sendTaskFeedback), not a direct LLM API call — see design.md F0012 §2.
+
+export async function startNlChat(
+  input: { entityType?: 'task' | 'pipeline' | 'agent'; message: string; runnerId?: string },
+  projectId?: string,
+) {
+  const r = await apiFetch(`/api/nl-chat/sessions${qs({ project: projectId })}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/nl-chat/sessions POST → ${r.status}`)
+  return data
+}
+
+export async function sendNlChatMessage(chatSessionId: string, message: string, projectId?: string) {
+  const r = await apiFetch(
+    `/api/nl-chat/sessions/${encodeURIComponent(chatSessionId)}/messages${qs({ project: projectId })}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    },
+  )
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) {
+    throw new Error(data.error || `/api/nl-chat/sessions/${chatSessionId}/messages POST → ${r.status}`)
+  }
+  return data
+}
+
+export async function fetchNlChatTurn(chatSessionId: string, projectId?: string) {
+  const r = await fetch(`/api/nl-chat/sessions/${encodeURIComponent(chatSessionId)}${qs({ project: projectId })}`)
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/nl-chat/sessions/${chatSessionId} → ${r.status}`)
+  return data
+}
+
+export async function cancelNlChat(chatSessionId: string, projectId?: string) {
+  const r = await apiFetch(
+    `/api/nl-chat/sessions/${encodeURIComponent(chatSessionId)}/cancel${qs({ project: projectId })}`,
+    { method: 'POST' },
+  )
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error || `/api/nl-chat/sessions/${chatSessionId}/cancel POST → ${r.status}`)
   return data
 }
 

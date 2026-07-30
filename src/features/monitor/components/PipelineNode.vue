@@ -1,12 +1,41 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import { useI18n } from 'vue-i18n'
+import { useChatSurface } from '../../nl-chat/composables/useChatSurface'
 
-defineProps({
+const props = defineProps({
   data: { type: Object, required: true },
 })
 
 const { t } = useI18n()
+const { openTaskChat } = useChatSurface()
+
+// Actions sit ON the node's top border (the border runs through their middle)
+// and are always visible — a hover-only popover outside the node lost hover the
+// moment the cursor travelled to it, so the button vanished before it could be
+// clicked. Run is centred on the node, chat sits at the top-right corner.
+//
+// Run mirrors what clicking the node does, and shows under exactly the same
+// condition (`data.runnable`).
+//
+// Chat only appears for a step that has actually run (`data.executed`, computed
+// in PipelineView) — a step that never ran has no CLI session, so there is no
+// history to replay.
+const hasRunHistory = computed(() => Boolean(props.data.taskId) && Boolean(props.data.executed))
+
+function onRun(): void {
+  props.data.onRun?.()
+}
+
+function onChat(): void {
+  if (!props.data.taskId) return
+  openTaskChat({
+    taskId: props.data.taskId,
+    stepId: props.data.stepId,
+    stepLabel: props.data.label,
+  })
+}
 const STATUS_ICON = { done: '✓', active: '▶', waiting: '⏸', pending: '○' }
 
 function bubbleTitle(data: Record<string, any>): string | undefined {
@@ -29,6 +58,42 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
       },
     ]"
   >
+    <div class="pnode-actions">
+      <button
+        v-if="data.runnable"
+        type="button"
+        class="pnode-action pnode-action-center pnode-run-btn"
+        :title="t('monitor.pipelineNode.clickToRun')"
+        :aria-label="t('monitor.pipelineNode.run')"
+        @click.stop="onRun"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5.5v13l11-6.5z" />
+        </svg>
+      </button>
+      <button
+        v-if="hasRunHistory"
+        type="button"
+        class="pnode-action pnode-action-right pnode-chat-btn"
+        :title="t('monitor.pipelineNode.chatWithRunner')"
+        :aria-label="t('monitor.pipelineNode.chat')"
+        @click.stop="onChat"
+      >
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M20.5 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 20.5 12z" />
+        </svg>
+      </button>
+    </div>
     <Handle type="target" :position="Position.Left" />
     <div class="pnode-bubble" :title="bubbleTitle(data)">
       {{ data.running ? '⏳' : (STATUS_ICON[data.status] || '○') }}
@@ -47,6 +112,55 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
 </template>
 
 <style scoped lang="scss">
+.pnode {
+  position: relative;
+}
+/* Always reachable (no hover race): the buttons straddle the node's top border,
+   which passes through their vertical middle. */
+.pnode-actions {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.pnode-action {
+  position: absolute;
+  /* The containing block is the padding box, so -1px lifts the button by half
+     the node's 2px border — its middle then lands on the border line. */
+  top: -1px;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  /* Borderless + hover scale, per docs/ui-buttons.md (.icon-btn). */
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+.pnode-action:hover {
+  color: var(--text);
+}
+/* The positioning transform is repeated in each hover rule so the scale
+   composes with it instead of replacing it. */
+.pnode-action-center {
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.pnode-action-center:hover {
+  transform: translate(-50%, -50%) scale(1.15);
+}
+.pnode-action-right {
+  right: 4px;
+  transform: translateY(-50%);
+}
+.pnode-action-right:hover {
+  transform: translateY(-50%) scale(1.15);
+}
 .pnode-waiting .pnode-bubble,
 .pnode-runnable .pnode-bubble {
   cursor: pointer;

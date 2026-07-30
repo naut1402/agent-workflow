@@ -76,6 +76,9 @@ export const monitor = {
     clickToRun: 'Click to run this step',
     running: 'Running…',
     qaCount: '{count} blocking questions',
+    run: 'Run step',
+    chat: 'Chat',
+    chatWithRunner: "Chat with this step's runner",
   },
   qa: {
     head: '⚠ Pipeline is waiting for answers to blocking questions',
@@ -85,6 +88,12 @@ export const monitor = {
     editTitle: 'Double-click to edit',
     noTask: 'Could not determine task; cannot save.',
     reloaded: 'File changed on disk — content was reloaded.',
+    other: 'Other',
+    otherPlaceholder: 'Type your answer…',
+    submit: 'Submit',
+    submitting: 'Submitting…',
+    submitError409: 'Step is running — please retry Submit shortly.',
+    submitError400: 'No session left to resume — this step needs to run again.',
   },
   saveIndicator: {
     saving: 'Saving',

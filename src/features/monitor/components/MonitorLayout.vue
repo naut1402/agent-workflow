@@ -175,6 +175,7 @@ async function toggleArchiveSelected() {
           :qa="selected.qa"
           :task-id="selected.task_id"
           :project-id="selectedProjectId"
+          :step-id="selected.current_phase"
           @saved="emit('qa-saved')"
         />
 

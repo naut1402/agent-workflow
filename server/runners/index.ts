@@ -40,11 +40,13 @@ export {
   cancelJob,
   submitApprovalJob,
   sendJobFeedback,
+  sendTaskFeedback,
   getApprovalDiff,
   approveJob,
   discardJob,
   findSelectionRange,
   extractLines,
+  stepIdOf,
 } from './jobQueue.js'
 export { reapOrphanedRunningJobs, isPidAlive } from './pidReaper.js'
 export {
@@ -52,7 +54,9 @@ export {
   resolveSessionPlan,
   recordSessionUsage,
   isSessionEntryValid,
+  closeTaskSession,
 } from './sessionLedger.js'
+export type { SessionEntry, TaskSessionLedger, SessionEntryStatus } from './sessionLedger.js'
 export {
   parseCursorJsonOutput,
   buildCursorJsonArgs,

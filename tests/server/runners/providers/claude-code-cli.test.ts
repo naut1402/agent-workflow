@@ -316,3 +316,66 @@ describe('createLocalConsoleProvider — job log structure', () => {
     }
   })
 })
+
+// Chat rounds resume the same agent's session, so the agent instructions are
+// already in the conversation — re-sending them every message is noise.
+describe('createLocalConsoleProvider — agent instructions on resume', () => {
+  const agentWithPrompt: ResolvedAgent = { ...resolvedAgent, systemPrompt: 'BẠN LÀ AGENT DESIGNER' }
+
+  async function runOnce(metadata: Record<string, unknown>, resumeSessionId?: string): Promise<string> {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-preamble-'))
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-preamble-'))
+    try {
+      const { cliPath, flags } = nodeCli('ok')
+      const logPath = makeLogPath(home)
+      const provider = createLocalConsoleProvider({
+        providerId: 'claude-code-cli',
+        defaultCliPath: cliPath,
+        claudeStyleArgs: false,
+      })
+      await provider.execute(
+        {
+          jobId: 'job-preamble',
+          resolvedAgent: agentWithPrompt,
+          userPrompt: 'sửa lại phần A',
+          workspace,
+          produces: [],
+          timeoutMs: 5000,
+          metadata: { logPath, ...metadata },
+          ...(resumeSessionId ? { resumeSessionId } : {}),
+        },
+        { cliPath, flags },
+        credential,
+      )
+      return fs.readFileSync(logPath, 'utf8')
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(workspace, { recursive: true, force: true })
+    }
+  }
+
+  test('a chat-feedback round on a resumed session sends only the message', async () => {
+    const log = await runOnce({ isChatFeedback: true }, 'sess-1')
+    expect(log).not.toContain('## Agent instructions')
+    expect(log).not.toContain('BẠN LÀ AGENT DESIGNER')
+    expect(log).toContain('sửa lại phần A')
+  })
+
+  test('a fresh run still sends the instructions', async () => {
+    const log = await runOnce({})
+    expect(log).toContain('## Agent instructions')
+    expect(log).toContain('BẠN LÀ AGENT DESIGNER')
+  })
+
+  test("a pipeline step resuming another step's session still sends them (different agent)", async () => {
+    // No isChatFeedback: this is a run-step job, whose agent differs from the
+    // agent that opened the session.
+    const log = await runOnce({ pipelineStepId: 'implement' }, 'sess-1')
+    expect(log).toContain('## Agent instructions')
+  })
+
+  test('isChatFeedback without a resumed session still sends them (nothing to inherit)', async () => {
+    const log = await runOnce({ isChatFeedback: true })
+    expect(log).toContain('## Agent instructions')
+  })
+})

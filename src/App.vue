@@ -24,6 +24,7 @@ import LogsPanel from './features/logs/components/LogsPanel.vue'
 import QuickActionPanel from './features/quick-action/components/QuickActionPanel.vue'
 import SettingsDialog from './features/settings/components/SettingsDialog.vue'
 import CreateTaskDialog from './features/monitor/components/CreateTaskDialog.vue'
+import FloatingChatButton from './features/nl-chat/components/FloatingChatButton.vue'
 import RailIcon from './shared/ui/RailIcon.vue'
 import { APP_VERSION } from './shared/lib/appVersion'
 
@@ -422,6 +423,8 @@ onUnmounted(() => {
       @mark-all-read="markAllRead"
       @select="onNotificationSelect"
     />
+
+    <FloatingChatButton :project-id="selectedProjectId" />
 
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
     <CreateTaskDialog

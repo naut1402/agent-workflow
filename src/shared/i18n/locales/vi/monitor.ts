@@ -77,6 +77,9 @@ export const monitor = {
     clickToRun: 'Nhấn để chạy step này',
     running: 'Đang chạy…',
     qaCount: '{count} câu hỏi blocking',
+    run: 'Chạy step',
+    chat: 'Chat',
+    chatWithRunner: 'Chat với runner của step này',
   },
   qa: {
     head: '⚠ Pipeline đang chờ trả lời câu hỏi blocking',
@@ -86,6 +89,12 @@ export const monitor = {
     editTitle: 'Double-click để sửa',
     noTask: 'Không xác định được task, không thể lưu.',
     reloaded: 'File đã thay đổi trên disk — nội dung đã được tải lại.',
+    other: 'Khác',
+    otherPlaceholder: 'Nhập câu trả lời của bạn…',
+    submit: 'Submit',
+    submitting: 'Đang gửi…',
+    submitError409: 'Step đang chạy — vui lòng thử Submit lại sau.',
+    submitError400: 'Không còn phiên nào để tiếp tục — cần chạy lại step này.',
   },
   saveIndicator: {
     saving: 'Đang lưu',
