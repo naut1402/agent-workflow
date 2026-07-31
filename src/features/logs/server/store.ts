@@ -1,14 +1,14 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { registryHome } from '../registry.js'
-import { statSafe } from '../../core/contracts/fs.js'
+import { registryHome } from '../../../server/registry.js'
+import { statSafe } from '../../../core/contracts/fs.js'
 import {
   type LogEntry,
   type LogType,
   type AuditOp,
   type AuditEntity,
   parseLogLine,
-} from '../../core/contracts/schemas/log.js'
+} from '../../../core/contracts/schemas/log.js'
 
 // Append-only JSONL log store, global under `~/.dev-team-dashboard/logs/`.
 // Depends only on shared/ + the registry home resolver — knows nothing of HTTP.

@@ -7,7 +7,7 @@ import { j, parseBody, unknownProject } from '../respond.js'
 import { parseAgentMarkdown, compileAgentMarkdown } from '../../../core/contracts/agentMarkdown.js'
 import { safeReadDir } from '../../../core/contracts/fs.js'
 import { sanitiseProfileName, sanitiseAgentName } from '../../../core/contracts/sanitize.js'
-import { emitAudit } from '../../logging/store.js'
+import { emitAudit } from '../../../features/logs/server/store.js'
 import {
   customAgentsDir,
   agentTemplatesDir,

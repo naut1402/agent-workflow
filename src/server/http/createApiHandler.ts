@@ -2,8 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Buffer } from 'node:buffer'
 import type { RegistryContext } from '../registry.js'
 import { json } from '../../core/contracts/http.js'
-import { handleKnowledgeApi } from '../knowledge/knowledgeApi.js'
-import { appendRequestLog } from '../logging/store.js'
+import { handleKnowledgeApi } from '../../features/knowledge/server/knowledgeApi.js'
+import { appendRequestLog } from '../../features/logs/server/store.js'
 import { createApp } from './app.js'
 
 // ── Node ⇆ Hono bridge ─────────────────────────────────────────────────────

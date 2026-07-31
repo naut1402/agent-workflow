@@ -1,7 +1,7 @@
 import type { Hono } from 'hono'
 import type { HonoEnv } from '../types.js'
 import { j } from '../respond.js'
-import { emitAudit } from '../../logging/store.js'
+import { emitAudit } from '../../../features/logs/server/store.js'
 
 // Project registry CRUD — no per-project root needed.
 export function registerRegistryRoutes(app: Hono<HonoEnv>): void {

@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createApp } from '../../../../src/server/http/app.js'
-import { readLogs } from '../../../../src/server/logging/store.js'
+import { readLogs } from '../../../../src/features/logs/server/store.js'
 import type { RegistryContext } from '../../../../src/server/registry.js'
 
 // Integration tests via Hono's app.request — no server boot, no node req/res

@@ -1,8 +1,8 @@
 import type { Hono } from 'hono'
-import type { HonoEnv } from '../types.js'
-import { j } from '../respond.js'
-import { readLogs } from '../../logging/store.js'
-import { readJobLog, readJobLogDelta, readTaskJobLogDelta } from '../../logging/jobLog.js'
+import type { HonoEnv } from '../../../server/http/types.js'
+import { j } from '../../../server/http/respond.js'
+import { readLogs } from './store.js'
+import { readJobLog, readJobLogDelta, readTaskJobLogDelta } from './jobLog.js'
 import type { LogType } from '../../../core/contracts/schemas/log.js'
 
 // Read surface for the logging feature — global (not per-project).

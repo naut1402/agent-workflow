@@ -2,7 +2,7 @@ import path from 'node:path'
 import type { Hono } from 'hono'
 import type { HonoEnv } from '../types.js'
 import { j, parseBody, unknownProject } from '../respond.js'
-import { emitAudit } from '../../logging/store.js'
+import { emitAudit } from '../../../features/logs/server/store.js'
 import {
   listRunners,
   upsertRunner,

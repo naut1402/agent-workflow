@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createApiHandler } from '../../../../src/server/http/createApiHandler.js'
-import { readLogs } from '../../../../src/server/logging/store.js'
+import { readLogs } from '../../../../src/features/logs/server/store.js'
 import type { RegistryContext } from '../../../../src/server/registry.js'
 
 // Drives the node⇆Hono bridge directly to assert the request-logging hook

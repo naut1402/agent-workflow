@@ -1,7 +1,7 @@
 import type { Hono } from 'hono'
 import type { HonoEnv } from '../types.js'
 import { j, parseBody, unknownProject } from '../respond.js'
-import { emitAudit } from '../../logging/store.js'
+import { emitAudit } from '../../../features/logs/server/store.js'
 import { StartNlChatRequest, NlChatMessageRequest } from '../../../core/contracts/schemas/nlChat.js'
 import { ensureNlChatBuilderAgent, scanCustomAgents } from '../../agents/index.js'
 import { buildCatalog } from '../../catalog/index.js'

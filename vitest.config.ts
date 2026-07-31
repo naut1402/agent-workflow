@@ -35,7 +35,7 @@ export default defineConfig({
     // Unit tests live under tests/ mirroring the source tree. Vitest owns FE +
     // contracts; bun test owns tests/src/server + tests/mcp.
     include: ['tests/src/**/*.{test,spec}.ts'],
-    exclude: ['node_modules', 'dist', 'test-e2e/**', 'tests/src/server/**'],
+    exclude: ['node_modules', 'dist', 'test-e2e/**', 'tests/src/server/**', 'tests/src/features/**/server/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],

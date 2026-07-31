@@ -7,7 +7,7 @@ import { j, parseBody, unknownProject } from '../respond.js'
 import { statSafe } from '../../../core/contracts/fs.js'
 import { sanitiseProfileName } from '../../../core/contracts/sanitize.js'
 import { profilesDir } from '../../agents/index.js'
-import { emitAudit } from '../../logging/store.js'
+import { emitAudit } from '../../../features/logs/server/store.js'
 
 // Pipeline profiles (named reusable configs) + pipeline.yaml write.
 export function registerConfigRoutes(app: Hono<HonoEnv>): void {

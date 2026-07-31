@@ -64,9 +64,9 @@ Domain module nhận `ctx`/`root`, trả data thuần; tầng HTTP mới biết 
 | Agents | `src/server/agents/*` | CRUD custom-agent, template, generate (NL→draft khi có `ANTHROPIC_API_KEY`, không thì heuristic). |
 | Tasks | `src/server/tasks/index.ts` | Liệt kê task, đọc state + artifact. |
 | Rules | `src/server/rules/index.ts` | Đọc rule project (`.claude/rules/*`). |
-| Knowledge | `src/server/knowledge/{knowledgeApi,driverRegistry,fileDriver}.ts` | Driver pluggable sau `getKnowledgeDriver(root)`; hiện chỉ có driver `file`. |
+| Knowledge | `src/features/knowledge/server/` | Driver pluggable sau `getKnowledgeDriver(root)`; hiện chỉ có driver `file`. |
+| Logging | `src/features/logs/server/` (+ `routes.ts`) | Nhật ký job + request log; route Hono đăng ký từ feature. |
 | Runners | `src/server/runners/{agentResolver,connections,credentials,index,jobQueue,providerRegistry,registry,types}.ts` + `providers/{claude-code-cli,cursor-cli,codex-cli,console-command}.ts` | Điều phối job runner. Runner chọn **connection** (local-console hoặc ai-provider); provider CLI: `claude-code-cli`, `cursor-cli`, `codex-cli`, `console-command` (argv thuần, không agent/`allowedTools`). |
-| Logging | `src/server/logging/{jobLog,store}.ts` | Nhật ký job + request log. |
 | CLI | `src/server/runner-cli.mjs` (còn `.mjs`) | Runner CLI. |
 
 ### 2.5 Type dùng chung `src/core/contracts/` (alias `@shared`)

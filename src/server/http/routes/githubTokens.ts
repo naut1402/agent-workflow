@@ -3,7 +3,7 @@ import type { HonoEnv } from '../types.js'
 import { j, parseBody } from '../respond.js'
 import { loadGithubTokensConfig, saveGithubTokensConfig } from '../../autoscan/config.js'
 import { parseGithubTokensConfig } from '../../../core/contracts/schemas/githubTokens.js'
-import { emitAudit } from '../../logging/store.js'
+import { emitAudit } from '../../../features/logs/server/store.js'
 
 /** CRUD for per-repo GitHub PATs used when fetching private issues. */
 export function registerGithubTokensRoutes(app: Hono<HonoEnv>): void {

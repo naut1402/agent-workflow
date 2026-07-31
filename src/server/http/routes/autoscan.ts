@@ -3,7 +3,7 @@ import type { HonoEnv } from '../types.js'
 import { j, parseBody } from '../respond.js'
 import { loadAutoscanConfig, saveAutoscanConfig, runAutoscan } from '../../autoscan/index.js'
 import { parseAutoscanConfig } from '../../../core/contracts/schemas/autoscan.js'
-import { emitAudit } from '../../logging/store.js'
+import { emitAudit } from '../../../features/logs/server/store.js'
 
 /** Autoscan config + on-demand scan against the project registry. */
 export function registerAutoscanRoutes(app: Hono<HonoEnv>): void {
