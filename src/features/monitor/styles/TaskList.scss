@@ -65,7 +65,28 @@
 .tasklist .id.id-active { color: var(--active); }
 .tasklist .id.id-done { color: var(--done); }
 .tasklist .id.id-pending { color: var(--muted); }
-.tasklist .flag { font-size: 11px; font-weight: 700; }
+.tasklist .flag {
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  border-radius: 0;
+}
+.tasklist .flag .flag-chat {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
 .tasklist .flag.error { color: var(--danger); }
 .tasklist .flag.qa,
 .tasklist .flag.hitl,
