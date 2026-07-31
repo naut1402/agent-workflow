@@ -386,14 +386,6 @@ async function submitHitl(action: 'approve' | 'reject') {
       <span v-if="hitlToast" class="chip chip-ok">{{ hitlToast }}</span>
       <span v-if="runToast" class="chip chip-ok">{{ runToast }}</span>
       <span v-if="runError" class="chip chip-err">{{ runError }}</span>
-      <button
-        v-if="waitingPhase"
-        type="button"
-        class="btn-hitl"
-        @click="openHitlModal(waitingPhase)"
-      >
-        {{ t('monitor.pipeline.hitlTitle') }}
-      </button>
     </div>
 
     <div class="vflow-container">

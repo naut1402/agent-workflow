@@ -3,7 +3,7 @@ import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { TaskArchivePatch, TaskStatePatch } from '../../shared/schemas/task.js'
 import { loadPipelineConfig } from '../pipeline/index.js'
-import { readState } from './index.js'
+import { readState, flowProfilePath } from './index.js'
 
 export type HitlApplyResult =
   | { ok: true; state: Record<string, unknown>; mtime: number }
@@ -233,5 +233,24 @@ export async function applyArchiveAction(
 
     const mtime = await writeStateAtomic(stateFile, state)
     return { ok: true, state, mtime }
+  })
+}
+
+/**
+ * Permanently delete a task's files. Unlike applyArchiveAction, this does NOT
+ * require readState() to succeed first — it exists specifically to remove
+ * tasks whose state file is missing/corrupt and therefore have no other
+ * available action (see B0009 §5).
+ */
+export async function deleteTask(
+  root: string,
+  taskId: string,
+): Promise<{ ok: true }> {
+  const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
+  return withStateFileLock(stateFile, async () => {
+    await fs.rm(path.join(root, 'tasks', taskId), { recursive: true, force: true })
+    await fs.rm(stateFile, { force: true })
+    await fs.rm(flowProfilePath(root, taskId), { force: true })
+    return { ok: true }
   })
 }

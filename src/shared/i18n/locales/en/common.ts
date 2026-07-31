@@ -38,6 +38,7 @@ export const common = {
   errors: {
     updateTaskStatus: 'Could not update task status (error {status})',
     archiveTask: 'Could not archive task (error {status})',
+    deleteTask: 'Could not delete task (error {status})',
     saveCustomAgent: 'Could not save custom agent (server returned no name).',
   },
   folderPicker: {

@@ -32,14 +32,15 @@ afterEach(() => {
 })
 
 describe('TaskList', () => {
-  it('renders one row per task with id + phase label', () => {
+  it('renders one row per task with id + status icon (mục 4)', () => {
     const w = mount(TaskList, { props: { tasks } })
     expect(w.find('.tasklist-head').exists()).toBe(true)
     const ids = w.findAll('.task-entry .id').map((n) => n.text())
     expect(ids).toEqual(['B4488', 'F003'])
-    // phaseLabel: current_phase when present, else hitl_pending
-    const phases = w.findAll('.task-entry .phase').map((n) => n.text())
-    expect(phases).toEqual(['designer', 'hitl-2'])
+    // taskStatusKey: has current_phase (not completed) → active; hitl_pending → waiting
+    const flags = w.findAll('.task-entry .flag').map((n) => n.text())
+    expect(flags).toEqual(['▶', '⏸'])
+    expect(w.find('.task-entry .phase').exists()).toBe(false)
   })
 
   it('emits create-task when + button is clicked', async () => {
@@ -59,11 +60,11 @@ describe('TaskList', () => {
     expect(files).toContain('design.md')
   })
 
-  it('phase is blank (not "—") when the task has no current_phase/hitl_pending/has_qa', () => {
+  it('shows the pending icon when the task has no current_phase/hitl_pending/has_qa', () => {
     const w = mount(TaskList, {
       props: { tasks: [{ ...tasks[0], current_phase: null, hitl_pending: null, has_qa: false }] },
     })
-    expect(w.find('.task-entry .phase').text()).toBe('')
+    expect(w.find('.task-entry .flag').text()).toBe('○')
   })
 
   describe('hide missing artifacts (mục 1)', () => {
@@ -147,6 +148,21 @@ describe('TaskList', () => {
     })
     const buttons = w.findAll('.btn-archive')
     expect(buttons.length).toBe(1)
+  })
+
+  it('shows a delete button (and the error icon/color) only for a task with state_ok: false (mục 5)', () => {
+    const w = mount(TaskList, {
+      props: {
+        tasks: [
+          { ...tasks[0], state_ok: false },
+          { ...tasks[1] }, // state_ok: true, no delete button
+        ],
+      },
+    })
+    const buttons = w.findAll('.btn-delete')
+    expect(buttons.length).toBe(1)
+    expect(w.findAll('.flag.error').length).toBe(1)
+    expect(w.findAll('.id.id-error').length).toBe(1)
   })
 
   it('groups archived tasks into a collapsed <details> at the bottom, hidden from the main list', () => {

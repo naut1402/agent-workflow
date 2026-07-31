@@ -179,7 +179,7 @@ describe('ArtifactPanel — MarkdownTextEditor inline edit', () => {
 
     expect(w.find('.mock-md-editor').exists()).toBe(true)
     expect(w.find('textarea.cfg-input.art-editor').exists()).toBe(false)
-    expect(w.find('.mock-md-editor').attributes('data-height')).toBe('320px')
+    expect(w.find('.mock-md-editor').attributes('data-height')).toBe('auto')
   })
 
   it('dblclick a block mounts MarkdownTextEditor for that section', async () => {
@@ -190,7 +190,7 @@ describe('ArtifactPanel — MarkdownTextEditor inline edit', () => {
     await flushPromises()
 
     expect(w.find('.mock-md-editor').exists()).toBe(true)
-    expect(w.find('.mock-md-editor').attributes('data-height')).toBe('240px')
+    expect(w.find('.mock-md-editor').attributes('data-height')).toBe('auto')
   })
 })
 

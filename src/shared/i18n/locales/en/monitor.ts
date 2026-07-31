@@ -23,11 +23,14 @@ export const monitor = {
     showMissing: 'Show missing files ({count})',
   },
   taskItem: {
-    waitingQa: 'waiting on Q&A',
     flagQa: 'has a blocking question',
     flagHitl: 'waiting for approval',
+    stateError: 'task state is broken',
     archive: 'Archive task',
     unarchive: 'Unarchive',
+    deleteTask: 'Delete task',
+    confirmDelete: 'Permanently delete this task? This cannot be undone.',
+    deleteError: 'Failed to delete task',
   },
   projectBar: {
     addTitle: 'Add project',
@@ -45,7 +48,6 @@ export const monitor = {
       'Remove project "{name}" (currently the default) from the dashboard?\nAnother project will automatically become the default.\n(Does not delete files on disk.)',
   },
   pipeline: {
-    hitlTitle: '⏸ Review HITL',
     inherit: 'inherits: {list}',
     saving: 'Saving…',
     hitlHeading: 'HITL review — {label}',

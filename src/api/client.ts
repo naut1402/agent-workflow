@@ -162,6 +162,20 @@ export async function patchTaskArchive(id: string, body: TaskArchivePatch, proje
   return data
 }
 
+export async function deleteTask(id: string, projectId?: string) {
+  const r = await apiFetch(`/api/tasks/${encodeURIComponent(id)}${qs({ project: projectId })}`, {
+    method: 'DELETE',
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) {
+    const err = new Error(data.error || i18n.global.t('common.errors.deleteTask', { status: r.status }))
+    ;(err as any).status = r.status
+    ;(err as any).data = data
+    throw err
+  }
+  return data
+}
+
 // Trigger the task's current step to run (clicking a node on the pipeline
 // flow). `targetStepId` opts into server-side chaining across gate-less
 // steps until it reaches that step, hits a HITL gate, or a job fails.

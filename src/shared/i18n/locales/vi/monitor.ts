@@ -24,11 +24,14 @@ export const monitor = {
     showMissing: 'Hiện file thiếu ({count})',
   },
   taskItem: {
-    waitingQa: 'chờ Q&A',
     flagQa: 'có câu hỏi blocking',
     flagHitl: 'đang chờ duyệt',
+    stateError: 'task lỗi state',
     archive: 'Lưu trữ task',
     unarchive: 'Bỏ lưu trữ',
+    deleteTask: 'Xoá task',
+    confirmDelete: 'Xoá vĩnh viễn task này? Hành động không thể hoàn tác.',
+    deleteError: 'Xoá task thất bại',
   },
   projectBar: {
     addTitle: 'Thêm project',
@@ -46,7 +49,6 @@ export const monitor = {
       'Gỡ project "{name}" (đang là mặc định) khỏi dashboard?\nProject khác sẽ tự động trở thành mặc định.\n(Không xoá file trên đĩa.)',
   },
   pipeline: {
-    hitlTitle: '⏸ Duyệt HITL',
     inherit: 'kế thừa: {list}',
     saving: 'Đang lưu…',
     hitlHeading: 'Duyệt HITL — {label}',

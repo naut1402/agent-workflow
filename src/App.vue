@@ -204,6 +204,11 @@ function handleOpenArtifact({ taskId, name }) {
   openArtifact.value = { taskId, name }
 }
 
+async function onTaskDeleted(taskId: string) {
+  if (selectedId.value === taskId) selectedId.value = null
+  await poll()
+}
+
 function onCreateTaskOpen() {
   createTaskOpen.value = true
 }
@@ -380,6 +385,7 @@ onUnmounted(() => {
         @qa-saved="poll"
         @hitl-action="poll"
         @task-archived="poll"
+        @task-deleted="onTaskDeleted"
         @create-task="onCreateTaskOpen"
       />
     </main>

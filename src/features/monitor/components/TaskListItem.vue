@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { patchTaskArchive } from '../../../api'
+import { patchTaskArchive, deleteTask } from '../../../api'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -11,7 +11,9 @@ const props = defineProps({
   projectId: { type: String, default: null },
   hideMissing: { type: Boolean, default: true },
 })
-const emit = defineEmits(['select', 'toggle-expand', 'open-artifact', 'task-archived', 'toggle-hide-missing'])
+const emit = defineEmits([
+  'select', 'toggle-expand', 'open-artifact', 'task-archived', 'task-deleted', 'toggle-hide-missing',
+])
 
 const { t } = useI18n()
 const archiveError = ref('')
@@ -34,16 +36,44 @@ async function toggleArchive() {
   }
 }
 
+async function removeTask() {
+  archiveError.value = ''
+  if (!confirm(t('monitor.taskItem.confirmDelete'))) return
+  try {
+    await deleteTask(props.task.task_id, props.projectId ?? undefined)
+    emit('task-deleted', props.task.task_id)
+  } catch (e: any) {
+    archiveError.value = String(e.message || e || t('monitor.taskItem.deleteError'))
+  }
+}
+
 function selectTask() {
   emit('select', props.task.task_id)
   if (!props.isExpanded) emit('toggle-expand', props.task.task_id)
 }
 
-function phaseLabel(task: any) {
-  if (task.has_qa) return t('monitor.taskItem.waitingQa')
-  if (task.hitl_pending) return task.hitl_pending
-  if (task.current_phase) return task.current_phase
-  return ''
+function taskStatusKey(task: any): 'error' | 'waiting' | 'done' | 'active' | 'pending' {
+  if (!task.state_ok) return 'error'
+  if (task.has_qa || task.hitl_pending) return 'waiting'
+  if (task.current_phase === 'completed') return 'done'
+  if (task.current_phase) return 'active'
+  return 'pending'
+}
+
+function statusIcon(task: any): string {
+  if (!task.state_ok) return '⚠'
+  if (task.has_qa) return 'Q'
+  if (task.hitl_pending) return '⏸'
+  if (task.current_phase === 'completed') return '✓'
+  if (task.current_phase) return '▶'
+  return '○'
+}
+
+function flagClass(task: any): string {
+  if (!task.state_ok) return 'error'
+  if (task.has_qa) return 'qa'
+  if (task.hitl_pending) return 'hitl'
+  return taskStatusKey(task)
 }
 
 const ORDER = [
@@ -87,10 +117,12 @@ function hiddenCount(task: any) {
         :class="{ open: isExpanded }"
         @click.stop="emit('toggle-expand', task.task_id)"
       >›</span>
-      <span class="id">{{ task.task_id }}</span>
-      <span class="phase">{{ phaseLabel(task) }}</span>
-      <span v-if="task.has_qa" class="flag qa" :title="t('monitor.taskItem.flagQa')">Q</span>
-      <span v-else-if="task.hitl_pending" class="flag hitl" :title="t('monitor.taskItem.flagHitl')">⏸</span>
+      <span
+        class="flag"
+        :class="flagClass(task)"
+        :title="!task.state_ok ? t('monitor.taskItem.stateError') : task.has_qa ? t('monitor.taskItem.flagQa') : task.hitl_pending ? t('monitor.taskItem.flagHitl') : undefined"
+      >{{ statusIcon(task) }}</span>
+      <span class="id" :class="'id-' + taskStatusKey(task)">{{ task.task_id }}</span>
       <button
         v-if="task.state_ok"
         class="btn-archive"
@@ -108,6 +140,12 @@ function hiddenCount(task: any) {
           stroke-linejoin="round"
           aria-hidden="true"
         ><rect x="2" y="2" width="12" height="3" rx="1" /><path d="M3 5v7.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5" /><path d="M6.5 8.5h3" /></svg></button>
+      <button
+        v-if="!task.state_ok"
+        class="btn-delete"
+        :title="t('monitor.taskItem.deleteTask')"
+        @click.stop="removeTask"
+      >✕</button>
     </div>
     <p v-if="archiveError" class="art-warning">{{ archiveError }}</p>
 

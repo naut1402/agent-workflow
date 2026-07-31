@@ -11,7 +11,7 @@ const props = defineProps({
   openArtifact: { type: Object, default: null }, // { taskId, name }
   projectId: { type: String, default: null },
 })
-const emit = defineEmits(['select', 'open-artifact', 'task-archived', 'create-task'])
+const emit = defineEmits(['select', 'open-artifact', 'task-archived', 'task-deleted', 'create-task'])
 const { t } = useI18n()
 const { settings, update } = useAppSettings()
 
@@ -80,6 +80,7 @@ const archivedTasks = computed(() => props.tasks.filter((t) => t.archived))
         @toggle-expand="toggleExpand"
         @open-artifact="emit('open-artifact', $event)"
         @task-archived="emit('task-archived')"
+        @task-deleted="emit('task-deleted', $event)"
         @toggle-hide-missing="toggleHideMissing"
       />
     </ul>
