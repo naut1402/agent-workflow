@@ -8,7 +8,7 @@ import {
   getSectionTitle,
   slugifySectionKey,
   emptyDraft,
-} from '../../../../shared/agentMarkdown.js'
+} from '../../../core/contracts/agentMarkdown.js'
 import { useSortable } from '../../../core/composables/useSortable'
 import { saveAgentTemplate } from '../../../api'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'

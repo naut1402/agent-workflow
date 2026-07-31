@@ -10,8 +10,8 @@ import {
   resolveCollapseAppSidebarOnOutside,
   resolveNotifyShowFloating,
   resolveNotifyShowSidebar,
-} from '../shared/schemas/appSettings'
-import { resolveAutoscanIntervalMs } from '../shared/schemas/autoscan'
+} from './core/contracts/schemas/appSettings'
+import { resolveAutoscanIntervalMs } from './core/contracts/schemas/autoscan'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
 import { useNotifications } from './features/notifications/composables/useNotifications'
 import FloatingNotificationIcon from './features/notifications/components/FloatingNotificationIcon.vue'

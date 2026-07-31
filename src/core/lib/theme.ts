@@ -1,5 +1,5 @@
-import type { AppSettings } from '../../../shared/schemas/appSettings'
-import { resolveThemePreference } from '../../../shared/schemas/appSettings'
+import type { AppSettings } from '../contracts/schemas/appSettings'
+import { resolveThemePreference } from '../contracts/schemas/appSettings'
 
 export type ResolvedTheme = 'light' | 'dark'
 export type ThemePreference = 'system' | 'light' | 'dark'

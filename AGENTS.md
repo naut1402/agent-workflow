@@ -13,11 +13,11 @@ Nguồn quy ước duy nhất cho mọi AI agent làm việc trong repo, bất k
 
 `dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **dev-agent-teams orchestrator khác** — repo này không chạy orchestrator, chỉ quan sát. Với *state* từng task (`.dev-state/*.json`) thì chỉ đọc; với *config* (pipeline, custom agent, template, knowledge) và **artifact markdown** thì đọc/ghi được (ghi qua `PUT /api/artifact`).
 
-- **Backend**: một app Hono duy nhất chạy trên 2 transport. Sửa route ở `server/http/routes/*.ts`; domain logic (không biết gì về HTTP) ở `server/<module>/`. `server/http/createApiHandler.ts` là cầu nối Node ⇆ Hono — riêng `/api/knowledge` bị `handleKnowledgeApi` chặn **trước Hono**. `server/devTeamApi.ts` chỉ là shim re-export.
-- **Frontend**: feature-module `src/features/<mode>/` (7 mode: monitor / pipeline editor / agent editor / knowledge / runner / logs / quick-action; cộng notifications + nl-chat không phải mode rail); API wrapper ở `src/api/`, nền FE/shell ở `src/core/`; contract FE↔BE ở `shared/` (repo root).
+- **Backend**: một app Hono duy nhất chạy trên 2 transport. Sửa route ở `src/server/http/routes/*.ts`; domain logic (không biết gì về HTTP) ở `src/server/<module>/`. `src/server/http/createApiHandler.ts` là cầu nối Node ⇆ Hono — riêng `/api/knowledge` bị `handleKnowledgeApi` chặn **trước Hono**. `src/server/devTeamApi.ts` chỉ là shim re-export.
+- **Frontend**: feature-module `src/features/<mode>/` …; API wrapper ở `src/api/`, nền FE/shell ở `src/core/`; contract FE↔BE ở `src/core/contracts/` (alias `@shared`).
 - **Data root** `.dev-team-agent/`, 2 run mode: dev đọc từ `cwd/..`/`DEV_TEAM_ROOT`; standalone đọc qua `ProjectRegistry` (`~/.dev-team-dashboard/projects.json`, `?project=<id>`).
-- **Pipeline config xếp lớp**: `DEFAULT_PIPELINE` (`server/pipeline/default.ts`) ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`, lớp sau đè lớp trước.
-- **MCP** (`mcp/server.ts`, `bun run mcp`): CRUD project-registry qua `server/registry.ts`, không cần HTTP server.
+- **Pipeline config xếp lớp**: `DEFAULT_PIPELINE` (`src/server/pipeline/default.ts`) ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`, lớp sau đè lớp trước.
+- **MCP** (`mcp/server.ts`, `bun run mcp`): CRUD project-registry qua `src/server/registry.ts`, không cần HTTP server.
 
 Chi tiết đầy đủ luồng dữ liệu, domain module, frontend: [`docs/architecture.md`](docs/architecture.md) (nguồn duy nhất, không lặp lại ở đây).
 
@@ -31,17 +31,15 @@ Chi tiết đầy đủ luồng dữ liệu, domain module, frontend: [`docs/arc
 agent-workflow/
 ├── index.html, vite.config.ts, package.json, tsconfig.json,
 │   vitest.config.ts, playwright.config.ts, eslint.config.js, bun.lock
-├── src/        # Vue 3 frontend (SPA: features/ + core/)
-├── server/     # Backend: Hono app (http/) + domain modules + registry + knowledge
-├── shared/     # Type + helper dùng chung repo-root (Zod schemas, fs/http/…)
+├── src/        # SPA + backend: features/, core/ (+ contracts/), server/
 ├── mcp/        # MCP stdio server (project-registry CRUD)
 ├── tests/      # unit tests mirror cây source (bun test + vitest)
 ├── test-e2e/   # @playwright/test specs + fixtures/.dev-team-agent/
-├── docs/       # Tài liệu: architecture.md; i18n.md; ui-buttons.md; scss-adoption.md — không chứa evidence test / tài liệu theo task
+├── docs/       # Tài liệu: architecture.md; i18n.md; ui-buttons.md; scss-adoption.md
 └── .claude/    # settings.local.json (bật MCP) + rules/ (rule project cho orchestrator)
 ```
 
-Ngoại lệ cố ý chưa chuyển `.ts`: `shared/agentMarkdown.js`, `server/runner-cli.mjs` — ghi đúng đuôi khi tham chiếu. Tooling config: `vite`/`vitest`/`playwright` dùng `.ts`; `eslint.config.js` giữ `.js` (flat config ESM, tránh loader TS).
+Ngoại lệ cố ý chưa chuyển `.ts`: `src/core/contracts/agentMarkdown.js`, `src/server/runner-cli.mjs` — ghi đúng đuôi khi tham chiếu. Tooling config: `vite`/`vitest`/`playwright` dùng `.ts`; `eslint.config.js` giữ `.js` (flat config ESM, tránh loader TS).
 
 ---
 
@@ -49,7 +47,7 @@ Ngoại lệ cố ý chưa chuyển `.ts`: `shared/agentMarkdown.js`, `server/ru
 
 ### 3.1 Ngôn ngữ & module
 
-ESM thuần (`"type": "module"`); server import core Node có tiền tố `node:`. Code mới/migrate dùng TypeScript — migration TS cơ bản đã xong, chỉ còn `shared/agentMarkdown.js` (và `server/runner-cli.mjs`) chưa chuyển nên `tsconfig.json` vẫn giữ `allowJs: true`.
+ESM thuần (`"type": "module"`); server import core Node có tiền tố `node:`. Code mới/migrate dùng TypeScript — migration TS cơ bản đã xong, chỉ còn `src/core/contracts/agentMarkdown.js` (và `src/server/runner-cli.mjs`) chưa chuyển nên `tsconfig.json` vẫn giữ `allowJs: true`.
 
 `tsconfig.json` hiện **chưa bật strict** (`strict: false`, `checkJs: false` toàn cục) — hướng đi là bật `strict` dần theo từng module khi module đó đã có type vững, đừng coi cả repo đã strict.
 
@@ -69,11 +67,11 @@ Discriminated union với discriminant kiểu boolean (`{ok:true,...}|{ok:false,
 
 ### 3.3 Zod là nguồn chân lý cho type & validation
 
-Định nghĩa schema bằng Zod một lần, suy type bằng `z.infer` — không viết tay `interface` song song với validator (dễ trôi lệch nhau). Validate ở mọi biên I/O (state JSON, YAML pipeline, request body) bằng `safeParse`, giữ triết lý defensive: parse fail → trả default, không throw. Schema dùng chung 2 phía đặt ở `shared/schemas/`.
+Định nghĩa schema bằng Zod một lần, suy type bằng `z.infer` — không viết tay `interface` song song với validator (dễ trôi lệch nhau). Validate ở mọi biên I/O (state JSON, YAML pipeline, request body) bằng `safeParse`, giữ triết lý defensive: parse fail → trả default, không throw. Schema dùng chung 2 phía đặt ở `src/core/contracts/schemas/`.
 
 ### 3.4 Kiến trúc & coupling — chỉ đi xuống, không vòng tròn
 
-Functional + ctx-injection: dependency truyền qua tham số `ctx`, không dùng class-DI/NestJS/OOP framework. Phụ thuộc chỉ đi một chiều xuống dưới: `shared/` không import gì khác trong server → domain module chỉ import `shared/` → `http/` import domain module → transport import `http/`. Không vòng tròn.
+Functional + ctx-injection: dependency truyền qua tham số `ctx`, không dùng class-DI/NestJS/OOP framework. Phụ thuộc chỉ đi một chiều xuống dưới: `src/core/contracts/` không import `src/server/` → domain module chỉ import contracts → `http/` import domain module → transport import `http/`. Không vòng tròn.
 
 Domain module không biết gì về HTTP — chỉ nhận `ctx`/`root`, trả data thuần; HTTP chỉ ở tầng `http/` (Hono), route mỏng: parse input → gọi domain module → `c.json`.
 
@@ -116,15 +114,15 @@ Coverage ưu tiên cao — mỗi module refactor phải kèm test (unit + e2e).
 
 | Tầng | Runner | Phạm vi | Lệnh |
 |------|--------|---------|------|
-| Unit/integration backend | **bun test** | `server/**`, `mcp/**` (pure fn, domain module với fake ctx, Hono `app.request`) | `bun run test` |
-| Unit frontend | **vitest** (jsdom) | `src/**`, `shared/**` (composable, lib, schema, component @vue/test-utils) | `bun run test:fe` |
+| Unit/integration backend | **bun test** | `src/server/**`, `mcp/**` (pure fn, domain module với fake ctx, Hono `app.request`) | `bun run test` |
+| Unit frontend | **vitest** (jsdom) | `src/**` (features, core, contracts) | `bun run test:fe` |
 | E2E | **@playwright/test** | full stack: server thật + fixture `.dev-team-agent/` + browser | `bun run test:e2e` |
 
 `bun run test:all` chạy tuần tự: typecheck → lint → bun test → vitest → playwright.
 
 ### 5.2 Layout test — gom vào `tests/` + `test-e2e/`
 
-Unit test mirror cây source trong `tests/` (`server/pipeline/merge.ts` ↔ `tests/server/pipeline/merge.test.ts`), không co-locate. `tests/server/**` + `tests/mcp/**` → bun test (`bun run test`); `tests/src/**` + `tests/shared/**` → vitest (`bun run test:fe`). Backend dùng API `bun:test`, frontend/shared import từ `vitest`; import source bằng relative path trỏ ngược về cây gốc.
+Unit test mirror cây source trong `tests/` (`src/server/pipeline/merge.ts` ↔ `tests/src/server/pipeline/merge.test.ts`), không co-locate. `tests/src/server/**` + `tests/mcp/**` → bun test (`bun run test`); `tests/src/**` + `tests/src/core/contracts/**` → vitest (`bun run test:fe`). Backend dùng API `bun:test`, frontend/shared import từ `vitest`; import source bằng relative path trỏ ngược về cây gốc.
 
 E2E ở `test-e2e/`: `test-e2e/<feature>.spec.ts` + `test-e2e/fixtures/` (`.dev-team-agent/` giả + golden snapshot); `playwright.config.ts` trỏ `testDir` về đây.
 

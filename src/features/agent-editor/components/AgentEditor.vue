@@ -11,7 +11,7 @@ import {
   exportCustomAgent,
   fetchCatalog,
 } from '../../../api'
-import { emptyDraft } from '../../../../shared/agentMarkdown.js'
+import { emptyDraft } from '../../../core/contracts/agentMarkdown.js'
 import AgentSectionEditor from './AgentSectionEditor.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'
 import AgentNlWizard from './AgentNlWizard.vue'

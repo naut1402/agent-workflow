@@ -2,7 +2,7 @@ import { computed, type ComputedRef } from 'vue'
 import {
   resolveLocale,
   type LocalePreference,
-} from '../../../shared/schemas/appSettings'
+} from '../contracts/schemas/appSettings'
 import { useAppSettings } from './useAppSettings'
 import { setI18nLocale } from '../i18n'
 

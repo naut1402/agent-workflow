@@ -15,7 +15,7 @@ const { version: appVersion } = JSON.parse(
   readFileSync(path.join(__dirname, 'package.json'), 'utf8'),
 )
 
-// Frontend unit tests (Vue components, composables, src/core + root shared/ contracts).
+// Frontend unit tests (Vue components, composables, src/core + contracts).
 // Backend unit/integration tests run under `bun test` instead (see package.json).
 export default defineConfig({
   plugins: [vue()],
@@ -24,7 +24,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@shared': path.resolve(__dirname, 'shared'),
+      '@shared': path.resolve(__dirname, 'src/core/contracts'),
       '@': path.resolve(__dirname, 'src'),
     },
   },
@@ -32,15 +32,16 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     execArgv,
-    // Unit tests live under tests/ mirroring the source tree. Vitest owns the
-    // frontend + shared subtrees; bun test owns tests/server + tests/mcp.
-    include: ['tests/src/**/*.{test,spec}.ts', 'tests/shared/**/*.{test,spec}.ts'],
-    exclude: ['node_modules', 'dist', 'test-e2e/**'],
+    // Unit tests live under tests/ mirroring the source tree. Vitest owns FE +
+    // contracts; bun test owns tests/src/server + tests/mcp.
+    include: ['tests/src/**/*.{test,spec}.ts'],
+    exclude: ['node_modules', 'dist', 'test-e2e/**', 'tests/src/server/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: './coverage/frontend',
-      include: ['src/**/*.{ts,vue}', 'shared/**/*.ts'],
+      include: ['src/**/*.{ts,vue}'],
+      exclude: ['src/server/**'],
       // Thresholds start at 0 (no tests yet on setup branch) and are raised
       // per-module as each module's tests land. Target: 60% global, then tighten.
       thresholds: { lines: 0, functions: 0, branches: 0, statements: 0 },

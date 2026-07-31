@@ -7,7 +7,7 @@ import {
   resolveNotifyHitlPending,
   resolveNotifyQaReady,
   resolveNotifySoundEnabled,
-} from '../../../../shared/schemas/appSettings'
+} from '../../../core/contracts/schemas/appSettings'
 import type { NotificationEvent, NotificationKind } from '../lib/notificationTypes'
 import { sendBrowserNotification } from '../lib/browserNotification'
 import { playNotificationSound } from '../lib/sound'

@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { fetchRunners, fetchCatalog } from '../../../api'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
 import QuickActionMenuDialog from './QuickActionMenuDialog.vue'
-import type { ArtifactMenuNode } from '../../../../shared/schemas/artifactAction'
+import type { ArtifactMenuNode } from '../../../core/contracts/schemas/artifactAction'
 import {
   addMenuGroup,
   findActionMenuId,

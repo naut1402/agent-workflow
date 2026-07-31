@@ -52,8 +52,8 @@ export default tseslint.config(
   {
     files: [
       'src/**/*.{ts,tsx,js}',
-      'server/**/*.{ts,tsx,js,mjs}',
-      'shared/**/*.{ts,tsx,js}',
+      'src/server/**/*.{ts,tsx,js,mjs}',
+      'src/core/contracts/**/*.{ts,tsx,js}',
       'mcp/**/*.{ts,tsx,js}',
       'tests/**/*.{ts,tsx,js,mjs}',
       'test-e2e/**/*.{ts,tsx,js,mjs}',

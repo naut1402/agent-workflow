@@ -12,4 +12,4 @@ Guidance cho Claude Code (claude.ai/code) khi làm việc trong repo này.
 
 - **MCP server:** `mcp/server.ts` (`bun run mcp`) expose CRUD project-registry cho Claude Code; bật qua `.claude/settings.local.json` (`enabledMcpjsonServers`, file local — gitignored). Không cần HTTP server chạy — xem [`docs/architecture.md`](docs/architecture.md) §4.
 - **Rule project:** thư mục `.claude/rules/` chứa rule do dev-team orchestrator nạp cho **project đích** (không phải quy ước của repo này). Quy ước phát triển repo này ở [`AGENTS.md`](AGENTS.md).
-- Khi sửa API: chỉ sửa route trong `server/http/routes/*.ts` một lần — cả 2 transport (Vite dev + Node standalone) cùng thừa hưởng.
+- Khi sửa API: chỉ sửa route trong `src/server/http/routes/*.ts` một lần — cả 2 transport (Vite dev + Node standalone) cùng thừa hưởng.

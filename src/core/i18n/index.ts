@@ -1,5 +1,5 @@
 import { createI18n } from 'vue-i18n'
-import type { LocalePreference } from '../../../shared/schemas/appSettings'
+import type { LocalePreference } from '../contracts/schemas/appSettings'
 import { vi } from './locales/vi'
 import { en } from './locales/en'
 import './types'

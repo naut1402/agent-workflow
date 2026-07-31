@@ -12,7 +12,7 @@ import {
   uploadAgentTemplate,
   deleteAgentTemplate,
 } from '../../../api'
-import { draftFromCatalogAgent } from '../../../../shared/agentMarkdown.js'
+import { draftFromCatalogAgent } from '../../../core/contracts/agentMarkdown.js'
 
 const emit = defineEmits(['apply-draft', 'close'])
 

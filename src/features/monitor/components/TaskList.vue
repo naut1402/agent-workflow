@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TaskListItem from './TaskListItem.vue'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
-import { resolveHideMissingArtifacts } from '../../../../shared/schemas/appSettings'
+import { resolveHideMissingArtifacts } from '../../../core/contracts/schemas/appSettings'
 
 const props = defineProps({
   tasks: { type: Array as () => any[], required: true },

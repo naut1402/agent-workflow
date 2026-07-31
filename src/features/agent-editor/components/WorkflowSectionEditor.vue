@@ -5,7 +5,7 @@ const { t } = useI18n()
 import { ref, computed, onMounted, watch } from 'vue'
 import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../core/lib/workflowSteps'
 import { useSortable } from '../../../core/composables/useSortable'
-import { slugifySectionKey } from '../../../../shared/agentMarkdown.js'
+import { slugifySectionKey } from '../../../core/contracts/agentMarkdown.js'
 import {
   fetchPipelineConfig,
   fetchWorkflowStepTemplates,

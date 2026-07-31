@@ -16,7 +16,7 @@ import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
-} from '../../../../shared/schemas/appSettings'
+} from '../../../core/contracts/schemas/appSettings'
 
 const SUB_SIDEBAR_KEY = 'dev-dashboard-monitor-subsidebar-collapsed'
 

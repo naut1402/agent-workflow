@@ -3,7 +3,7 @@ import {
   DEFAULT_APP_SETTINGS,
   parseAppSettings,
   type AppSettings,
-} from '../../../shared/schemas/appSettings'
+} from '../contracts/schemas/appSettings'
 import { applyThemeToDocument } from '../lib/theme'
 
 export const STORAGE_KEY = 'dev-dashboard-app-settings'
