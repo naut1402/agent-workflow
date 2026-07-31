@@ -5,7 +5,7 @@ import type { HonoEnv } from '../types.js'
 import { j, parseBody, unknownProject } from '../respond.js'
 import { resolveArtifact } from '../../../shared/sanitize.js'
 import { collectTasks, flowProfilePath, createTask, readState } from '../../tasks/index.js'
-import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction } from '../../tasks/state.js'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask } from '../../tasks/state.js'
 import { loadPipelineConfig } from '../../pipeline/index.js'
 import { emitAudit } from '../../logging/store.js'
 import { TaskArchivePatch, TaskStatePatch } from '../../../shared/schemas/task.js'
@@ -494,6 +494,21 @@ export function registerTaskRoutes(app: Hono<HonoEnv>): void {
       },
       ...(job ? { job } : {}),
     })
+  })
+
+  // Permanently delete a task's files. Unlike PUT /api/task-archive, this does
+  // not require the state file to be readable first — it's the only recovery
+  // path for a task whose state is broken (see B0009 §5).
+  app.delete('/api/tasks/:id', async (c) => {
+    const root = c.get('root')
+    if (!root) return unknownProject(c)
+    const id = c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return j(c, 400, { error: 'invalid task id' })
+
+    await deleteTask(root, id)
+
+    emitAudit({ op: 'delete', entity: 'task-state', identifier: id, projectId: c.get('projectId') })
+    return j(c, 200, { id, deleted: true })
   })
 
   // Dashboard-triggered execution of a task's current step (clicking a node on

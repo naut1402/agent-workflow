@@ -588,7 +588,7 @@ onUpdated(() => scheduleMermaid())
               <MarkdownTextEditor
                 :ref="bindEditor"
                 v-model="sectionDraft"
-                height="240px"
+                height="auto"
                 autofocus
                 @blur="handleBlur"
               />
@@ -616,7 +616,7 @@ onUpdated(() => scheduleMermaid())
             <MarkdownTextEditor
               :ref="bindEditor"
               v-model="sectionDraft"
-              height="320px"
+              height="auto"
               autofocus
               @blur="handleBlur"
             />

@@ -41,6 +41,7 @@ const emit = defineEmits([
   'qa-saved',
   'hitl-action',
   'task-archived',
+  'task-deleted',
   'create-task',
 ])
 
@@ -135,6 +136,7 @@ async function toggleArchiveSelected() {
           @select="emit('select-task', $event)"
           @open-artifact="emit('open-artifact', $event)"
           @task-archived="emit('task-archived')"
+          @task-deleted="emit('task-deleted', $event)"
           @create-task="emit('create-task')"
         />
       </template>

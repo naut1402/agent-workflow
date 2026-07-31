@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, writeStateAtomic } from '../../../server/tasks/state'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, writeStateAtomic } from '../../../server/tasks/state'
 
 let dirs: string[] = []
 async function tmp(): Promise<string> {
@@ -274,5 +274,38 @@ describe('applyArchiveAction', () => {
     expect(result.ok).toBe(false)
     if (!('error' in result)) return
     expect(result.status).toBe(404)
+  })
+})
+
+describe('deleteTask', () => {
+  test('removes tasks/<id>, .dev-state/<id>.json and the flow profile', async () => {
+    const root = await tmp()
+    await seedTask(root, 'T10', { current_phase: 'completed' })
+    await fs.mkdir(path.join(root, 'flow-profiles'), { recursive: true })
+    await fs.writeFile(path.join(root, 'flow-profiles', 'T10.json'), '{}', 'utf8')
+
+    const result = await deleteTask(root, 'T10')
+    expect(result.ok).toBe(true)
+
+    await expect(fs.stat(path.join(root, 'tasks', 'T10'))).rejects.toThrow()
+    await expect(fs.stat(path.join(root, '.dev-state', 'T10.json'))).rejects.toThrow()
+    await expect(fs.stat(path.join(root, 'flow-profiles', 'T10.json'))).rejects.toThrow()
+  })
+
+  test('succeeds even when the state file is missing/corrupt (unlike applyArchiveAction)', async () => {
+    const root = await tmp()
+    await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+    await fs.mkdir(path.join(root, 'tasks', 'T11'), { recursive: true })
+    await fs.writeFile(path.join(root, '.dev-state', 'T11.json'), 'not json', 'utf8')
+
+    const result = await deleteTask(root, 'T11')
+    expect(result.ok).toBe(true)
+    await expect(fs.stat(path.join(root, 'tasks', 'T11'))).rejects.toThrow()
+  })
+
+  test('is idempotent for a task that does not exist at all', async () => {
+    const root = await tmp()
+    const result = await deleteTask(root, 'T12')
+    expect(result.ok).toBe(true)
   })
 })

@@ -138,8 +138,8 @@ watch(
 )
 
 onMounted(async () => {
-  await createEditor()
   await nextTick()
+  await createEditor()
   if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
     themeObserver = new MutationObserver(() => {
       if (!editor) return
