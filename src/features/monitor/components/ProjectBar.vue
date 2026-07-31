@@ -6,7 +6,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { addProject, removeProject } from '../../../api'
-import FolderPickerDialog from '../../../shared/ui/FolderPickerDialog.vue'
+import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 
 const { t } = useI18n()
 

@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { diffLines } from 'diff'
 import { fetchProposal, approveJob, discardJob, sendActionFeedback, fetchJob } from '../../../api'
-import { i18n } from '../../../shared/i18n'
+import { i18n } from '../../../core/i18n'
 
 // Drives ArtifactProposalReview: fetches the before/after of an
 // `awaiting_approval` job, exposes a line-diff for rendering, and handles the

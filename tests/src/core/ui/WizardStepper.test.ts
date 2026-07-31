@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import WizardStepper from '@/shared/ui/WizardStepper.vue'
+import WizardStepper from '@/core/ui/WizardStepper.vue'
 
 const steps = [
   { key: 'a', label: 'Alpha' },

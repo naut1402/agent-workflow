@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
-import { vi as viMessages } from '@/shared/i18n/locales/vi'
-import { en as enMessages } from '@/shared/i18n/locales/en'
+import { vi as viMessages } from '@/core/i18n/locales/vi'
+import { en as enMessages } from '@/core/i18n/locales/en'
 
 /** Fresh i18n instance per test — avoids locale bleed across the app singleton. */
 export function createTestI18n(locale: 'vi' | 'en' = 'vi') {

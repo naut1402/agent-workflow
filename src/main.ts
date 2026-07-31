@@ -1,10 +1,10 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import './styles/main.scss'
-import { useAppSettings } from './shared/composables/useAppSettings'
-import { applyThemeToDocument, watchSystemTheme } from './shared/lib/theme'
+import { useAppSettings } from './core/composables/useAppSettings'
+import { applyThemeToDocument, watchSystemTheme } from './core/lib/theme'
 import { resolveThemePreference, resolveLocale } from '../shared/schemas/appSettings'
-import { i18n, setI18nLocale } from './shared/i18n'
+import { i18n, setI18nLocale } from './core/i18n'
 
 const { settings, load } = useAppSettings()
 load()

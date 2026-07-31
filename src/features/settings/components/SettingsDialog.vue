@@ -2,8 +2,9 @@
 import { computed, inject, onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onClickOutside } from '@vueuse/core'
-import { useAppSettings } from '../../../shared/composables/useAppSettings'
-import { useLocale } from '../../../shared/composables/useLocale'
+import { useAppSettings } from '../../../core/composables/useAppSettings'
+import { useLocale } from '../../../core/composables/useLocale'
+import { reloadProjectsKey } from '../../../core/shell/keys'
 import {
   resolveArtifactViewMode,
   resolveCollapseAppSidebarOnOutside,
@@ -27,8 +28,8 @@ import {
   saveGithubTokensConfig,
 } from '../../../api'
 import { parseGithubRepoRef } from '../../../../shared/schemas/githubTokens'
-import FolderPickerDialog from '../../../shared/ui/FolderPickerDialog.vue'
-import CSelect from '../../../shared/ui/CSelect.vue'
+import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
+import CSelect from '../../../core/ui/CSelect.vue'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -37,7 +38,7 @@ const { settings, load, update } = useAppSettings()
 const { locale, setLocale } = useLocale()
 
 /** Optional: App.vue provides this so scan can refresh the project list. */
-const reloadProjects = inject<(() => void | Promise<void>) | undefined>('reloadProjects', undefined)
+const reloadProjects = inject(reloadProjectsKey, undefined)
 
 type SettingsGroupId = 'general' | 'projects' | 'notifications'
 

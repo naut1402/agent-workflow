@@ -9,9 +9,9 @@ import {
   slugifySectionKey,
   emptyDraft,
 } from '../../../../shared/agentMarkdown.js'
-import { useSortable } from '../../../shared/composables/useSortable'
+import { useSortable } from '../../../core/composables/useSortable'
 import { saveAgentTemplate } from '../../../api'
-import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
+import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 import WorkflowSectionEditor from './WorkflowSectionEditor.vue'
 
 const props = defineProps({

@@ -3,7 +3,7 @@ import {
   applyThemeToDocument,
   resolveThemeToDataAttr,
   watchSystemTheme,
-} from '../../../../src/shared/lib/theme'
+} from '../../../../src/core/lib/theme'
 
 describe('resolveThemeToDataAttr', () => {
   it('maps light / dark directly', () => {

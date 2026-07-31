@@ -4,7 +4,7 @@
 // convention of pulling derived logic out of .vue files).
 
 import { phasesFromPipeline, phaseStatus } from '../../../api/phase'
-import { i18n } from '../../../shared/i18n'
+import { i18n } from '../../../core/i18n'
 
 export interface TimelineEvent {
   ts: number | null

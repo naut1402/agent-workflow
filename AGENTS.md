@@ -14,7 +14,7 @@ Nguồn quy ước duy nhất cho mọi AI agent làm việc trong repo, bất k
 `dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **dev-agent-teams orchestrator khác** — repo này không chạy orchestrator, chỉ quan sát. Với *state* từng task (`.dev-state/*.json`) thì chỉ đọc; với *config* (pipeline, custom agent, template, knowledge) và **artifact markdown** thì đọc/ghi được (ghi qua `PUT /api/artifact`).
 
 - **Backend**: một app Hono duy nhất chạy trên 2 transport. Sửa route ở `server/http/routes/*.ts`; domain logic (không biết gì về HTTP) ở `server/<module>/`. `server/http/createApiHandler.ts` là cầu nối Node ⇆ Hono — riêng `/api/knowledge` bị `handleKnowledgeApi` chặn **trước Hono**. `server/devTeamApi.ts` chỉ là shim re-export.
-- **Frontend**: feature-module `src/features/<mode>/` (7 mode: monitor / pipeline editor / agent editor / knowledge / runner / logs / quick-action; cộng notifications + nl-chat không phải mode rail); API wrapper ở `src/api/`, phần dùng chung ở `src/shared/`.
+- **Frontend**: feature-module `src/features/<mode>/` (7 mode: monitor / pipeline editor / agent editor / knowledge / runner / logs / quick-action; cộng notifications + nl-chat không phải mode rail); API wrapper ở `src/api/`, nền FE/shell ở `src/core/`; contract FE↔BE ở `shared/` (repo root).
 - **Data root** `.dev-team-agent/`, 2 run mode: dev đọc từ `cwd/..`/`DEV_TEAM_ROOT`; standalone đọc qua `ProjectRegistry` (`~/.dev-team-dashboard/projects.json`, `?project=<id>`).
 - **Pipeline config xếp lớp**: `DEFAULT_PIPELINE` (`server/pipeline/default.ts`) ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`, lớp sau đè lớp trước.
 - **MCP** (`mcp/server.ts`, `bun run mcp`): CRUD project-registry qua `server/registry.ts`, không cần HTTP server.
@@ -31,7 +31,7 @@ Chi tiết đầy đủ luồng dữ liệu, domain module, frontend: [`docs/arc
 agent-workflow/
 ├── index.html, vite.config.ts, package.json, tsconfig.json,
 │   vitest.config.ts, playwright.config.ts, eslint.config.js, bun.lock
-├── src/        # Vue 3 frontend (SPA, feature-module theo mode)
+├── src/        # Vue 3 frontend (SPA: features/ + core/)
 ├── server/     # Backend: Hono app (http/) + domain modules + registry + knowledge
 ├── shared/     # Type + helper dùng chung repo-root (Zod schemas, fs/http/…)
 ├── mcp/        # MCP stdio server (project-registry CRUD)
@@ -79,15 +79,15 @@ Domain module không biết gì về HTTP — chỉ nhận `ctx`/`root`, trả d
 
 ### 3.5 Frontend (Vue 3)
 
-`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables}` + `src/shared/{ui,composables,lib}`; API wrapper tập trung ở `src/api/`.
+`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables}` + `src/core/{ui,composables,lib,i18n,shell}`; API wrapper tập trung ở `src/api/`.
 
 - Quy ước button (ưu tiên icon-btn, default không viền, hover scale): [`docs/ui-buttons.md`](docs/ui-buttons.md).
-- **Custom UI primitives** trong `src/shared/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.
+- **Custom UI primitives** trong `src/core/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.
 ### 3.6 Ngôn ngữ UI (i18n)
 
 UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **Tiếng Việt (`vi`) là locale mặc định** và là **nguồn chân lý cho message schema** — các locale khác (vd `en`) được gắn type theo `vi` nên thiếu key là lỗi compile, không phải fallback runtime.
 
-- Hub dùng chung ở `src/shared/i18n/`; message tách theo **namespace per-feature** (`common`, `monitor`, `agentEditor`, `knowledge`, `runner`, `logs`, `pipelineEditor`, `quickAction`, `settings`) — mỗi feature chỉ sửa namespace của mình.
+- Hub dùng chung ở `src/core/i18n/`; message tách theo **namespace per-feature** (`common`, `monitor`, `agentEditor`, `knowledge`, `runner`, `logs`, `pipelineEditor`, `quickAction`, `settings`) — mỗi feature chỉ sửa namespace của mình.
 - Trong `<script setup>`: `const { t } = useI18n()`. Ngoài component (vd `src/api/`): `i18n.global.t(...)`.
 - Locale hiện tại lưu trong `AppSettings.locale` (localStorage, chung store với theme); đổi qua `useLocale()`.
 - Test mount component có `t()`: dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`) để cài i18n plugin.

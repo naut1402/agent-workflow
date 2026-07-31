@@ -36,7 +36,7 @@ vi.mock('@toast-ui/editor', () => {
 vi.mock('@toast-ui/editor/dist/toastui-editor.css', () => ({}))
 vi.mock('@toast-ui/editor/dist/theme/toastui-editor-dark.css', () => ({}))
 
-import MarkdownTextEditor from '@/shared/ui/MarkdownTextEditor.vue'
+import MarkdownTextEditor from '@/core/ui/MarkdownTextEditor.vue'
 
 describe('MarkdownTextEditor', () => {
   beforeEach(() => {

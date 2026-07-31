@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 import { computed, inject, onMounted } from 'vue'
 import { useAgentBuild } from '../composables/useAgentBuild'
+import { navigateToModeKey } from '../../../core/shell/keys'
 
 // Merged NL build wizard (Correction A / F0005): describe → preview → optional
 // "Lưu & chạy thử" smoke-run, replacing both the draft-only AS-IS wizard here
@@ -23,7 +24,7 @@ const emit = defineEmits<{
 // Provided by App.vue so any nested wizard/panel can switch the shell to the
 // Runner mode without bubbling a custom event through every intermediate
 // component.
-const navigateToMode = inject<((mode: string) => void) | undefined>('navigateToMode', undefined)
+const navigateToMode = inject(navigateToModeKey, undefined)
 
 const build = useAgentBuild({
   getProjectId: () => props.projectId ?? null,

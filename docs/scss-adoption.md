@@ -38,7 +38,7 @@ Trả lời: có nên đưa SCSS vào stack không; nếu có thì migrate thế
 ### 2.3 Theme
 
 - Token màu / surface là **CSS custom properties** trên `:root` và `[data-theme="light"|"dark"]`.
-- JS: `src/shared/lib/theme.ts` + `useAppSettings` + FOUC guard trong `index.html`.
+- JS: `src/core/lib/theme.ts` + `useAppSettings` + FOUC guard trong `index.html`.
 - Preference: `system` | `light` | `dark` (schema `shared/schemas/appSettings.ts`).
 
 → Màu theme **phải tiếp tục là CSS variables** (đổi lúc runtime). SCSS variables chỉ phù hợp cho giá trị compile-time (spacing scale, radius cố định, breakpoint nếu sau này có).

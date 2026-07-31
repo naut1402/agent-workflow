@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { useLocalToggle } from '../../../../src/shared/composables/useLocalToggle'
+import { useLocalToggle } from '../../../../src/core/composables/useLocalToggle'
 
 describe('useLocalToggle', () => {
   it('defaults to false and toggles', () => {

@@ -6,7 +6,8 @@ import ArtifactPanel from '@/features/monitor/components/ArtifactPanel.vue'
 import {
   STORAGE_KEY,
   useAppSettings,
-} from '@/shared/composables/useAppSettings'
+} from '@/core/composables/useAppSettings'
+import { navigateToModeKey } from '@/core/shell/keys'
 import { fetchArtifact, fetchArtifactActions, fetchRunners, runArtifactAction } from '@/api'
 
 const MD_TWO_H2 = `# Title
@@ -68,7 +69,7 @@ vi.mock('@/api', () => ({
   })),
 }))
 
-vi.mock('@/shared/markdown', () => ({
+vi.mock('@/core/markdown', () => ({
   parseMarkdown: (s: string) => `<p>${s}</p>`,
   renderMermaid: vi.fn(async () => {}),
 }))
@@ -315,7 +316,7 @@ describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
     const w = mount(ArtifactPanel, {
       props: { task, openArtifact: { taskId: 'DEMO-1', name: 'design.md' }, projectId: null },
       global: {
-        provide: { navigateToMode },
+        provide: { [navigateToModeKey as symbol]: navigateToMode },
         stubs: { MarkdownTextEditor: MarkdownTextEditorStub },
       },
     })

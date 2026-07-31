@@ -3,8 +3,9 @@ import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onClickOutside } from '@vueuse/core'
 import { fetchProjects, fetchAutoscanConfig, runAutoscan } from './api'
-import { useLocalToggle } from './shared/composables/useLocalToggle'
-import { useAppSettings } from './shared/composables/useAppSettings'
+import { useLocalToggle } from './core/composables/useLocalToggle'
+import { useAppSettings } from './core/composables/useAppSettings'
+import { navigateToModeKey, reloadProjectsKey } from './core/shell/keys'
 import {
   resolveCollapseAppSidebarOnOutside,
   resolveNotifyShowFloating,
@@ -25,8 +26,8 @@ import QuickActionPanel from './features/quick-action/components/QuickActionPane
 import SettingsDialog from './features/settings/components/SettingsDialog.vue'
 import CreateTaskDialog from './features/monitor/components/CreateTaskDialog.vue'
 import FloatingChatButton from './features/nl-chat/components/FloatingChatButton.vue'
-import RailIcon from './shared/ui/RailIcon.vue'
-import { APP_VERSION } from './shared/lib/appVersion'
+import RailIcon from './core/ui/RailIcon.vue'
+import { APP_VERSION } from './core/lib/appVersion'
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
 const PROJECT_KEY = 'dev-dashboard-selected-project'
@@ -56,7 +57,7 @@ onClickOutside(
 // Central mode switch, so any nested wizard/panel (Agent Editor's Build NL
 // gate, ArtifactPanel's QuickAction gate) can send the user to Runner mode
 // without bubbling a custom event through every intermediate component.
-provide('navigateToMode', (m: string) => {
+provide(navigateToModeKey, (m: string) => {
   mode.value = m
 })
 
@@ -140,7 +141,7 @@ function onProjectsChanged() {
 }
 
 /** Exposed so SettingsDialog can refresh the sidebar after an autoscan run. */
-provide('reloadProjects', loadProjects)
+provide(reloadProjectsKey, loadProjects)
 
 let autoscanTimer: ReturnType<typeof setInterval> | null = null
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   STORAGE_KEY,
   useAppSettings,
-} from '../../../../src/shared/composables/useAppSettings'
+} from '../../../../src/core/composables/useAppSettings'
 
 beforeEach(() => {
   localStorage.clear()

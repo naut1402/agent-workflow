@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mountWithI18n } from '../../helpers/i18n'
-import CSelect from '@/shared/ui/CSelect.vue'
+import CSelect from '@/core/ui/CSelect.vue'
 
 const options = [
   { value: 'both', label: 'Both' },

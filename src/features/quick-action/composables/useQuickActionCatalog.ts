@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { fetchArtifactActionsCatalog, saveArtifactActionsCatalog } from '../../../api'
-import { i18n } from '../../../shared/i18n'
+import { i18n } from '../../../core/i18n'
 import type { ArtifactMenuNode } from '../../../../shared/schemas/artifactAction'
 
 // Plain (non-component) module → resolve strings via the app i18n singleton

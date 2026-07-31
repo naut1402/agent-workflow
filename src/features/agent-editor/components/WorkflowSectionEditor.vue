@@ -3,8 +3,8 @@ import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 import { ref, computed, onMounted, watch } from 'vue'
-import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../shared/lib/workflowSteps'
-import { useSortable } from '../../../shared/composables/useSortable'
+import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../core/lib/workflowSteps'
+import { useSortable } from '../../../core/composables/useSortable'
 import { slugifySectionKey } from '../../../../shared/agentMarkdown.js'
 import {
   fetchPipelineConfig,
@@ -12,7 +12,7 @@ import {
   fetchWorkflowStepTemplate,
   saveWorkflowStepTemplate,
 } from '../../../api'
-import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
+import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../../src/shared/lib/workflowSteps'
+import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../../src/core/lib/workflowSteps'
 
 describe('parseWorkflowMarkdown', () => {
   it('returns [] for empty input', () => {

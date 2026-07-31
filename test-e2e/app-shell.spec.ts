@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { capturePage } from './_capture'
 
-// Regression capture for the src-foundation refactor (src/api + src/shared).
+// Regression capture for the src-foundation refactor (src/api + src/core).
 // Confirms the app shell + monitor mode still render after moving the API
 // client, composables and shared UI — if any import broke, the SPA would not
 // mount and these assertions would fail. Screenshots attach via testInfo

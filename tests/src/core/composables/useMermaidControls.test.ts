@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { attachMermaidControls } from '../../../../src/shared/composables/useMermaidControls'
+import { attachMermaidControls } from '../../../../src/core/composables/useMermaidControls'
 
 function makeRoot(): HTMLElement {
   const root = document.createElement('div')

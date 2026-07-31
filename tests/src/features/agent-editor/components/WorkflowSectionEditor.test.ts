@@ -2,7 +2,7 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
-import { compileWorkflowMarkdown, parseWorkflowMarkdown } from '@/shared/lib/workflowSteps'
+import { compileWorkflowMarkdown, parseWorkflowMarkdown } from '@/core/lib/workflowSteps'
 import WorkflowSectionEditor from '@/features/agent-editor/components/WorkflowSectionEditor.vue'
 
 /** Lightweight stub — avoid mounting Toast UI Editor in jsdom. */

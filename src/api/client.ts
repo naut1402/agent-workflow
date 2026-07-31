@@ -1,8 +1,8 @@
 // Thin fetch wrappers around the dev-server API exposed by server/devTeamApi.ts.
 
 import type { TaskArchivePatch, TaskStatePatch } from '../../shared/schemas/task'
-import { getApiToken } from '../shared/lib/authToken.js'
-import { i18n } from '../shared/i18n'
+import { getApiToken } from '../core/lib/authToken.js'
+import { i18n } from '../core/i18n'
 
 // Build a query string from key/value pairs, dropping null/undefined/empty and
 // URL-encoding values. Used to append the optional `?project=<id>` selector.

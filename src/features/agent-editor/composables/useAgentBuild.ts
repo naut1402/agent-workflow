@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { i18n } from '../../../shared/i18n'
+import { i18n } from '../../../core/i18n'
 import { buildAndRunAgent, fetchJob, fetchRunners, generateAgentDraft } from '../../../api'
 
 // Drives the "Build agent từ NL" wizard end to end: generate a draft from a

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUpdated, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
+import { parseMarkdown, renderMermaid } from '../../../core/markdown'
 import { saveArtifact, sendTaskFeedback } from '../../../api'
 import {
   bindFocusableEditRef,
@@ -9,7 +9,7 @@ import {
 } from '../composables/useInlineMarkdownEdit'
 import { parseQaBlocks, applyAnswer, type QaBlock } from '../composables/useQaQuestions'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
-import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
+import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
 const { t } = useI18n()
 

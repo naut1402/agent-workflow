@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import JobLogStream from '../../../shared/ui/JobLogStream.vue'
-import KnowledgePickerDialog from '../../../shared/ui/KnowledgePickerDialog.vue'
-import WizardStepper from '../../../shared/ui/WizardStepper.vue'
+import JobLogStream from '../../../core/ui/JobLogStream.vue'
+import KnowledgePickerDialog from '../../../core/ui/KnowledgePickerDialog.vue'
+import WizardStepper from '../../../core/ui/WizardStepper.vue'
 import { CREATE_TASK_STEPS, useCreateTask } from '../composables/useCreateTask'
 
 const props = defineProps<{

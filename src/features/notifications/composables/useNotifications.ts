@@ -1,6 +1,6 @@
 import { type Ref, computed, ref, watch } from 'vue'
-import { i18n } from '../../../shared/i18n'
-import { useAppSettings } from '../../../shared/composables/useAppSettings'
+import { i18n } from '../../../core/i18n'
+import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {
   resolveNotificationsEnabled,
   resolveNotifyBrowserEnabled,

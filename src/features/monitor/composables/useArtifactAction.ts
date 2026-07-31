@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { runArtifactAction, fetchJob } from '../../../api'
-import { i18n } from '../../../shared/i18n'
+import { i18n } from '../../../core/i18n'
 
 // Drives an artifact quick-action end to end: submit the job, poll
 // `GET /api/jobs?id=` until it settles, then invoke `onReload` on success so the

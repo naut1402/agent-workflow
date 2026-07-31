@@ -10,7 +10,7 @@ import {
   uploadKnowledgeFile,
   fetchKnowledgeTags,
 } from '../../../api'
-import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
+import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
 const { t } = useI18n()
 

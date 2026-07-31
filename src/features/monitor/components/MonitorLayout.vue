@@ -9,10 +9,10 @@ import TaskList from './TaskList.vue'
 import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
-import RailIcon from '../../../shared/ui/RailIcon.vue'
+import RailIcon from '../../../core/ui/RailIcon.vue'
 import { patchTaskArchive } from '../../../api'
-import { useLocalToggle } from '../../../shared/composables/useLocalToggle'
-import { useAppSettings } from '../../../shared/composables/useAppSettings'
+import { useLocalToggle } from '../../../core/composables/useLocalToggle'
+import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,

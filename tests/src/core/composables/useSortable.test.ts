@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
-import { useSortable } from '../../../../src/shared/composables/useSortable'
+import { useSortable } from '../../../../src/core/composables/useSortable'
 
 describe('useSortable', () => {
   it('reorders the list on drag-over and notifies', () => {

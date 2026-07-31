@@ -15,7 +15,7 @@ const { version: appVersion } = JSON.parse(
   readFileSync(path.join(__dirname, 'package.json'), 'utf8'),
 )
 
-// Frontend unit tests (Vue components, composables, src/ + shared/ logic).
+// Frontend unit tests (Vue components, composables, src/core + root shared/ contracts).
 // Backend unit/integration tests run under `bun test` instead (see package.json).
 export default defineConfig({
   plugins: [vue()],

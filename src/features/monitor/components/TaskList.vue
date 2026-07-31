@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TaskListItem from './TaskListItem.vue'
-import { useAppSettings } from '../../../shared/composables/useAppSettings'
+import { useAppSettings } from '../../../core/composables/useAppSettings'
 import { resolveHideMissingArtifacts } from '../../../../shared/schemas/appSettings'
 
 const props = defineProps({

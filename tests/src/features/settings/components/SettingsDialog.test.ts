@@ -5,7 +5,7 @@ import SettingsDialog from '@/features/settings/components/SettingsDialog.vue'
 import {
   STORAGE_KEY,
   useAppSettings,
-} from '@/shared/composables/useAppSettings'
+} from '@/core/composables/useAppSettings'
 
 vi.mock('@/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api')>()
