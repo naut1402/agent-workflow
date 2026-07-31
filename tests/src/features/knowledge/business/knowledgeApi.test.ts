@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { handleKnowledgeApi } from '../../../../../src/features/knowledge/server/knowledgeApi'
+import { handleKnowledgeApi } from '../../../../../src/features/knowledge/business/knowledgeApi'
 
 let root: string
 beforeEach(async () => {

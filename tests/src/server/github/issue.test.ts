@@ -3,7 +3,7 @@ import {
   buildIssuePrompt,
   fetchGithubIssue,
   parseGithubIssueUrl,
-} from '../../../../src/server/github/issue'
+} from '../../../../src/features/monitor/business/github/issue'
 
 const originalFetch = globalThis.fetch
 let savedToken: string | undefined

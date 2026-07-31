@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { homeDir, safeReadDir, statSafe } from '../../core/contracts/fs.js'
-import { parseFrontmatter } from '../../core/contracts/frontmatter.js'
+import { homeDir, safeReadDir, statSafe } from '../../../../core/contracts/fs.js'
+import { parseFrontmatter } from '../../../../core/contracts/frontmatter.js'
 
 export interface ScanOpts {
   includeContractSkills?: boolean

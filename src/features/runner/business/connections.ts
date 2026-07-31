@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { registryHome } from '../registry.js'
+import { registryHome } from '../../../core/registry.js'
 import {
   CONNECTIONS_VERSION,
   DEFAULT_CONNECTION_ID,

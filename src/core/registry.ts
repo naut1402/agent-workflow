@@ -5,7 +5,7 @@
 //   ~/.dev-team-dashboard/projects.json   (override via DEV_TEAM_DASHBOARD_HOME)
 //
 // This module is the single source of truth shared by BOTH the REST API
-// (server/devTeamApi.js) and the MCP server (mcp/server.mjs), so CRUD applied
+// (core/devTeamApi.js) and the MCP server (mcp/server.mjs), so CRUD applied
 // from either channel stays consistent and validation can never be bypassed.
 //
 // Design ref: U0001 design.md §4.2 (schema + validate), §4.3 (resolveProjectRoot

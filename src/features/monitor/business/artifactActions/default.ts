@@ -1,4 +1,4 @@
-import type { ArtifactAction } from '../../core/contracts/schemas/artifactAction.js'
+import type { ArtifactAction } from '../../../../core/contracts/schemas/artifactAction.js'
 
 // Built-in default catalog, used when the dashboard-global
 // `artifact-actions.yaml` (under `~/.dev-team-dashboard/`) is missing. Kept as a

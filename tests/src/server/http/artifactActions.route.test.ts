@@ -3,8 +3,8 @@ import http from 'node:http'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApiHandler } from '../../../../src/server/devTeamApi.js'
-import { createRegistryContext } from '../../../../src/server/registry.js'
+import { createApiHandler } from '../../../../src/core/devTeamApi.js'
+import { createRegistryContext } from '../../../../src/core/registry.js'
 
 // Route-level contract for the artifact quick-actions endpoints, booted the same
 // way as the golden test (real node:http around createApiHandler + a throwaway

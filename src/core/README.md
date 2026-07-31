@@ -1,28 +1,29 @@
-# `src/core` — nền tảng frontend / shell + contracts
+# `src/core` — nền tảng app (FE shell + contracts + HTTP kernel)
 
-Kernel phía browser: UI primitives, composable dùng chung, i18n, helper thuần, injection key của shell, và **contracts** (Zod/schema/helper FE↔BE).
+- **Browser:** UI primitives, composable, i18n, shell keys, `contracts/`
+- **Node (không bundle vào SPA):** `registry.ts`, `http/`, `devTeamApi.ts`, `business/AbstractBusiness`
 
 ## Biên với các cây khác
 
 | Cây | Vai trò |
 |-----|---------|
-| `src/core/` | Nền FE + shell keys + `contracts/` |
-| `src/core/contracts/` | Contract FE↔BE (Zod, sanitize, fs helper…) — alias `@shared` |
-| `src/features/` | Mode / panel UI |
-| `src/server/` | Domain + HTTP Node (không import từ browser bundle) |
+| `src/core/` | Nền FE + contracts + HTTP/registry kernel |
+| `src/core/http/types.ts` | **Nguồn type thống nhất** (`HonoEnv`, re-export registry types) |
+| `src/features/` | Mode UI + `api.ts` / `controller.ts` / `business/` |
+| `src/standalone.ts` | Entrypoint HTTP production (`bun run serve`) |
+| `src/runner-cli.mjs` | CLI submit job |
 
-`src/core` (trừ phần Node-only trong `contracts/fs.ts` khi chỉ server dùng) được import từ `App.vue` và `src/features/*`. Feature **không** import `src/server/`.
+Feature import type từ `src/core/http/types.js`. Không còn thư mục `src/server/`.
 
 ## Có trong 1.0.0
 
-- `composables/`, `ui/`, `i18n/`, `lib/`, `markdown.ts`
-- `contracts/` — trước đây là repo-root `shared/`
-- `shell/keys.ts` — `InjectionKey` typed cho `navigateToMode` và `reloadProjects`
+- `composables/`, `ui/`, `i18n/`, `lib/`, `markdown.ts`, `shell/keys.ts`
+- `contracts/` — Zod/schema FE↔BE (alias `@shared`)
+- `registry.ts`, `http/{app,createApiHandler,loadFeatureRoutes,types,respond,AbstractController}`, `devTeamApi.ts`
+- `business/AbstractBusiness.ts`
 
 ## Chưa có (sau 1.0.0)
 
-- ModeRegistry / `registerMode` / sidebar động theo plugin
-- Event bus / contribution API
-- Ports plugin công khai
+- ModeRegistry / event bus / contribution API
 
-Xem thêm [`docs/architecture.md`](../../docs/architecture.md) §3.2.
+Xem [`docs/architecture.md`](../../docs/architecture.md).

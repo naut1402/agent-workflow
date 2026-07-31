@@ -9,7 +9,7 @@ import {
   resolveSessionPlan,
   saveTaskSessionLedger,
   type SessionEntry,
-} from '../../../../src/server/runners/sessionLedger.js'
+} from '../../../../src/features/runner/business/sessionLedger.js'
 
 let home: string
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME

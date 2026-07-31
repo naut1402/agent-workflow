@@ -2,16 +2,16 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/server/http/app.js'
-import type { RegistryContext } from '../../../../src/server/registry.js'
+import { createApp } from '../../../../src/core/http/app.js'
+import type { RegistryContext } from '../../../../src/core/http/types.js'
 import {
   submitApprovalJob,
   loadJob,
   registerProvider,
   upsertConnection,
   upsertRunner,
-} from '../../../../src/server/runners/index.js'
-import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/server/runners/types.js'
+} from '../../../../src/features/runner/business/index.js'
+import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
 // Route-level contract for the approval-flow job endpoints
 // (GET /api/jobs/:id/proposal, POST .../approve|discard|feedback), driven via
@@ -43,7 +43,7 @@ const stubProvider: RunnerProvider = {
 }
 
 let root: string
-let app: ReturnType<typeof createApp>
+let app: Awaited<ReturnType<typeof createApp>>
 const savedEnv = { ...process.env }
 
 function fakeCtx(): RegistryContext {
@@ -94,13 +94,13 @@ async function awaitingJob(content = 'original\n') {
   return { ws, job }
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-approval-route-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = path.join(root, '.home')
   registerProvider(stubProvider)
   upsertConnection({ id: 'stub-conn-route', kind: 'local-console', providerId: PROVIDER_ID, cliPath: 'stub' })
   upsertRunner({ id: 'stub-runner-route', connectionId: 'stub-conn-route', config: {} })
-  app = createApp(fakeCtx())
+  app = await createApp(fakeCtx())
 })
 afterAll(() => {
   process.env = savedEnv

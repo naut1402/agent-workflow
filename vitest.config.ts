@@ -35,13 +35,13 @@ export default defineConfig({
     // Unit tests live under tests/ mirroring the source tree. Vitest owns FE +
     // contracts; bun test owns tests/src/server + tests/mcp.
     include: ['tests/src/**/*.{test,spec}.ts'],
-    exclude: ['node_modules', 'dist', 'test-e2e/**', 'tests/src/server/**', 'tests/src/features/**/server/**'],
+    exclude: ['node_modules', 'dist', 'test-e2e/**', 'tests/src/server/**', 'tests/src/features/**/business/**', 'tests/src/features/**/server/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: './coverage/frontend',
       include: ['src/**/*.{ts,vue}'],
-      exclude: ['src/server/**'],
+      exclude: ['src/core/http/**', 'src/core/registry.ts', 'src/core/devTeamApi.ts', 'src/standalone.ts', 'src/runner-cli.mjs', 'src/features/**/business/**'],
       // Thresholds start at 0 (no tests yet on setup branch) and are raised
       // per-module as each module's tests land. Target: 60% global, then tighten.
       thresholds: { lines: 0, functions: 0, branches: 0, statements: 0 },

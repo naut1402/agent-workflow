@@ -7,7 +7,7 @@ import {
   findTranscriptFile,
   readTranscript,
   readSessionTranscript,
-} from '../../../../src/server/chat/sessionTranscript'
+} from '../../../../src/features/monitor/business/sessionTranscript'
 
 // The CLI keeps its own conversation transcript at
 // <CLAUDE_CONFIG_DIR>/projects/<encoded cwd>/<sessionId>.jsonl and appends to it

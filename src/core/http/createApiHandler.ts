@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Buffer } from 'node:buffer'
-import type { RegistryContext } from '../registry.js'
-import { json } from '../../core/contracts/http.js'
-import { handleKnowledgeApi } from '../../features/knowledge/server/knowledgeApi.js'
-import { appendRequestLog } from '../../features/logs/server/store.js'
+import type { RegistryContext } from './types.js'
+import { json } from '../contracts/http.js'
+import { handleKnowledgeApi } from '../../features/knowledge/business/knowledgeApi.js'
+import { appendRequestLog } from '../../features/logs/business/store.js'
 import { createApp } from './app.js'
 
 // ── Node ⇆ Hono bridge ─────────────────────────────────────────────────────
@@ -41,7 +41,18 @@ async function writeWebResponse(res: ServerResponse, response: Response): Promis
 }
 
 export function createApiHandler(ctx: RegistryContext) {
-  const app = createApp(ctx)
+  // Lazy init: first /api request awaits feature route registration once.
+  // Reset on failure so a transient init error does not pin every later request to 500.
+  let appPromise: Promise<Awaited<ReturnType<typeof createApp>>> | null = null
+  const getApp = () => {
+    if (!appPromise) {
+      appPromise = createApp(ctx).catch((err) => {
+        appPromise = null
+        throw err
+      })
+    }
+    return appPromise
+  }
 
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url || '/', 'http://localhost')
@@ -62,6 +73,7 @@ export function createApiHandler(ctx: RegistryContext) {
         await handleKnowledgeApi(req, res, url, root)
         return true
       }
+      const app = await getApp()
       const response = await app.fetch(await nodeToWebRequest(req, url))
       await writeWebResponse(res, response)
     } catch (err: any) {

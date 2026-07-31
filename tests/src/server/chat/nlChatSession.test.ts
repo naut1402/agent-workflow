@@ -8,17 +8,17 @@ import {
   registerProvider,
   upsertConnection,
   upsertRunner,
-} from '../../../../src/server/runners/index'
-import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/server/runners/types'
+} from '../../../../src/features/runner/business/index'
+import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types'
 import { TASK_ID_PATTERN } from '../../../../src/core/contracts/schemas/taskCreate'
-import { ensureNlChatBuilderAgent } from '../../../../src/server/agents/index'
+import { ensureNlChatBuilderAgent } from '../../../../src/features/agent-editor/business/index'
 import {
   startNlChatSession,
   continueNlChatSession,
   getNlChatTurn,
   cancelNlChatSession,
   isNlChatSessionId,
-} from '../../../../src/server/chat/nlChatSession'
+} from '../../../../src/features/nl-chat/business/nlChatSession'
 
 // startNlChatSession/continueNlChatSession are thin wrappers around
 // submitJob/sendTaskFeedback (F0011) — these tests exercise the wrapper

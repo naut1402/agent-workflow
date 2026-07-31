@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { dedupeCatalogItems, sourcePriority } from '../../../../src/server/catalog/dedupe'
+import { dedupeCatalogItems, sourcePriority } from '../../../../src/features/pipeline-editor/business/catalog/dedupe'
 
 describe('sourcePriority', () => {
   test('ranks dashboard > project > plugin > repo > user > cursor > unknown', () => {

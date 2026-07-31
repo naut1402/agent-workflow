@@ -1,4 +1,4 @@
-import { isPrivateHostname } from '../../core/contracts/sanitize.js'
+import { isPrivateHostname } from '../../../core/contracts/sanitize.js'
 
 export interface FetchUrlSafeOptions {
   /** Extra request headers (e.g. API Accept / Authorization). */

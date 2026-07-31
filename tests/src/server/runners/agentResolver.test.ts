@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { resolveAgent } from '../../../../src/server/runners/agentResolver.js'
+import { resolveAgent } from '../../../../src/features/runner/business/agentResolver.js'
 
 // Regression test for a real bug caught via the job-log payload (see PR history):
 // any agent markdown with an intro paragraph before the first canonical heading,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { generateDraftFromNl } from '../../../../src/server/agents/generate'
+import { generateDraftFromNl } from '../../../../src/features/agent-editor/business/generate'
 
 // With no API key, generateDraftFromNl must fall back to the local heuristic
 // (deterministic, no network).

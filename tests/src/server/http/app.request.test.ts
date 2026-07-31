@@ -2,16 +2,16 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/server/http/app.js'
-import { readLogs } from '../../../../src/features/logs/server/store.js'
-import type { RegistryContext } from '../../../../src/server/registry.js'
+import { createApp } from '../../../../src/core/http/app.js'
+import { readLogs } from '../../../../src/features/logs/business/store.js'
+import type { RegistryContext } from '../../../../src/core/http/types.js'
 
 // Integration tests via Hono's app.request — no server boot, no node req/res
 // mock. This is the testability win of the Hono migration: routing + the
 // root-resolution middleware are exercised directly against an in-memory app.
 
 let root: string
-let app: ReturnType<typeof createApp>
+let app: Awaited<ReturnType<typeof createApp>>
 
 // Minimal fake ctx: unknown project → null root; default → fixture root.
 function fakeCtx(): RegistryContext {
@@ -31,14 +31,14 @@ function fakeCtx(): RegistryContext {
 
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
 
-beforeAll(() => {
+beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-appreq-'))
   // Keep audit logs (emitted by mutation routes) inside the tmp root.
   process.env.DEV_TEAM_DASHBOARD_HOME = path.join(root, '.home')
   fs.mkdirSync(path.join(root, '.dev-state'), { recursive: true })
   fs.mkdirSync(path.join(root, 'tasks', 'A1'), { recursive: true })
   fs.writeFileSync(path.join(root, '.dev-state', 'A1.json'), JSON.stringify({ current_phase: 'design' }))
-  app = createApp(fakeCtx())
+  app = await createApp(fakeCtx())
 })
 
 afterAll(() => {

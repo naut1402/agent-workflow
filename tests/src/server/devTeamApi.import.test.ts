@@ -5,7 +5,7 @@ import { describe, expect, test } from 'bun:test'
 // helpers. A resolution / load regression fails here immediately.
 describe('devTeamApi module graph', () => {
   test('createApiHandler + devTeamApi load and are callable factories', async () => {
-    const mod = await import('../../../src/server/devTeamApi.js')
+    const mod = await import('../../../src/core/devTeamApi.js')
     expect(typeof mod.createApiHandler).toBe('function')
     expect(typeof mod.devTeamApi).toBe('function')
   })

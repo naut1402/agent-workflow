@@ -7,8 +7,8 @@ import {
   buildConsoleInvocation,
   createConsoleCommandProvider,
   splitCommandArgs,
-} from '../../../../../src/server/runners/providers/console-command.js'
-import type { CredentialProfile, ResolvedAgent } from '../../../../../src/server/runners/types.js'
+} from '../../../../../src/features/runner/business/providers/console-command.js'
+import type { CredentialProfile, ResolvedAgent } from '../../../../../src/features/runner/business/types.js'
 
 const credential: CredentialProfile = {
   id: 'cli-session-implicit',

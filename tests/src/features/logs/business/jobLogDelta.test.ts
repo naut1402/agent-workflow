@@ -6,10 +6,10 @@ import {
   readJobLogDelta,
   readTaskJobLogDelta,
   resolveTaskJobId,
-} from '../../../../../src/features/logs/server/jobLog.js'
-import { submitJob, loadJob } from '../../../../../src/server/runners/jobQueue.js'
-import { upsertRunner } from '../../../../../src/server/runners/registry.js'
-import { DEFAULT_CONNECTION_ID } from '../../../../../src/server/runners/types.js'
+} from '../../../../../src/features/logs/business/jobLog.js'
+import { submitJob, loadJob } from '../../../../../src/features/runner/business/jobQueue.js'
+import { upsertRunner } from '../../../../../src/features/runner/business/registry.js'
+import { DEFAULT_CONNECTION_ID } from '../../../../../src/features/runner/business/types.js'
 
 let home: string
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME

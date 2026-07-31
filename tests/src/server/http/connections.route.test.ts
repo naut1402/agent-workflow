@@ -2,12 +2,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/server/http/app.js'
-import type { RegistryContext } from '../../../../src/server/registry.js'
+import { createApp } from '../../../../src/core/http/app.js'
+import type { RegistryContext } from '../../../../src/core/http/types.js'
 
 let root: string
 let home: string
-let app: ReturnType<typeof createApp>
+let app: Awaited<ReturnType<typeof createApp>>
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
 
 function fakeCtx(): RegistryContext {
@@ -25,12 +25,12 @@ function fakeCtx(): RegistryContext {
   }
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-conn-api-'))
   home = path.join(root, '.home')
   process.env.DEV_TEAM_DASHBOARD_HOME = home
   fs.mkdirSync(home, { recursive: true })
-  app = createApp(fakeCtx())
+  app = await createApp(fakeCtx())
 })
 
 afterAll(() => {

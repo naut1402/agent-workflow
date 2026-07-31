@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { createFileDriver, knowledgeRoot, loadKnowledgeBundle } from '../../../../../src/features/knowledge/server/fileDriver'
+import { createFileDriver, knowledgeRoot, loadKnowledgeBundle } from '../../../../../src/features/knowledge/business/fileDriver'
 
 let root: string
 let driver: ReturnType<typeof createFileDriver>

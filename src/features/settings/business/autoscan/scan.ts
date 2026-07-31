@@ -3,8 +3,8 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { safeReadDir } from '../../core/contracts/fs.js'
-import { add, list, type Project } from '../registry.js'
+import { safeReadDir } from '../../../../core/contracts/fs.js'
+import { add, list, type Project } from '../../../../core/registry.js'
 
 export interface ScanHit {
   path: string

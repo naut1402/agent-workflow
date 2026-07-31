@@ -2,16 +2,16 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { browseDirectory } from '../../../src/server/fsBrowse'
+import { browseDirectory } from '../../../src/features/settings/business/fsBrowse'
 import {
   loadAutoscanConfig,
   saveAutoscanConfig,
   dashboardSettingsFile,
   autoscanFile,
-} from '../../../src/server/autoscan/config'
-import { runAutoscan } from '../../../src/server/autoscan/scan'
-import { add, list, createRegistryContext } from '../../../src/server/registry'
-import { createApp } from '../../../src/server/http/app'
+} from '../../../src/features/settings/business/autoscan/config'
+import { runAutoscan } from '../../../src/features/settings/business/autoscan/scan'
+import { add, list, createRegistryContext } from '../../../src/core/registry'
+import { createApp } from '../../../src/core/http/app'
 
 let home: string
 let workspaceParent: string
@@ -108,7 +108,7 @@ describe('HTTP autoscan + fs browse', () => {
     fs.mkdirSync(path.join(proj, '.dev-team-agent'), { recursive: true })
 
     const ctx = createRegistryContext({ defaultRoot: null })
-    const app = createApp(ctx)
+    const app = await createApp(ctx)
 
     const get0 = await app.request('/api/autoscan')
     expect(get0.status).toBe(200)
@@ -137,7 +137,7 @@ describe('HTTP autoscan + fs browse', () => {
     const child = path.join(workspaceParent, 'visible')
     fs.mkdirSync(child)
     const ctx = createRegistryContext({ defaultRoot: null })
-    const app = createApp(ctx)
+    const app = await createApp(ctx)
     const res = await app.request(`/api/fs/browse?path=${encodeURIComponent(workspaceParent)}`)
     expect(res.status).toBe(200)
     const body = await res.json()

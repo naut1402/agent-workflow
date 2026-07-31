@@ -23,7 +23,7 @@ export default defineConfig({
   // Build the SPA then serve it via the standalone server pointed at the fixture
   // workspace. reuseExistingServer locally so repeated runs are fast.
   webServer: {
-    command: 'bun run build && bun src/server/standalone.ts',
+    command: 'bun run build && bun src/standalone.ts',
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

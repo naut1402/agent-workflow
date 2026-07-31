@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import path from 'node:path'
-import { agentTemplatesDir, customAgentsDir, profilesDir, workflowStepTemplatesDir } from '../../../../src/server/agents/paths'
+import { agentTemplatesDir, customAgentsDir, profilesDir, workflowStepTemplatesDir } from '../../../../src/features/agent-editor/business/paths'
 
 const root = path.resolve('/data/.dev-team-agent')
 

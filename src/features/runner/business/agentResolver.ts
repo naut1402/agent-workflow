@@ -6,7 +6,7 @@ import {
   parseAgentMarkdown,
   ensureSectionOrder,
   getSectionTitle,
-} from '../../core/contracts/agentMarkdown.js'
+} from '../../../core/contracts/agentMarkdown.js'
 import type { ResolvedAgent } from './types.js'
 
 function homeDir(): string {

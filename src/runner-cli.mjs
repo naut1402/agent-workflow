@@ -9,7 +9,7 @@
  */
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { submitAndWait, submitJob, loadJob } from './runners/jobQueue.js'
+import { submitAndWait, submitJob, loadJob } from './features/runner/business/jobQueue.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 

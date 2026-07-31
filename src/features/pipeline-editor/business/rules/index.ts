@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { homeDir, safeReadDir } from '../../core/contracts/fs.js'
+import { homeDir, safeReadDir } from '../../../../core/contracts/fs.js'
 
 export const RULE_CATEGORIES = ['coding', 'doc-writing', 'doc-review', 'test', 'git-pr', 'other']
 

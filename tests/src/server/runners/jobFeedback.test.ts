@@ -11,8 +11,8 @@ import {
   registerProvider,
   upsertConnection,
   upsertRunner,
-} from '../../../../src/server/runners/index.js'
-import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/server/runners/types.js'
+} from '../../../../src/features/runner/business/index.js'
+import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
 // Task-scoped chat resume (F0011): sendTaskFeedback() is the taskId-keyed
 // counterpart to sendJobFeedback() (approval flow, jobId-keyed, see

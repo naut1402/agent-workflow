@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { statSafe } from '../../core/contracts/fs.js'
-import { knownArtifactsFor, loadPipelineConfig } from '../pipeline/index.js'
+import { statSafe } from '../../../../core/contracts/fs.js'
+import { knownArtifactsFor, loadPipelineConfig } from '../../../pipeline-editor/business/pipeline/index.js'
 
 // pipeline-export.json is machine-readable only — excluded from the UI artifact list.
 export const MACHINE_FILES = new Set(['pipeline-export.json'])

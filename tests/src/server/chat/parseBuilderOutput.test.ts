@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { parseBuilderOutput } from '../../../../src/server/chat/parseBuilderOutput'
+import { parseBuilderOutput } from '../../../../src/features/nl-chat/business/parseBuilderOutput'
 
 describe('parseBuilderOutput', () => {
   test('sentinel + valid JSON → draft', () => {

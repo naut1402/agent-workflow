@@ -2,10 +2,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/server/http/app.js'
-import type { RegistryContext } from '../../../../src/server/registry.js'
-import { loadJob, loadTaskSessionLedger, registerProvider, upsertConnection, upsertRunner } from '../../../../src/server/runners/index.js'
-import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/server/runners/types.js'
+import { createApp } from '../../../../src/core/http/app.js'
+import type { RegistryContext } from '../../../../src/core/http/types.js'
+import { loadJob, loadTaskSessionLedger, registerProvider, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
+import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
 // Route-level contract for POST /api/tasks/:id/feedback — task-scoped chat
 // resume (F0011), the counterpart to POST /api/jobs/:id/feedback (approval
@@ -35,7 +35,7 @@ const stubProvider: RunnerProvider = {
 }
 
 let root: string
-let app: ReturnType<typeof createApp>
+let app: Awaited<ReturnType<typeof createApp>>
 const savedEnv = { ...process.env }
 const PROJECT_ID = 'proj-task-feedback'
 
@@ -82,7 +82,7 @@ function seedTask(taskId: string, state: Record<string, unknown>, requestBody = 
   fs.writeFileSync(path.join(root, 'tasks', taskId, 'request.md'), requestBody, 'utf8')
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-task-feedback-route-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = path.join(root, '.home')
   registerProvider(stubProvider)
@@ -93,7 +93,7 @@ beforeAll(() => {
     ['version: 1', 'steps:', "  - id: implementer", "    agent: ' '", "  - id: reviewer", "    agent: ' '"].join('\n'),
     'utf8',
   )
-  app = createApp(fakeCtx())
+  app = await createApp(fakeCtx())
 })
 afterAll(() => {
   process.env = savedEnv

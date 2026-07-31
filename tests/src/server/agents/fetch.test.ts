@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { fetchUrlSafe } from '../../../../src/server/agents/fetch'
+import { fetchUrlSafe } from '../../../../src/features/agent-editor/business/fetch'
 
 // These assert the SSRF/protocol guards which reject BEFORE any network call.
 describe('fetchUrlSafe guards', () => {

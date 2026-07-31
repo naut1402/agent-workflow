@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { buildClaudeInvocation } from '../../../../src/server/runners/providers/claude-code-cli.js'
+import { buildClaudeInvocation } from '../../../../src/features/runner/business/providers/claude-code-cli.js'
 import {
   buildCursorJsonArgs,
   mintSessionId,
   parseCursorJsonOutput,
   prepareSessionInvocation,
-} from '../../../../src/server/runners/sessionCapture.js'
+} from '../../../../src/features/runner/business/sessionCapture.js'
 
 describe('sessionCapture', () => {
   test('claude preset-uuid: mints id when starting fresh', () => {

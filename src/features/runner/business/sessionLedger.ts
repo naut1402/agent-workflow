@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { registryHome } from '../registry.js'
+import { registryHome } from '../../../core/registry.js'
 
 export type SessionPolicy = 'single' | 'per-step' | 'per-runner'
 export type SessionEntryStatus = 'open' | 'closed' | 'stale' | 'archived'

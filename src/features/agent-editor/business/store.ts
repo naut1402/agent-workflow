@@ -1,9 +1,9 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import yaml from 'js-yaml'
-import { parseAgentMarkdown } from '../../core/contracts/agentMarkdown.js'
-import { safeReadDir } from '../../core/contracts/fs.js'
-import { sanitiseAgentName } from '../../core/contracts/sanitize.js'
+import { parseAgentMarkdown } from '../../../core/contracts/agentMarkdown.js'
+import { safeReadDir } from '../../../core/contracts/fs.js'
+import { sanitiseAgentName } from '../../../core/contracts/sanitize.js'
 import { customAgentsDir } from './paths.js'
 
 /** Catalog-shaped listing of dashboard-created custom agents (for buildCatalog). */

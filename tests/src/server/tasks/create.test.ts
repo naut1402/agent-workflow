@@ -3,8 +3,8 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import yaml from 'js-yaml'
-import { createTask, renderRequestMarkdown } from '../../../../src/server/tasks/create'
-import { DEFAULT_PIPELINE } from '../../../../src/server/pipeline/index'
+import { createTask, renderRequestMarkdown } from '../../../../src/features/monitor/business/tasks/create'
+import { DEFAULT_PIPELINE } from '../../../../src/features/pipeline-editor/business/pipeline/index'
 
 let dirs: string[] = []
 async function tmpRoot(): Promise<string> {

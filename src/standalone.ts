@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // Standalone dev-team-dashboard server.
 //
-//   bun server/standalone.ts
+//   bun src/standalone.ts
 //
 // A neutral HTTP server that does NOT live inside any single
 // `.dev-team-agent/` workspace. It:
@@ -22,8 +22,8 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createApiHandler } from './devTeamApi.js'
-import { createRegistryContext, seedDefault, list } from './registry.js'
+import { createApiHandler } from './core/devTeamApi.js'
+import { createRegistryContext, seedDefault, list } from './core/registry.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distDir = path.resolve(__dirname, '..', 'dist')

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { DEFAULT_PIPELINE, knownArtifactsFor, loadPipelineConfig } from '../../../../src/server/pipeline/index'
+import { DEFAULT_PIPELINE, knownArtifactsFor, loadPipelineConfig } from '../../../../src/features/pipeline-editor/business/pipeline/index'
 
 let dirs: string[] = []
 async function tmpRoot(): Promise<string> {

@@ -12,8 +12,8 @@ import {
   upsertRunner,
   upsertConnection,
   registerProvider,
-} from '../../../../src/server/runners/index.js'
-import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/server/runners/types.js'
+} from '../../../../src/features/runner/business/index.js'
+import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
 // End-to-end characterization of the approval flow (U0005-4): a `require_approval`
 // quick action runs against a throwaway copy of the task workspace, reaches

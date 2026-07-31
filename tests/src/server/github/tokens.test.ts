@@ -7,10 +7,10 @@ import {
   saveGithubTokensConfig,
   dashboardSettingsFile,
   saveAutoscanConfig,
-} from '../../../../src/server/autoscan/config'
-import { createRegistryContext } from '../../../../src/server/registry'
-import { createApp } from '../../../../src/server/http/app'
-import { fetchGithubIssue } from '../../../../src/server/github/issue'
+} from '../../../../src/features/settings/business/autoscan/config'
+import { createRegistryContext } from '../../../../src/core/registry'
+import { createApp } from '../../../../src/core/http/app'
+import { fetchGithubIssue } from '../../../../src/features/monitor/business/github/issue'
 
 let home: string
 const saved: Record<string, string | undefined> = {}
@@ -53,7 +53,7 @@ describe('github tokens config', () => {
 
 describe('GET/PUT /api/github/tokens', () => {
   test('round-trips via Hono', async () => {
-    const app = createApp(createRegistryContext())
+    const app = await createApp(createRegistryContext())
     const put = await app.request('/api/github/tokens', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

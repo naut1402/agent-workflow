@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, writeStateAtomic } from '../../../../src/server/tasks/state'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
 
 let dirs: string[] = []
 async function tmp(): Promise<string> {

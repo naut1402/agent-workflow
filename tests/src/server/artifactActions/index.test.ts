@@ -15,7 +15,7 @@ import {
   loadArtifactActionsFile,
   saveArtifactActions,
   DEFAULT_ARTIFACT_ACTIONS,
-} from '../../../../src/server/artifactActions/index.js'
+} from '../../../../src/features/monitor/business/artifactActions/index.js'
 import type { ArtifactAction } from '../../../../src/core/contracts/schemas/artifactAction.js'
 
 const action = (over: Partial<ArtifactAction> = {}): ArtifactAction => ({

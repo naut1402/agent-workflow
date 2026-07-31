@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { registryHome } from '../../../server/registry.js'
+import { registryHome } from '../../../core/registry.js'
 import { statSafe } from '../../../core/contracts/fs.js'
 import {
   type LogEntry,

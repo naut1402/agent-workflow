@@ -7,7 +7,7 @@ import {
   appendRequestLog,
   emitAudit,
   readLogs,
-} from '../../../../../src/features/logs/server/store.js'
+} from '../../../../../src/features/logs/business/store.js'
 
 // Logger store round-trips against a tmp DEV_TEAM_DASHBOARD_HOME so it never
 // touches the real ~/.dev-team-dashboard.

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { findMarketplaceJson, scanPlugin, scanSkillsFlatDir } from '../../../../src/server/catalog/scan'
+import { findMarketplaceJson, scanPlugin, scanSkillsFlatDir } from '../../../../src/features/pipeline-editor/business/catalog/scan'
 
 let root: string
 

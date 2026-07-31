@@ -6,8 +6,8 @@ import path from 'node:path'
 import {
   buildClaudeInvocation,
   createLocalConsoleProvider,
-} from '../../../../../src/server/runners/providers/claude-code-cli.js'
-import type { CredentialProfile, ResolvedAgent } from '../../../../../src/server/runners/types.js'
+} from '../../../../../src/features/runner/business/providers/claude-code-cli.js'
+import type { CredentialProfile, ResolvedAgent } from '../../../../../src/features/runner/business/types.js'
 
 // Runs the shared local-console provider against real short-lived shell
 // scripts — no node:child_process mocking convention exists in this codebase

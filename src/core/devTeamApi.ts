@@ -8,7 +8,7 @@ import { createApiHandler } from './http/createApiHandler.js'
 //   createApiHandler(ctx) → async (req,res)=>boolean   (shared by both transports)
 //   devTeamApi({ root })  → Vite middleware plugin      (dev mode)
 //
-// The standalone node server (server/standalone.ts) mounts createApiHandler too.
+// The standalone entry (src/standalone.ts) mounts createApiHandler too.
 
 export { createApiHandler }
 

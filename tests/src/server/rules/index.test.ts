@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { buildRules, inferRuleCategory, RULE_CATEGORIES, walkRuleFiles, type RuleItem } from '../../../../src/server/rules/index'
+import { buildRules, inferRuleCategory, RULE_CATEGORIES, walkRuleFiles, type RuleItem } from '../../../../src/features/pipeline-editor/business/rules/index'
 
 describe('inferRuleCategory', () => {
   test.each([

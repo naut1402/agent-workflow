@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { registryHome } from '../registry.js'
+import { registryHome } from '../../../core/registry.js'
 import { ensureLegacyConnection } from './connections.js'
 import {
   DEFAULT_CONNECTION_ID,

@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/server/http/app.js'
-import type { RegistryContext } from '../../../../src/server/registry.js'
+import { createApp } from '../../../../src/core/http/app.js'
+import type { RegistryContext } from '../../../../src/core/http/types.js'
 
 // Route-level contract for DELETE /api/tasks/:id (B0009 §5) — permanently
 // removes a task's files without requiring its state file to be readable
@@ -11,7 +11,7 @@ import type { RegistryContext } from '../../../../src/server/registry.js'
 // PUT /api/task-archive, see state.test.ts's applyArchiveAction 404 case).
 
 let root: string
-let app: ReturnType<typeof createApp>
+let app: Awaited<ReturnType<typeof createApp>>
 const savedEnv = { ...process.env }
 
 function fakeCtx(): RegistryContext {
@@ -45,10 +45,10 @@ function seedTask(taskId: string, state: Record<string, unknown> | null) {
   }
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-task-delete-route-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = path.join(root, '.home')
-  app = createApp(fakeCtx())
+  app = await createApp(fakeCtx())
 })
 afterAll(() => {
   process.env = savedEnv

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { getKnowledgeDriver, loadKnowledgeConfig } from '../../../../../src/features/knowledge/server/driverRegistry'
+import { getKnowledgeDriver, loadKnowledgeConfig } from '../../../../../src/features/knowledge/business/driverRegistry'
 
 let root: string
 beforeEach(async () => {

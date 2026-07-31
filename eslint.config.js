@@ -52,7 +52,12 @@ export default tseslint.config(
   {
     files: [
       'src/**/*.{ts,tsx,js}',
-      'src/server/**/*.{ts,tsx,js,mjs}',
+      'src/core/**/*.{ts,tsx,js,mjs}',
+      'src/standalone.ts',
+      'src/runner-cli.mjs',
+      'src/features/**/api.ts',
+      'src/features/**/controller.ts',
+      'src/features/**/business/**/*.{ts,tsx,js}',
       'src/core/contracts/**/*.{ts,tsx,js}',
       'mcp/**/*.{ts,tsx,js}',
       'tests/**/*.{ts,tsx,js,mjs}',

@@ -1,14 +1,14 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import yaml from 'js-yaml'
-import { readYamlSafe } from '../../core/contracts/fs.js'
-import { registryHome } from '../registry.js'
+import { readYamlSafe } from '../../../../core/contracts/fs.js'
+import { registryHome } from '../../../../core/registry.js'
 import {
   ArtifactActionsFile,
   type ArtifactAction,
   type ArtifactActionView,
   type ArtifactMenuNode,
-} from '../../core/contracts/schemas/artifactAction.js'
+} from '../../../../core/contracts/schemas/artifactAction.js'
 import { DEFAULT_ARTIFACT_ACTIONS } from './default.js'
 
 export { DEFAULT_ARTIFACT_ACTIONS } from './default.js'

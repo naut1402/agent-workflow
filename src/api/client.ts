@@ -1,4 +1,4 @@
-// Thin fetch wrappers around the dev-server API exposed by src/server/devTeamApi.ts.
+// Thin fetch wrappers around the dev-server API exposed by src/core/devTeamApi.ts.
 
 import type { TaskArchivePatch, TaskStatePatch } from '../core/contracts/schemas/task'
 import { getApiToken } from '../core/lib/authToken.js'
@@ -716,7 +716,7 @@ export async function fetchJobs(limit = 10) {
 
 // ── Approval flow (require_approval quick actions) ───────────────────────────
 // A job that settled at `awaiting_approval` ran against a scratch copy; nothing
-// is on disk for real until `approveJob`. See src/server/runners/jobQueue.ts.
+// is on disk for real until `approveJob`. See src/features/runner/business/jobQueue.ts.
 
 // Proposed diff for an awaiting-approval job: { artifactName, before, after }.
 export async function fetchProposal(jobId: string) {

@@ -7,7 +7,7 @@ import {
   sanitiseCredentialId,
   sanitiseConnectionId,
   DEFAULT_CONNECTION_ID,
-} from '../../../../src/server/runners/types.js'
+} from '../../../../src/features/runner/business/types.js'
 import {
   substituteConfig,
   normalizeAgentRef,
@@ -38,7 +38,7 @@ import {
   loadJob,
   listJobs,
   cancelJob,
-} from '../../../../src/server/runners/index.js'
+} from '../../../../src/features/runner/business/index.js'
 
 // Characterization test for the runners execution plane (U0005), written
 // against the current JS via the public index surface so it survives the

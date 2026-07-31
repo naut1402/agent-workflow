@@ -2,11 +2,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { encodeWorkspacePath } from '../../../../src/server/chat/sessionTranscript'
-import { getTaskChatState, resolveChatSession } from '../../../../src/server/chat/taskChat'
-import { saveTaskSessionLedger, type SessionEntry } from '../../../../src/server/runners/sessionLedger'
-import { upsertConnection, upsertRunner } from '../../../../src/server/runners/index'
-import type { JobRecord } from '../../../../src/server/runners/types'
+import { encodeWorkspacePath } from '../../../../src/features/monitor/business/sessionTranscript'
+import { getTaskChatState, resolveChatSession } from '../../../../src/features/monitor/business/taskChat'
+import { saveTaskSessionLedger, type SessionEntry } from '../../../../src/features/runner/business/sessionLedger'
+import { upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index'
+import type { JobRecord } from '../../../../src/features/runner/business/types'
 
 // getTaskChatState mirrors sendTaskFeedback's guard order so the UI can explain
 // why sending is blocked before the user types, and resolves WHICH CLI session

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
-import { compileAgentMarkdown, emptyDraft } from '../../core/contracts/agentMarkdown.js'
+import { compileAgentMarkdown, emptyDraft } from '../../../core/contracts/agentMarkdown.js'
 import { agentTemplatesDir, customAgentsDir } from './paths.js'
 
 /** Seed `agent-templates/default-agent.md` if it does not exist yet. */

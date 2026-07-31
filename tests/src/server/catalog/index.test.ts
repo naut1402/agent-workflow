@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { buildCatalog, parseCatalogAgentId, resolveCatalogAgentPath } from '../../../../src/server/catalog/index'
+import { buildCatalog, parseCatalogAgentId, resolveCatalogAgentPath } from '../../../../src/features/pipeline-editor/business/catalog/index'
 
 describe('parseCatalogAgentId', () => {
   test('splits on the last colon into source + name', () => {

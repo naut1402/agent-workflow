@@ -15,7 +15,7 @@ import {
   saveRegistry,
   seedDefault,
   validateProjectPath,
-} from '../../../src/server/registry'
+} from '../../../src/core/registry'
 
 let home: string // registry config home (DEV_TEAM_DASHBOARD_HOME)
 let proj: string // a fake project root containing .dev-team-agent

@@ -11,15 +11,15 @@ import {
   upsertRunner,
   upsertConnection,
   registerProvider,
-} from '../../../../src/server/runners/index.js'
+} from '../../../../src/features/runner/business/index.js'
 import {
   spliceLines,
   extractLines,
   detectEol,
   cleanAgentOutput,
   findSelectionRange,
-} from '../../../../src/server/runners/jobQueue.js'
-import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/server/runners/types.js'
+} from '../../../../src/features/runner/business/jobQueue.js'
+import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
 // Selection splice (U0005-4): a selection quick action must only touch the
 // picked lines. The agent RESPONDS with the improved text (stdout); the server
