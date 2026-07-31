@@ -14,7 +14,7 @@ Nguồn quy ước duy nhất cho mọi AI agent làm việc trong repo, bất k
 `dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **dev-agent-teams orchestrator khác** — repo này không chạy orchestrator, chỉ quan sát. Với *state* từng task (`.dev-state/*.json`) thì chỉ đọc; với *config* (pipeline, custom agent, template, knowledge) và **artifact markdown** thì đọc/ghi được (ghi qua `PUT /api/artifact`).
 
 - **Backend**: Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Kernel ở `src/core/` (`http/`, `registry.ts`, `devTeamApi.ts`). Entry production: `src/standalone.ts`. Type thống nhất: `src/core/http/types.ts`. `/api/knowledge` chặn trước Hono trong `createApiHandler`.
-- **Frontend**: feature-module `src/features/<mode>/` …; API wrapper ở `src/api/`, nền FE/shell ở `src/core/`; contract FE↔BE ở `src/core/contracts/` (alias `@shared`).
+- **Frontend**: feature-module `src/features/<mode>/` …; FE HTTP client colocated `features/<mode>/client.ts`, helper chung `src/api/http.ts`, barrel `src/api/` re-export; nền FE/shell ở `src/core/`; contract FE↔BE ở `src/core/contracts/` (alias `@shared`). Không trộn với Hono `features/*/api.ts` (server).
 - **Data root** `.dev-team-agent/`, 2 run mode: dev đọc từ `cwd/..`/`DEV_TEAM_ROOT`; standalone đọc qua `ProjectRegistry` (`~/.dev-team-dashboard/projects.json`, `?project=<id>`).
 - **Pipeline config xếp lớp**: `DEFAULT_PIPELINE` (`src/features/pipeline-editor/business/pipeline/default.ts`) ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`, lớp sau đè lớp trước.
 - **MCP** (`mcp/server.ts`, `bun run mcp`): CRUD project-registry qua `src/core/registry.ts`, không cần HTTP server.
@@ -77,7 +77,7 @@ Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuầ
 
 ### 3.5 Frontend (Vue 3)
 
-`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables}` + `src/core/{ui,composables,lib,i18n,shell}`; API wrapper tập trung ở `src/api/`.
+`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables,client.ts}` + `src/core/{ui,composables,lib,i18n,shell}`; `src/api/` là barrel + `http.ts` (`qs`/`apiFetch`) — không nhét fetch theo feature vào một file khổng lồ.
 
 - Quy ước button (ưu tiên icon-btn, default không viền, hover scale): [`docs/ui-buttons.md`](docs/ui-buttons.md).
 - **Custom UI primitives** trong `src/core/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.
