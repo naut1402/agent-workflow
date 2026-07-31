@@ -119,9 +119,11 @@ describe('TaskList', () => {
     })
   })
 
-  it('flags a task with pending Q&A', () => {
+  it('flags a task with pending Q&A using the chat icon', () => {
     const w = mount(TaskList, { props: { tasks: [{ ...tasks[0], has_qa: true }] } })
     expect(w.find('.flag.qa').exists()).toBe(true)
+    expect(w.find('.flag.qa .flag-chat').exists()).toBe(true)
+    expect(w.find('.flag.qa').text()).not.toContain('Q')
   })
 
   it('shows the archive button for every task, regardless of current_phase', () => {

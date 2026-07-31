@@ -65,7 +65,28 @@
 .tasklist .id.id-active { color: var(--active); }
 .tasklist .id.id-done { color: var(--done); }
 .tasklist .id.id-pending { color: var(--muted); }
-.tasklist .flag { font-size: 11px; font-weight: 700; }
+.tasklist .flag {
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  border-radius: 0;
+}
+.tasklist .flag .flag-chat {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
 .tasklist .flag.error { color: var(--danger); }
 .tasklist .flag.qa,
 .tasklist .flag.hitl,
@@ -266,8 +287,14 @@
 .chip-ok { color: var(--accent); border-color: var(--accent); }
 .chip-err { color: var(--danger); border-color: var(--danger); }
 
-/* QA */
-.qa { background: rgba(227,179,65,0.08); border: 1px solid var(--waiting); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+/* QA panel (không dùng class `.qa` trần — sẽ đụng `.flag.qa` ở task list) */
+.qa-panel {
+  background: rgba(227,179,65,0.08);
+  border: 1px solid var(--waiting);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
 .qa-head { font-weight: 700; color: var(--waiting); margin-bottom: 4px; }
 .qa-hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
 .qa-block + .qa-block { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
@@ -277,13 +304,14 @@
 .qa-other-input { margin-top: 4px; margin-left: 24px; width: calc(100% - 24px); }
 .qa-submit-row { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
 
-/* Artifact viewer */
+/* Artifact viewer — không tự cuộn; chỉ .monitor-content cuộn trang */
 .art-view {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 18px 22px;
   min-height: 200px;
+  overflow: visible;
 }
 .art-empty { color: var(--muted); }
 
@@ -401,11 +429,10 @@
 .art-section-editor { min-height: 120px; margin: 8px 14px 14px; width: calc(100% - 28px); }
 .art-editor {
   width: 100%;
-  min-height: 320px;
+  min-height: 120px;
   font-family: ui-monospace, monospace;
   font-size: 13px;
   line-height: 1.5;
-  resize: vertical;
 }
 .art-message { font-size: 12px; color: var(--waiting); margin: 0 0 10px; }
 .art-warning { font-size: 12px; color: var(--waiting); margin: 0 0 10px; }
@@ -442,6 +469,7 @@
 .monitor-layout {
   display: grid;
   grid-template-columns: 240px 1fr;
+  flex: 1;
   height: 100%;
   min-height: 0;
   overflow: hidden;

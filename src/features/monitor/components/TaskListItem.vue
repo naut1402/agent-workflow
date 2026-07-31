@@ -62,11 +62,16 @@ function taskStatusKey(task: any): 'error' | 'waiting' | 'done' | 'active' | 'pe
 
 function statusIcon(task: any): string {
   if (!task.state_ok) return '⚠'
-  if (task.has_qa) return 'Q'
+  // has_qa: SVG chat icon in template (not a text glyph)
+  if (task.has_qa) return ''
   if (task.hitl_pending) return '⏸'
   if (task.current_phase === 'completed') return '✓'
   if (task.current_phase) return '▶'
   return '○'
+}
+
+function isQaFlag(task: any): boolean {
+  return !!(task.state_ok && task.has_qa)
 }
 
 function flagClass(task: any): string {
@@ -121,7 +126,24 @@ function hiddenCount(task: any) {
         class="flag"
         :class="flagClass(task)"
         :title="!task.state_ok ? t('monitor.taskItem.stateError') : task.has_qa ? t('monitor.taskItem.flagQa') : task.hitl_pending ? t('monitor.taskItem.flagHitl') : undefined"
-      >{{ statusIcon(task) }}</span>
+      >
+        <svg
+          v-if="isQaFlag(task)"
+          class="flag-chat"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M20.5 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 20.5 12z" />
+        </svg>
+        <template v-else>{{ statusIcon(task) }}</template>
+      </span>
       <span class="id" :class="'id-' + taskStatusKey(task)">{{ task.task_id }}</span>
       <button
         v-if="task.state_ok"
