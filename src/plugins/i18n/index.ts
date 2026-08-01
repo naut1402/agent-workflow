@@ -2,7 +2,17 @@ import type { App, InjectionKey, Plugin } from 'vue'
 import { createI18n } from 'vue-i18n'
 import type { LocalePreference } from '../../core/contracts/schemas/appSettings'
 import { loadLocaleMessages } from './loadLocales'
-import './types'
+
+declare module 'vue' {
+  interface ComponentCustomProperties {
+    /** Đổi locale (plugin i18n) — `globalProperties.$setI18nLocale`. */
+    $setI18nLocale: (locale: LocalePreference) => void
+    $localeRegistry: {
+      locales: string[]
+      defaultLocale: string
+    }
+  }
+}
 
 export type AppLocale = LocalePreference
 
