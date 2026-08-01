@@ -61,4 +61,12 @@ describe('i18n foundation', () => {
     expect(t('common.modes.logs')).toBe('ログ')
     setI18nLocale('vi')
   })
+
+  it('missing key on active locale falls back to vi', () => {
+    registerLocale('xx', { common: { modes: { logs: 'XX' } } })
+    setI18nLocale('xx' as any)
+    // key không có trong xx → fallbackLocale=vi
+    expect(t('common.status.updated', { time: '10:00' })).toBe('cập nhật 10:00')
+    setI18nLocale('vi')
+  })
 })

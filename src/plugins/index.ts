@@ -30,5 +30,5 @@ export {
   type AppLocale,
   type LocaleRegistry,
   type I18nHelpers,
-  type Messages,
+  loadLocaleMessages,
 } from './i18n'

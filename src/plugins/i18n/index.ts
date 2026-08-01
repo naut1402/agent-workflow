@@ -2,11 +2,9 @@ import type { App, InjectionKey, Plugin } from 'vue'
 import { createI18n } from 'vue-i18n'
 import type { LocalePreference } from '../../core/contracts/schemas/appSettings'
 import { loadLocaleMessages } from './loadLocales'
-import type { Messages } from './schema'
 import './types'
 
 export type AppLocale = LocalePreference
-export type { Messages }
 
 export const DEFAULT_LOCALE: AppLocale = 'vi'
 
@@ -35,6 +33,8 @@ const localeRegistry: LocaleRegistry = {
 export function getLocaleRegistry(): LocaleRegistry {
   return localeRegistry
 }
+
+export { loadLocaleMessages }
 
 const loaded = loadLocaleMessages()
 const initialLocales = Object.keys(loaded)

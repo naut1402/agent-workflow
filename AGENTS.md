@@ -83,14 +83,14 @@ Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuầ
 - **Custom UI primitives** trong `src/core/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.
 ### 3.6 Ngôn ngữ UI (i18n)
 
-UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **Tiếng Việt (`vi`) là locale mặc định** và là **nguồn chân lý cho message schema** — các locale khác (vd `en`) được gắn type theo `vi` nên thiếu key là lỗi compile, không phải fallback runtime.
+UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **Tiếng Việt (`vi`) là locale mặc định** và **fallback** (`fallbackLocale: 'vi'`) — locale khác thiếu key thì hiện bản `vi`, không bắt typecheck đối ứng đủ.
 
 - Cài đặt qua `src/plugins` (`installPlugins` / `i18nPlugin`); `registerLocale` để bổ sung locale vào registry app-scope.
 - Message theo feature: `src/features/<feature>/locales/{vi,en}.ts` (+ `common` ở `src/plugins/i18n/locales/common/`); plugin **glob** tự nạp. Namespace = camelCase tên feature (`agent-editor` → `agentEditor`).
 - Plugin chỉ gắn từ `main.ts` qua `installPlugins` — helpers i18n inject global (`$t`, `$setI18nLocale`). Trong `<script setup>`: `const { t } = useI18nHelpers()` (`src/core/composables/useI18nHelpers.ts` — **không** import `useI18n` từ `vue-i18n`). Ngoài setup (scripts/pure): `import { t } from '@/plugins/i18n'`.
 - Locale hiện tại lưu trong `AppSettings.locale` (localStorage); đổi qua `useLocale()`.
 - Test mount component có `t()`: dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`).
-- **Khi thêm/sửa text UI**: đối ứng đủ `vi` + `en` trong `locales/` của feature; namespace mới → cập nhật `src/plugins/i18n/schema.ts`. Chi tiết: [`docs/i18n.md`](docs/i18n.md).
+- **Khi thêm/sửa text UI**: thêm key ở `vi`; `en` khuyến nghị đối ứng nhưng không bắt buộc (thiếu → fallback `vi`). Chi tiết: [`docs/i18n.md`](docs/i18n.md).
 
 ---
 

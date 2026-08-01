@@ -1,9 +1,4 @@
-import type { Messages } from './schema'
 import type { LocalePreference } from '../../core/contracts/schemas/appSettings'
-
-declare module 'vue-i18n' {
-  export interface DefineLocaleMessage extends Messages {}
-}
 
 declare module 'vue' {
   interface ComponentCustomProperties {
