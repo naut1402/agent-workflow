@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiRequest } from '../../../api/http'
+import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
 
 export async function fetchAgentTemplates() {
   return apiGet('/api/agent-templates')

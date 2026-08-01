@@ -9,7 +9,7 @@ import {
   saveAutoscanConfig,
 } from '../../../../src/features/settings/business/autoscan/config'
 import { createRegistryContext } from '../../../../src/core/registry'
-import { createApp } from '../../../../src/core/http/app'
+import { createApp } from '../../../../src/api/apiServer'
 import { fetchGithubIssue } from '../../../../src/features/monitor/business/github/issue'
 
 let home: string

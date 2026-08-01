@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { PHASES, phasesFromPipeline, phaseStatus, type Phase } from '../../../src/api/phase'
-import { qs } from '../../../src/api/client'
+import { PHASES, phasesFromPipeline, phaseStatus, type Phase } from '../../../../src/core/lib/phase'
+import { qs } from '../../../../src/core/http/client'
 
 describe('phasesFromPipeline', () => {
   it('falls back to PHASES when pipeline has no steps', () => {

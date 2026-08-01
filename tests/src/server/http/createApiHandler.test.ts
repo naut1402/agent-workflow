@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApiHandler } from '../../../../src/core/http/createApiHandler.js'
+import { createApiHandler } from '../../../../src/api/apiServer.js'
 import { readLogs } from '../../../../src/features/logs/business/store.js'
 import type { RegistryContext } from '../../../../src/core/http/types.js'
 

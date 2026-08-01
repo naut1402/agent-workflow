@@ -11,7 +11,7 @@ import {
 } from '../../../src/features/settings/business/autoscan/config'
 import { runAutoscan } from '../../../src/features/settings/business/autoscan/scan'
 import { add, list, createRegistryContext } from '../../../src/core/registry'
-import { createApp } from '../../../src/core/http/app'
+import { createApp } from '../../../src/api/apiServer'
 
 let home: string
 let workspaceParent: string

@@ -1,9 +1,8 @@
 import fsSync from 'node:fs'
-import { createRegistryContext } from './registry.js'
-import { createApiHandler } from './http/createApiHandler.js'
+import { createRegistryContext } from '../core/registry.js'
+import { createApiHandler } from './apiServer.js'
 
-// Backend HTTP surface over the `.dev-team-agent/` data root. The routing lives
-// in a Hono app (server/http/); this file keeps the public entrypoints:
+// API setup entrypoints:
 //
 //   createApiHandler(ctx) → async (req,res)=>boolean   (shared by both transports)
 //   devTeamApi({ root })  → Vite middleware plugin      (dev mode)

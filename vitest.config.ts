@@ -41,7 +41,17 @@ export default defineConfig({
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: './coverage/frontend',
       include: ['src/**/*.{ts,vue}'],
-      exclude: ['src/core/http/**', 'src/core/registry.ts', 'src/core/devTeamApi.ts', 'src/standalone.ts', 'src/runner-cli.mjs', 'src/features/**/business/**'],
+      exclude: [
+        'src/api/apiServer.ts',
+        'src/api/devTeamApi.ts',
+        'src/core/http/respond.ts',
+        'src/core/http/types.ts',
+        'src/core/http/AbstractController.ts',
+        'src/core/registry.ts',
+        'src/standalone.ts',
+        'src/runner-cli.mjs',
+        'src/features/**/business/**',
+      ],
       // Thresholds start at 0 (no tests yet on setup branch) and are raised
       // per-module as each module's tests land. Target: 60% global, then tighten.
       thresholds: { lines: 0, functions: 0, branches: 0, statements: 0 },

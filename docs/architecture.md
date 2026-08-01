@@ -36,21 +36,19 @@ Backend là **một app Hono duy nhất** chạy trên **hai transport** khác n
 
 ### 2.1 Tầng HTTP (Hono)
 
-- `src/core/http/app.ts` — `createApp(ctx)` (async) dựng instance `Hono`, middleware resolve `.dev-team-agent/` root từ `?project=`, rồi gọi `registerFeatureRoutes`.
+- `src/api/apiServer.ts` — `createApp(ctx)` dựng Hono + middleware resolve root từ `?project=` / tự duyệt `features/<name>/api.ts` (`registerFeatureRoutes`); `createApiHandler(ctx)` là **cầu nối Node ⇆ Hono** (lazy-await `createApp`).
 - `src/core/http/AbstractController.ts` — base controller (json/ok/requireRoot/parseBody/…) + `bind(Controller, method)`.
 - `src/core/business/AbstractBusiness.ts` — base tầng domain (requireRoot/fail; không biết HTTP).
 - `src/features/<name>/controller.ts` — HTTP handler (extends AbstractController); gọi `XxxBusiness`.
 - `src/features/<name>/business/` — domain + class `XxxBusiness` (extends AbstractBusiness).
-- `src/features/<name>/api.ts` — **chỉ** map route → `bind(...)` + `routeOrder` / `registerRoutes`.
-- `src/core/http/loadFeatureRoutes.ts` — static import các `api.ts`, sắp theo `routeOrder`. Thêm feature → thêm dòng registry (Vite/Node không dynamic-import `.ts`).
-- `src/core/http/{respond,types}.ts` — helper response + type dùng chung tầng HTTP (controller ưu tiên AbstractController).
-- `src/core/http/createApiHandler.ts` — **cầu nối Node ⇆ Hono**. Lazy-await `createApp` lần đầu.
+- `src/features/<name>/api.ts` — **chỉ** map route → `bind(...)` + `routeOrder` / `registerRoutes`. Feature mới có `api.ts` thì được nạp (không sửa registry tay).
+- `src/core/http/{respond,types,client}.ts` — helper response + type tầng HTTP server; `client.ts` là FE fetch (`apiGet`/`apiPost`/…).
 
 > **Lưu ý routing:** `/api/knowledge` **không** đi qua Hono — nó được `handleKnowledgeApi` (node-res thuần trong module knowledge) xử lý và **chặn trước** nhánh Hono ngay trong `createApiHandler`. Đừng mô tả "mọi route đều qua Hono". `createApiHandler` cũng là **điểm chốt duy nhất** ghi request log (fire-and-forget trong `finally`, không await vào response).
 
 ### 2.2 Shim tương thích
 
-`src/core/devTeamApi.ts` (36 dòng) chỉ là **shim** giữ hợp đồng cũ: re-export `createApiHandler` + export Vite plugin `devTeamApi({root})`. Nó **không** còn chứa logic core (khác hẳn mô tả cũ về "dispatcher `(req,res)=>boolean` là core").
+`src/api/devTeamApi.ts` (36 dòng) chỉ là **shim** giữ hợp đồng cũ: re-export `createApiHandler` + export Vite plugin `devTeamApi({root})`. Nó **không** còn chứa logic core (khác hẳn mô tả cũ về "dispatcher `(req,res)=>boolean` là core").
 
 ### 2.3 Hai transport
 
@@ -59,7 +57,7 @@ Backend là **một app Hono duy nhất** chạy trên **hai transport** khác n
 
 ### 2.4 Domain / business (data thuần, không biết HTTP)
 
-Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts` → business → controller → `core/http`. Kernel (registry, Hono transport) nằm `src/core/`; entry `src/standalone.ts`.
+Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts` → business → controller → `src/api` (Hono setup). Registry ở `src/core/registry.ts`; entry `src/standalone.ts`.
 
 | Module | Đường dẫn thật | Vai trò |
 |---|---|---|
@@ -103,8 +101,9 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 
 ### 3.1 API layer
 
-- `src/api/{http.ts, client.ts, phase.ts, index.ts}` — `http.ts` (`qs`/`apiFetch`/`apiGet`/`apiPost`/`apiRequest`); fetch theo consumer ở `src/features/<mode>/scripts/` (`featureNameApi.ts` chung, `ComponentNameApi.ts` riêng). `client.ts` chỉ re-export helper HTTP. Hono route đăng ký riêng ở `features/*/api.ts` (server).
-- Suy diễn trạng thái phase (`PHASES`, `phasesFromPipeline`, `phaseStatus`) nằm ở `phase.ts`. Phase status **được suy từ sự tồn tại của artifact** + con trỏ live — phản chiếu đúng quy tắc của orchestrator (status không bao giờ được encode, chỉ suy ra).
+- **Server setup** (`src/api/`): `apiServer.ts` (`createApp` + `createApiHandler` + đăng ký feature routes), `devTeamApi.ts` (Vite plugin). Kernel HTTP (`types`, `AbstractController`, `respond`, FE `client`) ở `src/core/http/`. Không có barrel FE trong `src/api/`.
+- **FE fetch**: `src/core/http/client.ts` (`apiGet`/`apiPost`/…). Fetch theo consumer ở `src/features/<mode>/scripts/`. Hono route đăng ký ở `features/*/api.ts`.
+- Suy diễn trạng thái phase (`PHASES`, `phasesFromPipeline`, `phaseStatus`) nằm ở `src/core/lib/phase.ts`. Phase status **được suy từ sự tồn tại của artifact** + con trỏ live — phản chiếu đúng quy tắc của orchestrator (status không bao giờ được encode, chỉ suy ra).
 
 ### 3.2 Core frontend (`src/core`)
 

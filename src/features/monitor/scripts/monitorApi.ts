@@ -1,6 +1,6 @@
 import type { TaskArchivePatch } from '../../../core/contracts/schemas/task'
 import { i18n } from '../../../core/i18n'
-import { apiGet, apiPost, apiRequest } from '../../../api/http'
+import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
 
 export async function fetchTasks(projectId?: string) {
   return apiGet('/api/tasks', { project: projectId })

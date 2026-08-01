@@ -13,8 +13,8 @@ Nguồn quy ước duy nhất cho mọi AI agent làm việc trong repo, bất k
 
 `dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **dev-agent-teams orchestrator khác** — repo này không chạy orchestrator, chỉ quan sát. Với *state* từng task (`.dev-state/*.json`) thì chỉ đọc; với *config* (pipeline, custom agent, template, knowledge) và **artifact markdown** thì đọc/ghi được (ghi qua `PUT /api/artifact`).
 
-- **Backend**: Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Kernel ở `src/core/` (`http/`, `registry.ts`, `devTeamApi.ts`). Entry production: `src/standalone.ts`. Type thống nhất: `src/core/http/types.ts`. `/api/knowledge` chặn trước Hono trong `createApiHandler`.
-- **Frontend**: feature-module `src/features/<mode>/` …; FE HTTP ở `features/<mode>/scripts/`; SCSS ở `features/<mode>/styles/` (`common.scss` + `{Component}.scss`, gom qua `styles/index.scss`). Shell/token global: `src/styles/`. Helper `src/api/http.ts`; `src/api/client.ts` chỉ re-export helper. Nền FE/shell ở `src/core/`; contract FE↔BE ở `src/core/contracts/` (alias `@shared`). Không trộn với Hono `features/*/api.ts` (server).
+- **Backend**: Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Setup app-root ở `src/api/` (`apiServer.ts`, `devTeamApi.ts`); kernel HTTP ở `src/core/http/` (`types`, `AbstractController`, `respond`, FE `client`); registry ở `src/core/registry.ts`. Entry production: `src/standalone.ts`. `/api/knowledge` chặn trước Hono trong `createApiHandler` (`apiServer.ts`).
+- **Frontend**: feature-module `src/features/<mode>/` …; FE HTTP ở `features/<mode>/scripts/`; SCSS ở `features/<mode>/styles/`. Shell/token: `src/styles/`. FE fetch helper: `src/core/http/client.ts`. Nền FE/shell ở `src/core/`; contract FE↔BE ở `src/core/contracts/` (alias `@shared`). Không trộn FE client với Hono `features/*/api.ts`.
 - **Data root** `.dev-team-agent/`, 2 run mode: dev đọc từ `cwd/..`/`DEV_TEAM_ROOT`; standalone đọc qua `ProjectRegistry` (`~/.dev-team-dashboard/projects.json`, `?project=<id>`).
 - **Pipeline config xếp lớp**: `DEFAULT_PIPELINE` (`src/features/pipeline-editor/business/pipeline/default.ts`) ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`, lớp sau đè lớp trước.
 - **MCP** (`mcp/server.ts`, `bun run mcp`): CRUD project-registry qua `src/core/registry.ts`, không cần HTTP server.
@@ -31,7 +31,7 @@ Chi tiết đầy đủ luồng dữ liệu, domain module, frontend: [`docs/arc
 agent-workflow/
 ├── index.html, vite.config.ts, package.json, tsconfig.json,
 │   vitest.config.ts, playwright.config.ts, eslint.config.js, bun.lock
-├── src/        # SPA + backend: features/, core/ (+ contracts/), server/
+├── src/        # SPA + backend: features/, core/ (+ contracts/, http/), api/
 ├── mcp/        # MCP stdio server (project-registry CRUD)
 ├── tests/      # unit tests mirror cây source (bun test + vitest)
 ├── test-e2e/   # @playwright/test specs + fixtures/.dev-team-agent/

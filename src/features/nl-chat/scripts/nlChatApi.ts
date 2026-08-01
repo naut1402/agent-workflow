@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from '../../../api/http'
+import { apiGet, apiPost } from '../../../core/http/client'
 
 export async function startNlChat(
   input: { entityType?: 'task' | 'pipeline' | 'agent'; message: string; runnerId?: string },

@@ -3,7 +3,7 @@
 // no Vue: kept pure so it can be unit-tested without rendering (per the
 // convention of pulling derived logic out of .vue files).
 
-import { phasesFromPipeline, phaseStatus } from '../../../api/phase'
+import { phasesFromPipeline, phaseStatus } from '../../../core/lib/phase'
 import { i18n } from '../../../core/i18n'
 
 export interface TimelineEvent {

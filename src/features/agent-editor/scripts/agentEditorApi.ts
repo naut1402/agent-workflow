@@ -1,5 +1,5 @@
 import { i18n } from '../../../core/i18n'
-import { apiGet, apiPost, apiRequest } from '../../../api/http'
+import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
 import { submitJob } from '../../runner/scripts/runnerApi'
 
 export async function fetchCustomAgents() {

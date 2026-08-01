@@ -7,7 +7,7 @@ import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep } from '../scripts/PipelineViewApi'
 import { fetchJob, fetchJobs } from '../../runner/scripts/runnerApi'
-import { phasesFromPipeline, phaseStatus } from '../../../api/phase'
+import { phasesFromPipeline, phaseStatus } from '../../../core/lib/phase'
 import PipelineNode from './PipelineNode.vue'
 import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
 

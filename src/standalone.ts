@@ -22,7 +22,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createApiHandler } from './core/devTeamApi.js'
+import { createApiHandler } from './api/devTeamApi.js'
 import { createRegistryContext, seedDefault, list } from './core/registry.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))

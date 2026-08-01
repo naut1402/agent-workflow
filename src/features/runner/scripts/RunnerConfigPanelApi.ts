@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiRequest } from '../../../api/http'
+import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
 
 export async function saveRunner(runner: unknown) {
   return apiPost('/api/runners', { runner })

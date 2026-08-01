@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { Hono } from 'hono'
-import { registerFeatureRoutes } from '../../../../src/core/http/loadFeatureRoutes.js'
+import { registerFeatureRoutes } from '../../../../src/api/apiServer.js'
 import type { HonoEnv } from '../../../../src/core/http/types.js'
 
 describe('registerFeatureRoutes', () => {

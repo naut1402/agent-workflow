@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiRequest } from '../../../api/http'
+import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
 
 export async function fetchPipelineConfig(id: string, projectId?: string) {
   return apiGet('/api/pipeline-config', { id, project: projectId })

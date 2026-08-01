@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/core/http/app.js'
+import { createApp } from '../../../../src/api/apiServer.js'
 import type { RegistryContext } from '../../../../src/core/http/types.js'
 import { loadJob, loadTaskSessionLedger, registerProvider, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'

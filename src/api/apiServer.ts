@@ -1,20 +1,87 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Buffer } from 'node:buffer'
-import type { RegistryContext } from './types.js'
-import { json } from '../contracts/http.js'
-import { handleKnowledgeApi } from '../../features/knowledge/business/knowledgeApi.js'
-import { appendRequestLog } from '../../features/logs/business/store.js'
-import { createApp } from './app.js'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { Hono } from 'hono'
+import type { HonoEnv, RegistryContext } from '../core/http/types.js'
+import { j } from '../core/http/respond.js'
+import { json } from '../core/contracts/http.js'
+import { handleKnowledgeApi } from '../features/knowledge/business/knowledgeApi.js'
+import { appendRequestLog } from '../features/logs/business/store.js'
 
-// ── Node ⇆ Hono bridge ─────────────────────────────────────────────────────
+// ── API server (Hono app + Node bridge) ─────────────────────────────────────
 //
-// Public contract is unchanged: createApiHandler(ctx) → async (req,res)=>boolean
+// Public contract: createApiHandler(ctx) → async (req,res)=>boolean
 // that returns `true` when it produced a response for an /api/* request, and
 // `false` for non-api paths (caller falls through to static / next middleware).
 //
 // /api/knowledge is still served by the node-res-based handleKnowledgeApi
 // (knowledge module's own HTTP surface); everything else is routed through the
 // Hono app via a node→Web Request bridge.
+//
+// createApp(ctx) builds the Hono instance (exported for tests via app.request).
+// Feature routes: mỗi `src/features/<name>/api.ts` export `registerRoutes` +
+// optional `routeOrder` (số nhỏ chạy trước). Tự duyệt thư mục — không liệt kê tay.
+
+type FeatureApiModule = {
+  registerRoutes?: (app: Hono<HonoEnv>) => void
+  routeOrder?: number
+}
+
+const featuresRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../features')
+
+async function loadFeatureApis(): Promise<FeatureApiModule[]> {
+  const entries = await fs.readdir(featuresRoot, { withFileTypes: true })
+  const mods: FeatureApiModule[] = []
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue
+    const apiFile = path.join(featuresRoot, ent.name, 'api.ts')
+    try {
+      await fs.access(apiFile)
+    } catch {
+      continue
+    }
+    const mod = (await import(pathToFileURL(apiFile).href)) as FeatureApiModule
+    mods.push(mod)
+  }
+  return mods
+}
+
+/** Đăng ký route từ mọi feature `api.ts`, sắp theo `routeOrder` (mặc định 100). */
+export async function registerFeatureRoutes(app: Hono<HonoEnv>): Promise<void> {
+  const loaded = (await loadFeatureApis())
+    .filter(
+      (m): m is FeatureApiModule & { registerRoutes: (app: Hono<HonoEnv>) => void } =>
+        typeof m.registerRoutes === 'function',
+    )
+    .map((m) => ({
+      order: typeof m.routeOrder === 'number' ? m.routeOrder : 100,
+      register: m.registerRoutes,
+    }))
+
+  loaded.sort((a, b) => a.order - b.order)
+  for (const item of loaded) item.register(app)
+}
+
+export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
+  const app = new Hono<HonoEnv>()
+
+  app.use('/api/*', async (c, next) => {
+    const projectId = c.req.query('project') || null
+    c.set('ctx', ctx)
+    c.set('projectId', projectId)
+    c.set('root', ctx.resolveProjectRoot(projectId))
+    await next()
+  })
+
+  await registerFeatureRoutes(app)
+
+  app.notFound((c) => j(c, 404, { error: 'unknown endpoint' }))
+  app.onError((err, c) => j(c, 500, { error: String((err as any)?.message ?? err) }))
+
+  return app
+}
 
 async function nodeToWebRequest(req: IncomingMessage, url: URL): Promise<Request> {
   const headers = new Headers()
