@@ -1,7 +1,7 @@
 # `src/core` — nền tảng app (FE shell + contracts + registry)
 
 - **Browser:** UI primitives, composable, i18n, shell keys, `contracts/`
-- **Node (không bundle vào SPA):** `registry.ts`, `business/AbstractBusiness`
+- **Node (không bundle vào SPA):** `registry.ts`, `business/AbstractBusiness`, `log/` (driver + ghi request/audit)
 
 ## Biên với các cây khác
 
@@ -23,6 +23,7 @@ Feature import type/controller từ `src/core/http/`. Contracts shell ở `src/c
 - `contracts/` — helper FE↔BE + `schemas/appSettings` (alias `@shared`); schema domain ở `features/*/schemas/`
 - `http/` — types + AbstractController + respond + FE `client.ts`
 - `registry.ts`, `business/AbstractBusiness.ts`
+- `log/` — chọn log driver + ghi request/audit (`emitAudit` / `appendRequestLog`); feature `logs` lo đọc UI + job log
 
 Setup app-root xem `src/api/` (`apiServer`, `devTeamApi`, …).
 

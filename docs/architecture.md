@@ -69,7 +69,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 | Agents | `src/features/agent-editor/business/` | CRUD custom-agent, template, NL generate. |
 | Tasks / artifacts | `src/features/monitor/business/` | Tasks, state, artifact actions, github issue, task chat. |
 | Knowledge | `src/features/knowledge/business/` | Driver pluggable (`file`). |
-| Logging | `src/features/logs/business/` + controller/api | Job + request/audit log. |
+| Logging | `src/core/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit JSONL; job log thuộc runner. |
 | Runners | `src/features/runner/business/` | Job queue, connections, providers CLI. |
 | NL chat | `src/features/nl-chat/business/` | Session builder chat. |
 | CLI | `src/runner-cli.mjs` | Runner CLI entry. |

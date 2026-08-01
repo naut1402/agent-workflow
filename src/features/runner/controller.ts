@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { AbstractController } from '../../core/http/AbstractController.js'
-import { emitAudit } from '../logs/business/store.js'
+import { emitAudit } from '../../core/log/store.js'
 import * as runnerStore from './business/index.js'
 
 export class RunnerController extends AbstractController {

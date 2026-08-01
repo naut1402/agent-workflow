@@ -71,7 +71,7 @@ Discriminated union với discriminant kiểu boolean (`{ok:true,...}|{ok:false,
 
 ### 3.4 Kiến trúc & coupling — chỉ đi xuống, không vòng tròn
 
-Functional + ctx-injection: dependency truyền qua tham số `ctx`, không dùng class-DI/NestJS/OOP framework. Phụ thuộc chỉ đi một chiều xuống dưới: `src/core/contracts/` không import `src/core/` (HTTP kernel) / `src/standalone.ts` → domain module chỉ import contracts → `http/` import domain module → transport import `http/`. Không vòng tròn.
+Functional + ctx-injection: dependency truyền qua tham số `ctx`, không dùng class-DI/NestJS/OOP framework. Phụ thuộc chỉ đi một chiều xuống dưới: `src/core/contracts/` và `src/core/log/` không import feature → domain module chỉ import core → `http/` / feature controller. Không vòng tròn.
 
 Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuần (`{ status, error }` khi lỗi). Controller parse request → gọi `XxxBusiness` → `this.json` / `ok`.
 

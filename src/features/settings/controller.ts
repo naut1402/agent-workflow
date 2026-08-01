@@ -1,7 +1,7 @@
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { parseAutoscanConfig } from './schemas/autoscan.js'
 import { parseGithubTokensConfig } from './schemas/githubTokens.js'
-import { emitAudit } from '../logs/business/store.js'
+import { emitAudit } from '../../core/log/store.js'
 import {
   loadAutoscanConfig,
   saveAutoscanConfig,

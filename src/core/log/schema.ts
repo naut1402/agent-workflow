@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
 /**
- * Log entries persisted as append-only JSONL under `~/.dev-team-dashboard/logs/`.
- * Zod is the single source of truth — UI/server types come from `z.infer`.
+ * Log entry schema (request/audit JSONL). Write path: `src/core/log` (driver + append).
+ * Read UI: `src/features/logs/business`.
  *
  * Two kinds, discriminated by `type`:
  *  - `request` — one line per `/api/*` request (method/path/status/duration).

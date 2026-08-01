@@ -5,7 +5,7 @@ import { AbstractController } from '../../core/http/AbstractController.js'
 import { parseAgentMarkdown, compileAgentMarkdown } from '../../core/contracts/agentMarkdown.js'
 import { safeReadDir } from '../../core/contracts/fs.js'
 import { sanitiseProfileName, sanitiseAgentName } from '../../core/contracts/sanitize.js'
-import { emitAudit } from '../logs/business/store.js'
+import { emitAudit } from '../../core/log/store.js'
 import {
   customAgentsDir,
   agentTemplatesDir,

@@ -8,7 +8,7 @@ import type { HonoEnv, RegistryContext } from '../core/http/types.js'
 import { j } from '../core/http/respond.js'
 import { json } from '../core/contracts/http.js'
 import { handleKnowledgeApi } from '../features/knowledge/business/knowledgeApi.js'
-import { appendRequestLog } from '../features/logs/business/store.js'
+import { appendRequestLog } from '../core/log/store.js'
 
 // Static imports — fallback khi Vite chạy trên Node (không import được .ts tuyệt đối).
 import * as agentEditorApi from '../features/agent-editor/api.js'
