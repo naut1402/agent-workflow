@@ -10,6 +10,15 @@ import { json } from '../core/contracts/http.js'
 import { handleKnowledgeApi } from '../features/knowledge/business/knowledgeApi.js'
 import { appendRequestLog } from '../features/logs/business/store.js'
 
+// Static imports — fallback khi Vite chạy trên Node (không import được .ts tuyệt đối).
+import * as agentEditorApi from '../features/agent-editor/api.js'
+import * as logsApi from '../features/logs/api.js'
+import * as monitorApi from '../features/monitor/api.js'
+import * as nlChatApi from '../features/nl-chat/api.js'
+import * as pipelineEditorApi from '../features/pipeline-editor/api.js'
+import * as runnerApi from '../features/runner/api.js'
+import * as settingsApi from '../features/settings/api.js'
+
 // ── API server (Hono app + Node bridge) ─────────────────────────────────────
 //
 // Public contract: createApiHandler(ctx) → async (req,res)=>boolean
@@ -22,30 +31,63 @@ import { appendRequestLog } from '../features/logs/business/store.js'
 //
 // createApp(ctx) builds the Hono instance (exported for tests via app.request).
 // Feature routes: mỗi `src/features/<name>/api.ts` export `registerRoutes` +
-// optional `routeOrder` (số nhỏ chạy trước). Tự duyệt thư mục — không liệt kê tay.
+// optional `routeOrder` (số nhỏ chạy trước).
 
 type FeatureApiModule = {
   registerRoutes?: (app: Hono<HonoEnv>) => void
   routeOrder?: number
 }
 
+const STATIC_FEATURE_APIS: FeatureApiModule[] = [
+  settingsApi,
+  runnerApi,
+  logsApi,
+  monitorApi,
+  pipelineEditorApi,
+  agentEditorApi,
+  nlChatApi,
+]
+
 const featuresRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../features')
 
+/**
+ * Nạp feature API:
+ * 1) import.meta.glob (Vite/Vitest khi đã transform)
+ * 2) readdir + import file:// (Bun — `bun test` / `bun src/standalone.ts`)
+ * 3) static import (Vite middleware trên Node — không load được .ts tuyệt đối)
+ */
 async function loadFeatureApis(): Promise<FeatureApiModule[]> {
-  const entries = await fs.readdir(featuresRoot, { withFileTypes: true })
-  const mods: FeatureApiModule[] = []
-  for (const ent of entries) {
-    if (!ent.isDirectory()) continue
-    const apiFile = path.join(featuresRoot, ent.name, 'api.ts')
+  const globFn = (import.meta as any).glob as undefined | ((pattern: string, opts?: object) => Record<string, FeatureApiModule>)
+  if (typeof globFn === 'function') {
     try {
-      await fs.access(apiFile)
+      const mods = globFn('../features/*/api.ts', { eager: true })
+      const values = Object.values(mods || {})
+      if (values.length) return values
     } catch {
-      continue
+      // fall through
     }
-    const mod = (await import(pathToFileURL(apiFile).href)) as FeatureApiModule
-    mods.push(mod)
   }
-  return mods
+
+  try {
+    const entries = await fs.readdir(featuresRoot, { withFileTypes: true })
+    const mods: FeatureApiModule[] = []
+    for (const ent of entries) {
+      if (!ent.isDirectory()) continue
+      const apiFile = path.join(featuresRoot, ent.name, 'api.ts')
+      try {
+        await fs.access(apiFile)
+      } catch {
+        continue
+      }
+      const mod = (await import(pathToFileURL(apiFile).href)) as FeatureApiModule
+      mods.push(mod)
+    }
+    if (mods.length) return mods
+  } catch {
+    // Node/Vite: dynamic import(.ts) fails → static fallback
+  }
+
+  return STATIC_FEATURE_APIS
 }
 
 /** Đăng ký route từ mọi feature `api.ts`, sắp theo `routeOrder` (mặc định 100). */
