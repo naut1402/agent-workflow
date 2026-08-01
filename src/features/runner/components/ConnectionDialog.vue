@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { fetchCredentials, saveCredential, saveConnection, scanLocalCommands } from '../RunnerApi'
+import { fetchCredentials, saveCredential, saveConnection, scanLocalCommands } from '../scripts/ConnectionDialogApi'
 import type { ConnectionKind, ProviderEntry } from '../types'
 
 interface RegisteredCommand {

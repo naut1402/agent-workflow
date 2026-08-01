@@ -2,7 +2,7 @@
 // Reusable knowledge multi-select + upload dialog for create-task and pipeline editor.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { fetchKnowledgeList, uploadKnowledgeFile } from '../../features/knowledge/KnowledgePanelApi'
+import { fetchKnowledgeList, uploadKnowledgeFile } from '../../features/knowledge/scripts/knowledgeApi'
 
 const props = defineProps<{
   /** Entry ids already selected (`scope/slug`). */

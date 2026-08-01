@@ -7,7 +7,7 @@ import {
   useAppSettings,
 } from '@/core/composables/useAppSettings'
 
-vi.mock('@/features/settings/SettingsDialogApi', () => ({
+vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
   fetchAutoscanConfig: vi.fn(async () => ({
     config: { enabled: false, whitelist: [], intervalMs: 60_000 },
   })),

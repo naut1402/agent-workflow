@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { diffLines } from 'diff'
-import { fetchProposal, approveJob, discardJob, sendActionFeedback, fetchJob } from '../../runner/RunnerApi'
+import { fetchProposal, approveJob, discardJob, sendActionFeedback, fetchJob } from '../../runner/scripts/runnerApi'
 import { i18n } from '../../../core/i18n'
 
 // Drives ArtifactProposalReview: fetches the before/after of an

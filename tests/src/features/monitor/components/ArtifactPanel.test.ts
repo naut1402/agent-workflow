@@ -8,8 +8,8 @@ import {
   useAppSettings,
 } from '@/core/composables/useAppSettings'
 import { navigateToModeKey } from '@/core/shell/keys'
-import { fetchArtifact, fetchArtifactActions, runArtifactAction } from '../../../../../src/features/monitor/MonitorApi'
-import { fetchRunners } from '../../../../../src/features/runner/RunnerApi'
+import { fetchArtifact, fetchArtifactActions, runArtifactAction } from '../../../../../src/features/monitor/scripts/ArtifactPanelApi'
+import { fetchRunners } from '../../../../../src/features/runner/scripts/runnerApi'
 
 const MD_TWO_H2 = `# Title
 
@@ -58,7 +58,7 @@ const MarkdownTextEditorStub = defineComponent({
   },
 })
 
-vi.mock('@/features/monitor/MonitorApi', () => ({
+vi.mock('@/features/monitor/scripts/ArtifactPanelApi', () => ({
   fetchArtifact: vi.fn(async () => ({ content: MD_TWO_H2, mtime: 1 })),
   fetchArtifactActions: vi.fn(async () => ({ actions: [], menus: [] })),
   runArtifactAction: vi.fn(async () => ({ job: { id: 'job1', status: 'succeeded' } })),
@@ -68,7 +68,7 @@ vi.mock('@/features/monitor/MonitorApi', () => ({
   })),
 }))
 
-vi.mock('@/features/runner/RunnerApi', () => ({
+vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchRunners: vi.fn(async () => ({ runners: [], defaultRunnerId: null })),
   fetchJob: vi.fn(async () => ({ job: { id: 'job1', status: 'succeeded' } })),
 }))

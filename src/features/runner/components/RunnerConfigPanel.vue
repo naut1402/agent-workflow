@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { fetchRunners, saveRunner, deleteRunner, setDefaultRunner, fetchConnections, fetchJobs } from '../RunnerApi'
+import { fetchRunners, fetchJobs } from '../scripts/runnerApi'
+import { saveRunner, deleteRunner, setDefaultRunner, fetchConnections } from '../scripts/RunnerConfigPanelApi'
 import RunnerDialog from './RunnerDialog.vue'
 import type { ProviderEntry, RunnerDraft } from '../types'
 

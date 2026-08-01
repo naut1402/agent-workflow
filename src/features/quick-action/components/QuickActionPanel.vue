@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { fetchRunners } from '../../runner/RunnerApi'
-import { fetchCatalog } from '../../pipeline-editor/PipelineEditorApi'
+import { fetchRunners } from '../../runner/scripts/runnerApi'
+import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
 import QuickActionMenuDialog from './QuickActionMenuDialog.vue'
 import type { ArtifactMenuNode } from '../../../core/contracts/schemas/artifactAction'

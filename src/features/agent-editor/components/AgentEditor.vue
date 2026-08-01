@@ -3,8 +3,8 @@ import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 import { ref, onMounted } from 'vue'
-import { fetchCustomAgents, fetchCustomAgent, saveCustomAgent, deleteCustomAgent, exportCustomAgent } from '../AgentEditorApi'
-import { fetchCatalog } from '../../pipeline-editor/PipelineEditorApi'
+import { fetchCustomAgents, fetchCustomAgent, saveCustomAgent, deleteCustomAgent, exportCustomAgent } from '../scripts/agentEditorApi'
+import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { emptyDraft } from '../../../core/contracts/agentMarkdown.js'
 import AgentSectionEditor from './AgentSectionEditor.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'

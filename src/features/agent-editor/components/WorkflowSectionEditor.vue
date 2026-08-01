@@ -6,8 +6,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../core/lib/workflowSteps'
 import { useSortable } from '../../../core/composables/useSortable'
 import { slugifySectionKey } from '../../../core/contracts/agentMarkdown.js'
-import { fetchPipelineConfig } from '../../pipeline-editor/PipelineEditorApi'
-import { fetchWorkflowStepTemplates, fetchWorkflowStepTemplate, saveWorkflowStepTemplate } from '../AgentEditorApi'
+import { fetchPipelineConfig } from '../../pipeline-editor/scripts/pipelineEditorApi'
+import { fetchWorkflowStepTemplates, fetchWorkflowStepTemplate, saveWorkflowStepTemplate } from '../scripts/WorkflowSectionEditorApi'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
 const props = defineProps({

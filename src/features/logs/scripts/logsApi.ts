@@ -1,4 +1,4 @@
-import { apiGet } from '../../api/http'
+import { apiGet } from '../../../api/http'
 
 export async function fetchLogs(
   { type, project, limit }: { type?: string; project?: string; limit?: number } = {},
@@ -7,9 +7,7 @@ export async function fetchLogs(
 }
 
 export interface FetchJobLogOptions {
-  /** Byte cursor the client already consumed. */
   offset?: number
-  /** Long-poll wait hint (ms) for delta log endpoint. */
   wait?: number
 }
 

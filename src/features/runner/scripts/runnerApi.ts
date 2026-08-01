@@ -1,43 +1,8 @@
-import { apiGet, apiPost, apiRequest } from '../../api/http'
+import { apiGet, apiPost, apiRequest } from '../../../api/http'
 
+/** Runners/jobs dùng chung nhiều feature. */
 export async function fetchRunners() {
   return apiGet('/api/runners')
-}
-
-export async function saveRunner(runner: unknown) {
-  return apiPost('/api/runners', { runner })
-}
-
-export async function deleteRunner(id: string) {
-  return apiRequest('DELETE', '/api/runners', { query: { id } })
-}
-
-export async function setDefaultRunner(id: string) {
-  return apiPost('/api/runners/default', { id })
-}
-
-export async function fetchCredentials() {
-  return apiGet('/api/credentials')
-}
-
-export async function saveCredential(profile: unknown) {
-  return apiPost('/api/credentials', { profile })
-}
-
-export async function fetchConnections() {
-  return apiGet('/api/connections')
-}
-
-export async function saveConnection(connection: unknown) {
-  return apiPost('/api/connections', { connection })
-}
-
-export async function deleteConnection(id: string) {
-  return apiRequest('DELETE', '/api/connections', { query: { id } })
-}
-
-export async function scanLocalCommands() {
-  return apiGet('/api/connections/scan')
 }
 
 export async function submitJob(payload: unknown, projectId?: string) {

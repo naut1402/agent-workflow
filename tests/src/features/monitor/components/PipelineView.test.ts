@@ -2,17 +2,17 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import PipelineView from '@/features/monitor/components/PipelineView.vue'
-import { fetchJob, fetchJobs } from '../../../../../src/features/runner/RunnerApi'
-import { runPipelineStep } from '../../../../../src/features/monitor/MonitorApi'
+import { fetchJob, fetchJobs } from '../../../../../src/features/runner/scripts/runnerApi'
+import { runPipelineStep } from '../../../../../src/features/monitor/scripts/PipelineViewApi'
 
-vi.mock('@/features/monitor/MonitorApi', () => ({
+vi.mock('@/features/monitor/scripts/PipelineViewApi', () => ({
   fetchFlowProfile: vi.fn(async () => ({ exists: false, profile: null })),
   saveFlowProfile: vi.fn(async () => ({})),
   patchTaskState: vi.fn(),
   runPipelineStep: vi.fn(),
 }))
 
-vi.mock('@/features/runner/RunnerApi', () => ({
+vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchJob: vi.fn(),
   fetchJobs: vi.fn(async () => ({ jobs: [] })),
 }))

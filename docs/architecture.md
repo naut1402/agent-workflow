@@ -103,7 +103,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 
 ### 3.1 API layer
 
-- `src/api/{http.ts, client.ts, phase.ts, index.ts}` — `http.ts` (`qs`/`apiFetch`/`apiGet`/`apiPost`/`apiRequest`); fetch theo consumer ở `src/features/<mode>/*Api.ts` (không barrel vào `client.ts`). `client.ts` chỉ re-export helper HTTP dùng chung. Hono route đăng ký riêng ở `features/*/api.ts` (server).
+- `src/api/{http.ts, client.ts, phase.ts, index.ts}` — `http.ts` (`qs`/`apiFetch`/`apiGet`/`apiPost`/`apiRequest`); fetch theo consumer ở `src/features/<mode>/scripts/` (`featureNameApi.ts` chung, `ComponentNameApi.ts` riêng). `client.ts` chỉ re-export helper HTTP. Hono route đăng ký riêng ở `features/*/api.ts` (server).
 - Suy diễn trạng thái phase (`PHASES`, `phasesFromPipeline`, `phaseStatus`) nằm ở `phase.ts`. Phase status **được suy từ sự tồn tại của artifact** + con trỏ live — phản chiếu đúng quy tắc của orchestrator (status không bao giờ được encode, chỉ suy ra).
 
 ### 3.2 Core frontend (`src/core`)

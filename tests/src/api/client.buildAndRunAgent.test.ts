@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildAndRunAgent } from '../../../src/features/agent-editor/AgentEditorApi'
+import { buildAndRunAgent } from '../../../src/features/agent-editor/scripts/agentEditorApi'
 
 // Stub fetch so we can assert the compose order (save custom agent → submit job)
 // and the derived job payload without a live server.

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { fetchLogs, fetchJobLog } from '../LogsPanelApi'
-import { fetchJobs } from '../../runner/RunnerApi'
+import { fetchLogs, fetchJobLog } from '../scripts/LogsPanelApi'
+import { fetchJobs } from '../../runner/scripts/runnerApi'
 
 const { t } = useI18n()
 

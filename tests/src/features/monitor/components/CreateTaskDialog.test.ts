@@ -3,23 +3,23 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, DOMWrapper } from '@vue/test-utils'
 import CreateTaskDialog from '@/features/monitor/components/CreateTaskDialog.vue'
 
-vi.mock('@/features/pipeline-editor/PipelineEditorApi', () => ({
+vi.mock('@/features/pipeline-editor/scripts/ProfileManagerApi', () => ({
   fetchPipelineProfiles: vi.fn(async () => ({ profiles: [{ name: 'dev' }] })),
   fetchPipelineProfile: vi.fn(async () => ({
     pipeline: { steps: [{ id: 'investigator', label: 'Investigate' }] },
   })),
 }))
 
-vi.mock('@/features/runner/RunnerApi', () => ({
+vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchRunners: vi.fn(async () => ({ runners: [{ id: 'r1', name: 'Runner 1', enabled: true }] })),
 }))
 
-vi.mock('@/features/monitor/MonitorApi', () => ({
+vi.mock('@/features/monitor/scripts/CreateTaskDialogApi', () => ({
   fetchGithubIssue: vi.fn(),
   createTask: vi.fn(),
 }))
 
-import { createTask, fetchGithubIssue } from '../../../../../src/features/monitor/MonitorApi'
+import { createTask, fetchGithubIssue } from '../../../../../src/features/monitor/scripts/CreateTaskDialogApi'
 
 function mountDialog(props: Record<string, unknown> = {}) {
   return mount(CreateTaskDialog, { props, attachTo: document.body })

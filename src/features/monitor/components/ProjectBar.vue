@@ -5,7 +5,7 @@
 // touches files on disk.
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { addProject, removeProject } from '../../settings/SettingsDialogApi'
+import { addProject, removeProject } from '../../settings/scripts/settingsApi'
 import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 
 const { t } = useI18n()

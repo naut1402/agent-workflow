@@ -1,6 +1,6 @@
-import { i18n } from '../../core/i18n'
-import { apiGet, apiPost, apiRequest } from '../../api/http'
-import { submitJob } from '../runner/RunnerApi'
+import { i18n } from '../../../core/i18n'
+import { apiGet, apiPost, apiRequest } from '../../../api/http'
+import { submitJob } from '../../runner/scripts/runnerApi'
 
 export async function fetchCustomAgents() {
   return apiGet('/api/custom-agents')
@@ -26,58 +26,6 @@ export async function exportCustomAgent(name: string, overwrite = false) {
 
 export async function generateAgentDraft(description: string) {
   return apiPost('/api/custom-agents/generate', { description })
-}
-
-export async function fetchAgentTemplates() {
-  return apiGet('/api/agent-templates')
-}
-
-export async function fetchAgentTemplate(name: string) {
-  return apiGet('/api/agent-templates', { name }, {
-    errorMessage: (status) => `/api/agent-templates?name=${name} → ${status}`,
-  })
-}
-
-export async function saveAgentTemplate(draft: unknown) {
-  return apiPost('/api/agent-templates', { draft })
-}
-
-export async function importAgentTemplateUrl(url: string, name?: string) {
-  return apiPost('/api/agent-templates', { url, name }, {
-    errorMessage: (status) => `/api/agent-templates URL → ${status}`,
-  })
-}
-
-export async function uploadAgentTemplate(file: File) {
-  const fd = new FormData()
-  fd.append('file', file)
-  return apiRequest('POST', '/api/agent-templates', {
-    rawBody: fd,
-    skipJsonContentType: true,
-    errorMessage: (status) => `/api/agent-templates upload → ${status}`,
-  })
-}
-
-export async function deleteAgentTemplate(name: string) {
-  return apiRequest('DELETE', '/api/agent-templates', { query: { name } })
-}
-
-export async function fetchWorkflowStepTemplates() {
-  return apiGet('/api/workflow-step-templates')
-}
-
-export async function fetchWorkflowStepTemplate(name: string) {
-  return apiGet('/api/workflow-step-templates', { name }, {
-    errorMessage: (status) => `/api/workflow-step-templates?name=${name} → ${status}`,
-  })
-}
-
-export async function saveWorkflowStepTemplate(template: unknown) {
-  return apiPost('/api/workflow-step-templates', { template })
-}
-
-export async function deleteWorkflowStepTemplate(name: string) {
-  return apiRequest('DELETE', '/api/workflow-step-templates', { query: { name } })
 }
 
 export interface BuildAndRunAgentInput {

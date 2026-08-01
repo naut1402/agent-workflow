@@ -1,4 +1,4 @@
-import { apiGet, apiRequest } from '../../api/http'
+import { apiGet, apiRequest } from '../../../api/http'
 
 export async function fetchArtifactActionsCatalog() {
   return apiGet('/api/artifact-actions')

@@ -2,7 +2,7 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 
-vi.mock('@/features/runner/RunnerApi', () => ({
+vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchProposal: vi.fn(async () => ({ artifactName: 'design.md', before: 'old line\n', after: 'new line\n' })),
   approveJob: vi.fn(async () => ({ job: {} })),
   discardJob: vi.fn(async () => ({ job: {} })),
@@ -10,7 +10,7 @@ vi.mock('@/features/runner/RunnerApi', () => ({
   fetchJob: vi.fn(),
 }))
 
-import { approveJob, discardJob } from '../../../../../src/features/runner/RunnerApi'
+import { approveJob, discardJob } from '../../../../../src/features/runner/scripts/runnerApi'
 import ArtifactProposalReview from '@/features/monitor/components/ArtifactProposalReview.vue'
 
 function mountReview() {

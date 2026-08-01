@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { saveRunner, submitJob, fetchJob } from '../RunnerApi'
+import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
 import type { ConnectionOption, ProviderEntry, RunnerDraft } from '../types'
 

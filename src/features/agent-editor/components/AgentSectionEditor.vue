@@ -10,7 +10,7 @@ import {
   emptyDraft,
 } from '../../../core/contracts/agentMarkdown.js'
 import { useSortable } from '../../../core/composables/useSortable'
-import { saveAgentTemplate } from '../AgentEditorApi'
+import { saveAgentTemplate } from '../scripts/AgentSectionEditorApi'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 import WorkflowSectionEditor from './WorkflowSectionEditor.vue'
 

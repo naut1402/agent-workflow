@@ -1,6 +1,6 @@
 import { ref } from 'vue'
-import { runArtifactAction } from '../MonitorApi'
-import { fetchJob } from '../../runner/RunnerApi'
+import { runArtifactAction } from '../scripts/ArtifactPanelApi'
+import { fetchJob } from '../../runner/scripts/runnerApi'
 import { i18n } from '../../../core/i18n'
 
 // Drives an artifact quick-action end to end: submit the job, poll

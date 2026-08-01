@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { fetchTaskChat, sendTaskFeedback } from '../../monitor/MonitorApi'
+import { fetchTaskChat, sendTaskFeedback } from '../../monitor/scripts/monitorApi'
 
 /**
  * Chat with the runner of a task's pipeline step: replays the CLI session's own

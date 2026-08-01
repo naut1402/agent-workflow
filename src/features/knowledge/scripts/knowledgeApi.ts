@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiRequest } from '../../api/http'
+import { apiGet, apiPost, apiRequest } from '../../../api/http'
 
 export async function fetchKnowledgeList(
   { scope, tags, q, projectId }: { scope?: string; tags?: string[]; q?: string; projectId?: string } = {},
