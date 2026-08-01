@@ -7,23 +7,19 @@ import {
   useAppSettings,
 } from '@/core/composables/useAppSettings'
 
-vi.mock('@/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/api')>()
-  return {
-    ...actual,
-    fetchAutoscanConfig: vi.fn(async () => ({
-      config: { enabled: false, whitelist: [], intervalMs: 60_000 },
-    })),
-    saveAutoscanConfig: vi.fn(async (c: object) => ({ config: c })),
-    runAutoscan: vi.fn(async () => ({
-      report: { added: [], existing: [], skipped: [], errors: [], hits: [], scanned: 0 },
-    })),
-    fetchGithubTokensConfig: vi.fn(async () => ({
-      config: { repos: [{ repo: 'acme/app', token: 'ghp_old' }] },
-    })),
-    saveGithubTokensConfig: vi.fn(async (c: object) => ({ config: c })),
-  }
-})
+vi.mock('@/features/settings/SettingsDialogApi', () => ({
+  fetchAutoscanConfig: vi.fn(async () => ({
+    config: { enabled: false, whitelist: [], intervalMs: 60_000 },
+  })),
+  saveAutoscanConfig: vi.fn(async (c: object) => ({ config: c })),
+  runAutoscan: vi.fn(async () => ({
+    report: { added: [], existing: [], skipped: [], errors: [], hits: [], scanned: 0 },
+  })),
+  fetchGithubTokensConfig: vi.fn(async () => ({
+    config: { repos: [{ repo: 'acme/app', token: 'ghp_old' }] },
+  })),
+  saveGithubTokensConfig: vi.fn(async (c: object) => ({ config: c })),
+}))
 
 beforeEach(() => {
   localStorage.clear()

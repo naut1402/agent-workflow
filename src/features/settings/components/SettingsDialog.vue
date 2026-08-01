@@ -20,13 +20,7 @@ import {
   type NotificationUiPlacement,
   type ThemePreference,
 } from '../../../core/contracts/schemas/appSettings'
-import {
-  fetchAutoscanConfig,
-  saveAutoscanConfig,
-  runAutoscan,
-  fetchGithubTokensConfig,
-  saveGithubTokensConfig,
-} from '../../../api'
+import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig } from '../SettingsDialogApi'
 import { parseGithubRepoRef } from '../../../core/contracts/schemas/githubTokens'
 import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 import CSelect from '../../../core/ui/CSelect.vue'

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { patchTaskArchive, deleteTask } from '../../../api'
+import { patchTaskArchive, deleteTask } from '../MonitorApi'
 
 const props = defineProps({
   task: { type: Object, required: true },

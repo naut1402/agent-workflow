@@ -41,7 +41,7 @@ const { saveArtifact, sendTaskFeedback } = vi.hoisted(() => ({
   ),
 }))
 
-vi.mock('@/api', () => ({ saveArtifact, sendTaskFeedback }))
+vi.mock('@/features/monitor/MonitorApi', () => ({ saveArtifact, sendTaskFeedback }))
 
 vi.mock('@/core/markdown', () => ({
   parseMarkdown: (s: string) => `<p>${s}</p>`,

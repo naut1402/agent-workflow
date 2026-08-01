@@ -5,7 +5,8 @@ const { t } = useI18n()
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, onUpdated, inject } from 'vue'
 import { useFullscreen } from '@vueuse/core'
 import { parseMarkdown, renderMermaid } from '../../../core/markdown'
-import { fetchArtifact, saveArtifact, fetchArtifactActions, fetchRunners } from '../../../api'
+import { fetchArtifact, saveArtifact, fetchArtifactActions } from '../MonitorApi'
+import { fetchRunners } from '../../runner/RunnerApi'
 import {
   bindFocusableEditRef,
   splitMarkdownSections,

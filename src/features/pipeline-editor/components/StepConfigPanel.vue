@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
-import { fetchKnowledgeList } from '../../../api'
+import { fetchKnowledgeList } from '../../knowledge/KnowledgePanelApi'
 
 const props = defineProps({
   stepId: { type: String, default: null },

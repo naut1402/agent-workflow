@@ -5,16 +5,9 @@ const { t } = useI18n()
 import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import {
-  phasesFromPipeline,
-  phaseStatus,
-  fetchFlowProfile,
-  saveFlowProfile,
-  patchTaskState,
-  runPipelineStep,
-  fetchJob,
-  fetchJobs,
-} from '../../../api'
+import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep } from '../MonitorApi'
+import { fetchJob, fetchJobs } from '../../runner/RunnerApi'
+import { phasesFromPipeline, phaseStatus } from '../../../api/phase'
 import PipelineNode from './PipelineNode.vue'
 import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
 

@@ -10,7 +10,7 @@ import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
 import RailIcon from '../../../core/ui/RailIcon.vue'
-import { patchTaskArchive } from '../../../api'
+import { patchTaskArchive } from '../MonitorApi'
 import { useLocalToggle } from '../../../core/composables/useLocalToggle'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {

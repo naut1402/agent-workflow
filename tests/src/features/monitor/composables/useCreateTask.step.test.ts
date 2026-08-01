@@ -1,10 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/api', () => ({
+vi.mock('@/features/monitor/MonitorApi', () => ({
   createTask: vi.fn(),
   fetchGithubIssue: vi.fn(),
+}))
+
+vi.mock('@/features/pipeline-editor/PipelineEditorApi', () => ({
   fetchPipelineProfile: vi.fn(),
   fetchPipelineProfiles: vi.fn(),
+}))
+
+vi.mock('@/features/runner/RunnerApi', () => ({
   fetchRunners: vi.fn(),
 }))
 

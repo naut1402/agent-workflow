@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onClickOutside } from '@vueuse/core'
-import { fetchProjects, fetchAutoscanConfig, runAutoscan } from './api'
+import { fetchProjects, fetchAutoscanConfig, runAutoscan } from './features/settings/SettingsDialogApi'
 import { useLocalToggle } from './core/composables/useLocalToggle'
 import { useAppSettings } from './core/composables/useAppSettings'
 import { navigateToModeKey, reloadProjectsKey } from './core/shell/keys'

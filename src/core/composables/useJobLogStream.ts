@@ -1,5 +1,5 @@
 import { onUnmounted, ref, watch, type Ref } from 'vue'
-import { fetchJobLog } from '../../api'
+import { fetchJobLog } from '../../features/logs/LogsPanelApi'
 
 export interface JobLogStreamOptions {
   /** Long-poll wait hint passed to the server (ms). */

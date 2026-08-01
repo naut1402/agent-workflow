@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { i18n } from '../../../core/i18n'
-import { buildAndRunAgent, fetchJob, fetchRunners, generateAgentDraft } from '../../../api'
+import { buildAndRunAgent, generateAgentDraft } from '../AgentEditorApi'
+import { fetchJob, fetchRunners } from '../../runner/RunnerApi'
 
 // Drives the "Build agent từ NL" wizard end to end: generate a draft from a
 // natural-language description, let the user tweak it, then persist + smoke-run

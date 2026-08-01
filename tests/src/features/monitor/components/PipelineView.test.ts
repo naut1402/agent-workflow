@@ -2,20 +2,20 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import PipelineView from '@/features/monitor/components/PipelineView.vue'
-import { fetchJob, fetchJobs, runPipelineStep } from '@/api'
+import { fetchJob, fetchJobs } from '../../../../../src/features/runner/RunnerApi'
+import { runPipelineStep } from '../../../../../src/features/monitor/MonitorApi'
 
-vi.mock('@/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/api')>()
-  return {
-    ...actual,
-    fetchFlowProfile: vi.fn(async () => ({ exists: false, profile: null })),
-    saveFlowProfile: vi.fn(async () => ({})),
-    patchTaskState: vi.fn(),
-    runPipelineStep: vi.fn(),
-    fetchJob: vi.fn(),
-    fetchJobs: vi.fn(async () => ({ jobs: [] })),
-  }
-})
+vi.mock('@/features/monitor/MonitorApi', () => ({
+  fetchFlowProfile: vi.fn(async () => ({ exists: false, profile: null })),
+  saveFlowProfile: vi.fn(async () => ({})),
+  patchTaskState: vi.fn(),
+  runPipelineStep: vi.fn(),
+}))
+
+vi.mock('@/features/runner/RunnerApi', () => ({
+  fetchJob: vi.fn(),
+  fetchJobs: vi.fn(async () => ({ jobs: [] })),
+}))
 
 // VueFlow renders nodes internally via its own layout/canvas machinery that
 // jsdom can't support (ResizeObserver, SVG measurement, …) — stub it with a

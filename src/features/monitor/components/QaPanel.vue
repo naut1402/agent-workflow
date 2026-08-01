@@ -2,7 +2,7 @@
 import { ref, computed, watch, nextTick, onUpdated, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { parseMarkdown, renderMermaid } from '../../../core/markdown'
-import { saveArtifact, sendTaskFeedback } from '../../../api'
+import { saveArtifact, sendTaskFeedback } from '../MonitorApi'
 import {
   bindFocusableEditRef,
   useInlineMarkdownEdit,

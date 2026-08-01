@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { fetchArtifactActionsCatalog, saveArtifactActionsCatalog } from '../../../api'
+import { fetchArtifactActionsCatalog, saveArtifactActionsCatalog } from '../QuickActionPanelApi'
 import { i18n } from '../../../core/i18n'
 import type { ArtifactMenuNode } from '../../../core/contracts/schemas/artifactAction'
 

@@ -3,7 +3,7 @@
 // (add project) and Settings (autoscan whitelist).
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { browseFs } from '../../api'
+import { browseFs } from '../../features/settings/SettingsDialogApi'
 
 const props = defineProps<{
   /** Initial directory to open (absolute). Empty → server default (home). */

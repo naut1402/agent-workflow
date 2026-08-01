@@ -3,15 +3,8 @@ import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 import { ref, onMounted } from 'vue'
-import {
-  fetchAgentTemplates,
-  fetchAgentTemplate,
-  fetchCatalog,
-  fetchCatalogAgent,
-  importAgentTemplateUrl,
-  uploadAgentTemplate,
-  deleteAgentTemplate,
-} from '../../../api'
+import { fetchAgentTemplates, fetchAgentTemplate, importAgentTemplateUrl, uploadAgentTemplate, deleteAgentTemplate } from '../AgentEditorApi'
+import { fetchCatalog, fetchCatalogAgent } from '../../pipeline-editor/PipelineEditorApi'
 import { draftFromCatalogAgent } from '../../../core/contracts/agentMarkdown.js'
 
 const emit = defineEmits(['apply-draft', 'close'])

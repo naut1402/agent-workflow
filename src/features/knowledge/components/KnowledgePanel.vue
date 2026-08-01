@@ -1,15 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import {
-  fetchKnowledgeList,
-  fetchKnowledgeEntry,
-  saveKnowledgeEntry,
-  createKnowledgeEntry,
-  deleteKnowledgeEntry,
-  uploadKnowledgeFile,
-  fetchKnowledgeTags,
-} from '../../../api'
+import { fetchKnowledgeList, fetchKnowledgeEntry, saveKnowledgeEntry, createKnowledgeEntry, deleteKnowledgeEntry, uploadKnowledgeFile, fetchKnowledgeTags } from '../KnowledgePanelApi'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
 const { t } = useI18n()
