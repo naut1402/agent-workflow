@@ -12,6 +12,7 @@ export function useI18nHelpers(): {
     throw new Error('[i18n] useI18nHelpers() chỉ gọi trong setup sau installPlugins')
   }
   const gp = inst.appContext.config.globalProperties
-  const t = (...args: any[]): string => gp.$t(...args) as string
+  const translate = gp.$t as (...args: any[]) => string
+  const t = (...args: any[]): string => translate(...args)
   return { t }
 }

@@ -29,14 +29,18 @@ export class MonitorBusiness extends AbstractBusiness {
     return loadPipelineConfig(gate.root, taskId)
   }
 
-  flowProfilePath() {
+  flowProfilePath(id: string) {
     const gate = this.requireRoot()
     if ('error' in gate) return gate
-    return { root: gate.root, path: flowProfilePath(gate.root) }
+    return { root: gate.root, path: flowProfilePath(gate.root, id) }
   }
 
-  getTaskChatState(taskId: string) {
-    return getTaskChatState(taskId)
+  getTaskChatState(
+    projectId: string,
+    taskId: string,
+    opts?: Parameters<typeof getTaskChatState>[2],
+  ) {
+    return getTaskChatState(projectId, taskId, opts)
   }
 
   fetchGithubIssue(url: string) {
