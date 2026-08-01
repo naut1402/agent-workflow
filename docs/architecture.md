@@ -114,7 +114,7 @@ Nền tảng FE / shell: `composables/*`, `lib/`, `markdown.ts`, `ui/`, `i18n/`,
 
 ### 3.3 Styling
 
-Entry SCSS: `src/styles/main.scss` (import từ `src/main.ts`). Partials: `_tokens.scss` (CSS custom properties theme), `_shell.scss` (layout/sidebar/mode/modal/btn dùng chung), `_<module>.scss` theo feature (`monitor`, `pipeline-editor`, `agent-editor`, `knowledge`, …). Theme runtime qua `data-theme` + CSS variables; SFC feature dùng `<style scoped lang="scss">` khi đã migrate. Khảo sát & kế hoạch: [`scss-adoption.md`](scss-adoption.md).
+Entry SCSS: `src/styles/main.scss` (tokens + scrollbar + shell, import từ `src/main.ts`). Style theo feature: `src/features/<mode>/styles/` (`common.scss` + `{Component}.scss` + `index.scss`) — **tự nạp** trong `src/main.ts` qua `import.meta.glob('./features/*/styles/index.scss', { eager: true })`, không liệt kê từng feature trong `main.scss`. Theme/runtime token (`_tokens` / `_shell`) là CSS variables trên `:root` nên sửa hàng loạt vẫn ảnh hưởng mọi module. Vite: `sass-embedded` + `scss.api = 'modern-compiler'`. Khảo sát: [`scss-adoption.md`](scss-adoption.md).
 
 ---
 

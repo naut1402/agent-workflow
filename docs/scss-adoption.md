@@ -117,11 +117,12 @@ Lý do ngắn:
 
 1. **Theme = CSS custom properties** (`var(--bg)`, …). Không đưa palette light/dark vào SCSS `$variable` trừ giá trị compile-time không đổi theo theme.
 2. **Không SCSS-hóa vendor CSS** (vue-flow, toast-ui).
-3. **Partials theo trách nhiệm**, không theo “một file một component” ngay từ đầu:
-   - `_tokens.scss`, `_shell.scss` — phần **chung** (PR chung).
-   - `_<module>.scss` — một file / module (`monitor`, `pipeline-editor`, `agent-editor`, `knowledge`, …) — **một PR / module**.
-   - `_legacy-rest.scss` — tạm chứa CSS chưa tách; xoá khi hết module PR.
-   - Entry `src/styles/main.scss` `@use` các partial; `main.ts` import entry.
+3. **Partials theo trách nhiệm**:
+   - `src/styles/_tokens.scss`, `_shell.scss`, `_scrollbar.scss` — phần **chung shell** (entry `main.scss`).
+   - `src/features/<mode>/styles/` — `common.scss` + `{Component}.scss` + `index.scss`.
+   - **Không** liệt kê feature trong `main.scss`: `src/main.ts` dùng `import.meta.glob('./features/*/styles/index.scss', { eager: true })`.
+   - Theme = CSS variables trên `:root` → sửa token/shell ảnh hưởng mọi feature CSS.
+   - Style co-located SFC: `<style scoped lang="scss">` khi chỉ một component dùng.
 4. **Style co-located**: UI chỉ dùng trong một SFC → `<style scoped lang="scss">` trong feature đó; pattern dùng ≥2 mode → partial shared/shell.
 5. **Không đổi tên class hàng loạt** trong slice tooling/split — tránh đụng template + e2e selector cùng lúc.
 6. **Mixin** chỉ cho pattern lặp thật (vd hàng nút, panel border dùng token). Cấm mixin “theme color” thay `var(--*)`.
