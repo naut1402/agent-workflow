@@ -1,13 +1,12 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
-import { useApp } from '../../../plugins'
 import { fetchRunners, fetchJobs } from '../scripts/runnerApi'
 import { saveRunner, deleteRunner, setDefaultRunner, fetchConnections } from '../scripts/RunnerConfigPanelApi'
 import RunnerDialog from './RunnerDialog.vue'
 import type { ProviderEntry, RunnerDraft } from '../types'
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 
 const runners = ref<RunnerDraft[]>([])
 const defaultRunnerId = ref('')

@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import { useI18nHelpers } from './core/composables/useI18nHelpers'
 import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
-import { useApp } from './plugins'
 import { onClickOutside } from '@vueuse/core'
 import { fetchProjects } from './features/settings/scripts/settingsApi'
 import { fetchAutoscanConfig, runAutoscan } from './features/settings/scripts/SettingsDialogApi'
@@ -33,8 +33,7 @@ import { APP_VERSION } from './core/lib/appVersion'
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
 const PROJECT_KEY = 'dev-dashboard-selected-project'
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 
 // ── Mode ─────────────────────────────────────────────────────────────────────
 const mode = ref('monitor')

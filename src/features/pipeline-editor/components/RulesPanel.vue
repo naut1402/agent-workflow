@@ -1,8 +1,7 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed } from 'vue'
-import { useApp } from '../../../plugins'
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 
 const props = defineProps({
   rules: { type: Array as () => any[], default: () => [] },

@@ -7,7 +7,7 @@ declare module 'vue-i18n' {
 
 declare module 'vue' {
   interface ComponentCustomProperties {
-    /** Đổi locale (plugin i18n) — dùng `app.$setI18nLocale` / `useApp().$setI18nLocale`. */
+    /** Đổi locale (plugin i18n) — `getCurrentInstance()!.appContext.config.globalProperties.$setI18nLocale`. */
     $setI18nLocale: (locale: LocalePreference) => void
     $localeRegistry: {
       locales: string[]

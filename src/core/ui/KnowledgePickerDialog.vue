@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Reusable knowledge multi-select + upload dialog for create-task and pipeline editor.
+import { useI18nHelpers } from '../composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useApp } from '../../plugins'
 import { fetchKnowledgeList, uploadKnowledgeFile } from '../../features/knowledge/scripts/knowledgeApi'
 
 const props = defineProps<{
@@ -15,8 +15,7 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 
 const entries = ref<
   { id: string; title: string; scope: string; tags?: string[] }[]

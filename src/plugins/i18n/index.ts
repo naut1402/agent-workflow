@@ -19,7 +19,7 @@ export type LocaleRegistry = {
 
 /**
  * Helpers i18n — inject vào Vue app (provide + globalProperties).
- * Trong setup: `const app = useApp(); app.$t(...)`.
+ * Trong setup: `const { t } = useI18nHelpers()` (`src/core/composables/useI18nHelpers`).
  */
 export type I18nHelpers = {
   t: (...args: any[]) => string
@@ -111,7 +111,7 @@ export function registerLocale(locale: string, messages: Record<string, unknown>
 
 /**
  * Tạo helpers và gắn lên app instance (provide + `$t` / `$setI18nLocale` global).
- * Chỉ gọi từ `i18nPlugin.install` — feature dùng `useApp().$t`.
+ * Chỉ gọi từ `i18nPlugin.install` — feature dùng `useI18nHelpers()` (core/composables).
  */
 export function injectI18nHelpers(app: App): I18nHelpers {
   const helpers: I18nHelpers = {

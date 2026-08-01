@@ -1,6 +1,6 @@
 /**
  * Test / mount helpers — cài vue-i18n + globalProperties
- * (giống production `i18nPlugin`) để feature dùng `useApp().$t`.
+ * (giống production `i18nPlugin`) để feature dùng `useI18nHelpers()`.
  */
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'

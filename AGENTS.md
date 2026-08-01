@@ -87,7 +87,7 @@ UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **
 
 - Cài đặt qua `src/plugins` (`installPlugins` / `i18nPlugin`); `registerLocale` để bổ sung locale vào registry app-scope.
 - Message theo feature: `src/features/<feature>/locales/{vi,en}.ts` (+ `common` ở `src/plugins/i18n/locales/common/`); plugin **glob** tự nạp. Namespace = camelCase tên feature (`agent-editor` → `agentEditor`).
-- Plugin chỉ gắn từ `main.ts` qua `installPlugins` — helpers i18n inject global (`$t`, `$setI18nLocale`). Trong `<script setup>`: `const app = useApp(); app.$t('…')` (**không** import `useI18n` từ `vue-i18n`). Ngoài setup (scripts/pure): `import { t } from '@/plugins/i18n'`.
+- Plugin chỉ gắn từ `main.ts` qua `installPlugins` — helpers i18n inject global (`$t`, `$setI18nLocale`). Trong `<script setup>`: `const { t } = useI18nHelpers()` (`src/core/composables/useI18nHelpers.ts` — **không** import `useI18n` từ `vue-i18n`). Ngoài setup (scripts/pure): `import { t } from '@/plugins/i18n'`.
 - Locale hiện tại lưu trong `AppSettings.locale` (localStorage); đổi qua `useLocale()`.
 - Test mount component có `t()`: dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`).
 - **Khi thêm/sửa text UI**: đối ứng đủ `vi` + `en` trong `locales/` của feature; namespace mới → cập nhật `src/plugins/i18n/schema.ts`. Chi tiết: [`docs/i18n.md`](docs/i18n.md).

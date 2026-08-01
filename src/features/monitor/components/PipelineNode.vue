@@ -1,15 +1,14 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
-import { useApp } from '../../../plugins'
 import { useChatSurface } from '../../nl-chat/composables/useChatSurface'
 
 const props = defineProps({
   data: { type: Object, required: true },
 })
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 const { openTaskChat } = useChatSurface()
 
 // Actions sit ON the node's top border (the border runs through their middle)

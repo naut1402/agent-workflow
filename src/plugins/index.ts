@@ -1,4 +1,4 @@
-import { getCurrentInstance, type App, type ComponentPublicInstance } from 'vue'
+import type { App } from 'vue'
 import { i18nPlugin, type I18nPluginOptions } from './i18n'
 
 export type InstallPluginsOptions = {
@@ -8,24 +8,11 @@ export type InstallPluginsOptions = {
 /**
  * Cài thư viện/plugin app-scope tại một chỗ (i18n, …).
  * Chỉ gọi từ app root (`main.ts`). Feature không import `createI18n` / `vue-i18n`.
- * Sau khi cài: `useApp().$t` / template `$t`.
+ * Sau khi cài: trong setup dùng `useI18nHelpers()` (`src/core/composables`).
  */
 export function installPlugins(app: App, options: InstallPluginsOptions = {}): App {
   app.use(i18nPlugin, options.i18n ?? {})
   return app
-}
-
-/**
- * Proxy Vue instance hiện tại — sau `installPlugins`, dùng `app.$t` / `app.$setI18nLocale`.
- * Chỉ gọi trong `<script setup>` / composable (có currentInstance).
- * Scripts/pure ngoài setup: `import { t } from '@/plugins/i18n'`.
- */
-export function useApp(): ComponentPublicInstance {
-  const inst = getCurrentInstance()
-  if (!inst?.proxy) {
-    throw new Error('[plugins] useApp() chỉ gọi trong setup sau installPlugins(app)')
-  }
-  return inst.proxy
 }
 
 export {

@@ -1,10 +1,9 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed } from 'vue'
-import { useApp } from '../../../plugins'
 import { Handle, Position } from '@vue-flow/core'
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 
 const props = defineProps({
   id: { type: String, required: true },

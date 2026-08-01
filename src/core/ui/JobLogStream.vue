@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../composables/useI18nHelpers'
 import { nextTick, ref, toRef, watch } from 'vue'
-import { useApp } from '../../plugins'
 import { useJobLogStream, isJobLogTerminal } from '../composables/useJobLogStream'
 
 const props = defineProps<{
@@ -9,8 +9,7 @@ const props = defineProps<{
   active?: boolean
 }>()
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 const preRef = ref<HTMLElement | null>(null)
 const activeRef = toRef(props, 'active')
 

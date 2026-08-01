@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useApp } from '../../../plugins'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, onMounted, watch } from 'vue'
 import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../core/lib/workflowSteps'
 import { useSortable } from '../../../core/composables/useSortable'
@@ -8,8 +8,7 @@ import { fetchPipelineConfig } from '../../pipeline-editor/scripts/pipelineEdito
 import { fetchWorkflowStepTemplates, fetchWorkflowStepTemplate, saveWorkflowStepTemplate } from '../scripts/WorkflowSectionEditorApi'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 const props = defineProps({
   modelValue: { type: String, default: '' },
 })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useApp } from '../../../plugins'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { onMounted, ref } from 'vue'
 import { useArtifactProposal } from '../composables/useArtifactProposal'
 
@@ -9,8 +9,7 @@ import { useArtifactProposal } from '../composables/useArtifactProposal'
 // send follow-up feedback into the same CLI session. Opened by ArtifactPanel
 // when a run settles at `awaiting_approval`.
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 const props = defineProps<{
   jobId: string
   artifactName: string

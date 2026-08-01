@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useApp } from '../../../plugins'
 import JobLogStream from '../../../core/ui/JobLogStream.vue'
 import KnowledgePickerDialog from '../../../core/ui/KnowledgePickerDialog.vue'
 import WizardStepper from '../../../core/ui/WizardStepper.vue'
@@ -15,8 +15,7 @@ const emit = defineEmits<{
   created: [payload: { taskId: string; jobId: string | null }]
 }>()
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 const showKnowledgePicker = ref(false)
 
 const {

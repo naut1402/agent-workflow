@@ -1,11 +1,10 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, onUnmounted, watch } from 'vue'
-import { useApp } from '../../../plugins'
 import { fetchLogs, fetchJobLog } from '../scripts/LogsPanelApi'
 import { fetchJobs } from '../../runner/scripts/runnerApi'
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 
 type Tab = 'audit' | 'request' | 'jobs'
 

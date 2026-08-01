@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { useApp } from '../../../plugins'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 defineProps({
   saving: { type: Boolean, default: false },
   saved: { type: Boolean, default: false },
 })
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 </script>
 
 <template>

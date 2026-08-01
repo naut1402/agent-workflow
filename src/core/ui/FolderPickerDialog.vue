@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Modal directory browser backed by GET /api/fs/browse. Used by ProjectBar
 // (add project) and Settings (autoscan whitelist).
+import { useI18nHelpers } from '../composables/useI18nHelpers'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { useApp } from '../../plugins'
 import { browseFs } from '../../features/settings/scripts/settingsApi'
 
 const props = defineProps<{
@@ -15,8 +15,7 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 
 const currentPath = ref('')
 const parentPath = ref<string | null>(null)

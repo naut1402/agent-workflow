@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { useApp } from '../../../plugins'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import type { NotificationEvent } from '../lib/notificationTypes'
 
 defineProps<{ history: NotificationEvent[] }>()
 const emit = defineEmits<{ markAllRead: []; select: [event: NotificationEvent] }>()
 
-const app = useApp()
-const t = (...args: any[]) => app.$t(...args) as string
+const { t } = useI18nHelpers()
 
 function message(event: NotificationEvent) {
   return event.kind === 'qa_ready'
