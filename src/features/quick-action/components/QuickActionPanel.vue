@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
@@ -13,7 +13,8 @@ import {
   setActionMenuMembership,
 } from '../lib/menuTree'
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 
 // CRUD panel for the artifact-actions catalog (Correction B / F0005): create,
 // edit, delete a "quick action" — the prompt/agent/attach-point/runner binding

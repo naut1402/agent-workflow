@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import type { NotificationEvent } from '../lib/notificationTypes'
 
 defineProps<{ history: NotificationEvent[] }>()
 const emit = defineEmits<{ markAllRead: []; select: [event: NotificationEvent] }>()
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 
 function message(event: NotificationEvent) {
   return event.kind === 'qa_ready'

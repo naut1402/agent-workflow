@@ -14,7 +14,7 @@ Nguồn quy ước duy nhất cho mọi AI agent làm việc trong repo, bất k
 `dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **dev-agent-teams orchestrator khác** — repo này không chạy orchestrator, chỉ quan sát. Với *state* từng task (`.dev-state/*.json`) thì chỉ đọc; với *config* (pipeline, custom agent, template, knowledge) và **artifact markdown** thì đọc/ghi được (ghi qua `PUT /api/artifact`).
 
 - **Backend**: Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Setup app-root ở `src/api/` (`apiServer.ts`, `devTeamApi.ts`); kernel HTTP ở `src/core/http/` (`types`, `AbstractController`, `respond`, FE `client`); registry ở `src/core/registry.ts`. Entry production: `src/standalone.ts`. `/api/knowledge` chặn trước Hono trong `createApiHandler` (`apiServer.ts`).
-- **Frontend**: feature-module `src/features/<mode>/` …; FE HTTP ở `features/<mode>/scripts/`; SCSS ở `features/<mode>/styles/`. Shell/token: `src/styles/`. FE fetch helper: `src/core/http/client.ts`. Nền FE/shell ở `src/core/`; contract FE↔BE ở `src/core/contracts/` (alias `@shared`). Không trộn FE client với Hono `features/*/api.ts`.
+- **Frontend**: feature-module `src/features/<mode>/` …; FE HTTP ở `features/<mode>/scripts/`; SCSS ở `features/<mode>/styles/`; locale ở `features/<mode>/locales/`. Shell/token: `src/styles/`. Plugins app-scope: `src/plugins/` (`installPlugins`). FE fetch helper: `src/core/http/client.ts`. Nền FE/shell ở `src/core/`; contract FE↔BE ở `src/core/contracts/` (alias `@shared`). Không trộn FE client với Hono `features/*/api.ts`.
 - **Data root** `.dev-team-agent/`, 2 run mode: dev đọc từ `cwd/..`/`DEV_TEAM_ROOT`; standalone đọc qua `ProjectRegistry` (`~/.dev-team-dashboard/projects.json`, `?project=<id>`).
 - **Pipeline config xếp lớp**: `DEFAULT_PIPELINE` (`src/features/pipeline-editor/business/pipeline/default.ts`) ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`, lớp sau đè lớp trước.
 - **MCP** (`mcp/server.ts`, `bun run mcp`): CRUD project-registry qua `src/core/registry.ts`, không cần HTTP server.
@@ -77,7 +77,7 @@ Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuầ
 
 ### 3.5 Frontend (Vue 3)
 
-`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables,scripts/*Api.ts,styles/}` + `src/core/{ui,composables,lib,i18n,shell}`; FE client trong `scripts/`; SCSS feature trong `styles/` (`common.scss` + `{Component}.scss`, `index.scss`) — tự nạp bởi `import.meta.glob` trong `src/main.ts`; `src/styles/main.scss` chỉ tokens/shell/scrollbar.
+`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables,scripts/*Api.ts,styles/,locales/}` + `src/core/{ui,composables,lib,shell}`; plugins app-scope ở `src/plugins/`; FE client trong `scripts/`; SCSS feature trong `styles/` — tự nạp bởi `import.meta.glob` trong `src/main.ts`; locale feature trong `locales/` — tự nạp bởi plugin i18n.
 
 - Quy ước button (ưu tiên icon-btn, default không viền, hover scale): [`docs/ui-buttons.md`](docs/ui-buttons.md).
 - **Custom UI primitives** trong `src/core/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.
@@ -85,11 +85,12 @@ Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuầ
 
 UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **Tiếng Việt (`vi`) là locale mặc định** và là **nguồn chân lý cho message schema** — các locale khác (vd `en`) được gắn type theo `vi` nên thiếu key là lỗi compile, không phải fallback runtime.
 
-- Hub dùng chung ở `src/core/i18n/`; message tách theo **namespace per-feature** (`common`, `monitor`, `agentEditor`, `knowledge`, `runner`, `logs`, `pipelineEditor`, `quickAction`, `settings`) — mỗi feature chỉ sửa namespace của mình.
-- Trong `<script setup>`: `const { t } = useI18n()`. Ngoài component (vd `src/api/`): `i18n.global.t(...)`.
-- Locale hiện tại lưu trong `AppSettings.locale` (localStorage, chung store với theme); đổi qua `useLocale()`.
-- Test mount component có `t()`: dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`) để cài i18n plugin.
-- **Khi thêm/sửa text UI**: luôn cân nhắc và **đối ứng đủ** — thêm cùng key vào `locales/vi/<namespace>.ts` và mọi locale khác (vd `en`); không chỉ sửa component mà bỏ sót message file. Chi tiết + checklist: [`docs/i18n.md`](docs/i18n.md).
+- Cài đặt qua `src/plugins` (`installPlugins` / `i18nPlugin`); `registerLocale` để bổ sung locale vào registry app-scope.
+- Message theo feature: `src/features/<feature>/locales/{vi,en}.ts` (+ `common` ở `src/plugins/i18n/locales/common/`); plugin **glob** tự nạp. Namespace = camelCase tên feature (`agent-editor` → `agentEditor`).
+- Plugin chỉ gắn từ `main.ts` qua `installPlugins` — helpers i18n inject global (`$t`, `$setI18nLocale`). Trong `<script setup>`: `const app = useApp(); app.$t('…')` (**không** import `useI18n` từ `vue-i18n`). Ngoài setup (scripts/pure): `import { t } from '@/plugins/i18n'`.
+- Locale hiện tại lưu trong `AppSettings.locale` (localStorage); đổi qua `useLocale()`.
+- Test mount component có `t()`: dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`).
+- **Khi thêm/sửa text UI**: đối ứng đủ `vi` + `en` trong `locales/` của feature; namespace mới → cập nhật `src/plugins/i18n/schema.ts`. Chi tiết: [`docs/i18n.md`](docs/i18n.md).
 
 ---
 

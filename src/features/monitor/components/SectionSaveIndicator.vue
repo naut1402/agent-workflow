@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
+import { useApp } from '../../../plugins'
 defineProps({
   saving: { type: Boolean, default: false },
   saved: { type: Boolean, default: false },
 })
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 </script>
 
 <template>

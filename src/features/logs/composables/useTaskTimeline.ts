@@ -4,7 +4,7 @@
 // convention of pulling derived logic out of .vue files).
 
 import { phasesFromPipeline, phaseStatus } from '../../../core/lib/phase'
-import { i18n } from '../../../core/i18n'
+import { t } from '../../../plugins/i18n'
 
 export interface TimelineEvent {
   ts: number | null
@@ -23,20 +23,20 @@ export function deriveTimeline(task: any): TimelineEvent[] {
   for (const [name, meta] of Object.entries(artifacts)) {
     const m = meta as { exists?: boolean; mtime?: number } | null
     if (m && m.exists && typeof m.mtime === 'number') {
-      events.push({ ts: m.mtime, kind: 'artifact', label: name, detail: i18n.global.t('logs.timeline.artifactDetail') })
+      events.push({ ts: m.mtime, kind: 'artifact', label: name, detail: t('logs.timeline.artifactDetail') })
     }
   }
 
   // Live phase cursor — the phase currently running (no fixed timestamp).
   for (const phase of phasesFromPipeline(task.pipeline)) {
     if (phaseStatus(phase, task) === 'active') {
-      events.push({ ts: null, kind: 'phase', label: phase.label, detail: i18n.global.t('logs.timeline.phaseDetail') })
+      events.push({ ts: null, kind: 'phase', label: phase.label, detail: t('logs.timeline.phaseDetail') })
     }
   }
 
   // HITL gate awaiting human approval.
   if (task.hitl_pending) {
-    events.push({ ts: null, kind: 'hitl', label: String(task.hitl_pending), detail: i18n.global.t('logs.timeline.hitlDetail') })
+    events.push({ ts: null, kind: 'hitl', label: String(task.hitl_pending), detail: t('logs.timeline.hitlDetail') })
   }
 
   // Ascending by timestamp; ongoing events (active phase / pending gate) last.

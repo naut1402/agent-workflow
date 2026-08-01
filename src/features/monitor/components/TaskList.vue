@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import TaskListItem from './TaskListItem.vue'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
 import { resolveHideMissingArtifacts } from '../../../core/contracts/schemas/appSettings'
@@ -12,7 +12,8 @@ const props = defineProps({
   projectId: { type: String, default: null },
 })
 const emit = defineEmits(['select', 'open-artifact', 'task-archived', 'task-deleted', 'create-task'])
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 const { settings, update } = useAppSettings()
 
 // Track which tasks have their file list expanded.

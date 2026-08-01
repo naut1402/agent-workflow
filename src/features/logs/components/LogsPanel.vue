@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, onUnmounted, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import { fetchLogs, fetchJobLog } from '../scripts/LogsPanelApi'
 import { fetchJobs } from '../../runner/scripts/runnerApi'
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 
 type Tab = 'audit' | 'request' | 'jobs'
 

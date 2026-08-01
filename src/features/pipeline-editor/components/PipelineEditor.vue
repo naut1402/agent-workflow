@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, markRaw, onMounted, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { fetchCatalog, fetchPipelineConfig, fetchRules, writePipelineConfig } from '../scripts/pipelineEditorApi'
@@ -20,7 +20,8 @@ import {
   type StepPreservedMap,
 } from '../lib/pipelineRoundTrip'
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 
 const props = defineProps({
   scope: { type: String, default: 'global' },

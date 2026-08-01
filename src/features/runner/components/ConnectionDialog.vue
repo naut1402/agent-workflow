@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import { fetchCredentials, saveCredential, saveConnection, scanLocalCommands } from '../scripts/ConnectionDialogApi'
 import type { ConnectionKind, ProviderEntry } from '../types'
 
@@ -30,7 +30,8 @@ const emit = defineEmits<{
   saved: [connectionId: string]
 }>()
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 
 const kind = ref<ConnectionKind>('local-console')
 const label = ref('')

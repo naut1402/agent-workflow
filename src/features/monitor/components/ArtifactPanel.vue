@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useApp } from '../../../plugins'
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, onUpdated, inject } from 'vue'
 import { useFullscreen } from '@vueuse/core'
 import { parseMarkdown, renderMermaid } from '../../../core/markdown'
@@ -25,6 +23,8 @@ import { resolveArtifactViewMode } from '../../../core/contracts/schemas/appSett
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 const props = defineProps({
   task: { type: Object, required: true },
   openArtifact: { type: Object, default: null },

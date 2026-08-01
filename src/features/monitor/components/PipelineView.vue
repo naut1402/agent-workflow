@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useApp } from '../../../plugins'
 import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
@@ -11,6 +9,8 @@ import { phasesFromPipeline, phaseStatus } from '../../../core/lib/phase'
 import PipelineNode from './PipelineNode.vue'
 import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
 
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 const props = defineProps({
   task: { type: Object, required: true },
   projectId: { type: [String, null], default: null },

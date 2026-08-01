@@ -4,11 +4,12 @@
 // registry. Removing a project only detaches it from the dashboard — it never
 // touches files on disk.
 import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import { addProject, removeProject } from '../../settings/scripts/settingsApi'
 import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 
 const props = defineProps({
   projects: { type: Array as () => any[], default: () => [] },

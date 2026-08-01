@@ -1,11 +1,8 @@
 import { ref } from 'vue'
 import { fetchArtifactActionsCatalog, saveArtifactActionsCatalog } from '../scripts/QuickActionPanelApi'
-import { i18n } from '../../../core/i18n'
+import { t } from '../../../plugins/i18n'
 import type { ArtifactMenuNode } from '../../../core/contracts/schemas/artifactAction'
 
-// Plain (non-component) module → resolve strings via the app i18n singleton
-// rather than useI18n(). `t` reflects the active locale at call time.
-const t = i18n.global.t
 
 // Drives the QuickAction CRUD panel: loads the full artifact-actions catalog
 // (`GET /api/artifact-actions` without `?artifact=`), lets the caller

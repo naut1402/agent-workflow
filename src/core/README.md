@@ -8,6 +8,7 @@
 | Cây | Vai trò |
 |-----|---------|
 | `src/core/` | Nền FE + contracts + project registry |
+| `src/plugins/` | Cài thư viện app-scope (i18n, …); `installPlugins(app)` |
 | `src/api/` | Setup HTTP app-root only (`apiServer`, `devTeamApi`) |
 | `src/core/http/` | Kernel HTTP server (`types`, `AbstractController`, `respond`) + FE client (`client.ts`) |
 | `src/features/` | Mode UI + `api.ts` / `controller.ts` / `business/` |

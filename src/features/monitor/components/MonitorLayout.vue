@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useApp } from '../../../plugins'
 import { computed, onMounted, ref, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import ProjectBar from './ProjectBar.vue'
@@ -18,6 +16,8 @@ import {
   resolveCollapseTaskExpandOnOutside,
 } from '../../../core/contracts/schemas/appSettings'
 
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 const SUB_SIDEBAR_KEY = 'dev-dashboard-monitor-subsidebar-collapsed'
 
 const props = defineProps({

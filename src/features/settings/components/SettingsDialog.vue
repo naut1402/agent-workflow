@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, onUnmounted, ref, type Ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import { onClickOutside } from '@vueuse/core'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
 import { useLocale } from '../../../core/composables/useLocale'
@@ -27,7 +27,8 @@ import CSelect from '../../../core/ui/CSelect.vue'
 
 const emit = defineEmits<{ close: [] }>()
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 const { settings, load, update } = useAppSettings()
 const { locale, setLocale } = useLocale()
 

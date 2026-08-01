@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import { fetchKnowledgeList, fetchKnowledgeEntry, saveKnowledgeEntry, createKnowledgeEntry, deleteKnowledgeEntry, uploadKnowledgeFile, fetchKnowledgeTags } from '../scripts/KnowledgePanelApi'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 
 const scope = ref('project')
 const tagFilter = ref('')

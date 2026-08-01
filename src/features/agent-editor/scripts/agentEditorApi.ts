@@ -1,4 +1,4 @@
-import { i18n } from '../../../core/i18n'
+import { t } from '../../../plugins/i18n'
 import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
 import { submitJob } from '../../runner/scripts/runnerApi'
 
@@ -47,7 +47,7 @@ export async function buildAndRunAgent(
 ): Promise<BuildAndRunAgentResult> {
   const saved = await saveCustomAgent(input.draft, input.projectId)
   const name: string | undefined = saved?.name
-  if (!name) throw new Error(i18n.global.t('common.errors.saveCustomAgent'))
+  if (!name) throw new Error(t('common.errors.saveCustomAgent'))
   const res = await submitJob(
     {
       runnerId: input.runnerId,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import { onClickOutside } from '@vueuse/core'
 import type { NotificationEvent } from '../lib/notificationTypes'
 import NotificationList from './NotificationList.vue'
@@ -8,7 +8,8 @@ import NotificationList from './NotificationList.vue'
 defineProps<{ unreadCount: number; history: NotificationEvent[] }>()
 const emit = defineEmits<{ markAllRead: []; select: [event: NotificationEvent] }>()
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 const open = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
 

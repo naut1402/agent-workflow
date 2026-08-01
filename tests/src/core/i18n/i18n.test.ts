@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   i18n,
+  t,
   setI18nLocale,
+  registerLocale,
+  getLocaleRegistry,
   SUPPORTED_LOCALES,
   DEFAULT_LOCALE,
-} from '@/core/i18n'
+} from '@/plugins/i18n'
 import { useLocale } from '@/core/composables/useLocale'
 import { useAppSettings, STORAGE_KEY } from '@/core/composables/useAppSettings'
 import { resolveLocale } from '../../../../src/core/contracts/schemas/appSettings'
@@ -33,14 +36,13 @@ describe('i18n foundation', () => {
   })
 
   it('t() resolves a shared key and switches with the active locale', () => {
-    const t = i18n.global.t
     expect(t('common.modes.logs')).toBe('Nhật ký')
     setI18nLocale('en')
     expect(t('common.modes.logs')).toBe('Logs')
   })
 
   it('named interpolation works for status.updated', () => {
-    expect(i18n.global.t('common.status.updated', { time: '10:00' })).toBe('cập nhật 10:00')
+    expect(t('common.status.updated', { time: '10:00' })).toBe('cập nhật 10:00')
   })
 
   it('useLocale.setLocale persists the preference and flips the live locale', () => {
@@ -50,5 +52,13 @@ describe('i18n foundation', () => {
     expect(locale.value).toBe('en')
     expect(i18n.global.locale.value).toBe('en')
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).locale).toBe('en')
+  })
+
+  it('registerLocale merges messages and updates locale registry', () => {
+    registerLocale('ja', { common: { modes: { logs: 'ログ' } } })
+    expect(getLocaleRegistry().locales).toContain('ja')
+    setI18nLocale('ja' as any)
+    expect(t('common.modes.logs')).toBe('ログ')
+    setI18nLocale('vi')
   })
 })

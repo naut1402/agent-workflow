@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import { patchTaskArchive, deleteTask } from '../scripts/TaskListItemApi'
 
 const props = defineProps({
@@ -15,7 +15,8 @@ const emit = defineEmits([
   'select', 'toggle-expand', 'open-artifact', 'task-archived', 'task-deleted', 'toggle-hide-missing',
 ])
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 const archiveError = ref('')
 
 async function toggleArchive() {

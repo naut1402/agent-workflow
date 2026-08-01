@@ -1,5 +1,5 @@
 import type { TaskArchivePatch } from '../../../core/contracts/schemas/task'
-import { i18n } from '../../../core/i18n'
+import { t } from '../../../plugins/i18n'
 import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
 
 export async function fetchTasks(projectId?: string) {
@@ -10,14 +10,14 @@ export async function patchTaskArchive(id: string, body: TaskArchivePatch, proje
   return apiRequest('PUT', '/api/task-archive', {
     query: { id, project: projectId },
     body,
-    errorMessage: (status) => i18n.global.t('common.errors.archiveTask', { status }),
+    errorMessage: (status) => t('common.errors.archiveTask', { status }),
   })
 }
 
 export async function deleteTask(id: string, projectId?: string) {
   return apiRequest('DELETE', `/api/tasks/${encodeURIComponent(id)}`, {
     query: { project: projectId },
-    errorMessage: (status) => i18n.global.t('common.errors.deleteTask', { status }),
+    errorMessage: (status) => t('common.errors.deleteTask', { status }),
   })
 }
 

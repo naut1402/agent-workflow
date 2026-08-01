@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useApp } from '../../../plugins'
 import { ref, computed } from 'vue'
 import {
   FIXED_SECTION_KEYS,
@@ -14,6 +12,8 @@ import { saveAgentTemplate } from '../scripts/AgentSectionEditorApi'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 import WorkflowSectionEditor from './WorkflowSectionEditor.vue'
 
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 const props = defineProps({
   draft: { type: Object, required: true },
   catalog: { type: Object, default: () => ({ skills: [] }) },

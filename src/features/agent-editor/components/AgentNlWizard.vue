@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useApp } from '../../../plugins'
 import { computed, inject, onMounted } from 'vue'
 import { useAgentBuild } from '../composables/useAgentBuild'
 import { navigateToModeKey } from '../../../core/shell/keys'
@@ -12,6 +10,8 @@ import { navigateToModeKey } from '../../../core/shell/keys'
 // entry point). Agent Editor has no task context, so the smoke job always
 // runs in the `custom-agents` sandbox workspace.
 
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 const props = defineProps<{
   projectId?: string | null
 }>()

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUpdated, reactive } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import { parseMarkdown, renderMermaid } from '../../../core/markdown'
 import { saveArtifact, sendTaskFeedback } from '../scripts/QaPanelApi'
 import {
@@ -11,7 +11,8 @@ import { parseQaBlocks, applyAnswer, type QaBlock } from '../composables/useQaQu
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 
 const props = defineProps({
   qa: { type: String, default: '' },

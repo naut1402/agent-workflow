@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useApp } from '../../../plugins'
 import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
 import type { ConnectionOption, ProviderEntry, RunnerDraft } from '../types'
@@ -17,7 +17,8 @@ const emit = defineEmits<{
   refreshed: []
 }>()
 
-const { t } = useI18n()
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 
 const draft = ref(emptyDraft())
 const isEdit = computed(() => Boolean(props.runner?.id))

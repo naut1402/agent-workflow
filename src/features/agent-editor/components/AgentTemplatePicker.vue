@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useApp } from '../../../plugins'
 import { ref, onMounted } from 'vue'
 import { fetchAgentTemplates, fetchAgentTemplate, importAgentTemplateUrl, uploadAgentTemplate, deleteAgentTemplate } from '../scripts/AgentTemplatePickerApi'
 import { fetchCatalog, fetchCatalogAgent } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { draftFromCatalogAgent } from '../../../core/contracts/agentMarkdown.js'
 
+const app = useApp()
+const t = (...args: any[]) => app.$t(...args) as string
 const emit = defineEmits(['apply-draft', 'close'])
 
 const templates = ref([])
