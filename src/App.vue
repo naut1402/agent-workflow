@@ -12,7 +12,7 @@ import {
   resolveNotifyShowFloating,
   resolveNotifyShowSidebar,
 } from './core/contracts/schemas/appSettings'
-import { resolveAutoscanIntervalMs } from './core/contracts/schemas/autoscan'
+import { resolveAutoscanIntervalMs } from './features/settings/schemas/autoscan'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
 import { useNotifications } from './features/notifications/composables/useNotifications'
 import FloatingNotificationIcon from './features/notifications/components/FloatingNotificationIcon.vue'

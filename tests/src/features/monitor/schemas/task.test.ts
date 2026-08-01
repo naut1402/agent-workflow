@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseTaskState, TaskState } from '@shared/schemas/task'
+import { parseTaskState, TaskState } from '@/features/monitor/schemas/task'
 
 describe('parseTaskState', () => {
   it('applies safe defaults for an empty/invalid input', () => {

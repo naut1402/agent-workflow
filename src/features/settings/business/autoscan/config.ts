@@ -10,16 +10,16 @@ import {
   resolveAutoscanFromDashboard,
   resolveGithubTokensFromDashboard,
   type DashboardSettings,
-} from '../../../../core/contracts/schemas/dashboardSettings.js'
+} from '../../schemas/dashboardSettings.js'
 import {
   DEFAULT_AUTOSCAN_CONFIG,
   parseAutoscanConfig,
   type AutoscanConfig,
-} from '../../../../core/contracts/schemas/autoscan.js'
+} from '../../schemas/autoscan.js'
 import {
   parseGithubTokensConfig,
   type GithubTokensConfig,
-} from '../../../../core/contracts/schemas/githubTokens.js'
+} from '../../schemas/githubTokens.js'
 import { registryHome } from '../../../../core/registry.js'
 
 export function dashboardSettingsFile(): string {

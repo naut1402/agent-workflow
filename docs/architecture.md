@@ -78,7 +78,8 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 
 `src/core/contracts/` không import HTTP kernel; domain/business import contracts + `registry` khi cần.
 
-- `src/core/contracts/schemas/{log,task}.ts` — Zod schema (type suy ra bằng `z.infer`), single source cho type dùng chung 2 phía.
+- `src/core/contracts/schemas/appSettings.ts` — preference shell (theme/locale/notifications UI); core/plugins dùng.
+- Schema domain (task, log, autoscan, …) nằm ở `src/features/<feature>/schemas/` — Zod + `z.infer`, validate biên I/O của feature đó.
 - `src/core/contracts/{frontmatter,fs,http,sanitize}.ts` — helper thuần.
 - `src/core/contracts/agentMarkdown.js` (**vẫn `.js`**) — round-trip agent-markdown, import bởi cả frontend và domain module backend.
 
@@ -107,7 +108,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 
 ### 3.2 Core frontend (`src/core`)
 
-Nền tảng FE / shell: `composables/*`, `lib/`, `markdown.ts`, `ui/`, `shell/keys.ts`, cộng `contracts/` (Zod + helper FE↔BE, alias `@shared` — xem §2.5). i18n cài qua `src/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`.
+Nền tảng FE / shell: `composables/*`, `lib/`, `markdown.ts`, `ui/`, `shell/keys.ts`, cộng `contracts/` (helper FE↔BE + `schemas/appSettings`, alias `@shared` — xem §2.5). Schema domain ở `features/<name>/schemas/`. i18n cài qua `src/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`.
 
 **Roadmap kernel (sau 1.0.0):** ModeRegistry / `registerMode`, event bus, contribution API (plugin). Chưa triển khai trong 1.0.0 — xem [`src/core/README.md`](../src/core/README.md).
 

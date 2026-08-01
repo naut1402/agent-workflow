@@ -10,7 +10,7 @@ import {
   upsertRunner,
 } from '../../../../src/features/runner/business/index'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types'
-import { TASK_ID_PATTERN } from '../../../../src/core/contracts/schemas/taskCreate'
+import { TASK_ID_PATTERN } from '../../../../src/features/monitor/schemas/taskCreate'
 import { ensureNlChatBuilderAgent } from '../../../../src/features/agent-editor/business/index'
 import {
   startNlChatSession,

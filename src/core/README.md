@@ -15,12 +15,12 @@
 | `src/standalone.ts` | Entrypoint HTTP production (`bun run serve`) |
 | `src/runner-cli.mjs` | CLI submit job |
 
-Feature import type/controller từ `src/core/http/`. Contracts giữ ở `src/core/contracts/`. Không còn `src/server/`.
+Feature import type/controller từ `src/core/http/`. Contracts shell ở `src/core/contracts/` (`appSettings` + helpers). Schema domain ở `src/features/<feature>/schemas/`. Không còn `src/server/`.
 
 ## Có trong 1.0.0
 
 - `composables/`, `ui/`, `i18n/`, `lib/`, `markdown.ts`, `shell/keys.ts`
-- `contracts/` — Zod/schema FE↔BE (alias `@shared`)
+- `contracts/` — helper FE↔BE + `schemas/appSettings` (alias `@shared`); schema domain ở `features/*/schemas/`
 - `http/` — types + AbstractController + respond + FE `client.ts`
 - `registry.ts`, `business/AbstractBusiness.ts`
 

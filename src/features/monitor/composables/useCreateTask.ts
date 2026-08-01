@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import type { CreateTaskRequest, TaskSource } from '../../../core/contracts/schemas/taskCreate.js'
+import type { CreateTaskRequest, TaskSource } from '../schemas/taskCreate.js'
 import { createTask, fetchGithubIssue } from '../scripts/CreateTaskDialogApi'
 import { fetchPipelineProfile, fetchPipelineProfiles } from '../../pipeline-editor/scripts/ProfileManagerApi'
 import { fetchRunners } from '../../runner/scripts/runnerApi'

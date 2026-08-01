@@ -1,5 +1,5 @@
-import { TASK_ID_PATTERN } from '../../../core/contracts/schemas/taskCreate.js'
-import type { TaskSource } from '../../../core/contracts/schemas/taskCreate.js'
+import { TASK_ID_PATTERN } from '../schemas/taskCreate.js'
+import type { TaskSource } from '../schemas/taskCreate.js'
 
 export type TaskIdValidationCode = 'required' | 'invalid'
 

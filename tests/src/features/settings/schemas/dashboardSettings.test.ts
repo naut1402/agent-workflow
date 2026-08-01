@@ -4,7 +4,7 @@ import {
   parseDashboardSettings,
   resolveAutoscanFromDashboard,
   resolveGithubTokensFromDashboard,
-} from '@shared/schemas/dashboardSettings'
+} from '@/features/settings/schemas/dashboardSettings'
 
 describe('parseDashboardSettings', () => {
   it('returns default for invalid input', () => {

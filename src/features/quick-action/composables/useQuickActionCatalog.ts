@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { fetchArtifactActionsCatalog, saveArtifactActionsCatalog } from '../scripts/QuickActionPanelApi'
 import { t } from '../../../plugins/i18n'
-import type { ArtifactMenuNode } from '../../../core/contracts/schemas/artifactAction'
+import type { ArtifactMenuNode } from '../../monitor/schemas/artifactAction'
 
 
 // Drives the QuickAction CRUD panel: loads the full artifact-actions catalog

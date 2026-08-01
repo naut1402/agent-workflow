@@ -1,7 +1,7 @@
 import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
 import { readLogs, emitAudit, appendRequestLog } from './store.js'
 import { readJobLog, readJobLogDelta, readTaskJobLogDelta } from './jobLog.js'
-import type { LogType } from '../../../core/contracts/schemas/log.js'
+import type { LogType } from '../schemas/log.js'
 
 export class LogsBusiness extends AbstractBusiness {
   listLogs(opts: { type?: LogType; project?: string; limit?: number }) {

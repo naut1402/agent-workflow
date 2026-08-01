@@ -8,7 +8,7 @@ import {
   type AuditOp,
   type AuditEntity,
   parseLogLine,
-} from '../../../core/contracts/schemas/log.js'
+} from '../schemas/log.js'
 
 // Append-only JSONL log store, global under `~/.dev-team-dashboard/logs/`.
 // Depends only on shared/ + the registry home resolver — knows nothing of HTTP.

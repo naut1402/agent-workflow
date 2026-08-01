@@ -1,4 +1,4 @@
-import type { TaskStatePatch } from '../../../core/contracts/schemas/task'
+import type { TaskStatePatch } from '../schemas/task'
 import { t } from '../../../plugins/i18n'
 import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
 

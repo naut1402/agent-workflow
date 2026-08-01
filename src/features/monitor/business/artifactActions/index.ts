@@ -8,7 +8,7 @@ import {
   type ArtifactAction,
   type ArtifactActionView,
   type ArtifactMenuNode,
-} from '../../../../core/contracts/schemas/artifactAction.js'
+} from '../../schemas/artifactAction.js'
 import { DEFAULT_ARTIFACT_ACTIONS } from './default.js'
 
 export { DEFAULT_ARTIFACT_ACTIONS } from './default.js'

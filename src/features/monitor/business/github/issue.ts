@@ -1,6 +1,6 @@
 import { fetchUrlSafe } from '../../../agent-editor/business/fetch.js'
 import { loadGithubTokensConfig } from '../../../settings/business/autoscan/config.js'
-import { resolveGithubTokenForRepo } from '../../../../core/contracts/schemas/githubTokens.js'
+import { resolveGithubTokenForRepo } from '../../../settings/schemas/githubTokens.js'
 
 export interface GithubIssuePreview {
   number: number

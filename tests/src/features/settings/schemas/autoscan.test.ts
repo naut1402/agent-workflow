@@ -3,7 +3,7 @@ import {
   DEFAULT_AUTOSCAN_CONFIG,
   parseAutoscanConfig,
   resolveAutoscanIntervalMs,
-} from '@shared/schemas/autoscan'
+} from '@/features/settings/schemas/autoscan'
 
 describe('parseAutoscanConfig', () => {
   it('returns default for invalid input', () => {

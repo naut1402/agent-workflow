@@ -16,7 +16,7 @@ import {
   saveArtifactActions,
   DEFAULT_ARTIFACT_ACTIONS,
 } from '../../../../src/features/monitor/business/artifactActions/index.js'
-import type { ArtifactAction } from '../../../../src/core/contracts/schemas/artifactAction.js'
+import type { ArtifactAction } from '../../../../src/features/monitor/schemas/artifactAction.js'
 
 const action = (over: Partial<ArtifactAction> = {}): ArtifactAction => ({
   id: 'improve-doc',

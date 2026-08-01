@@ -4,7 +4,7 @@ import {
   parseGithubRepoRef,
   parseGithubTokensConfig,
   resolveGithubTokenForRepo,
-} from '@shared/schemas/githubTokens'
+} from '@/features/settings/schemas/githubTokens'
 
 describe('parseGithubRepoRef', () => {
   it('accepts bare owner/repo', () => {

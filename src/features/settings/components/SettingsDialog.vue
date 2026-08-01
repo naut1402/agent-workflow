@@ -21,7 +21,7 @@ import {
   type ThemePreference,
 } from '../../../core/contracts/schemas/appSettings'
 import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig } from '../scripts/SettingsDialogApi'
-import { parseGithubRepoRef } from '../../../core/contracts/schemas/githubTokens'
+import { parseGithubRepoRef } from '../schemas/githubTokens'
 import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 import CSelect from '../../../core/ui/CSelect.vue'
 

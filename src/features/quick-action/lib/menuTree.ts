@@ -1,4 +1,4 @@
-import type { ArtifactMenuNode } from '../../../core/contracts/schemas/artifactAction'
+import type { ArtifactMenuNode } from '../../monitor/schemas/artifactAction'
 
 export type MenuGroupOption = { id: string; label: string; depth: number }
 

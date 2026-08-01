@@ -67,7 +67,7 @@ Discriminated union với discriminant kiểu boolean (`{ok:true,...}|{ok:false,
 
 ### 3.3 Zod là nguồn chân lý cho type & validation
 
-Định nghĩa schema bằng Zod một lần, suy type bằng `z.infer` — không viết tay `interface` song song với validator (dễ trôi lệch nhau). Validate ở mọi biên I/O (state JSON, YAML pipeline, request body) bằng `safeParse`, giữ triết lý defensive: parse fail → trả default, không throw. Schema dùng chung 2 phía đặt ở `src/core/contracts/schemas/`.
+Định nghĩa schema bằng Zod một lần, suy type bằng `z.infer` — không viết tay `interface` song song với validator (dễ trôi lệch nhau). Validate ở mọi biên I/O (state JSON, YAML pipeline, request body) bằng `safeParse`, giữ triết lý defensive: parse fail → trả default, không throw. Schema **theo domain feature** đặt ở `src/features/<feature>/schemas/`; preference shell (`appSettings`) giữ ở `src/core/contracts/schemas/` (core/plugins dùng, tránh `core` → `features`).
 
 ### 3.4 Kiến trúc & coupling — chỉ đi xuống, không vòng tròn
 
@@ -77,7 +77,7 @@ Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuầ
 
 ### 3.5 Frontend (Vue 3)
 
-`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables,scripts/*Api.ts,styles/,locales/}` + `src/core/{ui,composables,lib,shell}`; plugins app-scope ở `src/plugins/`; FE client trong `scripts/`; SCSS feature trong `styles/` — tự nạp bởi `import.meta.glob` trong `src/main.ts`; locale feature trong `locales/` — tự nạp bởi plugin i18n.
+`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables,scripts/*Api.ts,styles/,locales/,schemas/}` + `src/core/{ui,composables,lib,shell}`; plugins app-scope ở `src/plugins/`; FE client trong `scripts/`; SCSS feature trong `styles/` — tự nạp bởi `import.meta.glob` trong `src/main.ts`; locale feature trong `locales/` — tự nạp bởi plugin i18n.
 
 - Quy ước button (ưu tiên icon-btn, default không viền, hover scale): [`docs/ui-buttons.md`](docs/ui-buttons.md).
 - **Custom UI primitives** trong `src/core/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.

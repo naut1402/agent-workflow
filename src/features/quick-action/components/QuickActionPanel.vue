@@ -5,7 +5,7 @@ import { fetchRunners } from '../../runner/scripts/runnerApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
 import QuickActionMenuDialog from './QuickActionMenuDialog.vue'
-import type { ArtifactMenuNode } from '../../../core/contracts/schemas/artifactAction'
+import type { ArtifactMenuNode } from '../../monitor/schemas/artifactAction'
 import {
   addMenuGroup,
   findActionMenuId,

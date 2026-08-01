@@ -6,10 +6,10 @@ import { collectTasks, flowProfilePath, createTask, readState } from './business
 import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask } from './business/tasks/state.js'
 import { loadPipelineConfig } from '../pipeline-editor/business/pipeline/index.js'
 import { emitAudit } from '../logs/business/store.js'
-import { TaskArchivePatch, TaskStatePatch } from '../../core/contracts/schemas/task.js'
-import { CreateTaskRequest, GithubIssueRequest } from '../../core/contracts/schemas/taskCreate.js'
-import { RunStepRequest } from '../../core/contracts/schemas/runStep.js'
-import { TaskFeedbackRequest } from '../../core/contracts/schemas/taskFeedback.js'
+import { TaskArchivePatch, TaskStatePatch } from './schemas/task.js'
+import { CreateTaskRequest, GithubIssueRequest } from './schemas/taskCreate.js'
+import { RunStepRequest } from './schemas/runStep.js'
+import { TaskFeedbackRequest } from './schemas/taskFeedback.js'
 import { fetchGithubIssue } from './business/github/index.js'
 import { getTaskChatState } from './business/taskChat.js'
 import {
@@ -31,7 +31,7 @@ import {
   toActionView,
   saveArtifactActions,
 } from './business/artifactActions/index.js'
-import { RunArtifactActionRequest } from '../../core/contracts/schemas/artifactAction.js'
+import { RunArtifactActionRequest } from './schemas/artifactAction.js'
 
 /** Serialize concurrent PUT /api/artifact for the same target (in-process). */
 const artifactWriteLocks = new Map<string, Promise<void>>()
