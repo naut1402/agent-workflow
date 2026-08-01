@@ -11,20 +11,14 @@
  * doesn't comply, and is applied to the (user-editable) draft before saving.
  */
 
+import { slugify as slugifyBase } from '../../../core/lib/stringUtils'
+
 const DEFAULT_VERSION = 1
 
 /** `plugin:dev-agent-teams:implementer` → `implementer`; keeps [a-z0-9-] only. */
 function slugify(raw: string): string {
   const tail = raw.split(':').pop() ?? raw
-  return tail
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    // \u0111/\u0110 has no NFD decomposition \u2014 without this a Vietnamese step name that
-    // starts with it loses its first letter.
-    .replace(/\u0111/g, 'd')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+  return slugifyBase(tail, { maxLength: 80, fallback: '' })
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

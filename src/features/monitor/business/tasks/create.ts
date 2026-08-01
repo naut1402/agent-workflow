@@ -1,8 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
-import yaml from 'js-yaml'
-import { readYamlSafe } from '../../../../core/contracts/fs.js'
+import { dumpYaml, readYamlSafe } from '../../../../core/lib/yamlLib.js'
 import { sanitiseProfileName } from '../../../../core/contracts/sanitize.js'
 import { TASK_ID_PATTERN } from '../../schemas/taskCreate.js'
 import type { CreateTaskRequest } from '../../schemas/taskCreate.js'
@@ -56,17 +55,14 @@ export function renderRequestMarkdown(input: {
   createdAt: string
   prompt: string
 }): string {
-  const front = yaml.dump(
-    {
-      task_id: input.taskId,
-      source: input.source,
-      issue_url: input.issueUrl ?? null,
-      knowledge_inputs: input.knowledgeInputs,
-      created_at: input.createdAt,
-      created_by: 'dashboard',
-    },
-    { lineWidth: 120 },
-  )
+  const front = dumpYaml({
+    task_id: input.taskId,
+    source: input.source,
+    issue_url: input.issueUrl ?? null,
+    knowledge_inputs: input.knowledgeInputs,
+    created_at: input.createdAt,
+    created_by: 'dashboard',
+  })
   const body = input.prompt.replace(/\s+$/, '')
   return `---\n${front}---\n\n${body}\n`
 }
@@ -147,7 +143,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       pipelineFile = path.join(taskDir, 'pipeline.yaml')
       await writeFileAtomic(
         pipelineFile,
-        yaml.dump({ ...override.doc, steps, steps_replace: override.replace }, { lineWidth: 120 }),
+        dumpYaml({ ...override.doc, steps, steps_replace: override.replace }),
       )
     } else if (knowledgeInputs.length) {
       // No profile chosen: keep the inherited flow and only patch knowledge onto
@@ -158,7 +154,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
         pipelineFile = path.join(taskDir, 'pipeline.yaml')
         await writeFileAtomic(
           pipelineFile,
-          yaml.dump({ steps: [{ id: firstId, knowledge_inputs: knowledgeInputs }] }, { lineWidth: 120 }),
+          dumpYaml({ steps: [{ id: firstId, knowledge_inputs: knowledgeInputs }] }),
         )
       }
     }

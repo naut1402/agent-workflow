@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import yaml from 'js-yaml'
+import { loadYaml, dumpYaml } from '../../../core/lib/yamlLib.js'
 
 const SCOPES = ['project', 'system']
 const MAX_UPLOAD_BYTES = 512 * 1024
@@ -33,7 +33,7 @@ function parseEntryFile(raw: string, id: string, filePath: string) {
     const end = lines.findIndex((line, i) => i > 0 && line.trim() === '---')
     if (end > 0) {
       try {
-        fm = yaml.load(lines.slice(1, end).join('\n')) || {}
+        fm = loadYaml(lines.slice(1, end).join('\n')) || {}
       } catch {
         fm = {}
       }
@@ -63,7 +63,7 @@ function serialiseEntry({ title, slug, scope, tags, content }) {
     tags: sanitiseTags(tags),
     updated_at: new Date().toISOString(),
   }
-  return `---\n${yaml.dump(fm, { lineWidth: 120 }).trim()}\n---\n\n${content || ''}`
+  return `---\n${dumpYaml(fm).trim()}\n---\n\n${content || ''}`
 }
 
 async function ensureDirs(root) {

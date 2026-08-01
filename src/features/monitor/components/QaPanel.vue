@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, watch, nextTick, onUpdated, reactive } from 'vue'
-import { parseMarkdown, renderMermaid } from '../../../core/markdown'
+import { parseMarkdown, renderMermaid } from '../../../core/lib/markdownLib'
 import { saveArtifact, sendTaskFeedback } from '../scripts/QaPanelApi'
 import {
   bindFocusableEditRef,

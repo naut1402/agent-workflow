@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import yaml from 'js-yaml'
+import { dumpYaml, loadYaml } from '../../../../src/core/lib/yamlLib.js'
 import { createTask, renderRequestMarkdown } from '../../../../src/features/monitor/business/tasks/create'
 import { DEFAULT_PIPELINE } from '../../../../src/features/pipeline-editor/business/pipeline/index'
 
@@ -64,7 +64,7 @@ describe('createTask', () => {
     await fs.mkdir(path.join(root, 'pipeline-profiles'), { recursive: true })
     await fs.writeFile(
       path.join(root, 'pipeline-profiles', 'quick.yaml'),
-      yaml.dump({
+      dumpYaml({
         steps: [
           { id: 'investigator', agent: 'dev-agent-teams:investigator', produces: ['investigate.md'] },
           { id: 'designer', agent: 'dev-agent-teams:designer', produces: ['design.md'] },
@@ -85,7 +85,7 @@ describe('createTask', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
 
-    const pipelineYaml = yaml.load(await fs.readFile(result.pipelineFile!, 'utf8')) as any
+    const pipelineYaml = loadYaml(await fs.readFile(result.pipelineFile!, 'utf8')) as any
     expect(pipelineYaml.steps_replace).toBe(true)
     expect(pipelineYaml.steps[0].knowledge_inputs).toEqual(['project/context'])
     expect(result.state.auto_review).toBe(true)

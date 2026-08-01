@@ -7,6 +7,7 @@
 
 | Cây | Vai trò |
 |-----|---------|
+| `src/core/lib/` | `*Utils` (kiểu dữ liệu) + `*Lib` (wrapper package) + helper domain |
 | `src/core/` | Nền FE + contracts + project registry |
 | `src/plugins/` | Cài thư viện app-scope (i18n, …); `installPlugins(app)` |
 | `src/api/` | Setup HTTP app-root only (`apiServer`, `devTeamApi`) |
@@ -19,7 +20,7 @@ Feature import type/controller từ `src/core/http/`. Contracts shell ở `src/c
 
 ## Có trong 1.0.0
 
-- `composables/`, `ui/`, `i18n/`, `lib/`, `markdown.ts`, `shell/keys.ts`
+- `composables/`, `ui/`, `lib/` (`*Utils`, `*Lib`, phase, theme, …), `shell/keys.ts`
 - `contracts/` — helper FE↔BE + `schemas/appSettings` (alias `@shared`); schema domain ở `features/*/schemas/`
 - `http/` — types + AbstractController + respond + FE `client.ts`
 - `registry.ts`, `business/AbstractBusiness.ts`

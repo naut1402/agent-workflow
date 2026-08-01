@@ -1,3 +1,4 @@
+import { nowStamp } from '../lib/dateUtils.js'
 import { getLogDriver } from './driver.js'
 import type { AuditEntity, AuditOp, LogEntry } from './schema.js'
 
@@ -13,11 +14,6 @@ export async function appendLog(entry: LogEntry): Promise<void> {
   }
 }
 
-function now(): { ts: number; iso: string } {
-  const d = new Date()
-  return { ts: d.getTime(), iso: d.toISOString() }
-}
-
 /** Record one `/api/*` request. Fire-and-forget. */
 export function appendRequestLog(p: {
   method: string
@@ -27,7 +23,7 @@ export function appendRequestLog(p: {
   durationMs: number
   error?: string | null
 }): void {
-  void appendLog({ type: 'request', ...now(), ...p, error: p.error ?? null }).catch(() => {})
+  void appendLog({ type: 'request', ...nowStamp(), ...p, error: p.error ?? null }).catch(() => {})
 }
 
 /** Record one config mutation. Fire-and-forget; call only on the success path. */
@@ -38,5 +34,5 @@ export function emitAudit(p: {
   projectId: string | null
   detail?: Record<string, unknown>
 }): void {
-  void appendLog({ type: 'audit', ...now(), ...p }).catch(() => {})
+  void appendLog({ type: 'audit', ...nowStamp(), ...p }).catch(() => {})
 }

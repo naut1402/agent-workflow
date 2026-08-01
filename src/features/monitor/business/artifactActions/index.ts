@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import yaml from 'js-yaml'
-import { readYamlSafe } from '../../../../core/contracts/fs.js'
+import { dumpYaml, readYamlSafe } from '../../../../core/lib/yamlLib.js'
 import { registryHome } from '../../../../core/registry.js'
 import {
   ArtifactActionsFile,
@@ -188,7 +187,7 @@ export async function saveArtifactActions(body: unknown): Promise<SaveArtifactAc
   const target = catalogFile()
   const tmp = `${target}.tmp`
   await fs.mkdir(home, { recursive: true })
-  await fs.writeFile(tmp, yaml.dump(file, { lineWidth: 120 }), 'utf8')
+  await fs.writeFile(tmp, dumpYaml(file), 'utf8')
   await fs.rename(tmp, target)
   return { ok: true, version: file.version, actions, menus }
 }

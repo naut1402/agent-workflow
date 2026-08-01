@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { parseMarkdown } from '@/core/markdown'
+import { parseMarkdown } from '@/core/lib/markdownLib'
 
 // `renderMermaid` dynamic-imports the real `mermaid` package, which needs full
 // browser canvas/SVG layout APIs that jsdom doesn't provide — mock it so the
@@ -56,7 +56,7 @@ describe('renderMermaid', () => {
   }
 
   it('short-circuits a no-op re-render: mermaid.run only runs once for unchanged source + theme', async () => {
-    const { renderMermaid } = await import('@/core/markdown')
+    const { renderMermaid } = await import('@/core/lib/markdownLib')
     const mermaid = (await import('mermaid')).default
     vi.mocked(mermaid.run).mockClear()
     const root = mountMermaidNode()
@@ -73,7 +73,7 @@ describe('renderMermaid', () => {
   })
 
   it('still re-renders when the theme changes between calls', async () => {
-    const { renderMermaid } = await import('@/core/markdown')
+    const { renderMermaid } = await import('@/core/lib/markdownLib')
     const mermaid = (await import('mermaid')).default
     vi.mocked(mermaid.run).mockClear()
     const root = mountMermaidNode()

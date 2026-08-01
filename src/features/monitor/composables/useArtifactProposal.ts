@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { diffLines } from 'diff'
+import { diffLines } from '../../../core/lib/diffLib'
 import { fetchProposal, approveJob, discardJob, sendActionFeedback, fetchJob } from '../../runner/scripts/runnerApi'
 import { t } from '../../../plugins/i18n'
 

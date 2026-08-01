@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import yaml from 'js-yaml'
 import {
   parseAgentMarkdown,
   ensureSectionOrder,
@@ -139,7 +138,7 @@ export async function resolveAgent(
     throw new Error(`agent file not found for ref: ${agentRef}`)
   }
   const raw = await fs.readFile(agentPath, 'utf8')
-  const draft: any = parseAgentMarkdown(raw, yaml)
+  const draft: any = parseAgentMarkdown(raw)
   return {
     ref: agentRef,
     name: draft.name || path.basename(agentPath, '.md'),

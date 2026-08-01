@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import yaml from 'js-yaml'
 // agentMarkdown is still plain JS (TS conversion deferred to the strict phase);
 // it relocated to shared/ in this module so backend + frontend share one home.
 import {
@@ -25,8 +24,8 @@ describe('agentMarkdown round-trip', () => {
       },
     })
 
-    const md = compileAgentMarkdown(draft, yaml)
-    const parsed = parseAgentMarkdown(md, yaml)
+    const md = compileAgentMarkdown(draft)
+    const parsed = parseAgentMarkdown(md)
 
     expect(parsed.name).toBe('investigator')
     expect(parsed.description).toBe('Survey the codebase')
@@ -38,13 +37,13 @@ describe('agentMarkdown round-trip', () => {
   })
 
   it('parses markdown without frontmatter into the role section', () => {
-    const parsed = parseAgentMarkdown('just some prose', yaml)
+    const parsed = parseAgentMarkdown('just some prose')
     expect(parsed.sections.role).toBe('just some prose')
     expect(parsed.name).toBe('')
   })
 
   it('compiled output starts with a YAML frontmatter block', () => {
-    const md = compileAgentMarkdown(emptyDraft({ name: 'x' }), yaml)
+    const md = compileAgentMarkdown(emptyDraft({ name: 'x' }))
     expect(md.startsWith('---\n')).toBe(true)
     expect(md).toContain('name: x')
   })

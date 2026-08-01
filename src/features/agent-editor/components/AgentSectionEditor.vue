@@ -4,9 +4,9 @@ import { ref, computed } from 'vue'
 import {
   FIXED_SECTION_KEYS,
   getSectionTitle,
-  slugifySectionKey,
   emptyDraft,
 } from '../../../core/contracts/agentMarkdown.js'
+import { slugifySectionKey } from '../../../core/lib/stringUtils'
 import { useSortable } from '../../../core/composables/useSortable'
 import { saveAgentTemplate } from '../scripts/AgentSectionEditorApi'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'

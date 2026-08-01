@@ -2,7 +2,7 @@
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, onUpdated, inject } from 'vue'
 import { useFullscreen } from '@vueuse/core'
-import { parseMarkdown, renderMermaid } from '../../../core/markdown'
+import { parseMarkdown, renderMermaid } from '../../../core/lib/markdownLib'
 import { fetchArtifact, saveArtifact, fetchArtifactActions } from '../scripts/ArtifactPanelApi'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
 import {

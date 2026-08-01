@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { slugify } from '../../../core/lib/stringUtils'
 import { fetchCredentials, saveCredential, saveConnection, scanLocalCommands } from '../scripts/ConnectionDialogApi'
 import type { ConnectionKind, ProviderEntry } from '../types'
 
@@ -81,20 +82,12 @@ watch(selectedCommandId, (id) => {
   }
 })
 
-function slugify(text: string): string {
-  const s = text
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40)
-  return s || 'conn'
+function slugifyConn(text: string): string {
+  return slugify(text, { maxLength: 40, fallback: 'conn' })
 }
 
 function buildConnectionId(resolvedProvider: string): string {
-  const base = slugify(label.value) || resolvedProvider
+  const base = slugifyConn(label.value) || resolvedProvider
   const suffix = kind.value === 'local-console' ? 'local' : 'api'
   return `${base}-${suffix}`.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
 }

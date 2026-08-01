@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import yaml from 'js-yaml'
 import { parseAgentMarkdown } from '../../../core/contracts/agentMarkdown.js'
 import { safeReadDir } from '../../../core/contracts/fs.js'
 import { sanitiseAgentName } from '../../../core/contracts/sanitize.js'
@@ -15,7 +14,7 @@ export async function scanCustomAgents(root: string): Promise<any[]> {
     const agentName = entry.name.replace(/\.md$/, '')
     try {
       const raw = await fs.readFile(path.join(dir, entry.name), 'utf8')
-      const draft = parseAgentMarkdown(raw, yaml)
+      const draft = parseAgentMarkdown(raw)
       agents.push({
         id: `dashboard:${agentName}`,
         name: agentName,
@@ -41,7 +40,7 @@ export async function listCustomAgentMeta(root: string): Promise<any[]> {
     const name = entry.name.replace(/\.md$/, '')
     try {
       const raw = await fs.readFile(path.join(dir, entry.name), 'utf8')
-      const draft: any = parseAgentMarkdown(raw, yaml)
+      const draft: any = parseAgentMarkdown(raw)
       agents.push({
         name,
         description: draft.description || '',
@@ -62,7 +61,7 @@ export async function readCustomAgent(root: string, name: string) {
   const fp = path.join(customAgentsDir(root), `${clean}.md`)
   try {
     const content = await fs.readFile(fp, 'utf8')
-    const draft = parseAgentMarkdown(content, yaml)
+    const draft = parseAgentMarkdown(content)
     return { name: clean, content, draft }
   } catch {
     return null

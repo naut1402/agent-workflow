@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { slugify } from '../../../core/lib/stringUtils'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
@@ -149,18 +150,8 @@ const isConsoleCommandRunner = computed(() => effectiveProviderId.value === 'con
 // Strip diacritics/emoji/punctuation to an ascii kebab slug; ensure uniqueness
 // against the existing catalog. Only used when creating — an edited action
 // keeps its original id so its identity is stable.
-function slugify(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
 function deriveId(label: string): string {
-  const base = slugify(label) || 'quick-action'
+  const base = slugify(label, { maxLength: 80, fallback: 'quick-action' })
   const taken = new Set(catalog.actions.value.map((a) => a.id))
   if (!taken.has(base)) return base
   let n = 2

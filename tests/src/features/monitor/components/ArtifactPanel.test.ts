@@ -73,7 +73,7 @@ vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchJob: vi.fn(async () => ({ job: { id: 'job1', status: 'succeeded' } })),
 }))
 
-vi.mock('@/core/markdown', () => ({
+vi.mock('@/core/lib/markdownLib', () => ({
   parseMarkdown: (s: string) => `<p>${s}</p>`,
   renderMermaid: vi.fn(async () => {}),
 }))

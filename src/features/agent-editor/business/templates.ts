@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import yaml from 'js-yaml'
 import { compileAgentMarkdown, emptyDraft } from '../../../core/contracts/agentMarkdown.js'
 import { agentTemplatesDir, customAgentsDir } from './paths.js'
 
@@ -23,7 +22,7 @@ export async function ensureDefaultTemplate(root: string): Promise<void> {
         output: '- Ghi artifact vào task folder',
       },
     })
-    await fs.writeFile(fp, compileAgentMarkdown(draft, yaml), 'utf8')
+    await fs.writeFile(fp, compileAgentMarkdown(draft), 'utf8')
   }
 }
 

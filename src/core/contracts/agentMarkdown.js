@@ -2,6 +2,12 @@
  * Parse / compile custom agent markdown ↔ AgentDraft JSON.
  */
 
+import { asArray } from '../lib/arrayUtils.js'
+import { loadYaml, dumpYaml } from '../lib/yamlLib.js'
+import { slugifySectionKey } from '../lib/stringUtils.js'
+
+export { slugifySectionKey }
+
 const DEFAULT_SECTION_ORDER = ['role', 'skills', 'workflow', 'guardrail', 'output']
 
 const SECTION_TITLES = {
@@ -101,8 +107,8 @@ export function emptyDraft(overrides = {}) {
   return draft
 }
 
-/** Parse agent markdown (pass js-yaml `yaml` on server). */
-export function parseAgentMarkdown(raw, yaml) {
+/** Parse agent markdown (YAML via `src/core/lib/yamlLib`). */
+export function parseAgentMarkdown(raw) {
   const lines = raw.split(/\r?\n/)
   if (lines[0]?.trim() !== '---') {
     return emptyDraft({ sections: { role: raw } })
@@ -112,21 +118,21 @@ export function parseAgentMarkdown(raw, yaml) {
   const fmText = lines.slice(1, end).join('\n')
   let body = lines.slice(end + 1).join('\n').trim()
   let fm = {}
-  if (yaml) {
-    try {
-      fm = yaml.load(fmText) || {}
-    } catch {
-      fm = {}
-    }
+  try {
+    fm = loadYaml(fmText) || {}
+  } catch {
+    fm = {}
   }
 
   const draft = emptyDraft({
     name: fm.name || '',
     description: fm.description || '',
     model: fm.model || 'claude-sonnet-4-6',
-    skills: Array.isArray(fm.skills) ? fm.skills : [],
-    parameters: Array.isArray(fm.parameters) ? fm.parameters : [],
-    section_order: Array.isArray(fm.section_order) ? fm.section_order : [...DEFAULT_SECTION_ORDER],
+    skills: asArray(fm.skills),
+    parameters: asArray(fm.parameters),
+    section_order: asArray(fm.section_order).length
+      ? asArray(fm.section_order)
+      : [...DEFAULT_SECTION_ORDER],
     section_labels:
       fm.section_labels && typeof fm.section_labels === 'object' ? fm.section_labels : {},
   })
@@ -176,7 +182,7 @@ export function parseAgentMarkdown(raw, yaml) {
   return parsed
 }
 
-export function compileAgentMarkdown(draft, yaml) {
+export function compileAgentMarkdown(draft) {
   const fm = {
     name: draft.name,
     description: draft.description || '',
@@ -200,7 +206,7 @@ export function compileAgentMarkdown(draft, yaml) {
     })
     .filter(Boolean)
 
-  const fmYaml = yaml.dump(fm, { lineWidth: 120 }).trim()
+  const fmYaml = dumpYaml(fm).trim()
   return `---\n${fmYaml}\n---\n\n${bodyParts.join('\n\n')}\n`
 }
 
@@ -218,8 +224,8 @@ export function draftFromCatalogAgent(agent) {
 }
 
 /** Build draft from full agent markdown (catalog copy). */
-export function draftFromAgentMarkdown(raw, yaml, agentMeta = {}) {
-  const parsed = parseAgentMarkdown(raw, yaml)
+export function draftFromAgentMarkdown(raw, agentMeta = {}) {
+  const parsed = parseAgentMarkdown(raw)
   return emptyDraft({
     name: `${agentMeta.name || parsed.name || 'agent'}-copy`,
     description: parsed.description || agentMeta.description || '',
@@ -230,18 +236,6 @@ export function draftFromAgentMarkdown(raw, yaml, agentMeta = {}) {
     section_order: [...parsed.section_order],
     section_labels: { ...(parsed.section_labels || {}) },
   })
-}
-
-export function slugifySectionKey(title) {
-  const base = (title || 'section')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 32)
-  return base || 'section'
 }
 
 export function heuristicDraftFromDescription(description) {

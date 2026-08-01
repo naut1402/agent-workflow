@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import yaml from 'js-yaml'
+import { loadYaml, dumpYaml } from '../../core/lib/yamlLib.js'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { statSafe } from '../../core/contracts/fs.js'
 import { sanitiseProfileName } from '../../core/contracts/sanitize.js'
@@ -24,7 +24,7 @@ export class PipelineEditorController extends AbstractController {
       if (!name) return this.badRequest('invalid profile name')
       try {
         const raw = await fs.readFile(path.join(dir, `${name}.yaml`), 'utf8')
-        return this.ok({ name, pipeline: yaml.load(raw) })
+        return this.ok({ name, pipeline: loadYaml(raw) })
       } catch {
         return this.notFound('profile not found')
       }
@@ -57,7 +57,7 @@ export class PipelineEditorController extends AbstractController {
       return this.badRequest('pipeline.steps must be an array')
     }
     await fs.mkdir(dir, { recursive: true })
-    await fs.writeFile(path.join(dir, `${name}.yaml`), yaml.dump(b.value.pipeline, { lineWidth: 120 }), 'utf8')
+    await fs.writeFile(path.join(dir, `${name}.yaml`), dumpYaml(b.value.pipeline), 'utf8')
     emitAudit({ op: 'create', entity: 'pipeline-profile', identifier: name, projectId: this.projectId })
     return this.ok({ saved: true, name })
   }
@@ -102,7 +102,7 @@ export class PipelineEditorController extends AbstractController {
       return this.badRequest('scope must be "global" or "task" (with taskId)')
     }
     const toWrite = scope === 'task' ? { ...pipeline, steps_replace: true } : pipeline
-    await fs.writeFile(target, yaml.dump(toWrite, { lineWidth: 120 }), 'utf8')
+    await fs.writeFile(target, dumpYaml(toWrite), 'utf8')
     emitAudit({
       op: 'update',
       entity: 'pipeline',
@@ -147,7 +147,7 @@ export class PipelineEditorController extends AbstractController {
     try {
       const raw = await fs.readFile(agentPath, 'utf8')
       const meta = parseCatalogAgentId(id)
-      const draft = draftFromAgentMarkdown(raw, yaml, { name: meta?.name, description: '' })
+      const draft = draftFromAgentMarkdown(raw, { name: meta?.name, description: '' })
       const fm = parseFrontmatter(raw)
       if (fm.description) draft.description = fm.description
       if (Array.isArray(fm.skills) && fm.skills.length) draft.skills = [...fm.skills]

@@ -1,4 +1,4 @@
-import yaml from 'js-yaml'
+import { loadYaml } from '../lib/yamlLib.js'
 
 /**
  * Parse a leading YAML frontmatter block (delimited by `---` lines).
@@ -11,7 +11,7 @@ export function parseFrontmatter(raw: string): Record<string, any> {
   const end = lines.findIndex((line, i) => i > 0 && line.trim() === '---')
   if (end < 0) return {}
   try {
-    return (yaml.load(lines.slice(1, end).join('\n')) as Record<string, any>) || {}
+    return (loadYaml(lines.slice(1, end).join('\n')) as Record<string, any>) || {}
   } catch {
     return {}
   }

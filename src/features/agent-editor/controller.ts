@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import yaml from 'js-yaml'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { parseAgentMarkdown, compileAgentMarkdown } from '../../core/contracts/agentMarkdown.js'
 import { safeReadDir } from '../../core/contracts/fs.js'
@@ -41,7 +40,7 @@ export class AgentEditorController extends AbstractController {
     const clean = sanitiseAgentName(draft.name)
     if (!clean) return this.badRequest('invalid agent name')
     await fs.mkdir(customAgentsDir(root), { recursive: true })
-    const content = compileAgentMarkdown({ ...draft, name: clean }, yaml)
+    const content = compileAgentMarkdown({ ...draft, name: clean })
     await fs.writeFile(path.join(customAgentsDir(root), `${clean}.md`), content, 'utf8')
     emitAudit({ op: 'create', entity: 'custom-agent', identifier: clean, projectId: this.projectId })
     return this.ok({ saved: true, name: clean })
@@ -109,7 +108,7 @@ export class AgentEditorController extends AbstractController {
       if (!clean) return this.badRequest('invalid name')
       try {
         const raw = await fs.readFile(path.join(tplDir, `${clean}.md`), 'utf8')
-        return this.ok({ name: clean, content: raw, draft: parseAgentMarkdown(raw, yaml) })
+        return this.ok({ name: clean, content: raw, draft: parseAgentMarkdown(raw) })
       } catch {
         return this.notFound('not found')
       }
@@ -120,7 +119,7 @@ export class AgentEditorController extends AbstractController {
       const n = entry.name.replace(/\.md$/, '')
       try {
         const raw = await fs.readFile(path.join(tplDir, entry.name), 'utf8')
-        const d = parseAgentMarkdown(raw, yaml)
+        const d = parseAgentMarkdown(raw)
         templates.push({ name: n, description: d.description || '' })
       } catch {
         templates.push({ name: n, description: '' })
@@ -168,7 +167,7 @@ export class AgentEditorController extends AbstractController {
       } catch (e: any) {
         return this.badRequest(String(e.message || e))
       }
-      const draft = parseAgentMarkdown(text, yaml)
+      const draft = parseAgentMarkdown(text)
       const clean = sanitiseAgentName(parsed.name || draft.name || 'url-template') || 'url-template'
       await fs.mkdir(tplDir, { recursive: true })
       await fs.writeFile(path.join(tplDir, `${clean}.md`), text, 'utf8')
@@ -179,7 +178,7 @@ export class AgentEditorController extends AbstractController {
     const clean = sanitiseAgentName(draft.name || parsed.name)
     if (!clean) return this.badRequest('invalid template name')
     await fs.mkdir(tplDir, { recursive: true })
-    await fs.writeFile(path.join(tplDir, `${clean}.md`), compileAgentMarkdown(draft, yaml), 'utf8')
+    await fs.writeFile(path.join(tplDir, `${clean}.md`), compileAgentMarkdown(draft), 'utf8')
     emitAudit({ op: 'create', entity: 'agent-template', identifier: clean, projectId: this.projectId })
     return this.ok({ saved: true, name: clean })
   }
