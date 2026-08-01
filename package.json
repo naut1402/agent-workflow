@@ -16,7 +16,7 @@
     "lint:fix": "eslint . --fix",
     "lint:commit": "commitlint",
     "format": "prettier --write .",
-    "test": "bun test tests/src/server tests/src/features/knowledge/business tests/src/features/logs/business tests/mcp",
+    "test": "bun test tests/src/server tests/src/features/knowledge/business tests/src/features/logs/business tests/src/core/log tests/mcp",
     "test:fe": "vitest run --coverage",
     "test:e2e": "playwright test --pass-with-no-tests",
     "test:all": "bun run typecheck && bun run lint && bun run test && bun run test:fe && bun run test:e2e"
