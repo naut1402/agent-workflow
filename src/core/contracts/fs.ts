@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
+import { loadYaml } from '../lib/yamlLib.js'
 
 /** Best-effort home directory (Windows USERPROFILE first, then HOME). */
 export function homeDir(): string {
@@ -31,5 +32,13 @@ export async function statSafe(p: string): Promise<StatInfo> {
   }
 }
 
-/** @deprecated Import from `@/core/lib/yamlLib` — kept for callers still on contracts/fs. */
-export { readYamlSafe } from '../lib/yamlLib.js'
+/** Load a YAML file; null on any error / non-object. */
+export async function readYamlSafe(p: string): Promise<Record<string, any> | null> {
+  try {
+    const raw = await fs.readFile(p, 'utf8')
+    const doc = loadYaml(raw)
+    return doc && typeof doc === 'object' ? (doc as Record<string, any>) : null
+  } catch {
+    return null
+  }
+}

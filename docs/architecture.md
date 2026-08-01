@@ -80,7 +80,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 
 - `src/core/contracts/schemas/appSettings.ts` — preference shell (theme/locale/notifications UI); core/plugins dùng.
 - Schema domain (task, log, autoscan, …) nằm ở `src/features/<feature>/schemas/` — Zod + `z.infer`, validate biên I/O của feature đó.
-- `src/core/contracts/{frontmatter,fs,http,sanitize}.ts` — helper thuần (fs: `homeDir`/`safeReadDir`/`statSafe`; YAML qua `src/core/lib/yamlLib`).
+- `src/core/contracts/{frontmatter,fs,http,sanitize}.ts` — helper thuần (fs: `homeDir`/`safeReadDir`/`statSafe`/`readYamlSafe`; parse/dump YAML thuần qua `yamlLib`).
 - `src/core/lib/` — `*Utils` (string/array/date) + `*Lib` (yaml/markdown/diff) + helper domain (phase, theme, …).
 - `src/core/contracts/agentMarkdown.js` (**vẫn `.js`**) — round-trip agent-markdown, import bởi cả frontend và domain module backend.
 

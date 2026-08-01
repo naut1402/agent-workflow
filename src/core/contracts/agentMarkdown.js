@@ -2,9 +2,9 @@
  * Parse / compile custom agent markdown ↔ AgentDraft JSON.
  */
 
-import { asArray } from '../lib/arrayUtils.js'
-import { loadYaml, dumpYaml } from '../lib/yamlLib.js'
-import { slugifySectionKey } from '../lib/stringUtils.js'
+import { asArray } from '../lib/arrayUtils.ts'
+import { loadYaml, dumpYaml } from '../lib/yamlLib.ts'
+import { slugifySectionKey } from '../lib/stringUtils.ts'
 
 export { slugifySectionKey }
 
