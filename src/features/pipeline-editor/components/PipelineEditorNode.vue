@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { ref, computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
+
+const { t } = useI18nHelpers()
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -17,12 +20,12 @@ const emit = defineEmits(['edit', 'delete'])
 const editing = ref(false)
 const labelDraft = ref('')
 
-const previewLabels = {
-  pending: '⏳ Chờ',
-  active: '▶ Đang chạy',
-  done: '✓ Xong',
-  hitl: '⏸ HITL',
-}
+const previewLabels = computed<Record<string, string>>(() => ({
+  pending: t('pipelineEditor.preview.status.pending'),
+  active: t('pipelineEditor.preview.status.active'),
+  done: t('pipelineEditor.preview.status.done'),
+  hitl: t('pipelineEditor.preview.status.hitl'),
+}))
 
 function startEdit() {
   labelDraft.value = props.data.label || ''

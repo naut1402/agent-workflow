@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useSearch } from '../../../shared/composables/useSearch'
+import { useSearch } from '../../../core/composables/useSearch'
 
 const props = defineProps({
   catalog: { type: Object as () => any, required: true }, // { skills: [], agents: [] }

@@ -3,8 +3,12 @@
 // (whose tasks the monitor view polls) and add/remove projects in the shared
 // registry. Removing a project only detaches it from the dashboard — it never
 // touches files on disk.
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref } from 'vue'
-import { addProject, removeProject } from '../../../api'
+import { addProject, removeProject } from '../../settings/scripts/settingsApi'
+import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
+
+const { t } = useI18nHelpers()
 
 const props = defineProps({
   projects: { type: Array as () => any[], default: () => [] },
@@ -19,6 +23,7 @@ const newPath = ref('')
 const newName = ref('')
 const busy = ref(false)
 const errorMsg = ref('')
+const pickerOpen = ref(false)
 
 function openAdd() {
   adding.value = true
@@ -30,11 +35,17 @@ function openAdd() {
 function cancelAdd() {
   adding.value = false
   errorMsg.value = ''
+  pickerOpen.value = false
+}
+
+function onPicked(path: string) {
+  newPath.value = path
+  pickerOpen.value = false
 }
 
 async function submitAdd() {
   if (!newPath.value.trim()) {
-    errorMsg.value = 'Nhập đường dẫn tới .dev-team-agent (hoặc project root).'
+    errorMsg.value = t('monitor.projectBar.pathRequired')
     return
   }
   busy.value = true
@@ -45,15 +56,17 @@ async function submitAdd() {
     emit('changed')
     if (project?.id) emit('select', project.id)
   } catch (e) {
-    errorMsg.value = String(e.message || e)
+    errorMsg.value = String((e as Error).message || e)
   } finally {
     busy.value = false
   }
 }
 
 async function onRemove(project) {
-  if (project.default) return
-  if (!window.confirm(`Gỡ project "${project.name}" khỏi dashboard?\n(Không xoá file trên đĩa.)`)) return
+  const confirmMsg = project.default
+    ? t('monitor.projectBar.confirmRemoveDefault', { name: project.name })
+    : t('monitor.projectBar.confirmRemove', { name: project.name })
+  if (!window.confirm(confirmMsg)) return
   busy.value = true
   errorMsg.value = ''
   try {
@@ -61,7 +74,7 @@ async function onRemove(project) {
     emit('changed')
     if (props.selectedId === project.id) emit('select', null)
   } catch (e) {
-    errorMsg.value = String(e.message || e)
+    errorMsg.value = String((e as Error).message || e)
   } finally {
     busy.value = false
   }
@@ -72,7 +85,7 @@ async function onRemove(project) {
   <div class="project-bar">
     <div class="project-bar-head">
       <span class="project-bar-title">Projects</span>
-      <button class="project-add-btn" type="button" title="Thêm project" @click="openAdd">＋</button>
+      <button class="project-add-btn" type="button" :title="t('monitor.projectBar.addTitle')" @click="openAdd">＋</button>
     </div>
 
     <ul class="project-list">
@@ -87,42 +100,65 @@ async function onRemove(project) {
           <span v-if="p.default" class="project-default-badge">default</span>
         </button>
         <button
-          v-if="!p.default"
           class="project-remove"
           type="button"
-          title="Gỡ khỏi dashboard"
+          :title="t('monitor.projectBar.removeTitle')"
           @click="onRemove(p)"
         >×</button>
       </li>
-      <li v-if="!projects.length" class="project-empty">Chưa có project nào.</li>
+      <li v-if="!projects.length" class="project-empty">{{ t('monitor.projectBar.empty') }}</li>
     </ul>
 
     <div v-if="adding" class="project-add-form">
-      <input
-        v-model="newPath"
-        class="project-input"
-        placeholder="Đường dẫn .dev-team-agent / project root"
-        @keyup.enter="submitAdd"
-      />
+      <div class="project-path-row">
+        <input
+          v-model="newPath"
+          class="project-input"
+          :placeholder="t('monitor.projectBar.pathPlaceholder')"
+          @keyup.enter="submitAdd"
+        />
+        <button
+          type="button"
+          class="icon-btn project-browse-btn"
+          :title="t('monitor.projectBar.browse')"
+          :aria-label="t('monitor.projectBar.browse')"
+          :disabled="busy"
+          @click="pickerOpen = true"
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M2 3h5l1 1h6v9H2V3zm1 2v7h10V5H3z"
+            />
+          </svg>
+        </button>
+      </div>
       <input
         v-model="newName"
         class="project-input"
-        placeholder="Tên hiển thị (tuỳ chọn)"
+        :placeholder="t('monitor.projectBar.namePlaceholder')"
         @keyup.enter="submitAdd"
       />
       <div class="project-add-actions">
         <button class="project-btn primary" type="button" :disabled="busy" @click="submitAdd">
-          {{ busy ? '…' : 'Thêm' }}
+          {{ busy ? '…' : t('monitor.projectBar.add') }}
         </button>
-        <button class="project-btn" type="button" :disabled="busy" @click="cancelAdd">Huỷ</button>
+        <button class="project-btn" type="button" :disabled="busy" @click="cancelAdd">{{ t('monitor.projectBar.cancel') }}</button>
       </div>
     </div>
 
     <p v-if="errorMsg" class="project-err">⚠ {{ errorMsg }}</p>
+
+    <FolderPickerDialog
+      v-if="pickerOpen"
+      :initial-path="newPath.trim() || undefined"
+      @select="onPicked"
+      @close="pickerOpen = false"
+    />
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .project-bar {
   border-bottom: 1px solid var(--border, #2a2a35);
   padding: 8px 10px;
@@ -150,14 +186,14 @@ async function onRemove(project) {
   line-height: 1;
   padding: 2px 7px;
 }
-.project-add-btn:hover { background: rgba(255, 255, 255, 0.06); }
+.project-add-btn:hover { background: var(--hover-surface); }
 .project-list { list-style: none; margin: 0; padding: 0; }
 .project-item {
   display: flex;
   align-items: center;
   border-radius: 5px;
 }
-.project-item.active { background: rgba(120, 160, 255, 0.16); }
+.project-item.active { background: rgba(var(--accent-rgb), 0.16); }
 .project-pick {
   flex: 1;
   display: flex;
@@ -188,11 +224,18 @@ async function onRemove(project) {
   padding: 0 7px;
   font-size: 16px;
 }
-.project-remove:hover { opacity: 1; color: #ff8080; }
+.project-remove:hover { opacity: 1; color: var(--danger); }
 .project-empty { opacity: 0.5; padding: 5px 6px; }
 .project-add-form { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.project-path-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.project-path-row .project-input { flex: 1; min-width: 0; }
+.project-browse-btn { flex-shrink: 0; }
 .project-input {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--input-surface);
   border: 1px solid var(--border, #2a2a35);
   border-radius: 4px;
   color: inherit;
@@ -209,7 +252,7 @@ async function onRemove(project) {
   padding: 4px 10px;
   font-size: 12px;
 }
-.project-btn.primary { background: rgba(120, 160, 255, 0.22); }
+.project-btn.primary { background: rgba(var(--accent-rgb), 0.22); }
 .project-btn:disabled { opacity: 0.5; cursor: default; }
-.project-err { color: #ff9090; font-size: 12px; margin: 6px 0 0; }
+.project-err { color: var(--danger); font-size: 12px; margin: 6px 0 0; }
 </style>

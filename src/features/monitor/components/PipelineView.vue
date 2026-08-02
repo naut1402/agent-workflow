@@ -1,13 +1,21 @@
 <script setup lang="ts">
-import { ref, computed, watch, markRaw } from 'vue'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { phasesFromPipeline, phaseStatus, fetchFlowProfile, saveFlowProfile } from '../../../api'
+import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep } from '../scripts/PipelineViewApi'
+import { fetchJob, fetchJobs } from '../../runner/scripts/runnerApi'
+import { phasesFromPipeline, phaseStatus } from '../../../core/lib/phase'
 import PipelineNode from './PipelineNode.vue'
+import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
 
+const { t } = useI18nHelpers()
 const props = defineProps({
   task: { type: Object, required: true },
+  projectId: { type: [String, null], default: null },
 })
+
+const emit = defineEmits(['hitl-action'])
 
 const nodeTypes = { pipeline: markRaw(PipelineNode) }
 
@@ -47,18 +55,49 @@ const phases = computed(() => {
   }))
 })
 
+const phaseKeys = computed(() => phases.value.map((p) => p.key))
+
 const nodes = computed(() =>
   phases.value.map((p, i) => {
     const isActivePhase = props.task.current_phase === p.key
+    const status = phaseStatus(p, props.task)
+    const running = runningStepId.value === p.key
+    const stateOk = canRunWithTaskState(props.task)
+    const inScope = isRunnableTarget(phaseKeys.value, props.task.current_phase, p.key)
+    // Click-to-run only for current/future active|pending nodes, when state
+    // is healthy and no in-flight run is already tracked for this task.
+    const runnable =
+      stateOk &&
+      !runningStepId.value &&
+      !running &&
+      inScope &&
+      (status === 'active' || status === 'pending')
+    // "Already ran" — the only steps with a CLI session to chat with. Artifact
+    // existence is checked directly (not via `status`) so a step that ran and
+    // FAILED still offers chat: it stays `active` (current_phase never moved),
+    // which is exactly when talking to the runner matters most.
+    const artifactDone = p.artifact ? Boolean(props.task.artifacts?.[p.artifact]?.exists) : false
+    const executed = artifactDone || status === 'done' || status === 'waiting' || running
     return {
       id: p.key,
       type: 'pipeline',
       position: { x: p.x ?? i * NODE_SPACING, y: p.y ?? NODE_Y },
       data: {
         label: p.label,
-        status: phaseStatus(p, props.task),
+        // Identity of the step, so the node's corner actions can open a chat
+        // scoped to this step's runner session.
+        taskId: props.task.task_id,
+        stepId: p.key,
+        status,
+        hitl: p.hitl,
         // Q&A badge only on the phase that's currently active (the one that created qa.md)
         qa_count: isActivePhase ? (props.task.qa_count ?? 0) : 0,
+        running,
+        runnable,
+        executed,
+        // The node's Run button goes through the same confirm dialog as
+        // clicking the node, so both paths share the overwrite warning.
+        onRun: () => openRunConfirm({ id: p.key, label: p.label }),
       },
     }
   }),
@@ -96,64 +135,249 @@ function onNodeDragStop({ node }) {
   })
 }
 
-// Profile editor modal.
-const editorOpen = ref(false)
-const editorJson = ref('')
-const editorError = ref('')
-const saving = ref(false)
+// HITL approve/reject modal
+const hitlOpen = ref(false)
+const hitlTaskId = ref('')
+const hitlGateId = ref('')
+const hitlLabel = ref('')
+const hitlMtime = ref<number | null>(null)
+const hitlFeedback = ref('')
+const hitlBusy = ref(false)
+const hitlError = ref('')
+const hitlToast = ref('')
 
-function openEditor() {
-  const profile = customProfile.value ?? {
-    phases: phases.value.map((p) => ({ key: p.key, x: p.x, y: p.y })),
-  }
-  editorJson.value = JSON.stringify(profile, null, 2)
-  editorError.value = ''
-  editorOpen.value = true
+const waitingPhase = computed(() =>
+  phases.value.find((p) => phaseStatus(p, props.task) === 'waiting' && p.hitl),
+)
+
+function openHitlModal(phase: { key: string; label: string; hitl: string | null }) {
+  if (!phase.hitl) return
+  hitlTaskId.value = props.task.task_id
+  hitlMtime.value = props.task.state_mtime ?? null
+  hitlGateId.value = phase.hitl
+  hitlLabel.value = phase.label || phase.key
+  hitlFeedback.value = ''
+  hitlError.value = ''
+  hitlOpen.value = true
 }
 
-async function saveProfile() {
-  editorError.value = ''
-  let parsed
+watch(
+  () => props.task.state_mtime,
+  (v) => {
+    if (hitlOpen.value) hitlMtime.value = v ?? null
+  },
+)
+
+// Run-step (click a node to run/chain to it)
+const runningStepId = ref<string | null>(null)
+const runError = ref('')
+const runToast = ref('')
+let runPollTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearRunPoll() {
+  if (runPollTimer != null) {
+    clearTimeout(runPollTimer)
+    runPollTimer = null
+  }
+}
+
+/** Adopt any queued/running job for this task (e.g. "Chạy ngay" on create). */
+async function syncInFlightRun() {
+  if (!props.task?.task_id || !canRunWithTaskState(props.task)) return
   try {
-    parsed = JSON.parse(editorJson.value)
-  } catch (e) {
-    editorError.value = `JSON không hợp lệ: ${e.message}`
+    const data = await fetchJobs(50)
+    const jobs = Array.isArray(data?.jobs) ? data.jobs : []
+    const inflight = jobs.find(
+      (j: any) =>
+        j?.metadata?.taskId === props.task.task_id &&
+        (j.status === 'queued' || j.status === 'running'),
+    )
+    if (!inflight?.id) return
+    const stepId =
+      (typeof inflight.metadata?.pipelineStepId === 'string' && inflight.metadata.pipelineStepId) ||
+      props.task.current_phase ||
+      null
+    runningStepId.value = stepId
+    if (runPollTimer == null) pollRunStepJob(inflight.id)
+  } catch {
+    /* best-effort — missing jobs list must not break the pipeline view */
+  }
+}
+
+watch(() => props.task.task_id, () => {
+  clearRunPoll()
+  runningStepId.value = null
+  runError.value = ''
+  syncInFlightRun()
+}, { immediate: true })
+
+onBeforeUnmount(clearRunPoll)
+
+async function pollRunStepJob(jobId: string) {
+  clearRunPoll()
+  try {
+    const { job } = await fetchJob(jobId)
+    if (job?.status === 'succeeded') {
+      runningStepId.value = null
+      runToast.value = t('monitor.pipeline.stepSucceeded')
+      emit('hitl-action')
+      setTimeout(() => { runToast.value = '' }, 4000)
+      return
+    }
+    if (job?.status === 'failed' || job?.status === 'cancelled') {
+      runningStepId.value = null
+      runError.value = job.error ? String(job.error) : t('monitor.pipeline.stepFailed')
+      emit('hitl-action')
+      return
+    }
+    // Keep the spinner on the step the job is actually executing (server
+    // always runs current_phase / metadata.pipelineStepId), not the chain target.
+    const liveStep =
+      (typeof job?.metadata?.pipelineStepId === 'string' && job.metadata.pipelineStepId) ||
+      props.task.current_phase ||
+      runningStepId.value
+    runningStepId.value = liveStep
+    runPollTimer = setTimeout(() => pollRunStepJob(jobId), 2000)
+  } catch (e: any) {
+    runningStepId.value = null
+    runError.value = String(e.message || e)
+  }
+}
+
+async function runStep(node: { id: string }) {
+  if (runningStepId.value) return
+  if (!canRunWithTaskState(props.task)) {
+    runError.value = t('monitor.pipeline.stepStateError')
     return
   }
-  saving.value = true
+  if (!isRunnableTarget(phaseKeys.value, props.task.current_phase, node.id)) {
+    runError.value = t('monitor.pipeline.stepPastNode')
+    return
+  }
+  runError.value = ''
+  // Spinner tracks the step that will actually execute first (current_phase).
+  runningStepId.value = props.task.current_phase || node.id
   try {
-    await saveFlowProfile(props.task.task_id, parsed)
-    customProfile.value = parsed
-    editorOpen.value = false
-  } catch (e) {
-    editorError.value = String(e.message || e)
-  } finally {
-    saving.value = false
+    const { job } = await runPipelineStep(
+      props.task.task_id,
+      { targetStepId: node.id },
+      props.projectId ?? undefined,
+    )
+    runToast.value = t('monitor.pipeline.stepStarted')
+    setTimeout(() => { runToast.value = '' }, 3000)
+    pollRunStepJob(job.id)
+  } catch (e: any) {
+    runningStepId.value = null
+    if (e?.status === 409) {
+      runError.value = t('monitor.pipeline.stepAlreadyRunning')
+    } else {
+      runError.value = String(e.message || e)
+    }
   }
 }
 
-async function resetProfile() {
-  saving.value = true
+// Run confirmation (click active/pending node → confirm before submitting).
+// The dialog is framed around the clicked node ("run this phase"), so the
+// overwrite warning checks that same node's own artifact — the one that
+// would actually be rewritten if/when the run reaches it. Other phases in
+// between (current_phase or intermediate chain steps) are a different node's
+// concern and are not this dialog's business.
+const runConfirmOpen = ref(false)
+const runConfirmNode = ref<{ id: string; label: string } | null>(null)
+const runConfirmOverwrite = ref<string[]>([])
+
+function openRunConfirm(node: { id: string; label: string }) {
+  runConfirmNode.value = node
+  const clickedPhase = phases.value.find((p) => p.key === node.id)
+  runConfirmOverwrite.value =
+    clickedPhase?.artifact && props.task.artifacts?.[clickedPhase.artifact]?.exists
+      ? [clickedPhase.artifact]
+      : []
+  runConfirmOpen.value = true
+}
+
+function cancelRunConfirm() {
+  runConfirmOpen.value = false
+  runConfirmNode.value = null
+  runConfirmOverwrite.value = []
+}
+
+function confirmRunStep() {
+  const node = runConfirmNode.value
+  runConfirmOpen.value = false
+  runConfirmNode.value = null
+  runConfirmOverwrite.value = []
+  if (node) runStep(node)
+}
+
+function onNodeClick({ node }) {
+  if (node.data?.status === 'waiting' && node.data?.hitl) {
+    openHitlModal({ key: node.id, label: node.data.label, hitl: node.data.hitl })
+    return
+  }
+  // Prefer the precomputed `runnable` flag (state_ok, in-flight, current/future).
+  if (node.data?.runnable) {
+    openRunConfirm({ id: node.id, label: node.data.label })
+    return
+  }
+  if (node.data?.status !== 'active' && node.data?.status !== 'pending') return
+  if (runningStepId.value) {
+    runError.value = t('monitor.pipeline.stepAlreadyRunning')
+    return
+  }
+  if (!canRunWithTaskState(props.task)) {
+    runError.value = t('monitor.pipeline.stepStateError')
+    return
+  }
+  // Past pending node while current is further ahead — explain instead of
+  // silently starting current_phase (which looks like "clicked design, ran implement").
+  if (!isRunnableTarget(phaseKeys.value, props.task.current_phase, node.id)) {
+    runError.value = t('monitor.pipeline.stepPastNode')
+  }
+}
+
+async function submitHitl(action: 'approve' | 'reject') {
+  if (hitlMtime.value == null) {
+    hitlError.value = t('monitor.pipeline.missingMtime')
+    return
+  }
+  hitlBusy.value = true
+  hitlError.value = ''
   try {
-    const defaultProfile = {
-      phases: phasesFromPipeline(props.task.pipeline).map((p, i) => ({ key: p.key, x: i * NODE_SPACING, y: NODE_Y })),
+    await patchTaskState(
+      hitlTaskId.value,
+      {
+        action,
+        gate_id: hitlGateId.value,
+        feedback: action === 'reject' ? hitlFeedback.value : undefined,
+        mtime: hitlMtime.value,
+      },
+      props.projectId ?? undefined,
+    )
+    hitlOpen.value = false
+    hitlToast.value = action === 'approve' ? t('monitor.pipeline.approved') : t('monitor.pipeline.rejected')
+    emit('hitl-action')
+    setTimeout(() => { hitlToast.value = '' }, 3000)
+  } catch (e: any) {
+    if (e?.status === 409) {
+      hitlError.value = t('monitor.pipeline.stateChanged')
+      hitlMtime.value = e?.body?.mtime ?? props.task.state_mtime ?? null
+      emit('hitl-action')
+    } else {
+      hitlError.value = String(e.message || e)
     }
-    await saveFlowProfile(props.task.task_id, defaultProfile)
-    customProfile.value = null
-    editorOpen.value = false
-  } catch (e) {
-    editorError.value = String(e.message || e)
   } finally {
-    saving.value = false
+    hitlBusy.value = false
   }
 }
 </script>
 
 <template>
   <section class="pipeline-wrap">
-    <div class="pipeline-toolbar">
-      <span v-if="customProfile" class="chip chip-custom">flow profile tùy chỉnh</span>
-      <button class="btn-edit-profile" @click="openEditor">⚙ flow profile</button>
+    <div v-if="hitlToast || runToast || runError || waitingPhase" class="pipeline-toolbar">
+      <span v-if="hitlToast" class="chip chip-ok">{{ hitlToast }}</span>
+      <span v-if="runToast" class="chip chip-ok">{{ runToast }}</span>
+      <span v-if="runError" class="chip chip-err">{{ runError }}</span>
     </div>
 
     <div class="vflow-container">
@@ -167,16 +391,17 @@ async function resetProfile() {
         :nodes-draggable="true"
         :elements-selectable="false"
         @node-drag-stop="onNodeDragStop"
+        @node-click="onNodeClick"
         class="vflow"
       />
     </div>
 
-    <section class="meta-row">
-      <span v-for="(n, doc) in (task.doc_review_round || {})" :key="doc" class="chip">
-        doc-review {{ doc }}: {{ n }}
-      </span>
+    <section
+      v-if="task.inherit_from_parent?.length || task.subtasks?.length"
+      class="meta-row"
+    >
       <span v-if="task.inherit_from_parent?.length" class="chip">
-        kế thừa: {{ task.inherit_from_parent.join(', ') }}
+        {{ t('monitor.pipeline.inherit', { list: task.inherit_from_parent.join(', ') }) }}
       </span>
       <span v-if="task.subtasks?.length" class="chip">
         subtask: {{ task.subtasks.join(', ') }}
@@ -184,23 +409,48 @@ async function resetProfile() {
     </section>
   </section>
 
-  <!-- Flow profile editor modal -->
+  <!-- HITL approve modal -->
   <Teleport to="body">
-    <div v-if="editorOpen" class="modal-backdrop" @click.self="editorOpen = false">
+    <div v-if="hitlOpen" class="modal-backdrop" @click.self="hitlOpen = false">
       <div class="modal">
         <div class="modal-head">
-          <span>Flow Profile — {{ task.task_id }}</span>
-          <button class="modal-close" @click="editorOpen = false">✕</button>
+          <span>{{ t('monitor.pipeline.hitlHeading', { label: hitlLabel }) }}</span>
+          <button class="modal-close" @click="hitlOpen = false">✕</button>
         </div>
         <p class="modal-hint">
-          Định nghĩa các phase và vị trí node. Kéo node trên canvas để cập nhật <code>x</code>/<code>y</code> tự động.
+          {{ t('monitor.pipeline.hitlWaiting') }} <code>{{ hitlGateId }}</code> {{ t('monitor.pipeline.hitlWaitingMid') }} <strong>{{ hitlTaskId }}</strong>.
         </p>
-        <textarea class="profile-editor" v-model="editorJson" spellcheck="false" />
-        <p v-if="editorError" class="editor-error">{{ editorError }}</p>
+        <label class="hitl-feedback-label">
+          {{ t('monitor.pipeline.feedbackLabel') }}
+          <textarea v-model="hitlFeedback" class="profile-editor hitl-feedback" rows="3" />
+        </label>
+        <p v-if="hitlError" class="editor-error">{{ hitlError }}</p>
         <div class="modal-actions">
-          <button class="btn-ghost" @click="resetProfile" :disabled="saving">Reset về mặc định</button>
-          <button class="btn-primary" @click="saveProfile" :disabled="saving">
-            {{ saving ? 'Đang lưu…' : 'Lưu profile' }}
+          <button class="btn-ghost" :disabled="hitlBusy" @click="submitHitl('reject')">{{ t('monitor.pipeline.reject') }}</button>
+          <button class="btn-primary" :disabled="hitlBusy" @click="submitHitl('approve')">
+            {{ hitlBusy ? t('monitor.pipeline.saving') : t('monitor.pipeline.approve') }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Run-step confirm modal -->
+  <Teleport to="body">
+    <div v-if="runConfirmOpen" class="modal-backdrop" @click.self="cancelRunConfirm">
+      <div class="modal">
+        <div class="modal-head">
+          <span>{{ t('monitor.pipeline.runConfirmHeading', { label: runConfirmNode?.label ?? '' }) }}</span>
+          <button class="modal-close" @click="cancelRunConfirm">✕</button>
+        </div>
+        <p class="modal-hint">{{ t('monitor.pipeline.runConfirmBody') }}</p>
+        <p v-if="runConfirmOverwrite.length" class="editor-error">
+          {{ t('monitor.pipeline.runConfirmOverwriteWarning', { files: runConfirmOverwrite.join(', ') }) }}
+        </p>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="cancelRunConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
+          <button class="btn-primary" @click="confirmRunStep">
+            {{ runConfirmOverwrite.length ? t('monitor.pipeline.runConfirmRunOverwrite') : t('monitor.pipeline.runConfirmRun') }}
           </button>
         </div>
       </div>

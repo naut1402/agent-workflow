@@ -1,14 +1,10 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, onMounted, watch } from 'vue'
-import {
-  fetchKnowledgeList,
-  fetchKnowledgeEntry,
-  saveKnowledgeEntry,
-  createKnowledgeEntry,
-  deleteKnowledgeEntry,
-  uploadKnowledgeFile,
-  fetchKnowledgeTags,
-} from '../../../api'
+import { fetchKnowledgeList, fetchKnowledgeEntry, saveKnowledgeEntry, createKnowledgeEntry, deleteKnowledgeEntry, uploadKnowledgeFile, fetchKnowledgeTags } from '../scripts/KnowledgePanelApi'
+import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
+
+const { t } = useI18nHelpers()
 
 const scope = ref('project')
 const tagFilter = ref('')
@@ -123,7 +119,7 @@ async function save() {
       ? await saveKnowledgeEntry(selectedId.value, payload)
       : await createKnowledgeEntry(payload)
     selectedId.value = data.entry.id
-    message.value = `Đã lưu ${data.entry.id}`
+    message.value = t('knowledge.messages.saved', { id: data.entry.id })
     await loadList()
   } catch (e) {
     error.value = String(e.message || e)
@@ -132,10 +128,10 @@ async function save() {
 
 async function remove() {
   if (!selectedId.value) return
-  if (!confirm(`Xóa "${selectedId.value}"?`)) return
+  if (!confirm(t('knowledge.messages.confirmDelete', { id: selectedId.value }))) return
   try {
     await deleteKnowledgeEntry(selectedId.value)
-    message.value = 'Đã xóa'
+    message.value = t('knowledge.messages.deleted')
     newEntry()
     await loadList()
   } catch (e) {
@@ -151,7 +147,7 @@ async function onFileUpload(event) {
   try {
     const tags = uploadTags.value.split(/[,;]+/).map((t) => t.trim()).filter(Boolean)
     const data = await uploadKnowledgeFile(file, { scope: uploadScope.value, tags })
-    message.value = `Đã upload ${data.entry.id}`
+    message.value = t('knowledge.messages.uploaded', { id: data.entry.id })
     showUpload.value = false
     uploadTags.value = ''
     await loadList()
@@ -171,27 +167,27 @@ onMounted(loadList)
 <template>
   <div class="knowledge-panel">
     <header class="knowledge-head">
-      <h2>Knowledge</h2>
+      <h2>{{ t('knowledge.title') }}</h2>
       <div class="knowledge-head-actions">
-        <button class="btn-ghost btn-sm" @click="showUpload = !showUpload">Upload</button>
-        <button class="btn-primary btn-sm" @click="newEntry">+ Tạo mới</button>
+        <button class="btn-ghost btn-sm" @click="showUpload = !showUpload">{{ t('knowledge.actions.upload') }}</button>
+        <button class="btn-primary btn-sm" @click="newEntry">{{ t('knowledge.actions.create') }}</button>
       </div>
     </header>
 
     <div v-if="showUpload" class="knowledge-upload-box">
       <label class="cfg-label">
-        Scope
+        {{ t('knowledge.upload.scope') }}
         <select v-model="uploadScope" class="cfg-input">
           <option value="project">project</option>
           <option value="system">system</option>
         </select>
       </label>
       <label class="cfg-label">
-        Tags (phân cách bằng dấu phẩy)
+        {{ t('knowledge.upload.tags') }}
         <input v-model="uploadTags" class="cfg-input" placeholder="pipeline, vue" />
       </label>
       <label class="cfg-label">
-        File (.md, .txt)
+        {{ t('knowledge.upload.file') }}
         <input type="file" accept=".md,.txt,text/plain,text/markdown" :disabled="uploading" @change="onFileUpload" />
       </label>
     </div>
@@ -204,16 +200,16 @@ onMounted(loadList)
               class="knowledge-scope-tab"
               :class="{ active: scope === 'project' }"
               @click="scope = 'project'"
-            >Project</button>
+            >{{ t('knowledge.scopeTabs.project') }}</button>
             <button
               class="knowledge-scope-tab"
               :class="{ active: scope === 'system' }"
               @click="scope = 'system'"
-            >System</button>
+            >{{ t('knowledge.scopeTabs.system') }}</button>
           </div>
-          <input v-model="query" class="cfg-input cfg-input-sm" placeholder="Tìm…" />
+          <input v-model="query" class="cfg-input cfg-input-sm" :placeholder="t('knowledge.filters.searchPlaceholder')" />
           <select v-model="tagFilter" class="cfg-input cfg-input-sm">
-            <option value="">Tất cả tags</option>
+            <option value="">{{ t('knowledge.filters.allTags') }}</option>
             <option v-for="t in allTags" :key="t.tag" :value="t.tag">
               {{ t.tag }} ({{ t.count }})
             </option>
@@ -221,8 +217,8 @@ onMounted(loadList)
         </div>
 
         <ul class="knowledge-list">
-          <li v-if="loading" class="muted">Đang tải…</li>
-          <li v-else-if="!filteredEntries.length" class="muted">Chưa có entry.</li>
+          <li v-if="loading" class="muted">{{ t('knowledge.list.loading') }}</li>
+          <li v-else-if="!filteredEntries.length" class="muted">{{ t('knowledge.list.empty') }}</li>
           <li
             v-for="e in filteredEntries"
             :key="e.id"
@@ -241,22 +237,22 @@ onMounted(loadList)
 
       <section class="knowledge-editor-pane" v-if="draft">
         <label class="cfg-label">
-          Title
+          {{ t('knowledge.fields.title') }}
           <input v-model="draft.title" class="cfg-input" />
         </label>
         <label class="cfg-label">
-          Slug
-          <input v-model="draft.slug" class="cfg-input" :disabled="!!selectedId" placeholder="auto từ title" />
+          {{ t('knowledge.fields.slug') }}
+          <input v-model="draft.slug" class="cfg-input" :disabled="!!selectedId" :placeholder="t('knowledge.fields.slugPlaceholder')" />
         </label>
         <label class="cfg-label">
-          Scope
+          {{ t('knowledge.fields.scope') }}
           <select v-model="draft.scope" class="cfg-input" :disabled="!!selectedId">
             <option value="project">project</option>
             <option value="system">system</option>
           </select>
         </label>
         <label class="cfg-label">
-          Tags
+          {{ t('knowledge.fields.tags') }}
           <div class="tag-row">
             <span
               v-for="(t, i) in draft.tags"
@@ -270,7 +266,7 @@ onMounted(loadList)
               v-model="tagInput"
               class="cfg-input cfg-input-sm"
               list="knowledge-tag-suggestions"
-              placeholder="Thêm tag…"
+              :placeholder="t('knowledge.fields.addTagPlaceholder')"
               @keydown.enter.prevent="addTag"
             />
             <datalist id="knowledge-tag-suggestions">
@@ -280,18 +276,18 @@ onMounted(loadList)
           </div>
         </label>
         <label class="cfg-label knowledge-content-label">
-          Nội dung (Markdown)
-          <textarea v-model="draft.content" class="knowledge-textarea" spellcheck="false" />
+          {{ t('knowledge.fields.content') }}
+          <MarkdownTextEditor v-model="draft.content" height="400px" />
         </label>
         <div class="knowledge-editor-actions">
-          <button class="btn-primary btn-sm" @click="save">Lưu</button>
-          <button v-if="selectedId" class="btn-danger btn-sm" @click="remove">Xóa</button>
+          <button class="btn-primary btn-sm" @click="save">{{ t('knowledge.actions.save') }}</button>
+          <button v-if="selectedId" class="btn-danger btn-sm" @click="remove">{{ t('knowledge.actions.delete') }}</button>
           <span v-if="message" class="save-msg">{{ message }}</span>
           <span v-if="error" class="err">{{ error }}</span>
         </div>
       </section>
       <section v-else class="knowledge-editor-pane empty">
-        <p class="muted">Chọn entry hoặc tạo mới.</p>
+        <p class="muted">{{ t('knowledge.editor.empty') }}</p>
       </section>
     </div>
   </div>

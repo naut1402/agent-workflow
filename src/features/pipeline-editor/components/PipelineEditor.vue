@@ -1,21 +1,89 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, markRaw, onMounted, watch } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { fetchCatalog, fetchPipelineConfig, fetchRules, writePipelineConfig } from '../../../api'
-import { useLocalToggle } from '../../../shared/composables/useLocalToggle'
+import { fetchCatalog, fetchPipelineConfig, fetchRules, writePipelineConfig } from '../scripts/pipelineEditorApi'
+import { useLocalToggle } from '../../../core/composables/useLocalToggle'
 import PipelineEditorNode from './PipelineEditorNode.vue'
 import CatalogPanel from './CatalogPanel.vue'
 import RulesPanel from './RulesPanel.vue'
 import StepConfigPanel from './StepConfigPanel.vue'
 import ProfileManager from './ProfileManager.vue'
-import RailIcon from '../../../shared/ui/RailIcon.vue'
+import RailIcon from '../../../core/ui/RailIcon.vue'
+import {
+  extractPipelineMeta,
+  extractStepPreservedMap,
+  buildStepFromNode,
+  assemblePipeline,
+  type PipelineMeta,
+  type StepPreservedMap,
+} from '../lib/pipelineRoundTrip'
+
+const { t } = useI18nHelpers()
 
 const props = defineProps({
   scope: { type: String, default: 'global' },
   taskId: { type: String, default: '' },
+  tasks: { type: Array as () => any[], default: () => [] },
+  projectId: { type: [String, null], default: null },
   appSidebarCollapsed: { type: Boolean, default: false },
 })
+
+const emit = defineEmits(['update:scope', 'update:task-id'])
+
+const taskSelect = ref('')
+const taskManual = ref('')
+
+function onScopeChange(event) {
+  emit('update:scope', event.target.value)
+}
+
+function onTaskSelectChange() {
+  if (taskSelect.value === '__manual__') {
+    emit('update:task-id', taskManual.value)
+  } else {
+    emit('update:task-id', taskSelect.value)
+    taskManual.value = ''
+  }
+}
+
+watch(taskManual, (v) => {
+  if (taskSelect.value === '__manual__') emit('update:task-id', v)
+})
+
+watch(
+  () => props.taskId,
+  (id) => {
+    if (!id) {
+      if (props.scope !== 'global') {
+        taskSelect.value = ''
+        taskManual.value = ''
+      }
+      return
+    }
+    const listed = props.tasks.some((t) => t.task_id === id)
+    if (listed) {
+      taskSelect.value = id
+      taskManual.value = ''
+    } else {
+      taskSelect.value = '__manual__'
+      taskManual.value = id
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => props.scope,
+  (scope) => {
+    if (scope === 'global') {
+      taskSelect.value = ''
+      taskManual.value = ''
+      emit('update:task-id', '')
+    }
+  },
+)
 
 const nodeTypes = { pipelineEditor: markRaw(PipelineEditorNode) } as any
 const {
@@ -33,6 +101,8 @@ const {
 const nodes = ref([])
 const edges = ref([])
 
+const pipelineMeta = ref<PipelineMeta>({})
+const stepPreserved = ref<StepPreservedMap>({})
 const catalog = ref<any>({ skills: [], agents: [] })
 const rulesData = ref({ rules: [], categories: [] })
 const leftTab = ref('catalog')
@@ -73,10 +143,19 @@ function onRuleSelect(rule) {
     highlightedCategory.value === rule.category ? null : rule.category
 }
 
+function applyLoadedPipeline(pipeline) {
+  pipelineMeta.value = extractPipelineMeta(pipeline)
+  stepPreserved.value = extractStepPreservedMap(pipeline?.steps || [])
+  buildFlowFromPipeline(pipeline)
+}
+
 async function loadConfig() {
   try {
-    const data = await fetchPipelineConfig(props.scope === 'task' ? props.taskId : null)
-    buildFlowFromPipeline(data.pipeline)
+    const data = await fetchPipelineConfig(
+      props.scope === 'task' ? props.taskId : null,
+      props.projectId ?? undefined,
+    )
+    applyLoadedPipeline(data.pipeline)
   } catch {
     // no-op
   }
@@ -124,7 +203,7 @@ onMounted(async () => {
 
 let configDebounce = null
 watch(
-  [() => props.scope, () => props.taskId],
+  [() => props.scope, () => props.taskId, () => props.projectId],
   () => {
     closeConfig()
     clearTimeout(configDebounce)
@@ -262,28 +341,19 @@ const previewActiveStep = computed(() => {
   }
 })
 
-function buildPipelineFromFlow() {
+function buildFullPipeline() {
   const nodeList = getNodes.value
   const edgeList = getEdges.value
   const order = topoSort(nodeList, edgeList)
   const nodeMap = Object.fromEntries(nodeList.map((n) => [n.id, n]))
-  const steps = order.map((id) => {
-    const n = nodeMap[id]
-    if (!n) return null
-    const d = n.data
-    return {
-      id,
-      name: d.label || id,
-      agent: d.agent || '',
-      skills: d.skills || [],
-      rule_category: d.rule_category || '',
-      rule_required: d.rule_required ?? true,
-      produces: d.produces || [],
-      knowledge_inputs: d.knowledge_inputs || [],
-      hitl: d.hitl || { mode: 'none' },
-    }
-  }).filter(Boolean)
-  return { version: 1, steps }
+  const steps = order
+    .map((id) => {
+      const n = nodeMap[id]
+      if (!n) return null
+      return buildStepFromNode(n.data, id, stepPreserved.value[id])
+    })
+    .filter(Boolean)
+  return assemblePipeline(pipelineMeta.value, steps as Record<string, unknown>[])
 }
 
 function autoLayout() {
@@ -304,8 +374,13 @@ async function saveToFile() {
   saving.value = true
   saveMsg.value = ''
   try {
-    const pipeline = buildPipelineFromFlow()
-    await writePipelineConfig(props.scope, pipeline, props.taskId || undefined)
+    const pipeline = buildFullPipeline()
+    await writePipelineConfig(
+      props.scope,
+      pipeline,
+      props.taskId || undefined,
+      props.projectId ?? undefined,
+    )
     saveMsg.value = '✓ Saved'
     setTimeout(() => { saveMsg.value = '' }, 2500)
   } catch (e) {
@@ -359,12 +434,15 @@ function sleep(ms) {
 }
 
 function onProfileLoad(pipeline) {
-  buildFlowFromPipeline(pipeline)
+  applyLoadedPipeline(pipeline)
   setTimeout(() => fitView(), 100)
 }
 
-const currentPipeline = computed(() => buildPipelineFromFlow())
-const currentSteps = computed(() => currentPipeline.value.steps || [])
+const currentPipeline = computed(() => buildFullPipeline())
+const currentSteps = computed(() => {
+  const steps = currentPipeline.value.steps
+  return Array.isArray(steps) ? steps : []
+})
 
 const hasFanOut = computed(() => {
   const outDeg = {}
@@ -383,10 +461,14 @@ const editorLayoutClass = computed(() => ({
 <template>
   <div class="editor-root" :class="{ 'preview-active': previewing }">
     <div class="editor-toolbar">
-      <ProfileManager :current-pipeline="currentPipeline" @load="onProfileLoad" />
+      <ProfileManager
+        :current-pipeline="currentPipeline"
+        :project-id="projectId"
+        @load="onProfileLoad"
+      />
 
       <div v-if="hasFanOut" class="fanout-warning" role="status">
-        Orchestrator chạy tuần tự — nhánh song song sẽ được sắp xếp theo thứ tự topo khi lưu
+        {{ t('pipelineEditor.toolbar.fanOutWarning') }}
       </div>
 
       <div class="editor-toolbar-actions">
@@ -412,11 +494,37 @@ const editorLayoutClass = computed(() => ({
 
     <div class="editor-layout" :class="editorLayoutClass">
       <div class="editor-left" :class="{ 'editor-left-collapsed': editorLeftCollapsed }">
+        <div v-if="!editorLeftCollapsed" class="editor-scope-panel">
+          <label class="scope-label">Scope:</label>
+          <select :value="scope" class="scope-select cfg-input" @change="onScopeChange">
+            <option value="global">Global pipeline.yaml</option>
+            <option value="task">Per-task</option>
+          </select>
+          <template v-if="scope === 'task'">
+            <select
+              v-model="taskSelect"
+              class="scope-select cfg-input"
+              @change="onTaskSelectChange"
+            >
+              <option value="">{{ t('pipelineEditor.scope.selectTask') }}</option>
+              <option v-for="task in tasks" :key="task.task_id" :value="task.task_id">
+                {{ task.task_id }}
+              </option>
+              <option value="__manual__">{{ t('pipelineEditor.scope.manualEntry') }}</option>
+            </select>
+            <input
+              v-if="taskSelect === '__manual__'"
+              v-model="taskManual"
+              class="scope-task-input cfg-input"
+              :placeholder="t('pipelineEditor.scope.taskIdPlaceholder')"
+            />
+          </template>
+        </div>
         <div class="editor-left-tabs" :class="{ 'is-collapsed': editorLeftCollapsed }">
           <button
             type="button"
             class="editor-left-collapse-btn rail-icon-btn"
-            :title="editorLeftCollapsed ? 'Mở catalog & rules' : 'Thu gọn catalog'"
+            :title="editorLeftCollapsed ? t('pipelineEditor.leftPanel.expandTitle') : t('pipelineEditor.leftPanel.collapseTitle')"
             :aria-expanded="!editorLeftCollapsed"
             @click="toggleEditorLeft"
           >
@@ -444,7 +552,7 @@ const editorLayoutClass = computed(() => ({
             <button
               class="editor-left-tab editor-left-tab-icon rail-icon-btn"
               :class="{ active: leftTab === 'catalog' }"
-              title="Catalog — mở panel"
+              :title="t('pipelineEditor.leftPanel.catalogOpenTitle')"
               @click="openLeftTab('catalog')"
             >
               <RailIcon name="catalog" />
@@ -452,7 +560,7 @@ const editorLayoutClass = computed(() => ({
             <button
               class="editor-left-tab editor-left-tab-icon rail-icon-btn"
               :class="{ active: leftTab === 'rules' }"
-              title="Rules — mở panel"
+              :title="t('pipelineEditor.leftPanel.rulesOpenTitle')"
               @click="openLeftTab('rules')"
             >
               <RailIcon name="rules" />
@@ -507,7 +615,7 @@ const editorLayoutClass = computed(() => ({
             <strong>{{ previewActiveStep.index }}/{{ previewActiveStep.total }}</strong>
             {{ previewActiveStep.label }}
             <span v-if="previewActiveStep.agent" class="preview-banner-agent">({{ previewActiveStep.agent }})</span>
-            <span v-if="previewHitlPause" class="preview-banner-hitl">— chờ HITL</span>
+            <span v-if="previewHitlPause" class="preview-banner-hitl">{{ t('pipelineEditor.preview.waitingHitl') }}</span>
           </template>
           <template v-else>Simulation — no files written</template>
           &nbsp;

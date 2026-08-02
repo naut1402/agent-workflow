@@ -56,9 +56,10 @@ describe('tool handlers over a temp registry', () => {
     expect(payload(handleListProjects()).projects).toHaveLength(1)
     expect(payload(handleGetProject({ id: project.id })).project.id).toBe(project.id)
 
-    // default project cannot be removed → fail envelope
+    // removing the (only, default) project succeeds, leaving an empty registry
     const rm = handleRemoveProject({ id: project.id })
-    expect(rm.isError).toBe(true)
+    expect(rm.isError).toBeUndefined()
+    expect(payload(handleListProjects()).projects).toHaveLength(0)
   })
 
   test('get unknown id → fail', () => {

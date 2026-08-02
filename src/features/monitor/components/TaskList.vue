@@ -1,17 +1,24 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { computed, ref } from 'vue'
+import TaskListItem from './TaskListItem.vue'
+import { useAppSettings } from '../../../core/composables/useAppSettings'
+import { resolveHideMissingArtifacts } from '../../../core/configs/appSettings'
 
 const props = defineProps({
   tasks: { type: Array as () => any[], required: true },
   selectedId: { type: String, default: null },
   openArtifact: { type: Object, default: null }, // { taskId, name }
+  projectId: { type: String, default: null },
 })
-const emit = defineEmits(['select', 'open-artifact'])
+const emit = defineEmits(['select', 'open-artifact', 'task-archived', 'task-deleted', 'create-task'])
+const { t } = useI18nHelpers()
+const { settings, update } = useAppSettings()
 
 // Track which tasks have their file list expanded.
 const expanded = ref(new Set())
 
-function toggleExpand(taskId) {
+function toggleExpand(taskId: string) {
   if (expanded.value.has(taskId)) {
     expanded.value.delete(taskId)
   } else {
@@ -21,75 +28,81 @@ function toggleExpand(taskId) {
   expanded.value = new Set(expanded.value)
 }
 
-function selectTask(taskId) {
-  emit('select', taskId)
-  if (!expanded.value.has(taskId)) toggleExpand(taskId)
+/** Collapse every expanded task's file list — exposed for MonitorLayout's
+ * click-outside handling (setting-gated, mục 7). */
+function collapseAll() {
+  expanded.value = new Set()
+}
+defineExpose({ collapseAll })
+
+const hideMissing = computed(() => resolveHideMissingArtifacts(settings.value))
+function toggleHideMissing() {
+  update({ hideMissingArtifacts: !hideMissing.value })
 }
 
-function phaseLabel(t) {
-  if (t.has_qa) return 'chờ Q&A'
-  if (t.hitl_pending) return t.hitl_pending
-  if (t.current_phase) return t.current_phase
-  return '—'
-}
-
-// Stable order matching ArtifactPanel's ORDER list.
-const ORDER = [
-  'investigate.md', 'investigate-po.md',
-  'design.md', 'design-po.md',
-  'phpstan.md', 'review.md', 'test-spec.md', 'pr-desc.md',
-  'qa.md',
-]
-
-function sortedArtifacts(task) {
-  const a = task.artifacts || {}
-  const names = Object.keys(a)
-  names.sort((x, y) => {
-    const ix = ORDER.indexOf(x)
-    const iy = ORDER.indexOf(y)
-    return (ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy) || x.localeCompare(y)
-  })
-  return names.map((name) => ({ name, ...a[name] }))
-}
+// Archived tasks no longer appear in the main list — they're grouped in a
+// collapsible section at the bottom instead. Non-archived order is preserved
+// (no re-sort) since it's a plain filter over props.tasks.
+const activeTasks = computed(() => props.tasks.filter((t) => !t.archived))
+const archivedTasks = computed(() => props.tasks.filter((t) => t.archived))
 </script>
 
 <template>
-  <ul class="tasklist">
-    <li
-      v-for="t in tasks"
-      :key="t.task_id"
-      class="task-entry"
-      :class="{ active: t.task_id === selectedId, attention: t.has_qa }"
-    >
-      <!-- Task header row -->
-      <div class="task-row" @click="selectTask(t.task_id)">
-        <span
-          class="expand-chevron"
-          :class="{ open: expanded.has(t.task_id) }"
-          @click.stop="toggleExpand(t.task_id)"
-        >›</span>
-        <span class="id">{{ t.task_id }}</span>
-        <span class="phase">{{ phaseLabel(t) }}</span>
-        <span v-if="t.has_qa" class="flag qa" title="có câu hỏi blocking">Q</span>
-        <span v-else-if="t.hitl_pending" class="flag hitl" title="đang chờ duyệt">⏸</span>
-      </div>
-
-      <!-- Collapsible file list -->
-      <ul v-if="expanded.has(t.task_id)" class="file-list">
-        <li
-          v-for="it in sortedArtifacts(t)"
-          :key="it.name"
-          class="file-item"
-          :class="{
-            missing: !it.exists,
-            active: openArtifact && openArtifact.taskId === t.task_id && openArtifact.name === it.name,
-          }"
-          @click="it.exists && emit('open-artifact', { taskId: t.task_id, name: it.name })"
-        >
-          <span class="file-dot">{{ it.exists ? '●' : '○' }}</span>
-          <span class="file-name">{{ it.name }}</span>
-        </li>
+  <div class="tasklist-panel">
+    <div class="tasklist-head">
+      <span class="tasklist-head-label">{{ t('monitor.taskList.title') }}</span>
+      <button
+        type="button"
+        class="icon-btn"
+        :title="t('monitor.taskList.createTask')"
+        :aria-label="t('monitor.taskList.createTask')"
+        @click="emit('create-task')"
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M8 2.5a.75.75 0 0 1 .75.75V7h3.75a.75.75 0 0 1 0 1.5H8.75v3.75a.75.75 0 0 1-1.5 0V8.5H3.5a.75.75 0 0 1 0-1.5h3.75V3.25A.75.75 0 0 1 8 2.5z"
+          />
+        </svg>
+      </button>
+    </div>
+    <ul class="tasklist tasklist--active">
+      <TaskListItem
+        v-for="t in activeTasks"
+        :key="t.task_id"
+        :task="t"
+        :selected-id="selectedId"
+        :open-artifact="openArtifact"
+        :is-expanded="expanded.has(t.task_id)"
+        :project-id="projectId"
+        :hide-missing="hideMissing"
+        @select="emit('select', $event)"
+        @toggle-expand="toggleExpand"
+        @open-artifact="emit('open-artifact', $event)"
+        @task-archived="emit('task-archived')"
+        @task-deleted="emit('task-deleted', $event)"
+        @toggle-hide-missing="toggleHideMissing"
+      />
+    </ul>
+    <details v-if="archivedTasks.length" class="archived-group">
+      <summary>{{ t('monitor.taskList.archivedSummary', { count: archivedTasks.length }) }}</summary>
+      <ul class="tasklist tasklist--archived">
+        <TaskListItem
+          v-for="t in archivedTasks"
+          :key="t.task_id"
+          :task="t"
+          :selected-id="selectedId"
+          :open-artifact="openArtifact"
+          :is-expanded="expanded.has(t.task_id)"
+          :project-id="projectId"
+          :hide-missing="hideMissing"
+          @select="emit('select', $event)"
+          @toggle-expand="toggleExpand"
+          @open-artifact="emit('open-artifact', $event)"
+          @task-archived="emit('task-archived')"
+          @toggle-hide-missing="toggleHideMissing"
+        />
       </ul>
-    </li>
-  </ul>
+    </details>
+  </div>
 </template>

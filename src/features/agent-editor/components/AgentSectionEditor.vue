@@ -1,15 +1,18 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed } from 'vue'
 import {
   FIXED_SECTION_KEYS,
   getSectionTitle,
-  slugifySectionKey,
   emptyDraft,
-} from '../../../../shared/agentMarkdown.js'
-import { useSortable } from '../../../shared/composables/useSortable'
-import { saveAgentTemplate } from '../../../api'
+} from '../business/agentMarkdown.js'
+import { slugifySectionKey } from '../../../core/lib/stringUtils'
+import { useSortable } from '../../../core/composables/useSortable'
+import { saveAgentTemplate } from '../scripts/AgentSectionEditorApi'
+import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 import WorkflowSectionEditor from './WorkflowSectionEditor.vue'
 
+const { t } = useI18nHelpers()
 const props = defineProps({
   draft: { type: Object, required: true },
   catalog: { type: Object, default: () => ({ skills: [] }) },
@@ -90,7 +93,7 @@ function toggleSkill(skillName) {
 function removeSection(key) {
   if (!canRemoveSection(key)) return
   const title = sectionLabel(key)
-  if (!confirm(`Xóa section "${title}"?`)) return
+  if (!confirm(t('agentEditor.section.confirmDelete', { title }))) return
   const section_order = props.draft.section_order.filter((k) => k !== key)
   const sections = { ...props.draft.sections }
   delete sections[key]
@@ -101,7 +104,7 @@ function removeSection(key) {
 }
 
 function addSection() {
-  const title = prompt('Tên section mới:')
+  const title = prompt(t('agentEditor.section.promptNewTitle'))
   if (!title?.trim()) return
   const slug = slugifySectionKey(title)
   let key = `custom_${slug}`
@@ -119,11 +122,11 @@ async function saveSectionTemplate(key) {
   const title = sectionLabel(key)
   const content = (props.draft.sections?.[key] || '').trim()
   if (!content) {
-    emit('error', `Section "${title}" trống — không lưu được template`)
+    emit('error', t('agentEditor.section.emptyTemplate', { title }))
     return
   }
   const defaultName = `section-${slugifySectionKey(title)}`
-  const name = prompt('Tên template section:', defaultName)
+  const name = prompt(t('agentEditor.section.promptTemplateName'), defaultName)
   if (!name?.trim()) return
 
   savingTemplate.value = key
@@ -136,7 +139,7 @@ async function saveSectionTemplate(key) {
       section_labels: key.startsWith('custom_') ? { [key]: title } : {},
     })
     const result = await saveAgentTemplate(tplDraft)
-    emit('message', `Đã lưu template section → ${result.name}`)
+    emit('message', t('agentEditor.section.savedTemplate', { name: result.name }))
   } catch (e) {
     emit('error', String(e.message || e))
   } finally {
@@ -192,7 +195,7 @@ async function saveSectionTemplate(key) {
         @dragend="onDragEnd"
       >
         <div class="section-head">
-          <span class="drag-handle" title="Kéo để sắp xếp">⋮⋮</span>
+          <span class="drag-handle" :title="t('agentEditor.section.dragTitle')">⋮⋮</span>
           <button
             type="button"
             class="section-collapse-btn"
@@ -202,22 +205,22 @@ async function saveSectionTemplate(key) {
             {{ isCollapsed(key) ? '▶' : '▼' }}
           </button>
           <span class="section-title">{{ sectionLabel(key) }}</span>
-          <span v-if="isFixedSection(key)" class="chip chip-xs">cố định</span>
+          <span v-if="isFixedSection(key)" class="chip chip-xs">{{ t('agentEditor.section.fixed') }}</span>
           <div class="section-head-actions">
             <button
               type="button"
               class="btn-ghost btn-sm"
               :disabled="savingTemplate === key"
-              title="Lưu section làm template"
+              :title="t('agentEditor.section.saveTemplateTitle')"
               @click="saveSectionTemplate(key)"
             >
-              {{ savingTemplate === key ? '…' : 'Lưu template' }}
+              {{ savingTemplate === key ? '…' : t('agentEditor.section.saveTemplate') }}
             </button>
             <button
               v-if="canRemoveSection(key)"
               type="button"
               class="btn-ghost btn-sm btn-danger"
-              title="Xóa section"
+              :title="t('agentEditor.section.deleteTitle')"
               @click="removeSection(key)"
             >
               ✕
@@ -232,12 +235,11 @@ async function saveSectionTemplate(key) {
             @message="emit('message', $event)"
             @error="emit('error', $event)"
           />
-          <textarea
+          <MarkdownTextEditor
             v-else
-            class="cfg-textarea"
-            :value="draft.sections?.[key] || ''"
-            rows="4"
-            @input="updateSection(key, ($event.target as HTMLInputElement).value)"
+            :model-value="draft.sections?.[key] || ''"
+            height="180px"
+            @update:model-value="updateSection(key, $event)"
           />
         </div>
       </div>

@@ -5,13 +5,13 @@ import tseslint from 'typescript-eslint'
 
 const noEnum = {
   selector: 'TSEnumDeclaration',
-  message: 'Không dùng TypeScript enum — dùng union literal type (AGENTS.md §3.1).',
+  message: 'Không dùng TypeScript enum — dùng union literal type (docs/implement/coding-convention.md).',
 }
 
 const noDefaultExport = {
   selector: 'ExportDefaultDeclaration',
   message:
-    'Không dùng default export trừ *.vue / vite.config.* / vitest.config.* / playwright.config.* / *.d.ts (AGENTS.md §3.1).',
+    'Không dùng default export trừ *.vue / vite.config.* / vitest.config.* / playwright.config.* / *.d.ts (docs/implement/coding-convention.md).',
 }
 
 /** MVP: recommended giữ nguyên nhưng hạ error → warn để CI xanh (không --max-warnings 0). */
@@ -52,11 +52,16 @@ export default tseslint.config(
   {
     files: [
       'src/**/*.{ts,tsx,js}',
-      'server/**/*.{ts,tsx,js,mjs}',
-      'shared/**/*.{ts,tsx,js}',
+      'src/core/**/*.{ts,tsx,js,mjs}',
+      'src/standalone.ts',
+      'src/runner-cli.mjs',
+      'src/features/**/api.ts',
+      'src/features/**/controller.ts',
+      'src/features/**/business/**/*.{ts,tsx,js}',
+      'src/core/configs/**/*.{ts,tsx,js}',
       'mcp/**/*.{ts,tsx,js}',
-      'tests/**/*.{ts,tsx,js}',
-      'test-e2e/**/*.{ts,tsx,js}',
+      'tests/**/*.{ts,tsx,js,mjs}',
+      'test-e2e/**/*.{ts,tsx,js,mjs}',
     ],
     languageOptions: {
       globals: {

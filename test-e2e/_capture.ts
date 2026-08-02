@@ -6,3 +6,6 @@ export async function capturePage(page: Page, testInfo: TestInfo, name: string):
   await page.screenshot({ path: file, fullPage: true })
   await testInfo.attach(name, { path: file, contentType: 'image/png' })
 }
+
+/** Alias giữ tương thích các spec release (settings / quick-action / archive…). */
+export const capture = capturePage

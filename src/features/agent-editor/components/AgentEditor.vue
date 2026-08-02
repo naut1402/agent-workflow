@@ -1,18 +1,14 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
-import {
-  fetchCustomAgents,
-  fetchCustomAgent,
-  saveCustomAgent,
-  deleteCustomAgent,
-  exportCustomAgent,
-  fetchCatalog,
-} from '../../../api'
-import { emptyDraft } from '../../../../shared/agentMarkdown.js'
+import { fetchCustomAgents, fetchCustomAgent, saveCustomAgent, deleteCustomAgent, exportCustomAgent } from '../scripts/agentEditorApi'
+import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
+import { emptyDraft } from '../business/agentMarkdown.js'
 import AgentSectionEditor from './AgentSectionEditor.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'
 import AgentNlWizard from './AgentNlWizard.vue'
 
+const { t } = useI18nHelpers()
 const agents = ref([])
 const catalog = ref({ skills: [], agents: [] })
 const draft = ref(emptyDraft())
@@ -68,7 +64,7 @@ async function save() {
   try {
     const result = await saveCustomAgent(draft.value)
     selectedName.value = result.name
-    message.value = `Đã lưu ${result.name}`
+    message.value = t('agentEditor.messages.saved', { name: result.name })
     await loadList()
     await loadCatalog()
   } catch (e) {
@@ -80,10 +76,10 @@ async function save() {
 
 async function remove() {
   if (!selectedName.value) return
-  if (!confirm(`Xóa agent "${selectedName.value}"?`)) return
+  if (!confirm(t('agentEditor.messages.confirmDelete', { name: selectedName.value }))) return
   try {
     await deleteCustomAgent(selectedName.value)
-    message.value = 'Đã xóa'
+    message.value = t('agentEditor.messages.deleted')
     newAgent()
     await loadList()
     await loadCatalog()
@@ -94,7 +90,7 @@ async function remove() {
 
 async function doExport(overwrite = false) {
   if (!selectedName.value) {
-    error.value = 'Lưu agent trước khi export'
+    error.value = t('agentEditor.messages.saveBeforeExport')
     return
   }
   try {
@@ -102,7 +98,7 @@ async function doExport(overwrite = false) {
     message.value = `Exported → ${result.path}`
   } catch (e) {
     const msg = String(e.message || e)
-    if (msg.includes('file exists') && confirm('File đã tồn tại. Ghi đè?')) {
+    if (msg.includes('file exists') && confirm(t('agentEditor.messages.confirmOverwrite'))) {
       await doExport(true)
     } else {
       error.value = msg
@@ -134,7 +130,7 @@ function applyDraft(newDraft) {
           <span class="agent-list-name">{{ a.name }}</span>
           <span v-if="a.editable" class="chip chip-xs">dashboard</span>
         </li>
-        <li v-if="!agents.length" class="muted agent-list-empty">Chưa có agent tùy chỉnh</li>
+        <li v-if="!agents.length" class="muted agent-list-empty">{{ t('agentEditor.list.empty') }}</li>
       </ul>
     </aside>
 
@@ -143,8 +139,8 @@ function applyDraft(newDraft) {
         <button type="button" class="btn-ghost btn-sm" @click="showTemplates = true">Template / Copy</button>
         <button type="button" class="btn-ghost btn-sm" @click="showNl = true">Build NL</button>
         <button type="button" class="btn-ghost btn-sm" :disabled="!selectedName" @click="doExport(false)">Export .claude/agents</button>
-        <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">Lưu</button>
-        <button type="button" class="btn-ghost btn-sm btn-danger" :disabled="!selectedName" @click="remove">Xóa</button>
+        <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">{{ t('agentEditor.actions.save') }}</button>
+        <button type="button" class="btn-ghost btn-sm btn-danger" :disabled="!selectedName" @click="remove">{{ t('agentEditor.actions.delete') }}</button>
       </div>
 
       <p v-if="message" class="ok-msg">{{ message }}</p>
@@ -164,10 +160,10 @@ function applyDraft(newDraft) {
         </label>
         <label class="cfg-label">
           Description
-          <input v-model="draft.description" class="cfg-input" placeholder="Mô tả ngắn" />
+          <input v-model="draft.description" class="cfg-input" :placeholder="t('agentEditor.fields.descriptionPlaceholder')" />
         </label>
         <label class="cfg-label">
-          Model khuyến nghị
+          {{ t('agentEditor.fields.recommendedModel') }}
           <input v-model="draft.model" class="cfg-input" placeholder="claude-sonnet-4-6" />
         </label>
       </div>

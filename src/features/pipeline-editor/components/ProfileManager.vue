@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { fetchPipelineProfiles, fetchPipelineProfile, savePipelineProfile, deletePipelineProfile } from '../../../api'
+import { ref, onMounted, watch } from 'vue'
+import { fetchPipelineProfiles, fetchPipelineProfile, savePipelineProfile, deletePipelineProfile } from '../scripts/ProfileManagerApi'
 
 const props = defineProps({
   currentPipeline: { type: Object, required: true },
+  projectId: { type: [String, null], default: null },
 })
 
 const emit = defineEmits(['load'])
@@ -17,7 +18,7 @@ const error = ref('')
 
 async function loadProfiles() {
   try {
-    const data = await fetchPipelineProfiles()
+    const data = await fetchPipelineProfiles(props.projectId ?? undefined)
     profiles.value = data.profiles || []
   } catch (e) {
     error.value = String(e.message || e)
@@ -26,11 +27,13 @@ async function loadProfiles() {
 
 onMounted(loadProfiles)
 
+watch(() => props.projectId, loadProfiles)
+
 async function handleLoad() {
   if (!selected.value) return
   error.value = ''
   try {
-    const data = await fetchPipelineProfile(selected.value)
+    const data = await fetchPipelineProfile(selected.value, props.projectId ?? undefined)
     emit('load', data.pipeline)
   } catch (e) {
     error.value = String(e.message || e)
@@ -43,7 +46,7 @@ async function handleSave() {
   saving.value = true
   error.value = ''
   try {
-    await savePipelineProfile(name, props.currentPipeline)
+    await savePipelineProfile(name, props.currentPipeline, props.projectId ?? undefined)
     saveAsName.value = ''
     await loadProfiles()
     selected.value = name
@@ -59,7 +62,7 @@ async function handleDelete() {
   deleting.value = true
   error.value = ''
   try {
-    await deletePipelineProfile(selected.value)
+    await deletePipelineProfile(selected.value, props.projectId ?? undefined)
     selected.value = ''
     await loadProfiles()
   } catch (e) {

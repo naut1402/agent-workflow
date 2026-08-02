@@ -3,7 +3,7 @@
 // registry. Spawned by Claude Code (see plugins/dev-agent-teams/.mcp.json).
 //
 // It exposes CRUD over the SAME projects.json the REST/standalone server uses
-// (via the shared server/registry.ts) — so projects added from Claude Code and
+// (via the shared core/registry.ts) — so projects added from Claude Code and
 // from the dashboard UI stay consistent. The MCP server operates directly on
 // the registry file and does NOT require the HTTP server to be running.
 //
@@ -18,7 +18,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { list, get, add, remove } from '../server/registry.js'
+import { APP_VERSION } from '../src/core/configs/appVersion.js'
+import { list, get, add, remove } from '../src/core/registry.js'
 
 // Return `any` to stay decoupled from the SDK's literal content-type unions.
 export function ok(payload: unknown): any {
@@ -57,7 +58,7 @@ export function handleRemoveProject({ id }: { id: string }): any {
 // ── Server wiring ──────────────────────────────────────────────────────────────
 
 export function createMcpServer(): McpServer {
-  const server = new McpServer({ name: 'dev-team-dashboard', version: '0.1.0' })
+  const server = new McpServer({ name: 'dev-team-dashboard', version: APP_VERSION })
 
   server.tool(
     'list_projects',
@@ -87,7 +88,7 @@ export function createMcpServer(): McpServer {
   server.tool(
     'remove_project',
     'Remove a project from the registry by id. Does NOT delete any files on disk. '
-      + 'Refuses to remove the default project.',
+      + 'Removing the default project promotes the next remaining project (if any) to default.',
     { id: z.string().describe('Project id to remove.') },
     async ({ id }) => handleRemoveProject({ id }),
   )
