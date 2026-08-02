@@ -218,7 +218,7 @@ function foldProposalIntoScratch(job: JobRecord, stdout: string): void {
   if (job.spliceRange) {
     let base = ''
     try {
-      base = readTextFileSync(joinPath(job.applyTarget!, job.approvalArtifact!), 'utf8')
+      base = readTextFileSync(joinPath(job.applyTarget!, job.approvalArtifact!))
     } catch {
       base = '' // real artifact may not exist yet
     }
@@ -242,7 +242,7 @@ function saveJob(job: JobRecord): JobRecord {
   ensureJobsDir()
   const file = jobFile(job.id)
   const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, JSON.stringify(job, null, 2), 'utf8')
+  writeTextFileSync(tmp, JSON.stringify(job, null, 2))
   renameSync(tmp, file)
   return job
 }
@@ -253,7 +253,7 @@ export function listJobs(limit = 20): JobRecord[] {
   const jobs = files
     .map((f): JobRecord | null => {
       try {
-        return JSON.parse(readTextFileSync(joinPath(jobsDir(), f), 'utf8'))
+        return JSON.parse(readTextFileSync(joinPath(jobsDir(), f)))
       } catch {
         return null
       }
@@ -572,7 +572,7 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   const workspace = joinPath(devTeamRoot, 'tasks', taskId)
   let userPrompt = ''
   try {
-    userPrompt = readTextFileSync(joinPath(workspace, 'request.md'), 'utf8')
+    userPrompt = readTextFileSync(joinPath(workspace, 'request.md'))
   } catch {
     return // no request.md — leave the chain to stop rather than run with an empty prompt
   }
@@ -840,13 +840,13 @@ export function getApprovalDiff(
   }
   let before = ''
   try {
-    before = readTextFileSync(joinPath(job.applyTarget, job.approvalArtifact), 'utf8')
+    before = readTextFileSync(joinPath(job.applyTarget, job.approvalArtifact))
   } catch {
     before = '' // artifact may not exist yet (a brand-new file the agent proposed creating)
   }
   let after: string
   try {
-    after = readTextFileSync(joinPath(job.workspace, job.approvalArtifact), 'utf8')
+    after = readTextFileSync(joinPath(job.workspace, job.approvalArtifact))
   } catch (err: any) {
     return { ok: false, status: 500, error: `cannot read proposed content: ${err.message}` }
   }
@@ -870,7 +870,7 @@ export function approveJob(id: string): MutationResult<{ job: JobRecord }> {
   }
   let content: string
   try {
-    content = readTextFileSync(joinPath(job.workspace, job.approvalArtifact), 'utf8')
+    content = readTextFileSync(joinPath(job.workspace, job.approvalArtifact))
   } catch (err: any) {
     return { ok: false, status: 500, error: `cannot read proposed content: ${err.message}` }
   }

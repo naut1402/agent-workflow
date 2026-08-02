@@ -235,9 +235,6 @@ export async function loadKnowledgeBundle(devTeamRoot, ids) {
 
 // ── driver selection ───────────────────────────────────────────────────────
 
-import { joinPath, readTextFile } from '../../../core/lib/fileHelper.js'
-import { loadYaml } from '../../../core/lib/yamlLib.js'
-
 const SUPPORTED = ['file']
 
 export async function loadKnowledgeConfig(devTeamRoot) {

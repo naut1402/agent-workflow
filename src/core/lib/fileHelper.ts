@@ -5,8 +5,6 @@ import type {
   Dirent,
   PathLike,
   Stats,
-  WatchOptions,
-  WatchListener,
   FSWatcher,
 } from 'node:fs'
 import type { FileHandle } from 'node:fs/promises'
@@ -74,6 +72,8 @@ export async function safeReadDir(dir: string): Promise<Dirent[]> {
   }
 }
 
+export async function readDir(dir: string): Promise<string[]>
+export async function readDir(dir: string, opts: { withFileTypes: true }): Promise<Dirent[]>
 export async function readDir(
   dir: string,
   opts?: { withFileTypes?: boolean },
@@ -219,16 +219,6 @@ export function cpSync(
   fs.cpSync(src, dest, opts)
 }
 
-export function watch(
-  filename: PathLike,
-  options?: WatchOptions | BufferEncoding | string | null,
-  listener?: WatchListener,
-): FSWatcher {
-  if (typeof options === 'function') {
-    return fs.watch(filename, options)
-  }
-  if (listener) {
-    return fs.watch(filename, options as WatchOptions | BufferEncoding, listener)
-  }
-  return fs.watch(filename, options as WatchOptions | BufferEncoding | undefined)
+export function watch(...args: Parameters<typeof fs.watch>): FSWatcher {
+  return fs.watch(...args)
 }

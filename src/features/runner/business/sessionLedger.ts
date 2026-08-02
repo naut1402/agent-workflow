@@ -65,7 +65,7 @@ function emptyLedger(taskId: string): TaskSessionLedger {
 export function loadTaskSessionLedger(projectId: string, taskId: string): TaskSessionLedger {
   if (!projectId || !taskId) return emptyLedger(taskId)
   try {
-    const raw = readTextFileSync(ledgerFile(projectId, taskId), 'utf8')
+    const raw = readTextFileSync(ledgerFile(projectId, taskId))
     const data = JSON.parse(raw) as TaskSessionLedger
     if (!data || data.version !== 1 || !Array.isArray(data.sessions)) return emptyLedger(taskId)
     return {
@@ -84,7 +84,7 @@ export function saveTaskSessionLedger(projectId: string, ledger: TaskSessionLedg
   mkdirSync(dir, { recursive: true })
   const file = ledgerFile(projectId, ledger.taskId)
   const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, JSON.stringify(ledger, null, 2), 'utf8')
+  writeTextFileSync(tmp, JSON.stringify(ledger, null, 2))
   renameSync(tmp, file)
 }
 

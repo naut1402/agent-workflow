@@ -62,7 +62,7 @@ export function saveDashboardSettings(settings: DashboardSettings): DashboardSet
   const normalised = parseDashboardSettings(settings)
   const file = dashboardSettingsFile()
   const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, JSON.stringify(normalised, null, 2), 'utf8')
+  writeTextFileSync(tmp, JSON.stringify(normalised, null, 2))
   renameSync(tmp, file)
   return normalised
 }
