@@ -39,6 +39,11 @@ Gộp theo **đợt kiến trúc** (không phải từng hotfix một). OID theo
 | U13 | `fileHelper` + business không import `node:fs`/`path` trực tiếp | `bcdccb5`, `044c16e`, `45366a8` |
 | U14 | Sanitize theo feature; peer qua `business/index` | `0de7495` |
 | U15 | Gom `business/` theo nghiệp vụ (ít file hơn) | `1d0b10f` |
+| U16 | Docs hub `AGENTS` + `docs/implement` + quy ước PR body | `17020fc`, `35bbf74`, `e9761fd` |
+| U17 | `dirModuleLoader` + `apiServer` dùng `fileHelper` | `3efbcbd`, `5dcb3ca` |
+| U18 | `agentMarkdown` → `agent-editor/business` | `b1cbaf3`, `6d36ad4` |
+| U19 | `contracts` → `configs` + alias `@configs` | `7efa071`, `684a4ec` |
+| U20 | Logging prefs (`settings.json`) + gate ghi/đọc | `84134b9` |
 
 ---
 
@@ -379,7 +384,7 @@ core/configs/* (hỗn hợp)   →  features/<f>/schemas/*  (task, autoscan, …
 | | |
 |--|--|
 | **Ưu** | Không vòng `core → features`; Zod gần biên I/O của feature. |
-| **Nhược** | Import schema phải biết feature path; chia sẻ schema giữa 2 feature cần rút contracts/lib cẩn thận. |
+| **Nhược** | Import schema phải biết feature path; chia sẻ schema giữa 2 feature cần rút core/lib cẩn thận. |
 | **Tradeoff** | Chỉ giữ ở core những schema **shell thật sự** dùng. |
 
 ### 4. Quy tắc rút ra
@@ -438,12 +443,12 @@ TRƯỚC                                 SAU
 slugify copy-paste nhiều chỗ       →  stringUtils / arrayUtils / dateUtils
 import js-yaml / diff / marked rải →  yamlLib / diffLib / markdownLib
 yamlLib kèm fs.readFile            →  yamlLib thuần (browser-safe);
-                                      readYamlSafe ở contracts/fs
+                                      readYamlSafe / FS qua fileHelper
 ```
 
 ### 2. Logic trước → sau
 
-- **Trước:** Helper dữ liệu và wrapper package nằm lẫn contracts / component local.
+- **Trước:** Helper dữ liệu và wrapper package nằm lẫn configs / component local.
 - **Sau:** Quy ước tên rõ; FE import được `yamlLib` qua `agentMarkdown` mà **không** kéo `node:fs` vào bundle.
 
 ### 3. Ưu / nhược / tradeoff
@@ -571,6 +576,171 @@ runner: pidReaper / sessionCapture…   →  gắn jobQueue / sessionLedger / re
 
 ---
 
+## U16 — Docs hub + `docs/implement` + quy ước PR body
+
+**Commits:** `17020fc`, `35bbf74`, `e9761fd`
+
+### 1. Kiến trúc trước → sau
+
+```
+TRƯỚC                              SAU
+AGENTS.md phình (mọi quy ước)  →  AGENTS = hub + bảng trỏ docs/
+                                  docs/implement/*-rule|convention
+                                  docs/cookbook/ (bài học đợt lớn)
+PR body bảng file phẳng        →  phần riêng theo cây feature;
+                                  phần chung (core / peer feature)
+```
+
+### 2. Logic trước → sau
+
+- **Trước:** Agent/dev đọc một file dài; PR mô tả khó map với cấu trúc thư mục mới.
+- **Sau:** Hub mỏng; chi tiết theo loại task; PR bắt buộc nhóm theo lớp + blast radius (core / feature khác).
+
+### 3. Ưu / nhược / tradeoff
+
+| | |
+|--|--|
+| **Ưu** | Tài liệu hiện hành tách khỏi lịch sử; review PR bám convention. |
+| **Nhược** | Nhiều file docs — cần hub rõ để không lạc. |
+| **Tradeoff** | Cookbook kể **vì sao/làm sao** của đợt; `implement/*` mô tả **hiện hành** — không trộn issue/PR vào manual. |
+
+### 4. Quy tắc rút ra
+
+- Đổi convention → cập nhật `docs/implement/`; đợt lớn → bổ sung cookbook.
+- PR body theo [`../implement/pr-docs-convention.md`](../implement/pr-docs-convention.md) §1.1–§1.2.
+
+---
+
+## U17 — `dirModuleLoader` + `apiServer` / `fileHelper`
+
+**Commits:** `3efbcbd`, `5dcb3ca`
+
+### 1. Kiến trúc trước → sau
+
+```
+TRƯỚC                                   SAU
+apiServer tự đọc/nạp module rải     →  loadModulesUnder (core/lib)
+                                        + path/FS qua fileHelper
+test import đuôi .ts (vue-tsc lỗi)  →  import `.js` trong bun test
+```
+
+### 2. Logic trước → sau
+
+- **Trước:** Logic quét thư mục feature/api nằm trong setup HTTP — khó tái dùng / test.
+- **Sau:** Helper thuần nạp module; HTTP chỉ gọi; typecheck/CI thống nhất đuôi `.js` (ESM emit).
+
+### 3. Ưu / nhược / tradeoff
+
+| | |
+|--|--|
+| **Ưu** | Auto-load feature routes testable; FS một cửa `fileHelper`. |
+| **Nhược** | Import test phải nhớ `.js` dù source `.ts`. |
+| **Tradeoff** | Convention import ESM (TS5097) > tiện viết đuôi `.ts` trong test. |
+
+### 4. Quy tắc rút ra
+
+- Wiring auto-load → helper `core/lib`, không phình `apiServer`.
+- Bun/unit test import source: đuôi `.js` khớp `moduleResolution`.
+
+---
+
+## U18 — `agentMarkdown` thuộc `agent-editor`
+
+**Commits:** `b1cbaf3`, `6d36ad4`
+
+### 1. Kiến trúc trước → sau
+
+```
+TRƯỚC                                      SAU
+agentMarkdown ở core/contracts (lẫn)  →  features/agent-editor/business/agentMarkdown.js
+peer import barrel dễ cycle           →  import sâu khi cần tránh cycle barrel
+```
+
+### 2. Logic trước → sau
+
+- **Trước:** Parse/ghép markdown agent nằm nền tảng dù là capability editor.
+- **Sau:** Owner = agent-editor; pipeline/runner dùng qua path sâu hoặc index an toàn cycle.
+
+### 3. Ưu / nhược / tradeoff
+
+| | |
+|--|--|
+| **Ưu** | Đúng sở hữu feature; core không giữ logic soạn agent. |
+| **Nhược** | Vẫn `.js` (chưa migrate TS); peer đôi khi import sâu. |
+| **Tradeoff** | Import sâu có chủ đích > cycle `business/index` ↔ index. |
+
+### 4. Quy tắc rút ra
+
+- Capability UI/domain soạn agent ≠ kernel — đặt trong feature sở hữu.
+- Peer: ưu tiên `business/index`; **ngoại lệ** import sâu khi barrel tạo vòng.
+
+---
+
+## U19 — Đổi tên `contracts` → `configs` + `@configs`
+
+**Commits:** `7efa071`, `684a4ec`
+
+### 1. Kiến trúc trước → sau
+
+```
+TRƯỚC                         SAU
+src/core/contracts/       →  src/core/configs/  (appSettings, appVersion — flatten)
+alias @shared → contracts →  @configs → configs
+```
+
+### 2. Logic trước → sau
+
+- **Trước:** Tên “contracts” gợi BE↔FE Zod chung; thực tế chỉ còn preference/version shell.
+- **Sau:** Tên `configs` + alias khớp vai trò; import/docs/test đồng bộ.
+
+### 3. Ưu / nhược / tradeoff
+
+| | |
+|--|--|
+| **Ưu** | Giảm nhầm với schema domain / “contract API”. |
+| **Nhược** | Rename + đổi alias một lần trên mọi call site. |
+| **Tradeoff** | Flatten file trong `configs/` (bỏ `schemas/` lồng) vì chỉ còn ít module shell. |
+
+### 4. Quy tắc rút ra
+
+- Đặt tên thư mục theo **nội dung còn lại**, không giữ tên lịch sử migration.
+- Đổi alias: cập nhật `tsconfig` / `vitest` / eslint / docs cùng đợt.
+
+---
+
+## U20 — Logging prefs (ẩn Logs + bật/tắt loại)
+
+**Commits:** `84134b9` (kèm polish UI settings `9441930` ngoài scope kiến trúc)
+
+### 1. Kiến trúc trước → sau
+
+```
+TRƯỚC                              SAU
+Luôn ghi audit/request/jobs    →  settings.json.logging + core/log/loggingPrefs
+Tab Logs luôn hiện             →  showLogsTab; tab con theo types.*
+Gate nằm feature settings?     →  prefs đọc trong core/log (không core→features)
+```
+
+### 2. Logic trước → sau
+
+- **Trước:** Không tắt được ghi log / ẩn mode Logs; prefs UI khác (localStorage) không chặn server.
+- **Sau:** Server-side prefs; `isLogTypeEnabled` gate `appendLog` / job `logPath` / API đọc; Settings + App/LogsPanel consume.
+
+### 3. Ưu / nhược / tradeoff
+
+| | |
+|--|--|
+| **Ưu** | Tắt loại = không ghi + không hiện; đúng chỗ chặn ở server. |
+| **Nhược** | Schema logging parse ở `core/log` (subset) — settings feature reuse. |
+| **Tradeoff** | Duplicate schema mỏng ở core > vi phạm `core → features` khi gate ghi. |
+
+### 4. Quy tắc rút ra
+
+- Prefs **chặn I/O server** → `settings.json` (DashboardSettings), không AppSettings localStorage.
+- Cross-cut ghi log: gate cạnh `core/log`; feature settings chỉ merge/API/UI.
+
+---
+
 ## Sơ đồ kiến trúc tổng (sau tái cấu trúc)
 
 ```mermaid
@@ -626,6 +796,7 @@ flowchart TB
 6. Dùng `*Utils` / `*Lib` / `fileHelper` có sẵn; mở rộng helper trước khi copy logic.
 7. Business không import trực tiếp `node:fs` / `node:path`.
 8. Chạy `bun run typecheck` + `bun run build` nếu đụng FE+Node.
+9. PR: mô tả theo cây thư mục + phần chung core/peer — [`../implement/pr-docs-convention.md`](../implement/pr-docs-convention.md).
 
 Chi tiết quy ước đặt file & review: [`../implement/feature-organization-rule.md`](../implement/feature-organization-rule.md), [`../implement/review-checklist-rule.md`](../implement/review-checklist-rule.md).
 
@@ -636,6 +807,7 @@ Chi tiết quy ước đặt file & review: [`../implement/feature-organization-
 - Kiến trúc hiện hành: [`../architecture.md`](../architecture.md)
 - Tổ chức feature / business: [`../implement/feature-organization-rule.md`](../implement/feature-organization-rule.md)
 - Coding convention: [`../implement/coding-convention.md`](../implement/coding-convention.md)
+- PR / commit docs: [`../implement/pr-docs-convention.md`](../implement/pr-docs-convention.md)
 - Checklist review: [`../implement/review-checklist-rule.md`](../implement/review-checklist-rule.md)
 - Hub agent / bất biến: [`../../AGENTS.md`](../../AGENTS.md)
 - i18n: [`../i18n.md`](../i18n.md)
