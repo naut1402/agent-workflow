@@ -1,19 +1,14 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, onMounted, watch } from 'vue'
-import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../shared/lib/workflowSteps'
-import { useSortable } from '../../../shared/composables/useSortable'
-import { slugifySectionKey } from '../../../../shared/agentMarkdown.js'
-import {
-  fetchPipelineConfig,
-  fetchWorkflowStepTemplates,
-  fetchWorkflowStepTemplate,
-  saveWorkflowStepTemplate,
-} from '../../../api'
-import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
+import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../core/lib/workflowSteps'
+import { useSortable } from '../../../core/composables/useSortable'
+import { slugifySectionKey } from '../../../core/lib/stringUtils'
+import { fetchPipelineConfig } from '../../pipeline-editor/scripts/pipelineEditorApi'
+import { fetchWorkflowStepTemplates, fetchWorkflowStepTemplate, saveWorkflowStepTemplate } from '../scripts/WorkflowSectionEditorApi'
+import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
+const { t } = useI18nHelpers()
 const props = defineProps({
   modelValue: { type: String, default: '' },
 })

@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, onMounted, ref, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import ProjectBar from './ProjectBar.vue'
@@ -9,15 +7,16 @@ import TaskList from './TaskList.vue'
 import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
-import RailIcon from '../../../shared/ui/RailIcon.vue'
-import { patchTaskArchive } from '../../../api'
-import { useLocalToggle } from '../../../shared/composables/useLocalToggle'
-import { useAppSettings } from '../../../shared/composables/useAppSettings'
+import RailIcon from '../../../core/ui/RailIcon.vue'
+import { patchTaskArchive } from '../scripts/monitorApi'
+import { useLocalToggle } from '../../../core/composables/useLocalToggle'
+import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
-} from '../../../../shared/schemas/appSettings'
+} from '../../../core/configs/appSettings'
 
+const { t } = useI18nHelpers()
 const SUB_SIDEBAR_KEY = 'dev-dashboard-monitor-subsidebar-collapsed'
 
 const props = defineProps({

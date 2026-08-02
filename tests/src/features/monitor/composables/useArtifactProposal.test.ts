@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/api', () => ({
+vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchProposal: vi.fn(),
   approveJob: vi.fn(),
   discardJob: vi.fn(),
@@ -8,7 +8,7 @@ vi.mock('@/api', () => ({
   fetchJob: vi.fn(),
 }))
 
-import { fetchProposal, approveJob, discardJob, sendActionFeedback, fetchJob } from '@/api'
+import { fetchProposal, approveJob, discardJob, sendActionFeedback, fetchJob } from '../../../../../src/features/runner/scripts/runnerApi'
 import { useArtifactProposal } from '@/features/monitor/composables/useArtifactProposal'
 
 afterEach(() => vi.clearAllMocks())

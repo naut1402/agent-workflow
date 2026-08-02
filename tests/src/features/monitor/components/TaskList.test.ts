@@ -2,7 +2,7 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import TaskList from '@/features/monitor/components/TaskList.vue'
-import { STORAGE_KEY, useAppSettings } from '@/shared/composables/useAppSettings'
+import { STORAGE_KEY, useAppSettings } from '@/core/composables/useAppSettings'
 
 const tasks = [
   {

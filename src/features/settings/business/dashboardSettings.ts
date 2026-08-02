@@ -1,0 +1,127 @@
+// Global dashboard settings under ~/.dev-team-dashboard/settings.json.
+// Autoscan lives at settings.autoscan; legacy autoscan.json is still read once
+// for migration so existing installs keep working.
+
+import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import {
+  DEFAULT_DASHBOARD_SETTINGS,
+  parseDashboardSettings,
+  resolveAutoscanFromDashboard,
+  resolveGithubTokensFromDashboard,
+  resolveLoggingFromDashboard,
+  type DashboardSettings,
+} from '../schemas/dashboardSettings.js'
+import {
+  DEFAULT_AUTOSCAN_CONFIG,
+  parseAutoscanConfig,
+  type AutoscanConfig,
+} from '../schemas/autoscan.js'
+import {
+  parseGithubTokensConfig,
+  type GithubTokensConfig,
+} from '../schemas/githubTokens.js'
+import {
+  invalidateLoggingPrefsCache,
+  parseLoggingConfig,
+  type LoggingConfig,
+} from '../../../core/log/loggingPrefs.js'
+import { registryHome } from '../../../core/registry.js'
+
+export function dashboardSettingsFile(): string {
+  return joinPath(registryHome(), 'settings.json')
+}
+
+/** @deprecated Prefer settings.json — kept for one-time migration read. */
+export function autoscanFile(): string {
+  return joinPath(registryHome(), 'autoscan.json')
+}
+
+function readJsonFile(file: string): unknown | null {
+  try {
+    return JSON.parse(readTextFileSync(file))
+  } catch {
+    return null
+  }
+}
+
+export function loadDashboardSettings(): DashboardSettings {
+  const primary = readJsonFile(dashboardSettingsFile())
+  if (primary != null) return parseDashboardSettings(primary)
+
+  // Migrate legacy autoscan.json → in-memory settings shape (persisted on next save).
+  const legacy = readJsonFile(autoscanFile())
+  if (legacy != null) {
+    return parseDashboardSettings({
+      autoscan: parseAutoscanConfig(legacy),
+    })
+  }
+
+  return {
+    autoscan: { ...DEFAULT_AUTOSCAN_CONFIG, whitelist: [] },
+    githubTokens: { repos: [] },
+    logging: parseLoggingConfig(undefined),
+  }
+}
+
+export function saveDashboardSettings(settings: DashboardSettings): DashboardSettings {
+  const home = registryHome()
+  mkdirSync(home, { recursive: true })
+  const normalised = parseDashboardSettings(settings)
+  const file = dashboardSettingsFile()
+  const tmp = `${file}.tmp`
+  writeTextFileSync(tmp, JSON.stringify(normalised, null, 2))
+  renameSync(tmp, file)
+  invalidateLoggingPrefsCache()
+  return normalised
+}
+
+export function loadAutoscanConfig(): AutoscanConfig {
+  return resolveAutoscanFromDashboard(loadDashboardSettings())
+}
+
+export function saveAutoscanConfig(config: AutoscanConfig): AutoscanConfig {
+  const current = loadDashboardSettings()
+  const normalised: AutoscanConfig = {
+    enabled: Boolean(config.enabled),
+    whitelist: Array.isArray(config.whitelist)
+      ? [...new Set(config.whitelist.map((p) => String(p).trim()).filter(Boolean))]
+      : [],
+    intervalMs: config.intervalMs ?? DEFAULT_AUTOSCAN_CONFIG.intervalMs,
+  }
+  const saved = saveDashboardSettings({
+    ...current,
+    autoscan: normalised,
+  })
+  return resolveAutoscanFromDashboard(saved)
+}
+
+export function loadGithubTokensConfig(): GithubTokensConfig {
+  return resolveGithubTokensFromDashboard(loadDashboardSettings())
+}
+
+export function saveGithubTokensConfig(config: GithubTokensConfig): GithubTokensConfig {
+  const current = loadDashboardSettings()
+  const normalised = parseGithubTokensConfig(config)
+  const saved = saveDashboardSettings({
+    ...current,
+    githubTokens: normalised,
+  })
+  return resolveGithubTokensFromDashboard(saved)
+}
+
+export function loadLoggingConfig(): LoggingConfig {
+  return resolveLoggingFromDashboard(loadDashboardSettings())
+}
+
+export function saveLoggingConfig(config: LoggingConfig): LoggingConfig {
+  const current = loadDashboardSettings()
+  const normalised = parseLoggingConfig(config)
+  const saved = saveDashboardSettings({
+    ...current,
+    logging: normalised,
+  })
+  return resolveLoggingFromDashboard(saved)
+}
+
+// Re-export default shape for callers that only need the empty template.
+export { DEFAULT_DASHBOARD_SETTINGS }

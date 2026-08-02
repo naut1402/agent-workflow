@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { deriveTimeline, type TimelineEvent } from '../composables/useTaskTimeline'
 
-const { t } = useI18n()
+const { t } = useI18nHelpers()
 
 const props = defineProps<{ task: any }>()
 

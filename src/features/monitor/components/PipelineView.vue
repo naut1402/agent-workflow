@@ -1,23 +1,15 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import {
-  phasesFromPipeline,
-  phaseStatus,
-  fetchFlowProfile,
-  saveFlowProfile,
-  patchTaskState,
-  runPipelineStep,
-  fetchJob,
-  fetchJobs,
-} from '../../../api'
+import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep } from '../scripts/PipelineViewApi'
+import { fetchJob, fetchJobs } from '../../runner/scripts/runnerApi'
+import { phasesFromPipeline, phaseStatus } from '../../../core/lib/phase'
 import PipelineNode from './PipelineNode.vue'
 import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
 
+const { t } = useI18nHelpers()
 const props = defineProps({
   task: { type: Object, required: true },
   projectId: { type: [String, null], default: null },

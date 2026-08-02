@@ -2,9 +2,9 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import ProjectBar from '@/features/monitor/components/ProjectBar.vue'
-import { removeProject } from '@/api'
+import { removeProject } from '../../../../../src/features/settings/scripts/settingsApi'
 
-vi.mock('@/api', () => ({
+vi.mock('@/features/settings/scripts/settingsApi', () => ({
   addProject: vi.fn(async () => ({ project: { id: 'new-1', name: 'New' } })),
   removeProject: vi.fn(async () => ({ removed: true })),
 }))

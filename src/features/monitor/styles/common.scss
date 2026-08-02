@@ -1,0 +1,45 @@
+/* Monitor — shared helpers (mermaid zoom / fullscreen). */
+/* ── Mermaid zoom/fullscreen controls (mục 6) ────────────────────────────── */
+.mermaid-wrap {
+  position: relative;
+  overflow: auto;
+}
+.mermaid-wrap:fullscreen {
+  background: var(--panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.mermaid-toolbar {
+  position: sticky;
+  top: 4px;
+  float: right;
+  display: flex;
+  gap: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px;
+  z-index: 1;
+}
+.mermaid-toolbar button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  border-radius: 4px;
+  width: 26px;
+  height: 24px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.mermaid-toolbar button:hover { color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }

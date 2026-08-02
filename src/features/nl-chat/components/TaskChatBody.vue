@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTaskChat } from '../composables/useTaskChat'
-import { parseMarkdown } from '../../../shared/markdown'
+import { parseMarkdown } from '../../../core/lib/markdownLib'
 
 // Body of the floating chat window when it is scoped to a pipeline step: the
 // runner's own conversation history (CLI session transcript) plus an input that

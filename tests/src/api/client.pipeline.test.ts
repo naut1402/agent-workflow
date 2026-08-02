@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  deletePipelineProfile,
-  fetchPipelineProfile,
-  fetchPipelineProfiles,
-  savePipelineProfile,
-  writePipelineConfig,
-} from '../../../src/api/client'
+import { deletePipelineProfile, fetchPipelineProfile, fetchPipelineProfiles, savePipelineProfile } from '../../../src/features/pipeline-editor/scripts/ProfileManagerApi'
+import { writePipelineConfig } from '../../../src/features/pipeline-editor/scripts/pipelineEditorApi'
 
 describe('pipeline API client project scope', () => {
   afterEach(() => {

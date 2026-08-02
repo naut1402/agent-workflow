@@ -1,7 +1,7 @@
 import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it } from 'vitest'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
-import { STORAGE_KEY, useAppSettings } from '@/shared/composables/useAppSettings'
+import { STORAGE_KEY, useAppSettings } from '@/core/composables/useAppSettings'
 
 const SUB_SIDEBAR_KEY = 'dev-dashboard-monitor-subsidebar-collapsed'
 

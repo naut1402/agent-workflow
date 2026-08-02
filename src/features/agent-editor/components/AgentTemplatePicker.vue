@@ -1,19 +1,11 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
-import {
-  fetchAgentTemplates,
-  fetchAgentTemplate,
-  fetchCatalog,
-  fetchCatalogAgent,
-  importAgentTemplateUrl,
-  uploadAgentTemplate,
-  deleteAgentTemplate,
-} from '../../../api'
-import { draftFromCatalogAgent } from '../../../../shared/agentMarkdown.js'
+import { fetchAgentTemplates, fetchAgentTemplate, importAgentTemplateUrl, uploadAgentTemplate, deleteAgentTemplate } from '../scripts/AgentTemplatePickerApi'
+import { fetchCatalog, fetchCatalogAgent } from '../../pipeline-editor/scripts/pipelineEditorApi'
+import { draftFromCatalogAgent } from '../business/agentMarkdown.js'
 
+const { t } = useI18nHelpers()
 const emit = defineEmits(['apply-draft', 'close'])
 
 const templates = ref([])

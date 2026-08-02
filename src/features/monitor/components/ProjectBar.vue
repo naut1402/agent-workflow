@@ -3,12 +3,12 @@
 // (whose tasks the monitor view polls) and add/remove projects in the shared
 // registry. Removing a project only detaches it from the dashboard — it never
 // touches files on disk.
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { addProject, removeProject } from '../../../api'
-import FolderPickerDialog from '../../../shared/ui/FolderPickerDialog.vue'
+import { addProject, removeProject } from '../../settings/scripts/settingsApi'
+import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 
-const { t } = useI18n()
+const { t } = useI18nHelpers()
 
 const props = defineProps({
   projects: { type: Array as () => any[], default: () => [] },

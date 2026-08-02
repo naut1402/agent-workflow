@@ -6,8 +6,10 @@ import ArtifactPanel from '@/features/monitor/components/ArtifactPanel.vue'
 import {
   STORAGE_KEY,
   useAppSettings,
-} from '@/shared/composables/useAppSettings'
-import { fetchArtifact, fetchArtifactActions, fetchRunners, runArtifactAction } from '@/api'
+} from '@/core/composables/useAppSettings'
+import { navigateToModeKey } from '@/core/shell/keys'
+import { fetchArtifact, fetchArtifactActions, runArtifactAction } from '../../../../../src/features/monitor/scripts/ArtifactPanelApi'
+import { fetchRunners } from '../../../../../src/features/runner/scripts/runnerApi'
 
 const MD_TWO_H2 = `# Title
 
@@ -56,19 +58,22 @@ const MarkdownTextEditorStub = defineComponent({
   },
 })
 
-vi.mock('@/api', () => ({
+vi.mock('@/features/monitor/scripts/ArtifactPanelApi', () => ({
   fetchArtifact: vi.fn(async () => ({ content: MD_TWO_H2, mtime: 1 })),
   fetchArtifactActions: vi.fn(async () => ({ actions: [], menus: [] })),
-  fetchRunners: vi.fn(async () => ({ runners: [], defaultRunnerId: null })),
   runArtifactAction: vi.fn(async () => ({ job: { id: 'job1', status: 'succeeded' } })),
-  fetchJob: vi.fn(async () => ({ job: { id: 'job1', status: 'succeeded' } })),
   saveArtifact: vi.fn(async (_taskId: string, _name: string, content: string) => ({
     content,
     mtime: 2,
   })),
 }))
 
-vi.mock('@/shared/markdown', () => ({
+vi.mock('@/features/runner/scripts/runnerApi', () => ({
+  fetchRunners: vi.fn(async () => ({ runners: [], defaultRunnerId: null })),
+  fetchJob: vi.fn(async () => ({ job: { id: 'job1', status: 'succeeded' } })),
+}))
+
+vi.mock('@/core/lib/markdownLib', () => ({
   parseMarkdown: (s: string) => `<p>${s}</p>`,
   renderMermaid: vi.fn(async () => {}),
 }))
@@ -315,7 +320,7 @@ describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
     const w = mount(ArtifactPanel, {
       props: { task, openArtifact: { taskId: 'DEMO-1', name: 'design.md' }, projectId: null },
       global: {
-        provide: { navigateToMode },
+        provide: { [navigateToModeKey as symbol]: navigateToMode },
         stubs: { MarkdownTextEditor: MarkdownTextEditorStub },
       },
     })

@@ -1,4 +1,4 @@
-// Commitlint — khớp AGENTS.md §6.6.
+// Commitlint — khớp docs/implement/pr-docs-convention.md §6.
 // Format: `[<TASK>]? <type>(<scope>)?: <subject>`
 // Type: feat | fix | chore | docs | refactor | test
 // Breaking: `type!:` / `type(scope)!:` hoặc footer `BREAKING CHANGE:`
@@ -29,7 +29,7 @@ const config = {
     'footer-leading-blank': [2, 'always'],
   },
   helpUrl:
-    'https://github.com/naut1402/agent-workflow/blob/dev/1.0.0/main/AGENTS.md#66-commit-message-pr-title--issue-title',
+    'https://github.com/naut1402/agent-workflow/blob/dev/1.0.0/main/docs/implement/pr-docs-convention.md#6-commit-message-pr-title--issue-title',
 }
 
 export default config

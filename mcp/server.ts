@@ -3,7 +3,7 @@
 // registry. Spawned by Claude Code (see plugins/dev-agent-teams/.mcp.json).
 //
 // It exposes CRUD over the SAME projects.json the REST/standalone server uses
-// (via the shared server/registry.ts) — so projects added from Claude Code and
+// (via the shared core/registry.ts) — so projects added from Claude Code and
 // from the dashboard UI stay consistent. The MCP server operates directly on
 // the registry file and does NOT require the HTTP server to be running.
 //
@@ -18,8 +18,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { APP_VERSION } from '../shared/appVersion.js'
-import { list, get, add, remove } from '../server/registry.js'
+import { APP_VERSION } from '../src/core/configs/appVersion.js'
+import { list, get, add, remove } from '../src/core/registry.js'
 
 // Return `any` to stay decoupled from the SDK's literal content-type unions.
 export function ok(payload: unknown): any {

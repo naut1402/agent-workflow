@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
-import { i18n } from '../../../shared/i18n'
-import { buildAndRunAgent, fetchJob, fetchRunners, generateAgentDraft } from '../../../api'
+import { t } from '../../../plugins/i18n'
+import { buildAndRunAgent, generateAgentDraft } from '../scripts/agentEditorApi'
+import { fetchJob, fetchRunners } from '../../runner/scripts/runnerApi'
 
 // Drives the "Build agent từ NL" wizard end to end: generate a draft from a
 // natural-language description, let the user tweak it, then persist + smoke-run
@@ -45,7 +46,7 @@ export interface UseAgentBuildOptions {
   maxPollErrors?: number
 }
 
-const DEFAULT_SMOKE_PROMPT = () => i18n.global.t('agentEditor.build.smokePrompt')
+const DEFAULT_SMOKE_PROMPT = () => t('agentEditor.build.smokePrompt')
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -56,10 +57,10 @@ function isTerminal(status?: string): boolean {
 }
 
 function failureMessage(job: JobLike): string {
-  if (job.status === 'cancelled') return i18n.global.t('agentEditor.build.jobCancelled')
+  if (job.status === 'cancelled') return t('agentEditor.build.jobCancelled')
   return job.error
-    ? i18n.global.t('agentEditor.build.jobFailedWithError', { error: job.error })
-    : i18n.global.t('agentEditor.build.jobFailed')
+    ? t('agentEditor.build.jobFailedWithError', { error: job.error })
+    : t('agentEditor.build.jobFailed')
 }
 
 export function useAgentBuild(opts: UseAgentBuildOptions) {
@@ -103,14 +104,14 @@ export function useAgentBuild(opts: UseAgentBuildOptions) {
         selectedRunnerId.value = preferred?.id ?? null
       }
     } catch (e: any) {
-      error.value = i18n.global.t('agentEditor.build.loadRunnersFailed', { message: String(e?.message || e) })
+      error.value = t('agentEditor.build.loadRunnersFailed', { message: String(e?.message || e) })
     }
   }
 
   async function generate(): Promise<void> {
     if (generating.value) return
     if (!description.value.trim()) {
-      error.value = i18n.global.t('agentEditor.build.describeRequired')
+      error.value = t('agentEditor.build.describeRequired')
       return
     }
     generating.value = true
@@ -120,7 +121,7 @@ export function useAgentBuild(opts: UseAgentBuildOptions) {
       draft.value = { ...(data?.draft ?? {}) } as AgentDraft
       step.value = 'preview'
     } catch (e: any) {
-      error.value = i18n.global.t('agentEditor.build.draftFailed', { message: String(e?.message || e) })
+      error.value = t('agentEditor.build.draftFailed', { message: String(e?.message || e) })
     } finally {
       generating.value = false
     }
@@ -150,14 +151,14 @@ export function useAgentBuild(opts: UseAgentBuildOptions) {
         // Tolerate transient network/5xx blips instead of failing the whole run.
         consecutiveErrors += 1
         if (consecutiveErrors > maxPollErrors) throw e
-        if (Date.now() >= deadline) return { status: 'failed', error: i18n.global.t('agentEditor.build.jobTimeout') }
+        if (Date.now() >= deadline) return { status: 'failed', error: t('agentEditor.build.jobTimeout') }
         await sleep(pollMs)
         continue
       }
-      if (!job) throw new Error(i18n.global.t('agentEditor.build.jobMissing'))
+      if (!job) throw new Error(t('agentEditor.build.jobMissing'))
       jobStatus.value = job.status ?? null
       if (isTerminal(job.status)) return job
-      if (Date.now() >= deadline) return { ...job, status: 'failed', error: i18n.global.t('agentEditor.build.jobTimeout') }
+      if (Date.now() >= deadline) return { ...job, status: 'failed', error: t('agentEditor.build.jobTimeout') }
       await sleep(pollMs)
     }
   }
@@ -165,12 +166,12 @@ export function useAgentBuild(opts: UseAgentBuildOptions) {
   async function buildAndRun(): Promise<void> {
     if (running.value) return
     if (!draft.value || !draft.value.name?.trim()) {
-      error.value = i18n.global.t('agentEditor.build.draftNameRequired')
+      error.value = t('agentEditor.build.draftNameRequired')
       return
     }
     if (!hasUsableRunner.value) {
       error.value =
-        i18n.global.t('agentEditor.build.noRunner')
+        t('agentEditor.build.noRunner')
       return
     }
     running.value = true
@@ -190,7 +191,7 @@ export function useAgentBuild(opts: UseAgentBuildOptions) {
       savedName.value = res.name
       const id: string | undefined = res.job?.id
       jobId.value = id ?? null
-      if (!id) throw new Error(i18n.global.t('agentEditor.build.noJobId'))
+      if (!id) throw new Error(t('agentEditor.build.noJobId'))
       const final = await pollJob(id)
       jobStatus.value = final.status ?? null
       jobLogPath.value = final.logPath ?? null

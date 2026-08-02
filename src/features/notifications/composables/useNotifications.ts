@@ -1,13 +1,13 @@
 import { type Ref, computed, ref, watch } from 'vue'
-import { i18n } from '../../../shared/i18n'
-import { useAppSettings } from '../../../shared/composables/useAppSettings'
+import { t } from '../../../plugins/i18n'
+import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {
   resolveNotificationsEnabled,
   resolveNotifyBrowserEnabled,
   resolveNotifyHitlPending,
   resolveNotifyQaReady,
   resolveNotifySoundEnabled,
-} from '../../../../shared/schemas/appSettings'
+} from '../../../core/configs/appSettings'
 import type { NotificationEvent, NotificationKind } from '../lib/notificationTypes'
 import { sendBrowserNotification } from '../lib/browserNotification'
 import { playNotificationSound } from '../lib/sound'
@@ -33,10 +33,6 @@ function saveReadIds(ids: Set<string>) {
   }
 }
 
-// Plain (non-component) composable → resolve strings via the app i18n
-// singleton (see useQuickActionCatalog.ts) rather than useI18n(), since this
-// is also called from unit tests without a mounted component/i18n plugin.
-const t = i18n.global.t
 
 /**
  * Derives HITL-pending / QA-ready notifications from the polled `tasks` list

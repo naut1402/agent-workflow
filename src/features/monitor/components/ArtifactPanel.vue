@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, onUpdated, inject } from 'vue'
 import { useFullscreen } from '@vueuse/core'
-import { parseMarkdown, renderMermaid } from '../../../shared/markdown'
-import { fetchArtifact, saveArtifact, fetchArtifactActions, fetchRunners } from '../../../api'
+import { parseMarkdown, renderMermaid } from '../../../core/lib/markdownLib'
+import { fetchArtifact, saveArtifact, fetchArtifactActions } from '../scripts/ArtifactPanelApi'
+import { fetchRunners } from '../../runner/scripts/runnerApi'
 import {
   bindFocusableEditRef,
   splitMarkdownSections,
@@ -16,13 +15,15 @@ import { useArtifactSelectionToolbar } from '../composables/useArtifactSelection
 import ArtifactProposalReview from './ArtifactProposalReview.vue'
 import QuickActionMenuDropdown from '../../quick-action/components/QuickActionMenuDropdown.vue'
 import { splitActionsByMenu } from '../../quick-action/lib/menuTree'
-import type { ArtifactMenuNode } from '../../../../shared/schemas/artifactAction'
-import { useAppSettings } from '../../../shared/composables/useAppSettings'
-import { attachMermaidControls } from '../../../shared/composables/useMermaidControls'
-import { resolveArtifactViewMode } from '../../../../shared/schemas/appSettings'
+import type { ArtifactMenuNode } from '../schemas/artifactAction'
+import { useAppSettings } from '../../../core/composables/useAppSettings'
+import { attachMermaidControls } from '../../../core/composables/useMermaidControls'
+import { navigateToModeKey } from '../../../core/shell/keys'
+import { resolveArtifactViewMode } from '../../../core/configs/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
-import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
+import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
+const { t } = useI18nHelpers()
 const props = defineProps({
   task: { type: Object, required: true },
   openArtifact: { type: Object, default: null },
@@ -33,7 +34,7 @@ const { settings } = useAppSettings()
 
 // Provided by App.vue — lets the runner gate below send the user to Runner
 // mode without bubbling a custom event through Monitor/App.
-const navigateToMode = inject<((mode: string) => void) | undefined>('navigateToMode', undefined)
+const navigateToMode = inject(navigateToModeKey, undefined)
 
 const content = ref('')
 const loadedKey = ref<string | null>(null)

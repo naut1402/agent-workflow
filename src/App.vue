@@ -1,16 +1,18 @@
 <script setup lang="ts">
+import { useI18nHelpers } from './core/composables/useI18nHelpers'
 import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { onClickOutside } from '@vueuse/core'
-import { fetchProjects, fetchAutoscanConfig, runAutoscan } from './api'
-import { useLocalToggle } from './shared/composables/useLocalToggle'
-import { useAppSettings } from './shared/composables/useAppSettings'
+import { fetchProjects } from './features/settings/scripts/settingsApi'
+import { fetchAutoscanConfig, runAutoscan, fetchLoggingConfig } from './features/settings/scripts/SettingsDialogApi'
+import { useLocalToggle } from './core/composables/useLocalToggle'
+import { useAppSettings } from './core/composables/useAppSettings'
+import { navigateToModeKey, reloadProjectsKey } from './core/shell/keys'
 import {
   resolveCollapseAppSidebarOnOutside,
   resolveNotifyShowFloating,
   resolveNotifyShowSidebar,
-} from '../shared/schemas/appSettings'
-import { resolveAutoscanIntervalMs } from '../shared/schemas/autoscan'
+} from './core/configs/appSettings'
+import { resolveAutoscanIntervalMs } from './features/settings/schemas/autoscan'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
 import { useNotifications } from './features/notifications/composables/useNotifications'
 import FloatingNotificationIcon from './features/notifications/components/FloatingNotificationIcon.vue'
@@ -25,17 +27,18 @@ import QuickActionPanel from './features/quick-action/components/QuickActionPane
 import SettingsDialog from './features/settings/components/SettingsDialog.vue'
 import CreateTaskDialog from './features/monitor/components/CreateTaskDialog.vue'
 import FloatingChatButton from './features/nl-chat/components/FloatingChatButton.vue'
-import RailIcon from './shared/ui/RailIcon.vue'
-import { APP_VERSION } from './shared/lib/appVersion'
+import RailIcon from './core/ui/RailIcon.vue'
+import { APP_VERSION } from './core/lib/appVersion'
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
 const PROJECT_KEY = 'dev-dashboard-selected-project'
 
-const { t } = useI18n()
+const { t } = useI18nHelpers()
 
 // ── Mode ─────────────────────────────────────────────────────────────────────
 const mode = ref('monitor')
 const settingsOpen = ref(false)
+const showLogsTab = ref(true)
 
 const editorScope = ref('global')
 const editorTaskId = ref('')
@@ -56,7 +59,7 @@ onClickOutside(
 // Central mode switch, so any nested wizard/panel (Agent Editor's Build NL
 // gate, ArtifactPanel's QuickAction gate) can send the user to Runner mode
 // without bubbling a custom event through every intermediate component.
-provide('navigateToMode', (m: string) => {
+provide(navigateToModeKey, (m: string) => {
   mode.value = m
 })
 
@@ -140,7 +143,7 @@ function onProjectsChanged() {
 }
 
 /** Exposed so SettingsDialog can refresh the sidebar after an autoscan run. */
-provide('reloadProjects', loadProjects)
+provide(reloadProjectsKey, loadProjects)
 
 let autoscanTimer: ReturnType<typeof setInterval> | null = null
 
@@ -189,6 +192,27 @@ function onProjectsChangedEvent() {
   void loadProjects()
 }
 
+async function loadLoggingPrefs() {
+  try {
+    const data = await fetchLoggingConfig()
+    const cfg = data.config || {}
+    showLogsTab.value = cfg.showLogsTab !== false
+    if (!showLogsTab.value && mode.value === 'logs') mode.value = 'monitor'
+  } catch {
+    showLogsTab.value = true
+  }
+}
+
+function onLoggingChanged(ev: Event) {
+  const detail = (ev as CustomEvent).detail
+  if (detail && typeof detail.showLogsTab === 'boolean') {
+    showLogsTab.value = detail.showLogsTab
+  } else {
+    void loadLoggingPrefs()
+  }
+  if (!showLogsTab.value && mode.value === 'logs') mode.value = 'monitor'
+}
+
 watch(sidebarCollapsed, (v) => {
   try {
     localStorage.setItem(SIDEBAR_KEY, v ? '1' : '0')
@@ -228,9 +252,11 @@ watch(mode, async (m) => {
 onMounted(async () => {
   loadSidebarPref()
   await loadProjects()
+  void loadLoggingPrefs()
   start()
   window.addEventListener('dev-dashboard:autoscan-changed', onAutoscanChanged)
   window.addEventListener('dev-dashboard:projects-changed', onProjectsChangedEvent)
+  window.addEventListener('dev-dashboard:logging-changed', onLoggingChanged)
   void startAutoscanLoop()
 })
 onUnmounted(() => {
@@ -238,6 +264,7 @@ onUnmounted(() => {
   stopAutoscanLoop()
   window.removeEventListener('dev-dashboard:autoscan-changed', onAutoscanChanged)
   window.removeEventListener('dev-dashboard:projects-changed', onProjectsChangedEvent)
+  window.removeEventListener('dev-dashboard:logging-changed', onLoggingChanged)
 })
 </script>
 
@@ -320,6 +347,7 @@ onUnmounted(() => {
           <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.runner') }}</span>
         </button>
         <button
+          v-if="showLogsTab"
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'logs' }"
           :title="t('common.modes.logs')"

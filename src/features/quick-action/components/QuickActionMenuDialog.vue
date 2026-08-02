@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { onBeforeUnmount, onMounted, ref, toRaw } from 'vue'
-import { useI18n } from 'vue-i18n'
 import type { ArtifactMenuNode } from '../lib/menuTypes'
 
 const props = defineProps<{
@@ -14,7 +14,7 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const { t } = useI18n()
+const { t } = useI18nHelpers()
 /** Deep-clone menu tree. `toRaw` only unwraps the top proxy; nested nodes stay
  * reactive and break `structuredClone` — use JSON round-trip so reopen works. */
 function cloneMenus(menus: ArtifactMenuNode[]): ArtifactMenuNode[] {

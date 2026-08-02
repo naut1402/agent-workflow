@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, inject, onMounted } from 'vue'
 import { useAgentBuild } from '../composables/useAgentBuild'
+import { navigateToModeKey } from '../../../core/shell/keys'
 
 // Merged NL build wizard (Correction A / F0005): describe → preview → optional
 // "Lưu & chạy thử" smoke-run, replacing both the draft-only AS-IS wizard here
@@ -11,6 +10,7 @@ import { useAgentBuild } from '../composables/useAgentBuild'
 // entry point). Agent Editor has no task context, so the smoke job always
 // runs in the `custom-agents` sandbox workspace.
 
+const { t } = useI18nHelpers()
 const props = defineProps<{
   projectId?: string | null
 }>()
@@ -23,7 +23,7 @@ const emit = defineEmits<{
 // Provided by App.vue so any nested wizard/panel can switch the shell to the
 // Runner mode without bubbling a custom event through every intermediate
 // component.
-const navigateToMode = inject<((mode: string) => void) | undefined>('navigateToMode', undefined)
+const navigateToMode = inject(navigateToModeKey, undefined)
 
 const build = useAgentBuild({
   getProjectId: () => props.projectId ?? null,

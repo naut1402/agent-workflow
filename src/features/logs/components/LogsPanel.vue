@@ -1,11 +1,22 @@
 <script setup lang="ts">
-import { ref, onUnmounted, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { fetchLogs, fetchJobs, fetchJobLog } from '../../../api'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { fetchLogs, fetchJobLog } from '../scripts/LogsPanelApi'
+import { fetchJobs } from '../../runner/scripts/runnerApi'
+import { fetchLoggingConfig } from '../../settings/scripts/SettingsDialogApi'
 
-const { t } = useI18n()
+const { t } = useI18nHelpers()
 
 type Tab = 'audit' | 'request' | 'jobs'
+
+const enabledTypes = ref({ audit: true, request: true, jobs: true })
+const availableTabs = computed(() => {
+  const tabs: Tab[] = []
+  if (enabledTypes.value.audit) tabs.push('audit')
+  if (enabledTypes.value.request) tabs.push('request')
+  if (enabledTypes.value.jobs) tabs.push('jobs')
+  return tabs
+})
 
 const tab = ref<Tab>('audit')
 const entries = ref<any[]>([])
@@ -25,6 +36,39 @@ function stopTail() {
     tailTimer = null
   }
   tailing.value = false
+}
+
+async function loadLoggingTypes() {
+  try {
+    const data = await fetchLoggingConfig()
+    const types = data.config?.types || {}
+    enabledTypes.value = {
+      audit: types.audit !== false,
+      request: types.request !== false,
+      jobs: types.jobs !== false,
+    }
+  } catch {
+    enabledTypes.value = { audit: true, request: true, jobs: true }
+  }
+  const tabs = availableTabs.value
+  if (!tabs.includes(tab.value)) {
+    tab.value = tabs[0] || 'audit'
+  }
+}
+
+function onLoggingChanged(ev: Event) {
+  const detail = (ev as CustomEvent).detail
+  if (detail?.types) {
+    enabledTypes.value = {
+      audit: detail.types.audit !== false,
+      request: detail.types.request !== false,
+      jobs: detail.types.jobs !== false,
+    }
+    const tabs = availableTabs.value
+    if (!tabs.includes(tab.value)) tab.value = tabs[0] || 'audit'
+  } else {
+    void loadLoggingTypes()
+  }
 }
 
 async function loadLogs(type: 'audit' | 'request') {
@@ -99,12 +143,20 @@ watch(
   (t) => {
     if (t === 'audit') loadLogs('audit')
     else if (t === 'request') loadLogs('request')
-    else loadJobs()
+    else if (t === 'jobs') loadJobs()
   },
   { immediate: true },
 )
 
-onUnmounted(stopTail)
+onMounted(() => {
+  void loadLoggingTypes()
+  window.addEventListener('dev-dashboard:logging-changed', onLoggingChanged)
+})
+
+onUnmounted(() => {
+  stopTail()
+  window.removeEventListener('dev-dashboard:logging-changed', onLoggingChanged)
+})
 </script>
 
 <template>
@@ -114,16 +166,38 @@ onUnmounted(stopTail)
       <p class="muted">{{ t('logs.subtitle') }}</p>
     </header>
 
-    <nav class="logs-tabs">
-      <button type="button" :class="{ active: tab === 'audit' }" @click="selectTab('audit')">{{ t('logs.tabs.audit') }}</button>
-      <button type="button" :class="{ active: tab === 'request' }" @click="selectTab('request')">{{ t('logs.tabs.request') }}</button>
-      <button type="button" :class="{ active: tab === 'jobs' }" @click="selectTab('jobs')">{{ t('logs.tabs.jobs') }}</button>
+    <nav v-if="availableTabs.length" class="logs-tabs">
+      <button
+        v-if="enabledTypes.audit"
+        type="button"
+        :class="{ active: tab === 'audit' }"
+        @click="selectTab('audit')"
+      >
+        {{ t('logs.tabs.audit') }}
+      </button>
+      <button
+        v-if="enabledTypes.request"
+        type="button"
+        :class="{ active: tab === 'request' }"
+        @click="selectTab('request')"
+      >
+        {{ t('logs.tabs.request') }}
+      </button>
+      <button
+        v-if="enabledTypes.jobs"
+        type="button"
+        :class="{ active: tab === 'jobs' }"
+        @click="selectTab('jobs')"
+      >
+        {{ t('logs.tabs.jobs') }}
+      </button>
     </nav>
+    <p v-else class="muted">{{ t('logs.empty.allDisabled') }}</p>
 
     <div v-if="error" class="err-banner">{{ error }}</div>
 
     <!-- Audit -->
-    <table v-if="tab === 'audit'" class="logs-table">
+    <table v-if="tab === 'audit' && enabledTypes.audit" class="logs-table">
       <thead>
         <tr><th>{{ t('logs.columns.time') }}</th><th>{{ t('logs.columns.op') }}</th><th>{{ t('logs.columns.entity') }}</th><th>{{ t('logs.columns.identifier') }}</th><th>{{ t('logs.columns.project') }}</th></tr>
       </thead>
@@ -140,7 +214,7 @@ onUnmounted(stopTail)
     </table>
 
     <!-- Request -->
-    <table v-else-if="tab === 'request'" class="logs-table">
+    <table v-else-if="tab === 'request' && enabledTypes.request" class="logs-table">
       <thead>
         <tr><th>{{ t('logs.columns.time') }}</th><th>{{ t('logs.columns.method') }}</th><th>{{ t('logs.columns.path') }}</th><th>{{ t('logs.columns.status') }}</th><th>{{ t('logs.columns.ms') }}</th><th>{{ t('logs.columns.project') }}</th></tr>
       </thead>
@@ -158,7 +232,7 @@ onUnmounted(stopTail)
     </table>
 
     <!-- Jobs -->
-    <div v-else class="jobs-layout">
+    <div v-else-if="tab === 'jobs' && enabledTypes.jobs" class="jobs-layout">
       <aside class="jobs-list">
         <ul>
           <li

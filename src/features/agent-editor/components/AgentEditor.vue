@@ -1,21 +1,14 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
-import {
-  fetchCustomAgents,
-  fetchCustomAgent,
-  saveCustomAgent,
-  deleteCustomAgent,
-  exportCustomAgent,
-  fetchCatalog,
-} from '../../../api'
-import { emptyDraft } from '../../../../shared/agentMarkdown.js'
+import { fetchCustomAgents, fetchCustomAgent, saveCustomAgent, deleteCustomAgent, exportCustomAgent } from '../scripts/agentEditorApi'
+import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
+import { emptyDraft } from '../business/agentMarkdown.js'
 import AgentSectionEditor from './AgentSectionEditor.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'
 import AgentNlWizard from './AgentNlWizard.vue'
 
+const { t } = useI18nHelpers()
 const agents = ref([])
 const catalog = ref({ skills: [], agents: [] })
 const draft = ref(emptyDraft())

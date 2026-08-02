@@ -1,16 +1,16 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, markRaw, onMounted, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { fetchCatalog, fetchPipelineConfig, fetchRules, writePipelineConfig } from '../../../api'
-import { useLocalToggle } from '../../../shared/composables/useLocalToggle'
+import { fetchCatalog, fetchPipelineConfig, fetchRules, writePipelineConfig } from '../scripts/pipelineEditorApi'
+import { useLocalToggle } from '../../../core/composables/useLocalToggle'
 import PipelineEditorNode from './PipelineEditorNode.vue'
 import CatalogPanel from './CatalogPanel.vue'
 import RulesPanel from './RulesPanel.vue'
 import StepConfigPanel from './StepConfigPanel.vue'
 import ProfileManager from './ProfileManager.vue'
-import RailIcon from '../../../shared/ui/RailIcon.vue'
+import RailIcon from '../../../core/ui/RailIcon.vue'
 import {
   extractPipelineMeta,
   extractStepPreservedMap,
@@ -20,7 +20,7 @@ import {
   type StepPreservedMap,
 } from '../lib/pipelineRoundTrip'
 
-const { t } = useI18n()
+const { t } = useI18nHelpers()
 
 const props = defineProps({
   scope: { type: String, default: 'global' },

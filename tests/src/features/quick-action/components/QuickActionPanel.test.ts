@@ -3,7 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n } from '../../../helpers/i18n'
 import QuickActionPanel from '@/features/quick-action/components/QuickActionPanel.vue'
 
-vi.mock('@/api', () => ({
+vi.mock('@/features/quick-action/scripts/QuickActionPanelApi', () => ({
   fetchArtifactActionsCatalog: vi.fn(async () => ({
     version: 1,
     menus: [],
@@ -21,11 +21,17 @@ vi.mock('@/api', () => ({
     ],
   })),
   saveArtifactActionsCatalog: vi.fn(async (file: any) => ({ ok: true, ...file })),
+}))
+
+vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchRunners: vi.fn(async () => ({
     runners: [{ id: 'r1', name: 'Runner A', connectionId: 'conn-claude' }],
     connections: [{ id: 'conn-claude', providerId: 'claude-code-cli' }],
     defaultRunnerId: 'r1',
   })),
+}))
+
+vi.mock('@/features/pipeline-editor/scripts/pipelineEditorApi', () => ({
   fetchCatalog: vi.fn(async () => ({
     skills: [],
     agents: [
@@ -35,7 +41,7 @@ vi.mock('@/api', () => ({
   })),
 }))
 
-import { saveArtifactActionsCatalog } from '@/api'
+import { saveArtifactActionsCatalog } from '../../../../../src/features/quick-action/scripts/QuickActionPanelApi'
 
 afterEach(() => vi.clearAllMocks())
 
@@ -104,7 +110,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('hides agent_ref and clears it when runner is console-command', async () => {
-    const { fetchRunners } = await import('@/api')
+    const { fetchRunners } = await import('@/features/runner/scripts/runnerApi')
     vi.mocked(fetchRunners).mockResolvedValueOnce({
       runners: [{ id: 'sh1', name: 'Shell', connectionId: 'conn-sh' }],
       connections: [{ id: 'conn-sh', providerId: 'console-command' }],

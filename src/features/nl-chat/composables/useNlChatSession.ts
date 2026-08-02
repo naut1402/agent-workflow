@@ -1,16 +1,11 @@
 import { ref } from 'vue'
 import { normalizePipelineDraft } from '../lib/pipelineDraft'
-import {
-  startNlChat,
-  sendNlChatMessage,
-  fetchNlChatTurn,
-  cancelNlChat,
-  fetchJob,
-  fetchCatalog,
-  createTask,
-  savePipelineProfile,
-  saveCustomAgent,
-} from '../../../api'
+import { startNlChat, sendNlChatMessage, fetchNlChatTurn, cancelNlChat } from '../scripts/ChatWindowApi'
+import { fetchJob } from '../../runner/scripts/runnerApi'
+import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
+import { savePipelineProfile } from '../../pipeline-editor/scripts/ProfileManagerApi'
+import { createTask } from '../../monitor/scripts/monitorApi'
+import { saveCustomAgent } from '../../agent-editor/scripts/agentEditorApi'
 
 // Drives the floating NL chat surface end to end: the user just chats (no
 // "what do you want to create?" picker — the agent infers the entity type and

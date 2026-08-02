@@ -1,0 +1,36 @@
+# Chặn merge version line → main nếu còn thư mục docs/todo/
+#
+# Chỉ chạy khi PR: head = dev/<x.y.z>/main  →  base = main
+# Sau khi trả nợ: docs/todo phải không tồn tại (xóa cả thư mục).
+# Quy ước: docs/implement/todo-debt-convention.md
+# Script: .github/scripts/check-todo-debt.ts
+
+name: Todo debt
+
+on:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: todo-debt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # Chỉ khi merge dòng version (dev/x.y.z/main) vào main — không chạy PR feature → version main
+    if: >-
+      github.base_ref == 'main' &&
+      startsWith(github.head_ref, 'dev/') &&
+      endsWith(github.head_ref, '/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Fail if docs/todo still exists
+        run: bun run check:todo

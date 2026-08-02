@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import BuilderChatBody from './BuilderChatBody.vue'
 import TaskChatBody from './TaskChatBody.vue'
 import type { ChatContext } from '../composables/useChatSurface'
-import { fetchRunners } from '../../../api'
+import { fetchRunners } from '../../runner/scripts/runnerApi'
 
 // Shell of the floating chat window: position (docked to the draggable icon),
 // header, and one of two bodies —

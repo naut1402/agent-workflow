@@ -1,19 +1,18 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed } from 'vue'
 import {
   FIXED_SECTION_KEYS,
   getSectionTitle,
-  slugifySectionKey,
   emptyDraft,
-} from '../../../../shared/agentMarkdown.js'
-import { useSortable } from '../../../shared/composables/useSortable'
-import { saveAgentTemplate } from '../../../api'
-import MarkdownTextEditor from '../../../shared/ui/MarkdownTextEditor.vue'
+} from '../business/agentMarkdown.js'
+import { slugifySectionKey } from '../../../core/lib/stringUtils'
+import { useSortable } from '../../../core/composables/useSortable'
+import { saveAgentTemplate } from '../scripts/AgentSectionEditorApi'
+import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 import WorkflowSectionEditor from './WorkflowSectionEditor.vue'
 
+const { t } = useI18nHelpers()
 const props = defineProps({
   draft: { type: Object, required: true },
   catalog: { type: Object, default: () => ({ skills: [] }) },

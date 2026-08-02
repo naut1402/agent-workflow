@@ -41,9 +41,9 @@ const { saveArtifact, sendTaskFeedback } = vi.hoisted(() => ({
   ),
 }))
 
-vi.mock('@/api', () => ({ saveArtifact, sendTaskFeedback }))
+vi.mock('@/features/monitor/scripts/QaPanelApi', () => ({ saveArtifact, sendTaskFeedback }))
 
-vi.mock('@/shared/markdown', () => ({
+vi.mock('@/core/lib/markdownLib', () => ({
   parseMarkdown: (s: string) => `<p>${s}</p>`,
   renderMermaid: vi.fn(async () => {}),
 }))

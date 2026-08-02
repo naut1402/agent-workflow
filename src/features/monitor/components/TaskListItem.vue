@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { patchTaskArchive, deleteTask } from '../../../api'
+import { patchTaskArchive, deleteTask } from '../scripts/TaskListItemApi'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -15,7 +15,7 @@ const emit = defineEmits([
   'select', 'toggle-expand', 'open-artifact', 'task-archived', 'task-deleted', 'toggle-hide-missing',
 ])
 
-const { t } = useI18n()
+const { t } = useI18nHelpers()
 const archiveError = ref('')
 
 async function toggleArchive() {

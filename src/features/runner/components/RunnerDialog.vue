@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { saveRunner, submitJob, fetchJob } from '../../../api'
+import { slugify } from '../../../core/lib/stringUtils'
+import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
 import type { ConnectionOption, ProviderEntry, RunnerDraft } from '../types'
 
@@ -17,7 +18,7 @@ const emit = defineEmits<{
   refreshed: []
 }>()
 
-const { t } = useI18n()
+const { t } = useI18nHelpers()
 
 const draft = ref(emptyDraft())
 const isEdit = computed(() => Boolean(props.runner?.id))
@@ -52,18 +53,6 @@ const showsAllowedTools = computed(() => selectedProviderId.value === 'claude-co
 
 const isConsoleCommand = computed(() => selectedProviderId.value === 'console-command')
 
-function slugify(text: string): string {
-  const s = text
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48)
-  return s || 'runner'
-}
-
 watch(
   () => props.runner,
   (r) => {
@@ -88,7 +77,7 @@ function buildSavePayload(): RunnerDraft {
   }
   return {
     ...draft.value,
-    id: isEdit.value ? draft.value.id : slugify(draft.value.name),
+    id: isEdit.value ? draft.value.id : slugify(draft.value.name, { fallback: 'runner' }),
     name: draft.value.name.trim(),
     config,
   }

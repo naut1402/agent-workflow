@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { fetchTasks } from '../../../api'
+import { fetchTasks } from '../scripts/monitorApi'
 
 // Encapsulates the monitor task-polling loop (root/tasks/selection + connection
 // state + the 1500ms interval) so the shell stays thin and the polling logic is

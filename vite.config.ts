@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { devTeamApi } from './server/devTeamApi.js'
+import { devTeamApi } from './src/api/devTeamApi.js'
 
 // The dashboard is scaffolded into `.dev-team-agent/viewer/`, so the data root
 // (the `.dev-team-agent/` directory holding `.dev-state/` and `tasks/`) is the
@@ -13,7 +13,7 @@ import { devTeamApi } from './server/devTeamApi.js'
 // In dev mode this `root` becomes the ctx.defaultRoot (the project served when
 // no `?project=<id>` is given) — preserving the legacy single-project behaviour.
 // Multi-project support comes from the shared ProjectRegistry, exercised here
-// too via `?project=` (see server/devTeamApi.ts → createApiHandler).
+// too via `?project=` (see src/api/devTeamApi.ts → createApiHandler).
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const { version: appVersion } = JSON.parse(

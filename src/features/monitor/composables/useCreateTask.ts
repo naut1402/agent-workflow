@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
-import type { CreateTaskRequest, TaskSource } from '../../../../shared/schemas/taskCreate.js'
-import { createTask, fetchGithubIssue, fetchPipelineProfile, fetchPipelineProfiles, fetchRunners } from '../../../api'
+import type { CreateTaskRequest, TaskSource } from '../schemas/taskCreate.js'
+import { createTask, fetchGithubIssue } from '../scripts/CreateTaskDialogApi'
+import { fetchPipelineProfile, fetchPipelineProfiles } from '../../pipeline-editor/scripts/ProfileManagerApi'
+import { fetchRunners } from '../../runner/scripts/runnerApi'
 import {
   buildCreateTaskPreviewSummary,
   canAdvanceFromSourceStep,
