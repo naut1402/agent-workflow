@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { loadModulesUnder } from '../../../../src/core/lib/dirModuleLoader.ts'
+import { loadModulesUnder } from '../../../../src/core/lib/dirModuleLoader.js'
 
 let root: string
 
