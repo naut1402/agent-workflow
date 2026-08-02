@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:commit": "commitlint",
+    "check:todo": "bun .github/scripts/check-todo-debt.ts",
     "format": "prettier --write .",
     "test": "bun test tests/src/server tests/src/features/knowledge/business tests/src/features/logs/business tests/src/features/agent-editor/business tests/src/features/pipeline-editor/business tests/src/features/monitor/business tests/src/core/log tests/mcp",
     "test:fe": "vitest run --coverage",

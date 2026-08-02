@@ -12,6 +12,7 @@ Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `
 | Coding convention (TS, Zod, FE, i18n) | [`docs/implement/coding-convention.md`](docs/implement/coding-convention.md) |
 | Test | [`docs/implement/test-convention.md`](docs/implement/test-convention.md) |
 | PR / commit / docs output | [`docs/implement/pr-docs-convention.md`](docs/implement/pr-docs-convention.md) |
+| Nợ đối ứng sau (`docs/todo`) | [`docs/implement/todo-debt-convention.md`](docs/implement/todo-debt-convention.md) |
 | Git hygiene | [`docs/implement/git-convention.md`](docs/implement/git-convention.md) |
 | Worktree | [`docs/implement/worktree-convention.md`](docs/implement/worktree-convention.md) |
 | Checklist review | [`docs/implement/review-checklist-rule.md`](docs/implement/review-checklist-rule.md) |
@@ -85,4 +86,5 @@ Thêm scan/endpoint mới không được phá các bất biến sau:
 | Review PR | [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) |
 | Test / CI | [`test-convention.md`](docs/implement/test-convention.md) |
 | Commit / PR / docs | [`pr-docs-convention.md`](docs/implement/pr-docs-convention.md) + [`git-convention.md`](docs/implement/git-convention.md) |
+| Hoãn docs/test (hotfix, POC, convention chưa ổn) | [`todo-debt-convention.md`](docs/implement/todo-debt-convention.md) — `docs/todo/<issue>/<task-id>.md`; PR → `dev/**/main` đòi hỏi **không còn** thư mục `docs/todo/` |
 | Agent song song | [`worktree-convention.md`](docs/implement/worktree-convention.md) |

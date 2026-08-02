@@ -52,6 +52,7 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 - [ ] PR đụng helper FE+BE hoặc `fileHelper`: typecheck / build xanh locally (và CI).
 - [ ] Commit message / PR title đúng commitlint (`type(scope): subject`); không trailer công cụ.
 - [ ] **Nội dung thay đổi**: phần riêng nhóm theo cây thư mục/lớp; fix/refactor có Logic trước → sau; phần chung nêu Core và/hoặc feature khác (hoặc *Không*) — [`pr-docs-convention.md`](pr-docs-convention.md) §1.1–§1.2.
+- [ ] PR vào `dev/**/main`: thư mục `docs/todo/` **không tồn tại** — [`todo-debt-convention.md`](todo-debt-convention.md); PR trả nợ đã xóa cả cây.
 
 ## G. Docs (khi đổi convention)
 

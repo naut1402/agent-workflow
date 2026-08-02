@@ -1,0 +1,30 @@
+# Chặn merge vào dòng version nếu còn thư mục docs/todo/
+#
+# Sau khi trả nợ: docs/todo phải không tồn tại (xóa cả thư mục).
+# Quy ước: docs/implement/todo-debt-convention.md
+# Script: .github/scripts/check-todo-debt.ts
+
+name: Todo debt
+
+on:
+  pull_request:
+    branches:
+      - 'dev/**/main'
+
+concurrency:
+  group: todo-debt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Fail if docs/todo still exists
+        run: bun run check:todo

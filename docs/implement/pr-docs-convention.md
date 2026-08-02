@@ -10,6 +10,8 @@ Theo [`.github/pull_request_template.md`](../../.github/pull_request_template.md
 
 Bắt buộc mục **Nội dung thay đổi** (theo cấu trúc ở §1.1–§1.2; bảng file TRƯỚC → SAU khi có rename/split) và liệt kê loại test đã thêm/migrate.
 
+Khi hoãn cập nhật convention hoặc test (hotfix / POC / code chưa ổn): tạo `docs/todo/<issue>/<task-id>.md` và **xóa cả thư mục `docs/todo/`** trước khi merge vào `dev/**/main` — [`todo-debt-convention.md`](todo-debt-convention.md).
+
 ### 1.1 Chi tiết chỉnh sửa — phần riêng (feature / phạm vi chính)
 
 Code đã xếp theo cây thống nhất ([`feature-organization-rule.md`](feature-organization-rule.md), [`../architecture.md`](../architecture.md)) — **mô tả PR cũng nhóm theo cùng bản đồ**, không liệt kê phẳng “đổi file A, B, C” thiếu ngữ cảnh lớp.
