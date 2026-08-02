@@ -14,13 +14,13 @@ Hai tình huống hay **đốt token / lệch docs** nếu cứ sửa rule ngay:
 | Việc | Làm |
 |------|-----|
 | Đánh dấu nợ | Tạo `docs/todo/<issue>/<task-id>.md` (tạo cả cây `docs/todo/` khi chưa có) |
-| Đất sống của file nợ | Branch feature / epic / hotfix **trước** khi vào dòng version |
-| Gate | PR **vào** `dev/**/main`: CI **chặn** nếu thư mục `docs/todo` **còn tồn tại** |
-| Trả nợ | PR đối ứng: làm đủ việc còn thiếu **và xóa toàn bộ** `docs/todo/` (không để lại README / thư mục rỗng) |
+| Đất sống của file nợ | Branch / PR vào dòng version (`dev/x.y.z/main`) — **được** mang nợ trong giai version |
+| Gate | PR **`dev/x.y.z/main` → `main`**: CI **chặn** nếu thư mục `docs/todo` **còn tồn tại** |
+| Trả nợ | Trước khi promote lên `main`: làm đủ việc còn thiếu **và xóa toàn bộ** `docs/todo/` |
 
 `<issue>` / `<task-id>`: slug chữ-số/gạch ngang (vd `174`, `F0012`, `hotfix-logs`). Không có issue GitHub thì dùng id task nội bộ hoặc `adhoc`.
 
-**Bắt buộc:** trên dòng version, **`docs/todo` không tồn tại**. Chỉ xuất hiện tạm trên branch khi còn nợ.
+**Bắt buộc:** trên `main` (sau merge từ dòng version), **`docs/todo` không tồn tại**.
 
 ## 3. Nội dung file nợ
 
@@ -36,27 +36,28 @@ Không nhét diff dài hay secret vào file nợ.
 ## 4. Luồng làm việc
 
 ```text
-[hotfix / POC / refactor đang bay]
+[hotfix / POC / refactor trên dòng version]
     → tạo docs/todo/<issue>/<task-id>.md
-    → code tiếp trên branch không phải version main
+    → được merge vào dev/x.y.z/main khi còn nợ (gate Todo debt KHÔNG chạy ở đây)
 
-[PR đối ứng hoặc cùng PR trước khi merge vào dev/x.y.z/main]
+[trước khi mở / merge PR promote: dev/x.y.z/main → main]
     → cập nhật docs/implement (nếu nợ convention)
     → bổ sung test (nếu nợ test)
     → xóa hết docs/todo/ (cả thư mục)
-    → CI Todo debt xanh → mới merge được vào dòng version
+    → CI Todo debt xanh → mới merge được lên main
 ```
 
 Theo dõi nợ dài hạn ngoài gate này → GitHub Issue.
 
 ## 5. CI
 
-Script gate: [`.github/scripts/check-todo-debt.ts`](../../.github/scripts/check-todo-debt.ts) — chạy trên **CI/CD** (workflow Todo debt).
+Script gate: [`.github/scripts/check-todo-debt.ts`](../../.github/scripts/check-todo-debt.ts).
 
 Workflow [`.github/workflows/todo-debt.yml`](../../.github/workflows/todo-debt.yml):
 
-- `pull_request` có **base** khớp `dev/**/main`
-- Chạy `bun run check:todo` → fail nếu `docs/todo` còn tồn tại
+- `pull_request` **base** = `main`
+- Job chỉ chạy khi **head** khớp `dev/<…>/main` (vd `dev/1.0.0/main`)
+- `bun run check:todo` → fail nếu `docs/todo` còn tồn tại
 
 ```bash
 bun run check:todo
@@ -65,5 +66,6 @@ bun run check:todo
 ## 6. Checklist nhanh
 
 - [ ] Có hoãn docs/test? → đã có `docs/todo/<issue>/<task-id>.md`
-- [ ] PR vào `dev/x.y.z/main`? → **không còn** thư mục `docs/todo/`; `bun run check:todo` xanh
-- [ ] PR trả nợ? → đã xóa toàn bộ `docs/todo/` sau khi đối ứng
+- [ ] PR feature → `dev/x.y.z/main`? → được mang nợ; Todo debt **không** chặn
+- [ ] PR `dev/x.y.z/main` → `main`? → **không còn** thư mục `docs/todo/`; `bun run check:todo` xanh
+- [ ] Đã trả nợ? → đã xóa toàn bộ `docs/todo/`

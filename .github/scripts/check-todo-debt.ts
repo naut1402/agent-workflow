@@ -27,7 +27,7 @@ if (!fs.existsSync(root)) {
 }
 
 const files = listFiles(root)
-console.error('FAIL: docs/todo must not exist on version main (remove the whole directory after clearing debt).')
+console.error('FAIL: docs/todo must not exist when promoting version main → main (remove the whole directory after clearing debt).')
 if (files.length === 0) {
   console.error('  - docs/todo/ exists but is empty — delete the directory')
 } else {

@@ -10,7 +10,7 @@ Theo [`.github/pull_request_template.md`](../../.github/pull_request_template.md
 
 Bắt buộc mục **Nội dung thay đổi** (theo cấu trúc ở §1.1–§1.2; bảng file TRƯỚC → SAU khi có rename/split) và liệt kê loại test đã thêm/migrate.
 
-Khi hoãn cập nhật convention hoặc test (hotfix / POC / code chưa ổn): tạo `docs/todo/<issue>/<task-id>.md` và **xóa cả thư mục `docs/todo/`** trước khi merge vào `dev/**/main` — [`todo-debt-convention.md`](todo-debt-convention.md).
+Khi hoãn cập nhật convention hoặc test (hotfix / POC / code chưa ổn): tạo `docs/todo/<issue>/<task-id>.md`. Gate CI chỉ khi promote **`dev/x.y.z/main` → `main`** — khi đó phải **xóa cả thư mục `docs/todo/`** — [`todo-debt-convention.md`](todo-debt-convention.md).
 
 ### 1.1 Chi tiết chỉnh sửa — phần riêng (feature / phạm vi chính)
 

@@ -86,5 +86,5 @@ Thêm scan/endpoint mới không được phá các bất biến sau:
 | Review PR | [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) |
 | Test / CI | [`test-convention.md`](docs/implement/test-convention.md) |
 | Commit / PR / docs | [`pr-docs-convention.md`](docs/implement/pr-docs-convention.md) + [`git-convention.md`](docs/implement/git-convention.md) |
-| Hoãn docs/test (hotfix, POC, convention chưa ổn) | [`todo-debt-convention.md`](docs/implement/todo-debt-convention.md) — `docs/todo/<issue>/<task-id>.md`; PR → `dev/**/main` đòi hỏi **không còn** thư mục `docs/todo/` |
+| Hoãn docs/test (hotfix, POC, convention chưa ổn) | [`todo-debt-convention.md`](docs/implement/todo-debt-convention.md) — `docs/todo/…`; gate CI chỉ khi PR **`dev/x.y.z/main` → `main`** (phải xóa cả `docs/todo/`) |
 | Agent song song | [`worktree-convention.md`](docs/implement/worktree-convention.md) |

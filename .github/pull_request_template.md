@@ -58,10 +58,10 @@ Fix/refactor: bắt buộc Logic trước → sau.
 - [ ] Integration API (Hono `app.request`)
 - [ ] E2E (playwright) ở `test-e2e/` — chạy thật + gate CI; ảnh capture đính vào comment (không commit `docs/`)
 
-## Todo debt (nếu PR vào `dev/**/main`)
-<!-- docs/implement/todo-debt-convention.md — CI Todo debt: thư mục docs/todo phải không tồn tại. -->
-- [ ] Không còn thư mục `docs/todo/` (đã đối ứng và xóa hết, hoặc không tạo nợ)
-- [ ] Nếu đây là PR trả nợ: đã xóa toàn bộ `docs/todo/` + làm đủ checklist trong file nợ
+## Todo debt (nếu PR `dev/x.y.z/main` → `main`)
+<!-- docs/implement/todo-debt-convention.md — CI Todo debt chỉ gate promote lên main. -->
+- [ ] Không còn thư mục `docs/todo/` (đã đối ứng và xóa hết)
+- [ ] PR feature → `dev/x.y.z/main`: được mang nợ; không áp checklist này
 ## Checklist
 - [ ] Không thay đổi hành vi public (hoặc đã ghi rõ thay đổi)
 - [ ] PR body: phần riêng theo cấu trúc thư mục; phần chung nêu Core / feature khác (hoặc *Không*)
