@@ -275,13 +275,13 @@ onMounted(loadList)
             <button class="btn-ghost btn-sm" type="button" @click="addTag">+</button>
           </div>
         </label>
-        <label class="cfg-label knowledge-content-label">
-          {{ t('knowledge.fields.content') }}
+        <div class="cfg-label knowledge-content-label">
+          <span>{{ t('knowledge.fields.content') }}</span>
           <MarkdownTextEditor v-model="draft.content" height="400px" />
-        </label>
+        </div>
         <div class="knowledge-editor-actions">
-          <button class="btn-primary btn-sm" @click="save">{{ t('knowledge.actions.save') }}</button>
-          <button v-if="selectedId" class="btn-danger btn-sm" @click="remove">{{ t('knowledge.actions.delete') }}</button>
+          <button type="button" class="btn-primary btn-sm" @click="save">{{ t('knowledge.actions.save') }}</button>
+          <button v-if="selectedId" type="button" class="btn-danger btn-sm" @click="remove">{{ t('knowledge.actions.delete') }}</button>
           <span v-if="message" class="save-msg">{{ message }}</span>
           <span v-if="error" class="err">{{ error }}</span>
         </div>
