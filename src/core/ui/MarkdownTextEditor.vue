@@ -190,4 +190,27 @@ const rootClass = computed(() => ({
 .md-text-editor :deep(.toastui-editor-defaultUI) {
   border-radius: 6px;
 }
+
+/* height=auto still leaves ProseMirror/preview at overflow-y:auto +
+   height:calc(100% - 36px), which nests a second scrollbar beside the
+   page scroller (e.g. .monitor-content). Grow with content instead.
+   !important: Toast UI stylesheet can win the cascade depending on load
+   order; also overflow must set both axes (if overflow-x stays non-visible,
+   overflow-y:visible computes back to auto). */
+.md-text-editor :deep(.auto-height) {
+  .ProseMirror {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .toastui-editor-md-container .toastui-editor-md-preview {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .toastui-editor-ww-container .toastui-editor-contents {
+    overflow: visible !important;
+    height: auto !important;
+  }
+}
 </style>
