@@ -1,7 +1,7 @@
 // Floating chat surface (nl-chat feature): the window chrome plus the message
 // bubbles. Global rather than scoped because the window shell and its two
 // bodies (creation-flow builder, task/runner chat) are separate components that
-// must share one look — see docs/scss-adoption.md.
+// must share one look — see docs/architecture.md §3.3.
 /* Theme tokens only (see src/styles/_tokens.scss) — the panel must follow the
    light/dark theme instead of the previous hardcoded white surface. */
 .nl-chat-window {

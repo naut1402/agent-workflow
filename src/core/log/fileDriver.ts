@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { registryHome } from '../registry.js'
-import { statSafe } from '../contracts/fs.js'
+import { statSafe } from '../lib/fileHelper.js'
 import type { LogEntry, LogType } from './schema.js'
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5MB per file; one .1 backup on rotation.

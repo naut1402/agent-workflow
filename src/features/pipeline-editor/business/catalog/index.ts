@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { homeDir } from '../../../../core/contracts/fs.js'
+import { homeDir } from '../../../../core/lib/fileHelper.js'
 import { dedupeCatalogItems } from './dedupe.js'
 import { BUILTIN_CATALOG } from './builtins.js'
 import {

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { parseAgentMarkdown } from '../../../core/contracts/agentMarkdown.js'
-import { safeReadDir } from '../../../core/contracts/fs.js'
+import { safeReadDir } from '../../../core/lib/fileHelper.js'
 import { sanitiseAgentName } from '../../../core/contracts/sanitize.js'
 import { customAgentsDir } from './paths.js'
 

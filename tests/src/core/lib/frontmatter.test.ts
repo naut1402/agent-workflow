@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseFrontmatter } from '@shared/frontmatter'
+import { parseFrontmatter } from '@/core/lib/yamlLib'
 
 describe('parseFrontmatter', () => {
   it('parses a leading YAML frontmatter block', () => {

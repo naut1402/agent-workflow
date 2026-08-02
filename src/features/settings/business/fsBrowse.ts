@@ -4,7 +4,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { homeDir, safeReadDir } from '../../../core/contracts/fs.js'
+import { homeDir, safeReadDir } from '../../../core/lib/fileHelper.js'
 
 export interface BrowseEntry {
   name: string

@@ -80,8 +80,8 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 
 - `src/core/contracts/schemas/appSettings.ts` — preference shell (theme/locale/notifications UI); core/plugins dùng.
 - Schema domain (task, log, autoscan, …) nằm ở `src/features/<feature>/schemas/` — Zod + `z.infer`, validate biên I/O của feature đó.
-- `src/core/contracts/{frontmatter,fs,http,sanitize}.ts` — helper thuần (fs: `homeDir`/`safeReadDir`/`statSafe`/`readYamlSafe`; parse/dump YAML thuần qua `yamlLib`).
-- `src/core/lib/` — `*Utils` (string/array/date) + `*Lib` (yaml/markdown/diff) + helper domain (phase, theme, …).
+- `src/core/contracts/{http,sanitize}.ts` — helper thuần (HTTP respond helper phía contracts nếu còn; sanitize).
+- `src/core/lib/` — `*Utils` (string/array/date) + `*Lib` (yaml/markdown/diff; `yamlLib` gồm frontmatter + `readYamlSafe`) + `fileHelper` (homeDir/safeReadDir/statSafe) + helper domain (phase, theme, …).
 - `src/core/contracts/agentMarkdown.js` (**vẫn `.js`**) — round-trip agent-markdown, import bởi cả frontend và domain module backend.
 
 ---
@@ -109,15 +109,15 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 
 ### 3.2 Core frontend (`src/core`)
 
-Nền tảng FE / shell: `composables/*`, `lib/` (phase, …), `ui/`, `shell/keys.ts`, cộng `contracts/` (helper FE↔BE + `schemas/appSettings`, alias `@shared` — xem §2.5). Schema domain ở `features/<name>/schemas/`. i18n cài qua `src/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`.
+Nền tảng FE / shell: `composables/*`, `lib/` (phase, `*Utils`, `*Lib`, `fileHelper`, …), `ui/`, `shell/keys.ts`, cộng `contracts/` (helper FE↔BE + `schemas/appSettings`, alias `@shared` — xem §2.5). Schema domain ở `features/<name>/schemas/`. i18n cài qua `src/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`.
 
-Util / wrapper thư viện dùng chung (không gắn domain mode): `src/core/lib/{stringUtils,arrayUtils,dateUtils,yamlLib,markdownLib,diffLib}.ts`.
+Util / wrapper thư viện dùng chung (không gắn domain mode): `src/core/lib/{stringUtils,arrayUtils,dateUtils,yamlLib,markdownLib,diffLib,fileHelper}.ts`.
 
-**Roadmap kernel (sau 1.0.0):** ModeRegistry / `registerMode`, event bus, contribution API (plugin). Chưa triển khai trong 1.0.0 — xem [`src/core/README.md`](../src/core/README.md).
+**Roadmap kernel (sau 1.0.0):** ModeRegistry / `registerMode`, event bus, contribution API (plugin). Chưa triển khai trong 1.0.0.
 
 ### 3.3 Styling
 
-Entry SCSS: `src/styles/main.scss` (tokens + scrollbar + shell, import từ `src/main.ts`). Style theo feature: `src/features/<mode>/styles/` (`common.scss` + `{Component}.scss` + `index.scss`) — **tự nạp** trong `src/main.ts` qua `import.meta.glob('./features/*/styles/index.scss', { eager: true })`, không liệt kê từng feature trong `main.scss`. Theme/runtime token (`_tokens` / `_shell`) là CSS variables trên `:root` nên sửa hàng loạt vẫn ảnh hưởng mọi module. Vite: `sass-embedded` + `scss.api = 'modern-compiler'`. Khảo sát: [`scss-adoption.md`](scss-adoption.md).
+Entry SCSS: `src/styles/main.scss` (tokens + scrollbar + shell, import từ `src/main.ts`). Style theo feature: `src/features/<mode>/styles/` (`common.scss` + `{Component}.scss` + `index.scss`) — **tự nạp** trong `src/main.ts` qua `import.meta.glob('./features/*/styles/index.scss', { eager: true })`, không liệt kê từng feature trong `main.scss`. Theme/runtime token (`_tokens` / `_shell`) là CSS variables trên `:root` nên sửa hàng loạt vẫn ảnh hưởng mọi module. Vite: `sass-embedded` + `scss.api = 'modern-compiler'`.
 
 ---
 

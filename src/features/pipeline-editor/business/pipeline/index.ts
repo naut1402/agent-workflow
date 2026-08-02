@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { readYamlSafe } from '../../../../core/contracts/fs.js'
+import { readYamlSafe } from '../../../../core/lib/yamlLib.js'
 import { DEFAULT_PIPELINE } from './default.js'
 import { patchSteps, perTaskStepsReplace } from './merge.js'
 

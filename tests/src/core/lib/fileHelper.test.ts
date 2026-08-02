@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { homeDir, readYamlSafe, safeReadDir, statSafe } from '@shared/fs'
+import { homeDir, safeReadDir, statSafe } from '@/core/lib/fileHelper'
+import { readYamlSafe } from '@/core/lib/yamlLib'
 
 let dir: string
 
@@ -17,41 +18,48 @@ afterAll(async () => {
   await fs.rm(dir, { recursive: true, force: true })
 })
 
-describe('homeDir', () => {
-  it('returns a string', () => {
+describe('fileHelper', () => {
+  it('homeDir returns a string', () => {
     expect(typeof homeDir()).toBe('string')
   })
-})
 
-describe('safeReadDir', () => {
-  it('lists directory entries', async () => {
+  it('safeReadDir lists directory entries', async () => {
     const names = (await safeReadDir(dir)).map((e) => e.name).sort()
     expect(names).toEqual(['a.txt', 'bad.yaml', 'conf.yaml'])
   })
-  it('returns [] for a missing directory', async () => {
+
+  it('safeReadDir returns [] for a missing directory', async () => {
     expect(await safeReadDir(path.join(dir, 'nope'))).toEqual([])
   })
-})
 
-describe('statSafe', () => {
-  it('reports an existing file', async () => {
+  it('statSafe reports an existing file', async () => {
     const s = await statSafe(path.join(dir, 'a.txt'))
     expect(s.exists).toBe(true)
     expect(s.size).toBe(5)
     expect(typeof s.mtime).toBe('number')
   })
-  it('reports a missing file defensively', async () => {
-    expect(await statSafe(path.join(dir, 'missing'))).toEqual({ exists: false, mtime: null, size: 0 })
+
+  it('statSafe reports a missing file defensively', async () => {
+    expect(await statSafe(path.join(dir, 'missing'))).toEqual({
+      exists: false,
+      mtime: null,
+      size: 0,
+    })
   })
 })
 
-describe('readYamlSafe', () => {
+describe('yamlLib readYamlSafe', () => {
   it('parses a YAML object', async () => {
-    expect(await readYamlSafe(path.join(dir, 'conf.yaml'))).toEqual({ driver: 'file', nested: { x: 1 } })
+    expect(await readYamlSafe(path.join(dir, 'conf.yaml'))).toEqual({
+      driver: 'file',
+      nested: { x: 1 },
+    })
   })
+
   it('returns null for a missing file', async () => {
     expect(await readYamlSafe(path.join(dir, 'missing.yaml'))).toBeNull()
   })
+
   it('returns null for invalid YAML', async () => {
     expect(await readYamlSafe(path.join(dir, 'bad.yaml'))).toBeNull()
   })

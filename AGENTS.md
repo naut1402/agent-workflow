@@ -35,7 +35,7 @@ agent-workflow/
 ├── mcp/        # MCP stdio server (project-registry CRUD)
 ├── tests/      # unit tests mirror cây source (bun test + vitest)
 ├── test-e2e/   # @playwright/test specs + fixtures/.dev-team-agent/
-├── docs/       # Tài liệu: architecture.md; i18n.md; ui-buttons.md; scss-adoption.md
+├── docs/       # Tài liệu: architecture.md; i18n.md; ui-buttons.md; cookbook-…
 └── .claude/    # settings.local.json (bật MCP) + rules/ (rule project cho orchestrator)
 ```
 
@@ -73,7 +73,7 @@ Discriminated union với discriminant kiểu boolean (`{ok:true,...}|{ok:false,
 
 Functional + ctx-injection: dependency truyền qua tham số `ctx`, không dùng class-DI/NestJS/OOP framework. Phụ thuộc chỉ đi một chiều xuống dưới: `src/core/lib/` → `src/core/contracts/` và `src/core/log/` không import feature → domain module chỉ import core → `http/` / feature controller. Không vòng tròn.
 
-Helper dùng chung nằm ở **`src/core/lib/`**: kiểu dữ liệu đặt tên `*Utils` (`stringUtils`, `arrayUtils`, `dateUtils`); wrapper package đặt tên `*Lib` (`yamlLib`, `markdownLib`, `diffLib`). Không nhét vào `features/*/lib` (lib feature chỉ cho domain UI của mode đó). `readYamlSafe` (cần `node:fs`) nằm ở `contracts/fs` và dùng `loadYaml` từ `yamlLib`.
+Helper dùng chung nằm ở **`src/core/lib/`**: kiểu dữ liệu đặt tên `*Utils` (`stringUtils`, `arrayUtils`, `dateUtils`); wrapper package đặt tên `*Lib` (`yamlLib`, `markdownLib`, `diffLib`); helper FS đặt `fileHelper`. Không nhét vào `features/*/lib` (lib feature chỉ cho domain UI của mode đó). `parseFrontmatter` / `readYamlSafe` nằm ở `yamlLib`; `homeDir` / `safeReadDir` / `statSafe` nằm ở `fileHelper`.
 
 Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuần (`{ status, error }` khi lỗi). Controller parse request → gọi `XxxBusiness` → `this.json` / `ok`.
 
@@ -100,7 +100,7 @@ UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **
 
 Thêm scan/endpoint mới không được phá các bất biến sau:
 
-- **Đọc filesystem phải phòng thủ**: `safeReadDir`/`statSafe`/`readYamlSafe` (`contracts/fs`) /`readState`/`loadRegistry` nuốt lỗi, trả empty/false thay vì throw — một file state ghi dở không được làm sập request.
+- **Đọc filesystem phải phòng thủ**: `safeReadDir`/`statSafe` (`fileHelper`) / `readYamlSafe` (`yamlLib`) /`readState`/`loadRegistry` nuốt lỗi, trả empty/false thay vì throw — một file state ghi dở không được làm sập request.
 - **Chống path-traversal**: mọi input từ request phải sanitize (`resolveArtifact`, `resolveStatic`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương.
 - **Ghi registry atomic** (temp file + rename trong `saveRegistry`).
 - **Fetch URL người dùng** phải qua `fetchUrlSafe` (https-only, chặn private host) — tránh SSRF.

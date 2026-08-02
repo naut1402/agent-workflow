@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { dumpYaml } from '../../../../core/lib/yamlLib.js'
-import { readYamlSafe } from '../../../../core/contracts/fs.js'
+import { dumpYaml, readYamlSafe } from '../../../../core/lib/yamlLib.js'
 import { registryHome } from '../../../../core/registry.js'
 import {
   ArtifactActionsFile,
