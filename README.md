@@ -82,7 +82,7 @@ bun run mcp          # MCP stdio — project registry
 
 ### Docker (standalone)
 
-Không cần cài Bun trên host. Image chạy `src/standalone.ts`, bind `0.0.0.0:5174`, mount project + registry home.
+Không cần cài Bun trên host. Image chạy `src/standalone.ts`, bind `0.0.0.0:5174`, mount project + registry home. Runtime image **cài sẵn** Claude Code CLI (`claude`) và Cursor CLI (`agent`) bản Linux.
 
 `DEV_TEAM_ROOT` phải là thư mục **`.dev-team-agent`** (data root), không phải thư mục project cha.
 
@@ -98,10 +98,14 @@ docker run --rm -p 5174:5174 \
   -v dashboard-home:/data/dashboard-home \
   dev-team-dashboard:local
 
-# Hoặc Compose (bắt buộc set DEV_TEAM_PROJECT_PATH)
+# Compose — chỉ UI/API
 # Windows PowerShell:
 $env:DEV_TEAM_PROJECT_PATH = "C:\path\to\my-project"
 docker compose up --build
+
+# Compose — + runner CLI auth từ host (overlay)
+$env:HOST_HOME = $env:USERPROFILE   # Linux/macOS: export HOST_HOME="$HOME"
+docker compose -f docker-compose.yml -f docker-compose.runners.yml up --build
 ```
 
 | Env | Mặc định (image) | Ý nghĩa |
@@ -110,9 +114,21 @@ docker compose up --build
 | `DEV_TEAM_DASHBOARD_PORT` / `PORT` | `5174` | Cổng HTTP |
 | `DEV_TEAM_ROOT` | `/data/project/.dev-team-agent` | Data root (seed registry khi trống) |
 | `DEV_TEAM_DASHBOARD_HOME` | `/data/dashboard-home` | Registry multi-project (`projects.json`) |
-| `ANTHROPIC_API_KEY` | (trống) | Optional — NL agent-draft |
+| `HOST_HOME` | (compose runners) | Home host để mount `.claude` / `.cursor` / `credentials.json` |
+| `ANTHROPIC_API_KEY` | (trống) | Optional — NL draft / Claude `--bare` |
+| `CURSOR_API_KEY` | (trống) | Optional — Cursor headless khi không dùng session mount |
 
-**Lưu ý:** path Windows → Linux container dùng dạng `/c/Users/...` (Docker Desktop) hoặc để Compose tự map từ `DEV_TEAM_PROJECT_PATH`. Repo này **không** đóng gói orchestrator — chỉ dashboard quan sát project đã mount.
+**Runner + credential host** (`docker-compose.runners.yml`):
+
+| Mount host | Trong container |
+|------------|-----------------|
+| `$HOST_HOME/.claude` | `/root/.claude` (cli-session Claude) |
+| `$HOST_HOME/.cursor` | `/root/.cursor` (Cursor auth) |
+| `$HOST_HOME/.dev-team-dashboard/credentials.json` | `/data/dashboard-home/credentials.json` |
+
+Binary CLI **không** lấy từ Windows host (`.exe` / `.cmd` không chạy trong Linux container) — chỉ dùng bản đã cài trong image. Không mount `connections.json` từ host Windows vì `cliPath` thường trỏ path Windows.
+
+**Lưu ý:** path Windows → Linux container dùng dạng `/c/Users/...` (Docker Desktop) hoặc để Compose tự map từ `DEV_TEAM_PROJECT_PATH`. Session file tạo trên Windows có thể không đủ cho CLI Linux — khi đó dùng API key hoặc `claude`/`agent login` trong container. Repo này **không** đóng gói orchestrator — chỉ dashboard quan sát project đã mount.
 
 ### Lệnh hữu ích
 

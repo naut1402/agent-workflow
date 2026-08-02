@@ -5,6 +5,10 @@
 #   export DEV_TEAM_PROJECT_PATH=/path/to/my-project  # Linux/macOS
 #   docker compose up --build
 #
+# Runner CLI + credential host:
+#   set HOST_HOME=%USERPROFILE%   # hoặc $HOME
+#   docker compose -f docker-compose.yml -f docker-compose.runners.yml up --build
+#
 # UI: http://localhost:5174
 #
 # Lưu ý: DEV_TEAM_ROOT trong container trỏ tới `/data/project/.dev-team-agent`
@@ -21,8 +25,9 @@ services:
       DEV_TEAM_DASHBOARD_PORT: "5174"
       DEV_TEAM_ROOT: /data/project/.dev-team-agent
       DEV_TEAM_DASHBOARD_HOME: /data/dashboard-home
-      # Optional — bật NL agent-draft generation
+      # Optional — NL agent-draft / CLI --bare
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
     volumes:
       # Project đích (phải có sẵn `.dev-team-agent/` bên trong)
       - ${DEV_TEAM_PROJECT_PATH:?Set DEV_TEAM_PROJECT_PATH to your project directory}:/data/project

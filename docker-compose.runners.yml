@@ -1,0 +1,31 @@
+# Overlay: dùng CLI đã cài trong image + auth/credential từ host.
+#
+#   # Windows PowerShell
+#   $env:HOST_HOME = $env:USERPROFILE
+#   $env:DEV_TEAM_PROJECT_PATH = "C:\path\to\my-project"
+#   docker compose -f docker-compose.yml -f docker-compose.runners.yml up --build
+#
+#   # Linux / macOS
+#   export HOST_HOME="$HOME"
+#   export DEV_TEAM_PROJECT_PATH=/path/to/my-project
+#   docker compose -f docker-compose.yml -f docker-compose.runners.yml up --build
+#
+# Không mount connections.json từ host Windows (cliPath thường trỏ .exe/.cmd).
+# Connection trong container dùng `claude` / `agent` trên PATH của image.
+#
+# Windows → Linux: session file trong ~/.claude có thể không tương thích 100%;
+# fallback: ANTHROPIC_API_KEY / CURSOR_API_KEY (hoặc login lại trong container).
+
+services:
+  dashboard:
+    environment:
+      HOME: /root
+      # Đảm bảo runner tìm thấy binary đã cài trong image
+      PATH: /root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    volumes:
+      # Claude Code auth / settings (cli-session)
+      - ${HOST_HOME:?Set HOST_HOME to your user home (e.g. USERPROFILE or HOME)}/.claude:/root/.claude
+      # Cursor CLI auth / settings
+      - ${HOST_HOME}/.cursor:/root/.cursor
+      # Dashboard credential profiles (secretRef: cli-session | env:… | file:…)
+      - ${HOST_HOME}/.dev-team-dashboard/credentials.json:/data/dashboard-home/credentials.json
