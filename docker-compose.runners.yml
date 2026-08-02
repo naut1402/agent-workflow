@@ -1,23 +1,17 @@
 # Overlay: dùng CLI đã cài trong image + auth/credential từ host.
 #
-#   # Windows PowerShell
-#   $env:HOST_HOME = $env:USERPROFILE
-#   $env:DEV_TEAM_PROJECT_PATH = "C:\path\to\my-project"
-#   docker compose -f docker-compose.yml -f docker-compose.runners.yml up --build
-#
-#   # Linux / macOS
 #   export HOST_HOME="$HOME"
 #   export DEV_TEAM_PROJECT_PATH=/path/to/my-project
 #   docker compose -f docker-compose.yml -f docker-compose.runners.yml up --build
 #
-# Không mount connections.json từ host Windows (cliPath thường trỏ .exe/.cmd).
-# Connection trong container dùng `claude` / `agent` trên PATH của image.
+# Claude auth trên Linux:
+#   ~/.claude/.credentials.json   ← tên đúng (có dấu chấm)
+#   ~/.claude.json                ← sibling của thư mục .claude
 #
-# Container chạy user `dashboard` (uid 1001) — Claude không cho
-# --dangerously-skip-permissions khi root.
+# Host mounts là :ro; entrypoint COPY vào /home/dashboard (uid 1001) để
+# đọc được file mode 0600 mà không chown file trên host.
 #
-# Windows → Linux: session file trong ~/.claude có thể không tương thích 100%;
-# fallback: ANTHROPIC_API_KEY / CURSOR_API_KEY (hoặc login lại trong container).
+# Fallback: ANTHROPIC_API_KEY / CURSOR_API_KEY
 
 services:
   dashboard:
@@ -25,11 +19,12 @@ services:
     environment:
       HOME: /home/dashboard
       USER: dashboard
+      CLAUDE_CONFIG_DIR: /home/dashboard/.claude
       PATH: /home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
-      # Claude Code auth / settings (cli-session)
-      - ${HOST_HOME:?Set HOST_HOME to your user home (e.g. USERPROFILE or HOME)}/.claude:/home/dashboard/.claude
-      # Cursor CLI auth / settings
-      - ${HOST_HOME}/.cursor:/home/dashboard/.cursor
-      # Dashboard credential profiles (secretRef: cli-session | env:… | file:…)
+      # Auth + plugins (read-only từ host)
+      - ${HOST_HOME:?Set HOST_HOME to your user home}/.claude:/mnt/host-claude:ro
+      - ${HOST_HOME}/.claude.json:/mnt/host-claude.json:ro
+      - ${HOST_HOME}/.cursor:/mnt/host-cursor:ro
+      # Dashboard credential profiles
       - ${HOST_HOME}/.dev-team-dashboard/credentials.json:/data/dashboard-home/credentials.json

@@ -120,17 +120,27 @@ docker compose -f docker-compose.yml -f docker-compose.runners.yml up --build
 
 **Runner + credential host** (`docker-compose.runners.yml`):
 
-| Mount host | Trong container |
-|------------|-----------------|
-| `$HOST_HOME/.claude` | `/home/dashboard/.claude` (cli-session Claude) |
-| `$HOST_HOME/.cursor` | `/home/dashboard/.cursor` (Cursor auth) |
-| `$HOST_HOME/.dev-team-dashboard/credentials.json` | `/data/dashboard-home/credentials.json` |
+| Mount host (ro) | Trong container |
+|-----------------|-----------------|
+| `$HOST_HOME/.claude` | `/mnt/host-claude` → entrypoint copy/symlink vào `/home/dashboard/.claude` |
+| `$HOST_HOME/.claude.json` | `/mnt/host-claude.json` → copy → `/home/dashboard/.claude.json` |
+| `$HOST_HOME/.cursor` | `/mnt/host-cursor` → sync vào `/home/dashboard/.cursor` |
+| `$HOST_HOME/.dev-team-dashboard/credentials.json` | `/data/dashboard-home/credentials.json` (profile dashboard) |
 
-Binary CLI **không** lấy từ Windows host (`.exe` / `.cmd` không chạy trong Linux container) — chỉ dùng bản đã cài trong image. Không mount `connections.json` từ host Windows vì `cliPath` thường trỏ path Windows.
+Claude Linux đọc **`~/.claude/.credentials.json`** (có dấu chấm). Nếu host chỉ có `credentials.json` (không chấm), entrypoint vẫn copy và tạo thêm `.credentials.json`. Entrypoint **copy** auth vào home user `dashboard` (uid 1001) — không `chown` file trên host (tránh phá login host).
+
+Trước khi `up`, đảm bảo file tồn tại (Docker tạo **thư mục** nếu thiếu file mount):
+
+```bash
+test -f "$HOME/.claude/.credentials.json" || test -f "$HOME/.claude/credentials.json"
+test -f "$HOME/.claude.json" || echo '{}' > "$HOME/.claude.json"
+```
+
+Binary CLI **không** lấy từ Windows host. Fallback server: `ANTHROPIC_API_KEY` / `CURSOR_API_KEY`.
 
 Container chạy user **`dashboard` (uid 1001)** — Claude CLI từ chối `--dangerously-skip-permissions` khi process là root.
 
-**Lưu ý:** path Windows → Linux container dùng dạng `/c/Users/...` (Docker Desktop) hoặc để Compose tự map từ `DEV_TEAM_PROJECT_PATH`. Session file tạo trên Windows có thể không đủ cho CLI Linux — khi đó dùng API key hoặc `claude`/`agent login` trong container. Repo này **không** đóng gói orchestrator — chỉ dashboard quan sát project đã mount.
+**Lưu ý:** Repo này **không** đóng gói orchestrator — chỉ dashboard quan sát project đã mount.
 
 ### Lệnh hữu ích
 
