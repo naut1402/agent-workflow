@@ -100,6 +100,8 @@ function onCancel(): void {
   emit('close')
 }
 
+defineExpose({ cancel, reset })
+
 const ENTITY_LABELS: Record<NlChatEntityType, string> = {
   task: 'Task',
   pipeline: 'Pipeline',

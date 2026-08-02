@@ -15,7 +15,7 @@ import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.
  * types, instead of surfacing a 400/409 after the fact.
  */
 
-export type TaskChatBlockedReason = 'stepRunning' | 'noCompletedJob' | 'noSession'
+export type TaskChatBlockedReason = 'stepRunning' | 'noCompletedJob'
 
 export interface TaskChatRunningJob {
   jobId: string
@@ -110,14 +110,12 @@ export function getTaskChatState(
   const jobs = jobsOfTask(taskId)
   const runningJob = jobs.find((j) => j.status === 'queued' || j.status === 'running')
   const hasFinished = jobs.some((j) => j.status === 'succeeded' || j.status === 'failed')
-  const ledger = loadTaskSessionLedger(projectId, taskId)
-  const hasOpenSession = ledger.sessions.some((s) => s.status === 'open')
 
-  // Mirrors sendTaskFeedback()'s guard order exactly.
+  // Mirrors sendTaskFeedback()'s guard order: a finished job can always start
+  // or resume a chat (`sessionMode: 'new'` when the ledger has no open entry).
   let blockedReason: TaskChatBlockedReason | undefined
   if (runningJob) blockedReason = 'stepRunning'
   else if (!hasFinished) blockedReason = 'noCompletedJob'
-  else if (!hasOpenSession) blockedReason = 'noSession'
 
   const resolved = resolveChatSession(projectId, taskId, opts.stepId)
   const transcript = resolved.sessionId

@@ -251,13 +251,16 @@ describe('sendTaskFeedback — guards', () => {
     expect(result).toMatchObject({ ok: false, status: 400, error: 'no completed job to give feedback on' })
   })
 
-  test('ledger has no open entry (session never recorded) → 400', async () => {
+  test('ledger has no open entry → starts a new session instead of 400', async () => {
     seedTask('T5', 'implementer')
     // No sessionMode → runJob never records anything into the ledger.
     const job = runStepLikeJob('T5', 'implementer')
     await settle(job.id)
     const result = sendTaskFeedback('T5', 'P1', 'hi')
-    expect(result).toMatchObject({ ok: false, status: 400, error: 'no resumable session for this task' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.job.metadata?.inputSessionMode).toBe('new')
+    expect(result.job.metadata?.isChatFeedback).toBe(true)
   })
 
   test('a job is already queued/running for the task → 409', async () => {

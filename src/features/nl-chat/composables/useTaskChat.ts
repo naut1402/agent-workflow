@@ -19,7 +19,7 @@ export interface TaskChatTurn {
   tool?: string
 }
 
-export type TaskChatBlockedReason = 'stepRunning' | 'noCompletedJob' | 'noSession'
+export type TaskChatBlockedReason = 'stepRunning' | 'noCompletedJob'
 
 export interface TaskChatRunner {
   id: string
@@ -40,7 +40,6 @@ export interface UseTaskChatOptions {
 const BLOCKED_TEXT: Record<TaskChatBlockedReason, string> = {
   stepRunning: 'Step đang chạy — chờ chạy xong mới gửi được tin nhắn.',
   noCompletedJob: 'Chưa có job nào hoàn tất cho task này để nối tiếp hội thoại.',
-  noSession: 'Không còn phiên CLI nào mở cho task này để nối tiếp.',
 }
 
 export function useTaskChat(opts: UseTaskChatOptions) {

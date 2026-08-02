@@ -100,6 +100,7 @@
 .archived-group[open] > summary::before { transform: rotate(90deg); color: var(--accent); }
 
 .btn-archive,
+.btn-repair,
 .btn-delete {
   display: inline-flex;
   align-items: center;
@@ -114,12 +115,15 @@
   line-height: 1.4;
 }
 .btn-archive:hover { color: var(--accent); }
+.btn-repair:hover { color: var(--accent); }
 .btn-delete:hover { color: var(--danger); }
 .btn-archive svg,
+.btn-repair svg,
 .btn-archive-detail svg {
   transition: transform 0.15s ease;
 }
 .btn-archive:hover svg,
+.btn-repair:hover svg,
 .btn-archive-detail:hover svg {
   transform: scale(1.15);
 }

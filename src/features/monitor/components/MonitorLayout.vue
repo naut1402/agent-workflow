@@ -8,7 +8,8 @@ import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
 import RailIcon from '../../../core/ui/RailIcon.vue'
-import { patchTaskArchive } from '../scripts/monitorApi'
+import { patchTaskArchive, deleteTask, repairTaskState } from '../scripts/monitorApi'
+import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
 import { useLocalToggle } from '../../../core/composables/useLocalToggle'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {
@@ -45,6 +46,7 @@ const emit = defineEmits([
 ])
 
 const archiveError = ref('')
+const needsRepair = computed(() => taskNeedsStateRepair(props.selected))
 
 // Sub-sidebar collapse (mục 5) — cùng pattern App.vue (sidebar chính):
 // useLocalToggle + localStorage key riêng.
@@ -104,6 +106,29 @@ async function toggleArchiveSelected() {
     }
   }
 }
+
+async function repairSelected() {
+  if (!props.selected) return
+  archiveError.value = ''
+  try {
+    await repairTaskState(props.selected.task_id, props.selectedProjectId ?? undefined)
+    emit('task-archived')
+  } catch (e: any) {
+    archiveError.value = String(e.message || e)
+  }
+}
+
+async function deleteSelected() {
+  if (!props.selected) return
+  archiveError.value = ''
+  if (!confirm(t('monitor.layout.confirmDelete'))) return
+  try {
+    await deleteTask(props.selected.task_id, props.selectedProjectId ?? undefined)
+    emit('task-deleted', props.selected.task_id)
+  } catch (e: any) {
+    archiveError.value = String(e.message || e)
+  }
+}
 </script>
 
 <template>
@@ -151,7 +176,14 @@ async function toggleArchiveSelected() {
             <span v-if="selected.auto_review" class="badge auto">auto-review</span>
             <span v-if="selected.review_round" class="badge">review round {{ selected.review_round }}/2</span>
             <span v-if="selected.hitl_pending" class="badge hitl">⏸ {{ selected.hitl_pending }}</span>
-            <span v-if="!selected.state_ok" class="badge err">{{ t('monitor.layout.stateError') }}</span>
+            <span v-if="needsRepair" class="badge err">{{ t('monitor.layout.stateError') }}</span>
+            <button
+              v-if="needsRepair"
+              type="button"
+              class="btn-archive-detail"
+              :title="t('monitor.layout.repairStateTitle')"
+              @click="repairSelected"
+            >{{ t('monitor.layout.repairState') }}</button>
             <button
               v-if="selected.state_ok"
               class="btn-archive-detail"
@@ -167,6 +199,12 @@ async function toggleArchiveSelected() {
                 stroke-linejoin="round"
                 aria-hidden="true"
               ><rect x="2" y="2" width="12" height="3" rx="1" /><path d="M3 5v7.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5" /><path d="M6.5 8.5h3" /></svg> {{ t('monitor.layout.archive') }}</template></button>
+            <button
+              v-if="!selected.state_ok"
+              type="button"
+              class="btn-archive-detail"
+              @click="deleteSelected"
+            >{{ t('monitor.layout.deleteTask') }}</button>
           </div>
           <p v-if="archiveError" class="art-warning">{{ archiveError }}</p>
         </div>

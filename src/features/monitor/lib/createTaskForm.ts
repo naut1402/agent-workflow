@@ -11,6 +11,21 @@ export function validateTaskId(raw: string): TaskIdValidationCode | null {
   return null
 }
 
+/**
+ * Mint a dashboard task id (`T` + 8 hex chars) that always matches
+ * `TASK_ID_PATTERN`. Used when NL chat / API create a task without an id.
+ */
+export function mintTaskId(randomHex?: () => string): string {
+  const hex =
+    randomHex?.() ??
+    (typeof crypto !== 'undefined' && 'getRandomValues' in crypto
+      ? Array.from(crypto.getRandomValues(new Uint8Array(4)))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('')
+      : Math.random().toString(16).slice(2, 10).padEnd(8, '0'))
+  return `T${hex}`
+}
+
 export interface IssuePreviewInput {
   title: string
   body: string | null
