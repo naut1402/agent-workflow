@@ -1,8 +1,8 @@
-# Coding rules — tổ chức feature & helper
+# Feature organization rule — tổ chức feature & helper
 
-Quy ước **hiện hành** khi làm task đụng `src/features/*`, tầng `business/`, và logic dùng chung. Bổ sung [`AGENTS.md`](../AGENTS.md) / [`architecture.md`](architecture.md); không thay thế bất biến §4 trong `AGENTS.md`.
+Quy ước **hiện hành** khi làm task đụng `src/features/*`, tầng `business/`, và logic dùng chung. Bổ sung [`AGENTS.md`](../../AGENTS.md) / [`../architecture.md`](../architecture.md); không thay thế bất biến trong `AGENTS.md`. Coding convention (TS/Zod/FE): [`coding-convention.md`](coding-convention.md).
 
-Lịch sử tái cấu trúc (trước/sau, commit): [`cookbook-core-path-reorg.md`](cookbook-core-path-reorg.md). Checklist review: [`review-checklist.md`](review-checklist.md).
+Lịch sử tái cấu trúc: [`../cookbook/core-path-reorg.md`](../cookbook/core-path-reorg.md). Checklist review: [`review-checklist-rule.md`](review-checklist-rule.md).
 
 ---
 

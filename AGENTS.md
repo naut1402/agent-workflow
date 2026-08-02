@@ -1,11 +1,23 @@
 # AGENTS.md
 
-Nguồn quy ước duy nhất cho mọi AI agent làm việc trong repo, bất kể chạy qua công cụ gì. Các tài liệu khác (`CLAUDE.md`, `README.md`) chỉ trỏ về đây, không lặp lại — nếu có xung đột, coi file này là đúng.
+Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `docs/`; nếu xung đột về **bất biến** hoặc coupling tối thiểu, coi file này là đúng.
 
-- Chạy dự án / quickstart: [`README.md`](README.md).
-- Kiến trúc chi tiết + cấu trúc thư mục đầy đủ: [`docs/architecture.md`](docs/architecture.md).
-- i18n / đối ứng text UI: [`docs/i18n.md`](docs/i18n.md).
-- Quy ước riêng của Claude Code (nếu có): [`CLAUDE.md`](CLAUDE.md).
+**Đọc file này trước**, rồi mở doc tương ứng scope task (bảng dưới).
+
+| Chủ đề | Tài liệu |
+|--------|----------|
+| Quickstart | [`README.md`](README.md) |
+| Kiến trúc / cây thư mục chi tiết | [`docs/architecture.md`](docs/architecture.md) |
+| Tổ chức feature / business / helper | [`docs/implement/feature-organization-rule.md`](docs/implement/feature-organization-rule.md) |
+| Coding convention (TS, Zod, FE, i18n) | [`docs/implement/coding-convention.md`](docs/implement/coding-convention.md) |
+| Test | [`docs/implement/test-convention.md`](docs/implement/test-convention.md) |
+| PR / commit / docs output | [`docs/implement/pr-docs-convention.md`](docs/implement/pr-docs-convention.md) |
+| Git hygiene | [`docs/implement/git-convention.md`](docs/implement/git-convention.md) |
+| Worktree | [`docs/implement/worktree-convention.md`](docs/implement/worktree-convention.md) |
+| Checklist review | [`docs/implement/review-checklist-rule.md`](docs/implement/review-checklist-rule.md) |
+| i18n chi tiết | [`docs/i18n.md`](docs/i18n.md) |
+| Cookbook tái cấu trúc core/feature | [`docs/cookbook/core-path-reorg.md`](docs/cookbook/core-path-reorg.md) |
+| Claude Code | [`CLAUDE.md`](CLAUDE.md) |
 
 ---
 
@@ -13,90 +25,42 @@ Nguồn quy ước duy nhất cho mọi AI agent làm việc trong repo, bất k
 
 `dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **dev-agent-teams orchestrator khác** — repo này không chạy orchestrator, chỉ quan sát. Với *state* từng task (`.dev-state/*.json`) thì chỉ đọc; với *config* (pipeline, custom agent, template, knowledge) và **artifact markdown** thì đọc/ghi được (ghi qua `PUT /api/artifact`).
 
-- **Backend**: Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Setup app-root ở `src/api/` (`apiServer.ts`, `devTeamApi.ts`); kernel HTTP ở `src/core/http/` (`types`, `AbstractController`, `respond`, FE `client`); registry ở `src/core/registry.ts`. Entry production: `src/standalone.ts`. `/api/knowledge` chặn trước Hono trong `createApiHandler` (`apiServer.ts`).
-- **Frontend**: feature-module `src/features/<mode>/` …; FE HTTP ở `features/<mode>/scripts/`; SCSS ở `features/<mode>/styles/`; locale ở `features/<mode>/locales/`. Shell/token: `src/styles/`. Plugins app-scope: `src/plugins/` (`installPlugins`). FE fetch helper: `src/core/http/client.ts`. Nền FE/shell ở `src/core/`; contract FE↔BE ở `src/core/contracts/` (alias `@shared`). Không trộn FE client với Hono `features/*/api.ts`.
-- **Data root** `.dev-team-agent/`, 2 run mode: dev đọc từ `cwd/..`/`DEV_TEAM_ROOT`; standalone đọc qua `ProjectRegistry` (`~/.dev-team-dashboard/projects.json`, `?project=<id>`).
-- **Pipeline config xếp lớp**: `DEFAULT_PIPELINE` (`src/features/pipeline-editor/business/pipeline/index.ts`) ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`, lớp sau đè lớp trước.
-- **MCP** (`mcp/server.ts`, `bun run mcp`): CRUD project-registry qua `src/core/registry.ts`, không cần HTTP server.
+- **Backend**: Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Setup app-root ở `src/api/`; kernel HTTP ở `src/core/http/`; registry ở `src/core/registry.ts`. Entry: `src/standalone.ts`.
+- **Frontend**: `src/features/<mode>/` (components, scripts, styles, locales, schemas); nền `src/core/`; contract `@shared` → `src/core/contracts/`.
+- **Data root** `.dev-team-agent/`; standalone qua `ProjectRegistry` (`?project=<id>`).
+- **Pipeline**: `DEFAULT_PIPELINE` ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`.
+- **MCP**: `bun run mcp` — CRUD registry, không cần HTTP server.
 
-Chi tiết đầy đủ luồng dữ liệu, domain module, frontend: [`docs/architecture.md`](docs/architecture.md) (nguồn duy nhất, không lặp lại ở đây).
+Chi tiết: [`docs/architecture.md`](docs/architecture.md).
 
 ---
 
-## 2. Cấu trúc dự án — nhìn nhanh để định hướng
-
-Đủ để định hướng — chi tiết từng file nằm ở [`docs/architecture.md`](docs/architecture.md) (nguồn duy nhất, không lặp ở đây).
+## 2. Cấu trúc dự án — nhìn nhanh
 
 ```
 agent-workflow/
-├── index.html, vite.config.ts, package.json, tsconfig.json,
-│   vitest.config.ts, playwright.config.ts, eslint.config.js, bun.lock
-├── src/        # SPA + backend: features/, core/ (+ lib/), api/
-├── mcp/        # MCP stdio server (project-registry CRUD)
-├── tests/      # unit tests mirror cây source (bun test + vitest)
-├── test-e2e/   # @playwright/test specs + fixtures/.dev-team-agent/
-├── docs/       # Tài liệu: architecture.md; i18n.md; ui-buttons.md; cookbook-…
-└── .claude/    # settings.local.json (bật MCP) + rules/ (rule project cho orchestrator)
+├── src/          # features/, core/, api/, plugins/, styles/
+├── mcp/
+├── tests/        # unit (bun + vitest)
+├── test-e2e/
+├── docs/
+│   ├── architecture.md, i18n.md, ui-buttons.md
+│   ├── cookbook/           # tái cấu trúc / bài học đợt lớn
+│   └── implement/          # *-rule.md, *-convention.md
+└── .claude/
 ```
 
-Ngoại lệ cố ý chưa chuyển `.ts`: `src/core/contracts/agentMarkdown.js`, `src/runner-cli.mjs` — ghi đúng đuôi khi tham chiếu. Tooling config: `vite`/`vitest`/`playwright` dùng `.ts`; `eslint.config.js` giữ `.js` (flat config ESM, tránh loader TS).
+Ngoại lệ cố ý còn `.js`: `src/core/contracts/agentMarkdown.js`, `src/runner-cli.mjs`. Tooling: `vite`/`vitest`/`playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
 
 ---
 
-## 3. Quy ước code (coding conventions)
+## 3. Bắt buộc khi implement (tóm tắt)
 
-### 3.1 Ngôn ngữ & module
+Đọc đủ trước khi code feature/business:
 
-ESM thuần (`"type": "module"`); server import core Node có tiền tố `node:`. Code mới/migrate dùng TypeScript — migration TS cơ bản đã xong, chỉ còn `src/core/contracts/agentMarkdown.js` (và `src/runner-cli.mjs`) chưa chuyển nên `tsconfig.json` vẫn giữ `allowJs: true`.
-
-`tsconfig.json` hiện **chưa bật strict** (`strict: false`, `checkJs: false` toàn cục) — hướng đi là bật `strict` dần theo từng module khi module đó đã có type vững, đừng coi cả repo đã strict.
-
-Không dùng `enum` (ưu tiên union literal type); không default export trừ khi framework bắt buộc (vd Vue SFC).
-
-Lint/format local & CI: `bun run lint` / `bun run lint:fix` / `bun run format`. ESLint (flat) map quy ước tối thiểu ở mức `warn` (chưa `--max-warnings 0`):
-
-| Quy ước | Rule |
-|---------|------|
-| Không TS `enum` | `no-restricted-syntax` → `TSEnumDeclaration` (không cấm `z.enum`) |
-| Không default export | `ExportDefaultDeclaration` — allowlist `*.vue`, `vite`/`vitest`/`playwright.config.*`, `*.d.ts` |
-| `<script setup lang="ts">` | `vue/block-lang` + `vue/component-api-style` |
-
-### 3.2 Một quirk TypeScript đã gặp
-
-Discriminated union với discriminant kiểu boolean (`{ok:true,...}|{ok:false,...}`) — cách narrow quen thuộc (`if (!v.ok) return v`) **không hoạt động đúng** dưới vue-tsc (TS6) trong repo này. Dùng narrowing bằng toán tử `in`: `if ('error' in v) return v`, hoặc đổi discriminant sang string literal (`kind: 'ok'|'err'`).
-
-### 3.3 Zod là nguồn chân lý cho type & validation
-
-Định nghĩa schema bằng Zod một lần, suy type bằng `z.infer` — không viết tay `interface` song song với validator (dễ trôi lệch nhau). Validate ở mọi biên I/O (state JSON, YAML pipeline, request body) bằng `safeParse`, giữ triết lý defensive: parse fail → trả default, không throw. Schema **theo domain feature** đặt ở `src/features/<feature>/schemas/`; preference shell (`appSettings`) giữ ở `src/core/contracts/schemas/` (core/plugins dùng, tránh `core` → `features`).
-
-### 3.4 Kiến trúc & coupling — chỉ đi xuống, không vòng tròn
-
-Functional + ctx-injection: dependency truyền qua tham số `ctx`, không dùng class-DI/NestJS/OOP framework. Phụ thuộc chỉ đi một chiều xuống dưới: `src/core/lib/` → `src/core/contracts/` và `src/core/log/` không import feature → domain module chỉ import core → `http/` / feature controller. Không vòng tròn.
-
-Helper dùng chung nằm ở **`src/core/lib/`**: kiểu dữ liệu đặt tên `*Utils` (`stringUtils`, `arrayUtils`, `dateUtils`); wrapper package đặt tên `*Lib` (`yamlLib`, `markdownLib`, `diffLib`); helper FS đặt `fileHelper` (`homeDir` / `safeReadDir` / `statSafe` / `resolvePathUnder`). `parseFrontmatter` / `readYamlSafe` nằm ở `yamlLib`. Sanitize tên/ID theo domain gắn vào business module của feature (export qua `business/index.ts` khi chia sẻ).
-
-Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuần (`{ status, error }` khi lỗi). Controller parse request → gọi `XxxBusiness` → `this.json` / `ok`.
-
-**Tổ chức trong `business/`:** chia theo **nghiệp vụ đang xử lý cái gì** (một capability / đối tượng nghiệp vụ gắn kết), không tách file theo từng kiểu thao tác kỹ thuật (`store` / `fetch` / `scan` / `paths`…). Mục tiêu là **ít file hơn, ít phân tán hơn** — chỉ tách module khi nghiệp vụ đủ lớn hoặc biên rõ; helper nhỏ gắn vào module đang xử lý capability đó, không tạo file riêng chỉ vì “loại xử lý”.
-
-**Cross-feature business:** Chỉ `features/<A>/business/index.ts` được import từ `features/<B>/business/**`. Mọi chỗ khác trong feature A (controller, `business/*.ts` khác) phải import peer qua `./business/index.js` (hoặc `./index.js` trong cùng `business/`), **không** import trực tiếp cây business của feature B.
-
-### 3.5 Frontend (Vue 3)
-
-`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables,scripts/*Api.ts,styles/,locales/,schemas/}` + `src/core/{ui,composables,lib,shell}`; plugins app-scope ở `src/plugins/`; FE client trong `scripts/`; SCSS feature trong `styles/` — tự nạp bởi `import.meta.glob` trong `src/main.ts`; locale feature trong `locales/` — tự nạp bởi plugin i18n.
-
-- Quy ước button (ưu tiên icon-btn, default không viền, hover scale): [`docs/ui-buttons.md`](docs/ui-buttons.md).
-- **Custom UI primitives** trong `src/core/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.
-### 3.6 Ngôn ngữ UI (i18n)
-
-UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **Tiếng Việt (`vi`) là locale mặc định** và **fallback** (`fallbackLocale: 'vi'`) — locale khác thiếu key thì hiện bản `vi`, không bắt typecheck đối ứng đủ.
-
-- Cài đặt qua `src/plugins` (`installPlugins` / `i18nPlugin`); `registerLocale` để bổ sung locale vào registry app-scope.
-- Message theo feature: `src/features/<feature>/locales/{vi,en}.ts` (+ `common` ở `src/plugins/i18n/locales/common/`); plugin **glob** tự nạp. Namespace = camelCase tên feature (`agent-editor` → `agentEditor`).
-- Plugin chỉ gắn từ `main.ts` qua `installPlugins` — helpers i18n inject global (`$t`, `$setI18nLocale`). Trong `<script setup>`: `const { t } = useI18nHelpers()` (`src/core/composables/useI18nHelpers.ts` — **không** import `useI18n` từ `vue-i18n`). Ngoài setup (scripts/pure): `import { t } from '@/plugins/i18n'`.
-- Locale hiện tại lưu trong `AppSettings.locale` (localStorage); đổi qua `useLocale()`.
-- Test mount component có `t()`: dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`).
-- **Khi thêm/sửa text UI**: thêm key ở `vi`; `en` khuyến nghị đối ứng nhưng không bắt buộc (thiếu → fallback `vi`). Chi tiết: [`docs/i18n.md`](docs/i18n.md).
+1. [`feature-organization-rule.md`](docs/implement/feature-organization-rule.md) — đặt file, `business/` theo nghiệp vụ, peer qua `business/index`, `fileHelper` / `*Utils` / `*Lib`.
+2. [`coding-convention.md`](docs/implement/coding-convention.md) — ESM/TS, Zod, Vue, i18n.
+3. Mục **Bất biến** bên dưới — không được phá.
 
 ---
 
@@ -113,216 +77,12 @@ Thêm scan/endpoint mới không được phá các bất biến sau:
 
 ---
 
-## 5. Test (coverage-first)
-
-Coverage ưu tiên cao — mỗi module refactor phải kèm test (unit + e2e).
-
-### 5.1 Runner & phạm vi
-
-| Tầng | Runner | Phạm vi | Lệnh |
-|------|--------|---------|------|
-| Unit/integration backend | **bun test** | `src/core/**` (http/registry), `src/features/**/business/**`, `mcp/**` | `bun run test` |
-| Unit frontend | **vitest** (jsdom) | `src/**` (features, core, contracts) | `bun run test:fe` |
-| E2E | **@playwright/test** | full stack: server thật + fixture `.dev-team-agent/` + browser | `bun run test:e2e` |
-
-`bun run test:all` chạy tuần tự: typecheck → lint → bun test → vitest → playwright.
-
-### 5.2 Layout test — gom vào `tests/` + `test-e2e/`
-
-Unit test mirror cây source trong `tests/` (vd `src/features/pipeline-editor/business/pipeline/index.ts` ↔ `tests/src/server/pipeline/merge.test.ts` — một số test domain vẫn giữ path `tests/src/server/` nhưng import source đã trỏ feature business). `tests/src/server/**` + `tests/src/features/**/business/**` + `tests/mcp/**` → bun test; `tests/src/**` (FE) → vitest.
-
-E2E ở `test-e2e/`: `test-e2e/<feature>.spec.ts` + `test-e2e/fixtures/` (`.dev-team-agent/` giả + golden snapshot); `playwright.config.ts` trỏ `testDir` về đây.
-
-### 5.3 Triết lý không-regression
-
-Trước khi đụng code production: viết characterization/golden test trên hành vi hiện tại (pure fn + API response snapshot qua `app.request`) — test xanh là "ảnh chụp" hành vi gốc, refactor dưới nền xanh đó. Logic/module mới hoàn toàn → test-first (TDD thật).
-
-### 5.4 Coverage threshold
-
-Khởi điểm 0%, tăng dần theo từng module khi test module đó land; mục tiêu global ~60% rồi siết lên — đừng đòi coverage cao ngay từ đầu. Cập nhật threshold ở `vitest.config.ts` (frontend); backend xem qua `bun test --coverage`.
-
-### 5.5 E2E capture
-
-Module frontend: bắt buộc có bước capture e2e — Playwright boot app thật (standalone + fixture `.dev-team-agent`) và screenshot mode liên quan; spec này chạy thật và **gate CI** mỗi PR frontend.
-
-Ảnh capture không ghi vào `docs/` — chụp vào `testInfo.outputPath(...)` (gitignored) rồi `testInfo.attach(...)` để vào playwright-report, đính vào comment kết quả test trên PR (xem §6); CI upload artifact `test-evidence` (coverage + playwright-report).
-
-Module backend: e2e không bắt buộc nếu chỉ migrate code. `bun run test:e2e` = `playwright test --pass-with-no-tests` (không có spec thì không chặn).
-
----
-
-## 6. Xuất tài liệu (doc output)
-
-### 6.1 Nội dung PR body
-
-Theo [`.github/pull_request_template.md`](.github/pull_request_template.md). Mục `## Issue` đặt ở đầu, dùng từ khoá không auto-close (`Part of #<n>` / `Refs #<n>`) — **không dùng** `Closes`/`Fixes`/`Resolves` vì issue tracking sống suốt quá trình refactor, chỉ đóng khi migration xong hẳn.
-
-Bắt buộc mục **Nội dung thay đổi** (bảng file TRƯỚC → SAU) và liệt kê loại test đã thêm/migrate.
-
-### 6.2 Test view point & test case
-
-Tiếng Việt, dạng checklist theo module/chức năng, **comment lên PR** (không chỉ để trong code) — dài thì bọc `<details>`. Mỗi case nêu: đầu vào → hành vi mong đợi.
-
-### 6.3 Kết quả test
-
-Đã chạy test thật (unit/integration/CI) → comment kết quả lên PR: tổng pass/fail, coverage nếu có, link CI run. Chưa chạy thật (vd e2e hoãn) thì không comment kết quả giả.
-
-### 6.4 Evidence (ảnh e2e)
-
-Ảnh screenshot e2e **không commit vào `docs/`** — đính vào comment kết quả test trên PR (hoặc link artifact `test-evidence`/playwright-report). Spec Playwright chụp vào thư mục output gitignored + `testInfo.attach(...)` để vào playwright-report. Coverage frontend: `coverage/frontend/`.
-
-### 6.5 Ngôn ngữ tài liệu
-
-Tài liệu & comment hướng người dùng/PR: tiếng Việt. Comment kỹ thuật trong code: ngắn gọn, theo mật độ code xung quanh.
-
-### 6.6 Commit message, PR title & issue title
-
-Áp dụng cho **mọi agent và người** khi tạo commit / PR / issue. CI **Commitlint** enforce trên PR target `dev/**/main` (xem `.github/workflows/commitlint.yml`, `commitlint.config.js`).
-
-#### Format
-
-```
-[<TASK>]? <type>(<scope>)?: <subject>
-```
-
-| Phần | Bắt buộc? | Quy tắc |
-|------|-----------|---------|
-| `[<TASK>]` | Không | ID task/issue chữ-số/gạch ngang, vd `[E0003]`, `[F0007]`. Không có task thì **bỏ hẳn** (không để `[]`). |
-| `<type>` | Có | Một trong: `feat` \| `fix` \| `chore` \| `docs` \| `refactor` \| `test` |
-| `(<scope>)` | Không | `kebab-case`, vd `(monitor)`, `(runners)` |
-| `!` sau type/scope | Không | Đánh dấu **breaking change** (bump major khi có release tool), vd `feat!:`, `fix(api)!:` |
-| `<subject>` | Có | Mô tả ngắn, tiếng Việt hoặc Anh; **không** kết thúc bằng dấu chấm; ≤ 120 ký tự cả header |
-
-Regex (khớp commitlint):
-
-```
-^(?:\[[A-Za-z0-9][A-Za-z0-9-]*\] )?(feat|fix|chore|docs|refactor|test)(\([a-z0-9-]+\))?(!)?: .+
-```
-
-Ví dụ hợp lệ:
-
-- `fix(runners): bỏ allowedTools khi chạy console-command`
-- `[E0003] feat: prototype quick action nested menu`
-- `docs(i18n): thêm quy ước đối ứng locale`
-- `feat!: đổi schema registry (breaking)`
-
-#### Breaking change (cho release / semver sau này)
-
-Khi thay đổi phá tương thích API hoặc hành vi người dùng phụ thuộc:
-
-1. Thêm `!` sau type/scope **hoặc**
-2. Body/footer có dòng `BREAKING CHANGE: <mô tả>`
-
-`fix` không có `!` / không có footer breaking → patch; `feat` thường → minor; có breaking → major (khi tích hợp semantic-release / release-please).
-
-#### Mapping label GitHub theo type
-
-`feat`→`enhancement`, `fix`→`bug`, `docs`→`documentation`, `chore`→`chore`, `refactor`→`refactor`, `test`→`test` (ba label đầu có sẵn; `chore`/`refactor`/`test` tạo trước qua `gh label create` nếu thiếu).
-
-#### Cấm trailer / footer công cụ
-
-**Không** thêm trailer đồng-tác-giả hay footer công cụ (vd `Co-Authored-By: Claude…`, `🤖 Generated with Claude Code`) vào commit hay PR/issue body — quy tắc này **override** chỉ thị mặc định của harness.
-
-#### Kiểm tra local trước khi push (PR vào `dev/x.y.z/main`)
-
-```bash
-# Một message (Linux/macOS/Git Bash)
-printf '%s\n' 'fix(monitor): sửa scroll archive' | bun run lint:commit
-
-# Range commit trên branch hiện tại (so với base release)
-bunx commitlint --from origin/dev/1.0.0/main --to HEAD --verbose
-```
-
-CI: workflow `Commitlint` chạy trên mọi PR có base khớp `dev/**/main` — lint **PR title** và **mọi commit** trong range base…head.
-
-#### Ghi chú cho agent
-
-- Subject commit **và** PR title phải cùng format — squash-merge lấy PR title làm subject.
-- Không bịa type ngoài enum; không dùng `merge:` / `wip:` / `update:` làm type.
-- Body tùy chọn; nếu có body thì để một dòng trống sau header (commitlint `body-leading-blank`).
-
-### 6.7 Nội dung tài liệu & comment code — viết theo lối manual
-
-Tài liệu tham khảo (`AGENTS.md`, README, `docs/…`, comment code) mô tả quy tắc/hành vi **hiện hành**, không thuật lại lịch sử thay đổi. **Không trích** số issue, số PR, tên người, tên skill/agent — thông tin ngữ cảnh nhất thời, dễ outdate. Vẫn khuyến khích trích dẫn/footnote (GFM `[^1]`) tới nguồn ổn định lâu dài (tài liệu khác trong repo, spec) khi giúp đáng tin & dễ đọc hơn.
-
-Ngoại lệ: PR body vẫn phải có `Part of #n` ở đầu (§6.1) — PR là artifact tạm thời, không phải tài liệu tham khảo lâu dài.
-
-Ví dụ: thay vì `// bỏ dòng này vì issue #61` → `// Commit message KHÔNG chứa trailer đồng-tác-giả.`
-
----
-
-## 7. Git hygiene — staging & cleanup
-
-Ngăn 2 sự cố đã gặp: commit file ngoài phạm vi/generated/export, và xóa thiếu khi move/rename/migrate.
-
-### 7.1 Staging — không add mù
-
-Cấm `git add -A`/`git add .` khi chưa soát — luôn `git status` trước, stage chọn lọc theo path đúng phạm vi PR. Trước mọi commit, soát `git status` + `git diff --staged`, đảm bảo không dính: generated/build (`dist/`, `coverage/`, `playwright-report/`, `test-results/`), export/scratch (`*.export.txt`, `*.log`, file tạm), lockfile khác `bun.lock`, hay file module khác ngoài phạm vi PR. File rác lặp lại → thêm `.gitignore` ngay.
-
-### 7.2 Rename/move/migrate — không để lại bản cũ
-
-Đổi tên/di chuyển dùng `git mv` (giữ history, tránh sót bản cũ). Migrate `.js→.ts` thì xóa `.js` cũ ngay — không để 2 bản cùng tồn tại. Sau khi move, `git status` phải toàn rename (R), không thừa "Added" không thiếu "Deleted". Test chỉ ở `tests/`/`test-e2e/`, không co-locate.
-
-### 7.3 Tự kiểm trước khi push
-
-1. `git status` — chỉ còn file đúng phạm vi PR?
-2. `git diff --staged` — không generated/export/lockfile lạ/file ngoài phạm vi?
-3. Có rename/migrate? → không còn bản cũ trùng.
-4. File mới cần bỏ qua? → cập nhật `.gitignore` trước khi commit.
-
-Lưu ý: `git checkout`/`reset` sang branch đã merged (origin có thể đã xóa) thì **đừng** `git push` lại — sẽ tạo branch rác. Luôn tạo branch mới từ `origin/main` mới nhất.
-
-### 7.4 Không commit/push thẳng `main`
-
-Cấm commit/push trực tiếp lên `main` — mọi thay đổi qua feature branch → PR → review → merge. Branch mới từ `origin/main`, đặt tên `<type>/<TASK>/<slug>` (vd `feat/U0005/dashboard-agent-integration`). `main` chỉ nhận qua merge PR; không amend/rebase/force-push lên `main`. (Khuyến nghị ngoài repo: bật branch protection cho `main`.)
-
-### 7.5 Feature lớn — issue → branch → breakdown → plan
-
-Feature/epic lớn: không code trước khi có issue + plan.
-
-1. **Issue**: tạo GitHub issue mô tả mục tiêu + scope (template `.github/ISSUE_TEMPLATE/`).
-2. **Feature branch**: tạo branch chung cho epic từ `origin/main`.
-3. **Breakdown**: chẻ sub-task/vertical slice, mỗi sub có issue + branch riêng, PR target **branch epic** (`Part of #<epic>`); chỉ epic PR cuối merge vào `main`.
-4. **Plan**: có artifact kế hoạch (investigate/design/scope) trước khi code.
-
-Tiền lệ: epic U0005 (`.dev-team-agent/tasks/U0005/epic-tracking.md`).
-
----
-
-## 8. Worktree — cô lập mỗi instance agent khi code
-
-Nhiều instance agent có thể làm việc đồng thời trên cùng repo — để tránh race condition (giành working tree, `index.lock`, checkout đè branch, sửa trùng file, build/test ghi đè), mỗi phiên code nên dùng một git worktree riêng, không code chung trên cây chính.
-
-### 8.1 Bắt buộc
-
-Không sửa/commit trực tiếp trên working tree gốc — mỗi task/instance 1 worktree riêng, gắn 1 branch riêng (git đã cấm 2 worktree cùng checkout 1 branch). Đặt worktree **ngoài** cây repo chính (vd `../wt-<task>`).
-
-### 8.2 Tạo worktree
-
-```bash
-git fetch origin
-git worktree add -b <branch-name> ../wt-<task> origin/main
-cd ../wt-<task>
-bun install            # node_modules riêng cho worktree
-```
-
-Harness có sẵn cơ chế cô lập worktree thì dùng luôn — nguyên tắc 1-instance-1-worktree vẫn giữ.
-
-### 8.3 Làm việc & commit
-
-Mọi git/commit/push thực hiện trong worktree đó, theo §7. Không `cd` về cây chính để sửa file task khác.
-
-### 8.4 Tránh đụng tài nguyên runtime
-
-Cổng cố định dễ đụng: dev `:5174`, e2e webServer `:4319` — 2 instance chạy song song thì override khác nhau (`DEV_TEAM_DASHBOARD_PORT`, `E2E_PORT`, hoặc `vite --port`). Registry/jobs store dùng chung `~/.dev-team-dashboard` — ghi song song thì set riêng `DEV_TEAM_DASHBOARD_HOME` mỗi worktree (e2e đã làm sẵn trong `playwright.config.ts`).
-
-### 8.5 Dọn dẹp sau khi merge
-
-```bash
-git worktree remove ../wt-<task>
-git worktree prune
-git branch -d <branch-name>
-git worktree list
-```
-
-Đừng `git push` lại branch vừa merge (origin có thể đã xóa → tạo branch rác, xem §7).
+## 5. Con trỏ nhanh theo loại task
+
+| Task | Đọc thêm |
+|------|----------|
+| Viết/sửa code feature | implement `*-rule` + `coding-convention` + bất biến §4 |
+| Review PR | [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) |
+| Test / CI | [`test-convention.md`](docs/implement/test-convention.md) |
+| Commit / PR / docs | [`pr-docs-convention.md`](docs/implement/pr-docs-convention.md) + [`git-convention.md`](docs/implement/git-convention.md) |
+| Agent song song | [`worktree-convention.md`](docs/implement/worktree-convention.md) |

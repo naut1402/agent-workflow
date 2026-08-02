@@ -27,7 +27,7 @@ bun run mcp               # MCP stdio server (mcp/server.ts)
 
 Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`.
 
-Chạy test: `bun run test` (backend) · `bun run test:fe` (frontend) · `bun run test:e2e` (e2e) · `bun run test:all` (typecheck → lint → test → test:fe → e2e). Chi tiết quy ước test: [`AGENTS.md` §5](AGENTS.md#5-test-coverage-first).
+Chạy test: `bun run test` (backend) · `bun run test:fe` (frontend) · `bun run test:e2e` (e2e) · `bun run test:all` (typecheck → lint → test → test:fe → e2e). Chi tiết quy ước test: [`docs/implement/test-convention.md`](docs/implement/test-convention.md).
 
 ## Khái niệm `.dev-team-agent/` (data root)
 
@@ -43,5 +43,6 @@ Có **2 run mode** resolve root:
 ## Tài liệu sâu
 
 - **Kiến trúc + cấu trúc thư mục:** [`docs/architecture.md`](docs/architecture.md)
-- **Quy ước cho MỌI AI agent** (coding conventions, test, git/PR, worktree, bất biến): [`AGENTS.md`](AGENTS.md)
+- **Hub AI agent + bất biến:** [`AGENTS.md`](AGENTS.md)
+- **Implement (rule / convention):** [`docs/implement/`](docs/implement/)
 - **Đặc thù Claude Code:** [`CLAUDE.md`](CLAUDE.md)

@@ -1,6 +1,6 @@
 # Cookbook — tái cấu trúc core / feature (PR #174)
 
-Tài liệu chắt lọc từ nhánh `refactor/core-path-reorg` (base `dev/1.0.0/main`). Mục tiêu: tái hiện **vì sao** và **làm thế nào**, không thay [`architecture.md`](architecture.md) / [`AGENTS.md`](../AGENTS.md) (nguồn chân lý hành vi hiện hành).
+Tài liệu chắt lọc từ nhánh `refactor/core-path-reorg` (base `dev/1.0.0/main`). Mục tiêu: tái hiện **vì sao** và **làm thế nào**, không thay [`../architecture.md`](../architecture.md) / [`../../AGENTS.md`](../../AGENTS.md) (hub + bất biến hiện hành).
 
 **Phạm vi:** gom `shared` + `server` vào dưới `src/`, kernel mỏng (`core` / `api` / `plugins`), feature tự chứa route–business–UI–locale–styles–schemas, util/wrapper thống nhất trong `core/lib`.
 
@@ -626,16 +626,17 @@ flowchart TB
 7. Business không import trực tiếp `node:fs` / `node:path`.
 8. Chạy `bun run typecheck` + `bun run build` nếu đụng FE+Node.
 
-Chi tiết quy ước đặt file & review: [`coding-rules.md`](coding-rules.md), [`review-checklist.md`](review-checklist.md).
+Chi tiết quy ước đặt file & review: [`../implement/feature-organization-rule.md`](../implement/feature-organization-rule.md), [`../implement/review-checklist-rule.md`](../implement/review-checklist-rule.md).
 
 ---
 
 ## Liên kết
 
-- Kiến trúc hiện hành: [`architecture.md`](architecture.md)
-- Quy ước tổ chức code (feature / business / helper): [`coding-rules.md`](coding-rules.md)
-- Checklist review: [`review-checklist.md`](review-checklist.md)
-- Quy ước agent / bất biến: [`AGENTS.md`](../AGENTS.md)
-- i18n: [`i18n.md`](i18n.md)
-- SCSS: [`architecture.md`](architecture.md) §3.3
+- Kiến trúc hiện hành: [`../architecture.md`](../architecture.md)
+- Tổ chức feature / business: [`../implement/feature-organization-rule.md`](../implement/feature-organization-rule.md)
+- Coding convention: [`../implement/coding-convention.md`](../implement/coding-convention.md)
+- Checklist review: [`../implement/review-checklist-rule.md`](../implement/review-checklist-rule.md)
+- Hub agent / bất biến: [`../../AGENTS.md`](../../AGENTS.md)
+- i18n: [`../i18n.md`](../i18n.md)
+- SCSS: [`../architecture.md`](../architecture.md) §3.3
 - PR: https://github.com/naut1402/agent-workflow/pull/174

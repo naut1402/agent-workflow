@@ -1,6 +1,6 @@
 # Review checklist — feature / business / helper
 
-Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu trúc tương tự cookbook core/feature. Chi tiết quy ước: [`coding-rules.md`](coding-rules.md); bất biến repo: [`AGENTS.md`](../AGENTS.md) §3–§4.
+Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu trúc tương tự cookbook core/feature. Chi tiết quy ước: [`feature-organization-rule.md`](feature-organization-rule.md), [`coding-convention.md`](coding-convention.md); bất biến repo: [`AGENTS.md`](../../AGENTS.md) § Bất biến.
 
 Đánh dấu từng mục liên quan scope PR (không bắt buộc tick hết nếu PR không đụng vùng đó).
 
@@ -54,8 +54,8 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 
 ## G. Docs (khi đổi convention)
 
-- [ ] Đổi quy ước đặt file / peer / helper: cập nhật `coding-rules.md` và/hoặc `AGENTS.md` / `architecture.md` (mô tả **hiện hành**, không kể lịch sử issue).
-- [ ] Đợt tái cấu trúc lớn: bổ sung đơn vị vào cookbook nếu cần tái hiện quyết định.
+- [ ] Đổi quy ước đặt file / peer / helper: cập nhật `feature-organization-rule.md` và/hoặc `AGENTS.md` / `architecture.md` (mô tả **hiện hành**, không kể lịch sử issue).
+- [ ] Đợt tái cấu trúc lớn: bổ sung đơn vị vào `docs/cookbook/` nếu cần tái hiện quyết định.
 
 ---
 
@@ -63,7 +63,7 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 
 | Vấn đề | Gợi ý phản hồi |
 |--------|----------------|
-| Tách `paths.ts` / `store.ts` mỏng | “Gộp theo nghiệp vụ X — xem coding-rules §2.” |
+| Tách `paths.ts` / `store.ts` mỏng | “Gộp theo nghiệp vụ X — xem feature-organization-rule §2.” |
 | `import …/other/business/foo` từ controller | “Đưa re-export vào `business/index` của feature này.” |
 | `import fs from 'node:fs'` trong business | “Dùng / mở rộng `fileHelper`.” |
 | Copy `slugify` / YAML parse | “Dùng `stringUtils` / `yamlLib`.” |

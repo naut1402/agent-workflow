@@ -26,7 +26,7 @@ Hover scale (`scale(1.15)`) chỉ dùng cho toolbar / standalone. Nút nằm c�
 - Luôn có `type="button"` (trừ khi đúng là submit form).
 - Luôn có `title` và `aria-label` qua `t(...)` — icon-only không có nhãn chữ nên phụ thuộc hai thuộc tính này.
 - SVG trang trí: `aria-hidden="true"`.
-- Không hardcode chuỗi UI (xem quy ước i18n trong `AGENTS.md` §3.6).
+- Không hardcode chuỗi UI (xem quy ước i18n trong [`implement/coding-convention.md`](implement/coding-convention.md) / [`i18n.md`](i18n.md)).
 
 ### Ví dụ
 

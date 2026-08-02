@@ -3,7 +3,8 @@
 Tài liệu này mô tả **kiến trúc chi tiết** của `dev-team-dashboard`: cách backend và frontend được tổ chức, khái niệm "data root", cấu trúc thư mục, và cách một request đi qua hệ thống. Đây là **nguồn chính** cho phần kiến trúc + cấu trúc dự án cho người đọc — các tài liệu khác chỉ liên kết tới đây, không lặp lại.
 
 - Giới thiệu + hướng dẫn chạy nhanh: xem [`../README.md`](../README.md).
-- Quy ước code + nguyên tắc coupling + bất biến: xem [`../AGENTS.md`](../AGENTS.md).
+- Hub agent + bất biến: [`../AGENTS.md`](../AGENTS.md).
+- Coding / tổ chức feature: [`implement/coding-convention.md`](implement/coding-convention.md), [`implement/feature-organization-rule.md`](implement/feature-organization-rule.md).
 
 > Tài liệu bám **cấu trúc thật** của nhánh hiện tại. Ngoại lệ đuôi file: `src/core/contracts/agentMarkdown.js` và `src/runner-cli.mjs` cố ý **chưa** chuyển `.ts` — ghi đúng đuôi.
 
@@ -26,7 +27,7 @@ Mọi thao tác đọc/ghi của backend đều **scope vào một thư mục `.
 | **Dev** (`vite.config.ts` → plugin `devTeamApi`) | root = `cwd/..` (dashboard được scaffold vào `.dev-team-agent/viewer/`, nên thư mục cha là data root); override bằng env `DEV_TEAM_ROOT` | Đường single-project cũ. |
 | **Standalone / multi-project** (`src/standalone.ts`) | root lấy từ **ProjectRegistry** tại `~/.dev-team-dashboard/projects.json` (override thư mục bằng `DEV_TEAM_DASHBOARD_HOME`); request mang `?project=<id>`; không có id → default project (env `DEV_TEAM_ROOT` > default trong registry > fallback cũ) | Xem `resolveProjectRoot` trong `src/core/registry.ts`. |
 
-Đọc/ghi filesystem theo triết lý **defensive** (helper nuốt lỗi, trả empty/false thay vì throw) và **path-traversal hardening** (sanitize mọi input từ request) — chi tiết ở [`AGENTS.md` §4 (Bất biến)](../AGENTS.md#4-bất-biến-của-codebase-bắt-buộc-giữ).
+Đọc/ghi filesystem theo triết lý **defensive** (helper nuốt lỗi, trả empty/false thay vì throw) và **path-traversal hardening** (sanitize mọi input từ request) — chi tiết ở [`AGENTS.md` § Bất biến](../AGENTS.md#4-bất-biến-bắt-buộc-giữ).
 
 ---
 
@@ -144,4 +145,4 @@ agent-workflow/
 └── .claude/
 ```
 
-> Quy ước phát triển repo này (coding conventions, test, git hygiene, bất biến) nằm ở [`../AGENTS.md`](../AGENTS.md), **không** ở `.claude/rules/`.
+> Quy ước phát triển repo này nằm ở [`../AGENTS.md`](../AGENTS.md) + [`implement/`](implement/), **không** ở `.claude/rules/`.
