@@ -1,5 +1,7 @@
 .settings-dialog {
   width: min(760px, 94vw);
+  /* Cố định chiều cao — đổi group không làm dialog nhảy size. */
+  height: min(560px, 88vh);
 }
 
 .settings-layout {
@@ -16,6 +18,7 @@
   padding-right: 12px;
   border-right: 1px solid var(--border);
   flex-shrink: 0;
+  overflow-y: auto;
 }
 
 .settings-nav-item {
@@ -45,6 +48,7 @@
   flex: 1;
   min-height: 0;
   padding-left: 16px;
+  overflow-y: auto;
 }
 
 .settings-section {
