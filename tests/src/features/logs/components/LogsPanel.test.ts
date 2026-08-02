@@ -3,7 +3,27 @@ import { flushPromises } from '@vue/test-utils'
 import LogsPanel from '@/features/logs/components/LogsPanel.vue'
 import { mountWithI18n } from '../../../helpers/i18n'
 
-afterEach(() => vi.unstubAllGlobals())
+vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
+  fetchLoggingConfig: vi.fn(async () => ({
+    config: {
+      showLogsTab: true,
+      types: { audit: true, request: true, jobs: true },
+    },
+  })),
+}))
+
+import { fetchLoggingConfig } from '@/features/settings/scripts/SettingsDialogApi'
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.mocked(fetchLoggingConfig).mockReset()
+  vi.mocked(fetchLoggingConfig).mockResolvedValue({
+    config: {
+      showLogsTab: true,
+      types: { audit: true, request: true, jobs: true },
+    },
+  })
+})
 
 const JOB_ID = '11111111-2222-4333-8444-555555555555'
 
@@ -71,5 +91,53 @@ describe('LogsPanel', () => {
     await item.trigger('click')
     await flushPromises()
     expect(w.find('.job-log pre').text()).toContain('hello job log')
+  })
+
+  it('hides request/jobs tabs when logging types disabled', async () => {
+    vi.mocked(fetchLoggingConfig).mockResolvedValue({
+      config: {
+        showLogsTab: true,
+        types: { audit: true, request: false, jobs: false },
+      },
+    })
+    stubFetch()
+    const w = mountWithI18n(LogsPanel)
+    await flushPromises()
+
+    const labels = w.findAll('.logs-tabs button').map((b) => b.text())
+    expect(labels).toEqual(['Kiểm toán'])
+    expect(w.find('.logs-table').exists()).toBe(true)
+  })
+
+  it('shows allDisabled empty when every log type is off', async () => {
+    vi.mocked(fetchLoggingConfig).mockResolvedValue({
+      config: {
+        showLogsTab: true,
+        types: { audit: false, request: false, jobs: false },
+      },
+    })
+    stubFetch()
+    const w = mountWithI18n(LogsPanel)
+    await flushPromises()
+
+    expect(w.find('.logs-tabs').exists()).toBe(false)
+    expect(w.text()).toContain('Mọi loại log đang tắt')
+  })
+
+  it('reacts to logging-changed event by updating visible tabs', async () => {
+    stubFetch()
+    const w = mountWithI18n(LogsPanel)
+    await flushPromises()
+    expect(w.findAll('.logs-tabs button')).toHaveLength(3)
+
+    window.dispatchEvent(
+      new CustomEvent('dev-dashboard:logging-changed', {
+        detail: { types: { audit: false, request: true, jobs: false } },
+      }),
+    )
+    await flushPromises()
+
+    const labels = w.findAll('.logs-tabs button').map((b) => b.text())
+    expect(labels).toEqual(['Yêu cầu'])
   })
 })

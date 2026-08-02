@@ -19,7 +19,19 @@ vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
     config: { repos: [{ repo: 'acme/app', token: 'ghp_old' }] },
   })),
   saveGithubTokensConfig: vi.fn(async (c: object) => ({ config: c })),
+  fetchLoggingConfig: vi.fn(async () => ({
+    config: {
+      showLogsTab: true,
+      types: { audit: true, request: true, jobs: true },
+    },
+  })),
+  saveLoggingConfig: vi.fn(async (c: object) => ({ config: c })),
 }))
+
+import {
+  fetchLoggingConfig,
+  saveLoggingConfig,
+} from '@/features/settings/scripts/SettingsDialogApi'
 
 beforeEach(() => {
   localStorage.clear()
@@ -32,6 +44,15 @@ afterEach(() => {
   localStorage.clear()
   const { load } = useAppSettings()
   load()
+  vi.mocked(fetchLoggingConfig).mockReset()
+  vi.mocked(saveLoggingConfig).mockReset()
+  vi.mocked(fetchLoggingConfig).mockResolvedValue({
+    config: {
+      showLogsTab: true,
+      types: { audit: true, request: true, jobs: true },
+    },
+  })
+  vi.mocked(saveLoggingConfig).mockImplementation(async (c: object) => ({ config: c }))
 })
 
 describe('SettingsDialog', () => {
@@ -52,7 +73,59 @@ describe('SettingsDialog', () => {
     expect(text).toContain('Artifact')
     expect(text).toContain('Danh sách task')
     expect(text).toContain('Sidebar')
+    expect(text).toContain('Logs')
     expect(text).not.toContain('Autoscan')
+  })
+
+  it('logging section: shows type checkboxes when showLogsTab on; hides when off and persists', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    await flushPromises()
+
+    const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
+    expect(pane.textContent).toContain('Hiện tab Logs')
+    expect(pane.textContent).toContain('Audit')
+    expect(pane.textContent).toContain('Request')
+    expect(pane.textContent).toContain('Jobs')
+
+    const checkboxes = Array.from(
+      pane.querySelectorAll('.settings-section .settings-checkbox input[type="checkbox"]'),
+    ) as HTMLInputElement[]
+    // General group also has sidebar collapse checkboxes; logging block is last section with showTab + 3 types
+    const showLogs = checkboxes.find((el) =>
+      el.closest('label')?.textContent?.includes('Hiện tab Logs'),
+    )
+    expect(showLogs).toBeTruthy()
+    expect(showLogs!.checked).toBe(true)
+
+    showLogs!.checked = false
+    showLogs!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    expect(saveLoggingConfig).toHaveBeenCalledWith({
+      showLogsTab: false,
+      types: { audit: true, request: true, jobs: true },
+    })
+    expect(pane.textContent).not.toContain('Loại log')
+    expect(pane.textContent).not.toContain('Audit (thay đổi cấu hình)')
+  })
+
+  it('logging section: loads prefs from API (showLogsTab false hides types)', async () => {
+    vi.mocked(fetchLoggingConfig).mockResolvedValueOnce({
+      config: {
+        showLogsTab: false,
+        types: { audit: false, request: true, jobs: false },
+      },
+    })
+    mount(SettingsDialog, { attachTo: document.body })
+    await flushPromises()
+
+    const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
+    expect(pane.textContent).toContain('Hiện tab Logs')
+    expect(pane.textContent).not.toContain('Loại log')
+    const showLogs = Array.from(pane.querySelectorAll('label.settings-checkbox')).find((el) =>
+      el.textContent?.includes('Hiện tab Logs'),
+    )?.querySelector('input') as HTMLInputElement
+    expect(showLogs.checked).toBe(false)
   })
 
   it('mounts backdrop + title «Cài đặt»', () => {
