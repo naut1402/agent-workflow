@@ -1,0 +1,34 @@
+# Chạy dashboard standalone trong Docker.
+#
+# Gắn project orchestrator (thư mục cha chứa `.dev-team-agent/`) qua DEV_TEAM_PROJECT_PATH:
+#   set DEV_TEAM_PROJECT_PATH=C:\path\to\my-project   # Windows
+#   export DEV_TEAM_PROJECT_PATH=/path/to/my-project  # Linux/macOS
+#   docker compose up --build
+#
+# UI: http://localhost:5174
+#
+# Lưu ý: DEV_TEAM_ROOT trong container trỏ tới `/data/project/.dev-team-agent`
+# (data root), không phải thư mục project cha.
+
+services:
+  dashboard:
+    build: .
+    image: dev-team-dashboard:local
+    ports:
+      - "${DEV_TEAM_DASHBOARD_PORT:-5174}:5174"
+    environment:
+      DEV_TEAM_DASHBOARD_HOST: "0.0.0.0"
+      DEV_TEAM_DASHBOARD_PORT: "5174"
+      DEV_TEAM_ROOT: /data/project/.dev-team-agent
+      DEV_TEAM_DASHBOARD_HOME: /data/dashboard-home
+      # Optional — bật NL agent-draft generation
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      # Project đích (phải có sẵn `.dev-team-agent/` bên trong)
+      - ${DEV_TEAM_PROJECT_PATH:?Set DEV_TEAM_PROJECT_PATH to your project directory}:/data/project
+      # Registry multi-project (projects.json) — giữ qua restart
+      - dashboard-home:/data/dashboard-home
+    restart: unless-stopped
+
+volumes:
+  dashboard-home:

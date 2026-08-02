@@ -80,6 +80,40 @@ bun run start        # build + serve
 bun run mcp          # MCP stdio — project registry
 ```
 
+### Docker (standalone)
+
+Không cần cài Bun trên host. Image chạy `src/standalone.ts`, bind `0.0.0.0:5174`, mount project + registry home.
+
+`DEV_TEAM_ROOT` phải là thư mục **`.dev-team-agent`** (data root), không phải thư mục project cha.
+
+```bash
+# Build image
+docker build -t dev-team-dashboard:local .
+
+# Chạy nhanh — gắn thư mục project (bên trong có .dev-team-agent/)
+docker run --rm -p 5174:5174 \
+  -e DEV_TEAM_ROOT=/data/project/.dev-team-agent \
+  -e DEV_TEAM_DASHBOARD_HOME=/data/dashboard-home \
+  -v /path/to/my-project:/data/project \
+  -v dashboard-home:/data/dashboard-home \
+  dev-team-dashboard:local
+
+# Hoặc Compose (bắt buộc set DEV_TEAM_PROJECT_PATH)
+# Windows PowerShell:
+$env:DEV_TEAM_PROJECT_PATH = "C:\path\to\my-project"
+docker compose up --build
+```
+
+| Env | Mặc định (image) | Ý nghĩa |
+|-----|------------------|---------|
+| `DEV_TEAM_DASHBOARD_HOST` | `0.0.0.0` | Bind trong container (local `bun run serve` vẫn mặc định `127.0.0.1`) |
+| `DEV_TEAM_DASHBOARD_PORT` / `PORT` | `5174` | Cổng HTTP |
+| `DEV_TEAM_ROOT` | `/data/project/.dev-team-agent` | Data root (seed registry khi trống) |
+| `DEV_TEAM_DASHBOARD_HOME` | `/data/dashboard-home` | Registry multi-project (`projects.json`) |
+| `ANTHROPIC_API_KEY` | (trống) | Optional — NL agent-draft |
+
+**Lưu ý:** path Windows → Linux container dùng dạng `/c/Users/...` (Docker Desktop) hoặc để Compose tự map từ `DEV_TEAM_PROJECT_PATH`. Repo này **không** đóng gói orchestrator — chỉ dashboard quan sát project đã mount.
+
 ### Lệnh hữu ích
 
 ```bash
@@ -96,6 +130,7 @@ bun run check:todo   # gate docs/todo (CI promote → main)
 ### Liên kết hữu ích
 
 - [Quickstart (mục này)](#bắt-đầu-nhanh) — cài và chạy trong vài phút  
+- [Docker](#docker-standalone) — image / Compose / volume  
 - [Kiến trúc](docs/architecture.md) — data root, Hono × 2 transport, cây `src/`  
 - [Test convention](docs/implement/test-convention.md) — bun / vitest / e2e  
 - [PR & commit](docs/implement/pr-docs-convention.md) — format message, body PR  

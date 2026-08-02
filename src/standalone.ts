@@ -28,6 +28,7 @@ import { createRegistryContext, seedDefault, list } from './core/registry.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distDir = path.resolve(__dirname, '..', 'dist')
 
+// Local-first default (127.0.0.1). Docker image sets DEV_TEAM_DASHBOARD_HOST=0.0.0.0.
 const HOST = process.env.DEV_TEAM_DASHBOARD_HOST || '127.0.0.1'
 const PORT = Number(process.env.DEV_TEAM_DASHBOARD_PORT || process.env.PORT || 5174)
 
