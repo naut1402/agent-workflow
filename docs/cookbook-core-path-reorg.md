@@ -207,6 +207,7 @@ src/server/ (còn sót)      →  (xóa)
 
 - **Phụ thuộc một chiều:** `lib/contracts` → `business` → `controller` → `api` setup.
 - Feature **không** import feature khác qua tầng HTTP; chia sẻ qua contracts/lib hoặc API HTTP.
+- Trong `business/`: chia theo **nghiệp vụ đang xử lý cái gì**, không theo kiểu thao tác kỹ thuật — tránh tạo quá nhiều file làm phân tán business.
 - Xóa cây cũ ngay khi không còn import (tránh 2 nhà).
 
 ---

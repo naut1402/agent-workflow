@@ -2,24 +2,24 @@
 // Autoscan lives at settings.autoscan; legacy autoscan.json is still read once
 // for migration so existing installs keep working.
 
-import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import {
   DEFAULT_DASHBOARD_SETTINGS,
   parseDashboardSettings,
   resolveAutoscanFromDashboard,
   resolveGithubTokensFromDashboard,
   type DashboardSettings,
-} from '../../schemas/dashboardSettings.js'
+} from '../schemas/dashboardSettings.js'
 import {
   DEFAULT_AUTOSCAN_CONFIG,
   parseAutoscanConfig,
   type AutoscanConfig,
-} from '../../schemas/autoscan.js'
+} from '../schemas/autoscan.js'
 import {
   parseGithubTokensConfig,
   type GithubTokensConfig,
-} from '../../schemas/githubTokens.js'
-import { registryHome } from '../../../../core/registry.js'
+} from '../schemas/githubTokens.js'
+import { registryHome } from '../../../core/registry.js'
 
 export function dashboardSettingsFile(): string {
   return joinPath(registryHome(), 'settings.json')

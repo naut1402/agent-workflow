@@ -1,6 +1,11 @@
 import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
-import { loadAutoscanConfig, saveAutoscanConfig, runAutoscan } from './autoscan/index.js'
-import { loadGithubTokensConfig, saveGithubTokensConfig } from './autoscan/config.js'
+import {
+  loadAutoscanConfig,
+  saveAutoscanConfig,
+  loadGithubTokensConfig,
+  saveGithubTokensConfig,
+} from './dashboardSettings.js'
+import { runAutoscan } from './autoscan.js'
 import { browseDirectory } from './fsBrowse.js'
 
 export class SettingsBusiness extends AbstractBusiness {
@@ -32,8 +37,13 @@ export class SettingsBusiness extends AbstractBusiness {
 export {
   loadAutoscanConfig,
   saveAutoscanConfig,
-  runAutoscan,
   loadGithubTokensConfig,
   saveGithubTokensConfig,
-  browseDirectory,
-}
+  loadDashboardSettings,
+  saveDashboardSettings,
+  autoscanFile,
+  dashboardSettingsFile,
+  DEFAULT_DASHBOARD_SETTINGS,
+} from './dashboardSettings.js'
+export { runAutoscan, type ScanReport, type ScanHit } from './autoscan.js'
+export { browseDirectory } from './fsBrowse.js'

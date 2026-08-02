@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { listCustomAgentMeta, readCustomAgent, scanCustomAgents } from '../../../../src/features/agent-editor/business/store'
+import { listCustomAgentMeta, readCustomAgent, scanCustomAgents } from '../../../../src/features/agent-editor/business/agents'
 
 const FOO = `---
 name: foo

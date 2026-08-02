@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildTurnPrompt } from '../../../../src/features/nl-chat/business/buildTurnPrompt'
+import { buildTurnPrompt } from '../../../../src/features/nl-chat/business/nlChatSession'
 
 describe('buildTurnPrompt', () => {
   test.each(['task', 'pipeline', 'agent'] as const)('turn 1 (%s) always states the output contract', (entityType) => {

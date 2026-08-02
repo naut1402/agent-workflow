@@ -1,4 +1,4 @@
-import { getKnowledgeDriver } from './driverRegistry.js'
+import { getKnowledgeDriver } from './fileDriver.js'
 
 function json(res, status, body) {
   res.statusCode = status

@@ -57,21 +57,22 @@ Backend là **một app Hono duy nhất** chạy trên **hai transport** khác n
 
 ### 2.4 Domain / business (data thuần, không biết HTTP)
 
-Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts` → business → controller → `src/api` (Hono setup). Registry ở `src/core/registry.ts`; entry `src/standalone.ts`.
+Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts` → business → controller → `src/api` (Hono setup). Registry ở `src/core/registry.ts`; entry `src/standalone.ts`. Trong feature, `business/` gom theo **nghiệp vụ đang xử lý cái gì** — tránh tách nhiều file theo loại thao tác kỹ thuật làm phân tán không cần thiết.
 
 | Module | Đường dẫn thật | Vai trò |
 |---|---|---|
 | Types | `src/core/http/types.ts` | Nguồn type thống nhất (`HonoEnv`, registry types). |
 | Registry | `src/core/registry.ts` | `projects.json`; REST + MCP. |
 | Settings | `src/features/settings/business/` | Autoscan, fs browse, github tokens config. |
-| Pipeline | `src/features/pipeline-editor/business/pipeline/` | Layered pipeline config + merge. |
-| Catalog / Rules | `src/features/pipeline-editor/business/{catalog,rules}/` | Catalog skills/agents; rule project. |
-| Agents | `src/features/agent-editor/business/` | CRUD custom-agent, template, NL generate. |
-| Tasks / artifacts | `src/features/monitor/business/` | Tasks, state, artifact actions, github issue, task chat. |
-| Knowledge | `src/features/knowledge/business/` | Driver pluggable (`file`). |
+| Pipeline | `src/features/pipeline-editor/business/pipeline/` | Layered pipeline config + merge (một module). |
+| Catalog / Rules | `src/features/pipeline-editor/business/{catalog,rules}/` | Catalog skills/agents (+ scan); rule project. |
+| Agents | `src/features/agent-editor/business/` | `agents.ts` (CRUD/template/fetch) + NL generate. |
+| Tasks / artifacts | `src/features/monitor/business/` | Tasks, artifact actions, github issue, task chat. |
+| Knowledge | `src/features/knowledge/business/` | File driver + config/driver chọn trong cùng module. |
 | Logging | `src/core/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit JSONL; job log thuộc runner. |
-| Runners | `src/features/runner/business/` | Job queue, connections, providers CLI. |
-| NL chat | `src/features/nl-chat/business/` | Session builder chat. |
+| Runners | `src/features/runner/business/` | Job queue (+ reaper), connections, session ledger (+ capture), providers CLI. |
+| Settings | `src/features/settings/business/` | Dashboard settings, autoscan, fs browse. |
+| NL chat | `src/features/nl-chat/business/` | Session builder chat (prompt + parse trong cùng module). |
 | CLI | `src/runner-cli.mjs` | Runner CLI entry. |
 
 ### 2.5 Type dùng chung `src/core/contracts/` (alias `@shared`)

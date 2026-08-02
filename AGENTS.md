@@ -16,7 +16,7 @@ Nguồn quy ước duy nhất cho mọi AI agent làm việc trong repo, bất k
 - **Backend**: Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Setup app-root ở `src/api/` (`apiServer.ts`, `devTeamApi.ts`); kernel HTTP ở `src/core/http/` (`types`, `AbstractController`, `respond`, FE `client`); registry ở `src/core/registry.ts`. Entry production: `src/standalone.ts`. `/api/knowledge` chặn trước Hono trong `createApiHandler` (`apiServer.ts`).
 - **Frontend**: feature-module `src/features/<mode>/` …; FE HTTP ở `features/<mode>/scripts/`; SCSS ở `features/<mode>/styles/`; locale ở `features/<mode>/locales/`. Shell/token: `src/styles/`. Plugins app-scope: `src/plugins/` (`installPlugins`). FE fetch helper: `src/core/http/client.ts`. Nền FE/shell ở `src/core/`; contract FE↔BE ở `src/core/contracts/` (alias `@shared`). Không trộn FE client với Hono `features/*/api.ts`.
 - **Data root** `.dev-team-agent/`, 2 run mode: dev đọc từ `cwd/..`/`DEV_TEAM_ROOT`; standalone đọc qua `ProjectRegistry` (`~/.dev-team-dashboard/projects.json`, `?project=<id>`).
-- **Pipeline config xếp lớp**: `DEFAULT_PIPELINE` (`src/features/pipeline-editor/business/pipeline/default.ts`) ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`, lớp sau đè lớp trước.
+- **Pipeline config xếp lớp**: `DEFAULT_PIPELINE` (`src/features/pipeline-editor/business/pipeline/index.ts`) ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`, lớp sau đè lớp trước.
 - **MCP** (`mcp/server.ts`, `bun run mcp`): CRUD project-registry qua `src/core/registry.ts`, không cần HTTP server.
 
 Chi tiết đầy đủ luồng dữ liệu, domain module, frontend: [`docs/architecture.md`](docs/architecture.md) (nguồn duy nhất, không lặp lại ở đây).
@@ -77,6 +77,8 @@ Helper dùng chung nằm ở **`src/core/lib/`**: kiểu dữ liệu đặt tên
 
 Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuần (`{ status, error }` khi lỗi). Controller parse request → gọi `XxxBusiness` → `this.json` / `ok`.
 
+**Tổ chức trong `business/`:** chia theo **nghiệp vụ đang xử lý cái gì** (một capability / đối tượng nghiệp vụ gắn kết), không tách file theo từng kiểu thao tác kỹ thuật (`store` / `fetch` / `scan` / `paths`…). Mục tiêu là **ít file hơn, ít phân tán hơn** — chỉ tách module khi nghiệp vụ đủ lớn hoặc biên rõ; helper nhỏ gắn vào module đang xử lý capability đó, không tạo file riêng chỉ vì “loại xử lý”.
+
 **Cross-feature business:** Chỉ `features/<A>/business/index.ts` được import từ `features/<B>/business/**`. Mọi chỗ khác trong feature A (controller, `business/*.ts` khác) phải import peer qua `./business/index.js` (hoặc `./index.js` trong cùng `business/`), **không** import trực tiếp cây business của feature B.
 
 ### 3.5 Frontend (Vue 3)
@@ -103,7 +105,7 @@ UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **
 Thêm scan/endpoint mới không được phá các bất biến sau:
 
 - **Đọc filesystem phải phòng thủ**: `safeReadDir`/`statSafe` (`fileHelper`) / `readYamlSafe` (`yamlLib`) /`readState`/`loadRegistry` nuốt lỗi, trả empty/false thay vì throw — một file state ghi dở không được làm sập request.
-- **Chống path-traversal**: mọi input từ request phải sanitize tại feature sở hữu (`resolveArtifact` + `fileHelper.resolvePathUnder`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương. Hàm sanitize domain **không** nằm ở core — gắn vào module business liên quan (vd `pipeline/index`, `store`, `fetch`, `tasks`, `jobLog`) và export qua `business/index.ts` nếu feature khác cần dùng.
+- **Chống path-traversal**: mọi input từ request phải sanitize tại feature sở hữu (`resolveArtifact` + `fileHelper.resolvePathUnder`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương. Hàm sanitize domain **không** nằm ở core — gắn vào module business liên quan (vd `pipeline/index`, `agents`, `tasks`, `jobLog`) và export qua `business/index.ts` nếu feature khác cần dùng.
 - **Ghi registry atomic** (temp file + rename trong `saveRegistry`).
 - **Fetch URL người dùng** phải qua `fetchUrlSafe` (https-only, chặn private host) — tránh SSRF.
 - **ESM thuần**; server import core `node:`-prefixed.
@@ -127,7 +129,7 @@ Coverage ưu tiên cao — mỗi module refactor phải kèm test (unit + e2e).
 
 ### 5.2 Layout test — gom vào `tests/` + `test-e2e/`
 
-Unit test mirror cây source trong `tests/` (vd `src/features/pipeline-editor/business/pipeline/merge.ts` ↔ `tests/src/server/pipeline/merge.test.ts` — một số test domain vẫn giữ path `tests/src/server/` nhưng import source đã trỏ feature business). `tests/src/server/**` + `tests/src/features/**/business/**` + `tests/mcp/**` → bun test; `tests/src/**` (FE) → vitest.
+Unit test mirror cây source trong `tests/` (vd `src/features/pipeline-editor/business/pipeline/index.ts` ↔ `tests/src/server/pipeline/merge.test.ts` — một số test domain vẫn giữ path `tests/src/server/` nhưng import source đã trỏ feature business). `tests/src/server/**` + `tests/src/features/**/business/**` + `tests/mcp/**` → bun test; `tests/src/**` (FE) → vitest.
 
 E2E ở `test-e2e/`: `test-e2e/<feature>.spec.ts` + `test-e2e/fixtures/` (`.dev-team-agent/` giả + golden snapshot); `playwright.config.ts` trỏ `testDir` về đây.
 

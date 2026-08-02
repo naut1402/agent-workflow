@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { ensureDefaultTemplate } from '../../../../src/features/agent-editor/business/templates'
+import { ensureDefaultTemplate } from '../../../../src/features/agent-editor/business/agents'
 
 let root: string
 

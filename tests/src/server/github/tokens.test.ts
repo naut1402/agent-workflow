@@ -7,10 +7,10 @@ import {
   saveGithubTokensConfig,
   dashboardSettingsFile,
   saveAutoscanConfig,
-} from '../../../../src/features/settings/business/autoscan/config'
+} from '../../../../src/features/settings/business/dashboardSettings'
 import { createRegistryContext } from '../../../../src/core/registry'
 import { createApp } from '../../../../src/api/apiServer'
-import { fetchGithubIssue } from '../../../../src/features/monitor/business/github/issue'
+import { fetchGithubIssue } from '../../../../src/features/monitor/business/github/index'
 
 let home: string
 const saved: Record<string, string | undefined> = {}

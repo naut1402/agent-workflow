@@ -10,8 +10,8 @@ import {
   safeReadDir,
   statSync,
   type Stats,
-} from '../../../../core/lib/fileHelper.js'
-import { add, list, type Project } from '../../../../core/registry.js'
+} from '../../../core/lib/fileHelper.js'
+import { add, list, type Project } from '../../../core/registry.js'
 
 export interface ScanHit {
   path: string

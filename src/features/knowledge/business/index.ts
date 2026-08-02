@@ -1,5 +1,5 @@
 import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
-import { getKnowledgeDriver, loadKnowledgeConfig } from './driverRegistry.js'
+import { getKnowledgeDriver, loadKnowledgeConfig } from './fileDriver.js'
 import { handleKnowledgeApi } from './knowledgeApi.js'
 
 /** Facade knowledge — HTTP node-res vẫn qua handleKnowledgeApi. */
@@ -17,5 +17,11 @@ export class KnowledgeBusiness extends AbstractBusiness {
   }
 }
 
-export { getKnowledgeDriver, loadKnowledgeConfig, handleKnowledgeApi }
-export { createFileDriver, knowledgeRoot, loadKnowledgeBundle } from './fileDriver.js'
+export {
+  getKnowledgeDriver,
+  loadKnowledgeConfig,
+  createFileDriver,
+  knowledgeRoot,
+  loadKnowledgeBundle,
+} from './fileDriver.js'
+export { handleKnowledgeApi } from './knowledgeApi.js'

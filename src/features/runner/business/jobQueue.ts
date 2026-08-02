@@ -3,14 +3,11 @@ import crypto from 'node:crypto'
 import { spawn } from 'node:child_process'
 import os from 'node:os'
 import { registryHome } from '../../../core/registry.js'
-import { getRunner, getDefaultRunner, substituteConfig } from './registry.js'
+import { getRunner, getDefaultRunner, substituteConfig, getProvider } from './registry.js'
 import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
-import { getProvider } from './providerRegistry.js'
 import { resolveAgent } from './agentResolver.js'
-import { reapOrphanedRunningJobs } from './pidReaper.js'
-import { mintSessionId } from './sessionCapture.js'
-import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, type SessionMode } from './sessionLedger.js'
+import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
 import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
 import { advanceStepOnJobSuccess, loadPipelineConfig } from './index.js'
 
@@ -901,4 +898,53 @@ export function discardJob(id: string): MutationResult<{ job: JobRecord }> {
   removeScratchWorkspace(job.workspace)
   const updated = saveJob({ ...job, status: 'cancelled', finishedAt: new Date().toISOString() })
   return { ok: true, job: updated }
+}
+
+// ── orphan reaper ──────────────────────────────────────────────────────────
+
+/** Best-effort liveness check — `(pid, startedAt)` pair from the job record. */
+export function isPidAlive(pid: number | null | undefined): boolean {
+  if (pid == null || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Mark orphaned `running` jobs as failed after a server restart — the child
+ * process tree is no longer owned by this process.
+ */
+export function reapOrphanedRunningJobs(): JobRecord[] {
+  let files: string[] = []
+  try {
+    files = readdirSync(jobsDir()).filter((f) => f.endsWith('.json'))
+  } catch {
+    return []
+  }
+
+  const reaped: JobRecord[] = []
+  for (const f of files) {
+    let job: JobRecord
+    try {
+      job = JSON.parse(readTextFileSync(joinPath(jobsDir(), f)))
+    } catch {
+      continue
+    }
+    if (job.status !== 'running') continue
+    if (isPidAlive(job.pid)) continue
+
+    const updated: JobRecord = {
+      ...job,
+      status: 'failed',
+      finishedAt: new Date().toISOString(),
+      error: job.error || 'orphaned running job (process no longer alive)',
+      pid: null,
+    }
+    saveJob(updated)
+    reaped.push(updated)
+  }
+  return reaped
 }

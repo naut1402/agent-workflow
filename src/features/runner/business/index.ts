@@ -36,7 +36,7 @@ export {
   scanLocalCommands,
 } from './connections.js'
 export { resolveAgent, resolveAgentFilePath, normalizeAgentRef } from './agentResolver.js'
-export { getProvider, listProviderIds, registerProvider } from './providerRegistry.js'
+export { getProvider, listProviderIds, registerProvider } from './registry.js'
 export {
   submitJob,
   submitAndWait,
@@ -53,7 +53,7 @@ export {
   extractLines,
   stepIdOf,
 } from './jobQueue.js'
-export { reapOrphanedRunningJobs, isPidAlive } from './pidReaper.js'
+export { reapOrphanedRunningJobs, isPidAlive } from './jobQueue.js'
 export {
   loadTaskSessionLedger,
   resolveSessionPlan,
@@ -67,7 +67,7 @@ export {
   buildCursorJsonArgs,
   prepareSessionInvocation,
   mintSessionId,
-} from './sessionCapture.js'
+} from './sessionLedger.js'
 
 export type {
   CredentialProfile,

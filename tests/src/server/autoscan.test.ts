@@ -8,8 +8,8 @@ import {
   saveAutoscanConfig,
   dashboardSettingsFile,
   autoscanFile,
-} from '../../../src/features/settings/business/autoscan/config'
-import { runAutoscan } from '../../../src/features/settings/business/autoscan/scan'
+} from '../../../src/features/settings/business/dashboardSettings'
+import { runAutoscan } from '../../../src/features/settings/business/autoscan'
 import { add, list, createRegistryContext } from '../../../src/core/registry'
 import { createApp } from '../../../src/api/apiServer'
 

@@ -6,7 +6,7 @@ import {
   parseCursorJsonOutput,
   prepareSessionInvocation,
   type SessionCaptureMode,
-} from '../sessionCapture.js'
+} from '../sessionLedger.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ResolvedAgent, RunnerProvider } from '../types.js'
 
 interface ProcResult {

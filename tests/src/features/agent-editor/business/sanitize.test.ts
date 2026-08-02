@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { sanitiseAgentName } from '@/features/agent-editor/business/store'
-import { isPrivateHostname } from '@/features/agent-editor/business/fetch'
+import { sanitiseAgentName } from '@/features/agent-editor/business/agents'
+import { isPrivateHostname } from '@/features/agent-editor/business/agents'
 
 describe('sanitiseAgentName', () => {
   it('allows only alnum, underscore and dash (no dots/spaces)', () => {

@@ -4,5 +4,4 @@
  */
 
 export { sanitiseProfileName } from './pipeline/index.js'
-export { profilesDir, customAgentsDir } from '../../agent-editor/business/paths.js'
-export { scanCustomAgents } from '../../agent-editor/business/store.js'
+export { profilesDir, customAgentsDir, scanCustomAgents } from '../../agent-editor/business/index.js'

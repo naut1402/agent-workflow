@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { mergeStep, patchSteps, perTaskStepsReplace } from '../../../../src/features/pipeline-editor/business/pipeline/merge'
+import { mergeStep, patchSteps, perTaskStepsReplace } from '../../../../src/features/pipeline-editor/business/pipeline/index'
 
 describe('mergeStep', () => {
   test('shallow-merges fields, deep-merges hitl one level', () => {

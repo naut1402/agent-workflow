@@ -1,6 +1,52 @@
+/** Priority of a catalog source when deduping items with the same name. */
+export function sourcePriority(source: string): number {
+  if (source === 'dashboard') return 55
+  if (source === 'project') return 50
+  if (source === 'user') return 20
+  if (source === 'cursor') return 10
+  if (typeof source === 'string' && source.startsWith('repo:')) return 40
+  if (typeof source === 'string' && source.startsWith('plugin:')) return 45
+  return 0
+}
+
+/**
+ * Dedupe catalog items by `name`, keeping the highest-priority source, then
+ * sort by name. Pure — the core of catalog source precedence.
+ */
+export function dedupeCatalogItems<T extends { name: string; source: string }>(items: T[]): T[] {
+  const byName = new Map<string, T>()
+  for (const item of items) {
+    const existing = byName.get(item.name)
+    if (!existing || sourcePriority(item.source) > sourcePriority(existing.source)) {
+      byName.set(item.name, item)
+    }
+  }
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// Built-in fallback catalog when no skills/agents are discovered on disk
+// (e.g. marketplace.json not found and no installed plugins).
+export const BUILTIN_CATALOG = {
+  skills: [
+    { id: 'repo:dev-agent-teams:survey-codebase', name: 'survey-codebase', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Survey codebase, trace call chains' },
+    { id: 'repo:dev-agent-teams:write-design', name: 'write-design', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Write design documentation' },
+    { id: 'repo:dev-agent-teams:coding-rules', name: 'coding-rules', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Apply coding conventions' },
+    { id: 'repo:dev-agent-teams:run-phpstan', name: 'run-phpstan', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Run PHPStan static analysis' },
+    { id: 'repo:dev-agent-teams:write-tests', name: 'write-tests', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Write test specifications' },
+    { id: 'repo:dev-agent-teams:create-pr', name: 'create-pr', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Create pull request' },
+    { id: 'repo:dev-agent-teams:doc-review', name: 'doc-review', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Review documentation quality' },
+  ],
+  agents: [
+    { id: 'repo:dev-agent-teams:investigator', name: 'investigator', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Survey codebase, trace call chains from entry point', skills: ['survey-codebase'] },
+    { id: 'repo:dev-agent-teams:designer', name: 'designer', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Write design documentation', skills: ['write-design'] },
+    { id: 'repo:dev-agent-teams:implementer', name: 'implementer', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Implement code changes, run PHPStan', skills: ['coding-rules', 'run-phpstan'] },
+    { id: 'repo:dev-agent-teams:reviewer', name: 'reviewer', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Review code quality, create test spec', skills: ['coding-rules', 'write-tests'] },
+    { id: 'repo:dev-agent-teams:pr-creator', name: 'pr-creator', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Create PR description, amend commit', skills: ['create-pr'] },
+    { id: 'repo:dev-agent-teams:doc-reviewer', name: 'doc-reviewer', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Review document quality', skills: ['doc-review'] },
+  ],
+}
+
 import { basename, dirname, homeDir, joinPath, resolvePath } from '../../../../core/lib/fileHelper.js'
-import { dedupeCatalogItems } from './dedupe.js'
-import { BUILTIN_CATALOG } from './builtins.js'
 import {
   findMarketplaceJson,
   latestPluginCacheDir,
@@ -15,8 +61,6 @@ import {
   type ScanResult,
 } from './scan.js'
 
-export { sourcePriority, dedupeCatalogItems } from './dedupe.js'
-export { BUILTIN_CATALOG } from './builtins.js'
 
 export interface Catalog {
   skills: any[]

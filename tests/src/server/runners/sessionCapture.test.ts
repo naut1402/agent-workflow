@@ -5,7 +5,7 @@ import {
   mintSessionId,
   parseCursorJsonOutput,
   prepareSessionInvocation,
-} from '../../../../src/features/runner/business/sessionCapture.js'
+} from '../../../../src/features/runner/business/sessionLedger.js'
 
 describe('sessionCapture', () => {
   test('claude preset-uuid: mints id when starting fresh', () => {
