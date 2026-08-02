@@ -21,6 +21,19 @@ export async function deleteTask(id: string, projectId?: string) {
   })
 }
 
+export async function repairTaskState(id: string, projectId?: string) {
+  return apiPost(`/api/tasks/${encodeURIComponent(id)}/repair-state`, {}, {
+    query: { project: projectId },
+    errorMessage: (status) => t('common.errors.repairTaskState', { status }),
+  })
+}
+
+export async function closeTaskChatSession(id: string, projectId?: string) {
+  return apiPost(`/api/tasks/${encodeURIComponent(id)}/close-session`, {}, {
+    query: { project: projectId },
+  })
+}
+
 export async function fetchTaskChat(
   id: string,
   opts: { stepId?: string; from?: number } = {},

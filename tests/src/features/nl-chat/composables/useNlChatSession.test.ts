@@ -153,6 +153,25 @@ describe('useNlChatSession', () => {
     expect(s.step.value).toBe('done')
   })
 
+  it('confirm(task) mints a random taskId when the draft omits one', async () => {
+    const fetchMock = stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { prompt: 'p' } },
+      confirmOk: true,
+    })
+    const s = make()
+    await s.sendMessage('m')
+    await s.confirm({ prompt: 'p without id' })
+
+    expect(s.step.value).toBe('done')
+    const createCall = fetchMock.mock.calls.find(
+      ([url, init]: any[]) => String(url).includes('/api/tasks') && (init?.method || 'GET').toUpperCase() === 'POST',
+    )
+    expect(createCall).toBeTruthy()
+    const body = JSON.parse(createCall![1].body)
+    expect(body.prompt).toBe('p without id')
+    expect(body.taskId).toMatch(/^T[0-9a-f]{8}$/)
+  })
+
   it('confirm surfaces a failed create without throwing', async () => {
     stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { taskId: 't1', prompt: 'p' } }, confirmOk: false })
     const s = make()

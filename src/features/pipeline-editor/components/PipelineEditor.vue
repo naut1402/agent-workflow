@@ -35,6 +35,11 @@ const emit = defineEmits(['update:scope', 'update:task-id'])
 const taskSelect = ref('')
 const taskManual = ref('')
 
+/** Per-task pipeline edits only make sense for in-flight tasks. */
+const editableTasks = computed(() =>
+  (props.tasks || []).filter((t: any) => !t.archived && t.current_phase !== 'completed'),
+)
+
 function onScopeChange(event) {
   emit('update:scope', event.target.value)
 }
@@ -62,7 +67,7 @@ watch(
       }
       return
     }
-    const listed = props.tasks.some((t) => t.task_id === id)
+    const listed = editableTasks.value.some((t: any) => t.task_id === id)
     if (listed) {
       taskSelect.value = id
       taskManual.value = ''
@@ -507,7 +512,7 @@ const editorLayoutClass = computed(() => ({
               @change="onTaskSelectChange"
             >
               <option value="">{{ t('pipelineEditor.scope.selectTask') }}</option>
-              <option v-for="task in tasks" :key="task.task_id" :value="task.task_id">
+              <option v-for="task in editableTasks" :key="task.task_id" :value="task.task_id">
                 {{ task.task_id }}
               </option>
               <option value="__manual__">{{ t('pipelineEditor.scope.manualEntry') }}</option>

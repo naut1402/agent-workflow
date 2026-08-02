@@ -253,3 +253,56 @@ export async function deleteTask(
     return { ok: true }
   })
 }
+
+/**
+ * Repair a stranded task state so archive/delete/run become usable again:
+ * - Missing/corrupt state file → write a minimal `completed` state.
+ * - `current_phase` not in the current pipeline (and not `completed`) → set
+ *   `completed` (task finished under an older pipeline shape).
+ * - Stale `hitl_pending` that no longer matches any step gate → clear it.
+ *
+ * Callers that also want "heal stuck phase after a succeeded job" should run
+ * `advanceStepOnJobSuccess` first (same pattern as `runTaskStep`).
+ */
+export async function repairTaskState(
+  root: string,
+  taskId: string,
+): Promise<HitlApplyResult> {
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
+
+  return withStateFileLock(stateFile, async () => {
+    const pipeline = await loadPipelineConfig(root, taskId)
+    const steps = pipeline.steps || []
+    const stepIds = new Set(steps.map((s: any) => s.id).filter(Boolean))
+    const gateIds = new Set(
+      steps.map((s: any) => s.hitl?.gate_id).filter((g: unknown) => typeof g === 'string' && g),
+    )
+
+    const read = await readState(stateFile)
+    let state: Record<string, unknown>
+    if (!read.ok) {
+      state = {
+        current_phase: 'completed',
+        hitl_pending: null,
+        archived: false,
+        archived_at: null,
+        repaired_at: new Date().toISOString(),
+      }
+    } else {
+      state = { ...read.state } as Record<string, unknown>
+      const phase = String(state.current_phase ?? '')
+      if (phase && phase !== 'completed' && !stepIds.has(phase)) {
+        state.current_phase = 'completed'
+        state.hitl_pending = null
+      }
+      const pending = state.hitl_pending
+      if (typeof pending === 'string' && pending && !gateIds.has(pending)) {
+        state.hitl_pending = null
+      }
+      state.repaired_at = new Date().toISOString()
+    }
+
+    const mtime = await writeStateAtomic(stateFile, state)
+    return { ok: true, state, mtime }
+  })
+}

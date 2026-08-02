@@ -806,9 +806,7 @@ export function sendTaskFeedback(
   if (!parent) return { ok: false, status: 400, error: 'no completed job to give feedback on' }
 
   const ledger = loadTaskSessionLedger(projectId, taskId)
-  if (!ledger.sessions.some((s) => s.status === 'open')) {
-    return { ok: false, status: 400, error: 'no resumable session for this task' }
-  }
+  const hasOpenSession = ledger.sessions.some((s) => s.status === 'open')
 
   const { isChatFeedback: _isChatFeedback, ...parentMetadata } = parent.metadata || {}
   const job = submitJob({
@@ -817,11 +815,10 @@ export function sendTaskFeedback(
     workspace: parent.workspace,
     userPrompt: feedback,
     produces: parent.produces,
-    sessionMode: 'resume',
-    // Resume the exact CLI session this step ran under when we know it —
-    // `resolveSessionPlan` still validates it and falls back to a fresh
-    // session if the entry no longer applies.
-    sessionId: parent.sessionId,
+    // Resume when a ledger session is still open; otherwise start fresh so
+    // "new chat session" / close-then-reopen still works after × or +.
+    sessionMode: hasOpenSession ? 'resume' : 'new',
+    sessionId: hasOpenSession ? parent.sessionId : undefined,
     metadata: {
       ...parentMetadata,
       parentJobId: parent.id,

@@ -22,6 +22,8 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.post('/api/artifact-actions/run', bind(MonitorController, 'runArtifactAction'))
   app.post('/api/tasks', bind(MonitorController, 'createTask'))
   app.delete('/api/tasks/:id', bind(MonitorController, 'deleteTask'))
+  app.post('/api/tasks/:id/repair-state', bind(MonitorController, 'repairTaskState'))
+  app.post('/api/tasks/:id/close-session', bind(MonitorController, 'closeTaskChatSession'))
   app.post('/api/tasks/:id/run-step', bind(MonitorController, 'runTaskStep'))
   app.post('/api/tasks/:id/feedback', bind(MonitorController, 'postTaskFeedback'))
   app.get('/api/tasks/:id/chat', bind(MonitorController, 'getTaskChat'))

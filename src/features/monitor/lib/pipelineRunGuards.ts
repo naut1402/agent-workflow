@@ -9,6 +9,25 @@ export function canRunWithTaskState(task: { state_ok?: boolean } | null | undefi
 }
 
 /**
+ * True when the task needs a state repair: unreadable state file, or
+ * `current_phase` points at a step that is no longer in the pipeline
+ * (common after a pipeline edit left a finished task stranded).
+ */
+export function taskNeedsStateRepair(task: {
+  state_ok?: boolean
+  current_phase?: string | null
+  pipeline?: { steps?: Array<{ id?: string } | null> | null } | null
+} | null | undefined): boolean {
+  if (!task) return false
+  if (task.state_ok === false) return true
+  const phase = task.current_phase
+  if (!phase || phase === 'completed') return false
+  const steps = task.pipeline?.steps
+  if (!Array.isArray(steps) || steps.length === 0) return false
+  return !steps.some((s) => s && s.id === phase)
+}
+
+/**
  * Only the current phase and phases after it may be clicked to run.
  * A past pending/done node must not submit — the server always starts from
  * `current_phase`, so clicking a past id would re-run the current step and

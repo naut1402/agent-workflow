@@ -28,6 +28,7 @@ const {
   sendMessage,
   confirm,
   cancel,
+  reset,
   findInvalidPipelineAgentRefs,
 } = useNlChatSession({ getProjectId: () => props.projectId ?? undefined })
 
@@ -99,6 +100,8 @@ function onCancel(): void {
   void cancel()
   emit('close')
 }
+
+defineExpose({ cancel, reset })
 
 const ENTITY_LABELS: Record<NlChatEntityType, string> = {
   task: 'Task',
