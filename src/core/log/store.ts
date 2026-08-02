@@ -1,13 +1,16 @@
 import { nowStamp } from '../lib/dateUtils.js'
 import { getLogDriver } from './driver.js'
+import { isLogTypeEnabled } from './loggingPrefs.js'
 import type { AuditEntity, AuditOp, LogEntry } from './schema.js'
 
 /**
  * Append one entry via active log driver. Never throws —
- * logging must never break the caller.
+ * logging must never break the caller. Respects logging prefs (settings.json).
  */
 export async function appendLog(entry: LogEntry): Promise<void> {
   try {
+    if (entry.type === 'request' && !isLogTypeEnabled('request')) return
+    if (entry.type === 'audit' && !isLogTypeEnabled('audit')) return
     await getLogDriver().append(entry)
   } catch {
     /* swallow */
@@ -23,6 +26,7 @@ export function appendRequestLog(p: {
   durationMs: number
   error?: string | null
 }): void {
+  if (!isLogTypeEnabled('request')) return
   void appendLog({ type: 'request', ...nowStamp(), ...p, error: p.error ?? null }).catch(() => {})
 }
 
@@ -34,5 +38,6 @@ export function emitAudit(p: {
   projectId: string | null
   detail?: Record<string, unknown>
 }): void {
+  if (!isLogTypeEnabled('audit')) return
   void appendLog({ type: 'audit', ...nowStamp(), ...p }).catch(() => {})
 }

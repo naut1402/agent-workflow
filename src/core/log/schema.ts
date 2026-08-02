@@ -27,6 +27,7 @@ export const AUDIT_ENTITIES = [
   'project',
   'autoscan',
   'github-tokens',
+  'logging',
   'runner',
   'connection',
   'credential',

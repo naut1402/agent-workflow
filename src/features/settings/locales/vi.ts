@@ -33,6 +33,19 @@ export default {
     collapseAppOnOutsideClick: 'Tự thu gọn sidebar chính khi click ra ngoài',
     collapseMonitorSubOnOutsideClick: 'Tự thu gọn sub-sidebar Monitor khi click ra ngoài',
   },
+  logging: {
+    title: 'Logs',
+    desc: 'Ẩn/hiện mode Logs trên sidebar. Khi hiện, chọn loại log được ghi và hiển thị.',
+    showTab: 'Hiện tab Logs',
+    typesDesc: 'Loại log (tắt = không ghi và không hiện trong Logs).',
+    types: {
+      audit: 'Audit (thay đổi cấu hình)',
+      request: 'Request (HTTP /api)',
+      jobs: 'Jobs (stdout runner)',
+    },
+    saved: 'Đã lưu.',
+    loadError: 'Không tải được cấu hình logging.',
+  },
   autoscan: {
     title: 'Autoscan project',
     desc: 'Tự động quét thư mục trong whitelist và thêm project có `.dev-team-agent`.',

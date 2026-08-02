@@ -23,6 +23,7 @@ export default {
   empty: {
     log: 'Chưa có log.',
     job: 'Chưa có job.',
+    allDisabled: 'Mọi loại log đang tắt — bật lại trong Cài đặt › Chung › Logs.',
   },
   jobs: {
     tailStart: '▶ Tail',

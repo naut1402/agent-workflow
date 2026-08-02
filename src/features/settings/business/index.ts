@@ -4,6 +4,8 @@ import {
   saveAutoscanConfig,
   loadGithubTokensConfig,
   saveGithubTokensConfig,
+  loadLoggingConfig,
+  saveLoggingConfig,
 } from './dashboardSettings.js'
 import { runAutoscan } from './autoscan.js'
 import { browseDirectory } from './fsBrowse.js'
@@ -29,6 +31,14 @@ export class SettingsBusiness extends AbstractBusiness {
     return saveGithubTokensConfig(next)
   }
 
+  getLoggingConfig() {
+    return loadLoggingConfig()
+  }
+
+  saveLoggingConfig(next: Parameters<typeof saveLoggingConfig>[0]) {
+    return saveLoggingConfig(next)
+  }
+
   browseDirectory(pathParam?: string) {
     return browseDirectory(pathParam)
   }
@@ -39,6 +49,8 @@ export {
   saveAutoscanConfig,
   loadGithubTokensConfig,
   saveGithubTokensConfig,
+  loadLoggingConfig,
+  saveLoggingConfig,
   loadDashboardSettings,
   saveDashboardSettings,
   autoscanFile,

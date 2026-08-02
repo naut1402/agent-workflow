@@ -19,8 +19,8 @@ import {
   resolveThemePreference,
   type NotificationUiPlacement,
   type ThemePreference,
-} from '../../../core/contracts/schemas/appSettings'
-import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig } from '../scripts/SettingsDialogApi'
+} from '../../../core/configs/appSettings'
+import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig, fetchLoggingConfig, saveLoggingConfig } from '../scripts/SettingsDialogApi'
 import { parseGithubRepoRef } from '../schemas/githubTokens'
 import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 import CSelect from '../../../core/ui/CSelect.vue'
@@ -147,6 +147,88 @@ function onNotificationUiPlacementUpdate(value: string) {
   if (value === 'sidebar' || value === 'floating' || value === 'both') {
     update({ notificationUiPlacement: value as NotificationUiPlacement })
   }
+}
+
+// ── Logging (server-backed) ──────────────────────────────────────────────────
+
+const showLogsTab = ref(true)
+const logTypeAudit = ref(true)
+const logTypeRequest = ref(true)
+const logTypeJobs = ref(true)
+const loggingBusy = ref(false)
+const loggingMsg = ref('')
+const loggingErr = ref('')
+
+async function loadLogging() {
+  loggingErr.value = ''
+  try {
+    const data = await fetchLoggingConfig()
+    const cfg = data.config || {}
+    showLogsTab.value = cfg.showLogsTab !== false
+    logTypeAudit.value = cfg.types?.audit !== false
+    logTypeRequest.value = cfg.types?.request !== false
+    logTypeJobs.value = cfg.types?.jobs !== false
+  } catch {
+    loggingErr.value = t('settings.logging.loadError')
+  }
+}
+
+async function persistLogging() {
+  loggingBusy.value = true
+  loggingMsg.value = ''
+  loggingErr.value = ''
+  try {
+    const data = await saveLoggingConfig({
+      showLogsTab: showLogsTab.value,
+      types: {
+        audit: logTypeAudit.value,
+        request: logTypeRequest.value,
+        jobs: logTypeJobs.value,
+      },
+    })
+    const cfg = data.config || {}
+    showLogsTab.value = cfg.showLogsTab !== false
+    logTypeAudit.value = cfg.types?.audit !== false
+    logTypeRequest.value = cfg.types?.request !== false
+    logTypeJobs.value = cfg.types?.jobs !== false
+    loggingMsg.value = t('settings.logging.saved')
+    window.dispatchEvent(
+      new CustomEvent('dev-dashboard:logging-changed', {
+        detail: {
+          showLogsTab: showLogsTab.value,
+          types: {
+            audit: logTypeAudit.value,
+            request: logTypeRequest.value,
+            jobs: logTypeJobs.value,
+          },
+        },
+      }),
+    )
+  } catch (e) {
+    loggingErr.value = String((e as Error).message || e)
+  } finally {
+    loggingBusy.value = false
+  }
+}
+
+function toggleShowLogsTab() {
+  showLogsTab.value = !showLogsTab.value
+  void persistLogging()
+}
+
+function toggleLogTypeAudit() {
+  logTypeAudit.value = !logTypeAudit.value
+  void persistLogging()
+}
+
+function toggleLogTypeRequest() {
+  logTypeRequest.value = !logTypeRequest.value
+  void persistLogging()
+}
+
+function toggleLogTypeJobs() {
+  logTypeJobs.value = !logTypeJobs.value
+  void persistLogging()
 }
 
 // ── Autoscan (server-backed) ─────────────────────────────────────────────────
@@ -363,6 +445,7 @@ onMounted(() => {
   load()
   void loadAutoscan()
   void loadGithubTokens()
+  void loadLogging()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -539,6 +622,51 @@ onUnmounted(() => {
                   />
                   {{ t('settings.sidebar.collapseMonitorSubOnOutsideClick') }}
                 </label>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.logging.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.logging.desc') }}</p>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="showLogsTab"
+                    :disabled="loggingBusy"
+                    @change="toggleShowLogsTab"
+                  />
+                  {{ t('settings.logging.showTab') }}
+                </label>
+                <template v-if="showLogsTab">
+                  <p class="settings-section-desc">{{ t('settings.logging.typesDesc') }}</p>
+                  <label class="settings-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="logTypeAudit"
+                      :disabled="loggingBusy"
+                      @change="toggleLogTypeAudit"
+                    />
+                    {{ t('settings.logging.types.audit') }}
+                  </label>
+                  <label class="settings-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="logTypeRequest"
+                      :disabled="loggingBusy"
+                      @change="toggleLogTypeRequest"
+                    />
+                    {{ t('settings.logging.types.request') }}
+                  </label>
+                  <label class="settings-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="logTypeJobs"
+                      :disabled="loggingBusy"
+                      @change="toggleLogTypeJobs"
+                    />
+                    {{ t('settings.logging.types.jobs') }}
+                  </label>
+                </template>
+                <p v-if="loggingMsg" class="settings-autoscan-msg">{{ loggingMsg }}</p>
+                <p v-if="loggingErr" class="settings-autoscan-err">{{ loggingErr }}</p>
               </section>
             </template>
 

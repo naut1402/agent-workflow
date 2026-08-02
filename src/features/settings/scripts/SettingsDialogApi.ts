@@ -25,3 +25,14 @@ export async function saveGithubTokensConfig(config: {
 }) {
   return apiRequest('PUT', '/api/github/tokens', { body: config })
 }
+
+export async function fetchLoggingConfig() {
+  return apiGet('/api/logging-config')
+}
+
+export async function saveLoggingConfig(config: {
+  showLogsTab?: boolean
+  types?: { audit?: boolean; request?: boolean; jobs?: boolean }
+}) {
+  return apiRequest('PUT', '/api/logging-config', { body: config })
+}

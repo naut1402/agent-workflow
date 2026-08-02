@@ -8,6 +8,7 @@ import {
   parseDashboardSettings,
   resolveAutoscanFromDashboard,
   resolveGithubTokensFromDashboard,
+  resolveLoggingFromDashboard,
   type DashboardSettings,
 } from '../schemas/dashboardSettings.js'
 import {
@@ -19,6 +20,11 @@ import {
   parseGithubTokensConfig,
   type GithubTokensConfig,
 } from '../schemas/githubTokens.js'
+import {
+  invalidateLoggingPrefsCache,
+  parseLoggingConfig,
+  type LoggingConfig,
+} from '../../../core/log/loggingPrefs.js'
 import { registryHome } from '../../../core/registry.js'
 
 export function dashboardSettingsFile(): string {
@@ -53,6 +59,7 @@ export function loadDashboardSettings(): DashboardSettings {
   return {
     autoscan: { ...DEFAULT_AUTOSCAN_CONFIG, whitelist: [] },
     githubTokens: { repos: [] },
+    logging: parseLoggingConfig(undefined),
   }
 }
 
@@ -64,6 +71,7 @@ export function saveDashboardSettings(settings: DashboardSettings): DashboardSet
   const tmp = `${file}.tmp`
   writeTextFileSync(tmp, JSON.stringify(normalised, null, 2))
   renameSync(tmp, file)
+  invalidateLoggingPrefsCache()
   return normalised
 }
 
@@ -99,6 +107,20 @@ export function saveGithubTokensConfig(config: GithubTokensConfig): GithubTokens
     githubTokens: normalised,
   })
   return resolveGithubTokensFromDashboard(saved)
+}
+
+export function loadLoggingConfig(): LoggingConfig {
+  return resolveLoggingFromDashboard(loadDashboardSettings())
+}
+
+export function saveLoggingConfig(config: LoggingConfig): LoggingConfig {
+  const current = loadDashboardSettings()
+  const normalised = parseLoggingConfig(config)
+  const saved = saveDashboardSettings({
+    ...current,
+    logging: normalised,
+  })
+  return resolveLoggingFromDashboard(saved)
 }
 
 // Re-export default shape for callers that only need the empty template.

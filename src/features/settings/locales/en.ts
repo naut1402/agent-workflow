@@ -32,6 +32,19 @@ export default {
     collapseAppOnOutsideClick: 'Auto-collapse the main sidebar on outside click',
     collapseMonitorSubOnOutsideClick: 'Auto-collapse the Monitor sub-sidebar on outside click',
   },
+  logging: {
+    title: 'Logs',
+    desc: 'Show or hide the Logs mode in the sidebar. When shown, choose which log types are written and displayed.',
+    showTab: 'Show Logs tab',
+    typesDesc: 'Log types (off = do not write and do not show in Logs).',
+    types: {
+      audit: 'Audit (config changes)',
+      request: 'Request (HTTP /api)',
+      jobs: 'Jobs (runner stdout)',
+    },
+    saved: 'Saved.',
+    loadError: 'Could not load logging config.',
+  },
   autoscan: {
     title: 'Project autoscan',
     desc: 'Automatically scan whitelist folders and add projects that contain `.dev-team-agent`.',

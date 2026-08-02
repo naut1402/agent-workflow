@@ -1,6 +1,7 @@
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { parseAutoscanConfig } from './schemas/autoscan.js'
 import { parseGithubTokensConfig } from './schemas/githubTokens.js'
+import { parseLoggingConfig } from '../../core/log/loggingPrefs.js'
 import { emitAudit } from '../../core/log/store.js'
 import {
   loadAutoscanConfig,
@@ -8,6 +9,8 @@ import {
   runAutoscan,
   loadGithubTokensConfig,
   saveGithubTokensConfig,
+  loadLoggingConfig,
+  saveLoggingConfig,
   browseDirectory,
 } from './business/index.js'
 
@@ -123,6 +126,27 @@ export class SettingsController extends AbstractController {
     const next = parseGithubTokensConfig(b.value)
     const saved = saveGithubTokensConfig(next)
     emitAudit({ op: 'update', entity: 'github-tokens', identifier: 'config', projectId: null })
+    return this.ok({ config: saved })
+  }
+
+  getLogging() {
+    return this.ok({ config: loadLoggingConfig() })
+  }
+
+  async updateLogging() {
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON')
+    const current = loadLoggingConfig()
+    const next = parseLoggingConfig({
+      ...current,
+      ...b.value,
+      types: {
+        ...current.types,
+        ...(b.value?.types && typeof b.value.types === 'object' ? b.value.types : {}),
+      },
+    })
+    const saved = saveLoggingConfig(next)
+    emitAudit({ op: 'update', entity: 'logging', identifier: 'config', projectId: null })
     return this.ok({ config: saved })
   }
 }

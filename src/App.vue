@@ -3,7 +3,7 @@ import { useI18nHelpers } from './core/composables/useI18nHelpers'
 import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { fetchProjects } from './features/settings/scripts/settingsApi'
-import { fetchAutoscanConfig, runAutoscan } from './features/settings/scripts/SettingsDialogApi'
+import { fetchAutoscanConfig, runAutoscan, fetchLoggingConfig } from './features/settings/scripts/SettingsDialogApi'
 import { useLocalToggle } from './core/composables/useLocalToggle'
 import { useAppSettings } from './core/composables/useAppSettings'
 import { navigateToModeKey, reloadProjectsKey } from './core/shell/keys'
@@ -11,7 +11,7 @@ import {
   resolveCollapseAppSidebarOnOutside,
   resolveNotifyShowFloating,
   resolveNotifyShowSidebar,
-} from './core/contracts/schemas/appSettings'
+} from './core/configs/appSettings'
 import { resolveAutoscanIntervalMs } from './features/settings/schemas/autoscan'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
 import { useNotifications } from './features/notifications/composables/useNotifications'
@@ -38,6 +38,7 @@ const { t } = useI18nHelpers()
 // ── Mode ─────────────────────────────────────────────────────────────────────
 const mode = ref('monitor')
 const settingsOpen = ref(false)
+const showLogsTab = ref(true)
 
 const editorScope = ref('global')
 const editorTaskId = ref('')
@@ -191,6 +192,27 @@ function onProjectsChangedEvent() {
   void loadProjects()
 }
 
+async function loadLoggingPrefs() {
+  try {
+    const data = await fetchLoggingConfig()
+    const cfg = data.config || {}
+    showLogsTab.value = cfg.showLogsTab !== false
+    if (!showLogsTab.value && mode.value === 'logs') mode.value = 'monitor'
+  } catch {
+    showLogsTab.value = true
+  }
+}
+
+function onLoggingChanged(ev: Event) {
+  const detail = (ev as CustomEvent).detail
+  if (detail && typeof detail.showLogsTab === 'boolean') {
+    showLogsTab.value = detail.showLogsTab
+  } else {
+    void loadLoggingPrefs()
+  }
+  if (!showLogsTab.value && mode.value === 'logs') mode.value = 'monitor'
+}
+
 watch(sidebarCollapsed, (v) => {
   try {
     localStorage.setItem(SIDEBAR_KEY, v ? '1' : '0')
@@ -230,9 +252,11 @@ watch(mode, async (m) => {
 onMounted(async () => {
   loadSidebarPref()
   await loadProjects()
+  void loadLoggingPrefs()
   start()
   window.addEventListener('dev-dashboard:autoscan-changed', onAutoscanChanged)
   window.addEventListener('dev-dashboard:projects-changed', onProjectsChangedEvent)
+  window.addEventListener('dev-dashboard:logging-changed', onLoggingChanged)
   void startAutoscanLoop()
 })
 onUnmounted(() => {
@@ -240,6 +264,7 @@ onUnmounted(() => {
   stopAutoscanLoop()
   window.removeEventListener('dev-dashboard:autoscan-changed', onAutoscanChanged)
   window.removeEventListener('dev-dashboard:projects-changed', onProjectsChangedEvent)
+  window.removeEventListener('dev-dashboard:logging-changed', onLoggingChanged)
 })
 </script>
 
@@ -322,6 +347,7 @@ onUnmounted(() => {
           <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.runner') }}</span>
         </button>
         <button
+          v-if="showLogsTab"
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'logs' }"
           :title="t('common.modes.logs')"

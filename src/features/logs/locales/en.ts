@@ -23,6 +23,7 @@ export default {
   empty: {
     log: 'No logs yet.',
     job: 'No jobs yet.',
+    allDisabled: 'All log types are disabled — enable them in Settings › General › Logs.',
   },
   jobs: {
     tailStart: '▶ Tail',

@@ -3,6 +3,7 @@ import crypto from 'node:crypto'
 import { spawn } from 'node:child_process'
 import os from 'node:os'
 import { registryHome } from '../../../core/registry.js'
+import { isLogTypeEnabled } from '../../../core/log/loggingPrefs.js'
 import { getRunner, getDefaultRunner, substituteConfig, getProvider } from './registry.js'
 import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
@@ -323,14 +324,16 @@ async function runJob(job: JobRecord): Promise<void> {
     return
   }
 
-  const logPath = joinPath(jobsDir(), `${job.id}.log`)
-  try {
-    writeTextFileSync(logPath, '')
-  } catch {
-    /* ignore */
+  const logPath = isLogTypeEnabled('jobs') ? joinPath(jobsDir(), `${job.id}.log`) : undefined
+  if (logPath) {
+    try {
+      writeTextFileSync(logPath, '')
+    } catch {
+      /* ignore */
+    }
   }
 
-  saveJob({ ...job, status: 'running', startedAt: new Date().toISOString(), logPath, pid: null })
+  saveJob({ ...job, status: 'running', startedAt: new Date().toISOString(), logPath: logPath ?? null, pid: null })
 
   let userPrompt = job.userPrompt || ''
   if (!userPrompt && job.promptRef) {

@@ -20,4 +20,7 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
 
   app.get('/api/github/tokens', bind(SettingsController, 'getGithubTokens'))
   app.put('/api/github/tokens', bind(SettingsController, 'updateGithubTokens'))
+
+  app.get('/api/logging-config', bind(SettingsController, 'getLogging'))
+  app.put('/api/logging-config', bind(SettingsController, 'updateLogging'))
 }
