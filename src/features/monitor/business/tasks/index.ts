@@ -1,6 +1,4 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
-import { resolvePathUnder, statSafe } from '../../../../core/lib/fileHelper.js'
+import { joinPath, readDir, readFile, readTextFile, resolvePathUnder, statSafe } from '../../../../core/lib/fileHelper.js'
 import { knownArtifactsFor, loadPipelineConfig } from '../index.js'
 
 /**
@@ -24,7 +22,7 @@ export async function listArtifacts(
   const out: Record<string, any> = {}
   let entries: any[] = []
   try {
-    entries = await fs.readdir(taskDir, { withFileTypes: true })
+    entries = await readDir(taskDir, { withFileTypes: true })
   } catch {
     return { artifacts: out, subtasks: [] }
   }
@@ -36,7 +34,7 @@ export async function listArtifacts(
     }
     if (MACHINE_FILES.has(e.name)) continue
     if (e.name.endsWith('.md')) {
-      const meta = await statSafe(path.join(taskDir, e.name))
+      const meta = await statSafe(joinPath(taskDir, e.name))
       out[e.name] = { exists: true, mtime: meta.mtime, size: meta.size }
     }
   }
@@ -52,7 +50,7 @@ export async function readState(
   stateFile: string,
 ): Promise<{ ok: true; state: any } | { ok: false; error: string }> {
   try {
-    const raw = await fs.readFile(stateFile, 'utf8')
+    const raw = await readTextFile(stateFile)
     return { ok: true, state: JSON.parse(raw) }
   } catch (err: any) {
     return { ok: false, error: String(err && err.message ? err.message : err) }
@@ -61,13 +59,13 @@ export async function readState(
 
 /** Collect every task (from .dev-state/*.json + tasks/* dirs) with state, artifacts, qa. */
 export async function collectTasks(root: string): Promise<any[]> {
-  const stateDir = path.join(root, '.dev-state')
-  const tasksDir = path.join(root, 'tasks')
+  const stateDir = joinPath(root, '.dev-state')
+  const tasksDir = joinPath(root, 'tasks')
   const result: any[] = []
 
   let stateFiles: string[] = []
   try {
-    stateFiles = (await fs.readdir(stateDir)).filter((f) => f.endsWith('.json'))
+    stateFiles = (await readDir(stateDir)).filter((f) => f.endsWith('.json'))
   } catch {
     stateFiles = []
   }
@@ -76,7 +74,7 @@ export async function collectTasks(root: string): Promise<any[]> {
   // directories that have artifacts but no state yet (e.g. legacy / mid-init).
   const ids = new Set(stateFiles.map((f) => f.replace(/\.json$/, '')))
   try {
-    for (const e of await fs.readdir(tasksDir, { withFileTypes: true })) {
+    for (const e of await readDir(tasksDir, { withFileTypes: true })) {
       if (e.isDirectory()) ids.add(e.name)
     }
   } catch {
@@ -84,13 +82,13 @@ export async function collectTasks(root: string): Promise<any[]> {
   }
 
   for (const id of [...ids].sort()) {
-    const stateFile = path.join(stateDir, `${id}.json`)
+    const stateFile = joinPath(stateDir, `${id}.json`)
     const stateMeta = await statSafe(stateFile)
     const { ok, state, error }: any = stateMeta.exists
       ? await readState(stateFile)
       : { ok: false, state: null, error: 'no state file' }
 
-    const taskDir = path.join(tasksDir, id)
+    const taskDir = joinPath(tasksDir, id)
     const cfg = await loadPipelineConfig(root, id)
     const { artifacts, subtasks } = await listArtifacts(taskDir, knownArtifactsFor(cfg))
 
@@ -98,7 +96,7 @@ export async function collectTasks(root: string): Promise<any[]> {
     let qa_count = 0
     if (artifacts['qa.md'] && artifacts['qa.md'].exists) {
       try {
-        qa = await fs.readFile(path.join(taskDir, 'qa.md'), 'utf8')
+        qa = await readFile(joinPath(taskDir, 'qa.md'), 'utf8')
         // Count Q&A items: each question starts with a level-2 heading "## Q"
         qa_count = (qa.match(/^##\s+Q\d/gm) || []).length
       } catch {
@@ -136,7 +134,7 @@ export async function collectTasks(root: string): Promise<any[]> {
 
 /** Path to a task's flow-profile JSON. */
 export function flowProfilePath(root: string, id: string): string {
-  return path.join(root, 'flow-profiles', `${id}.json`)
+  return joinPath(root, 'flow-profiles', `${id}.json`)
 }
 
 export { createTask, renderRequestMarkdown } from './create.js'

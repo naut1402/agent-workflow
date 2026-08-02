@@ -1,4 +1,4 @@
-import path from 'node:path'
+import { joinPath } from '../../../../core/lib/fileHelper.js'
 import { readYamlSafe } from '../../../../core/lib/yamlLib.js'
 import { DEFAULT_PIPELINE } from './default.js'
 import { patchSteps, perTaskStepsReplace } from './merge.js'
@@ -14,7 +14,7 @@ export async function loadPipelineConfig(root: string, id: string | null): Promi
   const cfg = JSON.parse(JSON.stringify(DEFAULT_PIPELINE))
   let source = 'builtin'
 
-  const global = await readYamlSafe(path.join(root, 'pipeline.yaml'))
+  const global = await readYamlSafe(joinPath(root, 'pipeline.yaml'))
   if (global) {
     if (Array.isArray(global.steps)) cfg.steps = global.steps
     if (global.defaults) cfg.defaults = { ...cfg.defaults, ...global.defaults }
@@ -24,7 +24,7 @@ export async function loadPipelineConfig(root: string, id: string | null): Promi
   }
 
   if (id) {
-    const per = await readYamlSafe(path.join(root, 'tasks', id, 'pipeline.yaml'))
+    const per = await readYamlSafe(joinPath(root, 'tasks', id, 'pipeline.yaml'))
     if (per) {
       if (Array.isArray(per.steps)) {
         if (perTaskStepsReplace(cfg.steps, per)) {

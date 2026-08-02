@@ -1,6 +1,5 @@
-import fs from 'node:fs'
+import { joinPath, mkdirSync, readTextFileSync, renameSync, resolvePath, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import os from 'node:os'
-import path from 'node:path'
 import { registryHome } from '../../../core/registry.js'
 
 export type SessionPolicy = 'single' | 'per-step' | 'per-runner'
@@ -51,11 +50,11 @@ export interface ResolvedSessionPlan {
 }
 
 function sessionsDir(projectId: string): string {
-  return path.join(registryHome(), 'sessions', projectId)
+  return joinPath(registryHome(), 'sessions', projectId)
 }
 
 function ledgerFile(projectId: string, taskId: string): string {
-  return path.join(sessionsDir(projectId), `${taskId}.json`)
+  return joinPath(sessionsDir(projectId), `${taskId}.json`)
 }
 
 function emptyLedger(taskId: string): TaskSessionLedger {
@@ -65,7 +64,7 @@ function emptyLedger(taskId: string): TaskSessionLedger {
 export function loadTaskSessionLedger(projectId: string, taskId: string): TaskSessionLedger {
   if (!projectId || !taskId) return emptyLedger(taskId)
   try {
-    const raw = fs.readFileSync(ledgerFile(projectId, taskId), 'utf8')
+    const raw = readTextFileSync(ledgerFile(projectId, taskId), 'utf8')
     const data = JSON.parse(raw) as TaskSessionLedger
     if (!data || data.version !== 1 || !Array.isArray(data.sessions)) return emptyLedger(taskId)
     return {
@@ -81,11 +80,11 @@ export function loadTaskSessionLedger(projectId: string, taskId: string): TaskSe
 
 export function saveTaskSessionLedger(projectId: string, ledger: TaskSessionLedger): void {
   const dir = sessionsDir(projectId)
-  fs.mkdirSync(dir, { recursive: true })
+  mkdirSync(dir, { recursive: true })
   const file = ledgerFile(projectId, ledger.taskId)
   const tmp = `${file}.tmp`
-  fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2), 'utf8')
-  fs.renameSync(tmp, file)
+  writeTextFileSync(tmp, JSON.stringify(ledger, null, 2), 'utf8')
+  renameSync(tmp, file)
 }
 
 function findOpenEntry(ledger: TaskSessionLedger): SessionEntry | null {
@@ -119,7 +118,7 @@ export function isSessionEntryValid(
   if (entry.connectionId !== ctx.connectionId) {
     return { invalid: true, reason: 'connection changed' }
   }
-  if (path.resolve(entry.workspace) !== path.resolve(ctx.workspace)) {
+  if (resolvePath(entry.workspace) !== resolvePath(ctx.workspace)) {
     return { invalid: true, reason: 'workspace changed' }
   }
   if (!entry.sessionId) {
@@ -201,7 +200,7 @@ export function recordSessionUsage(input: RecordSessionInput): void {
       providerId: input.providerId,
       runnerId: input.runnerId,
       connectionId: input.connectionId,
-      workspace: path.resolve(input.workspace),
+      workspace: resolvePath(input.workspace),
       host,
       model: input.model,
       stepIds: input.stepId ? [input.stepId] : [],

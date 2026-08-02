@@ -1,14 +1,13 @@
-import fs from 'node:fs'
-import path from 'node:path'
+import { joinPath, readTextFileSync, readdirSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import { registryHome } from '../../../core/registry.js'
 import type { JobRecord } from './types.js'
 
 function jobsDir(): string {
-  return path.join(registryHome(), 'jobs')
+  return joinPath(registryHome(), 'jobs')
 }
 
 function jobFile(id: string): string {
-  return path.join(jobsDir(), `${id}.json`)
+  return joinPath(jobsDir(), `${id}.json`)
 }
 
 /** Best-effort liveness check — `(pid, startedAt)` pair from the job record. */
@@ -25,8 +24,8 @@ export function isPidAlive(pid: number | null | undefined): boolean {
 function saveJob(job: JobRecord): void {
   const file = jobFile(job.id)
   const tmp = `${file}.tmp`
-  fs.writeFileSync(tmp, JSON.stringify(job, null, 2), 'utf8')
-  fs.renameSync(tmp, file)
+  writeTextFileSync(tmp, JSON.stringify(job, null, 2), 'utf8')
+  renameSync(tmp, file)
 }
 
 /**
@@ -36,7 +35,7 @@ function saveJob(job: JobRecord): void {
 export function reapOrphanedRunningJobs(): JobRecord[] {
   let files: string[] = []
   try {
-    files = fs.readdirSync(jobsDir()).filter((f) => f.endsWith('.json'))
+    files = readdirSync(jobsDir()).filter((f) => f.endsWith('.json'))
   } catch {
     return []
   }
@@ -45,7 +44,7 @@ export function reapOrphanedRunningJobs(): JobRecord[] {
   for (const f of files) {
     let job: JobRecord
     try {
-      job = JSON.parse(fs.readFileSync(path.join(jobsDir(), f), 'utf8'))
+      job = JSON.parse(readTextFileSync(joinPath(jobsDir(), f), 'utf8'))
     } catch {
       continue
     }

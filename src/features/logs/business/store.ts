@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises'
+import { readTextFile } from '../../../core/lib/fileHelper.js'
 import { logFile } from '../../../core/log/fileDriver.js'
 import { parseLogLine, type LogEntry, type LogType } from '../../../core/log/schema.js'
 
@@ -16,7 +16,7 @@ export async function readLogs(opts: {
   for (const t of types) {
     let raw: string
     try {
-      raw = await fs.readFile(logFile(t), 'utf8')
+      raw = await readTextFile(logFile(t))
     } catch {
       continue
     }

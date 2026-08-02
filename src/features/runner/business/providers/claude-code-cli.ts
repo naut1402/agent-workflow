@@ -1,6 +1,5 @@
+import { appendTextFileSync, existsSync, joinPath } from '../../../../core/lib/fileHelper.js'
 import { spawn } from 'node:child_process'
-import fs from 'node:fs'
-import path from 'node:path'
 import { resolveSecretRef } from '../credentials.js'
 import {
   buildCursorJsonArgs,
@@ -334,7 +333,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
       const appendLog = (text: string) => {
         if (!logPath) return
         try {
-          fs.appendFileSync(logPath, text)
+          appendTextFileSync(logPath, text)
         } catch {
           /* ignore */
         }
@@ -393,8 +392,8 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
       const artifactsFound: string[] = []
       if (req.produces?.length) {
         for (const name of req.produces) {
-          const fp = path.join(req.workspace, name)
-          if (fs.existsSync(fp)) artifactsFound.push(name)
+          const fp = joinPath(req.workspace, name)
+          if (existsSync(fp)) artifactsFound.push(name)
         }
       }
 

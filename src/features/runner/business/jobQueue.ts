@@ -1,5 +1,4 @@
-import fs from 'node:fs'
-import path from 'node:path'
+import { cpSync, dirname, joinPath, mkdirSync, readTextFileSync, readdirSync, renameSync, resolvePath, rmSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import crypto from 'node:crypto'
 import { spawn } from 'node:child_process'
 import os from 'node:os'
@@ -70,15 +69,15 @@ export interface SubmitJobInput {
 reapOrphanedRunningJobs()
 
 function jobsDir(): string {
-  return path.join(registryHome(), 'jobs')
+  return joinPath(registryHome(), 'jobs')
 }
 
 function jobFile(id: string): string {
-  return path.join(jobsDir(), `${id}.json`)
+  return joinPath(jobsDir(), `${id}.json`)
 }
 
 function ensureJobsDir(): void {
-  fs.mkdirSync(jobsDir(), { recursive: true })
+  mkdirSync(jobsDir(), { recursive: true })
 }
 
 // ── Approval flow (see JobRecord's sessionId/applyTarget/approvalArtifact/
@@ -90,23 +89,23 @@ function ensureJobsDir(): void {
 // directory's placement (outside any git-tracked tree).
 
 function proposalsDir(): string {
-  return path.join(registryHome(), 'proposals')
+  return joinPath(registryHome(), 'proposals')
 }
 
 function scratchWorkspacePath(jobId: string): string {
-  return path.join(proposalsDir(), jobId)
+  return joinPath(proposalsDir(), jobId)
 }
 
 function copyWorkspaceForApproval(realWorkspace: string, jobId: string): string {
   const scratch = scratchWorkspacePath(jobId)
-  fs.mkdirSync(path.dirname(scratch), { recursive: true })
-  fs.cpSync(realWorkspace, scratch, { recursive: true })
+  mkdirSync(dirname(scratch), { recursive: true })
+  cpSync(realWorkspace, scratch, { recursive: true })
   return scratch
 }
 
 function removeScratchWorkspace(scratchPath: string): void {
   try {
-    fs.rmSync(scratchPath, { recursive: true, force: true })
+    rmSync(scratchPath, { recursive: true, force: true })
   } catch {
     /* ignore — best-effort cleanup */
   }
@@ -218,25 +217,25 @@ export function cleanAgentOutput(stdout: string): string {
  */
 function foldProposalIntoScratch(job: JobRecord, stdout: string): void {
   const proposed = cleanAgentOutput(stdout)
-  const scratchArtifact = path.join(job.workspace, job.approvalArtifact!)
+  const scratchArtifact = joinPath(job.workspace, job.approvalArtifact!)
   if (job.spliceRange) {
     let base = ''
     try {
-      base = fs.readFileSync(path.join(job.applyTarget!, job.approvalArtifact!), 'utf8')
+      base = readTextFileSync(joinPath(job.applyTarget!, job.approvalArtifact!), 'utf8')
     } catch {
       base = '' // real artifact may not exist yet
     }
     const spliced = spliceLines(base, job.spliceRange.start, job.spliceRange.end, proposed)
-    fs.writeFileSync(scratchArtifact, spliced, 'utf8')
+    writeTextFileSync(scratchArtifact, spliced)
   } else if (proposed) {
-    fs.writeFileSync(scratchArtifact, proposed, 'utf8')
+    writeTextFileSync(scratchArtifact, proposed)
   }
   // else: whole-file job with no stdout — keep whatever the agent wrote.
 }
 
 export function loadJob(id: string): JobRecord | null {
   try {
-    return JSON.parse(fs.readFileSync(jobFile(id), 'utf8'))
+    return JSON.parse(readTextFileSync(jobFile(id)))
   } catch {
     return null
   }
@@ -246,18 +245,18 @@ function saveJob(job: JobRecord): JobRecord {
   ensureJobsDir()
   const file = jobFile(job.id)
   const tmp = `${file}.tmp`
-  fs.writeFileSync(tmp, JSON.stringify(job, null, 2), 'utf8')
-  fs.renameSync(tmp, file)
+  writeTextFileSync(tmp, JSON.stringify(job, null, 2), 'utf8')
+  renameSync(tmp, file)
   return job
 }
 
 export function listJobs(limit = 20): JobRecord[] {
   ensureJobsDir()
-  const files = fs.readdirSync(jobsDir()).filter((f) => f.endsWith('.json'))
+  const files = readdirSync(jobsDir()).filter((f) => f.endsWith('.json'))
   const jobs = files
     .map((f): JobRecord | null => {
       try {
-        return JSON.parse(fs.readFileSync(path.join(jobsDir(), f), 'utf8'))
+        return JSON.parse(readTextFileSync(joinPath(jobsDir(), f), 'utf8'))
       } catch {
         return null
       }
@@ -327,9 +326,9 @@ async function runJob(job: JobRecord): Promise<void> {
     return
   }
 
-  const logPath = path.join(jobsDir(), `${job.id}.log`)
+  const logPath = joinPath(jobsDir(), `${job.id}.log`)
   try {
-    fs.writeFileSync(logPath, '', 'utf8')
+    writeTextFileSync(logPath, '')
   } catch {
     /* ignore */
   }
@@ -339,7 +338,7 @@ async function runJob(job: JobRecord): Promise<void> {
   let userPrompt = job.userPrompt || ''
   if (!userPrompt && job.promptRef) {
     try {
-      userPrompt = fs.readFileSync(job.promptRef, 'utf8')
+      userPrompt = readTextFileSync(job.promptRef)
     } catch (err: any) {
       saveJob({
         ...(loadJob(job.id) as JobRecord),
@@ -351,7 +350,7 @@ async function runJob(job: JobRecord): Promise<void> {
     }
   }
 
-  const projectRoot = (job.metadata?.projectRoot as string) || path.dirname(job.workspace)
+  const projectRoot = (job.metadata?.projectRoot as string) || dirname(job.workspace)
   const devTeamRoot = (job.metadata?.devTeamRoot as string) || job.workspace
 
   let resolvedAgent
@@ -573,10 +572,10 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   const nextStep = (pipeline.steps || []).find((s: any) => s.id === nextStepId)
   if (!nextStep?.agent) return
 
-  const workspace = path.join(devTeamRoot, 'tasks', taskId)
+  const workspace = joinPath(devTeamRoot, 'tasks', taskId)
   let userPrompt = ''
   try {
-    userPrompt = fs.readFileSync(path.join(workspace, 'request.md'), 'utf8')
+    userPrompt = readTextFileSync(joinPath(workspace, 'request.md'), 'utf8')
   } catch {
     return // no request.md — leave the chain to stop rather than run with an empty prompt
   }
@@ -616,9 +615,9 @@ export function submitJob(input: SubmitJobInput): JobRecord {
     status: 'queued',
     runnerId: runner?.id || input.runnerId || 'unknown',
     agentRef: input.agentRef,
-    workspace: path.resolve(input.workspace),
+    workspace: resolvePath(input.workspace),
     userPrompt: input.userPrompt,
-    promptRef: input.promptRef ? path.resolve(input.promptRef) : undefined,
+    promptRef: input.promptRef ? resolvePath(input.promptRef) : undefined,
     produces: input.produces,
     createdAt: new Date().toISOString(),
     startedAt: null,
@@ -700,7 +699,7 @@ export interface SubmitApprovalJobInput extends SubmitJobInput {
 export function submitApprovalJob(input: SubmitApprovalJobInput): JobRecord {
   const id = crypto.randomUUID()
   const runner = input.runnerId ? getRunner(input.runnerId) : getDefaultRunner()
-  const realWorkspace = path.resolve(input.workspace)
+  const realWorkspace = resolvePath(input.workspace)
   const scratch = copyWorkspaceForApproval(realWorkspace, id)
   const job: JobRecord = {
     id,
@@ -709,7 +708,7 @@ export function submitApprovalJob(input: SubmitApprovalJobInput): JobRecord {
     agentRef: input.agentRef,
     workspace: scratch,
     userPrompt: input.userPrompt,
-    promptRef: input.promptRef ? path.resolve(input.promptRef) : undefined,
+    promptRef: input.promptRef ? resolvePath(input.promptRef) : undefined,
     produces: input.produces,
     createdAt: new Date().toISOString(),
     startedAt: null,
@@ -844,13 +843,13 @@ export function getApprovalDiff(
   }
   let before = ''
   try {
-    before = fs.readFileSync(path.join(job.applyTarget, job.approvalArtifact), 'utf8')
+    before = readTextFileSync(joinPath(job.applyTarget, job.approvalArtifact), 'utf8')
   } catch {
     before = '' // artifact may not exist yet (a brand-new file the agent proposed creating)
   }
   let after: string
   try {
-    after = fs.readFileSync(path.join(job.workspace, job.approvalArtifact), 'utf8')
+    after = readTextFileSync(joinPath(job.workspace, job.approvalArtifact), 'utf8')
   } catch (err: any) {
     return { ok: false, status: 500, error: `cannot read proposed content: ${err.message}` }
   }
@@ -874,16 +873,16 @@ export function approveJob(id: string): MutationResult<{ job: JobRecord }> {
   }
   let content: string
   try {
-    content = fs.readFileSync(path.join(job.workspace, job.approvalArtifact), 'utf8')
+    content = readTextFileSync(joinPath(job.workspace, job.approvalArtifact), 'utf8')
   } catch (err: any) {
     return { ok: false, status: 500, error: `cannot read proposed content: ${err.message}` }
   }
-  const realFile = path.join(job.applyTarget, job.approvalArtifact)
+  const realFile = joinPath(job.applyTarget, job.approvalArtifact)
   try {
-    fs.mkdirSync(path.dirname(realFile), { recursive: true })
+    mkdirSync(dirname(realFile), { recursive: true })
     const tmp = `${realFile}.tmp`
-    fs.writeFileSync(tmp, content, 'utf8')
-    fs.renameSync(tmp, realFile)
+    writeTextFileSync(tmp, content)
+    renameSync(tmp, realFile)
   } catch (err: any) {
     return { ok: false, status: 500, error: `cannot apply proposed content: ${err.message}` }
   }

@@ -1,5 +1,4 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
+import { joinPath, mkdir, rename, writeTextFile } from '../../../../core/lib/fileHelper.js'
 import { dumpYaml, readYamlSafe } from '../../../../core/lib/yamlLib.js'
 import { registryHome } from '../../../../core/registry.js'
 import {
@@ -22,7 +21,7 @@ const DEFAULT_MENUS: ArtifactMenuNode[] = []
 // root to resolve the artifact file / agent.
 
 function catalogFile(): string {
-  return path.join(registryHome(), 'artifact-actions.yaml')
+  return joinPath(registryHome(), 'artifact-actions.yaml')
 }
 
 function escapeRegExp(s: string): string {
@@ -186,8 +185,8 @@ export async function saveArtifactActions(body: unknown): Promise<SaveArtifactAc
   const home = registryHome()
   const target = catalogFile()
   const tmp = `${target}.tmp`
-  await fs.mkdir(home, { recursive: true })
-  await fs.writeFile(tmp, dumpYaml(file), 'utf8')
-  await fs.rename(tmp, target)
+  await mkdir(home, { recursive: true })
+  await writeTextFile(tmp, dumpYaml(file))
+  await rename(tmp, target)
   return { ok: true, version: file.version, actions, menus }
 }

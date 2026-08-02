@@ -1,5 +1,4 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
+import { access, dirname, joinPath, mkdir, readTextFile, writeTextFile } from '../../../core/lib/fileHelper.js'
 import { fileURLToPath } from 'node:url'
 import { compileAgentMarkdown, emptyDraft } from '../../../core/contracts/agentMarkdown.js'
 import { agentTemplatesDir, customAgentsDir } from './paths.js'
@@ -7,10 +6,10 @@ import { agentTemplatesDir, customAgentsDir } from './paths.js'
 /** Seed `agent-templates/default-agent.md` if it does not exist yet. */
 export async function ensureDefaultTemplate(root: string): Promise<void> {
   const dir = agentTemplatesDir(root)
-  await fs.mkdir(dir, { recursive: true })
-  const fp = path.join(dir, 'default-agent.md')
+  await mkdir(dir, { recursive: true })
+  const fp = joinPath(dir, 'default-agent.md')
   try {
-    await fs.access(fp)
+    await access(fp)
   } catch {
     const draft = emptyDraft({
       name: 'default-agent',
@@ -22,14 +21,14 @@ export async function ensureDefaultTemplate(root: string): Promise<void> {
         output: '- Ghi artifact vào task folder',
       },
     })
-    await fs.writeFile(fp, compileAgentMarkdown(draft), 'utf8')
+    await writeTextFile(fp, compileAgentMarkdown(draft))
   }
 }
 
 /** Absolute path of the bundled `nl-chat-builder.md` source, alongside this file. */
 function bundledNlChatBuilderPath(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url))
-  return path.join(here, 'templates', 'nl-chat-builder.md')
+  const here = dirname(fileURLToPath(import.meta.url))
+  return joinPath(here, 'templates', 'nl-chat-builder.md')
 }
 
 /**
@@ -40,12 +39,12 @@ function bundledNlChatBuilderPath(): string {
  */
 export async function ensureNlChatBuilderAgent(root: string): Promise<void> {
   const dir = customAgentsDir(root)
-  await fs.mkdir(dir, { recursive: true })
-  const fp = path.join(dir, 'nl-chat-builder.md')
+  await mkdir(dir, { recursive: true })
+  const fp = joinPath(dir, 'nl-chat-builder.md')
   try {
-    await fs.access(fp)
+    await access(fp)
   } catch {
-    const bundled = await fs.readFile(bundledNlChatBuilderPath(), 'utf8')
-    await fs.writeFile(fp, bundled, 'utf8')
+    const bundled = await readTextFile(bundledNlChatBuilderPath())
+    await writeTextFile(fp, bundled)
   }
 }

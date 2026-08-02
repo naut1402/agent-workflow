@@ -2,8 +2,7 @@
 // Autoscan lives at settings.autoscan; legacy autoscan.json is still read once
 // for migration so existing installs keep working.
 
-import fs from 'node:fs'
-import path from 'node:path'
+import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../../core/lib/fileHelper.js'
 import {
   DEFAULT_DASHBOARD_SETTINGS,
   parseDashboardSettings,
@@ -23,17 +22,17 @@ import {
 import { registryHome } from '../../../../core/registry.js'
 
 export function dashboardSettingsFile(): string {
-  return path.join(registryHome(), 'settings.json')
+  return joinPath(registryHome(), 'settings.json')
 }
 
 /** @deprecated Prefer settings.json — kept for one-time migration read. */
 export function autoscanFile(): string {
-  return path.join(registryHome(), 'autoscan.json')
+  return joinPath(registryHome(), 'autoscan.json')
 }
 
 function readJsonFile(file: string): unknown | null {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'))
+    return JSON.parse(readTextFileSync(file))
   } catch {
     return null
   }
@@ -59,12 +58,12 @@ export function loadDashboardSettings(): DashboardSettings {
 
 export function saveDashboardSettings(settings: DashboardSettings): DashboardSettings {
   const home = registryHome()
-  fs.mkdirSync(home, { recursive: true })
+  mkdirSync(home, { recursive: true })
   const normalised = parseDashboardSettings(settings)
   const file = dashboardSettingsFile()
   const tmp = `${file}.tmp`
-  fs.writeFileSync(tmp, JSON.stringify(normalised, null, 2), 'utf8')
-  fs.renameSync(tmp, file)
+  writeTextFileSync(tmp, JSON.stringify(normalised, null, 2), 'utf8')
+  renameSync(tmp, file)
   return normalised
 }
 

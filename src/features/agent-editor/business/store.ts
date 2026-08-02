@@ -1,7 +1,5 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
 import { parseAgentMarkdown } from '../../../core/contracts/agentMarkdown.js'
-import { safeReadDir } from '../../../core/lib/fileHelper.js'
+import { joinPath, readFile, readTextFile, safeReadDir } from '../../../core/lib/fileHelper.js'
 import { customAgentsDir } from './paths.js'
 
 /** Sanitize an agent / template name (stricter charset than profile names). */
@@ -20,7 +18,7 @@ export async function scanCustomAgents(root: string): Promise<any[]> {
     if (!entry.isFile() || !entry.name.endsWith('.md')) continue
     const agentName = entry.name.replace(/\.md$/, '')
     try {
-      const raw = await fs.readFile(path.join(dir, entry.name), 'utf8')
+      const raw = await readFile(joinPath(dir, entry.name), 'utf8')
       const draft = parseAgentMarkdown(raw)
       agents.push({
         id: `dashboard:${agentName}`,
@@ -46,7 +44,7 @@ export async function listCustomAgentMeta(root: string): Promise<any[]> {
     if (!entry.isFile() || !entry.name.endsWith('.md')) continue
     const name = entry.name.replace(/\.md$/, '')
     try {
-      const raw = await fs.readFile(path.join(dir, entry.name), 'utf8')
+      const raw = await readFile(joinPath(dir, entry.name), 'utf8')
       const draft: any = parseAgentMarkdown(raw)
       agents.push({
         name,
@@ -65,9 +63,9 @@ export async function listCustomAgentMeta(root: string): Promise<any[]> {
 export async function readCustomAgent(root: string, name: string) {
   const clean = sanitiseAgentName(name)
   if (!clean) return null
-  const fp = path.join(customAgentsDir(root), `${clean}.md`)
+  const fp = joinPath(customAgentsDir(root), `${clean}.md`)
   try {
-    const content = await fs.readFile(fp, 'utf8')
+    const content = await readTextFile(fp)
     const draft = parseAgentMarkdown(content)
     return { name: clean, content, draft }
   } catch {

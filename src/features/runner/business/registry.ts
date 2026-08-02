@@ -1,5 +1,4 @@
-import fs from 'node:fs'
-import path from 'node:path'
+import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import { registryHome } from '../../../core/registry.js'
 import { ensureLegacyConnection } from './connections.js'
 import {
@@ -13,7 +12,7 @@ import {
 } from './types.js'
 
 function runnersFile(): string {
-  return path.join(registryHome(), 'runners.json')
+  return joinPath(registryHome(), 'runners.json')
 }
 
 function emptyRunners(): RunnersStore {
@@ -64,7 +63,7 @@ export function loadRunners(): RunnersStore {
   const file = runnersFile()
   let raw: string
   try {
-    raw = fs.readFileSync(file, 'utf8')
+    raw = readTextFileSync(file)
   } catch {
     // Chưa có file → danh sách trống (user tự tạo runner).
     return emptyRunners()
@@ -93,7 +92,7 @@ export function loadRunners(): RunnersStore {
 
 export function saveRunners(store: RunnersStore): RunnersStore {
   const home = registryHome()
-  fs.mkdirSync(home, { recursive: true })
+  mkdirSync(home, { recursive: true })
   const file = runnersFile()
   const tmp = `${file}.tmp`
   const payload = JSON.stringify(
@@ -105,8 +104,8 @@ export function saveRunners(store: RunnersStore): RunnersStore {
     null,
     2,
   )
-  fs.writeFileSync(tmp, payload, 'utf8')
-  fs.renameSync(tmp, file)
+  writeTextFileSync(tmp, payload)
+  renameSync(tmp, file)
   return store
 }
 

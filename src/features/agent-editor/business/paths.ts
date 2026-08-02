@@ -1,18 +1,18 @@
-import path from 'node:path'
+import { joinPath } from '../../../core/lib/fileHelper.js'
 
 // Dashboard-managed config directories under a data root.
 export function profilesDir(root: string): string {
-  return path.join(root, 'pipeline-profiles')
+  return joinPath(root, 'pipeline-profiles')
 }
 
 export function customAgentsDir(root: string): string {
-  return path.join(root, 'custom-agents')
+  return joinPath(root, 'custom-agents')
 }
 
 export function agentTemplatesDir(root: string): string {
-  return path.join(root, 'agent-templates')
+  return joinPath(root, 'agent-templates')
 }
 
 export function workflowStepTemplatesDir(root: string): string {
-  return path.join(root, 'workflow-step-templates')
+  return joinPath(root, 'workflow-step-templates')
 }

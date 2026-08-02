@@ -1,10 +1,8 @@
 // Directory browser for the local folder-picker UI. Lists directories only —
 // never file contents. Defensive: missing/unreadable paths → empty entries.
 
-import fs from 'node:fs'
 import os from 'node:os'
-import path from 'node:path'
-import { homeDir, safeReadDir } from '../../../core/lib/fileHelper.js'
+import { type Stats, dirname, existsSync, homeDir, isAbsolutePath, joinPath, parsePath, realpathSync, resolvePath, safeReadDir, statSync } from '../../../core/lib/fileHelper.js'
 
 export interface BrowseEntry {
   name: string
@@ -33,7 +31,7 @@ function windowsDrives(): BrowseEntry[] {
     const letter = String.fromCharCode(i)
     const root = `${letter}:\\`
     try {
-      if (fs.existsSync(root)) {
+      if (existsSync(root)) {
         out.push({ name: `${letter}:`, path: root, isDirectory: true })
       }
     } catch {
@@ -56,12 +54,12 @@ function listRoots(): BrowseResult {
 }
 
 function parentOf(abs: string): string | null {
-  const parent = path.dirname(abs)
+  const parent = dirname(abs)
   // At filesystem root (/, C:\): next "up" is the roots list.
   if (parent === abs) return ROOTS_SENTINEL
   // Windows: dirname('C:\\') === 'C:\\'
   if (process.platform === 'win32') {
-    const parsed = path.parse(abs)
+    const parsed = parsePath(abs)
     if (parsed.root === abs) return ROOTS_SENTINEL
   }
   return parent
@@ -78,7 +76,7 @@ export async function browseDirectory(input: unknown): Promise<BrowseOutcome> {
     const home = homeDir() || os.homedir()
     if (!home) return { ok: true, result: listRoots() }
     // Default landing: home directory.
-    return browseAbsolute(path.resolve(home))
+    return browseAbsolute(resolvePath(home))
   }
 
   if (typeof input !== 'string') {
@@ -89,7 +87,7 @@ export async function browseDirectory(input: unknown): Promise<BrowseOutcome> {
   if (!raw) {
     const home = homeDir() || os.homedir()
     if (!home) return { ok: true, result: listRoots() }
-    return browseAbsolute(path.resolve(home))
+    return browseAbsolute(resolvePath(home))
   }
 
   // Client may send the roots sentinel as empty after trim — already handled.
@@ -98,25 +96,25 @@ export async function browseDirectory(input: unknown): Promise<BrowseOutcome> {
     return { ok: true, result: listRoots() }
   }
 
-  if (!path.isAbsolute(raw)) {
+  if (!isAbsolutePath(raw)) {
     return { ok: false, status: 400, error: 'path must be absolute' }
   }
 
-  return browseAbsolute(path.resolve(raw))
+  return browseAbsolute(resolvePath(raw))
 }
 
 async function browseAbsolute(abs: string): Promise<BrowseOutcome> {
   let canonical: string
   try {
-    canonical = fs.realpathSync(abs)
+    canonical = realpathSync(abs)
   } catch {
     // Path may not exist yet / broken symlink — still try listing if it's a dir.
     canonical = abs
   }
 
-  let stat: fs.Stats
+  let stat: Stats
   try {
-    stat = fs.statSync(canonical)
+    stat = statSync(canonical)
   } catch {
     return { ok: false, status: 400, error: 'path not found' }
   }
@@ -132,7 +130,7 @@ async function browseAbsolute(abs: string): Promise<BrowseOutcome> {
     if (d.name === '.' || d.name === '..') continue
     entries.push({
       name: d.name,
-      path: path.join(canonical, d.name),
+      path: joinPath(canonical, d.name),
       isDirectory: true,
     })
   }

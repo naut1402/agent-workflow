@@ -1,5 +1,4 @@
-import path from 'node:path'
-import { homeDir } from '../../../../core/lib/fileHelper.js'
+import { basename, dirname, homeDir, joinPath, resolvePath } from '../../../../core/lib/fileHelper.js'
 import { dedupeCatalogItems } from './dedupe.js'
 import { BUILTIN_CATALOG } from './builtins.js'
 import {
@@ -35,7 +34,7 @@ export async function buildCatalog(
   root: string,
   deps: { scanCustomAgents: (root: string) => Promise<any[]> },
 ): Promise<Catalog> {
-  const projectRoot = path.dirname(root)
+  const projectRoot = dirname(root)
   const catalogOpts = { includeContractSkills: true }
   const enabledInstalls = await loadEnabledPluginInstalls()
   const enabledPluginNames = enabledInstalls.length
@@ -96,32 +95,32 @@ export async function resolveCatalogAgentPath(
   const fileName = `${name}.md`
 
   if (source === 'dashboard') {
-    return path.join(deps.customAgentsDir(root), fileName)
+    return joinPath(deps.customAgentsDir(root), fileName)
   }
   if (source === 'user') {
-    return path.join(homeDir(), '.claude', 'agents', fileName)
+    return joinPath(homeDir(), '.claude', 'agents', fileName)
   }
   if (source === 'project') {
-    return path.join(projectRoot, '.claude', 'agents', fileName)
+    return joinPath(projectRoot, '.claude', 'agents', fileName)
   }
   if (source.startsWith('repo:')) {
     const pluginName = source.slice('repo:'.length)
     const found = await findMarketplaceJson(projectRoot)
     if (!found) return null
     const plugins = Array.isArray(found.data.plugins) ? found.data.plugins : []
-    const hit = plugins.find((p: any) => (p.name || path.basename(p.source)) === pluginName)
+    const hit = plugins.find((p: any) => (p.name || basename(p.source)) === pluginName)
     if (!hit?.source) return null
-    return path.join(path.resolve(found.dir, hit.source), 'agents', fileName)
+    return joinPath(resolvePath(found.dir, hit.source), 'agents', fileName)
   }
   if (source.startsWith('plugin:')) {
     const pluginName = source.slice('plugin:'.length)
     const installs = await loadEnabledPluginInstalls()
     const install = installs.find((i) => i.name === pluginName)
     if (install?.installPath) {
-      return path.join(install.installPath, 'agents', fileName)
+      return joinPath(install.installPath, 'agents', fileName)
     }
     const cacheDir = await latestPluginCacheDir(pluginName)
-    if (cacheDir) return path.join(cacheDir, 'agents', fileName)
+    if (cacheDir) return joinPath(cacheDir, 'agents', fileName)
   }
   return null
 }

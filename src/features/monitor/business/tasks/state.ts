@@ -1,5 +1,4 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
+import { dirname, joinPath, mkdir, readTextFile, rename, rm, stat, writeFile, writeTextFile } from '../../../../core/lib/fileHelper.js'
 import { randomBytes } from 'node:crypto'
 import { TaskArchivePatch, TaskStatePatch } from '../../schemas/task.js'
 import { loadPipelineConfig } from '../index.js'
@@ -29,16 +28,16 @@ export async function writeStateAtomic(
   stateFile: string,
   state: Record<string, unknown>,
 ): Promise<number> {
-  await fs.mkdir(path.dirname(stateFile), { recursive: true })
+  await mkdir(dirname(stateFile), { recursive: true })
   const tmp = uniqueTempPath(stateFile)
   try {
-    await fs.writeFile(tmp, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
-    await fs.rename(tmp, stateFile)
+    await writeFile(tmp, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+    await rename(tmp, stateFile)
   } catch (err) {
-    await fs.rm(tmp, { force: true }).catch(() => {})
+    await rm(tmp, { force: true }).catch(() => {})
     throw err
   }
-  const s = await fs.stat(stateFile)
+  const s = await stat(stateFile)
   return s.mtimeMs
 }
 
@@ -60,7 +59,7 @@ export async function applyHitlAction(
   taskId: string,
   patch: TaskStatePatch,
 ): Promise<HitlApplyResult> {
-  const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
 
   return withStateFileLock(stateFile, async () => {
     const read = await readState(stateFile)
@@ -70,7 +69,7 @@ export async function applyHitlAction(
 
     let currentMtime: number | null = null
     try {
-      const s = await fs.stat(stateFile)
+      const s = await stat(stateFile)
       currentMtime = s.mtimeMs
     } catch {
       currentMtime = null
@@ -118,15 +117,15 @@ export async function applyHitlAction(
       state.hitl_pending = null
       if (patch.feedback?.trim()) {
         state.last_feedback = patch.feedback.trim()
-        const feedbackPath = path.join(root, 'tasks', taskId, 'hitl-feedback.md')
-        await fs.mkdir(path.dirname(feedbackPath), { recursive: true })
+        const feedbackPath = joinPath(root, 'tasks', taskId, 'hitl-feedback.md')
+        await mkdir(dirname(feedbackPath), { recursive: true })
         const stamp = new Date().toISOString()
         const block = `\n## ${stamp} — ${patch.gate_id}\n${patch.feedback.trim()}\n`
         try {
-          const prev = await fs.readFile(feedbackPath, 'utf8')
-          await fs.writeFile(feedbackPath, prev + block, 'utf8')
+          const prev = await readTextFile(feedbackPath)
+          await writeTextFile(feedbackPath, prev + block)
         } catch {
-          await fs.writeFile(feedbackPath, `# HITL feedback — ${taskId}\n${block}`, 'utf8')
+          await writeTextFile(feedbackPath, `# HITL feedback — ${taskId}\n${block}`)
         }
       }
     } else {
@@ -161,7 +160,7 @@ export async function advanceStepOnJobSuccess(
   taskId: string,
   stepId: string,
 ): Promise<{ state: Record<string, unknown>; mtime: number } | null> {
-  const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
 
   return withStateFileLock(stateFile, async () => {
     const read = await readState(stateFile)
@@ -201,7 +200,7 @@ export async function applyArchiveAction(
   taskId: string,
   patch: TaskArchivePatch,
 ): Promise<HitlApplyResult> {
-  const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
 
   return withStateFileLock(stateFile, async () => {
     const read = await readState(stateFile)
@@ -211,7 +210,7 @@ export async function applyArchiveAction(
 
     let currentMtime: number | null = null
     try {
-      const s = await fs.stat(stateFile)
+      const s = await stat(stateFile)
       currentMtime = s.mtimeMs
     } catch {
       currentMtime = null
@@ -246,11 +245,11 @@ export async function deleteTask(
   root: string,
   taskId: string,
 ): Promise<{ ok: true }> {
-  const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
   return withStateFileLock(stateFile, async () => {
-    await fs.rm(path.join(root, 'tasks', taskId), { recursive: true, force: true })
-    await fs.rm(stateFile, { force: true })
-    await fs.rm(flowProfilePath(root, taskId), { force: true })
+    await rm(joinPath(root, 'tasks', taskId), { recursive: true, force: true })
+    await rm(stateFile, { force: true })
+    await rm(flowProfilePath(root, taskId), { force: true })
     return { ok: true }
   })
 }

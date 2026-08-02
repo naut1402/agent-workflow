@@ -1,5 +1,4 @@
-import fs from 'node:fs'
-import path from 'node:path'
+import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import { registryHome } from '../../../core/registry.js'
 import {
   CREDENTIALS_VERSION,
@@ -17,7 +16,7 @@ export type ResolvedSecret =
   | { type: 'unknown'; ref: string }
 
 function credentialsFile(): string {
-  return path.join(registryHome(), 'credentials.json')
+  return joinPath(registryHome(), 'credentials.json')
 }
 
 function emptyStore(): CredentialsStore {
@@ -38,7 +37,7 @@ export function loadCredentials(): CredentialsStore {
   const file = credentialsFile()
   let raw: string
   try {
-    raw = fs.readFileSync(file, 'utf8')
+    raw = readTextFileSync(file)
   } catch {
     return emptyStore()
   }
@@ -54,7 +53,7 @@ export function loadCredentials(): CredentialsStore {
 
 export function saveCredentials(store: CredentialsStore): CredentialsStore {
   const home = registryHome()
-  fs.mkdirSync(home, { recursive: true })
+  mkdirSync(home, { recursive: true })
   const file = credentialsFile()
   const tmp = `${file}.tmp`
   const payload = JSON.stringify(
@@ -62,8 +61,8 @@ export function saveCredentials(store: CredentialsStore): CredentialsStore {
     null,
     2,
   )
-  fs.writeFileSync(tmp, payload, 'utf8')
-  fs.renameSync(tmp, file)
+  writeTextFileSync(tmp, payload)
+  renameSync(tmp, file)
   return store
 }
 

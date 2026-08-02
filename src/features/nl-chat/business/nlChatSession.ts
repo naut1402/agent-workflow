@@ -1,5 +1,4 @@
-import fs from 'node:fs'
-import path from 'node:path'
+import { dirname, joinPath, mkdirSync, readTextFileSync, rmSync } from '../../../core/lib/fileHelper.js'
 import crypto from 'node:crypto'
 import { registryHome } from '../../../core/registry.js'
 import {
@@ -27,7 +26,7 @@ function mintChatSessionId(): string {
 
 /** Scratch workspace for a chat session — no real project file is ever touched. */
 function scratchWorkspace(chatSessionId: string): string {
-  return path.join(registryHome(), 'nlchat-scratch', chatSessionId)
+  return joinPath(registryHome(), 'nlchat-scratch', chatSessionId)
 }
 
 /** Jobs tagged with this chat session, oldest first. */
@@ -72,7 +71,7 @@ export interface NlChatSessionStarted {
 export function startNlChatSession(input: StartNlChatSessionInput): NlChatSessionStarted {
   const chatSessionId = mintChatSessionId()
   const workspace = scratchWorkspace(chatSessionId)
-  fs.mkdirSync(workspace, { recursive: true })
+  mkdirSync(workspace, { recursive: true })
 
   const prompt = buildTurnPrompt({
     entityType: input.entityType,
@@ -90,7 +89,7 @@ export function startNlChatSession(input: StartNlChatSessionInput): NlChatSessio
     metadata: {
       taskId: chatSessionId,
       projectId: input.projectId,
-      projectRoot: path.dirname(input.devTeamRoot),
+      projectRoot: dirname(input.devTeamRoot),
       devTeamRoot: input.devTeamRoot,
       isNlChat: true,
       ...(input.entityType ? { entityType: input.entityType } : {}),
@@ -158,7 +157,7 @@ function agentStdoutOf(job: JobRecord): string {
 
   let log = ''
   try {
-    log = job.logPath ? fs.readFileSync(job.logPath, 'utf8') : ''
+    log = job.logPath ? readTextFileSync(job.logPath) : ''
   } catch {
     return ''
   }
@@ -182,7 +181,7 @@ export function cancelNlChatSession(chatSessionId: string, projectId: string): v
   const workspace = jobs[0]?.workspace
   if (workspace) {
     try {
-      fs.rmSync(workspace, { recursive: true, force: true })
+      rmSync(workspace, { recursive: true, force: true })
     } catch {
       /* best-effort cleanup only */
     }

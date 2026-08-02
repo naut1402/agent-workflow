@@ -1,9 +1,16 @@
 // Scan whitelist directories for project roots that contain `.dev-team-agent`
 // and register them via ProjectRegistry.add (idempotent on canonical path).
 
-import fs from 'node:fs'
-import path from 'node:path'
-import { safeReadDir } from '../../../../core/lib/fileHelper.js'
+import {
+  basename,
+  isAbsolutePath,
+  joinPath,
+  realpathSync,
+  resolvePath,
+  safeReadDir,
+  statSync,
+  type Stats,
+} from '../../../../core/lib/fileHelper.js'
 import { add, list, type Project } from '../../../../core/registry.js'
 
 export interface ScanHit {
@@ -24,33 +31,33 @@ export interface ScanReport {
 
 function hasDevTeamAgent(dir: string): boolean {
   try {
-    const inner = path.join(dir, '.dev-team-agent')
-    return fs.statSync(inner).isDirectory()
+    const inner = joinPath(dir, '.dev-team-agent')
+    return statSync(inner).isDirectory()
   } catch {
     return false
   }
 }
 
 function isDevTeamAgentDir(dir: string): boolean {
-  return path.basename(dir) === '.dev-team-agent'
+  return basename(dir) === '.dev-team-agent'
 }
 
 /** Collect candidate project roots under one whitelist entry (depth 1). */
 async function collectCandidates(root: string): Promise<string[]> {
   let abs: string
   try {
-    abs = fs.realpathSync(path.resolve(root))
+    abs = realpathSync(resolvePath(root))
   } catch {
     return []
   }
 
-  let stat: fs.Stats
+  let info: Stats
   try {
-    stat = fs.statSync(abs)
+    info = statSync(abs)
   } catch {
     return []
   }
-  if (!stat.isDirectory()) return []
+  if (!info.isDirectory()) return []
 
   const found: string[] = []
 
@@ -61,7 +68,7 @@ async function collectCandidates(root: string): Promise<string[]> {
   for (const d of await safeReadDir(abs)) {
     if (!d.isDirectory()) continue
     if (d.name === '.dev-team-agent') continue
-    const child = path.join(abs, d.name)
+    const child = joinPath(abs, d.name)
     if (hasDevTeamAgent(child)) found.push(child)
   }
 
@@ -94,7 +101,7 @@ export async function runAutoscan(
   for (const entry of whitelist) {
     const trimmed = String(entry || '').trim()
     if (!trimmed) continue
-    if (!path.isAbsolute(trimmed)) {
+    if (!isAbsolutePath(trimmed)) {
       report.skipped.push({ path: trimmed, reason: 'path must be absolute' })
       continue
     }

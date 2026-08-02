@@ -1,6 +1,4 @@
-import fs from 'node:fs'
-import fsPromises from 'node:fs/promises'
-import path from 'node:path'
+import { type FSWatcher, joinPath, openFile, stat, watch } from '../../../core/lib/fileHelper.js'
 import { registryHome } from '../../../core/registry.js'
 import type { JobRecord, JobStatus } from './index.js'
 import { loadJob, listJobs } from './index.js'
@@ -42,7 +40,7 @@ export type JobLogDeltaResult =
   | { ok: false; status: number; error: string }
 
 function jobLogPath(id: string): string {
-  return path.join(registryHome(), 'jobs', `${id}.log`)
+  return joinPath(registryHome(), 'jobs', `${id}.log`)
 }
 
 const terminalStatuses = new Set<JobStatus>(['succeeded', 'failed', 'cancelled', 'awaiting_approval'])
@@ -54,7 +52,7 @@ function isTerminal(status: JobStatus | undefined): boolean {
 async function waitForLogGrowth(file: string, offset: number, waitMs: number): Promise<number> {
   if (waitMs <= 0) {
     try {
-      return (await fsPromises.stat(file)).size
+      return (await stat(file)).size
     } catch {
       return 0
     }
@@ -72,7 +70,7 @@ async function waitForLogGrowth(file: string, offset: number, waitMs: number): P
       }
       clearTimeout(timer)
       try {
-        resolve((await fsPromises.stat(file)).size)
+        resolve((await stat(file)).size)
       } catch {
         resolve(offset)
       }
@@ -82,9 +80,9 @@ async function waitForLogGrowth(file: string, offset: number, waitMs: number): P
       finish()
     }, waitMs)
 
-    let watcher: fs.FSWatcher | null = null
+    let watcher: FSWatcher | null = null
     try {
-      watcher = fs.watch(file, () => {
+      watcher = watch(file, () => {
         finish()
       })
     } catch {
@@ -101,9 +99,9 @@ export async function readJobLog(
   if (!id) return { ok: false, status: 400, error: 'invalid job id' }
 
   const file = jobLogPath(id)
-  let handle: Awaited<ReturnType<typeof fsPromises.open>> | null = null
+  let handle: Awaited<ReturnType<typeof openFile>> | null = null
   try {
-    handle = await fsPromises.open(file, 'r')
+    handle = await openFile(file, 'r')
     const { size } = await handle.stat()
     if (size === 0) return { ok: true, text: '', size: 0, truncated: false }
     const start = size > tailBytes ? size - tailBytes : 0
@@ -137,7 +135,7 @@ export async function readJobLogDelta(
 
   let size = 0
   try {
-    size = (await fsPromises.stat(file)).size
+    size = (await stat(file)).size
   } catch {
     size = 0
   }
@@ -154,7 +152,7 @@ export async function readJobLogDelta(
 
   let text = ''
   if (readLen > 0) {
-    const handle = await fsPromises.open(file, 'r')
+    const handle = await openFile(file, 'r')
     try {
       const buf = Buffer.alloc(readLen)
       await handle.read(buf, 0, readLen, from)

@@ -1,5 +1,4 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
+import { access, dirname, joinPath, mkdir, rename, rm, writeTextFile } from '../../../../core/lib/fileHelper.js'
 import { randomBytes } from 'node:crypto'
 import { dumpYaml, readYamlSafe } from '../../../../core/lib/yamlLib.js'
 import { sanitiseProfileName, profilesDir, loadPipelineConfig } from '../index.js'
@@ -33,13 +32,13 @@ export type CreateTaskResult =
 
 /** Atomic write: unique temp file in the target dir + rename. */
 async function writeFileAtomic(target: string, content: string): Promise<void> {
-  await fs.mkdir(path.dirname(target), { recursive: true })
+  await mkdir(dirname(target), { recursive: true })
   const tmp = `${target}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
   try {
-    await fs.writeFile(tmp, content, 'utf8')
-    await fs.rename(tmp, target)
+    await writeTextFile(tmp, content)
+    await rename(tmp, target)
   } catch (err) {
-    await fs.rm(tmp, { force: true }).catch(() => {})
+    await rm(tmp, { force: true }).catch(() => {})
     throw err
   }
 }
@@ -74,7 +73,7 @@ async function resolvePipelineOverride(
   if (!input.profileName) return null
   const name = sanitiseProfileName(input.profileName)
   if (!name) return null
-  const profile = await readYamlSafe(path.join(profilesDir(root), `${name}.yaml`))
+  const profile = await readYamlSafe(joinPath(profilesDir(root), `${name}.yaml`))
   if (!profile || !Array.isArray(profile.steps) || profile.steps.length === 0) return null
   return { doc: { ...profile }, replace: true }
 }
@@ -96,11 +95,11 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
   }
 
   const taskId = input.taskId
-  const taskDir = path.join(root, 'tasks', taskId)
-  const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
+  const taskDir = joinPath(root, 'tasks', taskId)
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
 
   try {
-    await fs.access(stateFile)
+    await access(stateFile)
     return { ok: false, status: 409, error: 'task already exists' }
   } catch {
     /* no state file — free to create */
@@ -108,9 +107,9 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
 
   // mkdir without `recursive` is the atomic half of the exists check: two
   // concurrent creates race here and the loser gets EEXIST → 409.
-  await fs.mkdir(path.dirname(taskDir), { recursive: true })
+  await mkdir(dirname(taskDir), { recursive: true })
   try {
-    await fs.mkdir(taskDir)
+    await mkdir(taskDir)
   } catch (err: any) {
     if (err?.code === 'EEXIST') return { ok: false, status: 409, error: 'task already exists' }
     return { ok: false, status: 500, error: String(err?.message ?? err) }
@@ -118,7 +117,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
 
   const knowledgeInputs = input.knowledgeInputs ?? []
   const createdAt = new Date().toISOString()
-  const requestFile = path.join(taskDir, 'request.md')
+  const requestFile = joinPath(taskDir, 'request.md')
   const requestContent = renderRequestMarkdown({
     taskId,
     source: input.source,
@@ -138,7 +137,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       if (knowledgeInputs.length && steps[0]) {
         steps[0].knowledge_inputs = [...new Set([...(steps[0].knowledge_inputs ?? []), ...knowledgeInputs])]
       }
-      pipelineFile = path.join(taskDir, 'pipeline.yaml')
+      pipelineFile = joinPath(taskDir, 'pipeline.yaml')
       await writeFileAtomic(
         pipelineFile,
         dumpYaml({ ...override.doc, steps, steps_replace: override.replace }),
@@ -149,7 +148,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       const inherited = await loadPipelineConfig(root, null)
       const firstId = inherited.steps?.[0]?.id
       if (firstId) {
-        pipelineFile = path.join(taskDir, 'pipeline.yaml')
+        pipelineFile = joinPath(taskDir, 'pipeline.yaml')
         await writeFileAtomic(
           pipelineFile,
           dumpYaml({ steps: [{ id: firstId, knowledge_inputs: knowledgeInputs }] }),
@@ -187,8 +186,8 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
   } catch (err: any) {
     // Roll back the scaffold so a failed create doesn't leave a half task that
     // would 409 on retry.
-    await fs.rm(taskDir, { recursive: true, force: true }).catch(() => {})
-    await fs.rm(stateFile, { force: true }).catch(() => {})
+    await rm(taskDir, { recursive: true, force: true }).catch(() => {})
+    await rm(stateFile, { force: true }).catch(() => {})
     return { ok: false, status: 500, error: String(err?.message ?? err) }
   }
 }

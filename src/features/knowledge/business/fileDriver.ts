@@ -1,12 +1,11 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
+import { access, basename, extname, joinPath, mkdir, readDir, readTextFile, unlink, writeTextFile } from '../../../core/lib/fileHelper.js'
 import { loadYaml, dumpYaml } from '../../../core/lib/yamlLib.js'
 
 const SCOPES = ['project', 'system']
 const MAX_UPLOAD_BYTES = 512 * 1024
 
 export function knowledgeRoot(devTeamRoot) {
-  return path.join(devTeamRoot, 'knowledge')
+  return joinPath(devTeamRoot, 'knowledge')
 }
 
 function sanitiseSlug(raw) {
@@ -42,7 +41,7 @@ function parseEntryFile(raw: string, id: string, filePath: string) {
   }
   const content = lines.slice(bodyStart).join('\n').replace(/^\n+/, '')
   const scope = fm.scope || id.split('/')[0] || 'project'
-  const slug = fm.slug || id.split('/').slice(1).join('/') || path.basename(filePath, '.md')
+  const slug = fm.slug || id.split('/').slice(1).join('/') || basename(filePath, '.md')
   return {
     id,
     slug,
@@ -68,8 +67,8 @@ function serialiseEntry({ title, slug, scope, tags, content }) {
 
 async function ensureDirs(root) {
   const base = knowledgeRoot(root)
-  await fs.mkdir(path.join(base, 'project'), { recursive: true })
-  await fs.mkdir(path.join(base, 'system'), { recursive: true })
+  await mkdir(joinPath(base, 'project'), { recursive: true })
+  await mkdir(joinPath(base, 'system'), { recursive: true })
   return base
 }
 
@@ -77,24 +76,24 @@ function entryPath(base, scope, slug) {
   if (!SCOPES.includes(scope)) throw new Error('invalid scope')
   const clean = sanitiseSlug(slug)
   if (!clean) throw new Error('invalid slug')
-  return { id: `${scope}/${clean}`, filePath: path.join(base, scope, `${clean}.md`) }
+  return { id: `${scope}/${clean}`, filePath: joinPath(base, scope, `${clean}.md`) }
 }
 
 async function walkEntries(base) {
   const entries = []
   for (const scope of SCOPES) {
-    const dir = path.join(base, scope)
+    const dir = joinPath(base, scope)
     let files = []
     try {
-      files = await fs.readdir(dir)
+      files = await readDir(dir)
     } catch {
       continue
     }
     for (const name of files) {
       if (!name.endsWith('.md')) continue
-      const filePath = path.join(dir, name)
+      const filePath = joinPath(dir, name)
       try {
-        const raw = await fs.readFile(filePath, 'utf8')
+        const raw = await readTextFile(filePath)
         const slug = name.replace(/\.md$/, '')
         entries.push(parseEntryFile(raw, `${scope}/${slug}`, filePath))
       } catch {
@@ -137,7 +136,7 @@ export function createFileDriver(devTeamRoot: string) {
       const realScope = SCOPES.includes(scope) ? scope : 'project'
       const realSlug = SCOPES.includes(scope) ? rest.join('/') : scope
       const { filePath } = entryPath(base, realScope, realSlug)
-      const raw = await fs.readFile(filePath, 'utf8')
+      const raw = await readTextFile(filePath)
       return parseEntryFile(raw, `${realScope}/${sanitiseSlug(realSlug)}`, filePath)
     },
 
@@ -160,7 +159,7 @@ export function createFileDriver(devTeamRoot: string) {
         tags,
         content: content ?? '',
       })
-      await fs.writeFile(filePath, body, 'utf8')
+      await writeTextFile(filePath, body)
       return this.read(entryId)
     },
 
@@ -170,14 +169,14 @@ export function createFileDriver(devTeamRoot: string) {
       }
       const base = await ensureDirs(devTeamRoot)
       const baseName = filename || 'upload'
-      const ext = path.extname(baseName).toLowerCase()
+      const ext = extname(baseName).toLowerCase()
       if (!['.md', '.txt', ''].includes(ext)) {
         throw new Error('only .md and .txt files allowed')
       }
       const slug = sanitiseSlug(baseName)
       const { id, filePath } = entryPath(base, scope, slug)
       try {
-        await fs.access(filePath)
+        await access(filePath)
         throw new Error(`entry already exists: ${id}`)
       } catch (e) {
         if (e.code !== 'ENOENT') throw e
@@ -199,7 +198,7 @@ export function createFileDriver(devTeamRoot: string) {
       const [scope, ...rest] = String(id).split('/')
       if (!SCOPES.includes(scope)) throw new Error('invalid id')
       const { filePath } = entryPath(base, scope, rest.join('/'))
-      await fs.unlink(filePath)
+      await unlink(filePath)
       return { deleted: true, id: `${scope}/${sanitiseSlug(rest.join('/'))}` }
     },
 

@@ -1,14 +1,13 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
+import { joinPath, readTextFile } from '../../../core/lib/fileHelper.js'
 import { loadYaml } from '../../../core/lib/yamlLib.js'
 import { createFileDriver } from './fileDriver.js'
 
 const SUPPORTED = ['file']
 
 export async function loadKnowledgeConfig(devTeamRoot) {
-  const configPath = path.join(devTeamRoot, 'knowledge.config.yaml')
+  const configPath = joinPath(devTeamRoot, 'knowledge.config.yaml')
   try {
-    const raw = await fs.readFile(configPath, 'utf8')
+    const raw = await readTextFile(configPath)
     const cfg: any = loadYaml(raw) || {}
     const driver = cfg.driver || 'file'
     if (!SUPPORTED.includes(driver)) {

@@ -1,6 +1,5 @@
+import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import { spawnSync } from 'node:child_process'
-import fs from 'node:fs'
-import path from 'node:path'
 import { registryHome } from '../../../core/registry.js'
 import {
   CONNECTIONS_VERSION,
@@ -29,7 +28,7 @@ const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
 ]
 
 function connectionsFile(): string {
-  return path.join(registryHome(), 'connections.json')
+  return joinPath(registryHome(), 'connections.json')
 }
 
 function emptyStore(): ConnectionsStore {
@@ -53,7 +52,7 @@ export function loadConnections(): ConnectionsStore {
   const file = connectionsFile()
   let raw: string
   try {
-    raw = fs.readFileSync(file, 'utf8')
+    raw = readTextFileSync(file)
   } catch {
     return emptyStore()
   }
@@ -90,7 +89,7 @@ function normaliseConnection(raw: any): Connection | null {
 
 export function saveConnections(store: ConnectionsStore): ConnectionsStore {
   const home = registryHome()
-  fs.mkdirSync(home, { recursive: true })
+  mkdirSync(home, { recursive: true })
   const file = connectionsFile()
   const tmp = `${file}.tmp`
   const payload = JSON.stringify(
@@ -101,8 +100,8 @@ export function saveConnections(store: ConnectionsStore): ConnectionsStore {
     null,
     2,
   )
-  fs.writeFileSync(tmp, payload, 'utf8')
-  fs.renameSync(tmp, file)
+  writeTextFileSync(tmp, payload)
+  renameSync(tmp, file)
   return store
 }
 

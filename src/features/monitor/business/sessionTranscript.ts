@@ -1,6 +1,5 @@
-import fs from 'node:fs'
+import { existsSync, joinPath, readTextFileSync, readdirSync } from '../../../core/lib/fileHelper.js'
 import os from 'node:os'
-import path from 'node:path'
 
 /**
  * Read a Claude Code CLI session transcript — the conversation history the CLI
@@ -40,8 +39,8 @@ const MAX_SCAN_DIRS = 400
 
 function transcriptRoot(): string {
   const configDir = process.env.CLAUDE_CONFIG_DIR
-  const home = configDir && configDir.trim() ? configDir : path.join(os.homedir(), '.claude')
-  return path.join(home, 'projects')
+  const home = configDir && configDir.trim() ? configDir : joinPath(os.homedir(), '.claude')
+  return joinPath(home, 'projects')
 }
 
 /** `C:\Users\me\.dev-team-dashboard\x` → `C--Users-me--dev-team-dashboard-x`. */
@@ -59,19 +58,19 @@ export function findTranscriptFile(sessionId: string, workspace?: string): strin
   const root = transcriptRoot()
 
   if (workspace) {
-    const direct = path.join(root, encodeWorkspacePath(workspace), `${sessionId}.jsonl`)
-    if (fs.existsSync(direct)) return direct
+    const direct = joinPath(root, encodeWorkspacePath(workspace), `${sessionId}.jsonl`)
+    if (existsSync(direct)) return direct
   }
 
   let dirs: string[]
   try {
-    dirs = fs.readdirSync(root)
+    dirs = readdirSync(root)
   } catch {
     return null
   }
   for (const dir of dirs.slice(0, MAX_SCAN_DIRS)) {
-    const candidate = path.join(root, dir, `${sessionId}.jsonl`)
-    if (fs.existsSync(candidate)) return candidate
+    const candidate = joinPath(root, dir, `${sessionId}.jsonl`)
+    if (existsSync(candidate)) return candidate
   }
   return null
 }
@@ -131,7 +130,7 @@ export interface TranscriptResult {
 export function readTranscript(file: string, opts: ReadTranscriptOptions = {}): TranscriptResult {
   let raw = ''
   try {
-    raw = fs.readFileSync(file, 'utf8')
+    raw = readTextFileSync(file)
   } catch {
     return { turns: [], total: 0 }
   }

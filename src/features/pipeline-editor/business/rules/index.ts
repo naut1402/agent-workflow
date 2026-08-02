@@ -1,5 +1,4 @@
-import path from 'node:path'
-import { homeDir, safeReadDir } from '../../../../core/lib/fileHelper.js'
+import { dirname, homeDir, joinPath, relativePath, safeReadDir } from '../../../../core/lib/fileHelper.js'
 
 export const RULE_CATEGORIES = ['coding', 'doc-writing', 'doc-review', 'test', 'git-pr', 'other']
 
@@ -30,13 +29,13 @@ export async function walkRuleFiles(
   out: RuleItem[],
 ): Promise<void> {
   for (const entry of await safeReadDir(dir)) {
-    const full = path.join(dir, entry.name)
+    const full = joinPath(dir, entry.name)
     if (entry.isDirectory()) {
       await walkRuleFiles(full, scope, baseDir, out)
       continue
     }
     if (!/\.(md|mdc)$/i.test(entry.name)) continue
-    const rel = path.relative(baseDir, full).replace(/\\/g, '/')
+    const rel = relativePath(baseDir, full).replace(/\\/g, '/')
     const name = entry.name.replace(/\.(md|mdc)$/i, '')
     out.push({
       id: `${scope}:${rel}`,
@@ -50,11 +49,11 @@ export async function walkRuleFiles(
 
 /** Build the rules listing for a data root: project `.claude/rules` + global `~/.cursor/rules`. */
 export async function buildRules(root: string): Promise<{ rules: RuleItem[]; categories: string[] }> {
-  const projectRoot = path.dirname(root)
+  const projectRoot = dirname(root)
   const rules: RuleItem[] = []
 
-  await walkRuleFiles(path.join(projectRoot, '.claude', 'rules'), 'project', projectRoot, rules)
-  await walkRuleFiles(path.join(homeDir(), '.cursor', 'rules'), 'global', homeDir(), rules)
+  await walkRuleFiles(joinPath(projectRoot, '.claude', 'rules'), 'project', projectRoot, rules)
+  await walkRuleFiles(joinPath(homeDir(), '.cursor', 'rules'), 'global', homeDir(), rules)
 
   rules.sort(
     (a, b) =>

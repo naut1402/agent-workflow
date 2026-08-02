@@ -1,5 +1,4 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
+import { access, basename, joinPath, readDir, readTextFile, stat } from '../../../core/lib/fileHelper.js'
 import os from 'node:os'
 import {
   parseAgentMarkdown,
@@ -29,7 +28,7 @@ function parseCatalogAgentId(id: unknown): { source: string; name: string } | nu
 
 async function safeAccess(p: string): Promise<boolean> {
   try {
-    await fs.access(p)
+    await access(p)
     return true
   } catch {
     return false
@@ -37,27 +36,27 @@ async function safeAccess(p: string): Promise<boolean> {
 }
 
 async function findInPluginCache(pluginName: string, fileName: string): Promise<string | null> {
-  const cacheRoot = path.join(homeDir(), '.claude', 'plugins', 'cache')
+  const cacheRoot = joinPath(homeDir(), '.claude', 'plugins', 'cache')
   let bestPath: string | null = null
   let bestMtime = 0
   try {
-    const markets = await fs.readdir(cacheRoot, { withFileTypes: true })
+    const markets = await readDir(cacheRoot, { withFileTypes: true })
     for (const market of markets) {
       if (!market.isDirectory()) continue
-      const pluginPath = path.join(cacheRoot, market.name, pluginName)
+      const pluginPath = joinPath(cacheRoot, market.name, pluginName)
       let versions
       try {
-        versions = await fs.readdir(pluginPath, { withFileTypes: true })
+        versions = await readDir(pluginPath, { withFileTypes: true })
       } catch {
         continue
       }
       for (const v of versions) {
         if (!v.isDirectory()) continue
-        const candidate = path.join(pluginPath, v.name, 'agents', fileName)
+        const candidate = joinPath(pluginPath, v.name, 'agents', fileName)
         if (!(await safeAccess(candidate))) continue
         let mtime = 0
         try {
-          mtime = (await fs.stat(candidate)).mtimeMs
+          mtime = (await stat(candidate)).mtimeMs
         } catch {
           mtime = 0
         }
@@ -85,17 +84,17 @@ async function resolveAgentFilePath(
   const fileName = `${name}.md`
 
   if (source === 'dashboard') {
-    return path.join(devTeamRoot, 'custom-agents', fileName)
+    return joinPath(devTeamRoot, 'custom-agents', fileName)
   }
   if (source === 'user') {
-    return path.join(homeDir(), '.claude', 'agents', fileName)
+    return joinPath(homeDir(), '.claude', 'agents', fileName)
   }
   if (source === 'project') {
-    return path.join(projectRoot, '.claude', 'agents', fileName)
+    return joinPath(projectRoot, '.claude', 'agents', fileName)
   }
   if (source.startsWith('repo:') || source.startsWith('plugin:')) {
     const pluginName = source.includes(':') ? source.slice(source.indexOf(':') + 1) : source
-    const builtin = path.join(projectRoot, 'plugins', pluginName, 'agents', fileName)
+    const builtin = joinPath(projectRoot, 'plugins', pluginName, 'agents', fileName)
     if (await safeAccess(builtin)) return builtin
     const cached = await findInPluginCache(pluginName, fileName)
     if (cached) return cached
@@ -137,11 +136,11 @@ export async function resolveAgent(
   if (!agentPath) {
     throw new Error(`agent file not found for ref: ${agentRef}`)
   }
-  const raw = await fs.readFile(agentPath, 'utf8')
+  const raw = await readTextFile(agentPath)
   const draft: any = parseAgentMarkdown(raw)
   return {
     ref: agentRef,
-    name: draft.name || path.basename(agentPath, '.md'),
+    name: draft.name || basename(agentPath, '.md'),
     description: draft.description || '',
     systemPrompt: buildSystemPrompt(draft),
     skills: draft.skills || [],
