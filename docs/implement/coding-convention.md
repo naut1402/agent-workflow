@@ -30,13 +30,13 @@ Discriminated union với discriminant kiểu boolean (`{ok:true,...}|{ok:false,
 
 ## 3. Zod là nguồn chân lý cho type & validation
 
-Định nghĩa schema bằng Zod một lần, suy type bằng `z.infer` — không viết tay `interface` song song với validator (dễ trôi lệch nhau). Validate ở mọi biên I/O (state JSON, YAML pipeline, request body) bằng `safeParse`, giữ triết lý defensive: parse fail → trả default, không throw. Schema **theo domain feature** đặt ở `src/features/<feature>/schemas/`; preference shell (`appSettings`) giữ ở `src/core/contracts/schemas/` (core/plugins dùng, tránh `core` → `features`).
+Định nghĩa schema bằng Zod một lần, suy type bằng `z.infer` — không viết tay `interface` song song với validator (dễ trôi lệch nhau). Validate ở mọi biên I/O (state JSON, YAML pipeline, request body) bằng `safeParse`, giữ triết lý defensive: parse fail → trả default, không throw. Schema **theo domain feature** đặt ở `src/features/<feature>/schemas/`; preference shell (`appSettings`) giữ ở `src/core/configs/` (core/plugins dùng, tránh `core` → `features`).
 
 ---
 
 ## 4. Kiến trúc & coupling — chỉ đi xuống
 
-Functional + ctx-injection: dependency truyền qua tham số `ctx`, không dùng class-DI/NestJS/OOP framework. Phụ thuộc chỉ đi một chiều xuống dưới: `src/core/lib/` → `src/core/contracts/` và `src/core/log/` không import feature → domain module chỉ import core → `http/` / feature controller. Không vòng tròn.
+Functional + ctx-injection: dependency truyền qua tham số `ctx`, không dùng class-DI/NestJS/OOP framework. Phụ thuộc chỉ đi một chiều xuống dưới: `src/core/lib/` → `src/core/configs/` và `src/core/log/` không import feature → domain module chỉ import core → `http/` / feature controller. Không vòng tròn.
 
 Helper dùng chung, tổ chức `business/`, peer cross-feature: xem [`feature-organization-rule.md`](feature-organization-rule.md).
 

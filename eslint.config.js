@@ -58,7 +58,7 @@ export default tseslint.config(
       'src/features/**/api.ts',
       'src/features/**/controller.ts',
       'src/features/**/business/**/*.{ts,tsx,js}',
-      'src/core/contracts/**/*.{ts,tsx,js}',
+      'src/core/configs/**/*.{ts,tsx,js}',
       'mcp/**/*.{ts,tsx,js}',
       'tests/**/*.{ts,tsx,js,mjs}',
       'test-e2e/**/*.{ts,tsx,js,mjs}',

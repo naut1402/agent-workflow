@@ -15,7 +15,7 @@ const { version: appVersion } = JSON.parse(
   readFileSync(path.join(__dirname, 'package.json'), 'utf8'),
 )
 
-// Frontend unit tests (Vue components, composables, src/core + contracts).
+// Frontend unit tests (Vue components, composables, src/core + configs).
 // Backend unit/integration tests run under `bun test` instead (see package.json).
 export default defineConfig({
   plugins: [vue()],
@@ -24,7 +24,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@shared': path.resolve(__dirname, 'src/core/contracts'),
+      '@configs': path.resolve(__dirname, 'src/core/configs'),
       '@': path.resolve(__dirname, 'src'),
     },
   },
@@ -33,7 +33,7 @@ export default defineConfig({
     environment: 'jsdom',
     execArgv,
     // Unit tests live under tests/ mirroring the source tree. Vitest owns FE +
-    // contracts; bun test owns tests/src/server + tests/mcp.
+    // configs; bun test owns tests/src/server + tests/mcp.
     include: ['tests/src/**/*.{test,spec}.ts'],
     exclude: ['node_modules', 'dist', 'test-e2e/**', 'tests/src/server/**', 'tests/src/core/log/**', 'tests/src/features/**/business/**', 'tests/src/features/**/server/**'],
     coverage: {

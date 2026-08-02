@@ -5,7 +5,7 @@ import './styles/main.scss'
 import.meta.glob('./features/*/styles/index.scss', { eager: true })
 import { useAppSettings } from './core/composables/useAppSettings'
 import { applyThemeToDocument, watchSystemTheme } from './core/lib/theme'
-import { resolveThemePreference, resolveLocale } from './core/contracts/schemas/appSettings'
+import { resolveThemePreference, resolveLocale } from './core/configs/appSettings'
 import { installPlugins, setI18nLocale } from './plugins'
 
 const { settings, load } = useAppSettings()

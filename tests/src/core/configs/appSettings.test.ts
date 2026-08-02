@@ -17,7 +17,7 @@ import {
   resolveNotifyShowSidebar,
   resolveNotifySoundEnabled,
   resolveThemePreference,
-} from '@shared/schemas/appSettings'
+} from '@configs/appSettings'
 
 describe('parseAppSettings', () => {
   it('returns default for null / undefined / non-object', () => {

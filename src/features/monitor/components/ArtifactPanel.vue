@@ -19,7 +19,7 @@ import type { ArtifactMenuNode } from '../schemas/artifactAction'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
 import { attachMermaidControls } from '../../../core/composables/useMermaidControls'
 import { navigateToModeKey } from '../../../core/shell/keys'
-import { resolveArtifactViewMode } from '../../../core/contracts/schemas/appSettings'
+import { resolveArtifactViewMode } from '../../../core/configs/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 

@@ -18,12 +18,12 @@
     "forceConsistentCasingInFileNames": true,
 
     "paths": {
-      "@shared/*": ["./src/core/contracts/*"],
+      "@configs/*": ["./src/core/configs/*"],
       "@/*": ["./src/*"]
     }
   },
   "include": [
-    "src/core/contracts/**/*","mcp/**/*",
+    "src/core/configs/**/*","mcp/**/*",
     "src/**/*",
     "scripts/**/*",
     "tests/**/*",

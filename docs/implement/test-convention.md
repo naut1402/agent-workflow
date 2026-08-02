@@ -11,7 +11,7 @@ Coverage ưu tiên cao — mỗi module refactor phải kèm test (unit + e2e kh
 | Tầng | Runner | Phạm vi | Lệnh |
 |------|--------|---------|------|
 | Unit/integration backend | **bun test** | `src/core/**` (http/registry), `src/features/**/business/**`, `mcp/**` | `bun run test` |
-| Unit frontend | **vitest** (jsdom) | `src/**` (features, core, contracts) | `bun run test:fe` |
+| Unit frontend | **vitest** (jsdom) | `src/**` (features, core, configs) | `bun run test:fe` |
 | E2E | **@playwright/test** | full stack: server thật + fixture `.dev-team-agent/` + browser | `bun run test:e2e` |
 
 `bun run test:all` chạy tuần tự: typecheck → lint → bun test → vitest → playwright.

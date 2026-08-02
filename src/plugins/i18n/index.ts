@@ -1,6 +1,6 @@
 import type { App, InjectionKey, Plugin } from 'vue'
 import { createI18n } from 'vue-i18n'
-import type { LocalePreference } from '../../core/contracts/schemas/appSettings'
+import type { LocalePreference } from '../../core/configs/appSettings'
 import { loadLocaleMessages } from './loadLocales'
 
 declare module 'vue' {

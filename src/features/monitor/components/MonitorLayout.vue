@@ -14,7 +14,7 @@ import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
-} from '../../../core/contracts/schemas/appSettings'
+} from '../../../core/configs/appSettings'
 
 const { t } = useI18nHelpers()
 const SUB_SIDEBAR_KEY = 'dev-dashboard-monitor-subsidebar-collapsed'

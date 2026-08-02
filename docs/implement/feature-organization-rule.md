@@ -20,7 +20,7 @@ Khi nhận task, xác định **feature sở hữu** trước, rồi đặt arti
 | FE gọi API | `scripts/*Api.ts` (dùng `apiGet` / `apiPost` từ `core/http`) |
 | Chuỗi UI | `locales/vi.ts` (+ `en` khuyến nghị) |
 | SCSS mode | `styles/index.scss` (glob từ `main.ts`) |
-| Prefer shell / theme / locale app | `src/core/contracts/schemas/` hoặc plugins — **không** đẩy schema shell vào feature |
+| Prefer shell / theme / locale app | `src/core/configs/` hoặc plugins — **không** đẩy schema shell vào feature |
 | Helper kiểu dữ liệu / wrap package / FS | `src/core/lib/` (§3) |
 | Ghi audit / request log | `src/core/log/` — feature logs chỉ consume / stream job log |
 
@@ -93,7 +93,7 @@ Thứ tự quyết định:
 ### 3.2 Không thuộc `core/lib`
 
 - Rule/sanitize **domain** (tên agent, profile, task id, artifact path) → business feature sở hữu.
-- Preference shell (`locale`, theme, …) → `core/contracts` / plugins.
+- Preference shell (`locale`, theme, …) → `core/configs` / plugins.
 - Driver log ghi hạ tầng → `core/log`.
 
 ---
@@ -101,7 +101,7 @@ Thứ tự quyết định:
 ## 4. Coupling & hướng phụ thuộc
 
 ```
-core/lib, core/contracts, core/log, core/registry
+core/lib, core/configs, core/log, core/registry
         ↑
 features/*/business
         ↑

@@ -58,7 +58,7 @@ Backend là **một app Hono duy nhất** chạy trên **hai transport** khác n
 
 ### 2.4 Domain / business (data thuần, không biết HTTP)
 
-Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts` → business → controller → `src/api` (Hono setup). Registry ở `src/core/registry.ts`; entry `src/standalone.ts`. Trong feature, `business/` gom theo **nghiệp vụ đang xử lý cái gì** — tránh tách nhiều file theo loại thao tác kỹ thuật làm phân tán không cần thiết.
+Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/configs` + `core/lib` → business → controller → `src/api` (Hono setup). Registry ở `src/core/registry.ts`; entry `src/standalone.ts`. Trong feature, `business/` gom theo **nghiệp vụ đang xử lý cái gì** — tránh tách nhiều file theo loại thao tác kỹ thuật làm phân tán không cần thiết.
 
 | Module | Đường dẫn thật | Vai trò |
 |---|---|---|
@@ -76,15 +76,16 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 | NL chat | `src/features/nl-chat/business/` | Session builder chat (prompt + parse trong cùng module). |
 | CLI | `src/runner-cli.mjs` | Runner CLI entry. |
 
-### 2.5 Type dùng chung `src/core/contracts/` (alias `@shared`)
+### 2.5 Config dùng chung `src/core/configs/` (alias `@configs`)
 
-`src/core/contracts/` không import HTTP kernel; domain/business import contracts + `registry` khi cần.
+`src/core/configs/` giữ preference / version shell — không import HTTP kernel; domain/business import configs + `lib` + `registry` khi cần.
 
-- `src/core/contracts/schemas/appSettings.ts` — preference shell (theme/locale/notifications UI); core/plugins dùng.
+- `src/core/configs/appSettings.ts` — preference shell (theme/locale/notifications UI); core/plugins dùng. **Không** nhầm với schema business của feature `settings` (`autoscan`, `dashboardSettings`, `githubTokens` ở `features/settings/schemas/`).
+- `src/core/configs/appVersion.ts` — semver từ `package.json`.
 - Schema domain (task, log, autoscan, …) nằm ở `src/features/<feature>/schemas/` — Zod + `z.infer`, validate biên I/O của feature đó.
 - `src/core/lib/` — `*Utils` / `*Lib` / `fileHelper` (`resolvePathUnder`, …) + helper domain (phase, theme, …).
-- Sanitize / peer API gắn vào business hiện có và **re-export qua `business/index.ts`** khi feature khác cần dùng. Feature tiêu thụ chỉ import peer từ **index của chính nó**, không import thẳng `features/<khác>/business/...`.
-- Round-trip agent markdown: `src/features/agent-editor/business/agentMarkdown.js` (**vẫn `.js`**) — sở hữu agent-editor; FE/cùng feature và peer (runner, pipeline-editor) import module này. Peer nên import **sâu** `agentMarkdown.js` (không qua `agent-editor/business/index`) để tránh cycle với re-export `sanitiseProfileName` từ pipeline-editor.
+- Sanitize / peer API gắn vào business hiện có và **re-export qua `business/index.ts`** khi feature khác cần dùng. Feature tiêu thụ chỉ import peer từ **index của chính nó**, không import thẳng `features/<khác>/business/...` (trừ khi tránh vòng barrel — xem feature-organization-rule).
+- Round-trip agent markdown: `src/features/agent-editor/business/agentMarkdown.js` (**vẫn `.js`**) — sở hữu agent-editor; peer import sâu `agentMarkdown.js` khi cần tránh cycle.
 
 ---
 
@@ -101,7 +102,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 | `runner` | `src/features/runner/` | `RunnerConfigPanel`, `ConnectionDialog` |
 | `logs` (Nhật ký) | `src/features/logs/` | `LogsPanel`, `TaskTimeline`; composable `useTaskTimeline.ts` |
 
-- `src/features/notifications/` — không phải mode, mount xuyên suốt cả 6 mode trong `App.vue` (bell trong `sidebar-footer` và/hoặc `FloatingNotificationIcon` overlay góc trên-phải toàn cục — chọn qua Settings › Thông báo › Vị trí hiển thị: `notificationUiPlacement` = `sidebar` | `floating` | `both`, mặc định `both`; ẩn float khi `unreadCount` về 0). Khi có unread, icon chuông rung + scale (CSS animation). Badge cho HITL-pending/QA-ready **client-only**, suy ra từ chính `tasks` ref đã poll qua `useTaskPolling.ts` (diff `hitl_pending`/`has_qa` qua các lần poll để bắt cạnh chuyển false→true) — không có endpoint/schema backend riêng, vì `.dev-state/<task-id>.json` đã phản ánh đồng nhất cả task chạy từ orchestrator lẫn task chạy từ runner của dashboard (`src/features/runner/business/jobQueue.ts`). Trạng thái đã đọc lưu `localStorage`. Composable `useNotifications.ts` đọc `src/core/contracts/schemas/appSettings.ts` (`notificationsEnabled`, `notifyHitlPending`, `notifyQaReady`, `notifyBrowserEnabled`, `notifySoundEnabled`, `notificationUiPlacement` — cấu hình ở Settings › Thông báo) để bật/tắt notify theo loại sự kiện, vị trí UI, browser `Notification` API (`lib/browserNotification.ts`), và âm thanh Web Audio API (`lib/sound.ts`). Component dropdown dùng chung `components/NotificationList.vue`.
+- `src/features/notifications/` — không phải mode, mount xuyên suốt cả 6 mode trong `App.vue` (bell trong `sidebar-footer` và/hoặc `FloatingNotificationIcon` overlay góc trên-phải toàn cục — chọn qua Settings › Thông báo › Vị trí hiển thị: `notificationUiPlacement` = `sidebar` | `floating` | `both`, mặc định `both`; ẩn float khi `unreadCount` về 0). Khi có unread, icon chuông rung + scale (CSS animation). Badge cho HITL-pending/QA-ready **client-only**, suy ra từ chính `tasks` ref đã poll qua `useTaskPolling.ts` (diff `hitl_pending`/`has_qa` qua các lần poll để bắt cạnh chuyển false→true) — không có endpoint/schema backend riêng, vì `.dev-state/<task-id>.json` đã phản ánh đồng nhất cả task chạy từ orchestrator lẫn task chạy từ runner của dashboard (`src/features/runner/business/jobQueue.ts`). Trạng thái đã đọc lưu `localStorage`. Composable `useNotifications.ts` đọc `src/core/configs/appSettings.ts` (`notificationsEnabled`, `notifyHitlPending`, `notifyQaReady`, `notifyBrowserEnabled`, `notifySoundEnabled`, `notificationUiPlacement` — cấu hình ở Settings › Thông báo) để bật/tắt notify theo loại sự kiện, vị trí UI, browser `Notification` API (`lib/browserNotification.ts`), và âm thanh Web Audio API (`lib/sound.ts`). Component dropdown dùng chung `components/NotificationList.vue`.
 
 ### 3.1 API layer
 
@@ -111,7 +112,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 
 ### 3.2 Core frontend (`src/core`)
 
-Nền tảng FE / shell: `composables/*`, `lib/` (phase, `*Utils`, `*Lib`, `fileHelper`, …), `ui/`, `shell/keys.ts`, cộng `contracts/` (helper FE↔BE + `schemas/appSettings`, alias `@shared` — xem §2.5). Schema domain ở `features/<name>/schemas/`. i18n cài qua `src/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`.
+Nền tảng FE / shell: `composables/*`, `lib/` (phase, `*Utils`, `*Lib`, `fileHelper`, …), `ui/`, `shell/keys.ts`, cộng `configs/` (preference shell + `appVersion`, alias `@configs` — xem §2.5). Schema domain ở `features/<name>/schemas/`. i18n cài qua `src/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`.
 
 Util / wrapper thư viện dùng chung (không gắn domain mode): `src/core/lib/{stringUtils,arrayUtils,dateUtils,yamlLib,markdownLib,diffLib,fileHelper,dirModuleLoader}.ts`.
 

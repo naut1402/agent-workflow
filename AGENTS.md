@@ -26,7 +26,7 @@ Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `
 `dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **dev-agent-teams orchestrator khác** — repo này không chạy orchestrator, chỉ quan sát. Với *state* từng task (`.dev-state/*.json`) thì chỉ đọc; với *config* (pipeline, custom agent, template, knowledge) và **artifact markdown** thì đọc/ghi được (ghi qua `PUT /api/artifact`).
 
 - **Backend**: Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Setup app-root ở `src/api/`; kernel HTTP ở `src/core/http/`; registry ở `src/core/registry.ts`. Entry: `src/standalone.ts`.
-- **Frontend**: `src/features/<mode>/` (components, scripts, styles, locales, schemas); nền `src/core/`; contract `@shared` → `src/core/contracts/`.
+- **Frontend**: `src/features/<mode>/` (components, scripts, styles, locales, schemas); nền `src/core/`; config shell `@configs` → `src/core/configs/`.
 - **Data root** `.dev-team-agent/`; standalone qua `ProjectRegistry` (`?project=<id>`).
 - **Pipeline**: `DEFAULT_PIPELINE` ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`.
 - **MCP**: `bun run mcp` — CRUD registry, không cần HTTP server.

@@ -57,7 +57,7 @@ src/shared/  (FE helpers)  →  src/core/   (ui, composables, i18n, lib, shell�
 ### 2. Logic trước → sau
 
 - **Trước:** “shared” = túi đồ FE dùng chung, dễ nhầm với `shared/` repo-root (contracts BE↔FE).
-- **Sau:** `src/core` là **nền app**; contracts dùng chung sẽ gom dần vào `core/contracts` (alias `@shared` giữ tương thích).
+- **Sau:** `src/core` là **nền app**; preference / version shell ở `core/configs` (alias `@configs`).
 
 ### 3. Ưu / nhược / tradeoff
 
@@ -65,7 +65,7 @@ src/shared/  (FE helpers)  →  src/core/   (ui, composables, i18n, lib, shell�
 |--|--|
 | **Ưu** | Tên phản ánh vai trò (nền tảng, không phải “misc”); chuẩn bị shell keys. |
 | **Nhược** | Rename hàng loạt import; tạm thời hai nghĩa “shared” (alias vs thư mục). |
-| **Tradeoff** | Giữ alias `@shared` → đỡ phá test/import cũ, nhưng tài liệu phải nói rõ = `core/contracts`. |
+| **Tradeoff** | Alias `@configs` = `core/configs`; schema nghiệp vụ vẫn ở `features/*/schemas/`. |
 
 ### 4. Quy tắc rút ra
 
@@ -82,7 +82,7 @@ src/shared/  (FE helpers)  →  src/core/   (ui, composables, i18n, lib, shell�
 
 ```
 TRƯỚC (repo root)          SAU
-shared/                 →  src/core/contracts/  (+ alias @shared)
+shared/                 →  src/core/configs/  (+ alias @configs)
 server/                 →  src/server/          (tạm; sẽ tan vào core/features)
 src/                       src/
 mcp/                       mcp/  (giữ ngoài — stdio riêng)
@@ -208,8 +208,8 @@ src/server/ (còn sót)      →  (xóa)
 
 ### 4. Quy tắc rút ra
 
-- **Phụ thuộc một chiều:** `lib/contracts` → `business` → `controller` → `api` setup.
-- Feature **không** import feature khác qua tầng HTTP; chia sẻ qua contracts/lib hoặc API HTTP.
+- **Phụ thuộc một chiều:** `lib/configs` → `business` → `controller` → `api` setup.
+- Feature **không** import feature khác qua tầng HTTP; chia sẻ qua configs/lib hoặc API HTTP.
 - Trong `business/`: chia theo **nghiệp vụ đang xử lý cái gì**, không theo kiểu thao tác kỹ thuật — tránh tạo quá nhiều file làm phân tán business.
 - Xóa cây cũ ngay khi không còn import (tránh 2 nhà).
 
@@ -365,8 +365,8 @@ useI18n() rải / type chặt en↔vi     →  features/*/locales/{vi,en}.ts (gl
 
 ```
 TRƯỚC                                   SAU
-core/contracts/schemas/* (hỗn hợp)   →  features/<f>/schemas/*  (task, autoscan, …)
-                                        core/contracts/schemas/appSettings  (shell)
+core/configs/* (hỗn hợp)   →  features/<f>/schemas/*  (task, autoscan, …)
+                                        core/configs/appSettings  (shell)
 ```
 
 ### 2. Logic trước → sau
@@ -508,7 +508,7 @@ watch / readDir type lỏng               →  overload đúng → vue-tsc xanh
 
 ```
 TRƯỚC                                      SAU
-core/contracts/sanitize.ts (túi chung)  →  gắn vào module business sở hữu
+core/configs/sanitize.ts (túi chung)  →  gắn vào module business sở hữu
                                            (pipeline, agents, tasks, jobLog, …)
 feature A import sâu B/business/x.ts    →  chỉ A/business/index.ts được import
                                            từ B/business/**; nội bộ A đi qua
@@ -584,7 +584,7 @@ flowchart TB
   subgraph core["src/core — ổn định"]
     http["http — AbstractController, client"]
     bizAbs["business — AbstractBusiness"]
-    contracts["contracts — schemas shell"]
+    configs["configs — appSettings, appVersion"]
     lib["lib — *Utils / *Lib / fileHelper"]
     log["log — driver + emit"]
     registry["registry"]
@@ -605,14 +605,14 @@ flowchart TB
   fCtrl --> http
   fCtrl --> fBiz
   fBiz --> bizAbs
-  fBiz --> contracts
+  fBiz --> configs
   fBiz --> lib
   fBiz -.->|own capability| agentMd
   api --> log
   api --> registry
 ```
 
-**Đọc sơ đồ theo Lean:** mũi tên phụ thuộc hướng vào core/contracts/lib; feature mới **thêm hộp**, không sửa hộp core trừ khi đổi abstract.
+**Đọc sơ đồ theo Lean:** mũi tên phụ thuộc hướng vào core/configs/lib; feature mới **thêm hộp**, không sửa hộp core trừ khi đổi abstract.
 
 ---
 
@@ -622,7 +622,7 @@ flowchart TB
 2. Controller `extends AbstractController`; business `extends AbstractBusiness`.
 3. `business/` gom theo nghiệp vụ; peer chỉ qua `business/index.ts`.
 4. Không sửa `apiServer` registry tay — để glob/`registerFeatureRoutes` nạp.
-5. Schema domain để trong feature; đừng đẩy vào `core/contracts` trừ shell thật sự.
+5. Schema domain để trong feature; đừng đẩy vào `core/configs` trừ shell preference thật sự.
 6. Dùng `*Utils` / `*Lib` / `fileHelper` có sẵn; mở rộng helper trước khi copy logic.
 7. Business không import trực tiếp `node:fs` / `node:path`.
 8. Chạy `bun run typecheck` + `bun run build` nếu đụng FE+Node.

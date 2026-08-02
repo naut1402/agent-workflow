@@ -10,7 +10,7 @@ import {
 } from '@/plugins/i18n'
 import { useLocale } from '@/core/composables/useLocale'
 import { useAppSettings, STORAGE_KEY } from '@/core/composables/useAppSettings'
-import { resolveLocale } from '../../../../src/core/contracts/schemas/appSettings'
+import { resolveLocale } from '../../../../src/core/configs/appSettings'
 
 function reset() {
   localStorage.clear()

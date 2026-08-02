@@ -10,7 +10,7 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 
 - [ ] Thay đổi nằm đúng feature sở hữu; không “vá” logic domain vào feature khác hoặc vào `core` nếu là nghiệp vụ.
 - [ ] Route mới/sửa chỉ ở `features/<f>/api.ts` + `controller.ts` — controller không chứa đọc/ghi filesystem phức tạp.
-- [ ] Schema domain ở `features/<f>/schemas/`; không nhét schema shell vào feature; không đẩy schema domain lên `core/contracts` trừ khi thật sự app-wide.
+- [ ] Schema domain ở `features/<f>/schemas/`; không nhét schema shell vào feature; không đẩy schema domain lên `core/configs` trừ khi thật sự app-wide.
 - [ ] UI string qua i18n (`locales/`); FE API qua `scripts/*Api.ts` + `apiGet`/`apiPost`.
 - [ ] Không thêm wiring hub tay nếu glob/auto-load đã đủ (route / styles / locales).
 
@@ -67,4 +67,4 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 | `import …/other/business/foo` từ controller | “Đưa re-export vào `business/index` của feature này.” |
 | `import fs from 'node:fs'` trong business | “Dùng / mở rộng `fileHelper`.” |
 | Copy `slugify` / YAML parse | “Dùng `stringUtils` / `yamlLib`.” |
-| Sanitize mới trong `core/contracts` | “Gắn module business sở hữu + export index.” |
+| Sanitize mới trong `core` (sai chỗ) | “Gắn module business sở hữu + export index.” |
