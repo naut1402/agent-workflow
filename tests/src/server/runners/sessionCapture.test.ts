@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { buildClaudeInvocation } from '../../../../src/features/runner/business/providers/claude-code-cli.js'
 import {
   buildCursorJsonArgs,
+  buildCursorJsonInvocation,
   mintSessionId,
   parseCursorJsonOutput,
   prepareSessionInvocation,
@@ -46,13 +47,29 @@ describe('sessionCapture', () => {
     expect(inv.args).toEqual(['-p', '--resume', 'resume-abc'])
   })
 
-  test('cursor parse-json: buildCursorJsonArgs adds -p, --output-format json, and --trust', () => {
+  test('cursor parse-json: buildCursorJsonArgs adds -p, --output-format json, and --trust (prompt NOT in argv)', () => {
     const args = buildCursorJsonArgs(['--model', 'x'], 'do task')
     expect(args).toContain('-p')
     expect(args).toContain('--output-format')
     expect(args).toContain('json')
     expect(args).toContain('--trust')
-    expect(args[args.length - 1]).toBe('do task')
+    // Regression (#177): prompt must never be an argv element — Windows
+    // shell:true space-joins argv and cmd.exe would truncate a multi-line
+    // prompt to the first token ("##").
+    expect(args).not.toContain('do task')
+  })
+
+  test('cursor parse-json: buildCursorJsonInvocation puts prompt on stdin and --resume in argv', () => {
+    const inv = buildCursorJsonInvocation({
+      flags: ['--model', 'x'],
+      prompt: '## Agent instructions\n\nfull multi-line prompt',
+      resumeSessionId: 'sess-abc',
+    })
+    expect(inv.stdinInput).toBe('## Agent instructions\n\nfull multi-line prompt')
+    expect(inv.args).toEqual(['--model', 'x', '-p', '--output-format', 'json', '--trust', '--resume', 'sess-abc'])
+    for (const arg of inv.args) {
+      expect(arg.includes('Agent instructions')).toBe(false)
+    }
   })
 
   test('cursor parse-json: does not duplicate --trust when already set', () => {
@@ -75,6 +92,18 @@ describe('sessionCapture', () => {
     expect(parseCursorJsonOutput(stdout)).toEqual({
       session_id: 'chat-99',
       result: 'proposed markdown body',
+    })
+  })
+
+  test('parseCursorJsonOutput tolerates leading noise before JSON object', () => {
+    const body = JSON.stringify({
+      session_id: 'chat-noise',
+      result: '===DRAFT_READY===\n```json\n{"taskId":"t1"}\n```',
+    })
+    const stdout = `cursor-retrieval: tracing to 'C:\\Temp\\x.log'\n${body}\n`
+    expect(parseCursorJsonOutput(stdout)).toEqual({
+      session_id: 'chat-noise',
+      result: '===DRAFT_READY===\n```json\n{"taskId":"t1"}\n```',
     })
   })
 

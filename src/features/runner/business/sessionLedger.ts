@@ -244,24 +244,53 @@ export interface CursorJsonOutput {
   result?: string
 }
 
-/** Parse cursor-agent JSON stdout; tolerates leading/trailing whitespace. */
+function cursorFieldsFrom(parsed: Record<string, unknown>): CursorJsonOutput {
+  return {
+    session_id: typeof parsed.session_id === 'string' ? parsed.session_id : undefined,
+    result: typeof parsed.result === 'string' ? parsed.result : undefined,
+  }
+}
+
+/** Parse cursor-agent JSON stdout; tolerates leading/trailing whitespace/noise. */
 export function parseCursorJsonOutput(stdout: string): CursorJsonOutput {
   const trimmed = stdout.trim()
   if (!trimmed) return {}
   try {
-    const parsed = JSON.parse(trimmed) as Record<string, unknown>
-    return {
-      session_id: typeof parsed.session_id === 'string' ? parsed.session_id : undefined,
-      result: typeof parsed.result === 'string' ? parsed.result : undefined,
-    }
+    return cursorFieldsFrom(JSON.parse(trimmed) as Record<string, unknown>)
   } catch {
-    return {}
+    // Defensive: tolerate a leading stderr line (or similar) before the JSON object.
+    const start = trimmed.indexOf('{')
+    const end = trimmed.lastIndexOf('}')
+    if (start < 0 || end <= start) return {}
+    try {
+      return cursorFieldsFrom(JSON.parse(trimmed.slice(start, end + 1)) as Record<string, unknown>)
+    } catch {
+      return {}
+    }
   }
 }
 
-/** Build cursor headless argv with JSON output for session capture. */
-export function buildCursorJsonArgs(flags: string[], prompt: string): string[] {
-  const base = Array.isArray(flags) ? [...flags] : []
+export interface CursorJsonInvocationInput {
+  flags: string[]
+  prompt: string
+  resumeSessionId?: string
+}
+
+export interface CursorJsonInvocation {
+  args: string[]
+  stdinInput: string
+}
+
+/**
+ * Build cursor headless invocation with JSON output for session capture.
+ *
+ * The prompt is delivered on STDIN, never as an argv element — same Windows
+ * `shell: true` argv-splitting bug that forced Claude onto stdin. Cursor CLI
+ * accepts a piped prompt with `-p` / `--print` (print mode is inferred when
+ * stdin is not a TTY).
+ */
+export function buildCursorJsonInvocation(input: CursorJsonInvocationInput): CursorJsonInvocation {
+  const base = Array.isArray(input.flags) ? [...input.flags] : []
   if (!base.includes('-p')) base.push('-p')
   if (!base.some((f) => f === '--output-format' || f.startsWith('--output-format='))) {
     base.push('--output-format', 'json')
@@ -272,8 +301,17 @@ export function buildCursorJsonArgs(flags: string[], prompt: string): string[] {
     base.includes('-f') ||
     base.includes('--force')
   if (!hasTrust) base.push('--trust')
-  base.push(prompt)
-  return base
+  if (input.resumeSessionId) base.push('--resume', input.resumeSessionId)
+  return { args: base, stdinInput: input.prompt }
+}
+
+/** Flag-only argv for cursor JSON mode (prompt is on stdin — see buildCursorJsonInvocation). */
+export function buildCursorJsonArgs(
+  flags: string[],
+  prompt: string,
+  resumeSessionId?: string,
+): string[] {
+  return buildCursorJsonInvocation({ flags, prompt, resumeSessionId }).args
 }
 
 /** Mint a v4 UUID for Claude `--session-id`. */
