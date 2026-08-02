@@ -8,7 +8,56 @@ Quy ước PR body, evidence test, commit message, ngôn ngữ tài liệu. Hub:
 
 Theo [`.github/pull_request_template.md`](../../.github/pull_request_template.md). Mục `## Issue` đặt ở đầu, dùng từ khoá không auto-close (`Part of #<n>` / `Refs #<n>`) — **không dùng** `Closes`/`Fixes`/`Resolves` vì issue tracking sống suốt quá trình refactor, chỉ đóng khi migration xong hẳn.
 
-Bắt buộc mục **Nội dung thay đổi** (bảng file TRƯỚC → SAU) và liệt kê loại test đã thêm/migrate.
+Bắt buộc mục **Nội dung thay đổi** (theo cấu trúc ở §1.1–§1.2; bảng file TRƯỚC → SAU khi có rename/split) và liệt kê loại test đã thêm/migrate.
+
+### 1.1 Chi tiết chỉnh sửa — phần riêng (feature / phạm vi chính)
+
+Code đã xếp theo cây thống nhất ([`feature-organization-rule.md`](feature-organization-rule.md), [`../architecture.md`](../architecture.md)) — **mô tả PR cũng nhóm theo cùng bản đồ**, không liệt kê phẳng “đổi file A, B, C” thiếu ngữ cảnh lớp.
+
+Gom theo đường dẫn / lớp (chỉ mục có thay đổi):
+
+| Nhóm trong PR | Ví dụ path |
+|---------------|------------|
+| HTTP | `src/features/<feature>/api.ts`, `controller.ts` |
+| Domain | `…/business/` |
+| Schema | `…/schemas/` |
+| UI / FE API / i18n / style | `…/components/`, `composables/`, `scripts/`, `locales/`, `styles/` |
+| Test | `tests/…` (mirror source), `test-e2e/` |
+
+Trong mỗi nhóm: 1– vài gạch đầu dòng — *làm gì* / *vì sao*, không dump toàn bộ diff.
+
+**Fix / refactor:** thêm cặp **Logic trước → Logic sau** (hành vi hoặc luồng), không chỉ tên hàm đổi chỗ. Feature mới thuần có thể bỏ cặp này nếu chưa có hành vi cũ để đối chiếu.
+
+Ví dụ khung:
+
+```markdown
+### Chi tiết chỉnh sửa (phần riêng)
+
+#### `src/features/settings/`
+- `api.ts` / `controller.ts`: …
+- `business/`: …
+- `schemas/`: …
+- `components/` / `scripts/` / `locales/`: …
+
+**Logic trước → sau** (fix/refactor):
+- Trước: …
+- Sau: …
+```
+
+### 1.2 Chi tiết chỉnh sửa — phần chung (ảnh hưởng chéo)
+
+Luôn có mục này (ghi *Không* nếu không đụng). Dùng để reviewer thấy blast radius ngoài feature chính:
+
+1. **Core** (`src/core/…` — vd `lib/`, `log/`, `http/`, `configs/`): nếu đổi **logic** (hành vi helper, gate, schema dùng chung, middleware) → nêu module + thay đổi; rename/import-only thuần có thể ghi một dòng ngắn hoặc *Không*.
+2. **Feature khác** (`src/features/<peer>/…`): nếu sửa logic / API / contract của feature không phải phạm vi chính → nêu feature + chỗ đụng (ưu tiên qua `business/index`; ghi rõ nếu phải import sâu vì tránh cycle).
+
+Ví dụ khung:
+
+```markdown
+### Chi tiết chỉnh sửa (phần chung)
+- **Core:** `src/core/log/…` — …
+- **Feature khác:** `runner` (`jobQueue`) — …; hoặc *Không*
+```
 
 ---
 

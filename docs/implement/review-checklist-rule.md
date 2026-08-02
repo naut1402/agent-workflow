@@ -1,6 +1,6 @@
 # Review checklist — feature / business / helper
 
-Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu trúc tương tự cookbook core/feature. Chi tiết quy ước: [`feature-organization-rule.md`](feature-organization-rule.md), [`coding-convention.md`](coding-convention.md); bất biến repo: [`AGENTS.md`](../../AGENTS.md) § Bất biến.
+Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu trúc tương tự cookbook core/feature. Chi tiết quy ước: [`feature-organization-rule.md`](feature-organization-rule.md), [`coding-convention.md`](coding-convention.md), [`pr-docs-convention.md`](pr-docs-convention.md) (§1 trình bày PR); bất biến repo: [`AGENTS.md`](../../AGENTS.md) § Bất biến.
 
 Đánh dấu từng mục liên quan scope PR (không bắt buộc tick hết nếu PR không đụng vùng đó).
 
@@ -45,12 +45,13 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 - [ ] Zod `safeParse` ở biên; không `interface` tay song song schema nếu có thể `z.infer`.
 - [ ] Discriminated union: tránh narrow boolean `ok` dễ gãy dưới vue-tsc — dùng `'error' in v` hoặc discriminant string nếu cần.
 
-## F. Test & CI
+## F. Test & CI & PR body
 
 - [ ] Có unit/integration tương ứng vùng đổi; test mirror dưới `tests/` (không co-locate lung tung).
 - [ ] Domain/fs → **bun test**; FE/component → vitest.
 - [ ] PR đụng helper FE+BE hoặc `fileHelper`: typecheck / build xanh locally (và CI).
 - [ ] Commit message / PR title đúng commitlint (`type(scope): subject`); không trailer công cụ.
+- [ ] **Nội dung thay đổi**: phần riêng nhóm theo cây thư mục/lớp; fix/refactor có Logic trước → sau; phần chung nêu Core và/hoặc feature khác (hoặc *Không*) — [`pr-docs-convention.md`](pr-docs-convention.md) §1.1–§1.2.
 
 ## G. Docs (khi đổi convention)
 
