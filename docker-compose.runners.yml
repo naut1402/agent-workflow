@@ -13,19 +13,23 @@
 # Không mount connections.json từ host Windows (cliPath thường trỏ .exe/.cmd).
 # Connection trong container dùng `claude` / `agent` trên PATH của image.
 #
+# Container chạy user `dashboard` (uid 1001) — Claude không cho
+# --dangerously-skip-permissions khi root.
+#
 # Windows → Linux: session file trong ~/.claude có thể không tương thích 100%;
 # fallback: ANTHROPIC_API_KEY / CURSOR_API_KEY (hoặc login lại trong container).
 
 services:
   dashboard:
+    user: "0:0"
     environment:
-      HOME: /root
-      # Đảm bảo runner tìm thấy binary đã cài trong image
-      PATH: /root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      HOME: /home/dashboard
+      USER: dashboard
+      PATH: /home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       # Claude Code auth / settings (cli-session)
-      - ${HOST_HOME:?Set HOST_HOME to your user home (e.g. USERPROFILE or HOME)}/.claude:/root/.claude
+      - ${HOST_HOME:?Set HOST_HOME to your user home (e.g. USERPROFILE or HOME)}/.claude:/home/dashboard/.claude
       # Cursor CLI auth / settings
-      - ${HOST_HOME}/.cursor:/root/.cursor
+      - ${HOST_HOME}/.cursor:/home/dashboard/.cursor
       # Dashboard credential profiles (secretRef: cli-session | env:… | file:…)
       - ${HOST_HOME}/.dev-team-dashboard/credentials.json:/data/dashboard-home/credentials.json

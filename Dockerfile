@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Multi-stage: Vite SPA build → Bun standalone (+ Claude/Cursor CLI trong image).
+# Multi-stage: Vite SPA build → Bun standalone (+ Claude/Cursor CLI, non-root).
 
 FROM oven/bun:1 AS build
 WORKDIR /app
@@ -20,26 +20,40 @@ ENV NODE_ENV=production \
     DEV_TEAM_DASHBOARD_PORT=5174 \
     DEV_TEAM_DASHBOARD_HOME=/data/dashboard-home \
     DEV_TEAM_ROOT=/data/project/.dev-team-agent \
-    PATH="/root/.local/bin:${PATH}"
+    HOME=/home/dashboard \
+    PATH="/home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-# Runner CLI (Linux) — không dùng binary Windows từ host.
-# Auth/session: mount ~/.claude và ~/.cursor từ host (xem docker-compose.runners.yml).
+# Claude CLI từ chối --dangerously-skip-permissions khi chạy root — bắt buộc non-root.
+# oven/bun đã chiếm uid 1000 → dùng 1001.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl ca-certificates git \
-  && curl -fsSL https://claude.ai/install.sh | bash \
-  && curl -fsS https://cursor.com/install | bash \
-  && command -v claude \
-  && (command -v agent || command -v cursor-agent) \
+  && useradd --create-home --uid 1001 --shell /bin/bash dashboard \
+  && mkdir -p /data/dashboard-home /data/project \
+    /home/dashboard/.local/bin /home/dashboard/.local/share \
+  && chown -R dashboard:dashboard /home/dashboard /data \
   && rm -rf /var/lib/apt/lists/*
 
+# Runner CLI (Linux) — cài dưới user dashboard (HOME=~dashboard).
+USER dashboard
+ENV HOME=/home/dashboard
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+  && curl -fsS https://cursor.com/install | bash \
+  && command -v claude \
+  && (command -v agent || command -v cursor-agent)
+
+USER root
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src ./src
 COPY --from=build /app/tsconfig.json ./tsconfig.json
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+  && chown -R dashboard:dashboard /app /data /home/dashboard
 
 EXPOSE 5174
 
-# Bind 0.0.0.0 (ENV trên) để port publish từ host tới được container.
+# Entrypoint chown volume rồi drop privileges → user dashboard.
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["bun", "src/standalone.ts"]

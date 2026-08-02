@@ -122,11 +122,13 @@ docker compose -f docker-compose.yml -f docker-compose.runners.yml up --build
 
 | Mount host | Trong container |
 |------------|-----------------|
-| `$HOST_HOME/.claude` | `/root/.claude` (cli-session Claude) |
-| `$HOST_HOME/.cursor` | `/root/.cursor` (Cursor auth) |
+| `$HOST_HOME/.claude` | `/home/dashboard/.claude` (cli-session Claude) |
+| `$HOST_HOME/.cursor` | `/home/dashboard/.cursor` (Cursor auth) |
 | `$HOST_HOME/.dev-team-dashboard/credentials.json` | `/data/dashboard-home/credentials.json` |
 
 Binary CLI **không** lấy từ Windows host (`.exe` / `.cmd` không chạy trong Linux container) — chỉ dùng bản đã cài trong image. Không mount `connections.json` từ host Windows vì `cliPath` thường trỏ path Windows.
+
+Container chạy user **`dashboard` (uid 1001)** — Claude CLI từ chối `--dangerously-skip-permissions` khi process là root.
 
 **Lưu ý:** path Windows → Linux container dùng dạng `/c/Users/...` (Docker Desktop) hoặc để Compose tự map từ `DEV_TEAM_PROJECT_PATH`. Session file tạo trên Windows có thể không đủ cho CLI Linux — khi đó dùng API key hoặc `claude`/`agent login` trong container. Repo này **không** đóng gói orchestrator — chỉ dashboard quan sát project đã mount.
 
