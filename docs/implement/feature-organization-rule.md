@@ -81,11 +81,13 @@ Thứ tự quyết định:
 |------|-----|--------|
 | Thao tác kiểu dữ liệu thuần | `*Utils` | `stringUtils`, `arrayUtils`, `dateUtils` |
 | Biên thư viện bên thứ ba | `*Lib` | `yamlLib`, `markdownLib`, `diffLib` |
-| Filesystem / path (Node) | `fileHelper` | `joinPath`, `readTextFile`, `safeReadDir`, `resolvePathUnder` |
+| Filesystem / path / URL file (Node) | `fileHelper` | `joinPath`, `readTextFile`, `pathToFileURL`, `dirnameFromImportMeta` |
+| Quét thư mục + dynamic `import` (Node/Bun) | `dirModuleLoader` | `loadModulesUnder` |
 
 - `parseFrontmatter` / `readYamlSafe` nằm `yamlLib`.
-- Module **FE + BE** dùng chung: **không** `import` top-level `node:*` (Vite bundle). I/O Node để `fileHelper` hoặc dynamic import có chủ đích.
-- Business **không** `import` trực tiếp `node:fs` / `node:path` — đi qua `fileHelper`. Thêm thao tác fs mới → bổ sung vào `fileHelper` (kèm overload nếu cần, vd `readDir` với `withFileTypes`) rồi mới gọi từ business.
+- Module **FE + BE** dùng chung: **không** `import` top-level `node:*` (Vite bundle). I/O Node để `fileHelper` hoặc dynamic import có chủ đích (`dirModuleLoader` — **không** import từ bundle browser).
+- Business **không** `import` trực tiếp `node:fs` / `node:path` / `node:url` (path↔file URL) — đi qua `fileHelper`. Thêm thao tác fs mới → bổ sung vào `fileHelper` (kèm overload nếu cần, vd `readDir` với `withFileTypes`) rồi mới gọi từ business.
+- `apiServer` đăng ký route: `loadModulesUnder(featuresRoot, { entryFile: 'api.ts' })` rồi sort `routeOrder` / gọi `registerRoutes` — **không** liệt kê feature tay; giữ `node:http` / `node:buffer` ở tầng transport.
 - Sau khi đổi chữ ký helper: chạy `bun run typecheck` (CI gate).
 
 ### 3.2 Không thuộc `core/lib`

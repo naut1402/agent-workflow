@@ -2,7 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { homeDir, resolvePathUnder, safeReadDir, statSafe } from '@/core/lib/fileHelper'
+import {
+  dirnameFromImportMeta,
+  fileURLToPath,
+  homeDir,
+  pathToFileURL,
+  resolvePathUnder,
+  safeReadDir,
+  statSafe,
+} from '@/core/lib/fileHelper'
 import { readYamlSafe } from '@/core/lib/yamlLib'
 
 let dir: string
@@ -56,6 +64,16 @@ describe('fileHelper', () => {
     const base = path.resolve(dir)
     expect(resolvePathUnder(base, '..', 'outside')).toBeNull()
     expect(resolvePathUnder(base, '..')).toBeNull()
+  })
+
+  it('round-trips path ↔ file URL', () => {
+    const p = path.join(dir, 'a.txt')
+    expect(fileURLToPath(pathToFileURL(p))).toBe(p)
+  })
+
+  it('dirnameFromImportMeta matches parent of file URL', () => {
+    const url = pathToFileURL(path.join(dir, 'a.txt')).href
+    expect(dirnameFromImportMeta(url)).toBe(dir)
   })
 })
 

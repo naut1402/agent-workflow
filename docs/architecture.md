@@ -113,7 +113,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 
 Nền tảng FE / shell: `composables/*`, `lib/` (phase, `*Utils`, `*Lib`, `fileHelper`, …), `ui/`, `shell/keys.ts`, cộng `contracts/` (helper FE↔BE + `schemas/appSettings`, alias `@shared` — xem §2.5). Schema domain ở `features/<name>/schemas/`. i18n cài qua `src/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`.
 
-Util / wrapper thư viện dùng chung (không gắn domain mode): `src/core/lib/{stringUtils,arrayUtils,dateUtils,yamlLib,markdownLib,diffLib,fileHelper}.ts`.
+Util / wrapper thư viện dùng chung (không gắn domain mode): `src/core/lib/{stringUtils,arrayUtils,dateUtils,yamlLib,markdownLib,diffLib,fileHelper,dirModuleLoader}.ts`.
 
 **Roadmap kernel (sau 1.0.0):** ModeRegistry / `registerMode`, event bus, contribution API (plugin). Chưa triển khai trong 1.0.0.
 

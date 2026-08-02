@@ -298,8 +298,7 @@ src/styles/ phình theo mode     →  src/styles/ = token + shell
 TRƯỚC                                SAU
 devTeamApi / createApp lẫn logic  →  src/api/apiServer.ts  (createApp + createApiHandler)
                                      src/api/devTeamApi.ts (shim Vite mỏng)
-                                     registerFeatureRoutes: glob features/*/api.ts
-                                     (+ fallback static list cho môi trường đặc biệt)
+                                     registerFeatureRoutes: loadModulesUnder(features/*/api.ts)
 ```
 
 ### 2. Logic trước → sau

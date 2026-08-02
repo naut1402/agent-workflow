@@ -1,6 +1,7 @@
 import fsPromises from 'node:fs/promises'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath as nodeFileURLToPath, pathToFileURL as nodePathToFileURL } from 'node:url'
 import type {
   Dirent,
   PathLike,
@@ -48,6 +49,21 @@ export function isAbsolutePath(p: string): boolean {
 
 export function parsePath(p: string): path.ParsedPath {
   return path.parse(p)
+}
+
+/** `fileURLToPath` — convert `file:` URL / `import.meta.url` to a filesystem path. */
+export function fileURLToPath(url: string | URL): string {
+  return nodeFileURLToPath(url)
+}
+
+/** `pathToFileURL` — convert a filesystem path to a `file:` URL (dynamic `import`). */
+export function pathToFileURL(p: string): URL {
+  return nodePathToFileURL(p)
+}
+
+/** Directory containing the module that owns `import.meta.url`. */
+export function dirnameFromImportMeta(importMetaUrl: string): string {
+  return path.dirname(nodeFileURLToPath(importMetaUrl))
 }
 
 /**
