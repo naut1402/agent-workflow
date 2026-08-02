@@ -2,9 +2,19 @@ import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import { registryHome } from '../../../core/registry.js'
-import { sanitiseJobId } from '../../../core/contracts/sanitize.js'
-import { loadJob, listJobs } from '../../runner/business/jobQueue.js'
-import type { JobRecord, JobStatus } from '../../runner/business/types.js'
+import type { JobRecord, JobStatus } from './index.js'
+import { loadJob, listJobs } from './index.js'
+
+/**
+ * Validate a job id. Job ids are minted with `crypto.randomUUID()`, so a strict
+ * UUID shape both matches real ids and rejects path traversal.
+ */
+export function sanitiseJobId(id: unknown): string | null {
+  if (typeof id !== 'string') return null
+  const v = id.trim().toLowerCase()
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v)) return null
+  return v
+}
 
 const DEFAULT_TAIL_BYTES = 64 * 1024
 const DELTA_MAX_BYTES = 256 * 1024

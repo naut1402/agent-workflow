@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ServerResponse } from 'node:http'
-import { json } from '@shared/http'
+import { json } from '@/core/http/responseHelper'
 
 function mockRes() {
   return {
@@ -16,7 +16,7 @@ function mockRes() {
   }
 }
 
-describe('json', () => {
+describe('responseHelper json', () => {
   it('writes status, JSON body and no-store headers', () => {
     const res = mockRes()
     json(res as unknown as ServerResponse, 201, { ok: true, n: 1 })

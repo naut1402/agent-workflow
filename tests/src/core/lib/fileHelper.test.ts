@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { homeDir, safeReadDir, statSafe } from '@/core/lib/fileHelper'
+import { homeDir, resolvePathUnder, safeReadDir, statSafe } from '@/core/lib/fileHelper'
 import { readYamlSafe } from '@/core/lib/yamlLib'
 
 let dir: string
@@ -45,6 +45,17 @@ describe('fileHelper', () => {
       mtime: null,
       size: 0,
     })
+  })
+
+  it('resolvePathUnder keeps paths inside base', () => {
+    const base = path.resolve(dir)
+    expect(resolvePathUnder(base, 'a.txt')).toBe(path.resolve(base, 'a.txt'))
+  })
+
+  it('resolvePathUnder rejects traversal', () => {
+    const base = path.resolve(dir)
+    expect(resolvePathUnder(base, '..', 'outside')).toBeNull()
+    expect(resolvePathUnder(base, '..')).toBeNull()
   })
 })
 

@@ -73,9 +73,11 @@ Discriminated union với discriminant kiểu boolean (`{ok:true,...}|{ok:false,
 
 Functional + ctx-injection: dependency truyền qua tham số `ctx`, không dùng class-DI/NestJS/OOP framework. Phụ thuộc chỉ đi một chiều xuống dưới: `src/core/lib/` → `src/core/contracts/` và `src/core/log/` không import feature → domain module chỉ import core → `http/` / feature controller. Không vòng tròn.
 
-Helper dùng chung nằm ở **`src/core/lib/`**: kiểu dữ liệu đặt tên `*Utils` (`stringUtils`, `arrayUtils`, `dateUtils`); wrapper package đặt tên `*Lib` (`yamlLib`, `markdownLib`, `diffLib`); helper FS đặt `fileHelper`. Không nhét vào `features/*/lib` (lib feature chỉ cho domain UI của mode đó). `parseFrontmatter` / `readYamlSafe` nằm ở `yamlLib`; `homeDir` / `safeReadDir` / `statSafe` nằm ở `fileHelper`.
+Helper dùng chung nằm ở **`src/core/lib/`**: kiểu dữ liệu đặt tên `*Utils` (`stringUtils`, `arrayUtils`, `dateUtils`); wrapper package đặt tên `*Lib` (`yamlLib`, `markdownLib`, `diffLib`); helper FS đặt `fileHelper` (`homeDir` / `safeReadDir` / `statSafe` / `resolvePathUnder`). `parseFrontmatter` / `readYamlSafe` nằm ở `yamlLib`. Sanitize tên/ID theo domain gắn vào business module của feature (export qua `business/index.ts` khi chia sẻ).
 
 Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuần (`{ status, error }` khi lỗi). Controller parse request → gọi `XxxBusiness` → `this.json` / `ok`.
+
+**Cross-feature business:** Chỉ `features/<A>/business/index.ts` được import từ `features/<B>/business/**`. Mọi chỗ khác trong feature A (controller, `business/*.ts` khác) phải import peer qua `./business/index.js` (hoặc `./index.js` trong cùng `business/`), **không** import trực tiếp cây business của feature B.
 
 ### 3.5 Frontend (Vue 3)
 
@@ -101,7 +103,7 @@ UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **
 Thêm scan/endpoint mới không được phá các bất biến sau:
 
 - **Đọc filesystem phải phòng thủ**: `safeReadDir`/`statSafe` (`fileHelper`) / `readYamlSafe` (`yamlLib`) /`readState`/`loadRegistry` nuốt lỗi, trả empty/false thay vì throw — một file state ghi dở không được làm sập request.
-- **Chống path-traversal**: mọi input từ request phải sanitize (`resolveArtifact`, `resolveStatic`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương.
+- **Chống path-traversal**: mọi input từ request phải sanitize tại feature sở hữu (`resolveArtifact` + `fileHelper.resolvePathUnder`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương. Hàm sanitize domain **không** nằm ở core — gắn vào module business liên quan (vd `pipeline/index`, `store`, `fetch`, `tasks`, `jobLog`) và export qua `business/index.ts` nếu feature khác cần dùng.
 - **Ghi registry atomic** (temp file + rename trong `saveRegistry`).
 - **Fetch URL người dùng** phải qua `fetchUrlSafe` (https-only, chặn private host) — tránh SSRF.
 - **ESM thuần**; server import core `node:`-prefixed.

@@ -5,9 +5,10 @@ import {
   getNlChatTurn,
   cancelNlChatSession,
   isNlChatSessionId,
-} from './nlChatSession.js'
-import { ensureNlChatBuilderAgent, scanCustomAgents } from '../../agent-editor/business/index.js'
-import { buildCatalog } from '../../pipeline-editor/business/catalog/index.js'
+  ensureNlChatBuilderAgent,
+  scanCustomAgents,
+  buildCatalog,
+} from './index.js'
 
 export class NlChatBusiness extends AbstractBusiness {
   async ensureBuilderAgent() {

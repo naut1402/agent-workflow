@@ -1,10 +1,18 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { AbstractController } from '../../core/http/AbstractController.js'
-import { resolveArtifact } from '../../core/contracts/sanitize.js'
+import { resolveArtifact } from './business/tasks/index.js'
 import { collectTasks, flowProfilePath, createTask, readState } from './business/tasks/index.js'
 import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask } from './business/tasks/state.js'
-import { loadPipelineConfig } from '../pipeline-editor/business/pipeline/index.js'
+import {
+  loadPipelineConfig,
+  submitJob,
+  submitApprovalJob,
+  sendTaskFeedback,
+  findSelectionRange,
+  extractLines,
+  listJobs,
+} from './business/index.js'
 import { emitAudit } from '../../core/log/store.js'
 import { TaskArchivePatch, TaskStatePatch } from './schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from './schemas/taskCreate.js'
@@ -12,14 +20,6 @@ import { RunStepRequest } from './schemas/runStep.js'
 import { TaskFeedbackRequest } from './schemas/taskFeedback.js'
 import { fetchGithubIssue } from './business/github/index.js'
 import { getTaskChatState } from './business/taskChat.js'
-import {
-  submitJob,
-  submitApprovalJob,
-  sendTaskFeedback,
-  findSelectionRange,
-  extractLines,
-  listJobs,
-} from '../runner/business/index.js'
 import {
   loadArtifactActions,
   loadArtifactActionsFile,

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { TaskArchivePatch, TaskStatePatch } from '../../schemas/task.js'
-import { loadPipelineConfig } from '../../../pipeline-editor/business/pipeline/index.js'
+import { loadPipelineConfig } from '../index.js'
 import { readState, flowProfilePath } from './index.js'
 
 export type HitlApplyResult =

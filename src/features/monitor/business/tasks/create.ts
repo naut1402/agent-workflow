@@ -2,11 +2,9 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { dumpYaml, readYamlSafe } from '../../../../core/lib/yamlLib.js'
-import { sanitiseProfileName } from '../../../../core/contracts/sanitize.js'
+import { sanitiseProfileName, profilesDir, loadPipelineConfig } from '../index.js'
 import { TASK_ID_PATTERN } from '../../schemas/taskCreate.js'
 import type { CreateTaskRequest } from '../../schemas/taskCreate.js'
-import { profilesDir } from '../../../agent-editor/business/paths.js'
-import { loadPipelineConfig } from '../../../pipeline-editor/business/pipeline/index.js'
 import { writeStateAtomic } from './state.js'
 
 export interface CreateTaskInput

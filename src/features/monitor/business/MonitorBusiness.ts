@@ -1,7 +1,7 @@
 import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
 import { collectTasks, flowProfilePath, createTask, readState } from './tasks/index.js'
 import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask } from './tasks/state.js'
-import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
+import { loadPipelineConfig } from './index.js'
 import { fetchGithubIssue } from './github/index.js'
 import { getTaskChatState } from './taskChat.js'
 import {

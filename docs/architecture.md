@@ -42,7 +42,7 @@ Backend là **một app Hono duy nhất** chạy trên **hai transport** khác n
 - `src/features/<name>/controller.ts` — HTTP handler (extends AbstractController); gọi `XxxBusiness`.
 - `src/features/<name>/business/` — domain + class `XxxBusiness` (extends AbstractBusiness).
 - `src/features/<name>/api.ts` — **chỉ** map route → `bind(...)` + `routeOrder` / `registerRoutes`. Feature mới có `api.ts` thì được nạp (không sửa registry tay).
-- `src/core/http/{respond,types,client}.ts` — helper response + type tầng HTTP server; `client.ts` là FE fetch (`apiGet`/`apiPost`/…).
+- `src/core/http/{responseHelper,types,client}.ts` — helper response (Node `json` + Hono `j`) + type tầng HTTP; `client.ts` là FE fetch (`apiGet`/`apiPost`/…).
 
 > **Lưu ý routing:** `/api/knowledge` **không** đi qua Hono — nó được `handleKnowledgeApi` (node-res thuần trong module knowledge) xử lý và **chặn trước** nhánh Hono ngay trong `createApiHandler`. Đừng mô tả "mọi route đều qua Hono". `createApiHandler` cũng là **điểm chốt duy nhất** ghi request log (fire-and-forget trong `finally`, không await vào response).
 
@@ -80,8 +80,8 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 
 - `src/core/contracts/schemas/appSettings.ts` — preference shell (theme/locale/notifications UI); core/plugins dùng.
 - Schema domain (task, log, autoscan, …) nằm ở `src/features/<feature>/schemas/` — Zod + `z.infer`, validate biên I/O của feature đó.
-- `src/core/contracts/{http,sanitize}.ts` — helper thuần (HTTP respond helper phía contracts nếu còn; sanitize).
-- `src/core/lib/` — `*Utils` (string/array/date) + `*Lib` (yaml/markdown/diff; `yamlLib` gồm frontmatter + `readYamlSafe`) + `fileHelper` (homeDir/safeReadDir/statSafe) + helper domain (phase, theme, …).
+- `src/core/lib/` — `*Utils` / `*Lib` / `fileHelper` (`resolvePathUnder`, …) + helper domain (phase, theme, …).
+- Sanitize / peer API gắn vào business hiện có và **re-export qua `business/index.ts`** khi feature khác cần dùng. Feature tiêu thụ chỉ import peer từ **index của chính nó**, không import thẳng `features/<khác>/business/...`.
 - `src/core/contracts/agentMarkdown.js` (**vẫn `.js`**) — round-trip agent-markdown, import bởi cả frontend và domain module backend.
 
 ---
@@ -103,7 +103,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 
 ### 3.1 API layer
 
-- **Server setup** (`src/api/`): `apiServer.ts` (`createApp` + `createApiHandler` + đăng ký feature routes), `devTeamApi.ts` (Vite plugin). Kernel HTTP (`types`, `AbstractController`, `respond`, FE `client`) ở `src/core/http/`. Không có barrel FE trong `src/api/`.
+- **Server setup** (`src/api/`): `apiServer.ts` (`createApp` + `createApiHandler` + đăng ký feature routes), `devTeamApi.ts` (Vite plugin). Kernel HTTP (`types`, `AbstractController`, `responseHelper`, FE `client`) ở `src/core/http/`. Không có barrel FE trong `src/api/`.
 - **FE fetch**: `src/core/http/client.ts` (`apiGet`/`apiPost`/…). Fetch theo consumer ở `src/features/<mode>/scripts/`. Hono route đăng ký ở `features/*/api.ts`.
 - Suy diễn trạng thái phase (`PHASES`, `phasesFromPipeline`, `phaseStatus`) nằm ở `src/core/lib/phase.ts`. Phase status **được suy từ sự tồn tại của artifact** + con trỏ live — phản chiếu đúng quy tắc của orchestrator (status không bao giờ được encode, chỉ suy ra).
 

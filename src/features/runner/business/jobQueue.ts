@@ -13,8 +13,7 @@ import { reapOrphanedRunningJobs } from './pidReaper.js'
 import { mintSessionId } from './sessionCapture.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, type SessionMode } from './sessionLedger.js'
 import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
-import { advanceStepOnJobSuccess } from '../../monitor/business/tasks/state.js'
-import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
+import { advanceStepOnJobSuccess, loadPipelineConfig } from './index.js'
 
 /** Cap on the stdout persisted for NL chat jobs — a chat reply/draft is small. */
 const NL_CHAT_STDOUT_LIMIT = 64 * 1024

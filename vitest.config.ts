@@ -44,7 +44,7 @@ export default defineConfig({
       exclude: [
         'src/api/apiServer.ts',
         'src/api/devTeamApi.ts',
-        'src/core/http/respond.ts',
+        'src/core/http/responseHelper.ts',
         'src/core/http/types.ts',
         'src/core/http/AbstractController.ts',
         'src/core/registry.ts',

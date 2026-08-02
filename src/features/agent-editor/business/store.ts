@@ -2,8 +2,15 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { parseAgentMarkdown } from '../../../core/contracts/agentMarkdown.js'
 import { safeReadDir } from '../../../core/lib/fileHelper.js'
-import { sanitiseAgentName } from '../../../core/contracts/sanitize.js'
 import { customAgentsDir } from './paths.js'
+
+/** Sanitize an agent / template name (stricter charset than profile names). */
+export function sanitiseAgentName(name: unknown): string | null {
+  if (typeof name !== 'string' || !name.trim()) return null
+  if (/[\\/\0]/.test(name)) return null
+  const clean = name.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
+  return clean || null
+}
 
 /** Catalog-shaped listing of dashboard-created custom agents (for buildCatalog). */
 export async function scanCustomAgents(root: string): Promise<any[]> {

@@ -1,8 +1,15 @@
-import { isPrivateHostname } from '../../../core/contracts/sanitize.js'
-
 export interface FetchUrlSafeOptions {
   /** Extra request headers (e.g. API Accept / Authorization). */
   headers?: Record<string, string>
+}
+
+/** True for hostnames that resolve to private / loopback ranges (SSRF guard). */
+export function isPrivateHostname(hostname: string): boolean {
+  const h = (hostname || '').toLowerCase()
+  if (h === 'localhost' || h.endsWith('.local')) return true
+  if (/^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h)) return true
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true
+  return false
 }
 
 /**

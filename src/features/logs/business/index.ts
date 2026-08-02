@@ -21,6 +21,10 @@ export class LogsBusiness extends AbstractBusiness {
   }
 }
 
+/** Peers from runner (owned by runner feature). */
+export { loadJob, listJobs } from '../../runner/business/jobQueue.js'
+export type { JobRecord, JobStatus } from '../../runner/business/types.js'
+
 export { readLogs }
 export { emitAudit, appendRequestLog } from '../../../core/log/store.js'
-export { readJobLog, readJobLogDelta, readTaskJobLogDelta }
+export { readJobLog, readJobLogDelta, readTaskJobLogDelta, sanitiseJobId } from './jobLog.js'

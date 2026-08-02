@@ -12,7 +12,7 @@ describe('devTeamApi module graph', () => {
 
   test('shared helpers are reachable from the server side', async () => {
     const { parseFrontmatter } = await import('../../../src/core/lib/yamlLib')
-    const { isPrivateHostname } = await import('../../../src/core/contracts/sanitize')
+    const { isPrivateHostname } = await import('../../../src/features/agent-editor/business/fetch.js')
     expect(parseFrontmatter('---\nname: x\n---')).toEqual({ name: 'x' })
     expect(isPrivateHostname('127.0.0.1')).toBe(true)
   })

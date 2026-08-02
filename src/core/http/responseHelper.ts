@@ -1,8 +1,17 @@
 import type { Context } from 'hono'
+import type { ServerResponse } from 'node:http'
 import type { HonoEnv } from './types.js'
 
-// Mirror the legacy `json()` helper (shared/http.ts) on the Hono side:
-// JSON body + `Cache-Control: no-store` (the dashboard polls; never cache).
+/** Write a JSON response with no-store caching (Node http transport). */
+export function json(res: ServerResponse, status: number, body: unknown): void {
+  const payload = JSON.stringify(body)
+  res.statusCode = status
+  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-store')
+  res.end(payload)
+}
+
+// Hono side: JSON body + `Cache-Control: no-store` (the dashboard polls; never cache).
 export function j(c: Context<HonoEnv>, status: number, body: unknown): Response {
   c.header('Cache-Control', 'no-store')
   return c.json(body as any, status as any)

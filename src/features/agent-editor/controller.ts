@@ -3,7 +3,6 @@ import path from 'node:path'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { parseAgentMarkdown, compileAgentMarkdown } from '../../core/contracts/agentMarkdown.js'
 import { safeReadDir } from '../../core/lib/fileHelper.js'
-import { sanitiseProfileName, sanitiseAgentName } from '../../core/contracts/sanitize.js'
 import { emitAudit } from '../../core/log/store.js'
 import {
   customAgentsDir,
@@ -14,6 +13,8 @@ import {
   fetchUrlSafe,
   generateDraftFromNl,
   ensureDefaultTemplate,
+  sanitiseAgentName,
+  sanitiseProfileName,
 } from './business/index.js'
 
 export class AgentEditorController extends AbstractController {

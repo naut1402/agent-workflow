@@ -2,7 +2,7 @@ import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
 import { buildCatalog, parseCatalogAgentId, resolveCatalogAgentPath } from './catalog/index.js'
 import { buildRules } from './rules/index.js'
 import { loadPipelineConfig, knownArtifactsFor } from './pipeline/index.js'
-import { profilesDir, scanCustomAgents, customAgentsDir } from '../../agent-editor/business/index.js'
+import { profilesDir, scanCustomAgents, customAgentsDir } from './index.js'
 
 export class PipelineEditorBusiness extends AbstractBusiness {
   async getCatalog() {

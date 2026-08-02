@@ -59,3 +59,14 @@ export function knownArtifactsFor(cfg: any): string[] {
   }
   return [...set]
 }
+
+/**
+ * Sanitize names that become pipeline / flow profile file stems.
+ * Rejects path separators and null bytes; strips disallowed chars; caps at 64.
+ */
+export function sanitiseProfileName(name: unknown): string | null {
+  if (typeof name !== 'string' || !name.trim()) return null
+  if (/[\\/\0]/.test(name)) return null
+  const clean = name.trim().replace(/[^a-zA-Z0-9_\-. ]/g, '').slice(0, 64)
+  return clean || null
+}

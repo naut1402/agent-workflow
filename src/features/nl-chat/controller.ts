@@ -1,15 +1,16 @@
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { StartNlChatRequest, NlChatMessageRequest } from './schemas/nlChat.js'
 import { emitAudit } from '../../core/log/store.js'
-import { ensureNlChatBuilderAgent, scanCustomAgents } from '../agent-editor/business/index.js'
-import { buildCatalog } from '../pipeline-editor/business/catalog/index.js'
 import {
   startNlChatSession,
   continueNlChatSession,
   getNlChatTurn,
   cancelNlChatSession,
   isNlChatSessionId,
-} from './business/nlChatSession.js'
+  ensureNlChatBuilderAgent,
+  scanCustomAgents,
+  buildCatalog,
+} from './business/index.js'
 
 /**
  * NL chat surface (F0012): a floating chat that generates a Task / Pipeline /

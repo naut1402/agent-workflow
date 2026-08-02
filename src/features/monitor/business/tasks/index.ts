@@ -1,7 +1,17 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { statSafe } from '../../../../core/lib/fileHelper.js'
-import { knownArtifactsFor, loadPipelineConfig } from '../../../pipeline-editor/business/pipeline/index.js'
+import { resolvePathUnder, statSafe } from '../../../../core/lib/fileHelper.js'
+import { knownArtifactsFor, loadPipelineConfig } from '../index.js'
+
+/**
+ * Resolve an artifact path under `<root>/tasks/<id>/<name>`.
+ * Returns null if the path escapes the task directory (or root).
+ */
+export function resolveArtifact(root: string, id: string, name: string): string | null {
+  const taskDir = resolvePathUnder(root, 'tasks', id)
+  if (!taskDir) return null
+  return resolvePathUnder(taskDir, name)
+}
 
 // pipeline-export.json is machine-readable only — excluded from the UI artifact list.
 export const MACHINE_FILES = new Set(['pipeline-export.json'])

@@ -1,5 +1,4 @@
-import { fetchUrlSafe } from '../../../agent-editor/business/fetch.js'
-import { loadGithubTokensConfig } from '../../../settings/business/autoscan/config.js'
+import { fetchUrlSafe, loadGithubTokensConfig } from '../index.js'
 import { resolveGithubTokenForRepo } from '../../../settings/schemas/githubTokens.js'
 
 export interface GithubIssuePreview {
