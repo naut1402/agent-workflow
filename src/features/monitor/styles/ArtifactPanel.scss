@@ -1,10 +1,11 @@
-/* Artifact viewer */
+/* Artifact viewer — không tự cuộn; chỉ .monitor-content cuộn trang */
 .art-view {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 18px 22px;
   min-height: 200px;
+  overflow: visible;
 }
 .art-empty { color: var(--muted); }
 
@@ -122,11 +123,10 @@
 .art-section-editor { min-height: 120px; margin: 8px 14px 14px; width: calc(100% - 28px); }
 .art-editor {
   width: 100%;
-  min-height: 320px;
+  min-height: 120px;
   font-family: ui-monospace, monospace;
   font-size: 13px;
   line-height: 1.5;
-  resize: vertical;
 }
 .art-message { font-size: 12px; color: var(--waiting); margin: 0 0 10px; }
 .art-warning { font-size: 12px; color: var(--waiting); margin: 0 0 10px; }

@@ -28,6 +28,7 @@ const {
   sendMessage,
   confirm,
   cancel,
+  reset,
   findInvalidPipelineAgentRefs,
 } = useNlChatSession({ getProjectId: () => props.projectId ?? undefined })
 

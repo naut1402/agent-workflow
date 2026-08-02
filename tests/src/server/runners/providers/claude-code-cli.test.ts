@@ -232,6 +232,90 @@ describe('createLocalConsoleProvider — job log structure', () => {
     }
   })
 
+  // #177: cursor-cli used to put the prompt in argv; on Windows shell:true
+  // that truncates to the first token ("##"), so nl-chat-builder only saw
+  // "## Agent instructions". Prompt must go on stdin; --resume must be argv.
+  test('cursor parse-json: prompt on stdin, --resume in argv, result extracted from JSON', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
+    try {
+      const fakeCli = path.join(home, 'fake-cursor.mjs')
+      fs.writeFileSync(
+        fakeCli,
+        [
+          "process.stdout.write('ARGV:' + JSON.stringify(process.argv.slice(2)) + '\\n')",
+          "let data = ''",
+          "process.stdin.setEncoding('utf8')",
+          "process.stdin.on('data', (c) => { data += c })",
+          "process.stdin.on('end', () => {",
+          "  process.stdout.write('STDIN_START\\n' + data + '\\nSTDIN_END\\n')",
+          "  process.stdout.write(JSON.stringify({",
+          "    type: 'result', subtype: 'success', is_error: false,",
+          "    result: '===DRAFT_READY===\\n```json\\n{\"taskId\":\"t1\",\"prompt\":\"p\"}\\n```',",
+          "    session_id: 'captured-sess',",
+          "  }) + '\\n')",
+          '})',
+          '',
+        ].join('\n'),
+        'utf8',
+      )
+
+      const multiLinePrompt =
+        '## Agent instructions\n\nBạn là nl-chat-builder.\n\n## Task\n\nNgười dùng (lượt 1): tạo task cập nhật deploy'
+
+      const provider = createLocalConsoleProvider({
+        providerId: 'cursor-cli',
+        defaultCliPath: process.execPath,
+        claudeStyleArgs: false,
+        sessionCapture: 'parse-json',
+      })
+
+      let output = ''
+      const result = await provider.execute(
+        {
+          jobId: 'job-cursor-stdin',
+          resolvedAgent,
+          userPrompt: multiLinePrompt,
+          workspace,
+          produces: [],
+          timeoutMs: 10000,
+          resumeSessionId: 'prev-sess-99',
+        },
+        { cliPath: process.execPath, flags: [fakeCli] },
+        credential,
+        (chunk) => {
+          output += chunk
+        },
+      )
+
+      expect(result.ok).toBe(true)
+      expect(result.exitCode).toBe(0)
+      expect(result.sessionId).toBe('captured-sess')
+      expect(result.stdout).toContain('===DRAFT_READY===')
+      expect(result.stdout).toContain('"taskId":"t1"')
+
+      expect(output).toContain(multiLinePrompt)
+      expect(output).toContain('## Agent instructions')
+      expect(output).toContain('Người dùng (lượt 1): tạo task cập nhật deploy')
+
+      const argvLine = output.split('\n').find((l) => l.startsWith('ARGV:'))
+      expect(argvLine).toBeTruthy()
+      const argv = JSON.parse(argvLine!.slice('ARGV:'.length)) as string[]
+      expect(argv).toContain('-p')
+      expect(argv).toContain('--output-format')
+      expect(argv).toContain('json')
+      expect(argv).toContain('--trust')
+      expect(argv).toContain('--resume')
+      expect(argv).toContain('prev-sess-99')
+      expect(argv.some((a) => a === multiLinePrompt)).toBe(false)
+      expect(argv.some((a) => a.includes('Agent instructions'))).toBe(false)
+      expect(argv.some((a) => a.includes('nl-chat-builder'))).toBe(false)
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
   test('failure: result section records exitCode + error from stderr', async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))

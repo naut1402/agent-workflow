@@ -516,7 +516,7 @@ export class MonitorController extends AbstractController {
     }
 
     const result = await repairTaskState(root, id)
-    if (!result.ok) return this.json(result.status, { error: result.error, taskId: id })
+    if ('error' in result) return this.json(result.status, { error: result.error, taskId: id })
 
     emitAudit({
       op: 'update',

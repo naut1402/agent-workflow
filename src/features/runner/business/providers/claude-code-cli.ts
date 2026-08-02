@@ -2,7 +2,7 @@ import { appendTextFileSync, existsSync, joinPath } from '../../../../core/lib/f
 import { spawn } from 'node:child_process'
 import { resolveSecretRef } from '../credentials.js'
 import {
-  buildCursorJsonArgs,
+  buildCursorJsonInvocation,
   parseCursorJsonOutput,
   prepareSessionInvocation,
   type SessionCaptureMode,
@@ -110,6 +110,10 @@ function describePayload(opts: {
   cliPath: string
   flags: string[]
   claudeStyle: boolean
+  /** Final argv actually spawned (flags only when prompt goes via stdin). */
+  argv?: string[]
+  /** Prompt piped on stdin (Claude + Cursor parse-json) — never shown in CLI line. */
+  promptViaStdin?: boolean
   allowedTools?: unknown
   dangerouslySkipPermissions?: unknown
   sessionId?: string
@@ -117,20 +121,26 @@ function describePayload(opts: {
   prompt: string
   metadata?: Record<string, unknown>
 }): string {
-  const cli = [opts.cliPath, ...opts.flags]
-  let promptNote: string
-  if (opts.claudeStyle) {
-    // Mirror buildClaudeInvocation: `-p` + flags in argv; the prompt itself is
-    // piped to stdin (not an argv element), so it is NOT shown in the CLI line.
-    cli.push('-p')
-    if (opts.allowedTools) cli.push('--allowedTools', String(opts.allowedTools))
-    if (opts.dangerouslySkipPermissions) cli.push('--dangerously-skip-permissions')
-    if (opts.sessionId) cli.push('--session-id', opts.sessionId)
-    if (opts.resumeSessionId) cli.push('--resume', opts.resumeSessionId)
+  const cli = [opts.cliPath]
+  let promptNote = ''
+  if (opts.promptViaStdin) {
+    // Argv already holds flags only; prompt is below under "--- Prompt ---".
+    if (opts.argv) {
+      cli.push(...opts.argv)
+    } else if (opts.claudeStyle) {
+      // Fallback mirror when caller did not pass computed argv (legacy path).
+      cli.push('-p')
+      if (opts.allowedTools) cli.push('--allowedTools', String(opts.allowedTools))
+      if (opts.dangerouslySkipPermissions) cli.push('--dangerously-skip-permissions')
+      if (opts.sessionId) cli.push('--session-id', opts.sessionId)
+      if (opts.resumeSessionId) cli.push('--resume', opts.resumeSessionId)
+    } else {
+      cli.push(...opts.flags)
+    }
     promptNote = '(prompt gửi qua stdin — xem "--- Prompt ---" bên dưới)'
   } else {
-    cli.push('<prompt — xem "--- Prompt ---" bên dưới>')
-    promptNote = ''
+    // Keep the (potentially huge) prompt out of the CLI summary line.
+    cli.push(...opts.flags, '<prompt — xem "--- Prompt ---" bên dưới>')
   }
   const agent = opts.resolvedAgent
   const agentLabel = agent.ref
@@ -324,7 +334,16 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
         args = invocation.args
         stdinInput = invocation.stdinInput
       } else if (sessionCapture === 'parse-json') {
-        args = buildCursorJsonArgs(flags, prompt)
+        // Same Windows argv-splitting class as Claude: prompt must not be an
+        // argv element under shell:true. Also pass --resume so multi-turn NL
+        // chat (and approval feedback) keeps the captured session_id.
+        const invocation = buildCursorJsonInvocation({
+          flags,
+          prompt,
+          resumeSessionId: sessionPlan.resumeSessionId,
+        })
+        args = invocation.args
+        stdinInput = invocation.stdinInput
       } else {
         args = [...flags, prompt]
       }
@@ -346,6 +365,8 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
           cliPath,
           flags,
           claudeStyle: useClaudeStyle,
+          argv: args,
+          promptViaStdin: stdinInput != null,
           allowedTools: runnerConfig.allowedTools,
           dangerouslySkipPermissions: skipPermissions,
           sessionId: sessionPlan.sessionId,
