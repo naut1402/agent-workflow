@@ -2,7 +2,7 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { describe, expect, it } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { defineComponent, h, reactive } from 'vue'
-import { emptyDraft } from '@shared/agentMarkdown.js'
+import { emptyDraft } from '@/features/agent-editor/business/agentMarkdown.js'
 import AgentSectionEditor from '@/features/agent-editor/components/AgentSectionEditor.vue'
 
 /** Lightweight stub — avoid mounting Toast UI Editor in jsdom. */

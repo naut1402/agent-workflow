@@ -584,7 +584,7 @@ flowchart TB
   subgraph core["src/core — ổn định"]
     http["http — AbstractController, client"]
     bizAbs["business — AbstractBusiness"]
-    contracts["contracts — schemas shell, agentMarkdown"]
+    contracts["contracts — schemas shell"]
     lib["lib — *Utils / *Lib / fileHelper"]
     log["log — driver + emit"]
     registry["registry"]
@@ -595,6 +595,7 @@ flowchart TB
     fCtrl["controller.ts"]
     fBiz["business/ — theo nghiệp vụ + index peer"]
     fUi["components / scripts / styles / locales / schemas"]
+    agentMd["agent-editor: agentMarkdown.js"]
   end
 
   main --> plugins
@@ -606,6 +607,7 @@ flowchart TB
   fBiz --> bizAbs
   fBiz --> contracts
   fBiz --> lib
+  fBiz -.->|own capability| agentMd
   api --> log
   api --> registry
 ```

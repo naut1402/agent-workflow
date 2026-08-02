@@ -59,7 +59,7 @@ Helper nhỏ (sanitize tên, parse một format) **gắn vào module đang xử 
 
 1. Chỉ **`features/<A>/business/index.ts`** được `import` từ `features/<B>/business/**`.
 2. Trong feature A: controller và `business/*.ts` khác import peer qua `./business/index.js` (hoặc `./index.js` trong cùng `business/`).
-3. **Không** import sâu `../../other-feature/business/foo.js` từ controller hay module nội bộ.
+3. **Không** import sâu `../../other-feature/business/foo.js` từ controller hay module nội bộ — **trừ** khi đi qua index tạo **vòng barrel** (vd `agent-editor/business/index` re-export pipeline → pipeline/controller không được import index đó; import sâu `agentMarkdown.js` thay thế).
 4. Tránh vòng barrel↔barrel: khi cần, index A re-export từ **module sâu** của B (không bắt buộc đi qua `B/business/index` nếu tạo cycle).
 
 Sanitize / rule chỉ thuộc một feature: đặt trong module sở hữu; feature khác dùng qua index (của mình re-export hoặc của peer — theo quy tắc trên).

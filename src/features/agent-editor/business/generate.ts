@@ -1,4 +1,4 @@
-import { emptyDraft, heuristicDraftFromDescription } from '../../../core/contracts/agentMarkdown.js'
+import { emptyDraft, heuristicDraftFromDescription } from './agentMarkdown.js'
 
 /**
  * Generate an AgentDraft from a natural-language description. Uses the Anthropic

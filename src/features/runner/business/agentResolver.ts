@@ -4,7 +4,7 @@ import {
   parseAgentMarkdown,
   ensureSectionOrder,
   getSectionTitle,
-} from '../../../core/contracts/agentMarkdown.js'
+} from '../../agent-editor/business/agentMarkdown.js'
 import type { ResolvedAgent } from './types.js'
 
 function homeDir(): string {
@@ -103,7 +103,7 @@ async function resolveAgentFilePath(
 }
 
 function buildSystemPrompt(draft: any): string {
-  // `ensureSectionOrder` (shared/agentMarkdown.js) already appends 'unclassified'
+  // `ensureSectionOrder` (agent-editor/business/agentMarkdown) already appends 'unclassified'
   // to the order whenever it has content — it's how the Agent Editor form shows
   // a trailing "Chưa phân loại" box for headings it couldn't classify. Rendering
   // it again here after the loop used to duplicate the whole catch-all block

@@ -5,7 +5,7 @@ import {
   FIXED_SECTION_KEYS,
   getSectionTitle,
   emptyDraft,
-} from '../../../core/contracts/agentMarkdown.js'
+} from '../business/agentMarkdown.js'
 import { slugifySectionKey } from '../../../core/lib/stringUtils'
 import { useSortable } from '../../../core/composables/useSortable'
 import { saveAgentTemplate } from '../scripts/AgentSectionEditorApi'

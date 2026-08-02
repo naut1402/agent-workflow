@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { AbstractController } from '../../core/http/AbstractController.js'
-import { parseAgentMarkdown, compileAgentMarkdown } from '../../core/contracts/agentMarkdown.js'
+import { parseAgentMarkdown, compileAgentMarkdown } from './business/index.js'
 import { safeReadDir } from '../../core/lib/fileHelper.js'
 import { emitAudit } from '../../core/log/store.js'
 import {

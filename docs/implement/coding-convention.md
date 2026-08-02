@@ -6,7 +6,7 @@ Quy ước code **hiện hành** (module, type, FE, i18n). Tổ chức feature/b
 
 ## 1. Ngôn ngữ & module
 
-ESM thuần (`"type": "module"`); server import core Node có tiền tố `node:`. Code mới/migrate dùng TypeScript — migration TS cơ bản đã xong, chỉ còn `src/core/contracts/agentMarkdown.js` (và `src/runner-cli.mjs`) chưa chuyển nên `tsconfig.json` vẫn giữ `allowJs: true`.
+ESM thuần (`"type": "module"`); server import core Node có tiền tố `node:`. Code mới/migrate dùng TypeScript — migration TS cơ bản đã xong, chỉ còn `src/features/agent-editor/business/agentMarkdown.js` (và `src/runner-cli.mjs`) chưa chuyển nên `tsconfig.json` vẫn giữ `allowJs: true`.
 
 `tsconfig.json` hiện **chưa bật strict** (`strict: false`, `checkJs: false` toàn cục) — hướng đi là bật `strict` dần theo từng module khi module đó đã có type vững, đừng coi cả repo đã strict.
 

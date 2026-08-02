@@ -6,7 +6,7 @@ Tài liệu này mô tả **kiến trúc chi tiết** của `dev-team-dashboard`
 - Hub agent + bất biến: [`../AGENTS.md`](../AGENTS.md).
 - Coding / tổ chức feature: [`implement/coding-convention.md`](implement/coding-convention.md), [`implement/feature-organization-rule.md`](implement/feature-organization-rule.md).
 
-> Tài liệu bám **cấu trúc thật** của nhánh hiện tại. Ngoại lệ đuôi file: `src/core/contracts/agentMarkdown.js` và `src/runner-cli.mjs` cố ý **chưa** chuyển `.ts` — ghi đúng đuôi.
+> Tài liệu bám **cấu trúc thật** của nhánh hiện tại. Ngoại lệ đuôi file: `src/features/agent-editor/business/agentMarkdown.js` và `src/runner-cli.mjs` cố ý **chưa** chuyển `.ts` — ghi đúng đuôi.
 
 ---
 
@@ -84,7 +84,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `contracts
 - Schema domain (task, log, autoscan, …) nằm ở `src/features/<feature>/schemas/` — Zod + `z.infer`, validate biên I/O của feature đó.
 - `src/core/lib/` — `*Utils` / `*Lib` / `fileHelper` (`resolvePathUnder`, …) + helper domain (phase, theme, …).
 - Sanitize / peer API gắn vào business hiện có và **re-export qua `business/index.ts`** khi feature khác cần dùng. Feature tiêu thụ chỉ import peer từ **index của chính nó**, không import thẳng `features/<khác>/business/...`.
-- `src/core/contracts/agentMarkdown.js` (**vẫn `.js`**) — round-trip agent-markdown, import bởi cả frontend và domain module backend.
+- Round-trip agent markdown: `src/features/agent-editor/business/agentMarkdown.js` (**vẫn `.js`**) — sở hữu agent-editor; FE/cùng feature và peer (runner, pipeline-editor) import module này. Peer nên import **sâu** `agentMarkdown.js` (không qua `agent-editor/business/index`) để tránh cycle với re-export `sanitiseProfileName` từ pipeline-editor.
 
 ---
 

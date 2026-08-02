@@ -50,7 +50,7 @@ agent-workflow/
 └── .claude/
 ```
 
-Ngoại lệ cố ý còn `.js`: `src/core/contracts/agentMarkdown.js`, `src/runner-cli.mjs`. Tooling: `vite`/`vitest`/`playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
+Ngoại lệ cố ý còn `.js`: `src/features/agent-editor/business/agentMarkdown.js`, `src/runner-cli.mjs`. Tooling: `vite`/`vitest`/`playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
 
 ---
 

@@ -1,4 +1,4 @@
-import { parseAgentMarkdown, compileAgentMarkdown, emptyDraft } from '../../../core/contracts/agentMarkdown.js'
+import { parseAgentMarkdown, compileAgentMarkdown, emptyDraft } from './agentMarkdown.js'
 import {
   access,
   dirname,

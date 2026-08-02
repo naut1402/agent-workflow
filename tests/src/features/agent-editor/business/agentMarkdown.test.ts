@@ -1,11 +1,10 @@
-import { describe, expect, it } from 'vitest'
-// agentMarkdown is still plain JS (TS conversion deferred to the strict phase);
-// it relocated to shared/ in this module so backend + frontend share one home.
+import { describe, expect, it } from 'bun:test'
+// agentMarkdown is still plain JS (TS conversion deferred to the strict phase).
 import {
   compileAgentMarkdown,
   emptyDraft,
   parseAgentMarkdown,
-} from '@shared/agentMarkdown.js'
+} from '../../../../../src/features/agent-editor/business/agentMarkdown.js'
 
 describe('agentMarkdown round-trip', () => {
   it('compile → parse preserves frontmatter + section content', () => {
