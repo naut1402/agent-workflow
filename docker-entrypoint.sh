@@ -46,6 +46,29 @@ ensure_project_dev_team_writable() {
 
 ensure_project_dev_team_writable
 
+# ── Seed bundled dev-agent-teams plugin (agents/skills) ─────────────────────
+# resolveAgent('dev-agent-teams:investigator') looks under
+# ~/.claude/plugins/cache/<market>/dev-agent-teams/<ver>/agents/*.md
+# Host mount (runners overlay) wins when present; otherwise use image bundle.
+seed_bundled_plugin() {
+  src=/opt/bundled-plugins/dev-agent-teams
+  dest_root=/home/dashboard/.claude/plugins/cache/bundled/dev-agent-teams/0.0.0
+  if [ ! -d "$src/agents" ]; then
+    return 0
+  fi
+  # Prefer host plugin cache when runners overlay already synced plugins.
+  if [ -e /home/dashboard/.claude/plugins/cache ] \
+    && find /home/dashboard/.claude/plugins/cache -path '*/dev-agent-teams/*/agents/investigator.md' 2>/dev/null | grep -q .
+  then
+    return 0
+  fi
+  # Writable seed for Claude CLI skill discovery. resolveAgent also reads
+  # /opt/bundled-plugins directly when cache seed fails (ro symlink).
+  mkdir -p "$dest_root" 2>/dev/null || return 0
+  cp -a "$src/." "$dest_root/" 2>/dev/null || return 0
+  chown -R dashboard:dashboard /home/dashboard/.claude/plugins 2>/dev/null || true
+}
+
 # ── Claude / Cursor auth from host (ro mounts under /mnt) ──────────────────
 # Official Claude Linux credential file is ~/.claude/.credentials.json (dot).
 # Host files are often mode 0600 / other uid — copy into HOME so uid 1001 can
@@ -118,6 +141,8 @@ fi
 if [ -d /mnt/host-cursor ]; then
   sync_cursor_auth
 fi
+
+seed_bundled_plugin
 
 export HOME=/home/dashboard
 export USER=dashboard

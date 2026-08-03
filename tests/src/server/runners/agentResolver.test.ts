@@ -78,6 +78,36 @@ describe('resolveAgent — blank ref (ad-hoc, no agent file)', () => {
   })
 })
 
+describe('resolveAgent — bundled plugin fallback', () => {
+  test('resolves plugin ref from DEV_TEAM_BUNDLED_PLUGINS when cache misses', async () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-agent-project-'))
+    const bundleRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-bundled-'))
+    const prevBundle = process.env.DEV_TEAM_BUNDLED_PLUGINS
+    try {
+      const agentsDir = path.join(bundleRoot, 'zzz-test-bundle', 'agents')
+      fs.mkdirSync(agentsDir, { recursive: true })
+      fs.writeFileSync(
+        path.join(agentsDir, 'hello.md'),
+        `---\nname: hello\ndescription: bundled\nskills: []\n---\n\n# Hello\n\n## Vai trò\n\nbundle role\n`,
+        'utf8',
+      )
+      process.env.DEV_TEAM_BUNDLED_PLUGINS = bundleRoot
+      const resolved = await resolveAgent('plugin:zzz-test-bundle:hello', {
+        projectRoot,
+        devTeamRoot: projectRoot,
+      })
+      expect(resolved.name).toBe('hello')
+      expect(resolved.systemPrompt).toContain('bundle role')
+      expect(resolved.agentFilePath).toBe(path.join(agentsDir, 'hello.md'))
+    } finally {
+      if (prevBundle === undefined) delete process.env.DEV_TEAM_BUNDLED_PLUGINS
+      else process.env.DEV_TEAM_BUNDLED_PLUGINS = prevBundle
+      fs.rmSync(projectRoot, { recursive: true, force: true })
+      fs.rmSync(bundleRoot, { recursive: true, force: true })
+    }
+  })
+})
+
 function countOccurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1
 }

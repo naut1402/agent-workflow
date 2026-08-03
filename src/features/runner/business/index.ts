@@ -35,7 +35,7 @@ export {
   listProviderCatalog,
   scanLocalCommands,
 } from './connections.js'
-export { resolveAgent, resolveAgentFilePath, normalizeAgentRef } from './agentResolver.js'
+export { resolveAgent, resolveAgentFilePath, normalizeAgentRef, describeAgentSearchPaths } from './agentResolver.js'
 export { getProvider, listProviderIds, registerProvider } from './registry.js'
 export {
   submitJob,

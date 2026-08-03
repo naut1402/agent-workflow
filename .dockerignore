@@ -20,8 +20,10 @@ test-results
 .vite
 docs/todo
 
-# docs (not needed inside image)
+# docs (not needed inside image) — keep bundled plugin agent/skill markdown
 *.md
+!docker/bundled-plugins/
+!docker/bundled-plugins/**
 
 # misc
 .env

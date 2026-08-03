@@ -142,6 +142,8 @@ Container chạy user **`dashboard` (uid 1001)** — Claude CLI từ chối `--d
 
 Entrypoint (root) tạo/chown chỉ cây **`.dev-team-agent/`** dưới `/data/project` (và `DEV_TEAM_ROOT`) rồi mới drop xuống uid 1001 — tránh `EACCES` khi ghi `custom-agents/`, knowledge, … trên bind mount host (thường thuộc root/user khác). Không `chown` toàn bộ source tree project.
 
+**Plugin agents (`dev-agent-teams:investigator`, …):** image kèm bundle tại `/opt/bundled-plugins/dev-agent-teams` (fallback khi không mount host). Ưu tiên `~/.claude/plugins/cache` từ host qua `docker-compose.runners.yml` (`HOST_HOME`). Không có file agent → job fail `agent file not found for ref: …`.
+
 **Lưu ý mount:** `DEV_TEAM_PROJECT_PATH` nên là thư mục project có sẵn `.dev-team-agent/` (compose map → `/data/project`). Nếu mount cha chứa nhiều repo (vd `/data/project/agent-workflow/.dev-team-agent`), đăng ký project qua registry/autoscan; request không có `?project=` dùng **registry default**, không ép ghi vào `DEV_TEAM_ROOT` khi đã có project.
 
 **Lưu ý:** Repo này **không** đóng gói orchestrator — chỉ dashboard quan sát project đã mount.

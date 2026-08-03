@@ -20,6 +20,7 @@ ENV NODE_ENV=production \
     DEV_TEAM_DASHBOARD_PORT=5174 \
     DEV_TEAM_DASHBOARD_HOME=/data/dashboard-home \
     DEV_TEAM_ROOT=/data/project/.dev-team-agent \
+    DEV_TEAM_BUNDLED_PLUGINS=/opt/bundled-plugins \
     HOME=/home/dashboard \
     PATH="/home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
@@ -48,9 +49,11 @@ RUN bun install --frozen-lockfile --production
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src ./src
 COPY --from=build /app/tsconfig.json ./tsconfig.json
+# Fallback plugin agents/skills when host ~/.claude/plugins is not mounted.
+COPY docker/bundled-plugins/dev-agent-teams /opt/bundled-plugins/dev-agent-teams
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
-  && chown -R dashboard:dashboard /app /data /home/dashboard
+  && chown -R dashboard:dashboard /app /data /home/dashboard /opt/bundled-plugins
 
 EXPOSE 5174
 

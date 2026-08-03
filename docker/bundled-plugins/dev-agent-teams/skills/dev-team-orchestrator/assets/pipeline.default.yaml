@@ -1,0 +1,93 @@
+# Default pipeline config cho dev-team-orchestrator.
+#
+# NGUỒN DUY NHẤT (single source of truth) cho flow mặc định 6-agent:
+#   - orchestrator dùng làm built-in fallback khi không có pipeline.yaml nào
+#   - /init-dev-pipeline copy file này ra .dev-team-agent/pipeline.yaml
+#   - /dev-dashboard (setup.mjs bootstrap) scaffold file này khi chuẩn bị state project
+#
+# Orchestrator merge theo thứ tự: file này -> .dev-team-agent/pipeline.yaml (global)
+# -> .dev-team-agent/tasks/<id>/pipeline.yaml (per-task patch theo step.id).
+# Sửa thứ tự `steps`, `agent`, `skills`, `rule_category`, `hitl` để tuỳ biến.
+version: 1
+
+defaults:
+  review_retry_max: 2     # số vòng retry tối đa cho gate có `retry`
+  auto_review: false      # true = tự chạy doc-reviewer tại gate optional_doc_review
+  export_json: false      # true = ghi pipeline-export.json sau mỗi phase
+
+steps:
+  - id: investigator            # = current_phase trong state
+    name: Investigate
+    agent: dev-agent-teams:investigator
+    skills: [survey-codebase]   # skill orchestrator nhắc agent áp dụng
+    rule_category: doc-writing  # section trong project-rules.md
+    rule_required: true         # true = thiếu rule thì DỪNG
+    produces: [investigate.md]  # artifact bước này sinh ra
+    knowledge_inputs: []        # optional: [project/slug, system/foo] — file .md trong .dev-team-agent/knowledge/
+    export_key: investigator    # key trong pipeline-export.json
+    hitl:
+      mode: manual              # manual | auto | none
+      gate_id: hitl-1
+      optional_doc_review: true # mời chạy doc-reviewer sau khi duyệt
+
+  - id: designer
+    name: Design
+    agent: dev-agent-teams:designer
+    skills: [write-design]
+    rule_category: doc-writing
+    rule_required: true
+    produces: [design.md]
+    export_key: designer
+    hitl:
+      mode: manual
+      gate_id: hitl-2
+      optional_doc_review: true
+
+  - id: implementer
+    name: Implement
+    agent: dev-agent-teams:implementer
+    skills: [coding-rules, run-phpstan]
+    rule_category: coding
+    rule_required: false             # thiếu rule thì fallback
+    rule_fallback_skill: coding-rules
+    produces: [phpstan.md]
+    export_key: implementer
+    hitl:
+      mode: none
+
+  - id: reviewer
+    name: Review
+    agent: dev-agent-teams:reviewer
+    skills: [coding-rules, write-tests]
+    rule_category: [coding, test]
+    rule_required: false
+    rule_fallback_skill: coding-rules
+    produces: [review.md, test-spec.md]
+    export_key: reviewer
+    hitl:
+      mode: manual
+      gate_id: hitl-3
+      blocking: true               # bắt buộc human duyệt dù auto_review
+      retry:
+        on: must_fix               # còn [must] thì quay lại...
+        restart_from: implementer  # ...bước này
+        max: 2
+
+  - id: pr-creator
+    name: PR
+    agent: dev-agent-teams:pr-creator
+    skills: [create-pr]
+    rule_category: git-pr
+    rule_required: false
+    rule_fallback_skill: create-pr
+    produces: [pr-desc.md]
+    export_key: pr_creator
+    hitl:
+      mode: none
+
+# Agent review tài liệu, dùng tại gate có optional_doc_review: true
+doc_reviewer:
+  agent: dev-agent-teams:doc-reviewer
+  skills: [doc-review]
+  rule_category: doc-review
+  rule_required: true

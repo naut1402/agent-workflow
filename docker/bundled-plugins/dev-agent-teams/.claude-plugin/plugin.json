@@ -1,0 +1,44 @@
+{
+  "name": "dev-agent-teams",
+  "description": "Multi-agent development pipeline: investigate → design → implement → review → PR",
+  "version": "0.0.1",
+  "author": {
+    "name": "tttuan"
+  },
+  "license": "Apache-2.0",
+  "skills": ["./skills/"],
+  "userConfig": {
+    "dashboardApp": {
+      "type": "string",
+      "title": "Dashboard app directory",
+      "description": "Absolute path to a local clone of the dashboard app repo (https://github.com/naut1402/agent-workflow). The /dev-dashboard skill clones it here, and the dev-team-dashboard MCP server runs from it. Recommended: an absolute path (e.g. /home/you/.dev-team-dashboard/app) — '~' is not expanded when used as the MCP command argument.",
+      "required": true
+    },
+    "dashboardHome": {
+      "type": "string",
+      "title": "Dashboard registry home",
+      "description": "Directory holding the multi-project registry (projects.json) and runners.json. Leave empty to use the server default (~/.dev-team-dashboard)."
+    },
+    "dashboardServerUrl": {
+      "type": "string",
+      "title": "Remote dashboard URL",
+      "description": "Base URL of a deployed dev-team-dashboard server (e.g. https://dashboard.example.com). Required for /dev-team-orchestrator --remote. Handshake resolves projectId when omitted. Leave empty for local-only."
+    },
+    "dashboardApiToken": {
+      "type": "string",
+      "title": "Remote dashboard API token",
+      "description": "Bearer token when the remote dashboard has DEV_TEAM_API_TOKEN enabled. Orchestrator passes this to sync/runner scripts via --api-token or DEV_TEAM_API_TOKEN.",
+      "sensitive": true
+    },
+    "dashboardProjectId": {
+      "type": "string",
+      "title": "Default dashboard project id",
+      "description": "Optional opaque project id on the remote registry. Prefer leaving empty — resolve-remote.mjs resolves from project name or git remote. UI shows name; copy id from ProjectBar if needed."
+    },
+    "dashboardProjectName": {
+      "type": "string",
+      "title": "Default dashboard project name",
+      "description": "Optional display name of the project on the remote dashboard (as shown in the UI). Used by handshake when project id is unknown."
+    }
+  }
+}
