@@ -1,18 +1,51 @@
 #!/bin/sh
 # Drop root before starting the dashboard so Claude CLI can use
 # --dangerously-skip-permissions (blocked for uid 0).
+#
+# Ownership (LinuxServer-style):
+#   PUID / PGID → chạy process trùng uid/gid sở hữu project trên host
+#                 (không chown /data/project). Khuyến nghị.
+#   FIX_PROJECT_OWNERSHIP=1 → chown -R /data/project (đổi owner trên host — last resort).
+#
+# Compat: HOST_UID / HOST_GID vẫn được đọc nếu PUID/PGID trống.
 set -e
 
-mkdir -p /data/dashboard-home /home/dashboard/.claude /home/dashboard/.cursor
+RUN_UID="${PUID:-${HOST_UID:-1001}}"
+RUN_GID="${PGID:-${HOST_GID:-1001}}"
 
-chown -R dashboard:dashboard /data/dashboard-home 2>/dev/null || true
-chown dashboard:dashboard /home/dashboard 2>/dev/null || true
-chown dashboard:dashboard /data/dashboard-home/credentials.json 2>/dev/null || true
+resolve_run_user() {
+  if getent passwd "$RUN_UID" >/dev/null 2>&1; then
+    RUN_NAME=$(getent passwd "$RUN_UID" | cut -d: -f1)
+    return 0
+  fi
+  RUN_NAME=abc
+  if ! getent group "$RUN_GID" >/dev/null 2>&1; then
+    groupadd -g "$RUN_GID" abc 2>/dev/null || true
+  fi
+  useradd -u "$RUN_UID" -g "$RUN_GID" -d /home/dashboard -M -s /bin/bash "$RUN_NAME" 2>/dev/null \
+    || useradd -u "$RUN_UID" -d /home/dashboard -M -s /bin/bash "$RUN_NAME" 2>/dev/null \
+    || true
+  if getent passwd "$RUN_UID" >/dev/null 2>&1; then
+    RUN_NAME=$(getent passwd "$RUN_UID" | cut -d: -f1)
+  else
+    RUN_NAME=dashboard
+    RUN_UID=1001
+    RUN_GID=1001
+  fi
+}
+
+own() {
+  chown -R "$RUN_UID:$RUN_GID" "$@" 2>/dev/null || true
+}
+
+mkdir -p /data/dashboard-home /home/dashboard/.claude /home/dashboard/.cursor
+resolve_run_user
+
+own /data/dashboard-home /home/dashboard
+chown "$RUN_UID:$RUN_GID" /data/dashboard-home/credentials.json 2>/dev/null || true
+own /app
 
 # ── Writable `.dev-team-agent` on bind mounts ─────────────────────────────────
-# Process runs as uid 1001 after drop. Host bind mounts under /data/project are
-# often owned by root/other uid → mkdir custom-agents / knowledge fails (EACCES).
-# Only touch data-root trees — never chown the whole project source tree.
 fix_dev_team_root() {
   target="$1"
   [ -n "$target" ] || return 0
@@ -27,7 +60,21 @@ fix_dev_team_root() {
     "$target/knowledge/system" \
     "$target/.dev-state" \
     2>/dev/null || true
-  chown -R dashboard:dashboard "$target" 2>/dev/null || true
+  # Prefer mkdir as PUID when possible (tránh chown thừa).
+  if runuser -u "$RUN_NAME" -- test -w "$target" 2>/dev/null; then
+    runuser -u "$RUN_NAME" -- mkdir -p \
+      "$target/custom-agents" \
+      "$target/agent-templates" \
+      "$target/workflow-step-templates" \
+      "$target/pipeline-profiles" \
+      "$target/tasks" \
+      "$target/knowledge/project" \
+      "$target/knowledge/system" \
+      "$target/.dev-state" \
+      2>/dev/null || true
+  else
+    own "$target"
+  fi
 }
 
 ensure_project_dev_team_writable() {
@@ -36,7 +83,6 @@ ensure_project_dev_team_writable() {
   fi
 
   if [ -d /data/project ]; then
-    # Nested workspaces: /data/project/<repo>/.dev-team-agent (autoscan / multi-repo mount)
     find /data/project -maxdepth 3 -type d -name '.dev-team-agent' 2>/dev/null \
       | while IFS= read -r d; do
           fix_dev_team_root "$d"
@@ -44,10 +90,6 @@ ensure_project_dev_team_writable() {
   fi
 }
 
-# Opt-in: chown toàn bộ /data/project → dashboard (uid 1001).
-# Cần khi runner/implementer sửa source (`src/**`, `.git`) trên bind mount
-# đang thuộc root:root. Đổi ownership trên host bind (thường OK trên server
-# agent chuyên dụng). Tắt: FIX_PROJECT_OWNERSHIP=0.
 fix_project_tree_writable() {
   case "${FIX_PROJECT_OWNERSHIP:-0}" in
     1|true|TRUE|yes|YES) ;;
@@ -56,40 +98,29 @@ fix_project_tree_writable() {
   if [ ! -d /data/project ]; then
     return 0
   fi
-  echo "[dev-team-dashboard] FIX_PROJECT_OWNERSHIP=1 → chown -R dashboard:dashboard /data/project"
-  chown -R dashboard:dashboard /data/project 2>/dev/null || true
+  echo "[dev-team-dashboard] WARNING: FIX_PROJECT_OWNERSHIP=1 → chown -R ${RUN_UID}:${RUN_GID} /data/project (host bind ownership changes)"
+  chown -R "$RUN_UID:$RUN_GID" /data/project 2>/dev/null || true
 }
 
 ensure_project_dev_team_writable
 fix_project_tree_writable
 
-# ── Seed bundled dev-agent-teams plugin (agents/skills) ─────────────────────
-# resolveAgent('dev-agent-teams:investigator') looks under
-# ~/.claude/plugins/cache/<market>/dev-agent-teams/<ver>/agents/*.md
-# Host mount (runners overlay) wins when present; otherwise use image bundle.
 seed_bundled_plugin() {
   src=/opt/bundled-plugins/dev-agent-teams
   dest_root=/home/dashboard/.claude/plugins/cache/bundled/dev-agent-teams/0.0.0
   if [ ! -d "$src/agents" ]; then
     return 0
   fi
-  # Prefer host plugin cache when runners overlay already synced plugins.
   if [ -e /home/dashboard/.claude/plugins/cache ] \
     && find /home/dashboard/.claude/plugins/cache -path '*/dev-agent-teams/*/agents/investigator.md' 2>/dev/null | grep -q .
   then
     return 0
   fi
-  # Writable seed for Claude CLI skill discovery. resolveAgent also reads
-  # /opt/bundled-plugins directly when cache seed fails (ro symlink).
   mkdir -p "$dest_root" 2>/dev/null || return 0
   cp -a "$src/." "$dest_root/" 2>/dev/null || return 0
-  chown -R dashboard:dashboard /home/dashboard/.claude/plugins 2>/dev/null || true
+  own /home/dashboard/.claude/plugins
 }
 
-# ── Claude / Cursor auth from host (ro mounts under /mnt) ──────────────────
-# Official Claude Linux credential file is ~/.claude/.credentials.json (dot).
-# Host files are often mode 0600 / other uid — copy into HOME so uid 1001 can
-# read without chown'ing the host bind (which would break host `claude`).
 sync_claude_auth() {
   host_dir=/mnt/host-claude
   host_json=/mnt/host-claude.json
@@ -100,7 +131,6 @@ sync_claude_auth() {
   for name in .credentials.json credentials.json; do
     if [ -f "$host_dir/$name" ]; then
       cp "$host_dir/$name" "$dest_dir/$name"
-      # Always expose the canonical dotted name Claude looks for.
       if [ "$name" = "credentials.json" ] && [ ! -f "$dest_dir/.credentials.json" ]; then
         cp "$host_dir/$name" "$dest_dir/.credentials.json"
       fi
@@ -111,18 +141,16 @@ sync_claude_auth() {
     cp "$host_json" /home/dashboard/.claude.json
   fi
 
-  # Plugins cache (agents) — symlink into ro mount when possible.
   if [ -d "$host_dir/plugins" ]; then
     rm -rf "$dest_dir/plugins"
     ln -s "$host_dir/plugins" "$dest_dir/plugins"
   fi
 
-  # Other useful dirs (settings) — best-effort copy of settings.json only.
   if [ -f "$host_dir/settings.json" ]; then
     cp "$host_dir/settings.json" "$dest_dir/settings.json"
   fi
 
-  chown -R dashboard:dashboard "$dest_dir" /home/dashboard/.claude.json 2>/dev/null || true
+  own "$dest_dir" /home/dashboard/.claude.json
   chmod 600 "$dest_dir/.credentials.json" 2>/dev/null || true
   chmod 600 "$dest_dir/credentials.json" 2>/dev/null || true
   chmod 600 /home/dashboard/.claude.json 2>/dev/null || true
@@ -135,7 +163,6 @@ sync_cursor_auth() {
     return 0
   fi
   mkdir -p "$dest_dir"
-  # Shallow copy of top-level files; skip huge caches if any.
   for f in "$host_dir"/* "$host_dir"/.[!.]*; do
     [ -e "$f" ] || continue
     base=$(basename "$f")
@@ -149,7 +176,7 @@ sync_cursor_auth() {
       ln -s "$f" "$dest_dir/$base" 2>/dev/null || true
     fi
   done
-  chown -R dashboard:dashboard "$dest_dir" 2>/dev/null || true
+  own "$dest_dir"
 }
 
 if [ -d /mnt/host-claude ]; then
@@ -162,22 +189,22 @@ fi
 seed_bundled_plugin
 
 export HOME=/home/dashboard
-export USER=dashboard
+export USER="$RUN_NAME"
 export CLAUDE_CONFIG_DIR=/home/dashboard/.claude
 export PATH="/home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-# Avoid "dubious ownership" when bind mount / git metadata was root-owned.
 if command -v git >/dev/null 2>&1; then
   git config --global --add safe.directory '*' 2>/dev/null || true
-  # Config above runs as root; copy into dashboard home for the dropped user.
   if [ -f /root/.gitconfig ]; then
     cp /root/.gitconfig /home/dashboard/.gitconfig 2>/dev/null || true
-    chown dashboard:dashboard /home/dashboard/.gitconfig 2>/dev/null || true
+    own /home/dashboard/.gitconfig
   fi
 fi
 
+echo "[dev-team-dashboard] drop privileges → uid=${RUN_UID} gid=${RUN_GID} user=${RUN_NAME} PUID=${PUID:-} PGID=${PGID:-} FIX_PROJECT_OWNERSHIP=${FIX_PROJECT_OWNERSHIP:-0}"
+
 if [ "$(id -u)" = "0" ]; then
-  exec runuser -u dashboard -- env \
+  exec runuser -u "$RUN_NAME" -- env \
     HOME="$HOME" \
     USER="$USER" \
     CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" \

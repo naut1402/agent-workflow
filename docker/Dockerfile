@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1
+# Build từ root repo:
+#   docker build -f docker/Dockerfile -t dev-team-dashboard:local .
 # Multi-stage: Vite SPA build → Bun standalone (+ Claude/Cursor CLI, non-root).
 
 FROM oven/bun:1 AS build
@@ -25,7 +27,8 @@ ENV NODE_ENV=production \
     PATH="/home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # Claude CLI từ chối --dangerously-skip-permissions khi chạy root — bắt buộc non-root.
-# oven/bun đã chiếm uid 1000 → dùng 1001.
+# oven/bun đã chiếm uid 1000 → dùng 1001 làm user mặc định trong image.
+# Runtime identity: PUID/PGID (LinuxServer-style) — xem docker/entrypoint.sh.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl ca-certificates git \
   && useradd --create-home --uid 1001 --shell /bin/bash dashboard \
@@ -34,7 +37,6 @@ RUN apt-get update \
   && chown -R dashboard:dashboard /home/dashboard /data \
   && rm -rf /var/lib/apt/lists/*
 
-# Runner CLI (Linux) — cài dưới user dashboard (HOME=~dashboard).
 USER dashboard
 ENV HOME=/home/dashboard
 RUN curl -fsSL https://claude.ai/install.sh | bash \
@@ -49,14 +51,12 @@ RUN bun install --frozen-lockfile --production
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src ./src
 COPY --from=build /app/tsconfig.json ./tsconfig.json
-# Fallback plugin agents/skills when host ~/.claude/plugins is not mounted.
 COPY docker/bundled-plugins/dev-agent-teams /opt/bundled-plugins/dev-agent-teams
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
   && chown -R dashboard:dashboard /app /data /home/dashboard /opt/bundled-plugins
 
 EXPOSE 5174
 
-# Entrypoint chown volume rồi drop privileges → user dashboard.
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["bun", "src/standalone.ts"]

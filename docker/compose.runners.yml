@@ -1,0 +1,25 @@
+# Overlay runners: CLI auth từ host + PUID/PGID.
+#
+#   ./docker/install.sh --runners
+#
+# Auth Linux:
+#   ~/.claude/.credentials.json
+#   ~/.claude.json
+#
+# Mount :ro → /mnt/...; entrypoint COPY vào /home/dashboard (không chown file host).
+
+services:
+  dashboard:
+    user: "0:0"
+    environment:
+      HOME: /home/dashboard
+      CLAUDE_CONFIG_DIR: /home/dashboard/.claude
+      PATH: /home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PUID: ${PUID:?Set PUID=$(id -u)}
+      PGID: ${PGID:?Set PGID=$(id -g)}
+      FIX_PROJECT_OWNERSHIP: ${FIX_PROJECT_OWNERSHIP:-0}
+    volumes:
+      - ${HOST_HOME:?Set HOST_HOME to your user home}/.claude:/mnt/host-claude:ro
+      - ${HOST_HOME}/.claude.json:/mnt/host-claude.json:ro
+      - ${HOST_HOME}/.cursor:/mnt/host-cursor:ro
+      - ${HOST_HOME}/.dev-team-dashboard/credentials.json:/data/dashboard-home/credentials.json

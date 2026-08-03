@@ -1,0 +1,42 @@
+# Dashboard standalone — file nằm trong docker/; build context = repo root.
+#
+# Deploy nhanh:
+#   ./docker/install.sh
+#
+# Hoặc:
+#   export PUID=$(id -u) PGID=$(id -g)
+#   export DEV_TEAM_PROJECT_PATH="${DEV_TEAM_PROJECT_PATH:-$HOME/workspace}"
+#   docker compose -f docker/compose.yml up -d --build
+#
+# DEV_TEAM_ROOT trong container = /data/project/.dev-team-agent
+
+name: agent-workflow
+
+services:
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: dev-team-dashboard:local
+    ports:
+      - "${DEV_TEAM_DASHBOARD_PORT:-5174}:5174"
+    environment:
+      DEV_TEAM_DASHBOARD_HOST: "0.0.0.0"
+      DEV_TEAM_DASHBOARD_PORT: "5174"
+      DEV_TEAM_ROOT: /data/project/.dev-team-agent
+      DEV_TEAM_DASHBOARD_HOME: /data/dashboard-home
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+      # LinuxServer-style — trùng uid/gid user sở hữu project trên host
+      PUID: ${PUID:-1001}
+      PGID: ${PGID:-1001}
+      # Last resort — chown cả /data/project trên host bind (mặc định tắt)
+      FIX_PROJECT_OWNERSHIP: ${FIX_PROJECT_OWNERSHIP:-0}
+    volumes:
+      # Default: ~/workspace (override bằng DEV_TEAM_PROJECT_PATH)
+      - ${DEV_TEAM_PROJECT_PATH:-${HOME}/workspace}:/data/project
+      - dashboard-home:/data/dashboard-home
+    restart: unless-stopped
+
+volumes:
+  dashboard-home:

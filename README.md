@@ -82,79 +82,50 @@ bun run mcp          # MCP stdio — project registry
 
 ### Docker (standalone)
 
-Không cần cài Bun trên host. Image chạy `src/standalone.ts`, bind `0.0.0.0:5174`, mount project + registry home. Runtime image **cài sẵn** Claude Code CLI (`claude`) và Cursor CLI (`agent`) bản Linux.
-
-`DEV_TEAM_ROOT` phải là thư mục **`.dev-team-agent`** (data root), không phải thư mục project cha.
+Mọi file Docker nằm trong [`docker/`](docker/). Deploy mẫu:
 
 ```bash
-# Build image
-docker build -t dev-team-dashboard:local .
+./docker/install.sh              # UI/API — mount $HOME/workspace
+./docker/install.sh --runners    # + auth Claude/Cursor từ host (PUID/PGID)
+./docker/install.sh --down
+```
 
-# Chạy nhanh — gắn thư mục project (bên trong có .dev-team-agent/)
-docker run --rm -p 5174:5174 \
-  -e DEV_TEAM_ROOT=/data/project/.dev-team-agent \
-  -e DEV_TEAM_DASHBOARD_HOME=/data/dashboard-home \
-  -v /path/to/my-project:/data/project \
-  -v dashboard-home:/data/dashboard-home \
-  dev-team-dashboard:local
+Không cần cài Bun trên host. Image chạy `src/standalone.ts`, bind `0.0.0.0:5174`. Runtime **cài sẵn** `claude` + `agent` (Linux).
+
+`DEV_TEAM_ROOT` trong container = `/data/project/.dev-team-agent` (data root).
+
+```bash
+# Build thủ công (context = repo root)
+docker build -f docker/Dockerfile -t dev-team-dashboard:local .
 
 # Compose — chỉ UI/API
-# Windows PowerShell:
-$env:DEV_TEAM_PROJECT_PATH = "C:\path\to\my-project"
-docker compose up --build
+export PUID="$(id -u)" PGID="$(id -g)"
+export DEV_TEAM_PROJECT_PATH="${DEV_TEAM_PROJECT_PATH:-$HOME/workspace}"
+docker compose -f docker/compose.yml up -d --build
 
-# Compose — + runner CLI auth từ host (overlay)
-$env:HOST_HOME = $env:USERPROFILE   # Linux/macOS: export HOST_HOME="$HOME"
-docker compose -f docker-compose.yml -f docker-compose.runners.yml up --build
+# Compose — + runners
+export HOST_HOME="$HOME"
+docker compose -f docker/compose.yml -f docker/compose.runners.yml up -d --build
 ```
 
-| Env | Mặc định (image) | Ý nghĩa |
-|-----|------------------|---------|
-| `DEV_TEAM_DASHBOARD_HOST` | `0.0.0.0` | Bind trong container (local `bun run serve` vẫn mặc định `127.0.0.1`) |
-| `DEV_TEAM_DASHBOARD_PORT` / `PORT` | `5174` | Cổng HTTP |
-| `DEV_TEAM_ROOT` | `/data/project/.dev-team-agent` | Data root (seed registry khi trống) |
-| `DEV_TEAM_DASHBOARD_HOME` | `/data/dashboard-home` | Registry multi-project (`projects.json`) |
-| `HOST_HOME` | (compose runners) | Home host để mount `.claude` / `.cursor` / `credentials.json` |
-| `ANTHROPIC_API_KEY` | (trống) | Optional — NL draft / Claude `--bare` |
-| `CURSOR_API_KEY` | (trống) | Optional — Cursor headless khi không dùng session mount |
+| Env | Mặc định | Ý nghĩa |
+|-----|----------|---------|
+| `PUID` / `PGID` | `1001` (compose) / `id -u`/`id -g` (`install.sh`) | Process User/Group ID — trùng owner project trên host |
+| `DEV_TEAM_PROJECT_PATH` | `$HOME/workspace` | Bind mount → `/data/project` |
+| `HOST_HOME` | `$HOME` (runners) | Mount `.claude` / `.cursor` / credentials |
+| `DEV_TEAM_DASHBOARD_PORT` | `5174` | Cổng HTTP |
+| `DEV_TEAM_ROOT` | `/data/project/.dev-team-agent` | Data root trong container |
+| `DEV_TEAM_DASHBOARD_HOME` | `/data/dashboard-home` | Registry multi-project |
+| `ANTHROPIC_API_KEY` / `CURSOR_API_KEY` | (trống) | Optional API key |
+| `FIX_PROJECT_OWNERSHIP` | `0` | Last resort — `chown` cả project trên host |
 
-**Runner + credential host** (`docker-compose.runners.yml`):
+**PUID/PGID (khuyến nghị):** process trong container = user sở hữu `~/workspace` → ghi được `src/**` **không** đổi owner host. Sample: [`docker/.env.example`](docker/.env.example).
 
-| Mount host (ro) | Trong container |
-|-----------------|-----------------|
-| `$HOST_HOME/.claude` | `/mnt/host-claude` → entrypoint copy/symlink vào `/home/dashboard/.claude` |
-| `$HOST_HOME/.claude.json` | `/mnt/host-claude.json` → copy → `/home/dashboard/.claude.json` |
-| `$HOST_HOME/.cursor` | `/mnt/host-cursor` → sync vào `/home/dashboard/.cursor` |
-| `$HOST_HOME/.dev-team-dashboard/credentials.json` | `/data/dashboard-home/credentials.json` (profile dashboard) |
+**Runners** (`docker/compose.runners.yml`): mount ro auth host → entrypoint copy vào `/home/dashboard`. Cần `~/.claude/.credentials.json` (có dấu chấm) và `~/.claude.json` (file).
 
-Claude Linux đọc **`~/.claude/.credentials.json`** (có dấu chấm). Nếu host chỉ có `credentials.json` (không chấm), entrypoint vẫn copy và tạo thêm `.credentials.json`. Entrypoint **copy** auth vào home user `dashboard` (uid 1001) — không `chown` file trên host (tránh phá login host).
+**Plugin agents:** bundle tại `/opt/bundled-plugins/dev-agent-teams` ([`docker/bundled-plugins/`](docker/bundled-plugins/)).
 
-Trước khi `up`, đảm bảo file tồn tại (Docker tạo **thư mục** nếu thiếu file mount):
-
-```bash
-test -f "$HOME/.claude/.credentials.json" || test -f "$HOME/.claude/credentials.json"
-test -f "$HOME/.claude.json" || echo '{}' > "$HOME/.claude.json"
-```
-
-Binary CLI **không** lấy từ Windows host. Fallback server: `ANTHROPIC_API_KEY` / `CURSOR_API_KEY`.
-
-Container chạy user **`dashboard` (uid 1001)** — Claude CLI từ chối `--dangerously-skip-permissions` khi process là root.
-
-Entrypoint (root) luôn tạo/chown cây **`.dev-team-agent/`** dưới `/data/project` (và `DEV_TEAM_ROOT`) rồi drop xuống uid 1001 — tránh `EACCES` khi ghi `custom-agents/`, knowledge, …
-
-Khi runner/implementer cần sửa **source** (`src/**`, `.git`): bật `FIX_PROJECT_OWNERSHIP=1` (mặc định **bật** trong `docker-compose.runners.yml`) để `chown -R dashboard:dashboard /data/project`. Trên host, cây project sẽ thuộc uid 1001. Tắt: `FIX_PROJECT_OWNERSHIP=0`.
-
-Hoặc trên host (không cần recreate image):
-
-```bash
-sudo chown -R 1001:1001 /path/to/your-project
-```
-
-**Plugin agents (`dev-agent-teams:investigator`, …):** image kèm bundle tại `/opt/bundled-plugins/dev-agent-teams` (fallback khi không mount host). Ưu tiên `~/.claude/plugins/cache` từ host qua `docker-compose.runners.yml` (`HOST_HOME`). Không có file agent → job fail `agent file not found for ref: …`.
-
-**Lưu ý mount:** `DEV_TEAM_PROJECT_PATH` nên là thư mục project có sẵn `.dev-team-agent/` (compose map → `/data/project`). Nếu mount cha chứa nhiều repo (vd `/data/project/agent-workflow/.dev-team-agent`), đăng ký project qua registry/autoscan; request không có `?project=` dùng **registry default**, không ép ghi vào `DEV_TEAM_ROOT` khi đã có project.
-
-**Lưu ý:** Repo này **không** đóng gói orchestrator — chỉ dashboard quan sát project đã mount.
+Chi tiết path / quyền: xem comment trong `docker/compose.yml`, `docker/entrypoint.sh`, `docker/install.sh`.
 
 ### Lệnh hữu ích
 
