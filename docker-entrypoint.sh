@@ -44,7 +44,24 @@ ensure_project_dev_team_writable() {
   fi
 }
 
+# Opt-in: chown toàn bộ /data/project → dashboard (uid 1001).
+# Cần khi runner/implementer sửa source (`src/**`, `.git`) trên bind mount
+# đang thuộc root:root. Đổi ownership trên host bind (thường OK trên server
+# agent chuyên dụng). Tắt: FIX_PROJECT_OWNERSHIP=0.
+fix_project_tree_writable() {
+  case "${FIX_PROJECT_OWNERSHIP:-0}" in
+    1|true|TRUE|yes|YES) ;;
+    *) return 0 ;;
+  esac
+  if [ ! -d /data/project ]; then
+    return 0
+  fi
+  echo "[dev-team-dashboard] FIX_PROJECT_OWNERSHIP=1 → chown -R dashboard:dashboard /data/project"
+  chown -R dashboard:dashboard /data/project 2>/dev/null || true
+}
+
 ensure_project_dev_team_writable
+fix_project_tree_writable
 
 # ── Seed bundled dev-agent-teams plugin (agents/skills) ─────────────────────
 # resolveAgent('dev-agent-teams:investigator') looks under
@@ -148,6 +165,16 @@ export HOME=/home/dashboard
 export USER=dashboard
 export CLAUDE_CONFIG_DIR=/home/dashboard/.claude
 export PATH="/home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Avoid "dubious ownership" when bind mount / git metadata was root-owned.
+if command -v git >/dev/null 2>&1; then
+  git config --global --add safe.directory '*' 2>/dev/null || true
+  # Config above runs as root; copy into dashboard home for the dropped user.
+  if [ -f /root/.gitconfig ]; then
+    cp /root/.gitconfig /home/dashboard/.gitconfig 2>/dev/null || true
+    chown dashboard:dashboard /home/dashboard/.gitconfig 2>/dev/null || true
+  fi
+fi
 
 if [ "$(id -u)" = "0" ]; then
   exec runuser -u dashboard -- env \

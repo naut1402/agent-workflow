@@ -140,7 +140,15 @@ Binary CLI **không** lấy từ Windows host. Fallback server: `ANTHROPIC_API_K
 
 Container chạy user **`dashboard` (uid 1001)** — Claude CLI từ chối `--dangerously-skip-permissions` khi process là root.
 
-Entrypoint (root) tạo/chown chỉ cây **`.dev-team-agent/`** dưới `/data/project` (và `DEV_TEAM_ROOT`) rồi mới drop xuống uid 1001 — tránh `EACCES` khi ghi `custom-agents/`, knowledge, … trên bind mount host (thường thuộc root/user khác). Không `chown` toàn bộ source tree project.
+Entrypoint (root) luôn tạo/chown cây **`.dev-team-agent/`** dưới `/data/project` (và `DEV_TEAM_ROOT`) rồi drop xuống uid 1001 — tránh `EACCES` khi ghi `custom-agents/`, knowledge, …
+
+Khi runner/implementer cần sửa **source** (`src/**`, `.git`): bật `FIX_PROJECT_OWNERSHIP=1` (mặc định **bật** trong `docker-compose.runners.yml`) để `chown -R dashboard:dashboard /data/project`. Trên host, cây project sẽ thuộc uid 1001. Tắt: `FIX_PROJECT_OWNERSHIP=0`.
+
+Hoặc trên host (không cần recreate image):
+
+```bash
+sudo chown -R 1001:1001 /path/to/your-project
+```
 
 **Plugin agents (`dev-agent-teams:investigator`, …):** image kèm bundle tại `/opt/bundled-plugins/dev-agent-teams` (fallback khi không mount host). Ưu tiên `~/.claude/plugins/cache` từ host qua `docker-compose.runners.yml` (`HOST_HOME`). Không có file agent → job fail `agent file not found for ref: …`.
 

@@ -11,6 +11,9 @@
 # Host mounts là :ro; entrypoint COPY vào /home/dashboard (uid 1001) để
 # đọc được file mode 0600 mà không chown file trên host.
 #
+# FIX_PROJECT_OWNERSHIP=1 (mặc định ở overlay này): chown /data/project →
+# dashboard để implementer ghi được src/**. Tắt: FIX_PROJECT_OWNERSHIP=0.
+#
 # Fallback: ANTHROPIC_API_KEY / CURSOR_API_KEY
 
 services:
@@ -21,6 +24,9 @@ services:
       USER: dashboard
       CLAUDE_CONFIG_DIR: /home/dashboard/.claude
       PATH: /home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      # Implementer/runner cần ghi src/** — chown bind mount /data/project → uid 1001.
+      # Tắt: FIX_PROJECT_OWNERSHIP=0 (chỉ còn ghi được .dev-team-agent/).
+      FIX_PROJECT_OWNERSHIP: ${FIX_PROJECT_OWNERSHIP:-1}
     volumes:
       # Auth + plugins (read-only từ host)
       - ${HOST_HOME:?Set HOST_HOME to your user home}/.claude:/mnt/host-claude:ro
