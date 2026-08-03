@@ -9,6 +9,43 @@ chown -R dashboard:dashboard /data/dashboard-home 2>/dev/null || true
 chown dashboard:dashboard /home/dashboard 2>/dev/null || true
 chown dashboard:dashboard /data/dashboard-home/credentials.json 2>/dev/null || true
 
+# ── Writable `.dev-team-agent` on bind mounts ─────────────────────────────────
+# Process runs as uid 1001 after drop. Host bind mounts under /data/project are
+# often owned by root/other uid → mkdir custom-agents / knowledge fails (EACCES).
+# Only touch data-root trees — never chown the whole project source tree.
+fix_dev_team_root() {
+  target="$1"
+  [ -n "$target" ] || return 0
+  mkdir -p \
+    "$target" \
+    "$target/custom-agents" \
+    "$target/agent-templates" \
+    "$target/workflow-step-templates" \
+    "$target/pipeline-profiles" \
+    "$target/tasks" \
+    "$target/knowledge/project" \
+    "$target/knowledge/system" \
+    "$target/.dev-state" \
+    2>/dev/null || true
+  chown -R dashboard:dashboard "$target" 2>/dev/null || true
+}
+
+ensure_project_dev_team_writable() {
+  if [ -n "${DEV_TEAM_ROOT:-}" ]; then
+    fix_dev_team_root "$DEV_TEAM_ROOT"
+  fi
+
+  if [ -d /data/project ]; then
+    # Nested workspaces: /data/project/<repo>/.dev-team-agent (autoscan / multi-repo mount)
+    find /data/project -maxdepth 3 -type d -name '.dev-team-agent' 2>/dev/null \
+      | while IFS= read -r d; do
+          fix_dev_team_root "$d"
+        done
+  fi
+}
+
+ensure_project_dev_team_writable
+
 # ── Claude / Cursor auth from host (ro mounts under /mnt) ──────────────────
 # Official Claude Linux credential file is ~/.claude/.credentials.json (dot).
 # Host files are often mode 0600 / other uid — copy into HOME so uid 1001 can
