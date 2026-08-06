@@ -121,7 +121,7 @@ docker compose -f docker/compose.yml -f docker/compose.runners.yml up -d --build
 
 **PUID/PGID (khuyến nghị):** process trong container = user sở hữu `~/workspace` → ghi được `src/**` **không** đổi owner host. Sample: [`docker/.env.example`](docker/.env.example).
 
-**Runners** (`docker/compose.runners.yml`): mount ro auth host → entrypoint copy vào `/home/dashboard`. Cần `~/.claude/.credentials.json` (có dấu chấm) và `~/.claude.json` (file).
+**Runners** (`docker/compose.runners.yml`): mount ro auth host → entrypoint copy vào `/home/dashboard`. Cần `~/.claude/.credentials.json` (có dấu chấm) và `~/.claude.json` (file). Entrypoint ghi `.claude.json` vào cả `$HOME/.claude.json` và `$CLAUDE_CONFIG_DIR/.claude.json` — Claude CLI với `CLAUDE_CONFIG_DIR` chỉ đọc path sau. Nếu copy tay vào container, đặt file tại `/home/dashboard/.claude/.claude.json` (không chỉ `$HOME/.claude.json`). Host macOS: OAuth có thể nằm Keychain — file `.credentials.json` trống/stale → dùng `claude setup-token` + `CLAUDE_CODE_OAUTH_TOKEN`, hoặc login một lần trong container Linux.
 
 **Plugin agents:** bundle tại `/opt/bundled-plugins/dev-agent-teams` ([`docker/bundled-plugins/`](docker/bundled-plugins/)).
 

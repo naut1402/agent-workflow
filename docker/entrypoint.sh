@@ -137,8 +137,12 @@ sync_claude_auth() {
     fi
   done
 
+  # Khi CLAUDE_CONFIG_DIR được set, Claude CLI (≥2.0) đọc
+  # $CLAUDE_CONFIG_DIR/.claude.json — KHÔNG phải $HOME/.claude.json.
+  # Copy cả hai path để tương thích legacy + config-dir.
   if [ -f "$host_json" ]; then
     cp "$host_json" /home/dashboard/.claude.json
+    cp "$host_json" "$dest_dir/.claude.json"
   fi
 
   if [ -d "$host_dir/plugins" ]; then
@@ -154,6 +158,7 @@ sync_claude_auth() {
   chmod 600 "$dest_dir/.credentials.json" 2>/dev/null || true
   chmod 600 "$dest_dir/credentials.json" 2>/dev/null || true
   chmod 600 /home/dashboard/.claude.json 2>/dev/null || true
+  chmod 600 "$dest_dir/.claude.json" 2>/dev/null || true
 }
 
 sync_cursor_auth() {

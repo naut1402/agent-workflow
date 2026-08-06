@@ -2,11 +2,14 @@
 #
 #   ./docker/install.sh --runners
 #
-# Auth Linux:
+# Auth Linux (host):
 #   ~/.claude/.credentials.json
 #   ~/.claude.json
 #
 # Mount :ro → /mnt/...; entrypoint COPY vào /home/dashboard (không chown file host).
+# Trong container CLAUDE_CONFIG_DIR=/home/dashboard/.claude → Claude đọc
+#   /home/dashboard/.claude/.credentials.json
+#   /home/dashboard/.claude/.claude.json   ← không phải $HOME/.claude.json
 
 services:
   dashboard:
