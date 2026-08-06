@@ -142,9 +142,10 @@ describe('sendTaskFeedback — normal flow', () => {
     expect(open).toBeTruthy()
     expect(open?.sessionId).toBeTruthy()
 
-    const result = sendTaskFeedback('T1', 'P1', 'follow-up question')
+    const result = await sendTaskFeedback('T1', 'P1', 'follow-up question')
     expect(result.ok).toBe(true)
     if ('error' in result) throw new Error(result.error)
+    if ('queued' in result) throw new Error('unexpected queued result')
     expect(result.job.parentJobId).toBe(first.id)
     expect(result.job.metadata?.isChatFeedback).toBe(true)
     expect(result.job.userPrompt).toBe('follow-up question')
@@ -174,16 +175,18 @@ describe('sendTaskFeedback — normal flow', () => {
 
     // Newest finished job is the reviewer one, but the chat was opened from the
     // implementer node — the feedback round must continue THAT job.
-    const result = sendTaskFeedback('T7', 'P1', 'về step implementer', { stepId: 'implementer' })
+    const result = await sendTaskFeedback('T7', 'P1', 'về step implementer', { stepId: 'implementer' })
     expect(result.ok).toBe(true)
     if ('error' in result) throw new Error(result.error)
+    if ('queued' in result) throw new Error('unexpected queued result')
     expect(result.job.parentJobId).toBe(implJob.id)
     expect(result.job.metadata?.pipelineStepId).toBe('implementer')
     await settle(result.job.id)
 
     // No stepId → newest finished job, as before.
-    const fallback = sendTaskFeedback('T7', 'P1', 'chung chung')
+    const fallback = await sendTaskFeedback('T7', 'P1', 'chung chung')
     if ('error' in fallback) throw new Error(fallback.error)
+    if ('queued' in fallback) throw new Error('unexpected queued result')
     expect(fallback.job.parentJobId).not.toBe(implJob.id)
     await settle(fallback.job.id)
   })
@@ -194,9 +197,10 @@ describe('sendTaskFeedback — normal flow', () => {
     await settle(first.id)
     await waitForPhase('T8', (p) => p === 'reviewer')
 
-    const result = sendTaskFeedback('T8', 'P1', 'hi', { stepId: 'does-not-exist' })
+    const result = await sendTaskFeedback('T8', 'P1', 'hi', { stepId: 'does-not-exist' })
     expect(result.ok).toBe(true)
     if ('error' in result) throw new Error(result.error)
+    if ('queued' in result) throw new Error('unexpected queued result')
     expect(result.job.parentJobId).toBe(first.id)
     await settle(result.job.id)
   })
@@ -211,28 +215,73 @@ describe('sendTaskFeedback — normal flow', () => {
     expect(open?.stepIds).toContain('implementer')
   })
 
+  test('pipeline edited to a new agent since the parent job ran: feedback resumes with the NEW agent', async () => {
+    seedTask('T10', 'implementer')
+    const first = runStepLikeJob('T10', 'implementer', 'new')
+    await settle(first.id)
+    expect(first.agentRef).toBe('')
+
+    // Pipeline edited via chat/editor after the job ran — step now points at a
+    // different agent than the one `first` was submitted with.
+    fs.writeFileSync(
+      path.join(root, 'tasks', 'T10', 'pipeline.yaml'),
+      ['version: 1', 'steps_replace: true', 'steps:', "  - id: implementer", '    agent: agent-B'].join('\n'),
+      'utf8',
+    )
+
+    const result = await sendTaskFeedback('T10', 'P1', 'hi', { stepId: 'implementer' })
+    if ('error' in result) throw new Error(result.error)
+    if ('queued' in result) throw new Error('unexpected queued result')
+    expect(result.job.agentRef).toBe('agent-B')
+    await settle(result.job.id)
+
+    fs.rmSync(path.join(root, 'tasks', 'T10', 'pipeline.yaml'), { force: true })
+  })
+
+  test('step removed from the pipeline since the parent job ran: falls back to the old job\'s agentRef', async () => {
+    seedTask('T11', 'implementer')
+    const first = runStepLikeJob('T11', 'implementer', 'new')
+    await settle(first.id)
+
+    fs.writeFileSync(
+      path.join(root, 'tasks', 'T11', 'pipeline.yaml'),
+      ['version: 1', 'steps_replace: true', 'steps:', "  - id: reviewer", '    agent: agent-B'].join('\n'),
+      'utf8',
+    )
+
+    const result = await sendTaskFeedback('T11', 'P1', 'hi', { stepId: 'implementer' })
+    if ('error' in result) throw new Error(result.error)
+    if ('queued' in result) throw new Error('unexpected queued result')
+    expect(result.job.agentRef).toBe(first.agentRef)
+    await settle(result.job.id)
+
+    fs.rmSync(path.join(root, 'tasks', 'T11', 'pipeline.yaml'), { force: true })
+  })
+
   test('a chat-feedback job can itself be the parent of a further feedback round', async () => {
     seedTask('T2', 'implementer')
     const first = runStepLikeJob('T2', 'implementer', 'new')
     await settle(first.id)
     await waitForPhase('T2', (p) => p === 'reviewer')
 
-    const round1 = sendTaskFeedback('T2', 'P1', 'round1')
+    const round1 = await sendTaskFeedback('T2', 'P1', 'round1')
     if ('error' in round1) throw new Error(round1.error)
+    if ('queued' in round1) throw new Error('unexpected queued result')
     await settle(round1.job.id)
 
-    const round2 = sendTaskFeedback('T2', 'P1', 'round2')
+    const round2 = await sendTaskFeedback('T2', 'P1', 'round2')
     expect(round2.ok).toBe(true)
     if ('error' in round2) throw new Error(round2.error)
+    if ('queued' in round2) throw new Error('unexpected queued result')
     expect(round2.job.parentJobId).toBe(round1.job.id)
     await settle(round2.job.id)
   })
 })
 
 describe('sendTaskFeedback — guards', () => {
-  test('no job at all for the task → 400', () => {
+  test('no job at all for the task → 400', async () => {
     seedTask('T3', 'implementer')
-    const result = sendTaskFeedback('T3', 'P1', 'hi')
+    const result = await sendTaskFeedback('T3', 'P1', 'hi')
     expect(result).toMatchObject({ ok: false, status: 400, error: 'no completed job to give feedback on' })
   })
 
@@ -247,7 +296,7 @@ describe('sendTaskFeedback — guards', () => {
       metadata: { taskId: 'T4', projectId: 'P1' },
     })
     await settle(job.id)
-    const result = sendTaskFeedback('T4', 'P1', 'hi')
+    const result = await sendTaskFeedback('T4', 'P1', 'hi')
     expect(result).toMatchObject({ ok: false, status: 400, error: 'no completed job to give feedback on' })
   })
 
@@ -256,11 +305,11 @@ describe('sendTaskFeedback — guards', () => {
     // No sessionMode → runJob never records anything into the ledger.
     const job = runStepLikeJob('T5', 'implementer')
     await settle(job.id)
-    const result = sendTaskFeedback('T5', 'P1', 'hi')
+    const result = await sendTaskFeedback('T5', 'P1', 'hi')
     expect(result).toMatchObject({ ok: false, status: 400, error: 'no resumable session for this task' })
   })
 
-  test('a job is already queued/running for the task → 409', async () => {
+  test('a job is already queued/running for the task, default mode → queued (not 409)', async () => {
     seedTask('T6', 'implementer')
     const first = runStepLikeJob('T6', 'implementer', 'new')
     await settle(first.id)
@@ -271,8 +320,8 @@ describe('sendTaskFeedback — guards', () => {
     for (let i = 0; i < 200 && loadJob(second.id)?.status !== 'running'; i++) await sleep(5)
     expect(loadJob(second.id)?.status).toBe('running')
 
-    const result = sendTaskFeedback('T6', 'P1', 'hi')
-    expect(result).toMatchObject({ ok: false, status: 409, error: 'step already running' })
+    const result = await sendTaskFeedback('T6', 'P1', 'hi')
+    expect(result).toMatchObject({ ok: true, queued: true })
 
     gated = false
     resolveGate?.()

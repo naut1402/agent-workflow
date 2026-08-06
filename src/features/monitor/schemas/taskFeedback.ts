@@ -14,6 +14,12 @@ export const TaskFeedbackRequest = z.object({
    * `sendTaskFeedback(..., { stepId })`.
    */
   stepId: z.string().min(1).max(200).nullish(),
+  /**
+   * How to handle feedback while the target step's job is still running —
+   * `'queue'` (default) waits for it to finish; `'immediate'` cancels it and
+   * resumes right away. Ignored when no job is currently running.
+   */
+  mode: z.enum(['queue', 'immediate']).optional(),
 })
 
 export type TaskFeedbackRequest = z.infer<typeof TaskFeedbackRequest>

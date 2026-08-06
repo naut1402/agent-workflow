@@ -14,7 +14,7 @@ const DEFAULT_POSITION = { right: 24, bottom: 24 }
 
 // Open state + context live in a module-level composable so a pipeline node's
 // popover can open this same window scoped to its step.
-const { open, context, toggle, close, resetToBuilder } = useChatSurface()
+const { open, context, toggle, close, resetToBuilder, openBuilderChat } = useChatSurface()
 const position = reactive(loadPosition())
 
 // Once opened, the window stays mounted and is only hidden — minimizing must
@@ -80,6 +80,13 @@ function onPointerUp(): void {
 function onClick(): void {
   if (dragMoved) {
     dragMoved = false
+    return
+  }
+  // While a step's chat is open, the FAB means "start a new chat" (its
+  // tooltip) rather than hide/show — minimizing already has its own button
+  // (—) in the window header for the ẩn-giữ-context case.
+  if (open.value && context.value.mode === 'task') {
+    openBuilderChat()
     return
   }
   // Show/hide only — the context is preserved, so reopening after a minimize

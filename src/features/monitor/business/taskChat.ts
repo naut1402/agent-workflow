@@ -15,7 +15,7 @@ import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.
  * types, instead of surfacing a 400/409 after the fact.
  */
 
-export type TaskChatBlockedReason = 'stepRunning' | 'noCompletedJob' | 'noSession'
+export type TaskChatBlockedReason = 'noCompletedJob' | 'noSession'
 
 export interface TaskChatRunningJob {
   jobId: string
@@ -44,6 +44,8 @@ export interface TaskChatState {
   running: TaskChatRunningJob | null
   runner: TaskChatRunner | null
   canSend: boolean
+  /** A message sent now would be queued (step running) rather than sent right away. */
+  queued: boolean
   blockedReason?: TaskChatBlockedReason
   /** Set when the ledger entry we would resume is no longer usable. */
   staleReason?: string
@@ -113,11 +115,14 @@ export function getTaskChatState(
   const ledger = loadTaskSessionLedger(projectId, taskId)
   const hasOpenSession = ledger.sessions.some((s) => s.status === 'open')
 
-  // Mirrors sendTaskFeedback()'s guard order exactly.
+  // A running job no longer blocks sending — `sendTaskFeedback` queues it
+  // instead (see `queued` below) — so these guards only apply once nothing is
+  // running, mirroring the checks `sendTaskFeedback` falls through to then.
   let blockedReason: TaskChatBlockedReason | undefined
-  if (runningJob) blockedReason = 'stepRunning'
-  else if (!hasFinished) blockedReason = 'noCompletedJob'
-  else if (!hasOpenSession) blockedReason = 'noSession'
+  if (!runningJob) {
+    if (!hasFinished) blockedReason = 'noCompletedJob'
+    else if (!hasOpenSession) blockedReason = 'noSession'
+  }
 
   const resolved = resolveChatSession(projectId, taskId, opts.stepId)
   const transcript = resolved.sessionId
@@ -152,6 +157,7 @@ export function getTaskChatState(
           { id: runnerJob.runnerId, name: runnerJob.runnerId, enabled: false }
         : null,
     canSend: !blockedReason,
+    queued: Boolean(runningJob),
     ...(blockedReason ? { blockedReason } : {}),
     ...(resolved.staleReason ? { staleReason: resolved.staleReason } : {}),
   }

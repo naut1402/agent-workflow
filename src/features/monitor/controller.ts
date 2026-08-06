@@ -598,10 +598,22 @@ export class MonitorController extends AbstractController {
     if (!read.ok) return this.notFound('task not found', { taskId: id })
 
     const projectId = this.projectId || ''
-    const result = sendTaskFeedback(id, projectId, parsed.data.feedback, {
+    const result = await sendTaskFeedback(id, projectId, parsed.data.feedback, {
       stepId: parsed.data.stepId ?? undefined,
+      mode: parsed.data.mode,
     })
     if ('error' in result) return this.json(result.status || 400, { error: result.error, taskId: id })
+
+    if ('queued' in result) {
+      emitAudit({
+        op: 'update',
+        entity: 'task-state',
+        identifier: id,
+        projectId: this.projectId,
+        detail: { action: 'feedback-queued', stepId: parsed.data.stepId ?? undefined },
+      })
+      return this.created({ queued: true })
+    }
 
     emitAudit({
       op: 'update',

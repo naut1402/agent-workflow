@@ -36,12 +36,12 @@ export async function fetchTaskChat(
 export async function sendTaskFeedback(
   id: string,
   feedback: string,
-  opts: { stepId?: string } = {},
+  opts: { stepId?: string; mode?: 'queue' | 'immediate' } = {},
   projectId?: string,
 ) {
   return apiPost(
     `/api/tasks/${encodeURIComponent(id)}/feedback`,
-    { feedback, stepId: opts.stepId },
+    { feedback, stepId: opts.stepId, mode: opts.mode },
     { query: { project: projectId } },
   )
 }
