@@ -188,15 +188,16 @@ export async function advanceStepOnJobSuccess(
       const verdict = await checkReviewRetry(root, taskId, currentStep)
       if (verdict.retry) {
         const round = Number(state.review_round ?? 0) + 1
+        state.review_round = round
         if (round <= retry.max) {
-          state.review_round = round
           state.current_phase = retry.restart_from
           state.hitl_pending = null
+          const mtime = await writeStateAtomic(stateFile, state)
+          return { state, mtime }
         }
-        // Past `retry.max`: leave `current_phase`/`hitl_pending` untouched —
-        // the task stands still on this step for a human to intervene.
-        const mtime = await writeStateAtomic(stateFile, state)
-        return { state, mtime }
+        // Past `retry.max`: fall through to the gate/advance logic below —
+        // for a step with `hitl.gate_id` (like `reviewer`), that opens the
+        // human gate instead of leaving the task silently re-runnable.
       }
     }
 

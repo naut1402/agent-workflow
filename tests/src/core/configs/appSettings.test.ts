@@ -220,6 +220,11 @@ describe('resolveChatFeedbackMode', () => {
   it('keeps immediate when set', () => {
     expect(resolveChatFeedbackMode({ chatFeedbackMode: 'immediate' })).toBe('immediate')
   })
+
+  it('parseAppSettings preserves both valid values, not just what the resolver defaults to', () => {
+    expect(parseAppSettings({ chatFeedbackMode: 'queue' })).toEqual({ chatFeedbackMode: 'queue' })
+    expect(parseAppSettings({ chatFeedbackMode: 'immediate' })).toEqual({ chatFeedbackMode: 'immediate' })
+  })
 })
 
 describe('AppSettingsSchema — new optional fields (mục 1, 7)', () => {

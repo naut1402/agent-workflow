@@ -245,7 +245,7 @@ describe('advanceStepOnJobSuccess — review retry', () => {
     expect(result?.state.hitl_pending).toBeNull()
   })
 
-  test('NEEDS_CHANGES past retry.max → stands still, no gate opened', async () => {
+  test('NEEDS_CHANGES past retry.max → falls through to the gate instead of standing silently re-runnable', async () => {
     const root = await tmp()
     await fs.writeFile(path.join(root, 'pipeline.yaml'), retryPipeline, 'utf8')
     await seedTask(root, 'T21', { current_phase: 'reviewer', review_round: 2 })
@@ -254,7 +254,8 @@ describe('advanceStepOnJobSuccess — review retry', () => {
     const result = await advanceStepOnJobSuccess(root, 'T21', 'reviewer')
     expect(result).not.toBeNull()
     expect(result?.state.current_phase).toBe('reviewer')
-    expect(result?.state.hitl_pending).toBeFalsy()
+    expect(result?.state.review_round).toBe(3)
+    expect(result?.state.hitl_pending).toBe('hitl-3')
   })
 
   test('APPROVE verdict falls through to the existing gate behavior', async () => {

@@ -45,8 +45,8 @@ const BLOCKED_TEXT: Record<TaskChatBlockedReason, string> = {
 
 /** A step's own job is busy and this session has no `.dev-state` to queue against (nl-chat). */
 const STEP_BUSY_TEXT = 'Step đang chạy — chờ chạy xong mới gửi được tin nhắn.'
-/** Sent while the target step's job is running, in the (default) queue mode. */
-const QUEUED_TEXT = 'Đã ghi nhận, sẽ gửi khi step hiện tại xong.'
+/** Shown while the target step's job is running, in the (default) queue mode — before anything has been sent. */
+const QUEUED_TEXT = 'Tin nhắn mới sẽ được gửi khi step hiện tại hoàn tất.'
 
 export function useTaskChat(opts: UseTaskChatOptions) {
   const { settings } = useAppSettings()

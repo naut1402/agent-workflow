@@ -112,7 +112,7 @@ describe('useTaskChat', () => {
 
     expect(c.canSend.value).toBe(true)
     expect(c.queued.value).toBe(true)
-    expect(c.blockedText.value).toContain('Đã ghi nhận')
+    expect(c.blockedText.value).toContain('sẽ được gửi')
     expect(c.running.value).toMatchObject({ jobId: 'j9' })
   })
 
