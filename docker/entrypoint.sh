@@ -13,9 +13,23 @@ set -e
 RUN_UID="${PUID:-${HOST_UID:-1001}}"
 RUN_GID="${PGID:-${HOST_GID:-1001}}"
 
+# Claude CLI chặn --dangerously-skip-permissions với uid 0.
+# Deploy bằng root + PUID=$(id -u) → PUID=0 → mọi job fail.
+if [ "$RUN_UID" = "0" ] || [ "$RUN_GID" = "0" ]; then
+  echo "[dev-team-dashboard] WARNING: PUID/PGID=0 không dùng được (Claude block root). Fallback uid/gid 1001 (dashboard)."
+  RUN_UID=1001
+  RUN_GID=1001
+fi
+
 resolve_run_user() {
   if getent passwd "$RUN_UID" >/dev/null 2>&1; then
     RUN_NAME=$(getent passwd "$RUN_UID" | cut -d: -f1)
+    # Không bao giờ "drop" sang root dù passwd có uid 0.
+    if [ "$RUN_NAME" = "root" ] || [ "$RUN_UID" = "0" ]; then
+      RUN_NAME=dashboard
+      RUN_UID=1001
+      RUN_GID=1001
+    fi
     return 0
   fi
   RUN_NAME=abc
@@ -121,6 +135,36 @@ seed_bundled_plugin() {
   own /home/dashboard/.claude/plugins
 }
 
+# Đảm bảo $CLAUDE_CONFIG_DIR/.claude.json tồn tại (Claude backup rồi xóa khi crash/root).
+ensure_claude_json() {
+  dest_dir=/home/dashboard/.claude
+  dest_cfg="$dest_dir/.claude.json"
+  home_cfg=/home/dashboard/.claude.json
+  mkdir -p "$dest_dir/backups"
+
+  if [ -f "$dest_cfg" ]; then
+    :
+  elif [ -f "$home_cfg" ]; then
+    cp "$home_cfg" "$dest_cfg"
+  else
+    latest=$(ls -1t "$dest_dir"/backups/.claude.json.backup.* 2>/dev/null | head -n 1 || true)
+    if [ -n "$latest" ] && [ -f "$latest" ]; then
+      echo "[dev-team-dashboard] restore .claude.json ← $latest"
+      cp "$latest" "$dest_cfg"
+    else
+      echo "[dev-team-dashboard] seed minimal $dest_cfg"
+      printf '%s\n' '{"hasCompletedOnboarding":true,"bypassPermissionsModeAccepted":true}' > "$dest_cfg"
+    fi
+  fi
+
+  if [ -f "$dest_cfg" ] && [ ! -f "$home_cfg" ]; then
+    cp "$dest_cfg" "$home_cfg"
+  fi
+  own "$dest_cfg" "$home_cfg"
+  chmod 600 "$dest_cfg" 2>/dev/null || true
+  chmod 600 "$home_cfg" 2>/dev/null || true
+}
+
 sync_claude_auth() {
   host_dir=/mnt/host-claude
   host_json=/mnt/host-claude.json
@@ -140,9 +184,12 @@ sync_claude_auth() {
   # Khi CLAUDE_CONFIG_DIR được set, Claude CLI (≥2.0) đọc
   # $CLAUDE_CONFIG_DIR/.claude.json — KHÔNG phải $HOME/.claude.json.
   # Copy cả hai path để tương thích legacy + config-dir.
+  # Docker tạo DIRECTORY nếu file host thiếu — chỉ copy khi là file thật.
   if [ -f "$host_json" ]; then
     cp "$host_json" /home/dashboard/.claude.json
     cp "$host_json" "$dest_dir/.claude.json"
+  elif [ -d "$host_json" ]; then
+    echo "[dev-team-dashboard] WARNING: $host_json là thư mục (host thiếu ~/.claude.json). Bỏ qua mount."
   fi
 
   if [ -d "$host_dir/plugins" ]; then
@@ -191,6 +238,9 @@ if [ -d /mnt/host-cursor ]; then
   sync_cursor_auth
 fi
 
+# Luôn chạy sau sync — kể cả không mount host (restore backup / seed).
+ensure_claude_json
+
 seed_bundled_plugin
 
 export HOME=/home/dashboard
@@ -206,15 +256,30 @@ if command -v git >/dev/null 2>&1; then
   fi
 fi
 
+if [ "$RUN_UID" = "0" ] || [ "$RUN_NAME" = "root" ]; then
+  echo "[dev-team-dashboard] FATAL: không thể chạy dashboard/Claude với uid 0. Set PUID/PGID = user thường (không phải root)." >&2
+  exit 1
+fi
+
 echo "[dev-team-dashboard] drop privileges → uid=${RUN_UID} gid=${RUN_GID} user=${RUN_NAME} PUID=${PUID:-} PGID=${PGID:-} FIX_PROJECT_OWNERSHIP=${FIX_PROJECT_OWNERSHIP:-0}"
 
 if [ "$(id -u)" = "0" ]; then
+  if ! command -v runuser >/dev/null 2>&1; then
+    echo "[dev-team-dashboard] FATAL: thiếu lệnh runuser — không drop được root." >&2
+    exit 1
+  fi
   exec runuser -u "$RUN_NAME" -- env \
     HOME="$HOME" \
     USER="$USER" \
     CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" \
     PATH="$PATH" \
     "$@"
+fi
+
+# Entrypoint không phải root nhưng uid vẫn 0? (bất thường)
+if [ "$(id -u)" = "0" ]; then
+  echo "[dev-team-dashboard] FATAL: vẫn đang root sau khi cố drop privileges." >&2
+  exit 1
 fi
 
 exec "$@"

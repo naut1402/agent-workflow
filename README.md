@@ -119,7 +119,7 @@ docker compose -f docker/compose.yml -f docker/compose.runners.yml up -d --build
 | `ANTHROPIC_API_KEY` / `CURSOR_API_KEY` | (trống) | Optional API key |
 | `FIX_PROJECT_OWNERSHIP` | `0` | Last resort — `chown` cả project trên host |
 
-**PUID/PGID (khuyến nghị):** process trong container = user sở hữu `~/workspace` → ghi được `src/**` **không** đổi owner host. Sample: [`docker/.env.example`](docker/.env.example).
+**PUID/PGID (khuyến nghị):** process trong container = user sở hữu `~/workspace` → ghi được `src/**` **không** đổi owner host. Sample: [`docker/.env.example`](docker/.env.example). **Không dùng `PUID=0`** (deploy bằng root + `PUID=$(id -u)`): Claude từ chối `--dangerously-skip-permissions` và có thể làm mất `.claude.json` (chỉ còn file trong `backups/`). Entrypoint fallback về uid 1001 và tự restore/seed `.claude.json`.
 
 **Runners** (`docker/compose.runners.yml`): mount ro auth host → entrypoint copy vào `/home/dashboard`. Cần `~/.claude/.credentials.json` (có dấu chấm) và `~/.claude.json` (file). Entrypoint ghi `.claude.json` vào cả `$HOME/.claude.json` và `$CLAUDE_CONFIG_DIR/.claude.json` — Claude CLI với `CLAUDE_CONFIG_DIR` chỉ đọc path sau. Nếu copy tay vào container, đặt file tại `/home/dashboard/.claude/.claude.json` (không chỉ `$HOME/.claude.json`). Host macOS: OAuth có thể nằm Keychain — file `.credentials.json` trống/stale → dùng `claude setup-token` + `CLAUDE_CODE_OAUTH_TOKEN`, hoặc login một lần trong container Linux.
 

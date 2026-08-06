@@ -40,6 +40,12 @@ export DEV_TEAM_PROJECT_PATH="${DEV_TEAM_PROJECT_PATH:-$HOME/workspace}"
 export DEV_TEAM_DASHBOARD_PORT="${DEV_TEAM_DASHBOARD_PORT:-5174}"
 export FIX_PROJECT_OWNERSHIP="${FIX_PROJECT_OWNERSHIP:-0}"
 
+if [ "$PUID" = "0" ] || [ "$PGID" = "0" ]; then
+  echo "!! Cảnh báo: PUID/PGID=0 (root). Claude CLI chặn --dangerously-skip-permissions." >&2
+  echo "   Dùng user thường: export PUID=\$(id -u) PGID=\$(id -g) khi KHÔNG phải root," >&2
+  echo "   hoặc set PUID/PGID = uid sở hữu DEV_TEAM_PROJECT_PATH." >&2
+fi
+
 COMPOSE=(docker compose -f docker/compose.yml)
 if [ "$WITH_RUNNERS" -eq 1 ]; then
   COMPOSE+=(-f docker/compose.runners.yml)
