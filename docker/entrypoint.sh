@@ -112,6 +112,7 @@ fix_project_tree_writable() {
 ensure_project_dev_team_writable
 fix_project_tree_writable
 
+# Seed agent templates (docs/template/agents → image /opt/bundled-plugins) khi thiếu host plugin cache.
 seed_bundled_plugin() {
   src=/opt/bundled-plugins/dev-agent-teams
   dest_root=/home/dashboard/.claude/plugins/cache/bundled/dev-agent-teams/0.0.0

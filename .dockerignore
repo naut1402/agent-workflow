@@ -20,10 +20,10 @@ test-results
 .vite
 docs/todo
 
-# docs (not needed in image) — keep bundled plugin agent/skill markdown
+# docs (not needed in image) — giữ agent template cho Docker fallback
 *.md
-!docker/bundled-plugins/
-!docker/bundled-plugins/**
+!docs/template/agents/
+!docs/template/agents/**
 
 # misc / local env
 .env

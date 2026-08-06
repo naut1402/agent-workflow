@@ -98,7 +98,7 @@ async function resolveAgentFilePath(
     if (await safeAccess(builtin)) return builtin
     const cached = await findInPluginCache(pluginName, fileName)
     if (cached) return cached
-    // Docker image bundle (see docker/bundled-plugins + DEV_TEAM_BUNDLED_PLUGINS)
+    // Docker fallback: docs/template/agents → /opt/bundled-plugins (DEV_TEAM_BUNDLED_PLUGINS)
     const bundledRoots = [
       process.env.DEV_TEAM_BUNDLED_PLUGINS?.trim(),
       '/opt/bundled-plugins',

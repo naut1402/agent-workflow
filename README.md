@@ -125,7 +125,7 @@ docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.ru
 
 **Runners** (`docker/compose.runners.yml`): mount ro auth từ `HOST_HOME` trong `.env` → entrypoint copy vào `/home/dashboard`. Cần `$HOST_HOME/.claude/.credentials.json` (có dấu chấm) và `$HOST_HOME/.claude.json` (file). Entrypoint ghi `.claude.json` vào cả `$HOME/.claude.json` và `$CLAUDE_CONFIG_DIR/.claude.json` — Claude CLI với `CLAUDE_CONFIG_DIR` chỉ đọc path sau. Nếu copy tay vào container, đặt file tại `/home/dashboard/.claude/.claude.json` (không chỉ `$HOME/.claude.json`). Host macOS: OAuth có thể nằm Keychain — file `.credentials.json` trống/stale → dùng `claude setup-token` + `CLAUDE_CODE_OAUTH_TOKEN` trong `.env`, hoặc login một lần trong container Linux.
 
-**Plugin agents:** bundle tại `/opt/bundled-plugins/dev-agent-teams` ([`docker/bundled-plugins/`](docker/bundled-plugins/)).
+**Plugin agents:** image chỉ đóng gói template agent từ [`docs/template/agents/`](docs/template/agents/) → `/opt/bundled-plugins/dev-agent-teams/agents` (xem [`docs/template/README.md`](docs/template/README.md)).
 
 Chi tiết path / quyền: xem comment trong `docker/compose.yml`, `docker/entrypoint.sh`, `docker/install.sh`.
 
