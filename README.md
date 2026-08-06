@@ -116,6 +116,7 @@ docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.ru
 | `DEV_TEAM_ROOT` | `/data/project/.dev-team-agent` | Data root trong container |
 | `DEV_TEAM_DASHBOARD_HOME` | `/data/dashboard-home` | Registry multi-project |
 | `ANTHROPIC_API_KEY` / `CURSOR_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` | (trống) | Optional — đặt trong `docker/.env` |
+| `GH_TOKEN` / `GITHUB_TOKEN` | (trống) | PAT cho `git push` / `gh` — xem [`docker/.env.example`](docker/.env.example) |
 | `FIX_PROJECT_OWNERSHIP` | `0` | Xem ghi chú trong [`docker/.env.example`](docker/.env.example) |
 
 **`docker/.env` (runtime):** Compose dùng `--env-file docker/.env` để substitute `${…}` trong YAML và `env_file` inject vào container. Sample: [`docker/.env.example`](docker/.env.example). File `docker/.env` gitignored — không commit secret/path máy.

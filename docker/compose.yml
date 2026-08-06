@@ -27,6 +27,8 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CURSOR_API_KEY: ${CURSOR_API_KEY:-}
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      GH_TOKEN: ${GH_TOKEN:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-${GH_TOKEN:-}}
     volumes:
       - ${DEV_TEAM_PROJECT_PATH:-${HOME}/workspace}:/data/project
       - dashboard-home:/data/dashboard-home

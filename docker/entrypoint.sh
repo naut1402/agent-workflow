@@ -257,6 +257,23 @@ if command -v git >/dev/null 2>&1; then
   fi
 fi
 
+# Normalize GitHub token for gh + git (HTTPS push).
+if [ -z "${GH_TOKEN:-}" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
+  GH_TOKEN="$GITHUB_TOKEN"
+fi
+if [ -z "${GITHUB_TOKEN:-}" ] && [ -n "${GH_TOKEN:-}" ]; then
+  GITHUB_TOKEN="$GH_TOKEN"
+fi
+export GH_TOKEN="${GH_TOKEN:-}"
+export GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+
+if [ -n "$GH_TOKEN" ] && command -v gh >/dev/null 2>&1; then
+  runuser -u "$RUN_NAME" -- env HOME="$HOME" GH_TOKEN="$GH_TOKEN" GITHUB_TOKEN="$GITHUB_TOKEN" \
+    gh auth setup-git 2>/dev/null || true
+elif [ -z "$GH_TOKEN" ]; then
+  echo "[dev-team-dashboard] WARNING: GH_TOKEN/GITHUB_TOKEN unset — git push / gh pr may fail" >&2
+fi
+
 if [ "$RUN_UID" = "0" ] || [ "$RUN_NAME" = "root" ]; then
   echo "[dev-team-dashboard] FATAL: refuse uid 0" >&2
   exit 1
@@ -274,6 +291,8 @@ if [ "$(id -u)" = "0" ]; then
     USER="$USER" \
     CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" \
     PATH="$PATH" \
+    GH_TOKEN="$GH_TOKEN" \
+    GITHUB_TOKEN="$GITHUB_TOKEN" \
     "$@"
 fi
 

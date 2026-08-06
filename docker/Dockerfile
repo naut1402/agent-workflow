@@ -30,11 +30,20 @@ ENV NODE_ENV=production \
 # oven/bun đã chiếm uid 1000 → dùng 1001 làm user mặc định trong image.
 # Runtime identity: PUID/PGID (LinuxServer-style) — xem docker/entrypoint.sh.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl ca-certificates git \
+  && apt-get install -y --no-install-recommends curl ca-certificates git gnupg \
+  && mkdir -p -m 755 /etc/apt/keyrings \
+  && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+       -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+  && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+       > /etc/apt/sources.list.d/github-cli.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends gh \
   && useradd --create-home --uid 1001 --shell /bin/bash dashboard \
   && mkdir -p /data/dashboard-home /data/project \
     /home/dashboard/.local/bin /home/dashboard/.local/share \
   && chown -R dashboard:dashboard /home/dashboard /data \
+  && command -v gh \
   && rm -rf /var/lib/apt/lists/*
 
 USER dashboard
