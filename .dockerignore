@@ -20,7 +20,7 @@ test-results
 .vite
 docs/todo
 
-# docs (not needed in image) — giữ agent template cho Docker fallback
+# docs (not needed in image) — trừ agent templates
 *.md
 !docs/template/agents/
 !docs/template/agents/**

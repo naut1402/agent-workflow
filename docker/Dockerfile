@@ -60,7 +60,6 @@ RUN bun install --frozen-lockfile --production
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src ./src
 COPY --from=build /app/tsconfig.json ./tsconfig.json
-# Chỉ agent markdown (docs/template) — không vendor skills/script của plugin
 COPY docs/template/agents /opt/bundled-plugins/dev-agent-teams/agents
 COPY docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
