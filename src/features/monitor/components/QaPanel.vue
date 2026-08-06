@@ -193,7 +193,7 @@ onUpdated(() => scheduleMermaid())
 </script>
 
 <template>
-  <section class="qa">
+  <section class="qa-panel">
     <div class="qa-head">{{ t('monitor.qa.head') }}</div>
     <div class="qa-hint">
       {{ t('monitor.qa.hintBefore') }}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canRunWithTaskState, isRunnableTarget } from '@/features/monitor/lib/pipelineRunGuards'
+import { canRunWithTaskState, isRunnableTarget, taskNeedsStateRepair } from '@/features/monitor/lib/pipelineRunGuards'
 
 const KEYS = ['investigator', 'designer', 'implementer', 'reviewer', 'pr-creator']
 
@@ -11,6 +11,39 @@ describe('canRunWithTaskState', () => {
 
   it('blocks run when state_ok is false', () => {
     expect(canRunWithTaskState({ state_ok: false })).toBe(false)
+  })
+})
+
+describe('taskNeedsStateRepair', () => {
+  it('flags unreadable state', () => {
+    expect(taskNeedsStateRepair({ state_ok: false })).toBe(true)
+  })
+
+  it('flags current_phase missing from pipeline steps', () => {
+    expect(
+      taskNeedsStateRepair({
+        state_ok: true,
+        current_phase: 'ghost-step',
+        pipeline: { steps: [{ id: 'implementer' }] },
+      }),
+    ).toBe(true)
+  })
+
+  it('allows completed and in-pipeline phases', () => {
+    expect(
+      taskNeedsStateRepair({
+        state_ok: true,
+        current_phase: 'completed',
+        pipeline: { steps: [{ id: 'implementer' }] },
+      }),
+    ).toBe(false)
+    expect(
+      taskNeedsStateRepair({
+        state_ok: true,
+        current_phase: 'implementer',
+        pipeline: { steps: [{ id: 'implementer' }] },
+      }),
+    ).toBe(false)
   })
 })
 

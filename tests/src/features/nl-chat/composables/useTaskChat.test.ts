@@ -97,12 +97,12 @@ describe('useTaskChat', () => {
   })
 
   it('explains a blocked input instead of leaving it silently disabled', async () => {
-    stubApi([{ ...READY, canSend: false, blockedReason: 'noSession', running: null }])
+    stubApi([{ ...READY, canSend: false, blockedReason: 'noCompletedJob', running: null }])
     const c = make()
     await c.refresh(false)
 
     expect(c.canSend.value).toBe(false)
-    expect(c.blockedText.value).toContain('phiên CLI')
+    expect(c.blockedText.value).toContain('job nào hoàn tất')
   })
 
   it('a running step no longer disables sending — shows a "queued" hint instead', async () => {

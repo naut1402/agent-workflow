@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { ref } from 'vue'
-import { patchTaskArchive, deleteTask } from '../scripts/TaskListItemApi'
+import { computed, ref } from 'vue'
+import { patchTaskArchive, deleteTask, repairTaskState } from '../scripts/TaskListItemApi'
+import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -17,6 +18,7 @@ const emit = defineEmits([
 
 const { t } = useI18nHelpers()
 const archiveError = ref('')
+const needsRepair = computed(() => taskNeedsStateRepair(props.task))
 
 async function toggleArchive() {
   archiveError.value = ''
@@ -47,13 +49,23 @@ async function removeTask() {
   }
 }
 
+async function repairState() {
+  archiveError.value = ''
+  try {
+    await repairTaskState(props.task.task_id, props.projectId ?? undefined)
+    emit('task-archived')
+  } catch (e: any) {
+    archiveError.value = String(e.message || e || t('monitor.taskItem.repairError'))
+  }
+}
+
 function selectTask() {
   emit('select', props.task.task_id)
   if (!props.isExpanded) emit('toggle-expand', props.task.task_id)
 }
 
 function taskStatusKey(task: any): 'error' | 'waiting' | 'done' | 'active' | 'pending' {
-  if (!task.state_ok) return 'error'
+  if (!task.state_ok || needsRepair.value) return 'error'
   if (task.has_qa || task.hitl_pending) return 'waiting'
   if (task.current_phase === 'completed') return 'done'
   if (task.current_phase) return 'active'
@@ -61,16 +73,21 @@ function taskStatusKey(task: any): 'error' | 'waiting' | 'done' | 'active' | 'pe
 }
 
 function statusIcon(task: any): string {
-  if (!task.state_ok) return '⚠'
-  if (task.has_qa) return 'Q'
+  if (!task.state_ok || needsRepair.value) return '⚠'
+  // has_qa: SVG chat icon in template (not a text glyph)
+  if (task.has_qa) return ''
   if (task.hitl_pending) return '⏸'
   if (task.current_phase === 'completed') return '✓'
   if (task.current_phase) return '▶'
   return '○'
 }
 
+function isQaFlag(task: any): boolean {
+  return !!(task.state_ok && !needsRepair.value && task.has_qa)
+}
+
 function flagClass(task: any): string {
-  if (!task.state_ok) return 'error'
+  if (!task.state_ok || needsRepair.value) return 'error'
   if (task.has_qa) return 'qa'
   if (task.hitl_pending) return 'hitl'
   return taskStatusKey(task)
@@ -120,9 +137,44 @@ function hiddenCount(task: any) {
       <span
         class="flag"
         :class="flagClass(task)"
-        :title="!task.state_ok ? t('monitor.taskItem.stateError') : task.has_qa ? t('monitor.taskItem.flagQa') : task.hitl_pending ? t('monitor.taskItem.flagHitl') : undefined"
-      >{{ statusIcon(task) }}</span>
+        :title="needsRepair ? t('monitor.taskItem.stateError') : task.has_qa ? t('monitor.taskItem.flagQa') : task.hitl_pending ? t('monitor.taskItem.flagHitl') : undefined"
+      >
+        <svg
+          v-if="isQaFlag(task)"
+          class="flag-chat"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M20.5 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 20.5 12z" />
+        </svg>
+        <template v-else>{{ statusIcon(task) }}</template>
+      </span>
       <span class="id" :class="'id-' + taskStatusKey(task)">{{ task.task_id }}</span>
+      <button
+        v-if="needsRepair"
+        type="button"
+        class="btn-repair"
+        :title="t('monitor.taskItem.repairStateTitle')"
+        :aria-label="t('monitor.taskItem.repairState')"
+        @click.stop="repairState"
+      ><svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.25"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        ><path d="M10.5 2.5a3 3 0 0 1 3 3l-2 2-1.5-.5-.5-1.5 2-2z" /><path d="M9.5 6.5 3 13l-1-1 6.5-6.5" /></svg></button>
       <button
         v-if="task.state_ok"
         class="btn-archive"

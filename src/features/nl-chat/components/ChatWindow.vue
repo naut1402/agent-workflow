@@ -4,6 +4,8 @@ import BuilderChatBody from './BuilderChatBody.vue'
 import TaskChatBody from './TaskChatBody.vue'
 import type { ChatContext } from '../composables/useChatSurface'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
+import { closeTaskChatSession } from '../../monitor/scripts/monitorApi'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 
 // Shell of the floating chat window: position (docked to the draggable icon),
 // header, and one of two bodies —
@@ -26,7 +28,11 @@ const emit = defineEmits<{
   close: []
 }>()
 
+const { t } = useI18nHelpers()
 const context = computed<ChatContext>(() => props.context ?? { mode: 'builder' })
+const builderRef = ref<InstanceType<typeof BuilderChatBody> | null>(null)
+/** Bumps to remount TaskChatBody after closing / starting a new session. */
+const taskSessionEpoch = ref(0)
 
 // Task mode identifies itself by the task + step it is scoped to (the badge
 // icon carries the "this is a runner chat" meaning, so no prose title).
@@ -255,6 +261,33 @@ const anchorStyle = computed(() => {
     bottom: `${Math.min(Math.max(bottom, VIEWPORT_MARGIN), maxBottom)}px`,
   }
 })
+
+/** End the active chat session (NL scratch or task ledger) — same teardown for × and +. */
+async function dismissActiveSession(): Promise<void> {
+  const ctx = context.value
+  if (ctx.mode === 'builder') {
+    await builderRef.value?.cancel?.()
+    return
+  }
+  try {
+    await closeTaskChatSession(ctx.taskId, props.projectId ?? undefined)
+  } catch {
+    /* best-effort — UI still resets */
+  }
+  taskSessionEpoch.value += 1
+}
+
+async function onCloseClick(): Promise<void> {
+  await dismissActiveSession()
+  emit('close')
+}
+
+async function onNewSession(): Promise<void> {
+  await dismissActiveSession()
+  if (context.value.mode === 'builder') {
+    builderRef.value?.reset?.()
+  }
+}
 </script>
 
 <template>
@@ -348,13 +381,28 @@ const anchorStyle = computed(() => {
       <button
         type="button"
         class="nl-chat-icon-btn"
-        title="Thu nhỏ"
-        aria-label="Thu nhỏ"
+        :title="t('nlChat.window.newSession')"
+        :aria-label="t('nlChat.window.newSession')"
+        @click="onNewSession"
+      >
+        +
+      </button>
+      <button
+        type="button"
+        class="nl-chat-icon-btn"
+        :title="t('nlChat.window.minimize')"
+        :aria-label="t('nlChat.window.minimize')"
         @click="emit('minimize')"
       >
         —
       </button>
-      <button type="button" class="nl-chat-icon-btn" title="Đóng" aria-label="Đóng" @click="emit('close')">×</button>
+      <button
+        type="button"
+        class="nl-chat-icon-btn"
+        :title="t('nlChat.window.close')"
+        :aria-label="t('nlChat.window.close')"
+        @click="onCloseClick"
+      >×</button>
     </header>
 
     <div
@@ -368,7 +416,7 @@ const anchorStyle = computed(() => {
     <div class="nl-chat-body">
       <TaskChatBody
         v-if="context.mode === 'task'"
-        :key="`${context.taskId}::${context.stepId ?? ''}`"
+        :key="`${context.taskId}::${context.stepId ?? ''}::${taskSessionEpoch}`"
         :task-id="context.taskId"
         :step-id="context.stepId"
         :step-label="context.stepLabel"
@@ -377,7 +425,13 @@ const anchorStyle = computed(() => {
         @status="status = $event"
         @runner="stepRunner = $event"
       />
-      <BuilderChatBody v-else :project-id="projectId" @status="status = $event" @close="emit('close')" />
+      <BuilderChatBody
+        v-else
+        ref="builderRef"
+        :project-id="projectId"
+        @status="status = $event"
+        @close="emit('close')"
+      />
     </div>
   </div>
 </template>

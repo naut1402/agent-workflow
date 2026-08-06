@@ -66,6 +66,7 @@ export type { SessionEntry, TaskSessionLedger, SessionEntryStatus } from './sess
 export {
   parseCursorJsonOutput,
   buildCursorJsonArgs,
+  buildCursorJsonInvocation,
   prepareSessionInvocation,
   mintSessionId,
 } from './sessionLedger.js'

@@ -21,7 +21,7 @@ export interface TaskChatTurn {
   tool?: string
 }
 
-export type TaskChatBlockedReason = 'noCompletedJob' | 'noSession'
+export type TaskChatBlockedReason = 'noCompletedJob'
 
 export interface TaskChatRunner {
   id: string
@@ -41,7 +41,6 @@ export interface UseTaskChatOptions {
 
 const BLOCKED_TEXT: Record<TaskChatBlockedReason, string> = {
   noCompletedJob: 'Chưa có job nào hoàn tất cho task này để nối tiếp hội thoại.',
-  noSession: 'Không còn phiên CLI nào mở cho task này để nối tiếp.',
 }
 
 /** A step's own job is busy and this session has no `.dev-state` to queue against (nl-chat). */

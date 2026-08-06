@@ -15,7 +15,7 @@ import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.
  * types, instead of surfacing a 400/409 after the fact.
  */
 
-export type TaskChatBlockedReason = 'noCompletedJob' | 'noSession'
+export type TaskChatBlockedReason = 'noCompletedJob'
 
 export interface TaskChatRunningJob {
   jobId: string
@@ -112,17 +112,13 @@ export function getTaskChatState(
   const jobs = jobsOfTask(taskId)
   const runningJob = jobs.find((j) => j.status === 'queued' || j.status === 'running')
   const hasFinished = jobs.some((j) => j.status === 'succeeded' || j.status === 'failed')
-  const ledger = loadTaskSessionLedger(projectId, taskId)
-  const hasOpenSession = ledger.sessions.some((s) => s.status === 'open')
 
   // A running job no longer blocks sending — `sendTaskFeedback` queues it
-  // instead (see `queued` below) — so these guards only apply once nothing is
-  // running, mirroring the checks `sendTaskFeedback` falls through to then.
+  // instead (see `queued` below). A finished job can always start or resume a
+  // chat (`sessionMode: 'new'` when the ledger has no open entry), so the only
+  // remaining block is having no finished job at all.
   let blockedReason: TaskChatBlockedReason | undefined
-  if (!runningJob) {
-    if (!hasFinished) blockedReason = 'noCompletedJob'
-    else if (!hasOpenSession) blockedReason = 'noSession'
-  }
+  if (!runningJob && !hasFinished) blockedReason = 'noCompletedJob'
 
   const resolved = resolveChatSession(projectId, taskId, opts.stepId)
   const transcript = resolved.sessionId

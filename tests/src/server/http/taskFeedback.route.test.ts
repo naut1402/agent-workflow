@@ -158,11 +158,11 @@ describe('POST /api/tasks/:id/feedback', () => {
     expect(res.status).toBe(400)
   })
 
-  test('400 when the task has no resumable session', async () => {
+  test('starts a new session when the task has no open ledger entry', async () => {
     seedTask('F3', { current_phase: 'implementer' })
     // run-step without a `project` query param → projectId stays null so
     // runJob() never writes to the session ledger — the finished job exists
-    // but there is nothing to resume.
+    // but there is nothing to resume; feedback opens a fresh session.
     const stepRes = await app.request('/api/tasks/F3/run-step', {
       method: 'POST',
       body: JSON.stringify({ runnerId: 'stub-runner-tf-route' }),
@@ -175,7 +175,9 @@ describe('POST /api/tasks/:id/feedback', () => {
       method: 'POST',
       body: JSON.stringify({ feedback: 'hi' }),
     })
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.job?.metadata?.inputSessionMode).toBe('new')
   })
 
   test('404 for an unknown task', async () => {
