@@ -116,11 +116,11 @@ docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.ru
 | `DEV_TEAM_ROOT` | `/data/project/.dev-team-agent` | Data root trong container |
 | `DEV_TEAM_DASHBOARD_HOME` | `/data/dashboard-home` | Registry multi-project |
 | `ANTHROPIC_API_KEY` / `CURSOR_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` | (trống) | Optional — đặt trong `docker/.env` |
-| `FIX_PROJECT_OWNERSHIP` | `0` | Last resort — `chown` cả project trên host |
+| `FIX_PROJECT_OWNERSHIP` | `0` | Xem ghi chú trong [`docker/.env.example`](docker/.env.example) |
 
 **`docker/.env` (runtime):** Compose dùng `--env-file docker/.env` để substitute `${…}` trong YAML và `env_file` inject vào container. Sample: [`docker/.env.example`](docker/.env.example). File `docker/.env` gitignored — không commit secret/path máy.
 
-**PUID/PGID (khuyến nghị):** process trong container = user sở hữu `~/workspace` → ghi được `src/**` **không** đổi owner host. **Không dùng `PUID=0`** (deploy bằng root + `PUID=$(id -u)`): Claude từ chối `--dangerously-skip-permissions` và có thể làm mất `.claude.json` (chỉ còn file trong `backups/`). Entrypoint fallback về uid 1001 và tự restore/seed `.claude.json`.
+**PUID/PGID (khuyến nghị):** process trong container = user sở hữu `DEV_TEAM_PROJECT_PATH` → ghi được `src/**` **không** đổi owner host. **Không dùng `PUID=0`**. Entrypoint vẫn `chown` riêng cây `.dev-team-agent` khi cần.
 
 **Runners** (`docker/compose.runners.yml`): mount ro auth từ `HOST_HOME` trong `.env` → entrypoint copy vào `/home/dashboard`. Cần `$HOST_HOME/.claude/.credentials.json` (có dấu chấm) và `$HOST_HOME/.claude.json` (file). Entrypoint ghi `.claude.json` vào cả `$HOME/.claude.json` và `$CLAUDE_CONFIG_DIR/.claude.json` — Claude CLI với `CLAUDE_CONFIG_DIR` chỉ đọc path sau. Nếu copy tay vào container, đặt file tại `/home/dashboard/.claude/.claude.json` (không chỉ `$HOME/.claude.json`). Host macOS: OAuth có thể nằm Keychain — file `.credentials.json` trống/stale → dùng `claude setup-token` + `CLAUDE_CODE_OAUTH_TOKEN` trong `.env`, hoặc login một lần trong container Linux.
 
