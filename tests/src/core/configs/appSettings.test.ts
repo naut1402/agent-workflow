@@ -4,6 +4,7 @@ import {
   DEFAULT_APP_SETTINGS,
   parseAppSettings,
   resolveArtifactViewMode,
+  resolveChatFeedbackMode,
   resolveCollapseAppSidebarOnOutside,
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
@@ -206,6 +207,23 @@ describe('resolveNotificationUiPlacement', () => {
     expect(resolveNotificationUiPlacement({ notificationUiPlacement: 'sidebar' })).toBe('sidebar')
     expect(resolveNotificationUiPlacement({ notificationUiPlacement: 'floating' })).toBe('floating')
     expect(resolveNotificationUiPlacement({ notificationUiPlacement: 'both' })).toBe('both')
+  })
+})
+
+describe('resolveChatFeedbackMode', () => {
+  it('missing / invalid → queue (safe default)', () => {
+    expect(resolveChatFeedbackMode({})).toBe('queue')
+    expect(resolveChatFeedbackMode(undefined)).toBe('queue')
+    expect(resolveChatFeedbackMode({ chatFeedbackMode: 'bogus' as any })).toBe('queue')
+  })
+
+  it('keeps immediate when set', () => {
+    expect(resolveChatFeedbackMode({ chatFeedbackMode: 'immediate' })).toBe('immediate')
+  })
+
+  it('parseAppSettings preserves both valid values, not just what the resolver defaults to', () => {
+    expect(parseAppSettings({ chatFeedbackMode: 'queue' })).toEqual({ chatFeedbackMode: 'queue' })
+    expect(parseAppSettings({ chatFeedbackMode: 'immediate' })).toEqual({ chatFeedbackMode: 'immediate' })
   })
 })
 

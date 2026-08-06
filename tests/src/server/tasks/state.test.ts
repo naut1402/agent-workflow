@@ -224,6 +224,97 @@ describe('advanceStepOnJobSuccess', () => {
   })
 })
 
+describe('advanceStepOnJobSuccess — review retry', () => {
+  const retryPipeline = `version: 1\nsteps:\n  - id: implementer\n  - id: reviewer\n    produces: [review.md]\n    hitl: { mode: manual, gate_id: hitl-3, retry: { on: must_fix, restart_from: implementer, max: 2 } }\n  - id: pr-creator\n`
+
+  async function seedReview(root: string, taskId: string, recommendation: string) {
+    await fs.mkdir(path.join(root, 'tasks', taskId), { recursive: true })
+    await fs.writeFile(path.join(root, 'tasks', taskId, 'review.md'), `## Summary\nRecommendation: ${recommendation}\n`, 'utf8')
+  }
+
+  test('NEEDS_CHANGES, review_round < max → loops back to restart_from', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), retryPipeline, 'utf8')
+    await seedTask(root, 'T20', { current_phase: 'reviewer', review_round: 0 })
+    await seedReview(root, 'T20', 'NEEDS_CHANGES')
+
+    const result = await advanceStepOnJobSuccess(root, 'T20', 'reviewer')
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('implementer')
+    expect(result?.state.review_round).toBe(1)
+    expect(result?.state.hitl_pending).toBeNull()
+  })
+
+  test('NEEDS_CHANGES past retry.max → falls through to the gate instead of standing silently re-runnable', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), retryPipeline, 'utf8')
+    await seedTask(root, 'T21', { current_phase: 'reviewer', review_round: 2 })
+    await seedReview(root, 'T21', 'NEEDS_CHANGES')
+
+    const result = await advanceStepOnJobSuccess(root, 'T21', 'reviewer')
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('reviewer')
+    expect(result?.state.review_round).toBe(3)
+    expect(result?.state.hitl_pending).toBe('hitl-3')
+  })
+
+  test('APPROVE verdict falls through to the existing gate behavior', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), retryPipeline, 'utf8')
+    await seedTask(root, 'T22', { current_phase: 'reviewer', review_round: 0 })
+    await seedReview(root, 'T22', 'APPROVE')
+
+    const result = await advanceStepOnJobSuccess(root, 'T22', 'reviewer')
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('reviewer')
+    expect(result?.state.hitl_pending).toBe('hitl-3')
+  })
+
+  test('artifact missing a Recommendation line → fail-safe, falls through to gate', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), retryPipeline, 'utf8')
+    await seedTask(root, 'T23', { current_phase: 'reviewer', review_round: 0 })
+    await fs.mkdir(path.join(root, 'tasks', 'T23'), { recursive: true })
+    await fs.writeFile(path.join(root, 'tasks', 'T23', 'review.md'), 'no verdict line here\n', 'utf8')
+
+    const result = await advanceStepOnJobSuccess(root, 'T23', 'reviewer')
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('reviewer')
+    expect(result?.state.hitl_pending).toBe('hitl-3')
+  })
+
+  test('restart_from points to a step no longer in the pipeline → no throw, falls through to gate', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: reviewer\n    produces: [review.md]\n    hitl: { mode: manual, gate_id: hitl-3, retry: { on: must_fix, restart_from: implementer, max: 2 } }\n`,
+      'utf8',
+    )
+    await seedTask(root, 'T24', { current_phase: 'reviewer', review_round: 0 })
+    await seedReview(root, 'T24', 'NEEDS_CHANGES')
+
+    const result = await advanceStepOnJobSuccess(root, 'T24', 'reviewer')
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('reviewer')
+    expect(result?.state.hitl_pending).toBe('hitl-3')
+  })
+
+  test('step without hitl.retry declared → unaffected, advances/gates as before', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: implementer\n  - id: reviewer\n    produces: [review.md]\n  - id: pr-creator\n`,
+      'utf8',
+    )
+    await seedTask(root, 'T25', { current_phase: 'reviewer' })
+    await seedReview(root, 'T25', 'NEEDS_CHANGES')
+
+    const result = await advanceStepOnJobSuccess(root, 'T25', 'reviewer')
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('pr-creator')
+  })
+})
+
 describe('applyArchiveAction', () => {
   test('archives a task, writing archived + archived_at', async () => {
     const root = await tmp()

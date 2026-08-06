@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { TaskArchivePatch, TaskStatePatch } from '../../schemas/task.js'
 import { loadPipelineConfig } from '../index.js'
 import { readState, flowProfilePath } from './index.js'
+import { checkReviewRetry } from './reviewVerdict.js'
 
 export type HitlApplyResult =
   | { ok: true; state: Record<string, unknown>; mtime: number }
@@ -176,6 +177,30 @@ export async function advanceStepOnJobSuccess(
     const currentStep = stepIdx >= 0 ? steps[stepIdx] : null
     if (!currentStep) return null
 
+    // A step opting into `hitl.retry` (e.g. `reviewer` in DEFAULT_PIPELINE) gets
+    // its artifact's verdict checked BEFORE the gate/advance below — a
+    // `NEEDS_CHANGES`-style verdict loops back to `retry.restart_from` without
+    // ever bothering the human gate; only an approve verdict (or exhausting
+    // `retry.max`) falls through to the existing behavior.
+    const retry = currentStep.hitl?.retry
+    const restartStepExists = retry ? steps.some((s: any) => s.id === retry.restart_from) : false
+    if (retry && restartStepExists) {
+      const verdict = await checkReviewRetry(root, taskId, currentStep)
+      if (verdict.retry) {
+        const round = Number(state.review_round ?? 0) + 1
+        state.review_round = round
+        if (round <= retry.max) {
+          state.current_phase = retry.restart_from
+          state.hitl_pending = null
+          const mtime = await writeStateAtomic(stateFile, state)
+          return { state, mtime }
+        }
+        // Past `retry.max`: fall through to the gate/advance logic below —
+        // for a step with `hitl.gate_id` (like `reviewer`), that opens the
+        // human gate instead of leaving the task silently re-runnable.
+      }
+    }
+
     const gateId = currentStep.hitl?.gate_id
     if (gateId) {
       state.hitl_pending = gateId
@@ -186,6 +211,51 @@ export async function advanceStepOnJobSuccess(
 
     const mtime = await writeStateAtomic(stateFile, state)
     return { state, mtime }
+  })
+}
+
+export interface PendingFeedback {
+  feedback: string
+  stepId?: string
+}
+
+/**
+ * Record feedback sent while its target step's job is still `running` —
+ * `runJob` collects this once that job finishes and resubmits it via
+ * `sendTaskFeedback`. A second call before the job finishes overwrites the
+ * first; only the latest feedback for a task is kept (test-spec §3.8).
+ *
+ * Returns `false` (and writes nothing) when `taskId` has no `.dev-state`
+ * file — callers must not report `queued: true` in that case, since nothing
+ * will ever resubmit it (e.g. nl-chat's scratch sessions, which reuse this
+ * same feedback path but aren't dashboard pipeline tasks).
+ */
+export async function queuePendingFeedback(
+  root: string,
+  taskId: string,
+  feedback: PendingFeedback,
+): Promise<boolean> {
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
+  return withStateFileLock(stateFile, async () => {
+    const read = await readState(stateFile)
+    if (!read.ok) return false
+    const state = { ...read.state, pending_feedback: feedback } as Record<string, unknown>
+    await writeStateAtomic(stateFile, state)
+    return true
+  })
+}
+
+/** Consume (and clear) a task's queued feedback, if any — null if none is pending. */
+export async function takePendingFeedback(root: string, taskId: string): Promise<PendingFeedback | null> {
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
+  return withStateFileLock(stateFile, async () => {
+    const read = await readState(stateFile)
+    if (!read.ok) return null
+    const pending = read.state.pending_feedback as PendingFeedback | undefined
+    if (!pending) return null
+    const state = { ...read.state, pending_feedback: null } as Record<string, unknown>
+    await writeStateAtomic(stateFile, state)
+    return pending
   })
 }
 

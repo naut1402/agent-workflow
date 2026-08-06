@@ -263,11 +263,11 @@ export function startNlChatSession(input: StartNlChatSessionInput): NlChatSessio
  * (F0011), which resumes the CLI session recorded in the chat session's
  * ledger entry.
  */
-export function continueNlChatSession(
+export async function continueNlChatSession(
   chatSessionId: string,
   projectId: string,
   message: string,
-): MutationResult<{ job: JobRecord }> {
+): Promise<MutationResult<{ job: JobRecord }>> {
   const jobs = findChatJobs(chatSessionId)
   // A session is known by having at least one tagged job — `entityType` may be
   // absent (auto mode), so it can no longer double as the existence check.
@@ -279,7 +279,13 @@ export function continueNlChatSession(
     turnIndex: jobs.length + 1,
     message,
   })
-  return sendTaskFeedback(chatSessionId, projectId, prompt)
+  // Chat sessions here are scratch-only (no `.dev-state` file), so
+  // `sendTaskFeedback` can never actually return `{ queued: true }` for one —
+  // an active job still surfaces as the original "busy" error.
+  const result = await sendTaskFeedback(chatSessionId, projectId, prompt)
+  if ('error' in result) return result
+  if ('job' in result) return { ok: true, job: result.job }
+  return { ok: false, status: 409, error: 'step already running' }
 }
 
 export type NlChatTurnResult =

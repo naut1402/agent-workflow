@@ -22,6 +22,13 @@ export default {
     block: 'Block theo H2',
     full: 'Full',
   },
+  chatFeedback: {
+    title: 'Chat khi step đang chạy',
+    desc: 'Cách xử lý tin nhắn/feedback khi step đang chạy.',
+    groupLabel: 'Khi step đang chạy, gửi feedback',
+    queue: 'Hàng đợi (chờ step hiện tại xong)',
+    immediate: 'Gửi ngay (huỷ step đang chạy)',
+  },
   taskList: {
     title: 'Danh sách task',
     desc: 'Tuỳ chọn hành vi danh sách task ở Monitor mode.',

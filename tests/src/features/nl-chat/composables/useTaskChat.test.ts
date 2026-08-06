@@ -97,23 +97,33 @@ describe('useTaskChat', () => {
   })
 
   it('explains a blocked input instead of leaving it silently disabled', async () => {
-    stubApi([{ ...READY, canSend: false, blockedReason: 'stepRunning', running: { jobId: 'j9', stepId: 'design' } }])
+    stubApi([{ ...READY, canSend: false, blockedReason: 'noCompletedJob', running: null }])
     const c = make()
     await c.refresh(false)
 
     expect(c.canSend.value).toBe(false)
-    expect(c.blockedText.value).toContain('Step đang chạy')
+    expect(c.blockedText.value).toContain('job nào hoàn tất')
+  })
+
+  it('a running step no longer disables sending — shows a "queued" hint instead', async () => {
+    stubApi([{ ...READY, canSend: true, queued: true, running: { jobId: 'j9', stepId: 'design' } }])
+    const c = make()
+    await c.refresh(false)
+
+    expect(c.canSend.value).toBe(true)
+    expect(c.queued.value).toBe(true)
+    expect(c.blockedText.value).toContain('sẽ được gửi')
     expect(c.running.value).toMatchObject({ jobId: 'j9' })
   })
 
-  it('send posts the feedback with the step id and echoes it until the transcript catches up', async () => {
+  it('send posts the feedback with the step id + chat feedback mode and echoes it until the transcript catches up', async () => {
     const fetchMock = stubApi([READY, { ...READY, turns: [], total: 2 }])
     const c = make()
     await c.refresh(false)
     await c.send('sửa lại phần A')
 
     const post = fetchMock.mock.calls.find(([, init]: any[]) => init?.method === 'POST')!
-    expect(JSON.parse(post[1].body)).toEqual({ feedback: 'sửa lại phần A', stepId: 'design' })
+    expect(JSON.parse(post[1].body)).toEqual({ feedback: 'sửa lại phần A', stepId: 'design', mode: 'queue' })
     // Not in the transcript yet → still shown as pending.
     expect(c.pending.value).toEqual(['sửa lại phần A'])
   })
@@ -140,7 +150,7 @@ describe('useTaskChat', () => {
 
   it('start polls faster while a step runs and stop() ends the loop', async () => {
     vi.useFakeTimers()
-    const fetchMock = stubApi([{ ...READY, canSend: false, blockedReason: 'stepRunning', running: { jobId: 'j9' } }])
+    const fetchMock = stubApi([{ ...READY, canSend: true, queued: true, running: { jobId: 'j9' } }])
     const c = make({ runningPollMs: 1000, idlePollMs: 60_000 })
     await c.start()
     const afterStart = fetchMock.mock.calls.length

@@ -159,8 +159,8 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
         ],
         running: { jobId: 'job-e2e', stepId: url.searchParams.get('stepId'), startedAt: null },
         runner: { id: 'runner-e2e', name: 'Runner E2E', enabled: true },
-        canSend: false,
-        blockedReason: 'stepRunning',
+        canSend: true,
+        queued: true,
       },
     })
   })
@@ -197,11 +197,11 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
   await expect(reply).not.toContainText('**')
   await expect(win.locator('.task-chat-activity')).toContainText('Read')
 
-  // Sending is blocked while the step runs: the input is disabled and its
-  // placeholder carries the reason (no separate warning line).
+  // Sending while the step runs is no longer blocked — the message is queued
+  // instead, so the input stays enabled and its placeholder explains that.
   const input = win.locator('.nl-chat-input-row textarea')
-  await expect(input).toBeDisabled()
-  await expect(input).toHaveAttribute('placeholder', /Step đang chạy/)
+  await expect(input).toBeEnabled()
+  await expect(input).toHaveAttribute('placeholder', /sẽ được gửi/)
 
   // Info icon after the title: hover shows what this chat is bound to.
   const info = win.locator('.nl-chat-info')

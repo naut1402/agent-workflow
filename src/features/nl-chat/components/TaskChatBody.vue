@@ -84,9 +84,11 @@ function autoGrow(): void {
   el.style.height = `${el.scrollHeight}px`
 }
 
-const placeholder = computed(() =>
-  chat.canSend.value ? 'Nhập tin nhắn cho runner…' : chat.blockedText.value || 'Chưa gửi được',
-)
+const placeholder = computed(() => {
+  if (!chat.canSend.value) return chat.blockedText.value || 'Chưa gửi được'
+  if (chat.queued.value) return chat.blockedText.value || 'Nhập tin nhắn cho runner…'
+  return 'Nhập tin nhắn cho runner…'
+})
 
 // Header status: a running step is the interesting state — that is the whole
 // point of watching a runner live.
