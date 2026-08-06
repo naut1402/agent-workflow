@@ -85,8 +85,9 @@ bun run mcp          # MCP stdio — project registry
 Mọi file Docker nằm trong [`docker/`](docker/). Deploy mẫu:
 
 ```bash
-./docker/install.sh              # UI/API — mount $HOME/workspace
-./docker/install.sh --runners    # + auth Claude/Cursor từ host (PUID/PGID)
+cp docker/.env.example docker/.env   # sửa HOST_HOME, PUID, DEV_TEAM_PROJECT_PATH
+./docker/install.sh                  # UI/API — đọc docker/.env
+./docker/install.sh --runners        # + auth Claude/Cursor từ HOST_HOME
 ./docker/install.sh --down
 ```
 
@@ -98,30 +99,30 @@ Không cần cài Bun trên host. Image chạy `src/standalone.ts`, bind `0.0.0.
 # Build thủ công (context = repo root)
 docker build -f docker/Dockerfile -t dev-team-dashboard:local .
 
-# Compose — chỉ UI/API
-export PUID="$(id -u)" PGID="$(id -g)"
-export DEV_TEAM_PROJECT_PATH="${DEV_TEAM_PROJECT_PATH:-$HOME/workspace}"
-docker compose -f docker/compose.yml up -d --build
+# Compose — luôn truyền --env-file docker/.env (substitute + runtime)
+cp docker/.env.example docker/.env   # chỉnh PUID/HOST_HOME/…
+docker compose --env-file docker/.env -f docker/compose.yml up -d --build
 
-# Compose — + runners
-export HOST_HOME="$HOME"
-docker compose -f docker/compose.yml -f docker/compose.runners.yml up -d --build
+# + runners
+docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.runners.yml up -d --build
 ```
 
 | Env | Mặc định | Ý nghĩa |
 |-----|----------|---------|
-| `PUID` / `PGID` | `1001` (compose) / `id -u`/`id -g` (`install.sh`) | Process User/Group ID — trùng owner project trên host |
-| `DEV_TEAM_PROJECT_PATH` | `$HOME/workspace` | Bind mount → `/data/project` |
-| `HOST_HOME` | `$HOME` (runners) | Mount `.claude` / `.cursor` / credentials |
+| `PUID` / `PGID` | `1001` (compose) / điền trong `docker/.env` | Process User/Group ID — trùng owner project trên host |
+| `DEV_TEAM_PROJECT_PATH` | trong `docker/.env` | Bind mount → `/data/project` |
+| `HOST_HOME` | trong `docker/.env` (runners) | Mount `.claude` / `.cursor` / credentials |
 | `DEV_TEAM_DASHBOARD_PORT` | `5174` | Cổng HTTP |
 | `DEV_TEAM_ROOT` | `/data/project/.dev-team-agent` | Data root trong container |
 | `DEV_TEAM_DASHBOARD_HOME` | `/data/dashboard-home` | Registry multi-project |
-| `ANTHROPIC_API_KEY` / `CURSOR_API_KEY` | (trống) | Optional API key |
+| `ANTHROPIC_API_KEY` / `CURSOR_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` | (trống) | Optional — đặt trong `docker/.env` |
 | `FIX_PROJECT_OWNERSHIP` | `0` | Last resort — `chown` cả project trên host |
 
-**PUID/PGID (khuyến nghị):** process trong container = user sở hữu `~/workspace` → ghi được `src/**` **không** đổi owner host. Sample: [`docker/.env.example`](docker/.env.example). **Không dùng `PUID=0`** (deploy bằng root + `PUID=$(id -u)`): Claude từ chối `--dangerously-skip-permissions` và có thể làm mất `.claude.json` (chỉ còn file trong `backups/`). Entrypoint fallback về uid 1001 và tự restore/seed `.claude.json`.
+**`docker/.env` (runtime):** Compose dùng `--env-file docker/.env` để substitute `${…}` trong YAML và `env_file` inject vào container. Sample: [`docker/.env.example`](docker/.env.example). File `docker/.env` gitignored — không commit secret/path máy.
 
-**Runners** (`docker/compose.runners.yml`): mount ro auth host → entrypoint copy vào `/home/dashboard`. Cần `~/.claude/.credentials.json` (có dấu chấm) và `~/.claude.json` (file). Entrypoint ghi `.claude.json` vào cả `$HOME/.claude.json` và `$CLAUDE_CONFIG_DIR/.claude.json` — Claude CLI với `CLAUDE_CONFIG_DIR` chỉ đọc path sau. Nếu copy tay vào container, đặt file tại `/home/dashboard/.claude/.claude.json` (không chỉ `$HOME/.claude.json`). Host macOS: OAuth có thể nằm Keychain — file `.credentials.json` trống/stale → dùng `claude setup-token` + `CLAUDE_CODE_OAUTH_TOKEN`, hoặc login một lần trong container Linux.
+**PUID/PGID (khuyến nghị):** process trong container = user sở hữu `~/workspace` → ghi được `src/**` **không** đổi owner host. **Không dùng `PUID=0`** (deploy bằng root + `PUID=$(id -u)`): Claude từ chối `--dangerously-skip-permissions` và có thể làm mất `.claude.json` (chỉ còn file trong `backups/`). Entrypoint fallback về uid 1001 và tự restore/seed `.claude.json`.
+
+**Runners** (`docker/compose.runners.yml`): mount ro auth từ `HOST_HOME` trong `.env` → entrypoint copy vào `/home/dashboard`. Cần `$HOST_HOME/.claude/.credentials.json` (có dấu chấm) và `$HOST_HOME/.claude.json` (file). Entrypoint ghi `.claude.json` vào cả `$HOME/.claude.json` và `$CLAUDE_CONFIG_DIR/.claude.json` — Claude CLI với `CLAUDE_CONFIG_DIR` chỉ đọc path sau. Nếu copy tay vào container, đặt file tại `/home/dashboard/.claude/.claude.json` (không chỉ `$HOME/.claude.json`). Host macOS: OAuth có thể nằm Keychain — file `.credentials.json` trống/stale → dùng `claude setup-token` + `CLAUDE_CODE_OAUTH_TOKEN` trong `.env`, hoặc login một lần trong container Linux.
 
 **Plugin agents:** bundle tại `/opt/bundled-plugins/dev-agent-teams` ([`docker/bundled-plugins/`](docker/bundled-plugins/)).
 

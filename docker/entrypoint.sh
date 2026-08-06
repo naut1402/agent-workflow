@@ -3,20 +3,16 @@
 # --dangerously-skip-permissions (blocked for uid 0).
 #
 # Ownership (LinuxServer-style):
-#   PUID / PGID → chạy process trùng uid/gid sở hữu project trên host
-#                 (không chown /data/project). Khuyến nghị.
-#   FIX_PROJECT_OWNERSHIP=1 → chown -R /data/project (đổi owner trên host — last resort).
-#
-# Compat: HOST_UID / HOST_GID vẫn được đọc nếu PUID/PGID trống.
+#   PUID / PGID → process uid/gid matching host project owner.
+#   FIX_PROJECT_OWNERSHIP=1 → chown -R /data/project (last resort).
+# Compat: HOST_UID / HOST_GID if PUID/PGID unset.
 set -e
 
 RUN_UID="${PUID:-${HOST_UID:-1001}}"
 RUN_GID="${PGID:-${HOST_GID:-1001}}"
 
-# Claude CLI chặn --dangerously-skip-permissions với uid 0.
-# Deploy bằng root + PUID=$(id -u) → PUID=0 → mọi job fail.
 if [ "$RUN_UID" = "0" ] || [ "$RUN_GID" = "0" ]; then
-  echo "[dev-team-dashboard] WARNING: PUID/PGID=0 không dùng được (Claude block root). Fallback uid/gid 1001 (dashboard)."
+  echo "[dev-team-dashboard] WARNING: PUID/PGID=0 — fallback uid/gid 1001" >&2
   RUN_UID=1001
   RUN_GID=1001
 fi
@@ -24,7 +20,6 @@ fi
 resolve_run_user() {
   if getent passwd "$RUN_UID" >/dev/null 2>&1; then
     RUN_NAME=$(getent passwd "$RUN_UID" | cut -d: -f1)
-    # Không bao giờ "drop" sang root dù passwd có uid 0.
     if [ "$RUN_NAME" = "root" ] || [ "$RUN_UID" = "0" ]; then
       RUN_NAME=dashboard
       RUN_UID=1001
@@ -59,7 +54,6 @@ own /data/dashboard-home /home/dashboard
 chown "$RUN_UID:$RUN_GID" /data/dashboard-home/credentials.json 2>/dev/null || true
 own /app
 
-# ── Writable `.dev-team-agent` on bind mounts ─────────────────────────────────
 fix_dev_team_root() {
   target="$1"
   [ -n "$target" ] || return 0
@@ -74,7 +68,6 @@ fix_dev_team_root() {
     "$target/knowledge/system" \
     "$target/.dev-state" \
     2>/dev/null || true
-  # Prefer mkdir as PUID when possible (tránh chown thừa).
   if runuser -u "$RUN_NAME" -- test -w "$target" 2>/dev/null; then
     runuser -u "$RUN_NAME" -- mkdir -p \
       "$target/custom-agents" \
@@ -112,7 +105,7 @@ fix_project_tree_writable() {
   if [ ! -d /data/project ]; then
     return 0
   fi
-  echo "[dev-team-dashboard] WARNING: FIX_PROJECT_OWNERSHIP=1 → chown -R ${RUN_UID}:${RUN_GID} /data/project (host bind ownership changes)"
+  echo "[dev-team-dashboard] WARNING: FIX_PROJECT_OWNERSHIP=1 → chown -R ${RUN_UID}:${RUN_GID} /data/project"
   chown -R "$RUN_UID:$RUN_GID" /data/project 2>/dev/null || true
 }
 
@@ -135,7 +128,6 @@ seed_bundled_plugin() {
   own /home/dashboard/.claude/plugins
 }
 
-# Đảm bảo $CLAUDE_CONFIG_DIR/.claude.json tồn tại (Claude backup rồi xóa khi crash/root).
 ensure_claude_json() {
   dest_dir=/home/dashboard/.claude
   dest_cfg="$dest_dir/.claude.json"
@@ -152,7 +144,6 @@ ensure_claude_json() {
       echo "[dev-team-dashboard] restore .claude.json ← $latest"
       cp "$latest" "$dest_cfg"
     else
-      echo "[dev-team-dashboard] seed minimal $dest_cfg"
       printf '%s\n' '{"hasCompletedOnboarding":true,"bypassPermissionsModeAccepted":true}' > "$dest_cfg"
     fi
   fi
@@ -169,27 +160,37 @@ sync_claude_auth() {
   host_dir=/mnt/host-claude
   host_json=/mnt/host-claude.json
   dest_dir=/home/dashboard/.claude
+  synced_cred=0
 
   mkdir -p "$dest_dir"
 
   for name in .credentials.json credentials.json; do
-    if [ -f "$host_dir/$name" ]; then
-      cp "$host_dir/$name" "$dest_dir/$name"
-      if [ "$name" = "credentials.json" ] && [ ! -f "$dest_dir/.credentials.json" ]; then
-        cp "$host_dir/$name" "$dest_dir/.credentials.json"
+    src="$host_dir/$name"
+    if [ -f "$src" ]; then
+      if [ ! -r "$src" ]; then
+        echo "[dev-team-dashboard] WARNING: unreadable $src" >&2
+        continue
+      fi
+      if cp "$src" "$dest_dir/$name"; then
+        synced_cred=1
+        if [ "$name" = "credentials.json" ] && [ ! -f "$dest_dir/.credentials.json" ]; then
+          cp "$src" "$dest_dir/.credentials.json"
+        fi
+      else
+        echo "[dev-team-dashboard] WARNING: cp failed: $src" >&2
       fi
     fi
   done
 
-  # Khi CLAUDE_CONFIG_DIR được set, Claude CLI (≥2.0) đọc
-  # $CLAUDE_CONFIG_DIR/.claude.json — KHÔNG phải $HOME/.claude.json.
-  # Copy cả hai path để tương thích legacy + config-dir.
-  # Docker tạo DIRECTORY nếu file host thiếu — chỉ copy khi là file thật.
+  if [ "$synced_cred" = "0" ]; then
+    echo "[dev-team-dashboard] WARNING: no .credentials.json under $host_dir" >&2
+  fi
+
   if [ -f "$host_json" ]; then
     cp "$host_json" /home/dashboard/.claude.json
     cp "$host_json" "$dest_dir/.claude.json"
   elif [ -d "$host_json" ]; then
-    echo "[dev-team-dashboard] WARNING: $host_json là thư mục (host thiếu ~/.claude.json). Bỏ qua mount."
+    echo "[dev-team-dashboard] WARNING: $host_json is a directory (host ~/.claude.json missing)" >&2
   fi
 
   if [ -d "$host_dir/plugins" ]; then
@@ -233,14 +234,14 @@ sync_cursor_auth() {
 
 if [ -d /mnt/host-claude ]; then
   sync_claude_auth
+else
+  echo "[dev-team-dashboard] WARNING: /mnt/host-claude not mounted" >&2
 fi
 if [ -d /mnt/host-cursor ]; then
   sync_cursor_auth
 fi
 
-# Luôn chạy sau sync — kể cả không mount host (restore backup / seed).
 ensure_claude_json
-
 seed_bundled_plugin
 
 export HOME=/home/dashboard
@@ -257,7 +258,7 @@ if command -v git >/dev/null 2>&1; then
 fi
 
 if [ "$RUN_UID" = "0" ] || [ "$RUN_NAME" = "root" ]; then
-  echo "[dev-team-dashboard] FATAL: không thể chạy dashboard/Claude với uid 0. Set PUID/PGID = user thường (không phải root)." >&2
+  echo "[dev-team-dashboard] FATAL: refuse uid 0" >&2
   exit 1
 fi
 
@@ -265,7 +266,7 @@ echo "[dev-team-dashboard] drop privileges → uid=${RUN_UID} gid=${RUN_GID} use
 
 if [ "$(id -u)" = "0" ]; then
   if ! command -v runuser >/dev/null 2>&1; then
-    echo "[dev-team-dashboard] FATAL: thiếu lệnh runuser — không drop được root." >&2
+    echo "[dev-team-dashboard] FATAL: runuser not found" >&2
     exit 1
   fi
   exec runuser -u "$RUN_NAME" -- env \
@@ -276,9 +277,8 @@ if [ "$(id -u)" = "0" ]; then
     "$@"
 fi
 
-# Entrypoint không phải root nhưng uid vẫn 0? (bất thường)
 if [ "$(id -u)" = "0" ]; then
-  echo "[dev-team-dashboard] FATAL: vẫn đang root sau khi cố drop privileges." >&2
+  echo "[dev-team-dashboard] FATAL: still root" >&2
   exit 1
 fi
 

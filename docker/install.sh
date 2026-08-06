@@ -1,20 +1,13 @@
 #!/usr/bin/env bash
-# Deploy sample — chạy từ bất kỳ đâu; tự tìm root repo.
-#
-# Usage:
-#   ./docker/install.sh              # UI/API only
-#   ./docker/install.sh --runners    # + Claude/Cursor auth mount
-#   ./docker/install.sh --down
-#   DEV_TEAM_PROJECT_PATH=/data/apps ./docker/install.sh --runners
-#
-# Defaults (LinuxServer-style):
-#   PUID=$(id -u)  PGID=$(id -g)
-#   DEV_TEAM_PROJECT_PATH=$HOME/workspace
-#   HOST_HOME=$HOME
+# Deploy helper. Usage: ./docker/install.sh [--runners|--down]
+# Reads docker/.env (--env-file). Creates from .env.example if missing.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+
+ENV_FILE="$ROOT/docker/.env"
+ENV_EXAMPLE="$ROOT/docker/.env.example"
 
 WITH_RUNNERS=0
 DO_DOWN=0
@@ -23,7 +16,7 @@ for arg in "$@"; do
     --runners|-r) WITH_RUNNERS=1 ;;
     --down) DO_DOWN=1 ;;
     -h|--help)
-      sed -n '2,12p' "$0"
+      sed -n '2,4p' "$0"
       exit 0
       ;;
     *)
@@ -33,6 +26,40 @@ for arg in "$@"; do
   esac
 done
 
+if [ ! -f "$ENV_FILE" ]; then
+  if [ -f "$ENV_EXAMPLE" ]; then
+    cp "$ENV_EXAMPLE" "$ENV_FILE"
+    if [ "$(id -u)" != "0" ]; then
+      tmp="${ENV_FILE}.tmp"
+      sed \
+        -e "s|^PUID=.*|PUID=$(id -u)|" \
+        -e "s|^PGID=.*|PGID=$(id -g)|" \
+        -e "s|^HOST_HOME=.*|HOST_HOME=$HOME|" \
+        -e "s|^DEV_TEAM_PROJECT_PATH=.*|DEV_TEAM_PROJECT_PATH=$HOME/workspace|" \
+        "$ENV_FILE" > "$tmp" && mv "$tmp" "$ENV_FILE"
+    fi
+    echo "==> created $ENV_FILE"
+  else
+    echo "!! missing $ENV_EXAMPLE" >&2
+    exit 1
+  fi
+fi
+
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in
+    ''|\#*) continue ;;
+  esac
+  key="${line%%=*}"
+  val="${line#*=}"
+  key="$(printf '%s' "$key" | tr -d '[:space:]')"
+  case "$key" in
+    ''|*[!A-Za-z0-9_]*) continue ;;
+  esac
+  if [ -z "${!key+x}" ]; then
+    export "$key=$val"
+  fi
+done < "$ENV_FILE"
+
 export PUID="${PUID:-$(id -u)}"
 export PGID="${PGID:-$(id -g)}"
 export HOST_HOME="${HOST_HOME:-$HOME}"
@@ -41,12 +68,10 @@ export DEV_TEAM_DASHBOARD_PORT="${DEV_TEAM_DASHBOARD_PORT:-5174}"
 export FIX_PROJECT_OWNERSHIP="${FIX_PROJECT_OWNERSHIP:-0}"
 
 if [ "$PUID" = "0" ] || [ "$PGID" = "0" ]; then
-  echo "!! Cảnh báo: PUID/PGID=0 (root). Claude CLI chặn --dangerously-skip-permissions." >&2
-  echo "   Dùng user thường: export PUID=\$(id -u) PGID=\$(id -g) khi KHÔNG phải root," >&2
-  echo "   hoặc set PUID/PGID = uid sở hữu DEV_TEAM_PROJECT_PATH." >&2
+  echo "!! WARNING: PUID/PGID=0" >&2
 fi
 
-COMPOSE=(docker compose -f docker/compose.yml)
+COMPOSE=(docker compose --env-file "$ENV_FILE" -f docker/compose.yml)
 if [ "$WITH_RUNNERS" -eq 1 ]; then
   COMPOSE+=(-f docker/compose.runners.yml)
 fi
@@ -58,28 +83,30 @@ if [ "$DO_DOWN" -eq 1 ]; then
 fi
 
 if [ ! -d "$DEV_TEAM_PROJECT_PATH" ]; then
-  echo "==> tạo DEV_TEAM_PROJECT_PATH=$DEV_TEAM_PROJECT_PATH"
+  echo "==> mkdir $DEV_TEAM_PROJECT_PATH"
   mkdir -p "$DEV_TEAM_PROJECT_PATH"
 fi
 
 if [ "$WITH_RUNNERS" -eq 1 ]; then
+  if [ -z "${HOST_HOME:-}" ] || [ "$HOST_HOME" = "/home/youruser" ]; then
+    echo "!! set HOST_HOME in docker/.env (got '$HOST_HOME')" >&2
+    exit 1
+  fi
   mkdir -p "$HOST_HOME/.claude" "$HOST_HOME/.cursor" "$HOST_HOME/.dev-team-dashboard"
   if [ ! -f "$HOST_HOME/.claude.json" ]; then
     echo '{}' > "$HOST_HOME/.claude.json"
-    echo "==> tạo $HOST_HOME/.claude.json"
   fi
   if [ ! -f "$HOST_HOME/.dev-team-dashboard/credentials.json" ]; then
     cat > "$HOST_HOME/.dev-team-dashboard/credentials.json" <<'EOF'
 {"version":1,"profiles":[{"id":"claude-default","provider":"claude-code-cli","label":"Claude Code (logged-in CLI)","secretRef":"cli-session"}]}
 EOF
-    echo "==> tạo $HOST_HOME/.dev-team-dashboard/credentials.json"
   fi
   if [ ! -f "$HOST_HOME/.claude/.credentials.json" ] && [ ! -f "$HOST_HOME/.claude/credentials.json" ]; then
-    echo "!! Cảnh báo: chưa có $HOST_HOME/.claude/.credentials.json — Claude trong container sẽ yêu cầu login (hoặc set ANTHROPIC_API_KEY)." >&2
+    echo "!! WARNING: missing $HOST_HOME/.claude/.credentials.json" >&2
   fi
 fi
 
-echo "==> deploy"
+echo "==> deploy (env-file=$ENV_FILE)"
 echo "    PUID=$PUID PGID=$PGID"
 echo "    DEV_TEAM_PROJECT_PATH=$DEV_TEAM_PROJECT_PATH"
 echo "    HOST_HOME=$HOST_HOME"
