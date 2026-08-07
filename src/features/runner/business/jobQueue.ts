@@ -9,11 +9,18 @@ import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
+import { isAgentCliProviderId } from './providers/agentCli.js'
 import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
 import { advanceStepOnJobSuccess, loadPipelineConfig, queuePendingFeedback, takePendingFeedback } from './index.js'
 
-/** Cap on the stdout persisted for NL chat jobs — a chat reply/draft is small. */
-const NL_CHAT_STDOUT_LIMIT = 64 * 1024
+/** Cap on stdout persisted for chat surfaces (NL chat + task chat fallback). */
+const CHAT_STDOUT_LIMIT = 64 * 1024
+
+/** Persist agent reply on the job record for chat UI (NL + pipeline task chat). */
+function shouldPersistStdout(job: JobRecord, providerId: string | undefined): boolean {
+  if (job.metadata?.isNlChat) return true
+  return Boolean(providerId && isAgentCliProviderId(providerId))
+}
 
 /**
  * The pipeline step a job belongs to. Pipeline run-step jobs tag
@@ -531,7 +538,9 @@ async function runJob(job: JobRecord): Promise<void> {
         logPath: result.logPath,
         artifactsFound: result.artifactsFound,
         pid: null,
-        ...(job.metadata?.isNlChat ? { stdout: (result.stdout ?? '').slice(0, NL_CHAT_STDOUT_LIMIT) } : {}),
+        ...(shouldPersistStdout(job, connection.providerId)
+          ? { stdout: (result.stdout ?? '').slice(0, CHAT_STDOUT_LIMIT) }
+          : {}),
         ...(capturedSessionId ? { sessionId: capturedSessionId } : {}),
       })
     }
@@ -548,9 +557,11 @@ async function runJob(job: JobRecord): Promise<void> {
     logPath: result.logPath,
     artifactsFound: result.artifactsFound,
     pid: null,
-    // NL chat reads the agent's reply from here: the log file also contains the
-    // payload/prompt framing, which must never be shown as the chat answer.
-    ...(job.metadata?.isNlChat ? { stdout: (result.stdout ?? '').slice(0, NL_CHAT_STDOUT_LIMIT) } : {}),
+    // Task/NL chat read the agent's reply from here: the log file also contains
+    // the payload/prompt framing, which must never be shown as the chat answer.
+    ...(shouldPersistStdout(job, connection.providerId)
+      ? { stdout: (result.stdout ?? '').slice(0, CHAT_STDOUT_LIMIT) }
+      : {}),
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
   })
   if (!isApprovalJob) await resubmitPendingFeedback(job)

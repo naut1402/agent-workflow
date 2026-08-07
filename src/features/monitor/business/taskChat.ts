@@ -1,7 +1,82 @@
-import { getConnection, getRunner, listJobs, loadTaskSessionLedger, stepIdOf } from './index.js'
+import {
+  getConnection,
+  getRunner,
+  listJobs,
+  loadTaskSessionLedger,
+  parseCursorJsonOutput,
+  stepIdOf,
+} from './index.js'
 import type { JobRecord, SessionEntry } from './index.js'
+import { readTextFileSync } from '../../../core/lib/fileHelper.js'
 import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.js'
 import { readCursorSessionTranscript } from './cursorSessionTranscript.js'
+
+const RESPONSE_HEADER = '=== Phản hồi của runner (stdout/stderr) ==='
+const RESULT_HEADER = '=== Kết quả ==='
+const MAX_FALLBACK_CHARS = 4000
+
+function clipFallback(text: string): string {
+  const t = text.trim()
+  return t.length > MAX_FALLBACK_CHARS ? `${t.slice(0, MAX_FALLBACK_CHARS)}\n…(đã cắt bớt)` : t
+}
+
+/**
+ * Agent reply for a finished job when the CLI transcript file is missing.
+ * Prefer persisted `job.stdout` (NL chat / agent-cli); else strip framing from
+ * the job log — same approach as nl-chat's `agentStdoutOf`.
+ */
+function agentOutputFromJob(job: JobRecord): string {
+  if (typeof job.stdout === 'string' && job.stdout.trim()) {
+    return extractAgentText(job.stdout)
+  }
+
+  let log = ''
+  try {
+    log = job.logPath ? readTextFileSync(job.logPath) : ''
+  } catch {
+    return ''
+  }
+
+  const start = log.indexOf(RESPONSE_HEADER)
+  if (start < 0) return ''
+  let body = log.slice(start + RESPONSE_HEADER.length)
+  const end = body.indexOf(RESULT_HEADER)
+  if (end >= 0) body = body.slice(0, end)
+  const stripped = body
+    .split('\n')
+    .filter((line) => !line.startsWith('[runner] '))
+    .join('\n')
+    .trim()
+  return extractAgentText(stripped)
+}
+
+/** Prefer Cursor/agent JSON `result` field when stdout is still raw JSON. */
+function extractAgentText(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+  const parsed = parseCursorJsonOutput(trimmed)
+  if (typeof parsed.result === 'string' && parsed.result.trim()) return parsed.result.trim()
+  return trimmed
+}
+
+/** Build user/assistant turns from a job when disk transcript is unavailable. */
+function synthesizeTurnsFromJob(job: JobRecord): TranscriptTurn[] {
+  const turns: TranscriptTurn[] = []
+  const prompt = typeof job.userPrompt === 'string' ? job.userPrompt.trim() : ''
+  if (prompt) {
+    turns.push({ index: 0, role: 'user', text: clipFallback(prompt) })
+  }
+  const out = agentOutputFromJob(job)
+  if (out) {
+    turns.push({
+      index: turns.length,
+      role: 'assistant',
+      text: clipFallback(out),
+      at: job.finishedAt || job.startedAt || undefined,
+    })
+  }
+  return turns
+}
 
 /**
  * State for "chat trực tiếp với runner": the conversation history of the CLI
@@ -202,8 +277,34 @@ export function getTaskChatState(
       })
     : { turns: [], total: 0, file: null, matchedProvider: hint as TranscriptProviderHint }
 
+  const runnerJob =
+    runningJob ??
+    (opts.stepId
+      ? jobs.find((j) => stepIdOf(j) === opts.stepId && (j.status === 'succeeded' || j.status === 'failed'))
+      : undefined) ??
+    resolved.job ??
+    jobs.find((j) => j.status === 'succeeded' || j.status === 'failed') ??
+    jobs[0]
+  const runnerConfig = runnerJob ? getRunner(runnerJob.runnerId) : null
+
+  // Cursor/agent-cli often leave no on-disk transcript the dashboard can find,
+  // while the job log / stdout already holds the reply. Fall back so chat is
+  // not empty after a successful run.
+  let turns = transcript.turns
+  let total = transcript.total
+  let transcriptFound = Boolean(transcript.file)
   let transcriptMissingReason: string | undefined
-  if (resolved.sessionId && !transcript.file) {
+  const from = opts.fromIndex ?? 0
+  if ((!transcript.file || turns.length === 0) && runnerJob && !runningJob) {
+    const synthesized = synthesizeTurnsFromJob(runnerJob)
+    if (synthesized.length) {
+      turns = synthesized.filter((t) => t.index >= from)
+      total = synthesized.length
+      transcriptFound = true
+    }
+  }
+
+  if (resolved.sessionId && !transcriptFound) {
     if (transcript.matchedProvider === 'cursor-cli' || hint === 'cursor-cli') {
       transcriptMissingReason =
         'Không tìm thấy transcript Cursor cho session này (kiểm tra ~/.cursor/projects/*/agent-transcripts). Có thể CLI chưa ghi file hoặc session_id chưa capture.'
@@ -213,22 +314,15 @@ export function getTaskChatState(
     }
   }
 
-  const runnerJob =
-    runningJob ??
-    (opts.stepId ? jobs.find((j) => stepIdOf(j) === opts.stepId) : undefined) ??
-    resolved.job ??
-    jobs[0]
-  const runnerConfig = runnerJob ? getRunner(runnerJob.runnerId) : null
-
   return {
     taskId,
     stepId: opts.stepId,
     sessionId: resolved.sessionId,
-    transcriptFound: Boolean(transcript.file),
+    transcriptFound,
     ...(transcriptMissingReason ? { transcriptMissingReason } : {}),
     transcriptProvider: transcript.matchedProvider,
-    turns: transcript.turns,
-    total: transcript.total,
+    turns,
+    total,
     running: runningJob
       ? { jobId: runningJob.id, stepId: stepIdOf(runningJob), startedAt: runningJob.startedAt }
       : null,

@@ -147,15 +147,24 @@ function textFromCursorEntry(entry: Record<string, unknown>): { role: 'user' | '
   else if (roleRaw === 'assistant' || roleRaw === 'ai' || roleRaw === 'agent') role = 'assistant'
   if (!role) return { role: null, text: '' }
 
-  const text =
-    typeof entry.text === 'string'
-      ? entry.text
-      : typeof entry.message === 'string'
-        ? entry.message
-        : typeof entry.content === 'string'
-          ? entry.content
-          : ''
-  return { role, text, at }
+  if (typeof entry.text === 'string') return { role, text: entry.text, at }
+  if (typeof entry.message === 'string') return { role, text: entry.message, at }
+  if (typeof entry.content === 'string') return { role, text: entry.content, at }
+
+  // Nested `{ message: { content: string | blocks[] } }` (Cursor agent-transcript)
+  const message = entry.message && typeof entry.message === 'object' ? (entry.message as Record<string, unknown>) : null
+  const nested = message?.content ?? entry.content
+  if (typeof nested === 'string') return { role, text: nested, at }
+  if (Array.isArray(nested)) {
+    const parts: string[] = []
+    for (const raw of nested) {
+      const block = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
+      if (block?.type === 'text' && typeof block.text === 'string') parts.push(block.text)
+      else if (typeof raw === 'string') parts.push(raw)
+    }
+    return { role, text: parts.join('\n'), at }
+  }
+  return { role, text: '', at }
 }
 
 /** Parse Cursor JSONL (or Claude-compatible) into turns — only the file tail is read. */

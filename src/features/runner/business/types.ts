@@ -143,9 +143,9 @@ export interface JobRecord {
   error?: string
   artifactsFound?: string[]
   /**
-   * The CLI's raw stdout, persisted only for NL chat jobs
-   * (`metadata.isNlChat`) and capped — the chat surface must show the agent's
-   * answer, not the job log, which also holds the payload/prompt framing.
+   * The CLI's raw stdout (or parsed agent `result`), persisted for NL chat and
+   * Agent CLI pipeline jobs so task chat can show the reply when the on-disk
+   * session transcript is missing. Capped; never treat the full job log as this.
    */
   stdout?: string
   metadata?: Record<string, unknown>
