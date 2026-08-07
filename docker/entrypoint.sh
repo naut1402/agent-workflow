@@ -226,7 +226,9 @@ sync_cursor_auth() {
     [ -e "$f" ] || continue
     base=$(basename "$f")
     case "$base" in
-      projects|ai-tracking|extensions) continue ;;
+      projects|ai-tracking|extensions|chats|acp-sessions|browser-logs|debug-logs|plans|worktrees)
+        continue
+        ;;
     esac
     if [ -f "$f" ]; then
       cp "$f" "$dest_dir/$base" 2>/dev/null || true
@@ -235,6 +237,7 @@ sync_cursor_auth() {
       ln -s "$f" "$dest_dir/$base" 2>/dev/null || true
     fi
   done
+  mkdir -p "$dest_dir/chats" "$dest_dir/projects" "$dest_dir/acp-sessions"
   own "$dest_dir"
 }
 
