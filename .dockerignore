@@ -1,0 +1,32 @@
+# deps & build output
+node_modules
+dist
+
+# VCS / editor / local
+.git
+.github
+.claude
+.cursor
+*.local.*
+CLAUDE.local.md
+.dev-team-agent
+
+# tests & reports (not needed in image)
+tests
+test-e2e
+coverage
+playwright-report
+test-results
+.vite
+docs/todo
+
+# docs (not needed in image) — trừ agent templates
+*.md
+!docs/template/agents/
+!docs/template/agents/**
+
+# misc / local env
+.env
+.env.*
+docker/.env
+.dockerignore

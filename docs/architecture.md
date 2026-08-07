@@ -25,7 +25,7 @@ Mọi thao tác đọc/ghi của backend đều **scope vào một thư mục `.
 | Run mode | Cách resolve root | Ghi chú |
 |---|---|---|
 | **Dev** (`vite.config.ts` → plugin `devTeamApi`) | root = `cwd/..` (dashboard được scaffold vào `.dev-team-agent/viewer/`, nên thư mục cha là data root); override bằng env `DEV_TEAM_ROOT` | Đường single-project cũ. |
-| **Standalone / multi-project** (`src/standalone.ts`) | root lấy từ **ProjectRegistry** tại `~/.dev-team-dashboard/projects.json` (override thư mục bằng `DEV_TEAM_DASHBOARD_HOME`); request mang `?project=<id>`; không có id → default project (env `DEV_TEAM_ROOT` > default trong registry > fallback cũ) | Xem `resolveProjectRoot` trong `src/core/registry.ts`. |
+| **Standalone / multi-project** (`src/standalone.ts`) | root lấy từ **ProjectRegistry** tại `~/.dev-team-dashboard/projects.json` (override thư mục bằng `DEV_TEAM_DASHBOARD_HOME`); request mang `?project=<id>`; không có id → default project (registry default > env `DEV_TEAM_ROOT` > fallback cũ) | Xem `resolveProjectRoot` trong `src/core/registry.ts`. |
 
 Đọc/ghi filesystem theo triết lý **defensive** (helper nuốt lỗi, trả empty/false thay vì throw) và **path-traversal hardening** (sanitize mọi input từ request) — chi tiết ở [`AGENTS.md` § Bất biến](../AGENTS.md#4-bất-biến-bắt-buộc-giữ).
 

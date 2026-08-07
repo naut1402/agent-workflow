@@ -143,17 +143,21 @@ describe('seedDefault + resolveProjectRoot', () => {
     expect(seedDefault(proj)).toBeNull() // already populated
     expect(seedDefault(null)).toBeNull()
   })
-  test('resolveProjectRoot: known id, unknown→null, env priority, default, fallback', () => {
+  test('resolveProjectRoot: known id, unknown→null, registry default trước env, fallback', () => {
     const r = add({ path: proj })
     const id = r.ok ? r.project.id : ''
     expect(resolveProjectRoot(id)).toBe(r.ok ? r.project.path : '')
     expect(resolveProjectRoot('unknown')).toBeNull()
-    // DEV_TEAM_ROOT highest priority for the default (no id)
+    // Registry default wins even when DEV_TEAM_ROOT points elsewhere
+    process.env.DEV_TEAM_ROOT = path.join(home, 'other-env-root')
+    expect(resolveProjectRoot(null)).toBe(r.ok ? r.project.path : '')
+    delete process.env.DEV_TEAM_ROOT
+    expect(resolveProjectRoot(null)).toBe(r.ok ? r.project.path : '')
+  })
+  test('resolveProjectRoot: DEV_TEAM_ROOT khi registry trống', () => {
     process.env.DEV_TEAM_ROOT = proj
     expect(resolveProjectRoot(null)).toBe(path.resolve(proj))
     delete process.env.DEV_TEAM_ROOT
-    // falls back to registry default
-    expect(resolveProjectRoot(null)).toBe(r.ok ? r.project.path : '')
   })
   test('resolveProjectRoot opts.defaultRoot as last resort', () => {
     expect(resolveProjectRoot(null, { defaultRoot: '/legacy' })).toBe('/legacy')
