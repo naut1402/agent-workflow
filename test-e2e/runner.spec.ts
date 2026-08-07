@@ -28,7 +28,7 @@ test('runner config: mount + save runner roundtrip (capture)', async ({ page }, 
   await page.locator('.runner-list li').filter({ hasText: /E2E Runner/ }).first().click()
   const editDialog = page.getByRole('dialog', { name: 'Sửa runner' })
   await expect(editDialog).toBeVisible()
-  await editDialog.locator('.conn-add').click()
+  await editDialog.getByRole('button', { name: 'Thêm connection' }).click()
   const connDialog = page.getByRole('dialog', { name: 'Thêm connection' })
   await expect(connDialog).toBeVisible()
   await connDialog.getByLabel('Tên kết nối').fill('E2E Connection')
