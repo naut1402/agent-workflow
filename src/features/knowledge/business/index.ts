@@ -25,3 +25,10 @@ export {
   loadKnowledgeBundle,
 } from './fileDriver.js'
 export { handleKnowledgeApi } from './knowledgeApi.js'
+export { scanProjectDocuments, readCandidateContent } from './scanDocs.js'
+export {
+  listKnowledgeRevisions,
+  snapshotKnowledgeRevision,
+  readKnowledgeRevision,
+  restoreKnowledgeRevision,
+} from './versions.js'
