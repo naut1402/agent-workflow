@@ -59,23 +59,65 @@ function extractAgentText(raw: string): string {
   return trimmed
 }
 
-/** Build user/assistant turns from a job when disk transcript is unavailable. */
-function synthesizeTurnsFromJob(job: JobRecord): TranscriptTurn[] {
+/** Build user/assistant turns from a single finished job (indices start at `startIndex`). */
+function synthesizeTurnsFromJob(job: JobRecord, startIndex = 0): TranscriptTurn[] {
   const turns: TranscriptTurn[] = []
   const prompt = typeof job.userPrompt === 'string' ? job.userPrompt.trim() : ''
   if (prompt) {
-    turns.push({ index: 0, role: 'user', text: clipFallback(prompt) })
+    turns.push({ index: startIndex + turns.length, role: 'user', text: clipFallback(prompt) })
   }
   const out = agentOutputFromJob(job)
   if (out) {
     turns.push({
-      index: turns.length,
+      index: startIndex + turns.length,
       role: 'assistant',
       text: clipFallback(out),
       at: job.finishedAt || job.startedAt || undefined,
     })
   }
   return turns
+}
+
+/**
+ * Conversation reconstructed from finished pipeline/feedback jobs when the CLI
+ * transcript file is missing or empty. Jobs are oldest→newest so chat-feedback
+ * rounds append after the original step run — stable indices for poll `from`.
+ */
+function synthesizeTurnsFromJobs(jobs: JobRecord[]): TranscriptTurn[] {
+  const chronological = [...jobs].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+  const turns: TranscriptTurn[] = []
+  for (const job of chronological) {
+    turns.push(...synthesizeTurnsFromJob(job, turns.length))
+  }
+  return turns
+}
+
+function finishedJobsForChat(jobs: JobRecord[], stepId?: string, sessionId?: string | null): JobRecord[] {
+  return jobs.filter((j) => {
+    if (j.status !== 'succeeded' && j.status !== 'failed') return false
+    if (stepId && stepIdOf(j) !== stepId) {
+      // Feedback jobs keep parent step id; also accept same CLI session.
+      if (!sessionId || j.sessionId !== sessionId) return false
+    }
+    return true
+  })
+}
+
+/** True when the latest finished job's prompt/reply is already in transcript turns. */
+function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | undefined): boolean {
+  if (!latest) return true
+  const prompt = typeof latest.userPrompt === 'string' ? latest.userPrompt.trim() : ''
+  const out = agentOutputFromJob(latest)
+  if (!prompt && !out) return true
+  const texts = turns.map((t) => t.text.trim())
+  if (prompt && texts.some((t) => t === clipFallback(prompt) || t.includes(prompt.slice(0, 80)))) {
+    return true
+  }
+  if (out) {
+    const clip = clipFallback(out)
+    if (texts.some((t) => t === clip || t.includes(clip.slice(0, 80)))) return true
+  }
+  return false
 }
 
 /**
@@ -287,16 +329,23 @@ export function getTaskChatState(
     jobs[0]
   const runnerConfig = runnerJob ? getRunner(runnerJob.runnerId) : null
 
-  // Cursor/agent-cli often leave no on-disk transcript the dashboard can find,
-  // while the job log / stdout already holds the reply. Fall back so chat is
-  // not empty after a successful run.
+  // Cursor/agent-cli often leave no on-disk transcript (or one that lags behind
+  // chat-feedback jobs). Rebuild / extend turns from finished job stdout+logs.
   let turns = transcript.turns
   let total = transcript.total
   let transcriptFound = Boolean(transcript.file)
   let transcriptMissingReason: string | undefined
   const from = opts.fromIndex ?? 0
-  if ((!transcript.file || turns.length === 0) && runnerJob && !runningJob) {
-    const synthesized = synthesizeTurnsFromJob(runnerJob)
+  const jobSource = finishedJobsForChat(jobs, opts.stepId, resolved.sessionId)
+  const needJobFallback =
+    !runningJob &&
+    jobSource.length > 0 &&
+    (!transcript.file || turns.length === 0 || !transcriptCoversLatestJob(turns, jobSource[0]))
+
+  if (needJobFallback) {
+    // When the on-disk transcript is incomplete, prefer the full job timeline
+    // (includes every feedback round) over a stale partial file.
+    const synthesized = synthesizeTurnsFromJobs(jobSource)
     if (synthesized.length) {
       turns = synthesized.filter((t) => t.index >= from)
       total = synthesized.length

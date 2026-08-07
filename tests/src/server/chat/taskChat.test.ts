@@ -261,6 +261,49 @@ describe('getTaskChatState', () => {
     expect(state.turns[1]?.text).toContain('Nội dung từ stdout')
   })
 
+  test('job-fallback timeline includes chat-feedback rounds (stable indices)', () => {
+    upsertConnection({
+      id: 'conn-cursor-fb',
+      kind: 'local-console',
+      providerId: 'cursor-cli',
+      cliPath: 'agent',
+    })
+    upsertRunner({ id: 'runner-cursor-fb', name: 'Cursor FB', connectionId: 'conn-cursor-fb', config: {} })
+    writeJob({
+      id: 'j-step',
+      runnerId: 'runner-cursor-fb',
+      sessionId: 's-fb',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      userPrompt: 'Viết design',
+      stdout: '## Design xong',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'designer' },
+    })
+    writeJob({
+      id: 'j-hello',
+      runnerId: 'runner-cursor-fb',
+      sessionId: 's-fb',
+      createdAt: '2026-01-02T00:00:00.000Z',
+      userPrompt: 'hello',
+      stdout: JSON.stringify({ result: 'Chào từ feedback', session_id: 's-fb' }),
+      metadata: {
+        taskId: TASK,
+        projectId: PROJECT,
+        pipelineStepId: 'designer',
+        isChatFeedback: true,
+      },
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
+    expect(state.turns.map((t) => t.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
+    expect(state.turns[2]?.text).toBe('hello')
+    expect(state.turns[3]?.text).toContain('Chào từ feedback')
+    expect(state.total).toBe(4)
+    // Poll cursor: from=2 returns only the feedback round.
+    const page = getTaskChatState(PROJECT, TASK, { stepId: 'designer', fromIndex: 2 })
+    expect(page.turns.map((t) => t.text)).toEqual(['hello', 'Chào từ feedback'])
+    expect(page.total).toBe(4)
+  })
+
   test('falls back to job log Phản hồi section when stdout is not persisted', () => {
     const logDir = path.join(home, 'jobs')
     fs.mkdirSync(logDir, { recursive: true })
