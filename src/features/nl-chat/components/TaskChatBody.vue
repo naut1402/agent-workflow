@@ -140,7 +140,10 @@ onUnmounted(() => chat.stop())
         Step này chưa có phiên CLI nào — chạy step trước rồi quay lại đây.
       </p>
       <p v-else-if="!chat.transcriptFound.value" class="nl-chat-hint">
-        Không tìm thấy transcript của phiên {{ chat.sessionId.value }} trên máy này.
+        {{
+          chat.transcriptMissingReason.value ||
+          `Không tìm thấy transcript của phiên ${chat.sessionId.value} trên máy này.`
+        }}
       </p>
       <p v-else-if="chat.turns.value.length === 0 && chat.pending.value.length === 0" class="nl-chat-hint">
         Phiên chưa có nội dung hội thoại nào.

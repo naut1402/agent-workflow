@@ -54,6 +54,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
   const total = ref(0)
   const sessionId = ref<string | null>(null)
   const transcriptFound = ref(false)
+  const transcriptMissingReason = ref<string | null>(null)
   const running = ref<{ jobId: string; stepId?: string } | null>(null)
   const runner = ref<TaskChatRunner | null>(null)
   const canSend = ref(false)
@@ -93,6 +94,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     total.value = typeof data?.total === 'number' ? data.total : turns.value.length
     sessionId.value = data?.sessionId ?? null
     transcriptFound.value = Boolean(data?.transcriptFound)
+    transcriptMissingReason.value = data?.transcriptMissingReason ?? null
     running.value = data?.running ?? null
     runner.value = data?.runner ?? null
     canSend.value = Boolean(data?.canSend)
@@ -171,6 +173,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     total,
     sessionId,
     transcriptFound,
+    transcriptMissingReason,
     running,
     runner,
     canSend,

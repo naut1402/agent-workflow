@@ -1,14 +1,15 @@
-import { getRunner, listJobs, loadTaskSessionLedger, stepIdOf } from './index.js'
+import { getConnection, getRunner, listJobs, loadTaskSessionLedger, stepIdOf } from './index.js'
 import type { JobRecord, SessionEntry } from './index.js'
 import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.js'
+import { readCursorSessionTranscript } from './cursorSessionTranscript.js'
 
 /**
  * State for "chat trực tiếp với runner": the conversation history of the CLI
  * session a pipeline step ran under, plus whether a message can be sent right
  * now. History comes from the CLI's own session transcript
- * (`sessionTranscript.ts`), which the CLI appends to while it works — so the
- * same endpoint doubles as live monitoring of a running step instead of only
- * showing the result once it finishes.
+ * (`sessionTranscript.ts` / `cursorSessionTranscript.ts`), which the CLI
+ * appends to while it works — so the same endpoint doubles as live monitoring
+ * of a running step instead of only showing the result once it finishes.
  *
  * Sending itself stays `sendTaskFeedback()` (F0011); this module only mirrors
  * its guards so the UI can explain *why* the input is blocked before the user
@@ -16,6 +17,8 @@ import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.
  */
 
 export type TaskChatBlockedReason = 'noCompletedJob'
+
+export type TranscriptProviderHint = 'claude-code-cli' | 'cursor-cli' | 'unknown'
 
 export interface TaskChatRunningJob {
   jobId: string
@@ -38,6 +41,13 @@ export interface TaskChatState {
   sessionId: string | null
   /** True when the transcript file was found on disk. */
   transcriptFound: boolean
+  /**
+   * When sessionId is set but the transcript file is missing — UI should show
+   * a clear message instead of an empty/erroring chat.
+   */
+  transcriptMissingReason?: string
+  /** Which transcript backend was used. */
+  transcriptProvider?: TranscriptProviderHint
   turns: TranscriptTurn[]
   /** Total turns in the transcript — pass back as `fromIndex` to poll. */
   total: number
@@ -57,6 +67,43 @@ function jobsOfTask(taskId: string): JobRecord[] {
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
 }
 
+function providerIdOfJob(job: JobRecord | undefined): string | null {
+  if (!job) return null
+  const runner = getRunner(job.runnerId)
+  if (!runner) return null
+  const conn = getConnection(runner.connectionId)
+  return conn?.providerId || null
+}
+
+function resolveTranscriptProvider(
+  providerId: string | null | undefined,
+  entry?: SessionEntry,
+): TranscriptProviderHint {
+  const id = providerId || entry?.providerId || ''
+  if (id === 'cursor-cli') return 'cursor-cli'
+  if (id === 'claude-code-cli') return 'claude-code-cli'
+  if (id === 'codex-cli') return 'unknown'
+  return id ? 'unknown' : 'claude-code-cli'
+}
+
+function readTranscriptForProvider(
+  hint: TranscriptProviderHint,
+  sessionId: string,
+  workspace: string | undefined,
+  opts: { fromIndex?: number; includeToolActivity?: boolean },
+): { turns: TranscriptTurn[]; total: number; file: string | null; matchedProvider: TranscriptProviderHint } {
+  if (hint === 'cursor-cli') {
+    const r = readCursorSessionTranscript(sessionId, workspace, opts)
+    return { ...r, matchedProvider: 'cursor-cli' }
+  }
+  // Claude (default) + unknown → try Claude path first, then Cursor fallback
+  const claude = readSessionTranscript(sessionId, workspace, opts)
+  if (claude.file) return { ...claude, matchedProvider: 'claude-code-cli' }
+  const cursor = readCursorSessionTranscript(sessionId, workspace, opts)
+  if (cursor.file) return { ...cursor, matchedProvider: 'cursor-cli' }
+  return { ...claude, matchedProvider: hint }
+}
+
 /**
  * The CLI session to show for (task, step). A running job wins — its session is
  * the one producing output right now — then the newest finished job of that
@@ -66,16 +113,35 @@ export function resolveChatSession(
   projectId: string,
   taskId: string,
   stepId?: string,
-): { sessionId: string | null; workspace?: string; entry?: SessionEntry; staleReason?: string } {
+): {
+  sessionId: string | null
+  workspace?: string
+  entry?: SessionEntry
+  staleReason?: string
+  providerId?: string | null
+  job?: JobRecord
+} {
   const jobs = jobsOfTask(taskId)
   const running = jobs.find((j) => j.status === 'queued' || j.status === 'running')
   if (running?.sessionId && (!stepId || stepIdOf(running) === stepId || !stepIdOf(running))) {
-    return { sessionId: running.sessionId, workspace: running.workspace }
+    return {
+      sessionId: running.sessionId,
+      workspace: running.workspace,
+      providerId: providerIdOfJob(running),
+      job: running,
+    }
   }
 
   if (stepId) {
     const ofStep = jobs.find((j) => stepIdOf(j) === stepId && j.sessionId)
-    if (ofStep?.sessionId) return { sessionId: ofStep.sessionId, workspace: ofStep.workspace }
+    if (ofStep?.sessionId) {
+      return {
+        sessionId: ofStep.sessionId,
+        workspace: ofStep.workspace,
+        providerId: providerIdOfJob(ofStep),
+        job: ofStep,
+      }
+    }
   }
 
   const ledger = loadTaskSessionLedger(projectId, taskId)
@@ -89,12 +155,23 @@ export function resolveChatSession(
       sessionId: entry.sessionId,
       workspace: entry.workspace,
       entry,
-      staleReason: entry.status === 'stale' || entry.status === 'archived' ? entry.staleReason || entry.status : undefined,
+      providerId: entry.providerId,
+      staleReason:
+        entry.status === 'stale' || entry.status === 'archived'
+          ? entry.staleReason || entry.status
+          : undefined,
     }
   }
 
   const anyJob = jobs.find((j) => j.sessionId)
-  return anyJob?.sessionId ? { sessionId: anyJob.sessionId, workspace: anyJob.workspace } : { sessionId: null }
+  return anyJob?.sessionId
+    ? {
+        sessionId: anyJob.sessionId,
+        workspace: anyJob.workspace,
+        providerId: providerIdOfJob(anyJob),
+        job: anyJob,
+      }
+    : { sessionId: null }
 }
 
 export interface GetTaskChatStateOptions {
@@ -113,26 +190,33 @@ export function getTaskChatState(
   const runningJob = jobs.find((j) => j.status === 'queued' || j.status === 'running')
   const hasFinished = jobs.some((j) => j.status === 'succeeded' || j.status === 'failed')
 
-  // A running job no longer blocks sending — `sendTaskFeedback` queues it
-  // instead (see `queued` below). A finished job can always start or resume a
-  // chat (`sessionMode: 'new'` when the ledger has no open entry), so the only
-  // remaining block is having no finished job at all.
   let blockedReason: TaskChatBlockedReason | undefined
   if (!runningJob && !hasFinished) blockedReason = 'noCompletedJob'
 
   const resolved = resolveChatSession(projectId, taskId, opts.stepId)
+  const hint = resolveTranscriptProvider(resolved.providerId, resolved.entry)
   const transcript = resolved.sessionId
-    ? readSessionTranscript(resolved.sessionId, resolved.workspace, {
+    ? readTranscriptForProvider(hint, resolved.sessionId, resolved.workspace, {
         fromIndex: opts.fromIndex,
         includeToolActivity: opts.includeToolActivity,
       })
-    : { turns: [], total: 0, file: null }
+    : { turns: [], total: 0, file: null, matchedProvider: hint as TranscriptProviderHint }
 
-  // The runner that ran (or is running) this step — the running job wins, else
-  // the newest job of the step/task, mirroring resolveChatSession()'s order.
+  let transcriptMissingReason: string | undefined
+  if (resolved.sessionId && !transcript.file) {
+    if (transcript.matchedProvider === 'cursor-cli' || hint === 'cursor-cli') {
+      transcriptMissingReason =
+        'Không tìm thấy transcript Cursor cho session này (kiểm tra ~/.cursor/projects/*/agent-transcripts). Có thể CLI chưa ghi file hoặc session_id chưa capture.'
+    } else {
+      transcriptMissingReason =
+        'Không tìm thấy transcript trên disk cho session id này. Session có thể thuộc provider khác hoặc cwd không khớp.'
+    }
+  }
+
   const runnerJob =
     runningJob ??
     (opts.stepId ? jobs.find((j) => stepIdOf(j) === opts.stepId) : undefined) ??
+    resolved.job ??
     jobs[0]
   const runnerConfig = runnerJob ? getRunner(runnerJob.runnerId) : null
 
@@ -141,6 +225,8 @@ export function getTaskChatState(
     stepId: opts.stepId,
     sessionId: resolved.sessionId,
     transcriptFound: Boolean(transcript.file),
+    ...(transcriptMissingReason ? { transcriptMissingReason } : {}),
+    transcriptProvider: transcript.matchedProvider,
     turns: transcript.turns,
     total: transcript.total,
     running: runningJob
@@ -149,8 +235,7 @@ export function getTaskChatState(
     runner: runnerConfig
       ? { id: runnerConfig.id, name: runnerConfig.name || runnerConfig.id, enabled: runnerConfig.enabled !== false }
       : runnerJob
-        ? // Job recorded a runner id that no longer exists in the registry.
-          { id: runnerJob.runnerId, name: runnerJob.runnerId, enabled: false }
+        ? { id: runnerJob.runnerId, name: runnerJob.runnerId, enabled: false }
         : null,
     canSend: !blockedReason,
     queued: Boolean(runningJob),
