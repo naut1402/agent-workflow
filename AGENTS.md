@@ -7,7 +7,6 @@ Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `
 | Chủ đề | Tài liệu |
 |--------|----------|
 | Quickstart | [`README.md`](README.md) |
-| Deploy / Docker | [`docs/deploy.md`](docs/deploy.md) |
 | Kiến trúc / cây thư mục chi tiết | [`docs/architecture.md`](docs/architecture.md) |
 | Tổ chức feature / business / helper | [`docs/implement/feature-organization-rule.md`](docs/implement/feature-organization-rule.md) |
 | Coding convention (TS, Zod, FE, i18n) | [`docs/implement/coding-convention.md`](docs/implement/coding-convention.md) |

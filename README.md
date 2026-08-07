@@ -96,7 +96,7 @@ bun run check:todo   # gate docs/todo (CI promote → main)
 ### Liên kết hữu ích
 
 - [Quickstart (mục này)](#bắt-đầu-nhanh) — cài và chạy trong vài phút  
-- [Deploy / Docker](docs/deploy.md) — Compose, Dockerfile, `install.sh`, lệnh `docker:*`  
+- [Docker](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example)  
 - [Kiến trúc](docs/architecture.md) — data root, Hono × 2 transport, cây `src/`  
 - [Test convention](docs/implement/test-convention.md) — bun / vitest / e2e  
 - [PR & commit](docs/implement/pr-docs-convention.md) — format message, body PR  
