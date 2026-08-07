@@ -120,7 +120,7 @@ docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.ru
 | `FIX_PROJECT_OWNERSHIP` | `0` | Xem ghi chú trong [`docker/.env.example`](docker/.env.example) |
 | `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` / `CURL_CA_BUNDLE` | (host, tùy chọn) | CA tổ chức / MITM — `install.sh` copy vào image khi build |
 
-**Corporate CA (MITM / Fortinet / Zscaler):** nếu host đã set các biến CA ở trên, `./docker/install.sh` stage file vào `docker/certs/` (gitignored), bake vào `/etc/ssl/corp-ca/`, chạy `update-ca-certificates`, và set cùng tên biến tới path trong container. Không cần (và không nên) bật `NODE_TLS_REJECT_UNAUTHORIZED=0` trong image.
+**Corporate CA (MITM / Fortinet / Zscaler):** nếu host đã set các biến CA ở trên, `./docker/install.sh` stage file + `manifest.env` (basename) vào `docker/certs/` (gitignored), bake vào `/etc/ssl/corp-ca/`, chạy `update-ca-certificates`, và export path trong container qua `env.sh`. Không truyền absolute `/etc/...` làm build-arg (Git Bash/MSYS sẽ đổi thành `C:/Program Files/Git/etc/...`). Không bật `NODE_TLS_REJECT_UNAUTHORIZED=0` trong image.
 
 **`docker/.env` (runtime):** Compose dùng `--env-file docker/.env` để substitute `${…}` trong YAML và `env_file` inject vào container. Sample: [`docker/.env.example`](docker/.env.example). File `docker/.env` gitignored — không commit secret/path máy.
 

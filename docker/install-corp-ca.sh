@@ -1,12 +1,15 @@
 #!/bin/sh
 # Install staged corporate CA files into the system trust store + write env.sh.
 # Expects certs at /etc/ssl/corp-ca/ (placeholders like .gitkeep ignored).
-# Optional /etc/ssl/corp-ca/build-args.env supplies in-image paths for:
-#   NODE_EXTRA_CA_CERTS SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE
+# Optional manifest.env maps env var → basename only (no absolute /etc paths —
+# those get mangled by Git Bash/MSYS when passed as Docker build-args).
+#   NODE_EXTRA_CA_CERTS=Fortinet_RV1_CA_SSL.cer
+#   SSL_CERT_FILE=python-custom-ca-bundle.pem
 set -eu
 
 CORP_DIR="${CORP_CA_DIR:-/etc/ssl/corp-ca}"
 MAX_SYSTEM_CA_BYTES="${CORP_CA_SYSTEM_MAX_BYTES:-65536}"
+MANIFEST="$CORP_DIR/manifest.env"
 
 mkdir -p "$CORP_DIR" /usr/local/share/ca-certificates
 rm -f "$CORP_DIR/.gitkeep"
@@ -48,15 +51,46 @@ else
   echo "[corp-ca] no corporate CA staged — skip"
 fi
 
-# Load optional in-image path mapping from build-args (may be empty).
+# Resolve manifest basenames → absolute paths under CORP_DIR.
 NODE_EXTRA_CA_CERTS=
 SSL_CERT_FILE=
 REQUESTS_CA_BUNDLE=
 CURL_CA_BUNDLE=
-if [ -f "$CORP_DIR/build-args.env" ]; then
+if [ -f "$MANIFEST" ]; then
   # shellcheck disable=SC1090
-  . "$CORP_DIR/build-args.env"
+  . "$MANIFEST"
 fi
+
+resolve_under_corp() {
+  var_name="$1"
+  eval "val=\${$var_name:-}"
+  [ -n "$val" ] || return 0
+  # Basename only (preferred). Absolute path accepted only if it exists in-image
+  # (never trust Windows/MSYS-mangled C:/Program Files/Git/etc/... paths).
+  case "$val" in
+    /*)
+      if [ -f "$val" ]; then
+        return 0
+      fi
+      val=$(basename "$val")
+      ;;
+    [A-Za-z]:/*|[A-Za-z]:\\*)
+      val=$(basename "$val" | tr '\\' '/')
+      val=$(basename "$val")
+      ;;
+  esac
+  if [ -f "$CORP_DIR/$val" ]; then
+    eval "$var_name=\"\$CORP_DIR/\$val\""
+  else
+    echo "[corp-ca] WARNING: $var_name file missing: $val" >&2
+    eval "$var_name="
+  fi
+}
+
+resolve_under_corp NODE_EXTRA_CA_CERTS
+resolve_under_corp SSL_CERT_FILE
+resolve_under_corp REQUESTS_CA_BUNDLE
+resolve_under_corp CURL_CA_BUNDLE
 
 ENV_SH="$CORP_DIR/env.sh"
 : > "$ENV_SH"
@@ -89,8 +123,7 @@ prepend_extra_if_needed SSL_CERT_FILE
 prepend_extra_if_needed REQUESTS_CA_BUNDLE
 prepend_extra_if_needed CURL_CA_BUNDLE
 
-# If only NODE_EXTRA is set, still point OpenSSL/curl at the updated system bundle
-# so SSL_CERT_FILE is not left unset while MITM CA is in the store.
+# If only NODE_EXTRA is set, point OpenSSL/curl at the updated system bundle.
 if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ -f "$NODE_EXTRA_CA_CERTS" ]; then
   if ! grep -q '^export SSL_CERT_FILE=' "$ENV_SH" 2>/dev/null; then
     printf "export SSL_CERT_FILE='%s'\n" "/etc/ssl/certs/ca-certificates.crt" >> "$ENV_SH"

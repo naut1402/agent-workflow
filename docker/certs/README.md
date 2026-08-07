@@ -7,6 +7,11 @@
 - `REQUESTS_CA_BUNDLE`
 - `CURL_CA_BUNDLE`
 
-Staged files are baked into the image at `/etc/ssl/corp-ca/` and wired to matching
-container env vars. Do not commit real certificates — this directory is gitignored
-except `.gitkeep` / this README.
+It also writes `manifest.env` with **basenames only** (e.g. `NODE_EXTRA_CA_CERTS=Fortinet.cer`).
+The Dockerfile COPYs this directory into `/etc/ssl/corp-ca/` and `install-corp-ca.sh`
+resolves basenames there.
+
+Do **not** pass absolute `/etc/...` paths as Docker build-args from Git Bash/MSYS —
+those get rewritten to `C:/Program Files/Git/etc/...` and break the Linux build.
+
+Do not commit real certificates — this directory is gitignored except `.gitkeep` / this README.

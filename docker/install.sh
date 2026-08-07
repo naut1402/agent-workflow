@@ -89,20 +89,20 @@ normalize_host_path() {
 }
 
 # If host has NODE_EXTRA_CA_CERTS / SSL_CERT_FILE / …, stage into docker/certs/
-# and set DOCKER_BUILD_* to matching /etc/ssl/corp-ca/<basename> for image build.
+# and write manifest.env with basenames only (COPY'd into the image).
+# Avoid passing absolute /etc/... paths as Docker build-args: Git Bash/MSYS
+# converts them to C:/Program Files/Git/etc/... and breaks the Linux build.
 stage_corp_ca_from_host() {
   local dest="$ROOT/docker/certs"
-  local var host_val norm base image_path staged=0
+  local manifest="$dest/manifest.env"
+  local var host_val norm base staged=0
   mkdir -p "$dest"
-  # Drop previously staged certs; keep placeholders.
+  # Drop previously staged certs/manifest; keep placeholders.
   find "$dest" -maxdepth 1 -type f \
     ! -name '.gitkeep' ! -name 'README.md' ! -name 'README' \
     -delete 2>/dev/null || true
 
-  DOCKER_BUILD_NODE_EXTRA_CA_CERTS=
-  DOCKER_BUILD_SSL_CERT_FILE=
-  DOCKER_BUILD_REQUESTS_CA_BUNDLE=
-  DOCKER_BUILD_CURL_CA_BUNDLE=
+  : > "$manifest"
 
   for var in NODE_EXTRA_CA_CERTS SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE; do
     host_val="${!var:-}"
@@ -114,18 +114,15 @@ stage_corp_ca_from_host() {
     fi
     base="$(basename "$norm")"
     cp "$norm" "$dest/$base"
-    image_path="/etc/ssl/corp-ca/$base"
-    export "DOCKER_BUILD_${var}=$image_path"
-    echo "    staged $var → $base ($image_path)"
+    printf '%s=%s\n' "$var" "$base" >> "$manifest"
+    echo "    staged $var → $base (/etc/ssl/corp-ca/$base)"
     staged=1
   done
 
-  export DOCKER_BUILD_NODE_EXTRA_CA_CERTS DOCKER_BUILD_SSL_CERT_FILE
-  export DOCKER_BUILD_REQUESTS_CA_BUNDLE DOCKER_BUILD_CURL_CA_BUNDLE
-
   if [ "$staged" -eq 1 ]; then
-    echo "==> corporate CA: staged for image build"
+    echo "==> corporate CA: staged for image build (via docker/certs/manifest.env)"
   else
+    rm -f "$manifest"
     echo "==> corporate CA: none (host env unset or files missing)"
   fi
 }
@@ -170,6 +167,9 @@ EOF
 fi
 
 stage_corp_ca_from_host
+
+# Git Bash/MSYS must not rewrite paths passed to docker.exe (e.g. /data/...).
+export MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL:-*}"
 
 echo "==> deploy (env-file=$ENV_FILE)"
 echo "    PUID=$PUID PGID=$PGID"

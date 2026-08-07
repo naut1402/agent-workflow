@@ -3,9 +3,10 @@
 #   docker build -f docker/Dockerfile -t dev-team-dashboard:local .
 # Multi-stage: Vite SPA build → Bun standalone (+ Claude/Cursor CLI, non-root).
 #
-# Corporate / MITM CA (optional): stage via docker/install.sh when host has
-# NODE_EXTRA_CA_CERTS / SSL_CERT_FILE / REQUESTS_CA_BUNDLE / CURL_CA_BUNDLE.
-# Build-args below map to in-image paths under /etc/ssl/corp-ca/.
+# Corporate / MITM CA (optional): docker/install.sh stages host CA files +
+# docker/certs/manifest.env (basenames only) into the build context. Do NOT pass
+# absolute /etc/... paths as build-args — Git Bash/MSYS rewrites them to
+# C:/Program Files/Git/etc/... and breaks the Linux build.
 
 FROM oven/bun:1 AS build
 WORKDIR /app
@@ -16,20 +17,9 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 COPY docker/certs/ /etc/ssl/corp-ca/
 COPY docker/install-corp-ca.sh /tmp/install-corp-ca.sh
-ARG NODE_EXTRA_CA_CERTS=
-ARG SSL_CERT_FILE=
-ARG REQUESTS_CA_BUNDLE=
-ARG CURL_CA_BUNDLE=
-RUN printf '%s\n' \
-      "NODE_EXTRA_CA_CERTS='${NODE_EXTRA_CA_CERTS}'" \
-      "SSL_CERT_FILE='${SSL_CERT_FILE}'" \
-      "REQUESTS_CA_BUNDLE='${REQUESTS_CA_BUNDLE}'" \
-      "CURL_CA_BUNDLE='${CURL_CA_BUNDLE}'" \
-      > /etc/ssl/corp-ca/build-args.env \
-  && chmod +x /tmp/install-corp-ca.sh \
+RUN chmod +x /tmp/install-corp-ca.sh \
   && /tmp/install-corp-ca.sh \
-  && rm -f /tmp/install-corp-ca.sh \
-  && if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi
+  && rm -f /tmp/install-corp-ca.sh
 
 COPY package.json bun.lock ./
 RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
@@ -63,17 +53,7 @@ RUN apt-get update \
 # Corporate CA before any further HTTPS (gh / claude.ai / cursor.com).
 COPY docker/certs/ /etc/ssl/corp-ca/
 COPY docker/install-corp-ca.sh /tmp/install-corp-ca.sh
-ARG NODE_EXTRA_CA_CERTS=
-ARG SSL_CERT_FILE=
-ARG REQUESTS_CA_BUNDLE=
-ARG CURL_CA_BUNDLE=
-RUN printf '%s\n' \
-      "NODE_EXTRA_CA_CERTS='${NODE_EXTRA_CA_CERTS}'" \
-      "SSL_CERT_FILE='${SSL_CERT_FILE}'" \
-      "REQUESTS_CA_BUNDLE='${REQUESTS_CA_BUNDLE}'" \
-      "CURL_CA_BUNDLE='${CURL_CA_BUNDLE}'" \
-      > /etc/ssl/corp-ca/build-args.env \
-  && chmod +x /tmp/install-corp-ca.sh \
+RUN chmod +x /tmp/install-corp-ca.sh \
   && /tmp/install-corp-ca.sh \
   && rm -f /tmp/install-corp-ca.sh
 
