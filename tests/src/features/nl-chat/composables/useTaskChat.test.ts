@@ -117,7 +117,11 @@ describe('useTaskChat', () => {
   })
 
   it('send posts the feedback with the step id + chat feedback mode and echoes it until the transcript catches up', async () => {
-    const fetchMock = stubApi([READY, { ...READY, turns: [], total: 2 }])
+    const fetchMock = stubApi([
+      READY,
+      // Job still running — no assistant yet; full reload while pending must keep the echo.
+      { ...READY, turns: READY.turns, total: 2, running: { jobId: 'j-fb', stepId: 'design' } },
+    ])
     const c = make()
     await c.refresh(false)
     await c.send('sửa lại phần A')
@@ -126,16 +130,57 @@ describe('useTaskChat', () => {
     expect(JSON.parse(post[1].body)).toEqual({ feedback: 'sửa lại phần A', stepId: 'design', mode: 'queue' })
     // Not in the transcript yet → still shown as pending.
     expect(c.pending.value).toEqual(['sửa lại phần A'])
+    // Pending forces from=0 (not a stale incremental cursor).
+    const chatGets = fetchMock.mock.calls.filter(([url]: any[]) => String(url).includes('/chat'))
+    expect(String(chatGets[chatGets.length - 1][0])).not.toContain('from=')
   })
 
   it('drops the optimistic echo once the transcript contains new turns', async () => {
-    stubApi([READY, { ...READY, turns: [{ index: 2, role: 'user', text: 'sửa lại phần A' }], total: 3 }])
+    stubApi([
+      READY,
+      {
+        ...READY,
+        turns: [
+          ...READY.turns,
+          { index: 2, role: 'user', text: 'sửa lại phần A' },
+          { index: 3, role: 'assistant', text: 'đã sửa' },
+        ],
+        total: 4,
+        running: null,
+      },
+    ])
     const c = make()
     await c.refresh(false)
     await c.send('sửa lại phần A')
 
     expect(c.pending.value).toEqual([])
-    expect(c.turns.value.map((t) => t.index)).toEqual([0, 1, 2])
+    expect(c.turns.value.map((t) => t.index)).toEqual([0, 1, 2, 3])
+  })
+
+  it('clears Đang gửi when job-fallback returns a fresh 0-based timeline after success', async () => {
+    // Reproduces stuck pending: prior total=2, then server synthesizes only the
+    // feedback job as indices 0..1 — incremental from=2 would return [] forever.
+    stubApi([
+      READY,
+      {
+        taskId: 'DEMO-1',
+        sessionId: 's1',
+        transcriptFound: true,
+        turns: [
+          { index: 0, role: 'user', text: 'hello' },
+          { index: 1, role: 'assistant', text: 'Chào bạn từ stdout' },
+        ],
+        total: 2,
+        running: null,
+        canSend: true,
+      },
+    ])
+    const c = make()
+    await c.refresh(false)
+    await c.send('hello')
+
+    expect(c.pending.value).toEqual([])
+    expect(c.turns.value.map((t) => t.text)).toEqual(['hello', 'Chào bạn từ stdout'])
   })
 
   it('a 409 from the server is reported as "step đang chạy", not a raw HTTP error', async () => {
