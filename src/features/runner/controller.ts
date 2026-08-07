@@ -191,4 +191,30 @@ export class RunnerController extends AbstractController {
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     return this.created({ job: result.job })
   }
+
+  getUsage() {
+    const projectId = this.c.req.query('project') || this.projectId || undefined
+    const taskId = this.c.req.query('task') || undefined
+    return this.ok(runnerStore.aggregateUsage({ projectId: projectId || undefined, taskId }))
+  }
+
+  async updateUsageMode() {
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON')
+    const mode = b.value.mode
+    if (mode !== 'observe' && mode !== 'warn' && mode !== 'block') {
+      return this.badRequest('mode must be observe|warn|block')
+    }
+    const store = runnerStore.setUsageMode(mode, b.value.dailyLimit)
+    return this.ok({ mode: store.mode, dailyLimit: store.dailyLimit })
+  }
+
+  async estimateUsage() {
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON')
+    const text = String(b.value.text || b.value.prompt || '')
+    const tokens = runnerStore.estimateTokens(text)
+    const gate = runnerStore.checkUsageGate(tokens)
+    return this.ok({ estimatedTokens: tokens, gate })
+  }
 }

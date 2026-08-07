@@ -78,6 +78,15 @@ export {
   mintSessionId,
 } from './sessionLedger.js'
 
+export {
+  estimateTokens,
+  recordUsage,
+  aggregateUsage,
+  setUsageMode,
+  checkUsageGate,
+  loadUsageStore,
+} from './tokenUsage.js'
+
 export type {
   CredentialProfile,
   Connection,

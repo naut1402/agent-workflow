@@ -35,4 +35,8 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.post('/api/jobs/:id/approve', bind(RunnerController, 'approveJob'))
   app.post('/api/jobs/:id/discard', bind(RunnerController, 'discardJob'))
   app.post('/api/jobs/:id/feedback', bind(RunnerController, 'jobFeedback'))
+
+  app.get('/api/usage', bind(RunnerController, 'getUsage'))
+  app.put('/api/usage/mode', bind(RunnerController, 'updateUsageMode'))
+  app.post('/api/usage/estimate', bind(RunnerController, 'estimateUsage'))
 }
