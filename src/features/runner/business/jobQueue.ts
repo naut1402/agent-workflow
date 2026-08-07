@@ -564,7 +564,7 @@ async function resubmitPendingFeedback(job: JobRecord): Promise<void> {
   if (!pending) return
   try {
     const res = await sendTaskFeedback(taskId, projectId, pending.feedback, { stepId: pending.stepId })
-    if (!res.ok) {
+    if (res.ok === false) {
       console.error('[jobQueue] queued feedback rejected on resubmit', res.error)
       await queuePendingFeedback(devTeamRoot, taskId, pending)
     }
