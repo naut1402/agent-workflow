@@ -9,6 +9,7 @@ export const routeOrder = 10
 export function registerRoutes(app: Hono<HonoEnv>): void {
   app.get('/api/projects', bind(SettingsController, 'getProjects'))
   app.post('/api/projects', bind(SettingsController, 'createProject'))
+  app.patch('/api/projects/branch', bind(SettingsController, 'updateProjectBranch'))
   app.delete('/api/projects', bind(SettingsController, 'deleteProject'))
   app.all('/api/projects', bind(SettingsController, 'projectsMethodNotAllowed'))
 

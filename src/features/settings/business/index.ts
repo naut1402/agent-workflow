@@ -59,3 +59,4 @@ export {
 } from './dashboardSettings.js'
 export { runAutoscan, type ScanReport, type ScanHit } from './autoscan.js'
 export { browseDirectory } from './fsBrowse.js'
+export { cloneProject, setProjectBranch } from './cloneProject.js'

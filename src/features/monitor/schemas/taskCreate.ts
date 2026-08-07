@@ -45,6 +45,12 @@ export const CreateTaskRequest = z.object({
   /** Submit the first step to a runner right after scaffolding. */
   run: z.boolean().default(false),
   runnerId: z.string().min(1).nullish(),
+  /** Preferred git branch for this task (metadata; worktree policy later). */
+  branch: z
+    .string()
+    .regex(/^[A-Za-z0-9._/-]+$/, 'invalid branch')
+    .max(200)
+    .nullish(),
 })
 
 export type CreateTaskRequest = z.infer<typeof CreateTaskRequest>

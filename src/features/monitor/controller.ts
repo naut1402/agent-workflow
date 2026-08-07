@@ -15,6 +15,7 @@ import {
   closeTaskSession,
 } from './business/index.js'
 import { emitAudit } from '../../core/log/store.js'
+import { emit } from '../../core/events/index.js'
 import { TaskArchivePatch, TaskStatePatch } from './schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from './schemas/taskCreate.js'
 import { mintTaskId } from './lib/createTaskForm.js'
@@ -434,6 +435,7 @@ export class MonitorController extends AbstractController {
       knowledgeInputs: body.knowledgeInputs,
       autoReview: body.autoReview,
       exportJson: body.exportJson,
+      branch: body.branch,
     })
     if ('error' in result) return this.json(result.status, { error: result.error, taskId })
 
@@ -462,9 +464,13 @@ export class MonitorController extends AbstractController {
           taskId: result.taskId,
           pipelineStepId: result.firstStep.id,
           createTaskRun: true,
+          knowledgeInputs: body.knowledgeInputs,
+          ...(body.branch ? { branch: body.branch } : {}),
         },
       })
     }
+
+    emit('task.created', { taskId: result.taskId, projectId: this.projectId, branch: body.branch })
 
     return this.created({
       task: {
