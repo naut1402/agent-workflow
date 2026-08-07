@@ -436,34 +436,57 @@ onUnmounted(() => {
                   </button>
                 </div>
               </div>
-              <select id="conn-command" v-model="selectedCommandId" class="cfg-input">
-                <option value="" disabled>{{ t('runner.connectionDialog.commandPlaceholder') }}</option>
-                <option v-for="c in commandOptions" :key="c.id" :value="c.id">
-                  {{ c.command }}{{ c.available ? '' : t('runner.connectionDialog.notOnPath') }}{{ c.custom ? t('runner.connectionDialog.custom') : '' }}
-                </option>
-              </select>
-              <p v-if="selectedCommand" class="muted path-hint">{{ selectedCommand.path }}</p>
-              <ul v-if="customCommands.length" class="cmd-actions">
-                <li v-for="c in customCommands" :key="`cmd-${c.id}`">
-                  <span class="muted">{{ c.command }}</span>
+              <div class="command-row">
+                <select id="conn-command" v-model="selectedCommandId" class="cfg-input">
+                  <option value="" disabled>{{ t('runner.connectionDialog.commandPlaceholder') }}</option>
+                  <option v-for="c in commandOptions" :key="c.id" :value="c.id">
+                    {{ c.command }}{{ c.available ? '' : t('runner.connectionDialog.notOnPath') }}{{ c.custom ? t('runner.connectionDialog.custom') : '' }}
+                  </option>
+                </select>
+                <div v-if="selectedCommand?.custom" class="icon-btn-group">
                   <button
                     type="button"
-                    class="btn-ghost btn-sm"
+                    class="icon-btn icon-btn-inline"
                     :title="t('runner.connectionDialog.editCommand')"
-                    @click="openEditCommand(c)"
+                    :aria-label="t('runner.connectionDialog.editCommand')"
+                    @click="openEditCommand(selectedCommand)"
                   >
-                    {{ t('runner.actions.edit') }}
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
+                      />
+                    </svg>
                   </button>
                   <button
                     type="button"
-                    class="btn-ghost btn-sm danger-text"
+                    class="icon-btn icon-btn-inline danger"
                     :title="t('runner.connectionDialog.deleteCommand')"
-                    @click="removeCustomCommand(c)"
+                    :aria-label="t('runner.connectionDialog.deleteCommand')"
+                    @click="removeCustomCommand(selectedCommand)"
                   >
-                    {{ t('runner.actions.delete') }}
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
+                      />
+                    </svg>
                   </button>
-                </li>
-              </ul>
+                </div>
+              </div>
+              <p
+                v-if="selectedCommand?.path && selectedCommand.path !== selectedCommand.command"
+                class="muted path-hint"
+              >
+                {{ selectedCommand.path }}
+              </p>
             </div>
           </template>
 
@@ -607,17 +630,15 @@ onUnmounted(() => {
   margin-bottom: 0.35rem;
 }
 .row-btns { display: flex; gap: 0.35rem; }
-.path-hint { margin: 0.35rem 0 0; }
-.muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
-.cmd-actions,
-.cred-actions { list-style: none; padding: 0; margin: 0.4rem 0 0; display: flex; flex-wrap: wrap; gap: 0.25rem; }
-.cmd-actions li {
+.command-row {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  width: 100%;
+  gap: 0.4rem;
 }
-.danger-text { color: var(--danger); }
+.command-row .cfg-input { flex: 1; min-width: 0; }
+.path-hint { margin: 0.35rem 0 0; }
+.muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
+.cred-actions { list-style: none; padding: 0; margin: 0.4rem 0 0; display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .new-cred {
   border: 1px dashed var(--border);
   border-radius: 6px;
