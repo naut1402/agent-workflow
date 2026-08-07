@@ -45,3 +45,33 @@ Feature/epic lớn: không code trước khi có issue + plan.
 4. **Plan**: có artifact kế hoạch (investigate/design/scope) trước khi code.
 
 Tiền lệ: epic U0005 (`.dev-team-agent/tasks/U0005/epic-tracking.md`).
+
+---
+
+## 6. Tách commit theo xử lý (một commit ≈ một concern)
+
+Khi PR lớn hoặc gom nhiều hạng mục độc lập trên cùng branch: **không gộp hết vào một commit**. Tách theo từng xử lý / concern để review và bisect dễ hơn.
+
+### Khi nào tách
+
+- Nhiều loại thay đổi cùng lúc: `feat` / `fix` / `refactor` / `docs` / `test` / `chore` — mỗi loại (hoặc mỗi vertical slice) một commit.
+- Cùng loại nhưng độc lập về phạm vi (vd sửa Docker script vs CRUD connection vs rule git) — tách commit riêng.
+- Hotfix nhỏ trên cùng branch với refactor lớn — tách để có thể cherry-pick / revert riêng.
+
+### Quy tắc
+
+1. **Một commit ≈ một concern**: mô tả được bằng một câu subject (format commit: [`pr-docs-convention.md`](pr-docs-convention.md) §6).
+2. **Không trộn** refactor lớn với fix hành vi, hoặc docs quy ước với code feature — trừ khi không tách được an toàn (migration atomic).
+3. **Thứ tự hợp lý**: nền (refactor/chore) → feat/fix → docs/test bổ sung nếu test không đi kèm cùng commit feature.
+4. Stage chọn lọc theo path (`git add <path>`), không `git add -A` khi working tree còn file ngoài concern hiện tại (xem §1).
+5. Subject commit nêu *vì sao / xử lý nào*, không liệt kê hết file.
+
+### Ví dụ
+
+| Tách tốt | Tránh |
+|----------|--------|
+| `chore(docker): thêm bun script compose` rồi `feat(runner): sửa/xoá connection` | Một commit “cập nhật 1.0.2” gồm Docker + runner + docs |
+| `docs(git): quy ước tách commit theo xử lý` riêng | Nhét rule docs vào commit feature không liên quan |
+| `refactor(runner): …` rồi `fix(runner): …` | Refactor + đổi hành vi user trong cùng commit khó review |
+
+Agent/người: khi user hoặc task yêu cầu nhiều hạng mục — **áp dụng tách commit ngay lúc commit**, không chờ đến lúc mở PR mới chia.
