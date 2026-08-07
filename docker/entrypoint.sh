@@ -222,22 +222,24 @@ sync_cursor_auth() {
     return 0
   fi
   mkdir -p "$dest_dir"
+  # Bỏ symlink cũ trỏ sang mount :ro (restart container vẫn giữ volume/home).
+  for link in "$dest_dir"/* "$dest_dir"/.[!.]*; do
+    [ -L "$link" ] || continue
+    target=$(readlink "$link" 2>/dev/null || true)
+    case "$target" in
+      "$host_dir"/*|"$host_dir") rm -f "$link" ;;
+    esac
+  done
+  # Chỉ copy file từ mount :ro. Không symlink thư mục — Cursor CLI ghi
+  # sandbox-policies/, chats/, … dưới ~/.cursor (EROFS nếu trỏ sang host ro).
   for f in "$host_dir"/* "$host_dir"/.[!.]*; do
     [ -e "$f" ] || continue
+    [ -f "$f" ] || continue
     base=$(basename "$f")
-    case "$base" in
-      projects|ai-tracking|extensions|chats|acp-sessions|browser-logs|debug-logs|plans|worktrees)
-        continue
-        ;;
-    esac
-    if [ -f "$f" ]; then
-      cp "$f" "$dest_dir/$base" 2>/dev/null || true
-    elif [ -d "$f" ]; then
-      rm -rf "$dest_dir/$base"
-      ln -s "$f" "$dest_dir/$base" 2>/dev/null || true
-    fi
+    cp "$f" "$dest_dir/$base" 2>/dev/null || true
   done
-  mkdir -p "$dest_dir/chats" "$dest_dir/projects" "$dest_dir/acp-sessions"
+  mkdir -p "$dest_dir/chats" "$dest_dir/projects" "$dest_dir/acp-sessions" \
+    "$dest_dir/sandbox-policies"
   own "$dest_dir"
 }
 
