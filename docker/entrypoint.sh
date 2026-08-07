@@ -238,6 +238,32 @@ sync_cursor_auth() {
   own "$dest_dir"
 }
 
+sync_cursor_cli_auth() {
+  dest_dir=/home/dashboard/.config/cursor
+  dest="$dest_dir/auth.json"
+  mkdir -p "$dest_dir"
+  src=""
+  if [ -f /mnt/host-cursor-auth.json ] && [ -s /mnt/host-cursor-auth.json ] \
+    && grep -q accessToken /mnt/host-cursor-auth.json 2>/dev/null; then
+    src=/mnt/host-cursor-auth.json
+  elif [ -f /home/dashboard/.cursor/auth.json ] \
+    && grep -q accessToken /home/dashboard/.cursor/auth.json 2>/dev/null; then
+    src=/home/dashboard/.cursor/auth.json
+  fi
+  if [ -n "$src" ]; then
+    cp "$src" "$dest"
+    chmod 600 "$dest"
+    own "$dest_dir"
+    mkdir -p /home/dashboard/.cursor
+    cp "$dest" /home/dashboard/.cursor/auth.json
+    chmod 600 /home/dashboard/.cursor/auth.json
+    own /home/dashboard/.cursor/auth.json
+    echo "[dev-team-dashboard] synced Cursor CLI auth → $dest"
+  elif [ -z "${CURSOR_API_KEY:-}" ]; then
+    echo "[dev-team-dashboard] WARNING: Cursor CLI not authenticated — set CURSOR_API_KEY or mount host auth.json (agent login)" >&2
+  fi
+}
+
 if [ -d /mnt/host-claude ]; then
   sync_claude_auth
 else
@@ -246,6 +272,7 @@ fi
 if [ -d /mnt/host-cursor ]; then
   sync_cursor_auth
 fi
+sync_cursor_cli_auth
 
 ensure_claude_json
 seed_bundled_plugin

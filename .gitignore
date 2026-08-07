@@ -7,6 +7,9 @@ docker/.env
 .env
 .env.local
 
+# Runtime staging — never commit
+docker/.runtime/
+
 # Staged corporate CA for image build (host copies via install.sh)
 docker/certs/**
 !docker/certs/.gitkeep

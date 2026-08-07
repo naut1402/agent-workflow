@@ -190,6 +190,39 @@ stage_corp_ca_from_host() {
   fi
 }
 
+stage_cursor_cli_auth() {
+  local runtime="$ROOT/docker/.runtime"
+  local stage="$runtime/cursor-auth.json"
+  local cand found=""
+  mkdir -p "$runtime"
+
+  for cand in \
+    "${HOST_HOME:+$HOST_HOME/.cursor/auth.json}" \
+    "${XDG_CONFIG_HOME:-${HOME}/.config}/cursor/auth.json" \
+    "${APPDATA:+$(normalize_host_path "$APPDATA/Cursor/auth.json")}" \
+    "${USERPROFILE:+$(normalize_host_path "$USERPROFILE/AppData/Roaming/Cursor/auth.json")}" \
+    "$(normalize_host_path "C:/Users/$(id -un)/AppData/Roaming/Cursor/auth.json")"
+  do
+    [ -n "$cand" ] || continue
+    if [ -f "$cand" ] && grep -q accessToken "$cand" 2>/dev/null; then
+      found="$cand"
+      break
+    fi
+  done
+
+  if [ -n "$found" ]; then
+    cp "$found" "$stage"
+    chmod 600 "$stage" 2>/dev/null || true
+    echo "==> staged Cursor CLI auth from $found"
+  else
+    printf '{}\n' > "$stage"
+    if [ -z "${CURSOR_API_KEY:-}" ]; then
+      echo "!! WARNING: Cursor CLI auth not found (expected Windows %%APPDATA%%\\Cursor\\auth.json or ~/.cursor/auth.json)." >&2
+      echo "   Set CURSOR_API_KEY in docker/.env, or run: agent login" >&2
+    fi
+  fi
+}
+
 if [ "$PUID" = "0" ] || [ "$PGID" = "0" ]; then
   echo "!! WARNING: PUID/PGID=0" >&2
 fi
@@ -227,6 +260,8 @@ EOF
   if [ ! -f "$HOST_HOME/.claude/.credentials.json" ] && [ ! -f "$HOST_HOME/.claude/credentials.json" ]; then
     echo "!! WARNING: missing $HOST_HOME/.claude/.credentials.json" >&2
   fi
+
+  stage_cursor_cli_auth
 fi
 
 if [ "$DO_BUILD" -eq 0 ] && ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
