@@ -233,35 +233,62 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   {{ c.label }} ({{ c.id }})
                 </option>
               </select>
-              <button
-                type="button"
-                class="btn-ghost btn-sm conn-add"
-                :title="t('runner.connectionDialog.title')"
-                :aria-label="t('runner.connectionDialog.title')"
-                @click="openNewConnection"
-              >
-                +
-              </button>
-              <button
-                type="button"
-                class="btn-ghost btn-sm"
-                :disabled="!selectedConnection"
-                :title="t('runner.connectionDialog.editTitle')"
-                :aria-label="t('runner.connectionDialog.editTitle')"
-                @click="openEditConnection"
-              >
-                {{ t('runner.actions.edit') }}
-              </button>
-              <button
-                type="button"
-                class="btn-ghost btn-sm danger-text"
-                :disabled="!selectedConnection"
-                :title="t('runner.connectionDialog.deleteConnection')"
-                :aria-label="t('runner.connectionDialog.deleteConnection')"
-                @click="removeConnection"
-              >
-                {{ t('runner.actions.delete') }}
-              </button>
+              <div class="icon-btn-group">
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :title="t('runner.connectionDialog.title')"
+                  :aria-label="t('runner.connectionDialog.title')"
+                  @click="openNewConnection"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      d="M8 3v10M3 8h10"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :disabled="!selectedConnection"
+                  :title="t('runner.connectionDialog.editTitle')"
+                  :aria-label="t('runner.connectionDialog.editTitle')"
+                  @click="openEditConnection"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline danger"
+                  :disabled="!selectedConnection"
+                  :title="t('runner.connectionDialog.deleteConnection')"
+                  :aria-label="t('runner.connectionDialog.deleteConnection')"
+                  @click="removeConnection"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      stroke-linecap="round"
+                      d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
+                    />
+                  </svg>
+                </button>
+              </div>
             </div>
             <p v-if="isConsoleCommand" class="muted hint">{{ t('runner.fields.consoleHint') }}</p>
           </div>
@@ -341,9 +368,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   align-items: center;
   gap: 0.4rem;
 }
-.connection-row .cfg-input { flex: 1; }
-.conn-add { flex-shrink: 0; min-width: 2rem; font-size: 1.1rem; line-height: 1; }
-.danger-text { color: var(--danger); }
+.connection-row .cfg-input { flex: 1; min-width: 0; }
 .hint { margin: 0.35rem 0 0; font-size: 0.8rem; }
 .enable-row {
   display: flex;
