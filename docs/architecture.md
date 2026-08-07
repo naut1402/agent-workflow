@@ -116,7 +116,7 @@ Nền tảng FE / shell: `composables/*`, `lib/` (phase, `*Utils`, `*Lib`, `file
 
 Util / wrapper thư viện dùng chung (không gắn domain mode): `src/core/lib/{stringUtils,arrayUtils,dateUtils,yamlLib,markdownLib,diffLib,fileHelper,dirModuleLoader}.ts`.
 
-**Roadmap kernel (sau 1.0.0):** ModeRegistry / `registerMode`, event bus, contribution API (plugin). Chưa triển khai trong 1.0.0.
+**Kernel (1.1.0+):** event bus tại `src/core/events/` (`emit`/`on`, trigger registry stub); plugin context bag tại `src/core/plugin/` (`buildPluginContext`, `registerContextContributor`). ModeRegistry / full contribution UI vẫn có thể mở rộng sau.
 
 ### 3.3 Styling
 
