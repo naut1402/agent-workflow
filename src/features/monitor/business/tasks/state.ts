@@ -4,6 +4,7 @@ import { TaskArchivePatch, TaskStatePatch } from '../../schemas/task.js'
 import { loadPipelineConfig } from '../index.js'
 import { readState, flowProfilePath } from './index.js'
 import { checkReviewRetry } from './reviewVerdict.js'
+import { emit } from '../../../../core/events/index.js'
 
 export type HitlApplyResult =
   | { ok: true; state: Record<string, unknown>; mtime: number }
@@ -137,6 +138,12 @@ export async function applyHitlAction(
     }
 
     const mtime = await writeStateAtomic(stateFile, state)
+    emit('hitl.resolved', {
+      taskId,
+      gateId: patch.gate_id,
+      action: patch.action,
+      currentPhase: state.current_phase,
+    })
     return { ok: true, state, mtime }
   })
 }
@@ -204,9 +211,11 @@ export async function advanceStepOnJobSuccess(
     const gateId = currentStep.hitl?.gate_id
     if (gateId) {
       state.hitl_pending = gateId
+      emit('hitl.pending', { taskId, gateId, stepId })
     } else {
       const next = steps[stepIdx + 1]
       state.current_phase = next ? next.id : 'completed'
+      emit('task.advanced', { taskId, stepId, currentPhase: state.current_phase })
     }
 
     const mtime = await writeStateAtomic(stateFile, state)
