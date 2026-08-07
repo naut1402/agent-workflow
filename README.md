@@ -85,13 +85,15 @@ bun run mcp          # MCP stdio — project registry
 Mọi file Docker nằm trong [`docker/`](docker/). Deploy mẫu:
 
 ```bash
-cp docker/.env.example docker/.env   # sửa HOST_HOME, PUID, DEV_TEAM_PROJECT_PATH
-./docker/install.sh                  # UI/API — đọc docker/.env
-./docker/install.sh --runners        # + auth Claude/Cursor từ HOST_HOME
+cp docker/.env.example docker/.env   # sửa HOST_HOME, PUID, DEV_TEAM_PROJECT_PATH, PORT
+./docker/install.sh                  # up -d (build chỉ khi image chưa có)
+./docker/install.sh --runners        # + auth Claude/Cursor từ HOST_HOME (không ép rebuild)
+./docker/install.sh --build          # rebuild image (Dockerfile / CA / deps)
+./docker/install.sh --port=8080      # đổi host port, ghi vào docker/.env
 ./docker/install.sh --down
 ```
 
-Không cần cài Bun trên host. Image chạy `src/standalone.ts`, bind `0.0.0.0:5174`. Runtime **cài sẵn** `claude` + `agent` (Linux).
+Không cần cài Bun trên host. Image chạy `src/standalone.ts`, bind `0.0.0.0:5174` trong container. Runtime **cài sẵn** `claude` + `agent` (Linux).
 
 `DEV_TEAM_ROOT` trong container = `/data/project/.dev-team-agent` (data root).
 
@@ -100,11 +102,11 @@ Không cần cài Bun trên host. Image chạy `src/standalone.ts`, bind `0.0.0.
 docker build -f docker/Dockerfile -t dev-team-dashboard:local .
 
 # Compose — luôn truyền --env-file docker/.env (substitute + runtime)
-cp docker/.env.example docker/.env   # chỉnh PUID/HOST_HOME/…
-docker compose --env-file docker/.env -f docker/compose.yml up -d --build
+cp docker/.env.example docker/.env   # chỉnh PUID/HOST_HOME/PORT/…
+docker compose --env-file docker/.env -f docker/compose.yml up -d
 
 # + runners
-docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.runners.yml up -d --build
+docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.runners.yml up -d
 ```
 
 | Env | Mặc định | Ý nghĩa |
@@ -112,7 +114,7 @@ docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.ru
 | `PUID` / `PGID` | `1001` (compose) / điền trong `docker/.env` | Process User/Group ID — trùng owner project trên host |
 | `DEV_TEAM_PROJECT_PATH` | trong `docker/.env` | Bind mount → `/data/project` |
 | `HOST_HOME` | trong `docker/.env` (runners) | Mount `.claude` / `.cursor` / credentials |
-| `DEV_TEAM_DASHBOARD_PORT` | `5174` | Cổng HTTP |
+| `DEV_TEAM_DASHBOARD_PORT` | `5174` | **Host** publish port (`host:5174` → container). Đổi bằng `.env` hoặc `./docker/install.sh --port=N` |
 | `DEV_TEAM_ROOT` | `/data/project/.dev-team-agent` | Data root trong container |
 | `DEV_TEAM_DASHBOARD_HOME` | `/data/dashboard-home` | Registry multi-project |
 | `ANTHROPIC_API_KEY` / `CURSOR_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` | (trống) | Optional — đặt trong `docker/.env` |

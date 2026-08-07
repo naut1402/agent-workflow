@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deploy helper. Usage: ./docker/install.sh [--runners|--down]
+# Deploy helper.
+# Usage: ./docker/install.sh [--runners] [--build] [--port=N] [--down]
 # Reads docker/.env (--env-file). Creates from .env.example if missing.
 set -euo pipefail
 
@@ -7,23 +8,56 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 # Absolute for shell file I/O; relative for docker.exe (avoids Git Bash/MSYS
-# turning /c/Users/... into C:\c\Users\... when MSYS2_ARG_CONV_EXCL is set).
+# turning /c/Users/... into C:\c\Users\...).
 ENV_FILE="$ROOT/docker/.env"
 ENV_FILE_DOCKER="docker/.env"
 ENV_EXAMPLE="$ROOT/docker/.env.example"
+IMAGE_NAME="dev-team-dashboard:local"
 
 WITH_RUNNERS=0
 DO_DOWN=0
-for arg in "$@"; do
-  case "$arg" in
-    --runners|-r) WITH_RUNNERS=1 ;;
-    --down) DO_DOWN=1 ;;
+DO_BUILD=0
+CLI_PORT=
+
+usage() {
+  cat <<'EOF'
+Usage: ./docker/install.sh [options]
+
+  --runners, -r     Mount host Claude/Cursor auth (compose.runners.yml)
+  --build, -b       Rebuild image (Dockerfile / deps / corporate CA)
+  --port=N, -p N    Host publish port (persists to docker/.env)
+  --down            docker compose down
+  -h, --help        Show this help
+
+Default is up -d without rebuild. Image is built automatically if missing.
+PORT: set DEV_TEAM_DASHBOARD_PORT in docker/.env or pass --port=N
+      (host port only; container always listens on 5174).
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --runners|-r) WITH_RUNNERS=1; shift ;;
+    --build|-b) DO_BUILD=1; shift ;;
+    --down) DO_DOWN=1; shift ;;
+    --port=*)
+      CLI_PORT="${1#--port=}"
+      shift
+      ;;
+    --port|-p)
+      if [ $# -lt 2 ]; then
+        echo "!! $1 needs a port number" >&2
+        exit 1
+      fi
+      CLI_PORT="$2"
+      shift 2
+      ;;
     -h|--help)
-      sed -n '2,4p' "$0"
+      usage
       exit 0
       ;;
     *)
-      echo "Unknown arg: $arg (try --help)" >&2
+      echo "Unknown arg: $1 (try --help)" >&2
       exit 1
       ;;
   esac
@@ -69,6 +103,32 @@ export HOST_HOME="${HOST_HOME:-$HOME}"
 export DEV_TEAM_PROJECT_PATH="${DEV_TEAM_PROJECT_PATH:-$HOME/workspace}"
 export DEV_TEAM_DASHBOARD_PORT="${DEV_TEAM_DASHBOARD_PORT:-5174}"
 export FIX_PROJECT_OWNERSHIP="${FIX_PROJECT_OWNERSHIP:-0}"
+
+persist_env_key() {
+  local key="$1" val="$2" tmp
+  tmp="${ENV_FILE}.tmp"
+  if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+    sed "s|^${key}=.*|${key}=${val}|" "$ENV_FILE" > "$tmp" && mv "$tmp" "$ENV_FILE"
+  else
+    printf '\n%s=%s\n' "$key" "$val" >> "$ENV_FILE"
+  fi
+}
+
+if [ -n "$CLI_PORT" ]; then
+  case "$CLI_PORT" in
+    ''|*[!0-9]*)
+      echo "!! invalid port: $CLI_PORT" >&2
+      exit 1
+      ;;
+  esac
+  if [ "$CLI_PORT" -lt 1 ] || [ "$CLI_PORT" -gt 65535 ]; then
+    echo "!! port out of range: $CLI_PORT" >&2
+    exit 1
+  fi
+  export DEV_TEAM_DASHBOARD_PORT="$CLI_PORT"
+  persist_env_key DEV_TEAM_DASHBOARD_PORT "$CLI_PORT"
+  echo "==> DEV_TEAM_DASHBOARD_PORT=$CLI_PORT (saved to $ENV_FILE_DOCKER)"
+fi
 
 # Normalize Windows / Git-Bash / MSYS paths to a filesystem path this shell can open.
 normalize_host_path() {
@@ -169,16 +229,27 @@ EOF
   fi
 fi
 
-stage_corp_ca_from_host
+if [ "$DO_BUILD" -eq 0 ] && ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+  echo "==> image $IMAGE_NAME missing — enabling --build"
+  DO_BUILD=1
+fi
+
+if [ "$DO_BUILD" -eq 1 ]; then
+  stage_corp_ca_from_host
+fi
 
 echo "==> deploy (env-file=$ENV_FILE_DOCKER)"
 echo "    PUID=$PUID PGID=$PGID"
 echo "    DEV_TEAM_PROJECT_PATH=$DEV_TEAM_PROJECT_PATH"
 echo "    HOST_HOME=$HOST_HOME"
-echo "    runners=$WITH_RUNNERS FIX_PROJECT_OWNERSHIP=$FIX_PROJECT_OWNERSHIP"
+echo "    runners=$WITH_RUNNERS build=$DO_BUILD FIX_PROJECT_OWNERSHIP=$FIX_PROJECT_OWNERSHIP"
 echo "    UI http://127.0.0.1:${DEV_TEAM_DASHBOARD_PORT}/"
 
-"${COMPOSE[@]}" up -d --build
+if [ "$DO_BUILD" -eq 1 ]; then
+  "${COMPOSE[@]}" up -d --build
+else
+  "${COMPOSE[@]}" up -d
+fi
 
 echo "==> status"
 "${COMPOSE[@]}" ps
