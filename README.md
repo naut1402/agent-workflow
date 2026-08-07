@@ -93,24 +93,10 @@ bun run test:all     # typecheck → lint → test → test:fe → e2e
 bun run check:todo   # gate docs/todo (CI promote → main)
 ```
 
-### Docker (container)
-
-Cần Docker + Bash (`install.sh`). Chi tiết: [`docker/README.md`](docker/README.md).
-
-```bash
-bun run docker:up           # up -d (tạo docker/.env nếu thiếu)
-bun run docker:up:runners   # kèm mount auth Claude/Cursor
-bun run docker:build        # rebuild image + up
-bun run docker:logs         # theo dõi log
-bun run docker:ps           # trạng thái
-bun run docker:down         # dừng / xoá container
-bun run docker:restart      # restart service
-```
-
 ### Liên kết hữu ích
 
 - [Quickstart (mục này)](#bắt-đầu-nhanh) — cài và chạy trong vài phút  
-- [Docker](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example); lệnh bun: `docker:up` / `docker:build` / `docker:down` / `docker:logs` / `docker:ps` (xem [`docker/README.md`](docker/README.md))  
+- [Deploy / Docker](docs/deploy.md) — Compose, Dockerfile, `install.sh`, lệnh `docker:*`  
 - [Kiến trúc](docs/architecture.md) — data root, Hono × 2 transport, cây `src/`  
 - [Test convention](docs/implement/test-convention.md) — bun / vitest / e2e  
 - [PR & commit](docs/implement/pr-docs-convention.md) — format message, body PR  

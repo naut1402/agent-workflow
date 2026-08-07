@@ -1,6 +1,6 @@
 # Docker — chạy dashboard trong container
 
-Compose + Dockerfile ở thư mục này. Deploy có bước chuẩn bị env / CA / auth CLI qua `install.sh`.
+Compose + Dockerfile ở thư mục [`docker/`](../docker/). Deploy có bước chuẩn bị env / CA / auth CLI qua `install.sh`.
 
 ## Yêu cầu
 
@@ -24,11 +24,11 @@ UI mặc định: `http://127.0.0.1:5174/` (đổi port bằng `DEV_TEAM_DASHBOA
 
 ## File chính
 
-- [`compose.yml`](compose.yml) — service `dashboard`
-- [`compose.runners.yml`](compose.runners.yml) — mount auth host (cần `HOST_HOME`)
-- [`Dockerfile`](Dockerfile) — image `dev-team-dashboard:local`
-- [`.env.example`](.env.example) — mẫu biến môi trường
-- [`install.sh`](install.sh) — deploy helper đầy đủ (`--runners`, `--build`, `--down`, `--port`)
-- [`certs/`](certs/) — CA corporate khi build (tuỳ chọn)
+- [`compose.yml`](../docker/compose.yml) — service `dashboard`
+- [`compose.runners.yml`](../docker/compose.runners.yml) — mount auth host (cần `HOST_HOME`)
+- [`Dockerfile`](../docker/Dockerfile) — image `dev-team-dashboard:local`
+- [`.env.example`](../docker/.env.example) — mẫu biến môi trường
+- [`install.sh`](../docker/install.sh) — deploy helper đầy đủ (`--runners`, `--build`, `--down`, `--port`)
+- [`certs/`](../docker/certs/) — CA corporate khi build (tuỳ chọn)
 
 Chi tiết biến môi trường xem comment trong `.env.example`.
