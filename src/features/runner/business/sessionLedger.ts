@@ -131,6 +131,10 @@ export function isSessionEntryValid(
 /**
  * Decide session flags for a job from explicit sessionMode + ledger (policy
  * `single` by default). Invalid resume conditions force a fresh session.
+ *
+ * When `stepId` is set and an open entry exists for a *different* step only
+ * (per-step isolation): force `new` so pipeline steps do not share a Cursor /
+ * Claude session that the chat UI cannot resolve for the current step.
  */
 export function resolveSessionPlan(ctx: ResolveSessionContext): ResolvedSessionPlan {
   const mode = ctx.sessionMode ?? 'none'
@@ -143,10 +147,29 @@ export function resolveSessionPlan(ctx: ResolveSessionContext): ResolvedSessionP
     return { sessionMode: 'new', sessionId: ctx.sessionId }
   }
 
-  // resume
-  const candidateId = ctx.sessionId || open?.sessionId || undefined
-  if (open && candidateId) {
-    const check = isSessionEntryValid(open, ctx)
+  // Prefer an open entry that already lists this step (same-step resume)
+  // BEFORE applying per-step isolation against the newest open entry.
+  let candidate = open
+  if (ctx.stepId) {
+    const byStep = [...ledger.sessions]
+      .reverse()
+      .find((s) => s.status === 'open' && s.stepIds?.includes(ctx.stepId!) && s.sessionId)
+    if (byStep) candidate = byStep
+  }
+
+  if (
+    ctx.stepId &&
+    candidate &&
+    candidate.stepIds?.length &&
+    !candidate.stepIds.includes(ctx.stepId) &&
+    ledger.sessionPolicy === 'per-step'
+  ) {
+    return { sessionMode: 'new', staleReason: 'per-step: new step' }
+  }
+
+  const candidateId = ctx.sessionId || candidate?.sessionId || undefined
+  if (candidate && candidateId) {
+    const check = isSessionEntryValid(candidate, ctx)
     if (!check.invalid) {
       return { sessionMode: 'resume', resumeSessionId: candidateId }
     }

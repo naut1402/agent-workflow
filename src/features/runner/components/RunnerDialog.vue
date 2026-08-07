@@ -3,6 +3,7 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { slugify } from '../../../core/lib/stringUtils'
 import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
+import { deleteConnection } from '../scripts/ConnectionDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
 import type { ConnectionOption, ProviderEntry, RunnerDraft } from '../types'
 
@@ -27,6 +28,7 @@ const testing = ref(false)
 const error = ref('')
 const message = ref('')
 const showConnectionDialog = ref(false)
+const editingConnection = ref<ConnectionOption | null>(null)
 
 function emptyDraft(): RunnerDraft {
   return {
@@ -149,10 +151,45 @@ async function smokeTest() {
   }
 }
 
+function openNewConnection() {
+  editingConnection.value = null
+  showConnectionDialog.value = true
+}
+
+function openEditConnection() {
+  const c = selectedConnection.value
+  if (!c) return
+  editingConnection.value = { ...c }
+  showConnectionDialog.value = true
+}
+
+async function removeConnection() {
+  const c = selectedConnection.value
+  if (!c) return
+  if (!confirm(t('runner.messages.confirmDeleteConnection', { id: c.id }))) return
+  error.value = ''
+  try {
+    await deleteConnection(c.id)
+    message.value = t('runner.messages.connectionDeleted', { id: c.id })
+    if (draft.value.connectionId === c.id) draft.value.connectionId = ''
+    emit('refreshed')
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
 async function onConnectionSaved(connectionId: string) {
   emit('refreshed')
   draft.value.connectionId = connectionId
-  message.value = t('runner.messages.connectionAdded', { id: connectionId })
+  message.value = editingConnection.value
+    ? t('runner.messages.connectionSaved', { id: connectionId })
+    : t('runner.messages.connectionAdded', { id: connectionId })
+  editingConnection.value = null
+}
+
+function closeConnectionDialog() {
+  showConnectionDialog.value = false
+  editingConnection.value = null
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -196,14 +233,62 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   {{ c.label }} ({{ c.id }})
                 </option>
               </select>
-              <button
-                type="button"
-                class="btn-ghost btn-sm conn-add"
-                :title="t('runner.connectionDialog.title')"
-                @click="showConnectionDialog = true"
-              >
-                +
-              </button>
+              <div class="icon-btn-group">
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :title="t('runner.connectionDialog.title')"
+                  :aria-label="t('runner.connectionDialog.title')"
+                  @click="openNewConnection"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      d="M8 3v10M3 8h10"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :disabled="!selectedConnection"
+                  :title="t('runner.connectionDialog.editTitle')"
+                  :aria-label="t('runner.connectionDialog.editTitle')"
+                  @click="openEditConnection"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline danger"
+                  :disabled="!selectedConnection"
+                  :title="t('runner.connectionDialog.deleteConnection')"
+                  :aria-label="t('runner.connectionDialog.deleteConnection')"
+                  @click="removeConnection"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      stroke-linecap="round"
+                      d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
+                    />
+                  </svg>
+                </button>
+              </div>
             </div>
             <p v-if="isConsoleCommand" class="muted hint">{{ t('runner.fields.consoleHint') }}</p>
           </div>
@@ -267,7 +352,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     <ConnectionDialog
       v-if="showConnectionDialog"
       :providers="providers"
-      @close="showConnectionDialog = false"
+      :connection="editingConnection"
+      @close="closeConnectionDialog"
       @saved="onConnectionSaved"
     />
   </Teleport>
@@ -282,8 +368,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   align-items: center;
   gap: 0.4rem;
 }
-.connection-row .cfg-input { flex: 1; }
-.conn-add { flex-shrink: 0; min-width: 2rem; font-size: 1.1rem; line-height: 1; }
+.connection-row .cfg-input { flex: 1; min-width: 0; }
 .hint { margin: 0.35rem 0 0; font-size: 0.8rem; }
 .enable-row {
   display: flex;

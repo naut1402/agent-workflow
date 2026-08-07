@@ -136,11 +136,14 @@ onUnmounted(() => chat.stop())
   <div class="task-chat">
     <div ref="messagesRef" class="nl-chat-messages">
       <p v-if="chat.loading.value" class="nl-chat-hint">Đang tải hội thoại của runner…</p>
-      <p v-else-if="!chat.sessionId.value" class="nl-chat-hint">
+      <p v-else-if="!chat.sessionId.value && chat.turns.value.length === 0" class="nl-chat-hint">
         Step này chưa có phiên CLI nào — chạy step trước rồi quay lại đây.
       </p>
-      <p v-else-if="!chat.transcriptFound.value" class="nl-chat-hint">
-        Không tìm thấy transcript của phiên {{ chat.sessionId.value }} trên máy này.
+      <p v-else-if="chat.sessionId.value && !chat.transcriptFound.value && chat.turns.value.length === 0" class="nl-chat-hint">
+        {{
+          chat.transcriptMissingReason.value ||
+          `Không tìm thấy transcript của phiên ${chat.sessionId.value} trên máy này.`
+        }}
       </p>
       <p v-else-if="chat.turns.value.length === 0 && chat.pending.value.length === 0" class="nl-chat-hint">
         Phiên chưa có nội dung hội thoại nào.

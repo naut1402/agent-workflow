@@ -31,6 +31,7 @@ export const AUDIT_ENTITIES = [
   'runner',
   'connection',
   'credential',
+  'command',
   'artifact',
   'artifact-actions',
   'task-state',

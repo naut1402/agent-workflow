@@ -15,7 +15,3 @@ export async function setDefaultRunner(id: string) {
 export async function fetchConnections() {
   return apiGet('/api/connections')
 }
-
-export async function deleteConnection(id: string) {
-  return apiRequest('DELETE', '/api/connections', { query: { id } })
-}

@@ -1,6 +1,7 @@
 import { appendTextFileSync, existsSync, joinPath } from '../../../../core/lib/fileHelper.js'
 import { spawn } from 'node:child_process'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../types.js'
+import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 
 interface ProcResult {
   exitCode: number | null
@@ -81,8 +82,26 @@ function describePayload(opts: {
   cliPath: string
   args: string[]
   userPrompt: string
+  metadata?: Record<string, unknown>
 }): string {
+  const meta = opts.metadata || {}
   const lines = [
+    formatJobLogHeader({
+      jobId: String(meta.jobId || ''),
+      providerId: 'console-command',
+      runnerId: typeof meta.runnerId === 'string' ? meta.runnerId : undefined,
+      connectionId: typeof meta.connectionId === 'string' ? meta.connectionId : undefined,
+      projectId: typeof meta.projectId === 'string' ? meta.projectId : undefined,
+      taskId: typeof meta.taskId === 'string' ? meta.taskId : undefined,
+      stepId:
+        typeof meta.stepId === 'string'
+          ? meta.stepId
+          : typeof meta.pipelineStepId === 'string'
+            ? meta.pipelineStepId
+            : undefined,
+      workspace: opts.workspace,
+      mode: 'console-command',
+    }).trimEnd(),
     '=== Payload gửi cho runner ===',
     'Mode: console-command (argv thuần, không agent / allowedTools)',
     `Workspace: ${opts.workspace}`,
@@ -96,16 +115,13 @@ function describePayload(opts: {
 }
 
 function describeResult(result: ExecuteResult): string {
-  const lines = [
-    '',
-    '=== Kết quả ===',
-    `ok: ${result.ok}`,
-    `exitCode: ${result.exitCode ?? 'null'}`,
-    `durationMs: ${result.durationMs}`,
-  ]
-  if (result.artifactsFound?.length) lines.push(`artifactsFound: ${result.artifactsFound.join(', ')}`)
-  if (result.error) lines.push(`error: ${result.error}`)
-  return lines.join('\n') + '\n'
+  return formatJobLogFooter({
+    ok: result.ok,
+    exitCode: result.exitCode,
+    durationMs: result.durationMs,
+    error: result.error,
+    artifactsFound: result.artifactsFound,
+  })
 }
 
 function runProcess(
@@ -173,6 +189,7 @@ function runProcess(
 export function createConsoleCommandProvider(): RunnerProvider {
   return {
     providerId: 'console-command',
+    family: 'console-command',
 
     validateRunnerConfig(config) {
       const errors: string[] = []
@@ -216,6 +233,7 @@ export function createConsoleCommandProvider(): RunnerProvider {
           cliPath,
           args,
           userPrompt: req.userPrompt || '',
+          metadata: req.metadata,
         }),
       )
 

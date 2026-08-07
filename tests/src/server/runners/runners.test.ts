@@ -32,6 +32,9 @@ import {
   ensureLegacyConnection,
   listProviderCatalog,
   scanLocalCommands,
+  upsertCustomCommand,
+  deleteCustomCommand,
+  listCustomCommands,
   listProviderIds,
   getProvider,
   submitJob,
@@ -177,7 +180,7 @@ describe('connections CRUD', () => {
   })
   test('scanLocalCommands returns Cursor CLI as agent', () => {
     const cmds = scanLocalCommands()
-    expect(cmds.length).toBe(3)
+    expect(cmds.filter((c) => !c.custom).length).toBe(3)
     const cursor = cmds.find((c) => c.id === 'cursor')
     expect(cursor).toMatchObject({ command: 'agent', providerId: 'cursor-cli' })
     for (const c of cmds) {
@@ -189,6 +192,47 @@ describe('connections CRUD', () => {
       })
       expect('path' in c).toBe(true)
     }
+  })
+  test('custom commands CRUD + appear in scan', () => {
+    expect(upsertCustomCommand({ id: '', path: '/bin/foo' } as any)).toEqual({
+      ok: false,
+      error: 'invalid command (id and path required)',
+    })
+    expect(upsertCustomCommand({ id: 'my-tool', path: '' } as any)).toEqual({
+      ok: false,
+      error: 'invalid command (id and path required)',
+    })
+    const res = upsertCustomCommand({
+      id: 'my-tool',
+      command: 'foo',
+      path: 'C:\\tools\\foo.exe',
+      providerId: 'console-command',
+      flags: ['--json'],
+    })
+    expect(res.ok).toBe(true)
+    expect(listCustomCommands()).toHaveLength(1)
+    expect(listCustomCommands()[0]).toMatchObject({
+      id: 'my-tool',
+      command: 'foo',
+      path: 'C:\\tools\\foo.exe',
+      flags: ['--json'],
+    })
+    const scanned = scanLocalCommands()
+    expect(scanned.find((c) => c.id === 'my-tool')).toMatchObject({
+      custom: true,
+      path: 'C:\\tools\\foo.exe',
+      providerId: 'console-command',
+    })
+    expect(upsertCustomCommand({
+      id: 'my-tool',
+      command: 'foo2',
+      path: '/usr/bin/foo',
+      providerId: 'console-command',
+    }).ok).toBe(true)
+    expect(listCustomCommands()[0].command).toBe('foo2')
+    expect(deleteCustomCommand('my-tool')).toEqual({ ok: true })
+    expect(listCustomCommands()).toHaveLength(0)
+    expect(deleteCustomCommand('missing')).toMatchObject({ ok: false, status: 404 })
   })
   test('provider catalog includes kind metadata', () => {
     const catalog = listProviderCatalog()

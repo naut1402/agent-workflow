@@ -4,19 +4,42 @@ import { ref, onMounted } from 'vue'
 import { fetchRunners, fetchJobs } from '../scripts/runnerApi'
 import { saveRunner, deleteRunner, setDefaultRunner, fetchConnections } from '../scripts/RunnerConfigPanelApi'
 import RunnerDialog from './RunnerDialog.vue'
-import type { ProviderEntry, RunnerDraft } from '../types'
+import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderFamily } from '../types'
 
 const { t } = useI18nHelpers()
 
 const runners = ref<RunnerDraft[]>([])
 const defaultRunnerId = ref('')
-const connections = ref<{ id: string; label: string }[]>([])
+const connections = ref<ConnectionOption[]>([])
 const providers = ref<ProviderEntry[]>([])
 const message = ref('')
 const error = ref('')
 const recentJobs = ref<any[]>([])
 const showRunnerDialog = ref(false)
 const editingRunner = ref<RunnerDraft | null>(null)
+
+function connectionOf(r: RunnerDraft): ConnectionOption | undefined {
+  return connections.value.find((c) => c.id === r.connectionId)
+}
+
+function familyOfProviderId(providerId: string | undefined): ProviderFamily {
+  if (!providerId) return 'console-command'
+  if (providerId === 'console-command') return 'console-command'
+  if (providerId === 'anthropic-api' || providerId.endsWith('-api')) return 'ai-api'
+  if (providerId === 'claude-code-cli' || providerId === 'cursor-cli' || providerId === 'codex-cli') {
+    return 'agent-cli'
+  }
+  const fromCatalog = providers.value.find((p) => p.id === providerId)?.family
+  if (fromCatalog) return fromCatalog
+  return 'console-command'
+}
+
+/** Only Agent CLI / AI API runners may be the default AI runner. */
+function canBeDefaultAi(r: RunnerDraft): boolean {
+  const conn = connectionOf(r)
+  const family = familyOfProviderId(conn?.providerId)
+  return family === 'agent-cli' || family === 'ai-api'
+}
 
 async function load() {
   error.value = ''
@@ -83,6 +106,10 @@ async function toggleEnabled(r: RunnerDraft, e: Event) {
 
 async function makeDefault(r: RunnerDraft, e: Event) {
   e.stopPropagation()
+  if (!canBeDefaultAi(r)) {
+    error.value = t('runner.messages.consoleNotDefault')
+    return
+  }
   try {
     await setDefaultRunner(r.id)
     message.value = `Default: ${r.id}`
@@ -163,9 +190,9 @@ async function remove(r: RunnerDraft, e: Event) {
             type="button"
             class="icon-btn"
             :class="{ active: r.id === defaultRunnerId }"
-            :disabled="r.id === defaultRunnerId"
-            :title="t('runner.panel.makeDefault')"
-            :aria-label="t('runner.panel.makeDefault')"
+            :disabled="r.id === defaultRunnerId || !canBeDefaultAi(r)"
+            :title="canBeDefaultAi(r) ? t('runner.panel.makeDefault') : t('runner.messages.consoleNotDefault')"
+            :aria-label="canBeDefaultAi(r) ? t('runner.panel.makeDefault') : t('runner.messages.consoleNotDefault')"
             @click="makeDefault(r, $event)"
           >
             <!-- star -->

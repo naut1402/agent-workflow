@@ -9,6 +9,9 @@ export interface CredentialProfile {
 
 export type ConnectionKind = 'local-console' | 'ai-provider'
 
+/** Provider category — Agent CLI vs console argv vs remote API. */
+export type ProviderFamily = 'agent-cli' | 'console-command' | 'ai-api'
+
 export interface Connection {
   id: string
   label: string
@@ -28,6 +31,8 @@ export interface ProviderCatalogEntry {
   id: string
   kind: ConnectionKind
   label: string
+  /** agent-cli may be set as default AI runner; console-command may not. */
+  family: ProviderFamily
 }
 
 export interface ScannedCommand {
@@ -36,6 +41,18 @@ export interface ScannedCommand {
   path: string | null
   available: boolean
   providerId: string
+  /** Custom commands persisted in commands.json (editable / deletable). */
+  custom?: boolean
+  flags?: string[]
+}
+
+/** User-registered local console command (registryHome/commands.json). */
+export interface CustomCommand {
+  id: string
+  command: string
+  path: string
+  providerId: string
+  flags: string[]
 }
 
 export interface RunnerConfig {
@@ -91,6 +108,13 @@ export interface ExecuteResult {
   stdout?: string
   /** Captured CLI session id (preset-uuid or parse-json providers). */
   sessionId?: string | null
+  /** Optional token usage (Agent CLI); see providers/agentCli.ts. */
+  tokenUsage?: {
+    inputTokens?: number
+    outputTokens?: number
+    totalTokens?: number
+    estimated?: boolean
+  }
 }
 
 // `awaiting_approval`: an approval-flow job (see jobQueue.ts) finished
@@ -119,9 +143,9 @@ export interface JobRecord {
   error?: string
   artifactsFound?: string[]
   /**
-   * The CLI's raw stdout, persisted only for NL chat jobs
-   * (`metadata.isNlChat`) and capped — the chat surface must show the agent's
-   * answer, not the job log, which also holds the payload/prompt framing.
+   * The CLI's raw stdout (or parsed agent `result`), persisted for NL chat and
+   * Agent CLI pipeline jobs so task chat can show the reply when the on-disk
+   * session transcript is missing. Capped; never treat the full job log as this.
    */
   stdout?: string
   metadata?: Record<string, unknown>
@@ -159,10 +183,17 @@ export interface ConnectionsStore {
   connections: Connection[]
 }
 
+export interface CommandsStore {
+  version: number
+  commands: CustomCommand[]
+}
+
 // A provider plugs a concrete execution backend (e.g. the Claude Code CLI) into
 // the runner plane behind a uniform contract.
 export interface RunnerProvider {
   providerId: string
+  /** Defaults inferred from providerId when omitted (legacy providers). */
+  family?: ProviderFamily
   validateRunnerConfig(config: Record<string, unknown> | undefined): { ok: boolean; errors: string[] }
   validateCredential(profile: CredentialProfile | undefined): { ok: boolean; errors: string[] }
   capabilities(): { supportsAgentFile: boolean; supportsStreaming: boolean; maxConcurrency: number }
@@ -184,6 +215,7 @@ export type MutationResult<T = {}> = MutationOk<T> | MutationErr
 export const RUNNERS_VERSION = 2
 export const CREDENTIALS_VERSION = 1
 export const CONNECTIONS_VERSION = 1
+export const COMMANDS_VERSION = 1
 
 export const DEFAULT_CONNECTION_ID = 'claude-code-cli-local'
 
@@ -199,5 +231,9 @@ export function sanitiseCredentialId(id: unknown): string | null {
 }
 
 export function sanitiseConnectionId(id: unknown): string | null {
+  return sanitiseRunnerId(id)
+}
+
+export function sanitiseCommandId(id: unknown): string | null {
   return sanitiseRunnerId(id)
 }

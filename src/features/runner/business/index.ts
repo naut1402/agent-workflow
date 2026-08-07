@@ -36,8 +36,23 @@ export {
   listProviderCatalog,
   scanLocalCommands,
 } from './connections.js'
+export {
+  loadCommands,
+  saveCommands,
+  listCustomCommands,
+  getCustomCommand,
+  upsertCustomCommand,
+  deleteCustomCommand,
+} from './commands.js'
 export { resolveAgent, resolveAgentFilePath, normalizeAgentRef, describeAgentSearchPaths } from './agentResolver.js'
 export { getProvider, listProviderIds, registerProvider } from './registry.js'
+export {
+  AGENT_CLI_PROVIDER_IDS,
+  isAgentCliProviderId,
+  isAgentCliProvider,
+  providerFamilyOf,
+} from './providers/agentCli.js'
+export type { AgentCliProvider, AgentCliCapabilities, TokenUsage, ProviderFamily as AgentProviderFamily } from './providers/agentCli.js'
 export {
   submitJob,
   submitAndWait,
@@ -75,6 +90,7 @@ export type {
   CredentialProfile,
   Connection,
   ConnectionKind,
+  CustomCommand,
   ProviderCatalogEntry,
   ScannedCommand,
   RunnerConfig,
@@ -85,4 +101,5 @@ export type {
   JobRecord,
   RunnerProvider,
   MutationResult,
+  ProviderFamily,
 } from './types.js'
