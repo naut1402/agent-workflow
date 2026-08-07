@@ -3,6 +3,7 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { slugify } from '../../../core/lib/stringUtils'
 import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
+import { deleteConnection } from '../scripts/ConnectionDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
 import type { ConnectionOption, ProviderEntry, RunnerDraft } from '../types'
 
@@ -27,6 +28,7 @@ const testing = ref(false)
 const error = ref('')
 const message = ref('')
 const showConnectionDialog = ref(false)
+const editingConnection = ref<ConnectionOption | null>(null)
 
 function emptyDraft(): RunnerDraft {
   return {
@@ -149,10 +151,45 @@ async function smokeTest() {
   }
 }
 
+function openNewConnection() {
+  editingConnection.value = null
+  showConnectionDialog.value = true
+}
+
+function openEditConnection() {
+  const c = selectedConnection.value
+  if (!c) return
+  editingConnection.value = { ...c }
+  showConnectionDialog.value = true
+}
+
+async function removeConnection() {
+  const c = selectedConnection.value
+  if (!c) return
+  if (!confirm(t('runner.messages.confirmDeleteConnection', { id: c.id }))) return
+  error.value = ''
+  try {
+    await deleteConnection(c.id)
+    message.value = t('runner.messages.connectionDeleted', { id: c.id })
+    if (draft.value.connectionId === c.id) draft.value.connectionId = ''
+    emit('refreshed')
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
 async function onConnectionSaved(connectionId: string) {
   emit('refreshed')
   draft.value.connectionId = connectionId
-  message.value = t('runner.messages.connectionAdded', { id: connectionId })
+  message.value = editingConnection.value
+    ? t('runner.messages.connectionSaved', { id: connectionId })
+    : t('runner.messages.connectionAdded', { id: connectionId })
+  editingConnection.value = null
+}
+
+function closeConnectionDialog() {
+  showConnectionDialog.value = false
+  editingConnection.value = null
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -200,9 +237,30 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 type="button"
                 class="btn-ghost btn-sm conn-add"
                 :title="t('runner.connectionDialog.title')"
-                @click="showConnectionDialog = true"
+                :aria-label="t('runner.connectionDialog.title')"
+                @click="openNewConnection"
               >
                 +
+              </button>
+              <button
+                type="button"
+                class="btn-ghost btn-sm"
+                :disabled="!selectedConnection"
+                :title="t('runner.connectionDialog.editTitle')"
+                :aria-label="t('runner.connectionDialog.editTitle')"
+                @click="openEditConnection"
+              >
+                {{ t('runner.actions.edit') }}
+              </button>
+              <button
+                type="button"
+                class="btn-ghost btn-sm danger-text"
+                :disabled="!selectedConnection"
+                :title="t('runner.connectionDialog.deleteConnection')"
+                :aria-label="t('runner.connectionDialog.deleteConnection')"
+                @click="removeConnection"
+              >
+                {{ t('runner.actions.delete') }}
               </button>
             </div>
             <p v-if="isConsoleCommand" class="muted hint">{{ t('runner.fields.consoleHint') }}</p>
@@ -267,7 +325,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     <ConnectionDialog
       v-if="showConnectionDialog"
       :providers="providers"
-      @close="showConnectionDialog = false"
+      :connection="editingConnection"
+      @close="closeConnectionDialog"
       @saved="onConnectionSaved"
     />
   </Teleport>
@@ -284,6 +343,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 }
 .connection-row .cfg-input { flex: 1; }
 .conn-add { flex-shrink: 0; min-width: 2rem; font-size: 1.1rem; line-height: 1; }
+.danger-text { color: var(--danger); }
 .hint { margin: 0.35rem 0 0; font-size: 0.8rem; }
 .enable-row {
   display: flex;

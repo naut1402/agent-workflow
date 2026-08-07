@@ -14,6 +14,9 @@ export interface ConnectionOption {
   label: string
   kind?: ConnectionKind
   providerId?: string
+  cliPath?: string
+  flags?: string[]
+  credentialId?: string | null
 }
 
 export interface RunnerDraft {
