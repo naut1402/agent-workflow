@@ -134,7 +134,7 @@ describe('continueNlChatSession', () => {
     const openBefore = loadTaskSessionLedger('P2', chatSessionId).sessions.find((s) => s.status === 'open')
     expect(openBefore?.sessionId).toBeTruthy()
 
-    const result = continueNlChatSession(chatSessionId, 'P2', 'chỉ dùng agent implementer')
+    const result = await continueNlChatSession(chatSessionId, 'P2', 'chỉ dùng agent implementer')
     expect(result.ok).toBe(true)
     if ('error' in result) throw new Error(result.error)
     await settle(result.job.id)
@@ -155,15 +155,15 @@ describe('continueNlChatSession', () => {
     expect(job.metadata?.entityType).toBeUndefined()
     await settle(job.id)
 
-    const result = continueNlChatSession(chatSessionId, 'P2b', 'mình muốn tạo một task')
+    const result = await continueNlChatSession(chatSessionId, 'P2b', 'mình muốn tạo một task')
     expect(result.ok).toBe(true)
     if ('error' in result) throw new Error(result.error)
     await settle(result.job.id)
     expect(captured[captured.length - 1].userPrompt).toContain('mình muốn tạo một task')
   })
 
-  test('unknown chat session id → error result, no throw', () => {
-    const result = continueNlChatSession('nlchat-doesnotexist', 'P2', 'hi')
+  test('unknown chat session id → error result, no throw', async () => {
+    const result = await continueNlChatSession('nlchat-doesnotexist', 'P2', 'hi')
     expect(result).toMatchObject({ ok: false, status: 404 })
   })
 })

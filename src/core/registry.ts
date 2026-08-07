@@ -276,9 +276,9 @@ export function seedDefault(devTeamRoot: string | null | undefined): Project | n
 //   - explicit, known id → that project's path
 //   - explicit, unknown id → null (caller returns 404)
 //   - null/empty id → the DEFAULT project:
-//       1. DEV_TEAM_ROOT env (if set)              ← highest priority
-//       2. registry entry with default: true
-//       3. opts.defaultRoot (e.g. Vite cwd/..)     ← legacy fallback
+//       1. registry entry with default: true
+//       2. DEV_TEAM_ROOT env (if set)
+//       3. opts.defaultRoot (e.g. Vite cwd/..)
 // Design §4.3.
 export function resolveProjectRoot(
   projectId: string | null | undefined,
@@ -290,14 +290,14 @@ export function resolveProjectRoot(
   }
 
   // No project → default.
-  const envRoot = process.env.DEV_TEAM_ROOT
-  if (envRoot && envRoot.trim()) return path.resolve(envRoot.trim())
-
   const { defaultId, projects } = list()
   if (defaultId) {
     const def = projects.find((p) => p.id === defaultId)
     if (def) return def.path
   }
+
+  const envRoot = process.env.DEV_TEAM_ROOT
+  if (envRoot && envRoot.trim()) return path.resolve(envRoot.trim())
 
   if (opts.defaultRoot) return opts.defaultRoot
   return null

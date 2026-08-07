@@ -1,5 +1,7 @@
 import { computed, ref } from 'vue'
 import { fetchTaskChat, sendTaskFeedback } from '../../monitor/scripts/monitorApi'
+import { resolveChatFeedbackMode } from '../../../core/configs/appSettings'
+import { useAppSettings } from '../../../core/composables/useAppSettings'
 
 /**
  * Chat with the runner of a task's pipeline step: replays the CLI session's own
@@ -19,7 +21,7 @@ export interface TaskChatTurn {
   tool?: string
 }
 
-export type TaskChatBlockedReason = 'stepRunning' | 'noCompletedJob' | 'noSession'
+export type TaskChatBlockedReason = 'noCompletedJob'
 
 export interface TaskChatRunner {
   id: string
@@ -38,12 +40,16 @@ export interface UseTaskChatOptions {
 }
 
 const BLOCKED_TEXT: Record<TaskChatBlockedReason, string> = {
-  stepRunning: 'Step đang chạy — chờ chạy xong mới gửi được tin nhắn.',
   noCompletedJob: 'Chưa có job nào hoàn tất cho task này để nối tiếp hội thoại.',
-  noSession: 'Không còn phiên CLI nào mở cho task này để nối tiếp.',
 }
 
+/** A step's own job is busy and this session has no `.dev-state` to queue against (nl-chat). */
+const STEP_BUSY_TEXT = 'Step đang chạy — chờ chạy xong mới gửi được tin nhắn.'
+/** Shown while the target step's job is running, in the (default) queue mode — before anything has been sent. */
+const QUEUED_TEXT = 'Tin nhắn mới sẽ được gửi khi step hiện tại hoàn tất.'
+
 export function useTaskChat(opts: UseTaskChatOptions) {
+  const { settings } = useAppSettings()
   const turns = ref<TaskChatTurn[]>([])
   const total = ref(0)
   const sessionId = ref<string | null>(null)
@@ -51,6 +57,8 @@ export function useTaskChat(opts: UseTaskChatOptions) {
   const running = ref<{ jobId: string; stepId?: string } | null>(null)
   const runner = ref<TaskChatRunner | null>(null)
   const canSend = ref(false)
+  /** A message sent right now would be queued rather than sent immediately. */
+  const queued = ref(false)
   const blockedReason = ref<TaskChatBlockedReason | null>(null)
   const staleReason = ref<string | null>(null)
   const sending = ref(false)
@@ -65,7 +73,11 @@ export function useTaskChat(opts: UseTaskChatOptions) {
   let timer: ReturnType<typeof setTimeout> | null = null
   let stopped = false
 
-  const blockedText = computed(() => (blockedReason.value ? BLOCKED_TEXT[blockedReason.value] : null))
+  const blockedText = computed(() => {
+    if (blockedReason.value) return BLOCKED_TEXT[blockedReason.value]
+    if (queued.value) return QUEUED_TEXT
+    return null
+  })
 
   function applyState(data: any, incremental: boolean): void {
     const fresh: TaskChatTurn[] = Array.isArray(data?.turns) ? data.turns : []
@@ -84,6 +96,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     running.value = data?.running ?? null
     runner.value = data?.runner ?? null
     canSend.value = Boolean(data?.canSend)
+    queued.value = Boolean(data?.queued)
     blockedReason.value = data?.blockedReason ?? null
     staleReason.value = data?.staleReason ?? null
   }
@@ -138,16 +151,15 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     sending.value = true
     error.value = null
     try {
-      await sendTaskFeedback(opts.getTaskId(), message, { stepId: opts.getStepId() }, opts.getProjectId())
-      // The message only becomes a transcript turn once the CLI records it —
-      // echo it meanwhile so the input never looks lost.
+      const mode = resolveChatFeedbackMode(settings.value)
+      await sendTaskFeedback(opts.getTaskId(), message, { stepId: opts.getStepId(), mode }, opts.getProjectId())
+      // The message only becomes a transcript turn once the CLI records it (or,
+      // if queued, once the running job finishes and it resubmits) — echo it
+      // meanwhile so the input never looks lost.
       pending.value.push(message)
       await refresh(true)
     } catch (e: any) {
-      error.value =
-        e?.status === 409
-          ? BLOCKED_TEXT.stepRunning
-          : String(e?.message || e)
+      error.value = e?.status === 409 ? STEP_BUSY_TEXT : String(e?.message || e)
     } finally {
       sending.value = false
     }
@@ -162,6 +174,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     running,
     runner,
     canSend,
+    queued,
     blockedReason,
     blockedText,
     staleReason,

@@ -21,6 +21,8 @@ export const AppSettingsSchema = z
     notifySoundEnabled: z.boolean().optional(),
     /** Where to show notification UI icons. Missing → 'both'. */
     notificationUiPlacement: z.enum(['sidebar', 'floating', 'both']).optional(),
+    /** Feedback while a step's job is running: wait for it, or cancel + resume now. Missing → 'queue'. */
+    chatFeedbackMode: z.enum(['queue', 'immediate']).optional(),
   })
   .passthrough()
 
@@ -28,6 +30,7 @@ export type AppSettings = z.infer<typeof AppSettingsSchema>
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type LocalePreference = 'vi' | 'en'
 export type NotificationUiPlacement = 'sidebar' | 'floating' | 'both'
+export type ChatFeedbackMode = 'queue' | 'immediate'
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {}
 
@@ -145,4 +148,11 @@ export function resolveNotifyShowFloating(
 ): boolean {
   const p = resolveNotificationUiPlacement(settings)
   return p === 'floating' || p === 'both'
+}
+
+/** Effective chat feedback mode: missing / invalid → 'queue' (safest default). */
+export function resolveChatFeedbackMode(
+  settings: Pick<AppSettings, 'chatFeedbackMode'> | null | undefined,
+): ChatFeedbackMode {
+  return settings?.chatFeedbackMode === 'immediate' ? 'immediate' : 'queue'
 }

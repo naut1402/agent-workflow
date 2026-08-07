@@ -21,6 +21,13 @@ export default {
     block: 'Block by H2',
     full: 'Full',
   },
+  chatFeedback: {
+    title: 'Chat while a step is running',
+    desc: 'How to handle feedback sent while a step is running.',
+    groupLabel: 'While a step is running, send feedback',
+    queue: 'Queue (wait for the current step)',
+    immediate: 'Send now (cancels the running step)',
+  },
   taskList: {
     title: 'Task list',
     desc: 'Task list behaviour preferences in Monitor mode.',

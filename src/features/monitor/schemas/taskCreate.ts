@@ -27,7 +27,8 @@ export const CreateTaskPipeline = z
 export type CreateTaskPipeline = z.infer<typeof CreateTaskPipeline>
 
 export const CreateTaskRequest = z.object({
-  taskId: TaskIdSchema,
+  /** Optional — server mints a random id when omitted (NL chat without taskId). */
+  taskId: TaskIdSchema.optional(),
   source: z.enum(TASK_SOURCES).default('prompt'),
   /** Body of `request.md` — the brief handed to the first pipeline step. */
   prompt: z.string().min(1).max(200_000),

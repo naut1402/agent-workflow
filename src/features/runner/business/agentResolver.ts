@@ -5,6 +5,7 @@ import {
   ensureSectionOrder,
   getSectionTitle,
 } from '../../agent-editor/business/agentMarkdown.js'
+import { sanitiseAgentName } from '../../agent-editor/business/agents.js'
 import type { ResolvedAgent } from './types.js'
 
 function homeDir(): string {
@@ -80,7 +81,9 @@ async function resolveAgentFilePath(
   const id = normalizeAgentRef(agentRef)
   const parsed = parseCatalogAgentId(id)
   if (!parsed?.name) return null
-  const { source, name } = parsed
+  const { source } = parsed
+  const name = sanitiseAgentName(parsed.name)
+  if (!name) return null
   const fileName = `${name}.md`
 
   if (source === 'dashboard') {
@@ -93,13 +96,51 @@ async function resolveAgentFilePath(
     return joinPath(projectRoot, '.claude', 'agents', fileName)
   }
   if (source.startsWith('repo:') || source.startsWith('plugin:')) {
-    const pluginName = source.includes(':') ? source.slice(source.indexOf(':') + 1) : source
+    const rawPlugin = source.includes(':') ? source.slice(source.indexOf(':') + 1) : source
+    const pluginName = sanitiseAgentName(rawPlugin)
+    if (!pluginName) return null
     const builtin = joinPath(projectRoot, 'plugins', pluginName, 'agents', fileName)
     if (await safeAccess(builtin)) return builtin
     const cached = await findInPluginCache(pluginName, fileName)
     if (cached) return cached
+    // Image / DEV_TEAM_BUNDLED_PLUGINS fallback (docs/template/agents)
+    const bundledRoots = [
+      process.env.DEV_TEAM_BUNDLED_PLUGINS?.trim(),
+      '/opt/bundled-plugins',
+    ].filter(Boolean) as string[]
+    for (const root of bundledRoots) {
+      const bundled = joinPath(root, pluginName, 'agents', fileName)
+      if (await safeAccess(bundled)) return bundled
+    }
   }
   return null
+}
+
+/** Paths consulted for repo:/plugin: refs — used in error messages. */
+export function describeAgentSearchPaths(
+  projectRoot: string,
+  agentRef: string,
+): string[] {
+  const id = normalizeAgentRef(agentRef)
+  const parsed = parseCatalogAgentId(id)
+  if (!parsed?.name) return []
+  const { source } = parsed
+  const name = sanitiseAgentName(parsed.name)
+  if (!name) return []
+  const fileName = `${name}.md`
+  if (!(source.startsWith('repo:') || source.startsWith('plugin:'))) return []
+  const rawPlugin = source.includes(':') ? source.slice(source.indexOf(':') + 1) : source
+  const pluginName = sanitiseAgentName(rawPlugin)
+  if (!pluginName) return []
+  const paths = [
+    joinPath(projectRoot, 'plugins', pluginName, 'agents', fileName),
+    joinPath(homeDir(), '.claude', 'plugins', 'cache', '*', pluginName, '*', 'agents', fileName),
+    joinPath('/opt/bundled-plugins', pluginName, 'agents', fileName),
+  ]
+  if (process.env.DEV_TEAM_BUNDLED_PLUGINS?.trim()) {
+    paths.push(joinPath(process.env.DEV_TEAM_BUNDLED_PLUGINS.trim(), pluginName, 'agents', fileName))
+  }
+  return paths
 }
 
 function buildSystemPrompt(draft: any): string {
@@ -134,7 +175,9 @@ export async function resolveAgent(
   }
   const agentPath = await resolveAgentFilePath(ctx.projectRoot, ctx.devTeamRoot, agentRef)
   if (!agentPath) {
-    throw new Error(`agent file not found for ref: ${agentRef}`)
+    const looked = describeAgentSearchPaths(ctx.projectRoot, agentRef)
+    const hint = looked.length ? ` (looked in: ${looked.join(', ')})` : ''
+    throw new Error(`agent file not found for ref: ${agentRef}${hint}`)
   }
   const raw = await readTextFile(agentPath)
   const draft: any = parseAgentMarkdown(raw)

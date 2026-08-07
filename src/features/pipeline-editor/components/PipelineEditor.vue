@@ -35,6 +35,24 @@ const emit = defineEmits(['update:scope', 'update:task-id'])
 const taskSelect = ref('')
 const taskManual = ref('')
 
+/** Per-task pipeline edits only make sense for in-flight tasks. */
+function isTaskEditable(task: any): boolean {
+  return !task?.archived && task?.current_phase !== 'completed'
+}
+
+const editableTasks = computed(() =>
+  (props.tasks || []).filter((t: any) => isTaskEditable(t)),
+)
+
+/** True when the open task is archived/completed (known from props). */
+const taskWriteBlocked = computed(() => {
+  if (props.scope !== 'task') return false
+  const id = (props.taskId || '').trim()
+  if (!id) return true
+  const known = (props.tasks || []).find((t: any) => t.task_id === id)
+  return !!(known && !isTaskEditable(known))
+})
+
 function onScopeChange(event) {
   emit('update:scope', event.target.value)
 }
@@ -62,14 +80,22 @@ watch(
       }
       return
     }
-    const listed = props.tasks.some((t) => t.task_id === id)
+    const listed = editableTasks.value.some((t: any) => t.task_id === id)
     if (listed) {
       taskSelect.value = id
       taskManual.value = ''
-    } else {
-      taskSelect.value = '__manual__'
-      taskManual.value = id
+      return
     }
+    const known = (props.tasks || []).find((t: any) => t.task_id === id)
+    if (known && !isTaskEditable(known)) {
+      // Do not fall through to manual entry — that would bypass the filter.
+      taskSelect.value = ''
+      taskManual.value = ''
+      emit('update:task-id', '')
+      return
+    }
+    taskSelect.value = '__manual__'
+    taskManual.value = id
   },
   { immediate: true },
 )
@@ -371,6 +397,10 @@ const saving = ref(false)
 const saveMsg = ref('')
 
 async function saveToFile() {
+  if (taskWriteBlocked.value) {
+    saveMsg.value = '✗ Task is archived or completed'
+    return
+  }
   saving.value = true
   saveMsg.value = ''
   try {
@@ -485,7 +515,7 @@ const editorLayoutClass = computed(() => ({
         >■ Stop</button>
         <button
           class="btn-primary btn-sm"
-          :disabled="saving"
+          :disabled="saving || taskWriteBlocked"
           @click="saveToFile"
         >{{ saving ? 'Saving…' : 'Save to file' }}</button>
         <span v-if="saveMsg" class="save-msg">{{ saveMsg }}</span>
@@ -507,7 +537,7 @@ const editorLayoutClass = computed(() => ({
               @change="onTaskSelectChange"
             >
               <option value="">{{ t('pipelineEditor.scope.selectTask') }}</option>
-              <option v-for="task in tasks" :key="task.task_id" :value="task.task_id">
+              <option v-for="task in editableTasks" :key="task.task_id" :value="task.task_id">
                 {{ task.task_id }}
               </option>
               <option value="__manual__">{{ t('pipelineEditor.scope.manualEntry') }}</option>

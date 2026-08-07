@@ -83,7 +83,7 @@ export class NlChatController extends AbstractController {
     }
 
     const projectId = this.projectId || ''
-    const result = continueNlChatSession(id, projectId, parsed.data.message)
+    const result = await continueNlChatSession(id, projectId, parsed.data.message)
     if ('error' in result) {
       return this.json(result.status || 400, { error: result.error, chatSessionId: id })
     }

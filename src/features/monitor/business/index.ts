@@ -22,7 +22,7 @@ export {
   stepIdOf,
 } from '../../runner/business/index.js'
 export { getRunner } from '../../runner/business/index.js'
-export { loadTaskSessionLedger } from '../../runner/business/index.js'
+export { loadTaskSessionLedger, closeTaskSession } from '../../runner/business/index.js'
 export type { SessionEntry } from '../../runner/business/index.js'
 export type { JobRecord } from '../../runner/business/index.js'
 

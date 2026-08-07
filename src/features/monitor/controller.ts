@@ -3,7 +3,7 @@ import path from 'node:path'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { resolveArtifact } from './business/tasks/index.js'
 import { collectTasks, flowProfilePath, createTask, readState } from './business/tasks/index.js'
-import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask } from './business/tasks/state.js'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, repairTaskState } from './business/tasks/state.js'
 import {
   loadPipelineConfig,
   submitJob,
@@ -12,10 +12,12 @@ import {
   findSelectionRange,
   extractLines,
   listJobs,
+  closeTaskSession,
 } from './business/index.js'
 import { emitAudit } from '../../core/log/store.js'
 import { TaskArchivePatch, TaskStatePatch } from './schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from './schemas/taskCreate.js'
+import { mintTaskId } from './lib/createTaskForm.js'
 import { RunStepRequest } from './schemas/runStep.js'
 import { TaskFeedbackRequest } from './schemas/taskFeedback.js'
 import { fetchGithubIssue } from './business/github/index.js'
@@ -420,8 +422,9 @@ export class MonitorController extends AbstractController {
       return this.badRequest('invalid request', { details: parsed.error.flatten() })
     }
     const body = parsed.data
+    const taskId = body.taskId ?? mintTaskId()
     const result = await createTask(root, {
-      taskId: body.taskId,
+      taskId,
       source: body.source,
       prompt: body.prompt,
       issueUrl: body.issueUrl,
@@ -432,7 +435,7 @@ export class MonitorController extends AbstractController {
       autoReview: body.autoReview,
       exportJson: body.exportJson,
     })
-    if ('error' in result) return this.json(result.status, { error: result.error, taskId: body.taskId })
+    if ('error' in result) return this.json(result.status, { error: result.error, taskId })
 
     emitAudit({
       op: 'create',
@@ -487,6 +490,59 @@ export class MonitorController extends AbstractController {
 
     emitAudit({ op: 'delete', entity: 'task-state', identifier: id, projectId: this.projectId })
     return this.ok({ id, deleted: true })
+  }
+
+  async repairTaskState() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const id = this.c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+
+    const stateFile = path.join(root, '.dev-state', `${id}.json`)
+    const before = await readState(stateFile)
+    if (before.ok) {
+      const stepId = String(before.state.current_phase ?? '')
+      const lastSucceeded = listJobs(200).find(
+        (j) =>
+          j.metadata?.taskId === id &&
+          j.status === 'succeeded' &&
+          !j.applyTarget &&
+          j.metadata?.pipelineStepId === stepId,
+      )
+      if (lastSucceeded && stepId) {
+        await advanceStepOnJobSuccess(root, id, stepId)
+      }
+    }
+
+    const result = await repairTaskState(root, id)
+    if ('error' in result) return this.json(result.status, { error: result.error, taskId: id })
+
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: this.projectId,
+      detail: { action: 'repair' },
+    })
+    return this.ok({ id, state: result.state, mtime: result.mtime })
+  }
+
+  async closeTaskChatSession() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const id = this.c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+
+    closeTaskSession(this.projectId || '', id)
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: this.projectId,
+      detail: { action: 'close-session' },
+    })
+    return this.ok({ id, closed: true })
   }
 
   async runTaskStep() {
@@ -598,10 +654,22 @@ export class MonitorController extends AbstractController {
     if (!read.ok) return this.notFound('task not found', { taskId: id })
 
     const projectId = this.projectId || ''
-    const result = sendTaskFeedback(id, projectId, parsed.data.feedback, {
+    const result = await sendTaskFeedback(id, projectId, parsed.data.feedback, {
       stepId: parsed.data.stepId ?? undefined,
+      mode: parsed.data.mode,
     })
     if ('error' in result) return this.json(result.status || 400, { error: result.error, taskId: id })
+
+    if ('queued' in result) {
+      emitAudit({
+        op: 'update',
+        entity: 'task-state',
+        identifier: id,
+        projectId: this.projectId,
+        detail: { action: 'feedback-queued', stepId: parsed.data.stepId ?? undefined },
+      })
+      return this.created({ queued: true })
+    }
 
     emitAudit({
       op: 'update',

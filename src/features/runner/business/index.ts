@@ -1,5 +1,6 @@
 /** Peer: advance task phase after a successful pipeline job (owned by monitor). */
-export { advanceStepOnJobSuccess } from '../../monitor/business/tasks/state.js'
+export { advanceStepOnJobSuccess, queuePendingFeedback, takePendingFeedback } from '../../monitor/business/tasks/state.js'
+export type { PendingFeedback } from '../../monitor/business/tasks/state.js'
 /** Peer: layered pipeline config (owned by pipeline-editor). */
 export { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
 
@@ -35,7 +36,7 @@ export {
   listProviderCatalog,
   scanLocalCommands,
 } from './connections.js'
-export { resolveAgent, resolveAgentFilePath, normalizeAgentRef } from './agentResolver.js'
+export { resolveAgent, resolveAgentFilePath, normalizeAgentRef, describeAgentSearchPaths } from './agentResolver.js'
 export { getProvider, listProviderIds, registerProvider } from './registry.js'
 export {
   submitJob,
@@ -65,6 +66,7 @@ export type { SessionEntry, TaskSessionLedger, SessionEntryStatus } from './sess
 export {
   parseCursorJsonOutput,
   buildCursorJsonArgs,
+  buildCursorJsonInvocation,
   prepareSessionInvocation,
   mintSessionId,
 } from './sessionLedger.js'

@@ -6,6 +6,8 @@ import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { savePipelineProfile } from '../../pipeline-editor/scripts/ProfileManagerApi'
 import { createTask } from '../../monitor/scripts/monitorApi'
 import { saveCustomAgent } from '../../agent-editor/scripts/agentEditorApi'
+import { mintTaskId } from '../../monitor/lib/createTaskForm'
+import { TASK_ID_PATTERN } from '../../monitor/schemas/taskCreate'
 
 // Drives the floating NL chat surface end to end: the user just chats (no
 // "what do you want to create?" picker — the agent infers the entity type and
@@ -219,7 +221,12 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     try {
       const projectId = opts.getProjectId()
       if (entityType.value === 'task') {
-        await createTask(editedDraft, projectId)
+        const rawId = editedDraft.taskId
+        const payload =
+          typeof rawId === 'string' && TASK_ID_PATTERN.test(rawId)
+            ? editedDraft
+            : { ...editedDraft, taskId: mintTaskId() }
+        await createTask(payload, projectId)
       } else if (entityType.value === 'pipeline') {
         // Re-normalize: the preview textarea is editable, so a user can drop
         // the step ids the Pipeline Editor needs back out of the draft.

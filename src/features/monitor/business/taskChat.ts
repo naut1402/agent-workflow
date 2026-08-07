@@ -15,7 +15,7 @@ import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.
  * types, instead of surfacing a 400/409 after the fact.
  */
 
-export type TaskChatBlockedReason = 'stepRunning' | 'noCompletedJob' | 'noSession'
+export type TaskChatBlockedReason = 'noCompletedJob'
 
 export interface TaskChatRunningJob {
   jobId: string
@@ -44,6 +44,8 @@ export interface TaskChatState {
   running: TaskChatRunningJob | null
   runner: TaskChatRunner | null
   canSend: boolean
+  /** A message sent now would be queued (step running) rather than sent right away. */
+  queued: boolean
   blockedReason?: TaskChatBlockedReason
   /** Set when the ledger entry we would resume is no longer usable. */
   staleReason?: string
@@ -110,14 +112,13 @@ export function getTaskChatState(
   const jobs = jobsOfTask(taskId)
   const runningJob = jobs.find((j) => j.status === 'queued' || j.status === 'running')
   const hasFinished = jobs.some((j) => j.status === 'succeeded' || j.status === 'failed')
-  const ledger = loadTaskSessionLedger(projectId, taskId)
-  const hasOpenSession = ledger.sessions.some((s) => s.status === 'open')
 
-  // Mirrors sendTaskFeedback()'s guard order exactly.
+  // A running job no longer blocks sending — `sendTaskFeedback` queues it
+  // instead (see `queued` below). A finished job can always start or resume a
+  // chat (`sessionMode: 'new'` when the ledger has no open entry), so the only
+  // remaining block is having no finished job at all.
   let blockedReason: TaskChatBlockedReason | undefined
-  if (runningJob) blockedReason = 'stepRunning'
-  else if (!hasFinished) blockedReason = 'noCompletedJob'
-  else if (!hasOpenSession) blockedReason = 'noSession'
+  if (!runningJob && !hasFinished) blockedReason = 'noCompletedJob'
 
   const resolved = resolveChatSession(projectId, taskId, opts.stepId)
   const transcript = resolved.sessionId
@@ -152,6 +153,7 @@ export function getTaskChatState(
           { id: runnerJob.runnerId, name: runnerJob.runnerId, enabled: false }
         : null,
     canSend: !blockedReason,
+    queued: Boolean(runningJob),
     ...(blockedReason ? { blockedReason } : {}),
     ...(resolved.staleReason ? { staleReason: resolved.staleReason } : {}),
   }

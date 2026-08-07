@@ -158,11 +158,11 @@ describe('POST /api/tasks/:id/feedback', () => {
     expect(res.status).toBe(400)
   })
 
-  test('400 when the task has no resumable session', async () => {
+  test('starts a new session when the task has no open ledger entry', async () => {
     seedTask('F3', { current_phase: 'implementer' })
     // run-step without a `project` query param → projectId stays null so
     // runJob() never writes to the session ledger — the finished job exists
-    // but there is nothing to resume.
+    // but there is nothing to resume; feedback opens a fresh session.
     const stepRes = await app.request('/api/tasks/F3/run-step', {
       method: 'POST',
       body: JSON.stringify({ runnerId: 'stub-runner-tf-route' }),
@@ -175,7 +175,9 @@ describe('POST /api/tasks/:id/feedback', () => {
       method: 'POST',
       body: JSON.stringify({ feedback: 'hi' }),
     })
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.job?.metadata?.inputSessionMode).toBe('new')
   })
 
   test('404 for an unknown task', async () => {
@@ -186,7 +188,7 @@ describe('POST /api/tasks/:id/feedback', () => {
     expect(res.status).toBe(404)
   })
 
-  test('409 when a job is already running for the task', async () => {
+  test('default (queue) mode while a job is running: 201 queued, not 409', async () => {
     gated = true
     seedTask('F4', { current_phase: 'implementer' })
     const stepRes = await runStep('F4')
@@ -199,7 +201,83 @@ describe('POST /api/tasks/:id/feedback', () => {
       method: 'POST',
       body: JSON.stringify({ feedback: 'hi' }),
     })
-    expect(res.status).toBe(409)
+    expect(res.status).toBe(201)
+    expect(await res.json()).toEqual({ queued: true })
+
+    gated = false
+    resolveGate?.()
+    await settle(job.id)
+  })
+
+  test('queued feedback is resubmitted automatically once the running job finishes', async () => {
+    gated = true
+    seedTask('F5', { current_phase: 'implementer' })
+    const stepRes = await runStep('F5')
+    const { job } = await stepRes.json()
+    for (let i = 0; i < 200 && loadJob(job.id)?.status !== 'running'; i++) await sleep(5)
+
+    const queueRes = await app.request(`/api/tasks/F5/feedback?project=${PROJECT_ID}`, {
+      method: 'POST',
+      body: JSON.stringify({ feedback: 'please clarify' }),
+    })
+    expect(queueRes.status).toBe(201)
+
+    gated = false
+    resolveGate?.()
+    const finished = await settle(job.id)
+    expect(finished.status).toBe('succeeded')
+
+    // The resubmit fires from inside runJob's tail — poll for the child job.
+    let child: any = null
+    for (let i = 0; i < 200 && !child; i++) {
+      const jobs = fs
+        .readdirSync(path.join(process.env.DEV_TEAM_DASHBOARD_HOME as string, 'jobs'))
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => JSON.parse(fs.readFileSync(path.join(process.env.DEV_TEAM_DASHBOARD_HOME as string, 'jobs', f), 'utf8')))
+      child = jobs.find((j) => j.parentJobId === job.id)
+      if (!child) await sleep(5)
+    }
+    expect(child).toBeTruthy()
+    expect(child.userPrompt).toBe('please clarify')
+    await settle(child.id)
+  })
+
+  test("immediate mode on the SAME step cancels the running job and resumes now", async () => {
+    gated = true
+    seedTask('F6', { current_phase: 'implementer' })
+    const stepRes = await runStep('F6')
+    const { job } = await stepRes.json()
+    for (let i = 0; i < 200 && loadJob(job.id)?.status !== 'running'; i++) await sleep(5)
+
+    const res = await app.request(`/api/tasks/F6/feedback?project=${PROJECT_ID}`, {
+      method: 'POST',
+      body: JSON.stringify({ feedback: 'stop, do X instead', stepId: 'implementer', mode: 'immediate' }),
+    })
+    expect(res.status).toBe(201)
+    const { job: child } = await res.json()
+    expect(child.parentJobId).toBe(job.id)
+
+    expect(loadJob(job.id)?.status).toBe('cancelled')
+
+    gated = false
+    resolveGate?.()
+    await settle(child.id)
+  })
+
+  test('immediate mode targeting a DIFFERENT step falls back to queueing, does not cancel', async () => {
+    gated = true
+    seedTask('F7', { current_phase: 'implementer' })
+    const stepRes = await runStep('F7')
+    const { job } = await stepRes.json()
+    for (let i = 0; i < 200 && loadJob(job.id)?.status !== 'running'; i++) await sleep(5)
+
+    const res = await app.request(`/api/tasks/F7/feedback?project=${PROJECT_ID}`, {
+      method: 'POST',
+      body: JSON.stringify({ feedback: 'hi', stepId: 'reviewer', mode: 'immediate' }),
+    })
+    expect(res.status).toBe(201)
+    expect(await res.json()).toEqual({ queued: true })
+    expect(loadJob(job.id)?.status).toBe('running')
 
     gated = false
     resolveGate?.()
@@ -250,7 +328,8 @@ describe('GET /api/tasks/:id/chat', () => {
     const res = await app.request(`/api/tasks/C3/chat?project=${PROJECT_ID}`)
     const body = await res.json()
     expect(body.running).toMatchObject({ jobId: job.id, stepId: 'implementer' })
-    expect(body).toMatchObject({ canSend: false, blockedReason: 'stepRunning' })
+    expect(body).toMatchObject({ canSend: true, queued: true })
+    expect(body.blockedReason).toBeUndefined()
 
     gated = false
     resolveGate?.()

@@ -18,6 +18,7 @@ Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `
 | Checklist review | [`docs/implement/review-checklist-rule.md`](docs/implement/review-checklist-rule.md) |
 | i18n chi tiết | [`docs/i18n.md`](docs/i18n.md) |
 | Cookbook tái cấu trúc core/feature | [`docs/cookbook/core-path-reorg.md`](docs/cookbook/core-path-reorg.md) |
+| Template agent / pipeline | [`docs/template/`](docs/template/) |
 | Claude Code | [`CLAUDE.md`](CLAUDE.md) |
 
 ---
@@ -46,6 +47,7 @@ agent-workflow/
 ├── test-e2e/
 ├── docs/
 │   ├── architecture.md, i18n.md, ui-buttons.md
+│   ├── template/           # agent + pipeline mẫu
 │   ├── cookbook/           # tái cấu trúc / bài học đợt lớn
 │   └── implement/          # *-rule.md, *-convention.md
 └── .claude/

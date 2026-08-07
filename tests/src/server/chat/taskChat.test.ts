@@ -161,10 +161,11 @@ describe('getTaskChatState', () => {
     expect(getTaskChatState(PROJECT, TASK, { fromIndex: 2 }).turns).toEqual([])
   })
 
-  test('blocked with stepRunning while a job runs — sending is impossible then', () => {
+  test('a running job no longer blocks sending — feedback gets queued instead', () => {
     writeJob({ id: 'j-live', status: 'running', sessionId: 's1', finishedAt: null })
     const state = getTaskChatState(PROJECT, TASK)
-    expect(state).toMatchObject({ canSend: false, blockedReason: 'stepRunning' })
+    expect(state).toMatchObject({ canSend: true, queued: true })
+    expect(state.blockedReason).toBeUndefined()
     expect(state.running).toMatchObject({ jobId: 'j-live' })
   })
 
@@ -172,7 +173,7 @@ describe('getTaskChatState', () => {
     expect(getTaskChatState(PROJECT, TASK)).toMatchObject({ canSend: false, blockedReason: 'noCompletedJob' })
   })
 
-  test('blocked with noSession when no ledger entry is open', () => {
+  test('canSend when a job finished even if the ledger session is closed (starts a new session)', () => {
     writeJob({ id: 'j1', sessionId: 's1' })
     saveTaskSessionLedger(PROJECT, {
       version: 1,
@@ -180,7 +181,9 @@ describe('getTaskChatState', () => {
       sessionPolicy: 'single',
       sessions: [ledgerEntry({ sessionId: 's1', status: 'closed' })],
     })
-    expect(getTaskChatState(PROJECT, TASK)).toMatchObject({ canSend: false, blockedReason: 'noSession' })
+    const state = getTaskChatState(PROJECT, TASK)
+    expect(state.canSend).toBe(true)
+    expect(state.blockedReason).toBeUndefined()
   })
 
   test('canSend once a job finished and the ledger still has an open session', () => {

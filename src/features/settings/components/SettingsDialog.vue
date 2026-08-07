@@ -7,6 +7,7 @@ import { useLocale } from '../../../core/composables/useLocale'
 import { reloadProjectsKey } from '../../../core/shell/keys'
 import {
   resolveArtifactViewMode,
+  resolveChatFeedbackMode,
   resolveCollapseAppSidebarOnOutside,
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
@@ -17,6 +18,7 @@ import {
   resolveNotificationUiPlacement,
   resolveNotifySoundEnabled,
   resolveThemePreference,
+  type ChatFeedbackMode,
   type NotificationUiPlacement,
   type ThemePreference,
 } from '../../../core/configs/appSettings'
@@ -74,6 +76,13 @@ const collapseMonitorSubSidebarOnOutside = computed(() =>
 function setArtifactViewMode(mode: 'block' | 'full') {
   if (artifactViewMode.value === mode) return
   update({ artifactViewMode: mode })
+}
+
+const chatFeedbackMode = computed(() => resolveChatFeedbackMode(settings.value))
+
+function setChatFeedbackMode(mode: ChatFeedbackMode) {
+  if (chatFeedbackMode.value === mode) return
+  update({ chatFeedbackMode: mode })
 }
 
 function setTheme(mode: ThemePreference) {
@@ -588,6 +597,36 @@ onUnmounted(() => {
                       @change="setArtifactViewMode('full')"
                     />
                     {{ t('settings.artifact.full') }}
+                  </label>
+                </div>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.chatFeedback.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.chatFeedback.desc') }}</p>
+                <div
+                  class="settings-radio-group"
+                  role="radiogroup"
+                  :aria-label="t('settings.chatFeedback.groupLabel')"
+                >
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="chatFeedbackMode"
+                      value="queue"
+                      :checked="chatFeedbackMode === 'queue'"
+                      @change="setChatFeedbackMode('queue')"
+                    />
+                    {{ t('settings.chatFeedback.queue') }}
+                  </label>
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="chatFeedbackMode"
+                      value="immediate"
+                      :checked="chatFeedbackMode === 'immediate'"
+                      @change="setChatFeedbackMode('immediate')"
+                    />
+                    {{ t('settings.chatFeedback.immediate') }}
                   </label>
                 </div>
               </section>

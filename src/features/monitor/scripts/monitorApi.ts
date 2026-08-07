@@ -21,6 +21,19 @@ export async function deleteTask(id: string, projectId?: string) {
   })
 }
 
+export async function repairTaskState(id: string, projectId?: string) {
+  return apiPost(`/api/tasks/${encodeURIComponent(id)}/repair-state`, {}, {
+    query: { project: projectId },
+    errorMessage: (status) => t('common.errors.repairTaskState', { status }),
+  })
+}
+
+export async function closeTaskChatSession(id: string, projectId?: string) {
+  return apiPost(`/api/tasks/${encodeURIComponent(id)}/close-session`, {}, {
+    query: { project: projectId },
+  })
+}
+
 export async function fetchTaskChat(
   id: string,
   opts: { stepId?: string; from?: number } = {},
@@ -36,12 +49,12 @@ export async function fetchTaskChat(
 export async function sendTaskFeedback(
   id: string,
   feedback: string,
-  opts: { stepId?: string } = {},
+  opts: { stepId?: string; mode?: 'queue' | 'immediate' } = {},
   projectId?: string,
 ) {
   return apiPost(
     `/api/tasks/${encodeURIComponent(id)}/feedback`,
-    { feedback, stepId: opts.stepId },
+    { feedback, stepId: opts.stepId, mode: opts.mode },
     { query: { project: projectId } },
   )
 }

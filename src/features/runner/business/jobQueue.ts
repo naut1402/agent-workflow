@@ -10,7 +10,7 @@ import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
 import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
-import { advanceStepOnJobSuccess, loadPipelineConfig } from './index.js'
+import { advanceStepOnJobSuccess, loadPipelineConfig, queuePendingFeedback, takePendingFeedback } from './index.js'
 
 /** Cap on the stdout persisted for NL chat jobs — a chat reply/draft is small. */
 const NL_CHAT_STDOUT_LIMIT = 64 * 1024
@@ -463,6 +463,11 @@ async function runJob(job: JobRecord): Promise<void> {
     onStart,
   )
 
+  // `cancelJob` already set `status: 'cancelled'` and this SIGTERM is why
+  // `provider.execute()` just resolved — `result.ok` will be false, and
+  // without this guard the code below would overwrite it with `'failed'`.
+  if (loadJob(job.id)?.status === 'cancelled') return
+
   const capturedSessionId = result.sessionId ?? execSessionId ?? execResumeSessionId
   if (taskId && projectId && inputSessionMode && inputSessionMode !== 'none' && capturedSessionId) {
     recordSessionUsage({
@@ -523,6 +528,7 @@ async function runJob(job: JobRecord): Promise<void> {
         ...(capturedSessionId ? { sessionId: capturedSessionId } : {}),
       })
     }
+    await resubmitPendingFeedback(job)
     return
   }
 
@@ -540,6 +546,32 @@ async function runJob(job: JobRecord): Promise<void> {
     ...(job.metadata?.isNlChat ? { stdout: (result.stdout ?? '').slice(0, NL_CHAT_STDOUT_LIMIT) } : {}),
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
   })
+  if (!isApprovalJob) await resubmitPendingFeedback(job)
+}
+
+/**
+ * A step's chat surface may queue feedback (`queuePendingFeedback`) while its
+ * job is still running — once that job (or a chat-feedback job resuming the
+ * same session) finishes, resubmit whatever is queued. Approval jobs are
+ * excluded: quick-action scratch runs aren't a task's pipeline step chat.
+ */
+async function resubmitPendingFeedback(job: JobRecord): Promise<void> {
+  const taskId = typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined
+  const devTeamRoot = typeof job.metadata?.devTeamRoot === 'string' ? job.metadata.devTeamRoot : undefined
+  const projectId = typeof job.metadata?.projectId === 'string' ? job.metadata.projectId : ''
+  if (!taskId || !devTeamRoot) return
+  const pending = await takePendingFeedback(devTeamRoot, taskId)
+  if (!pending) return
+  try {
+    const res = await sendTaskFeedback(taskId, projectId, pending.feedback, { stepId: pending.stepId })
+    if (res.ok === false) {
+      console.error('[jobQueue] queued feedback rejected on resubmit', res.error)
+      await queuePendingFeedback(devTeamRoot, taskId, pending)
+    }
+  } catch (err) {
+    console.error('[jobQueue] failed to resubmit queued feedback', err)
+    await queuePendingFeedback(devTeamRoot, taskId, pending)
+  }
 }
 
 /**
@@ -779,49 +811,99 @@ export function sendJobFeedback(id: string, feedback: string): MutationResult<{ 
  * (non-scratch) workspace, and does not itself advance `current_phase`; the
  * job it submits is tagged `metadata.isChatFeedback` so `runJob()` skips
  * `advancePipelineStepChain` for it (see edge cases in design.md §4.4).
+ *
+ * If a job for this task is still `queued`/`running`, default (`mode`
+ * omitted or `'queue'`) is to record the feedback and return `{ queued: true }`
+ * — `runJob` resubmits it automatically once that job finishes. `mode:
+ * 'immediate'` instead cancels the active job (only when it's the SAME step
+ * being chatted with, or the active job carries no step at all) and resumes
+ * its session right away.
  */
-export function sendTaskFeedback(
+export async function sendTaskFeedback(
   taskId: string,
   projectId: string,
   feedback: string,
-  opts: { stepId?: string } = {},
-): MutationResult<{ job: JobRecord }> {
+  opts: { stepId?: string; mode?: 'queue' | 'immediate' } = {},
+): Promise<MutationResult<{ job: JobRecord } | { queued: true }>> {
   const active = listJobs(50).find(
     (j) => j.metadata?.taskId === taskId && (j.status === 'queued' || j.status === 'running'),
   )
-  if (active) return { ok: false, status: 409, error: 'step already running' }
 
-  const finished = listJobs(200)
-    .filter(
-      (j) =>
-        j.metadata?.taskId === taskId &&
-        !j.applyTarget &&
-        (j.status === 'succeeded' || j.status === 'failed'),
-    )
-    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
-  // Chatting from a step's popover must land in THAT step's session, not
-  // whatever ran last — prefer the newest finished job of the requested step
-  // (its metadata carries the session/workspace the resume plan reuses).
-  const parent = (opts.stepId ? finished.find((j) => stepIdOf(j) === opts.stepId) : undefined) ?? finished[0]
+  let parent: JobRecord | undefined
+  if (active) {
+    const activeStepId = stepIdOf(active)
+    const sameStep = !activeStepId || !opts.stepId || activeStepId === opts.stepId
+    if (opts.mode === 'immediate' && sameStep && cancelJob(active.id).ok) {
+      // `cancelJob` just flipped `active` to `'cancelled'` — resume its
+      // session directly instead of treating it as "no active job".
+      parent = active
+    } else {
+      const devTeamRoot = typeof active.metadata?.devTeamRoot === 'string' ? active.metadata.devTeamRoot : undefined
+      const stillActive = loadJob(active.id)
+      if (stillActive && (stillActive.status === 'queued' || stillActive.status === 'running')) {
+        // `queuePendingFeedback` only succeeds for a real dashboard task (one
+        // with a `.dev-state` file) — nl-chat's scratch sessions reuse this
+        // same function but have none, so they keep the original "busy" error
+        // instead of a `queued: true` that would never actually resubmit.
+        const queued = devTeamRoot && (await queuePendingFeedback(devTeamRoot, taskId, { feedback, stepId: opts.stepId }))
+        if (queued) {
+          // Job may have finished between the active check and the write — reclaim and send now.
+          const after = loadJob(active.id)
+          if (after && after.status !== 'queued' && after.status !== 'running') {
+            const taken = await takePendingFeedback(devTeamRoot, taskId)
+            if (taken) return sendTaskFeedback(taskId, projectId, taken.feedback, { stepId: taken.stepId })
+          }
+          return { ok: true, queued: true }
+        }
+        return { ok: false, status: 409, error: 'step already running' }
+      }
+      // Race: the cancel above lost to the job finishing on its own — fall
+      // through and treat it like there was no active job at all.
+    }
+  }
+
+  if (!parent) {
+    const finished = listJobs(200)
+      .filter(
+        (j) =>
+          j.metadata?.taskId === taskId &&
+          !j.applyTarget &&
+          (j.status === 'succeeded' || j.status === 'failed' || j.status === 'cancelled'),
+      )
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+    // Chatting from a step's popover must land in THAT step's session, not
+    // whatever ran last — prefer the newest finished job of the requested step
+    // (its metadata carries the session/workspace the resume plan reuses).
+    parent = (opts.stepId ? finished.find((j) => stepIdOf(j) === opts.stepId) : undefined) ?? finished[0]
+  }
   if (!parent) return { ok: false, status: 400, error: 'no completed job to give feedback on' }
 
   const ledger = loadTaskSessionLedger(projectId, taskId)
-  if (!ledger.sessions.some((s) => s.status === 'open')) {
-    return { ok: false, status: 400, error: 'no resumable session for this task' }
+  const hasOpenSession = ledger.sessions.some((s) => s.status === 'open')
+
+  // The step may have changed agent since `parent` ran (pipeline edited via
+  // chat, or advanced past a retry loop) — re-resolve from the pipeline
+  // config that's live NOW rather than trusting the old job's `agentRef`.
+  let agentRef = parent.agentRef
+  const parentStepId = stepIdOf(parent)
+  const devTeamRoot = typeof parent.metadata?.devTeamRoot === 'string' ? parent.metadata.devTeamRoot : undefined
+  if (parentStepId && devTeamRoot) {
+    const pipeline = await loadPipelineConfig(devTeamRoot, taskId)
+    const step = (pipeline.steps || []).find((s: any) => s.id === parentStepId)
+    if (step?.agent) agentRef = step.agent
   }
 
   const { isChatFeedback: _isChatFeedback, ...parentMetadata } = parent.metadata || {}
   const job = submitJob({
     runnerId: parent.runnerId === 'unknown' ? undefined : parent.runnerId,
-    agentRef: parent.agentRef,
+    agentRef,
     workspace: parent.workspace,
     userPrompt: feedback,
     produces: parent.produces,
-    sessionMode: 'resume',
-    // Resume the exact CLI session this step ran under when we know it —
-    // `resolveSessionPlan` still validates it and falls back to a fresh
-    // session if the entry no longer applies.
-    sessionId: parent.sessionId,
+    // Resume when a ledger session is still open; otherwise start fresh so
+    // "new chat session" / close-then-reopen still works after × or +.
+    sessionMode: hasOpenSession ? 'resume' : 'new',
+    sessionId: hasOpenSession ? parent.sessionId : undefined,
     metadata: {
       ...parentMetadata,
       parentJobId: parent.id,
