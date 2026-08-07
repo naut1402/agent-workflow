@@ -1,6 +1,7 @@
 import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import { spawnSync } from 'node:child_process'
 import { registryHome } from '../../../core/registry.js'
+import { listCustomCommands } from './commands.js'
 import {
   CONNECTIONS_VERSION,
   DEFAULT_CONNECTION_ID,
@@ -228,9 +229,9 @@ function resolveCommandPath(command: string): string | null {
   }
 }
 
-/** Scan known local console CLIs on PATH — defensive, never throws. */
+/** Scan known local console CLIs on PATH + custom commands — defensive, never throws. */
 export function scanLocalCommands(): ScannedCommand[] {
-  return LOCAL_COMMANDS.map((entry) => {
+  const builtin: ScannedCommand[] = LOCAL_COMMANDS.map((entry) => {
     const resolved = resolveCommandPath(entry.command)
     return {
       id: entry.id,
@@ -238,6 +239,23 @@ export function scanLocalCommands(): ScannedCommand[] {
       path: resolved,
       available: Boolean(resolved),
       providerId: entry.providerId,
+      custom: false,
+      flags: [],
     }
   })
+  let custom: ScannedCommand[] = []
+  try {
+    custom = listCustomCommands().map((entry) => ({
+      id: entry.id,
+      command: entry.command,
+      path: entry.path,
+      available: true,
+      providerId: entry.providerId,
+      custom: true,
+      flags: entry.flags || [],
+    }))
+  } catch {
+    custom = []
+  }
+  return [...builtin, ...custom]
 }

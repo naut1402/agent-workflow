@@ -314,8 +314,8 @@ describe('GET /api/tasks/:id/chat', () => {
     const body = await res.json()
     expect(body).toMatchObject({ taskId: 'C2', stepId: 'implementer', canSend: true })
     expect(body.sessionId).toBeTruthy()
-    // No real CLI ran, so there is no transcript file on disk for that session.
-    expect(body.transcriptFound).toBe(false)
+    // Mock agent-cli job has stdout/log; chat falls back when the CLI transcript file is missing.
+    expect(body.transcriptFound).toBe(true)
   })
 
   test('reports the running job so the UI can show a live step', async () => {

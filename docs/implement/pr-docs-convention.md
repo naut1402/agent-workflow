@@ -91,6 +91,8 @@ Tài liệu & comment hướng người dùng/PR: tiếng Việt. Comment kỹ t
 
 Áp dụng cho **mọi agent và người** khi tạo commit / PR / issue. CI **Commitlint** enforce trên PR target `dev/**/main` (xem `.github/workflows/commitlint.yml`, `commitlint.config.js`).
 
+PR lớn / nhiều xử lý độc lập: **tách commit theo từng concern** — xem [`git-convention.md`](git-convention.md) §6 (một commit ≈ một xử lý: feat / fix / refactor / docs…).
+
 ### Format
 
 ```

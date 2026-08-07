@@ -23,7 +23,7 @@ export {
 } from '../../runner/business/index.js'
 export { getRunner } from '../../runner/business/index.js'
 export { getConnection } from '../../runner/business/index.js'
-export { loadTaskSessionLedger, closeTaskSession } from '../../runner/business/index.js'
+export { loadTaskSessionLedger, closeTaskSession, parseCursorJsonOutput } from '../../runner/business/index.js'
 export type { SessionEntry } from '../../runner/business/index.js'
 export type { JobRecord } from '../../runner/business/index.js'
 

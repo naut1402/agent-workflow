@@ -80,10 +80,22 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     return null
   })
 
+  /** Drop optimistic echoes once the server history contains them (or a reply). */
+  function reconcilePending(allTurns: TaskChatTurn[], data: any): void {
+    if (pending.value.length === 0) return
+    const userTexts = new Set(
+      allTurns.filter((t) => t.role === 'user').map((t) => t.text.trim()),
+    )
+    pending.value = pending.value.filter((p) => !userTexts.has(p.trim()))
+    // Job finished and we have an assistant turn — echo is obsolete even if the
+    // user line was clipped differently than the optimistic text.
+    if (!data?.running && allTurns.some((t) => t.role === 'assistant') && pending.value.length) {
+      pending.value = []
+    }
+  }
+
   function applyState(data: any, incremental: boolean): void {
     const fresh: TaskChatTurn[] = Array.isArray(data?.turns) ? data.turns : []
-    // Anything the CLI has now recorded supersedes our optimistic echo.
-    if (fresh.length > 0) pending.value = []
     if (incremental) {
       // `from` was honoured: append only turns we have not seen.
       const seen = new Set(turns.value.map((t) => t.index))
@@ -101,24 +113,33 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     queued.value = Boolean(data?.queued)
     blockedReason.value = data?.blockedReason ?? null
     staleReason.value = data?.staleReason ?? null
+    reconcilePending(turns.value, data)
   }
 
   async function refresh(incremental = true): Promise<void> {
     const taskId = opts.getTaskId()
     if (!taskId) return
-    if (!incremental) {
+    // While an optimistic send is waiting, always reload from 0. Job-fallback
+    // turns use a 0-based index space that resets per response shape; polling
+    // with from=<old total> returns [] forever and leaves "Đang gửi" stuck.
+    const useIncremental = incremental && pending.value.length === 0
+    if (!useIncremental && !incremental) {
       turns.value = []
       total.value = 0
       pending.value = []
+    } else if (!useIncremental) {
+      // Keep pending; replace turns from a full snapshot.
+      turns.value = []
+      total.value = 0
     }
-    loading.value = turns.value.length === 0
+    loading.value = turns.value.length === 0 && pending.value.length === 0
     try {
       const data = await fetchTaskChat(
         taskId,
-        { stepId: opts.getStepId(), from: incremental ? total.value : 0 },
+        { stepId: opts.getStepId(), from: useIncremental ? total.value : 0 },
         opts.getProjectId(),
       )
-      applyState(data, incremental)
+      applyState(data, useIncremental)
       error.value = null
     } catch (e: any) {
       error.value = String(e?.message || e)
@@ -129,10 +150,12 @@ export function useTaskChat(opts: UseTaskChatOptions) {
 
   function scheduleNext(): void {
     if (stopped) return
+    // Poll fast while a send is in flight or a job is running.
+    const delay = running.value || pending.value.length ? runningPollMs : idlePollMs
     timer = setTimeout(async () => {
       await refresh(true)
       scheduleNext()
-    }, running.value ? runningPollMs : idlePollMs)
+    }, delay)
   }
 
   async function start(): Promise<void> {
@@ -157,7 +180,8 @@ export function useTaskChat(opts: UseTaskChatOptions) {
       await sendTaskFeedback(opts.getTaskId(), message, { stepId: opts.getStepId(), mode }, opts.getProjectId())
       // The message only becomes a transcript turn once the CLI records it (or,
       // if queued, once the running job finishes and it resubmits) — echo it
-      // meanwhile so the input never looks lost.
+      // meanwhile so the input never looks lost. Full refresh (pending≠∅) so we
+      // do not poll with a stale `from` against job-fallback indices.
       pending.value.push(message)
       await refresh(true)
     } catch (e: any) {

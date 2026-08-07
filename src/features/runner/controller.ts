@@ -68,6 +68,13 @@ export class RunnerController extends AbstractController {
 
   deleteConnection() {
     const id = this.c.req.query('id') || ''
+    const usedBy = runnerStore
+      .listRunners()
+      .runners.filter((r) => r.connectionId === id)
+      .map((r) => r.id)
+    if (usedBy.length) {
+      return this.json(400, { error: `connection in use by runners: ${usedBy.join(', ')}` })
+    }
     const result = runnerStore.deleteConnection(id)
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     emitAudit({ op: 'delete', entity: 'connection', identifier: id, projectId: null })
@@ -75,6 +82,36 @@ export class RunnerController extends AbstractController {
   }
 
   connectionsMethodNotAllowed() {
+    return this.methodNotAllowed()
+  }
+
+  listCommands() {
+    return this.ok({ commands: runnerStore.listCustomCommands() })
+  }
+
+  async upsertCommand() {
+    const b = await this.requireJsonBody()
+    if ('error' in b) return b.error
+    const result = runnerStore.upsertCustomCommand(b.value.command || b.value)
+    if ('error' in result) return this.badRequest(result.error)
+    emitAudit({
+      op: 'update',
+      entity: 'command',
+      identifier: result.command?.id ?? null,
+      projectId: null,
+    })
+    return this.ok({ saved: true, command: result.command })
+  }
+
+  deleteCommand() {
+    const id = this.c.req.query('id') || ''
+    const result = runnerStore.deleteCustomCommand(id)
+    if ('error' in result) return this.json(result.status || 400, { error: result.error })
+    emitAudit({ op: 'delete', entity: 'command', identifier: id, projectId: null })
+    return this.ok({ deleted: true, id })
+  }
+
+  commandsMethodNotAllowed() {
     return this.methodNotAllowed()
   }
 

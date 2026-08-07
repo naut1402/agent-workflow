@@ -229,4 +229,120 @@ describe('getTaskChatState', () => {
     writeJob({ id: 'j-approval', applyTarget: WORKSPACE, approvalArtifact: 'design.md', sessionId: 's-appr' })
     expect(getTaskChatState(PROJECT, TASK)).toMatchObject({ blockedReason: 'noCompletedJob', sessionId: null })
   })
+
+  test('falls back to job stdout when Cursor transcript file is missing', () => {
+    upsertConnection({
+      id: 'conn-cursor',
+      kind: 'local-console',
+      providerId: 'cursor-cli',
+      cliPath: 'agent',
+    })
+    upsertRunner({ id: 'runner-cursor', name: 'Cursor', connectionId: 'conn-cursor', config: {} })
+    writeJob({
+      id: 'j-cursor',
+      runnerId: 'runner-cursor',
+      sessionId: 's-missing-on-disk',
+      userPrompt: 'Viết design',
+      stdout: JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        duration_ms: 1000,
+        result: '## Design\n\nNội dung từ stdout.',
+        session_id: 's-missing-on-disk',
+      }),
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'designer' },
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
+    expect(state.transcriptFound).toBe(true)
+    expect(state.transcriptProvider).toBe('cursor-cli')
+    expect(state.turns.map((t) => t.role)).toEqual(['user', 'assistant'])
+    expect(state.turns[1]?.text).toContain('Nội dung từ stdout')
+  })
+
+  test('job-fallback timeline includes chat-feedback rounds (stable indices)', () => {
+    upsertConnection({
+      id: 'conn-cursor-fb',
+      kind: 'local-console',
+      providerId: 'cursor-cli',
+      cliPath: 'agent',
+    })
+    upsertRunner({ id: 'runner-cursor-fb', name: 'Cursor FB', connectionId: 'conn-cursor-fb', config: {} })
+    writeJob({
+      id: 'j-step',
+      runnerId: 'runner-cursor-fb',
+      sessionId: 's-fb',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      userPrompt: 'Viết design',
+      stdout: '## Design xong',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'designer' },
+    })
+    writeJob({
+      id: 'j-hello',
+      runnerId: 'runner-cursor-fb',
+      sessionId: 's-fb',
+      createdAt: '2026-01-02T00:00:00.000Z',
+      userPrompt: 'hello',
+      stdout: JSON.stringify({ result: 'Chào từ feedback', session_id: 's-fb' }),
+      metadata: {
+        taskId: TASK,
+        projectId: PROJECT,
+        pipelineStepId: 'designer',
+        isChatFeedback: true,
+      },
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
+    expect(state.turns.map((t) => t.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
+    expect(state.turns[2]?.text).toBe('hello')
+    expect(state.turns[3]?.text).toContain('Chào từ feedback')
+    expect(state.total).toBe(4)
+    // Poll cursor: from=2 returns only the feedback round.
+    const page = getTaskChatState(PROJECT, TASK, { stepId: 'designer', fromIndex: 2 })
+    expect(page.turns.map((t) => t.text)).toEqual(['hello', 'Chào từ feedback'])
+    expect(page.total).toBe(4)
+  })
+
+  test('falls back to job log Phản hồi section when stdout is not persisted', () => {
+    const logDir = path.join(home, 'jobs')
+    fs.mkdirSync(logDir, { recursive: true })
+    const logPath = path.join(logDir, 'j-log.log')
+    fs.writeFileSync(
+      logPath,
+      [
+        '=== Payload gửi cho runner ===',
+        '--- Prompt ---',
+        'hello',
+        '',
+        '=== Phản hồi của runner (stdout/stderr) ===',
+        '',
+        '{"result":"Trả lời từ log","session_id":"s-log"}',
+        '',
+        '=== Kết quả ===',
+        'ok: true',
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+    upsertConnection({
+      id: 'conn-cursor-2',
+      kind: 'local-console',
+      providerId: 'cursor-cli',
+      cliPath: 'agent',
+    })
+    upsertRunner({ id: 'runner-cursor-2', name: 'Cursor 2', connectionId: 'conn-cursor-2', config: {} })
+    writeJob({
+      id: 'j-log',
+      runnerId: 'runner-cursor-2',
+      sessionId: 's-log',
+      userPrompt: 'hello',
+      logPath,
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'designer' },
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
+    expect(state.transcriptFound).toBe(true)
+    expect(state.turns.some((t) => t.role === 'assistant' && t.text.includes('Trả lời từ log'))).toBe(true)
+  })
 })

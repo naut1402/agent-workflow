@@ -2,8 +2,15 @@
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { slugify } from '../../../core/lib/stringUtils'
-import { fetchCredentials, saveCredential, saveConnection, scanLocalCommands } from '../scripts/ConnectionDialogApi'
-import type { ConnectionKind, ProviderEntry } from '../types'
+import {
+  fetchCredentials,
+  saveCredential,
+  saveConnection,
+  scanLocalCommands,
+  saveCustomCommand,
+  deleteCustomCommand,
+} from '../scripts/ConnectionDialogApi'
+import type { ConnectionKind, ConnectionOption, ProviderEntry } from '../types'
 
 interface RegisteredCommand {
   id: string
@@ -24,6 +31,8 @@ interface CredentialProfile {
 
 const props = defineProps<{
   providers: ProviderEntry[]
+  /** When set — edit existing connection (id preserved). */
+  connection?: ConnectionOption | null
 }>()
 
 const emit = defineEmits<{
@@ -32,6 +41,8 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18nHelpers()
+
+const isEdit = computed(() => Boolean(props.connection?.id))
 
 const kind = ref<ConnectionKind>('local-console')
 const label = ref('')
@@ -46,6 +57,7 @@ const customCommands = ref<RegisteredCommand[]>([])
 const credentials = ref<CredentialProfile[]>([])
 const showNewCredential = ref(false)
 const showRegisterCommand = ref(false)
+const editingCommandId = ref<string | null>(null)
 const newCred = ref({ id: '', label: '', secretRef: 'env:ANTHROPIC_API_KEY' })
 const registerDraft = ref({ command: '', path: '', flagsText: '' })
 const registerError = ref('')
@@ -87,6 +99,7 @@ function slugifyConn(text: string): string {
 }
 
 function buildConnectionId(resolvedProvider: string): string {
+  if (isEdit.value && props.connection?.id) return props.connection.id
   const base = slugifyConn(label.value) || resolvedProvider
   const suffix = kind.value === 'local-console' ? 'local' : 'api'
   return `${base}-${suffix}`.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
@@ -116,20 +129,70 @@ async function loadCredentials() {
   }
 }
 
+function applyConnectionPrefill() {
+  const c = props.connection
+  if (!c?.id) return
+  label.value = c.label || ''
+  kind.value = c.kind === 'ai-provider' ? 'ai-provider' : 'local-console'
+  providerId.value = c.providerId || ''
+  credentialId.value = c.credentialId || ''
+  if (kind.value === 'local-console' && c.cliPath) {
+    const match =
+      commandOptions.value.find(
+        (cmd) => cmd.path === c.cliPath || cmd.command === c.cliPath || cmd.id === c.cliPath,
+      ) || null
+    if (match) {
+      selectedCommandId.value = match.id
+    } else {
+      const id = `edit-${c.id}`
+      customCommands.value = [
+        {
+          id,
+          command: c.label || c.cliPath,
+          path: c.cliPath,
+          available: true,
+          providerId: c.providerId || 'console-command',
+          flags: Array.isArray(c.flags) ? c.flags : [],
+          custom: true,
+        },
+        ...customCommands.value.filter((x) => x.id !== id),
+      ]
+      selectedCommandId.value = id
+    }
+  }
+}
+
 async function refreshScan() {
   scanning.value = true
   error.value = ''
   try {
     const data = await scanLocalCommands()
-    scanned.value = (data.commands || []).map((c: any) => ({
-      id: c.id,
-      command: c.command,
-      path: c.path || c.command,
-      available: Boolean(c.available),
-      providerId: c.providerId,
-      flags: [],
-    }))
-    if (!selectedCommandId.value) {
+    const all = (data.commands || []) as RegisteredCommand[]
+    scanned.value = all
+      .filter((c) => !c.custom)
+      .map((c) => ({
+        id: c.id,
+        command: c.command,
+        path: c.path || c.command,
+        available: Boolean(c.available),
+        providerId: c.providerId,
+        flags: Array.isArray(c.flags) ? c.flags : [],
+        custom: false,
+      }))
+    customCommands.value = all
+      .filter((c) => c.custom)
+      .map((c) => ({
+        id: c.id,
+        command: c.command,
+        path: c.path || c.command,
+        available: true,
+        providerId: c.providerId,
+        flags: Array.isArray(c.flags) ? c.flags : [],
+        custom: true,
+      }))
+    if (props.connection?.id) {
+      applyConnectionPrefill()
+    } else if (!selectedCommandId.value) {
       const firstAvail = scanned.value.find((c) => c.available) || scanned.value[0]
       if (firstAvail) selectedCommandId.value = firstAvail.id
     }
@@ -142,11 +205,24 @@ async function refreshScan() {
 
 function openRegisterCommand() {
   registerError.value = ''
+  editingCommandId.value = null
   registerDraft.value = { command: '', path: '', flagsText: '' }
   showRegisterCommand.value = true
 }
 
-function confirmRegisterCommand() {
+function openEditCommand(cmd: RegisteredCommand) {
+  if (!cmd.custom) return
+  registerError.value = ''
+  editingCommandId.value = cmd.id
+  registerDraft.value = {
+    command: cmd.command,
+    path: cmd.path,
+    flagsText: (cmd.flags || []).join(' '),
+  }
+  showRegisterCommand.value = true
+}
+
+async function confirmRegisterCommand() {
   registerError.value = ''
   const path = registerDraft.value.path.trim()
   if (!path) {
@@ -157,23 +233,54 @@ function confirmRegisterCommand() {
     registerDraft.value.command.trim() ||
     path.replace(/\\/g, '/').split('/').pop()?.replace(/\.(exe|cmd|bat|ps1)$/i, '') ||
     'custom'
-  const id = `custom-${slugify(command)}-${Date.now().toString(36).slice(-4)}`
+  const id =
+    editingCommandId.value ||
+    `custom-${slugify(command)}-${Date.now().toString(36).slice(-4)}`
+  const flags = registerDraft.value.flagsText
+    .split(/\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
   const entry: RegisteredCommand = {
     id,
     command,
     path,
     available: true,
     providerId: inferProviderFromPath(path),
-    flags: registerDraft.value.flagsText
-      .split(/\s+/)
-      .map((s) => s.trim())
-      .filter(Boolean),
+    flags,
     custom: true,
   }
-  customCommands.value.push(entry)
-  selectedCommandId.value = entry.id
-  if (!label.value.trim()) label.value = command
-  showRegisterCommand.value = false
+  try {
+    await saveCustomCommand({
+      id: entry.id,
+      command: entry.command,
+      path: entry.path,
+      providerId: entry.providerId,
+      flags: entry.flags,
+    })
+    const idx = customCommands.value.findIndex((c) => c.id === id)
+    if (idx >= 0) customCommands.value[idx] = entry
+    else customCommands.value.push(entry)
+    selectedCommandId.value = entry.id
+    if (!label.value.trim()) label.value = command
+    showRegisterCommand.value = false
+    editingCommandId.value = null
+  } catch (e: any) {
+    registerError.value = String(e.message || e)
+  }
+}
+
+async function removeCustomCommand(cmd: RegisteredCommand) {
+  if (!cmd.custom) return
+  if (!confirm(t('runner.messages.confirmDeleteCommand', { id: cmd.id }))) return
+  try {
+    await deleteCustomCommand(cmd.id)
+    customCommands.value = customCommands.value.filter((c) => c.id !== cmd.id)
+    if (selectedCommandId.value === cmd.id) {
+      selectedCommandId.value = scanned.value.find((c) => c.available)?.id || scanned.value[0]?.id || ''
+    }
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
 }
 
 async function saveNewCredential() {
@@ -287,7 +394,9 @@ onUnmounted(() => {
         aria-labelledby="connection-dialog-title"
       >
         <div class="modal-head">
-          <span id="connection-dialog-title">{{ t('runner.connectionDialog.title') }}</span>
+          <span id="connection-dialog-title">{{
+            isEdit ? t('runner.connectionDialog.editTitle') : t('runner.connectionDialog.title')
+          }}</span>
           <button type="button" class="modal-close" :aria-label="t('runner.a11y.close')" @click="emit('close')">✕</button>
         </div>
 
@@ -304,11 +413,11 @@ onUnmounted(() => {
             <span class="cfg-label">{{ t('runner.connectionDialog.kind') }}</span>
             <div class="kind-radios" role="radiogroup" :aria-label="t('runner.connectionDialog.kindGroup')">
               <label class="kind-radio">
-                <input v-model="kind" type="radio" value="local-console" />
+                <input v-model="kind" type="radio" value="local-console" :disabled="isEdit" />
                 Local console
               </label>
               <label class="kind-radio">
-                <input v-model="kind" type="radio" value="ai-provider" />
+                <input v-model="kind" type="radio" value="ai-provider" :disabled="isEdit" />
                 AI provider
               </label>
             </div>
@@ -327,13 +436,57 @@ onUnmounted(() => {
                   </button>
                 </div>
               </div>
-              <select id="conn-command" v-model="selectedCommandId" class="cfg-input">
-                <option value="" disabled>{{ t('runner.connectionDialog.commandPlaceholder') }}</option>
-                <option v-for="c in commandOptions" :key="c.id" :value="c.id">
-                  {{ c.command }}{{ c.available ? '' : t('runner.connectionDialog.notOnPath') }}{{ c.custom ? t('runner.connectionDialog.custom') : '' }}
-                </option>
-              </select>
-              <p v-if="selectedCommand" class="muted path-hint">{{ selectedCommand.path }}</p>
+              <div class="command-row">
+                <select id="conn-command" v-model="selectedCommandId" class="cfg-input">
+                  <option value="" disabled>{{ t('runner.connectionDialog.commandPlaceholder') }}</option>
+                  <option v-for="c in commandOptions" :key="c.id" :value="c.id">
+                    {{ c.command }}{{ c.available ? '' : t('runner.connectionDialog.notOnPath') }}{{ c.custom ? t('runner.connectionDialog.custom') : '' }}
+                  </option>
+                </select>
+                <div v-if="selectedCommand?.custom" class="icon-btn-group">
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline"
+                    :title="t('runner.connectionDialog.editCommand')"
+                    :aria-label="t('runner.connectionDialog.editCommand')"
+                    @click="openEditCommand(selectedCommand)"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline danger"
+                    :title="t('runner.connectionDialog.deleteCommand')"
+                    :aria-label="t('runner.connectionDialog.deleteCommand')"
+                    @click="removeCustomCommand(selectedCommand)"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <p
+                v-if="selectedCommand?.path && selectedCommand.path !== selectedCommand.command"
+                class="muted path-hint"
+              >
+                {{ selectedCommand.path }}
+              </p>
             </div>
           </template>
 
@@ -398,7 +551,6 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Nested: đăng ký command tuỳ chỉnh -->
     <div
       v-if="showRegisterCommand"
       class="modal-backdrop nested-backdrop"
@@ -411,7 +563,9 @@ onUnmounted(() => {
         aria-labelledby="register-command-title"
       >
         <div class="modal-head">
-          <span id="register-command-title">{{ t('runner.registerDialog.title') }}</span>
+          <span id="register-command-title">{{
+            editingCommandId ? t('runner.registerDialog.editTitle') : t('runner.registerDialog.title')
+          }}</span>
           <button
             type="button"
             class="modal-close"
@@ -444,7 +598,9 @@ onUnmounted(() => {
           </div>
           <div class="modal-actions">
             <button type="button" class="btn-ghost btn-sm" @click="showRegisterCommand = false">{{ t('runner.actions.cancel') }}</button>
-            <button type="button" class="btn-primary btn-sm" @click="confirmRegisterCommand">{{ t('runner.registerDialog.addToList') }}</button>
+            <button type="button" class="btn-primary btn-sm" @click="confirmRegisterCommand">
+              {{ editingCommandId ? t('runner.actions.save') : t('runner.registerDialog.addToList') }}
+            </button>
           </div>
         </div>
       </div>
@@ -474,6 +630,12 @@ onUnmounted(() => {
   margin-bottom: 0.35rem;
 }
 .row-btns { display: flex; gap: 0.35rem; }
+.command-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.command-row .cfg-input { flex: 1; min-width: 0; }
 .path-hint { margin: 0.35rem 0 0; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
 .cred-actions { list-style: none; padding: 0; margin: 0.4rem 0 0; display: flex; flex-wrap: wrap; gap: 0.25rem; }

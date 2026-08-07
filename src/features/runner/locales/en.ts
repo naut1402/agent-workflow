@@ -34,6 +34,8 @@ export default {
     test: 'Test',
     testing: 'Testing…',
     refresh: 'Refresh',
+    edit: 'Edit',
+    delete: 'Delete',
   },
   dialog: {
     addTitle: 'Add runner',
@@ -49,6 +51,10 @@ export default {
     deleted: 'Deleted',
     confirmDelete: 'Delete runner {id}?',
     connectionAdded: 'Added connection {id}',
+    connectionSaved: 'Saved connection {id}',
+    connectionDeleted: 'Deleted connection {id}',
+    confirmDeleteConnection: 'Delete connection {id}?',
+    confirmDeleteCommand: 'Delete custom command {id}?',
     consoleNotDefault: 'Console command cannot be the default AI runner',
   },
   errors: {
@@ -61,6 +67,10 @@ export default {
   },
   connectionDialog: {
     title: 'Add connection',
+    editTitle: 'Edit connection',
+    deleteConnection: 'Delete connection',
+    editCommand: 'Edit command',
+    deleteCommand: 'Delete command',
     labelField: 'Connection name',
     kind: 'Kind',
     kindGroup: 'Connection kind',
@@ -76,6 +86,7 @@ export default {
   },
   registerDialog: {
     title: 'Register command',
+    editTitle: 'Edit command',
     commandField: 'Command name',
     commandPlaceholder: 'e.g. claude (optional)',
     pathPlaceholder: 'claude or full path',

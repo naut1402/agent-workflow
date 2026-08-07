@@ -27,4 +27,10 @@ describe('agentCli family', () => {
     expect(isAgentCliProvider(console)).toBe(false)
     expect(console.family).toBe('console-command')
   })
+
+  test('does not advertise token usage until execute() maps real usage', () => {
+    // Footer only shows tokens when ExecuteResult.tokenUsage is set; until then
+    // supportsTokenUsage must stay false (PR #189 review).
+    expect(createClaudeCodeCliProvider().agentCapabilities().supportsTokenUsage).toBe(false)
+  })
 })

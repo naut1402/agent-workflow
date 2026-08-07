@@ -33,6 +33,8 @@ export default {
     test: 'Kiểm tra',
     testing: 'Đang kiểm tra…',
     refresh: 'Refresh',
+    edit: 'Sửa',
+    delete: 'Xóa',
   },
   dialog: {
     addTitle: 'Thêm runner',
@@ -48,6 +50,10 @@ export default {
     deleted: 'Đã xóa',
     confirmDelete: 'Xóa runner {id}?',
     connectionAdded: 'Đã thêm connection {id}',
+    connectionSaved: 'Đã lưu connection {id}',
+    connectionDeleted: 'Đã xóa connection {id}',
+    confirmDeleteConnection: 'Xóa connection {id}?',
+    confirmDeleteCommand: 'Xóa command tuỳ chỉnh {id}?',
     consoleNotDefault: 'Console command không thể làm default AI runner',
   },
   errors: {
@@ -60,6 +66,10 @@ export default {
   },
   connectionDialog: {
     title: 'Thêm connection',
+    editTitle: 'Sửa connection',
+    deleteConnection: 'Xóa connection',
+    editCommand: 'Sửa command',
+    deleteCommand: 'Xóa command',
     labelField: 'Tên kết nối',
     kind: 'Loại',
     kindGroup: 'Loại connection',
@@ -75,6 +85,7 @@ export default {
   },
   registerDialog: {
     title: 'Đăng ký command',
+    editTitle: 'Sửa command',
     commandField: 'Tên command',
     commandPlaceholder: 'vd. claude (tuỳ chọn)',
     pathPlaceholder: 'claude hoặc đường dẫn đầy đủ',
