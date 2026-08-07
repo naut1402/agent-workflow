@@ -6,7 +6,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# Absolute for shell file I/O; relative for docker.exe (avoids Git Bash/MSYS
+# turning /c/Users/... into C:\c\Users\... when MSYS2_ARG_CONV_EXCL is set).
 ENV_FILE="$ROOT/docker/.env"
+ENV_FILE_DOCKER="docker/.env"
 ENV_EXAMPLE="$ROOT/docker/.env.example"
 
 WITH_RUNNERS=0
@@ -131,7 +134,7 @@ if [ "$PUID" = "0" ] || [ "$PGID" = "0" ]; then
   echo "!! WARNING: PUID/PGID=0" >&2
 fi
 
-COMPOSE=(docker compose --env-file "$ENV_FILE" -f docker/compose.yml)
+COMPOSE=(docker compose --env-file "$ENV_FILE_DOCKER" -f docker/compose.yml)
 if [ "$WITH_RUNNERS" -eq 1 ]; then
   COMPOSE+=(-f docker/compose.runners.yml)
 fi
@@ -168,10 +171,7 @@ fi
 
 stage_corp_ca_from_host
 
-# Git Bash/MSYS must not rewrite paths passed to docker.exe (e.g. /data/...).
-export MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL:-*}"
-
-echo "==> deploy (env-file=$ENV_FILE)"
+echo "==> deploy (env-file=$ENV_FILE_DOCKER)"
 echo "    PUID=$PUID PGID=$PGID"
 echo "    DEV_TEAM_PROJECT_PATH=$DEV_TEAM_PROJECT_PATH"
 echo "    HOST_HOME=$HOST_HOME"
