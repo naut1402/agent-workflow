@@ -360,13 +360,17 @@ export async function repairTaskState(
       }
     } else {
       state = { ...read.state } as Record<string, unknown>
-      const phase = String(state.current_phase ?? '')
-      if (phase && phase !== 'completed' && !stepIds.has(phase)) {
+      const phase = state.current_phase
+      if (
+        typeof phase !== 'string' ||
+        !phase ||
+        (phase !== 'completed' && !stepIds.has(phase))
+      ) {
         state.current_phase = 'completed'
         state.hitl_pending = null
       }
       const pending = state.hitl_pending
-      if (typeof pending === 'string' && pending && !gateIds.has(pending)) {
+      if (pending != null && (typeof pending !== 'string' || !gateIds.has(pending))) {
         state.hitl_pending = null
       }
       state.repaired_at = new Date().toISOString()

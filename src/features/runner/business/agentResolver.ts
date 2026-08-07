@@ -5,6 +5,7 @@ import {
   ensureSectionOrder,
   getSectionTitle,
 } from '../../agent-editor/business/agentMarkdown.js'
+import { sanitiseAgentName } from '../../agent-editor/business/agents.js'
 import type { ResolvedAgent } from './types.js'
 
 function homeDir(): string {
@@ -80,7 +81,9 @@ async function resolveAgentFilePath(
   const id = normalizeAgentRef(agentRef)
   const parsed = parseCatalogAgentId(id)
   if (!parsed?.name) return null
-  const { source, name } = parsed
+  const { source } = parsed
+  const name = sanitiseAgentName(parsed.name)
+  if (!name) return null
   const fileName = `${name}.md`
 
   if (source === 'dashboard') {
@@ -93,7 +96,9 @@ async function resolveAgentFilePath(
     return joinPath(projectRoot, '.claude', 'agents', fileName)
   }
   if (source.startsWith('repo:') || source.startsWith('plugin:')) {
-    const pluginName = source.includes(':') ? source.slice(source.indexOf(':') + 1) : source
+    const rawPlugin = source.includes(':') ? source.slice(source.indexOf(':') + 1) : source
+    const pluginName = sanitiseAgentName(rawPlugin)
+    if (!pluginName) return null
     const builtin = joinPath(projectRoot, 'plugins', pluginName, 'agents', fileName)
     if (await safeAccess(builtin)) return builtin
     const cached = await findInPluginCache(pluginName, fileName)
@@ -119,10 +124,14 @@ export function describeAgentSearchPaths(
   const id = normalizeAgentRef(agentRef)
   const parsed = parseCatalogAgentId(id)
   if (!parsed?.name) return []
-  const { source, name } = parsed
+  const { source } = parsed
+  const name = sanitiseAgentName(parsed.name)
+  if (!name) return []
   const fileName = `${name}.md`
   if (!(source.startsWith('repo:') || source.startsWith('plugin:'))) return []
-  const pluginName = source.includes(':') ? source.slice(source.indexOf(':') + 1) : source
+  const rawPlugin = source.includes(':') ? source.slice(source.indexOf(':') + 1) : source
+  const pluginName = sanitiseAgentName(rawPlugin)
+  if (!pluginName) return []
   const paths = [
     joinPath(projectRoot, 'plugins', pluginName, 'agents', fileName),
     joinPath(homeDir(), '.claude', 'plugins', 'cache', '*', pluginName, '*', 'agents', fileName),

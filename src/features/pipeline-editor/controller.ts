@@ -94,6 +94,19 @@ export class PipelineEditorController extends AbstractController {
       target = path.join(root, 'pipeline.yaml')
     } else if (scope === 'task' && taskId) {
       if (/[^\w\-]/.test(taskId)) return this.badRequest('invalid taskId')
+      // Reject writes for archived/completed tasks (UI filter + manual-entry bypass).
+      const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
+      try {
+        const state = JSON.parse(await fs.readFile(stateFile, 'utf8')) as {
+          archived?: unknown
+          current_phase?: unknown
+        }
+        if (state?.archived === true || state?.current_phase === 'completed') {
+          return this.badRequest('cannot write pipeline for archived or completed task')
+        }
+      } catch {
+        /* missing/corrupt state — allow (new task override) */
+      }
       const taskDir = path.join(root, 'tasks', taskId)
       await fs.mkdir(taskDir, { recursive: true })
       target = path.join(taskDir, 'pipeline.yaml')

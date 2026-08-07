@@ -108,6 +108,26 @@ describe('resolveAgent — bundled plugin fallback', () => {
   })
 })
 
+describe('resolveAgent — path sanitisation', () => {
+  test('rejects plugin/agent refs with path traversal segments', async () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-agent-project-'))
+    try {
+      const secrets = path.join(projectRoot, 'secrets-passwd', 'agents')
+      fs.mkdirSync(secrets, { recursive: true })
+      fs.writeFileSync(path.join(secrets, 'evil.md'), '# evil\n', 'utf8')
+      // Would resolve under projectRoot/plugins/../../secrets-passwd without sanitise.
+      await expect(
+        resolveAgent('plugin:../../secrets-passwd:evil', {
+          projectRoot,
+          devTeamRoot: projectRoot,
+        }),
+      ).rejects.toThrow()
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true })
+    }
+  })
+})
+
 function countOccurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1
 }

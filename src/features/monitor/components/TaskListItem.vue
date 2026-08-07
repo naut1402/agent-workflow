@@ -65,7 +65,7 @@ function selectTask() {
 }
 
 function taskStatusKey(task: any): 'error' | 'waiting' | 'done' | 'active' | 'pending' {
-  if (!task.state_ok || needsRepair.value) return 'error'
+  if (task.state_ok === false || needsRepair.value) return 'error'
   if (task.has_qa || task.hitl_pending) return 'waiting'
   if (task.current_phase === 'completed') return 'done'
   if (task.current_phase) return 'active'
@@ -73,7 +73,7 @@ function taskStatusKey(task: any): 'error' | 'waiting' | 'done' | 'active' | 'pe
 }
 
 function statusIcon(task: any): string {
-  if (!task.state_ok || needsRepair.value) return '⚠'
+  if (task.state_ok === false || needsRepair.value) return '⚠'
   // has_qa: SVG chat icon in template (not a text glyph)
   if (task.has_qa) return ''
   if (task.hitl_pending) return '⏸'
@@ -83,11 +83,11 @@ function statusIcon(task: any): string {
 }
 
 function isQaFlag(task: any): boolean {
-  return !!(task.state_ok && !needsRepair.value && task.has_qa)
+  return !!(task.state_ok !== false && !needsRepair.value && task.has_qa)
 }
 
 function flagClass(task: any): string {
-  if (!task.state_ok || needsRepair.value) return 'error'
+  if (task.state_ok === false || needsRepair.value) return 'error'
   if (task.has_qa) return 'qa'
   if (task.hitl_pending) return 'hitl'
   return taskStatusKey(task)

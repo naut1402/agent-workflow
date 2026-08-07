@@ -563,9 +563,14 @@ async function resubmitPendingFeedback(job: JobRecord): Promise<void> {
   const pending = await takePendingFeedback(devTeamRoot, taskId)
   if (!pending) return
   try {
-    await sendTaskFeedback(taskId, projectId, pending.feedback, { stepId: pending.stepId })
+    const res = await sendTaskFeedback(taskId, projectId, pending.feedback, { stepId: pending.stepId })
+    if (!res.ok) {
+      console.error('[jobQueue] queued feedback rejected on resubmit', res.error)
+      await queuePendingFeedback(devTeamRoot, taskId, pending)
+    }
   } catch (err) {
     console.error('[jobQueue] failed to resubmit queued feedback', err)
+    await queuePendingFeedback(devTeamRoot, taskId, pending)
   }
 }
 
@@ -841,7 +846,15 @@ export async function sendTaskFeedback(
         // same function but have none, so they keep the original "busy" error
         // instead of a `queued: true` that would never actually resubmit.
         const queued = devTeamRoot && (await queuePendingFeedback(devTeamRoot, taskId, { feedback, stepId: opts.stepId }))
-        if (queued) return { ok: true, queued: true }
+        if (queued) {
+          // Job may have finished between the active check and the write — reclaim and send now.
+          const after = loadJob(active.id)
+          if (after && after.status !== 'queued' && after.status !== 'running') {
+            const taken = await takePendingFeedback(devTeamRoot, taskId)
+            if (taken) return sendTaskFeedback(taskId, projectId, taken.feedback, { stepId: taken.stepId })
+          }
+          return { ok: true, queued: true }
+        }
         return { ok: false, status: 409, error: 'step already running' }
       }
       // Race: the cancel above lost to the job finishing on its own — fall

@@ -288,7 +288,8 @@ export CLAUDE_CONFIG_DIR=/home/dashboard/.claude
 export PATH="/home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 if command -v git >/dev/null 2>&1; then
-  git config --global --add safe.directory '*' 2>/dev/null || true
+  # Only trust the mounted project — never wildcard every repo.
+  git config --global --add safe.directory /data/project 2>/dev/null || true
   if [ -f /root/.gitconfig ]; then
     cp /root/.gitconfig /home/dashboard/.gitconfig 2>/dev/null || true
     own /home/dashboard/.gitconfig

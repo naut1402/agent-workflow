@@ -48,9 +48,40 @@ NODE_EXTRA_CA_CERTS=
 SSL_CERT_FILE=
 REQUESTS_CA_BUNDLE=
 CURL_CA_BUNDLE=
+
+# Parse manifest as KEY=value data — never source as shell (host basenames).
+is_safe_ca_basename() {
+  case "$1" in
+    ''|.*|*/*|*\\*|*"'"*|*'\"'*|*$'\n'*) return 1 ;;
+  esac
+  case "$1" in
+    *[!A-Za-z0-9._-]*) return 1 ;;
+  esac
+  return 0
+}
+
 if [ -f "$MANIFEST" ]; then
-  # shellcheck disable=SC1090
-  . "$MANIFEST"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      ''|\#*) continue ;;
+    esac
+    key=${line%%=*}
+    val=${line#*=}
+    case "$key" in
+      NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|REQUESTS_CA_BUNDLE|CURL_CA_BUNDLE) ;;
+      *) continue ;;
+    esac
+    if ! is_safe_ca_basename "$val"; then
+      echo "[corp-ca] WARNING: reject unsafe manifest value for $key: $val" >&2
+      continue
+    fi
+    case "$key" in
+      NODE_EXTRA_CA_CERTS) NODE_EXTRA_CA_CERTS=$val ;;
+      SSL_CERT_FILE) SSL_CERT_FILE=$val ;;
+      REQUESTS_CA_BUNDLE) REQUESTS_CA_BUNDLE=$val ;;
+      CURL_CA_BUNDLE) CURL_CA_BUNDLE=$val ;;
+    esac
+  done < "$MANIFEST"
 fi
 
 resolve_under_corp() {
@@ -69,6 +100,11 @@ resolve_under_corp() {
       val=$(basename "$val")
       ;;
   esac
+  if ! is_safe_ca_basename "$val"; then
+    echo "[corp-ca] WARNING: $var_name unsafe basename: $val" >&2
+    eval "$var_name="
+    return 0
+  fi
   if [ -f "$CORP_DIR/$val" ]; then
     eval "$var_name=\"\$CORP_DIR/\$val\""
   else

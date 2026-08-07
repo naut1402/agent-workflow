@@ -46,7 +46,7 @@ Tuân theo rule coding (project rule ưu tiên, `coding-rules` fallback):
 - Security: prepared statements, htmlspecialchars, CSRF
 
 Sau khi viết xong, commit toàn bộ thay đổi:
-```
+```shell
 git add <các file đã sửa>
 git commit -m "wip: implement <task-id>"
 ```
@@ -67,9 +67,20 @@ Với mỗi new error (so với `main`):
 
 Ghi `.dev-team-agent/tasks/<task-id>/phpstan.md` theo template trong `run-phpstan`.
 
+#### Bước 6: Gộp Phase 2 vào commit cuối
+
+`pr-creator` đọc diff của **một** commit (`git diff <commit>^..<commit>`). Mọi sửa Phase 2 (fix PHPStan, `phpstan.md`) phải nằm trong commit cuối cùng được báo cáo:
+
+```shell
+git add <các file đã sửa trong Phase 2>
+git commit --amend --no-edit
+```
+
+Chỉ báo cáo hash của commit **sau** amend (hoặc commit follow-up nếu amend không khả dụng — khi đó cập nhật contract `pr-creator` tương ứng). Không để sửa Phase 2 nằm ngoài commit mà `pr-creator` sẽ đọc.
+
 ## Kết quả trả về
 
-```
+```text
 IMPLEMENTER DONE [<task-id>]
 - commit: <short hash> wip: implement <task-id>
 - phpstan.md: .dev-team-agent/tasks/<task-id>/phpstan.md
@@ -78,7 +89,7 @@ IMPLEMENTER DONE [<task-id>]
 ```
 
 Nếu dừng do QA:
-```
+```text
 IMPLEMENTER BLOCKED [<task-id>] — awaiting QA
 - qa.md: .dev-team-agent/tasks/<task-id>/qa.md
 ```

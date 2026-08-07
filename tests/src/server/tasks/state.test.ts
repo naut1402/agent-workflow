@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, repairTaskState, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
 
 let dirs: string[] = []
 async function tmp(): Promise<string> {
@@ -398,5 +398,55 @@ describe('deleteTask', () => {
     const root = await tmp()
     const result = await deleteTask(root, 'T12')
     expect(result.ok).toBe(true)
+  })
+})
+
+describe('repairTaskState', () => {
+  test('normalizes non-string current_phase to completed', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n  - id: designer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'R1', { current_phase: 42, hitl_pending: null })
+
+    const result = await repairTaskState(root, 'R1')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.current_phase).toBe('completed')
+    expect(result.state.hitl_pending).toBeNull()
+  })
+
+  test('clears non-string hitl_pending', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n`,
+      'utf8',
+    )
+    await seedTask(root, 'R2', { current_phase: 'investigator', hitl_pending: { gate: 'x' } })
+
+    const result = await repairTaskState(root, 'R2')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.current_phase).toBe('investigator')
+    expect(result.state.hitl_pending).toBeNull()
+  })
+
+  test('clears empty-string current_phase', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n`,
+      'utf8',
+    )
+    await seedTask(root, 'R3', { current_phase: '', hitl_pending: 'stale-gate' })
+
+    const result = await repairTaskState(root, 'R3')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.current_phase).toBe('completed')
+    expect(result.state.hitl_pending).toBeNull()
   })
 })

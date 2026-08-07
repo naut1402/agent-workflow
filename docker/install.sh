@@ -176,6 +176,13 @@ stage_corp_ca_from_host() {
       continue
     fi
     base="$(basename "$norm")"
+    # Basename only, safe charset — consumer must not treat this as shell.
+    case "$base" in
+      ''|.*|*/*|*\\*|*"'"*|*'\"'*|*$'\n'*|*[!A-Za-z0-9._-]*)
+        echo "!! WARNING: $var basename unsafe, skip: $base" >&2
+        continue
+        ;;
+    esac
     cp "$norm" "$dest/$base"
     printf '%s=%s\n' "$var" "$base" >> "$manifest"
     echo "    staged $var → $base (/etc/ssl/corp-ca/$base)"
