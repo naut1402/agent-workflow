@@ -48,6 +48,7 @@ export default {
     deleted: 'Đã xóa',
     confirmDelete: 'Xóa runner {id}?',
     connectionAdded: 'Đã thêm connection {id}',
+    consoleNotDefault: 'Console command không thể làm default AI runner',
   },
   errors: {
     nameRequired: 'Nhập tên runner',

@@ -1,10 +1,11 @@
 import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import { registryHome } from '../../../core/registry.js'
-import { ensureLegacyConnection } from './connections.js'
+import { ensureLegacyConnection, getConnection } from './connections.js'
 import { createClaudeCodeCliProvider } from './providers/claude-code-cli.js'
 import { createCursorCliProvider } from './providers/cursor-cli.js'
 import { createCodexCliProvider } from './providers/codex-cli.js'
 import { createConsoleCommandProvider } from './providers/console-command.js'
+import { providerFamilyOf } from './providers/agentCli.js'
 import {
   DEFAULT_CONNECTION_ID,
   RUNNERS_VERSION,
@@ -128,9 +129,18 @@ export function getRunner(id: unknown): RunnerConfig | null {
 export function getDefaultRunner(): RunnerConfig | null {
   const store = loadRunners()
   const hit =
-    store.runners.find((r) => r.id === store.defaultRunnerId && r.enabled !== false) ||
-    store.runners.find((r) => r.enabled !== false)
+    store.runners.find((r) => r.id === store.defaultRunnerId && isEligibleDefaultAiRunner(r)) ||
+    store.runners.find((r) => isEligibleDefaultAiRunner(r))
   return hit || null
+}
+
+/** Agent CLI / AI API only — never console-command or unknown/missing provider. */
+export function isEligibleDefaultAiRunner(r: RunnerConfig): boolean {
+  if (r.enabled === false) return false
+  const conn = getConnection(r.connectionId)
+  if (!conn?.providerId) return false
+  const family = providerFamilyOf(conn.providerId)
+  return family === 'agent-cli' || family === 'ai-api'
 }
 
 export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig }> {
@@ -167,7 +177,7 @@ export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig
   else store.runners.push(entry)
 
   if (!store.defaultRunnerId || !store.runners.some((r) => r.id === store.defaultRunnerId)) {
-    store.defaultRunnerId = id
+    store.defaultRunnerId = store.runners.find((r) => isEligibleDefaultAiRunner(r))?.id || null
   }
   saveRunners(store)
   return { ok: true, runner: entry }
@@ -181,7 +191,7 @@ export function deleteRunner(id: unknown): MutationResult {
   if (idx < 0) return { ok: false, status: 404, error: 'not found' }
   store.runners.splice(idx, 1)
   if (store.defaultRunnerId === clean) {
-    store.defaultRunnerId = store.runners[0]?.id || null
+    store.defaultRunnerId = store.runners.find((r) => isEligibleDefaultAiRunner(r))?.id || null
   }
   saveRunners(store)
   return { ok: true }
@@ -191,8 +201,17 @@ export function setDefaultRunner(id: unknown): MutationResult<{ defaultRunnerId:
   const clean = sanitiseRunnerId(id)
   if (!clean) return { ok: false, status: 400, error: 'invalid id' }
   const store = loadRunners()
-  if (!store.runners.some((r) => r.id === clean)) {
+  const runner = store.runners.find((r) => r.id === clean)
+  if (!runner) {
     return { ok: false, status: 404, error: 'runner not found' }
+  }
+  const conn = getConnection(runner.connectionId)
+  if (conn && conn.providerId === 'console-command') {
+    return {
+      ok: false,
+      status: 400,
+      error: 'console-command cannot be the default AI runner; pick an Agent CLI connection',
+    }
   }
   store.defaultRunnerId = clean
   saveRunners(store)

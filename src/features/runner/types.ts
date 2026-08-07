@@ -1,9 +1,12 @@
 export type ConnectionKind = 'local-console' | 'ai-provider'
 
+export type ProviderFamily = 'agent-cli' | 'console-command' | 'ai-api'
+
 export interface ProviderEntry {
   id: string
   kind: ConnectionKind
   label: string
+  family?: ProviderFamily
 }
 
 export interface ConnectionOption {

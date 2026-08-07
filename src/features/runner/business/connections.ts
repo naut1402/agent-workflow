@@ -20,11 +20,11 @@ const LOCAL_COMMANDS: Array<{ id: string; command: string; providerId: string; l
 ]
 
 const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
-  { id: 'claude-code-cli', kind: 'local-console', label: 'Claude Code CLI' },
-  { id: 'cursor-cli', kind: 'local-console', label: 'Cursor CLI' },
-  { id: 'codex-cli', kind: 'local-console', label: 'Codex CLI' },
-  { id: 'console-command', kind: 'local-console', label: 'Console command' },
-  { id: 'anthropic-api', kind: 'ai-provider', label: 'Anthropic API' },
+  { id: 'claude-code-cli', kind: 'local-console', label: 'Claude Code CLI', family: 'agent-cli' },
+  { id: 'cursor-cli', kind: 'local-console', label: 'Cursor CLI', family: 'agent-cli' },
+  { id: 'codex-cli', kind: 'local-console', label: 'Codex CLI', family: 'agent-cli' },
+  { id: 'console-command', kind: 'local-console', label: 'Console command', family: 'console-command' },
+  { id: 'anthropic-api', kind: 'ai-provider', label: 'Anthropic API', family: 'ai-api' },
 ]
 
 function connectionsFile(): string {

@@ -39,6 +39,13 @@ export {
 export { resolveAgent, resolveAgentFilePath, normalizeAgentRef, describeAgentSearchPaths } from './agentResolver.js'
 export { getProvider, listProviderIds, registerProvider } from './registry.js'
 export {
+  AGENT_CLI_PROVIDER_IDS,
+  isAgentCliProviderId,
+  isAgentCliProvider,
+  providerFamilyOf,
+} from './providers/agentCli.js'
+export type { AgentCliProvider, AgentCliCapabilities, TokenUsage, ProviderFamily as AgentProviderFamily } from './providers/agentCli.js'
+export {
   submitJob,
   submitAndWait,
   loadJob,
@@ -85,4 +92,5 @@ export type {
   JobRecord,
   RunnerProvider,
   MutationResult,
+  ProviderFamily,
 } from './types.js'

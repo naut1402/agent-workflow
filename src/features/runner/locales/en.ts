@@ -49,6 +49,7 @@ export default {
     deleted: 'Deleted',
     confirmDelete: 'Delete runner {id}?',
     connectionAdded: 'Added connection {id}',
+    consoleNotDefault: 'Console command cannot be the default AI runner',
   },
   errors: {
     nameRequired: 'Enter a runner name',

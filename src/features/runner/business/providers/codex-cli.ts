@@ -1,7 +1,7 @@
 import { createLocalConsoleProvider } from './claude-code-cli.js'
-import type { RunnerProvider } from '../types.js'
+import type { AgentCliProvider } from './agentCli.js'
 
-export function createCodexCliProvider(): RunnerProvider {
+export function createCodexCliProvider(): AgentCliProvider {
   return createLocalConsoleProvider({
     providerId: 'codex-cli',
     defaultCliPath: 'codex',

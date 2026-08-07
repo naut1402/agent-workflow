@@ -9,6 +9,9 @@ export interface CredentialProfile {
 
 export type ConnectionKind = 'local-console' | 'ai-provider'
 
+/** Provider category — Agent CLI vs console argv vs remote API. */
+export type ProviderFamily = 'agent-cli' | 'console-command' | 'ai-api'
+
 export interface Connection {
   id: string
   label: string
@@ -28,6 +31,8 @@ export interface ProviderCatalogEntry {
   id: string
   kind: ConnectionKind
   label: string
+  /** agent-cli may be set as default AI runner; console-command may not. */
+  family: ProviderFamily
 }
 
 export interface ScannedCommand {
@@ -91,6 +96,13 @@ export interface ExecuteResult {
   stdout?: string
   /** Captured CLI session id (preset-uuid or parse-json providers). */
   sessionId?: string | null
+  /** Optional token usage (Agent CLI); see providers/agentCli.ts. */
+  tokenUsage?: {
+    inputTokens?: number
+    outputTokens?: number
+    totalTokens?: number
+    estimated?: boolean
+  }
 }
 
 // `awaiting_approval`: an approval-flow job (see jobQueue.ts) finished
@@ -163,6 +175,8 @@ export interface ConnectionsStore {
 // the runner plane behind a uniform contract.
 export interface RunnerProvider {
   providerId: string
+  /** Defaults inferred from providerId when omitted (legacy providers). */
+  family?: ProviderFamily
   validateRunnerConfig(config: Record<string, unknown> | undefined): { ok: boolean; errors: string[] }
   validateCredential(profile: CredentialProfile | undefined): { ok: boolean; errors: string[] }
   capabilities(): { supportsAgentFile: boolean; supportsStreaming: boolean; maxConcurrency: number }

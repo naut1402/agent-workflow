@@ -8,6 +8,8 @@ import {
   type SessionCaptureMode,
 } from '../sessionLedger.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ResolvedAgent, RunnerProvider } from '../types.js'
+import type { AgentCliProvider } from './agentCli.js'
+import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 
 interface ProcResult {
   exitCode: number | null
@@ -146,7 +148,26 @@ function describePayload(opts: {
   const agentLabel = agent.ref
     ? `${agent.ref}${agent.name ? ` (${agent.name})` : ''}`
     : `${agent.name || 'ad-hoc'} — không gắn agent, chạy prompt trực tiếp`
+  const meta = opts.metadata || {}
   const lines = [
+    formatJobLogHeader({
+      jobId: String(meta.jobId || meta.logJobId || ''),
+      providerId: typeof meta.providerId === 'string' ? meta.providerId : undefined,
+      runnerId: typeof meta.runnerId === 'string' ? meta.runnerId : undefined,
+      connectionId: typeof meta.connectionId === 'string' ? meta.connectionId : undefined,
+      projectId: typeof meta.projectId === 'string' ? meta.projectId : undefined,
+      taskId: typeof meta.taskId === 'string' ? meta.taskId : undefined,
+      stepId:
+        typeof meta.stepId === 'string'
+          ? meta.stepId
+          : typeof meta.pipelineStepId === 'string'
+            ? meta.pipelineStepId
+            : undefined,
+      sessionId: opts.sessionId,
+      resumeSessionId: opts.resumeSessionId,
+      workspace: opts.workspace,
+      mode: 'agent-cli',
+    }).trimEnd(),
     '=== Payload gửi cho runner ===',
     `Agent: ${agentLabel}${agent.model ? ` — model: ${agent.model}` : ''}`,
     `Workspace: ${opts.workspace}`,
@@ -166,16 +187,15 @@ function describePayload(opts: {
 /** Result footer appended after the process exits — the "what happened" summary
  * that used to be dropped once ExecuteResult was returned. */
 function describeResult(result: ExecuteResult): string {
-  const lines = [
-    '',
-    '=== Kết quả ===',
-    `ok: ${result.ok}`,
-    `exitCode: ${result.exitCode ?? 'null'}`,
-    `durationMs: ${result.durationMs}`,
-  ]
-  if (result.artifactsFound?.length) lines.push(`artifactsFound: ${result.artifactsFound.join(', ')}`)
-  if (result.error) lines.push(`error: ${result.error}`)
-  return lines.join('\n') + '\n'
+  return formatJobLogFooter({
+    ok: result.ok,
+    exitCode: result.exitCode,
+    durationMs: result.durationMs,
+    sessionId: result.sessionId,
+    error: result.error,
+    artifactsFound: result.artifactsFound,
+    tokenUsage: result.tokenUsage,
+  })
 }
 
 interface RunProcessOptions {
@@ -265,13 +285,14 @@ export interface LocalConsoleProviderOptions {
   sessionCapture?: SessionCaptureMode
 }
 
-/** Shared local-console spawn provider (Claude / Cursor / Codex). */
-export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): RunnerProvider {
+/** Shared Agent CLI spawn provider (Claude / Cursor / Codex) — not console-command. */
+export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): AgentCliProvider {
   const claudeStyle = opts.claudeStyleArgs !== false && opts.providerId === 'claude-code-cli'
   const sessionCapture: SessionCaptureMode = opts.sessionCapture ?? 'none'
 
   return {
     providerId: opts.providerId,
+    family: 'agent-cli',
 
     validateRunnerConfig(config) {
       const errors: string[] = []
@@ -289,6 +310,16 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
         supportsAgentFile: opts.providerId === 'claude-code-cli',
         supportsStreaming: false,
         maxConcurrency: 1,
+      }
+    },
+
+    agentCapabilities() {
+      return {
+        supportsAgentFile: opts.providerId === 'claude-code-cli',
+        supportsStreaming: false,
+        maxConcurrency: 1,
+        sessionCapture,
+        supportsTokenUsage: false,
       }
     },
 
@@ -444,7 +475,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): R
   }
 }
 
-export function createClaudeCodeCliProvider(): RunnerProvider {
+export function createClaudeCodeCliProvider(): AgentCliProvider {
   return createLocalConsoleProvider({
     providerId: 'claude-code-cli',
     defaultCliPath: 'claude',
