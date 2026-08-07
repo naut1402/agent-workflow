@@ -1,12 +1,4 @@
 # syntax=docker/dockerfile:1
-# Build từ root repo:
-#   docker build -f docker/Dockerfile -t dev-team-dashboard:local .
-# Multi-stage: Vite SPA build → Bun standalone (+ Claude/Cursor CLI, non-root).
-#
-# Corporate / MITM CA (optional): docker/install.sh stages host CA files +
-# docker/certs/manifest.env (basenames only) into the build context. Do NOT pass
-# absolute /etc/... paths as build-args — Git Bash/MSYS rewrites them to
-# C:/Program Files/Git/etc/... and breaks the Linux build.
 
 FROM oven/bun:1 AS build
 WORKDIR /app
@@ -43,14 +35,10 @@ ENV NODE_ENV=production \
     HOME=/home/dashboard \
     PATH="/home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-# Claude CLI từ chối --dangerously-skip-permissions khi chạy root — bắt buộc non-root.
-# oven/bun đã chiếm uid 1000 → dùng 1001 làm user mặc định trong image.
-# Runtime identity: PUID/PGID (LinuxServer-style) — xem docker/entrypoint.sh.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl ca-certificates git gnupg openssl \
   && rm -rf /var/lib/apt/lists/*
 
-# Corporate CA before any further HTTPS (gh / claude.ai / cursor.com).
 COPY docker/certs/ /etc/ssl/corp-ca/
 COPY docker/install-corp-ca.sh /tmp/install-corp-ca.sh
 RUN chmod +x /tmp/install-corp-ca.sh \
@@ -75,7 +63,6 @@ RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
 
 USER dashboard
 ENV HOME=/home/dashboard
-# bash sources BASH_ENV for non-interactive shells (claude/cursor install scripts).
 ENV BASH_ENV=/etc/ssl/corp-ca/env.sh
 RUN curl -fsSL https://claude.ai/install.sh | bash \
   && curl -fsS https://cursor.com/install | bash \

@@ -80,60 +80,6 @@ bun run start        # build + serve
 bun run mcp          # MCP stdio — project registry
 ```
 
-### Docker (standalone)
-
-Mọi file Docker nằm trong [`docker/`](docker/). Deploy mẫu:
-
-```bash
-cp docker/.env.example docker/.env   # sửa HOST_HOME, PUID, DEV_TEAM_PROJECT_PATH, PORT
-./docker/install.sh                  # up -d (build chỉ khi image chưa có)
-./docker/install.sh --runners        # + auth Claude/Cursor từ HOST_HOME (không ép rebuild)
-./docker/install.sh --build          # rebuild image (Dockerfile / CA / deps)
-./docker/install.sh --port=8080      # đổi host port, ghi vào docker/.env
-./docker/install.sh --down
-```
-
-Không cần cài Bun trên host. Image chạy `src/standalone.ts`, bind `0.0.0.0:5174` trong container. Runtime **cài sẵn** `claude` + `agent` (Linux).
-
-`DEV_TEAM_ROOT` trong container = `/data/project/.dev-team-agent` (data root).
-
-```bash
-# Build thủ công (context = repo root)
-docker build -f docker/Dockerfile -t dev-team-dashboard:local .
-
-# Compose — luôn truyền --env-file docker/.env (substitute + runtime)
-cp docker/.env.example docker/.env   # chỉnh PUID/HOST_HOME/PORT/…
-docker compose --env-file docker/.env -f docker/compose.yml up -d
-
-# + runners
-docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.runners.yml up -d
-```
-
-| Env | Mặc định | Ý nghĩa |
-|-----|----------|---------|
-| `PUID` / `PGID` | `1001` (compose) / điền trong `docker/.env` | Process User/Group ID — trùng owner project trên host |
-| `DEV_TEAM_PROJECT_PATH` | trong `docker/.env` | Bind mount → `/data/project` |
-| `HOST_HOME` | trong `docker/.env` (runners) | Mount `.claude` / `.cursor` / credentials |
-| `DEV_TEAM_DASHBOARD_PORT` | `5174` | **Host** publish port (`host:5174` → container). Đổi bằng `.env` hoặc `./docker/install.sh --port=N` |
-| `DEV_TEAM_ROOT` | `/data/project/.dev-team-agent` | Data root trong container |
-| `DEV_TEAM_DASHBOARD_HOME` | `/data/dashboard-home` | Registry multi-project |
-| `ANTHROPIC_API_KEY` / `CURSOR_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` | (trống) | Optional — đặt trong `docker/.env` |
-| `GH_TOKEN` / `GITHUB_TOKEN` | (trống) | PAT cho `git push` / `gh` — xem [`docker/.env.example`](docker/.env.example) |
-| `FIX_PROJECT_OWNERSHIP` | `0` | Xem ghi chú trong [`docker/.env.example`](docker/.env.example) |
-| `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` / `CURL_CA_BUNDLE` | (host, tùy chọn) | CA tổ chức / MITM — `install.sh` copy vào image khi build |
-
-**Corporate CA (MITM / Fortinet / Zscaler):** nếu host đã set các biến CA ở trên, `./docker/install.sh` stage file + `manifest.env` (basename) vào `docker/certs/` (gitignored), bake vào `/etc/ssl/corp-ca/`, chạy `update-ca-certificates`, và export path trong container qua `env.sh`. Không truyền absolute `/etc/...` làm build-arg (Git Bash/MSYS sẽ đổi thành `C:/Program Files/Git/etc/...`). Không bật `NODE_TLS_REJECT_UNAUTHORIZED=0` trong image.
-
-**`docker/.env` (runtime):** Compose dùng `--env-file docker/.env` để substitute `${…}` trong YAML và `env_file` inject vào container. Sample: [`docker/.env.example`](docker/.env.example). File `docker/.env` gitignored — không commit secret/path máy.
-
-**PUID/PGID (khuyến nghị):** process trong container = user sở hữu `DEV_TEAM_PROJECT_PATH` → ghi được `src/**` **không** đổi owner host. **Không dùng `PUID=0`**. Entrypoint vẫn `chown` riêng cây `.dev-team-agent` khi cần.
-
-**Runners** (`docker/compose.runners.yml`): mount ro auth từ `HOST_HOME` trong `.env` → entrypoint copy vào `/home/dashboard`. Cần `$HOST_HOME/.claude/.credentials.json` (có dấu chấm) và `$HOST_HOME/.claude.json` (file). Entrypoint ghi `.claude.json` vào cả `$HOME/.claude.json` và `$CLAUDE_CONFIG_DIR/.claude.json` — Claude CLI với `CLAUDE_CONFIG_DIR` chỉ đọc path sau. Nếu copy tay vào container, đặt file tại `/home/dashboard/.claude/.claude.json` (không chỉ `$HOME/.claude.json`). Host macOS: OAuth có thể nằm Keychain — file `.credentials.json` trống/stale → dùng `claude setup-token` + `CLAUDE_CODE_OAUTH_TOKEN` trong `.env`, hoặc login một lần trong container Linux.
-
-**Plugin agents:** template tại [`docs/template/agents/`](docs/template/agents/) → `/opt/bundled-plugins/dev-agent-teams/agents` trong image.
-
-Chi tiết path / quyền: xem comment trong `docker/compose.yml`, `docker/entrypoint.sh`, `docker/install.sh`.
-
 ### Lệnh hữu ích
 
 ```bash
@@ -150,7 +96,7 @@ bun run check:todo   # gate docs/todo (CI promote → main)
 ### Liên kết hữu ích
 
 - [Quickstart (mục này)](#bắt-đầu-nhanh) — cài và chạy trong vài phút  
-- [Docker](#docker-standalone) — image / Compose / volume  
+- [Docker](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example)  
 - [Kiến trúc](docs/architecture.md) — data root, Hono × 2 transport, cây `src/`  
 - [Test convention](docs/implement/test-convention.md) — bun / vitest / e2e  
 - [PR & commit](docs/implement/pr-docs-convention.md) — format message, body PR  

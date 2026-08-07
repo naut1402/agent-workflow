@@ -276,11 +276,10 @@ export function seedDefault(devTeamRoot: string | null | undefined): Project | n
 //   - explicit, known id → that project's path
 //   - explicit, unknown id → null (caller returns 404)
 //   - null/empty id → the DEFAULT project:
-//       1. registry entry with default: true       ← FE "null = default project"
-//       2. DEV_TEAM_ROOT env (Docker seed / empty registry)
-//       3. opts.defaultRoot (e.g. Vite cwd/..)     ← legacy fallback
-// Design §4.3 — registry default trước env để Docker (luôn set DEV_TEAM_ROOT)
-// không ghi đè project đã đăng ký / autoscan (path khác với env).
+//       1. registry entry with default: true
+//       2. DEV_TEAM_ROOT env (if set)
+//       3. opts.defaultRoot (e.g. Vite cwd/..)
+// Design §4.3.
 export function resolveProjectRoot(
   projectId: string | null | undefined,
   opts: { defaultRoot?: string | null } = {},

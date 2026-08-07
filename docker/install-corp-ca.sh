@@ -1,10 +1,4 @@
 #!/bin/sh
-# Install staged corporate CA files into the system trust store + write env.sh.
-# Expects certs at /etc/ssl/corp-ca/ (placeholders like .gitkeep ignored).
-# Optional manifest.env maps env var → basename only (no absolute /etc paths —
-# those get mangled by Git Bash/MSYS when passed as Docker build-args).
-#   NODE_EXTRA_CA_CERTS=Fortinet_RV1_CA_SSL.cer
-#   SSL_CERT_FILE=python-custom-ca-bundle.pem
 set -eu
 
 CORP_DIR="${CORP_CA_DIR:-/etc/ssl/corp-ca}"
@@ -24,7 +18,6 @@ for f in "$CORP_DIR"/*; do
   esac
 
   size=$(wc -c < "$f" | tr -d ' ')
-  # Skip huge bundles for system store (wired via SSL_CERT_FILE instead).
   if [ "$size" -gt "$MAX_SYSTEM_CA_BYTES" ]; then
     echo "[corp-ca] skip system-store (bundle ${size}B): $base"
     found=1
@@ -51,7 +44,6 @@ else
   echo "[corp-ca] no corporate CA staged — skip"
 fi
 
-# Resolve manifest basenames → absolute paths under CORP_DIR.
 NODE_EXTRA_CA_CERTS=
 SSL_CERT_FILE=
 REQUESTS_CA_BUNDLE=
@@ -65,8 +57,6 @@ resolve_under_corp() {
   var_name="$1"
   eval "val=\${$var_name:-}"
   [ -n "$val" ] || return 0
-  # Basename only (preferred). Absolute path accepted only if it exists in-image
-  # (never trust Windows/MSYS-mangled C:/Program Files/Git/etc/... paths).
   case "$val" in
     /*)
       if [ -f "$val" ]; then
@@ -95,14 +85,11 @@ resolve_under_corp CURL_CA_BUNDLE
 ENV_SH="$CORP_DIR/env.sh"
 : > "$ENV_SH"
 
-# NODE_EXTRA_CA_CERTS → file as-is (Node appends to its default store).
 if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ -f "$NODE_EXTRA_CA_CERTS" ]; then
   printf "export NODE_EXTRA_CA_CERTS='%s'\n" "$NODE_EXTRA_CA_CERTS" >> "$ENV_SH"
   echo "[corp-ca] env NODE_EXTRA_CA_CERTS=$NODE_EXTRA_CA_CERTS"
 fi
 
-# SSL_CERT_FILE / REQUESTS_CA_BUNDLE / CURL_CA_BUNDLE must include corp MITM CA.
-# Host bundles (e.g. certifi) often omit Fortinet — prepend NODE_EXTRA when present.
 prepend_extra_if_needed() {
   var_name="$1"
   eval "src=\${$var_name:-}"
@@ -123,7 +110,6 @@ prepend_extra_if_needed SSL_CERT_FILE
 prepend_extra_if_needed REQUESTS_CA_BUNDLE
 prepend_extra_if_needed CURL_CA_BUNDLE
 
-# If only NODE_EXTRA is set, point OpenSSL/curl at the updated system bundle.
 if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ -f "$NODE_EXTRA_CA_CERTS" ]; then
   if ! grep -q '^export SSL_CERT_FILE=' "$ENV_SH" 2>/dev/null; then
     printf "export SSL_CERT_FILE='%s'\n" "/etc/ssl/certs/ca-certificates.crt" >> "$ENV_SH"

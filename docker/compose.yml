@@ -1,6 +1,3 @@
-# Dashboard standalone — build context = repo root.
-# Env: docker/.env (see .env.example). DEV_TEAM_ROOT=/data/project/.dev-team-agent
-
 name: agent-workflow
 
 services:
@@ -8,19 +5,14 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-      # Corporate CA: install.sh stages files + manifest.env under docker/certs/
-      # (basenames only). Do not pass /etc/... paths as build-args — Git Bash/MSYS
-      # rewrites them to C:/Program Files/Git/etc/... and breaks the Linux build.
     image: dev-team-dashboard:local
     ports:
-      # Host publish port (DEV_TEAM_DASHBOARD_PORT) → container always :5174
       - "${DEV_TEAM_DASHBOARD_PORT:-5174}:5174"
     env_file:
       - path: .env
         required: false
     environment:
       DEV_TEAM_DASHBOARD_HOST: "0.0.0.0"
-      # Listen port inside container is fixed; host mapping uses DEV_TEAM_DASHBOARD_PORT above.
       DEV_TEAM_DASHBOARD_PORT: "5174"
       DEV_TEAM_ROOT: /data/project/.dev-team-agent
       DEV_TEAM_DASHBOARD_HOME: /data/dashboard-home
