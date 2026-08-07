@@ -41,6 +41,18 @@ export interface ScannedCommand {
   path: string | null
   available: boolean
   providerId: string
+  /** Custom commands persisted in commands.json (editable / deletable). */
+  custom?: boolean
+  flags?: string[]
+}
+
+/** User-registered local console command (registryHome/commands.json). */
+export interface CustomCommand {
+  id: string
+  command: string
+  path: string
+  providerId: string
+  flags: string[]
 }
 
 export interface RunnerConfig {
@@ -171,6 +183,11 @@ export interface ConnectionsStore {
   connections: Connection[]
 }
 
+export interface CommandsStore {
+  version: number
+  commands: CustomCommand[]
+}
+
 // A provider plugs a concrete execution backend (e.g. the Claude Code CLI) into
 // the runner plane behind a uniform contract.
 export interface RunnerProvider {
@@ -198,6 +215,7 @@ export type MutationResult<T = {}> = MutationOk<T> | MutationErr
 export const RUNNERS_VERSION = 2
 export const CREDENTIALS_VERSION = 1
 export const CONNECTIONS_VERSION = 1
+export const COMMANDS_VERSION = 1
 
 export const DEFAULT_CONNECTION_ID = 'claude-code-cli-local'
 
@@ -213,5 +231,9 @@ export function sanitiseCredentialId(id: unknown): string | null {
 }
 
 export function sanitiseConnectionId(id: unknown): string | null {
+  return sanitiseRunnerId(id)
+}
+
+export function sanitiseCommandId(id: unknown): string | null {
   return sanitiseRunnerId(id)
 }

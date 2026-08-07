@@ -42,7 +42,30 @@ export class RunnerBusiness extends AbstractBusiness {
   }
 
   deleteConnection(id: string) {
+    const usedBy = runners
+      .listRunners()
+      .runners.filter((r) => r.connectionId === id)
+      .map((r) => r.id)
+    if (usedBy.length) {
+      return {
+        ok: false as const,
+        status: 400,
+        error: `connection in use by runners: ${usedBy.join(', ')}`,
+      }
+    }
     return runners.deleteConnection(id)
+  }
+
+  listCustomCommands() {
+    return { commands: runners.listCustomCommands() }
+  }
+
+  upsertCustomCommand(command: unknown) {
+    return runners.upsertCustomCommand(command)
+  }
+
+  deleteCustomCommand(id: string) {
+    return runners.deleteCustomCommand(id)
   }
 
   listCredentials() {

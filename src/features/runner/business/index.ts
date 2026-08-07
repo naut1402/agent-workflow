@@ -36,6 +36,14 @@ export {
   listProviderCatalog,
   scanLocalCommands,
 } from './connections.js'
+export {
+  loadCommands,
+  saveCommands,
+  listCustomCommands,
+  getCustomCommand,
+  upsertCustomCommand,
+  deleteCustomCommand,
+} from './commands.js'
 export { resolveAgent, resolveAgentFilePath, normalizeAgentRef, describeAgentSearchPaths } from './agentResolver.js'
 export { getProvider, listProviderIds, registerProvider } from './registry.js'
 export {
@@ -82,6 +90,7 @@ export type {
   CredentialProfile,
   Connection,
   ConnectionKind,
+  CustomCommand,
   ProviderCatalogEntry,
   ScannedCommand,
   RunnerConfig,

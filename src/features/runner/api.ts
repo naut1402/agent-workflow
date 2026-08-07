@@ -20,6 +20,11 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.delete('/api/connections', bind(RunnerController, 'deleteConnection'))
   app.all('/api/connections', bind(RunnerController, 'connectionsMethodNotAllowed'))
 
+  app.get('/api/commands', bind(RunnerController, 'listCommands'))
+  app.post('/api/commands', bind(RunnerController, 'upsertCommand'))
+  app.delete('/api/commands', bind(RunnerController, 'deleteCommand'))
+  app.all('/api/commands', bind(RunnerController, 'commandsMethodNotAllowed'))
+
   app.get('/api/credentials', bind(RunnerController, 'listCredentials'))
   app.post('/api/credentials', bind(RunnerController, 'upsertCredential'))
   app.delete('/api/credentials', bind(RunnerController, 'deleteCredential'))
