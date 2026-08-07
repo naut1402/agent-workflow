@@ -7,6 +7,11 @@ docker/.env
 .env
 .env.local
 
+# Staged corporate CA for image build (host copies via install.sh)
+docker/certs/**
+!docker/certs/.gitkeep
+!docker/certs/README.md
+
 # Orchestrator's own transient state for THIS repo (root only; e2e fixtures below
 # are handled separately). Dashboard reads TARGET projects' .dev-team-agent/.
 /.dev-team-agent/

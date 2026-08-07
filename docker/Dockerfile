@@ -2,17 +2,44 @@
 # Build từ root repo:
 #   docker build -f docker/Dockerfile -t dev-team-dashboard:local .
 # Multi-stage: Vite SPA build → Bun standalone (+ Claude/Cursor CLI, non-root).
+#
+# Corporate / MITM CA (optional): stage via docker/install.sh when host has
+# NODE_EXTRA_CA_CERTS / SSL_CERT_FILE / REQUESTS_CA_BUNDLE / CURL_CA_BUNDLE.
+# Build-args below map to in-image paths under /etc/ssl/corp-ca/.
 
 FROM oven/bun:1 AS build
 WORKDIR /app
 
+USER root
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates openssl \
+  && rm -rf /var/lib/apt/lists/*
+COPY docker/certs/ /etc/ssl/corp-ca/
+COPY docker/install-corp-ca.sh /tmp/install-corp-ca.sh
+ARG NODE_EXTRA_CA_CERTS=
+ARG SSL_CERT_FILE=
+ARG REQUESTS_CA_BUNDLE=
+ARG CURL_CA_BUNDLE=
+RUN printf '%s\n' \
+      "NODE_EXTRA_CA_CERTS='${NODE_EXTRA_CA_CERTS}'" \
+      "SSL_CERT_FILE='${SSL_CERT_FILE}'" \
+      "REQUESTS_CA_BUNDLE='${REQUESTS_CA_BUNDLE}'" \
+      "CURL_CA_BUNDLE='${CURL_CA_BUNDLE}'" \
+      > /etc/ssl/corp-ca/build-args.env \
+  && chmod +x /tmp/install-corp-ca.sh \
+  && /tmp/install-corp-ca.sh \
+  && rm -f /tmp/install-corp-ca.sh \
+  && if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi
+
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
+  && bun install --frozen-lockfile
 
 COPY index.html vite.config.ts tsconfig.json ./
 COPY src ./src
 
-RUN bun run build
+RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
+  && bun run build
 
 FROM oven/bun:1 AS runtime
 WORKDIR /app
@@ -30,7 +57,27 @@ ENV NODE_ENV=production \
 # oven/bun đã chiếm uid 1000 → dùng 1001 làm user mặc định trong image.
 # Runtime identity: PUID/PGID (LinuxServer-style) — xem docker/entrypoint.sh.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl ca-certificates git gnupg \
+  && apt-get install -y --no-install-recommends curl ca-certificates git gnupg openssl \
+  && rm -rf /var/lib/apt/lists/*
+
+# Corporate CA before any further HTTPS (gh / claude.ai / cursor.com).
+COPY docker/certs/ /etc/ssl/corp-ca/
+COPY docker/install-corp-ca.sh /tmp/install-corp-ca.sh
+ARG NODE_EXTRA_CA_CERTS=
+ARG SSL_CERT_FILE=
+ARG REQUESTS_CA_BUNDLE=
+ARG CURL_CA_BUNDLE=
+RUN printf '%s\n' \
+      "NODE_EXTRA_CA_CERTS='${NODE_EXTRA_CA_CERTS}'" \
+      "SSL_CERT_FILE='${SSL_CERT_FILE}'" \
+      "REQUESTS_CA_BUNDLE='${REQUESTS_CA_BUNDLE}'" \
+      "CURL_CA_BUNDLE='${CURL_CA_BUNDLE}'" \
+      > /etc/ssl/corp-ca/build-args.env \
+  && chmod +x /tmp/install-corp-ca.sh \
+  && /tmp/install-corp-ca.sh \
+  && rm -f /tmp/install-corp-ca.sh
+
+RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
   && mkdir -p -m 755 /etc/apt/keyrings \
   && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
        -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
@@ -48,6 +95,8 @@ RUN apt-get update \
 
 USER dashboard
 ENV HOME=/home/dashboard
+# bash sources BASH_ENV for non-interactive shells (claude/cursor install scripts).
+ENV BASH_ENV=/etc/ssl/corp-ca/env.sh
 RUN curl -fsSL https://claude.ai/install.sh | bash \
   && curl -fsS https://cursor.com/install | bash \
   && command -v claude \
@@ -55,7 +104,8 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
 
 USER root
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --production
+RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
+  && bun install --frozen-lockfile --production
 
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src ./src
@@ -63,7 +113,7 @@ COPY --from=build /app/tsconfig.json ./tsconfig.json
 COPY docs/template/agents /opt/bundled-plugins/dev-agent-teams/agents
 COPY docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
-  && chown -R dashboard:dashboard /app /data /home/dashboard /opt/bundled-plugins
+  && chown -R dashboard:dashboard /app /data /home/dashboard /opt/bundled-plugins /etc/ssl/corp-ca
 
 EXPOSE 5174
 

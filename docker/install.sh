@@ -67,6 +67,69 @@ export DEV_TEAM_PROJECT_PATH="${DEV_TEAM_PROJECT_PATH:-$HOME/workspace}"
 export DEV_TEAM_DASHBOARD_PORT="${DEV_TEAM_DASHBOARD_PORT:-5174}"
 export FIX_PROJECT_OWNERSHIP="${FIX_PROJECT_OWNERSHIP:-0}"
 
+# Normalize Windows / Git-Bash / MSYS paths to a filesystem path this shell can open.
+normalize_host_path() {
+  local p="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -u "$p" 2>/dev/null || printf '%s' "$p"
+    return 0
+  fi
+  case "$p" in
+    [A-Za-z]:[\\/]*|[A-Za-z]:\\*)
+      local drive rest
+      drive=$(printf '%s' "${p%"${p#?}"}" | tr '[:upper:]' '[:lower:]')
+      rest="${p:2}"
+      rest="${rest//\\//}"
+      printf '/%s/%s' "$drive" "$rest"
+      ;;
+    *)
+      printf '%s' "$p"
+      ;;
+  esac
+}
+
+# If host has NODE_EXTRA_CA_CERTS / SSL_CERT_FILE / …, stage into docker/certs/
+# and set DOCKER_BUILD_* to matching /etc/ssl/corp-ca/<basename> for image build.
+stage_corp_ca_from_host() {
+  local dest="$ROOT/docker/certs"
+  local var host_val norm base image_path staged=0
+  mkdir -p "$dest"
+  # Drop previously staged certs; keep placeholders.
+  find "$dest" -maxdepth 1 -type f \
+    ! -name '.gitkeep' ! -name 'README.md' ! -name 'README' \
+    -delete 2>/dev/null || true
+
+  DOCKER_BUILD_NODE_EXTRA_CA_CERTS=
+  DOCKER_BUILD_SSL_CERT_FILE=
+  DOCKER_BUILD_REQUESTS_CA_BUNDLE=
+  DOCKER_BUILD_CURL_CA_BUNDLE=
+
+  for var in NODE_EXTRA_CA_CERTS SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE; do
+    host_val="${!var:-}"
+    [ -n "$host_val" ] || continue
+    norm="$(normalize_host_path "$host_val")"
+    if [ ! -f "$norm" ]; then
+      echo "!! WARNING: $var points to missing file: $host_val" >&2
+      continue
+    fi
+    base="$(basename "$norm")"
+    cp "$norm" "$dest/$base"
+    image_path="/etc/ssl/corp-ca/$base"
+    export "DOCKER_BUILD_${var}=$image_path"
+    echo "    staged $var → $base ($image_path)"
+    staged=1
+  done
+
+  export DOCKER_BUILD_NODE_EXTRA_CA_CERTS DOCKER_BUILD_SSL_CERT_FILE
+  export DOCKER_BUILD_REQUESTS_CA_BUNDLE DOCKER_BUILD_CURL_CA_BUNDLE
+
+  if [ "$staged" -eq 1 ]; then
+    echo "==> corporate CA: staged for image build"
+  else
+    echo "==> corporate CA: none (host env unset or files missing)"
+  fi
+}
+
 if [ "$PUID" = "0" ] || [ "$PGID" = "0" ]; then
   echo "!! WARNING: PUID/PGID=0" >&2
 fi
@@ -105,6 +168,8 @@ EOF
     echo "!! WARNING: missing $HOST_HOME/.claude/.credentials.json" >&2
   fi
 fi
+
+stage_corp_ca_from_host
 
 echo "==> deploy (env-file=$ENV_FILE)"
 echo "    PUID=$PUID PGID=$PGID"

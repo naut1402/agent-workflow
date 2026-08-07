@@ -8,6 +8,12 @@
 # Compat: HOST_UID / HOST_GID if PUID/PGID unset.
 set -e
 
+# Corporate CA exports (only non-empty paths; written at image build).
+if [ -f /etc/ssl/corp-ca/env.sh ]; then
+  # shellcheck disable=SC1091
+  . /etc/ssl/corp-ca/env.sh
+fi
+
 RUN_UID="${PUID:-${HOST_UID:-1001}}"
 RUN_GID="${PGID:-${HOST_GID:-1001}}"
 

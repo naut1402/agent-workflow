@@ -8,6 +8,12 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        # In-image paths set by docker/install.sh when host CA env is present.
+        NODE_EXTRA_CA_CERTS: ${DOCKER_BUILD_NODE_EXTRA_CA_CERTS:-}
+        SSL_CERT_FILE: ${DOCKER_BUILD_SSL_CERT_FILE:-}
+        REQUESTS_CA_BUNDLE: ${DOCKER_BUILD_REQUESTS_CA_BUNDLE:-}
+        CURL_CA_BUNDLE: ${DOCKER_BUILD_CURL_CA_BUNDLE:-}
     image: dev-team-dashboard:local
     ports:
       - "${DEV_TEAM_DASHBOARD_PORT:-5174}:5174"
