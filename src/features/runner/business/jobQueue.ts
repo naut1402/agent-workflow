@@ -4,6 +4,10 @@ import { spawn } from 'node:child_process'
 import os from 'node:os'
 import { registryHome } from '../../../core/registry.js'
 import { isLogTypeEnabled } from '../../../core/log/loggingPrefs.js'
+import { emit } from '../../../core/events/index.js'
+import { buildPluginContext, mergePromptWithContext } from '../../../core/plugin/index.js'
+import { loadKnowledgeBundle } from '../../knowledge/business/index.js'
+import { estimateTokens, recordUsage } from './tokenUsage.js'
 import { getRunner, getDefaultRunner, substituteConfig, getProvider } from './registry.js'
 import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
@@ -334,6 +338,13 @@ async function runJob(job: JobRecord): Promise<void> {
   }
 
   saveJob({ ...job, status: 'running', startedAt: new Date().toISOString(), logPath: logPath ?? null, pid: null })
+  emit('job.started', {
+    jobId: job.id,
+    runnerId: runner.id,
+    providerId: connection.providerId,
+    taskId: job.metadata?.taskId,
+    projectId: job.metadata?.projectId,
+  })
 
   let userPrompt = job.userPrompt || ''
   if (!userPrompt && job.promptRef) {
@@ -346,6 +357,7 @@ async function runJob(job: JobRecord): Promise<void> {
         finishedAt: new Date().toISOString(),
         error: `cannot read prompt: ${err.message}`,
       })
+      emit('job.failed', { jobId: job.id, error: 'cannot read prompt' })
       return
     }
   }
@@ -353,10 +365,39 @@ async function runJob(job: JobRecord): Promise<void> {
   const projectRoot = (job.metadata?.projectRoot as string) || dirname(job.workspace)
   const devTeamRoot = (job.metadata?.devTeamRoot as string) || job.workspace
 
+  // Inject knowledge + plugin context into the prompt (Agent CLI only).
+  if (connection.providerId !== 'console-command') {
+    try {
+      const knowledgeIds = Array.isArray(job.metadata?.knowledgeInputs)
+        ? (job.metadata!.knowledgeInputs as string[])
+        : Array.isArray(job.metadata?.knowledgeIds)
+          ? (job.metadata!.knowledgeIds as string[])
+          : []
+      const bundleRows = knowledgeIds.length
+        ? await loadKnowledgeBundle(devTeamRoot, knowledgeIds)
+        : []
+      const knowledgeBundle: Record<string, string> = {}
+      for (const row of bundleRows as Array<{ id: string; content?: string; error?: string }>) {
+        if (row.content) knowledgeBundle[row.id] = row.content
+      }
+      const ctx = await buildPluginContext({
+        projectId: typeof job.metadata?.projectId === 'string' ? job.metadata.projectId : undefined,
+        projectRoot,
+        devTeamRoot,
+        taskId: typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined,
+        stepId: stepIdOf(job),
+        knowledgeIds,
+        knowledgeBundle,
+        branch: typeof job.metadata?.branch === 'string' ? job.metadata.branch : undefined,
+      })
+      userPrompt = mergePromptWithContext(userPrompt, ctx)
+    } catch (err) {
+      console.warn('[jobQueue] plugin context inject failed', err)
+    }
+  }
+
   let resolvedAgent
   try {
-    // Console-command providers never merge an agent system prompt — ignore any
-    // agentRef the client may still send.
     if (connection.providerId === 'console-command') {
       resolvedAgent = await resolveAgent('', { projectRoot, devTeamRoot })
     } else {
@@ -534,14 +575,17 @@ async function runJob(job: JobRecord): Promise<void> {
         ...(job.metadata?.isNlChat ? { stdout: (result.stdout ?? '').slice(0, NL_CHAT_STDOUT_LIMIT) } : {}),
         ...(capturedSessionId ? { sessionId: capturedSessionId } : {}),
       })
+      emit('job.finished', { jobId: job.id, status: 'succeeded', taskId, projectId })
+      recordJobTokenUsage(job, connection.providerId, runner.id, userPrompt, result)
     }
     await resubmitPendingFeedback(job)
     return
   }
 
+  const finalStatus = result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed'
   saveJob({
     ...(loadJob(job.id) as JobRecord),
-    status: result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed',
+    status: finalStatus,
     finishedAt: new Date().toISOString(),
     exitCode: result.exitCode,
     error: result.error,
@@ -553,7 +597,44 @@ async function runJob(job: JobRecord): Promise<void> {
     ...(job.metadata?.isNlChat ? { stdout: (result.stdout ?? '').slice(0, NL_CHAT_STDOUT_LIMIT) } : {}),
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
   })
+  emit(result.ok ? 'job.finished' : 'job.failed', {
+    jobId: job.id,
+    status: finalStatus,
+    taskId,
+    projectId,
+  })
+  recordJobTokenUsage(job, connection.providerId, runner.id, userPrompt, result)
   if (!isApprovalJob) await resubmitPendingFeedback(job)
+}
+
+function recordJobTokenUsage(
+  job: JobRecord,
+  providerId: string,
+  runnerId: string,
+  userPrompt: string,
+  result: { tokenUsage?: JobRecord['metadata'] extends never ? never : any; stdout?: string },
+): void {
+  try {
+    const usage = result.tokenUsage as
+      | { inputTokens?: number; outputTokens?: number; totalTokens?: number; estimated?: boolean }
+      | undefined
+    const inputTokens = usage?.inputTokens ?? estimateTokens(userPrompt)
+    const outputTokens = usage?.outputTokens ?? estimateTokens(result.stdout || '')
+    const totalTokens = usage?.totalTokens ?? inputTokens + outputTokens
+    recordUsage({
+      jobId: job.id,
+      projectId: typeof job.metadata?.projectId === 'string' ? job.metadata.projectId : undefined,
+      taskId: typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined,
+      runnerId,
+      providerId,
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      estimated: usage ? Boolean(usage.estimated) : true,
+    })
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
