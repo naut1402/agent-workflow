@@ -1,7 +1,7 @@
 {
   "name": "dev-team-dashboard",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.1.0",
   "type": "module",
   "description": "Realtime dashboard for dev-agent-teams orchestrator state (.dev-team-agent/)",
   "scripts": {
@@ -17,7 +17,7 @@
     "lint:commit": "commitlint",
     "check:todo": "bun .github/scripts/check-todo-debt.ts",
     "format": "prettier --write .",
-    "test": "bun test tests/src/server tests/src/features/knowledge/business tests/src/features/logs/business tests/src/features/agent-editor/business tests/src/features/pipeline-editor/business tests/src/features/monitor/business tests/src/core/log tests/mcp",
+    "test": "bun test tests/src/server tests/src/features/knowledge/business tests/src/features/logs/business tests/src/features/agent-editor/business tests/src/features/pipeline-editor/business tests/src/features/monitor/business tests/src/core/log tests/src/core/events tests/src/core/plugin tests/mcp",
     "test:fe": "vitest run --coverage",
     "test:e2e": "playwright test --pass-with-no-tests",
     "test:all": "bun run typecheck && bun run lint && bun run test && bun run test:fe && bun run test:e2e"
