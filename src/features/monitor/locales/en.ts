@@ -41,14 +41,23 @@ export default {
   },
   projectBar: {
     addTitle: 'Add project',
+    cloneTitle: 'Clone from Git',
     removeTitle: 'Remove from dashboard',
+    selectLabel: 'Select project',
+    selectPlaceholder: 'Select project…',
+    prevProject: 'Previous project',
+    nextProject: 'Next project',
     empty: 'No projects yet.',
     pathPlaceholder: 'Path to .dev-team-agent / project root',
+    gitUrlPlaceholder: 'https://github.com/owner/repo',
+    branchPlaceholder: 'Branch (default: main)',
     namePlaceholder: 'Display name (optional)',
     browse: 'Browse folder',
     add: 'Add',
+    clone: 'Clone',
     cancel: 'Cancel',
     pathRequired: 'Enter a path to .dev-team-agent (or project root).',
+    gitUrlRequired: "Enter a git URL (https or git{'@'}).",
     confirmRemove:
       'Remove project "{name}" from the dashboard?\n(Does not delete files on disk.)',
     confirmRemoveDefault:

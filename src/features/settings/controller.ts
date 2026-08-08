@@ -15,50 +15,6 @@ import {
 } from './business/index.js'
 
 export class SettingsController extends AbstractController {
-  // Project registry CRUD — no per-project root needed.
-  getProjects() {
-    const { registry } = this.ctx
-    const id = this.c.req.query('id')
-    if (id) {
-      const project = registry.get(id)
-      if (!project) return this.notFound('unknown project', { id })
-      return this.ok({ project })
-    }
-    return this.ok(registry.list())
-  }
-
-  async createProject() {
-    const { registry } = this.ctx
-    let parsed: any
-    try {
-      parsed = JSON.parse((await this.c.req.text()) || '{}')
-    } catch {
-      return this.badRequest('invalid JSON')
-    }
-    const result = registry.add({ path: parsed.path, name: parsed.name })
-    if ('error' in result) return this.json(result.status || 400, { error: result.error })
-    emitAudit({
-      op: 'create',
-      entity: 'project',
-      identifier: result.project?.id ?? null,
-      projectId: result.project?.id ?? null,
-    })
-    return this.created({ project: result.project })
-  }
-
-  deleteProject() {
-    const { registry } = this.ctx
-    const id = this.c.req.query('id') || ''
-    const result = registry.remove(id)
-    if ('error' in result) return this.json(result.status || 400, { error: result.error })
-    emitAudit({ op: 'delete', entity: 'project', identifier: id, projectId: id })
-    return this.ok({ removed: true })
-  }
-
-  projectsMethodNotAllowed() {
-    return this.methodNotAllowed()
-  }
-
   /** Local filesystem directory browser (folder picker). */
   async browseFs() {
     // Missing query → default home; explicit empty / __roots__ handled in browseDirectory.

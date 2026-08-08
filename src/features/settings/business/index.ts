@@ -59,3 +59,8 @@ export {
 } from './dashboardSettings.js'
 export { runAutoscan, type ScanReport, type ScanHit } from './autoscan.js'
 export { browseDirectory } from './fsBrowse.js'
+/** Peer surface for GitHub PAT helpers (clone / issue) — không phải project registry. */
+export {
+  parseGithubRepoRef,
+  resolveGithubTokenForRepo,
+} from '../schemas/githubTokens.js'

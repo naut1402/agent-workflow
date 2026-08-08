@@ -6,6 +6,12 @@ import { MonitorController } from './controller.js'
 export const routeOrder = 70
 
 export function registerRoutes(app: Hono<HonoEnv>): void {
+  app.get('/api/projects', bind(MonitorController, 'getProjects'))
+  app.post('/api/projects', bind(MonitorController, 'createProject'))
+  app.patch('/api/projects/branch', bind(MonitorController, 'updateProjectBranch'))
+  app.delete('/api/projects', bind(MonitorController, 'deleteProject'))
+  app.all('/api/projects', bind(MonitorController, 'projectsMethodNotAllowed'))
+
   app.get('/api/tasks', bind(MonitorController, 'listTasks'))
   app.get('/api/pipeline-config', bind(MonitorController, 'getPipelineConfig'))
   app.get('/api/artifact', bind(MonitorController, 'getArtifact'))

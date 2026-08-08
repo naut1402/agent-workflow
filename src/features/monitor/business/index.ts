@@ -28,3 +28,5 @@ export type { SessionEntry } from '../../runner/business/index.js'
 export type { JobRecord } from '../../runner/business/index.js'
 
 export { resolveArtifact } from './tasks/index.js'
+export { cloneProject, setProjectBranch } from './projects/index.js'
+export type { CloneResult } from './projects/index.js'
