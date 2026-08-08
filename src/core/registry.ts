@@ -25,13 +25,6 @@ export interface Project {
   path: string
   addedAt: string
   default: boolean
-  /** Remote clone metadata (kind === 'git'). */
-  gitUrl?: string
-  defaultBranch?: string
-  /** Current / preferred working branch. */
-  branch?: string
-  /** Absolute path to cloned repo root (parent of .dev-team-agent). */
-  repoPath?: string
 }
 
 export interface Registry {

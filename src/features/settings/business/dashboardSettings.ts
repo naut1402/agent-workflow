@@ -8,7 +8,6 @@ import {
   parseDashboardSettings,
   resolveAutoscanFromDashboard,
   resolveGithubTokensFromDashboard,
-  resolveKnowledgeScanFromDashboard,
   resolveLoggingFromDashboard,
   type DashboardSettings,
 } from '../schemas/dashboardSettings.js'
@@ -21,10 +20,6 @@ import {
   parseGithubTokensConfig,
   type GithubTokensConfig,
 } from '../schemas/githubTokens.js'
-import {
-  parseKnowledgeScanConfig,
-  type KnowledgeScanConfig,
-} from '../schemas/knowledgeScan.js'
 import {
   invalidateLoggingPrefsCache,
   parseLoggingConfig,
@@ -65,7 +60,6 @@ export function loadDashboardSettings(): DashboardSettings {
     autoscan: { ...DEFAULT_AUTOSCAN_CONFIG, whitelist: [] },
     githubTokens: { repos: [] },
     logging: parseLoggingConfig(undefined),
-    knowledgeScan: parseKnowledgeScanConfig(undefined),
   }
 }
 
@@ -127,20 +121,6 @@ export function saveLoggingConfig(config: LoggingConfig): LoggingConfig {
     logging: normalised,
   })
   return resolveLoggingFromDashboard(saved)
-}
-
-export function loadKnowledgeScanConfig(): KnowledgeScanConfig {
-  return resolveKnowledgeScanFromDashboard(loadDashboardSettings())
-}
-
-export function saveKnowledgeScanConfig(config: KnowledgeScanConfig): KnowledgeScanConfig {
-  const current = loadDashboardSettings()
-  const normalised = parseKnowledgeScanConfig(config)
-  const saved = saveDashboardSettings({
-    ...current,
-    knowledgeScan: normalised,
-  })
-  return resolveKnowledgeScanFromDashboard(saved)
 }
 
 // Re-export default shape for callers that only need the empty template.
