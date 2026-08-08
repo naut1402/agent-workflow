@@ -28,6 +28,8 @@ export function appendRequestLog(p: {
   error?: string | null
   level?: LogLevel
   traceId?: string | null
+  query?: string | null
+  response?: string | null
 }): void {
   if (!isLogTypeEnabled('request')) return
   const level = p.level ?? levelFromHttpStatus(p.status)
@@ -39,6 +41,8 @@ export function appendRequestLog(p: {
     traceId,
     method: p.method,
     path: p.path,
+    query: p.query ?? '',
+    response: p.response ?? '',
     projectId: p.projectId,
     status: p.status,
     durationMs: p.durationMs,

@@ -7,6 +7,10 @@ import { dirnameFromImportMeta, resolvePath } from '../core/lib/fileHelper.js'
 import { loadModulesUnder } from '../core/lib/dirModuleLoader.js'
 import { handleKnowledgeApi } from '../features/knowledge/business/knowledgeApi.js'
 import { appendRequestLog } from '../core/log/store.js'
+import {
+  formatRequestQuery,
+  formatResponsePreview,
+} from '../core/log/schema.js'
 import { resolveTraceIdFromRequest, runWithTraceIdAsync } from '../core/log/traceContext.js'
 
 // ── API server (Hono app + Node bridge) ─────────────────────────────────────
@@ -119,16 +123,22 @@ export function createApiHandler(ctx: RegistryContext) {
     const traceId = resolveTraceIdFromRequest(req)
     return runWithTraceIdAsync(traceId, async () => {
       let errored: string | null = null
+      let responsePreview = ''
+      const query = formatRequestQuery(url.search)
       try {
         // Set early so clients can correlate even if the handler throws later.
         if (!res.headersSent) res.setHeader('X-Trace-Id', traceId)
         if (url.pathname.startsWith('/api/knowledge')) {
           const root = ctx.resolveProjectRoot(projectId)
           if (!root) {
+            const body = JSON.stringify({ error: 'unknown project', project: projectId })
+            responsePreview = formatResponsePreview(Buffer.from(body), 'application/json')
             json(res, 404, { error: 'unknown project', project: projectId })
             return true
           }
           await handleKnowledgeApi(req, res, url, root)
+          // Knowledge writes directly to the node response — body not mirrored here.
+          responsePreview = ''
           return true
         }
         const app = await getApp()
@@ -136,9 +146,15 @@ export function createApiHandler(ctx: RegistryContext) {
         // Prefer inbound/minted id on the wire (overwrite if Hono also set one).
         const headers = new Headers(response.headers)
         headers.set('X-Trace-Id', traceId)
-        await writeWebResponse(res, new Response(response.body, { status: response.status, headers }))
+        const buf = Buffer.from(await response.arrayBuffer())
+        responsePreview = formatResponsePreview(buf, headers.get('content-type'))
+        await writeWebResponse(res, new Response(buf, { status: response.status, headers }))
       } catch (err: any) {
         errored = String(err && err.message ? err.message : err)
+        responsePreview = formatResponsePreview(
+          Buffer.from(JSON.stringify({ error: errored })),
+          'application/json',
+        )
         json(res, 500, { error: errored })
       } finally {
         appendRequestLog({
@@ -149,6 +165,8 @@ export function createApiHandler(ctx: RegistryContext) {
           durationMs: Date.now() - started,
           error: errored,
           traceId,
+          query,
+          response: responsePreview || (errored ? errored : ''),
         })
       }
       return true

@@ -19,6 +19,8 @@ export default {
     project: 'Project',
     method: 'Method',
     path: 'Path',
+    query: 'Params',
+    response: 'Response',
     status: 'Status',
     ms: 'ms',
   },
@@ -29,6 +31,12 @@ export default {
     levelAll: 'Tất cả',
     clear: 'Xóa lọc',
     useTrace: 'Lọc theo trace id này',
+    sortHint: 'Click để sort; Shift+click để sort thêm cột',
+  },
+  copy: {
+    hint: 'Click để copy',
+    done: 'Đã copy',
+    fail: 'Copy thất bại',
   },
   empty: {
     log: 'Chưa có log.',

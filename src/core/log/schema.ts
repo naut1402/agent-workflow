@@ -55,6 +55,10 @@ export const RequestLogEntry = z.object({
   traceId: traceIdField,
   method: z.string(),
   path: z.string(),
+  /** Raw query string without leading `?` (truncated when long). */
+  query: z.string().default(''),
+  /** Response body preview (truncated; binary → placeholder). */
+  response: z.string().default(''),
   projectId: z.string().nullable(),
   status: z.number(),
   durationMs: z.number(),
@@ -78,6 +82,37 @@ export const LogEntry = z.discriminatedUnion('type', [RequestLogEntry, AuditLogE
 export type LogEntry = z.infer<typeof LogEntry>
 export type RequestLogEntry = z.infer<typeof RequestLogEntry>
 export type AuditLogEntry = z.infer<typeof AuditLogEntry>
+
+/** Cap stored query/response previews so JSONL stays bounded. */
+export const LOG_QUERY_MAX_CHARS = 2_048
+export const LOG_RESPONSE_MAX_CHARS = 4_096
+
+export function truncateForLog(text: string, max: number): string {
+  if (text.length <= max) return text
+  return `${text.slice(0, max)}…`
+}
+
+/** Query string without leading `?`, truncated. */
+export function formatRequestQuery(search: string): string {
+  const raw = search.startsWith('?') ? search.slice(1) : search
+  return truncateForLog(raw, LOG_QUERY_MAX_CHARS)
+}
+
+/** UTF-8 text preview from response bytes + content-type. */
+export function formatResponsePreview(buf: Buffer, contentType: string | null | undefined): string {
+  const ct = (contentType || '').toLowerCase()
+  const textual =
+    !ct ||
+    ct.includes('json') ||
+    ct.includes('text/') ||
+    ct.includes('xml') ||
+    ct.includes('javascript') ||
+    ct.includes('urlencoded')
+  if (!textual) {
+    return truncateForLog(`[binary ${ct || 'unknown'} ${buf.length}b]`, LOG_RESPONSE_MAX_CHARS)
+  }
+  return truncateForLog(buf.toString('utf8'), LOG_RESPONSE_MAX_CHARS)
+}
 
 /** Map HTTP status → severity for request rows. */
 export function levelFromHttpStatus(status: number): LogLevel {

@@ -3,6 +3,9 @@ import { LOG_LEVELS, type LogEntry, type LogLevel } from '../../../core/log/sche
 
 export type SortDir = 'asc' | 'desc'
 
+/** One column in a (possibly multi-column) sort. */
+export type SortSpec = { key: string; dir: SortDir }
+
 export type LogsTableFilters = {
   /** Empty = all levels. */
   levels: LogLevel[]
@@ -18,6 +21,16 @@ const LEVEL_RANK: Record<LogLevel, number> = {
   error: 3,
 }
 
+/** UI header keys `time` / `iso` map to the same sort key as `ts`. */
+export function canonicalSortKey(key: string): string {
+  if (key === 'time' || key === 'iso') return 'ts'
+  return key
+}
+
+function defaultDir(key: string): SortDir {
+  return canonicalSortKey(key) === 'ts' ? 'desc' : 'asc'
+}
+
 function cellValue(entry: LogEntry, key: string): string | number {
   if (key === 'time' || key === 'iso') return entry.iso || entry.ts
   if (key === 'ts') return entry.ts
@@ -27,6 +40,8 @@ function cellValue(entry: LogEntry, key: string): string | number {
   if (entry.type === 'request') {
     if (key === 'method') return entry.method
     if (key === 'path') return entry.path
+    if (key === 'query') return entry.query || ''
+    if (key === 'response') return entry.response || ''
     if (key === 'status') return entry.status
     if (key === 'ms' || key === 'durationMs') return entry.durationMs
   } else {
@@ -37,6 +52,14 @@ function cellValue(entry: LogEntry, key: string): string | number {
   return ''
 }
 
+function compareCells(a: LogEntry, b: LogEntry, key: string, dir: SortDir): number {
+  const sign = dir === 'asc' ? 1 : -1
+  const va = cellValue(a, key)
+  const vb = cellValue(b, key)
+  if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * sign
+  return String(va).localeCompare(String(vb), undefined, { numeric: true }) * sign
+}
+
 function matchesQuery(entry: LogEntry, q: string): boolean {
   if (!q) return true
   const hay = [
@@ -45,7 +68,15 @@ function matchesQuery(entry: LogEntry, q: string): boolean {
     entry.projectId,
     entry.iso,
     entry.type === 'request'
-      ? [entry.method, entry.path, String(entry.status), String(entry.durationMs), entry.error]
+      ? [
+          entry.method,
+          entry.path,
+          entry.query,
+          entry.response,
+          String(entry.status),
+          String(entry.durationMs),
+          entry.error,
+        ]
       : [entry.op, entry.entity, entry.identifier],
   ]
     .flat()
@@ -57,29 +88,50 @@ function matchesQuery(entry: LogEntry, q: string): boolean {
 
 /** Client-side filter + column sort for audit/request tables (limit ~200). */
 export function useLogsTable(entries: Ref<LogEntry[]>) {
-  const sortKey = ref<string>('ts')
-  const sortDir = ref<SortDir>('desc')
+  /** Ordered sort keys: primary first. Shift+click appends; plain click replaces. */
+  const sortSpecs = ref<SortSpec[]>([{ key: 'ts', dir: 'desc' }])
   const filters = ref<LogsTableFilters>({
     levels: [],
     traceId: '',
     q: '',
   })
 
-  function toggleSort(key: string) {
-    if (sortKey.value === key) {
-      sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  /**
+   * @param append — true when Shift is held: add/toggle column in multi-sort stack.
+   *                 false: replace stack with this column only (toggle dir if same).
+   */
+  function toggleSort(key: string, opts?: { append?: boolean }) {
+    const canon = canonicalSortKey(key)
+    const append = opts?.append === true
+    const specs = sortSpecs.value
+    const idx = specs.findIndex((s) => canonicalSortKey(s.key) === canon)
+
+    if (!append) {
+      if (idx === 0 && specs.length === 1) {
+        sortSpecs.value = [{ key: canon, dir: specs[0].dir === 'asc' ? 'desc' : 'asc' }]
+        return
+      }
+      sortSpecs.value = [{ key: canon, dir: defaultDir(canon) }]
       return
     }
-    sortKey.value = key
-    sortDir.value = key === 'ts' || key === 'time' || key === 'iso' ? 'desc' : 'asc'
+
+    if (idx >= 0) {
+      const next = specs.slice()
+      next[idx] = { key: canon, dir: next[idx].dir === 'asc' ? 'desc' : 'asc' }
+      sortSpecs.value = next
+      return
+    }
+    sortSpecs.value = [...specs, { key: canon, dir: defaultDir(canon) }]
   }
 
-  function sortIndicator(key: string): '' | '↑' | '↓' {
-    const active =
-      sortKey.value === key ||
-      (key === 'time' && (sortKey.value === 'ts' || sortKey.value === 'iso'))
-    if (!active) return ''
-    return sortDir.value === 'asc' ? '↑' : '↓'
+  /** Arrow + optional priority index when multi-sorting (e.g. `↑1`). */
+  function sortIndicator(key: string): string {
+    const canon = canonicalSortKey(key)
+    const idx = sortSpecs.value.findIndex((s) => canonicalSortKey(s.key) === canon)
+    if (idx < 0) return ''
+    const arrow = sortSpecs.value[idx].dir === 'asc' ? '↑' : '↓'
+    if (sortSpecs.value.length <= 1) return arrow
+    return `${arrow}${idx + 1}`
   }
 
   const displayed = computed(() => {
@@ -92,13 +144,13 @@ export function useLogsTable(entries: Ref<LogEntry[]>) {
       if (!matchesQuery(e, q)) return false
       return true
     })
-    const key = sortKey.value === 'time' ? 'iso' : sortKey.value
-    const dir = sortDir.value === 'asc' ? 1 : -1
+    const specs = sortSpecs.value
     rows = rows.slice().sort((a, b) => {
-      const va = cellValue(a, key)
-      const vb = cellValue(b, key)
-      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
-      return String(va).localeCompare(String(vb), undefined, { numeric: true }) * dir
+      for (const spec of specs) {
+        const cmp = compareCells(a, b, canonicalSortKey(spec.key), spec.dir)
+        if (cmp !== 0) return cmp
+      }
+      return 0
     })
     return rows
   })
@@ -119,8 +171,7 @@ export function useLogsTable(entries: Ref<LogEntry[]>) {
   }
 
   return {
-    sortKey,
-    sortDir,
+    sortSpecs,
     filters,
     displayed,
     toggleSort,

@@ -40,6 +40,10 @@ const {
   LOG_LEVELS,
 } = useLogsTable(entries)
 
+function onHeaderSort(key: string, ev: MouseEvent) {
+  toggleSort(key, { append: ev.shiftKey })
+}
+
 let tailTimer: ReturnType<typeof setInterval> | null = null
 
 function stopTail() {
@@ -158,6 +162,35 @@ function levelActive(level: LogLevel): boolean {
   return filters.value.levels.includes(level)
 }
 
+const copyFlash = ref('')
+let copyFlashTimer: ReturnType<typeof setTimeout> | null = null
+
+async function copyText(text: string) {
+  const value = String(text ?? '')
+  if (!value) return
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = value
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    copyFlash.value = t('logs.copy.done')
+  } catch {
+    copyFlash.value = t('logs.copy.fail')
+  }
+  if (copyFlashTimer) clearTimeout(copyFlashTimer)
+  copyFlashTimer = setTimeout(() => {
+    copyFlash.value = ''
+  }, 1500)
+}
+
 // React to tab changes (covers both programmatic and click-driven switches).
 watch(
   tab,
@@ -176,6 +209,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopTail()
+  if (copyFlashTimer) clearTimeout(copyFlashTimer)
   window.removeEventListener('dev-dashboard:logging-changed', onLoggingChanged)
 })
 </script>
@@ -216,6 +250,7 @@ onUnmounted(() => {
     <p v-else class="muted">{{ t('logs.empty.allDisabled') }}</p>
 
     <div v-if="error" class="err-banner">{{ error }}</div>
+    <p v-if="copyFlash" class="copy-flash" role="status">{{ copyFlash }}</p>
 
     <div
       v-if="tab === 'audit' || tab === 'request'"
@@ -262,28 +297,29 @@ onUnmounted(() => {
     </div>
 
     <!-- Audit -->
-    <table v-if="tab === 'audit' && enabledTypes.audit" class="logs-table">
+    <div v-if="tab === 'audit' && enabledTypes.audit" class="logs-table-wrap">
+    <table class="logs-table">
       <thead>
         <tr>
-          <th class="sortable" @click="toggleSort('time')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('time', $event)">
             {{ t('logs.columns.time') }} {{ sortIndicator('time') }}
           </th>
-          <th class="sortable" @click="toggleSort('level')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('level', $event)">
             {{ t('logs.columns.level') }} {{ sortIndicator('level') }}
           </th>
-          <th class="sortable" @click="toggleSort('traceId')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('traceId', $event)">
             {{ t('logs.columns.traceId') }} {{ sortIndicator('traceId') }}
           </th>
-          <th class="sortable" @click="toggleSort('op')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('op', $event)">
             {{ t('logs.columns.op') }} {{ sortIndicator('op') }}
           </th>
-          <th class="sortable" @click="toggleSort('entity')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('entity', $event)">
             {{ t('logs.columns.entity') }} {{ sortIndicator('entity') }}
           </th>
-          <th class="sortable" @click="toggleSort('identifier')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('identifier', $event)">
             {{ t('logs.columns.identifier') }} {{ sortIndicator('identifier') }}
           </th>
-          <th class="sortable" @click="toggleSort('project')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('project', $event)">
             {{ t('logs.columns.project') }} {{ sortIndicator('project') }}
           </th>
         </tr>
@@ -314,33 +350,41 @@ onUnmounted(() => {
         </tr>
       </tbody>
     </table>
+    </div>
 
     <!-- Request -->
-    <table v-else-if="tab === 'request' && enabledTypes.request" class="logs-table">
+    <div v-else-if="tab === 'request' && enabledTypes.request" class="logs-table-wrap">
+    <table class="logs-table logs-table-request">
       <thead>
         <tr>
-          <th class="sortable" @click="toggleSort('time')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('time', $event)">
             {{ t('logs.columns.time') }} {{ sortIndicator('time') }}
           </th>
-          <th class="sortable" @click="toggleSort('level')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('level', $event)">
             {{ t('logs.columns.level') }} {{ sortIndicator('level') }}
           </th>
-          <th class="sortable" @click="toggleSort('traceId')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('traceId', $event)">
             {{ t('logs.columns.traceId') }} {{ sortIndicator('traceId') }}
           </th>
-          <th class="sortable" @click="toggleSort('method')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('method', $event)">
             {{ t('logs.columns.method') }} {{ sortIndicator('method') }}
           </th>
-          <th class="sortable" @click="toggleSort('path')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('path', $event)">
             {{ t('logs.columns.path') }} {{ sortIndicator('path') }}
           </th>
-          <th class="sortable" @click="toggleSort('status')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('query', $event)">
+            {{ t('logs.columns.query') }} {{ sortIndicator('query') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('response', $event)">
+            {{ t('logs.columns.response') }} {{ sortIndicator('response') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('status', $event)">
             {{ t('logs.columns.status') }} {{ sortIndicator('status') }}
           </th>
-          <th class="sortable" @click="toggleSort('ms')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('ms', $event)">
             {{ t('logs.columns.ms') }} {{ sortIndicator('ms') }}
           </th>
-          <th class="sortable" @click="toggleSort('project')">
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('project', $event)">
             {{ t('logs.columns.project') }} {{ sortIndicator('project') }}
           </th>
         </tr>
@@ -367,15 +411,40 @@ onUnmounted(() => {
           </td>
           <td>{{ e.type === 'request' ? e.method : '' }}</td>
           <td>{{ e.type === 'request' ? e.path : '' }}</td>
+          <td class="cell-clip">
+            <button
+              v-if="e.type === 'request' && e.query"
+              type="button"
+              class="clip-btn"
+              :title="`${t('logs.copy.hint')}\n${e.query}`"
+              @click="copyText(e.query)"
+            >
+              {{ e.query }}
+            </button>
+            <span v-else class="muted">—</span>
+          </td>
+          <td class="cell-clip">
+            <button
+              v-if="e.type === 'request' && e.response"
+              type="button"
+              class="clip-btn"
+              :title="`${t('logs.copy.hint')}\n${e.response}`"
+              @click="copyText(e.response)"
+            >
+              {{ e.response }}
+            </button>
+            <span v-else class="muted">—</span>
+          </td>
           <td>{{ e.type === 'request' ? e.status : '' }}</td>
           <td>{{ e.type === 'request' ? e.durationMs : '' }}</td>
           <td>{{ e.projectId || '—' }}</td>
         </tr>
         <tr v-if="!displayed.length && !loading">
-          <td colspan="8" class="muted">{{ t('logs.empty.log') }}</td>
+          <td colspan="10" class="muted">{{ t('logs.empty.log') }}</td>
         </tr>
       </tbody>
     </table>
+    </div>
 
     <!-- Jobs -->
     <div v-else-if="tab === 'jobs' && enabledTypes.jobs" class="jobs-layout">
@@ -408,7 +477,15 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-.logs-panel { padding: 1rem 1.25rem; max-width: 1200px; }
+.logs-panel {
+  padding: 1rem 1.25rem;
+  max-width: 1200px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
 .logs-head h2 { margin: 0 0 0.25rem; font-size: 1.25rem; font-weight: 500; }
 .muted { color: var(--text-muted); font-size: 0.85rem; }
 .logs-tabs {
@@ -416,6 +493,7 @@ onUnmounted(() => {
   gap: 0.25rem;
   margin: 0.75rem 0;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .logs-tabs button {
   padding: 0.4rem 0.9rem;
@@ -466,12 +544,44 @@ onUnmounted(() => {
   font-weight: 600;
 }
 .logs-count { margin-left: auto; }
-.logs-table { width: 100%; font-size: 0.82rem; border-collapse: collapse; }
+.logs-table-wrap {
+  flex: 1 1 auto;
+  min-height: 12rem;
+  max-height: min(70vh, calc(100vh - 14rem));
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+}
+.logs-table { width: 100%; font-size: 0.82rem; border-collapse: separate; border-spacing: 0; }
 .logs-table th,
 .logs-table td {
   text-align: left;
-  padding: 0.3rem 0.5rem;
+  padding: 0.35rem 0.75rem;
   border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.logs-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
+  box-shadow: 0 1px 0 var(--border);
+}
+/* Time vs level: give ISO timestamp room and gap before level badge */
+.logs-table th:nth-child(1),
+.logs-table td:nth-child(1) {
+  min-width: 12.5rem;
+  width: 12.5rem;
+  white-space: nowrap;
+  padding-right: 1.25rem;
+}
+.logs-table th:nth-child(2),
+.logs-table td:nth-child(2) {
+  min-width: 5rem;
+  width: 5rem;
+  padding-left: 0.35rem;
+  padding-right: 0.85rem;
 }
 .logs-table th.sortable {
   cursor: pointer;
@@ -480,6 +590,37 @@ onUnmounted(() => {
 }
 .logs-table th.sortable:hover { color: var(--accent); }
 .logs-table .row-err td { color: var(--danger); }
+.logs-table-request { table-layout: fixed; }
+.logs-table-request th:nth-child(6),
+.logs-table-request td:nth-child(6) { width: 14%; }
+.logs-table-request th:nth-child(7),
+.logs-table-request td:nth-child(7) { width: 22%; }
+.cell-clip {
+  max-width: 12rem;
+  overflow: hidden;
+}
+.clip-btn {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.clip-btn:hover { color: var(--accent); text-decoration: underline; }
+.copy-flash {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--accent);
+}
 .level-badge {
   display: inline-block;
   padding: 0.1rem 0.4rem;

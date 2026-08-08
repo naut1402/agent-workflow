@@ -19,6 +19,8 @@ export default {
     project: 'Project',
     method: 'Method',
     path: 'Path',
+    query: 'Params',
+    response: 'Response',
     status: 'Status',
     ms: 'ms',
   },
@@ -29,6 +31,12 @@ export default {
     levelAll: 'All',
     clear: 'Clear',
     useTrace: 'Filter by this trace id',
+    sortHint: 'Click to sort; Shift+click to add sort columns',
+  },
+  copy: {
+    hint: 'Click to copy',
+    done: 'Copied',
+    fail: 'Copy failed',
   },
   empty: {
     log: 'No logs yet.',

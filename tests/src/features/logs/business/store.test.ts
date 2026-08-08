@@ -47,6 +47,10 @@ async function writeRequest(p: { path: string; projectId?: string | null; status
     status: p.status ?? 200,
     durationMs: 1,
     error: null,
+    level: 'info',
+    traceId: '',
+    query: '',
+    response: '',
   })
 }
 
@@ -59,8 +63,8 @@ describe('logging/store', () => {
   })
 
   test('newest-first ordering', async () => {
-    await appendLog({ type: 'request', ts: 1000, iso: 'a', method: 'GET', path: '/old', projectId: null, status: 200, durationMs: 1, error: null })
-    await appendLog({ type: 'request', ts: 2000, iso: 'b', method: 'GET', path: '/new', projectId: null, status: 200, durationMs: 1, error: null })
+    await appendLog({ type: 'request', ts: 1000, iso: 'a', method: 'GET', path: '/old', projectId: null, status: 200, durationMs: 1, error: null, level: 'info', traceId: '', query: '', response: '' })
+    await appendLog({ type: 'request', ts: 2000, iso: 'b', method: 'GET', path: '/new', projectId: null, status: 200, durationMs: 1, error: null, level: 'info', traceId: '', query: '', response: '' })
     const entries = await readLogs({ type: 'request' })
     expect(entries.map((e) => (e.type === 'request' ? e.path : ''))).toEqual(['/new', '/old'])
   })
@@ -101,10 +105,25 @@ describe('logging/store', () => {
   })
 
   test('appendRequestLog emits a request line', async () => {
-    appendRequestLog({ method: 'POST', path: '/api/x', projectId: null, status: 201, durationMs: 3 })
+    appendRequestLog({
+      method: 'POST',
+      path: '/api/x',
+      projectId: null,
+      status: 201,
+      durationMs: 3,
+      query: 'a=1',
+      response: '{"id":1}',
+    })
     await new Promise((r) => setTimeout(r, 20))
     const entries = await readLogs({ type: 'request' })
-    expect(entries[0]).toMatchObject({ method: 'POST', path: '/api/x', status: 201, level: 'info' })
+    expect(entries[0]).toMatchObject({
+      method: 'POST',
+      path: '/api/x',
+      status: 201,
+      level: 'info',
+      query: 'a=1',
+      response: '{"id":1}',
+    })
   })
 
   test('appendRequestLog derives warn/error levels from status', async () => {
