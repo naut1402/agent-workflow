@@ -104,7 +104,32 @@ describe('logging/store', () => {
     appendRequestLog({ method: 'POST', path: '/api/x', projectId: null, status: 201, durationMs: 3 })
     await new Promise((r) => setTimeout(r, 20))
     const entries = await readLogs({ type: 'request' })
-    expect(entries[0]).toMatchObject({ method: 'POST', path: '/api/x', status: 201 })
+    expect(entries[0]).toMatchObject({ method: 'POST', path: '/api/x', status: 201, level: 'info' })
+  })
+
+  test('appendRequestLog derives warn/error levels from status', async () => {
+    appendRequestLog({ method: 'GET', path: '/api/miss', projectId: null, status: 404, durationMs: 1 })
+    appendRequestLog({ method: 'GET', path: '/api/boom', projectId: null, status: 500, durationMs: 1 })
+    await new Promise((r) => setTimeout(r, 20))
+    const entries = await readLogs({ type: 'request' })
+    const byPath = Object.fromEntries(
+      entries.filter((e) => e.type === 'request').map((e) => [e.path, e.level]),
+    )
+    expect(byPath['/api/miss']).toBe('warn')
+    expect(byPath['/api/boom']).toBe('error')
+  })
+
+  test('emitAudit / appendRequestLog pick up ALS traceId', async () => {
+    const { runWithTraceId } = await import('../../../../../src/core/log/traceContext.js')
+    runWithTraceId('corr-42', () => {
+      appendRequestLog({ method: 'GET', path: '/api/traced', projectId: null, status: 200, durationMs: 1 })
+      emitAudit({ op: 'update', entity: 'logging', identifier: null, projectId: null })
+    })
+    await new Promise((r) => setTimeout(r, 20))
+    const reqs = await readLogs({ type: 'request' })
+    const audits = await readLogs({ type: 'audit' })
+    expect(reqs[0]).toMatchObject({ path: '/api/traced', traceId: 'corr-42' })
+    expect(audits[0]).toMatchObject({ entity: 'logging', traceId: 'corr-42' })
   })
 
   test('rotates past 5MB into a .1 backup', async () => {

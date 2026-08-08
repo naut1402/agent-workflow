@@ -1,7 +1,8 @@
 import { nowStamp } from '../lib/dateUtils.js'
 import { getLogDriver } from './driver.js'
 import { isLogTypeEnabled } from './loggingPrefs.js'
-import type { AuditEntity, AuditOp, LogEntry } from './schema.js'
+import { levelFromHttpStatus, type AuditEntity, type AuditOp, type LogEntry, type LogLevel } from './schema.js'
+import { getTraceId } from './traceContext.js'
 
 /**
  * Append one entry via active log driver. Never throws —
@@ -25,9 +26,24 @@ export function appendRequestLog(p: {
   status: number
   durationMs: number
   error?: string | null
+  level?: LogLevel
+  traceId?: string | null
 }): void {
   if (!isLogTypeEnabled('request')) return
-  void appendLog({ type: 'request', ...nowStamp(), ...p, error: p.error ?? null }).catch(() => {})
+  const level = p.level ?? levelFromHttpStatus(p.status)
+  const traceId = (p.traceId ?? getTraceId() ?? '').trim()
+  void appendLog({
+    type: 'request',
+    ...nowStamp(),
+    level,
+    traceId,
+    method: p.method,
+    path: p.path,
+    projectId: p.projectId,
+    status: p.status,
+    durationMs: p.durationMs,
+    error: p.error ?? null,
+  }).catch(() => {})
 }
 
 /** Record one config mutation. Fire-and-forget; call only on the success path. */
@@ -37,7 +53,21 @@ export function emitAudit(p: {
   identifier: string | null
   projectId: string | null
   detail?: Record<string, unknown>
+  level?: LogLevel
+  traceId?: string | null
 }): void {
   if (!isLogTypeEnabled('audit')) return
-  void appendLog({ type: 'audit', ...nowStamp(), ...p }).catch(() => {})
+  const level = p.level ?? 'info'
+  const traceId = (p.traceId ?? getTraceId() ?? '').trim()
+  void appendLog({
+    type: 'audit',
+    ...nowStamp(),
+    level,
+    traceId,
+    op: p.op,
+    entity: p.entity,
+    identifier: p.identifier,
+    projectId: p.projectId,
+    ...(p.detail ? { detail: p.detail } : {}),
+  }).catch(() => {})
 }

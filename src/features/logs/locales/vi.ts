@@ -11,6 +11,8 @@ export default {
   },
   columns: {
     time: 'Thời gian',
+    level: 'Level',
+    traceId: 'Trace',
     op: 'Thao tác',
     entity: 'Đối tượng',
     identifier: 'Định danh',
@@ -19,6 +21,14 @@ export default {
     path: 'Path',
     status: 'Status',
     ms: 'ms',
+  },
+  filters: {
+    q: 'Lọc nhanh…',
+    traceId: 'Trace id…',
+    level: 'Mức log',
+    levelAll: 'Tất cả',
+    clear: 'Xóa lọc',
+    useTrace: 'Lọc theo trace id này',
   },
   empty: {
     log: 'Chưa có log.',

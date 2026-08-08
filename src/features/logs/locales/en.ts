@@ -11,6 +11,8 @@ export default {
   },
   columns: {
     time: 'Time',
+    level: 'Level',
+    traceId: 'Trace',
     op: 'Operation',
     entity: 'Entity',
     identifier: 'Identifier',
@@ -19,6 +21,14 @@ export default {
     path: 'Path',
     status: 'Status',
     ms: 'ms',
+  },
+  filters: {
+    q: 'Quick filter…',
+    traceId: 'Trace id…',
+    level: 'Log level',
+    levelAll: 'All',
+    clear: 'Clear',
+    useTrace: 'Filter by this trace id',
   },
   empty: {
     log: 'No logs yet.',
