@@ -136,6 +136,18 @@ function allocateCloneDest(
   return path.join(clonesRoot, `${base}-${Date.now().toString(36)}`.slice(0, 64))
 }
 
+/**
+ * Canonical HTTPS clone URL from already-parsed owner/repo.
+ * Exported for unit tests — do not re-match the path with a non-anchored
+ * non-greedy regex (that truncated `agent-workflow` → `a`).
+ */
+export function normaliseGithubCloneUrl(gitUrl: string, owner: string, repo: string): string {
+  if (/^git@github\.com:/i.test(gitUrl) || /^https:\/\/github\.com\//i.test(gitUrl)) {
+    return `https://github.com/${owner}/${repo}.git`
+  }
+  return gitUrl
+}
+
 /** Map clone URL → PAT from Settings / GITHUB_TOKEN (GitHub HTTPS only). */
 function resolveCloneAuth(gitUrl: string): {
   cloneUrl: string
@@ -154,14 +166,7 @@ function resolveCloneAuth(gitUrl: string): {
   if (!token) return { cloneUrl: gitUrl, extraHeader: null, usedToken: false }
 
   // Prefer HTTPS + Bearer header so token never lands in remote URL / .git/config.
-  let cloneUrl = gitUrl
-  if (/^git@github\.com:/i.test(gitUrl)) {
-    cloneUrl = `https://github.com/${owner}/${repo}.git`
-  } else if (/^https:\/\/github\.com\//i.test(gitUrl) && !/\.git(\/|$)/i.test(gitUrl)) {
-    // Normalise trailing path for clone; keep existing .git if present.
-    const m = gitUrl.match(/^https:\/\/github\.com\/([^/]+)\/([^/#?\s]+?)(?:\.git)?/i)
-    if (m) cloneUrl = `https://github.com/${m[1]}/${m[2].replace(/\.git$/i, '')}.git`
-  }
+  const cloneUrl = normaliseGithubCloneUrl(gitUrl, owner, repo)
 
   const safeToken = token.replace(/[\r\n]/g, '').split(String.fromCharCode(0)).join('').trim()
   return {

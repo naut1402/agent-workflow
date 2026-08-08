@@ -1,1 +1,6 @@
-export { cloneProject, setProjectBranch, type CloneResult } from './cloneProject.js'
+export {
+  cloneProject,
+  normaliseGithubCloneUrl,
+  setProjectBranch,
+  type CloneResult,
+} from './cloneProject.js'
