@@ -2,7 +2,8 @@
 // Sidebar project selector + CRUD. Two entry points after title:
 // ＋ local path, Git clone (separate forms under the header).
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
+import { onClickOutside } from '@vueuse/core'
 import { addProject, removeProject } from '../../settings/scripts/settingsApi'
 import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 
@@ -25,6 +26,22 @@ const gitBranch = ref('main')
 const busy = ref(false)
 const errorMsg = ref('')
 const pickerOpen = ref(false)
+
+const selectOpen = ref(false)
+const selectHovering = ref(false)
+const selectRootRef = ref<HTMLElement | null>(null)
+
+const selectedProject = computed(
+  () => props.projects.find((p) => p.id === props.selectedId) ?? null,
+)
+
+const selectedIndex = computed(() =>
+  props.projects.findIndex((p) => p.id === props.selectedId),
+)
+
+onClickOutside(selectRootRef, () => {
+  selectOpen.value = false
+})
 
 function clearFields() {
   errorMsg.value = ''
@@ -57,6 +74,66 @@ function onPicked(path: string) {
   newPath.value = path
   pickerOpen.value = false
 }
+
+function selectByOffset(delta: number) {
+  const list = props.projects
+  if (!list.length) return
+  let idx = selectedIndex.value
+  if (idx < 0) idx = delta > 0 ? -1 : 0
+  const next = (idx + delta + list.length) % list.length
+  const id = list[next]?.id
+  if (id != null && id !== props.selectedId) emit('select', id)
+}
+
+function selectPrev() {
+  selectByOffset(-1)
+}
+
+function selectNext() {
+  selectByOffset(1)
+}
+
+function toggleSelect() {
+  if (!props.projects.length) return
+  selectOpen.value = !selectOpen.value
+}
+
+function pickProject(id: string) {
+  selectOpen.value = false
+  if (id !== props.selectedId) emit('select', id)
+}
+
+function onSelectWheel(e: WheelEvent) {
+  if (!props.projects.length) return
+  e.preventDefault()
+  if (e.deltaY > 0) selectNext()
+  else if (e.deltaY < 0) selectPrev()
+}
+
+function onHoverKeydown(e: KeyboardEvent) {
+  if (!selectHovering.value || selectOpen.value) return
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    selectNext()
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    selectPrev()
+  }
+}
+
+function onSelectEnter() {
+  selectHovering.value = true
+  window.addEventListener('keydown', onHoverKeydown)
+}
+
+function onSelectLeave() {
+  selectHovering.value = false
+  window.removeEventListener('keydown', onHoverKeydown)
+}
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onHoverKeydown)
+})
 
 async function submitLocal() {
   if (!newPath.value.trim()) {
@@ -231,26 +308,83 @@ async function onRemove(project) {
 
     <p v-show="errorMsg" class="project-err">⚠ {{ errorMsg }}</p>
 
-    <ul class="project-list">
-      <li
-        v-for="p in projects"
-        :key="p.id"
-        class="project-item"
-        :class="{ active: p.id === selectedId }"
+    <div v-if="projects.length" class="project-select-row">
+      <div
+        ref="selectRootRef"
+        class="project-select"
+        :class="{ 'is-open': selectOpen }"
+        @mouseenter="onSelectEnter"
+        @mouseleave="onSelectLeave"
+        @wheel.prevent="onSelectWheel"
       >
-        <button type="button" class="project-pick" @click="emit('select', p.id)">
-          <span class="project-name">{{ p.name }}</span>
-          <span v-if="p.default" class="project-default-badge">default</span>
+        <button
+          type="button"
+          class="project-select-trigger"
+          :aria-label="t('monitor.projectBar.selectLabel')"
+          aria-haspopup="listbox"
+          :aria-expanded="selectOpen"
+          :disabled="busy"
+          @click.stop="toggleSelect"
+        >
+          <span class="project-select-value">
+            <span class="project-name">{{ selectedProject?.name ?? t('monitor.projectBar.selectPlaceholder') }}</span>
+            <span v-if="selectedProject?.default" class="project-default-badge">default</span>
+          </span>
+        </button>
+
+        <ul v-if="selectOpen" class="project-select-menu" role="listbox" :aria-label="t('monitor.projectBar.selectLabel')">
+          <li
+            v-for="p in projects"
+            :key="p.id"
+            role="option"
+            class="project-item"
+            :class="{ active: p.id === selectedId }"
+            :aria-selected="p.id === selectedId"
+          >
+            <button type="button" class="project-pick" @click="pickProject(p.id)">
+              <span class="project-name">{{ p.name }}</span>
+              <span v-if="p.default" class="project-default-badge">default</span>
+            </button>
+            <button
+              type="button"
+              class="project-remove"
+              :title="t('monitor.projectBar.removeTitle')"
+              :aria-label="t('monitor.projectBar.removeTitle')"
+              :disabled="busy"
+              @click.stop="onRemove(p)"
+            >×</button>
+          </li>
+        </ul>
+      </div>
+
+      <div class="project-nav">
+        <button
+          type="button"
+          class="project-nav-btn"
+          :title="t('monitor.projectBar.prevProject')"
+          :aria-label="t('monitor.projectBar.prevProject')"
+          :disabled="busy || projects.length < 2"
+          @click.stop="selectPrev"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 7.5 6 4.5 9 7.5" />
+          </svg>
         </button>
         <button
           type="button"
-          class="project-remove"
-          :title="t('monitor.projectBar.removeTitle')"
-          @click="onRemove(p)"
-        >×</button>
-      </li>
-      <li v-if="!projects.length" class="project-empty">{{ t('monitor.projectBar.empty') }}</li>
-    </ul>
+          class="project-nav-btn"
+          :title="t('monitor.projectBar.nextProject')"
+          :aria-label="t('monitor.projectBar.nextProject')"
+          :disabled="busy || projects.length < 2"
+          @click.stop="selectNext"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 4.5 6 7.5 9 4.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <p v-else class="project-empty">{{ t('monitor.projectBar.empty') }}</p>
 
     <FolderPickerDialog
       v-if="pickerOpen"
@@ -264,7 +398,6 @@ async function onRemove(project) {
 <style scoped lang="scss">
 .project-bar {
   border-bottom: 1px solid var(--border, #2a2a35);
-  padding: 8px 10px;
   font-size: 13px;
   flex-shrink: 0;
 }
@@ -320,12 +453,99 @@ async function onRemove(project) {
   font-size: 11px;
   font-weight: 600;
   opacity: 0.75;
-  margin-bottom: 2px;
+  margin: 0;
 }
-.project-list {
+.project-select-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+}
+.project-select {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.project-select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin: 0;
+  padding: 4px 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.project-select-trigger:hover:not(:disabled),
+.project-select.is-open .project-select-trigger {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+.project-select-trigger:focus-visible {
+  outline: none;
+  background: rgba(var(--accent-rgb), 0.16);
+}
+.project-select-trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.project-select-value {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+.project-select-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 4px;
   list-style: none;
+  background: var(--panel-2, var(--panel, #1a1a22));
+  border: 1px solid var(--border, #2a2a35);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.project-nav {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 1px;
+}
+.project-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin: 0;
   padding: 0;
+  width: 20px;
+  height: 14px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+}
+.project-nav-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: rgba(var(--accent-rgb), 0.16);
+}
+.project-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 .project-item {
   display: flex;
@@ -347,6 +567,7 @@ async function onRemove(project) {
   text-align: left;
   padding: 5px 6px;
   overflow: hidden;
+  min-width: 0;
 }
 .project-name {
   overflow: hidden;
@@ -354,6 +575,7 @@ async function onRemove(project) {
   white-space: nowrap;
 }
 .project-default-badge {
+  flex-shrink: 0;
   font-size: 10px;
   opacity: 0.6;
   border: 1px solid currentColor;
@@ -369,21 +591,26 @@ async function onRemove(project) {
   padding: 0 7px;
   font-size: 16px;
 }
-.project-remove:hover {
+.project-remove:hover:not(:disabled) {
   opacity: 1;
   color: var(--danger);
 }
+.project-remove:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
 .project-empty {
   opacity: 0.5;
-  padding: 5px 6px;
+  padding: 2px 0;
+  margin: 0;
 }
 .project-add-form {
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   flex-shrink: 0;
-  padding: 8px;
+  padding: 4px;
   border: 1px solid var(--border, #2a2a35);
   border-radius: 6px;
   background: var(--panel-2, var(--panel, transparent));
@@ -433,6 +660,6 @@ async function onRemove(project) {
 .project-err {
   color: var(--danger);
   font-size: 12px;
-  margin: 0 0 6px;
+  margin: 0 0 4px;
 }
 </style>
