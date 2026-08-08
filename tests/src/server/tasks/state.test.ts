@@ -1,8 +1,10 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test, beforeEach } from 'bun:test'
 import fs from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, repairTaskState, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
+import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
 
 let dirs: string[] = []
 async function tmp(): Promise<string> {
@@ -13,6 +15,11 @@ async function tmp(): Promise<string> {
 afterEach(async () => {
   await Promise.all(dirs.map((d) => fs.rm(d, { recursive: true, force: true })))
   dirs = []
+  _resetEventBusForTest()
+})
+
+beforeEach(() => {
+  _resetEventBusForTest()
 })
 
 async function seedTask(root: string, id: string, state: Record<string, unknown>) {
@@ -222,6 +229,39 @@ describe('advanceStepOnJobSuccess', () => {
     const result = await advanceStepOnJobSuccess(root, 'T14', 'implementer')
     expect(result).toBeNull()
   })
+
+  test('hitl.pending emits after state file has hitl_pending', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    const stateFile = await seedTask(root, 'T12e', { current_phase: 'investigator' })
+    let pendingAtEmit: unknown
+    on('hitl.pending', () => {
+      // Sync read — emit does not await async handlers.
+      pendingAtEmit = JSON.parse(readFileSync(stateFile, 'utf8')).hitl_pending
+    })
+    await advanceStepOnJobSuccess(root, 'T12e', 'investigator')
+    expect(pendingAtEmit).toBe('hitl-1')
+  })
+
+  test('task.advanced emits with new currentPhase after persist', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: implementer\n  - id: reviewer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'T10e', { current_phase: 'implementer' })
+    const events: Array<Record<string, unknown>> = []
+    on('task.advanced', (e) => {
+      events.push(e.payload)
+    })
+    await advanceStepOnJobSuccess(root, 'T10e', 'implementer')
+    expect(events).toEqual([{ taskId: 'T10e', stepId: 'implementer', currentPhase: 'reviewer' }])
+  })
 })
 
 describe('advanceStepOnJobSuccess — review retry', () => {
@@ -238,11 +278,23 @@ describe('advanceStepOnJobSuccess — review retry', () => {
     await seedTask(root, 'T20', { current_phase: 'reviewer', review_round: 0 })
     await seedReview(root, 'T20', 'NEEDS_CHANGES')
 
+    const events: Array<Record<string, unknown>> = []
+    on('task.advanced', (e) => {
+      events.push(e.payload)
+    })
     const result = await advanceStepOnJobSuccess(root, 'T20', 'reviewer')
     expect(result).not.toBeNull()
     expect(result?.state.current_phase).toBe('implementer')
     expect(result?.state.review_round).toBe(1)
     expect(result?.state.hitl_pending).toBeNull()
+    expect(events).toEqual([
+      {
+        taskId: 'T20',
+        stepId: 'reviewer',
+        currentPhase: 'implementer',
+        reason: 'review_retry',
+      },
+    ])
   })
 
   test('NEEDS_CHANGES past retry.max → falls through to the gate instead of standing silently re-runnable', async () => {

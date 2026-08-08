@@ -200,6 +200,12 @@ export async function advanceStepOnJobSuccess(
           state.current_phase = retry.restart_from
           state.hitl_pending = null
           const mtime = await writeStateAtomic(stateFile, state)
+          emit('task.advanced', {
+            taskId,
+            stepId,
+            currentPhase: state.current_phase,
+            reason: 'review_retry',
+          })
           return { state, mtime }
         }
         // Past `retry.max`: fall through to the gate/advance logic below —
@@ -211,14 +217,18 @@ export async function advanceStepOnJobSuccess(
     const gateId = currentStep.hitl?.gate_id
     if (gateId) {
       state.hitl_pending = gateId
-      emit('hitl.pending', { taskId, gateId, stepId })
     } else {
       const next = steps[stepIdx + 1]
       state.current_phase = next ? next.id : 'completed'
-      emit('task.advanced', { taskId, stepId, currentPhase: state.current_phase })
     }
 
+    // Emit after persist so listeners never read stale state.
     const mtime = await writeStateAtomic(stateFile, state)
+    if (gateId) {
+      emit('hitl.pending', { taskId, gateId, stepId })
+    } else {
+      emit('task.advanced', { taskId, stepId, currentPhase: state.current_phase })
+    }
     return { state, mtime }
   })
 }

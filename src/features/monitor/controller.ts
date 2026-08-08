@@ -17,6 +17,7 @@ import {
   setProjectBranch,
 } from './business/index.js'
 import { emitAudit } from '../../core/log/store.js'
+import { emit, emitEntity } from '../../core/events/index.js'
 import { TaskArchivePatch, TaskStatePatch } from './schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from './schemas/taskCreate.js'
 import { mintTaskId } from './lib/createTaskForm.js'
@@ -93,6 +94,10 @@ export class MonitorController extends AbstractController {
         identifier: cloned.project?.id ?? null,
         projectId: cloned.project?.id ?? null,
       })
+      emitEntity('created', 'project', {
+        id: cloned.project?.id ?? null,
+        projectId: cloned.project?.id ?? null,
+      })
       return this.created({ project: cloned.project, repoPath: cloned.repoPath, branch: cloned.branch })
     }
     const result = registry.add({ path: parsed.path, name: parsed.name })
@@ -107,12 +112,20 @@ export class MonitorController extends AbstractController {
         identifier: result.project?.id ?? null,
         projectId: result.project?.id ?? null,
       })
+      emitEntity('created', 'project', {
+        id: result.project?.id ?? null,
+        projectId: result.project?.id ?? null,
+      })
       return this.created({ project: updated || result.project })
     }
     emitAudit({
       op: 'create',
       entity: 'project',
       identifier: result.project?.id ?? null,
+      projectId: result.project?.id ?? null,
+    })
+    emitEntity('created', 'project', {
+      id: result.project?.id ?? null,
       projectId: result.project?.id ?? null,
     })
     return this.created({ project: result.project })
@@ -134,6 +147,7 @@ export class MonitorController extends AbstractController {
     const result = registry.remove(id)
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     emitAudit({ op: 'delete', entity: 'project', identifier: id, projectId: id })
+    emitEntity('deleted', 'project', { id, projectId: id })
     return this.ok({ removed: true })
   }
 
@@ -357,6 +371,11 @@ export class MonitorController extends AbstractController {
       projectId: this.projectId,
       detail: { action: parsed.data.archived ? 'archive' : 'unarchive' },
     })
+    emitEntity('updated', 'task-state', {
+      id,
+      projectId: this.projectId,
+      detail: { action: parsed.data.archived ? 'archive' : 'unarchive' },
+    })
     return this.ok({ id, state: result.state, mtime: result.mtime })
   }
 
@@ -529,6 +548,10 @@ export class MonitorController extends AbstractController {
       identifier: result.taskId,
       projectId: this.projectId,
     })
+    emit('task.created', {
+      taskId: result.taskId,
+      projectId: this.projectId,
+    })
 
     let job: ReturnType<typeof submitJob> | undefined
     if (body.run) {
@@ -576,6 +599,7 @@ export class MonitorController extends AbstractController {
     await deleteTask(root, id)
 
     emitAudit({ op: 'delete', entity: 'task-state', identifier: id, projectId: this.projectId })
+    emitEntity('deleted', 'task-state', { id, projectId: this.projectId })
     return this.ok({ id, deleted: true })
   }
 
@@ -609,6 +633,11 @@ export class MonitorController extends AbstractController {
       op: 'update',
       entity: 'task-state',
       identifier: id,
+      projectId: this.projectId,
+      detail: { action: 'repair' },
+    })
+    emitEntity('updated', 'task-state', {
+      id,
       projectId: this.projectId,
       detail: { action: 'repair' },
     })

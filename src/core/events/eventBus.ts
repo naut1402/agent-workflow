@@ -8,10 +8,14 @@ export type DashboardEventType =
   | 'job.started'
   | 'job.finished'
   | 'job.failed'
+  | 'job.cancelled'
   | 'task.created'
   | 'task.advanced'
   | 'hitl.pending'
   | 'hitl.resolved'
+  | 'entity.created'
+  | 'entity.updated'
+  | 'entity.deleted'
   | 'webhook.received'
   | 'webhook.triggered'
   | 'usage.recorded'
@@ -83,7 +87,10 @@ export function _resetEventBusForTest(): void {
   anyHandlers.clear()
 }
 
-/** Stub registry for future schedule / webhook triggers (contract only). */
+/**
+ * Stub registry for future schedule / webhook triggers.
+ * Contract only — không auto-`on(match)` trong Epic D; wire runtime TBD (#193 follow-up).
+ */
 export type TriggerKind = 'schedule' | 'event' | 'webhook'
 
 export interface TriggerRegistration {

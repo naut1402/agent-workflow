@@ -42,6 +42,7 @@ import {
   listJobs,
   cancelJob,
 } from '../../../../src/features/runner/business/index.js'
+import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
 
 // Characterization test for the runners execution plane (U0005), written
 // against the current JS via the public index surface so it survives the
@@ -64,6 +65,7 @@ beforeEach(() => {
   for (const f of ['runners.json', 'credentials.json', 'connections.json']) {
     fs.rmSync(path.join(home, f), { force: true })
   }
+  _resetEventBusForTest()
 })
 
 describe('loadRunners', () => {
@@ -349,5 +351,56 @@ describe('job queue', () => {
     expect(path.isAbsolute(job.workspace)).toBe(true)
     expect(loadJob(job.id)?.id).toBe(job.id)
     expect(cancelJob('does-not-exist')).toMatchObject({ ok: false, status: 404 })
+  })
+
+  test('submitJob emits job.queued', () => {
+    upsertRunner({ id: 'claude-code-local', connectionId: DEFAULT_CONNECTION_ID } as any)
+    const seen: string[] = []
+    on('job.queued', (e) => {
+      seen.push(String(e.payload.jobId))
+    })
+    const job = submitJob({ agentRef: 'noref', workspace: home })
+    expect(seen).toEqual([job.id])
+  })
+
+  test('cancelJob emits job.cancelled after status cancelled', () => {
+    upsertRunner({ id: 'claude-code-local', connectionId: DEFAULT_CONNECTION_ID } as any)
+    const job = submitJob({ agentRef: 'noref', workspace: home })
+    const events: Array<Record<string, unknown>> = []
+    on('job.cancelled', (e) => {
+      events.push(e.payload)
+      expect(loadJob(job.id)?.status).toBe('cancelled')
+    })
+    expect(cancelJob(job.id)).toMatchObject({ ok: true })
+    expect(events).toEqual([{ jobId: job.id, taskId: undefined, projectId: undefined }])
+  })
+
+  test('cancelJob on already-cancelled is idempotent (no second emit)', () => {
+    upsertRunner({ id: 'claude-code-local', connectionId: DEFAULT_CONNECTION_ID } as any)
+    const job = submitJob({ agentRef: 'noref', workspace: home })
+    expect(cancelJob(job.id)).toMatchObject({ ok: true })
+    const events: Array<Record<string, unknown>> = []
+    on('job.cancelled', (e) => {
+      events.push(e.payload)
+    })
+    expect(cancelJob(job.id)).toMatchObject({ ok: true })
+    expect(events).toEqual([])
+  })
+
+  test('early-fail missing runner emits job.failed without job.started', async () => {
+    const types: string[] = []
+    on('*', (e) => {
+      types.push(e.type)
+    })
+    const job = submitJob({ agentRef: 'noref', workspace: home, runnerId: 'missing-runner' })
+    expect(types).toContain('job.queued')
+    for (let i = 0; i < 40; i++) {
+      const cur = loadJob(job.id)
+      if (cur?.status === 'failed') break
+      await new Promise((r) => setTimeout(r, 25))
+    }
+    expect(loadJob(job.id)?.status).toBe('failed')
+    expect(types).toContain('job.failed')
+    expect(types).not.toContain('job.started')
   })
 })
