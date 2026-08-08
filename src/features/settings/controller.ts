@@ -2,6 +2,7 @@ import { AbstractController } from '../../core/http/AbstractController.js'
 import { parseAutoscanConfig } from './schemas/autoscan.js'
 import { parseGithubTokensConfig } from './schemas/githubTokens.js'
 import { parseLoggingConfig } from '../../core/log/loggingPrefs.js'
+import { parseKnowledgeScanConfig } from './schemas/knowledgeScan.js'
 import { emitAudit } from '../../core/log/store.js'
 import {
   loadAutoscanConfig,
@@ -11,7 +12,11 @@ import {
   saveGithubTokensConfig,
   loadLoggingConfig,
   saveLoggingConfig,
+  loadKnowledgeScanConfig,
+  saveKnowledgeScanConfig,
   browseDirectory,
+  cloneProject,
+  setProjectBranch,
 } from './business/index.js'
 
 export class SettingsController extends AbstractController {
@@ -35,8 +40,37 @@ export class SettingsController extends AbstractController {
     } catch {
       return this.badRequest('invalid JSON')
     }
+    // Clone remote repo when gitUrl is provided.
+    if (parsed.gitUrl) {
+      const cloned = cloneProject({
+        gitUrl: parsed.gitUrl,
+        branch: parsed.branch || parsed.defaultBranch,
+        name: parsed.name,
+        destName: parsed.destName,
+      })
+      if ('error' in cloned) return this.json(cloned.status || 400, { error: cloned.error })
+      emitAudit({
+        op: 'create',
+        entity: 'project',
+        identifier: cloned.project?.id ?? null,
+        projectId: cloned.project?.id ?? null,
+      })
+      return this.created({ project: cloned.project, repoPath: cloned.repoPath, branch: cloned.branch })
+    }
     const result = registry.add({ path: parsed.path, name: parsed.name })
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
+    // Optional branch metadata on local projects.
+    if (parsed.branch && result.project?.id) {
+      setProjectBranch(result.project.id, parsed.branch)
+      const updated = registry.get(result.project.id)
+      emitAudit({
+        op: 'create',
+        entity: 'project',
+        identifier: result.project?.id ?? null,
+        projectId: result.project?.id ?? null,
+      })
+      return this.created({ project: updated || result.project })
+    }
     emitAudit({
       op: 'create',
       entity: 'project',
@@ -44,6 +78,16 @@ export class SettingsController extends AbstractController {
       projectId: result.project?.id ?? null,
     })
     return this.created({ project: result.project })
+  }
+
+  async updateProjectBranch() {
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON')
+    const id = String(b.value.id || b.value.projectId || '')
+    const branch = String(b.value.branch || '')
+    const result = setProjectBranch(id, branch)
+    if ('error' in result) return this.json(result.status || 400, { error: result.error })
+    return this.ok({ project: result.project, branch: result.branch })
   }
 
   deleteProject() {
@@ -147,6 +191,22 @@ export class SettingsController extends AbstractController {
     })
     const saved = saveLoggingConfig(next)
     emitAudit({ op: 'update', entity: 'logging', identifier: 'config', projectId: null })
+    return this.ok({ config: saved })
+  }
+
+  getKnowledgeScan() {
+    return this.ok({ config: loadKnowledgeScanConfig() })
+  }
+
+  async updateKnowledgeScan() {
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON')
+    const next = parseKnowledgeScanConfig({
+      ...loadKnowledgeScanConfig(),
+      ...b.value,
+    })
+    const saved = saveKnowledgeScanConfig(next)
+    emitAudit({ op: 'update', entity: 'knowledge-scan', identifier: 'config', projectId: null })
     return this.ok({ config: saved })
   }
 }

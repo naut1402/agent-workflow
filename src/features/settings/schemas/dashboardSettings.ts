@@ -17,6 +17,12 @@ import {
   parseLoggingConfig,
   type LoggingConfig,
 } from '../../../core/log/loggingPrefs'
+import {
+  DEFAULT_KNOWLEDGE_SCAN_CONFIG,
+  KnowledgeScanConfigSchema,
+  parseKnowledgeScanConfig,
+  type KnowledgeScanConfig,
+} from './knowledgeScan'
 
 /**
  * Server-global dashboard settings (`~/.dev-team-dashboard/settings.json`).
@@ -27,6 +33,7 @@ export const DashboardSettingsSchema = z
     autoscan: AutoscanConfigSchema.optional(),
     githubTokens: GithubTokensConfigSchema.optional(),
     logging: LoggingConfigSchema.optional(),
+    knowledgeScan: KnowledgeScanConfigSchema.optional(),
   })
   .passthrough()
 
@@ -36,6 +43,10 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   autoscan: { ...DEFAULT_AUTOSCAN_CONFIG, whitelist: [] },
   githubTokens: { ...DEFAULT_GITHUB_TOKENS_CONFIG, repos: [] },
   logging: { ...DEFAULT_LOGGING_CONFIG, types: { ...DEFAULT_LOGGING_CONFIG.types } },
+  knowledgeScan: {
+    ...DEFAULT_KNOWLEDGE_SCAN_CONFIG,
+    whitelist: [...DEFAULT_KNOWLEDGE_SCAN_CONFIG.whitelist],
+  },
 }
 
 export function parseDashboardSettings(raw: unknown): DashboardSettings {
@@ -45,6 +56,10 @@ export function parseDashboardSettings(raw: unknown): DashboardSettings {
       autoscan: { ...DEFAULT_AUTOSCAN_CONFIG, whitelist: [] },
       githubTokens: { repos: [] },
       logging: { ...DEFAULT_LOGGING_CONFIG, types: { ...DEFAULT_LOGGING_CONFIG.types } },
+      knowledgeScan: {
+        ...DEFAULT_KNOWLEDGE_SCAN_CONFIG,
+        whitelist: [...DEFAULT_KNOWLEDGE_SCAN_CONFIG.whitelist],
+      },
     }
   }
   return {
@@ -52,7 +67,16 @@ export function parseDashboardSettings(raw: unknown): DashboardSettings {
     autoscan: parseAutoscanConfig(parsed.data.autoscan ?? DEFAULT_AUTOSCAN_CONFIG),
     githubTokens: parseGithubTokensConfig(parsed.data.githubTokens ?? DEFAULT_GITHUB_TOKENS_CONFIG),
     logging: parseLoggingConfig(parsed.data.logging ?? DEFAULT_LOGGING_CONFIG),
+    knowledgeScan: parseKnowledgeScanConfig(
+      parsed.data.knowledgeScan ?? DEFAULT_KNOWLEDGE_SCAN_CONFIG,
+    ),
   }
+}
+
+export function resolveKnowledgeScanFromDashboard(
+  settings: DashboardSettings | null | undefined,
+): KnowledgeScanConfig {
+  return parseKnowledgeScanConfig(settings?.knowledgeScan ?? DEFAULT_KNOWLEDGE_SCAN_CONFIG)
 }
 
 export function resolveAutoscanFromDashboard(

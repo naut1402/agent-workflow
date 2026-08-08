@@ -26,6 +26,7 @@ export const AUDIT_ENTITIES = [
   'flow-profile',
   'project',
   'autoscan',
+  'knowledge-scan',
   'github-tokens',
   'logging',
   'runner',

@@ -51,12 +51,14 @@ export function renderRequestMarkdown(input: {
   knowledgeInputs: string[]
   createdAt: string
   prompt: string
+  branch?: string | null
 }): string {
   const front = dumpYaml({
     task_id: input.taskId,
     source: input.source,
     issue_url: input.issueUrl ?? null,
     knowledge_inputs: input.knowledgeInputs,
+    branch: input.branch ?? null,
     created_at: input.createdAt,
     created_by: 'dashboard',
   })
@@ -125,6 +127,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
     knowledgeInputs,
     createdAt,
     prompt: input.prompt,
+    branch: input.branch ?? null,
   })
 
   let pipelineFile: string | null = null
@@ -168,6 +171,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       export_json: input.exportJson ?? pipeline.defaults?.export_json ?? false,
       doc_review_round: { investigate: 0, design: 0 },
       inherit_from_parent: [],
+      ...(input.branch ? { branch: input.branch } : {}),
     }
     await writeStateAtomic(stateFile, state)
 
