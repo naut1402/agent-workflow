@@ -463,12 +463,10 @@ export class MonitorController extends AbstractController {
           taskId: result.taskId,
           pipelineStepId: result.firstStep.id,
           createTaskRun: true,
-          knowledgeInputs: body.knowledgeInputs,
           ...(body.branch ? { branch: body.branch } : {}),
         },
       })
     }
-
 
     return this.created({
       task: {
