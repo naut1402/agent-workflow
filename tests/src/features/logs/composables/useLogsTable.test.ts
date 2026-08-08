@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 import { ref } from 'vue'
 import {
   levelFromHttpStatus,
@@ -6,9 +6,9 @@ import {
   formatRequestQuery,
   formatResponsePreview,
   type LogEntry,
-} from '../../../../../src/core/log/schema.js'
-import { getTraceId, runWithTraceId } from '../../../../../src/core/log/traceContext.js'
-import { useLogsTable } from '../../../../../src/features/logs/composables/useLogsTable'
+} from '@/core/log/schema'
+import { getTraceId, runWithTraceId } from '@/core/log/traceContext'
+import { useLogsTable } from '@/features/logs/composables/useLogsTable'
 
 describe('levelFromHttpStatus', () => {
   test('maps status bands', () => {
