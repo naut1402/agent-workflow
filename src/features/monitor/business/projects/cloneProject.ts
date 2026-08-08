@@ -5,8 +5,12 @@
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { registryHome, add, loadRegistry, saveRegistry, get, type Project } from '../../../core/registry.js'
-import { loadGithubTokensConfig } from './dashboardSettings.js'
+import { registryHome, add, loadRegistry, saveRegistry, get, type Project } from '../../../../core/registry.js'
+import {
+  loadGithubTokensConfig,
+  parseGithubRepoRef,
+  resolveGithubTokenForRepo,
+} from '../../../settings/business/index.js'
 
 /** Git metadata kept on registry JSON without extending core Project. */
 type ProjectGitMeta = Project & {
@@ -15,10 +19,6 @@ type ProjectGitMeta = Project & {
   branch?: string
   repoPath?: string
 }
-import {
-  parseGithubRepoRef,
-  resolveGithubTokenForRepo,
-} from '../schemas/githubTokens.js'
 
 function sanitiseBranch(branch: unknown): string | null {
   if (typeof branch !== 'string' || !branch.trim()) return null
@@ -163,7 +163,7 @@ function resolveCloneAuth(gitUrl: string): {
     if (m) cloneUrl = `https://github.com/${m[1]}/${m[2].replace(/\.git$/i, '')}.git`
   }
 
-  const safeToken = token.replace(/[\r\n\x00]/g, '').trim()
+  const safeToken = token.replace(/[\r\n]/g, '').split(String.fromCharCode(0)).join('').trim()
   return {
     cloneUrl,
     extraHeader: `Authorization: Bearer ${safeToken}`,

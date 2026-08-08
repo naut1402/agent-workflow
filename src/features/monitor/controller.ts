@@ -13,6 +13,8 @@ import {
   extractLines,
   listJobs,
   closeTaskSession,
+  cloneProject,
+  setProjectBranch,
 } from './business/index.js'
 import { emitAudit } from '../../core/log/store.js'
 import { TaskArchivePatch, TaskStatePatch } from './schemas/task.js'
@@ -56,6 +58,89 @@ async function withArtifactWriteLock<T>(target: string, fn: () => Promise<T>): P
 }
 
 export class MonitorController extends AbstractController {
+  // Project registry CRUD — no per-project root needed (Monitor owns project ↔ task UX).
+  getProjects() {
+    const { registry } = this.ctx
+    const id = this.c.req.query('id')
+    if (id) {
+      const project = registry.get(id)
+      if (!project) return this.notFound('unknown project', { id })
+      return this.ok({ project })
+    }
+    return this.ok(registry.list())
+  }
+
+  async createProject() {
+    const { registry } = this.ctx
+    let parsed: any
+    try {
+      parsed = JSON.parse((await this.c.req.text()) || '{}')
+    } catch {
+      return this.badRequest('invalid JSON')
+    }
+    // Clone remote repo when gitUrl is provided.
+    if (parsed.gitUrl) {
+      const cloned = cloneProject({
+        gitUrl: parsed.gitUrl,
+        branch: parsed.branch || parsed.defaultBranch,
+        name: parsed.name,
+        destName: parsed.destName,
+      })
+      if ('error' in cloned) return this.json(cloned.status || 400, { error: cloned.error })
+      emitAudit({
+        op: 'create',
+        entity: 'project',
+        identifier: cloned.project?.id ?? null,
+        projectId: cloned.project?.id ?? null,
+      })
+      return this.created({ project: cloned.project, repoPath: cloned.repoPath, branch: cloned.branch })
+    }
+    const result = registry.add({ path: parsed.path, name: parsed.name })
+    if ('error' in result) return this.json(result.status || 400, { error: result.error })
+    // Optional branch metadata on local projects.
+    if (parsed.branch && result.project?.id) {
+      setProjectBranch(result.project.id, parsed.branch)
+      const updated = registry.get(result.project.id)
+      emitAudit({
+        op: 'create',
+        entity: 'project',
+        identifier: result.project?.id ?? null,
+        projectId: result.project?.id ?? null,
+      })
+      return this.created({ project: updated || result.project })
+    }
+    emitAudit({
+      op: 'create',
+      entity: 'project',
+      identifier: result.project?.id ?? null,
+      projectId: result.project?.id ?? null,
+    })
+    return this.created({ project: result.project })
+  }
+
+  async updateProjectBranch() {
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON')
+    const id = String(b.value.id || b.value.projectId || '')
+    const branch = String(b.value.branch || '')
+    const result = setProjectBranch(id, branch)
+    if ('error' in result) return this.json(result.status || 400, { error: result.error })
+    return this.ok({ project: result.project, branch: result.branch })
+  }
+
+  deleteProject() {
+    const { registry } = this.ctx
+    const id = this.c.req.query('id') || ''
+    const result = registry.remove(id)
+    if ('error' in result) return this.json(result.status || 400, { error: result.error })
+    emitAudit({ op: 'delete', entity: 'project', identifier: id, projectId: id })
+    return this.ok({ removed: true })
+  }
+
+  projectsMethodNotAllowed() {
+    return this.methodNotAllowed()
+  }
+
   async listTasks() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error

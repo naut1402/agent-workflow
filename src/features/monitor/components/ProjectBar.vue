@@ -4,7 +4,7 @@
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { addProject, removeProject } from '../../settings/scripts/settingsApi'
+import { addProject, removeProject } from '../scripts/monitorApi'
 import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 
 const { t } = useI18nHelpers()
