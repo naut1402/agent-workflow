@@ -109,7 +109,8 @@ describe('useLogsTable', () => {
     table.clearFilters()
     table.filters.value = { ...table.filters.value, traceId: 'bbb' }
     expect(table.displayed.value).toHaveLength(1)
-    expect(table.displayed.value[0].path).toBe('/api/a')
+    const row = table.displayed.value[0]
+    expect(row.type === 'request' && row.path).toBe('/api/a')
   })
 
   test('sorts by clicked column', () => {
