@@ -1,19 +1,20 @@
 import { z } from 'zod'
 
 /**
- * Log entry schema (request/audit JSONL). Write path: `src/core/log` (driver + append).
+ * Log entry schema (request/audit/events JSONL). Write path: `src/core/log` (driver + append).
  * Read UI: `src/features/logs/business`.
  *
- * Two kinds, discriminated by `type`:
+ * Kinds, discriminated by `type`:
  *  - `request` — one line per `/api/*` request (method/path/status/duration).
  *  - `audit`   — one line per config mutation (op/entity/identifier).
+ *  - `events`  — one line per domain bus emit (gated by `logging.types.events`).
  *
  * Parsing is intentionally defensive: a malformed JSONL line yields `null` and
  * is skipped rather than throwing, mirroring the codebase's defensive-reads rule.
  *
  * `level` + `traceId` default when missing so older JSONL rows still parse.
  */
-export const LOG_TYPES = ['request', 'audit'] as const
+export const LOG_TYPES = ['request', 'audit', 'events'] as const
 export type LogType = (typeof LOG_TYPES)[number]
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const
@@ -78,10 +79,23 @@ export const AuditLogEntry = z.object({
   detail: z.record(z.unknown()).optional(),
 })
 
-export const LogEntry = z.discriminatedUnion('type', [RequestLogEntry, AuditLogEntry])
+/** Domain event row — `event` is DashboardEvent.type; distinct from LogType discriminant. */
+export const EventLogEntry = z.object({
+  type: z.literal('events'),
+  ts: z.number(),
+  iso: z.string(),
+  level: levelField,
+  traceId: traceIdField,
+  event: z.string(),
+  payload: z.record(z.unknown()).default({}),
+  projectId: z.string().nullable().default(null),
+})
+
+export const LogEntry = z.discriminatedUnion('type', [RequestLogEntry, AuditLogEntry, EventLogEntry])
 export type LogEntry = z.infer<typeof LogEntry>
 export type RequestLogEntry = z.infer<typeof RequestLogEntry>
 export type AuditLogEntry = z.infer<typeof AuditLogEntry>
+export type EventLogEntry = z.infer<typeof EventLogEntry>
 
 /** Cap stored query/response previews so JSONL stays bounded. */
 export const LOG_QUERY_MAX_CHARS = 2_048

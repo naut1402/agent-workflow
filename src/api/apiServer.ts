@@ -12,6 +12,7 @@ import {
   formatResponsePreview,
 } from '../core/log/schema.js'
 import { resolveTraceIdFromRequest, runWithTraceIdAsync } from '../core/log/traceContext.js'
+import { registerEventLogSubscriber } from '../core/log/eventLogSubscriber.js'
 
 // ── API server (Hono app + Node bridge) ─────────────────────────────────────
 //
@@ -70,6 +71,8 @@ export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
 
   app.notFound((c) => j(c, 404, { error: 'unknown endpoint' }))
   app.onError((err, c) => j(c, 500, { error: String((err as any)?.message ?? err) }))
+
+  registerEventLogSubscriber()
 
   return app
 }

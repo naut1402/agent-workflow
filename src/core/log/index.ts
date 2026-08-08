@@ -5,6 +5,7 @@ export {
   AUDIT_ENTITIES,
   RequestLogEntry,
   AuditLogEntry,
+  EventLogEntry,
   LogEntry,
   parseLogLine,
   levelFromHttpStatus,
@@ -20,6 +21,10 @@ export {
 export { getLogDriver, setLogDriver, resetLogDriver, type LogDriver } from './driver.js'
 export { logsDir, logFile, appendFileLog } from './fileDriver.js'
 export { appendLog, appendRequestLog, emitAudit } from './store.js'
+export {
+  registerEventLogSubscriber,
+  _resetEventLogSubscriberForTest,
+} from './eventLogSubscriber.js'
 export {
   getTraceId,
   runWithTraceId,
