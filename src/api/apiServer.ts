@@ -7,6 +7,11 @@ import { dirnameFromImportMeta, resolvePath } from '../core/lib/fileHelper.js'
 import { loadModulesUnder } from '../core/lib/dirModuleLoader.js'
 import { handleKnowledgeApi } from '../features/knowledge/business/knowledgeApi.js'
 import { appendRequestLog } from '../core/log/store.js'
+import {
+  formatRequestQuery,
+  formatResponsePreview,
+} from '../core/log/schema.js'
+import { resolveTraceIdFromRequest, runWithTraceIdAsync } from '../core/log/traceContext.js'
 
 // ── API server (Hono app + Node bridge) ─────────────────────────────────────
 //
@@ -86,10 +91,9 @@ async function nodeToWebRequest(req: IncomingMessage, url: URL): Promise<Request
   return new Request(url.toString(), { method, headers, body: body as any })
 }
 
-async function writeWebResponse(res: ServerResponse, response: Response): Promise<void> {
-  res.statusCode = response.status
-  response.headers.forEach((value, key) => res.setHeader(key, value))
-  const buf = Buffer.from(await response.arrayBuffer())
+function writeWebResponse(res: ServerResponse, status: number, headers: Headers, buf: Buffer): void {
+  res.statusCode = status
+  headers.forEach((value, key) => res.setHeader(key, value))
   res.end(buf)
 }
 
@@ -115,33 +119,56 @@ export function createApiHandler(ctx: RegistryContext) {
     // logging is fire-and-forget in `finally`, never awaited into the response.
     const started = Date.now()
     const projectId = url.searchParams.get('project') || null
-    let errored: string | null = null
-    try {
-      if (url.pathname.startsWith('/api/knowledge')) {
-        const root = ctx.resolveProjectRoot(projectId)
-        if (!root) {
-          json(res, 404, { error: 'unknown project', project: projectId })
+    const traceId = resolveTraceIdFromRequest(req)
+    return runWithTraceIdAsync(traceId, async () => {
+      let errored: string | null = null
+      let responsePreview = ''
+      const query = formatRequestQuery(url.search)
+      try {
+        // Set early so clients can correlate even if the handler throws later.
+        if (!res.headersSent) res.setHeader('X-Trace-Id', traceId)
+        if (url.pathname.startsWith('/api/knowledge')) {
+          const root = ctx.resolveProjectRoot(projectId)
+          if (!root) {
+            const body = JSON.stringify({ error: 'unknown project', project: projectId })
+            responsePreview = formatResponsePreview(Buffer.from(body), 'application/json')
+            json(res, 404, { error: 'unknown project', project: projectId })
+            return true
+          }
+          await handleKnowledgeApi(req, res, url, root)
+          // Knowledge writes directly to the node response — body not mirrored here.
+          responsePreview = ''
           return true
         }
-        await handleKnowledgeApi(req, res, url, root)
-        return true
+        const app = await getApp()
+        const response = await app.fetch(await nodeToWebRequest(req, url))
+        // Prefer inbound/minted id on the wire (overwrite if Hono also set one).
+        const headers = new Headers(response.headers)
+        headers.set('X-Trace-Id', traceId)
+        const buf = Buffer.from(await response.arrayBuffer())
+        responsePreview = formatResponsePreview(buf, headers.get('content-type'))
+        writeWebResponse(res, response.status, headers, buf)
+      } catch (err: any) {
+        errored = String(err && err.message ? err.message : err)
+        responsePreview = formatResponsePreview(
+          Buffer.from(JSON.stringify({ error: errored })),
+          'application/json',
+        )
+        json(res, 500, { error: errored })
+      } finally {
+        appendRequestLog({
+          method: req.method || 'GET',
+          path: url.pathname,
+          projectId,
+          status: res.statusCode,
+          durationMs: Date.now() - started,
+          error: errored,
+          traceId,
+          query,
+          response: responsePreview || (errored ? errored : ''),
+        })
       }
-      const app = await getApp()
-      const response = await app.fetch(await nodeToWebRequest(req, url))
-      await writeWebResponse(res, response)
-    } catch (err: any) {
-      errored = String(err && err.message ? err.message : err)
-      json(res, 500, { error: errored })
-    } finally {
-      appendRequestLog({
-        method: req.method || 'GET',
-        path: url.pathname,
-        projectId,
-        status: res.statusCode,
-        durationMs: Date.now() - started,
-        error: errored,
-      })
-    }
-    return true
+      return true
+    })
   }
 }
