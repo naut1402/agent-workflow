@@ -1,8 +1,43 @@
 import { describe, expect, test } from 'bun:test'
 import {
   githubGitAuthExtraHeader,
+  isGithubGitRemote,
   normaliseGithubCloneUrl,
+  resolveCloneAuth,
+  sanitiseGitUrl,
 } from '@/features/monitor/business/projects/cloneProject'
+
+describe('sanitiseGitUrl', () => {
+  test('accepts public https and github ssh', () => {
+    expect(sanitiseGitUrl('https://github.com/naut1402/agent-workflow')).toContain('github.com')
+    expect(sanitiseGitUrl('git@github.com:naut1402/agent-workflow.git')).toContain('git@github.com')
+  })
+
+  test('rejects userinfo, private hosts, and junk', () => {
+    expect(sanitiseGitUrl('https://user:token@github.com/o/r')).toBeNull()
+    expect(sanitiseGitUrl('https://127.0.0.1/o/r')).toBeNull()
+    expect(sanitiseGitUrl('https://10.0.0.5/o/r')).toBeNull()
+    expect(sanitiseGitUrl('git@192.168.1.1:o/r.git')).toBeNull()
+    expect(sanitiseGitUrl('https://evil.example/o/r')).toContain('evil.example')
+    expect(sanitiseGitUrl('not-a-url')).toBeNull()
+  })
+})
+
+describe('isGithubGitRemote / resolveCloneAuth', () => {
+  test('only github remotes are github remotes', () => {
+    expect(isGithubGitRemote('https://github.com/o/r')).toBe(true)
+    expect(isGithubGitRemote('git@github.com:o/r.git')).toBe(true)
+    expect(isGithubGitRemote('https://evil.example/o/r')).toBe(false)
+    expect(isGithubGitRemote('https://gitlab.com/o/r')).toBe(false)
+  })
+
+  test('non-github host never gets Authorization header', () => {
+    const auth = resolveCloneAuth('https://evil.example/owner/repo')
+    expect(auth.extraHeader).toBeNull()
+    expect(auth.usedToken).toBe(false)
+    expect(auth.cloneUrl).toBe('https://evil.example/owner/repo')
+  })
+})
 
 describe('normaliseGithubCloneUrl', () => {
   test('keeps full repo name when HTTPS URL has no .git suffix', () => {

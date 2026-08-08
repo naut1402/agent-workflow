@@ -21,12 +21,14 @@ export async function runWithTraceIdAsync<T>(traceId: string, fn: () => Promise<
 }
 
 /** Prefer inbound `X-Trace-Id` / `X-Request-Id`, else mint a UUID. */
+const SAFE_TRACE_ID = /^[A-Za-z0-9._:\-]{1,128}$/
+
 export function resolveTraceIdFromRequest(req: IncomingMessage): string {
   const raw = req.headers['x-trace-id'] ?? req.headers['x-request-id']
   const v = Array.isArray(raw) ? raw[0] : raw
   if (typeof v === 'string') {
     const trimmed = v.trim().slice(0, 128)
-    if (trimmed) return trimmed
+    if (SAFE_TRACE_ID.test(trimmed)) return trimmed
   }
   return randomUUID()
 }

@@ -49,9 +49,22 @@ describe('formatRequestQuery / formatResponsePreview', () => {
     expect(formatRequestQuery(`?${'x'.repeat(3000)}`).endsWith('…')).toBe(true)
   })
 
+  test('redacts sensitive query keys', () => {
+    expect(formatRequestQuery('?token=ghp_secret&ok=1')).toBe('token=%5Bredacted%5D&ok=1')
+    expect(formatRequestQuery('?Authorization=Bearer%20x')).toContain('%5Bredacted%5D')
+  })
+
   test('previews json text and placeholders binary', () => {
     expect(formatResponsePreview(Buffer.from('{"ok":true}'), 'application/json')).toBe('{"ok":true}')
     expect(formatResponsePreview(Buffer.from([0, 1, 2]), 'application/octet-stream')).toContain('binary')
+  })
+
+  test('redacts sensitive JSON response keys without decoding whole buffer semantics', () => {
+    const body = JSON.stringify({ token: 'ghp_x', nested: { password: 'p', keep: 1 } })
+    const preview = formatResponsePreview(Buffer.from(body), 'application/json')
+    expect(preview).toContain('[redacted]')
+    expect(preview).not.toContain('ghp_x')
+    expect(preview).toContain('"keep":1')
   })
 })
 
@@ -62,6 +75,20 @@ describe('traceContext', () => {
       expect(getTraceId()).toBe('trace-abc')
     })
     expect(getTraceId()).toBeNull()
+  })
+
+  test('resolveTraceIdFromRequest rejects control characters', async () => {
+    const { resolveTraceIdFromRequest } = await import('@/core/log/traceContext')
+    const bad = resolveTraceIdFromRequest({
+      headers: { 'x-trace-id': 'abc\ndef' },
+    } as any)
+    expect(bad).not.toContain('\n')
+    expect(bad.length).toBeGreaterThan(8)
+
+    const good = resolveTraceIdFromRequest({
+      headers: { 'x-trace-id': 'req-42:ok_path' },
+    } as any)
+    expect(good).toBe('req-42:ok_path')
   })
 })
 

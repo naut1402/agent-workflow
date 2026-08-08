@@ -91,10 +91,9 @@ async function nodeToWebRequest(req: IncomingMessage, url: URL): Promise<Request
   return new Request(url.toString(), { method, headers, body: body as any })
 }
 
-async function writeWebResponse(res: ServerResponse, response: Response): Promise<void> {
-  res.statusCode = response.status
-  response.headers.forEach((value, key) => res.setHeader(key, value))
-  const buf = Buffer.from(await response.arrayBuffer())
+function writeWebResponse(res: ServerResponse, status: number, headers: Headers, buf: Buffer): void {
+  res.statusCode = status
+  headers.forEach((value, key) => res.setHeader(key, value))
   res.end(buf)
 }
 
@@ -148,7 +147,7 @@ export function createApiHandler(ctx: RegistryContext) {
         headers.set('X-Trace-Id', traceId)
         const buf = Buffer.from(await response.arrayBuffer())
         responsePreview = formatResponsePreview(buf, headers.get('content-type'))
-        await writeWebResponse(res, new Response(buf, { status: response.status, headers }))
+        writeWebResponse(res, response.status, headers, buf)
       } catch (err: any) {
         errored = String(err && err.message ? err.message : err)
         responsePreview = formatResponsePreview(

@@ -87,18 +87,59 @@ export type AuditLogEntry = z.infer<typeof AuditLogEntry>
 export const LOG_QUERY_MAX_CHARS = 2_048
 export const LOG_RESPONSE_MAX_CHARS = 4_096
 
+/** Keys that must never land in request/response log previews. */
+const SENSITIVE_KEY_RE = /(token|pat|secret|password|api[-_]?key|authorization)/i
+
 export function truncateForLog(text: string, max: number): string {
   if (text.length <= max) return text
   return `${text.slice(0, max)}…`
 }
 
-/** Query string without leading `?`, truncated. */
-export function formatRequestQuery(search: string): string {
-  const raw = search.startsWith('?') ? search.slice(1) : search
-  return truncateForLog(raw, LOG_QUERY_MAX_CHARS)
+function redactQueryParams(raw: string): string {
+  try {
+    const sp = new URLSearchParams(raw)
+    let changed = false
+    for (const k of [...sp.keys()]) {
+      if (SENSITIVE_KEY_RE.test(k)) {
+        sp.set(k, '[redacted]')
+        changed = true
+      }
+    }
+    return changed ? sp.toString() : raw
+  } catch {
+    return raw
+  }
 }
 
-/** UTF-8 text preview from response bytes + content-type. */
+function redactSensitiveValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactSensitiveValue)
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = SENSITIVE_KEY_RE.test(k) ? '[redacted]' : redactSensitiveValue(v)
+    }
+    return out
+  }
+  return value
+}
+
+function redactResponseText(text: string): string {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return text
+  try {
+    return JSON.stringify(redactSensitiveValue(JSON.parse(trimmed)))
+  } catch {
+    return text
+  }
+}
+
+/** Query string without leading `?`, redacted + truncated. */
+export function formatRequestQuery(search: string): string {
+  const raw = search.startsWith('?') ? search.slice(1) : search
+  return truncateForLog(redactQueryParams(raw), LOG_QUERY_MAX_CHARS)
+}
+
+/** UTF-8 text preview from response bytes + content-type (slice before decode). */
 export function formatResponsePreview(buf: Buffer, contentType: string | null | undefined): string {
   const ct = (contentType || '').toLowerCase()
   const textual =
@@ -111,7 +152,9 @@ export function formatResponsePreview(buf: Buffer, contentType: string | null | 
   if (!textual) {
     return truncateForLog(`[binary ${ct || 'unknown'} ${buf.length}b]`, LOG_RESPONSE_MAX_CHARS)
   }
-  return truncateForLog(buf.toString('utf8'), LOG_RESPONSE_MAX_CHARS)
+  // Max UTF-8 char is 4 bytes — enough prefix for LOG_RESPONSE_MAX_CHARS without decoding whole body.
+  const slice = buf.subarray(0, LOG_RESPONSE_MAX_CHARS * 4)
+  return truncateForLog(redactResponseText(slice.toString('utf8')), LOG_RESPONSE_MAX_CHARS)
 }
 
 /** Map HTTP status → severity for request rows. */

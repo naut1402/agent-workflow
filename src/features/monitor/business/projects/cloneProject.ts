@@ -6,6 +6,7 @@ import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { registryHome, add, loadRegistry, saveRegistry, get, type Project } from '../../../../core/registry.js'
+import { isPrivateHostname } from '../../../agent-editor/business/index.js'
 import {
   loadGithubTokensConfig,
   parseGithubRepoRef,
@@ -27,14 +28,32 @@ function sanitiseBranch(branch: unknown): string | null {
   return b.slice(0, 200)
 }
 
-function sanitiseGitUrl(url: unknown): string | null {
+/** Reject private/loopback hosts (same policy spirit as fetchUrlSafe). Exported for tests. */
+export function sanitiseGitUrl(url: unknown): string | null {
   if (typeof url !== 'string' || !url.trim()) return null
-  const u = url.trim()
-  // https://host/owner/repo[.git][/...]
-  if (/^https:\/\/[^\s/]+\/[^\s/]+\/[^\s/]+/i.test(u)) return u.slice(0, 500)
+  const u = url.trim().slice(0, 500)
+  // https://host/owner/repo — no userinfo (@); blocks SSRF to private hosts.
+  if (/^https:\/\/[^\s/@]+\/[^\s/]+\/[^\s/]+/i.test(u)) {
+    try {
+      const host = new URL(u).hostname
+      if (!host || isPrivateHostname(host)) return null
+      return u
+    } catch {
+      return null
+    }
+  }
   // git@host:owner/repo.git
-  if (/^git@[\w.-]+:[\w./-]+\.git$/i.test(u)) return u.slice(0, 500)
+  const ssh = u.match(/^git@([\w.-]+):[\w./-]+\.git$/i)
+  if (ssh) {
+    if (isPrivateHostname(ssh[1])) return null
+    return u
+  }
   return null
+}
+
+/** True only for github.com HTTPS or SSH remotes (PAT must never leave GitHub). */
+export function isGithubGitRemote(gitUrl: string): boolean {
+  return /^https:\/\/(?:www\.)?github\.com\//i.test(gitUrl) || /^git@github\.com:/i.test(gitUrl)
 }
 
 function ensureDevTeamAgent(repoDir: string): string {
@@ -67,19 +86,14 @@ function resolveGitCommand(): string {
 }
 
 function runGit(args: string[]): SpawnSyncReturns<string> {
-  const opts = {
+  // Never shell:true — argv is joined into a shell string and user-controlled
+  // cloneUrl / extraHeader would become command-injection / token-leak surfaces.
+  return spawnSync(resolveGitCommand(), args, {
     encoding: 'utf8' as const,
     windowsHide: true,
     timeout: 300_000,
     env: process.env,
-  }
-  const git = resolveGitCommand()
-  let result = spawnSync(git, args, opts)
-  // Fallback: shell resolves `.cmd` shims when direct spawn misses PATH.
-  if (result.error && (result.error as NodeJS.ErrnoException).code === 'ENOENT') {
-    result = spawnSync('git', args, { ...opts, shell: true })
-  }
-  return result
+  })
 }
 
 function formatGitFailure(result: SpawnSyncReturns<string>): string {
@@ -159,12 +173,16 @@ export function githubGitAuthExtraHeader(token: string): string {
   return `Authorization: Basic ${basic}`
 }
 
-/** Map clone URL → PAT from Settings / GITHUB_TOKEN (GitHub HTTPS only). */
-function resolveCloneAuth(gitUrl: string): {
+/** Map clone URL → PAT from Settings / GITHUB_TOKEN (GitHub remotes only). */
+export function resolveCloneAuth(gitUrl: string): {
   cloneUrl: string
   extraHeader: string | null
   usedToken: boolean
 } {
+  // Defense in depth: never send PAT to a non-github host even if slug parse matches.
+  if (!isGithubGitRemote(gitUrl)) {
+    return { cloneUrl: gitUrl, extraHeader: null, usedToken: false }
+  }
   const slug = parseGithubRepoRef(gitUrl)
   if (!slug) return { cloneUrl: gitUrl, extraHeader: null, usedToken: false }
   const [owner, repo] = slug.split('/')
@@ -267,16 +285,17 @@ export function cloneProject(input: {
 
   const reg = loadRegistry()
   const proj = reg.projects.find((p) => p.id === added.project.id) as ProjectGitMeta | undefined
-  if (proj) {
-    proj.kind = 'git'
-    proj.gitUrl = gitUrl
-    proj.defaultBranch = branch
-    proj.branch = branch
-    proj.repoPath = dest
-    saveRegistry(reg)
+  if (!proj) {
+    return { ok: false, status: 500, error: 'project registered but not found in registry' }
   }
+  proj.kind = 'git'
+  proj.gitUrl = gitUrl
+  proj.defaultBranch = branch
+  proj.branch = branch
+  proj.repoPath = dest
+  saveRegistry(reg)
 
-  return { ok: true, project: proj || added.project, repoPath: dest, branch }
+  return { ok: true, project: proj, repoPath: dest, branch }
 }
 
 /** Update branch field on an existing project (metadata only — does not checkout). */

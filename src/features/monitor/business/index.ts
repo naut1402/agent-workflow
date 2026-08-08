@@ -10,7 +10,7 @@ export {
   knownArtifactsFor,
   sanitiseProfileName,
 } from '../../pipeline-editor/business/pipeline/index.js'
-export { profilesDir, fetchUrlSafe } from '../../agent-editor/business/index.js'
+export { profilesDir, fetchUrlSafe, isPrivateHostname } from '../../agent-editor/business/index.js'
 export { loadGithubTokensConfig } from '../../settings/business/index.js'
 export {
   submitJob,
