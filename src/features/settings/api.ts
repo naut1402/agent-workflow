@@ -24,7 +24,4 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
 
   app.get('/api/logging-config', bind(SettingsController, 'getLogging'))
   app.put('/api/logging-config', bind(SettingsController, 'updateLogging'))
-
-  app.get('/api/knowledge-scan', bind(SettingsController, 'getKnowledgeScan'))
-  app.put('/api/knowledge-scan', bind(SettingsController, 'updateKnowledgeScan'))
 }

@@ -7,6 +7,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { registryHome, add, loadRegistry, saveRegistry, get, type Project } from '../../../core/registry.js'
 import { loadGithubTokensConfig } from './dashboardSettings.js'
+
+/** Git metadata kept on registry JSON without extending core Project. */
+type ProjectGitMeta = Project & {
+  gitUrl?: string
+  defaultBranch?: string
+  branch?: string
+  repoPath?: string
+}
 import {
   parseGithubRepoRef,
   resolveGithubTokenForRepo,
@@ -245,7 +253,7 @@ export function cloneProject(input: {
   }
 
   const reg = loadRegistry()
-  const proj = reg.projects.find((p) => p.id === added.project.id)
+  const proj = reg.projects.find((p) => p.id === added.project.id) as ProjectGitMeta | undefined
   if (proj) {
     proj.kind = 'git'
     proj.gitUrl = gitUrl
@@ -268,7 +276,7 @@ export function setProjectBranch(
   const proj = get(projectId)
   if (!proj) return { ok: false, status: 404, error: 'unknown project' }
   const reg = loadRegistry()
-  const hit = reg.projects.find((p) => p.id === projectId)
+  const hit = reg.projects.find((p) => p.id === projectId) as ProjectGitMeta | undefined
   if (!hit) return { ok: false, status: 404, error: 'unknown project' }
   hit.branch = b
   saveRegistry(reg)

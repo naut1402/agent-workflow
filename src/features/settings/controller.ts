@@ -2,7 +2,6 @@ import { AbstractController } from '../../core/http/AbstractController.js'
 import { parseAutoscanConfig } from './schemas/autoscan.js'
 import { parseGithubTokensConfig } from './schemas/githubTokens.js'
 import { parseLoggingConfig } from '../../core/log/loggingPrefs.js'
-import { parseKnowledgeScanConfig } from './schemas/knowledgeScan.js'
 import { emitAudit } from '../../core/log/store.js'
 import {
   loadAutoscanConfig,
@@ -12,8 +11,6 @@ import {
   saveGithubTokensConfig,
   loadLoggingConfig,
   saveLoggingConfig,
-  loadKnowledgeScanConfig,
-  saveKnowledgeScanConfig,
   browseDirectory,
   cloneProject,
   setProjectBranch,
@@ -191,22 +188,6 @@ export class SettingsController extends AbstractController {
     })
     const saved = saveLoggingConfig(next)
     emitAudit({ op: 'update', entity: 'logging', identifier: 'config', projectId: null })
-    return this.ok({ config: saved })
-  }
-
-  getKnowledgeScan() {
-    return this.ok({ config: loadKnowledgeScanConfig() })
-  }
-
-  async updateKnowledgeScan() {
-    const b = await this.parseBody()
-    if (!b.ok) return this.badRequest('invalid JSON')
-    const next = parseKnowledgeScanConfig({
-      ...loadKnowledgeScanConfig(),
-      ...b.value,
-    })
-    const saved = saveKnowledgeScanConfig(next)
-    emitAudit({ op: 'update', entity: 'knowledge-scan', identifier: 'config', projectId: null })
     return this.ok({ config: saved })
   }
 }
