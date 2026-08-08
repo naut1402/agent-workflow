@@ -148,6 +148,17 @@ export function normaliseGithubCloneUrl(gitUrl: string, owner: string, repo: str
   return gitUrl
 }
 
+/**
+ * GitHub git Smart HTTP rejects `Authorization: Bearer` (`remote: invalid credentials`).
+ * Use Basic with username `x-access-token` (token stays out of the remote URL).
+ * Exported for unit tests.
+ */
+export function githubGitAuthExtraHeader(token: string): string {
+  const safeToken = token.replace(/[\r\n]/g, '').split(String.fromCharCode(0)).join('').trim()
+  const basic = Buffer.from(`x-access-token:${safeToken}`, 'utf8').toString('base64')
+  return `Authorization: Basic ${basic}`
+}
+
 /** Map clone URL → PAT from Settings / GITHUB_TOKEN (GitHub HTTPS only). */
 function resolveCloneAuth(gitUrl: string): {
   cloneUrl: string
@@ -165,13 +176,10 @@ function resolveCloneAuth(gitUrl: string): {
   )
   if (!token) return { cloneUrl: gitUrl, extraHeader: null, usedToken: false }
 
-  // Prefer HTTPS + Bearer header so token never lands in remote URL / .git/config.
   const cloneUrl = normaliseGithubCloneUrl(gitUrl, owner, repo)
-
-  const safeToken = token.replace(/[\r\n]/g, '').split(String.fromCharCode(0)).join('').trim()
   return {
     cloneUrl,
-    extraHeader: `Authorization: Bearer ${safeToken}`,
+    extraHeader: githubGitAuthExtraHeader(token),
     usedToken: true,
   }
 }

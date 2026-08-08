@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { normaliseGithubCloneUrl } from '@/features/monitor/business/projects/cloneProject'
+import {
+  githubGitAuthExtraHeader,
+  normaliseGithubCloneUrl,
+} from '@/features/monitor/business/projects/cloneProject'
 
 describe('normaliseGithubCloneUrl', () => {
   test('keeps full repo name when HTTPS URL has no .git suffix', () => {
@@ -28,5 +31,21 @@ describe('normaliseGithubCloneUrl', () => {
   test('leaves non-github URL unchanged', () => {
     const url = 'https://gitlab.com/o/r.git'
     expect(normaliseGithubCloneUrl(url, 'o', 'r')).toBe(url)
+  })
+})
+
+describe('githubGitAuthExtraHeader', () => {
+  test('uses Basic x-access-token (not Bearer) for git Smart HTTP', () => {
+    const header = githubGitAuthExtraHeader('ghp_test_token')
+    expect(header.startsWith('Authorization: Basic ')).toBe(true)
+    expect(header.includes('Bearer')).toBe(false)
+    const b64 = header.slice('Authorization: Basic '.length)
+    expect(Buffer.from(b64, 'base64').toString('utf8')).toBe('x-access-token:ghp_test_token')
+  })
+
+  test('strips CR/LF/NUL from token before encoding', () => {
+    const header = githubGitAuthExtraHeader('ghp_a\r\nb\0c')
+    const b64 = header.slice('Authorization: Basic '.length)
+    expect(Buffer.from(b64, 'base64').toString('utf8')).toBe('x-access-token:ghp_abc')
   })
 })
