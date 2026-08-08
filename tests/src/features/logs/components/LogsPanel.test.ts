@@ -43,7 +43,20 @@ function stubFetch() {
         ],
       }
     else if (url.includes('/api/logs'))
-      body = { entries: [{ type: 'audit', iso: '2026-01-01', op: 'create', entity: 'custom-agent', identifier: 'foo', projectId: null }] }
+      body = {
+        entries: [
+          {
+            type: 'audit',
+            iso: '2026-01-01',
+            level: 'info',
+            traceId: 'trace-demo',
+            op: 'create',
+            entity: 'custom-agent',
+            identifier: 'foo',
+            projectId: null,
+          },
+        ],
+      }
     return { ok: true, json: async () => body }
   })
   vi.stubGlobal('fetch', mock)
