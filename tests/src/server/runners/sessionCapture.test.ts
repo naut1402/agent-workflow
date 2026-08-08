@@ -47,11 +47,14 @@ describe('sessionCapture', () => {
     expect(inv.args).toEqual(['-p', '--resume', 'resume-abc'])
   })
 
-  test('cursor parse-json: buildCursorJsonArgs adds -p, --output-format json, and --trust (prompt NOT in argv)', () => {
+  test('cursor parse-json: buildCursorJsonArgs adds -p, json, sandbox disabled, force, trust (prompt NOT in argv)', () => {
     const args = buildCursorJsonArgs(['--model', 'x'], 'do task')
     expect(args).toContain('-p')
     expect(args).toContain('--output-format')
     expect(args).toContain('json')
+    expect(args).toContain('--sandbox')
+    expect(args).toContain('disabled')
+    expect(args).toContain('--force')
     expect(args).toContain('--trust')
     // Regression (#177): prompt must never be an argv element — Windows
     // shell:true space-joins argv and cmd.exe would truncate a multi-line
@@ -66,21 +69,39 @@ describe('sessionCapture', () => {
       resumeSessionId: 'sess-abc',
     })
     expect(inv.stdinInput).toBe('## Agent instructions\n\nfull multi-line prompt')
-    expect(inv.args).toEqual(['--model', 'x', '-p', '--output-format', 'json', '--trust', '--resume', 'sess-abc'])
+    expect(inv.args).toEqual([
+      '--model',
+      'x',
+      '-p',
+      '--output-format',
+      'json',
+      '--sandbox',
+      'disabled',
+      '--force',
+      '--trust',
+      '--resume',
+      'sess-abc',
+    ])
     for (const arg of inv.args) {
       expect(arg.includes('Agent instructions')).toBe(false)
     }
   })
 
-  test('cursor parse-json: does not duplicate --trust when already set', () => {
-    const args = buildCursorJsonArgs(['--trust', '-p'], 'do task')
+  test('cursor parse-json: does not duplicate --trust / --force / --sandbox when already set', () => {
+    const args = buildCursorJsonArgs(['--trust', '--force', '--sandbox', 'enabled', '-p'], 'do task')
     expect(args.filter((f) => f === '--trust')).toHaveLength(1)
+    expect(args.filter((f) => f === '--force')).toHaveLength(1)
+    expect(args.filter((f) => f === '--sandbox')).toHaveLength(1)
+    expect(args).toContain('enabled')
+    expect(args).not.toContain('disabled')
   })
 
-  test('cursor parse-json: skips --trust when --yolo or -f present', () => {
-    expect(buildCursorJsonArgs(['--yolo'], 'x')).not.toContain('--trust')
-    expect(buildCursorJsonArgs(['-f'], 'x')).not.toContain('--trust')
-    expect(buildCursorJsonArgs(['--force'], 'x')).not.toContain('--trust')
+  test('cursor parse-json: --yolo / -f count as force (no duplicate --force)', () => {
+    expect(buildCursorJsonArgs(['--yolo'], 'x')).toContain('--yolo')
+    expect(buildCursorJsonArgs(['--yolo'], 'x')).not.toContain('--force')
+    expect(buildCursorJsonArgs(['-f'], 'x')).toContain('-f')
+    expect(buildCursorJsonArgs(['-f'], 'x')).not.toContain('--force')
+    expect(buildCursorJsonArgs(['--force'], 'x').filter((f) => f === '--force')).toHaveLength(1)
   })
 
   test('parseCursorJsonOutput extracts session_id and result', () => {

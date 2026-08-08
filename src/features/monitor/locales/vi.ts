@@ -42,14 +42,23 @@ export default {
   },
   projectBar: {
     addTitle: 'Thêm project',
+    cloneTitle: 'Clone từ Git',
     removeTitle: 'Gỡ khỏi dashboard',
+    selectLabel: 'Chọn project',
+    selectPlaceholder: 'Chọn project…',
+    prevProject: 'Project trước',
+    nextProject: 'Project sau',
     empty: 'Chưa có project nào.',
     pathPlaceholder: 'Đường dẫn .dev-team-agent / project root',
+    gitUrlPlaceholder: "https://github.com/owner/repo",
+    branchPlaceholder: 'Branch (mặc định: main)',
     namePlaceholder: 'Tên hiển thị (tuỳ chọn)',
     browse: 'Chọn thư mục',
     add: 'Thêm',
+    clone: 'Clone',
     cancel: 'Huỷ',
     pathRequired: 'Nhập đường dẫn tới .dev-team-agent (hoặc project root).',
+    gitUrlRequired: "Nhập URL git (https hoặc git{'@'}).",
     confirmRemove:
       'Gỡ project "{name}" khỏi dashboard?\n(Không xoá file trên đĩa.)',
     confirmRemoveDefault:

@@ -311,6 +311,11 @@ export interface CursorJsonInvocation {
  * `shell: true` argv-splitting bug that forced Claude onto stdin. Cursor CLI
  * accepts a piped prompt with `-p` / `--print` (print mode is inferred when
  * stdin is not a TTY).
+ *
+ * Headless defaults also disable Cursor's nested sandbox and force-approve
+ * tools: inside Docker / CI the sandbox backend often cannot start, so Shell
+ * fails ("Sandbox mode is enabled but not available on this system").
+ * Isolation is the container (or host policy), not Cursor's Landlock helper.
  */
 export function buildCursorJsonInvocation(input: CursorJsonInvocationInput): CursorJsonInvocation {
   const base = Array.isArray(input.flags) ? [...input.flags] : []
@@ -318,12 +323,14 @@ export function buildCursorJsonInvocation(input: CursorJsonInvocationInput): Cur
   if (!base.some((f) => f === '--output-format' || f.startsWith('--output-format='))) {
     base.push('--output-format', 'json')
   }
-  const hasTrust =
-    base.includes('--trust') ||
-    base.includes('--yolo') ||
-    base.includes('-f') ||
-    base.includes('--force')
-  if (!hasTrust) base.push('--trust')
+  const hasSandbox = base.some(
+    (f) => f === '--sandbox' || f.startsWith('--sandbox='),
+  )
+  if (!hasSandbox) base.push('--sandbox', 'disabled')
+  const hasForce =
+    base.includes('--yolo') || base.includes('-f') || base.includes('--force')
+  if (!hasForce) base.push('--force')
+  if (!base.includes('--trust')) base.push('--trust')
   if (input.resumeSessionId) base.push('--resume', input.resumeSessionId)
   return { args: base, stdinInput: input.prompt }
 }

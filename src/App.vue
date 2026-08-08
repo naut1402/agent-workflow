@@ -2,7 +2,7 @@
 import { useI18nHelpers } from './core/composables/useI18nHelpers'
 import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { fetchProjects } from './features/settings/scripts/settingsApi'
+import { fetchProjects } from './features/monitor/scripts/monitorApi'
 import { fetchAutoscanConfig, runAutoscan, fetchLoggingConfig } from './features/settings/scripts/SettingsDialogApi'
 import { useLocalToggle } from './core/composables/useLocalToggle'
 import { useAppSettings } from './core/composables/useAppSettings'
