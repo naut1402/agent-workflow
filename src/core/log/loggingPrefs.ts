@@ -11,6 +11,8 @@ export const LoggingTypesSchema = z.object({
   audit: z.boolean().optional(),
   request: z.boolean().optional(),
   jobs: z.boolean().optional(),
+  /** Domain events JSONL — default off (Epic D observability; Settings UI in #196). */
+  events: z.boolean().optional(),
 })
 
 export const LoggingConfigSchema = z
@@ -24,6 +26,7 @@ export type LoggingTypes = {
   audit: boolean
   request: boolean
   jobs: boolean
+  events: boolean
 }
 
 export type LoggingConfig = {
@@ -35,7 +38,7 @@ export type LoggingTypeKey = keyof LoggingTypes
 
 export const DEFAULT_LOGGING_CONFIG: LoggingConfig = {
   showLogsTab: true,
-  types: { audit: true, request: true, jobs: true },
+  types: { audit: true, request: true, jobs: true, events: false },
 }
 
 export function parseLoggingConfig(raw: unknown): LoggingConfig {
@@ -48,6 +51,8 @@ export function parseLoggingConfig(raw: unknown): LoggingConfig {
       audit: d.types?.audit !== false,
       request: d.types?.request !== false,
       jobs: d.types?.jobs !== false,
+      // Explicit true only — missing key stays off (unlike audit/request/jobs).
+      events: d.types?.events === true,
     },
   }
 }

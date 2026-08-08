@@ -36,7 +36,7 @@ describe('HTTP logging-config + gated log read', () => {
     expect(await get0.json()).toEqual({
       config: {
         showLogsTab: true,
-        types: { audit: true, request: true, jobs: true },
+        types: { audit: true, request: true, jobs: true, events: false },
       },
     })
 
@@ -52,13 +52,13 @@ describe('HTTP logging-config + gated log read', () => {
     expect(await put.json()).toEqual({
       config: {
         showLogsTab: false,
-        types: { audit: false, request: true, jobs: false },
+        types: { audit: false, request: true, jobs: false, events: false },
       },
     })
 
     expect(loadLoggingConfig()).toEqual({
       showLogsTab: false,
-      types: { audit: false, request: true, jobs: false },
+      types: { audit: false, request: true, jobs: false, events: false },
     })
 
     const get1 = await app.request('/api/logging-config')
@@ -68,7 +68,7 @@ describe('HTTP logging-config + gated log read', () => {
   test('GET /api/logs returns empty when type disabled', async () => {
     saveLoggingConfig({
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true },
+      types: { audit: true, request: true, jobs: true, events: false },
     })
     invalidateLoggingPrefsCache()
     await appendLog({
@@ -79,11 +79,13 @@ describe('HTTP logging-config + gated log read', () => {
       entity: 'project',
       identifier: 'visible-then-hidden',
       projectId: null,
+      level: 'info',
+      traceId: '',
     })
 
     saveLoggingConfig({
       showLogsTab: true,
-      types: { audit: false, request: true, jobs: true },
+      types: { audit: false, request: true, jobs: true, events: false },
     })
     invalidateLoggingPrefsCache()
 

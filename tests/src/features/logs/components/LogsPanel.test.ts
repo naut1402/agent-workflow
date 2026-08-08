@@ -7,7 +7,7 @@ vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
   fetchLoggingConfig: vi.fn(async () => ({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true },
+      types: { audit: true, request: true, jobs: true, events: false },
     },
   })),
 }))
@@ -20,7 +20,7 @@ afterEach(() => {
   vi.mocked(fetchLoggingConfig).mockResolvedValue({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true },
+      types: { audit: true, request: true, jobs: true, events: false },
     },
   })
 })
@@ -42,21 +42,35 @@ function stubFetch() {
           },
         ],
       }
-    else if (url.includes('/api/logs'))
+    else if (url.includes('/api/logs')) {
+      const events = url.includes('type=events')
       body = {
-        entries: [
-          {
-            type: 'audit',
-            iso: '2026-01-01',
-            level: 'info',
-            traceId: 'trace-demo',
-            op: 'create',
-            entity: 'custom-agent',
-            identifier: 'foo',
-            projectId: null,
-          },
-        ],
+        entries: events
+          ? [
+              {
+                type: 'events',
+                iso: '2026-01-02',
+                level: 'info',
+                traceId: 'trace-evt',
+                event: 'job.started',
+                payload: { id: 'j1' },
+                projectId: 'p1',
+              },
+            ]
+          : [
+              {
+                type: 'audit',
+                iso: '2026-01-01',
+                level: 'info',
+                traceId: 'trace-demo',
+                op: 'create',
+                entity: 'custom-agent',
+                identifier: 'foo',
+                projectId: null,
+              },
+            ],
       }
+    }
     return { ok: true, json: async () => body }
   })
   vi.stubGlobal('fetch', mock)
@@ -92,7 +106,7 @@ describe('LogsPanel', () => {
     const w = mountWithI18n(LogsPanel)
     await flushPromises()
 
-    await w.findAll('.logs-tabs button')[2].trigger('click') // "Jobs"
+    await w.findAll('.logs-tabs button')[2].trigger('click') // "Jobs" (events off by default)
     await flushPromises()
     expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/jobs'))).toBe(true)
 
@@ -106,11 +120,41 @@ describe('LogsPanel', () => {
     expect(w.find('.job-log pre').text()).toContain('hello job log')
   })
 
+  it('events tab fetches domain event logs when prefs enabled', async () => {
+    vi.mocked(fetchLoggingConfig).mockResolvedValue({
+      config: {
+        showLogsTab: true,
+        types: { audit: true, request: true, jobs: true, events: true },
+      },
+    })
+    const fetchMock = stubFetch()
+    const w = mountWithI18n(LogsPanel)
+    await flushPromises()
+
+    const labels = w.findAll('.logs-tabs button').map((b) => b.text())
+    expect(labels).toEqual(['Kiểm toán', 'Yêu cầu', 'Events', 'Jobs'])
+
+    await w.findAll('.logs-tabs button')[2].trigger('click') // Events
+    await flushPromises()
+
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls.some((u) => u.includes('/api/logs') && u.includes('type=events'))).toBe(true)
+    expect(w.find('.logs-table-events').text()).toContain('job.started')
+  })
+
+  it('hides events tab when events prefs off (default)', async () => {
+    stubFetch()
+    const w = mountWithI18n(LogsPanel)
+    await flushPromises()
+    const labels = w.findAll('.logs-tabs button').map((b) => b.text())
+    expect(labels).toEqual(['Kiểm toán', 'Yêu cầu', 'Jobs'])
+  })
+
   it('hides request/jobs tabs when logging types disabled', async () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValue({
       config: {
         showLogsTab: true,
-        types: { audit: true, request: false, jobs: false },
+        types: { audit: true, request: false, jobs: false, events: false },
       },
     })
     stubFetch()
@@ -126,7 +170,7 @@ describe('LogsPanel', () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValue({
       config: {
         showLogsTab: true,
-        types: { audit: false, request: false, jobs: false },
+        types: { audit: false, request: false, jobs: false, events: false },
       },
     })
     stubFetch()
@@ -145,7 +189,7 @@ describe('LogsPanel', () => {
 
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {
-        detail: { types: { audit: false, request: true, jobs: false } },
+        detail: { types: { audit: false, request: true, jobs: false, events: false } },
       }),
     )
     await flushPromises()
