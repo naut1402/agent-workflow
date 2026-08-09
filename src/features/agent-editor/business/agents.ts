@@ -2,6 +2,7 @@ import { parseAgentMarkdown, compileAgentMarkdown, emptyDraft } from './agentMar
 import {
   access,
   dirname,
+  fileURLToPath,
   joinPath,
   mkdir,
   readFile,
@@ -9,7 +10,6 @@ import {
   safeReadDir,
   writeTextFile,
 } from '../../../core/lib/fileHelper.js'
-import { fileURLToPath } from 'node:url'
 
 // ── paths under data root ──────────────────────────────────────────────────
 
