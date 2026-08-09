@@ -9,7 +9,8 @@ export class LogsController extends AbstractController {
 
   async listLogs() {
     const typeQ = this.c.req.query('type')
-    const type = typeQ === 'request' || typeQ === 'audit' ? (typeQ as LogType) : undefined
+    const type =
+      typeQ === 'request' || typeQ === 'audit' || typeQ === 'events' ? (typeQ as LogType) : undefined
     const project = this.c.req.query('project') || undefined
     const rawLimit = Number(this.c.req.query('limit'))
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 1000) : 200

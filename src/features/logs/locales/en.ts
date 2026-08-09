@@ -7,6 +7,7 @@ export default {
   tabs: {
     audit: 'Audit',
     request: 'Request',
+    events: 'Events',
     jobs: 'Jobs',
   },
   columns: {
@@ -23,6 +24,8 @@ export default {
     response: 'Response',
     status: 'Status',
     ms: 'ms',
+    event: 'Event',
+    payload: 'Payload',
   },
   filters: {
     q: 'Quick filter…',

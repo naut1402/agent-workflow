@@ -12,6 +12,7 @@ export async function appendLog(entry: LogEntry): Promise<void> {
   try {
     if (entry.type === 'request' && !isLogTypeEnabled('request')) return
     if (entry.type === 'audit' && !isLogTypeEnabled('audit')) return
+    if (entry.type === 'events' && !isLogTypeEnabled('events')) return
     await getLogDriver().append(entry)
   } catch {
     /* swallow */

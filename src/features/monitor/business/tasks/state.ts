@@ -4,6 +4,7 @@ import { TaskArchivePatch, TaskStatePatch } from '../../schemas/task.js'
 import { loadPipelineConfig } from '../index.js'
 import { readState, flowProfilePath } from './index.js'
 import { checkReviewRetry } from './reviewVerdict.js'
+import { emit } from '../../../../core/events/index.js'
 
 export type HitlApplyResult =
   | { ok: true; state: Record<string, unknown>; mtime: number }
@@ -137,6 +138,12 @@ export async function applyHitlAction(
     }
 
     const mtime = await writeStateAtomic(stateFile, state)
+    emit('hitl.resolved', {
+      taskId,
+      gateId: patch.gate_id,
+      action: patch.action,
+      currentPhase: state.current_phase,
+    })
     return { ok: true, state, mtime }
   })
 }
@@ -193,6 +200,12 @@ export async function advanceStepOnJobSuccess(
           state.current_phase = retry.restart_from
           state.hitl_pending = null
           const mtime = await writeStateAtomic(stateFile, state)
+          emit('task.advanced', {
+            taskId,
+            stepId,
+            currentPhase: state.current_phase,
+            reason: 'review_retry',
+          })
           return { state, mtime }
         }
         // Past `retry.max`: fall through to the gate/advance logic below —
@@ -209,7 +222,13 @@ export async function advanceStepOnJobSuccess(
       state.current_phase = next ? next.id : 'completed'
     }
 
+    // Emit after persist so listeners never read stale state.
     const mtime = await writeStateAtomic(stateFile, state)
+    if (gateId) {
+      emit('hitl.pending', { taskId, gateId, stepId })
+    } else {
+      emit('task.advanced', { taskId, stepId, currentPhase: state.current_phase })
+    }
     return { state, mtime }
   })
 }

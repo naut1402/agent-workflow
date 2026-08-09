@@ -116,7 +116,7 @@ Nền tảng FE / shell: `composables/*`, `lib/` (phase, `*Utils`, `*Lib`, `file
 
 Util / wrapper thư viện dùng chung (không gắn domain mode): `src/core/lib/{stringUtils,arrayUtils,dateUtils,yamlLib,markdownLib,diffLib,fileHelper,dirModuleLoader}.ts`.
 
-**Roadmap kernel (sau 1.0.0):** ModeRegistry / `registerMode`, event bus, contribution API (plugin). Chưa triển khai trong 1.0.0.
+**Kernel (1.1.0+ — Epic D):** event bus nội bộ tại `src/core/events/` (`emit` / `on` / `once`, `emitEntity` cho CRUD `entity.*`, trigger registry stub contract-only). Nguyên tắc: **persist rồi mới emit** (`saveJob` / `writeStateAtomic` / `saveRegistry` → `emit`); handler lỗi bị nuốt + `console.warn`. Chi tiết + checklist: [`roadmap/1.1.0-event-driven.md`](roadmap/1.1.0-event-driven.md). **Mục lục event theo feature:** [`event-catalog.md`](event-catalog.md). Quan sát UI / prefs ghi event log → #195 / #196 (base `dev/1.1.0/event-driven`). ModeRegistry / plugin contribution API vẫn có thể mở rộng sau (không nằm Epic D).
 
 ### 3.3 Styling
 

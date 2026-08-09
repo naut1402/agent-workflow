@@ -17,7 +17,7 @@
     "lint:commit": "commitlint",
     "check:todo": "bun .github/scripts/check-todo-debt.ts",
     "format": "prettier --write .",
-    "test": "bun test tests/src/server tests/src/features/knowledge/business tests/src/features/logs/business tests/src/features/agent-editor/business tests/src/features/pipeline-editor/business tests/src/features/monitor/business tests/src/core/log tests/mcp",
+    "test": "bun test tests/src/server tests/src/features/knowledge/business tests/src/features/logs/business tests/src/features/agent-editor/business tests/src/features/pipeline-editor/business tests/src/features/monitor/business tests/src/core/log tests/src/core/events tests/mcp",
     "test:fe": "vitest run --coverage",
     "test:e2e": "playwright test --pass-with-no-tests",
     "test:all": "bun run typecheck && bun run lint && bun run test && bun run test:fe && bun run test:e2e"
@@ -34,7 +34,7 @@
     "mermaid": "^11.6.0",
     "vue": "^3.4.21",
     "vue-i18n": "^11.4.6",
-    "zod": "^3.23.8"
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",

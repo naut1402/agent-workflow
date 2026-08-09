@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { emitAudit } from '../../core/log/store.js'
+import { emitEntity } from '../../core/events/index.js'
 import * as runnerStore from './business/index.js'
 
 export class RunnerController extends AbstractController {
@@ -18,6 +19,7 @@ export class RunnerController extends AbstractController {
     const result = runnerStore.upsertRunner(b.value.runner || b.value)
     if ('error' in result) return this.badRequest(result.error)
     emitAudit({ op: 'update', entity: 'runner', identifier: result.runner?.id ?? null, projectId: null })
+    emitEntity('updated', 'runner', { id: result.runner?.id ?? null, projectId: null })
     return this.ok({ saved: true, runner: result.runner })
   }
 
@@ -26,6 +28,7 @@ export class RunnerController extends AbstractController {
     const result = runnerStore.deleteRunner(id)
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     emitAudit({ op: 'delete', entity: 'runner', identifier: id, projectId: null })
+    emitEntity('deleted', 'runner', { id, projectId: null })
     return this.ok({ deleted: true, id })
   }
 
@@ -63,6 +66,7 @@ export class RunnerController extends AbstractController {
       identifier: result.connection?.id ?? null,
       projectId: null,
     })
+    emitEntity('updated', 'connection', { id: result.connection?.id ?? null, projectId: null })
     return this.ok({ saved: true, connection: result.connection })
   }
 
@@ -78,6 +82,7 @@ export class RunnerController extends AbstractController {
     const result = runnerStore.deleteConnection(id)
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     emitAudit({ op: 'delete', entity: 'connection', identifier: id, projectId: null })
+    emitEntity('deleted', 'connection', { id, projectId: null })
     return this.ok({ deleted: true, id })
   }
 
@@ -100,6 +105,7 @@ export class RunnerController extends AbstractController {
       identifier: result.command?.id ?? null,
       projectId: null,
     })
+    emitEntity('updated', 'command', { id: result.command?.id ?? null, projectId: null })
     return this.ok({ saved: true, command: result.command })
   }
 
@@ -108,6 +114,7 @@ export class RunnerController extends AbstractController {
     const result = runnerStore.deleteCustomCommand(id)
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     emitAudit({ op: 'delete', entity: 'command', identifier: id, projectId: null })
+    emitEntity('deleted', 'command', { id, projectId: null })
     return this.ok({ deleted: true, id })
   }
 
@@ -125,6 +132,7 @@ export class RunnerController extends AbstractController {
     const result = runnerStore.upsertCredential(b.value.profile || b.value)
     if ('error' in result) return this.badRequest(result.error)
     emitAudit({ op: 'update', entity: 'credential', identifier: result.profile?.id ?? null, projectId: null })
+    emitEntity('updated', 'credential', { id: result.profile?.id ?? null, projectId: null })
     return this.ok({ saved: true, profile: result.profile })
   }
 
@@ -133,6 +141,7 @@ export class RunnerController extends AbstractController {
     const result = runnerStore.deleteCredential(id)
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     emitAudit({ op: 'delete', entity: 'credential', identifier: id, projectId: null })
+    emitEntity('deleted', 'credential', { id, projectId: null })
     return this.ok({ deleted: true, id })
   }
 

@@ -164,6 +164,7 @@ const showLogsTab = ref(true)
 const logTypeAudit = ref(true)
 const logTypeRequest = ref(true)
 const logTypeJobs = ref(true)
+const logTypeEvents = ref(false)
 const loggingBusy = ref(false)
 const loggingMsg = ref('')
 const loggingErr = ref('')
@@ -177,6 +178,7 @@ async function loadLogging() {
     logTypeAudit.value = cfg.types?.audit !== false
     logTypeRequest.value = cfg.types?.request !== false
     logTypeJobs.value = cfg.types?.jobs !== false
+    logTypeEvents.value = cfg.types?.events === true
   } catch {
     loggingErr.value = t('settings.logging.loadError')
   }
@@ -193,6 +195,7 @@ async function persistLogging() {
         audit: logTypeAudit.value,
         request: logTypeRequest.value,
         jobs: logTypeJobs.value,
+        events: logTypeEvents.value,
       },
     })
     const cfg = data.config || {}
@@ -200,6 +203,7 @@ async function persistLogging() {
     logTypeAudit.value = cfg.types?.audit !== false
     logTypeRequest.value = cfg.types?.request !== false
     logTypeJobs.value = cfg.types?.jobs !== false
+    logTypeEvents.value = cfg.types?.events === true
     loggingMsg.value = t('settings.logging.saved')
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {
@@ -209,6 +213,7 @@ async function persistLogging() {
             audit: logTypeAudit.value,
             request: logTypeRequest.value,
             jobs: logTypeJobs.value,
+            events: logTypeEvents.value,
           },
         },
       }),
@@ -237,6 +242,11 @@ function toggleLogTypeRequest() {
 
 function toggleLogTypeJobs() {
   logTypeJobs.value = !logTypeJobs.value
+  void persistLogging()
+}
+
+function toggleLogTypeEvents() {
+  logTypeEvents.value = !logTypeEvents.value
   void persistLogging()
 }
 
@@ -702,6 +712,15 @@ onUnmounted(() => {
                       @change="toggleLogTypeJobs"
                     />
                     {{ t('settings.logging.types.jobs') }}
+                  </label>
+                  <label class="settings-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="logTypeEvents"
+                      :disabled="loggingBusy"
+                      @change="toggleLogTypeEvents"
+                    />
+                    {{ t('settings.logging.types.events') }}
                   </label>
                 </template>
                 <p v-if="loggingMsg" class="settings-autoscan-msg">{{ loggingMsg }}</p>

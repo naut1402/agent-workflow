@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import os from 'node:os'
 import { registryHome } from '../../../core/registry.js'
 import { isLogTypeEnabled } from '../../../core/log/loggingPrefs.js'
+import { emit } from '../../../core/events/index.js'
 import { getRunner, getDefaultRunner, substituteConfig, getProvider } from './registry.js'
 import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
@@ -295,39 +296,46 @@ async function runJob(job: JobRecord): Promise<void> {
       finishedAt: new Date().toISOString(),
       error: 'runner not found or disabled',
     })
+    emit('job.failed', { jobId: job.id, error: 'runner not found or disabled' })
     return
   }
 
   const connection = getConnection(runner.connectionId)
   if (!connection) {
+    const error = `connection not found: ${runner.connectionId}`
     saveJob({
       ...job,
       status: 'failed',
       finishedAt: new Date().toISOString(),
-      error: `connection not found: ${runner.connectionId}`,
+      error,
     })
+    emit('job.failed', { jobId: job.id, error })
     return
   }
 
   const credential = credentialForConnection(connection)
   if (!credential) {
+    const error = `credential not found for connection: ${runner.connectionId}`
     saveJob({
       ...job,
       status: 'failed',
       finishedAt: new Date().toISOString(),
-      error: `credential not found for connection: ${runner.connectionId}`,
+      error,
     })
+    emit('job.failed', { jobId: job.id, error })
     return
   }
 
   const provider = getProvider(connection.providerId)
   if (!provider) {
+    const error = `unknown provider: ${connection.providerId}`
     saveJob({
       ...job,
       status: 'failed',
       finishedAt: new Date().toISOString(),
-      error: `unknown provider: ${connection.providerId}`,
+      error,
     })
+    emit('job.failed', { jobId: job.id, error })
     return
   }
 
@@ -341,6 +349,13 @@ async function runJob(job: JobRecord): Promise<void> {
   }
 
   saveJob({ ...job, status: 'running', startedAt: new Date().toISOString(), logPath: logPath ?? null, pid: null })
+  emit('job.started', {
+    jobId: job.id,
+    runnerId: runner.id,
+    providerId: connection.providerId,
+    taskId: job.metadata?.taskId,
+    projectId: job.metadata?.projectId,
+  })
 
   let userPrompt = job.userPrompt || ''
   if (!userPrompt && job.promptRef) {
@@ -353,6 +368,7 @@ async function runJob(job: JobRecord): Promise<void> {
         finishedAt: new Date().toISOString(),
         error: `cannot read prompt: ${err.message}`,
       })
+      emit('job.failed', { jobId: job.id, error: 'cannot read prompt' })
       return
     }
   }
@@ -370,12 +386,14 @@ async function runJob(job: JobRecord): Promise<void> {
       resolvedAgent = await resolveAgent(job.agentRef, { projectRoot, devTeamRoot })
     }
   } catch (err: any) {
+    const error = String(err.message || err)
     saveJob({
       ...(loadJob(job.id) as JobRecord),
       status: 'failed',
       finishedAt: new Date().toISOString(),
-      error: String(err.message || err),
+      error,
     })
+    emit('job.failed', { jobId: job.id, error })
     return
   }
 
@@ -517,6 +535,7 @@ async function runJob(job: JobRecord): Promise<void> {
         error: `cannot apply proposed content: ${err.message}`,
         logPath: result.logPath,
       })
+      emit('job.failed', { jobId: job.id, error: 'cannot apply proposed content', taskId, projectId })
       return
     }
   }
@@ -543,14 +562,16 @@ async function runJob(job: JobRecord): Promise<void> {
           : {}),
         ...(capturedSessionId ? { sessionId: capturedSessionId } : {}),
       })
+      emit('job.finished', { jobId: job.id, status: 'succeeded', taskId, projectId })
     }
     await resubmitPendingFeedback(job)
     return
   }
 
+  const finalStatus = result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed'
   saveJob({
     ...(loadJob(job.id) as JobRecord),
-    status: result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed',
+    status: finalStatus,
     finishedAt: new Date().toISOString(),
     exitCode: result.exitCode,
     error: result.error,
@@ -563,6 +584,13 @@ async function runJob(job: JobRecord): Promise<void> {
       ? { stdout: (result.stdout ?? '').slice(0, CHAT_STDOUT_LIMIT) }
       : {}),
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
+  })
+  emit(result.ok ? 'job.finished' : 'job.failed', {
+    jobId: job.id,
+    status: finalStatus,
+    taskId,
+    projectId,
+    ...(result.ok ? {} : { error: result.error }),
   })
   if (!isApprovalJob) await resubmitPendingFeedback(job)
 }
@@ -681,6 +709,12 @@ export function submitJob(input: SubmitJobInput): JobRecord {
     ...(input.parentJobId ? { parentJobId: input.parentJobId } : {}),
   }
   saveJob(job)
+  emit('job.queued', {
+    jobId: job.id,
+    runnerId: job.runnerId,
+    taskId: job.metadata?.taskId,
+    projectId: job.metadata?.projectId,
+  })
   queue.push(id)
   processQueue().catch((err) => {
     console.error('[jobQueue]', err)
@@ -712,6 +746,8 @@ export function cancelJob(id: string): MutationResult {
   if (job.status === 'succeeded' || job.status === 'failed') {
     return { ok: false, status: 400, error: 'job already finished' }
   }
+  // Idempotent: already cancelled → ok without re-emit (avoid duplicate listeners).
+  if (job.status === 'cancelled') return { ok: true }
 
   if (job.pid != null && job.pid > 0) {
     try {
@@ -726,6 +762,11 @@ export function cancelJob(id: string): MutationResult {
   }
 
   saveJob({ ...job, status: 'cancelled', finishedAt: new Date().toISOString(), pid: null })
+  emit('job.cancelled', {
+    jobId: job.id,
+    taskId: job.metadata?.taskId,
+    projectId: job.metadata?.projectId,
+  })
   return { ok: true }
 }
 
