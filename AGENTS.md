@@ -8,7 +8,7 @@ Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `
 |--------|----------|
 | Quickstart | [`README.md`](README.md) |
 | Kiến trúc / cây thư mục chi tiết | [`docs/architecture.md`](docs/architecture.md) |
-| Mục lục domain events (theo feature) | [`docs/event-catalog.md`](docs/event-catalog.md) |
+| Mục lục domain events (theo feature) | [`docs/event-catalog.md`](docs/event-catalog.md) (checklist survey §7) |
 | Tổ chức feature / business / helper | [`docs/implement/feature-organization-rule.md`](docs/implement/feature-organization-rule.md) |
 | Coding convention (TS, Zod, FE, i18n) | [`docs/implement/coding-convention.md`](docs/implement/coding-convention.md) |
 | Test | [`docs/implement/test-convention.md`](docs/implement/test-convention.md) |
@@ -86,6 +86,7 @@ Thêm scan/endpoint mới không được phá các bất biến sau:
 | Task | Đọc thêm |
 |------|----------|
 | Viết/sửa code feature | implement `*-rule` + `coding-convention` + bất biến §4 |
+| Survey / investigate (skill `survey-codebase`) | [`event-catalog.md`](docs/event-catalog.md) §7 — cân nhắc thêm/sửa/xoá event + cập nhật catalog |
 | Review PR | [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) |
 | Test / CI | [`test-convention.md`](docs/implement/test-convention.md) |
 | Commit / PR / docs | [`pr-docs-convention.md`](docs/implement/pr-docs-convention.md) + [`git-convention.md`](docs/implement/git-convention.md) (tách commit §6 khi PR nhiều xử lý) |

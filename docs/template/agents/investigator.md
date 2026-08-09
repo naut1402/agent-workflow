@@ -40,6 +40,7 @@ Thực hiện theo hướng dẫn trong skill `/survey-codebase`:
 3. Xác định phạm vi ảnh hưởng (blast radius)
 4. Kiểm tra test coverage hiện tại
 5. Gán confidence cho từng phát hiện
+6. **Domain events:** checklist [`docs/event-catalog.md`](../../event-catalog.md) §7 — cân nhắc thêm / sửa / xoá `emit`·`emitEntity` trên call chain (persist → emit); ghi kết luận vào investigate; khi chốt thay đổi thì phản ánh catalog trong cùng thay đổi code (hoặc nợ `docs/todo/`)
 
 Dùng Serena MCP tools (`find_symbol`, `find_implementations`, `find_referencing_symbols`, `get_symbols_overview`) để đọc codebase. Không đoán mò — chỉ ghi những gì đã xác nhận trực tiếp từ code.
 

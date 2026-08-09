@@ -98,10 +98,25 @@ Cùng một thao tác (vd tạo task) có thể vừa `task.created` (events) v�
 
 ---
 
-## 7. Cách cập nhật tài liệu này
+## 7. Checklist khi survey codebase (bắt buộc cân nhắc)
 
-Khi thêm emit mới:
+Áp dụng khi chạy skill `survey-codebase` / phase investigator (và khi design/implement đụng persist domain). Mục tiêu: không bỏ sót emit và **không để catalog lệch code**.
 
-1. Thêm / cập nhật hàng trong bảng feature tương ứng (event, khi nào, payload, file).
-2. Nếu type mới: cập nhật `DashboardEventType` trong `eventBus.ts` và mục §5 nếu chưa wire đủ.
+Đối chiếu [`event-catalog.md`](event-catalog.md) (file này) + grep `emit(` / `emitEntity(` quanh entry point / call chain đang survey.
+
+- [ ] **Có lifecycle / CRUD persist mới hoặc đổi hành vi sau persist?** → cân nhắc **thêm** `emit` / `emitEntity` (sau persist OK; payload tối thiểu, không secret).
+- [ ] **Đổi tên type, payload, entity, hoặc điều kiện phát?** → **sửa** call site + hàng tương ứng trong catalog (§1–§4); cập nhật `DashboardEventType` nếu type đổi.
+- [ ] **Xóa / gỡ flow phát event?** → **xoá** emit chết + gỡ hoặc đánh dấu hàng catalog (và §5 nếu type không còn dùng).
+- [ ] **Không cần event?** → ghi rõ trong `investigate.md` / design (*không emit vì …*) để reviewer không hỏi lại.
+- [ ] **Phản ánh tài liệu:** mọi thêm/sửa/xoá event đã chốt phải cập nhật file này trong cùng PR (hoặc nợ `docs/todo/` theo [`implement/todo-debt-convention.md`](implement/todo-debt-convention.md)).
+- [ ] Type mới trên bus: cập nhật union `DashboardEventType` (`src/core/events/eventBus.ts`) và bảng §5 nếu chưa wire đủ.
+
+Gợi ý ghi trong investigate (vd §4 Files / blast radius): một dòng *Events: thêm `…` / sửa `…` / xoá `…` / không đổi*.
+
+---
+
+## 8. Cách cập nhật tài liệu này (khi implement)
+
+1. Thêm / cập nhật / gỡ hàng trong bảng feature tương ứng (event, khi nào, payload, file).
+2. Nếu type mới hoặc đổi tên: `DashboardEventType` + §5 nếu cần.
 3. Giữ nguyên tắc persist → emit; không log secret trong payload.
