@@ -59,6 +59,8 @@ function cellValue(entry: LogEntry, key: string): string | number {
     if (key === 'identifier') return entry.identifier || ''
   } else if (entry.type === 'usage') {
     if (key === 'jobId') return entry.jobId
+    if (key === 'taskId') return entry.taskId || ''
+    if (key === 'sessionId') return entry.sessionId || ''
     if (key === 'model') return entry.model || ''
     if (key === 'provider') return entry.provider
     if (key === 'inputTokens') return entry.inputTokens
@@ -97,15 +99,18 @@ function matchesQuery(entry: LogEntry, q: string): boolean {
         ? [entry.event, JSON.stringify(entry.payload ?? {})]
         : entry.type === 'audit'
           ? [entry.op, entry.entity, entry.identifier]
-          : [
-              entry.jobId,
-              entry.model,
-              entry.provider,
-              entry.sessionId,
-              String(entry.inputTokens),
-              String(entry.outputTokens),
-              String(entry.totalTokens),
-            ],
+          : entry.type === 'usage'
+            ? [
+                entry.jobId,
+                entry.taskId,
+                entry.model,
+                entry.provider,
+                entry.sessionId,
+                String(entry.inputTokens),
+                String(entry.outputTokens),
+                String(entry.totalTokens),
+              ]
+            : [],
   ]
     .flat()
     .filter((x) => x != null && x !== '')

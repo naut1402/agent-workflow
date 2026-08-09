@@ -44,6 +44,7 @@ function stubFetch() {
       }
     else if (url.includes('/api/logs')) {
       const events = url.includes('type=events')
+      const usage = url.includes('type=usage')
       body = {
         entries: events
           ? [
@@ -57,18 +58,36 @@ function stubFetch() {
                 projectId: 'p1',
               },
             ]
-          : [
-              {
-                type: 'audit',
-                iso: '2026-01-01',
-                level: 'info',
-                traceId: 'trace-demo',
-                op: 'create',
-                entity: 'custom-agent',
-                identifier: 'foo',
-                projectId: null,
-              },
-            ],
+          : usage
+            ? [
+                {
+                  type: 'usage',
+                  iso: '2026-01-03',
+                  level: 'info',
+                  traceId: '',
+                  jobId: JOB_ID,
+                  inputTokens: 10,
+                  outputTokens: 20,
+                  totalTokens: 30,
+                  estimatedCostUsd: null,
+                  model: 'claude-sonnet',
+                  provider: 'claude-code-cli',
+                  taskId: 'T20fd4281',
+                  projectId: 'p1',
+                },
+              ]
+            : [
+                {
+                  type: 'audit',
+                  iso: '2026-01-01',
+                  level: 'info',
+                  traceId: 'trace-demo',
+                  op: 'create',
+                  entity: 'custom-agent',
+                  identifier: 'foo',
+                  projectId: null,
+                },
+              ],
       }
     }
     return { ok: true, json: async () => body }
@@ -106,7 +125,7 @@ describe('LogsPanel', () => {
     const w = mountWithI18n(LogsPanel)
     await flushPromises()
 
-    await w.findAll('.logs-tabs button')[3].trigger('click') // "Jobs" (events on → index 3)
+    await w.findAll('.logs-tabs button')[4].trigger('click') // "Jobs" (events+usage on → index 4)
     await flushPromises()
     expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/jobs'))).toBe(true)
 
@@ -126,7 +145,7 @@ describe('LogsPanel', () => {
     await flushPromises()
 
     const labels = w.findAll('.logs-tabs button').map((b) => b.text())
-    expect(labels).toEqual(['Kiểm toán', 'Yêu cầu', 'Events', 'Jobs'])
+    expect(labels).toEqual(['Kiểm toán', 'Yêu cầu', 'Events', 'Usage', 'Jobs'])
 
     await w.findAll('.logs-tabs button')[2].trigger('click') // Events
     await flushPromises()
@@ -134,6 +153,22 @@ describe('LogsPanel', () => {
     const urls = fetchMock.mock.calls.map((c) => String(c[0]))
     expect(urls.some((u) => u.includes('/api/logs') && u.includes('type=events'))).toBe(true)
     expect(w.find('.logs-table-events').text()).toContain('job.started')
+  })
+
+  it('usage tab fetches usage logs and shows token columns', async () => {
+    const fetchMock = stubFetch()
+    const w = mountWithI18n(LogsPanel)
+    await flushPromises()
+
+    await w.findAll('.logs-tabs button')[3].trigger('click') // Usage
+    await flushPromises()
+
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls.some((u) => u.includes('/api/logs') && u.includes('type=usage'))).toBe(true)
+    const table = w.find('.logs-table-usage')
+    expect(table.text()).toContain('claude-sonnet')
+    expect(table.text()).toContain('30')
+    expect(table.text()).toContain('T20fd4281')
   })
 
   it('hides events tab when events prefs off', async () => {
@@ -147,6 +182,20 @@ describe('LogsPanel', () => {
     const w = mountWithI18n(LogsPanel)
     await flushPromises()
     const labels = w.findAll('.logs-tabs button').map((b) => b.text())
+    expect(labels).toEqual(['Kiểm toán', 'Yêu cầu', 'Usage', 'Jobs'])
+  })
+
+  it('hides usage tab when usage prefs off', async () => {
+    vi.mocked(fetchLoggingConfig).mockResolvedValue({
+      config: {
+        showLogsTab: true,
+        types: { audit: true, request: true, jobs: true, events: false, usage: false },
+      },
+    })
+    stubFetch()
+    const w = mountWithI18n(LogsPanel)
+    await flushPromises()
+    const labels = w.findAll('.logs-tabs button').map((b) => b.text())
     expect(labels).toEqual(['Kiểm toán', 'Yêu cầu', 'Jobs'])
   })
 
@@ -154,7 +203,7 @@ describe('LogsPanel', () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValue({
       config: {
         showLogsTab: true,
-        types: { audit: true, request: false, jobs: false, events: false, usage: true },
+        types: { audit: true, request: false, jobs: false, events: false, usage: false },
       },
     })
     stubFetch()
@@ -170,7 +219,7 @@ describe('LogsPanel', () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValue({
       config: {
         showLogsTab: true,
-        types: { audit: false, request: false, jobs: false, events: false, usage: true },
+        types: { audit: false, request: false, jobs: false, events: false, usage: false },
       },
     })
     stubFetch()
@@ -185,11 +234,11 @@ describe('LogsPanel', () => {
     stubFetch()
     const w = mountWithI18n(LogsPanel)
     await flushPromises()
-    expect(w.findAll('.logs-tabs button')).toHaveLength(4)
+    expect(w.findAll('.logs-tabs button')).toHaveLength(5)
 
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {
-        detail: { types: { audit: false, request: true, jobs: false, events: false, usage: true } },
+        detail: { types: { audit: false, request: true, jobs: false, events: false, usage: false } },
       }),
     )
     await flushPromises()

@@ -8,6 +8,7 @@ export default {
     audit: 'Kiểm toán',
     request: 'Yêu cầu',
     events: 'Events',
+    usage: 'Usage',
     jobs: 'Jobs',
   },
   columns: {
@@ -26,6 +27,13 @@ export default {
     ms: 'ms',
     event: 'Event',
     payload: 'Payload',
+    model: 'Model',
+    provider: 'Provider',
+    inputTokens: 'Input',
+    outputTokens: 'Output',
+    totalTokens: 'Total',
+    jobId: 'Job',
+    taskId: 'Task',
   },
   filters: {
     q: 'Lọc nhanh…',

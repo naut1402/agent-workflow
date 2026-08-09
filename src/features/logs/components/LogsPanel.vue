@@ -9,14 +9,15 @@ import { useLogsTable } from '../composables/useLogsTable'
 
 const { t } = useI18nHelpers()
 
-type Tab = 'audit' | 'request' | 'events' | 'jobs'
+type Tab = 'audit' | 'request' | 'events' | 'usage' | 'jobs'
 
-const enabledTypes = ref({ audit: true, request: true, events: false, jobs: true })
+const enabledTypes = ref({ audit: true, request: true, events: false, usage: true, jobs: true })
 const availableTabs = computed(() => {
   const tabs: Tab[] = []
   if (enabledTypes.value.audit) tabs.push('audit')
   if (enabledTypes.value.request) tabs.push('request')
   if (enabledTypes.value.events) tabs.push('events')
+  if (enabledTypes.value.usage) tabs.push('usage')
   if (enabledTypes.value.jobs) tabs.push('jobs')
   return tabs
 })
@@ -63,10 +64,11 @@ async function loadLoggingTypes() {
       audit: types.audit !== false,
       request: types.request !== false,
       events: types.events === true,
+      usage: types.usage !== false,
       jobs: types.jobs !== false,
     }
   } catch {
-    enabledTypes.value = { audit: true, request: true, events: false, jobs: true }
+    enabledTypes.value = { audit: true, request: true, events: false, usage: true, jobs: true }
   }
   const tabs = availableTabs.value
   if (!tabs.includes(tab.value)) {
@@ -81,6 +83,7 @@ function onLoggingChanged(ev: Event) {
       audit: detail.types.audit !== false,
       request: detail.types.request !== false,
       events: detail.types.events === true,
+      usage: detail.types.usage !== false,
       jobs: detail.types.jobs !== false,
     }
     const tabs = availableTabs.value
@@ -90,7 +93,7 @@ function onLoggingChanged(ev: Event) {
   }
 }
 
-async function loadLogs(type: 'audit' | 'request' | 'events') {
+async function loadLogs(type: 'audit' | 'request' | 'events' | 'usage') {
   loading.value = true
   error.value = ''
   try {
@@ -210,6 +213,7 @@ watch(
     if (t === 'audit') loadLogs('audit')
     else if (t === 'request') loadLogs('request')
     else if (t === 'events') loadLogs('events')
+    else if (t === 'usage') loadLogs('usage')
     else if (t === 'jobs') loadJobs()
   },
   { immediate: true },
@@ -260,6 +264,14 @@ onUnmounted(() => {
         {{ t('logs.tabs.events') }}
       </button>
       <button
+        v-if="enabledTypes.usage"
+        type="button"
+        :class="{ active: tab === 'usage' }"
+        @click="selectTab('usage')"
+      >
+        {{ t('logs.tabs.usage') }}
+      </button>
+      <button
         v-if="enabledTypes.jobs"
         type="button"
         :class="{ active: tab === 'jobs' }"
@@ -274,7 +286,7 @@ onUnmounted(() => {
     <p v-if="copyFlash" class="copy-flash" role="status">{{ copyFlash }}</p>
 
     <div
-      v-if="tab === 'audit' || tab === 'request' || tab === 'events'"
+      v-if="tab === 'audit' || tab === 'request' || tab === 'events' || tab === 'usage'"
       class="logs-toolbar"
     >
       <input
@@ -525,6 +537,70 @@ onUnmounted(() => {
         </tr>
         <tr v-if="!displayed.length && !loading">
           <td colspan="6" class="muted">{{ t('logs.empty.log') }}</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <!-- Usage (LLM token snapshots) -->
+    <div v-else-if="tab === 'usage' && enabledTypes.usage" class="logs-table-wrap">
+    <table class="logs-table logs-table-usage">
+      <thead>
+        <tr>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('time', $event)">
+            {{ t('logs.columns.time') }} {{ sortIndicator('time') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('model', $event)">
+            {{ t('logs.columns.model') }} {{ sortIndicator('model') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('provider', $event)">
+            {{ t('logs.columns.provider') }} {{ sortIndicator('provider') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('inputTokens', $event)">
+            {{ t('logs.columns.inputTokens') }} {{ sortIndicator('inputTokens') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('outputTokens', $event)">
+            {{ t('logs.columns.outputTokens') }} {{ sortIndicator('outputTokens') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('totalTokens', $event)">
+            {{ t('logs.columns.totalTokens') }} {{ sortIndicator('totalTokens') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('jobId', $event)">
+            {{ t('logs.columns.jobId') }} {{ sortIndicator('jobId') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('taskId', $event)">
+            {{ t('logs.columns.taskId') }} {{ sortIndicator('taskId') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('project', $event)">
+            {{ t('logs.columns.project') }} {{ sortIndicator('project') }}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="(e, i) in displayed" :key="i" :class="[`row-level-${e.level}`]">
+          <td>{{ e.iso }}</td>
+          <td>{{ e.type === 'usage' ? e.model || '—' : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.provider : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.inputTokens : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.outputTokens : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.totalTokens : '' }}</td>
+          <td class="cell-clip">
+            <button
+              v-if="e.type === 'usage' && e.jobId"
+              type="button"
+              class="clip-btn"
+              :title="`${t('logs.copy.hint')}\n${e.jobId}`"
+              @click="copyText(e.jobId)"
+            >
+              {{ e.jobId.slice(0, 8) }}…
+            </button>
+            <span v-else class="muted">—</span>
+          </td>
+          <td>{{ e.type === 'usage' ? e.taskId || '—' : '' }}</td>
+          <td>{{ e.projectId || '—' }}</td>
+        </tr>
+        <tr v-if="!displayed.length && !loading">
+          <td colspan="9" class="muted">{{ t('logs.empty.log') }}</td>
         </tr>
       </tbody>
     </table>
