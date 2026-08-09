@@ -8,8 +8,6 @@ Tham chiếu nhanh các **domain event** phát trên event bus nội bộ (`src/
 
 **Quy ước:** emit **sau** persist thành công; payload tối thiểu (id / taskId / stepId …); không đưa secret. Không có type riêng `pipeline.*` / `step.*` — tiến trình step gắn qua `job.*` + `task.advanced` / `hitl.*`.
 
-Checklist hoàn thành workflow (survey/design/implement): [`AGENTS.md`](../AGENTS.md) §6 — không nhúng vào template agent.
-
 Cột **Event** trên UI = giá trị `type` trong bảng dưới.
 
 ---
@@ -102,7 +100,7 @@ Cùng một thao tác (vd tạo task) có thể vừa `task.created` (events) v�
 
 ## 7. Cách cập nhật tài liệu này
 
-Khi thêm / sửa / xoá emit (sau khi checklist [`AGENTS.md`](../AGENTS.md) §6 đã chốt):
+Khi thêm / sửa / xoá emit:
 
 1. Thêm / cập nhật / gỡ hàng trong bảng feature tương ứng (event, khi nào, payload, file).
 2. Nếu type mới hoặc đổi tên: `DashboardEventType` (`src/core/events/eventBus.ts`) + §5 nếu cần.

@@ -91,7 +91,12 @@ Nếu file chưa tồn tại, tạo mới với cấu trúc `{ "task_id": "<id>"
 
 ### Bước cuối: Checklist hoàn thành (theo repo)
 
-Đọc `AGENTS.md` ở root repo đang làm việc. Nếu có mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) cho phase/survey này → thực hiện từng mục; thiếu mục nào thì bổ sung artifact / ghi nhận trước khi báo DONE. **Không có mục checklist trong `AGENTS.md` → bỏ qua** (không bịa checklist từ template này). Không nhúng chi tiết checklist đặc thù repo vào agent — mỗi repo tự mô tả trong `AGENTS.md`.
+1. Đọc `AGENTS.md` ở root repo đang làm việc.
+2. Tìm mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) áp dụng phase / survey này.
+3. Theo kết quả:
+   - Có mục → thực hiện từng hạng mục; thiếu thì bổ sung artifact / ghi nhận trước khi báo DONE.
+   - Không có mục → bỏ qua (không bịa checklist từ template này).
+4. Không nhúng chi tiết checklist đặc thù repo vào agent — mỗi repo tự mô tả trong `AGENTS.md`.
 
 ## Kết quả trả về
 

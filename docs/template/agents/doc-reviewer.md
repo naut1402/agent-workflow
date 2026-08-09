@@ -49,7 +49,12 @@ Theo workflow trong skill `doc-review`:
 
 ### Bước cuối: Checklist hoàn thành (theo repo)
 
-Đọc `AGENTS.md` ở root repo đang làm việc. Nếu có mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) cho phase doc-review → thực hiện từng mục trước khi báo DONE. **Không có → bỏ qua.** Không nhúng checklist đặc thù repo vào agent.
+1. Đọc `AGENTS.md` ở root repo đang làm việc.
+2. Tìm mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) áp dụng phase doc-review.
+3. Theo kết quả:
+   - Có mục → thực hiện từng hạng mục trước khi báo DONE.
+   - Không có mục → bỏ qua.
+4. Không nhúng checklist đặc thù repo vào agent.
 
 ## Kết quả trả về
 
