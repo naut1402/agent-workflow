@@ -2,14 +2,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { emit, _resetEventBusForTest } from '../../../../src/core/events/eventBus.js'
+import { emit, _resetEventBusForTest } from '../../../../src/core/events/index.js'
 import {
-  invalidateLoggingPrefsCache,
-} from '../../../../src/core/log/loggingPrefs.js'
-import {
-  registerEventLogSubscriber,
-  _resetEventLogSubscriberForTest,
+  installEventLogSubscriber,
+  uninstallEventLogSubscriberForTest,
+  prepareEventPayload,
 } from '../../../../src/core/log/eventLogSubscriber.js'
+import { invalidateLoggingPrefsCache } from '../../../../src/core/log/loggingPrefs.js'
 import { readLogs } from '../../../../src/features/logs/business/store.js'
 
 let home: string
@@ -17,19 +16,18 @@ const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
 
 function writeSettings(logging: unknown) {
   fs.mkdirSync(home, { recursive: true })
-  fs.writeFileSync(
-    path.join(home, 'settings.json'),
-    JSON.stringify({ logging }, null, 2),
-  )
+  fs.writeFileSync(path.join(home, 'settings.json'), JSON.stringify({ logging }, null, 2))
   invalidateLoggingPrefsCache()
 }
 
 beforeAll(() => {
-  home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-event-log-sub-'))
+  home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-evtlog-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = home
 })
 
 afterAll(() => {
+  uninstallEventLogSubscriberForTest()
+  _resetEventBusForTest()
   if (prevHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
   else process.env.DEV_TEAM_DASHBOARD_HOME = prevHome
   fs.rmSync(home, { recursive: true, force: true })
@@ -43,39 +41,46 @@ beforeEach(() => {
     /* ignore */
   }
   invalidateLoggingPrefsCache()
-  _resetEventLogSubscriberForTest()
   _resetEventBusForTest()
+  uninstallEventLogSubscriberForTest()
+  installEventLogSubscriber()
 })
 
-describe('eventLogSubscriber', () => {
-  test('does not write when events prefs off (default)', async () => {
-    registerEventLogSubscriber()
-    emit('job.started', { jobId: 'j1', projectId: 'p1' })
-    await new Promise((r) => setTimeout(r, 40))
-    expect(await readLogs({ type: 'events' })).toEqual([])
+describe('prepareEventPayload', () => {
+  test('redacts sensitive keys', () => {
+    expect(prepareEventPayload({ token: 'secret', id: 'j1' })).toEqual({
+      token: '[redacted]',
+      id: 'j1',
+    })
   })
+})
 
-  test('writes JSONL when events prefs on', async () => {
+describe('event log subscriber', () => {
+  test('emit task.created → events.jsonl when prefs on', async () => {
     writeSettings({ types: { events: true } })
-    registerEventLogSubscriber()
-    emit('entity.created', { entity: 'project', id: 'p1', projectId: 'p1' })
+    emit('task.created', { taskId: 'T1', projectId: 'p1' })
     await new Promise((r) => setTimeout(r, 40))
     const entries = await readLogs({ type: 'events' })
-    expect(entries.length).toBe(1)
+    expect(entries).toHaveLength(1)
     expect(entries[0]).toMatchObject({
       type: 'events',
-      event: 'entity.created',
+      event: 'task.created',
       projectId: 'p1',
-      payload: { entity: 'project', id: 'p1', projectId: 'p1' },
     })
   })
 
-  test('registerEventLogSubscriber is idempotent', async () => {
+  test('emit job.started is persisted', async () => {
     writeSettings({ types: { events: true } })
-    registerEventLogSubscriber()
-    registerEventLogSubscriber()
-    emit('job.queued', { jobId: 'q1' })
+    emit('job.started', { jobId: 'j1', projectId: 'p1', taskId: 'T1' })
     await new Promise((r) => setTimeout(r, 40))
-    expect(await readLogs({ type: 'events' })).toHaveLength(1)
+    const entries = await readLogs({ type: 'events' })
+    expect(entries[0]).toMatchObject({ event: 'job.started', projectId: 'p1' })
+  })
+
+  test('no write when events prefs off', async () => {
+    writeSettings({ types: { events: false } })
+    emit('task.created', { taskId: 'T1', projectId: 'p1' })
+    await new Promise((r) => setTimeout(r, 40))
+    expect(await readLogs({ type: 'events' })).toEqual([])
   })
 })

@@ -71,7 +71,7 @@ export function invalidateLoggingPrefsCache(): void {
 }
 
 /**
- * Read logging prefs from settings.json. Missing/invalid → all enabled.
+ * Read logging prefs from settings.json. Missing/invalid → defaults.
  * Small file; caches until invalidate or mtime changes.
  */
 export function loadLoggingPrefs(): LoggingConfig {

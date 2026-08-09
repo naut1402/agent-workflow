@@ -89,6 +89,18 @@ Nếu orchestrator truyền `export_json = true` trong task prompt, sau khi ghi 
 
 Nếu file chưa tồn tại, tạo mới với cấu trúc `{ "task_id": "<id>", "version": 1, "phases": { "investigator": { ... } } }`.
 
+### Bước cuối: Checklist hoàn thành (theo repo)
+
+1. Đọc `AGENTS.md` ở root repo đang làm việc.
+2. Tìm mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) áp dụng phase / survey này.
+3. Theo kết quả tìm mục:
+   - Có mục → thực hiện từng hạng mục.
+   - Không có mục → bỏ qua (không bịa checklist từ template này).
+4. Khi hạng mục **NG**:
+   - Không phải blocking → **tự healing** trong scope phase (sửa artifact / ghi nhận thiếu, rồi check lại) rồi mới báo DONE.
+   - Blocking (cần người quyết) → tạo `qa.md` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
+5. Không nhúng chi tiết checklist đặc thù repo vào agent — mỗi repo tự mô tả trong `AGENTS.md`.
+
 ## Kết quả trả về
 
 ```
@@ -98,6 +110,7 @@ INVESTIGATOR DONE [<task-id>]
 - Confidence tổng thể: High / Medium / Low
 - Có QA: Yes / No
 - pipeline-export.json: updated (phases.investigator) / skipped (export_json=false)
+- Checklist AGENTS.md: done / skipped (không có)
 ```
 
 Nếu dừng do QA:

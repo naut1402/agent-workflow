@@ -1,6 +1,6 @@
 /**
- * Persist domain bus events to JSONL when `logging.types.events` is on.
- * Register once at API boot (`createApp`); idempotent.
+ * Persist domain bus events to `events.jsonl` when `logging.types.events` is on.
+ * Part of observability (#195 read UI + #196 write/prefs).
  */
 import { on, type DashboardEvent } from '../events/eventBus.js'
 import { nowStamp } from '../lib/dateUtils.js'
@@ -9,54 +9,73 @@ import { LOG_RESPONSE_MAX_CHARS, truncateForLog } from './schema.js'
 import { appendLog } from './store.js'
 import { getTraceId } from './traceContext.js'
 
-let unsubscribe: (() => void) | null = null
+const SENSITIVE_KEY_RE = /(token|pat|secret|password|api[-_]?key|authorization)/i
 
-function resolveProjectId(payload: Record<string, unknown>): string | null {
-  if (!('projectId' in payload)) return null
-  const p = payload.projectId
-  if (typeof p === 'string') return p
-  if (p == null) return null
-  return String(p)
+let uninstall: (() => void) | null = null
+
+function redactPayload(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactPayload)
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = SENSITIVE_KEY_RE.test(k) ? '[redacted]' : redactPayload(v)
+    }
+    return out
+  }
+  return value
 }
 
-function boundPayload(payload: Record<string, unknown>): Record<string, unknown> {
-  const serialized = JSON.stringify(payload)
-  if (serialized.length <= LOG_RESPONSE_MAX_CHARS) return payload
-  const clipped = truncateForLog(serialized, LOG_RESPONSE_MAX_CHARS)
+/** Bound + redact payload so JSONL stays small and free of secrets. */
+export function prepareEventPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const redacted = redactPayload(payload) as Record<string, unknown>
   try {
-    return JSON.parse(clipped) as Record<string, unknown>
+    const raw = JSON.stringify(redacted)
+    if (raw.length <= LOG_RESPONSE_MAX_CHARS) return redacted
+    return { _truncated: true, preview: truncateForLog(raw, LOG_RESPONSE_MAX_CHARS) }
   } catch {
-    return { _truncated: clipped }
+    return { _error: 'payload_not_serializable' }
   }
 }
 
-function onDomainEvent(event: DashboardEvent): void {
+function projectIdFromPayload(payload: Record<string, unknown>): string | null {
+  const p = payload.projectId
+  return typeof p === 'string' && p.trim() ? p : null
+}
+
+export function appendEventLog(event: DashboardEvent): void {
   if (!isLogTypeEnabled('events')) return
   const raw =
     event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload)
       ? (event.payload as Record<string, unknown>)
       : {}
+  const projectId = projectIdFromPayload(raw)
+  const payload = Object.keys(raw).length ? prepareEventPayload(raw) : {}
+  const traceId = (getTraceId() ?? '').trim()
   void appendLog({
     type: 'events',
     ...nowStamp(),
     level: 'info',
-    traceId: (getTraceId() ?? '').trim(),
-    event: event.type,
-    payload: boundPayload(raw),
-    projectId: resolveProjectId(raw),
+    traceId,
+    event: String(event.type || ''),
+    payload,
+    projectId,
   }).catch(() => {})
 }
 
-/** Subscribe wildcard handler once. Safe to call from createApp repeatedly. */
-export function registerEventLogSubscriber(): void {
-  if (unsubscribe) return
-  unsubscribe = on('*', onDomainEvent)
+function onDomainEvent(event: DashboardEvent): void {
+  appendEventLog(event)
 }
 
-/** Tests only — drop handler so suites can re-register cleanly. */
-export function _resetEventLogSubscriberForTest(): void {
-  if (unsubscribe) {
-    unsubscribe()
-    unsubscribe = null
+/** Idempotent for production; rebinds after bus reset in tests. */
+export function installEventLogSubscriber(): void {
+  uninstallEventLogSubscriberForTest()
+  uninstall = on('*', onDomainEvent)
+}
+
+/** Tests only — remove wildcard handler after `_resetEventBusForTest`. */
+export function uninstallEventLogSubscriberForTest(): void {
+  if (uninstall) {
+    uninstall()
+    uninstall = null
   }
 }

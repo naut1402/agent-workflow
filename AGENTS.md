@@ -8,6 +8,7 @@ Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `
 |--------|----------|
 | Quickstart | [`README.md`](README.md) |
 | Kiến trúc / cây thư mục chi tiết | [`docs/architecture.md`](docs/architecture.md) |
+| Mục lục domain events (theo feature) | [`docs/event-catalog.md`](docs/event-catalog.md) |
 | Tổ chức feature / business / helper | [`docs/implement/feature-organization-rule.md`](docs/implement/feature-organization-rule.md) |
 | Coding convention (TS, Zod, FE, i18n) | [`docs/implement/coding-convention.md`](docs/implement/coding-convention.md) |
 | Test | [`docs/implement/test-convention.md`](docs/implement/test-convention.md) |
@@ -46,7 +47,7 @@ agent-workflow/
 ├── tests/        # unit (bun + vitest)
 ├── test-e2e/
 ├── docs/
-│   ├── architecture.md, i18n.md, ui-buttons.md
+│   ├── architecture.md, event-catalog.md, i18n.md, ui-buttons.md
 │   ├── template/           # agent + pipeline mẫu
 │   ├── cookbook/           # tái cấu trúc / bài học đợt lớn
 │   └── implement/          # *-rule.md, *-convention.md
@@ -85,8 +86,27 @@ Thêm scan/endpoint mới không được phá các bất biến sau:
 | Task | Đọc thêm |
 |------|----------|
 | Viết/sửa code feature | implement `*-rule` + `coding-convention` + bất biến §4 |
-| Review PR | [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) |
+| Review PR | [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) (+ mục **H** domain events khi đụng persist) |
 | Test / CI | [`test-convention.md`](docs/implement/test-convention.md) |
 | Commit / PR / docs | [`pr-docs-convention.md`](docs/implement/pr-docs-convention.md) + [`git-convention.md`](docs/implement/git-convention.md) (tách commit §6 khi PR nhiều xử lý) |
 | Hoãn docs/test (hotfix, POC, convention chưa ổn) | [`todo-debt-convention.md`](docs/implement/todo-debt-convention.md) — `docs/todo/…`; gate CI chỉ khi PR **`dev/x.y.z/main` → `main`** (phải xóa cả `docs/todo/`) |
 | Agent song song | [`worktree-convention.md`](docs/implement/worktree-convention.md) |
+
+---
+
+## 6. Checklist hoàn thành workflow
+
+Template agent (`docs/template/agents/*`) chỉ có **bước cuối generic**: đọc mục này. **Repo khác không có mục tương đương → agent bỏ qua.** Chi tiết catalog: [`docs/event-catalog.md`](docs/event-catalog.md).
+
+### Survey / investigate
+
+Khi survey call chain đụng persist / lifecycle / CRUD domain:
+
+- [ ] Cân nhắc **thêm / sửa / xoá** `emit` / `emitEntity` (sau persist OK; payload tối thiểu, không secret).
+- [ ] Ghi kết luận trong `investigate.md` (vd *Events: thêm … / sửa … / xoá … / không đổi — vì …*).
+- [ ] Nếu chốt đổi event: cập nhật [`docs/event-catalog.md`](docs/event-catalog.md) (+ `DashboardEventType` nếu type mới/đổi tên) trong cùng thay đổi code, hoặc nợ [`docs/todo/`](docs/implement/todo-debt-convention.md).
+
+### Design / implement / review (khi scope đụng event)
+
+- [ ] Design nêu emit dự kiến (hoặc *không emit*).
+- [ ] Implement / review: catalog và code khớp; xem thêm [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) mục **H**.

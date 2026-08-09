@@ -1,13 +1,14 @@
 import { z } from 'zod'
 
 /**
- * Log entry schema (request/audit/events JSONL). Write path: `src/core/log` (driver + append).
+ * Log entry schema (request/audit JSONL). Write path: `src/core/log` (driver + append).
  * Read UI: `src/features/logs/business`.
  *
- * Kinds, discriminated by `type`:
+ * Three kinds, discriminated by `type`:
  *  - `request` — one line per `/api/*` request (method/path/status/duration).
  *  - `audit`   — one line per config mutation (op/entity/identifier).
- *  - `events`  — one line per domain bus emit (gated by `logging.types.events`).
+ *  - `events`  — one line per domain event from the in-process bus (`event` field
+ *                holds DashboardEvent.type; do not confuse with this discriminant).
  *
  * Parsing is intentionally defensive: a malformed JSONL line yields `null` and
  * is skipped rather than throwing, mirroring the codebase's defensive-reads rule.
@@ -79,16 +80,16 @@ export const AuditLogEntry = z.object({
   detail: z.record(z.unknown()).optional(),
 })
 
-/** Domain event row — `event` is DashboardEvent.type; distinct from LogType discriminant. */
 export const EventLogEntry = z.object({
   type: z.literal('events'),
   ts: z.number(),
   iso: z.string(),
   level: levelField,
   traceId: traceIdField,
+  /** Domain event name (`job.started`, `entity.created`, …). */
   event: z.string(),
   payload: z.record(z.unknown()).default({}),
-  projectId: z.string().nullable().default(null),
+  projectId: z.string().nullable(),
 })
 
 export const LogEntry = z.discriminatedUnion('type', [RequestLogEntry, AuditLogEntry, EventLogEntry])

@@ -7,12 +7,12 @@ import { dirnameFromImportMeta, resolvePath } from '../core/lib/fileHelper.js'
 import { loadModulesUnder } from '../core/lib/dirModuleLoader.js'
 import { handleKnowledgeApi } from '../features/knowledge/business/knowledgeApi.js'
 import { appendRequestLog } from '../core/log/store.js'
+import { installEventLogSubscriber } from '../core/log/eventLogSubscriber.js'
 import {
   formatRequestQuery,
   formatResponsePreview,
 } from '../core/log/schema.js'
 import { resolveTraceIdFromRequest, runWithTraceIdAsync } from '../core/log/traceContext.js'
-import { registerEventLogSubscriber } from '../core/log/eventLogSubscriber.js'
 
 // ── API server (Hono app + Node bridge) ─────────────────────────────────────
 //
@@ -57,6 +57,9 @@ export async function registerFeatureRoutes(app: Hono<HonoEnv>): Promise<void> {
 }
 
 export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
+  // Domain events → events.jsonl (prefs-gated). Idempotent across createApp calls.
+  installEventLogSubscriber()
+
   const app = new Hono<HonoEnv>()
 
   app.use('/api/*', async (c, next) => {
@@ -71,8 +74,6 @@ export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
 
   app.notFound((c) => j(c, 404, { error: 'unknown endpoint' }))
   app.onError((err, c) => j(c, 500, { error: String((err as any)?.message ?? err) }))
-
-  registerEventLogSubscriber()
 
   return app
 }

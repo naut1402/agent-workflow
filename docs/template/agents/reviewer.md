@@ -85,6 +85,18 @@ Theo hướng dẫn trong `write-tests`, tạo `.dev-team-agent/tasks/<task-id>/
 - Từ implementation details trong `design.md §4`
 - Từ edge cases trong `design.md §4.4`
 
+### Bước cuối: Checklist hoàn thành (theo repo)
+
+1. Đọc `AGENTS.md` ở root repo đang làm việc.
+2. Tìm mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) áp dụng phase review.
+3. Theo kết quả tìm mục:
+   - Có mục → thực hiện từng hạng mục.
+   - Không có mục → bỏ qua.
+4. Khi hạng mục **NG**:
+   - Không phải blocking → **tự healing** trong scope phase rồi mới báo DONE.
+   - Blocking (cần người quyết) → tạo `qa.md` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
+5. Không nhúng checklist đặc thù repo vào agent.
+
 ## Kết quả trả về
 
 ```
@@ -93,4 +105,5 @@ REVIEWER DONE [<task-id>]
 - test-spec.md: .dev-team-agent/tasks/<task-id>/test-spec.md
 - [must]: <n> | [should]: <n> | [imo]: <n>
 - Recommendation: APPROVE / NEEDS_CHANGES
+- Checklist AGENTS.md: done / skipped (không có)
 ```

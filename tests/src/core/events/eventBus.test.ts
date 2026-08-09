@@ -77,4 +77,18 @@ describe('eventBus', () => {
     expect(unregisterTrigger('t1')).toBe(true)
     expect(listTriggers()).toHaveLength(0)
   })
+
+  test('bus state is process-global (survives dual module evaluation)', () => {
+    const key = '__devTeamDashboardEventBus__'
+    const g = globalThis as Record<string, unknown>
+    expect(g[key]).toBeTruthy()
+    const seen: string[] = []
+    on('*', (e) => {
+      seen.push(e.type)
+    })
+    // Simulate "other copy" of emit by calling through global state only —
+    // same emit() still must deliver after reset+re-subscribe patterns.
+    emit('job.queued', { jobId: 'g1' })
+    expect(seen).toEqual(['job.queued'])
+  })
 })

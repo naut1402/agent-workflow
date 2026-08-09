@@ -26,6 +26,8 @@ export default defineConfig({
     alias: {
       '@configs': path.resolve(__dirname, 'src/core/configs'),
       '@': path.resolve(__dirname, 'src'),
+      // zod 3.25 dual-package: Vite leaves named `{ z }` undefined — use shim.
+      zod: path.resolve(__dirname, 'tests/shims/zod.ts'),
     },
   },
   test: {

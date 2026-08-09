@@ -44,13 +44,19 @@ function cellValue(entry: LogEntry, key: string): string | number {
     if (key === 'response') return entry.response || ''
     if (key === 'status') return entry.status
     if (key === 'ms' || key === 'durationMs') return entry.durationMs
-  } else if (entry.type === 'audit') {
+  } else if (entry.type === 'events') {
+    if (key === 'event') return entry.event
+    if (key === 'payload') {
+      try {
+        return JSON.stringify(entry.payload ?? {})
+      } catch {
+        return ''
+      }
+    }
+  } else {
     if (key === 'op') return entry.op
     if (key === 'entity') return entry.entity
     if (key === 'identifier') return entry.identifier || ''
-  } else if (entry.type === 'events') {
-    if (key === 'event') return entry.event
-    if (key === 'payload') return JSON.stringify(entry.payload ?? {})
   }
   return ''
 }
@@ -80,11 +86,9 @@ function matchesQuery(entry: LogEntry, q: string): boolean {
           String(entry.durationMs),
           entry.error,
         ]
-      : entry.type === 'audit'
-        ? [entry.op, entry.entity, entry.identifier]
-        : entry.type === 'events'
-          ? [entry.event, JSON.stringify(entry.payload ?? {})]
-          : [],
+      : entry.type === 'events'
+        ? [entry.event, JSON.stringify(entry.payload ?? {})]
+        : [entry.op, entry.entity, entry.identifier],
   ]
     .flat()
     .filter((x) => x != null && x !== '')
