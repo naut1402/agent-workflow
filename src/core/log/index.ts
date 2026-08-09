@@ -21,6 +21,12 @@ export { getLogDriver, setLogDriver, resetLogDriver, type LogDriver } from './dr
 export { logsDir, logFile, appendFileLog } from './fileDriver.js'
 export { appendLog, appendRequestLog, emitAudit } from './store.js'
 export {
+  installEventLogSubscriber,
+  uninstallEventLogSubscriberForTest,
+  appendEventLog,
+  prepareEventPayload,
+} from './eventLogSubscriber.js'
+export {
   getTraceId,
   runWithTraceId,
   runWithTraceIdAsync,
