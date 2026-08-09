@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { invalidateLoggingPrefsCache } from '../../../../src/core/log/loggingPrefsIo.js'
-import { captureJobUsage } from '../../../../src/features/runner/business/usageCapture.js'
+import { captureJobUsage, captureTokenUsageFromExecute } from '../../../../src/features/runner/business/usageCapture.js'
 import {
   encodeCwdForClaudeProjects,
   sessionTranscriptPath,
@@ -210,6 +210,34 @@ describe('captureJobUsage', () => {
     })
     expect(merged?.usage?.totalTokens).toBe(3)
     expect(loadJob(job.id)?.usage?.totalTokens).toBe(3)
+  })
+
+  test('captureTokenUsageFromExecute writes JobRecord + usage.jsonl (Cursor stdout)', async () => {
+    writeSettings(true)
+    const job = seedJob('job-cursor-stdout')
+    await captureTokenUsageFromExecute(
+      job,
+      'cursor-cli',
+      {
+        inputTokens: 12144,
+        outputTokens: 388,
+        cacheReadTokens: 5952,
+        cacheWriteTokens: 0,
+        totalTokens: 18484,
+      },
+      '10bc53f4-fcf9-489c-a300-a8d611e7df9c',
+    )
+    const updated = loadJob(job.id)
+    expect(updated?.usage?.inputTokens).toBe(12144)
+    expect(updated?.usage?.outputTokens).toBe(388)
+    expect(updated?.usage?.cacheReadTokens).toBe(5952)
+    expect(updated?.usage?.provider).toBe('cursor-cli')
+    expect(updated?.usage?.estimatedCostUsd).toBeNull()
+
+    const jsonl = fs.readFileSync(path.join(home, 'logs', 'usage.jsonl'), 'utf8')
+    expect(jsonl).toContain('"source":"stdout"')
+    expect(jsonl).toContain(job.id)
+    expect(jsonl).toContain('"provider":"cursor-cli"')
   })
 
   test('sessionTranscriptPath rejects bad session id', () => {

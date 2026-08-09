@@ -452,11 +452,27 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
       const ok = procResult.exitCode === 0 && !procResult.killed
       let stdout = procResult.stdout
       let capturedSessionId: string | null | undefined = sessionPlan.presetSessionId ?? undefined
+      let tokenUsage: ExecuteResult['tokenUsage']
 
       if (sessionCapture === 'parse-json') {
         const parsed = parseCursorJsonOutput(procResult.stdout)
         if (parsed.result != null) stdout = parsed.result
         if (parsed.session_id) capturedSessionId = parsed.session_id
+        if (parsed.usage) {
+          const total =
+            parsed.usage.inputTokens +
+            parsed.usage.outputTokens +
+            parsed.usage.cacheReadTokens +
+            parsed.usage.cacheWriteTokens
+          tokenUsage = {
+            inputTokens: parsed.usage.inputTokens,
+            outputTokens: parsed.usage.outputTokens,
+            cacheReadTokens: parsed.usage.cacheReadTokens,
+            cacheWriteTokens: parsed.usage.cacheWriteTokens,
+            totalTokens: total,
+            model: parsed.model,
+          }
+        }
       }
 
       const result: ExecuteResult = {
@@ -468,6 +484,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         error: ok ? undefined : formatFailure(procResult),
         stdout,
         sessionId: capturedSessionId,
+        tokenUsage,
       }
       appendLog(describeResult(result))
       return result

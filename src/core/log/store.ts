@@ -59,18 +59,18 @@ export function appendRequestLog(p: {
   }).catch(() => {})
 }
 
-/** Record one job token-usage snapshot. Fire-and-forget. */
+/** Record one job token-usage snapshot. Fire-and-forget when not awaited. */
 export function appendUsageLog(
   p: Omit<UsageLogEntry, 'type' | 'ts' | 'iso' | 'level' | 'traceId'> & {
     level?: LogLevel
     traceId?: string | null
   },
-): void {
-  if (!isLogTypeEnabled('usage')) return
+): Promise<void> {
+  if (!isLogTypeEnabled('usage')) return Promise.resolve()
   const level = p.level ?? 'info'
   const traceId = (p.traceId ?? getTraceId() ?? '').trim()
   const { level: _l, traceId: _t, ...rest } = p
-  void appendLog({
+  return appendLog({
     type: 'usage',
     ...nowStamp(),
     level,

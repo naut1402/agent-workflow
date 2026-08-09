@@ -14,7 +14,7 @@ import {
   type ClaudeTokenUsage,
 } from './claudeUsageTranscript.js'
 import { getUsageCursor, setUsageCursor } from './sessionLedger.js'
-import type { JobRecord } from './types.js'
+import type { ExecuteResult, JobRecord } from './types.js'
 
 type UsagePart = {
   source: 'main' | 'subagent'
@@ -33,6 +33,66 @@ function durationMsOf(job: JobRecord, finishedAt: string): number | null {
   const end = Date.parse(finishedAt)
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null
   return end - start
+}
+
+function numTok(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0
+}
+
+/**
+ * Persist token usage already present on `ExecuteResult` (e.g. Cursor JSON stdout).
+ * Prefs `logging.types.usage === false` skips JobRecord + JSONL.
+ */
+export async function captureTokenUsageFromExecute(
+  job: JobRecord,
+  providerId: string,
+  tokenUsage: NonNullable<ExecuteResult['tokenUsage']>,
+  sessionId: string | null,
+): Promise<void> {
+  if (!isLogTypeEnabled('usage')) return
+  const inputTokens = numTok(tokenUsage.inputTokens)
+  const outputTokens = numTok(tokenUsage.outputTokens)
+  const cacheReadTokens = numTok(tokenUsage.cacheReadTokens)
+  const cacheWriteTokens = numTok(tokenUsage.cacheWriteTokens)
+  const summed = inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
+  const totalTokens = numTok(tokenUsage.totalTokens) || summed
+  if (totalTokens <= 0 && summed <= 0) return
+
+  const projectId = metaString(job, 'projectId')
+  const taskId = metaString(job, 'taskId')
+  const finishedAt = job.finishedAt || new Date().toISOString()
+  const model =
+    typeof tokenUsage.model === 'string' && tokenUsage.model.trim()
+      ? tokenUsage.model.trim()
+      : typeof job.metadata?.model === 'string'
+        ? job.metadata.model
+        : null
+
+  // Dynamic import avoids circular init with jobQueue.
+  const { loadJob, mergeJobUsage, stepIdOf } = await import('./jobQueue.js')
+  const snapshot: UsageSnapshot = {
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    totalTokens: totalTokens || summed,
+    estimatedCostUsd: null,
+    model,
+    provider: providerId,
+    taskId,
+    projectId,
+    stepId: stepIdOf(job) ?? null,
+    phase: metaString(job, 'phase'),
+    pipelineId: metaString(job, 'pipelineId'),
+    jobId: job.id,
+    sessionId,
+    startedAt: job.startedAt,
+    finishedAt,
+    durationMs: durationMsOf(job, finishedAt),
+  }
+  const cur = loadJob(job.id)
+  if (cur) mergeJobUsage(cur.id, snapshot)
+  await appendUsageLog({ ...snapshot, source: 'stdout' })
 }
 
 /**
@@ -123,7 +183,7 @@ export async function captureJobUsage(
   const cur = loadJob(job.id)
   if (cur) mergeJobUsage(cur.id, snapshot)
 
-  appendUsageLog({ ...snapshot, source: 'aggregate' })
+  await appendUsageLog({ ...snapshot, source: 'aggregate' })
 
   if (projectId && taskId) setUsageCursor(projectId, taskId, sessionId, nextCursor)
 }

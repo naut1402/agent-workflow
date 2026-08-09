@@ -114,7 +114,10 @@ export interface ExecuteResult {
   tokenUsage?: {
     inputTokens?: number
     outputTokens?: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
     totalTokens?: number
+    model?: string
     estimated?: boolean
   }
 }

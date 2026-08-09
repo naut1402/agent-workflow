@@ -11,7 +11,7 @@ import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
 import { isAgentCliProviderId } from './providers/agentCli.js'
-import { captureJobUsage } from './usageCapture.js'
+import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js'
 import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
 import type { UsageSnapshot } from '../../../core/log/schema.js'
 import { advanceStepOnJobSuccess, loadPipelineConfig, queuePendingFeedback, takePendingFeedback } from './index.js'
@@ -529,6 +529,18 @@ async function runJob(job: JobRecord): Promise<void> {
       { ...current, sessionId: capturedSessionId },
       capturedSessionId,
       connection.providerId,
+    ).catch(() => {})
+  }
+
+  // Cursor (and other parse-json CLIs) already emit usage on ExecuteResult —
+  // persist when present so Logs → Usage is not Claude-only.
+  if (result.tokenUsage) {
+    const current = loadJob(job.id) || job
+    void captureTokenUsageFromExecute(
+      { ...current, ...(capturedSessionId ? { sessionId: capturedSessionId } : {}) },
+      connection.providerId,
+      result.tokenUsage,
+      capturedSessionId ?? null,
     ).catch(() => {})
   }
 

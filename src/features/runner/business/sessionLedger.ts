@@ -312,13 +312,52 @@ export type SessionCaptureMode = 'preset-uuid' | 'parse-json' | 'none'
 export interface CursorJsonOutput {
   session_id?: string
   result?: string
+  /** Token usage from Cursor `--output-format json` result payload (camelCase). */
+  usage?: {
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    cacheWriteTokens: number
+  }
+  model?: string
+}
+
+function numToken(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0
+}
+
+/** Extract Cursor/Claude-style usage object (camelCase or snake_case). */
+export function parseCursorUsageObject(raw: unknown): CursorJsonOutput['usage'] | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const u = raw as Record<string, unknown>
+  const usage = {
+    inputTokens: numToken(u.inputTokens ?? u.input_tokens),
+    outputTokens: numToken(u.outputTokens ?? u.output_tokens),
+    cacheReadTokens: numToken(u.cacheReadTokens ?? u.cache_read_input_tokens ?? u.cache_read_tokens),
+    cacheWriteTokens: numToken(
+      u.cacheWriteTokens ?? u.cache_creation_input_tokens ?? u.cache_write_tokens,
+    ),
+  }
+  if (
+    usage.inputTokens === 0 &&
+    usage.outputTokens === 0 &&
+    usage.cacheReadTokens === 0 &&
+    usage.cacheWriteTokens === 0
+  ) {
+    return undefined
+  }
+  return usage
 }
 
 function cursorFieldsFrom(parsed: Record<string, unknown>): CursorJsonOutput {
-  return {
+  const out: CursorJsonOutput = {
     session_id: typeof parsed.session_id === 'string' ? parsed.session_id : undefined,
     result: typeof parsed.result === 'string' ? parsed.result : undefined,
   }
+  const usage = parseCursorUsageObject(parsed.usage)
+  if (usage) out.usage = usage
+  if (typeof parsed.model === 'string' && parsed.model.trim()) out.model = parsed.model.trim()
+  return out
 }
 
 /** Parse cursor-agent JSON stdout; tolerates leading/trailing whitespace/noise. */

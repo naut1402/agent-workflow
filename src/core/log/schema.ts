@@ -124,7 +124,7 @@ export const UsageLogEntry = z.object({
   level: levelField,
   traceId: traceIdField,
   ...UsageSnapshotSchema.shape,
-  source: z.enum(['main', 'subagent', 'aggregate']).optional(),
+  source: z.enum(['main', 'subagent', 'aggregate', 'stdout']).optional(),
   agentType: z.string().nullable().optional(),
 })
 

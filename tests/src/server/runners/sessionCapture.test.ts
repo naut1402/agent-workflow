@@ -116,6 +116,31 @@ describe('sessionCapture', () => {
     })
   })
 
+  test('parseCursorJsonOutput extracts usage (camelCase) from Cursor result JSON', () => {
+    const stdout = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      session_id: '10bc53f4-fcf9-489c-a300-a8d611e7df9c',
+      result: 'Xin chào!',
+      usage: {
+        inputTokens: 12144,
+        outputTokens: 388,
+        cacheReadTokens: 5952,
+        cacheWriteTokens: 0,
+      },
+    })
+    expect(parseCursorJsonOutput(stdout)).toEqual({
+      session_id: '10bc53f4-fcf9-489c-a300-a8d611e7df9c',
+      result: 'Xin chào!',
+      usage: {
+        inputTokens: 12144,
+        outputTokens: 388,
+        cacheReadTokens: 5952,
+        cacheWriteTokens: 0,
+      },
+    })
+  })
+
   test('parseCursorJsonOutput tolerates leading noise before JSON object', () => {
     const body = JSON.stringify({
       session_id: 'chat-noise',
