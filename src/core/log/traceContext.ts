@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { randomUUID } from 'node:crypto'
+import { randomUUID } from '../lib/fileHelper.js'
 import type { IncomingMessage } from 'node:http'
 
 type TraceStore = { traceId: string }
