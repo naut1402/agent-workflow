@@ -49,6 +49,7 @@ export default {
       request: 'Request (HTTP /api)',
       jobs: 'Jobs (runner stdout)',
       events: 'Events (domain event bus)',
+      usage: 'Usage (LLM tokens)',
     },
     saved: 'Saved.',
     loadError: 'Could not load logging config.',

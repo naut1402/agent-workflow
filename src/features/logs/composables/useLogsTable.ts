@@ -53,10 +53,17 @@ function cellValue(entry: LogEntry, key: string): string | number {
         return ''
       }
     }
-  } else {
+  } else if (entry.type === 'audit') {
     if (key === 'op') return entry.op
     if (key === 'entity') return entry.entity
     if (key === 'identifier') return entry.identifier || ''
+  } else if (entry.type === 'usage') {
+    if (key === 'jobId') return entry.jobId
+    if (key === 'model') return entry.model || ''
+    if (key === 'provider') return entry.provider
+    if (key === 'inputTokens') return entry.inputTokens
+    if (key === 'outputTokens') return entry.outputTokens
+    if (key === 'totalTokens') return entry.totalTokens
   }
   return ''
 }
@@ -88,7 +95,17 @@ function matchesQuery(entry: LogEntry, q: string): boolean {
         ]
       : entry.type === 'events'
         ? [entry.event, JSON.stringify(entry.payload ?? {})]
-        : [entry.op, entry.entity, entry.identifier],
+        : entry.type === 'audit'
+          ? [entry.op, entry.entity, entry.identifier]
+          : [
+              entry.jobId,
+              entry.model,
+              entry.provider,
+              entry.sessionId,
+              String(entry.inputTokens),
+              String(entry.outputTokens),
+              String(entry.totalTokens),
+            ],
   ]
     .flat()
     .filter((x) => x != null && x !== '')

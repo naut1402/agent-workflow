@@ -13,6 +13,7 @@ export const LoggingTypesSchema = z.object({
   jobs: z.boolean().optional(),
   /** Domain events JSONL — opt-in (default off; volume/noise when debugging). */
   events: z.boolean().optional(),
+  usage: z.boolean().optional(),
 })
 
 export const LoggingConfigSchema = z
@@ -27,6 +28,7 @@ export type LoggingTypes = {
   request: boolean
   jobs: boolean
   events: boolean
+  usage: boolean
 }
 
 export type LoggingConfig = {
@@ -38,7 +40,7 @@ export type LoggingTypeKey = keyof LoggingTypes
 
 export const DEFAULT_LOGGING_CONFIG: LoggingConfig = {
   showLogsTab: true,
-  types: { audit: true, request: true, jobs: true, events: false },
+  types: { audit: true, request: true, jobs: true, events: false, usage: true },
 }
 
 export function parseLoggingConfig(raw: unknown): LoggingConfig {
@@ -53,6 +55,7 @@ export function parseLoggingConfig(raw: unknown): LoggingConfig {
       jobs: d.types?.jobs !== false,
       // Opt-in: missing/undefined → off (unlike audit/request/jobs).
       events: d.types?.events === true,
+      usage: d.types?.usage !== false,
     },
   }
 }

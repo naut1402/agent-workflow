@@ -7,7 +7,7 @@ vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
   fetchLoggingConfig: vi.fn(async () => ({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: true },
+      types: { audit: true, request: true, jobs: true, events: true, usage: true },
     },
   })),
 }))
@@ -20,7 +20,7 @@ afterEach(() => {
   vi.mocked(fetchLoggingConfig).mockResolvedValue({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: true },
+      types: { audit: true, request: true, jobs: true, events: true, usage: true },
     },
   })
 })
@@ -140,7 +140,7 @@ describe('LogsPanel', () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValue({
       config: {
         showLogsTab: true,
-        types: { audit: true, request: true, jobs: true, events: false },
+        types: { audit: true, request: true, jobs: true, events: false, usage: true },
       },
     })
     stubFetch()
@@ -154,7 +154,7 @@ describe('LogsPanel', () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValue({
       config: {
         showLogsTab: true,
-        types: { audit: true, request: false, jobs: false, events: false },
+        types: { audit: true, request: false, jobs: false, events: false, usage: true },
       },
     })
     stubFetch()
@@ -170,7 +170,7 @@ describe('LogsPanel', () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValue({
       config: {
         showLogsTab: true,
-        types: { audit: false, request: false, jobs: false, events: false },
+        types: { audit: false, request: false, jobs: false, events: false, usage: true },
       },
     })
     stubFetch()
@@ -189,7 +189,7 @@ describe('LogsPanel', () => {
 
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {
-        detail: { types: { audit: false, request: true, jobs: false, events: false } },
+        detail: { types: { audit: false, request: true, jobs: false, events: false, usage: true } },
       }),
     )
     await flushPromises()

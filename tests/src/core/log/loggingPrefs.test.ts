@@ -45,14 +45,14 @@ beforeEach(() => {
 })
 
 describe('parseLoggingConfig', () => {
-  test('defaults audit/request/jobs on; events off', () => {
+  test('defaults audit/request/jobs on; events off; usage on', () => {
     expect(parseLoggingConfig(undefined)).toEqual({
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: false },
+      types: { audit: true, request: true, jobs: true, events: false, usage: true },
     })
   })
 
-  test('false flags stick; events opt-in', () => {
+  test('false flags stick; events opt-in; usage default on', () => {
     expect(
       parseLoggingConfig({
         showLogsTab: false,
@@ -60,37 +60,39 @@ describe('parseLoggingConfig', () => {
       }),
     ).toEqual({
       showLogsTab: false,
-      types: { audit: false, request: true, jobs: false, events: false },
+      types: { audit: false, request: true, jobs: false, events: false, usage: true },
     })
     expect(
       parseLoggingConfig({
-        types: { events: true },
+        types: { events: true, usage: false },
       }),
     ).toEqual({
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: true },
+      types: { audit: true, request: true, jobs: true, events: true, usage: false },
     })
   })
 })
 
 describe('isLogTypeEnabled / loadLoggingPrefs', () => {
-  test('missing settings.json → audit/request/jobs on; events off', () => {
+  test('missing settings.json → audit/request/jobs/usage on; events off', () => {
     expect(isLogTypeEnabled('audit')).toBe(true)
     expect(isLogTypeEnabled('request')).toBe(true)
     expect(isLogTypeEnabled('jobs')).toBe(true)
     expect(isLogTypeEnabled('events')).toBe(false)
+    expect(isLogTypeEnabled('usage')).toBe(true)
   })
 
   test('reads types from settings.json', () => {
     writeSettings({
       showLogsTab: true,
-      types: { audit: false, request: true, jobs: false, events: true },
+      types: { audit: false, request: true, jobs: false, events: true, usage: false },
     })
     expect(loadLoggingPrefs().types.audit).toBe(false)
     expect(isLogTypeEnabled('audit')).toBe(false)
     expect(isLogTypeEnabled('request')).toBe(true)
     expect(isLogTypeEnabled('jobs')).toBe(false)
     expect(isLogTypeEnabled('events')).toBe(true)
+    expect(isLogTypeEnabled('usage')).toBe(false)
   })
 })
 

@@ -20,6 +20,13 @@ export interface SessionEntry {
   createdAt: string
   lastUsedAt: string
   staleReason?: string
+  /** Cursor for Claude transcript usage capture across resume jobs. */
+  usageCursor?: UsageCursor
+}
+
+export interface UsageCursor {
+  mainLines: number
+  subagentFiles: string[]
 }
 
 export interface TaskSessionLedger {
@@ -254,6 +261,46 @@ export function closeTaskSession(projectId: string, taskId: string): void {
       s.lastUsedAt = now
       changed = true
     }
+  }
+  if (changed) saveTaskSessionLedger(projectId, ledger)
+}
+
+/** Read usage cursor for a session id on the task ledger (null if missing). */
+export function getUsageCursor(
+  projectId: string,
+  taskId: string,
+  sessionId: string,
+): UsageCursor | null {
+  if (!projectId || !taskId || !sessionId) return null
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
+    const s = ledger.sessions[i]
+    if (s.sessionId === sessionId && s.usageCursor) return { ...s.usageCursor, subagentFiles: [...s.usageCursor.subagentFiles] }
+    if (s.sessionId === sessionId) return null
+  }
+  return null
+}
+
+/** Persist usage cursor onto the matching session entry (no-op if not found). */
+export function setUsageCursor(
+  projectId: string,
+  taskId: string,
+  sessionId: string,
+  cursor: UsageCursor,
+): void {
+  if (!projectId || !taskId || !sessionId) return
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  let changed = false
+  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
+    const s = ledger.sessions[i]
+    if (s.sessionId !== sessionId) continue
+    s.usageCursor = {
+      mainLines: Math.max(0, cursor.mainLines),
+      subagentFiles: [...cursor.subagentFiles],
+    }
+    s.lastUsedAt = new Date().toISOString()
+    changed = true
+    break
   }
   if (changed) saveTaskSessionLedger(projectId, ledger)
 }

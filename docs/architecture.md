@@ -70,7 +70,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | Agents | `src/features/agent-editor/business/` | `agents.ts` (CRUD/template/fetch) + NL generate. |
 | Tasks / artifacts | `src/features/monitor/business/` | Tasks, artifact actions, github issue, task chat. |
 | Knowledge | `src/features/knowledge/business/` | File driver + config/driver chọn trong cùng module. |
-| Logging | `src/core/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit JSONL; job log thuộc runner. |
+| Logging | `src/core/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit/events/usage JSONL (`UsageSnapshot`); job log text thuộc runner. |
 | Runners | `src/features/runner/business/` | Job queue (+ reaper), connections, session ledger (+ capture), providers CLI. |
 | Settings | `src/features/settings/business/` | Dashboard settings, autoscan, fs browse. |
 | NL chat | `src/features/nl-chat/business/` | Session builder chat (prompt + parse trong cùng module). |
