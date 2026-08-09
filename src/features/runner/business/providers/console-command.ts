@@ -1,5 +1,5 @@
 import { appendTextFileSync, existsSync, joinPath } from '../../../../core/lib/fileHelper.js'
-import { spawn } from 'node:child_process'
+import { spawn } from '../../../../core/lib/processHelper.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../types.js'
 import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 

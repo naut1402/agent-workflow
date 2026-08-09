@@ -1,6 +1,6 @@
 import { cpSync, dirname, joinPath, mkdirSync, readTextFileSync, readdirSync, renameSync, resolvePath, rmSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import crypto from 'node:crypto'
-import { spawn } from 'node:child_process'
+import { spawn } from '../../../core/lib/processHelper.js'
 import os from 'node:os'
 import { registryHome } from '../../../core/registry.js'
 import { isLogTypeEnabled } from '../../../core/log/loggingPrefsIo.js'

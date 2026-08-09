@@ -1,8 +1,8 @@
 /**
- * Public business surface for monitor.
+ * Public business surface for monitor (controllers + cross-feature).
  * Cross-feature deps are re-exported here only — other modules in this feature
- * import peers through `./index.js` / `./business/index.js`, never from another
- * feature's business tree directly.
+ * import peers through `./peers.js` (tasks) or `./index.js` (full surface),
+ * never from another feature's business tree directly.
  */
 
 export {

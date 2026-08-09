@@ -11,7 +11,7 @@ import {
   writeTextFile,
 } from '../../../../core/lib/fileHelper.js'
 import { TaskArchivePatch, TaskStatePatch } from '../../schemas/task.js'
-import { loadPipelineConfig } from '../index.js'
+import { loadPipelineConfig } from '../peers.js'
 import { readState, flowProfilePath } from './index.js'
 import { checkReviewRetry } from './reviewVerdict.js'
 import { emit } from '../../../../core/events/index.js'

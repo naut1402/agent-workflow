@@ -1,5 +1,5 @@
 import { joinPath, readDir, readFile, readTextFile, resolvePathUnder, statSafe } from '../../../../core/lib/fileHelper.js'
-import { knownArtifactsFor, loadPipelineConfig } from '../index.js'
+import { knownArtifactsFor, loadPipelineConfig } from '../peers.js'
 
 /**
  * Resolve an artifact path under `<root>/tasks/<id>/<name>`.

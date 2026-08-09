@@ -1,5 +1,5 @@
 import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
-import { spawnSync } from 'node:child_process'
+import { spawnSync } from '../../../core/lib/processHelper.js'
 import { registryHome } from '../../../core/registry.js'
 import { listCustomCommands } from './commands.js'
 import {

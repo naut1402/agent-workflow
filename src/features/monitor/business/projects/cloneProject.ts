@@ -2,7 +2,8 @@
  * Clone a git repo into dashboard workspace and register as a project.
  */
 
-import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
+import type { SpawnSyncReturns } from '../../../../core/lib/processHelper.js'
+import { spawnSync } from '../../../../core/lib/processHelper.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { registryHome, add, loadRegistry, saveRegistry, get, type Project } from '../../../../core/registry.js'

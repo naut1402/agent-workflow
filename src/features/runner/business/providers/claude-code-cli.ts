@@ -1,5 +1,5 @@
 import { appendTextFileSync, existsSync, joinPath } from '../../../../core/lib/fileHelper.js'
-import { spawn } from 'node:child_process'
+import { spawn } from '../../../../core/lib/processHelper.js'
 import { resolveSecretRef } from '../credentials.js'
 import {
   buildCursorJsonInvocation,
