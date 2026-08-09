@@ -31,6 +31,8 @@ export default {
     provider: 'Provider',
     inputTokens: 'Input',
     outputTokens: 'Output',
+    cacheReadTokens: 'Cache read',
+    cacheWriteTokens: 'Cache write',
     totalTokens: 'Total',
     jobId: 'Job',
     taskId: 'Task',

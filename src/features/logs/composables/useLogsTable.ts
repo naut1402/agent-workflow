@@ -65,6 +65,8 @@ function cellValue(entry: LogEntry, key: string): string | number {
     if (key === 'provider') return entry.provider
     if (key === 'inputTokens') return entry.inputTokens
     if (key === 'outputTokens') return entry.outputTokens
+    if (key === 'cacheReadTokens') return entry.cacheReadTokens ?? 0
+    if (key === 'cacheWriteTokens') return entry.cacheWriteTokens ?? 0
     if (key === 'totalTokens') return entry.totalTokens
   }
   return ''
@@ -108,6 +110,8 @@ function matchesQuery(entry: LogEntry, q: string): boolean {
                 entry.sessionId,
                 String(entry.inputTokens),
                 String(entry.outputTokens),
+                String(entry.cacheReadTokens ?? 0),
+                String(entry.cacheWriteTokens ?? 0),
                 String(entry.totalTokens),
               ]
             : [],

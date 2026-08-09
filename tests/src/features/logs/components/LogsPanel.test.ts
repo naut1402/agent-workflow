@@ -68,7 +68,9 @@ function stubFetch() {
                   jobId: JOB_ID,
                   inputTokens: 10,
                   outputTokens: 20,
-                  totalTokens: 30,
+                  cacheReadTokens: 5,
+                  cacheWriteTokens: 2,
+                  totalTokens: 37,
                   estimatedCostUsd: null,
                   model: 'claude-sonnet',
                   provider: 'claude-code-cli',
@@ -167,7 +169,9 @@ describe('LogsPanel', () => {
     expect(urls.some((u) => u.includes('/api/logs') && u.includes('type=usage'))).toBe(true)
     const table = w.find('.logs-table-usage')
     expect(table.text()).toContain('claude-sonnet')
-    expect(table.text()).toContain('30')
+    expect(table.text()).toContain('37')
+    expect(table.text()).toContain('Cache read')
+    expect(table.text()).toContain('Cache write')
     expect(table.text()).toContain('T20fd4281')
   })
 

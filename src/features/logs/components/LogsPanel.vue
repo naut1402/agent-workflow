@@ -562,6 +562,12 @@ onUnmounted(() => {
           <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('outputTokens', $event)">
             {{ t('logs.columns.outputTokens') }} {{ sortIndicator('outputTokens') }}
           </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('cacheReadTokens', $event)">
+            {{ t('logs.columns.cacheReadTokens') }} {{ sortIndicator('cacheReadTokens') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('cacheWriteTokens', $event)">
+            {{ t('logs.columns.cacheWriteTokens') }} {{ sortIndicator('cacheWriteTokens') }}
+          </th>
           <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('totalTokens', $event)">
             {{ t('logs.columns.totalTokens') }} {{ sortIndicator('totalTokens') }}
           </th>
@@ -583,6 +589,8 @@ onUnmounted(() => {
           <td>{{ e.type === 'usage' ? e.provider : '' }}</td>
           <td>{{ e.type === 'usage' ? e.inputTokens : '' }}</td>
           <td>{{ e.type === 'usage' ? e.outputTokens : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.cacheReadTokens ?? 0 : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.cacheWriteTokens ?? 0 : '' }}</td>
           <td>{{ e.type === 'usage' ? e.totalTokens : '' }}</td>
           <td class="cell-clip">
             <button
@@ -600,7 +608,7 @@ onUnmounted(() => {
           <td>{{ e.projectId || '—' }}</td>
         </tr>
         <tr v-if="!displayed.length && !loading">
-          <td colspan="9" class="muted">{{ t('logs.empty.log') }}</td>
+          <td colspan="11" class="muted">{{ t('logs.empty.log') }}</td>
         </tr>
       </tbody>
     </table>
