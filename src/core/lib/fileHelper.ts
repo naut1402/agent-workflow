@@ -1,7 +1,10 @@
 import fsPromises from 'node:fs/promises'
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath as nodeFileURLToPath, pathToFileURL as nodePathToFileURL } from 'node:url'
+// Namespace import — named `from 'node:url'` is rewritten by Vite to property
+// access at module init (`ext["fileURLToPath"]`), which throws in the browser
+// if this file is ever pulled into the client graph. Defer access to call sites.
+import * as nodeUrl from 'node:url'
 import type {
   Dirent,
   PathLike,
@@ -53,17 +56,17 @@ export function parsePath(p: string): path.ParsedPath {
 
 /** `fileURLToPath` — convert `file:` URL / `import.meta.url` to a filesystem path. */
 export function fileURLToPath(url: string | URL): string {
-  return nodeFileURLToPath(url)
+  return nodeUrl.fileURLToPath(url)
 }
 
 /** `pathToFileURL` — convert a filesystem path to a `file:` URL (dynamic `import`). */
 export function pathToFileURL(p: string): URL {
-  return nodePathToFileURL(p)
+  return nodeUrl.pathToFileURL(p)
 }
 
 /** Directory containing the module that owns `import.meta.url`. */
 export function dirnameFromImportMeta(importMetaUrl: string): string {
-  return path.dirname(nodeFileURLToPath(importMetaUrl))
+  return path.dirname(nodeUrl.fileURLToPath(importMetaUrl))
 }
 
 /**
