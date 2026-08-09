@@ -1,6 +1,10 @@
 /**
  * In-process event bus — nền cho automation (schedule / webhook / HITL).
  * Sync publish; handlers must not throw (errors are swallowed + logged).
+ *
+ * State lives on `globalThis` so Vite dev (plugin graph) + `import(fileURL)`
+ * feature loaders share one bus. Module-local Maps would split: subscriber
+ * registers on copy A while jobQueue `emit` hits copy B → Events tab stays empty.
  */
 
 export type DashboardEventType =
@@ -29,10 +33,28 @@ export interface DashboardEvent<T = Record<string, unknown>> {
 
 export type EventHandler = (event: DashboardEvent) => void | Promise<void>
 
-const handlers = new Map<string, Set<EventHandler>>()
-const anyHandlers = new Set<EventHandler>()
+type BusState = {
+  handlers: Map<string, Set<EventHandler>>
+  anyHandlers: Set<EventHandler>
+  triggers: Map<string, TriggerRegistration>
+}
+
+const BUS_KEY = '__devTeamDashboardEventBus__'
+
+function busState(): BusState {
+  const g = globalThis as typeof globalThis & { [BUS_KEY]?: BusState }
+  if (!g[BUS_KEY]) {
+    g[BUS_KEY] = {
+      handlers: new Map(),
+      anyHandlers: new Set(),
+      triggers: new Map(),
+    }
+  }
+  return g[BUS_KEY]
+}
 
 export function on(type: DashboardEventType | '*', handler: EventHandler): () => void {
+  const { handlers, anyHandlers } = busState()
   if (type === '*') {
     anyHandlers.add(handler)
     return () => {
@@ -59,6 +81,7 @@ export function once(type: DashboardEventType, handler: EventHandler): () => voi
 }
 
 export function emit(type: DashboardEventType, payload: Record<string, unknown> = {}): DashboardEvent {
+  const { handlers, anyHandlers } = busState()
   const event: DashboardEvent = {
     type,
     at: new Date().toISOString(),
@@ -83,6 +106,7 @@ export function emit(type: DashboardEventType, payload: Record<string, unknown> 
 
 /** Clear all handlers — tests only. */
 export function _resetEventBusForTest(): void {
+  const { handlers, anyHandlers } = busState()
   handlers.clear()
   anyHandlers.clear()
 }
@@ -102,20 +126,18 @@ export interface TriggerRegistration {
   meta?: Record<string, unknown>
 }
 
-const triggers = new Map<string, TriggerRegistration>()
-
 export function registerTrigger(reg: TriggerRegistration): void {
-  triggers.set(reg.id, reg)
+  busState().triggers.set(reg.id, reg)
 }
 
 export function unregisterTrigger(id: string): boolean {
-  return triggers.delete(id)
+  return busState().triggers.delete(id)
 }
 
 export function listTriggers(): TriggerRegistration[] {
-  return [...triggers.values()]
+  return [...busState().triggers.values()]
 }
 
 export function _resetTriggersForTest(): void {
-  triggers.clear()
+  busState().triggers.clear()
 }
