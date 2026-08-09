@@ -164,7 +164,7 @@ const showLogsTab = ref(true)
 const logTypeAudit = ref(true)
 const logTypeRequest = ref(true)
 const logTypeJobs = ref(true)
-const logTypeEvents = ref(true)
+const logTypeEvents = ref(false)
 const loggingBusy = ref(false)
 const loggingMsg = ref('')
 const loggingErr = ref('')
@@ -178,7 +178,7 @@ async function loadLogging() {
     logTypeAudit.value = cfg.types?.audit !== false
     logTypeRequest.value = cfg.types?.request !== false
     logTypeJobs.value = cfg.types?.jobs !== false
-    logTypeEvents.value = cfg.types?.events !== false
+    logTypeEvents.value = cfg.types?.events === true
   } catch {
     loggingErr.value = t('settings.logging.loadError')
   }
@@ -203,7 +203,7 @@ async function persistLogging() {
     logTypeAudit.value = cfg.types?.audit !== false
     logTypeRequest.value = cfg.types?.request !== false
     logTypeJobs.value = cfg.types?.jobs !== false
-    logTypeEvents.value = cfg.types?.events !== false
+    logTypeEvents.value = cfg.types?.events === true
     loggingMsg.value = t('settings.logging.saved')
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {

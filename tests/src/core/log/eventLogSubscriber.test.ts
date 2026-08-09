@@ -48,15 +48,15 @@ beforeEach(() => {
 })
 
 describe('eventLogSubscriber', () => {
-  test('does not write when events prefs off', async () => {
-    writeSettings({ types: { events: false } })
+  test('does not write when events prefs off (default)', async () => {
     registerEventLogSubscriber()
     emit('job.started', { jobId: 'j1', projectId: 'p1' })
     await new Promise((r) => setTimeout(r, 40))
     expect(await readLogs({ type: 'events' })).toEqual([])
   })
 
-  test('writes JSONL when events prefs on (default)', async () => {
+  test('writes JSONL when events prefs on', async () => {
+    writeSettings({ types: { events: true } })
     registerEventLogSubscriber()
     emit('entity.created', { entity: 'project', id: 'p1', projectId: 'p1' })
     await new Promise((r) => setTimeout(r, 40))
@@ -71,6 +71,7 @@ describe('eventLogSubscriber', () => {
   })
 
   test('registerEventLogSubscriber is idempotent', async () => {
+    writeSettings({ types: { events: true } })
     registerEventLogSubscriber()
     registerEventLogSubscriber()
     emit('job.queued', { jobId: 'q1' })
