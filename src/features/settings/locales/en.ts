@@ -48,6 +48,7 @@ export default {
       audit: 'Audit (config changes)',
       request: 'Request (HTTP /api)',
       jobs: 'Jobs (runner stdout)',
+      events: 'Events (domain event bus)',
     },
     saved: 'Saved.',
     loadError: 'Could not load logging config.',

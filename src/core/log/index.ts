@@ -5,6 +5,7 @@ export {
   AUDIT_ENTITIES,
   RequestLogEntry,
   AuditLogEntry,
+  EventLogEntry,
   LogEntry,
   parseLogLine,
   levelFromHttpStatus,

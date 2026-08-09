@@ -11,7 +11,7 @@ const { t } = useI18nHelpers()
 
 type Tab = 'audit' | 'request' | 'events' | 'jobs'
 
-const enabledTypes = ref({ audit: true, request: true, events: true, jobs: true })
+const enabledTypes = ref({ audit: true, request: true, events: false, jobs: true })
 const availableTabs = computed(() => {
   const tabs: Tab[] = []
   if (enabledTypes.value.audit) tabs.push('audit')
@@ -62,11 +62,11 @@ async function loadLoggingTypes() {
     enabledTypes.value = {
       audit: types.audit !== false,
       request: types.request !== false,
-      events: types.events !== false,
+      events: types.events === true,
       jobs: types.jobs !== false,
     }
   } catch {
-    enabledTypes.value = { audit: true, request: true, events: true, jobs: true }
+    enabledTypes.value = { audit: true, request: true, events: false, jobs: true }
   }
   const tabs = availableTabs.value
   if (!tabs.includes(tab.value)) {
@@ -80,7 +80,7 @@ function onLoggingChanged(ev: Event) {
     enabledTypes.value = {
       audit: detail.types.audit !== false,
       request: detail.types.request !== false,
-      events: detail.types.events !== false,
+      events: detail.types.events === true,
       jobs: detail.types.jobs !== false,
     }
     const tabs = availableTabs.value

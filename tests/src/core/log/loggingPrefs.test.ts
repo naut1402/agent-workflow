@@ -45,34 +45,40 @@ beforeEach(() => {
 })
 
 describe('parseLoggingConfig', () => {
-  test('defaults audit/request/jobs/events on', () => {
+  test('defaults audit/request/jobs on; events off', () => {
     expect(parseLoggingConfig(undefined)).toEqual({
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: true },
+      types: { audit: true, request: true, jobs: true, events: false },
     })
   })
 
-  test('false flags stick', () => {
+  test('false flags stick; events opt-in', () => {
     expect(
       parseLoggingConfig({
         showLogsTab: false,
-        types: { audit: false, request: true, jobs: false, events: false },
+        types: { audit: false, request: true, jobs: false },
       }),
     ).toEqual({
       showLogsTab: false,
       types: { audit: false, request: true, jobs: false, events: false },
     })
-    expect(parseLoggingConfig({ types: { events: true } }).types.events).toBe(true)
-    expect(parseLoggingConfig({ types: { events: false } }).types.events).toBe(false)
+    expect(
+      parseLoggingConfig({
+        types: { events: true },
+      }),
+    ).toEqual({
+      showLogsTab: true,
+      types: { audit: true, request: true, jobs: true, events: true },
+    })
   })
 })
 
 describe('isLogTypeEnabled / loadLoggingPrefs', () => {
-  test('missing settings.json → all types on (incl. events)', () => {
+  test('missing settings.json → audit/request/jobs on; events off', () => {
     expect(isLogTypeEnabled('audit')).toBe(true)
     expect(isLogTypeEnabled('request')).toBe(true)
     expect(isLogTypeEnabled('jobs')).toBe(true)
-    expect(isLogTypeEnabled('events')).toBe(true)
+    expect(isLogTypeEnabled('events')).toBe(false)
   })
 
   test('reads types from settings.json', () => {
@@ -115,17 +121,13 @@ describe('write gate', () => {
       status: 200,
       durationMs: 1,
       error: null,
-      level: 'info',
-      traceId: '',
-      query: '',
-      response: '',
     })
     const entries = await readLogs({ type: 'request' })
     expect(entries.length).toBe(1)
   })
 
-  test('appendLog events no-ops when events disabled', async () => {
-    writeSettings({ types: { audit: true, request: true, jobs: true, events: false } })
+  test('appendLog events no-ops when events disabled (default)', async () => {
+    writeSettings({ types: { audit: true, request: true, jobs: true } })
     await appendLog({
       type: 'events',
       ts: Date.now(),
@@ -133,26 +135,26 @@ describe('write gate', () => {
       level: 'info',
       traceId: '',
       event: 'job.started',
-      payload: { id: 'j1' },
+      payload: { jobId: 'j1' },
       projectId: null,
     })
     expect(await readLogs({ type: 'events' })).toEqual([])
   })
 
-  test('appendLog events writes when events enabled (default)', async () => {
+  test('appendLog events writes when events enabled', async () => {
     writeSettings({ types: { events: true } })
     await appendLog({
       type: 'events',
       ts: Date.now(),
       iso: new Date().toISOString(),
       level: 'info',
-      traceId: 'tr-1',
+      traceId: '',
       event: 'entity.created',
       payload: { entity: 'project', id: 'p1' },
       projectId: 'p1',
     })
     const entries = await readLogs({ type: 'events' })
-    expect(entries).toHaveLength(1)
+    expect(entries.length).toBe(1)
     expect(entries[0]).toMatchObject({
       type: 'events',
       event: 'entity.created',

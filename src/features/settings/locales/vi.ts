@@ -49,6 +49,7 @@ export default {
       audit: 'Audit (thay đổi cấu hình)',
       request: 'Request (HTTP /api)',
       jobs: 'Jobs (stdout runner)',
+      events: 'Events (domain event bus)',
     },
     saved: 'Đã lưu.',
     loadError: 'Không tải được cấu hình logging.',

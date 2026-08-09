@@ -1,6 +1,6 @@
 /**
  * Persist domain bus events to `events.jsonl` when `logging.types.events` is on.
- * Part of observability (#195 read UI + #196 write path).
+ * Part of observability (#195 read UI + #196 write/prefs).
  */
 import { on, type DashboardEvent } from '../events/eventBus.js'
 import { nowStamp } from '../lib/dateUtils.js'
@@ -44,10 +44,12 @@ function projectIdFromPayload(payload: Record<string, unknown>): string | null {
 
 export function appendEventLog(event: DashboardEvent): void {
   if (!isLogTypeEnabled('events')) return
-  const payload =
+  const raw =
     event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload)
-      ? prepareEventPayload(event.payload as Record<string, unknown>)
+      ? (event.payload as Record<string, unknown>)
       : {}
+  const projectId = projectIdFromPayload(raw)
+  const payload = Object.keys(raw).length ? prepareEventPayload(raw) : {}
   const traceId = (getTraceId() ?? '').trim()
   void appendLog({
     type: 'events',
@@ -56,7 +58,7 @@ export function appendEventLog(event: DashboardEvent): void {
     traceId,
     event: String(event.type || ''),
     payload,
-    projectId: projectIdFromPayload(payload),
+    projectId,
   }).catch(() => {})
 }
 

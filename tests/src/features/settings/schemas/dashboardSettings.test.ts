@@ -41,7 +41,7 @@ describe('parseDashboardSettings', () => {
     })
     expect(parsed.logging).toEqual({
       showLogsTab: false,
-      types: { audit: false, request: true, jobs: false, events: true },
+      types: { audit: false, request: true, jobs: false, events: false },
     })
   })
 })
@@ -61,13 +61,13 @@ describe('resolveGithubTokensFromDashboard', () => {
 })
 
 describe('resolveLoggingFromDashboard', () => {
-  it('falls back to defaults (events on)', () => {
+  it('falls back to audit/request/jobs on; events off', () => {
     expect(resolveLoggingFromDashboard({}).showLogsTab).toBe(true)
     expect(resolveLoggingFromDashboard(undefined).types).toEqual({
       audit: true,
       request: true,
       jobs: true,
-      events: true,
+      events: false,
     })
   })
 })
