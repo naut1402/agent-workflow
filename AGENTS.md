@@ -8,6 +8,7 @@ Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `
 |--------|----------|
 | Quickstart | [`README.md`](README.md) |
 | Kiến trúc / cây thư mục chi tiết | [`docs/architecture.md`](docs/architecture.md) |
+| Mục lục domain events (theo feature) | [`docs/event-catalog.md`](docs/event-catalog.md) |
 | Tổ chức feature / business / helper | [`docs/implement/feature-organization-rule.md`](docs/implement/feature-organization-rule.md) |
 | Coding convention (TS, Zod, FE, i18n) | [`docs/implement/coding-convention.md`](docs/implement/coding-convention.md) |
 | Test | [`docs/implement/test-convention.md`](docs/implement/test-convention.md) |
@@ -46,7 +47,7 @@ agent-workflow/
 ├── tests/        # unit (bun + vitest)
 ├── test-e2e/
 ├── docs/
-│   ├── architecture.md, i18n.md, ui-buttons.md
+│   ├── architecture.md, event-catalog.md, i18n.md, ui-buttons.md
 │   ├── template/           # agent + pipeline mẫu
 │   ├── cookbook/           # tái cấu trúc / bài học đợt lớn
 │   └── implement/          # *-rule.md, *-convention.md
