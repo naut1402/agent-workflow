@@ -7,6 +7,7 @@ import { dirnameFromImportMeta, resolvePath } from '../core/lib/fileHelper.js'
 import { loadModulesUnder } from '../core/lib/dirModuleLoader.js'
 import { handleKnowledgeApi } from '../features/knowledge/business/knowledgeApi.js'
 import { appendRequestLog } from '../core/log/store.js'
+import { installEventLogSubscriber } from '../core/log/eventLogSubscriber.js'
 import {
   formatRequestQuery,
   formatResponsePreview,
@@ -56,6 +57,9 @@ export async function registerFeatureRoutes(app: Hono<HonoEnv>): Promise<void> {
 }
 
 export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
+  // Domain events → events.jsonl (prefs-gated). Idempotent across createApp calls.
+  installEventLogSubscriber()
+
   const app = new Hono<HonoEnv>()
 
   app.use('/api/*', async (c, next) => {

@@ -9,13 +9,14 @@ import { useLogsTable } from '../composables/useLogsTable'
 
 const { t } = useI18nHelpers()
 
-type Tab = 'audit' | 'request' | 'jobs'
+type Tab = 'audit' | 'request' | 'events' | 'jobs'
 
-const enabledTypes = ref({ audit: true, request: true, jobs: true })
+const enabledTypes = ref({ audit: true, request: true, events: true, jobs: true })
 const availableTabs = computed(() => {
   const tabs: Tab[] = []
   if (enabledTypes.value.audit) tabs.push('audit')
   if (enabledTypes.value.request) tabs.push('request')
+  if (enabledTypes.value.events) tabs.push('events')
   if (enabledTypes.value.jobs) tabs.push('jobs')
   return tabs
 })
@@ -61,10 +62,11 @@ async function loadLoggingTypes() {
     enabledTypes.value = {
       audit: types.audit !== false,
       request: types.request !== false,
+      events: types.events !== false,
       jobs: types.jobs !== false,
     }
   } catch {
-    enabledTypes.value = { audit: true, request: true, jobs: true }
+    enabledTypes.value = { audit: true, request: true, events: true, jobs: true }
   }
   const tabs = availableTabs.value
   if (!tabs.includes(tab.value)) {
@@ -78,6 +80,7 @@ function onLoggingChanged(ev: Event) {
     enabledTypes.value = {
       audit: detail.types.audit !== false,
       request: detail.types.request !== false,
+      events: detail.types.events !== false,
       jobs: detail.types.jobs !== false,
     }
     const tabs = availableTabs.value
@@ -87,7 +90,7 @@ function onLoggingChanged(ev: Event) {
   }
 }
 
-async function loadLogs(type: 'audit' | 'request') {
+async function loadLogs(type: 'audit' | 'request' | 'events') {
   loading.value = true
   error.value = ''
   try {
@@ -162,6 +165,15 @@ function levelActive(level: LogLevel): boolean {
   return filters.value.levels.includes(level)
 }
 
+function payloadPreview(entry: LogEntry): string {
+  if (entry.type !== 'events') return ''
+  try {
+    return JSON.stringify(entry.payload ?? {})
+  } catch {
+    return ''
+  }
+}
+
 const copyFlash = ref('')
 let copyFlashTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -197,6 +209,7 @@ watch(
   (t) => {
     if (t === 'audit') loadLogs('audit')
     else if (t === 'request') loadLogs('request')
+    else if (t === 'events') loadLogs('events')
     else if (t === 'jobs') loadJobs()
   },
   { immediate: true },
@@ -239,6 +252,14 @@ onUnmounted(() => {
         {{ t('logs.tabs.request') }}
       </button>
       <button
+        v-if="enabledTypes.events"
+        type="button"
+        :class="{ active: tab === 'events' }"
+        @click="selectTab('events')"
+      >
+        {{ t('logs.tabs.events') }}
+      </button>
+      <button
         v-if="enabledTypes.jobs"
         type="button"
         :class="{ active: tab === 'jobs' }"
@@ -253,7 +274,7 @@ onUnmounted(() => {
     <p v-if="copyFlash" class="copy-flash" role="status">{{ copyFlash }}</p>
 
     <div
-      v-if="tab === 'audit' || tab === 'request'"
+      v-if="tab === 'audit' || tab === 'request' || tab === 'events'"
       class="logs-toolbar"
     >
       <input
@@ -441,6 +462,69 @@ onUnmounted(() => {
         </tr>
         <tr v-if="!displayed.length && !loading">
           <td colspan="10" class="muted">{{ t('logs.empty.log') }}</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <!-- Events (domain bus JSONL) -->
+    <div v-else-if="tab === 'events' && enabledTypes.events" class="logs-table-wrap">
+    <table class="logs-table logs-table-events">
+      <thead>
+        <tr>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('time', $event)">
+            {{ t('logs.columns.time') }} {{ sortIndicator('time') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('level', $event)">
+            {{ t('logs.columns.level') }} {{ sortIndicator('level') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('traceId', $event)">
+            {{ t('logs.columns.traceId') }} {{ sortIndicator('traceId') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('event', $event)">
+            {{ t('logs.columns.event') }} {{ sortIndicator('event') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('project', $event)">
+            {{ t('logs.columns.project') }} {{ sortIndicator('project') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('payload', $event)">
+            {{ t('logs.columns.payload') }} {{ sortIndicator('payload') }}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="(e, i) in displayed" :key="i" :class="[`row-level-${e.level}`]">
+          <td>{{ e.iso }}</td>
+          <td><span class="level-badge" :class="`level-${e.level}`">{{ e.level }}</span></td>
+          <td>
+            <button
+              v-if="e.traceId"
+              type="button"
+              class="trace-link"
+              :title="t('logs.filters.useTrace')"
+              @click="filterByTrace(e.traceId)"
+            >
+              {{ e.traceId.slice(0, 8) }}…
+            </button>
+            <span v-else class="muted">—</span>
+          </td>
+          <td>{{ e.type === 'events' ? e.event : '' }}</td>
+          <td>{{ e.projectId || '—' }}</td>
+          <td class="cell-clip">
+            <button
+              v-if="e.type === 'events' && payloadPreview(e)"
+              type="button"
+              class="clip-btn"
+              :title="`${t('logs.copy.hint')}\n${payloadPreview(e)}`"
+              @click="copyText(payloadPreview(e))"
+            >
+              {{ payloadPreview(e) }}
+            </button>
+            <span v-else class="muted">—</span>
+          </td>
+        </tr>
+        <tr v-if="!displayed.length && !loading">
+          <td colspan="6" class="muted">{{ t('logs.empty.log') }}</td>
         </tr>
       </tbody>
     </table>

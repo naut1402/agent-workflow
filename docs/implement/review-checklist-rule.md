@@ -59,6 +59,14 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 - [ ] Đổi quy ước đặt file / peer / helper: cập nhật `feature-organization-rule.md` và/hoặc `AGENTS.md` / `architecture.md` (mô tả **hiện hành**, không kể lịch sử issue).
 - [ ] Đợt tái cấu trúc lớn: bổ sung đơn vị vào `docs/cookbook/` nếu cần tái hiện quyết định.
 
+## H. Domain events (khi đụng persist / lifecycle / CRUD)
+
+Chi tiết type / nơi emit: [`../event-catalog.md`](../event-catalog.md).
+
+- [ ] Đã cân nhắc thêm / sửa / xoá `emit` / `emitEntity` (sau persist; không secret trong payload).
+- [ ] `docs/event-catalog.md` khớp code (hoặc nợ `docs/todo/` có lý do).
+- [ ] Type mới/đổi tên: `DashboardEventType` đã cập nhật.
+
 ---
 
 ## Gợi ý comment review ngắn
