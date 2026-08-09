@@ -7,7 +7,7 @@ vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
   fetchLoggingConfig: vi.fn(async () => ({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: false },
+      types: { audit: true, request: true, jobs: true, events: true },
     },
   })),
 }))
@@ -20,7 +20,7 @@ afterEach(() => {
   vi.mocked(fetchLoggingConfig).mockResolvedValue({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: false },
+      types: { audit: true, request: true, jobs: true, events: true },
     },
   })
 })
@@ -106,7 +106,7 @@ describe('LogsPanel', () => {
     const w = mountWithI18n(LogsPanel)
     await flushPromises()
 
-    await w.findAll('.logs-tabs button')[2].trigger('click') // "Jobs" (events off by default)
+    await w.findAll('.logs-tabs button')[3].trigger('click') // "Jobs" (events on → index 3)
     await flushPromises()
     expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/jobs'))).toBe(true)
 
@@ -120,13 +120,7 @@ describe('LogsPanel', () => {
     expect(w.find('.job-log pre').text()).toContain('hello job log')
   })
 
-  it('events tab fetches domain event logs when prefs enabled', async () => {
-    vi.mocked(fetchLoggingConfig).mockResolvedValue({
-      config: {
-        showLogsTab: true,
-        types: { audit: true, request: true, jobs: true, events: true },
-      },
-    })
+  it('events tab fetches domain event logs (default on)', async () => {
     const fetchMock = stubFetch()
     const w = mountWithI18n(LogsPanel)
     await flushPromises()
@@ -142,7 +136,13 @@ describe('LogsPanel', () => {
     expect(w.find('.logs-table-events').text()).toContain('job.started')
   })
 
-  it('hides events tab when events prefs off (default)', async () => {
+  it('hides events tab when events prefs off', async () => {
+    vi.mocked(fetchLoggingConfig).mockResolvedValue({
+      config: {
+        showLogsTab: true,
+        types: { audit: true, request: true, jobs: true, events: false },
+      },
+    })
     stubFetch()
     const w = mountWithI18n(LogsPanel)
     await flushPromises()
@@ -185,7 +185,7 @@ describe('LogsPanel', () => {
     stubFetch()
     const w = mountWithI18n(LogsPanel)
     await flushPromises()
-    expect(w.findAll('.logs-tabs button')).toHaveLength(3)
+    expect(w.findAll('.logs-tabs button')).toHaveLength(4)
 
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {

@@ -45,18 +45,18 @@ beforeEach(() => {
 })
 
 describe('parseLoggingConfig', () => {
-  test('defaults audit/request/jobs on; events off', () => {
+  test('defaults audit/request/jobs/events on', () => {
     expect(parseLoggingConfig(undefined)).toEqual({
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: false },
+      types: { audit: true, request: true, jobs: true, events: true },
     })
   })
 
-  test('false flags stick; events requires explicit true', () => {
+  test('false flags stick', () => {
     expect(
       parseLoggingConfig({
         showLogsTab: false,
-        types: { audit: false, request: true, jobs: false },
+        types: { audit: false, request: true, jobs: false, events: false },
       }),
     ).toEqual({
       showLogsTab: false,
@@ -68,11 +68,11 @@ describe('parseLoggingConfig', () => {
 })
 
 describe('isLogTypeEnabled / loadLoggingPrefs', () => {
-  test('missing settings.json → audit/request/jobs on; events off', () => {
+  test('missing settings.json → all types on (incl. events)', () => {
     expect(isLogTypeEnabled('audit')).toBe(true)
     expect(isLogTypeEnabled('request')).toBe(true)
     expect(isLogTypeEnabled('jobs')).toBe(true)
-    expect(isLogTypeEnabled('events')).toBe(false)
+    expect(isLogTypeEnabled('events')).toBe(true)
   })
 
   test('reads types from settings.json', () => {
@@ -124,8 +124,8 @@ describe('write gate', () => {
     expect(entries.length).toBe(1)
   })
 
-  test('appendLog events no-ops when events disabled (default)', async () => {
-    writeSettings({ types: { audit: true, request: true, jobs: true } })
+  test('appendLog events no-ops when events disabled', async () => {
+    writeSettings({ types: { audit: true, request: true, jobs: true, events: false } })
     await appendLog({
       type: 'events',
       ts: Date.now(),
@@ -139,7 +139,7 @@ describe('write gate', () => {
     expect(await readLogs({ type: 'events' })).toEqual([])
   })
 
-  test('appendLog events writes when events enabled', async () => {
+  test('appendLog events writes when events enabled (default)', async () => {
     writeSettings({ types: { events: true } })
     await appendLog({
       type: 'events',
