@@ -2,12 +2,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { parseLoggingConfig } from '../../../../src/core/log/loggingPrefs.js'
 import {
   invalidateLoggingPrefsCache,
   isLogTypeEnabled,
   loadLoggingPrefs,
-  parseLoggingConfig,
-} from '../../../../src/core/log/loggingPrefs.js'
+} from '../../../../src/core/log/loggingPrefsIo.js'
 import { appendLog, appendRequestLog, emitAudit } from '../../../../src/core/log/store.js'
 import { readLogs } from '../../../../src/features/logs/business/store.js'
 

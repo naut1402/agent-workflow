@@ -8,7 +8,7 @@ import {
   uninstallEventLogSubscriberForTest,
   prepareEventPayload,
 } from '../../../../src/core/log/eventLogSubscriber.js'
-import { invalidateLoggingPrefsCache } from '../../../../src/core/log/loggingPrefs.js'
+import { invalidateLoggingPrefsCache } from '../../../../src/core/log/loggingPrefsIo.js'
 import { readLogs } from '../../../../src/features/logs/business/store.js'
 
 let home: string

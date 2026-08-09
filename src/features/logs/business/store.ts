@@ -1,6 +1,6 @@
 import { readTextFile } from '../../../core/lib/fileHelper.js'
 import { logFile } from '../../../core/log/fileDriver.js'
-import { isLogTypeEnabled } from '../../../core/log/loggingPrefs.js'
+import { isLogTypeEnabled } from '../../../core/log/loggingPrefsIo.js'
 import { parseLogLine, type LogEntry, type LogType } from '../../../core/log/schema.js'
 
 /**

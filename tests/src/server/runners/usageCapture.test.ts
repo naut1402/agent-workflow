@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { invalidateLoggingPrefsCache } from '../../../../src/core/log/loggingPrefs.js'
+import { invalidateLoggingPrefsCache } from '../../../../src/core/log/loggingPrefsIo.js'
 import { captureJobUsage } from '../../../../src/features/runner/business/usageCapture.js'
 import {
   encodeCwdForClaudeProjects,

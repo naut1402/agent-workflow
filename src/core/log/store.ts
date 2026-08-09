@@ -1,6 +1,6 @@
 import { nowStamp } from '../lib/dateUtils.js'
 import { getLogDriver } from './driver.js'
-import { isLogTypeEnabled } from './loggingPrefs.js'
+import { isLogTypeEnabled } from './loggingPrefsIo.js'
 import {
   levelFromHttpStatus,
   type AuditEntity,

@@ -1,5 +1,5 @@
 import { appendUsageLog } from '../../../core/log/store.js'
-import { isLogTypeEnabled } from '../../../core/log/loggingPrefs.js'
+import { isLogTypeEnabled } from '../../../core/log/loggingPrefsIo.js'
 import type { UsageSnapshot } from '../../../core/log/schema.js'
 import {
   hasAnyTokens,

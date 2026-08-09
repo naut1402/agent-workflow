@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createApp } from '../../../../src/api/apiServer.js'
 import { createRegistryContext } from '../../../../src/core/registry.js'
-import { invalidateLoggingPrefsCache } from '../../../../src/core/log/loggingPrefs.js'
+import { invalidateLoggingPrefsCache } from '../../../../src/core/log/loggingPrefsIo.js'
 import { appendLog } from '../../../../src/core/log/store.js'
 import {
   loadLoggingConfig,

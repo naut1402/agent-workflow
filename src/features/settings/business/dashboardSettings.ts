@@ -20,11 +20,8 @@ import {
   parseGithubTokensConfig,
   type GithubTokensConfig,
 } from '../schemas/githubTokens.js'
-import {
-  invalidateLoggingPrefsCache,
-  parseLoggingConfig,
-  type LoggingConfig,
-} from '../../../core/log/loggingPrefs.js'
+import { parseLoggingConfig, type LoggingConfig } from '../../../core/log/loggingPrefs.js'
+import { invalidateLoggingPrefsCache } from '../../../core/log/loggingPrefsIo.js'
 import { registryHome } from '../../../core/registry.js'
 
 export function dashboardSettingsFile(): string {
