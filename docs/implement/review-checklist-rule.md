@@ -61,7 +61,7 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 
 ## H. Domain events (khi đụng persist / lifecycle / CRUD)
 
-Checklist survey + catalog: [`../event-catalog.md`](../event-catalog.md) §7–§8.
+Theo checklist repo [`AGENTS.md`](../../AGENTS.md) §6 + catalog [`../event-catalog.md`](../event-catalog.md).
 
 - [ ] Đã cân nhắc thêm / sửa / xoá `emit` / `emitEntity` (sau persist; không secret trong payload).
 - [ ] `docs/event-catalog.md` khớp code (hoặc nợ `docs/todo/` có lý do).

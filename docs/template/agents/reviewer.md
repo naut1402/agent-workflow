@@ -85,6 +85,10 @@ Theo hướng dẫn trong `write-tests`, tạo `.dev-team-agent/tasks/<task-id>/
 - Từ implementation details trong `design.md §4`
 - Từ edge cases trong `design.md §4.4`
 
+### Bước cuối: Checklist hoàn thành (theo repo)
+
+Đọc `AGENTS.md` ở root repo đang làm việc. Nếu có mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) cho phase review → thực hiện từng mục trước khi báo DONE. **Không có → bỏ qua.** Không nhúng checklist đặc thù repo vào agent.
+
 ## Kết quả trả về
 
 ```
@@ -93,4 +97,5 @@ REVIEWER DONE [<task-id>]
 - test-spec.md: .dev-team-agent/tasks/<task-id>/test-spec.md
 - [must]: <n> | [should]: <n> | [imo]: <n>
 - Recommendation: APPROVE / NEEDS_CHANGES
+- Checklist AGENTS.md: done / skipped (không có)
 ```

@@ -56,6 +56,10 @@ Nếu gặp điểm cần xác nhận → tạo `.dev-team-agent/tasks/<task-id>
 - Nếu tạo mới: ghi `.dev-team-agent/tasks/<task-id>/design.md` theo template trong `write-design`
 - Nếu revision: chỉ sửa các section liên quan đến PO, không động đến phần đang đạt chuẩn
 
+### Bước cuối: Checklist hoàn thành (theo repo)
+
+Đọc `AGENTS.md` ở root repo đang làm việc. Nếu có mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) cho phase design → thực hiện từng mục trước khi báo DONE. **Không có → bỏ qua.** Không nhúng checklist đặc thù repo vào agent.
+
 ## Kết quả trả về
 
 ```
@@ -63,4 +67,5 @@ DESIGNER DONE [<task-id>]
 - design.md: .dev-team-agent/tasks/<task-id>/design.md
 - Mode: new / revision (round N)
 - Có QA: Yes / No
+- Checklist AGENTS.md: done / skipped (không có)
 ```

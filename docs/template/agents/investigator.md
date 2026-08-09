@@ -40,7 +40,6 @@ Thực hiện theo hướng dẫn trong skill `/survey-codebase`:
 3. Xác định phạm vi ảnh hưởng (blast radius)
 4. Kiểm tra test coverage hiện tại
 5. Gán confidence cho từng phát hiện
-6. **Domain events:** checklist [`docs/event-catalog.md`](../../event-catalog.md) §7 — cân nhắc thêm / sửa / xoá `emit`·`emitEntity` trên call chain (persist → emit); ghi kết luận vào investigate; khi chốt thay đổi thì phản ánh catalog trong cùng thay đổi code (hoặc nợ `docs/todo/`)
 
 Dùng Serena MCP tools (`find_symbol`, `find_implementations`, `find_referencing_symbols`, `get_symbols_overview`) để đọc codebase. Không đoán mò — chỉ ghi những gì đã xác nhận trực tiếp từ code.
 
@@ -90,6 +89,10 @@ Nếu orchestrator truyền `export_json = true` trong task prompt, sau khi ghi 
 
 Nếu file chưa tồn tại, tạo mới với cấu trúc `{ "task_id": "<id>", "version": 1, "phases": { "investigator": { ... } } }`.
 
+### Bước cuối: Checklist hoàn thành (theo repo)
+
+Đọc `AGENTS.md` ở root repo đang làm việc. Nếu có mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) cho phase/survey này → thực hiện từng mục; thiếu mục nào thì bổ sung artifact / ghi nhận trước khi báo DONE. **Không có mục checklist trong `AGENTS.md` → bỏ qua** (không bịa checklist từ template này). Không nhúng chi tiết checklist đặc thù repo vào agent — mỗi repo tự mô tả trong `AGENTS.md`.
+
 ## Kết quả trả về
 
 ```
@@ -99,6 +102,7 @@ INVESTIGATOR DONE [<task-id>]
 - Confidence tổng thể: High / Medium / Low
 - Có QA: Yes / No
 - pipeline-export.json: updated (phases.investigator) / skipped (export_json=false)
+- Checklist AGENTS.md: done / skipped (không có)
 ```
 
 Nếu dừng do QA:

@@ -78,6 +78,10 @@ git commit --amend --no-edit
 
 Chỉ báo cáo hash của commit **sau** amend (hoặc commit follow-up nếu amend không khả dụng — khi đó cập nhật contract `pr-creator` tương ứng). Không để sửa Phase 2 nằm ngoài commit mà `pr-creator` sẽ đọc.
 
+### Bước cuối: Checklist hoàn thành (theo repo)
+
+Đọc `AGENTS.md` ở root repo đang làm việc. Nếu có mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) cho phase implement → thực hiện từng mục trước khi báo DONE. **Không có → bỏ qua.** Không nhúng checklist đặc thù repo vào agent.
+
 ## Kết quả trả về
 
 ```text
@@ -86,6 +90,7 @@ IMPLEMENTER DONE [<task-id>]
 - phpstan.md: .dev-team-agent/tasks/<task-id>/phpstan.md
 - PHPStan status: CLEAN / HAS_NEW_ERRORS
 - Có QA: Yes / No
+- Checklist AGENTS.md: done / skipped (không có)
 ```
 
 Nếu dừng do QA:

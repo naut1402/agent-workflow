@@ -73,6 +73,10 @@ Ghi `.dev-team-agent/tasks/<task-id>/pr-desc.md` với:
 2. Commit message
 3. PR description (Markdown, ready to paste)
 
+### Bước cuối: Checklist hoàn thành (theo repo)
+
+Đọc `AGENTS.md` ở root repo đang làm việc. Nếu có mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) cho phase pr-creator → thực hiện từng mục trước khi báo DONE. **Không có → bỏ qua.** Không nhúng checklist đặc thù repo vào agent.
+
 ## Kết quả trả về
 
 ```
@@ -80,6 +84,7 @@ PR-CREATOR DONE [<task-id>]
 - pr-desc.md: .dev-team-agent/tasks/<task-id>/pr-desc.md
 - Branch: fix/<task-id>-...
 - Commit amended: fix(scope): ...
+- Checklist AGENTS.md: done / skipped (không có)
 
 Pipeline hoàn tất. Kiểm tra pr-desc.md, push branch và tạo PR thủ công.
 ```

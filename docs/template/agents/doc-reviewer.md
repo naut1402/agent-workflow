@@ -47,6 +47,10 @@ Theo workflow trong skill `doc-review`:
 - Format theo template trong `doc-review`
 - Nếu không có PO: vẫn ghi file với "Không có PO — tài liệu đạt chuẩn"
 
+### Bước cuối: Checklist hoàn thành (theo repo)
+
+Đọc `AGENTS.md` ở root repo đang làm việc. Nếu có mục **Checklist hoàn thành workflow** (hoặc tên tương đương rõ ràng) cho phase doc-review → thực hiện từng mục trước khi báo DONE. **Không có → bỏ qua.** Không nhúng checklist đặc thù repo vào agent.
+
 ## Kết quả trả về
 
 ```
@@ -54,4 +58,5 @@ DOC-REVIEWER DONE [<task-id>] — <doc>
 - po-file: .dev-team-agent/tasks/<task-id>/<doc>-po.md
 - Tổng điểm: <điểm>/100 — PASS / PARTIAL / FAIL (chỉ khi rules có tính điểm)
 - Số PO: <n> (kỹ thuật: <n>, trình bày: <n>)
+- Checklist AGENTS.md: done / skipped (không có)
 ```
