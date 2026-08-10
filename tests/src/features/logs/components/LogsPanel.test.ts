@@ -38,7 +38,7 @@ function stubFetch() {
             id: JOB_ID,
             status: 'succeeded',
             agentRef: 'project/quick-action-improve-doc',
-            metadata: { artifactName: 'design.md' },
+            metadata: { artifactName: 'design.md', pipelineStepId: 'implementer' },
           },
         ],
       }
@@ -75,6 +75,7 @@ function stubFetch() {
                   model: 'claude-sonnet',
                   provider: 'claude-code-cli',
                   taskId: 'T20fd4281',
+                  stepId: 'implementer',
                   projectId: 'p1',
                 },
               ]
@@ -131,9 +132,10 @@ describe('LogsPanel', () => {
     await flushPromises()
     expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/jobs'))).toBe(true)
 
-    // List item shows agent + artifact context, not just the raw job id.
+    // List item shows agent + pipeline step + artifact context, not just the raw job id.
     const item = w.find('.jobs-list li')
     expect(item.text()).toContain('project/quick-action-improve-doc')
+    expect(item.text()).toContain('implementer')
     expect(item.text()).toContain('design.md')
 
     await item.trigger('click')
@@ -173,6 +175,8 @@ describe('LogsPanel', () => {
     expect(table.text()).toContain('Cache read')
     expect(table.text()).toContain('Cache write')
     expect(table.text()).toContain('T20fd4281')
+    expect(table.text()).toContain('Step')
+    expect(table.text()).toContain('implementer')
   })
 
   it('hides events tab when events prefs off', async () => {

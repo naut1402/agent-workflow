@@ -60,6 +60,7 @@ function cellValue(entry: LogEntry, key: string): string | number {
   } else if (entry.type === 'usage') {
     if (key === 'jobId') return entry.jobId
     if (key === 'taskId') return entry.taskId || ''
+    if (key === 'stepId') return entry.stepId || ''
     if (key === 'sessionId') return entry.sessionId || ''
     if (key === 'model') return entry.model || ''
     if (key === 'provider') return entry.provider
@@ -105,6 +106,7 @@ function matchesQuery(entry: LogEntry, q: string): boolean {
             ? [
                 entry.jobId,
                 entry.taskId,
+                entry.stepId,
                 entry.model,
                 entry.provider,
                 entry.sessionId,

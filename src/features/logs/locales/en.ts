@@ -36,6 +36,7 @@ export default {
     totalTokens: 'Total',
     jobId: 'Job',
     taskId: 'Task',
+    stepId: 'Step',
   },
   filters: {
     q: 'Quick filter…',

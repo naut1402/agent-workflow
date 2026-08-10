@@ -46,6 +46,14 @@ function onHeaderSort(key: string, ev: MouseEvent) {
   toggleSort(key, { append: ev.shiftKey })
 }
 
+/** Pipeline / ad-hoc step tagged on the job (`stepId` or `pipelineStepId`). */
+function jobStepId(job: { metadata?: Record<string, unknown> | null }): string {
+  const meta = job.metadata || {}
+  if (typeof meta.stepId === 'string' && meta.stepId) return meta.stepId
+  if (typeof meta.pipelineStepId === 'string' && meta.pipelineStepId) return meta.pipelineStepId
+  return ''
+}
+
 let tailTimer: ReturnType<typeof setInterval> | null = null
 
 function stopTail() {
@@ -577,6 +585,9 @@ onUnmounted(() => {
           <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('taskId', $event)">
             {{ t('logs.columns.taskId') }} {{ sortIndicator('taskId') }}
           </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('stepId', $event)">
+            {{ t('logs.columns.stepId') }} {{ sortIndicator('stepId') }}
+          </th>
           <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('project', $event)">
             {{ t('logs.columns.project') }} {{ sortIndicator('project') }}
           </th>
@@ -605,10 +616,11 @@ onUnmounted(() => {
             <span v-else class="muted">—</span>
           </td>
           <td>{{ e.type === 'usage' ? e.taskId || '—' : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.stepId || '—' : '' }}</td>
           <td>{{ e.projectId || '—' }}</td>
         </tr>
         <tr v-if="!displayed.length && !loading">
-          <td colspan="11" class="muted">{{ t('logs.empty.log') }}</td>
+          <td colspan="12" class="muted">{{ t('logs.empty.log') }}</td>
         </tr>
       </tbody>
     </table>
@@ -625,7 +637,9 @@ onUnmounted(() => {
             @click="selectJob(j.id)"
           >
             <strong>{{ j.agentRef || j.id.slice(0, 8) }}</strong>
-            <span class="muted">{{ j.metadata?.artifactName || j.id.slice(0, 8) }} · {{ j.status }}</span>
+            <span class="muted">
+              <template v-if="jobStepId(j)">{{ jobStepId(j) }} · </template>{{ j.metadata?.artifactName || j.id.slice(0, 8) }} · {{ j.status }}
+            </span>
           </li>
           <li v-if="!jobs.length && !loading" class="muted">{{ t('logs.empty.job') }}</li>
         </ul>
