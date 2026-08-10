@@ -7,6 +7,8 @@ import {
   fileURLToPath,
   homeDir,
   pathToFileURL,
+  randomBytes,
+  randomUUID,
   resolvePathUnder,
   safeReadDir,
   statSafe,
@@ -74,6 +76,16 @@ describe('fileHelper', () => {
   it('dirnameFromImportMeta matches parent of file URL', () => {
     const url = pathToFileURL(path.join(dir, 'a.txt')).href
     expect(dirnameFromImportMeta(url)).toBe(dir)
+  })
+
+  it('randomBytes returns the requested length', () => {
+    expect(randomBytes(4)).toHaveLength(4)
+  })
+
+  it('randomUUID returns an RFC 4122-shaped string', () => {
+    expect(randomUUID()).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    )
   })
 })
 

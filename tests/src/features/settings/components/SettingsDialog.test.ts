@@ -22,7 +22,7 @@ vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
   fetchLoggingConfig: vi.fn(async () => ({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: false },
+      types: { audit: true, request: true, jobs: true, events: false, usage: true },
     },
   })),
   saveLoggingConfig: vi.fn(async (c: object) => ({ config: c })),
@@ -49,7 +49,7 @@ afterEach(() => {
   vi.mocked(fetchLoggingConfig).mockResolvedValue({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: false },
+      types: { audit: true, request: true, jobs: true, events: false, usage: true },
     },
   })
   vi.mocked(saveLoggingConfig).mockImplementation(async (c: object) => ({ config: c }))
@@ -104,7 +104,7 @@ describe('SettingsDialog', () => {
 
     expect(saveLoggingConfig).toHaveBeenCalledWith({
       showLogsTab: false,
-      types: { audit: true, request: true, jobs: true, events: false },
+      types: { audit: true, request: true, jobs: true, events: false, usage: true },
     })
     expect(pane.textContent).not.toContain('Loại log')
     expect(pane.textContent).not.toContain('Audit (thay đổi cấu hình)')
@@ -114,7 +114,7 @@ describe('SettingsDialog', () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValueOnce({
       config: {
         showLogsTab: false,
-        types: { audit: false, request: true, jobs: false },
+        types: { audit: false, request: true, jobs: false, events: false, usage: true },
       },
     })
     mount(SettingsDialog, { attachTo: document.body })

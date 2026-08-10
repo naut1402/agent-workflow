@@ -7,7 +7,7 @@ vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
   fetchLoggingConfig: vi.fn(async () => ({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: true },
+      types: { audit: true, request: true, jobs: true, events: true, usage: true },
     },
   })),
 }))
@@ -20,7 +20,7 @@ afterEach(() => {
   vi.mocked(fetchLoggingConfig).mockResolvedValue({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: true },
+      types: { audit: true, request: true, jobs: true, events: true, usage: true },
     },
   })
 })
@@ -38,12 +38,13 @@ function stubFetch() {
             id: JOB_ID,
             status: 'succeeded',
             agentRef: 'project/quick-action-improve-doc',
-            metadata: { artifactName: 'design.md' },
+            metadata: { artifactName: 'design.md', pipelineStepId: 'implementer' },
           },
         ],
       }
     else if (url.includes('/api/logs')) {
       const events = url.includes('type=events')
+      const usage = url.includes('type=usage')
       body = {
         entries: events
           ? [
@@ -57,18 +58,39 @@ function stubFetch() {
                 projectId: 'p1',
               },
             ]
-          : [
-              {
-                type: 'audit',
-                iso: '2026-01-01',
-                level: 'info',
-                traceId: 'trace-demo',
-                op: 'create',
-                entity: 'custom-agent',
-                identifier: 'foo',
-                projectId: null,
-              },
-            ],
+          : usage
+            ? [
+                {
+                  type: 'usage',
+                  iso: '2026-01-03',
+                  level: 'info',
+                  traceId: '',
+                  jobId: JOB_ID,
+                  inputTokens: 10,
+                  outputTokens: 20,
+                  cacheReadTokens: 5,
+                  cacheWriteTokens: 2,
+                  totalTokens: 37,
+                  estimatedCostUsd: null,
+                  model: 'claude-sonnet',
+                  provider: 'claude-code-cli',
+                  taskId: 'T20fd4281',
+                  stepId: 'implementer',
+                  projectId: 'p1',
+                },
+              ]
+            : [
+                {
+                  type: 'audit',
+                  iso: '2026-01-01',
+                  level: 'info',
+                  traceId: 'trace-demo',
+                  op: 'create',
+                  entity: 'custom-agent',
+                  identifier: 'foo',
+                  projectId: null,
+                },
+              ],
       }
     }
     return { ok: true, json: async () => body }
@@ -106,13 +128,14 @@ describe('LogsPanel', () => {
     const w = mountWithI18n(LogsPanel)
     await flushPromises()
 
-    await w.findAll('.logs-tabs button')[3].trigger('click') // "Jobs" (events on → index 3)
+    await w.findAll('.logs-tabs button')[4].trigger('click') // "Jobs" (events+usage on → index 4)
     await flushPromises()
     expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/jobs'))).toBe(true)
 
-    // List item shows agent + artifact context, not just the raw job id.
+    // List item shows agent + pipeline step + artifact context, not just the raw job id.
     const item = w.find('.jobs-list li')
     expect(item.text()).toContain('project/quick-action-improve-doc')
+    expect(item.text()).toContain('implementer')
     expect(item.text()).toContain('design.md')
 
     await item.trigger('click')
@@ -126,7 +149,7 @@ describe('LogsPanel', () => {
     await flushPromises()
 
     const labels = w.findAll('.logs-tabs button').map((b) => b.text())
-    expect(labels).toEqual(['Kiểm toán', 'Yêu cầu', 'Events', 'Jobs'])
+    expect(labels).toEqual(['Kiểm toán', 'Yêu cầu', 'Events', 'Usage', 'Jobs'])
 
     await w.findAll('.logs-tabs button')[2].trigger('click') // Events
     await flushPromises()
@@ -136,11 +159,45 @@ describe('LogsPanel', () => {
     expect(w.find('.logs-table-events').text()).toContain('job.started')
   })
 
+  it('usage tab fetches usage logs and shows token columns', async () => {
+    const fetchMock = stubFetch()
+    const w = mountWithI18n(LogsPanel)
+    await flushPromises()
+
+    await w.findAll('.logs-tabs button')[3].trigger('click') // Usage
+    await flushPromises()
+
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls.some((u) => u.includes('/api/logs') && u.includes('type=usage'))).toBe(true)
+    const table = w.find('.logs-table-usage')
+    expect(table.text()).toContain('claude-sonnet')
+    expect(table.text()).toContain('37')
+    expect(table.text()).toContain('Cache read')
+    expect(table.text()).toContain('Cache write')
+    expect(table.text()).toContain('T20fd4281')
+    expect(table.text()).toContain('Step')
+    expect(table.text()).toContain('implementer')
+  })
+
   it('hides events tab when events prefs off', async () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValue({
       config: {
         showLogsTab: true,
-        types: { audit: true, request: true, jobs: true, events: false },
+        types: { audit: true, request: true, jobs: true, events: false, usage: true },
+      },
+    })
+    stubFetch()
+    const w = mountWithI18n(LogsPanel)
+    await flushPromises()
+    const labels = w.findAll('.logs-tabs button').map((b) => b.text())
+    expect(labels).toEqual(['Kiểm toán', 'Yêu cầu', 'Usage', 'Jobs'])
+  })
+
+  it('hides usage tab when usage prefs off', async () => {
+    vi.mocked(fetchLoggingConfig).mockResolvedValue({
+      config: {
+        showLogsTab: true,
+        types: { audit: true, request: true, jobs: true, events: false, usage: false },
       },
     })
     stubFetch()
@@ -154,7 +211,7 @@ describe('LogsPanel', () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValue({
       config: {
         showLogsTab: true,
-        types: { audit: true, request: false, jobs: false, events: false },
+        types: { audit: true, request: false, jobs: false, events: false, usage: false },
       },
     })
     stubFetch()
@@ -170,7 +227,7 @@ describe('LogsPanel', () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValue({
       config: {
         showLogsTab: true,
-        types: { audit: false, request: false, jobs: false, events: false },
+        types: { audit: false, request: false, jobs: false, events: false, usage: false },
       },
     })
     stubFetch()
@@ -185,11 +242,11 @@ describe('LogsPanel', () => {
     stubFetch()
     const w = mountWithI18n(LogsPanel)
     await flushPromises()
-    expect(w.findAll('.logs-tabs button')).toHaveLength(4)
+    expect(w.findAll('.logs-tabs button')).toHaveLength(5)
 
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {
-        detail: { types: { audit: false, request: true, jobs: false, events: false } },
+        detail: { types: { audit: false, request: true, jobs: false, events: false, usage: false } },
       }),
     )
     await flushPromises()

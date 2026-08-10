@@ -4,7 +4,7 @@
  */
 import { on, type DashboardEvent } from '../events/eventBus.js'
 import { nowStamp } from '../lib/dateUtils.js'
-import { isLogTypeEnabled } from './loggingPrefs.js'
+import { isLogTypeEnabled } from './loggingPrefsIo.js'
 import { LOG_RESPONSE_MAX_CHARS, truncateForLog } from './schema.js'
 import { appendLog } from './store.js'
 import { getTraceId } from './traceContext.js'

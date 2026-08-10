@@ -42,6 +42,8 @@ export default defineConfig({
       'dist',
       'test-e2e/**',
       'tests/src/server/**',
+      // Node-only helpers (fileHelper / fs) — bun test, not jsdom.
+      'tests/src/core/lib/**',
       'tests/src/core/log/**',
       'tests/src/core/events/**',
       'tests/src/features/**/business/**',

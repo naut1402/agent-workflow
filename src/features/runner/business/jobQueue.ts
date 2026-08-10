@@ -1,9 +1,9 @@
 import { cpSync, dirname, joinPath, mkdirSync, readTextFileSync, readdirSync, renameSync, resolvePath, rmSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import crypto from 'node:crypto'
-import { spawn } from 'node:child_process'
+import { spawn } from '../../../core/lib/processHelper.js'
 import os from 'node:os'
 import { registryHome } from '../../../core/registry.js'
-import { isLogTypeEnabled } from '../../../core/log/loggingPrefs.js'
+import { isLogTypeEnabled } from '../../../core/log/loggingPrefsIo.js'
 import { emit } from '../../../core/events/index.js'
 import { getRunner, getDefaultRunner, substituteConfig, getProvider } from './registry.js'
 import { getConnection } from './connections.js'
@@ -11,7 +11,9 @@ import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
 import { isAgentCliProviderId } from './providers/agentCli.js'
+import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js'
 import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
+import type { UsageSnapshot } from '../../../core/log/schema.js'
 import { advanceStepOnJobSuccess, loadPipelineConfig, queuePendingFeedback, takePendingFeedback } from './index.js'
 
 /** Cap on stdout persisted for chat surfaces (NL chat + task chat fallback). */
@@ -256,6 +258,13 @@ function saveJob(job: JobRecord): JobRecord {
   return job
 }
 
+/** Merge usage onto an existing job record (usage capture path). */
+export function mergeJobUsage(id: string, usage: UsageSnapshot): JobRecord | null {
+  const cur = loadJob(id)
+  if (!cur) return null
+  return saveJob({ ...cur, usage })
+}
+
 export function listJobs(limit = 20): JobRecord[] {
   ensureJobsDir()
   const files = readdirSync(jobsDir()).filter((f) => f.endsWith('.json'))
@@ -498,8 +507,7 @@ async function runJob(job: JobRecord): Promise<void> {
   // `cancelJob` already set `status: 'cancelled'` and this SIGTERM is why
   // `provider.execute()` just resolved — `result.ok` will be false, and
   // without this guard the code below would overwrite it with `'failed'`.
-  if (loadJob(job.id)?.status === 'cancelled') return
-
+  // Session + usage capture still run first: tokens were spent even on cancel.
   const capturedSessionId = result.sessionId ?? execSessionId ?? execResumeSessionId
   if (taskId && projectId && inputSessionMode && inputSessionMode !== 'none' && capturedSessionId) {
     recordSessionUsage({
@@ -514,6 +522,29 @@ async function runJob(job: JobRecord): Promise<void> {
       stepId: jobStepId,
     })
   }
+
+  if (capturedSessionId && connection.providerId === 'claude-code-cli') {
+    const current = loadJob(job.id) || job
+    void captureJobUsage(
+      { ...current, sessionId: capturedSessionId },
+      capturedSessionId,
+      connection.providerId,
+    ).catch(() => {})
+  }
+
+  // Cursor (and other parse-json CLIs) already emit usage on ExecuteResult —
+  // persist when present so Logs → Usage is not Claude-only.
+  if (result.tokenUsage) {
+    const current = loadJob(job.id) || job
+    void captureTokenUsageFromExecute(
+      { ...current, ...(capturedSessionId ? { sessionId: capturedSessionId } : {}) },
+      connection.providerId,
+      result.tokenUsage,
+      capturedSessionId ?? null,
+    ).catch(() => {})
+  }
+
+  if (loadJob(job.id)?.status === 'cancelled') return
 
   const isApprovalJob = Boolean(job.applyTarget && job.approvalArtifact)
   const isChatFeedback = Boolean(job.metadata?.isChatFeedback)

@@ -1,6 +1,6 @@
 import { readTextFile } from '../../../core/lib/fileHelper.js'
 import { logFile } from '../../../core/log/fileDriver.js'
-import { isLogTypeEnabled } from '../../../core/log/loggingPrefs.js'
+import { isLogTypeEnabled } from '../../../core/log/loggingPrefsIo.js'
 import { parseLogLine, type LogEntry, type LogType } from '../../../core/log/schema.js'
 
 /**
@@ -13,7 +13,7 @@ export async function readLogs(opts: {
   project?: string | null
   limit?: number
 } = {}): Promise<LogEntry[]> {
-  const types: LogType[] = opts.type ? [opts.type] : ['request', 'audit']
+  const types: LogType[] = opts.type ? [opts.type] : ['request', 'audit', 'usage']
   const out: LogEntry[] = []
   for (const t of types) {
     if (!isLogTypeEnabled(t)) continue

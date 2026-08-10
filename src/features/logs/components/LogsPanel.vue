@@ -9,14 +9,15 @@ import { useLogsTable } from '../composables/useLogsTable'
 
 const { t } = useI18nHelpers()
 
-type Tab = 'audit' | 'request' | 'events' | 'jobs'
+type Tab = 'audit' | 'request' | 'events' | 'usage' | 'jobs'
 
-const enabledTypes = ref({ audit: true, request: true, events: false, jobs: true })
+const enabledTypes = ref({ audit: true, request: true, events: false, usage: true, jobs: true })
 const availableTabs = computed(() => {
   const tabs: Tab[] = []
   if (enabledTypes.value.audit) tabs.push('audit')
   if (enabledTypes.value.request) tabs.push('request')
   if (enabledTypes.value.events) tabs.push('events')
+  if (enabledTypes.value.usage) tabs.push('usage')
   if (enabledTypes.value.jobs) tabs.push('jobs')
   return tabs
 })
@@ -45,6 +46,14 @@ function onHeaderSort(key: string, ev: MouseEvent) {
   toggleSort(key, { append: ev.shiftKey })
 }
 
+/** Pipeline / ad-hoc step tagged on the job (`stepId` or `pipelineStepId`). */
+function jobStepId(job: { metadata?: Record<string, unknown> | null }): string {
+  const meta = job.metadata || {}
+  if (typeof meta.stepId === 'string' && meta.stepId) return meta.stepId
+  if (typeof meta.pipelineStepId === 'string' && meta.pipelineStepId) return meta.pipelineStepId
+  return ''
+}
+
 let tailTimer: ReturnType<typeof setInterval> | null = null
 
 function stopTail() {
@@ -63,10 +72,11 @@ async function loadLoggingTypes() {
       audit: types.audit !== false,
       request: types.request !== false,
       events: types.events === true,
+      usage: types.usage !== false,
       jobs: types.jobs !== false,
     }
   } catch {
-    enabledTypes.value = { audit: true, request: true, events: false, jobs: true }
+    enabledTypes.value = { audit: true, request: true, events: false, usage: true, jobs: true }
   }
   const tabs = availableTabs.value
   if (!tabs.includes(tab.value)) {
@@ -81,6 +91,7 @@ function onLoggingChanged(ev: Event) {
       audit: detail.types.audit !== false,
       request: detail.types.request !== false,
       events: detail.types.events === true,
+      usage: detail.types.usage !== false,
       jobs: detail.types.jobs !== false,
     }
     const tabs = availableTabs.value
@@ -90,7 +101,7 @@ function onLoggingChanged(ev: Event) {
   }
 }
 
-async function loadLogs(type: 'audit' | 'request' | 'events') {
+async function loadLogs(type: 'audit' | 'request' | 'events' | 'usage') {
   loading.value = true
   error.value = ''
   try {
@@ -210,6 +221,7 @@ watch(
     if (t === 'audit') loadLogs('audit')
     else if (t === 'request') loadLogs('request')
     else if (t === 'events') loadLogs('events')
+    else if (t === 'usage') loadLogs('usage')
     else if (t === 'jobs') loadJobs()
   },
   { immediate: true },
@@ -260,6 +272,14 @@ onUnmounted(() => {
         {{ t('logs.tabs.events') }}
       </button>
       <button
+        v-if="enabledTypes.usage"
+        type="button"
+        :class="{ active: tab === 'usage' }"
+        @click="selectTab('usage')"
+      >
+        {{ t('logs.tabs.usage') }}
+      </button>
+      <button
         v-if="enabledTypes.jobs"
         type="button"
         :class="{ active: tab === 'jobs' }"
@@ -274,7 +294,7 @@ onUnmounted(() => {
     <p v-if="copyFlash" class="copy-flash" role="status">{{ copyFlash }}</p>
 
     <div
-      v-if="tab === 'audit' || tab === 'request' || tab === 'events'"
+      v-if="tab === 'audit' || tab === 'request' || tab === 'events' || tab === 'usage'"
       class="logs-toolbar"
     >
       <input
@@ -530,6 +550,82 @@ onUnmounted(() => {
     </table>
     </div>
 
+    <!-- Usage (LLM token snapshots) -->
+    <div v-else-if="tab === 'usage' && enabledTypes.usage" class="logs-table-wrap">
+    <table class="logs-table logs-table-usage">
+      <thead>
+        <tr>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('time', $event)">
+            {{ t('logs.columns.time') }} {{ sortIndicator('time') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('model', $event)">
+            {{ t('logs.columns.model') }} {{ sortIndicator('model') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('provider', $event)">
+            {{ t('logs.columns.provider') }} {{ sortIndicator('provider') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('inputTokens', $event)">
+            {{ t('logs.columns.inputTokens') }} {{ sortIndicator('inputTokens') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('outputTokens', $event)">
+            {{ t('logs.columns.outputTokens') }} {{ sortIndicator('outputTokens') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('cacheReadTokens', $event)">
+            {{ t('logs.columns.cacheReadTokens') }} {{ sortIndicator('cacheReadTokens') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('cacheWriteTokens', $event)">
+            {{ t('logs.columns.cacheWriteTokens') }} {{ sortIndicator('cacheWriteTokens') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('totalTokens', $event)">
+            {{ t('logs.columns.totalTokens') }} {{ sortIndicator('totalTokens') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('jobId', $event)">
+            {{ t('logs.columns.jobId') }} {{ sortIndicator('jobId') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('taskId', $event)">
+            {{ t('logs.columns.taskId') }} {{ sortIndicator('taskId') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('stepId', $event)">
+            {{ t('logs.columns.stepId') }} {{ sortIndicator('stepId') }}
+          </th>
+          <th class="sortable" :title="t('logs.filters.sortHint')" @click="onHeaderSort('project', $event)">
+            {{ t('logs.columns.project') }} {{ sortIndicator('project') }}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="(e, i) in displayed" :key="i" :class="[`row-level-${e.level}`]">
+          <td>{{ e.iso }}</td>
+          <td>{{ e.type === 'usage' ? e.model || '—' : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.provider : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.inputTokens : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.outputTokens : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.cacheReadTokens ?? 0 : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.cacheWriteTokens ?? 0 : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.totalTokens : '' }}</td>
+          <td class="cell-clip">
+            <button
+              v-if="e.type === 'usage' && e.jobId"
+              type="button"
+              class="clip-btn"
+              :title="`${t('logs.copy.hint')}\n${e.jobId}`"
+              @click="copyText(e.jobId)"
+            >
+              {{ e.jobId.slice(0, 8) }}…
+            </button>
+            <span v-else class="muted">—</span>
+          </td>
+          <td>{{ e.type === 'usage' ? e.taskId || '—' : '' }}</td>
+          <td>{{ e.type === 'usage' ? e.stepId || '—' : '' }}</td>
+          <td>{{ e.projectId || '—' }}</td>
+        </tr>
+        <tr v-if="!displayed.length && !loading">
+          <td colspan="12" class="muted">{{ t('logs.empty.log') }}</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
     <!-- Jobs -->
     <div v-else-if="tab === 'jobs' && enabledTypes.jobs" class="jobs-layout">
       <aside class="jobs-list">
@@ -541,7 +637,9 @@ onUnmounted(() => {
             @click="selectJob(j.id)"
           >
             <strong>{{ j.agentRef || j.id.slice(0, 8) }}</strong>
-            <span class="muted">{{ j.metadata?.artifactName || j.id.slice(0, 8) }} · {{ j.status }}</span>
+            <span class="muted">
+              <template v-if="jobStepId(j)">{{ jobStepId(j) }} · </template>{{ j.metadata?.artifactName || j.id.slice(0, 8) }} · {{ j.status }}
+            </span>
           </li>
           <li v-if="!jobs.length && !loading" class="muted">{{ t('logs.empty.job') }}</li>
         </ul>

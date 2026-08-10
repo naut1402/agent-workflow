@@ -4,18 +4,19 @@ import { z } from 'zod'
  * Log entry schema (request/audit JSONL). Write path: `src/core/log` (driver + append).
  * Read UI: `src/features/logs/business`.
  *
- * Three kinds, discriminated by `type`:
+ * Four kinds, discriminated by `type`:
  *  - `request` — one line per `/api/*` request (method/path/status/duration).
  *  - `audit`   — one line per config mutation (op/entity/identifier).
  *  - `events`  — one line per domain event from the in-process bus (`event` field
  *                holds DashboardEvent.type; do not confuse with this discriminant).
+ *  - `usage`   — one line per job LLM token snapshot (`UsageSnapshot` + source).
  *
  * Parsing is intentionally defensive: a malformed JSONL line yields `null` and
  * is skipped rather than throwing, mirroring the codebase's defensive-reads rule.
  *
  * `level` + `traceId` default when missing so older JSONL rows still parse.
  */
-export const LOG_TYPES = ['request', 'audit', 'events'] as const
+export const LOG_TYPES = ['request', 'audit', 'events', 'usage'] as const
 export type LogType = (typeof LOG_TYPES)[number]
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const
@@ -92,11 +93,47 @@ export const EventLogEntry = z.object({
   projectId: z.string().nullable(),
 })
 
-export const LogEntry = z.discriminatedUnion('type', [RequestLogEntry, AuditLogEntry, EventLogEntry])
+
+/** Long-lived token/cost boundary schema (P0: estimatedCostUsd always null). */
+export const UsageSnapshotSchema = z.object({
+  inputTokens: z.number().nonnegative(),
+  outputTokens: z.number().nonnegative(),
+  cacheReadTokens: z.number().nonnegative().optional(),
+  cacheWriteTokens: z.number().nonnegative().optional(),
+  totalTokens: z.number().nonnegative(),
+  estimatedCostUsd: z.number().nullable(),
+  model: z.string().nullable(),
+  provider: z.string(),
+  taskId: z.string().nullable().optional(),
+  projectId: z.string().nullable().optional(),
+  stepId: z.string().nullable().optional(),
+  phase: z.string().nullable().optional(),
+  pipelineId: z.string().nullable().optional(),
+  jobId: z.string(),
+  sessionId: z.string().nullable().optional(),
+  startedAt: z.string().nullable().optional(),
+  finishedAt: z.string().nullable().optional(),
+  durationMs: z.number().nullable().optional(),
+})
+export type UsageSnapshot = z.infer<typeof UsageSnapshotSchema>
+
+export const UsageLogEntry = z.object({
+  type: z.literal('usage'),
+  ts: z.number(),
+  iso: z.string(),
+  level: levelField,
+  traceId: traceIdField,
+  ...UsageSnapshotSchema.shape,
+  source: z.enum(['main', 'subagent', 'aggregate', 'stdout']).optional(),
+  agentType: z.string().nullable().optional(),
+})
+
+export const LogEntry = z.discriminatedUnion('type', [RequestLogEntry, AuditLogEntry, EventLogEntry, UsageLogEntry])
 export type LogEntry = z.infer<typeof LogEntry>
 export type RequestLogEntry = z.infer<typeof RequestLogEntry>
 export type AuditLogEntry = z.infer<typeof AuditLogEntry>
 export type EventLogEntry = z.infer<typeof EventLogEntry>
+export type UsageLogEntry = z.infer<typeof UsageLogEntry>
 
 /** Cap stored query/response previews so JSONL stays bounded. */
 export const LOG_QUERY_MAX_CHARS = 2_048

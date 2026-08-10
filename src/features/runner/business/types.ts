@@ -1,5 +1,7 @@
 // Shared types for the runner execution plane (U0005).
 
+import type { UsageSnapshot } from '../../../core/log/schema.js'
+
 export interface CredentialProfile {
   id: string
   provider: string
@@ -112,7 +114,10 @@ export interface ExecuteResult {
   tokenUsage?: {
     inputTokens?: number
     outputTokens?: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
     totalTokens?: number
+    model?: string
     estimated?: boolean
   }
 }
@@ -165,6 +170,8 @@ export interface JobRecord {
   // this 1-indexed inclusive line range, so every line outside the range stays
   // byte-identical and the review diff is localized to the selection.
   spliceRange?: { start: number; end: number }
+  /** Aggregated LLM token usage for this job (Claude transcript capture, P0). */
+  usage?: UsageSnapshot
 }
 
 export interface RunnersStore {

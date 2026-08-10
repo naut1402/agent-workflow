@@ -50,6 +50,7 @@ export default {
       request: 'Request (HTTP /api)',
       jobs: 'Jobs (stdout runner)',
       events: 'Events (domain event bus)',
+      usage: 'Usage (token LLM)',
     },
     saved: 'Đã lưu.',
     loadError: 'Không tải được cấu hình logging.',

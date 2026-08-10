@@ -55,7 +55,10 @@ export function providerFamilyOf(providerId: string): ProviderFamily {
 export interface TokenUsage {
   inputTokens?: number
   outputTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
   totalTokens?: number
+  model?: string
   /** Heuristic estimate when CLI does not report usage. */
   estimated?: boolean
 }

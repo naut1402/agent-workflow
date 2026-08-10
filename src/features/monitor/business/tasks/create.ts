@@ -1,7 +1,15 @@
-import { access, dirname, joinPath, mkdir, rename, rm, writeTextFile } from '../../../../core/lib/fileHelper.js'
-import { randomBytes } from 'node:crypto'
+import {
+  access,
+  dirname,
+  joinPath,
+  mkdir,
+  randomBytes,
+  rename,
+  rm,
+  writeTextFile,
+} from '../../../../core/lib/fileHelper.js'
 import { dumpYaml, readYamlSafe } from '../../../../core/lib/yamlLib.js'
-import { sanitiseProfileName, profilesDir, loadPipelineConfig } from '../index.js'
+import { sanitiseProfileName, profilesDir, loadPipelineConfig } from '../peers.js'
 import { TASK_ID_PATTERN } from '../../schemas/taskCreate.js'
 import type { CreateTaskRequest } from '../../schemas/taskCreate.js'
 import { writeStateAtomic } from './state.js'

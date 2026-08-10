@@ -165,6 +165,7 @@ const logTypeAudit = ref(true)
 const logTypeRequest = ref(true)
 const logTypeJobs = ref(true)
 const logTypeEvents = ref(false)
+const logTypeUsage = ref(true)
 const loggingBusy = ref(false)
 const loggingMsg = ref('')
 const loggingErr = ref('')
@@ -179,6 +180,7 @@ async function loadLogging() {
     logTypeRequest.value = cfg.types?.request !== false
     logTypeJobs.value = cfg.types?.jobs !== false
     logTypeEvents.value = cfg.types?.events === true
+    logTypeUsage.value = cfg.types?.usage !== false
   } catch {
     loggingErr.value = t('settings.logging.loadError')
   }
@@ -196,6 +198,7 @@ async function persistLogging() {
         request: logTypeRequest.value,
         jobs: logTypeJobs.value,
         events: logTypeEvents.value,
+        usage: logTypeUsage.value,
       },
     })
     const cfg = data.config || {}
@@ -204,6 +207,7 @@ async function persistLogging() {
     logTypeRequest.value = cfg.types?.request !== false
     logTypeJobs.value = cfg.types?.jobs !== false
     logTypeEvents.value = cfg.types?.events === true
+    logTypeUsage.value = cfg.types?.usage !== false
     loggingMsg.value = t('settings.logging.saved')
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {
@@ -214,6 +218,7 @@ async function persistLogging() {
             request: logTypeRequest.value,
             jobs: logTypeJobs.value,
             events: logTypeEvents.value,
+            usage: logTypeUsage.value,
           },
         },
       }),
@@ -247,6 +252,11 @@ function toggleLogTypeJobs() {
 
 function toggleLogTypeEvents() {
   logTypeEvents.value = !logTypeEvents.value
+  void persistLogging()
+}
+
+function toggleLogTypeUsage() {
+  logTypeUsage.value = !logTypeUsage.value
   void persistLogging()
 }
 
@@ -721,6 +731,15 @@ onUnmounted(() => {
                       @change="toggleLogTypeEvents"
                     />
                     {{ t('settings.logging.types.events') }}
+                  </label>
+                  <label class="settings-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="logTypeUsage"
+                      :disabled="loggingBusy"
+                      @change="toggleLogTypeUsage"
+                    />
+                    {{ t('settings.logging.types.usage') }}
                   </label>
                 </template>
                 <p v-if="loggingMsg" class="settings-autoscan-msg">{{ loggingMsg }}</p>
