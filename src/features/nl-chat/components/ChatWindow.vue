@@ -270,7 +270,7 @@ async function dismissActiveSession(): Promise<void> {
     return
   }
   try {
-    await closeTaskChatSession(ctx.taskId, props.projectId ?? undefined)
+    await closeTaskChatSession(ctx.taskId, props.projectId ?? undefined, ctx.stepId)
   } catch {
     /* best-effort — UI still resets */
   }

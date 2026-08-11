@@ -6,7 +6,7 @@ import {
   parseCursorJsonOutput,
   stepIdOf,
 } from './index.js'
-import type { JobRecord, SessionEntry } from './index.js'
+import type { JobRecord, SessionEntry, TaskSessionLedger } from './index.js'
 import { readTextFileSync } from '../../../core/lib/fileHelper.js'
 import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.js'
 import { readCursorSessionTranscript } from './cursorSessionTranscript.js'
@@ -221,6 +221,17 @@ function readTranscriptForProvider(
   return { ...claude, matchedProvider: hint }
 }
 
+/** True when `sessionId` was actively dismissed for `stepId` (closed/stale) with no open replacement. */
+function isSessionDismissedForStep(ledger: TaskSessionLedger, sessionId: string, stepId: string): boolean {
+  const openReplacement = [...ledger.sessions]
+    .reverse()
+    .find((s) => s.status === 'open' && s.sessionId && s.stepIds?.includes(stepId))
+  if (openReplacement) return false
+  return ledger.sessions.some(
+    (s) => s.sessionId === sessionId && (s.status === 'closed' || s.status === 'stale'),
+  )
+}
+
 /**
  * The CLI session to show for (task, step). A running job wins — its session is
  * the one producing output right now — then the newest finished job of that
@@ -237,6 +248,8 @@ export function resolveChatSession(
   staleReason?: string
   providerId?: string | null
   job?: JobRecord
+  /** True when this step's session was actively dismissed (via "+") and not yet replaced. */
+  dismissedForStep?: boolean
 } {
   const jobs = jobsOfTask(taskId)
   const running = jobs.find((j) => j.status === 'queued' || j.status === 'running')
@@ -252,12 +265,29 @@ export function resolveChatSession(
   if (stepId) {
     const ofStep = jobs.find((j) => stepIdOf(j) === stepId && j.sessionId)
     if (ofStep?.sessionId) {
-      return {
-        sessionId: ofStep.sessionId,
-        workspace: ofStep.workspace,
-        providerId: providerIdOfJob(ofStep),
-        job: ofStep,
+      const ledgerForStep = loadTaskSessionLedger(projectId, taskId)
+      if (!isSessionDismissedForStep(ledgerForStep, ofStep.sessionId, stepId)) {
+        return {
+          sessionId: ofStep.sessionId,
+          workspace: ofStep.workspace,
+          providerId: providerIdOfJob(ofStep),
+          job: ofStep,
+        }
       }
+      // Dismissed: only a fresh `open` entry for this exact step may win here —
+      // do NOT fall through to the `byStep` ledger fallback below, since it does
+      // not filter by status and would return the very `closed` entry just ruled out.
+      const openForStep = [...ledgerForStep.sessions]
+        .reverse()
+        .find((s) => s.status === 'open' && s.sessionId && s.stepIds?.includes(stepId))
+      return openForStep
+        ? {
+            sessionId: openForStep.sessionId,
+            workspace: openForStep.workspace,
+            entry: openForStep,
+            providerId: openForStep.providerId,
+          }
+        : { sessionId: null, dismissedForStep: true }
     }
   }
 
@@ -336,7 +366,7 @@ export function getTaskChatState(
   let transcriptFound = Boolean(transcript.file)
   let transcriptMissingReason: string | undefined
   const from = opts.fromIndex ?? 0
-  const jobSource = finishedJobsForChat(jobs, opts.stepId, resolved.sessionId)
+  const jobSource = resolved.dismissedForStep ? [] : finishedJobsForChat(jobs, opts.stepId, resolved.sessionId)
   const needJobFallback =
     !runningJob &&
     jobSource.length > 0 &&

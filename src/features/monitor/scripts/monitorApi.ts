@@ -53,9 +53,9 @@ export async function repairTaskState(id: string, projectId?: string) {
   })
 }
 
-export async function closeTaskChatSession(id: string, projectId?: string) {
+export async function closeTaskChatSession(id: string, projectId?: string, stepId?: string) {
   return apiPost(`/api/tasks/${encodeURIComponent(id)}/close-session`, {}, {
-    query: { project: projectId },
+    query: { project: projectId, stepId },
   })
 }
 
