@@ -117,6 +117,21 @@ export function findCursorTranscriptFile(sessionId: string, _workspace?: string)
   return null
 }
 
+/**
+ * Cursor CLI writes user turns wrapped as `<timestamp>…</timestamp><user_query>…</user_query>`
+ * (sometimes without the `<timestamp>` prefix) — strip it so the chat UI shows
+ * plain text instead of the raw framing. No-op (returns `text` unchanged) when
+ * the string doesn't match the expected wrapper exactly, so a CLI format change
+ * degrades to "shows the wrapper" rather than losing/mangling content.
+ */
+export function stripCursorUserWrapper(text: string): string {
+  const full = text.match(/^<timestamp>[\s\S]*?<\/timestamp>\s*<user_query>([\s\S]*?)<\/user_query>\s*$/)
+  if (full) return full[1].trim()
+  const onlyQuery = text.match(/^<user_query>([\s\S]*?)<\/user_query>\s*$/)
+  if (onlyQuery) return onlyQuery[1].trim()
+  return text
+}
+
 function textFromCursorEntry(entry: Record<string, unknown>): { role: 'user' | 'assistant' | null; text: string; at?: string } {
   const at =
     typeof entry.timestamp === 'string'
@@ -129,14 +144,14 @@ function textFromCursorEntry(entry: Record<string, unknown>): { role: 'user' | '
   if (entry.type === 'user' || entry.type === 'assistant') {
     const message = entry.message as Record<string, unknown> | undefined
     const content = message?.content
-    if (typeof content === 'string') return { role: entry.type, text: content, at }
+    if (typeof content === 'string') return { role: entry.type, text: stripCursorUserWrapper(content), at }
     if (Array.isArray(content)) {
       const parts: string[] = []
       for (const raw of content) {
         const block = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
         if (block?.type === 'text' && typeof block.text === 'string') parts.push(block.text)
       }
-      return { role: entry.type, text: parts.join('\n'), at }
+      return { role: entry.type, text: stripCursorUserWrapper(parts.join('\n')), at }
     }
   }
 
@@ -147,14 +162,14 @@ function textFromCursorEntry(entry: Record<string, unknown>): { role: 'user' | '
   else if (roleRaw === 'assistant' || roleRaw === 'ai' || roleRaw === 'agent') role = 'assistant'
   if (!role) return { role: null, text: '' }
 
-  if (typeof entry.text === 'string') return { role, text: entry.text, at }
-  if (typeof entry.message === 'string') return { role, text: entry.message, at }
-  if (typeof entry.content === 'string') return { role, text: entry.content, at }
+  if (typeof entry.text === 'string') return { role, text: stripCursorUserWrapper(entry.text), at }
+  if (typeof entry.message === 'string') return { role, text: stripCursorUserWrapper(entry.message), at }
+  if (typeof entry.content === 'string') return { role, text: stripCursorUserWrapper(entry.content), at }
 
   // Nested `{ message: { content: string | blocks[] } }` (Cursor agent-transcript)
   const message = entry.message && typeof entry.message === 'object' ? (entry.message as Record<string, unknown>) : null
   const nested = message?.content ?? entry.content
-  if (typeof nested === 'string') return { role, text: nested, at }
+  if (typeof nested === 'string') return { role, text: stripCursorUserWrapper(nested), at }
   if (Array.isArray(nested)) {
     const parts: string[] = []
     for (const raw of nested) {
@@ -162,7 +177,7 @@ function textFromCursorEntry(entry: Record<string, unknown>): { role: 'user' | '
       if (block?.type === 'text' && typeof block.text === 'string') parts.push(block.text)
       else if (typeof raw === 'string') parts.push(raw)
     }
-    return { role, text: parts.join('\n'), at }
+    return { role, text: stripCursorUserWrapper(parts.join('\n')), at }
   }
   return { role, text: '', at }
 }
