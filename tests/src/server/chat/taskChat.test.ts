@@ -365,6 +365,30 @@ describe('getTaskChatState', () => {
     expect(page.total).toBe(4)
   })
 
+  test('strips the <timestamp>/<user_query> wrapper from job-fallback stdout too', () => {
+    upsertConnection({
+      id: 'conn-cursor-wrap',
+      kind: 'local-console',
+      providerId: 'cursor-cli',
+      cliPath: 'agent',
+    })
+    upsertRunner({ id: 'runner-cursor-wrap', name: 'Cursor wrap', connectionId: 'conn-cursor-wrap', config: {} })
+    writeJob({
+      id: 'j-cursor-wrap',
+      runnerId: 'runner-cursor-wrap',
+      sessionId: 's-missing-wrap',
+      userPrompt: 'Viết design',
+      stdout: JSON.stringify({
+        result: '<timestamp>2026-01-01T00:00:00Z</timestamp><user_query>Nội dung từ stdout.</user_query>',
+        session_id: 's-missing-wrap',
+      }),
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'designer' },
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
+    expect(state.turns[1]?.text).toBe('Nội dung từ stdout.')
+  })
+
   test('falls back to job log Phản hồi section when stdout is not persisted', () => {
     const logDir = path.join(home, 'jobs')
     fs.mkdirSync(logDir, { recursive: true })

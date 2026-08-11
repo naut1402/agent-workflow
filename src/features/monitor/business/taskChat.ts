@@ -9,7 +9,7 @@ import {
 import type { JobRecord, SessionEntry, TaskSessionLedger } from './index.js'
 import { readTextFileSync } from '../../../core/lib/fileHelper.js'
 import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.js'
-import { readCursorSessionTranscript } from './cursorSessionTranscript.js'
+import { readCursorSessionTranscript, stripCursorUserWrapper } from './cursorSessionTranscript.js'
 
 const RESPONSE_HEADER = '=== Phản hồi của runner (stdout/stderr) ==='
 const RESULT_HEADER = '=== Kết quả ==='
@@ -27,7 +27,7 @@ function clipFallback(text: string): string {
  */
 function agentOutputFromJob(job: JobRecord): string {
   if (typeof job.stdout === 'string' && job.stdout.trim()) {
-    return extractAgentText(job.stdout)
+    return stripCursorUserWrapper(extractAgentText(job.stdout))
   }
 
   let log = ''
@@ -47,7 +47,7 @@ function agentOutputFromJob(job: JobRecord): string {
     .filter((line) => !line.startsWith('[runner] '))
     .join('\n')
     .trim()
-  return extractAgentText(stripped)
+  return stripCursorUserWrapper(extractAgentText(stripped))
 }
 
 /** Prefer Cursor/agent JSON `result` field when stdout is still raw JSON. */
