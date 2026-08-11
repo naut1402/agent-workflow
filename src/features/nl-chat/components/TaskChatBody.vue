@@ -63,9 +63,10 @@ function shown(turn: { index: number; role: string; text: string }): string {
  * `ArtifactPanel.vue`'s `blocks`.
  */
 const displayTurns = computed(() =>
-  chat.sortedTurns.value.map((turn) =>
-    turn.role === 'assistant' ? { ...turn, html: parseMarkdown(turn.text) } : turn,
-  ),
+  chat.sortedTurns.value.map((turn) => ({
+    ...turn,
+    html: turn.role === 'assistant' ? parseMarkdown(turn.text) : undefined,
+  })),
 )
 
 async function scrollToEnd(): Promise<void> {
