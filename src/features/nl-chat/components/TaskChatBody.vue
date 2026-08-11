@@ -56,10 +56,18 @@ function shown(turn: { index: number; role: string; text: string }): string {
   return isCollapsed(turn) ? `${turn.text.slice(0, COLLAPSE_CHARS)}…` : turn.text
 }
 
-/** Runner replies are markdown (lists, code fences, headings) — render them. */
-function renderMarkdown(text: string): string {
-  return parseMarkdown(text)
-}
+/**
+ * Display-ordered turns with assistant markdown pre-rendered — a `computed`
+ * re-runs only when `sortedTurns` changes, not on every re-render (e.g. when
+ * `running`/`total` change but the turns themselves don't), same pattern as
+ * `ArtifactPanel.vue`'s `blocks`.
+ */
+const displayTurns = computed(() =>
+  chat.sortedTurns.value.map((turn) => ({
+    ...turn,
+    html: turn.role === 'assistant' ? parseMarkdown(turn.text) : undefined,
+  })),
+)
 
 async function scrollToEnd(): Promise<void> {
   await nextTick()
@@ -149,7 +157,7 @@ onUnmounted(() => chat.stop())
         Phiên chưa có nội dung hội thoại nào.
       </p>
 
-      <template v-for="turn in chat.turns.value" :key="turn.index">
+      <template v-for="turn in displayTurns" :key="turn.index">
         <p v-if="turn.role === 'tool'" class="task-chat-activity">
           <span class="task-chat-tool">{{ turn.tool }}</span>
           <span v-if="turn.text" class="task-chat-tool-arg">{{ turn.text }}</span>
@@ -160,7 +168,7 @@ onUnmounted(() => chat.stop())
           <div
             v-if="turn.role === 'assistant'"
             class="nl-chat-message nl-chat-message-assistant md"
-            v-html="renderMarkdown(turn.text)"
+            v-html="turn.html"
           ></div>
           <p v-else class="nl-chat-message" :class="`nl-chat-message-${turn.role}`">{{ shown(turn) }}</p>
           <button v-if="canCollapse(turn)" type="button" class="task-chat-more" @click="toggle(turn.index)">

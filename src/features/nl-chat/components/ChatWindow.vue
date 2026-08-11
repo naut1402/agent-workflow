@@ -26,6 +26,9 @@ const emit = defineEmits<{
   minimize: []
   /** Hide and forget the context (next open starts the creation assistant). */
   close: []
+  /** Task mode only: switch to a fresh builder chat, same as clicking the FAB
+   * while a task chat is open — the step's own session is left untouched. */
+  'new-session': []
 }>()
 
 const { t } = useI18nHelpers()
@@ -262,7 +265,7 @@ const anchorStyle = computed(() => {
   }
 })
 
-/** End the active chat session (NL scratch or task ledger) — same teardown for × and +. */
+/** End the active chat session (NL scratch or task ledger) — used by × to forget it for good. */
 async function dismissActiveSession(): Promise<void> {
   const ctx = context.value
   if (ctx.mode === 'builder') {
@@ -270,7 +273,7 @@ async function dismissActiveSession(): Promise<void> {
     return
   }
   try {
-    await closeTaskChatSession(ctx.taskId, props.projectId ?? undefined)
+    await closeTaskChatSession(ctx.taskId, props.projectId ?? undefined, ctx.stepId)
   } catch {
     /* best-effort — UI still resets */
   }
@@ -282,11 +285,19 @@ async function onCloseClick(): Promise<void> {
   emit('close')
 }
 
+/**
+ * + starts a fresh chat. In task mode this must NOT touch the step's CLI
+ * session (that used to close it out from under the step, then reopen the
+ * same task/step — effectively overwriting it) — instead it switches to a new
+ * builder chat, exactly like clicking the FAB while a task chat is open.
+ */
 async function onNewSession(): Promise<void> {
-  await dismissActiveSession()
-  if (context.value.mode === 'builder') {
-    builderRef.value?.reset?.()
+  if (context.value.mode !== 'builder') {
+    emit('new-session')
+    return
   }
+  await dismissActiveSession()
+  builderRef.value?.reset?.()
 }
 </script>
 

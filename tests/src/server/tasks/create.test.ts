@@ -92,6 +92,26 @@ describe('createTask', () => {
     expect(result.firstStep?.id).toBe('investigator')
   })
 
+  test('400 when profileName does not resolve to a usable pipeline profile', async () => {
+    const root = await tmpRoot()
+
+    const result = await createTask(root, {
+      taskId: 'F0012',
+      source: 'prompt',
+      prompt: 'Brief',
+      profileName: 'missing',
+      knowledgeInputs: [],
+      autoReview: false,
+      exportJson: false,
+    })
+    expect(result.ok).toBe(false)
+    if (!('error' in result)) return
+    expect(result.status).toBe(400)
+
+    await expect(fs.stat(path.join(root, '.dev-state', 'F0012.json'))).rejects.toThrow()
+    await expect(fs.stat(path.join(root, 'tasks', 'F0012'))).rejects.toThrow()
+  })
+
   test('409 when state file already exists', async () => {
     const root = await tmpRoot()
     await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })

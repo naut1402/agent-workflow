@@ -78,6 +78,7 @@ export function useNotifications(tasks: Ref<any[]>) {
         const hitl = Boolean(task.hitl_pending)
         const qa = Boolean(task.has_qa)
         nextFlags.set(taskId, { hitl, qa })
+        if (task.archived) continue
         const prev = prevFlags.get(taskId)
         if (hitl && !prev?.hitl && notificationsEnabled && notifyHitl) {
           pushEvent(taskId, 'hitl_pending', typeof task.hitl_pending === 'string' ? task.hitl_pending : null)

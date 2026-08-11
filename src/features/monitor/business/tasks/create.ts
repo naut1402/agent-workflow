@@ -135,6 +135,10 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
     await writeFileAtomic(requestFile, requestContent)
 
     const override = await resolvePipelineOverride(root, input)
+    if (input.profileName && !override) {
+      await rm(taskDir, { recursive: true, force: true }).catch(() => {})
+      return { ok: false, status: 400, error: 'pipeline profile not found or empty' }
+    }
     if (override) {
       const steps = (override.doc.steps as Record<string, any>[]).map((s) => ({ ...s }))
       if (knowledgeInputs.length && steps[0]) {

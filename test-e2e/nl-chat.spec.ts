@@ -218,6 +218,18 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
 
   await capture(page, testInfo, 'nl-chat-runner-session')
 
+  // + switches to a brand new (builder) chat instead of tearing down and
+  // recreating the step's own session — no close-session call goes out.
+  let closeSessionCalled = false
+  await page.route(/\/api\/tasks\/[^/]+\/close-session/, (route) => {
+    closeSessionCalled = true
+    route.fulfill({ json: { ok: true } })
+  })
+  await win.locator('.nl-chat-icon-btn[title="Phiên chat mới"]').click()
+  await expect(win.locator('.nl-chat-badge.is-task')).toHaveCount(0)
+  await expect(win.locator('.nl-chat-title')).toHaveText('Trợ lý tạo mới')
+  expect(closeSessionCalled).toBe(false)
+
   // Leaving the icon hides it again.
   await win.locator('.nl-chat-title').hover()
   await expect(popover).toHaveCount(0)

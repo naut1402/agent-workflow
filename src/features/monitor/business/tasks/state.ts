@@ -1,7 +1,7 @@
 import { dirname, joinPath, mkdir, readTextFile, rename, rm, stat, writeFile, writeTextFile } from '../../../../core/lib/fileHelper.js'
 import { randomBytes } from 'node:crypto'
 import { TaskArchivePatch, TaskStatePatch } from '../../schemas/task.js'
-import { loadPipelineConfig } from '../index.js'
+import { loadPipelineConfig, sendTaskFeedback } from '../index.js'
 import { readState, flowProfilePath } from './index.js'
 import { checkReviewRetry } from './reviewVerdict.js'
 
@@ -59,6 +59,7 @@ export async function applyHitlAction(
   root: string,
   taskId: string,
   patch: TaskStatePatch,
+  projectId = '',
 ): Promise<HitlApplyResult> {
   const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
 
@@ -137,6 +138,14 @@ export async function applyHitlAction(
     }
 
     const mtime = await writeStateAtomic(stateFile, state)
+
+    if (patch.action === 'reject' && patch.feedback?.trim() && currentStep) {
+      void sendTaskFeedback(taskId, projectId, patch.feedback.trim(), { stepId: currentStep.id }).catch(() => {
+        // Best-effort: reject already persisted OK even if feedback dispatch fails
+        // (step "cooled down", job busy, etc).
+      })
+    }
+
     return { ok: true, state, mtime }
   })
 }
@@ -202,7 +211,7 @@ export async function advanceStepOnJobSuccess(
     }
 
     const gateId = currentStep.hitl?.gate_id
-    if (gateId) {
+    if (gateId && !state.auto_review) {
       state.hitl_pending = gateId
     } else {
       const next = steps[stepIdx + 1]
