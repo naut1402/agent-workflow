@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
+  closeTaskSession,
   isSessionEntryValid,
   loadTaskSessionLedger,
   recordSessionUsage,
@@ -142,4 +143,50 @@ describe('sessionLedger', () => {
     })
     expect(plan).toEqual({ sessionMode: 'none' })
   })
+
+  test('closeTaskSession with stepId only closes the entry for that step', () => {
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'per-step',
+      sessions: [
+        seedEntry({ sessionId: 'sess-design', stepIds: ['design'], status: 'open' }),
+        seedEntry({ sessionId: 'sess-implement', stepIds: ['implement'], status: 'open' }),
+      ],
+    })
+    closeTaskSession(PROJECT, TASK, { stepId: 'design' })
+    const ledger = loadTaskSessionLedger(PROJECT, TASK)
+    expect(ledger.sessions.find((s) => s.sessionId === 'sess-design')?.status).toBe('closed')
+    expect(ledger.sessions.find((s) => s.sessionId === 'sess-implement')?.status).toBe('open')
+  })
+
+  test('closeTaskSession without opts closes every open entry (backward compat)', () => {
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'per-step',
+      sessions: [
+        seedEntry({ sessionId: 'sess-design', stepIds: ['design'], status: 'open' }),
+        seedEntry({ sessionId: 'sess-implement', stepIds: ['implement'], status: 'open' }),
+      ],
+    })
+    closeTaskSession(PROJECT, TASK)
+    const ledger = loadTaskSessionLedger(PROJECT, TASK)
+    expect(ledger.sessions.every((s) => s.status === 'closed')).toBe(true)
+  })
 })
+
+function seedEntry(overrides: Partial<SessionEntry> & { sessionId: string }): SessionEntry {
+  return {
+    providerId: 'claude-code-cli',
+    runnerId: 'r1',
+    connectionId: 'claude-code-cli-local',
+    workspace: '/tmp/ws',
+    host: os.hostname(),
+    stepIds: [],
+    status: 'open',
+    createdAt: new Date().toISOString(),
+    lastUsedAt: new Date().toISOString(),
+    ...overrides,
+  }
+}

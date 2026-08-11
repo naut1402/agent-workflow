@@ -244,16 +244,16 @@ export function recordSessionUsage(input: RecordSessionInput): void {
   saveTaskSessionLedger(projectId, ledger)
 }
 
-export function closeTaskSession(projectId: string, taskId: string): void {
+export function closeTaskSession(projectId: string, taskId: string, opts?: { stepId?: string }): void {
   const ledger = loadTaskSessionLedger(projectId, taskId)
   const now = new Date().toISOString()
   let changed = false
   for (const s of ledger.sessions) {
-    if (s.status === 'open') {
-      s.status = 'closed'
-      s.lastUsedAt = now
-      changed = true
-    }
+    if (s.status !== 'open') continue
+    if (opts?.stepId && !s.stepIds?.includes(opts.stepId)) continue
+    s.status = 'closed'
+    s.lastUsedAt = now
+    changed = true
   }
   if (changed) saveTaskSessionLedger(projectId, ledger)
 }
