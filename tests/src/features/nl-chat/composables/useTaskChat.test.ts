@@ -193,6 +193,39 @@ describe('useTaskChat', () => {
     expect(c.pending.value).toEqual([])
   })
 
+  it('sortedTurns reorders by `at` for display without touching raw turns/index', async () => {
+    stubApi([
+      {
+        ...READY,
+        turns: [
+          { index: 0, role: 'assistant', text: 'muộn hơn', at: '2026-01-01T00:00:05Z' },
+          { index: 1, role: 'user', text: 'sớm hơn', at: '2026-01-01T00:00:01Z' },
+        ],
+      },
+    ])
+    const c = make()
+    await c.refresh(false)
+
+    expect(c.turns.value.map((t) => t.index)).toEqual([0, 1])
+    expect(c.sortedTurns.value.map((t) => t.index)).toEqual([1, 0])
+  })
+
+  it('sortedTurns falls back to raw order when any turn is missing a parseable `at`', async () => {
+    stubApi([
+      {
+        ...READY,
+        turns: [
+          { index: 0, role: 'assistant', text: 'muộn hơn', at: '2026-01-01T00:00:05Z' },
+          { index: 1, role: 'user', text: 'không có at' },
+        ],
+      },
+    ])
+    const c = make()
+    await c.refresh(false)
+
+    expect(c.sortedTurns.value.map((t) => t.index)).toEqual([0, 1])
+  })
+
   it('start polls faster while a step runs and stop() ends the loop', async () => {
     vi.useFakeTimers()
     const fetchMock = stubApi([{ ...READY, canSend: true, queued: true, running: { jobId: 'j9' } }])

@@ -1,7 +1,7 @@
 {
   "name": "dev-team-dashboard",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "description": "Realtime dashboard for dev-agent-teams orchestrator state (.dev-team-agent/)",
   "scripts": {

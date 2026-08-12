@@ -70,6 +70,7 @@ export async function applyHitlAction(
   root: string,
   taskId: string,
   patch: TaskStatePatch,
+  projectId = '',
 ): Promise<HitlApplyResult> {
   const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
 
@@ -154,6 +155,22 @@ export async function applyHitlAction(
       action: patch.action,
       currentPhase: state.current_phase,
     })
+
+    if (patch.action === 'reject' && patch.feedback?.trim() && currentStep) {
+      // `sendTaskFeedback` lives behind the full `../index.js` barrel, which
+      // re-exports runner — and runner re-exports this module. Import it lazily
+      // so the cycle never runs at module-eval time (that's why the static
+      // import above goes through `../peers.js`).
+      const feedback = patch.feedback.trim()
+      const stepId = currentStep.id
+      void import('../index.js')
+        .then(({ sendTaskFeedback }) => sendTaskFeedback(taskId, projectId, feedback, { stepId }))
+        .catch(() => {
+          // Best-effort: reject already persisted OK even if feedback dispatch fails
+          // (step "cooled down", job busy, etc).
+        })
+    }
+
     return { ok: true, state, mtime }
   })
 }
@@ -225,7 +242,7 @@ export async function advanceStepOnJobSuccess(
     }
 
     const gateId = currentStep.hitl?.gate_id
-    if (gateId) {
+    if (gateId && !state.auto_review) {
       state.hitl_pending = gateId
     } else {
       const next = steps[stepIdx + 1]

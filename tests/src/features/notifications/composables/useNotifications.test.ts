@@ -105,6 +105,20 @@ describe('useNotifications', () => {
     expect(second.unreadCount.value).toBe(0)
   })
 
+  it('does not notify for archived tasks', async () => {
+    const tasks = ref<any[]>([{ task_id: 't1', hitl_pending: false, has_qa: false, archived: false }])
+    const { history } = useNotifications(tasks)
+
+    tasks.value = [{ task_id: 't1', hitl_pending: 'implement', has_qa: true, archived: true }]
+    await nextTick()
+    expect(history.value).toHaveLength(0)
+
+    // Unarchiving while the flags are still true must not be treated as a fresh transition.
+    tasks.value = [{ task_id: 't1', hitl_pending: 'implement', has_qa: true, archived: false }]
+    await nextTick()
+    expect(history.value).toHaveLength(0)
+  })
+
   it('respects the master notificationsEnabled switch', async () => {
     useAppSettings().update({ notificationsEnabled: false })
     const tasks = ref<any[]>([{ task_id: 't1', hitl_pending: false, has_qa: false }])

@@ -146,6 +146,7 @@ onUnmounted(() => {
     :visible="open"
     @minimize="close"
     @close="onClose"
+    @new-session="openBuilderChat"
   />
 </template>
 

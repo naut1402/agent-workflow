@@ -1,10 +1,66 @@
-import { afterEach, describe, expect, test, beforeEach } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, repairTaskState, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
 import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
+import { listJobs, loadJob, registerProvider, submitJob, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
+import type { ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
+
+// applyHitlAction's reject branch dispatches feedback through the REAL
+// sendTaskFeedback (fire-and-forget), not a mock: `business/index.js` is a
+// shared barrel imported by many other test suites (chat/, runner/...), and
+// bun's test runner loads every test file's top-level code before running any
+// test body — a `mock.module` swap here would leak the stub into those other
+// suites regardless of when it's undone. A stub runner provider + a real
+// finished job gives sendTaskFeedback something to resume, so its dispatch
+// (or lack thereof) can be observed as a real follow-up job.
+const FEEDBACK_PROVIDER_ID = 'stub-applyhitl-feedback'
+const stubFeedbackProvider: RunnerProvider = {
+  providerId: FEEDBACK_PROVIDER_ID,
+  validateRunnerConfig: () => ({ ok: true, errors: [] }),
+  validateCredential: () => ({ ok: true, errors: [] }),
+  capabilities: () => ({ supportsAgentFile: false, supportsStreaming: false, maxConcurrency: 1 }),
+  async execute(): Promise<ExecuteResult> {
+    return { ok: true, exitCode: 0, durationMs: 1 }
+  },
+}
+const savedEnv = { ...process.env }
+let jobsHome: string
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
+async function settleJob(id: string) {
+  for (let i = 0; i < 400; i++) {
+    const j = loadJob(id)
+    if (j && j.status !== 'queued' && j.status !== 'running') return j
+    await sleep(5)
+  }
+  throw new Error(`job ${id} never settled`)
+}
+/** Poll for a follow-up job `sendTaskFeedback` would submit off of `parentId`. */
+async function findFollowUpJob(parentId: string, tries = 40) {
+  for (let i = 0; i < tries; i++) {
+    const found = listJobs(200).find((j) => j.metadata?.parentJobId === parentId)
+    if (found) return found
+    await sleep(5)
+  }
+  return null
+}
+
+beforeAll(async () => {
+  jobsHome = await fs.mkdtemp(path.join(os.tmpdir(), 'task-state-jobs-'))
+  process.env.DEV_TEAM_DASHBOARD_HOME = jobsHome
+  registerProvider(stubFeedbackProvider)
+  upsertConnection({ id: 'stub-conn-applyhitl', kind: 'local-console', providerId: FEEDBACK_PROVIDER_ID, cliPath: 'stub' })
+  upsertRunner({ id: 'stub-runner-applyhitl', connectionId: 'stub-conn-applyhitl', config: {} })
+})
+afterAll(async () => {
+  process.env = savedEnv
+  await fs.rm(jobsHome, { recursive: true, force: true })
+})
 
 let dirs: string[] = []
 async function tmp(): Promise<string> {
@@ -79,12 +135,28 @@ describe('applyHitlAction', () => {
     })
     const before = (await fs.stat(stateFile)).mtimeMs
 
-    const result = await applyHitlAction(root, 'T2', {
-      action: 'reject',
-      gate_id: 'hitl-2',
-      feedback: 'cần bổ sung §4',
-      mtime: before,
+    // A finished job for the gated step, so sendTaskFeedback (called by the
+    // reject branch) has a parent job to resume.
+    const parent = submitJob({
+      runnerId: 'stub-runner-applyhitl',
+      agentRef: '',
+      workspace: path.join(root, 'tasks', 'T2'),
+      userPrompt: 'do designer work',
+      metadata: { devTeamRoot: root, projectId: 'proj-1', taskId: 'T2', pipelineStepId: 'designer' },
     })
+    await settleJob(parent.id)
+
+    const result = await applyHitlAction(
+      root,
+      'T2',
+      {
+        action: 'reject',
+        gate_id: 'hitl-2',
+        feedback: 'cần bổ sung §4',
+        mtime: before,
+      },
+      'proj-1',
+    )
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.state.current_phase).toBe('designer')
@@ -92,6 +164,46 @@ describe('applyHitlAction', () => {
     expect(result.state.last_feedback).toBe('cần bổ sung §4')
     const fb = await fs.readFile(path.join(root, 'tasks', 'T2', 'hitl-feedback.md'), 'utf8')
     expect(fb).toContain('cần bổ sung §4')
+
+    const followUp = await findFollowUpJob(parent.id)
+    expect(followUp).not.toBeNull()
+    expect(followUp?.userPrompt).toBe('cần bổ sung §4')
+    expect(followUp?.metadata?.isChatFeedback).toBe(true)
+  })
+
+  test('reject without feedback does not dispatch sendTaskFeedback', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: designer\n    hitl: { mode: manual, gate_id: hitl-2 }\n  - id: implementer\n`,
+      'utf8',
+    )
+    const stateFile = await seedTask(root, 'T2b', {
+      current_phase: 'designer',
+      hitl_pending: 'hitl-2',
+    })
+    const before = (await fs.stat(stateFile)).mtimeMs
+
+    const parent = submitJob({
+      runnerId: 'stub-runner-applyhitl',
+      agentRef: '',
+      workspace: path.join(root, 'tasks', 'T2b'),
+      userPrompt: 'do designer work',
+      metadata: { devTeamRoot: root, projectId: 'proj-1', taskId: 'T2b', pipelineStepId: 'designer' },
+    })
+    await settleJob(parent.id)
+
+    const result = await applyHitlAction(root, 'T2b', {
+      action: 'reject',
+      gate_id: 'hitl-2',
+      mtime: before,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.hitl_pending).toBeNull()
+
+    const followUp = await findFollowUpJob(parent.id, 10)
+    expect(followUp).toBeNull()
   })
 
   test('mtime conflict → 409', async () => {
@@ -195,6 +307,21 @@ describe('advanceStepOnJobSuccess', () => {
     expect(result).not.toBeNull()
     expect(result?.state.current_phase).toBe('investigator')
     expect(result?.state.hitl_pending).toBe('hitl-1')
+  })
+
+  test('auto_review: true skips the gate and advances past it', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'T12c', { current_phase: 'investigator', auto_review: true })
+
+    const result = await advanceStepOnJobSuccess(root, 'T12c', 'investigator')
+    expect(result).not.toBeNull()
+    expect(result?.state.hitl_pending).toBeFalsy()
+    expect(result?.state.current_phase).toBe('designer')
   })
 
   test('no-ops when a gate is already pending', async () => {

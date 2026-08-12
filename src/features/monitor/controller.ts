@@ -324,7 +324,7 @@ export class MonitorController extends AbstractController {
       return this.badRequest('invalid patch', { details: parsed.error.flatten() })
     }
 
-    const result = await applyHitlAction(root, id, parsed.data)
+    const result = await applyHitlAction(root, id, parsed.data, this.projectId || '')
     if ('error' in result) {
       const body: Record<string, unknown> = { error: result.error, id }
       if (result.state) body.state = result.state
@@ -649,8 +649,9 @@ export class MonitorController extends AbstractController {
     if ('error' in gate) return gate.error
     const id = this.c.req.param('id')
     if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+    const stepId = this.c.req.query('stepId') || undefined
 
-    closeTaskSession(this.projectId || '', id)
+    closeTaskSession(this.projectId || '', id, { stepId })
     emitAudit({
       op: 'update',
       entity: 'task-state',

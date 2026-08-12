@@ -80,6 +80,19 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     return null
   })
 
+  /**
+   * `turns` in display order. Server `index`/`total`/`from` stay read-order
+   * (poll cursor + dedup in `applyState` key off `index`, unchanged) — this
+   * only reorders what gets rendered, and only when every turn has a
+   * parseable `at`; a partial sort would be more confusing than none.
+   */
+  const sortedTurns = computed<TaskChatTurn[]>(() => {
+    const list = turns.value
+    const allHaveAt = list.length > 0 && list.every((t) => t.at && !Number.isNaN(Date.parse(t.at)))
+    if (!allHaveAt) return list
+    return [...list].sort((a, b) => Date.parse(a.at!) - Date.parse(b.at!) || a.index - b.index)
+  })
+
   /** Drop optimistic echoes once the server history contains them (or a reply). */
   function reconcilePending(allTurns: TaskChatTurn[], data: any): void {
     if (pending.value.length === 0) return
@@ -193,6 +206,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
 
   return {
     turns,
+    sortedTurns,
     pending,
     total,
     sessionId,

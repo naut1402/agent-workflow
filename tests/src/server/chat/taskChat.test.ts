@@ -141,6 +141,48 @@ describe('resolveChatSession', () => {
     })
     expect(resolveChatSession(PROJECT, TASK)).toMatchObject({ sessionId: 's-stale', staleReason: 'host changed' })
   })
+
+  test('dismissed via "+": finished job\'s session closed in ledger, no open replacement → null + flag', () => {
+    writeJob({
+      id: 'j-design',
+      sessionId: 's-design',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'design' },
+    })
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'single',
+      sessions: [ledgerEntry({ sessionId: 's-design', stepIds: ['design'], status: 'closed' })],
+    })
+    expect(resolveChatSession(PROJECT, TASK, 'design')).toEqual({ sessionId: null, dismissedForStep: true })
+  })
+
+  test('after dismiss + new message: the new job/session for the step wins, not stuck forever', () => {
+    writeJob({
+      id: 'j-design',
+      sessionId: 's-design',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'design' },
+    })
+    writeJob({
+      id: 'j-design-2',
+      sessionId: 's-design-2',
+      createdAt: '2026-01-02T00:00:00.000Z',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'design' },
+    })
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'single',
+      sessions: [
+        ledgerEntry({ sessionId: 's-design', stepIds: ['design'], status: 'closed' }),
+        ledgerEntry({ sessionId: 's-design-2', stepIds: ['design'], status: 'open' }),
+      ],
+    })
+    const resolved = resolveChatSession(PROJECT, TASK, 'design')
+    expect(resolved.sessionId).toBe('s-design-2')
+    expect(resolved.dismissedForStep).toBeUndefined()
+  })
 })
 
 describe('getTaskChatState', () => {
@@ -184,6 +226,25 @@ describe('getTaskChatState', () => {
     const state = getTaskChatState(PROJECT, TASK)
     expect(state.canSend).toBe(true)
     expect(state.blockedReason).toBeUndefined()
+  })
+
+  test('after "+": dismissed step session shows an empty chat, not the old job history', () => {
+    writeJob({
+      id: 'j-design',
+      sessionId: 's-design',
+      userPrompt: 'Viết design',
+      stdout: 'Nội dung cũ',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'design' },
+    })
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'single',
+      sessions: [ledgerEntry({ sessionId: 's-design', stepIds: ['design'], status: 'closed' })],
+    })
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'design' })
+    expect(state.sessionId).toBeNull()
+    expect(state.turns).toEqual([])
   })
 
   test('canSend once a job finished and the ledger still has an open session', () => {
@@ -302,6 +363,30 @@ describe('getTaskChatState', () => {
     const page = getTaskChatState(PROJECT, TASK, { stepId: 'designer', fromIndex: 2 })
     expect(page.turns.map((t) => t.text)).toEqual(['hello', 'Chào từ feedback'])
     expect(page.total).toBe(4)
+  })
+
+  test('strips the <timestamp>/<user_query> wrapper from job-fallback stdout too', () => {
+    upsertConnection({
+      id: 'conn-cursor-wrap',
+      kind: 'local-console',
+      providerId: 'cursor-cli',
+      cliPath: 'agent',
+    })
+    upsertRunner({ id: 'runner-cursor-wrap', name: 'Cursor wrap', connectionId: 'conn-cursor-wrap', config: {} })
+    writeJob({
+      id: 'j-cursor-wrap',
+      runnerId: 'runner-cursor-wrap',
+      sessionId: 's-missing-wrap',
+      userPrompt: 'Viết design',
+      stdout: JSON.stringify({
+        result: '<timestamp>2026-01-01T00:00:00Z</timestamp><user_query>Nội dung từ stdout.</user_query>',
+        session_id: 's-missing-wrap',
+      }),
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'designer' },
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
+    expect(state.turns[1]?.text).toBe('Nội dung từ stdout.')
   })
 
   test('falls back to job log Phản hồi section when stdout is not persisted', () => {
