@@ -260,7 +260,7 @@ export function closeTaskSession(projectId: string, taskId: string, opts?: { ste
 
 // ── CLI session capture helpers ────────────────────────────────────────────
 
-export type SessionCaptureMode = 'preset-uuid' | 'parse-json' | 'none'
+export type SessionCaptureMode = 'preset-uuid' | 'parse-json' | 'antigravity-json' | 'none'
 
 export interface CursorJsonOutput {
   session_id?: string
@@ -385,6 +385,56 @@ export function prepareSessionInvocation(input: SessionPrepareInput): SessionPre
     return { sessionId: preset, presetSessionId: preset }
   }
 
-  // parse-json: session id arrives after CLI exits — no preset.
+  // parse-json / antigravity-json: session id arrives after CLI exits — no preset.
   return {}
+}
+
+export interface AntigravityJsonOutput {
+  conversation_id?: string
+  response?: string
+}
+
+function antigravityFieldsFrom(parsed: Record<string, unknown>): AntigravityJsonOutput {
+  return {
+    conversation_id: typeof parsed.conversation_id === 'string' ? parsed.conversation_id : undefined,
+    response: typeof parsed.response === 'string' ? parsed.response : undefined,
+  }
+}
+
+export function parseAntigravityJsonOutput(stdout: string): AntigravityJsonOutput {
+  const trimmed = stdout.trim()
+  if (!trimmed) return {}
+  try {
+    return antigravityFieldsFrom(JSON.parse(trimmed) as Record<string, unknown>)
+  } catch {
+    const start = trimmed.indexOf('{')
+    const end = trimmed.lastIndexOf('}')
+    if (start < 0 || end <= start) return {}
+    try {
+      return antigravityFieldsFrom(JSON.parse(trimmed.slice(start, end + 1)) as Record<string, unknown>)
+    } catch {
+      return {}
+    }
+  }
+}
+
+export interface AntigravityJsonInvocationInput {
+  flags: string[]
+  prompt: string
+  resumeSessionId?: string
+}
+
+export interface AntigravityJsonInvocation {
+  args: string[]
+  stdinInput: string
+}
+
+export function buildAntigravityJsonInvocation(input: AntigravityJsonInvocationInput): AntigravityJsonInvocation {
+  const base = Array.isArray(input.flags) ? [...input.flags] : []
+  if (!base.includes('-p')) base.push('-p')
+  if (!base.some((f) => f === '--output-format' || f.startsWith('--output-format='))) {
+    base.push('--output-format', 'json')
+  }
+  if (input.resumeSessionId) base.push('--conversation', input.resumeSessionId)
+  return { args: base, stdinInput: input.prompt }
 }

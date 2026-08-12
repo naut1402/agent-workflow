@@ -5,6 +5,7 @@ import { createClaudeCodeCliProvider } from './providers/claude-code-cli.js'
 import { createCursorCliProvider } from './providers/cursor-cli.js'
 import { createCodexCliProvider } from './providers/codex-cli.js'
 import { createConsoleCommandProvider } from './providers/console-command.js'
+import { createAntigravityCliProvider } from './providers/antigravity-cli.js'
 import { providerFamilyOf } from './providers/agentCli.js'
 import {
   DEFAULT_CONNECTION_ID,
@@ -249,6 +250,7 @@ register(createClaudeCodeCliProvider())
 register(createCursorCliProvider())
 register(createCodexCliProvider())
 register(createConsoleCommandProvider())
+register(createAntigravityCliProvider())
 
 /**
  * Register (or replace) a provider at runtime. Built-in providers are registered

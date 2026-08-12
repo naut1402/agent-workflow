@@ -12,6 +12,7 @@ export const AGENT_CLI_PROVIDER_IDS = [
   'claude-code-cli',
   'cursor-cli',
   'codex-cli',
+  'antigravity-cli',
 ] as const
 
 export type AgentCliProviderId = (typeof AGENT_CLI_PROVIDER_IDS)[number]
@@ -21,7 +22,7 @@ export interface AgentCliCapabilities {
   supportsStreaming: boolean
   maxConcurrency: number
   /** How session ids are obtained (mirrors SessionCaptureMode). */
-  sessionCapture: 'preset-uuid' | 'parse-json' | 'none'
+  sessionCapture: 'preset-uuid' | 'parse-json' | 'antigravity-json' | 'none'
   /** Whether this provider can supply token usage in ExecuteResult. */
   supportsTokenUsage: boolean
 }
