@@ -101,18 +101,54 @@ describe('PipelineView — click a node to run/chain a step', () => {
     expect(document.body.querySelector('.modal-backdrop')).toBeNull()
   })
 
-  it('clicking a future pending node opens a confirm dialog, then chains toward it once confirmed', async () => {
+  it('clicking a future pending node with intermediates offers jump (primary) and chain', async () => {
     vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-2', status: 'queued' } })
     const task = { task_id: 'T2', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
     const w = mountPipeline(task)
     await flushPromises()
 
+    // implementer is two steps ahead (designer in between) → skip confirm.
     await w.find('[data-testid="node-implementer"]').trigger('click')
     await flushPromises()
     expect(runPipelineStep).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Bỏ qua các bước trung gian')
 
     await clickModalButton('.modal .btn-primary')
-    expect(runPipelineStep).toHaveBeenCalledWith('T2', { targetStepId: 'implementer' }, undefined)
+    expect(runPipelineStep).toHaveBeenCalledWith(
+      'T2',
+      { targetStepId: 'implementer', skipIntermediate: true },
+      undefined,
+    )
+  })
+
+  it('chain secondary button runs from current without skipIntermediate', async () => {
+    vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-2b', status: 'queued' } })
+    const task = { task_id: 'T2b', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-implementer"]').trigger('click')
+    await flushPromises()
+    const chainBtn = Array.from(document.body.querySelectorAll('.modal .btn-ghost')).find((el) =>
+      el.textContent?.includes('Chạy từ bước hiện tại'),
+    ) as HTMLElement | undefined
+    expect(chainBtn).toBeTruthy()
+    chainBtn!.click()
+    await flushPromises()
+    expect(runPipelineStep).toHaveBeenCalledWith('T2b', { targetStepId: 'implementer' }, undefined)
+  })
+
+  it('clicking the immediate next step keeps the classic confirm (no skip dialog)', async () => {
+    vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-next', status: 'queued' } })
+    const task = { task_id: 'T2c', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-designer"]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).not.toContain('Bỏ qua các bước trung gian')
+    await clickModalButton('.modal .btn-primary')
+    expect(runPipelineStep).toHaveBeenCalledWith('T2c', { targetStepId: 'designer' }, undefined)
   })
 
   it('warns about overwriting the clicked node\'s own artifact when it already exists (e.g. rerunning after a HITL reject)', async () => {
@@ -274,9 +310,9 @@ describe('PipelineView — click a node to run/chain a step', () => {
     expect(w.find('.chip-err').exists()).toBe(true)
   })
 
-  it('clicking a past pending node (before current_phase) does not run current step', async () => {
-    // implementer is active; designer has no artifact → pending, but before current.
-    // Must not submit (server would start implementer and look like "clicked design, ran implement").
+  it('clicking a past node (before current_phase) does not run and needs no error chip', async () => {
+    // implementer is active; designer has no artifact but is behind the cursor →
+    // phaseStatus marks it done, so the click is a no-op (not runnable).
     const task = {
       task_id: 'T12',
       current_phase: 'implementer',
@@ -286,12 +322,13 @@ describe('PipelineView — click a node to run/chain a step', () => {
     const w = mountPipeline(task)
     await flushPromises()
 
+    expect(w.findComponent({ name: 'VueFlow' }).props('nodes').find((n: any) => n.id === 'designer').data.status).toBe('done')
+
     await w.find('[data-testid="node-designer"]').trigger('click')
     await flushPromises()
 
     expect(runPipelineStep).not.toHaveBeenCalled()
     expect(document.body.querySelector('.modal-backdrop')).toBeNull()
-    expect(w.find('.chip-err').exists()).toBe(true)
   })
 })
 
@@ -316,6 +353,20 @@ describe('PipelineView — node data for the chat action', () => {
     expect(nodeData(w, 'investigator')).toMatchObject({ taskId: 'T20', stepId: 'investigator', executed: true })
     // Never ran → no chat history to show.
     expect(nodeData(w, 'reviewer').executed).toBe(false)
+  })
+
+  it('marks a past gate-less step executed once the cursor has moved past it', async () => {
+    const task = {
+      task_id: 'T20b',
+      current_phase: 'reviewer',
+      hitl_pending: null,
+      artifacts: {},
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    expect(nodeData(w, 'implementer').status).toBe('done')
+    expect(nodeData(w, 'implementer').executed).toBe(true)
   })
 
   it('a step waiting at its HITL gate counts as executed', async () => {

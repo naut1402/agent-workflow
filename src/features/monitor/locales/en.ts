@@ -88,6 +88,10 @@ export default {
     runConfirmCancel: 'Cancel',
     runConfirmRun: 'Run',
     runConfirmRunOverwrite: 'Overwrite & run',
+    runConfirmSkipHeading: 'Skip intermediate steps?',
+    runConfirmSkipBody: 'These steps will not run: {steps}',
+    runConfirmJumpOnly: 'Run only {label}',
+    runConfirmChainFromCurrent: 'Run from current step',
   },
   pipelineNode: {
     clickToApprove: 'Click to approve',

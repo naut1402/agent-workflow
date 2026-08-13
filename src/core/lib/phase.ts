@@ -38,12 +38,22 @@ export function phasesFromPipeline(pipeline: any): Phase[] {
 }
 
 // Derive a display status for a phase from artifacts + live state.
-export function phaseStatus(phase: Phase, task: any): PhaseStatus {
+// When `phaseKeys` is provided, phases already behind the pipeline cursor
+// (or a completed pipeline) count as `done` even without an artifact file —
+// gate-less steps that never declare `produces` still show as finished.
+export function phaseStatus(phase: Phase, task: any, phaseKeys?: string[]): PhaseStatus {
   const artifactDone = phase.artifact ? task.artifacts?.[phase.artifact]?.exists : false
   const isWaiting = phase.hitl && task.hitl_pending === phase.hitl
   const isActive = task.current_phase === phase.key && !task.hitl_pending
   if (isWaiting) return 'waiting'
   if (isActive) return 'active'
   if (artifactDone) return 'done'
+  const keys = phaseKeys?.length ? phaseKeys : null
+  if (keys) {
+    if (task.current_phase === 'completed') return 'done'
+    const i = keys.indexOf(phase.key)
+    const c = keys.indexOf(String(task.current_phase ?? ''))
+    if (i >= 0 && c > i) return 'done'
+  }
   return 'pending'
 }

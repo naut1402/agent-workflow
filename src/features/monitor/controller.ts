@@ -3,7 +3,15 @@ import path from 'node:path'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { resolveArtifact } from './business/tasks/index.js'
 import { collectTasks, flowProfilePath, createTask, readState } from './business/tasks/index.js'
-import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, repairTaskState } from './business/tasks/state.js'
+import {
+  advanceStepOnJobSuccess,
+  applyArchiveAction,
+  applyHitlAction,
+  deleteTask,
+  jumpToPipelineStep,
+  repairTaskState,
+} from './business/tasks/state.js'
+import { isRunnableTarget } from './lib/pipelineRunGuards.js'
 import {
   loadPipelineConfig,
   submitJob,
@@ -682,6 +690,23 @@ export class MonitorController extends AbstractController {
     }
 
     const pipeline = await loadPipelineConfig(root, id)
+    const phaseKeys = (pipeline.steps || []).map((s: any) => s.id).filter(Boolean)
+    const body = parsed.data
+    const target = body.targetStepId ?? undefined
+    const skip = body.skipIntermediate === true && !!target && target !== stepId
+
+    if (skip) {
+      if (!phaseKeys.includes(target) || !isRunnableTarget(phaseKeys, stepId, target)) {
+        return this.badRequest('invalid target step', { taskId: id, stepId, targetStepId: target })
+      }
+      const jumped = await jumpToPipelineStep(root, id, target)
+      if ('error' in jumped) {
+        return this.json(jumped.status, { error: jumped.error, taskId: id })
+      }
+      state = jumped.state
+      stepId = target
+    }
+
     const step = (pipeline.steps || []).find((s: any) => s.id === stepId)
     if (!step?.agent) {
       return this.badRequest('no runnable current step', { taskId: id, stepId })
@@ -695,12 +720,12 @@ export class MonitorController extends AbstractController {
       return this.notFound('request.md not found', { taskId: id })
     }
 
-    const body = parsed.data
     const job = submitJob({
       runnerId: body.runnerId ?? undefined,
       agentRef: step.agent,
       workspace: path.join(root, 'tasks', id),
       userPrompt,
+      produces: Array.isArray(step.produces) ? step.produces : undefined,
       sessionMode: 'new',
       metadata: {
         projectRoot: path.dirname(root),
@@ -708,7 +733,8 @@ export class MonitorController extends AbstractController {
         projectId: this.projectId || undefined,
         taskId: id,
         pipelineStepId: stepId,
-        ...(body.targetStepId ? { chainTarget: body.targetStepId } : {}),
+        // Jump: no chain. Chain: only when a target ahead of the start step.
+        ...(!skip && target && target !== stepId ? { chainTarget: target } : {}),
       },
     })
 
@@ -717,7 +743,7 @@ export class MonitorController extends AbstractController {
       entity: 'task-state',
       identifier: id,
       projectId: this.projectId,
-      detail: { action: 'run-step', stepId, jobId: job.id },
+      detail: { action: 'run-step', stepId, jobId: job.id, ...(skip ? { skipIntermediate: true } : {}) },
     })
 
     return this.created({ job })

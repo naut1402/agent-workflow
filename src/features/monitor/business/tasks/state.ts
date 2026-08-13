@@ -42,6 +42,30 @@ export async function writeStateAtomic(
   return s.mtimeMs
 }
 
+/**
+ * Jump the pipeline cursor to `targetStepId` without running intermediate
+ * steps. Caller must validate the target is in-pipeline and runnable; does
+ * not clear an open HITL gate (run-step rejects those earlier).
+ */
+export async function jumpToPipelineStep(
+  root: string,
+  taskId: string,
+  targetStepId: string,
+): Promise<{ ok: true; state: Record<string, unknown> } | { ok: false; error: string; status: number }> {
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
+  return withStateFileLock(stateFile, async () => {
+    const read = await readState(stateFile)
+    if (!read.ok) return { ok: false, error: 'state not found', status: 404 }
+    const state = { ...(read.state as Record<string, unknown>) }
+    if (state.hitl_pending) {
+      return { ok: false, error: 'task is waiting for HITL approval', status: 400 }
+    }
+    state.current_phase = targetStepId
+    await writeStateAtomic(stateFile, state)
+    return { ok: true, state }
+  })
+}
+
 function stepIndex(steps: any[], stepId: string): number {
   return steps.findIndex((s) => s.id === stepId)
 }
