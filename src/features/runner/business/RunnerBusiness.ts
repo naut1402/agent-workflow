@@ -1,5 +1,6 @@
 import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
 import * as runners from './index.js'
+import type { JobStatus } from './types.js'
 
 /**
  * Facade thao tác runner/connection/credential/job.
@@ -84,8 +85,8 @@ export class RunnerBusiness extends AbstractBusiness {
     return runners.loadJob(id)
   }
 
-  listJobs(limit: number) {
-    return runners.listJobs(limit)
+  listJobs(limit?: number, status?: JobStatus) {
+    return runners.listJobs(limit, status)
   }
 
   submitJob(input: Parameters<typeof runners.submitJob>[0]) {

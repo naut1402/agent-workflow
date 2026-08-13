@@ -13,8 +13,14 @@ export async function fetchJob(id: string) {
   return apiGet(`/api/jobs/${encodeURIComponent(id)}`)
 }
 
-export async function fetchJobs(limit = 10) {
-  return apiGet('/api/jobs', { limit })
+/** Giữ `any[]` như suy luận cũ từ `apiGet` (T=any) — `unknown[]` làm `.find` trả `unknown` và vỡ PipelineView/Logs. */
+export async function fetchJobs(limit?: number): Promise<{ jobs: any[] }>
+export async function fetchJobs(opts: { limit?: number; status?: string }): Promise<{ jobs: any[] }>
+export async function fetchJobs(arg?: number | { limit?: number; status?: string }): Promise<{ jobs: any[] }> {
+  if (arg && typeof arg === 'object') {
+    return apiGet('/api/jobs', { limit: arg.limit, status: arg.status })
+  }
+  return apiGet('/api/jobs', { limit: arg ?? 10 })
 }
 
 export async function fetchProposal(jobId: string) {
