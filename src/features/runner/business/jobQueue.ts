@@ -10,7 +10,7 @@ import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
 import { isAgentCliProviderId } from './providers/agentCli.js'
-import type { Connection, CredentialProfile, JobRecord, MutationResult } from './types.js'
+import type { Connection, CredentialProfile, JobRecord, JobStatus, MutationResult } from './types.js'
 import { advanceStepOnJobSuccess, loadPipelineConfig, queuePendingFeedback, takePendingFeedback } from './index.js'
 
 /** Cap on stdout persisted for chat surfaces (NL chat + task chat fallback). */
@@ -255,10 +255,10 @@ function saveJob(job: JobRecord): JobRecord {
   return job
 }
 
-export function listJobs(limit = 20): JobRecord[] {
+export function listJobs(limit?: number, status?: JobStatus): JobRecord[] {
   ensureJobsDir()
   const files = readdirSync(jobsDir()).filter((f) => f.endsWith('.json'))
-  const jobs = files
+  let jobs = files
     .map((f): JobRecord | null => {
       try {
         return JSON.parse(readTextFileSync(joinPath(jobsDir(), f)))
@@ -268,7 +268,16 @@ export function listJobs(limit = 20): JobRecord[] {
     })
     .filter((j): j is JobRecord => Boolean(j?.id))
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
-  return jobs.slice(0, limit)
+  if (status) {
+    jobs = jobs.filter((j) => j.status === status)
+  }
+  const effectiveLimit =
+    limit !== undefined && limit !== null && Number.isFinite(limit) && limit > 0
+      ? Math.floor(limit)
+      : status
+        ? undefined
+        : 20
+  return effectiveLimit !== undefined ? jobs.slice(0, effectiveLimit) : jobs
 }
 
 let running = false

@@ -13,8 +13,13 @@ export async function fetchJob(id: string) {
   return apiGet(`/api/jobs/${encodeURIComponent(id)}`)
 }
 
-export async function fetchJobs(limit = 10) {
-  return apiGet('/api/jobs', { limit })
+export async function fetchJobs(limit?: number): Promise<{ jobs: unknown[] }>
+export async function fetchJobs(opts: { limit?: number; status?: string }): Promise<{ jobs: unknown[] }>
+export async function fetchJobs(arg?: number | { limit?: number; status?: string }) {
+  if (arg && typeof arg === 'object') {
+    return apiGet('/api/jobs', { limit: arg.limit, status: arg.status })
+  }
+  return apiGet('/api/jobs', { limit: arg ?? 10 })
 }
 
 export async function fetchProposal(jobId: string) {
