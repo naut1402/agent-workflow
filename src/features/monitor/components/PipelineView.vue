@@ -7,7 +7,9 @@ import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep } fr
 import { fetchJob, fetchJobs } from '../../runner/scripts/runnerApi'
 import { phasesFromPipeline, phaseStatus } from '../../../core/lib/phase'
 import PipelineNode from './PipelineNode.vue'
+import ArtifactNode from './ArtifactNode.vue'
 import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
+import { buildArtifactNodesAndEdges } from '../lib/pipelineArtifactGraph'
 
 const { t } = useI18nHelpers()
 const props = defineProps({
@@ -17,7 +19,10 @@ const props = defineProps({
 
 const emit = defineEmits(['hitl-action'])
 
-const nodeTypes = { pipeline: markRaw(PipelineNode) }
+const nodeTypes = {
+  pipeline: markRaw(PipelineNode),
+  artifact: markRaw(ArtifactNode),
+}
 
 // Custom flow profile for this task (null = use default PHASES).
 const customProfile = ref(null)
@@ -57,8 +62,20 @@ const phases = computed(() => {
 
 const phaseKeys = computed(() => phases.value.map((p) => p.key))
 
-const nodes = computed(() =>
-  phases.value.map((p, i) => {
+const artifactGraph = computed(() =>
+  buildArtifactNodesAndEdges({
+    steps: props.task.pipeline?.steps ?? [],
+    phasePositions: Object.fromEntries(phases.value.map((p) => [p.key, { x: p.x, y: p.y }])),
+    artifacts: props.task.artifacts ?? {},
+    labels: {
+      producesTitle: t('monitor.artifactNode.producesTitle'),
+      knowledgeTitle: t('monitor.artifactNode.knowledgeTitle'),
+    },
+  }),
+)
+
+const nodes = computed(() => {
+  const stepNodes = phases.value.map((p, i) => {
     const isActivePhase = props.task.current_phase === p.key
     const status = phaseStatus(p, props.task)
     const running = runningStepId.value === p.key
@@ -100,11 +117,12 @@ const nodes = computed(() =>
         onRun: () => openRunConfirm({ id: p.key, label: p.label }),
       },
     }
-  }),
-)
+  })
+  return [...stepNodes, ...artifactGraph.value.artifactNodes]
+})
 
-const edges = computed((): any[] =>
-  phases.value.slice(0, -1).map((p, i) => {
+const edges = computed((): any[] => {
+  const control = phases.value.slice(0, -1).map((p, i) => {
     const next = phases.value[i + 1]
     const isWaiting = p.hitl && props.task.hitl_pending === p.hitl
     return {
@@ -117,12 +135,14 @@ const edges = computed((): any[] =>
       style: { stroke: isWaiting ? 'var(--waiting)' : 'var(--border)', strokeWidth: 2 },
       markerEnd: { type: 'arrowclosed', color: isWaiting ? 'var(--waiting)' : 'var(--border)' },
     }
-  }),
-)
+  })
+  return [...control, ...artifactGraph.value.dataFlowEdges]
+})
 
 // Persist node positions when user drags them. Positions are keyed by phase id
 // and overlaid onto the config-derived phase list.
 function onNodeDragStop({ node }) {
+  if (node.type === 'artifact') return
   const updated = {
     phases: phases.value.map((p) =>
       p.key === node.id
@@ -311,6 +331,7 @@ function confirmRunStep() {
 }
 
 function onNodeClick({ node }) {
+  if (node.type === 'artifact') return
   if (node.data?.status === 'waiting' && node.data?.hitl) {
     openHitlModal({ key: node.id, label: node.data.label, hitl: node.data.hitl })
     return

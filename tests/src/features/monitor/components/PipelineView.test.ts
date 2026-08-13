@@ -17,31 +17,33 @@ vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchJobs: vi.fn(async () => ({ jobs: [] })),
 }))
 
-// VueFlow renders nodes internally via its own layout/canvas machinery that
-// jsdom can't support (ResizeObserver, SVG measurement, …) — stub it with a
-// plain list of buttons (one per node) that emit `node-click` the same way
-// the real component would, so PipelineView's click-routing logic is what's
-// under test, not VueFlow's rendering.
-const VueFlowStub = {
-  name: 'VueFlow',
-  props: ['nodes', 'edges', 'nodeTypes'],
-  emits: ['node-click', 'node-drag-stop'],
-  template: `
-    <div>
-      <button
-        v-for="n in nodes"
-        :key="n.id"
-        :data-testid="'node-' + n.id"
-        @click="$emit('node-click', { node: n })"
-      >{{ n.id }}</button>
-    </div>
-  `,
-}
+// VueFlow's canvas (SVG getBBox / ResizeObserver) does not run under jsdom.
+// Stub the export so PipelineView's click-routing is tested, not VueFlow itself.
+vi.mock('@vue-flow/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@vue-flow/core')>()
+  return {
+    ...actual,
+    VueFlow: {
+      name: 'VueFlow',
+      props: ['nodes', 'edges', 'nodeTypes'],
+      emits: ['node-click', 'node-drag-stop'],
+      template: `
+        <div>
+          <button
+            v-for="n in nodes"
+            :key="n.id"
+            :data-testid="'node-' + n.id"
+            @click="$emit('node-click', { node: n })"
+          >{{ n.id }}</button>
+        </div>
+      `,
+    },
+  }
+})
 
 function mountPipeline(task: Record<string, any>) {
   return mount(PipelineView, {
     props: { task, projectId: null },
-    global: { stubs: { VueFlow: VueFlowStub } },
   })
 }
 
@@ -340,5 +342,89 @@ describe('PipelineView — node data for the chat action', () => {
     const designer = nodeData(w, 'designer')
     expect(designer.status).toBe('active')
     expect(designer.executed).toBe(true)
+  })
+})
+
+const SAMPLE_PIPELINE = {
+  steps: [
+    { id: 'investigator', name: 'Investigate', produces: ['investigate.md'] },
+    { id: 'designer', name: 'Design', produces: ['design.md'] },
+    { id: 'implementer', name: 'Implement', produces: ['phpstan.md'] },
+    { id: 'reviewer', name: 'Review', produces: ['review.md', 'test-spec.md'] },
+    { id: 'pr-creator', name: 'PR', produces: ['pr-desc.md'] },
+  ],
+}
+
+describe('PipelineView — artifact / knowledge graph nodes', () => {
+  function flowNodes(w: any) {
+    return w.findComponent({ name: 'VueFlow' }).props('nodes') as Array<{ id: string; type: string }>
+  }
+
+  it('embeds multi-produces as a single art-<stepId> artifact node', async () => {
+    const task = {
+      task_id: 'T30',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: { 'review.md': { exists: true } },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    const art = flowNodes(w).find((n) => n.id === 'art-reviewer')
+    expect(art).toBeDefined()
+    expect(art!.type).toBe('artifact')
+    expect(w.find('[data-testid="node-art-reviewer"]').exists()).toBe(true)
+  })
+
+  it('clicking an artifact node does not open run confirm or call runPipelineStep', async () => {
+    const task = {
+      task_id: 'T31',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: {},
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-art-reviewer"]').trigger('click')
+    await flushPromises()
+
+    expect(runPipelineStep).not.toHaveBeenCalled()
+    expect(document.body.querySelector('.modal-backdrop')).toBeNull()
+  })
+
+  it('does not create art-knowledge when no step has knowledge_inputs', async () => {
+    const task = {
+      task_id: 'T32',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: {},
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    expect(flowNodes(w).some((n) => n.id === 'art-knowledge')).toBe(false)
+  })
+
+  it('regression: clicking node-investigator still opens run confirm', async () => {
+    const task = {
+      task_id: 'T33',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: {},
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+
+    expect(runPipelineStep).not.toHaveBeenCalled()
+    expect(document.body.querySelector('.modal-backdrop')).not.toBeNull()
+    expect(document.body.textContent).toContain('Chạy step')
   })
 })

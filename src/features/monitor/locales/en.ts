@@ -98,6 +98,14 @@ export default {
     chat: 'Chat',
     chatWithRunner: "Chat with this step's runner",
   },
+  artifactNode: {
+    producesTitle: 'Artifacts',
+    knowledgeTitle: 'Knowledge',
+    exists: 'Exists',
+    missing: 'Missing',
+    fromStep: '→ {stepId}',
+  },
+
   qa: {
     head: '⚠ Pipeline is waiting for answers to blocking questions',
     hintBefore: 'Double-click the content below to edit (blur to save), or open',
