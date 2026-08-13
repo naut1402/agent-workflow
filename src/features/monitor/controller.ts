@@ -700,7 +700,9 @@ export class MonitorController extends AbstractController {
         return this.badRequest('invalid target step', { taskId: id, stepId, targetStepId: target })
       }
       const jumped = await jumpToPipelineStep(root, id, target)
-      if (!jumped.ok) return this.json(jumped.status, { error: jumped.error, taskId: id })
+      if ('error' in jumped) {
+        return this.json(jumped.status, { error: jumped.error, taskId: id })
+      }
       state = jumped.state
       stepId = target
     }
