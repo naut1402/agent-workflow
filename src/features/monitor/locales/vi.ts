@@ -89,6 +89,10 @@ export default {
     runConfirmCancel: 'Huỷ',
     runConfirmRun: 'Chạy',
     runConfirmRunOverwrite: 'Ghi đè & chạy',
+    runConfirmSkipHeading: 'Bỏ qua các bước trung gian?',
+    runConfirmSkipBody: 'Các bước sau sẽ không chạy: {steps}',
+    runConfirmJumpOnly: 'Chỉ chạy {label}',
+    runConfirmChainFromCurrent: 'Chạy từ bước hiện tại',
   },
   pipelineNode: {
     clickToApprove: 'Nhấn để duyệt',

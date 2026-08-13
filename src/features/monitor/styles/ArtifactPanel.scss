@@ -9,6 +9,23 @@
 }
 .art-empty { color: var(--muted); }
 
+.art-panel-body {
+  position: relative;
+}
+.art-busy-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+  pointer-events: all;
+  cursor: wait;
+  font-size: 14px;
+  color: var(--muted);
+}
+
 .art-toolbar {
   display: flex;
   align-items: center;

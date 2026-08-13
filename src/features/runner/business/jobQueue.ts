@@ -280,19 +280,45 @@ export function listJobs(limit?: number, status?: JobStatus): JobRecord[] {
   return effectiveLimit !== undefined ? jobs.slice(0, effectiveLimit) : jobs
 }
 
-let running = false
+/** Per-task concurrency: same task stays serial; different tasks run in parallel. */
+const runningTaskKeys = new Set<string>()
 const queue: string[] = []
+let pumpScheduled = false
 
-async function processQueue(): Promise<void> {
-  if (running) return
-  running = true
-  while (queue.length) {
-    const jobId = queue.shift()!
-    const job = loadJob(jobId)
-    if (!job || job.status !== 'queued') continue
-    await runJob(job)
-  }
-  running = false
+function taskKey(job: JobRecord): string {
+  const tid = job.metadata?.taskId
+  return typeof tid === 'string' && tid ? `task:${tid}` : `job:${job.id}`
+}
+
+function pumpQueue(): void {
+  if (pumpScheduled) return
+  pumpScheduled = true
+  queueMicrotask(() => {
+    pumpScheduled = false
+    for (let i = 0; i < queue.length; ) {
+      const id = queue[i]
+      const job = loadJob(id)
+      if (!job || job.status !== 'queued') {
+        queue.splice(i, 1)
+        continue
+      }
+      const key = taskKey(job)
+      if (runningTaskKeys.has(key)) {
+        i++
+        continue
+      }
+      queue.splice(i, 1)
+      runningTaskKeys.add(key)
+      void runJob(job)
+        .catch((err) => {
+          console.error('[jobQueue]', err)
+        })
+        .finally(() => {
+          runningTaskKeys.delete(key)
+          pumpQueue()
+        })
+    }
+  })
 }
 
 async function runJob(job: JobRecord): Promise<void> {
@@ -650,6 +676,7 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
     agentRef: nextStep.agent,
     workspace,
     userPrompt,
+    produces: Array.isArray(nextStep.produces) ? nextStep.produces : undefined,
     // Fresh CLI session per step — do not resume the previous step's context.
     sessionMode: 'new',
     metadata: {
@@ -691,9 +718,7 @@ export function submitJob(input: SubmitJobInput): JobRecord {
   }
   saveJob(job)
   queue.push(id)
-  processQueue().catch((err) => {
-    console.error('[jobQueue]', err)
-  })
+  pumpQueue()
   return job
 }
 
@@ -781,9 +806,7 @@ export function submitApprovalJob(input: SubmitApprovalJobInput): JobRecord {
   }
   saveJob(job)
   queue.push(id)
-  processQueue().catch((err) => {
-    console.error('[jobQueue]', err)
-  })
+  pumpQueue()
   return job
 }
 
@@ -824,9 +847,7 @@ export function sendJobFeedback(id: string, feedback: string): MutationResult<{ 
   }
   saveJob(job)
   queue.push(id2)
-  processQueue().catch((err) => {
-    console.error('[jobQueue]', err)
-  })
+  pumpQueue()
   return { ok: true, job }
 }
 

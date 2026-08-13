@@ -75,12 +75,13 @@ const artifactGraph = computed(() =>
 )
 
 const nodes = computed(() => {
+  const keys = phaseKeys.value
   const stepNodes = phases.value.map((p, i) => {
     const isActivePhase = props.task.current_phase === p.key
-    const status = phaseStatus(p, props.task)
+    const status = phaseStatus(p, props.task, keys)
     const running = runningStepId.value === p.key
     const stateOk = canRunWithTaskState(props.task)
-    const inScope = isRunnableTarget(phaseKeys.value, props.task.current_phase, p.key)
+    const inScope = isRunnableTarget(keys, props.task.current_phase, p.key)
     // Click-to-run only for current/future active|pending nodes, when state
     // is healthy and no in-flight run is already tracked for this task.
     const runnable =
@@ -122,6 +123,7 @@ const nodes = computed(() => {
 })
 
 const edges = computed((): any[] => {
+  const keys = phaseKeys.value
   const control = phases.value.slice(0, -1).map((p, i) => {
     const next = phases.value[i + 1]
     const isWaiting = p.hitl && props.task.hitl_pending === p.hitl
@@ -129,7 +131,7 @@ const edges = computed((): any[] => {
       id: `e-${p.key}-${next.key}`,
       source: p.key,
       target: next.key,
-      animated: phaseStatus(p, props.task) === 'active',
+      animated: phaseStatus(p, props.task, keys) === 'active',
       label: p.hitl || '',
       labelStyle: { fill: isWaiting ? 'var(--waiting)' : 'var(--muted)', fontWeight: isWaiting ? 700 : 400 },
       style: { stroke: isWaiting ? 'var(--waiting)' : 'var(--border)', strokeWidth: 2 },
@@ -167,7 +169,7 @@ const hitlError = ref('')
 const hitlToast = ref('')
 
 const waitingPhase = computed(() =>
-  phases.value.find((p) => phaseStatus(p, props.task) === 'waiting' && p.hitl),
+  phases.value.find((p) => phaseStatus(p, props.task, phaseKeys.value) === 'waiting' && p.hitl),
 )
 
 function openHitlModal(phase: { key: string; label: string; hitl: string | null }) {
@@ -264,7 +266,7 @@ async function pollRunStepJob(jobId: string) {
   }
 }
 
-async function runStep(node: { id: string }) {
+async function runStep(node: { id: string }, opts: { skipIntermediate?: boolean } = {}) {
   if (runningStepId.value) return
   if (!canRunWithTaskState(props.task)) {
     runError.value = t('monitor.pipeline.stepStateError')
@@ -275,12 +277,16 @@ async function runStep(node: { id: string }) {
     return
   }
   runError.value = ''
-  // Spinner tracks the step that will actually execute first (current_phase).
-  runningStepId.value = props.task.current_phase || node.id
+  const skip = opts.skipIntermediate === true
+  // Jump spinner tracks the target; chain tracks current_phase (first to execute).
+  runningStepId.value = skip ? node.id : (props.task.current_phase || node.id)
   try {
     const { job } = await runPipelineStep(
       props.task.task_id,
-      { targetStepId: node.id },
+      {
+        targetStepId: node.id,
+        ...(skip ? { skipIntermediate: true } : {}),
+      },
       props.projectId ?? undefined,
     )
     runToast.value = t('monitor.pipeline.stepStarted')
@@ -297,14 +303,26 @@ async function runStep(node: { id: string }) {
 }
 
 // Run confirmation (click active/pending node → confirm before submitting).
-// The dialog is framed around the clicked node ("run this phase"), so the
-// overwrite warning checks that same node's own artifact — the one that
-// would actually be rewritten if/when the run reaches it. Other phases in
-// between (current_phase or intermediate chain steps) are a different node's
-// concern and are not this dialog's business.
+// When the clicked node is ahead of current_phase with intermediate steps,
+// offer Jump (skip intermediates) vs Chain (run from current). Otherwise keep
+// the classic overwrite confirm. The overwrite warning checks the clicked
+// node's own artifact.
 const runConfirmOpen = ref(false)
 const runConfirmNode = ref<{ id: string; label: string } | null>(null)
 const runConfirmOverwrite = ref<string[]>([])
+const runConfirmSkipLabels = ref<string[]>([])
+
+function intermediateSkipLabels(targetId: string): string[] {
+  const keys = phaseKeys.value
+  const current = String(props.task.current_phase ?? '')
+  const curIdx = keys.indexOf(current)
+  const tgtIdx = keys.indexOf(targetId)
+  if (curIdx < 0 || tgtIdx < 0 || tgtIdx <= curIdx + 1) return []
+  return keys.slice(curIdx, tgtIdx).map((key) => {
+    const p = phases.value.find((ph) => ph.key === key)
+    return p?.label || key
+  })
+}
 
 function openRunConfirm(node: { id: string; label: string }) {
   runConfirmNode.value = node
@@ -313,6 +331,7 @@ function openRunConfirm(node: { id: string; label: string }) {
     clickedPhase?.artifact && props.task.artifacts?.[clickedPhase.artifact]?.exists
       ? [clickedPhase.artifact]
       : []
+  runConfirmSkipLabels.value = intermediateSkipLabels(node.id)
   runConfirmOpen.value = true
 }
 
@@ -320,14 +339,16 @@ function cancelRunConfirm() {
   runConfirmOpen.value = false
   runConfirmNode.value = null
   runConfirmOverwrite.value = []
+  runConfirmSkipLabels.value = []
 }
 
-function confirmRunStep() {
+function confirmRunStep(skipIntermediate = false) {
   const node = runConfirmNode.value
   runConfirmOpen.value = false
   runConfirmNode.value = null
   runConfirmOverwrite.value = []
-  if (node) runStep(node)
+  runConfirmSkipLabels.value = []
+  if (node) runStep(node, { skipIntermediate })
 }
 
 function onNodeClick({ node }) {
@@ -461,19 +482,42 @@ async function submitHitl(action: 'approve' | 'reject') {
     <div v-if="runConfirmOpen" class="modal-backdrop" @click.self="cancelRunConfirm">
       <div class="modal">
         <div class="modal-head">
-          <span>{{ t('monitor.pipeline.runConfirmHeading', { label: runConfirmNode?.label ?? '' }) }}</span>
+          <span>{{
+            runConfirmSkipLabels.length
+              ? t('monitor.pipeline.runConfirmSkipHeading')
+              : t('monitor.pipeline.runConfirmHeading', { label: runConfirmNode?.label ?? '' })
+          }}</span>
           <button class="modal-close" @click="cancelRunConfirm">✕</button>
         </div>
-        <p class="modal-hint">{{ t('monitor.pipeline.runConfirmBody') }}</p>
-        <p v-if="runConfirmOverwrite.length" class="editor-error">
-          {{ t('monitor.pipeline.runConfirmOverwriteWarning', { files: runConfirmOverwrite.join(', ') }) }}
-        </p>
-        <div class="modal-actions">
-          <button class="btn-ghost" @click="cancelRunConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
-          <button class="btn-primary" @click="confirmRunStep">
-            {{ runConfirmOverwrite.length ? t('monitor.pipeline.runConfirmRunOverwrite') : t('monitor.pipeline.runConfirmRun') }}
-          </button>
-        </div>
+        <template v-if="runConfirmSkipLabels.length">
+          <p class="modal-hint">
+            {{ t('monitor.pipeline.runConfirmSkipBody', { steps: runConfirmSkipLabels.join(', ') }) }}
+          </p>
+          <p v-if="runConfirmOverwrite.length" class="editor-error">
+            {{ t('monitor.pipeline.runConfirmOverwriteWarning', { files: runConfirmOverwrite.join(', ') }) }}
+          </p>
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="cancelRunConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
+            <button class="btn-ghost" @click="confirmRunStep(false)">
+              {{ t('monitor.pipeline.runConfirmChainFromCurrent') }}
+            </button>
+            <button class="btn-primary" @click="confirmRunStep(true)">
+              {{ t('monitor.pipeline.runConfirmJumpOnly', { label: runConfirmNode?.label ?? '' }) }}
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <p class="modal-hint">{{ t('monitor.pipeline.runConfirmBody') }}</p>
+          <p v-if="runConfirmOverwrite.length" class="editor-error">
+            {{ t('monitor.pipeline.runConfirmOverwriteWarning', { files: runConfirmOverwrite.join(', ') }) }}
+          </p>
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="cancelRunConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
+            <button class="btn-primary" @click="confirmRunStep(false)">
+              {{ runConfirmOverwrite.length ? t('monitor.pipeline.runConfirmRunOverwrite') : t('monitor.pipeline.runConfirmRun') }}
+            </button>
+          </div>
+        </template>
       </div>
     </div>
   </Teleport>
