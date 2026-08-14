@@ -30,6 +30,12 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.delete('/api/credentials', bind(RunnerController, 'deleteCredential'))
   app.all('/api/credentials', bind(RunnerController, 'credentialsMethodNotAllowed'))
 
+  app.get('/api/credentials/oauth/capabilities', bind(RunnerController, 'listOAuthCapabilities'))
+  app.post('/api/credentials/oauth/start', bind(RunnerController, 'startOAuthConnect'))
+  app.get('/api/credentials/oauth/callback', bind(RunnerController, 'oauthCallback'))
+  app.post('/api/credentials/oauth/exchange', bind(RunnerController, 'exchangeOAuthCode'))
+  app.get('/api/credentials/oauth/status', bind(RunnerController, 'oauthStatus'))
+
   app.get('/api/jobs', bind(RunnerController, 'listOrGetJobs'))
   app.post('/api/jobs', bind(RunnerController, 'submitJob'))
   app.all('/api/jobs', bind(RunnerController, 'jobsMethodNotAllowed'))

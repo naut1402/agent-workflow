@@ -8,6 +8,22 @@ export async function saveCredential(profile: unknown) {
   return apiPost('/api/credentials', { profile })
 }
 
+export async function fetchOAuthCapabilities() {
+  return apiGet('/api/credentials/oauth/capabilities')
+}
+
+export async function startOAuthConnect(providerId: string, label: string) {
+  return apiPost('/api/credentials/oauth/start', { providerId, label })
+}
+
+export async function exchangeOAuthCode(state: string, input: string) {
+  return apiPost('/api/credentials/oauth/exchange', { state, input })
+}
+
+export async function fetchOAuthStatus(state: string) {
+  return apiGet('/api/credentials/oauth/status', { state })
+}
+
 export async function saveConnection(connection: unknown) {
   return apiPost('/api/connections', { connection })
 }

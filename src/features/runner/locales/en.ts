@@ -74,6 +74,7 @@ export default {
     connLabelRequired: 'Enter a connection name',
     commandRequired: 'Select a command or register a new one',
     modelRequired: 'Enter a model id',
+    credentialSecretRequired: 'Paste a secret value, connect via browser, or fill in the advanced secretRef',
   },
   connectionDialog: {
     title: 'Add connection',
@@ -97,6 +98,14 @@ export default {
     modelHint: 'Model id sent to the provider (required), e.g. gpt-4.1, gemini-2.5-pro, grok-4, claude-opus-4-6',
     baseUrlField: 'Base URL (optional)',
     baseUrlHint: "Leave blank to use the provider's default endpoint — only set for a custom gateway/self-host",
+    connectViaBrowser: 'Connect via browser',
+    oauthPendingHint: 'A new tab opened to sign in. If it can\'t reach this dashboard, copy the URL/code it shows and paste it below instead.',
+    oauthPastePlaceholder: 'Paste the redirected URL or code here',
+    oauthPasteSubmit: 'Submit',
+    orPasteSecretBelow: 'Or paste a secret value directly below.',
+    secretValueField: 'Secret value',
+    secretValueHint: 'Your API key, pasted directly — stored encrypted, never shown again',
+    advancedSecretRef: 'Advanced: use a server-side secretRef instead (env:VAR_NAME / file:path)',
   },
   registerDialog: {
     title: 'Register command',

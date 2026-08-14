@@ -1,7 +1,7 @@
 // UI-only hints for the 4 API-based agentic providers (openai/gemini/xai/anthropic)
-// on ConnectionDialog.vue — placeholders shown next to the model/baseURL fields
-// and the default secretRef hint prefilled when creating a credential for one
-// of them. Pure data (no Vue import) so it is trivially unit-testable.
+// on ConnectionDialog.vue — placeholders shown next to the model/baseURL/secretRef
+// fields when creating a credential for one of them. Pure data (no Vue import)
+// so it is trivially unit-testable.
 
 /** Placeholder base URL shown on the field — the real default lives in registry.ts. */
 export const DEFAULT_BASE_URLS: Record<string, string> = {
@@ -19,7 +19,7 @@ export const DEFAULT_MODEL_HINTS: Record<string, string> = {
   'anthropic-api': 'claude-opus-4-6',
 }
 
-/** Prefilled `secretRef` when opening "+ Credential" for this provider. */
+/** Placeholder shown on the advanced `secretRef` field for this provider — not a prefilled value. */
 export const DEFAULT_SECRET_ENV_HINTS: Record<string, string> = {
   'openai-api': 'env:OPENAI_API_KEY',
   'gemini-api': 'env:GEMINI_API_KEY',

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -8,8 +8,10 @@ import {
   type AgenticRunResult,
 } from '../../../../../../src/features/runner/business/providers/agenticApiProvider.js'
 import { readTranscriptTurns, loadSessionMessages } from '../../../../../../src/features/runner/business/providers/agentTranscriptStore.js'
+import { storeSecret } from '../../../../../../src/features/runner/business/secretVault.js'
 import type { CredentialProfile, ExecuteRequest } from '../../../../../../src/features/runner/business/types.js'
 
+const originalFetch = globalThis.fetch
 let home: string
 let workspace: string
 const savedEnv = { ...process.env }
@@ -18,6 +20,7 @@ beforeAll(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-agentic-provider-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = home
   process.env.FAKE_AGENTIC_KEY = 'sk-test-123'
+  process.env.DASHBOARD_SECRET_KEY = 'test-passphrase'
 })
 afterAll(() => {
   process.env = savedEnv
@@ -139,6 +142,16 @@ describe('AgenticApiProvider — validateCredential / capabilities', () => {
     expect(p.validateCredential(credential('cli-session')).ok).toBe(false)
   })
 
+  test('accepts a stored: secretRef (pasted through ConnectionDialog)', () => {
+    const p = new FakeAgenticProvider()
+    expect(p.validateCredential(credential('stored:some-id'))).toEqual({ ok: true, errors: [] })
+  })
+
+  test('accepts an oauth: secretRef (Connect via browser)', () => {
+    const p = new FakeAgenticProvider()
+    expect(p.validateCredential(credential('oauth:some-id'))).toEqual({ ok: true, errors: [] })
+  })
+
   test('capabilities reports non-streaming, single-concurrency, no agent file', () => {
     const p = new FakeAgenticProvider()
     expect(p.capabilities()).toEqual({ supportsAgentFile: false, supportsStreaming: false, maxConcurrency: 1 })
@@ -151,6 +164,9 @@ describe('AgenticApiProvider — execute() template method', () => {
   })
   afterAll(() => {
     fs.rmSync(workspace, { recursive: true, force: true })
+  })
+  afterEach(() => {
+    globalThis.fetch = originalFetch
   })
 
   test('missing/invalid API key fails fast without calling runConversation', async () => {
@@ -229,5 +245,55 @@ describe('AgenticApiProvider — execute() template method', () => {
 
     expect(seenSignal).toBe(controller.signal)
     expect(seenSignal?.aborted).toBe(false)
+  })
+
+  test('a stored: secretRef (pasted secret) is resolved and passed through as the API key', async () => {
+    storeSecret('cred-stored-1', { value: 'pasted-secret-value' })
+    const p = new FakeAgenticProvider()
+    let seenApiKey = ''
+    p.runConversationImpl = async (ctx) => {
+      seenApiKey = ctx.apiKey
+      return { finalText: 'ok', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+    const result = await p.execute(baseRequest(), {}, credential('stored:cred-stored-1'))
+    expect(result.ok).toBe(true)
+    expect(seenApiKey).toBe('pasted-secret-value')
+  })
+
+  test('an oauth: secretRef with a fresh token is resolved without any network call', async () => {
+    storeSecret('cred-oauth-1', {
+      accessToken: 'oauth-access-token',
+      refreshToken: 'oauth-refresh-token',
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    })
+    let fetchCalled = false
+    globalThis.fetch = (async () => {
+      fetchCalled = true
+      return new Response('{}')
+    }) as unknown as typeof fetch
+
+    const p = new FakeAgenticProvider()
+    let seenApiKey = ''
+    p.runConversationImpl = async (ctx) => {
+      seenApiKey = ctx.apiKey
+      return { finalText: 'ok', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+    const result = await p.execute(baseRequest(), {}, credential('oauth:cred-oauth-1'))
+    expect(result.ok).toBe(true)
+    expect(seenApiKey).toBe('oauth-access-token')
+    expect(fetchCalled).toBe(false)
+  })
+
+  test('an oauth: secretRef pointing at a missing/deleted vault entry fails without calling runConversation', async () => {
+    const p = new FakeAgenticProvider()
+    let called = false
+    p.runConversationImpl = async () => {
+      called = true
+      return { finalText: '', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+    const result = await p.execute(baseRequest(), {}, credential('oauth:never-connected'))
+    expect(result.ok).toBe(false)
+    expect(result.error).toMatch(/connect again/)
+    expect(called).toBe(false)
   })
 })

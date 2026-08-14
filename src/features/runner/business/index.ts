@@ -24,7 +24,17 @@ export {
   upsertCredential,
   deleteCredential,
   resolveSecretRef,
+  isDirectSecretType,
 } from './credentials.js'
+export type { ResolvedSecret } from './credentials.js'
+export { isOAuthCapable } from './oauthProviders.js'
+export {
+  startOAuth,
+  completeFromCallback,
+  completeFromPaste,
+  getOAuthStatus,
+  ensureFreshOAuthToken,
+} from './oauthCredentials.js'
 export {
   loadConnections,
   saveConnections,

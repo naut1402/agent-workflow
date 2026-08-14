@@ -8,7 +8,8 @@ import {
   resolvePathUnder,
   writeTextFileSync,
 } from '../../../../core/lib/fileHelper.js'
-import { resolveSecretRef } from '../credentials.js'
+import { isDirectSecretType, resolveSecretRef } from '../credentials.js'
+import { ensureFreshOAuthToken } from '../oauthCredentials.js'
 import { mintSessionId } from '../sessionLedger.js'
 import { appendTranscriptTurn, loadSessionMessages, saveSessionMessages } from './agentTranscriptStore.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ProviderFamily, RunnerProvider } from '../types.js'
@@ -130,8 +131,11 @@ export abstract class AgenticApiProvider implements RunnerProvider {
 
   validateCredential(profile: CredentialProfile | undefined): { ok: boolean; errors: string[] } {
     const auth = resolveSecretRef(profile)
-    if (auth.type === 'env') return { ok: true, errors: [] }
-    return { ok: false, errors: ['secretRef phải là env:VAR_NAME cho provider API-based'] }
+    if (isDirectSecretType(auth.type)) return { ok: true, errors: [] }
+    return {
+      ok: false,
+      errors: ['secretRef phải là env:VAR_NAME, stored:<id> (dán secret qua UI), hoặc oauth:<id> (Connect via browser) cho provider API-based'],
+    }
   }
 
   validateRunnerConfig(_config: Record<string, unknown> | undefined): { ok: boolean; errors: string[] } {
@@ -148,8 +152,20 @@ export abstract class AgenticApiProvider implements RunnerProvider {
   async execute(req: ExecuteRequest, runnerConfig: Record<string, any>, credential: CredentialProfile): Promise<ExecuteResult> {
     const started = Date.now()
     const auth = resolveSecretRef(credential)
-    if (auth.type !== 'env' || !auth.value) {
-      return { ok: false, exitCode: null, durationMs: Date.now() - started, error: 'missing API key — secretRef phải là env:VAR_NAME' }
+    let apiKey: string
+    if (auth.type === 'oauth') {
+      const fresh = await ensureFreshOAuthToken(credential.secretRef.slice('oauth:'.length), this.providerId)
+      if ('error' in fresh) return { ok: false, exitCode: null, durationMs: Date.now() - started, error: fresh.error }
+      apiKey = fresh.value
+    } else if ((auth.type === 'env' || auth.type === 'stored') && auth.value) {
+      apiKey = auth.value
+    } else {
+      return {
+        ok: false,
+        exitCode: null,
+        durationMs: Date.now() - started,
+        error: 'missing API key — secretRef phải là env:VAR_NAME, stored:<id>, hoặc oauth:<id>',
+      }
     }
 
     const sessionId = req.resumeSessionId ?? req.sessionId ?? mintSessionId()
@@ -164,7 +180,7 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       result = await this.runConversation({
         req,
         runnerConfig,
-        apiKey: auth.value,
+        apiKey,
         priorMessages,
         workspace: req.workspace,
         signal: req.signal,

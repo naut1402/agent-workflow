@@ -9,6 +9,10 @@ import {
   scanLocalCommands,
   saveCustomCommand,
   deleteCustomCommand,
+  fetchOAuthCapabilities,
+  startOAuthConnect,
+  exchangeOAuthCode,
+  fetchOAuthStatus,
 } from '../scripts/ConnectionDialogApi'
 import { DEFAULT_BASE_URLS, DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
 import type { ConnectionKind, ConnectionOption, ProviderEntry } from '../types'
@@ -61,13 +65,99 @@ const credentials = ref<CredentialProfile[]>([])
 const showNewCredential = ref(false)
 const showRegisterCommand = ref(false)
 const editingCommandId = ref<string | null>(null)
-const newCred = ref({ id: '', label: '', secretRef: 'env:ANTHROPIC_API_KEY' })
+/** `id` intentionally not user-facing anymore — upsertCredential mints one when omitted. */
+const newCred = ref({ label: '', secretValue: '', secretRef: '' })
 const modelPlaceholder = computed(() => DEFAULT_MODEL_HINTS[providerId.value] || '')
 const baseUrlPlaceholder = computed(() => DEFAULT_BASE_URLS[providerId.value] || '')
+/** Hint only — must stay a placeholder, not a prefilled value, or "field left untouched" becomes indistinguishable from "field filled with the hint". */
+const secretRefPlaceholder = computed(() => DEFAULT_SECRET_ENV_HINTS[providerId.value] || 'env:ANTHROPIC_API_KEY')
+
+const oauthCapableProviders = ref<string[]>([])
+const canConnectOAuth = computed(() => oauthCapableProviders.value.includes(providerId.value))
+type OAuthFlowStatus = 'idle' | 'starting' | 'pending' | 'exchanging' | 'error'
+const oauthFlow = ref<{ state: string; status: OAuthFlowStatus; authorizeUrl: string; error: string }>({
+  state: '',
+  status: 'idle',
+  authorizeUrl: '',
+  error: '',
+})
+const oauthPasteInput = ref('')
+let oauthPollTimer: ReturnType<typeof setInterval> | null = null
+
+async function loadOAuthCapabilities() {
+  try {
+    const data = await fetchOAuthCapabilities()
+    oauthCapableProviders.value = data.providers || []
+  } catch {
+    /* best-effort — the "Connect via browser" button just won't show */
+  }
+}
+
+function stopOAuthPolling() {
+  if (oauthPollTimer) clearInterval(oauthPollTimer)
+  oauthPollTimer = null
+}
+
+function pollOAuthStatus() {
+  stopOAuthPolling()
+  oauthPollTimer = setInterval(async () => {
+    if (!oauthFlow.value.state) return
+    try {
+      const data = await fetchOAuthStatus(oauthFlow.value.state)
+      if (data.status === 'done') {
+        stopOAuthPolling()
+        await loadCredentials()
+        credentialId.value = data.credentialId
+        showNewCredential.value = false
+        oauthFlow.value = { state: '', status: 'idle', authorizeUrl: '', error: '' }
+      } else if (data.status === 'error') {
+        stopOAuthPolling()
+        oauthFlow.value = { ...oauthFlow.value, status: 'error', error: data.error || 'connect failed' }
+      }
+    } catch {
+      /* transient network hiccup — keep polling until the flow's own TTL expires */
+    }
+  }, 2000)
+}
+
+async function startConnectViaBrowser() {
+  oauthFlow.value = { state: '', status: 'starting', authorizeUrl: '', error: '' }
+  try {
+    const data = await startOAuthConnect(providerId.value, newCred.value.label)
+    oauthFlow.value = { state: data.state, status: 'pending', authorizeUrl: data.authorizeUrl, error: '' }
+    window.open(data.authorizeUrl, '_blank', 'noopener')
+    pollOAuthStatus()
+  } catch (e: any) {
+    oauthFlow.value = { state: '', status: 'error', authorizeUrl: '', error: String(e.message || e) }
+  }
+}
+
+async function submitOAuthPaste() {
+  if (!oauthFlow.value.state || !oauthPasteInput.value.trim()) return
+  oauthFlow.value = { ...oauthFlow.value, status: 'exchanging' }
+  try {
+    const data = await exchangeOAuthCode(oauthFlow.value.state, oauthPasteInput.value.trim())
+    stopOAuthPolling()
+    await loadCredentials()
+    credentialId.value = data.credentialId
+    showNewCredential.value = false
+    oauthPasteInput.value = ''
+    oauthFlow.value = { state: '', status: 'idle', authorizeUrl: '', error: '' }
+  } catch (e: any) {
+    oauthFlow.value = { ...oauthFlow.value, status: 'error', error: String(e.message || e) }
+  }
+}
+
+function cancelOAuthFlow() {
+  stopOAuthPolling()
+  oauthPasteInput.value = ''
+  oauthFlow.value = { state: '', status: 'idle', authorizeUrl: '', error: '' }
+}
 
 function toggleNewCredential() {
   if (!showNewCredential.value) {
-    newCred.value.secretRef = DEFAULT_SECRET_ENV_HINTS[providerId.value] || 'env:ANTHROPIC_API_KEY'
+    newCred.value = { label: '', secretValue: '', secretRef: '' }
+    cancelOAuthFlow()
   }
   showNewCredential.value = !showNewCredential.value
 }
@@ -299,12 +389,20 @@ async function removeCustomCommand(cmd: RegisteredCommand) {
 
 async function saveNewCredential() {
   error.value = ''
+  if (!newCred.value.secretValue.trim() && !newCred.value.secretRef.trim()) {
+    error.value = t('runner.errors.credentialSecretRequired')
+    return
+  }
   try {
     const { profile } = await saveCredential({
-      id: newCred.value.id,
-      label: newCred.value.label || newCred.value.id,
+      label: newCred.value.label || undefined,
       provider: providerId.value,
-      secretRef: newCred.value.secretRef,
+      // Prefer the pasted value; the raw secretRef field is the advanced/legacy
+      // path (env:VAR_NAME on the server, or file:/path) for operators who
+      // already manage secrets that way.
+      ...(newCred.value.secretValue.trim()
+        ? { secretValue: newCred.value.secretValue }
+        : { secretRef: newCred.value.secretRef }),
     })
     await loadCredentials()
     credentialId.value = profile.id
@@ -398,11 +496,13 @@ function onKeydown(e: KeyboardEvent) {
 
 onMounted(() => {
   loadCredentials()
+  loadOAuthCapabilities()
   refreshScan()
   window.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
+  stopOAuthPolling()
   window.removeEventListener('keydown', onKeydown)
 })
 </script>
@@ -546,20 +646,56 @@ onUnmounted(() => {
             </div>
             <div v-if="showNewCredential" class="new-cred">
               <div class="field">
-                <label class="cfg-label">Credential ID
-                  <input v-model="newCred.id" class="cfg-input" />
-                </label>
-              </div>
-              <div class="field">
                 <label class="cfg-label">{{ t('runner.connectionDialog.credLabelField') }}
                   <input v-model="newCred.label" class="cfg-input" />
                 </label>
               </div>
-              <div class="field">
-                <label class="cfg-label">secretRef
-                  <input v-model="newCred.secretRef" class="cfg-input" placeholder="env:ANTHROPIC_API_KEY" />
-                </label>
+
+              <div v-if="canConnectOAuth" class="field oauth-block">
+                <button
+                  type="button"
+                  class="btn-primary btn-sm"
+                  :disabled="oauthFlow.status === 'starting' || oauthFlow.status === 'pending' || oauthFlow.status === 'exchanging'"
+                  @click="startConnectViaBrowser"
+                >
+                  {{ t('runner.connectionDialog.connectViaBrowser') }}
+                </button>
+                <p v-if="oauthFlow.status === 'pending'" class="muted path-hint">
+                  {{ t('runner.connectionDialog.oauthPendingHint') }}
+                </p>
+                <div v-if="oauthFlow.status === 'pending' || oauthFlow.status === 'exchanging'" class="oauth-paste-row">
+                  <input
+                    v-model="oauthPasteInput"
+                    class="cfg-input"
+                    :placeholder="t('runner.connectionDialog.oauthPastePlaceholder')"
+                  />
+                  <button
+                    type="button"
+                    class="btn-ghost btn-sm"
+                    :disabled="!oauthPasteInput.trim() || oauthFlow.status === 'exchanging'"
+                    @click="submitOAuthPaste"
+                  >
+                    {{ t('runner.connectionDialog.oauthPasteSubmit') }}
+                  </button>
+                </div>
+                <p v-if="oauthFlow.status === 'error'" class="muted err-text">{{ oauthFlow.error }}</p>
+                <p class="muted path-hint">{{ t('runner.connectionDialog.orPasteSecretBelow') }}</p>
               </div>
+
+              <div class="field">
+                <label class="cfg-label">{{ t('runner.connectionDialog.secretValueField') }}
+                  <input v-model="newCred.secretValue" type="password" class="cfg-input" autocomplete="off" />
+                </label>
+                <p class="muted path-hint">{{ t('runner.connectionDialog.secretValueHint') }}</p>
+              </div>
+              <details class="advanced-secret-ref">
+                <summary class="muted">{{ t('runner.connectionDialog.advancedSecretRef') }}</summary>
+                <div class="field">
+                  <label class="cfg-label">secretRef
+                    <input v-model="newCred.secretRef" class="cfg-input" :placeholder="secretRefPlaceholder" />
+                  </label>
+                </div>
+              </details>
               <button type="button" class="btn-primary btn-sm" @click="saveNewCredential">{{ t('runner.connectionDialog.saveCredential') }}</button>
             </div>
             <div class="field">
@@ -680,6 +816,13 @@ onUnmounted(() => {
   padding: 0.75rem;
   margin-bottom: 0.75rem;
 }
+.oauth-block { border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 0.75rem; }
+.oauth-paste-row { display: flex; gap: 0.35rem; margin-top: 0.4rem; }
+.oauth-paste-row .cfg-input { flex: 1; min-width: 0; }
+.err-text { color: var(--danger); }
+.advanced-secret-ref { margin-bottom: 0.75rem; }
+.advanced-secret-ref summary { cursor: pointer; font-size: 0.8rem; }
+.advanced-secret-ref .field { margin-top: 0.5rem; margin-bottom: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
 .err-banner {
   background: rgba(248, 81, 73, 0.12);
