@@ -21,6 +21,14 @@ const emit = defineEmits<{
 
 const { t } = useI18nHelpers()
 
+const TIMEOUT_OPTIONS = [
+  { value: 300_000, labelKey: 'runner.timeoutOptions.min5' },
+  { value: 600_000, labelKey: 'runner.timeoutOptions.min10' },
+  { value: 900_000, labelKey: 'runner.timeoutOptions.min15' },
+  { value: 1_800_000, labelKey: 'runner.timeoutOptions.min30' },
+  { value: 3_600_000, labelKey: 'runner.timeoutOptions.hour1' },
+] as const
+
 function formatJobStatus(status: string | undefined): string {
   if (!status) return '—'
   const key = `runner.jobStatus.${status}`
@@ -304,6 +312,17 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <label class="cfg-label">{{ t('runner.fields.allowedTools') }}
               <input v-model="draft.config.allowedTools" class="cfg-input" />
             </label>
+          </div>
+
+          <div class="field">
+            <label class="cfg-label">{{ t('runner.fields.timeoutMs') }}
+              <select v-model.number="draft.config.timeoutMs" class="cfg-input timeout-select">
+                <option v-for="opt in TIMEOUT_OPTIONS" :key="opt.value" :value="opt.value">
+                  {{ t(opt.labelKey) }}
+                </option>
+              </select>
+            </label>
+            <p class="muted hint">{{ t('runner.fields.timeoutMsHint') }}</p>
           </div>
 
           <div class="field enable-row">

@@ -70,10 +70,10 @@ export function buildConsoleInvocation(input: ConsoleInvocationInput): ConsoleIn
   return { args: [...flags, ...extra] }
 }
 
-function formatFailure(procResult: ProcResult): string {
+function formatFailure(procResult: ProcResult, timeoutMs: number): string {
+  if (procResult.killed) return `process timed out after ${timeoutMs}ms`
   const fromStreams = [procResult.stderr, procResult.stdout].filter(Boolean).join('\n').trim()
   if (fromStreams) return fromStreams.slice(0, 1000)
-  if (procResult.killed) return 'process timed out'
   return `exit code ${procResult.exitCode ?? 'unknown'}`
 }
 
@@ -242,12 +242,13 @@ export function createConsoleCommandProvider(): RunnerProvider {
         appendLog(chunk)
       }
 
+      const timeoutMs = req.timeoutMs || runnerConfig.timeoutMs || 600_000
       let procResult: ProcResult
       try {
         procResult = await runProcess(cliPath, args, {
           cwd: req.workspace,
           env: { ...process.env },
-          timeoutMs: req.timeoutMs || runnerConfig.timeoutMs || 600_000,
+          timeoutMs,
           onLog: wrappedOnLog,
           onStart,
         })
@@ -278,7 +279,8 @@ export function createConsoleCommandProvider(): RunnerProvider {
         durationMs: Date.now() - started,
         logPath,
         artifactsFound,
-        error: ok ? undefined : formatFailure(procResult),
+        error: ok ? undefined : formatFailure(procResult, timeoutMs),
+        timedOut: procResult.killed,
         stdout: procResult.stdout,
       }
       appendLog(describeResult(result))

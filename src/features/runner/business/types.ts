@@ -110,6 +110,11 @@ export interface ExecuteResult {
   stdout?: string
   /** Captured CLI session id (preset-uuid or parse-json providers). */
   sessionId?: string | null
+  /** True when runProcess() killed the child after timeoutMs elapsed (SIGTERM).
+   * Lets classifyJobFailure() recognize a timeout deterministically instead of
+   * matching the CLI's own stdout/stderr text (e.g. Claude Code's interrupt
+   * markers "Execution error" / "[Request interrupted by user]"). */
+  timedOut?: boolean
   /** Optional token usage (Agent CLI); see providers/agentCli.ts. */
   tokenUsage?: {
     inputTokens?: number

@@ -91,9 +91,7 @@ export interface SubmitJobInput {
 
 function requeueJob(jobId: string): void {
   queue.push(jobId)
-  processQueue().catch((err) => {
-    console.error('[jobQueue]', err)
-  })
+  pumpQueue()
 }
 
 bindRecoverPoller({ loadJob, saveJob, requeueJob })
