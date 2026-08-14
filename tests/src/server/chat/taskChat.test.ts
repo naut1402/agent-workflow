@@ -6,6 +6,7 @@ import { encodeWorkspacePath } from '../../../../src/features/monitor/business/s
 import { getTaskChatState, resolveChatSession } from '../../../../src/features/monitor/business/taskChat'
 import { saveTaskSessionLedger, type SessionEntry } from '../../../../src/features/runner/business/sessionLedger'
 import { upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index'
+import { appendTranscriptTurn } from '../../../../src/features/runner/business/providers/agentTranscriptStore'
 import type { JobRecord } from '../../../../src/features/runner/business/types'
 
 // getTaskChatState mirrors sendTaskFeedback's guard order so the UI can explain
@@ -429,5 +430,57 @@ describe('getTaskChatState', () => {
     const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
     expect(state.transcriptFound).toBe(true)
     expect(state.turns.some((t) => t.role === 'assistant' && t.text.includes('Trả lời từ log'))).toBe(true)
+  })
+
+  test('an AgenticApiProvider job (openai-api) reads tool-call turns via apiAgentTranscript', () => {
+    upsertConnection({
+      id: 'conn-openai',
+      kind: 'ai-provider',
+      providerId: 'openai-api',
+      credentialId: 'cred-openai',
+    })
+    upsertRunner({ id: 'runner-openai', name: 'OpenAI', connectionId: 'conn-openai', config: {} })
+    appendTranscriptTurn('openai-api', 's-openai', { role: 'user', text: 'Viết design' })
+    appendTranscriptTurn('openai-api', 's-openai', { role: 'tool', tool: 'write_file', text: '{"path":"design.md"}' })
+    appendTranscriptTurn('openai-api', 's-openai', { role: 'assistant', text: '## Design xong' })
+    writeJob({
+      id: 'j-openai',
+      runnerId: 'runner-openai',
+      sessionId: 's-openai',
+      userPrompt: 'Viết design',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'designer' },
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
+    expect(state.transcriptFound).toBe(true)
+    expect(state.transcriptProvider).toBe('openai-api')
+    expect(state.turns.map((t) => t.role)).toEqual(['user', 'tool', 'assistant'])
+    expect(state.turns[1]?.tool).toBe('write_file')
+  })
+
+  test('an AgenticApiProvider job (anthropic-api) resolves the same way — no per-provider id list to fall out of sync', () => {
+    upsertConnection({
+      id: 'conn-anthropic',
+      kind: 'ai-provider',
+      providerId: 'anthropic-api',
+      credentialId: 'cred-anthropic',
+    })
+    upsertRunner({ id: 'runner-anthropic', name: 'Anthropic', connectionId: 'conn-anthropic', config: {} })
+    appendTranscriptTurn('anthropic-api', 's-anthropic', { role: 'user', text: 'Viết design' })
+    appendTranscriptTurn('anthropic-api', 's-anthropic', { role: 'tool', tool: 'str_replace_based_edit_tool', text: '{"path":"design.md"}' })
+    appendTranscriptTurn('anthropic-api', 's-anthropic', { role: 'assistant', text: '## Design xong' })
+    writeJob({
+      id: 'j-anthropic',
+      runnerId: 'runner-anthropic',
+      sessionId: 's-anthropic',
+      userPrompt: 'Viết design',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'designer' },
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
+    expect(state.transcriptFound).toBe(true)
+    expect(state.transcriptProvider).toBe('anthropic-api')
+    expect(state.turns.map((t) => t.role)).toEqual(['user', 'tool', 'assistant'])
+    expect(state.turns[1]?.tool).toBe('str_replace_based_edit_tool')
   })
 })

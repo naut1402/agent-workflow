@@ -10,6 +10,7 @@ import {
   saveCustomCommand,
   deleteCustomCommand,
 } from '../scripts/ConnectionDialogApi'
+import { DEFAULT_BASE_URLS, DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
 import type { ConnectionKind, ConnectionOption, ProviderEntry } from '../types'
 
 interface RegisteredCommand {
@@ -49,6 +50,8 @@ const label = ref('')
 const providerId = ref('')
 const selectedCommandId = ref('')
 const credentialId = ref('')
+const model = ref('')
+const baseURL = ref('')
 const scanning = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -59,6 +62,15 @@ const showNewCredential = ref(false)
 const showRegisterCommand = ref(false)
 const editingCommandId = ref<string | null>(null)
 const newCred = ref({ id: '', label: '', secretRef: 'env:ANTHROPIC_API_KEY' })
+const modelPlaceholder = computed(() => DEFAULT_MODEL_HINTS[providerId.value] || '')
+const baseUrlPlaceholder = computed(() => DEFAULT_BASE_URLS[providerId.value] || '')
+
+function toggleNewCredential() {
+  if (!showNewCredential.value) {
+    newCred.value.secretRef = DEFAULT_SECRET_ENV_HINTS[providerId.value] || 'env:ANTHROPIC_API_KEY'
+  }
+  showNewCredential.value = !showNewCredential.value
+}
 const registerDraft = ref({ command: '', path: '', flagsText: '' })
 const registerError = ref('')
 
@@ -136,6 +148,8 @@ function applyConnectionPrefill() {
   kind.value = c.kind === 'ai-provider' ? 'ai-provider' : 'local-console'
   providerId.value = c.providerId || ''
   credentialId.value = c.credentialId || ''
+  model.value = typeof c.config?.model === 'string' ? c.config.model : ''
+  baseURL.value = typeof c.config?.baseURL === 'string' ? c.config.baseURL : ''
   if (kind.value === 'local-console' && c.cliPath) {
     const match =
       commandOptions.value.find(
@@ -347,6 +361,14 @@ async function save() {
       return
     }
 
+    if (!model.value.trim()) {
+      error.value = t('runner.errors.modelRequired')
+      return
+    }
+
+    const config: Record<string, unknown> = { model: model.value.trim() }
+    if (baseURL.value.trim()) config.baseURL = baseURL.value.trim()
+
     const id = buildConnectionId(providerId.value)
     const { connection } = await saveConnection({
       id,
@@ -354,6 +376,7 @@ async function save() {
       kind: 'ai-provider',
       providerId: providerId.value,
       credentialId: credentialId.value,
+      config,
     })
     emit('saved', connection.id)
     emit('close')
@@ -502,7 +525,7 @@ onUnmounted(() => {
               <div class="row-actions">
                 <label class="cfg-label">Credential</label>
                 <div class="row-btns">
-                  <button type="button" class="btn-ghost btn-sm" @click="showNewCredential = !showNewCredential">
+                  <button type="button" class="btn-ghost btn-sm" @click="toggleNewCredential">
                     + Credential
                   </button>
                 </div>
@@ -538,6 +561,18 @@ onUnmounted(() => {
                 </label>
               </div>
               <button type="button" class="btn-primary btn-sm" @click="saveNewCredential">{{ t('runner.connectionDialog.saveCredential') }}</button>
+            </div>
+            <div class="field">
+              <label class="cfg-label">{{ t('runner.connectionDialog.modelField') }}
+                <input v-model="model" class="cfg-input" :placeholder="modelPlaceholder" />
+              </label>
+              <p class="muted path-hint">{{ t('runner.connectionDialog.modelHint') }}</p>
+            </div>
+            <div class="field">
+              <label class="cfg-label">{{ t('runner.connectionDialog.baseUrlField') }}
+                <input v-model="baseURL" class="cfg-input" :placeholder="baseUrlPlaceholder" />
+              </label>
+              <p class="muted path-hint">{{ t('runner.connectionDialog.baseUrlHint') }}</p>
             </div>
           </template>
 

@@ -92,6 +92,13 @@ export interface ExecuteRequest {
   // already proposed instead of starting over.
   sessionId?: string
   resumeSessionId?: string
+  /**
+   * Aborted when `cancelJob` is called for this job. Providers with no OS
+   * subprocess to SIGTERM (AgenticApiProvider subclasses) should thread this
+   * into their fetch/SDK calls; subprocess-spawning providers can ignore it
+   * (they are killed via `job.pid` instead).
+   */
+  signal?: AbortSignal
 }
 
 export interface ExecuteResult {

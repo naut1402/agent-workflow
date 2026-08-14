@@ -73,6 +73,7 @@ export default {
     cliPathRequired: 'Enter a CLI path',
     connLabelRequired: 'Enter a connection name',
     commandRequired: 'Select a command or register a new one',
+    modelRequired: 'Enter a model id',
   },
   connectionDialog: {
     title: 'Add connection',
@@ -92,6 +93,10 @@ export default {
     credLabelField: 'Name',
     saveCredential: 'Save credential',
     saveConnection: 'Save connection',
+    modelField: 'Model',
+    modelHint: 'Model id sent to the provider (required), e.g. gpt-4.1, gemini-2.5-pro, grok-4, claude-opus-4-6',
+    baseUrlField: 'Base URL (optional)',
+    baseUrlHint: "Leave blank to use the provider's default endpoint — only set for a custom gateway/self-host",
   },
   registerDialog: {
     title: 'Register command',

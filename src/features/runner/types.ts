@@ -17,6 +17,8 @@ export interface ConnectionOption {
   cliPath?: string
   flags?: string[]
   credentialId?: string | null
+  /** ai-provider: extra settings (model/baseURL) merged into runnerConfig at execute time. */
+  config?: Record<string, unknown>
 }
 
 export interface RunnerDraft {

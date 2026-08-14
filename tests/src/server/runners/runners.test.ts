@@ -242,6 +242,14 @@ describe('connections CRUD', () => {
     expect(catalog.find((p) => p.id === 'console-command')?.kind).toBe('local-console')
     expect(catalog.find((p) => p.id === 'anthropic-api')?.kind).toBe('ai-provider')
   })
+  test('provider catalog includes the API-based agentic providers, all family ai-api', () => {
+    const catalog = listProviderCatalog()
+    for (const id of ['openai-api', 'gemini-api', 'xai-api', 'anthropic-api']) {
+      const entry = catalog.find((p) => p.id === id)
+      expect(entry?.kind).toBe('ai-provider')
+      expect(entry?.family).toBe('ai-api')
+    }
+  })
 })
 
 describe('runners registry CRUD', () => {
@@ -335,6 +343,15 @@ describe('provider registry', () => {
     expect(typeof p?.execute).toBe('function')
     expect(getProvider('console-command')?.capabilities().supportsAgentFile).toBe(false)
     expect(getProvider('nope')).toBe(null)
+  })
+  test('the 4 API-based agentic providers are registered and share the AgenticApiProvider capabilities contract', () => {
+    for (const id of ['openai-api', 'gemini-api', 'xai-api', 'anthropic-api']) {
+      expect(listProviderIds()).toContain(id)
+      const p = getProvider(id)
+      expect(p?.providerId).toBe(id)
+      expect(typeof p?.execute).toBe('function')
+      expect(p?.capabilities()).toEqual({ supportsAgentFile: false, supportsStreaming: false, maxConcurrency: 1 })
+    }
   })
 })
 

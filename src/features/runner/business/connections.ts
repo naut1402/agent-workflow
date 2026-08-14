@@ -26,6 +26,9 @@ const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
   { id: 'codex-cli', kind: 'local-console', label: 'Codex CLI', family: 'agent-cli' },
   { id: 'console-command', kind: 'local-console', label: 'Console command', family: 'console-command' },
   { id: 'anthropic-api', kind: 'ai-provider', label: 'Anthropic API', family: 'ai-api' },
+  { id: 'openai-api', kind: 'ai-provider', label: 'OpenAI API', family: 'ai-api' },
+  { id: 'gemini-api', kind: 'ai-provider', label: 'Gemini API', family: 'ai-api' },
+  { id: 'xai-api', kind: 'ai-provider', label: 'xAI API', family: 'ai-api' },
 ]
 
 function connectionsFile(): string {

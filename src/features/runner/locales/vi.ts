@@ -72,6 +72,7 @@ export default {
     cliPathRequired: 'Nhập CLI path',
     connLabelRequired: 'Nhập tên kết nối',
     commandRequired: 'Chọn command hoặc đăng ký command mới',
+    modelRequired: 'Nhập model id',
   },
   connectionDialog: {
     title: 'Thêm connection',
@@ -91,6 +92,10 @@ export default {
     credLabelField: 'Tên',
     saveCredential: 'Lưu credential',
     saveConnection: 'Lưu connection',
+    modelField: 'Model',
+    modelHint: 'Model id gửi tới provider (bắt buộc), vd. gpt-4.1, gemini-2.5-pro, grok-4, claude-opus-4-6',
+    baseUrlField: 'Base URL (tuỳ chọn)',
+    baseUrlHint: 'Để trống dùng endpoint mặc định của provider — chỉ điền khi dùng gateway/self-host riêng',
   },
   registerDialog: {
     title: 'Đăng ký command',
