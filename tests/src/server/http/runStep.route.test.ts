@@ -153,6 +153,126 @@ describe('POST /api/tasks/:id/run-step', () => {
     expect(state.hitl_pending).toBe('hitl-3')
   })
 
+  test('skipIntermediate jumps to target without chaining through gated steps', async () => {
+    seedTask('R2b', { current_phase: 'implementer' })
+    const res = await app.request('/api/tasks/R2b/run-step', {
+      method: 'POST',
+      body: JSON.stringify({
+        runnerId: 'stub-runner-run-step',
+        targetStepId: 'pr-creator',
+        skipIntermediate: true,
+      }),
+    })
+    expect(res.status).toBe(201)
+    const { job } = await res.json()
+    expect(job.metadata.pipelineStepId).toBe('pr-creator')
+    expect(job.metadata.chainTarget).toBeUndefined()
+    await settle(job.id)
+    await waitForPhase('R2b', (p) => p === 'completed')
+    const reviewerJob = listJobs(50).find(
+      (j) => j.metadata?.taskId === 'R2b' && j.metadata?.pipelineStepId === 'reviewer',
+    )
+    expect(reviewerJob).toBeUndefined()
+    const state = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'R2b.json'), 'utf8'))
+    expect(state.hitl_pending).toBeFalsy()
+  })
+
+  test('skipIntermediate with unknown targetStepId returns 400 and does not jump', async () => {
+    seedTask('R2b-bad', { current_phase: 'implementer' })
+    const res = await app.request('/api/tasks/R2b-bad/run-step', {
+      method: 'POST',
+      body: JSON.stringify({
+        runnerId: 'stub-runner-run-step',
+        targetStepId: 'nope',
+        skipIntermediate: true,
+      }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('invalid target step')
+    const state = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'R2b-bad.json'), 'utf8'))
+    expect(state.current_phase).toBe('implementer')
+  })
+
+  test('skipIntermediate with a past targetStepId returns 400 and does not jump', async () => {
+    seedTask('R2b-past', { current_phase: 'pr-creator' })
+    const res = await app.request('/api/tasks/R2b-past/run-step', {
+      method: 'POST',
+      body: JSON.stringify({
+        runnerId: 'stub-runner-run-step',
+        targetStepId: 'implementer',
+        skipIntermediate: true,
+      }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('invalid target step')
+    const state = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'R2b-past.json'), 'utf8'))
+    expect(state.current_phase).toBe('pr-creator')
+  })
+
+  test('chain (no skipIntermediate) with an unknown targetStepId returns 400 and does not submit', async () => {
+    seedTask('R2d-bad', { current_phase: 'implementer' })
+    const res = await app.request('/api/tasks/R2d-bad/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step', targetStepId: 'nope' }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('invalid target step')
+    const state = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'R2d-bad.json'), 'utf8'))
+    expect(state.current_phase).toBe('implementer')
+  })
+
+  test('chain (no skipIntermediate) with a past targetStepId returns 400 and does not submit', async () => {
+    seedTask('R2d-past', { current_phase: 'pr-creator' })
+    const res = await app.request('/api/tasks/R2d-past/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step', targetStepId: 'implementer' }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('invalid target step')
+    const state = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'R2d-past.json'), 'utf8'))
+    expect(state.current_phase).toBe('pr-creator')
+  })
+
+  test('tags produces from the pipeline step onto the submitted job', async () => {
+    const pipelinePath = path.join(root, 'pipeline.yaml')
+    const originalPipeline = fs.readFileSync(pipelinePath, 'utf8')
+    try {
+      fs.writeFileSync(
+        pipelinePath,
+        [
+          'version: 1',
+          'steps:',
+          "  - id: implementer",
+          "    agent: ' '",
+          "    produces: [phpstan.md]",
+          "  - id: reviewer",
+          "    agent: ' '",
+          "    hitl: { mode: manual, gate_id: hitl-3 }",
+          "  - id: pr-creator",
+          "    agent: ' '",
+        ].join('\n'),
+        'utf8',
+      )
+      seedTask('R2c', { current_phase: 'implementer' })
+      const res = await app.request('/api/tasks/R2c/run-step', {
+        method: 'POST',
+        body: JSON.stringify({ runnerId: 'stub-runner-run-step' }),
+      })
+      expect(res.status).toBe(201)
+      const { job } = await res.json()
+      expect(job.produces).toEqual(['phpstan.md'])
+      await settle(job.id)
+    } finally {
+      // Restore root pipeline for later tests in this file, even if an
+      // assertion above threw.
+      fs.writeFileSync(pipelinePath, originalPipeline, 'utf8')
+    }
+  })
+
   test('chains all the way to the target when no gate is in between', async () => {
     seedTask('R3', { current_phase: 'implementer' })
     // Rewrite pipeline for this task only: implementer → pr-creator, no gate.
@@ -217,6 +337,30 @@ describe('POST /api/tasks/:id/run-step', () => {
     gated = false
     resolveGate?.()
     await settle(firstJob.id)
+  })
+
+  test('concurrent requests for the same task submit exactly one job', async () => {
+    gated = true
+    seedTask('R6b', { current_phase: 'implementer' })
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        app.request('/api/tasks/R6b/run-step', {
+          method: 'POST',
+          body: JSON.stringify({ runnerId: 'stub-runner-run-step' }),
+        }),
+      ),
+    )
+    const created = responses.filter((r) => r.status === 201)
+    const conflicted = responses.filter((r) => r.status === 409)
+    expect(created.length).toBe(1)
+    expect(conflicted.length).toBe(4)
+
+    const jobsForTask = listJobs(50).filter((j) => j.metadata?.taskId === 'R6b')
+    expect(jobsForTask.length).toBe(1)
+
+    gated = false
+    resolveGate?.()
+    await settle(jobsForTask[0].id)
   })
 
   test('tags inputSessionMode new so each step starts a fresh CLI session', async () => {

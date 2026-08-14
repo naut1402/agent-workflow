@@ -3,6 +3,7 @@ import { AbstractController } from '../../core/http/AbstractController.js'
 import { emitAudit } from '../../core/log/store.js'
 import { emitEntity } from '../../core/events/index.js'
 import * as runnerStore from './business/index.js'
+import type { JobStatus } from './business/types.js'
 
 export class RunnerController extends AbstractController {
   listRunners() {
@@ -156,8 +157,19 @@ export class RunnerController extends AbstractController {
       if (!job) return this.notFound('not found')
       return this.ok({ job })
     }
-    const limit = Number(this.c.req.query('limit')) || 20
-    return this.ok({ jobs: runnerStore.listJobs(limit) })
+    const statusRaw = this.c.req.query('status')
+    let status: JobStatus | undefined
+    if (statusRaw) {
+      const allowed = ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'awaiting_approval']
+      if (!allowed.includes(statusRaw)) return this.badRequest('invalid status')
+      status = statusRaw as JobStatus
+    }
+    const limitRaw = this.c.req.query('limit')
+    const limit =
+      limitRaw !== undefined && limitRaw !== ''
+        ? Number(limitRaw) || 20
+        : undefined
+    return this.ok({ jobs: runnerStore.listJobs(limit, status) })
   }
 
   async submitJob() {

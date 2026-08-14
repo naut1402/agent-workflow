@@ -89,6 +89,10 @@ export default {
     runConfirmCancel: 'Huỷ',
     runConfirmRun: 'Chạy',
     runConfirmRunOverwrite: 'Ghi đè & chạy',
+    runConfirmSkipHeading: 'Bỏ qua các bước trung gian?',
+    runConfirmSkipBody: 'Các bước sau sẽ không chạy: {steps}',
+    runConfirmJumpOnly: 'Chỉ chạy {label}',
+    runConfirmChainFromCurrent: 'Chạy từ bước hiện tại',
   },
   pipelineNode: {
     clickToApprove: 'Nhấn để duyệt',
@@ -99,6 +103,14 @@ export default {
     chat: 'Chat',
     chatWithRunner: 'Chat với runner của step này',
   },
+  artifactNode: {
+    producesTitle: 'Đầu ra',
+    knowledgeTitle: 'Knowledge',
+    exists: 'Đã có',
+    missing: 'Thiếu',
+    fromStep: '→ {stepId}',
+  },
+
   qa: {
     head: '⚠ Pipeline đang chờ trả lời câu hỏi blocking',
     hintBefore: 'Double-click vào nội dung bên dưới để sửa (blur để lưu), hoặc mở',
