@@ -110,6 +110,37 @@ describe('createConsoleCommandProvider', () => {
     }
   })
 
+  test('timeout-kill: error is a clear timeout message, not raw CLI output', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-console-'))
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
+    try {
+      const { cliPath, flags } = nodeCli(['hang'])
+      const provider = createConsoleCommandProvider()
+
+      const result = await provider.execute(
+        {
+          jobId: 'job-console-timeout',
+          resolvedAgent,
+          userPrompt: '',
+          workspace,
+          produces: [],
+          timeoutMs: 150,
+        },
+        { cliPath, flags },
+        credential,
+      )
+
+      expect(result.ok).toBe(false)
+      expect(result.exitCode).toBe(-1)
+      expect(result.timedOut).toBe(true)
+      expect(result.error).toBe('process timed out after 150ms')
+      expect(result.error).not.toContain('Execution error')
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
   test('empty prompt runs cliPath with flags only', async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-console-'))
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
