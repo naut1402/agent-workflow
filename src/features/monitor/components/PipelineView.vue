@@ -62,6 +62,7 @@ const nodes = computed(() =>
     const isActivePhase = props.task.current_phase === p.key
     const status = phaseStatus(p, props.task)
     const running = runningStepId.value === p.key
+    const recovering = recoveringStepId.value === p.key
     const stateOk = canRunWithTaskState(props.task)
     const inScope = isRunnableTarget(phaseKeys.value, props.task.current_phase, p.key)
     // Click-to-run only for current/future active|pending nodes, when state
@@ -93,6 +94,7 @@ const nodes = computed(() =>
         // Q&A badge only on the phase that's currently active (the one that created qa.md)
         qa_count: isActivePhase ? (props.task.qa_count ?? 0) : 0,
         running,
+        recovering,
         runnable,
         executed,
         // The node's Run button goes through the same confirm dialog as
@@ -170,6 +172,7 @@ watch(
 
 // Run-step (click a node to run/chain to it)
 const runningStepId = ref<string | null>(null)
+const recoveringStepId = ref<string | null>(null)
 const runError = ref('')
 const runToast = ref('')
 let runPollTimer: ReturnType<typeof setTimeout> | null = null
@@ -190,7 +193,7 @@ async function syncInFlightRun() {
     const inflight = jobs.find(
       (j: any) =>
         j?.metadata?.taskId === props.task.task_id &&
-        (j.status === 'queued' || j.status === 'running'),
+        (j.status === 'queued' || j.status === 'running' || j.status === 'awaiting_recovery'),
     )
     if (!inflight?.id) return
     const stepId =
@@ -207,6 +210,7 @@ async function syncInFlightRun() {
 watch(() => props.task.task_id, () => {
   clearRunPoll()
   runningStepId.value = null
+  recoveringStepId.value = null
   runError.value = ''
   syncInFlightRun()
 }, { immediate: true })
@@ -219,6 +223,7 @@ async function pollRunStepJob(jobId: string) {
     const { job } = await fetchJob(jobId)
     if (job?.status === 'succeeded') {
       runningStepId.value = null
+      recoveringStepId.value = null
       runToast.value = t('monitor.pipeline.stepSucceeded')
       emit('hitl-action')
       setTimeout(() => { runToast.value = '' }, 4000)
@@ -226,10 +231,24 @@ async function pollRunStepJob(jobId: string) {
     }
     if (job?.status === 'failed' || job?.status === 'cancelled') {
       runningStepId.value = null
+      recoveringStepId.value = null
       runError.value = job.error ? String(job.error) : t('monitor.pipeline.stepFailed')
       emit('hitl-action')
       return
     }
+    if (job?.status === 'awaiting_recovery') {
+      runError.value = ''
+      runToast.value = t('monitor.pipeline.stepAwaitingRecovery')
+      const liveStep =
+        (typeof job?.metadata?.pipelineStepId === 'string' && job.metadata.pipelineStepId) ||
+        props.task.current_phase ||
+        runningStepId.value
+      runningStepId.value = liveStep
+      recoveringStepId.value = liveStep
+      runPollTimer = setTimeout(() => pollRunStepJob(jobId), 2000)
+      return
+    }
+    recoveringStepId.value = null
     // Keep the spinner on the step the job is actually executing (server
     // always runs current_phase / metadata.pipelineStepId), not the chain target.
     const liveStep =

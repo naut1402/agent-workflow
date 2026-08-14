@@ -39,6 +39,7 @@ function onChat(): void {
 const STATUS_ICON = { done: '✓', active: '▶', waiting: '⏸', pending: '○' }
 
 function bubbleTitle(data: Record<string, any>): string | undefined {
+  if (data.recovering) return t('monitor.pipelineNode.awaitingRecovery')
   if (data.running) return t('monitor.pipelineNode.running')
   if (data.status === 'waiting') return t('monitor.pipelineNode.clickToApprove')
   if (data.runnable) return t('monitor.pipelineNode.clickToRun')
@@ -54,7 +55,8 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
       {
         'pnode-waiting': data.status === 'waiting',
         'pnode-runnable': !!data.runnable,
-        'pnode-running': data.running,
+        'pnode-running': data.running && !data.recovering,
+        'pnode-recovering': !!data.recovering,
       },
     ]"
   >
@@ -96,10 +98,10 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
     </div>
     <Handle type="target" :position="Position.Left" />
     <div class="pnode-bubble" :title="bubbleTitle(data)">
-      {{ data.running ? '⏳' : (STATUS_ICON[data.status] || '○') }}
+      {{ data.recovering ? '⏸' : (data.running ? '⏳' : (STATUS_ICON[data.status] || '○')) }}
     </div>
     <div class="pnode-label">{{ data.label }}</div>
-    <div class="pnode-sub">{{ data.status }}</div>
+    <div class="pnode-sub">{{ data.recovering ? t('monitor.pipelineNode.awaitingRecovery') : data.status }}</div>
     <span
       v-if="data.qa_count > 0"
       class="qa-badge"
@@ -171,6 +173,19 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
 }
 .pnode-running .pnode-bubble {
   animation: pnode-running-pulse 1.2s ease-in-out infinite;
+}
+.pnode-recovering .pnode-bubble {
+  animation: pnode-recovering-pulse 2s ease-in-out infinite;
+  color: var(--waiting, #d97706);
+}
+@keyframes pnode-recovering-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
 }
 @keyframes pnode-running-pulse {
   0%,

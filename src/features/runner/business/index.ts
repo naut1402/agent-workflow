@@ -69,7 +69,17 @@ export {
   extractLines,
   stepIdOf,
 } from './jobQueue.js'
-export { reapOrphanedRunningJobs, isPidAlive } from './jobQueue.js'
+export { reapOrphanedRunningJobs, isPidAlive, FAILURE_MAX_ATTEMPTS } from './jobQueue.js'
+export { classifyJobFailure, parseUsageResetAt } from './classifyJobFailure.js'
+export type { JobFailureKind } from './classifyJobFailure.js'
+export {
+  saveRecoverEntry,
+  loadRecoverEntry,
+  removeRecoverEntry,
+  listRecoverEntries,
+} from './recoverLedger.js'
+export type { RecoverEntry } from './recoverLedger.js'
+export { tickRecoverPoller, startRecoverPoller, resumeRecoveredJob } from './recoverPoller.js'
 export {
   loadTaskSessionLedger,
   resolveSessionPlan,

@@ -2,6 +2,15 @@
 // English translations for the `runner` namespace. Typed against the vi schema
 // so any missing/extra key is a compile error.
 export default {
+  jobStatus: {
+    queued: 'Queued',
+    running: 'Running',
+    succeeded: 'Succeeded',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+    awaiting_approval: 'Awaiting approval',
+    awaiting_recovery: 'Awaiting recovery',
+  },
   panel: {
     title: 'Runner Config',
     subtitle: 'Manage AI Agent Runners (global ~/.dev-team-dashboard/)',
