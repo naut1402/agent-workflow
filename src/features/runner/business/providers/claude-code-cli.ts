@@ -4,6 +4,8 @@ import { resolveSecretRef } from '../credentials.js'
 import {
   buildCursorJsonInvocation,
   parseCursorJsonOutput,
+  buildAntigravityJsonInvocation,
+  parseAntigravityJsonOutput,
   prepareSessionInvocation,
   type SessionCaptureMode,
 } from '../sessionLedger.js'
@@ -375,6 +377,14 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         })
         args = invocation.args
         stdinInput = invocation.stdinInput
+      } else if (sessionCapture === 'antigravity-json') {
+        const invocation = buildAntigravityJsonInvocation({
+          flags,
+          prompt,
+          resumeSessionId: sessionPlan.resumeSessionId,
+        })
+        args = invocation.args
+        stdinInput = invocation.stdinInput
       } else {
         args = [...flags, prompt]
       }
@@ -457,6 +467,10 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         const parsed = parseCursorJsonOutput(procResult.stdout)
         if (parsed.result != null) stdout = parsed.result
         if (parsed.session_id) capturedSessionId = parsed.session_id
+      } else if (sessionCapture === 'antigravity-json') {
+        const parsed = parseAntigravityJsonOutput(procResult.stdout)
+        if (parsed.response != null) stdout = parsed.response
+        if (parsed.conversation_id) capturedSessionId = parsed.conversation_id
       }
 
       const result: ExecuteResult = {

@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { buildClaudeInvocation } from '../../../../src/features/runner/business/providers/claude-code-cli.js'
 import {
+  buildAntigravityJsonInvocation,
   buildCursorJsonArgs,
   buildCursorJsonInvocation,
   mintSessionId,
+  parseAntigravityJsonOutput,
   parseCursorJsonOutput,
   prepareSessionInvocation,
 } from '../../../../src/features/runner/business/sessionLedger.js'
@@ -141,5 +143,76 @@ describe('sessionCapture', () => {
         resumeSessionId: 'b',
       }),
     ).toEqual({ sessionId: 'a', resumeSessionId: 'b' })
+  })
+
+  test('antigravity-json: prepareSessionInvocation has no preset (id after CLI exits)', () => {
+    expect(prepareSessionInvocation({ capture: 'antigravity-json' })).toEqual({})
+    expect(
+      prepareSessionInvocation({
+        capture: 'antigravity-json',
+        resumeSessionId: 'conv-1',
+      }),
+    ).toEqual({ resumeSessionId: 'conv-1' })
+  })
+
+  test('antigravity-json: buildAntigravityJsonInvocation puts prompt on stdin and --conversation in argv', () => {
+    const inv = buildAntigravityJsonInvocation({
+      flags: ['--model', 'x'],
+      prompt: '## Agent instructions\n\nfull multi-line prompt',
+      resumeSessionId: 'conv-abc',
+    })
+    expect(inv.stdinInput).toBe('## Agent instructions\n\nfull multi-line prompt')
+    expect(inv.args).toEqual([
+      '--model',
+      'x',
+      '-p',
+      '--output-format',
+      'json',
+      '--conversation',
+      'conv-abc',
+    ])
+    for (const arg of inv.args) {
+      expect(arg.includes('Agent instructions')).toBe(false)
+    }
+  })
+
+  test('antigravity-json: does not duplicate -p / --output-format when already set', () => {
+    const inv = buildAntigravityJsonInvocation({
+      flags: ['-p', '--output-format', 'json'],
+      prompt: 'hi',
+    })
+    expect(inv.args.filter((f) => f === '-p')).toHaveLength(1)
+    expect(inv.args.filter((f) => f === '--output-format')).toHaveLength(1)
+    expect(inv.args.filter((f) => f === 'json')).toHaveLength(1)
+    expect(inv.stdinInput).toBe('hi')
+  })
+
+  test('parseAntigravityJsonOutput extracts conversation_id and response', () => {
+    const stdout = JSON.stringify({
+      conversation_id: 'conv-99',
+      response: 'proposed markdown body',
+      other: true,
+    })
+    expect(parseAntigravityJsonOutput(stdout)).toEqual({
+      conversation_id: 'conv-99',
+      response: 'proposed markdown body',
+    })
+  })
+
+  test('parseAntigravityJsonOutput tolerates leading noise before JSON object', () => {
+    const body = JSON.stringify({
+      conversation_id: 'conv-noise',
+      response: 'ok',
+    })
+    const stdout = `agy: tracing to 'C:\\Temp\\x.log'\n${body}\n`
+    expect(parseAntigravityJsonOutput(stdout)).toEqual({
+      conversation_id: 'conv-noise',
+      response: 'ok',
+    })
+  })
+
+  test('parseAntigravityJsonOutput tolerates invalid JSON', () => {
+    expect(parseAntigravityJsonOutput('not json')).toEqual({})
+    expect(parseAntigravityJsonOutput('')).toEqual({})
   })
 })
