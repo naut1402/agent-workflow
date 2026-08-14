@@ -9,7 +9,7 @@ import {
 } from '@/core/composables/useAppSettings'
 import { navigateToModeKey } from '@/core/shell/keys'
 import { fetchArtifact, fetchArtifactActions, runArtifactAction } from '../../../../../src/features/monitor/scripts/ArtifactPanelApi'
-import { fetchRunners } from '../../../../../src/features/runner/scripts/runnerApi'
+import { fetchJob, fetchRunners } from '../../../../../src/features/runner/scripts/runnerApi'
 
 const MD_TWO_H2 = `# Title
 
@@ -353,6 +353,25 @@ describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
       expect.objectContaining({ taskId: 'DEMO-1', actionId: 'a-title', artifactName: 'design.md' }),
       undefined,
     )
+  })
+
+  it('shows a busy overlay while a quick action job is in flight', async () => {
+    vi.mocked(fetchArtifactActions).mockResolvedValue({
+      menus: [],
+      actions: [{ id: 'a-title', label: 'Title action', agent_ref: 'x', confirm: false, attach_points: ['artifact-title'] }],
+    })
+    vi.mocked(fetchRunners).mockResolvedValue({ runners: [{ id: 'r1', name: 'A' }], defaultRunnerId: 'r1' })
+    vi.mocked(runArtifactAction).mockResolvedValue({ job: { id: 'job-busy', status: 'running' } })
+    vi.mocked(fetchJob).mockReturnValue(new Promise(() => {})) // keep polling / overlay up
+
+    const w = await mountPanel({ taskId: 'DEMO-1', name: 'design.md' })
+    expect(w.find('.art-busy-overlay').exists()).toBe(false)
+
+    await w.find('.art-toolbar-actions .btn-quick-action').trigger('click')
+    await flushPromises()
+
+    expect(w.find('.art-busy-overlay').exists()).toBe(true)
+    expect(w.find('.art-busy-overlay').attributes('aria-busy')).toBe('true')
   })
 
   it('renders dropdown menus from the catalog response', async () => {

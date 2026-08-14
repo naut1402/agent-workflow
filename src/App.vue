@@ -15,7 +15,9 @@ import {
 import { resolveAutoscanIntervalMs } from './features/settings/schemas/autoscan'
 import { useTaskPolling } from './features/monitor/composables/useTaskPolling'
 import { useNotifications } from './features/notifications/composables/useNotifications'
+import { useRunningJobs } from './features/running-jobs/composables/useRunningJobs'
 import FloatingNotificationIcon from './features/notifications/components/FloatingNotificationIcon.vue'
+import FloatingRunningJobsIcon from './features/running-jobs/components/FloatingRunningJobsIcon.vue'
 import NotificationBell from './features/notifications/components/NotificationBell.vue'
 import MonitorLayout from './features/monitor/components/MonitorLayout.vue'
 import PipelineEditor from './features/pipeline-editor/components/PipelineEditor.vue'
@@ -85,6 +87,13 @@ const selected = computed(
 // both surface these flags through `.dev-state/<id>.json` via `/api/tasks`.
 const { history, unreadCount, markRead, markAllRead } = useNotifications(tasks)
 
+const {
+  grouped: runningJobsGrouped,
+  runningCount,
+  start: startRunningJobs,
+  stop: stopRunningJobs,
+} = useRunningJobs(1500)
+
 const showSidebarNotification = computed(() => resolveNotifyShowSidebar(settings.value))
 const showFloatingNotification = computed(() => resolveNotifyShowFloating(settings.value))
 
@@ -92,6 +101,11 @@ function onNotificationSelect(event: { id: string; taskId: string }) {
   markRead(event.id)
   mode.value = 'monitor'
   selectedId.value = event.taskId
+}
+
+function onRunningJobSelect(taskId: string) {
+  mode.value = 'monitor'
+  selectedId.value = taskId
 }
 
 function loadSidebarPref() {
@@ -254,6 +268,7 @@ onMounted(async () => {
   await loadProjects()
   void loadLoggingPrefs()
   start()
+  startRunningJobs()
   window.addEventListener('dev-dashboard:autoscan-changed', onAutoscanChanged)
   window.addEventListener('dev-dashboard:projects-changed', onProjectsChangedEvent)
   window.addEventListener('dev-dashboard:logging-changed', onLoggingChanged)
@@ -261,6 +276,7 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   stop()
+  stopRunningJobs()
   stopAutoscanLoop()
   window.removeEventListener('dev-dashboard:autoscan-changed', onAutoscanChanged)
   window.removeEventListener('dev-dashboard:projects-changed', onProjectsChangedEvent)
@@ -449,6 +465,14 @@ onUnmounted(() => {
     <main v-else-if="mode === 'agentEditor'" class="main main-editor">
       <AgentEditor />
     </main>
+
+    <FloatingRunningJobsIcon
+      :running-count="runningCount"
+      :groups="runningJobsGrouped.groups"
+      :truncated="runningJobsGrouped.truncated"
+      :hidden-task-count="runningJobsGrouped.hiddenTaskCount"
+      @select="onRunningJobSelect"
+    />
 
     <FloatingNotificationIcon
       v-if="showFloatingNotification"

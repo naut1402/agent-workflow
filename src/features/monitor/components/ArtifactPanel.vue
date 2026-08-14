@@ -223,7 +223,7 @@ async function onMenuSelectionRun(actionId: string) {
 // ── Selection toolbar ────────────────────────────────────────────────────────
 const selectionToolbar = useArtifactSelectionToolbar({
   getContainer: () => viewRoot.value,
-  isBlocked: () => isEditing() || !props.openArtifact,
+  isBlocked: () => isEditing() || !props.openArtifact || !!runningActionId.value,
   getBlockRanges: () => blockLineRanges.value,
 })
 
@@ -442,6 +442,14 @@ onUpdated(() => scheduleMermaid())
     <div v-if="!openArtifact" class="art-empty">{{ t('monitor.artifact.empty') }}</div>
 
     <template v-else>
+      <div class="art-panel-body">
+      <div
+        v-if="runningActionId"
+        class="art-busy-overlay"
+        aria-busy="true"
+      >
+        <span>{{ t('monitor.artifact.running') }}</span>
+      </div>
       <div class="art-toolbar">
         <!-- Thu gọn/mở rộng toàn bộ block đặt bên trái toolbar, cùng vị trí với
              nút collapse của sub-sidebar và panel trái Pipeline Editor. -->
@@ -449,7 +457,7 @@ onUpdated(() => scheduleMermaid())
           v-if="blockMode"
           type="button"
           class="icon-btn btn-toggle-all-blocks"
-          :disabled="isEditing()"
+          :disabled="isEditing() || !!runningActionId"
           :title="allBlocksOpen ? t('monitor.artifact.collapseAll') : t('monitor.artifact.expandAll')"
           :aria-label="allBlocksOpen ? t('monitor.artifact.collapseAll') : t('monitor.artifact.expandAll')"
           @click="toggleAllBlocks"
@@ -493,7 +501,7 @@ onUpdated(() => scheduleMermaid())
             type="button"
             class="icon-btn btn-view-mode"
             :class="{ active: blockMode }"
-            :disabled="isEditing()"
+            :disabled="isEditing() || !!runningActionId"
             :title="blockMode ? t('monitor.artifact.toFull') : t('monitor.artifact.toBlock')"
             :aria-label="blockMode ? t('monitor.artifact.toFull') : t('monitor.artifact.toBlock')"
             @click="blockMode = !blockMode"
@@ -634,6 +642,7 @@ onUpdated(() => scheduleMermaid())
             />
           </template>
         </div>
+      </div>
       </div>
     </template>
   </div>

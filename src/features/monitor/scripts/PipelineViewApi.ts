@@ -12,7 +12,7 @@ export async function patchTaskState(id: string, body: TaskStatePatch, projectId
 
 export async function runPipelineStep(
   id: string,
-  body: { targetStepId?: string; runnerId?: string },
+  body: { targetStepId?: string; runnerId?: string; skipIntermediate?: boolean },
   projectId?: string,
 ) {
   return apiPost(`/api/tasks/${encodeURIComponent(id)}/run-step`, body, {

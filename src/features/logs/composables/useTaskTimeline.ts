@@ -28,8 +28,10 @@ export function deriveTimeline(task: any): TimelineEvent[] {
   }
 
   // Live phase cursor — the phase currently running (no fixed timestamp).
-  for (const phase of phasesFromPipeline(task.pipeline)) {
-    if (phaseStatus(phase, task) === 'active') {
+  const phases = phasesFromPipeline(task.pipeline)
+  const phaseKeys = phases.map((p) => p.key)
+  for (const phase of phases) {
+    if (phaseStatus(phase, task, phaseKeys) === 'active') {
       events.push({ ts: null, kind: 'phase', label: phase.label, detail: t('logs.timeline.phaseDetail') })
     }
   }

@@ -25,6 +25,7 @@ describe('phasesFromPipeline', () => {
 
 describe('phaseStatus', () => {
   const phase: Phase = { key: 'designer', label: 'Design', artifact: 'design.md', hitl: 'hitl-2' }
+  const keys = ['investigator', 'designer', 'implementer']
 
   it('waiting when the phase gate is pending', () => {
     expect(phaseStatus(phase, { hitl_pending: 'hitl-2' })).toBe('waiting')
@@ -42,6 +43,22 @@ describe('phaseStatus', () => {
     expect(
       phaseStatus(phase, { hitl_pending: 'hitl-2', artifacts: { 'design.md': { exists: true } } }),
     ).toBe('waiting')
+  })
+  it('done when phase is behind the cursor even without an artifact', () => {
+    const gateLess: Phase = { key: 'investigator', label: 'Investigate', artifact: null, hitl: null }
+    expect(
+      phaseStatus(gateLess, { current_phase: 'designer', hitl_pending: null, artifacts: {} }, keys),
+    ).toBe('done')
+  })
+  it('done for all phases when pipeline is completed', () => {
+    expect(
+      phaseStatus(phase, { current_phase: 'completed', artifacts: {} }, keys),
+    ).toBe('done')
+  })
+  it('does not mark done by cursor when current_phase is unknown', () => {
+    expect(
+      phaseStatus(phase, { current_phase: 'ghost-step', artifacts: {} }, keys),
+    ).toBe('pending')
   })
 })
 
