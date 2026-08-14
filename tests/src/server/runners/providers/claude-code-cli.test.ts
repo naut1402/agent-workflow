@@ -358,6 +358,42 @@ describe('createLocalConsoleProvider — job log structure', () => {
     }
   })
 
+  test('timeout-kill: error is a clear timeout message, not raw CLI output', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
+    try {
+      const { cliPath, flags } = nodeCli('hang')
+      const provider = createLocalConsoleProvider({
+        providerId: 'claude-code-cli',
+        defaultCliPath: cliPath,
+        claudeStyleArgs: false,
+      })
+
+      const result = await provider.execute(
+        {
+          jobId: 'job-timeout',
+          resolvedAgent,
+          userPrompt: 'test',
+          workspace,
+          produces: [],
+          timeoutMs: 150,
+          metadata: {},
+        },
+        { cliPath, flags },
+        credential,
+      )
+
+      expect(result.ok).toBe(false)
+      expect(result.exitCode).toBe(-1)
+      expect(result.timedOut).toBe(true)
+      expect(result.error).toBe('process timed out after 150ms')
+      expect(result.error).not.toContain('Execution error')
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
   test('spawn error (bad cliPath): result footer still appended with the error', async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))

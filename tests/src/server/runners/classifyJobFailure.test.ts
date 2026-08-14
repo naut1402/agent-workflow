@@ -33,6 +33,15 @@ describe('classifyJobFailure', () => {
     expect(classifyJobFailure(fail({ error: 'process timed out after 60000ms' }))).toBe('process_crash')
   })
 
+  test('timed-out kill classified via explicit flag, regardless of CLI text', () => {
+    expect(classifyJobFailure(fail({ exitCode: -1, timedOut: true, error: 'Execution error' }))).toBe(
+      'process_crash',
+    )
+    expect(
+      classifyJobFailure(fail({ exitCode: -1, timedOut: true, error: '[Request interrupted by user]' })),
+    ).toBe('process_crash')
+  })
+
   test('verdict-fail returns null', () => {
     expect(classifyJobFailure(fail({ exitCode: 1, error: 'task failed' }))).toBe(null)
   })

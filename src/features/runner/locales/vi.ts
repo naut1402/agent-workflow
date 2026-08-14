@@ -34,6 +34,16 @@ export default {
     allowedTools: 'Allowed tools',
     consoleHint:
       'Console command: chạy argv thuần (cliPath + flags + args từ prompt). Không dùng allowedTools / agent_ref / system prompt.',
+    timeoutMs: 'Timeout job',
+    timeoutMsHint:
+      'Chọn thời gian dài hơn cho job resume session có context lớn — job hợp lệ nhưng chạy lâu sẽ không bị dừng giữa chừng.',
+  },
+  timeoutOptions: {
+    min5: '5 phút',
+    min10: '10 phút (mặc định)',
+    min15: '15 phút',
+    min30: '30 phút',
+    hour1: '60 phút (1 giờ)',
   },
   actions: {
     save: 'Lưu',

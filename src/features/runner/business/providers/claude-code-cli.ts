@@ -96,10 +96,10 @@ function buildChildEnv(credential: CredentialProfile): NodeJS.ProcessEnv {
   return env
 }
 
-function formatFailure(procResult: ProcResult): string {
+function formatFailure(procResult: ProcResult, timeoutMs: number): string {
+  if (procResult.killed) return `process timed out after ${timeoutMs}ms`
   const fromStreams = [procResult.stderr, procResult.stdout].filter(Boolean).join('\n').trim()
   if (fromStreams) return fromStreams.slice(0, 1000)
-  if (procResult.killed) return 'process timed out'
   return `exit code ${procResult.exitCode ?? 'unknown'}`
 }
 
@@ -419,12 +419,13 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         appendLog(`[runner] process started pid=${info.pid ?? 'null'} — chờ stdout/stderr…\n`)
       }
 
+      const timeoutMs = req.timeoutMs || runnerConfig.timeoutMs || 600_000
       let procResult: ProcResult
       try {
         procResult = await runProcess(cliPath, args, {
           cwd: req.workspace,
           env: buildChildEnv(credential),
-          timeoutMs: req.timeoutMs || runnerConfig.timeoutMs || 600_000,
+          timeoutMs,
           onLog: wrappedOnLog,
           onStart: wrappedOnStart,
           stdinInput,
@@ -481,7 +482,8 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         durationMs: Date.now() - started,
         logPath,
         artifactsFound,
-        error: ok ? undefined : formatFailure(procResult),
+        error: ok ? undefined : formatFailure(procResult, timeoutMs),
+        timedOut: procResult.killed,
         stdout,
         sessionId: capturedSessionId,
         tokenUsage,

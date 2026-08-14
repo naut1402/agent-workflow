@@ -35,6 +35,16 @@ export default {
     allowedTools: 'Allowed tools',
     consoleHint:
       'Console command: plain argv (cliPath + flags + prompt args). No allowedTools / agent_ref / system prompt.',
+    timeoutMs: 'Job timeout',
+    timeoutMsHint:
+      'Pick a longer duration for resume jobs with a large session context — a valid but slow job will not be stopped midway.',
+  },
+  timeoutOptions: {
+    min5: '5 minutes',
+    min10: '10 minutes (default)',
+    min15: '15 minutes',
+    min30: '30 minutes',
+    hour1: '60 minutes (1 hour)',
   },
   actions: {
     save: 'Save',

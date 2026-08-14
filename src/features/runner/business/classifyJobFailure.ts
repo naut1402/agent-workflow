@@ -9,6 +9,7 @@ const RESET_AT_RE = /resets?\s+(?:at|in)\s+([^\n.]+)/i
 
 export function classifyJobFailure(result: ExecuteResult): JobFailureKind | null {
   if (result.ok) return null
+  if (result.timedOut) return 'process_crash'
   const err = (result.error ?? '').trim()
   const blob = err
 
