@@ -1,6 +1,15 @@
 // UI strings for the `runner` feature (Runner Config panel + runner/connection
 // dialogs). Vietnamese is the source of truth for the message schema.
 export default {
+  jobStatus: {
+    queued: 'Đang chờ',
+    running: 'Đang chạy',
+    succeeded: 'Thành công',
+    failed: 'Thất bại',
+    cancelled: 'Đã huỷ',
+    awaiting_approval: 'Chờ duyệt',
+    awaiting_recovery: 'Đang chờ phục hồi',
+  },
   panel: {
     title: 'Runner Config',
     subtitle: 'Quản lý AI Agent Runner (global ~/.dev-team-dashboard/)',

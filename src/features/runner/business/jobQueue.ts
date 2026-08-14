@@ -15,9 +15,25 @@ import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js
 import type { Connection, CredentialProfile, JobRecord, JobStatus, MutationResult } from './types.js'
 import type { UsageSnapshot } from '../../../core/log/schema.js'
 import { advanceStepOnJobSuccess, loadPipelineConfig, queuePendingFeedback, takePendingFeedback } from './index.js'
+import { classifyJobFailure, parseUsageResetAt } from './classifyJobFailure.js'
+import { loadRecoverEntry, removeRecoverEntry, saveRecoverEntry } from './recoverLedger.js'
+import { bindRecoverPoller, startRecoverPoller } from './recoverPoller.js'
+import { loadRecoverySettings } from '../../settings/business/dashboardSettings.js'
+import {
+  DEFAULT_RECOVERY_SETTINGS,
+  resolveRecoveryBackoffMs,
+  resolveRecoveryMaxAttempts,
+} from '../../settings/schemas/recovery.js'
 
 /** Cap on stdout persisted for chat surfaces (NL chat + task chat fallback). */
 const CHAT_STDOUT_LIMIT = 64 * 1024
+
+/** Compile-time default — actual cap is `settings.recovery.maxAttempts` (Settings › Job recovery). */
+export const FAILURE_MAX_ATTEMPTS = DEFAULT_RECOVERY_SETTINGS.maxAttempts!
+
+function backoffMsFor(attemptCount: number, schedule: number[]): number {
+  return schedule[Math.min(attemptCount - 1, schedule.length - 1)] ?? schedule[schedule.length - 1]
+}
 
 /** Persist agent reply on the job record for chat UI (NL + pipeline task chat). */
 function shouldPersistStdout(job: JobRecord, providerId: string | undefined): boolean {
@@ -73,8 +89,18 @@ export interface SubmitJobInput {
   parentJobId?: string
 }
 
+function requeueJob(jobId: string): void {
+  queue.push(jobId)
+  processQueue().catch((err) => {
+    console.error('[jobQueue]', err)
+  })
+}
+
+bindRecoverPoller({ loadJob, saveJob, requeueJob })
+
 // Reap orphaned running jobs once when the module loads (server restart).
 reapOrphanedRunningJobs()
+startRecoverPoller()
 
 function jobsDir(): string {
   return joinPath(registryHome(), 'jobs')
@@ -585,6 +611,92 @@ async function runJob(job: JobRecord): Promise<void> {
   const isChatFeedback = Boolean(job.metadata?.isChatFeedback)
   if (!result.ok && isApprovalJob) removeScratchWorkspace(job.workspace)
 
+  if (!result.ok) {
+    const recoverySettings = loadRecoverySettings()
+    const kind = recoverySettings.enabled ? classifyJobFailure(result) : null
+    const current = loadJob(job.id) as JobRecord
+    const prevAttempts = current.attemptCount ?? 0
+
+    if (kind === 'usage_limit' || kind === 'network') {
+      const usageResetAt = kind === 'usage_limit' ? parseUsageResetAt(result.error ?? '') : null
+      const resumeAfter =
+        usageResetAt ??
+        new Date(
+          Date.now() +
+            (kind === 'network'
+              ? (recoverySettings.networkResumeDelayMs ?? DEFAULT_RECOVERY_SETTINGS.networkResumeDelayMs!)
+              : (recoverySettings.usageLimitResumeDelayMs ?? DEFAULT_RECOVERY_SETTINGS.usageLimitResumeDelayMs!)),
+        )
+      saveRecoverEntry({
+        version: 1,
+        jobId: job.id,
+        kind,
+        attemptCount: prevAttempts,
+        resumeAfter: resumeAfter.toISOString(),
+        createdAt: new Date().toISOString(),
+        lastError: result.error,
+        usageResetAt: usageResetAt?.toISOString() ?? null,
+      })
+      saveJob({
+        ...current,
+        status: 'awaiting_recovery',
+        finishedAt: null,
+        exitCode: result.exitCode,
+        error: result.error,
+        logPath: result.logPath,
+        pid: null,
+        attemptCount: prevAttempts,
+        failureKind: kind,
+      })
+      emit('job.awaiting_recovery', {
+        jobId: job.id,
+        kind,
+        resumeAfter: resumeAfter.toISOString(),
+        taskId,
+        projectId,
+      })
+      return
+    }
+
+    if (kind === 'process_crash') {
+      const maxAttempts = resolveRecoveryMaxAttempts(recoverySettings)
+      const nextAttempt = prevAttempts + 1
+      if (nextAttempt < maxAttempts) {
+        const schedule = resolveRecoveryBackoffMs(recoverySettings)
+        const delay = backoffMsFor(nextAttempt, schedule)
+        const resumeAfter = new Date(Date.now() + delay)
+        saveRecoverEntry({
+          version: 1,
+          jobId: job.id,
+          kind: 'process_crash',
+          attemptCount: nextAttempt,
+          resumeAfter: resumeAfter.toISOString(),
+          createdAt: new Date().toISOString(),
+          lastError: result.error,
+        })
+        saveJob({
+          ...current,
+          status: 'queued',
+          attemptCount: nextAttempt,
+          failureKind: kind,
+          error: result.error,
+          pid: null,
+          finishedAt: null,
+          exitCode: result.exitCode,
+          logPath: result.logPath,
+        })
+        emit('job.retry_scheduled', {
+          jobId: job.id,
+          attemptCount: nextAttempt,
+          resumeAfter: resumeAfter.toISOString(),
+          taskId,
+          projectId,
+        })
+        return
+      }
+    }
+  }
+
   // Fold the agent's proposed content (stdout) into the scratch artifact so the
   // review diff reflects the proposal — spliced into the selected line range for
   // a selection job, or replacing the whole file otherwise.
@@ -826,6 +938,7 @@ export function cancelJob(id: string): MutationResult {
     }
   }
 
+  removeRecoverEntry(id)
   saveJob({ ...job, status: 'cancelled', finishedAt: new Date().toISOString(), pid: null })
   emit('job.cancelled', {
     jobId: job.id,
@@ -946,7 +1059,9 @@ export async function sendTaskFeedback(
   opts: { stepId?: string; mode?: 'queue' | 'immediate' } = {},
 ): Promise<MutationResult<{ job: JobRecord } | { queued: true }>> {
   const active = listJobs(50).find(
-    (j) => j.metadata?.taskId === taskId && (j.status === 'queued' || j.status === 'running'),
+    (j) =>
+      j.metadata?.taskId === taskId &&
+      (j.status === 'queued' || j.status === 'running' || j.status === 'awaiting_recovery'),
   )
 
   let parent: JobRecord | undefined
@@ -960,7 +1075,7 @@ export async function sendTaskFeedback(
     } else {
       const devTeamRoot = typeof active.metadata?.devTeamRoot === 'string' ? active.metadata.devTeamRoot : undefined
       const stillActive = loadJob(active.id)
-      if (stillActive && (stillActive.status === 'queued' || stillActive.status === 'running')) {
+      if (stillActive && (stillActive.status === 'queued' || stillActive.status === 'running' || stillActive.status === 'awaiting_recovery')) {
         // `queuePendingFeedback` only succeeds for a real dashboard task (one
         // with a `.dev-state` file) — nl-chat's scratch sessions reuse this
         // same function but have none, so they keep the original "busy" error
@@ -969,7 +1084,7 @@ export async function sendTaskFeedback(
         if (queued) {
           // Job may have finished between the active check and the write — reclaim and send now.
           const after = loadJob(active.id)
-          if (after && after.status !== 'queued' && after.status !== 'running') {
+          if (after && after.status !== 'queued' && after.status !== 'running' && after.status !== 'awaiting_recovery') {
             const taken = await takePendingFeedback(devTeamRoot, taskId)
             if (taken) return sendTaskFeedback(taskId, projectId, taken.feedback, { stepId: taken.stepId })
           }
@@ -1140,6 +1255,46 @@ export function reapOrphanedRunningJobs(): JobRecord[] {
     }
     if (job.status !== 'running') continue
     if (isPidAlive(job.pid)) continue
+
+    const recoverySettings = loadRecoverySettings()
+    const entry = recoverySettings.enabled ? loadRecoverEntry(job.id) : null
+    if (entry) {
+      const updated: JobRecord = {
+        ...job,
+        status: job.status === 'running' ? 'awaiting_recovery' : job.status,
+        pid: null,
+      }
+      saveJob(updated)
+      reaped.push(updated)
+      continue
+    }
+
+    const attempts = job.attemptCount ?? 0
+    if (recoverySettings.enabled && attempts < resolveRecoveryMaxAttempts(recoverySettings)) {
+      const nextAttempt = attempts + 1
+      const delay = backoffMsFor(nextAttempt, resolveRecoveryBackoffMs(recoverySettings))
+      saveRecoverEntry({
+        version: 1,
+        jobId: job.id,
+        kind: 'process_crash',
+        attemptCount: nextAttempt,
+        resumeAfter: new Date(Date.now() + delay).toISOString(),
+        createdAt: new Date().toISOString(),
+        lastError: job.error || 'orphaned running job (process no longer alive)',
+      })
+      const updated: JobRecord = {
+        ...job,
+        status: 'queued',
+        attemptCount: nextAttempt,
+        failureKind: 'process_crash',
+        pid: null,
+        error: job.error || 'orphaned running job (process no longer alive)',
+        finishedAt: null,
+      }
+      saveJob(updated)
+      reaped.push(updated)
+      continue
+    }
 
     const updated: JobRecord = {
       ...job,

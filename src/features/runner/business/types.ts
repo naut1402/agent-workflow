@@ -127,7 +127,16 @@ export interface ExecuteResult {
 // the real files yet. Resolved by approveJob (apply + succeeded),
 // discardJob (cancelled), or sendJobFeedback (spawns a new `awaiting_approval`
 // job continuing the same CLI session).
-export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'awaiting_approval'
+export type JobStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+  | 'awaiting_approval'
+  | 'awaiting_recovery'
+
+export type JobFailureKind = 'usage_limit' | 'network' | 'process_crash'
 
 export interface JobRecord {
   id: string
@@ -172,6 +181,10 @@ export interface JobRecord {
   spliceRange?: { start: number; end: number }
   /** Aggregated LLM token usage for this job (Claude transcript capture, P0). */
   usage?: UsageSnapshot
+  /** Retry counter for process_crash recovery (defaults to 0 when absent). */
+  attemptCount?: number
+  /** Last classified failure kind — debug/UI only. */
+  failureKind?: JobFailureKind
 }
 
 export interface RunnersStore {

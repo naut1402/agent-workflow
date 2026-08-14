@@ -21,6 +21,13 @@ const emit = defineEmits<{
 
 const { t } = useI18nHelpers()
 
+function formatJobStatus(status: string | undefined): string {
+  if (!status) return '—'
+  const key = `runner.jobStatus.${status}`
+  const translated = t(key)
+  return translated !== key ? translated : status
+}
+
 const draft = ref(emptyDraft())
 const isEdit = computed(() => Boolean(props.runner?.id))
 const saving = ref(false)
@@ -134,7 +141,7 @@ async function smokeTest() {
             userPrompt: 'Reply with exactly: OK',
           },
     )
-    message.value = `Job ${job.id} — ${job.status}`
+    message.value = `Job ${job.id} — ${formatJobStatus(job.status)}`
     let current = job
     for (let i = 0; i < 120; i++) {
       await new Promise((r) => setTimeout(r, 1000))
@@ -142,7 +149,7 @@ async function smokeTest() {
       current = data.job
       if (current.status === 'succeeded' || current.status === 'failed') break
     }
-    message.value = `Smoke test: ${current.status}${current.error ? ` — ${current.error}` : ''}`
+    message.value = `Smoke test: ${formatJobStatus(current.status)}${current.error ? ` — ${current.error}` : ''}`
     emit('refreshed')
   } catch (e: any) {
     error.value = String(e.message || e)

@@ -18,4 +18,7 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
 
   app.get('/api/logging-config', bind(SettingsController, 'getLogging'))
   app.put('/api/logging-config', bind(SettingsController, 'updateLogging'))
+
+  app.get('/api/recovery-config', bind(SettingsController, 'getRecovery'))
+  app.put('/api/recovery-config', bind(SettingsController, 'updateRecovery'))
 }

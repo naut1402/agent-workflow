@@ -123,6 +123,24 @@
   margin-top: 0;
 }
 
+.settings-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  margin-top: 10px;
+}
+
+.settings-field input[type='number'] {
+  width: 72px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
 .settings-info-btn {
   flex-shrink: 0;
   color: var(--muted);

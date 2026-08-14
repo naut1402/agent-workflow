@@ -55,6 +55,9 @@ Không emit `pipeline.created` / `step.started` trên bus hiện tại.
 | `job.finished` | Kết thúc thành công | `jobId`, `status`, `taskId?`, `projectId?` | `jobQueue.ts` |
 | `job.failed` | Lỗi / early-fail (no runner, cred, prompt, …) | `jobId`, `error?`, `taskId?`, `projectId?` | `jobQueue.ts` |
 | `job.cancelled` | `cancelJob` sau persist | `jobId`, `taskId?`, `projectId?` | `jobQueue.ts` |
+| `job.awaiting_recovery` | Fail do `usage_limit`/`network` (`classifyJobFailure`) — non-terminal, chờ tự resume | `jobId`, `kind`, `resumeAfter`, `taskId?`, `projectId?` | `jobQueue.ts` `runJob` |
+| `job.retry_scheduled` | Fail do `process_crash`, còn attempt — tự retry sau backoff | `jobId`, `attemptCount`, `resumeAfter`, `taskId?`, `projectId?` | `jobQueue.ts` `runJob` |
+| `job.recovered` | Poller (`recoverPoller.ts`) resume job từ `awaiting_recovery`/backoff về `queued` | `jobId`, `kind`, `taskId?`, `projectId?` | `recoverPoller.ts` `resumeRecoveredJob` |
 
 ---
 
