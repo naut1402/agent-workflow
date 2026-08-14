@@ -54,6 +54,14 @@ export default {
     saved: 'Saved.',
     loadError: 'Could not load logging config.',
   },
+  recovery: {
+    title: 'Job recovery',
+    desc: 'Auto-recover jobs interrupted by usage-limit, network loss, or a process crash instead of marking them failed right away.',
+    enabled: 'Enable auto-recovery',
+    maxAttempts: 'Max retry attempts (process crash)',
+    saved: 'Saved.',
+    loadError: 'Could not load recovery config.',
+  },
   autoscan: {
     title: 'Project autoscan',
     desc: 'Automatically scan whitelist folders and add projects that contain `.dev-team-agent`.',

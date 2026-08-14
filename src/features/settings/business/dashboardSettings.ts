@@ -9,6 +9,7 @@ import {
   resolveAutoscanFromDashboard,
   resolveGithubTokensFromDashboard,
   resolveLoggingFromDashboard,
+  resolveRecoveryFromDashboard,
   type DashboardSettings,
 } from '../schemas/dashboardSettings.js'
 import {
@@ -22,6 +23,7 @@ import {
 } from '../schemas/githubTokens.js'
 import { parseLoggingConfig, type LoggingConfig } from '../../../core/log/loggingPrefs.js'
 import { invalidateLoggingPrefsCache } from '../../../core/log/loggingPrefsIo.js'
+import { parseRecoverySettings, type RecoverySettings } from '../schemas/recovery.js'
 import { registryHome } from '../../../core/registry.js'
 
 export function dashboardSettingsFile(): string {
@@ -57,6 +59,7 @@ export function loadDashboardSettings(): DashboardSettings {
     autoscan: { ...DEFAULT_AUTOSCAN_CONFIG, whitelist: [] },
     githubTokens: { repos: [] },
     logging: parseLoggingConfig(undefined),
+    recovery: parseRecoverySettings(undefined),
   }
 }
 
@@ -118,6 +121,20 @@ export function saveLoggingConfig(config: LoggingConfig): LoggingConfig {
     logging: normalised,
   })
   return resolveLoggingFromDashboard(saved)
+}
+
+export function loadRecoverySettings(): RecoverySettings {
+  return resolveRecoveryFromDashboard(loadDashboardSettings())
+}
+
+export function saveRecoverySettings(config: RecoverySettings): RecoverySettings {
+  const current = loadDashboardSettings()
+  const normalised = parseRecoverySettings(config)
+  const saved = saveDashboardSettings({
+    ...current,
+    recovery: normalised,
+  })
+  return resolveRecoveryFromDashboard(saved)
 }
 
 // Re-export default shape for callers that only need the empty template.

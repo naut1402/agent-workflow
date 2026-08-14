@@ -1,7 +1,8 @@
 import { listRecoverEntries, loadRecoverEntry, removeRecoverEntry } from './recoverLedger.js'
 import type { JobRecord } from './types.js'
-
-const RECOVER_POLL_MS = 30_000
+import { emit } from '../../../core/events/index.js'
+import { loadRecoverySettings } from '../../settings/business/dashboardSettings.js'
+import { resolveRecoveryPollIntervalMs } from '../../settings/schemas/recovery.js'
 
 type RecoverDeps = {
   loadJob: (id: string) => JobRecord | null
@@ -41,6 +42,12 @@ export async function resumeRecoveredJob(jobId: string): Promise<void> {
     failureKind: undefined,
   })
   deps.requeueJob(jobId)
+  emit('job.recovered', {
+    jobId,
+    kind: entry.kind,
+    taskId: job.metadata?.taskId,
+    projectId: job.metadata?.projectId,
+  })
 }
 
 export async function tickRecoverPoller(): Promise<void> {
@@ -53,7 +60,8 @@ export function startRecoverPoller(): void {
   if (pollerStarted) return
   pollerStarted = true
   void tickRecoverPoller()
+  const intervalMs = resolveRecoveryPollIntervalMs(loadRecoverySettings())
   setInterval(() => {
     void tickRecoverPoller()
-  }, RECOVER_POLL_MS)
+  }, intervalMs)
 }

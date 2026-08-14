@@ -6,6 +6,8 @@ import {
   saveGithubTokensConfig,
   loadLoggingConfig,
   saveLoggingConfig,
+  loadRecoverySettings,
+  saveRecoverySettings,
 } from './dashboardSettings.js'
 import { runAutoscan } from './autoscan.js'
 import { browseDirectory } from './fsBrowse.js'
@@ -39,6 +41,14 @@ export class SettingsBusiness extends AbstractBusiness {
     return saveLoggingConfig(next)
   }
 
+  getRecoverySettings() {
+    return loadRecoverySettings()
+  }
+
+  saveRecoverySettings(next: Parameters<typeof saveRecoverySettings>[0]) {
+    return saveRecoverySettings(next)
+  }
+
   browseDirectory(pathParam?: string) {
     return browseDirectory(pathParam)
   }
@@ -51,6 +61,8 @@ export {
   saveGithubTokensConfig,
   loadLoggingConfig,
   saveLoggingConfig,
+  loadRecoverySettings,
+  saveRecoverySettings,
   loadDashboardSettings,
   saveDashboardSettings,
   autoscanFile,

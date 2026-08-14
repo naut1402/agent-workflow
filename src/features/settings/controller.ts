@@ -2,6 +2,7 @@ import { AbstractController } from '../../core/http/AbstractController.js'
 import { parseAutoscanConfig } from './schemas/autoscan.js'
 import { parseGithubTokensConfig } from './schemas/githubTokens.js'
 import { parseLoggingConfig } from '../../core/log/loggingPrefs.js'
+import { parseRecoverySettings } from './schemas/recovery.js'
 import { emitAudit } from '../../core/log/store.js'
 import {
   loadAutoscanConfig,
@@ -11,6 +12,8 @@ import {
   saveGithubTokensConfig,
   loadLoggingConfig,
   saveLoggingConfig,
+  loadRecoverySettings,
+  saveRecoverySettings,
   browseDirectory,
 } from './business/index.js'
 
@@ -103,6 +106,22 @@ export class SettingsController extends AbstractController {
     })
     const saved = saveLoggingConfig(next)
     emitAudit({ op: 'update', entity: 'logging', identifier: 'config', projectId: null })
+    return this.ok({ config: saved })
+  }
+
+  getRecovery() {
+    return this.ok({ config: loadRecoverySettings() })
+  }
+
+  async updateRecovery() {
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON')
+    const next = parseRecoverySettings({
+      ...loadRecoverySettings(),
+      ...b.value,
+    })
+    const saved = saveRecoverySettings(next)
+    emitAudit({ op: 'update', entity: 'recovery', identifier: 'config', projectId: null })
     return this.ok({ config: saved })
   }
 }

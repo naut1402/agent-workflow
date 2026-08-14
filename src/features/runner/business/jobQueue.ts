@@ -18,15 +18,21 @@ import { advanceStepOnJobSuccess, loadPipelineConfig, queuePendingFeedback, take
 import { classifyJobFailure, parseUsageResetAt } from './classifyJobFailure.js'
 import { loadRecoverEntry, removeRecoverEntry, saveRecoverEntry } from './recoverLedger.js'
 import { bindRecoverPoller, startRecoverPoller } from './recoverPoller.js'
+import { loadRecoverySettings } from '../../settings/business/dashboardSettings.js'
+import {
+  DEFAULT_RECOVERY_SETTINGS,
+  resolveRecoveryBackoffMs,
+  resolveRecoveryMaxAttempts,
+} from '../../settings/schemas/recovery.js'
 
 /** Cap on stdout persisted for chat surfaces (NL chat + task chat fallback). */
 const CHAT_STDOUT_LIMIT = 64 * 1024
 
-export const FAILURE_MAX_ATTEMPTS = 3
-const BACKOFF_MS = [5_000, 15_000, 45_000]
+/** Compile-time default — actual cap is `settings.recovery.maxAttempts` (Settings › Job recovery). */
+export const FAILURE_MAX_ATTEMPTS = DEFAULT_RECOVERY_SETTINGS.maxAttempts!
 
-function backoffMs(attemptCount: number): number {
-  return BACKOFF_MS[Math.min(attemptCount - 1, BACKOFF_MS.length - 1)] ?? 45_000
+function backoffMsFor(attemptCount: number, schedule: number[]): number {
+  return schedule[Math.min(attemptCount - 1, schedule.length - 1)] ?? schedule[schedule.length - 1]
 }
 
 /** Persist agent reply on the job record for chat UI (NL + pipeline task chat). */
@@ -571,14 +577,21 @@ async function runJob(job: JobRecord): Promise<void> {
   if (!result.ok && isApprovalJob) removeScratchWorkspace(job.workspace)
 
   if (!result.ok) {
-    const kind = classifyJobFailure(result)
+    const recoverySettings = loadRecoverySettings()
+    const kind = recoverySettings.enabled ? classifyJobFailure(result) : null
     const current = loadJob(job.id) as JobRecord
     const prevAttempts = current.attemptCount ?? 0
 
     if (kind === 'usage_limit' || kind === 'network') {
       const usageResetAt = kind === 'usage_limit' ? parseUsageResetAt(result.error ?? '') : null
       const resumeAfter =
-        usageResetAt ?? new Date(Date.now() + (kind === 'network' ? 30_000 : 60 * 60_000))
+        usageResetAt ??
+        new Date(
+          Date.now() +
+            (kind === 'network'
+              ? (recoverySettings.networkResumeDelayMs ?? DEFAULT_RECOVERY_SETTINGS.networkResumeDelayMs!)
+              : (recoverySettings.usageLimitResumeDelayMs ?? DEFAULT_RECOVERY_SETTINGS.usageLimitResumeDelayMs!)),
+        )
       saveRecoverEntry({
         version: 1,
         jobId: job.id,
@@ -600,19 +613,29 @@ async function runJob(job: JobRecord): Promise<void> {
         attemptCount: prevAttempts,
         failureKind: kind,
       })
+      emit('job.awaiting_recovery', {
+        jobId: job.id,
+        kind,
+        resumeAfter: resumeAfter.toISOString(),
+        taskId,
+        projectId,
+      })
       return
     }
 
     if (kind === 'process_crash') {
+      const maxAttempts = resolveRecoveryMaxAttempts(recoverySettings)
       const nextAttempt = prevAttempts + 1
-      if (nextAttempt < FAILURE_MAX_ATTEMPTS) {
-        const delay = backoffMs(nextAttempt)
+      if (nextAttempt < maxAttempts) {
+        const schedule = resolveRecoveryBackoffMs(recoverySettings)
+        const delay = backoffMsFor(nextAttempt, schedule)
+        const resumeAfter = new Date(Date.now() + delay)
         saveRecoverEntry({
           version: 1,
           jobId: job.id,
           kind: 'process_crash',
           attemptCount: nextAttempt,
-          resumeAfter: new Date(Date.now() + delay).toISOString(),
+          resumeAfter: resumeAfter.toISOString(),
           createdAt: new Date().toISOString(),
           lastError: result.error,
         })
@@ -626,6 +649,13 @@ async function runJob(job: JobRecord): Promise<void> {
           finishedAt: null,
           exitCode: result.exitCode,
           logPath: result.logPath,
+        })
+        emit('job.retry_scheduled', {
+          jobId: job.id,
+          attemptCount: nextAttempt,
+          resumeAfter: resumeAfter.toISOString(),
+          taskId,
+          projectId,
         })
         return
       }
@@ -1196,7 +1226,8 @@ export function reapOrphanedRunningJobs(): JobRecord[] {
     if (job.status !== 'running') continue
     if (isPidAlive(job.pid)) continue
 
-    const entry = loadRecoverEntry(job.id)
+    const recoverySettings = loadRecoverySettings()
+    const entry = recoverySettings.enabled ? loadRecoverEntry(job.id) : null
     if (entry) {
       const updated: JobRecord = {
         ...job,
@@ -1209,9 +1240,9 @@ export function reapOrphanedRunningJobs(): JobRecord[] {
     }
 
     const attempts = job.attemptCount ?? 0
-    if (attempts < FAILURE_MAX_ATTEMPTS) {
+    if (recoverySettings.enabled && attempts < resolveRecoveryMaxAttempts(recoverySettings)) {
       const nextAttempt = attempts + 1
-      const delay = backoffMs(nextAttempt)
+      const delay = backoffMsFor(nextAttempt, resolveRecoveryBackoffMs(recoverySettings))
       saveRecoverEntry({
         version: 1,
         jobId: job.id,

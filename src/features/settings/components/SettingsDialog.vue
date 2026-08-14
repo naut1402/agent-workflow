@@ -22,7 +22,7 @@ import {
   type NotificationUiPlacement,
   type ThemePreference,
 } from '../../../core/configs/appSettings'
-import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig, fetchLoggingConfig, saveLoggingConfig } from '../scripts/SettingsDialogApi'
+import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig, fetchLoggingConfig, saveLoggingConfig, fetchRecoveryConfig, saveRecoveryConfig } from '../scripts/SettingsDialogApi'
 import { parseGithubRepoRef } from '../schemas/githubTokens'
 import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 import CSelect from '../../../core/ui/CSelect.vue'
@@ -260,6 +260,51 @@ function toggleLogTypeUsage() {
   void persistLogging()
 }
 
+// ── Recovery (server-backed) ─────────────────────────────────────────────────
+
+const recoveryEnabled = ref(true)
+const recoveryMaxAttempts = ref(3)
+const recoveryBusy = ref(false)
+const recoveryMsg = ref('')
+const recoveryErr = ref('')
+
+async function loadRecovery() {
+  recoveryErr.value = ''
+  try {
+    const data = await fetchRecoveryConfig()
+    const cfg = data.config || {}
+    recoveryEnabled.value = cfg.enabled !== false
+    recoveryMaxAttempts.value = Number.isFinite(cfg.maxAttempts) ? cfg.maxAttempts : 3
+  } catch {
+    recoveryErr.value = t('settings.recovery.loadError')
+  }
+}
+
+async function persistRecovery() {
+  recoveryBusy.value = true
+  recoveryMsg.value = ''
+  recoveryErr.value = ''
+  try {
+    const data = await saveRecoveryConfig({
+      enabled: recoveryEnabled.value,
+      maxAttempts: recoveryMaxAttempts.value,
+    })
+    const cfg = data.config || {}
+    recoveryEnabled.value = cfg.enabled !== false
+    recoveryMaxAttempts.value = Number.isFinite(cfg.maxAttempts) ? cfg.maxAttempts : 3
+    recoveryMsg.value = t('settings.recovery.saved')
+  } catch (e) {
+    recoveryErr.value = String((e as Error).message || e)
+  } finally {
+    recoveryBusy.value = false
+  }
+}
+
+function toggleRecoveryEnabled() {
+  recoveryEnabled.value = !recoveryEnabled.value
+  void persistRecovery()
+}
+
 // ── Autoscan (server-backed) ─────────────────────────────────────────────────
 
 const autoscanEnabled = ref(false)
@@ -475,6 +520,7 @@ onMounted(() => {
   void loadAutoscan()
   void loadGithubTokens()
   void loadLogging()
+  void loadRecovery()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -744,6 +790,35 @@ onUnmounted(() => {
                 </template>
                 <p v-if="loggingMsg" class="settings-autoscan-msg">{{ loggingMsg }}</p>
                 <p v-if="loggingErr" class="settings-autoscan-err">{{ loggingErr }}</p>
+              </section>
+
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.recovery.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.recovery.desc') }}</p>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="recoveryEnabled"
+                    :disabled="recoveryBusy"
+                    @change="toggleRecoveryEnabled"
+                  />
+                  {{ t('settings.recovery.enabled') }}
+                </label>
+                <template v-if="recoveryEnabled">
+                  <label class="settings-field">
+                    {{ t('settings.recovery.maxAttempts') }}
+                    <input
+                      v-model.number="recoveryMaxAttempts"
+                      type="number"
+                      min="1"
+                      max="10"
+                      :disabled="recoveryBusy"
+                      @change="persistRecovery"
+                    />
+                  </label>
+                </template>
+                <p v-if="recoveryMsg" class="settings-autoscan-msg">{{ recoveryMsg }}</p>
+                <p v-if="recoveryErr" class="settings-autoscan-err">{{ recoveryErr }}</p>
               </section>
             </template>
 

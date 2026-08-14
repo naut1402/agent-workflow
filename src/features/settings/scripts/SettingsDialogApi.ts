@@ -36,3 +36,15 @@ export async function saveLoggingConfig(config: {
 }) {
   return apiRequest('PUT', '/api/logging-config', { body: config })
 }
+
+export async function fetchRecoveryConfig() {
+  return apiGet('/api/recovery-config')
+}
+
+export async function saveRecoveryConfig(config: {
+  enabled?: boolean
+  maxAttempts?: number
+  pollIntervalMs?: number
+}) {
+  return apiRequest('PUT', '/api/recovery-config', { body: config })
+}

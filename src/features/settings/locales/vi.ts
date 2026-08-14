@@ -55,6 +55,14 @@ export default {
     saved: 'Đã lưu.',
     loadError: 'Không tải được cấu hình logging.',
   },
+  recovery: {
+    title: 'Phục hồi tiến trình',
+    desc: 'Tự phục hồi job bị gián đoạn do usage-limit, mất mạng hoặc process crash thay vì đánh fail ngay.',
+    enabled: 'Bật tự phục hồi',
+    maxAttempts: 'Số lần retry tối đa (process crash)',
+    saved: 'Đã lưu.',
+    loadError: 'Không tải được cấu hình phục hồi.',
+  },
   autoscan: {
     title: 'Autoscan project',
     desc: 'Tự động quét thư mục trong whitelist và thêm project có `.dev-team-agent`.',

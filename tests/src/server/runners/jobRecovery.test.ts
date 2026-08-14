@@ -14,6 +14,7 @@ import {
 import { loadJob, FAILURE_MAX_ATTEMPTS } from '../../../../src/features/runner/business/jobQueue.js'
 import { classifyJobFailure } from '../../../../src/features/runner/business/classifyJobFailure.js'
 import type { ExecuteResult } from '../../../../src/features/runner/business/types.js'
+import { on, type DashboardEvent } from '../../../../src/core/events/index.js'
 
 let home: string
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
@@ -91,6 +92,29 @@ describe('jobRecovery', () => {
     expect(loadRecoverEntry(JOB)).toBe(null)
     const job = loadJob(JOB)
     expect(job?.status).toBe('queued')
+  })
+
+  test('resumeRecoveredJob emits job.recovered', async () => {
+    seedJob({ status: 'awaiting_recovery' })
+    saveRecoverEntry({
+      version: 1,
+      jobId: JOB,
+      kind: 'network',
+      attemptCount: 0,
+      resumeAfter: new Date(Date.now() - 1000).toISOString(),
+      createdAt: new Date().toISOString(),
+    })
+    const seen: DashboardEvent[] = []
+    const off = on('job.recovered', (e) => {
+      seen.push(e)
+    })
+    try {
+      await resumeRecoveredJob(JOB)
+    } finally {
+      off()
+    }
+    expect(seen).toHaveLength(1)
+    expect(seen[0].payload).toMatchObject({ jobId: JOB, kind: 'network' })
   })
 
   test('tickRecoverPoller skips future resumeAfter', async () => {
