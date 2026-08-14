@@ -28,6 +28,7 @@ export {
 } from './credentials.js'
 export type { ResolvedSecret } from './credentials.js'
 export { isOAuthCapable } from './oauthProviders.js'
+export { hasVaultKey } from './secretVault.js'
 export {
   startOAuth,
   completeFromCallback,

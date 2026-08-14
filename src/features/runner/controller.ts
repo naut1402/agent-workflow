@@ -156,7 +156,9 @@ export class RunnerController extends AbstractController {
       .listProviderCatalog()
       .filter((p) => p.family === 'ai-api' && runnerStore.isOAuthCapable(p.id))
       .map((p) => p.id)
-    return this.ok({ providers })
+    // Lets ConnectionDialog.vue warn proactively instead of the user hitting
+    // a raw "DASHBOARD_SECRET_KEY is not set" error after filling the form.
+    return this.ok({ providers, vaultConfigured: runnerStore.hasVaultKey() })
   }
 
   private oauthRedirectUri(): string {

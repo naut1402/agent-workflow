@@ -72,6 +72,20 @@ describe('credentials OAuth HTTP API', () => {
     expect((await withGemini.json()).providers).toEqual(['gemini-api'])
   })
 
+  test('GET capabilities reports vaultConfigured so the UI can warn before the user hits a raw error', async () => {
+    const withKey = await app.request('/api/credentials/oauth/capabilities')
+    expect((await withKey.json()).vaultConfigured).toBe(true)
+
+    const savedKey = process.env.DASHBOARD_SECRET_KEY
+    delete process.env.DASHBOARD_SECRET_KEY
+    try {
+      const withoutKey = await app.request('/api/credentials/oauth/capabilities')
+      expect((await withoutKey.json()).vaultConfigured).toBe(false)
+    } finally {
+      process.env.DASHBOARD_SECRET_KEY = savedKey
+    }
+  })
+
   test('POST start fails for an unconfigured provider, succeeds for a configured one', async () => {
     const bad = await app.request('/api/credentials/oauth/start', {
       method: 'POST',

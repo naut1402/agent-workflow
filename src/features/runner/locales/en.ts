@@ -106,6 +106,7 @@ export default {
     secretValueField: 'Secret value',
     secretValueHint: 'Your API key, pasted directly — stored encrypted, never shown again',
     advancedSecretRef: 'Advanced: use a server-side secretRef instead (env:VAR_NAME / file:path)',
+    vaultNotConfigured: "Secret storage isn't configured on this server (DASHBOARD_SECRET_KEY missing) — ask an admin to set it, or use the advanced secretRef below instead.",
   },
   registerDialog: {
     title: 'Register command',

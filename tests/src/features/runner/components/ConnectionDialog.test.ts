@@ -152,4 +152,27 @@ describe('ConnectionDialog — Connect via browser (OAuth)', () => {
     expect(openSpy).toHaveBeenCalledWith('https://example.test/authorize', '_blank', 'noopener')
     openSpy.mockRestore()
   })
+
+  it('hides Connect via browser too when the vault itself is unconfigured, even for an OAuth-capable provider', async () => {
+    vi.mocked(fetchOAuthCapabilities).mockResolvedValue({ providers: ['gemini-api'], vaultConfigured: false })
+    await mountOnAiProvider()
+    const providerSelect = q<HTMLSelectElement>('select')
+    providerSelect.value = 'gemini-api'
+    providerSelect.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await click(buttonByText('+ Credential'))
+
+    expect(document.body.textContent).not.toContain(runnerVi.connectionDialog.connectViaBrowser)
+  })
+})
+
+describe('ConnectionDialog — vault not configured', () => {
+  it('warns and disables the secret value field instead of letting the user hit a raw save error', async () => {
+    vi.mocked(fetchOAuthCapabilities).mockResolvedValue({ providers: [], vaultConfigured: false })
+    await mountOnAiProvider()
+    await click(buttonByText('+ Credential'))
+
+    expect(document.body.textContent).toContain(runnerVi.connectionDialog.vaultNotConfigured)
+    expect(q<HTMLInputElement>('input[type="password"]').disabled).toBe(true)
+  })
 })

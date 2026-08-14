@@ -73,7 +73,14 @@ const baseUrlPlaceholder = computed(() => DEFAULT_BASE_URLS[providerId.value] ||
 const secretRefPlaceholder = computed(() => DEFAULT_SECRET_ENV_HINTS[providerId.value] || 'env:ANTHROPIC_API_KEY')
 
 const oauthCapableProviders = ref<string[]>([])
-const canConnectOAuth = computed(() => oauthCapableProviders.value.includes(providerId.value))
+/**
+ * Whether the server can encrypt/store a secret at all (`DASHBOARD_SECRET_KEY`
+ * set) — `true` until we actually hear otherwise, so the warning below never
+ * flashes on for the split second before `loadOAuthCapabilities()` resolves.
+ */
+const vaultConfigured = ref(true)
+/** OAuth tokens land in the same vault as pasted secrets — no vault key, no OAuth either. */
+const canConnectOAuth = computed(() => vaultConfigured.value && oauthCapableProviders.value.includes(providerId.value))
 type OAuthFlowStatus = 'idle' | 'starting' | 'pending' | 'exchanging' | 'error'
 const oauthFlow = ref<{ state: string; status: OAuthFlowStatus; authorizeUrl: string; error: string }>({
   state: '',
@@ -88,6 +95,7 @@ async function loadOAuthCapabilities() {
   try {
     const data = await fetchOAuthCapabilities()
     oauthCapableProviders.value = data.providers || []
+    vaultConfigured.value = data.vaultConfigured !== false
   } catch {
     /* best-effort — the "Connect via browser" button just won't show */
   }
@@ -682,9 +690,18 @@ onUnmounted(() => {
                 <p class="muted path-hint">{{ t('runner.connectionDialog.orPasteSecretBelow') }}</p>
               </div>
 
+              <p v-if="!vaultConfigured" class="err-text vault-warning">
+                {{ t('runner.connectionDialog.vaultNotConfigured') }}
+              </p>
               <div class="field">
                 <label class="cfg-label">{{ t('runner.connectionDialog.secretValueField') }}
-                  <input v-model="newCred.secretValue" type="password" class="cfg-input" autocomplete="off" />
+                  <input
+                    v-model="newCred.secretValue"
+                    type="password"
+                    class="cfg-input"
+                    autocomplete="off"
+                    :disabled="!vaultConfigured"
+                  />
                 </label>
                 <p class="muted path-hint">{{ t('runner.connectionDialog.secretValueHint') }}</p>
               </div>
@@ -820,6 +837,7 @@ onUnmounted(() => {
 .oauth-paste-row { display: flex; gap: 0.35rem; margin-top: 0.4rem; }
 .oauth-paste-row .cfg-input { flex: 1; min-width: 0; }
 .err-text { color: var(--danger); }
+.vault-warning { margin: 0 0 0.5rem; font-size: 0.8rem; }
 .advanced-secret-ref { margin-bottom: 0.75rem; }
 .advanced-secret-ref summary { cursor: pointer; font-size: 0.8rem; }
 .advanced-secret-ref .field { margin-top: 0.5rem; margin-bottom: 0; }

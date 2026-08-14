@@ -105,6 +105,7 @@ export default {
     secretValueField: 'Secret value',
     secretValueHint: 'API key của bạn, dán trực tiếp — lưu mã hoá, không hiện lại sau khi lưu',
     advancedSecretRef: 'Nâng cao: dùng secretRef phía server thay thế (env:VAR_NAME / file:path)',
+    vaultNotConfigured: 'Server chưa cấu hình kho lưu secret (thiếu DASHBOARD_SECRET_KEY) — nhờ admin set biến này, hoặc dùng secretRef nâng cao bên dưới.',
   },
   registerDialog: {
     title: 'Đăng ký command',
