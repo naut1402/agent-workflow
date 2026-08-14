@@ -28,9 +28,17 @@ function stepLabel(stepId: string | null) {
         :key="group.taskId ?? `unknown-${idx}`"
         class="running-jobs-list-task"
         :class="{ clickable: Boolean(group.taskId) }"
-        @click="group.taskId && emit('select', group.taskId)"
       >
-        <div class="running-jobs-list-task-row">
+        <button
+          v-if="group.taskId"
+          type="button"
+          class="running-jobs-list-task-row"
+          @click="emit('select', group.taskId)"
+        >
+          <span class="running-jobs-list-task-label">{{ taskLabel(group.taskId) }}</span>
+          <span class="running-jobs-list-task-badge">{{ group.jobCount }}</span>
+        </button>
+        <div v-else class="running-jobs-list-task-row">
           <span class="running-jobs-list-task-label">{{ taskLabel(group.taskId) }}</span>
           <span class="running-jobs-list-task-badge">{{ group.jobCount }}</span>
         </div>

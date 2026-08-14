@@ -5,7 +5,8 @@ import { groupRunningJobs, type JobLite } from '../lib/groupRunningJobs'
 export function useRunningJobs(pollMs = 1500) {
   const jobs = ref<JobLite[]>([])
   const error = ref<string | null>(null)
-  let timer: ReturnType<typeof setInterval> | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let running = false
 
   async function poll() {
     try {
@@ -22,16 +23,25 @@ export function useRunningJobs(pollMs = 1500) {
   const runningCount = computed(() => grouped.value.totalJobs)
 
   function stop() {
+    running = false
     if (timer) {
-      clearInterval(timer)
+      clearTimeout(timer)
       timer = null
     }
   }
 
+  // Chain via setTimeout (not setInterval) so a poll slower than `pollMs`
+  // can't overlap with the next one and have its response race a newer poll's.
+  async function scheduleNext() {
+    if (!running) return
+    await poll()
+    if (running) timer = setTimeout(scheduleNext, pollMs)
+  }
+
   function start() {
     stop()
-    poll()
-    timer = setInterval(poll, pollMs)
+    running = true
+    scheduleNext()
   }
 
   return { jobs, grouped, runningCount, error, poll, start, stop }

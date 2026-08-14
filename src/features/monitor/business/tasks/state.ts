@@ -19,6 +19,18 @@ function withStateFileLock<T>(stateFile: string, fn: () => Promise<T>): Promise<
   return run
 }
 
+/**
+ * Serialize an entire multi-step operation (read → validate → write, possibly
+ * spanning several state mutations and a job submission) per task. Callers
+ * already inside this lock must use the `AssumingLock` function variants below
+ * instead of the normal exported ones — re-entering `withStateFileLock` for
+ * the same file from within its own callback deadlocks (the outer call never
+ * resolves, so the inner call waits forever for its turn).
+ */
+export function withTaskLock<T>(root: string, taskId: string, fn: () => Promise<T>): Promise<T> {
+  return withStateFileLock(joinPath(root, '.dev-state', `${taskId}.json`), fn)
+}
+
 function uniqueTempPath(stateFile: string): string {
   const suffix = `${process.pid}.${Date.now()}.${randomBytes(4).toString('hex')}.tmp`
   return `${stateFile}.${suffix}`
@@ -47,23 +59,31 @@ export async function writeStateAtomic(
  * steps. Caller must validate the target is in-pipeline and runnable; does
  * not clear an open HITL gate (run-step rejects those earlier).
  */
+type JumpResult = { ok: true; state: Record<string, unknown> } | { ok: false; error: string; status: number }
+
+/** Core of `jumpToPipelineStep` — caller must already hold the task's lock (`withTaskLock`). */
+export async function jumpToPipelineStepAssumingLock(
+  stateFile: string,
+  targetStepId: string,
+): Promise<JumpResult> {
+  const read = await readState(stateFile)
+  if (!read.ok) return { ok: false, error: 'state not found', status: 404 }
+  const state = { ...(read.state as Record<string, unknown>) }
+  if (state.hitl_pending) {
+    return { ok: false, error: 'task is waiting for HITL approval', status: 400 }
+  }
+  state.current_phase = targetStepId
+  await writeStateAtomic(stateFile, state)
+  return { ok: true, state }
+}
+
 export async function jumpToPipelineStep(
   root: string,
   taskId: string,
   targetStepId: string,
-): Promise<{ ok: true; state: Record<string, unknown> } | { ok: false; error: string; status: number }> {
+): Promise<JumpResult> {
   const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
-  return withStateFileLock(stateFile, async () => {
-    const read = await readState(stateFile)
-    if (!read.ok) return { ok: false, error: 'state not found', status: 404 }
-    const state = { ...(read.state as Record<string, unknown>) }
-    if (state.hitl_pending) {
-      return { ok: false, error: 'task is waiting for HITL approval', status: 400 }
-    }
-    state.current_phase = targetStepId
-    await writeStateAtomic(stateFile, state)
-    return { ok: true, state }
-  })
+  return withStateFileLock(stateFile, () => jumpToPipelineStepAssumingLock(stateFile, targetStepId))
 }
 
 function stepIndex(steps: any[], stepId: string): number {
@@ -189,62 +209,69 @@ export async function applyHitlAction(
  * by another action) or a gate is already pending — callers should treat a
  * null result as "nothing to do", not an error.
  */
+/** Core of `advanceStepOnJobSuccess` — caller must already hold the task's lock (`withTaskLock`). */
+export async function advanceStepOnJobSuccessAssumingLock(
+  root: string,
+  taskId: string,
+  stepId: string,
+  stateFile: string,
+): Promise<{ state: Record<string, unknown>; mtime: number } | null> {
+  const read = await readState(stateFile)
+  if (!read.ok) return null
+
+  const state = { ...read.state } as Record<string, unknown>
+  if (String(state.current_phase ?? '') !== stepId) return null
+  if (state.hitl_pending) return null
+
+  const pipeline = await loadPipelineConfig(root, taskId)
+  const steps = pipeline.steps || []
+  const stepIdx = stepIndex(steps, stepId)
+  const currentStep = stepIdx >= 0 ? steps[stepIdx] : null
+  if (!currentStep) return null
+
+  // A step opting into `hitl.retry` (e.g. `reviewer` in DEFAULT_PIPELINE) gets
+  // its artifact's verdict checked BEFORE the gate/advance below — a
+  // `NEEDS_CHANGES`-style verdict loops back to `retry.restart_from` without
+  // ever bothering the human gate; only an approve verdict (or exhausting
+  // `retry.max`) falls through to the existing behavior.
+  const retry = currentStep.hitl?.retry
+  const restartStepExists = retry ? steps.some((s: any) => s.id === retry.restart_from) : false
+  if (retry && restartStepExists) {
+    const verdict = await checkReviewRetry(root, taskId, currentStep)
+    if (verdict.retry) {
+      const round = Number(state.review_round ?? 0) + 1
+      state.review_round = round
+      if (round <= retry.max) {
+        state.current_phase = retry.restart_from
+        state.hitl_pending = null
+        const mtime = await writeStateAtomic(stateFile, state)
+        return { state, mtime }
+      }
+      // Past `retry.max`: fall through to the gate/advance logic below —
+      // for a step with `hitl.gate_id` (like `reviewer`), that opens the
+      // human gate instead of leaving the task silently re-runnable.
+    }
+  }
+
+  const gateId = currentStep.hitl?.gate_id
+  if (gateId && !state.auto_review) {
+    state.hitl_pending = gateId
+  } else {
+    const next = steps[stepIdx + 1]
+    state.current_phase = next ? next.id : 'completed'
+  }
+
+  const mtime = await writeStateAtomic(stateFile, state)
+  return { state, mtime }
+}
+
 export async function advanceStepOnJobSuccess(
   root: string,
   taskId: string,
   stepId: string,
 ): Promise<{ state: Record<string, unknown>; mtime: number } | null> {
   const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
-
-  return withStateFileLock(stateFile, async () => {
-    const read = await readState(stateFile)
-    if (!read.ok) return null
-
-    const state = { ...read.state } as Record<string, unknown>
-    if (String(state.current_phase ?? '') !== stepId) return null
-    if (state.hitl_pending) return null
-
-    const pipeline = await loadPipelineConfig(root, taskId)
-    const steps = pipeline.steps || []
-    const stepIdx = stepIndex(steps, stepId)
-    const currentStep = stepIdx >= 0 ? steps[stepIdx] : null
-    if (!currentStep) return null
-
-    // A step opting into `hitl.retry` (e.g. `reviewer` in DEFAULT_PIPELINE) gets
-    // its artifact's verdict checked BEFORE the gate/advance below — a
-    // `NEEDS_CHANGES`-style verdict loops back to `retry.restart_from` without
-    // ever bothering the human gate; only an approve verdict (or exhausting
-    // `retry.max`) falls through to the existing behavior.
-    const retry = currentStep.hitl?.retry
-    const restartStepExists = retry ? steps.some((s: any) => s.id === retry.restart_from) : false
-    if (retry && restartStepExists) {
-      const verdict = await checkReviewRetry(root, taskId, currentStep)
-      if (verdict.retry) {
-        const round = Number(state.review_round ?? 0) + 1
-        state.review_round = round
-        if (round <= retry.max) {
-          state.current_phase = retry.restart_from
-          state.hitl_pending = null
-          const mtime = await writeStateAtomic(stateFile, state)
-          return { state, mtime }
-        }
-        // Past `retry.max`: fall through to the gate/advance logic below —
-        // for a step with `hitl.gate_id` (like `reviewer`), that opens the
-        // human gate instead of leaving the task silently re-runnable.
-      }
-    }
-
-    const gateId = currentStep.hitl?.gate_id
-    if (gateId && !state.auto_review) {
-      state.hitl_pending = gateId
-    } else {
-      const next = steps[stepIdx + 1]
-      state.current_phase = next ? next.id : 'completed'
-    }
-
-    const mtime = await writeStateAtomic(stateFile, state)
-    return { state, mtime }
-  })
+  return withStateFileLock(stateFile, () => advanceStepOnJobSuccessAssumingLock(root, taskId, stepId, stateFile))
 }
 
 export interface PendingFeedback {

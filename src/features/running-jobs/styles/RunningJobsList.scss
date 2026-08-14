@@ -36,6 +36,16 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.running-jobs-list-task.clickable .running-jobs-list-task-row {
+  cursor: pointer;
 }
 .running-jobs-list-task-label {
   flex: 1;

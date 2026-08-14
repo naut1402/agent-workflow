@@ -107,7 +107,7 @@ export function buildArtifactNodesAndEdges(opts: {
 
     const pos = opts.phasePositions[stepId] ?? { x: i * NODE_SPACING, y: NODE_Y }
     const next = steps[i + 1]
-    const nextId = typeof next?.id === 'string' ? next.id : null
+    const nextId = nonEmptyString(next?.id) ? next.id : null
 
     artifactNodes.push({
       id: `art-${stepId}`,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onUnmounted, ref } from 'vue'
+import { onClickOutside } from '@vueuse/core'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import type { TaskGroup } from '../lib/groupRunningJobs'
 import RunningJobsList from './RunningJobsList.vue'
@@ -14,9 +15,16 @@ const emit = defineEmits<{ select: [taskId: string] }>()
 
 const { t } = useI18nHelpers()
 const open = ref(false)
+const rootRef = ref<HTMLElement | null>(null)
+const triggerRef = ref<HTMLButtonElement | null>(null)
 let leaveTimer: ReturnType<typeof setTimeout> | null = null
 
+onClickOutside(rootRef, () => {
+  open.value = false
+})
+
 function onSelect(taskId: string) {
+  open.value = false
   emit('select', taskId)
 }
 
@@ -27,6 +35,9 @@ function clearLeaveTimer() {
   }
 }
 
+// Hover stays as a mouse convenience; the trigger button below is the
+// keyboard/click path (`aria-expanded` + toggle) so a mouse-less user can
+// open the dropdown and reach the running-job list at all.
 function onEnter() {
   clearLeaveTimer()
   open.value = true
@@ -40,6 +51,17 @@ function onLeave() {
   }, 150)
 }
 
+function onTriggerClick() {
+  open.value = !open.value
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && open.value) {
+    open.value = false
+    triggerRef.value?.focus()
+  }
+}
+
 onUnmounted(() => {
   clearLeaveTimer()
 })
@@ -48,16 +70,20 @@ onUnmounted(() => {
 <template>
   <div
     v-if="runningCount > 0"
+    ref="rootRef"
     class="floating-running-jobs"
     @mouseenter="onEnter"
     @mouseleave="onLeave"
+    @keydown="onKeydown"
   >
     <button
+      ref="triggerRef"
       type="button"
       class="floating-running-jobs-btn"
       :title="t('runningJobs.icon.title')"
       aria-haspopup="dialog"
       :aria-expanded="open"
+      @click="onTriggerClick"
     >
       <svg
         class="activity-icon"
