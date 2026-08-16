@@ -26,7 +26,6 @@
     "@anthropic-ai/sdk": "^0.117.1",
     "@hono/node-server": "^2.0.6",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@openai/agents": "^0.3.9",
     "@toast-ui/editor": "^3.2.2",
     "@vue-flow/core": "^1.41.0",
     "diff": "^9.0.0",

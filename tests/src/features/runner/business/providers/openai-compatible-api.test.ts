@@ -133,6 +133,68 @@ describe('OpenAiCompatibleProvider', () => {
     expect(seenUrl).toBe('https://custom-gateway.example/v1/chat/completions')
   })
 
+  test('follow-up request after a tool call stays OpenAI-spec shaped (strict compat backends like Gemini)', async () => {
+    const bodies: Array<Record<string, any>> = []
+    let call = 0
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      call++
+      bodies.push(JSON.parse(String(init?.body)))
+      if (call === 1) {
+        return jsonResponse(
+          chatCompletion(
+            {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                { id: 'call_1', type: 'function', function: { name: 'read_file', arguments: JSON.stringify({ path: 'a.txt' }) } },
+              ],
+            },
+            'tool_calls',
+          ),
+        )
+      }
+      return jsonResponse(chatCompletion({ role: 'assistant', content: 'read it' }, 'stop'))
+    }) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('gemini-api', 'https://generativelanguage.googleapis.com/v1beta/openai')
+    const result = await provider.execute(baseRequest(workspace), { model: 'gemini-2.5-pro' }, credential)
+
+    expect(result.ok).toBe(true)
+    expect(call).toBe(2)
+
+    const followUp = bodies[1]
+    // Assistant message carries ONLY spec fields — no raw tool_call `type`/`function`
+    // leaked onto the message itself (what @openai/agents' converter used to emit
+    // and Gemini's endpoint rejects).
+    const assistant = followUp.messages.find((m: Record<string, any>) => m.role === 'assistant')
+    expect(assistant).toBeDefined()
+    expect(Object.keys(assistant).sort()).toEqual(['content', 'role', 'tool_calls'])
+    expect(assistant.tool_calls).toEqual([
+      { id: 'call_1', type: 'function', function: { name: 'read_file', arguments: JSON.stringify({ path: 'a.txt' }) } },
+    ])
+    const toolMessage = followUp.messages.find((m: Record<string, any>) => m.role === 'tool')
+    expect(toolMessage.tool_call_id).toBe('call_1')
+    // No OpenAI-only `strict` flag on tool definitions.
+    for (const t of followUp.tools) {
+      expect('strict' in t.function).toBe(false)
+    }
+  })
+
+  test('empty model fails fast with a clear error instead of a provider 404', async () => {
+    let called = false
+    globalThis.fetch = (async () => {
+      called = true
+      return jsonResponse(chatCompletion({ role: 'assistant', content: 'x' }, 'stop'))
+    }) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('gemini-api', 'https://generativelanguage.googleapis.com/v1beta/openai')
+    const result = await provider.execute(baseRequest(workspace), {}, credential)
+
+    expect(result.ok).toBe(false)
+    expect(called).toBe(false)
+    if (!result.ok) expect(result.error).toContain('model is required')
+  })
+
   test('missing API key fails without making any request', async () => {
     let called = false
     globalThis.fetch = (async () => {
