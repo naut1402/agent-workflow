@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
 import { registryHome } from '../../../core/registry.js'
 
 /**
@@ -57,10 +57,7 @@ function loadVault(): VaultFile {
 function saveVault(vault: VaultFile): void {
   const home = registryHome()
   mkdirSync(home, { recursive: true })
-  const file = vaultFile()
-  const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, JSON.stringify(vault, null, 2))
-  renameSync(tmp, file)
+  writeTextFileAtomicSync(vaultFile(), JSON.stringify(vault, null, 2))
 }
 
 /** Encrypts `payload` and stores it under `id`, overwriting any existing entry. */

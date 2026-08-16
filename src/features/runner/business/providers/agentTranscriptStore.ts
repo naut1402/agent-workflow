@@ -2,9 +2,8 @@ import {
   appendTextFileSync,
   mkdirSync,
   readTextFileSync,
-  renameSync,
   joinPath,
-  writeTextFileSync,
+  writeTextFileAtomicSync,
 } from '../../../../core/lib/fileHelper.js'
 import { registryHome } from '../../../../core/registry.js'
 
@@ -90,12 +89,9 @@ export function readTranscriptTurns(providerId: string, sessionId: string): Agen
 export function saveSessionMessages(sessionId: string, messages: unknown[]): void {
   try {
     mkdirSync(sessionsDir(), { recursive: true })
-    const file = sessionFile(sessionId)
-    const tmp = `${file}.tmp`
-    writeTextFileSync(tmp, JSON.stringify({ sessionId, messages }, null, 2))
-    renameSync(tmp, file)
-  } catch {
-    /* best-effort */
+    writeTextFileAtomicSync(sessionFile(sessionId), JSON.stringify({ sessionId, messages }, null, 2))
+  } catch (err) {
+    console.warn(`[dev-team-dashboard] save session messages failed: ${String(err)}`)
   }
 }
 

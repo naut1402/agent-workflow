@@ -1,4 +1,4 @@
-import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
 import { registryHome } from '../../../core/registry.js'
 import { ensureLegacyConnection, getConnection } from './connections.js'
 import { createClaudeCodeCliProvider } from './providers/claude-code-cli.js'
@@ -101,9 +101,7 @@ export function loadRunners(): RunnersStore {
 export function saveRunners(store: RunnersStore): RunnersStore {
   const home = registryHome()
   mkdirSync(home, { recursive: true })
-  const file = runnersFile()
-  const tmp = `${file}.tmp`
-  const payload = JSON.stringify(
+  writeTextFileAtomicSync(runnersFile(), JSON.stringify(
     {
       version: store.version || RUNNERS_VERSION,
       defaultRunnerId: store.defaultRunnerId,
@@ -111,9 +109,7 @@ export function saveRunners(store: RunnersStore): RunnersStore {
     },
     null,
     2,
-  )
-  writeTextFileSync(tmp, payload)
-  renameSync(tmp, file)
+  ))
   return store
 }
 

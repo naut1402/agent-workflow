@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { writeTextFileAtomicSync } from './lib/fileHelper.js'
 
 const REGISTRY_VERSION = 1
 
@@ -103,15 +104,14 @@ export function loadRegistry(): Registry {
 export function saveRegistry(reg: Registry): Registry {
   const home = registryHome()
   fs.mkdirSync(home, { recursive: true })
-  const file = registryFile()
-  const tmp = `${file}.tmp`
-  const payload = JSON.stringify(
-    { version: reg.version || REGISTRY_VERSION, projects: reg.projects || [] },
-    null,
-    2,
+  writeTextFileAtomicSync(
+    registryFile(),
+    JSON.stringify(
+      { version: reg.version || REGISTRY_VERSION, projects: reg.projects || [] },
+      null,
+      2,
+    ),
   )
-  fs.writeFileSync(tmp, payload, 'utf8')
-  fs.renameSync(tmp, file)
   return reg
 }
 

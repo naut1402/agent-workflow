@@ -1,4 +1,4 @@
-import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
 import { spawnSync } from '../../../core/lib/processHelper.js'
 import { registryHome } from '../../../core/registry.js'
 import { listCustomCommands } from './commands.js'
@@ -94,18 +94,14 @@ function normaliseConnection(raw: any): Connection | null {
 export function saveConnections(store: ConnectionsStore): ConnectionsStore {
   const home = registryHome()
   mkdirSync(home, { recursive: true })
-  const file = connectionsFile()
-  const tmp = `${file}.tmp`
-  const payload = JSON.stringify(
+  writeTextFileAtomicSync(connectionsFile(), JSON.stringify(
     {
       version: store.version || CONNECTIONS_VERSION,
       connections: store.connections || [],
     },
     null,
     2,
-  )
-  writeTextFileSync(tmp, payload)
-  renameSync(tmp, file)
+  ))
   return store
 }
 

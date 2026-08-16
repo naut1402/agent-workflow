@@ -218,6 +218,54 @@ export function renameSync(from: string, to: string): void {
   fs.renameSync(from, to)
 }
 
+export function copyFileSync(from: string, to: string): void {
+  fs.copyFileSync(from, to)
+}
+
+/**
+ * Best-effort atomic text write: temp file + rename. Some filesystems (Docker
+ * bind mounts, SMB/NFS shares, antivirus-scanned dirs) return EBUSY/EPERM
+ * transiently when rename targets an existing file — retry briefly, then fall
+ * back to copy-over + unlink, which those filesystems do allow.
+ */
+export function writeTextFileAtomicSync(file: string, data: string): void {
+  const tmp = `${file}.tmp`
+  writeTextFileSync(tmp, data)
+  if (renameOverExisting(tmp, file)) return
+  copyFileSync(tmp, file)
+  rmSync(tmp, { force: true })
+}
+
+function renameOverExisting(from: string, to: string): boolean {
+  try {
+    renameSync(from, to)
+    return true
+  } catch (err: any) {
+    if (!isTransientRenameError(err)) throw err
+  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    busyWaitMs(20)
+    try {
+      renameSync(from, to)
+      return true
+    } catch (err: any) {
+      if (!isTransientRenameError(err)) throw err
+    }
+  }
+  return false
+}
+
+function isTransientRenameError(err: any): boolean {
+  return Boolean(err) && ['EBUSY', 'EPERM', 'EACCES'].includes(String(err.code))
+}
+
+function busyWaitMs(ms: number): void {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    /* spin */
+  }
+}
+
 export function rmSync(p: string, opts?: { recursive?: boolean; force?: boolean }): void {
   fs.rmSync(p, opts)
 }

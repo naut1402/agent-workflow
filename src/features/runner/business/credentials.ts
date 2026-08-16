@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
 import { registryHome } from '../../../core/registry.js'
 import { deleteSecret, readSecret, storeSecret } from './secretVault.js'
 import {
@@ -65,15 +65,11 @@ export function loadCredentials(): CredentialsStore {
 export function saveCredentials(store: CredentialsStore): CredentialsStore {
   const home = registryHome()
   mkdirSync(home, { recursive: true })
-  const file = credentialsFile()
-  const tmp = `${file}.tmp`
-  const payload = JSON.stringify(
+  writeTextFileAtomicSync(credentialsFile(), JSON.stringify(
     { version: store.version || CREDENTIALS_VERSION, profiles: store.profiles || [] },
     null,
     2,
-  )
-  writeTextFileSync(tmp, payload)
-  renameSync(tmp, file)
+  ))
   return store
 }
 

@@ -1,4 +1,4 @@
-import { cpSync, dirname, joinPath, mkdirSync, readTextFileSync, readdirSync, renameSync, resolvePath, rmSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { cpSync, dirname, joinPath, mkdirSync, readTextFileSync, readdirSync, resolvePath, rmSync, writeTextFileAtomicSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import crypto from 'node:crypto'
 import { spawn } from '../../../core/lib/processHelper.js'
 import os from 'node:os'
@@ -283,10 +283,7 @@ export function loadJob(id: string): JobRecord | null {
 
 function saveJob(job: JobRecord): JobRecord {
   ensureJobsDir()
-  const file = jobFile(job.id)
-  const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, JSON.stringify(job, null, 2))
-  renameSync(tmp, file)
+  writeTextFileAtomicSync(jobFile(job.id), JSON.stringify(job, null, 2))
   return job
 }
 
@@ -1218,9 +1215,7 @@ export function approveJob(id: string): MutationResult<{ job: JobRecord }> {
   const realFile = joinPath(job.applyTarget, job.approvalArtifact)
   try {
     mkdirSync(dirname(realFile), { recursive: true })
-    const tmp = `${realFile}.tmp`
-    writeTextFileSync(tmp, content)
-    renameSync(tmp, realFile)
+    writeTextFileAtomicSync(realFile, content)
   } catch (err: any) {
     return { ok: false, status: 500, error: `cannot apply proposed content: ${err.message}` }
   }

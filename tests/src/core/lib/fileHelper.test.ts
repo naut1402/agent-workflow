@@ -12,6 +12,7 @@ import {
   resolvePathUnder,
   safeReadDir,
   statSafe,
+  writeTextFileAtomicSync,
 } from '@/core/lib/fileHelper'
 import { readYamlSafe } from '@/core/lib/yamlLib'
 
@@ -31,6 +32,19 @@ afterAll(async () => {
 describe('fileHelper', () => {
   it('homeDir returns a string', () => {
     expect(typeof homeDir()).toBe('string')
+  })
+
+  it('writeTextFileAtomicSync writes content over an existing file and leaves no .tmp behind', async () => {
+    const ownDir = await fs.mkdtemp(path.join(os.tmpdir(), 'shared-fs-atomic-'))
+    try {
+      const file = path.join(ownDir, 'data.json')
+      writeTextFileAtomicSync(file, '{"v":1}')
+      writeTextFileAtomicSync(file, '{"v":2}')
+      expect(await fs.readFile(file, 'utf8')).toBe('{"v":2}')
+      expect((await safeReadDir(ownDir)).map((e) => e.name)).toEqual(['data.json'])
+    } finally {
+      await fs.rm(ownDir, { recursive: true, force: true })
+    }
   })
 
   it('safeReadDir lists directory entries', async () => {
