@@ -51,7 +51,7 @@ onClickOutside(wrapRef, () => {
 .info-tooltip-btn {
   width: 20px;
   height: 20px;
-  color: var(--muted);
+  color: var(--text);
 }
 
 .info-tooltip-tip {
