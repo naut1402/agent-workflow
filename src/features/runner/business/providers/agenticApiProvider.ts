@@ -268,13 +268,19 @@ export abstract class AgenticApiProvider implements RunnerProvider {
     } else if ((auth.type === 'env' || auth.type === 'stored') && auth.value) {
       apiKey = auth.value
     } else {
+      let detail: string
+      if (auth.type === 'env') detail = `biến môi trường "${auth.key}" chưa được đặt`
+      else if (auth.type === 'stored') detail = process.env.DASHBOARD_SECRET_KEY
+        ? 'secret trong vault không tìm thấy hoặc bị lỗi giải mã'
+        : 'DASHBOARD_SECRET_KEY chưa được đặt — không thể đọc secret từ vault'
+      else detail = `secretRef "${credential.secretRef}" không hỗ trợ cho API provider`
       const result: ExecuteResult = {
         ok: false,
         exitCode: null,
         durationMs: Date.now() - started,
         logPath,
         sessionId,
-        error: 'missing API key — secretRef phải là env:VAR_NAME, stored:<id>, hoặc oauth:<id>',
+        error: `missing API key — ${detail}`,
       }
       appendLog(this.describeResult(result))
       return result
