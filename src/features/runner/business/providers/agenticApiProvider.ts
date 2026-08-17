@@ -26,6 +26,29 @@ export interface AgenticRunResult {
   rawMessages: unknown[]
 }
 
+/**
+ * Lets `runConversation()` surface progress as it happens instead of the base
+ * class only seeing the final `AgenticRunResult` once the whole tool-use loop
+ * is done. A subclass that calls these opts out of the base class's legacy
+ * "write everything from the returned result" fallback (see `execute()`) —
+ * call them for every tool call / assistant turn, not just some.
+ */
+export interface AgenticStreamHandlers {
+  /** A tool call just finished executing this turn. */
+  onToolCall: (call: { name: string; argsSummary: string }) => void
+  /**
+   * Assistant text became available. `text` is a delta to append, not the
+   * full turn so far — callers that don't have real token streaming just
+   * call this once per turn with the whole turn text (`done` defaults to
+   * `true`). A future streaming subclass calls it many times per turn with
+   * `done: false`, then once more with the trailing delta (or `''`) and
+   * `done: true` — the base class buffers deltas and only commits a
+   * transcript turn (one JSONL line / chat bubble) at `done`, while still
+   * tailing every delta into the raw job log immediately.
+   */
+  onAssistantChunk: (text: string, opts?: { done?: boolean }) => void
+}
+
 export interface AgenticRunContext {
   req: ExecuteRequest
   runnerConfig: Record<string, any>
@@ -35,6 +58,8 @@ export interface AgenticRunContext {
   workspace: string
   /** Aborted on `cancelJob` — thread into fetch/SDK calls so cancelling stops the in-flight request. */
   signal?: AbortSignal
+  /** Report tool calls / assistant text as they happen instead of only at the end — see `AgenticStreamHandlers`. */
+  handlers: AgenticStreamHandlers
 }
 
 interface SandboxOk {
@@ -250,6 +275,35 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       appendTranscriptTurn(this.providerId, sessionId, { role: 'user', text: req.userPrompt })
     }
 
+    // Streamed as `runConversation()` progresses (see `AgenticStreamHandlers`)
+    // instead of only once at the very end. `streamed` tracks whether the
+    // subclass actually used these — if it never calls them (e.g. the older,
+    // non-streaming shape), `execute()` falls back to writing everything from
+    // the returned `result` in one shot below, exactly as before.
+    let streamed = false
+    let assistantBuffer = ''
+    const flushAssistantBuffer = (): void => {
+      const full = assistantBuffer
+      assistantBuffer = ''
+      if (full.trim()) {
+        appendTranscriptTurn(this.providerId, sessionId, { role: 'assistant', text: full })
+        appendLog('\n')
+      }
+    }
+    const handlers: AgenticStreamHandlers = {
+      onToolCall: (call) => {
+        streamed = true
+        appendTranscriptTurn(this.providerId, sessionId, { role: 'tool', tool: call.name, text: call.argsSummary })
+        appendLog(`[tool] ${call.name} ${call.argsSummary}\n`)
+      },
+      onAssistantChunk: (text, opts) => {
+        streamed = true
+        if (text) appendLog(text)
+        assistantBuffer += text
+        if (opts?.done !== false) flushAssistantBuffer()
+      },
+    }
+
     let result: AgenticRunResult
     try {
       result = await this.runConversation({
@@ -259,8 +313,10 @@ export abstract class AgenticApiProvider implements RunnerProvider {
         priorMessages,
         workspace: req.workspace,
         signal: req.signal,
+        handlers,
       })
     } catch (err: any) {
+      flushAssistantBuffer() // don't lose a partially-streamed turn if the loop threw mid-turn
       const failure: ExecuteResult = {
         ok: false,
         exitCode: null,
@@ -273,13 +329,15 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       return failure
     }
 
-    for (const call of result.toolCalls) {
-      appendTranscriptTurn(this.providerId, sessionId, { role: 'tool', tool: call.name, text: call.argsSummary })
-      appendLog(`[tool] ${call.name} ${call.argsSummary}\n`)
-    }
-    if (result.finalText?.trim()) {
-      appendTranscriptTurn(this.providerId, sessionId, { role: 'assistant', text: result.finalText })
-      appendLog(`${result.finalText}\n`)
+    if (!streamed) {
+      for (const call of result.toolCalls) {
+        appendTranscriptTurn(this.providerId, sessionId, { role: 'tool', tool: call.name, text: call.argsSummary })
+        appendLog(`[tool] ${call.name} ${call.argsSummary}\n`)
+      }
+      if (result.finalText?.trim()) {
+        appendTranscriptTurn(this.providerId, sessionId, { role: 'assistant', text: result.finalText })
+        appendLog(`${result.finalText}\n`)
+      }
     }
     saveSessionMessages(sessionId, result.rawMessages)
 

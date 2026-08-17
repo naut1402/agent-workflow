@@ -145,12 +145,18 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
         (call): call is OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall =>
           call.type === 'function',
       )
+      // Surface this turn's text as soon as it arrives — whether or not tool
+      // calls follow — instead of only the final no-tool-call turn (level-1
+      // streaming; see AgenticStreamHandlers). Not a real per-token delta
+      // (this SDK call isn't `stream: true`), so one call covers the whole turn.
+      const turnText = typeof message?.content === 'string' ? message.content : ''
+      if (turnText) ctx.handlers.onAssistantChunk(turnText, { done: true })
+
       if (!calls.length) {
-        const finalText = typeof message?.content === 'string' ? message.content : ''
         // Include the final reply in the persisted history so a resumed session
         // sees the model's own last answer.
-        messages.push({ role: 'assistant', content: finalText })
-        return { finalText, usage, toolCalls, rawMessages: messages }
+        messages.push({ role: 'assistant', content: turnText })
+        return { finalText: turnText, usage, toolCalls, rawMessages: messages }
       }
 
       // Rebuild the assistant message with only spec fields — echoing the
@@ -167,7 +173,9 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
       })
       for (const call of calls) {
         const outcome = this.executeTool(call, ctx.workspace)
-        toolCalls.push({ name: call.function.name, argsSummary: summarizeArgs(call.function.arguments) })
+        const entry = { name: call.function.name, argsSummary: summarizeArgs(call.function.arguments) }
+        toolCalls.push(entry)
+        ctx.handlers.onToolCall(entry)
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(outcome) })
       }
     }

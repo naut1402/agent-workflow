@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { OpenAiCompatibleProvider } from '../../../../../../src/features/runner/business/providers/openai-compatible-api.js'
+import { readTranscriptTurns } from '../../../../../../src/features/runner/business/providers/agentTranscriptStore.js'
 import type { CredentialProfile, ExecuteRequest } from '../../../../../../src/features/runner/business/types.js'
 
 const originalFetch = globalThis.fetch
@@ -89,6 +90,43 @@ describe('OpenAiCompatibleProvider', () => {
     expect(result.tokenUsage).toEqual({ inputTokens: 20, outputTokens: 10, totalTokens: 30 })
     expect(fs.readFileSync(path.join(workspace, 'out.md'), 'utf8')).toBe('hi from gpt')
     expect(call).toBe(2)
+  })
+
+  test('reasoning text alongside a tool call is written to the transcript live, not dropped', async () => {
+    let call = 0
+    globalThis.fetch = (async () => {
+      call++
+      if (call === 1) {
+        return jsonResponse(
+          chatCompletion(
+            {
+              role: 'assistant',
+              content: "I'll check the workspace first.",
+              tool_calls: [
+                { id: 'call_1', type: 'function', function: { name: 'list_directory', arguments: '{}' } },
+              ],
+            },
+            'tool_calls',
+          ),
+        )
+      }
+      return jsonResponse(chatCompletion({ role: 'assistant', content: 'done' }, 'stop'))
+    }) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test/v1')
+    const result = await provider.execute(
+      { ...baseRequest(workspace), sessionId: 'reasoning-turn-session' },
+      { model: 'gpt-test' },
+      credential,
+    )
+
+    expect(result.ok).toBe(true)
+    const turns = readTranscriptTurns('openai-api', 'reasoning-turn-session')
+    // Previously only the final no-tool-call turn's text ever reached the
+    // transcript — this turn's own reasoning text was silently dropped.
+    expect(turns.map((t) => t.role)).toEqual(['user', 'assistant', 'tool', 'assistant'])
+    expect(turns[1]?.text).toBe("I'll check the workspace first.")
+    expect(turns[3]?.text).toBe('done')
   })
 
   test('a tool call path outside the workspace is rejected by the shared sandbox, not written', async () => {

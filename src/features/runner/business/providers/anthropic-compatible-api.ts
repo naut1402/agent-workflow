@@ -80,9 +80,16 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
         (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use',
       )
 
+      // Surface this turn's text as soon as it arrives — whether or not tool
+      // calls follow — instead of only the final no-tool-use turn (level-1
+      // streaming; see AgenticStreamHandlers). Not a real per-token delta
+      // (this SDK call isn't streamed), so one call covers the whole turn.
+      const turnText = textOf(response.content)
+      if (turnText) ctx.handlers.onAssistantChunk(turnText, { done: true })
+
       if (!toolUseBlocks.length) {
         return {
-          finalText: textOf(response.content),
+          finalText: turnText,
           usage: {
             inputTokens: response.usage?.input_tokens,
             outputTokens: response.usage?.output_tokens,
@@ -96,7 +103,9 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
       messages.push({ role: 'assistant', content: response.content })
       const resultBlocks: Anthropic.Messages.ToolResultBlockParam[] = toolUseBlocks.map((block) => {
         const outcome = this.executeAnthropicTool(block, ctx.workspace)
-        toolCalls.push({ name: block.name, argsSummary: summarize(block.input) })
+        const entry = { name: block.name, argsSummary: summarize(block.input) }
+        toolCalls.push(entry)
+        ctx.handlers.onToolCall(entry)
         return {
           type: 'tool_result',
           tool_use_id: block.id,

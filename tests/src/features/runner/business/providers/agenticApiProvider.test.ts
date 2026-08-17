@@ -216,6 +216,59 @@ describe('AgenticApiProvider — execute() template method', () => {
     expect(loadSessionMessages(result.sessionId!)).toEqual([{ role: 'user', content: 'hello' }])
   })
 
+  test('a streaming subclass writes transcript turns as runConversation progresses, not only at the end', async () => {
+    const p = new FakeAgenticProvider()
+    const seenDuringRun: string[][] = []
+    p.runConversationImpl = async (ctx) => {
+      ctx.handlers.onToolCall({ name: 'list_directory', argsSummary: '{"path":"."}' })
+      // The tool-call turn must already be on disk before the loop moves on —
+      // that's the whole point of streaming instead of batching at the end.
+      seenDuringRun.push(readTranscriptTurns('fake-agentic-api', 'stream-session-1').map((t) => t.role))
+      ctx.handlers.onAssistantChunk('final answer', { done: true })
+      return { finalText: 'final answer', usage: {}, toolCalls: [{ name: 'list_directory', argsSummary: '{"path":"."}' }], rawMessages: [] }
+    }
+
+    // sessionId defaults to a fresh mintSessionId() when neither is set on the
+    // request, so pin one via resumeSessionId to read it back deterministically.
+    const result = await p.execute(baseRequest({ resumeSessionId: 'stream-session-1' }), {}, credential())
+    expect(result.ok).toBe(true)
+
+    expect(seenDuringRun[0]).toEqual(['user', 'tool']) // seen mid-run, before onAssistantChunk / return
+
+    const turns = readTranscriptTurns('fake-agentic-api', result.sessionId!)
+    expect(turns.map((t) => t.role)).toEqual(['user', 'tool', 'assistant'])
+    expect(turns[2]?.text).toBe('final answer')
+  })
+
+  test('a streaming subclass emitting chunks with done:false buffers them into a single committed turn', async () => {
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async (ctx) => {
+      ctx.handlers.onAssistantChunk('Hello, ', { done: false })
+      ctx.handlers.onAssistantChunk('world', { done: false })
+      ctx.handlers.onAssistantChunk('!', { done: true })
+      return { finalText: 'Hello, world!', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    const result = await p.execute(baseRequest({ resumeSessionId: 'stream-session-2' }), {}, credential())
+    const turns = readTranscriptTurns('fake-agentic-api', result.sessionId!)
+    expect(turns.map((t) => t.role)).toEqual(['user', 'assistant'])
+    expect(turns[1]?.text).toBe('Hello, world!')
+  })
+
+  test('runConversation throwing mid-stream still flushes the partially-buffered assistant turn', async () => {
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async (ctx) => {
+      ctx.handlers.onAssistantChunk('partial thought', { done: false })
+      throw new Error('model exploded mid-turn')
+    }
+
+    const result = await p.execute(baseRequest({ resumeSessionId: 'stream-session-3' }), {}, credential())
+    expect(result.ok).toBe(false)
+    const turns = readTranscriptTurns('fake-agentic-api', 'stream-session-3')
+    expect(turns.map((t) => t.role)).toEqual(['user', 'assistant'])
+    expect(turns[1]?.text).toBe('partial thought')
+  })
+
   test('resumeSessionId reuses the same session id and loads prior messages', async () => {
     const p = new FakeAgenticProvider()
     let seenPriorMessages: unknown[] = []
