@@ -195,6 +195,26 @@ describe('OpenAiCompatibleProvider', () => {
     if (!result.ok) expect(result.error).toContain('model is required')
   })
 
+  test('a 200 OK response carrying an error field (no choices) fails with a clear message instead of crashing', async () => {
+    globalThis.fetch = (async () => jsonResponse({ id: 'c1', error: { message: 'Provider returned error', code: 429 } })) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test/v1')
+    const result = await provider.execute(baseRequest(workspace), { model: 'gpt-test' }, credential)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe('Provider returned error')
+  })
+
+  test('a response with an empty choices array fails with a clear message', async () => {
+    globalThis.fetch = (async () => jsonResponse({ id: 'c1', object: 'chat.completion', created: 0, model: 'gpt-test', choices: [] })) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test/v1')
+    const result = await provider.execute(baseRequest(workspace), { model: 'gpt-test' }, credential)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toContain('không có choices')
+  })
+
   test('missing API key fails without making any request', async () => {
     let called = false
     globalThis.fetch = (async () => {

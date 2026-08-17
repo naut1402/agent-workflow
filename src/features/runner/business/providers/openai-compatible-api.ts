@@ -126,6 +126,18 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
       usage.outputTokens += response.usage?.completion_tokens ?? 0
       usage.totalTokens += response.usage?.total_tokens ?? 0
 
+      // Some OpenAI-compat gateways (e.g. OpenRouter free-tier models under
+      // load/rate-limit) answer 200 OK with an `error` field and no `choices`
+      // instead of a non-2xx status, so the SDK never throws. Surface that
+      // clearly instead of crashing on `choices[0]` of an empty array.
+      const gatewayError = (response as { error?: { message?: string; code?: unknown } }).error
+      if (gatewayError) {
+        throw new Error(gatewayError.message ? String(gatewayError.message) : `provider trả lỗi: ${JSON.stringify(gatewayError)}`)
+      }
+      if (!response.choices?.length) {
+        throw new Error('provider trả về response không có choices (rate limit / model quá tải / lỗi upstream)')
+      }
+
       const message = response.choices[0]?.message
       // Only function tool calls exist in this provider's toolset; filter keeps
       // the union narrowed to the spec shape we echo back below.
