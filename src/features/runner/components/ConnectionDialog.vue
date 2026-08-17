@@ -17,6 +17,8 @@ import {
 } from '../scripts/ConnectionDialogApi'
 import { DEFAULT_BASE_URLS, DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
 import type { ConnectionKind, ConnectionOption, ProviderEntry } from '../types'
+import CMultiSelect from '../../../core/ui/CMultiSelect.vue'
+import InfoTooltip from '../../../core/ui/InfoTooltip.vue'
 
 interface RegisteredCommand {
   id: string
@@ -55,8 +57,11 @@ const label = ref('')
 const providerId = ref('')
 const selectedCommandId = ref('')
 const credentialId = ref('')
-const model = ref('')
+/** Nullable by design — rotation across a provider's models is a future feature (see design.md). */
+const selectedModels = ref<string[]>([])
 const baseURL = ref('')
+/** Base URL input is opt-in behind a toggle — most connections use the provider's default endpoint. */
+const showBaseUrl = ref(false)
 const scanning = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -180,6 +185,12 @@ const loadingModels = ref(false)
 const modelFetchError = ref('')
 /** A key to fetch models with — an existing credential, or a not-yet-saved secret typed in "+ Credential". */
 const canFetchModels = computed(() => Boolean(providerId.value && (credentialId.value || newCred.value.secretValue.trim())))
+/** Fetched models ∪ already-selected ones — so a model saved before a fresh "Load models" fetch still shows up. */
+const modelSelectOptions = computed(() => {
+  const ids = new Set(modelOptions.value)
+  selectedModels.value.forEach((m) => ids.add(m))
+  return Array.from(ids).map((m) => ({ value: m, label: m }))
+})
 
 watch([providerId, credentialId], () => {
   modelOptions.value = []
@@ -192,7 +203,7 @@ async function loadModels() {
   try {
     const data = await fetchAvailableModels({
       providerId: providerId.value,
-      baseURL: baseURL.value.trim() || undefined,
+      baseURL: showBaseUrl.value ? baseURL.value.trim() || undefined : undefined,
       credentialId: !newCred.value.secretValue.trim() ? credentialId.value || undefined : undefined,
       secretValue: newCred.value.secretValue.trim() || undefined,
     })
@@ -277,8 +288,13 @@ function applyConnectionPrefill() {
   kind.value = c.kind === 'ai-provider' ? 'ai-provider' : 'local-console'
   providerId.value = c.providerId || ''
   credentialId.value = c.credentialId || ''
-  model.value = typeof c.config?.model === 'string' ? c.config.model : ''
+  selectedModels.value = Array.isArray(c.config?.models)
+    ? c.config.models.filter((m): m is string => typeof m === 'string')
+    : typeof c.config?.model === 'string' && c.config.model
+      ? [c.config.model]
+      : []
   baseURL.value = typeof c.config?.baseURL === 'string' ? c.config.baseURL : ''
+  showBaseUrl.value = Boolean(baseURL.value)
   if (kind.value === 'local-console' && c.cliPath) {
     const match =
       commandOptions.value.find(
@@ -498,13 +514,14 @@ async function save() {
       return
     }
 
-    if (!model.value.trim()) {
-      error.value = t('runner.errors.modelRequired')
-      return
+    const config: Record<string, unknown> = {}
+    if (selectedModels.value.length) {
+      config.models = selectedModels.value
+      // Legacy single-model field — kept for the provider wrappers, which pick
+      // the first entry until the rotate-across-models feature lands.
+      config.model = selectedModels.value[0]
     }
-
-    const config: Record<string, unknown> = { model: model.value.trim() }
-    if (baseURL.value.trim()) config.baseURL = baseURL.value.trim()
+    if (showBaseUrl.value && baseURL.value.trim()) config.baseURL = baseURL.value.trim()
 
     const id = buildConnectionId(providerId.value)
     const { connection } = await saveConnection({
@@ -747,33 +764,58 @@ onUnmounted(() => {
               <button type="button" class="btn-primary btn-sm" @click="saveNewCredential">{{ t('runner.connectionDialog.saveCredential') }}</button>
             </div>
             <div class="field">
-              <label class="cfg-label">{{ t('runner.connectionDialog.modelField') }}
-                <div class="row-actions">
-                  <input v-model="model" class="cfg-input" list="model-options-list" :placeholder="modelPlaceholder" />
+              <div class="row-actions">
+                <span class="cfg-label label-with-hint">
+                  {{ t('runner.connectionDialog.modelField') }}
+                  <InfoTooltip :text="t('runner.connectionDialog.modelHint')" />
+                </span>
+                <div class="row-btns">
                   <button
                     type="button"
-                    class="btn-ghost btn-sm"
+                    class="icon-btn"
                     :disabled="loadingModels || !canFetchModels"
+                    :title="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
+                    :aria-label="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
                     @click="loadModels"
                   >
-                    {{ loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels') }}
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 8a5 5 0 1 1-1.6-3.6" />
+                      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 2.8v3.4h-3.4" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn"
+                    :class="{ active: showBaseUrl }"
+                    :title="showBaseUrl ? t('runner.connectionDialog.hideBaseUrl') : t('runner.connectionDialog.showBaseUrl')"
+                    :aria-label="showBaseUrl ? t('runner.connectionDialog.hideBaseUrl') : t('runner.connectionDialog.showBaseUrl')"
+                    @click="showBaseUrl = !showBaseUrl"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M6.5 9.5 9.5 6.5" />
+                      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M7.8 4.6 9 3.4a2.3 2.3 0 0 1 3.3 3.3l-1.2 1.2" />
+                      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M8.2 11.4 7 12.6a2.3 2.3 0 0 1-3.3-3.3l1.2-1.2" />
+                    </svg>
                   </button>
                 </div>
-                <datalist id="model-options-list">
-                  <option v-for="m in modelOptions" :key="m" :value="m" />
-                </datalist>
-              </label>
-              <p class="muted path-hint">{{ t('runner.connectionDialog.modelHint') }}</p>
+              </div>
+              <CMultiSelect
+                v-model="selectedModels"
+                :options="modelSelectOptions"
+                :placeholder="modelPlaceholder || t('runner.connectionDialog.modelSelectPlaceholder')"
+                :aria-label="t('runner.connectionDialog.modelField')"
+              />
               <p v-if="modelFetchError" class="muted err-text">{{ modelFetchError }}</p>
               <p v-else-if="modelOptions.length" class="muted path-hint">
                 {{ t('runner.connectionDialog.modelsLoaded', { count: modelOptions.length }) }}
               </p>
-            </div>
-            <div class="field">
-              <label class="cfg-label">{{ t('runner.connectionDialog.baseUrlField') }}
+              <div v-if="showBaseUrl" class="base-url-field">
+                <span class="cfg-label label-with-hint">
+                  {{ t('runner.connectionDialog.baseUrlField') }}
+                  <InfoTooltip :text="t('runner.connectionDialog.baseUrlHint')" />
+                </span>
                 <input v-model="baseURL" class="cfg-input" :placeholder="baseUrlPlaceholder" />
-              </label>
-              <p class="muted path-hint">{{ t('runner.connectionDialog.baseUrlHint') }}</p>
+              </div>
             </div>
           </template>
 
@@ -866,6 +908,9 @@ onUnmounted(() => {
   margin-bottom: 0.35rem;
 }
 .row-btns { display: flex; gap: 0.35rem; }
+.label-with-hint { display: inline-flex; align-items: center; gap: 0.3rem; }
+.base-url-field { margin-top: 0.6rem; }
+.base-url-field .cfg-input { width: 100%; }
 .command-row {
   display: flex;
   align-items: center;

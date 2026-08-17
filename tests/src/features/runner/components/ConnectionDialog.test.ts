@@ -25,13 +25,16 @@ vi.mock('@/features/runner/scripts/ConnectionDialogApi', () => ({
   startOAuthConnect: vi.fn(async () => ({ state: 'state-1', authorizeUrl: 'https://example.test/authorize' })),
   exchangeOAuthCode: vi.fn(async () => ({ credentialId: 'oauth-cred-1' })),
   fetchOAuthStatus: vi.fn(async () => ({ status: 'pending' })),
+  fetchAvailableModels: vi.fn(async () => ({ models: [] })),
 }))
 
 import {
   fetchCredentials,
   saveCredential,
+  saveConnection,
   fetchOAuthCapabilities,
   startOAuthConnect,
+  fetchAvailableModels,
 } from '@/features/runner/scripts/ConnectionDialogApi'
 
 const PROVIDERS: ProviderEntry[] = [
@@ -66,9 +69,12 @@ async function click(el: Element) {
 beforeEach(() => {
   vi.mocked(fetchCredentials).mockClear()
   vi.mocked(saveCredential).mockClear()
+  vi.mocked(saveConnection).mockClear()
   vi.mocked(fetchOAuthCapabilities).mockClear()
   vi.mocked(startOAuthConnect).mockClear()
+  vi.mocked(fetchAvailableModels).mockClear()
   vi.mocked(fetchOAuthCapabilities).mockResolvedValue({ providers: [] })
+  vi.mocked(fetchAvailableModels).mockResolvedValue({ models: [] })
 })
 
 afterEach(() => {
@@ -174,5 +180,64 @@ describe('ConnectionDialog — vault not configured', () => {
 
     expect(document.body.textContent).toContain(runnerVi.connectionDialog.vaultNotConfigured)
     expect(q<HTMLInputElement>('input[type="password"]').disabled).toBe(true)
+  })
+})
+
+describe('ConnectionDialog — model & base URL', () => {
+  it('renders "Load models" as an icon button, not a text button', async () => {
+    await mountOnAiProvider()
+    expect(qa<HTMLButtonElement>('button').some((b) => b.textContent?.trim() === runnerVi.connectionDialog.loadModels)).toBe(false)
+    const loadBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.loadModels)
+    expect(loadBtn).toBeTruthy()
+    expect(loadBtn?.querySelector('svg')).toBeTruthy()
+  })
+
+  it('keeps the base URL input hidden until its toggle is switched on', async () => {
+    await mountOnAiProvider()
+    expect(document.body.querySelector('input[placeholder="https://api.anthropic.com"]')).toBeNull()
+
+    const toggleBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.showBaseUrl)
+    expect(toggleBtn).toBeTruthy()
+    await click(toggleBtn!)
+
+    expect(document.body.querySelector('input[placeholder="https://api.anthropic.com"]')).toBeTruthy()
+    const hideBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.hideBaseUrl)
+    expect(hideBtn).toBeTruthy()
+  })
+
+  it('lets the model field stay empty (nullable) — save is not blocked', async () => {
+    await mountOnAiProvider()
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude API conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.config.model).toBeUndefined()
+    expect(payload.config.models).toBeUndefined()
+  })
+
+  it('picks multiple models from the loaded list and saves models[] plus a first-entry model for the current single-model runtime', async () => {
+    await mountOnAiProvider()
+    await click(buttonByText('+ Credential'))
+    await setInputValue(q<HTMLInputElement>('input[type="password"]'), 'sk-test')
+    vi.mocked(fetchAvailableModels).mockResolvedValueOnce({ models: ['claude-a', 'claude-b'] })
+
+    const loadBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.loadModels)!
+    await click(loadBtn)
+
+    const multiSelectTrigger = q<HTMLButtonElement>('.c-multi-select .c-select-trigger')
+    await click(multiSelectTrigger)
+    const options = qa<HTMLLIElement>('.c-multi-select .c-select-option')
+    expect(options.map((o) => o.textContent?.trim())).toEqual(['claude-a', 'claude-b'])
+    await click(options[0])
+    await click(options[1])
+
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude API conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.config.models).toEqual(['claude-a', 'claude-b'])
+    expect(payload.config.model).toBe('claude-a')
   })
 })

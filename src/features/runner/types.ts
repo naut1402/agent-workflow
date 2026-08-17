@@ -17,8 +17,13 @@ export interface ConnectionOption {
   cliPath?: string
   flags?: string[]
   credentialId?: string | null
-  /** ai-provider: extra settings (model/baseURL) merged into runnerConfig at execute time. */
-  config?: Record<string, unknown>
+  /**
+   * ai-provider: extra settings merged into runnerConfig at execute time.
+   * `models` is the user-picked list (nullable — rotation across them is a
+   * later feature); `model` mirrors its first entry for the provider
+   * wrappers, which only read a single model today.
+   */
+  config?: Record<string, unknown> & { models?: string[]; model?: string; baseURL?: string }
 }
 
 export interface RunnerDraft {

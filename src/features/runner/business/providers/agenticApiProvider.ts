@@ -176,7 +176,8 @@ export abstract class AgenticApiProvider implements RunnerProvider {
   }
 
   validateRunnerConfig(_config: Record<string, unknown> | undefined): { ok: boolean; errors: string[] } {
-    // model/baseURL are optional here — enforced (model required) at ConnectionDialog save time.
+    // model/baseURL are optional — a connection with no model picked yet is valid
+    // (the future model-rotation feature is expected to fill it in at execute time).
     return { ok: true, errors: [] }
   }
 
