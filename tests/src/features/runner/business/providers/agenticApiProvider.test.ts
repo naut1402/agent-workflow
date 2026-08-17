@@ -297,3 +297,80 @@ describe('AgenticApiProvider — execute() template method', () => {
     expect(called).toBe(false)
   })
 })
+
+describe('AgenticApiProvider — job log (req.metadata.logPath)', () => {
+  let logDir: string
+  beforeAll(() => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-agentic-log-ws-'))
+    logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-agentic-log-'))
+  })
+  afterAll(() => {
+    fs.rmSync(workspace, { recursive: true, force: true })
+    fs.rmSync(logDir, { recursive: true, force: true })
+  })
+
+  test('without a logPath, execute() does not throw and writes nothing to disk', async () => {
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async () => ({ finalText: 'ok', usage: {}, toolCalls: [], rawMessages: [] })
+    const result = await p.execute(baseRequest(), {}, credential())
+    expect(result.ok).toBe(true)
+  })
+
+  test('a successful run writes payload header, tool calls, final text, and a result footer to logPath', async () => {
+    const logPath = path.join(logDir, 'success.log')
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async () => ({
+      finalText: 'the final answer',
+      usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+      toolCalls: [{ name: 'write_file', argsSummary: '{"path":"out.md"}' }],
+      rawMessages: [],
+    })
+
+    const result = await p.execute(baseRequest({ metadata: { logPath } }), { model: 'test-model' }, credential())
+
+    expect(result.ok).toBe(true)
+    expect(result.logPath).toBe(logPath)
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toContain('=== Payload gửi cho runner ===')
+    expect(log).toContain('Provider: fake-agentic-api — model: test-model')
+    expect(log).toContain('hello') // userPrompt
+    expect(log).toContain('[tool] write_file')
+    expect(log).toContain('the final answer')
+    expect(log).toContain('=== Kết quả ===')
+    expect(log).toContain('ok: true')
+  })
+
+  test('a missing API key still writes the header and a failing footer to logPath', async () => {
+    const logPath = path.join(logDir, 'auth-fail.log')
+    const p = new FakeAgenticProvider()
+    let called = false
+    p.runConversationImpl = async () => {
+      called = true
+      return { finalText: '', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    const result = await p.execute(baseRequest({ metadata: { logPath } }), {}, credential('cli-session'))
+
+    expect(result.ok).toBe(false)
+    expect(called).toBe(false)
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toContain('=== Payload gửi cho runner ===')
+    expect(log).toContain('=== Kết quả ===')
+    expect(log).toContain('ok: false')
+    expect(log).toContain('API key')
+  })
+
+  test('runConversation throwing still appends a failing footer to logPath', async () => {
+    const logPath = path.join(logDir, 'throw.log')
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async () => {
+      throw new Error('model exploded')
+    }
+
+    await p.execute(baseRequest({ metadata: { logPath } }), {}, credential())
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toContain('=== Kết quả ===')
+    expect(log).toContain('error: model exploded')
+  })
+})

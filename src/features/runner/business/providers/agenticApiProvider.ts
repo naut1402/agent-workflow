@@ -1,4 +1,5 @@
 import {
+  appendTextFileSync,
   dirname,
   existsSync,
   joinPath,
@@ -9,6 +10,7 @@ import {
   writeTextFileSync,
 } from '../../../../core/lib/fileHelper.js'
 import { isDirectSecretType, resolveSecretRef } from '../credentials.js'
+import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 import { ensureFreshOAuthToken } from '../oauthCredentials.js'
 import { mintSessionId } from '../sessionLedger.js'
 import { appendTranscriptTurn, loadSessionMessages, saveSessionMessages } from './agentTranscriptStore.js'
@@ -147,28 +149,101 @@ export abstract class AgenticApiProvider implements RunnerProvider {
     return { supportsAgentFile: false, supportsStreaming: false, maxConcurrency: 1 }
   }
 
+  // ---- Job-log framing — mirrors the CLI providers' logPath convention so the
+  // Logs panel is not empty just because this provider never spawns a subprocess. ----
+
+  private describePayload(req: ExecuteRequest, runnerConfig: Record<string, any>, sessionId: string): string {
+    const agent = req.resolvedAgent
+    const agentLabel = agent.ref
+      ? `${agent.ref}${agent.name ? ` (${agent.name})` : ''}`
+      : `${agent.name || 'ad-hoc'} — không gắn agent, chạy prompt trực tiếp`
+    const meta = req.metadata || {}
+    const lines = [
+      formatJobLogHeader({
+        jobId: String(meta.jobId || req.jobId || ''),
+        providerId: this.providerId,
+        runnerId: typeof meta.runnerId === 'string' ? meta.runnerId : undefined,
+        connectionId: typeof meta.connectionId === 'string' ? meta.connectionId : undefined,
+        projectId: typeof meta.projectId === 'string' ? meta.projectId : undefined,
+        taskId: typeof meta.taskId === 'string' ? meta.taskId : undefined,
+        stepId:
+          typeof meta.stepId === 'string'
+            ? meta.stepId
+            : typeof meta.pipelineStepId === 'string'
+              ? meta.pipelineStepId
+              : undefined,
+        sessionId,
+        resumeSessionId: req.resumeSessionId,
+        workspace: req.workspace,
+        mode: 'agentic-api',
+      }).trimEnd(),
+      '=== Payload gửi cho runner ===',
+      `Agent: ${agentLabel}${agent.model ? ` — model: ${agent.model}` : ''}`,
+      `Workspace: ${req.workspace}`,
+      `Provider: ${this.providerId}${runnerConfig.model ? ` — model: ${runnerConfig.model}` : ''}`,
+      '--- Prompt ---',
+      req.userPrompt,
+      '',
+      '=== Phản hồi của runner ===',
+      '',
+    ]
+    return lines.join('\n')
+  }
+
+  private describeResult(result: ExecuteResult): string {
+    return formatJobLogFooter({
+      ok: result.ok,
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+      sessionId: result.sessionId,
+      error: result.error,
+      artifactsFound: result.artifactsFound,
+      tokenUsage: result.tokenUsage,
+    })
+  }
+
   // ---- Template method — fixed for every subclass, delegates to runConversation() ----
 
   async execute(req: ExecuteRequest, runnerConfig: Record<string, any>, credential: CredentialProfile): Promise<ExecuteResult> {
     const started = Date.now()
-    const auth = resolveSecretRef(credential)
-    let apiKey: string
-    if (auth.type === 'oauth') {
-      const fresh = await ensureFreshOAuthToken(credential.secretRef.slice('oauth:'.length), this.providerId)
-      if ('error' in fresh) return { ok: false, exitCode: null, durationMs: Date.now() - started, error: fresh.error }
-      apiKey = fresh.value
-    } else if ((auth.type === 'env' || auth.type === 'stored') && auth.value) {
-      apiKey = auth.value
-    } else {
-      return {
-        ok: false,
-        exitCode: null,
-        durationMs: Date.now() - started,
-        error: 'missing API key — secretRef phải là env:VAR_NAME, stored:<id>, hoặc oauth:<id>',
+    const logPath = req.metadata?.logPath as string | undefined
+    const appendLog = (text: string) => {
+      if (!logPath) return
+      try {
+        appendTextFileSync(logPath, text)
+      } catch {
+        /* ignore */
       }
     }
 
     const sessionId = req.resumeSessionId ?? req.sessionId ?? mintSessionId()
+    appendLog(this.describePayload(req, runnerConfig, sessionId))
+
+    const auth = resolveSecretRef(credential)
+    let apiKey: string
+    if (auth.type === 'oauth') {
+      const fresh = await ensureFreshOAuthToken(credential.secretRef.slice('oauth:'.length), this.providerId)
+      if ('error' in fresh) {
+        const result: ExecuteResult = { ok: false, exitCode: null, durationMs: Date.now() - started, logPath, sessionId, error: fresh.error }
+        appendLog(this.describeResult(result))
+        return result
+      }
+      apiKey = fresh.value
+    } else if ((auth.type === 'env' || auth.type === 'stored') && auth.value) {
+      apiKey = auth.value
+    } else {
+      const result: ExecuteResult = {
+        ok: false,
+        exitCode: null,
+        durationMs: Date.now() - started,
+        logPath,
+        sessionId,
+        error: 'missing API key — secretRef phải là env:VAR_NAME, stored:<id>, hoặc oauth:<id>',
+      }
+      appendLog(this.describeResult(result))
+      return result
+    }
+
     const priorMessages = req.resumeSessionId ? loadSessionMessages(req.resumeSessionId) : []
 
     if (req.userPrompt?.trim()) {
@@ -186,27 +261,41 @@ export abstract class AgenticApiProvider implements RunnerProvider {
         signal: req.signal,
       })
     } catch (err: any) {
-      return { ok: false, exitCode: null, durationMs: Date.now() - started, sessionId, error: String(err?.message ?? err) }
+      const failure: ExecuteResult = {
+        ok: false,
+        exitCode: null,
+        durationMs: Date.now() - started,
+        logPath,
+        sessionId,
+        error: String(err?.message ?? err),
+      }
+      appendLog(this.describeResult(failure))
+      return failure
     }
 
     for (const call of result.toolCalls) {
       appendTranscriptTurn(this.providerId, sessionId, { role: 'tool', tool: call.name, text: call.argsSummary })
+      appendLog(`[tool] ${call.name} ${call.argsSummary}\n`)
     }
     if (result.finalText?.trim()) {
       appendTranscriptTurn(this.providerId, sessionId, { role: 'assistant', text: result.finalText })
+      appendLog(`${result.finalText}\n`)
     }
     saveSessionMessages(sessionId, result.rawMessages)
 
     const artifactsFound = (req.produces ?? []).filter((name) => existsSync(joinPath(req.workspace, name)))
 
-    return {
+    const final: ExecuteResult = {
       ok: true,
       exitCode: 0,
       durationMs: Date.now() - started,
+      logPath,
       stdout: result.finalText,
       tokenUsage: result.usage,
       sessionId,
       artifactsFound,
     }
+    appendLog(this.describeResult(final))
+    return final
   }
 }
