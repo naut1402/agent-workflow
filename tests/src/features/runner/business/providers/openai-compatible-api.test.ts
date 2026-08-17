@@ -253,6 +253,33 @@ describe('OpenAiCompatibleProvider', () => {
     if (!result.ok) expect(result.error).toContain('không có choices')
   })
 
+  test('listModels() calls the SDK models endpoint and returns sorted ids', async () => {
+    let seenUrl = ''
+    globalThis.fetch = (async (url: string) => {
+      seenUrl = String(url)
+      return jsonResponse({ object: 'list', data: [{ id: 'gpt-4o', object: 'model' }, { id: 'gpt-4.1', object: 'model' }] })
+    }) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test/v1')
+    const models = await provider.listModels('sk-openai-test', '')
+
+    expect(seenUrl).toBe('https://api.openai.test/v1/models')
+    expect(models).toEqual(['gpt-4.1', 'gpt-4o'])
+  })
+
+  test('listModels() respects an explicit baseURL override', async () => {
+    let seenUrl = ''
+    globalThis.fetch = (async (url: string) => {
+      seenUrl = String(url)
+      return jsonResponse({ object: 'list', data: [] })
+    }) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('gemini-api', 'https://default.example/v1')
+    await provider.listModels('key', 'https://custom-gateway.example/v1')
+
+    expect(seenUrl).toBe('https://custom-gateway.example/v1/models')
+  })
+
   test('missing API key fails without making any request', async () => {
     let called = false
     globalThis.fetch = (async () => {

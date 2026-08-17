@@ -49,6 +49,16 @@ export class RunnerController extends AbstractController {
     return this.ok({ commands: runnerStore.scanLocalCommands() })
   }
 
+  async listAvailableModels() {
+    const b = await this.requireJsonBody()
+    if ('error' in b) return b.error
+    const { providerId, baseURL, credentialId, secretValue } = b.value || {}
+    if (!providerId || typeof providerId !== 'string') return this.badRequest('providerId is required')
+    const result = await runnerStore.listAvailableModels({ providerId, baseURL, credentialId, secretValue })
+    if ('error' in result) return this.badRequest(result.error)
+    return this.ok({ models: result.models })
+  }
+
   listConnections() {
     return this.ok({
       connections: runnerStore.listConnections(),

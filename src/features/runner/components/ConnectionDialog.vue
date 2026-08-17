@@ -13,6 +13,7 @@ import {
   startOAuthConnect,
   exchangeOAuthCode,
   fetchOAuthStatus,
+  fetchAvailableModels,
 } from '../scripts/ConnectionDialogApi'
 import { DEFAULT_BASE_URLS, DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
 import type { ConnectionKind, ConnectionOption, ProviderEntry } from '../types'
@@ -173,6 +174,36 @@ const registerDraft = ref({ command: '', path: '', flagsText: '' })
 const registerError = ref('')
 
 const aiProviders = computed(() => props.providers.filter((p) => p.kind === 'ai-provider'))
+
+const modelOptions = ref<string[]>([])
+const loadingModels = ref(false)
+const modelFetchError = ref('')
+/** A key to fetch models with — an existing credential, or a not-yet-saved secret typed in "+ Credential". */
+const canFetchModels = computed(() => Boolean(providerId.value && (credentialId.value || newCred.value.secretValue.trim())))
+
+watch([providerId, credentialId], () => {
+  modelOptions.value = []
+  modelFetchError.value = ''
+})
+
+async function loadModels() {
+  modelFetchError.value = ''
+  loadingModels.value = true
+  try {
+    const data = await fetchAvailableModels({
+      providerId: providerId.value,
+      baseURL: baseURL.value.trim() || undefined,
+      credentialId: !newCred.value.secretValue.trim() ? credentialId.value || undefined : undefined,
+      secretValue: newCred.value.secretValue.trim() || undefined,
+    })
+    modelOptions.value = data.models || []
+    if (!modelOptions.value.length) modelFetchError.value = t('runner.connectionDialog.noModelsFound')
+  } catch (e: any) {
+    modelFetchError.value = e?.message ? String(e.message) : t('runner.connectionDialog.loadModelsFailed')
+  } finally {
+    loadingModels.value = false
+  }
+}
 
 const commandOptions = computed(() => [...scanned.value, ...customCommands.value])
 
@@ -623,7 +654,7 @@ onUnmounted(() => {
 
           <template v-else>
             <div class="field">
-              <label class="cfg-label">Provider
+              <label class="cfg-label">Interface
                 <select v-model="providerId" class="cfg-input">
                   <option v-for="p in aiProviders" :key="p.id" :value="p.id">{{ p.label }}</option>
                 </select>
@@ -717,9 +748,26 @@ onUnmounted(() => {
             </div>
             <div class="field">
               <label class="cfg-label">{{ t('runner.connectionDialog.modelField') }}
-                <input v-model="model" class="cfg-input" :placeholder="modelPlaceholder" />
+                <div class="row-actions">
+                  <input v-model="model" class="cfg-input" list="model-options-list" :placeholder="modelPlaceholder" />
+                  <button
+                    type="button"
+                    class="btn-ghost btn-sm"
+                    :disabled="loadingModels || !canFetchModels"
+                    @click="loadModels"
+                  >
+                    {{ loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels') }}
+                  </button>
+                </div>
+                <datalist id="model-options-list">
+                  <option v-for="m in modelOptions" :key="m" :value="m" />
+                </datalist>
               </label>
               <p class="muted path-hint">{{ t('runner.connectionDialog.modelHint') }}</p>
+              <p v-if="modelFetchError" class="muted err-text">{{ modelFetchError }}</p>
+              <p v-else-if="modelOptions.length" class="muted path-hint">
+                {{ t('runner.connectionDialog.modelsLoaded', { count: modelOptions.length }) }}
+              </p>
             </div>
             <div class="field">
               <label class="cfg-label">{{ t('runner.connectionDialog.baseUrlField') }}

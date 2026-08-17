@@ -53,6 +53,14 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
     this.defaultBaseURL = defaultBaseURL
   }
 
+  async listModels(apiKey: string, baseURL: string): Promise<string[]> {
+    const client = new Anthropic({ apiKey, baseURL: baseURL || this.defaultBaseURL })
+    const page = await client.models.list()
+    const ids: string[] = []
+    for await (const m of page) ids.push(m.id)
+    return ids.sort()
+  }
+
   protected async runConversation(ctx: AgenticRunContext): Promise<AgenticRunResult> {
     const client = new Anthropic({ apiKey: ctx.apiKey, baseURL: ctx.runnerConfig.baseURL || this.defaultBaseURL })
     const model = String(ctx.runnerConfig.model || '')

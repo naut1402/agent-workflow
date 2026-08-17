@@ -15,6 +15,7 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.post('/api/runners/default', bind(RunnerController, 'setDefaultRunner'))
 
   app.get('/api/connections/scan', bind(RunnerController, 'scanConnections'))
+  app.post('/api/connections/models', bind(RunnerController, 'listAvailableModels'))
   app.get('/api/connections', bind(RunnerController, 'listConnections'))
   app.post('/api/connections', bind(RunnerController, 'upsertConnection'))
   app.delete('/api/connections', bind(RunnerController, 'deleteConnection'))

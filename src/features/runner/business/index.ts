@@ -57,6 +57,8 @@ export {
 } from './commands.js'
 export { resolveAgent, resolveAgentFilePath, normalizeAgentRef, describeAgentSearchPaths } from './agentResolver.js'
 export { getProvider, listProviderIds, registerProvider } from './registry.js'
+export { listAvailableModels } from './modelCatalog.js'
+export type { ListModelsInput, ListModelsResult } from './modelCatalog.js'
 export {
   AGENT_CLI_PROVIDER_IDS,
   isAgentCliProviderId,

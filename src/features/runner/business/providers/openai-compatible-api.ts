@@ -93,6 +93,14 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     this.defaultBaseURL = defaultBaseURL
   }
 
+  async listModels(apiKey: string, baseURL: string): Promise<string[]> {
+    const client = new OpenAI({ baseURL: baseURL || this.defaultBaseURL, apiKey })
+    const page = await client.models.list()
+    const ids: string[] = []
+    for await (const m of page) ids.push(m.id)
+    return ids.sort()
+  }
+
   protected async runConversation(ctx: AgenticRunContext): Promise<AgenticRunResult> {
     const model = String(ctx.runnerConfig.model || '')
     if (!model) throw new Error('model is required — set it on the runner connection (ConnectionDialog)')

@@ -154,4 +154,18 @@ describe('AnthropicCompatibleProvider', () => {
     expect(result.stdout).toBe('blocked')
     expect(fs.existsSync('/etc/passwd-should-not-be-read-flag')).toBe(false)
   })
+
+  test('listModels() calls the SDK models endpoint and returns sorted ids', async () => {
+    let seenUrl = ''
+    globalThis.fetch = (async (url: string) => {
+      seenUrl = String(url)
+      return jsonResponse({ data: [{ id: 'claude-opus-4-6', type: 'model' }, { id: 'claude-haiku-4-6', type: 'model' }], has_more: false })
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const models = await provider.listModels('sk-ant-test', '')
+
+    expect(seenUrl).toBe('https://api.anthropic.test/v1/models')
+    expect(models).toEqual(['claude-haiku-4-6', 'claude-opus-4-6'])
+  })
 })

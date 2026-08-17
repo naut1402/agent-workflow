@@ -36,6 +36,15 @@ export async function scanLocalCommands() {
   return apiGet('/api/connections/scan')
 }
 
+export async function fetchAvailableModels(input: {
+  providerId: string
+  baseURL?: string
+  credentialId?: string
+  secretValue?: string
+}) {
+  return apiPost('/api/connections/models', input)
+}
+
 export async function fetchCustomCommands() {
   return apiGet('/api/commands')
 }

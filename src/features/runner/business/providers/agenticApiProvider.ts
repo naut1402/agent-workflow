@@ -99,6 +99,16 @@ export abstract class AgenticApiProvider implements RunnerProvider {
   /** The only method a subclass must implement — the model-specific tool-use loop. */
   protected abstract runConversation(ctx: AgenticRunContext): Promise<AgenticRunResult>
 
+  /**
+   * Fetch the model ids this provider's endpoint currently serves, so
+   * ConnectionDialog can offer them instead of a free-text guess. Optional —
+   * override in a subclass whose SDK exposes a models-list endpoint; the
+   * default rejects so callers get a clear reason instead of a silent [].
+   */
+  async listModels(_apiKey: string, _baseURL: string): Promise<string[]> {
+    throw new Error('provider này không hỗ trợ liệt kê model')
+  }
+
   // ---- Sandbox file-ops, shared by every subclass's tool implementations ----
 
   protected readWorkspaceFile(workspace: string, path: string): SandboxOk & { content: string } | SandboxErr {
