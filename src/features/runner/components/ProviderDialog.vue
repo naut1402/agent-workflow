@@ -202,23 +202,6 @@ async function saveNewCredential() {
   }
 }
 
-async function copyCredential(src: CredentialProfile) {
-  error.value = ''
-  const newId = `${src.id}-copy`
-  try {
-    const { profile } = await saveCredential({
-      id: newId,
-      label: `${src.label} (copy)`,
-      provider: src.provider,
-      secretRef: src.secretRef,
-    })
-    await loadCredentials()
-    credentialId.value = profile.id
-  } catch (e: any) {
-    error.value = String(e.message || e)
-  }
-}
-
 async function testModels() {
   modelTestError.value = ''
   loadingModels.value = true
@@ -370,13 +353,6 @@ onUnmounted(() => {
                 </svg>
               </button>
             </div>
-            <ul v-if="filteredCredentials.length" class="cred-actions">
-              <li v-for="c in filteredCredentials" :key="`copy-${c.id}`">
-                <button type="button" class="btn-ghost btn-sm" @click="copyCredential(c)">
-                  Copy «{{ c.id }}»
-                </button>
-              </li>
-            </ul>
           </div>
           <div v-if="showNewCredential" class="new-cred">
             <div class="field">
@@ -514,7 +490,6 @@ onUnmounted(() => {
 .credential-row .cfg-input { flex: 1; min-width: 0; }
 .path-hint { margin: 0.35rem 0 0; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
-.cred-actions { list-style: none; padding: 0; margin: 0.4rem 0 0; display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .new-cred {
   border: 1px dashed var(--border);
   border-radius: 6px;

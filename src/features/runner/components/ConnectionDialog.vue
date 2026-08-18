@@ -760,7 +760,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-.connection-dialog { max-width: 520px; width: min(520px, 94vw); }
+.connection-dialog { max-width: 520px; width: min(520px, 94vw); min-height: 560px; }
 .register-command-dialog { max-width: 440px; width: min(440px, 92vw); }
 .nested-backdrop { z-index: 1100; }
 .kind-radios { display: flex; gap: 1rem; margin-top: 0.35rem; flex-wrap: wrap; }
