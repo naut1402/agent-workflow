@@ -12,7 +12,7 @@ import {
 import { fetchProviderConfigs, saveProviderConfig } from '../scripts/ProviderDialogApi'
 import { DEFAULT_MODEL_HINTS } from '../scripts/agenticProviderDefaults'
 import type { ConnectionKind, ConnectionOption, ProviderConfigOption, ProviderEntry } from '../types'
-import CMultiSelect from '../../../core/ui/CMultiSelect.vue'
+import CComboSelect from '../../../core/ui/CComboSelect.vue'
 import InfoTooltip from '../../../core/ui/InfoTooltip.vue'
 import ProviderDialog from './ProviderDialog.vue'
 
@@ -88,6 +88,14 @@ const modelSelectOptions = computed(() => {
   const ids = new Set(modelOptions.value)
   selectedModels.value.forEach((m) => ids.add(m))
   return Array.from(ids).map((m) => ({ value: m, label: m }))
+})
+
+/** UI only allows a single model today; `selectedModels` stays an array for the future rotate-across-models feature. */
+const selectedModel = computed<string>({
+  get: () => selectedModels.value[0] || '',
+  set: (v) => {
+    selectedModels.value = v ? [v] : []
+  },
 })
 
 watch(selectedProviderConfigId, () => {
@@ -647,14 +655,13 @@ onUnmounted(() => {
                 </span>
               </div>
               <div class="command-row">
-                <CMultiSelect
-                  v-model="selectedModels"
+                <CComboSelect
+                  v-model="selectedModel"
                   :options="modelSelectOptions"
                   :placeholder="modelPlaceholder || t('runner.connectionDialog.modelSelectPlaceholder')"
                   :aria-label="t('runner.connectionDialog.modelField')"
-                  class="cfg-multi-select"
+                  class="cfg-combo-select"
                   creatable
-                  :create-placeholder="t('runner.connectionDialog.modelCustomPlaceholder')"
                 />
                 <button
                   type="button"
@@ -781,7 +788,7 @@ onUnmounted(() => {
   gap: 0.4rem;
 }
 .command-row .cfg-input { flex: 1; min-width: 0; }
-.cfg-multi-select { flex: 1; min-width: 0; }
+.cfg-combo-select { flex: 1; min-width: 0; }
 .icon-btn-group { display: inline-flex; align-items: center; gap: 0.15rem; flex-shrink: 0; }
 .path-hint { margin: 0.35rem 0 0; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }

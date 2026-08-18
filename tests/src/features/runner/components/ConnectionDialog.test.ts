@@ -331,7 +331,7 @@ describe('ConnectionDialog — model list', () => {
     expect(loadBtn?.querySelector('svg')).toBeTruthy()
   })
 
-  it('loads models through the selected provider config credential and saves models[] plus a first-entry model for the current single-model runtime', async () => {
+  it('loads models through the selected provider config credential and lets the user pick exactly one', async () => {
     await mountConnectionOnAiProvider()
     vi.mocked(fetchAvailableModels).mockResolvedValueOnce({ models: ['claude-a', 'claude-b'] })
 
@@ -344,35 +344,46 @@ describe('ConnectionDialog — model list', () => {
       baseURL: undefined,
     })
 
-    const multiSelectTrigger = q<HTMLButtonElement>('.c-multi-select .c-select-trigger')
-    await click(multiSelectTrigger)
-    const options = qa<HTMLLIElement>('.c-multi-select .c-select-option')
+    const comboInput = q<HTMLInputElement>('.c-combo-select .c-combo-input')
+    comboInput.dispatchEvent(new Event('focus'))
+    await flushPromises()
+    const options = qa<HTMLLIElement>('.c-combo-select .c-select-option')
     expect(options.map((o) => o.textContent?.trim())).toEqual(['claude-a', 'claude-b'])
     await click(options[0])
-    await click(options[1])
+    expect(comboInput.value).toBe('claude-a')
 
     await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude API conn')
     await click(buttonByText(runnerVi.connectionDialog.saveConnection))
 
     expect(saveConnection).toHaveBeenCalledTimes(1)
     const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
-    expect(payload.config.models).toEqual(['claude-a', 'claude-b'])
+    expect(payload.config.models).toEqual(['claude-a'])
     expect(payload.config.model).toBe('claude-a')
     expect(payload.config.providerConfigId).toBe('pc-anthropic')
+  })
+
+  it('filters the model list live while typing, directly in the select box', async () => {
+    await mountConnectionOnAiProvider()
+    vi.mocked(fetchAvailableModels).mockResolvedValueOnce({ models: ['claude-a', 'claude-b'] })
+    const loadBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.loadModels)!
+    await click(loadBtn)
+
+    const comboInput = q<HTMLInputElement>('.c-combo-select .c-combo-input')
+    await setInputValue(comboInput, 'claude-a')
+
+    const options = qa<HTMLLIElement>('.c-combo-select .c-select-option')
+    expect(options.map((o) => o.textContent?.trim())).toEqual(['claude-a'])
+    // No separate search input is rendered — filtering happens on the select's own field.
+    expect(document.body.querySelector('.c-select-create-input')).toBeNull()
   })
 
   it('lets the user type a model name that was never in the fetched list', async () => {
     await mountConnectionOnAiProvider()
 
-    const multiSelectTrigger = q<HTMLButtonElement>('.c-multi-select .c-select-trigger')
-    await click(multiSelectTrigger)
-    const createInput = q<HTMLInputElement>('.c-multi-select .c-select-create-input')
-    await setInputValue(createInput, 'my-custom-model')
-    createInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    const comboInput = q<HTMLInputElement>('.c-combo-select .c-combo-input')
+    await setInputValue(comboInput, 'my-custom-model')
+    comboInput.dispatchEvent(new Event('blur'))
     await flushPromises()
-
-    const options = qa<HTMLLIElement>('.c-multi-select .c-select-option')
-    expect(options.some((o) => o.textContent?.trim() === 'my-custom-model' && o.classList.contains('is-selected'))).toBe(true)
 
     await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude API conn')
     await click(buttonByText(runnerVi.connectionDialog.saveConnection))
