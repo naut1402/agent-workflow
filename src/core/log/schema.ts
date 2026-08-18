@@ -39,6 +39,7 @@ export const AUDIT_ENTITIES = [
   'recovery',
   'runner',
   'connection',
+  'provider-config',
   'credential',
   'command',
   'artifact',

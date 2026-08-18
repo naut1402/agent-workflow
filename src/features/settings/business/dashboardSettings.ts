@@ -2,7 +2,7 @@
 // Autoscan lives at settings.autoscan; legacy autoscan.json is still read once
 // for migration so existing installs keep working.
 
-import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
 import {
   DEFAULT_DASHBOARD_SETTINGS,
   parseDashboardSettings,
@@ -67,10 +67,7 @@ export function saveDashboardSettings(settings: DashboardSettings): DashboardSet
   const home = registryHome()
   mkdirSync(home, { recursive: true })
   const normalised = parseDashboardSettings(settings)
-  const file = dashboardSettingsFile()
-  const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, JSON.stringify(normalised, null, 2))
-  renameSync(tmp, file)
+  writeTextFileAtomicSync(dashboardSettingsFile(), JSON.stringify(normalised, null, 2))
   invalidateLoggingPrefsCache()
   return normalised
 }

@@ -1,4 +1,4 @@
-import { cpSync, dirname, joinPath, mkdirSync, readTextFileSync, readdirSync, renameSync, resolvePath, rmSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { cpSync, dirname, joinPath, mkdirSync, readTextFileSync, readdirSync, resolvePath, rmSync, writeTextFileAtomicSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import crypto from 'node:crypto'
 import { spawn } from '../../../core/lib/processHelper.js'
 import os from 'node:os'
@@ -12,7 +12,7 @@ import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
 import { isAgentCliProviderId } from './providers/agentCli.js'
 import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js'
-import type { Connection, CredentialProfile, JobRecord, JobStatus, MutationResult } from './types.js'
+import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
 import type { UsageSnapshot } from '../../../core/log/schema.js'
 import { advanceStepOnJobSuccess, loadPipelineConfig, queuePendingFeedback, takePendingFeedback } from './index.js'
 import { classifyJobFailure, parseUsageResetAt } from './classifyJobFailure.js'
@@ -34,6 +34,14 @@ export const FAILURE_MAX_ATTEMPTS = DEFAULT_RECOVERY_SETTINGS.maxAttempts!
 function backoffMsFor(attemptCount: number, schedule: number[]): number {
   return schedule[Math.min(attemptCount - 1, schedule.length - 1)] ?? schedule[schedule.length - 1]
 }
+
+/**
+ * In-flight `AbortController` per running job — the counterpart of `job.pid` for
+ * providers with no OS subprocess to SIGTERM (`AgenticApiProvider` subclasses,
+ * see providers/agenticApiProvider.ts). `cancelJob` aborts through this map;
+ * `runJob` always removes its entry once `provider.execute()` settles.
+ */
+const jobAbortControllers = new Map<string, AbortController>()
 
 /** Persist agent reply on the job record for chat UI (NL + pipeline task chat). */
 function shouldPersistStdout(job: JobRecord, providerId: string | undefined): boolean {
@@ -275,10 +283,7 @@ export function loadJob(id: string): JobRecord | null {
 
 function saveJob(job: JobRecord): JobRecord {
   ensureJobsDir()
-  const file = jobFile(job.id)
-  const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, JSON.stringify(job, null, 2))
-  renameSync(tmp, file)
+  writeTextFileAtomicSync(jobFile(job.id), JSON.stringify(job, null, 2))
   return job
 }
 
@@ -538,32 +543,41 @@ async function runJob(job: JobRecord): Promise<void> {
     saveJob({ ...current, pid: info.pid ?? null })
   }
 
-  const result = await provider.execute(
-    {
-      jobId: job.id,
-      resolvedAgent,
-      userPrompt,
-      workspace: job.workspace,
-      produces: job.produces,
-      timeoutMs: runnerConfig.timeoutMs,
-      metadata: {
-        ...job.metadata,
-        logPath,
-        jobId: job.id,
-        providerId: connection.providerId,
-        runnerId: runner.id,
-        connectionId: connection.id,
-      },
-      sessionId: execSessionId,
-      resumeSessionId: execResumeSessionId,
-    },
-    runnerConfig,
-    credential,
-    undefined,
-    onStart,
-  )
+  const abortController = new AbortController()
+  jobAbortControllers.set(job.id, abortController)
 
-  // `cancelJob` already set `status: 'cancelled'` and this SIGTERM is why
+  let result: ExecuteResult
+  try {
+    result = await provider.execute(
+      {
+        jobId: job.id,
+        resolvedAgent,
+        userPrompt,
+        workspace: job.workspace,
+        produces: job.produces,
+        timeoutMs: runnerConfig.timeoutMs,
+        metadata: {
+          ...job.metadata,
+          logPath,
+          jobId: job.id,
+          providerId: connection.providerId,
+          runnerId: runner.id,
+          connectionId: connection.id,
+        },
+        sessionId: execSessionId,
+        resumeSessionId: execResumeSessionId,
+        signal: abortController.signal,
+      },
+      runnerConfig,
+      credential,
+      undefined,
+      onStart,
+    )
+  } finally {
+    jobAbortControllers.delete(job.id)
+  }
+
+  // `cancelJob` already set `status: 'cancelled'` and this SIGTERM/abort is why
   // `provider.execute()` just resolved — `result.ok` will be false, and
   // without this guard the code below would overwrite it with `'failed'`.
   // Session + usage capture still run first: tokens were spent even on cancel.
@@ -937,6 +951,12 @@ export function cancelJob(id: string): MutationResult {
   }
 
   removeRecoverEntry(id)
+
+  // No OS pid to SIGTERM for providers with no subprocess (AgenticApiProvider
+  // subclasses run the model call in-process) — abort the in-flight
+  // fetch/SDK call instead so cancelling actually stops the request.
+  jobAbortControllers.get(id)?.abort()
+
   saveJob({ ...job, status: 'cancelled', finishedAt: new Date().toISOString(), pid: null })
   emit('job.cancelled', {
     jobId: job.id,
@@ -1195,9 +1215,7 @@ export function approveJob(id: string): MutationResult<{ job: JobRecord }> {
   const realFile = joinPath(job.applyTarget, job.approvalArtifact)
   try {
     mkdirSync(dirname(realFile), { recursive: true })
-    const tmp = `${realFile}.tmp`
-    writeTextFileSync(tmp, content)
-    renameSync(tmp, realFile)
+    writeTextFileAtomicSync(realFile, content)
   } catch (err: any) {
     return { ok: false, status: 500, error: `cannot apply proposed content: ${err.message}` }
   }

@@ -92,6 +92,13 @@ export interface ExecuteRequest {
   // already proposed instead of starting over.
   sessionId?: string
   resumeSessionId?: string
+  /**
+   * Aborted when `cancelJob` is called for this job. Providers with no OS
+   * subprocess to SIGTERM (AgenticApiProvider subclasses) should thread this
+   * into their fetch/SDK calls; subprocess-spawning providers can ignore it
+   * (they are killed via `job.pid` instead).
+   */
+  signal?: AbortSignal
 }
 
 export interface ExecuteResult {
@@ -208,6 +215,19 @@ export interface ConnectionsStore {
   connections: Connection[]
 }
 
+export interface ProviderConfig {
+  id: string
+  label: string
+  providerId: string
+  credentialId: string
+  baseURL?: string
+}
+
+export interface ProviderConfigsStore {
+  version: number
+  providerConfigs: ProviderConfig[]
+}
+
 export interface CommandsStore {
   version: number
   commands: CustomCommand[]
@@ -241,6 +261,7 @@ export const RUNNERS_VERSION = 2
 export const CREDENTIALS_VERSION = 1
 export const CONNECTIONS_VERSION = 1
 export const COMMANDS_VERSION = 1
+export const PROVIDER_CONFIGS_VERSION = 1
 
 export const DEFAULT_CONNECTION_ID = 'claude-code-cli-local'
 
@@ -260,5 +281,9 @@ export function sanitiseConnectionId(id: unknown): string | null {
 }
 
 export function sanitiseCommandId(id: unknown): string | null {
+  return sanitiseRunnerId(id)
+}
+
+export function sanitiseProviderConfigId(id: unknown): string | null {
   return sanitiseRunnerId(id)
 }

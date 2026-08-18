@@ -78,6 +78,7 @@ Thêm scan/endpoint mới không được phá các bất biến sau:
 - **Fetch URL người dùng** phải qua `fetchUrlSafe` (https-only, chặn private host) — tránh SSRF.
 - **ESM thuần**; server import core `node:`-prefixed.
 - `ANTHROPIC_API_KEY` tùy chọn, bật NL agent-draft generation (`/api/custom-agents/generate`); không có key thì fallback heuristic.
+- `DASHBOARD_SECRET_KEY` **bắt buộc** để dùng credential kiểu "dán secret trực tiếp" (`stored:`) hoặc "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` — mã hoá `secret-vault.json` (`secretVault.ts`). Không set → 2 luồng đó fail rõ ràng (`DASHBOARD_SECRET_KEY is not set — required to store or read vault secrets`), các luồng khác (CLI, `env:`/`file:` secretRef) không bị ảnh hưởng.
 
 ---
 

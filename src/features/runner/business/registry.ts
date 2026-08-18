@@ -1,10 +1,12 @@
-import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
 import { registryHome } from '../../../core/registry.js'
 import { ensureLegacyConnection, getConnection } from './connections.js'
 import { createClaudeCodeCliProvider } from './providers/claude-code-cli.js'
 import { createCursorCliProvider } from './providers/cursor-cli.js'
 import { createCodexCliProvider } from './providers/codex-cli.js'
 import { createConsoleCommandProvider } from './providers/console-command.js'
+import { createOpenAiCompatibleProvider } from './providers/openai-compatible-api.js'
+import { createAnthropicCompatibleProvider } from './providers/anthropic-compatible-api.js'
 import { providerFamilyOf } from './providers/agentCli.js'
 import {
   DEFAULT_CONNECTION_ID,
@@ -99,9 +101,7 @@ export function loadRunners(): RunnersStore {
 export function saveRunners(store: RunnersStore): RunnersStore {
   const home = registryHome()
   mkdirSync(home, { recursive: true })
-  const file = runnersFile()
-  const tmp = `${file}.tmp`
-  const payload = JSON.stringify(
+  writeTextFileAtomicSync(runnersFile(), JSON.stringify(
     {
       version: store.version || RUNNERS_VERSION,
       defaultRunnerId: store.defaultRunnerId,
@@ -109,9 +109,7 @@ export function saveRunners(store: RunnersStore): RunnersStore {
     },
     null,
     2,
-  )
-  writeTextFileSync(tmp, payload)
-  renameSync(tmp, file)
+  ))
   return store
 }
 
@@ -249,6 +247,10 @@ register(createClaudeCodeCliProvider())
 register(createCursorCliProvider())
 register(createCodexCliProvider())
 register(createConsoleCommandProvider())
+register(createOpenAiCompatibleProvider('openai-api', 'https://api.openai.com/v1'))
+register(createOpenAiCompatibleProvider('gemini-api', 'https://generativelanguage.googleapis.com/v1beta/openai'))
+register(createOpenAiCompatibleProvider('xai-api', 'https://api.x.ai/v1'))
+register(createAnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.com'))
 
 /**
  * Register (or replace) a provider at runtime. Built-in providers are registered
