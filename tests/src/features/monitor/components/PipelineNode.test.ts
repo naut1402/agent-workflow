@@ -94,6 +94,43 @@ describe('PipelineNode', () => {
       await w.find('.pnode-run-btn').trigger('click')
       expect(calls).toHaveLength(1)
     })
+
+    it('reset button appears for a step that already ran and is not runnable', () => {
+      const w = mountNode({ label: 'Implement', status: 'done', resettable: true, runnable: false })
+      expect(w.find('.pnode-reset-btn').exists()).toBe(true)
+      expect(w.find('.pnode-run-btn').exists()).toBe(false)
+      expect(w.find('.pnode-reset-btn').attributes('title')).toBe('Nhấn để reset step này')
+    })
+
+    it('no reset button when the step never ran (resettable: false)', () => {
+      expect(mountNode({ label: 'Implement', status: 'active', resettable: false }).find('.pnode-reset-btn').exists()).toBe(false)
+    })
+
+    // Regression for the decision in design.md §4.2b: retry case where a step
+    // is both `executed` (ran before) and `runnable` (current_phase moved back
+    // to it) — Run must win, Reset must stay hidden, never both.
+    it('run and reset are mutually exclusive: runnable wins when both are true', () => {
+      const w = mountNode({ label: 'Implement', status: 'active', runnable: true, executed: true, resettable: false })
+      expect(w.find('.pnode-run-btn').exists()).toBe(true)
+      expect(w.find('.pnode-reset-btn').exists()).toBe(false)
+    })
+
+    it('reset button calls data.onReset on click', async () => {
+      const calls: number[] = []
+      const w = mountNode({
+        label: 'Implement',
+        status: 'done',
+        resettable: true,
+        onReset: () => calls.push(1),
+      })
+      await w.find('.pnode-reset-btn').trigger('click')
+      expect(calls).toHaveLength(1)
+    })
+
+    it('reset button is centred on the node like the run button', () => {
+      const w = mountNode({ label: 'Implement', status: 'done', resettable: true })
+      expect(w.find('.pnode-reset-btn').classes()).toContain('pnode-action-center')
+    })
   })
 
   it('running=true shows the running class/icon and overrides the runnable affordance', () => {
