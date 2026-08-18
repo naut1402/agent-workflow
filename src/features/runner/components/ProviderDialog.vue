@@ -349,20 +349,27 @@ onUnmounted(() => {
           </div>
 
           <div class="field">
-            <div class="row-actions">
-              <label class="cfg-label">Credential</label>
-              <div class="row-btns">
-                <button type="button" class="btn-ghost btn-sm" @click="toggleNewCredential">
-                  + Credential
-                </button>
-              </div>
+            <label class="cfg-label">Credential</label>
+            <div class="credential-row">
+              <select v-model="credentialId" class="cfg-input">
+                <option value="" disabled>{{ t('runner.providerDialog.credentialPlaceholder') }}</option>
+                <option v-for="c in filteredCredentials" :key="c.id" :value="c.id">
+                  {{ c.label }} ({{ c.id }})
+                </option>
+              </select>
+              <button
+                type="button"
+                class="icon-btn icon-btn-inline"
+                :class="{ active: showNewCredential }"
+                :title="t('runner.providerDialog.addCredential')"
+                :aria-label="t('runner.providerDialog.addCredential')"
+                @click="toggleNewCredential"
+              >
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M8 3v10M3 8h10" />
+                </svg>
+              </button>
             </div>
-            <select v-model="credentialId" class="cfg-input">
-              <option value="" disabled>{{ t('runner.providerDialog.credentialPlaceholder') }}</option>
-              <option v-for="c in filteredCredentials" :key="c.id" :value="c.id">
-                {{ c.label }} ({{ c.id }})
-              </option>
-            </select>
             <ul v-if="filteredCredentials.length" class="cred-actions">
               <li v-for="c in filteredCredentials" :key="`copy-${c.id}`">
                 <button type="button" class="btn-ghost btn-sm" @click="copyCredential(c)">
@@ -499,6 +506,12 @@ onUnmounted(() => {
 }
 .row-btns { display: flex; gap: 0.35rem; }
 .label-with-hint { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; flex-direction: row; }
+.credential-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.credential-row .cfg-input { flex: 1; min-width: 0; }
 .path-hint { margin: 0.35rem 0 0; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
 .cred-actions { list-style: none; padding: 0; margin: 0.4rem 0 0; display: flex; flex-wrap: wrap; gap: 0.25rem; }

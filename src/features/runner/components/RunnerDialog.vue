@@ -179,6 +179,13 @@ function openEditConnection() {
   showConnectionDialog.value = true
 }
 
+function openCopyConnection() {
+  const c = selectedConnection.value
+  if (!c) return
+  editingConnection.value = { ...c, id: '', label: `${c.label} (copy)` }
+  showConnectionDialog.value = true
+}
+
 async function removeConnection() {
   const c = selectedConnection.value
   if (!c) return
@@ -197,7 +204,7 @@ async function removeConnection() {
 async function onConnectionSaved(connectionId: string) {
   emit('refreshed')
   draft.value.connectionId = connectionId
-  message.value = editingConnection.value
+  message.value = editingConnection.value?.id
     ? t('runner.messages.connectionSaved', { id: connectionId })
     : t('runner.messages.connectionAdded', { id: connectionId })
   editingConnection.value = null
@@ -284,6 +291,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                       stroke-linejoin="round"
                       d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
                     />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :disabled="!selectedConnection"
+                  :title="t('runner.connectionDialog.copyConnection')"
+                  :aria-label="t('runner.connectionDialog.copyConnection')"
+                  @click="openCopyConnection"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <rect x="5.5" y="5.5" width="7" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
+                    <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M3.5 10.5V3.5h7" />
                   </svg>
                 </button>
                 <button

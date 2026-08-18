@@ -213,7 +213,7 @@ async function migrateLegacyToProviderConfig(conn: ConnectionOption) {
 
 function applyConnectionPrefill() {
   const c = props.connection
-  if (!c?.id) return
+  if (!c) return
   label.value = c.label || ''
   kind.value = c.kind === 'ai-provider' ? 'ai-provider' : 'local-console'
   selectedModels.value = Array.isArray(c.config?.models)
@@ -247,7 +247,7 @@ function applyConnectionPrefill() {
     if (match) {
       selectedCommandId.value = match.id
     } else {
-      const id = `edit-${c.id}`
+      const id = `edit-${c.id || slugifyConn(c.label || c.cliPath)}`
       customCommands.value = [
         {
           id,
@@ -293,7 +293,7 @@ async function refreshScan() {
         flags: Array.isArray(c.flags) ? c.flags : [],
         custom: true,
       }))
-    if (props.connection?.id) {
+    if (props.connection) {
       applyConnectionPrefill()
     } else if (!selectedCommandId.value) {
       const firstAvail = scanned.value.find((c) => c.available) || scanned.value[0]

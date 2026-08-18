@@ -16,6 +16,7 @@ export default {
     addRunner: '+ Thêm runner',
     empty: 'Chưa có runner. Bấm «+ Thêm runner» để tạo.',
     makeDefault: 'Đặt làm mặc định',
+    copyRunner: 'Sao chép runner',
     deleteRunner: 'Xóa runner',
     recentJobs: 'Jobs gần đây',
   },
@@ -88,6 +89,7 @@ export default {
   connectionDialog: {
     title: 'Thêm connection',
     editTitle: 'Sửa connection',
+    copyConnection: 'Sao chép connection',
     deleteConnection: 'Xóa connection',
     editCommand: 'Sửa command',
     deleteCommand: 'Xóa command',
@@ -143,6 +145,7 @@ export default {
     labelPlaceholder: 'vd. OpenAI gateway của tôi',
     interfaceField: 'Interface',
     credentialPlaceholder: 'Chọn credential…',
+    addCredential: 'Thêm credential',
     testSection: 'Kiểm tra',
     testModels: 'Tải danh sách model',
     testModelsFailed: 'Không tải được danh sách model',

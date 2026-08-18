@@ -95,6 +95,13 @@ function openEdit(r: RunnerDraft) {
   message.value = ''
 }
 
+function openCopy(r: RunnerDraft, e: Event) {
+  e.stopPropagation()
+  editingRunner.value = { ...JSON.parse(JSON.stringify(r)), id: '', name: `${r.name} (copy)` }
+  showRunnerDialog.value = true
+  message.value = ''
+}
+
 function closeDialog() {
   showRunnerDialog.value = false
   editingRunner.value = null
@@ -222,6 +229,19 @@ async function remove(r: RunnerDraft, e: Event) {
                 stroke-linejoin="round"
                 d="M8 2.2l1.6 3.3 3.6.5-2.6 2.6.6 3.6L8 10.5 4.8 12.2l.6-3.6L2.8 6l3.6-.5L8 2.2z"
               />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="icon-btn"
+            :title="t('runner.panel.copyRunner')"
+            :aria-label="t('runner.panel.copyRunner')"
+            @click="openCopy(r, $event)"
+          >
+            <!-- copy -->
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <rect x="5.5" y="5.5" width="7" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
+              <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M3.5 10.5V3.5h7" />
             </svg>
           </button>
           <button

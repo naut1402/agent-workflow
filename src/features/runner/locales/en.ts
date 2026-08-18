@@ -17,6 +17,7 @@ export default {
     addRunner: '+ Add runner',
     empty: 'No runners yet. Click «+ Add runner» to create one.',
     makeDefault: 'Set as default',
+    copyRunner: 'Copy runner',
     deleteRunner: 'Delete runner',
     recentJobs: 'Recent jobs',
   },
@@ -89,6 +90,7 @@ export default {
   connectionDialog: {
     title: 'Add connection',
     editTitle: 'Edit connection',
+    copyConnection: 'Copy connection',
     deleteConnection: 'Delete connection',
     editCommand: 'Edit command',
     deleteCommand: 'Delete command',
@@ -144,6 +146,7 @@ export default {
     labelPlaceholder: 'e.g. My OpenAI gateway',
     interfaceField: 'Interface',
     credentialPlaceholder: 'Select credential…',
+    addCredential: 'Add credential',
     testSection: 'Test',
     testModels: 'Load model list',
     testModelsFailed: 'Failed to load the model list',

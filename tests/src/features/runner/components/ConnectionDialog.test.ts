@@ -75,6 +75,11 @@ function buttonByText(text: string): HTMLButtonElement {
   if (!btn) throw new Error(`button not found: ${text}`)
   return btn
 }
+function buttonByTitle(title: string): HTMLButtonElement {
+  const btn = qa<HTMLButtonElement>('button').find((b) => b.title === title)
+  if (!btn) throw new Error(`button not found: ${title}`)
+  return btn
+}
 async function setInputValue(input: HTMLInputElement, value: string) {
   input.value = value
   input.dispatchEvent(new Event('input'))
@@ -126,13 +131,13 @@ async function mountConnectionOnAiProvider() {
 describe('ProviderDialog — credential form', () => {
   it('no longer asks the user to type a credential id', async () => {
     await mountProviderDialog()
-    await click(buttonByText('+ Credential'))
+    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
     expect(document.body.textContent).not.toContain('Credential ID')
   })
 
   it('blocks saving a new credential with neither a secret value nor a secretRef', async () => {
     await mountProviderDialog()
-    await click(buttonByText('+ Credential'))
+    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
     await click(buttonByText(runnerVi.connectionDialog.saveCredential))
     expect(saveCredential).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain(runnerVi.errors.credentialSecretRequired)
@@ -140,7 +145,7 @@ describe('ProviderDialog — credential form', () => {
 
   it('saves with secretValue (pasted secret) rather than a raw secretRef', async () => {
     await mountProviderDialog()
-    await click(buttonByText('+ Credential'))
+    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
     await setInputValue(q<HTMLInputElement>('input[type="password"]'), 'sk-pasted-secret')
     await click(buttonByText(runnerVi.connectionDialog.saveCredential))
 
@@ -153,7 +158,7 @@ describe('ProviderDialog — credential form', () => {
 
   it('falls back to the advanced secretRef field when no secret value is pasted', async () => {
     await mountProviderDialog()
-    await click(buttonByText('+ Credential'))
+    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
     const advancedInput = q<HTMLInputElement>('input[placeholder="env:ANTHROPIC_API_KEY"]')
     await setInputValue(advancedInput, 'env:MY_OWN_VAR')
     await click(buttonByText(runnerVi.connectionDialog.saveCredential))
@@ -168,7 +173,7 @@ describe('ProviderDialog — credential form', () => {
 describe('ProviderDialog — Connect via browser (OAuth)', () => {
   it('hides the button when the provider has no OAuth capability', async () => {
     await mountProviderDialog()
-    await click(buttonByText('+ Credential'))
+    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
     expect(document.body.textContent).not.toContain(runnerVi.connectionDialog.connectViaBrowser)
   })
 
@@ -180,7 +185,7 @@ describe('ProviderDialog — Connect via browser (OAuth)', () => {
     interfaceSelect.value = 'gemini-api'
     interfaceSelect.dispatchEvent(new Event('change'))
     await flushPromises()
-    await click(buttonByText('+ Credential'))
+    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
 
     const connectText = runnerVi.connectionDialog.connectViaBrowser
     expect(document.body.textContent).toContain(connectText)
@@ -194,7 +199,7 @@ describe('ProviderDialog — Connect via browser (OAuth)', () => {
   it('hides Connect via browser too when the vault itself is unconfigured, even for an OAuth-capable provider', async () => {
     vi.mocked(fetchOAuthCapabilities).mockResolvedValue({ providers: ['gemini-api'], vaultConfigured: false })
     await mountProviderDialog()
-    await click(buttonByText('+ Credential'))
+    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
 
     expect(document.body.textContent).not.toContain(runnerVi.connectionDialog.connectViaBrowser)
   })
@@ -204,7 +209,7 @@ describe('ProviderDialog — vault not configured', () => {
   it('warns and disables the secret value field instead of letting the user hit a raw save error', async () => {
     vi.mocked(fetchOAuthCapabilities).mockResolvedValue({ providers: [], vaultConfigured: false })
     await mountProviderDialog()
-    await click(buttonByText('+ Credential'))
+    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
 
     expect(document.body.textContent).toContain(runnerVi.connectionDialog.vaultNotConfigured)
     expect(q<HTMLInputElement>('input[type="password"]').disabled).toBe(true)
