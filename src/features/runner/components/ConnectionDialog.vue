@@ -47,6 +47,8 @@ const label = ref('')
 const selectedCommandId = ref('')
 /** Nullable by design — rotation across a provider's models is a future feature (see design.md). */
 const selectedModels = ref<string[]>([])
+/** Opt-in per-Connection extra tools (shell/git/search/web) beyond the base 4 file-ops — default empty, unchanged behavior. */
+const extraTools = ref<string[]>([])
 const scanning = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -229,6 +231,9 @@ function applyConnectionPrefill() {
     : typeof c.config?.model === 'string' && c.config.model
       ? [c.config.model]
       : []
+  extraTools.value = Array.isArray(c.config?.extraTools)
+    ? c.config.extraTools.filter((t): t is string => typeof t === 'string')
+    : []
   if (kind.value === 'ai-provider') {
     const link = typeof c.config?.providerConfigId === 'string' ? c.config.providerConfigId : ''
     if (link && providerConfigList.value.some((p) => p.id === link)) {
@@ -441,6 +446,7 @@ async function save() {
       config.model = selectedModels.value[0]
     }
     if (pc.baseURL) config.baseURL = pc.baseURL
+    if (extraTools.value.length) config.extraTools = extraTools.value
 
     const id = buildConnectionId(pc.providerId)
     const { connection } = await saveConnection({
@@ -682,6 +688,34 @@ onUnmounted(() => {
                 {{ t('runner.connectionDialog.modelsLoaded', { count: modelOptions.length }) }}
               </p>
             </div>
+            <div class="field">
+              <span class="cfg-label label-with-hint">
+                {{ t('runner.connectionDialog.extraToolsLabel') }}
+                <InfoTooltip :text="t('runner.connectionDialog.extraToolsHint')" />
+              </span>
+              <div class="extra-tools-group">
+                <label class="kind-radio">
+                  <input v-model="extraTools" type="checkbox" value="shell" />
+                  {{ t('runner.connectionDialog.extraToolShell') }}
+                  <InfoTooltip :text="t('runner.connectionDialog.extraToolShellHint')" />
+                </label>
+                <label class="kind-radio">
+                  <input v-model="extraTools" type="checkbox" value="git" />
+                  {{ t('runner.connectionDialog.extraToolGit') }}
+                  <InfoTooltip :text="t('runner.connectionDialog.extraToolGitHint')" />
+                </label>
+                <label class="kind-radio">
+                  <input v-model="extraTools" type="checkbox" value="search" />
+                  {{ t('runner.connectionDialog.extraToolSearch') }}
+                  <InfoTooltip :text="t('runner.connectionDialog.extraToolSearchHint')" />
+                </label>
+                <label class="kind-radio">
+                  <input v-model="extraTools" type="checkbox" value="web" />
+                  {{ t('runner.connectionDialog.extraToolWeb') }}
+                  <InfoTooltip :text="t('runner.connectionDialog.extraToolWebHint')" />
+                </label>
+              </div>
+            </div>
           </template>
 
           <div class="modal-actions">
@@ -764,6 +798,7 @@ onUnmounted(() => {
 .register-command-dialog { max-width: 440px; width: min(440px, 92vw); }
 .nested-backdrop { z-index: 1100; }
 .kind-radios { display: flex; gap: 1rem; margin-top: 0.35rem; flex-wrap: wrap; }
+.extra-tools-group { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.35rem; }
 .kind-radio {
   display: inline-flex;
   align-items: center;

@@ -394,3 +394,82 @@ describe('ConnectionDialog — model list', () => {
     expect(payload.config.model).toBe('my-custom-model')
   })
 })
+
+describe('ConnectionDialog — extra tools (shell/git/search/web)', () => {
+  it('defaults to no extra tools checked and omits the key entirely on save', async () => {
+    await mountConnectionOnAiProvider()
+    const checkboxes = qa<HTMLInputElement>('input[type="checkbox"]')
+    expect(checkboxes.every((c) => !c.checked)).toBe(true)
+
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude API conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.config.extraTools).toBeUndefined()
+  })
+
+  it('checking shell + web saves both values under config.extraTools', async () => {
+    await mountConnectionOnAiProvider()
+    const shellCheckbox = qa<HTMLInputElement>('input[type="checkbox"][value="shell"]')[0]
+    shellCheckbox.checked = true
+    shellCheckbox.dispatchEvent(new Event('change'))
+    await flushPromises()
+    const webCheckbox = qa<HTMLInputElement>('input[type="checkbox"][value="web"]')[0]
+    webCheckbox.checked = true
+    webCheckbox.dispatchEvent(new Event('change'))
+    await flushPromises()
+
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude API conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.config.extraTools).toEqual(['shell', 'web'])
+  })
+
+  it('prefills checked extra tools from an edited connection', async () => {
+    const w = mount(ConnectionDialog, {
+      props: {
+        providers: PROVIDERS,
+        providerConfigs: PROVIDER_CONFIGS,
+        connection: {
+          id: 'conn-with-tools',
+          label: 'Conn with tools',
+          kind: 'ai-provider',
+          providerId: 'anthropic-api',
+          credentialId: 'cred-anthropic',
+          config: { providerConfigId: 'pc-anthropic', extraTools: ['git', 'search'] },
+        },
+      },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    expect(qa<HTMLInputElement>('input[type="checkbox"][value="git"]')[0].checked).toBe(true)
+    expect(qa<HTMLInputElement>('input[type="checkbox"][value="search"]')[0].checked).toBe(true)
+    expect(qa<HTMLInputElement>('input[type="checkbox"][value="shell"]')[0].checked).toBe(false)
+    expect(qa<HTMLInputElement>('input[type="checkbox"][value="web"]')[0].checked).toBe(false)
+    w.unmount()
+  })
+
+  it('a legacy connection with no extraTools key prefills every checkbox unchecked, without error', async () => {
+    const w = mount(ConnectionDialog, {
+      props: {
+        providers: PROVIDERS,
+        providerConfigs: PROVIDER_CONFIGS,
+        connection: {
+          id: 'legacy-no-tools',
+          label: 'Legacy conn',
+          kind: 'ai-provider',
+          providerId: 'anthropic-api',
+          credentialId: 'cred-anthropic',
+          config: { providerConfigId: 'pc-anthropic' },
+        },
+      },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    expect(qa<HTMLInputElement>('input[type="checkbox"]').every((c) => !c.checked)).toBe(true)
+    w.unmount()
+  })
+})

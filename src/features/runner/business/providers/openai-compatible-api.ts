@@ -1,5 +1,13 @@
 import OpenAI from 'openai'
-import { AgenticApiProvider, type AgenticRunContext, type AgenticRunResult } from './agenticApiProvider.js'
+import {
+  AgenticApiProvider,
+  EMPTY_REPLY_ERROR_MESSAGE,
+  EMPTY_REPLY_NUDGE_TEXT,
+  SHELL_ALLOWLIST,
+  type AgenticRunContext,
+  type AgenticRunResult,
+  type ExtraTool,
+} from './agenticApiProvider.js'
 
 /** Chặn vòng lặp vô hạn khi model liên tục gọi tool — mirror anthropic-compatible-api. */
 const MAX_AGENT_LOOP_TURNS = 8
@@ -15,7 +23,7 @@ function summarizeArgs(args: unknown): string {
   }
 }
 
-const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+const BASE_TOOLS: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = [
   {
     type: 'function',
     function: {
@@ -73,6 +81,101 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 ]
 
 /**
+ * Base 4 file-ops always registered; `extraTools` (from `Connection.config.extraTools`,
+ * default `[]`) opts a Connection into shell/git/search/web on top — see agenticApiProvider.ts.
+ * `webSearchConfigured` additionally gates `web_search` alone so an unconfigured
+ * `BRAVE_SEARCH_API_KEY` hides the tool instead of registering one that always errors.
+ */
+function buildTools(extraTools: ExtraTool[], webSearchConfigured: boolean): OpenAI.Chat.Completions.ChatCompletionFunctionTool[] {
+  const tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = [...BASE_TOOLS]
+  if (extraTools.includes('shell')) {
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'run_command',
+        description: `Run a shell command in the workspace. Only these binaries are allowed: ${SHELL_ALLOWLIST.join(', ')}.`,
+        parameters: {
+          type: 'object',
+          properties: {
+            command: { type: 'string', description: 'Binary to run — must be in the allowlist.' },
+            args: { type: 'array', items: { type: 'string' }, description: 'Argument list, passed verbatim (no shell interpretation).' },
+          },
+          required: ['command'],
+        },
+      },
+    })
+  }
+  if (extraTools.includes('git')) {
+    tools.push(
+      {
+        type: 'function',
+        function: { name: 'git_status', description: 'Show git status (porcelain) of the workspace.', parameters: { type: 'object', properties: {} } },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'git_diff',
+          description: 'Show git diff of the workspace or a single file.',
+          parameters: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'File path relative to the workspace (optional).' },
+              staged: { type: 'boolean', description: 'Diff staged changes instead of the working tree.' },
+            },
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'git_log',
+          description: 'Show recent commit log (oneline, capped at 50).',
+          parameters: { type: 'object', properties: { limit: { type: 'number', description: 'Max commits to show (1-50, default 20).' } } },
+        },
+      },
+    )
+  }
+  if (extraTools.includes('search')) {
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'search_files',
+        description: 'Search for a literal substring (not a regex) across text files in the workspace.',
+        parameters: {
+          type: 'object',
+          properties: {
+            pattern: { type: 'string', description: 'Literal substring to search for.' },
+            path: { type: 'string', description: 'Directory to search under, relative to the workspace (optional).' },
+          },
+          required: ['pattern'],
+        },
+      },
+    })
+  }
+  if (extraTools.includes('web')) {
+    if (webSearchConfigured) {
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'web_search',
+          description: 'Search the web (Brave Search), returns up to 5 results.',
+          parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+        },
+      })
+    }
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'fetch_url',
+        description: 'Fetch the text content of a public https URL (private/loopback hosts are blocked).',
+        parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
+      },
+    })
+  }
+  return tools
+}
+
+/**
  * `openai-api` / `gemini-api` / `xai-api` — all expose an OpenAI-compatible
  * Chat Completions endpoint, so one wrapper (differing only in `defaultBaseURL`)
  * covers the group. The tool-use loop is driven directly against the `openai`
@@ -107,6 +210,13 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
 
     const client = new OpenAI({ baseURL: ctx.runnerConfig.baseURL || this.defaultBaseURL, apiKey: ctx.apiKey })
 
+    const extraTools = this.resolveExtraTools(ctx.runnerConfig)
+    const tools = buildTools(extraTools, this.isWebSearchConfigured())
+    const systemContent = [
+      this.buildToolUsagePreamble(tools.map((t) => t.function.name)),
+      ctx.req.resolvedAgent.systemPrompt || '',
+    ].join('\n\n')
+
     // `messages` excludes the system prompt — it is re-prepended on every turn
     // so the persisted rawMessages stay resume-ready without duplicating it.
     const priorMessages = (ctx.priorMessages ?? []) as OpenAI.Chat.Completions.ChatCompletionMessageParam[]
@@ -116,16 +226,17 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
 
     const toolCalls: AgenticRunResult['toolCalls'] = []
     const usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+    let hasNudgedEmptyReply = false
 
     for (let turn = 1; turn <= MAX_AGENT_LOOP_TURNS; turn++) {
       const response = await client.chat.completions.create(
         {
           model,
           messages: [
-            { role: 'system', content: ctx.req.resolvedAgent.systemPrompt || '' },
+            { role: 'system', content: systemContent },
             ...messages,
           ],
-          tools: TOOLS,
+          tools,
         },
         { signal: ctx.signal },
       )
@@ -161,10 +272,24 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
       if (turnText) ctx.handlers.onAssistantChunk(turnText, { done: true })
 
       if (!calls.length) {
-        // Include the final reply in the persisted history so a resumed session
-        // sees the model's own last answer.
-        messages.push({ role: 'assistant', content: turnText })
-        return { finalText: turnText, usage, toolCalls, rawMessages: messages }
+        if (turnText.trim()) {
+          // Include the final reply in the persisted history so a resumed session
+          // sees the model's own last answer.
+          messages.push({ role: 'assistant', content: turnText })
+          return { finalText: turnText, usage, toolCalls, rawMessages: messages }
+        }
+
+        // Empty content + no tool call — the model may not understand this
+        // provider's toolset. Give it exactly one nudge before treating this
+        // as a real failure instead of silently reporting job success (see
+        // agenticApiProvider.ts's EMPTY_REPLY_NUDGE_TEXT for rationale).
+        if (!hasNudgedEmptyReply) {
+          hasNudgedEmptyReply = true
+          messages.push({ role: 'assistant', content: '' })
+          messages.push({ role: 'user', content: EMPTY_REPLY_NUDGE_TEXT })
+          continue
+        }
+        throw new Error(EMPTY_REPLY_ERROR_MESSAGE)
       }
 
       // Rebuild the assistant message with only spec fields — echoing the
@@ -180,7 +305,7 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
         })),
       })
       for (const call of calls) {
-        const outcome = this.executeTool(call, ctx.workspace)
+        const outcome = await this.executeTool(call, ctx.workspace)
         const entry = { name: call.function.name, argsSummary: summarizeArgs(call.function.arguments) }
         toolCalls.push(entry)
         ctx.handlers.onToolCall(entry)
@@ -191,7 +316,7 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
   }
 
   /** Map one chat-completions function tool call onto a base-class sandbox op. */
-  private executeTool(call: OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall, workspace: string) {
+  private async executeTool(call: OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall, workspace: string) {
     let args: Record<string, unknown> = {}
     try {
       args = JSON.parse(call.function.arguments || '{}')
@@ -213,6 +338,23 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
         )
       case 'list_directory':
         return this.listWorkspaceDirectory(workspace, typeof args.path === 'string' ? args.path : undefined)
+      case 'run_command': {
+        const command = typeof args.command === 'string' ? args.command : ''
+        const cmdArgs = Array.isArray(args.args) ? args.args.filter((a): a is string => typeof a === 'string') : []
+        return this.runShellCommand(workspace, command, cmdArgs)
+      }
+      case 'git_status':
+        return this.gitStatus(workspace)
+      case 'git_diff':
+        return this.gitDiff(workspace, typeof args.path === 'string' ? args.path : undefined, Boolean(args.staged))
+      case 'git_log':
+        return this.gitLog(workspace, typeof args.limit === 'number' ? args.limit : undefined)
+      case 'search_files':
+        return this.searchFiles(workspace, typeof args.pattern === 'string' ? args.pattern : '', typeof args.path === 'string' ? args.path : undefined)
+      case 'web_search':
+        return this.webSearch(typeof args.query === 'string' ? args.query : '')
+      case 'fetch_url':
+        return this.fetchUrl(typeof args.url === 'string' ? args.url : '')
       default:
         return { ok: false, error: `unknown tool: ${call.function.name}` }
     }

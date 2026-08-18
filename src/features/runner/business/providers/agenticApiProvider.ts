@@ -6,15 +6,107 @@ import {
   mkdirSync,
   readTextFileSync,
   readdirSync,
+  relativePath,
   resolvePathUnder,
   writeTextFileSync,
 } from '../../../../core/lib/fileHelper.js'
+import type { Dirent } from '../../../../core/lib/fileHelper.js'
+import { spawnSync } from '../../../../core/lib/processHelper.js'
+import { fetchUrlSafe } from '../../../agent-editor/business/index.js'
 import { isDirectSecretType, resolveSecretRef } from '../credentials.js'
 import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 import { ensureFreshOAuthToken } from '../oauthCredentials.js'
 import { mintSessionId } from '../sessionLedger.js'
 import { appendTranscriptTurn, loadSessionMessages, saveSessionMessages } from './agentTranscriptStore.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ProviderFamily, RunnerProvider } from '../types.js'
+
+/** Opt-in extra sandbox capabilities beyond the base 4 file-ops — gated per-Connection via `Connection.config.extraTools`. */
+export type ExtraTool = 'shell' | 'git' | 'search' | 'web'
+const VALID_EXTRA_TOOLS: ExtraTool[] = ['shell', 'git', 'search', 'web']
+
+/** Allowlisted binaries for `run_command` — no raw shell, argv-array only (no injection via `;`/`&&`/`$()`). */
+export const SHELL_ALLOWLIST = ['bun', 'npm', 'npx', 'pnpm', 'yarn', 'node', 'tsc']
+const SHELL_TIMEOUT_MS = 60_000
+const SHELL_OUTPUT_LIMIT = 8_000
+const SEARCH_MAX_MATCHES = 200
+const SEARCH_EXCLUDED_DIRS = new Set(['node_modules', '.git', 'dist', 'build'])
+const BRAVE_SEARCH_URL = 'https://api.search.brave.com/res/v1/web/search'
+
+/** Sent once when a turn comes back empty with no tool call — gives the model one chance to self-correct before the loop fails the job. */
+export const EMPTY_REPLY_NUDGE_TEXT =
+  'Bạn vừa trả lời trống và không gọi tool nào. Nếu đã hoàn tất nhiệm vụ, hãy trả lời ' +
+  'bằng một câu văn bản ngắn xác nhận. Nếu chưa, hãy gọi đúng 1 trong các tool đã được ' +
+  'liệt kê ở đầu system prompt.'
+
+/** Thrown when the turn after the nudge is still empty — surfaces as a clear `ok:false` instead of a silent `succeeded`. */
+export const EMPTY_REPLY_ERROR_MESSAGE =
+  'model trả lời rỗng và không gọi tool sau khi đã nhắc lại — có thể model không tương thích tốt với bộ tool hiện tại qua provider này'
+
+/** One-line description per tool name, shown to low-level models in the "tool usage preamble" (see `buildToolUsagePreamble`). */
+const TOOL_DESCRIPTIONS: Record<string, string> = {
+  read_file: 'read_file(path) — đọc nội dung 1 file text trong workspace',
+  write_file: 'write_file(path, content) — tạo mới/ghi đè 1 file text trong workspace',
+  edit_file: 'edit_file(path, old_string, new_string) — thay 1 đoạn text duy nhất trong file',
+  list_directory: 'list_directory(path?) — liệt kê entry của 1 thư mục trong workspace',
+  str_replace_based_edit_tool:
+    'str_replace_based_edit_tool(command, path, ...) — đọc/tạo/sửa file qua 1 tool duy nhất, command: ' +
+    '"view" (đọc file), "create" (tạo/ghi đè, cần file_text), "str_replace" (thay old_str bằng new_str, cần duy nhất 1 chỗ khớp), ' +
+    '"insert" (chèn new_str sau dòng insert_line)',
+  run_command: `run_command(command, args[]) — chạy 1 lệnh shell trong workspace, chỉ cho phép: ${SHELL_ALLOWLIST.join(', ')}`,
+  git_status: 'git_status() — trạng thái git (porcelain) của workspace',
+  git_diff: 'git_diff(path?, staged?) — diff của workspace hoặc 1 file',
+  git_log: 'git_log(limit?) — lịch sử commit gần nhất (oneline, tối đa 50)',
+  search_files: 'search_files(pattern, path?) — tìm 1 chuỗi con (không phải regex) trong các file text của workspace',
+  web_search: 'web_search(query) — tìm kiếm web (Brave Search), trả tối đa 5 kết quả',
+  fetch_url: 'fetch_url(url) — tải nội dung 1 URL https công khai (chặn host nội bộ/private)',
+}
+
+function truncate(text: string | undefined | null, limit: number): string {
+  const s = text ?? ''
+  return s.length > limit ? `${s.slice(0, limit)}…` : s
+}
+
+/** Shared shape for `run_command`/git tools — `ok` mirrors the process exit code, distinct from `SandboxErr` (used only when the process itself couldn't run). */
+interface ProcessResult {
+  ok: boolean
+  exitCode: number | null
+  stdout: string
+  stderr: string
+}
+
+function runGit(workspace: string, args: string[]): ProcessResult | SandboxErr {
+  const res = spawnSync('git', args, { cwd: workspace, encoding: 'utf8', timeout: SHELL_TIMEOUT_MS })
+  if (res.error) return { ok: false, error: String(res.error.message) }
+  return {
+    ok: res.status === 0,
+    exitCode: res.status,
+    stdout: truncate(res.stdout, SHELL_OUTPUT_LIMIT),
+    stderr: truncate(res.stderr, SHELL_OUTPUT_LIMIT),
+  }
+}
+
+/** Depth-first collect of file paths under `root`, skipping `SEARCH_EXCLUDED_DIRS` — stops early once well past the match cap. */
+function collectTextFiles(root: string, out: string[]): void {
+  let entries: Dirent[]
+  try {
+    entries = readdirSync(root, { withFileTypes: true })
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    if (out.length >= SEARCH_MAX_MATCHES * 4) return
+    if (entry.isDirectory()) {
+      if (SEARCH_EXCLUDED_DIRS.has(entry.name)) continue
+      collectTextFiles(joinPath(root, entry.name), out)
+    } else if (entry.isFile()) {
+      out.push(joinPath(root, entry.name))
+    }
+  }
+}
+
+function isLikelyBinary(content: string): boolean {
+  return content.includes('\u0000')
+}
 
 /** Result of one full turn of an API-based agentic conversation (tool-use loop included). */
 export interface AgenticRunResult {
@@ -159,6 +251,133 @@ export abstract class AgenticApiProvider implements RunnerProvider {
     if (!p) return { ok: false, error: 'path outside workspace' }
     try {
       return { ok: true, entries: readdirSync(p) }
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) }
+    }
+  }
+
+  // ---- Opt-in extra tools (Connection.config.extraTools) — shared by every subclass ----
+
+  /** Reads `runnerConfig.extraTools`, dropping anything not in `ExtraTool` — an unset/legacy connection resolves to `[]` (no behavior change). */
+  protected resolveExtraTools(runnerConfig: Record<string, any>): ExtraTool[] {
+    const raw = runnerConfig?.extraTools
+    if (!Array.isArray(raw)) return []
+    return raw.filter((v): v is ExtraTool => VALID_EXTRA_TOOLS.includes(v))
+  }
+
+  /** `web_search` only registers when this is true — an unconfigured key means the tool is absent, not present-and-always-failing. */
+  protected isWebSearchConfigured(): boolean {
+    return Boolean(process.env.BRAVE_SEARCH_API_KEY)
+  }
+
+  /**
+   * Generated per-request from the tool names actually registered for this
+   * turn — tells low-level models (via OpenRouter, unfamiliar with the tool
+   * names baked into agent markdown written for the Claude Code CLI, e.g.
+   * `find_symbol`/`Skill`/`Write`) exactly which tools exist here and to
+   * ignore any others mentioned in the system prompt below it.
+   */
+  protected buildToolUsagePreamble(enabledTools: string[]): string {
+    return [
+      '## Tool khả dụng (DUY NHẤT — bỏ qua mọi tên tool khác được nhắc ở phần hướng dẫn bên dưới)',
+      ...enabledTools.map((name) => `- ${TOOL_DESCRIPTIONS[name] ?? name}`),
+      '',
+      'Hướng dẫn bên dưới có thể nhắc tới các công cụ không tồn tại ở đây (vd find_symbol, ' +
+        'Serena MCP, Skill, Write, Read, Edit, TaskCreate...) — đó là tài liệu viết cho môi trường ' +
+        'khác, KHÔNG áp dụng. Chỉ gọi đúng tên tool trong danh sách trên.',
+    ].join('\n')
+  }
+
+  /** `run_command` — allowlisted binary, argv-array (no `shell:true`), bounded timeout/output. */
+  protected runShellCommand(workspace: string, command: string, args: string[]): ProcessResult | SandboxErr {
+    if (!SHELL_ALLOWLIST.includes(command)) {
+      return { ok: false, error: `lệnh "${command}" không nằm trong allowlist: ${SHELL_ALLOWLIST.join(', ')}` }
+    }
+    const res = spawnSync(command, args, { cwd: workspace, encoding: 'utf8', timeout: SHELL_TIMEOUT_MS })
+    if (res.error) return { ok: false, error: String(res.error.message) }
+    if (res.signal === 'SIGTERM') return { ok: false, error: `lệnh quá thời gian cho phép (${SHELL_TIMEOUT_MS}ms)` }
+    return {
+      ok: res.status === 0,
+      exitCode: res.status,
+      stdout: truncate(res.stdout, SHELL_OUTPUT_LIMIT),
+      stderr: truncate(res.stderr, SHELL_OUTPUT_LIMIT),
+    }
+  }
+
+  /** Read-only git tools — no commit/push/branch (write ops are out of scope, see design.md §6). */
+  protected gitStatus(workspace: string): ProcessResult | SandboxErr {
+    return runGit(workspace, ['status', '--porcelain'])
+  }
+
+  protected gitDiff(workspace: string, path?: string, staged = false): ProcessResult | SandboxErr {
+    const args = ['diff', ...(staged ? ['--staged'] : []), ...(path ? ['--', path] : [])]
+    return runGit(workspace, args)
+  }
+
+  protected gitLog(workspace: string, limit = 20): ProcessResult | SandboxErr {
+    const clamped = Math.min(Math.max(1, limit), 50)
+    return runGit(workspace, ['log', `--max-count=${clamped}`, '--oneline'])
+  }
+
+  /** `search_files` — substring literal (not regex, avoids ReDoS from model-controlled input), capped result count. */
+  protected searchFiles(
+    workspace: string,
+    pattern: string,
+    path?: string,
+  ): (SandboxOk & { matches: Array<{ file: string; line: number; text: string }>; truncated: boolean }) | SandboxErr {
+    const root = resolvePathUnder(workspace, path ?? '.')
+    if (!root) return { ok: false, error: 'path outside workspace' }
+    if (!pattern) return { ok: false, error: 'pattern is required' }
+    const files: string[] = []
+    collectTextFiles(root, files)
+    const matches: Array<{ file: string; line: number; text: string }> = []
+    for (const file of files) {
+      let content: string
+      try {
+        content = readTextFileSync(file)
+      } catch {
+        continue
+      }
+      if (isLikelyBinary(content)) continue
+      const lines = content.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes(pattern)) {
+          matches.push({ file: relativePath(workspace, file), line: i + 1, text: truncate(lines[i], 200) })
+          if (matches.length >= SEARCH_MAX_MATCHES) break
+        }
+      }
+      if (matches.length >= SEARCH_MAX_MATCHES) break
+    }
+    return { ok: true, matches, truncated: matches.length >= SEARCH_MAX_MATCHES }
+  }
+
+  /** `web_search` — Brave Search API; only called when `isWebSearchConfigured()` gated the tool into the schema. */
+  protected async webSearch(
+    query: string,
+  ): Promise<(SandboxOk & { results: Array<{ title: string; url: string; snippet: string }> }) | SandboxErr> {
+    const key = process.env.BRAVE_SEARCH_API_KEY
+    if (!key) return { ok: false, error: 'BRAVE_SEARCH_API_KEY chưa được cấu hình trên server' }
+    try {
+      const text = await fetchUrlSafe(`${BRAVE_SEARCH_URL}?q=${encodeURIComponent(query)}&count=5`, {
+        headers: { 'X-Subscription-Token': key, Accept: 'application/json' },
+      })
+      const data = JSON.parse(text)
+      const results = (Array.isArray(data?.web?.results) ? data.web.results : []).slice(0, 5).map((r: any) => ({
+        title: String(r?.title ?? ''),
+        url: String(r?.url ?? ''),
+        snippet: String(r?.description ?? ''),
+      }))
+      return { ok: true, results }
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) }
+    }
+  }
+
+  /** `fetch_url` — https-only/private-host/size-limit guards come from `fetchUrlSafe` (SSRF invariant, see AGENTS.md §4). */
+  protected async fetchUrl(url: string): Promise<(SandboxOk & { content: string }) | SandboxErr> {
+    try {
+      const text = await fetchUrlSafe(url)
+      return { ok: true, content: truncate(text, 20_000) }
     } catch (err: any) {
       return { ok: false, error: String(err?.message ?? err) }
     }

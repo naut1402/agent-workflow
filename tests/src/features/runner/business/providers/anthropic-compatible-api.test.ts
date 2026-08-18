@@ -169,3 +169,265 @@ describe('AnthropicCompatibleProvider', () => {
     expect(models).toEqual(['claude-haiku-4-6', 'claude-opus-4-6'])
   })
 })
+
+describe('AnthropicCompatibleProvider — empty-reply nudge-once (silent-success bug fix)', () => {
+  let ws: string
+  beforeAll(() => {
+    ws = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-anthropic-nudge-ws-'))
+  })
+  afterAll(() => {
+    fs.rmSync(ws, { recursive: true, force: true })
+  })
+
+  test('an empty reply with no tool_use gets nudged once, then recovers on the next turn', async () => {
+    let call = 0
+    const bodies: Array<Record<string, any>> = []
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      call++
+      bodies.push(JSON.parse(String(init?.body)))
+      if (call === 1) return jsonResponse(anthropicMessage([]))
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'all done now' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const result = await provider.execute(baseRequest(ws), { model: 'claude-test' }, credential)
+
+    expect(result.ok).toBe(true)
+    expect(result.stdout).toBe('all done now')
+    expect(call).toBe(2)
+    const secondReqMessages = bodies[1].messages
+    expect(
+      secondReqMessages.some((m: any) => m.role === 'user' && typeof m.content === 'string' && m.content.includes('trả lời trống')),
+    ).toBe(true)
+    // Anthropic's API rejects any non-final message with empty content
+    // ("all messages must have non-empty content except for the optional
+    // final assistant message") — the nudge must not add one, or the real
+    // API would 400 on this very request before the model ever sees it.
+    secondReqMessages.slice(0, -1).forEach((m: any) => {
+      expect(m.content).not.toBe('')
+      expect(Array.isArray(m.content) && m.content.length === 0).toBe(false)
+    })
+  })
+
+  test('two consecutive empty replies fail the job with a clear error instead of succeeding silently', async () => {
+    globalThis.fetch = (async () => jsonResponse(anthropicMessage([]))) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const result = await provider.execute(baseRequest(ws), { model: 'claude-test' }, credential)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toMatch(/rỗng/)
+  })
+
+  test('the originally reported bug: going silent right after a tool_use no longer reports job success', async () => {
+    let call = 0
+    globalThis.fetch = (async () => {
+      call++
+      if (call === 1) {
+        return jsonResponse(anthropicMessage([{ type: 'tool_use', id: 't1', name: 'list_directory', input: {} }]))
+      }
+      return jsonResponse(anthropicMessage([]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const result = await provider.execute(baseRequest(ws), { model: 'claude-test' }, credential)
+
+    expect(result.ok).toBe(false)
+    expect(call).toBe(3)
+  })
+})
+
+describe('AnthropicCompatibleProvider — tool usage preamble', () => {
+  let ws: string
+  beforeAll(() => {
+    ws = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-anthropic-preamble-ws-'))
+  })
+  afterAll(() => {
+    fs.rmSync(ws, { recursive: true, force: true })
+  })
+
+  test('lists exactly the base 2 tools when extraTools is unset', async () => {
+    let seenSystem = ''
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      seenSystem = JSON.parse(String(init?.body)).system
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'ok' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    await provider.execute(baseRequest(ws), { model: 'claude-test' }, credential)
+
+    expect(seenSystem).toContain('list_directory')
+    expect(seenSystem).not.toContain('run_command')
+    expect(seenSystem).toContain('be helpful')
+    // The text-editor tool is the main file-op surface on this wrapper — the
+    // preamble must describe its sub-commands, not just print its bare name
+    // (a low-level model can't infer "view/create/str_replace/insert" from
+    // the name "str_replace_based_edit_tool" alone).
+    expect(seenSystem).toContain('str_replace_based_edit_tool')
+    expect(seenSystem).toContain('view')
+    expect(seenSystem).toContain('str_replace')
+  })
+
+  test('lists run_command once extraTools includes shell', async () => {
+    let seenSystem = ''
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      seenSystem = JSON.parse(String(init?.body)).system
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'ok' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    await provider.execute(baseRequest(ws), { model: 'claude-test', extraTools: ['shell'] }, credential)
+
+    expect(seenSystem).toContain('run_command')
+  })
+})
+
+describe('AnthropicCompatibleProvider — extraTools (opt-in shell/git/search/web)', () => {
+  let ws: string
+  beforeAll(() => {
+    ws = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-anthropic-extra-ws-'))
+  })
+  afterAll(() => {
+    fs.rmSync(ws, { recursive: true, force: true })
+  })
+  afterEach(() => {
+    delete process.env.BRAVE_SEARCH_API_KEY
+  })
+
+  test('without extraTools, only the base 2 tools are registered', async () => {
+    let seenTools: any[] = []
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      seenTools = JSON.parse(String(init?.body)).tools
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'ok' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    await provider.execute(baseRequest(ws), { model: 'claude-test' }, credential)
+
+    expect(seenTools.map((t: any) => t.name).sort()).toEqual(['list_directory', 'str_replace_based_edit_tool'])
+  })
+
+  test('extraTools:["shell"] registers run_command and executes an allowlisted binary end-to-end', async () => {
+    let call = 0
+    const bodies: Array<Record<string, any>> = []
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      call++
+      bodies.push(JSON.parse(String(init?.body)))
+      if (call === 1) {
+        return jsonResponse(
+          anthropicMessage([
+            { type: 'tool_use', id: 't1', name: 'run_command', input: { command: 'bun', args: ['-e', "console.log('shell-ok')"] } },
+          ]),
+        )
+      }
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'done' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const result = await provider.execute(baseRequest(ws), { model: 'claude-test', extraTools: ['shell'] }, credential)
+
+    expect(result.ok).toBe(true)
+    expect(bodies[0].tools.map((t: any) => t.name)).toContain('run_command')
+    const toolResultMsg = bodies[1].messages[bodies[1].messages.length - 1]
+    const outcome = JSON.parse(toolResultMsg.content[0].content)
+    expect(outcome.ok).toBe(true)
+    expect(outcome.stdout).toContain('shell-ok')
+  })
+
+  test('run_command rejects a binary outside the allowlist', async () => {
+    let call = 0
+    const bodies: Array<Record<string, any>> = []
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      call++
+      bodies.push(JSON.parse(String(init?.body)))
+      if (call === 1) {
+        return jsonResponse(anthropicMessage([{ type: 'tool_use', id: 't1', name: 'run_command', input: { command: 'rm', args: ['-rf', '/'] } }]))
+      }
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'blocked' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const result = await provider.execute(baseRequest(ws), { model: 'claude-test', extraTools: ['shell'] }, credential)
+
+    expect(result.ok).toBe(true)
+    const toolResultMsg = bodies[1].messages[bodies[1].messages.length - 1]
+    expect(toolResultMsg.content[0].is_error).toBe(true)
+    expect(JSON.parse(toolResultMsg.content[0].content).error).toContain('không nằm trong allowlist')
+  })
+
+  test('extraTools:["git"] registers git_status/git_diff/git_log and maps them onto the sandbox git ops', async () => {
+    let call = 0
+    const bodies: Array<Record<string, any>> = []
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      call++
+      bodies.push(JSON.parse(String(init?.body)))
+      if (call === 1) {
+        return jsonResponse(anthropicMessage([{ type: 'tool_use', id: 't1', name: 'git_status', input: {} }]))
+      }
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'checked' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const result = await provider.execute(baseRequest(ws), { model: 'claude-test', extraTools: ['git'] }, credential)
+
+    expect(result.ok).toBe(true)
+    expect(bodies[0].tools.map((t: any) => t.name)).toEqual(expect.arrayContaining(['git_status', 'git_diff', 'git_log']))
+    const toolResultMsg = bodies[1].messages[bodies[1].messages.length - 1]
+    const outcome = JSON.parse(toolResultMsg.content[0].content)
+    expect(outcome.ok).toBe(false)
+    expect(typeof outcome.exitCode).toBe('number')
+  })
+
+  test('extraTools:["search"] registers search_files and finds a literal match', async () => {
+    fs.writeFileSync(path.join(ws, 'needle-file.txt'), 'contains needle here\n')
+    let call = 0
+    const bodies: Array<Record<string, any>> = []
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      call++
+      bodies.push(JSON.parse(String(init?.body)))
+      if (call === 1) {
+        return jsonResponse(anthropicMessage([{ type: 'tool_use', id: 't1', name: 'search_files', input: { pattern: 'needle' } }]))
+      }
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'found' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const result = await provider.execute(baseRequest(ws), { model: 'claude-test', extraTools: ['search'] }, credential)
+
+    expect(result.ok).toBe(true)
+    const toolResultMsg = bodies[1].messages[bodies[1].messages.length - 1]
+    const outcome = JSON.parse(toolResultMsg.content[0].content)
+    expect(outcome.ok).toBe(true)
+    expect(outcome.matches.some((m: any) => m.file === 'needle-file.txt')).toBe(true)
+  })
+
+  test('web_search is absent from the schema when BRAVE_SEARCH_API_KEY is unset, even with extraTools:["web"]', async () => {
+    delete process.env.BRAVE_SEARCH_API_KEY
+    let seenTools: any[] = []
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      seenTools = JSON.parse(String(init?.body)).tools
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'ok' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    await provider.execute(baseRequest(ws), { model: 'claude-test', extraTools: ['web'] }, credential)
+
+    const names = seenTools.map((t: any) => t.name)
+    expect(names).not.toContain('web_search')
+    expect(names).toContain('fetch_url')
+  })
+
+  test('web_search appears in the schema once BRAVE_SEARCH_API_KEY is configured', async () => {
+    process.env.BRAVE_SEARCH_API_KEY = 'brave-test-key'
+    let seenTools: any[] = []
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      seenTools = JSON.parse(String(init?.body)).tools
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'ok' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    await provider.execute(baseRequest(ws), { model: 'claude-test', extraTools: ['web'] }, credential)
+
+    expect(seenTools.map((t: any) => t.name)).toContain('web_search')
+  })
+})
