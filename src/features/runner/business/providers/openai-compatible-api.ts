@@ -214,8 +214,11 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     const tools = buildTools(extraTools, this.isWebSearchConfigured())
     const systemContent = [
       this.buildToolUsagePreamble(tools.map((t) => t.function.name)),
+      this.buildProjectContextPreamble(ctx.req),
       ctx.req.resolvedAgent.systemPrompt || '',
-    ].join('\n\n')
+    ]
+      .filter(Boolean)
+      .join('\n\n')
 
     // `messages` excludes the system prompt — it is re-prepended on every turn
     // so the persisted rawMessages stay resume-ready without duplicating it.

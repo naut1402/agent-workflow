@@ -159,7 +159,13 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
 
     const extraTools = this.resolveExtraTools(ctx.runnerConfig)
     const tools = buildTools(extraTools, this.isWebSearchConfigured())
-    const system = [this.buildToolUsagePreamble(tools.map((t) => t.name)), ctx.req.resolvedAgent.systemPrompt || ''].join('\n\n')
+    const system = [
+      this.buildToolUsagePreamble(tools.map((t) => t.name)),
+      this.buildProjectContextPreamble(ctx.req),
+      ctx.req.resolvedAgent.systemPrompt || '',
+    ]
+      .filter(Boolean)
+      .join('\n\n')
 
     const toolCalls: AgenticRunResult['toolCalls'] = []
     let hasNudgedEmptyReply = false

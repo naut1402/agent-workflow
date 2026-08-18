@@ -66,6 +66,9 @@ class FakeAgenticProvider extends AgenticApiProvider {
   preamble(tools: string[]) {
     return this.buildToolUsagePreamble(tools)
   }
+  projectContextPreamble(req: ExecuteRequest) {
+    return this.buildProjectContextPreamble(req)
+  }
   runCmd(ws: string, command: string, args: string[]) {
     return this.runShellCommand(ws, command, args)
   }
@@ -492,6 +495,50 @@ describe('AgenticApiProvider — buildToolUsagePreamble()', () => {
   test('an empty tool list still renders the header without throwing', () => {
     const p = new FakeAgenticProvider()
     expect(() => p.preamble([])).not.toThrow()
+  })
+
+  test('tells the model the workspace is already the task folder — no path prefix', () => {
+    const p = new FakeAgenticProvider()
+    const text = p.preamble(['write_file'])
+    expect(text).toMatch(/workspace hiện tại CHÍNH LÀ thư mục task/)
+    expect(text).toContain('`qa.md`')
+    expect(text).toContain('.dev-team-agent/tasks/<task-id>/qa.md')
+  })
+})
+
+describe('AgenticApiProvider — buildProjectContextPreamble()', () => {
+  let projectRoot: string
+  let devTeamRoot: string
+
+  beforeAll(() => {
+    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-agentic-project-'))
+    devTeamRoot = path.join(projectRoot, '.dev-team-agent')
+    fs.mkdirSync(devTeamRoot, { recursive: true })
+    fs.writeFileSync(path.join(projectRoot, 'AGENTS.md'), '# AGENTS\n\nbat bien quan trong')
+    fs.writeFileSync(path.join(devTeamRoot, 'project-rules.md'), '# Rules\n\nrule coding')
+  })
+  afterAll(() => {
+    fs.rmSync(projectRoot, { recursive: true, force: true })
+  })
+
+  test('embeds AGENTS.md and project-rules.md content when metadata points at them', () => {
+    const p = new FakeAgenticProvider()
+    const text = p.projectContextPreamble(baseRequest({ metadata: { projectRoot, devTeamRoot } }))
+    expect(text).toContain('bat bien quan trong')
+    expect(text).toContain('rule coding')
+    expect(text).toMatch(/KHÔNG gọi tool để đọc lại/)
+  })
+
+  test('returns empty string when metadata has no projectRoot/devTeamRoot', () => {
+    const p = new FakeAgenticProvider()
+    expect(p.projectContextPreamble(baseRequest())).toBe('')
+  })
+
+  test('returns empty string instead of throwing when the files do not exist', () => {
+    const p = new FakeAgenticProvider()
+    const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-agentic-empty-'))
+    expect(p.projectContextPreamble(baseRequest({ metadata: { projectRoot: emptyDir, devTeamRoot: emptyDir } }))).toBe('')
+    fs.rmSync(emptyDir, { recursive: true, force: true })
   })
 })
 

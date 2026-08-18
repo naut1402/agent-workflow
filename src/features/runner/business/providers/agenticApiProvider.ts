@@ -285,7 +285,52 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       'Hướng dẫn bên dưới có thể nhắc tới các công cụ không tồn tại ở đây (vd find_symbol, ' +
         'Serena MCP, Skill, Write, Read, Edit, TaskCreate...) — đó là tài liệu viết cho môi trường ' +
         'khác, KHÔNG áp dụng. Chỉ gọi đúng tên tool trong danh sách trên.',
+      '',
+      'Quy ước path: workspace hiện tại CHÍNH LÀ thư mục task (nơi chứa request.md), không phải ' +
+        'root repo. Mọi path truyền cho tool ở trên phải tương đối ngay trong workspace này — ví dụ ' +
+        'dùng `qa.md`, `investigate.md`, KHÔNG dùng `.dev-team-agent/tasks/<task-id>/qa.md` hay bất kỳ ' +
+        'tiền tố thư mục nào khác dù hướng dẫn bên dưới viết path đầy đủ như vậy (path đó viết cho môi ' +
+        'trường có cwd ở root repo).',
     ].join('\n')
+  }
+
+  /** Chars kept per embedded file in `buildProjectContextPreamble()` — enough for AGENTS.md/project-rules.md,
+   * bounded so a runaway file doesn't blow the context budget of small models. */
+  private static readonly PROJECT_CONTEXT_FILE_LIMIT = 12_000
+
+  /**
+   * Agent markdown (designer.md, reviewer.md, ...) universally instructs the model to read
+   * `AGENTS.md` (project root) and `.dev-team-agent/project-rules.md` — paths that sit *above*
+   * `workspace` (the task folder). The sandbox tools here intentionally can't reach outside
+   * `workspace` (see `resolvePathUnder` — a security invariant, not an oversight), and unlike the
+   * CLI providers (real filesystem access, can walk up a directory when a literal path 404s) a
+   * weak model just hits "path outside workspace" or silently skips the rule. Embedding both
+   * files' content directly in the system prompt sidesteps the read entirely.
+   */
+  protected buildProjectContextPreamble(req: ExecuteRequest): string {
+    const meta = req.metadata || {}
+    const projectRoot = typeof meta.projectRoot === 'string' ? meta.projectRoot : undefined
+    const devTeamRoot = typeof meta.devTeamRoot === 'string' ? meta.devTeamRoot : undefined
+    const sections: string[] = []
+    const tryEmbed = (dir: string | undefined, fileName: string) => {
+      if (!dir) return
+      try {
+        const content = readTextFileSync(joinPath(dir, fileName))
+        sections.push(`### ${fileName}\n\n${truncate(content, AgenticApiProvider.PROJECT_CONTEXT_FILE_LIMIT)}`)
+      } catch {
+        /* file doesn't exist for this project — nothing to embed */
+      }
+    }
+    tryEmbed(projectRoot, 'AGENTS.md')
+    tryEmbed(devTeamRoot, 'project-rules.md')
+    if (!sections.length) return ''
+    return [
+      '## Nội dung file ngoài workspace (đã nhúng sẵn — KHÔNG gọi tool để đọc lại các file này)',
+      'Hướng dẫn bên dưới có thể yêu cầu đọc `AGENTS.md` hoặc `.dev-team-agent/project-rules.md` — ' +
+        '2 file này nằm ngoài workspace hiện tại nên không đọc được qua tool. Nội dung đã được nhúng ' +
+        'sẵn dưới đây, dùng trực tiếp:',
+      ...sections,
+    ].join('\n\n')
   }
 
   /** `run_command` — allowlisted binary, argv-array (no `shell:true`), bounded timeout/output. */
