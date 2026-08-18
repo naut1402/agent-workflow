@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, repairTaskState, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, repairTaskState, resetPipelineStepAssumingLock, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
 import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
 import { listJobs, loadJob, registerProvider, submitJob, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
@@ -627,5 +627,226 @@ describe('repairTaskState', () => {
     if (!result.ok) return
     expect(result.state.current_phase).toBe('completed')
     expect(result.state.hitl_pending).toBeNull()
+  })
+})
+
+describe('resetPipelineStepAssumingLock', () => {
+  const pipelineWithRetry = [
+    'version: 1',
+    'steps:',
+    '  - id: investigator',
+    '    produces: [investigate.md]',
+    '  - id: designer',
+    '    produces: [design.md]',
+    '  - id: implementer',
+    '    produces: [phpstan.md]',
+    '  - id: reviewer',
+    '    produces: [review.md, test-spec.md]',
+    '    hitl: { mode: manual, gate_id: hitl-3, retry: { on: must_fix, restart_from: implementer, max: 2 } }',
+    '  - id: pr-creator',
+    '    produces: [pr-desc.md]',
+  ].join('\n')
+
+  async function seedFiles(root: string, taskId: string, files: Record<string, string>) {
+    await fs.mkdir(path.join(root, 'tasks', taskId), { recursive: true })
+    for (const [name, content] of Object.entries(files)) {
+      await fs.writeFile(path.join(root, 'tasks', taskId, name), content, 'utf8')
+    }
+  }
+
+  async function exists(root: string, taskId: string, name: string): Promise<boolean> {
+    try {
+      await fs.stat(path.join(root, 'tasks', taskId, name))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  test('non-cascade removes only the target step\'s own produces', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS1', { current_phase: 'completed' })
+    await seedFiles(root, 'RS1', { 'phpstan.md': 'impl', 'review.md': 'r' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS1', stateFile, 'implementer', false)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.removedSteps).toEqual(['implementer'])
+    expect(await exists(root, 'RS1', 'phpstan.md')).toBe(false)
+    expect(await exists(root, 'RS1', 'review.md')).toBe(true)
+  })
+
+  test('cascade removes the target and every step after it', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS2', { current_phase: 'completed' })
+    await seedFiles(root, 'RS2', {
+      'phpstan.md': 'impl',
+      'review.md': 'r',
+      'test-spec.md': 't',
+      'pr-desc.md': 'p',
+    })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS2', stateFile, 'implementer', true)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.removedSteps).toEqual(['implementer', 'reviewer', 'pr-creator'])
+    for (const f of ['phpstan.md', 'review.md', 'test-spec.md', 'pr-desc.md']) {
+      expect(await exists(root, 'RS2', f)).toBe(false)
+    }
+  })
+
+  test('deletes the -po.md sidecar alongside its main produces file', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS3', { current_phase: 'completed' })
+    await seedFiles(root, 'RS3', { 'review.md': 'r', 'review-po.md': 'po', 'test-spec.md': 't' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS3', stateFile, 'reviewer', false)
+    expect(result.ok).toBe(true)
+    expect(await exists(root, 'RS3', 'review.md')).toBe(false)
+    expect(await exists(root, 'RS3', 'review-po.md')).toBe(false)
+  })
+
+  test('leaves qa.md and hitl-feedback.md untouched even on a full cascade', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS4', { current_phase: 'completed' })
+    await seedFiles(root, 'RS4', {
+      'investigate.md': 'i',
+      'qa.md': 'qa history',
+      'hitl-feedback.md': 'feedback history',
+    })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS4', stateFile, 'investigator', true)
+    expect(result.ok).toBe(true)
+    expect(await exists(root, 'RS4', 'qa.md')).toBe(true)
+    expect(await exists(root, 'RS4', 'hitl-feedback.md')).toBe(true)
+  })
+
+  test('sets current_phase to stepId and clears hitl_pending', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS5', { current_phase: 'reviewer', hitl_pending: 'hitl-3' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS5', stateFile, 'designer', false)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.current_phase).toBe('designer')
+    expect(result.state.hitl_pending).toBeNull()
+  })
+
+  test('review_round resets to 0 when the target is at or before the retry step', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS6', { current_phase: 'completed', review_round: 2 })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS6', stateFile, 'implementer', false)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.review_round).toBe(0)
+  })
+
+  test('review_round is left untouched when the target is after the retry step', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS7', { current_phase: 'completed', review_round: 2 })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS7', stateFile, 'pr-creator', false)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.review_round).toBe(2)
+  })
+
+  test('doc_review_round.investigate/design reset to 0 only for removed steps', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS8', {
+      current_phase: 'completed',
+      doc_review_round: { investigate: 2, design: 1 },
+    })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS8', stateFile, 'designer', true)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // Cascade from designer removes designer/implementer/reviewer/pr-creator —
+    // investigator is untouched, so its doc_review_round entry must not reset.
+    expect(result.state.doc_review_round).toEqual({ investigate: 2, design: 0 })
+  })
+
+  test('defaults doc_review_round to {investigate:0, design:0} when missing on old state', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS9', { current_phase: 'completed' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS9', stateFile, 'investigator', false)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.doc_review_round).toEqual({ investigate: 0, design: 0 })
+  })
+
+  test('invalid stepId → 400, no file touched', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS10', { current_phase: 'completed' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS10', stateFile, 'nope', false)
+    expect(result.ok).toBe(false)
+    if ('error' in result) {
+      expect(result.status).toBe(400)
+      expect(result.error).toBe('invalid stepId')
+    }
+  })
+
+  test('missing state file → 404', async () => {
+    const root = await tmp()
+    await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+
+    const result = await resetPipelineStepAssumingLock(
+      root,
+      'RS11',
+      path.join(root, '.dev-state', 'RS11.json'),
+      'investigator',
+      false,
+    )
+    expect(result.ok).toBe(false)
+    if ('error' in result) expect(result.status).toBe(404)
+  })
+
+  test('cascade over steps that never produced anything is a no-op delete, still listed in removedSteps', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS12', { current_phase: 'implementer' })
+    await seedFiles(root, 'RS12', { 'phpstan.md': 'impl' })
+    // reviewer/pr-creator never ran — no files for them on disk.
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS12', stateFile, 'implementer', true)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.removedSteps).toEqual(['implementer', 'reviewer', 'pr-creator'])
+  })
+
+  test('emits task.advanced with reason "reset" after persist (no dedicated task.reset type)', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS13', { current_phase: 'completed' })
+
+    const events: Array<Record<string, unknown>> = []
+    on('task.advanced', (e) => {
+      events.push(e.payload)
+    })
+    const result = await resetPipelineStepAssumingLock(root, 'RS13', stateFile, 'designer', true)
+    expect(result.ok).toBe(true)
+    expect(events).toEqual([
+      {
+        taskId: 'RS13',
+        stepId: 'designer',
+        currentPhase: 'designer',
+        reason: 'reset',
+        cascade: true,
+        removedSteps: ['designer', 'implementer', 'reviewer', 'pr-creator'],
+      },
+    ])
   })
 })

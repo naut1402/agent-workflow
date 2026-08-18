@@ -101,6 +101,95 @@ function stepIndex(steps: any[], stepId: string): number {
   return steps.findIndex((s) => s.id === stepId)
 }
 
+export type ResetResult =
+  | { ok: true; state: Record<string, unknown>; mtime: number; removedSteps: string[] }
+  | { ok: false; error: string; status: number }
+
+/**
+ * Roll `current_phase` back to `stepId` and delete its artifacts (and, with
+ * `cascade`, every step after it). The reverse of `jumpToPipelineStepAssumingLock`
+ * — that one only ever moves the cursor forward (guarded by `isRunnableTarget`);
+ * this one moves it backward (guarded by `isResettableTarget`), which is why it's
+ * a separate function rather than a shared "jump" with a direction flag.
+ *
+ * `qa.md`/`hitl-feedback.md` are deliberately left alone — they're task-wide
+ * history, not a single step's artifact.
+ *
+ * Core of `resetPipelineStep` — caller must already hold the task's lock (`withTaskLock`).
+ */
+export async function resetPipelineStepAssumingLock(
+  root: string,
+  taskId: string,
+  stateFile: string,
+  stepId: string,
+  cascade: boolean,
+): Promise<ResetResult> {
+  const read = await readState(stateFile)
+  if (!read.ok) return { ok: false, error: 'state not found', status: 404 }
+  const state = { ...(read.state as Record<string, unknown>) }
+
+  const pipeline = await loadPipelineConfig(root, taskId)
+  const steps = pipeline.steps || []
+  const phaseKeys = steps.map((s: any) => s.id).filter(Boolean)
+  const targetIdx = phaseKeys.indexOf(stepId)
+  if (targetIdx < 0) return { ok: false, error: 'invalid stepId', status: 400 }
+
+  const removedSteps = cascade ? phaseKeys.slice(targetIdx) : [stepId]
+
+  for (const sid of removedSteps) {
+    const step = steps.find((s: any) => s.id === sid)
+    for (const file of step?.produces ?? []) {
+      await rm(joinPath(root, 'tasks', taskId, file), { force: true })
+      const m = /^(.*)\.md$/.exec(file)
+      if (m) await rm(joinPath(root, 'tasks', taskId, `${m[1]}-po.md`), { force: true })
+    }
+  }
+
+  state.current_phase = stepId
+  state.hitl_pending = null
+
+  const retryStep = steps.find((s: any) => s.hitl?.retry)
+  if (retryStep) {
+    const retryIdx = phaseKeys.indexOf(retryStep.id)
+    if (targetIdx <= retryIdx) state.review_round = 0
+  }
+  const docReviewRound = {
+    investigate: 0,
+    design: 0,
+    ...((state.doc_review_round as Record<string, unknown>) ?? {}),
+  }
+  if (removedSteps.includes('investigator')) docReviewRound.investigate = 0
+  if (removedSteps.includes('designer')) docReviewRound.design = 0
+  state.doc_review_round = docReviewRound
+
+  const mtime = await writeStateAtomic(stateFile, state)
+  // No dedicated `task.reset` type — event-catalog.md's convention is that
+  // step-cursor changes go through `task.advanced` with a `reason` (same as
+  // `review_retry` below), not a new `pipeline.*`/`step.*` type per action.
+  emit('task.advanced', {
+    taskId,
+    stepId,
+    currentPhase: state.current_phase,
+    reason: 'reset',
+    cascade,
+    removedSteps,
+  })
+
+  return { ok: true, state, mtime, removedSteps }
+}
+
+export async function resetPipelineStep(
+  root: string,
+  taskId: string,
+  stepId: string,
+  cascade: boolean,
+): Promise<ResetResult> {
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
+  return withStateFileLock(stateFile, () =>
+    resetPipelineStepAssumingLock(root, taskId, stateFile, stepId, cascade),
+  )
+}
+
 function hitlPendingMatches(hitlPending: unknown, gateId: string): boolean {
   return hitlPending === true || hitlPending === gateId
 }
