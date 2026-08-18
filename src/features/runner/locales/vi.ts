@@ -111,6 +111,7 @@ export default {
     modelField: 'Model',
     modelHint: 'Model dùng cho connection này — có thể chọn nhiều, hoặc để trống (cơ chế rotate giữa các model sẽ tự chọn sau)',
     modelSelectPlaceholder: 'Chọn model…',
+    modelCustomPlaceholder: 'Nhập tên model rồi nhấn Enter…',
     loadModels: 'Tải danh sách model',
     loadingModels: 'Đang tải model…',
     modelsLoaded: 'Đã tải {count} model',

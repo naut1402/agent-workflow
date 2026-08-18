@@ -112,6 +112,7 @@ export default {
     modelField: 'Model',
     modelHint: "Models used by this connection — pick more than one, or leave empty (rotating between them is a later feature)",
     modelSelectPlaceholder: 'Select model…',
+    modelCustomPlaceholder: 'Type a model name and press Enter…',
     loadModels: 'Load model list',
     loadingModels: 'Loading models…',
     modelsLoaded: 'Loaded {count} models',

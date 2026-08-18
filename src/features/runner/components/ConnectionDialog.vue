@@ -653,6 +653,8 @@ onUnmounted(() => {
                   :placeholder="modelPlaceholder || t('runner.connectionDialog.modelSelectPlaceholder')"
                   :aria-label="t('runner.connectionDialog.modelField')"
                   class="cfg-multi-select"
+                  creatable
+                  :create-placeholder="t('runner.connectionDialog.modelCustomPlaceholder')"
                 />
                 <button
                   type="button"

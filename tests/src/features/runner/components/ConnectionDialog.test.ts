@@ -360,4 +360,26 @@ describe('ConnectionDialog — model list', () => {
     expect(payload.config.model).toBe('claude-a')
     expect(payload.config.providerConfigId).toBe('pc-anthropic')
   })
+
+  it('lets the user type a model name that was never in the fetched list', async () => {
+    await mountConnectionOnAiProvider()
+
+    const multiSelectTrigger = q<HTMLButtonElement>('.c-multi-select .c-select-trigger')
+    await click(multiSelectTrigger)
+    const createInput = q<HTMLInputElement>('.c-multi-select .c-select-create-input')
+    await setInputValue(createInput, 'my-custom-model')
+    createInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    await flushPromises()
+
+    const options = qa<HTMLLIElement>('.c-multi-select .c-select-option')
+    expect(options.some((o) => o.textContent?.trim() === 'my-custom-model' && o.classList.contains('is-selected'))).toBe(true)
+
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude API conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.config.models).toEqual(['my-custom-model'])
+    expect(payload.config.model).toBe('my-custom-model')
+  })
 })
