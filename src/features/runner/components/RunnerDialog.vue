@@ -253,7 +253,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <select v-model="draft.connectionId" class="cfg-input">
                 <option value="" disabled>{{ t('runner.fields.connectionPlaceholder') }}</option>
                 <option v-for="c in connections" :key="c.id" :value="c.id">
-                  {{ c.label }} ({{ c.id }})
+                  {{ c.label }}
                 </option>
               </select>
               <div class="icon-btn-group">
@@ -424,12 +424,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   gap: 0.5rem;
 }
 .enable-row .cfg-label { margin: 0; }
+.modal-body { display: flex; flex-direction: column; }
 .modal-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 1rem;
+  margin-top: auto;
+  padding-top: 1rem;
 }
 .spacer { flex: 1; }
 .err-banner {

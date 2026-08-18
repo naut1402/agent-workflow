@@ -182,7 +182,6 @@ function clearValue() {
   position: relative;
   display: block;
   width: 100%;
-  max-width: 360px;
 }
 
 .c-combo-trigger {

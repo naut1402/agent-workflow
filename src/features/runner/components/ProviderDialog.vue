@@ -337,7 +337,7 @@ onUnmounted(() => {
               <select v-model="credentialId" class="cfg-input">
                 <option value="" disabled>{{ t('runner.providerDialog.credentialPlaceholder') }}</option>
                 <option v-for="c in filteredCredentials" :key="c.id" :value="c.id">
-                  {{ c.label }} ({{ c.id }})
+                  {{ c.label }}
                 </option>
               </select>
               <button
@@ -504,7 +504,8 @@ onUnmounted(() => {
 .advanced-secret-ref { margin-bottom: 0.75rem; }
 .advanced-secret-ref summary { cursor: pointer; font-size: 0.8rem; }
 .advanced-secret-ref .field { margin-top: 0.5rem; margin-bottom: 0; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+.modal-body { display: flex; flex-direction: column; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: auto; padding-top: 1rem; }
 .modal-actions .spacer { flex: 1; }
 .err-banner {
   background: rgba(248, 81, 73, 0.12);

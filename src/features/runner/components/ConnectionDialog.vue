@@ -793,7 +793,8 @@ onUnmounted(() => {
 .path-hint { margin: 0.35rem 0 0; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
 .err-text { color: var(--danger); }
-.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+.modal-body { display: flex; flex-direction: column; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: auto; padding-top: 1rem; }
 .err-banner {
   background: rgba(248, 81, 73, 0.12);
   border: 1px solid var(--danger);
