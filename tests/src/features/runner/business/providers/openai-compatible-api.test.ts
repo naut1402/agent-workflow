@@ -253,6 +253,33 @@ describe('OpenAiCompatibleProvider', () => {
     if (!result.ok) expect(result.error).toContain('không có choices')
   })
 
+  test('an upstream response that is not valid JSON is wrapped into a clear error, not a raw SyntaxError (TC-07, Lỗi 3)', async () => {
+    globalThis.fetch = (async () =>
+      new Response('not valid json {{{', { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test/v1')
+    const result = await provider.execute(baseRequest(workspace), { model: 'gpt-test' }, credential)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toContain('response upstream không hợp lệ')
+  })
+
+  test('a call that hangs past the configured timeout fails within that timeout instead of hanging indefinitely (TC-06, Lỗi 3)', async () => {
+    globalThis.fetch = (async (_url: string, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')))
+      })) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test/v1')
+    const started = Date.now()
+    const result = await provider.execute(baseRequest(workspace), { model: 'gpt-test', timeoutMs: 50 }, credential)
+    const elapsedMs = Date.now() - started
+
+    expect(result.ok).toBe(false)
+    expect(elapsedMs).toBeLessThan(5_000)
+    if (!result.ok) expect(result.error).toMatch(/timeout/)
+  })
+
   test('listModels() calls the SDK models endpoint and returns sorted ids', async () => {
     let seenUrl = ''
     globalThis.fetch = (async (url: string) => {

@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   AgenticApiProvider,
+  AgenticRunError,
   type AgenticRunContext,
   type AgenticRunResult,
 } from '../../../../../../src/features/runner/business/providers/agenticApiProvider.js'
@@ -384,6 +385,160 @@ describe('AgenticApiProvider — execute() template method', () => {
     expect(result.ok).toBe(false)
     expect(result.error).toMatch(/connect again/)
     expect(called).toBe(false)
+  })
+})
+
+describe('AgenticApiProvider — AgenticRunError persists partialMessages (Lỗi 1 regression)', () => {
+  beforeAll(() => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-agentic-runerror-ws-'))
+  })
+  afterAll(() => {
+    fs.rmSync(workspace, { recursive: true, force: true })
+  })
+
+  test('runConversation throwing AgenticRunError persists partialMessages via saveSessionMessages', async () => {
+    const p = new FakeAgenticProvider()
+    const accumulated = [
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', tool_calls: [{ id: 'call_1' }] },
+      { role: 'tool', tool_call_id: 'call_1', content: '{"ok":true}' },
+    ]
+    p.runConversationImpl = async (ctx) => {
+      ctx.handlers.onToolCall({ name: 'list_directory', argsSummary: '{}' })
+      throw new AgenticRunError('gọi LLM thất bại giữa chừng', accumulated)
+    }
+
+    const result = await p.execute(baseRequest({ resumeSessionId: 'run-error-session-1' }), {}, credential())
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe('gọi LLM thất bại giữa chừng')
+    expect(loadSessionMessages('run-error-session-1')).toEqual(accumulated)
+  })
+
+  test('runConversation throwing a plain Error does not persist any session messages (unlike AgenticRunError)', async () => {
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async () => {
+      throw new Error('model exploded')
+    }
+
+    const result = await p.execute(baseRequest({ resumeSessionId: 'run-error-session-2' }), {}, credential())
+
+    expect(result.ok).toBe(false)
+    expect(loadSessionMessages('run-error-session-2')).toEqual([])
+  })
+
+  test('an AgenticRunError with an empty partialMessages array does not overwrite a previously persisted session', async () => {
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async () => ({
+      finalText: 'ok',
+      usage: {},
+      toolCalls: [],
+      rawMessages: [{ role: 'user', content: 'hello' }],
+    })
+    const first = await p.execute(baseRequest({ resumeSessionId: 'run-error-session-3' }), {}, credential())
+    expect(first.ok).toBe(true)
+    const savedAfterSuccess = loadSessionMessages('run-error-session-3')
+    expect(savedAfterSuccess).not.toEqual([])
+
+    p.runConversationImpl = async () => {
+      throw new AgenticRunError('lỗi không có message nào để lưu', [])
+    }
+    const second = await p.execute(baseRequest({ resumeSessionId: 'run-error-session-3' }), {}, credential())
+
+    expect(second.ok).toBe(false)
+    expect(loadSessionMessages('run-error-session-3')).toEqual(savedAfterSuccess)
+  })
+
+  test('resume after a mid-conversation AgenticRunError sees the exact partialMessages, not an empty session', async () => {
+    const p = new FakeAgenticProvider()
+    const partialMessages = [
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', tool_calls: [{ id: 'call_1' }] },
+    ]
+    p.runConversationImpl = async () => {
+      throw new AgenticRunError('gọi LLM thất bại giữa chừng', partialMessages)
+    }
+
+    const first = await p.execute(baseRequest(), {}, credential())
+    expect(first.ok).toBe(false)
+
+    let seenPriorMessages: unknown[] = []
+    p.runConversationImpl = async (ctx) => {
+      seenPriorMessages = ctx.priorMessages
+      return { finalText: 'resumed', usage: {}, toolCalls: [], rawMessages: ctx.priorMessages }
+    }
+    const second = await p.execute(baseRequest({ resumeSessionId: first.sessionId! }), {}, credential())
+
+    expect(second.ok).toBe(true)
+    expect(seenPriorMessages).toEqual(partialMessages)
+  })
+})
+
+describe('AgenticApiProvider — describePayload() không hiển thị model dư từ agent config (Lỗi 2 regression)', () => {
+  let logDir: string
+  beforeAll(() => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-agentic-payload-ws-'))
+    logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-agentic-payload-log-'))
+  })
+  afterAll(() => {
+    fs.rmSync(workspace, { recursive: true, force: true })
+    fs.rmSync(logDir, { recursive: true, force: true })
+  })
+
+  test('an agent with an explicit model set does not leak it onto the "Agent:" log line', async () => {
+    const logPath = path.join(logDir, 'agent-model.log')
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async () => ({ finalText: 'ok', usage: {}, toolCalls: [], rawMessages: [] })
+
+    await p.execute(
+      baseRequest({
+        metadata: { logPath },
+        resolvedAgent: { ref: 'agent', name: 'agent', description: '', systemPrompt: 'be helpful', skills: [], model: 'gpt-4o' },
+      }),
+      {},
+      credential(),
+    )
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    const agentLine = log.split('\n').find((l) => l.startsWith('Agent:'))
+    expect(agentLine).toBe('Agent: agent (agent)')
+  })
+
+  test('an agent falling back to the system default model still does not show it in the log (TC-05)', async () => {
+    const logPath = path.join(logDir, 'agent-default-model.log')
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async () => ({ finalText: 'ok', usage: {}, toolCalls: [], rawMessages: [] })
+
+    await p.execute(
+      baseRequest({
+        metadata: { logPath },
+        resolvedAgent: { ref: 'agent', name: 'agent', description: '', systemPrompt: 'be helpful', skills: [], model: 'claude-sonnet-4-6' },
+      }),
+      {},
+      credential(),
+    )
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).not.toContain('claude-sonnet-4-6')
+  })
+
+  test('the real model used to call the API (runnerConfig.model) still shows on the "Provider:" line', async () => {
+    const logPath = path.join(logDir, 'provider-model.log')
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async () => ({ finalText: 'ok', usage: {}, toolCalls: [], rawMessages: [] })
+
+    await p.execute(
+      baseRequest({
+        metadata: { logPath },
+        resolvedAgent: { ref: 'agent', name: 'agent', description: '', systemPrompt: 'be helpful', skills: [], model: 'gpt-4o' },
+      }),
+      { model: 'gemma-4-26b' },
+      credential(),
+    )
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toContain('Provider: fake-agentic-api — model: gemma-4-26b')
+    expect(log).not.toContain('gpt-4o')
   })
 })
 

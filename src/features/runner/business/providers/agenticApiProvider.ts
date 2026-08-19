@@ -108,6 +108,22 @@ function isLikelyBinary(content: string): boolean {
   return content.includes('\u0000')
 }
 
+/**
+ * Thrown by `runConversation()` instead of a plain `Error` once `messages` has
+ * accumulated any history worth keeping (system prompt, tool calls, partial
+ * turns) — lets `execute()` persist that history via `saveSessionMessages()`
+ * before surfacing the failure, so a resume after a mid-conversation error
+ * doesn't start from an empty session.
+ */
+export class AgenticRunError extends Error {
+  readonly partialMessages: unknown[]
+  constructor(message: string, partialMessages: unknown[]) {
+    super(message)
+    this.name = 'AgenticRunError'
+    this.partialMessages = partialMessages
+  }
+}
+
 /** Result of one full turn of an API-based agentic conversation (tool-use loop included). */
 export interface AgenticRunResult {
   finalText: string
@@ -478,7 +494,7 @@ export abstract class AgenticApiProvider implements RunnerProvider {
         mode: 'agentic-api',
       }).trimEnd(),
       '=== Payload gửi cho runner ===',
-      `Agent: ${agentLabel}${agent.model ? ` — model: ${agent.model}` : ''}`,
+      `Agent: ${agentLabel}`,
       `Workspace: ${req.workspace}`,
       `Provider: ${this.providerId}${runnerConfig.model ? ` — model: ${runnerConfig.model}` : ''}`,
       '--- Prompt ---',
@@ -598,6 +614,11 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       })
     } catch (err: any) {
       flushAssistantBuffer() // don't lose a partially-streamed turn if the loop threw mid-turn
+      // `.length` guard: avoid overwriting an already-persisted session with `[]`
+      // if some future throw site forgets to pass a full `messages` array.
+      if (err instanceof AgenticRunError && Array.isArray(err.partialMessages) && err.partialMessages.length) {
+        saveSessionMessages(sessionId, err.partialMessages)
+      }
       const failure: ExecuteResult = {
         ok: false,
         exitCode: null,
