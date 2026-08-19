@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import {
   AgenticApiProvider,
+  AgenticRunError,
   EMPTY_REPLY_ERROR_MESSAGE,
   EMPTY_REPLY_NUDGE_TEXT,
   SHELL_ALLOWLIST,
@@ -149,7 +150,8 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
   }
 
   protected async runConversation(ctx: AgenticRunContext): Promise<AgenticRunResult> {
-    const client = new Anthropic({ apiKey: ctx.apiKey, baseURL: ctx.runnerConfig.baseURL || this.defaultBaseURL })
+    const timeoutMs = Number(ctx.req.timeoutMs) || Number(ctx.runnerConfig.timeoutMs) || 600_000
+    const client = new Anthropic({ apiKey: ctx.apiKey, baseURL: ctx.runnerConfig.baseURL || this.defaultBaseURL, timeout: timeoutMs })
     const model = String(ctx.runnerConfig.model || '')
 
     const priorMessages = ctx.priorMessages as Anthropic.Messages.MessageParam[]
@@ -171,16 +173,24 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
     let hasNudgedEmptyReply = false
 
     for (let turn = 1; turn <= MAX_AGENT_LOOP_TURNS; turn++) {
-      const response = await client.messages.create(
-        {
-          model,
-          system,
-          max_tokens: 4096,
-          tools,
+      let response: Anthropic.Messages.Message
+      try {
+        response = await client.messages.create(
+          {
+            model,
+            system,
+            max_tokens: 4096,
+            tools,
+            messages,
+          },
+          { signal: ctx.signal },
+        )
+      } catch (err: any) {
+        throw new AgenticRunError(
+          `gọi LLM thất bại (có thể do timeout sau ${timeoutMs}ms hoặc response upstream không hợp lệ): ${String(err?.message ?? err)}`,
           messages,
-        },
-        { signal: ctx.signal },
-      )
+        )
+      }
 
       const toolUseBlocks = response.content.filter(
         (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use',
@@ -221,7 +231,7 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
           messages.push({ role: 'user', content: EMPTY_REPLY_NUDGE_TEXT })
           continue
         }
-        throw new Error(EMPTY_REPLY_ERROR_MESSAGE)
+        throw new AgenticRunError(EMPTY_REPLY_ERROR_MESSAGE, messages)
       }
 
       messages.push({ role: 'assistant', content: response.content })
@@ -241,7 +251,7 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
       messages.push({ role: 'user', content: resultBlocks })
     }
 
-    throw new Error(`exceeded ${MAX_AGENT_LOOP_TURNS} agent loop turns`)
+    throw new AgenticRunError(`exceeded ${MAX_AGENT_LOOP_TURNS} agent loop turns`, messages)
   }
 
   /** Map one `tool_use` block to a base-class sandbox op (text_editor command, list_directory, or an opt-in extra tool). */

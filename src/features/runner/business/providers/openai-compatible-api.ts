@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import {
   AgenticApiProvider,
+  AgenticRunError,
   EMPTY_REPLY_ERROR_MESSAGE,
   EMPTY_REPLY_NUDGE_TEXT,
   SHELL_ALLOWLIST,
@@ -208,7 +209,8 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     const model = String(ctx.runnerConfig.model || '')
     if (!model) throw new Error('model is required — set it on the runner connection (ConnectionDialog)')
 
-    const client = new OpenAI({ baseURL: ctx.runnerConfig.baseURL || this.defaultBaseURL, apiKey: ctx.apiKey })
+    const timeoutMs = Number(ctx.req.timeoutMs) || Number(ctx.runnerConfig.timeoutMs) || 600_000
+    const client = new OpenAI({ baseURL: ctx.runnerConfig.baseURL || this.defaultBaseURL, apiKey: ctx.apiKey, timeout: timeoutMs })
 
     const extraTools = this.resolveExtraTools(ctx.runnerConfig)
     const tools = buildTools(extraTools, this.isWebSearchConfigured())
@@ -232,17 +234,25 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     let hasNudgedEmptyReply = false
 
     for (let turn = 1; turn <= MAX_AGENT_LOOP_TURNS; turn++) {
-      const response = await client.chat.completions.create(
-        {
-          model,
-          messages: [
-            { role: 'system', content: systemContent },
-            ...messages,
-          ],
-          tools,
-        },
-        { signal: ctx.signal },
-      )
+      let response: OpenAI.Chat.Completions.ChatCompletion
+      try {
+        response = await client.chat.completions.create(
+          {
+            model,
+            messages: [
+              { role: 'system', content: systemContent },
+              ...messages,
+            ],
+            tools,
+          },
+          { signal: ctx.signal },
+        )
+      } catch (err: any) {
+        throw new AgenticRunError(
+          `gọi LLM thất bại (có thể do timeout sau ${timeoutMs}ms hoặc response upstream không hợp lệ): ${String(err?.message ?? err)}`,
+          messages,
+        )
+      }
 
       usage.inputTokens += response.usage?.prompt_tokens ?? 0
       usage.outputTokens += response.usage?.completion_tokens ?? 0
@@ -254,10 +264,13 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
       // clearly instead of crashing on `choices[0]` of an empty array.
       const gatewayError = (response as { error?: { message?: string; code?: unknown } }).error
       if (gatewayError) {
-        throw new Error(gatewayError.message ? String(gatewayError.message) : `provider trả lỗi: ${JSON.stringify(gatewayError)}`)
+        throw new AgenticRunError(
+          gatewayError.message ? String(gatewayError.message) : `provider trả lỗi: ${JSON.stringify(gatewayError)}`,
+          messages,
+        )
       }
       if (!response.choices?.length) {
-        throw new Error('provider trả về response không có choices (rate limit / model quá tải / lỗi upstream)')
+        throw new AgenticRunError('provider trả về response không có choices (rate limit / model quá tải / lỗi upstream)', messages)
       }
 
       const message = response.choices[0]?.message
@@ -292,7 +305,7 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
           messages.push({ role: 'user', content: EMPTY_REPLY_NUDGE_TEXT })
           continue
         }
-        throw new Error(EMPTY_REPLY_ERROR_MESSAGE)
+        throw new AgenticRunError(EMPTY_REPLY_ERROR_MESSAGE, messages)
       }
 
       // Rebuild the assistant message with only spec fields — echoing the
@@ -315,7 +328,7 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(outcome) })
       }
     }
-    throw new Error(`exceeded ${MAX_AGENT_LOOP_TURNS} agent loop turns`)
+    throw new AgenticRunError(`exceeded ${MAX_AGENT_LOOP_TURNS} agent loop turns`, messages)
   }
 
   /** Map one chat-completions function tool call onto a base-class sandbox op. */
