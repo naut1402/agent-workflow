@@ -34,9 +34,11 @@ export interface ConnectionOption {
    * ai-provider: extra settings merged into runnerConfig at execute time.
    * `models` is the user-picked list (nullable — rotation across them is a
    * later feature); `model` mirrors its first entry for the provider
-   * wrappers, which only read a single model today.
+   * wrappers, which only read a single model today. `extraTools` opts this
+   * connection into shell/git/search/web tools beyond the base file-ops —
+   * absent/empty means unchanged (only the base tools).
    */
-  config?: Record<string, unknown> & { models?: string[]; model?: string; baseURL?: string }
+  config?: Record<string, unknown> & { models?: string[]; model?: string; baseURL?: string; extraTools?: string[] }
 }
 
 export interface RunnerDraft {
