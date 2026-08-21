@@ -449,6 +449,48 @@ describe('POST /api/tasks/:id/run-step', () => {
     expect(state.hitl_pending).toBe('hitl-3')
   })
 
+  // #225 vấn đề 4: restart (reset) rolls current_phase back to a step whose OLD
+  // succeeded job is still sitting in job history — without `last_reset_at`, the
+  // "heal stuck phase" logic above would mistake that stale job for "already done"
+  // and auto-advance past the step the user asked to run again.
+  test('does not heal past a step whose only succeeded job predates the last reset (restart)', async () => {
+    seedTask('R11', { current_phase: 'implementer', last_reset_at: new Date().toISOString() })
+    const staleJobId = crypto.randomUUID()
+    const jobsDir = path.join(root, '.home', 'jobs')
+    fs.mkdirSync(jobsDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(jobsDir, `${staleJobId}.json`),
+      JSON.stringify({
+        id: staleJobId,
+        status: 'succeeded',
+        runnerId: 'stub-runner-run-step',
+        agentRef: ' ',
+        workspace: path.join(root, 'tasks', 'R11'),
+        userPrompt: 'do the thing',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        startedAt: '2020-01-01T00:00:00.000Z',
+        finishedAt: '2020-01-01T00:00:00.000Z',
+        exitCode: 0,
+        pid: null,
+        metadata: {
+          taskId: 'R11',
+          pipelineStepId: 'implementer',
+          devTeamRoot: root,
+        },
+      }),
+      'utf8',
+    )
+
+    const res = await app.request('/api/tasks/R11/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step' }),
+    })
+    expect(res.status).toBe(201)
+    const { job } = await res.json()
+    // Must re-run implementer, not skip to reviewer using the stale (pre-reset) job.
+    expect(job.metadata.pipelineStepId).toBe('implementer')
+  })
+
   test('chained step jobs also use inputSessionMode new', async () => {
     seedTask('R10', { current_phase: 'implementer' })
     fs.mkdirSync(path.join(root, 'tasks', 'R10'), { recursive: true })

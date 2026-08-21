@@ -737,6 +737,24 @@ describe('resetPipelineStepAssumingLock', () => {
     expect(result.state.hitl_pending).toBeNull()
   })
 
+  // #225 vấn đề 4: runTaskStep (controller.ts) uses `last_reset_at` to tell a fresh
+  // reset apart from the "heal stuck phase" fallback — a `succeeded` job for this step
+  // that finished before this timestamp must not be mistaken for "already done".
+  test('sets last_reset_at to an ISO-8601 timestamp on every reset', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS14', { current_phase: 'reviewer' })
+
+    const before = new Date().toISOString()
+    const result = await resetPipelineStepAssumingLock(root, 'RS14', stateFile, 'designer', false)
+    const after = new Date().toISOString()
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const resetAt = result.state.last_reset_at as string
+    expect(typeof resetAt).toBe('string')
+    expect(resetAt >= before && resetAt <= after).toBe(true)
+  })
+
   test('review_round resets to 0 when the target is at or before the retry step', async () => {
     const root = await tmp()
     await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
