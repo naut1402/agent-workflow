@@ -84,6 +84,10 @@ describe('createLocalConsoleProvider — job log structure', () => {
       expect(log).toContain(`Workspace: ${workspace}`)
       expect(log).toContain('--- Prompt ---')
       expect(log).toContain('Cải thiện tài liệu design.md')
+      // resolvedAgent.systemPrompt is empty — buildPrompt() must return userPrompt
+      // untouched, so no path-convention preamble or "## Agent instructions" wrapper.
+      expect(log).not.toContain('## Agent instructions')
+      expect(log).not.toContain('Quy ước path')
       expect(log).toContain('=== Phản hồi của runner (stdout/stderr) ===')
       expect(log).toContain('hello from runner')
       expect(log).toContain('=== Kết quả ===')
@@ -485,6 +489,23 @@ describe('createLocalConsoleProvider — agent instructions on resume', () => {
     const log = await runOnce({})
     expect(log).toContain('## Agent instructions')
     expect(log).toContain('BẠN LÀ AGENT DESIGNER')
+  })
+
+  // #225 vấn đề 1: a real CLI child process runs with cwd=workspace (task folder), not
+  // the repo root the agent markdown was written for — without the preamble the model
+  // follows literal `.dev-team-agent/tasks/<id>/...` paths and writes one directory too
+  // deep. Preamble must come before the agent's own instructions so the model reads it
+  // first.
+  test('a fresh run prepends the path-convention preamble before the agent instructions', async () => {
+    const log = await runOnce({})
+    expect(log).toContain('Quy ước path')
+    expect(log).toContain('cwd')
+    const preambleIdx = log.indexOf('Quy ước path')
+    const agentInstructionsIdx = log.indexOf('## Agent instructions')
+    const systemPromptIdx = log.indexOf('BẠN LÀ AGENT DESIGNER')
+    expect(preambleIdx).toBeGreaterThan(-1)
+    expect(preambleIdx).toBeGreaterThan(agentInstructionsIdx)
+    expect(preambleIdx).toBeLessThan(systemPromptIdx)
   })
 
   test("a pipeline step resuming another step's session still sends them (different agent)", async () => {

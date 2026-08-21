@@ -659,6 +659,46 @@ describe('AgenticApiProvider — job log (req.metadata.logPath)', () => {
     expect(log.split('the one true system prompt').length - 1).toBe(1)
   })
 
+  // #225 vấn đề 2: a chat-feedback round resumes the SAME session, so re-printing the
+  // whole system prompt in the log every message reads as "system prompt sent again"
+  // even though nothing changed. The actual API request must still get the full text —
+  // this only gates what gets appended to the log file.
+  test('onSystemPrompt gates the log (not the API payload) for a resumed chat-feedback round', async () => {
+    const logPath = path.join(logDir, 'system-prompt-resumed.log')
+    const p = new FakeAgenticProvider()
+    let sentToApi = ''
+    p.runConversationImpl = async (ctx) => {
+      sentToApi = 'full system prompt text sent to model'
+      ctx.handlers.onSystemPrompt(sentToApi)
+      return { finalText: 'done', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    await p.execute(
+      baseRequest({ resumeSessionId: 'sess-1', metadata: { logPath, isChatFeedback: true } }),
+      {},
+      credential(),
+    )
+
+    expect(sentToApi).toBe('full system prompt text sent to model')
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).not.toContain('full system prompt text sent to model')
+    expect(log).toContain('không đổi')
+  })
+
+  test('onSystemPrompt logs the full text for the first job of a session (not resumed)', async () => {
+    const logPath = path.join(logDir, 'system-prompt-first.log')
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async (ctx) => {
+      ctx.handlers.onSystemPrompt('full system prompt text sent to model')
+      return { finalText: 'done', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    await p.execute(baseRequest({ metadata: { logPath } }), {}, credential())
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toContain('full system prompt text sent to model')
+  })
+
   test('onToolCall logs a success outcome with a distinguishable "ok" marker', async () => {
     const logPath = path.join(logDir, 'tool-ok.log')
     const p = new FakeAgenticProvider()

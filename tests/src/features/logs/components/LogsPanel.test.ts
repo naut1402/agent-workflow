@@ -165,7 +165,7 @@ describe('LogsPanel', () => {
     await flushPromises()
     // JobLogDialog renders via <Teleport to="body"> — query document.body, not the wrapper.
     expect(document.body.querySelector('.modal')).not.toBeNull()
-    expect(document.body.querySelector('.modal pre')?.textContent).toContain('hello job log')
+    expect(document.body.querySelector('.modal .job-log-section-body')?.textContent).toContain('hello job log')
 
     ;(document.body.querySelector('.modal-close') as HTMLElement)?.click()
     await flushPromises()
@@ -174,8 +174,8 @@ describe('LogsPanel', () => {
     // Click the second row's button — must show job B's log, not job A's leftover.
     await rows[1].find('button').trigger('click')
     await flushPromises()
-    expect(document.body.querySelector('.modal pre')?.textContent).toContain('log của job B')
-    expect(document.body.querySelector('.modal pre')?.textContent).not.toContain('hello job log')
+    expect(document.body.querySelector('.modal .job-log-section-body')?.textContent).toContain('log của job B')
+    expect(document.body.querySelector('.modal .job-log-section-body')?.textContent).not.toContain('hello job log')
   })
 
   it('opening the dialog for a running job does not throw even with a partial log', async () => {
@@ -189,7 +189,7 @@ describe('LogsPanel', () => {
     await rows[1].find('button').trigger('click') // job B is 'running'
     await flushPromises()
     expect(document.body.querySelector('.modal')).not.toBeNull()
-    expect(document.body.querySelector('.modal pre')?.textContent).toContain('log của job B')
+    expect(document.body.querySelector('.modal .job-log-section-body')?.textContent).toContain('log của job B')
   })
 
   it('shows an empty state, consistent with other tabs, when there are no jobs', async () => {

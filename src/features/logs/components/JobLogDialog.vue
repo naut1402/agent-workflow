@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { fetchJobLog } from '../scripts/LogsPanelApi'
+import { parseJobLogSections, type JobLogSectionKind } from '../scripts/logSections'
+import { parseMarkdown } from '../../../core/lib/markdownLib'
 
 const props = defineProps<{ jobId: string }>()
 
@@ -13,6 +15,18 @@ const text = ref('')
 const truncated = ref(false)
 const loading = ref(true)
 const error = ref('')
+
+const SECTION_LABEL: Record<JobLogSectionKind, string> = {
+  meta: 'Hệ thống',
+  payload: 'Payload',
+  'system-prompt': 'Hệ thống',
+  output: 'Phản hồi',
+  result: 'Kết quả',
+}
+/** Rendered markdown for model-generated content; the rest is key:value text, not markdown. */
+const MARKDOWN_KINDS = new Set<JobLogSectionKind>(['output', 'system-prompt'])
+
+const sections = computed(() => parseJobLogSections(text.value))
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
@@ -58,7 +72,24 @@ onUnmounted(() => {
           <p v-else-if="error" class="err-banner">{{ error }}</p>
           <template v-else>
             <span v-if="truncated" class="muted">{{ t('logs.jobs.truncated') }}</span>
-            <pre>{{ text || t('logs.jobs.logEmpty') }}</pre>
+            <p v-if="!text" class="muted">{{ t('logs.jobs.logEmpty') }}</p>
+            <div v-else class="job-log-sections">
+              <section v-for="(section, i) in sections" :key="i" class="job-log-section">
+                <div class="job-log-section-head">
+                  <span class="job-log-badge" :class="`job-log-badge-${section.kind}`">
+                    {{ SECTION_LABEL[section.kind] }}
+                  </span>
+                  <span v-if="section.title" class="job-log-section-title">{{ section.title }}</span>
+                </div>
+                <!-- eslint-disable-next-line vue/no-v-html -- runner-generated markdown, same trust level as chat/artifacts -->
+                <div
+                  v-if="MARKDOWN_KINDS.has(section.kind)"
+                  class="job-log-section-body md"
+                  v-html="parseMarkdown(section.body)"
+                ></div>
+                <pre v-else class="job-log-section-body">{{ section.body }}</pre>
+              </section>
+            </div>
           </template>
         </div>
       </div>
@@ -81,6 +112,31 @@ onUnmounted(() => {
   max-height: 60vh;
   overflow: auto;
   white-space: pre-wrap;
+}
+.job-log-sections { display: flex; flex-direction: column; gap: 0.6rem; max-height: 70vh; overflow: auto; }
+.job-log-section-head { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.25rem; }
+.job-log-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.job-log-badge-output { color: var(--accent); border-color: var(--accent); }
+.job-log-badge-result { color: var(--success, var(--accent)); }
+.job-log-section-title { font-size: 0.75rem; color: var(--text-muted); }
+.job-log-section-body.md {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  font-size: 0.85rem;
+  max-height: 60vh;
+  overflow: auto;
 }
 .err-banner {
   background: var(--panel-2);

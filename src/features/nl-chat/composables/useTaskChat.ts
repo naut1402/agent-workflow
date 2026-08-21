@@ -21,6 +21,11 @@ export interface TaskChatTurn {
   tool?: string
 }
 
+/** `sortedTurns` entry merged with an in-flight optimistic echo, in send order. */
+export interface TaskChatTimelineItem extends TaskChatTurn {
+  pending?: boolean
+}
+
 export type TaskChatBlockedReason = 'noCompletedJob'
 
 export interface TaskChatRunner {
@@ -63,8 +68,12 @@ export function useTaskChat(opts: UseTaskChatOptions) {
   const blockedReason = ref<TaskChatBlockedReason | null>(null)
   const staleReason = ref<string | null>(null)
   const sending = ref(false)
-  /** Messages posted but not yet visible in the transcript (optimistic echo). */
-  const pending = ref<string[]>([])
+  /** Messages posted but not yet visible in the transcript (optimistic echo), with the
+   *  timestamp they were sent at so `timeline` can slot them into place instead of always
+   *  appending at the end. */
+  const pendingItems = ref<{ text: string; at: string }[]>([])
+  /** Public contract unchanged: text-only, in send order. */
+  const pending = computed(() => pendingItems.value.map((p) => p.text))
   const error = ref<string | null>(null)
   const loading = ref(false)
 
@@ -93,17 +102,38 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     return [...list].sort((a, b) => Date.parse(a.at!) - Date.parse(b.at!) || a.index - b.index)
   })
 
+  /**
+   * `turns` merged with `pendingItems`, in send-time order — the single list
+   * `TaskChatBody.vue` renders instead of two separate DOM blocks (which put every
+   * pending echo after the last real turn regardless of when it was sent).
+   */
+  const timeline = computed<TaskChatTimelineItem[]>(() => {
+    const base: TaskChatTimelineItem[] = sortedTurns.value
+    if (pendingItems.value.length === 0) return base
+    const pendingTurns: TaskChatTimelineItem[] = pendingItems.value.map((p, i) => ({
+      index: -1 - i,
+      role: 'user',
+      text: p.text,
+      at: p.at,
+      pending: true,
+    }))
+    const merged = [...base, ...pendingTurns]
+    const allHaveAt = merged.every((t) => t.at && !Number.isNaN(Date.parse(t.at)))
+    if (!allHaveAt) return merged
+    return [...merged].sort((a, b) => Date.parse(a.at!) - Date.parse(b.at!) || a.index - b.index)
+  })
+
   /** Drop optimistic echoes once the server history contains them (or a reply). */
   function reconcilePending(allTurns: TaskChatTurn[], data: any): void {
-    if (pending.value.length === 0) return
+    if (pendingItems.value.length === 0) return
     const userTexts = new Set(
       allTurns.filter((t) => t.role === 'user').map((t) => t.text.trim()),
     )
-    pending.value = pending.value.filter((p) => !userTexts.has(p.trim()))
+    pendingItems.value = pendingItems.value.filter((p) => !userTexts.has(p.text.trim()))
     // Job finished and we have an assistant turn — echo is obsolete even if the
     // user line was clipped differently than the optimistic text.
-    if (!data?.running && allTurns.some((t) => t.role === 'assistant') && pending.value.length) {
-      pending.value = []
+    if (!data?.running && allTurns.some((t) => t.role === 'assistant') && pendingItems.value.length) {
+      pendingItems.value = []
     }
   }
 
@@ -135,17 +165,17 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     // While an optimistic send is waiting, always reload from 0. Job-fallback
     // turns use a 0-based index space that resets per response shape; polling
     // with from=<old total> returns [] forever and leaves "Đang gửi" stuck.
-    const useIncremental = incremental && pending.value.length === 0
+    const useIncremental = incremental && pendingItems.value.length === 0
     if (!useIncremental && !incremental) {
       turns.value = []
       total.value = 0
-      pending.value = []
+      pendingItems.value = []
     } else if (!useIncremental) {
       // Keep pending; replace turns from a full snapshot.
       turns.value = []
       total.value = 0
     }
-    loading.value = turns.value.length === 0 && pending.value.length === 0
+    loading.value = turns.value.length === 0 && pendingItems.value.length === 0
     try {
       const data = await fetchTaskChat(
         taskId,
@@ -164,7 +194,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
   function scheduleNext(): void {
     if (stopped) return
     // Poll fast while a send is in flight or a job is running.
-    const delay = running.value || pending.value.length ? runningPollMs : idlePollMs
+    const delay = running.value || pendingItems.value.length ? runningPollMs : idlePollMs
     timer = setTimeout(async () => {
       await refresh(true)
       scheduleNext()
@@ -195,7 +225,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
       // if queued, once the running job finishes and it resubmits) — echo it
       // meanwhile so the input never looks lost. Full refresh (pending≠∅) so we
       // do not poll with a stale `from` against job-fallback indices.
-      pending.value.push(message)
+      pendingItems.value.push({ text: message, at: new Date().toISOString() })
       await refresh(true)
     } catch (e: any) {
       error.value = e?.status === 409 ? STEP_BUSY_TEXT : String(e?.message || e)
@@ -207,6 +237,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
   return {
     turns,
     sortedTurns,
+    timeline,
     pending,
     total,
     sessionId,

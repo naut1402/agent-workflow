@@ -145,6 +145,11 @@ export async function resetPipelineStepAssumingLock(
     }
   }
 
+  // Distinguishes an active reset from the "heal stuck phase" fallback in
+  // `runTaskStep` (controller.ts): a `succeeded` job for this step that finished
+  // BEFORE this timestamp is stale (belongs to the run being reset away from),
+  // not a signal to auto-advance past the freshly reset step.
+  state.last_reset_at = new Date().toISOString()
   state.current_phase = stepId
   state.hitl_pending = null
 

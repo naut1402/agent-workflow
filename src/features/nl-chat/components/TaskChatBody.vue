@@ -57,13 +57,13 @@ function shown(turn: { index: number; role: string; text: string }): string {
 }
 
 /**
- * Display-ordered turns with assistant markdown pre-rendered — a `computed`
- * re-runs only when `sortedTurns` changes, not on every re-render (e.g. when
- * `running`/`total` change but the turns themselves don't), same pattern as
- * `ArtifactPanel.vue`'s `blocks`.
+ * Display-ordered turns (real + pending, interleaved by send time) with assistant
+ * markdown pre-rendered — a `computed` re-runs only when `timeline` changes, not on
+ * every re-render (e.g. when `running`/`total` change but the turns themselves don't),
+ * same pattern as `ArtifactPanel.vue`'s `blocks`.
  */
 const displayTurns = computed(() =>
-  chat.sortedTurns.value.map((turn) => ({
+  chat.timeline.value.map((turn) => ({
     ...turn,
     html: turn.role === 'assistant' ? parseMarkdown(turn.text) : undefined,
   })),
@@ -157,30 +157,31 @@ onUnmounted(() => chat.stop())
         Phiên chưa có nội dung hội thoại nào.
       </p>
 
-      <template v-for="turn in displayTurns" :key="turn.index">
+      <template v-for="turn in displayTurns" :key="turn.pending ? `pending-${turn.index}` : turn.index">
         <p v-if="turn.role === 'tool'" class="task-chat-activity">
           <span class="task-chat-tool">{{ turn.tool }}</span>
           <span v-if="turn.text" class="task-chat-tool-arg">{{ turn.text }}</span>
         </p>
         <div v-else class="nl-chat-row" :class="`nl-chat-row-${turn.role}`">
-          <span class="nl-chat-role">{{ turn.role === 'user' ? 'Bạn' : 'Runner' }}</span>
+          <span class="nl-chat-role">{{ turn.pending ? 'Bạn · đang gửi' : turn.role === 'user' ? 'Bạn' : 'Runner' }}</span>
           <!-- eslint-disable-next-line vue/no-v-html -- agent markdown, same trust level as artifacts -->
           <div
             v-if="turn.role === 'assistant'"
             class="nl-chat-message nl-chat-message-assistant md"
             v-html="turn.html"
           ></div>
-          <p v-else class="nl-chat-message" :class="`nl-chat-message-${turn.role}`">{{ shown(turn) }}</p>
+          <p
+            v-else
+            class="nl-chat-message"
+            :class="[`nl-chat-message-${turn.role}`, { 'is-pending': turn.pending }]"
+          >
+            {{ shown(turn) }}
+          </p>
           <button v-if="canCollapse(turn)" type="button" class="task-chat-more" @click="toggle(turn.index)">
             {{ isCollapsed(turn) ? 'Xem thêm' : 'Thu lại' }}
           </button>
         </div>
       </template>
-
-      <div v-for="(text, i) in chat.pending.value" :key="`pending-${i}`" class="nl-chat-row nl-chat-row-user">
-        <span class="nl-chat-role">Bạn · đang gửi</span>
-        <p class="nl-chat-message nl-chat-message-user is-pending">{{ text }}</p>
-      </div>
 
       <p v-if="chat.error.value" class="nl-chat-error">{{ chat.error.value }}</p>
       <p v-if="chat.staleReason.value" class="nl-chat-nudge">

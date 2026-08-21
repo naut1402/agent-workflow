@@ -712,12 +712,19 @@ export class MonitorController extends AbstractController {
       if (existing) return this.json(409, { error: 'step already running', taskId: id, job: existing })
 
       let stepId = String(state.current_phase ?? '')
+      // A restart sets `last_reset_at` (state.ts::resetPipelineStepAssumingLock) — a
+      // `succeeded` job for this step that finished BEFORE that reset is the run being
+      // reset away from, not a signal to auto-advance past the step just reset. Absent
+      // `last_reset_at` (never reset), behavior is unchanged: any succeeded job heals
+      // a stuck phase.
+      const resetAt = typeof state.last_reset_at === 'string' ? state.last_reset_at : null
       const lastSucceeded = listJobs(200).find(
         (j) =>
           j.metadata?.taskId === id &&
           j.status === 'succeeded' &&
           !j.applyTarget &&
-          j.metadata?.pipelineStepId === stepId,
+          j.metadata?.pipelineStepId === stepId &&
+          (!resetAt || (typeof j.finishedAt === 'string' && j.finishedAt > resetAt)),
       )
       if (lastSucceeded && stepId) {
         await advanceStepOnJobSuccessAssumingLock(root, id, stepId, stateFile)

@@ -18,6 +18,7 @@ import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 import { ensureFreshOAuthToken } from '../oauthCredentials.js'
 import { mintSessionId } from '../sessionLedger.js'
 import { appendTranscriptTurn, loadSessionMessages, saveSessionMessages } from './agentTranscriptStore.js'
+import { shouldSendAgentInstructions } from './claude-code-cli.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ProviderFamily, RunnerProvider } from '../types.js'
 
 /** Opt-in extra sandbox capabilities beyond the base 4 file-ops — gated per-Connection via `Connection.config.extraTools`. */
@@ -602,6 +603,10 @@ export abstract class AgenticApiProvider implements RunnerProvider {
     }
     const handlers: AgenticStreamHandlers = {
       onSystemPrompt: (system) => {
+        if (!shouldSendAgentInstructions(req)) {
+          appendLog(`--- System prompt (không đổi — đã gửi ở job trước của phiên này) ---${RUNNER_RESPONSE_MARKER}`)
+          return
+        }
         appendLog(`--- System prompt (đã gửi cho model) ---\n${system}\n${RUNNER_RESPONSE_MARKER}`)
       },
       onToolCall: (call) => {
