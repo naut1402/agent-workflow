@@ -2,7 +2,7 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import PipelineView from '@/features/monitor/components/PipelineView.vue'
-import { fetchJob, fetchJobs } from '../../../../../src/features/runner/scripts/runnerApi'
+import { fetchJob, fetchJobs, cancelJob } from '../../../../../src/features/runner/scripts/runnerApi'
 import { runPipelineStep, resetPipelineStep } from '../../../../../src/features/monitor/scripts/PipelineViewApi'
 
 vi.mock('@/features/monitor/scripts/PipelineViewApi', () => ({
@@ -16,6 +16,7 @@ vi.mock('@/features/monitor/scripts/PipelineViewApi', () => ({
 vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchJob: vi.fn(),
   fetchJobs: vi.fn(async () => ({ jobs: [] })),
+  cancelJob: vi.fn(),
 }))
 
 // VueFlow's canvas (SVG getBBox / ResizeObserver) does not run under jsdom.
@@ -687,5 +688,72 @@ describe('PipelineView — reset step confirm', () => {
 
     expect(resetPipelineStep).not.toHaveBeenCalled()
     expect(document.body.querySelector('.modal-backdrop')).toBeNull()
+  })
+})
+
+// The Stop button itself lives inside PipelineNode.vue (not rendered by the
+// VueFlow stub above) — these tests invoke `data.onStop()` directly, the same
+// callback the button calls on click.
+describe('PipelineView — stopping a running step', () => {
+  function nodeData(w: any, id: string) {
+    return w.findComponent({ name: 'VueFlow' }).props('nodes').find((n: any) => n.id === id).data
+  }
+
+  it('stop calls cancelJob with the job id currently being polled', async () => {
+    vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-stop-1', status: 'queued' } })
+    vi.mocked(fetchJob).mockResolvedValue({
+      job: { status: 'running', metadata: { pipelineStepId: 'investigator' } },
+    })
+    vi.mocked(cancelJob).mockResolvedValue({})
+    const task = { task_id: 'TSTOP1', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+    await clickModalButton('.modal .btn-primary')
+
+    expect(nodeData(w, 'investigator').running).toBe(true)
+    nodeData(w, 'investigator').onStop()
+    await flushPromises()
+
+    expect(cancelJob).toHaveBeenCalledWith('job-stop-1')
+  })
+
+  it('a cancelled job shows the stop message, not the failure message', async () => {
+    vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-stop-2', status: 'queued' } })
+    vi.mocked(fetchJob).mockResolvedValue({
+      job: { status: 'cancelled', metadata: { pipelineStepId: 'investigator' } },
+    })
+    const task = { task_id: 'TSTOP2', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+    await clickModalButton('.modal .btn-primary')
+    await flushPromises()
+
+    expect(w.text()).toContain('Đã dừng step')
+    expect(w.text()).not.toContain('Step chạy thất bại')
+    expect(nodeData(w, 'investigator').running).toBe(false)
+  })
+
+  it('a failed job (not stopped) still shows the failure message', async () => {
+    vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-stop-3', status: 'queued' } })
+    vi.mocked(fetchJob).mockResolvedValue({
+      job: { status: 'failed', error: null, metadata: { pipelineStepId: 'investigator' } },
+    })
+    const task = { task_id: 'TSTOP3', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+    await clickModalButton('.modal .btn-primary')
+    await flushPromises()
+
+    expect(w.text()).toContain('Step chạy thất bại')
+    expect(w.text()).not.toContain('Đã dừng step')
   })
 })

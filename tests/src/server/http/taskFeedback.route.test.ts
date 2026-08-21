@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createApp } from '../../../../src/api/apiServer.js'
 import type { RegistryContext } from '../../../../src/core/http/types.js'
-import { loadJob, loadTaskSessionLedger, registerProvider, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
+import { listJobs, loadJob, loadTaskSessionLedger, registerProvider, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
 // Route-level contract for POST /api/tasks/:id/feedback — task-scoped chat
@@ -71,6 +71,17 @@ async function settle(id: string) {
   throw new Error(`job ${id} never settled (status=${loadJob(id)?.status})`)
 }
 
+async function waitForPhase(taskId: string, predicate: (phase: string | null) => boolean, tries = 400) {
+  const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
+  for (let i = 0; i < tries; i++) {
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
+    if (predicate(state.current_phase ?? null)) return state
+    await sleep(5)
+  }
+  const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
+  throw new Error(`current_phase never matched (last=${state.current_phase})`)
+}
+
 function seedTask(taskId: string, state: Record<string, unknown>, requestBody = 'do the thing') {
   fs.mkdirSync(path.join(root, '.dev-state'), { recursive: true })
   fs.mkdirSync(path.join(root, 'tasks', taskId), { recursive: true })
@@ -112,17 +123,16 @@ async function runStep(taskId: string, body: Record<string, unknown> = {}) {
 }
 
 describe('run-step wiring: sessionMode resume', () => {
-  test('two successive run-step calls leave exactly one open ledger entry', async () => {
+  test('a chain through gate-less steps leaves exactly one open ledger entry', async () => {
     seedTask('W1', { current_phase: 'implementer' })
     const first = await runStep('W1')
     expect(first.status).toBe(201)
     const { job: job1 } = await first.json()
     await settle(job1.id)
-
-    const second = await runStep('W1')
-    expect(second.status).toBe(201)
-    const { job: job2 } = await second.json()
-    await settle(job2.id)
+    // implementer -> reviewer now chains automatically from this single call
+    // (B202608_1902) — a second run-step call is no longer how the pipeline
+    // reaches `reviewer`'s own session.
+    await waitForPhase('W1', (p) => p === 'completed')
 
     const ledger = loadTaskSessionLedger(PROJECT_ID, 'W1')
     const openEntries = ledger.sessions.filter((s) => s.status === 'open')
@@ -137,6 +147,14 @@ describe('POST /api/tasks/:id/feedback', () => {
     expect(stepRes.status).toBe(201)
     const { job } = await stepRes.json()
     await settle(job.id)
+    // implementer -> reviewer chains automatically (B202608_1902) — the most
+    // recent finished job is now reviewer's, not the implementer job returned
+    // above.
+    await waitForPhase('F1', (p) => p === 'completed')
+    const reviewerJob = listJobs(50).find(
+      (j) => j.metadata?.taskId === 'F1' && j.metadata?.pipelineStepId === 'reviewer',
+    )
+    expect(reviewerJob).toBeTruthy()
 
     const res = await app.request(`/api/tasks/F1/feedback?project=${PROJECT_ID}`, {
       method: 'POST',
@@ -144,7 +162,7 @@ describe('POST /api/tasks/:id/feedback', () => {
     })
     expect(res.status).toBe(201)
     const { job: child } = await res.json()
-    expect(child.parentJobId).toBe(job.id)
+    expect(child.parentJobId).toBe(reviewerJob!.id)
     expect(child.metadata.isChatFeedback).toBe(true)
     await settle(child.id)
   })
@@ -227,14 +245,20 @@ describe('POST /api/tasks/:id/feedback', () => {
     const finished = await settle(job.id)
     expect(finished.status).toBe('succeeded')
 
-    // The resubmit fires from inside runJob's tail — poll for the child job.
+    // The resubmit fires from inside runJob's tail. With implementer -> reviewer
+    // now chaining automatically (B202608_1902), the queued feedback may find
+    // the auto-chained reviewer job still active and re-queue itself once more
+    // before finally resubmitting once that job also finishes — so match by
+    // content/taskId rather than assuming implementer is still the parent.
     let child: any = null
     for (let i = 0; i < 200 && !child; i++) {
       const jobs = fs
         .readdirSync(path.join(process.env.DEV_TEAM_DASHBOARD_HOME as string, 'jobs'))
         .filter((f) => f.endsWith('.json'))
         .map((f) => JSON.parse(fs.readFileSync(path.join(process.env.DEV_TEAM_DASHBOARD_HOME as string, 'jobs', f), 'utf8')))
-      child = jobs.find((j) => j.parentJobId === job.id)
+      child = jobs.find(
+        (j) => j.metadata?.taskId === 'F5' && j.metadata?.isChatFeedback && j.userPrompt === 'please clarify',
+      )
       if (!child) await sleep(5)
     }
     expect(child).toBeTruthy()

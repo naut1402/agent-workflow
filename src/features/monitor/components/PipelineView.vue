@@ -4,7 +4,7 @@ import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, resetPipelineStep } from '../scripts/PipelineViewApi'
-import { fetchJob, fetchJobs } from '../../runner/scripts/runnerApi'
+import { fetchJob, fetchJobs, cancelJob } from '../../runner/scripts/runnerApi'
 import { phasesFromPipeline, phaseStatus } from '../../../core/lib/phase'
 import PipelineNode from './PipelineNode.vue'
 import ArtifactNode from './ArtifactNode.vue'
@@ -133,6 +133,7 @@ const nodes = computed(() => {
         // clicking the node, so both paths share the overwrite warning.
         onRun: () => openRunConfirm({ id: p.key, label: p.label }),
         onReset: () => openResetConfirm({ id: p.key, label: p.label }),
+        onStop: () => stopStep(),
       },
     }
   })
@@ -210,6 +211,8 @@ watch(
 // Run-step (click a node to run/chain to it)
 const runningStepId = ref<string | null>(null)
 const recoveringStepId = ref<string | null>(null)
+// The job currently being polled, so the Stop button has an id to cancel.
+const activeJobId = ref<string | null>(null)
 const runError = ref('')
 const runToast = ref('')
 let runPollTimer: ReturnType<typeof setTimeout> | null = null
@@ -232,7 +235,10 @@ async function syncInFlightRun() {
         j?.metadata?.taskId === props.task.task_id &&
         (j.status === 'queued' || j.status === 'running' || j.status === 'awaiting_recovery'),
     )
-    if (!inflight?.id) return
+    if (!inflight?.id) {
+      activeJobId.value = null
+      return
+    }
     const stepId =
       (typeof inflight.metadata?.pipelineStepId === 'string' && inflight.metadata.pipelineStepId) ||
       props.task.current_phase ||
@@ -248,6 +254,7 @@ watch(() => props.task.task_id, () => {
   clearRunPoll()
   runningStepId.value = null
   recoveringStepId.value = null
+  activeJobId.value = null
   runError.value = ''
   syncInFlightRun()
 }, { immediate: true })
@@ -256,19 +263,32 @@ onBeforeUnmount(clearRunPoll)
 
 async function pollRunStepJob(jobId: string) {
   clearRunPoll()
+  activeJobId.value = jobId
   try {
     const { job } = await fetchJob(jobId)
     if (job?.status === 'succeeded') {
       runningStepId.value = null
       recoveringStepId.value = null
+      activeJobId.value = null
       runToast.value = t('monitor.pipeline.stepSucceeded')
       emit('hitl-action')
       setTimeout(() => { runToast.value = '' }, 4000)
       return
     }
-    if (job?.status === 'failed' || job?.status === 'cancelled') {
+    if (job?.status === 'cancelled') {
       runningStepId.value = null
       recoveringStepId.value = null
+      activeJobId.value = null
+      runError.value = ''
+      runToast.value = t('monitor.pipeline.stepCancelled')
+      emit('hitl-action')
+      setTimeout(() => { runToast.value = '' }, 3000)
+      return
+    }
+    if (job?.status === 'failed') {
+      runningStepId.value = null
+      recoveringStepId.value = null
+      activeJobId.value = null
       runError.value = job.error ? String(job.error) : t('monitor.pipeline.stepFailed')
       emit('hitl-action')
       return
@@ -333,6 +353,17 @@ async function runStep(node: { id: string }, opts: { skipIntermediate?: boolean 
     } else {
       runError.value = String(e.message || e)
     }
+  }
+}
+
+async function stopStep() {
+  if (!activeJobId.value) return
+  try {
+    await cancelJob(activeJobId.value)
+    // pollRunStepJob's in-flight timer observes status === 'cancelled' on its
+    // next tick and clears runningStepId/activeJobId — nothing to do here.
+  } catch (e: any) {
+    runError.value = String(e.message || e)
   }
 }
 

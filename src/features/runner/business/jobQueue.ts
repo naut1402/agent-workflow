@@ -812,13 +812,13 @@ async function resubmitPendingFeedback(job: JobRecord): Promise<void> {
 
 /**
  * Dashboard "run step" jobs tag `metadata.pipelineStepId` (the step the job
- * just ran) and, for a chained run, `metadata.chainTarget` (the step the user
- * clicked). On success, `advanceStepOnJobSuccess` either advances
- * `current_phase` past a gate-less step or opens the step's HITL gate — and
- * only while chasing a `chainTarget` not yet reached, this keeps submitting
- * the next gate-less step's job automatically. A HITL gate (or a step id we
- * don't recognise) stops the chain; the user resumes it via the existing
- * approve flow or another click.
+ * just ran) and, for a jump-to-target run, `metadata.chainTarget` (the step
+ * the user clicked). On success, `advanceStepOnJobSuccess` either advances
+ * `current_phase` past a gate-less step or opens the step's HITL gate.
+ * Every successful gate-less step keeps this chain going automatically —
+ * a `chainTarget`, when present, only makes it stop exactly there instead of
+ * running further. A HITL gate (or a step id / agent we don't recognise, or
+ * a missing `request.md`) always stops the chain regardless of `chainTarget`.
  */
 async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   const taskId = typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined
@@ -828,9 +828,10 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   if (!taskId || !devTeamRoot || !pipelineStepId) return
 
   const advanced = await advanceStepOnJobSuccess(devTeamRoot, taskId, pipelineStepId)
+  if (!advanced) return
   // Stop once the clicked node itself has run, even if it advanced further —
   // the user only asked to reach `chainTarget`, not run past it.
-  if (!advanced || !chainTarget || pipelineStepId === chainTarget) return
+  if (chainTarget && pipelineStepId === chainTarget) return
 
   const nextStepId = String(advanced.state.current_phase ?? '')
   if (!nextStepId || nextStepId === 'completed' || nextStepId === pipelineStepId) return
