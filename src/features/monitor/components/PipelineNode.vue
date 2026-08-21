@@ -32,6 +32,10 @@ function onReset(): void {
   props.data.onReset?.()
 }
 
+function onStop(): void {
+  props.data.onStop?.()
+}
+
 function onChat(): void {
   if (!props.data.taskId) return
   openTaskChat({
@@ -66,7 +70,19 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
   >
     <div class="pnode-actions">
       <button
-        v-if="data.runnable"
+        v-if="data.running"
+        type="button"
+        class="pnode-action pnode-action-center pnode-stop-btn"
+        :title="t('monitor.pipelineNode.clickToStop')"
+        :aria-label="t('monitor.pipelineNode.stop')"
+        @click.stop="onStop"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <rect x="6" y="6" width="12" height="12" />
+        </svg>
+      </button>
+      <button
+        v-else-if="data.runnable"
         type="button"
         class="pnode-action pnode-action-center pnode-run-btn"
         :title="t('monitor.pipelineNode.clickToRun')"
@@ -192,6 +208,9 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
 }
 .pnode-reset-btn {
   color: var(--waiting);
+}
+.pnode-stop-btn {
+  color: var(--danger);
 }
 .pnode-waiting .pnode-bubble,
 .pnode-runnable .pnode-bubble {
