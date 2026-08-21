@@ -332,6 +332,12 @@ describe('GET /api/tasks/:id/chat', () => {
     const stepRes = await runStep('C2')
     const { job } = await stepRes.json()
     await settle(job.id)
+    // implementer -> reviewer chains automatically (B202608_1902) — wait for the
+    // whole chain to settle first, otherwise this races the auto-submitted
+    // reviewer job: while it's still running/queued, getTaskChatState treats the
+    // task as having a live job and skips the finished-job transcript fallback,
+    // so transcriptFound flips to false depending on how fast the chain runs.
+    await waitForPhase('C2', (p) => p === 'completed')
 
     const res = await app.request(`/api/tasks/C2/chat?project=${PROJECT_ID}&stepId=implementer`)
     expect(res.status).toBe(200)
