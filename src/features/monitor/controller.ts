@@ -542,6 +542,7 @@ export class MonitorController extends AbstractController {
     const result = await createTask(root, {
       taskId,
       source: body.source,
+      name: body.name,
       prompt: body.prompt,
       issueUrl: body.issueUrl,
       parentTaskId: body.parentTaskId,
