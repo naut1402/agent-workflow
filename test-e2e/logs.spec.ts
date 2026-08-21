@@ -18,7 +18,7 @@ test('logs mode: mount + tab switch (capture)', async ({ page }, testInfo) => {
   await expect(page.locator('.logs-table')).toBeVisible()
 
   await page.locator('.logs-tabs button', { hasText: 'Jobs' }).click()
-  await expect(page.locator('.jobs-layout')).toBeVisible()
+  await expect(page.locator('.logs-table-jobs')).toBeVisible()
 
   await capture(page, testInfo, 'logs')
 })
