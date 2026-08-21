@@ -3,6 +3,7 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, ref } from 'vue'
 import { patchTaskArchive, deleteTask, repairTaskState } from '../scripts/TaskListItemApi'
 import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
+import { taskDisplayName } from '../lib/taskDisplay'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -156,7 +157,7 @@ function hiddenCount(task: any) {
         </svg>
         <template v-else>{{ statusIcon(task) }}</template>
       </span>
-      <span class="id" :class="'id-' + taskStatusKey(task)">{{ task.task_id }}</span>
+      <span class="id" :class="'id-' + taskStatusKey(task)" :title="task.task_id">{{ taskDisplayName(task) }}</span>
       <button
         v-if="needsRepair"
         type="button"
