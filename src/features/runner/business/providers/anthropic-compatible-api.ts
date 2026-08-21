@@ -5,6 +5,7 @@ import {
   EMPTY_REPLY_ERROR_MESSAGE,
   EMPTY_REPLY_NUDGE_TEXT,
   SHELL_ALLOWLIST,
+  summarizeResult,
   type AgenticRunContext,
   type AgenticRunResult,
   type ExtraTool,
@@ -168,6 +169,7 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
     ]
       .filter(Boolean)
       .join('\n\n')
+    ctx.handlers.onSystemPrompt(system)
 
     const toolCalls: AgenticRunResult['toolCalls'] = []
     let hasNudgedEmptyReply = false
@@ -238,7 +240,12 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
       const resultBlocks: Anthropic.Messages.ToolResultBlockParam[] = []
       for (const block of toolUseBlocks) {
         const outcome = await this.executeAnthropicTool(block, ctx.workspace)
-        const entry = { name: block.name, argsSummary: summarize(block.input) }
+        const entry = {
+          name: block.name,
+          argsSummary: summarize(block.input),
+          ok: outcome.ok !== false,
+          resultSummary: summarizeResult(outcome),
+        }
         toolCalls.push(entry)
         ctx.handlers.onToolCall(entry)
         resultBlocks.push({

@@ -237,9 +237,7 @@ function isSessionDismissedForStep(ledger: TaskSessionLedger, sessionId: string,
     .reverse()
     .find((s) => s.status === 'open' && s.sessionId && s.stepIds?.includes(stepId))
   if (openReplacement) return false
-  return ledger.sessions.some(
-    (s) => s.sessionId === sessionId && (s.status === 'closed' || s.status === 'stale'),
-  )
+  return ledger.sessions.some((s) => s.sessionId === sessionId && s.status === 'closed')
 }
 
 /**

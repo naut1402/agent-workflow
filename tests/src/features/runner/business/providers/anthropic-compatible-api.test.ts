@@ -458,3 +458,73 @@ describe('AnthropicCompatibleProvider — extraTools (opt-in shell/git/search/we
     expect(seenTools.map((t: any) => t.name)).toContain('web_search')
   })
 })
+
+describe('AnthropicCompatibleProvider — job log: system prompt + tool-call outcome (Bug 1/2 fix)', () => {
+  let ws: string
+  let logDir: string
+  beforeAll(() => {
+    ws = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-anthropic-log-ws-'))
+    logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-anthropic-log-'))
+  })
+  afterAll(() => {
+    fs.rmSync(ws, { recursive: true, force: true })
+    fs.rmSync(logDir, { recursive: true, force: true })
+  })
+
+  test('the real system prompt sent to the model is written to the job log, before the model responds', async () => {
+    const logPath = path.join(logDir, 'system-prompt.log')
+    globalThis.fetch = (async () => jsonResponse(anthropicMessage([{ type: 'text', text: 'all done' }]))) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    await provider.execute({ ...baseRequest(ws), metadata: { logPath } }, { model: 'claude-test' }, credential)
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    const systemIdx = log.indexOf('be helpful')
+    const answerIdx = log.indexOf('all done')
+    expect(systemIdx).toBeGreaterThan(-1)
+    expect(answerIdx).toBeGreaterThan(systemIdx)
+    // logged exactly once even though the same string could in principle
+    // reappear in the model's own reply
+    expect(log.split('be helpful').length - 1).toBe(1)
+  })
+
+  test('a successful tool call is logged with a distinguishable "ok" outcome', async () => {
+    const logPath = path.join(logDir, 'tool-ok.log')
+    let call = 0
+    globalThis.fetch = (async () => {
+      call++
+      if (call === 1) {
+        return jsonResponse(anthropicMessage([{ type: 'tool_use', id: 't1', name: 'list_directory', input: { path: '.' } }]))
+      }
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'listed' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    await provider.execute({ ...baseRequest(ws), metadata: { logPath } }, { model: 'claude-test' }, credential)
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toMatch(/\[tool\] list_directory .* → ok/)
+  })
+
+  test('a failing tool call is logged with a FAIL outcome distinguishable from success', async () => {
+    const logPath = path.join(logDir, 'tool-fail.log')
+    let call = 0
+    globalThis.fetch = (async () => {
+      call++
+      if (call === 1) {
+        return jsonResponse(
+          anthropicMessage([
+            { type: 'tool_use', id: 't1', name: 'str_replace_based_edit_tool', input: { command: 'str_replace', path: 'missing.md', old_str: 'x', new_str: 'y' } },
+          ]),
+        )
+      }
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'reported failure' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    await provider.execute({ ...baseRequest(ws), metadata: { logPath } }, { model: 'claude-test' }, credential)
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toMatch(/\[tool\] str_replace_based_edit_tool .* → FAIL:/)
+  })
+})
