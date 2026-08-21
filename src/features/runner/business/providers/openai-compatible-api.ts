@@ -5,6 +5,7 @@ import {
   EMPTY_REPLY_ERROR_MESSAGE,
   EMPTY_REPLY_NUDGE_TEXT,
   SHELL_ALLOWLIST,
+  summarizeResult,
   type AgenticRunContext,
   type AgenticRunResult,
   type ExtraTool,
@@ -221,6 +222,7 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     ]
       .filter(Boolean)
       .join('\n\n')
+    ctx.handlers.onSystemPrompt(systemContent)
 
     // `messages` excludes the system prompt — it is re-prepended on every turn
     // so the persisted rawMessages stay resume-ready without duplicating it.
@@ -322,7 +324,12 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
       })
       for (const call of calls) {
         const outcome = await this.executeTool(call, ctx.workspace)
-        const entry = { name: call.function.name, argsSummary: summarizeArgs(call.function.arguments) }
+        const entry = {
+          name: call.function.name,
+          argsSummary: summarizeArgs(call.function.arguments),
+          ok: outcome.ok !== false,
+          resultSummary: summarizeResult(outcome),
+        }
         toolCalls.push(entry)
         ctx.handlers.onToolCall(entry)
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(outcome) })

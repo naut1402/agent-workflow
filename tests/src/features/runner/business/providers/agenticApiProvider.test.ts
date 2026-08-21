@@ -234,7 +234,7 @@ describe('AgenticApiProvider — execute() template method', () => {
     p.runConversationImpl = async () => ({
       finalText: 'final answer',
       usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-      toolCalls: [{ name: 'write_file', argsSummary: '{"path":"out.md"}' }],
+      toolCalls: [{ name: 'write_file', argsSummary: '{"path":"out.md"}', ok: true, resultSummary: '{"ok":true}' }],
       rawMessages: [{ role: 'user', content: 'hello' }],
     })
     fs.writeFileSync(path.join(workspace, 'out.md'), 'produced')
@@ -257,12 +257,17 @@ describe('AgenticApiProvider — execute() template method', () => {
     const p = new FakeAgenticProvider()
     const seenDuringRun: string[][] = []
     p.runConversationImpl = async (ctx) => {
-      ctx.handlers.onToolCall({ name: 'list_directory', argsSummary: '{"path":"."}' })
+      ctx.handlers.onToolCall({ name: 'list_directory', argsSummary: '{"path":"."}', ok: true, resultSummary: '{"ok":true,"entries":[]}' })
       // The tool-call turn must already be on disk before the loop moves on —
       // that's the whole point of streaming instead of batching at the end.
       seenDuringRun.push(readTranscriptTurns('fake-agentic-api', 'stream-session-1').map((t) => t.role))
       ctx.handlers.onAssistantChunk('final answer', { done: true })
-      return { finalText: 'final answer', usage: {}, toolCalls: [{ name: 'list_directory', argsSummary: '{"path":"."}' }], rawMessages: [] }
+      return {
+        finalText: 'final answer',
+        usage: {},
+        toolCalls: [{ name: 'list_directory', argsSummary: '{"path":"."}', ok: true, resultSummary: '{"ok":true,"entries":[]}' }],
+        rawMessages: [],
+      }
     }
 
     // sessionId defaults to a fresh mintSessionId() when neither is set on the
@@ -404,7 +409,7 @@ describe('AgenticApiProvider — AgenticRunError persists partialMessages (Lỗi
       { role: 'tool', tool_call_id: 'call_1', content: '{"ok":true}' },
     ]
     p.runConversationImpl = async (ctx) => {
-      ctx.handlers.onToolCall({ name: 'list_directory', argsSummary: '{}' })
+      ctx.handlers.onToolCall({ name: 'list_directory', argsSummary: '{}', ok: true, resultSummary: '{"ok":true,"entries":[]}' })
       throw new AgenticRunError('gọi LLM thất bại giữa chừng', accumulated)
     }
 
@@ -566,7 +571,7 @@ describe('AgenticApiProvider — job log (req.metadata.logPath)', () => {
     p.runConversationImpl = async () => ({
       finalText: 'the final answer',
       usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
-      toolCalls: [{ name: 'write_file', argsSummary: '{"path":"out.md"}' }],
+      toolCalls: [{ name: 'write_file', argsSummary: '{"path":"out.md"}', ok: true, resultSummary: '{"ok":true}' }],
       rawMessages: [],
     })
 
@@ -616,6 +621,95 @@ describe('AgenticApiProvider — job log (req.metadata.logPath)', () => {
     const log = fs.readFileSync(logPath, 'utf8')
     expect(log).toContain('=== Kết quả ===')
     expect(log).toContain('error: model exploded')
+  })
+
+  test('onSystemPrompt writes the real system prompt to the job log, before the runner-response marker', async () => {
+    const logPath = path.join(logDir, 'system-prompt.log')
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async (ctx) => {
+      ctx.handlers.onSystemPrompt('## Tool khả dụng\n...\nbe helpful')
+      ctx.handlers.onAssistantChunk('final answer', { done: true })
+      return { finalText: 'final answer', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    await p.execute(baseRequest({ metadata: { logPath } }), {}, credential())
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    const systemIdx = log.indexOf('be helpful')
+    const markerIdx = log.indexOf('=== Phản hồi của runner ===')
+    const answerIdx = log.indexOf('final answer')
+    expect(systemIdx).toBeGreaterThan(-1)
+    expect(markerIdx).toBeGreaterThan(systemIdx)
+    expect(answerIdx).toBeGreaterThan(markerIdx)
+  })
+
+  test('onSystemPrompt is only ever appended once per job, even with multiple tool-call turns', async () => {
+    const logPath = path.join(logDir, 'system-prompt-once.log')
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async (ctx) => {
+      ctx.handlers.onSystemPrompt('the one true system prompt')
+      ctx.handlers.onToolCall({ name: 'search_files', argsSummary: '{}', ok: true, resultSummary: '{"ok":true,"matches":[]}' })
+      ctx.handlers.onToolCall({ name: 'search_files', argsSummary: '{}', ok: true, resultSummary: '{"ok":true,"matches":[]}' })
+      return { finalText: 'done', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    await p.execute(baseRequest({ metadata: { logPath } }), {}, credential())
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log.split('the one true system prompt').length - 1).toBe(1)
+  })
+
+  test('onToolCall logs a success outcome with a distinguishable "ok" marker', async () => {
+    const logPath = path.join(logDir, 'tool-ok.log')
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async (ctx) => {
+      ctx.handlers.onToolCall({ name: 'search_files', argsSummary: '{"pattern":"needle"}', ok: true, resultSummary: '{"ok":true,"matches":[{"file":"a.ts"}]}' })
+      return { finalText: 'done', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    await p.execute(baseRequest({ metadata: { logPath } }), {}, credential())
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toContain('[tool] search_files {"pattern":"needle"} → ok')
+    expect(log).not.toContain('FAIL')
+  })
+
+  test('onToolCall logs a failure outcome with a clear FAIL marker and the error summary', async () => {
+    const logPath = path.join(logDir, 'tool-fail.log')
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async (ctx) => {
+      ctx.handlers.onToolCall({
+        name: 'edit_file',
+        argsSummary: '{"path":"a.md"}',
+        ok: false,
+        resultSummary: '{"ok":false,"error":"old_string not found"}',
+      })
+      return { finalText: 'done', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    await p.execute(baseRequest({ metadata: { logPath } }), {}, credential())
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toContain('[tool] edit_file {"path":"a.md"} → FAIL: {"ok":false,"error":"old_string not found"}')
+  })
+
+  test('multiple consecutive tool calls each get their own result line, not a single line repeated with no result', async () => {
+    const logPath = path.join(logDir, 'tool-multi.log')
+    const p = new FakeAgenticProvider()
+    p.runConversationImpl = async (ctx) => {
+      ctx.handlers.onSystemPrompt('system prompt')
+      for (let i = 0; i < 5; i++) {
+        ctx.handlers.onToolCall({ name: 'search_files', argsSummary: `{"pattern":"n${i}"}`, ok: true, resultSummary: '{"ok":true,"matches":[]}' })
+      }
+      return { finalText: 'done', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    await p.execute(baseRequest({ metadata: { logPath } }), {}, credential())
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    const lines = log.split('\n').filter((l) => l.startsWith('[tool] search_files'))
+    expect(lines).toHaveLength(5)
+    for (const line of lines) expect(line).toContain('→ ok')
   })
 })
 

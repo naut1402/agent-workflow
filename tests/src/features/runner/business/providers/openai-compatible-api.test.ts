@@ -607,3 +607,83 @@ describe('OpenAiCompatibleProvider — extraTools (opt-in shell/git/search/web)'
     expect(seenTools.map((t: any) => t.function.name)).toContain('web_search')
   })
 })
+
+describe('OpenAiCompatibleProvider — job log: system prompt + tool-call outcome (Bug 1/2 fix)', () => {
+  let ws: string
+  let logDir: string
+  beforeAll(() => {
+    ws = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-openai-log-ws-'))
+    logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-openai-log-'))
+  })
+  afterAll(() => {
+    fs.rmSync(ws, { recursive: true, force: true })
+    fs.rmSync(logDir, { recursive: true, force: true })
+  })
+
+  test('the real system prompt sent to the model is written to the job log, before the model responds', async () => {
+    const logPath = path.join(logDir, 'system-prompt.log')
+    globalThis.fetch = (async () => jsonResponse(chatCompletion({ role: 'assistant', content: 'all done' }, 'stop'))) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test/v1')
+    await provider.execute({ ...baseRequest(ws), metadata: { logPath } }, { model: 'gpt-test' }, credential)
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    const systemIdx = log.indexOf('be helpful')
+    const answerIdx = log.indexOf('all done')
+    expect(systemIdx).toBeGreaterThan(-1)
+    expect(answerIdx).toBeGreaterThan(systemIdx)
+    expect(log.split('be helpful').length - 1).toBe(1)
+  })
+
+  test('a successful tool call is logged with a distinguishable "ok" outcome', async () => {
+    const logPath = path.join(logDir, 'tool-ok.log')
+    let call = 0
+    globalThis.fetch = (async () => {
+      call++
+      if (call === 1) {
+        return jsonResponse(
+          chatCompletion(
+            { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'list_directory', arguments: '{}' } }] },
+            'tool_calls',
+          ),
+        )
+      }
+      return jsonResponse(chatCompletion({ role: 'assistant', content: 'listed' }, 'stop'))
+    }) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test/v1')
+    await provider.execute({ ...baseRequest(ws), metadata: { logPath } }, { model: 'gpt-test' }, credential)
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toMatch(/\[tool\] list_directory .* → ok/)
+  })
+
+  test('a failing tool call is logged with a FAIL outcome distinguishable from success', async () => {
+    const logPath = path.join(logDir, 'tool-fail.log')
+    let call = 0
+    globalThis.fetch = (async () => {
+      call++
+      if (call === 1) {
+        return jsonResponse(
+          chatCompletion(
+            {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                { id: 'c1', type: 'function', function: { name: 'edit_file', arguments: JSON.stringify({ path: 'missing.md', old_string: 'x', new_string: 'y' }) } },
+              ],
+            },
+            'tool_calls',
+          ),
+        )
+      }
+      return jsonResponse(chatCompletion({ role: 'assistant', content: 'reported failure' }, 'stop'))
+    }) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test/v1')
+    await provider.execute({ ...baseRequest(ws), metadata: { logPath } }, { model: 'gpt-test' }, credential)
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toMatch(/\[tool\] edit_file .* → FAIL:/)
+  })
+})

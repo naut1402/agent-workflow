@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { encodeWorkspacePath } from '../../../../src/features/monitor/business/sessionTranscript'
 import { getTaskChatState, resolveChatSession } from '../../../../src/features/monitor/business/taskChat'
-import { saveTaskSessionLedger, type SessionEntry } from '../../../../src/features/runner/business/sessionLedger'
+import { recordSessionUsage, saveTaskSessionLedger, type SessionEntry } from '../../../../src/features/runner/business/sessionLedger'
 import { upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index'
 import { appendTranscriptTurn } from '../../../../src/features/runner/business/providers/agentTranscriptStore'
 import type { JobRecord } from '../../../../src/features/runner/business/types'
@@ -184,6 +184,39 @@ describe('resolveChatSession', () => {
     expect(resolved.sessionId).toBe('s-design-2')
     expect(resolved.dismissedForStep).toBeUndefined()
   })
+
+  test('Bug4 fix: the next pipeline step starting (forceNew → prior entry auto-stale) does not hide the finished step\'s chat', () => {
+    writeJob({
+      id: 'j-A',
+      sessionId: 's-A',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'A' },
+    })
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'per-step',
+      sessions: [ledgerEntry({ sessionId: 's-A', stepIds: ['A'], status: 'open' })],
+    })
+
+    // Mirrors exactly what advancePipelineStepChain() + jobQueue.ts do when the
+    // next step of the SAME pipeline starts — forceNew:true, unconditionally,
+    // with no user action involved (see design.md §3.4/§4.2).
+    recordSessionUsage({
+      projectId: PROJECT,
+      taskId: TASK,
+      sessionId: 's-B',
+      providerId: 'claude-code-cli',
+      runnerId: 'r1',
+      connectionId: 'c1',
+      workspace: WORKSPACE,
+      stepId: 'B',
+      forceNew: true,
+    })
+
+    const resolved = resolveChatSession(PROJECT, TASK, 'A')
+    expect(resolved.sessionId).toBe('s-A')
+    expect(resolved.dismissedForStep).toBeUndefined()
+  })
 })
 
 describe('getTaskChatState', () => {
@@ -259,6 +292,37 @@ describe('getTaskChatState', () => {
     const state = getTaskChatState(PROJECT, TASK)
     expect(state.canSend).toBe(true)
     expect(state.blockedReason).toBeUndefined()
+  })
+
+  test('Bug4 fix: reopening a finished step\'s chat after the next pipeline step starts still replays its transcript', () => {
+    writeJob({
+      id: 'j-A',
+      sessionId: 's-A',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'A' },
+    })
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'per-step',
+      sessions: [ledgerEntry({ sessionId: 's-A', stepIds: ['A'], status: 'open' })],
+    })
+    writeTranscript('s-A', ['xong bước A'])
+
+    recordSessionUsage({
+      projectId: PROJECT,
+      taskId: TASK,
+      sessionId: 's-B',
+      providerId: 'claude-code-cli',
+      runnerId: 'r1',
+      connectionId: 'c1',
+      workspace: WORKSPACE,
+      stepId: 'B',
+      forceNew: true,
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'A' })
+    expect(state.sessionId).toBe('s-A')
+    expect(state.turns.map((t) => t.text)).toEqual(['xong bước A'])
   })
 
   test('reports the runner of the step, resolved from the registry', () => {

@@ -38,6 +38,9 @@ export const EMPTY_REPLY_NUDGE_TEXT =
   'bằng một câu văn bản ngắn xác nhận. Nếu chưa, hãy gọi đúng 1 trong các tool đã được ' +
   'liệt kê ở đầu system prompt.'
 
+/** Marker line reprinted right before the model's response in the job log — now emitted by `onSystemPrompt` (see execute()) instead of unconditionally by describePayload(). */
+export const RUNNER_RESPONSE_MARKER = '\n=== Phản hồi của runner ===\n\n'
+
 /** Thrown when the turn after the nudge is still empty — surfaces as a clear `ok:false` instead of a silent `succeeded`. */
 export const EMPTY_REPLY_ERROR_MESSAGE =
   'model trả lời rỗng và không gọi tool sau khi đã nhắc lại — có thể model không tương thích tốt với bộ tool hiện tại qua provider này'
@@ -129,9 +132,20 @@ export interface AgenticRunResult {
   finalText: string
   usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number }
   /** Pre-summarized so the base class never needs to know a subclass's tool schema. */
-  toolCalls: Array<{ name: string; argsSummary: string }>
+  toolCalls: Array<{ name: string; argsSummary: string; ok: boolean; resultSummary: string }>
   /** Opaque to the base class — persisted verbatim, handed back to the same subclass on resume. */
   rawMessages: unknown[]
+}
+
+/** Same truncation rule as `summarize()`/`summarizeArgs()` (200 chars) — keeps a large tool outcome (e.g. `search_files` matches) from blowing up the job log. */
+export function summarizeResult(outcome: unknown): string {
+  try {
+    const json = JSON.stringify(outcome)
+    if (!json) return ''
+    return json.length > 200 ? `${json.slice(0, 200)}…` : json
+  } catch {
+    return ''
+  }
 }
 
 /**
@@ -142,8 +156,8 @@ export interface AgenticRunResult {
  * call them for every tool call / assistant turn, not just some.
  */
 export interface AgenticStreamHandlers {
-  /** A tool call just finished executing this turn. */
-  onToolCall: (call: { name: string; argsSummary: string }) => void
+  /** A tool call just finished executing this turn — `ok`/`resultSummary` reflect the outcome, not just the call. */
+  onToolCall: (call: { name: string; argsSummary: string; ok: boolean; resultSummary: string }) => void
   /**
    * Assistant text became available. `text` is a delta to append, not the
    * full turn so far — callers that don't have real token streaming just
@@ -155,6 +169,8 @@ export interface AgenticStreamHandlers {
    * tailing every delta into the raw job log immediately.
    */
   onAssistantChunk: (text: string, opts?: { done?: boolean }) => void
+  /** Called exactly once by `runConversation()`, right after the system prompt is built — before the first model call. */
+  onSystemPrompt: (system: string) => void
 }
 
 export interface AgenticRunContext {
@@ -499,9 +515,6 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       `Provider: ${this.providerId}${runnerConfig.model ? ` — model: ${runnerConfig.model}` : ''}`,
       '--- Prompt ---',
       req.userPrompt,
-      '',
-      '=== Phản hồi của runner ===',
-      '',
     ]
     return lines.join('\n')
   }
@@ -588,10 +601,14 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       }
     }
     const handlers: AgenticStreamHandlers = {
+      onSystemPrompt: (system) => {
+        appendLog(`--- System prompt (đã gửi cho model) ---\n${system}\n${RUNNER_RESPONSE_MARKER}`)
+      },
       onToolCall: (call) => {
         streamed = true
         appendTranscriptTurn(this.providerId, sessionId, { role: 'tool', tool: call.name, text: call.argsSummary })
-        appendLog(`[tool] ${call.name} ${call.argsSummary}\n`)
+        const status = call.ok ? 'ok' : `FAIL: ${call.resultSummary}`
+        appendLog(`[tool] ${call.name} ${call.argsSummary} → ${status}\n`)
       },
       onAssistantChunk: (text, opts) => {
         streamed = true
@@ -634,7 +651,8 @@ export abstract class AgenticApiProvider implements RunnerProvider {
     if (!streamed) {
       for (const call of result.toolCalls) {
         appendTranscriptTurn(this.providerId, sessionId, { role: 'tool', tool: call.name, text: call.argsSummary })
-        appendLog(`[tool] ${call.name} ${call.argsSummary}\n`)
+        const status = call.ok ? 'ok' : `FAIL: ${call.resultSummary}`
+        appendLog(`[tool] ${call.name} ${call.argsSummary} → ${status}\n`)
       }
       if (result.finalText?.trim()) {
         appendTranscriptTurn(this.providerId, sessionId, { role: 'assistant', text: result.finalText })

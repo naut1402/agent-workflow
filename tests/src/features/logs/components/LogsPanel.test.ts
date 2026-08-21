@@ -23,22 +23,34 @@ afterEach(() => {
       types: { audit: true, request: true, jobs: true, events: true, usage: true },
     },
   })
+  // JobLogDialog renders via <Teleport to="body"> — clear leftover nodes between tests.
+  document.body.innerHTML = ''
 })
 
 const JOB_ID = '11111111-2222-4333-8444-555555555555'
+const JOB_ID_2 = '22222222-3333-4444-8555-666666666666'
 
 function stubFetch() {
   const mock = vi.fn(async (url: string) => {
     let body: any = {}
-    if (url.includes('/api/jobs/')) body = { id: JOB_ID, text: 'hello job log', truncated: false }
+    if (url.includes(`/api/jobs/${JOB_ID_2}`)) body = { id: JOB_ID_2, text: 'log của job B', truncated: false }
+    else if (url.includes('/api/jobs/')) body = { id: JOB_ID, text: 'hello job log', truncated: false }
     else if (url.includes('/api/jobs'))
       body = {
         jobs: [
           {
             id: JOB_ID,
             status: 'succeeded',
+            createdAt: '2026-01-01T00:00:00.000Z',
             agentRef: 'project/quick-action-improve-doc',
             metadata: { artifactName: 'design.md', pipelineStepId: 'implementer' },
+          },
+          {
+            id: JOB_ID_2,
+            status: 'running',
+            createdAt: '2026-01-02T00:00:00.000Z',
+            agentRef: 'project/quick-action-review',
+            metadata: { artifactName: 'review.md', pipelineStepId: 'reviewer' },
           },
         ],
       }
@@ -123,7 +135,7 @@ describe('LogsPanel', () => {
     expect(urls.some((u) => u.includes('/api/logs') && u.includes('type=request'))).toBe(true)
   })
 
-  it('jobs tab lists jobs and shows the selected job log', async () => {
+  it('jobs tab lists jobs in a table, each row with a "view log" button', async () => {
     const fetchMock = stubFetch()
     const w = mountWithI18n(LogsPanel)
     await flushPromises()
@@ -132,15 +144,69 @@ describe('LogsPanel', () => {
     await flushPromises()
     expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/jobs'))).toBe(true)
 
-    // List item shows agent + pipeline step + artifact context, not just the raw job id.
-    const item = w.find('.jobs-list li')
-    expect(item.text()).toContain('project/quick-action-improve-doc')
-    expect(item.text()).toContain('implementer')
-    expect(item.text()).toContain('design.md')
+    const rows = w.findAll('.logs-table-jobs tbody tr')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].text()).toContain('project/quick-action-improve-doc')
+    expect(rows[0].text()).toContain('implementer')
+    expect(rows[0].find('button').exists()).toBe(true)
+    // No tail/live-follow control anywhere on the tab (TC-14 regression).
+    expect(w.text()).not.toContain('Tail')
+  })
 
-    await item.trigger('click')
+  it('clicking the view-log button opens a dialog with that exact job\'s log, and closing it works', async () => {
+    stubFetch()
+    const w = mountWithI18n(LogsPanel)
     await flushPromises()
-    expect(w.find('.job-log pre').text()).toContain('hello job log')
+    await w.findAll('.logs-tabs button')[4].trigger('click')
+    await flushPromises()
+
+    const rows = w.findAll('.logs-table-jobs tbody tr')
+    await rows[0].find('button').trigger('click')
+    await flushPromises()
+    // JobLogDialog renders via <Teleport to="body"> — query document.body, not the wrapper.
+    expect(document.body.querySelector('.modal')).not.toBeNull()
+    expect(document.body.querySelector('.modal pre')?.textContent).toContain('hello job log')
+
+    ;(document.body.querySelector('.modal-close') as HTMLElement)?.click()
+    await flushPromises()
+    expect(document.body.querySelector('.modal')).toBeNull()
+
+    // Click the second row's button — must show job B's log, not job A's leftover.
+    await rows[1].find('button').trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('.modal pre')?.textContent).toContain('log của job B')
+    expect(document.body.querySelector('.modal pre')?.textContent).not.toContain('hello job log')
+  })
+
+  it('opening the dialog for a running job does not throw even with a partial log', async () => {
+    stubFetch()
+    const w = mountWithI18n(LogsPanel)
+    await flushPromises()
+    await w.findAll('.logs-tabs button')[4].trigger('click')
+    await flushPromises()
+
+    const rows = w.findAll('.logs-table-jobs tbody tr')
+    await rows[1].find('button').trigger('click') // job B is 'running'
+    await flushPromises()
+    expect(document.body.querySelector('.modal')).not.toBeNull()
+    expect(document.body.querySelector('.modal pre')?.textContent).toContain('log của job B')
+  })
+
+  it('shows an empty state, consistent with other tabs, when there are no jobs', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/api/jobs')) return { ok: true, json: async () => ({ jobs: [] }) }
+        return { ok: true, json: async () => ({ entries: [] }) }
+      }),
+    )
+    const w = mountWithI18n(LogsPanel)
+    await flushPromises()
+    await w.findAll('.logs-tabs button')[4].trigger('click')
+    await flushPromises()
+
+    expect(w.findAll('.logs-table-jobs tbody tr')).toHaveLength(1)
+    expect(w.find('.logs-table-jobs').text()).toContain('Chưa có job')
   })
 
   it('events tab fetches domain event logs (default on)', async () => {

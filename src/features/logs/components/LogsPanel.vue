@@ -2,10 +2,11 @@
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import type { LogEntry, LogLevel } from '../../../core/log/schema'
-import { fetchLogs, fetchJobLog } from '../scripts/LogsPanelApi'
+import { fetchLogs } from '../scripts/LogsPanelApi'
 import { fetchJobs } from '../../runner/scripts/runnerApi'
 import { fetchLoggingConfig } from '../../settings/scripts/SettingsDialogApi'
 import { useLogsTable } from '../composables/useLogsTable'
+import JobLogDialog from './JobLogDialog.vue'
 
 const { t } = useI18nHelpers()
 
@@ -25,10 +26,7 @@ const availableTabs = computed(() => {
 const tab = ref<Tab>('audit')
 const entries = ref<LogEntry[]>([])
 const jobs = ref<any[]>([])
-const selectedJobId = ref('')
-const jobLog = ref('')
-const jobLogTruncated = ref(false)
-const tailing = ref(false)
+const dialogJobId = ref('')
 const loading = ref(false)
 const error = ref('')
 
@@ -52,16 +50,6 @@ function jobStepId(job: { metadata?: Record<string, unknown> | null }): string {
   if (typeof meta.stepId === 'string' && meta.stepId) return meta.stepId
   if (typeof meta.pipelineStepId === 'string' && meta.pipelineStepId) return meta.pipelineStepId
   return ''
-}
-
-let tailTimer: ReturnType<typeof setInterval> | null = null
-
-function stopTail() {
-  if (tailTimer) {
-    clearInterval(tailTimer)
-    tailTimer = null
-  }
-  tailing.value = false
 }
 
 async function loadLoggingTypes() {
@@ -131,39 +119,7 @@ async function loadJobs() {
   }
 }
 
-async function loadJobLog(id: string) {
-  try {
-    const data = await fetchJobLog(id)
-    if (selectedJobId.value !== id) return
-    jobLog.value = data.text || ''
-    jobLogTruncated.value = Boolean(data.truncated)
-  } catch (e: any) {
-    if (selectedJobId.value !== id) return
-    error.value = String(e.message || e)
-  }
-}
-
-function selectJob(id: string) {
-  stopTail()
-  selectedJobId.value = id
-  jobLog.value = ''
-  loadJobLog(id)
-}
-
-function toggleTail() {
-  if (tailing.value) {
-    stopTail()
-    return
-  }
-  if (!selectedJobId.value) return
-  tailing.value = true
-  tailTimer = setInterval(() => {
-    if (selectedJobId.value) loadJobLog(selectedJobId.value)
-  }, 1500)
-}
-
 function selectTab(t: Tab) {
-  stopTail()
   tab.value = t
 }
 
@@ -233,7 +189,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  stopTail()
   if (copyFlashTimer) clearTimeout(copyFlashTimer)
   window.removeEventListener('dev-dashboard:logging-changed', onLoggingChanged)
 })
@@ -627,34 +582,35 @@ onUnmounted(() => {
     </div>
 
     <!-- Jobs -->
-    <div v-else-if="tab === 'jobs' && enabledTypes.jobs" class="jobs-layout">
-      <aside class="jobs-list">
-        <ul>
-          <li
-            v-for="j in jobs"
-            :key="j.id"
-            :class="{ active: j.id === selectedJobId }"
-            @click="selectJob(j.id)"
-          >
-            <strong>{{ j.agentRef || j.id.slice(0, 8) }}</strong>
-            <span class="muted">
-              <template v-if="jobStepId(j)">{{ jobStepId(j) }} · </template>{{ j.metadata?.artifactName || j.id.slice(0, 8) }} · {{ j.status }}
-            </span>
-          </li>
-          <li v-if="!jobs.length && !loading" class="muted">{{ t('logs.empty.job') }}</li>
-        </ul>
-      </aside>
-      <section class="job-log">
-        <div class="job-log-bar">
-          <button type="button" class="btn" :disabled="!selectedJobId" @click="toggleTail">
-            {{ tailing ? t('logs.jobs.tailStop') : t('logs.jobs.tailStart') }}
-          </button>
-          <span v-if="jobLogTruncated" class="muted">{{ t('logs.jobs.truncated') }}</span>
-        </div>
-        <pre v-if="selectedJobId">{{ jobLog || t('logs.jobs.logEmpty') }}</pre>
-        <p v-else class="muted">{{ t('logs.jobs.selectPrompt') }}</p>
-      </section>
+    <div v-else-if="tab === 'jobs' && enabledTypes.jobs" class="logs-table-wrap">
+      <table class="logs-table logs-table-jobs">
+        <thead>
+          <tr>
+            <th>{{ t('logs.columns.time') }}</th>
+            <th>{{ t('logs.columns.agent') }}</th>
+            <th>{{ t('logs.columns.stepId') }}</th>
+            <th>{{ t('logs.columns.status') }}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="j in jobs" :key="j.id">
+            <td>{{ j.createdAt }}</td>
+            <td>{{ j.agentRef || j.id.slice(0, 8) }}</td>
+            <td>{{ jobStepId(j) || '—' }}</td>
+            <td><span class="level-badge">{{ j.status }}</span></td>
+            <td>
+              <button type="button" class="btn" @click="dialogJobId = j.id">{{ t('logs.jobs.viewLog') }}</button>
+            </td>
+          </tr>
+          <tr v-if="!jobs.length && !loading">
+            <td colspan="5" class="muted">{{ t('logs.empty.job') }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
+
+    <JobLogDialog v-if="dialogJobId" :job-id="dialogJobId" @close="dialogJobId = ''" />
   </div>
 </template>
 
@@ -835,23 +791,6 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .btn-ghost { background: transparent; }
-.jobs-layout { display: grid; grid-template-columns: 200px 1fr; gap: 1rem; }
-.jobs-list ul { list-style: none; padding: 0; margin: 0; }
-.jobs-list li { padding: 0.4rem 0.5rem; border-radius: 6px; cursor: pointer; }
-.jobs-list li.active { background: var(--panel-2); }
-.jobs-list li strong { display: block; font-size: 0.85rem; }
-.job-log-bar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
-.job-log pre {
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: 0.75rem;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  max-height: 60vh;
-  overflow: auto;
-  white-space: pre-wrap;
-}
 .err-banner {
   background: var(--panel-2);
   color: var(--danger);
