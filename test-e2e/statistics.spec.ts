@@ -59,13 +59,30 @@ test('statistics mode: chart mermaid + bảng drill-down (capture)', async ({ pa
   await expect(page.locator('.statistics-table tbody tr')).toHaveCount(2, { timeout: 10_000 })
   await expect(page.locator('.statistics-table tbody tr').first()).toContainText('STAT-1')
 
-  // ChartCard vẽ mermaid SVG qua markdown pipeline.
-  await expect(page.locator('.chart-card-body .mermaid svg')).toBeVisible({ timeout: 20_000 })
+  // ChartCard vẽ mermaid SVG qua markdown pipeline — parse lỗi vẫn sinh SVG
+  // (error bomb) nên phải assert cả không có "Syntax error".
+  async function expectChartRendered() {
+    const mermaidNode = page.locator('.chart-card-body .mermaid')
+    await expect(mermaidNode.locator('svg')).toBeVisible({ timeout: 20_000 })
+    await expect(mermaidNode).not.toContainText(/syntax error/i)
+  }
+  await expectChartRendered()
+
+  // Đổi loại chart (bar → line → pie) qua selectbox trong slot control của card.
+  async function pickChartType(label: string) {
+    await page.locator('.chart-card-controls .c-select-trigger').nth(1).click()
+    await page.locator('.c-select-option', { hasText: label }).click()
+  }
+  await pickChartType('Đường')
+  await expectChartRendered()
+  await pickChartType('Tròn')
+  await expectChartRendered()
 
   // Drill-down: click task STAT-1 → groupBy step, breadcrumb hiện.
   await page.locator('.statistics-table tbody tr').first().click()
   await expect(page.locator('.statistics-crumb')).toContainText('STAT-1')
   await expect(page.locator('.statistics-table tbody tr')).toHaveCount(2, { timeout: 10_000 })
+  await expectChartRendered()
 
   await capturePage(page, testInfo, 'statistics')
 })

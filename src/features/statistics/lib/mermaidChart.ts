@@ -53,7 +53,7 @@ export function buildBarChart(input: AxisChartInput): string {
     'xychart-beta',
     `  title "${escapeMermaidText(input.title)}"`,
     `  x-axis [${categories.join(', ')}]`,
-    `  y-axis "${escapeMermaidText(input.valueLabel)}" --> 0..${axisUpperBound(values)}`,
+    `  y-axis "${escapeMermaidText(input.valueLabel)}" 0 --> ${axisUpperBound(values)}`,
     `  bar [${values.join(', ')}]`,
   ].join('\n')
 }
@@ -66,7 +66,7 @@ export function buildLineChart(input: AxisChartInput): string {
     'xychart-beta',
     `  title "${escapeMermaidText(input.title)}"`,
     `  x-axis [${categories.join(', ')}]`,
-    `  y-axis "${escapeMermaidText(input.valueLabel)}" --> 0..${axisUpperBound(values)}`,
+    `  y-axis "${escapeMermaidText(input.valueLabel)}" 0 --> ${axisUpperBound(values)}`,
     `  line [${values.join(', ')}]`,
   ].join('\n')
 }

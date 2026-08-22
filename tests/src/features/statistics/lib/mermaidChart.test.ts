@@ -29,12 +29,12 @@ describe('buildBarChart / buildLineChart', () => {
     valueLabel: 'Total tokens',
   }
 
-  it('bar: xychart-beta + categories quote + y bound theo max', () => {
+  it('bar: xychart-beta + categories quote + y range <min> --> <max>', () => {
     const def = buildBarChart(input)
     expect(def).toContain('xychart-beta')
     expect(def).toContain('title "Total theo task"')
     expect(def).toContain('x-axis ["TA1", "TB1"]')
-    expect(def).toContain('y-axis "Total tokens" --> 0..1500')
+    expect(def).toContain('y-axis "Total tokens" 0 --> 1500')
     expect(def).toContain('bar [160, 1500]')
   })
 
@@ -46,7 +46,7 @@ describe('buildBarChart / buildLineChart', () => {
 
   it('max 0 → cột trên trục tối thiểu 1, giá trị làm tròn không âm', () => {
     const def = buildBarChart({ ...input, values: [0, -3.7] })
-    expect(def).toContain('0..1')
+    expect(def).toContain('0 --> 1')
     expect(def).toContain('bar [0, 0]')
   })
 })
@@ -70,5 +70,31 @@ describe('buildPieChart + buildChart', () => {
     const base = { title: 'T', labels: ['we"ird[l]abel'], values: [5], valueLabel: 'V' }
     expect(buildChart('bar', base)).toContain('"we\'irdlabel"')
     expect(buildChart('pie', base)).toContain('"we' + "'" + 'irdlabel" : 5')
+  })
+})
+
+describe('parse bằng mermaid thật (jsdom)', () => {
+  // Gate cú pháp thật: test string ở trên không bắt được lỗi grammar
+  // (vd từng ship `y-axis "V" --> 0..N` sai range syntax).
+  it('definition bar/line/pie parse OK, cú pháp sai bị reject', async () => {
+    const mermaid = (await import('mermaid')).default
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' })
+
+    const base = {
+      title: 'Total theo task',
+      categories: ['TA1', 'we"ird label', 'đà có dấu'],
+      values: [160, 1500, 0],
+      valueLabel: 'Total tokens',
+    }
+    await expect(mermaid.parse(buildBarChart(base))).resolves.toBeTruthy()
+    await expect(mermaid.parse(buildLineChart(base))).resolves.toBeTruthy()
+    await expect(
+      mermaid.parse(
+        buildPieChart({ title: 'T', slices: [{ label: 'a', value: 1 }, { label: 'b', value: 2 }] }),
+      ),
+    ).resolves.toBeTruthy()
+
+    // Đối chứng: range sai (`--> 0..N`) phải bị reject.
+    await expect(mermaid.parse('xychart-beta\n  y-axis "V" --> 0..5\n  bar [1]')).rejects.toThrow()
   })
 })
