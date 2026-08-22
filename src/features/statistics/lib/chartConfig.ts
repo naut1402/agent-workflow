@@ -1,5 +1,3 @@
-import type { ChartKind, ChartStyleConfig } from './mermaidChart'
-import { DEFAULT_CHART_STYLE } from './mermaidChart'
 import type { NumberFormat } from './format'
 import {
   USAGE_GROUP_BYS,
@@ -11,6 +9,61 @@ import {
 /** Grid span của chart tile trong gallery 4 cột. */
 export const TILE_MIN_SPAN = 1
 export const TILE_MAX_SPAN = 4
+
+/** Bước snap chiều cao khi kéo resize (px) — align tương tự snap cột. */
+export const TILE_HEIGHT_STEP = 20
+
+export type ChartKind = 'bar' | 'pie' | 'line'
+
+/**
+ * Thuộc tính hiển thị của chart — những gì renderer hiện tại (chart.js) hỗ
+ * trợ: chiều cao (width bám panel), nhãn trục, màu. Title là tham số riêng
+ * (rỗng → không vẽ).
+ */
+export interface ChartStyleConfig {
+  height: number
+  /** Tiêu đề trục x (bar/line); rỗng → không thêm. */
+  xAxisTitle?: string
+  /** Nhãn trục y (bar/line); rỗng → không thêm. */
+  yAxisLabel?: string
+  /** Màu bar/line (hex). */
+  color?: string
+  /** Bảng màu section pie (hex). */
+  pieColors?: string[]
+}
+
+export const DEFAULT_CHART_STYLE: ChartStyleConfig = {
+  height: 300,
+  xAxisTitle: '',
+  yAxisLabel: '',
+  color: '#4A7DFF',
+  pieColors: [
+    '#4A7DFF',
+    '#FF9F43',
+    '#2ECC71',
+    '#E74C3C',
+    '#9B59B6',
+    '#1ABC9C',
+    '#F1C40F',
+    '#E67E22',
+    '#34495E',
+    '#FF6E00',
+  ],
+}
+
+/** Giới hạn chiều cao chart (px) — width bám panel. */
+export const CHART_MIN_HEIGHT = 180
+export const CHART_MAX_HEIGHT = 3000
+
+export function clampChartHeight(height: number): number {
+  return Math.min(CHART_MAX_HEIGHT, Math.max(CHART_MIN_HEIGHT, Math.round(height)))
+}
+
+/** Snapped height theo TILE_HEIGHT_STEP, trong khoảng clamp. */
+export function snapChartHeight(height: number): number {
+  const stepped = Math.round(height / TILE_HEIGHT_STEP) * TILE_HEIGHT_STEP
+  return clampChartHeight(stepped)
+}
 
 /** Config một chart instance trong danh sách chart của mode Thống kê. */
 export interface ChartConfig {

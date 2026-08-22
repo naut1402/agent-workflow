@@ -2,28 +2,28 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import ChartCard from '@/features/statistics/components/ChartCard.vue'
 import { mountWithI18n } from '../../../helpers/i18n'
-import { DEFAULT_CHART_STYLE } from '@/features/statistics/lib/mermaidChart'
+import { DEFAULT_CHART_STYLE } from '@/features/statistics/lib/chartConfig'
 
-// renderMermaid lazy-import mermaid thật — trong jsdom không vẽ được ổn định;
-// mock để assert wiring (được gọi với root + definition đúng) thay vì pixel.
-vi.mock('@/core/lib/markdownLib', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/core/lib/markdownLib')>()
-  return {
-    ...actual,
-    renderMermaid: vi.fn(async () => {}),
-  }
-})
+// jsdom không implement canvas 2d context — chart.js thật không dựng được.
+// Mock chart.js/auto với class giả ghi lại config để assert translation props → chart.
+const instances: Array<{ config: Record<string, unknown>; destroyed: boolean }> = []
 
-import { renderMermaid } from '@/core/lib/markdownLib'
-import { attachMermaidControls } from '@/core/composables/useMermaidControls'
-
-vi.mock('@/core/composables/useMermaidControls', () => ({
-  attachMermaidControls: vi.fn(),
+vi.mock('chart.js/auto', () => ({
+  default: class FakeChart {
+    config: Record<string, unknown>
+    destroyed = false
+    constructor(_canvas: unknown, config: Record<string, unknown>) {
+      this.config = config
+      instances.push(this)
+    }
+    destroy() {
+      this.destroyed = true
+    }
+    update() {}
+  },
 }))
 
-afterEach(() => {
-  vi.clearAllMocks()
-})
+import FakeChart from 'chart.js/auto'
 
 function props(overrides: Record<string, unknown> = {}) {
   return {
@@ -35,55 +35,85 @@ function props(overrides: Record<string, unknown> = {}) {
   }
 }
 
-describe('ChartCard (wrapper renderer mermaid)', () => {
-  it('mount → renderMermaid + attachMermaidControls với node chứa definition', async () => {
+function lastInstance() {
+  return instances[instances.length - 1]
+}
+
+afterEach(() => {
+  vi.clearAllMocks()
+  instances.length = 0
+})
+
+describe('ChartCard (renderer chart.js)', () => {
+  it('mount có dữ liệu → dựng Chart đúng type/labels/values', async () => {
     mountWithI18n(ChartCard, { props: props() })
     await flushPromises()
 
-    expect(renderMermaid).toHaveBeenCalled()
-    const root = (renderMermaid as ReturnType<typeof vi.fn>).mock.calls[0][0] as HTMLElement
-    expect(root.querySelector('.mermaid')?.textContent).toContain('xychart-beta')
-    expect(root.querySelector('.mermaid')?.textContent).toContain('bar [160, 1500]')
-    expect(attachMermaidControls).toHaveBeenCalled()
+    expect(instances).toHaveLength(1)
+    const cfg = lastInstance().config as {
+      type: string
+      data: { labels: string[]; datasets: Array<{ data: number[]; backgroundColor: unknown }> }
+    }
+    expect(cfg.type).toBe('bar')
+    expect(cfg.data.labels).toEqual(['TA1', 'TB1'])
+    expect(cfg.data.datasets[0].data).toEqual([160, 1500])
   })
 
-  it('đổi props data → gọi renderMermaid lại với definition mới', async () => {
+  it('đổi props data → tạo lại Chart với data mới, unmount → destroy', async () => {
     const wrapper = mountWithI18n(ChartCard, { props: props() })
     await flushPromises()
-    ;(renderMermaid as ReturnType<typeof vi.fn>).mockClear()
 
     await wrapper.setProps({ values: [999, 1], chartType: 'line' })
     await flushPromises()
-    expect(renderMermaid).toHaveBeenCalled()
-    const root = (renderMermaid as ReturnType<typeof vi.fn>).mock.calls[0][0] as HTMLElement
-    expect(root.querySelector('.mermaid')?.textContent).toContain('line [999, 1]')
+    const cfg = lastInstance().config as { type: string; data: { datasets: Array<{ data: number[] }> } }
+    expect(cfg.type).toBe('line')
+    expect(cfg.data.datasets[0].data).toEqual([999, 1])
+    expect(instances[0].destroyed).toBe(true) // instance cũ bị destroy khi tạo lại
+
+    wrapper.unmount()
+    expect(lastInstance().destroyed).toBe(true)
   })
 
-  it('styleConfig truyền vào definition (directive config + height theo body)', async () => {
+  it('pie: dùng bảng màu styleConfig; bar: dùng màu đơn + tick format theo numberFormat', async () => {
     mountWithI18n(ChartCard, {
-      props: props({ styleConfig: { ...DEFAULT_CHART_STYLE, height: 400, color: '#2ECC71' } }),
+      props: props({
+        chartType: 'pie',
+        styleConfig: { ...DEFAULT_CHART_STYLE, pieColors: ['#111111', '#222222'] },
+      }),
     })
     await flushPromises()
-    const root = (renderMermaid as ReturnType<typeof vi.fn>).mock.calls[0][0] as HTMLElement
-    const src = root.querySelector('.mermaid')?.textContent ?? ''
-    // jsdom không đo được clientWidth → fallback 720; height từ config.
-    expect(src).toContain('width: 720')
-    expect(src).toContain('height: 400')
-    expect(src).toContain('plotColorPalette: "#2ECC71"')
+    const pie = lastInstance().config as { data: { datasets: Array<{ backgroundColor: string[] }> } }
+    expect(pie.data.datasets[0].backgroundColor).toEqual(['#111111', '#222222'])
+
+    mountWithI18n(ChartCard, {
+      props: props({ styleConfig: { ...DEFAULT_CHART_STYLE, color: '#2ECC71' }, numberFormat: 'full' }),
+    })
+    await flushPromises()
+    const bar = lastInstance().config as {
+      data: { datasets: Array<{ backgroundColor: string }> }
+      options: { scales: { y: { ticks: { callback: (v: number) => string } } } }
+    }
+    expect(bar.data.datasets[0].backgroundColor).toBe('#2ECC71')
+    // Tick trục y định dạng theo numberFormat (full → dấu phẩy).
+    expect(bar.options.scales.y.ticks.callback(1234567)).toBe('1,234,567')
   })
 
-  it('không có dữ liệu (toàn 0/rỗng) → empty state, không render chart', async () => {
+  it('không có dữ liệu → empty state, không dựng Chart', async () => {
     const wrapper = mountWithI18n(ChartCard, {
       props: props({ labels: [], values: [] }),
     })
     await flushPromises()
-    expect(wrapper.find('.chart-card-body').exists()).toBe(false)
+    expect(instances).toHaveLength(0)
     expect(wrapper.find('.chart-card-state').text()).toBeTruthy()
-    expect(renderMermaid).not.toHaveBeenCalled()
+    expect(wrapper.find('canvas').exists()).toBe(false)
   })
 
   it('loading → hiện trạng thái loading thay vì chart', () => {
     const wrapper = mountWithI18n(ChartCard, { props: props({ loading: true }) })
+    expect(wrapper.find('canvas').exists()).toBe(false)
     expect(wrapper.find('.chart-card-body').exists()).toBe(false)
   })
 })
+
+// Ngăn lint báo FakeChart chưa dùng — class dùng qua side-effect mock phía trên.
+void FakeChart

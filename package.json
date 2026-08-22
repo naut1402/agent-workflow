@@ -28,6 +28,7 @@
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@toast-ui/editor": "^3.2.2",
     "@vue-flow/core": "^1.41.0",
+    "chart.js": "^4.5.1",
     "diff": "^9.0.0",
     "hono": "^4.12.27",
     "js-yaml": "^4.1.0",

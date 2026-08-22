@@ -3,7 +3,6 @@ import {
   compactNumber,
   formatNumber,
   fullNumber,
-  pickUnitScale,
 } from '@/features/statistics/lib/format'
 
 describe('format số liệu thống kê', () => {
@@ -24,12 +23,5 @@ describe('format số liệu thống kê', () => {
   it('formatNumber theo tuỳ chọn compact/full', () => {
     expect(formatNumber(1234567, 'compact')).toBe('1.23M')
     expect(formatNumber(1234567, 'full')).toBe('1,234,567')
-  })
-
-  it('pickUnitScale theo bậc max', () => {
-    expect(pickUnitScale(9_999)).toEqual({ divisor: 1, axisSuffix: '' })
-    expect(pickUnitScale(25_000)).toEqual({ divisor: 1_000, axisSuffix: ' (K)' })
-    expect(pickUnitScale(25_000_000)).toEqual({ divisor: 1_000_000, axisSuffix: ' (M)' })
-    expect(pickUnitScale(25_000_000_000)).toEqual({ divisor: 1_000_000_000, axisSuffix: ' (B)' })
   })
 })

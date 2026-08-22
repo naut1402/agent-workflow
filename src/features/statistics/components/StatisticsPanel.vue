@@ -13,7 +13,7 @@ import {
   sanitizeChartConfig,
   type ChartConfig,
 } from '../lib/chartConfig'
-import { formatDuration, formatNumber, formatTs, pickUnitScale } from '../lib/format'
+import { formatDuration, formatNumber, formatTs } from '../lib/format'
 
 /**
  * Mode Thống kê (issue #231): gallery chart 4 cột — mỗi chart một card
@@ -175,13 +175,6 @@ function cardSeries(chart: ChartConfig): { labels: string[]; values: number[] } 
     labels: [...labels.slice(0, MAX_CHART_ITEMS), t('statistics.other')],
     values: [...values.slice(0, MAX_CHART_ITEMS), rest],
   }
-}
-
-/** Scale đơn vị áp cho chart khi bật định dạng compact — nhãn trục không chồng. */
-function cardUnitScale(chart: ChartConfig): { divisor: number; axisSuffix: string } | undefined {
-  if (chart.numberFormat !== 'compact') return undefined
-  const { values } = cardSeries(chart)
-  return pickUnitScale(Math.max(0, ...values))
 }
 
 // ── Card summary (min/max/avg — tách khỏi bảng) ──────────────────────────────
@@ -433,8 +426,8 @@ onMounted(() => {
           :labels="cardSeries(chart).labels"
           :values="cardSeries(chart).values"
           :loading="loading"
+          :number-format="chart.numberFormat"
           :style-config="chart.style"
-          :unit-scale="cardUnitScale(chart)"
         />
       </ChartTile>
     </div>
@@ -664,18 +657,6 @@ onMounted(() => {
 }
 .statistics-charts .chart-tile.is-active {
   border-color: var(--accent);
-}
-/* Zoom/fullscreen của mermaid toolbar + group nút tile: cùng cụm góc phải,
-   chỉ hiện khi hover chart (group tile nằm trên, toolbar ngay dưới). */
-.statistics-charts :deep(.mermaid-toolbar) {
-  opacity: 0;
-  transition: opacity 0.12s ease;
-  pointer-events: none;
-  top: 30px;
-}
-.statistics-charts .chart-tile:hover :deep(.mermaid-toolbar) {
-  opacity: 1;
-  pointer-events: auto;
 }
 .statistics-truncated {
   margin: 0.5rem 0 0.25rem;

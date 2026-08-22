@@ -10,6 +10,9 @@ export default {
   other: '(others)',
   addChart: 'Add chart',
   removeChart: 'Remove this chart',
+  zoomIn: 'Zoom in',
+  zoomOut: 'Zoom out',
+  zoomReset: 'Reset zoom',
   numberFormat: {
     label: 'Number format',
     compact: 'Compact (1,234.5K)',

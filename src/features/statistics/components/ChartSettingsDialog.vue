@@ -7,7 +7,7 @@ import {
   CHART_MAX_HEIGHT,
   CHART_MIN_HEIGHT,
   type ChartKind,
-} from '../lib/mermaidChart'
+} from '../lib/chartConfig'
 import {
   makeDefaultChartConfig,
   sanitizeChartConfig,

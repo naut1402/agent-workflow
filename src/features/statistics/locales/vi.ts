@@ -11,6 +11,9 @@ export default {
   other: '(còn lại)',
   addChart: 'Thêm chart',
   removeChart: 'Bỏ chart này',
+  zoomIn: 'Phóng to',
+  zoomOut: 'Thu nhỏ',
+  zoomReset: 'Về kích thước gốc',
   numberFormat: {
     label: 'Định dạng số',
     compact: 'Rút gọn (1,234.5K)',

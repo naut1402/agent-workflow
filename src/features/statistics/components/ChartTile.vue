@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { clampChartHeight } from '../lib/mermaidChart'
-import { TILE_MIN_SPAN, TILE_MAX_SPAN } from '../lib/chartConfig'
+import { TILE_MIN_SPAN, TILE_MAX_SPAN, snapChartHeight } from '../lib/chartConfig'
 
 /**
  * Vật chứa một chart trong gallery grid 4 cột: sở hữu grid span (1-4), chiều
- * cao card, overlay button group (settings / remove + zoom-fullscreen của
- * mermaid toolbar — hiện khi hover) và handle kéo góc đổi span + height.
- * Nội dung chart là slot (ChartCard).
+ * cao card (snap bước 20px), MỘT action group duy nhất (settings / remove /
+ * zoom in-out-reset) đi theo con trỏ chuột trong tile và ẩn khi rời khỏi
+ * chart. Zoom áp CSS transform lên nội dung — tràn thì scroll ngang/dọc.
  */
 const props = withDefaults(
   defineProps<{
@@ -28,7 +27,53 @@ const emit = defineEmits<{
 
 const { t } = useI18nHelpers()
 
-/** Preview trong lúc kéo — áp trực tiếp style, commit khi thả. */
+// ── Action group đi theo con trỏ ────────────────────────────────────────────
+const tileRef = ref<HTMLElement | null>(null)
+const groupPos = ref({ x: 0, y: 0 })
+const groupVisible = ref(false)
+const GROUP_OFFSET = { x: 14, y: 14 }
+
+function onPointerMove(move: PointerEvent) {
+  const tile = tileRef.value
+  if (!tile) return
+  const rect = tile.getBoundingClientRect()
+  groupPos.value = {
+    x: Math.min(Math.max(move.clientX - rect.left + GROUP_OFFSET.x, 4), Math.max(4, rect.width - 160)),
+    y: Math.min(Math.max(move.clientY - rect.top + GROUP_OFFSET.y, 4), Math.max(4, rect.height - 36)),
+  }
+  groupVisible.value = true
+}
+
+function onPointerLeave() {
+  groupVisible.value = false
+}
+
+const groupStyle = computed(() => ({
+  left: `${groupPos.value.x}px`,
+  top: `${groupPos.value.y}px`,
+  opacity: groupVisible.value ? 1 : 0,
+}))
+
+// ── Zoom nội dung chart ─────────────────────────────────────────────────────
+const ZOOM_MIN = 0.5
+const ZOOM_MAX = 3
+const zoom = ref(1)
+
+function zoomBy(delta: number) {
+  zoom.value = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((zoom.value + delta) * 100) / 100))
+}
+
+function zoomReset() {
+  zoom.value = 1
+}
+
+const zoomStyle = computed(() => ({
+  transform: `scale(${zoom.value})`,
+  transformOrigin: 'top left',
+}))
+
+// ── Kéo handle: ngang → snap cột (span), dọc → snap bước 20px ───────────────
+const GRID_GAP = 12
 const dragPreview = ref<{ span: number; height: number } | null>(null)
 
 const tileStyle = computed(() => {
@@ -39,17 +84,22 @@ const tileStyle = computed(() => {
   }
 })
 
-// Kéo handle: ngang → đổi grid span (snap theo cột), dọc → đổi height px.
-// Listener trên window (pointer capture tổng hợp không đảm bảo — xem ChartCard cũ).
 let stopDrag: (() => void) | null = null
 const handleRef = ref<HTMLElement | null>(null)
 
 function onResizeStart(down: PointerEvent) {
   const handle = handleRef.value
-  if (!handle || stopDrag) return
-  const grid = handle.closest('.statistics-charts') as HTMLElement | null
+  const tile = tileRef.value
+  if (!handle || !tile || stopDrag) return
+  const grid = tile.closest('.statistics-charts') as HTMLElement | null
   const colWidth = gridColumnWidth(grid)
-  const start = { x: down.clientX, y: down.clientY, span: props.span, height: props.height, width: colWidth * props.span }
+  const start = {
+    x: down.clientX,
+    y: down.clientY,
+    span: props.span,
+    height: props.height,
+    width: colWidth * props.span + GRID_GAP * (props.span - 1),
+  }
   try {
     handle.setPointerCapture?.(down.pointerId)
   } catch {
@@ -58,14 +108,13 @@ function onResizeStart(down: PointerEvent) {
 
   const onMove = (move: PointerEvent) => {
     const desiredWidth = start.width + (move.clientX - start.x)
-    const gap = 12
     const span = Math.max(
       TILE_MIN_SPAN,
-      Math.min(TILE_MAX_SPAN, Math.round((desiredWidth + gap) / (colWidth + gap))),
+      Math.min(TILE_MAX_SPAN, Math.round((desiredWidth + GRID_GAP) / (colWidth + GRID_GAP))),
     )
     dragPreview.value = {
       span,
-      height: clampChartHeight(start.height + (move.clientY - start.y)),
+      height: snapChartHeight(start.height + (move.clientY - start.y)),
     }
   }
   const onUp = () => {
@@ -90,9 +139,12 @@ function onResizeStart(down: PointerEvent) {
 /** Bề rộng 1 cột grid từ container thật (repeat(4, 1fr) + gap 12). */
 function gridColumnWidth(grid: HTMLElement | null): number {
   if (!grid) return 240
-  const gap = 12
-  return Math.max(80, (grid.clientWidth - 3 * gap) / 4)
+  return Math.max(80, (grid.clientWidth - 3 * GRID_GAP) / 4)
 }
+
+onMounted(() => {
+  groupVisible.value = false
+})
 
 onBeforeUnmount(() => {
   stopDrag?.()
@@ -100,8 +152,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="chart-tile" :style="tileStyle">
-    <div class="chart-tile-actions">
+  <div
+    ref="tileRef"
+    class="chart-tile"
+    :style="tileStyle"
+    @pointermove="onPointerMove"
+    @pointerleave="onPointerLeave"
+  >
+    <div class="chart-tile-actions" :style="groupStyle" @pointerleave.stop>
       <button
         type="button"
         class="icon-btn"
@@ -126,9 +184,47 @@ onBeforeUnmount(() => {
           <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8" />
         </svg>
       </button>
+      <span class="chart-tile-action-sep" aria-hidden="true" />
+      <button
+        type="button"
+        class="icon-btn"
+        :title="t('statistics.zoomIn')"
+        :aria-label="t('statistics.zoomIn')"
+        @click.stop="zoomBy(0.25)"
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.4" fill="none" stroke="currentColor" stroke-width="1.4" />
+          <path stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M10.4 10.4L14 14M7 5.2v3.6M5.2 7h3.6" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        :title="t('statistics.zoomOut')"
+        :aria-label="t('statistics.zoomOut')"
+        @click.stop="zoomBy(-0.25)"
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.4" fill="none" stroke="currentColor" stroke-width="1.4" />
+          <path stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M10.4 10.4L14 14M5.2 7h3.6" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        :title="t('statistics.zoomReset')"
+        :aria-label="t('statistics.zoomReset')"
+        @click.stop="zoomReset"
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M3 8a5 5 0 1 0 1.5-3.6M3 2.8V5h2.2" />
+        </svg>
+      </button>
     </div>
     <div class="chart-tile-content">
-      <slot />
+      <div class="chart-tile-zoom" :style="zoomStyle">
+        <slot />
+      </div>
     </div>
     <span
       ref="handleRef"
@@ -149,12 +245,9 @@ onBeforeUnmount(() => {
   padding: 0.5rem 0.5rem 0.6rem;
   min-width: 0;
 }
-/* Overlay button group — chỉ HIỆN khi hover chart; pointer-events giữ auto
-   (để tool click được ngay cả khi opacity 0 — hit-target không bị svg chặn). */
+/* MỘT action group duy nhất — đi theo con trỏ trong tile, ẩn khi rời chart. */
 .chart-tile-actions {
   position: absolute;
-  top: 6px;
-  right: 6px;
   z-index: 3;
   display: flex;
   gap: 2px;
@@ -162,16 +255,25 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--panel-2);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
   opacity: 0;
   transition: opacity 0.12s ease;
+  pointer-events: auto;
 }
-.chart-tile:hover .chart-tile-actions,
-.chart-tile:focus-within .chart-tile-actions {
-  opacity: 1;
+.chart-tile-action-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 3px 1px;
+  background: var(--border);
 }
 .chart-tile-content {
   height: 100%;
   min-height: 0;
+  overflow: auto;
+}
+.chart-tile-zoom {
+  min-width: 100%;
+  height: 100%;
 }
 .chart-resize-handle {
   position: absolute;

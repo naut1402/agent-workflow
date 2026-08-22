@@ -1,121 +1,206 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import Chart from 'chart.js/auto'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { parseMarkdown, renderMermaid } from '../../../core/lib/markdownLib'
-import { attachMermaidControls } from '../../../core/composables/useMermaidControls'
-import { buildChart, type ChartKind, type ChartStyleConfig } from '../lib/mermaidChart'
+import { formatNumber, type NumberFormat } from '../lib/format'
+import type { ChartKind, ChartStyleConfig } from '../lib/chartConfig'
 
 /**
- * Wrapper chart thuần render (issue #231 quyết định 1): nhận DATA + config,
- * nội bộ build mermaid rồi đi qua pipeline markdownLib. Đổi renderer sau này
- * (chart.js/echarts) chỉ sửa file này — consumers và test không đổi.
+ * Wrapper chart cho statistics (issue #231 quyết định 1): nhận DATA + config,
+ * nội bộ render bằng chart.js. Trước đây dùng mermaid — đổi renderer chỉ sửa
+ * file này, consumers và test không đổi.
  *
- * Chart vẽ FULL panel: width đo qua ResizeObserver, height theo styleConfig.
- * Không chứa nút bấm — ChartTile (cha) sở hữu overlay button group + resize.
+ * Chart vẽ full panel (responsive theo container, height = style.height).
+ * Không chứa nút bấm — ChartTile (cha) sở hữu action group theo con trỏ.
  */
 const props = withDefaults(
   defineProps<{
-    /** Tiêu đề VẼ TRONG chart (mermaid title); rỗng → không vẽ. */
+    /** Tiêu đề VẼ TRONG chart; rỗng → không vẽ. */
     title?: string
     chartType: ChartKind
     labels: string[]
     values: number[]
     loading?: boolean
+    numberFormat?: NumberFormat
     styleConfig?: ChartStyleConfig
-    /** Scale đơn vị K/M/B — giá trị chia divisor. */
-    unitScale?: { divisor: number; axisSuffix: string }
   }>(),
-  { title: '', loading: false, styleConfig: undefined, unitScale: undefined },
+  { title: '', loading: false, numberFormat: 'compact', styleConfig: undefined },
 )
 
 const { t } = useI18nHelpers()
-const bodyRef = ref<HTMLElement | null>(null)
-/** Width vùng vẽ đo được (px) — fallback 720 khi chưa đo được (jsdom). */
-const renderWidth = ref(720)
+const canvasRef = ref<HTMLCanvasElement | null>(null)
+let chart: Chart | null = null
 
 const hasData = computed(
   () => props.labels.length > 0 && props.values.some((v) => Number.isFinite(v) && v > 0),
 )
 
-const definition = computed(() => {
-  if (!hasData.value) return ''
-  return buildChart(props.chartType, {
-    title: props.title,
-    labels: props.labels,
-    values: props.values,
-    width: renderWidth.value,
-    style: props.styleConfig,
-    unitScale: props.unitScale,
-  })
-})
-
-const html = computed(() =>
-  definition.value ? parseMarkdown(`\`\`\`mermaid\n${definition.value}\n\`\`\`\n`) : '',
-)
-
-const bodyStyle = computed(() => ({
-  height: `${props.styleConfig?.height ?? 300}px`,
-}))
-
-async function scheduleRender(): Promise<void> {
-  await nextTick()
-  if (bodyRef.value && definition.value) {
-    await renderMermaid(bodyRef.value)
-    attachMermaidControls(bodyRef.value, { onToggleFullscreen: onToggleMermaidFullscreen })
+/** Màu chữ/line theo theme shell — đọc CSS var, cập nhật khi data-theme đổi. */
+function themeColors() {
+  const styles = getComputedStyle(document.documentElement)
+  return {
+    text: styles.getPropertyValue('--text').trim() || '#c9d1d9',
+    muted: styles.getPropertyValue('--text-muted').trim() || '#8b97a3',
+    border: styles.getPropertyValue('--border').trim() || '#30363d',
+    panel: styles.getPropertyValue('--panel').trim() || '#1a2027',
   }
 }
 
-function onToggleMermaidFullscreen(wrapEl: HTMLElement) {
-  if (document.fullscreenElement) {
-    void document.exitFullscreen().catch(() => {})
-  } else if (wrapEl.requestFullscreen) {
-    void wrapEl.requestFullscreen().catch(() => {})
+function tickFormat(value: number | string): string {
+  return formatNumber(Number(value), props.numberFormat)
+}
+
+function buildOptions() {
+  const colors = themeColors()
+  const isPie = props.chartType === 'pie'
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false as const,
+    plugins: {
+      legend: {
+        display: isPie,
+        position: 'right' as const,
+        labels: { color: colors.muted, boxWidth: 12, font: { size: 11 } },
+      },
+      title: {
+        display: !!props.title,
+        text: props.title,
+        color: colors.text,
+        font: { size: 13 },
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx: { label?: string; parsed: number | { [key: string]: number } }) => {
+            const raw = typeof ctx.parsed === 'number' ? ctx.parsed : ctx.parsed.y ?? 0
+            return ` ${tickFormat(raw)}`
+          },
+        },
+      },
+    },
+    scales: isPie
+      ? {}
+      : {
+          x: {
+            title: {
+              display: !!props.styleConfig?.xAxisTitle,
+              text: props.styleConfig?.xAxisTitle ?? '',
+              color: colors.muted,
+              font: { size: 11 },
+            },
+            ticks: {
+              color: colors.muted,
+              autoSkip: true,
+              maxRotation: 45,
+              minRotation: 0,
+              font: { size: 10 },
+            },
+            grid: { color: colors.border },
+          },
+          y: {
+            beginAtZero: true,
+            title: {
+              display: !!props.styleConfig?.yAxisLabel,
+              text: props.styleConfig?.yAxisLabel ?? '',
+              color: colors.muted,
+              font: { size: 11 },
+            },
+            ticks: {
+              color: colors.muted,
+              callback: (value: string | number) => tickFormat(value),
+              font: { size: 10 },
+            },
+            grid: { color: colors.border },
+          },
+        },
   }
 }
 
-let widthObserver: ResizeObserver | null = null
+function buildChartConfig() {
+  const isPie = props.chartType === 'pie'
+  const color = props.styleConfig?.color || '#4A7DFF'
+  const palette = props.styleConfig?.pieColors || []
+  return {
+    type: props.chartType as 'bar' | 'line' | 'pie',
+    data: {
+      labels: [...props.labels],
+      datasets: [
+        isPie
+          ? {
+              data: [...props.values],
+              backgroundColor: palette.length ? palette : undefined,
+              borderColor: themeColors().panel,
+              borderWidth: 1,
+            }
+          : props.chartType === 'line'
+            ? {
+                data: [...props.values],
+                borderColor: color,
+                backgroundColor: `${color}33`,
+                fill: true,
+                tension: 0.25,
+                pointRadius: 2,
+              }
+            : {
+                data: [...props.values],
+                backgroundColor: color,
+                borderRadius: 3,
+                maxBarThickness: 48,
+              },
+      ],
+    },
+    options: buildOptions(),
+  }
+}
+
+function ensureChart() {
+  if (!canvasRef.value || !hasData.value) return
+  destroyChart()
+  chart = new Chart(canvasRef.value, buildChartConfig())
+}
+
+function destroyChart() {
+  chart?.destroy()
+  chart = null
+}
+
 let themeObserver: MutationObserver | null = null
 
 onMounted(() => {
-  if (bodyRef.value) renderWidth.value = bodyRef.value.clientWidth || 720
-  // jsdom không có ResizeObserver — guard để test unit không cần polyfill.
-  if (typeof ResizeObserver !== 'undefined' && bodyRef.value) {
-    widthObserver = new ResizeObserver((records) => {
-      const w = records[0]?.contentRect.width
-      if (w && Math.round(w) !== renderWidth.value) renderWidth.value = Math.round(w)
-    })
-    widthObserver.observe(bodyRef.value)
-  }
-  // Theme shell đổi `data-theme` trên <html> — mermaid cần vẽ lại theo theme mới.
+  ensureChart()
+  // Theme shell đổi `data-theme` trên <html> — vẽ lại theo màu mới.
   themeObserver = new MutationObserver(() => {
-    void scheduleRender()
+    if (chart) {
+      chart.options = buildOptions()
+      chart.update()
+    }
   })
   themeObserver.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ['data-theme'],
   })
-  void scheduleRender()
 })
 
 onBeforeUnmount(() => {
-  widthObserver?.disconnect()
   themeObserver?.disconnect()
+  destroyChart()
 })
 
-watch([definition, () => props.loading], () => {
-  void scheduleRender()
-})
+watch(
+  () => [props.labels, props.values, props.chartType, props.title, props.numberFormat, props.styleConfig, props.loading] as const,
+  () => {
+    if (!props.loading) ensureChart()
+  },
+  { deep: true },
+)
 </script>
 
 <template>
   <div class="chart-card" :class="{ 'is-loading': loading }">
     <div v-if="loading" class="chart-card-state">{{ t('statistics.loading') }}</div>
     <div v-else-if="!hasData" class="chart-card-state">{{ t('statistics.emptyChart') }}</div>
-    <!-- v-html từ definition do chính feature build (không phải input người dùng) -->
-    <div v-else ref="bodyRef" class="chart-card-body" :style="bodyStyle">
-      <div class="chart-canvas">
-        <div class="chart-canvas-plot" v-html="html" />
-      </div>
+    <div v-else class="chart-card-body" :style="{ height: `${styleConfig?.height ?? 300}px` }">
+      <canvas ref="canvasRef" role="img" />
     </div>
   </div>
 </template>
@@ -135,28 +220,9 @@ watch([definition, () => props.loading], () => {
   padding: 2rem 0.5rem;
   text-align: center;
 }
-/* Panel chart: height theo config, chart full width — tràn thì scroll. */
 .chart-card-body {
-  flex: 1 1 auto;
+  position: relative;
+  width: 100%;
   min-height: 0;
-  overflow: auto;
-  padding: 0.25rem 0;
-}
-.chart-canvas {
-  min-width: 100%;
-  width: fit-content;
-}
-.chart-canvas-plot :deep(.mermaid) {
-  display: flex;
-  justify-content: center;
-  min-height: 2rem;
-}
-/* `.mermaid` là flex (block-level) khiến toolbar zoom/fullscreen (float:right)
-   rơi xuống đáy wrap — ép toolbar về góc trên như ArtifactPanel. */
-.chart-canvas-plot :deep(.mermaid-toolbar) {
-  float: none;
-  position: absolute;
-  top: 4px;
-  right: 4px;
 }
 </style>

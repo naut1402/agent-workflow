@@ -3,14 +3,14 @@ import { flushPromises } from '@vue/test-utils'
 import StatisticsPanel from '@/features/statistics/components/StatisticsPanel.vue'
 import { mountWithI18n } from '../../../helpers/i18n'
 
-// Panel không vẽ mermaid thật trong jsdom — ChartCard đã có test wiring riêng.
-vi.mock('@/core/lib/markdownLib', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/core/lib/markdownLib')>()
-  return {
-    ...actual,
-    renderMermaid: vi.fn(async () => {}),
-  }
-})
+// Panel mount ChartCard → chart.js cần canvas 2d (jsdom không có) — mock chart.js/auto.
+vi.mock('chart.js/auto', () => ({
+  default: class FakeChart {
+    constructor(_canvas: unknown, _config: unknown) {}
+    destroy() {}
+    update() {}
+  },
+}))
 
 function usageGroup(key: string, totalTokens: number) {
   return {

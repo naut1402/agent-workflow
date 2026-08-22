@@ -39,24 +39,6 @@ export function formatNumber(value: number, format: NumberFormat): string {
   return format === 'compact' ? compactNumber(value) : fullNumber(value)
 }
 
-/**
- * Chọn hệ đơn vị cho trục/biểu đồ: chia giá trị để nhãn không dài gây chồng chữ.
- * max < 10K → giữ nguyên; ≥ 10K → K; ≥ 10M → M; ≥ 10B → B.
- */
-export interface UnitScale {
-  divisor: number
-  /** Hậu tố đơn vị nhấn vào nhãn trục, vd " (K)". */
-  axisSuffix: string
-}
-
-export function pickUnitScale(maxValue: number): UnitScale {
-  const abs = Math.abs(maxValue)
-  if (abs >= 10_000_000_000) return { divisor: 1_000_000_000, axisSuffix: ' (B)' }
-  if (abs >= 10_000_000) return { divisor: 1_000_000, axisSuffix: ' (M)' }
-  if (abs >= 10_000) return { divisor: 1_000, axisSuffix: ' (K)' }
-  return { divisor: 1, axisSuffix: '' }
-}
-
 /** 3725000 → "1h 2m 5s"; bỏ đơn vị 0 ở đầu (đủ "5s" / "2m 5s"). */
 export function formatDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '—'

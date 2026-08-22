@@ -6,6 +6,7 @@ import { capturePage } from './_capture'
 // E2E cho mode Thống kê (issue #231). Boot standalone server theo playwright.config
 // (fixture .dev-team-agent + DEV_TEAM_DASHBOARD_HOME isolate). Seed vài dòng
 // usage.jsonl vào home e2e để chart + bảng render có dữ liệu deterministic.
+// Renderer: chart.js (canvas) — assert canvas + height style thay vì mermaid svg.
 
 const e2eHome = path.resolve(process.cwd(), 'test-e2e/.runtime/home')
 
@@ -62,32 +63,46 @@ test('statistics mode: gallery đa chart + settings + resize (capture)', async (
   // Card summary (min/max/avg per-entry + giữa các group) hiển thị.
   await expect(page.locator('.statistics-summary-card')).toBeVisible()
 
-  // ChartCard vẽ mermaid SVG — parse lỗi vẫn sinh SVG (error bomb) nên phải
-  // assert cả không có "Syntax error". Width SVG giờ theo panel (viewBox động).
-  async function expectChartRendered() {
-    const mermaidNode = page.locator('.chart-card-body .mermaid').first()
-    await expect(mermaidNode.locator('svg')).toBeVisible({ timeout: 20_000 })
-    await expect(mermaidNode).not.toContainText(/syntax error/i)
-  }
-  await expectChartRendered()
-
-  const svgHeight = () =>
-    page.locator('.chart-card-body .mermaid svg').first().evaluate((el) => {
-      const vb = el.getAttribute('viewBox') || ''
-      return vb.split(' ')[3] ?? ''
+  // chart.js vẽ canvas trong card — chart.js vẽ có dữ liệu thì canvas có kích thước thật.
+  const canvas = page.locator('.chart-card-body canvas').first()
+  await expect(canvas).toBeVisible({ timeout: 15_000 })
+  await expect
+    .poll(async () => {
+      const box = await canvas.boundingBox()
+      return box ? Math.round(box.height) : 0
     })
-  await expect.poll(svgHeight, { timeout: 15_000 }).toBe('300')
+    .toBeGreaterThan(100)
 
-  // Button group (settings/remove) + toolbar zoom/fullscreen chỉ hiện khi hover.
-  const actions = page.locator('.chart-tile .chart-tile-actions').first()
+  // Action group MỘT cụm đi theo con trỏ: ẩn mặc định → hiện + đổi vị trí theo
+  // pointermove → ẩn khi rời chart. Nhóm chứa settings/remove/zoom.
+  const tile = page.locator('.chart-tile').first()
+  const actions = tile.locator('.chart-tile-actions')
   await expect(actions).toHaveCSS('opacity', '0')
-  await page.locator('.chart-tile').first().hover()
+  const tileBox = (await tile.boundingBox())!
+  await page.mouse.move(tileBox.x + tileBox.width * 0.3, tileBox.y + 40)
   await expect(actions).toHaveCSS('opacity', '1')
+  const pos1 = await actions.evaluate((el) => el.style.left + '|' + el.style.top)
+  await page.mouse.move(tileBox.x + tileBox.width * 0.8, tileBox.y + 120)
+  const pos2 = await actions.evaluate((el) => el.style.left + '|' + el.style.top)
+  expect(pos1).not.toBe(pos2)
+  await expect(tile.locator('button[title="Phóng to"]')).toBeVisible()
+  await page.mouse.move(tileBox.x - 40, tileBox.y - 40)
+  await expect(actions).toHaveCSS('opacity', '0')
+
+  // Zoom: click phóng to → nội dung scale 1.25 (computed transform = matrix).
+  await page.mouse.move(tileBox.x + 80, tileBox.y + 60)
+  await tile.locator('button[title="Phóng to"]').click()
+  await expect(tile.locator('.chart-tile-zoom')).toHaveCSS('transform', /1\.25/)
+  await tile.locator('button[title="Về kích thước gốc"]').click()
+  await expect(tile.locator('.chart-tile-zoom')).not.toHaveCSS('transform', /1\.25/)
 
   // Loại biểu đồ nằm trong dialog settings của từng chart (CSelect: groupBy,
   // metric, chartType, numberFormat → chartType là thứ 3, index 2).
   async function setChartType(label: string) {
-    await page.locator('.chart-tile .chart-tile-actions .icon-btn').first().click() // gear
+    const t = page.locator('.chart-tile').first()
+    const tb = (await t.boundingBox())!
+    await page.mouse.move(tb.x + 60, tb.y + 50) // action group theo con trỏ
+    await t.locator('button[title="Thiết lập biểu đồ"]').click()
     const dialog = page.locator('.chart-settings-dialog')
     await expect(dialog).toBeVisible()
     await dialog.locator('.c-select-trigger').nth(2).click()
@@ -96,24 +111,27 @@ test('statistics mode: gallery đa chart + settings + resize (capture)', async (
     await expect(dialog).toHaveCount(0)
   }
   await setChartType('Đường')
-  await expectChartRendered()
+  await expect(page.locator('.chart-card-body canvas').first()).toBeVisible()
   await setChartType('Tròn')
-  await expectChartRendered()
+  await expect(page.locator('.chart-card-body canvas').first()).toBeVisible()
   await setChartType('Cột')
-  await expectChartRendered()
+  await expect(page.locator('.chart-card-body canvas').first()).toBeVisible()
 
-  // Thêm chart mới → 2 tile, dialog mở sẵn → đóng. Tile mới mặc định span 2.
+  // Hai pie cùng lúc không vẽ chồng nhau (bug mermaid đa instance): thêm chart
+  // thứ 2, đặt cả hai thành pie — mỗi tile phải có canvas riêng visible.
   await page.locator('.statistics-add-chart').click()
   await expect(page.locator('.chart-tile')).toHaveCount(2)
   const addDialog = page.locator('.chart-settings-dialog')
   await expect(addDialog).toBeVisible()
   await addDialog.locator('.chart-settings-close').click()
-
-  // Xoá 1 chart → còn 1 (nút xoá chỉ hiện khi có nhiều chart).
+  await setChartType('Tròn')
+  for (const c of await page.locator('.chart-card-body canvas').all()) {
+    await expect(c).toBeVisible()
+  }
   await page.locator('.chart-tile').nth(1).locator('button[title="Bỏ chart này"]').click()
   await expect(page.locator('.chart-tile')).toHaveCount(1)
 
-  // Kéo handle góc tile: dọc +40px → height 340; ngang đủ xa → snap span 4.
+  // Kéo handle góc tile: dọc +40px → height snap 340; ngang đủ xa → snap span 4.
   const handle = page.locator('.chart-resize-handle')
   const handleBox = await handle.boundingBox()
   expect(handleBox).toBeTruthy()
@@ -121,15 +139,18 @@ test('statistics mode: gallery đa chart + settings + resize (capture)', async (
   await page.mouse.down()
   await page.mouse.move(handleBox!.x + 7 + 900, handleBox!.y + 7 + 40, { steps: 5 })
   await page.mouse.up()
-  await expect.poll(svgHeight, { timeout: 15_000 }).toBe('340')
+  await expect
+    .poll(() => page.locator('.chart-card-body').first().evaluate((el) => el.style.height))
+    .toBe('340px')
   const spanNow = await page.locator('.chart-tile').first().evaluate((el) => el.style.gridColumn)
   expect(spanNow).toContain('span 4')
 
   // Dialog thiết lập: mở, sửa tiêu đề (live-apply), đóng.
-  await page.locator('.chart-tile .chart-tile-actions .icon-btn').first().click()
+  const tb2 = (await page.locator('.chart-tile').first().boundingBox())!
+  await page.mouse.move(tb2.x + 60, tb2.y + 50)
+  await page.locator('.chart-tile button[title="Thiết lập biểu đồ"]').first().click()
   await expect(page.locator('.chart-settings-dialog')).toBeVisible()
   await page.locator('.chart-settings-dialog input[type="text"]').first().fill('Tiêu đề tùy chỉnh')
-  await expect(page.locator('.chart-card-body .mermaid')).not.toContainText(/syntax error/i)
   await page.locator('.chart-settings-close').click()
   await expect(page.locator('.chart-settings-dialog')).toHaveCount(0)
 
@@ -137,7 +158,6 @@ test('statistics mode: gallery đa chart + settings + resize (capture)', async (
   await page.locator('.statistics-table tbody tr').first().click()
   await expect(page.locator('.statistics-crumb')).toContainText('STAT-1')
   await expect(page.locator('.statistics-table tbody tr')).toHaveCount(2, { timeout: 10_000 })
-  await expectChartRendered()
 
   // Toàn page thống kê scroll được — shell `.main-editor` overflow:hidden nên
   // chính `.statistics-panel` phải là scroll container (viewport 720px cao).
