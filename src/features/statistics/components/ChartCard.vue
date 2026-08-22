@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { parseMarkdown, renderMermaid } from '../../../core/lib/markdownLib'
 import { attachMermaidControls } from '../../../core/composables/useMermaidControls'
 import {
@@ -14,22 +14,26 @@ import {
  * Wrapper chart cho statistics (issue #231 quyết định 1): nhận DATA + config
  * (không nhận mermaid definition sẵn) nên đổi renderer sau này (chart.js/echarts)
  * chỉ sửa bên trong file này — consumers và test không đổi. Slot `control` cho
- * panel gắn range/metric/chart-type selector mà không cần biết renderer.
+ * panel gắn icon button (settings/remove) mà không cần biết renderer.
  *
- * Body có chiều cao cố định + scroll; handle ở GÓC CHART (không phải panel) kéo
- * đổi kích thước chart (width/height áp qua directive config của mermaid).
+ * Không có title riêng ở header — tiêu đề là của CHART (prop `title`, rỗng thì
+ * mermaid không vẽ dòng title). Body cao cố định + scroll; handle ở GÓC CHART
+ * kéo đổi kích thước (width/height áp qua directive config của mermaid).
  */
 const props = withDefaults(
   defineProps<{
-    title: string
+    /** Tiêu đề VẼ TRONG chart (mermaid title); rỗng → không vẽ. */
+    title?: string
     chartType: ChartKind
     labels: string[]
     values: number[]
     valueLabel?: string
     loading?: boolean
     styleConfig?: ChartStyleConfig
+    /** Scale đơn vị K/M/B — giá trị chia divisor, nhãn trục y thêm suffix. */
+    unitScale?: { divisor: number; axisSuffix: string }
   }>(),
-  { valueLabel: '', loading: false, styleConfig: undefined },
+  { title: '', valueLabel: '', loading: false, styleConfig: undefined, unitScale: undefined },
 )
 
 const emit = defineEmits<{ resize: [width: number, height: number] }>()
@@ -50,8 +54,9 @@ const definition = computed(() => {
     title: props.title,
     labels: props.labels,
     values: props.values,
-    valueLabel: props.valueLabel || props.title,
+    valueLabel: props.valueLabel || '',
     style: props.styleConfig,
+    unitScale: props.unitScale,
   })
 })
 
@@ -154,8 +159,7 @@ watch([definition, () => props.loading], () => {
 
 <template>
   <section class="chart-card" :class="{ 'is-loading': loading }">
-    <header class="chart-card-head">
-      <h3 class="chart-card-title">{{ title }}</h3>
+    <header v-if="$slots.control" class="chart-card-head">
       <div class="chart-card-controls">
         <slot name="control" />
       </div>
@@ -183,24 +187,16 @@ watch([definition, () => props.loading], () => {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel);
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 1rem 0.75rem;
   margin: 0.5rem 0 0.75rem;
 }
 .chart-card-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.chart-card-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 500;
+  justify-content: flex-end;
 }
 .chart-card-controls {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -214,7 +210,7 @@ watch([definition, () => props.loading], () => {
 .chart-card-body {
   height: 380px;
   overflow: auto;
-  padding: 0.5rem 0 0.25rem;
+  padding: 0.25rem 0 0.25rem;
 }
 .chart-canvas {
   position: relative;

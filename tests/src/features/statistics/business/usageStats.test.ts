@@ -167,6 +167,28 @@ describe('statistics/aggregateUsage (pure)', () => {
     expect(r.totals.lastTs).toBe(T2)
   })
 
+  test('min/max/avg totalTokens + duration theo từng entry của group', () => {
+    const r = aggregateUsage(entries, { groupBy: 'task', project: 'p1' })
+    const ta = r.groups.find((g) => g.key === 'TA')!
+    expect(ta.minTotalTokens).toBe(160)
+    expect(ta.maxTotalTokens).toBe(280)
+    expect(ta.avgTotalTokens).toBe(220) // (160+280)/2
+    expect(ta.minDurationMs).toBe(1_000)
+    expect(ta.maxDurationMs).toBe(2_000)
+    expect(ta.avgDurationMs).toBe(1_500)
+
+    // Group không entry nào có duration → duration stats null, token stats vẫn có.
+    const noDuration = aggregateUsage(
+      [entry({ ts: T0, jobId: 'jx', projectId: 'p1', taskId: 'TX', totalTokens: 50 })],
+      { groupBy: 'task' },
+    ).groups[0]
+    expect(noDuration.minDurationMs).toBe(null)
+    expect(noDuration.maxDurationMs).toBe(null)
+    expect(noDuration.avgDurationMs).toBe(null)
+    expect(noDuration.minTotalTokens).toBe(50)
+    expect(noDuration.avgTotalTokens).toBe(50)
+  })
+
   test('filter task + step thu về đúng subset', () => {
     const r = aggregateUsage(entries, { groupBy: 'job', project: 'p1', taskId: 'TA', stepId: 'implement' })
     expect(r.groups.map((g) => g.key).sort()).toEqual(['j1', 'j2'])

@@ -62,6 +62,15 @@ export const UsageGroupSchema = z.object({
   durationMs: z.number().nonnegative(),
   firstTs: z.number(),
   lastTs: z.number(),
+  /** Mốc theo từng entry trong group — thước đo phức tạp task (min/max/avg). */
+  minTotalTokens: z.number().nonnegative(),
+  maxTotalTokens: z.number().nonnegative(),
+  /** Trung bình totalTokens mỗi entry trong group. */
+  avgTotalTokens: z.number().nonnegative(),
+  /** Duration stats — null khi không entry nào có duration. */
+  minDurationMs: z.number().nullable(),
+  maxDurationMs: z.number().nullable(),
+  avgDurationMs: z.number().nullable(),
 })
 export type UsageGroup = z.infer<typeof UsageGroupSchema>
 

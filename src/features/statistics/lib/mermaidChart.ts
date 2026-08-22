@@ -16,12 +16,11 @@ const LABEL_MAX_CHARS = 28
  * được qua directive frontmatter: kích thước (xyChart.width/height), màu
  * (plotColorPalette / pie1..N). Thuộc tính ngoài khả năng mermaid thì không
  * đưa vào (issue #231 quyết định 1 — wrapper giữ contract tối giản).
+ * Title không nằm ở đây — là tham số riêng của builder (rỗng → không vẽ title).
  */
 export interface ChartStyleConfig {
   width: number
   height: number
-  /** Ghi đè tiêu đề chart; rỗng → dùng title suy từ metric/dimension. */
-  titleOverride?: string
   /** Tiêu đề trục x (bar/line); rỗng → không thêm. */
   xAxisTitle?: string
   /** Nhãn trục y (bar/line); rỗng → dùng valueLabel. */
@@ -35,7 +34,6 @@ export interface ChartStyleConfig {
 export const DEFAULT_CHART_STYLE: ChartStyleConfig = {
   width: 720,
   height: 300,
-  titleOverride: '',
   xAxisTitle: '',
   yAxisLabel: '',
   color: '#4A7DFF',
@@ -112,13 +110,16 @@ export function escapeMermaidText(value: string): string {
 }
 
 export interface AxisChartInput {
+  /** Tiêu đề chart; rỗng → KHÔNG vẽ dòng title. */
   title: string
   categories: string[]
   values: number[]
   /** Nhãn trục y (vd "Total tokens"). */
   valueLabel: string
-  /** Thuộc tính hiển thị (kích thước/màu/tiêu đề ghi đè). */
+  /** Thuộc tính hiển thị (kích thước/màu/nhãn trục). */
   style?: ChartStyleConfig
+  /** Scale đơn vị (K/M/B) — giá trị chia divisor, nhãn trục y thêm suffix. */
+  unitScale?: { divisor: number; axisSuffix: string }
 }
 
 function toInt(v: number): number {
@@ -130,18 +131,20 @@ function axisUpperBound(values: number[]): number {
 }
 
 function axisChartLines(kind: 'bar' | 'line', input: AxisChartInput): string[] {
-  const values = input.values.map(toInt)
+  const divisor = input.unitScale?.divisor ?? 1
+  const values = input.values.map((v) => toInt(v / divisor))
   const categories = input.categories.map((c) => `"${escapeMermaidText(c)}"`)
   const xTitle = input.style?.xAxisTitle ? `"${escapeMermaidText(input.style.xAxisTitle)}" ` : ''
-  const title = input.style?.titleOverride || input.title
-  const yLabel = input.style?.yAxisLabel || input.valueLabel
-  return [
-    'xychart-beta',
-    `  title "${escapeMermaidText(title)}"`,
+  // Suffix đơn vị là chuỗi tự sinh "(K)/(M)/(B)" — nối SAU escape để giữ dấu ngoặc.
+  const yLabel = `${escapeMermaidText(input.style?.yAxisLabel || input.valueLabel)}${input.unitScale?.axisSuffix ?? ''}`
+  const lines = ['xychart-beta']
+  if (input.title) lines.push(`  title "${escapeMermaidText(input.title)}"`)
+  lines.push(
     `  x-axis ${xTitle}[${categories.join(', ')}]`,
-    `  y-axis "${escapeMermaidText(yLabel)}" 0 --> ${axisUpperBound(values)}`,
+    `  y-axis "${yLabel}" 0 --> ${axisUpperBound(values)}`,
     `  ${kind} [${values.join(', ')}]`,
-  ]
+  )
+  return lines
 }
 
 /** xychart-beta dạng bar: `x-axis ["A","B"]` quote luôn để thoải mái ký tự. */
@@ -159,16 +162,21 @@ export interface PieSlice {
   value: number
 }
 
-/** Pie + showData (hiển thị giá trị trên slide). */
+/** Pie + showData (hiển thị giá trị trên slide); title rỗng → không vẽ. */
 export function buildPieChart(input: {
   title: string
   slices: PieSlice[]
   style?: ChartStyleConfig
+  unitScale?: { divisor: number; axisSuffix: string }
 }): string {
-  const title = input.style?.titleOverride || input.title
-  const rows = input.slices.map((s) => `  "${escapeMermaidText(s.label)}" : ${toInt(s.value)}`)
-  const body = ['pie showData', `  title "${escapeMermaidText(title)}"`, ...rows].join('\n')
-  return `${buildDirectives('pie', input.style)}${body}`
+  const divisor = input.unitScale?.divisor ?? 1
+  const rows = input.slices.map(
+    (s) => `  "${escapeMermaidText(s.label)}" : ${toInt(s.value / divisor)}`,
+  )
+  const body = ['pie showData']
+  if (input.title) body.push(`  title "${escapeMermaidText(input.title)}"`)
+  body.push(...rows)
+  return `${buildDirectives('pie', input.style)}${body.join('\n')}`
 }
 
 /** Build theo loại chart — ChartCard gọi chung một cửa. */
@@ -180,6 +188,7 @@ export function buildChart(
     values: number[]
     valueLabel: string
     style?: ChartStyleConfig
+    unitScale?: { divisor: number; axisSuffix: string }
   },
 ): string {
   if (kind === 'pie') {
@@ -187,6 +196,7 @@ export function buildChart(
       title: input.title,
       slices: input.labels.map((label, i) => ({ label, value: input.values[i] ?? 0 })),
       style: input.style,
+      unitScale: input.unitScale,
     })
   }
   const builder = kind === 'line' ? buildLineChart : buildBarChart
@@ -196,5 +206,6 @@ export function buildChart(
     values: input.values,
     valueLabel: input.valueLabel,
     style: input.style,
+    unitScale: input.unitScale,
   })
 }

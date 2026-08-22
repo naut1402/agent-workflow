@@ -33,7 +33,7 @@ function usageLine(p: { projectId: string; taskId: string; stepId: string; jobId
   })
 }
 
-test('statistics mode: chart mermaid + bảng drill-down (capture)', async ({ page, request }, testInfo) => {
+test('statistics mode: đa chart + settings + resize (capture)', async ({ page, request }, testInfo) => {
   // Lấy default project id của registry e2e để seed usage đúng scope mặc định.
   const projectsRes = await request.get('/api/projects')
   const projectsBody = (await projectsRes.json()) as { defaultId?: string | null }
@@ -62,7 +62,7 @@ test('statistics mode: chart mermaid + bảng drill-down (capture)', async ({ pa
   // ChartCard vẽ mermaid SVG qua markdown pipeline — parse lỗi vẫn sinh SVG
   // (error bomb) nên phải assert cả không có "Syntax error".
   async function expectChartRendered() {
-    const mermaidNode = page.locator('.chart-card-body .mermaid')
+    const mermaidNode = page.locator('.chart-card-body .mermaid').first()
     await expect(mermaidNode.locator('svg')).toBeVisible({ timeout: 20_000 })
     await expect(mermaidNode).not.toContainText(/syntax error/i)
   }
@@ -71,19 +71,41 @@ test('statistics mode: chart mermaid + bảng drill-down (capture)', async ({ pa
   // Kích thước mặc định áp qua directive config — mermaid dựng viewBox theo
   // width/height config (svg width attr luôn "100%", max-width giới hạn theo px).
   const svgSize = () =>
-    page.locator('.chart-card-body .mermaid svg').evaluate((el) => el.getAttribute('viewBox') || '')
+    page.locator('.chart-card-body .mermaid svg').first().evaluate((el) => el.getAttribute('viewBox') || '')
   await expect.poll(svgSize, { timeout: 15_000 }).toBe('0 0 720 300')
 
-  // Đổi loại chart (bar → line → pie) qua selectbox trong slot control của card.
-  async function pickChartType(label: string) {
-    await page.locator('.chart-card-controls .c-select-trigger').nth(1).click()
-    await page.locator('.c-select-option', { hasText: label }).click()
+  // Loại biểu đồ giờ nằm trong dialog settings của từng chart.
+  async function setChartType(label: string) {
+    await page.locator('.statistics-chart-item .icon-btn').first().click() // gear
+    const dialog = page.locator('.chart-settings-dialog')
+    await expect(dialog).toBeVisible()
+    await dialog.locator('.c-select-trigger').nth(2).click() // groupBy, metric, chartType
+    await page.locator('.c-select-option', { hasText: label }).first().click()
+    await dialog.locator('.chart-settings-close').click()
+    await expect(dialog).toHaveCount(0)
   }
-  await pickChartType('Đường')
+  await setChartType('Đường')
   await expectChartRendered()
-  await pickChartType('Tròn')
+  await setChartType('Tròn')
   await expectChartRendered()
-  await pickChartType('Cột')
+  await setChartType('Cột')
+  await expectChartRendered()
+
+  // Định dạng số: chuyển sang đầy đủ — tổng 25K hiện "25,000".
+  await page.locator('.statistics-field .c-select-trigger').nth(1).click()
+  await page.locator('.c-select-option', { hasText: 'Đầy đủ' }).click()
+  await expect(page.locator('.statistics-summary')).toContainText('25,000')
+
+  // Thêm chart mới → 2 card, dialog mở sẵn cho chart mới → đóng.
+  await page.locator('.statistics-add-chart').click()
+  await expect(page.locator('.statistics-chart-item')).toHaveCount(2)
+  const addDialog = page.locator('.chart-settings-dialog')
+  await expect(addDialog).toBeVisible()
+  await addDialog.locator('.chart-settings-close').click()
+
+  // Xoá 1 chart → còn 1 (nút xoá chỉ hiện khi có nhiều chart).
+  await page.locator('.statistics-chart-item').nth(1).locator('button[title="Bỏ chart này"]').click()
+  await expect(page.locator('.statistics-chart-item')).toHaveCount(1)
 
   // Kéo handle góc chart → kích thước mới áp vào viewBox (re-render một lần khi thả).
   const handle = page.locator('.chart-resize-handle')
@@ -96,7 +118,7 @@ test('statistics mode: chart mermaid + bảng drill-down (capture)', async ({ pa
   await expect.poll(svgSize, { timeout: 15_000 }).toBe('0 0 850 340')
 
   // Dialog thiết lập: mở, sửa tiêu đề (live-apply), đóng.
-  await page.locator('.statistics-settings-btn').click()
+  await page.locator('.statistics-chart-item .icon-btn').first().click()
   await expect(page.locator('.chart-settings-dialog')).toBeVisible()
   await page.locator('.chart-settings-dialog input[type="text"]').first().fill('Tiêu đề tùy chỉnh')
   await expect(page.locator('.chart-card-body .mermaid')).not.toContainText(/syntax error/i)

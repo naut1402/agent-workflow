@@ -86,15 +86,40 @@ describe('ChartStyleConfig — directive config + nhãn/màu ghi đè', () => {
   it('bar với style: directive xyChart width/height + plotColorPalette + title trục x', () => {
     const def = buildBarChart({
       ...base,
-      style: { ...DEFAULT_CHART_STYLE, width: 900, height: 400, color: '#2ECC71', xAxisTitle: 'Task', titleOverride: 'Tùy chỉnh', yAxisLabel: 'Tokens' },
+      style: { ...DEFAULT_CHART_STYLE, width: 900, height: 400, color: '#2ECC71', xAxisTitle: 'Task', yAxisLabel: 'Tokens' },
     })
     expect(def).toContain('---\nconfig:')
     expect(def).toContain('  xyChart:\n    width: 900\n    height: 400')
     expect(def).toContain('themeVariables:')
     expect(def).toContain('plotColorPalette: "#2ECC71"')
-    expect(def).toContain('title "Tùy chỉnh"')
+    expect(def).toContain('title "Total theo task"')
     expect(def).toContain('x-axis "Task" ["TA1", "TB1"]')
     expect(def).toContain('y-axis "Tokens" 0 --> 1500')
+  })
+
+  it('title rỗng → không vẽ dòng title (bar/line/pie)', () => {
+    const bar = buildBarChart({ ...base, title: '' })
+    expect(bar).not.toContain('title "')
+    const line = buildLineChart({ ...base, title: '' })
+    expect(line).not.toContain('title "')
+    const pie = buildPieChart({ title: '', slices: [{ label: 'a', value: 1 }] })
+    expect(pie).not.toContain('title "')
+  })
+
+  it('unitScale chia giá trị + suffix nhãn trục y', () => {
+    const def = buildBarChart({
+      ...base,
+      values: [160_000, 1_500_000],
+      unitScale: { divisor: 1_000, axisSuffix: ' (K)' },
+    })
+    expect(def).toContain('y-axis "Total tokens (K)" 0 --> 1500')
+    expect(def).toContain('bar [160, 1500]')
+    const pie = buildPieChart({
+      title: 'T',
+      slices: [{ label: 'a', value: 25_000 }],
+      unitScale: { divisor: 1_000, axisSuffix: ' (K)' },
+    })
+    expect(pie).toContain('"a" : 25')
   })
 
   it('không có style → không sinh directive (giữ definition tối giản)', () => {

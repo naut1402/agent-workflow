@@ -11,7 +11,7 @@ const savedHome = process.env.DEV_TEAM_DASHBOARD_HOME
 
 const T0 = Date.parse('2026-08-01T10:00:00.000Z')
 
-function usageEntry(p: { jobId: string; taskId: string; totalTokens: number }) {
+function usageEntry(p: { jobId: string; taskId: string; totalTokens: number; durationMs?: number }) {
   return JSON.stringify({
     type: 'usage',
     ts: T0,
@@ -28,6 +28,7 @@ function usageEntry(p: { jobId: string; taskId: string; totalTokens: number }) {
     projectId: 'p1',
     stepId: 'implement',
     jobId: p.jobId,
+    durationMs: p.durationMs ?? null,
   })
 }
 
@@ -38,7 +39,11 @@ beforeEach(() => {
   fs.mkdirSync(path.join(home, 'logs'), { recursive: true })
   fs.writeFileSync(
     path.join(home, 'logs', 'usage.jsonl'),
-    [usageEntry({ jobId: 'j1', taskId: 'TA', totalTokens: 100 }), usageEntry({ jobId: 'j2', taskId: 'TB', totalTokens: 900 })].join('\n'),
+    [
+      usageEntry({ jobId: 'j1', taskId: 'TA', totalTokens: 100, durationMs: 1_000 }),
+      usageEntry({ jobId: 'j1b', taskId: 'TA', totalTokens: 300, durationMs: 3_000 }),
+      usageEntry({ jobId: 'j2', taskId: 'TB', totalTokens: 900 }),
+    ].join('\n'),
   )
 })
 
@@ -57,8 +62,15 @@ describe('HTTP GET /api/statistics/usage', () => {
     const body = await res.json()
     expect(body.groupBy).toBe('task')
     expect(body.groups.map((g: any) => g.key)).toEqual(['TB', 'TA'])
-    expect(body.totals.totalTokens).toBe(1000)
+    expect(body.totals.totalTokens).toBe(1300)
     expect(body.truncated).toBe(false)
+    const ta = body.groups[1]
+    expect(ta.minTotalTokens).toBe(100)
+    expect(ta.maxTotalTokens).toBe(300)
+    expect(ta.avgTotalTokens).toBe(200)
+    expect(ta.minDurationMs).toBe(1000)
+    expect(ta.maxDurationMs).toBe(3000)
+    expect(ta.avgDurationMs).toBe(2000)
   })
 
   test('lọc project + groupBy step + filter task', async () => {
@@ -67,7 +79,7 @@ describe('HTTP GET /api/statistics/usage', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.groups.map((g: any) => g.key)).toEqual(['implement'])
-    expect(body.groups[0].totalTokens).toBe(100)
+    expect(body.groups[0].totalTokens).toBe(400)
   })
 
   test('groupBy=date với from ISO hợp lệ', async () => {

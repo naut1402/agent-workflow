@@ -1,29 +1,61 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import type { ChartKind, ChartStyleConfig } from '../lib/mermaidChart'
+import CSelect from '../../../core/ui/CSelect.vue'
+import type { CSelectOption } from '../../../core/ui/CSelect.vue'
+import { computed } from 'vue'
 import {
   CHART_MAX_HEIGHT,
   CHART_MAX_WIDTH,
   CHART_MIN_HEIGHT,
   CHART_MIN_WIDTH,
-  DEFAULT_CHART_STYLE,
+  type ChartKind,
 } from '../lib/mermaidChart'
+import {
+  makeDefaultChartConfig,
+  sanitizeChartConfig,
+  type ChartConfig,
+} from '../lib/chartConfig'
+import { USAGE_GROUP_BYS, USAGE_METRICS } from '../schemas/usageStats'
 
 /**
- * Dialog thuộc tính chart — chỉ expose những gì mermaid hiện tại render được
- * (kích thước, tiêu đề/nhãn trục, màu). Sửa trực tiếp vào model (live-apply):
- * thay đổi áp dụng ngay vào chart phía sau, không cần nút Lưu.
+ * Dialog thiết lập MỘT chart instance: gom nhóm / chỉ số / loại biểu đồ /
+ * tiêu đề (rỗng → chart không vẽ title) / nhãn trục / màu / kích thước.
+ * Sửa trực tiếp vào model (live-apply) — thay đổi áp dụng ngay phía sau dialog.
  */
-defineProps<{ chartType: ChartKind }>()
+const props = defineProps<{ allowProjectGroup: boolean }>()
 
-const model = defineModel<ChartStyleConfig>({ required: true })
+const model = defineModel<ChartConfig>({ required: true })
 
 const emit = defineEmits<{ close: [] }>()
 
 const { t } = useI18nHelpers()
 
-function patch(updates: Partial<ChartStyleConfig>) {
+const groupByOptions = computed<CSelectOption[]>(() => {
+  const opts: CSelectOption[] = []
+  for (const g of USAGE_GROUP_BYS) {
+    if (g === 'project' && !props.allowProjectGroup) continue
+    opts.push({ value: g, label: t(`statistics.groupBy.${g}`) })
+  }
+  return opts
+})
+
+const metricOptions = computed<CSelectOption[]>(() =>
+  USAGE_METRICS.map((m) => ({ value: m, label: t(`statistics.metric.${m}`) })),
+)
+
+const chartTypeOptions = computed<CSelectOption[]>(() =>
+  (['bar', 'line', 'pie'] as ChartKind[]).map((c) => ({
+    value: c,
+    label: t(`statistics.chartType.${c}`),
+  })),
+)
+
+function patch(updates: Partial<ChartConfig>) {
   model.value = { ...model.value, ...updates }
+}
+
+function patchStyle(updates: Partial<ChartConfig['style']>) {
+  model.value = { ...model.value, style: { ...model.value.style, ...updates } }
 }
 
 function patchSize(field: 'width' | 'height', raw: string) {
@@ -33,21 +65,22 @@ function patchSize(field: 'width' | 'height', raw: string) {
     field === 'width'
       ? Math.min(CHART_MAX_WIDTH, Math.max(CHART_MIN_WIDTH, Math.round(value)))
       : Math.min(CHART_MAX_HEIGHT, Math.max(CHART_MIN_HEIGHT, Math.round(value)))
-  patch({ [field]: clamped } as Partial<ChartStyleConfig>)
+  patchStyle({ [field]: clamped } as Partial<ChartConfig['style']>)
 }
 
 function removePieColor(index: number) {
-  patch({ pieColors: (model.value.pieColors ?? []).filter((_, i) => i !== index) })
+  patchStyle({ pieColors: (model.value.style.pieColors ?? []).filter((_, i) => i !== index) })
 }
 
 function addPieColor() {
-  const colors = model.value.pieColors ?? []
+  const colors = model.value.style.pieColors ?? []
   if (colors.length >= 12) return
-  patch({ pieColors: [...colors, '#4A7DFF'] })
+  patchStyle({ pieColors: [...colors, '#4A7DFF'] })
 }
 
 function resetDefaults() {
-  model.value = { ...DEFAULT_CHART_STYLE }
+  const fresh = makeDefaultChartConfig({ id: model.value.id })
+  model.value = sanitizeChartConfig(fresh) ?? fresh
 }
 </script>
 
@@ -76,41 +109,71 @@ function resetDefaults() {
       </div>
       <p class="muted chart-settings-hint">{{ t('statistics.settings.hint') }}</p>
 
+      <div class="chart-settings-row">
+        <label class="chart-settings-field">
+          <span>{{ t('statistics.groupBy.label') }}</span>
+          <CSelect
+            :model-value="model.groupBy"
+            :options="groupByOptions"
+            :aria-label="t('statistics.groupBy.label')"
+            @update:model-value="patch({ groupBy: $event as ChartConfig['groupBy'] })"
+          />
+        </label>
+        <label class="chart-settings-field">
+          <span>{{ t('statistics.metric.label') }}</span>
+          <CSelect
+            :model-value="model.metric"
+            :options="metricOptions"
+            :aria-label="t('statistics.metric.label')"
+            @update:model-value="patch({ metric: $event as ChartConfig['metric'] })"
+          />
+        </label>
+        <label class="chart-settings-field">
+          <span>{{ t('statistics.chartType.label') }}</span>
+          <CSelect
+            :model-value="model.chartType"
+            :options="chartTypeOptions"
+            :aria-label="t('statistics.chartType.label')"
+            @update:model-value="patch({ chartType: $event as ChartConfig['chartType'] })"
+          />
+        </label>
+      </div>
+
       <label class="chart-settings-field">
         <span>{{ t('statistics.settings.chartTitle') }}</span>
         <input
           type="text"
-          :value="model.titleOverride"
-          :placeholder="t('statistics.settings.autoTitle')"
-          @input="patch({ titleOverride: ($event.target as HTMLInputElement).value })"
+          :value="model.title"
+          :placeholder="t('statistics.settings.noTitle')"
+          @input="patch({ title: ($event.target as HTMLInputElement).value })"
         />
       </label>
 
-      <template v-if="chartType !== 'pie'">
+      <template v-if="model.chartType !== 'pie'">
         <label class="chart-settings-field">
           <span>{{ t('statistics.settings.xAxisTitle') }}</span>
           <input
             type="text"
-            :value="model.xAxisTitle"
+            :value="model.style.xAxisTitle"
             :placeholder="t('statistics.settings.none')"
-            @input="patch({ xAxisTitle: ($event.target as HTMLInputElement).value })"
+            @input="patchStyle({ xAxisTitle: ($event.target as HTMLInputElement).value })"
           />
         </label>
         <label class="chart-settings-field">
           <span>{{ t('statistics.settings.yAxisLabel') }}</span>
           <input
             type="text"
-            :value="model.yAxisLabel"
+            :value="model.style.yAxisLabel"
             :placeholder="t('statistics.settings.autoLabel')"
-            @input="patch({ yAxisLabel: ($event.target as HTMLInputElement).value })"
+            @input="patchStyle({ yAxisLabel: ($event.target as HTMLInputElement).value })"
           />
         </label>
         <label class="chart-settings-field chart-settings-field--color">
           <span>{{ t('statistics.settings.chartColor') }}</span>
           <input
             type="color"
-            :value="model.color || DEFAULT_CHART_STYLE.color"
-            @input="patch({ color: ($event.target as HTMLInputElement).value })"
+            :value="model.style.color || '#4A7DFF'"
+            @input="patchStyle({ color: ($event.target as HTMLInputElement).value })"
           />
         </label>
       </template>
@@ -118,14 +181,14 @@ function resetDefaults() {
       <div v-else class="chart-settings-field">
         <span>{{ t('statistics.settings.pieColors') }}</span>
         <ul class="chart-settings-colors">
-          <li v-for="(color, index) in model.pieColors ?? []" :key="index">
+          <li v-for="(color, index) in model.style.pieColors ?? []" :key="index">
             <input
               type="color"
               :value="color"
               :aria-label="`${t('statistics.settings.pieColors')} ${index + 1}`"
               @input="
-                patch({
-                  pieColors: (model.pieColors ?? []).map((c, i) =>
+                patchStyle({
+                  pieColors: (model.style.pieColors ?? []).map((c, i) =>
                     i === index ? ($event.target as HTMLInputElement).value : c,
                   ),
                 })
@@ -162,7 +225,7 @@ function resetDefaults() {
             type="number"
             :min="CHART_MIN_WIDTH"
             :max="CHART_MAX_WIDTH"
-            :value="model.width"
+            :value="model.style.width"
             @input="patchSize('width', ($event.target as HTMLInputElement).value)"
           />
         </label>
@@ -172,7 +235,7 @@ function resetDefaults() {
             type="number"
             :min="CHART_MIN_HEIGHT"
             :max="CHART_MAX_HEIGHT"
-            :value="model.height"
+            :value="model.style.height"
             @input="patchSize('height', ($event.target as HTMLInputElement).value)"
           />
         </label>
@@ -192,7 +255,7 @@ function resetDefaults() {
 
 <style scoped lang="scss">
 .chart-settings-dialog {
-  width: min(520px, 94vw);
+  width: min(560px, 94vw);
   gap: 0.75rem;
 }
 .chart-settings-hint {
@@ -205,6 +268,7 @@ function resetDefaults() {
   flex-direction: column;
   gap: 0.3rem;
   font-size: 0.85rem;
+  flex: 1 1 10rem;
 }
 .chart-settings-field > span {
   color: var(--text-muted);
@@ -226,6 +290,7 @@ function resetDefaults() {
   flex-direction: row;
   align-items: center;
   gap: 0.6rem;
+  flex: 0 0 auto;
 }
 .chart-settings-field--color input[type='color'] {
   width: 2.6rem;
@@ -239,6 +304,7 @@ function resetDefaults() {
 .chart-settings-row {
   display: flex;
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
 .chart-settings-colors {
   list-style: none;

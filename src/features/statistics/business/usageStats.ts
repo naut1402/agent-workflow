@@ -92,6 +92,13 @@ function emptyAccumulator(key: string) {
     durationMs: 0,
     firstTs: Number.POSITIVE_INFINITY,
     lastTs: Number.NEGATIVE_INFINITY,
+    // Mốc min/max/avg theo từng entry — min/max để POSITIVE/NEGATIVE_INFINITY
+    // làm sentinel; durationMs null được map riêng (entry không có duration).
+    minTotalTokens: Number.POSITIVE_INFINITY,
+    maxTotalTokens: 0,
+    minDurationMs: Number.POSITIVE_INFINITY,
+    maxDurationMs: 0,
+    durationCount: 0,
   }
 }
 
@@ -105,12 +112,20 @@ function accumulate(acc: Accumulator, entry: UsageLogEntry): void {
   acc.cacheReadTokens += entry.cacheReadTokens ?? 0
   acc.cacheWriteTokens += entry.cacheWriteTokens ?? 0
   acc.totalTokens += entry.totalTokens
-  acc.durationMs += entry.durationMs ?? 0
+  acc.minTotalTokens = Math.min(acc.minTotalTokens, entry.totalTokens)
+  acc.maxTotalTokens = Math.max(acc.maxTotalTokens, entry.totalTokens)
+  if (entry.durationMs != null) {
+    acc.durationMs += entry.durationMs
+    acc.minDurationMs = Math.min(acc.minDurationMs, entry.durationMs)
+    acc.maxDurationMs = Math.max(acc.maxDurationMs, entry.durationMs)
+    acc.durationCount += 1
+  }
   acc.firstTs = Math.min(acc.firstTs, entry.ts)
   acc.lastTs = Math.max(acc.lastTs, entry.ts)
 }
 
 function finalize(acc: Accumulator): UsageGroup {
+  const hasDuration = acc.durationCount > 0
   return {
     key: acc.key,
     entries: acc.entries,
@@ -123,6 +138,12 @@ function finalize(acc: Accumulator): UsageGroup {
     durationMs: acc.durationMs,
     firstTs: Number.isFinite(acc.firstTs) ? acc.firstTs : 0,
     lastTs: Number.isFinite(acc.lastTs) ? acc.lastTs : 0,
+    minTotalTokens: acc.minTotalTokens,
+    maxTotalTokens: acc.maxTotalTokens,
+    avgTotalTokens: acc.entries ? acc.totalTokens / acc.entries : 0,
+    minDurationMs: hasDuration ? acc.minDurationMs : null,
+    maxDurationMs: hasDuration ? acc.maxDurationMs : null,
+    avgDurationMs: hasDuration ? acc.durationMs / acc.durationCount : null,
   }
 }
 
