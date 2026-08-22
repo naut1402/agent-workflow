@@ -101,16 +101,16 @@ test('statistics mode: gallery đa chart + settings + resize (capture)', async (
   await tile.locator('button[title="Về kích thước gốc"]').click()
   await expect(tile.locator('.chart-tile-zoom')).not.toHaveCSS('transform', /1\.25/)
 
-  // Loại biểu đồ nằm trong dialog settings của từng chart (CSelect: groupBy,
-  // metric, chartType, numberFormat → chartType là thứ 3, index 2).
+  // Loại biểu đồ nằm trong dialog settings của từng chart (selects: kind,
+  // groupBy, metric, chartType, numberFormat → chartType index 3).
   async function setChartType(label: string) {
     const t = page.locator('.chart-tile').first()
     const tb = (await t.boundingBox())!
-    await page.mouse.move(tb.x + 60, tb.y + 50) // action group theo con trỏ
+    await page.mouse.move(tb.x + 60, tb.y + 50) // action group hiện khi hover
     await t.locator('button[title="Thiết lập biểu đồ"]').click()
     const dialog = page.locator('.chart-settings-dialog')
     await expect(dialog).toBeVisible()
-    await dialog.locator('.c-select-trigger').nth(2).click()
+    await dialog.locator('.c-select-trigger').nth(3).click()
     await page.locator('.c-select-option', { hasText: label }).first().click()
     await dialog.locator('.chart-settings-close').click()
     await expect(dialog).toHaveCount(0)
@@ -123,8 +123,9 @@ test('statistics mode: gallery đa chart + settings + resize (capture)', async (
   await expect(page.locator('.chart-card-body canvas').first()).toBeVisible()
 
   // Hai pie cùng lúc không vẽ chồng nhau (bug mermaid đa instance): thêm chart
-  // thứ 2, đặt cả hai thành pie — mỗi tile phải có canvas riêng visible.
+  // thứ 2 qua menu +, đặt cả hai thành pie — mỗi tile phải có canvas riêng.
   await page.locator('.statistics-add-chart').click()
+  await page.locator('.statistics-add-menu button', { hasText: 'Biểu đồ' }).click()
   await expect(page.locator('.chart-tile')).toHaveCount(2)
   const addDialog = page.locator('.chart-settings-dialog')
   await expect(addDialog).toBeVisible()

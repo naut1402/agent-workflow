@@ -26,7 +26,7 @@ describe('chartConfig — span/height clamp + sanitize prefs', () => {
     expect(snapChartHeight(99999)).toBe(3000)
   })
 
-  it('sanitizeChartConfig: bỏ field lệch, giữ field hợp lệ, repair span/format', () => {
+  it('sanitizeChartConfig: bỏ field lệch, giữ field hợp lệ, repair span/format/kind', () => {
     const c = sanitizeChartConfig({
       id: 'x',
       title: 'T',
@@ -43,12 +43,24 @@ describe('chartConfig — span/height clamp + sanitize prefs', () => {
       groupBy: 'model',
       metric: 'totalTokens',
       chartType: 'line',
+      kind: 'chart',
       span: 4,
       numberFormat: 'full',
     })
     expect(c!.style.height).toBe(400)
     // Field lạ trong style không phá cấu trúc default.
     expect(c!.style.pieColors?.length).toBeGreaterThan(0)
+  })
+
+  it('sanitizeChartConfig: report — clamp topN, hướng bottom', () => {
+    const c = sanitizeChartConfig({
+      kind: 'report',
+      topN: 9999,
+      reportDirection: 'bottom',
+    })
+    expect(c).toMatchObject({ kind: 'report', topN: 100, reportDirection: 'bottom' })
+    const bad = sanitizeChartConfig({ kind: 'weird', topN: 'x' })
+    expect(bad).toMatchObject({ kind: 'chart', topN: 10, reportDirection: 'top' })
   })
 
   it('sanitizeChartConfig: object rác → null', () => {

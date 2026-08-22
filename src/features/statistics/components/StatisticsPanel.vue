@@ -4,14 +4,22 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ChartCard from './ChartCard.vue'
 import ChartSettingsDialog from './ChartSettingsDialog.vue'
 import ChartTile from './ChartTile.vue'
+import ReportCard from './ReportCard.vue'
 import CSelect from '../../../core/ui/CSelect.vue'
 import type { CSelectOption } from '../../../core/ui/CSelect.vue'
 import { fetchUsageStats } from '../scripts/usageStatsApi'
-import type { UsageGroupBy, UsageStatsResult } from '../schemas/usageStats'
+import {
+  USAGE_METRICS,
+  type UsageGroupBy,
+  type UsageMetric,
+  type UsageStatsResult,
+} from '../schemas/usageStats'
 import {
   makeDefaultChartConfig,
   sanitizeChartConfig,
   snapChartHeight,
+  TILE_MAX_SPAN,
+  TILE_MIN_SPAN,
   type ChartConfig,
 } from '../lib/chartConfig'
 import { formatDuration, formatNumber, formatTs, signedNumber } from '../lib/format'
@@ -53,6 +61,8 @@ const drillStepId = ref('')
 
 /** Card summary co giãn chiều cao như chart tile (snap bước 20px). */
 const summaryHeight = ref(200)
+/** Card summary co giãn chiều rộng theo grid span (1-4 cột). */
+const summarySpan = ref(4)
 
 function loadPrefs(): void {
   try {
@@ -65,6 +75,9 @@ function loadPrefs(): void {
     }
     if (typeof p.summaryHeight === 'number' && p.summaryHeight >= 120) {
       summaryHeight.value = snapChartHeight(p.summaryHeight)
+    }
+    if (typeof p.summarySpan === 'number') {
+      summarySpan.value = Math.min(TILE_MAX_SPAN, Math.max(TILE_MIN_SPAN, Math.round(p.summarySpan)))
     }
     if (Array.isArray(p.charts) && p.charts.length) {
       const parsed = p.charts.map(sanitizeChartConfig).filter((c): c is ChartConfig => !!c)
@@ -97,6 +110,7 @@ function persistPrefs(): void {
         scope: scope.value,
         rangeDays: rangeDays.value,
         summaryHeight: summaryHeight.value,
+        summarySpan: summarySpan.value,
         charts: charts.value,
       }),
     )
@@ -105,7 +119,7 @@ function persistPrefs(): void {
   }
 }
 
-watch([scope, rangeDays, summaryHeight], persistPrefs)
+watch([scope, rangeDays, summaryHeight, summarySpan], persistPrefs)
 watch(charts, persistPrefs, { deep: true })
 
 // ── Toolbar options ──────────────────────────────────────────────────────────
@@ -153,11 +167,15 @@ function updateChart(next: ChartConfig) {
   if (idx >= 0) charts.value[idx] = next
 }
 
-function addChart() {
-  const chart = makeDefaultChartConfig()
+/** Menu thêm thẻ: biểu đồ hoặc report xếp hạng. */
+const addMenuOpen = ref(false)
+
+function addCard(kind: 'chart' | 'report') {
+  addMenuOpen.value = false
+  const chart = makeDefaultChartConfig({ kind, span: kind === 'report' ? 1 : 2 })
   charts.value.push(chart)
   activateChart(chart.id)
-  settingsFor.value = chart.id // mở luôn dialog để cấu hình chart mới
+  settingsFor.value = chart.id // mở luôn dialog để cấu hình thẻ mới
 }
 
 function removeChart(id: string) {
@@ -173,6 +191,7 @@ function onTileResize(chart: ChartConfig, span: number, height: number) {
 }
 
 // ── Data mỗi chart ───────────────────────────────────────────────────────────
+/** Series cho biểu đồ — cap 12 item + gộp còn lại để trục không dồn. */
 function cardSeries(chart: ChartConfig): { labels: string[]; values: number[] } {
   const groups = results.value[chart.id]?.groups ?? []
   const labels = groups.map((g) => (g.key === '' ? t('statistics.noAttribution') : g.key))
@@ -185,6 +204,41 @@ function cardSeries(chart: ChartConfig): { labels: string[]; values: number[] } 
   }
 }
 
+/** Series cho report — đầy đủ, ReportCard tự cắt top-N. */
+function reportSeries(chart: ChartConfig): { labels: string[]; values: number[] } {
+  const groups = results.value[chart.id]?.groups ?? []
+  return {
+    labels: groups.map((g) => (g.key === '' ? t('statistics.noAttribution') : g.key)),
+    values: groups.map((g) => g[chart.metric] ?? 0),
+  }
+}
+
+// ── Bảng chi tiết: lọc theo tên + offset ±avg ngay trong cột ────────────────
+const tableFilter = ref('')
+
+const filteredRows = computed(() => {
+  const q = tableFilter.value.trim().toLowerCase()
+  if (!q) return rows.value
+  return rows.value.filter((g) => g.key.toLowerCase().includes(q))
+})
+
+/** Trung bình MỖI CỘT token trên các dòng đang hiển thị (đã lọc). */
+const columnAvgs = computed(() => {
+  const metrics = USAGE_METRICS as readonly UsageMetric[]
+  const out = {} as Record<UsageMetric, number>
+  for (const m of metrics) {
+    const total = filteredRows.value.reduce((s, g) => s + (g[m] ?? 0), 0)
+    out[m] = filteredRows.value.length ? total / filteredRows.value.length : 0
+  }
+  return out
+})
+
+function offsetClass(offset: number): string {
+  if (offset > 0.5) return 'is-above'
+  if (offset < -0.5) return 'is-below'
+  return 'is-avg'
+}
+
 // ── Card summary (min/max/avg — table, co giãn được) ─────────────────────────
 const entryStats = computed(() => activeResult.value?.totals ?? null)
 
@@ -195,36 +249,67 @@ function spreadOf(values: number[]): { min: number; max: number; avg: number } |
   return { min: Math.min(...values), max: Math.max(...values), avg: sum / values.length }
 }
 
-/** Tổng token mỗi group của dimension đang xem (task nhẹ/nặng/trung bình). */
-const groupSpread = computed(() => spreadOf(rows.value.map((g) => g.totalTokens)))
+/** min/max/avg MỖI METRIC (input/output/cache/total) giữa các group đang xem. */
+const metricSpreads = computed(() =>
+  USAGE_METRICS.map((metric) => ({
+    metric,
+    spread: spreadOf(filteredRows.value.map((g) => g[metric] ?? 0)),
+  })),
+)
 
 /** Tổng token mỗi step — query summary riêng, luôn có bất kể chart nào. */
 const stepSpread = computed(() => spreadOf((stepSummary.value?.groups ?? []).map((g) => g.totalTokens)))
 
-/** Card summary co giãn chiều cao như chart tile (snap bước 20px). */
-const summaryDragPreview = ref<number | null>(null)
+/** Card summary co giãn cả CHIỀU RỘNG (grid span) LẪN chiều cao — như tile. */
+const summaryDragPreview = ref<{ span: number; height: number } | null>(null)
 const summaryRef = ref<HTMLElement | null>(null)
 const summaryHandleRef = ref<HTMLElement | null>(null)
+const summaryGridRef = ref<HTMLElement | null>(null)
 let stopSummaryDrag: (() => void) | null = null
+
+const GRID_GAP = 12
+
+function summaryGridColumnWidth(): number {
+  const grid = summaryGridRef.value
+  if (!grid) return 240
+  return Math.max(80, (grid.clientWidth - 3 * GRID_GAP) / 4)
+}
 
 function onSummaryResizeStart(down: PointerEvent) {
   const handle = summaryHandleRef.value
   if (!handle || stopSummaryDrag) return
-  const startY = down.clientY
-  const startHeight = summaryHeight.value
+  const colWidth = summaryGridColumnWidth()
+  const start = {
+    x: down.clientX,
+    y: down.clientY,
+    span: summarySpan.value,
+    height: summaryHeight.value,
+    width: colWidth * summarySpan.value + GRID_GAP * (summarySpan.value - 1),
+  }
   try {
     handle.setPointerCapture?.(down.pointerId)
   } catch {
     // PointerId tổng hợp có thể bị từ chối — window listener là nguồn sự thật.
   }
   const onMove = (move: PointerEvent) => {
-    summaryDragPreview.value = snapChartHeight(startHeight + (move.clientY - startY))
+    const desiredWidth = start.width + (move.clientX - start.x)
+    const span = Math.max(
+      TILE_MIN_SPAN,
+      Math.min(TILE_MAX_SPAN, Math.round((desiredWidth + GRID_GAP) / (colWidth + GRID_GAP))),
+    )
+    summaryDragPreview.value = {
+      span,
+      height: snapChartHeight(start.height + (move.clientY - start.y)),
+    }
   }
   const onUp = () => {
     stopSummaryDrag?.()
     const final = summaryDragPreview.value
     summaryDragPreview.value = null
-    if (final && final !== summaryHeight.value) summaryHeight.value = final
+    if (final) {
+      summarySpan.value = final.span
+      summaryHeight.value = final.height
+    }
   }
   window.addEventListener('pointermove', onMove)
   window.addEventListener('pointerup', onUp)
@@ -242,7 +327,10 @@ onBeforeUnmount(() => {
 })
 
 const summaryStyle = computed(() => ({
-  height: `${summaryDragPreview.value ?? summaryHeight.value}px`,
+  gridColumn: `span ${summaryDragPreview.value?.span ?? summarySpan.value} / span ${
+    summaryDragPreview.value?.span ?? summarySpan.value
+  }`,
+  height: `${summaryDragPreview.value?.height ?? summaryHeight.value}px`,
 }))
 
 // ── Drill-down ───────────────────────────────────────────────────────────────
@@ -405,23 +493,34 @@ onMounted(() => {
       <button type="button" class="statistics-refresh" @click="load">
         {{ t('statistics.refresh') }}
       </button>
-      <button
-        type="button"
-        class="icon-btn statistics-add-chart"
-        :title="t('statistics.addChart')"
-        :aria-label="t('statistics.addChart')"
-        @click="addChart"
-      >
-        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-          <path
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            d="M8 3v10M3 8h10"
-          />
-        </svg>
-      </button>
+      <div class="statistics-add-wrap">
+        <button
+          type="button"
+          class="icon-btn statistics-add-chart"
+          :title="t('statistics.addCard')"
+          :aria-label="t('statistics.addCard')"
+          :aria-expanded="addMenuOpen"
+          @click="addMenuOpen = !addMenuOpen"
+        >
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+            <path
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              d="M8 3v10M3 8h10"
+            />
+          </svg>
+        </button>
+        <div v-if="addMenuOpen" class="statistics-add-menu" role="menu">
+          <button type="button" role="menuitem" @click="addCard('chart')">
+            📊 {{ t('statistics.kind.chart') }}
+          </button>
+          <button type="button" role="menuitem" @click="addCard('report')">
+            🏆 {{ t('statistics.kind.report') }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <nav v-if="breadcrumbs.length" class="statistics-breadcrumbs" :aria-label="t('statistics.drill.label')">
@@ -439,70 +538,76 @@ onMounted(() => {
       </button>
     </nav>
 
-    <!-- Card summary: table min/max/avg — đơn vị ghi ở nhãn, co giãn được -->
-    <section v-if="activeResult" ref="summaryRef" class="statistics-summary-card" :style="summaryStyle">
-      <header class="summary-card-head">
-        <h3>📋 {{ t('statistics.summary.title') }}</h3>
-        <span class="muted">
-          {{ t('statistics.summary.overviewLine', {
-            entries: formatNumber(activeResult.totals.entries, activeNumberFormat),
-            dimension: t('statistics.groupBy.' + (activeChart?.groupBy ?? 'task')),
-            tokens: formatNumber(activeResult.totals.totalTokens, activeNumberFormat),
-            jobs: formatNumber(activeResult.totals.jobs, activeNumberFormat),
-          }) }}
-        </span>
-      </header>
-      <div class="summary-card-body">
-        <table class="summary-table">
-          <thead>
-            <tr>
-              <th>{{ t('statistics.summary.colMetric') }}</th>
-              <th class="num">🟢 {{ t('statistics.summary.colMin') }}</th>
-              <th class="num">🔵 {{ t('statistics.summary.colAvg') }}</th>
-              <th class="num">🔴 {{ t('statistics.summary.colMax') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="entryStats">
-              <td class="summary-metric">
-                🧮 {{ t('statistics.summary.rowEntryTokens') }}
-                <span class="summary-hint">{{ t('statistics.summary.entryHint') }}</span>
-              </td>
-              <td class="num is-below">{{ formatNumber(entryStats.minTotalTokens, activeNumberFormat) }}</td>
-              <td class="num is-avg">{{ formatNumber(entryStats.avgTotalTokens, activeNumberFormat) }}</td>
-              <td class="num is-above">{{ formatNumber(entryStats.maxTotalTokens, activeNumberFormat) }}</td>
-            </tr>
-            <tr v-if="entryStats">
-              <td class="summary-metric">⏱️ {{ t('statistics.summary.rowEntryDuration') }}</td>
-              <td class="num is-below">{{ formatDuration(entryStats.minDurationMs ?? 0) }}</td>
-              <td class="num is-avg">{{ formatDuration(entryStats.avgDurationMs ?? 0) }}</td>
-              <td class="num is-above">{{ formatDuration(entryStats.maxDurationMs ?? 0) }}</td>
-            </tr>
-            <tr v-if="groupSpread">
-              <td class="summary-metric">
-                🧩 {{ t('statistics.summary.rowGroupTokens', { dimension: t('statistics.groupBy.' + (activeChart?.groupBy ?? 'task')) }) }}
-              </td>
-              <td class="num is-below">{{ formatNumber(groupSpread.min, activeNumberFormat) }}</td>
-              <td class="num is-avg">{{ formatNumber(groupSpread.avg, activeNumberFormat) }}</td>
-              <td class="num is-above">{{ formatNumber(groupSpread.max, activeNumberFormat) }}</td>
-            </tr>
-            <tr v-if="stepSpread">
-              <td class="summary-metric">🪜 {{ t('statistics.summary.rowStepTokens') }}</td>
-              <td class="num is-below">{{ formatNumber(stepSpread.min, activeNumberFormat) }}</td>
-              <td class="num is-avg">{{ formatNumber(stepSpread.avg, activeNumberFormat) }}</td>
-              <td class="num is-above">{{ formatNumber(stepSpread.max, activeNumberFormat) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <span
-        ref="summaryHandleRef"
-        class="summary-resize-handle"
-        role="separator"
-        :title="t('statistics.settings.resizeHint')"
-        @pointerdown="onSummaryResizeStart"
-      />
-    </section>
+    <!-- Card summary: table min/max/avg — co giãn rộng (grid span) + cao như tile -->
+    <div v-if="activeResult" ref="summaryGridRef" class="statistics-summary-grid">
+      <section ref="summaryRef" class="statistics-summary-card" :style="summaryStyle">
+        <header class="summary-card-head">
+          <h3>📋 {{ t('statistics.summary.title') }}</h3>
+          <span class="muted">
+            {{ t('statistics.summary.overviewLine', {
+              entries: formatNumber(activeResult.totals.entries, activeNumberFormat),
+              dimension: t('statistics.groupBy.' + (activeChart?.groupBy ?? 'task')),
+              tokens: formatNumber(activeResult.totals.totalTokens, activeNumberFormat),
+              jobs: formatNumber(activeResult.totals.jobs, activeNumberFormat),
+            }) }}
+          </span>
+        </header>
+        <div class="summary-card-body">
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>{{ t('statistics.summary.colMetric') }}</th>
+                <th class="num">🟢 {{ t('statistics.summary.colMin') }}</th>
+                <th class="num">🔵 {{ t('statistics.summary.colAvg') }}</th>
+                <th class="num">🔴 {{ t('statistics.summary.colMax') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Mỗi metric token: spread giữa các group của dimension đang xem -->
+              <tr v-for="row in metricSpreads" v-show="row.spread" :key="row.metric">
+                <td class="summary-metric">
+                  🧩 {{ t('statistics.summary.rowMetric', {
+                    metric: t(`statistics.metric.${row.metric}`),
+                    dimension: t('statistics.groupBy.' + (activeChart?.groupBy ?? 'task')),
+                  }) }}
+                </td>
+                <td class="num is-below">{{ formatNumber(row.spread?.min ?? 0, activeNumberFormat) }}</td>
+                <td class="num is-avg">{{ formatNumber(row.spread?.avg ?? 0, activeNumberFormat) }}</td>
+                <td class="num is-above">{{ formatNumber(row.spread?.max ?? 0, activeNumberFormat) }}</td>
+              </tr>
+              <tr v-if="entryStats">
+                <td class="summary-metric">
+                  🧮 {{ t('statistics.summary.rowEntryTokens') }}
+                  <span class="summary-hint">{{ t('statistics.summary.entryHint') }}</span>
+                </td>
+                <td class="num is-below">{{ formatNumber(entryStats.minTotalTokens, activeNumberFormat) }}</td>
+                <td class="num is-avg">{{ formatNumber(entryStats.avgTotalTokens, activeNumberFormat) }}</td>
+                <td class="num is-above">{{ formatNumber(entryStats.maxTotalTokens, activeNumberFormat) }}</td>
+              </tr>
+              <tr v-if="entryStats">
+                <td class="summary-metric">⏱️ {{ t('statistics.summary.rowEntryDuration') }}</td>
+                <td class="num is-below">{{ formatDuration(entryStats.minDurationMs ?? 0) }}</td>
+                <td class="num is-avg">{{ formatDuration(entryStats.avgDurationMs ?? 0) }}</td>
+                <td class="num is-above">{{ formatDuration(entryStats.maxDurationMs ?? 0) }}</td>
+              </tr>
+              <tr v-if="stepSpread">
+                <td class="summary-metric">🪜 {{ t('statistics.summary.rowStepTokens') }}</td>
+                <td class="num is-below">{{ formatNumber(stepSpread.min, activeNumberFormat) }}</td>
+                <td class="num is-avg">{{ formatNumber(stepSpread.avg, activeNumberFormat) }}</td>
+                <td class="num is-above">{{ formatNumber(stepSpread.max, activeNumberFormat) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <span
+          ref="summaryHandleRef"
+          class="summary-resize-handle"
+          role="separator"
+          :title="t('statistics.settings.resizeHint')"
+          @pointerdown="onSummaryResizeStart"
+        />
+      </section>
+    </div>
 
     <div class="statistics-charts">
       <ChartTile
@@ -516,7 +621,18 @@ onMounted(() => {
         @settings="openSettings(chart.id)"
         @remove="removeChart(chart.id)"
       >
+        <ReportCard
+          v-if="chart.kind === 'report'"
+          :labels="reportSeries(chart).labels"
+          :values="reportSeries(chart).values"
+          :top-n="chart.topN"
+          :direction="chart.reportDirection"
+          :number-format="chart.numberFormat"
+          :metric-label="t(`statistics.metric.${chart.metric}`)"
+          :loading="loading"
+        />
         <ChartCard
+          v-else
           :title="chart.title"
           :chart-type="chart.chartType"
           :labels="cardSeries(chart).labels"
@@ -533,6 +649,18 @@ onMounted(() => {
     </p>
 
     <div v-if="rows.length" class="statistics-table-wrap">
+      <div class="statistics-table-toolbar">
+        <input
+          v-model="tableFilter"
+          type="search"
+          class="statistics-table-search"
+          :placeholder="t('statistics.table.searchPlaceholder')"
+          autocomplete="off"
+        />
+        <span class="muted">
+          {{ t('statistics.table.shown', { shown: filteredRows.length, total: rows.length }) }}
+        </span>
+      </div>
       <table class="statistics-table">
         <thead>
           <tr>
@@ -544,19 +672,13 @@ onMounted(() => {
             <th class="num">{{ t('statistics.table.cacheRead') }}</th>
             <th class="num">{{ t('statistics.table.cacheWrite') }}</th>
             <th class="num">{{ t('statistics.table.total') }}</th>
-            <th class="num">🟢 {{ t('statistics.table.minTok') }}</th>
-            <th class="num">🔵 {{ t('statistics.table.avgTok') }}</th>
-            <th class="num">🔴 {{ t('statistics.table.maxTok') }}</th>
             <th class="num">{{ t('statistics.table.duration') }}</th>
-            <th class="num">🟢 {{ t('statistics.table.minDur') }}</th>
-            <th class="num">🔵 {{ t('statistics.table.avgDur') }}</th>
-            <th class="num">🔴 {{ t('statistics.table.maxDur') }}</th>
             <th class="num">{{ t('statistics.table.lastTs') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr
-            v-for="group in rows"
+            v-for="group in filteredRows"
             :key="group.key"
             :class="{ 'is-drillable': !!drillable && group.key !== '' }"
             :title="drillable && group.key !== '' ? t('statistics.table.drillHint') : undefined"
@@ -567,30 +689,27 @@ onMounted(() => {
             </td>
             <td class="num">{{ formatNumber(group.entries, activeNumberFormat) }}</td>
             <td class="num">{{ formatNumber(group.jobs, activeNumberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.inputTokens, activeNumberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.outputTokens, activeNumberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.cacheReadTokens, activeNumberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.cacheWriteTokens, activeNumberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.totalTokens, activeNumberFormat) }}</td>
-            <td class="num is-below">
-              {{ formatNumber(group.minTotalTokens, activeNumberFormat) }}
-              <span class="offset">{{ signedNumber(group.minTotalTokens - group.avgTotalTokens, activeNumberFormat) }}</span>
+            <td class="num">
+              {{ formatNumber(group.inputTokens, activeNumberFormat) }}
+              <span class="offset" :class="offsetClass(group.inputTokens - columnAvgs.inputTokens)">{{ signedNumber(group.inputTokens - columnAvgs.inputTokens, activeNumberFormat) }}</span>
             </td>
-            <td class="num is-avg">{{ formatNumber(group.avgTotalTokens, activeNumberFormat) }}</td>
-            <td class="num is-above">
-              {{ formatNumber(group.maxTotalTokens, activeNumberFormat) }}
-              <span class="offset">{{ signedNumber(group.maxTotalTokens - group.avgTotalTokens, activeNumberFormat) }}</span>
+            <td class="num">
+              {{ formatNumber(group.outputTokens, activeNumberFormat) }}
+              <span class="offset" :class="offsetClass(group.outputTokens - columnAvgs.outputTokens)">{{ signedNumber(group.outputTokens - columnAvgs.outputTokens, activeNumberFormat) }}</span>
+            </td>
+            <td class="num">
+              {{ formatNumber(group.cacheReadTokens, activeNumberFormat) }}
+              <span class="offset" :class="offsetClass(group.cacheReadTokens - columnAvgs.cacheReadTokens)">{{ signedNumber(group.cacheReadTokens - columnAvgs.cacheReadTokens, activeNumberFormat) }}</span>
+            </td>
+            <td class="num">
+              {{ formatNumber(group.cacheWriteTokens, activeNumberFormat) }}
+              <span class="offset" :class="offsetClass(group.cacheWriteTokens - columnAvgs.cacheWriteTokens)">{{ signedNumber(group.cacheWriteTokens - columnAvgs.cacheWriteTokens, activeNumberFormat) }}</span>
+            </td>
+            <td class="num">
+              {{ formatNumber(group.totalTokens, activeNumberFormat) }}
+              <span class="offset" :class="offsetClass(group.totalTokens - columnAvgs.totalTokens)">{{ signedNumber(group.totalTokens - columnAvgs.totalTokens, activeNumberFormat) }}</span>
             </td>
             <td class="num">{{ formatDuration(group.durationMs) }}</td>
-            <td class="num is-below">
-              {{ formatDuration(group.minDurationMs ?? 0) }}
-              <span class="offset">{{ signedDuration((group.minDurationMs ?? 0) - (group.avgDurationMs ?? 0)) }}</span>
-            </td>
-            <td class="num is-avg">{{ formatDuration(group.avgDurationMs ?? 0) }}</td>
-            <td class="num is-above">
-              {{ formatDuration(group.maxDurationMs ?? 0) }}
-              <span class="offset">{{ signedDuration((group.maxDurationMs ?? 0) - (group.avgDurationMs ?? 0)) }}</span>
-            </td>
             <td class="num">{{ formatTs(group.lastTs) }}</td>
           </tr>
         </tbody>
@@ -700,6 +819,37 @@ onMounted(() => {
   border-color: var(--accent);
   color: var(--accent);
 }
+.statistics-add-wrap {
+  position: relative;
+}
+.statistics-add-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 13rem;
+  padding: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.statistics-add-menu button {
+  padding: 0.45rem 0.7rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+.statistics-add-menu button:hover {
+  background: var(--hover-surface);
+  color: var(--accent);
+}
 .statistics-breadcrumbs {
   display: flex;
   flex-wrap: wrap;
@@ -731,6 +881,18 @@ onMounted(() => {
 }
 .statistics-crumb-x {
   opacity: 0.7;
+}
+/* Card summary — grid 4 cột riêng để co giãn CHIỀU RỘNG theo span như tile. */
+.statistics-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0.5rem 0 0.25rem;
+}
+@media (max-width: 1100px) {
+  .statistics-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 /* Card summary — table min/max/avg, co giãn chiều cao như chart tile. */
 .statistics-summary-card {
@@ -859,6 +1021,26 @@ onMounted(() => {
   border-radius: 6px;
   background: var(--panel);
   margin-top: 0.5rem;
+}
+.statistics-table-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.statistics-table-search {
+  flex: 0 1 16rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--input-surface);
+  color: var(--text);
+  font-size: 0.82rem;
 }
 .statistics-table {
   width: 100%;

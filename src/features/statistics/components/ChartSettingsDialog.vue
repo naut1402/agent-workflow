@@ -6,11 +6,11 @@ import { computed } from 'vue'
 import {
   CHART_MAX_HEIGHT,
   CHART_MIN_HEIGHT,
-  type ChartKind,
-} from '../lib/chartConfig'
-import {
+  REPORT_TOP_N_MAX,
+  REPORT_TOP_N_MIN,
   makeDefaultChartConfig,
   sanitizeChartConfig,
+  type ChartKind,
   type ChartConfig,
 } from '../lib/chartConfig'
 import { USAGE_GROUP_BYS, USAGE_METRICS } from '../schemas/usageStats'
@@ -53,6 +53,16 @@ const numberFormatOptions = computed<CSelectOption[]>(() => [
   { value: 'full', label: t('statistics.numberFormat.full') },
 ])
 
+const kindOptions = computed<CSelectOption[]>(() => [
+  { value: 'chart', label: t('statistics.kind.chart') },
+  { value: 'report', label: t('statistics.kind.report') },
+])
+
+const directionOptions = computed<CSelectOption[]>(() => [
+  { value: 'top', label: t('statistics.report.directionTop') },
+  { value: 'bottom', label: t('statistics.report.directionBottom') },
+])
+
 function patch(updates: Partial<ChartConfig>) {
   model.value = { ...model.value, ...updates }
 }
@@ -66,6 +76,12 @@ function patchHeight(raw: string) {
   if (!Number.isFinite(value)) return
   const clamped = Math.min(CHART_MAX_HEIGHT, Math.max(CHART_MIN_HEIGHT, Math.round(value)))
   patchStyle({ height: clamped })
+}
+
+function patchTopN(raw: string) {
+  const value = Number(raw)
+  if (!Number.isFinite(value)) return
+  patch({ topN: Math.min(REPORT_TOP_N_MAX, Math.max(REPORT_TOP_N_MIN, Math.round(value))) })
 }
 
 function removePieColor(index: number) {
@@ -111,6 +127,15 @@ function resetDefaults() {
 
       <div class="chart-settings-row">
         <label class="chart-settings-field">
+          <span>{{ t('statistics.kind.label') }}</span>
+          <CSelect
+            :model-value="model.kind"
+            :options="kindOptions"
+            :aria-label="t('statistics.kind.label')"
+            @update:model-value="patch({ kind: $event as ChartConfig['kind'] })"
+          />
+        </label>
+        <label class="chart-settings-field">
           <span>{{ t('statistics.groupBy.label') }}</span>
           <CSelect
             :model-value="model.groupBy"
@@ -128,15 +153,38 @@ function resetDefaults() {
             @update:model-value="patch({ metric: $event as ChartConfig['metric'] })"
           />
         </label>
-        <label class="chart-settings-field">
-          <span>{{ t('statistics.chartType.label') }}</span>
-          <CSelect
-            :model-value="model.chartType"
-            :options="chartTypeOptions"
-            :aria-label="t('statistics.chartType.label')"
-            @update:model-value="patch({ chartType: $event as ChartConfig['chartType'] })"
-          />
-        </label>
+        <template v-if="model.kind === 'chart'">
+          <label class="chart-settings-field">
+            <span>{{ t('statistics.chartType.label') }}</span>
+            <CSelect
+              :model-value="model.chartType"
+              :options="chartTypeOptions"
+              :aria-label="t('statistics.chartType.label')"
+              @update:model-value="patch({ chartType: $event as ChartConfig['chartType'] })"
+            />
+          </label>
+        </template>
+        <template v-else>
+          <label class="chart-settings-field chart-settings-field--num">
+            <span>{{ t('statistics.report.topN') }}</span>
+            <input
+              type="number"
+              :min="REPORT_TOP_N_MIN"
+              :max="REPORT_TOP_N_MAX"
+              :value="model.topN"
+              @input="patchTopN(($event.target as HTMLInputElement).value)"
+            />
+          </label>
+          <label class="chart-settings-field">
+            <span>{{ t('statistics.report.direction') }}</span>
+            <CSelect
+              :model-value="model.reportDirection"
+              :options="directionOptions"
+              :aria-label="t('statistics.report.direction')"
+              @update:model-value="patch({ reportDirection: $event as ChartConfig['reportDirection'] })"
+            />
+          </label>
+        </template>
         <label class="chart-settings-field">
           <span>{{ t('statistics.numberFormat.label') }}</span>
           <CSelect
@@ -158,7 +206,7 @@ function resetDefaults() {
         />
       </label>
 
-      <template v-if="model.chartType !== 'pie'">
+      <template v-if="model.kind === 'chart' && model.chartType !== 'pie'">
         <label class="chart-settings-field">
           <span>{{ t('statistics.settings.xAxisTitle') }}</span>
           <input
@@ -187,7 +235,7 @@ function resetDefaults() {
         </label>
       </template>
 
-      <div v-else class="chart-settings-field">
+      <div v-else-if="model.kind === 'chart'" class="chart-settings-field">
         <span>{{ t('statistics.settings.pieColors') }}</span>
         <div class="chart-settings-toggles">
           <label class="chart-settings-toggle">

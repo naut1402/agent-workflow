@@ -89,7 +89,7 @@ afterEach(() => {
 })
 
 describe('StatisticsPanel — gallery đa chart + summary card', () => {
-  it('mount mặc định 1 chart theo task → summary table (entry/step/unit rõ) + bảng chi tiết có cột offset', async () => {
+  it('mount mặc định 1 chart theo task → summary 5 hàng metric + bảng offset trong cùng cột', async () => {
     mockStats(statsBody(['TB1', 'TA1']))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -104,20 +104,69 @@ describe('StatisticsPanel — gallery đa chart + summary card', () => {
     expect(urlsContain('groupBy=step')).toBe(true)
 
     expect(wrapper.findAll('.chart-tile')).toHaveLength(1)
-    // Summary table: 4 hàng — entry tokens (kèm hint giải thích), entry duration,
-    // mỗi dimension, mỗi step; đơn vị ghi ở header cột chỉ số.
+    // Summary table: mỗi metric một hàng (min/max/avg giữa các group) + entry + step.
     const summary = wrapper.find('.statistics-summary-card')
     expect(summary.find('.summary-table').exists()).toBe(true)
-    expect(summary.text()).toContain('Tổng token mỗi lần ghi nhận')
-    expect(summary.text()).toContain('1 dòng usage log')
-    expect(summary.text()).toContain('Tổng token mỗi Task')
+    expect(summary.text()).toContain('Total tokens mỗi Task')
+    expect(summary.text()).toContain('Input tokens mỗi Task')
     expect(summary.text()).toContain('Tổng token mỗi step')
     expect(summary.text()).toContain('Chỉ số (tokens)')
-    // Bảng chi tiết có cột min/max/avg (prefix emoji) + span offset.
+    // Bảng chi tiết: KHÔNG còn cột Min/Avg/Max riêng — offset nằm trong 5 cột token.
     const headers = wrapper.findAll('.statistics-table thead th').map((th) => th.text())
-    expect(headers.some((h) => h.includes('Min tok'))).toBe(true)
-    expect(headers.some((h) => h.includes('Max tok'))).toBe(true)
-    expect(wrapper.find('.statistics-table tbody .offset').exists()).toBe(true)
+    expect(headers.some((h) => h.includes('Min tok'))).toBe(false)
+    expect(headers.some((h) => h.includes('Max tok'))).toBe(false)
+    const offsets = wrapper.findAll('.statistics-table tbody tr:first-child .offset')
+    expect(offsets.length).toBe(5) // input, output, cacheRead, cacheWrite, total
+    // Cột input bằng nhau (10=10) → ±0; cột total TB1=200 > avg 150 → +offset đỏ.
+    expect(offsets[0].classes()).toContain('is-avg')
+    expect(offsets[4].classes()).toContain('is-above')
+  })
+
+  it('search bảng chi tiết lọc nhóm theo tên', async () => {
+    mockStats(statsBody(['TB1', 'TA1', 'TZ9']))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
+    await flushPromises()
+    expect(wrapper.findAll('.statistics-table tbody tr')).toHaveLength(3)
+
+    await wrapper.find('.statistics-table-search').setValue('ta')
+    await flushPromises()
+    expect(wrapper.findAll('.statistics-table tbody tr')).toHaveLength(1)
+    expect(wrapper.find('.statistics-table tbody tr').text()).toContain('TA1')
+  })
+
+  it('menu thêm: report xếp hạng — top N theo metric, đổi hướng nhỏ nhất', async () => {
+    mockStats(statsBody(['TB1', 'TA1', 'TC7']))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
+    await flushPromises()
+
+    // Mở menu + → chọn Báo cáo xếp hạng.
+    await wrapper.find('.statistics-add-chart').trigger('click')
+    const reportBtn = wrapper
+      .findAll('.statistics-add-menu button')
+      .find((b) => b.text().includes('Báo cáo xếp hạng'))
+    expect(reportBtn).toBeTruthy()
+    await reportBtn!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.chart-tile')).toHaveLength(2)
+    // Dialog mở sẵn cho report; dialog có input Top N.
+    const dialog = wrapper.findComponent({ name: 'ChartSettingsDialog' })
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.find('input[type="number"]').element as HTMLInputElement).toBeTruthy()
+    // Persist kind report.
+    const saved = JSON.parse(localStorage.getItem('dev-dashboard-statistics-prefs')!)
+    expect(saved.charts[1].kind).toBe('report')
+    expect(saved.charts[1].topN).toBe(10)
+
+    // ReportCard render ranking desc mặc định (TB1=300 đầu).
+    const report = wrapper.findComponent({ name: 'ReportCard' })
+    expect(report.exists()).toBe(true)
+    const rowsTxt = report.findAll('tbody tr').map((r) => r.text())
+    expect(rowsTxt[0]).toContain('TB1')
   })
 
   it('định dạng số theo chart: compact "25.00K" → full "25,000" qua dialog settings', async () => {
@@ -128,11 +177,11 @@ describe('StatisticsPanel — gallery đa chart + summary card', () => {
     await flushPromises()
     expect(wrapper.find('.statistics-summary-card').text()).toContain('25.00K')
 
-    // Mở dialog, chọn numberFormat "Đầy đủ" (CSelect thứ 4 trong dialog).
+    // Mở dialog, chọn numberFormat "Đầy đủ" (selects: kind, groupBy, metric, chartType, numberFormat).
     await wrapper.find('.chart-tile .chart-tile-actions .icon-btn').trigger('click')
     const dialog = wrapper.findComponent({ name: 'ChartSettingsDialog' })
     expect(dialog.exists()).toBe(true)
-    await dialog.findAll('.c-select-trigger')[3].trigger('click')
+    await dialog.findAll('.c-select-trigger')[4].trigger('click')
     const fullOption = wrapper.findAll('.c-select-option').find((o) => o.text() === 'Đầy đủ (1,234,567)')
     expect(fullOption).toBeTruthy()
     await fullOption!.trigger('click')
@@ -171,14 +220,20 @@ describe('StatisticsPanel — gallery đa chart + summary card', () => {
     const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
     await flushPromises()
 
+    // Mở menu + → chọn Biểu đồ.
     await wrapper.find('.statistics-add-chart').trigger('click')
+    const chartBtn = wrapper
+      .findAll('.statistics-add-menu button')
+      .find((b) => b.text().includes('Biểu đồ'))
+    expect(chartBtn).toBeTruthy()
+    await chartBtn!.trigger('click')
     await flushPromises()
     expect(wrapper.findAll('.chart-tile')).toHaveLength(2)
     const dialog = wrapper.findComponent({ name: 'ChartSettingsDialog' })
     expect(dialog.exists()).toBe(true)
 
-    // Đổi groupBy của chart mới sang Model (CSelect thứ nhất trong dialog).
-    await dialog.findAll('.c-select-trigger')[0].trigger('click')
+    // Đổi groupBy của chart mới sang Model (select thứ 2: kind, groupBy, ...).
+    await dialog.findAll('.c-select-trigger')[1].trigger('click')
     const modelOption = wrapper.findAll('.c-select-option').find((o) => o.text() === 'Model')
     expect(modelOption).toBeTruthy()
     await modelOption!.trigger('click')

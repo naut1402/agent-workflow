@@ -81,13 +81,22 @@ export interface ChartConfig {
   title: string
   groupBy: UsageGroupBy
   metric: UsageMetric
+  /** Loại thẻ: biểu đồ hoặc report xếp hạng top-N. */
+  kind: 'chart' | 'report'
   chartType: ChartKind
+  /** Report: số item top-N. */
+  topN: number
+  /** Report: xếp theo lớn nhất hay nhỏ nhất. */
+  reportDirection: 'top' | 'bottom'
   /** Cột chiếm trong gallery (1-4). */
   span: number
   /** Định dạng số của riêng chart (K/M/B hay đầy đủ). */
   numberFormat: NumberFormat
   style: ChartStyleConfig
 }
+
+export const REPORT_TOP_N_MIN = 1
+export const REPORT_TOP_N_MAX = 100
 
 export function newChartId(): string {
   return `chart-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
@@ -99,7 +108,10 @@ export function makeDefaultChartConfig(overrides: Partial<ChartConfig> = {}): Ch
     title: '',
     groupBy: 'task',
     metric: 'totalTokens',
+    kind: 'chart',
     chartType: 'bar',
+    topN: 10,
+    reportDirection: 'top',
     span: 2,
     numberFormat: 'compact',
     style: { ...DEFAULT_CHART_STYLE },
@@ -108,6 +120,11 @@ export function makeDefaultChartConfig(overrides: Partial<ChartConfig> = {}): Ch
 }
 
 const CHART_KINDS: ChartKind[] = ['bar', 'line', 'pie']
+
+function clampTopN(v: unknown): number {
+  const n = typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 10
+  return Math.min(REPORT_TOP_N_MAX, Math.max(REPORT_TOP_N_MIN, n))
+}
 
 /**
  * Sanitize config đọc từ localStorage (prefs cũ/hỏng) — field lệch thì bỏ,
@@ -126,7 +143,10 @@ export function sanitizeChartConfig(raw: unknown): ChartConfig | null {
     title: typeof p.title === 'string' ? p.title : '',
     groupBy,
     metric,
+    kind: p.kind === 'report' ? 'report' : 'chart',
     chartType,
+    topN: clampTopN(p.topN),
+    reportDirection: p.reportDirection === 'bottom' ? 'bottom' : 'top',
     span: clampSpan(p.span),
     numberFormat: p.numberFormat === 'full' ? 'full' : 'compact',
     style: { ...DEFAULT_CHART_STYLE, ...(isStyleObject(p.style) ? p.style : {}) },
