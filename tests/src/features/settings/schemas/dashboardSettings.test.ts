@@ -42,6 +42,7 @@ describe('parseDashboardSettings', () => {
     expect(parsed.logging).toEqual({
       showLogsTab: false,
       types: { audit: false, request: true, jobs: false, events: false, usage: true },
+      driver: 'file',
     })
   })
 })

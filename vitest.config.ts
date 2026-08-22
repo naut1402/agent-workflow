@@ -45,6 +45,7 @@ export default defineConfig({
       // Node-only helpers (fileHelper / fs) — bun test, not jsdom.
       'tests/src/core/lib/**',
       'tests/src/core/log/**',
+      'tests/src/core/db/**',
       'tests/src/core/events/**',
       'tests/src/features/**/business/**',
       'tests/src/features/**/server/**',

@@ -37,6 +37,7 @@ describe('HTTP logging-config + gated log read', () => {
       config: {
         showLogsTab: true,
         types: { audit: true, request: true, jobs: true, events: false, usage: true },
+        driver: 'file',
       },
     })
 
@@ -53,12 +54,14 @@ describe('HTTP logging-config + gated log read', () => {
       config: {
         showLogsTab: false,
         types: { audit: false, request: true, jobs: false, events: false, usage: true },
+        driver: 'file',
       },
     })
 
     expect(loadLoggingConfig()).toEqual({
       showLogsTab: false,
       types: { audit: false, request: true, jobs: false, events: false, usage: true },
+      driver: 'file',
     })
 
     const get1 = await app.request('/api/logging-config')
@@ -69,6 +72,7 @@ describe('HTTP logging-config + gated log read', () => {
     saveLoggingConfig({
       showLogsTab: true,
       types: { audit: true, request: true, jobs: true, events: false, usage: true },
+      driver: 'file',
     })
     invalidateLoggingPrefsCache()
     await appendLog({
@@ -84,6 +88,7 @@ describe('HTTP logging-config + gated log read', () => {
     saveLoggingConfig({
       showLogsTab: true,
       types: { audit: false, request: true, jobs: true, events: false, usage: true },
+      driver: 'file',
     })
     invalidateLoggingPrefsCache()
 
