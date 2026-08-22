@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { TILE_MIN_SPAN, TILE_MAX_SPAN, snapChartHeight } from '../lib/chartConfig'
 
 /**
  * Vật chứa một chart trong gallery grid 4 cột: sở hữu grid span (1-4), chiều
  * cao card (snap bước 20px), MỘT action group duy nhất (settings / remove /
- * zoom in-out-reset) đi theo con trỏ chuột trong tile và ẩn khi rời khỏi
- * chart. Zoom áp CSS transform lên nội dung — tràn thì scroll ngang/dọc.
+ * zoom in-out-reset) hiện ở GÓC TRÊN BÊN PHẢI khi hover chart. Zoom áp CSS
+ * transform lên nội dung — tràn thì scroll ngang/dọc.
  */
 const props = withDefaults(
   defineProps<{
@@ -27,32 +27,7 @@ const emit = defineEmits<{
 
 const { t } = useI18nHelpers()
 
-// ── Action group đi theo con trỏ ────────────────────────────────────────────
 const tileRef = ref<HTMLElement | null>(null)
-const groupPos = ref({ x: 0, y: 0 })
-const groupVisible = ref(false)
-const GROUP_OFFSET = { x: 14, y: 14 }
-
-function onPointerMove(move: PointerEvent) {
-  const tile = tileRef.value
-  if (!tile) return
-  const rect = tile.getBoundingClientRect()
-  groupPos.value = {
-    x: Math.min(Math.max(move.clientX - rect.left + GROUP_OFFSET.x, 4), Math.max(4, rect.width - 160)),
-    y: Math.min(Math.max(move.clientY - rect.top + GROUP_OFFSET.y, 4), Math.max(4, rect.height - 36)),
-  }
-  groupVisible.value = true
-}
-
-function onPointerLeave() {
-  groupVisible.value = false
-}
-
-const groupStyle = computed(() => ({
-  left: `${groupPos.value.x}px`,
-  top: `${groupPos.value.y}px`,
-  opacity: groupVisible.value ? 1 : 0,
-}))
 
 // ── Zoom nội dung chart ─────────────────────────────────────────────────────
 const ZOOM_MIN = 0.5
@@ -142,24 +117,14 @@ function gridColumnWidth(grid: HTMLElement | null): number {
   return Math.max(80, (grid.clientWidth - 3 * GRID_GAP) / 4)
 }
 
-onMounted(() => {
-  groupVisible.value = false
-})
-
 onBeforeUnmount(() => {
   stopDrag?.()
 })
 </script>
 
 <template>
-  <div
-    ref="tileRef"
-    class="chart-tile"
-    :style="tileStyle"
-    @pointermove="onPointerMove"
-    @pointerleave="onPointerLeave"
-  >
-    <div class="chart-tile-actions" :style="groupStyle" @pointerleave.stop>
+  <div ref="tileRef" class="chart-tile" :style="tileStyle">
+    <div class="chart-tile-actions">
       <button
         type="button"
         class="icon-btn"
@@ -245,9 +210,11 @@ onBeforeUnmount(() => {
   padding: 0.5rem 0.5rem 0.6rem;
   min-width: 0;
 }
-/* MỘT action group duy nhất — đi theo con trỏ trong tile, ẩn khi rời chart. */
+/* MỘT action group duy nhất — cố định GÓC TRÊN BÊN PHẢI, hiện khi hover chart. */
 .chart-tile-actions {
   position: absolute;
+  top: 6px;
+  right: 6px;
   z-index: 3;
   display: flex;
   gap: 2px;
@@ -259,6 +226,10 @@ onBeforeUnmount(() => {
   opacity: 0;
   transition: opacity 0.12s ease;
   pointer-events: auto;
+}
+.chart-tile:hover .chart-tile-actions,
+.chart-tile:focus-within .chart-tile-actions {
+  opacity: 1;
 }
 .chart-tile-action-sep {
   width: 1px;

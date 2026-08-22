@@ -39,6 +39,13 @@ export function formatNumber(value: number, format: NumberFormat): string {
   return format === 'compact' ? compactNumber(value) : fullNumber(value)
 }
 
+/** Offset có dấu so với trung bình: (+1.2K / −3.4 / 0) — dùng cho bảng chi tiết. */
+export function signedNumber(offset: number, format: NumberFormat): string {
+  if (!Number.isFinite(offset) || Math.abs(offset) < 0.5) return '±0'
+  const sign = offset > 0 ? '+' : '−'
+  return `${sign}${formatNumber(Math.abs(offset), format)}`
+}
+
 /** 3725000 → "1h 2m 5s"; bỏ đơn vị 0 ở đầu (đủ "5s" / "2m 5s"). */
 export function formatDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '—'

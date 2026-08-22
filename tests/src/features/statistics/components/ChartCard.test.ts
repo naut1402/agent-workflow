@@ -10,6 +10,7 @@ const instances: Array<{ config: Record<string, unknown>; destroyed: boolean }> 
 
 vi.mock('chart.js/auto', () => ({
   default: class FakeChart {
+    static register(..._plugins: unknown[]) {}
     config: Record<string, unknown>
     destroyed = false
     constructor(_canvas: unknown, config: Record<string, unknown>) {
@@ -22,6 +23,8 @@ vi.mock('chart.js/auto', () => ({
     update() {}
   },
 }))
+
+vi.mock('chartjs-plugin-datalabels', () => ({ default: { id: 'datalabels' } }))
 
 import FakeChart from 'chart.js/auto'
 
@@ -96,6 +99,36 @@ describe('ChartCard (renderer chart.js)', () => {
     expect(bar.data.datasets[0].backgroundColor).toBe('#2ECC71')
     // Tick trục y định dạng theo numberFormat (full → dấu phẩy).
     expect(bar.options.scales.y.ticks.callback(1234567)).toBe('1,234,567')
+  })
+
+  it('pie toggles: legend/datalabels theo pieShowLabels/values/percent', async () => {
+    const mount = (style: Record<string, unknown>) =>
+      mountWithI18n(ChartCard, {
+        props: props({ chartType: 'pie', styleConfig: style as never }),
+      })
+
+    // Mặc định: legend bật, datalabels tắt.
+    mount({})
+    await flushPromises()
+    let opts = instances.at(-1)!.config.options as {
+      plugins: {
+        legend: { display: boolean }
+        datalabels: { display: boolean; formatter: (v: number, ctx: { dataset: { data: number[] } }) => string }
+      }
+    }
+    expect(opts.plugins.legend.display).toBe(true)
+    expect(opts.plugins.datalabels.display).toBe(false)
+
+    // Bật giá trị + phần trăm, tắt legend.
+    mount({ pieShowLabels: false, pieShowValues: true, pieShowPercent: true })
+    await flushPromises()
+    opts = instances.at(-1)!.config.options as typeof opts
+    expect(opts.plugins.legend.display).toBe(false)
+    expect(opts.plugins.datalabels.display).toBe(true)
+    // Formatter: 600/1000 → "600\n60.0%".
+    expect(opts.plugins.datalabels.formatter(600, { dataset: { data: [600, 400] } })).toBe(
+      '600\n60.0%',
+    )
   })
 
   it('không có dữ liệu → empty state, không dựng Chart', async () => {

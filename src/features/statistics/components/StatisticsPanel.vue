@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ChartCard from './ChartCard.vue'
 import ChartSettingsDialog from './ChartSettingsDialog.vue'
 import ChartTile from './ChartTile.vue'
@@ -11,9 +11,10 @@ import type { UsageGroupBy, UsageStatsResult } from '../schemas/usageStats'
 import {
   makeDefaultChartConfig,
   sanitizeChartConfig,
+  snapChartHeight,
   type ChartConfig,
 } from '../lib/chartConfig'
-import { formatDuration, formatNumber, formatTs } from '../lib/format'
+import { formatDuration, formatNumber, formatTs, signedNumber } from '../lib/format'
 
 /**
  * Mode Thống kê (issue #231): gallery chart 4 cột — mỗi chart một card
@@ -50,6 +51,9 @@ const drillProject = ref('')
 const drillTaskId = ref('')
 const drillStepId = ref('')
 
+/** Card summary co giãn chiều cao như chart tile (snap bước 20px). */
+const summaryHeight = ref(200)
+
 function loadPrefs(): void {
   try {
     const raw = localStorage.getItem(PREFS_KEY)
@@ -58,6 +62,9 @@ function loadPrefs(): void {
     if (p.scope === 'all' || p.scope === 'project') scope.value = p.scope
     if (typeof p.rangeDays === 'number' && (RANGE_OPTIONS as readonly number[]).includes(p.rangeDays)) {
       rangeDays.value = p.rangeDays
+    }
+    if (typeof p.summaryHeight === 'number' && p.summaryHeight >= 120) {
+      summaryHeight.value = snapChartHeight(p.summaryHeight)
     }
     if (Array.isArray(p.charts) && p.charts.length) {
       const parsed = p.charts.map(sanitizeChartConfig).filter((c): c is ChartConfig => !!c)
@@ -89,6 +96,7 @@ function persistPrefs(): void {
       JSON.stringify({
         scope: scope.value,
         rangeDays: rangeDays.value,
+        summaryHeight: summaryHeight.value,
         charts: charts.value,
       }),
     )
@@ -97,7 +105,7 @@ function persistPrefs(): void {
   }
 }
 
-watch([scope, rangeDays], persistPrefs)
+watch([scope, rangeDays, summaryHeight], persistPrefs)
 watch(charts, persistPrefs, { deep: true })
 
 // ── Toolbar options ──────────────────────────────────────────────────────────
@@ -177,16 +185,65 @@ function cardSeries(chart: ChartConfig): { labels: string[]; values: number[] } 
   }
 }
 
-// ── Card summary (min/max/avg — tách khỏi bảng) ──────────────────────────────
+// ── Card summary (min/max/avg — table, co giãn được) ─────────────────────────
 const entryStats = computed(() => activeResult.value?.totals ?? null)
 
-/** Phân bố tổng token GIỮA các group (task nhẹ nhất/nặng nhất/trung bình). */
-const groupSpread = computed(() => {
-  if (!rows.value.length) return null
-  const totals = rows.value.map((g) => g.totalTokens)
-  const sum = totals.reduce((s, v) => s + v, 0)
-  return { min: Math.min(...totals), max: Math.max(...totals), avg: sum / totals.length }
+/** spread min/max/avg từ danh sách giá trị (null khi rỗng). */
+function spreadOf(values: number[]): { min: number; max: number; avg: number } | null {
+  if (!values.length) return null
+  const sum = values.reduce((s, v) => s + v, 0)
+  return { min: Math.min(...values), max: Math.max(...values), avg: sum / values.length }
+}
+
+/** Tổng token mỗi group của dimension đang xem (task nhẹ/nặng/trung bình). */
+const groupSpread = computed(() => spreadOf(rows.value.map((g) => g.totalTokens)))
+
+/** Tổng token mỗi step — query summary riêng, luôn có bất kể chart nào. */
+const stepSpread = computed(() => spreadOf((stepSummary.value?.groups ?? []).map((g) => g.totalTokens)))
+
+/** Card summary co giãn chiều cao như chart tile (snap bước 20px). */
+const summaryDragPreview = ref<number | null>(null)
+const summaryRef = ref<HTMLElement | null>(null)
+const summaryHandleRef = ref<HTMLElement | null>(null)
+let stopSummaryDrag: (() => void) | null = null
+
+function onSummaryResizeStart(down: PointerEvent) {
+  const handle = summaryHandleRef.value
+  if (!handle || stopSummaryDrag) return
+  const startY = down.clientY
+  const startHeight = summaryHeight.value
+  try {
+    handle.setPointerCapture?.(down.pointerId)
+  } catch {
+    // PointerId tổng hợp có thể bị từ chối — window listener là nguồn sự thật.
+  }
+  const onMove = (move: PointerEvent) => {
+    summaryDragPreview.value = snapChartHeight(startHeight + (move.clientY - startY))
+  }
+  const onUp = () => {
+    stopSummaryDrag?.()
+    const final = summaryDragPreview.value
+    summaryDragPreview.value = null
+    if (final && final !== summaryHeight.value) summaryHeight.value = final
+  }
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+  window.addEventListener('pointercancel', onUp)
+  stopSummaryDrag = () => {
+    stopSummaryDrag = null
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    window.removeEventListener('pointercancel', onUp)
+  }
+}
+
+onBeforeUnmount(() => {
+  stopSummaryDrag?.()
 })
+
+const summaryStyle = computed(() => ({
+  height: `${summaryDragPreview.value ?? summaryHeight.value}px`,
+}))
 
 // ── Drill-down ───────────────────────────────────────────────────────────────
 const drillable = computed(() => {
@@ -253,24 +310,36 @@ function onRowClick(group: { key?: string }): void {
   drillTo(drillable.value, key)
 }
 
+/** Offset thời lượng so với avg: "+1h 2m" / "−30s" / "±0". */
+function signedDuration(offsetMs: number): string {
+  if (!Number.isFinite(offsetMs) || Math.abs(offsetMs) < 500) return '±0'
+  return `${offsetMs > 0 ? '+' : '−'}${formatDuration(Math.abs(offsetMs))}`
+}
+
 // ── Load ─────────────────────────────────────────────────────────────────────
+/** Summary token theo step — query riêng, độc lập groupBy của các chart. */
+const stepSummary = ref<UsageStatsResult | null>(null)
+
 async function load(): Promise<void> {
   loading.value = true
   error.value = ''
   const from =
     rangeDays.value > 0 ? new Date(Date.now() - rangeDays.value * DAY_MS).toISOString() : undefined
+  const query = {
+    project: effectiveProject.value || undefined,
+    task: drillTaskId.value || undefined,
+    step: drillStepId.value || undefined,
+    from,
+  }
   try {
-    const replies = await Promise.all(
-      charts.value.map((chart) =>
-        fetchUsageStats({
-          project: effectiveProject.value || undefined,
-          task: drillTaskId.value || undefined,
-          step: drillStepId.value || undefined,
-          from,
-          groupBy: chart.groupBy,
-        }).then((r) => [chart.id, r] as const),
+    // Fetch step summary trước, charts sau — test dùng lastUrl() vẫn trúng chart cuối.
+    const [stepRes, ...replies] = await Promise.all([
+      fetchUsageStats({ ...query, groupBy: 'step' }).catch(() => null),
+      ...charts.value.map((chart) =>
+        fetchUsageStats({ ...query, groupBy: chart.groupBy }).then((r) => [chart.id, r] as const),
       ),
-    )
+    ])
+    stepSummary.value = stepRes
     results.value = Object.fromEntries(replies)
   } catch (e) {
     error.value = String((e as Error)?.message || e)
@@ -370,42 +439,69 @@ onMounted(() => {
       </button>
     </nav>
 
-    <!-- Card summary: min/max/avg per-entry + phân bố giữa các group -->
-    <section v-if="activeResult" class="statistics-summary-card">
-      <div class="summary-block">
-        <span class="summary-block-title">{{ t('statistics.summary.overview') }}</span>
-        <span class="summary-line">
-          {{ t('statistics.summary.groups', { n: formatNumber(activeResult.totals.entries, activeNumberFormat) }) }}
-          · {{ t('statistics.groupBy.' + (activeChart?.groupBy ?? 'task')) }}
+    <!-- Card summary: table min/max/avg — đơn vị ghi ở nhãn, co giãn được -->
+    <section v-if="activeResult" ref="summaryRef" class="statistics-summary-card" :style="summaryStyle">
+      <header class="summary-card-head">
+        <h3>📋 {{ t('statistics.summary.title') }}</h3>
+        <span class="muted">
+          {{ t('statistics.summary.overviewLine', {
+            entries: formatNumber(activeResult.totals.entries, activeNumberFormat),
+            dimension: t('statistics.groupBy.' + (activeChart?.groupBy ?? 'task')),
+            tokens: formatNumber(activeResult.totals.totalTokens, activeNumberFormat),
+            jobs: formatNumber(activeResult.totals.jobs, activeNumberFormat),
+          }) }}
         </span>
-        <span class="summary-line">
-          {{ t('statistics.totals.tokens') }}:
-          <strong>{{ formatNumber(activeResult.totals.totalTokens, activeNumberFormat) }}</strong>
-          · {{ t('statistics.totals.jobs') }}:
-          <strong>{{ formatNumber(activeResult.totals.jobs, activeNumberFormat) }}</strong>
-        </span>
+      </header>
+      <div class="summary-card-body">
+        <table class="summary-table">
+          <thead>
+            <tr>
+              <th>{{ t('statistics.summary.colMetric') }}</th>
+              <th class="num">🟢 {{ t('statistics.summary.colMin') }}</th>
+              <th class="num">🔵 {{ t('statistics.summary.colAvg') }}</th>
+              <th class="num">🔴 {{ t('statistics.summary.colMax') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="entryStats">
+              <td class="summary-metric">
+                🧮 {{ t('statistics.summary.rowEntryTokens') }}
+                <span class="summary-hint">{{ t('statistics.summary.entryHint') }}</span>
+              </td>
+              <td class="num is-below">{{ formatNumber(entryStats.minTotalTokens, activeNumberFormat) }}</td>
+              <td class="num is-avg">{{ formatNumber(entryStats.avgTotalTokens, activeNumberFormat) }}</td>
+              <td class="num is-above">{{ formatNumber(entryStats.maxTotalTokens, activeNumberFormat) }}</td>
+            </tr>
+            <tr v-if="entryStats">
+              <td class="summary-metric">⏱️ {{ t('statistics.summary.rowEntryDuration') }}</td>
+              <td class="num is-below">{{ formatDuration(entryStats.minDurationMs ?? 0) }}</td>
+              <td class="num is-avg">{{ formatDuration(entryStats.avgDurationMs ?? 0) }}</td>
+              <td class="num is-above">{{ formatDuration(entryStats.maxDurationMs ?? 0) }}</td>
+            </tr>
+            <tr v-if="groupSpread">
+              <td class="summary-metric">
+                🧩 {{ t('statistics.summary.rowGroupTokens', { dimension: t('statistics.groupBy.' + (activeChart?.groupBy ?? 'task')) }) }}
+              </td>
+              <td class="num is-below">{{ formatNumber(groupSpread.min, activeNumberFormat) }}</td>
+              <td class="num is-avg">{{ formatNumber(groupSpread.avg, activeNumberFormat) }}</td>
+              <td class="num is-above">{{ formatNumber(groupSpread.max, activeNumberFormat) }}</td>
+            </tr>
+            <tr v-if="stepSpread">
+              <td class="summary-metric">🪜 {{ t('statistics.summary.rowStepTokens') }}</td>
+              <td class="num is-below">{{ formatNumber(stepSpread.min, activeNumberFormat) }}</td>
+              <td class="num is-avg">{{ formatNumber(stepSpread.avg, activeNumberFormat) }}</td>
+              <td class="num is-above">{{ formatNumber(stepSpread.max, activeNumberFormat) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <div v-if="entryStats" class="summary-block">
-        <span class="summary-block-title">{{ t('statistics.summary.perEntry') }}</span>
-        <span class="summary-line">
-          {{ t('statistics.stats.minTokens') }}: <strong>{{ formatNumber(entryStats.minTotalTokens, activeNumberFormat) }}</strong>
-          · {{ t('statistics.stats.maxTokens') }}: <strong>{{ formatNumber(entryStats.maxTotalTokens, activeNumberFormat) }}</strong>
-          · {{ t('statistics.stats.avgTokens') }}: <strong>{{ formatNumber(entryStats.avgTotalTokens, activeNumberFormat) }}</strong>
-        </span>
-        <span class="summary-line">
-          {{ t('statistics.stats.minDuration') }}: <strong>{{ formatDuration(entryStats.minDurationMs ?? 0) }}</strong>
-          · {{ t('statistics.stats.maxDuration') }}: <strong>{{ formatDuration(entryStats.maxDurationMs ?? 0) }}</strong>
-          · {{ t('statistics.stats.avgDuration') }}: <strong>{{ formatDuration(entryStats.avgDurationMs ?? 0) }}</strong>
-        </span>
-      </div>
-      <div v-if="groupSpread" class="summary-block">
-        <span class="summary-block-title">{{ t('statistics.summary.betweenGroups') }}</span>
-        <span class="summary-line">
-          {{ t('statistics.stats.minTokens') }}: <strong>{{ formatNumber(groupSpread.min, activeNumberFormat) }}</strong>
-          · {{ t('statistics.stats.maxTokens') }}: <strong>{{ formatNumber(groupSpread.max, activeNumberFormat) }}</strong>
-          · {{ t('statistics.stats.avgTokens') }}: <strong>{{ formatNumber(groupSpread.avg, activeNumberFormat) }}</strong>
-        </span>
-      </div>
+      <span
+        ref="summaryHandleRef"
+        class="summary-resize-handle"
+        role="separator"
+        :title="t('statistics.settings.resizeHint')"
+        @pointerdown="onSummaryResizeStart"
+      />
     </section>
 
     <div class="statistics-charts">
@@ -448,7 +544,13 @@ onMounted(() => {
             <th class="num">{{ t('statistics.table.cacheRead') }}</th>
             <th class="num">{{ t('statistics.table.cacheWrite') }}</th>
             <th class="num">{{ t('statistics.table.total') }}</th>
+            <th class="num">🟢 {{ t('statistics.table.minTok') }}</th>
+            <th class="num">🔵 {{ t('statistics.table.avgTok') }}</th>
+            <th class="num">🔴 {{ t('statistics.table.maxTok') }}</th>
             <th class="num">{{ t('statistics.table.duration') }}</th>
+            <th class="num">🟢 {{ t('statistics.table.minDur') }}</th>
+            <th class="num">🔵 {{ t('statistics.table.avgDur') }}</th>
+            <th class="num">🔴 {{ t('statistics.table.maxDur') }}</th>
             <th class="num">{{ t('statistics.table.lastTs') }}</th>
           </tr>
         </thead>
@@ -470,7 +572,25 @@ onMounted(() => {
             <td class="num">{{ formatNumber(group.cacheReadTokens, activeNumberFormat) }}</td>
             <td class="num">{{ formatNumber(group.cacheWriteTokens, activeNumberFormat) }}</td>
             <td class="num">{{ formatNumber(group.totalTokens, activeNumberFormat) }}</td>
+            <td class="num is-below">
+              {{ formatNumber(group.minTotalTokens, activeNumberFormat) }}
+              <span class="offset">{{ signedNumber(group.minTotalTokens - group.avgTotalTokens, activeNumberFormat) }}</span>
+            </td>
+            <td class="num is-avg">{{ formatNumber(group.avgTotalTokens, activeNumberFormat) }}</td>
+            <td class="num is-above">
+              {{ formatNumber(group.maxTotalTokens, activeNumberFormat) }}
+              <span class="offset">{{ signedNumber(group.maxTotalTokens - group.avgTotalTokens, activeNumberFormat) }}</span>
+            </td>
             <td class="num">{{ formatDuration(group.durationMs) }}</td>
+            <td class="num is-below">
+              {{ formatDuration(group.minDurationMs ?? 0) }}
+              <span class="offset">{{ signedDuration((group.minDurationMs ?? 0) - (group.avgDurationMs ?? 0)) }}</span>
+            </td>
+            <td class="num is-avg">{{ formatDuration(group.avgDurationMs ?? 0) }}</td>
+            <td class="num is-above">
+              {{ formatDuration(group.maxDurationMs ?? 0) }}
+              <span class="offset">{{ signedDuration((group.maxDurationMs ?? 0) - (group.avgDurationMs ?? 0)) }}</span>
+            </td>
             <td class="num">{{ formatTs(group.lastTs) }}</td>
           </tr>
         </tbody>
@@ -612,36 +732,105 @@ onMounted(() => {
 .statistics-crumb-x {
   opacity: 0.7;
 }
-/* Card summary — thông tin min/max/avg tách khỏi bảng. */
+/* Card summary — table min/max/avg, co giãn chiều cao như chart tile. */
 .statistics-summary-card {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
+  position: relative;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel);
-  padding: 0.6rem 1rem;
+  padding: 0.5rem 1rem 0.75rem;
   margin: 0.5rem 0 0.25rem;
-}
-.summary-block {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  min-width: 14rem;
+  min-height: 120px;
+  overflow: hidden;
 }
-.summary-block-title {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
+.summary-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  flex-shrink: 0;
 }
-.summary-line {
+.summary-card-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+.summary-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.summary-table {
+  width: 100%;
   font-size: 0.82rem;
-  color: var(--text-muted);
+  border-collapse: collapse;
 }
-.summary-line strong {
-  color: var(--text);
+.summary-table th,
+.summary-table td {
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+.summary-table th {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.summary-table .num {
+  text-align: right;
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.summary-metric {
+  color: var(--text);
+}
+.summary-hint {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+.summary-resize-handle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 2;
+  width: 14px;
+  height: 14px;
+  cursor: ns-resize;
+  border-right: 3px solid var(--muted);
+  border-bottom: 3px solid var(--muted);
+  border-bottom-right-radius: 3px;
+  opacity: 0.65;
+  touch-action: none;
+}
+.summary-resize-handle:hover {
+  opacity: 1;
+  border-color: var(--accent);
+}
+/* Màu highlight: dưới avg (xanh) / avg (accent) / trên avg (đỏ cam). */
+.statistics-table .is-below,
+.summary-table .is-below {
+  color: #2ecc71;
+}
+.statistics-table .is-avg,
+.summary-table .is-avg {
+  color: var(--accent);
+}
+.statistics-table .is-above,
+.summary-table .is-above {
+  color: #ff8c69;
+}
+.statistics-table .offset {
+  display: inline-block;
+  margin-left: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  opacity: 0.85;
 }
 /* Gallery 4 cột — tile mặc định span 2 (thuộc tính grid-column do ChartTile set). */
 .statistics-charts {

@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import Chart from 'chart.js/auto'
+import Chart, { type ChartConfiguration } from 'chart.js/auto'
+import ChartDataLabels from 'chartjs-plugin-datalabels'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { formatNumber, type NumberFormat } from '../lib/format'
 import type { ChartKind, ChartStyleConfig } from '../lib/chartConfig'
+
+// Nhãn trên section pie (giá trị/phần trăm) — bật/tắt theo styleConfig.
+Chart.register(ChartDataLabels)
 
 /**
  * Wrapper chart cho statistics (issue #231 quyết định 1): nhận DATA + config,
@@ -53,13 +57,16 @@ function tickFormat(value: number | string): string {
 function buildOptions() {
   const colors = themeColors()
   const isPie = props.chartType === 'pie'
+  const showLabels = isPie && (props.styleConfig?.pieShowLabels ?? true)
+  const showSliceValues = isPie && (props.styleConfig?.pieShowValues ?? false)
+  const showSlicePercent = isPie && (props.styleConfig?.pieShowPercent ?? false)
   return {
     responsive: true,
     maintainAspectRatio: false,
     animation: false as const,
     plugins: {
       legend: {
-        display: isPie,
+        display: showLabels,
         position: 'right' as const,
         labels: { color: colors.muted, boxWidth: 12, font: { size: 11 } },
       },
@@ -68,6 +75,24 @@ function buildOptions() {
         text: props.title,
         color: colors.text,
         font: { size: 13 },
+      },
+      // chartjs-plugin-datalabels: chỉ bật trên pie theo checkbox setting;
+      // bar/line tắt hẳn để không dán số lên cột.
+      datalabels: {
+        display: showSliceValues || showSlicePercent,
+        color: '#fff',
+        textStrokeColor: colors.panel,
+        textStrokeWidth: 2,
+        font: { size: 10, weight: 600 },
+        formatter: (value: number, ctx: { dataset: { data: number[] } }) => {
+          const total = (ctx.dataset.data || []).reduce((s, v) => s + v, 0)
+          const parts: string[] = []
+          if (showSliceValues) parts.push(tickFormat(value))
+          if (showSlicePercent && total > 0) {
+            parts.push(`${((value / total) * 100).toFixed(1)}%`)
+          }
+          return parts.join('\n')
+        },
       },
       tooltip: {
         callbacks: {
@@ -156,7 +181,9 @@ function buildChartConfig() {
 function ensureChart() {
   if (!canvasRef.value || !hasData.value) return
   destroyChart()
-  chart = new Chart(canvasRef.value, buildChartConfig())
+  // Plugin datalabels không nằm trong type options của chart.js → cast qua
+  // ChartConfiguration thay vì nới type của builder.
+  chart = new Chart(canvasRef.value, buildChartConfig() as unknown as ChartConfiguration)
 }
 
 function destroyChart() {
@@ -171,7 +198,7 @@ onMounted(() => {
   // Theme shell đổi `data-theme` trên <html> — vẽ lại theo màu mới.
   themeObserver = new MutationObserver(() => {
     if (chart) {
-      chart.options = buildOptions()
+      chart.options = buildOptions() as unknown as typeof chart.options
       chart.update()
     }
   })

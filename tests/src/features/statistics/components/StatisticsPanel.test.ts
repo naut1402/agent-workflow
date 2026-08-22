@@ -6,11 +6,14 @@ import { mountWithI18n } from '../../../helpers/i18n'
 // Panel mount ChartCard → chart.js cần canvas 2d (jsdom không có) — mock chart.js/auto.
 vi.mock('chart.js/auto', () => ({
   default: class FakeChart {
+    static register(..._plugins: unknown[]) {}
     constructor(_canvas: unknown, _config: unknown) {}
     destroy() {}
     update() {}
   },
 }))
+
+vi.mock('chartjs-plugin-datalabels', () => ({ default: { id: 'datalabels' } }))
 
 function usageGroup(key: string, totalTokens: number) {
   return {
@@ -86,7 +89,7 @@ afterEach(() => {
 })
 
 describe('StatisticsPanel — gallery đa chart + summary card', () => {
-  it('mount mặc định 1 chart theo task → summary card có min/max/avg, bảng KHÔNG còn cột stats', async () => {
+  it('mount mặc định 1 chart theo task → summary table (entry/step/unit rõ) + bảng chi tiết có cột offset', async () => {
     mockStats(statsBody(['TB1', 'TA1']))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -97,20 +100,27 @@ describe('StatisticsPanel — gallery đa chart + summary card', () => {
     expect(q.get('project')).toBe('p1')
     expect(q.get('groupBy')).toBe('task')
     expect(q.get('from')).toBeTruthy()
+    // Summary theo step luôn được fetch kèm.
+    expect(urlsContain('groupBy=step')).toBe(true)
 
     expect(wrapper.findAll('.chart-tile')).toHaveLength(1)
-    // Card summary hiển thị mốc per-entry.
+    // Summary table: 4 hàng — entry tokens (kèm hint giải thích), entry duration,
+    // mỗi dimension, mỗi step; đơn vị ghi ở header cột chỉ số.
     const summary = wrapper.find('.statistics-summary-card')
-    expect(summary.exists()).toBe(true)
-    expect(summary.text()).toContain('250')
-    expect(summary.text()).toContain('500')
-    // Bảng không còn cột min/max/avg (đã dời vào card).
+    expect(summary.find('.summary-table').exists()).toBe(true)
+    expect(summary.text()).toContain('Tổng token mỗi lần ghi nhận')
+    expect(summary.text()).toContain('1 dòng usage log')
+    expect(summary.text()).toContain('Tổng token mỗi Task')
+    expect(summary.text()).toContain('Tổng token mỗi step')
+    expect(summary.text()).toContain('Chỉ số (tokens)')
+    // Bảng chi tiết có cột min/max/avg (prefix emoji) + span offset.
     const headers = wrapper.findAll('.statistics-table thead th').map((th) => th.text())
-    expect(headers).not.toContain('Min thời lượng')
-    expect(headers).toContain('Total')
+    expect(headers.some((h) => h.includes('Min tok'))).toBe(true)
+    expect(headers.some((h) => h.includes('Max tok'))).toBe(true)
+    expect(wrapper.find('.statistics-table tbody .offset').exists()).toBe(true)
   })
 
-  it('định dạng số theo chart: compact "25.0K" → full "25,000" qua dialog settings', async () => {
+  it('định dạng số theo chart: compact "25.00K" → full "25,000" qua dialog settings', async () => {
     mockStats(statsBody(['TB1', 'TA1']))
     vi.stubGlobal('fetch', fetchMock)
 

@@ -60,8 +60,12 @@ test('statistics mode: gallery đa chart + settings + resize (capture)', async (
   await expect(page.locator('.statistics-table tbody tr')).toHaveCount(2, { timeout: 10_000 })
   await expect(page.locator('.statistics-table tbody tr').first()).toContainText('STAT-1')
 
-  // Card summary (min/max/avg per-entry + giữa các group) hiển thị.
-  await expect(page.locator('.statistics-summary-card')).toBeVisible()
+  // Card summary dạng table: min/max/avg theo entry + dimension + step.
+  const summaryCard = page.locator('.statistics-summary-card')
+  await expect(summaryCard).toBeVisible()
+  await expect(summaryCard.locator('.summary-table')).toBeVisible()
+  await expect(summaryCard).toContainText('Tổng token mỗi step')
+  await expect(summaryCard).toContainText('Chỉ số (tokens)')
 
   // chart.js vẽ canvas trong card — chart.js vẽ có dữ liệu thì canvas có kích thước thật.
   const canvas = page.locator('.chart-card-body canvas').first()
@@ -73,18 +77,19 @@ test('statistics mode: gallery đa chart + settings + resize (capture)', async (
     })
     .toBeGreaterThan(100)
 
-  // Action group MỘT cụm đi theo con trỏ: ẩn mặc định → hiện + đổi vị trí theo
-  // pointermove → ẩn khi rời chart. Nhóm chứa settings/remove/zoom.
+  // Action group MỘT cụm cố định GÓC TRÊN BÊN PHẢI: ẩn mặc định, hover chart
+  // thì hiện. Nhóm chứa settings/remove/zoom.
   const tile = page.locator('.chart-tile').first()
   const actions = tile.locator('.chart-tile-actions')
   await expect(actions).toHaveCSS('opacity', '0')
   const tileBox = (await tile.boundingBox())!
-  await page.mouse.move(tileBox.x + tileBox.width * 0.3, tileBox.y + 40)
+  await page.mouse.move(tileBox.x + tileBox.width * 0.5, tileBox.y + 60)
   await expect(actions).toHaveCSS('opacity', '1')
-  const pos1 = await actions.evaluate((el) => el.style.left + '|' + el.style.top)
-  await page.mouse.move(tileBox.x + tileBox.width * 0.8, tileBox.y + 120)
-  const pos2 = await actions.evaluate((el) => el.style.left + '|' + el.style.top)
-  expect(pos1).not.toBe(pos2)
+  // Group neo góc trên-phải: không đổi vị trí khi con trỏ di chuyển trong tile.
+  const pos1 = await actions.evaluate((el) => `${el.style.top}|${el.style.right}`)
+  await page.mouse.move(tileBox.x + tileBox.width * 0.2, tileBox.y + 150)
+  const pos2 = await actions.evaluate((el) => `${el.style.top}|${el.style.right}`)
+  expect(pos1).toBe(pos2)
   await expect(tile.locator('button[title="Phóng to"]')).toBeVisible()
   await page.mouse.move(tileBox.x - 40, tileBox.y - 40)
   await expect(actions).toHaveCSS('opacity', '0')

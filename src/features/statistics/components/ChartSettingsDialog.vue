@@ -189,6 +189,32 @@ function resetDefaults() {
 
       <div v-else class="chart-settings-field">
         <span>{{ t('statistics.settings.pieColors') }}</span>
+        <div class="chart-settings-toggles">
+          <label class="chart-settings-toggle">
+            <input
+              type="checkbox"
+              :checked="model.style.pieShowLabels ?? true"
+              @change="patchStyle({ pieShowLabels: ($event.target as HTMLInputElement).checked })"
+            />
+            {{ t('statistics.settings.pieShowLabels') }}
+          </label>
+          <label class="chart-settings-toggle">
+            <input
+              type="checkbox"
+              :checked="model.style.pieShowValues ?? false"
+              @change="patchStyle({ pieShowValues: ($event.target as HTMLInputElement).checked })"
+            />
+            {{ t('statistics.settings.pieShowValues') }}
+          </label>
+          <label class="chart-settings-toggle">
+            <input
+              type="checkbox"
+              :checked="model.style.pieShowPercent ?? false"
+              @change="patchStyle({ pieShowPercent: ($event.target as HTMLInputElement).checked })"
+            />
+            {{ t('statistics.settings.pieShowPercent') }}
+          </label>
+        </div>
         <ul class="chart-settings-colors">
           <li v-for="(color, index) in model.style.pieColors ?? []" :key="index">
             <input
@@ -304,6 +330,22 @@ function resetDefaults() {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+.chart-settings-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+.chart-settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.chart-settings-toggle input {
+  accent-color: var(--accent);
 }
 .chart-settings-colors {
   list-style: none;

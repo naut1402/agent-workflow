@@ -30,6 +30,12 @@ export interface ChartStyleConfig {
   color?: string
   /** Bảng màu section pie (hex). */
   pieColors?: string[]
+  /** Pie: hiện nhãn section (legend). */
+  pieShowLabels?: boolean
+  /** Pie: hiện giá trị trên section. */
+  pieShowValues?: boolean
+  /** Pie: hiện phần trăm trên section. */
+  pieShowPercent?: boolean
 }
 
 export const DEFAULT_CHART_STYLE: ChartStyleConfig = {
@@ -49,6 +55,9 @@ export const DEFAULT_CHART_STYLE: ChartStyleConfig = {
     '#34495E',
     '#FF6E00',
   ],
+  pieShowLabels: true,
+  pieShowValues: false,
+  pieShowPercent: false,
 }
 
 /** Giới hạn chiều cao chart (px) — width bám panel. */
