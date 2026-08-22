@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono'
 import type { HonoEnv } from '../types.js'
-import type { RateLimitConfig } from '../../../features/settings/schemas/security.js'
+import type { RateLimitConfig, RateLimitRouteConfig } from '../../../features/settings/schemas/security.js'
 
 interface Bucket {
   count: number
@@ -18,7 +18,7 @@ export function matchRateLimitGroup(
   path: string,
   config: RateLimitConfig,
 ): { windowMs: number; max: number; groupId: string } {
-  let best: { pattern: string; windowMs: number; max: number } | null = null
+  let best: RateLimitRouteConfig | null = null
   for (const r of config.routes) {
     if (path.startsWith(r.pattern) && (!best || r.pattern.length > best.pattern.length)) best = r
   }

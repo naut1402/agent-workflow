@@ -136,9 +136,10 @@ export class SettingsController extends AbstractController {
   async updateSecurity() {
     const b = await this.parseBody()
     if (!b.ok) return this.badRequest('invalid JSON')
+    const current = loadSecurityConfig()
     const next = parseSecurityConfig({
-      ...loadSecurityConfig(),
-      ...b.value,
+      rateLimit: { ...current.rateLimit, ...(b.value?.rateLimit ?? {}) },
+      cors: { ...current.cors, ...(b.value?.cors ?? {}) },
     })
     const saved = saveSecurityConfig(next)
     emitAudit({ op: 'update', entity: 'security', identifier: 'config', projectId: null })

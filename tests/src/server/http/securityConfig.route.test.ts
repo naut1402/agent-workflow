@@ -55,6 +55,43 @@ describe('HTTP security-config', () => {
     expect((await get1.json()).config.rateLimit.enabled).toBe(true)
   })
 
+  test('partial PUT merges deep — does not drop nested rateLimit.routes/cors.allowedOrigins', async () => {
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+
+    await app.request('/api/security-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rateLimit: {
+          enabled: true,
+          windowMs: 5_000,
+          max: 3,
+          routes: [{ pattern: '/api/runner', windowMs: 1_000, max: 1 }],
+        },
+        cors: { enabled: true, allowedOrigins: ['https://allowed.example'], allowCredentials: true },
+      }),
+    })
+
+    const put = await app.request('/api/security-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rateLimit: { enabled: false } }),
+    })
+    expect(put.status).toBe(200)
+    const body = await put.json()
+    expect(body.config.rateLimit).toEqual({
+      enabled: false,
+      windowMs: 5_000,
+      max: 3,
+      routes: [{ pattern: '/api/runner', windowMs: 1_000, max: 1 }],
+    })
+    expect(body.config.cors).toEqual({
+      enabled: true,
+      allowedOrigins: ['https://allowed.example'],
+      allowCredentials: true,
+    })
+  })
+
   test('jwtEnabled reflects DASHBOARD_JWT_SECRET presence', async () => {
     process.env.DASHBOARD_JWT_SECRET = 'topsecret'
     const app = await createApp(createRegistryContext({ defaultRoot: null }))

@@ -178,7 +178,7 @@ export function createApiHandler(ctx: RegistryContext) {
             }
           }
           const authResult = await verifyJwtHeader(req.headers.authorization as string | undefined)
-          if (!authResult.ok) {
+          if (authResult.ok === false) {
             responsePreview = formatResponsePreview(
               Buffer.from(JSON.stringify({ error: authResult.error })),
               'application/json',

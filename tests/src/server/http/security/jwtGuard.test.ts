@@ -74,7 +74,7 @@ describe('verifyJwtHeader', () => {
     process.env.DASHBOARD_JWT_SECRET = 'topsecret'
     const result = await verifyJwtHeader(undefined)
     expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.status).toBe(401)
+    if (result.ok === false) expect(result.status).toBe(401)
   })
 
   test('malformed Authorization header variants → 401', async () => {
