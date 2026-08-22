@@ -10,6 +10,7 @@ import {
   resolveGithubTokensFromDashboard,
   resolveLoggingFromDashboard,
   resolveRecoveryFromDashboard,
+  resolveSecurityFromDashboard,
   type DashboardSettings,
 } from '../schemas/dashboardSettings.js'
 import {
@@ -24,6 +25,7 @@ import {
 import { parseLoggingConfig, type LoggingConfig } from '../../../core/log/loggingPrefs.js'
 import { invalidateLoggingPrefsCache } from '../../../core/log/loggingPrefsIo.js'
 import { parseRecoverySettings, type RecoverySettings } from '../schemas/recovery.js'
+import { DEFAULT_SECURITY_CONFIG, parseSecurityConfig, type SecurityConfig } from '../schemas/security.js'
 import { registryHome } from '../../../core/registry.js'
 
 export function dashboardSettingsFile(): string {
@@ -60,6 +62,7 @@ export function loadDashboardSettings(): DashboardSettings {
     githubTokens: { repos: [] },
     logging: parseLoggingConfig(undefined),
     recovery: parseRecoverySettings(undefined),
+    security: parseSecurityConfig(undefined),
   }
 }
 
@@ -134,5 +137,19 @@ export function saveRecoverySettings(config: RecoverySettings): RecoverySettings
   return resolveRecoveryFromDashboard(saved)
 }
 
+export function loadSecurityConfig(): SecurityConfig {
+  return resolveSecurityFromDashboard(loadDashboardSettings())
+}
+
+export function saveSecurityConfig(config: SecurityConfig): SecurityConfig {
+  const current = loadDashboardSettings()
+  const normalised = parseSecurityConfig(config)
+  const saved = saveDashboardSettings({
+    ...current,
+    security: normalised,
+  })
+  return resolveSecurityFromDashboard(saved)
+}
+
 // Re-export default shape for callers that only need the empty template.
-export { DEFAULT_DASHBOARD_SETTINGS }
+export { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SECURITY_CONFIG }

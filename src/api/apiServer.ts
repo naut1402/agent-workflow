@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Buffer } from 'node:buffer'
 import { Hono } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import type { HonoEnv, RegistryContext } from '../core/http/types.js'
 import { j, json } from '../core/http/responseHelper.js'
 import { dirnameFromImportMeta, resolvePath } from '../core/lib/fileHelper.js'
@@ -13,6 +14,15 @@ import {
   formatResponsePreview,
 } from '../core/log/schema.js'
 import { resolveTraceIdFromRequest, runWithTraceIdAsync } from '../core/log/traceContext.js'
+import { createJwtMiddleware, verifyJwtHeader } from '../core/http/security/jwtGuard.js'
+import {
+  createRateLimitMiddleware,
+  matchRateLimitGroup,
+  checkAndConsume,
+  resolveClientIp,
+} from '../core/http/security/rateLimiter.js'
+import { createCorsMiddleware, resolveCorsHeaders } from '../core/http/security/corsGuard.js'
+import { loadSecurityConfig } from '../features/settings/business/dashboardSettings.js'
 
 // ── API server (Hono app + Node bridge) ─────────────────────────────────────
 //
@@ -70,10 +80,19 @@ export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
     await next()
   })
 
+  // Thứ tự: CORS (preflight OPTIONS không kèm Authorization) → rate-limit (áp
+  // dụng bất kể đã auth chưa) → JWT. Cả 3 no-op mặc định (degrade-by-default).
+  app.use('/api/*', createCorsMiddleware(() => loadSecurityConfig().cors))
+  app.use('/api/*', createRateLimitMiddleware(() => loadSecurityConfig().rateLimit))
+  app.use('/api/*', createJwtMiddleware())
+
   await registerFeatureRoutes(app)
 
   app.notFound((c) => j(c, 404, { error: 'unknown endpoint' }))
-  app.onError((err, c) => j(c, 500, { error: String((err as any)?.message ?? err) }))
+  app.onError((err, c) => {
+    if (err instanceof HTTPException) return err.getResponse()
+    return j(c, 500, { error: String((err as any)?.message ?? err) })
+  })
 
   return app
 }
@@ -85,6 +104,8 @@ async function nodeToWebRequest(req: IncomingMessage, url: URL): Promise<Request
     if (Array.isArray(v)) for (const item of v) headers.append(k, item)
     else headers.set(k, String(v))
   }
+  // Ghi đè SAU khi copy header gốc — chống client tự set header trùng tên để giả mạo IP.
+  headers.set('x-dtd-client-ip', (req.socket as any)?.remoteAddress || 'unknown')
   const method = (req.method || 'GET').toUpperCase()
   let body: Buffer | undefined
   if (method !== 'GET' && method !== 'HEAD') {
@@ -132,6 +153,39 @@ export function createApiHandler(ctx: RegistryContext) {
         // Set early so clients can correlate even if the handler throws later.
         if (!res.headersSent) res.setHeader('X-Trace-Id', traceId)
         if (url.pathname.startsWith('/api/knowledge')) {
+          const security = loadSecurityConfig()
+          const corsHeaders = resolveCorsHeaders(req.headers.origin as string | undefined, security.cors)
+          if (corsHeaders) for (const [k, v] of Object.entries(corsHeaders)) res.setHeader(k, v)
+          if (security.cors.enabled && (req.method || 'GET').toUpperCase() === 'OPTIONS') {
+            res.statusCode = 204
+            res.end()
+            return true
+          }
+          if (security.rateLimit.enabled) {
+            const { windowMs, max, groupId } = matchRateLimitGroup(url.pathname, security.rateLimit)
+            const { allowed, retryAfterMs } = checkAndConsume(
+              `${groupId}:${resolveClientIp(req)}`,
+              windowMs,
+              max,
+              Date.now(),
+            )
+            if (!allowed) {
+              res.setHeader('Retry-After', String(Math.ceil(retryAfterMs / 1000)))
+              const body = JSON.stringify({ error: 'rate limit exceeded' })
+              responsePreview = formatResponsePreview(Buffer.from(body), 'application/json')
+              json(res, 429, { error: 'rate limit exceeded' })
+              return true
+            }
+          }
+          const authResult = await verifyJwtHeader(req.headers.authorization as string | undefined)
+          if (!authResult.ok) {
+            responsePreview = formatResponsePreview(
+              Buffer.from(JSON.stringify({ error: authResult.error })),
+              'application/json',
+            )
+            json(res, authResult.status, { error: authResult.error })
+            return true
+          }
           const root = ctx.resolveProjectRoot(projectId)
           if (!root) {
             const body = JSON.stringify({ error: 'unknown project', project: projectId })
