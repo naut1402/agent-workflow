@@ -45,10 +45,11 @@ beforeEach(() => {
 })
 
 describe('parseLoggingConfig', () => {
-  test('defaults audit/request/jobs on; events off; usage on', () => {
+  test('defaults audit/request/jobs on; events off; usage on; driver=file', () => {
     expect(parseLoggingConfig(undefined)).toEqual({
       showLogsTab: true,
       types: { audit: true, request: true, jobs: true, events: false, usage: true },
+      driver: 'file',
     })
   })
 
@@ -61,6 +62,7 @@ describe('parseLoggingConfig', () => {
     ).toEqual({
       showLogsTab: false,
       types: { audit: false, request: true, jobs: false, events: false, usage: true },
+      driver: 'file',
     })
     expect(
       parseLoggingConfig({
@@ -69,7 +71,15 @@ describe('parseLoggingConfig', () => {
     ).toEqual({
       showLogsTab: true,
       types: { audit: true, request: true, jobs: true, events: true, usage: false },
+      driver: 'file',
     })
+  })
+
+  test('driver=sqlite is accepted; anything else falls back to file', () => {
+    expect(parseLoggingConfig({ driver: 'sqlite' }).driver).toBe('sqlite')
+    expect(parseLoggingConfig({ driver: 'postgres' }).driver).toBe('file')
+    expect(parseLoggingConfig({ driver: '' }).driver).toBe('file')
+    expect(parseLoggingConfig({}).driver).toBe('file')
   })
 })
 
