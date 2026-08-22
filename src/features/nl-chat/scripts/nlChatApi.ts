@@ -1,7 +1,8 @@
 import { apiGet, apiPost } from '../../../core/http/client'
+import type { NlChatEntityType } from '../schemas/nlChat'
 
 export async function startNlChat(
-  input: { entityType?: 'task' | 'pipeline' | 'agent'; message: string; runnerId?: string },
+  input: { entityType?: NlChatEntityType; message: string; runnerId?: string },
   projectId?: string,
 ) {
   return apiPost('/api/nl-chat/sessions', input, { query: { project: projectId } })
