@@ -3,7 +3,9 @@ import { parseAutoscanConfig } from './schemas/autoscan.js'
 import { parseGithubTokensConfig } from './schemas/githubTokens.js'
 import { parseLoggingConfig } from '../../core/log/loggingPrefs.js'
 import { parseRecoverySettings } from './schemas/recovery.js'
+import { parseSecurityConfig } from './schemas/security.js'
 import { emitAudit } from '../../core/log/store.js'
+import { hasJwtSecret } from '../../core/http/security/jwtGuard.js'
 import {
   loadAutoscanConfig,
   saveAutoscanConfig,
@@ -14,6 +16,8 @@ import {
   saveLoggingConfig,
   loadRecoverySettings,
   saveRecoverySettings,
+  loadSecurityConfig,
+  saveSecurityConfig,
   browseDirectory,
 } from './business/index.js'
 
@@ -123,5 +127,22 @@ export class SettingsController extends AbstractController {
     const saved = saveRecoverySettings(next)
     emitAudit({ op: 'update', entity: 'recovery', identifier: 'config', projectId: null })
     return this.ok({ config: saved })
+  }
+
+  getSecurity() {
+    return this.ok({ config: loadSecurityConfig(), jwtEnabled: hasJwtSecret() })
+  }
+
+  async updateSecurity() {
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON')
+    const current = loadSecurityConfig()
+    const next = parseSecurityConfig({
+      rateLimit: { ...current.rateLimit, ...(b.value?.rateLimit ?? {}) },
+      cors: { ...current.cors, ...(b.value?.cors ?? {}) },
+    })
+    const saved = saveSecurityConfig(next)
+    emitAudit({ op: 'update', entity: 'security', identifier: 'config', projectId: null })
+    return this.ok({ config: saved, jwtEnabled: hasJwtSecret() })
   }
 }

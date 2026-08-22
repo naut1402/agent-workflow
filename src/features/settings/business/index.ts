@@ -63,6 +63,8 @@ export {
   saveLoggingConfig,
   loadRecoverySettings,
   saveRecoverySettings,
+  loadSecurityConfig,
+  saveSecurityConfig,
   loadDashboardSettings,
   saveDashboardSettings,
   autoscanFile,

@@ -10,7 +10,7 @@ const config = {
   parserPreset: {
     parserOpts: {
       headerPattern:
-        /^(?:\[([A-Za-z0-9][A-Za-z0-9-]*)\]\s)?(feat|fix|chore|docs|refactor|test)(?:\(([a-z0-9-]+)\))?(!)?:\s(.+)$/,
+        /^(?:\[([A-Za-z0-9][A-Za-z0-9_-]*)\]\s)?(feat|fix|chore|docs|refactor|test)(?:\(([a-z0-9-]+)\))?(!)?:\s(.+)$/,
       headerCorrespondence: ['ticket', 'type', 'scope', 'breaking', 'subject'],
       // Footer breaking — chuẩn Conventional Commits (cho release tool sau này).
       noteKeywords: ['BREAKING CHANGE', 'BREAKING-CHANGE'],
