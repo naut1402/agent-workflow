@@ -109,5 +109,13 @@ test('statistics mode: chart mermaid + bảng drill-down (capture)', async ({ pa
   await expect(page.locator('.statistics-table tbody tr')).toHaveCount(2, { timeout: 10_000 })
   await expectChartRendered()
 
+  // Toàn page thống kê scroll được — shell `.main-editor` overflow:hidden nên
+  // chính `.statistics-panel` phải là scroll container (viewport 720px cao).
+  const panel = page.locator('.statistics-panel')
+  const scrollable = await panel.evaluate((el) => el.scrollHeight > el.clientHeight)
+  expect(scrollable).toBe(true)
+  await panel.evaluate((el) => el.scrollTo(0, el.scrollHeight))
+  expect(await panel.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+
   await capturePage(page, testInfo, 'statistics')
 })

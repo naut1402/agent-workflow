@@ -450,6 +450,9 @@ onMounted(() => {
   min-height: 0;
   height: 100%;
   box-sizing: border-box;
+  /* Shell `.main-editor` overflow:hidden — panel tự scroll toàn trang
+     (header + chart + bảng vượt viewport thì cuộn dọc ở đây). */
+  overflow-y: auto;
 }
 .statistics-head h2 {
   margin: 0 0 0.25rem;
