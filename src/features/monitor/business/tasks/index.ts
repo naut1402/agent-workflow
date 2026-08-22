@@ -121,6 +121,7 @@ export async function collectTasks(root: string): Promise<any[]> {
       export_json: state?.export_json ?? false,
       archived: state?.archived ?? false,
       archived_at: state?.archived_at ?? null,
+      name: typeof state?.name === 'string' && state.name.trim() ? state.name.trim() : null,
       artifacts,
       subtasks,
       pipeline: cfg,

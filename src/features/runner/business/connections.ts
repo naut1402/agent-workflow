@@ -1,4 +1,4 @@
-import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
 import { spawnSync } from '../../../core/lib/processHelper.js'
 import { registryHome } from '../../../core/registry.js'
 import { listCustomCommands } from './commands.js'
@@ -26,6 +26,9 @@ const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
   { id: 'codex-cli', kind: 'local-console', label: 'Codex CLI', family: 'agent-cli' },
   { id: 'console-command', kind: 'local-console', label: 'Console command', family: 'console-command' },
   { id: 'anthropic-api', kind: 'ai-provider', label: 'Anthropic API', family: 'ai-api' },
+  { id: 'openai-api', kind: 'ai-provider', label: 'OpenAI API', family: 'ai-api' },
+  { id: 'gemini-api', kind: 'ai-provider', label: 'Gemini API', family: 'ai-api' },
+  { id: 'xai-api', kind: 'ai-provider', label: 'xAI API', family: 'ai-api' },
 ]
 
 function connectionsFile(): string {
@@ -91,18 +94,14 @@ function normaliseConnection(raw: any): Connection | null {
 export function saveConnections(store: ConnectionsStore): ConnectionsStore {
   const home = registryHome()
   mkdirSync(home, { recursive: true })
-  const file = connectionsFile()
-  const tmp = `${file}.tmp`
-  const payload = JSON.stringify(
+  writeTextFileAtomicSync(connectionsFile(), JSON.stringify(
     {
       version: store.version || CONNECTIONS_VERSION,
       connections: store.connections || [],
     },
     null,
     2,
-  )
-  writeTextFileSync(tmp, payload)
-  renameSync(tmp, file)
+  ))
   return store
 }
 

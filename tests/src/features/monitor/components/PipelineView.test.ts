@@ -2,19 +2,21 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import PipelineView from '@/features/monitor/components/PipelineView.vue'
-import { fetchJob, fetchJobs } from '../../../../../src/features/runner/scripts/runnerApi'
-import { runPipelineStep } from '../../../../../src/features/monitor/scripts/PipelineViewApi'
+import { fetchJob, fetchJobs, cancelJob } from '../../../../../src/features/runner/scripts/runnerApi'
+import { runPipelineStep, resetPipelineStep } from '../../../../../src/features/monitor/scripts/PipelineViewApi'
 
 vi.mock('@/features/monitor/scripts/PipelineViewApi', () => ({
   fetchFlowProfile: vi.fn(async () => ({ exists: false, profile: null })),
   saveFlowProfile: vi.fn(async () => ({})),
   patchTaskState: vi.fn(),
   runPipelineStep: vi.fn(),
+  resetPipelineStep: vi.fn(),
 }))
 
 vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchJob: vi.fn(),
   fetchJobs: vi.fn(async () => ({ jobs: [] })),
+  cancelJob: vi.fn(),
 }))
 
 // VueFlow's canvas (SVG getBBox / ResizeObserver) does not run under jsdom.
@@ -477,5 +479,281 @@ describe('PipelineView — artifact / knowledge graph nodes', () => {
     expect(runPipelineStep).not.toHaveBeenCalled()
     expect(document.body.querySelector('.modal-backdrop')).not.toBeNull()
     expect(document.body.textContent).toContain('Chạy step')
+  })
+})
+
+// The reset button itself lives inside PipelineNode.vue, which the VueFlow
+// stub above does not render — so these tests invoke `data.onReset()`
+// directly, the same callback PipelineNode's button calls on click.
+describe('PipelineView — reset step confirm', () => {
+  function nodeData(w: any, id: string) {
+    return w.findComponent({ name: 'VueFlow' }).props('nodes').find((n: any) => n.id === id).data
+  }
+
+  function findModalButton(text: string) {
+    return Array.from(document.body.querySelectorAll('.modal-actions button')).find((el) =>
+      el.textContent?.includes(text),
+    ) as HTMLElement | undefined
+  }
+
+  it('no cascade available (later steps have no artifacts) → single confirm button', async () => {
+    const task = {
+      task_id: 'RS1',
+      current_phase: 'reviewer',
+      hitl_pending: null,
+      artifacts: { 'phpstan.md': { exists: true } },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    nodeData(w, 'implementer').onReset()
+    await flushPromises()
+
+    expect(document.body.querySelector('.modal-backdrop')).not.toBeNull()
+    expect(findModalButton('Xoá cả các step sau')).toBeUndefined()
+    expect(findModalButton('Chỉ xoá step này')).toBeTruthy()
+  })
+
+  it('cascade available (a later step already has an artifact) → two confirm buttons', async () => {
+    const task = {
+      task_id: 'RS2',
+      current_phase: 'completed',
+      hitl_pending: null,
+      artifacts: { 'phpstan.md': { exists: true }, 'review.md': { exists: true } },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    nodeData(w, 'implementer').onReset()
+    await flushPromises()
+
+    expect(findModalButton('Chỉ xoá step này')).toBeTruthy()
+    expect(findModalButton('Xoá cả các step sau')).toBeTruthy()
+    expect(document.body.textContent).toContain('Review')
+  })
+
+  it('cascade delete warning lists files from every removed step, not just the clicked node', async () => {
+    // Regression for the bug found in review: the warning must include the
+    // downstream step's files too, or cascade-deleting silently removes more
+    // than what the user was shown.
+    const task = {
+      task_id: 'RS3',
+      current_phase: 'completed',
+      hitl_pending: null,
+      artifacts: {
+        'phpstan.md': { exists: true },
+        'review.md': { exists: true },
+        'test-spec.md': { exists: true },
+      },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    nodeData(w, 'implementer').onReset()
+    await flushPromises()
+
+    const warning = document.body.querySelector('.editor-error')?.textContent ?? ''
+    expect(warning).toContain('phpstan.md')
+    expect(warning).toContain('review.md')
+    expect(warning).toContain('test-spec.md')
+  })
+
+  it('"only this step" confirms with cascade: false', async () => {
+    vi.mocked(resetPipelineStep).mockResolvedValue({})
+    const task = {
+      task_id: 'RS4',
+      current_phase: 'completed',
+      hitl_pending: null,
+      artifacts: { 'phpstan.md': { exists: true }, 'review.md': { exists: true } },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    nodeData(w, 'implementer').onReset()
+    await flushPromises()
+    findModalButton('Chỉ xoá step này')!.click()
+    await flushPromises()
+
+    expect(resetPipelineStep).toHaveBeenCalledWith('RS4', { stepId: 'implementer', cascade: false }, undefined)
+  })
+
+  it('"delete later steps too" confirms with cascade: true', async () => {
+    vi.mocked(resetPipelineStep).mockResolvedValue({})
+    const task = {
+      task_id: 'RS5',
+      current_phase: 'completed',
+      hitl_pending: null,
+      artifacts: { 'phpstan.md': { exists: true }, 'review.md': { exists: true } },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    nodeData(w, 'implementer').onReset()
+    await flushPromises()
+    findModalButton('Xoá cả các step sau')!.click()
+    await flushPromises()
+
+    expect(resetPipelineStep).toHaveBeenCalledWith('RS5', { stepId: 'implementer', cascade: true }, undefined)
+  })
+
+  it('reset success shows a toast and asks the parent to refetch (hitl-action)', async () => {
+    // Listen via an `onHitlAction` attr instead of `wrapper.emitted()` — in
+    // this environment `emitted()` misses custom component emits (same
+    // pre-existing quirk documented in FloatingRunningJobsIcon.test.ts), while
+    // a plain listener prop is invoked directly by Vue's runtime emit.
+    vi.mocked(resetPipelineStep).mockResolvedValue({})
+    const onHitlAction = vi.fn()
+    const task = {
+      task_id: 'RS6',
+      current_phase: 'reviewer',
+      hitl_pending: null,
+      artifacts: { 'phpstan.md': { exists: true } },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mount(PipelineView, { props: { task, projectId: null }, attrs: { onHitlAction } })
+    await flushPromises()
+
+    nodeData(w, 'implementer').onReset()
+    await flushPromises()
+    findModalButton('Chỉ xoá step này')!.click()
+    await flushPromises()
+
+    expect(w.text()).toContain('Đã reset step')
+    expect(onHitlAction).toHaveBeenCalled()
+  })
+
+  it('shows an error chip on 409 (a job is already running)', async () => {
+    const err: any = new Error('step already running')
+    err.status = 409
+    vi.mocked(resetPipelineStep).mockRejectedValue(err)
+    const task = {
+      task_id: 'RS7',
+      current_phase: 'reviewer',
+      hitl_pending: null,
+      artifacts: { 'phpstan.md': { exists: true } },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    nodeData(w, 'implementer').onReset()
+    await flushPromises()
+    findModalButton('Chỉ xoá step này')!.click()
+    await flushPromises()
+
+    expect(w.find('.chip-err').exists()).toBe(true)
+    expect(w.find('.chip-err').text()).toContain('đang có step chạy')
+  })
+
+  it('shows a generic error chip on other failures', async () => {
+    vi.mocked(resetPipelineStep).mockRejectedValue(new Error('disk full'))
+    const task = {
+      task_id: 'RS8',
+      current_phase: 'reviewer',
+      hitl_pending: null,
+      artifacts: { 'phpstan.md': { exists: true } },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    nodeData(w, 'implementer').onReset()
+    await flushPromises()
+    findModalButton('Chỉ xoá step này')!.click()
+    await flushPromises()
+
+    expect(w.find('.chip-err').text()).toContain('disk full')
+  })
+
+  it('cancelling the reset confirm does not call the API', async () => {
+    const task = {
+      task_id: 'RS9',
+      current_phase: 'reviewer',
+      hitl_pending: null,
+      artifacts: { 'phpstan.md': { exists: true } },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    nodeData(w, 'implementer').onReset()
+    await flushPromises()
+    ;(document.body.querySelector('.modal-close') as HTMLElement).click()
+    await flushPromises()
+
+    expect(resetPipelineStep).not.toHaveBeenCalled()
+    expect(document.body.querySelector('.modal-backdrop')).toBeNull()
+  })
+})
+
+// The Stop button itself lives inside PipelineNode.vue (not rendered by the
+// VueFlow stub above) — these tests invoke `data.onStop()` directly, the same
+// callback the button calls on click.
+describe('PipelineView — stopping a running step', () => {
+  function nodeData(w: any, id: string) {
+    return w.findComponent({ name: 'VueFlow' }).props('nodes').find((n: any) => n.id === id).data
+  }
+
+  it('stop calls cancelJob with the job id currently being polled', async () => {
+    vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-stop-1', status: 'queued' } })
+    vi.mocked(fetchJob).mockResolvedValue({
+      job: { status: 'running', metadata: { pipelineStepId: 'investigator' } },
+    })
+    vi.mocked(cancelJob).mockResolvedValue({})
+    const task = { task_id: 'TSTOP1', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+    await clickModalButton('.modal .btn-primary')
+
+    expect(nodeData(w, 'investigator').running).toBe(true)
+    nodeData(w, 'investigator').onStop()
+    await flushPromises()
+
+    expect(cancelJob).toHaveBeenCalledWith('job-stop-1')
+  })
+
+  it('a cancelled job shows the stop message, not the failure message', async () => {
+    vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-stop-2', status: 'queued' } })
+    vi.mocked(fetchJob).mockResolvedValue({
+      job: { status: 'cancelled', metadata: { pipelineStepId: 'investigator' } },
+    })
+    const task = { task_id: 'TSTOP2', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+    await clickModalButton('.modal .btn-primary')
+    await flushPromises()
+
+    expect(w.text()).toContain('Đã dừng step')
+    expect(w.text()).not.toContain('Step chạy thất bại')
+    expect(nodeData(w, 'investigator').running).toBe(false)
+  })
+
+  it('a failed job (not stopped) still shows the failure message', async () => {
+    vi.mocked(runPipelineStep).mockResolvedValue({ job: { id: 'job-stop-3', status: 'queued' } })
+    vi.mocked(fetchJob).mockResolvedValue({
+      job: { status: 'failed', error: null, metadata: { pipelineStepId: 'investigator' } },
+    })
+    const task = { task_id: 'TSTOP3', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+    await clickModalButton('.modal .btn-primary')
+    await flushPromises()
+
+    expect(w.text()).toContain('Step chạy thất bại')
+    expect(w.text()).not.toContain('Đã dừng step')
   })
 })

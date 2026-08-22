@@ -10,6 +10,7 @@ import ArtifactPanel from './ArtifactPanel.vue'
 import RailIcon from '../../../core/ui/RailIcon.vue'
 import { patchTaskArchive, deleteTask, repairTaskState } from '../scripts/monitorApi'
 import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
+import { taskDisplayName } from '../lib/taskDisplay'
 import { useLocalToggle } from '../../../core/composables/useLocalToggle'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {
@@ -168,8 +169,8 @@ async function deleteSelected() {
     <section class="monitor-content">
       <template v-if="selected">
         <div class="task-head">
-          <h2>
-            {{ selected.task_id }}
+          <h2 :title="selected.task_id">
+            {{ taskDisplayName(selected) }}
             <span v-if="selected.parent_task_id" class="subtask">{{ t('monitor.layout.subtaskOf', { id: selected.parent_task_id }) }}</span>
           </h2>
           <div class="badges">

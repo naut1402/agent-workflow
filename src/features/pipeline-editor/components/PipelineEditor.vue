@@ -11,6 +11,7 @@ import RulesPanel from './RulesPanel.vue'
 import StepConfigPanel from './StepConfigPanel.vue'
 import ProfileManager from './ProfileManager.vue'
 import RailIcon from '../../../core/ui/RailIcon.vue'
+import { taskDisplayName } from '../../monitor/lib/taskDisplay'
 import {
   extractPipelineMeta,
   extractStepPreservedMap,
@@ -538,7 +539,7 @@ const editorLayoutClass = computed(() => ({
             >
               <option value="">{{ t('pipelineEditor.scope.selectTask') }}</option>
               <option v-for="task in editableTasks" :key="task.task_id" :value="task.task_id">
-                {{ task.task_id }}
+                {{ taskDisplayName(task) }}
               </option>
               <option value="__manual__">{{ t('pipelineEditor.scope.manualEntry') }}</option>
             </select>

@@ -1,4 +1,4 @@
-import { joinPath, mkdirSync, readTextFileSync, renameSync, resolvePath, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, resolvePath, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
 import crypto from 'node:crypto'
 import os from 'node:os'
 import { registryHome } from '../../../core/registry.js'
@@ -89,10 +89,7 @@ export function loadTaskSessionLedger(projectId: string, taskId: string): TaskSe
 export function saveTaskSessionLedger(projectId: string, ledger: TaskSessionLedger): void {
   const dir = sessionsDir(projectId)
   mkdirSync(dir, { recursive: true })
-  const file = ledgerFile(projectId, ledger.taskId)
-  const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, JSON.stringify(ledger, null, 2))
-  renameSync(tmp, file)
+  writeTextFileAtomicSync(ledgerFile(projectId, ledger.taskId), JSON.stringify(ledger, null, 2))
 }
 
 function findOpenEntry(ledger: TaskSessionLedger): SessionEntry | null {

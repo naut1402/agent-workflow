@@ -18,10 +18,21 @@ interface ProcResult {
   killed: boolean
 }
 
+/** cwd for a real CLI child process is the task workspace (`req.workspace`), not the repo
+ * root the agent markdown was written for — without this, a model follows the literal
+ * `.dev-team-agent/tasks/<task-id>/...` paths in its instructions and writes artifacts one
+ * directory too deep (`<task-id>/<task-id>/investigate.md`). */
+const PATH_CONVENTION_PREAMBLE =
+  'Quy ước path: thư mục làm việc hiện tại (cwd) CHÍNH LÀ thư mục task (nơi chứa request.md), ' +
+  'KHÔNG phải root repo. Mọi file cần đọc/ghi ở dưới phải dùng path tương đối ngay trong thư mục ' +
+  'này — ví dụ dùng `qa.md`, `investigate.md`, KHÔNG dùng `.dev-team-agent/tasks/<task-id>/qa.md` ' +
+  'hay bất kỳ tiền tố thư mục nào khác, dù hướng dẫn bên dưới có viết path đầy đủ như vậy (path đó ' +
+  'viết cho môi trường có cwd ở root repo).'
+
 function buildPrompt(resolvedAgent: ResolvedAgent, userPrompt: string): string {
   const system = resolvedAgent.systemPrompt?.trim()
   if (!system) return userPrompt
-  return `## Agent instructions\n\n${system}\n\n## Task\n\n${userPrompt}`
+  return `## Agent instructions\n\n${PATH_CONVENTION_PREAMBLE}\n\n${system}\n\n## Task\n\n${userPrompt}`
 }
 
 /**
@@ -35,7 +46,7 @@ function buildPrompt(resolvedAgent: ResolvedAgent, userPrompt: string): string {
  * `parentJobId` leaks forward — and a pipeline step resuming the previous
  * step's session runs a DIFFERENT agent, whose instructions must be sent.
  */
-function shouldSendAgentInstructions(req: ExecuteRequest): boolean {
+export function shouldSendAgentInstructions(req: ExecuteRequest): boolean {
   return !(req.resumeSessionId && req.metadata?.isChatFeedback === true)
 }
 
