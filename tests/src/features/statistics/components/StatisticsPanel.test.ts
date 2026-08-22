@@ -191,4 +191,46 @@ describe('StatisticsPanel', () => {
     expect(wrapper.find('.err-banner').exists()).toBe(true)
     expect(wrapper.find('.statistics-summary').exists()).toBe(false)
   })
+
+  it('gear mở dialog settings — sửa title áp live + persist vào localStorage', async () => {
+    mockStats(statsBody(['TA1']))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
+    await flushPromises()
+
+    await wrapper.find('.statistics-settings-btn').trigger('click')
+    const dialog = wrapper.findComponent({ name: 'ChartSettingsDialog' })
+    expect(dialog.exists()).toBe(true)
+
+    await dialog.find('input[type="text"]').setValue('Tiêu đề tùy chỉnh')
+    await flushPromises()
+
+    const saved = JSON.parse(localStorage.getItem('dev-dashboard-statistics-prefs')!)
+    expect(saved.chart.titleOverride).toBe('Tiêu đề tùy chỉnh')
+
+    // Live-apply: ChartCard nhận styleConfig mới qua prop.
+    const card = wrapper.findComponent({ name: 'ChartCard' })
+    expect(card.props('styleConfig')?.titleOverride).toBe('Tiêu đề tùy chỉnh')
+
+    await dialog.find('.chart-settings-close').trigger('click')
+    expect(wrapper.findComponent({ name: 'ChartSettingsDialog' }).exists()).toBe(false)
+  })
+
+  it('resize event từ ChartCard → cập nhật prefs.chart và persist', async () => {
+    mockStats(statsBody(['TA1']))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
+    await flushPromises()
+
+    const card = wrapper.findComponent({ name: 'ChartCard' })
+    card.vm.$emit('resize', 880, 420)
+    await flushPromises()
+
+    const saved = JSON.parse(localStorage.getItem('dev-dashboard-statistics-prefs')!)
+    expect(saved.chart.width).toBe(880)
+    expect(saved.chart.height).toBe(420)
+    expect(card.props('styleConfig')?.width).toBe(880)
+  })
 })

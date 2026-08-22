@@ -2,6 +2,7 @@
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, onMounted, ref, watch } from 'vue'
 import ChartCard from './ChartCard.vue'
+import ChartSettingsDialog from './ChartSettingsDialog.vue'
 import CSelect from '../../../core/ui/CSelect.vue'
 import { fetchUsageStats } from '../scripts/usageStatsApi'
 import {
@@ -13,7 +14,8 @@ import {
 } from '../schemas/usageStats'
 import type { CSelectOption } from '../../../core/ui/CSelect.vue'
 import { compactNumber, formatDuration, formatTs } from '../lib/format'
-import type { ChartKind } from '../lib/mermaidChart'
+import type { ChartKind, ChartStyleConfig } from '../lib/mermaidChart'
+import { DEFAULT_CHART_STYLE } from '../lib/mermaidChart'
 
 /**
  * Mode Thống kê (issue #231): tổng hợp token usage theo project → task → step
@@ -36,6 +38,8 @@ const metric = ref<UsageMetric>('totalTokens')
 const groupBy = ref<UsageGroupBy>('task')
 const chartType = ref<ChartKind>('bar')
 const rangeDays = ref<number>(30)
+const chartStyle = ref<ChartStyleConfig>({ ...DEFAULT_CHART_STYLE })
+const settingsOpen = ref(false)
 // Drill-down: project (scope all) → task → step; groupBy tự hạ cấp theo bậc.
 const drillProject = ref('')
 const drillTaskId = ref('')
@@ -67,31 +71,40 @@ function loadPrefs(): void {
     if (typeof p.rangeDays === 'number' && (RANGE_OPTIONS as readonly number[]).includes(p.rangeDays)) {
       rangeDays.value = p.rangeDays
     }
+    // Merge với default — prefs cũ không có key chart thì vẫn đủ field.
+    if (p.chart && typeof p.chart === 'object') {
+      chartStyle.value = { ...DEFAULT_CHART_STYLE, ...(p.chart as Partial<ChartStyleConfig>) }
+    }
   } catch {
     // Prefs hỏng → giữ default, không throw.
   }
 }
 
-watch(
-  [scope, metric, groupBy, chartType, rangeDays],
-  () => {
-    try {
-      localStorage.setItem(
-        PREFS_KEY,
-        JSON.stringify({
-          scope: scope.value,
-          metric: metric.value,
-          groupBy: groupBy.value,
-          chartType: chartType.value,
-          rangeDays: rangeDays.value,
-        }),
-      )
-    } catch {
-      // localStorage đầy/bị chặn — prefs là best-effort.
-    }
-  },
-  { deep: false },
-)
+function persistPrefs(): void {
+  try {
+    localStorage.setItem(
+      PREFS_KEY,
+      JSON.stringify({
+        scope: scope.value,
+        metric: metric.value,
+        groupBy: groupBy.value,
+        chartType: chartType.value,
+        rangeDays: rangeDays.value,
+        chart: chartStyle.value,
+      }),
+    )
+  } catch {
+    // localStorage đầy/bị chặn — prefs là best-effort.
+  }
+}
+
+watch([scope, metric, groupBy, chartType, rangeDays], persistPrefs, { deep: false })
+watch(chartStyle, persistPrefs, { deep: true })
+
+/** Handle kéo góc chart → cập nhật kích thước (áp qua directive config). */
+function onChartResize(width: number, height: number) {
+  chartStyle.value = { ...chartStyle.value, width, height }
+}
 
 /** Group theo project chỉ có nghĩa khi xem tất cả project. */
 const groupByOptions = computed<CSelectOption[]>(() => {
@@ -318,6 +331,8 @@ onMounted(() => {
       :values="chartValues"
       :value-label="t(`statistics.metric.${metric}`)"
       :loading="loading"
+      :style-config="chartStyle"
+      @resize="onChartResize"
     >
       <template #control>
         <div class="statistics-chart-controls">
@@ -333,9 +348,29 @@ onMounted(() => {
             :aria-label="t('statistics.chartType.label')"
             class="statistics-select statistics-select--control"
           />
+          <button
+            type="button"
+            class="icon-btn statistics-settings-btn"
+            :title="t('statistics.settings.open')"
+            :aria-label="t('statistics.settings.open')"
+            @click="settingsOpen = true"
+          >
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+              <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.3" />
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linecap="round"
+                d="M8 2.2v1.4M8 12.4v1.4M2.2 8h1.4M12.4 8h1.4M3.9 3.9l1 1M11.1 11.1l1 1M3.9 12.1l1-1M11.1 4.9l1-1"
+              />
+            </svg>
+          </button>
         </div>
       </template>
     </ChartCard>
+
+    <ChartSettingsDialog v-if="settingsOpen" v-model="chartStyle" :chart-type="chartType" @close="settingsOpen = false" />
 
     <p v-if="result?.truncated" class="muted statistics-truncated">
       {{ t('statistics.truncated') }}
@@ -526,6 +561,10 @@ onMounted(() => {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  align-items: center;
+}
+.statistics-settings-btn {
+  flex-shrink: 0;
 }
 .statistics-truncated {
   margin: 0 0 0.25rem;

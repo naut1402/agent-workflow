@@ -4,7 +4,9 @@ import {
   buildChart,
   buildLineChart,
   buildPieChart,
+  clampChartSize,
   escapeMermaidText,
+  DEFAULT_CHART_STYLE,
 } from '@/features/statistics/lib/mermaidChart'
 
 describe('escapeMermaidText', () => {
@@ -73,6 +75,51 @@ describe('buildPieChart + buildChart', () => {
   })
 })
 
+describe('ChartStyleConfig — directive config + nhãn/màu ghi đè', () => {
+  const base = {
+    title: 'Total theo task',
+    categories: ['TA1', 'TB1'],
+    values: [160, 1500],
+    valueLabel: 'Total tokens',
+  }
+
+  it('bar với style: directive xyChart width/height + plotColorPalette + title trục x', () => {
+    const def = buildBarChart({
+      ...base,
+      style: { ...DEFAULT_CHART_STYLE, width: 900, height: 400, color: '#2ECC71', xAxisTitle: 'Task', titleOverride: 'Tùy chỉnh', yAxisLabel: 'Tokens' },
+    })
+    expect(def).toContain('---\nconfig:')
+    expect(def).toContain('  xyChart:\n    width: 900\n    height: 400')
+    expect(def).toContain('themeVariables:')
+    expect(def).toContain('plotColorPalette: "#2ECC71"')
+    expect(def).toContain('title "Tùy chỉnh"')
+    expect(def).toContain('x-axis "Task" ["TA1", "TB1"]')
+    expect(def).toContain('y-axis "Tokens" 0 --> 1500')
+  })
+
+  it('không có style → không sinh directive (giữ definition tối giản)', () => {
+    expect(buildBarChart(base)).not.toContain('config:')
+  })
+
+  it('pie với pieColors → themeVariables pie1..N; màu không hợp lệ bị bỏ', () => {
+    const def = buildPieChart({
+      title: 'T',
+      slices: [{ label: 'a', value: 1 }],
+      style: { ...DEFAULT_CHART_STYLE, pieColors: ['#e6194b', 'javascript:alert(1)', '#3cb44b'] },
+    })
+    expect(def).toContain('pie1: "#e6194b"')
+    expect(def).toContain('pie2: "#3cb44b"')
+    expect(def).not.toContain('pie3')
+    expect(def).not.toContain('javascript')
+  })
+
+  it('clampChartSize giới hạn kích thước kéo-resize', () => {
+    expect(clampChartSize(10, 10)).toEqual({ width: 320, height: 180 })
+    expect(clampChartSize(99999, 99999)).toEqual({ width: 4000, height: 3000 })
+    expect(clampChartSize(720.6, 300.4)).toEqual({ width: 721, height: 300 })
+  })
+})
+
 describe('parse bằng mermaid thật (jsdom)', () => {
   // Gate cú pháp thật: test string ở trên không bắt được lỗi grammar
   // (vd từng ship `y-axis "V" --> 0..N` sai range syntax).
@@ -91,6 +138,25 @@ describe('parse bằng mermaid thật (jsdom)', () => {
     await expect(
       mermaid.parse(
         buildPieChart({ title: 'T', slices: [{ label: 'a', value: 1 }, { label: 'b', value: 2 }] }),
+      ),
+    ).resolves.toBeTruthy()
+
+    // Có style (directive config + title trục x) vẫn parse OK.
+    await expect(
+      mermaid.parse(
+        buildBarChart({
+          ...base,
+          style: { ...DEFAULT_CHART_STYLE, xAxisTitle: 'Task', color: '#2ECC71' },
+        }),
+      ),
+    ).resolves.toBeTruthy()
+    await expect(
+      mermaid.parse(
+        buildPieChart({
+          title: 'T',
+          slices: [{ label: 'a', value: 1 }],
+          style: DEFAULT_CHART_STYLE,
+        }),
       ),
     ).resolves.toBeTruthy()
 

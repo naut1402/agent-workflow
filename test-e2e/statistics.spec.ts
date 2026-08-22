@@ -68,6 +68,12 @@ test('statistics mode: chart mermaid + bảng drill-down (capture)', async ({ pa
   }
   await expectChartRendered()
 
+  // Kích thước mặc định áp qua directive config — mermaid dựng viewBox theo
+  // width/height config (svg width attr luôn "100%", max-width giới hạn theo px).
+  const svgSize = () =>
+    page.locator('.chart-card-body .mermaid svg').evaluate((el) => el.getAttribute('viewBox') || '')
+  await expect.poll(svgSize, { timeout: 15_000 }).toBe('0 0 720 300')
+
   // Đổi loại chart (bar → line → pie) qua selectbox trong slot control của card.
   async function pickChartType(label: string) {
     await page.locator('.chart-card-controls .c-select-trigger').nth(1).click()
@@ -77,6 +83,25 @@ test('statistics mode: chart mermaid + bảng drill-down (capture)', async ({ pa
   await expectChartRendered()
   await pickChartType('Tròn')
   await expectChartRendered()
+  await pickChartType('Cột')
+
+  // Kéo handle góc chart → kích thước mới áp vào viewBox (re-render một lần khi thả).
+  const handle = page.locator('.chart-resize-handle')
+  const handleBox = await handle.boundingBox()
+  expect(handleBox).toBeTruthy()
+  await page.mouse.move(handleBox!.x + 7, handleBox!.y + 7)
+  await page.mouse.down()
+  await page.mouse.move(handleBox!.x + 7 + 130, handleBox!.y + 7 + 40, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(svgSize, { timeout: 15_000 }).toBe('0 0 850 340')
+
+  // Dialog thiết lập: mở, sửa tiêu đề (live-apply), đóng.
+  await page.locator('.statistics-settings-btn').click()
+  await expect(page.locator('.chart-settings-dialog')).toBeVisible()
+  await page.locator('.chart-settings-dialog input[type="text"]').first().fill('Tiêu đề tùy chỉnh')
+  await expect(page.locator('.chart-card-body .mermaid')).not.toContainText(/syntax error/i)
+  await page.locator('.chart-settings-close').click()
+  await expect(page.locator('.chart-settings-dialog')).toHaveCount(0)
 
   // Drill-down: click task STAT-1 → groupBy step, breadcrumb hiện.
   await page.locator('.statistics-table tbody tr').first().click()
