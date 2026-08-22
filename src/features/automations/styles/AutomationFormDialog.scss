@@ -1,0 +1,43 @@
+/* AutomationFormDialog — modal tạo/sửa rule (nền modal shell + field common). */
+
+.automation-form {
+  max-width: 560px;
+  width: min(560px, calc(100vw - 32px));
+
+  .automation-form-body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .interval-row .interval-inputs {
+    display: flex;
+    gap: 8px;
+
+    input {
+      flex: 1;
+    }
+
+    select {
+      flex: 1;
+    }
+  }
+
+  .checkbox-field {
+    align-items: center;
+    flex-direction: row;
+    font-size: 13px;
+    gap: 8px;
+
+    input {
+      margin: 0;
+    }
+  }
+
+  .modal-foot {
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 10px 16px;
+  }
+}

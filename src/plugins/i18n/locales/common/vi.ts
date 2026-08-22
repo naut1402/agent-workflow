@@ -18,6 +18,7 @@ export default {
     knowledge: 'Knowledge',
     runner: 'Runner',
     runnerConfig: 'Runner Config',
+    automations: 'Automations',
     logs: 'Nhật ký',
   },
   status: {
@@ -28,6 +29,7 @@ export default {
       quickAction: 'quick action — polling paused',
       knowledge: 'knowledge — polling paused',
       runner: 'runner config — polling paused',
+      automations: 'automations — polling paused',
       logs: 'nhật ký — polling paused',
     },
   },

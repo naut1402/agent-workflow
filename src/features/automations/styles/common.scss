@@ -1,0 +1,105 @@
+/* Automations — shared (panel + form). Tokens từ _shell (_tokens). */
+
+.automations-panel,
+.automation-form {
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0 0 10px;
+
+    input[type='text'],
+    input[type='number'],
+    input[type='datetime-local'],
+    textarea,
+    select {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font: inherit;
+      padding: 6px 8px;
+      width: 100%;
+      box-sizing: border-box;
+
+      &:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 72px;
+    }
+  }
+
+  .field-label {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .field-hint {
+    color: var(--muted);
+    font-size: 11px;
+    margin: 2px 0 0;
+  }
+
+  .field-group {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 0 0 12px;
+    padding: 10px;
+
+    legend {
+      color: var(--muted);
+      font-size: 12px;
+      padding: 0 4px;
+    }
+  }
+
+  .chip-select {
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 12px;
+    gap: 6px;
+    padding: 4px 10px;
+    transition: all 0.12s ease;
+
+    input {
+      display: none;
+    }
+
+    &.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(var(--accent-rgb), 0.08);
+    }
+  }
+
+  .trigger-kind-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .form-error {
+    color: var(--danger);
+    font-size: 12px;
+    margin: 4px 0 8px;
+  }
+
+  .pending-hint {
+    border-left: 2px solid var(--border);
+    padding-left: 8px;
+  }
+
+  .muted {
+    color: var(--muted);
+  }
+}

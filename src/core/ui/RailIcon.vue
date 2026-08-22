@@ -10,6 +10,7 @@ type RailIconName =
   | 'quickAction'
   | 'knowledge'
   | 'runner'
+  | 'automations'
   | 'logs'
   | 'settings'
 
@@ -83,6 +84,11 @@ withDefaults(
     <template v-else-if="name === 'runner'">
       <path d="M2 8h3l2-4 4 8 2-4h3" />
       <circle cx="8" cy="12" r="1.25" fill="currentColor" stroke="none" />
+    </template>
+    <template v-else-if="name === 'automations'">
+      <circle cx="7" cy="8" r="4.5" />
+      <path d="M7 5.5V8l1.8 1.2" />
+      <path d="M12.5 9.5l-1.5 2.2h1.8l-1.5 2.2" />
     </template>
     <template v-else-if="name === 'logs'">
       <path d="M3 2.5h10v11H3z" />

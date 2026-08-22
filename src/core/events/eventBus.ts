@@ -26,6 +26,9 @@ export type DashboardEventType =
   | 'webhook.received'
   | 'webhook.triggered'
   | 'usage.recorded'
+  | 'automation.triggered'
+  | 'automation.run_succeeded'
+  | 'automation.run_failed'
   | string
 
 export interface DashboardEvent<T = Record<string, unknown>> {
@@ -115,8 +118,9 @@ export function _resetEventBusForTest(): void {
 }
 
 /**
- * Stub registry for future schedule / webhook triggers.
- * Contract only — không auto-`on(match)` trong Epic D; wire runtime TBD (#193 follow-up).
+ * Registry cho trigger (schedule / event / webhook) — quan sát "trigger đang sống".
+ * Runtime thật nằm ở feature automations (#233): scheduler tick + event
+ * subscriber đồng bộ rule đang bật vào đây qua `syncTriggerRegistry`.
  */
 export type TriggerKind = 'schedule' | 'event' | 'webhook'
 

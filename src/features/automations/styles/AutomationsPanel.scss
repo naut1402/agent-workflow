@@ -1,0 +1,183 @@
+/* AutomationsPanel — danh sách rule + history. */
+
+.automations-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+
+  .panel-head {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+
+    h2 {
+      font-size: 16px;
+      margin: 0;
+    }
+
+    p {
+      font-size: 12px;
+      margin: 2px 0 0;
+    }
+  }
+
+  .panel-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .panel-error {
+    color: var(--danger);
+    font-size: 13px;
+    margin: 0;
+  }
+
+  .panel-empty {
+    align-items: center;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    justify-content: center;
+    min-height: 200px;
+    text-align: center;
+  }
+
+  .rule-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .rule-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: grid;
+    column-gap: 12px;
+    grid-template-columns: 1fr auto;
+    padding: 12px;
+
+    &.disabled {
+      opacity: 0.6;
+    }
+  }
+
+  .rule-title-row {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+
+    .rule-name {
+      font-weight: 600;
+    }
+  }
+
+  .rule-status-chip {
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    font-size: 11px;
+    padding: 1px 8px;
+
+    &.on {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    &.off {
+      color: var(--muted);
+    }
+
+    &.running {
+      border-color: var(--accent);
+      color: var(--accent);
+      animation: automation-pulse 1.2s ease-in-out infinite;
+    }
+  }
+
+  .rule-desc {
+    font-size: 12px;
+    margin: 2px 0 0;
+  }
+
+  .rule-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 8px 0 0;
+
+    .meta-row {
+      display: flex;
+      gap: 8px;
+      font-size: 12px;
+
+      dt {
+        color: var(--muted);
+        min-width: 90px;
+      }
+
+      dd {
+        margin: 0;
+      }
+    }
+  }
+
+  .rule-last-run {
+    font-size: 11px;
+  }
+
+  .rule-actions {
+    align-self: start;
+  }
+
+  .rule-history {
+    border-top: 1px solid var(--border);
+    grid-column: 1 / -1;
+    margin-top: 10px;
+    padding-top: 10px;
+
+    h4 {
+      font-size: 13px;
+      margin: 0 0 8px;
+    }
+  }
+
+  .history-table {
+    border-collapse: collapse;
+    font-size: 12px;
+    width: 100%;
+
+    th {
+      color: var(--muted);
+      font-weight: 500;
+      padding: 4px 10px 4px 0;
+      text-align: left;
+    }
+
+    td {
+      border-top: 1px solid var(--border);
+      padding: 4px 10px 4px 0;
+      vertical-align: top;
+    }
+
+    .outcome-succeeded { color: var(--accent); }
+    .outcome-failed { color: var(--danger); }
+    .outcome-skipped,
+    .outcome-running { color: var(--muted); }
+  }
+}
+
+@keyframes automation-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}

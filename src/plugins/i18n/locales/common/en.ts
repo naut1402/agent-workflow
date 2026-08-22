@@ -16,6 +16,7 @@ export default {
     knowledge: 'Knowledge',
     runner: 'Runner',
     runnerConfig: 'Runner Config',
+    automations: 'Automations',
     logs: 'Logs',
   },
   status: {
@@ -26,6 +27,7 @@ export default {
       quickAction: 'quick action — polling paused',
       knowledge: 'knowledge — polling paused',
       runner: 'runner config — polling paused',
+      automations: 'automations — polling paused',
       logs: 'logs — polling paused',
     },
   },
