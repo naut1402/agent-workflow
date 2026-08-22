@@ -1,4 +1,4 @@
-import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
 import { registryHome } from '../../../core/registry.js'
 import {
   COMMANDS_VERSION,
@@ -73,18 +73,14 @@ export function loadCommands(): CommandsStore {
 export function saveCommands(store: CommandsStore): CommandsStore {
   const home = registryHome()
   mkdirSync(home, { recursive: true })
-  const file = commandsFile()
-  const tmp = `${file}.tmp`
-  const payload = JSON.stringify(
+  writeTextFileAtomicSync(commandsFile(), JSON.stringify(
     {
       version: store.version || COMMANDS_VERSION,
       commands: store.commands || [],
     },
     null,
     2,
-  )
-  writeTextFileSync(tmp, payload)
-  renameSync(tmp, file)
+  ))
   return store
 }
 

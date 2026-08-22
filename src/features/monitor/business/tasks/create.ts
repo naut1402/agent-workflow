@@ -60,6 +60,7 @@ export function renderRequestMarkdown(input: {
   createdAt: string
   prompt: string
   branch?: string | null
+  name?: string | null
 }): string {
   const front = dumpYaml({
     task_id: input.taskId,
@@ -69,6 +70,7 @@ export function renderRequestMarkdown(input: {
     branch: input.branch ?? null,
     created_at: input.createdAt,
     created_by: 'dashboard',
+    ...(input.name?.trim() ? { name: input.name.trim() } : {}),
   })
   const body = input.prompt.replace(/\s+$/, '')
   return `---\n${front}---\n\n${body}\n`
@@ -136,6 +138,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
     createdAt,
     prompt: input.prompt,
     branch: input.branch ?? null,
+    name: input.name,
   })
 
   let pipelineFile: string | null = null
@@ -184,6 +187,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       doc_review_round: { investigate: 0, design: 0 },
       inherit_from_parent: [],
       ...(input.branch ? { branch: input.branch } : {}),
+      ...(input.name?.trim() ? { name: input.name.trim() } : {}),
     }
     await writeStateAtomic(stateFile, state)
 

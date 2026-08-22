@@ -10,7 +10,10 @@ import {
   applyHitlAction,
   deleteTask,
   repairTaskState,
+  resetPipelineStepAssumingLock,
+  withTaskLock,
 } from './business/tasks/state.js'
+import { isResettableTarget } from './lib/pipelineRunGuards.js'
 import {
   loadPipelineConfig,
   submitJob,
@@ -29,6 +32,7 @@ import { TaskArchivePatch, TaskStatePatch } from './schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from './schemas/taskCreate.js'
 import { mintTaskId } from './lib/createTaskForm.js'
 import { RunStepRequest } from './schemas/runStep.js'
+import { ResetStepRequest } from './schemas/resetStep.js'
 import { TaskFeedbackRequest } from './schemas/taskFeedback.js'
 import { fetchGithubIssue } from './business/github/index.js'
 import { getTaskChatState } from './business/taskChat.js'
@@ -537,6 +541,7 @@ export class MonitorController extends AbstractController {
     const result = await createTask(root, {
       taskId,
       source: body.source,
+      name: body.name,
       prompt: body.prompt,
       issueUrl: body.issueUrl,
       parentTaskId: body.parentTaskId,
@@ -685,8 +690,9 @@ export class MonitorController extends AbstractController {
 
     const body = parsed.data
 
-    // Core (per-task lock, HITL gate, busy 409, auto-advance, submit) lives in
-    // business `runTaskStep` — shared with automations (#233).
+    // Core (per-task lock, HITL gate, busy 409, auto-advance incl. the
+    // `last_reset_at` guard, submit) lives in business `runTaskStep` — shared
+    // with automations (#233).
     const result = await runTaskStepCore(root, this.projectId, id, {
       runnerId: body.runnerId ?? null,
       targetStepId: body.targetStepId ?? null,
@@ -710,6 +716,67 @@ export class MonitorController extends AbstractController {
     })
 
     return this.created({ job: result.job })
+  }
+
+  async resetTaskStep() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const id = this.c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON body')
+    const parsed = ResetStepRequest.safeParse(b.value)
+    if (!parsed.success) {
+      return this.badRequest('invalid request', { details: parsed.error.flatten() })
+    }
+    const { stepId, cascade } = parsed.data
+
+    return withTaskLock(root, id, async () => {
+      const stateFile = path.join(root, '.dev-state', `${id}.json`)
+      const read = await readState(stateFile)
+      if (!read.ok) return this.notFound('task not found', { taskId: id })
+      const state = read.state as Record<string, unknown>
+
+      const existing = listJobs(50).find(
+        (j) =>
+          j.metadata?.taskId === id &&
+          (j.status === 'queued' || j.status === 'running'),
+      )
+      if (existing) return this.json(409, { error: 'step already running', taskId: id, job: existing })
+
+      const pipeline = await loadPipelineConfig(root, id)
+      const phaseKeys = (pipeline.steps || []).map((s: any) => s.id).filter(Boolean)
+      const currentPhase = String(state.current_phase ?? '')
+      if (!phaseKeys.includes(stepId) || !isResettableTarget(phaseKeys, currentPhase, stepId)) {
+        return this.badRequest('invalid reset target', { taskId: id, stepId })
+      }
+
+      const result = await resetPipelineStepAssumingLock(root, id, stateFile, stepId, cascade)
+      if ('error' in result) return this.json(result.status, { error: result.error, taskId: id })
+
+      // `closeTaskSession` can't be called from state.ts (cycle through
+      // business/index.js — see comment on `applyHitlAction`), so it runs
+      // here for every step whose artifacts were just deleted.
+      for (const sid of result.removedSteps) {
+        closeTaskSession(this.projectId || '', id, { stepId: sid })
+      }
+
+      emitAudit({
+        op: 'update',
+        entity: 'task-state',
+        identifier: id,
+        projectId: this.projectId,
+        detail: { action: 'reset-step', stepId, cascade, removedSteps: result.removedSteps },
+      })
+      emitEntity('updated', 'task-state', {
+        id,
+        projectId: this.projectId,
+        detail: { action: 'reset-step' },
+      })
+      return this.ok({ id, state: result.state, mtime: result.mtime, removedSteps: result.removedSteps })
+    })
   }
 
   async postTaskFeedback() {

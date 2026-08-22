@@ -26,6 +26,7 @@ import KnowledgePanel from './features/knowledge/components/KnowledgePanel.vue'
 import RunnerConfigPanel from './features/runner/components/RunnerConfigPanel.vue'
 import LogsPanel from './features/logs/components/LogsPanel.vue'
 import AutomationsPanel from './features/automations/components/AutomationsPanel.vue'
+import StatisticsPanel from './features/statistics/components/StatisticsPanel.vue'
 import QuickActionPanel from './features/quick-action/components/QuickActionPanel.vue'
 import SettingsDialog from './features/settings/components/SettingsDialog.vue'
 import CreateTaskDialog from './features/monitor/components/CreateTaskDialog.vue'
@@ -382,6 +383,15 @@ onUnmounted(() => {
           <RailIcon name="logs" />
           <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.logs') }}</span>
         </button>
+        <button
+          class="mode-btn rail-icon-btn"
+          :class="{ active: mode === 'statistics' }"
+          :title="t('common.modes.statistics')"
+          @click="mode = 'statistics'"
+        >
+          <RailIcon name="statistics" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.statistics') }}</span>
+        </button>
       </div>
 
       <div class="sidebar-footer">
@@ -402,6 +412,7 @@ onUnmounted(() => {
           <span v-else-if="mode === 'runner'" class="muted">{{ t('common.status.paused.runner') }}</span>
           <span v-else-if="mode === 'automations'" class="muted">{{ t('common.status.paused.automations') }}</span>
           <span v-else-if="mode === 'logs'" class="muted">{{ t('common.status.paused.logs') }}</span>
+          <span v-else-if="mode === 'statistics'" class="muted">{{ t('common.status.paused.statistics') }}</span>
         </footer>
         <button
           type="button"
@@ -475,6 +486,10 @@ onUnmounted(() => {
 
     <main v-else-if="mode === 'logs'" class="main main-editor">
       <LogsPanel />
+    </main>
+
+    <main v-else-if="mode === 'statistics'" class="main main-editor">
+      <StatisticsPanel :project-id="selectedProjectId" :default-project-id="defaultProjectId" />
     </main>
 
     <main v-else-if="mode === 'agentEditor'" class="main main-editor">

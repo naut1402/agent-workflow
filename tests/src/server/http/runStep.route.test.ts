@@ -4,13 +4,15 @@ import os from 'node:os'
 import path from 'node:path'
 import { createApp } from '../../../../src/api/apiServer.js'
 import type { RegistryContext } from '../../../../src/core/http/types.js'
-import { loadJob, listJobs, registerProvider, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
+import { cancelJob, loadJob, listJobs, registerProvider, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
+import { on } from '../../../../src/core/events/index.js'
 
 // Route-level contract for POST /api/tasks/:id/run-step — clicking a pipeline
-// node to run the task's current step (and, with `targetStepId`, keep
-// chaining across gate-less steps). Driven via Hono's app.request, same style
-// as jobApproval.route.test.ts. A stub provider "succeeds" instantly so the
+// node to run the task's current step. Every successful gate-less step keeps
+// this chain going automatically, `targetStepId` (when given) only makes it
+// stop exactly there. Driven via Hono's app.request, same style as
+// jobApproval.route.test.ts. A stub provider "succeeds" instantly so the
 // job-queue's chain-on-success hook (jobQueue.ts advancePipelineStepChain)
 // runs synchronously enough for `settle()` polling to observe it.
 
@@ -175,6 +177,72 @@ describe('POST /api/tasks/:id/run-step', () => {
     expect(reviewerJob).toBeUndefined()
     const state = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'R2b.json'), 'utf8'))
     expect(state.hitl_pending).toBeFalsy()
+  })
+
+  test('auto-chains through multiple gate-less steps with no targetStepId given', async () => {
+    seedTask('R12', { current_phase: 'stepA' })
+    fs.mkdirSync(path.join(root, 'tasks', 'R12'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'tasks', 'R12', 'pipeline.yaml'),
+      [
+        'steps_replace: true',
+        'steps:',
+        "  - id: stepA",
+        "    agent: ' '",
+        "  - id: stepB",
+        "    agent: ' '",
+        "  - id: stepC",
+        "    agent: ' '",
+        "    hitl: { mode: manual, gate_id: hitl-r12 }",
+      ].join('\n'),
+      'utf8',
+    )
+    // No targetStepId: the previous behaviour required `chainTarget` to keep
+    // chaining, so this used to stop dead after stepA even though stepB has
+    // no gate — reproduces the bug report directly.
+    const res = await app.request('/api/tasks/R12/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step' }),
+    })
+    expect(res.status).toBe(201)
+    const { job } = await res.json()
+    expect(job.metadata.pipelineStepId).toBe('stepA')
+    await settle(job.id)
+    await waitForPhase('R12', (p) => p === 'stepC')
+    await sleep(50)
+    const state = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'R12.json'), 'utf8'))
+    expect(state.hitl_pending).toBe('hitl-r12')
+    // stepB must have been auto-submitted and run without a second run-step call.
+    const stepBJob = listJobs(50).find(
+      (j) => j.metadata?.taskId === 'R12' && j.metadata?.pipelineStepId === 'stepB',
+    )
+    expect(stepBJob).toBeTruthy()
+    expect(stepBJob?.status).toBe('succeeded')
+  })
+
+  test('auto-chains to completed when the entire pipeline is gate-less', async () => {
+    seedTask('R13', { current_phase: 'stepA' })
+    fs.mkdirSync(path.join(root, 'tasks', 'R13'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'tasks', 'R13', 'pipeline.yaml'),
+      [
+        'steps_replace: true',
+        'steps:',
+        "  - id: stepA",
+        "    agent: ' '",
+        "  - id: stepB",
+        "    agent: ' '",
+      ].join('\n'),
+      'utf8',
+    )
+    const res = await app.request('/api/tasks/R13/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step' }),
+    })
+    expect(res.status).toBe(201)
+    const { job } = await res.json()
+    await settle(job.id)
+    await waitForPhase('R13', (p) => p === 'completed')
   })
 
   test('skipIntermediate with unknown targetStepId returns 400 and does not jump', async () => {
@@ -449,6 +517,48 @@ describe('POST /api/tasks/:id/run-step', () => {
     expect(state.hitl_pending).toBe('hitl-3')
   })
 
+  // #225 vấn đề 4: restart (reset) rolls current_phase back to a step whose OLD
+  // succeeded job is still sitting in job history — without `last_reset_at`, the
+  // "heal stuck phase" logic above would mistake that stale job for "already done"
+  // and auto-advance past the step the user asked to run again.
+  test('does not heal past a step whose only succeeded job predates the last reset (restart)', async () => {
+    seedTask('R11', { current_phase: 'implementer', last_reset_at: new Date().toISOString() })
+    const staleJobId = crypto.randomUUID()
+    const jobsDir = path.join(root, '.home', 'jobs')
+    fs.mkdirSync(jobsDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(jobsDir, `${staleJobId}.json`),
+      JSON.stringify({
+        id: staleJobId,
+        status: 'succeeded',
+        runnerId: 'stub-runner-run-step',
+        agentRef: ' ',
+        workspace: path.join(root, 'tasks', 'R11'),
+        userPrompt: 'do the thing',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        startedAt: '2020-01-01T00:00:00.000Z',
+        finishedAt: '2020-01-01T00:00:00.000Z',
+        exitCode: 0,
+        pid: null,
+        metadata: {
+          taskId: 'R11',
+          pipelineStepId: 'implementer',
+          devTeamRoot: root,
+        },
+      }),
+      'utf8',
+    )
+
+    const res = await app.request('/api/tasks/R11/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step' }),
+    })
+    expect(res.status).toBe(201)
+    const { job } = await res.json()
+    // Must re-run implementer, not skip to reviewer using the stale (pre-reset) job.
+    expect(job.metadata.pipelineStepId).toBe('implementer')
+  })
+
   test('chained step jobs also use inputSessionMode new', async () => {
     seedTask('R10', { current_phase: 'implementer' })
     fs.mkdirSync(path.join(root, 'tasks', 'R10'), { recursive: true })
@@ -479,6 +589,157 @@ describe('POST /api/tasks/:id/run-step', () => {
     )
     expect(chained).toBeTruthy()
     expect(chained?.metadata?.inputSessionMode).toBe('new')
+  })
+})
+
+// #B202608_1902 vấn đề: user cần dừng (Stop) một chain đang tự chạy — reuses
+// the pre-existing POST /api/jobs/:id/cancel endpoint (no new backend surface).
+describe('POST /api/jobs/:id/cancel (stopping a running chain)', () => {
+  test('cancels the running step, blocks the chain, and leaves current_phase unchanged', async () => {
+    gated = true
+    seedTask('R14', { current_phase: 'implementer' })
+    const res = await app.request('/api/tasks/R14/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step' }),
+    })
+    expect(res.status).toBe(201)
+    const { job } = await res.json()
+    for (let i = 0; i < 200 && loadJob(job.id)?.status !== 'running'; i++) await sleep(5)
+    expect(loadJob(job.id)?.status).toBe('running')
+
+    const cancelRes = await app.request(`/api/jobs/${job.id}/cancel`, { method: 'POST' })
+    expect(cancelRes.status).toBe(200)
+    const cancelBody = await cancelRes.json()
+    expect(cancelBody.cancelled).toBe(true)
+    expect(loadJob(job.id)?.status).toBe('cancelled')
+
+    // Let the (already-cancelled) job's execute() resolve — runJob's early
+    // return on `status === 'cancelled'` must stop it before advancing phase
+    // or chaining, even though the stub's result is `ok: true`.
+    gated = false
+    resolveGate?.()
+    await sleep(50)
+
+    const state = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'R14.json'), 'utf8'))
+    expect(state.current_phase).toBe('implementer')
+    const reviewerJob = listJobs(50).find(
+      (j) => j.metadata?.taskId === 'R14' && j.metadata?.pipelineStepId === 'reviewer',
+    )
+    expect(reviewerJob).toBeUndefined()
+  })
+
+  test('succeeds without error for a job awaiting_recovery (no live pid to kill)', async () => {
+    seedTask('R15', { current_phase: 'implementer' })
+    const staleJobId = crypto.randomUUID()
+    const jobsDir = path.join(root, '.home', 'jobs')
+    fs.mkdirSync(jobsDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(jobsDir, `${staleJobId}.json`),
+      JSON.stringify({
+        id: staleJobId,
+        status: 'awaiting_recovery',
+        runnerId: 'stub-runner-run-step',
+        agentRef: ' ',
+        workspace: path.join(root, 'tasks', 'R15'),
+        userPrompt: 'do the thing',
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        finishedAt: null,
+        exitCode: 1,
+        pid: null,
+        metadata: { taskId: 'R15', pipelineStepId: 'implementer', devTeamRoot: root },
+      }),
+      'utf8',
+    )
+
+    const res = await app.request(`/api/jobs/${staleJobId}/cancel`, { method: 'POST' })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.cancelled).toBe(true)
+    expect(loadJob(staleJobId)?.status).toBe('cancelled')
+    const reviewerJob = listJobs(50).find(
+      (j) => j.metadata?.taskId === 'R15' && j.metadata?.pipelineStepId === 'reviewer',
+    )
+    expect(reviewerJob).toBeUndefined()
+  })
+
+  test('400s for a job that already succeeded, without touching its state (Stop/succeed race)', async () => {
+    const doneJobId = crypto.randomUUID()
+    const jobsDir = path.join(root, '.home', 'jobs')
+    fs.mkdirSync(jobsDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(jobsDir, `${doneJobId}.json`),
+      JSON.stringify({
+        id: doneJobId,
+        status: 'succeeded',
+        runnerId: 'stub-runner-run-step',
+        agentRef: ' ',
+        workspace: path.join(root, 'tasks', 'R16'),
+        userPrompt: 'do the thing',
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        exitCode: 0,
+        pid: null,
+        metadata: { taskId: 'R16', pipelineStepId: 'implementer', devTeamRoot: root },
+      }),
+      'utf8',
+    )
+
+    const res = await app.request(`/api/jobs/${doneJobId}/cancel`, { method: 'POST' })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('job already finished')
+    expect(loadJob(doneJobId)?.status).toBe('succeeded')
+  })
+
+  test('cancels a chained job before it starts, stopping the chain right there', async () => {
+    seedTask('R17', { current_phase: 'implementer' })
+    fs.mkdirSync(path.join(root, 'tasks', 'R17'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, 'tasks', 'R17', 'pipeline.yaml'),
+      [
+        'steps_replace: true',
+        'steps:',
+        "  - id: implementer",
+        "    agent: ' '",
+        "  - id: pr-creator",
+        "    agent: ' '",
+      ].join('\n'),
+      'utf8',
+    )
+
+    // `job.queued` fires synchronously from submitJob(), before the job is
+    // pushed onto the run queue — cancelling here from the listener beats
+    // pumpQueue's microtask to it, so the chained job never leaves `queued`.
+    const off = on('job.queued', (event: any) => {
+      const jobId = event.payload?.jobId
+      const queuedJob = jobId ? loadJob(jobId) : null
+      if (queuedJob?.metadata?.taskId === 'R17' && queuedJob.metadata?.pipelineStepId === 'pr-creator') {
+        cancelJob(jobId)
+      }
+    })
+
+    try {
+      const res = await app.request('/api/tasks/R17/run-step', {
+        method: 'POST',
+        body: JSON.stringify({ runnerId: 'stub-runner-run-step', targetStepId: 'pr-creator' }),
+      })
+      expect(res.status).toBe(201)
+      const { job } = await res.json()
+      await settle(job.id)
+      await sleep(50)
+
+      const prCreatorJob = listJobs(50).find(
+        (j) => j.metadata?.taskId === 'R17' && j.metadata?.pipelineStepId === 'pr-creator',
+      )
+      expect(prCreatorJob?.status).toBe('cancelled')
+
+      const state = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'R17.json'), 'utf8'))
+      expect(state.current_phase).toBe('pr-creator')
+    } finally {
+      off()
+    }
   })
 })
 

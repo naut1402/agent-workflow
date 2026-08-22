@@ -4,8 +4,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { encodeWorkspacePath } from '../../../../src/features/monitor/business/sessionTranscript'
 import { getTaskChatState, resolveChatSession } from '../../../../src/features/monitor/business/taskChat'
-import { saveTaskSessionLedger, type SessionEntry } from '../../../../src/features/runner/business/sessionLedger'
+import { recordSessionUsage, saveTaskSessionLedger, type SessionEntry } from '../../../../src/features/runner/business/sessionLedger'
 import { upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index'
+import { appendTranscriptTurn } from '../../../../src/features/runner/business/providers/agentTranscriptStore'
 import type { JobRecord } from '../../../../src/features/runner/business/types'
 
 // getTaskChatState mirrors sendTaskFeedback's guard order so the UI can explain
@@ -183,6 +184,39 @@ describe('resolveChatSession', () => {
     expect(resolved.sessionId).toBe('s-design-2')
     expect(resolved.dismissedForStep).toBeUndefined()
   })
+
+  test('Bug4 fix: the next pipeline step starting (forceNew → prior entry auto-stale) does not hide the finished step\'s chat', () => {
+    writeJob({
+      id: 'j-A',
+      sessionId: 's-A',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'A' },
+    })
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'per-step',
+      sessions: [ledgerEntry({ sessionId: 's-A', stepIds: ['A'], status: 'open' })],
+    })
+
+    // Mirrors exactly what advancePipelineStepChain() + jobQueue.ts do when the
+    // next step of the SAME pipeline starts — forceNew:true, unconditionally,
+    // with no user action involved (see design.md §3.4/§4.2).
+    recordSessionUsage({
+      projectId: PROJECT,
+      taskId: TASK,
+      sessionId: 's-B',
+      providerId: 'claude-code-cli',
+      runnerId: 'r1',
+      connectionId: 'c1',
+      workspace: WORKSPACE,
+      stepId: 'B',
+      forceNew: true,
+    })
+
+    const resolved = resolveChatSession(PROJECT, TASK, 'A')
+    expect(resolved.sessionId).toBe('s-A')
+    expect(resolved.dismissedForStep).toBeUndefined()
+  })
 })
 
 describe('getTaskChatState', () => {
@@ -258,6 +292,37 @@ describe('getTaskChatState', () => {
     const state = getTaskChatState(PROJECT, TASK)
     expect(state.canSend).toBe(true)
     expect(state.blockedReason).toBeUndefined()
+  })
+
+  test('Bug4 fix: reopening a finished step\'s chat after the next pipeline step starts still replays its transcript', () => {
+    writeJob({
+      id: 'j-A',
+      sessionId: 's-A',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'A' },
+    })
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'per-step',
+      sessions: [ledgerEntry({ sessionId: 's-A', stepIds: ['A'], status: 'open' })],
+    })
+    writeTranscript('s-A', ['xong bước A'])
+
+    recordSessionUsage({
+      projectId: PROJECT,
+      taskId: TASK,
+      sessionId: 's-B',
+      providerId: 'claude-code-cli',
+      runnerId: 'r1',
+      connectionId: 'c1',
+      workspace: WORKSPACE,
+      stepId: 'B',
+      forceNew: true,
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'A' })
+    expect(state.sessionId).toBe('s-A')
+    expect(state.turns.map((t) => t.text)).toEqual(['xong bước A'])
   })
 
   test('reports the runner of the step, resolved from the registry', () => {
@@ -429,5 +494,57 @@ describe('getTaskChatState', () => {
     const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
     expect(state.transcriptFound).toBe(true)
     expect(state.turns.some((t) => t.role === 'assistant' && t.text.includes('Trả lời từ log'))).toBe(true)
+  })
+
+  test('an AgenticApiProvider job (openai-api) reads tool-call turns via apiAgentTranscript', () => {
+    upsertConnection({
+      id: 'conn-openai',
+      kind: 'ai-provider',
+      providerId: 'openai-api',
+      credentialId: 'cred-openai',
+    })
+    upsertRunner({ id: 'runner-openai', name: 'OpenAI', connectionId: 'conn-openai', config: {} })
+    appendTranscriptTurn('openai-api', 's-openai', { role: 'user', text: 'Viết design' })
+    appendTranscriptTurn('openai-api', 's-openai', { role: 'tool', tool: 'write_file', text: '{"path":"design.md"}' })
+    appendTranscriptTurn('openai-api', 's-openai', { role: 'assistant', text: '## Design xong' })
+    writeJob({
+      id: 'j-openai',
+      runnerId: 'runner-openai',
+      sessionId: 's-openai',
+      userPrompt: 'Viết design',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'designer' },
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
+    expect(state.transcriptFound).toBe(true)
+    expect(state.transcriptProvider).toBe('openai-api')
+    expect(state.turns.map((t) => t.role)).toEqual(['user', 'tool', 'assistant'])
+    expect(state.turns[1]?.tool).toBe('write_file')
+  })
+
+  test('an AgenticApiProvider job (anthropic-api) resolves the same way — no per-provider id list to fall out of sync', () => {
+    upsertConnection({
+      id: 'conn-anthropic',
+      kind: 'ai-provider',
+      providerId: 'anthropic-api',
+      credentialId: 'cred-anthropic',
+    })
+    upsertRunner({ id: 'runner-anthropic', name: 'Anthropic', connectionId: 'conn-anthropic', config: {} })
+    appendTranscriptTurn('anthropic-api', 's-anthropic', { role: 'user', text: 'Viết design' })
+    appendTranscriptTurn('anthropic-api', 's-anthropic', { role: 'tool', tool: 'str_replace_based_edit_tool', text: '{"path":"design.md"}' })
+    appendTranscriptTurn('anthropic-api', 's-anthropic', { role: 'assistant', text: '## Design xong' })
+    writeJob({
+      id: 'j-anthropic',
+      runnerId: 'runner-anthropic',
+      sessionId: 's-anthropic',
+      userPrompt: 'Viết design',
+      metadata: { taskId: TASK, projectId: PROJECT, pipelineStepId: 'designer' },
+    })
+
+    const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
+    expect(state.transcriptFound).toBe(true)
+    expect(state.transcriptProvider).toBe('anthropic-api')
+    expect(state.turns.map((t) => t.role)).toEqual(['user', 'tool', 'assistant'])
+    expect(state.turns[1]?.tool).toBe('str_replace_based_edit_tool')
   })
 })

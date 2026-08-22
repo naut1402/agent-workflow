@@ -3,8 +3,9 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
 import { fetchRunners, fetchJobs } from '../scripts/runnerApi'
 import { saveRunner, deleteRunner, setDefaultRunner, fetchConnections } from '../scripts/RunnerConfigPanelApi'
+import { fetchProviderConfigs } from '../scripts/ProviderDialogApi'
 import RunnerDialog from './RunnerDialog.vue'
-import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderFamily } from '../types'
+import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderConfigOption, ProviderFamily } from '../types'
 
 const { t } = useI18nHelpers()
 
@@ -12,6 +13,7 @@ const runners = ref<RunnerDraft[]>([])
 const defaultRunnerId = ref('')
 const connections = ref<ConnectionOption[]>([])
 const providers = ref<ProviderEntry[]>([])
+const providerConfigs = ref<ProviderConfigOption[]>([])
 const message = ref('')
 const error = ref('')
 const recentJobs = ref<any[]>([])
@@ -58,15 +60,17 @@ function jobStatusClass(status: string | undefined): string {
 async function load() {
   error.value = ''
   try {
-    const [rData, cData, jData] = await Promise.all([
+    const [rData, cData, jData, pData] = await Promise.all([
       fetchRunners(),
       fetchConnections(),
       fetchJobs(10),
+      fetchProviderConfigs(),
     ])
     runners.value = rData.runners || []
     defaultRunnerId.value = rData.defaultRunnerId || ''
     providers.value = (rData.providers || cData.providers || []) as ProviderEntry[]
     connections.value = cData.connections || rData.connections || []
+    providerConfigs.value = pData.providerConfigs || []
     recentJobs.value = jData.jobs || []
     if (editingRunner.value?.id) {
       const updated = runners.value.find((r) => r.id === editingRunner.value?.id)
@@ -87,6 +91,13 @@ function openNew() {
 
 function openEdit(r: RunnerDraft) {
   editingRunner.value = JSON.parse(JSON.stringify(r))
+  showRunnerDialog.value = true
+  message.value = ''
+}
+
+function openCopy(r: RunnerDraft, e: Event) {
+  e.stopPropagation()
+  editingRunner.value = { ...JSON.parse(JSON.stringify(r)), id: '', name: `${r.name} (copy)` }
   showRunnerDialog.value = true
   message.value = ''
 }
@@ -222,6 +233,19 @@ async function remove(r: RunnerDraft, e: Event) {
           </button>
           <button
             type="button"
+            class="icon-btn"
+            :title="t('runner.panel.copyRunner')"
+            :aria-label="t('runner.panel.copyRunner')"
+            @click="openCopy(r, $event)"
+          >
+            <!-- copy -->
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <rect x="5.5" y="5.5" width="7" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
+              <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M3.5 10.5V3.5h7" />
+            </svg>
+          </button>
+          <button
+            type="button"
             class="icon-btn danger"
             :title="t('runner.panel.deleteRunner')"
             :aria-label="t('runner.panel.deleteRunner')"
@@ -264,6 +288,7 @@ async function remove(r: RunnerDraft, e: Event) {
       :runner="editingRunner"
       :connections="connections"
       :providers="providers"
+      :providerConfigs="providerConfigs"
       @close="closeDialog"
       @saved="onSaved"
       @refreshed="load"

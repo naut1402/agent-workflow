@@ -18,6 +18,7 @@ export default {
     runnerConfig: 'Runner Config',
     automations: 'Automations',
     logs: 'Logs',
+    statistics: 'Statistics',
   },
   status: {
     updated: 'updated {time}',
@@ -29,6 +30,7 @@ export default {
       runner: 'runner config — polling paused',
       automations: 'automations — polling paused',
       logs: 'logs — polling paused',
+      statistics: 'statistics — polling paused',
     },
   },
   language: {

@@ -112,9 +112,15 @@ beforeAll(() => {
   registerProvider(stubProvider)
   upsertConnection({ id: 'stub-conn-feedback', kind: 'local-console', providerId: PROVIDER_ID, cliPath: 'stub' })
   upsertRunner({ id: 'stub-runner-feedback', connectionId: 'stub-conn-feedback', config: {} })
+  // `reviewer` has no `agent` — a gate-less `implementer` success now keeps
+  // chaining automatically (B202608_1902), and `advancePipelineStepChain`
+  // only skips submitting a job for a next step it can't resolve an agent
+  // for. That stops the chain right after advancing current_phase to
+  // `reviewer`, matching what these tests assert on (the *implementer*
+  // job/ledger entry) without a second, auto-run `reviewer` job racing them.
   fs.writeFileSync(
     path.join(root, 'pipeline.yaml'),
-    ['version: 1', 'steps:', "  - id: implementer", "    agent: ' '", "  - id: reviewer", "    agent: ' '"].join('\n'),
+    ['version: 1', 'steps:', "  - id: implementer", "    agent: ' '", '  - id: reviewer'].join('\n'),
     'utf8',
   )
 })

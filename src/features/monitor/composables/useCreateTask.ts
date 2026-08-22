@@ -207,9 +207,11 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     error.value = null
     loading.value = true
     try {
+      const name = form.value.source === 'issue' ? issuePreview.value?.title?.trim() || undefined : undefined
       const payload: CreateTaskRequest = {
         taskId: form.value.taskId.trim(),
         source: form.value.source,
+        name,
         prompt: form.value.prompt.trim(),
         issueUrl: form.value.source === 'issue' ? form.value.issueUrl.trim() : undefined,
         profileName: form.value.profileName?.trim() || undefined,

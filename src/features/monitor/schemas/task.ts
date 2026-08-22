@@ -27,6 +27,8 @@ export const TaskState = z
     export_json: z.boolean().optional(),
     archived: z.boolean().optional(),
     archived_at: z.string().nullable().optional(),
+    /** Human-readable task title, written by the orchestrator or the create flow. */
+    name: z.string().optional(),
   })
   .passthrough()
 
@@ -62,6 +64,7 @@ export interface TaskStateView {
   export_json: boolean
   archived: boolean
   archived_at: string | null
+  name: string | null
 }
 
 /**
@@ -82,5 +85,6 @@ export function parseTaskState(raw: unknown): TaskStateView {
     export_json: s.export_json ?? false,
     archived: s.archived ?? false,
     archived_at: s.archived_at ?? null,
+    name: typeof s.name === 'string' && s.name.trim() ? s.name.trim() : null,
   }
 }

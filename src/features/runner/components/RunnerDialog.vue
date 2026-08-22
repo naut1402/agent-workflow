@@ -5,12 +5,13 @@ import { slugify } from '../../../core/lib/stringUtils'
 import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
 import { deleteConnection } from '../scripts/ConnectionDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
-import type { ConnectionOption, ProviderEntry, RunnerDraft } from '../types'
+import type { ConnectionOption, ProviderEntry, ProviderConfigOption, RunnerDraft } from '../types'
 
 const props = defineProps<{
   runner: RunnerDraft | null
   connections: ConnectionOption[]
   providers: ProviderEntry[]
+  providerConfigs: ProviderConfigOption[]
 }>()
 
 const emit = defineEmits<{
@@ -178,6 +179,13 @@ function openEditConnection() {
   showConnectionDialog.value = true
 }
 
+function openCopyConnection() {
+  const c = selectedConnection.value
+  if (!c) return
+  editingConnection.value = { ...c, id: '', label: `${c.label} (copy)` }
+  showConnectionDialog.value = true
+}
+
 async function removeConnection() {
   const c = selectedConnection.value
   if (!c) return
@@ -196,7 +204,7 @@ async function removeConnection() {
 async function onConnectionSaved(connectionId: string) {
   emit('refreshed')
   draft.value.connectionId = connectionId
-  message.value = editingConnection.value
+  message.value = editingConnection.value?.id
     ? t('runner.messages.connectionSaved', { id: connectionId })
     : t('runner.messages.connectionAdded', { id: connectionId })
   editingConnection.value = null
@@ -245,7 +253,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <select v-model="draft.connectionId" class="cfg-input">
                 <option value="" disabled>{{ t('runner.fields.connectionPlaceholder') }}</option>
                 <option v-for="c in connections" :key="c.id" :value="c.id">
-                  {{ c.label }} ({{ c.id }})
+                  {{ c.label }}
                 </option>
               </select>
               <div class="icon-btn-group">
@@ -283,6 +291,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                       stroke-linejoin="round"
                       d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
                     />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :disabled="!selectedConnection"
+                  :title="t('runner.connectionDialog.copyConnection')"
+                  :aria-label="t('runner.connectionDialog.copyConnection')"
+                  @click="openCopyConnection"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <rect x="5.5" y="5.5" width="7" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
+                    <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M3.5 10.5V3.5h7" />
                   </svg>
                 </button>
                 <button
@@ -378,6 +399,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     <ConnectionDialog
       v-if="showConnectionDialog"
       :providers="providers"
+      :providerConfigs="providerConfigs"
       :connection="editingConnection"
       @close="closeConnectionDialog"
       @saved="onConnectionSaved"
@@ -402,12 +424,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   gap: 0.5rem;
 }
 .enable-row .cfg-label { margin: 0; }
+.modal-body { display: flex; flex-direction: column; }
 .modal-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 1rem;
+  margin-top: auto;
+  padding-top: 1rem;
 }
 .spacer { flex: 1; }
 .err-banner {

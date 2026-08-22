@@ -31,6 +31,29 @@ describe('renderRequestMarkdown', () => {
     expect(md).toContain('created_by: dashboard')
     expect(md.endsWith('Do the thing\n')).toBe(true)
   })
+
+  test('omits name from frontmatter when not provided', () => {
+    const md = renderRequestMarkdown({
+      taskId: 'F0010',
+      source: 'prompt',
+      knowledgeInputs: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      prompt: 'Do the thing',
+    })
+    expect(md).not.toContain('name:')
+  })
+
+  test('includes trimmed name in frontmatter when provided', () => {
+    const md = renderRequestMarkdown({
+      taskId: 'F0010',
+      source: 'prompt',
+      knowledgeInputs: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      prompt: 'Do the thing',
+      name: '  From dashboard  ',
+    })
+    expect(md).toContain('name: From dashboard')
+  })
 })
 
 describe('createTask', () => {
@@ -57,6 +80,27 @@ describe('createTask', () => {
     expect(state.review_round).toBe(0)
     expect(state.doc_review_round).toEqual({ investigate: 0, design: 0 })
     expect(result.pipelineFile).toBeNull()
+  })
+
+  test('persists name to state and request.md frontmatter when provided', async () => {
+    const root = await tmpRoot()
+    const result = await createTask(root, {
+      taskId: 'F0012',
+      source: 'prompt',
+      prompt: 'Brief',
+      name: '  From dashboard  ',
+      knowledgeInputs: [],
+      autoReview: false,
+      exportJson: false,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    const state = JSON.parse(await fs.readFile(result.stateFile, 'utf8'))
+    expect(state.name).toBe('From dashboard')
+
+    const request = await fs.readFile(result.requestFile, 'utf8')
+    expect(request).toContain('name: From dashboard')
   })
 
   test('writes pipeline.yaml from profile with knowledge on first step', async () => {

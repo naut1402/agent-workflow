@@ -9,6 +9,19 @@ export interface ProviderEntry {
   family?: ProviderFamily
 }
 
+/**
+ * AI-provider setup kept apart from connections: interface + credential +
+ * optional baseURL. A connection then just references a provider config and
+ * picks models usable on it.
+ */
+export interface ProviderConfigOption {
+  id: string
+  label: string
+  providerId: string
+  credentialId: string
+  baseURL?: string
+}
+
 export interface ConnectionOption {
   id: string
   label: string
@@ -17,6 +30,15 @@ export interface ConnectionOption {
   cliPath?: string
   flags?: string[]
   credentialId?: string | null
+  /**
+   * ai-provider: extra settings merged into runnerConfig at execute time.
+   * `models` is the user-picked list (nullable — rotation across them is a
+   * later feature); `model` mirrors its first entry for the provider
+   * wrappers, which only read a single model today. `extraTools` opts this
+   * connection into shell/git/search/web tools beyond the base file-ops —
+   * absent/empty means unchanged (only the base tools).
+   */
+  config?: Record<string, unknown> & { models?: string[]; model?: string; baseURL?: string; extraTools?: string[] }
 }
 
 export interface RunnerDraft {

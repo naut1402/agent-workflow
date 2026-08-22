@@ -46,3 +46,24 @@ export function isRunnableTarget(
   if (currentIdx < 0) return false
   return targetIdx >= currentIdx
 }
+
+/**
+ * Only a phase at or before the current phase may be reset — the reverse
+ * direction of `isRunnableTarget`. Kept as a separate function (not a
+ * `direction` flag on `isRunnableTarget`) because the two guards protect
+ * opposite invariants: Run must never go backwards, Reset must never go
+ * forwards past what has actually run.
+ */
+export function isResettableTarget(
+  phaseKeys: string[],
+  currentPhase: string | null | undefined,
+  targetStepId: string,
+): boolean {
+  if (!phaseKeys.length) return false
+  const targetIdx = phaseKeys.indexOf(targetStepId)
+  if (targetIdx < 0) return false
+  if (currentPhase === 'completed') return true
+  const currentIdx = phaseKeys.indexOf(String(currentPhase ?? ''))
+  if (currentIdx < 0) return false
+  return targetIdx <= currentIdx
+}

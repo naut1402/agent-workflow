@@ -98,4 +98,15 @@ describe('collectTasks', () => {
   test('empty root → []', async () => {
     expect(await collectTasks(await tmp())).toEqual([])
   })
+
+  test('exposes name from state, normalises blank/missing to null', async () => {
+    const root = await tmp()
+    await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+    await fs.writeFile(path.join(root, '.dev-state', 'B3.json'), '{"name":"Epic foo"}')
+    await fs.writeFile(path.join(root, '.dev-state', 'B4.json'), '{"current_phase":"design"}')
+
+    const tasks = await collectTasks(root)
+    expect(tasks.find((t) => t.task_id === 'B3')!.name).toBe('Epic foo')
+    expect(tasks.find((t) => t.task_id === 'B4')!.name).toBeNull()
+  })
 })
