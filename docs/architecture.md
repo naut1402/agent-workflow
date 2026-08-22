@@ -72,6 +72,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | Knowledge | `src/features/knowledge/business/` | File driver + config/driver chọn trong cùng module. |
 | Logging | `src/core/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit/events/usage JSONL (`UsageSnapshot`); job log text thuộc runner. |
 | Runners | `src/features/runner/business/` | Job queue (+ reaper), connections, session ledger (+ capture), providers CLI. |
+| Automations | `src/features/automations/business/` | Rule CRUD (`automations/*.yaml` theo data root), scheduler tick (time/interval/cron), event trigger, action `runTask` (tái dùng `createTask` + `runTaskStep` của monitor), run ledger ở `registryHome()/automations/` (#233). |
 | Settings | `src/features/settings/business/` | Dashboard settings, autoscan, fs browse. |
 | NL chat | `src/features/nl-chat/business/` | Session builder chat (prompt + parse trong cùng module). |
 | CLI | `src/runner-cli.mjs` | Runner CLI entry. |
@@ -89,9 +90,9 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 
 ---
 
-## 3. Frontend (feature-module, 6 mode)
+## 3. Frontend (feature-module, 7 mode)
 
-- `src/main.ts` mount `src/App.vue`. `App.vue` là shell với **6 mode**, sidebar + lựa chọn project lưu trong localStorage. Mode `monitor` **poll `/api/tasks` mỗi 1500ms** (qua `src/features/monitor/composables/useTaskPolling.ts`); các mode khác pause polling.
+- `src/main.ts` mount `src/App.vue`. `App.vue` là shell với **7 mode**, sidebar + lựa chọn project lưu trong localStorage. Mode `monitor` **poll `/api/tasks` mỗi 1500ms** (qua `src/features/monitor/composables/useTaskPolling.ts`); các mode khác pause polling.
 
 | Mode (`App.vue` `mode`) | Thư mục | Component / thành phần chính |
 |---|---|---|
@@ -100,9 +101,10 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | `agentEditor` | `src/features/agent-editor/` | `AgentEditor`, `AgentSectionEditor`, `WorkflowSectionEditor`, `AgentTemplatePicker`, `AgentNlWizard` |
 | `knowledge` | `src/features/knowledge/` | `KnowledgePanel` |
 | `runner` | `src/features/runner/` | `RunnerConfigPanel`, `ConnectionDialog` |
+| `automations` | `src/features/automations/` | `AutomationsPanel`, `AutomationFormDialog`; composable `useAutomations.ts` — rule trigger (time/interval/cron/event) → action `runTask` (#233); chat NL tạo automation qua entity `'automation'` |
 | `logs` (Nhật ký) | `src/features/logs/` | `LogsPanel`, `TaskTimeline`; composable `useTaskTimeline.ts` |
 
-- `src/features/notifications/` — không phải mode, mount xuyên suốt cả 6 mode trong `App.vue` (bell trong `sidebar-footer` và/hoặc `FloatingNotificationIcon` overlay góc trên-phải toàn cục — chọn qua Settings › Thông báo › Vị trí hiển thị: `notificationUiPlacement` = `sidebar` | `floating` | `both`, mặc định `both`; ẩn float khi `unreadCount` về 0). Khi có unread, icon chuông rung + scale (CSS animation). Badge cho HITL-pending/QA-ready **client-only**, suy ra từ chính `tasks` ref đã poll qua `useTaskPolling.ts` (diff `hitl_pending`/`has_qa` qua các lần poll để bắt cạnh chuyển false→true) — không có endpoint/schema backend riêng, vì `.dev-state/<task-id>.json` đã phản ánh đồng nhất cả task chạy từ orchestrator lẫn task chạy từ runner của dashboard (`src/features/runner/business/jobQueue.ts`). Trạng thái đã đọc lưu `localStorage`. Composable `useNotifications.ts` đọc `src/core/configs/appSettings.ts` (`notificationsEnabled`, `notifyHitlPending`, `notifyQaReady`, `notifyBrowserEnabled`, `notifySoundEnabled`, `notificationUiPlacement` — cấu hình ở Settings › Thông báo) để bật/tắt notify theo loại sự kiện, vị trí UI, browser `Notification` API (`lib/browserNotification.ts`), và âm thanh Web Audio API (`lib/sound.ts`). Component dropdown dùng chung `components/NotificationList.vue`.
+- `src/features/notifications/` — không phải mode, mount xuyên suốt cả 7 mode trong `App.vue` (bell trong `sidebar-footer` và/hoặc `FloatingNotificationIcon` overlay góc trên-phải toàn cục — chọn qua Settings › Thông báo › Vị trí hiển thị: `notificationUiPlacement` = `sidebar` | `floating` | `both`, mặc định `both`; ẩn float khi `unreadCount` về 0). Khi có unread, icon chuông rung + scale (CSS animation). Badge cho HITL-pending/QA-ready **client-only**, suy ra từ chính `tasks` ref đã poll qua `useTaskPolling.ts` (diff `hitl_pending`/`has_qa` qua các lần poll để bắt cạnh chuyển false→true) — không có endpoint/schema backend riêng, vì `.dev-state/<task-id>.json` đã phản ánh đồng nhất cả task chạy từ orchestrator lẫn task chạy từ runner của dashboard (`src/features/runner/business/jobQueue.ts`). Trạng thái đã đọc lưu `localStorage`. Composable `useNotifications.ts` đọc `src/core/configs/appSettings.ts` (`notificationsEnabled`, `notifyHitlPending`, `notifyQaReady`, `notifyBrowserEnabled`, `notifySoundEnabled`, `notificationUiPlacement` — cấu hình ở Settings › Thông báo) để bật/tắt notify theo loại sự kiện, vị trí UI, browser `Notification` API (`lib/browserNotification.ts`), và âm thanh Web Audio API (`lib/sound.ts`). Component dropdown dùng chung `components/NotificationList.vue`.
 
 ### 3.1 API layer
 
@@ -116,7 +118,7 @@ Nền tảng FE / shell: `composables/*`, `lib/` (phase, `*Utils`, `*Lib`, `file
 
 Util / wrapper thư viện dùng chung (không gắn domain mode): `src/core/lib/{stringUtils,arrayUtils,dateUtils,yamlLib,markdownLib,diffLib,fileHelper,dirModuleLoader}.ts`.
 
-**Kernel (1.1.0+ — Epic D):** event bus nội bộ tại `src/core/events/` (`emit` / `on` / `once`, `emitEntity` cho CRUD `entity.*`, trigger registry stub contract-only). Nguyên tắc: **persist rồi mới emit** (`saveJob` / `writeStateAtomic` / `saveRegistry` → `emit`); handler lỗi bị nuốt + `console.warn`. Chi tiết + checklist: [`roadmap/1.1.0-event-driven.md`](roadmap/1.1.0-event-driven.md). **Mục lục event theo feature:** [`event-catalog.md`](event-catalog.md). Quan sát UI / prefs ghi event log → #195 / #196 (base `dev/1.1.0/event-driven`). ModeRegistry / plugin contribution API vẫn có thể mở rộng sau (không nằm Epic D).
+**Kernel (1.1.0+ — Epic D):** event bus nội bộ tại `src/core/events/` (`emit` / `on` / `once`, `emitEntity` cho CRUD `entity.*`, trigger registry). Nguyên tắc: **persist rồi mới emit** (`saveJob` / `writeStateAtomic` / `saveRegistry` → `emit`); handler lỗi bị nuốt + `console.warn`. Runtime trigger (schedule tick + event subscriber) do feature **automations** (#233) wire — rule đang bật được đồng bộ vào trigger registry qua `syncTriggerRegistry`. Chi tiết + checklist: [`roadmap/1.1.0-event-driven.md`](roadmap/1.1.0-event-driven.md). **Mục lục event theo feature:** [`event-catalog.md`](event-catalog.md). Quan sát UI / prefs ghi event log → #195 / #196 (base `dev/1.1.0/event-driven`). ModeRegistry / plugin contribution API vẫn có thể mở rộng sau (không nằm Epic D).
 
 ### 3.3 Styling
 
