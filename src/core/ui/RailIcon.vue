@@ -11,6 +11,7 @@ type RailIconName =
   | 'knowledge'
   | 'runner'
   | 'logs'
+  | 'statistics'
   | 'settings'
 
 withDefaults(
@@ -87,6 +88,10 @@ withDefaults(
     <template v-else-if="name === 'logs'">
       <path d="M3 2.5h10v11H3z" />
       <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" />
+    </template>
+    <template v-else-if="name === 'statistics'">
+      <path d="M3 13.5h10" />
+      <path d="M5 13.5V9.5M8 13.5V5.5M11 13.5V7.5" />
     </template>
     <template v-else-if="name === 'settings'">
       <circle cx="8" cy="8" r="2.25" />
