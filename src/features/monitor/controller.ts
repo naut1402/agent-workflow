@@ -3,17 +3,14 @@ import path from 'node:path'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { resolveArtifact } from './business/tasks/index.js'
 import { collectTasks, flowProfilePath, createTask, readState } from './business/tasks/index.js'
+import { runTaskStep as runTaskStepCore } from './business/tasks/index.js'
 import {
   advanceStepOnJobSuccess,
-  advanceStepOnJobSuccessAssumingLock,
   applyArchiveAction,
   applyHitlAction,
   deleteTask,
-  jumpToPipelineStepAssumingLock,
   repairTaskState,
-  withTaskLock,
 } from './business/tasks/state.js'
-import { isRunnableTarget } from './lib/pipelineRunGuards.js'
 import {
   loadPipelineConfig,
   submitJob,
@@ -688,116 +685,31 @@ export class MonitorController extends AbstractController {
 
     const body = parsed.data
 
-    // Everything below reads-checks-writes task state and, on success, creates
-    // the step's job. Serialize per task: without this, two concurrent
-    // requests can both observe "no job running", each move current_phase,
-    // and both submit a job — running a step twice or tagging a job with a
-    // pipelineStepId that no longer matches the final cursor.
-    return withTaskLock(root, id, async () => {
-      const stateFile = path.join(root, '.dev-state', `${id}.json`)
-      let read = await readState(stateFile)
-      if (!read.ok) return this.notFound('task not found', { taskId: id })
-      let state = read.state as Record<string, unknown>
-      if (state.hitl_pending) {
-        return this.badRequest('task is waiting for HITL approval', { taskId: id })
-      }
-
-      const existing = listJobs(50).find(
-        (j) =>
-          j.metadata?.taskId === id &&
-          (j.status === 'queued' || j.status === 'running'),
-      )
-      if (existing) return this.json(409, { error: 'step already running', taskId: id, job: existing })
-
-      let stepId = String(state.current_phase ?? '')
-      const lastSucceeded = listJobs(200).find(
-        (j) =>
-          j.metadata?.taskId === id &&
-          j.status === 'succeeded' &&
-          !j.applyTarget &&
-          j.metadata?.pipelineStepId === stepId,
-      )
-      if (lastSucceeded && stepId) {
-        await advanceStepOnJobSuccessAssumingLock(root, id, stepId, stateFile)
-        read = await readState(stateFile)
-        if (!read.ok) return this.notFound('task not found', { taskId: id })
-        state = read.state as Record<string, unknown>
-        if (state.hitl_pending) {
-          return this.badRequest('task is waiting for HITL approval', { taskId: id })
-        }
-        stepId = String(state.current_phase ?? '')
-      }
-
-      const pipeline = await loadPipelineConfig(root, id)
-      const phaseKeys = (pipeline.steps || []).map((s: any) => s.id).filter(Boolean)
-      const target = body.targetStepId ?? undefined
-      const skip = body.skipIntermediate === true && !!target && target !== stepId
-      // Chain: no skip requested, but a target ahead of the start step — the
-      // job queue auto-advances toward it and stops once reached (jobQueue.ts
-      // `advancePipelineStepChain`). Validate it same as a jump target so an
-      // out-of-pipeline/past id can't be recorded as `chainTarget` and let the
-      // chain run past where the caller meant to stop.
-      const chainTarget = !skip && !!target && target !== stepId
-
-      if ((skip || chainTarget) && target) {
-        if (!phaseKeys.includes(target) || !isRunnableTarget(phaseKeys, stepId, target)) {
-          return this.badRequest('invalid target step', { taskId: id, stepId, targetStepId: target })
-        }
-      }
-
-      // Resolve the step that will actually run BEFORE mutating current_phase
-      // (jump), so a missing agent / request.md aborts without moving the
-      // cursor to a step nothing then executes for.
-      const runStepId = skip && target ? target : stepId
-      const step = (pipeline.steps || []).find((s: any) => s.id === runStepId)
-      if (!step?.agent) {
-        return this.badRequest('no runnable current step', { taskId: id, stepId: runStepId })
-      }
-
-      const requestFile = path.join(root, 'tasks', id, 'request.md')
-      let userPrompt: string
-      try {
-        userPrompt = await fs.readFile(requestFile, 'utf8')
-      } catch {
-        return this.notFound('request.md not found', { taskId: id })
-      }
-
-      if (skip && target) {
-        const jumped = await jumpToPipelineStepAssumingLock(stateFile, target)
-        if ('error' in jumped) {
-          return this.json(jumped.status, { error: jumped.error, taskId: id })
-        }
-        state = jumped.state
-        stepId = target
-      }
-
-      const job = submitJob({
-        runnerId: body.runnerId ?? undefined,
-        agentRef: step.agent,
-        workspace: path.join(root, 'tasks', id),
-        userPrompt,
-        produces: Array.isArray(step.produces) ? step.produces : undefined,
-        sessionMode: 'new',
-        metadata: {
-          projectRoot: path.dirname(root),
-          devTeamRoot: root,
-          projectId: this.projectId || undefined,
-          taskId: id,
-          pipelineStepId: stepId,
-          ...(chainTarget && target ? { chainTarget: target } : {}),
-        },
-      })
-
-      emitAudit({
-        op: 'update',
-        entity: 'task-state',
-        identifier: id,
-        projectId: this.projectId,
-        detail: { action: 'run-step', stepId, jobId: job.id, ...(skip ? { skipIntermediate: true } : {}) },
-      })
-
-      return this.created({ job })
+    // Core (per-task lock, HITL gate, busy 409, auto-advance, submit) lives in
+    // business `runTaskStep` — shared with automations (#233).
+    const result = await runTaskStepCore(root, this.projectId, id, {
+      runnerId: body.runnerId ?? null,
+      targetStepId: body.targetStepId ?? null,
+      skipIntermediate: body.skipIntermediate === true,
     })
+    if ('error' in result) {
+      return this.json(result.status, { error: result.error, ...result.extra })
+    }
+
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: this.projectId,
+      detail: {
+        action: 'run-step',
+        stepId: result.stepId,
+        jobId: result.job.id,
+        ...(result.skipIntermediate ? { skipIntermediate: true } : {}),
+      },
+    })
+
+    return this.created({ job: result.job })
   }
 
   async postTaskFeedback() {
