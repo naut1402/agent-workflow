@@ -19,6 +19,7 @@ export default {
     runner: 'Runner',
     runnerConfig: 'Runner Config',
     logs: 'Nhật ký',
+    statistics: 'Thống kê',
   },
   status: {
     updated: 'cập nhật {time}',
@@ -29,6 +30,7 @@ export default {
       knowledge: 'knowledge — polling paused',
       runner: 'runner config — polling paused',
       logs: 'nhật ký — polling paused',
+      statistics: 'thống kê — polling paused',
     },
   },
   language: {

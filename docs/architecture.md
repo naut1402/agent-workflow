@@ -71,6 +71,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | Tasks / artifacts | `src/features/monitor/business/` | Tasks, artifact actions, github issue, task chat. |
 | Knowledge | `src/features/knowledge/business/` | File driver + config/driver chọn trong cùng module. |
 | Logging | `src/core/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit/events/usage JSONL (`UsageSnapshot`); job log text thuộc runner. |
+| Statistics | `src/features/statistics/business/` | Aggregation token usage từ `usage.jsonl` theo project/task/step/job/model/provider/date/source (`GET /api/statistics/usage`); tầng đọc gom 1 module để cắm sqlite fast-path (#229) sau. |
 | Runners | `src/features/runner/business/` | Job queue (+ reaper), connections, session ledger (+ capture), providers CLI. |
 | Settings | `src/features/settings/business/` | Dashboard settings, autoscan, fs browse. |
 | NL chat | `src/features/nl-chat/business/` | Session builder chat (prompt + parse trong cùng module). |
@@ -89,9 +90,9 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 
 ---
 
-## 3. Frontend (feature-module, 6 mode)
+## 3. Frontend (feature-module, 7 mode)
 
-- `src/main.ts` mount `src/App.vue`. `App.vue` là shell với **6 mode**, sidebar + lựa chọn project lưu trong localStorage. Mode `monitor` **poll `/api/tasks` mỗi 1500ms** (qua `src/features/monitor/composables/useTaskPolling.ts`); các mode khác pause polling.
+- `src/main.ts` mount `src/App.vue`. `App.vue` là shell với **7 mode**, sidebar + lựa chọn project lưu trong localStorage. Mode `monitor` **poll `/api/tasks` mỗi 1500ms** (qua `src/features/monitor/composables/useTaskPolling.ts`); các mode khác pause polling.
 
 | Mode (`App.vue` `mode`) | Thư mục | Component / thành phần chính |
 |---|---|---|
@@ -101,6 +102,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | `knowledge` | `src/features/knowledge/` | `KnowledgePanel` |
 | `runner` | `src/features/runner/` | `RunnerConfigPanel`, `ConnectionDialog` |
 | `logs` (Nhật ký) | `src/features/logs/` | `LogsPanel`, `TaskTimeline`; composable `useTaskTimeline.ts` |
+| `statistics` (Thống kê) | `src/features/statistics/` | `StatisticsPanel`, `ChartCard` (wrapper chart — mermaid P0, đổi renderer sau không sửa consumer); `lib/mermaidChart.ts` build pie/xychart-beta; drill-down project → task → step → job |
 
 - `src/features/notifications/` — không phải mode, mount xuyên suốt cả 6 mode trong `App.vue` (bell trong `sidebar-footer` và/hoặc `FloatingNotificationIcon` overlay góc trên-phải toàn cục — chọn qua Settings › Thông báo › Vị trí hiển thị: `notificationUiPlacement` = `sidebar` | `floating` | `both`, mặc định `both`; ẩn float khi `unreadCount` về 0). Khi có unread, icon chuông rung + scale (CSS animation). Badge cho HITL-pending/QA-ready **client-only**, suy ra từ chính `tasks` ref đã poll qua `useTaskPolling.ts` (diff `hitl_pending`/`has_qa` qua các lần poll để bắt cạnh chuyển false→true) — không có endpoint/schema backend riêng, vì `.dev-state/<task-id>.json` đã phản ánh đồng nhất cả task chạy từ orchestrator lẫn task chạy từ runner của dashboard (`src/features/runner/business/jobQueue.ts`). Trạng thái đã đọc lưu `localStorage`. Composable `useNotifications.ts` đọc `src/core/configs/appSettings.ts` (`notificationsEnabled`, `notifyHitlPending`, `notifyQaReady`, `notifyBrowserEnabled`, `notifySoundEnabled`, `notificationUiPlacement` — cấu hình ở Settings › Thông báo) để bật/tắt notify theo loại sự kiện, vị trí UI, browser `Notification` API (`lib/browserNotification.ts`), và âm thanh Web Audio API (`lib/sound.ts`). Component dropdown dùng chung `components/NotificationList.vue`.
 

@@ -17,7 +17,7 @@
     "lint:commit": "commitlint",
     "check:todo": "bun .github/scripts/check-todo-debt.ts",
     "format": "prettier --write .",
-    "test": "bun test tests/src/server tests/src/features/knowledge/business tests/src/features/logs/business tests/src/features/agent-editor/business tests/src/features/pipeline-editor/business tests/src/features/monitor/business tests/src/features/runner/business tests/src/core/lib/fileHelper.test.ts tests/src/core/log tests/src/core/events tests/mcp",
+    "test": "bun test tests/src/server tests/src/features/knowledge/business tests/src/features/logs/business tests/src/features/statistics/business tests/src/features/agent-editor/business tests/src/features/pipeline-editor/business tests/src/features/monitor/business tests/src/features/runner/business tests/src/core/lib/fileHelper.test.ts tests/src/core/log tests/src/core/events tests/mcp",
     "test:fe": "vitest run --coverage",
     "test:e2e": "playwright test --pass-with-no-tests",
     "test:all": "bun run typecheck && bun run lint && bun run test && bun run test:fe && bun run test:e2e"
@@ -28,6 +28,8 @@
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@toast-ui/editor": "^3.2.2",
     "@vue-flow/core": "^1.41.0",
+    "chart.js": "^4.5.1",
+    "chartjs-plugin-datalabels": "^2.2.0",
     "diff": "^9.0.0",
     "hono": "^4.12.27",
     "js-yaml": "^4.1.0",

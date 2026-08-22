@@ -17,6 +17,7 @@ export default {
     runner: 'Runner',
     runnerConfig: 'Runner Config',
     logs: 'Logs',
+    statistics: 'Statistics',
   },
   status: {
     updated: 'updated {time}',
@@ -27,6 +28,7 @@ export default {
       knowledge: 'knowledge — polling paused',
       runner: 'runner config — polling paused',
       logs: 'logs — polling paused',
+      statistics: 'statistics — polling paused',
     },
   },
   language: {
