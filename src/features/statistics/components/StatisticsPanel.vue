@@ -3,6 +3,7 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, onMounted, ref, watch } from 'vue'
 import ChartCard from './ChartCard.vue'
 import ChartSettingsDialog from './ChartSettingsDialog.vue'
+import ChartTile from './ChartTile.vue'
 import CSelect from '../../../core/ui/CSelect.vue'
 import type { CSelectOption } from '../../../core/ui/CSelect.vue'
 import { fetchUsageStats } from '../scripts/usageStatsApi'
@@ -12,18 +13,20 @@ import {
   sanitizeChartConfig,
   type ChartConfig,
 } from '../lib/chartConfig'
-import { formatDuration, formatNumber, formatTs, pickUnitScale, type NumberFormat } from '../lib/format'
+import { formatDuration, formatNumber, formatTs, pickUnitScale } from '../lib/format'
 
 /**
- * Mode Thống kê (issue #231): tổng hợp token usage theo project → task → step
- * → job, ĐA chart — mỗi chart có config riêng (groupBy/metric/loại/tiêu đề/
- * style) lưu localStorage, thêm/xoá qua nút +/×. Bảng số liệu + drill-down
- * theo chart đang active (chart cuối được tương tác).
+ * Mode Thống kê (issue #231): gallery chart 4 cột — mỗi chart một card
+ * (ChartTile) với config riêng (groupBy/metric/loại/tiêu đề/span/height/định
+ * dạng số/style) lưu localStorage. Card summary tách riêng khỏi bảng; bảng +
+ * drill-down theo chart đang active (chart cuối được tương tác).
  */
 
 const PREFS_KEY = 'dev-dashboard-statistics-prefs'
 const DAY_MS = 86_400_000
 const RANGE_OPTIONS = [7, 30, 90, 0] as const // 0 = tất cả
+/** Giữ số cột trục X trong mức đọc được — dư gộp vào "(còn lại)". */
+const MAX_CHART_ITEMS = 12
 
 type Scope = 'project' | 'all'
 
@@ -34,7 +37,6 @@ const { t } = useI18nHelpers()
 // ── Config hiển thị (persist localStorage) ───────────────────────────────────
 const scope = ref<Scope>('project')
 const rangeDays = ref<number>(30)
-const numberFormat = ref<NumberFormat>('compact')
 const charts = ref<ChartConfig[]>([makeDefaultChartConfig()])
 
 // ── Trạng thái runtime ───────────────────────────────────────────────────────
@@ -57,7 +59,6 @@ function loadPrefs(): void {
     if (typeof p.rangeDays === 'number' && (RANGE_OPTIONS as readonly number[]).includes(p.rangeDays)) {
       rangeDays.value = p.rangeDays
     }
-    if (p.numberFormat === 'compact' || p.numberFormat === 'full') numberFormat.value = p.numberFormat
     if (Array.isArray(p.charts) && p.charts.length) {
       const parsed = p.charts.map(sanitizeChartConfig).filter((c): c is ChartConfig => !!c)
       if (parsed.length) charts.value = parsed
@@ -68,6 +69,7 @@ function loadPrefs(): void {
         groupBy: p.groupBy,
         metric: p.metric,
         chartType: p.chartType,
+        numberFormat: p.numberFormat,
         style: (p.chart as Record<string, unknown>) || {},
       })
       if (legacy) charts.value = [legacy]
@@ -87,7 +89,6 @@ function persistPrefs(): void {
       JSON.stringify({
         scope: scope.value,
         rangeDays: rangeDays.value,
-        numberFormat: numberFormat.value,
         charts: charts.value,
       }),
     )
@@ -96,18 +97,13 @@ function persistPrefs(): void {
   }
 }
 
-watch([scope, rangeDays, numberFormat], persistPrefs)
+watch([scope, rangeDays], persistPrefs)
 watch(charts, persistPrefs, { deep: true })
 
 // ── Toolbar options ──────────────────────────────────────────────────────────
 const scopeOptions = computed<CSelectOption[]>(() => [
   { value: 'project' as Scope, label: t('statistics.scope.project') },
   { value: 'all' as Scope, label: t('statistics.scope.all') },
-])
-
-const numberFormatOptions = computed<CSelectOption[]>(() => [
-  { value: 'compact', label: t('statistics.numberFormat.compact') },
-  { value: 'full', label: t('statistics.numberFormat.full') },
 ])
 
 /** Project param hiệu dụng: project đang chọn ở shell (null → default project,
@@ -124,6 +120,9 @@ const activeChart = computed(
 const activeResult = computed(() => (activeChart.value ? results.value[activeChart.value.id] : null))
 
 const rows = computed(() => activeResult.value?.groups ?? [])
+
+/** Định dạng số theo chart đang active (bảng + summary dùng chung). */
+const activeNumberFormat = computed(() => activeChart.value?.numberFormat ?? 'compact')
 
 function activateChart(id: string) {
   activeChartId.value = id
@@ -160,23 +159,41 @@ function removeChart(id: string) {
   if (activeChartId.value === id) activeChartId.value = charts.value[0]?.id ?? ''
 }
 
+function onTileResize(chart: ChartConfig, span: number, height: number) {
+  activateChart(chart.id)
+  updateChart({ ...chart, span, style: { ...chart.style, height } })
+}
+
 // ── Data mỗi chart ───────────────────────────────────────────────────────────
 function cardSeries(chart: ChartConfig): { labels: string[]; values: number[] } {
-  const result = results.value[chart.id]
-  const groups = result?.groups ?? []
+  const groups = results.value[chart.id]?.groups ?? []
   const labels = groups.map((g) => (g.key === '' ? t('statistics.noAttribution') : g.key))
   const values = groups.map((g) => g[chart.metric] ?? 0)
-  if (chart.chartType !== 'pie' || groups.length <= 10) return { labels, values }
-  const rest = values.slice(10).reduce((sum, v) => sum + v, 0)
-  return { labels: [...labels.slice(0, 10), t('statistics.other')], values: [...values.slice(10), rest] }
+  if (groups.length <= MAX_CHART_ITEMS) return { labels, values }
+  const rest = values.slice(MAX_CHART_ITEMS).reduce((sum, v) => sum + v, 0)
+  return {
+    labels: [...labels.slice(0, MAX_CHART_ITEMS), t('statistics.other')],
+    values: [...values.slice(0, MAX_CHART_ITEMS), rest],
+  }
 }
 
 /** Scale đơn vị áp cho chart khi bật định dạng compact — nhãn trục không chồng. */
 function cardUnitScale(chart: ChartConfig): { divisor: number; axisSuffix: string } | undefined {
-  if (numberFormat.value !== 'compact') return undefined
+  if (chart.numberFormat !== 'compact') return undefined
   const { values } = cardSeries(chart)
   return pickUnitScale(Math.max(0, ...values))
 }
+
+// ── Card summary (min/max/avg — tách khỏi bảng) ──────────────────────────────
+const entryStats = computed(() => activeResult.value?.totals ?? null)
+
+/** Phân bố tổng token GIỮA các group (task nhẹ nhất/nặng nhất/trung bình). */
+const groupSpread = computed(() => {
+  if (!rows.value.length) return null
+  const totals = rows.value.map((g) => g.totalTokens)
+  const sum = totals.reduce((s, v) => s + v, 0)
+  return { min: Math.min(...totals), max: Math.max(...totals), avg: sum / totals.length }
+})
 
 // ── Drill-down ───────────────────────────────────────────────────────────────
 const drillable = computed(() => {
@@ -311,15 +328,6 @@ onMounted(() => {
           class="statistics-select"
         />
       </div>
-      <div class="statistics-field">
-        <span class="statistics-field-label">{{ t('statistics.numberFormat.label') }}</span>
-        <CSelect
-          v-model="numberFormat"
-          :options="numberFormatOptions"
-          :aria-label="t('statistics.numberFormat.label')"
-          class="statistics-select"
-        />
-      </div>
       <div class="statistics-range" role="group" :aria-label="t('statistics.range.label')">
         <button
           v-for="d in RANGE_OPTIONS"
@@ -369,71 +377,71 @@ onMounted(() => {
       </button>
     </nav>
 
+    <!-- Card summary: min/max/avg per-entry + phân bố giữa các group -->
+    <section v-if="activeResult" class="statistics-summary-card">
+      <div class="summary-block">
+        <span class="summary-block-title">{{ t('statistics.summary.overview') }}</span>
+        <span class="summary-line">
+          {{ t('statistics.summary.groups', { n: formatNumber(activeResult.totals.entries, activeNumberFormat) }) }}
+          · {{ t('statistics.groupBy.' + (activeChart?.groupBy ?? 'task')) }}
+        </span>
+        <span class="summary-line">
+          {{ t('statistics.totals.tokens') }}:
+          <strong>{{ formatNumber(activeResult.totals.totalTokens, activeNumberFormat) }}</strong>
+          · {{ t('statistics.totals.jobs') }}:
+          <strong>{{ formatNumber(activeResult.totals.jobs, activeNumberFormat) }}</strong>
+        </span>
+      </div>
+      <div v-if="entryStats" class="summary-block">
+        <span class="summary-block-title">{{ t('statistics.summary.perEntry') }}</span>
+        <span class="summary-line">
+          {{ t('statistics.stats.minTokens') }}: <strong>{{ formatNumber(entryStats.minTotalTokens, activeNumberFormat) }}</strong>
+          · {{ t('statistics.stats.maxTokens') }}: <strong>{{ formatNumber(entryStats.maxTotalTokens, activeNumberFormat) }}</strong>
+          · {{ t('statistics.stats.avgTokens') }}: <strong>{{ formatNumber(entryStats.avgTotalTokens, activeNumberFormat) }}</strong>
+        </span>
+        <span class="summary-line">
+          {{ t('statistics.stats.minDuration') }}: <strong>{{ formatDuration(entryStats.minDurationMs ?? 0) }}</strong>
+          · {{ t('statistics.stats.maxDuration') }}: <strong>{{ formatDuration(entryStats.maxDurationMs ?? 0) }}</strong>
+          · {{ t('statistics.stats.avgDuration') }}: <strong>{{ formatDuration(entryStats.avgDurationMs ?? 0) }}</strong>
+        </span>
+      </div>
+      <div v-if="groupSpread" class="summary-block">
+        <span class="summary-block-title">{{ t('statistics.summary.betweenGroups') }}</span>
+        <span class="summary-line">
+          {{ t('statistics.stats.minTokens') }}: <strong>{{ formatNumber(groupSpread.min, activeNumberFormat) }}</strong>
+          · {{ t('statistics.stats.maxTokens') }}: <strong>{{ formatNumber(groupSpread.max, activeNumberFormat) }}</strong>
+          · {{ t('statistics.stats.avgTokens') }}: <strong>{{ formatNumber(groupSpread.avg, activeNumberFormat) }}</strong>
+        </span>
+      </div>
+    </section>
+
     <div class="statistics-charts">
-      <div
+      <ChartTile
         v-for="chart in charts"
         :key="chart.id"
-        class="statistics-chart-item"
+        :span="chart.span"
+        :height="chart.style.height"
+        :removable="charts.length > 1"
         :class="{ 'is-active': chart.id === activeChart?.id }"
-        @click.capture="activateChart(chart.id)"
+        @resize="(span, height) => onTileResize(chart, span, height)"
+        @settings="openSettings(chart.id)"
+        @remove="removeChart(chart.id)"
       >
         <ChartCard
           :title="chart.title"
           :chart-type="chart.chartType"
           :labels="cardSeries(chart).labels"
           :values="cardSeries(chart).values"
-          :value-label="t(`statistics.metric.${chart.metric}`)"
           :loading="loading"
           :style-config="chart.style"
           :unit-scale="cardUnitScale(chart)"
-          @resize="(w, h) => updateChart({ ...chart, style: { ...chart.style, width: w, height: h } })"
-        >
-          <template #control>
-            <button
-              type="button"
-              class="icon-btn"
-              :title="t('statistics.settings.open')"
-              :aria-label="t('statistics.settings.open')"
-              @click.stop="openSettings(chart.id)"
-            >
-              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-                <circle cx="8" cy="8" r="5.4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-dasharray="1.9 2.24" />
-                <circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.25" />
-              </svg>
-            </button>
-            <button
-              v-if="charts.length > 1"
-              type="button"
-              class="icon-btn"
-              :title="t('statistics.removeChart')"
-              :aria-label="t('statistics.removeChart')"
-              @click.stop="removeChart(chart.id)"
-            >
-              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-                <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8" />
-              </svg>
-            </button>
-          </template>
-        </ChartCard>
-      </div>
+        />
+      </ChartTile>
     </div>
 
     <p v-if="activeResult?.truncated" class="muted statistics-truncated">
       {{ t('statistics.truncated') }}
     </p>
-
-    <div v-if="activeResult" class="statistics-summary">
-      <span>{{ t('statistics.totals.entries') }}: <strong>{{ formatNumber(activeResult.totals.entries, numberFormat) }}</strong></span>
-      <span>{{ t('statistics.totals.jobs') }}: <strong>{{ formatNumber(activeResult.totals.jobs, numberFormat) }}</strong></span>
-      <span>
-        {{ t('statistics.totals.tokens') }}:
-        <strong>{{ formatNumber(activeResult.totals.totalTokens, numberFormat) }}</strong>
-      </span>
-      <span>
-        {{ t('statistics.totals.duration') }}:
-        <strong>{{ formatDuration(activeResult.totals.durationMs) }}</strong>
-      </span>
-    </div>
 
     <div v-if="rows.length" class="statistics-table-wrap">
       <table class="statistics-table">
@@ -447,13 +455,7 @@ onMounted(() => {
             <th class="num">{{ t('statistics.table.cacheRead') }}</th>
             <th class="num">{{ t('statistics.table.cacheWrite') }}</th>
             <th class="num">{{ t('statistics.table.total') }}</th>
-            <th class="num">{{ t('statistics.stats.minTokens') }}</th>
-            <th class="num">{{ t('statistics.stats.maxTokens') }}</th>
-            <th class="num">{{ t('statistics.stats.avgTokens') }}</th>
             <th class="num">{{ t('statistics.table.duration') }}</th>
-            <th class="num">{{ t('statistics.stats.minDuration') }}</th>
-            <th class="num">{{ t('statistics.stats.maxDuration') }}</th>
-            <th class="num">{{ t('statistics.stats.avgDuration') }}</th>
             <th class="num">{{ t('statistics.table.lastTs') }}</th>
           </tr>
         </thead>
@@ -468,20 +470,14 @@ onMounted(() => {
             <td class="statistics-key">
               {{ group.key === '' ? t('statistics.noAttribution') : group.key }}
             </td>
-            <td class="num">{{ formatNumber(group.entries, numberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.jobs, numberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.inputTokens, numberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.outputTokens, numberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.cacheReadTokens, numberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.cacheWriteTokens, numberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.totalTokens, numberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.minTotalTokens, numberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.maxTotalTokens, numberFormat) }}</td>
-            <td class="num">{{ formatNumber(group.avgTotalTokens, numberFormat) }}</td>
+            <td class="num">{{ formatNumber(group.entries, activeNumberFormat) }}</td>
+            <td class="num">{{ formatNumber(group.jobs, activeNumberFormat) }}</td>
+            <td class="num">{{ formatNumber(group.inputTokens, activeNumberFormat) }}</td>
+            <td class="num">{{ formatNumber(group.outputTokens, activeNumberFormat) }}</td>
+            <td class="num">{{ formatNumber(group.cacheReadTokens, activeNumberFormat) }}</td>
+            <td class="num">{{ formatNumber(group.cacheWriteTokens, activeNumberFormat) }}</td>
+            <td class="num">{{ formatNumber(group.totalTokens, activeNumberFormat) }}</td>
             <td class="num">{{ formatDuration(group.durationMs) }}</td>
-            <td class="num">{{ formatDuration(group.minDurationMs ?? 0) }}</td>
-            <td class="num">{{ formatDuration(group.maxDurationMs ?? 0) }}</td>
-            <td class="num">{{ formatDuration(group.avgDurationMs ?? 0) }}</td>
             <td class="num">{{ formatTs(group.lastTs) }}</td>
           </tr>
         </tbody>
@@ -501,7 +497,7 @@ onMounted(() => {
 <style scoped lang="scss">
 .statistics-panel {
   padding: 1rem 1.25rem;
-  max-width: 1200px;
+  max-width: 1400px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -623,27 +619,66 @@ onMounted(() => {
 .statistics-crumb-x {
   opacity: 0.7;
 }
-.statistics-charts {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.statistics-chart-item.is-active :deep(.chart-card) {
-  border-color: var(--accent);
-}
-.statistics-truncated {
-  margin: 0 0 0.25rem;
-}
-.statistics-summary {
+/* Card summary — thông tin min/max/avg tách khỏi bảng. */
+.statistics-summary-card {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.25rem;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin: 0.25rem 0 0.5rem;
+  gap: 0.75rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 0.6rem 1rem;
+  margin: 0.5rem 0 0.25rem;
 }
-.statistics-summary strong {
+.summary-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 14rem;
+}
+.summary-block-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.summary-line {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.summary-line strong {
   color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+/* Gallery 4 cột — tile mặc định span 2 (thuộc tính grid-column do ChartTile set). */
+.statistics-charts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .statistics-charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.statistics-charts .chart-tile.is-active {
+  border-color: var(--accent);
+}
+/* Zoom/fullscreen của mermaid toolbar + group nút tile: cùng cụm góc phải,
+   chỉ hiện khi hover chart (group tile nằm trên, toolbar ngay dưới). */
+.statistics-charts :deep(.mermaid-toolbar) {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+  top: 30px;
+}
+.statistics-charts .chart-tile:hover :deep(.mermaid-toolbar) {
+  opacity: 1;
+  pointer-events: auto;
+}
+.statistics-truncated {
+  margin: 0.5rem 0 0.25rem;
 }
 .statistics-table-wrap {
   flex: 1 1 auto;
@@ -653,6 +688,7 @@ onMounted(() => {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--panel);
+  margin-top: 0.5rem;
 }
 .statistics-table {
   width: 100%;

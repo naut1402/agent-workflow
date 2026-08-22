@@ -149,6 +149,7 @@ function finalize(acc: Accumulator): UsageGroup {
 
 function totalsOf(accs: Accumulator[]): UsageTotals {
   const total = accumulateAll(accs)
+  const hasDuration = total.durationCount > 0
   return {
     entries: total.entries,
     jobs: countDistinctJobs(accs),
@@ -160,6 +161,14 @@ function totalsOf(accs: Accumulator[]): UsageTotals {
     durationMs: total.durationMs,
     firstTs: Number.isFinite(total.firstTs) ? total.firstTs : null,
     lastTs: Number.isFinite(total.lastTs) ? total.lastTs : null,
+    // Entry-level: min/max gộp từ các group, avg chia trên TOÀN bộ entry.
+    // accs rỗng → sentinel Infinity về 0.
+    minTotalTokens: Number.isFinite(total.minTotalTokens) ? total.minTotalTokens : 0,
+    maxTotalTokens: total.maxTotalTokens,
+    avgTotalTokens: total.entries ? total.totalTokens / total.entries : 0,
+    minDurationMs: hasDuration ? total.minDurationMs : null,
+    maxDurationMs: hasDuration ? total.maxDurationMs : null,
+    avgDurationMs: hasDuration ? total.durationMs / total.durationCount : null,
   }
 }
 
@@ -173,6 +182,11 @@ function accumulateAll(accs: Accumulator[]): Accumulator {
     total.cacheWriteTokens += acc.cacheWriteTokens
     total.totalTokens += acc.totalTokens
     total.durationMs += acc.durationMs
+    total.durationCount += acc.durationCount
+    total.minTotalTokens = Math.min(total.minTotalTokens, acc.minTotalTokens)
+    total.maxTotalTokens = Math.max(total.maxTotalTokens, acc.maxTotalTokens)
+    total.minDurationMs = Math.min(total.minDurationMs, acc.minDurationMs)
+    total.maxDurationMs = Math.max(total.maxDurationMs, acc.maxDurationMs)
     total.firstTs = Math.min(total.firstTs, acc.firstTs)
     total.lastTs = Math.max(total.lastTs, acc.lastTs)
   }

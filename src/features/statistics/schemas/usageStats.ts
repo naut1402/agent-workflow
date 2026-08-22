@@ -85,6 +85,13 @@ export const UsageTotalsSchema = z.object({
   durationMs: z.number().nonnegative(),
   firstTs: z.number().nullable(),
   lastTs: z.number().nullable(),
+  /** Thống kê theo TỪNG ENTRY trên toàn phạm vi (đã filter) — cho card summary. */
+  minTotalTokens: z.number().nonnegative(),
+  maxTotalTokens: z.number().nonnegative(),
+  avgTotalTokens: z.number().nonnegative(),
+  minDurationMs: z.number().nullable(),
+  maxDurationMs: z.number().nullable(),
+  avgDurationMs: z.number().nullable(),
 })
 export type UsageTotals = z.infer<typeof UsageTotalsSchema>
 

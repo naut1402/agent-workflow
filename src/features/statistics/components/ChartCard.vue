@@ -3,22 +3,15 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { parseMarkdown, renderMermaid } from '../../../core/lib/markdownLib'
 import { attachMermaidControls } from '../../../core/composables/useMermaidControls'
-import {
-  buildChart,
-  clampChartSize,
-  type ChartKind,
-  type ChartStyleConfig,
-} from '../lib/mermaidChart'
+import { buildChart, type ChartKind, type ChartStyleConfig } from '../lib/mermaidChart'
 
 /**
- * Wrapper chart cho statistics (issue #231 quyết định 1): nhận DATA + config
- * (không nhận mermaid definition sẵn) nên đổi renderer sau này (chart.js/echarts)
- * chỉ sửa bên trong file này — consumers và test không đổi. Slot `control` cho
- * panel gắn icon button (settings/remove) mà không cần biết renderer.
+ * Wrapper chart thuần render (issue #231 quyết định 1): nhận DATA + config,
+ * nội bộ build mermaid rồi đi qua pipeline markdownLib. Đổi renderer sau này
+ * (chart.js/echarts) chỉ sửa file này — consumers và test không đổi.
  *
- * Không có title riêng ở header — tiêu đề là của CHART (prop `title`, rỗng thì
- * mermaid không vẽ dòng title). Body cao cố định + scroll; handle ở GÓC CHART
- * kéo đổi kích thước (width/height áp qua directive config của mermaid).
+ * Chart vẽ FULL panel: width đo qua ResizeObserver, height theo styleConfig.
+ * Không chứa nút bấm — ChartTile (cha) sở hữu overlay button group + resize.
  */
 const props = withDefaults(
   defineProps<{
@@ -27,22 +20,18 @@ const props = withDefaults(
     chartType: ChartKind
     labels: string[]
     values: number[]
-    valueLabel?: string
     loading?: boolean
     styleConfig?: ChartStyleConfig
-    /** Scale đơn vị K/M/B — giá trị chia divisor, nhãn trục y thêm suffix. */
+    /** Scale đơn vị K/M/B — giá trị chia divisor. */
     unitScale?: { divisor: number; axisSuffix: string }
   }>(),
-  { title: '', valueLabel: '', loading: false, styleConfig: undefined, unitScale: undefined },
+  { title: '', loading: false, styleConfig: undefined, unitScale: undefined },
 )
 
-const emit = defineEmits<{ resize: [width: number, height: number] }>()
-
 const { t } = useI18nHelpers()
-const chartRoot = ref<HTMLElement | null>(null)
-const resizeHandle = ref<HTMLElement | null>(null)
-/** Kích thước preview trong lúc kéo (chỉ đổi CSS, không re-render mermaid). */
-const dragPreview = ref<{ width: number; height: number } | null>(null)
+const bodyRef = ref<HTMLElement | null>(null)
+/** Width vùng vẽ đo được (px) — fallback 720 khi chưa đo được (jsdom). */
+const renderWidth = ref(720)
 
 const hasData = computed(
   () => props.labels.length > 0 && props.values.some((v) => Number.isFinite(v) && v > 0),
@@ -54,7 +43,7 @@ const definition = computed(() => {
     title: props.title,
     labels: props.labels,
     values: props.values,
-    valueLabel: props.valueLabel || '',
+    width: renderWidth.value,
     style: props.styleConfig,
     unitScale: props.unitScale,
   })
@@ -64,18 +53,16 @@ const html = computed(() =>
   definition.value ? parseMarkdown(`\`\`\`mermaid\n${definition.value}\n\`\`\`\n`) : '',
 )
 
-const canvasStyle = computed(() => {
-  const size = dragPreview.value
-  if (!size) return undefined
-  return { width: `${size.width}px`, height: `${size.height}px` }
-})
+const bodyStyle = computed(() => ({
+  height: `${props.styleConfig?.height ?? 300}px`,
+}))
 
 async function scheduleRender(): Promise<void> {
   await nextTick()
-  const root = chartRoot.value
-  if (!root || !definition.value) return
-  await renderMermaid(root)
-  attachMermaidControls(root, { onToggleFullscreen: onToggleMermaidFullscreen })
+  if (bodyRef.value && definition.value) {
+    await renderMermaid(bodyRef.value)
+    attachMermaidControls(bodyRef.value, { onToggleFullscreen: onToggleMermaidFullscreen })
+  }
 }
 
 function onToggleMermaidFullscreen(wrapEl: HTMLElement) {
@@ -86,57 +73,20 @@ function onToggleMermaidFullscreen(wrapEl: HTMLElement) {
   }
 }
 
-// Kéo handle góc chart: preview bằng CSS trong lúc kéo, commit size khi thả
-// (một lần re-render mermaid duy nhất thay vì vẽ lại mỗi pointermove).
-// Listener move/up gắn trên window — pointer capture với pointerId tổng hợp
-// không đảm bảo hoạt động, và pointerup có thể nổ trên phần tử khác.
-let stopDrag: (() => void) | null = null
-
-function onResizeStart(down: PointerEvent) {
-  const handle = resizeHandle.value
-  if (!handle || stopDrag) return
-  const base = props.styleConfig
-    ? clampChartSize(props.styleConfig.width, props.styleConfig.height)
-    : { width: 720, height: 300 }
-  const startX = down.clientX
-  const startY = down.clientY
-  try {
-    handle.setPointerCapture?.(down.pointerId)
-  } catch {
-    // PointerId tổng hợp có thể bị từ chối — window listener là nguồn sự thật.
-  }
-
-  const onMove = (move: PointerEvent) => {
-    dragPreview.value = clampChartSize(
-      base.width + (move.clientX - startX),
-      base.height + (move.clientY - startY),
-    )
-  }
-  const onUp = () => {
-    stopDrag?.()
-    const final = dragPreview.value
-    dragPreview.value = null
-    if (final && (final.width !== base.width || final.height !== base.height)) {
-      emit('resize', final.width, final.height)
-    }
-  }
-  window.addEventListener('pointermove', onMove)
-  window.addEventListener('pointerup', onUp)
-  window.addEventListener('pointercancel', onUp)
-  stopDrag = () => {
-    stopDrag = null
-    window.removeEventListener('pointermove', onMove)
-    window.removeEventListener('pointerup', onUp)
-    window.removeEventListener('pointercancel', onUp)
-  }
-}
-
-// Theme shell đổi `data-theme` trên <html> — mermaid cần vẽ lại theo theme mới
-// (renderMermaid tự re-render khi data-mermaid-theme lệch theme hiện tại).
+let widthObserver: ResizeObserver | null = null
 let themeObserver: MutationObserver | null = null
 
 onMounted(() => {
-  void scheduleRender()
+  if (bodyRef.value) renderWidth.value = bodyRef.value.clientWidth || 720
+  // jsdom không có ResizeObserver — guard để test unit không cần polyfill.
+  if (typeof ResizeObserver !== 'undefined' && bodyRef.value) {
+    widthObserver = new ResizeObserver((records) => {
+      const w = records[0]?.contentRect.width
+      if (w && Math.round(w) !== renderWidth.value) renderWidth.value = Math.round(w)
+    })
+    widthObserver.observe(bodyRef.value)
+  }
+  // Theme shell đổi `data-theme` trên <html> — mermaid cần vẽ lại theo theme mới.
   themeObserver = new MutationObserver(() => {
     void scheduleRender()
   })
@@ -144,12 +94,12 @@ onMounted(() => {
     attributes: true,
     attributeFilter: ['data-theme'],
   })
+  void scheduleRender()
 })
 
 onBeforeUnmount(() => {
+  widthObserver?.disconnect()
   themeObserver?.disconnect()
-  themeObserver = null
-  stopDrag?.()
 })
 
 watch([definition, () => props.loading], () => {
@@ -158,62 +108,41 @@ watch([definition, () => props.loading], () => {
 </script>
 
 <template>
-  <section class="chart-card" :class="{ 'is-loading': loading }">
-    <header v-if="$slots.control" class="chart-card-head">
-      <div class="chart-card-controls">
-        <slot name="control" />
-      </div>
-    </header>
+  <div class="chart-card" :class="{ 'is-loading': loading }">
     <div v-if="loading" class="chart-card-state">{{ t('statistics.loading') }}</div>
     <div v-else-if="!hasData" class="chart-card-state">{{ t('statistics.emptyChart') }}</div>
     <!-- v-html từ definition do chính feature build (không phải input người dùng) -->
-    <div v-else class="chart-card-body">
-      <div ref="chartRoot" class="chart-canvas" :style="canvasStyle">
+    <div v-else ref="bodyRef" class="chart-card-body" :style="bodyStyle">
+      <div class="chart-canvas">
         <div class="chart-canvas-plot" v-html="html" />
-        <span
-          ref="resizeHandle"
-          class="chart-resize-handle"
-          role="separator"
-          :title="t('statistics.settings.resizeHint')"
-          @pointerdown="onResizeStart"
-        />
       </div>
     </div>
-  </section>
+  </div>
 </template>
 
 <style scoped lang="scss">
 .chart-card {
-  border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel);
-  padding: 0.5rem 1rem 0.75rem;
-  margin: 0.5rem 0 0.75rem;
-}
-.chart-card-head {
+  height: 100%;
   display: flex;
-  justify-content: flex-end;
-}
-.chart-card-controls {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-  flex-wrap: wrap;
+  flex-direction: column;
+  min-height: 0;
 }
 .chart-card-state {
   color: var(--text-muted);
   font-size: 0.85rem;
-  padding: 2.5rem 0;
+  padding: 2rem 0.5rem;
   text-align: center;
 }
-/* Panel cố định chiều cao — chart to hơn thì scroll, không đẩy bảng xuống. */
+/* Panel chart: height theo config, chart full width — tràn thì scroll. */
 .chart-card-body {
-  height: 380px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
-  padding: 0.25rem 0 0.25rem;
+  padding: 0.25rem 0;
 }
 .chart-canvas {
-  position: relative;
   min-width: 100%;
   width: fit-content;
 }
@@ -223,30 +152,11 @@ watch([definition, () => props.loading], () => {
   min-height: 2rem;
 }
 /* `.mermaid` là flex (block-level) khiến toolbar zoom/fullscreen (float:right)
-   rơi xuống đáy wrap và đè handle resize — ép toolbar về góc trên như ArtifactPanel. */
+   rơi xuống đáy wrap — ép toolbar về góc trên như ArtifactPanel. */
 .chart-canvas-plot :deep(.mermaid-toolbar) {
   float: none;
   position: absolute;
   top: 4px;
   right: 4px;
-}
-/* Handle góc dưới-phải của CHART — kéo đổi width/height chart (không phải panel). */
-.chart-resize-handle {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  z-index: 2;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
-  border-right: 3px solid var(--muted);
-  border-bottom: 3px solid var(--muted);
-  border-bottom-right-radius: 3px;
-  opacity: 0.65;
-  touch-action: none;
-}
-.chart-resize-handle:hover {
-  opacity: 1;
-  border-color: var(--accent);
 }
 </style>

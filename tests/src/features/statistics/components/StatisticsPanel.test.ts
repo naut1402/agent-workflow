@@ -46,10 +46,16 @@ function statsBody(keys: string[], groupBy = 'task') {
       outputTokens: 5 * keys.length,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      totalTokens: 100 * keys.length,
+      totalTokens: 25_000,
       durationMs: 1000 * keys.length,
       firstTs: 1_785_000_000_000,
       lastTs: 1_785_000_000_000,
+      minTotalTokens: 100,
+      maxTotalTokens: 500,
+      avgTotalTokens: 250,
+      minDurationMs: 1000,
+      maxDurationMs: 3000,
+      avgDurationMs: 2000,
     },
   }
 }
@@ -79,25 +85,50 @@ afterEach(() => {
   localStorage.clear()
 })
 
-describe('StatisticsPanel — đa chart', () => {
-  it('mount mặc định 1 chart theo task → bảng có cột min/max/avg tokens + duration', async () => {
+describe('StatisticsPanel — gallery đa chart + summary card', () => {
+  it('mount mặc định 1 chart theo task → summary card có min/max/avg, bảng KHÔNG còn cột stats', async () => {
     mockStats(statsBody(['TB1', 'TA1']))
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
     await flushPromises()
 
-    expect(lastUrl()).toContain('/api/statistics/usage')
     const q = urlQuery(lastUrl())
     expect(q.get('project')).toBe('p1')
     expect(q.get('groupBy')).toBe('task')
     expect(q.get('from')).toBeTruthy()
 
-    expect(wrapper.findAll('.statistics-chart-item')).toHaveLength(1)
-    expect(wrapper.findAll('.statistics-table thead th').map((th) => th.text())).toContain(
-      'Avg tok/entry',
-    )
-    expect(wrapper.find('.statistics-summary').text()).toContain('200')
+    expect(wrapper.findAll('.chart-tile')).toHaveLength(1)
+    // Card summary hiển thị mốc per-entry.
+    const summary = wrapper.find('.statistics-summary-card')
+    expect(summary.exists()).toBe(true)
+    expect(summary.text()).toContain('250')
+    expect(summary.text()).toContain('500')
+    // Bảng không còn cột min/max/avg (đã dời vào card).
+    const headers = wrapper.findAll('.statistics-table thead th').map((th) => th.text())
+    expect(headers).not.toContain('Min thời lượng')
+    expect(headers).toContain('Total')
+  })
+
+  it('định dạng số theo chart: compact "25.0K" → full "25,000" qua dialog settings', async () => {
+    mockStats(statsBody(['TB1', 'TA1']))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
+    await flushPromises()
+    expect(wrapper.find('.statistics-summary-card').text()).toContain('25.00K')
+
+    // Mở dialog, chọn numberFormat "Đầy đủ" (CSelect thứ 4 trong dialog).
+    await wrapper.find('.chart-tile .chart-tile-actions .icon-btn').trigger('click')
+    const dialog = wrapper.findComponent({ name: 'ChartSettingsDialog' })
+    expect(dialog.exists()).toBe(true)
+    await dialog.findAll('.c-select-trigger')[3].trigger('click')
+    const fullOption = wrapper.findAll('.c-select-option').find((o) => o.text() === 'Đầy đủ (1,234,567)')
+    expect(fullOption).toBeTruthy()
+    await fullOption!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.statistics-summary-card').text()).toContain('25,000')
   })
 
   it('drill: click row task → refetch groupBy=step, breadcrumb xoá drill quay về task', async () => {
@@ -123,7 +154,7 @@ describe('StatisticsPanel — đa chart', () => {
     expect(q2.get('groupBy')).toBe('task')
   })
 
-  it('thêm chart → 2 chart + dialog mở sẵn; đổi groupBy trong dialog → fetch thêm groupBy mới; xoá chart', async () => {
+  it('thêm chart → 2 tile + dialog mở sẵn; đổi groupBy → fetch thêm groupBy mới; xoá chart', async () => {
     mockStats(statsBody(['TB1']))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -132,12 +163,11 @@ describe('StatisticsPanel — đa chart', () => {
 
     await wrapper.find('.statistics-add-chart').trigger('click')
     await flushPromises()
-    expect(wrapper.findAll('.statistics-chart-item')).toHaveLength(2)
-    // Dialog mở sẵn cho chart mới.
+    expect(wrapper.findAll('.chart-tile')).toHaveLength(2)
     const dialog = wrapper.findComponent({ name: 'ChartSettingsDialog' })
     expect(dialog.exists()).toBe(true)
 
-    // Đổi groupBy của chart mới sang Model (selectbox thứ nhất trong dialog).
+    // Đổi groupBy của chart mới sang Model (CSelect thứ nhất trong dialog).
     await dialog.findAll('.c-select-trigger')[0].trigger('click')
     const modelOption = wrapper.findAll('.c-select-option').find((o) => o.text() === 'Model')
     expect(modelOption).toBeTruthy()
@@ -147,15 +177,30 @@ describe('StatisticsPanel — đa chart', () => {
     expect(urlsContain('groupBy=model')).toBe(true)
     expect(urlsContain('groupBy=task')).toBe(true)
 
-    // Persist cấu trúc đa chart.
     const saved = JSON.parse(localStorage.getItem('dev-dashboard-statistics-prefs')!)
     expect(saved.charts).toHaveLength(2)
     expect(saved.charts[1].groupBy).toBe('model')
 
-    // Xoá chart đầu → còn 1, không còn nút xoá.
-    await wrapper.findAll('.statistics-chart-item .icon-btn')[1].trigger('click') // nút xoá của chart 1
+    // Xoá chart mới → còn 1.
+    await wrapper.findAll('button[title="Bỏ chart này"]')[0].trigger('click')
     await flushPromises()
-    expect(wrapper.findAll('.statistics-chart-item')).toHaveLength(1)
+    expect(wrapper.findAll('.chart-tile')).toHaveLength(1)
+  })
+
+  it('tile resize → cập nhật span + height, persist', async () => {
+    mockStats(statsBody(['TA1']))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
+    await flushPromises()
+
+    const tile = wrapper.findComponent({ name: 'ChartTile' })
+    tile.vm.$emit('resize', 4, 420)
+    await flushPromises()
+
+    const saved = JSON.parse(localStorage.getItem('dev-dashboard-statistics-prefs')!)
+    expect(saved.charts[0].span).toBe(4)
+    expect(saved.charts[0].style.height).toBe(420)
   })
 
   it('gear mở dialog settings — sửa title áp live + persist', async () => {
@@ -165,7 +210,7 @@ describe('StatisticsPanel — đa chart', () => {
     const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
     await flushPromises()
 
-    await wrapper.find('.statistics-chart-item .icon-btn').trigger('click') // gear
+    await wrapper.find('.chart-tile .chart-tile-actions .icon-btn').trigger('click')
     const dialog = wrapper.findComponent({ name: 'ChartSettingsDialog' })
     expect(dialog.exists()).toBe(true)
 
@@ -182,22 +227,6 @@ describe('StatisticsPanel — đa chart', () => {
     expect(wrapper.findComponent({ name: 'ChartSettingsDialog' }).exists()).toBe(false)
   })
 
-  it('resize event từ ChartCard → cập nhật style chart và persist', async () => {
-    mockStats(statsBody(['TA1']))
-    vi.stubGlobal('fetch', fetchMock)
-
-    const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
-    await flushPromises()
-
-    const card = wrapper.findComponent({ name: 'ChartCard' })
-    card.vm.$emit('resize', 880, 420)
-    await flushPromises()
-
-    const saved = JSON.parse(localStorage.getItem('dev-dashboard-statistics-prefs')!)
-    expect(saved.charts[0].style.width).toBe(880)
-    expect(saved.charts[0].style.height).toBe(420)
-  })
-
   it('prefs bản đơn chart cũ migrate thành danh sách 1 phần tử', async () => {
     localStorage.setItem(
       'dev-dashboard-statistics-prefs',
@@ -207,7 +236,7 @@ describe('StatisticsPanel — đa chart', () => {
         groupBy: 'model',
         metric: 'inputTokens',
         chartType: 'line',
-        chart: { width: 900, height: 400 },
+        chart: { height: 400 },
       }),
     )
     mockStats(statsBody(['m1'], 'model'))
@@ -216,11 +245,10 @@ describe('StatisticsPanel — đa chart', () => {
     const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
     await flushPromises()
 
-    const q = urlQuery(lastUrl())
-    expect(q.get('groupBy')).toBe('model')
+    expect(urlQuery(lastUrl()).get('groupBy')).toBe('model')
     const card = wrapper.findComponent({ name: 'ChartCard' })
     expect(card.props('chartType')).toBe('line')
-    expect(card.props('styleConfig').width).toBe(900)
+    expect(card.props('styleConfig').height).toBe(400)
   })
 
   it('API lỗi → err-banner, bảng trống không crash', async () => {
@@ -240,6 +268,6 @@ describe('StatisticsPanel — đa chart', () => {
     const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
     await flushPromises()
     expect(wrapper.find('.err-banner').exists()).toBe(true)
-    expect(wrapper.find('.statistics-summary').exists()).toBe(false)
+    expect(wrapper.find('.statistics-summary-card').exists()).toBe(false)
   })
 })

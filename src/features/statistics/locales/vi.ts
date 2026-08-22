@@ -17,12 +17,18 @@ export default {
     full: 'Đầy đủ (1,234,567)',
   },
   stats: {
-    minTokens: 'Min tok/entry',
-    maxTokens: 'Max tok/entry',
-    avgTokens: 'Avg tok/entry',
+    minTokens: 'Min',
+    maxTokens: 'Max',
+    avgTokens: 'Avg',
     minDuration: 'Min thời lượng',
     maxDuration: 'Max thời lượng',
     avgDuration: 'Avg thời lượng',
+  },
+  summary: {
+    overview: 'Tổng quan',
+    perEntry: 'Mỗi lần chạy (entry)',
+    betweenGroups: 'Giữa các group',
+    groups: '{n} entry',
   },
   scope: {
     label: 'Phạm vi',

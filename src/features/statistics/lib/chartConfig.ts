@@ -1,11 +1,16 @@
 import type { ChartKind, ChartStyleConfig } from './mermaidChart'
 import { DEFAULT_CHART_STYLE } from './mermaidChart'
+import type { NumberFormat } from './format'
 import {
   USAGE_GROUP_BYS,
   USAGE_METRICS,
   type UsageGroupBy,
   type UsageMetric,
 } from '../schemas/usageStats'
+
+/** Grid span của chart tile trong gallery 4 cột. */
+export const TILE_MIN_SPAN = 1
+export const TILE_MAX_SPAN = 4
 
 /** Config một chart instance trong danh sách chart của mode Thống kê. */
 export interface ChartConfig {
@@ -15,6 +20,10 @@ export interface ChartConfig {
   groupBy: UsageGroupBy
   metric: UsageMetric
   chartType: ChartKind
+  /** Cột chiếm trong gallery (1-4). */
+  span: number
+  /** Định dạng số của riêng chart (K/M/B hay đầy đủ). */
+  numberFormat: NumberFormat
   style: ChartStyleConfig
 }
 
@@ -29,6 +38,8 @@ export function makeDefaultChartConfig(overrides: Partial<ChartConfig> = {}): Ch
     groupBy: 'task',
     metric: 'totalTokens',
     chartType: 'bar',
+    span: 2,
+    numberFormat: 'compact',
     style: { ...DEFAULT_CHART_STYLE },
     ...overrides,
   }
@@ -54,12 +65,19 @@ export function sanitizeChartConfig(raw: unknown): ChartConfig | null {
     groupBy,
     metric,
     chartType,
+    span: clampSpan(p.span),
+    numberFormat: p.numberFormat === 'full' ? 'full' : 'compact',
     style: { ...DEFAULT_CHART_STYLE, ...(isStyleObject(p.style) ? p.style : {}) },
   }
 }
 
 function isStyleObject(v: unknown): v is Partial<ChartStyleConfig> {
   return !!v && typeof v === 'object'
+}
+
+function clampSpan(v: unknown): number {
+  const n = typeof v === 'number' ? v : 2
+  return Math.min(TILE_MAX_SPAN, Math.max(TILE_MIN_SPAN, Math.round(n)))
 }
 
 function isGroupBy(v: unknown): v is UsageGroupBy {

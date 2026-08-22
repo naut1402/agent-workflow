@@ -5,9 +5,7 @@ import type { CSelectOption } from '../../../core/ui/CSelect.vue'
 import { computed } from 'vue'
 import {
   CHART_MAX_HEIGHT,
-  CHART_MAX_WIDTH,
   CHART_MIN_HEIGHT,
-  CHART_MIN_WIDTH,
   type ChartKind,
 } from '../lib/mermaidChart'
 import {
@@ -50,6 +48,11 @@ const chartTypeOptions = computed<CSelectOption[]>(() =>
   })),
 )
 
+const numberFormatOptions = computed<CSelectOption[]>(() => [
+  { value: 'compact', label: t('statistics.numberFormat.compact') },
+  { value: 'full', label: t('statistics.numberFormat.full') },
+])
+
 function patch(updates: Partial<ChartConfig>) {
   model.value = { ...model.value, ...updates }
 }
@@ -58,14 +61,11 @@ function patchStyle(updates: Partial<ChartConfig['style']>) {
   model.value = { ...model.value, style: { ...model.value.style, ...updates } }
 }
 
-function patchSize(field: 'width' | 'height', raw: string) {
+function patchHeight(raw: string) {
   const value = Number(raw)
   if (!Number.isFinite(value)) return
-  const clamped =
-    field === 'width'
-      ? Math.min(CHART_MAX_WIDTH, Math.max(CHART_MIN_WIDTH, Math.round(value)))
-      : Math.min(CHART_MAX_HEIGHT, Math.max(CHART_MIN_HEIGHT, Math.round(value)))
-  patchStyle({ [field]: clamped } as Partial<ChartConfig['style']>)
+  const clamped = Math.min(CHART_MAX_HEIGHT, Math.max(CHART_MIN_HEIGHT, Math.round(value)))
+  patchStyle({ height: clamped })
 }
 
 function removePieColor(index: number) {
@@ -135,6 +135,15 @@ function resetDefaults() {
             :options="chartTypeOptions"
             :aria-label="t('statistics.chartType.label')"
             @update:model-value="patch({ chartType: $event as ChartConfig['chartType'] })"
+          />
+        </label>
+        <label class="chart-settings-field">
+          <span>{{ t('statistics.numberFormat.label') }}</span>
+          <CSelect
+            :model-value="model.numberFormat"
+            :options="numberFormatOptions"
+            :aria-label="t('statistics.numberFormat.label')"
+            @update:model-value="patch({ numberFormat: $event as ChartConfig['numberFormat'] })"
           />
         </label>
       </div>
@@ -220,23 +229,13 @@ function resetDefaults() {
 
       <div class="chart-settings-row">
         <label class="chart-settings-field chart-settings-field--num">
-          <span>{{ t('statistics.settings.width') }}</span>
-          <input
-            type="number"
-            :min="CHART_MIN_WIDTH"
-            :max="CHART_MAX_WIDTH"
-            :value="model.style.width"
-            @input="patchSize('width', ($event.target as HTMLInputElement).value)"
-          />
-        </label>
-        <label class="chart-settings-field chart-settings-field--num">
           <span>{{ t('statistics.settings.height') }}</span>
           <input
             type="number"
             :min="CHART_MIN_HEIGHT"
             :max="CHART_MAX_HEIGHT"
             :value="model.style.height"
-            @input="patchSize('height', ($event.target as HTMLInputElement).value)"
+            @input="patchHeight(($event.target as HTMLInputElement).value)"
           />
         </label>
       </div>

@@ -16,12 +16,18 @@ export default {
     full: 'Full (1,234,567)',
   },
   stats: {
-    minTokens: 'Min tok/entry',
-    maxTokens: 'Max tok/entry',
-    avgTokens: 'Avg tok/entry',
+    minTokens: 'Min',
+    maxTokens: 'Max',
+    avgTokens: 'Avg',
     minDuration: 'Min duration',
     maxDuration: 'Max duration',
     avgDuration: 'Avg duration',
+  },
+  summary: {
+    overview: 'Overview',
+    perEntry: 'Per run (entry)',
+    betweenGroups: 'Between groups',
+    groups: '{n} entries',
   },
   scope: {
     label: 'Scope',

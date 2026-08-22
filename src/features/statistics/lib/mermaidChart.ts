@@ -16,14 +16,14 @@ const LABEL_MAX_CHARS = 28
  * được qua directive frontmatter: kích thước (xyChart.width/height), màu
  * (plotColorPalette / pie1..N). Thuộc tính ngoài khả năng mermaid thì không
  * đưa vào (issue #231 quyết định 1 — wrapper giữ contract tối giản).
- * Title không nằm ở đây — là tham số riêng của builder (rỗng → không vẽ title).
+ * Title và width không nằm ở đây: title là tham số builder (rỗng → không vẽ),
+ * width đo từ panel thật (chart luôn vẽ full card).
  */
 export interface ChartStyleConfig {
-  width: number
   height: number
   /** Tiêu đề trục x (bar/line); rỗng → không thêm. */
   xAxisTitle?: string
-  /** Nhãn trục y (bar/line); rỗng → dùng valueLabel. */
+  /** Nhãn trục y (bar/line); rỗng → KHÔNG vẽ title trục y (tránh đè số). */
   yAxisLabel?: string
   /** Màu bar/line (hex). */
   color?: string
@@ -32,7 +32,6 @@ export interface ChartStyleConfig {
 }
 
 export const DEFAULT_CHART_STYLE: ChartStyleConfig = {
-  width: 720,
   height: 300,
   xAxisTitle: '',
   yAxisLabel: '',
@@ -51,17 +50,12 @@ export const DEFAULT_CHART_STYLE: ChartStyleConfig = {
   ],
 }
 
-/** Giới hạn kéo-resize chart (px). */
-export const CHART_MIN_WIDTH = 320
-export const CHART_MAX_WIDTH = 4000
+/** Giới hạn chiều cao chart (px) — width bám panel. */
 export const CHART_MIN_HEIGHT = 180
 export const CHART_MAX_HEIGHT = 3000
 
-export function clampChartSize(width: number, height: number): { width: number; height: number } {
-  return {
-    width: Math.min(CHART_MAX_WIDTH, Math.max(CHART_MIN_WIDTH, Math.round(width))),
-    height: Math.min(CHART_MAX_HEIGHT, Math.max(CHART_MIN_HEIGHT, Math.round(height))),
-  }
+export function clampChartHeight(height: number): number {
+  return Math.min(CHART_MAX_HEIGHT, Math.max(CHART_MIN_HEIGHT, Math.round(height)))
 }
 
 /** Chỉ chấp nhận hex màu (#rgb..#rrggbbaa) — chặn inject YAML qua chuỗi màu. */
@@ -70,7 +64,7 @@ function safeHex(value: string | undefined): string | null {
 }
 
 /** Directive frontmatter `--- config: ---` áp kích thước + màu cho diagram. */
-function buildDirectives(kind: ChartKind, style?: ChartStyleConfig): string {
+function buildDirectives(kind: ChartKind, width: number, style?: ChartStyleConfig): string {
   if (!style) return ''
   const configLines: string[] = []
   const themeVars: string[] = []
@@ -78,8 +72,11 @@ function buildDirectives(kind: ChartKind, style?: ChartStyleConfig): string {
     const colors = (style.pieColors ?? []).map(safeHex).filter((c): c is string => !!c)
     colors.forEach((c, i) => themeVars.push(`    pie${i + 1}: "${c}"`))
   } else {
-    const size = clampChartSize(style.width, style.height)
-    configLines.push('  xyChart:', `    width: ${size.width}`, `    height: ${size.height}`)
+    configLines.push(
+      '  xyChart:',
+      `    width: ${Math.max(120, Math.round(width))}`,
+      `    height: ${clampChartHeight(style.height)}`,
+    )
     const color = safeHex(style.color)
     if (color) themeVars.push(`    xyChart:`, `      plotColorPalette: "${color}"`)
   }
@@ -96,7 +93,7 @@ function buildDirectives(kind: ChartKind, style?: ChartStyleConfig): string {
  * chuỗi đã quote ở một số diagram (pie title, xychart category). Thay `'` cho
  * `"` rồi bỏ ký tự dễ vỡ — taskId/model thường chỉ còn ký tự an toàn.
  */
-export function escapeMermaidText(value: string): string {
+export function escapeMermaidText(value: string, maxChars = LABEL_MAX_CHARS): string {
   const cleaned = value
     .replace(/"/g, "'")
     .replace(/[\r\n\t]+/g, ' ')
@@ -106,7 +103,7 @@ export function escapeMermaidText(value: string): string {
     .replace(/\s+/g, ' ')
     .trim()
   if (!cleaned) return '—'
-  return cleaned.length > LABEL_MAX_CHARS ? `${cleaned.slice(0, LABEL_MAX_CHARS - 1)}…` : cleaned
+  return cleaned.length > maxChars ? `${cleaned.slice(0, maxChars - 1)}…` : cleaned
 }
 
 export interface AxisChartInput {
@@ -114,13 +111,16 @@ export interface AxisChartInput {
   title: string
   categories: string[]
   values: number[]
-  /** Nhãn trục y (vd "Total tokens"). */
-  valueLabel: string
+  /** Chiều rộng vùng vẽ (px) — đo từ panel, chart luôn full card. */
+  width: number
   /** Thuộc tính hiển thị (kích thước/màu/nhãn trục). */
   style?: ChartStyleConfig
-  /** Scale đơn vị (K/M/B) — giá trị chia divisor, nhãn trục y thêm suffix. */
+  /** Scale đơn vị (K/M/B) — giá trị chia divisor. */
   unitScale?: { divisor: number; axisSuffix: string }
 }
+
+/** Nhãn category trục X ngắn hơn label pie — tránh các cột đè nhau. */
+const AXIS_LABEL_MAX_CHARS = 14
 
 function toInt(v: number): number {
   return Math.max(0, Math.round(v))
@@ -133,28 +133,31 @@ function axisUpperBound(values: number[]): number {
 function axisChartLines(kind: 'bar' | 'line', input: AxisChartInput): string[] {
   const divisor = input.unitScale?.divisor ?? 1
   const values = input.values.map((v) => toInt(v / divisor))
-  const categories = input.categories.map((c) => `"${escapeMermaidText(c)}"`)
+  const categories = input.categories.map((c) => `"${escapeMermaidText(c, AXIS_LABEL_MAX_CHARS)}"`)
   const xTitle = input.style?.xAxisTitle ? `"${escapeMermaidText(input.style.xAxisTitle)}" ` : ''
-  // Suffix đơn vị là chuỗi tự sinh "(K)/(M)/(B)" — nối SAU escape để giữ dấu ngoặc.
-  const yLabel = `${escapeMermaidText(input.style?.yAxisLabel || input.valueLabel)}${input.unitScale?.axisSuffix ?? ''}`
   const lines = ['xychart-beta']
   if (input.title) lines.push(`  title "${escapeMermaidText(input.title)}"`)
-  lines.push(
-    `  x-axis ${xTitle}[${categories.join(', ')}]`,
-    `  y-axis "${yLabel}" 0 --> ${axisUpperBound(values)}`,
-    `  ${kind} [${values.join(', ')}]`,
-  )
+  lines.push(`  x-axis ${xTitle}[${categories.join(', ')}]`)
+  // KHÔNG vẽ title trục y khi người dùng chưa đặt — mermaid vẽ title dọc bị
+  // đè lên số tick; chỉ đặt mới vẽ (kèm suffix đơn vị).
+  if (input.style?.yAxisLabel) {
+    const yLabel = `${escapeMermaidText(input.style.yAxisLabel)}${input.unitScale?.axisSuffix ?? ''}`
+    lines.push(`  y-axis "${yLabel}" 0 --> ${axisUpperBound(values)}`)
+  } else {
+    lines.push(`  y-axis 0 --> ${axisUpperBound(values)}`)
+  }
+  lines.push(`  ${kind} [${values.join(', ')}]`)
   return lines
 }
 
 /** xychart-beta dạng bar: `x-axis ["A","B"]` quote luôn để thoải mái ký tự. */
 export function buildBarChart(input: AxisChartInput): string {
-  return `${buildDirectives('bar', input.style)}${axisChartLines('bar', input).join('\n')}`
+  return `${buildDirectives('bar', input.width, input.style)}${axisChartLines('bar', input).join('\n')}`
 }
 
 /** xychart-beta dạng line — dùng cho trend theo ngày. */
 export function buildLineChart(input: AxisChartInput): string {
-  return `${buildDirectives('line', input.style)}${axisChartLines('line', input).join('\n')}`
+  return `${buildDirectives('line', input.width, input.style)}${axisChartLines('line', input).join('\n')}`
 }
 
 export interface PieSlice {
@@ -166,6 +169,7 @@ export interface PieSlice {
 export function buildPieChart(input: {
   title: string
   slices: PieSlice[]
+  width: number
   style?: ChartStyleConfig
   unitScale?: { divisor: number; axisSuffix: string }
 }): string {
@@ -176,7 +180,7 @@ export function buildPieChart(input: {
   const body = ['pie showData']
   if (input.title) body.push(`  title "${escapeMermaidText(input.title)}"`)
   body.push(...rows)
-  return `${buildDirectives('pie', input.style)}${body.join('\n')}`
+  return `${buildDirectives('pie', input.width, input.style)}${body.join('\n')}`
 }
 
 /** Build theo loại chart — ChartCard gọi chung một cửa. */
@@ -186,7 +190,7 @@ export function buildChart(
     title: string
     labels: string[]
     values: number[]
-    valueLabel: string
+    width: number
     style?: ChartStyleConfig
     unitScale?: { divisor: number; axisSuffix: string }
   },
@@ -195,6 +199,7 @@ export function buildChart(
     return buildPieChart({
       title: input.title,
       slices: input.labels.map((label, i) => ({ label, value: input.values[i] ?? 0 })),
+      width: input.width,
       style: input.style,
       unitScale: input.unitScale,
     })
@@ -204,7 +209,7 @@ export function buildChart(
     title: input.title,
     categories: input.labels,
     values: input.values,
-    valueLabel: input.valueLabel,
+    width: input.width,
     style: input.style,
     unitScale: input.unitScale,
   })

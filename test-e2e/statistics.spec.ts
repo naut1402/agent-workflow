@@ -33,7 +33,7 @@ function usageLine(p: { projectId: string; taskId: string; stepId: string; jobId
   })
 }
 
-test('statistics mode: đa chart + settings + resize (capture)', async ({ page, request }, testInfo) => {
+test('statistics mode: gallery đa chart + settings + resize (capture)', async ({ page, request }, testInfo) => {
   // Lấy default project id của registry e2e để seed usage đúng scope mặc định.
   const projectsRes = await request.get('/api/projects')
   const projectsBody = (await projectsRes.json()) as { defaultId?: string | null }
@@ -59,8 +59,11 @@ test('statistics mode: đa chart + settings + resize (capture)', async ({ page, 
   await expect(page.locator('.statistics-table tbody tr')).toHaveCount(2, { timeout: 10_000 })
   await expect(page.locator('.statistics-table tbody tr').first()).toContainText('STAT-1')
 
-  // ChartCard vẽ mermaid SVG qua markdown pipeline — parse lỗi vẫn sinh SVG
-  // (error bomb) nên phải assert cả không có "Syntax error".
+  // Card summary (min/max/avg per-entry + giữa các group) hiển thị.
+  await expect(page.locator('.statistics-summary-card')).toBeVisible()
+
+  // ChartCard vẽ mermaid SVG — parse lỗi vẫn sinh SVG (error bomb) nên phải
+  // assert cả không có "Syntax error". Width SVG giờ theo panel (viewBox động).
   async function expectChartRendered() {
     const mermaidNode = page.locator('.chart-card-body .mermaid').first()
     await expect(mermaidNode.locator('svg')).toBeVisible({ timeout: 20_000 })
@@ -68,18 +71,26 @@ test('statistics mode: đa chart + settings + resize (capture)', async ({ page, 
   }
   await expectChartRendered()
 
-  // Kích thước mặc định áp qua directive config — mermaid dựng viewBox theo
-  // width/height config (svg width attr luôn "100%", max-width giới hạn theo px).
-  const svgSize = () =>
-    page.locator('.chart-card-body .mermaid svg').first().evaluate((el) => el.getAttribute('viewBox') || '')
-  await expect.poll(svgSize, { timeout: 15_000 }).toBe('0 0 720 300')
+  const svgHeight = () =>
+    page.locator('.chart-card-body .mermaid svg').first().evaluate((el) => {
+      const vb = el.getAttribute('viewBox') || ''
+      return vb.split(' ')[3] ?? ''
+    })
+  await expect.poll(svgHeight, { timeout: 15_000 }).toBe('300')
 
-  // Loại biểu đồ giờ nằm trong dialog settings của từng chart.
+  // Button group (settings/remove) + toolbar zoom/fullscreen chỉ hiện khi hover.
+  const actions = page.locator('.chart-tile .chart-tile-actions').first()
+  await expect(actions).toHaveCSS('opacity', '0')
+  await page.locator('.chart-tile').first().hover()
+  await expect(actions).toHaveCSS('opacity', '1')
+
+  // Loại biểu đồ nằm trong dialog settings của từng chart (CSelect: groupBy,
+  // metric, chartType, numberFormat → chartType là thứ 3, index 2).
   async function setChartType(label: string) {
-    await page.locator('.statistics-chart-item .icon-btn').first().click() // gear
+    await page.locator('.chart-tile .chart-tile-actions .icon-btn').first().click() // gear
     const dialog = page.locator('.chart-settings-dialog')
     await expect(dialog).toBeVisible()
-    await dialog.locator('.c-select-trigger').nth(2).click() // groupBy, metric, chartType
+    await dialog.locator('.c-select-trigger').nth(2).click()
     await page.locator('.c-select-option', { hasText: label }).first().click()
     await dialog.locator('.chart-settings-close').click()
     await expect(dialog).toHaveCount(0)
@@ -91,34 +102,31 @@ test('statistics mode: đa chart + settings + resize (capture)', async ({ page, 
   await setChartType('Cột')
   await expectChartRendered()
 
-  // Định dạng số: chuyển sang đầy đủ — tổng 25K hiện "25,000".
-  await page.locator('.statistics-field .c-select-trigger').nth(1).click()
-  await page.locator('.c-select-option', { hasText: 'Đầy đủ' }).click()
-  await expect(page.locator('.statistics-summary')).toContainText('25,000')
-
-  // Thêm chart mới → 2 card, dialog mở sẵn cho chart mới → đóng.
+  // Thêm chart mới → 2 tile, dialog mở sẵn → đóng. Tile mới mặc định span 2.
   await page.locator('.statistics-add-chart').click()
-  await expect(page.locator('.statistics-chart-item')).toHaveCount(2)
+  await expect(page.locator('.chart-tile')).toHaveCount(2)
   const addDialog = page.locator('.chart-settings-dialog')
   await expect(addDialog).toBeVisible()
   await addDialog.locator('.chart-settings-close').click()
 
   // Xoá 1 chart → còn 1 (nút xoá chỉ hiện khi có nhiều chart).
-  await page.locator('.statistics-chart-item').nth(1).locator('button[title="Bỏ chart này"]').click()
-  await expect(page.locator('.statistics-chart-item')).toHaveCount(1)
+  await page.locator('.chart-tile').nth(1).locator('button[title="Bỏ chart này"]').click()
+  await expect(page.locator('.chart-tile')).toHaveCount(1)
 
-  // Kéo handle góc chart → kích thước mới áp vào viewBox (re-render một lần khi thả).
+  // Kéo handle góc tile: dọc +40px → height 340; ngang đủ xa → snap span 4.
   const handle = page.locator('.chart-resize-handle')
   const handleBox = await handle.boundingBox()
   expect(handleBox).toBeTruthy()
   await page.mouse.move(handleBox!.x + 7, handleBox!.y + 7)
   await page.mouse.down()
-  await page.mouse.move(handleBox!.x + 7 + 130, handleBox!.y + 7 + 40, { steps: 4 })
+  await page.mouse.move(handleBox!.x + 7 + 900, handleBox!.y + 7 + 40, { steps: 5 })
   await page.mouse.up()
-  await expect.poll(svgSize, { timeout: 15_000 }).toBe('0 0 850 340')
+  await expect.poll(svgHeight, { timeout: 15_000 }).toBe('340')
+  const spanNow = await page.locator('.chart-tile').first().evaluate((el) => el.style.gridColumn)
+  expect(spanNow).toContain('span 4')
 
   // Dialog thiết lập: mở, sửa tiêu đề (live-apply), đóng.
-  await page.locator('.statistics-chart-item .icon-btn').first().click()
+  await page.locator('.chart-tile .chart-tile-actions .icon-btn').first().click()
   await expect(page.locator('.chart-settings-dialog')).toBeVisible()
   await page.locator('.chart-settings-dialog input[type="text"]').first().fill('Tiêu đề tùy chỉnh')
   await expect(page.locator('.chart-card-body .mermaid')).not.toContainText(/syntax error/i)

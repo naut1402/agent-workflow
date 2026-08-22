@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildBarChart,
   buildChart,
+  clampChartHeight,
   buildLineChart,
   buildPieChart,
-  clampChartSize,
   escapeMermaidText,
   DEFAULT_CHART_STYLE,
 } from '@/features/statistics/lib/mermaidChart'
@@ -16,9 +16,10 @@ describe('escapeMermaidText', () => {
     expect(escapeMermaidText('line1\nline2\ttab')).toBe('line1 line2 tab')
   })
 
-  it('cắt nhãn dài quá 28 ký tự, rỗng → gạch nối', () => {
+  it('cắt nhãn theo maxChars, rỗng → gạch nối', () => {
     const long = 'a'.repeat(40)
     expect(escapeMermaidText(long)).toBe(`${'a'.repeat(27)}…`)
+    expect(escapeMermaidText(long, 14)).toBe(`${'a'.repeat(13)}…`)
     expect(escapeMermaidText('   ')).toBe('—')
   })
 })
@@ -28,15 +29,16 @@ describe('buildBarChart / buildLineChart', () => {
     title: 'Total theo task',
     categories: ['TA1', 'TB1'],
     values: [160, 1500],
-    valueLabel: 'Total tokens',
+    width: 720,
   }
 
-  it('bar: xychart-beta + categories quote + y range <min> --> <max>', () => {
+  it('bar: xychart-beta + categories quote + y range <min> --> <max>, KHÔNG title trục y mặc định', () => {
     const def = buildBarChart(input)
     expect(def).toContain('xychart-beta')
     expect(def).toContain('title "Total theo task"')
     expect(def).toContain('x-axis ["TA1", "TB1"]')
-    expect(def).toContain('y-axis "Total tokens" 0 --> 1500')
+    // Mặc định không vẽ title trục y — tránh mermaid vẽ chữ dọc đè lên số tick.
+    expect(def).toContain('y-axis 0 --> 1500')
     expect(def).toContain('bar [160, 1500]')
   })
 
@@ -46,32 +48,20 @@ describe('buildBarChart / buildLineChart', () => {
     expect(def).not.toContain('bar [')
   })
 
+  it('đặt yAxisLabel mới vẽ title trục y (kèm suffix đơn vị)', () => {
+    const def = buildBarChart({
+      ...input,
+      style: { ...DEFAULT_CHART_STYLE, yAxisLabel: 'Tokens' },
+      unitScale: { divisor: 1_000, axisSuffix: ' (K)' },
+    })
+    // Giá trị cũng chia theo divisor: 160/1000→0, 1500/1000→2.
+    expect(def).toContain('y-axis "Tokens (K)" 0 --> 2')
+  })
+
   it('max 0 → cột trên trục tối thiểu 1, giá trị làm tròn không âm', () => {
     const def = buildBarChart({ ...input, values: [0, -3.7] })
     expect(def).toContain('0 --> 1')
     expect(def).toContain('bar [0, 0]')
-  })
-})
-
-describe('buildPieChart + buildChart', () => {
-  it('pie showData + slice "label" : value', () => {
-    const def = buildPieChart({ title: 'Tỉ trọng', slices: [{ label: 'TA', value: 30 }, { label: 'TB', value: 70 }] })
-    expect(def.split('\n')[0]).toBe('pie showData')
-    expect(def).toContain('"TA" : 30')
-    expect(def).toContain('"TB" : 70')
-  })
-
-  it('buildChart điều hướng đúng builder theo kind', () => {
-    const base = { title: 'T', labels: ['a', 'b'], values: [1, 2], valueLabel: 'V' }
-    expect(buildChart('pie', base)).toContain('pie showData')
-    expect(buildChart('bar', base)).toContain('bar [1, 2]')
-    expect(buildChart('line', base)).toContain('line [1, 2]')
-  })
-
-  it('label có ký tự nguy hiểm được escape trong mọi builder', () => {
-    const base = { title: 'T', labels: ['we"ird[l]abel'], values: [5], valueLabel: 'V' }
-    expect(buildChart('bar', base)).toContain('"we\'irdlabel"')
-    expect(buildChart('pie', base)).toContain('"we' + "'" + 'irdlabel" : 5')
   })
 })
 
@@ -80,21 +70,20 @@ describe('ChartStyleConfig — directive config + nhãn/màu ghi đè', () => {
     title: 'Total theo task',
     categories: ['TA1', 'TB1'],
     values: [160, 1500],
-    valueLabel: 'Total tokens',
+    width: 900,
   }
 
   it('bar với style: directive xyChart width/height + plotColorPalette + title trục x', () => {
     const def = buildBarChart({
       ...base,
-      style: { ...DEFAULT_CHART_STYLE, width: 900, height: 400, color: '#2ECC71', xAxisTitle: 'Task', yAxisLabel: 'Tokens' },
+      style: { ...DEFAULT_CHART_STYLE, height: 400, color: '#2ECC71', xAxisTitle: 'Task' },
     })
     expect(def).toContain('---\nconfig:')
     expect(def).toContain('  xyChart:\n    width: 900\n    height: 400')
     expect(def).toContain('themeVariables:')
     expect(def).toContain('plotColorPalette: "#2ECC71"')
-    expect(def).toContain('title "Total theo task"')
     expect(def).toContain('x-axis "Task" ["TA1", "TB1"]')
-    expect(def).toContain('y-axis "Tokens" 0 --> 1500')
+    expect(def).toContain('y-axis 0 --> 1500')
   })
 
   it('title rỗng → không vẽ dòng title (bar/line/pie)', () => {
@@ -102,21 +91,21 @@ describe('ChartStyleConfig — directive config + nhãn/màu ghi đè', () => {
     expect(bar).not.toContain('title "')
     const line = buildLineChart({ ...base, title: '' })
     expect(line).not.toContain('title "')
-    const pie = buildPieChart({ title: '', slices: [{ label: 'a', value: 1 }] })
+    const pie = buildPieChart({ title: '', slices: [{ label: 'a', value: 1 }], width: 900 })
     expect(pie).not.toContain('title "')
   })
 
-  it('unitScale chia giá trị + suffix nhãn trục y', () => {
+  it('unitScale chia giá trị theo divisor', () => {
     const def = buildBarChart({
       ...base,
       values: [160_000, 1_500_000],
       unitScale: { divisor: 1_000, axisSuffix: ' (K)' },
     })
-    expect(def).toContain('y-axis "Total tokens (K)" 0 --> 1500')
     expect(def).toContain('bar [160, 1500]')
     const pie = buildPieChart({
       title: 'T',
       slices: [{ label: 'a', value: 25_000 }],
+      width: 900,
       unitScale: { divisor: 1_000, axisSuffix: ' (K)' },
     })
     expect(pie).toContain('"a" : 25')
@@ -130,6 +119,7 @@ describe('ChartStyleConfig — directive config + nhãn/màu ghi đè', () => {
     const def = buildPieChart({
       title: 'T',
       slices: [{ label: 'a', value: 1 }],
+      width: 900,
       style: { ...DEFAULT_CHART_STYLE, pieColors: ['#e6194b', 'javascript:alert(1)', '#3cb44b'] },
     })
     expect(def).toContain('pie1: "#e6194b"')
@@ -138,10 +128,10 @@ describe('ChartStyleConfig — directive config + nhãn/màu ghi đè', () => {
     expect(def).not.toContain('javascript')
   })
 
-  it('clampChartSize giới hạn kích thước kéo-resize', () => {
-    expect(clampChartSize(10, 10)).toEqual({ width: 320, height: 180 })
-    expect(clampChartSize(99999, 99999)).toEqual({ width: 4000, height: 3000 })
-    expect(clampChartSize(720.6, 300.4)).toEqual({ width: 721, height: 300 })
+  it('clampChartHeight giới hạn chiều cao kéo-resize', () => {
+    expect(clampChartHeight(10)).toBe(180)
+    expect(clampChartHeight(99999)).toBe(3000)
+    expect(clampChartHeight(300.4)).toBe(300)
   })
 })
 
@@ -156,22 +146,22 @@ describe('parse bằng mermaid thật (jsdom)', () => {
       title: 'Total theo task',
       categories: ['TA1', 'we"ird label', 'đà có dấu'],
       values: [160, 1500, 0],
-      valueLabel: 'Total tokens',
+      width: 720,
     }
     await expect(mermaid.parse(buildBarChart(base))).resolves.toBeTruthy()
     await expect(mermaid.parse(buildLineChart(base))).resolves.toBeTruthy()
     await expect(
       mermaid.parse(
-        buildPieChart({ title: 'T', slices: [{ label: 'a', value: 1 }, { label: 'b', value: 2 }] }),
+        buildPieChart({ title: 'T', slices: [{ label: 'a', value: 1 }, { label: 'b', value: 2 }], width: 720 }),
       ),
     ).resolves.toBeTruthy()
 
-    // Có style (directive config + title trục x) vẫn parse OK.
+    // Có style (directive config + title trục) vẫn parse OK.
     await expect(
       mermaid.parse(
         buildBarChart({
           ...base,
-          style: { ...DEFAULT_CHART_STYLE, xAxisTitle: 'Task', color: '#2ECC71' },
+          style: { ...DEFAULT_CHART_STYLE, xAxisTitle: 'Task', yAxisLabel: 'Tokens', color: '#2ECC71' },
         }),
       ),
     ).resolves.toBeTruthy()
@@ -180,6 +170,7 @@ describe('parse bằng mermaid thật (jsdom)', () => {
         buildPieChart({
           title: 'T',
           slices: [{ label: 'a', value: 1 }],
+          width: 720,
           style: DEFAULT_CHART_STYLE,
         }),
       ),
@@ -187,5 +178,20 @@ describe('parse bằng mermaid thật (jsdom)', () => {
 
     // Đối chứng: range sai (`--> 0..N`) phải bị reject.
     await expect(mermaid.parse('xychart-beta\n  y-axis "V" --> 0..5\n  bar [1]')).rejects.toThrow()
+  })
+})
+
+describe('buildChart', () => {
+  it('điều hướng đúng builder theo kind', () => {
+    const base = { title: 'T', labels: ['a', 'b'], values: [1, 2], width: 720 }
+    expect(buildChart('pie', base)).toContain('pie showData')
+    expect(buildChart('bar', base)).toContain('bar [1, 2]')
+    expect(buildChart('line', base)).toContain('line [1, 2]')
+  })
+
+  it('label có ký tự nguy hiểm được escape trong mọi builder', () => {
+    const base = { title: 'T', labels: ['we"ird[l]abel'], values: [5], width: 720 }
+    expect(buildChart('bar', base)).toContain('"we\'irdlabel"')
+    expect(buildChart('pie', base)).toContain('"we' + "'" + 'irdlabel" : 5')
   })
 })
