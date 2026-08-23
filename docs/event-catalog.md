@@ -87,7 +87,8 @@ Nơi emit: `runner/controller.ts` (sau mutation OK).
 
 Ghi chú:
 
-- Rule trigger `kind: event` subscribe wildcard trên bus — **bỏ qua** `automation.*` (chống vòng lặp rule → run → event → rule); chỉ khớp khi `payload.projectId` bằng project của rule.
+- Rule có **nhiều trigger** (OR): timer (once/interval/cron cùng mốc `startAt`) do scheduler tick đánh giá; trigger `kind: event` subscribe wildcard trên bus — **bỏ qua** `automation.*` (chống vòng lặp rule → run → event → rule); chỉ khớp khi `payload.projectId` bằng project của rule.
+- Run là **chuỗi action tuần tự chạy nền** (chờ từng job xong, capture stdout/artifacts làm biến `{{steps.N.*}}` cho bước sau — `lib/vars.ts`); event `run_succeeded`/`run_failed` phát khi cả chuỗi kết thúc.
 - Runtime state + run history: `registryHome()/automations/<projectKey>/` (`state.json` + `runs/`); config rule ở data root `automations/<id>.yaml`.
 - Trigger registry (`registerTrigger`/`listTriggers`) được đồng bộ từ rule đang bật qua `syncTriggerRegistry` — runtime thật là scheduler tick + event subscriber của feature.
 
