@@ -1,4 +1,12 @@
-import { access, basename, joinPath, readDir, readTextFile, stat } from '../../../core/lib/fileHelper.js'
+import {
+  access,
+  basename,
+  joinPath,
+  readDir,
+  readTextFile,
+  safeReadDir,
+  stat,
+} from '../../../core/lib/fileHelper.js'
 import os from 'node:os'
 import {
   parseAgentMarkdown,
@@ -87,7 +95,8 @@ async function resolveAgentFilePath(
   const fileName = `${name}.md`
 
   if (source === 'dashboard') {
-    return joinPath(devTeamRoot, 'custom-agents', fileName)
+    const p = joinPath(devTeamRoot, 'custom-agents', fileName)
+    return (await safeAccess(p)) ? p : null
   }
   if (source === 'user') {
     return joinPath(homeDir(), '.claude', 'agents', fileName)
@@ -116,11 +125,12 @@ async function resolveAgentFilePath(
   return null
 }
 
-/** Paths consulted for repo:/plugin: refs — used in error messages. */
-export function describeAgentSearchPaths(
+/** Paths consulted for dashboard:/repo:/plugin: refs — used in error messages. */
+export async function describeAgentSearchPaths(
   projectRoot: string,
+  devTeamRoot: string,
   agentRef: string,
-): string[] {
+): Promise<string[]> {
   const id = normalizeAgentRef(agentRef)
   const parsed = parseCatalogAgentId(id)
   if (!parsed?.name) return []
@@ -128,6 +138,16 @@ export function describeAgentSearchPaths(
   const name = sanitiseAgentName(parsed.name)
   if (!name) return []
   const fileName = `${name}.md`
+
+  if (source === 'dashboard') {
+    const dir = joinPath(devTeamRoot, 'custom-agents')
+    const p = joinPath(dir, fileName)
+    const available = (await safeReadDir(dir))
+      .filter((e) => e.isFile() && e.name.endsWith('.md'))
+      .map((e) => e.name.slice(0, -3))
+    return available.length ? [`${p} (agent có sẵn trong project: ${available.join(', ')})`] : [p]
+  }
+
   if (!(source.startsWith('repo:') || source.startsWith('plugin:'))) return []
   const rawPlugin = source.includes(':') ? source.slice(source.indexOf(':') + 1) : source
   const pluginName = sanitiseAgentName(rawPlugin)
@@ -175,7 +195,7 @@ export async function resolveAgent(
   }
   const agentPath = await resolveAgentFilePath(ctx.projectRoot, ctx.devTeamRoot, agentRef)
   if (!agentPath) {
-    const looked = describeAgentSearchPaths(ctx.projectRoot, agentRef)
+    const looked = await describeAgentSearchPaths(ctx.projectRoot, ctx.devTeamRoot, agentRef)
     const hint = looked.length ? ` (looked in: ${looked.join(', ')})` : ''
     throw new Error(`agent file not found for ref: ${agentRef}${hint}`)
   }

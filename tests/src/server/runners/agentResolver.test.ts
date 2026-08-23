@@ -128,6 +128,60 @@ describe('resolveAgent — path sanitisation', () => {
   })
 })
 
+describe('resolveAgent — dashboard agent', () => {
+  test('resolves an existing dashboard: agent from custom-agents/', async () => {
+    const devTeamRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-devteam-'))
+    try {
+      const agentsDir = path.join(devTeamRoot, 'custom-agents')
+      fs.mkdirSync(agentsDir, { recursive: true })
+      fs.writeFileSync(
+        path.join(agentsDir, 'create-issue.md'),
+        `---\nname: create-issue\ndescription: create issue\nskills: []\n---\n\n# Create Issue\n\n## Vai trò\n\ncreate issues\n`,
+        'utf8',
+      )
+      const resolved = await resolveAgent('dashboard:create-issue', {
+        projectRoot: devTeamRoot,
+        devTeamRoot,
+      })
+      expect(resolved.name).toBe('create-issue')
+      expect(resolved.agentFilePath).toBe(path.join(agentsDir, 'create-issue.md'))
+    } finally {
+      fs.rmSync(devTeamRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects a missing dashboard: agent with a hint listing available agents', async () => {
+    const devTeamRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-devteam-'))
+    try {
+      const agentsDir = path.join(devTeamRoot, 'custom-agents')
+      fs.mkdirSync(agentsDir, { recursive: true })
+      fs.writeFileSync(path.join(agentsDir, 'create-issue.md'), '# Create Issue\n', 'utf8')
+
+      await expect(
+        resolveAgent('dashboard:create-gh-issue', { projectRoot: devTeamRoot, devTeamRoot }),
+      ).rejects.toThrow(/create-gh-issue\.md.*create-issue/)
+    } finally {
+      fs.rmSync(devTeamRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects a missing dashboard: agent without a stray empty hint when custom-agents/ does not exist', async () => {
+    const devTeamRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-devteam-'))
+    try {
+      let error: unknown
+      try {
+        await resolveAgent('dashboard:create-gh-issue', { projectRoot: devTeamRoot, devTeamRoot })
+      } catch (err) {
+        error = err
+      }
+      expect(String(error)).toContain('create-gh-issue.md')
+      expect(String(error)).not.toContain('agent có sẵn trong project')
+    } finally {
+      fs.rmSync(devTeamRoot, { recursive: true, force: true })
+    }
+  })
+})
+
 function countOccurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1
 }
