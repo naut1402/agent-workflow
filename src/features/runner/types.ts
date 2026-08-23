@@ -10,15 +10,13 @@ export interface ProviderEntry {
 }
 
 /**
- * AI-provider setup kept apart from connections: interface + credential +
- * optional baseURL. A connection then just references a provider config and
- * picks models usable on it.
+ * Reusable provider template: interface + optional baseURL. Credential
+ * selection lives on the Connection itself, not here.
  */
 export interface ProviderConfigOption {
   id: string
   label: string
   providerId: string
-  credentialId: string
   baseURL?: string
 }
 

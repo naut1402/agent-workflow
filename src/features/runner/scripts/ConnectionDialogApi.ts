@@ -8,6 +8,10 @@ export async function saveCredential(profile: unknown) {
   return apiPost('/api/credentials', { profile })
 }
 
+export async function deleteCredential(id: string) {
+  return apiRequest('DELETE', '/api/credentials', { query: { id } })
+}
+
 export async function fetchOAuthCapabilities() {
   return apiGet('/api/credentials/oauth/capabilities')
 }

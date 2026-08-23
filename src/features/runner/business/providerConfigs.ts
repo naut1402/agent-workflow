@@ -21,13 +21,10 @@ function normaliseProviderConfig(raw: any): ProviderConfig | null {
   if (!id) return null
   const providerId = String(raw.providerId || '').trim()
   if (!providerId) return null
-  const credentialId = String(raw.credentialId || '').trim()
-  if (!credentialId) return null
   return {
     id,
     label: String(raw.label || id).slice(0, 128),
     providerId,
-    credentialId,
     baseURL: raw.baseURL != null ? String(raw.baseURL) : undefined,
   }
 }
@@ -79,14 +76,11 @@ export function upsertProviderConfig(input: any): MutationResult<{ providerConfi
   if (!id) return { ok: false, error: 'invalid provider config id' }
   const providerId = String(input.providerId || '').trim()
   if (!providerId) return { ok: false, error: 'providerId is required' }
-  const credentialId = String(input.credentialId || '').trim()
-  if (!credentialId) return { ok: false, error: 'credentialId is required' }
 
   const entry: ProviderConfig = {
     id,
     label: String(input.label || id).slice(0, 128),
     providerId,
-    credentialId,
     baseURL: input.baseURL != null ? String(input.baseURL) : undefined,
   }
 

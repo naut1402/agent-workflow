@@ -22,6 +22,7 @@ vi.mock('@/features/runner/scripts/ConnectionDialogApi', () => ({
   scanLocalCommands: vi.fn(async () => ({ commands: [] })),
   saveCustomCommand: vi.fn(async (c: unknown) => ({ command: c })),
   deleteCustomCommand: vi.fn(async () => ({ deleted: true })),
+  deleteCredential: vi.fn(async () => ({ deleted: true })),
   fetchOAuthCapabilities: vi.fn(async () => ({ providers: [] })),
   startOAuthConnect: vi.fn(async () => ({ state: 'state-1', authorizeUrl: 'https://example.test/authorize' })),
   exchangeOAuthCode: vi.fn(async () => ({ credentialId: 'oauth-cred-1' })),
@@ -38,12 +39,13 @@ vi.mock('@/features/runner/scripts/ProviderDialogApi', () => ({
 import {
   fetchCredentials,
   saveCredential,
+  deleteCredential,
   saveConnection,
   fetchOAuthCapabilities,
   startOAuthConnect,
   fetchAvailableModels,
 } from '@/features/runner/scripts/ConnectionDialogApi'
-import { fetchProviderConfigs } from '@/features/runner/scripts/ProviderDialogApi'
+import { fetchProviderConfigs, saveProviderConfig, deleteProviderConfig } from '@/features/runner/scripts/ProviderDialogApi'
 
 const PROVIDERS: ProviderEntry[] = [
   { id: 'anthropic-api', kind: 'ai-provider', label: 'Anthropic API', family: 'ai-api' },
@@ -52,14 +54,13 @@ const PROVIDERS: ProviderEntry[] = [
 ]
 
 const PROVIDER_CONFIGS: ProviderConfigOption[] = [
-  { id: 'pc-anthropic', label: 'Anthropic chính', providerId: 'anthropic-api', credentialId: 'cred-anthropic' },
-  {
-    id: 'pc-gemini',
-    label: 'Gemini gateway',
-    providerId: 'gemini-api',
-    credentialId: 'cred-gemini',
-    baseURL: 'https://gemini.example/v1',
-  },
+  { id: 'pc-anthropic', label: 'Anthropic chính', providerId: 'anthropic-api' },
+  { id: 'pc-gemini', label: 'Gemini gateway', providerId: 'gemini-api', baseURL: 'https://gemini.example/v1' },
+]
+
+const CREDENTIALS = [
+  { id: 'cred-anthropic', provider: 'anthropic-api', label: 'Anthropic chính', secretRef: 'vault:cred-anthropic' },
+  { id: 'cred-gemini', provider: 'gemini-api', label: 'Gemini gateway', secretRef: 'vault:cred-gemini' },
 ]
 
 function q<T extends Element = HTMLElement>(selector: string): T {
@@ -93,13 +94,19 @@ async function click(el: Element) {
 beforeEach(() => {
   vi.mocked(fetchCredentials).mockClear()
   vi.mocked(saveCredential).mockClear()
+  vi.mocked(deleteCredential).mockClear()
   vi.mocked(saveConnection).mockClear()
   vi.mocked(fetchOAuthCapabilities).mockClear()
   vi.mocked(startOAuthConnect).mockClear()
   vi.mocked(fetchAvailableModels).mockClear()
   vi.mocked(fetchProviderConfigs).mockClear()
+  vi.mocked(saveProviderConfig).mockClear()
+  vi.mocked(deleteProviderConfig).mockClear()
+  vi.mocked(fetchCredentials).mockResolvedValue({ profiles: [...CREDENTIALS] })
   vi.mocked(fetchOAuthCapabilities).mockResolvedValue({ providers: [] })
   vi.mocked(fetchAvailableModels).mockResolvedValue({ models: [] })
+  vi.mocked(fetchProviderConfigs).mockResolvedValue({ providerConfigs: [...PROVIDER_CONFIGS] })
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
 
 afterEach(() => {
@@ -115,9 +122,9 @@ async function mountProviderDialog(providerConfig: ProviderConfigOption | null =
   return w
 }
 
-async function mountConnectionOnAiProvider() {
+async function mountConnectionOnAiProvider(connection: any = null) {
   const w = mount(ConnectionDialog, {
-    props: { providers: PROVIDERS, providerConfigs: PROVIDER_CONFIGS },
+    props: { providers: PROVIDERS, providerConfigs: PROVIDER_CONFIGS, connection },
     attachTo: document.body,
   })
   await flushPromises()
@@ -128,25 +135,159 @@ async function mountConnectionOnAiProvider() {
   return w
 }
 
-describe('ProviderDialog — credential form', () => {
-  it('no longer asks the user to type a credential id', async () => {
+function providerConfigSelect(): HTMLSelectElement {
+  return qa<HTMLSelectElement>('select').find((s) =>
+    Array.from(s.options).some((o) => o.value === 'pc-anthropic' || o.value === 'pc-gemini'),
+  )!
+}
+function credentialSelect(): HTMLSelectElement {
+  return qa<HTMLSelectElement>('select').find((s) =>
+    Array.from(s.options).some((o) => o.value === 'cred-anthropic' || o.value === 'cred-gemini'),
+  )!
+}
+async function chooseProviderConfig(id: string) {
+  const sel = providerConfigSelect()
+  sel.value = id
+  sel.dispatchEvent(new Event('change'))
+  await flushPromises()
+}
+async function chooseCredential(credentialId: string) {
+  const sel = credentialSelect()
+  sel.value = credentialId
+  sel.dispatchEvent(new Event('change'))
+  await flushPromises()
+}
+
+describe('ProviderDialog — provider config (no credential)', () => {
+  it('does not render any credential field', async () => {
     await mountProviderDialog()
-    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
+    expect(document.body.textContent).not.toContain(runnerVi.connectionDialog.credentialField)
+    expect(document.body.querySelector('input[type="password"]')).toBeNull()
+  })
+
+  it('requires a label and an interface before saving', async () => {
+    await mountProviderDialog()
+    await click(buttonByText(runnerVi.providerDialog.save))
+    expect(saveProviderConfig).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain(runnerVi.providerDialog.labelRequired)
+  })
+
+  it('saves label + interface + base URL', async () => {
+    await mountProviderDialog()
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. OpenAI gateway của tôi"]'), 'My gateway')
+    const interfaceSelect = q<HTMLSelectElement>('select')
+    interfaceSelect.value = 'gemini-api'
+    interfaceSelect.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await setInputValue(
+      q<HTMLInputElement>('input[placeholder="https://generativelanguage.googleapis.com/v1beta/openai"]'),
+      'https://gemini.example/v1',
+    )
+    await click(buttonByText(runnerVi.providerDialog.save))
+
+    expect(saveProviderConfig).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveProviderConfig).mock.calls[0][0] as any
+    expect(payload.providerId).toBe('gemini-api')
+    expect(payload.label).toBe('My gateway')
+    expect(payload.baseURL).toBe('https://gemini.example/v1')
+    expect(payload.credentialId).toBeUndefined()
+  })
+
+  it('prefills from an edited provider config', async () => {
+    await mountProviderDialog(PROVIDER_CONFIGS[1])
+    const labelInput = q<HTMLInputElement>('input[placeholder="vd. OpenAI gateway của tôi"]')
+    expect(labelInput.value).toBe('Gemini gateway')
+    const interfaceSelect = q<HTMLSelectElement>('select')
+    expect(interfaceSelect.value).toBe('gemini-api')
+    const baseUrlInput = qa<HTMLInputElement>('.field input').find((i) => i.value === 'https://gemini.example/v1')
+    expect(baseUrlInput).toBeTruthy()
+  })
+})
+
+describe('ConnectionDialog — provider config picker', () => {
+  it('lists configured provider configs, not raw interfaces', async () => {
+    await mountConnectionOnAiProvider()
+    const options = Array.from(providerConfigSelect().options).map((o) => o.value)
+    expect(options).toEqual(expect.arrayContaining(['pc-anthropic', 'pc-gemini']))
+  })
+
+  it('opens ProviderDialog via the "+" button next to the provider picker', async () => {
+    await mountConnectionOnAiProvider()
+    await click(buttonByTitle(runnerVi.providerDialog.title))
+    expect(document.body.textContent).toContain(runnerVi.providerDialog.labelField)
+  })
+
+  it('blocks saving when no provider config is selected', async () => {
+    await mountConnectionOnAiProvider()
+    const sel = providerConfigSelect()
+    sel.value = ''
+    sel.dispatchEvent(new Event('change'))
+    await flushPromises()
+
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'My conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+    expect(saveConnection).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain(runnerVi.errors.providerConfigRequired)
+  })
+})
+
+describe('ConnectionDialog — provider + credential setup', () => {
+  it('saves a connection using providerId/baseURL from the provider config and the chosen credential', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude API conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.kind).toBe('ai-provider')
+    expect(payload.providerId).toBe('anthropic-api')
+    expect(payload.credentialId).toBe('cred-anthropic')
+    expect(payload.config.providerConfigId).toBe('pc-anthropic')
+    expect(payload.config.baseURL).toBeUndefined()
+  })
+
+  it('copies the provider config base URL into the saved connection', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-gemini')
+    await chooseCredential('cred-gemini')
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Gemini conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.providerId).toBe('gemini-api')
+    expect(payload.credentialId).toBe('cred-gemini')
+    expect(payload.config.baseURL).toBe('https://gemini.example/v1')
+  })
+})
+
+describe('ConnectionDialog — creating a credential inline', () => {
+  it('opens the "+ Credential" subform and does not navigate away from the connection dialog', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.addCredential))
     expect(document.body.textContent).not.toContain('Credential ID')
   })
 
   it('blocks saving a new credential with neither a secret value nor a secretRef', async () => {
-    await mountProviderDialog()
-    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.addCredential))
     await click(buttonByText(runnerVi.connectionDialog.saveCredential))
     expect(saveCredential).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain(runnerVi.errors.credentialSecretRequired)
   })
 
-  it('saves with secretValue (pasted secret) rather than a raw secretRef', async () => {
-    await mountProviderDialog()
-    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
+  it('creates the credential with a pasted secret and selects it for this connection', async () => {
+    vi.mocked(fetchCredentials).mockResolvedValueOnce({ profiles: [] })
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.addCredential))
     await setInputValue(q<HTMLInputElement>('input[type="password"]'), 'sk-pasted-secret')
+    vi.mocked(fetchCredentials).mockResolvedValueOnce({
+      profiles: [{ id: 'minted-id', provider: 'anthropic-api', label: '', secretRef: '' }],
+    })
     await click(buttonByText(runnerVi.connectionDialog.saveCredential))
 
     expect(saveCredential).toHaveBeenCalledTimes(1)
@@ -154,11 +295,18 @@ describe('ProviderDialog — credential form', () => {
     expect(payload.secretValue).toBe('sk-pasted-secret')
     expect(payload.secretRef).toBeUndefined()
     expect(payload.id).toBeUndefined()
+
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'New conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+    const connPayload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(connPayload.credentialId).toBe('minted-id')
+    expect(connPayload.providerId).toBe('anthropic-api')
   })
 
   it('falls back to the advanced secretRef field when no secret value is pasted', async () => {
-    await mountProviderDialog()
-    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.addCredential))
     const advancedInput = q<HTMLInputElement>('input[placeholder="env:ANTHROPIC_API_KEY"]')
     await setInputValue(advancedInput, 'env:MY_OWN_VAR')
     await click(buttonByText(runnerVi.connectionDialog.saveCredential))
@@ -170,22 +318,118 @@ describe('ProviderDialog — credential form', () => {
   })
 })
 
-describe('ProviderDialog — Connect via browser (OAuth)', () => {
+describe('ConnectionDialog — deleting a provider config', () => {
+  it('disables the delete button until a provider config is selected', async () => {
+    await mountConnectionOnAiProvider()
+    const sel = providerConfigSelect()
+    sel.value = ''
+    sel.dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(buttonByTitle(runnerVi.connectionDialog.deleteProvider).disabled).toBe(true)
+  })
+
+  it('deletes the selected provider config after confirming, then refreshes the list', async () => {
+    vi.mocked(fetchProviderConfigs).mockResolvedValueOnce({ providerConfigs: [PROVIDER_CONFIGS[1]] })
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.deleteProvider))
+
+    expect(deleteProviderConfig).toHaveBeenCalledWith('pc-anthropic')
+    expect(providerConfigSelect().value).toBe('pc-gemini')
+  })
+
+  it('does nothing when the user cancels the confirmation', async () => {
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.deleteProvider))
+    expect(deleteProviderConfig).not.toHaveBeenCalled()
+  })
+})
+
+describe('ConnectionDialog — editing a credential', () => {
+  it('disables edit/delete until a credential is selected', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    expect(buttonByTitle(runnerVi.connectionDialog.editCredential).disabled).toBe(true)
+    expect(buttonByTitle(runnerVi.connectionDialog.deleteCredential).disabled).toBe(true)
+  })
+
+  it('opens the subform prefilled with the label, without prefilling any secret', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.editCredential))
+
+    const labelInput = qa<HTMLInputElement>('.new-cred input').find((i) => i.value === 'Anthropic chính')
+    expect(labelInput).toBeTruthy()
+    expect(q<HTMLInputElement>('input[type="password"]').value).toBe('')
+  })
+
+  it('saves the edit, keeping the existing secretRef when no new secret is entered', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.editCredential))
+    await click(buttonByText(runnerVi.actions.save))
+
+    expect(saveCredential).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveCredential).mock.calls[0][0] as any
+    expect(payload.id).toBe('cred-anthropic')
+    expect(payload.secretRef).toBe('vault:cred-anthropic')
+    expect(payload.secretValue).toBeUndefined()
+  })
+
+  it('replaces the secret when a new one is pasted while editing', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.editCredential))
+    await setInputValue(q<HTMLInputElement>('input[type="password"]'), 'sk-new-secret')
+    await click(buttonByText(runnerVi.actions.save))
+
+    const payload = vi.mocked(saveCredential).mock.calls[0][0] as any
+    expect(payload.id).toBe('cred-anthropic')
+    expect(payload.secretValue).toBe('sk-new-secret')
+    expect(payload.secretRef).toBeUndefined()
+  })
+})
+
+describe('ConnectionDialog — deleting a credential', () => {
+  it('deletes the selected credential after confirming, then clears the selection', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.deleteCredential))
+
+    expect(deleteCredential).toHaveBeenCalledWith('cred-anthropic')
+    expect(credentialSelect().value).toBe('')
+  })
+
+  it('does nothing when the user cancels the confirmation', async () => {
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.deleteCredential))
+    expect(deleteCredential).not.toHaveBeenCalled()
+  })
+})
+
+describe('ConnectionDialog — Connect via browser (OAuth)', () => {
   it('hides the button when the provider has no OAuth capability', async () => {
-    await mountProviderDialog()
-    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.addCredential))
     expect(document.body.textContent).not.toContain(runnerVi.connectionDialog.connectViaBrowser)
   })
 
   it('shows the button once the provider is reported OAuth-capable, and starts the flow on click', async () => {
     vi.mocked(fetchOAuthCapabilities).mockResolvedValue({ providers: ['gemini-api'] })
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
-    await mountProviderDialog()
-    const interfaceSelect = q<HTMLSelectElement>('select')
-    interfaceSelect.value = 'gemini-api'
-    interfaceSelect.dispatchEvent(new Event('change'))
-    await flushPromises()
-    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-gemini')
+    await click(buttonByTitle(runnerVi.connectionDialog.addCredential))
 
     const connectText = runnerVi.connectionDialog.connectViaBrowser
     expect(document.body.textContent).toContain(connectText)
@@ -198,105 +442,77 @@ describe('ProviderDialog — Connect via browser (OAuth)', () => {
 
   it('hides Connect via browser too when the vault itself is unconfigured, even for an OAuth-capable provider', async () => {
     vi.mocked(fetchOAuthCapabilities).mockResolvedValue({ providers: ['gemini-api'], vaultConfigured: false })
-    await mountProviderDialog()
-    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-gemini')
+    await click(buttonByTitle(runnerVi.connectionDialog.addCredential))
 
     expect(document.body.textContent).not.toContain(runnerVi.connectionDialog.connectViaBrowser)
   })
 })
 
-describe('ProviderDialog — vault not configured', () => {
+describe('ConnectionDialog — vault not configured', () => {
   it('warns and disables the secret value field instead of letting the user hit a raw save error', async () => {
     vi.mocked(fetchOAuthCapabilities).mockResolvedValue({ providers: [], vaultConfigured: false })
-    await mountProviderDialog()
-    await click(buttonByTitle(runnerVi.providerDialog.addCredential))
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.addCredential))
 
     expect(document.body.textContent).toContain(runnerVi.connectionDialog.vaultNotConfigured)
     expect(q<HTMLInputElement>('input[type="password"]').disabled).toBe(true)
   })
 })
 
-describe('ProviderDialog — base URL', () => {
-  it('always shows the base URL input (no toggle) with the provider default as placeholder', async () => {
-    await mountProviderDialog()
-    const baseUrlInput = q<HTMLInputElement>('input[placeholder="https://api.anthropic.com"]')
-    expect(baseUrlInput).toBeTruthy()
-  })
-
-  it('prefills from an edited provider config', async () => {
-    await mountProviderDialog(PROVIDER_CONFIGS[1])
-    const labelInput = q<HTMLInputElement>('input[placeholder="vd. OpenAI gateway của tôi"]')
-    expect(labelInput.value).toBe('Gemini gateway')
-    // Interface select reflects the saved provider, base URL the saved endpoint.
-    const interfaceSelect = q<HTMLSelectElement>('select')
-    expect(interfaceSelect.value).toBe('gemini-api')
-    const baseUrlInput = qa<HTMLInputElement>('.field input').find((i) => i.value === 'https://gemini.example/v1')
-    expect(baseUrlInput).toBeTruthy()
-  })
-})
-
-describe('ConnectionDialog — provider config picker', () => {
-  it('lists configured providers instead of raw interfaces/credentials', async () => {
+describe('ConnectionDialog — validation', () => {
+  it('blocks saving when a provider config is selected but no credential is chosen or created', async () => {
     await mountConnectionOnAiProvider()
-    const providerSelect = qa<HTMLSelectElement>('select').find((s) =>
-      Array.from(s.options).some((o) => o.value === 'pc-anthropic'),
-    )
-    expect(providerSelect).toBeTruthy()
-    expect(document.body.textContent).not.toContain('+ Credential')
+    await chooseProviderConfig('pc-anthropic')
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'My conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+    expect(saveConnection).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain(runnerVi.errors.credentialRequired)
   })
 
-  it('blocks saving when no provider config is selected', async () => {
+  it('resets the credential when switching to a provider config whose provider the chosen credential does not belong to', async () => {
     await mountConnectionOnAiProvider()
-    // Empty the selection first.
-    const providerSelect = qa<HTMLSelectElement>('select').find((s) =>
-      Array.from(s.options).some((o) => o.value === 'pc-anthropic'),
-    )!
-    providerSelect.value = ''
-    providerSelect.dispatchEvent(new Event('change'))
-    await flushPromises()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+
+    await chooseProviderConfig('pc-gemini')
+    // cred-anthropic does not belong to gemini-api — must not carry over.
+    expect(credentialSelect().value).toBe('')
 
     await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'My conn')
     await click(buttonByText(runnerVi.connectionDialog.saveConnection))
     expect(saveConnection).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain(runnerVi.errors.providerConfigRequired)
+    expect(document.body.textContent).toContain(runnerVi.errors.credentialRequired)
   })
+})
 
-  it('saves a self-contained connection (providerId + credentialId copied from the provider config)', async () => {
-    await mountConnectionOnAiProvider()
-    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude API conn')
-    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
-
-    expect(saveConnection).toHaveBeenCalledTimes(1)
-    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
-    expect(payload.kind).toBe('ai-provider')
-    expect(payload.providerId).toBe('anthropic-api')
-    expect(payload.credentialId).toBe('cred-anthropic')
-    expect(payload.config.providerConfigId).toBe('pc-anthropic')
-    // Default endpoint provider config — no baseURL copied.
-    expect(payload.config.baseURL).toBeUndefined()
-    expect(payload.config.model).toBeUndefined()
-    expect(payload.config.models).toBeUndefined()
-  })
-
-  it('copies the provider config base URL into the saved connection', async () => {
-    await mountConnectionOnAiProvider()
-    const providerSelect = qa<HTMLSelectElement>('select').find((s) =>
-      Array.from(s.options).some((o) => o.value === 'pc-gemini'),
-    )!
-    providerSelect.value = 'pc-gemini'
-    providerSelect.dispatchEvent(new Event('change'))
+describe('ConnectionDialog — editing an existing connection', () => {
+  it('prefills the provider config (by providerConfigId link) and credential from a previously saved connection', async () => {
+    const w = mount(ConnectionDialog, {
+      props: {
+        providers: PROVIDERS,
+        providerConfigs: PROVIDER_CONFIGS,
+        connection: {
+          id: 'existing-api',
+          label: 'Existing conn',
+          kind: 'ai-provider',
+          providerId: 'gemini-api',
+          credentialId: 'cred-gemini',
+          config: { providerConfigId: 'pc-gemini' },
+        },
+      },
+      attachTo: document.body,
+    })
     await flushPromises()
 
-    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Gemini conn')
-    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
-
-    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
-    expect(payload.providerId).toBe('gemini-api')
-    expect(payload.credentialId).toBe('cred-gemini')
-    expect(payload.config.baseURL).toBe('https://gemini.example/v1')
+    expect(providerConfigSelect().value).toBe('pc-gemini')
+    expect(credentialSelect().value).toBe('cred-gemini')
+    w.unmount()
   })
 
-  it('prefills a legacy connection by matching provider + credential when no providerConfigId link exists', async () => {
+  it('matches on providerId when no providerConfigId link exists', async () => {
     const w = mount(ConnectionDialog, {
       props: {
         providers: PROVIDERS,
@@ -312,10 +528,37 @@ describe('ConnectionDialog — provider config picker', () => {
       attachTo: document.body,
     })
     await flushPromises()
-    const providerSelect = qa<HTMLSelectElement>('select').find((s) =>
-      Array.from(s.options).some((o) => o.value === 'pc-gemini'),
-    )
-    expect(providerSelect?.value).toBe('pc-gemini')
+
+    expect(providerConfigSelect().value).toBe('pc-gemini')
+    expect(credentialSelect().value).toBe('cred-gemini')
+    w.unmount()
+  })
+
+  it('lets the user edit and re-save without disturbing the existing provider/credential pair', async () => {
+    const w = mount(ConnectionDialog, {
+      props: {
+        providers: PROVIDERS,
+        providerConfigs: PROVIDER_CONFIGS,
+        connection: {
+          id: 'existing-api',
+          label: 'Existing conn',
+          kind: 'ai-provider',
+          providerId: 'gemini-api',
+          credentialId: 'cred-gemini',
+          config: { providerConfigId: 'pc-gemini' },
+        },
+      },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.id).toBe('existing-api')
+    expect(payload.providerId).toBe('gemini-api')
+    expect(payload.credentialId).toBe('cred-gemini')
+    expect(payload.config.baseURL).toBe('https://gemini.example/v1')
     w.unmount()
   })
 })
@@ -323,6 +566,8 @@ describe('ConnectionDialog — provider config picker', () => {
 describe('ConnectionDialog — model list', () => {
   it('renders "Load models" as an icon button, not a text button', async () => {
     await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
     expect(
       qa<HTMLButtonElement>('button').some((b) => b.textContent?.trim() === runnerVi.connectionDialog.loadModels),
     ).toBe(false)
@@ -331,8 +576,10 @@ describe('ConnectionDialog — model list', () => {
     expect(loadBtn?.querySelector('svg')).toBeTruthy()
   })
 
-  it('loads models through the selected provider config credential and lets the user pick exactly one', async () => {
+  it('loads models through the selected provider config + credential and lets the user pick exactly one', async () => {
     await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
     vi.mocked(fetchAvailableModels).mockResolvedValueOnce({ models: ['claude-a', 'claude-b'] })
 
     const loadBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.loadModels)!
@@ -342,6 +589,7 @@ describe('ConnectionDialog — model list', () => {
       providerId: 'anthropic-api',
       credentialId: 'cred-anthropic',
       baseURL: undefined,
+      secretValue: undefined,
     })
 
     const comboInput = q<HTMLInputElement>('.c-combo-select .c-combo-input')
@@ -364,6 +612,8 @@ describe('ConnectionDialog — model list', () => {
 
   it('filters the model list live while typing, directly in the select box', async () => {
     await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
     vi.mocked(fetchAvailableModels).mockResolvedValueOnce({ models: ['claude-a', 'claude-b'] })
     const loadBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.loadModels)!
     await click(loadBtn)
@@ -379,6 +629,8 @@ describe('ConnectionDialog — model list', () => {
 
   it('lets the user type a model name that was never in the fetched list', async () => {
     await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
 
     const comboInput = q<HTMLInputElement>('.c-combo-select .c-combo-input')
     await setInputValue(comboInput, 'my-custom-model')
@@ -398,6 +650,8 @@ describe('ConnectionDialog — model list', () => {
 describe('ConnectionDialog — extra tools (shell/git/search/web)', () => {
   it('defaults to no extra tools checked and omits the key entirely on save', async () => {
     await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
     const checkboxes = qa<HTMLInputElement>('input[type="checkbox"]')
     expect(checkboxes.every((c) => !c.checked)).toBe(true)
 
@@ -410,6 +664,8 @@ describe('ConnectionDialog — extra tools (shell/git/search/web)', () => {
 
   it('checking shell + web saves both values under config.extraTools', async () => {
     await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
     const shellCheckbox = qa<HTMLInputElement>('input[type="checkbox"][value="shell"]')[0]
     shellCheckbox.checked = true
     shellCheckbox.dispatchEvent(new Event('change'))

@@ -223,11 +223,12 @@ export interface ConnectionsStore {
   connections: Connection[]
 }
 
+// A reusable provider "template": interface + optional baseURL. Credential
+// selection lives on the Connection itself, not here.
 export interface ProviderConfig {
   id: string
   label: string
   providerId: string
-  credentialId: string
   baseURL?: string
 }
 

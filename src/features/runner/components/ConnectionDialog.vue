@@ -8,9 +8,16 @@ import {
   saveCustomCommand,
   deleteCustomCommand,
   fetchAvailableModels,
+  fetchCredentials,
+  saveCredential,
+  deleteCredential,
+  fetchOAuthCapabilities,
+  startOAuthConnect,
+  exchangeOAuthCode,
+  fetchOAuthStatus,
 } from '../scripts/ConnectionDialogApi'
-import { fetchProviderConfigs, saveProviderConfig } from '../scripts/ProviderDialogApi'
-import { DEFAULT_MODEL_HINTS } from '../scripts/agenticProviderDefaults'
+import { fetchProviderConfigs, saveProviderConfig, deleteProviderConfig } from '../scripts/ProviderDialogApi'
+import { DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
 import type { ConnectionKind, ConnectionOption, ProviderConfigOption, ProviderEntry } from '../types'
 import CComboSelect from '../../../core/ui/CComboSelect.vue'
 import InfoTooltip from '../../../core/ui/InfoTooltip.vue'
@@ -24,6 +31,13 @@ interface RegisteredCommand {
   providerId: string
   flags: string[]
   custom?: boolean
+}
+
+interface CredentialProfile {
+  id: string
+  provider: string
+  label: string
+  secretRef: string
 }
 
 const props = defineProps<{
@@ -59,8 +73,9 @@ const editingCommandId = ref<string | null>(null)
 const registerDraft = ref({ command: '', path: '', flagsText: '' })
 const registerError = ref('')
 
-// ai-provider: everything provider-related (interface, credential, base URL)
-// lives in a provider config; the connection just references it and picks models.
+// ai-provider: the provider (interface + base URL) is a reusable provider
+// config; the credential is chosen/created right here, tying it to this
+// connection specifically.
 const selectedProviderConfigId = ref('')
 const providerConfigList = ref<ProviderConfigOption[]>([...props.providerConfigs])
 const showProviderDialog = ref(false)
@@ -78,13 +93,56 @@ const selectedProviderConfig = computed(
   () => providerConfigList.value.find((p) => p.id === selectedProviderConfigId.value) || null,
 )
 
+const credentialId = ref('')
+const credentials = ref<CredentialProfile[]>([])
+const showNewCredential = ref(false)
+/** Set while the "+ Credential" subform is editing an existing credential instead of creating one. */
+const editingCredentialId = ref<string | null>(null)
+/** `id` intentionally not user-facing — upsertCredential mints one when omitted. */
+const newCred = ref({ label: '', secretValue: '', secretRef: '' })
+
+const selectedCredential = computed(() => credentials.value.find((c) => c.id === credentialId.value) || null)
+/** Hint only — must stay a placeholder, not a prefilled value, or "field left untouched" becomes indistinguishable from "field filled with the hint". */
+const secretRefPlaceholder = computed(
+  () => DEFAULT_SECRET_ENV_HINTS[selectedProviderConfig.value?.providerId || ''] || 'env:ANTHROPIC_API_KEY',
+)
+
+const filteredCredentials = computed(() =>
+  credentials.value.filter(
+    (c) => !selectedProviderConfig.value || c.provider === selectedProviderConfig.value.providerId,
+  ),
+)
+
+const oauthCapableProviders = ref<string[]>([])
+/**
+ * Whether the server can encrypt/store a secret at all (`DASHBOARD_SECRET_KEY`
+ * set) — `true` until we actually hear otherwise, so the warning below never
+ * flashes on for the split second before `loadOAuthCapabilities()` resolves.
+ */
+const vaultConfigured = ref(true)
+/** OAuth tokens land in the same vault as pasted secrets — no vault key, no OAuth either. */
+const canConnectOAuth = computed(
+  () => vaultConfigured.value && oauthCapableProviders.value.includes(selectedProviderConfig.value?.providerId || ''),
+)
+type OAuthFlowStatus = 'idle' | 'starting' | 'pending' | 'exchanging' | 'error'
+const oauthFlow = ref<{ state: string; status: OAuthFlowStatus; authorizeUrl: string; error: string }>({
+  state: '',
+  status: 'idle',
+  authorizeUrl: '',
+  error: '',
+})
+const oauthPasteInput = ref('')
+let oauthPollTimer: ReturnType<typeof setInterval> | null = null
+
 const modelPlaceholder = computed(() => DEFAULT_MODEL_HINTS[selectedProviderConfig.value?.providerId || ''] || '')
 
 const modelOptions = ref<string[]>([])
 const loadingModels = ref(false)
 const modelFetchError = ref('')
-/** Models are fetched through the provider config's credential — no separate key handling here. */
-const canFetchModels = computed(() => Boolean(selectedProviderConfig.value))
+/** A key to fetch models with — an existing credential, or a not-yet-saved secret typed in "+ Credential". */
+const canFetchModels = computed(
+  () => Boolean(selectedProviderConfig.value && (credentialId.value || newCred.value.secretValue.trim())),
+)
 /** Fetched models ∪ already-selected ones — so a model saved before a fresh "Load models" fetch still shows up. */
 const modelSelectOptions = computed(() => {
   const ids = new Set(modelOptions.value)
@@ -103,6 +161,9 @@ const selectedModel = computed<string>({
 watch(selectedProviderConfigId, () => {
   modelOptions.value = []
   modelFetchError.value = ''
+  if (credentialId.value && !filteredCredentials.value.some((c) => c.id === credentialId.value)) {
+    credentialId.value = ''
+  }
 })
 
 async function refreshProviderConfigs() {
@@ -129,16 +190,178 @@ async function onProviderConfigSaved(id: string) {
   selectedProviderConfigId.value = id
 }
 
+async function removeSelectedProviderConfig() {
+  const pc = selectedProviderConfig.value
+  if (!pc) return
+  if (!confirm(t('runner.providerDialog.deleteConfirm', { id: pc.id }))) return
+  try {
+    await deleteProviderConfig(pc.id)
+    await refreshProviderConfigs()
+    if (selectedProviderConfigId.value === pc.id) {
+      selectedProviderConfigId.value = providerConfigList.value[0]?.id || ''
+    }
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
+async function loadOAuthCapabilities() {
+  try {
+    const data = await fetchOAuthCapabilities()
+    oauthCapableProviders.value = data.providers || []
+    vaultConfigured.value = data.vaultConfigured !== false
+  } catch {
+    /* best-effort — the "Connect via browser" button just won't show */
+  }
+}
+
+function stopOAuthPolling() {
+  if (oauthPollTimer) clearInterval(oauthPollTimer)
+  oauthPollTimer = null
+}
+
+function pollOAuthStatus() {
+  stopOAuthPolling()
+  oauthPollTimer = setInterval(async () => {
+    if (!oauthFlow.value.state) return
+    try {
+      const data = await fetchOAuthStatus(oauthFlow.value.state)
+      if (data.status === 'done') {
+        stopOAuthPolling()
+        await loadCredentials()
+        credentialId.value = data.credentialId
+        showNewCredential.value = false
+        oauthFlow.value = { state: '', status: 'idle', authorizeUrl: '', error: '' }
+      } else if (data.status === 'error') {
+        stopOAuthPolling()
+        oauthFlow.value = { ...oauthFlow.value, status: 'error', error: data.error || 'connect failed' }
+      }
+    } catch {
+      /* transient network hiccup — keep polling until the flow's own TTL expires */
+    }
+  }, 2000)
+}
+
+async function startConnectViaBrowser() {
+  oauthFlow.value = { state: '', status: 'starting', authorizeUrl: '', error: '' }
+  try {
+    const data = await startOAuthConnect(selectedProviderConfig.value?.providerId || '', newCred.value.label)
+    oauthFlow.value = { state: data.state, status: 'pending', authorizeUrl: data.authorizeUrl, error: '' }
+    window.open(data.authorizeUrl, '_blank', 'noopener')
+    pollOAuthStatus()
+  } catch (e: any) {
+    oauthFlow.value = { state: '', status: 'error', authorizeUrl: '', error: String(e.message || e) }
+  }
+}
+
+async function submitOAuthPaste() {
+  if (!oauthFlow.value.state || !oauthPasteInput.value.trim()) return
+  oauthFlow.value = { ...oauthFlow.value, status: 'exchanging' }
+  try {
+    const data = await exchangeOAuthCode(oauthFlow.value.state, oauthPasteInput.value.trim())
+    stopOAuthPolling()
+    await loadCredentials()
+    credentialId.value = data.credentialId
+    showNewCredential.value = false
+    oauthPasteInput.value = ''
+    oauthFlow.value = { state: '', status: 'idle', authorizeUrl: '', error: '' }
+  } catch (e: any) {
+    oauthFlow.value = { ...oauthFlow.value, status: 'error', error: String(e.message || e) }
+  }
+}
+
+function cancelOAuthFlow() {
+  stopOAuthPolling()
+  oauthPasteInput.value = ''
+  oauthFlow.value = { state: '', status: 'idle', authorizeUrl: '', error: '' }
+}
+
+function toggleNewCredential() {
+  if (!showNewCredential.value) {
+    editingCredentialId.value = null
+    newCred.value = { label: '', secretValue: '', secretRef: '' }
+    cancelOAuthFlow()
+  }
+  showNewCredential.value = !showNewCredential.value
+}
+
+function openEditCredential() {
+  const cred = selectedCredential.value
+  if (!cred) return
+  editingCredentialId.value = cred.id
+  newCred.value = { label: cred.label, secretValue: '', secretRef: '' }
+  cancelOAuthFlow()
+  showNewCredential.value = true
+}
+
+async function removeSelectedCredential() {
+  const cred = selectedCredential.value
+  if (!cred) return
+  if (!confirm(t('runner.messages.confirmDeleteCredential', { label: cred.label }))) return
+  try {
+    await deleteCredential(cred.id)
+    await loadCredentials()
+    if (credentialId.value === cred.id) credentialId.value = ''
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
+async function loadCredentials() {
+  try {
+    const data = await fetchCredentials()
+    credentials.value = data.profiles || []
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
+async function saveNewCredential() {
+  error.value = ''
+  const editingId = editingCredentialId.value
+  const existing = editingId ? credentials.value.find((c) => c.id === editingId) : null
+  // Editing keeps the current secret untouched unless a new one is entered;
+  // creating still requires one of the two secret fields.
+  if (!editingId && !newCred.value.secretValue.trim() && !newCred.value.secretRef.trim()) {
+    error.value = t('runner.errors.credentialSecretRequired')
+    return
+  }
+  try {
+    const { profile } = await saveCredential({
+      ...(editingId ? { id: editingId } : {}),
+      label: newCred.value.label || undefined,
+      provider: selectedProviderConfig.value?.providerId || '',
+      // Prefer the pasted value; the raw secretRef field is the advanced/legacy
+      // path (env:VAR_NAME on the server, or file:/path) for operators who
+      // already manage secrets that way.
+      ...(newCred.value.secretValue.trim()
+        ? { secretValue: newCred.value.secretValue }
+        : newCred.value.secretRef.trim()
+          ? { secretRef: newCred.value.secretRef }
+          : existing
+            ? { secretRef: existing.secretRef }
+            : {}),
+    })
+    await loadCredentials()
+    credentialId.value = profile.id
+    showNewCredential.value = false
+    editingCredentialId.value = null
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
 async function loadModels() {
-  if (!selectedProviderConfig.value) return
+  const pc = selectedProviderConfig.value
+  if (!pc) return
   modelFetchError.value = ''
   loadingModels.value = true
   try {
-    const pc = selectedProviderConfig.value
     const data = await fetchAvailableModels({
       providerId: pc.providerId,
       baseURL: pc.baseURL || undefined,
-      credentialId: pc.credentialId || undefined,
+      credentialId: !newCred.value.secretValue.trim() ? credentialId.value || undefined : undefined,
+      secretValue: newCred.value.secretValue.trim() || undefined,
     })
     modelOptions.value = data.models || []
     if (!modelOptions.value.length) modelFetchError.value = t('runner.connectionDialog.noModelsFound')
@@ -199,9 +422,10 @@ function inferProviderFromPath(pathOrCmd: string): string {
 }
 
 /**
- * Auto-migrate a legacy connection (saved before the provider-config split) by
- * creating a matching provider config. This runs silently on edit — the user
- * sees the provider pre-selected and can save normally.
+ * Auto-migrate a legacy connection (saved before the provider-config split, or
+ * one whose `config.providerConfigId` link is missing/stale) by creating a
+ * matching provider config from its providerId/baseURL. This runs silently on
+ * edit — the user sees the provider pre-selected and can save normally.
  */
 async function migrateLegacyToProviderConfig(conn: ConnectionOption) {
   const id = `mig-${conn.id}`
@@ -211,7 +435,6 @@ async function migrateLegacyToProviderConfig(conn: ConnectionOption) {
       id,
       label: conn.label || conn.providerId || 'Migrated provider',
       providerId: conn.providerId || '',
-      credentialId: conn.credentialId || '',
       ...(baseURL ? { baseURL } : {}),
     })
     providerConfigList.value.push(providerConfig)
@@ -235,17 +458,17 @@ function applyConnectionPrefill() {
     ? c.config.extraTools.filter((t): t is string => typeof t === 'string')
     : []
   if (kind.value === 'ai-provider') {
+    credentialId.value = c.credentialId || ''
     const link = typeof c.config?.providerConfigId === 'string' ? c.config.providerConfigId : ''
     if (link && providerConfigList.value.some((p) => p.id === link)) {
       selectedProviderConfigId.value = link
     } else {
-      // Legacy connection (saved before the split): match on provider + credential.
-      const match = providerConfigList.value.find(
-        (p) => p.providerId === c.providerId && p.credentialId === c.credentialId,
-      )
+      // Legacy connection (or missing link): match on provider — credential no
+      // longer lives on the provider config, so it isn't part of the match.
+      const match = providerConfigList.value.find((p) => p.providerId === c.providerId)
       if (match) {
         selectedProviderConfigId.value = match.id
-      } else if (c.credentialId) {
+      } else if (c.providerId) {
         // Auto-migrate: create a provider config from the legacy connection
         // so the user can edit/save without losing their config.
         migrateLegacyToProviderConfig(c)
@@ -434,6 +657,10 @@ async function save() {
       error.value = t('runner.errors.providerConfigRequired')
       return
     }
+    if (!credentialId.value) {
+      error.value = t('runner.errors.credentialRequired')
+      return
+    }
 
     // Keep the connection self-contained (providerId + credentialId + baseURL
     // copied from the provider config) so the execution plane stays unchanged;
@@ -454,7 +681,7 @@ async function save() {
       label: label.value.trim(),
       kind: 'ai-provider',
       providerId: pc.providerId,
-      credentialId: pc.credentialId,
+      credentialId: credentialId.value,
       config,
     })
     emit('saved', connection.id)
@@ -481,10 +708,13 @@ function onKeydown(e: KeyboardEvent) {
 
 onMounted(() => {
   refreshScan()
+  loadCredentials()
+  loadOAuthCapabilities()
   window.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
+  stopOAuthPolling()
   window.removeEventListener('keydown', onKeydown)
 })
 </script>
@@ -647,12 +877,161 @@ onUnmounted(() => {
                       />
                     </svg>
                   </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline danger"
+                    :disabled="!selectedProviderConfig"
+                    :title="t('runner.connectionDialog.deleteProvider')"
+                    :aria-label="t('runner.connectionDialog.deleteProvider')"
+                    @click="removeSelectedProviderConfig"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
+                      />
+                    </svg>
+                  </button>
                 </div>
               </div>
               <p v-if="!providerConfigList.length" class="muted path-hint">
                 {{ t('runner.connectionDialog.noProviderConfigs') }}
               </p>
             </div>
+
+            <div class="field">
+              <label class="cfg-label">{{ t('runner.connectionDialog.credentialField') }}</label>
+              <div class="credential-row">
+                <select v-model="credentialId" class="cfg-input">
+                  <option value="" disabled>{{ t('runner.connectionDialog.credentialPlaceholder') }}</option>
+                  <option v-for="c in filteredCredentials" :key="c.id" :value="c.id">
+                    {{ c.label }}
+                  </option>
+                </select>
+                <div class="icon-btn-group">
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline"
+                    :class="{ active: showNewCredential && !editingCredentialId }"
+                    :title="t('runner.connectionDialog.addCredential')"
+                    :aria-label="t('runner.connectionDialog.addCredential')"
+                    @click="toggleNewCredential"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M8 3v10M3 8h10" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline"
+                    :disabled="!selectedCredential"
+                    :title="t('runner.connectionDialog.editCredential')"
+                    :aria-label="t('runner.connectionDialog.editCredential')"
+                    @click="openEditCredential"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline danger"
+                    :disabled="!selectedCredential"
+                    :title="t('runner.connectionDialog.deleteCredential')"
+                    :aria-label="t('runner.connectionDialog.deleteCredential')"
+                    @click="removeSelectedCredential"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div v-if="showNewCredential" class="new-cred">
+              <div class="field">
+                <label class="cfg-label">{{ t('runner.connectionDialog.credLabelField') }}
+                  <input v-model="newCred.label" class="cfg-input" />
+                </label>
+              </div>
+
+              <div v-if="canConnectOAuth" class="field oauth-block">
+                <button
+                  type="button"
+                  class="btn-primary btn-sm"
+                  :disabled="oauthFlow.status === 'starting' || oauthFlow.status === 'pending' || oauthFlow.status === 'exchanging'"
+                  @click="startConnectViaBrowser"
+                >
+                  {{ t('runner.connectionDialog.connectViaBrowser') }}
+                </button>
+                <p v-if="oauthFlow.status === 'pending'" class="muted path-hint">
+                  {{ t('runner.connectionDialog.oauthPendingHint') }}
+                </p>
+                <div v-if="oauthFlow.status === 'pending' || oauthFlow.status === 'exchanging'" class="oauth-paste-row">
+                  <input
+                    v-model="oauthPasteInput"
+                    class="cfg-input"
+                    :placeholder="t('runner.connectionDialog.oauthPastePlaceholder')"
+                  />
+                  <button
+                    type="button"
+                    class="btn-ghost btn-sm"
+                    :disabled="!oauthPasteInput.trim() || oauthFlow.status === 'exchanging'"
+                    @click="submitOAuthPaste"
+                  >
+                    {{ t('runner.connectionDialog.oauthPasteSubmit') }}
+                  </button>
+                </div>
+                <p v-if="oauthFlow.status === 'error'" class="muted err-text">{{ oauthFlow.error }}</p>
+                <p class="muted path-hint">{{ t('runner.connectionDialog.orPasteSecretBelow') }}</p>
+              </div>
+
+              <p v-if="!vaultConfigured" class="err-text vault-warning">
+                {{ t('runner.connectionDialog.vaultNotConfigured') }}
+              </p>
+              <div class="field">
+                <label class="cfg-label">{{ t('runner.connectionDialog.secretValueField') }}
+                  <input
+                    v-model="newCred.secretValue"
+                    type="password"
+                    class="cfg-input"
+                    autocomplete="off"
+                    :disabled="!vaultConfigured"
+                  />
+                </label>
+                <p class="muted path-hint">
+                  {{ editingCredentialId ? t('runner.connectionDialog.secretValueEditHint') : t('runner.connectionDialog.secretValueHint') }}
+                </p>
+              </div>
+              <details class="advanced-secret-ref">
+                <summary class="muted">{{ t('runner.connectionDialog.advancedSecretRef') }}</summary>
+                <div class="field">
+                  <label class="cfg-label">{{ t('runner.connectionDialog.secretRefField') }}
+                    <input v-model="newCred.secretRef" class="cfg-input" :placeholder="secretRefPlaceholder" />
+                  </label>
+                </div>
+              </details>
+              <button type="button" class="btn-primary btn-sm" @click="saveNewCredential">
+                {{ editingCredentialId ? t('runner.actions.save') : t('runner.connectionDialog.saveCredential') }}
+              </button>
+            </div>
+
             <div class="field">
               <div class="row-actions">
                 <span class="cfg-label label-with-hint">
@@ -824,10 +1203,29 @@ onUnmounted(() => {
 }
 .command-row .cfg-input { flex: 1; min-width: 0; }
 .cfg-combo-select { flex: 1; min-width: 0; }
+.credential-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.credential-row .cfg-input { flex: 1; min-width: 0; }
 .icon-btn-group { display: inline-flex; align-items: center; gap: 0.15rem; flex-shrink: 0; }
 .path-hint { margin: 0.35rem 0 0; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
+.new-cred {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.oauth-block { border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 0.75rem; }
+.oauth-paste-row { display: flex; gap: 0.35rem; margin-top: 0.4rem; }
+.oauth-paste-row .cfg-input { flex: 1; min-width: 0; }
 .err-text { color: var(--danger); }
+.vault-warning { margin: 0 0 0.5rem; font-size: 0.8rem; }
+.advanced-secret-ref { margin-bottom: 0.75rem; }
+.advanced-secret-ref summary { cursor: pointer; font-size: 0.8rem; }
+.advanced-secret-ref .field { margin-top: 0.5rem; margin-bottom: 0; }
 .modal-body { display: flex; flex-direction: column; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: auto; padding-top: 1rem; }
 .err-banner {
