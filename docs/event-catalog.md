@@ -67,8 +67,7 @@ Không emit `pipeline.created` / `step.started` / `task.reset` trên bus hiện 
 | Event | Entity (`payload.entity`) | Khi nào |
 |-------|---------------------------|---------|
 | `entity.updated` / `entity.deleted` | `runner` | Upsert / xóa runner |
-| `entity.updated` / `entity.deleted` | `connection` | Upsert / xóa connection |
-| `entity.updated` / `entity.deleted` | `provider-config` | Upsert / xóa provider config (interface + credential + baseURL, tách khỏi connection) |
+| `entity.updated` / `entity.deleted` | `connection` | Upsert / xóa connection (chứa cả provider + credential + baseURL) |
 | `entity.updated` / `entity.deleted` | `command` | Upsert / xóa command |
 | `entity.updated` / `entity.deleted` | `credential` | Upsert / xóa credential profile |
 

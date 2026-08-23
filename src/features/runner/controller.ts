@@ -101,38 +101,6 @@ export class RunnerController extends AbstractController {
     return this.methodNotAllowed()
   }
 
-  listProviderConfigs() {
-    return this.ok({ providerConfigs: runnerStore.listProviderConfigs() })
-  }
-
-  async upsertProviderConfig() {
-    const b = await this.requireJsonBody()
-    if ('error' in b) return b.error
-    const result = runnerStore.upsertProviderConfig(b.value.providerConfig || b.value)
-    if ('error' in result) return this.badRequest(result.error)
-    emitAudit({
-      op: 'update',
-      entity: 'provider-config',
-      identifier: result.providerConfig?.id ?? null,
-      projectId: null,
-    })
-    emitEntity('updated', 'provider-config', { id: result.providerConfig?.id ?? null, projectId: null })
-    return this.ok({ saved: true, providerConfig: result.providerConfig })
-  }
-
-  deleteProviderConfig() {
-    const id = this.c.req.query('id') || ''
-    const result = runnerStore.deleteProviderConfig(id)
-    if ('error' in result) return this.json(result.status || 400, { error: result.error })
-    emitAudit({ op: 'delete', entity: 'provider-config', identifier: id, projectId: null })
-    emitEntity('deleted', 'provider-config', { id, projectId: null })
-    return this.ok({ deleted: true, id })
-  }
-
-  providerConfigsMethodNotAllowed() {
-    return this.methodNotAllowed()
-  }
-
   listCommands() {
     return this.ok({ commands: runnerStore.listCustomCommands() })
   }

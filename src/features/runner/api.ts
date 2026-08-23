@@ -21,11 +21,6 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.delete('/api/connections', bind(RunnerController, 'deleteConnection'))
   app.all('/api/connections', bind(RunnerController, 'connectionsMethodNotAllowed'))
 
-  app.get('/api/provider-configs', bind(RunnerController, 'listProviderConfigs'))
-  app.post('/api/provider-configs', bind(RunnerController, 'upsertProviderConfig'))
-  app.delete('/api/provider-configs', bind(RunnerController, 'deleteProviderConfig'))
-  app.all('/api/provider-configs', bind(RunnerController, 'providerConfigsMethodNotAllowed'))
-
   app.get('/api/commands', bind(RunnerController, 'listCommands'))
   app.post('/api/commands', bind(RunnerController, 'upsertCommand'))
   app.delete('/api/commands', bind(RunnerController, 'deleteCommand'))

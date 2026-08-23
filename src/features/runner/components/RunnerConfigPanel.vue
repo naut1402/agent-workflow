@@ -3,9 +3,8 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
 import { fetchRunners, fetchJobs } from '../scripts/runnerApi'
 import { saveRunner, deleteRunner, setDefaultRunner, fetchConnections } from '../scripts/RunnerConfigPanelApi'
-import { fetchProviderConfigs } from '../scripts/ProviderDialogApi'
 import RunnerDialog from './RunnerDialog.vue'
-import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderConfigOption, ProviderFamily } from '../types'
+import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderFamily } from '../types'
 
 const { t } = useI18nHelpers()
 
@@ -13,7 +12,6 @@ const runners = ref<RunnerDraft[]>([])
 const defaultRunnerId = ref('')
 const connections = ref<ConnectionOption[]>([])
 const providers = ref<ProviderEntry[]>([])
-const providerConfigs = ref<ProviderConfigOption[]>([])
 const message = ref('')
 const error = ref('')
 const recentJobs = ref<any[]>([])
@@ -60,17 +58,15 @@ function jobStatusClass(status: string | undefined): string {
 async function load() {
   error.value = ''
   try {
-    const [rData, cData, jData, pData] = await Promise.all([
+    const [rData, cData, jData] = await Promise.all([
       fetchRunners(),
       fetchConnections(),
       fetchJobs(10),
-      fetchProviderConfigs(),
     ])
     runners.value = rData.runners || []
     defaultRunnerId.value = rData.defaultRunnerId || ''
     providers.value = (rData.providers || cData.providers || []) as ProviderEntry[]
     connections.value = cData.connections || rData.connections || []
-    providerConfigs.value = pData.providerConfigs || []
     recentJobs.value = jData.jobs || []
     if (editingRunner.value?.id) {
       const updated = runners.value.find((r) => r.id === editingRunner.value?.id)
@@ -288,7 +284,6 @@ async function remove(r: RunnerDraft, e: Event) {
       :runner="editingRunner"
       :connections="connections"
       :providers="providers"
-      :providerConfigs="providerConfigs"
       @close="closeDialog"
       @saved="onSaved"
       @refreshed="load"

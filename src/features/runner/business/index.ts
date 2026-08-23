@@ -48,14 +48,6 @@ export {
   scanLocalCommands,
 } from './connections.js'
 export {
-  loadProviderConfigs,
-  saveProviderConfigs,
-  listProviderConfigs,
-  getProviderConfig,
-  upsertProviderConfig,
-  deleteProviderConfig,
-} from './providerConfigs.js'
-export {
   loadCommands,
   saveCommands,
   listCustomCommands,
@@ -133,6 +125,4 @@ export type {
   RunnerProvider,
   MutationResult,
   ProviderFamily,
-  ProviderConfig,
-  ProviderConfigsStore,
 } from './types.js'
