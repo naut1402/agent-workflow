@@ -225,6 +225,26 @@ export function deleteAutomation(root: string, id: string): { ok: true } | { ok:
   }
 }
 
+/**
+ * Rule thuần one-shot (mọi trigger đều timer `once`) đã tới hạn thì ghi
+ * `enabled: false` VÀO FILE YAML — state runtime ở registryHome có thể mất
+ * khi redeploy docker (container mới), nhưng rule file nằm ở data root
+ * (volume mount) nên cấm chạy lại một cách bền vững. Trả true nếu đã disable.
+ */
+export function disableIfAllOnceTriggersSpent(root: string, rule: AutomationRuleRecordType): boolean {
+  // Đọc lại từ file — object truyền vào có thể là bản cũ trong bộ nhớ
+  // (run kéo dài, container khác vừa ghi…).
+  const current = loadRule(root, rule.id)
+  if (!current || !current.enabled || current.triggers.length === 0) return false
+  const now = Date.now()
+  const allSpent = current.triggers.every(
+    (t) => t.kind === 'timer' && t.repeat.mode === 'once' && Date.parse(t.startAt) <= now,
+  )
+  if (!allSpent) return false
+  const result = setAutomationEnabled(root, rule.id, false)
+  return !('error' in result)
+}
+
 // ── Epic D trigger registry (contract-only stub) ─────────────────────────────
 //
 // Đồng bộ rule đang bật vào registry để `listTriggers()` phản ánh đúng "trigger

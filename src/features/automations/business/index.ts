@@ -23,6 +23,7 @@ export {
   updateAutomation,
   setAutomationEnabled,
   deleteAutomation,
+  disableIfAllOnceTriggersSpent,
   syncTriggerRegistry,
   removeFromTriggerRegistry,
 } from './rules.js'

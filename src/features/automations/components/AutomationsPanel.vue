@@ -257,7 +257,7 @@ onMounted(() => {
         <div class="icon-btn-group rule-actions">
           <button
             type="button"
-            class="icon-btn-inline"
+            class="icon-btn icon-btn-inline"
             :class="{ active: rule.enabled }"
             :title="t(rule.enabled ? 'automations.rule.toggleOff' : 'automations.rule.toggleOn')"
             :aria-label="t(rule.enabled ? 'automations.rule.toggleOff' : 'automations.rule.toggleOn')"
@@ -271,7 +271,7 @@ onMounted(() => {
           </button>
           <button
             type="button"
-            class="icon-btn-inline"
+            class="icon-btn icon-btn-inline"
             :title="t('automations.rule.runNow')"
             :aria-label="t('automations.rule.runNow')"
             :disabled="runningIds.has(rule.id)"
@@ -283,7 +283,7 @@ onMounted(() => {
           </button>
           <button
             type="button"
-            class="icon-btn-inline"
+            class="icon-btn icon-btn-inline"
             :title="t('automations.rule.history')"
             :aria-label="t('automations.rule.history')"
             @click="toggleHistory(rule.id)"
@@ -296,7 +296,7 @@ onMounted(() => {
           </button>
           <button
             type="button"
-            class="icon-btn-inline"
+            class="icon-btn icon-btn-inline"
             :title="t('automations.rule.edit')"
             :aria-label="t('automations.rule.edit')"
             @click="openEdit(rule)"
@@ -307,7 +307,7 @@ onMounted(() => {
           </button>
           <button
             type="button"
-            class="icon-btn-inline danger"
+            class="icon-btn icon-btn-inline danger"
             :title="t('automations.rule.delete')"
             :aria-label="t('automations.rule.delete')"
             @click="onDelete(rule)"

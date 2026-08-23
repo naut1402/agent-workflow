@@ -8,11 +8,13 @@
     gap: 4px;
     margin: 0 0 10px;
 
-    input[type='text'],
-    input[type='number'],
-    input[type='datetime-local'],
-    textarea,
-    select {
+    /* Chỉ style element con TRỰC TIẾP — tránh đè lên input bên trong
+       CComboSelect (`.c-combo-input` nằm sâu trong wrapper riêng). */
+    > input[type='text'],
+    > input[type='number'],
+    > input[type='datetime-local'],
+    > textarea,
+    > select {
       background: var(--panel-2);
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -28,9 +30,26 @@
       }
     }
 
-    textarea {
+    > textarea {
       resize: vertical;
       min-height: 72px;
+    }
+
+    /* Input lồng trong `.interval-inputs` (cháu của .field, vẫn là control native). */
+    .interval-inputs > input,
+    .interval-inputs > select {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font: inherit;
+      padding: 6px 8px;
+      box-sizing: border-box;
+
+      &:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
     }
   }
 

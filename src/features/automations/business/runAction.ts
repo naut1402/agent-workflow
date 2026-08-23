@@ -21,6 +21,7 @@ import type {
   RunTaskAction,
 } from '../schemas/automation.js'
 import { firedOnceTriggersAtRun } from './matcher.js'
+import { disableIfAllOnceTriggersSpent, syncTriggerRegistry } from './rules.js'
 import {
   getRuleState,
   saveRun,
@@ -331,6 +332,19 @@ export function runAutomation(input: RunAutomationInput): AutomationRun {
     inFlight: true,
   }
   setRuleState(projectId, rule.id, state)
+
+  // Rule thuần one-shot đã chạy → disable NGAY TRONG FILE YAML: runtime state
+  // ở registryHome mất khi redeploy docker (container mới), còn rule file ở
+  // data root (volume mount) nên đây là lớp chặn chạy lại bền vững.
+  if (disableIfAllOnceTriggersSpent(input.root, rule)) {
+    syncTriggerRegistry(input.root, String(projectId || ''))
+    emit('entity.updated', {
+      entity: 'automation',
+      id: rule.id,
+      projectId: projectId || undefined,
+      detail: { enabled: false, reason: 'one-shot spent' },
+    })
+  }
 
   const matchedTrigger = rule.triggers.find((t) => t.id === input.triggerId)
   const run: AutomationRun = {

@@ -5,6 +5,7 @@ import path from 'node:path'
 import {
   createAutomation,
   deleteAutomation,
+  disableIfAllOnceTriggersSpent,
   getAutomation,
   listAutomations,
   sanitiseAutomationId,
@@ -194,6 +195,46 @@ describe('legacy shape (trigger/action đơn) → triggers/actions[]', () => {
     const event = getAutomation(root, 'legacy-event')
     expect(event!.triggers).toEqual([{ id: 't1', kind: 'event', eventType: 'job.failed' }])
     expect(event!.actions).toEqual([{ kind: 'runTask', mode: 'existing', taskId: 'Tabc1234' }])
+  })
+})
+
+describe('disableIfAllOnceTriggersSpent (one-shot bền qua redeploy)', () => {
+  test('rule thuần once đã tới hạn → disable ghi thẳng vào YAML', () => {
+    const created = createAutomation(root, {
+      ...baseBody,
+      name: 'One shot',
+      triggers: [{ kind: 'timer', startAt: '2020-01-01T00:00:00.000Z', repeat: { mode: 'once' } }],
+    })
+    if ('error' in created) throw new Error(created.error)
+
+    expect(disableIfAllOnceTriggersSpent(root, created.automation)).toBe(true)
+    // Đọc lại từ "container mới" (chỉ còn file YAML) — rule đã tắt.
+    expect(getAutomation(root, 'one-shot')!.enabled).toBe(false)
+    // Idempotent — rule đã tắt thì không làm gì.
+    expect(disableIfAllOnceTriggersSpent(root, created.automation)).toBe(false)
+  })
+
+  test('rule còn trigger chưa tới hạn / pha trộn loại khác → không disable', () => {
+    const future = createAutomation(root, {
+      ...baseBody,
+      name: 'Future once',
+      triggers: [{ kind: 'timer', startAt: '2099-01-01T00:00:00.000Z', repeat: { mode: 'once' } }],
+    })
+    if ('error' in future) throw new Error(future.error)
+    expect(disableIfAllOnceTriggersSpent(root, future.automation)).toBe(false)
+    expect(getAutomation(root, 'future-once')!.enabled).toBe(true)
+
+    const mixed = createAutomation(root, {
+      ...baseBody,
+      name: 'Mixed rule',
+      triggers: [
+        { kind: 'timer', startAt: '2020-01-01T00:00:00.000Z', repeat: { mode: 'once' } },
+        { kind: 'event', eventType: 'job.failed' },
+      ],
+    })
+    if ('error' in mixed) throw new Error(mixed.error)
+    expect(disableIfAllOnceTriggersSpent(root, mixed.automation)).toBe(false)
+    expect(getAutomation(root, 'mixed-rule')!.enabled).toBe(true)
   })
 })
 

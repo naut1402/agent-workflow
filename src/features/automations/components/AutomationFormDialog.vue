@@ -382,7 +382,7 @@ function submit(): void {
               </div>
               <button
                 type="button"
-                class="icon-btn-inline danger"
+                class="icon-btn icon-btn-inline danger"
                 :title="t('automations.trigger.remove')"
                 :aria-label="t('automations.trigger.remove')"
                 :disabled="form.triggers.length <= 1"
@@ -478,7 +478,7 @@ function submit(): void {
                   />
                   <button
                     type="button"
-                    class="icon-btn-inline"
+                    class="icon-btn icon-btn-inline"
                     :class="{ active: varsOpenFor === i + 1 }"
                     :title="t('automations.vars.toggle')"
                     :aria-label="t('automations.vars.toggle')"
@@ -492,7 +492,7 @@ function submit(): void {
                   </button>
                   <button
                     type="button"
-                    class="icon-btn-inline danger"
+                    class="icon-btn icon-btn-inline danger"
                     :title="t('automations.action.remove')"
                     :aria-label="t('automations.action.remove')"
                     :disabled="form.actions.length <= 1"
