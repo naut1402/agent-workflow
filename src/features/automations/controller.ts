@@ -239,4 +239,14 @@ export class AutomationsController extends AbstractController {
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.floor(limitRaw)), 50) : 20
     return this.ok({ runs: listRuns(this.projectId, limit) })
   }
+
+  /** Lịch sử thực thi toàn project (mọi rule) — tab "Lịch sử thực thi" trên FE. */
+  async listAllRuns() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+
+    const limitRaw = Number(this.c.req.query('limit') || '50')
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.floor(limitRaw)), 50) : 50
+    return this.ok({ runs: listRuns(this.projectId, limit) })
+  }
 }

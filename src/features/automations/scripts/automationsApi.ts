@@ -104,6 +104,14 @@ export async function fetchAutomationRuns(id: string, projectId?: string, limit 
   })
 }
 
+/** Lịch sử thực thi toàn project (mọi rule) — tab "Lịch sử thực thi". */
+export async function fetchAllAutomationRuns(projectId?: string, limit = 50) {
+  return apiGet<{ runs: AutomationRun[] }>('/api/automations/runs', {
+    project: projectId,
+    limit: String(limit),
+  })
+}
+
 export type {
   AutomationAction,
   AutomationRuleRecord,

@@ -104,6 +104,11 @@ export default {
     colActions: 'Actions',
   },
 
+  tabs: {
+    list: 'List',
+    history: 'Execution history',
+  },
+
   vars: {
     toggle: 'Show referenceable variables',
     hint: 'Click a variable to copy, then paste it into any input (prompt, task, profile, runner…):',
@@ -124,13 +129,18 @@ export default {
   },
 
   history: {
-    title: 'Run history — {name}',
     empty: 'No runs yet',
     time: 'When',
     source: 'Source',
     outcome: 'Outcome',
-    detail: 'Detail',
     loading: 'Loading…',
+    ruleFilter: 'Automation',
+    allRules: 'All automations',
+    ruleColumn: 'Automation',
+    stepInput: 'Input',
+    stepResult: 'Result',
+    noInput: '(no input)',
+    noResult: '(no result yet)',
   },
 
   form: {

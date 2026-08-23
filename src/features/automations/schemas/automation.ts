@@ -250,6 +250,8 @@ export interface AutomationStepResult {
   taskId?: string
   jobId?: string
   status: string
+  /** Cấu hình action đã resolve biến — hiển thị lại để xác nhận input đã chạy. */
+  input?: Record<string, unknown>
   stdout?: string
   artifacts?: Record<string, string>
   error?: string

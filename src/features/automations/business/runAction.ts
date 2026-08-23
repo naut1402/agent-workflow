@@ -56,6 +56,37 @@ const POLL_INTERVAL_MS = 1_500
 const STDOUT_CAP = 64_000
 const ARTIFACT_EACH_CAP = 32_000
 const ARTIFACT_TOTAL_CAP = 128_000
+const INPUT_FIELD_CAP = 4_000
+
+/** Tóm tắt input đã resolve biến của action — lưu vào step để xác nhận lại sau khi chạy. */
+function buildStepInput(action: AutomationAction): Record<string, unknown> {
+  if (action.kind === 'httpRequest') {
+    return {
+      method: action.method,
+      url: action.url,
+      ...(action.headers ? { headers: action.headers } : {}),
+      ...(action.body ? { body: cap(action.body, INPUT_FIELD_CAP) } : {}),
+    }
+  }
+  if (action.kind === 'runCommand') {
+    return {
+      runnerId: action.runnerId,
+      ...(action.params ? { params: cap(action.params, INPUT_FIELD_CAP) } : {}),
+    }
+  }
+  return action.mode === 'create'
+    ? {
+        mode: 'create',
+        prompt: cap(action.prompt ?? '', INPUT_FIELD_CAP),
+        ...(action.profileName ? { profileName: action.profileName } : {}),
+        ...(action.runnerId ? { runnerId: action.runnerId } : {}),
+      }
+    : {
+        mode: 'existing',
+        taskId: action.taskId,
+        ...(action.runnerId ? { runnerId: action.runnerId } : {}),
+      }
+}
 
 /** Task id do automation sinh — tuân TASK_ID_PATTERN, dễ nhận diện nguồn. */
 function mintAutomationTaskId(): string {
@@ -288,6 +319,7 @@ async function executeSequence(
         index: i + 1,
         status: 'running',
         ...(action.name ? { name: action.name } : {}),
+        input: buildStepInput(action),
       }
       run.steps.push(step)
 

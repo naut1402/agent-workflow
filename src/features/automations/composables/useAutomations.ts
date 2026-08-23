@@ -1,9 +1,9 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type { AutomationRun, CreateAutomationRequest, UpdateAutomationRequest } from '../schemas/automation'
 import {
+  fetchAllAutomationRuns,
   fetchAutomationEventTypes,
   fetchAutomationFormOptions,
-  fetchAutomationRuns,
   fetchAutomations,
   deleteAutomation,
   createAutomation,
@@ -30,10 +30,9 @@ export function useAutomations(getProjectId: () => string | undefined) {
   const error = ref('')
   const actionError = ref('')
 
-  /** Rule đang mở history (id) + runs tương ứng. */
-  const historyFor = ref<string | null>(null)
-  const historyRuns = ref<AutomationRun[]>([])
-  const historyLoading = ref(false)
+  /** Lịch sử thực thi toàn project (mọi rule) — tab "Lịch sử thực thi". */
+  const runs = ref<AutomationRun[]>([])
+  const runsLoading = ref(false)
   const runningIds = ref<Set<string>>(new Set())
 
   const sorted = computed(() => [...automations.value].sort((a, b) => a.name.localeCompare(b.name)))
@@ -108,10 +107,6 @@ export function useAutomations(getProjectId: () => string | undefined) {
     actionError.value = ''
     try {
       await deleteAutomation(id, getProjectId())
-      if (historyFor.value === id) {
-        historyFor.value = null
-        historyRuns.value = []
-      }
       await load()
     } catch (e: any) {
       actionError.value = String(e?.message || e)
@@ -124,7 +119,7 @@ export function useAutomations(getProjectId: () => string | undefined) {
     try {
       const data = await runAutomationNow(id, getProjectId())
       await load()
-      if (historyFor.value === id) await loadHistory(id)
+      await loadRuns()
       return data.run
     } catch (e: any) {
       actionError.value = String(e?.message || e)
@@ -136,26 +131,17 @@ export function useAutomations(getProjectId: () => string | undefined) {
     }
   }
 
-  async function loadHistory(id: string): Promise<void> {
-    historyLoading.value = true
+  /** Lịch sử thực thi toàn project (mọi rule) — tab "Lịch sử thực thi". */
+  async function loadRuns(): Promise<void> {
+    runsLoading.value = true
     try {
-      const data = await fetchAutomationRuns(id, getProjectId(), 20)
-      historyRuns.value = data.runs || []
+      const data = await fetchAllAutomationRuns(getProjectId(), 50)
+      runs.value = data.runs || []
     } catch {
-      historyRuns.value = []
+      runs.value = []
     } finally {
-      historyLoading.value = false
+      runsLoading.value = false
     }
-  }
-
-  async function toggleHistory(id: string): Promise<void> {
-    if (historyFor.value === id) {
-      historyFor.value = null
-      historyRuns.value = []
-      return
-    }
-    historyFor.value = id
-    await loadHistory(id)
   }
 
   // Poll nhẹ theo project — panel mount/unmount điều khiển vòng đời.
@@ -165,6 +151,7 @@ export function useAutomations(getProjectId: () => string | undefined) {
     stopPolling()
     timer = setInterval(() => {
       void load()
+      void loadRuns()
     }, POLL_MS)
   }
 
@@ -178,6 +165,7 @@ export function useAutomations(getProjectId: () => string | undefined) {
     () => {
       void load()
       void loadEventTypes()
+      void loadRuns()
     },
     { immediate: true },
   )
@@ -191,9 +179,8 @@ export function useAutomations(getProjectId: () => string | undefined) {
     loading,
     error,
     actionError,
-    historyFor,
-    historyRuns,
-    historyLoading,
+    runs,
+    runsLoading,
     runningIds,
     load,
     loadEventTypes,
@@ -203,7 +190,7 @@ export function useAutomations(getProjectId: () => string | undefined) {
     toggle,
     remove,
     runNow,
-    toggleHistory,
+    loadRuns,
     startPolling,
     stopPolling,
   }

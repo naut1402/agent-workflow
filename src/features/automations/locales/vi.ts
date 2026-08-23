@@ -104,6 +104,11 @@ export default {
     colActions: 'Hành động',
   },
 
+  tabs: {
+    list: 'Danh sách',
+    history: 'Lịch sử thực thi',
+  },
+
   vars: {
     toggle: 'Xem biến có thể tham chiếu',
     hint: 'Bấm vào biến để sao chép rồi dán vào ô nhập (prompt, task, profile, runner…):',
@@ -124,13 +129,18 @@ export default {
   },
 
   history: {
-    title: 'Lịch sử chạy — {name}',
     empty: 'Chưa có lần chạy nào',
     time: 'Thời điểm',
     source: 'Nguồn',
     outcome: 'Kết quả',
-    detail: 'Chi tiết',
     loading: 'Đang tải…',
+    ruleFilter: 'Automation',
+    allRules: 'Tất cả automation',
+    ruleColumn: 'Automation',
+    stepInput: 'Input',
+    stepResult: 'Kết quả',
+    noInput: '(không có input)',
+    noResult: '(chưa có kết quả)',
   },
 
   form: {

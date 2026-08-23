@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { useAutomations } from '../composables/useAutomations'
-import type { AutomationListItem } from '../scripts/automationsApi'
+import type { AutomationListItem, AutomationStepResult } from '../scripts/automationsApi'
 import AutomationFormDialog from './AutomationFormDialog.vue'
 
 const props = defineProps<{
@@ -18,9 +18,8 @@ const {
   loading,
   error,
   actionError,
-  historyFor,
-  historyRuns,
-  historyLoading,
+  runs,
+  runsLoading,
   runningIds,
   load,
   loadEventTypes,
@@ -30,9 +29,14 @@ const {
   toggle,
   remove,
   runNow,
-  toggleHistory,
+  loadRuns,
   startPolling,
 } = useAutomations(() => props.projectId)
+
+const activeTab = ref<'list' | 'history'>('list')
+/** '' = tất cả rule. */
+const historyRuleFilter = ref('')
+const expandedRunId = ref<string | null>(null)
 
 const showForm = ref(false)
 const editRule = ref<AutomationListItem | null>(null)
@@ -70,9 +74,54 @@ async function onFormSubmit(payload: {
 }
 
 async function onRunNow(rule: AutomationListItem): Promise<void> {
-  await runNow(rule.id)
-  // Chuỗi chạy nền — mở history để theo dõi tiến trình từng bước.
-  if (historyFor.value !== rule.id) await toggleHistory(rule.id)
+  const run = await runNow(rule.id)
+  // Chuỗi chạy nền — mở tab lịch sử, lọc theo rule và bung sẵn run vừa tạo để theo dõi từng bước.
+  historyRuleFilter.value = rule.id
+  expandedRunId.value = run?.runId ?? null
+  activeTab.value = 'history'
+}
+
+function openHistoryTab(): void {
+  activeTab.value = 'history'
+  void loadRuns()
+}
+
+function onOpenRuleHistory(rule: AutomationListItem): void {
+  historyRuleFilter.value = rule.id
+  openHistoryTab()
+}
+
+const filteredRuns = computed(() =>
+  historyRuleFilter.value ? runs.value.filter((run) => run.automationId === historyRuleFilter.value) : runs.value,
+)
+
+function ruleNameOf(automationId: string): string {
+  return automations.value.find((rule) => rule.id === automationId)?.name ?? automationId
+}
+
+function toggleRunExpand(runId: string): void {
+  expandedRunId.value = expandedRunId.value === runId ? null : runId
+}
+
+/** Tên thân thiện cho outcome/step status, fallback về mã gốc nếu chưa có nhãn (vd job 'cancelled'). */
+function outcomeLabel(code: string): string {
+  const key = `automations.outcome.${code}`
+  const label = t(key)
+  return label === key ? code : label
+}
+
+interface StepInputEntry {
+  key: string
+  value: string
+}
+
+/** Input đã resolve biến của step — hiển thị lại để người dùng xác nhận đã chạy đúng cấu hình. */
+function stepInputEntries(step: AutomationStepResult): StepInputEntry[] {
+  if (!step.input) return []
+  return Object.entries(step.input).map(([key, value]) => ({
+    key,
+    value: typeof value === 'string' ? value : JSON.stringify(value),
+  }))
 }
 
 function onDelete(rule: AutomationListItem): void {
@@ -158,6 +207,7 @@ const emptyList = computed(() => automations.value.length === 0)
 onMounted(() => {
   void load()
   void loadEventTypes()
+  void loadRuns()
   startPolling()
 })
 </script>
@@ -190,28 +240,49 @@ onMounted(() => {
 
     <p v-if="error" class="panel-error">{{ t('automations.loadError') }} — {{ error }}</p>
 
-    <div v-if="loading && emptyList" class="panel-empty muted">…</div>
-
-    <div v-else-if="emptyList" class="panel-empty">
-      <p>{{ t('automations.empty') }}</p>
-      <p class="muted">{{ t('automations.emptyHint') }}</p>
-      <p class="muted pending-hint">{{ t('automations.pending.webhook') }}</p>
+    <div class="panel-tabs" role="tablist">
+      <button
+        type="button"
+        class="panel-tab"
+        role="tab"
+        :class="{ active: activeTab === 'list' }"
+        @click="activeTab = 'list'"
+      >
+        {{ t('automations.tabs.list') }}
+      </button>
+      <button
+        type="button"
+        class="panel-tab"
+        role="tab"
+        :class="{ active: activeTab === 'history' }"
+        @click="openHistoryTab"
+      >
+        {{ t('automations.tabs.history') }}
+      </button>
     </div>
 
-    <div v-else class="rule-table-wrap">
-      <table class="rule-table">
-        <thead>
-          <tr>
-            <th>{{ t('automations.list.colName') }}</th>
-            <th>{{ t('automations.list.colTrigger') }}</th>
-            <th>{{ t('automations.list.colSteps') }}</th>
-            <th>{{ t('automations.list.colRun') }}</th>
-            <th>{{ t('automations.list.colActions') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-for="rule in automations" :key="rule.id">
-            <tr class="rule-row" :class="{ disabled: !rule.enabled }">
+    <template v-if="activeTab === 'list'">
+      <div v-if="loading && emptyList" class="panel-empty muted">…</div>
+
+      <div v-else-if="emptyList" class="panel-empty">
+        <p>{{ t('automations.empty') }}</p>
+        <p class="muted">{{ t('automations.emptyHint') }}</p>
+        <p class="muted pending-hint">{{ t('automations.pending.webhook') }}</p>
+      </div>
+
+      <div v-else class="rule-table-wrap">
+        <table class="rule-table">
+          <thead>
+            <tr>
+              <th>{{ t('automations.list.colName') }}</th>
+              <th>{{ t('automations.list.colTrigger') }}</th>
+              <th>{{ t('automations.list.colSteps') }}</th>
+              <th>{{ t('automations.list.colRun') }}</th>
+              <th>{{ t('automations.list.colActions') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="rule in automations" :key="rule.id" class="rule-row" :class="{ disabled: !rule.enabled }">
               <td>
                 <div class="rule-title-row">
                   <span class="rule-name">{{ rule.name }}</span>
@@ -274,108 +345,155 @@ onMounted(() => {
                   </div>
                 </dl>
               </td>
-              <td class="icon-btn-group rule-actions">
-                <button
-                  type="button"
-                  class="icon-btn icon-btn-inline"
-                  :class="{ active: rule.enabled }"
-                  :title="t(rule.enabled ? 'automations.rule.toggleOff' : 'automations.rule.toggleOn')"
-                  :aria-label="t(rule.enabled ? 'automations.rule.toggleOff' : 'automations.rule.toggleOn')"
-                  @click="toggle(rule.id, !rule.enabled)"
-                >
-                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="8" cy="8" r="6" />
-                    <path v-if="rule.enabled" d="M8 5v3l2 2" />
-                    <path v-else d="M8 5v3" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class="icon-btn icon-btn-inline"
-                  :title="t('automations.rule.runNow')"
-                  :aria-label="t('automations.rule.runNow')"
-                  :disabled="runningIds.has(rule.id)"
-                  @click="onRunNow(rule)"
-                >
-                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M5 3.5v9l7-4.5z" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class="icon-btn icon-btn-inline"
-                  :title="t('automations.rule.history')"
-                  :aria-label="t('automations.rule.history')"
-                  @click="toggleHistory(rule.id)"
-                >
-                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M3 8a5 5 0 1 0 1.5-3.5" />
-                    <path d="M3 3v2.5h2.5" />
-                    <path d="M8 5.5V8l2 1.5" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class="icon-btn icon-btn-inline"
-                  :title="t('automations.rule.edit')"
-                  :aria-label="t('automations.rule.edit')"
-                  @click="openEdit(rule)"
-                >
-                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3z" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class="icon-btn icon-btn-inline danger"
-                  :title="t('automations.rule.delete')"
-                  :aria-label="t('automations.rule.delete')"
-                  @click="onDelete(rule)"
-                >
-                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M3 4.5h10M6.5 4.5v-1h3v1M4.5 4.5l.5 8h6l.5-8" />
-                  </svg>
-                </button>
-              </td>
-            </tr>
-            <tr v-if="historyFor === rule.id" class="rule-history-row">
-              <td colspan="5">
-                <div class="rule-history">
-                  <h4>{{ t('automations.history.title', { name: rule.name }) }}</h4>
-                  <p v-if="historyLoading" class="muted">{{ t('automations.history.loading') }}</p>
-                  <p v-else-if="historyRuns.filter((r) => r.automationId === rule.id).length === 0" class="muted">
-                    {{ t('automations.history.empty') }}
-                  </p>
-                  <table v-else class="history-table">
-                    <thead>
-                      <tr>
-                        <th>{{ t('automations.history.time') }}</th>
-                        <th>{{ t('automations.history.source') }}</th>
-                        <th>{{ t('automations.history.outcome') }}</th>
-                        <th>{{ t('automations.history.detail') }}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="run in historyRuns.filter((r) => r.automationId === rule.id)" :key="run.runId">
-                        <td>{{ formatTime(run.startedAt) }}</td>
-                        <td>{{ t(`automations.runSource.${run.source}`) }}</td>
-                        <td :class="`outcome-${run.outcome}`">{{ t(`automations.outcome.${run.outcome}`) }}</td>
-                        <td class="muted">
-                          <template v-if="run.error">{{ run.error }}</template>
-                          <template v-for="step in run.steps || []" :key="step.index">
-                            <span class="history-step"> #{{ step.index }} {{ step.status }}<template v-if="step.taskId"> · {{ step.taskId }}</template></span>
-                          </template>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+              <td class="rule-actions">
+                <div class="icon-btn-group">
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline"
+                    :class="{ active: rule.enabled }"
+                    :title="t(rule.enabled ? 'automations.rule.toggleOff' : 'automations.rule.toggleOn')"
+                    :aria-label="t(rule.enabled ? 'automations.rule.toggleOff' : 'automations.rule.toggleOn')"
+                    @click="toggle(rule.id, !rule.enabled)"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="8" cy="8" r="6" />
+                      <path v-if="rule.enabled" d="M8 5v3l2 2" />
+                      <path v-else d="M8 5v3" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline"
+                    :title="t('automations.rule.runNow')"
+                    :aria-label="t('automations.rule.runNow')"
+                    :disabled="runningIds.has(rule.id)"
+                    @click="onRunNow(rule)"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M5 3.5v9l7-4.5z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline"
+                    :title="t('automations.rule.history')"
+                    :aria-label="t('automations.rule.history')"
+                    @click="onOpenRuleHistory(rule)"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M3 8a5 5 0 1 0 1.5-3.5" />
+                      <path d="M3 3v2.5h2.5" />
+                      <path d="M8 5.5V8l2 1.5" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline"
+                    :title="t('automations.rule.edit')"
+                    :aria-label="t('automations.rule.edit')"
+                    @click="openEdit(rule)"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline danger"
+                    :title="t('automations.rule.delete')"
+                    :aria-label="t('automations.rule.delete')"
+                    @click="onDelete(rule)"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M3 4.5h10M6.5 4.5v-1h3v1M4.5 4.5l.5 8h6l.5-8" />
+                    </svg>
+                  </button>
                 </div>
               </td>
             </tr>
-          </template>
-        </tbody>
-      </table>
-    </div>
+          </tbody>
+        </table>
+      </div>
+    </template>
+
+    <template v-else>
+      <div class="history-toolbar">
+        <label class="history-filter">
+          <span class="muted">{{ t('automations.history.ruleFilter') }}</span>
+          <select v-model="historyRuleFilter">
+            <option value="">{{ t('automations.history.allRules') }}</option>
+            <option v-for="rule in automations" :key="rule.id" :value="rule.id">{{ rule.name }}</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="rule-table-wrap">
+        <table class="rule-table">
+          <thead>
+            <tr>
+              <th>{{ t('automations.history.time') }}</th>
+              <th>{{ t('automations.history.ruleColumn') }}</th>
+              <th>{{ t('automations.history.source') }}</th>
+              <th>{{ t('automations.history.outcome') }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="runsLoading">
+              <td colspan="5" class="muted">{{ t('automations.history.loading') }}</td>
+            </tr>
+            <template v-else>
+              <template v-for="run in filteredRuns" :key="run.runId">
+                <tr class="run-row" @click="toggleRunExpand(run.runId)">
+                  <td>{{ formatTime(run.startedAt) }}</td>
+                  <td>{{ ruleNameOf(run.automationId) }}</td>
+                  <td>{{ t(`automations.runSource.${run.source}`) }}</td>
+                  <td :class="`outcome-${run.outcome}`">{{ outcomeLabel(run.outcome) }}</td>
+                  <td class="run-expand-cell">{{ expandedRunId === run.runId ? '▾' : '▸' }}</td>
+                </tr>
+                <tr v-if="expandedRunId === run.runId" class="run-detail-row">
+                  <td colspan="5">
+                    <p v-if="run.error" class="outcome-failed">{{ run.error }}</p>
+                    <p v-if="!run.steps || run.steps.length === 0" class="muted">{{ t('automations.history.empty') }}</p>
+                    <ol v-else class="run-steps-detail">
+                      <li v-for="step in run.steps" :key="step.index" class="run-step-detail">
+                        <div class="step-detail-head">
+                          <span class="rule-step-dot">{{ step.index }}</span>
+                          <span v-if="step.name">{{ step.name }}</span>
+                          <span :class="`outcome-${step.status}`">{{ outcomeLabel(step.status) }}</span>
+                        </div>
+                        <div class="step-detail-body">
+                          <div class="step-detail-col">
+                            <h5>{{ t('automations.history.stepInput') }}</h5>
+                            <dl v-if="stepInputEntries(step).length">
+                              <template v-for="entry in stepInputEntries(step)" :key="entry.key">
+                                <dt>{{ entry.key }}</dt>
+                                <dd>{{ entry.value }}</dd>
+                              </template>
+                            </dl>
+                            <p v-else class="muted">{{ t('automations.history.noInput') }}</p>
+                          </div>
+                          <div class="step-detail-col">
+                            <h5>{{ t('automations.history.stepResult') }}</h5>
+                            <p v-if="step.error" class="outcome-failed">{{ step.error }}</p>
+                            <pre v-if="step.stdout">{{ step.stdout }}</pre>
+                            <p v-if="!step.error && !step.stdout" class="muted">{{ t('automations.history.noResult') }}</p>
+                            <p v-if="step.taskId" class="muted">taskId: {{ step.taskId }}</p>
+                          </div>
+                        </div>
+                      </li>
+                    </ol>
+                  </td>
+                </tr>
+              </template>
+              <tr v-if="filteredRuns.length === 0">
+                <td colspan="5" class="muted">{{ t('automations.history.empty') }}</td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </template>
 
     <AutomationFormDialog
       :visible="showForm"

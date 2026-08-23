@@ -96,6 +96,7 @@ describe('httpRequest action — bất biến chống SSRF (fetchUrlSafe)', () =
     expect(final.steps![0].error).toMatch(/https/i)
     expect(final.steps![0].jobId).toBeUndefined()
     expect(final.steps![0].taskId).toBeUndefined()
+    expect(final.steps![0].input).toEqual({ method: 'GET', url: 'http://example.com/hook' })
   })
 
   test('URL https trỏ private host bị chặn — step failed', async () => {
@@ -146,6 +147,7 @@ describe('runCommand action', () => {
     expect(final.steps![0].status).toBe('succeeded')
     expect(final.steps![0].stdout).toBe('hello from command\n')
     expect(final.steps![0].taskId).toBeUndefined()
+    expect(final.steps![0].input).toEqual({ runnerId: 'stub-run-command-runner', params: 'echo hello' })
 
     expect(lastExecuteRequest).not.toBeNull()
     expect(lastExecuteRequest!.resolvedAgent.ref).toBe('')
@@ -183,5 +185,6 @@ describe('runTask action (regression — dispatch không đổi)', () => {
     expect(final.steps![0].taskId).toBe('Tmissing1')
     expect(final.steps![0].error).toBe('task not found')
     expect(final.steps![0].jobId).toBeUndefined()
+    expect(final.steps![0].input).toEqual({ mode: 'existing', taskId: 'Tmissing1' })
   })
 })
