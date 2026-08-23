@@ -5,12 +5,13 @@ import { slugify } from '../../../core/lib/stringUtils'
 import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
 import { deleteConnection } from '../scripts/ConnectionDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
-import type { ConnectionOption, ProviderEntry, RunnerDraft } from '../types'
+import type { ConnectionOption, ProviderEntry, ProviderConfigOption, RunnerDraft } from '../types'
 
 const props = defineProps<{
   runner: RunnerDraft | null
   connections: ConnectionOption[]
   providers: ProviderEntry[]
+  providerConfigs: ProviderConfigOption[]
 }>()
 
 const emit = defineEmits<{
@@ -398,6 +399,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     <ConnectionDialog
       v-if="showConnectionDialog"
       :providers="providers"
+      :providerConfigs="providerConfigs"
       :connection="editingConnection"
       @close="closeConnectionDialog"
       @saved="onConnectionSaved"

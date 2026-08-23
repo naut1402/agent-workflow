@@ -9,6 +9,17 @@ export interface ProviderEntry {
   family?: ProviderFamily
 }
 
+/**
+ * Reusable provider template: interface + optional baseURL. Credential
+ * selection lives on the Connection itself, not here.
+ */
+export interface ProviderConfigOption {
+  id: string
+  label: string
+  providerId: string
+  baseURL?: string
+}
+
 export interface ConnectionOption {
   id: string
   label: string
