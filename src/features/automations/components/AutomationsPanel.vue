@@ -129,6 +129,12 @@ function triggerChips(rule: AutomationListItem): TriggerChip[] {
 
 function stepLabel(rule: AutomationListItem, index: number): string {
   const action = rule.actions[index]
+  if (action.kind === 'httpRequest') {
+    return `${action.name?.trim() || t('automations.action.httpRequest')} · ${action.method} ${action.url}`
+  }
+  if (action.kind === 'runCommand') {
+    return `${action.name?.trim() || t('automations.action.runCommand')}${action.runnerId ? ` · ${action.runnerId}` : ''}`
+  }
   const name = action.name?.trim() || t(action.mode === 'create' ? 'automations.action.create' : 'automations.action.existing')
   const detail = action.mode === 'existing' && action.taskId ? ` · ${action.taskId}` : ''
   return `${name}${detail}`
@@ -192,164 +198,184 @@ onMounted(() => {
       <p class="muted pending-hint">{{ t('automations.pending.webhook') }}</p>
     </div>
 
-    <ul v-else class="rule-list">
-      <li v-for="rule in automations" :key="rule.id" class="rule-card" :class="{ disabled: !rule.enabled }">
-        <div class="rule-main">
-          <div class="rule-title-row">
-            <span class="rule-name">{{ rule.name }}</span>
-            <span
-              class="rule-status-chip"
-              :class="rule.enabled ? 'on' : 'off'"
-              :title="t(rule.enabled ? 'automations.rule.enabled' : 'automations.rule.disabled')"
-            >
-              {{ t(rule.enabled ? 'automations.rule.enabled' : 'automations.rule.disabled') }}
-            </span>
-            <span v-if="rule.state.inFlight" class="rule-status-chip running">
-              {{ t('automations.rule.inFlight') }}
-            </span>
-          </div>
-          <p v-if="rule.description" class="rule-desc muted">{{ rule.description }}</p>
-
-          <div class="rule-triggers">
-            <span
-              v-for="chip in triggerChips(rule)"
-              :key="chip.key"
-              class="rule-trigger-chip"
-              :title="t('automations.trigger.header')"
-            >
-              <svg v-if="chip.icon === 'timer'" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="8" cy="8" r="5.5" />
-                <path d="M8 5.5V8l1.8 1.2" />
-              </svg>
-              <svg v-else viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M8.5 2 4 8.5h3L6.5 14 12 7H8.7z" />
-              </svg>
-              {{ chip.text }}
-            </span>
-          </div>
-
-          <ol class="rule-steps">
-            <li v-for="(_, i) in rule.actions" :key="i" class="rule-step">
-              <span class="rule-step-dot">{{ i + 1 }}</span>
-              <span>{{ stepLabel(rule, i) }}</span>
-            </li>
-          </ol>
-
-          <dl class="rule-meta">
-            <div class="meta-row">
-              <dt>↻</dt>
-              <dd>
-                <template v-if="rule.state.inFlight">{{ t('automations.rule.inFlight') }}</template>
-                <template v-else-if="oneShotDone(rule)">{{ t('automations.rule.oneShotDone') }}</template>
-                <template v-else-if="rule.nextRunAt">
-                  {{ t('automations.rule.nextRun', { time: formatTime(rule.nextRunAt) }) }}
-                </template>
-                <template v-else>{{ t('automations.rule.noNextRun') }}</template>
-                <span v-if="rule.state.lastRunAt" class="rule-last-run muted">
-                  · {{ t('automations.rule.lastRun', { time: formatTime(rule.state.lastRunAt) }) }}
-                  <template v-if="outcomeKey(rule)"> ({{ t(outcomeKey(rule)) }})</template>
-                </span>
-              </dd>
-            </div>
-          </dl>
-        </div>
-
-        <div class="icon-btn-group rule-actions">
-          <button
-            type="button"
-            class="icon-btn icon-btn-inline"
-            :class="{ active: rule.enabled }"
-            :title="t(rule.enabled ? 'automations.rule.toggleOff' : 'automations.rule.toggleOn')"
-            :aria-label="t(rule.enabled ? 'automations.rule.toggleOff' : 'automations.rule.toggleOn')"
-            @click="toggle(rule.id, !rule.enabled)"
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="8" cy="8" r="6" />
-              <path v-if="rule.enabled" d="M8 5v3l2 2" />
-              <path v-else d="M8 5v3" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            class="icon-btn icon-btn-inline"
-            :title="t('automations.rule.runNow')"
-            :aria-label="t('automations.rule.runNow')"
-            :disabled="runningIds.has(rule.id)"
-            @click="onRunNow(rule)"
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M5 3.5v9l7-4.5z" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            class="icon-btn icon-btn-inline"
-            :title="t('automations.rule.history')"
-            :aria-label="t('automations.rule.history')"
-            @click="toggleHistory(rule.id)"
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 8a5 5 0 1 0 1.5-3.5" />
-              <path d="M3 3v2.5h2.5" />
-              <path d="M8 5.5V8l2 1.5" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            class="icon-btn icon-btn-inline"
-            :title="t('automations.rule.edit')"
-            :aria-label="t('automations.rule.edit')"
-            @click="openEdit(rule)"
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3z" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            class="icon-btn icon-btn-inline danger"
-            :title="t('automations.rule.delete')"
-            :aria-label="t('automations.rule.delete')"
-            @click="onDelete(rule)"
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 4.5h10M6.5 4.5v-1h3v1M4.5 4.5l.5 8h6l.5-8" />
-            </svg>
-          </button>
-        </div>
-
-        <div v-if="historyFor === rule.id" class="rule-history">
-          <h4>{{ t('automations.history.title', { name: rule.name }) }}</h4>
-          <p v-if="historyLoading" class="muted">{{ t('automations.history.loading') }}</p>
-          <p v-else-if="historyRuns.filter((r) => r.automationId === rule.id).length === 0" class="muted">
-            {{ t('automations.history.empty') }}
-          </p>
-          <table v-else class="history-table">
-            <thead>
-              <tr>
-                <th>{{ t('automations.history.time') }}</th>
-                <th>{{ t('automations.history.source') }}</th>
-                <th>{{ t('automations.history.outcome') }}</th>
-                <th>{{ t('automations.history.detail') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="run in historyRuns.filter((r) => r.automationId === rule.id)" :key="run.runId">
-                <td>{{ formatTime(run.startedAt) }}</td>
-                <td>{{ t(`automations.runSource.${run.source}`) }}</td>
-                <td :class="`outcome-${run.outcome}`">{{ t(`automations.outcome.${run.outcome}`) }}</td>
-                <td class="muted">
-                  <template v-if="run.error">{{ run.error }}</template>
-                  <template v-for="step in run.steps || []" :key="step.index">
-                    <span class="history-step"> #{{ step.index }} {{ step.status }}<template v-if="step.taskId"> · {{ step.taskId }}</template></span>
-                  </template>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </li>
-    </ul>
+    <div v-else class="rule-table-wrap">
+      <table class="rule-table">
+        <thead>
+          <tr>
+            <th>{{ t('automations.list.colName') }}</th>
+            <th>{{ t('automations.list.colTrigger') }}</th>
+            <th>{{ t('automations.list.colSteps') }}</th>
+            <th>{{ t('automations.list.colRun') }}</th>
+            <th>{{ t('automations.list.colActions') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="rule in automations" :key="rule.id">
+            <tr class="rule-row" :class="{ disabled: !rule.enabled }">
+              <td>
+                <div class="rule-title-row">
+                  <span class="rule-name">{{ rule.name }}</span>
+                  <span
+                    class="rule-status-chip"
+                    :class="rule.enabled ? 'on' : 'off'"
+                    :title="t(rule.enabled ? 'automations.rule.enabled' : 'automations.rule.disabled')"
+                  >
+                    {{ t(rule.enabled ? 'automations.rule.enabled' : 'automations.rule.disabled') }}
+                  </span>
+                  <span v-if="rule.state.inFlight" class="rule-status-chip running">
+                    {{ t('automations.rule.inFlight') }}
+                  </span>
+                </div>
+                <p v-if="rule.description" class="rule-desc muted">{{ rule.description }}</p>
+              </td>
+              <td>
+                <div class="rule-triggers">
+                  <span
+                    v-for="chip in triggerChips(rule)"
+                    :key="chip.key"
+                    class="rule-trigger-chip"
+                    :title="t('automations.trigger.header')"
+                  >
+                    <svg v-if="chip.icon === 'timer'" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="8" cy="8" r="5.5" />
+                      <path d="M8 5.5V8l1.8 1.2" />
+                    </svg>
+                    <svg v-else viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M8.5 2 4 8.5h3L6.5 14 12 7H8.7z" />
+                    </svg>
+                    {{ chip.text }}
+                  </span>
+                </div>
+              </td>
+              <td>
+                <ol class="rule-steps">
+                  <li v-for="(_, i) in rule.actions" :key="i" class="rule-step">
+                    <span class="rule-step-dot">{{ i + 1 }}</span>
+                    <span>{{ stepLabel(rule, i) }}</span>
+                  </li>
+                </ol>
+              </td>
+              <td>
+                <dl class="rule-meta">
+                  <div class="meta-row">
+                    <dt>↻</dt>
+                    <dd>
+                      <template v-if="rule.state.inFlight">{{ t('automations.rule.inFlight') }}</template>
+                      <template v-else-if="oneShotDone(rule)">{{ t('automations.rule.oneShotDone') }}</template>
+                      <template v-else-if="rule.nextRunAt">
+                        {{ t('automations.rule.nextRun', { time: formatTime(rule.nextRunAt) }) }}
+                      </template>
+                      <template v-else>{{ t('automations.rule.noNextRun') }}</template>
+                      <span v-if="rule.state.lastRunAt" class="rule-last-run muted">
+                        · {{ t('automations.rule.lastRun', { time: formatTime(rule.state.lastRunAt) }) }}
+                        <template v-if="outcomeKey(rule)"> ({{ t(outcomeKey(rule)) }})</template>
+                      </span>
+                    </dd>
+                  </div>
+                </dl>
+              </td>
+              <td class="icon-btn-group rule-actions">
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :class="{ active: rule.enabled }"
+                  :title="t(rule.enabled ? 'automations.rule.toggleOff' : 'automations.rule.toggleOn')"
+                  :aria-label="t(rule.enabled ? 'automations.rule.toggleOff' : 'automations.rule.toggleOn')"
+                  @click="toggle(rule.id, !rule.enabled)"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="8" cy="8" r="6" />
+                    <path v-if="rule.enabled" d="M8 5v3l2 2" />
+                    <path v-else d="M8 5v3" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :title="t('automations.rule.runNow')"
+                  :aria-label="t('automations.rule.runNow')"
+                  :disabled="runningIds.has(rule.id)"
+                  @click="onRunNow(rule)"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M5 3.5v9l7-4.5z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :title="t('automations.rule.history')"
+                  :aria-label="t('automations.rule.history')"
+                  @click="toggleHistory(rule.id)"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 8a5 5 0 1 0 1.5-3.5" />
+                    <path d="M3 3v2.5h2.5" />
+                    <path d="M8 5.5V8l2 1.5" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :title="t('automations.rule.edit')"
+                  :aria-label="t('automations.rule.edit')"
+                  @click="openEdit(rule)"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline danger"
+                  :title="t('automations.rule.delete')"
+                  :aria-label="t('automations.rule.delete')"
+                  @click="onDelete(rule)"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 4.5h10M6.5 4.5v-1h3v1M4.5 4.5l.5 8h6l.5-8" />
+                  </svg>
+                </button>
+              </td>
+            </tr>
+            <tr v-if="historyFor === rule.id" class="rule-history-row">
+              <td colspan="5">
+                <div class="rule-history">
+                  <h4>{{ t('automations.history.title', { name: rule.name }) }}</h4>
+                  <p v-if="historyLoading" class="muted">{{ t('automations.history.loading') }}</p>
+                  <p v-else-if="historyRuns.filter((r) => r.automationId === rule.id).length === 0" class="muted">
+                    {{ t('automations.history.empty') }}
+                  </p>
+                  <table v-else class="history-table">
+                    <thead>
+                      <tr>
+                        <th>{{ t('automations.history.time') }}</th>
+                        <th>{{ t('automations.history.source') }}</th>
+                        <th>{{ t('automations.history.outcome') }}</th>
+                        <th>{{ t('automations.history.detail') }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="run in historyRuns.filter((r) => r.automationId === rule.id)" :key="run.runId">
+                        <td>{{ formatTime(run.startedAt) }}</td>
+                        <td>{{ t(`automations.runSource.${run.source}`) }}</td>
+                        <td :class="`outcome-${run.outcome}`">{{ t(`automations.outcome.${run.outcome}`) }}</td>
+                        <td class="muted">
+                          <template v-if="run.error">{{ run.error }}</template>
+                          <template v-for="step in run.steps || []" :key="step.index">
+                            <span class="history-step"> #{{ step.index }} {{ step.status }}<template v-if="step.taskId"> · {{ step.taskId }}</template></span>
+                          </template>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
 
     <AutomationFormDialog
       :visible="showForm"

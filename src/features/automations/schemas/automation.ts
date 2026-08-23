@@ -78,22 +78,62 @@ export const MAX_ACTIONS = 10
  * - `existing`: chạy task có sẵn theo pipeline hiện tại (đường run-step)
  * Các trường text hỗ trợ biến `{{trigger.…}}` / `{{steps.N.…}}` (thay khi chạy).
  */
-const RunTaskAction = z
-  .object({
-    kind: z.literal('runTask'),
-    /** Nhãn bước trên timeline (hiển thị). */
-    name: z.string().max(100).optional(),
-    description: z.string().max(500).optional(),
-    mode: z.enum(['create', 'existing']),
-    /** mode=create: nội dung request.md của task mới. */
-    prompt: z.string().min(1).max(200_000).optional(),
-    /** mode=create: pipeline profile đặt tên trong `pipeline-profiles/`. */
-    profileName: z.string().min(1).max(100).nullish(),
-    runnerId: z.string().min(1).nullish(),
-    /** mode=existing: task cần chạy. */
-    taskId: z.string().regex(/^[A-Za-z0-9][\w-]{0,63}$/, 'invalid task id').optional(),
-  })
+/**
+ * Object thuần (không `.superRefine`) — bắt buộc để dùng làm nhánh trong
+ * `z.discriminatedUnion` (yêu cầu `ZodObject`, không nhận `ZodEffects`).
+ * Validate `mode`↔`prompt`/`taskId` áp ở `AutomationAction.superRefine` bên dưới.
+ */
+const RunTaskAction = z.object({
+  kind: z.literal('runTask'),
+  /** Nhãn bước trên timeline (hiển thị). */
+  name: z.string().max(100).optional(),
+  description: z.string().max(500).optional(),
+  mode: z.enum(['create', 'existing']),
+  /** mode=create: nội dung request.md của task mới. */
+  prompt: z.string().min(1).max(200_000).optional(),
+  /** mode=create: pipeline profile đặt tên trong `pipeline-profiles/`. */
+  profileName: z.string().min(1).max(100).nullish(),
+  runnerId: z.string().min(1).nullish(),
+  /** mode=existing: task cần chạy. */
+  taskId: z.string().regex(/^[A-Za-z0-9][\w-]{0,63}$/, 'invalid task id').optional(),
+})
+export type RunTaskAction = z.infer<typeof RunTaskAction>
+
+const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
+
+/**
+ * Action `httpRequest`: gọi HTTP tuỳ method/headers/body qua `fetchUrlSafe`
+ * (duy nhất nơi enforce SSRF — https-only + chặn private host).
+ */
+const HttpRequestAction = z.object({
+  kind: z.literal('httpRequest'),
+  name: z.string().max(100).optional(),
+  description: z.string().max(500).optional(),
+  method: z.enum(HTTP_METHODS).default('GET'),
+  url: z.string().min(1).max(2000),
+  /** header name→value; https-only/SSRF check ở runtime qua fetchUrlSafe, không ở schema. */
+  headers: z.record(z.string().max(200), z.string().max(2000)).optional(),
+  body: z.string().max(100_000).optional(),
+})
+export type HttpRequestAction = z.infer<typeof HttpRequestAction>
+
+/**
+ * Action `runCommand`: chạy job qua runner đã cấu hình (khuyến nghị provider
+ * `console-command`), `params` là argv tự do — split giống console-command hiện có.
+ */
+const RunCommandAction = z.object({
+  kind: z.literal('runCommand'),
+  name: z.string().max(100).optional(),
+  description: z.string().max(500).optional(),
+  runnerId: z.string().min(1),
+  params: z.string().max(20_000).optional(),
+})
+export type RunCommandAction = z.infer<typeof RunCommandAction>
+
+export const AutomationAction = z
+  .discriminatedUnion('kind', [RunTaskAction, HttpRequestAction, RunCommandAction])
   .superRefine((a, ctx) => {
+    if (a.kind !== 'runTask') return
     if (a.mode === 'create' && !a.prompt) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['prompt'], message: 'prompt is required for mode=create' })
     }
@@ -101,7 +141,7 @@ const RunTaskAction = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['taskId'], message: 'taskId is required for mode=existing' })
     }
   })
-export type RunTaskAction = z.infer<typeof RunTaskAction>
+export type AutomationAction = z.infer<typeof AutomationAction>
 
 export const AutomationRuleRecord = z.object({
   version: z.literal(1),
@@ -110,7 +150,7 @@ export const AutomationRuleRecord = z.object({
   description: z.string().max(500).optional(),
   enabled: z.boolean(),
   triggers: z.array(AutomationTrigger).min(1).max(MAX_TRIGGERS),
-  actions: z.array(RunTaskAction).min(1).max(MAX_ACTIONS),
+  actions: z.array(AutomationAction).min(1).max(MAX_ACTIONS),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 })
@@ -123,7 +163,7 @@ export const CreateAutomationRequest = z.object({
   description: z.string().max(500).optional(),
   enabled: z.boolean().default(true),
   triggers: z.array(AutomationTrigger).min(1).max(MAX_TRIGGERS),
-  actions: z.array(RunTaskAction).min(1).max(MAX_ACTIONS),
+  actions: z.array(AutomationAction).min(1).max(MAX_ACTIONS),
 })
 export type CreateAutomationRequest = z.infer<typeof CreateAutomationRequest>
 
@@ -133,7 +173,7 @@ export const UpdateAutomationRequest = z.object({
   description: z.string().max(500).optional(),
   enabled: z.boolean(),
   triggers: z.array(AutomationTrigger).min(1).max(MAX_TRIGGERS),
-  actions: z.array(RunTaskAction).min(1).max(MAX_ACTIONS),
+  actions: z.array(AutomationAction).min(1).max(MAX_ACTIONS),
 })
 export type UpdateAutomationRequest = z.infer<typeof UpdateAutomationRequest>
 
@@ -187,6 +227,11 @@ export function normaliseAutomationDoc(raw: unknown): Record<string, any> {
   }
   if (!Array.isArray(doc.actions) && doc.action && typeof doc.action === 'object') {
     doc.actions = [doc.action]
+  }
+  if (Array.isArray(doc.actions)) {
+    doc.actions = doc.actions.map((a: any) =>
+      a && typeof a === 'object' && !a.kind ? { ...a, kind: 'runTask' } : a,
+    )
   }
   delete doc.trigger
   delete doc.action

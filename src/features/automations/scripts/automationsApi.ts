@@ -5,11 +5,15 @@
 
 import { apiGet, apiPost, apiRequest } from '../../../core/http/client.js'
 import type {
+  AutomationAction,
   AutomationRuleRecord,
   AutomationRun,
   AutomationRunOutcome,
   AutomationStepResult,
   CreateAutomationRequest,
+  HttpRequestAction,
+  RunCommandAction,
+  RunTaskAction,
   RuleRuntimeState,
   TimerRepeat,
   UpdateAutomationRequest,
@@ -30,7 +34,7 @@ export interface AutomationListItem extends AutomationRuleRecord {
 export interface AutomationFormOptions {
   tasks: string[]
   profiles: string[]
-  runners: Array<{ id: string; label: string }>
+  runners: Array<{ id: string; label: string; family?: string }>
 }
 
 export async function fetchAutomations(projectId?: string) {
@@ -101,10 +105,14 @@ export async function fetchAutomationRuns(id: string, projectId?: string, limit 
 }
 
 export type {
+  AutomationAction,
   AutomationRuleRecord,
   AutomationRun,
   AutomationRunOutcome,
   AutomationStepResult,
+  HttpRequestAction,
+  RunCommandAction,
+  RunTaskAction,
   RuleRuntimeState,
   TimerRepeat,
   CreateAutomationRequest,

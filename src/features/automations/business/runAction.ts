@@ -8,16 +8,19 @@
  * trong run record (outcome failed/skipped), không ném lỗi lên caller.
  */
 
-import { joinPath, randomBytes, randomUUID, readTextFileSync, readdirSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, randomBytes, randomUUID, readTextFileSync, readdirSync } from '../../../core/lib/fileHelper.js'
 import { emit } from '../../../core/events/index.js'
 import { submitJob, loadJob } from '../../runner/business/index.js'
 import type { JobRecord } from '../../runner/business/index.js'
-import { createTask, runTaskStep } from '../../monitor/business/index.js'
+import { createTask, fetchUrlSafe, runTaskStep } from '../../monitor/business/index.js'
 import type {
+  AutomationAction,
   AutomationRuleRecord,
   AutomationRun,
   AutomationRunOutcome,
   AutomationStepResult,
+  HttpRequestAction,
+  RunCommandAction,
   RunTaskAction,
 } from '../schemas/automation.js'
 import { firedOnceTriggersAtRun } from './matcher.js'
@@ -113,6 +116,8 @@ export async function waitJobTerminal(jobId: string, timeoutMs: number): Promise
 interface StepExecution {
   taskId?: string
   jobId?: string
+  /** Có giá trị khi action không tạo job — kết quả chạy đồng bộ (httpRequest). */
+  stdout?: string
   skipped?: boolean
   error?: string
 }
@@ -191,6 +196,49 @@ async function executeExistingAction(
   return { taskId: action.taskId, jobId: result.job.id }
 }
 
+async function executeHttpRequestAction(action: HttpRequestAction): Promise<StepExecution> {
+  try {
+    const text = await fetchUrlSafe(action.url, {
+      method: action.method,
+      headers: action.headers,
+      body: action.body,
+    })
+    return { stdout: cap(text, STDOUT_CAP) }
+  } catch (err: any) {
+    return { error: String(err?.message ?? err) }
+  }
+}
+
+async function executeRunCommandAction(
+  input: RunAutomationInput,
+  action: RunCommandAction,
+  runId: string,
+): Promise<StepExecution> {
+  const workspace = joinPath(
+    input.root,
+    'automations',
+    input.rule.id,
+    'runs',
+    runId,
+    `cmd-${randomBytes(3).toString('hex')}`,
+  )
+  mkdirSync(workspace, { recursive: true })
+  const job = submitJob({
+    runnerId: action.runnerId,
+    agentRef: '',
+    workspace,
+    userPrompt: action.params ?? '',
+    metadata: {
+      projectRoot: joinPath(input.root, '..'),
+      devTeamRoot: input.root,
+      projectId: input.projectId || undefined,
+      automationId: input.rule.id,
+      automationRunId: runId,
+    },
+  })
+  return { jobId: job.id }
+}
+
 function triggerContextOf(input: RunAutomationInput): TriggerContext {
   if (input.source === 'event' && input.event) {
     return { kind: 'event', type: input.event.type, payload: input.event.payload }
@@ -223,8 +271,18 @@ async function executeSequence(
   try {
     for (let i = 0; i < input.rule.actions.length; i++) {
       const rawAction = input.rule.actions[i]
-      // Thay biến trong các trường input của action trước khi thực thi.
-      const action = substituteVarsInRecord(rawAction, ['name', 'description', 'prompt', 'taskId', 'profileName', 'runnerId'], ctx) as RunTaskAction
+      // Thay biến trong các trường input của action trước khi thực thi (theo kind).
+      const substFields =
+        rawAction.kind === 'httpRequest'
+          ? ['name', 'description', 'url', 'body']
+          : rawAction.kind === 'runCommand'
+            ? ['name', 'description', 'runnerId', 'params']
+            : ['name', 'description', 'prompt', 'taskId', 'profileName', 'runnerId']
+      const action = substituteVarsInRecord(
+        rawAction as unknown as Record<string, unknown>,
+        substFields,
+        ctx,
+      ) as unknown as AutomationAction
 
       const step: AutomationStepResult = {
         index: i + 1,
@@ -234,9 +292,13 @@ async function executeSequence(
       run.steps.push(step)
 
       const executed =
-        action.mode === 'create'
-          ? await executeCreateAction(input, action, run.runId)
-          : await executeExistingAction(input, action)
+        action.kind === 'httpRequest'
+          ? await executeHttpRequestAction(action)
+          : action.kind === 'runCommand'
+            ? await executeRunCommandAction(input, action, run.runId)
+            : action.mode === 'create'
+              ? await executeCreateAction(input, action, run.runId)
+              : await executeExistingAction(input, action)
 
       if (executed.taskId) step.taskId = executed.taskId
       if (executed.jobId) step.jobId = executed.jobId
@@ -249,24 +311,30 @@ async function executeSequence(
         break
       }
 
-      // Chờ job của bước này xong mới capture output / chạy bước kế.
-      const job = await waitJobTerminal(executed.jobId!, stepTimeoutMs())
-      if (!job) {
-        step.status = 'failed'
-        step.error = 'job vanished while waiting'
-        outcome = 'failed'
-        error = step.error
-        break
+      if (executed.jobId) {
+        // Có job thật (runTask hoặc runCommand) — chờ tới trạng thái terminal như cũ.
+        const job = await waitJobTerminal(executed.jobId, stepTimeoutMs())
+        if (!job) {
+          step.status = 'failed'
+          step.error = 'job vanished while waiting'
+          outcome = 'failed'
+          error = step.error
+          break
+        }
+        step.status = job.status
+        if (job.status !== 'succeeded') {
+          step.error = job.error || `job ${job.status}`
+          outcome = 'failed'
+          error = `step ${i + 1}: ${step.error}`
+          break
+        }
+        step.stdout = stdoutOf(job)
+        if (step.taskId) step.artifacts = artifactsOf(input.root, step.taskId)
+      } else {
+        // Không tạo job — kết quả chạy đồng bộ (httpRequest).
+        step.status = 'succeeded'
+        step.stdout = executed.stdout ?? ''
       }
-      step.status = job.status
-      if (job.status !== 'succeeded') {
-        step.error = job.error || `job ${job.status}`
-        outcome = 'failed'
-        error = `step ${i + 1}: ${step.error}`
-        break
-      }
-      step.stdout = stdoutOf(job)
-      if (step.taskId) step.artifacts = artifactsOf(input.root, step.taskId)
       ctx.steps.push(step)
 
       // Progress ghi dần để history poll thấy từng bước.

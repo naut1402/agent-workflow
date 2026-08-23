@@ -2,7 +2,7 @@ import { joinPath, readdirSync } from '../../core/lib/fileHelper.js'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { emitAudit } from '../../core/log/store.js'
 import { emitEntity } from '../../core/events/index.js'
-import { listRunners } from '../runner/business/index.js'
+import { getConnection, listRunners, providerFamilyOf } from '../runner/business/index.js'
 import { profilesDir } from '../monitor/business/index.js'
 import {
   AUTOMATION_ID_PATTERN,
@@ -89,11 +89,12 @@ export class AutomationsController extends AbstractController {
       /* chưa có profile nào */
     }
 
-    let runners: Array<{ id: string; label: string }> = []
+    let runners: Array<{ id: string; label: string; family?: string }> = []
     try {
       runners = listRunners().runners.map((r: any) => ({
         id: String(r.id ?? ''),
         label: String(r.name ?? r.id ?? ''),
+        family: providerFamilyOf(getConnection(r.connectionId)?.providerId ?? ''),
       }))
     } catch {
       /* registry runner hỏng — combobox rỗng, vẫn gõ tay được */

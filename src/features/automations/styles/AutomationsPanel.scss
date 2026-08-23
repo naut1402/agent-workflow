@@ -5,7 +5,6 @@
   flex-direction: column;
   gap: 12px;
   height: 100%;
-  overflow-y: auto;
   padding: 16px;
 
   .panel-head {
@@ -50,25 +49,38 @@
     text-align: center;
   }
 
-  .rule-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  .rule-card {
-    background: var(--panel);
+  .rule-table-wrap {
+    flex: 1;
+    min-height: 0; // bắt buộc để flex-child scroll được thay vì tràn cha
+    overflow-y: auto;
     border: 1px solid var(--border);
     border-radius: 10px;
-    display: grid;
-    column-gap: 12px;
-    grid-template-columns: 1fr auto;
-    padding: 12px;
+  }
 
-    &.disabled {
+  .rule-table {
+    border-collapse: collapse;
+    width: 100%;
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: var(--panel);
+      text-align: left;
+      font-weight: 500;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      z-index: 1;
+    }
+
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .rule-row.disabled {
       opacity: 0.6;
     }
   }
@@ -194,15 +206,14 @@
   }
 
   .rule-actions {
-    align-self: start;
+    white-space: nowrap;
+  }
+
+  .rule-history-row td {
+    background: var(--bg);
   }
 
   .rule-history {
-    border-top: 1px solid var(--border);
-    grid-column: 1 / -1;
-    margin-top: 10px;
-    padding-top: 10px;
-
     h4 {
       font-size: 13px;
       margin: 0 0 8px;

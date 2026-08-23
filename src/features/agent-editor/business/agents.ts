@@ -155,6 +155,10 @@ export async function ensureNlChatBuilderAgent(root: string): Promise<void> {
 export interface FetchUrlSafeOptions {
   /** Extra request headers (e.g. API Accept / Authorization). */
   headers?: Record<string, string>
+  /** HTTP method — defaults to GET (existing call sites unaffected). */
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  /** Request body — only meaningful for non-GET methods. */
+  body?: string
 }
 
 /** True for hostnames that resolve to private / loopback ranges (SSRF guard). */
@@ -183,9 +187,11 @@ export async function fetchUrlSafe(
   if (u.protocol !== 'https:') throw new Error('only https URLs allowed')
   if (isPrivateHostname(u.hostname)) throw new Error('private hosts not allowed')
   const res = await fetch(urlStr, {
+    method: options?.method ?? 'GET',
     redirect: 'follow',
     signal: AbortSignal.timeout(15000),
     ...(options?.headers ? { headers: options.headers } : {}),
+    ...(options?.body !== undefined ? { body: options.body } : {}),
   })
   if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
   const text = await res.text()

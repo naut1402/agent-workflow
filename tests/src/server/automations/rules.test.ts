@@ -13,6 +13,7 @@ import {
   syncTriggerRegistry,
   updateAutomation,
 } from '../../../../src/features/automations/business/rules.js'
+import { CreateAutomationRequest } from '../../../../src/features/automations/schemas/automation.js'
 import {
   _resetTriggersForTest,
   listTriggers,
@@ -160,6 +161,56 @@ describe('defensive read', () => {
   })
 })
 
+describe('createAutomation — action kind mở rộng (httpRequest / runCommand)', () => {
+  test('httpRequest action round-trips; missing url rejected', () => {
+    const created = createAutomation(root, {
+      ...baseBody,
+      name: 'Http action',
+      actions: [{ kind: 'httpRequest', method: 'POST', url: 'https://example.com/hook', body: '{}' }],
+    })
+    if ('error' in created) throw new Error(created.error)
+    expect(getAutomation(root, 'http-action')!.actions).toEqual([
+      { kind: 'httpRequest', method: 'POST', url: 'https://example.com/hook', body: '{}' },
+    ])
+
+    // Schema-level validate (controller boundary — `CreateAutomationRequest.safeParse`
+    // trước khi gọi createAutomation, xem controller.ts createAutomation()).
+    const bad = CreateAutomationRequest.safeParse({
+      ...baseBody,
+      name: 'Http action missing url',
+      actions: [{ kind: 'httpRequest', method: 'GET' }],
+    })
+    expect(bad.success).toBe(false)
+  })
+
+  test('runCommand action round-trips; missing runnerId rejected', () => {
+    const created = createAutomation(root, {
+      ...baseBody,
+      name: 'Command action',
+      actions: [{ kind: 'runCommand', runnerId: 'console-1', params: 'echo hello' }],
+    })
+    if ('error' in created) throw new Error(created.error)
+    expect(getAutomation(root, 'command-action')!.actions).toEqual([
+      { kind: 'runCommand', runnerId: 'console-1', params: 'echo hello' },
+    ])
+
+    const bad = CreateAutomationRequest.safeParse({
+      ...baseBody,
+      name: 'Command action missing runner',
+      actions: [{ kind: 'runCommand' }],
+    })
+    expect(bad.success).toBe(false)
+  })
+
+  test('runTask action cũ vẫn parse bình thường (regression)', () => {
+    const created = createAutomation(root, baseBody)
+    if ('error' in created) throw new Error(created.error)
+    expect(getAutomation(root, 'nightly-check')!.actions).toEqual([
+      { kind: 'runTask', mode: 'create', prompt: 'run the nightly check' },
+    ])
+  })
+})
+
 describe('legacy shape (trigger/action đơn) → triggers/actions[]', () => {
   test('time/interval/cron/event cũ đọc lên thành timer/event + ghi lại shape mới', () => {
     fs.mkdirSync(path.join(root, 'automations'), { recursive: true })
@@ -195,6 +246,16 @@ describe('legacy shape (trigger/action đơn) → triggers/actions[]', () => {
     const event = getAutomation(root, 'legacy-event')
     expect(event!.triggers).toEqual([{ id: 't1', kind: 'event', eventType: 'job.failed' }])
     expect(event!.actions).toEqual([{ kind: 'runTask', mode: 'existing', taskId: 'Tabc1234' }])
+  })
+
+  test('action thiếu kind (tiền union) → mặc định kind=runTask', () => {
+    fs.mkdirSync(path.join(root, 'automations'), { recursive: true })
+    const createdAt = '2026-08-01T00:00:00.000Z'
+    fs.writeFileSync(
+      path.join(root, 'automations', 'no-kind.yaml'),
+      `version: 1\nid: no-kind\nname: No kind\nenabled: true\ncreatedAt: ${createdAt}\nupdatedAt: ${createdAt}\ntriggers:\n  - id: t1\n    kind: timer\n    startAt: ${createdAt}\n    repeat:\n      mode: once\nactions:\n  - mode: create\n    prompt: p\n`,
+    )
+    expect(getAutomation(root, 'no-kind')!.actions).toEqual([{ kind: 'runTask', mode: 'create', prompt: 'p' }])
   })
 })
 

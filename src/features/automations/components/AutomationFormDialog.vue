@@ -29,6 +29,8 @@ type TriggerKind = 'timer' | 'event'
 type RepeatMode = 'once' | 'interval' | 'cron'
 type IntervalUnit = 'minute' | 'hour' | 'day'
 type ActionMode = 'create' | 'existing'
+type ActionKind = 'runTask' | 'httpRequest' | 'runCommand'
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 interface TriggerRow {
   kind: TriggerKind
@@ -42,13 +44,23 @@ interface TriggerRow {
 }
 
 interface ActionRow {
+  kind: ActionKind
   name: string
   description: string
+  // runTask
   mode: ActionMode
   prompt: string
   profileName: string
   runnerId: string
   taskId: string
+  // httpRequest
+  method: HttpMethod
+  url: string
+  /** textarea "Key: Value" mỗi dòng — parse khi submit. */
+  headersText: string
+  body: string
+  // runCommand
+  params: string
 }
 
 const MAX_TRIGGERS = 5
@@ -80,7 +92,36 @@ function newTriggerRow(): TriggerRow {
 }
 
 function newActionRow(): ActionRow {
-  return { name: '', description: '', mode: 'create', prompt: '', profileName: '', runnerId: '', taskId: '' }
+  return {
+    kind: 'runTask',
+    name: '',
+    description: '',
+    mode: 'create',
+    prompt: '',
+    profileName: '',
+    runnerId: '',
+    taskId: '',
+    method: 'GET',
+    url: '',
+    headersText: '',
+    body: '',
+    params: '',
+  }
+}
+
+function headersToText(headers?: Record<string, string>): string {
+  return headers ? Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join('\n') : ''
+}
+
+function textToHeaders(text: string): Record<string, string> | undefined {
+  const out: Record<string, string> = {}
+  for (const line of text.split('\n')) {
+    const idx = line.indexOf(':')
+    if (idx <= 0) continue
+    const key = line.slice(0, idx).trim()
+    if (key) out[key] = line.slice(idx + 1).trim()
+  }
+  return Object.keys(out).length ? out : undefined
 }
 
 // ── Chuyển đổi datetime / interval ──────────────────────────────────────────
@@ -148,21 +189,34 @@ watch(
         row.eventType = tr.eventType
         return row
       })
-      form.actions = rule.actions.map((a): ActionRow => ({
-        name: a.name ?? '',
-        description: a.description ?? '',
-        mode: a.mode,
-        prompt: a.prompt ?? '',
-        profileName: a.profileName ?? '',
-        runnerId: a.runnerId ?? '',
-        taskId: a.taskId ?? '',
-      }))
+      form.actions = rule.actions.map((a): ActionRow => {
+        const row = newActionRow()
+        row.kind = a.kind
+        row.name = a.name ?? ''
+        row.description = a.description ?? ''
+        if (a.kind === 'runTask') {
+          row.mode = a.mode
+          row.prompt = a.prompt ?? ''
+          row.profileName = a.profileName ?? ''
+          row.taskId = a.taskId ?? ''
+          row.runnerId = a.runnerId ?? ''
+        } else if (a.kind === 'httpRequest') {
+          row.method = a.method
+          row.url = a.url
+          row.headersText = headersToText(a.headers)
+          row.body = a.body ?? ''
+        } else {
+          row.runnerId = a.runnerId
+          row.params = a.params ?? ''
+        }
+        return row
+      })
     } else {
       form.name = ''
       form.description = ''
       form.enabled = true
       form.triggers = [newTriggerRow()]
-      form.actions = [newActionRow()]
+      form.actions = []
     }
   },
   { immediate: true },
@@ -191,11 +245,20 @@ const triggerErrors = computed(() =>
 
 const actionErrors = computed(() =>
   form.actions.map((row): string => {
-    if (row.mode === 'create' && !row.prompt.trim()) return t('automations.action.promptRequired')
-    if (row.mode === 'existing') {
-      if (!row.taskId.trim()) return t('automations.action.taskIdRequired')
-      if (!/^[A-Za-z0-9][\w-]{0,63}$/.test(row.taskId.trim())) return t('automations.action.taskIdInvalid')
+    if (row.kind === 'runTask') {
+      if (row.mode === 'create' && !row.prompt.trim()) return t('automations.action.promptRequired')
+      if (row.mode === 'existing') {
+        if (!row.taskId.trim()) return t('automations.action.taskIdRequired')
+        if (!/^[A-Za-z0-9][\w-]{0,63}$/.test(row.taskId.trim())) return t('automations.action.taskIdInvalid')
+      }
+      return ''
     }
+    if (row.kind === 'httpRequest') {
+      if (!row.url.trim()) return t('automations.action.urlRequired')
+      if (!/^https:\/\//i.test(row.url.trim())) return t('automations.action.urlHttpsOnly')
+      return ''
+    }
+    if (!row.runnerId.trim()) return t('automations.action.runnerRequired')
     return ''
   }),
 )
@@ -232,6 +295,15 @@ const runnerOptions = computed<CComboSelectOption[]>(() =>
 
 const taskOptions = computed<CComboSelectOption[]>(() =>
   props.formOptions.tasks.map((id) => ({ value: id, label: id })),
+)
+
+const HTTP_METHODS_UI: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+const httpMethodOptions: CComboSelectOption[] = HTTP_METHODS_UI.map((m) => ({ value: m, label: m }))
+
+const commandRunnerOptions = computed<CComboSelectOption[]>(() =>
+  props.formOptions.runners
+    .filter((r) => !r.family || r.family === 'console-command')
+    .map((r) => ({ value: r.id, label: r.label || r.id })),
 )
 
 // ── Biến tham chiếu ─────────────────────────────────────────────────────────
@@ -284,7 +356,7 @@ function addAction(): void {
 }
 
 function removeAction(index: number): void {
-  if (form.actions.length > 1) form.actions.splice(index, 1)
+  form.actions.splice(index, 1)
 }
 
 // ── Submit ──────────────────────────────────────────────────────────────────
@@ -304,18 +376,34 @@ function buildTriggers(): CreateAutomationRequest['triggers'] {
   })
 }
 
-function submit(): void {
-  if (validationError.value || props.saving) return
-
-  const common = {
-    name: form.name.trim(),
-    ...(form.description.trim() ? { description: form.description.trim() } : {}),
-    enabled: form.enabled,
-    triggers: buildTriggers(),
-    actions: form.actions.map((row) => ({
-      kind: 'runTask' as const,
+function buildActions(): CreateAutomationRequest['actions'] {
+  return form.actions.map((row) => {
+    const base = {
       ...(row.name.trim() ? { name: row.name.trim() } : {}),
       ...(row.description.trim() ? { description: row.description.trim() } : {}),
+    }
+    if (row.kind === 'httpRequest') {
+      const headers = textToHeaders(row.headersText)
+      return {
+        kind: 'httpRequest' as const,
+        ...base,
+        method: row.method,
+        url: row.url.trim(),
+        ...(headers ? { headers } : {}),
+        ...(row.body.trim() ? { body: row.body } : {}),
+      }
+    }
+    if (row.kind === 'runCommand') {
+      return {
+        kind: 'runCommand' as const,
+        ...base,
+        runnerId: row.runnerId.trim(),
+        ...(row.params.trim() ? { params: row.params } : {}),
+      }
+    }
+    return {
+      kind: 'runTask' as const,
+      ...base,
       mode: row.mode,
       ...(row.mode === 'create'
         ? {
@@ -324,7 +412,19 @@ function submit(): void {
           }
         : { taskId: row.taskId.trim() }),
       ...(row.runnerId.trim() ? { runnerId: row.runnerId.trim() } : {}),
-    })),
+    }
+  })
+}
+
+function submit(): void {
+  if (validationError.value || props.saving) return
+
+  const common = {
+    name: form.name.trim(),
+    ...(form.description.trim() ? { description: form.description.trim() } : {}),
+    enabled: form.enabled,
+    triggers: buildTriggers(),
+    actions: buildActions(),
   }
 
   if (props.editRule) {
@@ -495,7 +595,6 @@ function submit(): void {
                     class="icon-btn icon-btn-inline danger"
                     :title="t('automations.action.remove')"
                     :aria-label="t('automations.action.remove')"
-                    :disabled="form.actions.length <= 1"
                     @click="removeAction(i)"
                   >
                     <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -510,51 +609,109 @@ function submit(): void {
                 </label>
 
                 <div class="trigger-kind-row">
-                  <label class="chip-select" :class="{ active: row.mode === 'create' }">
-                    <input v-model="row.mode" type="radio" value="create" :name="`action-mode-${i}`" />
-                    {{ t('automations.action.create') }}
+                  <label class="chip-select" :class="{ active: row.kind === 'runTask' }">
+                    <input v-model="row.kind" type="radio" value="runTask" :name="`action-kind-${i}`" />
+                    {{ t('automations.action.runTaskKind') }}
                   </label>
-                  <label class="chip-select" :class="{ active: row.mode === 'existing' }">
-                    <input v-model="row.mode" type="radio" value="existing" :name="`action-mode-${i}`" />
-                    {{ t('automations.action.existing') }}
+                  <label class="chip-select" :class="{ active: row.kind === 'httpRequest' }">
+                    <input v-model="row.kind" type="radio" value="httpRequest" :name="`action-kind-${i}`" />
+                    {{ t('automations.action.httpRequest') }}
+                  </label>
+                  <label class="chip-select" :class="{ active: row.kind === 'runCommand' }">
+                    <input v-model="row.kind" type="radio" value="runCommand" :name="`action-kind-${i}`" />
+                    {{ t('automations.action.runCommand') }}
                   </label>
                 </div>
 
-                <label v-if="row.mode === 'create'" class="field">
-                  <span class="field-label">{{ t('automations.action.prompt') }}</span>
-                  <textarea v-model="row.prompt" rows="4" :placeholder="t('automations.action.promptPlaceholder')" />
-                </label>
-                <div v-if="row.mode === 'create'" class="field">
-                  <span class="field-label">{{ t('automations.action.profileName') }}</span>
-                  <CComboSelect
-                    v-model="row.profileName"
-                    :options="profileOptions"
-                    creatable
-                    :aria-label="t('automations.action.profileName')"
-                    :placeholder="t('automations.action.profileNamePlaceholder')"
-                  />
-                </div>
-                <div v-else class="field">
-                  <span class="field-label">{{ t('automations.action.taskId') }}</span>
-                  <CComboSelect
-                    v-model="row.taskId"
-                    :options="taskOptions"
-                    creatable
-                    :aria-label="t('automations.action.taskId')"
-                    :placeholder="t('automations.action.taskIdPlaceholder')"
-                  />
-                </div>
+                <template v-if="row.kind === 'runTask'">
+                  <div class="trigger-kind-row">
+                    <label class="chip-select" :class="{ active: row.mode === 'create' }">
+                      <input v-model="row.mode" type="radio" value="create" :name="`action-mode-${i}`" />
+                      {{ t('automations.action.create') }}
+                    </label>
+                    <label class="chip-select" :class="{ active: row.mode === 'existing' }">
+                      <input v-model="row.mode" type="radio" value="existing" :name="`action-mode-${i}`" />
+                      {{ t('automations.action.existing') }}
+                    </label>
+                  </div>
 
-                <div class="field">
-                  <span class="field-label">{{ t('automations.action.runnerId') }}</span>
-                  <CComboSelect
-                    v-model="row.runnerId"
-                    :options="runnerOptions"
-                    creatable
-                    :aria-label="t('automations.action.runnerId')"
-                    :placeholder="t('automations.action.runnerIdPlaceholder')"
-                  />
-                </div>
+                  <label v-if="row.mode === 'create'" class="field">
+                    <span class="field-label">{{ t('automations.action.prompt') }}</span>
+                    <textarea v-model="row.prompt" rows="4" :placeholder="t('automations.action.promptPlaceholder')" />
+                  </label>
+                  <div v-if="row.mode === 'create'" class="field">
+                    <span class="field-label">{{ t('automations.action.profileName') }}</span>
+                    <CComboSelect
+                      v-model="row.profileName"
+                      :options="profileOptions"
+                      creatable
+                      :aria-label="t('automations.action.profileName')"
+                      :placeholder="t('automations.action.profileNamePlaceholder')"
+                    />
+                  </div>
+                  <div v-else class="field">
+                    <span class="field-label">{{ t('automations.action.taskId') }}</span>
+                    <CComboSelect
+                      v-model="row.taskId"
+                      :options="taskOptions"
+                      creatable
+                      :aria-label="t('automations.action.taskId')"
+                      :placeholder="t('automations.action.taskIdPlaceholder')"
+                    />
+                  </div>
+
+                  <div class="field">
+                    <span class="field-label">{{ t('automations.action.runnerId') }}</span>
+                    <CComboSelect
+                      v-model="row.runnerId"
+                      :options="runnerOptions"
+                      creatable
+                      :aria-label="t('automations.action.runnerId')"
+                      :placeholder="t('automations.action.runnerIdPlaceholder')"
+                    />
+                  </div>
+                </template>
+
+                <template v-else-if="row.kind === 'httpRequest'">
+                  <div class="field">
+                    <span class="field-label">{{ t('automations.action.method') }}</span>
+                    <CComboSelect
+                      v-model="row.method"
+                      :options="httpMethodOptions"
+                      :aria-label="t('automations.action.method')"
+                    />
+                  </div>
+                  <label class="field">
+                    <span class="field-label">{{ t('automations.action.url') }}</span>
+                    <input v-model="row.url" type="text" :placeholder="t('automations.action.urlPlaceholder')" />
+                  </label>
+                  <label class="field">
+                    <span class="field-label">{{ t('automations.action.headers') }}</span>
+                    <textarea v-model="row.headersText" rows="3" :placeholder="t('automations.action.headersPlaceholder')" />
+                    <span class="field-hint">{{ t('automations.action.headersHint') }}</span>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">{{ t('automations.action.body') }}</span>
+                    <textarea v-model="row.body" rows="4" :placeholder="t('automations.action.bodyPlaceholder')" />
+                  </label>
+                </template>
+
+                <template v-else>
+                  <div class="field">
+                    <span class="field-label">{{ t('automations.action.runnerId') }}</span>
+                    <CComboSelect
+                      v-model="row.runnerId"
+                      :options="commandRunnerOptions"
+                      creatable
+                      :aria-label="t('automations.action.runnerId')"
+                      :placeholder="t('automations.action.runnerIdPlaceholder')"
+                    />
+                  </div>
+                  <label class="field">
+                    <span class="field-label">{{ t('automations.action.params') }}</span>
+                    <textarea v-model="row.params" rows="3" :placeholder="t('automations.action.paramsPlaceholder')" />
+                  </label>
+                </template>
 
                 <p v-if="actionErrors[i]" class="form-error">{{ actionErrors[i] }}</p>
 
@@ -580,6 +737,8 @@ function submit(): void {
               </div>
             </li>
           </ol>
+
+          <p v-if="form.actions.length === 0" class="muted field-hint">{{ t('automations.action.empty') }}</p>
 
           <button
             type="button"
