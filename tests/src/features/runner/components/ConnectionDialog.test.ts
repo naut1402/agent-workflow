@@ -22,6 +22,7 @@ vi.mock('@/features/runner/scripts/ConnectionDialogApi', () => ({
   scanLocalCommands: vi.fn(async () => ({ commands: [] })),
   saveCustomCommand: vi.fn(async (c: unknown) => ({ command: c })),
   deleteCustomCommand: vi.fn(async () => ({ deleted: true })),
+  deleteCredential: vi.fn(async () => ({ deleted: true })),
   fetchOAuthCapabilities: vi.fn(async () => ({ providers: [] })),
   startOAuthConnect: vi.fn(async () => ({ state: 'state-1', authorizeUrl: 'https://example.test/authorize' })),
   exchangeOAuthCode: vi.fn(async () => ({ credentialId: 'oauth-cred-1' })),
@@ -38,12 +39,13 @@ vi.mock('@/features/runner/scripts/ProviderDialogApi', () => ({
 import {
   fetchCredentials,
   saveCredential,
+  deleteCredential,
   saveConnection,
   fetchOAuthCapabilities,
   startOAuthConnect,
   fetchAvailableModels,
 } from '@/features/runner/scripts/ConnectionDialogApi'
-import { fetchProviderConfigs, saveProviderConfig } from '@/features/runner/scripts/ProviderDialogApi'
+import { fetchProviderConfigs, saveProviderConfig, deleteProviderConfig } from '@/features/runner/scripts/ProviderDialogApi'
 
 const PROVIDERS: ProviderEntry[] = [
   { id: 'anthropic-api', kind: 'ai-provider', label: 'Anthropic API', family: 'ai-api' },
@@ -92,15 +94,19 @@ async function click(el: Element) {
 beforeEach(() => {
   vi.mocked(fetchCredentials).mockClear()
   vi.mocked(saveCredential).mockClear()
+  vi.mocked(deleteCredential).mockClear()
   vi.mocked(saveConnection).mockClear()
   vi.mocked(fetchOAuthCapabilities).mockClear()
   vi.mocked(startOAuthConnect).mockClear()
   vi.mocked(fetchAvailableModels).mockClear()
   vi.mocked(fetchProviderConfigs).mockClear()
   vi.mocked(saveProviderConfig).mockClear()
+  vi.mocked(deleteProviderConfig).mockClear()
   vi.mocked(fetchCredentials).mockResolvedValue({ profiles: [...CREDENTIALS] })
   vi.mocked(fetchOAuthCapabilities).mockResolvedValue({ providers: [] })
   vi.mocked(fetchAvailableModels).mockResolvedValue({ models: [] })
+  vi.mocked(fetchProviderConfigs).mockResolvedValue({ providerConfigs: [...PROVIDER_CONFIGS] })
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
 
 afterEach(() => {
@@ -309,6 +315,104 @@ describe('ConnectionDialog — creating a credential inline', () => {
     const payload = vi.mocked(saveCredential).mock.calls[0][0] as any
     expect(payload.secretRef).toBe('env:MY_OWN_VAR')
     expect(payload.secretValue).toBeUndefined()
+  })
+})
+
+describe('ConnectionDialog — deleting a provider config', () => {
+  it('disables the delete button until a provider config is selected', async () => {
+    await mountConnectionOnAiProvider()
+    const sel = providerConfigSelect()
+    sel.value = ''
+    sel.dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(buttonByTitle(runnerVi.connectionDialog.deleteProvider).disabled).toBe(true)
+  })
+
+  it('deletes the selected provider config after confirming, then refreshes the list', async () => {
+    vi.mocked(fetchProviderConfigs).mockResolvedValueOnce({ providerConfigs: [PROVIDER_CONFIGS[1]] })
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.deleteProvider))
+
+    expect(deleteProviderConfig).toHaveBeenCalledWith('pc-anthropic')
+    expect(providerConfigSelect().value).toBe('pc-gemini')
+  })
+
+  it('does nothing when the user cancels the confirmation', async () => {
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.deleteProvider))
+    expect(deleteProviderConfig).not.toHaveBeenCalled()
+  })
+})
+
+describe('ConnectionDialog — editing a credential', () => {
+  it('disables edit/delete until a credential is selected', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    expect(buttonByTitle(runnerVi.connectionDialog.editCredential).disabled).toBe(true)
+    expect(buttonByTitle(runnerVi.connectionDialog.deleteCredential).disabled).toBe(true)
+  })
+
+  it('opens the subform prefilled with the label, without prefilling any secret', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.editCredential))
+
+    const labelInput = qa<HTMLInputElement>('.new-cred input').find((i) => i.value === 'Anthropic chính')
+    expect(labelInput).toBeTruthy()
+    expect(q<HTMLInputElement>('input[type="password"]').value).toBe('')
+  })
+
+  it('saves the edit, keeping the existing secretRef when no new secret is entered', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.editCredential))
+    await click(buttonByText(runnerVi.actions.save))
+
+    expect(saveCredential).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveCredential).mock.calls[0][0] as any
+    expect(payload.id).toBe('cred-anthropic')
+    expect(payload.secretRef).toBe('vault:cred-anthropic')
+    expect(payload.secretValue).toBeUndefined()
+  })
+
+  it('replaces the secret when a new one is pasted while editing', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.editCredential))
+    await setInputValue(q<HTMLInputElement>('input[type="password"]'), 'sk-new-secret')
+    await click(buttonByText(runnerVi.actions.save))
+
+    const payload = vi.mocked(saveCredential).mock.calls[0][0] as any
+    expect(payload.id).toBe('cred-anthropic')
+    expect(payload.secretValue).toBe('sk-new-secret')
+    expect(payload.secretRef).toBeUndefined()
+  })
+})
+
+describe('ConnectionDialog — deleting a credential', () => {
+  it('deletes the selected credential after confirming, then clears the selection', async () => {
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.deleteCredential))
+
+    expect(deleteCredential).toHaveBeenCalledWith('cred-anthropic')
+    expect(credentialSelect().value).toBe('')
+  })
+
+  it('does nothing when the user cancels the confirmation', async () => {
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await click(buttonByTitle(runnerVi.connectionDialog.deleteCredential))
+    expect(deleteCredential).not.toHaveBeenCalled()
   })
 })
 

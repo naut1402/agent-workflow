@@ -10,12 +10,13 @@ import {
   fetchAvailableModels,
   fetchCredentials,
   saveCredential,
+  deleteCredential,
   fetchOAuthCapabilities,
   startOAuthConnect,
   exchangeOAuthCode,
   fetchOAuthStatus,
 } from '../scripts/ConnectionDialogApi'
-import { fetchProviderConfigs, saveProviderConfig } from '../scripts/ProviderDialogApi'
+import { fetchProviderConfigs, saveProviderConfig, deleteProviderConfig } from '../scripts/ProviderDialogApi'
 import { DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
 import type { ConnectionKind, ConnectionOption, ProviderConfigOption, ProviderEntry } from '../types'
 import CComboSelect from '../../../core/ui/CComboSelect.vue'
@@ -95,8 +96,12 @@ const selectedProviderConfig = computed(
 const credentialId = ref('')
 const credentials = ref<CredentialProfile[]>([])
 const showNewCredential = ref(false)
+/** Set while the "+ Credential" subform is editing an existing credential instead of creating one. */
+const editingCredentialId = ref<string | null>(null)
 /** `id` intentionally not user-facing — upsertCredential mints one when omitted. */
 const newCred = ref({ label: '', secretValue: '', secretRef: '' })
+
+const selectedCredential = computed(() => credentials.value.find((c) => c.id === credentialId.value) || null)
 /** Hint only — must stay a placeholder, not a prefilled value, or "field left untouched" becomes indistinguishable from "field filled with the hint". */
 const secretRefPlaceholder = computed(
   () => DEFAULT_SECRET_ENV_HINTS[selectedProviderConfig.value?.providerId || ''] || 'env:ANTHROPIC_API_KEY',
@@ -185,6 +190,21 @@ async function onProviderConfigSaved(id: string) {
   selectedProviderConfigId.value = id
 }
 
+async function removeSelectedProviderConfig() {
+  const pc = selectedProviderConfig.value
+  if (!pc) return
+  if (!confirm(t('runner.providerDialog.deleteConfirm', { id: pc.id }))) return
+  try {
+    await deleteProviderConfig(pc.id)
+    await refreshProviderConfigs()
+    if (selectedProviderConfigId.value === pc.id) {
+      selectedProviderConfigId.value = providerConfigList.value[0]?.id || ''
+    }
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
 async function loadOAuthCapabilities() {
   try {
     const data = await fetchOAuthCapabilities()
@@ -258,10 +278,33 @@ function cancelOAuthFlow() {
 
 function toggleNewCredential() {
   if (!showNewCredential.value) {
+    editingCredentialId.value = null
     newCred.value = { label: '', secretValue: '', secretRef: '' }
     cancelOAuthFlow()
   }
   showNewCredential.value = !showNewCredential.value
+}
+
+function openEditCredential() {
+  const cred = selectedCredential.value
+  if (!cred) return
+  editingCredentialId.value = cred.id
+  newCred.value = { label: cred.label, secretValue: '', secretRef: '' }
+  cancelOAuthFlow()
+  showNewCredential.value = true
+}
+
+async function removeSelectedCredential() {
+  const cred = selectedCredential.value
+  if (!cred) return
+  if (!confirm(t('runner.messages.confirmDeleteCredential', { label: cred.label }))) return
+  try {
+    await deleteCredential(cred.id)
+    await loadCredentials()
+    if (credentialId.value === cred.id) credentialId.value = ''
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
 }
 
 async function loadCredentials() {
@@ -275,12 +318,17 @@ async function loadCredentials() {
 
 async function saveNewCredential() {
   error.value = ''
-  if (!newCred.value.secretValue.trim() && !newCred.value.secretRef.trim()) {
+  const editingId = editingCredentialId.value
+  const existing = editingId ? credentials.value.find((c) => c.id === editingId) : null
+  // Editing keeps the current secret untouched unless a new one is entered;
+  // creating still requires one of the two secret fields.
+  if (!editingId && !newCred.value.secretValue.trim() && !newCred.value.secretRef.trim()) {
     error.value = t('runner.errors.credentialSecretRequired')
     return
   }
   try {
     const { profile } = await saveCredential({
+      ...(editingId ? { id: editingId } : {}),
       label: newCred.value.label || undefined,
       provider: selectedProviderConfig.value?.providerId || '',
       // Prefer the pasted value; the raw secretRef field is the advanced/legacy
@@ -288,11 +336,16 @@ async function saveNewCredential() {
       // already manage secrets that way.
       ...(newCred.value.secretValue.trim()
         ? { secretValue: newCred.value.secretValue }
-        : { secretRef: newCred.value.secretRef }),
+        : newCred.value.secretRef.trim()
+          ? { secretRef: newCred.value.secretRef }
+          : existing
+            ? { secretRef: existing.secretRef }
+            : {}),
     })
     await loadCredentials()
     credentialId.value = profile.id
     showNewCredential.value = false
+    editingCredentialId.value = null
   } catch (e: any) {
     error.value = String(e.message || e)
   }
@@ -824,6 +877,24 @@ onUnmounted(() => {
                       />
                     </svg>
                   </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline danger"
+                    :disabled="!selectedProviderConfig"
+                    :title="t('runner.connectionDialog.deleteProvider')"
+                    :aria-label="t('runner.connectionDialog.deleteProvider')"
+                    @click="removeSelectedProviderConfig"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
+                      />
+                    </svg>
+                  </button>
                 </div>
               </div>
               <p v-if="!providerConfigList.length" class="muted path-hint">
@@ -840,18 +911,57 @@ onUnmounted(() => {
                     {{ c.label }}
                   </option>
                 </select>
-                <button
-                  type="button"
-                  class="icon-btn icon-btn-inline"
-                  :class="{ active: showNewCredential }"
-                  :title="t('runner.connectionDialog.addCredential')"
-                  :aria-label="t('runner.connectionDialog.addCredential')"
-                  @click="toggleNewCredential"
-                >
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M8 3v10M3 8h10" />
-                  </svg>
-                </button>
+                <div class="icon-btn-group">
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline"
+                    :class="{ active: showNewCredential && !editingCredentialId }"
+                    :title="t('runner.connectionDialog.addCredential')"
+                    :aria-label="t('runner.connectionDialog.addCredential')"
+                    @click="toggleNewCredential"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M8 3v10M3 8h10" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline"
+                    :disabled="!selectedCredential"
+                    :title="t('runner.connectionDialog.editCredential')"
+                    :aria-label="t('runner.connectionDialog.editCredential')"
+                    @click="openEditCredential"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-inline danger"
+                    :disabled="!selectedCredential"
+                    :title="t('runner.connectionDialog.deleteCredential')"
+                    :aria-label="t('runner.connectionDialog.deleteCredential')"
+                    @click="removeSelectedCredential"
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
             <div v-if="showNewCredential" class="new-cred">
@@ -905,7 +1015,9 @@ onUnmounted(() => {
                     :disabled="!vaultConfigured"
                   />
                 </label>
-                <p class="muted path-hint">{{ t('runner.connectionDialog.secretValueHint') }}</p>
+                <p class="muted path-hint">
+                  {{ editingCredentialId ? t('runner.connectionDialog.secretValueEditHint') : t('runner.connectionDialog.secretValueHint') }}
+                </p>
               </div>
               <details class="advanced-secret-ref">
                 <summary class="muted">{{ t('runner.connectionDialog.advancedSecretRef') }}</summary>
@@ -915,7 +1027,9 @@ onUnmounted(() => {
                   </label>
                 </div>
               </details>
-              <button type="button" class="btn-primary btn-sm" @click="saveNewCredential">{{ t('runner.connectionDialog.saveCredential') }}</button>
+              <button type="button" class="btn-primary btn-sm" @click="saveNewCredential">
+                {{ editingCredentialId ? t('runner.actions.save') : t('runner.connectionDialog.saveCredential') }}
+              </button>
             </div>
 
             <div class="field">
