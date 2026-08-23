@@ -171,7 +171,7 @@ onMounted(() => {
           :aria-label="t('automations.refresh')"
           @click="load()"
         >
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M13 8a5 5 0 1 1-1.5-3.5" />
             <path d="M13 3v2.5h-2.5" />
           </svg>
@@ -217,11 +217,11 @@ onMounted(() => {
               class="rule-trigger-chip"
               :title="t('automations.trigger.header')"
             >
-              <svg v-if="chip.icon === 'timer'" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+              <svg v-if="chip.icon === 'timer'" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="8" cy="8" r="5.5" />
                 <path d="M8 5.5V8l1.8 1.2" />
               </svg>
-              <svg v-else viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+              <svg v-else viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M8.5 2 4 8.5h3L6.5 14 12 7H8.7z" />
               </svg>
               {{ chip.text }}
@@ -263,7 +263,7 @@ onMounted(() => {
             :aria-label="t(rule.enabled ? 'automations.rule.toggleOff' : 'automations.rule.toggleOn')"
             @click="toggle(rule.id, !rule.enabled)"
           >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="8" cy="8" r="6" />
               <path v-if="rule.enabled" d="M8 5v3l2 2" />
               <path v-else d="M8 5v3" />
@@ -277,7 +277,7 @@ onMounted(() => {
             :disabled="runningIds.has(rule.id)"
             @click="onRunNow(rule)"
           >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M5 3.5v9l7-4.5z" />
             </svg>
           </button>
@@ -288,7 +288,7 @@ onMounted(() => {
             :aria-label="t('automations.rule.history')"
             @click="toggleHistory(rule.id)"
           >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 8a5 5 0 1 0 1.5-3.5" />
               <path d="M3 3v2.5h2.5" />
               <path d="M8 5.5V8l2 1.5" />
@@ -301,7 +301,7 @@ onMounted(() => {
             :aria-label="t('automations.rule.edit')"
             @click="openEdit(rule)"
           >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3z" />
             </svg>
           </button>
@@ -312,7 +312,7 @@ onMounted(() => {
             :aria-label="t('automations.rule.delete')"
             @click="onDelete(rule)"
           >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 4.5h10M6.5 4.5v-1h3v1M4.5 4.5l.5 8h6l.5-8" />
             </svg>
           </button>

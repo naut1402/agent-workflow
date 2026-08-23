@@ -388,7 +388,7 @@ function submit(): void {
                 :disabled="form.triggers.length <= 1"
                 @click="removeTrigger(i)"
               >
-                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M3 4.5h10M6.5 4.5v-1h3v1M4.5 4.5l.5 8h6l.5-8" />
                 </svg>
               </button>
@@ -484,7 +484,7 @@ function submit(): void {
                     :aria-label="t('automations.vars.toggle')"
                     @click="varsOpenFor = varsOpenFor === i + 1 ? null : i + 1"
                   >
-                    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <circle cx="8" cy="8" r="6" />
                       <path d="M6.2 6.2a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.2v.3" />
                       <circle cx="8" cy="11.6" r="0.5" fill="currentColor" stroke="none" />
@@ -498,7 +498,7 @@ function submit(): void {
                     :disabled="form.actions.length <= 1"
                     @click="removeAction(i)"
                   >
-                    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M3 4.5h10M6.5 4.5v-1h3v1M4.5 4.5l.5 8h6l.5-8" />
                     </svg>
                   </button>
