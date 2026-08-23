@@ -2,6 +2,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import type { AutomationRun, CreateAutomationRequest, UpdateAutomationRequest } from '../schemas/automation'
 import {
   fetchAutomationEventTypes,
+  fetchAutomationFormOptions,
   fetchAutomationRuns,
   fetchAutomations,
   deleteAutomation,
@@ -9,6 +10,7 @@ import {
   runAutomationNow,
   toggleAutomation,
   updateAutomation,
+  type AutomationFormOptions,
   type AutomationListItem,
 } from '../scripts/automationsApi'
 
@@ -23,6 +25,7 @@ const POLL_MS = 10_000
 export function useAutomations(getProjectId: () => string | undefined) {
   const automations = ref<AutomationListItem[]>([])
   const eventTypes = ref<string[]>([])
+  const formOptions = ref<AutomationFormOptions>({ tasks: [], profiles: [], runners: [] })
   const loading = ref(false)
   const error = ref('')
   const actionError = ref('')
@@ -55,6 +58,15 @@ export function useAutomations(getProjectId: () => string | undefined) {
       eventTypes.value = data.types || []
     } catch {
       /* dropdown rỗng — form vẫn gõ tay được */
+    }
+  }
+
+  /** Options cho combobox task/profile/runner — load lại mỗi lần mở form. */
+  async function loadFormOptions(): Promise<void> {
+    try {
+      formOptions.value = await fetchAutomationFormOptions(getProjectId())
+    } catch {
+      formOptions.value = { tasks: [], profiles: [], runners: [] }
     }
   }
 
@@ -175,6 +187,7 @@ export function useAutomations(getProjectId: () => string | undefined) {
   return {
     automations: sorted,
     eventTypes,
+    formOptions,
     loading,
     error,
     actionError,
@@ -184,6 +197,7 @@ export function useAutomations(getProjectId: () => string | undefined) {
     runningIds,
     load,
     loadEventTypes,
+    loadFormOptions,
     create,
     update,
     toggle,

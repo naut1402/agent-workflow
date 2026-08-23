@@ -1,8 +1,8 @@
 /**
  * Automation scheduler (#233) — tick định kỳ quét automation của mọi project
- * trong registry, đánh giá trigger thời gian (time/interval/cron) và chạy
- * action do hệ thống bơm vào (`bindAutomationRunner`, pattern recoverPoller:
- * module này không kéo monitor/runner khi unit-test).
+ * trong registry, đánh giá trigger thời gian (timer: once/interval/cron) và
+ * chạy action do hệ thống bơm vào (`bindAutomationRunner`, pattern
+ * recoverPoller: module này không kéo monitor/runner khi unit-test).
  *
  * Sống sót qua restart: rule config ở data root, runtime state ở
  * `registryHome()/automations/` — khi boot quét lại là tính tiếp due.
@@ -10,7 +10,7 @@
 
 import { loadRegistry } from '../../../core/registry.js'
 import type { AutomationRuleRecord } from '../schemas/automation.js'
-import { evaluateScheduleTrigger } from './matcher.js'
+import { evaluateRuleTriggers } from './matcher.js'
 import { clearStaleInFlight, getRuleState } from './runLedger.js'
 import { listAutomations, syncTriggerRegistry } from './rules.js'
 
@@ -19,9 +19,13 @@ export interface AutomationRunnerInput {
   projectId: string | null
   rule: AutomationRuleRecord
   source: 'manual' | 'schedule' | 'event'
+  /** Trigger khớp (id trong rule.triggers) — truyền vào run để dựng context. */
+  triggerId?: string
+  /** Payload event gốc khi source=event. */
+  event?: { type: string; payload: Record<string, unknown> }
 }
 
-export type AutomationRunnerFn = (input: AutomationRunnerInput) => Promise<unknown>
+export type AutomationRunnerFn = (input: AutomationRunnerInput) => Promise<unknown> | unknown
 
 /** Default noop — business/index.ts bơm `runAutomation` thật khi nạp server. */
 let boundRunner: AutomationRunnerFn = async () => undefined
@@ -54,22 +58,22 @@ function activeProjects(): ProjectLike[] {
   return []
 }
 
-/** Rule có trigger thời gian (scheduler xử); event/webhook do module khác. */
-export function isScheduleTrigger(
-  trigger: AutomationRuleRecord['trigger'],
-): boolean {
-  return trigger.kind === 'time' || trigger.kind === 'interval' || trigger.kind === 'cron'
+/** Rule có trigger thời gian (scheduler xử); event do subscriber xử. */
+export function hasTimerTrigger(rule: AutomationRuleRecord): boolean {
+  return rule.triggers.some((t) => t.kind === 'timer')
 }
 
 /** Rule due + project của nó — tách ra để test không cần interval thật. */
-export function collectDueSchedules(now: Date): Array<{ project: ProjectLike; rule: AutomationRuleRecord }> {
-  const due: Array<{ project: ProjectLike; rule: AutomationRuleRecord }> = []
+export function collectDueSchedules(
+  now: Date,
+): Array<{ project: ProjectLike; rule: AutomationRuleRecord; triggerId: string }> {
+  const due: Array<{ project: ProjectLike; rule: AutomationRuleRecord; triggerId: string }> = []
   for (const project of activeProjects()) {
     for (const rule of listAutomations(project.path)) {
-      if (!rule.enabled || !isScheduleTrigger(rule.trigger)) continue
+      if (!rule.enabled || !hasTimerTrigger(rule)) continue
       const state = getRuleState(project.id, rule.id)
-      const evaluation = evaluateScheduleTrigger(rule.trigger, state, rule.createdAt, now)
-      if (evaluation.due) due.push({ project, rule })
+      const evaluation = evaluateRuleTriggers(rule.triggers, state, now)
+      if (evaluation.due) due.push({ project, rule, triggerId: evaluation.dueTriggerIds[0] })
     }
   }
   return due
@@ -78,9 +82,9 @@ export function collectDueSchedules(now: Date): Array<{ project: ProjectLike; ru
 /** Một tick: chạy mọi rule due (tuần tự — action submit job, không cần song song). */
 export async function tickAutomationScheduler(now: Date = new Date()): Promise<number> {
   let triggered = 0
-  for (const { project, rule } of collectDueSchedules(now)) {
+  for (const { project, rule, triggerId } of collectDueSchedules(now)) {
     try {
-      await boundRunner({ root: project.path, projectId: project.id, rule, source: 'schedule' })
+      await boundRunner({ root: project.path, projectId: project.id, rule, source: 'schedule', triggerId })
       triggered++
     } catch (err) {
       console.warn(`[automations] run failed for ${project.id}:${rule.id}:`, err)

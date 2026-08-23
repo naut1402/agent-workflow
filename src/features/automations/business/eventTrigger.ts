@@ -40,8 +40,12 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
 
   const run = getBoundAutomationRunner()
   for (const rule of listAutomations(project.path)) {
-    if (!rule.enabled || rule.trigger.kind !== 'event') continue
-    if (rule.trigger.eventType !== event.type) continue
+    if (!rule.enabled) continue
+    // Nhiều trigger: khớp **bất kỳ** trigger event nào của rule.
+    const matched = rule.triggers.find(
+      (t) => t.kind === 'event' && t.eventType === event.type,
+    )
+    if (!matched) continue
 
     const state = getRuleState(project.id, rule.id)
     if (state.inFlight) continue
@@ -53,7 +57,14 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
     }
 
     try {
-      await run({ root: project.path, projectId: project.id, rule, source: 'event' })
+      await run({
+        root: project.path,
+        projectId: project.id,
+        rule,
+        source: 'event',
+        triggerId: matched.id,
+        event: { type: event.type, payload: event.payload ?? {} },
+      })
     } catch (err) {
       console.warn(`[automations] event run failed for ${project.id}:${rule.id}:`, err)
     }

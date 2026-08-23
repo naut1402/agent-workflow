@@ -14,6 +14,7 @@ const { t } = useI18nHelpers()
 const {
   automations,
   eventTypes,
+  formOptions,
   loading,
   error,
   actionError,
@@ -23,6 +24,7 @@ const {
   runningIds,
   load,
   loadEventTypes,
+  loadFormOptions,
   create,
   update,
   toggle,
@@ -41,12 +43,14 @@ const formServerError = ref('')
 function openCreate(): void {
   editRule.value = null
   formServerError.value = ''
+  void loadFormOptions()
   showForm.value = true
 }
 
 function openEdit(rule: AutomationListItem): void {
   editRule.value = rule
   formServerError.value = ''
+  void loadFormOptions()
   showForm.value = true
 }
 
@@ -66,11 +70,9 @@ async function onFormSubmit(payload: {
 }
 
 async function onRunNow(rule: AutomationListItem): Promise<void> {
-  const run = await runNow(rule.id)
-  // Kết quả hiển thị qua history + last-run vừa load lại — không alert.
-  if (run && historyFor.value !== rule.id && run.outcome !== 'succeeded') {
-    void toggleHistory(rule.id)
-  }
+  await runNow(rule.id)
+  // Chuỗi chạy nền — mở history để theo dõi tiến trình từng bước.
+  if (historyFor.value !== rule.id) await toggleHistory(rule.id)
 }
 
 function onDelete(rule: AutomationListItem): void {
@@ -86,29 +88,57 @@ function formatTime(iso: string | null): string {
   return d.toLocaleString()
 }
 
-function triggerSummary(rule: AutomationListItem): string {
-  const tr = rule.trigger
-  if (tr.kind === 'time') return t('automations.trigger.summaryTime', { time: formatTime(tr.at) })
-  if (tr.kind === 'cron') return t('automations.trigger.summaryCron', { expr: tr.cron })
-  if (tr.kind === 'event') return t('automations.trigger.summaryEvent', { type: tr.eventType })
-  // interval — hiển thị đơn vị lớn nhất chia hết
-  const ms = tr.everyMs
-  if (ms >= 86_400_000 && ms % 86_400_000 === 0) {
-    return t('automations.trigger.summaryInterval', { value: ms / 86_400_000, unit: t('automations.trigger.intervalDay') })
-  }
-  if (ms >= 3_600_000 && ms % 3_600_000 === 0) {
-    return t('automations.trigger.summaryInterval', { value: ms / 3_600_000, unit: t('automations.trigger.intervalHour') })
-  }
-  return t('automations.trigger.summaryInterval', {
-    value: Math.round(ms / 60_000),
-    unit: t('automations.trigger.intervalMinute'),
+/** Tên thân thiện cho event type: "Job thất bại (job.failed)". */
+function eventLabel(code: string): string {
+  const key = `automations.eventNames.${code}`
+  const label = t(key)
+  return label === key ? code : `${label} (${code})`
+}
+
+interface TriggerChip {
+  key: string
+  icon: 'timer' | 'event'
+  text: string
+}
+
+function triggerChips(rule: AutomationListItem): TriggerChip[] {
+  return rule.triggers.map((tr, i): TriggerChip => {
+    if (tr.kind === 'timer') {
+      if (tr.repeat.mode === 'cron') {
+        return { key: `t${i}`, icon: 'timer', text: t('automations.trigger.summaryCron', { expr: tr.repeat.expr }) }
+      }
+      if (tr.repeat.mode === 'interval') {
+        const ms = tr.repeat.everyMs
+        const valueUnit =
+          ms >= 86_400_000 && ms % 86_400_000 === 0
+            ? { value: ms / 86_400_000, unit: t('automations.trigger.intervalDay') }
+            : ms >= 3_600_000 && ms % 3_600_000 === 0
+              ? { value: ms / 3_600_000, unit: t('automations.trigger.intervalHour') }
+              : { value: Math.round(ms / 60_000), unit: t('automations.trigger.intervalMinute') }
+        return {
+          key: `t${i}`,
+          icon: 'timer',
+          text: t('automations.trigger.summaryInterval', { value: valueUnit.value, unit: valueUnit.unit }),
+        }
+      }
+      return { key: `t${i}`, icon: 'timer', text: t('automations.trigger.summaryTime', { time: formatTime(tr.startAt) }) }
+    }
+    return { key: `t${i}`, icon: 'event', text: t('automations.trigger.summaryEvent', { type: eventLabel(tr.eventType) }) }
   })
 }
 
-function actionSummary(rule: AutomationListItem): string {
-  return rule.action.mode === 'create'
-    ? t('automations.action.create')
-    : `${t('automations.action.existing')} · ${rule.action.taskId ?? ''}`
+function stepLabel(rule: AutomationListItem, index: number): string {
+  const action = rule.actions[index]
+  const name = action.name?.trim() || t(action.mode === 'create' ? 'automations.action.create' : 'automations.action.existing')
+  const detail = action.mode === 'existing' && action.taskId ? ` · ${action.taskId}` : ''
+  return `${name}${detail}`
+}
+
+/** Mọi timer một lần đã chạy và không còn lịch nào → hiển thị "one-shot đã chạy". */
+function oneShotDone(rule: AutomationListItem): boolean {
+  const timers = rule.triggers.filter((tr) => tr.kind === 'timer')
+  if (!timers.length) return false
+  return rule.nextRunAt === null && timers.every((tr) => tr.kind === 'timer' && tr.repeat.mode === 'once' && rule.state.triggerFired[tr.id])
 }
 
 function outcomeKey(rule: AutomationListItem): string {
@@ -117,7 +147,7 @@ function outcomeKey(rule: AutomationListItem): string {
   return `automations.outcome.${rule.state.lastOutcome}`
 }
 
-const emptyNextRun = computed(() => automations.value.length === 0)
+const emptyList = computed(() => automations.value.length === 0)
 
 onMounted(() => {
   void load()
@@ -136,12 +166,15 @@ onMounted(() => {
       <div class="panel-actions">
         <button
           type="button"
-          class="btn-ghost"
+          class="icon-btn"
           :title="t('automations.refresh')"
           :aria-label="t('automations.refresh')"
           @click="load()"
         >
-          ⟳
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path d="M13 8a5 5 0 1 1-1.5-3.5" />
+            <path d="M13 3v2.5h-2.5" />
+          </svg>
         </button>
         <button type="button" class="btn-primary" @click="openCreate">
           {{ t('automations.create') }}
@@ -151,9 +184,9 @@ onMounted(() => {
 
     <p v-if="error" class="panel-error">{{ t('automations.loadError') }} — {{ error }}</p>
 
-    <div v-if="loading && emptyNextRun" class="panel-empty muted">…</div>
+    <div v-if="loading && emptyList" class="panel-empty muted">…</div>
 
-    <div v-else-if="emptyNextRun" class="panel-empty">
+    <div v-else-if="emptyList" class="panel-empty">
       <p>{{ t('automations.empty') }}</p>
       <p class="muted">{{ t('automations.emptyHint') }}</p>
       <p class="muted pending-hint">{{ t('automations.pending.webhook') }}</p>
@@ -176,22 +209,38 @@ onMounted(() => {
             </span>
           </div>
           <p v-if="rule.description" class="rule-desc muted">{{ rule.description }}</p>
+
+          <div class="rule-triggers">
+            <span
+              v-for="chip in triggerChips(rule)"
+              :key="chip.key"
+              class="rule-trigger-chip"
+              :title="t('automations.trigger.header')"
+            >
+              <svg v-if="chip.icon === 'timer'" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <circle cx="8" cy="8" r="5.5" />
+                <path d="M8 5.5V8l1.8 1.2" />
+              </svg>
+              <svg v-else viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path d="M8.5 2 4 8.5h3L6.5 14 12 7H8.7z" />
+              </svg>
+              {{ chip.text }}
+            </span>
+          </div>
+
+          <ol class="rule-steps">
+            <li v-for="(_, i) in rule.actions" :key="i" class="rule-step">
+              <span class="rule-step-dot">{{ i + 1 }}</span>
+              <span>{{ stepLabel(rule, i) }}</span>
+            </li>
+          </ol>
+
           <dl class="rule-meta">
-            <div class="meta-row">
-              <dt>{{ t('automations.trigger.kind') }}</dt>
-              <dd>{{ triggerSummary(rule) }}</dd>
-            </div>
-            <div class="meta-row">
-              <dt>{{ t('automations.action.header') }}</dt>
-              <dd>{{ actionSummary(rule) }}</dd>
-            </div>
             <div class="meta-row">
               <dt>↻</dt>
               <dd>
                 <template v-if="rule.state.inFlight">{{ t('automations.rule.inFlight') }}</template>
-                <template v-else-if="rule.trigger.kind === 'time' && rule.state.fired">
-                  {{ t('automations.rule.oneShotDone') }}
-                </template>
+                <template v-else-if="oneShotDone(rule)">{{ t('automations.rule.oneShotDone') }}</template>
                 <template v-else-if="rule.nextRunAt">
                   {{ t('automations.rule.nextRun', { time: formatTime(rule.nextRunAt) }) }}
                 </template>
@@ -272,7 +321,9 @@ onMounted(() => {
         <div v-if="historyFor === rule.id" class="rule-history">
           <h4>{{ t('automations.history.title', { name: rule.name }) }}</h4>
           <p v-if="historyLoading" class="muted">{{ t('automations.history.loading') }}</p>
-          <p v-else-if="historyRuns.length === 0" class="muted">{{ t('automations.history.empty') }}</p>
+          <p v-else-if="historyRuns.filter((r) => r.automationId === rule.id).length === 0" class="muted">
+            {{ t('automations.history.empty') }}
+          </p>
           <table v-else class="history-table">
             <thead>
               <tr>
@@ -289,7 +340,9 @@ onMounted(() => {
                 <td :class="`outcome-${run.outcome}`">{{ t(`automations.outcome.${run.outcome}`) }}</td>
                 <td class="muted">
                   <template v-if="run.error">{{ run.error }}</template>
-                  <template v-if="run.taskId"> · {{ run.taskId }}</template>
+                  <template v-for="step in run.steps || []" :key="step.index">
+                    <span class="history-step"> #{{ step.index }} {{ step.status }}<template v-if="step.taskId"> · {{ step.taskId }}</template></span>
+                  </template>
                 </td>
               </tr>
             </tbody>
@@ -302,6 +355,7 @@ onMounted(() => {
       :visible="showForm"
       :edit-rule="editRule"
       :event-types="eventTypes"
+      :form-options="formOptions"
       :saving="saving"
       :server-error="formServerError"
       @close="showForm = false"

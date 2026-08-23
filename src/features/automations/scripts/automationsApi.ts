@@ -8,8 +8,10 @@ import type {
   AutomationRuleRecord,
   AutomationRun,
   AutomationRunOutcome,
+  AutomationStepResult,
   CreateAutomationRequest,
   RuleRuntimeState,
+  TimerRepeat,
   UpdateAutomationRequest,
 } from '../schemas/automation'
 
@@ -18,10 +20,17 @@ export interface AutomationListItem extends AutomationRuleRecord {
   state: {
     lastRunAt: string | null
     lastOutcome: AutomationRunOutcome | null
-    fired: boolean
+    triggerFired: Record<string, boolean>
     inFlight: boolean
   }
   nextRunAt: string | null
+}
+
+/** Options cho combobox trong form (GET /api/automations/form-options). */
+export interface AutomationFormOptions {
+  tasks: string[]
+  profiles: string[]
+  runners: Array<{ id: string; label: string }>
 }
 
 export async function fetchAutomations(projectId?: string) {
@@ -32,6 +41,12 @@ export async function fetchAutomations(projectId?: string) {
 
 export async function fetchAutomationEventTypes(projectId?: string) {
   return apiGet<{ types: string[] }>('/api/automations/event-types', {
+    project: projectId,
+  })
+}
+
+export async function fetchAutomationFormOptions(projectId?: string) {
+  return apiGet<AutomationFormOptions>('/api/automations/form-options', {
     project: projectId,
   })
 }
@@ -69,7 +84,7 @@ export async function deleteAutomation(id: string, projectId?: string) {
   )
 }
 
-/** Run now (manual) — trả run record chứa outcome (succeeded/failed/skipped). */
+/** Run now (manual) — trả run đang `running`; kết quả cuối qua history poll. */
 export async function runAutomationNow(id: string, projectId?: string) {
   return apiPost<{ run: AutomationRun }>(
     `/api/automations/${encodeURIComponent(id)}/run`,
@@ -85,4 +100,13 @@ export async function fetchAutomationRuns(id: string, projectId?: string, limit 
   })
 }
 
-export type { AutomationRuleRecord, RuleRuntimeState, AutomationRun, AutomationRunOutcome }
+export type {
+  AutomationRuleRecord,
+  AutomationRun,
+  AutomationRunOutcome,
+  AutomationStepResult,
+  RuleRuntimeState,
+  TimerRepeat,
+  CreateAutomationRequest,
+  UpdateAutomationRequest,
+}

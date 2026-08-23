@@ -156,8 +156,8 @@ export function nextCronAfter(expr: string, after: Date): Date | null {
 export interface TriggerRuntimeState {
   /** Lần chạy gần nhất của rule (ISO) — null khi chưa chạy lần nào. */
   lastRunAt: string | null
-  /** One-shot `time` đã chạy xong chưa (sống trong state, không đụng config). */
-  fired?: boolean
+  /** Trigger id one-shot `once` đã chạy (không chạy lại). */
+  triggerFired?: Record<string, boolean>
 }
 
 export interface TriggerEvaluation {
@@ -167,48 +167,100 @@ export interface TriggerEvaluation {
 }
 
 /**
- * Đánh giá một trigger **thời gian** tại `now`:
- * - `time`: due đúng một lần khi tới hạn và chưa fired.
- * - `interval`: due khi qua `everyMs` kể từ lần chạy gần nhất (hoặc createdAt
- *   nếu chưa chạy — lần đầu đợi trọn một interval kể từ lúc tạo, tránh chạy
- *   bất ngờ ngay sau khi tạo rule).
- * - `cron`: due khi có lần khớp ≤ now chưa được chạy. Server downtime vượt
- *   nhiều lịch chạy → **chạy bù đúng một lần** rồi tính lại từ now.
+ * Đánh giá một trigger **thời gian** tại `now` — mọi mode cùng mốc `startAt`:
+ * - `once`: due đúng một lần khi tới `startAt` và chưa fired.
+ * - `interval`: slot chạy = startAt + k·everyMs. Lần đầu due tại `startAt`;
+ *   sau mỗi lần chạy, slot kế = slot liền sau `lastRunAt`. Downtime lỡ nhiều
+ *   slot → **chạy bù đúng một lần** rồi tính lại.
+ * - `cron`: lần khớp đầu tiên sau `lastRunAt` (hoặc `startAt` nếu chưa chạy);
+ *   downtime lỡ nhiều lịch → chạy bù một lần.
  */
-export function evaluateScheduleTrigger(
+export function evaluateTimerTrigger(
   trigger: AutomationTrigger,
   state: TriggerRuntimeState,
-  ruleCreatedAt: string,
   now: Date,
 ): TriggerEvaluation {
-  if (trigger.kind === 'time') {
-    const at = trigger.at ? Date.parse(trigger.at) : NaN
-    if (Number.isNaN(at)) return { due: false, nextRunAt: null }
-    if (state.fired) return { due: false, nextRunAt: null }
-    return { due: now.getTime() >= at, nextRunAt: new Date(at).toISOString() }
+  if (trigger.kind !== 'timer') return { due: false, nextRunAt: null }
+
+  const startAt = Date.parse(trigger.startAt)
+  if (Number.isNaN(startAt)) return { due: false, nextRunAt: null }
+  const lastRun = state.lastRunAt ? Date.parse(state.lastRunAt) : null
+
+  if (trigger.repeat.mode === 'once') {
+    if (state.triggerFired?.[trigger.id]) return { due: false, nextRunAt: null }
+    return { due: now.getTime() >= startAt, nextRunAt: new Date(startAt).toISOString() }
   }
 
-  if (trigger.kind === 'interval') {
-    const everyMs = trigger.everyMs ?? 0
+  if (trigger.repeat.mode === 'interval') {
+    const everyMs = trigger.repeat.everyMs
     if (everyMs <= 0) return { due: false, nextRunAt: null }
-    const base = Date.parse(state.lastRunAt ?? ruleCreatedAt)
-    if (Number.isNaN(base)) return { due: false, nextRunAt: null }
-    // Coalesce: nhảy tới slot gần nhất chưa qua trong tương lai (chạy bù 1 lần).
-    let next = base + everyMs
-    while (next + everyMs <= now.getTime()) next += everyMs
+    // Slot kế = slot đầu tiên còn nằm sau lần chạy gần nhất (chưa chạy → startAt).
+    let next: number
+    if (lastRun === null || Number.isNaN(lastRun)) {
+      next = startAt
+    } else {
+      const k = Math.floor((lastRun - startAt) / everyMs) + 1
+      next = startAt + k * everyMs
+    }
     return { due: next <= now.getTime(), nextRunAt: new Date(next).toISOString() }
   }
 
-  if (trigger.kind === 'cron') {
-    const expr = trigger.cron ?? ''
-    const refRaw = state.lastRunAt ?? ruleCreatedAt
-    const ref = Date.parse(refRaw)
-    if (!expr || Number.isNaN(ref)) return { due: false, nextRunAt: null }
-    const next = nextCronAfter(expr, new Date(ref))
-    if (!next) return { due: false, nextRunAt: null }
-    return { due: next.getTime() <= now.getTime(), nextRunAt: next.toISOString() }
-  }
+  // cron — ref = lastRunAt ?? startAt
+  const refRaw = state.lastRunAt ?? trigger.startAt
+  const ref = Date.parse(refRaw)
+  if (Number.isNaN(ref)) return { due: false, nextRunAt: null }
+  const next = nextCronAfter(trigger.repeat.expr, new Date(ref))
+  if (!next) return { due: false, nextRunAt: null }
+  return { due: next.getTime() <= now.getTime(), nextRunAt: next.toISOString() }
+}
 
-  // Event trigger không có lịch — không due theo tick.
-  return { due: false, nextRunAt: null }
+export interface RuleTriggerEvaluation {
+  due: boolean
+  /** Slot gần nhất trong các trigger thời gian (UI hiển thị). */
+  nextRunAt: string | null
+  /** Trigger timer đang due (để đánh dấu fired khi run bắt đầu). */
+  dueTriggerIds: string[]
+}
+
+/**
+ * Đánh giá toàn bộ trigger của rule tại `now`: rule due khi **bất kỳ** trigger
+ * thời gian nào due (event trigger do subscriber xử, không due theo tick).
+ */
+export function evaluateRuleTriggers(
+  triggers: AutomationTrigger[],
+  state: TriggerRuntimeState,
+  now: Date,
+): RuleTriggerEvaluation {
+  let due = false
+  let nextRunAt: string | null = null
+  const dueTriggerIds: string[] = []
+  for (const trigger of triggers) {
+    if (trigger.kind !== 'timer') continue
+    const evaluation = evaluateTimerTrigger(trigger, state, now)
+    if (evaluation.nextRunAt && (!nextRunAt || evaluation.nextRunAt < nextRunAt)) {
+      nextRunAt = evaluation.nextRunAt
+    }
+    if (evaluation.due) {
+      due = true
+      dueTriggerIds.push(trigger.id)
+    }
+  }
+  return { due, nextRunAt, dueTriggerIds }
+}
+
+/**
+ * Trigger one-shot `once` đã qua `startAt` coi như đã kích hoạt khi rule chạy
+ * (kể cả khi run fail thì không chạy lại) — trả về state map cần merge.
+ */
+export function firedOnceTriggersAtRun(
+  triggers: AutomationTrigger[],
+  now: Date,
+): Record<string, boolean> {
+  const fired: Record<string, boolean> = {}
+  for (const trigger of triggers) {
+    if (trigger.kind !== 'timer' || trigger.repeat.mode !== 'once') continue
+    const startAt = Date.parse(trigger.startAt)
+    if (!Number.isNaN(startAt) && now.getTime() >= startAt) fired[trigger.id] = true
+  }
+  return fired
 }

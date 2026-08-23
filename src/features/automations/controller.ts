@@ -1,6 +1,9 @@
+import { joinPath, readdirSync } from '../../core/lib/fileHelper.js'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { emitAudit } from '../../core/log/store.js'
 import { emitEntity } from '../../core/events/index.js'
+import { listRunners } from '../runner/business/index.js'
+import { profilesDir } from '../monitor/business/index.js'
 import {
   AUTOMATION_ID_PATTERN,
   CreateAutomationRequest,
@@ -10,7 +13,7 @@ import {
 import {
   createAutomation,
   deleteAutomation,
-  evaluateScheduleTrigger,
+  evaluateRuleTriggers,
   getAutomation,
   getRuleState,
   KNOWN_AUTOMATION_EVENT_TYPES,
@@ -25,8 +28,8 @@ import {
 } from './business/index.js'
 
 /**
- * Automations mode (#233): CRUD rule (trigger → action) + run now + history.
- * Config theo project (data root `automations/`); runtime state ở
+ * Automations mode (#233): CRUD rule (triggers[] → actions[]) + run now +
+ * history. Config theo project (data root `automations/`); runtime state ở
  * registryHome — xem business/runLedger.ts.
  */
 export class AutomationsController extends AbstractController {
@@ -38,13 +41,13 @@ export class AutomationsController extends AbstractController {
     const now = new Date()
     const automations = listAutomations(root).map((rule) => {
       const state = getRuleState(this.projectId, rule.id)
-      const evaluation = evaluateScheduleTrigger(rule.trigger, state, rule.createdAt, now)
+      const evaluation = evaluateRuleTriggers(rule.triggers, state, now)
       return {
         ...rule,
         state: {
           lastRunAt: state.lastRunAt,
           lastOutcome: state.lastOutcome,
-          fired: state.fired === true,
+          triggerFired: state.triggerFired ?? {},
           inFlight: state.inFlight === true,
         },
         nextRunAt: evaluation.nextRunAt,
@@ -55,6 +58,48 @@ export class AutomationsController extends AbstractController {
 
   async listEventTypes() {
     return this.ok({ types: KNOWN_AUTOMATION_EVENT_TYPES })
+  }
+
+  /**
+   * Options cho các combobox trong form: task (đang có trong project),
+   * pipeline profile, runner — đọc phòng thủ, thiếu thì trả mảng rỗng.
+   */
+  async formOptions() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+
+    let taskIds: string[] = []
+    try {
+      taskIds = readdirSync(joinPath(root, '.dev-state'))
+        .filter((f) => f.endsWith('.json') && !f.endsWith('.tmp'))
+        .map((f) => f.replace(/\.json$/, ''))
+        .sort()
+    } catch {
+      /* chưa có task nào */
+    }
+
+    let profiles: string[] = []
+    try {
+      profiles = readdirSync(profilesDir(root))
+        .filter((f) => f.endsWith('.yaml') && !f.endsWith('.tmp'))
+        .map((f) => f.replace(/\.yaml$/, ''))
+        .sort()
+    } catch {
+      /* chưa có profile nào */
+    }
+
+    let runners: Array<{ id: string; label: string }> = []
+    try {
+      runners = listRunners().runners.map((r: any) => ({
+        id: String(r.id ?? ''),
+        label: String(r.name ?? r.id ?? ''),
+      }))
+    } catch {
+      /* registry runner hỏng — combobox rỗng, vẫn gõ tay được */
+    }
+
+    return this.ok({ tasks: taskIds, profiles, runners })
   }
 
   async createAutomation() {
@@ -177,7 +222,8 @@ export class AutomationsController extends AbstractController {
       projectId: this.projectId,
       detail: { action: 'run-now' },
     })
-    const run = await runAutomation({ root, projectId: this.projectId, rule, source: 'manual' })
+    // Chuỗi action chạy nền — trả run đang `running`, kết quả qua history poll.
+    const run = runAutomation({ root, projectId: this.projectId, rule, source: 'manual' })
     return this.ok({ run })
   }
 

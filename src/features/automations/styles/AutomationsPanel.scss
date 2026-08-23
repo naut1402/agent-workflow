@@ -110,6 +110,63 @@
     margin: 2px 0 0;
   }
 
+  .rule-triggers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .rule-trigger-chip {
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text);
+    display: inline-flex;
+    font-size: 11px;
+    gap: 5px;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 2px 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    svg {
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+  }
+
+  /* Mini timeline các bước action trên card. */
+  .rule-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+
+    .rule-step {
+      align-items: center;
+      display: flex;
+      font-size: 12px;
+      gap: 8px;
+    }
+
+    .rule-step-dot {
+      align-items: center;
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      color: var(--accent);
+      display: inline-flex;
+      flex-shrink: 0;
+      font-size: 10px;
+      height: 16px;
+      justify-content: center;
+      width: 16px;
+    }
+  }
+
   .rule-meta {
     display: flex;
     flex-direction: column;
@@ -123,7 +180,7 @@
 
       dt {
         color: var(--muted);
-        min-width: 90px;
+        min-width: 20px;
       }
 
       dd {
@@ -174,6 +231,12 @@
     .outcome-failed { color: var(--danger); }
     .outcome-skipped,
     .outcome-running { color: var(--muted); }
+  }
+
+  .history-step {
+    display: inline-block;
+    margin-right: 6px;
+    white-space: nowrap;
   }
 }
 

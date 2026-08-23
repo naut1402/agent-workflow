@@ -2,6 +2,9 @@
  * CRUD automation rule — persist `<root>/automations/<id>.yaml` (data root,
  * cùng pattern `pipeline-profiles/`). Defensive read (file hỏng → skip) +
  * atomic write (temp + rename) theo bất biến AGENTS.md §4.
+ *
+ * Đọc file cũ (trigger/action đơn) được chuẩn hoá sang shape hiện hành qua
+ * `normaliseAutomationDoc` — ghi lại luôn theo shape mới.
  */
 
 import {
@@ -19,7 +22,9 @@ import { listTriggers, registerTrigger, unregisterTrigger } from '../../../core/
 import {
   AUTOMATION_ID_PATTERN,
   AutomationRuleRecord,
+  normaliseAutomationDoc,
   type AutomationRuleRecord as AutomationRuleRecordType,
+  type AutomationTrigger,
   type CreateAutomationRequest,
   type UpdateAutomationRequest,
 } from '../schemas/automation.js'
@@ -50,12 +55,37 @@ export function sanitiseAutomationId(name: unknown): string {
     .replace(/-+$/g, '')
 }
 
-/** Ngữ nghĩa trigger mà Zod không đo được (cron parse được, time còn tương lai hay không để tuỳ user). */
-function validateTriggerSemantics(trigger: AutomationRuleRecordType['trigger']): string | null {
-  if (trigger.kind === 'cron' && !parseCronExpr(trigger.cron)) {
-    return 'invalid cron expression'
+/** Ngữ nghĩa trigger mà Zod không đo được (cron parse được; id trùng nhau). */
+function validateTriggersSemantics(triggers: AutomationTrigger[]): string | null {
+  const ids = new Set<string>()
+  for (const trigger of triggers) {
+    // Trigger thiếu id được mint sau — chỉ tính trùng với id đã gửi.
+    if (trigger.id) {
+      if (ids.has(trigger.id)) return 'duplicate trigger id'
+      ids.add(trigger.id)
+    }
+    if (trigger.kind === 'timer' && trigger.repeat.mode === 'cron' && !parseCronExpr(trigger.repeat.expr)) {
+      return 'invalid cron expression'
+    }
   }
   return null
+}
+
+/** Sinh id ổn định cho trigger thiếu id (`t1`, `t2`… — không trùng trong rule). */
+function withTriggerIds(triggers: AutomationTrigger[]): AutomationTrigger[] {
+  const used = new Set<string>()
+  let n = 1
+  return triggers.map((t) => {
+    if (t.id && !used.has(t.id)) {
+      used.add(t.id)
+      return t
+    }
+    while (used.has(`t${n}`)) n++
+    const id = `t${n}`
+    used.add(id)
+    n++
+    return { ...t, id }
+  })
 }
 
 /** Đọc một file rule — parse hỏng trả null (defensive), không throw. */
@@ -67,25 +97,8 @@ function loadRule(root: string, id: string): AutomationRuleRecordType | null {
     return null
   }
   if (!raw || typeof raw !== 'object') return null
-  const parsed = AutomationRuleRecord.safeParse(raw)
+  const parsed = AutomationRuleRecord.safeParse(normaliseAutomationDoc(raw))
   return parsed.success ? parsed.data : null
-}
-
-export function listAutomations(root: string): AutomationRuleRecordType[] {
-  const files = listRuleFiles(automationsDir(root))
-  const rules: AutomationRuleRecordType[] = []
-  for (const f of files) {
-    const id = f.replace(/\.yaml$/, '')
-    const rule = loadRule(root, id)
-    if (rule && rule.id === id) rules.push(rule)
-  }
-  rules.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
-  return rules
-}
-
-export function getAutomation(root: string, id: string): AutomationRuleRecordType | null {
-  if (!AUTOMATION_ID_PATTERN.test(id)) return null
-  return loadRule(root, id)
 }
 
 function writeRuleAtomic(root: string, rule: AutomationRuleRecordType): void {
@@ -105,6 +118,23 @@ function listRuleFiles(dir: string): string[] {
   }
 }
 
+export function listAutomations(root: string): AutomationRuleRecordType[] {
+  const files = listRuleFiles(automationsDir(root))
+  const rules: AutomationRuleRecordType[] = []
+  for (const f of files) {
+    const id = f.replace(/\.yaml$/, '')
+    const rule = loadRule(root, id)
+    if (rule && rule.id === id) rules.push(rule)
+  }
+  rules.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+  return rules
+}
+
+export function getAutomation(root: string, id: string): AutomationRuleRecordType | null {
+  if (!AUTOMATION_ID_PATTERN.test(id)) return null
+  return loadRule(root, id)
+}
+
 /**
  * Tạo rule mới. Id: ưu tiên `body.id` (đã qua schema), không có thì slug từ
  * tên; trùng → tự tăng hậu tố `-2`, `-3`… (chat/NL không biết id tồn tại).
@@ -113,7 +143,7 @@ export function createAutomation(
   root: string,
   body: CreateAutomationRequest,
 ): RuleResult<AutomationRuleRecordType> {
-  const semError = validateTriggerSemantics(body.trigger)
+  const semError = validateTriggersSemantics(body.triggers)
   if (semError) return { ok: false, status: 400, error: semError }
 
   mkdirSync(automationsDir(root), { recursive: true })
@@ -124,7 +154,7 @@ export function createAutomation(
   let id = base
   for (let n = 2; existsSync(ruleFile(root, id)); n++) {
     const suffix = `-${n}`
-    id = `${base.slice(0, AUTOMATION_ID_PATTERN.source.length ? 64 - suffix.length : 64)}${suffix}`
+    id = `${base.slice(0, 64 - suffix.length)}${suffix}`
     if (n > 100) return { ok: false, status: 409, error: 'cannot derive a free automation id' }
   }
 
@@ -135,8 +165,8 @@ export function createAutomation(
     name: body.name,
     ...(body.description ? { description: body.description } : {}),
     enabled: body.enabled,
-    trigger: body.trigger,
-    action: body.action,
+    triggers: withTriggerIds(body.triggers),
+    actions: body.actions,
     createdAt: now,
     updatedAt: now,
   })
@@ -154,7 +184,7 @@ export function updateAutomation(
   const existing = loadRule(root, id)
   if (!existing) return { ok: false, status: 404, error: 'automation not found' }
 
-  const semError = validateTriggerSemantics(body.trigger)
+  const semError = validateTriggersSemantics(body.triggers)
   if (semError) return { ok: false, status: 400, error: semError }
 
   const rule: AutomationRuleRecordType = AutomationRuleRecord.parse({
@@ -162,8 +192,8 @@ export function updateAutomation(
     name: body.name,
     ...(body.description ? { description: body.description } : {}),
     enabled: body.enabled,
-    trigger: body.trigger,
-    action: body.action,
+    triggers: withTriggerIds(body.triggers),
+    actions: body.actions,
     updatedAt: new Date().toISOString(),
   })
   writeRuleAtomic(root, rule)
@@ -200,34 +230,36 @@ export function deleteAutomation(root: string, id: string): { ok: true } | { ok:
 // Đồng bộ rule đang bật vào registry để `listTriggers()` phản ánh đúng "trigger
 // đang sống" — runtime thật vẫn là scheduler/event subscriber của feature này.
 
-export interface TriggerProjectRef {
-  projectId: string
-}
-
 export function syncTriggerRegistry(root: string, projectId: string): void {
   const rules = listAutomations(root)
   const live = new Set<string>()
   for (const rule of rules) {
     if (!rule.enabled) continue
-    const id = `${projectId}:${rule.id}`
-    live.add(id)
-    if (rule.trigger.kind === 'event') {
-      registerTrigger({ id, kind: 'event', match: rule.trigger.eventType, enabled: true })
-    } else {
-      const match =
-        rule.trigger.kind === 'time'
-          ? String(rule.trigger.at)
-          : rule.trigger.kind === 'interval'
-            ? String(rule.trigger.everyMs)
-            : String(rule.trigger.cron)
-      registerTrigger({ id, kind: 'schedule', match, enabled: true })
+    for (const trigger of rule.triggers) {
+      const id = `${projectId}:${rule.id}:${trigger.id}`
+      live.add(id)
+      if (trigger.kind === 'event') {
+        registerTrigger({ id, kind: 'event', match: trigger.eventType, enabled: true })
+      } else {
+        const match =
+          trigger.repeat.mode === 'interval'
+            ? String(trigger.repeat.everyMs)
+            : trigger.repeat.mode === 'cron'
+              ? String(trigger.repeat.expr)
+              : String(trigger.startAt)
+        registerTrigger({ id, kind: 'schedule', match, enabled: true })
+      }
     }
   }
+  const prefix = `${projectId}:`
   for (const reg of listTriggers()) {
-    if (reg.id.startsWith(`${projectId}:`) && !live.has(reg.id)) unregisterTrigger(reg.id)
+    if (reg.id.startsWith(prefix) && !live.has(reg.id)) unregisterTrigger(reg.id)
   }
 }
 
 export function removeFromTriggerRegistry(projectId: string, ruleId: string): void {
-  unregisterTrigger(`${projectId}:${ruleId}`)
+  const prefix = `${projectId}:${ruleId}:`
+  for (const reg of listTriggers()) {
+    if (reg.id.startsWith(prefix)) unregisterTrigger(reg.id)
+  }
 }

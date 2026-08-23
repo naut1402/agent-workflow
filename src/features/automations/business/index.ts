@@ -13,6 +13,7 @@ import { startEventTriggers } from './eventTrigger.js'
 import { runAutomation } from './runAction.js'
 
 export * from './matcher.js'
+export * from '../lib/vars.js'
 export {
   automationsDir,
   sanitiseAutomationId,
@@ -34,11 +35,17 @@ export {
   type AutomationRunOutcome,
   type RuleRuntimeState,
 } from './runLedger.js'
-export { runAutomation, type RunAutomationInput, type AutomationRunSource } from './runAction.js'
+export {
+  runAutomation,
+  stepTimeoutMs,
+  waitJobTerminal,
+  type RunAutomationInput,
+  type AutomationRunSource,
+} from './runAction.js'
 export {
   tickAutomationScheduler,
   collectDueSchedules,
-  isScheduleTrigger,
+  hasTimerTrigger,
   automationPollIntervalMs,
   bindAutomationRunner,
   type AutomationRunnerInput,
