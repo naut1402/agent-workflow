@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import {
-  evaluateScheduleTrigger,
+  evaluateRuleTriggers,
+  evaluateTimerTrigger,
+  firedOnceTriggersAtRun,
   nextCronAfter,
   parseCronExpr,
 } from '../../../../src/features/automations/business/matcher.js'
@@ -86,109 +88,126 @@ describe('nextCronAfter', () => {
   })
 })
 
-describe('evaluateScheduleTrigger', () => {
+describe('evaluateTimerTrigger (timer: once/interval/cron)', () => {
   const now = new Date(2026, 7, 22, 12, 0, 0)
 
-  test('time: due at/after `at`, only once', () => {
-    const past = evaluateScheduleTrigger(
-      { kind: 'time', at: '2026-08-22T10:00:00.000Z' },
+  test('once: due at/after startAt, only once (triggerFired)', () => {
+    const past = evaluateTimerTrigger(
+      { id: 't1', kind: 'timer', startAt: '2026-08-22T10:00:00.000Z', repeat: { mode: 'once' } },
       { lastRunAt: null },
-      '2026-08-22T00:00:00.000Z',
       now,
     )
     expect(past.due).toBe(true)
 
-    const fired = evaluateScheduleTrigger(
-      { kind: 'time', at: '2026-08-22T10:00:00.000Z' },
-      { lastRunAt: '2026-08-22T10:00:01.000Z', fired: true },
-      '2026-08-22T00:00:00.000Z',
+    const fired = evaluateTimerTrigger(
+      { id: 't1', kind: 'timer', startAt: '2026-08-22T10:00:00.000Z', repeat: { mode: 'once' } },
+      { lastRunAt: '2026-08-22T10:00:01.000Z', triggerFired: { t1: true } },
       now,
     )
     expect(fired.due).toBe(false)
     expect(fired.nextRunAt).toBeNull()
 
-    const future = evaluateScheduleTrigger(
-      { kind: 'time', at: '2026-08-23T10:00:00.000Z' },
+    const future = evaluateTimerTrigger(
+      { id: 't1', kind: 'timer', startAt: '2026-08-23T10:00:00.000Z', repeat: { mode: 'once' } },
       { lastRunAt: null },
-      '2026-08-22T00:00:00.000Z',
       now,
     )
     expect(future.due).toBe(false)
     expect(future.nextRunAt).toBe('2026-08-23T10:00:00.000Z')
   })
 
-  test('interval: first run waits a full interval after createdAt', () => {
-    const created = '2026-08-22T11:00:00.000Z' // 1h trước now
-    const every30m = evaluateScheduleTrigger(
-      { kind: 'interval', everyMs: 30 * 60_000 },
+  test('interval: first run due exactly at startAt', () => {
+    const atStart = evaluateTimerTrigger(
+      { id: 't1', kind: 'timer', startAt: '2026-08-22T12:00:00.000Z', repeat: { mode: 'interval', everyMs: 30 * 60_000 } },
       { lastRunAt: null },
-      created,
       now,
     )
-    expect(every30m.due).toBe(true)
+    expect(atStart.due).toBe(true)
 
-    const every2h = evaluateScheduleTrigger(
-      { kind: 'interval', everyMs: 2 * 3_600_000 },
+    const before = evaluateTimerTrigger(
+      { id: 't1', kind: 'timer', startAt: '2026-08-22T12:30:00.000Z', repeat: { mode: 'interval', everyMs: 30 * 60_000 } },
       { lastRunAt: null },
-      created,
       now,
     )
-    expect(every2h.due).toBe(false)
+    expect(before.due).toBe(false)
+    expect(before.nextRunAt).toBe('2026-08-22T12:30:00.000Z')
   })
 
-  test('interval: overdue slots coalesce to exactly one due run', () => {
-    // Chạy cuối 6h trước, interval 30m → đã lỡ 12 slot; due một lần và
-    // nextRun là slot vừa lỡ gần nhất (≤ now).
-    const eval12 = evaluateScheduleTrigger(
-      { kind: 'interval', everyMs: 30 * 60_000 },
-      { lastRunAt: '2026-08-22T06:00:00.000Z' },
-      '2026-08-22T00:00:00.000Z',
+  test('interval: next slot anchored on startAt grid after lastRunAt; missed slots coalesce', () => {
+    // startAt 9:00, mỗi 30m; chạy cuối 11:00 → slot kế 11:30 ≤ now 12:00 → due.
+    const due = evaluateTimerTrigger(
+      { id: 't1', kind: 'timer', startAt: '2026-08-22T09:00:00.000Z', repeat: { mode: 'interval', everyMs: 30 * 60_000 } },
+      { lastRunAt: '2026-08-22T11:00:00.000Z' },
       now,
     )
-    expect(eval12.due).toBe(true)
-    expect(Date.parse(eval12.nextRunAt!)).toBeLessThanOrEqual(now.getTime())
-    // Sau khi "chạy bù" (lastRunAt = now) → không due nữa.
-    const afterCatchUp = evaluateScheduleTrigger(
-      { kind: 'interval', everyMs: 30 * 60_000 },
-      { lastRunAt: now.toISOString() },
-      '2026-08-22T00:00:00.000Z',
+    expect(due.due).toBe(true)
+    expect(due.nextRunAt).toBe('2026-08-22T11:30:00.000Z')
+
+    // Chạy bù lúc 12:00 → slot kế 12:30, không due nữa.
+    const afterCatchUp = evaluateTimerTrigger(
+      { id: 't1', kind: 'timer', startAt: '2026-08-22T09:00:00.000Z', repeat: { mode: 'interval', everyMs: 30 * 60_000 } },
+      { lastRunAt: '2026-08-22T12:00:00.000Z' },
       now,
     )
     expect(afterCatchUp.due).toBe(false)
+    expect(afterCatchUp.nextRunAt).toBe('2026-08-22T12:30:00.000Z')
   })
 
-  test('cron: due when an occurrence passed since lastRunAt', () => {
-    // 9h hằng ngày; chạy cuối hôm qua 9h → hôm nay 9h đã qua (now = 12h).
-    const due = evaluateScheduleTrigger(
-      { kind: 'cron', cron: '0 9 * * *' },
+  test('cron: due when an occurrence passed since lastRunAt (fallback startAt)', () => {
+    const due = evaluateTimerTrigger(
+      { id: 't1', kind: 'timer', startAt: new Date(2026, 7, 20).toISOString(), repeat: { mode: 'cron', expr: '0 9 * * *' } },
       { lastRunAt: new Date(2026, 7, 21, 9, 0).toISOString() },
-      '2026-08-20T00:00:00.000Z',
       now,
     )
     expect(due.due).toBe(true)
 
-    const notDue = evaluateScheduleTrigger(
-      { kind: 'cron', cron: '0 9 * * *' },
+    const notDue = evaluateTimerTrigger(
+      { id: 't1', kind: 'timer', startAt: new Date(2026, 7, 20).toISOString(), repeat: { mode: 'cron', expr: '0 9 * * *' } },
       { lastRunAt: new Date(2026, 7, 22, 9, 0).toISOString() },
-      '2026-08-20T00:00:00.000Z',
       now,
     )
     expect(notDue.due).toBe(false)
     expect(notDue.nextRunAt).toEqual(new Date(2026, 7, 23, 9, 0, 0).toISOString())
   })
 
-  test('event trigger never due via scheduler', () => {
-    const result = evaluateScheduleTrigger(
-      { kind: 'event', eventType: 'job.failed' },
+  test('event trigger never due via scheduler evaluation', () => {
+    const result = evaluateTimerTrigger(
+      { id: 't1', kind: 'event', eventType: 'job.failed' },
       { lastRunAt: null },
-      '2026-08-20T00:00:00.000Z',
       now,
     )
     expect(result.due).toBe(false)
-    expect(result.nextRunAt).toBeNull()
   })
 })
 
-beforeEach(() => {
-  // matcher thuần — không state; giữ cho đồng bộ các file test.
+describe('evaluateRuleTriggers (OR qua nhiều trigger)', () => {
+  const now = new Date(2026, 7, 22, 12, 0, 0)
+
+  test('due khi một trong nhiều trigger due; nextRunAt = slot sớm nhất', () => {
+    const evaluation = evaluateRuleTriggers(
+      [
+        { id: 't1', kind: 'timer', startAt: '2026-08-23T09:00:00.000Z', repeat: { mode: 'once' } },
+        { id: 't2', kind: 'timer', startAt: '2026-08-22T08:00:00.000Z', repeat: { mode: 'interval', everyMs: 3_600_000 } },
+        { id: 't3', kind: 'event', eventType: 'job.failed' },
+      ],
+      { lastRunAt: null },
+      now,
+    )
+    expect(evaluation.due).toBe(true)
+    expect(evaluation.dueTriggerIds).toEqual(['t2'])
+    expect(evaluation.nextRunAt).toBe('2026-08-22T08:00:00.000Z')
+  })
+
+  test('firedOnceTriggersAtRun: chỉ đánh dấu once đã qua startAt', () => {
+    const fired = firedOnceTriggersAtRun(
+      [
+        { id: 't1', kind: 'timer', startAt: '2026-08-20T00:00:00.000Z', repeat: { mode: 'once' } },
+        { id: 't2', kind: 'timer', startAt: '2026-08-30T00:00:00.000Z', repeat: { mode: 'once' } },
+        { id: 't3', kind: 'timer', startAt: '2026-08-20T00:00:00.000Z', repeat: { mode: 'interval', everyMs: 60_000 } },
+      ],
+      now,
+    )
+    expect(fired).toEqual({ t1: true })
+  })
 })
+

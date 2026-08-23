@@ -58,8 +58,8 @@ function makeEventRule(name: string, eventType: string): string {
   const result = createAutomation(root, {
     name,
     enabled: true,
-    trigger: { kind: 'event', eventType },
-    action: { kind: 'runTask', mode: 'create', prompt: 'p' },
+    triggers: [{ kind: 'event', eventType }],
+    actions: [{ kind: 'runTask', mode: 'create', prompt: 'p' }],
   })
   if ('error' in result) throw new Error(result.error)
   return result.automation.id
@@ -118,12 +118,38 @@ describe('handleEvent (đối chiếu trực tiếp — deterministic)', () => {
     const created = createAutomation(root, {
       name: 'Off rule',
       enabled: false,
-      trigger: { kind: 'event', eventType: 'job.failed' },
-      action: { kind: 'runTask', mode: 'create', prompt: 'p' },
+      triggers: [{ kind: 'event', eventType: 'job.failed' }],
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'p' }],
     })
     if ('error' in created) throw new Error(created.error)
     await handleEvent(fakeEvent('job.failed', { projectId: 'p1' }))
     expect(calls).toEqual([])
+  })
+})
+
+describe('multi event trigger', () => {
+  test('rule khớp khi MỘT trong nhiều event trigger trùng type — truyền event payload cho runner', async () => {
+    const created = createAutomation(root, {
+      name: 'Two sources',
+      enabled: true,
+      triggers: [
+        { kind: 'timer', startAt: '2030-01-01T00:00:00.000Z', repeat: { mode: 'once' } },
+        { kind: 'event', eventType: 'task.created' },
+      ],
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'p' }],
+    })
+    if ('error' in created) throw new Error(created.error)
+    const ruleId = created.automation.id
+
+    let seenEvent: { type: string; payload: Record<string, unknown> } | null = null
+    bindAutomationRunner(async (input) => {
+      if (input.event) seenEvent = input.event
+      calls.push({ projectId: String(input.projectId), ruleId: input.rule.id, source: input.source })
+    })
+    await handleEvent(fakeEvent('task.created', { taskId: 'T1', projectId: 'p1' }))
+    expect(calls).toHaveLength(1)
+    expect(calls[0].ruleId).toBe(ruleId)
+    expect(seenEvent).toEqual({ type: 'task.created', payload: { taskId: 'T1', projectId: 'p1' } })
   })
 })
 

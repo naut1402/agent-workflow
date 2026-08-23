@@ -8,14 +8,14 @@ import {
   tickAutomationScheduler,
 } from '../../../../src/features/automations/business/scheduler.js'
 import { createAutomation } from '../../../../src/features/automations/business/rules.js'
-import { getRuleState, listRuns } from '../../../../src/features/automations/business/runLedger.js'
+import { getRuleState, listRuns, setRuleState } from '../../../../src/features/automations/business/runLedger.js'
 
 let home: string
 let root: string
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
 const prevRoot = process.env.DEV_TEAM_ROOT
 
-const calls: Array<{ projectId: string; ruleId: string; source: string }> = []
+const calls: Array<{ projectId: string; ruleId: string; source: string; triggerId?: string }> = []
 
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'automations-home-'))
@@ -29,7 +29,7 @@ beforeEach(() => {
   )
   calls.length = 0
   bindAutomationRunner(async (input) => {
-    calls.push({ projectId: String(input.projectId), ruleId: input.rule.id, source: input.source })
+    calls.push({ projectId: String(input.projectId), ruleId: input.rule.id, source: input.source, triggerId: input.triggerId })
   })
 })
 
@@ -43,86 +43,71 @@ afterEach(() => {
 })
 
 describe('collectDueSchedules', () => {
-  test('past one-shot is due once, then never again', async () => {
+  test('past one-shot is due once, then never again (triggerFired)', () => {
     const created = createAutomation(root, {
       name: 'Once',
       enabled: true,
-      trigger: { kind: 'time', at: '2020-01-01T00:00:00.000Z' },
-      action: { kind: 'runTask', mode: 'create', prompt: 'p' },
+      triggers: [{ kind: 'timer', startAt: '2020-01-01T00:00:00.000Z', repeat: { mode: 'once' } }],
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'p' }],
     })
     if ('error' in created) throw new Error(created.error)
 
     expect(collectDueSchedules(new Date())).toHaveLength(1)
 
-    // Giả lập run đã diễn ra (như runAction sẽ ghi): state.fired → không due nữa.
-    const { setRuleState } = await import('../../../../src/features/automations/business/runLedger.js')
-    setRuleState('p1', 'once', { lastRunAt: new Date().toISOString(), lastOutcome: 'succeeded', fired: true })
+    // Giả lập run đã diễn ra (như runAction sẽ ghi): triggerFired → không due nữa.
+    setRuleState('p1', 'once', { lastRunAt: new Date().toISOString(), lastOutcome: 'succeeded', triggerFired: { t1: true } })
     expect(collectDueSchedules(new Date())).toHaveLength(0)
   })
 
-  test('disabled rule and event rule are never due by tick', () => {
+  test('due khi MỘT trong nhiều timer trigger due', () => {
+    createAutomation(root, {
+      name: 'Multi',
+      enabled: true,
+      triggers: [
+        { kind: 'timer', startAt: '2030-01-01T00:00:00.000Z', repeat: { mode: 'once' } },
+        { kind: 'timer', startAt: '2020-01-01T00:00:00.000Z', repeat: { mode: 'interval', everyMs: 60_000 } },
+      ],
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'p' }],
+    })
+    const due = collectDueSchedules(new Date())
+    expect(due).toHaveLength(1)
+    expect(due[0].triggerId).toBe('t2')
+  })
+
+  test('disabled rule and event-only rule are never due by tick', () => {
     createAutomation(root, {
       name: 'Off',
       enabled: false,
-      trigger: { kind: 'interval', everyMs: 60_000 },
-      action: { kind: 'runTask', mode: 'create', prompt: 'p' },
+      triggers: [{ kind: 'timer', startAt: '2020-01-01T00:00:00.000Z', repeat: { mode: 'interval', everyMs: 60_000 } }],
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'p' }],
     })
     createAutomation(root, {
       name: 'On event',
       enabled: true,
-      trigger: { kind: 'event', eventType: 'job.failed' },
-      action: { kind: 'runTask', mode: 'create', prompt: 'p' },
+      triggers: [{ kind: 'event', eventType: 'job.failed' }],
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'p' }],
     })
     expect(collectDueSchedules(new Date())).toHaveLength(0)
-  })
-
-  test('overdue interval coalesces to a single run per tick', async () => {
-    createAutomation(root, {
-      name: 'Every 30m',
-      enabled: true,
-      trigger: { kind: 'interval', everyMs: 30 * 60_000 },
-      action: { kind: 'runTask', mode: 'create', prompt: 'p' },
-    })
-
-    // Chưa qua interval đầu → chưa due.
-    expect(collectDueSchedules(new Date())).toHaveLength(0)
-
-    // Giả lập đã chạy 6h trước → 12 slot lỡ, vẫn chỉ 1 run.
-    const { setRuleState } = await import('../../../../src/features/automations/business/runLedger.js')
-    setRuleState('p1', 'every-30m', { lastRunAt: new Date(Date.now() - 6 * 3_600_000).toISOString(), lastOutcome: 'succeeded' })
-    const due = collectDueSchedules(new Date())
-    expect(due).toHaveLength(1)
-
-    const triggered = await tickAutomationScheduler()
-    expect(triggered).toBe(1)
-    expect(calls).toEqual([{ projectId: 'p1', ruleId: 'every-30m', source: 'schedule' }])
   })
 })
 
 describe('tickAutomationScheduler', () => {
-  test('runs due rules sequentially and records nothing extra on clean tick', async () => {
+  test('runs due rules and passes the matching triggerId', async () => {
     createAutomation(root, {
       name: 'Nightly',
       enabled: true,
-      trigger: { kind: 'cron', cron: '* * * * *' }, // mỗi phút
-      action: { kind: 'runTask', mode: 'create', prompt: 'p' },
+      triggers: [{ kind: 'timer', startAt: '2020-01-01T00:00:00.000Z', repeat: { mode: 'interval', everyMs: 30 * 60_000 } }],
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'p' }],
     })
-
-    // Rule vừa tạo → lần cron đầu là phút kế (không due ngay — đúng semantic).
-    expect(await tickAutomationScheduler()).toBe(0)
-
-    // Giả lập lần chạy cuối 2 phút trước → phút vừa qua đã lỡ → due 1 lần.
-    const { setRuleState } = await import('../../../../src/features/automations/business/runLedger.js')
-    setRuleState('p1', 'nightly', { lastRunAt: new Date(Date.now() - 2 * 60_000).toISOString(), lastOutcome: 'succeeded' })
 
     const count = await tickAutomationScheduler()
     expect(count).toBe(1)
-    expect(calls).toEqual([{ projectId: 'p1', ruleId: 'nightly', source: 'schedule' }])
+    expect(calls).toEqual([{ projectId: 'p1', ruleId: 'nightly', source: 'schedule', triggerId: 't1' }])
 
     // Stub runner không ghi run ledger / state — đúng thiết kế DI.
     expect(listRuns('p1', 10)).toEqual([])
     const state = getRuleState('p1', 'nightly')
-    expect(state.lastRunAt).not.toBeNull()
+    expect(state.lastRunAt).toBeNull()
   })
 
   test('runner error is swallowed and does not break the tick', async () => {
@@ -132,8 +117,8 @@ describe('tickAutomationScheduler', () => {
     createAutomation(root, {
       name: 'Bad runner',
       enabled: true,
-      trigger: { kind: 'cron', cron: '* * * * *' },
-      action: { kind: 'runTask', mode: 'create', prompt: 'p' },
+      triggers: [{ kind: 'timer', startAt: '2020-01-01T00:00:00.000Z', repeat: { mode: 'interval', everyMs: 60_000 } }],
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'p' }],
     })
     const count = await tickAutomationScheduler()
     expect(count).toBe(0) // lỗi không tính là triggered
