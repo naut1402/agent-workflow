@@ -9,7 +9,7 @@
  * treated as a plain-text follow-up question.
  */
 
-export type NlChatEntityType = 'task' | 'pipeline' | 'agent'
+export type NlChatEntityType = 'task' | 'pipeline' | 'agent' | 'automation'
 
 export type BuilderTurn =
   | { kind: 'question'; text: string }
@@ -44,7 +44,7 @@ export function parseBuilderOutput(stdout: string): BuilderTurn {
 }
 
 function isEntityType(v: unknown): v is NlChatEntityType {
-  return v === 'task' || v === 'pipeline' || v === 'agent'
+  return v === 'task' || v === 'pipeline' || v === 'agent' || v === 'automation'
 }
 
 /**
@@ -88,10 +88,10 @@ const OUTPUT_CONTRACT_HEADER = [
 
 const AUTO_MODE_HEADER = [
   'Người dùng đang chat tự do — CHƯA chọn sẵn loại đối tượng cần tạo.',
-  'Bạn phải tự suy ra người dùng muốn tạo `task`, `pipeline` hay `agent` từ nội dung hội thoại;',
+  'Bạn phải tự suy ra người dùng muốn tạo `task`, `pipeline`, `agent` hay `automation` từ nội dung hội thoại;',
   'nếu chưa rõ thì hỏi lại bằng văn bản thuần (đây cũng là câu hỏi bình thường, không phải form).',
   'Nếu người dùng chỉ hỏi han/trao đổi mà chưa muốn tạo gì, cứ trả lời như một trợ lý bình thường — KHÔNG ép chốt draft.',
-  'Khi chốt draft, JSON trong code block phải là wrapper: { "entityType": "task" | "pipeline" | "agent", "draft": { ...draft đúng schema của entityType đó... } }.',
+  'Khi chốt draft, JSON trong code block phải là wrapper: { "entityType": "task" | "pipeline" | "agent" | "automation", "draft": { ...draft đúng schema của entityType đó... } }.',
 ].join('\n')
 
 function schemaHintFor(entityType?: NlChatEntityType | null): string {
@@ -104,6 +104,8 @@ function schemaHintFor(entityType?: NlChatEntityType | null): string {
       schemaHintFor('pipeline'),
       '',
       schemaHintFor('agent'),
+      '',
+      schemaHintFor('automation'),
     ].join('\n')
   }
   switch (entityType) {
@@ -124,6 +126,14 @@ function schemaHintFor(entityType?: NlChatEntityType | null): string {
       return [
         'entityType = agent: JSON phải theo đúng shape AgentDraft hiện có của dashboard (name, description, model, skills, sections, section_order).',
         'Tái dùng đúng schema draft agent đã có, không tự bịa field mới.',
+      ].join('\n')
+    case 'automation':
+      return [
+        'entityType = automation: JSON phải là subset field của CreateAutomationRequest cho rule tự động hoá (trigger → action).',
+        'Bắt buộc: { "name": string, "trigger": {...}, "action": {...} }. Optional: "description", "enabled" (mặc định true).',
+        'trigger là MỘT trong: { "kind": "time", "at": "<ISO datetime>" } (chạy một lần) | { "kind": "interval", "everyMs": <số ms, tối thiểu 60000> } (định kỳ) | { "kind": "cron", "cron": "<biểu thức 5 field, vd \'0 9 * * 1-5\'>" } | { "kind": "event", "eventType": "<domain event, vd \'job.failed\', \'hitl.pending\', \'task.created\'>" }.',
+        'action là MỘT trong: { "kind": "runTask", "mode": "create", "prompt": "<prompt cho task mới>" (+ optional "profileName", "runnerId") } | { "kind": "runTask", "mode": "existing", "taskId": "<id task>" } (+ optional "runnerId").',
+        'Luôn hỏi người dùng muốn chạy task MỚI (cần prompt) hay task CÓ SẴN (cần taskId) khi chưa rõ.',
       ].join('\n')
     default:
       return ''
@@ -196,7 +206,7 @@ function findChatJobs(chatSessionId: string): JobRecord[] {
 
 function entityTypeOf(job: JobRecord | undefined): NlChatEntityType | null {
   const t = job?.metadata?.entityType
-  return t === 'task' || t === 'pipeline' || t === 'agent' ? t : null
+  return t === 'task' || t === 'pipeline' || t === 'agent' || t === 'automation' ? t : null
 }
 
 export interface StartNlChatSessionInput {

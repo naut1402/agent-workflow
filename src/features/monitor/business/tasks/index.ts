@@ -140,3 +140,5 @@ export function flowProfilePath(root: string, id: string): string {
 
 export { createTask, renderRequestMarkdown } from './create.js'
 export type { CreateTaskInput, CreateTaskResult, CreatedTask } from './create.js'
+export { runTaskStep } from './runStep.js'
+export type { RunTaskStepInput, RunTaskStepResult } from './runStep.js'

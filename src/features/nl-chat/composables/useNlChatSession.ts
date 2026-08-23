@@ -6,6 +6,7 @@ import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { savePipelineProfile } from '../../pipeline-editor/scripts/ProfileManagerApi'
 import { createTask } from '../../monitor/scripts/monitorApi'
 import { saveCustomAgent } from '../../agent-editor/scripts/agentEditorApi'
+import { createAutomation } from '../../automations/scripts/automationsApi'
 import { mintTaskId } from '../../monitor/lib/createTaskForm'
 import { TASK_ID_PATTERN } from '../../monitor/schemas/taskCreate'
 
@@ -19,7 +20,7 @@ import { TASK_ID_PATTERN } from '../../monitor/schemas/taskCreate'
 // Kept as a composable (no render needed) so the state machine is
 // unit-testable by mocking the API client, same pattern as useAgentBuild.ts.
 
-export type NlChatEntityType = 'task' | 'pipeline' | 'agent'
+export type NlChatEntityType = 'task' | 'pipeline' | 'agent' | 'automation'
 export type NlChatStep = 'chatting' | 'previewDraft' | 'confirming' | 'done' | 'error'
 
 export interface NlChatMessage {
@@ -231,6 +232,8 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         // Re-normalize: the preview textarea is editable, so a user can drop
         // the step ids the Pipeline Editor needs back out of the draft.
         await savePipelineProfile(pipelineName.value, normalizePipelineDraft(editedDraft), projectId)
+      } else if (entityType.value === 'automation') {
+        await createAutomation(editedDraft as never, projectId)
       } else {
         await saveCustomAgent(editedDraft, projectId)
       }

@@ -76,7 +76,25 @@ Nơi emit: `runner/controller.ts` (sau mutation OK).
 
 ---
 
-## 5. Type đã khai báo nhưng chưa / ít wire trên nhánh này
+## 5. Automations — rule lifecycle & run (#233)
+
+| Event | Khi nào | Payload gợi ý | Nơi emit |
+|-------|---------|---------------|----------|
+| `automation.triggered` | Rule khớp trigger (tick scheduler / event / Run now) — trước khi action chạy | `automationId`, `projectId`, `runId`, `triggerKind`, `source` (`manual`/`schedule`/`event`) | `automations/business/runAction.ts` |
+| `automation.run_succeeded` | Action `runTask` xong (job đã submit) | `automationId`, `projectId`, `runId`, `taskId?`, `jobId?` | `runAction.ts` |
+| `automation.run_failed` | Action lỗi hoặc bị skip (task đang bận) | `automationId`, `projectId`, `runId`, `outcome` (`failed`/`skipped`), `error?`, `taskId?` | `runAction.ts` |
+| `entity.created|updated|deleted` (`entity: automation`) | CRUD rule | `id`, `projectId` (+`detail.enabled` khi toggle) | `automations/controller.ts` |
+
+Ghi chú:
+
+- Rule có **nhiều trigger** (OR): timer (once/interval/cron cùng mốc `startAt`) do scheduler tick đánh giá; trigger `kind: event` subscribe wildcard trên bus — **bỏ qua** `automation.*` (chống vòng lặp rule → run → event → rule); chỉ khớp khi `payload.projectId` bằng project của rule.
+- Run là **chuỗi action tuần tự chạy nền** (chờ từng job xong, capture stdout/artifacts làm biến `{{steps.N.*}}` cho bước sau — `lib/vars.ts`); event `run_succeeded`/`run_failed` phát khi cả chuỗi kết thúc.
+- Runtime state + run history: `registryHome()/automations/<projectKey>/` (`state.json` + `runs/`); config rule ở data root `automations/<id>.yaml`.
+- Trigger registry (`registerTrigger`/`listTriggers`) được đồng bộ từ rule đang bật qua `syncTriggerRegistry` — runtime thật là scheduler tick + event subscriber của feature.
+
+---
+
+## 6. Type đã khai báo nhưng chưa / ít wire trên nhánh này
 
 Khai báo trong `DashboardEventType` (`eventBus.ts`); có thể xuất hiện khi feature tương ứng đã emit:
 
@@ -90,7 +108,7 @@ Khai báo trong `DashboardEventType` (`eventBus.ts`); có thể xuất hiện kh
 
 ---
 
-## 6. Phân biệt với audit / request log
+## 7. Phân biệt với audit / request log
 
 | Kênh | `type` JSONL | Mục đích |
 |------|--------------|----------|
@@ -103,7 +121,7 @@ Cùng một thao tác (vd tạo task) có thể vừa `task.created` (events) v�
 
 ---
 
-## 7. Cách cập nhật tài liệu này
+## 8. Cách cập nhật tài liệu này
 
 Khi thêm / sửa / xoá emit:
 

@@ -107,6 +107,7 @@ const ENTITY_LABELS: Record<NlChatEntityType, string> = {
   task: 'Task',
   pipeline: 'Pipeline',
   agent: 'Agent',
+  automation: 'Automation',
 }
 
 // A turn is a CLI round trip that can take tens of seconds, so "đang suy nghĩ"

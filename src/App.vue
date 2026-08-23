@@ -25,6 +25,7 @@ import AgentEditor from './features/agent-editor/components/AgentEditor.vue'
 import KnowledgePanel from './features/knowledge/components/KnowledgePanel.vue'
 import RunnerConfigPanel from './features/runner/components/RunnerConfigPanel.vue'
 import LogsPanel from './features/logs/components/LogsPanel.vue'
+import AutomationsPanel from './features/automations/components/AutomationsPanel.vue'
 import StatisticsPanel from './features/statistics/components/StatisticsPanel.vue'
 import QuickActionPanel from './features/quick-action/components/QuickActionPanel.vue'
 import SettingsDialog from './features/settings/components/SettingsDialog.vue'
@@ -364,6 +365,15 @@ onUnmounted(() => {
           <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.runner') }}</span>
         </button>
         <button
+          class="mode-btn rail-icon-btn"
+          :class="{ active: mode === 'automations' }"
+          :title="t('common.modes.automations')"
+          @click="mode = 'automations'"
+        >
+          <RailIcon name="automations" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.automations') }}</span>
+        </button>
+        <button
           v-if="showLogsTab"
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === 'logs' }"
@@ -400,6 +410,7 @@ onUnmounted(() => {
           <span v-else-if="mode === 'quickAction'" class="muted">{{ t('common.status.paused.quickAction') }}</span>
           <span v-else-if="mode === 'knowledge'" class="muted">{{ t('common.status.paused.knowledge') }}</span>
           <span v-else-if="mode === 'runner'" class="muted">{{ t('common.status.paused.runner') }}</span>
+          <span v-else-if="mode === 'automations'" class="muted">{{ t('common.status.paused.automations') }}</span>
           <span v-else-if="mode === 'logs'" class="muted">{{ t('common.status.paused.logs') }}</span>
           <span v-else-if="mode === 'statistics'" class="muted">{{ t('common.status.paused.statistics') }}</span>
         </footer>
@@ -467,6 +478,10 @@ onUnmounted(() => {
 
     <main v-else-if="mode === 'runner'" class="main main-editor">
       <RunnerConfigPanel />
+    </main>
+
+    <main v-else-if="mode === 'automations'" class="main main-editor">
+      <AutomationsPanel :project-id="selectedProjectId" />
     </main>
 
     <main v-else-if="mode === 'logs'" class="main main-editor">
