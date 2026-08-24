@@ -6,55 +6,86 @@ import { safeReadDir } from '../../core/lib/fileHelper.js'
 import { emitAudit } from '../../core/log/store.js'
 import {
   customAgentsDir,
+  globalAgentsDir,
   agentTemplatesDir,
   workflowStepTemplatesDir,
   listCustomAgentMeta,
+  listGlobalAgentMeta,
   readCustomAgent,
   fetchUrlSafe,
   generateDraftFromNl,
   ensureDefaultTemplate,
   sanitiseAgentName,
   sanitiseProfileName,
+  type AgentScope,
 } from './business/index.js'
+
+function readScope(raw: unknown): AgentScope {
+  return raw === 'global' ? 'global' : 'project'
+}
 
 export class AgentEditorController extends AbstractController {
   async listOrGetCustomAgents() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate.error
-    const { root } = gate
     const name = this.c.req.query('name')
     if (name) {
-      const agent = await readCustomAgent(root, name)
+      const scope = readScope(this.c.req.query('scope'))
+      let root: string | null = null
+      if (scope === 'project') {
+        const gate = this.requireRoot()
+        if ('error' in gate) return gate.error
+        root = gate.root
+      }
+      const agent = await readCustomAgent(root, name, scope)
       if (!agent) return this.notFound('not found')
       return this.ok(agent)
     }
-    return this.ok({ agents: await listCustomAgentMeta(root) })
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const [project, global] = await Promise.all([listCustomAgentMeta(root), listGlobalAgentMeta()])
+    const agents = [
+      ...project.map((a) => ({ ...a, scope: 'project' })),
+      ...global.map((a) => ({ ...a, scope: 'global' })),
+    ].sort((a, b) => a.name.localeCompare(b.name))
+    return this.ok({ agents })
   }
 
   async createCustomAgent() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate.error
-    const { root } = gate
     const b = await this.requireJsonBody()
     if ('error' in b) return b.error
     const draft = b.value.draft || b.value
+    const scope = readScope(b.value.scope)
     const clean = sanitiseAgentName(draft.name)
     if (!clean) return this.badRequest('invalid agent name')
-    await fs.mkdir(customAgentsDir(root), { recursive: true })
+    let dir: string
+    if (scope === 'global') {
+      dir = globalAgentsDir()
+    } else {
+      const gate = this.requireRoot()
+      if ('error' in gate) return gate.error
+      dir = customAgentsDir(gate.root)
+    }
+    await fs.mkdir(dir, { recursive: true })
     const content = compileAgentMarkdown({ ...draft, name: clean })
-    await fs.writeFile(path.join(customAgentsDir(root), `${clean}.md`), content, 'utf8')
+    await fs.writeFile(path.join(dir, `${clean}.md`), content, 'utf8')
     emitAudit({ op: 'create', entity: 'custom-agent', identifier: clean, projectId: this.projectId })
-    return this.ok({ saved: true, name: clean })
+    return this.ok({ saved: true, name: clean, scope })
   }
 
   async deleteCustomAgent() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate.error
-    const { root } = gate
     const name = sanitiseAgentName(this.c.req.query('name') || '')
     if (!name) return this.badRequest('invalid name')
+    const scope = readScope(this.c.req.query('scope'))
+    let dir: string
+    if (scope === 'global') {
+      dir = globalAgentsDir()
+    } else {
+      const gate = this.requireRoot()
+      if ('error' in gate) return gate.error
+      dir = customAgentsDir(gate.root)
+    }
     try {
-      await fs.unlink(path.join(customAgentsDir(root), `${name}.md`))
+      await fs.unlink(path.join(dir, `${name}.md`))
       emitAudit({ op: 'delete', entity: 'custom-agent', identifier: name, projectId: this.projectId })
       return this.ok({ deleted: true, name })
     } catch {
@@ -70,7 +101,8 @@ export class AgentEditorController extends AbstractController {
     if ('error' in b) return b.error
     const name = sanitiseAgentName(b.value.name)
     if (!name) return this.badRequest('invalid name')
-    const agent = await readCustomAgent(root, name)
+    const scope = readScope(b.value.scope)
+    const agent = await readCustomAgent(root, name, scope)
     if (!agent) return this.notFound('agent not found')
     const exportDir = path.join(path.dirname(root), '.claude', 'agents')
     await fs.mkdir(exportDir, { recursive: true })

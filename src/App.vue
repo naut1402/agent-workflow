@@ -493,7 +493,7 @@ onUnmounted(() => {
     </main>
 
     <main v-else-if="mode === 'agentEditor'" class="main main-editor">
-      <AgentEditor />
+      <AgentEditor :project-id="selectedProjectId" />
     </main>
 
     <FloatingRunningJobsIcon

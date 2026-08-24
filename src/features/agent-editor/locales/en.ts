@@ -12,6 +12,9 @@ export default {
   fields: {
     descriptionPlaceholder: 'Short description',
     recommendedModel: 'Recommended model',
+    scope: 'Scope',
+    scopeProject: 'Current project',
+    scopeGlobal: 'Global (every project)',
   },
   messages: {
     saved: 'Saved {name}',
@@ -19,6 +22,7 @@ export default {
     confirmDelete: 'Delete agent "{name}"?',
     saveBeforeExport: 'Save the agent before exporting',
     confirmOverwrite: 'File already exists. Overwrite?',
+    scopeRequiresProject: 'No project selected — pick a project in the header or switch scope to "Global".',
   },
   section: {
     dragTitle: 'Drag to reorder',

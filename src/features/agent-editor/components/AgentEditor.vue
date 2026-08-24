@@ -8,11 +8,14 @@ import AgentSectionEditor from './AgentSectionEditor.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'
 import AgentNlWizard from './AgentNlWizard.vue'
 
+const props = defineProps<{ projectId?: string | null }>()
+
 const { t } = useI18nHelpers()
 const agents = ref([])
 const catalog = ref({ skills: [], agents: [] })
 const draft = ref(emptyDraft())
 const selectedName = ref('')
+const scope = ref('project')
 const saving = ref(false)
 const message = ref('')
 const error = ref('')
@@ -21,7 +24,7 @@ const showNl = ref(false)
 
 async function loadList() {
   try {
-    const data = await fetchCustomAgents()
+    const data = await fetchCustomAgents(props.projectId ?? undefined)
     agents.value = data.agents || []
   } catch (e) {
     error.value = String(e.message || e)
@@ -42,14 +45,17 @@ onMounted(async () => {
 
 function newAgent() {
   selectedName.value = ''
+  scope.value = 'project'
   draft.value = emptyDraft({ name: 'new-agent' })
   message.value = ''
 }
 
-async function selectAgent(name) {
+async function selectAgent(agent) {
   try {
-    const data = await fetchCustomAgent(name)
-    selectedName.value = name
+    const agentScope = agent.scope === 'global' ? 'global' : 'project'
+    const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agentScope)
+    selectedName.value = agent.name
+    scope.value = agentScope
     draft.value = { ...data.draft, name: data.name }
     message.value = ''
   } catch (e) {
@@ -58,11 +64,15 @@ async function selectAgent(name) {
 }
 
 async function save() {
+  if (scope.value === 'project' && !props.projectId) {
+    error.value = t('agentEditor.messages.scopeRequiresProject')
+    return
+  }
   saving.value = true
   error.value = ''
   message.value = ''
   try {
-    const result = await saveCustomAgent(draft.value)
+    const result = await saveCustomAgent(draft.value, props.projectId ?? undefined, scope.value)
     selectedName.value = result.name
     message.value = t('agentEditor.messages.saved', { name: result.name })
     await loadList()
@@ -78,7 +88,7 @@ async function remove() {
   if (!selectedName.value) return
   if (!confirm(t('agentEditor.messages.confirmDelete', { name: selectedName.value }))) return
   try {
-    await deleteCustomAgent(selectedName.value)
+    await deleteCustomAgent(selectedName.value, props.projectId ?? undefined, scope.value)
     message.value = t('agentEditor.messages.deleted')
     newAgent()
     await loadList()
@@ -94,7 +104,7 @@ async function doExport(overwrite = false) {
     return
   }
   try {
-    const result = await exportCustomAgent(selectedName.value, overwrite)
+    const result = await exportCustomAgent(selectedName.value, overwrite, props.projectId ?? undefined, scope.value)
     message.value = `Exported → ${result.path}`
   } catch (e) {
     const msg = String(e.message || e)
@@ -122,13 +132,13 @@ function applyDraft(newDraft) {
       <ul class="agent-list">
         <li
           v-for="a in agents"
-          :key="a.name"
+          :key="`${a.scope}:${a.name}`"
           class="agent-list-item"
-          :class="{ active: selectedName === a.name }"
-          @click="selectAgent(a.name)"
+          :class="{ active: selectedName === a.name && scope === a.scope }"
+          @click="selectAgent(a)"
         >
           <span class="agent-list-name">{{ a.name }}</span>
-          <span v-if="a.editable" class="chip chip-xs">dashboard</span>
+          <span class="chip chip-xs">{{ a.scope === 'global' ? t('agentEditor.fields.scopeGlobal') : t('agentEditor.fields.scopeProject') }}</span>
         </li>
         <li v-if="!agents.length" class="muted agent-list-empty">{{ t('agentEditor.list.empty') }}</li>
       </ul>
@@ -150,7 +160,7 @@ function applyDraft(newDraft) {
         <AgentTemplatePicker @apply-draft="applyDraft" @close="showTemplates = false" />
       </div>
       <div v-if="showNl" class="agent-modal">
-        <AgentNlWizard @apply-draft="applyDraft" @close="showNl = false" />
+        <AgentNlWizard :project-id="projectId" @apply-draft="applyDraft" @close="showNl = false" />
       </div>
 
       <div class="agent-basic-fields">
@@ -166,6 +176,14 @@ function applyDraft(newDraft) {
           {{ t('agentEditor.fields.recommendedModel') }}
           <input v-model="draft.model" class="cfg-input" placeholder="claude-sonnet-4-6" />
         </label>
+        <label class="cfg-label">
+          {{ t('agentEditor.fields.scope') }}
+          <select v-model="scope" class="cfg-input">
+            <option value="project">{{ t('agentEditor.fields.scopeProject') }}</option>
+            <option value="global">{{ t('agentEditor.fields.scopeGlobal') }}</option>
+          </select>
+        </label>
+        <p v-if="scope === 'project' && !projectId" class="err">{{ t('agentEditor.messages.scopeRequiresProject') }}</p>
       </div>
 
       <AgentSectionEditor

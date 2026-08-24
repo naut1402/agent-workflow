@@ -2,26 +2,41 @@ import { t } from '../../../plugins/i18n'
 import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
 import { submitJob } from '../../runner/scripts/runnerApi'
 
-export async function fetchCustomAgents() {
-  return apiGet('/api/custom-agents')
+export type AgentScope = 'project' | 'global'
+
+export async function fetchCustomAgents(projectId?: string) {
+  return apiGet('/api/custom-agents', { project: projectId })
 }
 
-export async function fetchCustomAgent(name: string) {
-  return apiGet('/api/custom-agents', { name }, {
+export async function fetchCustomAgent(name: string, projectId?: string, scope?: AgentScope) {
+  return apiGet('/api/custom-agents', { name, project: projectId, scope }, {
     errorMessage: (status) => `/api/custom-agents?name=${name} → ${status}`,
   })
 }
 
-export async function saveCustomAgent(draft: unknown, projectId?: string) {
-  return apiPost('/api/custom-agents', { draft }, { query: { project: projectId } })
+/**
+ * `scope: 'global'` writes to `~/.claude/agents/` (machine-wide, resolved as
+ * `user:<name>`) instead of the current project's `custom-agents/`
+ * (`dashboard:<name>`) — no `project` query is sent for `global`, since the
+ * write doesn't depend on which project is selected.
+ */
+export async function saveCustomAgent(draft: unknown, projectId?: string, scope: AgentScope = 'project') {
+  return apiPost('/api/custom-agents', { draft, scope }, { query: scope === 'global' ? {} : { project: projectId } })
 }
 
-export async function deleteCustomAgent(name: string) {
-  return apiRequest('DELETE', '/api/custom-agents', { query: { name } })
+export async function deleteCustomAgent(name: string, projectId?: string, scope: AgentScope = 'project') {
+  return apiRequest('DELETE', '/api/custom-agents', {
+    query: { name, scope, ...(scope === 'global' ? {} : { project: projectId }) },
+  })
 }
 
-export async function exportCustomAgent(name: string, overwrite = false) {
-  return apiPost('/api/custom-agents/export', { name, overwrite })
+export async function exportCustomAgent(
+  name: string,
+  overwrite = false,
+  projectId?: string,
+  scope: AgentScope = 'project',
+) {
+  return apiPost('/api/custom-agents/export', { name, overwrite, scope }, { query: { project: projectId } })
 }
 
 export async function generateAgentDraft(description: string) {
