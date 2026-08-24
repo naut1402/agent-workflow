@@ -12,6 +12,9 @@ export default {
   fields: {
     descriptionPlaceholder: 'Mô tả ngắn',
     recommendedModel: 'Model khuyến nghị',
+    scope: 'Phạm vi',
+    scopeProject: 'Project hiện tại',
+    scopeGlobal: 'Toàn cục (mọi project)',
   },
   messages: {
     saved: 'Đã lưu {name}',
@@ -19,6 +22,7 @@ export default {
     confirmDelete: 'Xóa agent "{name}"?',
     saveBeforeExport: 'Lưu agent trước khi export',
     confirmOverwrite: 'File đã tồn tại. Ghi đè?',
+    scopeRequiresProject: 'Chưa chọn project — chọn project ở header hoặc đổi phạm vi sang "Toàn cục".',
   },
   section: {
     dragTitle: 'Kéo để sắp xếp',

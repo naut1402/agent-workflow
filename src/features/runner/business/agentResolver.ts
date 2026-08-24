@@ -99,7 +99,8 @@ async function resolveAgentFilePath(
     return (await safeAccess(p)) ? p : null
   }
   if (source === 'user') {
-    return joinPath(homeDir(), '.claude', 'agents', fileName)
+    const p = joinPath(homeDir(), '.claude', 'agents', fileName)
+    return (await safeAccess(p)) ? p : null
   }
   if (source === 'project') {
     return joinPath(projectRoot, '.claude', 'agents', fileName)
@@ -146,6 +147,15 @@ export async function describeAgentSearchPaths(
       .filter((e) => e.isFile() && e.name.endsWith('.md'))
       .map((e) => e.name.slice(0, -3))
     return available.length ? [`${p} (agent có sẵn trong project: ${available.join(', ')})`] : [p]
+  }
+
+  if (source === 'user') {
+    const dir = joinPath(homeDir(), '.claude', 'agents')
+    const p = joinPath(dir, fileName)
+    const available = (await safeReadDir(dir))
+      .filter((e) => e.isFile() && e.name.endsWith('.md'))
+      .map((e) => e.name.slice(0, -3))
+    return available.length ? [`${p} (agent có sẵn (global): ${available.join(', ')})`] : [p]
   }
 
   if (!(source.startsWith('repo:') || source.startsWith('plugin:'))) return []

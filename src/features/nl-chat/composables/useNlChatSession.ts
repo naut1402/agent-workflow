@@ -22,6 +22,7 @@ import { TASK_ID_PATTERN } from '../../monitor/schemas/taskCreate'
 
 export type NlChatEntityType = 'task' | 'pipeline' | 'agent' | 'automation'
 export type NlChatStep = 'chatting' | 'previewDraft' | 'confirming' | 'done' | 'error'
+export type NlChatAgentScope = 'project' | 'global'
 
 export interface NlChatMessage {
   role: 'user' | 'assistant'
@@ -57,6 +58,14 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   const messages = ref<NlChatMessage[]>([])
   const draft = ref<Record<string, unknown> | null>(null)
   const pipelineName = ref('')
+  // Explicit choice re-confirmed at "previewDraft" for an `agent` draft —
+  // `getProjectId()` alone is not trusted for where to save it (see the
+  // "dashboard:create-gh-issue saved to the wrong project" incident:
+  // saveCustomAgent silently fell back to whatever project has `default:
+  // true` when the project context was null). `'project'` requires a real
+  // `getProjectId()`, checked in `confirm()`; `'global'` writes to
+  // `~/.claude/agents/` regardless of project context.
+  const agentScope = ref<NlChatAgentScope>('project')
 
   const chatSessionId = ref<string | null>(null)
   const sending = ref(false)
@@ -216,11 +225,16 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         return
       }
     }
+    const projectId = opts.getProjectId()
+    if (entityType.value === 'agent' && agentScope.value === 'project' && !projectId) {
+      error.value = 'Chưa chọn project — chọn project ở header hoặc đổi phạm vi agent sang "Toàn cục".'
+      step.value = 'previewDraft'
+      return
+    }
     confirming.value = true
     step.value = 'confirming'
     error.value = null
     try {
-      const projectId = opts.getProjectId()
       if (entityType.value === 'task') {
         const rawId = editedDraft.taskId
         const payload =
@@ -235,7 +249,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
       } else if (entityType.value === 'automation') {
         await createAutomation(editedDraft as never, projectId)
       } else {
-        await saveCustomAgent(editedDraft, projectId)
+        await saveCustomAgent(editedDraft, projectId, agentScope.value)
       }
       step.value = 'done'
     } catch (e: any) {
@@ -263,6 +277,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     messages.value = []
     draft.value = null
     pipelineName.value = ''
+    agentScope.value = 'project'
     chatSessionId.value = null
     sending.value = false
     confirming.value = false
@@ -281,6 +296,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     messages,
     draft,
     pipelineName,
+    agentScope,
     chatSessionId,
     sending,
     confirming,

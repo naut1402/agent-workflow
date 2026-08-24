@@ -19,6 +19,7 @@ const {
   messages,
   draft,
   pipelineName,
+  agentScope,
   sending,
   confirming,
   error,
@@ -83,7 +84,8 @@ const canConfirm = computed(
   () =>
     step.value === 'previewDraft' &&
     (entityType.value !== 'pipeline' || pipelineName.value.trim().length > 0) &&
-    (entityType.value !== 'pipeline' || !pipelineAgentError.value),
+    (entityType.value !== 'pipeline' || !pipelineAgentError.value) &&
+    (entityType.value !== 'agent' || agentScope.value === 'global' || !!props.projectId),
 )
 
 function onConfirm(): void {
@@ -202,9 +204,19 @@ watch([() => messages.value.length, () => sending.value], async () => {
       Tên pipeline
       <input v-model="pipelineName" type="text" placeholder="Tên profile pipeline" />
     </label>
+    <label v-if="entityType === 'agent'" class="nl-chat-agent-scope">
+      Phạm vi agent
+      <select v-model="agentScope">
+        <option value="project">Chỉ project hiện tại</option>
+        <option value="global">Toàn cục (mọi project)</option>
+      </select>
+    </label>
     <textarea v-model="draftText" class="nl-chat-draft-textarea" rows="14"></textarea>
     <p v-if="draftParseError" class="nl-chat-error">{{ draftParseError }}</p>
     <p v-if="entityType === 'pipeline' && pipelineAgentError" class="nl-chat-error">{{ pipelineAgentError }}</p>
+    <p v-if="entityType === 'agent' && agentScope === 'project' && !props.projectId" class="nl-chat-error">
+      Chưa chọn project ở header — chọn project hoặc đổi phạm vi agent sang "Toàn cục".
+    </p>
     <div class="nl-chat-preview-actions">
       <button type="button" :disabled="!canConfirm || confirming" @click="onConfirm">Xác nhận & tạo</button>
       <button type="button" @click="onCancel">Huỷ</button>

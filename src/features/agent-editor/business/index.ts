@@ -1,18 +1,20 @@
 export {
   profilesDir,
   customAgentsDir,
+  globalAgentsDir,
   agentTemplatesDir,
   workflowStepTemplatesDir,
   sanitiseAgentName,
   scanCustomAgents,
   listCustomAgentMeta,
+  listGlobalAgentMeta,
   readCustomAgent,
   ensureDefaultTemplate,
   ensureNlChatBuilderAgent,
   fetchUrlSafe,
   isPrivateHostname,
 } from './agents.js'
-export type { FetchUrlSafeOptions } from './agents.js'
+export type { FetchUrlSafeOptions, AgentScope } from './agents.js'
 export { generateDraftFromNl } from './generate.js'
 export {
   FIXED_SECTION_KEYS,

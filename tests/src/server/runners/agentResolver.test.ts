@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -179,6 +179,61 @@ describe('resolveAgent — dashboard agent', () => {
     } finally {
       fs.rmSync(devTeamRoot, { recursive: true, force: true })
     }
+  })
+})
+
+describe('resolveAgent — user (global) agent', () => {
+  const prevHome = process.env.HOME
+  const prevUserProfile = process.env.USERPROFILE
+  let home: string
+  let agentsDir: string
+
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-userhome-'))
+    process.env.HOME = home
+    process.env.USERPROFILE = home
+    agentsDir = path.join(home, '.claude', 'agents')
+    fs.mkdirSync(agentsDir, { recursive: true })
+  })
+
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.HOME
+    else process.env.HOME = prevHome
+    if (prevUserProfile === undefined) delete process.env.USERPROFILE
+    else process.env.USERPROFILE = prevUserProfile
+    fs.rmSync(home, { recursive: true, force: true })
+  })
+
+  test('resolves an existing user: agent from ~/.claude/agents/', async () => {
+    fs.writeFileSync(
+      path.join(agentsDir, 'shared-agent.md'),
+      `---\nname: shared-agent\ndescription: shared\nskills: []\n---\n\n## Vai trò\n\nshared\n`,
+      'utf8',
+    )
+    const resolved = await resolveAgent('user:shared-agent', { projectRoot: home, devTeamRoot: home })
+    expect(resolved.name).toBe('shared-agent')
+    expect(resolved.agentFilePath).toBe(path.join(agentsDir, 'shared-agent.md'))
+  })
+
+  test('rejects a missing user: agent with a hint listing available global agents', async () => {
+    fs.writeFileSync(path.join(agentsDir, 'shared-agent.md'), '# Shared\n', 'utf8')
+
+    await expect(
+      resolveAgent('user:missing-agent', { projectRoot: home, devTeamRoot: home }),
+    ).rejects.toThrow(/missing-agent\.md.*shared-agent/)
+  })
+
+  test('rejects a missing user: agent without a stray empty hint when the dir does not exist', async () => {
+    fs.rmSync(agentsDir, { recursive: true, force: true })
+
+    let error: unknown
+    try {
+      await resolveAgent('user:missing-agent', { projectRoot: home, devTeamRoot: home })
+    } catch (err) {
+      error = err
+    }
+    expect(String(error)).toContain('missing-agent.md')
+    expect(String(error)).not.toContain('agent có sẵn (global)')
   })
 })
 
