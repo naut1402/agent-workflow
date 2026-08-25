@@ -44,6 +44,7 @@ function startRename() {
 }
 
 async function commitRename() {
+  if (!renaming.value) return
   renaming.value = false
   const next = draftName.value.trim()
   const current = taskDisplayName(props.task)
@@ -222,7 +223,7 @@ function hiddenCount(task: any) {
         class="id"
         :class="'id-' + taskStatusKey(task)"
         :style="marqueeDistance ? { '--marquee-distance': marqueeDistance + 'px' } : undefined"
-        :title="task.task_id"
+        :title="`${task.task_id} — ${t('monitor.taskItem.renameTitle')}`"
         @dblclick.stop="startRename"
         @mouseenter="onIdMouseEnter"
       ><span>{{ taskDisplayName(task) }}</span></span>

@@ -309,6 +309,67 @@ describe('CreateTaskDialog', () => {
       expect(document.querySelector('.create-task-body input.cfg-input[type="url"]')).toBeTruthy()
     })
 
+    it('uses the fetched item URL, not the currently-selected repo, when picking an issue', async () => {
+      vi.mocked(fetchGithubTokenRepos).mockResolvedValue(['o/repo-a', 'o/repo-b'])
+      vi.mocked(fetchOpenGithubIssues).mockResolvedValue({
+        issues: [{ number: 7, title: 'From repo A', url: 'https://github.com/o/repo-a/issues/7', updatedAt: '' }],
+      })
+      vi.mocked(fetchGithubIssue).mockResolvedValue({
+        issue: { title: 'From repo A', body: null, url: 'https://github.com/o/repo-a/issues/7', prompt: '# From repo A' },
+      })
+
+      mountDialog()
+      await flushPromises()
+      ;(document.querySelectorAll('.create-task-tab')[1] as HTMLButtonElement).click()
+      await flushPromises()
+      ;(
+        [...document.querySelectorAll('button.btn-ghost')].find((b) => b.textContent?.includes('Xem issue đang mở')) as HTMLButtonElement
+      ).click()
+      await flushPromises()
+
+      // Switch the repo dropdown to repo-b WITHOUT reloading — the list still shows repo-a's issue.
+      const repoSelect = new DOMWrapper(document.querySelector('.create-task-body select.cfg-input')!)
+      await repoSelect.setValue('o/repo-b')
+
+      const issueItem = document.querySelector('.create-task-issue-item') as HTMLLIElement
+      issueItem.click()
+      await flushPromises()
+
+      const urlInput = document.querySelector('.create-task-body input.cfg-input[type="url"]') as HTMLInputElement
+      expect(urlInput.value).toBe('https://github.com/o/repo-a/issues/7')
+      expect(fetchGithubIssue).toHaveBeenCalledWith('https://github.com/o/repo-a/issues/7', undefined)
+    })
+
+    it('clears the stale issue list when a repo switch reload fails', async () => {
+      vi.mocked(fetchGithubTokenRepos).mockResolvedValue(['o/repo-a', 'o/repo-b'])
+      vi.mocked(fetchOpenGithubIssues).mockResolvedValueOnce({
+        issues: [{ number: 1, title: 'From repo A', url: 'https://github.com/o/repo-a/issues/1', updatedAt: '' }],
+      })
+
+      mountDialog()
+      await flushPromises()
+      const taskInput = new DOMWrapper(document.querySelector('.create-task-body input.cfg-input')!)
+      await taskInput.setValue('F0010')
+      ;(document.querySelectorAll('.create-task-tab')[1] as HTMLButtonElement).click()
+      await flushPromises()
+      const loadBtn = [...document.querySelectorAll('button.btn-ghost')].find((b) =>
+        b.textContent?.includes('Xem issue đang mở'),
+      ) as HTMLButtonElement
+      loadBtn.click()
+      await flushPromises()
+      expect(document.body.textContent).toContain('From repo A')
+
+      vi.mocked(fetchOpenGithubIssues).mockRejectedValueOnce(new Error('repo not found'))
+      const repoSelect = new DOMWrapper(document.querySelector('.create-task-body select.cfg-input')!)
+      await repoSelect.setValue('o/repo-b')
+      loadBtn.click()
+      await flushPromises()
+
+      expect(document.querySelector('.create-task-issue-item')).toBeNull()
+      expect(document.body.textContent).not.toContain('From repo A')
+      expect(document.querySelector('.field-err')?.textContent).toContain('repo not found')
+    })
+
     it('shows issuesError on a failed list without hiding the manual URL fallback', async () => {
       vi.mocked(fetchGithubTokenRepos).mockResolvedValue(['o/configured-repo'])
       vi.mocked(fetchOpenGithubIssues).mockRejectedValue(new Error('repo not found'))

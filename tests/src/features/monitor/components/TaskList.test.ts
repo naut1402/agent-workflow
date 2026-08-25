@@ -335,6 +335,30 @@ describe('TaskList', () => {
       expect(fetchMock).not.toHaveBeenCalled()
     })
 
+    it('Escape cancels rename even when the DOM removal fires a native blur afterwards', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+
+      const w = mount(TaskList, {
+        props: { tasks: [{ ...tasks[0], state_mtime: 123 }] },
+        attachTo: document.body,
+      })
+      await w.find('.task-entry .id').trigger('dblclick')
+      const input = w.find('.id-rename-input')
+      const inputEl = input.element as HTMLInputElement
+      inputEl.focus()
+      await input.setValue('New task name')
+      await input.trigger('keyup.escape')
+
+      expect(w.find('.id-rename-input').exists()).toBe(false)
+      // Simulate the browser's native blur, fired when a focused element is removed from the DOM.
+      inputEl.dispatchEvent(new Event('blur'))
+      await flushPromises()
+
+      expect(fetchMock).not.toHaveBeenCalled()
+      w.unmount()
+    })
+
     it('no-op (no API call) when the name is unchanged or blank after trim', async () => {
       const fetchMock = vi.fn()
       vi.stubGlobal('fetch', fetchMock)

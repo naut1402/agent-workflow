@@ -37,6 +37,7 @@ import { RunStepRequest } from './schemas/runStep.js'
 import { ResetStepRequest } from './schemas/resetStep.js'
 import { TaskFeedbackRequest } from './schemas/taskFeedback.js'
 import { fetchGithubIssue, listOpenGithubIssues } from './business/github/index.js'
+import { parseGithubRepoRef } from '../settings/schemas/githubTokens.js'
 import { getTaskChatState } from './business/taskChat.js'
 import {
   loadArtifactActions,
@@ -900,8 +901,9 @@ export class MonitorController extends AbstractController {
   async getGithubIssues() {
     const repo = this.c.req.query('repo') || ''
     const page = Number(this.c.req.query('page')) || 1
-    const [owner, name] = repo.split('/')
-    if (!owner || !name) return this.badRequest('invalid repo, expected owner/repo')
+    const slug = parseGithubRepoRef(repo)
+    if (!slug) return this.badRequest('invalid repo, expected owner/repo')
+    const [owner, name] = slug.split('/')
 
     const result = await listOpenGithubIssues(owner, name, page)
     if ('error' in result) return this.json(result.status, { error: result.error })

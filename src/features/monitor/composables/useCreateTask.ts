@@ -195,6 +195,7 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
 
   async function loadOpenIssues() {
     issuesError.value = null
+    openIssues.value = []
     const repo = effectiveRepo()
     if (!repo) return
     issuesLoading.value = true
@@ -209,7 +210,7 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
   }
 
   function pickIssue(it: GithubIssueListItem) {
-    form.value.issueUrl = `https://github.com/${effectiveRepo()}/issues/${it.number}`
+    form.value.issueUrl = it.url
     void fetchIssue()
   }
 
