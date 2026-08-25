@@ -52,6 +52,14 @@ export const TaskArchivePatch = z.object({
 
 export type TaskArchivePatch = z.infer<typeof TaskArchivePatch>
 
+/** Body for dashboard rename of a task (`PUT /api/task-name`). */
+export const TaskNamePatch = z.object({
+  name: z.string().trim().min(1).max(500),
+  mtime: z.number(),
+})
+
+export type TaskNamePatch = z.infer<typeof TaskNamePatch>
+
 /** UI-facing projection of task state with the same safe defaults the API applies. */
 export interface TaskStateView {
   parent_task_id: string | null

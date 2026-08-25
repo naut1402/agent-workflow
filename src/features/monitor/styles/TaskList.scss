@@ -59,12 +59,48 @@
 }
 .expand-chevron.open { transform: rotate(90deg); color: var(--accent); }
 
-.tasklist .id { font-weight: 600; }
+.tasklist .id {
+  font-weight: 600;
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  vertical-align: bottom;
+}
 .tasklist .id.id-error { color: var(--danger); }
 .tasklist .id.id-waiting { color: var(--waiting); }
 .tasklist .id.id-active { color: var(--active); }
 .tasklist .id.id-done { color: var(--done); }
 .tasklist .id.id-pending { color: var(--muted); }
+.task-row:hover .id { text-overflow: clip; }
+.task-row:hover .id > span {
+  display: inline-block;
+  animation: id-marquee 8s linear infinite;
+}
+// `--marquee-distance` (set inline on hover, see TaskListItem.vue) is the
+// exact scrollWidth - clientWidth overflow; 0 (unset) keeps this a no-op.
+@keyframes id-marquee {
+  0%, 15% { transform: translateX(0); }
+  85%, 100% { transform: translateX(calc(-1 * var(--marquee-distance, 0px))); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-row:hover .id > span { animation: none; }
+}
+
+.id-rename-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  font: inherit;
+  color: inherit;
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 0 4px;
+}
 .tasklist .flag {
   font-size: 11px;
   font-weight: 700;

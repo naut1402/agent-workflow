@@ -23,6 +23,7 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.post('/api/flow-profile', bind(MonitorController, 'postFlowProfile'))
   app.put('/api/task-state', bind(MonitorController, 'putTaskState'))
   app.put('/api/task-archive', bind(MonitorController, 'putTaskArchive'))
+  app.put('/api/task-name', bind(MonitorController, 'putTaskName'))
   app.get('/api/artifact-actions', bind(MonitorController, 'getArtifactActions'))
   app.put('/api/artifact-actions', bind(MonitorController, 'putArtifactActions'))
   app.post('/api/artifact-actions/run', bind(MonitorController, 'runArtifactAction'))
@@ -35,4 +36,5 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.post('/api/tasks/:id/feedback', bind(MonitorController, 'postTaskFeedback'))
   app.get('/api/tasks/:id/chat', bind(MonitorController, 'getTaskChat'))
   app.post('/api/github/issue', bind(MonitorController, 'postGithubIssue'))
+  app.get('/api/github/issues', bind(MonitorController, 'getGithubIssues'))
 }

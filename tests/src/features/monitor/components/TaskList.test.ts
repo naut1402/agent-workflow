@@ -271,4 +271,80 @@ describe('TaskList', () => {
     expect(w.emitted('task-archived')).toBeTruthy()
     expect(w.find('.art-warning').exists()).toBe(false)
   })
+
+  describe('inline rename (mục 1)', () => {
+    it('dblclick .id switches to an input, blur commits the new name via patchTaskName', async () => {
+      const fetchMock = vi.fn(async (_input: any, _init: any = {}) => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'B4488' }),
+      }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const w = mount(TaskList, {
+        props: { tasks: [{ ...tasks[0], state_mtime: 123 }], projectId: 'proj-1' },
+      })
+      await w.find('.task-entry .id').trigger('dblclick')
+      const input = w.find('.id-rename-input')
+      expect(input.exists()).toBe(true)
+
+      await input.setValue('New task name')
+      await input.trigger('blur')
+      await flushPromises()
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const [url, init] = fetchMock.mock.calls[0]
+      expect(String(url)).toContain('/api/task-name')
+      expect(String(url)).toContain('id=B4488')
+      expect(String(url)).toContain('project=proj-1')
+      expect(init.method).toBe('PUT')
+      expect(JSON.parse(init.body)).toEqual({ name: 'New task name', mtime: 123 })
+      expect(w.emitted('task-archived')).toBeTruthy()
+    })
+
+    it('refreshes (emits task-archived) instead of erroring on a 409 rename conflict', async () => {
+      const fetchMock = vi.fn(async (_input: any, _init: any = {}) => ({
+        ok: false,
+        status: 409,
+        json: async () => ({ error: 'conflict' }),
+      }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const w = mount(TaskList, { props: { tasks: [{ ...tasks[0], state_mtime: 123 }] } })
+      await w.find('.task-entry .id').trigger('dblclick')
+      const input = w.find('.id-rename-input')
+      await input.setValue('New task name')
+      await input.trigger('blur')
+      await flushPromises()
+
+      expect(w.emitted('task-archived')).toBeTruthy()
+      expect(w.find('.art-warning').exists()).toBe(false)
+    })
+
+    it('Escape cancels rename without calling the API', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+
+      const w = mount(TaskList, { props: { tasks: [{ ...tasks[0], state_mtime: 123 }] } })
+      await w.find('.task-entry .id').trigger('dblclick')
+      const input = w.find('.id-rename-input')
+      await input.setValue('New task name')
+      await input.trigger('keyup.escape')
+
+      expect(w.find('.id-rename-input').exists()).toBe(false)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('no-op (no API call) when the name is unchanged or blank after trim', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+
+      const w = mount(TaskList, { props: { tasks: [{ ...tasks[0], state_mtime: 123 }] } })
+      await w.find('.task-entry .id').trigger('dblclick')
+      await w.find('.id-rename-input').trigger('blur')
+      await flushPromises()
+
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+  })
 })

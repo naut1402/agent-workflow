@@ -8,11 +8,13 @@ import {
   advanceStepOnJobSuccess,
   applyArchiveAction,
   applyHitlAction,
+  applyRenameAction,
   deleteTask,
   repairTaskState,
   resetPipelineStepAssumingLock,
   withTaskLock,
 } from './business/tasks/state.js'
+import { generateAndApplyTaskName } from './business/tasks/generateTaskName.js'
 import { isResettableTarget } from './lib/pipelineRunGuards.js'
 import {
   loadPipelineConfig,
@@ -28,13 +30,13 @@ import {
 } from './business/index.js'
 import { emitAudit } from '../../core/log/store.js'
 import { emit, emitEntity } from '../../core/events/index.js'
-import { TaskArchivePatch, TaskStatePatch } from './schemas/task.js'
+import { TaskArchivePatch, TaskNamePatch, TaskStatePatch } from './schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from './schemas/taskCreate.js'
 import { mintTaskId } from './lib/createTaskForm.js'
 import { RunStepRequest } from './schemas/runStep.js'
 import { ResetStepRequest } from './schemas/resetStep.js'
 import { TaskFeedbackRequest } from './schemas/taskFeedback.js'
-import { fetchGithubIssue } from './business/github/index.js'
+import { fetchGithubIssue, listOpenGithubIssues } from './business/github/index.js'
 import { getTaskChatState } from './business/taskChat.js'
 import {
   loadArtifactActions,
@@ -390,6 +392,43 @@ export class MonitorController extends AbstractController {
     return this.ok({ id, state: result.state, mtime: result.mtime })
   }
 
+  async putTaskName() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const id = this.c.req.query('id') || ''
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON body')
+    const parsed = TaskNamePatch.safeParse(b.value)
+    if (!parsed.success) {
+      return this.badRequest('invalid patch', { details: parsed.error.flatten() })
+    }
+
+    const result = await applyRenameAction(root, id, parsed.data)
+    if ('error' in result) {
+      const body: Record<string, unknown> = { error: result.error, id }
+      if (result.state) body.state = result.state
+      if (result.mtime != null) body.mtime = result.mtime
+      return this.json(result.status, body)
+    }
+
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: this.projectId,
+      detail: { action: 'rename' },
+    })
+    emitEntity('updated', 'task-state', {
+      id,
+      projectId: this.projectId,
+      detail: { action: 'rename' },
+    })
+    return this.ok({ id, state: result.state, mtime: result.mtime })
+  }
+
   async getArtifactActions() {
     const artifact = this.c.req.query('artifact') || ''
     const attach = this.c.req.query('attach') || ''
@@ -564,6 +603,10 @@ export class MonitorController extends AbstractController {
       taskId: result.taskId,
       projectId: this.projectId,
     })
+
+    if (body.source === 'prompt' && !body.name?.trim() && body.prompt?.trim()) {
+      generateAndApplyTaskName(root, result.taskId, body.prompt, result.mtime).catch(() => {})
+    }
 
     let job: ReturnType<typeof submitJob> | undefined
     if (body.run) {
@@ -852,5 +895,16 @@ export class MonitorController extends AbstractController {
     const result = await fetchGithubIssue(parsed.data.url)
     if ('error' in result) return this.json(result.status, { error: result.error })
     return this.ok({ issue: result.issue })
+  }
+
+  async getGithubIssues() {
+    const repo = this.c.req.query('repo') || ''
+    const page = Number(this.c.req.query('page')) || 1
+    const [owner, name] = repo.split('/')
+    if (!owner || !name) return this.badRequest('invalid repo, expected owner/repo')
+
+    const result = await listOpenGithubIssues(owner, name, page)
+    if ('error' in result) return this.json(result.status, { error: result.error })
+    return this.ok({ issues: result.issues })
   }
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { computed, ref } from 'vue'
-import { patchTaskArchive, deleteTask, repairTaskState } from '../scripts/TaskListItemApi'
+import { computed, nextTick, ref } from 'vue'
+import { patchTaskArchive, patchTaskName, deleteTask, repairTaskState } from '../scripts/TaskListItemApi'
 import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
 import { taskDisplayName } from '../lib/taskDisplay'
 
@@ -20,6 +20,54 @@ const emit = defineEmits([
 const { t } = useI18nHelpers()
 const archiveError = ref('')
 const needsRepair = computed(() => taskNeedsStateRepair(props.task))
+const renaming = ref(false)
+const draftName = ref('')
+const renameInput = ref<HTMLInputElement | null>(null)
+const idEl = ref<HTMLElement | null>(null)
+const marqueeDistance = ref(0)
+
+/** Measure overflow on hover so the marquee travels exactly far enough to reveal the tail — 0 when the name already fits. */
+function onIdMouseEnter() {
+  const el = idEl.value
+  if (!el) return
+  marqueeDistance.value = Math.max(0, el.scrollWidth - el.clientWidth)
+}
+
+function startRename() {
+  if (renaming.value) return
+  draftName.value = taskDisplayName(props.task)
+  renaming.value = true
+  nextTick(() => {
+    renameInput.value?.focus()
+    renameInput.value?.select()
+  })
+}
+
+async function commitRename() {
+  renaming.value = false
+  const next = draftName.value.trim()
+  const current = taskDisplayName(props.task)
+  if (!next || next === current) return
+  archiveError.value = ''
+  try {
+    await patchTaskName(
+      props.task.task_id,
+      { name: next, mtime: props.task.state_mtime },
+      props.projectId ?? undefined,
+    )
+    emit('task-archived')
+  } catch (e: any) {
+    if (e?.status === 409) {
+      emit('task-archived')
+    } else {
+      archiveError.value = String(e.message || e)
+    }
+  }
+}
+
+function cancelRename() {
+  renaming.value = false
+}
 
 async function toggleArchive() {
   archiveError.value = ''
@@ -157,7 +205,27 @@ function hiddenCount(task: any) {
         </svg>
         <template v-else>{{ statusIcon(task) }}</template>
       </span>
-      <span class="id" :class="'id-' + taskStatusKey(task)" :title="task.task_id">{{ taskDisplayName(task) }}</span>
+      <input
+        v-if="renaming"
+        ref="renameInput"
+        v-model="draftName"
+        class="id-rename-input"
+        type="text"
+        @click.stop
+        @blur="commitRename"
+        @keyup.enter="($event.target as HTMLInputElement).blur()"
+        @keyup.escape="cancelRename"
+      />
+      <span
+        v-else
+        ref="idEl"
+        class="id"
+        :class="'id-' + taskStatusKey(task)"
+        :style="marqueeDistance ? { '--marquee-distance': marqueeDistance + 'px' } : undefined"
+        :title="task.task_id"
+        @dblclick.stop="startRename"
+        @mouseenter="onIdMouseEnter"
+      ><span>{{ taskDisplayName(task) }}</span></span>
       <button
         v-if="needsRepair"
         type="button"

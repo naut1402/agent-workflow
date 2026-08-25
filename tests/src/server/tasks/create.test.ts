@@ -80,6 +80,9 @@ describe('createTask', () => {
     expect(state.review_round).toBe(0)
     expect(state.doc_review_round).toEqual({ investigate: 0, design: 0 })
     expect(result.pipelineFile).toBeNull()
+
+    const onDisk = await fs.stat(result.stateFile)
+    expect(result.mtime).toBe(onDisk.mtimeMs)
   })
 
   test('persists name to state and request.md frontmatter when provided', async () => {

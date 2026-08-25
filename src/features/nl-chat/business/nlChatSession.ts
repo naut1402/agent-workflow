@@ -113,6 +113,7 @@ function schemaHintFor(entityType?: NlChatEntityType | null): string {
       return [
         'entityType = task: JSON phải là subset field của CreateTaskRequest.',
         'Tối thiểu bắt buộc: { "prompt": string }. Field "taskId" là optional — nếu người dùng không chỉ định, hệ thống sẽ tự sinh mã ngẫu nhiên.',
+        'Field "name" là BẮT BUỘC — tên ngắn gọn (≤60 ký tự) mô tả task, khác với "taskId".',
         'Các field khác (source, profileName, pipeline, knowledgeInputs, ...) là optional — chỉ thêm khi người dùng cung cấp, giữ nguyên default của Zod nếu không.',
       ].join('\n')
     case 'pipeline':

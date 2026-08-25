@@ -1,6 +1,11 @@
 import { computed, ref } from 'vue'
 import type { CreateTaskRequest, TaskSource } from '../schemas/taskCreate.js'
-import { createTask, fetchGithubIssue } from '../scripts/CreateTaskDialogApi'
+import {
+  createTask,
+  fetchGithubIssue,
+  fetchGithubTokenRepos,
+  fetchOpenGithubIssues,
+} from '../scripts/CreateTaskDialogApi'
 import { fetchPipelineProfile, fetchPipelineProfiles } from '../../pipeline-editor/scripts/ProfileManagerApi'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
 import {
@@ -12,6 +17,16 @@ import {
 } from '../lib/createTaskForm'
 
 export const CREATE_TASK_STEPS = 4
+
+/** Sentinel `selectedRepo` value for "manual owner/repo entry" in the issue picker. */
+export const MANUAL_REPO_OPTION = '__other__'
+
+export interface GithubIssueListItem {
+  number: number
+  title: string
+  url: string
+  updatedAt: string
+}
 
 export function emptyCreateTaskForm() {
   return {
@@ -43,6 +58,12 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     null,
   )
   const issueLoaded = ref(false)
+  const repoOptions = ref<string[]>([])
+  const selectedRepo = ref('')
+  const manualRepo = ref('')
+  const openIssues = ref<GithubIssueListItem[]>([])
+  const issuesLoading = ref(false)
+  const issuesError = ref<string | null>(null)
   const profiles = ref<{ name: string }[]>([])
   const runners = ref<{ id: string; name: string; enabled?: boolean }[]>([])
   const firstStepLabel = ref<string | null>(null)
@@ -97,6 +118,12 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     error.value = null
     issuePreview.value = null
     issueLoaded.value = false
+    repoOptions.value = []
+    selectedRepo.value = ''
+    manualRepo.value = ''
+    openIssues.value = []
+    issuesLoading.value = false
+    issuesError.value = null
     firstStepLabel.value = null
     submittedJobId.value = null
     createdTaskId.value = null
@@ -149,6 +176,41 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     } catch {
       firstStepLabel.value = null
     }
+  }
+
+  /** `owner/repo` actually queried — the picked dropdown entry, or the manual field when "Other…" is picked. */
+  function effectiveRepo(): string {
+    return selectedRepo.value === MANUAL_REPO_OPTION ? manualRepo.value.trim() : selectedRepo.value
+  }
+
+  async function loadRepoOptions() {
+    if (repoOptions.value.length) return
+    try {
+      repoOptions.value = await fetchGithubTokenRepos(opts.getProjectId() ?? undefined)
+    } catch {
+      repoOptions.value = []
+    }
+    selectedRepo.value = repoOptions.value[0] ?? MANUAL_REPO_OPTION
+  }
+
+  async function loadOpenIssues() {
+    issuesError.value = null
+    const repo = effectiveRepo()
+    if (!repo) return
+    issuesLoading.value = true
+    try {
+      const data = await fetchOpenGithubIssues(repo, opts.getProjectId() ?? undefined)
+      openIssues.value = data.issues ?? []
+    } catch (e: unknown) {
+      issuesError.value = String((e as Error)?.message ?? e)
+    } finally {
+      issuesLoading.value = false
+    }
+  }
+
+  function pickIssue(it: GithubIssueListItem) {
+    form.value.issueUrl = `https://github.com/${effectiveRepo()}/issues/${it.number}`
+    void fetchIssue()
   }
 
   async function fetchIssue() {
@@ -243,6 +305,12 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     error,
     issuePreview,
     issueLoaded,
+    repoOptions,
+    selectedRepo,
+    manualRepo,
+    openIssues,
+    issuesLoading,
+    issuesError,
     profiles,
     runners,
     taskIdError,
@@ -257,6 +325,9 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     ensureRunnerSelected,
     refreshFirstStepLabel,
     fetchIssue,
+    loadRepoOptions,
+    loadOpenIssues,
+    pickIssue,
     next,
     back,
     goToStep,
