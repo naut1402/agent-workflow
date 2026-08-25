@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
-import { fetchCustomAgents, fetchCustomAgent, saveCustomAgent, deleteCustomAgent, exportCustomAgent } from '../scripts/agentEditorApi'
+import {
+  fetchCustomAgents,
+  fetchCustomAgent,
+  saveCustomAgent,
+  deleteCustomAgent,
+  exportCustomAgent,
+  type AgentScope,
+} from '../scripts/agentEditorApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { emptyDraft } from '../business/agentMarkdown.js'
 import AgentSectionEditor from './AgentSectionEditor.vue'
@@ -15,7 +22,7 @@ const agents = ref([])
 const catalog = ref({ skills: [], agents: [] })
 const draft = ref(emptyDraft())
 const selectedName = ref('')
-const scope = ref('project')
+const scope = ref<AgentScope>('project')
 const saving = ref(false)
 const message = ref('')
 const error = ref('')
