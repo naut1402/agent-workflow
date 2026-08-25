@@ -71,10 +71,6 @@ async function selectAgent(agent) {
 }
 
 async function save() {
-  if (scope.value === 'project' && !props.projectId) {
-    error.value = t('agentEditor.messages.scopeRequiresProject')
-    return
-  }
   saving.value = true
   error.value = ''
   message.value = ''
@@ -190,7 +186,6 @@ function applyDraft(newDraft) {
             <option value="global">{{ t('agentEditor.fields.scopeGlobal') }}</option>
           </select>
         </label>
-        <p v-if="scope === 'project' && !projectId" class="err">{{ t('agentEditor.messages.scopeRequiresProject') }}</p>
       </div>
 
       <AgentSectionEditor
