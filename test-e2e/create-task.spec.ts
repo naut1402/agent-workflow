@@ -60,10 +60,11 @@ test('create task from Prompt tab (capture)', async ({ page }, testInfo) => {
 
   await expect(dialog).toBeHidden({ timeout: 15_000 })
 
-  // Task appears in the sidebar list and is selected.
-  const row = page.locator('.task-row', { hasText: TASK_ID })
+  // Task appears in the sidebar list. Match on the `.id` span's title (always the raw
+  // task_id) rather than its visible text — a background job may have already renamed
+  // the display label to an auto-generated task name by the time the row renders.
+  const row = page.locator('.task-row').filter({ has: page.locator(`.id[title^="${TASK_ID} "]`) })
   await expect(row).toBeVisible({ timeout: 15_000 })
-  await expect(row.locator('.id')).toHaveText(TASK_ID)
 
   await capture(page, testInfo, 'create-task-listed')
 

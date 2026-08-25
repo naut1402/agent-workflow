@@ -10,7 +10,7 @@ import {
   writeFile,
   writeTextFile,
 } from '../../../../core/lib/fileHelper.js'
-import { TaskArchivePatch, TaskStatePatch } from '../../schemas/task.js'
+import { TaskArchivePatch, TaskNamePatch, TaskStatePatch } from '../../schemas/task.js'
 import { loadPipelineConfig } from '../peers.js'
 import { readState, flowProfilePath } from './index.js'
 import { checkReviewRetry } from './reviewVerdict.js'
@@ -539,6 +539,46 @@ export async function applyArchiveAction(
     const state = { ...read.state } as Record<string, unknown>
     state.archived = patch.archived
     state.archived_at = patch.archived ? new Date().toISOString() : null
+
+    const mtime = await writeStateAtomic(stateFile, state)
+    return { ok: true, state, mtime }
+  })
+}
+
+/** Rename a task. Mirrors applyArchiveAction's lock/mtime-check/write shape. */
+export async function applyRenameAction(
+  root: string,
+  taskId: string,
+  patch: TaskNamePatch,
+): Promise<HitlApplyResult> {
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
+
+  return withStateFileLock(stateFile, async () => {
+    const read = await readState(stateFile)
+    if (!read.ok) {
+      return { ok: false, error: 'state not found', status: 404 }
+    }
+
+    let currentMtime: number | null = null
+    try {
+      const s = await stat(stateFile)
+      currentMtime = s.mtimeMs
+    } catch {
+      currentMtime = null
+    }
+
+    if (currentMtime != null && currentMtime !== patch.mtime) {
+      return {
+        ok: false,
+        error: 'conflict',
+        status: 409,
+        state: read.state,
+        mtime: currentMtime,
+      }
+    }
+
+    const state = { ...read.state } as Record<string, unknown>
+    state.name = patch.name
 
     const mtime = await writeStateAtomic(stateFile, state)
     return { ok: true, state, mtime }

@@ -32,6 +32,8 @@ export interface CreatedTask {
   firstStep: Record<string, any> | null
   /** Rendered `request.md` (frontmatter + prompt), reused as the runner prompt. */
   requestContent: string
+  /** mtime of the just-written state file — the expected mtime for a follow-up patch (e.g. name generation). */
+  mtime: number
 }
 
 export type CreateTaskResult =
@@ -189,7 +191,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       ...(input.branch ? { branch: input.branch } : {}),
       ...(input.name?.trim() ? { name: input.name.trim() } : {}),
     }
-    await writeStateAtomic(stateFile, state)
+    const mtime = await writeStateAtomic(stateFile, state)
 
     return {
       ok: true,
@@ -202,6 +204,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       pipeline,
       firstStep,
       requestContent,
+      mtime,
     }
   } catch (err: any) {
     // Roll back the scaffold so a failed create doesn't leave a half task that

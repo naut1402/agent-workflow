@@ -4,7 +4,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import JobLogStream from '../../../core/ui/JobLogStream.vue'
 import KnowledgePickerDialog from '../../../core/ui/KnowledgePickerDialog.vue'
 import WizardStepper from '../../../core/ui/WizardStepper.vue'
-import { CREATE_TASK_STEPS, useCreateTask } from '../composables/useCreateTask'
+import { CREATE_TASK_STEPS, MANUAL_REPO_OPTION, useCreateTask } from '../composables/useCreateTask'
 
 const props = defineProps<{
   projectId?: string | null
@@ -25,6 +25,12 @@ const {
   error,
   issuePreview,
   issueLoaded,
+  repoOptions,
+  selectedRepo,
+  manualRepo,
+  openIssues,
+  issuesLoading,
+  issuesError,
   profiles,
   runners,
   taskIdError,
@@ -39,6 +45,9 @@ const {
   ensureRunnerSelected,
   refreshFirstStepLabel,
   fetchIssue,
+  loadRepoOptions,
+  loadOpenIssues,
+  pickIssue,
   next,
   back,
   goToStep,
@@ -79,6 +88,8 @@ watch(
     if (src === 'prompt') {
       issueLoaded.value = false
       issuePreview.value = null
+    } else {
+      void loadRepoOptions()
     }
   },
 )
@@ -229,6 +240,44 @@ onUnmounted(() => {
             </template>
 
             <template v-else>
+              <label class="cfg-label">
+                {{ t('monitor.createTask.issueRepo') }}
+                <select v-model="selectedRepo" class="cfg-input">
+                  <option v-for="r in repoOptions" :key="r" :value="r">{{ r }}</option>
+                  <option :value="MANUAL_REPO_OPTION">{{ t('monitor.createTask.issueRepoOther') }}</option>
+                </select>
+              </label>
+              <input
+                v-if="selectedRepo === MANUAL_REPO_OPTION"
+                v-model="manualRepo"
+                class="cfg-input"
+                :placeholder="t('monitor.createTask.issueRepoManualPlaceholder')"
+              />
+              <button
+                type="button"
+                class="btn-ghost btn-sm"
+                :disabled="issuesLoading || !selectedRepo || (selectedRepo === MANUAL_REPO_OPTION && !manualRepo.trim())"
+                @click="loadOpenIssues()"
+              >
+                {{ issuesLoading ? t('monitor.createTask.issueListLoading') : t('monitor.createTask.issueListLoad') }}
+              </button>
+              <p v-if="issuesError" class="field-err">{{ issuesError }}</p>
+              <ul v-if="openIssues.length" class="create-task-issue-list">
+                <li
+                  v-for="it in openIssues"
+                  :key="it.number"
+                  class="create-task-issue-item"
+                  @click="pickIssue(it)"
+                >
+                  <span class="create-task-issue-number">#{{ it.number }}</span>
+                  <span class="create-task-issue-title">{{ it.title }}</span>
+                </li>
+              </ul>
+              <p v-else-if="!issuesLoading && !issuesError" class="muted">
+                {{ t('monitor.createTask.issueListEmpty') }}
+              </p>
+
+              <p class="modal-hint">{{ t('monitor.createTask.issueUrlOr') }}</p>
               <label class="cfg-label">
                 {{ t('monitor.createTask.issueUrl') }}
                 <input
@@ -472,6 +521,39 @@ onUnmounted(() => {
   gap: 8px;
   font-size: 13px;
   cursor: pointer;
+}
+
+.create-task-issue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.create-task-issue-item {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.create-task-issue-item:hover {
+  background: var(--panel-2);
+}
+
+.create-task-issue-number {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.create-task-issue-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .create-task-knowledge-chips {

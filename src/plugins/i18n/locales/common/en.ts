@@ -42,6 +42,7 @@ export default {
   errors: {
     updateTaskStatus: 'Could not update task status (error {status})',
     archiveTask: 'Could not archive task (error {status})',
+    renameTask: 'Could not rename task (error {status})',
     deleteTask: 'Could not delete task (error {status})',
     repairTaskState: 'Could not repair task state (error {status})',
     saveCustomAgent: 'Could not save custom agent (server returned no name).',

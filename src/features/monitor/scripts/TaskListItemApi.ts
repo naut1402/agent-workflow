@@ -1,2 +1,2 @@
-/** TaskListItem: archive / xóa / vá state task. */
-export { patchTaskArchive, deleteTask, repairTaskState } from './monitorApi'
+/** TaskListItem: archive / xóa / vá state / đổi tên task. */
+export { patchTaskArchive, patchTaskName, deleteTask, repairTaskState } from './monitorApi'

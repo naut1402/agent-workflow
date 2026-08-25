@@ -44,6 +44,7 @@ export default {
   errors: {
     updateTaskStatus: 'Không thể cập nhật trạng thái task (mã lỗi {status})',
     archiveTask: 'Không thể lưu trữ task (mã lỗi {status})',
+    renameTask: 'Không thể đổi tên task (mã lỗi {status})',
     deleteTask: 'Không thể xoá task (mã lỗi {status})',
     repairTaskState: 'Không thể vá state task (mã lỗi {status})',
     saveCustomAgent: 'Không lưu được custom agent (server không trả về tên).',

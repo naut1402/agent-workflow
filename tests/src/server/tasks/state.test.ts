@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, repairTaskState, resetPipelineStepAssumingLock, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, applyRenameAction, deleteTask, repairTaskState, resetPipelineStepAssumingLock, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
 import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
 import { listJobs, loadJob, registerProvider, submitJob, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
@@ -541,6 +541,44 @@ describe('applyArchiveAction', () => {
     await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
 
     const result = await applyArchiveAction(root, 'T9', { archived: true, mtime: Date.now() })
+    expect(result.ok).toBe(false)
+    if (!('error' in result)) return
+    expect(result.status).toBe(404)
+  })
+})
+
+describe('applyRenameAction', () => {
+  test('writes state.name', async () => {
+    const root = await tmp()
+    const stateFile = await seedTask(root, 'RN1', { current_phase: 'completed' })
+    const before = (await fs.stat(stateFile)).mtimeMs
+
+    const result = await applyRenameAction(root, 'RN1', { name: 'New name', mtime: before })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.name).toBe('New name')
+  })
+
+  test('mtime conflict → 409, state left untouched', async () => {
+    const root = await tmp()
+    const stateFile = await seedTask(root, 'RN2', { current_phase: 'completed' })
+    const before = (await fs.stat(stateFile)).mtimeMs
+
+    const result = await applyRenameAction(root, 'RN2', { name: 'New name', mtime: before - 1 })
+    expect(result.ok).toBe(false)
+    if (!('error' in result)) return
+    expect(result.status).toBe(409)
+    expect(result.error).toBe('conflict')
+
+    const state = JSON.parse(await fs.readFile(stateFile, 'utf8'))
+    expect(state.name).toBeUndefined()
+  })
+
+  test('no state file → 404', async () => {
+    const root = await tmp()
+    await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+
+    const result = await applyRenameAction(root, 'RN3', { name: 'x', mtime: Date.now() })
     expect(result.ok).toBe(false)
     if (!('error' in result)) return
     expect(result.status).toBe(404)
