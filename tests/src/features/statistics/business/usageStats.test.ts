@@ -255,13 +255,18 @@ describe('statistics/getUsageStats (đọc file)', () => {
     expect(r.totals.firstTs).toBe(null)
   })
 
-  test('cache TTL: ghi thêm entry mới nhưng vẫn thấy trong lần gọi kế (cache reset mỗi test)', async () => {
+  test('ghi entry mới → thấy ngay lần gọi kế mà KHÔNG cần reset cache thủ công', async () => {
     await getUsageStats({ groupBy: 'task' })
     fs.appendFileSync(usageFile(), `${JSON.stringify(entry({ ts: T2, jobId: 'job-new', projectId: 'p1', taskId: 'TA1', totalTokens: 5 }))}\n`)
-    resetUsageStatsCacheForTest()
     const r = await getUsageStats({ groupBy: 'task', project: 'p1' })
     const ta = r.groups.find((g) => g.key === 'TA1')
     expect(ta?.entries).toBe(3)
+  })
+
+  test('cache-hit: gọi lại liên tiếp không ghi gì giữa 2 lần → không lỗi, kết quả giống nhau', async () => {
+    const r1 = await getUsageStats({ groupBy: 'task', project: 'p1' })
+    const r2 = await getUsageStats({ groupBy: 'task', project: 'p1' })
+    expect(r2).toEqual(r1)
   })
 })
 

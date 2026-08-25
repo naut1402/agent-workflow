@@ -1,4 +1,4 @@
-import { readTextFile } from '../../../core/lib/fileHelper.js'
+import { readTextFile, statSafe } from '../../../core/lib/fileHelper.js'
 import { logFile } from '../../../core/log/fileDriver.js'
 import { isLogTypeEnabled } from '../../../core/log/loggingPrefsIo.js'
 import { parseLogLine, type UsageLogEntry } from '../../../core/log/schema.js'
@@ -20,33 +20,46 @@ import type {
  * controller/UI — bên ngoài vẫn thấy mảng entry như cũ.
  */
 
-const CACHE_TTL_MS = 10_000
 /** Số group tối đa trả về — tránh xychart/pie nổ khi có hàng trăm task/job. */
 export const MAX_GROUPS = 200
 
-let entryCache: { at: number; entries: UsageLogEntry[] } | null = null
+let entryCache: { mtime: number; size: number; entries: UsageLogEntry[] } | null = null
 
-/** Cho test reset cache TTL giữa các case ghi file liên tiếp. */
+/** Clear cached stat signature — dùng cho test isolation giữa các case ghi file liên tiếp. */
 export function resetUsageStatsCacheForTest(): void {
   entryCache = null
 }
 
 /** Đọc toàn bộ usage entries (mọi project) — lọc theo project làm ở tầng aggregate. */
 export async function readUsageEntries(): Promise<UsageLogEntry[]> {
-  if (entryCache && Date.now() - entryCache.at < CACHE_TTL_MS) return entryCache.entries
-  const entries: UsageLogEntry[] = []
-  if (isLogTypeEnabled('usage')) {
-    try {
-      const raw = await readTextFile(logFile('usage'))
-      for (const line of raw.split('\n')) {
-        const entry = parseLogLine(line)
-        if (entry && entry.type === 'usage') entries.push(entry)
-      }
-    } catch {
-      // File chưa tồn tại / đọc lỗi → empty (bất biến đọc phòng thủ).
-    }
+  if (!isLogTypeEnabled('usage')) return []
+
+  const file = logFile('usage')
+  const info = await statSafe(file)
+
+  if (!info.exists) {
+    entryCache = null
+    return []
   }
-  entryCache = { at: Date.now(), entries }
+
+  if (entryCache && entryCache.mtime === info.mtime && entryCache.size === info.size) {
+    return entryCache.entries
+  }
+
+  const entries: UsageLogEntry[] = []
+  try {
+    const raw = await readTextFile(file)
+    for (const line of raw.split('\n')) {
+      const entry = parseLogLine(line)
+      if (entry && entry.type === 'usage') entries.push(entry)
+    }
+  } catch {
+    // File chưa tồn tại / đọc lỗi → empty (bất biến đọc phòng thủ).
+    entryCache = null
+    return []
+  }
+
+  entryCache = { mtime: info.mtime!, size: info.size, entries }
   return entries
 }
 
@@ -243,7 +256,7 @@ export function aggregateUsage(
   }
 }
 
-/** Đọc (cache TTL) + filter + aggregate theo query đã validate. */
+/** Đọc (cache theo mtime/size file) + filter + aggregate theo query đã validate. */
 export async function getUsageStats(
   query: UsageStatsQuery,
   bounds: { fromMs?: number; toMs?: number } = {},
