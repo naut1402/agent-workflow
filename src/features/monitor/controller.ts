@@ -16,18 +16,7 @@ import {
 } from './business/tasks/state.js'
 import { generateAndApplyTaskName } from './business/tasks/generateTaskName.js'
 import { isResettableTarget } from './lib/pipelineRunGuards.js'
-import {
-  loadPipelineConfig,
-  submitJob,
-  submitApprovalJob,
-  sendTaskFeedback,
-  findSelectionRange,
-  extractLines,
-  listJobs,
-  closeTaskSession,
-  cloneProject,
-  setProjectBranch,
-} from './business/index.js'
+import * as monitorBusiness from './business/index.js'
 import { emitAudit } from '../../core/log/store.js'
 import { emit, emitEntity } from '../../core/events/index.js'
 import { TaskArchivePatch, TaskNamePatch, TaskStatePatch } from './schemas/task.js'
@@ -95,7 +84,7 @@ export class MonitorController extends AbstractController {
     }
     // Clone remote repo when gitUrl is provided.
     if (parsed.gitUrl) {
-      const cloned = cloneProject({
+      const cloned = monitorBusiness.cloneProject({
         gitUrl: parsed.gitUrl,
         branch: parsed.branch || parsed.defaultBranch,
         name: parsed.name,
@@ -118,7 +107,7 @@ export class MonitorController extends AbstractController {
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     // Optional branch metadata on local projects.
     if (parsed.branch && result.project?.id) {
-      setProjectBranch(result.project.id, parsed.branch)
+      monitorBusiness.setProjectBranch(result.project.id, parsed.branch)
       const updated = registry.get(result.project.id)
       emitAudit({
         op: 'create',
@@ -150,7 +139,7 @@ export class MonitorController extends AbstractController {
     if (!b.ok) return this.badRequest('invalid JSON')
     const id = String(b.value.id || b.value.projectId || '')
     const branch = String(b.value.branch || '')
-    const result = setProjectBranch(id, branch)
+    const result = monitorBusiness.setProjectBranch(id, branch)
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     return this.ok({ project: result.project, branch: result.branch })
   }
@@ -184,7 +173,7 @@ export class MonitorController extends AbstractController {
     if ('error' in gate) return gate.error
     const { root } = gate
     const id = this.c.req.query('id') || ''
-    const cfg = await loadPipelineConfig(root, id || null)
+    const cfg = await monitorBusiness.loadPipelineConfig(root, id || null)
     return this.ok({ id: id || null, pipeline: cfg })
   }
 
@@ -507,7 +496,7 @@ export class MonitorController extends AbstractController {
     let selectionForPrompt = selectedText ?? ''
     if (useSplice) {
       const lineCount = content.split(/\r?\n/).length
-      const matched = findSelectionRange(content, selectedText!)
+      const matched = monitorBusiness.findSelectionRange(content, selectedText!)
       if (matched) {
         spliceRange = matched
       } else {
@@ -516,7 +505,7 @@ export class MonitorController extends AbstractController {
         const end = Math.min(Math.max(start, rawEnd), lineCount)
         spliceRange = { start, end }
       }
-      selectionForPrompt = extractLines(content, spliceRange.start, spliceRange.end)
+      selectionForPrompt = monitorBusiness.extractLines(content, spliceRange.start, spliceRange.end)
     }
 
     const userPrompt = substitutePrompt(action.prompt_template, {
@@ -549,12 +538,12 @@ export class MonitorController extends AbstractController {
       },
     }
     const job = action.require_approval
-      ? submitApprovalJob({
+      ? monitorBusiness.submitApprovalJob({
           ...jobInput,
           approvalArtifact: artifactName,
           ...(useSplice ? { spliceRange } : {}),
         })
-      : submitJob(jobInput)
+      : monitorBusiness.submitJob(jobInput)
 
     emitAudit({
       op: 'update',
@@ -609,13 +598,13 @@ export class MonitorController extends AbstractController {
       generateAndApplyTaskName(root, result.taskId, body.prompt, result.mtime).catch(() => {})
     }
 
-    let job: ReturnType<typeof submitJob> | undefined
+    let job: ReturnType<typeof monitorBusiness.submitJob> | undefined
     if (body.run) {
       const agentRef = result.firstStep?.agent
       if (typeof agentRef !== 'string' || !agentRef) {
         return this.badRequest('pipeline has no first-step agent', { taskId: result.taskId })
       }
-      job = submitJob({
+      job = monitorBusiness.submitJob({
         runnerId: body.runnerId ?? undefined,
         agentRef,
         workspace: path.join(root, 'tasks', result.taskId),
@@ -670,7 +659,7 @@ export class MonitorController extends AbstractController {
     const before = await readState(stateFile)
     if (before.ok) {
       const stepId = String(before.state.current_phase ?? '')
-      const lastSucceeded = listJobs(200).find(
+      const lastSucceeded = monitorBusiness.listJobs(200).find(
         (j) =>
           j.metadata?.taskId === id &&
           j.status === 'succeeded' &&
@@ -707,7 +696,7 @@ export class MonitorController extends AbstractController {
     if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
     const stepId = this.c.req.query('stepId') || undefined
 
-    closeTaskSession(this.projectId || '', id, { stepId })
+    monitorBusiness.closeTaskSession(this.projectId || '', id, { stepId })
     emitAudit({
       op: 'update',
       entity: 'task-state',
@@ -783,14 +772,14 @@ export class MonitorController extends AbstractController {
       if (!read.ok) return this.notFound('task not found', { taskId: id })
       const state = read.state as Record<string, unknown>
 
-      const existing = listJobs(50).find(
+      const existing = monitorBusiness.listJobs(50).find(
         (j) =>
           j.metadata?.taskId === id &&
           (j.status === 'queued' || j.status === 'running'),
       )
       if (existing) return this.json(409, { error: 'step already running', taskId: id, job: existing })
 
-      const pipeline = await loadPipelineConfig(root, id)
+      const pipeline = await monitorBusiness.loadPipelineConfig(root, id)
       const phaseKeys = (pipeline.steps || []).map((s: any) => s.id).filter(Boolean)
       const currentPhase = String(state.current_phase ?? '')
       if (!phaseKeys.includes(stepId) || !isResettableTarget(phaseKeys, currentPhase, stepId)) {
@@ -804,7 +793,7 @@ export class MonitorController extends AbstractController {
       // business/index.js — see comment on `applyHitlAction`), so it runs
       // here for every step whose artifacts were just deleted.
       for (const sid of result.removedSteps) {
-        closeTaskSession(this.projectId || '', id, { stepId: sid })
+        monitorBusiness.closeTaskSession(this.projectId || '', id, { stepId: sid })
       }
 
       emitAudit({
@@ -842,7 +831,7 @@ export class MonitorController extends AbstractController {
     if (!read.ok) return this.notFound('task not found', { taskId: id })
 
     const projectId = this.projectId || ''
-    const result = await sendTaskFeedback(id, projectId, parsed.data.feedback, {
+    const result = await monitorBusiness.sendTaskFeedback(id, projectId, parsed.data.feedback, {
       stepId: parsed.data.stepId ?? undefined,
       mode: parsed.data.mode,
     })
