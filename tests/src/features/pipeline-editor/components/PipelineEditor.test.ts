@@ -27,11 +27,22 @@ vi.mock('@/features/pipeline-editor/scripts/ProfileManagerApi', () => ({
 
 // VueFlow's canvas (SVG getBBox / ResizeObserver) does not run under jsdom —
 // stub the component but keep useVueFlow() (used directly by PipelineEditor).
+// fitView is stubbed too: the real implementation warns ("Viewport not
+// initialized yet.") when called without a mounted VueFlow canvas, and
+// PipelineEditor's onMounted schedules fitView() via an uncancelled
+// setTimeout — since these tests never unmount, that warning can otherwise
+// fire asynchronously after a test (and this file's jsdom env) has already
+// torn down, crashing the run with an unrelated "Closing rpc" error.
 vi.mock('@vue-flow/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@vue-flow/core')>()
   return {
     ...actual,
     VueFlow: { name: 'VueFlow', props: ['nodes', 'edges', 'nodeTypes'], template: '<div />' },
+    useVueFlow: (...args: Parameters<typeof actual.useVueFlow>) => {
+      const vueFlow = actual.useVueFlow(...args)
+      ;(vueFlow as unknown as { fitView: unknown }).fitView = vi.fn()
+      return vueFlow
+    },
   }
 })
 
