@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { useI18nHelpers } from './core/composables/useI18nHelpers'
-import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide, inject } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { fetchProjects } from './features/monitor/scripts/monitorApi'
 import { fetchAutoscanConfig, runAutoscan, fetchLoggingConfig } from './features/settings/scripts/SettingsDialogApi'
 import { useLocalToggle } from './core/composables/useLocalToggle'
 import { useAppSettings } from './core/composables/useAppSettings'
 import { navigateToModeKey, reloadProjectsKey } from './core/shell/keys'
+import { containerKey } from './core/shell/containerKey'
+import { modeRegistryToken, type ShellContext } from './core/shell/modeRegistry'
 import {
   resolveCollapseAppSidebarOnOutside,
   resolveNotifyShowFloating,
@@ -19,20 +21,17 @@ import { useRunningJobs } from './features/running-jobs/composables/useRunningJo
 import FloatingNotificationIcon from './features/notifications/components/FloatingNotificationIcon.vue'
 import FloatingRunningJobsIcon from './features/running-jobs/components/FloatingRunningJobsIcon.vue'
 import NotificationBell from './features/notifications/components/NotificationBell.vue'
-import MonitorLayout from './features/monitor/components/MonitorLayout.vue'
-import PipelineEditor from './features/pipeline-editor/components/PipelineEditor.vue'
-import AgentEditor from './features/agent-editor/components/AgentEditor.vue'
-import KnowledgePanel from './features/knowledge/components/KnowledgePanel.vue'
-import RunnerConfigPanel from './features/runner/components/RunnerConfigPanel.vue'
-import LogsPanel from './features/logs/components/LogsPanel.vue'
-import AutomationsPanel from './features/automations/components/AutomationsPanel.vue'
-import StatisticsPanel from './features/statistics/components/StatisticsPanel.vue'
-import QuickActionPanel from './features/quick-action/components/QuickActionPanel.vue'
 import SettingsDialog from './features/settings/components/SettingsDialog.vue'
 import CreateTaskDialog from './features/monitor/components/CreateTaskDialog.vue'
 import FloatingChatButton from './features/nl-chat/components/FloatingChatButton.vue'
 import RailIcon from './core/ui/RailIcon.vue'
 import { APP_VERSION } from './core/lib/appVersion'
+
+const container = inject(containerKey)
+if (!container) {
+  throw new Error('App.vue: container chưa được provide — kiểm tra installPlugins() ở main.ts')
+}
+const modeRegistry = container.resolve(modeRegistryToken)
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
 const PROJECT_KEY = 'dev-dashboard-selected-project'
@@ -158,6 +157,18 @@ function onProjectsChanged() {
   loadProjects()
 }
 
+function onSelectTask(id: string | null) {
+  selectedId.value = id
+}
+
+function onUpdateScope(scope: string) {
+  editorScope.value = scope
+}
+
+function onUpdateTaskId(taskId: string) {
+  editorTaskId.value = taskId
+}
+
 /** Exposed so SettingsDialog can refresh the sidebar after an autoscan run. */
 provide(reloadProjectsKey, loadProjects)
 
@@ -259,6 +270,39 @@ async function onTaskCreated({ taskId }: { taskId: string; jobId: string | null 
   selectedId.value = taskId
 }
 
+// State/hàm shell sở hữu, mode đọc/gọi qua `bindings(ctx)` của chính feature —
+// App.vue không còn biết mode nào cần props/listener gì (xem registerMode.ts).
+const shellContext = computed<ShellContext>(() => ({
+  projects: projects.value,
+  tasks: tasks.value,
+  selectedId: selectedId.value,
+  selected: selected.value,
+  selectedProjectId: selectedProjectId.value,
+  defaultProjectId: defaultProjectId.value,
+  connected: connected.value,
+  error: error.value,
+  lastUpdated: lastUpdated.value,
+  sidebarCollapsed: sidebarCollapsed.value,
+  editorScope: editorScope.value,
+  editorTaskId: editorTaskId.value,
+  openArtifact: openArtifact.value,
+  showLogsTab: showLogsTab.value,
+  onSelectProject,
+  onProjectsChanged,
+  onSelectTask,
+  onOpenArtifact: handleOpenArtifact,
+  poll,
+  onTaskDeleted,
+  onCreateTaskOpen,
+  onUpdateScope,
+  onUpdateTaskId,
+}))
+
+const modes = computed(() =>
+  modeRegistry.listModes().filter((m) => !m.visible || m.visible(shellContext.value)),
+)
+const activeMode = computed(() => modeRegistry.getMode(mode.value))
+
 watch(mode, async (m) => {
   stop()
   if (m === 'monitor') start()
@@ -311,86 +355,15 @@ onUnmounted(() => {
 
       <div class="mode-toggle">
         <button
+          v-for="m in modes"
+          :key="m.key"
           class="mode-btn rail-icon-btn"
-          :class="{ active: mode === 'monitor' }"
-          :title="t('common.modes.monitor')"
-          @click="mode = 'monitor'"
+          :class="{ active: mode === m.key }"
+          :title="t(m.titleKey ?? m.labelKey)"
+          @click="mode = m.key"
         >
-          <RailIcon name="monitor" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.monitor') }}</span>
-        </button>
-        <button
-          class="mode-btn rail-icon-btn"
-          :class="{ active: mode === 'editor' }"
-          :title="t('common.modes.pipelineEditor')"
-          @click="mode = 'editor'"
-        >
-          <RailIcon name="pipeline" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.pipelineEditor') }}</span>
-        </button>
-        <button
-          class="mode-btn rail-icon-btn"
-          :class="{ active: mode === 'agentEditor' }"
-          :title="t('common.modes.agentEditor')"
-          @click="mode = 'agentEditor'"
-        >
-          <RailIcon name="agent" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.agentEditor') }}</span>
-        </button>
-        <button
-          class="mode-btn rail-icon-btn"
-          :class="{ active: mode === 'quickAction' }"
-          :title="t('common.modes.quickAction')"
-          @click="mode = 'quickAction'"
-        >
-          <RailIcon name="quickAction" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.quickAction') }}</span>
-        </button>
-        <button
-          class="mode-btn rail-icon-btn"
-          :class="{ active: mode === 'knowledge' }"
-          :title="t('common.modes.knowledge')"
-          @click="mode = 'knowledge'"
-        >
-          <RailIcon name="knowledge" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.knowledge') }}</span>
-        </button>
-        <button
-          class="mode-btn rail-icon-btn"
-          :class="{ active: mode === 'runner' }"
-          :title="t('common.modes.runnerConfig')"
-          @click="mode = 'runner'"
-        >
-          <RailIcon name="runner" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.runner') }}</span>
-        </button>
-        <button
-          class="mode-btn rail-icon-btn"
-          :class="{ active: mode === 'automations' }"
-          :title="t('common.modes.automations')"
-          @click="mode = 'automations'"
-        >
-          <RailIcon name="automations" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.automations') }}</span>
-        </button>
-        <button
-          v-if="showLogsTab"
-          class="mode-btn rail-icon-btn"
-          :class="{ active: mode === 'logs' }"
-          :title="t('common.modes.logs')"
-          @click="mode = 'logs'"
-        >
-          <RailIcon name="logs" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.logs') }}</span>
-        </button>
-        <button
-          class="mode-btn rail-icon-btn"
-          :class="{ active: mode === 'statistics' }"
-          :title="t('common.modes.statistics')"
-          @click="mode = 'statistics'"
-        >
-          <RailIcon name="statistics" />
-          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t('common.modes.statistics') }}</span>
+          <RailIcon :name="m.icon" />
+          <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t(m.labelKey) }}</span>
         </button>
       </div>
 
@@ -404,15 +377,8 @@ onUnmounted(() => {
         />
         <footer v-if="!sidebarCollapsed" class="status">
           <span v-if="error" class="err">⚠ {{ error }}</span>
-          <span v-else-if="lastUpdated && mode === 'monitor'">{{ t('common.status.updated', { time: lastUpdated }) }}</span>
-          <span v-else-if="mode === 'editor'" class="muted">{{ t('common.status.paused.editor') }}</span>
-          <span v-else-if="mode === 'agentEditor'" class="muted">{{ t('common.status.paused.agentEditor') }}</span>
-          <span v-else-if="mode === 'quickAction'" class="muted">{{ t('common.status.paused.quickAction') }}</span>
-          <span v-else-if="mode === 'knowledge'" class="muted">{{ t('common.status.paused.knowledge') }}</span>
-          <span v-else-if="mode === 'runner'" class="muted">{{ t('common.status.paused.runner') }}</span>
-          <span v-else-if="mode === 'automations'" class="muted">{{ t('common.status.paused.automations') }}</span>
-          <span v-else-if="mode === 'logs'" class="muted">{{ t('common.status.paused.logs') }}</span>
-          <span v-else-if="mode === 'statistics'" class="muted">{{ t('common.status.paused.statistics') }}</span>
+          <span v-else-if="activeMode?.statusKind === 'live' && lastUpdated">{{ t('common.status.updated', { time: lastUpdated }) }}</span>
+          <span v-else-if="activeMode?.statusKind === 'paused'" class="muted">{{ t(`common.status.paused.${mode}`) }}</span>
         </footer>
         <button
           type="button"
@@ -432,69 +398,11 @@ onUnmounted(() => {
       </div>
     </aside>
 
-    <main v-if="mode === 'monitor'" class="main main-editor">
-      <MonitorLayout
-        :projects="projects"
-        :default-project-id="defaultProjectId"
-        :selected-project-id="selectedProjectId"
-        :tasks="tasks"
-        :selected-id="selectedId"
-        :selected="selected"
-        :open-artifact="openArtifact"
-        :connected="connected"
-        :error="error"
-        :last-updated="lastUpdated"
-        @select-project="onSelectProject"
-        @projects-changed="onProjectsChanged"
-        @select-task="selectedId = $event"
-        @open-artifact="handleOpenArtifact"
-        @qa-saved="poll"
-        @hitl-action="poll"
-        @task-archived="poll"
-        @task-deleted="onTaskDeleted"
-        @create-task="onCreateTaskOpen"
-      />
-    </main>
-
-    <main v-else-if="mode === 'editor'" class="main main-editor">
-      <PipelineEditor
-        :scope="editorScope"
-        :task-id="editorTaskId"
-        :tasks="tasks"
-        :project-id="selectedProjectId"
-        :app-sidebar-collapsed="sidebarCollapsed"
-        @update:scope="editorScope = $event"
-        @update:task-id="editorTaskId = $event"
-      />
-    </main>
-
-    <main v-else-if="mode === 'quickAction'" class="main main-editor">
-      <QuickActionPanel :project-id="selectedProjectId" />
-    </main>
-
-    <main v-else-if="mode === 'knowledge'" class="main main-editor">
-      <KnowledgePanel />
-    </main>
-
-    <main v-else-if="mode === 'runner'" class="main main-editor">
-      <RunnerConfigPanel />
-    </main>
-
-    <main v-else-if="mode === 'automations'" class="main main-editor">
-      <AutomationsPanel :project-id="selectedProjectId" />
-    </main>
-
-    <main v-else-if="mode === 'logs'" class="main main-editor">
-      <LogsPanel />
-    </main>
-
-    <main v-else-if="mode === 'statistics'" class="main main-editor">
-      <StatisticsPanel :project-id="selectedProjectId" :default-project-id="defaultProjectId" />
-    </main>
-
-    <main v-else-if="mode === 'agentEditor'" class="main main-editor">
-      <AgentEditor :project-id="selectedProjectId" />
-    </main>
+    <template v-for="m in modes" :key="m.key">
+      <main v-if="mode === m.key" class="main main-editor">
+        <component :is="m.panel" v-bind="m.bindings?.(shellContext) ?? {}" />
+      </main>
+    </template>
 
     <FloatingRunningJobsIcon
       :running-count="runningCount"

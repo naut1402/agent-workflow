@@ -11,6 +11,18 @@ import RunnerConfigPanel from '@/features/runner/components/RunnerConfigPanel.vu
 import AutomationsPanel from '@/features/automations/components/AutomationsPanel.vue'
 import LogsPanel from '@/features/logs/components/LogsPanel.vue'
 import StatisticsPanel from '@/features/statistics/components/StatisticsPanel.vue'
+import { createContainer } from '@/core/container'
+import { containerKey } from '@/core/shell/containerKey'
+import { createModeRegistry, modeRegistryToken } from '@/core/shell/modeRegistry'
+import { registerMonitorMode } from '@/features/monitor/registerMode'
+import { registerPipelineEditorMode } from '@/features/pipeline-editor/registerMode'
+import { registerAgentEditorMode } from '@/features/agent-editor/registerMode'
+import { registerQuickActionMode } from '@/features/quick-action/registerMode'
+import { registerKnowledgeMode } from '@/features/knowledge/registerMode'
+import { registerRunnerMode } from '@/features/runner/registerMode'
+import { registerAutomationsMode } from '@/features/automations/registerMode'
+import { registerLogsMode } from '@/features/logs/registerMode'
+import { registerStatisticsMode } from '@/features/statistics/registerMode'
 
 vi.mock('@/features/monitor/scripts/monitorApi', () => ({
   fetchProjects: vi.fn(async () => ({ projects: [], defaultId: null })),
@@ -56,6 +68,37 @@ const MODE_DEFS = [
 const i18n = createTestI18n('vi')
 const t = (key: string, params?: Record<string, unknown>) => (i18n.global.t as any)(key, params ?? {})
 
+// Wiring y hệt `main.ts` — App.test.ts phải exercise đúng cơ chế container/registry
+// thật, không phải mock rời rạc, để còn là safety net cho refactor App.vue.
+function buildContainer() {
+  const registry = createModeRegistry()
+  registerMonitorMode(registry)
+  registerPipelineEditorMode(registry)
+  registerAgentEditorMode(registry)
+  registerQuickActionMode(registry)
+  registerKnowledgeMode(registry)
+  registerRunnerMode(registry)
+  registerAutomationsMode(registry)
+  registerLogsMode(registry)
+  registerStatisticsMode(registry)
+
+  const container = createContainer()
+  container.register(modeRegistryToken, () => registry)
+  return container
+}
+
+function mountApp(options: Record<string, any> = {}) {
+  const { global: g = {}, ...rest } = options
+  return mount(App, {
+    attachTo: document.body,
+    ...rest,
+    global: {
+      ...g,
+      provide: { [containerKey]: buildContainer(), ...(g.provide ?? {}) },
+    },
+  })
+}
+
 describe('App', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>
   let warnSpy: ReturnType<typeof vi.spyOn>
@@ -84,7 +127,7 @@ describe('App', () => {
   })
 
   it('mount app: hiện đủ 9 nút mode trong sidebar theo đúng thứ tự', async () => {
-    const wrapper = mount(App, { attachTo: document.body })
+    const wrapper = mountApp()
     await flushPromises()
 
     const buttons = wrapper.findAll('.mode-toggle .mode-btn')
@@ -97,7 +140,7 @@ describe('App', () => {
   it.each(MODE_DEFS)(
     'mode "$key": active sidebar + status text + main panel đúng component',
     async (def) => {
-      const wrapper = mount(App, { attachTo: document.body })
+      const wrapper = mountApp()
       await flushPromises()
 
       const index = MODE_DEFS.findIndex((m) => m.key === def.key)
@@ -128,7 +171,7 @@ describe('App', () => {
   )
 
   it('mode monitor: MonitorLayout nhận đủ 10 props + 9 event listener', async () => {
-    const wrapper = mount(App, { attachTo: document.body })
+    const wrapper = mountApp()
     await flushPromises()
 
     const panel = wrapper.findComponent(MonitorLayout as any)
@@ -158,7 +201,7 @@ describe('App', () => {
   })
 
   it('mode editor: PipelineEditor nhận đủ 5 props + update:scope / update:task-id', async () => {
-    const wrapper = mount(App, { attachTo: document.body })
+    const wrapper = mountApp()
     await flushPromises()
     await wrapper.findAll('.mode-toggle .mode-btn')[1].trigger('click')
     await flushPromises()
@@ -178,7 +221,7 @@ describe('App', () => {
   })
 
   it('không có console.error / console.warn khi mount và chuyển mode', async () => {
-    const wrapper = mount(App, { attachTo: document.body })
+    const wrapper = mountApp()
     await flushPromises()
     for (const btn of wrapper.findAll('.mode-toggle .mode-btn')) {
       await btn.trigger('click')
