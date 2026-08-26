@@ -3,6 +3,7 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import { useChatSurface } from '../../nl-chat/composables/useChatSurface'
+import Icon from '../../../core/ui/Icon.vue'
 
 const props = defineProps({
   data: { type: Object, required: true },
@@ -124,19 +125,7 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
         :aria-label="t('monitor.pipelineNode.chat')"
         @click.stop="onChat"
       >
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M20.5 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 20.5 12z" />
-        </svg>
+        <Icon name="chatBubble" :size="15" />
       </button>
     </div>
     <Handle type="target" :position="Position.Left" />

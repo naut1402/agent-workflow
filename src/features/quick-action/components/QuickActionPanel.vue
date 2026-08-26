@@ -6,6 +6,7 @@ import { fetchRunners } from '../../runner/scripts/runnerApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
 import QuickActionMenuDialog from './QuickActionMenuDialog.vue'
+import Icon from '../../../core/ui/Icon.vue'
 import type { ArtifactMenuNode } from '../../monitor/schemas/artifactAction'
 import {
   addMenuGroup,
@@ -491,9 +492,7 @@ async function removeAction(a: QuickActionDraft) {
             :aria-label="t('quickAction.form.close')"
             @click="closeForm"
           >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8" />
-            </svg>
+            <Icon name="close" :size="16" />
           </button>
         </div>
         <p v-if="formError" class="err">{{ formError }}</p>
@@ -651,9 +650,7 @@ async function removeAction(a: QuickActionDraft) {
             :aria-label="t('quickAction.form.close')"
             @click="closeCreateMenuDialog"
           >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8" />
-            </svg>
+            <Icon name="close" :size="16" />
           </button>
         </div>
         <p v-if="createMenuError" class="err">{{ createMenuError }}</p>

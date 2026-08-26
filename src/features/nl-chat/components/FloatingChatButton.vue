@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import ChatWindow from './ChatWindow.vue'
 import { useChatSurface } from '../composables/useChatSurface'
+import Icon from '../../../core/ui/Icon.vue'
 
 // Floating chat icon, bottom-right by default, draggable — the single UI
 // anchor for the NL chat surface shared by Task/Pipeline/Agent creation
@@ -122,20 +123,7 @@ onUnmounted(() => {
     @pointerdown="onPointerDown"
     @click="onClick"
   >
-    <svg
-      width="26"
-      height="26"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.6"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M20.5 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 20.5 12z" />
-      <path d="M8.5 10.5h7M8.5 13.5h4.5" />
-    </svg>
+    <Icon name="chatBubble" :size="26" />
   </button>
   <ChatWindow
     v-if="everOpened"

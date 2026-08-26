@@ -4,6 +4,7 @@ import { computed, nextTick, ref } from 'vue'
 import { patchTaskArchive, patchTaskName, deleteTask, repairTaskState } from '../scripts/TaskListItemApi'
 import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
 import { taskDisplayName } from '../lib/taskDisplay'
+import Icon from '../../../core/ui/Icon.vue'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -189,21 +190,7 @@ function hiddenCount(task: any) {
         :class="flagClass(task)"
         :title="needsRepair ? t('monitor.taskItem.stateError') : task.has_qa ? t('monitor.taskItem.flagQa') : task.hitl_pending ? t('monitor.taskItem.flagHitl') : undefined"
       >
-        <svg
-          v-if="isQaFlag(task)"
-          class="flag-chat"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M20.5 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 20.5 12z" />
-        </svg>
+        <Icon v-if="isQaFlag(task)" name="chatBubble" :size="14" class="flag-chat" />
         <template v-else>{{ statusIcon(task) }}</template>
       </span>
       <input
@@ -250,18 +237,7 @@ function hiddenCount(task: any) {
         class="btn-archive"
         :title="task.archived ? t('monitor.taskItem.unarchive') : t('monitor.taskItem.archive')"
         @click.stop="toggleArchive"
-      ><template v-if="task.archived">↩</template><svg
-          v-else
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.25"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        ><rect x="2" y="2" width="12" height="3" rx="1" /><path d="M3 5v7.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5" /><path d="M6.5 8.5h3" /></svg></button>
+      ><template v-if="task.archived">↩</template><Icon v-else name="archiveBox" :size="14" /></button>
       <button
         v-if="!task.state_ok"
         class="btn-delete"

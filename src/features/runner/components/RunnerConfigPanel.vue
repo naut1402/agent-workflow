@@ -5,6 +5,7 @@ import { fetchRunners, fetchJobs } from '../scripts/runnerApi'
 import { saveRunner, deleteRunner, setDefaultRunner, fetchConnections } from '../scripts/RunnerConfigPanelApi'
 import { fetchProviderConfigs } from '../scripts/ProviderDialogApi'
 import RunnerDialog from './RunnerDialog.vue'
+import Icon from '../../../core/ui/Icon.vue'
 import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderConfigOption, ProviderFamily } from '../types'
 
 const { t } = useI18nHelpers()
@@ -238,11 +239,7 @@ async function remove(r: RunnerDraft, e: Event) {
             :aria-label="t('runner.panel.copyRunner')"
             @click="openCopy(r, $event)"
           >
-            <!-- copy -->
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <rect x="5.5" y="5.5" width="7" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
-              <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M3.5 10.5V3.5h7" />
-            </svg>
+            <Icon name="copy" />
           </button>
           <button
             type="button"
@@ -251,16 +248,7 @@ async function remove(r: RunnerDraft, e: Event) {
             :aria-label="t('runner.panel.deleteRunner')"
             @click="remove(r, $event)"
           >
-            <!-- trash -->
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-                d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
-              />
-            </svg>
+            <Icon name="trash" />
           </button>
         </div>
       </li>

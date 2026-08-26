@@ -20,6 +20,7 @@ import { fetchProviderConfigs, saveProviderConfig, deleteProviderConfig } from '
 import { DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
 import type { ConnectionKind, ConnectionOption, ProviderConfigOption, ProviderEntry } from '../types'
 import CComboSelect from '../../../core/ui/CComboSelect.vue'
+import Icon from '../../../core/ui/Icon.vue'
 import InfoTooltip from '../../../core/ui/InfoTooltip.vue'
 import ProviderDialog from './ProviderDialog.vue'
 
@@ -786,16 +787,7 @@ onUnmounted(() => {
                     :aria-label="t('runner.connectionDialog.editCommand')"
                     @click="openEditCommand(selectedCommand)"
                   >
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                      <path
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.4"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
-                      />
-                    </svg>
+                    <Icon name="pencil" />
                   </button>
                   <button
                     type="button"
@@ -804,15 +796,7 @@ onUnmounted(() => {
                     :aria-label="t('runner.connectionDialog.deleteCommand')"
                     @click="removeCustomCommand(selectedCommand)"
                   >
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                      <path
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.4"
-                        stroke-linecap="round"
-                        d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
-                      />
-                    </svg>
+                    <Icon name="trash" />
                   </button>
                 </div>
               </div>
@@ -848,15 +832,7 @@ onUnmounted(() => {
                     :aria-label="t('runner.providerDialog.title')"
                     @click="openNewProviderConfig"
                   >
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                      <path
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.5"
-                        stroke-linecap="round"
-                        d="M8 3v10M3 8h10"
-                      />
-                    </svg>
+                    <Icon name="plus" />
                   </button>
                   <button
                     type="button"
@@ -866,16 +842,7 @@ onUnmounted(() => {
                     :aria-label="t('runner.providerDialog.editTitle')"
                     @click="openEditProviderConfig"
                   >
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                      <path
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.4"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
-                      />
-                    </svg>
+                    <Icon name="pencil" />
                   </button>
                   <button
                     type="button"
@@ -885,15 +852,7 @@ onUnmounted(() => {
                     :aria-label="t('runner.connectionDialog.deleteProvider')"
                     @click="removeSelectedProviderConfig"
                   >
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                      <path
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.4"
-                        stroke-linecap="round"
-                        d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
-                      />
-                    </svg>
+                    <Icon name="trash" />
                   </button>
                 </div>
               </div>
@@ -920,9 +879,7 @@ onUnmounted(() => {
                     :aria-label="t('runner.connectionDialog.addCredential')"
                     @click="toggleNewCredential"
                   >
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                      <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M8 3v10M3 8h10" />
-                    </svg>
+                    <Icon name="plus" />
                   </button>
                   <button
                     type="button"
@@ -932,16 +889,7 @@ onUnmounted(() => {
                     :aria-label="t('runner.connectionDialog.editCredential')"
                     @click="openEditCredential"
                   >
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                      <path
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.4"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
-                      />
-                    </svg>
+                    <Icon name="pencil" />
                   </button>
                   <button
                     type="button"
@@ -951,15 +899,7 @@ onUnmounted(() => {
                     :aria-label="t('runner.connectionDialog.deleteCredential')"
                     @click="removeSelectedCredential"
                   >
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                      <path
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.4"
-                        stroke-linecap="round"
-                        d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
-                      />
-                    </svg>
+                    <Icon name="trash" />
                   </button>
                 </div>
               </div>
