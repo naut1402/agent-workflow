@@ -20,6 +20,7 @@ import { fetchProviderConfigs, saveProviderConfig, deleteProviderConfig } from '
 import { DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
 import type { ConnectionKind, ConnectionOption, ProviderConfigOption, ProviderEntry } from '../types'
 import CComboSelect from '../../../core/ui/CComboSelect.vue'
+import CSelect from '../../../core/ui/CSelect.vue'
 import Icon from '../../../core/ui/Icon.vue'
 import InfoTooltip from '../../../core/ui/InfoTooltip.vue'
 import ProviderDialog from './ProviderDialog.vue'
@@ -94,6 +95,10 @@ const selectedProviderConfig = computed(
   () => providerConfigList.value.find((p) => p.id === selectedProviderConfigId.value) || null,
 )
 
+const providerConfigSelectOptions = computed(() =>
+  providerConfigList.value.map((pc) => ({ value: pc.id, label: `${pc.label} (${pc.providerId})` })),
+)
+
 const credentialId = ref('')
 const credentials = ref<CredentialProfile[]>([])
 const showNewCredential = ref(false)
@@ -113,6 +118,8 @@ const filteredCredentials = computed(() =>
     (c) => !selectedProviderConfig.value || c.provider === selectedProviderConfig.value.providerId,
   ),
 )
+
+const credentialSelectOptions = computed(() => filteredCredentials.value.map((c) => ({ value: c.id, label: c.label })))
 
 const oauthCapableProviders = ref<string[]>([])
 /**
@@ -377,6 +384,13 @@ const commandOptions = computed(() => [...scanned.value, ...customCommands.value
 
 const selectedCommand = computed(
   () => commandOptions.value.find((c) => c.id === selectedCommandId.value) || null,
+)
+
+const commandSelectOptions = computed(() =>
+  commandOptions.value.map((c) => ({
+    value: c.id,
+    label: `${c.command}${c.available ? '' : t('runner.connectionDialog.notOnPath')}${c.custom ? t('runner.connectionDialog.custom') : ''}`,
+  })),
 )
 
 watch(
@@ -762,7 +776,7 @@ onUnmounted(() => {
           <template v-if="kind === 'local-console'">
             <div class="field">
               <div class="row-actions">
-                <label class="cfg-label" for="conn-command">Command</label>
+                <label class="cfg-label">Command</label>
                 <div class="row-btns">
                   <button type="button" class="btn-ghost btn-sm" :disabled="scanning" @click="refreshScan">
                     {{ scanning ? t('runner.connectionDialog.scanning') : t('runner.actions.refresh') }}
@@ -773,12 +787,13 @@ onUnmounted(() => {
                 </div>
               </div>
               <div class="command-row">
-                <select id="conn-command" v-model="selectedCommandId" class="cfg-input">
-                  <option value="" disabled>{{ t('runner.connectionDialog.commandPlaceholder') }}</option>
-                  <option v-for="c in commandOptions" :key="c.id" :value="c.id">
-                    {{ c.command }}{{ c.available ? '' : t('runner.connectionDialog.notOnPath') }}{{ c.custom ? t('runner.connectionDialog.custom') : '' }}
-                  </option>
-                </select>
+                <CSelect
+                  v-model="selectedCommandId"
+                  :options="commandSelectOptions"
+                  :placeholder="t('runner.connectionDialog.commandPlaceholder')"
+                  aria-label="Command"
+                  class="cfg-input"
+                />
                 <div v-if="selectedCommand?.custom" class="icon-btn-group">
                   <button
                     type="button"
@@ -818,12 +833,13 @@ onUnmounted(() => {
                 </span>
               </div>
               <div class="command-row">
-                <select v-model="selectedProviderConfigId" class="cfg-input">
-                  <option value="" disabled>{{ t('runner.connectionDialog.providerPlaceholder') }}</option>
-                  <option v-for="pc in providerConfigList" :key="pc.id" :value="pc.id">
-                    {{ pc.label }} ({{ pc.providerId }})
-                  </option>
-                </select>
+                <CSelect
+                  v-model="selectedProviderConfigId"
+                  :options="providerConfigSelectOptions"
+                  :placeholder="t('runner.connectionDialog.providerPlaceholder')"
+                  :aria-label="t('runner.connectionDialog.providerField')"
+                  class="cfg-input"
+                />
                 <div class="icon-btn-group">
                   <button
                     type="button"
@@ -864,12 +880,13 @@ onUnmounted(() => {
             <div class="field">
               <label class="cfg-label">{{ t('runner.connectionDialog.credentialField') }}</label>
               <div class="credential-row">
-                <select v-model="credentialId" class="cfg-input">
-                  <option value="" disabled>{{ t('runner.connectionDialog.credentialPlaceholder') }}</option>
-                  <option v-for="c in filteredCredentials" :key="c.id" :value="c.id">
-                    {{ c.label }}
-                  </option>
-                </select>
+                <CSelect
+                  v-model="credentialId"
+                  :options="credentialSelectOptions"
+                  :placeholder="t('runner.connectionDialog.credentialPlaceholder')"
+                  :aria-label="t('runner.connectionDialog.credentialField')"
+                  class="cfg-input"
+                />
                 <div class="icon-btn-group">
                   <button
                     type="button"

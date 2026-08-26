@@ -51,6 +51,7 @@ Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuầ
 - Quy ước button (ưu tiên icon-btn, default không viền, hover scale): [`../ui-buttons.md`](../ui-buttons.md).
 - **Custom UI primitives** trong `src/core/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.
 - **Icon dùng chung** (`src/core/ui/Icon.vue`): mọi icon SVG trong component feature dùng `<Icon name="..." />` — **không** tự vẽ tay `<svg>`/`<path>` lặp lại trong từng component. Icon chưa có trong union `name` của `Icon.vue` thì thêm case mới trực tiếp vào `Icon.vue` (giữ nguyên viewBox/style gốc), không copy SVG ra file khác dù chỉ dùng 1 nơi.
+- **Dropdown/select dùng chung**: dropdown mới **không** dùng `<select>` native — dùng `CSelect` (`src/core/ui/CSelect.vue`, option cố định) hoặc `CComboSelect` (`src/core/ui/CComboSelect.vue`, option nhiều hoặc cần nhập giá trị mới/creatable). Chỉ giữ `<select>` native khi cần hành vi trình duyệt gốc không có API tương đương trong 2 component trên.
 
 ---
 

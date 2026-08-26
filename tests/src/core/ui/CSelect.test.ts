@@ -41,4 +41,52 @@ describe('CSelect', () => {
     await wrapper.find('.c-select-trigger').trigger('click')
     expect(wrapper.find('.c-select-menu').exists()).toBe(false)
   })
+
+  it('shows the placeholder when modelValue matches no option', () => {
+    const wrapper = mountWithI18n(CSelect, {
+      props: { modelValue: '', options, placeholder: 'Pick one' },
+    })
+    expect(wrapper.find('.c-select-value').text()).toBe('Pick one')
+    expect(wrapper.find('.c-select-value').classes()).toContain('is-placeholder')
+  })
+
+  it('shows an empty-state row instead of a blank menu when there are no options', async () => {
+    const wrapper = mountWithI18n(CSelect, {
+      props: { modelValue: '', options: [] },
+    })
+    await wrapper.find('.c-select-trigger').trigger('click')
+    expect(wrapper.find('.c-select-empty').exists()).toBe(true)
+    expect(wrapper.findAll('.c-select-option')).toHaveLength(0)
+  })
+
+  it('opens and picks an option with the keyboard alone (no click)', async () => {
+    const wrapper = mountWithI18n(CSelect, {
+      props: { modelValue: 'both', options, ariaLabel: 'Placement' },
+      attachTo: document.body,
+    })
+
+    await wrapper.find('.c-select-trigger').trigger('keydown', { key: 'ArrowDown' })
+    expect(wrapper.find('.c-select-menu').exists()).toBe(true)
+
+    await wrapper.find('.c-select-trigger').trigger('keydown', { key: 'ArrowDown' })
+    await wrapper.find('.c-select-trigger').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('update:modelValue')?.[0]?.[0]).toBe('floating')
+    expect(wrapper.find('.c-select-menu').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
+  it('closes without picking on Escape', async () => {
+    const wrapper = mountWithI18n(CSelect, {
+      props: { modelValue: 'both', options, ariaLabel: 'Placement' },
+      attachTo: document.body,
+    })
+
+    await wrapper.find('.c-select-trigger').trigger('click')
+    await wrapper.find('.c-select-trigger').trigger('keydown', { key: 'Escape' })
+    expect(wrapper.find('.c-select-menu').exists()).toBe(false)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+
+    wrapper.unmount()
+  })
 })

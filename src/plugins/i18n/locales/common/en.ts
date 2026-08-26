@@ -47,6 +47,9 @@ export default {
     repairTaskState: 'Could not repair task state (error {status})',
     saveCustomAgent: 'Could not save custom agent (server returned no name).',
   },
+  select: {
+    empty: 'No options.',
+  },
   folderPicker: {
     title: 'Choose folder',
     close: 'Close',

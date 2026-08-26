@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, DOMWrapper } from '@vue/test-utils'
 import RunnerDialog from '@/features/runner/components/RunnerDialog.vue'
 import type { ConnectionOption, ProviderEntry } from '@/features/runner/types'
+import runnerVi from '@/features/runner/locales/vi'
 
 vi.mock('@/features/runner/scripts/RunnerDialogApi', () => ({
   saveRunner: vi.fn(async () => ({ ok: true })),
@@ -25,25 +26,48 @@ function mountDialog(props: Record<string, unknown> = {}) {
   })
 }
 
+// The timeout field migrated from a native `<select>` to `CSelect` (task
+// 20260826_001) — drive its actual DOM: click the trigger to open the menu,
+// then click the `<li>` whose text matches the preset label.
+function timeoutSelectRoot(): HTMLElement {
+  const el = [...document.querySelectorAll<HTMLElement>('.c-select')].find(
+    (root) => root.querySelector('.c-select-trigger')?.getAttribute('aria-label') === runnerVi.fields.timeoutMs,
+  )
+  if (!el) throw new Error('timeout CSelect not found')
+  return el
+}
+async function pickTimeoutPreset(label: string) {
+  const root = timeoutSelectRoot()
+  root.querySelector<HTMLButtonElement>('.c-select-trigger')!.click()
+  await flushPromises()
+  const option = [...document.querySelectorAll<HTMLLIElement>('.c-select-option')].find(
+    (li) => li.textContent?.trim() === label,
+  )
+  if (!option) throw new Error(`preset not found: ${label}`)
+  option.click()
+  await flushPromises()
+}
+
 afterEach(() => {
   vi.clearAllMocks()
   document.body.innerHTML = ''
 })
 
 describe('RunnerDialog — timeout dropdown', () => {
-  it('renders timeout dropdown with 5 presets, default 10 phút', () => {
+  it('renders timeout dropdown with 5 presets, default 10 phút', async () => {
     mountDialog()
-    const select = document.querySelector('select.timeout-select') as HTMLSelectElement
-    expect(select).toBeTruthy()
-    const options = [...select.querySelectorAll('option')]
+    const root = timeoutSelectRoot()
+    expect(root.querySelector('.c-select-value')?.textContent?.trim()).toBe(runnerVi.timeoutOptions.min10)
+
+    root.querySelector<HTMLButtonElement>('.c-select-trigger')!.click()
+    await flushPromises()
+    const options = [...document.querySelectorAll('.c-select-option')]
     expect(options).toHaveLength(5)
-    expect(select.value).toBe('600000')
   })
 
   it('selecting 60 phút persists timeoutMs = 3_600_000 on save payload', async () => {
     mountDialog()
-    const select = new DOMWrapper(document.querySelector('select.timeout-select')!)
-    await select.setValue('3600000')
+    await pickTimeoutPreset(runnerVi.timeoutOptions.hour1)
 
     const nameInput = new DOMWrapper(document.querySelector('.field input.cfg-input')!)
     await nameInput.setValue('Runner test')
