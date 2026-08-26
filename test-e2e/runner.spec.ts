@@ -16,7 +16,7 @@ test('runner config: mount + save runner roundtrip (capture)', async ({ page }, 
   const runnerDialog = page.getByRole('dialog', { name: 'Thêm runner' })
   await expect(runnerDialog).toBeVisible()
   await runnerDialog.getByLabel('Tên runner').fill('E2E Runner')
-  await expect(runnerDialog.locator('select').first()).toBeVisible()
+  await expect(runnerDialog.getByRole('button', { name: 'Connection' })).toBeVisible()
   await page.getByRole('button', { name: 'Lưu' }).click()
   await expect(runnerDialog).toBeHidden({ timeout: 10_000 })
 
@@ -33,7 +33,8 @@ test('runner config: mount + save runner roundtrip (capture)', async ({ page }, 
   await expect(connDialog).toBeVisible()
   await connDialog.getByLabel('Tên kết nối').fill('E2E Connection')
   await page.getByRole('button', { name: 'Refresh' }).click()
-  await connDialog.locator('#conn-command').selectOption({ index: 1 })
+  await connDialog.getByRole('button', { name: 'Command' }).click()
+  await connDialog.getByRole('option').first().click()
   await page.getByRole('button', { name: 'Lưu connection' }).click()
   await expect(connDialog).toBeHidden({ timeout: 10_000 })
   await page.getByRole('button', { name: 'Huỷ' }).click()
