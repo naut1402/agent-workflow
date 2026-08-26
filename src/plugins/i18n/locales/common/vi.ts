@@ -49,6 +49,9 @@ export default {
     repairTaskState: 'Không thể vá state task (mã lỗi {status})',
     saveCustomAgent: 'Không lưu được custom agent (server không trả về tên).',
   },
+  select: {
+    empty: 'Không có tuỳ chọn.',
+  },
   folderPicker: {
     title: 'Chọn thư mục',
     close: 'Đóng',

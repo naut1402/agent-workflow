@@ -5,6 +5,7 @@ import { slugify } from '../../../core/lib/stringUtils'
 import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
 import { deleteConnection } from '../scripts/ConnectionDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
+import CSelect from '../../../core/ui/CSelect.vue'
 import Icon from '../../../core/ui/Icon.vue'
 import type { ConnectionOption, ProviderEntry, ProviderConfigOption, RunnerDraft } from '../types'
 
@@ -64,6 +65,17 @@ function emptyDraft(): RunnerDraft {
 const selectedConnection = computed(
   () => props.connections.find((c) => c.id === draft.value.connectionId) || null,
 )
+
+const connectionSelectOptions = computed(() => props.connections.map((c) => ({ value: c.id, label: c.label })))
+
+const timeoutSelectOptions = computed(() => TIMEOUT_OPTIONS.map((o) => ({ value: String(o.value), label: t(o.labelKey) })))
+
+const timeoutModel = computed({
+  get: () => String(draft.value.config.timeoutMs),
+  set: (v: string) => {
+    draft.value.config.timeoutMs = Number(v)
+  },
+})
 
 const selectedProviderId = computed(() => selectedConnection.value?.providerId || '')
 
@@ -251,12 +263,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <div class="field">
             <label class="cfg-label">Connection</label>
             <div class="connection-row">
-              <select v-model="draft.connectionId" class="cfg-input">
-                <option value="" disabled>{{ t('runner.fields.connectionPlaceholder') }}</option>
-                <option v-for="c in connections" :key="c.id" :value="c.id">
-                  {{ c.label }}
-                </option>
-              </select>
+              <CSelect
+                v-model="draft.connectionId"
+                :options="connectionSelectOptions"
+                :placeholder="t('runner.fields.connectionPlaceholder')"
+                aria-label="Connection"
+                class="cfg-input"
+              />
               <div class="icon-btn-group">
                 <button
                   type="button"
@@ -310,11 +323,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
           <div class="field">
             <label class="cfg-label">{{ t('runner.fields.timeoutMs') }}
-              <select v-model.number="draft.config.timeoutMs" class="cfg-input timeout-select">
-                <option v-for="opt in TIMEOUT_OPTIONS" :key="opt.value" :value="opt.value">
-                  {{ t(opt.labelKey) }}
-                </option>
-              </select>
+              <CSelect
+                v-model="timeoutModel"
+                :options="timeoutSelectOptions"
+                :aria-label="t('runner.fields.timeoutMs')"
+                class="cfg-input timeout-select"
+              />
             </label>
             <p class="muted hint">{{ t('runner.fields.timeoutMsHint') }}</p>
           </div>
