@@ -4,16 +4,16 @@ export async function fetchPipelineConfig(id: string, projectId?: string) {
   return apiGet('/api/pipeline-config', { id, project: projectId })
 }
 
-export async function fetchCatalog() {
-  return apiGet('/api/catalog')
+export async function fetchCatalog(projectId?: string) {
+  return apiGet('/api/catalog', { project: projectId })
 }
 
 export async function fetchCatalogAgent(id: string) {
   return apiGet('/api/catalog-agent', { id })
 }
 
-export async function fetchRules() {
-  return apiGet('/api/rules')
+export async function fetchRules(projectId?: string) {
+  return apiGet('/api/rules', { project: projectId })
 }
 
 export async function writePipelineConfig(

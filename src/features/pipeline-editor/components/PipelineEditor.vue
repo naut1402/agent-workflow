@@ -143,7 +143,7 @@ function openLeftTab(tab) {
 
 async function loadCatalog() {
   try {
-    catalog.value = await fetchCatalog()
+    catalog.value = await fetchCatalog(props.projectId ?? undefined)
   } catch {
     catalog.value = { skills: [], agents: [], error: true } as any
   }
@@ -151,7 +151,7 @@ async function loadCatalog() {
 
 async function loadRules() {
   try {
-    rulesData.value = await fetchRules()
+    rulesData.value = await fetchRules(props.projectId ?? undefined)
   } catch {
     rulesData.value = { rules: [], categories: [] }
   }
@@ -226,6 +226,11 @@ onConnect((params) => {
 onMounted(async () => {
   await Promise.all([loadCatalog(), loadRules(), loadConfig()])
   setTimeout(() => fitView(), 100)
+})
+
+watch(() => props.projectId, () => {
+  loadCatalog()
+  loadRules()
 })
 
 let configDebounce = null
