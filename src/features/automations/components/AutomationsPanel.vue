@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { useAutomations } from '../composables/useAutomations'
+import Icon from '../../../core/ui/Icon.vue'
 import type { AutomationListItem, AutomationStepResult } from '../scripts/automationsApi'
 import AutomationFormDialog from './AutomationFormDialog.vue'
 
@@ -404,9 +405,7 @@ onMounted(() => {
                     :aria-label="t('automations.rule.delete')"
                     @click="onDelete(rule)"
                   >
-                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M3 4.5h10M6.5 4.5v-1h3v1M4.5 4.5l.5 8h6l.5-8" />
-                    </svg>
+                    <Icon name="trash" :size="16" />
                   </button>
                 </div>
               </td>

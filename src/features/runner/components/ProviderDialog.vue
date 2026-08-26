@@ -5,6 +5,7 @@ import { slugify } from '../../../core/lib/stringUtils'
 import { saveProviderConfig, deleteProviderConfig } from '../scripts/ProviderDialogApi'
 import { DEFAULT_BASE_URLS } from '../scripts/agenticProviderDefaults'
 import type { ProviderConfigOption, ProviderEntry } from '../types'
+import CSelect from '../../../core/ui/CSelect.vue'
 import InfoTooltip from '../../../core/ui/InfoTooltip.vue'
 
 const props = defineProps<{
@@ -30,6 +31,7 @@ const error = ref('')
 const baseUrlPlaceholder = computed(() => DEFAULT_BASE_URLS[providerId.value] || '')
 
 const aiProviders = computed(() => props.providers.filter((p) => p.kind === 'ai-provider'))
+const aiProviderSelectOptions = computed(() => aiProviders.value.map((p) => ({ value: p.id, label: p.label })))
 
 async function remove() {
   if (!props.providerConfig?.id) return
@@ -126,9 +128,12 @@ onUnmounted(() => {
 
           <div class="field">
             <label class="cfg-label">{{ t('runner.providerDialog.interfaceField') }}
-              <select v-model="providerId" class="cfg-input">
-                <option v-for="p in aiProviders" :key="p.id" :value="p.id">{{ p.label }}</option>
-              </select>
+              <CSelect
+                v-model="providerId"
+                :options="aiProviderSelectOptions"
+                :aria-label="t('runner.providerDialog.interfaceField')"
+                class="cfg-input"
+              />
             </label>
           </div>
 

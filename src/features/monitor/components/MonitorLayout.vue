@@ -8,6 +8,7 @@ import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
 import RailIcon from '../../../core/ui/RailIcon.vue'
+import Icon from '../../../core/ui/Icon.vue'
 import { patchTaskArchive, deleteTask, repairTaskState } from '../scripts/monitorApi'
 import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
 import { taskDisplayName } from '../lib/taskDisplay'
@@ -189,17 +190,7 @@ async function deleteSelected() {
               v-if="selected.state_ok"
               class="btn-archive-detail"
               @click="toggleArchiveSelected"
-            ><template v-if="selected.archived">{{ t('monitor.layout.unarchive') }}</template><template v-else><svg
-                width="14"
-                height="14"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.25"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              ><rect x="2" y="2" width="12" height="3" rx="1" /><path d="M3 5v7.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5" /><path d="M6.5 8.5h3" /></svg> {{ t('monitor.layout.archive') }}</template></button>
+            ><template v-if="selected.archived">{{ t('monitor.layout.unarchive') }}</template><template v-else><Icon name="archiveBox" :size="14" /> {{ t('monitor.layout.archive') }}</template></button>
             <button
               v-if="!selected.state_ok"
               type="button"

@@ -2,6 +2,7 @@
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { onBeforeUnmount, onMounted, ref, toRaw } from 'vue'
 import type { ArtifactMenuNode } from '../lib/menuTypes'
+import Icon from '../../../core/ui/Icon.vue'
 
 const props = defineProps<{
   menus: ArtifactMenuNode[]
@@ -124,9 +125,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
           :aria-label="t('quickAction.form.close')"
           @click="emit('close')"
         >
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-            <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8" />
-          </svg>
+          <Icon name="close" :size="16" />
         </button>
       </div>
       <p class="muted qa-menu-dialog-hint">{{ t('quickAction.menu.dialogHint') }}</p>

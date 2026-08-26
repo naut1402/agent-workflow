@@ -122,9 +122,9 @@ async function mountProviderDialog(providerConfig: ProviderConfigOption | null =
   return w
 }
 
-async function mountConnectionOnAiProvider(connection: any = null) {
+async function mountConnectionOnAiProvider(connection: any = null, providerConfigs = PROVIDER_CONFIGS) {
   const w = mount(ConnectionDialog, {
-    props: { providers: PROVIDERS, providerConfigs: PROVIDER_CONFIGS, connection },
+    props: { providers: PROVIDERS, providerConfigs, connection },
     attachTo: document.body,
   })
   await flushPromises()
@@ -135,27 +135,46 @@ async function mountConnectionOnAiProvider(connection: any = null) {
   return w
 }
 
-function providerConfigSelect(): HTMLSelectElement {
-  return qa<HTMLSelectElement>('select').find((s) =>
-    Array.from(s.options).some((o) => o.value === 'pc-anthropic' || o.value === 'pc-gemini'),
-  )!
+// The provider-config/credential/interface pickers migrated from native
+// `<select>` to `CSelect` (task 20260826_001) — there's no `<select>` DOM node
+// or `.value` to read/set directly anymore. These helpers drive `CSelect`'s
+// actual DOM instead: find the `.c-select` root by its `aria-label`, click the
+// trigger to open the menu, then click the `<li>` whose text matches the
+// option's label.
+function cSelectRootByLabel(ariaLabel: string): HTMLElement {
+  const el = qa<HTMLElement>('.c-select').find(
+    (root) => root.querySelector('.c-select-trigger')?.getAttribute('aria-label') === ariaLabel,
+  )
+  if (!el) throw new Error(`CSelect not found: ${ariaLabel}`)
+  return el
 }
-function credentialSelect(): HTMLSelectElement {
-  return qa<HTMLSelectElement>('select').find((s) =>
-    Array.from(s.options).some((o) => o.value === 'cred-anthropic' || o.value === 'cred-gemini'),
-  )!
+function cSelectValueText(root: HTMLElement): string {
+  return root.querySelector('.c-select-value')!.textContent!.trim()
+}
+async function pickCSelectOption(root: HTMLElement, optionLabel: string) {
+  await click(root.querySelector('.c-select-trigger')!)
+  const option = qa<HTMLLIElement>('.c-select-option').find((li) => li.textContent?.trim() === optionLabel)
+  if (!option) throw new Error(`option not found: ${optionLabel}`)
+  await click(option)
+}
+function providerConfigSelectRoot(): HTMLElement {
+  return cSelectRootByLabel(runnerVi.connectionDialog.providerField)
+}
+function credentialSelectRoot(): HTMLElement {
+  return cSelectRootByLabel(runnerVi.connectionDialog.credentialField)
+}
+function providerConfigLabelOf(id: string): string {
+  const pc = PROVIDER_CONFIGS.find((p) => p.id === id)!
+  return `${pc.label} (${pc.providerId})`
+}
+function credentialLabelOf(id: string): string {
+  return CREDENTIALS.find((c) => c.id === id)!.label
 }
 async function chooseProviderConfig(id: string) {
-  const sel = providerConfigSelect()
-  sel.value = id
-  sel.dispatchEvent(new Event('change'))
-  await flushPromises()
+  await pickCSelectOption(providerConfigSelectRoot(), providerConfigLabelOf(id))
 }
 async function chooseCredential(credentialId: string) {
-  const sel = credentialSelect()
-  sel.value = credentialId
-  sel.dispatchEvent(new Event('change'))
-  await flushPromises()
+  await pickCSelectOption(credentialSelectRoot(), credentialLabelOf(credentialId))
 }
 
 describe('ProviderDialog — provider config (no credential)', () => {
@@ -175,10 +194,7 @@ describe('ProviderDialog — provider config (no credential)', () => {
   it('saves label + interface + base URL', async () => {
     await mountProviderDialog()
     await setInputValue(q<HTMLInputElement>('input[placeholder="vd. OpenAI gateway của tôi"]'), 'My gateway')
-    const interfaceSelect = q<HTMLSelectElement>('select')
-    interfaceSelect.value = 'gemini-api'
-    interfaceSelect.dispatchEvent(new Event('change'))
-    await flushPromises()
+    await pickCSelectOption(cSelectRootByLabel(runnerVi.providerDialog.interfaceField), 'Gemini API')
     await setInputValue(
       q<HTMLInputElement>('input[placeholder="https://generativelanguage.googleapis.com/v1beta/openai"]'),
       'https://gemini.example/v1',
@@ -197,8 +213,7 @@ describe('ProviderDialog — provider config (no credential)', () => {
     await mountProviderDialog(PROVIDER_CONFIGS[1])
     const labelInput = q<HTMLInputElement>('input[placeholder="vd. OpenAI gateway của tôi"]')
     expect(labelInput.value).toBe('Gemini gateway')
-    const interfaceSelect = q<HTMLSelectElement>('select')
-    expect(interfaceSelect.value).toBe('gemini-api')
+    expect(cSelectValueText(cSelectRootByLabel(runnerVi.providerDialog.interfaceField))).toBe('Gemini API')
     const baseUrlInput = qa<HTMLInputElement>('.field input').find((i) => i.value === 'https://gemini.example/v1')
     expect(baseUrlInput).toBeTruthy()
   })
@@ -207,8 +222,12 @@ describe('ProviderDialog — provider config (no credential)', () => {
 describe('ConnectionDialog — provider config picker', () => {
   it('lists configured provider configs, not raw interfaces', async () => {
     await mountConnectionOnAiProvider()
-    const options = Array.from(providerConfigSelect().options).map((o) => o.value)
-    expect(options).toEqual(expect.arrayContaining(['pc-anthropic', 'pc-gemini']))
+    const root = providerConfigSelectRoot()
+    await click(root.querySelector('.c-select-trigger')!)
+    const labels = qa<HTMLLIElement>('.c-select-option').map((li) => li.textContent?.trim())
+    expect(labels).toEqual(
+      expect.arrayContaining([providerConfigLabelOf('pc-anthropic'), providerConfigLabelOf('pc-gemini')]),
+    )
   })
 
   it('opens ProviderDialog via the "+" button next to the provider picker', async () => {
@@ -218,11 +237,9 @@ describe('ConnectionDialog — provider config picker', () => {
   })
 
   it('blocks saving when no provider config is selected', async () => {
-    await mountConnectionOnAiProvider()
-    const sel = providerConfigSelect()
-    sel.value = ''
-    sel.dispatchEvent(new Event('change'))
-    await flushPromises()
+    // No `CSelect` option can express "unset" once one has been auto-picked, so
+    // start from an empty catalog instead of forcing '' onto a native select.
+    await mountConnectionOnAiProvider(null, [])
 
     await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'My conn')
     await click(buttonByText(runnerVi.connectionDialog.saveConnection))
@@ -320,11 +337,7 @@ describe('ConnectionDialog — creating a credential inline', () => {
 
 describe('ConnectionDialog — deleting a provider config', () => {
   it('disables the delete button until a provider config is selected', async () => {
-    await mountConnectionOnAiProvider()
-    const sel = providerConfigSelect()
-    sel.value = ''
-    sel.dispatchEvent(new Event('change'))
-    await flushPromises()
+    await mountConnectionOnAiProvider(null, [])
     expect(buttonByTitle(runnerVi.connectionDialog.deleteProvider).disabled).toBe(true)
   })
 
@@ -335,7 +348,7 @@ describe('ConnectionDialog — deleting a provider config', () => {
     await click(buttonByTitle(runnerVi.connectionDialog.deleteProvider))
 
     expect(deleteProviderConfig).toHaveBeenCalledWith('pc-anthropic')
-    expect(providerConfigSelect().value).toBe('pc-gemini')
+    expect(cSelectValueText(providerConfigSelectRoot())).toBe(providerConfigLabelOf('pc-gemini'))
   })
 
   it('does nothing when the user cancels the confirmation', async () => {
@@ -403,7 +416,7 @@ describe('ConnectionDialog — deleting a credential', () => {
     await click(buttonByTitle(runnerVi.connectionDialog.deleteCredential))
 
     expect(deleteCredential).toHaveBeenCalledWith('cred-anthropic')
-    expect(credentialSelect().value).toBe('')
+    expect(cSelectValueText(credentialSelectRoot())).toBe(runnerVi.connectionDialog.credentialPlaceholder)
   })
 
   it('does nothing when the user cancels the confirmation', async () => {
@@ -479,7 +492,7 @@ describe('ConnectionDialog — validation', () => {
 
     await chooseProviderConfig('pc-gemini')
     // cred-anthropic does not belong to gemini-api — must not carry over.
-    expect(credentialSelect().value).toBe('')
+    expect(cSelectValueText(credentialSelectRoot())).toBe(runnerVi.connectionDialog.credentialPlaceholder)
 
     await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'My conn')
     await click(buttonByText(runnerVi.connectionDialog.saveConnection))
@@ -507,8 +520,8 @@ describe('ConnectionDialog — editing an existing connection', () => {
     })
     await flushPromises()
 
-    expect(providerConfigSelect().value).toBe('pc-gemini')
-    expect(credentialSelect().value).toBe('cred-gemini')
+    expect(cSelectValueText(providerConfigSelectRoot())).toBe(providerConfigLabelOf('pc-gemini'))
+    expect(cSelectValueText(credentialSelectRoot())).toBe(credentialLabelOf('cred-gemini'))
     w.unmount()
   })
 
@@ -529,8 +542,8 @@ describe('ConnectionDialog — editing an existing connection', () => {
     })
     await flushPromises()
 
-    expect(providerConfigSelect().value).toBe('pc-gemini')
-    expect(credentialSelect().value).toBe('cred-gemini')
+    expect(cSelectValueText(providerConfigSelectRoot())).toBe(providerConfigLabelOf('pc-gemini'))
+    expect(cSelectValueText(credentialSelectRoot())).toBe(credentialLabelOf('cred-gemini'))
     w.unmount()
   })
 

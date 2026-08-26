@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import Icon from '../../../core/ui/Icon.vue'
 import { TILE_MIN_SPAN, TILE_MAX_SPAN, snapChartHeight } from '../lib/chartConfig'
 
 /**
@@ -145,9 +146,7 @@ onBeforeUnmount(() => {
         :aria-label="t('statistics.removeChart')"
         @click.stop="emit('remove')"
       >
-        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-          <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8" />
-        </svg>
+        <Icon name="close" :size="14" />
       </button>
       <span class="chart-tile-action-sep" aria-hidden="true" />
       <button

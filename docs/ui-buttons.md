@@ -25,7 +25,7 @@ Hover scale (`scale(1.15)`) chỉ dùng cho toolbar / standalone. Nút nằm c�
 
 - Luôn có `type="button"` (trừ khi đúng là submit form).
 - Luôn có `title` và `aria-label` qua `t(...)` — icon-only không có nhãn chữ nên phụ thuộc hai thuộc tính này.
-- SVG trang trí: `aria-hidden="true"`.
+- Icon bên trong dùng component chung `<Icon name="..." />` (`src/core/ui/Icon.vue`) — **không** tự vẽ tay `<svg>`/`<path>` (xem [`implement/coding-convention.md`](implement/coding-convention.md) §5). `Icon.vue` tự đặt `aria-hidden="true"` trên `<svg>` gốc.
 - Không hardcode chuỗi UI (xem quy ước i18n trong [`implement/coding-convention.md`](implement/coding-convention.md) / [`i18n.md`](i18n.md)).
 
 ### Ví dụ
@@ -39,6 +39,11 @@ Hover scale (`scale(1.15)`) chỉ dùng cho toolbar / standalone. Nút nằm c�
   :aria-label="t('runner.panel.deleteRunner')"
   @click="remove(item)"
 >
+  <Icon name="trash" />
+</button>
+
+<!-- Sai: tự vẽ tay SVG thay vì dùng Icon.vue -->
+<button type="button" class="icon-btn" :title="..." :aria-label="...">
   <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
     <!-- path -->
   </svg>

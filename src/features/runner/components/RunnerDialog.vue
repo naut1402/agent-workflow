@@ -5,6 +5,8 @@ import { slugify } from '../../../core/lib/stringUtils'
 import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
 import { deleteConnection } from '../scripts/ConnectionDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
+import CSelect from '../../../core/ui/CSelect.vue'
+import Icon from '../../../core/ui/Icon.vue'
 import type { ConnectionOption, ProviderEntry, ProviderConfigOption, RunnerDraft } from '../types'
 
 const props = defineProps<{
@@ -63,6 +65,17 @@ function emptyDraft(): RunnerDraft {
 const selectedConnection = computed(
   () => props.connections.find((c) => c.id === draft.value.connectionId) || null,
 )
+
+const connectionSelectOptions = computed(() => props.connections.map((c) => ({ value: c.id, label: c.label })))
+
+const timeoutSelectOptions = computed(() => TIMEOUT_OPTIONS.map((o) => ({ value: String(o.value), label: t(o.labelKey) })))
+
+const timeoutModel = computed({
+  get: () => String(draft.value.config.timeoutMs),
+  set: (v: string) => {
+    draft.value.config.timeoutMs = Number(v)
+  },
+})
 
 const selectedProviderId = computed(() => selectedConnection.value?.providerId || '')
 
@@ -250,12 +263,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <div class="field">
             <label class="cfg-label">Connection</label>
             <div class="connection-row">
-              <select v-model="draft.connectionId" class="cfg-input">
-                <option value="" disabled>{{ t('runner.fields.connectionPlaceholder') }}</option>
-                <option v-for="c in connections" :key="c.id" :value="c.id">
-                  {{ c.label }}
-                </option>
-              </select>
+              <CSelect
+                v-model="draft.connectionId"
+                :options="connectionSelectOptions"
+                :placeholder="t('runner.fields.connectionPlaceholder')"
+                aria-label="Connection"
+                class="cfg-input"
+              />
               <div class="icon-btn-group">
                 <button
                   type="button"
@@ -264,15 +278,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   :aria-label="t('runner.connectionDialog.title')"
                   @click="openNewConnection"
                 >
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <path
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      d="M8 3v10M3 8h10"
-                    />
-                  </svg>
+                  <Icon name="plus" />
                 </button>
                 <button
                   type="button"
@@ -282,16 +288,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   :aria-label="t('runner.connectionDialog.editTitle')"
                   @click="openEditConnection"
                 >
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <path
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.4"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
-                    />
-                  </svg>
+                  <Icon name="pencil" />
                 </button>
                 <button
                   type="button"
@@ -301,10 +298,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   :aria-label="t('runner.connectionDialog.copyConnection')"
                   @click="openCopyConnection"
                 >
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <rect x="5.5" y="5.5" width="7" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
-                    <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M3.5 10.5V3.5h7" />
-                  </svg>
+                  <Icon name="copy" />
                 </button>
                 <button
                   type="button"
@@ -314,15 +308,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   :aria-label="t('runner.connectionDialog.deleteConnection')"
                   @click="removeConnection"
                 >
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <path
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.4"
-                      stroke-linecap="round"
-                      d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
-                    />
-                  </svg>
+                  <Icon name="trash" />
                 </button>
               </div>
             </div>
@@ -337,11 +323,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
           <div class="field">
             <label class="cfg-label">{{ t('runner.fields.timeoutMs') }}
-              <select v-model.number="draft.config.timeoutMs" class="cfg-input timeout-select">
-                <option v-for="opt in TIMEOUT_OPTIONS" :key="opt.value" :value="opt.value">
-                  {{ t(opt.labelKey) }}
-                </option>
-              </select>
+              <CSelect
+                v-model="timeoutModel"
+                :options="timeoutSelectOptions"
+                :aria-label="t('runner.fields.timeoutMs')"
+                class="cfg-input timeout-select"
+              />
             </label>
             <p class="muted hint">{{ t('runner.fields.timeoutMsHint') }}</p>
           </div>

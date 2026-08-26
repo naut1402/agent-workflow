@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import CComboSelect from '../../../core/ui/CComboSelect.vue'
 import type { CComboSelectOption } from '../../../core/ui/CComboSelect.vue'
+import Icon from '../../../core/ui/Icon.vue'
 import { varsSkeletonForStep } from '../lib/vars'
 import type { AutomationListItem } from '../scripts/automationsApi'
 import type { AutomationFormOptions } from '../scripts/automationsApi'
@@ -488,9 +489,7 @@ function submit(): void {
                 :disabled="form.triggers.length <= 1"
                 @click="removeTrigger(i)"
               >
-                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M3 4.5h10M6.5 4.5v-1h3v1M4.5 4.5l.5 8h6l.5-8" />
-                </svg>
+                <Icon name="trash" :size="14" />
               </button>
             </div>
 
@@ -597,9 +596,7 @@ function submit(): void {
                     :aria-label="t('automations.action.remove')"
                     @click="removeAction(i)"
                   >
-                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M3 4.5h10M6.5 4.5v-1h3v1M4.5 4.5l.5 8h6l.5-8" />
-                    </svg>
+                    <Icon name="trash" :size="14" />
                   </button>
                 </div>
 
