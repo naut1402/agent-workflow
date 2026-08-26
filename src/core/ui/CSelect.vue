@@ -69,14 +69,17 @@ function moveHighlight(delta: number) {
 }
 
 function onTriggerKeydown(e: KeyboardEvent) {
+  if (props.disabled) return
   if (e.key === 'ArrowDown') {
     e.preventDefault()
-    if (!open.value) openMenu()
-    else moveHighlight(1)
+    const wasOpen = open.value
+    if (!wasOpen) openMenu()
+    moveHighlight(1)
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
-    if (!open.value) openMenu()
-    else moveHighlight(-1)
+    const wasOpen = open.value
+    if (!wasOpen) openMenu()
+    moveHighlight(-1)
   } else if (e.key === 'Enter' || e.key === ' ') {
     if (open.value) {
       e.preventDefault()
