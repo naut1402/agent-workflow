@@ -147,9 +147,15 @@ const modelPlaceholder = computed(() => DEFAULT_MODEL_HINTS[selectedProviderConf
 const modelOptions = ref<string[]>([])
 const loadingModels = ref(false)
 const modelFetchError = ref('')
-/** A key to fetch models with — an existing credential, or a not-yet-saved secret typed in "+ Credential". */
+/** local-console model selector shows only for the claude-code-cli command — no equivalent for Cursor/Codex. */
+const isClaudeCliSelected = computed(
+  () => kind.value === 'local-console' && selectedCommand.value?.providerId === 'claude-code-cli',
+)
+/** A key to fetch models with — an existing credential, or a not-yet-saved secret typed in "+ Credential"; claude-code-cli needs neither (static alias list). */
 const canFetchModels = computed(
-  () => Boolean(selectedProviderConfig.value && (credentialId.value || newCred.value.secretValue.trim())),
+  () =>
+    isClaudeCliSelected.value ||
+    Boolean(selectedProviderConfig.value && (credentialId.value || newCred.value.secretValue.trim())),
 )
 /** Fetched models ∪ already-selected ones — so a model saved before a fresh "Load models" fetch still shows up. */
 const modelSelectOptions = computed(() => {
@@ -360,6 +366,21 @@ async function saveNewCredential() {
 }
 
 async function loadModels() {
+  if (isClaudeCliSelected.value) {
+    modelFetchError.value = ''
+    loadingModels.value = true
+    try {
+      const data = await fetchAvailableModels({ providerId: 'claude-code-cli' })
+      modelOptions.value = data.models || []
+      if (!modelOptions.value.length) modelFetchError.value = t('runner.connectionDialog.noModelsFound')
+    } catch (e: any) {
+      modelFetchError.value = e?.message ? String(e.message) : t('runner.connectionDialog.loadModelsFailed')
+    } finally {
+      loadingModels.value = false
+    }
+    return
+  }
+
   const pc = selectedProviderConfig.value
   if (!pc) return
   modelFetchError.value = ''
@@ -408,6 +429,8 @@ watch(selectedCommandId, (id) => {
   if (cmd) {
     if (!label.value.trim()) label.value = cmd.command
   }
+  modelOptions.value = []
+  modelFetchError.value = ''
 })
 
 function slugifyConn(text: string): string {
@@ -654,6 +677,10 @@ async function save() {
       }
       const resolvedProvider = cmd.providerId
       const id = buildConnectionId(resolvedProvider)
+      const config =
+        resolvedProvider === 'claude-code-cli' && selectedModels.value.length
+          ? { model: selectedModels.value[0] }
+          : undefined
       const { connection } = await saveConnection({
         id,
         label: label.value.trim(),
@@ -661,6 +688,7 @@ async function save() {
         providerId: resolvedProvider,
         cliPath: cmd.path || cmd.command,
         flags: cmd.flags || [],
+        ...(config ? { config } : {}),
       })
       emit('saved', connection.id)
       emit('close')
@@ -820,6 +848,42 @@ onUnmounted(() => {
                 class="muted path-hint"
               >
                 {{ selectedCommand.path }}
+              </p>
+            </div>
+
+            <div class="field" v-if="isClaudeCliSelected">
+              <div class="row-actions">
+                <span class="cfg-label label-with-hint">
+                  {{ t('runner.connectionDialog.modelField') }}
+                  <InfoTooltip :text="t('runner.connectionDialog.modelHint')" />
+                </span>
+              </div>
+              <div class="command-row">
+                <CComboSelect
+                  v-model="selectedModel"
+                  :options="modelSelectOptions"
+                  :placeholder="t('runner.connectionDialog.modelSelectPlaceholder')"
+                  :aria-label="t('runner.connectionDialog.modelField')"
+                  class="cfg-combo-select"
+                  creatable
+                />
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :disabled="loadingModels || !canFetchModels"
+                  :title="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
+                  :aria-label="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
+                  @click="loadModels"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 8a5 5 0 1 1-1.6-3.6" />
+                    <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 2.8v3.4h-3.4" />
+                  </svg>
+                </button>
+              </div>
+              <p v-if="modelFetchError" class="muted err-text">{{ modelFetchError }}</p>
+              <p v-else-if="modelOptions.length" class="muted path-hint">
+                {{ t('runner.connectionDialog.modelsLoaded', { count: modelOptions.length }) }}
               </p>
             </div>
           </template>

@@ -27,12 +27,14 @@ export interface Connection {
   /** ai-provider: trỏ credential profile */
   credentialId?: string | null
   /**
-   * ai-provider (`ai-api`): free-form settings merged into `runnerConfig` at
-   * execute time (`models`/`model`/`baseURL`, …). `extraTools?: string[]`
-   * opts this Connection into shell/git/search/web tools beyond the base 4
-   * file-ops (see `AgenticApiProvider.resolveExtraTools`) — optional and
-   * absent on connections created before this key existed, which then get
-   * only the base tools (unchanged behavior).
+   * Free-form settings merged into `runnerConfig` at execute time
+   * (`models`/`model`/`baseURL`, …). For `ai-provider` (`ai-api`),
+   * `extraTools?: string[]` opts this Connection into shell/git/search/web
+   * tools beyond the base 4 file-ops (see `AgenticApiProvider.resolveExtraTools`)
+   * — optional and absent on connections created before this key existed,
+   * which then get only the base tools (unchanged behavior). For
+   * `local-console` with `providerId: 'claude-code-cli'`, `model` is read
+   * as the `--model` argv value (see `claude-code-cli.ts`).
    */
   config?: Record<string, unknown>
 }

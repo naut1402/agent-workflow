@@ -41,6 +41,7 @@ import {
   saveCredential,
   deleteCredential,
   saveConnection,
+  scanLocalCommands,
   fetchOAuthCapabilities,
   startOAuthConnect,
   fetchAvailableModels,
@@ -96,6 +97,7 @@ beforeEach(() => {
   vi.mocked(saveCredential).mockClear()
   vi.mocked(deleteCredential).mockClear()
   vi.mocked(saveConnection).mockClear()
+  vi.mocked(scanLocalCommands).mockClear()
   vi.mocked(fetchOAuthCapabilities).mockClear()
   vi.mocked(startOAuthConnect).mockClear()
   vi.mocked(fetchAvailableModels).mockClear()
@@ -103,6 +105,7 @@ beforeEach(() => {
   vi.mocked(saveProviderConfig).mockClear()
   vi.mocked(deleteProviderConfig).mockClear()
   vi.mocked(fetchCredentials).mockResolvedValue({ profiles: [...CREDENTIALS] })
+  vi.mocked(scanLocalCommands).mockResolvedValue({ commands: [] })
   vi.mocked(fetchOAuthCapabilities).mockResolvedValue({ providers: [] })
   vi.mocked(fetchAvailableModels).mockResolvedValue({ models: [] })
   vi.mocked(fetchProviderConfigs).mockResolvedValue({ providerConfigs: [...PROVIDER_CONFIGS] })
@@ -120,6 +123,28 @@ async function mountProviderDialog(providerConfig: ProviderConfigOption | null =
   })
   await flushPromises()
   return w
+}
+
+const LOCAL_COMMANDS = [
+  { id: 'claude', command: 'claude', path: 'claude', available: true, providerId: 'claude-code-cli', flags: [] },
+  { id: 'cursor-agent', command: 'cursor-agent', path: 'cursor-agent', available: true, providerId: 'cursor-cli', flags: [] },
+]
+
+async function mountConnectionOnLocalConsole(connection: any = null) {
+  vi.mocked(scanLocalCommands).mockResolvedValue({ commands: LOCAL_COMMANDS })
+  const w = mount(ConnectionDialog, {
+    props: { providers: PROVIDERS, providerConfigs: PROVIDER_CONFIGS, connection },
+    attachTo: document.body,
+  })
+  await flushPromises()
+  return w
+}
+
+function commandSelectRoot(): HTMLElement {
+  return cSelectRootByLabel('Command')
+}
+async function chooseCommand(label: string) {
+  await pickCSelectOption(commandSelectRoot(), label)
 }
 
 async function mountConnectionOnAiProvider(connection: any = null, providerConfigs = PROVIDER_CONFIGS) {
@@ -740,5 +765,134 @@ describe('ConnectionDialog — extra tools (shell/git/search/web)', () => {
 
     expect(qa<HTMLInputElement>('input[type="checkbox"]').every((c) => !c.checked)).toBe(true)
     w.unmount()
+  })
+})
+
+describe('ConnectionDialog — local-console model (claude-code-cli)', () => {
+  it('shows the model field + reload button when claude is the selected command, without needing a credential', async () => {
+    await mountConnectionOnLocalConsole()
+    expect(document.body.textContent).toContain(runnerVi.connectionDialog.modelField)
+    const loadBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.loadModels)
+    expect(loadBtn).toBeTruthy()
+    expect(loadBtn?.disabled).toBe(false)
+  })
+
+  it('reload fetches the static claude-code-cli model list without baseURL/credentialId', async () => {
+    await mountConnectionOnLocalConsole()
+    vi.mocked(fetchAvailableModels).mockResolvedValueOnce({ models: ['opus', 'sonnet', 'haiku'] })
+
+    const loadBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.loadModels)!
+    await click(loadBtn)
+
+    expect(fetchAvailableModels).toHaveBeenCalledWith({ providerId: 'claude-code-cli' })
+    expect(document.body.textContent).not.toContain(runnerVi.connectionDialog.noModelsFound)
+  })
+
+  it('hides the model field for a non-claude local command (e.g. cursor-agent)', async () => {
+    await mountConnectionOnLocalConsole()
+    await chooseCommand('cursor-agent')
+    expect(document.body.textContent).not.toContain(runnerVi.connectionDialog.modelField)
+  })
+
+  it('selecting a model and saving persists it under config.model for the claude connection', async () => {
+    await mountConnectionOnLocalConsole()
+    vi.mocked(fetchAvailableModels).mockResolvedValueOnce({ models: ['opus', 'sonnet', 'haiku'] })
+    const loadBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.loadModels)!
+    await click(loadBtn)
+
+    const comboInput = q<HTMLInputElement>('.c-combo-select .c-combo-input')
+    comboInput.dispatchEvent(new Event('focus'))
+    await flushPromises()
+    const option = qa<HTMLLIElement>('.c-combo-select .c-select-option').find((o) => o.textContent?.trim() === 'opus')!
+    await click(option)
+
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude local conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.kind).toBe('local-console')
+    expect(payload.providerId).toBe('claude-code-cli')
+    expect(payload.config).toEqual({ model: 'opus' })
+  })
+
+  it('saving without picking a model works exactly as before (no config.model)', async () => {
+    await mountConnectionOnLocalConsole()
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude local conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.config).toBeUndefined()
+  })
+
+  it('switching from claude to a non-claude command before saving does not leak the chosen model', async () => {
+    await mountConnectionOnLocalConsole()
+    vi.mocked(fetchAvailableModels).mockResolvedValueOnce({ models: ['opus', 'sonnet', 'haiku'] })
+    const loadBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.loadModels)!
+    await click(loadBtn)
+    const comboInput = q<HTMLInputElement>('.c-combo-select .c-combo-input')
+    comboInput.dispatchEvent(new Event('focus'))
+    await flushPromises()
+    const option = qa<HTMLLIElement>('.c-combo-select .c-select-option').find((o) => o.textContent?.trim() === 'opus')!
+    await click(option)
+
+    await chooseCommand('cursor-agent')
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Cursor conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.providerId).toBe('cursor-cli')
+    expect(payload.config).toBeUndefined()
+  })
+
+  it('editing a pre-existing claude connection prefills its saved model', async () => {
+    const w = await mountConnectionOnLocalConsole({
+      id: 'claude-local',
+      label: 'Claude local',
+      kind: 'local-console',
+      providerId: 'claude-code-cli',
+      cliPath: 'claude',
+      flags: [],
+      config: { model: 'sonnet' },
+    })
+
+    const comboInput = q<HTMLInputElement>('.c-combo-select .c-combo-input')
+    expect(comboInput.value).toBe('sonnet')
+    w.unmount()
+  })
+
+  it('editing a legacy claude connection with no model configured opens without error and stays unset', async () => {
+    const w = await mountConnectionOnLocalConsole({
+      id: 'claude-local',
+      label: 'Claude local',
+      kind: 'local-console',
+      providerId: 'claude-code-cli',
+      cliPath: 'claude',
+      flags: [],
+    })
+
+    const comboInput = q<HTMLInputElement>('.c-combo-select .c-combo-input')
+    expect(comboInput.value).toBe('')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.config).toBeUndefined()
+    w.unmount()
+  })
+
+  it('switching commands clears the previously fetched model list (no stale options)', async () => {
+    await mountConnectionOnLocalConsole()
+    vi.mocked(fetchAvailableModels).mockResolvedValueOnce({ models: ['opus', 'sonnet', 'haiku'] })
+    const loadBtn = qa<HTMLButtonElement>('button').find((b) => b.title === runnerVi.connectionDialog.loadModels)!
+    await click(loadBtn)
+    const loadedText = runnerVi.connectionDialog.modelsLoaded.replace('{count}', '3')
+    expect(document.body.textContent).toContain(loadedText)
+
+    await chooseCommand('cursor-agent')
+    expect(document.body.textContent).not.toContain(runnerVi.connectionDialog.modelField)
+
+    await chooseCommand('claude')
+    expect(document.body.textContent).not.toContain(loadedText)
   })
 })
