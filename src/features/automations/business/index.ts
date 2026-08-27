@@ -14,45 +14,11 @@ import { runAutomation } from './runAction.js'
 
 export * from './matcher.js'
 export * from '../lib/vars.js'
-export {
-  automationsDir,
-  sanitiseAutomationId,
-  listAutomations,
-  getAutomation,
-  createAutomation,
-  updateAutomation,
-  setAutomationEnabled,
-  deleteAutomation,
-  disableIfAllOnceTriggersSpent,
-  syncTriggerRegistry,
-  removeFromTriggerRegistry,
-} from './rules.js'
-export {
-  getRuleState,
-  listRuns,
-  removeRuleRuntime,
-  clearStaleInFlight,
-  type AutomationRun,
-  type AutomationRunOutcome,
-  type RuleRuntimeState,
-} from './runLedger.js'
-export {
-  runAutomation,
-  stepTimeoutMs,
-  waitJobTerminal,
-  type RunAutomationInput,
-  type AutomationRunSource,
-} from './runAction.js'
-export {
-  tickAutomationScheduler,
-  collectDueSchedules,
-  hasTimerTrigger,
-  automationPollIntervalMs,
-  bindAutomationRunner,
-  type AutomationRunnerInput,
-  type AutomationRunnerFn,
-} from './scheduler.js'
-export { startEventTriggers, MIN_EVENT_REFIRE_MS } from './eventTrigger.js'
+export * from './rules.js'
+export * from './runLedger.js'
+export * from './runAction.js'
+export * from './scheduler.js'
+export * from './eventTrigger.js'
 
 /** Sự kiện có thể chọn làm trigger trong UI (từ event-catalog, trừ `automation.*` tự phát). */
 export const KNOWN_AUTOMATION_EVENT_TYPES: string[] = [

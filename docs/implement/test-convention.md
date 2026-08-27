@@ -30,6 +30,8 @@ E2E ở `test-e2e/`: `test-e2e/<feature>.spec.ts` + `test-e2e/fixtures/` (`.dev-
 
 Trước khi đụng code production: viết characterization/golden test trên hành vi hiện tại (pure fn + API response snapshot qua `app.request`) — test xanh là "ảnh chụp" hành vi gốc, refactor dưới nền xanh đó. Logic/module mới hoàn toàn → test-first (TDD thật).
 
+Test tự nhiên fail sau khi sửa code (kể cả lỗi chỉ lộ ra ở CI, không tái hiện local): điều tra **root cause**, sửa code sản phẩm — không mock/stub để né qua đường code đang lỗi. Trạng thái trước khi sửa xanh thì sau khi sửa phải xanh lại đúng nghĩa (test vẫn chạy qua code thật), không phải "làm cho CI đỡ đỏ". Mock chỉ hợp lệ cho phụ thuộc ngoài (API, thư viện nặng/không chạy được dưới jsdom, …) đã hợp lý từ đầu — không dùng mock để thay cho việc sửa 1 bug vừa phát hiện.
+
 ---
 
 ## 4. Coverage threshold

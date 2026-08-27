@@ -1,10 +1,10 @@
 import { AbstractController } from '../../core/http/AbstractController.js'
-import { LogsBusiness } from './business/index.js'
+import * as logsBusiness from './business/index.js'
 import type { LogType } from '../../core/log/schema.js'
 
 export class LogsController extends AbstractController {
   private biz() {
-    return new LogsBusiness(this.root)
+    return new logsBusiness.LogsBusiness(this.root)
   }
 
   async listLogs() {

@@ -3,7 +3,7 @@ import path from 'node:path'
 import { loadYaml, dumpYaml } from '../../core/lib/yamlLib.js'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { statSafe } from '../../core/lib/fileHelper.js'
-import { sanitiseProfileName, profilesDir, scanCustomAgents, customAgentsDir } from './business/index.js'
+import * as pipelineEditorBusiness from './business/index.js'
 import { draftFromAgentMarkdown } from '../agent-editor/business/agentMarkdown.js'
 import { parseFrontmatter } from '../../core/lib/yamlLib.js'
 import { emitAudit } from '../../core/log/store.js'
@@ -16,10 +16,10 @@ export class PipelineEditorController extends AbstractController {
     if ('error' in gate) return gate.error
     const { root } = gate
 
-    const dir = profilesDir(root)
+    const dir = pipelineEditorBusiness.profilesDir(root)
     const nameParam = this.c.req.query('name')
     if (nameParam) {
-      const name = sanitiseProfileName(nameParam)
+      const name = pipelineEditorBusiness.sanitiseProfileName(nameParam)
       if (!name) return this.badRequest('invalid profile name')
       try {
         const raw = await fs.readFile(path.join(dir, `${name}.yaml`), 'utf8')
@@ -47,10 +47,10 @@ export class PipelineEditorController extends AbstractController {
     if ('error' in gate) return gate.error
     const { root } = gate
 
-    const dir = profilesDir(root)
+    const dir = pipelineEditorBusiness.profilesDir(root)
     const b = await this.parseBody()
     if (!b.ok) return this.badRequest('invalid JSON')
-    const name = sanitiseProfileName(b.value.name)
+    const name = pipelineEditorBusiness.sanitiseProfileName(b.value.name)
     if (!name) return this.badRequest('invalid profile name')
     if (!b.value.pipeline || !Array.isArray(b.value.pipeline.steps)) {
       return this.badRequest('pipeline.steps must be an array')
@@ -66,8 +66,8 @@ export class PipelineEditorController extends AbstractController {
     if ('error' in gate) return gate.error
     const { root } = gate
 
-    const dir = profilesDir(root)
-    const name = sanitiseProfileName(this.c.req.query('name') || '')
+    const dir = pipelineEditorBusiness.profilesDir(root)
+    const name = pipelineEditorBusiness.sanitiseProfileName(this.c.req.query('name') || '')
     if (!name) return this.badRequest('invalid profile name')
     try {
       await fs.unlink(path.join(dir, `${name}.yaml`))
@@ -130,7 +130,7 @@ export class PipelineEditorController extends AbstractController {
     if ('error' in gate) return gate.error
     const { root } = gate
 
-    return this.ok(await buildCatalog(root, { scanCustomAgents }))
+    return this.ok(await buildCatalog(root, { scanCustomAgents: pipelineEditorBusiness.scanCustomAgents }))
   }
 
   async getCatalogAgent() {
@@ -141,7 +141,9 @@ export class PipelineEditorController extends AbstractController {
     const id = this.c.req.query('id')
     if (!id) return this.badRequest('missing id')
     const projectRoot = path.dirname(root)
-    let agentPath = await resolveCatalogAgentPath(projectRoot, root, id, { customAgentsDir })
+    let agentPath = await resolveCatalogAgentPath(projectRoot, root, id, {
+      customAgentsDir: pipelineEditorBusiness.customAgentsDir,
+    })
     if (!agentPath) {
       const parsed = parseCatalogAgentId(id)
       if (parsed?.source?.startsWith('repo:')) {

@@ -12,7 +12,8 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 - [ ] Route mới/sửa chỉ ở `features/<f>/api.ts` + `controller.ts` — controller không chứa đọc/ghi filesystem phức tạp.
 - [ ] Schema domain ở `features/<f>/schemas/`; không nhét schema shell vào feature; không đẩy schema domain lên `core/configs` trừ khi thật sự app-wide.
 - [ ] UI string qua i18n (`locales/`); FE API qua `scripts/*Api.ts` + `apiGet`/`apiPost`.
-- [ ] Không thêm wiring hub tay nếu glob/auto-load đã đủ (route / styles / locales).
+- [ ] Không thêm wiring hub tay nếu glob/auto-load đã đủ (route / styles / locales / `registerMode`).
+- [ ] PR thêm/sửa **mode** ở FE shell (`App.vue`, `registerMode.ts`): đúng [`mode-registry-convention.md`](mode-registry-convention.md) — không sửa `main.ts`, không đụng `App.vue` ngoài `shellContext` (khi thật sự cần state mới), `MODE_DEFS` trong `App.test.ts` đã cập nhật.
 
 ## B. Tầng `business/`
 

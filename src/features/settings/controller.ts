@@ -6,49 +6,36 @@ import { parseRecoverySettings } from './schemas/recovery.js'
 import { parseSecurityConfig } from './schemas/security.js'
 import { emitAudit } from '../../core/log/store.js'
 import { hasJwtSecret } from '../../core/http/security/jwtGuard.js'
-import {
-  loadAutoscanConfig,
-  saveAutoscanConfig,
-  runAutoscan,
-  loadGithubTokensConfig,
-  saveGithubTokensConfig,
-  loadLoggingConfig,
-  saveLoggingConfig,
-  loadRecoverySettings,
-  saveRecoverySettings,
-  loadSecurityConfig,
-  saveSecurityConfig,
-  browseDirectory,
-} from './business/index.js'
+import * as settingsBusiness from './business/index.js'
 
 export class SettingsController extends AbstractController {
   /** Local filesystem directory browser (folder picker). */
   async browseFs() {
     // Missing query → default home; explicit empty / __roots__ handled in browseDirectory.
     const pathParam = this.c.req.query('path')
-    const outcome = await browseDirectory(pathParam === undefined ? undefined : pathParam)
+    const outcome = await settingsBusiness.browseDirectory(pathParam === undefined ? undefined : pathParam)
     if ('error' in outcome) return this.json(outcome.status || 400, { error: outcome.error })
     return this.ok(outcome.result)
   }
 
   getAutoscan() {
-    return this.ok({ config: loadAutoscanConfig() })
+    return this.ok({ config: settingsBusiness.loadAutoscanConfig() })
   }
 
   async updateAutoscan() {
     const b = await this.parseBody()
     if (!b.ok) return this.badRequest('invalid JSON')
     const next = parseAutoscanConfig({
-      ...loadAutoscanConfig(),
+      ...settingsBusiness.loadAutoscanConfig(),
       ...b.value,
     })
-    const saved = saveAutoscanConfig(next)
+    const saved = settingsBusiness.saveAutoscanConfig(next)
     emitAudit({ op: 'update', entity: 'autoscan', identifier: 'config', projectId: null })
     return this.ok({ config: saved })
   }
 
   async runAutoscan() {
-    const config = loadAutoscanConfig()
+    const config = settingsBusiness.loadAutoscanConfig()
     // Optional body may override whitelist for a one-shot run (settings "scan now"
     // with unsaved edits); otherwise use persisted whitelist.
     const b = await this.parseBody()
@@ -68,7 +55,7 @@ export class SettingsController extends AbstractController {
         },
       })
     }
-    const report = await runAutoscan(whitelist)
+    const report = await settingsBusiness.runAutoscan(whitelist)
     emitAudit({
       op: 'create',
       entity: 'autoscan',
@@ -80,26 +67,26 @@ export class SettingsController extends AbstractController {
   }
 
   getGithubTokens() {
-    return this.ok({ config: loadGithubTokensConfig() })
+    return this.ok({ config: settingsBusiness.loadGithubTokensConfig() })
   }
 
   async updateGithubTokens() {
     const b = await this.parseBody()
     if (!b.ok) return this.badRequest('invalid JSON')
     const next = parseGithubTokensConfig(b.value)
-    const saved = saveGithubTokensConfig(next)
+    const saved = settingsBusiness.saveGithubTokensConfig(next)
     emitAudit({ op: 'update', entity: 'github-tokens', identifier: 'config', projectId: null })
     return this.ok({ config: saved })
   }
 
   getLogging() {
-    return this.ok({ config: loadLoggingConfig() })
+    return this.ok({ config: settingsBusiness.loadLoggingConfig() })
   }
 
   async updateLogging() {
     const b = await this.parseBody()
     if (!b.ok) return this.badRequest('invalid JSON')
-    const current = loadLoggingConfig()
+    const current = settingsBusiness.loadLoggingConfig()
     const next = parseLoggingConfig({
       ...current,
       ...b.value,
@@ -108,40 +95,40 @@ export class SettingsController extends AbstractController {
         ...(b.value?.types && typeof b.value.types === 'object' ? b.value.types : {}),
       },
     })
-    const saved = saveLoggingConfig(next)
+    const saved = settingsBusiness.saveLoggingConfig(next)
     emitAudit({ op: 'update', entity: 'logging', identifier: 'config', projectId: null })
     return this.ok({ config: saved })
   }
 
   getRecovery() {
-    return this.ok({ config: loadRecoverySettings() })
+    return this.ok({ config: settingsBusiness.loadRecoverySettings() })
   }
 
   async updateRecovery() {
     const b = await this.parseBody()
     if (!b.ok) return this.badRequest('invalid JSON')
     const next = parseRecoverySettings({
-      ...loadRecoverySettings(),
+      ...settingsBusiness.loadRecoverySettings(),
       ...b.value,
     })
-    const saved = saveRecoverySettings(next)
+    const saved = settingsBusiness.saveRecoverySettings(next)
     emitAudit({ op: 'update', entity: 'recovery', identifier: 'config', projectId: null })
     return this.ok({ config: saved })
   }
 
   getSecurity() {
-    return this.ok({ config: loadSecurityConfig(), jwtEnabled: hasJwtSecret() })
+    return this.ok({ config: settingsBusiness.loadSecurityConfig(), jwtEnabled: hasJwtSecret() })
   }
 
   async updateSecurity() {
     const b = await this.parseBody()
     if (!b.ok) return this.badRequest('invalid JSON')
-    const current = loadSecurityConfig()
+    const current = settingsBusiness.loadSecurityConfig()
     const next = parseSecurityConfig({
       rateLimit: { ...current.rateLimit, ...(b.value?.rateLimit ?? {}) },
       cors: { ...current.cors, ...(b.value?.cors ?? {}) },
     })
-    const saved = saveSecurityConfig(next)
+    const saved = settingsBusiness.saveSecurityConfig(next)
     emitAudit({ op: 'update', entity: 'security', identifier: 'config', projectId: null })
     return this.ok({ config: saved, jwtEnabled: hasJwtSecret() })
   }

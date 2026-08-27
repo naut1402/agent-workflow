@@ -1,19 +1,5 @@
 <script setup lang="ts">
-type RailIconName =
-  | 'panelCollapse'
-  | 'panelExpand'
-  | 'monitor'
-  | 'pipeline'
-  | 'catalog'
-  | 'rules'
-  | 'agent'
-  | 'quickAction'
-  | 'knowledge'
-  | 'runner'
-  | 'automations'
-  | 'logs'
-  | 'statistics'
-  | 'settings'
+import type { RailIconName } from './railIconNames'
 
 withDefaults(
   defineProps<{

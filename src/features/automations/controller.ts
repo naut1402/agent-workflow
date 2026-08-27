@@ -10,22 +10,7 @@ import {
   ToggleAutomationRequest,
   UpdateAutomationRequest,
 } from './schemas/automation.js'
-import {
-  createAutomation,
-  deleteAutomation,
-  evaluateRuleTriggers,
-  getAutomation,
-  getRuleState,
-  KNOWN_AUTOMATION_EVENT_TYPES,
-  listAutomations,
-  listRuns,
-  removeFromTriggerRegistry,
-  removeRuleRuntime,
-  runAutomation,
-  setAutomationEnabled,
-  syncTriggerRegistry,
-  updateAutomation,
-} from './business/index.js'
+import * as automationsBusiness from './business/index.js'
 
 /**
  * Automations mode (#233): CRUD rule (triggers[] → actions[]) + run now +
@@ -39,9 +24,9 @@ export class AutomationsController extends AbstractController {
     const { root } = gate
 
     const now = new Date()
-    const automations = listAutomations(root).map((rule) => {
-      const state = getRuleState(this.projectId, rule.id)
-      const evaluation = evaluateRuleTriggers(rule.triggers, state, now)
+    const automations = automationsBusiness.listAutomations(root).map((rule) => {
+      const state = automationsBusiness.getRuleState(this.projectId, rule.id)
+      const evaluation = automationsBusiness.evaluateRuleTriggers(rule.triggers, state, now)
       return {
         ...rule,
         state: {
@@ -57,7 +42,7 @@ export class AutomationsController extends AbstractController {
   }
 
   async listEventTypes() {
-    return this.ok({ types: KNOWN_AUTOMATION_EVENT_TYPES })
+    return this.ok({ types: automationsBusiness.KNOWN_AUTOMATION_EVENT_TYPES })
   }
 
   /**
@@ -115,10 +100,10 @@ export class AutomationsController extends AbstractController {
       return this.badRequest('invalid request', { details: parsed.error.flatten() })
     }
 
-    const result = createAutomation(root, parsed.data)
+    const result = automationsBusiness.createAutomation(root, parsed.data)
     if ('error' in result) return this.json(result.status, { error: result.error })
 
-    syncTriggerRegistry(root, this.projectId || '')
+    automationsBusiness.syncTriggerRegistry(root, this.projectId || '')
     emitAudit({
       op: 'create',
       entity: 'automation',
@@ -144,10 +129,10 @@ export class AutomationsController extends AbstractController {
       return this.badRequest('invalid request', { details: parsed.error.flatten() })
     }
 
-    const result = updateAutomation(root, id, parsed.data)
+    const result = automationsBusiness.updateAutomation(root, id, parsed.data)
     if ('error' in result) return this.json(result.status, { error: result.error })
 
-    syncTriggerRegistry(root, this.projectId || '')
+    automationsBusiness.syncTriggerRegistry(root, this.projectId || '')
     emitAudit({
       op: 'update',
       entity: 'automation',
@@ -171,10 +156,10 @@ export class AutomationsController extends AbstractController {
     const parsed = ToggleAutomationRequest.safeParse(b.value)
     if (!parsed.success) return this.badRequest('invalid request')
 
-    const result = setAutomationEnabled(root, id, parsed.data.enabled)
+    const result = automationsBusiness.setAutomationEnabled(root, id, parsed.data.enabled)
     if ('error' in result) return this.json(result.status, { error: result.error })
 
-    syncTriggerRegistry(root, this.projectId || '')
+    automationsBusiness.syncTriggerRegistry(root, this.projectId || '')
     emitAudit({
       op: 'update',
       entity: 'automation',
@@ -194,11 +179,11 @@ export class AutomationsController extends AbstractController {
     const id = this.c.req.param('id')
     if (!id || !AUTOMATION_ID_PATTERN.test(id)) return this.badRequest('invalid automation id')
 
-    const result = deleteAutomation(root, id)
+    const result = automationsBusiness.deleteAutomation(root, id)
     if ('error' in result) return this.json(result.status, { error: result.error })
 
-    removeFromTriggerRegistry(this.projectId || '', id)
-    removeRuleRuntime(this.projectId, id)
+    automationsBusiness.removeFromTriggerRegistry(this.projectId || '', id)
+    automationsBusiness.removeRuleRuntime(this.projectId, id)
     emitAudit({ op: 'delete', entity: 'automation', identifier: id, projectId: this.projectId })
     emitEntity('deleted', 'automation', { id, projectId: this.projectId })
     return this.ok({ id, deleted: true })
@@ -213,7 +198,7 @@ export class AutomationsController extends AbstractController {
     const id = this.c.req.param('id')
     if (!id || !AUTOMATION_ID_PATTERN.test(id)) return this.badRequest('invalid automation id')
 
-    const rule = getAutomation(root, id)
+    const rule = automationsBusiness.getAutomation(root, id)
     if (!rule) return this.notFound('automation not found', { id })
 
     emitAudit({
@@ -224,7 +209,7 @@ export class AutomationsController extends AbstractController {
       detail: { action: 'run-now' },
     })
     // Chuỗi action chạy nền — trả run đang `running`, kết quả qua history poll.
-    const run = runAutomation({ root, projectId: this.projectId, rule, source: 'manual' })
+    const run = automationsBusiness.runAutomation({ root, projectId: this.projectId, rule, source: 'manual' })
     return this.ok({ run })
   }
 
@@ -237,7 +222,7 @@ export class AutomationsController extends AbstractController {
 
     const limitRaw = Number(this.c.req.query('limit') || '20')
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.floor(limitRaw)), 50) : 20
-    return this.ok({ runs: listRuns(this.projectId, limit) })
+    return this.ok({ runs: automationsBusiness.listRuns(this.projectId, limit) })
   }
 
   /** Lịch sử thực thi toàn project (mọi rule) — tab "Lịch sử thực thi" trên FE. */
@@ -247,6 +232,6 @@ export class AutomationsController extends AbstractController {
 
     const limitRaw = Number(this.c.req.query('limit') || '50')
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.floor(limitRaw)), 50) : 50
-    return this.ok({ runs: listRuns(this.projectId, limit) })
+    return this.ok({ runs: automationsBusiness.listRuns(this.projectId, limit) })
   }
 }
