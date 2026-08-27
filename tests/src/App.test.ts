@@ -13,16 +13,12 @@ import LogsPanel from '@/features/logs/components/LogsPanel.vue'
 import StatisticsPanel from '@/features/statistics/components/StatisticsPanel.vue'
 import { createContainer } from '@/core/container'
 import { containerKey } from '@/core/shell/containerKey'
-import { createModeRegistry, modeRegistryToken } from '@/core/shell/modeRegistry'
-import { registerMonitorMode } from '@/features/monitor/registerMode'
-import { registerPipelineEditorMode } from '@/features/pipeline-editor/registerMode'
-import { registerAgentEditorMode } from '@/features/agent-editor/registerMode'
-import { registerQuickActionMode } from '@/features/quick-action/registerMode'
-import { registerKnowledgeMode } from '@/features/knowledge/registerMode'
-import { registerRunnerMode } from '@/features/runner/registerMode'
-import { registerAutomationsMode } from '@/features/automations/registerMode'
-import { registerLogsMode } from '@/features/logs/registerMode'
-import { registerStatisticsMode } from '@/features/statistics/registerMode'
+import { createModeRegistry, modeRegistryToken, type ModeRegistry } from '@/core/shell/modeRegistry'
+
+// Cùng cơ chế auto-discovery với `main.ts` (glob thay vì import + gọi từng
+// registerXMode) — App.test.ts phải exercise đúng wiring thật, không phải mock
+// rời rạc, để còn là safety net cho refactor App.vue.
+const modeModules = import.meta.glob('../../src/features/*/registerMode.ts', { eager: true })
 
 vi.mock('@/features/monitor/scripts/monitorApi', () => ({
   fetchProjects: vi.fn(async () => ({ projects: [], defaultId: null })),
@@ -68,19 +64,11 @@ const MODE_DEFS = [
 const i18n = createTestI18n('vi')
 const t = (key: string, params?: Record<string, unknown>) => (i18n.global.t as any)(key, params ?? {})
 
-// Wiring y hệt `main.ts` — App.test.ts phải exercise đúng cơ chế container/registry
-// thật, không phải mock rời rạc, để còn là safety net cho refactor App.vue.
 function buildContainer() {
   const registry = createModeRegistry()
-  registerMonitorMode(registry)
-  registerPipelineEditorMode(registry)
-  registerAgentEditorMode(registry)
-  registerQuickActionMode(registry)
-  registerKnowledgeMode(registry)
-  registerRunnerMode(registry)
-  registerAutomationsMode(registry)
-  registerLogsMode(registry)
-  registerStatisticsMode(registry)
+  for (const mod of Object.values(modeModules)) {
+    ;(mod as { registerMode: (registry: ModeRegistry) => void }).registerMode(registry)
+  }
 
   const container = createContainer()
   container.register(modeRegistryToken, () => registry)

@@ -8,16 +8,7 @@ import { applyThemeToDocument, watchSystemTheme } from './core/lib/theme'
 import { resolveThemePreference, resolveLocale } from './core/configs/appSettings'
 import { installPlugins, setI18nLocale } from './plugins'
 import { createContainer } from './core/container'
-import { createModeRegistry, modeRegistryToken } from './core/shell/modeRegistry'
-import { registerMonitorMode } from './features/monitor/registerMode'
-import { registerPipelineEditorMode } from './features/pipeline-editor/registerMode'
-import { registerAgentEditorMode } from './features/agent-editor/registerMode'
-import { registerQuickActionMode } from './features/quick-action/registerMode'
-import { registerKnowledgeMode } from './features/knowledge/registerMode'
-import { registerRunnerMode } from './features/runner/registerMode'
-import { registerAutomationsMode } from './features/automations/registerMode'
-import { registerLogsMode } from './features/logs/registerMode'
-import { registerStatisticsMode } from './features/statistics/registerMode'
+import { createModeRegistry, modeRegistryToken, type ModeRegistry } from './core/shell/modeRegistry'
 
 const { settings, load } = useAppSettings()
 load()
@@ -30,18 +21,15 @@ watchSystemTheme(() => {
   }
 })
 
-// Đăng ký tường minh + đồng bộ, trước app.mount() — đảm bảo App.vue đọc
-// registry lần đầu (trong setup) không bị thiếu mode nào.
+// Auto-load features/<name>/registerMode.ts — new features need no main.ts edit,
+// chỉ cần thêm file đúng convention (export `registerMode(registry)`). Vite/Vitest
+// transform eager glob thành object tĩnh — vẫn đồng bộ, chạy xong trước app.mount().
+const modeModules = import.meta.glob('./features/*/registerMode.ts', { eager: true })
+
 const modeRegistry = createModeRegistry()
-registerMonitorMode(modeRegistry)
-registerPipelineEditorMode(modeRegistry)
-registerAgentEditorMode(modeRegistry)
-registerQuickActionMode(modeRegistry)
-registerKnowledgeMode(modeRegistry)
-registerRunnerMode(modeRegistry)
-registerAutomationsMode(modeRegistry)
-registerLogsMode(modeRegistry)
-registerStatisticsMode(modeRegistry)
+for (const mod of Object.values(modeModules)) {
+  ;(mod as { registerMode: (registry: ModeRegistry) => void }).registerMode(modeRegistry)
+}
 
 const container = createContainer()
 container.register(modeRegistryToken, () => modeRegistry)
