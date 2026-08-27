@@ -1,7 +1,7 @@
 import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
 import LogsPanel from './components/LogsPanel.vue'
 
-export function registerLogsMode(registry: ModeRegistry): void {
+export function registerMode(registry: ModeRegistry): void {
   registry.registerMode({
     key: 'logs',
     labelKey: 'common.modes.logs',

@@ -1,7 +1,7 @@
 import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
 import StatisticsPanel from './components/StatisticsPanel.vue'
 
-export function registerStatisticsMode(registry: ModeRegistry): void {
+export function registerMode(registry: ModeRegistry): void {
   registry.registerMode({
     key: 'statistics',
     labelKey: 'common.modes.statistics',

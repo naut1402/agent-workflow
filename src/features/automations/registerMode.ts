@@ -1,7 +1,7 @@
 import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
 import AutomationsPanel from './components/AutomationsPanel.vue'
 
-export function registerAutomationsMode(registry: ModeRegistry): void {
+export function registerMode(registry: ModeRegistry): void {
   registry.registerMode({
     key: 'automations',
     labelKey: 'common.modes.automations',

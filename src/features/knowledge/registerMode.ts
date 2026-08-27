@@ -1,7 +1,7 @@
 import type { ModeRegistry } from '../../core/shell/modeRegistry'
 import KnowledgePanel from './components/KnowledgePanel.vue'
 
-export function registerKnowledgeMode(registry: ModeRegistry): void {
+export function registerMode(registry: ModeRegistry): void {
   registry.registerMode({
     key: 'knowledge',
     labelKey: 'common.modes.knowledge',

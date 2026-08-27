@@ -1,7 +1,7 @@
 import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
 import AgentEditor from './components/AgentEditor.vue'
 
-export function registerAgentEditorMode(registry: ModeRegistry): void {
+export function registerMode(registry: ModeRegistry): void {
   registry.registerMode({
     key: 'agentEditor',
     labelKey: 'common.modes.agentEditor',

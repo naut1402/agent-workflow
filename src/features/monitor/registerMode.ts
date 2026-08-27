@@ -2,7 +2,7 @@ import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
 import MonitorLayout from './components/MonitorLayout.vue'
 
 /** Mode mặc định của app — statusKind 'live' (khác 8 mode còn lại đều 'paused'). */
-export function registerMonitorMode(registry: ModeRegistry): void {
+export function registerMode(registry: ModeRegistry): void {
   registry.registerMode({
     key: 'monitor',
     labelKey: 'common.modes.monitor',

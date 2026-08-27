@@ -1,7 +1,7 @@
 import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
 import QuickActionPanel from './components/QuickActionPanel.vue'
 
-export function registerQuickActionMode(registry: ModeRegistry): void {
+export function registerMode(registry: ModeRegistry): void {
   registry.registerMode({
     key: 'quickAction',
     labelKey: 'common.modes.quickAction',

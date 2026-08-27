@@ -1,7 +1,7 @@
 import type { ModeRegistry } from '../../core/shell/modeRegistry'
 import RunnerConfigPanel from './components/RunnerConfigPanel.vue'
 
-export function registerRunnerMode(registry: ModeRegistry): void {
+export function registerMode(registry: ModeRegistry): void {
   registry.registerMode({
     key: 'runner',
     // Tooltip ("Runner Config") khác label sidebar ("Runner") — giữ đúng hành vi gốc.

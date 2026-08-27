@@ -1,7 +1,7 @@
 import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
 import PipelineEditor from './components/PipelineEditor.vue'
 
-export function registerPipelineEditorMode(registry: ModeRegistry): void {
+export function registerMode(registry: ModeRegistry): void {
   registry.registerMode({
     key: 'editor',
     labelKey: 'common.modes.pipelineEditor',
