@@ -89,7 +89,7 @@ Thêm scan/endpoint mới không được phá các bất biến sau:
 |------|----------|
 | Viết/sửa code feature | implement `*-rule` + `coding-convention` + bất biến §4 |
 | Thêm mode mới ở FE shell (`App.vue`) | [`mode-registry-convention.md`](docs/implement/mode-registry-convention.md) — checklist §4 |
-| Review PR | [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) (+ mục **H** domain events khi đụng persist) |
+| Review PR | [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) (mục **Dữ liệu & An toàn** có domain events khi đụng persist) |
 | Test / CI | [`test-convention.md`](docs/implement/test-convention.md) |
 | Commit / PR / docs | [`pr-docs-convention.md`](docs/implement/pr-docs-convention.md) + [`git-convention.md`](docs/implement/git-convention.md) (tách commit §6 khi PR nhiều xử lý) |
 | Hoãn docs/test (hotfix, POC, convention chưa ổn) | [`todo-debt-convention.md`](docs/implement/todo-debt-convention.md) — `docs/todo/…`; gate CI chỉ khi PR **`dev/x.y.z/main` → `main`** (phải xóa cả `docs/todo/`) |
@@ -105,11 +105,11 @@ Template agent (`docs/template/agents/*`) chỉ có **bước cuối generic**: 
 
 Khi survey call chain đụng persist / lifecycle / CRUD domain:
 
-- [ ] Cân nhắc **thêm / sửa / xoá** `emit` / `emitEntity` (sau persist OK; payload tối thiểu, không secret).
-- [ ] Ghi kết luận trong `investigate.md` (vd *Events: thêm … / sửa … / xoá … / không đổi — vì …*).
-- [ ] Nếu chốt đổi event: cập nhật [`docs/event-catalog.md`](docs/event-catalog.md) (+ `DashboardEventType` nếu type mới/đổi tên) trong cùng thay đổi code, hoặc nợ [`docs/todo/`](docs/implement/todo-debt-convention.md).
+- [ ] **Cân nhắc emit**: thêm/sửa/xoá `emit`/`emitEntity` (sau persist OK; payload tối thiểu, không secret).
+- [ ] **Ghi kết luận**: trong `investigate.md` (vd *Events: thêm … / sửa … / xoá … / không đổi — vì …*).
+- [ ] **Cập nhật catalog nếu chốt đổi event**: [`docs/event-catalog.md`](docs/event-catalog.md) (+ `DashboardEventType` nếu type mới/đổi tên) trong cùng thay đổi code, hoặc nợ [`docs/todo/`](docs/implement/todo-debt-convention.md).
 
 ### Design / implement / review (khi scope đụng event)
 
-- [ ] Design nêu emit dự kiến (hoặc *không emit*).
-- [ ] Implement / review: catalog và code khớp; xem thêm [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) mục **H**.
+- [ ] **Design nêu emit dự kiến** (hoặc *không emit*).
+- [ ] **Implement/review đối chiếu catalog và code** — xem thêm [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) mục **Dữ liệu & An toàn**.
