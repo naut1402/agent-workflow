@@ -48,24 +48,14 @@ vi.mock('@vue-flow/core', async (importOriginal) => {
   }
 })
 
-// Toast UI Editor (dùng bởi MarkdownTextEditor — mount thật trong KnowledgePanel/
-// AgentSectionEditor/...) tự init qua dynamic import() trong onMounted; App.test.ts
-// mount/unmount nhiều panel liên tục nên dễ hit race "el null" sau unmount — cùng
-// cách mock với tests/src/core/ui/MarkdownTextEditor.test.ts.
-vi.mock('@toast-ui/editor', () => {
-  class MockEditor {
-    constructor() {}
-    focus = vi.fn()
-    blur = vi.fn()
-    destroy = vi.fn()
-    setMarkdown = vi.fn()
-    setHeight = vi.fn()
-    getMarkdown = vi.fn(() => '')
-  }
-  return { default: MockEditor }
-})
-vi.mock('@toast-ui/editor/dist/toastui-editor.css', () => ({}))
-vi.mock('@toast-ui/editor/dist/theme/toastui-editor-dark.css', () => ({}))
+// MarkdownTextEditor (dùng thật trong KnowledgePanel/AgentSectionEditor/...) tự
+// init Toast UI Editor qua `await import('@toast-ui/editor')` bên trong onMounted —
+// mock riêng package đó không chặn được race "el null sau unmount" một cách ổn định
+// (dynamic import bên trong .vue component, không phải static import ở test file).
+// Mock hẳn component để không đụng tới Toast UI Editor.
+vi.mock('@/core/ui/MarkdownTextEditor.vue', () => ({
+  default: { name: 'MarkdownTextEditor', template: '<div class="markdown-editor-stub" />' },
+}))
 
 // `key` = thứ tự nút trong `.mode-toggle` (khớp thứ tự template hiện tại của App.vue).
 const MODE_DEFS = [
