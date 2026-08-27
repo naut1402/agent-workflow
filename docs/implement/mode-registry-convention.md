@@ -6,6 +6,8 @@ Quy ước khi thêm/sửa **mode** (`monitor`, `editor`, `agentEditor`, …) tr
 
 ## 1. Kiến trúc
 
+Sơ đồ trình tự bootstrap (từ `main.ts` chạy tới `App.vue` render xong) + diễn giải chi tiết: [`../diagram/IoC.md`](../diagram/IoC.md).
+
 `App.vue` không còn hard-code danh sách mode. 3 lớp:
 
 | Lớp | File | Vai trò |

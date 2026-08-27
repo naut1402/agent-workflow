@@ -11,7 +11,7 @@ Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `
 | Mục lục domain events (theo feature) | [`docs/event-catalog.md`](docs/event-catalog.md) |
 | Tổ chức feature / business / helper | [`docs/implement/feature-organization-rule.md`](docs/implement/feature-organization-rule.md) |
 | Coding convention (TS, Zod, FE, i18n) | [`docs/implement/coding-convention.md`](docs/implement/coding-convention.md) |
-| Thêm mode mới ở FE shell (ModeRegistry/DI) | [`docs/implement/mode-registry-convention.md`](docs/implement/mode-registry-convention.md) |
+| Thêm mode mới ở FE shell (ModeRegistry/DI) | [`docs/implement/mode-registry-convention.md`](docs/implement/mode-registry-convention.md) — sơ đồ bootstrap: [`docs/diagram/IoC.md`](docs/diagram/IoC.md) |
 | Test | [`docs/implement/test-convention.md`](docs/implement/test-convention.md) |
 | PR / commit / docs output | [`docs/implement/pr-docs-convention.md`](docs/implement/pr-docs-convention.md) |
 | Nợ đối ứng sau (`docs/todo`) | [`docs/implement/todo-debt-convention.md`](docs/implement/todo-debt-convention.md) |
