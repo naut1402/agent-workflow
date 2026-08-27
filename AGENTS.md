@@ -11,6 +11,7 @@ Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `
 | Mục lục domain events (theo feature) | [`docs/event-catalog.md`](docs/event-catalog.md) |
 | Tổ chức feature / business / helper | [`docs/implement/feature-organization-rule.md`](docs/implement/feature-organization-rule.md) |
 | Coding convention (TS, Zod, FE, i18n) | [`docs/implement/coding-convention.md`](docs/implement/coding-convention.md) |
+| Thêm mode mới ở FE shell (ModeRegistry/DI) | [`docs/implement/mode-registry-convention.md`](docs/implement/mode-registry-convention.md) |
 | Test | [`docs/implement/test-convention.md`](docs/implement/test-convention.md) |
 | PR / commit / docs output | [`docs/implement/pr-docs-convention.md`](docs/implement/pr-docs-convention.md) |
 | Nợ đối ứng sau (`docs/todo`) | [`docs/implement/todo-debt-convention.md`](docs/implement/todo-debt-convention.md) |
@@ -87,6 +88,7 @@ Thêm scan/endpoint mới không được phá các bất biến sau:
 | Task | Đọc thêm |
 |------|----------|
 | Viết/sửa code feature | implement `*-rule` + `coding-convention` + bất biến §4 |
+| Thêm mode mới ở FE shell (`App.vue`) | [`mode-registry-convention.md`](docs/implement/mode-registry-convention.md) — checklist §4 |
 | Review PR | [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) (+ mục **H** domain events khi đụng persist) |
 | Test / CI | [`test-convention.md`](docs/implement/test-convention.md) |
 | Commit / PR / docs | [`pr-docs-convention.md`](docs/implement/pr-docs-convention.md) + [`git-convention.md`](docs/implement/git-convention.md) (tách commit §6 khi PR nhiều xử lý) |
