@@ -111,5 +111,5 @@ Khi survey call chain đụng persist / lifecycle / CRUD domain:
 
 ### Design / implement / review (khi scope đụng event)
 
-- [ ] **Design nêu emit dự kiến** (hoặc *không emit*).
-- [ ] **Implement/review đối chiếu catalog và code** — xem thêm [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) mục **Dữ liệu & An toàn**.
+- [ ] **Nêu rõ emit dự kiến trong design** (hoặc *không emit*).
+- [ ] **Đối chiếu catalog với code khi implement/review** — xem thêm [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) mục **Dữ liệu & An toàn**.
