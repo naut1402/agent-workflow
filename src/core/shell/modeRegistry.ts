@@ -1,5 +1,6 @@
 import type { Component } from 'vue'
 import { createToken, type ContainerToken } from '../container'
+import type { RailIconName } from '../ui/railIconNames'
 
 /** Object App.vue dựng mỗi render — state/hàm shell sở hữu mà mode cần đọc/gọi. */
 export type ShellContext = Record<string, unknown>
@@ -9,7 +10,7 @@ export interface ModeEntry {
   labelKey: string
   /** Tooltip riêng (khác `labelKey`) — mặc định dùng `labelKey` nếu không set. */
   titleKey?: string
-  icon: string
+  icon: RailIconName
   order: number
   statusKind: 'live' | 'paused'
   panel: Component
