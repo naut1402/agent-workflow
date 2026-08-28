@@ -52,18 +52,18 @@ interface ModeEntry {
 
 ## 4. Checklist — thêm mode mới
 
-- [ ] Tạo `src/features/<feature>/registerMode.ts`, export **đúng tên** `registerMode(registry: ModeRegistry): void` (không đặt tên khác — glob ở `main.ts` gọi cố định `mod.registerMode(...)`).
-- [ ] `key` duy nhất, chưa tồn tại ở mode nào khác (trùng → `registry.registerMode()` throw lúc khởi động — fail-fast, không lỗi ngầm).
-- [ ] `order` duy nhất, chọn số phù hợp vị trí mong muốn trong sidebar (không cần liền kề mode khác).
-- [ ] `labelKey` (+ `titleKey` nếu tooltip khác label) trỏ đúng key đã có trong `plugins/i18n/locales/common/{vi,en}.ts` → `modes.*`; `statusKind: 'paused'` cần thêm key `status.paused.<key>` ở cả 2 locale (xem [`../i18n.md`](../i18n.md)).
-- [ ] `icon` khớp tên đã đăng ký trong `RailIcon.vue`.
-- [ ] `panel` import trực tiếp (top-level `import X from './components/X.vue'`), **không** lazy-load — xem §5.
-- [ ] `bindings(ctx)` chỉ lấy state/hàm đã có sẵn trong `ShellContext` (§3); nếu cần state mới thật sự thuộc shell, thêm đúng 1 dòng vào `shellContext` trong `App.vue` (không thêm nhánh `v-if` hay import tĩnh nào khác ở `App.vue`).
-- [ ] Mode cần điều kiện ẩn/hiện động (như `logs` theo `showLogsTab`) → dùng `visible(ctx)`, không tự thêm `v-if` riêng trong `App.vue`.
-- [ ] **Không** sửa `src/main.ts` — nếu thấy cần sửa main.ts để "đăng ký" mode mới nghĩa là đang làm sai convention (glob tự quét theo path `features/*/registerMode.ts`).
-- [ ] Panel component tự apply coding convention chung của feature ([`feature-organization-rule.md`](feature-organization-rule.md), [`coding-convention.md`](coding-convention.md)) — `registerMode.ts` không phải chỗ chứa logic domain, chỉ khai báo + map props/listener.
-- [ ] Test: cập nhật `tests/src/App.test.ts` — thêm entry vào `MODE_DEFS` (key, labelKey, statusKind, component) để mode mới được cover tự động trong cả 3 test lặp qua `MODE_DEFS` (sidebar active, status text, main panel + props/listener nếu cần assert riêng như `monitor`/`editor`). File này build container qua cùng glob với `main.ts` — không cần đăng ký tay.
-- [ ] Chạy `vue-tsc --noEmit`, `vitest run tests/src/App.test.ts`, và test riêng của feature (unit/business) — xanh trước khi PR.
+- [ ] **Export đúng `registerMode`**: tạo `src/features/<feature>/registerMode.ts`, export **đúng tên** `registerMode(registry: ModeRegistry): void` (không đặt tên khác — glob ở `main.ts` gọi cố định `mod.registerMode(...)`).
+- [ ] **Đặt `key` duy nhất**: chưa tồn tại ở mode nào khác (trùng → `registry.registerMode()` throw lúc khởi động — fail-fast, không lỗi ngầm).
+- [ ] **Chọn `order` duy nhất**: số phù hợp vị trí mong muốn trong sidebar (không cần liền kề mode khác).
+- [ ] **Trỏ đúng i18n key**: `labelKey` (+ `titleKey` nếu tooltip khác label) trỏ đúng key đã có trong `plugins/i18n/locales/common/{vi,en}.ts` → `modes.*`; `statusKind: 'paused'` cần thêm key `status.paused.<key>` ở cả 2 locale (xem [`../i18n.md`](../i18n.md)).
+- [ ] **Khớp `icon` với RailIcon**: tên đã đăng ký trong `RailIcon.vue`.
+- [ ] **Import `panel` trực tiếp**: top-level `import X from './components/X.vue'`, **không** lazy-load — xem §5.
+- [ ] **Giới hạn `bindings(ctx)` trong `ShellContext`**: chỉ lấy state/hàm đã có sẵn (§3); nếu cần state mới thật sự thuộc shell, thêm đúng 1 dòng vào `shellContext` trong `App.vue` (không thêm nhánh `v-if` hay import tĩnh nào khác ở `App.vue`).
+- [ ] **Dùng `visible(ctx)` cho ẩn/hiện động**: mode cần điều kiện như `logs` theo `showLogsTab` → dùng `visible(ctx)`, không tự thêm `v-if` riêng trong `App.vue`.
+- [ ] **Không sửa `src/main.ts`**: nếu thấy cần sửa main.ts để "đăng ký" mode mới nghĩa là đang làm sai convention (glob tự quét theo path `features/*/registerMode.ts`).
+- [ ] **Tuân thủ coding convention trong panel**: tự apply quy ước chung của feature ([`feature-organization-rule.md`](feature-organization-rule.md), [`coding-convention.md`](coding-convention.md)) — `registerMode.ts` không phải chỗ chứa logic domain, chỉ khai báo + map props/listener.
+- [ ] **Cập nhật `MODE_DEFS` trong App.test.ts**: thêm entry (key, labelKey, statusKind, component) để mode mới được cover tự động trong cả 3 test lặp qua `MODE_DEFS` (sidebar active, status text, main panel + props/listener nếu cần assert riêng như `monitor`/`editor`). File này build container qua cùng glob với `main.ts` — không cần đăng ký tay.
+- [ ] **Giữ xanh trước khi PR**: chạy `vue-tsc --noEmit`, `vitest run tests/src/App.test.ts`, và test riêng của feature (unit/business).
 
 ---
 
