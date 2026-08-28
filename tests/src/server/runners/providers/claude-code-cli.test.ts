@@ -155,6 +155,37 @@ describe('createLocalConsoleProvider — job log structure', () => {
     expect(invocation.stdinInput).toBe('nội dung bất kỳ')
   })
 
+  test('claude style: model is forwarded as --model when set', () => {
+    const invocation = buildClaudeInvocation({
+      flags: ['--bare'],
+      prompt: 'nội dung bất kỳ',
+      allowedTools: 'Read,Edit',
+      dangerouslySkipPermissions: true,
+      sessionId: 'sess-123',
+      model: 'opus',
+    })
+    expect(invocation.args).toEqual([
+      '--bare',
+      '-p',
+      '--allowedTools',
+      'Read,Edit',
+      '--dangerously-skip-permissions',
+      '--model',
+      'opus',
+      '--session-id',
+      'sess-123',
+    ])
+  })
+
+  test('claude style: no model set → no --model in argv', () => {
+    const invocation = buildClaudeInvocation({
+      flags: [],
+      prompt: 'nội dung bất kỳ',
+      resumeSessionId: 'resume-xyz',
+    })
+    expect(invocation.args).not.toContain('--model')
+  })
+
   // Real spawn, cross-platform (no `claude` needed): use node itself as the
   // fake CLI, pointing at a tiny script that echoes its argv and everything it
   // read from stdin. Proves the multi-line Vietnamese prompt arrives on stdin
@@ -230,6 +261,107 @@ describe('createLocalConsoleProvider — job log structure', () => {
       expect(argv.some((a) => a === multiLinePrompt)).toBe(false)
       expect(argv.some((a) => a.includes('thư mục'))).toBe(false)
       expect(argv.some((a) => a.includes('Đọc'))).toBe(false)
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
+  test('integration: runnerConfig.model is spawned as --model <value> in real argv', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
+    try {
+      const fakeCli = path.join(home, 'fake-cli.mjs')
+      fs.writeFileSync(
+        fakeCli,
+        [
+          "process.stdout.write('ARGV:' + JSON.stringify(process.argv.slice(2)) + '\\n')",
+          'process.stdin.resume()',
+          "process.stdin.on('end', () => process.exit(0))",
+          '',
+        ].join('\n'),
+        'utf8',
+      )
+
+      const provider = createLocalConsoleProvider({
+        providerId: 'claude-code-cli',
+        defaultCliPath: process.execPath,
+        claudeStyleArgs: true,
+      })
+
+      let output = ''
+      const result = await provider.execute(
+        {
+          jobId: 'job-model',
+          resolvedAgent,
+          userPrompt: 'prompt bất kỳ',
+          workspace,
+          produces: [],
+          timeoutMs: 10000,
+        },
+        { cliPath: process.execPath, flags: [fakeCli], model: 'opus' },
+        credential,
+        (chunk) => {
+          output += chunk
+        },
+      )
+
+      expect(result.ok).toBe(true)
+      const argvLine = output.split('\n').find((l) => l.startsWith('ARGV:'))
+      expect(argvLine).toBeTruthy()
+      const argv = JSON.parse(argvLine!.slice('ARGV:'.length)) as string[]
+      expect(argv).toContain('--model')
+      expect(argv[argv.indexOf('--model') + 1]).toBe('opus')
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
+  test('regression: cursor/codex (non-claude-style) never receive --model even if runnerConfig.model is set', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
+    try {
+      const fakeCli = path.join(home, 'fake-cli.mjs')
+      fs.writeFileSync(
+        fakeCli,
+        [
+          "process.stdout.write('ARGV:' + JSON.stringify(process.argv.slice(2)) + '\\n')",
+          'process.stdin.resume()',
+          "process.stdin.on('end', () => process.exit(0))",
+          '',
+        ].join('\n'),
+        'utf8',
+      )
+
+      const provider = createLocalConsoleProvider({
+        providerId: 'cursor-cli',
+        defaultCliPath: process.execPath,
+        claudeStyleArgs: false,
+      })
+
+      let output = ''
+      const result = await provider.execute(
+        {
+          jobId: 'job-cursor-model',
+          resolvedAgent,
+          userPrompt: 'prompt bất kỳ',
+          workspace,
+          produces: [],
+          timeoutMs: 10000,
+        },
+        { cliPath: process.execPath, flags: [fakeCli], model: 'opus' },
+        credential,
+        (chunk) => {
+          output += chunk
+        },
+      )
+
+      expect(result.ok).toBe(true)
+      const argvLine = output.split('\n').find((l) => l.startsWith('ARGV:'))
+      expect(argvLine).toBeTruthy()
+      const argv = JSON.parse(argvLine!.slice('ARGV:'.length)) as string[]
+      expect(argv).not.toContain('--model')
     } finally {
       fs.rmSync(home, { recursive: true, force: true })
       fs.rmSync(workspace, { recursive: true, force: true })

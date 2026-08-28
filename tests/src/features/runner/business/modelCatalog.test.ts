@@ -34,8 +34,20 @@ afterEach(() => {
 })
 
 describe('listAvailableModels', () => {
-  test('a provider outside the AgenticApiProvider family (e.g. a CLI) is rejected with a clear error', async () => {
-    const result = await listAvailableModels({ providerId: 'claude-code-cli', secretValue: 'whatever' })
+  test('claude-code-cli returns the static alias list without any credential/network call', async () => {
+    let called = false
+    globalThis.fetch = (async () => {
+      called = true
+      return jsonResponse({ data: [] })
+    }) as unknown as typeof fetch
+
+    const result = await listAvailableModels({ providerId: 'claude-code-cli' })
+    expect(result).toEqual({ ok: true, models: ['opus', 'sonnet', 'haiku'] })
+    expect(called).toBe(false)
+  })
+
+  test('a CLI provider other than claude-code-cli (e.g. cursor-cli) is still rejected with a clear error', async () => {
+    const result = await listAvailableModels({ providerId: 'cursor-cli', secretValue: 'whatever' })
     expect(result).toEqual({ ok: false, error: 'provider này không hỗ trợ liệt kê model' })
   })
 

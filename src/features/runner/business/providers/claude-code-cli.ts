@@ -57,6 +57,7 @@ export interface ClaudeInvocationInput {
   dangerouslySkipPermissions?: unknown
   sessionId?: string
   resumeSessionId?: string
+  model?: string
 }
 
 export interface ClaudeInvocation {
@@ -80,6 +81,9 @@ export function buildClaudeInvocation(input: ClaudeInvocationInput): ClaudeInvoc
   }
   if (input.dangerouslySkipPermissions) {
     args.push('--dangerously-skip-permissions')
+  }
+  if (input.model) {
+    args.push('--model', input.model)
   }
   // Approval-flow session continuity — exactly one is ever set (see
   // ExecuteRequest.sessionId/resumeSessionId doc comment).
@@ -372,6 +376,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
           dangerouslySkipPermissions: skipPermissions,
           sessionId: sessionPlan.sessionId,
           resumeSessionId: sessionPlan.resumeSessionId,
+          model: runnerConfig.model,
         })
         args = invocation.args
         stdinInput = invocation.stdinInput
