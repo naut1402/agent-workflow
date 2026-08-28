@@ -20,6 +20,7 @@ Cột **Event** trên UI = giá trị `type` trong bảng dưới.
 | `task.advanced` | Đổi `current_phase` sau job success (không gate), `review_retry`, hoặc reset step (nút reset) | `taskId`, `stepId`, `currentPhase`, đôi khi `reason` (+ `cascade`, `removedSteps` khi `reason: reset`) | `monitor/business/tasks/state.ts` `advanceStepOnJobSuccess` / `resetPipelineStepAssumingLock` |
 | `hitl.pending` | Step có `hitl.gate_id` — mở cổng chờ duyệt | `taskId`, `gateId`, `stepId` | `state.ts` `advanceStepOnJobSuccess` |
 | `hitl.resolved` | Approve / reject HITL | `taskId`, `gateId`, `action`, `currentPhase` | `state.ts` `applyHitlAction` |
+| `hitl.resolved` (`reason: pipeline_changed`) | Pipeline đổi khiến gate đang pending không còn được step hiện tại khai báo — hệ thống tự huỷ (`action: 'cancelled'`) hoặc chuẩn hoá legacy `true` về gate id (`action: 'normalized'`) | `taskId`, `gateId` (giá trị cũ, null nếu legacy `true`), `action`, `reason`, `currentPhase` | `state.ts` `reconcileGateStateAssumingLock` |
 | `entity.updated` (`entity: task-state`) | Repair / cập nhật state task | `id`, `projectId`, `detail` | `monitor/controller.ts` |
 | `entity.deleted` (`entity: task-state`) | Xóa task | `id`, `projectId` | `monitor/controller.ts` |
 

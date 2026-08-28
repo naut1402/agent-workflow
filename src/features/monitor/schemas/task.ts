@@ -77,7 +77,10 @@ export interface TaskStateView {
 
 /**
  * Project an unknown raw value into a TaskStateView with safe defaults.
- * Mirrors the field defaulting in the `/api/tasks` handler so the two never drift.
+ * Mirrors the raw field defaulting of the `/api/tasks` handler — NOT its gate
+ * reconciliation: that handler additionally runs `hitl_pending` through
+ * `resolveHitlPending` against the task's live pipeline, which needs I/O this
+ * pure projection has no access to.
  */
 export function parseTaskState(raw: unknown): TaskStateView {
   const parsed = TaskState.safeParse(raw)

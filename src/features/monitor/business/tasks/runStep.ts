@@ -16,6 +16,7 @@ import { readState } from './index.js'
 import {
   advanceStepOnJobSuccessAssumingLock,
   jumpToPipelineStepAssumingLock,
+  reconcileGateStateAssumingLock,
   withTaskLock,
 } from './state.js'
 
@@ -46,10 +47,10 @@ export async function runTaskStep(
     let read = await readState(stateFile)
     if (!read.ok) return { ok: false, status: 404, error: 'task not found', extra: { taskId } }
     let state = read.state as Record<string, unknown>
-    if (state.hitl_pending) {
-      return { ok: false, status: 400, error: 'task is waiting for HITL approval', extra: { taskId } }
-    }
 
+    // Checked before reconcile so a request that is going to be refused anyway
+    // leaves no trace: reconcile persists, and bumping `state_mtime` here would
+    // make an open HITL modal fail its own 409 conflict check for nothing.
     const existing = listJobs(50).find(
       (j) =>
         j.metadata?.taskId === taskId &&
@@ -57,6 +58,20 @@ export async function runTaskStep(
     )
     if (existing) {
       return { ok: false, status: 409, error: 'step already running', extra: { taskId, job: existing } }
+    }
+
+    // The pipeline may have been edited while the gate was open: a gate the
+    // current step no longer declares leaves nobody able to approve it (the UI
+    // draws no node, `applyHitlAction` refuses) — clear it here instead of
+    // returning 400 into a deadlock. This doubles as the automatic way out for
+    // tasks already stuck. Must persist (not just patch in memory) because
+    // `jumpToPipelineStepAssumingLock` re-reads the file and blocks on
+    // `hitl_pending` too. Has to stay ahead of the `hitl_pending` check below.
+    const reconciled = await reconcileGateStateAssumingLock(root, taskId, stateFile, { state })
+    if (reconciled) state = reconciled.state
+
+    if (state.hitl_pending) {
+      return { ok: false, status: 400, error: 'task is waiting for HITL approval', extra: { taskId } }
     }
 
     let stepId = String(state.current_phase ?? '')

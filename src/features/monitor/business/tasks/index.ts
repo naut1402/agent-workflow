@@ -1,4 +1,5 @@
 import { joinPath, readDir, readFile, readTextFile, resolvePathUnder, statSafe } from '../../../../core/lib/fileHelper.js'
+import { resolveHitlPending, gateStepsFromConfig } from '../../../../core/lib/phase.js'
 import { knownArtifactsFor, loadPipelineConfig } from '../peers.js'
 
 /**
@@ -113,7 +114,17 @@ export async function collectTasks(root: string): Promise<any[]> {
       // a partially-written file.
       parent_task_id: state?.parent_task_id ?? null,
       current_phase: state?.current_phase ?? null,
-      hitl_pending: state?.hitl_pending ?? null,
+      // A gate only still counts if the CURRENT pipeline declares it on the step
+      // the cursor sits on — normalise here so the ⏸ badge, the `waiting` node,
+      // notifications and the timeline can never contradict the server. `cfg` is
+      // already loaded above, so this costs no extra I/O. Same `gateStepsFromConfig`
+      // as the write side: when the YAML is unreadable both keep the gate, so the
+      // UI still draws a node for whatever the server is still blocking on.
+      hitl_pending: resolveHitlPending(
+        gateStepsFromConfig(cfg),
+        state?.current_phase,
+        state?.hitl_pending,
+      ),
       review_round: state?.review_round ?? 0,
       auto_review: state?.auto_review ?? false,
       doc_review_round: state?.doc_review_round ?? { investigate: 0, design: 0 },
