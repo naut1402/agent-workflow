@@ -7,7 +7,14 @@ export function createToken<T>(description: string): ContainerToken<T> {
   return Symbol(description) as ContainerToken<T>
 }
 
-export function createContainer(): Container {
+/**
+ * Container 2 tầng: gọi không tham số → container độc lập (FE `main.ts`, root
+ * container của BE); truyền `parent` → **child scope** kế thừa token của cha.
+ *
+ * Bất biến: child **không** cache instance của parent — parent tự cache, nên
+ * service process-scoped chỉ có đúng 1 bản dù N child scope cùng resolve.
+ */
+export function createContainer(parent?: Container): Container {
   const factories = new Map<symbol, Factory<unknown>>()
   const instances = new Map<symbol, unknown>()
   const resolving: symbol[] = []
@@ -26,6 +33,9 @@ export function createContainer(): Container {
 
     const factory = factories.get(key)
     if (!factory) {
+      // Child scope đè được token của cha; token không đè thì lấy instance
+      // singleton ở tầng đã đăng ký (parent tự cache).
+      if (parent) return parent.resolve(token)
       throw new Error(`Container: chưa đăng ký provider cho token "${String(key)}"`)
     }
     if (resolving.includes(key)) {
@@ -43,6 +53,10 @@ export function createContainer(): Container {
     }
   }
 
-  const container: Container = { register, resolve }
+  function has(token: ContainerToken<unknown>): boolean {
+    return factories.has(token as symbol) || (parent ? parent.has(token) : false)
+  }
+
+  const container: Container = { register, resolve, has }
   return container
 }

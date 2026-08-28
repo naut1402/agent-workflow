@@ -6,6 +6,7 @@ import type { HonoEnv, RegistryContext } from '../core/http/types.js'
 import { j, json } from '../core/http/responseHelper.js'
 import { dirnameFromImportMeta, resolvePath } from '../core/lib/fileHelper.js'
 import { loadModulesUnder } from '../core/lib/dirModuleLoader.js'
+import { buildRootContainer, createRequestScope } from './businessContainer.js'
 import { handleKnowledgeApi } from '../features/knowledge/business/knowledgeApi.js'
 import { appendRequestLog } from '../core/log/store.js'
 import { installEventLogSubscriber } from '../core/log/eventLogSubscriber.js'
@@ -72,11 +73,17 @@ export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
 
   const app = new Hono<HonoEnv>()
 
+  // Root container: 1 / app instance (KHÔNG để ở module scope — mỗi createApp
+  // trong test phải có root riêng, nếu không `register` sẽ throw duplicate).
+  const rootContainer = await buildRootContainer()
+
   app.use('/api/*', async (c, next) => {
     const projectId = c.req.query('project') || null
+    const root = ctx.resolveProjectRoot(projectId)
     c.set('ctx', ctx)
     c.set('projectId', projectId)
-    c.set('root', ctx.resolveProjectRoot(projectId))
+    c.set('root', root)
+    c.set('container', createRequestScope(rootContainer, { root, projectId, ctx }))
     await next()
   })
 
