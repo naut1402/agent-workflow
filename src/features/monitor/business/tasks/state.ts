@@ -10,6 +10,7 @@ import {
   writeFile,
   writeTextFile,
 } from '../../../../core/lib/fileHelper.js'
+import { resolveHitlPending, gateStepsFromConfig } from '../../../../core/lib/phase.js'
 import { TaskArchivePatch, TaskNamePatch, TaskStatePatch } from '../../schemas/task.js'
 import { loadPipelineConfig } from '../peers.js'
 import { readState, flowProfilePath } from './index.js'
@@ -314,6 +315,77 @@ export async function applyHitlAction(
 }
 
 /**
+ * Bring `hitl_pending` back in line with the pipeline the task runs under now.
+ * Writes (and emits) ONLY when the value actually changes — reconcile runs on
+ * every run-step, and a no-op must not bump `state_mtime` (an open HITL modal
+ * uses mtime for its 409 conflict check).
+ *
+ * Core of `reconcileGateState` — caller must already hold the task's lock
+ * (`withTaskLock`).
+ *
+ * Returns null when nothing changed.
+ */
+export async function reconcileGateStateAssumingLock(
+  root: string,
+  taskId: string,
+  stateFile: string,
+  // Callers on the hot path (run-step, every job success) have usually just
+  // read one or both of these under the same lock. Reusing them keeps this
+  // reconcile free of extra I/O and, as a bonus, makes caller and reconcile
+  // decide against the very same pipeline snapshot.
+  preloaded?: { state?: Record<string, unknown>; pipeline?: any },
+): Promise<{
+  state: Record<string, unknown>
+  mtime: number
+  from: unknown
+  to: string | null
+} | null> {
+  let raw = preloaded?.state
+  if (!raw) {
+    const read = await readState(stateFile)
+    if (!read.ok) return null
+    raw = read.state as Record<string, unknown>
+  }
+
+  const state = { ...raw }
+  const before = state.hitl_pending
+  // Same definition of "not blocked" as `resolveHitlPending` — anything falsy,
+  // `''` included. A looser guard here would let an empty-string pending reach
+  // the write below and bump `state_mtime` (breaking an open HITL modal's 409
+  // check) plus emit an audit line for a gate that never existed.
+  if (!before) return null // not blocked → skip loading the pipeline
+
+  const pipeline = preloaded?.pipeline ?? (await loadPipelineConfig(root, taskId))
+  // `gateStepsFromConfig` yields null for an unreadable pipeline, which makes
+  // `resolveHitlPending` keep the gate — releasing one on a guess would walk a
+  // job straight past a human approval nobody gave.
+  const after = resolveHitlPending(gateStepsFromConfig(pipeline), state.current_phase, before)
+  if (after === before) return null
+
+  state.hitl_pending = after
+  state.gate_reconciled_at = new Date().toISOString()
+  const mtime = await writeStateAtomic(stateFile, state)
+
+  // Emit after persist (event-catalog convention). No new `pipeline.*` type —
+  // reuse `hitl.resolved`, the way reset reuses `task.advanced`.
+  emit('hitl.resolved', {
+    taskId,
+    gateId: typeof before === 'string' ? before : null,
+    action: after ? 'normalized' : 'cancelled',
+    reason: 'pipeline_changed',
+    currentPhase: state.current_phase,
+  })
+  return { state, mtime, from: before, to: after }
+}
+
+export async function reconcileGateState(root: string, taskId: string) {
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
+  return withStateFileLock(stateFile, () =>
+    reconcileGateStateAssumingLock(root, taskId, stateFile),
+  )
+}
+
+/**
  * Update task state after a dashboard-triggered "run step" job succeeds —
  * fills the bookkeeping gap that only the external orchestrator CLI used to
  * cover:
@@ -335,14 +407,22 @@ export async function advanceStepOnJobSuccessAssumingLock(
   stepId: string,
   stateFile: string,
 ): Promise<{ state: Record<string, unknown>; mtime: number } | null> {
+  // A gate left over from an older pipeline shape makes the `hitl_pending`
+  // guard below bail out forever (and `advancePipelineStepChain` with it) —
+  // clear it first so a just-edited pipeline takes effect. State and pipeline
+  // are read once here and handed to reconcile, since we need both anyway.
   const read = await readState(stateFile)
   if (!read.ok) return null
+  const pipeline = await loadPipelineConfig(root, taskId)
+  const reconciled = await reconcileGateStateAssumingLock(root, taskId, stateFile, {
+    state: read.state as Record<string, unknown>,
+    pipeline,
+  })
 
-  const state = { ...read.state } as Record<string, unknown>
+  const state = { ...(reconciled?.state ?? (read.state as Record<string, unknown>)) }
   if (String(state.current_phase ?? '') !== stepId) return null
   if (state.hitl_pending) return null
 
-  const pipeline = await loadPipelineConfig(root, taskId)
   const steps = pipeline.steps || []
   const stepIdx = stepIndex(steps, stepId)
   const currentStep = stepIdx >= 0 ? steps[stepIdx] : null
@@ -392,14 +472,21 @@ export async function advanceStepOnJobSuccess(
   const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
 
   return withStateFileLock(stateFile, async () => {
+    // Same reason as in `advanceStepOnJobSuccessAssumingLock`: drop a gate the
+    // current pipeline no longer declares before it blocks the advance for good.
+    // We are inside the state file lock already, hence the `AssumingLock` variant.
     const read = await readState(stateFile)
     if (!read.ok) return null
+    const pipeline = await loadPipelineConfig(root, taskId)
+    const reconciled = await reconcileGateStateAssumingLock(root, taskId, stateFile, {
+      state: read.state as Record<string, unknown>,
+      pipeline,
+    })
 
-    const state = { ...read.state } as Record<string, unknown>
+    const state = { ...(reconciled?.state ?? (read.state as Record<string, unknown>)) }
     if (String(state.current_phase ?? '') !== stepId) return null
     if (state.hitl_pending) return null
 
-    const pipeline = await loadPipelineConfig(root, taskId)
     const steps = pipeline.steps || []
     const stepIdx = stepIndex(steps, stepId)
     const currentStep = stepIdx >= 0 ? steps[stepIdx] : null
@@ -609,7 +696,8 @@ export async function deleteTask(
  * - Missing/corrupt state file → write a minimal `completed` state.
  * - `current_phase` not in the current pipeline (and not `completed`) → set
  *   `completed` (task finished under an older pipeline shape).
- * - Stale `hitl_pending` that no longer matches any step gate → clear it.
+ * - Stale `hitl_pending` that the step at `current_phase` no longer declares →
+ *   clear it (`resolveHitlPending`).
  *
  * Callers that also want "heal stuck phase after a succeeded job" should run
  * `advanceStepOnJobSuccess` first (same pattern as `runTaskStep`).
@@ -624,9 +712,6 @@ export async function repairTaskState(
     const pipeline = await loadPipelineConfig(root, taskId)
     const steps = pipeline.steps || []
     const stepIds = new Set(steps.map((s: any) => s.id).filter(Boolean))
-    const gateIds = new Set(
-      steps.map((s: any) => s.hitl?.gate_id).filter((g: unknown) => typeof g === 'string' && g),
-    )
 
     const read = await readState(stateFile)
     let state: Record<string, unknown>
@@ -649,9 +734,20 @@ export async function repairTaskState(
         state.current_phase = 'completed'
         state.hitl_pending = null
       }
+      // Runs AFTER the `current_phase` normalisation above, because a gate is
+      // only meaningful relative to a valid cursor. Sharing `resolveHitlPending`
+      // means repair now also catches a gate moved to a different step.
+      //
+      // Deliberately passes `steps` raw rather than `gateStepsFromConfig(pipeline)`:
+      // reconcile refuses to judge an unreadable pipeline, so repair — an explicit
+      // button a human presses on a task they can see is stuck — is the one place
+      // that rules on the pipeline it CAN resolve. Silent paths stay conservative;
+      // the manual override stays an override. (When even the fallback declares
+      // the gate, repair keeps it and the way out is re-saving the pipeline,
+      // which overwrites the unparseable file.)
       const pending = state.hitl_pending
-      if (pending != null && (typeof pending !== 'string' || !gateIds.has(pending))) {
-        state.hitl_pending = null
+      if (pending != null) {
+        state.hitl_pending = resolveHitlPending(steps, state.current_phase, pending)
       }
       state.repaired_at = new Date().toISOString()
     }

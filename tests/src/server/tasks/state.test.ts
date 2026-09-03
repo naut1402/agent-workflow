@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, applyRenameAction, deleteTask, repairTaskState, resetPipelineStepAssumingLock, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, applyRenameAction, deleteTask, reconcileGateState, repairTaskState, resetPipelineStepAssumingLock, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
 import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
 import { listJobs, loadJob, registerProvider, submitJob, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
@@ -904,5 +904,269 @@ describe('resetPipelineStepAssumingLock', () => {
         removedSteps: ['designer', 'implementer', 'reviewer', 'pr-creator'],
       },
     ])
+  })
+})
+
+// T8e63498c — `hitl_pending` outliving the pipeline shape that created it.
+describe('reconcileGateState', () => {
+  const gatedPipeline = [
+    'version: 1',
+    'steps:',
+    '  - id: investigator',
+    '    hitl: { mode: manual, gate_id: hitl-1 }',
+    '  - id: designer',
+    '',
+  ].join('\n')
+  const gatelessPipeline = ['version: 1', 'steps:', '  - id: investigator', '  - id: designer', ''].join('\n')
+
+  async function seedWithPipeline(id: string, yaml: string, state: Record<string, unknown>) {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), yaml, 'utf8')
+    const stateFile = await seedTask(root, id, state)
+    return { root, stateFile }
+  }
+
+  test('clears a gate the current step no longer declares and reports the reason', async () => {
+    const seen: any[] = []
+    const off = on('hitl.resolved', (e: any) => {
+      seen.push(e.payload)
+    })
+    try {
+      const { root, stateFile } = await seedWithPipeline('G1', gatelessPipeline, {
+        current_phase: 'investigator',
+        hitl_pending: 'hitl-1',
+      })
+
+      const result = await reconcileGateState(root, 'G1')
+      expect(result).not.toBeNull()
+      expect(result!.from).toBe('hitl-1')
+      expect(result!.to).toBeNull()
+      expect(result!.mtime).toBeGreaterThan(0)
+      // Persisted, not just returned — the run-step guard re-reads the file.
+      const persisted = JSON.parse(await fs.readFile(stateFile, 'utf8'))
+      expect(persisted.hitl_pending).toBeNull()
+      expect(typeof persisted.gate_reconciled_at).toBe('string')
+
+      // Audit trail must not look like a human approved the gate.
+      expect(seen.length).toBe(1)
+      expect(seen[0]).toMatchObject({
+        taskId: 'G1',
+        gateId: 'hitl-1',
+        action: 'cancelled',
+        reason: 'pipeline_changed',
+      })
+    } finally {
+      off()
+    }
+  })
+
+  test('no-op for a gate that is still live — must not touch state_mtime', async () => {
+    const seen: any[] = []
+    const off = on('hitl.resolved', (e: any) => {
+      seen.push(e.payload)
+    })
+    try {
+      const { root, stateFile } = await seedWithPipeline('G2', gatedPipeline, {
+        current_phase: 'investigator',
+        hitl_pending: 'hitl-1',
+      })
+      const before = (await fs.stat(stateFile)).mtimeMs
+
+      // Reconcile runs on every run-step, so a no-op bumping mtime would make
+      // an open HITL modal fail its 409 conflict check for no reason.
+      expect(await reconcileGateState(root, 'G2')).toBeNull()
+      expect((await fs.stat(stateFile)).mtimeMs).toBe(before)
+      expect(seen.length).toBe(0)
+    } finally {
+      off()
+    }
+  })
+
+  test('no-op when nothing is pending at all', async () => {
+    const { root, stateFile } = await seedWithPipeline('G3', gatedPipeline, {
+      current_phase: 'investigator',
+      hitl_pending: null,
+    })
+    const before = (await fs.stat(stateFile)).mtimeMs
+    expect(await reconcileGateState(root, 'G3')).toBeNull()
+    expect((await fs.stat(stateFile)).mtimeMs).toBe(before)
+  })
+
+  test('normalises legacy boolean true to the live gate id', async () => {
+    const { root } = await seedWithPipeline('G4', gatedPipeline, {
+      current_phase: 'investigator',
+      hitl_pending: true,
+    })
+    const result = await reconcileGateState(root, 'G4')
+    expect(result).not.toBeNull()
+    // Without an id the UI cannot draw the node to approve, so the task is
+    // blocked with no way out even though the gate is real.
+    expect(result!.to).toBe('hitl-1')
+  })
+
+  test('returns null for a missing state file', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), gatelessPipeline, 'utf8')
+    expect(await reconcileGateState(root, 'nope')).toBeNull()
+  })
+
+  // TC-27 — `''` is falsy for `resolveHitlPending`, so the write side has to
+  // read it the same way. A looser guard resolves `'' → null`, sees a change,
+  // and writes: mtime bumps under an open HITL modal (spurious 409) and the
+  // audit log gains a cancellation for a gate that never existed.
+  test('an empty-string pending is "not blocked" — no write, no event', async () => {
+    const seen: any[] = []
+    const off = on('hitl.resolved', (e: any) => {
+      seen.push(e.payload)
+    })
+    try {
+      const { root, stateFile } = await seedWithPipeline('G5', gatedPipeline, {
+        current_phase: 'investigator',
+        hitl_pending: '',
+      })
+      const before = (await fs.stat(stateFile)).mtimeMs
+
+      expect(await reconcileGateState(root, 'G5')).toBeNull()
+      expect((await fs.stat(stateFile)).mtimeMs).toBe(before)
+      expect(seen.length).toBe(0)
+      expect(JSON.parse(await fs.readFile(stateFile, 'utf8')).gate_reconciled_at).toBeUndefined()
+    } finally {
+      off()
+    }
+  })
+
+  // TC-26 (unit half) — a pipeline.yaml that exists but will not parse makes
+  // `loadPipelineConfig` fall back to a shape that is NOT this task's. Reading
+  // "no gate declared" off that fallback and clearing would walk the task past
+  // a human approval nobody gave.
+  test('holds the gate when the task pipeline exists but does not parse', async () => {
+    const seen: any[] = []
+    const off = on('hitl.resolved', (e: any) => {
+      seen.push(e.payload)
+    })
+    try {
+      // Global says no gate — so a wrong fallback is visibly wrong here.
+      const { root, stateFile } = await seedWithPipeline('G6', gatelessPipeline, {
+        current_phase: 'investigator',
+        hitl_pending: 'hitl-1',
+      })
+      await fs.mkdir(path.join(root, 'tasks', 'G6'), { recursive: true })
+      await fs.writeFile(
+        path.join(root, 'tasks', 'G6', 'pipeline.yaml'),
+        'version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1\n',
+        'utf8',
+      )
+      const before = (await fs.stat(stateFile)).mtimeMs
+
+      expect(await reconcileGateState(root, 'G6')).toBeNull()
+      expect((await fs.stat(stateFile)).mtimeMs).toBe(before)
+      expect(JSON.parse(await fs.readFile(stateFile, 'utf8')).hitl_pending).toBe('hitl-1')
+      expect(seen.length).toBe(0)
+    } finally {
+      off()
+    }
+  })
+
+  // The counterpart to the case above: holding on a broken file is only
+  // acceptable because the human override still lets go.
+  test('repair is still the way out when the pipeline cannot be parsed', async () => {
+    const { root, stateFile } = await seedWithPipeline('G7', gatelessPipeline, {
+      current_phase: 'investigator',
+      hitl_pending: 'hitl-1',
+    })
+    await fs.mkdir(path.join(root, 'tasks', 'G7'), { recursive: true })
+    await fs.writeFile(path.join(root, 'tasks', 'G7', 'pipeline.yaml'), 'steps: [ {', 'utf8')
+
+    const repaired = await repairTaskState(root, 'G7')
+    expect(repaired.ok).toBe(true)
+    expect(JSON.parse(await fs.readFile(stateFile, 'utf8')).hitl_pending).toBeNull()
+  })
+})
+
+describe('advanceStepOnJobSuccess with a stale gate', () => {
+  test('advances instead of bailing out forever on a gate the pipeline dropped', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n  - id: designer\n`,
+      'utf8',
+    )
+    // Pre-fix, the `if (state.hitl_pending) return null` guard fired here and
+    // froze both the advance and the step chain that depends on it.
+    await seedTask(root, 'A1', { current_phase: 'investigator', hitl_pending: 'hitl-1' })
+
+    const result = await advanceStepOnJobSuccess(root, 'A1', 'investigator')
+    expect(result).not.toBeNull()
+    expect(result!.state.current_phase).toBe('designer')
+    expect(result!.state.hitl_pending).toBeNull()
+  })
+
+  test('still refuses to advance past a gate that is genuinely live', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'A2', { current_phase: 'investigator', hitl_pending: 'hitl-1' })
+
+    expect(await advanceStepOnJobSuccess(root, 'A2', 'investigator')).toBeNull()
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(root, '.dev-state', 'A2.json'), 'utf8'),
+    )
+    expect(persisted.current_phase).toBe('investigator')
+    expect(persisted.hitl_pending).toBe('hitl-1')
+  })
+})
+
+// Gap in the existing repairTaskState coverage: a pending gate id that matches
+// nothing, with a `current_phase` that IS valid — the other three cases all get
+// short-circuited by the phase-normalisation branch first.
+describe('repairTaskState — stale gate with a valid current_phase', () => {
+  test('clears a pending gate the current step no longer declares', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n  - id: designer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'R4', { current_phase: 'investigator', hitl_pending: 'gone-gate' })
+
+    const result = await repairTaskState(root, 'R4')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.current_phase).toBe('investigator')
+    expect(result.state.hitl_pending).toBeNull()
+  })
+
+  test('clears a pending gate that moved to a different step', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n  - id: designer\n    hitl: { mode: manual, gate_id: hitl-1 }\n`,
+      'utf8',
+    )
+    await seedTask(root, 'R5', { current_phase: 'investigator', hitl_pending: 'hitl-1' })
+
+    const result = await repairTaskState(root, 'R5')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.hitl_pending).toBeNull()
+  })
+
+  test('keeps a pending gate the current step still declares', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'R6', { current_phase: 'investigator', hitl_pending: 'hitl-1' })
+
+    const result = await repairTaskState(root, 'R6')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // Repair must not double as "skip the gate".
+    expect(result.state.hitl_pending).toBe('hitl-1')
   })
 })

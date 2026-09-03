@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { loadYaml, dumpYaml } from '../../core/lib/yamlLib.js'
 import { AbstractController } from '../../core/http/AbstractController.js'
-import { statSafe } from '../../core/lib/fileHelper.js'
+import { statSafe, writeTextFileAtomicSync } from '../../core/lib/fileHelper.js'
 import * as pipelineEditorBusiness from './business/index.js'
 import { draftFromAgentMarkdown } from '../agent-editor/business/agentMarkdown.js'
 import { parseFrontmatter } from '../../core/lib/yamlLib.js'
@@ -114,7 +114,11 @@ export class PipelineEditorController extends AbstractController {
       return this.badRequest('scope must be "global" or "task" (with taskId)')
     }
     const toWrite = scope === 'task' ? { ...pipeline, steps_replace: true } : pipeline
-    await fs.writeFile(target, dumpYaml(toWrite), 'utf8')
+    // Atomic (temp + rename): gate reconciliation now depends on reading an
+    // intact YAML. A read landing mid-write would see a truncated file,
+    // `readYamlSafe` would return null, the pipeline would fall back to
+    // global/builtin — and reconcile could clear a legitimate gate.
+    writeTextFileAtomicSync(target, dumpYaml(toWrite))
     emitAudit({
       op: 'update',
       entity: 'pipeline',
