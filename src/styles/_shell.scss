@@ -437,3 +437,5 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   flex-shrink: 0;
 }
 .mermaid-toolbar button:hover { color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
+
+.save-msg { font-size: 12px; color: var(--done); }

@@ -97,3 +97,36 @@ async function handleDelete() {
     <span v-if="error" class="profile-error">{{ error }}</span>
   </div>
 </template>
+
+<style scoped lang="scss">
+.profile-manager {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.profile-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.profile-select {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 4px 7px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.profile-input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  width: 120px;
+  outline: none;
+}
+.profile-input:focus { border-color: var(--accent); }
+.profile-sep { color: var(--border); font-size: 16px; }
+.profile-error { font-size: 11px; color: var(--danger); }
+</style>

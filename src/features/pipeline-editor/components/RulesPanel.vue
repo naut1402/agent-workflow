@@ -78,3 +78,78 @@ function onRuleClick(rule) {
     </div>
   </aside>
 </template>
+
+<style scoped lang="scss">
+.rules-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+
+.rules-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.rules-panel-head {
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.rules-empty {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 16px;
+  text-align: center;
+}
+
+.rules-scope-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  padding: 10px 10px 4px;
+}
+
+.rules-category-group { margin-bottom: 6px; }
+
+.rules-category-head { padding: 0 10px 4px; }
+
+.chip-category {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(var(--accent-rgb), 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  color: var(--accent);
+}
+
+.rules-item {
+  margin: 0 8px 4px;
+  padding: 7px 9px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.rules-item:hover { border-color: var(--accent); }
+.rules-item-active { border-color: var(--waiting); box-shadow: inset 2px 0 0 var(--waiting); }
+
+.rules-item-name { font-size: 12px; font-weight: 600; }
+.rules-item-path {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rules-item-steps { font-size: 10px; color: var(--accent); margin-top: 4px; }
+.rules-item-steps.muted { color: var(--muted); }
+</style>

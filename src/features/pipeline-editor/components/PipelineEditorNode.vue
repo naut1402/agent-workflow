@@ -86,3 +86,87 @@ function commitLabel() {
     <Handle type="source" :position="Position.Right" />
   </div>
 </template>
+
+<style scoped lang="scss">
+.node-editor { position: relative; }
+.node-editor.node-state-pending { opacity: 0.45; }
+.node-editor.node-state-active {
+  border-color: var(--active);
+  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.45);
+  animation: preview-pulse 1s ease-in-out infinite;
+}
+.node-editor.node-state-done { border-color: var(--done); opacity: 0.75; }
+.node-editor.node-state-hitl {
+  border-color: var(--waiting);
+  box-shadow: 0 0 10px rgba(227, 179, 65, 0.4);
+}
+
+@keyframes preview-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.35); }
+  50% { box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.55); }
+}
+
+.preview-status {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+  z-index: 2;
+  pointer-events: none;
+}
+.preview-status--pending { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
+.preview-status--active { background: var(--active); color: #fff; }
+.preview-status--done { background: var(--done); color: #0f1419; }
+.preview-status--hitl { background: var(--waiting); color: #0f1419; }
+
+/* ── Pipeline editor node ───────────────────────────────────────────────── */
+.node-editor {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 160px;
+  max-width: 200px;
+  font-size: 12px;
+  position: relative;
+}
+.node-editor:hover { border-color: var(--accent); }
+
+.node-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.node-editor-label { font-weight: 600; flex: 1; }
+.node-editor-input {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+.node-editor-actions { display: flex; gap: 3px; }
+.node-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 3px;
+  font-size: 12px;
+  line-height: 1;
+}
+.node-btn:hover { color: var(--text); }
+.node-btn-del:hover { color: var(--danger); }
+.node-editor-agent { font-size: 10px; color: var(--accent); margin-top: 3px; }
+.node-editor-skills { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 3px; }
+</style>

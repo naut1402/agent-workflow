@@ -259,3 +259,51 @@ function apply() {
     </div>
   </aside>
 </template>
+
+<style scoped lang="scss">
+.cfg-input-mt { margin-top: 4px; }
+
+/* ── Step config panel ──────────────────────────────────────────────────── */
+.step-config-panel {
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.step-config-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.step-config-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.step-config-footer {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.step-config-panel[hidden] {
+  display: none;
+}
+
+.cfg-label-row { flex-direction: row; align-items: center; gap: 6px; }
+</style>
