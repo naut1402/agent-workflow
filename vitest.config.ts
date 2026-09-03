@@ -46,8 +46,12 @@ export default defineConfig({
       'dist',
       'test-e2e/**',
       'tests/src/server/**',
-      // Node-only helpers (fileHelper / fs) — bun test, not jsdom.
-      'tests/src/core/lib/**',
+      // Node-only helpers (fs / phase) — bun test, not jsdom. Các file core/lib
+      // còn lại là test vitest thuần (vi.stubGlobal / vi.resetModules /
+      // __APP_VERSION__) nên phải để vitest nhặt — liệt kê đích danh thay vì
+      // loại trừ cả thư mục, tránh test viết rồi mà không runner nào chạy.
+      'tests/src/core/lib/fileHelper.test.ts',
+      'tests/src/core/lib/phase.test.ts',
       'tests/src/core/log/**',
       'tests/src/core/events/**',
       'tests/src/features/**/business/**',

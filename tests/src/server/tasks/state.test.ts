@@ -391,6 +391,100 @@ describe('advanceStepOnJobSuccess', () => {
   })
 })
 
+// ── TC-13 (nợ roadmap 1.1.0 §5): mọi nhánh no-op của advanceStepOnJobSuccess
+// phải im lặng. Bất biến event kernel (docs/event-catalog.md): thao tác không
+// đổi state thì không phát event — vừa `task.advanced` vừa `hitl.pending`, và
+// file state không được ghi lại (ghi lại sẽ bump `state_mtime`, làm modal HITL
+// đang mở nhận 409 oan).
+describe('advanceStepOnJobSuccess — no-op branches emit nothing', () => {
+  const PIPELINE = `version: 1\nsteps:\n  - id: implementer\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: reviewer\n`
+
+  /** Gom cả hai loại event mà một lần advance thành công có thể phát. */
+  function captureAdvanceEvents(): string[] {
+    const seen: string[] = []
+    on('task.advanced', () => {
+      seen.push('task.advanced')
+    })
+    on('hitl.pending', () => {
+      seen.push('hitl.pending')
+    })
+    return seen
+  }
+
+  const cases: Array<{
+    name: string
+    taskId: string
+    /** null = không seed state file. */
+    seed: Record<string, unknown> | null
+    stepId: string
+  }> = [
+    {
+      name: 'current_phase đã chạy tiếp (race với action khác)',
+      taskId: 'TC13-race',
+      seed: { current_phase: 'reviewer' },
+      stepId: 'implementer',
+    },
+    {
+      name: 'task đã ở phase completed',
+      taskId: 'TC13-completed',
+      seed: { current_phase: 'completed' },
+      stepId: 'implementer',
+    },
+    {
+      name: 'đang chờ HITL (gate hợp lệ nên reconcile giữ nguyên)',
+      taskId: 'TC13-gated',
+      seed: { current_phase: 'implementer', hitl_pending: 'hitl-1' },
+      stepId: 'implementer',
+    },
+    {
+      name: 'thiếu state file',
+      taskId: 'TC13-nostate',
+      seed: null,
+      stepId: 'implementer',
+    },
+    {
+      name: 'step không có trong pipeline',
+      taskId: 'TC13-ghost',
+      seed: { current_phase: 'ghost' },
+      stepId: 'ghost',
+    },
+  ]
+
+  for (const c of cases) {
+    test(`${c.name} → null, không emit, state không đổi`, async () => {
+      const root = await tmp()
+      await fs.writeFile(path.join(root, 'pipeline.yaml'), PIPELINE, 'utf8')
+      let stateFile: string | null = null
+      let before: string | null = null
+      if (c.seed) {
+        stateFile = await seedTask(root, c.taskId, c.seed)
+        before = readFileSync(stateFile, 'utf8')
+      } else {
+        await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+      }
+      const seen = captureAdvanceEvents()
+
+      const result = await advanceStepOnJobSuccess(root, c.taskId, c.stepId)
+
+      expect(result).toBeNull()
+      expect(seen).toEqual([])
+      if (stateFile) expect(readFileSync(stateFile, 'utf8')).toBe(before!)
+    })
+  }
+
+  // Đối chứng dương: cùng pipeline/harness, đường đi hợp lệ vẫn phát đúng 1
+  // event — nếu thiếu, các case trên có thể xanh vì bus im chứ không vì no-op.
+  test('đối chứng: step có gate đang là phase hiện tại → đúng 1 hitl.pending', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), PIPELINE, 'utf8')
+    await seedTask(root, 'TC13-ok', { current_phase: 'implementer' })
+    const seen = captureAdvanceEvents()
+
+    expect(await advanceStepOnJobSuccess(root, 'TC13-ok', 'implementer')).not.toBeNull()
+    expect(seen).toEqual(['hitl.pending'])
+  })
+})
+
 describe('advanceStepOnJobSuccess — review retry', () => {
   const retryPipeline = `version: 1\nsteps:\n  - id: implementer\n  - id: reviewer\n    produces: [review.md]\n    hitl: { mode: manual, gate_id: hitl-3, retry: { on: must_fix, restart_from: implementer, max: 2 } }\n  - id: pr-creator\n`
 

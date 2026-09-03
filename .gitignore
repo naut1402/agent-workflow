@@ -36,3 +36,4 @@ test-e2e/fixtures/project/.dev-team-agent/knowledge/
 test-e2e/fixtures/project/.dev-team-agent/knowledge.config.yaml
 test-e2e/fixtures/project/.dev-team-agent/pipeline.yaml
 test-e2e/fixtures/project/.dev-team-agent/artifact-actions.yaml
+test-e2e/fixtures/project/.dev-team-agent/automations/
