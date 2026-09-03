@@ -3,13 +3,16 @@
 #
 # Phạm vi chạy:
 # - PR có base `main` hoặc nhánh phiên bản `dev/x.y.z/main` (glob `dev/**/main`)
+# - Không chạy trên PR release `dev/x.y.z/main` → `main` (xem `if` ở job bên dưới)
 # - Không chạy trên push: fallow so trực tiếp với base SHA của PR, không cần baseline
 #   server-side như SonarCloud
 #
 # Chế độ: `audit` + gate `new-only` — chỉ soi file đổi trong PR, bỏ qua finding kế thừa.
-# Giai đoạn soft-launch: `fail-on-issues: false` nên job LUÔN xanh; kết quả chỉ để đọc qua
-# sticky PR comment + Check Run + annotation. Siết thành gate cứng bằng PR riêng sau khi có
-# số liệu thực tế trên vài PR: repo còn tồn đọng lượng lớn finding kế thừa từ trước khi có
+# Giai đoạn soft-launch: `fail-on-issues: false` nên *job* luôn xanh — nhưng `comment: true`
+# vẫn tạo Check Run `Fallow` riêng, và conclusion của check đó lấy từ quyết định gate của
+# fallow, KHÔNG theo `fail-on-issues`. Nói cách khác: check `Fallow` vẫn có thể đỏ và làm PR
+# `UNSTABLE` trong khi job `Fallow analysis` xanh. Siết thành gate cứng bằng PR riêng sau khi
+# có số liệu thực tế trên vài PR: repo còn tồn đọng lượng lớn finding kế thừa từ trước khi có
 # phân tích tĩnh, bật gate ngay sẽ chặn merge hàng loạt.
 
 name: Fallow
@@ -34,6 +37,13 @@ permissions:
 jobs:
   fallow:
     name: Fallow analysis
+    # Bỏ qua PR release (dev/x.y.z/main → main) — phủ định đúng điều kiện ở `todo-debt.yml`.
+    # Gate `new-only` so với merge-base, mà merge-base của PR release là điểm rẽ nhánh của cả
+    # dòng version → "new" = toàn bộ diff, chỉ phát lại nợ kế thừa đã soi ở từng PR feature.
+    if: >-
+      !(github.base_ref == 'main' &&
+      startsWith(github.head_ref, 'dev/') &&
+      endsWith(github.head_ref, '/main'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
