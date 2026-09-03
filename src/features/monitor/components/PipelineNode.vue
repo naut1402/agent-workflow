@@ -147,6 +147,56 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
 
 <style scoped lang="scss">
 .pnode {
+  background: var(--panel-2);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 14px;
+  // Wide enough that the top-right action buttons (run/chat) never crowd the
+  // centred status bubble — see PipelineNode.vue.
+  min-width: 110px;
+  text-align: center;
+  cursor: default;
+  position: relative;
+}
+
+.qa-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: var(--waiting);
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 2px 5px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.pnode-bubble {
+  font-size: 20px;
+  color: var(--muted);
+  line-height: 1;
+}
+.pnode-label { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.pnode-sub { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+.pnode.done { border-color: var(--done); }
+.pnode.done .pnode-bubble { color: var(--done); }
+.pnode.active {
+  border-color: var(--active);
+  box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.4);
+  animation: pulse 1.6s infinite;
+}
+.pnode.active .pnode-bubble { color: var(--active); }
+.pnode.waiting { border-color: var(--waiting); }
+.pnode.waiting .pnode-bubble { color: var(--waiting); }
+
+@keyframes pulse {
+  0%,100% { box-shadow: 0 0 6px rgba(var(--accent-rgb), 0.3); }
+  50% { box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.7); }
+}
+
+.pnode {
   position: relative;
 }
 /* Always reachable (no hover race): the buttons straddle the node's top border,

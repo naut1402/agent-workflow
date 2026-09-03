@@ -695,3 +695,30 @@ async function submitHitl(action: 'approve' | 'reject') {
     </div>
   </Teleport>
 </template>
+
+<style scoped lang="scss">
+.pipeline-wrap { margin-bottom: 14px; }
+
+.pipeline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* Flow profile editor modal */
+
+.profile-editor {
+  flex: 1;
+  min-height: 320px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  padding: 12px;
+  resize: vertical;
+}
+.editor-error { color: var(--danger); font-size: 12px; margin: 0; }
+</style>
