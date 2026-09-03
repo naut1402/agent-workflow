@@ -132,6 +132,12 @@ tính class con lồng bên trong):
 **Kích thước file không phải lý do tách.** 300 dòng `<style scoped>` cạnh template của
 nó vẫn dễ định vị hơn 300 dòng ở file rời + một dòng `@use`.
 
+**Đếm theo compound CUỐI của selector, không phải tổ tiên.** `scoped` gắn `[data-v-…]`
+vào compound cuối, nên rule chỉ inline được khi **phần tử đích** nằm trong template của
+chính SFC đó. Rule *bắc cầu* — tổ tiên ở SFC này, đích ở SFC khác (vd
+`.preview-active .catalog-panel`, `.monitor-sub-sidebar .tasklist`) — tính là **≥2
+component** ⇒ bậc 2, dù chỉ có một component render selector gốc.
+
 Không làm:
 
 - File `styles/<Component>.scss` mà chỉ component đó render selector gốc → inline vào SFC.
@@ -141,6 +147,12 @@ Không làm:
 - Đặt tên `common.scss` cho nội dung chỉ một component dùng (tên sai lệch còn tệ hơn
   phân mảnh) — và ngược lại, đừng để `<Component>.scss` rỗng trong khi `common.scss`
   giữ hết style của đúng component đó.
+- Định nghĩa primitive dùng xuyên feature (`.cfg-input`, `.chip`, …) trong `styles/` của
+  một feature bất kỳ: feature khác sẽ phụ thuộc ngầm vào thứ tự glob → đưa lên `src/styles/`.
+
+Khi tách một file SCSS đang phục vụ nhiều component: kiểm bằng **compound cuối** —
+với mỗi selector, phần tử đích phải do template của SFC nhận nó render. Rule nào không
+thoả thì thuộc bậc 2/3, không inline.
 
 Khi gộp nhiều file vào một `<style scoped>`: **giữ đúng thứ tự nạp cũ** (theo thứ tự
 `@use` trong `index.scss` — `common` trước, `<Component>` sau), vì các rule cùng
