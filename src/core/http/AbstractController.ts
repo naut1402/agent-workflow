@@ -1,5 +1,6 @@
 import type { Context, Handler } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
+import type { Container, ContainerToken } from '../container/index.js'
 import type { HonoEnv, RegistryContext } from './types.js'
 
 /**
@@ -19,6 +20,25 @@ export abstract class AbstractController {
 
   protected get ctx(): RegistryContext {
     return this.c.get('ctx')
+  }
+
+  /**
+   * Child scope của request hiện tại. Middleware `/api/*` (`apiServer.ts`) set
+   * biến này; thiếu nghĩa là controller được gọi ngoài app đã wiring.
+   */
+  protected get container(): Container {
+    const container = this.c.get('container')
+    if (!container) {
+      throw new Error(
+        'AbstractController: chưa có container cho request — thiếu middleware /api/* (src/api/apiServer.ts)',
+      )
+    }
+    return container
+  }
+
+  /** Lấy business facade / service qua token thay vì import trực tiếp module. */
+  protected resolve<T>(token: ContainerToken<T>): T {
+    return this.container.resolve(token)
   }
 
   /** JSON + Cache-Control: no-store (dashboard poll). */

@@ -2,6 +2,8 @@
  * Nguồn type thống nhất cho kernel core (HTTP + registry).
  * Import type từ `src/core/http/types.js` — một nguồn duy nhất.
  */
+import type { Container } from '../container/index.js'
+
 export type {
   Project,
   Registry,
@@ -18,5 +20,7 @@ export type HonoEnv = {
     root: string | null
     projectId: string | null
     ctx: import('../registry.js').RegistryContext
+    /** Child scope của root container — 1 instance / request (`src/api/businessContainer.ts`). */
+    container: Container
   }
 }
