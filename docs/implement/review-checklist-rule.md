@@ -15,6 +15,7 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 - [ ] **Đặt đúng schema domain**: ở `features/<f>/schemas/`; không nhét schema shell vào feature, không đẩy lên `core/configs` trừ khi thật sự app-wide.
 - [ ] **Chuẩn hoá UI string & FE API**: string qua i18n (`locales/`); gọi API qua `scripts/*Api.ts` + `apiGet`/`apiPost`.
 - [ ] **Không wiring thủ công**: không thêm tay nếu glob/auto-load đã đủ (route / styles / locales / `registerMode`).
+- [ ] **Đặt style đúng tầng**: selector gốc chỉ 1 component render → `<style scoped lang="scss">` trong SFC; ≥2 component cùng feature → `features/<f>/styles/` + `index.scss`; xuyên feature → `src/styles/`. Không thêm file `styles/*.scss` chỉ-comment, không thêm `index.scss` chỉ để `@use` file private — [`feature-organization-rule.md`](feature-organization-rule.md) §5.
 - [ ] **Tuân thủ mode-registry khi thêm/sửa mode** (`App.vue`, `registerMode.ts`): theo [`mode-registry-convention.md`](mode-registry-convention.md) — không sửa `main.ts`, không đụng `App.vue` ngoài `shellContext` (trừ khi thật sự cần state mới), `MODE_DEFS` trong `App.test.ts` đã cập nhật.
 
 ### `business/` & helper dùng chung
@@ -80,3 +81,5 @@ Chi tiết type / nơi emit: [`../event-catalog.md`](../event-catalog.md).
 | Persist/CRUD mới không thấy `emit` | “Cân nhắc emit — xem event-catalog + mục Dữ liệu & An toàn.” |
 | Event mới nhưng `event-catalog.md` chưa cập nhật | “Cập nhật catalog cùng PR, hoặc nợ `docs/todo/` có lý do.” |
 | Đổi chữ ký `fileHelper` (vd `readDir` + `withFileTypes`, `watch`) | “Chạy `vue-tsc` xem call site có khớp không — đừng truyền arg thừa như `'utf8'` nếu helper đã cố định encoding.” |
+| `styles/<Component>.scss` mới nhưng chỉ 1 component render selector gốc | “Đưa vào `<style scoped lang="scss">` trong SFC — xem feature-organization-rule §5.” |
+| File SCSS chỉ có comment, 0 rule (hoặc `index.scss` chỉ `@use` file private) | “Xoá file + dòng `@use`; nếu `styles/` rỗng theo thì xoá cả thư mục — glob `main.ts` tự thích ứng.” |

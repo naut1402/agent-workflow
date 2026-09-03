@@ -46,7 +46,7 @@ Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuầ
 
 ## 5. Frontend (Vue 3)
 
-`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables,scripts/*Api.ts,styles/,locales/,schemas/}` + `src/core/{ui,composables,lib,shell}`; plugins app-scope ở `src/plugins/`; FE client trong `scripts/`; SCSS feature trong `styles/` — tự nạp bởi `import.meta.glob` trong `src/main.ts`; locale feature trong `locales/` — tự nạp bởi plugin i18n.
+`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables,scripts/*Api.ts,styles/,locales/,schemas/}` + `src/core/{ui,composables,lib,shell}`; plugins app-scope ở `src/plugins/`; FE client trong `scripts/`; SCSS dùng chung trong feature (≥2 component) ở `styles/` — tự nạp bởi `import.meta.glob` trong `src/main.ts`, còn style riêng của một component thì ở `<style scoped lang="scss">` trong chính SFC ([`feature-organization-rule.md`](feature-organization-rule.md) §5); locale feature trong `locales/` — tự nạp bởi plugin i18n.
 
 - Quy ước button (ưu tiên icon-btn, default không viền, hover scale): [`../ui-buttons.md`](../ui-buttons.md).
 - **Custom UI primitives** trong `src/core/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.
