@@ -187,6 +187,7 @@ function close() {
 </template>
 
 <style scoped lang="scss">
+.agent-nl-wizard { margin-bottom: 12px; }
 .nl-wizard-head {
   display: flex;
   align-items: center;
