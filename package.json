@@ -4,6 +4,7 @@
   "version": "1.0.5",
   "type": "module",
   "description": "Realtime dashboard for dev-agent-teams orchestrator state (.dev-team-agent/)",
+  "license": "MIT",
   "scripts": {
     "dev": "bun --bun vite",
     "build": "vite build",

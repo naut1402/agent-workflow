@@ -8,6 +8,7 @@
 [![Vue 3](https://img.shields.io/badge/UI-Vue%203-42b883?logo=vue.js&logoColor=white)](https://vuejs.org)
 [![Hono](https://img.shields.io/badge/API-Hono-e36002)](https://hono.dev)
 [![GitHub stars](https://img.shields.io/github/stars/naut1402/agent-workflow?style=social)](https://github.com/naut1402/agent-workflow)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
@@ -120,6 +121,10 @@ Branch phát hành dòng version: `dev/x.y.z/main` (vd `dev/1.0.0/main`). Không
 - **FE:** Vue 3, Vite, vue-i18n, Vue Flow, Toast UI / Mermaid  
 - **BE:** Hono (Vite middleware + `src/standalone.ts`), Zod, Bun  
 - **Tooling:** ESLint, Prettier, Commitlint, Playwright, Vitest  
+
+## License
+
+Mã nguồn phát hành theo [MIT License](LICENSE) — © 2026 Tran Thanh Tuan.
 
 ---
 
