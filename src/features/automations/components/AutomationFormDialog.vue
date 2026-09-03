@@ -774,3 +774,323 @@ function submit(): void {
     </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+.automation-form {
+  max-width: 640px;
+  width: min(640px, calc(100vw - 32px));
+
+  /* ── [A] từ `styles/common.scss` (đã xoá), phần chỉ form này dùng. PHẢI đứng
+     TRƯỚC [B]: `.field` và `.checkbox-field` cùng specificity (0,2,0) và cùng set
+     `flex-direction`/`gap`; `.checkbox-field` chỉ thắng nhờ `index.scss` `@use`
+     `./common` trước `./AutomationFormDialog`. `.muted` không copy — trùng nguyên
+     văn `_shell.scss`. ── */
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0 0 10px;
+
+    /* Chỉ style element con TRỰC TIẾP — tránh đè lên input bên trong
+       CComboSelect (`.c-combo-input` nằm sâu trong wrapper riêng). */
+    > input[type='text'],
+    > input[type='number'],
+    > input[type='datetime-local'],
+    > textarea,
+    > select {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font: inherit;
+      padding: 6px 8px;
+      width: 100%;
+      box-sizing: border-box;
+
+      &:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+    }
+
+    > textarea {
+      resize: vertical;
+      min-height: 72px;
+    }
+
+    /* Input lồng trong `.interval-inputs` (cháu của .field, vẫn là control native). */
+    .interval-inputs > input,
+    .interval-inputs > select {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font: inherit;
+      padding: 6px 8px;
+      box-sizing: border-box;
+
+      &:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+    }
+  }
+
+  .field-label {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .field-hint {
+    color: var(--muted);
+    font-size: 11px;
+    margin: 2px 0 0;
+  }
+
+  .field-group {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 0 0 12px;
+    padding: 10px;
+
+    legend {
+      color: var(--muted);
+      font-size: 12px;
+      padding: 0 4px;
+    }
+  }
+
+  .chip-select {
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 12px;
+    gap: 6px;
+    padding: 4px 10px;
+    transition: all 0.12s ease;
+
+    input {
+      display: none;
+    }
+
+    &.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(var(--accent-rgb), 0.08);
+    }
+  }
+
+  .trigger-kind-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .form-error {
+    color: var(--danger);
+    font-size: 12px;
+    margin: 4px 0 8px;
+  }
+
+  .pending-hint {
+    border-left: 2px solid var(--border);
+    padding-left: 8px;
+  }
+
+  /* ── [B] từ `styles/AutomationFormDialog.scss` (đã xoá) ── */
+  .automation-form-body {
+    display: flex;
+    flex-direction: column;
+    max-height: min(72vh, 720px);
+    overflow-y: auto;
+  }
+
+  .interval-row .interval-inputs {
+    display: flex;
+    gap: 8px;
+
+    input,
+    select {
+      flex: 1;
+    }
+  }
+
+  .checkbox-field {
+    align-items: center;
+    flex-direction: row;
+    font-size: 13px;
+    gap: 8px;
+
+    input {
+      margin: 0;
+    }
+  }
+
+  .modal-foot {
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 10px 16px;
+  }
+
+  /* ── Trigger rows ── */
+  .trigger-row {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    padding: 10px;
+  }
+
+  .trigger-row-head {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+
+    .trigger-row-index {
+      align-items: center;
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      color: var(--accent);
+      display: inline-flex;
+      flex-shrink: 0;
+      font-size: 11px;
+      height: 18px;
+      justify-content: center;
+      width: 18px;
+    }
+
+    .trigger-kind-row {
+      flex: 1;
+      margin-bottom: 0;
+    }
+  }
+
+  .add-row-btn {
+    align-self: flex-start;
+  }
+
+  /* ── Action timeline ── */
+  .action-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    list-style: none;
+    margin: 4px 0 8px;
+    padding: 0;
+  }
+
+  .action-step {
+    display: flex;
+    gap: 10px;
+  }
+
+  .step-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    padding-right: 2px;
+
+    .step-dot {
+      align-items: center;
+      background: rgba(var(--accent-rgb), 0.12);
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      color: var(--accent);
+      display: inline-flex;
+      font-size: 11px;
+      height: 22px;
+      justify-content: center;
+      width: 22px;
+    }
+
+    .step-line {
+      background: var(--border);
+      flex: 1;
+      min-height: 14px;
+      width: 1px;
+    }
+  }
+
+  .action-step:last-child .step-line {
+    display: none;
+  }
+
+  .step-body {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    flex: 1;
+    margin-bottom: 10px;
+    padding: 10px;
+  }
+
+  .step-head {
+    align-items: center;
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+
+    .step-name-input {
+      background: transparent;
+      border: none;
+      border-bottom: 1px dashed var(--border);
+      color: var(--text);
+      flex: 1;
+      font: inherit;
+      font-weight: 600;
+      padding: 2px 0;
+
+      &:focus {
+        outline: none;
+        border-bottom-color: var(--accent);
+      }
+    }
+  }
+
+  /* ── Vars panel ── */
+  .vars-panel {
+    background: var(--panel-2);
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    margin-top: 6px;
+    padding: 8px;
+
+    .vars-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 6px 0;
+    }
+
+    .vars-chip {
+      font-family: var(--font-mono, monospace);
+      font-size: 11px;
+    }
+
+    .vars-copied {
+      color: var(--accent);
+      margin-left: 6px;
+    }
+
+    .vars-overview {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: var(--font-mono, monospace);
+      font-size: 11px;
+      margin: 6px 0 0;
+      max-height: 220px;
+      overflow: auto;
+      padding: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  }
+}
+</style>

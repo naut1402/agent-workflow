@@ -339,3 +339,121 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   flex-direction: column;
   min-height: 0;
 }
+
+/* ── Form control dùng chung (label / input / textarea) ─────────────────────
+   Dùng ở nhiều feature — giữ ở tầng shell, không đặt trong styles/ của feature. */
+.cfg-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cfg-input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+.cfg-input:focus { border-color: var(--accent); }
+.cfg-input-sm { flex: 1; }
+.cfg-textarea {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+/* ── Chip + hàng tag ────────────────────────────────────────────────────── */
+.chip {
+  font-size: 11px; color: var(--muted); background: var(--panel);
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px;
+}
+.chip-ok { color: var(--accent); border-color: var(--accent); }
+.chip-err { color: var(--danger); border-color: var(--danger); }
+.chip-rm { cursor: pointer; }
+.chip-rm:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+.chip-skill { background: rgba(var(--accent-rgb),0.12); border: 1px solid rgba(var(--accent-rgb),0.3); color: var(--accent); }
+.chip-xs { font-size: 9px; padding: 1px 5px; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 4px; min-height: 20px; }
+.tag-input-row { display: flex; gap: 5px; align-items: center; }
+
+/* ── Hàng nút + thông báo ok của wizard/panel ───────────────────────────── */
+.nl-actions { display: flex; gap: 8px; margin-top: 10px; }
+.ok-msg { color: var(--ok); font-size: 12px; }
+
+/* ── Mermaid zoom/fullscreen ────────────────────────────────────────────────
+   Element do `core/composables/useMermaidControls.ts` tạo lúc chạy nên không có
+   scope-id — bắt buộc giữ global, không inline được vào SFC. */
+.mermaid-wrap {
+  position: relative;
+  overflow: auto;
+}
+.mermaid-wrap:fullscreen {
+  background: var(--panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.mermaid-toolbar {
+  position: sticky;
+  top: 4px;
+  float: right;
+  display: flex;
+  gap: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px;
+  z-index: 1;
+}
+.mermaid-toolbar button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  border-radius: 4px;
+  width: 26px;
+  height: 24px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.mermaid-toolbar button:hover { color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
+
+.save-msg { font-size: 12px; color: var(--done); }
+
+/* ── VueFlow canvas (monitor PipelineView + pipeline-editor) ────────────────
+   `.vue-flow__*` do thư viện sinh lúc chạy nên không có scope-id — giữ global. */
+.vflow-container {
+  height: 280px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.vflow { width: 100%; height: 100%; }
+.vue-flow__background { background: var(--panel); }
+.vue-flow__edge-path { stroke: var(--border); }
+.vue-flow__edge-text { fill: var(--muted); font-size: 10px; }
+.vue-flow__handle { background: var(--border); border-color: var(--panel-2); }
+.vue-flow__attribution { display: none; }
+
+.meta-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; margin-bottom: 18px; }

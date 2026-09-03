@@ -233,3 +233,55 @@ async function deleteSelected() {
     </section>
   </div>
 </template>
+
+<style scoped lang="scss">
+.monitor-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  transition: grid-template-columns 0.2s ease;
+}
+.monitor-layout.monitor-layout--sub-collapsed {
+  grid-template-columns: 48px 1fr;
+}
+.monitor-sub-sidebar {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  padding: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+.monitor-sub-sidebar.monitor-sub-sidebar--collapsed {
+  padding: 10px 6px;
+  align-items: center;
+}
+.monitor-sub-sidebar-collapse-btn {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  margin: 0 0 8px;
+}
+.monitor-sub-sidebar--collapsed .monitor-sub-sidebar-collapse-btn { margin: 0; }
+.monitor-sub-sidebar-collapse-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+.monitor-content {
+  overflow-y: auto;
+  padding: 16px 20px;
+  min-height: 0;
+}
+</style>

@@ -286,6 +286,7 @@ src/styles/ phình theo mode     →  src/styles/ = token + shell
 
 - **Shell token tập trung; skin feature phân tán.**
 - Pattern glob lặp lại cho locales / routes (cùng triết lý).
+- Biên hiện hành giữa `<style scoped>` (riêng 1 component) và `features/*/styles/` (≥2 component): [`../implement/feature-organization-rule.md`](../implement/feature-organization-rule.md) §5 — U7 chỉ ghi bước chuyển ở PR #174, không phải quy ước hiện hành.
 
 ---
 
