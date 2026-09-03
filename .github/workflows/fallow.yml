@@ -1,0 +1,51 @@
+# Phân tích tĩnh Fallow — codebase intelligence cho TS/JS (dead-code, duplication, complexity).
+# Tài liệu: https://fallow.mintlify.app/integrations/ci
+#
+# Phạm vi chạy:
+# - PR có base `main` hoặc nhánh phiên bản `dev/x.y.z/main` (glob `dev/**/main`)
+# - Không chạy trên push: fallow so trực tiếp với base SHA của PR, không cần baseline
+#   server-side như SonarCloud
+#
+# Chế độ: `audit` + gate `new-only` — chỉ soi file đổi trong PR, bỏ qua finding kế thừa.
+# Giai đoạn soft-launch: `fail-on-issues: false` nên job LUÔN xanh; kết quả chỉ để đọc qua
+# sticky PR comment + Check Run + annotation. Siết thành gate cứng bằng PR riêng sau khi có
+# số liệu thực tế trên vài PR (repo đang tồn đọng 464 dead-code / 82 dupes / 234 health).
+
+name: Fallow
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+      - 'dev/**/main'
+
+concurrency:
+  group: fallow-${{ github.ref }}
+  cancel-in-progress: true
+
+# contents: read — checkout; pull-requests: write — sticky comment; checks: write — Check Run.
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  fallow:
+    name: Fallow analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0 # bắt buộc: auto-changed-since cần base SHA của PR có trong lịch sử local
+          persist-credentials: false # sau checkout không có thao tác git nào cần remote
+
+      - name: Fallow audit
+        uses: fallow-rs/fallow@79a0e8d8dbcaa408dce348b3df14fc1e824f988b # v3.22.0
+        with:
+          version: '3.22.0' # repo không khai `fallow` trong package.json → không pin sẽ cài `latest`
+          command: audit
+          gate: new-only
+          fail-on-issues: false # soft-launch — xem header
+          comment: true
+          branded-token: false # không gửi OIDC token cho broker bên thứ ba (api.fallow.cloud)
