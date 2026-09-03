@@ -9,7 +9,8 @@
 # Chế độ: `audit` + gate `new-only` — chỉ soi file đổi trong PR, bỏ qua finding kế thừa.
 # Giai đoạn soft-launch: `fail-on-issues: false` nên job LUÔN xanh; kết quả chỉ để đọc qua
 # sticky PR comment + Check Run + annotation. Siết thành gate cứng bằng PR riêng sau khi có
-# số liệu thực tế trên vài PR (repo đang tồn đọng 464 dead-code / 82 dupes / 234 health).
+# số liệu thực tế trên vài PR: repo còn tồn đọng lượng lớn finding kế thừa từ trước khi có
+# phân tích tĩnh, bật gate ngay sẽ chặn merge hàng loạt.
 
 name: Fallow
 
