@@ -292,3 +292,110 @@ onMounted(loadList)
     </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+.knowledge-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 16px;
+  gap: 12px;
+}
+.knowledge-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.knowledge-head h2 { margin: 0; font-size: 16px; }
+.knowledge-head-actions { display: flex; gap: 8px; }
+.knowledge-upload-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel);
+  display: grid;
+  gap: 8px;
+  max-width: 480px;
+}
+.knowledge-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.knowledge-list-pane {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.knowledge-filters {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.knowledge-scope-tabs { display: flex; gap: 6px; }
+.knowledge-scope-tab {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  cursor: pointer;
+  font-size: 12px;
+}
+.knowledge-scope-tab.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.knowledge-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+.knowledge-list-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+.knowledge-list-item:hover { background: var(--panel-2); }
+.knowledge-list-item.active { background: var(--accent-dim); }
+.knowledge-list-title { font-size: 13px; font-weight: 600; }
+.knowledge-list-meta { font-size: 11px; color: var(--muted); }
+.knowledge-editor-pane {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* flex:1 + min-height:<content> lets the label shrink below Toast UI height,
+   so the editor overflows and covers the Save row (esp. visible in light theme). */
+.knowledge-content-label {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+}
+.knowledge-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+</style>
