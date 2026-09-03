@@ -1,0 +1,44 @@
+# Phân tích tĩnh SonarCloud (sonarcloud.io — org `naut1402`, project `naut1402_agent-workflow`).
+#
+# Phạm vi chạy:
+# - PR có base `main` hoặc nhánh phiên bản `dev/x.y.z/main` (glob `dev/**/main`)
+# - Push lên chính các nhánh đó — để SonarCloud có baseline branch cho so sánh "new code"
+#
+# Cấu hình scanner: sonar-project.properties (root repo)
+# Secret: SONAR_TOKEN (đã cấu hình sẵn trong repo settings)
+
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - 'dev/**/main'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+      - 'dev/**/main'
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+# Job chỉ đọc code — SonarCloud decorate PR bằng GitHub App riêng, không dùng GITHUB_TOKEN.
+permissions:
+  contents: read
+
+jobs:
+  sonarqube:
+    name: SonarQube
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+          persist-credentials: false # sau checkout không có thao tác git nào cần remote
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
