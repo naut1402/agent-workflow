@@ -48,32 +48,4 @@
   padding: 24px;
 }
 
-.cfg-label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--muted);
-}
 .cfg-label-row { flex-direction: row; align-items: center; gap: 6px; }
-
-.cfg-input {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 5px;
-  padding: 5px 8px;
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-}
-.cfg-input:focus { border-color: var(--accent); }
-.cfg-input-sm { flex: 1; }
-
-.tag-row { display: flex; flex-wrap: wrap; gap: 4px; min-height: 20px; }
-.tag-input-row { display: flex; gap: 5px; align-items: center; }
-
-.chip-rm { cursor: pointer; }
-.chip-rm:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
-.chip-skill { background: rgba(var(--accent-rgb),0.12); border: 1px solid rgba(var(--accent-rgb),0.3); color: var(--accent); }
-.chip-xs { font-size: 9px; padding: 1px 5px; }

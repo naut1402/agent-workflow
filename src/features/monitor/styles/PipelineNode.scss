@@ -50,9 +50,3 @@
 }
 
 .meta-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; margin-bottom: 18px; }
-.chip {
-  font-size: 11px; color: var(--muted); background: var(--panel);
-  border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px;
-}
-.chip-ok { color: var(--accent); border-color: var(--accent); }
-.chip-err { color: var(--danger); border-color: var(--danger); }
