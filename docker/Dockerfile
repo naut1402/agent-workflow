@@ -39,11 +39,22 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends curl ca-certificates git gnupg openssl \
   && rm -rf /var/lib/apt/lists/*
 
+# Tạo sớm để mọi COPY --chown=dashboard phía sau hợp lệ.
+RUN useradd --create-home --uid 1001 --shell /bin/bash dashboard \
+  && mkdir -p /data/dashboard-home /data/project \
+    /home/dashboard/.local/bin /home/dashboard/.local/share \
+    /opt/bundled-plugins/dev-agent-teams \
+  && chown -R dashboard:dashboard /home/dashboard /data /opt/bundled-plugins \
+  && chown dashboard:dashboard /app
+
+# Giữ root:root — root source env.sh lúc start, nên dashboard không được là owner.
+# a+rX (không chown) vì cert nguồn có thể là 0600 mà dashboard vẫn phải đọc được.
 COPY docker/certs/ /etc/ssl/corp-ca/
 COPY docker/install-corp-ca.sh /tmp/install-corp-ca.sh
 RUN chmod +x /tmp/install-corp-ca.sh \
   && /tmp/install-corp-ca.sh \
-  && rm -f /tmp/install-corp-ca.sh
+  && rm -f /tmp/install-corp-ca.sh \
+  && chmod -R a+rX /etc/ssl/corp-ca
 
 RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
   && mkdir -p -m 755 /etc/apt/keyrings \
@@ -54,12 +65,17 @@ RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
        > /etc/apt/sources.list.d/github-cli.list \
   && apt-get update \
   && apt-get install -y --no-install-recommends gh \
-  && useradd --create-home --uid 1001 --shell /bin/bash dashboard \
-  && mkdir -p /data/dashboard-home /data/project \
-    /home/dashboard/.local/bin /home/dashboard/.local/share \
-  && chown -R dashboard:dashboard /home/dashboard /data \
   && command -v gh \
   && rm -rf /var/lib/apt/lists/*
+
+# Node cho vitest / eslint / vue-tsc chạy trên project mount ở /data/project (shebang
+# `#!/usr/bin/env node`). Tag phải là `-trixie-` để khớp glibc của `oven/bun:1`.
+COPY --from=node:24-trixie-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:24-trixie-slim /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+  && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+  && node --version \
+  && npm --version
 
 USER dashboard
 ENV HOME=/home/dashboard
@@ -69,18 +85,19 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
   && command -v claude \
   && (command -v agent || command -v cursor-agent)
 
-USER root
-COPY package.json bun.lock ./
-RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
-  && bun install --frozen-lockfile --production
+COPY --chown=dashboard:dashboard package.json bun.lock ./
+RUN --mount=type=cache,id=bun-cache-runtime,target=/tmp/bun-cache,uid=1001,gid=1001 \
+    if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
+  && BUN_INSTALL_CACHE_DIR=/tmp/bun-cache bun install --frozen-lockfile --production
 
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/src ./src
-COPY --from=build /app/tsconfig.json ./tsconfig.json
-COPY docs/template/agents /opt/bundled-plugins/dev-agent-teams/agents
-COPY docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
-  && chown -R dashboard:dashboard /app /data /home/dashboard /opt/bundled-plugins /etc/ssl/corp-ca
+# Phải là root: entrypoint cần uid 0 cho useradd/chown/runuser (PUID/PGID).
+USER root
+# Không thêm RUN nào sau các COPY dưới đây — mọi lần sửa source sẽ phải chạy lại layer đó.
+COPY --from=build --chown=dashboard:dashboard /app/dist ./dist
+COPY --from=build --chown=dashboard:dashboard /app/src ./src
+COPY --from=build --chown=dashboard:dashboard /app/tsconfig.json ./tsconfig.json
+COPY --chown=dashboard:dashboard docs/template/agents /opt/bundled-plugins/dev-agent-teams/agents
+COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 5174
 

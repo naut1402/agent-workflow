@@ -25,8 +25,12 @@ import type { CredentialProfile, ExecuteRequest, ExecuteResult, ProviderFamily, 
 export type ExtraTool = 'shell' | 'git' | 'search' | 'web'
 const VALID_EXTRA_TOOLS: ExtraTool[] = ['shell', 'git', 'search', 'web']
 
-/** Allowlisted binaries for `run_command` — no raw shell, argv-array only (no injection via `;`/`&&`/`$()`). */
-export const SHELL_ALLOWLIST = ['bun', 'npm', 'npx', 'pnpm', 'yarn', 'node', 'tsc']
+/**
+ * Allowlisted binaries for `run_command` — no raw shell, argv-array only (no injection via `;`/`&&`/`$()`).
+ * Chỉ những binary image bảo đảm có (`docker/Dockerfile`) — list này vào thẳng tool description,
+ * tên không tồn tại là mời model gọi rồi nhận ENOENT. Bin project-local: gọi qua `npx <bin>`.
+ */
+export const SHELL_ALLOWLIST = ['bun', 'npm', 'npx', 'node']
 const SHELL_TIMEOUT_MS = 60_000
 const SHELL_OUTPUT_LIMIT = 8_000
 const SEARCH_MAX_MATCHES = 200
