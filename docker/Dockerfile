@@ -68,6 +68,15 @@ RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
   && command -v gh \
   && rm -rf /var/lib/apt/lists/*
 
+# Node cho vitest / eslint / vue-tsc chạy trên project mount ở /data/project (shebang
+# `#!/usr/bin/env node`). Tag phải là `-trixie-` để khớp glibc của `oven/bun:1`.
+COPY --from=node:24-trixie-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:24-trixie-slim /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+  && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+  && node --version \
+  && npm --version
+
 USER dashboard
 ENV HOME=/home/dashboard
 ENV BASH_ENV=/etc/ssl/corp-ca/env.sh
