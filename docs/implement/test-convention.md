@@ -16,6 +16,8 @@ Coverage ưu tiên cao — mỗi module refactor phải kèm test (unit + e2e kh
 
 `bun run test:all` chạy tuần tự: typecheck → lint → bun test → vitest → playwright.
 
+**Chạy test trong container dashboard**: image có sẵn `bun` + `node` (Node 24 — `vitest`/`eslint`/`vue-tsc` là script `#!/usr/bin/env node`). `cd /data/project/<repo>` rồi chạy đúng các lệnh trong bảng trên, không cần thêm biến môi trường. `node_modules` lấy từ chính repo mount, không dùng `/app/node_modules`.
+
 ---
 
 ## 2. Layout test — gom vào `tests/` + `test-e2e/`
