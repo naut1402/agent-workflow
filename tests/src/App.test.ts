@@ -92,6 +92,9 @@ describe('App', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
+    // Sub-sidebar của monitor persist vào localStorage — dọn để mỗi test khởi
+    // động từ trạng thái mặc định, không nhận state của test trước.
+    localStorage.clear()
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     // Catch-all cho fetch của các panel con (KnowledgePanel/AutomationsPanel/LogsPanel/
@@ -107,6 +110,7 @@ describe('App', () => {
   })
 
   afterEach(() => {
+    localStorage.clear()
     document.body.innerHTML = ''
     errorSpy.mockRestore()
     warnSpy.mockRestore()
@@ -158,7 +162,7 @@ describe('App', () => {
     },
   )
 
-  it('mode monitor: MonitorLayout nhận đủ 10 props + 9 event listener', async () => {
+  it('mode monitor: MonitorLayout nhận đủ 11 props + 10 event listener', async () => {
     const wrapper = mountApp()
     await flushPromises()
 
@@ -176,6 +180,7 @@ describe('App', () => {
       'connected',
       'error',
       'lastUpdated',
+      'subSidebarCollapsed',
     ]) {
       expect(props).toHaveProperty(key)
     }
@@ -188,7 +193,7 @@ describe('App', () => {
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
-  it('mode editor: PipelineEditor nhận đủ 5 props + update:scope / update:task-id', async () => {
+  it('mode editor: PipelineEditor nhận đủ 6 props + update:scope / update:task-id', async () => {
     const wrapper = mountApp()
     await flushPromises()
     await wrapper.findAll('.mode-toggle .mode-btn')[1].trigger('click')
@@ -197,7 +202,7 @@ describe('App', () => {
     const panel = wrapper.findComponent(PipelineEditor as any)
     expect(panel.exists()).toBe(true)
     const props = panel.props()
-    for (const key of ['scope', 'taskId', 'tasks', 'projectId', 'appSidebarCollapsed']) {
+    for (const key of ['scope', 'taskId', 'tasks', 'projectId', 'appSidebarCollapsed', 'subSidebarCollapsed']) {
       expect(props).toHaveProperty(key)
     }
 
@@ -206,6 +211,143 @@ describe('App', () => {
     await flushPromises()
     expect(wrapper.findComponent(PipelineEditor as any).props('scope')).toBe('task')
     expect(wrapper.findComponent(PipelineEditor as any).props('taskId')).toBe('t-9')
+  })
+
+  describe('click mode icon — 3 trạng thái', () => {
+    const MONITOR = MODE_DEFS.findIndex((m) => m.key === 'monitor')
+    const EDITOR = MODE_DEFS.findIndex((m) => m.key === 'editor')
+    const LOGS = MODE_DEFS.findIndex((m) => m.key === 'logs')
+
+    const modeBtns = (wrapper: any) => wrapper.findAll('.mode-toggle .mode-btn')
+
+    it('mode chưa chọn: chỉ chọn mode, không toggle sub-sidebar của nó', async () => {
+      const wrapper = mountApp()
+      await flushPromises()
+
+      await modeBtns(wrapper)[EDITOR].trigger('click')
+      await flushPromises()
+
+      const panel = wrapper.findComponent(PipelineEditor as any)
+      expect(panel.exists()).toBe(true)
+      expect(panel.props('subSidebarCollapsed')).toBe(false)
+      expect(modeBtns(wrapper)[EDITOR].classes('active')).toBe(true)
+    })
+
+    it('mode đang chọn: click lật ẩn/hiện sub-sidebar, mode không đổi', async () => {
+      const wrapper = mountApp()
+      await flushPromises()
+      expect(wrapper.findComponent(MonitorLayout as any).props('subSidebarCollapsed')).toBe(false)
+
+      await modeBtns(wrapper)[MONITOR].trigger('click')
+      await flushPromises()
+      expect(wrapper.findComponent(MonitorLayout as any).props('subSidebarCollapsed')).toBe(true)
+      expect(modeBtns(wrapper)[MONITOR].classes('active')).toBe(true)
+
+      await modeBtns(wrapper)[MONITOR].trigger('click')
+      await flushPromises()
+      expect(wrapper.findComponent(MonitorLayout as any).props('subSidebarCollapsed')).toBe(false)
+      expect(modeBtns(wrapper)[MONITOR].classes('active')).toBe(true)
+    })
+
+    it('state sub-sidebar giữ riêng theo mode khi chuyển qua lại', async () => {
+      const wrapper = mountApp()
+      await flushPromises()
+
+      await modeBtns(wrapper)[MONITOR].trigger('click') // monitor → ẩn
+      await flushPromises()
+
+      await modeBtns(wrapper)[EDITOR].trigger('click') // sang editor: vẫn hiện
+      await flushPromises()
+      expect(wrapper.findComponent(PipelineEditor as any).props('subSidebarCollapsed')).toBe(false)
+
+      await modeBtns(wrapper)[MONITOR].trigger('click') // về monitor: vẫn ẩn
+      await flushPromises()
+      expect(wrapper.findComponent(MonitorLayout as any).props('subSidebarCollapsed')).toBe(true)
+    })
+
+    it('mode không có sub-sidebar: click lại là no-op, không lỗi', async () => {
+      const wrapper = mountApp()
+      await flushPromises()
+
+      await modeBtns(wrapper)[LOGS].trigger('click')
+      await flushPromises()
+      await modeBtns(wrapper)[LOGS].trigger('click')
+      await flushPromises()
+
+      expect(modeBtns(wrapper)[LOGS].classes('active')).toBe(true)
+      expect(wrapper.findComponent(LogsPanel as any).exists()).toBe(true)
+      expect(errorSpy).not.toHaveBeenCalled()
+    })
+
+    it('aria-expanded chỉ có trên mode đang chọn + có sub-sidebar, và bám theo state', async () => {
+      const wrapper = mountApp()
+      await flushPromises()
+
+      expect(modeBtns(wrapper)[MONITOR].attributes('aria-expanded')).toBe('true')
+      expect(modeBtns(wrapper)[EDITOR].attributes('aria-expanded')).toBeUndefined()
+      expect(modeBtns(wrapper)[LOGS].attributes('aria-expanded')).toBeUndefined()
+
+      await modeBtns(wrapper)[MONITOR].trigger('click')
+      await flushPromises()
+      expect(modeBtns(wrapper)[MONITOR].attributes('aria-expanded')).toBe('false')
+
+      await modeBtns(wrapper)[LOGS].trigger('click')
+      await flushPromises()
+      expect(modeBtns(wrapper)[LOGS].attributes('aria-expanded')).toBeUndefined()
+    })
+
+    it('tooltip mode đang chọn gợi ý hành động toggle, mode khác giữ tên mode', async () => {
+      const wrapper = mountApp()
+      await flushPromises()
+
+      expect(modeBtns(wrapper)[MONITOR].attributes('title')).toBe(
+        `${t('common.modes.monitor')} — ${t('common.sidebar.collapseSubSidebar')}`,
+      )
+      expect(modeBtns(wrapper)[EDITOR].attributes('title')).toBe(t('common.modes.pipelineEditor'))
+      expect(modeBtns(wrapper)[LOGS].attributes('title')).toBe(t('common.modes.logs'))
+
+      await modeBtns(wrapper)[MONITOR].trigger('click')
+      await flushPromises()
+      expect(modeBtns(wrapper)[MONITOR].attributes('title')).toBe(
+        `${t('common.modes.monitor')} — ${t('common.sidebar.expandSubSidebar')}`,
+      )
+    })
+
+    it('panel tự mở lại sub-sidebar qua update: emit (state 2 chiều)', async () => {
+      const wrapper = mountApp()
+      await flushPromises()
+      await modeBtns(wrapper)[EDITOR].trigger('click')
+      await flushPromises()
+
+      await modeBtns(wrapper)[EDITOR].trigger('click') // ẩn panel trái
+      await flushPromises()
+      expect(wrapper.findComponent(PipelineEditor as any).props('subSidebarCollapsed')).toBe(true)
+      expect(modeBtns(wrapper)[EDITOR].attributes('aria-expanded')).toBe('false')
+
+      await wrapper.findComponent(PipelineEditor as any).vm.$emit('update:subSidebarCollapsed', false)
+      await flushPromises()
+      expect(wrapper.findComponent(PipelineEditor as any).props('subSidebarCollapsed')).toBe(false)
+      expect(modeBtns(wrapper)[EDITOR].attributes('aria-expanded')).toBe('true')
+    })
+
+    it('monitor nhớ trạng thái ẩn qua reload, editor thì không', async () => {
+      const first = mountApp()
+      await flushPromises()
+      await first.findAll('.mode-toggle .mode-btn')[MONITOR].trigger('click')
+      await first.findAll('.mode-toggle .mode-btn')[EDITOR].trigger('click')
+      await flushPromises()
+      await first.findAll('.mode-toggle .mode-btn')[EDITOR].trigger('click')
+      await flushPromises()
+      first.unmount()
+
+      const second = mountApp() // remount = reload
+      await flushPromises()
+      expect(second.findComponent(MonitorLayout as any).props('subSidebarCollapsed')).toBe(true)
+
+      await second.findAll('.mode-toggle .mode-btn')[EDITOR].trigger('click')
+      await flushPromises()
+      expect(second.findComponent(PipelineEditor as any).props('subSidebarCollapsed')).toBe(false)
+    })
   })
 
   it('không có console.error / console.warn khi mount và chuyển mode', async () => {

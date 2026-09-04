@@ -11,8 +11,6 @@ export default {
     taskIdPlaceholder: 'Mã task',
   },
   leftPanel: {
-    expandTitle: 'Mở catalog & rules',
-    collapseTitle: 'Thu gọn catalog',
     catalogOpenTitle: 'Catalog — mở panel',
     rulesOpenTitle: 'Rules — mở panel',
   },

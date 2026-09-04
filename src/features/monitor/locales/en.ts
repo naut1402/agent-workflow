@@ -14,8 +14,6 @@ export default {
     emptyHintSuffix: 'to get started.',
     connecting: 'Connecting to the dev server…',
     selectTask: 'Select a task on the left.',
-    collapseSubSidebar: 'Collapse task list',
-    expandSubSidebar: 'Expand task list',
   },
   taskList: {
     title: 'Tasks',
