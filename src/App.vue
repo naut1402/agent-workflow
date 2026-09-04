@@ -67,6 +67,16 @@ function onModeClick(m: ModeEntry) {
   subSidebar.toggle(m.key)
 }
 
+/**
+ * `aria-expanded` chỉ có nghĩa khi nút đang thật sự điều khiển một vùng đóng/mở:
+ * mode đang active + có sub-sidebar. Ngoài ra trả `undefined` để Vue bỏ hẳn
+ * attribute, không tuyên bố disclosure không tồn tại.
+ */
+function modeBtnExpanded(m: ModeEntry): boolean | undefined {
+  if (mode.value !== m.key || !subSidebar.has(m.key)) return undefined
+  return !subSidebar.isCollapsed(m.key)
+}
+
 /** Mode đang active + có sub-sidebar thì tooltip gợi ý luôn hành động toggle. */
 function modeBtnTitle(m: ModeEntry): string {
   const label = t(m.titleKey ?? m.labelKey)
@@ -388,7 +398,7 @@ onUnmounted(() => {
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === m.key }"
           :title="modeBtnTitle(m)"
-          :aria-expanded="mode === m.key && subSidebar.has(m.key) ? !subSidebar.isCollapsed(m.key) : undefined"
+          :aria-expanded="modeBtnExpanded(m)"
           @click="onModeClick(m)"
         >
           <RailIcon :name="m.icon" />
