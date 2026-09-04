@@ -13,6 +13,7 @@ Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `
 | Coding convention (TS, Zod, FE, i18n) | [`docs/implement/coding-convention.md`](docs/implement/coding-convention.md) |
 | Thêm mode mới ở FE shell (ModeRegistry/DI) | [`docs/implement/mode-registry-convention.md`](docs/implement/mode-registry-convention.md) — sơ đồ bootstrap: [`docs/diagram/IoC.md`](docs/diagram/IoC.md) |
 | Test | [`docs/implement/test-convention.md`](docs/implement/test-convention.md) |
+| Viết artifact `investigate.md` / `design.md` | [`docs/implement/doc-writing-convention.md`](docs/implement/doc-writing-convention.md) |
 | PR / commit / docs output | [`docs/implement/pr-docs-convention.md`](docs/implement/pr-docs-convention.md) |
 | Nợ đối ứng sau (`docs/todo`) | [`docs/implement/todo-debt-convention.md`](docs/implement/todo-debt-convention.md) |
 | Git hygiene / tách commit theo xử lý | [`docs/implement/git-convention.md`](docs/implement/git-convention.md) (§6) |
@@ -113,3 +114,33 @@ Khi survey call chain đụng persist / lifecycle / CRUD domain:
 
 - [ ] **Nêu rõ emit dự kiến trong design** (hoặc *không emit*).
 - [ ] **Đối chiếu catalog với code khi implement/review** — xem thêm [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) mục **Dữ liệu & An toàn**.
+
+---
+
+## 7. Rule viết tài liệu — `investigate.md` / `design.md` (doc-writing)
+
+Áp dụng cho artifact markdown trong `.dev-team-agent/tasks/<id>/`. Rule này **thắng** mọi template mặc định đi kèm công cụ sinh tài liệu. Bản đầy đủ (lý do, ví dụ, anti-pattern): [`docs/implement/doc-writing-convention.md`](docs/implement/doc-writing-convention.md).
+
+### `investigate.md` — decision-first, 6 section
+
+Đúng 6 heading `##`, đúng thứ tự, giữ nguyên tên:
+
+1. `## 1. Tổng quan` — vấn đề, hướng giải quyết, phạm vi (module + số lượng), confidence tổng thể.
+2. `## 2. Quyết định cần chốt` — bảng `| # | Nhóm | Vấn đề | Đề xuất mặc định | Nếu chọn khác | Người chốt |`, đánh số `D1…Dn`. Gom **mọi** rủi ro cần người quyết và câu hỏi mở vào đây; mỗi dòng bắt buộc có đề xuất mặc định để người duyệt chỉ việc đồng ý — nếu thật sự chưa có mặc định thì nêu ≥ 2 lựa chọn kèm điều kiện chọn, không để ô trống.
+3. `## 3. Luồng xử lý & UX` — chỉ luồng chuẩn (happy path) và ghi chú UX. Chọn text flow / `mermaid sequenceDiagram` / `mermaid flowchart TD` theo độ phức tạp. Không chèn bug hay cạm bẫy kỹ thuật vào đây.
+4. `## 4. Lưu ý kỹ thuật` — `G1…Gn`, mỗi mục theo *hiện tượng → nguyên nhân → cách xử lý*: cạm bẫy, xung đột, ràng buộc môi trường/branch. Rủi ro dev tự xử lý được nằm ở đây, không đẩy lên §2.
+5. `## 5. Phạm vi ảnh hưởng & test` — một bảng gộp `| Module / File | Thay đổi dự kiến | Test hiện có | Confidence |` ở mức file/hàm/component; kèm vài câu blast radius, kết luận DB/schema và kết luận events (§6).
+6. `## 6. Phụ lục` — dành cho người code và review PR: entry points, chi tiết `file:line`, DB/schema chi tiết, test coverage chi tiết, ghi chú khảo sát khác. Mỗi mục con là một `###`.
+
+Bất biến:
+
+- Chỉ `##` mới là section — viewer gập/sửa theo `##`; chi tiết bên trong dùng `###`. Không đặt `##` ở đầu dòng bên trong code fence: viewer cắt section không phân biệt fence nên sẽ cắt đôi khối code (thụt 1 space, hoặc dùng `###` trở xuống).
+- `file:line` **chỉ** xuất hiện ở §4 và §6. §1–§3 và §5 nêu tên file/hàm/component, không kèm số dòng.
+- §1 + §2 phải đủ để người duyệt chốt mà không cần đọc tiếp.
+- Không xoá section vì "không có gì để ghi" — giữ đủ 6 section, ghi empty state tường minh (vd *Không có quyết định cần phê duyệt*, *Không đổi schema*, *Không có khía cạnh UX*).
+- Không dùng checkbox `[ ]` trong ô bảng — không render thành control. Mục **blocking** phải đưa sang `qa.md`, mỗi câu một block `## Q<n>` + `**Lựa chọn:**` (list `- A. …`) + `**Trả lời:**`.
+- Không đặt ngân sách độ dài bằng số dòng; tiêu chí là "đọc §1–§2 là chốt được".
+
+### `design.md` — giữ 7 section
+
+`## §1. Tổng quan` / `§2. Investigation Summary` / `§3. So sánh giải pháp` (ít nhất 2 phương án, kể cả "giữ nguyên hiện trạng") / `§4. Implementation Details` (4.1 Files, 4.2 Logic, 4.3 DB, 4.4 Edge cases) / `§5. Test Notes` / `§6. Out of scope` / `§7. Schedule`. §4 phải đủ chi tiết để code mà không hỏi lại.

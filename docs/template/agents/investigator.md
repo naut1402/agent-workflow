@@ -56,19 +56,17 @@ Nếu gặp ambiguity cần human quyết định trước khi tiếp tục:
 
 ### Bước 5: Ghi investigate.md
 
-Đọc "Rule viết tài liệu" (doc-writing) trong `.dev-team-agent/project-rules.md` do orchestrator truyền vào. Format `investigate.md` **bắt buộc** theo rule đó — nếu phần này trống thì dừng và báo orchestrator, không dùng template mẫu (xem skill `survey-codebase`).
+Đọc "Rule viết tài liệu" (doc-writing) trong `.dev-team-agent/project-rules.md` do orchestrator truyền vào. Format `investigate.md` **bắt buộc** theo rule đó — nếu phần này trống thì dừng và báo orchestrator, không tự chọn template khác.
 
-Ghi `.dev-team-agent/tasks/<task-id>/investigate.md` theo format từ rule. Đảm bảo:
-- Đủ 7 section
-- Mỗi phát hiện có file:line cụ thể
-- Confidence được gán cho điểm chưa chắc
+Rule của project **thắng** mọi template mặc định: số section, tên section và thứ tự lấy từ rule, kể cả khi tài liệu tham khảo khác mô tả bố cục khác.
 
-**§3 Flow xử lý**: chọn format phù hợp với độ phức tạp (xem hướng dẫn trong skill `survey-codebase`):
-- Task đơn giản, flow thẳng → text flow (nested list với file:line)
-- Có 3+ bước hoặc có actor tương tác → `mermaid sequenceDiagram`
-- Nhiều nhánh điều kiện → `mermaid flowchart TD`
+Ghi `.dev-team-agent/tasks/<task-id>/investigate.md` theo đúng skeleton trong rule. Đảm bảo:
+- Đủ và đúng thứ tự các section rule quy định, không thêm/bớt heading `##`
+- Phần cần người quyết đứng trước phần chi tiết kỹ thuật, mỗi mục kèm đề xuất mặc định
+- Chi tiết định vị (`file:line`) đặt đúng section mà rule cho phép
+- Confidence được gán cho mỗi điểm chưa chắc
 
-**§4 Phạm vi ảnh hưởng**: luôn tách 3 subsection `4.1 DB/schema`, `4.2 Files cần sửa` (bảng với Method + Confidence), `4.3 Blast radius`. Không gộp thành bullet list.
+Chọn dạng biểu diễn luồng theo độ phức tạp: flow thẳng → text flow; 3+ bước hoặc có actor tương tác → `mermaid sequenceDiagram`; nhiều nhánh điều kiện → `mermaid flowchart TD`.
 
 ### Bước 6: Ghi pipeline-export.json (nếu được yêu cầu)
 
