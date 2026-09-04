@@ -270,6 +270,27 @@ describe('ArtifactPanel — block mode toggle all', () => {
   })
 })
 
+describe('ArtifactPanel — block mode first-block summary (mục 2)', () => {
+  it('renders a real <summary> for a heading-less first block, same as other blocks', async () => {
+    vi.mocked(fetchArtifact).mockImplementation(async () => ({ content: MD_TWO_H2, mtime: 1 }))
+    seedSettings('block')
+    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+
+    const blocks = w.findAll('.block-item')
+    // MD_TWO_H2's first line ("# Title") isn't an H2, so block 0 has no heading.
+    const firstSummary = blocks[0].find('summary')
+    expect(firstSummary.exists()).toBe(true)
+    expect(firstSummary.text()).toBe('Chi tiết')
+
+    // Every block — including the fallback-labelled first one — gets the same
+    // `.block-item > summary` marker via CSS; a missing <summary> on block 0
+    // was the root cause of the oversized default UA-rendered "Details" icon.
+    const secondSummary = blocks[1].find('summary')
+    expect(secondSummary.exists()).toBe(true)
+    expect(secondSummary.text()).toBe('Alpha')
+  })
+})
+
 describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
   afterEach(() => {
     vi.mocked(fetchArtifactActions).mockReset()

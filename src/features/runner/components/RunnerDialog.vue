@@ -5,12 +5,15 @@ import { slugify } from '../../../core/lib/stringUtils'
 import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
 import { deleteConnection } from '../scripts/ConnectionDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
-import type { ConnectionOption, ProviderEntry, RunnerDraft } from '../types'
+import CSelect from '../../../core/ui/CSelect.vue'
+import Icon from '../../../core/ui/Icon.vue'
+import type { ConnectionOption, ProviderEntry, ProviderConfigOption, RunnerDraft } from '../types'
 
 const props = defineProps<{
   runner: RunnerDraft | null
   connections: ConnectionOption[]
   providers: ProviderEntry[]
+  providerConfigs: ProviderConfigOption[]
 }>()
 
 const emit = defineEmits<{
@@ -20,6 +23,21 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18nHelpers()
+
+const TIMEOUT_OPTIONS = [
+  { value: 300_000, labelKey: 'runner.timeoutOptions.min5' },
+  { value: 600_000, labelKey: 'runner.timeoutOptions.min10' },
+  { value: 900_000, labelKey: 'runner.timeoutOptions.min15' },
+  { value: 1_800_000, labelKey: 'runner.timeoutOptions.min30' },
+  { value: 3_600_000, labelKey: 'runner.timeoutOptions.hour1' },
+] as const
+
+function formatJobStatus(status: string | undefined): string {
+  if (!status) return '—'
+  const key = `runner.jobStatus.${status}`
+  const translated = t(key)
+  return translated !== key ? translated : status
+}
 
 const draft = ref(emptyDraft())
 const isEdit = computed(() => Boolean(props.runner?.id))
@@ -47,6 +65,17 @@ function emptyDraft(): RunnerDraft {
 const selectedConnection = computed(
   () => props.connections.find((c) => c.id === draft.value.connectionId) || null,
 )
+
+const connectionSelectOptions = computed(() => props.connections.map((c) => ({ value: c.id, label: c.label })))
+
+const timeoutSelectOptions = computed(() => TIMEOUT_OPTIONS.map((o) => ({ value: String(o.value), label: t(o.labelKey) })))
+
+const timeoutModel = computed({
+  get: () => String(draft.value.config.timeoutMs),
+  set: (v: string) => {
+    draft.value.config.timeoutMs = Number(v)
+  },
+})
 
 const selectedProviderId = computed(() => selectedConnection.value?.providerId || '')
 
@@ -134,7 +163,7 @@ async function smokeTest() {
             userPrompt: 'Reply with exactly: OK',
           },
     )
-    message.value = `Job ${job.id} — ${job.status}`
+    message.value = `Job ${job.id} — ${formatJobStatus(job.status)}`
     let current = job
     for (let i = 0; i < 120; i++) {
       await new Promise((r) => setTimeout(r, 1000))
@@ -142,7 +171,7 @@ async function smokeTest() {
       current = data.job
       if (current.status === 'succeeded' || current.status === 'failed') break
     }
-    message.value = `Smoke test: ${current.status}${current.error ? ` — ${current.error}` : ''}`
+    message.value = `Smoke test: ${formatJobStatus(current.status)}${current.error ? ` — ${current.error}` : ''}`
     emit('refreshed')
   } catch (e: any) {
     error.value = String(e.message || e)
@@ -160,6 +189,13 @@ function openEditConnection() {
   const c = selectedConnection.value
   if (!c) return
   editingConnection.value = { ...c }
+  showConnectionDialog.value = true
+}
+
+function openCopyConnection() {
+  const c = selectedConnection.value
+  if (!c) return
+  editingConnection.value = { ...c, id: '', label: `${c.label} (copy)` }
   showConnectionDialog.value = true
 }
 
@@ -181,7 +217,7 @@ async function removeConnection() {
 async function onConnectionSaved(connectionId: string) {
   emit('refreshed')
   draft.value.connectionId = connectionId
-  message.value = editingConnection.value
+  message.value = editingConnection.value?.id
     ? t('runner.messages.connectionSaved', { id: connectionId })
     : t('runner.messages.connectionAdded', { id: connectionId })
   editingConnection.value = null
@@ -227,12 +263,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <div class="field">
             <label class="cfg-label">Connection</label>
             <div class="connection-row">
-              <select v-model="draft.connectionId" class="cfg-input">
-                <option value="" disabled>{{ t('runner.fields.connectionPlaceholder') }}</option>
-                <option v-for="c in connections" :key="c.id" :value="c.id">
-                  {{ c.label }} ({{ c.id }})
-                </option>
-              </select>
+              <CSelect
+                v-model="draft.connectionId"
+                :options="connectionSelectOptions"
+                :placeholder="t('runner.fields.connectionPlaceholder')"
+                aria-label="Connection"
+                class="cfg-input"
+              />
               <div class="icon-btn-group">
                 <button
                   type="button"
@@ -241,15 +278,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   :aria-label="t('runner.connectionDialog.title')"
                   @click="openNewConnection"
                 >
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <path
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      d="M8 3v10M3 8h10"
-                    />
-                  </svg>
+                  <Icon name="plus" />
                 </button>
                 <button
                   type="button"
@@ -259,16 +288,17 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   :aria-label="t('runner.connectionDialog.editTitle')"
                   @click="openEditConnection"
                 >
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <path
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.4"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5zM8 5l3 3"
-                    />
-                  </svg>
+                  <Icon name="pencil" />
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline"
+                  :disabled="!selectedConnection"
+                  :title="t('runner.connectionDialog.copyConnection')"
+                  :aria-label="t('runner.connectionDialog.copyConnection')"
+                  @click="openCopyConnection"
+                >
+                  <Icon name="copy" />
                 </button>
                 <button
                   type="button"
@@ -278,15 +308,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   :aria-label="t('runner.connectionDialog.deleteConnection')"
                   @click="removeConnection"
                 >
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <path
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.4"
-                      stroke-linecap="round"
-                      d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
-                    />
-                  </svg>
+                  <Icon name="trash" />
                 </button>
               </div>
             </div>
@@ -297,6 +319,18 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <label class="cfg-label">{{ t('runner.fields.allowedTools') }}
               <input v-model="draft.config.allowedTools" class="cfg-input" />
             </label>
+          </div>
+
+          <div class="field">
+            <label class="cfg-label">{{ t('runner.fields.timeoutMs') }}
+              <CSelect
+                v-model="timeoutModel"
+                :options="timeoutSelectOptions"
+                :aria-label="t('runner.fields.timeoutMs')"
+                class="cfg-input timeout-select"
+              />
+            </label>
+            <p class="muted hint">{{ t('runner.fields.timeoutMsHint') }}</p>
           </div>
 
           <div class="field enable-row">
@@ -352,6 +386,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     <ConnectionDialog
       v-if="showConnectionDialog"
       :providers="providers"
+      :providerConfigs="providerConfigs"
       :connection="editingConnection"
       @close="closeConnectionDialog"
       @saved="onConnectionSaved"
@@ -376,12 +411,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   gap: 0.5rem;
 }
 .enable-row .cfg-label { margin: 0; }
+.modal-body { display: flex; flex-direction: column; }
 .modal-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 1rem;
+  margin-top: auto;
+  padding-top: 1rem;
 }
 .spacer { flex: 1; }
 .err-banner {

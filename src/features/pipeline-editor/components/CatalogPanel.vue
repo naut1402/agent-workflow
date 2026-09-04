@@ -134,3 +134,90 @@ function onDragStart(event, item, type) {
     </template>
   </aside>
 </template>
+
+<style scoped lang="scss">
+.catalog-panel {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.catalog-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.catalog-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 8px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.catalog-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.catalog-tab:hover:not(.active) { color: var(--text); }
+
+.catalog-search {
+  margin: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+.catalog-search:focus { border-color: var(--accent); }
+
+.catalog-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+
+.catalog-item {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  margin-bottom: 5px;
+  cursor: grab;
+  transition: border-color 0.15s;
+}
+.catalog-item:hover { border-color: var(--accent); }
+.catalog-item:active { cursor: grabbing; }
+
+.catalog-item-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.catalog-item-meta { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.catalog-item-desc { font-size: 11px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.catalog-item-skills { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
+.catalog-empty { color: var(--muted); font-size: 12px; padding: 12px 0; text-align: center; }
+
+.catalog-source-filter {
+  margin: 6px 8px 0;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 4px 7px;
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.source-badge {
+  display: inline-block;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(139, 151, 163, 0.15);
+  color: var(--muted);
+}
+</style>

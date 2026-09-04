@@ -40,3 +40,58 @@ function message(event: NotificationEvent) {
     </ul>
   </div>
 </template>
+
+<style scoped lang="scss">
+.notification-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text);
+}
+.notification-list-mark-all {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+.notification-list-empty {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.notification-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.notification-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.notification-list-item:last-child { border-bottom: none; }
+.notification-list-item:hover { background: var(--hover-surface); }
+.notification-list-item.unread { background: var(--accent-dim); }
+.notification-list-item-message {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.notification-list-item-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+</style>

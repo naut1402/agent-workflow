@@ -4,12 +4,14 @@ import {
   listJobs,
   loadTaskSessionLedger,
   parseCursorJsonOutput,
+  providerFamilyOf,
   stepIdOf,
 } from './index.js'
 import type { JobRecord, SessionEntry, TaskSessionLedger } from './index.js'
 import { readTextFileSync } from '../../../core/lib/fileHelper.js'
 import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.js'
 import { readCursorSessionTranscript, stripCursorUserWrapper } from './cursorSessionTranscript.js'
+import { readApiAgentTranscript } from './apiAgentTranscript.js'
 
 const RESPONSE_HEADER = '=== Phản hồi của runner (stdout/stderr) ==='
 const RESULT_HEADER = '=== Kết quả ==='
@@ -135,7 +137,10 @@ function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | 
 
 export type TaskChatBlockedReason = 'noCompletedJob'
 
-export type TranscriptProviderHint = 'claude-code-cli' | 'cursor-cli' | 'unknown'
+// `providerFamilyOf(id) === 'ai-api'` (agentCli.ts) is the single source of truth for
+// which provider ids are `AgenticApiProvider` subclasses — no separate id list to keep
+// in sync here (any current or future `*-api` provider is picked up automatically).
+export type TranscriptProviderHint = 'claude-code-cli' | 'cursor-cli' | 'unknown' | (string & {})
 
 export interface TaskChatRunningJob {
   jobId: string
@@ -199,6 +204,7 @@ function resolveTranscriptProvider(
   const id = providerId || entry?.providerId || ''
   if (id === 'cursor-cli') return 'cursor-cli'
   if (id === 'claude-code-cli') return 'claude-code-cli'
+  if (providerFamilyOf(id) === 'ai-api') return id
   if (id === 'codex-cli') return 'unknown'
   return id ? 'unknown' : 'claude-code-cli'
 }
@@ -212,6 +218,10 @@ function readTranscriptForProvider(
   if (hint === 'cursor-cli') {
     const r = readCursorSessionTranscript(sessionId, workspace, opts)
     return { ...r, matchedProvider: 'cursor-cli' }
+  }
+  if (providerFamilyOf(hint) === 'ai-api') {
+    const r = readApiAgentTranscript(hint, sessionId, opts)
+    return { ...r, matchedProvider: hint }
   }
   // Claude (default) + unknown → try Claude path first, then Cursor fallback
   const claude = readSessionTranscript(sessionId, workspace, opts)
@@ -227,9 +237,7 @@ function isSessionDismissedForStep(ledger: TaskSessionLedger, sessionId: string,
     .reverse()
     .find((s) => s.status === 'open' && s.sessionId && s.stepIds?.includes(stepId))
   if (openReplacement) return false
-  return ledger.sessions.some(
-    (s) => s.sessionId === sessionId && (s.status === 'closed' || s.status === 'stale'),
-  )
+  return ledger.sessions.some((s) => s.sessionId === sessionId && s.status === 'closed')
 }
 
 /**

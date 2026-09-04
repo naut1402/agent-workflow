@@ -181,6 +181,7 @@ export async function readJobLogDelta(
 const ACTIVE_PRIORITY: Record<JobStatus, number> = {
   running: 4,
   queued: 3,
+  awaiting_recovery: 3,
   awaiting_approval: 2,
   succeeded: 1,
   failed: 0,

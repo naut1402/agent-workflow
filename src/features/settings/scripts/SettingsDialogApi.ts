@@ -32,7 +32,19 @@ export async function fetchLoggingConfig() {
 
 export async function saveLoggingConfig(config: {
   showLogsTab?: boolean
-  types?: { audit?: boolean; request?: boolean; jobs?: boolean }
+  types?: { audit?: boolean; request?: boolean; jobs?: boolean; events?: boolean; usage?: boolean }
 }) {
   return apiRequest('PUT', '/api/logging-config', { body: config })
+}
+
+export async function fetchRecoveryConfig() {
+  return apiGet('/api/recovery-config')
+}
+
+export async function saveRecoveryConfig(config: {
+  enabled?: boolean
+  maxAttempts?: number
+  pollIntervalMs?: number
+}) {
+  return apiRequest('PUT', '/api/recovery-config', { body: config })
 }

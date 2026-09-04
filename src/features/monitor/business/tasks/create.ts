@@ -1,7 +1,15 @@
-import { access, dirname, joinPath, mkdir, rename, rm, writeTextFile } from '../../../../core/lib/fileHelper.js'
-import { randomBytes } from 'node:crypto'
+import {
+  access,
+  dirname,
+  joinPath,
+  mkdir,
+  randomBytes,
+  rename,
+  rm,
+  writeTextFile,
+} from '../../../../core/lib/fileHelper.js'
 import { dumpYaml, readYamlSafe } from '../../../../core/lib/yamlLib.js'
-import { sanitiseProfileName, profilesDir, loadPipelineConfig } from '../index.js'
+import { sanitiseProfileName, profilesDir, loadPipelineConfig } from '../peers.js'
 import { TASK_ID_PATTERN } from '../../schemas/taskCreate.js'
 import type { CreateTaskRequest } from '../../schemas/taskCreate.js'
 import { writeStateAtomic } from './state.js'
@@ -24,6 +32,8 @@ export interface CreatedTask {
   firstStep: Record<string, any> | null
   /** Rendered `request.md` (frontmatter + prompt), reused as the runner prompt. */
   requestContent: string
+  /** mtime of the just-written state file — the expected mtime for a follow-up patch (e.g. name generation). */
+  mtime: number
 }
 
 export type CreateTaskResult =
@@ -52,6 +62,7 @@ export function renderRequestMarkdown(input: {
   createdAt: string
   prompt: string
   branch?: string | null
+  name?: string | null
 }): string {
   const front = dumpYaml({
     task_id: input.taskId,
@@ -61,6 +72,7 @@ export function renderRequestMarkdown(input: {
     branch: input.branch ?? null,
     created_at: input.createdAt,
     created_by: 'dashboard',
+    ...(input.name?.trim() ? { name: input.name.trim() } : {}),
   })
   const body = input.prompt.replace(/\s+$/, '')
   return `---\n${front}---\n\n${body}\n`
@@ -128,6 +140,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
     createdAt,
     prompt: input.prompt,
     branch: input.branch ?? null,
+    name: input.name,
   })
 
   let pipelineFile: string | null = null
@@ -176,8 +189,9 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       doc_review_round: { investigate: 0, design: 0 },
       inherit_from_parent: [],
       ...(input.branch ? { branch: input.branch } : {}),
+      ...(input.name?.trim() ? { name: input.name.trim() } : {}),
     }
-    await writeStateAtomic(stateFile, state)
+    const mtime = await writeStateAtomic(stateFile, state)
 
     return {
       ok: true,
@@ -190,6 +204,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       pipeline,
       firstStep,
       requestContent,
+      mtime,
     }
   } catch (err: any) {
     // Roll back the scaffold so a failed create doesn't leave a half task that

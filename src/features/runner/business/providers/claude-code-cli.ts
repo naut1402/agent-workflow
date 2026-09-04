@@ -1,5 +1,5 @@
 import { appendTextFileSync, existsSync, joinPath } from '../../../../core/lib/fileHelper.js'
-import { spawn } from 'node:child_process'
+import { spawn } from '../../../../core/lib/processHelper.js'
 import { resolveSecretRef } from '../credentials.js'
 import {
   buildCursorJsonInvocation,
@@ -18,10 +18,21 @@ interface ProcResult {
   killed: boolean
 }
 
+/** cwd for a real CLI child process is the task workspace (`req.workspace`), not the repo
+ * root the agent markdown was written for — without this, a model follows the literal
+ * `.dev-team-agent/tasks/<task-id>/...` paths in its instructions and writes artifacts one
+ * directory too deep (`<task-id>/<task-id>/investigate.md`). */
+const PATH_CONVENTION_PREAMBLE =
+  'Quy ước path: thư mục làm việc hiện tại (cwd) CHÍNH LÀ thư mục task (nơi chứa request.md), ' +
+  'KHÔNG phải root repo. Mọi file cần đọc/ghi ở dưới phải dùng path tương đối ngay trong thư mục ' +
+  'này — ví dụ dùng `qa.md`, `investigate.md`, KHÔNG dùng `.dev-team-agent/tasks/<task-id>/qa.md` ' +
+  'hay bất kỳ tiền tố thư mục nào khác, dù hướng dẫn bên dưới có viết path đầy đủ như vậy (path đó ' +
+  'viết cho môi trường có cwd ở root repo).'
+
 function buildPrompt(resolvedAgent: ResolvedAgent, userPrompt: string): string {
   const system = resolvedAgent.systemPrompt?.trim()
   if (!system) return userPrompt
-  return `## Agent instructions\n\n${system}\n\n## Task\n\n${userPrompt}`
+  return `## Agent instructions\n\n${PATH_CONVENTION_PREAMBLE}\n\n${system}\n\n## Task\n\n${userPrompt}`
 }
 
 /**
@@ -35,7 +46,7 @@ function buildPrompt(resolvedAgent: ResolvedAgent, userPrompt: string): string {
  * `parentJobId` leaks forward — and a pipeline step resuming the previous
  * step's session runs a DIFFERENT agent, whose instructions must be sent.
  */
-function shouldSendAgentInstructions(req: ExecuteRequest): boolean {
+export function shouldSendAgentInstructions(req: ExecuteRequest): boolean {
   return !(req.resumeSessionId && req.metadata?.isChatFeedback === true)
 }
 
@@ -46,6 +57,7 @@ export interface ClaudeInvocationInput {
   dangerouslySkipPermissions?: unknown
   sessionId?: string
   resumeSessionId?: string
+  model?: string
 }
 
 export interface ClaudeInvocation {
@@ -69,6 +81,9 @@ export function buildClaudeInvocation(input: ClaudeInvocationInput): ClaudeInvoc
   }
   if (input.dangerouslySkipPermissions) {
     args.push('--dangerously-skip-permissions')
+  }
+  if (input.model) {
+    args.push('--model', input.model)
   }
   // Approval-flow session continuity — exactly one is ever set (see
   // ExecuteRequest.sessionId/resumeSessionId doc comment).
@@ -96,10 +111,10 @@ function buildChildEnv(credential: CredentialProfile): NodeJS.ProcessEnv {
   return env
 }
 
-function formatFailure(procResult: ProcResult): string {
+function formatFailure(procResult: ProcResult, timeoutMs: number): string {
+  if (procResult.killed) return `process timed out after ${timeoutMs}ms`
   const fromStreams = [procResult.stderr, procResult.stdout].filter(Boolean).join('\n').trim()
   if (fromStreams) return fromStreams.slice(0, 1000)
-  if (procResult.killed) return 'process timed out'
   return `exit code ${procResult.exitCode ?? 'unknown'}`
 }
 
@@ -361,6 +376,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
           dangerouslySkipPermissions: skipPermissions,
           sessionId: sessionPlan.sessionId,
           resumeSessionId: sessionPlan.resumeSessionId,
+          model: runnerConfig.model,
         })
         args = invocation.args
         stdinInput = invocation.stdinInput
@@ -419,12 +435,13 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         appendLog(`[runner] process started pid=${info.pid ?? 'null'} — chờ stdout/stderr…\n`)
       }
 
+      const timeoutMs = req.timeoutMs || runnerConfig.timeoutMs || 600_000
       let procResult: ProcResult
       try {
         procResult = await runProcess(cliPath, args, {
           cwd: req.workspace,
           env: buildChildEnv(credential),
-          timeoutMs: req.timeoutMs || runnerConfig.timeoutMs || 600_000,
+          timeoutMs,
           onLog: wrappedOnLog,
           onStart: wrappedOnStart,
           stdinInput,
@@ -452,11 +469,27 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
       const ok = procResult.exitCode === 0 && !procResult.killed
       let stdout = procResult.stdout
       let capturedSessionId: string | null | undefined = sessionPlan.presetSessionId ?? undefined
+      let tokenUsage: ExecuteResult['tokenUsage']
 
       if (sessionCapture === 'parse-json') {
         const parsed = parseCursorJsonOutput(procResult.stdout)
         if (parsed.result != null) stdout = parsed.result
         if (parsed.session_id) capturedSessionId = parsed.session_id
+        if (parsed.usage) {
+          const total =
+            parsed.usage.inputTokens +
+            parsed.usage.outputTokens +
+            parsed.usage.cacheReadTokens +
+            parsed.usage.cacheWriteTokens
+          tokenUsage = {
+            inputTokens: parsed.usage.inputTokens,
+            outputTokens: parsed.usage.outputTokens,
+            cacheReadTokens: parsed.usage.cacheReadTokens,
+            cacheWriteTokens: parsed.usage.cacheWriteTokens,
+            totalTokens: total,
+            model: parsed.model,
+          }
+        }
       }
 
       const result: ExecuteResult = {
@@ -465,9 +498,11 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         durationMs: Date.now() - started,
         logPath,
         artifactsFound,
-        error: ok ? undefined : formatFailure(procResult),
+        error: ok ? undefined : formatFailure(procResult, timeoutMs),
+        timedOut: procResult.killed,
         stdout,
         sessionId: capturedSessionId,
+        tokenUsage,
       }
       appendLog(describeResult(result))
       return result

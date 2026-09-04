@@ -2,13 +2,15 @@
 // Autoscan lives at settings.autoscan; legacy autoscan.json is still read once
 // for migration so existing installs keep working.
 
-import { joinPath, mkdirSync, readTextFileSync, renameSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
 import {
   DEFAULT_DASHBOARD_SETTINGS,
   parseDashboardSettings,
   resolveAutoscanFromDashboard,
   resolveGithubTokensFromDashboard,
   resolveLoggingFromDashboard,
+  resolveRecoveryFromDashboard,
+  resolveSecurityFromDashboard,
   type DashboardSettings,
 } from '../schemas/dashboardSettings.js'
 import {
@@ -20,11 +22,10 @@ import {
   parseGithubTokensConfig,
   type GithubTokensConfig,
 } from '../schemas/githubTokens.js'
-import {
-  invalidateLoggingPrefsCache,
-  parseLoggingConfig,
-  type LoggingConfig,
-} from '../../../core/log/loggingPrefs.js'
+import { parseLoggingConfig, type LoggingConfig } from '../../../core/log/loggingPrefs.js'
+import { invalidateLoggingPrefsCache } from '../../../core/log/loggingPrefsIo.js'
+import { parseRecoverySettings, type RecoverySettings } from '../schemas/recovery.js'
+import { DEFAULT_SECURITY_CONFIG, parseSecurityConfig, type SecurityConfig } from '../schemas/security.js'
 import { registryHome } from '../../../core/registry.js'
 
 export function dashboardSettingsFile(): string {
@@ -60,6 +61,8 @@ export function loadDashboardSettings(): DashboardSettings {
     autoscan: { ...DEFAULT_AUTOSCAN_CONFIG, whitelist: [] },
     githubTokens: { repos: [] },
     logging: parseLoggingConfig(undefined),
+    recovery: parseRecoverySettings(undefined),
+    security: parseSecurityConfig(undefined),
   }
 }
 
@@ -67,10 +70,7 @@ export function saveDashboardSettings(settings: DashboardSettings): DashboardSet
   const home = registryHome()
   mkdirSync(home, { recursive: true })
   const normalised = parseDashboardSettings(settings)
-  const file = dashboardSettingsFile()
-  const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, JSON.stringify(normalised, null, 2))
-  renameSync(tmp, file)
+  writeTextFileAtomicSync(dashboardSettingsFile(), JSON.stringify(normalised, null, 2))
   invalidateLoggingPrefsCache()
   return normalised
 }
@@ -123,5 +123,33 @@ export function saveLoggingConfig(config: LoggingConfig): LoggingConfig {
   return resolveLoggingFromDashboard(saved)
 }
 
+export function loadRecoverySettings(): RecoverySettings {
+  return resolveRecoveryFromDashboard(loadDashboardSettings())
+}
+
+export function saveRecoverySettings(config: RecoverySettings): RecoverySettings {
+  const current = loadDashboardSettings()
+  const normalised = parseRecoverySettings(config)
+  const saved = saveDashboardSettings({
+    ...current,
+    recovery: normalised,
+  })
+  return resolveRecoveryFromDashboard(saved)
+}
+
+export function loadSecurityConfig(): SecurityConfig {
+  return resolveSecurityFromDashboard(loadDashboardSettings())
+}
+
+export function saveSecurityConfig(config: SecurityConfig): SecurityConfig {
+  const current = loadDashboardSettings()
+  const normalised = parseSecurityConfig(config)
+  const saved = saveDashboardSettings({
+    ...current,
+    security: normalised,
+  })
+  return resolveSecurityFromDashboard(saved)
+}
+
 // Re-export default shape for callers that only need the empty template.
-export { DEFAULT_DASHBOARD_SETTINGS }
+export { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SECURITY_CONFIG }

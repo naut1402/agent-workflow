@@ -6,6 +6,7 @@ import type { ChatContext } from '../composables/useChatSurface'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
 import { closeTaskChatSession } from '../../monitor/scripts/monitorApi'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import Icon from '../../../core/ui/Icon.vue'
 
 // Shell of the floating chat window: position (docked to the draggable icon),
 // header, and one of two bodies —
@@ -305,19 +306,7 @@ async function onNewSession(): Promise<void> {
   <div ref="windowRef" class="nl-chat-window" role="dialog" :aria-label="title" :style="anchorStyle">
     <header class="nl-chat-header">
       <span v-if="context.mode === 'task'" class="nl-chat-badge is-task" aria-hidden="true">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.9"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M20.5 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 20.5 12z" />
-          <path d="M8.5 10.5h7M8.5 13.5h4.5" />
-        </svg>
+        <Icon name="chatBubble" :size="14" />
       </span>
       <span class="nl-chat-title">{{ title }}</span>
 

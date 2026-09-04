@@ -3,8 +3,10 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
 import { fetchRunners, fetchJobs } from '../scripts/runnerApi'
 import { saveRunner, deleteRunner, setDefaultRunner, fetchConnections } from '../scripts/RunnerConfigPanelApi'
+import { fetchProviderConfigs } from '../scripts/ProviderDialogApi'
 import RunnerDialog from './RunnerDialog.vue'
-import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderFamily } from '../types'
+import Icon from '../../../core/ui/Icon.vue'
+import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderConfigOption, ProviderFamily } from '../types'
 
 const { t } = useI18nHelpers()
 
@@ -12,6 +14,7 @@ const runners = ref<RunnerDraft[]>([])
 const defaultRunnerId = ref('')
 const connections = ref<ConnectionOption[]>([])
 const providers = ref<ProviderEntry[]>([])
+const providerConfigs = ref<ProviderConfigOption[]>([])
 const message = ref('')
 const error = ref('')
 const recentJobs = ref<any[]>([])
@@ -41,18 +44,34 @@ function canBeDefaultAi(r: RunnerDraft): boolean {
   return family === 'agent-cli' || family === 'ai-api'
 }
 
+function jobStatusLabel(status: string | undefined): string {
+  if (!status) return '—'
+  const key = `runner.jobStatus.${status}`
+  const translated = t(key)
+  return translated !== key ? translated : status
+}
+
+function jobStatusClass(status: string | undefined): string {
+  if (status === 'awaiting_recovery') return 'job-status-recovering'
+  if (status === 'running' || status === 'queued') return 'job-status-active'
+  if (status === 'failed') return 'job-status-failed'
+  return ''
+}
+
 async function load() {
   error.value = ''
   try {
-    const [rData, cData, jData] = await Promise.all([
+    const [rData, cData, jData, pData] = await Promise.all([
       fetchRunners(),
       fetchConnections(),
       fetchJobs(10),
+      fetchProviderConfigs(),
     ])
     runners.value = rData.runners || []
     defaultRunnerId.value = rData.defaultRunnerId || ''
     providers.value = (rData.providers || cData.providers || []) as ProviderEntry[]
     connections.value = cData.connections || rData.connections || []
+    providerConfigs.value = pData.providerConfigs || []
     recentJobs.value = jData.jobs || []
     if (editingRunner.value?.id) {
       const updated = runners.value.find((r) => r.id === editingRunner.value?.id)
@@ -73,6 +92,13 @@ function openNew() {
 
 function openEdit(r: RunnerDraft) {
   editingRunner.value = JSON.parse(JSON.stringify(r))
+  showRunnerDialog.value = true
+  message.value = ''
+}
+
+function openCopy(r: RunnerDraft, e: Event) {
+  e.stopPropagation()
+  editingRunner.value = { ...JSON.parse(JSON.stringify(r)), id: '', name: `${r.name} (copy)` }
   showRunnerDialog.value = true
   message.value = ''
 }
@@ -208,21 +234,21 @@ async function remove(r: RunnerDraft, e: Event) {
           </button>
           <button
             type="button"
+            class="icon-btn"
+            :title="t('runner.panel.copyRunner')"
+            :aria-label="t('runner.panel.copyRunner')"
+            @click="openCopy(r, $event)"
+          >
+            <Icon name="copy" />
+          </button>
+          <button
+            type="button"
             class="icon-btn danger"
             :title="t('runner.panel.deleteRunner')"
             :aria-label="t('runner.panel.deleteRunner')"
             @click="remove(r, $event)"
           >
-            <!-- trash -->
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-                d="M3.5 5h9M6 5V3.5h4V5M5 5l.5 8h5L11 5"
-              />
-            </svg>
+            <Icon name="trash" />
           </button>
         </div>
       </li>
@@ -237,7 +263,7 @@ async function remove(r: RunnerDraft, e: Event) {
         <tbody>
           <tr v-for="(j, idx) in recentJobs" :key="j.id || `job-${idx}`">
             <td>{{ j.id ? `${String(j.id).slice(0, 8)}…` : '—' }}</td>
-            <td>{{ j.status }}</td>
+            <td :class="jobStatusClass(j.status)">{{ jobStatusLabel(j.status) }}</td>
             <td>{{ j.agentRef || '—' }}</td>
             <td>{{ j.createdAt || '—' }}</td>
           </tr>
@@ -250,6 +276,7 @@ async function remove(r: RunnerDraft, e: Event) {
       :runner="editingRunner"
       :connections="connections"
       :providers="providers"
+      :providerConfigs="providerConfigs"
       @close="closeDialog"
       @saved="onSaved"
       @refreshed="load"
@@ -305,4 +332,7 @@ async function remove(r: RunnerDraft, e: Event) {
 .recent-jobs { margin-top: 2rem; }
 .recent-jobs table { width: 100%; font-size: 0.85rem; border-collapse: collapse; }
 .recent-jobs th, .recent-jobs td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); }
+.job-status-recovering { color: var(--waiting, #d97706); font-weight: 500; }
+.job-status-active { color: var(--accent); }
+.job-status-failed { color: var(--danger, #ef4444); }
 </style>

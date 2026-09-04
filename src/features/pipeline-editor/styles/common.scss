@@ -1,158 +1,17 @@
-/* Editor scope selector */
-.editor-scope { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
-.scope-label { font-size: 11px; color: var(--muted); }
-.scope-select, .scope-task-input {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 5px;
-  padding: 4px 7px;
-  font-size: 12px;
-  font-family: inherit;
-}
-.scope-task-input { margin-top: 3px; }
-.editor-scope-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-/* ── Editor root & layout ───────────────────────────────────────────────── */
-.editor-root {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
+/* Pipeline-editor — rule bắc cầu giữa 2 component (tổ tiên ở SFC này, đích ở SFC
+   khác) nên không đặt được trong <style scoped> của riêng ai; xem
+   docs/implement/feature-organization-rule.md §5. */
 
-.editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-
-.editor-toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-
-.fanout-warning {
-  flex: 1;
-  min-width: 200px;
-  max-width: 480px;
-  padding: 4px 10px;
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--waiting, #b8860b);
-  background: rgba(184, 134, 11, 0.12);
-  border: 1px solid rgba(184, 134, 11, 0.35);
-  border-radius: 4px;
-}
-
-.save-msg { font-size: 12px; color: var(--done); }
-
-.editor-layout {
-  display: grid;
-  grid-template-columns: 240px 1fr 280px;
-  flex: 1;
-  overflow: hidden;
-  isolation: isolate;
-  transition: grid-template-columns 0.2s ease;
-}
-.editor-layout.editor-layout--left-collapsed {
-  grid-template-columns: 48px 1fr 280px;
-}
-.editor-layout.editor-layout--no-config {
-  grid-template-columns: 240px 1fr;
-}
-.editor-layout.editor-layout--left-collapsed.editor-layout--no-config {
-  grid-template-columns: 48px 1fr;
-}
-
-.editor-canvas {
-  position: relative;
-  overflow: hidden;
-  height: 100%;
-}
-.editor-canvas .vflow-container {
-  height: 100%;
-  border-radius: 0;
-  border: none;
-  border-left: 1px solid var(--border);
-}
-
-/* Preview states */
-.node-editor { position: relative; }
-.node-editor.node-state-pending { opacity: 0.45; }
-.node-editor.node-state-active {
-  border-color: var(--active);
-  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.45);
-  animation: preview-pulse 1s ease-in-out infinite;
-}
-.node-editor.node-state-done { border-color: var(--done); opacity: 0.75; }
-.node-editor.node-state-hitl {
-  border-color: var(--waiting);
-  box-shadow: 0 0 10px rgba(227, 179, 65, 0.4);
-}
-
-@keyframes preview-pulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.35); }
-  50% { box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.55); }
-}
-
-.preview-status {
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 10px;
-  white-space: nowrap;
-  z-index: 2;
-  pointer-events: none;
-}
-.preview-status--pending { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
-.preview-status--active { background: var(--active); color: #fff; }
-.preview-status--done { background: var(--done); color: #0f1419; }
-.preview-status--hitl { background: var(--waiting); color: #0f1419; }
-
-.preview-active .editor-toolbar { opacity: 0.6; pointer-events: none; }
+/* .preview-active ở PipelineEditor → panel con */
 .preview-active .catalog-panel { opacity: 0.5; pointer-events: none; }
-.preview-active .editor-left { opacity: 0.5; pointer-events: none; }
 .preview-active .rules-panel { opacity: 0.5; pointer-events: none; }
 .preview-active .step-config-panel { opacity: 0.5; pointer-events: none; }
 
-.preview-banner {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(14, 18, 24, 0.92);
-  border: 1px solid var(--waiting);
-  color: var(--text);
-  border-radius: 20px;
-  padding: 6px 16px;
-  font-size: 13px;
-  z-index: 10;
-  white-space: nowrap;
-  max-width: 90%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* .editor-left ở PipelineEditor → CatalogPanel */
+.editor-left .catalog-panel { border-right: none; flex: 1; }
+
+/* .node-rule-highlight ở PipelineEditor → PipelineEditorNode */
+.node-rule-highlight .node-editor {
+  border-color: var(--waiting);
+  box-shadow: 0 0 6px rgba(227, 179, 65, 0.35);
 }
-.preview-banner-agent { color: var(--muted); font-size: 11px; }
-.preview-banner-hitl { color: var(--waiting); font-weight: 600; }

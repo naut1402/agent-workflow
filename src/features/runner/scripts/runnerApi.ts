@@ -42,3 +42,7 @@ export async function discardJob(jobId: string) {
 export async function sendActionFeedback(jobId: string, feedback: string) {
   return apiPost(`/api/jobs/${encodeURIComponent(jobId)}/feedback`, { feedback })
 }
+
+export async function cancelJob(jobId: string) {
+  return apiPost(`/api/jobs/${encodeURIComponent(jobId)}/cancel`)
+}

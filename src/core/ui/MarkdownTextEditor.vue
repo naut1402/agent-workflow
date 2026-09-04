@@ -72,6 +72,9 @@ function emitMarkdown() {
 async function createEditor() {
   if (!rootEl.value) return
   const { default: ToastEditor } = await import('@toast-ui/editor')
+  // Component may have unmounted while the editor bundle was still loading —
+  // `rootEl` (template ref) is cleared by Vue on unmount, re-check before construct.
+  if (!rootEl.value) return
   const theme = readDocumentTheme()
   editor = new ToastEditor({
     el: rootEl.value,

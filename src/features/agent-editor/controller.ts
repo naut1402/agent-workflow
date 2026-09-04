@@ -1,60 +1,77 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { AbstractController } from '../../core/http/AbstractController.js'
-import { parseAgentMarkdown, compileAgentMarkdown } from './business/index.js'
+import * as agentEditorBusiness from './business/index.js'
 import { safeReadDir } from '../../core/lib/fileHelper.js'
 import { emitAudit } from '../../core/log/store.js'
-import {
-  customAgentsDir,
-  agentTemplatesDir,
-  workflowStepTemplatesDir,
-  listCustomAgentMeta,
-  readCustomAgent,
-  fetchUrlSafe,
-  generateDraftFromNl,
-  ensureDefaultTemplate,
-  sanitiseAgentName,
-  sanitiseProfileName,
-} from './business/index.js'
+import type { AgentScope } from './business/index.js'
+
+function readScope(raw: unknown): AgentScope {
+  return raw === 'global' ? 'global' : 'project'
+}
 
 export class AgentEditorController extends AbstractController {
   async listOrGetCustomAgents() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate.error
-    const { root } = gate
     const name = this.c.req.query('name')
     if (name) {
-      const agent = await readCustomAgent(root, name)
+      const scope = readScope(this.c.req.query('scope'))
+      let root: string | null = null
+      if (scope === 'project') {
+        const gate = this.requireRoot()
+        if ('error' in gate) return gate.error
+        root = gate.root
+      }
+      const agent = await agentEditorBusiness.readCustomAgent(root, name, scope)
       if (!agent) return this.notFound('not found')
       return this.ok(agent)
     }
-    return this.ok({ agents: await listCustomAgentMeta(root) })
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const [project, global] = await Promise.all([agentEditorBusiness.listCustomAgentMeta(root), agentEditorBusiness.listGlobalAgentMeta()])
+    const agents = [
+      ...project.map((a) => ({ ...a, scope: 'project' })),
+      ...global.map((a) => ({ ...a, scope: 'global' })),
+    ].sort((a, b) => a.name.localeCompare(b.name))
+    return this.ok({ agents })
   }
 
   async createCustomAgent() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate.error
-    const { root } = gate
     const b = await this.requireJsonBody()
     if ('error' in b) return b.error
     const draft = b.value.draft || b.value
-    const clean = sanitiseAgentName(draft.name)
+    const scope = readScope(b.value.scope)
+    const clean = agentEditorBusiness.sanitiseAgentName(draft.name)
     if (!clean) return this.badRequest('invalid agent name')
-    await fs.mkdir(customAgentsDir(root), { recursive: true })
-    const content = compileAgentMarkdown({ ...draft, name: clean })
-    await fs.writeFile(path.join(customAgentsDir(root), `${clean}.md`), content, 'utf8')
+    let dir: string
+    if (scope === 'global') {
+      dir = agentEditorBusiness.globalAgentsDir()
+    } else {
+      const gate = this.requireRoot()
+      if ('error' in gate) return gate.error
+      dir = agentEditorBusiness.customAgentsDir(gate.root)
+    }
+    await fs.mkdir(dir, { recursive: true })
+    const content = agentEditorBusiness.compileAgentMarkdown({ ...draft, name: clean })
+    await fs.writeFile(path.join(dir, `${clean}.md`), content, 'utf8')
     emitAudit({ op: 'create', entity: 'custom-agent', identifier: clean, projectId: this.projectId })
-    return this.ok({ saved: true, name: clean })
+    return this.ok({ saved: true, name: clean, scope })
   }
 
   async deleteCustomAgent() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate.error
-    const { root } = gate
-    const name = sanitiseAgentName(this.c.req.query('name') || '')
+    const name = agentEditorBusiness.sanitiseAgentName(this.c.req.query('name') || '')
     if (!name) return this.badRequest('invalid name')
+    const scope = readScope(this.c.req.query('scope'))
+    let dir: string
+    if (scope === 'global') {
+      dir = agentEditorBusiness.globalAgentsDir()
+    } else {
+      const gate = this.requireRoot()
+      if ('error' in gate) return gate.error
+      dir = agentEditorBusiness.customAgentsDir(gate.root)
+    }
     try {
-      await fs.unlink(path.join(customAgentsDir(root), `${name}.md`))
+      await fs.unlink(path.join(dir, `${name}.md`))
       emitAudit({ op: 'delete', entity: 'custom-agent', identifier: name, projectId: this.projectId })
       return this.ok({ deleted: true, name })
     } catch {
@@ -68,9 +85,10 @@ export class AgentEditorController extends AbstractController {
     const { root } = gate
     const b = await this.requireJsonBody()
     if ('error' in b) return b.error
-    const name = sanitiseAgentName(b.value.name)
+    const name = agentEditorBusiness.sanitiseAgentName(b.value.name)
     if (!name) return this.badRequest('invalid name')
-    const agent = await readCustomAgent(root, name)
+    const scope = readScope(b.value.scope)
+    const agent = await agentEditorBusiness.readCustomAgent(root, name, scope)
     if (!agent) return this.notFound('agent not found')
     const exportDir = path.join(path.dirname(root), '.claude', 'agents')
     await fs.mkdir(exportDir, { recursive: true })
@@ -93,7 +111,7 @@ export class AgentEditorController extends AbstractController {
     if ('error' in gate) return gate.error
     const b = await this.requireJsonBody()
     if ('error' in b) return b.error
-    const draft = await generateDraftFromNl(b.value.description || '')
+    const draft = await agentEditorBusiness.generateDraftFromNl(b.value.description || '')
     return this.ok({ draft })
   }
 
@@ -101,15 +119,15 @@ export class AgentEditorController extends AbstractController {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
     const { root } = gate
-    await ensureDefaultTemplate(root)
-    const tplDir = agentTemplatesDir(root)
+    await agentEditorBusiness.ensureDefaultTemplate(root)
+    const tplDir = agentEditorBusiness.agentTemplatesDir(root)
     const name = this.c.req.query('name')
     if (name) {
-      const clean = sanitiseAgentName(name) || sanitiseProfileName(name)
+      const clean = agentEditorBusiness.sanitiseAgentName(name) || agentEditorBusiness.sanitiseProfileName(name)
       if (!clean) return this.badRequest('invalid name')
       try {
         const raw = await fs.readFile(path.join(tplDir, `${clean}.md`), 'utf8')
-        return this.ok({ name: clean, content: raw, draft: parseAgentMarkdown(raw) })
+        return this.ok({ name: clean, content: raw, draft: agentEditorBusiness.parseAgentMarkdown(raw) })
       } catch {
         return this.notFound('not found')
       }
@@ -120,7 +138,7 @@ export class AgentEditorController extends AbstractController {
       const n = entry.name.replace(/\.md$/, '')
       try {
         const raw = await fs.readFile(path.join(tplDir, entry.name), 'utf8')
-        const d = parseAgentMarkdown(raw)
+        const d = agentEditorBusiness.parseAgentMarkdown(raw)
         templates.push({ name: n, description: d.description || '' })
       } catch {
         templates.push({ name: n, description: '' })
@@ -133,8 +151,8 @@ export class AgentEditorController extends AbstractController {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
     const { root } = gate
-    await ensureDefaultTemplate(root)
-    const tplDir = agentTemplatesDir(root)
+    await agentEditorBusiness.ensureDefaultTemplate(root)
+    const tplDir = agentEditorBusiness.agentTemplatesDir(root)
     const ctype = this.c.req.header('content-type') || ''
     if (ctype.includes('multipart/form-data')) {
       const body = await this.c.req.text()
@@ -152,7 +170,7 @@ export class AgentEditorController extends AbstractController {
         }
       }
       if (!fileContent) return this.badRequest('no file content')
-      const clean = sanitiseAgentName(fileName) || 'uploaded-template'
+      const clean = agentEditorBusiness.sanitiseAgentName(fileName) || 'uploaded-template'
       await fs.mkdir(tplDir, { recursive: true })
       await fs.writeFile(path.join(tplDir, `${clean}.md`), fileContent, 'utf8')
       emitAudit({ op: 'create', entity: 'agent-template', identifier: clean, projectId: this.projectId })
@@ -164,22 +182,22 @@ export class AgentEditorController extends AbstractController {
     if (parsed.url) {
       let text: string
       try {
-        text = await fetchUrlSafe(parsed.url)
+        text = await agentEditorBusiness.fetchUrlSafe(parsed.url)
       } catch (e: any) {
         return this.badRequest(String(e.message || e))
       }
-      const draft = parseAgentMarkdown(text)
-      const clean = sanitiseAgentName(parsed.name || draft.name || 'url-template') || 'url-template'
+      const draft = agentEditorBusiness.parseAgentMarkdown(text)
+      const clean = agentEditorBusiness.sanitiseAgentName(parsed.name || draft.name || 'url-template') || 'url-template'
       await fs.mkdir(tplDir, { recursive: true })
       await fs.writeFile(path.join(tplDir, `${clean}.md`), text, 'utf8')
       emitAudit({ op: 'create', entity: 'agent-template', identifier: clean, projectId: this.projectId })
       return this.ok({ saved: true, name: clean, draft })
     }
     const draft = parsed.draft || parsed
-    const clean = sanitiseAgentName(draft.name || parsed.name)
+    const clean = agentEditorBusiness.sanitiseAgentName(draft.name || parsed.name)
     if (!clean) return this.badRequest('invalid template name')
     await fs.mkdir(tplDir, { recursive: true })
-    await fs.writeFile(path.join(tplDir, `${clean}.md`), compileAgentMarkdown(draft), 'utf8')
+    await fs.writeFile(path.join(tplDir, `${clean}.md`), agentEditorBusiness.compileAgentMarkdown(draft), 'utf8')
     emitAudit({ op: 'create', entity: 'agent-template', identifier: clean, projectId: this.projectId })
     return this.ok({ saved: true, name: clean })
   }
@@ -188,10 +206,10 @@ export class AgentEditorController extends AbstractController {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
     const { root } = gate
-    const tplDir = agentTemplatesDir(root)
+    const tplDir = agentEditorBusiness.agentTemplatesDir(root)
     const name =
-      sanitiseAgentName(this.c.req.query('name') || '') ||
-      sanitiseProfileName(this.c.req.query('name') || '')
+      agentEditorBusiness.sanitiseAgentName(this.c.req.query('name') || '') ||
+      agentEditorBusiness.sanitiseProfileName(this.c.req.query('name') || '')
     if (!name) return this.badRequest('invalid name')
     try {
       await fs.unlink(path.join(tplDir, `${name}.md`))
@@ -206,10 +224,10 @@ export class AgentEditorController extends AbstractController {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
     const { root } = gate
-    const tplDir = workflowStepTemplatesDir(root)
+    const tplDir = agentEditorBusiness.workflowStepTemplatesDir(root)
     const name = this.c.req.query('name')
     if (name) {
-      const clean = sanitiseAgentName(name)
+      const clean = agentEditorBusiness.sanitiseAgentName(name)
       if (!clean) return this.badRequest('invalid name')
       try {
         const raw = await fs.readFile(path.join(tplDir, `${clean}.json`), 'utf8')
@@ -237,11 +255,11 @@ export class AgentEditorController extends AbstractController {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
     const { root } = gate
-    const tplDir = workflowStepTemplatesDir(root)
+    const tplDir = agentEditorBusiness.workflowStepTemplatesDir(root)
     const b = await this.requireJsonBody()
     if ('error' in b) return b.error
     const template = b.value.template || b.value
-    const clean = sanitiseAgentName(template.name || b.value.name)
+    const clean = agentEditorBusiness.sanitiseAgentName(template.name || b.value.name)
     if (!clean) return this.badRequest('invalid template name')
     const payload = {
       name: clean,
@@ -264,8 +282,8 @@ export class AgentEditorController extends AbstractController {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
     const { root } = gate
-    const tplDir = workflowStepTemplatesDir(root)
-    const name = sanitiseAgentName(this.c.req.query('name') || '')
+    const tplDir = agentEditorBusiness.workflowStepTemplatesDir(root)
+    const name = agentEditorBusiness.sanitiseAgentName(this.c.req.query('name') || '')
     if (!name) return this.badRequest('invalid name')
     try {
       await fs.unlink(path.join(tplDir, `${name}.json`))

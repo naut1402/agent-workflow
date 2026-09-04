@@ -30,6 +30,8 @@ export const CreateTaskRequest = z.object({
   /** Optional — server mints a random id when omitted (NL chat without taskId). */
   taskId: TaskIdSchema.optional(),
   source: z.enum(TASK_SOURCES).default('prompt'),
+  /** Human-readable task title; defaults to `task_id` in the UI when absent. */
+  name: z.string().min(1).max(500).optional(),
   /** Body of `request.md` — the brief handed to the first pipeline step. */
   prompt: z.string().min(1).max(200_000),
   issueUrl: z.string().url().nullish(),

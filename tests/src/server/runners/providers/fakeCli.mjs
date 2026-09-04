@@ -13,8 +13,12 @@ if (mode === 'fail') {
   console.error('boom')
   process.exit(1)
 }
-if (mode === 'echo-args') {
+if (mode === 'hang') {
+  console.log('Execution error')
+  setInterval(() => {}, 1000)
+} else if (mode === 'echo-args') {
   for (const a of rest) console.log(a)
   process.exit(0)
+} else {
+  process.exit(2)
 }
-process.exit(2)

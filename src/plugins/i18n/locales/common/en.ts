@@ -16,7 +16,9 @@ export default {
     knowledge: 'Knowledge',
     runner: 'Runner',
     runnerConfig: 'Runner Config',
+    automations: 'Automations',
     logs: 'Logs',
+    statistics: 'Statistics',
   },
   status: {
     updated: 'updated {time}',
@@ -26,7 +28,9 @@ export default {
       quickAction: 'quick action — polling paused',
       knowledge: 'knowledge — polling paused',
       runner: 'runner config — polling paused',
+      automations: 'automations — polling paused',
       logs: 'logs — polling paused',
+      statistics: 'statistics — polling paused',
     },
   },
   language: {
@@ -38,9 +42,13 @@ export default {
   errors: {
     updateTaskStatus: 'Could not update task status (error {status})',
     archiveTask: 'Could not archive task (error {status})',
+    renameTask: 'Could not rename task (error {status})',
     deleteTask: 'Could not delete task (error {status})',
     repairTaskState: 'Could not repair task state (error {status})',
     saveCustomAgent: 'Could not save custom agent (server returned no name).',
+  },
+  select: {
+    empty: 'No options.',
   },
   folderPicker: {
     title: 'Choose folder',

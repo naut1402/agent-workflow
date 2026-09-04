@@ -42,6 +42,8 @@ import {
   listJobs,
   cancelJob,
 } from '../../../../src/features/runner/business/index.js'
+import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
+import { readSecret, storeSecret } from '../../../../src/features/runner/business/secretVault.js'
 
 // Characterization test for the runners execution plane (U0005), written
 // against the current JS via the public index surface so it survives the
@@ -55,15 +57,17 @@ const savedEnv = { ...process.env }
 beforeAll(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-runners-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = home
+  process.env.DASHBOARD_SECRET_KEY = 'test-passphrase'
 })
 afterAll(() => {
   process.env = savedEnv
   fs.rmSync(home, { recursive: true, force: true })
 })
 beforeEach(() => {
-  for (const f of ['runners.json', 'credentials.json', 'connections.json']) {
+  for (const f of ['runners.json', 'credentials.json', 'connections.json', 'secret-vault.json']) {
     fs.rmSync(path.join(home, f), { force: true })
   }
+  _resetEventBusForTest()
 })
 
 describe('loadRunners', () => {
@@ -128,6 +132,22 @@ describe('resolveSecretRef', () => {
     expect(resolveSecretRef({ secretRef: 'file:/x' } as any)).toEqual({ type: 'file', path: '/x' })
     expect(resolveSecretRef({} as any)).toEqual({ type: 'none' })
     expect(resolveSecretRef({ secretRef: 'weird' } as any)).toEqual({ type: 'unknown', ref: 'weird' })
+  })
+
+  test('stored: reads the pasted secret value out of the vault', () => {
+    storeSecret('vault-1', { value: 'pasted-value' })
+    expect(resolveSecretRef({ secretRef: 'stored:vault-1' } as any)).toEqual({ type: 'stored', value: 'pasted-value' })
+    expect(resolveSecretRef({ secretRef: 'stored:missing' } as any)).toEqual({ type: 'stored', value: null })
+  })
+
+  test('oauth: reads the access token (and expiresAt) out of the vault', () => {
+    storeSecret('vault-2', { accessToken: 'at-1', expiresAt: '2030-01-01T00:00:00.000Z' })
+    expect(resolveSecretRef({ secretRef: 'oauth:vault-2' } as any)).toEqual({
+      type: 'oauth',
+      value: 'at-1',
+      expiresAt: '2030-01-01T00:00:00.000Z',
+    })
+    expect(resolveSecretRef({ secretRef: 'oauth:missing' } as any)).toEqual({ type: 'oauth', value: null, expiresAt: null })
   })
 })
 
@@ -240,6 +260,14 @@ describe('connections CRUD', () => {
     expect(catalog.find((p) => p.id === 'console-command')?.kind).toBe('local-console')
     expect(catalog.find((p) => p.id === 'anthropic-api')?.kind).toBe('ai-provider')
   })
+  test('provider catalog includes the API-based agentic providers, all family ai-api', () => {
+    const catalog = listProviderCatalog()
+    for (const id of ['openai-api', 'gemini-api', 'xai-api', 'anthropic-api']) {
+      const entry = catalog.find((p) => p.id === id)
+      expect(entry?.kind).toBe('ai-provider')
+      expect(entry?.family).toBe('ai-api')
+    }
+  })
 })
 
 describe('runners registry CRUD', () => {
@@ -320,6 +348,32 @@ describe('credentials CRUD', () => {
     expect(deleteCredential('claude-default')).toEqual({ ok: true })
     expect(deleteCredential('c2')).toMatchObject({ ok: false, status: 400 })
   })
+
+  test('omitting id mints a fresh one instead of failing (the "+ Credential" form no longer asks for it)', () => {
+    const result = upsertCredential({ provider: 'openai-api', label: 'My key' } as any)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(typeof result.profile.id).toBe('string')
+    expect(result.profile.id.length).toBeGreaterThan(0)
+    expect(getCredential(result.profile.id)?.label).toBe('My key')
+  })
+
+  test('secretValue is stored encrypted, not persisted as-is; secretRef points at the vault entry', () => {
+    const result = upsertCredential({ id: 'c-pasted', provider: 'openai-api', secretValue: 'sk-real-secret' } as any)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.profile.secretRef).toBe('stored:c-pasted')
+
+    const raw = fs.readFileSync(path.join(home, 'credentials.json'), 'utf8')
+    expect(raw).not.toContain('sk-real-secret')
+    expect(readSecret<{ value: string }>('c-pasted')).toEqual({ value: 'sk-real-secret' })
+  })
+
+  test('deleting a credential with a stored: secretRef also removes the vault entry', () => {
+    upsertCredential({ id: 'c-del', provider: 'openai-api', secretValue: 'sk-to-delete' } as any)
+    expect(deleteCredential('c-del')).toEqual({ ok: true })
+    expect(readSecret('c-del')).toBeNull()
+  })
 })
 
 describe('provider registry', () => {
@@ -333,6 +387,15 @@ describe('provider registry', () => {
     expect(typeof p?.execute).toBe('function')
     expect(getProvider('console-command')?.capabilities().supportsAgentFile).toBe(false)
     expect(getProvider('nope')).toBe(null)
+  })
+  test('the 4 API-based agentic providers are registered and share the AgenticApiProvider capabilities contract', () => {
+    for (const id of ['openai-api', 'gemini-api', 'xai-api', 'anthropic-api']) {
+      expect(listProviderIds()).toContain(id)
+      const p = getProvider(id)
+      expect(p?.providerId).toBe(id)
+      expect(typeof p?.execute).toBe('function')
+      expect(p?.capabilities()).toEqual({ supportsAgentFile: false, supportsStreaming: false, maxConcurrency: 1 })
+    }
   })
 })
 
@@ -349,5 +412,56 @@ describe('job queue', () => {
     expect(path.isAbsolute(job.workspace)).toBe(true)
     expect(loadJob(job.id)?.id).toBe(job.id)
     expect(cancelJob('does-not-exist')).toMatchObject({ ok: false, status: 404 })
+  })
+
+  test('submitJob emits job.queued', () => {
+    upsertRunner({ id: 'claude-code-local', connectionId: DEFAULT_CONNECTION_ID } as any)
+    const seen: string[] = []
+    on('job.queued', (e) => {
+      seen.push(String(e.payload.jobId))
+    })
+    const job = submitJob({ agentRef: 'noref', workspace: home })
+    expect(seen).toEqual([job.id])
+  })
+
+  test('cancelJob emits job.cancelled after status cancelled', () => {
+    upsertRunner({ id: 'claude-code-local', connectionId: DEFAULT_CONNECTION_ID } as any)
+    const job = submitJob({ agentRef: 'noref', workspace: home })
+    const events: Array<Record<string, unknown>> = []
+    on('job.cancelled', (e) => {
+      events.push(e.payload)
+      expect(loadJob(job.id)?.status).toBe('cancelled')
+    })
+    expect(cancelJob(job.id)).toMatchObject({ ok: true })
+    expect(events).toEqual([{ jobId: job.id, taskId: undefined, projectId: undefined }])
+  })
+
+  test('cancelJob on already-cancelled is idempotent (no second emit)', () => {
+    upsertRunner({ id: 'claude-code-local', connectionId: DEFAULT_CONNECTION_ID } as any)
+    const job = submitJob({ agentRef: 'noref', workspace: home })
+    expect(cancelJob(job.id)).toMatchObject({ ok: true })
+    const events: Array<Record<string, unknown>> = []
+    on('job.cancelled', (e) => {
+      events.push(e.payload)
+    })
+    expect(cancelJob(job.id)).toMatchObject({ ok: true })
+    expect(events).toEqual([])
+  })
+
+  test('early-fail missing runner emits job.failed without job.started', async () => {
+    const types: string[] = []
+    on('*', (e) => {
+      types.push(e.type)
+    })
+    const job = submitJob({ agentRef: 'noref', workspace: home, runnerId: 'missing-runner' })
+    expect(types).toContain('job.queued')
+    for (let i = 0; i < 40; i++) {
+      const cur = loadJob(job.id)
+      if (cur?.status === 'failed') break
+      await new Promise((r) => setTimeout(r, 25))
+    }
+    expect(loadJob(job.id)?.status).toBe('failed')
+    expect(types).toContain('job.failed')
+    expect(types).not.toContain('job.started')
   })
 })

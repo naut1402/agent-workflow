@@ -24,7 +24,18 @@ export {
   upsertCredential,
   deleteCredential,
   resolveSecretRef,
+  isDirectSecretType,
 } from './credentials.js'
+export type { ResolvedSecret } from './credentials.js'
+export { isOAuthCapable } from './oauthProviders.js'
+export { hasVaultKey } from './secretVault.js'
+export {
+  startOAuth,
+  completeFromCallback,
+  completeFromPaste,
+  getOAuthStatus,
+  ensureFreshOAuthToken,
+} from './oauthCredentials.js'
 export {
   loadConnections,
   saveConnections,
@@ -37,6 +48,14 @@ export {
   scanLocalCommands,
 } from './connections.js'
 export {
+  loadProviderConfigs,
+  saveProviderConfigs,
+  listProviderConfigs,
+  getProviderConfig,
+  upsertProviderConfig,
+  deleteProviderConfig,
+} from './providerConfigs.js'
+export {
   loadCommands,
   saveCommands,
   listCustomCommands,
@@ -46,6 +65,8 @@ export {
 } from './commands.js'
 export { resolveAgent, resolveAgentFilePath, normalizeAgentRef, describeAgentSearchPaths } from './agentResolver.js'
 export { getProvider, listProviderIds, registerProvider } from './registry.js'
+export { listAvailableModels } from './modelCatalog.js'
+export type { ListModelsInput, ListModelsResult } from './modelCatalog.js'
 export {
   AGENT_CLI_PROVIDER_IDS,
   isAgentCliProviderId,
@@ -69,7 +90,17 @@ export {
   extractLines,
   stepIdOf,
 } from './jobQueue.js'
-export { reapOrphanedRunningJobs, isPidAlive } from './jobQueue.js'
+export { reapOrphanedRunningJobs, isPidAlive, FAILURE_MAX_ATTEMPTS } from './jobQueue.js'
+export { classifyJobFailure, parseUsageResetAt } from './classifyJobFailure.js'
+export type { JobFailureKind } from './classifyJobFailure.js'
+export {
+  saveRecoverEntry,
+  loadRecoverEntry,
+  removeRecoverEntry,
+  listRecoverEntries,
+} from './recoverLedger.js'
+export type { RecoverEntry } from './recoverLedger.js'
+export { tickRecoverPoller, startRecoverPoller, resumeRecoveredJob } from './recoverPoller.js'
 export {
   loadTaskSessionLedger,
   resolveSessionPlan,
@@ -102,4 +133,6 @@ export type {
   RunnerProvider,
   MutationResult,
   ProviderFamily,
+  ProviderConfig,
+  ProviderConfigsStore,
 } from './types.js'

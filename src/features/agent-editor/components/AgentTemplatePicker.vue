@@ -124,3 +124,10 @@ async function removeTemplate(name) {
     <button type="button" class="btn-ghost" @click="emit('close')">{{ t('agentEditor.actions.close') }}</button>
   </div>
 </template>
+
+<style scoped lang="scss">
+.agent-template-picker .picker-section { margin-bottom: 12px; }
+.picker-section h4 { font-size: 12px; margin: 0 0 6px; color: var(--muted); }
+.catalog-copy-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.catalog-copy-btn { font-size: 11px; }
+</style>

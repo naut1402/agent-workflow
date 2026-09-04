@@ -358,12 +358,20 @@
   border-radius: 999px;
   padding: 2px 8px;
 }
-.nl-chat-pipeline-name {
+.nl-chat-pipeline-name,
+.nl-chat-agent-scope {
   display: flex;
   flex-direction: column;
   gap: 4px;
   font-size: 12px;
   color: var(--muted);
+}
+.nl-chat-agent-scope select {
+  background: var(--input-surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
 }
 .nl-chat-draft-textarea {
   width: 100%;

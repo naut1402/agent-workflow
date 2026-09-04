@@ -1,20 +1,47 @@
-import { cpSync, dirname, joinPath, mkdirSync, readTextFileSync, readdirSync, renameSync, resolvePath, rmSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { cpSync, dirname, joinPath, mkdirSync, readTextFileSync, readdirSync, resolvePath, rmSync, writeTextFileAtomicSync, writeTextFileSync } from '../../../core/lib/fileHelper.js'
 import crypto from 'node:crypto'
-import { spawn } from 'node:child_process'
+import { spawn } from '../../../core/lib/processHelper.js'
 import os from 'node:os'
 import { registryHome } from '../../../core/registry.js'
-import { isLogTypeEnabled } from '../../../core/log/loggingPrefs.js'
+import { isLogTypeEnabled } from '../../../core/log/loggingPrefsIo.js'
+import { emit } from '../../../core/events/index.js'
 import { getRunner, getDefaultRunner, substituteConfig, getProvider } from './registry.js'
 import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
 import { isAgentCliProviderId } from './providers/agentCli.js'
-import type { Connection, CredentialProfile, JobRecord, JobStatus, MutationResult } from './types.js'
+import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js'
+import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
+import type { UsageSnapshot } from '../../../core/log/schema.js'
 import { advanceStepOnJobSuccess, loadPipelineConfig, queuePendingFeedback, takePendingFeedback } from './index.js'
+import { classifyJobFailure, parseUsageResetAt } from './classifyJobFailure.js'
+import { loadRecoverEntry, removeRecoverEntry, saveRecoverEntry } from './recoverLedger.js'
+import { bindRecoverPoller, startRecoverPoller } from './recoverPoller.js'
+import { loadRecoverySettings } from '../../settings/business/dashboardSettings.js'
+import {
+  DEFAULT_RECOVERY_SETTINGS,
+  resolveRecoveryBackoffMs,
+  resolveRecoveryMaxAttempts,
+} from '../../settings/schemas/recovery.js'
 
 /** Cap on stdout persisted for chat surfaces (NL chat + task chat fallback). */
 const CHAT_STDOUT_LIMIT = 64 * 1024
+
+/** Compile-time default — actual cap is `settings.recovery.maxAttempts` (Settings › Job recovery). */
+export const FAILURE_MAX_ATTEMPTS = DEFAULT_RECOVERY_SETTINGS.maxAttempts!
+
+function backoffMsFor(attemptCount: number, schedule: number[]): number {
+  return schedule[Math.min(attemptCount - 1, schedule.length - 1)] ?? schedule[schedule.length - 1]
+}
+
+/**
+ * In-flight `AbortController` per running job — the counterpart of `job.pid` for
+ * providers with no OS subprocess to SIGTERM (`AgenticApiProvider` subclasses,
+ * see providers/agenticApiProvider.ts). `cancelJob` aborts through this map;
+ * `runJob` always removes its entry once `provider.execute()` settles.
+ */
+const jobAbortControllers = new Map<string, AbortController>()
 
 /** Persist agent reply on the job record for chat UI (NL + pipeline task chat). */
 function shouldPersistStdout(job: JobRecord, providerId: string | undefined): boolean {
@@ -70,8 +97,16 @@ export interface SubmitJobInput {
   parentJobId?: string
 }
 
+function requeueJob(jobId: string): void {
+  queue.push(jobId)
+  pumpQueue()
+}
+
+bindRecoverPoller({ loadJob, saveJob, requeueJob })
+
 // Reap orphaned running jobs once when the module loads (server restart).
 reapOrphanedRunningJobs()
+startRecoverPoller()
 
 function jobsDir(): string {
   return joinPath(registryHome(), 'jobs')
@@ -248,11 +283,15 @@ export function loadJob(id: string): JobRecord | null {
 
 function saveJob(job: JobRecord): JobRecord {
   ensureJobsDir()
-  const file = jobFile(job.id)
-  const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, JSON.stringify(job, null, 2))
-  renameSync(tmp, file)
+  writeTextFileAtomicSync(jobFile(job.id), JSON.stringify(job, null, 2))
   return job
+}
+
+/** Merge usage onto an existing job record (usage capture path). */
+export function mergeJobUsage(id: string, usage: UsageSnapshot): JobRecord | null {
+  const cur = loadJob(id)
+  if (!cur) return null
+  return saveJob({ ...cur, usage })
 }
 
 export function listJobs(limit?: number, status?: JobStatus): JobRecord[] {
@@ -330,39 +369,46 @@ async function runJob(job: JobRecord): Promise<void> {
       finishedAt: new Date().toISOString(),
       error: 'runner not found or disabled',
     })
+    emit('job.failed', { jobId: job.id, error: 'runner not found or disabled' })
     return
   }
 
   const connection = getConnection(runner.connectionId)
   if (!connection) {
+    const error = `connection not found: ${runner.connectionId}`
     saveJob({
       ...job,
       status: 'failed',
       finishedAt: new Date().toISOString(),
-      error: `connection not found: ${runner.connectionId}`,
+      error,
     })
+    emit('job.failed', { jobId: job.id, error })
     return
   }
 
   const credential = credentialForConnection(connection)
   if (!credential) {
+    const error = `credential not found for connection: ${runner.connectionId}`
     saveJob({
       ...job,
       status: 'failed',
       finishedAt: new Date().toISOString(),
-      error: `credential not found for connection: ${runner.connectionId}`,
+      error,
     })
+    emit('job.failed', { jobId: job.id, error })
     return
   }
 
   const provider = getProvider(connection.providerId)
   if (!provider) {
+    const error = `unknown provider: ${connection.providerId}`
     saveJob({
       ...job,
       status: 'failed',
       finishedAt: new Date().toISOString(),
-      error: `unknown provider: ${connection.providerId}`,
+      error,
     })
+    emit('job.failed', { jobId: job.id, error })
     return
   }
 
@@ -376,6 +422,13 @@ async function runJob(job: JobRecord): Promise<void> {
   }
 
   saveJob({ ...job, status: 'running', startedAt: new Date().toISOString(), logPath: logPath ?? null, pid: null })
+  emit('job.started', {
+    jobId: job.id,
+    runnerId: runner.id,
+    providerId: connection.providerId,
+    taskId: job.metadata?.taskId,
+    projectId: job.metadata?.projectId,
+  })
 
   let userPrompt = job.userPrompt || ''
   if (!userPrompt && job.promptRef) {
@@ -388,6 +441,7 @@ async function runJob(job: JobRecord): Promise<void> {
         finishedAt: new Date().toISOString(),
         error: `cannot read prompt: ${err.message}`,
       })
+      emit('job.failed', { jobId: job.id, error: 'cannot read prompt' })
       return
     }
   }
@@ -405,12 +459,14 @@ async function runJob(job: JobRecord): Promise<void> {
       resolvedAgent = await resolveAgent(job.agentRef, { projectRoot, devTeamRoot })
     }
   } catch (err: any) {
+    const error = String(err.message || err)
     saveJob({
       ...(loadJob(job.id) as JobRecord),
       status: 'failed',
       finishedAt: new Date().toISOString(),
-      error: String(err.message || err),
+      error,
     })
+    emit('job.failed', { jobId: job.id, error })
     return
   }
 
@@ -487,36 +543,44 @@ async function runJob(job: JobRecord): Promise<void> {
     saveJob({ ...current, pid: info.pid ?? null })
   }
 
-  const result = await provider.execute(
-    {
-      jobId: job.id,
-      resolvedAgent,
-      userPrompt,
-      workspace: job.workspace,
-      produces: job.produces,
-      timeoutMs: runnerConfig.timeoutMs,
-      metadata: {
-        ...job.metadata,
-        logPath,
-        jobId: job.id,
-        providerId: connection.providerId,
-        runnerId: runner.id,
-        connectionId: connection.id,
-      },
-      sessionId: execSessionId,
-      resumeSessionId: execResumeSessionId,
-    },
-    runnerConfig,
-    credential,
-    undefined,
-    onStart,
-  )
+  const abortController = new AbortController()
+  jobAbortControllers.set(job.id, abortController)
 
-  // `cancelJob` already set `status: 'cancelled'` and this SIGTERM is why
+  let result: ExecuteResult
+  try {
+    result = await provider.execute(
+      {
+        jobId: job.id,
+        resolvedAgent,
+        userPrompt,
+        workspace: job.workspace,
+        produces: job.produces,
+        timeoutMs: runnerConfig.timeoutMs,
+        metadata: {
+          ...job.metadata,
+          logPath,
+          jobId: job.id,
+          providerId: connection.providerId,
+          runnerId: runner.id,
+          connectionId: connection.id,
+        },
+        sessionId: execSessionId,
+        resumeSessionId: execResumeSessionId,
+        signal: abortController.signal,
+      },
+      runnerConfig,
+      credential,
+      undefined,
+      onStart,
+    )
+  } finally {
+    jobAbortControllers.delete(job.id)
+  }
+
+  // `cancelJob` already set `status: 'cancelled'` and this SIGTERM/abort is why
   // `provider.execute()` just resolved — `result.ok` will be false, and
   // without this guard the code below would overwrite it with `'failed'`.
-  if (loadJob(job.id)?.status === 'cancelled') return
-
+  // Session + usage capture still run first: tokens were spent even on cancel.
   const capturedSessionId = result.sessionId ?? execSessionId ?? execResumeSessionId
   if (taskId && projectId && inputSessionMode && inputSessionMode !== 'none' && capturedSessionId) {
     recordSessionUsage({
@@ -532,9 +596,118 @@ async function runJob(job: JobRecord): Promise<void> {
     })
   }
 
+  if (capturedSessionId && connection.providerId === 'claude-code-cli') {
+    const current = loadJob(job.id) || job
+    void captureJobUsage(
+      { ...current, sessionId: capturedSessionId },
+      capturedSessionId,
+      connection.providerId,
+    ).catch(() => {})
+  }
+
+  // Cursor (and other parse-json CLIs) already emit usage on ExecuteResult —
+  // persist when present so Logs → Usage is not Claude-only.
+  if (result.tokenUsage) {
+    const current = loadJob(job.id) || job
+    void captureTokenUsageFromExecute(
+      { ...current, ...(capturedSessionId ? { sessionId: capturedSessionId } : {}) },
+      connection.providerId,
+      result.tokenUsage,
+      capturedSessionId ?? null,
+    ).catch(() => {})
+  }
+
+  if (loadJob(job.id)?.status === 'cancelled') return
+
   const isApprovalJob = Boolean(job.applyTarget && job.approvalArtifact)
   const isChatFeedback = Boolean(job.metadata?.isChatFeedback)
   if (!result.ok && isApprovalJob) removeScratchWorkspace(job.workspace)
+
+  if (!result.ok) {
+    const recoverySettings = loadRecoverySettings()
+    const kind = recoverySettings.enabled ? classifyJobFailure(result) : null
+    const current = loadJob(job.id) as JobRecord
+    const prevAttempts = current.attemptCount ?? 0
+
+    if (kind === 'usage_limit' || kind === 'network') {
+      const usageResetAt = kind === 'usage_limit' ? parseUsageResetAt(result.error ?? '') : null
+      const resumeAfter =
+        usageResetAt ??
+        new Date(
+          Date.now() +
+            (kind === 'network'
+              ? (recoverySettings.networkResumeDelayMs ?? DEFAULT_RECOVERY_SETTINGS.networkResumeDelayMs!)
+              : (recoverySettings.usageLimitResumeDelayMs ?? DEFAULT_RECOVERY_SETTINGS.usageLimitResumeDelayMs!)),
+        )
+      saveRecoverEntry({
+        version: 1,
+        jobId: job.id,
+        kind,
+        attemptCount: prevAttempts,
+        resumeAfter: resumeAfter.toISOString(),
+        createdAt: new Date().toISOString(),
+        lastError: result.error,
+        usageResetAt: usageResetAt?.toISOString() ?? null,
+      })
+      saveJob({
+        ...current,
+        status: 'awaiting_recovery',
+        finishedAt: null,
+        exitCode: result.exitCode,
+        error: result.error,
+        logPath: result.logPath,
+        pid: null,
+        attemptCount: prevAttempts,
+        failureKind: kind,
+      })
+      emit('job.awaiting_recovery', {
+        jobId: job.id,
+        kind,
+        resumeAfter: resumeAfter.toISOString(),
+        taskId,
+        projectId,
+      })
+      return
+    }
+
+    if (kind === 'process_crash') {
+      const maxAttempts = resolveRecoveryMaxAttempts(recoverySettings)
+      const nextAttempt = prevAttempts + 1
+      if (nextAttempt < maxAttempts) {
+        const schedule = resolveRecoveryBackoffMs(recoverySettings)
+        const delay = backoffMsFor(nextAttempt, schedule)
+        const resumeAfter = new Date(Date.now() + delay)
+        saveRecoverEntry({
+          version: 1,
+          jobId: job.id,
+          kind: 'process_crash',
+          attemptCount: nextAttempt,
+          resumeAfter: resumeAfter.toISOString(),
+          createdAt: new Date().toISOString(),
+          lastError: result.error,
+        })
+        saveJob({
+          ...current,
+          status: 'queued',
+          attemptCount: nextAttempt,
+          failureKind: kind,
+          error: result.error,
+          pid: null,
+          finishedAt: null,
+          exitCode: result.exitCode,
+          logPath: result.logPath,
+        })
+        emit('job.retry_scheduled', {
+          jobId: job.id,
+          attemptCount: nextAttempt,
+          resumeAfter: resumeAfter.toISOString(),
+          taskId,
+          projectId,
+        })
+        return
+      }
+    }
+  }
 
   // Fold the agent's proposed content (stdout) into the scratch artifact so the
   // review diff reflects the proposal — spliced into the selected line range for
@@ -552,6 +725,7 @@ async function runJob(job: JobRecord): Promise<void> {
         error: `cannot apply proposed content: ${err.message}`,
         logPath: result.logPath,
       })
+      emit('job.failed', { jobId: job.id, error: 'cannot apply proposed content', taskId, projectId })
       return
     }
   }
@@ -578,14 +752,16 @@ async function runJob(job: JobRecord): Promise<void> {
           : {}),
         ...(capturedSessionId ? { sessionId: capturedSessionId } : {}),
       })
+      emit('job.finished', { jobId: job.id, status: 'succeeded', taskId, projectId })
     }
     await resubmitPendingFeedback(job)
     return
   }
 
+  const finalStatus = result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed'
   saveJob({
     ...(loadJob(job.id) as JobRecord),
-    status: result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed',
+    status: finalStatus,
     finishedAt: new Date().toISOString(),
     exitCode: result.exitCode,
     error: result.error,
@@ -598,6 +774,13 @@ async function runJob(job: JobRecord): Promise<void> {
       ? { stdout: (result.stdout ?? '').slice(0, CHAT_STDOUT_LIMIT) }
       : {}),
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
+  })
+  emit(result.ok ? 'job.finished' : 'job.failed', {
+    jobId: job.id,
+    status: finalStatus,
+    taskId,
+    projectId,
+    ...(result.ok ? {} : { error: result.error }),
   })
   if (!isApprovalJob) await resubmitPendingFeedback(job)
 }
@@ -629,13 +812,13 @@ async function resubmitPendingFeedback(job: JobRecord): Promise<void> {
 
 /**
  * Dashboard "run step" jobs tag `metadata.pipelineStepId` (the step the job
- * just ran) and, for a chained run, `metadata.chainTarget` (the step the user
- * clicked). On success, `advanceStepOnJobSuccess` either advances
- * `current_phase` past a gate-less step or opens the step's HITL gate — and
- * only while chasing a `chainTarget` not yet reached, this keeps submitting
- * the next gate-less step's job automatically. A HITL gate (or a step id we
- * don't recognise) stops the chain; the user resumes it via the existing
- * approve flow or another click.
+ * just ran) and, for a jump-to-target run, `metadata.chainTarget` (the step
+ * the user clicked). On success, `advanceStepOnJobSuccess` either advances
+ * `current_phase` past a gate-less step or opens the step's HITL gate.
+ * Every successful gate-less step keeps this chain going automatically —
+ * a `chainTarget`, when present, only makes it stop exactly there instead of
+ * running further. A HITL gate (or a step id / agent we don't recognise, or
+ * a missing `request.md`) always stops the chain regardless of `chainTarget`.
  */
 async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   const taskId = typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined
@@ -645,9 +828,10 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   if (!taskId || !devTeamRoot || !pipelineStepId) return
 
   const advanced = await advanceStepOnJobSuccess(devTeamRoot, taskId, pipelineStepId)
+  if (!advanced) return
   // Stop once the clicked node itself has run, even if it advanced further —
   // the user only asked to reach `chainTarget`, not run past it.
-  if (!advanced || !chainTarget || pipelineStepId === chainTarget) return
+  if (chainTarget && pipelineStepId === chainTarget) return
 
   const nextStepId = String(advanced.state.current_phase ?? '')
   if (!nextStepId || nextStepId === 'completed' || nextStepId === pipelineStepId) return
@@ -717,6 +901,12 @@ export function submitJob(input: SubmitJobInput): JobRecord {
     ...(input.parentJobId ? { parentJobId: input.parentJobId } : {}),
   }
   saveJob(job)
+  emit('job.queued', {
+    jobId: job.id,
+    runnerId: job.runnerId,
+    taskId: job.metadata?.taskId,
+    projectId: job.metadata?.projectId,
+  })
   queue.push(id)
   pumpQueue()
   return job
@@ -746,6 +936,8 @@ export function cancelJob(id: string): MutationResult {
   if (job.status === 'succeeded' || job.status === 'failed') {
     return { ok: false, status: 400, error: 'job already finished' }
   }
+  // Idempotent: already cancelled → ok without re-emit (avoid duplicate listeners).
+  if (job.status === 'cancelled') return { ok: true }
 
   if (job.pid != null && job.pid > 0) {
     try {
@@ -759,7 +951,19 @@ export function cancelJob(id: string): MutationResult {
     }
   }
 
+  removeRecoverEntry(id)
+
+  // No OS pid to SIGTERM for providers with no subprocess (AgenticApiProvider
+  // subclasses run the model call in-process) — abort the in-flight
+  // fetch/SDK call instead so cancelling actually stops the request.
+  jobAbortControllers.get(id)?.abort()
+
   saveJob({ ...job, status: 'cancelled', finishedAt: new Date().toISOString(), pid: null })
+  emit('job.cancelled', {
+    jobId: job.id,
+    taskId: job.metadata?.taskId,
+    projectId: job.metadata?.projectId,
+  })
   return { ok: true }
 }
 
@@ -874,7 +1078,9 @@ export async function sendTaskFeedback(
   opts: { stepId?: string; mode?: 'queue' | 'immediate' } = {},
 ): Promise<MutationResult<{ job: JobRecord } | { queued: true }>> {
   const active = listJobs(50).find(
-    (j) => j.metadata?.taskId === taskId && (j.status === 'queued' || j.status === 'running'),
+    (j) =>
+      j.metadata?.taskId === taskId &&
+      (j.status === 'queued' || j.status === 'running' || j.status === 'awaiting_recovery'),
   )
 
   let parent: JobRecord | undefined
@@ -888,7 +1094,7 @@ export async function sendTaskFeedback(
     } else {
       const devTeamRoot = typeof active.metadata?.devTeamRoot === 'string' ? active.metadata.devTeamRoot : undefined
       const stillActive = loadJob(active.id)
-      if (stillActive && (stillActive.status === 'queued' || stillActive.status === 'running')) {
+      if (stillActive && (stillActive.status === 'queued' || stillActive.status === 'running' || stillActive.status === 'awaiting_recovery')) {
         // `queuePendingFeedback` only succeeds for a real dashboard task (one
         // with a `.dev-state` file) — nl-chat's scratch sessions reuse this
         // same function but have none, so they keep the original "busy" error
@@ -897,7 +1103,7 @@ export async function sendTaskFeedback(
         if (queued) {
           // Job may have finished between the active check and the write — reclaim and send now.
           const after = loadJob(active.id)
-          if (after && after.status !== 'queued' && after.status !== 'running') {
+          if (after && after.status !== 'queued' && after.status !== 'running' && after.status !== 'awaiting_recovery') {
             const taken = await takePendingFeedback(devTeamRoot, taskId)
             if (taken) return sendTaskFeedback(taskId, projectId, taken.feedback, { stepId: taken.stepId })
           }
@@ -1010,9 +1216,7 @@ export function approveJob(id: string): MutationResult<{ job: JobRecord }> {
   const realFile = joinPath(job.applyTarget, job.approvalArtifact)
   try {
     mkdirSync(dirname(realFile), { recursive: true })
-    const tmp = `${realFile}.tmp`
-    writeTextFileSync(tmp, content)
-    renameSync(tmp, realFile)
+    writeTextFileAtomicSync(realFile, content)
   } catch (err: any) {
     return { ok: false, status: 500, error: `cannot apply proposed content: ${err.message}` }
   }
@@ -1068,6 +1272,46 @@ export function reapOrphanedRunningJobs(): JobRecord[] {
     }
     if (job.status !== 'running') continue
     if (isPidAlive(job.pid)) continue
+
+    const recoverySettings = loadRecoverySettings()
+    const entry = recoverySettings.enabled ? loadRecoverEntry(job.id) : null
+    if (entry) {
+      const updated: JobRecord = {
+        ...job,
+        status: job.status === 'running' ? 'awaiting_recovery' : job.status,
+        pid: null,
+      }
+      saveJob(updated)
+      reaped.push(updated)
+      continue
+    }
+
+    const attempts = job.attemptCount ?? 0
+    if (recoverySettings.enabled && attempts < resolveRecoveryMaxAttempts(recoverySettings)) {
+      const nextAttempt = attempts + 1
+      const delay = backoffMsFor(nextAttempt, resolveRecoveryBackoffMs(recoverySettings))
+      saveRecoverEntry({
+        version: 1,
+        jobId: job.id,
+        kind: 'process_crash',
+        attemptCount: nextAttempt,
+        resumeAfter: new Date(Date.now() + delay).toISOString(),
+        createdAt: new Date().toISOString(),
+        lastError: job.error || 'orphaned running job (process no longer alive)',
+      })
+      const updated: JobRecord = {
+        ...job,
+        status: 'queued',
+        attemptCount: nextAttempt,
+        failureKind: 'process_crash',
+        pid: null,
+        error: job.error || 'orphaned running job (process no longer alive)',
+        finishedAt: null,
+      }
+      saveJob(updated)
+      reaped.push(updated)
+      continue
+    }
 
     const updated: JobRecord = {
       ...job,

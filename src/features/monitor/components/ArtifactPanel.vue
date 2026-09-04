@@ -588,7 +588,7 @@ onUpdated(() => scheduleMermaid())
               :saving="showSavingIndicator(i)"
               :saved="showSavedIndicator(i)"
             />
-            <summary v-if="block.heading">{{ block.heading }}</summary>
+            <summary>{{ block.heading || t('monitor.artifact.untitledSection') }}</summary>
             <div
               v-if="editingSection === i"
               class="art-editor art-section-editor"

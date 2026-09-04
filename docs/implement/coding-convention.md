@@ -46,10 +46,12 @@ Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuầ
 
 ## 5. Frontend (Vue 3)
 
-`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables,scripts/*Api.ts,styles/,locales/,schemas/}` + `src/core/{ui,composables,lib,shell}`; plugins app-scope ở `src/plugins/`; FE client trong `scripts/`; SCSS feature trong `styles/` — tự nạp bởi `import.meta.glob` trong `src/main.ts`; locale feature trong `locales/` — tự nạp bởi plugin i18n.
+`<script setup lang="ts">`; kéo logic suy diễn ra khỏi `.vue` xuống composable/lib thuần TS để test không cần render. Cấu trúc feature-module: `src/features/<mode>/{components,composables,scripts/*Api.ts,styles/,locales/,schemas/}` + `src/core/{ui,composables,lib,shell}`; plugins app-scope ở `src/plugins/`; FE client trong `scripts/`; SCSS dùng chung trong feature (≥2 component) ở `styles/` — tự nạp bởi `import.meta.glob` trong `src/main.ts`, còn style riêng của một component thì ở `<style scoped lang="scss">` trong chính SFC ([`feature-organization-rule.md`](feature-organization-rule.md) §5); locale feature trong `locales/` — tự nạp bởi plugin i18n.
 
 - Quy ước button (ưu tiên icon-btn, default không viền, hover scale): [`../ui-buttons.md`](../ui-buttons.md).
 - **Custom UI primitives** trong `src/core/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.
+- **Icon dùng chung** (`src/core/ui/Icon.vue`): mọi icon SVG trong component feature dùng `<Icon name="..." />` — **không** tự vẽ tay `<svg>`/`<path>` lặp lại trong từng component. Icon chưa có trong union `name` của `Icon.vue` thì thêm case mới trực tiếp vào `Icon.vue` (giữ nguyên viewBox/style gốc), không copy SVG ra file khác dù chỉ dùng 1 nơi.
+- **Dropdown/select dùng chung**: dropdown mới **không** dùng `<select>` native — dùng `CSelect` (`src/core/ui/CSelect.vue`, option cố định) hoặc `CComboSelect` (`src/core/ui/CComboSelect.vue`, option nhiều hoặc cần nhập giá trị mới/creatable). Chỉ giữ `<select>` native khi cần hành vi trình duyệt gốc không có API tương đương trong 2 component trên.
 
 ---
 
@@ -63,3 +65,9 @@ UI strings đi qua i18n (`vue-i18n`), **không** hardcode trong `.vue`/`.ts`. **
 - Locale hiện tại lưu trong `AppSettings.locale` (localStorage); đổi qua `useLocale()`.
 - Test mount component có `t()`: dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`).
 - **Khi thêm/sửa text UI**: thêm key ở `vi`; `en` khuyến nghị đối ứng nhưng không bắt buộc (thiếu → fallback `vi`). Chi tiết: [`../i18n.md`](../i18n.md).
+
+---
+
+## 7. Comment code (KISS)
+
+Chỉ comment khi logic đủ phức tạp cần giải thích **why** (constraint ẩn, workaround, invariant khó thấy) — không giải thích **what** (tên biến/hàm đặt tốt đã đủ nói what). Sửa nhỏ lẻ (theo review comment, fix bug, fix lỗi CI): **giữ nguyên comment cũ**, chỉ sửa nếu nó đã outdate/sai so với code hiện tại — tuyệt đối không thêm comment tường thuật lại thay đổi vừa làm (không có dạng `// sửa theo review`, `// fix CI`, `// đổi X vì lỗi Y`). Comment mô tả hành vi **hiện hành**, không kể lịch sử; ngắn gọn nhất có thể, giảm LOC. Chi tiết thêm (không trích số issue/PR/tên người trong comment): [`pr-docs-convention.md`](pr-docs-convention.md) §7.

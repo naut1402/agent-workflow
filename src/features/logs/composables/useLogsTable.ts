@@ -44,10 +44,31 @@ function cellValue(entry: LogEntry, key: string): string | number {
     if (key === 'response') return entry.response || ''
     if (key === 'status') return entry.status
     if (key === 'ms' || key === 'durationMs') return entry.durationMs
-  } else {
+  } else if (entry.type === 'events') {
+    if (key === 'event') return entry.event
+    if (key === 'payload') {
+      try {
+        return JSON.stringify(entry.payload ?? {})
+      } catch {
+        return ''
+      }
+    }
+  } else if (entry.type === 'audit') {
     if (key === 'op') return entry.op
     if (key === 'entity') return entry.entity
     if (key === 'identifier') return entry.identifier || ''
+  } else if (entry.type === 'usage') {
+    if (key === 'jobId') return entry.jobId
+    if (key === 'taskId') return entry.taskId || ''
+    if (key === 'stepId') return entry.stepId || ''
+    if (key === 'sessionId') return entry.sessionId || ''
+    if (key === 'model') return entry.model || ''
+    if (key === 'provider') return entry.provider
+    if (key === 'inputTokens') return entry.inputTokens
+    if (key === 'outputTokens') return entry.outputTokens
+    if (key === 'cacheReadTokens') return entry.cacheReadTokens ?? 0
+    if (key === 'cacheWriteTokens') return entry.cacheWriteTokens ?? 0
+    if (key === 'totalTokens') return entry.totalTokens
   }
   return ''
 }
@@ -77,7 +98,25 @@ function matchesQuery(entry: LogEntry, q: string): boolean {
           String(entry.durationMs),
           entry.error,
         ]
-      : [entry.op, entry.entity, entry.identifier],
+      : entry.type === 'events'
+        ? [entry.event, JSON.stringify(entry.payload ?? {})]
+        : entry.type === 'audit'
+          ? [entry.op, entry.entity, entry.identifier]
+          : entry.type === 'usage'
+            ? [
+                entry.jobId,
+                entry.taskId,
+                entry.stepId,
+                entry.model,
+                entry.provider,
+                entry.sessionId,
+                String(entry.inputTokens),
+                String(entry.outputTokens),
+                String(entry.cacheReadTokens ?? 0),
+                String(entry.cacheWriteTokens ?? 0),
+                String(entry.totalTokens),
+              ]
+            : [],
   ]
     .flat()
     .filter((x) => x != null && x !== '')

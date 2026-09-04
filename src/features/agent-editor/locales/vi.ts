@@ -12,6 +12,9 @@ export default {
   fields: {
     descriptionPlaceholder: 'Mô tả ngắn',
     recommendedModel: 'Model khuyến nghị',
+    scope: 'Phạm vi',
+    scopeProject: 'Project hiện tại',
+    scopeGlobal: 'Toàn cục (mọi project)',
   },
   messages: {
     saved: 'Đã lưu {name}',

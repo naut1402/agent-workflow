@@ -2,6 +2,8 @@ import { parseAgentMarkdown, compileAgentMarkdown, emptyDraft } from './agentMar
 import {
   access,
   dirname,
+  fileURLToPath,
+  homeDir,
   joinPath,
   mkdir,
   readFile,
@@ -9,9 +11,17 @@ import {
   safeReadDir,
   writeTextFile,
 } from '../../../core/lib/fileHelper.js'
-import { fileURLToPath } from 'node:url'
 
 // ── paths under data root ──────────────────────────────────────────────────
+
+/**
+ * Where a custom agent lives: `project` — this project's (gitignored)
+ * `.dev-team-agent/custom-agents/`, only resolvable while running against
+ * that project (`dashboard:<name>`). `global` — `~/.claude/agents/`, the same
+ * dir the `user:` catalog source and runner already read from, so it resolves
+ * regardless of which project a pipeline runs in (`user:<name>`).
+ */
+export type AgentScope = 'project' | 'global'
 
 export function profilesDir(root: string): string {
   return joinPath(root, 'pipeline-profiles')
@@ -19,6 +29,16 @@ export function profilesDir(root: string): string {
 
 export function customAgentsDir(root: string): string {
   return joinPath(root, 'custom-agents')
+}
+
+/** Machine-wide agents dir — same location the `user:` catalog source/resolver read from. */
+export function globalAgentsDir(): string {
+  return joinPath(homeDir(), '.claude', 'agents')
+}
+
+function agentScopeDir(root: string | null, scope: AgentScope): string {
+  if (scope === 'global') return globalAgentsDir()
+  return customAgentsDir(root || '')
 }
 
 export function agentTemplatesDir(root: string): string {
@@ -65,9 +85,7 @@ export async function scanCustomAgents(root: string): Promise<any[]> {
   return agents
 }
 
-/** Lightweight metadata listing of custom agents for the agent editor list. */
-export async function listCustomAgentMeta(root: string): Promise<any[]> {
-  const dir = customAgentsDir(root)
+async function listAgentMetaInDir(dir: string): Promise<any[]> {
   const agents: any[] = []
   for (const entry of await safeReadDir(dir)) {
     if (!entry.isFile() || !entry.name.endsWith('.md')) continue
@@ -88,15 +106,25 @@ export async function listCustomAgentMeta(root: string): Promise<any[]> {
   return agents.sort((a, b) => a.name.localeCompare(b.name))
 }
 
+/** Lightweight metadata listing of custom agents (scope `project`) for the agent editor list. */
+export async function listCustomAgentMeta(root: string): Promise<any[]> {
+  return listAgentMetaInDir(customAgentsDir(root))
+}
+
+/** Same shape as `listCustomAgentMeta`, but for the `global` scope (`~/.claude/agents/`). */
+export async function listGlobalAgentMeta(): Promise<any[]> {
+  return listAgentMetaInDir(globalAgentsDir())
+}
+
 /** Read one custom agent's raw markdown + parsed draft, or null if invalid/missing. */
-export async function readCustomAgent(root: string, name: string) {
+export async function readCustomAgent(root: string | null, name: string, scope: AgentScope = 'project') {
   const clean = sanitiseAgentName(name)
   if (!clean) return null
-  const fp = joinPath(customAgentsDir(root), `${clean}.md`)
+  const fp = joinPath(agentScopeDir(root, scope), `${clean}.md`)
   try {
     const content = await readTextFile(fp)
     const draft = parseAgentMarkdown(content)
-    return { name: clean, content, draft }
+    return { name: clean, content, draft, scope }
   } catch {
     return null
   }
@@ -155,6 +183,10 @@ export async function ensureNlChatBuilderAgent(root: string): Promise<void> {
 export interface FetchUrlSafeOptions {
   /** Extra request headers (e.g. API Accept / Authorization). */
   headers?: Record<string, string>
+  /** HTTP method — defaults to GET (existing call sites unaffected). */
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  /** Request body — only meaningful for non-GET methods. */
+  body?: string
 }
 
 /** True for hostnames that resolve to private / loopback ranges (SSRF guard). */
@@ -183,9 +215,11 @@ export async function fetchUrlSafe(
   if (u.protocol !== 'https:') throw new Error('only https URLs allowed')
   if (isPrivateHostname(u.hostname)) throw new Error('private hosts not allowed')
   const res = await fetch(urlStr, {
+    method: options?.method ?? 'GET',
     redirect: 'follow',
     signal: AbortSignal.timeout(15000),
     ...(options?.headers ? { headers: options.headers } : {}),
+    ...(options?.body !== undefined ? { body: options.body } : {}),
   })
   if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
   const text = await res.text()

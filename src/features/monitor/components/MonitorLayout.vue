@@ -8,8 +8,10 @@ import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
 import RailIcon from '../../../core/ui/RailIcon.vue'
+import Icon from '../../../core/ui/Icon.vue'
 import { patchTaskArchive, deleteTask, repairTaskState } from '../scripts/monitorApi'
 import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
+import { taskDisplayName } from '../lib/taskDisplay'
 import { useLocalToggle } from '../../../core/composables/useLocalToggle'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {
@@ -168,8 +170,8 @@ async function deleteSelected() {
     <section class="monitor-content">
       <template v-if="selected">
         <div class="task-head">
-          <h2>
-            {{ selected.task_id }}
+          <h2 :title="selected.task_id">
+            {{ taskDisplayName(selected) }}
             <span v-if="selected.parent_task_id" class="subtask">{{ t('monitor.layout.subtaskOf', { id: selected.parent_task_id }) }}</span>
           </h2>
           <div class="badges">
@@ -188,17 +190,7 @@ async function deleteSelected() {
               v-if="selected.state_ok"
               class="btn-archive-detail"
               @click="toggleArchiveSelected"
-            ><template v-if="selected.archived">{{ t('monitor.layout.unarchive') }}</template><template v-else><svg
-                width="14"
-                height="14"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.25"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              ><rect x="2" y="2" width="12" height="3" rx="1" /><path d="M3 5v7.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5" /><path d="M6.5 8.5h3" /></svg> {{ t('monitor.layout.archive') }}</template></button>
+            ><template v-if="selected.archived">{{ t('monitor.layout.unarchive') }}</template><template v-else><Icon name="archiveBox" :size="14" /> {{ t('monitor.layout.archive') }}</template></button>
             <button
               v-if="!selected.state_ok"
               type="button"
@@ -241,3 +233,55 @@ async function deleteSelected() {
     </section>
   </div>
 </template>
+
+<style scoped lang="scss">
+.monitor-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  transition: grid-template-columns 0.2s ease;
+}
+.monitor-layout.monitor-layout--sub-collapsed {
+  grid-template-columns: 48px 1fr;
+}
+.monitor-sub-sidebar {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  padding: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+.monitor-sub-sidebar.monitor-sub-sidebar--collapsed {
+  padding: 10px 6px;
+  align-items: center;
+}
+.monitor-sub-sidebar-collapse-btn {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  margin: 0 0 8px;
+}
+.monitor-sub-sidebar--collapsed .monitor-sub-sidebar-collapse-btn { margin: 0; }
+.monitor-sub-sidebar-collapse-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+.monitor-content {
+  overflow-y: auto;
+  padding: 16px 20px;
+  min-height: 0;
+}
+</style>

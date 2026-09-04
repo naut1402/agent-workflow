@@ -14,6 +14,7 @@ describe('parseTaskState', () => {
       export_json: false,
       archived: false,
       archived_at: null,
+      name: null,
     })
   })
 
@@ -55,5 +56,12 @@ describe('parseTaskState', () => {
   it('TaskState passes through unknown keys (forward-compatible)', () => {
     const parsed = TaskState.parse({ current_phase: 'pr', future_field: 42 })
     expect((parsed as Record<string, unknown>).future_field).toBe(42)
+  })
+
+  it('trims name and normalises blank/missing to null', () => {
+    expect(parseTaskState({ name: 'My task' }).name).toBe('My task')
+    expect(parseTaskState({ name: '  My task  ' }).name).toBe('My task')
+    expect(parseTaskState({ name: '   ' }).name).toBeNull()
+    expect(parseTaskState({}).name).toBeNull()
   })
 })

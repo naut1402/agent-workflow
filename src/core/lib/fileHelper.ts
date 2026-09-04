@@ -1,7 +1,12 @@
 import fsPromises from 'node:fs/promises'
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath as nodeFileURLToPath, pathToFileURL as nodePathToFileURL } from 'node:url'
+// Namespace imports — named `from 'node:*'` is rewritten by Vite to property
+// access at module init (`ext["fileURLToPath"]` / `ext["randomBytes"]`), which
+// throws in the browser if this file is ever pulled into the client graph.
+// Defer access to call sites.
+import * as nodeUrl from 'node:url'
+import * as nodeCrypto from 'node:crypto'
 import type {
   Dirent,
   PathLike,
@@ -53,17 +58,27 @@ export function parsePath(p: string): path.ParsedPath {
 
 /** `fileURLToPath` — convert `file:` URL / `import.meta.url` to a filesystem path. */
 export function fileURLToPath(url: string | URL): string {
-  return nodeFileURLToPath(url)
+  return nodeUrl.fileURLToPath(url)
 }
 
 /** `pathToFileURL` — convert a filesystem path to a `file:` URL (dynamic `import`). */
 export function pathToFileURL(p: string): URL {
-  return nodePathToFileURL(p)
+  return nodeUrl.pathToFileURL(p)
 }
 
 /** Directory containing the module that owns `import.meta.url`. */
 export function dirnameFromImportMeta(importMetaUrl: string): string {
-  return path.dirname(nodeFileURLToPath(importMetaUrl))
+  return path.dirname(nodeUrl.fileURLToPath(importMetaUrl))
+}
+
+/** `randomBytes` — cryptographically strong random bytes (Node crypto). */
+export function randomBytes(size: number): Buffer {
+  return nodeCrypto.randomBytes(size)
+}
+
+/** `randomUUID` — RFC 4122 v4 UUID string (Node crypto). */
+export function randomUUID(): string {
+  return nodeCrypto.randomUUID()
 }
 
 /**
@@ -201,6 +216,54 @@ export function mkdirSync(p: string, opts?: { recursive?: boolean }): string | u
 
 export function renameSync(from: string, to: string): void {
   fs.renameSync(from, to)
+}
+
+export function copyFileSync(from: string, to: string): void {
+  fs.copyFileSync(from, to)
+}
+
+/**
+ * Best-effort atomic text write: temp file + rename. Some filesystems (Docker
+ * bind mounts, SMB/NFS shares, antivirus-scanned dirs) return EBUSY/EPERM
+ * transiently when rename targets an existing file — retry briefly, then fall
+ * back to copy-over + unlink, which those filesystems do allow.
+ */
+export function writeTextFileAtomicSync(file: string, data: string): void {
+  const tmp = `${file}.tmp`
+  writeTextFileSync(tmp, data)
+  if (renameOverExisting(tmp, file)) return
+  copyFileSync(tmp, file)
+  rmSync(tmp, { force: true })
+}
+
+function renameOverExisting(from: string, to: string): boolean {
+  try {
+    renameSync(from, to)
+    return true
+  } catch (err: any) {
+    if (!isTransientRenameError(err)) throw err
+  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    busyWaitMs(20)
+    try {
+      renameSync(from, to)
+      return true
+    } catch (err: any) {
+      if (!isTransientRenameError(err)) throw err
+    }
+  }
+  return false
+}
+
+function isTransientRenameError(err: any): boolean {
+  return Boolean(err) && ['EBUSY', 'EPERM', 'EACCES'].includes(String(err.code))
+}
+
+function busyWaitMs(ms: number): void {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    /* spin */
+  }
 }
 
 export function rmSync(p: string, opts?: { recursive?: boolean; force?: boolean }): void {

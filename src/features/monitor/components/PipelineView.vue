@@ -3,8 +3,8 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep } from '../scripts/PipelineViewApi'
-import { fetchJob, fetchJobs } from '../../runner/scripts/runnerApi'
+import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, resetPipelineStep } from '../scripts/PipelineViewApi'
+import { fetchJob, fetchJobs, cancelJob } from '../../runner/scripts/runnerApi'
 import { phasesFromPipeline, phaseStatus } from '../../../core/lib/phase'
 import PipelineNode from './PipelineNode.vue'
 import ArtifactNode from './ArtifactNode.vue'
@@ -62,6 +62,14 @@ const phases = computed(() => {
 
 const phaseKeys = computed(() => phases.value.map((p) => p.key))
 
+// Full `produces[]` for a step — unlike `phase.artifact` (first produced file
+// only), needed to delete/check every file a multi-produces step wrote
+// (e.g. reviewer: review.md + test-spec.md).
+function stepProduces(stepId: string): string[] {
+  const step = (props.task.pipeline?.steps ?? []).find((s: any) => s.id === stepId)
+  return Array.isArray(step?.produces) ? step.produces : []
+}
+
 const artifactGraph = computed(() =>
   buildArtifactNodesAndEdges({
     steps: props.task.pipeline?.steps ?? [],
@@ -80,6 +88,7 @@ const nodes = computed(() => {
     const isActivePhase = props.task.current_phase === p.key
     const status = phaseStatus(p, props.task, keys)
     const running = runningStepId.value === p.key
+    const recovering = recoveringStepId.value === p.key
     const stateOk = canRunWithTaskState(props.task)
     const inScope = isRunnableTarget(keys, props.task.current_phase, p.key)
     // Click-to-run only for current/future active|pending nodes, when state
@@ -96,6 +105,11 @@ const nodes = computed(() => {
     // which is exactly when talking to the runner matters most.
     const artifactDone = p.artifact ? Boolean(props.task.artifacts?.[p.artifact]?.exists) : false
     const executed = artifactDone || status === 'done' || status === 'waiting' || running
+    // Reset button takes the Run button's slot for steps that have already
+    // run — but Run always wins when both are true (e.g. `implementer` after
+    // a reviewer reject: `executed` from the earlier run, `runnable` again
+    // because current_phase moved back here), so the two never show together.
+    const resettable = stateOk && !runningStepId.value && !running && executed && !runnable
     return {
       id: p.key,
       type: 'pipeline',
@@ -111,11 +125,15 @@ const nodes = computed(() => {
         // Q&A badge only on the phase that's currently active (the one that created qa.md)
         qa_count: isActivePhase ? (props.task.qa_count ?? 0) : 0,
         running,
+        recovering,
         runnable,
         executed,
+        resettable,
         // The node's Run button goes through the same confirm dialog as
         // clicking the node, so both paths share the overwrite warning.
         onRun: () => openRunConfirm({ id: p.key, label: p.label }),
+        onReset: () => openResetConfirm({ id: p.key, label: p.label }),
+        onStop: () => stopStep(),
       },
     }
   })
@@ -192,6 +210,9 @@ watch(
 
 // Run-step (click a node to run/chain to it)
 const runningStepId = ref<string | null>(null)
+const recoveringStepId = ref<string | null>(null)
+// The job currently being polled, so the Stop button has an id to cancel.
+const activeJobId = ref<string | null>(null)
 const runError = ref('')
 const runToast = ref('')
 let runPollTimer: ReturnType<typeof setTimeout> | null = null
@@ -212,9 +233,12 @@ async function syncInFlightRun() {
     const inflight = jobs.find(
       (j: any) =>
         j?.metadata?.taskId === props.task.task_id &&
-        (j.status === 'queued' || j.status === 'running'),
+        (j.status === 'queued' || j.status === 'running' || j.status === 'awaiting_recovery'),
     )
-    if (!inflight?.id) return
+    if (!inflight?.id) {
+      activeJobId.value = null
+      return
+    }
     const stepId =
       (typeof inflight.metadata?.pipelineStepId === 'string' && inflight.metadata.pipelineStepId) ||
       props.task.current_phase ||
@@ -229,6 +253,8 @@ async function syncInFlightRun() {
 watch(() => props.task.task_id, () => {
   clearRunPoll()
   runningStepId.value = null
+  recoveringStepId.value = null
+  activeJobId.value = null
   runError.value = ''
   syncInFlightRun()
 }, { immediate: true })
@@ -237,21 +263,49 @@ onBeforeUnmount(clearRunPoll)
 
 async function pollRunStepJob(jobId: string) {
   clearRunPoll()
+  activeJobId.value = jobId
   try {
     const { job } = await fetchJob(jobId)
     if (job?.status === 'succeeded') {
       runningStepId.value = null
+      recoveringStepId.value = null
+      activeJobId.value = null
       runToast.value = t('monitor.pipeline.stepSucceeded')
       emit('hitl-action')
       setTimeout(() => { runToast.value = '' }, 4000)
       return
     }
-    if (job?.status === 'failed' || job?.status === 'cancelled') {
+    if (job?.status === 'cancelled') {
       runningStepId.value = null
+      recoveringStepId.value = null
+      activeJobId.value = null
+      runError.value = ''
+      runToast.value = t('monitor.pipeline.stepCancelled')
+      emit('hitl-action')
+      setTimeout(() => { runToast.value = '' }, 3000)
+      return
+    }
+    if (job?.status === 'failed') {
+      runningStepId.value = null
+      recoveringStepId.value = null
+      activeJobId.value = null
       runError.value = job.error ? String(job.error) : t('monitor.pipeline.stepFailed')
       emit('hitl-action')
       return
     }
+    if (job?.status === 'awaiting_recovery') {
+      runError.value = ''
+      runToast.value = t('monitor.pipeline.stepAwaitingRecovery')
+      const liveStep =
+        (typeof job?.metadata?.pipelineStepId === 'string' && job.metadata.pipelineStepId) ||
+        props.task.current_phase ||
+        runningStepId.value
+      runningStepId.value = liveStep
+      recoveringStepId.value = liveStep
+      runPollTimer = setTimeout(() => pollRunStepJob(jobId), 2000)
+      return
+    }
+    recoveringStepId.value = null
     // Keep the spinner on the step the job is actually executing (server
     // always runs current_phase / metadata.pipelineStepId), not the chain target.
     const liveStep =
@@ -302,6 +356,17 @@ async function runStep(node: { id: string }, opts: { skipIntermediate?: boolean 
   }
 }
 
+async function stopStep() {
+  if (!activeJobId.value) return
+  try {
+    await cancelJob(activeJobId.value)
+    // pollRunStepJob's in-flight timer observes status === 'cancelled' on its
+    // next tick and clears runningStepId/activeJobId — nothing to do here.
+  } catch (e: any) {
+    runError.value = String(e.message || e)
+  }
+}
+
 // Run confirmation (click active/pending node → confirm before submitting).
 // When the clicked node is ahead of current_phase with intermediate steps,
 // offer Jump (skip intermediates) vs Chain (run from current). Otherwise keep
@@ -349,6 +414,71 @@ function confirmRunStep(skipIntermediate = false) {
   runConfirmOverwrite.value = []
   runConfirmSkipLabels.value = []
   if (node) runStep(node, { skipIntermediate })
+}
+
+// Reset-step confirmation (click the recycle button on an already-run step).
+const resetConfirmOpen = ref(false)
+const resetConfirmNode = ref<{ id: string; label: string } | null>(null)
+const resetConfirmOverwrite = ref<string[]>([])
+const resetConfirmCascadeLabels = ref<string[]>([])
+// Union of produces across target + every cascaded step, for the delete
+// warning shown when cascade is an available option — must list everything
+// that a cascade delete would remove, not just the clicked node's own files
+// (a partial list here is how someone accidentally nukes downstream artifacts
+// they didn't know were about to go).
+const resetConfirmCascadeFiles = ref<string[]>([])
+const resetError = ref('')
+const resetToast = ref('')
+
+function openResetConfirm(node: { id: string; label: string }) {
+  resetConfirmNode.value = node
+  resetConfirmOverwrite.value = stepProduces(node.id).filter((f) => props.task.artifacts?.[f]?.exists)
+  const keys = phaseKeys.value
+  const idx = keys.indexOf(node.id)
+  const afterKeys = idx >= 0 ? keys.slice(idx + 1) : []
+  resetConfirmCascadeLabels.value = afterKeys
+    .filter((k) => stepProduces(k).some((f) => props.task.artifacts?.[f]?.exists))
+    .map((k) => phases.value.find((p) => p.key === k)?.label || k)
+  const cascadeSteps = [node.id, ...afterKeys]
+  resetConfirmCascadeFiles.value = Array.from(
+    new Set(cascadeSteps.flatMap((k) => stepProduces(k).filter((f) => props.task.artifacts?.[f]?.exists))),
+  )
+  resetError.value = ''
+  resetConfirmOpen.value = true
+}
+
+function cancelResetConfirm() {
+  resetConfirmOpen.value = false
+  resetConfirmNode.value = null
+  resetConfirmOverwrite.value = []
+  resetConfirmCascadeLabels.value = []
+  resetConfirmCascadeFiles.value = []
+}
+
+async function doResetStep(node: { id: string; label: string }, cascade: boolean) {
+  resetError.value = ''
+  try {
+    await resetPipelineStep(props.task.task_id, { stepId: node.id, cascade }, props.projectId ?? undefined)
+    resetToast.value = t('monitor.pipeline.resetDone')
+    emit('hitl-action')
+    setTimeout(() => { resetToast.value = '' }, 3000)
+  } catch (e: any) {
+    if (e?.status === 409) {
+      resetError.value = t('monitor.pipeline.stepAlreadyRunning')
+    } else {
+      resetError.value = String(e.message || e)
+    }
+  }
+}
+
+function confirmReset(cascade: boolean) {
+  const node = resetConfirmNode.value
+  resetConfirmOpen.value = false
+  resetConfirmNode.value = null
+  resetConfirmOverwrite.value = []
+  resetConfirmCascadeLabels.value = []
+  resetConfirmCascadeFiles.value = []
+  if (node) doResetStep(node, cascade)
 }
 
 function onNodeClick({ node }) {
@@ -416,10 +546,12 @@ async function submitHitl(action: 'approve' | 'reject') {
 
 <template>
   <section class="pipeline-wrap">
-    <div v-if="hitlToast || runToast || runError || waitingPhase" class="pipeline-toolbar">
+    <div v-if="hitlToast || runToast || runError || resetToast || resetError || waitingPhase" class="pipeline-toolbar">
       <span v-if="hitlToast" class="chip chip-ok">{{ hitlToast }}</span>
       <span v-if="runToast" class="chip chip-ok">{{ runToast }}</span>
       <span v-if="runError" class="chip chip-err">{{ runError }}</span>
+      <span v-if="resetToast" class="chip chip-ok">{{ resetToast }}</span>
+      <span v-if="resetError" class="chip chip-err">{{ resetError }}</span>
     </div>
 
     <div class="vflow-container">
@@ -521,4 +653,72 @@ async function submitHitl(action: 'approve' | 'reject') {
       </div>
     </div>
   </Teleport>
+
+  <!-- Reset-step confirm modal -->
+  <Teleport to="body">
+    <div v-if="resetConfirmOpen" class="modal-backdrop" @click.self="cancelResetConfirm">
+      <div class="modal">
+        <div class="modal-head">
+          <span>{{ t('monitor.pipeline.resetConfirmHeading', { label: resetConfirmNode?.label ?? '' }) }}</span>
+          <button class="modal-close" @click="cancelResetConfirm">✕</button>
+        </div>
+        <template v-if="resetConfirmCascadeLabels.length">
+          <p class="modal-hint">
+            {{ t('monitor.pipeline.resetConfirmCascadeBody', { label: resetConfirmNode?.label ?? '' }) }}
+          </p>
+          <p v-if="resetConfirmCascadeFiles.length" class="editor-error">
+            {{ t('monitor.pipeline.resetConfirmDeleteWarning', { files: resetConfirmCascadeFiles.join(', ') }) }}
+          </p>
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="cancelResetConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
+            <button class="btn-ghost" @click="confirmReset(false)">
+              {{ t('monitor.pipeline.resetConfirmOnlyThis') }}
+            </button>
+            <button class="btn-primary" @click="confirmReset(true)">
+              {{ t('monitor.pipeline.resetConfirmCascade', { steps: resetConfirmCascadeLabels.join(', ') }) }}
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <p class="modal-hint">{{ t('monitor.pipeline.resetConfirmBody', { label: resetConfirmNode?.label ?? '' }) }}</p>
+          <p v-if="resetConfirmOverwrite.length" class="editor-error">
+            {{ t('monitor.pipeline.resetConfirmDeleteWarning', { files: resetConfirmOverwrite.join(', ') }) }}
+          </p>
+          <div class="modal-actions">
+            <button class="btn-ghost" @click="cancelResetConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
+            <button class="btn-primary" @click="confirmReset(false)">
+              {{ t('monitor.pipeline.resetConfirmOnlyThis') }}
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
+  </Teleport>
 </template>
+
+<style scoped lang="scss">
+.pipeline-wrap { margin-bottom: 14px; }
+
+.pipeline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* Flow profile editor modal */
+
+.profile-editor {
+  flex: 1;
+  min-height: 320px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  padding: 12px;
+  resize: vertical;
+}
+.editor-error { color: var(--danger); font-size: 12px; margin: 0; }
+</style>

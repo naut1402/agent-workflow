@@ -22,7 +22,7 @@ vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
   fetchLoggingConfig: vi.fn(async () => ({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true },
+      types: { audit: true, request: true, jobs: true, events: false, usage: true },
     },
   })),
   saveLoggingConfig: vi.fn(async (c: object) => ({ config: c })),
@@ -49,7 +49,7 @@ afterEach(() => {
   vi.mocked(fetchLoggingConfig).mockResolvedValue({
     config: {
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true },
+      types: { audit: true, request: true, jobs: true, events: false, usage: true },
     },
   })
   vi.mocked(saveLoggingConfig).mockImplementation(async (c: object) => ({ config: c }))
@@ -86,11 +86,12 @@ describe('SettingsDialog', () => {
     expect(pane.textContent).toContain('Audit')
     expect(pane.textContent).toContain('Request')
     expect(pane.textContent).toContain('Jobs')
+    expect(pane.textContent).toContain('Events')
 
     const checkboxes = Array.from(
       pane.querySelectorAll('.settings-section .settings-checkbox input[type="checkbox"]'),
     ) as HTMLInputElement[]
-    // General group also has sidebar collapse checkboxes; logging block is last section with showTab + 3 types
+    // General group also has sidebar collapse checkboxes; logging block is last section with showTab + 4 types
     const showLogs = checkboxes.find((el) =>
       el.closest('label')?.textContent?.includes('Hiện tab Logs'),
     )
@@ -103,7 +104,7 @@ describe('SettingsDialog', () => {
 
     expect(saveLoggingConfig).toHaveBeenCalledWith({
       showLogsTab: false,
-      types: { audit: true, request: true, jobs: true },
+      types: { audit: true, request: true, jobs: true, events: false, usage: true },
     })
     expect(pane.textContent).not.toContain('Loại log')
     expect(pane.textContent).not.toContain('Audit (thay đổi cấu hình)')
@@ -113,7 +114,7 @@ describe('SettingsDialog', () => {
     vi.mocked(fetchLoggingConfig).mockResolvedValueOnce({
       config: {
         showLogsTab: false,
-        types: { audit: false, request: true, jobs: false },
+        types: { audit: false, request: true, jobs: false, events: false, usage: true },
       },
     })
     mount(SettingsDialog, { attachTo: document.body })

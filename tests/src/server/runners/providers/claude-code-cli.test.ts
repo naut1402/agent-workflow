@@ -84,6 +84,10 @@ describe('createLocalConsoleProvider — job log structure', () => {
       expect(log).toContain(`Workspace: ${workspace}`)
       expect(log).toContain('--- Prompt ---')
       expect(log).toContain('Cải thiện tài liệu design.md')
+      // resolvedAgent.systemPrompt is empty — buildPrompt() must return userPrompt
+      // untouched, so no path-convention preamble or "## Agent instructions" wrapper.
+      expect(log).not.toContain('## Agent instructions')
+      expect(log).not.toContain('Quy ước path')
       expect(log).toContain('=== Phản hồi của runner (stdout/stderr) ===')
       expect(log).toContain('hello from runner')
       expect(log).toContain('=== Kết quả ===')
@@ -149,6 +153,37 @@ describe('createLocalConsoleProvider — job log structure', () => {
     })
     expect(invocation.args).toEqual(['-p', '--resume', 'resume-xyz'])
     expect(invocation.stdinInput).toBe('nội dung bất kỳ')
+  })
+
+  test('claude style: model is forwarded as --model when set', () => {
+    const invocation = buildClaudeInvocation({
+      flags: ['--bare'],
+      prompt: 'nội dung bất kỳ',
+      allowedTools: 'Read,Edit',
+      dangerouslySkipPermissions: true,
+      sessionId: 'sess-123',
+      model: 'opus',
+    })
+    expect(invocation.args).toEqual([
+      '--bare',
+      '-p',
+      '--allowedTools',
+      'Read,Edit',
+      '--dangerously-skip-permissions',
+      '--model',
+      'opus',
+      '--session-id',
+      'sess-123',
+    ])
+  })
+
+  test('claude style: no model set → no --model in argv', () => {
+    const invocation = buildClaudeInvocation({
+      flags: [],
+      prompt: 'nội dung bất kỳ',
+      resumeSessionId: 'resume-xyz',
+    })
+    expect(invocation.args).not.toContain('--model')
   })
 
   // Real spawn, cross-platform (no `claude` needed): use node itself as the
@@ -226,6 +261,107 @@ describe('createLocalConsoleProvider — job log structure', () => {
       expect(argv.some((a) => a === multiLinePrompt)).toBe(false)
       expect(argv.some((a) => a.includes('thư mục'))).toBe(false)
       expect(argv.some((a) => a.includes('Đọc'))).toBe(false)
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
+  test('integration: runnerConfig.model is spawned as --model <value> in real argv', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
+    try {
+      const fakeCli = path.join(home, 'fake-cli.mjs')
+      fs.writeFileSync(
+        fakeCli,
+        [
+          "process.stdout.write('ARGV:' + JSON.stringify(process.argv.slice(2)) + '\\n')",
+          'process.stdin.resume()',
+          "process.stdin.on('end', () => process.exit(0))",
+          '',
+        ].join('\n'),
+        'utf8',
+      )
+
+      const provider = createLocalConsoleProvider({
+        providerId: 'claude-code-cli',
+        defaultCliPath: process.execPath,
+        claudeStyleArgs: true,
+      })
+
+      let output = ''
+      const result = await provider.execute(
+        {
+          jobId: 'job-model',
+          resolvedAgent,
+          userPrompt: 'prompt bất kỳ',
+          workspace,
+          produces: [],
+          timeoutMs: 10000,
+        },
+        { cliPath: process.execPath, flags: [fakeCli], model: 'opus' },
+        credential,
+        (chunk) => {
+          output += chunk
+        },
+      )
+
+      expect(result.ok).toBe(true)
+      const argvLine = output.split('\n').find((l) => l.startsWith('ARGV:'))
+      expect(argvLine).toBeTruthy()
+      const argv = JSON.parse(argvLine!.slice('ARGV:'.length)) as string[]
+      expect(argv).toContain('--model')
+      expect(argv[argv.indexOf('--model') + 1]).toBe('opus')
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
+  test('regression: cursor/codex (non-claude-style) never receive --model even if runnerConfig.model is set', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
+    try {
+      const fakeCli = path.join(home, 'fake-cli.mjs')
+      fs.writeFileSync(
+        fakeCli,
+        [
+          "process.stdout.write('ARGV:' + JSON.stringify(process.argv.slice(2)) + '\\n')",
+          'process.stdin.resume()',
+          "process.stdin.on('end', () => process.exit(0))",
+          '',
+        ].join('\n'),
+        'utf8',
+      )
+
+      const provider = createLocalConsoleProvider({
+        providerId: 'cursor-cli',
+        defaultCliPath: process.execPath,
+        claudeStyleArgs: false,
+      })
+
+      let output = ''
+      const result = await provider.execute(
+        {
+          jobId: 'job-cursor-model',
+          resolvedAgent,
+          userPrompt: 'prompt bất kỳ',
+          workspace,
+          produces: [],
+          timeoutMs: 10000,
+        },
+        { cliPath: process.execPath, flags: [fakeCli], model: 'opus' },
+        credential,
+        (chunk) => {
+          output += chunk
+        },
+      )
+
+      expect(result.ok).toBe(true)
+      const argvLine = output.split('\n').find((l) => l.startsWith('ARGV:'))
+      expect(argvLine).toBeTruthy()
+      const argv = JSON.parse(argvLine!.slice('ARGV:'.length)) as string[]
+      expect(argv).not.toContain('--model')
     } finally {
       fs.rmSync(home, { recursive: true, force: true })
       fs.rmSync(workspace, { recursive: true, force: true })
@@ -358,6 +494,42 @@ describe('createLocalConsoleProvider — job log structure', () => {
     }
   })
 
+  test('timeout-kill: error is a clear timeout message, not raw CLI output', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
+    try {
+      const { cliPath, flags } = nodeCli('hang')
+      const provider = createLocalConsoleProvider({
+        providerId: 'claude-code-cli',
+        defaultCliPath: cliPath,
+        claudeStyleArgs: false,
+      })
+
+      const result = await provider.execute(
+        {
+          jobId: 'job-timeout',
+          resolvedAgent,
+          userPrompt: 'test',
+          workspace,
+          produces: [],
+          timeoutMs: 150,
+          metadata: {},
+        },
+        { cliPath, flags },
+        credential,
+      )
+
+      expect(result.ok).toBe(false)
+      expect(result.exitCode).toBe(-1)
+      expect(result.timedOut).toBe(true)
+      expect(result.error).toBe('process timed out after 150ms')
+      expect(result.error).not.toContain('Execution error')
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
   test('spawn error (bad cliPath): result footer still appended with the error', async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
@@ -449,6 +621,23 @@ describe('createLocalConsoleProvider — agent instructions on resume', () => {
     const log = await runOnce({})
     expect(log).toContain('## Agent instructions')
     expect(log).toContain('BẠN LÀ AGENT DESIGNER')
+  })
+
+  // #225 vấn đề 1: a real CLI child process runs with cwd=workspace (task folder), not
+  // the repo root the agent markdown was written for — without the preamble the model
+  // follows literal `.dev-team-agent/tasks/<id>/...` paths and writes one directory too
+  // deep. Preamble must come before the agent's own instructions so the model reads it
+  // first.
+  test('a fresh run prepends the path-convention preamble before the agent instructions', async () => {
+    const log = await runOnce({})
+    expect(log).toContain('Quy ước path')
+    expect(log).toContain('cwd')
+    const preambleIdx = log.indexOf('Quy ước path')
+    const agentInstructionsIdx = log.indexOf('## Agent instructions')
+    const systemPromptIdx = log.indexOf('BẠN LÀ AGENT DESIGNER')
+    expect(preambleIdx).toBeGreaterThan(-1)
+    expect(preambleIdx).toBeGreaterThan(agentInstructionsIdx)
+    expect(preambleIdx).toBeLessThan(systemPromptIdx)
   })
 
   test("a pipeline step resuming another step's session still sends them (different agent)", async () => {

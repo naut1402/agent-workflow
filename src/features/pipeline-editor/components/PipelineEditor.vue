@@ -11,6 +11,7 @@ import RulesPanel from './RulesPanel.vue'
 import StepConfigPanel from './StepConfigPanel.vue'
 import ProfileManager from './ProfileManager.vue'
 import RailIcon from '../../../core/ui/RailIcon.vue'
+import { taskDisplayName } from '../../monitor/lib/taskDisplay'
 import {
   extractPipelineMeta,
   extractStepPreservedMap,
@@ -543,7 +544,7 @@ const editorLayoutClass = computed(() => ({
             >
               <option value="">{{ t('pipelineEditor.scope.selectTask') }}</option>
               <option v-for="task in editableTasks" :key="task.task_id" :value="task.task_id">
-                {{ task.task_id }}
+                {{ taskDisplayName(task) }}
               </option>
               <option value="__manual__">{{ t('pipelineEditor.scope.manualEntry') }}</option>
             </select>
@@ -670,3 +671,203 @@ const editorLayoutClass = computed(() => ({
     </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+.scope-label { font-size: 11px; color: var(--muted); }
+.scope-select, .scope-task-input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 4px 7px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.scope-task-input { margin-top: 3px; }
+.editor-scope-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+/* ── Editor root & layout ───────────────────────────────────────────────── */
+.editor-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.editor-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.fanout-warning {
+  flex: 1;
+  min-width: 200px;
+  max-width: 480px;
+  padding: 4px 10px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--waiting, #b8860b);
+  background: rgba(184, 134, 11, 0.12);
+  border: 1px solid rgba(184, 134, 11, 0.35);
+  border-radius: 4px;
+}
+.editor-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr 280px;
+  flex: 1;
+  overflow: hidden;
+  isolation: isolate;
+  transition: grid-template-columns 0.2s ease;
+}
+.editor-layout.editor-layout--left-collapsed {
+  grid-template-columns: 48px 1fr 280px;
+}
+.editor-layout.editor-layout--no-config {
+  grid-template-columns: 240px 1fr;
+}
+.editor-layout.editor-layout--left-collapsed.editor-layout--no-config {
+  grid-template-columns: 48px 1fr;
+}
+
+.editor-canvas {
+  position: relative;
+  overflow: hidden;
+  height: 100%;
+}
+.editor-canvas .vflow-container {
+  height: 100%;
+  border-radius: 0;
+  border: none;
+  border-left: 1px solid var(--border);
+}
+
+.preview-active .editor-toolbar { opacity: 0.6; pointer-events: none; }
+.preview-active .editor-left { opacity: 0.5; pointer-events: none; }
+
+.preview-banner {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(14, 18, 24, 0.92);
+  border: 1px solid var(--waiting);
+  color: var(--text);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 13px;
+  z-index: 10;
+  white-space: nowrap;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.preview-banner-agent { color: var(--muted); font-size: 11px; }
+.preview-banner-hitl { color: var(--waiting); font-weight: 600; }
+
+/* ── Editor left column (catalog + rules tabs) ───────────────────────────── */
+.editor-left {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  transition: width 0.2s ease;
+  min-width: 0;
+}
+.editor-left.editor-left-collapsed {
+  width: 48px;
+  min-width: 48px;
+}
+
+.editor-left-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  align-items: stretch;
+}
+.editor-left-tabs.is-collapsed {
+  flex-direction: column;
+  border-bottom: none;
+  gap: 6px;
+  padding: 6px;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+.editor-left-collapse-btn {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  margin: 0;
+}
+.editor-left-tabs.is-collapsed .editor-left-collapse-btn {
+  margin: 0;
+}
+.editor-left-collapse-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+.editor-left-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 8px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.editor-left-tab-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  margin: 0;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  padding: 0 !important;
+}
+.editor-left-tab-icon.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+.editor-left-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.editor-left-tab:hover:not(.active) { color: var(--text); }
+</style>

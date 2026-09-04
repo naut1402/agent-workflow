@@ -68,5 +68,7 @@ Fix/refactor: bắt buộc Logic trước → sau.
 - [ ] Fix/refactor: đã có Logic trước → sau
 - [ ] Test xanh local · CI/CD xanh
 - [ ] Tuân thủ `docs/implement/coding-convention.md` + `feature-organization-rule.md`
+- [ ] Icon mới/sửa dùng `<Icon name="..." />` (`src/core/ui/Icon.vue`) — không tự vẽ tay `<svg>`/`<path>`
+- [ ] Dropdown mới dùng `CSelect`/`CComboSelect` (`src/core/ui/`) — không dùng `<select>` native
 - [ ] **Git hygiene** (`docs/implement/git-convention.md`): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
 - [ ] Rename/move dùng `git mv`; KHÔNG còn bản cũ trùng (vd `.js` lẫn `.ts`); test không lạc khỏi `tests/`·`test-e2e/`

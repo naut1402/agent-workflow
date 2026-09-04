@@ -19,7 +19,9 @@ Khi nhận task, xác định **feature sở hữu** trước, rồi đặt arti
 | UI Vue / composable | `components/`, `composables/` |
 | FE gọi API | `scripts/*Api.ts` (dùng `apiGet` / `apiPost` từ `core/http`) |
 | Chuỗi UI | `locales/vi.ts` (+ `en` khuyến nghị) |
-| SCSS mode | `styles/index.scss` (glob từ `main.ts`) |
+| Style chỉ **1** component render selector gốc | `<style scoped lang="scss">` trong chính `.vue` (§5) |
+| Style **≥2** component cùng feature dùng | `features/<f>/styles/*.scss` + `@use` từ `styles/index.scss` — glob từ `main.ts` (§5) |
+| Style dùng **xuyên feature**, hoặc gắn element do JS/`core` tạo runtime | `src/styles/` (shell) hoặc primitive `core/ui/C<Name>.vue` (§5) |
 | Prefer shell / theme / locale app | `src/core/configs/` hoặc plugins — **không** đẩy schema shell vào feature |
 | Helper kiểu dữ liệu / wrap package / FS | `src/core/lib/` (§3) |
 | Ghi audit / request log | `src/core/log/` — feature logs chỉ consume / stream job log |
@@ -115,7 +117,53 @@ src/api (setup) / main.ts (glob)
 
 ---
 
-## 5. Test & CI gắn với chỗ đặt file
+## 5. Tổ chức style (SCSS)
+
+Cùng mục tiêu §2.1 — **ít file, ít phân tán**. Tiêu chí **duy nhất** để chọn nơi đặt
+style là **bao nhiêu component render selector gốc** (selector ở cột 0 của file, không
+tính class con lồng bên trong):
+
+| Selector gốc được render bởi | Đặt ở |
+|------------------------------|--------|
+| Đúng **1** component | `<style scoped lang="scss">` trong chính `.vue` đó |
+| **≥2** component **cùng** feature | `features/<f>/styles/<Nhóm>.scss` + `@use` từ `styles/index.scss` |
+| **≥2** feature, hoặc element do JS/composable `core` tạo runtime (không có scope-id) | `src/styles/` (shell), hoặc primitive `core/ui/C<Name>.vue` + class `c-<name>` |
+
+**Kích thước file không phải lý do tách.** 300 dòng `<style scoped>` cạnh template của
+nó vẫn dễ định vị hơn 300 dòng ở file rời + một dòng `@use`.
+
+**Đếm theo compound CUỐI của selector, không phải tổ tiên.** `scoped` gắn `[data-v-…]`
+vào compound cuối, nên rule chỉ inline được khi **phần tử đích** nằm trong template của
+chính SFC đó. Rule *bắc cầu* — tổ tiên ở SFC này, đích ở SFC khác (vd
+`.preview-active .catalog-panel`, `.monitor-sub-sidebar .tasklist`) — tính là **≥2
+component** ⇒ bậc 2, dù chỉ có một component render selector gốc.
+
+Không làm:
+
+- File `styles/<Component>.scss` mà chỉ component đó render selector gốc → inline vào SFC.
+- File SCSS chỉ chứa comment, 0 rule (kiểu `/* … hiện gói trong X. */`) → xoá cả dòng `@use`.
+- `styles/index.scss` chỉ tồn tại để `@use` lại các file private → xoá cả thư mục `styles/`;
+  glob ở `main.ts` là pattern-based nên **không** sửa `main.ts`.
+- Đặt tên `common.scss` cho nội dung chỉ một component dùng (tên sai lệch còn tệ hơn
+  phân mảnh) — và ngược lại, đừng để `<Component>.scss` rỗng trong khi `common.scss`
+  giữ hết style của đúng component đó.
+- Định nghĩa primitive dùng xuyên feature (`.cfg-input`, `.chip`, …) trong `styles/` của
+  một feature bất kỳ: feature khác sẽ phụ thuộc ngầm vào thứ tự glob → đưa lên `src/styles/`.
+
+Khi tách một file SCSS đang phục vụ nhiều component: kiểm bằng **compound cuối** —
+với mỗi selector, phần tử đích phải do template của SFC nhận nó render. Rule nào không
+thoả thì thuộc bậc 2/3, không inline.
+
+Khi gộp nhiều file vào một `<style scoped>`: **giữ đúng thứ tự nạp cũ** (theo thứ tự
+`@use` trong `index.scss` — `common` trước, `<Component>` sau), vì các rule cùng
+specificity dựa vào source order để thắng.
+
+Giữ global, **không** scope hoá: `src/styles/_tokens.scss` (`:root` vars — SFC `scoped`
+đọc biến bình thường), `_shell.scss`, `_scrollbar.scss`.
+
+---
+
+## 6. Test & CI gắn với chỗ đặt file
 
 | Đổi gì | Test tối thiểu |
 |--------|----------------|
@@ -126,9 +174,10 @@ src/api (setup) / main.ts (glob)
 
 ---
 
-## 6. Tóm tắt nhanh
+## 7. Tóm tắt nhanh
 
 1. Task → chọn **feature** → đặt đúng lớp (api / controller / business / UI / schema / locale).
 2. `business/` = **nghiệp vụ đang xử lý gì**, ít file; peer chỉ qua `business/index`.
 3. Dùng chung → **mở rộng** `*Utils` / `*Lib` / `fileHelper` trước khi copy hoặc tạo file mới.
 4. Domain sanitize ở feature; FS/path qua `fileHelper`; không phình core bằng nghiệp vụ.
+5. Style: **1 component → `<style scoped>` trong SFC**; ≥2 component cùng feature → `styles/`; xuyên feature → `src/styles/` (§5).

@@ -249,6 +249,45 @@ describe('useNlChatSession', () => {
     expect(s.step.value).toBe('done')
   })
 
+  // 202608_005: an `agent` draft saved via NL-chat used to fall back silently
+  // to whatever project the server registry marks `default: true` when the
+  // project context was missing — the actual root cause of "agent created
+  // from dashboard can't be used" (job edb2c931..., saved to the wrong
+  // project). `agentScope` makes the target explicit instead of trusting
+  // `getProjectId()` alone.
+  it('confirm(agent) blocks and errors when scope is "project" (default) but no project is selected', async () => {
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'agent', draft: { name: 'a' } } })
+    const s = make()
+    await s.sendMessage('tạo agent')
+    expect(s.agentScope.value).toBe('project')
+
+    await s.confirm({ name: 'a' })
+
+    expect(s.step.value).toBe('previewDraft')
+    expect(s.error.value).toMatch(/project/i)
+  })
+
+  it('confirm(agent) succeeds with scope "global" even when no project is selected', async () => {
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'agent', draft: { name: 'a' } }, confirmOk: true })
+    const s = make()
+    await s.sendMessage('tạo agent')
+    s.agentScope.value = 'global'
+
+    await s.confirm({ name: 'a' })
+
+    expect(s.step.value).toBe('done')
+  })
+
+  it('confirm(agent) succeeds with scope "project" when a project is selected', async () => {
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'agent', draft: { name: 'a' } }, confirmOk: true })
+    const s = make({ getProjectId: () => 'proj-x' })
+    await s.sendMessage('tạo agent')
+
+    await s.confirm({ name: 'a' })
+
+    expect(s.step.value).toBe('done')
+  })
+
   it('cancel resets back to an empty chat', async () => {
     stubApi({ turn: { status: 'ready', kind: 'question', text: '?' } })
     const s = make()

@@ -3,36 +3,30 @@ import path from 'node:path'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { resolveArtifact } from './business/tasks/index.js'
 import { collectTasks, flowProfilePath, createTask, readState } from './business/tasks/index.js'
+import { runTaskStep as runTaskStepCore } from './business/tasks/index.js'
 import {
   advanceStepOnJobSuccess,
-  advanceStepOnJobSuccessAssumingLock,
   applyArchiveAction,
   applyHitlAction,
+  applyRenameAction,
   deleteTask,
-  jumpToPipelineStepAssumingLock,
   repairTaskState,
+  resetPipelineStepAssumingLock,
   withTaskLock,
 } from './business/tasks/state.js'
-import { isRunnableTarget } from './lib/pipelineRunGuards.js'
-import {
-  loadPipelineConfig,
-  submitJob,
-  submitApprovalJob,
-  sendTaskFeedback,
-  findSelectionRange,
-  extractLines,
-  listJobs,
-  closeTaskSession,
-  cloneProject,
-  setProjectBranch,
-} from './business/index.js'
+import { generateAndApplyTaskName } from './business/tasks/generateTaskName.js'
+import { isResettableTarget } from './lib/pipelineRunGuards.js'
+import * as monitorBusiness from './business/index.js'
 import { emitAudit } from '../../core/log/store.js'
-import { TaskArchivePatch, TaskStatePatch } from './schemas/task.js'
+import { emit, emitEntity } from '../../core/events/index.js'
+import { TaskArchivePatch, TaskNamePatch, TaskStatePatch } from './schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from './schemas/taskCreate.js'
 import { mintTaskId } from './lib/createTaskForm.js'
 import { RunStepRequest } from './schemas/runStep.js'
+import { ResetStepRequest } from './schemas/resetStep.js'
 import { TaskFeedbackRequest } from './schemas/taskFeedback.js'
-import { fetchGithubIssue } from './business/github/index.js'
+import { fetchGithubIssue, listOpenGithubIssues } from './business/github/index.js'
+import { parseGithubRepoRef } from '../settings/schemas/githubTokens.js'
 import { getTaskChatState } from './business/taskChat.js'
 import {
   loadArtifactActions,
@@ -90,7 +84,7 @@ export class MonitorController extends AbstractController {
     }
     // Clone remote repo when gitUrl is provided.
     if (parsed.gitUrl) {
-      const cloned = cloneProject({
+      const cloned = monitorBusiness.cloneProject({
         gitUrl: parsed.gitUrl,
         branch: parsed.branch || parsed.defaultBranch,
         name: parsed.name,
@@ -103,18 +97,26 @@ export class MonitorController extends AbstractController {
         identifier: cloned.project?.id ?? null,
         projectId: cloned.project?.id ?? null,
       })
+      emitEntity('created', 'project', {
+        id: cloned.project?.id ?? null,
+        projectId: cloned.project?.id ?? null,
+      })
       return this.created({ project: cloned.project, repoPath: cloned.repoPath, branch: cloned.branch })
     }
     const result = registry.add({ path: parsed.path, name: parsed.name })
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     // Optional branch metadata on local projects.
     if (parsed.branch && result.project?.id) {
-      setProjectBranch(result.project.id, parsed.branch)
+      monitorBusiness.setProjectBranch(result.project.id, parsed.branch)
       const updated = registry.get(result.project.id)
       emitAudit({
         op: 'create',
         entity: 'project',
         identifier: result.project?.id ?? null,
+        projectId: result.project?.id ?? null,
+      })
+      emitEntity('created', 'project', {
+        id: result.project?.id ?? null,
         projectId: result.project?.id ?? null,
       })
       return this.created({ project: updated || result.project })
@@ -125,6 +127,10 @@ export class MonitorController extends AbstractController {
       identifier: result.project?.id ?? null,
       projectId: result.project?.id ?? null,
     })
+    emitEntity('created', 'project', {
+      id: result.project?.id ?? null,
+      projectId: result.project?.id ?? null,
+    })
     return this.created({ project: result.project })
   }
 
@@ -133,7 +139,7 @@ export class MonitorController extends AbstractController {
     if (!b.ok) return this.badRequest('invalid JSON')
     const id = String(b.value.id || b.value.projectId || '')
     const branch = String(b.value.branch || '')
-    const result = setProjectBranch(id, branch)
+    const result = monitorBusiness.setProjectBranch(id, branch)
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     return this.ok({ project: result.project, branch: result.branch })
   }
@@ -144,6 +150,7 @@ export class MonitorController extends AbstractController {
     const result = registry.remove(id)
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     emitAudit({ op: 'delete', entity: 'project', identifier: id, projectId: id })
+    emitEntity('deleted', 'project', { id, projectId: id })
     return this.ok({ removed: true })
   }
 
@@ -166,7 +173,7 @@ export class MonitorController extends AbstractController {
     if ('error' in gate) return gate.error
     const { root } = gate
     const id = this.c.req.query('id') || ''
-    const cfg = await loadPipelineConfig(root, id || null)
+    const cfg = await monitorBusiness.loadPipelineConfig(root, id || null)
     return this.ok({ id: id || null, pipeline: cfg })
   }
 
@@ -367,6 +374,48 @@ export class MonitorController extends AbstractController {
       projectId: this.projectId,
       detail: { action: parsed.data.archived ? 'archive' : 'unarchive' },
     })
+    emitEntity('updated', 'task-state', {
+      id,
+      projectId: this.projectId,
+      detail: { action: parsed.data.archived ? 'archive' : 'unarchive' },
+    })
+    return this.ok({ id, state: result.state, mtime: result.mtime })
+  }
+
+  async putTaskName() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const id = this.c.req.query('id') || ''
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON body')
+    const parsed = TaskNamePatch.safeParse(b.value)
+    if (!parsed.success) {
+      return this.badRequest('invalid patch', { details: parsed.error.flatten() })
+    }
+
+    const result = await applyRenameAction(root, id, parsed.data)
+    if ('error' in result) {
+      const body: Record<string, unknown> = { error: result.error, id }
+      if (result.state) body.state = result.state
+      if (result.mtime != null) body.mtime = result.mtime
+      return this.json(result.status, body)
+    }
+
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: this.projectId,
+      detail: { action: 'rename' },
+    })
+    emitEntity('updated', 'task-state', {
+      id,
+      projectId: this.projectId,
+      detail: { action: 'rename' },
+    })
     return this.ok({ id, state: result.state, mtime: result.mtime })
   }
 
@@ -447,7 +496,7 @@ export class MonitorController extends AbstractController {
     let selectionForPrompt = selectedText ?? ''
     if (useSplice) {
       const lineCount = content.split(/\r?\n/).length
-      const matched = findSelectionRange(content, selectedText!)
+      const matched = monitorBusiness.findSelectionRange(content, selectedText!)
       if (matched) {
         spliceRange = matched
       } else {
@@ -456,7 +505,7 @@ export class MonitorController extends AbstractController {
         const end = Math.min(Math.max(start, rawEnd), lineCount)
         spliceRange = { start, end }
       }
-      selectionForPrompt = extractLines(content, spliceRange.start, spliceRange.end)
+      selectionForPrompt = monitorBusiness.extractLines(content, spliceRange.start, spliceRange.end)
     }
 
     const userPrompt = substitutePrompt(action.prompt_template, {
@@ -489,12 +538,12 @@ export class MonitorController extends AbstractController {
       },
     }
     const job = action.require_approval
-      ? submitApprovalJob({
+      ? monitorBusiness.submitApprovalJob({
           ...jobInput,
           approvalArtifact: artifactName,
           ...(useSplice ? { spliceRange } : {}),
         })
-      : submitJob(jobInput)
+      : monitorBusiness.submitJob(jobInput)
 
     emitAudit({
       op: 'update',
@@ -521,6 +570,7 @@ export class MonitorController extends AbstractController {
     const result = await createTask(root, {
       taskId,
       source: body.source,
+      name: body.name,
       prompt: body.prompt,
       issueUrl: body.issueUrl,
       parentTaskId: body.parentTaskId,
@@ -539,14 +589,22 @@ export class MonitorController extends AbstractController {
       identifier: result.taskId,
       projectId: this.projectId,
     })
+    emit('task.created', {
+      taskId: result.taskId,
+      projectId: this.projectId,
+    })
 
-    let job: ReturnType<typeof submitJob> | undefined
+    if (body.source === 'prompt' && !body.name?.trim() && body.prompt?.trim()) {
+      generateAndApplyTaskName(root, result.taskId, body.prompt, result.mtime).catch(() => {})
+    }
+
+    let job: ReturnType<typeof monitorBusiness.submitJob> | undefined
     if (body.run) {
       const agentRef = result.firstStep?.agent
       if (typeof agentRef !== 'string' || !agentRef) {
         return this.badRequest('pipeline has no first-step agent', { taskId: result.taskId })
       }
-      job = submitJob({
+      job = monitorBusiness.submitJob({
         runnerId: body.runnerId ?? undefined,
         agentRef,
         workspace: path.join(root, 'tasks', result.taskId),
@@ -586,6 +644,7 @@ export class MonitorController extends AbstractController {
     await deleteTask(root, id)
 
     emitAudit({ op: 'delete', entity: 'task-state', identifier: id, projectId: this.projectId })
+    emitEntity('deleted', 'task-state', { id, projectId: this.projectId })
     return this.ok({ id, deleted: true })
   }
 
@@ -600,7 +659,7 @@ export class MonitorController extends AbstractController {
     const before = await readState(stateFile)
     if (before.ok) {
       const stepId = String(before.state.current_phase ?? '')
-      const lastSucceeded = listJobs(200).find(
+      const lastSucceeded = monitorBusiness.listJobs(200).find(
         (j) =>
           j.metadata?.taskId === id &&
           j.status === 'succeeded' &&
@@ -622,6 +681,11 @@ export class MonitorController extends AbstractController {
       projectId: this.projectId,
       detail: { action: 'repair' },
     })
+    emitEntity('updated', 'task-state', {
+      id,
+      projectId: this.projectId,
+      detail: { action: 'repair' },
+    })
     return this.ok({ id, state: result.state, mtime: result.mtime })
   }
 
@@ -632,7 +696,7 @@ export class MonitorController extends AbstractController {
     if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
     const stepId = this.c.req.query('stepId') || undefined
 
-    closeTaskSession(this.projectId || '', id, { stepId })
+    monitorBusiness.closeTaskSession(this.projectId || '', id, { stepId })
     emitAudit({
       op: 'update',
       entity: 'task-state',
@@ -659,115 +723,92 @@ export class MonitorController extends AbstractController {
 
     const body = parsed.data
 
-    // Everything below reads-checks-writes task state and, on success, creates
-    // the step's job. Serialize per task: without this, two concurrent
-    // requests can both observe "no job running", each move current_phase,
-    // and both submit a job — running a step twice or tagging a job with a
-    // pipelineStepId that no longer matches the final cursor.
+    // Core (per-task lock, HITL gate, busy 409, auto-advance incl. the
+    // `last_reset_at` guard, submit) lives in business `runTaskStep` — shared
+    // with automations (#233).
+    const result = await runTaskStepCore(root, this.projectId, id, {
+      runnerId: body.runnerId ?? null,
+      targetStepId: body.targetStepId ?? null,
+      skipIntermediate: body.skipIntermediate === true,
+    })
+    if ('error' in result) {
+      return this.json(result.status, { error: result.error, ...result.extra })
+    }
+
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: this.projectId,
+      detail: {
+        action: 'run-step',
+        stepId: result.stepId,
+        jobId: result.job.id,
+        ...(result.skipIntermediate ? { skipIntermediate: true } : {}),
+      },
+    })
+
+    return this.created({ job: result.job })
+  }
+
+  async resetTaskStep() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const id = this.c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON body')
+    const parsed = ResetStepRequest.safeParse(b.value)
+    if (!parsed.success) {
+      return this.badRequest('invalid request', { details: parsed.error.flatten() })
+    }
+    const { stepId, cascade } = parsed.data
+
     return withTaskLock(root, id, async () => {
       const stateFile = path.join(root, '.dev-state', `${id}.json`)
-      let read = await readState(stateFile)
+      const read = await readState(stateFile)
       if (!read.ok) return this.notFound('task not found', { taskId: id })
-      let state = read.state as Record<string, unknown>
-      if (state.hitl_pending) {
-        return this.badRequest('task is waiting for HITL approval', { taskId: id })
-      }
+      const state = read.state as Record<string, unknown>
 
-      const existing = listJobs(50).find(
+      const existing = monitorBusiness.listJobs(50).find(
         (j) =>
           j.metadata?.taskId === id &&
           (j.status === 'queued' || j.status === 'running'),
       )
       if (existing) return this.json(409, { error: 'step already running', taskId: id, job: existing })
 
-      let stepId = String(state.current_phase ?? '')
-      const lastSucceeded = listJobs(200).find(
-        (j) =>
-          j.metadata?.taskId === id &&
-          j.status === 'succeeded' &&
-          !j.applyTarget &&
-          j.metadata?.pipelineStepId === stepId,
-      )
-      if (lastSucceeded && stepId) {
-        await advanceStepOnJobSuccessAssumingLock(root, id, stepId, stateFile)
-        read = await readState(stateFile)
-        if (!read.ok) return this.notFound('task not found', { taskId: id })
-        state = read.state as Record<string, unknown>
-        if (state.hitl_pending) {
-          return this.badRequest('task is waiting for HITL approval', { taskId: id })
-        }
-        stepId = String(state.current_phase ?? '')
-      }
-
-      const pipeline = await loadPipelineConfig(root, id)
+      const pipeline = await monitorBusiness.loadPipelineConfig(root, id)
       const phaseKeys = (pipeline.steps || []).map((s: any) => s.id).filter(Boolean)
-      const target = body.targetStepId ?? undefined
-      const skip = body.skipIntermediate === true && !!target && target !== stepId
-      // Chain: no skip requested, but a target ahead of the start step — the
-      // job queue auto-advances toward it and stops once reached (jobQueue.ts
-      // `advancePipelineStepChain`). Validate it same as a jump target so an
-      // out-of-pipeline/past id can't be recorded as `chainTarget` and let the
-      // chain run past where the caller meant to stop.
-      const chainTarget = !skip && !!target && target !== stepId
-
-      if ((skip || chainTarget) && target) {
-        if (!phaseKeys.includes(target) || !isRunnableTarget(phaseKeys, stepId, target)) {
-          return this.badRequest('invalid target step', { taskId: id, stepId, targetStepId: target })
-        }
+      const currentPhase = String(state.current_phase ?? '')
+      if (!phaseKeys.includes(stepId) || !isResettableTarget(phaseKeys, currentPhase, stepId)) {
+        return this.badRequest('invalid reset target', { taskId: id, stepId })
       }
 
-      // Resolve the step that will actually run BEFORE mutating current_phase
-      // (jump), so a missing agent / request.md aborts without moving the
-      // cursor to a step nothing then executes for.
-      const runStepId = skip && target ? target : stepId
-      const step = (pipeline.steps || []).find((s: any) => s.id === runStepId)
-      if (!step?.agent) {
-        return this.badRequest('no runnable current step', { taskId: id, stepId: runStepId })
-      }
+      const result = await resetPipelineStepAssumingLock(root, id, stateFile, stepId, cascade)
+      if ('error' in result) return this.json(result.status, { error: result.error, taskId: id })
 
-      const requestFile = path.join(root, 'tasks', id, 'request.md')
-      let userPrompt: string
-      try {
-        userPrompt = await fs.readFile(requestFile, 'utf8')
-      } catch {
-        return this.notFound('request.md not found', { taskId: id })
+      // `closeTaskSession` can't be called from state.ts (cycle through
+      // business/index.js — see comment on `applyHitlAction`), so it runs
+      // here for every step whose artifacts were just deleted.
+      for (const sid of result.removedSteps) {
+        monitorBusiness.closeTaskSession(this.projectId || '', id, { stepId: sid })
       }
-
-      if (skip && target) {
-        const jumped = await jumpToPipelineStepAssumingLock(stateFile, target)
-        if ('error' in jumped) {
-          return this.json(jumped.status, { error: jumped.error, taskId: id })
-        }
-        state = jumped.state
-        stepId = target
-      }
-
-      const job = submitJob({
-        runnerId: body.runnerId ?? undefined,
-        agentRef: step.agent,
-        workspace: path.join(root, 'tasks', id),
-        userPrompt,
-        produces: Array.isArray(step.produces) ? step.produces : undefined,
-        sessionMode: 'new',
-        metadata: {
-          projectRoot: path.dirname(root),
-          devTeamRoot: root,
-          projectId: this.projectId || undefined,
-          taskId: id,
-          pipelineStepId: stepId,
-          ...(chainTarget && target ? { chainTarget: target } : {}),
-        },
-      })
 
       emitAudit({
         op: 'update',
         entity: 'task-state',
         identifier: id,
         projectId: this.projectId,
-        detail: { action: 'run-step', stepId, jobId: job.id, ...(skip ? { skipIntermediate: true } : {}) },
+        detail: { action: 'reset-step', stepId, cascade, removedSteps: result.removedSteps },
       })
-
-      return this.created({ job })
+      emitEntity('updated', 'task-state', {
+        id,
+        projectId: this.projectId,
+        detail: { action: 'reset-step' },
+      })
+      return this.ok({ id, state: result.state, mtime: result.mtime, removedSteps: result.removedSteps })
     })
   }
 
@@ -790,7 +831,7 @@ export class MonitorController extends AbstractController {
     if (!read.ok) return this.notFound('task not found', { taskId: id })
 
     const projectId = this.projectId || ''
-    const result = await sendTaskFeedback(id, projectId, parsed.data.feedback, {
+    const result = await monitorBusiness.sendTaskFeedback(id, projectId, parsed.data.feedback, {
       stepId: parsed.data.stepId ?? undefined,
       mode: parsed.data.mode,
     })
@@ -844,5 +885,17 @@ export class MonitorController extends AbstractController {
     const result = await fetchGithubIssue(parsed.data.url)
     if ('error' in result) return this.json(result.status, { error: result.error })
     return this.ok({ issue: result.issue })
+  }
+
+  async getGithubIssues() {
+    const repo = this.c.req.query('repo') || ''
+    const page = Number(this.c.req.query('page')) || 1
+    const slug = parseGithubRepoRef(repo)
+    if (!slug) return this.badRequest('invalid repo, expected owner/repo')
+    const [owner, name] = slug.split('/')
+
+    const result = await listOpenGithubIssues(owner, name, page)
+    if ('error' in result) return this.json(result.status, { error: result.error })
+    return this.ok({ issues: result.issues })
   }
 }

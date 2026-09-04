@@ -7,6 +7,8 @@ export default {
   tabs: {
     audit: 'Kiểm toán',
     request: 'Yêu cầu',
+    events: 'Events',
+    usage: 'Usage',
     jobs: 'Jobs',
   },
   columns: {
@@ -23,6 +25,19 @@ export default {
     response: 'Response',
     status: 'Status',
     ms: 'ms',
+    event: 'Event',
+    payload: 'Payload',
+    model: 'Model',
+    provider: 'Provider',
+    inputTokens: 'Input',
+    outputTokens: 'Output',
+    cacheReadTokens: 'Cache read',
+    cacheWriteTokens: 'Cache write',
+    totalTokens: 'Total',
+    jobId: 'Job',
+    taskId: 'Task',
+    stepId: 'Step',
+    agent: 'Agent',
   },
   filters: {
     q: 'Lọc nhanh…',
@@ -44,11 +59,9 @@ export default {
     allDisabled: 'Mọi loại log đang tắt — bật lại trong Cài đặt › Chung › Logs.',
   },
   jobs: {
-    tailStart: '▶ Tail',
-    tailStop: '⏹ Dừng tail',
     truncated: '(đã cắt phần đầu)',
     logEmpty: '(log trống)',
-    selectPrompt: 'Chọn một job để xem log.',
+    viewLog: 'Xem log',
   },
   timeline: {
     heading: 'Dòng thời gian hoạt động',

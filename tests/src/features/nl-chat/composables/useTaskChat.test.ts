@@ -226,6 +226,44 @@ describe('useTaskChat', () => {
     expect(c.sortedTurns.value.map((t) => t.index)).toEqual([0, 1])
   })
 
+  it('timeline slots a pending echo by send time instead of always appending it last', async () => {
+    // Sent "now" (real Date.now()) must land between an old turn and a turn
+    // timestamped far in the future — proving `timeline` sorts by `at` rather than
+    // just concatenating pending after sortedTurns (the bug in the issue screenshot).
+    stubApi([
+      {
+        ...READY,
+        turns: [
+          { index: 0, role: 'user', text: 'cũ', at: '2020-01-01T00:00:00Z' },
+          { index: 1, role: 'assistant', text: 'trong tương lai', at: '2099-01-01T00:00:00Z' },
+        ],
+        running: { jobId: 'j-pending' },
+      },
+    ])
+    const c = make()
+    await c.refresh(false)
+    await c.send('gửi bây giờ')
+
+    expect(c.pending.value).toEqual(['gửi bây giờ'])
+    expect(c.timeline.value.map((t) => t.text)).toEqual(['cũ', 'gửi bây giờ', 'trong tương lai'])
+  })
+
+  it('timeline falls back to append-at-end when turns are missing a parseable `at` (regression)', async () => {
+    stubApi([
+      {
+        ...READY,
+        turns: [{ index: 0, role: 'user', text: 'không có at' }],
+        running: { jobId: 'j-pending' },
+      },
+    ])
+    const c = make()
+    await c.refresh(false)
+    await c.send('tin nhắn mới')
+
+    expect(c.pending.value).toEqual(['tin nhắn mới'])
+    expect(c.timeline.value.map((t) => t.text)).toEqual(['không có at', 'tin nhắn mới'])
+  })
+
   it('start polls faster while a step runs and stop() ends the loop', async () => {
     vi.useFakeTimers()
     const fetchMock = stubApi([{ ...READY, canSend: true, queued: true, running: { jobId: 'j9' } }])

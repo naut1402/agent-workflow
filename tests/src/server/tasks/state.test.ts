@@ -1,8 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, repairTaskState, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
+import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, applyRenameAction, deleteTask, reconcileGateState, repairTaskState, resetPipelineStepAssumingLock, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
+import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
 import { listJobs, loadJob, registerProvider, submitJob, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
@@ -69,6 +71,11 @@ async function tmp(): Promise<string> {
 afterEach(async () => {
   await Promise.all(dirs.map((d) => fs.rm(d, { recursive: true, force: true })))
   dirs = []
+  _resetEventBusForTest()
+})
+
+beforeEach(() => {
+  _resetEventBusForTest()
 })
 
 async function seedTask(root: string, id: string, state: Record<string, unknown>) {
@@ -349,6 +356,133 @@ describe('advanceStepOnJobSuccess', () => {
     const result = await advanceStepOnJobSuccess(root, 'T14', 'implementer')
     expect(result).toBeNull()
   })
+
+  test('hitl.pending emits after state file has hitl_pending', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    const stateFile = await seedTask(root, 'T12e', { current_phase: 'investigator' })
+    let pendingAtEmit: unknown
+    on('hitl.pending', () => {
+      // Sync read — emit does not await async handlers.
+      pendingAtEmit = JSON.parse(readFileSync(stateFile, 'utf8')).hitl_pending
+    })
+    await advanceStepOnJobSuccess(root, 'T12e', 'investigator')
+    expect(pendingAtEmit).toBe('hitl-1')
+  })
+
+  test('task.advanced emits with new currentPhase after persist', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: implementer\n  - id: reviewer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'T10e', { current_phase: 'implementer' })
+    const events: Array<Record<string, unknown>> = []
+    on('task.advanced', (e) => {
+      events.push(e.payload)
+    })
+    await advanceStepOnJobSuccess(root, 'T10e', 'implementer')
+    expect(events).toEqual([{ taskId: 'T10e', stepId: 'implementer', currentPhase: 'reviewer' }])
+  })
+})
+
+// ── TC-13 (nợ roadmap 1.1.0 §5): mọi nhánh no-op của advanceStepOnJobSuccess
+// phải im lặng. Bất biến event kernel (docs/event-catalog.md): thao tác không
+// đổi state thì không phát event — vừa `task.advanced` vừa `hitl.pending`, và
+// file state không được ghi lại (ghi lại sẽ bump `state_mtime`, làm modal HITL
+// đang mở nhận 409 oan).
+describe('advanceStepOnJobSuccess — no-op branches emit nothing', () => {
+  const PIPELINE = `version: 1\nsteps:\n  - id: implementer\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: reviewer\n`
+
+  /** Gom cả hai loại event mà một lần advance thành công có thể phát. */
+  function captureAdvanceEvents(): string[] {
+    const seen: string[] = []
+    on('task.advanced', () => {
+      seen.push('task.advanced')
+    })
+    on('hitl.pending', () => {
+      seen.push('hitl.pending')
+    })
+    return seen
+  }
+
+  const cases: Array<{
+    name: string
+    taskId: string
+    /** null = không seed state file. */
+    seed: Record<string, unknown> | null
+    stepId: string
+  }> = [
+    {
+      name: 'current_phase đã chạy tiếp (race với action khác)',
+      taskId: 'TC13-race',
+      seed: { current_phase: 'reviewer' },
+      stepId: 'implementer',
+    },
+    {
+      name: 'task đã ở phase completed',
+      taskId: 'TC13-completed',
+      seed: { current_phase: 'completed' },
+      stepId: 'implementer',
+    },
+    {
+      name: 'đang chờ HITL (gate hợp lệ nên reconcile giữ nguyên)',
+      taskId: 'TC13-gated',
+      seed: { current_phase: 'implementer', hitl_pending: 'hitl-1' },
+      stepId: 'implementer',
+    },
+    {
+      name: 'thiếu state file',
+      taskId: 'TC13-nostate',
+      seed: null,
+      stepId: 'implementer',
+    },
+    {
+      name: 'step không có trong pipeline',
+      taskId: 'TC13-ghost',
+      seed: { current_phase: 'ghost' },
+      stepId: 'ghost',
+    },
+  ]
+
+  for (const c of cases) {
+    test(`${c.name} → null, không emit, state không đổi`, async () => {
+      const root = await tmp()
+      await fs.writeFile(path.join(root, 'pipeline.yaml'), PIPELINE, 'utf8')
+      let stateFile: string | null = null
+      let before: string | null = null
+      if (c.seed) {
+        stateFile = await seedTask(root, c.taskId, c.seed)
+        before = readFileSync(stateFile, 'utf8')
+      } else {
+        await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+      }
+      const seen = captureAdvanceEvents()
+
+      const result = await advanceStepOnJobSuccess(root, c.taskId, c.stepId)
+
+      expect(result).toBeNull()
+      expect(seen).toEqual([])
+      if (stateFile) expect(readFileSync(stateFile, 'utf8')).toBe(before!)
+    })
+  }
+
+  // Đối chứng dương: cùng pipeline/harness, đường đi hợp lệ vẫn phát đúng 1
+  // event — nếu thiếu, các case trên có thể xanh vì bus im chứ không vì no-op.
+  test('đối chứng: step có gate đang là phase hiện tại → đúng 1 hitl.pending', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), PIPELINE, 'utf8')
+    await seedTask(root, 'TC13-ok', { current_phase: 'implementer' })
+    const seen = captureAdvanceEvents()
+
+    expect(await advanceStepOnJobSuccess(root, 'TC13-ok', 'implementer')).not.toBeNull()
+    expect(seen).toEqual(['hitl.pending'])
+  })
 })
 
 describe('advanceStepOnJobSuccess — review retry', () => {
@@ -365,11 +499,23 @@ describe('advanceStepOnJobSuccess — review retry', () => {
     await seedTask(root, 'T20', { current_phase: 'reviewer', review_round: 0 })
     await seedReview(root, 'T20', 'NEEDS_CHANGES')
 
+    const events: Array<Record<string, unknown>> = []
+    on('task.advanced', (e) => {
+      events.push(e.payload)
+    })
     const result = await advanceStepOnJobSuccess(root, 'T20', 'reviewer')
     expect(result).not.toBeNull()
     expect(result?.state.current_phase).toBe('implementer')
     expect(result?.state.review_round).toBe(1)
     expect(result?.state.hitl_pending).toBeNull()
+    expect(events).toEqual([
+      {
+        taskId: 'T20',
+        stepId: 'reviewer',
+        currentPhase: 'implementer',
+        reason: 'review_retry',
+      },
+    ])
   })
 
   test('NEEDS_CHANGES past retry.max → falls through to the gate instead of standing silently re-runnable', async () => {
@@ -495,6 +641,44 @@ describe('applyArchiveAction', () => {
   })
 })
 
+describe('applyRenameAction', () => {
+  test('writes state.name', async () => {
+    const root = await tmp()
+    const stateFile = await seedTask(root, 'RN1', { current_phase: 'completed' })
+    const before = (await fs.stat(stateFile)).mtimeMs
+
+    const result = await applyRenameAction(root, 'RN1', { name: 'New name', mtime: before })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.name).toBe('New name')
+  })
+
+  test('mtime conflict → 409, state left untouched', async () => {
+    const root = await tmp()
+    const stateFile = await seedTask(root, 'RN2', { current_phase: 'completed' })
+    const before = (await fs.stat(stateFile)).mtimeMs
+
+    const result = await applyRenameAction(root, 'RN2', { name: 'New name', mtime: before - 1 })
+    expect(result.ok).toBe(false)
+    if (!('error' in result)) return
+    expect(result.status).toBe(409)
+    expect(result.error).toBe('conflict')
+
+    const state = JSON.parse(await fs.readFile(stateFile, 'utf8'))
+    expect(state.name).toBeUndefined()
+  })
+
+  test('no state file → 404', async () => {
+    const root = await tmp()
+    await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+
+    const result = await applyRenameAction(root, 'RN3', { name: 'x', mtime: Date.now() })
+    expect(result.ok).toBe(false)
+    if (!('error' in result)) return
+    expect(result.status).toBe(404)
+  })
+})
+
 describe('deleteTask', () => {
   test('removes tasks/<id>, .dev-state/<id>.json and the flow profile', async () => {
     const root = await tmp()
@@ -575,5 +759,508 @@ describe('repairTaskState', () => {
     if (!result.ok) return
     expect(result.state.current_phase).toBe('completed')
     expect(result.state.hitl_pending).toBeNull()
+  })
+})
+
+describe('resetPipelineStepAssumingLock', () => {
+  const pipelineWithRetry = [
+    'version: 1',
+    'steps:',
+    '  - id: investigator',
+    '    produces: [investigate.md]',
+    '  - id: designer',
+    '    produces: [design.md]',
+    '  - id: implementer',
+    '    produces: [phpstan.md]',
+    '  - id: reviewer',
+    '    produces: [review.md, test-spec.md]',
+    '    hitl: { mode: manual, gate_id: hitl-3, retry: { on: must_fix, restart_from: implementer, max: 2 } }',
+    '  - id: pr-creator',
+    '    produces: [pr-desc.md]',
+  ].join('\n')
+
+  async function seedFiles(root: string, taskId: string, files: Record<string, string>) {
+    await fs.mkdir(path.join(root, 'tasks', taskId), { recursive: true })
+    for (const [name, content] of Object.entries(files)) {
+      await fs.writeFile(path.join(root, 'tasks', taskId, name), content, 'utf8')
+    }
+  }
+
+  async function exists(root: string, taskId: string, name: string): Promise<boolean> {
+    try {
+      await fs.stat(path.join(root, 'tasks', taskId, name))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  test('non-cascade removes only the target step\'s own produces', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS1', { current_phase: 'completed' })
+    await seedFiles(root, 'RS1', { 'phpstan.md': 'impl', 'review.md': 'r' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS1', stateFile, 'implementer', false)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.removedSteps).toEqual(['implementer'])
+    expect(await exists(root, 'RS1', 'phpstan.md')).toBe(false)
+    expect(await exists(root, 'RS1', 'review.md')).toBe(true)
+  })
+
+  test('cascade removes the target and every step after it', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS2', { current_phase: 'completed' })
+    await seedFiles(root, 'RS2', {
+      'phpstan.md': 'impl',
+      'review.md': 'r',
+      'test-spec.md': 't',
+      'pr-desc.md': 'p',
+    })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS2', stateFile, 'implementer', true)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.removedSteps).toEqual(['implementer', 'reviewer', 'pr-creator'])
+    for (const f of ['phpstan.md', 'review.md', 'test-spec.md', 'pr-desc.md']) {
+      expect(await exists(root, 'RS2', f)).toBe(false)
+    }
+  })
+
+  test('deletes the -po.md sidecar alongside its main produces file', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS3', { current_phase: 'completed' })
+    await seedFiles(root, 'RS3', { 'review.md': 'r', 'review-po.md': 'po', 'test-spec.md': 't' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS3', stateFile, 'reviewer', false)
+    expect(result.ok).toBe(true)
+    expect(await exists(root, 'RS3', 'review.md')).toBe(false)
+    expect(await exists(root, 'RS3', 'review-po.md')).toBe(false)
+  })
+
+  test('leaves qa.md and hitl-feedback.md untouched even on a full cascade', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS4', { current_phase: 'completed' })
+    await seedFiles(root, 'RS4', {
+      'investigate.md': 'i',
+      'qa.md': 'qa history',
+      'hitl-feedback.md': 'feedback history',
+    })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS4', stateFile, 'investigator', true)
+    expect(result.ok).toBe(true)
+    expect(await exists(root, 'RS4', 'qa.md')).toBe(true)
+    expect(await exists(root, 'RS4', 'hitl-feedback.md')).toBe(true)
+  })
+
+  test('sets current_phase to stepId and clears hitl_pending', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS5', { current_phase: 'reviewer', hitl_pending: 'hitl-3' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS5', stateFile, 'designer', false)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.current_phase).toBe('designer')
+    expect(result.state.hitl_pending).toBeNull()
+  })
+
+  // #225 vấn đề 4: runTaskStep (controller.ts) uses `last_reset_at` to tell a fresh
+  // reset apart from the "heal stuck phase" fallback — a `succeeded` job for this step
+  // that finished before this timestamp must not be mistaken for "already done".
+  test('sets last_reset_at to an ISO-8601 timestamp on every reset', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS14', { current_phase: 'reviewer' })
+
+    const before = new Date().toISOString()
+    const result = await resetPipelineStepAssumingLock(root, 'RS14', stateFile, 'designer', false)
+    const after = new Date().toISOString()
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const resetAt = result.state.last_reset_at as string
+    expect(typeof resetAt).toBe('string')
+    expect(resetAt >= before && resetAt <= after).toBe(true)
+  })
+
+  test('review_round resets to 0 when the target is at or before the retry step', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS6', { current_phase: 'completed', review_round: 2 })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS6', stateFile, 'implementer', false)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.review_round).toBe(0)
+  })
+
+  test('review_round is left untouched when the target is after the retry step', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS7', { current_phase: 'completed', review_round: 2 })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS7', stateFile, 'pr-creator', false)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.review_round).toBe(2)
+  })
+
+  test('doc_review_round.investigate/design reset to 0 only for removed steps', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS8', {
+      current_phase: 'completed',
+      doc_review_round: { investigate: 2, design: 1 },
+    })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS8', stateFile, 'designer', true)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // Cascade from designer removes designer/implementer/reviewer/pr-creator —
+    // investigator is untouched, so its doc_review_round entry must not reset.
+    expect(result.state.doc_review_round).toEqual({ investigate: 2, design: 0 })
+  })
+
+  test('defaults doc_review_round to {investigate:0, design:0} when missing on old state', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS9', { current_phase: 'completed' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS9', stateFile, 'investigator', false)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.doc_review_round).toEqual({ investigate: 0, design: 0 })
+  })
+
+  test('invalid stepId → 400, no file touched', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS10', { current_phase: 'completed' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS10', stateFile, 'nope', false)
+    expect(result.ok).toBe(false)
+    if ('error' in result) {
+      expect(result.status).toBe(400)
+      expect(result.error).toBe('invalid stepId')
+    }
+  })
+
+  test('missing state file → 404', async () => {
+    const root = await tmp()
+    await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+
+    const result = await resetPipelineStepAssumingLock(
+      root,
+      'RS11',
+      path.join(root, '.dev-state', 'RS11.json'),
+      'investigator',
+      false,
+    )
+    expect(result.ok).toBe(false)
+    if ('error' in result) expect(result.status).toBe(404)
+  })
+
+  test('cascade over steps that never produced anything is a no-op delete, still listed in removedSteps', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS12', { current_phase: 'implementer' })
+    await seedFiles(root, 'RS12', { 'phpstan.md': 'impl' })
+    // reviewer/pr-creator never ran — no files for them on disk.
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS12', stateFile, 'implementer', true)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.removedSteps).toEqual(['implementer', 'reviewer', 'pr-creator'])
+  })
+
+  test('emits task.advanced with reason "reset" after persist (no dedicated task.reset type)', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS13', { current_phase: 'completed' })
+
+    const events: Array<Record<string, unknown>> = []
+    on('task.advanced', (e) => {
+      events.push(e.payload)
+    })
+    const result = await resetPipelineStepAssumingLock(root, 'RS13', stateFile, 'designer', true)
+    expect(result.ok).toBe(true)
+    expect(events).toEqual([
+      {
+        taskId: 'RS13',
+        stepId: 'designer',
+        currentPhase: 'designer',
+        reason: 'reset',
+        cascade: true,
+        removedSteps: ['designer', 'implementer', 'reviewer', 'pr-creator'],
+      },
+    ])
+  })
+})
+
+// T8e63498c — `hitl_pending` outliving the pipeline shape that created it.
+describe('reconcileGateState', () => {
+  const gatedPipeline = [
+    'version: 1',
+    'steps:',
+    '  - id: investigator',
+    '    hitl: { mode: manual, gate_id: hitl-1 }',
+    '  - id: designer',
+    '',
+  ].join('\n')
+  const gatelessPipeline = ['version: 1', 'steps:', '  - id: investigator', '  - id: designer', ''].join('\n')
+
+  async function seedWithPipeline(id: string, yaml: string, state: Record<string, unknown>) {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), yaml, 'utf8')
+    const stateFile = await seedTask(root, id, state)
+    return { root, stateFile }
+  }
+
+  test('clears a gate the current step no longer declares and reports the reason', async () => {
+    const seen: any[] = []
+    const off = on('hitl.resolved', (e: any) => {
+      seen.push(e.payload)
+    })
+    try {
+      const { root, stateFile } = await seedWithPipeline('G1', gatelessPipeline, {
+        current_phase: 'investigator',
+        hitl_pending: 'hitl-1',
+      })
+
+      const result = await reconcileGateState(root, 'G1')
+      expect(result).not.toBeNull()
+      expect(result!.from).toBe('hitl-1')
+      expect(result!.to).toBeNull()
+      expect(result!.mtime).toBeGreaterThan(0)
+      // Persisted, not just returned — the run-step guard re-reads the file.
+      const persisted = JSON.parse(await fs.readFile(stateFile, 'utf8'))
+      expect(persisted.hitl_pending).toBeNull()
+      expect(typeof persisted.gate_reconciled_at).toBe('string')
+
+      // Audit trail must not look like a human approved the gate.
+      expect(seen.length).toBe(1)
+      expect(seen[0]).toMatchObject({
+        taskId: 'G1',
+        gateId: 'hitl-1',
+        action: 'cancelled',
+        reason: 'pipeline_changed',
+      })
+    } finally {
+      off()
+    }
+  })
+
+  test('no-op for a gate that is still live — must not touch state_mtime', async () => {
+    const seen: any[] = []
+    const off = on('hitl.resolved', (e: any) => {
+      seen.push(e.payload)
+    })
+    try {
+      const { root, stateFile } = await seedWithPipeline('G2', gatedPipeline, {
+        current_phase: 'investigator',
+        hitl_pending: 'hitl-1',
+      })
+      const before = (await fs.stat(stateFile)).mtimeMs
+
+      // Reconcile runs on every run-step, so a no-op bumping mtime would make
+      // an open HITL modal fail its 409 conflict check for no reason.
+      expect(await reconcileGateState(root, 'G2')).toBeNull()
+      expect((await fs.stat(stateFile)).mtimeMs).toBe(before)
+      expect(seen.length).toBe(0)
+    } finally {
+      off()
+    }
+  })
+
+  test('no-op when nothing is pending at all', async () => {
+    const { root, stateFile } = await seedWithPipeline('G3', gatedPipeline, {
+      current_phase: 'investigator',
+      hitl_pending: null,
+    })
+    const before = (await fs.stat(stateFile)).mtimeMs
+    expect(await reconcileGateState(root, 'G3')).toBeNull()
+    expect((await fs.stat(stateFile)).mtimeMs).toBe(before)
+  })
+
+  test('normalises legacy boolean true to the live gate id', async () => {
+    const { root } = await seedWithPipeline('G4', gatedPipeline, {
+      current_phase: 'investigator',
+      hitl_pending: true,
+    })
+    const result = await reconcileGateState(root, 'G4')
+    expect(result).not.toBeNull()
+    // Without an id the UI cannot draw the node to approve, so the task is
+    // blocked with no way out even though the gate is real.
+    expect(result!.to).toBe('hitl-1')
+  })
+
+  test('returns null for a missing state file', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), gatelessPipeline, 'utf8')
+    expect(await reconcileGateState(root, 'nope')).toBeNull()
+  })
+
+  // TC-27 — `''` is falsy for `resolveHitlPending`, so the write side has to
+  // read it the same way. A looser guard resolves `'' → null`, sees a change,
+  // and writes: mtime bumps under an open HITL modal (spurious 409) and the
+  // audit log gains a cancellation for a gate that never existed.
+  test('an empty-string pending is "not blocked" — no write, no event', async () => {
+    const seen: any[] = []
+    const off = on('hitl.resolved', (e: any) => {
+      seen.push(e.payload)
+    })
+    try {
+      const { root, stateFile } = await seedWithPipeline('G5', gatedPipeline, {
+        current_phase: 'investigator',
+        hitl_pending: '',
+      })
+      const before = (await fs.stat(stateFile)).mtimeMs
+
+      expect(await reconcileGateState(root, 'G5')).toBeNull()
+      expect((await fs.stat(stateFile)).mtimeMs).toBe(before)
+      expect(seen.length).toBe(0)
+      expect(JSON.parse(await fs.readFile(stateFile, 'utf8')).gate_reconciled_at).toBeUndefined()
+    } finally {
+      off()
+    }
+  })
+
+  // TC-26 (unit half) — a pipeline.yaml that exists but will not parse makes
+  // `loadPipelineConfig` fall back to a shape that is NOT this task's. Reading
+  // "no gate declared" off that fallback and clearing would walk the task past
+  // a human approval nobody gave.
+  test('holds the gate when the task pipeline exists but does not parse', async () => {
+    const seen: any[] = []
+    const off = on('hitl.resolved', (e: any) => {
+      seen.push(e.payload)
+    })
+    try {
+      // Global says no gate — so a wrong fallback is visibly wrong here.
+      const { root, stateFile } = await seedWithPipeline('G6', gatelessPipeline, {
+        current_phase: 'investigator',
+        hitl_pending: 'hitl-1',
+      })
+      await fs.mkdir(path.join(root, 'tasks', 'G6'), { recursive: true })
+      await fs.writeFile(
+        path.join(root, 'tasks', 'G6', 'pipeline.yaml'),
+        'version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1\n',
+        'utf8',
+      )
+      const before = (await fs.stat(stateFile)).mtimeMs
+
+      expect(await reconcileGateState(root, 'G6')).toBeNull()
+      expect((await fs.stat(stateFile)).mtimeMs).toBe(before)
+      expect(JSON.parse(await fs.readFile(stateFile, 'utf8')).hitl_pending).toBe('hitl-1')
+      expect(seen.length).toBe(0)
+    } finally {
+      off()
+    }
+  })
+
+  // The counterpart to the case above: holding on a broken file is only
+  // acceptable because the human override still lets go.
+  test('repair is still the way out when the pipeline cannot be parsed', async () => {
+    const { root, stateFile } = await seedWithPipeline('G7', gatelessPipeline, {
+      current_phase: 'investigator',
+      hitl_pending: 'hitl-1',
+    })
+    await fs.mkdir(path.join(root, 'tasks', 'G7'), { recursive: true })
+    await fs.writeFile(path.join(root, 'tasks', 'G7', 'pipeline.yaml'), 'steps: [ {', 'utf8')
+
+    const repaired = await repairTaskState(root, 'G7')
+    expect(repaired.ok).toBe(true)
+    expect(JSON.parse(await fs.readFile(stateFile, 'utf8')).hitl_pending).toBeNull()
+  })
+})
+
+describe('advanceStepOnJobSuccess with a stale gate', () => {
+  test('advances instead of bailing out forever on a gate the pipeline dropped', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n  - id: designer\n`,
+      'utf8',
+    )
+    // Pre-fix, the `if (state.hitl_pending) return null` guard fired here and
+    // froze both the advance and the step chain that depends on it.
+    await seedTask(root, 'A1', { current_phase: 'investigator', hitl_pending: 'hitl-1' })
+
+    const result = await advanceStepOnJobSuccess(root, 'A1', 'investigator')
+    expect(result).not.toBeNull()
+    expect(result!.state.current_phase).toBe('designer')
+    expect(result!.state.hitl_pending).toBeNull()
+  })
+
+  test('still refuses to advance past a gate that is genuinely live', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'A2', { current_phase: 'investigator', hitl_pending: 'hitl-1' })
+
+    expect(await advanceStepOnJobSuccess(root, 'A2', 'investigator')).toBeNull()
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(root, '.dev-state', 'A2.json'), 'utf8'),
+    )
+    expect(persisted.current_phase).toBe('investigator')
+    expect(persisted.hitl_pending).toBe('hitl-1')
+  })
+})
+
+// Gap in the existing repairTaskState coverage: a pending gate id that matches
+// nothing, with a `current_phase` that IS valid — the other three cases all get
+// short-circuited by the phase-normalisation branch first.
+describe('repairTaskState — stale gate with a valid current_phase', () => {
+  test('clears a pending gate the current step no longer declares', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n  - id: designer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'R4', { current_phase: 'investigator', hitl_pending: 'gone-gate' })
+
+    const result = await repairTaskState(root, 'R4')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.current_phase).toBe('investigator')
+    expect(result.state.hitl_pending).toBeNull()
+  })
+
+  test('clears a pending gate that moved to a different step', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n  - id: designer\n    hitl: { mode: manual, gate_id: hitl-1 }\n`,
+      'utf8',
+    )
+    await seedTask(root, 'R5', { current_phase: 'investigator', hitl_pending: 'hitl-1' })
+
+    const result = await repairTaskState(root, 'R5')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.hitl_pending).toBeNull()
+  })
+
+  test('keeps a pending gate the current step still declares', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    await seedTask(root, 'R6', { current_phase: 'investigator', hitl_pending: 'hitl-1' })
+
+    const result = await repairTaskState(root, 'R6')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // Repair must not double as "skip the gate".
+    expect(result.state.hitl_pending).toBe('hitl-1')
   })
 })

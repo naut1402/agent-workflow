@@ -49,8 +49,14 @@ resolve_run_user() {
   fi
 }
 
+# Chỉ chown entry sai owner — chown -R chạm mọi inode → overlayfs copy-up cả cây mỗi lần start.
+# -h có chủ đích: không deref symlink ra ngoài cây (vd ~/.claude/plugins → mount host :ro).
 own() {
-  chown -R "$RUN_UID:$RUN_GID" "$@" 2>/dev/null || true
+  for own_target in "$@"; do
+    [ -e "$own_target" ] || continue
+    find "$own_target" \( ! -user "$RUN_UID" -o ! -group "$RUN_GID" \) \
+      -exec chown -h "$RUN_UID:$RUN_GID" {} + 2>/dev/null || true
+  done
 }
 
 mkdir -p /data/dashboard-home /home/dashboard/.claude /home/dashboard/.cursor
@@ -258,7 +264,8 @@ sync_cursor_cli_auth() {
   if [ -n "$src" ]; then
     cp "$src" "$dest"
     chmod 600 "$dest"
-    own "$dest_dir"
+    # Từ .config: mkdir -p ở trên tạo nó dưới root, sau khi `own /home/dashboard` đã chạy.
+    own /home/dashboard/.config
     mkdir -p /home/dashboard/.cursor
     cp "$dest" /home/dashboard/.cursor/auth.json
     chmod 600 /home/dashboard/.cursor/auth.json

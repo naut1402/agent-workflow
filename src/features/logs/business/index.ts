@@ -1,7 +1,7 @@
 import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
 import { readLogs } from './store.js'
 import { readJobLog, readJobLogDelta, readTaskJobLogDelta } from './jobLog.js'
-import { isLogTypeEnabled } from '../../../core/log/loggingPrefs.js'
+import { isLogTypeEnabled } from '../../../core/log/loggingPrefsIo.js'
 import type { LogType } from '../../../core/log/schema.js'
 
 export class LogsBusiness extends AbstractBusiness {

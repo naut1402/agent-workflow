@@ -27,6 +27,8 @@ export const TaskState = z
     export_json: z.boolean().optional(),
     archived: z.boolean().optional(),
     archived_at: z.string().nullable().optional(),
+    /** Human-readable task title, written by the orchestrator or the create flow. */
+    name: z.string().optional(),
   })
   .passthrough()
 
@@ -50,6 +52,14 @@ export const TaskArchivePatch = z.object({
 
 export type TaskArchivePatch = z.infer<typeof TaskArchivePatch>
 
+/** Body for dashboard rename of a task (`PUT /api/task-name`). */
+export const TaskNamePatch = z.object({
+  name: z.string().trim().min(1).max(500),
+  mtime: z.number(),
+})
+
+export type TaskNamePatch = z.infer<typeof TaskNamePatch>
+
 /** UI-facing projection of task state with the same safe defaults the API applies. */
 export interface TaskStateView {
   parent_task_id: string | null
@@ -62,11 +72,15 @@ export interface TaskStateView {
   export_json: boolean
   archived: boolean
   archived_at: string | null
+  name: string | null
 }
 
 /**
  * Project an unknown raw value into a TaskStateView with safe defaults.
- * Mirrors the field defaulting in the `/api/tasks` handler so the two never drift.
+ * Mirrors the raw field defaulting of the `/api/tasks` handler — NOT its gate
+ * reconciliation: that handler additionally runs `hitl_pending` through
+ * `resolveHitlPending` against the task's live pipeline, which needs I/O this
+ * pure projection has no access to.
  */
 export function parseTaskState(raw: unknown): TaskStateView {
   const parsed = TaskState.safeParse(raw)
@@ -82,5 +96,6 @@ export function parseTaskState(raw: unknown): TaskStateView {
     export_json: s.export_json ?? false,
     archived: s.archived ?? false,
     archived_at: s.archived_at ?? null,
+    name: typeof s.name === 'string' && s.name.trim() ? s.name.trim() : null,
   }
 }

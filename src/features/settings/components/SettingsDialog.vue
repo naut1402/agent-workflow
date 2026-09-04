@@ -22,7 +22,7 @@ import {
   type NotificationUiPlacement,
   type ThemePreference,
 } from '../../../core/configs/appSettings'
-import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig, fetchLoggingConfig, saveLoggingConfig } from '../scripts/SettingsDialogApi'
+import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig, fetchLoggingConfig, saveLoggingConfig, fetchRecoveryConfig, saveRecoveryConfig } from '../scripts/SettingsDialogApi'
 import { parseGithubRepoRef } from '../schemas/githubTokens'
 import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 import CSelect from '../../../core/ui/CSelect.vue'
@@ -164,6 +164,8 @@ const showLogsTab = ref(true)
 const logTypeAudit = ref(true)
 const logTypeRequest = ref(true)
 const logTypeJobs = ref(true)
+const logTypeEvents = ref(false)
+const logTypeUsage = ref(true)
 const loggingBusy = ref(false)
 const loggingMsg = ref('')
 const loggingErr = ref('')
@@ -177,6 +179,8 @@ async function loadLogging() {
     logTypeAudit.value = cfg.types?.audit !== false
     logTypeRequest.value = cfg.types?.request !== false
     logTypeJobs.value = cfg.types?.jobs !== false
+    logTypeEvents.value = cfg.types?.events === true
+    logTypeUsage.value = cfg.types?.usage !== false
   } catch {
     loggingErr.value = t('settings.logging.loadError')
   }
@@ -193,6 +197,8 @@ async function persistLogging() {
         audit: logTypeAudit.value,
         request: logTypeRequest.value,
         jobs: logTypeJobs.value,
+        events: logTypeEvents.value,
+        usage: logTypeUsage.value,
       },
     })
     const cfg = data.config || {}
@@ -200,6 +206,8 @@ async function persistLogging() {
     logTypeAudit.value = cfg.types?.audit !== false
     logTypeRequest.value = cfg.types?.request !== false
     logTypeJobs.value = cfg.types?.jobs !== false
+    logTypeEvents.value = cfg.types?.events === true
+    logTypeUsage.value = cfg.types?.usage !== false
     loggingMsg.value = t('settings.logging.saved')
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {
@@ -209,6 +217,8 @@ async function persistLogging() {
             audit: logTypeAudit.value,
             request: logTypeRequest.value,
             jobs: logTypeJobs.value,
+            events: logTypeEvents.value,
+            usage: logTypeUsage.value,
           },
         },
       }),
@@ -238,6 +248,61 @@ function toggleLogTypeRequest() {
 function toggleLogTypeJobs() {
   logTypeJobs.value = !logTypeJobs.value
   void persistLogging()
+}
+
+function toggleLogTypeEvents() {
+  logTypeEvents.value = !logTypeEvents.value
+  void persistLogging()
+}
+
+function toggleLogTypeUsage() {
+  logTypeUsage.value = !logTypeUsage.value
+  void persistLogging()
+}
+
+// ── Recovery (server-backed) ─────────────────────────────────────────────────
+
+const recoveryEnabled = ref(true)
+const recoveryMaxAttempts = ref(3)
+const recoveryBusy = ref(false)
+const recoveryMsg = ref('')
+const recoveryErr = ref('')
+
+async function loadRecovery() {
+  recoveryErr.value = ''
+  try {
+    const data = await fetchRecoveryConfig()
+    const cfg = data.config || {}
+    recoveryEnabled.value = cfg.enabled !== false
+    recoveryMaxAttempts.value = Number.isFinite(cfg.maxAttempts) ? cfg.maxAttempts : 3
+  } catch {
+    recoveryErr.value = t('settings.recovery.loadError')
+  }
+}
+
+async function persistRecovery() {
+  recoveryBusy.value = true
+  recoveryMsg.value = ''
+  recoveryErr.value = ''
+  try {
+    const data = await saveRecoveryConfig({
+      enabled: recoveryEnabled.value,
+      maxAttempts: recoveryMaxAttempts.value,
+    })
+    const cfg = data.config || {}
+    recoveryEnabled.value = cfg.enabled !== false
+    recoveryMaxAttempts.value = Number.isFinite(cfg.maxAttempts) ? cfg.maxAttempts : 3
+    recoveryMsg.value = t('settings.recovery.saved')
+  } catch (e) {
+    recoveryErr.value = String((e as Error).message || e)
+  } finally {
+    recoveryBusy.value = false
+  }
+}
+
+function toggleRecoveryEnabled() {
+  recoveryEnabled.value = !recoveryEnabled.value
+  void persistRecovery()
 }
 
 // ── Autoscan (server-backed) ─────────────────────────────────────────────────
@@ -455,6 +520,7 @@ onMounted(() => {
   void loadAutoscan()
   void loadGithubTokens()
   void loadLogging()
+  void loadRecovery()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -703,9 +769,56 @@ onUnmounted(() => {
                     />
                     {{ t('settings.logging.types.jobs') }}
                   </label>
+                  <label class="settings-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="logTypeEvents"
+                      :disabled="loggingBusy"
+                      @change="toggleLogTypeEvents"
+                    />
+                    {{ t('settings.logging.types.events') }}
+                  </label>
+                  <label class="settings-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="logTypeUsage"
+                      :disabled="loggingBusy"
+                      @change="toggleLogTypeUsage"
+                    />
+                    {{ t('settings.logging.types.usage') }}
+                  </label>
                 </template>
                 <p v-if="loggingMsg" class="settings-autoscan-msg">{{ loggingMsg }}</p>
                 <p v-if="loggingErr" class="settings-autoscan-err">{{ loggingErr }}</p>
+              </section>
+
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.recovery.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.recovery.desc') }}</p>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="recoveryEnabled"
+                    :disabled="recoveryBusy"
+                    @change="toggleRecoveryEnabled"
+                  />
+                  {{ t('settings.recovery.enabled') }}
+                </label>
+                <template v-if="recoveryEnabled">
+                  <label class="settings-field">
+                    {{ t('settings.recovery.maxAttempts') }}
+                    <input
+                      v-model.number="recoveryMaxAttempts"
+                      type="number"
+                      min="1"
+                      max="10"
+                      :disabled="recoveryBusy"
+                      @change="persistRecovery"
+                    />
+                  </label>
+                </template>
+                <p v-if="recoveryMsg" class="settings-autoscan-msg">{{ recoveryMsg }}</p>
+                <p v-if="recoveryErr" class="settings-autoscan-err">{{ recoveryErr }}</p>
               </section>
             </template>
 
@@ -999,3 +1112,274 @@ onUnmounted(() => {
     />
   </Teleport>
 </template>
+
+<style scoped lang="scss">
+.settings-dialog {
+  width: min(760px, 94vw);
+  /* Cố định chiều cao — đổi group không làm dialog nhảy size. */
+  height: min(560px, 88vh);
+}
+
+.settings-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.settings-nav {
+  flex: 0 0 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 12px;
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.settings-nav-item {
+  text-align: left;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.settings-nav-item:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.settings-nav-item.active {
+  color: var(--text);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.settings-pane.modal-body {
+  flex: 1;
+  min-height: 0;
+  padding-left: 16px;
+  overflow-y: auto;
+}
+
+.settings-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.settings-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-section-desc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.settings-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.settings-radio input[type='radio'] {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+.settings-checkbox input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.settings-checkbox-row .settings-checkbox {
+  margin-top: 0;
+}
+
+.settings-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  margin-top: 10px;
+}
+
+.settings-field input[type='number'] {
+  width: 72px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.settings-info-btn {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.settings-info-btn:hover:not(:disabled),
+.settings-info-btn.active {
+  color: var(--text);
+}
+
+.settings-info-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.settings-info-tip {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  width: min(280px, 70vw);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel, var(--panel-2, #1e1e24));
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.settings-whitelist {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.settings-whitelist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-whitelist-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  background: var(--input-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 8px;
+}
+
+.settings-whitelist-empty {
+  opacity: 0.5;
+  font-size: 12px;
+  padding: 6px 0;
+}
+
+.settings-whitelist-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  min-width: 0;
+}
+
+.settings-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: inherit;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.settings-autoscan-actions {
+  margin-top: 12px;
+}
+
+.settings-autoscan-msg {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings-autoscan-err {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.settings-select-wrap {
+  margin-top: 10px;
+}
+
+.settings-token-mask {
+  flex: 0 0 auto;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  opacity: 0.55;
+  padding: 0 4px;
+}
+
+.settings-github-tokens .settings-whitelist-item.is-editing {
+  outline: 1px solid var(--accent, #6a9);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+.settings-github-tokens-add {
+  flex-wrap: wrap;
+}
+</style>

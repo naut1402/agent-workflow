@@ -3,6 +3,7 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import { useChatSurface } from '../../nl-chat/composables/useChatSurface'
+import Icon from '../../../core/ui/Icon.vue'
 
 const props = defineProps({
   data: { type: Object, required: true },
@@ -28,6 +29,14 @@ function onRun(): void {
   props.data.onRun?.()
 }
 
+function onReset(): void {
+  props.data.onReset?.()
+}
+
+function onStop(): void {
+  props.data.onStop?.()
+}
+
 function onChat(): void {
   if (!props.data.taskId) return
   openTaskChat({
@@ -39,6 +48,7 @@ function onChat(): void {
 const STATUS_ICON = { done: '✓', active: '▶', waiting: '⏸', pending: '○' }
 
 function bubbleTitle(data: Record<string, any>): string | undefined {
+  if (data.recovering) return t('monitor.pipelineNode.awaitingRecovery')
   if (data.running) return t('monitor.pipelineNode.running')
   if (data.status === 'waiting') return t('monitor.pipelineNode.clickToApprove')
   if (data.runnable) return t('monitor.pipelineNode.clickToRun')
@@ -54,13 +64,26 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
       {
         'pnode-waiting': data.status === 'waiting',
         'pnode-runnable': !!data.runnable,
-        'pnode-running': data.running,
+        'pnode-running': data.running && !data.recovering,
+        'pnode-recovering': !!data.recovering,
       },
     ]"
   >
     <div class="pnode-actions">
       <button
-        v-if="data.runnable"
+        v-if="data.running"
+        type="button"
+        class="pnode-action pnode-action-center pnode-stop-btn"
+        :title="t('monitor.pipelineNode.clickToStop')"
+        :aria-label="t('monitor.pipelineNode.stop')"
+        @click.stop="onStop"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <rect x="6" y="6" width="12" height="12" />
+        </svg>
+      </button>
+      <button
+        v-else-if="data.runnable"
         type="button"
         class="pnode-action pnode-action-center pnode-run-btn"
         :title="t('monitor.pipelineNode.clickToRun')"
@@ -72,12 +95,12 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
         </svg>
       </button>
       <button
-        v-if="hasRunHistory"
+        v-else-if="data.resettable"
         type="button"
-        class="pnode-action pnode-action-right pnode-chat-btn"
-        :title="t('monitor.pipelineNode.chatWithRunner')"
-        :aria-label="t('monitor.pipelineNode.chat')"
-        @click.stop="onChat"
+        class="pnode-action pnode-action-center pnode-reset-btn"
+        :title="t('monitor.pipelineNode.clickToReset')"
+        :aria-label="t('monitor.pipelineNode.reset')"
+        @click.stop="onReset"
       >
         <svg
           width="15"
@@ -90,16 +113,27 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
           stroke-linejoin="round"
           aria-hidden="true"
         >
-          <path d="M20.5 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 20.5 12z" />
+          <path d="M1 4v6h6" />
+          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
         </svg>
+      </button>
+      <button
+        v-if="hasRunHistory"
+        type="button"
+        class="pnode-action pnode-action-right pnode-chat-btn"
+        :title="t('monitor.pipelineNode.chatWithRunner')"
+        :aria-label="t('monitor.pipelineNode.chat')"
+        @click.stop="onChat"
+      >
+        <Icon name="chatBubble" :size="15" />
       </button>
     </div>
     <Handle type="target" :position="Position.Left" />
     <div class="pnode-bubble" :title="bubbleTitle(data)">
-      {{ data.running ? '⏳' : (STATUS_ICON[data.status] || '○') }}
+      {{ data.recovering ? '⏸' : (data.running ? '⏳' : (STATUS_ICON[data.status] || '○')) }}
     </div>
     <div class="pnode-label">{{ data.label }}</div>
-    <div class="pnode-sub">{{ data.status }}</div>
+    <div class="pnode-sub">{{ data.recovering ? t('monitor.pipelineNode.awaitingRecovery') : data.status }}</div>
     <span
       v-if="data.qa_count > 0"
       class="qa-badge"
@@ -112,6 +146,56 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
 </template>
 
 <style scoped lang="scss">
+.pnode {
+  background: var(--panel-2);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 14px;
+  // Wide enough that the top-right action buttons (run/chat) never crowd the
+  // centred status bubble — see PipelineNode.vue.
+  min-width: 110px;
+  text-align: center;
+  cursor: default;
+  position: relative;
+}
+
+.qa-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: var(--waiting);
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 2px 5px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.pnode-bubble {
+  font-size: 20px;
+  color: var(--muted);
+  line-height: 1;
+}
+.pnode-label { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.pnode-sub { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+.pnode.done { border-color: var(--done); }
+.pnode.done .pnode-bubble { color: var(--done); }
+.pnode.active {
+  border-color: var(--active);
+  box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.4);
+  animation: pulse 1.6s infinite;
+}
+.pnode.active .pnode-bubble { color: var(--active); }
+.pnode.waiting { border-color: var(--waiting); }
+.pnode.waiting .pnode-bubble { color: var(--waiting); }
+
+@keyframes pulse {
+  0%,100% { box-shadow: 0 0 6px rgba(var(--accent-rgb), 0.3); }
+  50% { box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.7); }
+}
+
 .pnode {
   position: relative;
 }
@@ -161,6 +245,12 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
 .pnode-action-right:hover {
   transform: translateY(-50%) scale(1.15);
 }
+.pnode-reset-btn {
+  color: var(--waiting);
+}
+.pnode-stop-btn {
+  color: var(--danger);
+}
 .pnode-waiting .pnode-bubble,
 .pnode-runnable .pnode-bubble {
   cursor: pointer;
@@ -171,6 +261,19 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
 }
 .pnode-running .pnode-bubble {
   animation: pnode-running-pulse 1.2s ease-in-out infinite;
+}
+.pnode-recovering .pnode-bubble {
+  animation: pnode-recovering-pulse 2s ease-in-out infinite;
+  color: var(--waiting, #d97706);
+}
+@keyframes pnode-recovering-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
 }
 @keyframes pnode-running-pulse {
   0%,

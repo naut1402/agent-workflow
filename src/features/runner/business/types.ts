@@ -1,5 +1,7 @@
 // Shared types for the runner execution plane (U0005).
 
+import type { UsageSnapshot } from '../../../core/log/schema.js'
+
 export interface CredentialProfile {
   id: string
   provider: string
@@ -24,6 +26,16 @@ export interface Connection {
   flags?: string[]
   /** ai-provider: trỏ credential profile */
   credentialId?: string | null
+  /**
+   * Free-form settings merged into `runnerConfig` at execute time
+   * (`models`/`model`/`baseURL`, …). For `ai-provider` (`ai-api`),
+   * `extraTools?: string[]` opts this Connection into shell/git/search/web
+   * tools beyond the base 4 file-ops (see `AgenticApiProvider.resolveExtraTools`)
+   * — optional and absent on connections created before this key existed,
+   * which then get only the base tools (unchanged behavior). For
+   * `local-console` with `providerId: 'claude-code-cli'`, `model` is read
+   * as the `--model` argv value (see `claude-code-cli.ts`).
+   */
   config?: Record<string, unknown>
 }
 
@@ -90,6 +102,13 @@ export interface ExecuteRequest {
   // already proposed instead of starting over.
   sessionId?: string
   resumeSessionId?: string
+  /**
+   * Aborted when `cancelJob` is called for this job. Providers with no OS
+   * subprocess to SIGTERM (AgenticApiProvider subclasses) should thread this
+   * into their fetch/SDK calls; subprocess-spawning providers can ignore it
+   * (they are killed via `job.pid` instead).
+   */
+  signal?: AbortSignal
 }
 
 export interface ExecuteResult {
@@ -108,11 +127,19 @@ export interface ExecuteResult {
   stdout?: string
   /** Captured CLI session id (preset-uuid or parse-json providers). */
   sessionId?: string | null
+  /** True when runProcess() killed the child after timeoutMs elapsed (SIGTERM).
+   * Lets classifyJobFailure() recognize a timeout deterministically instead of
+   * matching the CLI's own stdout/stderr text (e.g. Claude Code's interrupt
+   * markers "Execution error" / "[Request interrupted by user]"). */
+  timedOut?: boolean
   /** Optional token usage (Agent CLI); see providers/agentCli.ts. */
   tokenUsage?: {
     inputTokens?: number
     outputTokens?: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
     totalTokens?: number
+    model?: string
     estimated?: boolean
   }
 }
@@ -122,7 +149,16 @@ export interface ExecuteResult {
 // the real files yet. Resolved by approveJob (apply + succeeded),
 // discardJob (cancelled), or sendJobFeedback (spawns a new `awaiting_approval`
 // job continuing the same CLI session).
-export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'awaiting_approval'
+export type JobStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+  | 'awaiting_approval'
+  | 'awaiting_recovery'
+
+export type JobFailureKind = 'usage_limit' | 'network' | 'process_crash'
 
 export interface JobRecord {
   id: string
@@ -165,6 +201,12 @@ export interface JobRecord {
   // this 1-indexed inclusive line range, so every line outside the range stays
   // byte-identical and the review diff is localized to the selection.
   spliceRange?: { start: number; end: number }
+  /** Aggregated LLM token usage for this job (Claude transcript capture, P0). */
+  usage?: UsageSnapshot
+  /** Retry counter for process_crash recovery (defaults to 0 when absent). */
+  attemptCount?: number
+  /** Last classified failure kind — debug/UI only. */
+  failureKind?: JobFailureKind
 }
 
 export interface RunnersStore {
@@ -181,6 +223,20 @@ export interface CredentialsStore {
 export interface ConnectionsStore {
   version: number
   connections: Connection[]
+}
+
+// A reusable provider "template": interface + optional baseURL. Credential
+// selection lives on the Connection itself, not here.
+export interface ProviderConfig {
+  id: string
+  label: string
+  providerId: string
+  baseURL?: string
+}
+
+export interface ProviderConfigsStore {
+  version: number
+  providerConfigs: ProviderConfig[]
 }
 
 export interface CommandsStore {
@@ -216,6 +272,7 @@ export const RUNNERS_VERSION = 2
 export const CREDENTIALS_VERSION = 1
 export const CONNECTIONS_VERSION = 1
 export const COMMANDS_VERSION = 1
+export const PROVIDER_CONFIGS_VERSION = 1
 
 export const DEFAULT_CONNECTION_ID = 'claude-code-cli-local'
 
@@ -235,5 +292,9 @@ export function sanitiseConnectionId(id: unknown): string | null {
 }
 
 export function sanitiseCommandId(id: unknown): string | null {
+  return sanitiseRunnerId(id)
+}
+
+export function sanitiseProviderConfigId(id: unknown): string | null {
   return sanitiseRunnerId(id)
 }

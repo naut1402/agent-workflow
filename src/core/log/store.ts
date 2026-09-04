@@ -1,7 +1,14 @@
 import { nowStamp } from '../lib/dateUtils.js'
 import { getLogDriver } from './driver.js'
-import { isLogTypeEnabled } from './loggingPrefs.js'
-import { levelFromHttpStatus, type AuditEntity, type AuditOp, type LogEntry, type LogLevel } from './schema.js'
+import { isLogTypeEnabled } from './loggingPrefsIo.js'
+import {
+  levelFromHttpStatus,
+  type AuditEntity,
+  type AuditOp,
+  type LogEntry,
+  type LogLevel,
+  type UsageLogEntry,
+} from './schema.js'
 import { getTraceId } from './traceContext.js'
 
 /**
@@ -12,6 +19,8 @@ export async function appendLog(entry: LogEntry): Promise<void> {
   try {
     if (entry.type === 'request' && !isLogTypeEnabled('request')) return
     if (entry.type === 'audit' && !isLogTypeEnabled('audit')) return
+    if (entry.type === 'events' && !isLogTypeEnabled('events')) return
+    if (entry.type === 'usage' && !isLogTypeEnabled('usage')) return
     await getLogDriver().append(entry)
   } catch {
     /* swallow */
@@ -47,6 +56,26 @@ export function appendRequestLog(p: {
     status: p.status,
     durationMs: p.durationMs,
     error: p.error ?? null,
+  }).catch(() => {})
+}
+
+/** Record one job token-usage snapshot. Fire-and-forget when not awaited. */
+export function appendUsageLog(
+  p: Omit<UsageLogEntry, 'type' | 'ts' | 'iso' | 'level' | 'traceId'> & {
+    level?: LogLevel
+    traceId?: string | null
+  },
+): Promise<void> {
+  if (!isLogTypeEnabled('usage')) return Promise.resolve()
+  const level = p.level ?? 'info'
+  const traceId = (p.traceId ?? getTraceId() ?? '').trim()
+  const { level: _l, traceId: _t, ...rest } = p
+  return appendLog({
+    type: 'usage',
+    ...nowStamp(),
+    level,
+    traceId,
+    ...rest,
   }).catch(() => {})
 }
 

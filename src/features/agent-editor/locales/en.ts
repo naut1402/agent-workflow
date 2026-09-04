@@ -12,6 +12,9 @@ export default {
   fields: {
     descriptionPlaceholder: 'Short description',
     recommendedModel: 'Recommended model',
+    scope: 'Scope',
+    scopeProject: 'Current project',
+    scopeGlobal: 'Global (every project)',
   },
   messages: {
     saved: 'Saved {name}',

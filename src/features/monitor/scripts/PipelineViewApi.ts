@@ -20,6 +20,16 @@ export async function runPipelineStep(
   })
 }
 
+export async function resetPipelineStep(
+  id: string,
+  body: { stepId: string; cascade: boolean },
+  projectId?: string,
+) {
+  return apiPost(`/api/tasks/${encodeURIComponent(id)}/reset-step`, body, {
+    query: { project: projectId },
+  })
+}
+
 export async function fetchFlowProfile(id: string) {
   return apiGet('/api/flow-profile', { id })
 }

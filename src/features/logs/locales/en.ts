@@ -7,6 +7,8 @@ export default {
   tabs: {
     audit: 'Audit',
     request: 'Request',
+    events: 'Events',
+    usage: 'Usage',
     jobs: 'Jobs',
   },
   columns: {
@@ -23,6 +25,19 @@ export default {
     response: 'Response',
     status: 'Status',
     ms: 'ms',
+    event: 'Event',
+    payload: 'Payload',
+    model: 'Model',
+    provider: 'Provider',
+    inputTokens: 'Input',
+    outputTokens: 'Output',
+    cacheReadTokens: 'Cache read',
+    cacheWriteTokens: 'Cache write',
+    totalTokens: 'Total',
+    jobId: 'Job',
+    taskId: 'Task',
+    stepId: 'Step',
+    agent: 'Agent',
   },
   filters: {
     q: 'Quick filter…',
@@ -44,11 +59,9 @@ export default {
     allDisabled: 'All log types are disabled — enable them in Settings › General › Logs.',
   },
   jobs: {
-    tailStart: '▶ Tail',
-    tailStop: '⏹ Stop tail',
     truncated: '(head truncated)',
     logEmpty: '(empty log)',
-    selectPrompt: 'Select a job to view its log.',
+    viewLog: 'View log',
   },
   timeline: {
     heading: 'Activity timeline',

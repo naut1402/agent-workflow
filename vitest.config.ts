@@ -5,6 +5,10 @@ import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
+// Container dashboard đặt NODE_ENV=production, và vitest chỉ tự set 'test' khi biến chưa có.
+// Phải ép ở đây, không phải trong test.env: Vite đọc nó lúc load config để tính isProduction.
+process.env.NODE_ENV = 'test'
+
 // Node ≥25 ships incomplete built-in localStorage that shadows jsdom's.
 // Disable it so jsdom owns the global (vitest#8757 / node#60303).
 const nodeMajor = Number.parseInt(process.versions.node.split('.')[0], 10)
@@ -26,6 +30,8 @@ export default defineConfig({
     alias: {
       '@configs': path.resolve(__dirname, 'src/core/configs'),
       '@': path.resolve(__dirname, 'src'),
+      // zod 3.25 dual-package: Vite leaves named `{ z }` undefined — use shim.
+      zod: path.resolve(__dirname, 'tests/shims/zod.ts'),
     },
   },
   test: {
@@ -35,7 +41,22 @@ export default defineConfig({
     // Unit tests live under tests/ mirroring the source tree. Vitest owns FE +
     // configs; bun test owns tests/src/server + tests/mcp.
     include: ['tests/src/**/*.{test,spec}.ts'],
-    exclude: ['node_modules', 'dist', 'test-e2e/**', 'tests/src/server/**', 'tests/src/core/log/**', 'tests/src/features/**/business/**', 'tests/src/features/**/server/**'],
+    exclude: [
+      'node_modules',
+      'dist',
+      'test-e2e/**',
+      'tests/src/server/**',
+      // Node-only helpers (fs / phase) — bun test, not jsdom. Các file core/lib
+      // còn lại là test vitest thuần (vi.stubGlobal / vi.resetModules /
+      // __APP_VERSION__) nên phải để vitest nhặt — liệt kê đích danh thay vì
+      // loại trừ cả thư mục, tránh test viết rồi mà không runner nào chạy.
+      'tests/src/core/lib/fileHelper.test.ts',
+      'tests/src/core/lib/phase.test.ts',
+      'tests/src/core/log/**',
+      'tests/src/core/events/**',
+      'tests/src/features/**/business/**',
+      'tests/src/features/**/server/**',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],

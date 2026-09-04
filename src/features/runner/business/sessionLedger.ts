@@ -1,4 +1,4 @@
-import { joinPath, mkdirSync, readTextFileSync, renameSync, resolvePath, writeTextFileSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, resolvePath, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
 import crypto from 'node:crypto'
 import os from 'node:os'
 import { registryHome } from '../../../core/registry.js'
@@ -20,6 +20,13 @@ export interface SessionEntry {
   createdAt: string
   lastUsedAt: string
   staleReason?: string
+  /** Cursor for Claude transcript usage capture across resume jobs. */
+  usageCursor?: UsageCursor
+}
+
+export interface UsageCursor {
+  mainLines: number
+  subagentFiles: string[]
 }
 
 export interface TaskSessionLedger {
@@ -82,10 +89,7 @@ export function loadTaskSessionLedger(projectId: string, taskId: string): TaskSe
 export function saveTaskSessionLedger(projectId: string, ledger: TaskSessionLedger): void {
   const dir = sessionsDir(projectId)
   mkdirSync(dir, { recursive: true })
-  const file = ledgerFile(projectId, ledger.taskId)
-  const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, JSON.stringify(ledger, null, 2))
-  renameSync(tmp, file)
+  writeTextFileAtomicSync(ledgerFile(projectId, ledger.taskId), JSON.stringify(ledger, null, 2))
 }
 
 function findOpenEntry(ledger: TaskSessionLedger): SessionEntry | null {
@@ -258,6 +262,46 @@ export function closeTaskSession(projectId: string, taskId: string, opts?: { ste
   if (changed) saveTaskSessionLedger(projectId, ledger)
 }
 
+/** Read usage cursor for a session id on the task ledger (null if missing). */
+export function getUsageCursor(
+  projectId: string,
+  taskId: string,
+  sessionId: string,
+): UsageCursor | null {
+  if (!projectId || !taskId || !sessionId) return null
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
+    const s = ledger.sessions[i]
+    if (s.sessionId === sessionId && s.usageCursor) return { ...s.usageCursor, subagentFiles: [...s.usageCursor.subagentFiles] }
+    if (s.sessionId === sessionId) return null
+  }
+  return null
+}
+
+/** Persist usage cursor onto the matching session entry (no-op if not found). */
+export function setUsageCursor(
+  projectId: string,
+  taskId: string,
+  sessionId: string,
+  cursor: UsageCursor,
+): void {
+  if (!projectId || !taskId || !sessionId) return
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  let changed = false
+  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
+    const s = ledger.sessions[i]
+    if (s.sessionId !== sessionId) continue
+    s.usageCursor = {
+      mainLines: Math.max(0, cursor.mainLines),
+      subagentFiles: [...cursor.subagentFiles],
+    }
+    s.lastUsedAt = new Date().toISOString()
+    changed = true
+    break
+  }
+  if (changed) saveTaskSessionLedger(projectId, ledger)
+}
+
 // ── CLI session capture helpers ────────────────────────────────────────────
 
 export type SessionCaptureMode = 'preset-uuid' | 'parse-json' | 'none'
@@ -265,13 +309,52 @@ export type SessionCaptureMode = 'preset-uuid' | 'parse-json' | 'none'
 export interface CursorJsonOutput {
   session_id?: string
   result?: string
+  /** Token usage from Cursor `--output-format json` result payload (camelCase). */
+  usage?: {
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    cacheWriteTokens: number
+  }
+  model?: string
+}
+
+function numToken(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0
+}
+
+/** Extract Cursor/Claude-style usage object (camelCase or snake_case). */
+export function parseCursorUsageObject(raw: unknown): CursorJsonOutput['usage'] | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const u = raw as Record<string, unknown>
+  const usage = {
+    inputTokens: numToken(u.inputTokens ?? u.input_tokens),
+    outputTokens: numToken(u.outputTokens ?? u.output_tokens),
+    cacheReadTokens: numToken(u.cacheReadTokens ?? u.cache_read_input_tokens ?? u.cache_read_tokens),
+    cacheWriteTokens: numToken(
+      u.cacheWriteTokens ?? u.cache_creation_input_tokens ?? u.cache_write_tokens,
+    ),
+  }
+  if (
+    usage.inputTokens === 0 &&
+    usage.outputTokens === 0 &&
+    usage.cacheReadTokens === 0 &&
+    usage.cacheWriteTokens === 0
+  ) {
+    return undefined
+  }
+  return usage
 }
 
 function cursorFieldsFrom(parsed: Record<string, unknown>): CursorJsonOutput {
-  return {
+  const out: CursorJsonOutput = {
     session_id: typeof parsed.session_id === 'string' ? parsed.session_id : undefined,
     result: typeof parsed.result === 'string' ? parsed.result : undefined,
   }
+  const usage = parseCursorUsageObject(parsed.usage)
+  if (usage) out.usage = usage
+  if (typeof parsed.model === 'string' && parsed.model.trim()) out.model = parsed.model.trim()
+  return out
 }
 
 /** Parse cursor-agent JSON stdout; tolerates leading/trailing whitespace/noise. */

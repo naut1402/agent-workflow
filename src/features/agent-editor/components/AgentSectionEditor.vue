@@ -246,3 +246,38 @@ async function saveSectionTemplate(key) {
     </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+.section-list { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.section-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+.section-block.collapsed .section-body { display: none; }
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.section-block.collapsed .section-head { margin-bottom: 0; }
+.section-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 1;
+}
+.section-title { flex: 1; min-width: 0; }
+.skill-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.skill-chips .chip.active { border-color: var(--accent); background: var(--accent-dim); }
+.parameters-block { margin: 12px 0; }
+.parameters-head { display: flex; align-items: center; justify-content: space-between; }
+.param-row { display: flex; gap: 8px; margin-top: 6px; align-items: center; }
+</style>

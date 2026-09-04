@@ -53,7 +53,7 @@ export function perTaskStepsReplace(baseSteps: Step[], per: any): boolean {
 }
 
 import { joinPath } from '../../../../core/lib/fileHelper.js'
-import { readYamlSafe } from '../../../../core/lib/yamlLib.js'
+import { readYamlChecked } from '../../../../core/lib/yamlLib.js'
 
 
 /**
@@ -63,8 +63,16 @@ import { readYamlSafe } from '../../../../core/lib/yamlLib.js'
 export async function loadPipelineConfig(root: string, id: string | null): Promise<any> {
   const cfg = JSON.parse(JSON.stringify(DEFAULT_PIPELINE))
   let source = 'builtin'
+  // A pipeline.yaml that exists but will not parse must not read as "no such
+  // override" — otherwise `cfg.steps` silently becomes the global/builtin flow
+  // and a caller comparing against it concludes the task's gate was removed.
+  // We cannot know the real shape, so we say so and let callers hold their
+  // ground (see `resolveHitlPending`'s unreadable branch).
+  let untrusted = false
 
-  const global = await readYamlSafe(joinPath(root, 'pipeline.yaml'))
+  const globalRead = await readYamlChecked(joinPath(root, 'pipeline.yaml'))
+  if (globalRead.status === 'unreadable') untrusted = true
+  const global = globalRead.status === 'ok' ? globalRead.doc : null
   if (global) {
     if (Array.isArray(global.steps)) cfg.steps = global.steps
     if (global.defaults) cfg.defaults = { ...cfg.defaults, ...global.defaults }
@@ -74,7 +82,9 @@ export async function loadPipelineConfig(root: string, id: string | null): Promi
   }
 
   if (id) {
-    const per = await readYamlSafe(joinPath(root, 'tasks', id, 'pipeline.yaml'))
+    const perRead = await readYamlChecked(joinPath(root, 'tasks', id, 'pipeline.yaml'))
+    if (perRead.status === 'unreadable') untrusted = true
+    const per = perRead.status === 'ok' ? perRead.doc : null
     if (per) {
       if (Array.isArray(per.steps)) {
         if (perTaskStepsReplace(cfg.steps, per)) {
@@ -91,6 +101,7 @@ export async function loadPipelineConfig(root: string, id: string | null): Promi
   }
 
   cfg.source = source
+  cfg.untrusted = untrusted
   return cfg
 }
 

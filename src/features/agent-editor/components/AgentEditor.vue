@@ -1,18 +1,28 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
-import { fetchCustomAgents, fetchCustomAgent, saveCustomAgent, deleteCustomAgent, exportCustomAgent } from '../scripts/agentEditorApi'
+import {
+  fetchCustomAgents,
+  fetchCustomAgent,
+  saveCustomAgent,
+  deleteCustomAgent,
+  exportCustomAgent,
+  type AgentScope,
+} from '../scripts/agentEditorApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { emptyDraft } from '../business/agentMarkdown.js'
 import AgentSectionEditor from './AgentSectionEditor.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'
 import AgentNlWizard from './AgentNlWizard.vue'
 
+const props = defineProps<{ projectId?: string | null }>()
+
 const { t } = useI18nHelpers()
 const agents = ref([])
 const catalog = ref({ skills: [], agents: [] })
 const draft = ref(emptyDraft())
 const selectedName = ref('')
+const scope = ref<AgentScope>('project')
 const saving = ref(false)
 const message = ref('')
 const error = ref('')
@@ -21,7 +31,7 @@ const showNl = ref(false)
 
 async function loadList() {
   try {
-    const data = await fetchCustomAgents()
+    const data = await fetchCustomAgents(props.projectId ?? undefined)
     agents.value = data.agents || []
   } catch (e) {
     error.value = String(e.message || e)
@@ -42,14 +52,17 @@ onMounted(async () => {
 
 function newAgent() {
   selectedName.value = ''
+  scope.value = 'project'
   draft.value = emptyDraft({ name: 'new-agent' })
   message.value = ''
 }
 
-async function selectAgent(name) {
+async function selectAgent(agent) {
   try {
-    const data = await fetchCustomAgent(name)
-    selectedName.value = name
+    const agentScope = agent.scope === 'global' ? 'global' : 'project'
+    const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agentScope)
+    selectedName.value = agent.name
+    scope.value = agentScope
     draft.value = { ...data.draft, name: data.name }
     message.value = ''
   } catch (e) {
@@ -62,7 +75,7 @@ async function save() {
   error.value = ''
   message.value = ''
   try {
-    const result = await saveCustomAgent(draft.value)
+    const result = await saveCustomAgent(draft.value, props.projectId ?? undefined, scope.value)
     selectedName.value = result.name
     message.value = t('agentEditor.messages.saved', { name: result.name })
     await loadList()
@@ -78,7 +91,7 @@ async function remove() {
   if (!selectedName.value) return
   if (!confirm(t('agentEditor.messages.confirmDelete', { name: selectedName.value }))) return
   try {
-    await deleteCustomAgent(selectedName.value)
+    await deleteCustomAgent(selectedName.value, props.projectId ?? undefined, scope.value)
     message.value = t('agentEditor.messages.deleted')
     newAgent()
     await loadList()
@@ -94,7 +107,7 @@ async function doExport(overwrite = false) {
     return
   }
   try {
-    const result = await exportCustomAgent(selectedName.value, overwrite)
+    const result = await exportCustomAgent(selectedName.value, overwrite, props.projectId ?? undefined, scope.value)
     message.value = `Exported → ${result.path}`
   } catch (e) {
     const msg = String(e.message || e)
@@ -122,13 +135,13 @@ function applyDraft(newDraft) {
       <ul class="agent-list">
         <li
           v-for="a in agents"
-          :key="a.name"
+          :key="`${a.scope}:${a.name}`"
           class="agent-list-item"
-          :class="{ active: selectedName === a.name }"
-          @click="selectAgent(a.name)"
+          :class="{ active: selectedName === a.name && scope === a.scope }"
+          @click="selectAgent(a)"
         >
           <span class="agent-list-name">{{ a.name }}</span>
-          <span v-if="a.editable" class="chip chip-xs">dashboard</span>
+          <span class="chip chip-xs">{{ a.scope === 'global' ? t('agentEditor.fields.scopeGlobal') : t('agentEditor.fields.scopeProject') }}</span>
         </li>
         <li v-if="!agents.length" class="muted agent-list-empty">{{ t('agentEditor.list.empty') }}</li>
       </ul>
@@ -150,7 +163,7 @@ function applyDraft(newDraft) {
         <AgentTemplatePicker @apply-draft="applyDraft" @close="showTemplates = false" />
       </div>
       <div v-if="showNl" class="agent-modal">
-        <AgentNlWizard @apply-draft="applyDraft" @close="showNl = false" />
+        <AgentNlWizard :project-id="projectId" @apply-draft="applyDraft" @close="showNl = false" />
       </div>
 
       <div class="agent-basic-fields">
@@ -166,6 +179,13 @@ function applyDraft(newDraft) {
           {{ t('agentEditor.fields.recommendedModel') }}
           <input v-model="draft.model" class="cfg-input" placeholder="claude-sonnet-4-6" />
         </label>
+        <label class="cfg-label">
+          {{ t('agentEditor.fields.scope') }}
+          <select v-model="scope" class="cfg-input">
+            <option value="project">{{ t('agentEditor.fields.scopeProject') }}</option>
+            <option value="global">{{ t('agentEditor.fields.scopeGlobal') }}</option>
+          </select>
+        </label>
       </div>
 
       <AgentSectionEditor
@@ -178,3 +198,63 @@ function applyDraft(newDraft) {
     </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+.agent-editor {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+}
+.agent-list-panel {
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  padding: 12px;
+  overflow-y: auto;
+}
+.agent-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.agent-list-head h2 { font-size: 14px; margin: 0; }
+.agent-list { list-style: none; margin: 0; padding: 0; }
+.agent-list-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 13px;
+}
+.agent-list-item:hover { background: var(--panel-2); }
+.agent-list-item.active { background: var(--accent-dim); border: 1px solid var(--accent); }
+.agent-list-empty { padding: 8px; }
+.agent-form-panel {
+  padding: 16px;
+  overflow-y: auto;
+}
+.agent-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.agent-basic-fields {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  max-width: 560px;
+}
+.agent-modal {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+</style>

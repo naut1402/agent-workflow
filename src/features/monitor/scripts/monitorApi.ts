@@ -1,4 +1,4 @@
-import type { TaskArchivePatch } from '../schemas/task'
+import type { TaskArchivePatch, TaskNamePatch } from '../schemas/task'
 import { t } from '../../../plugins/i18n'
 import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
 
@@ -36,6 +36,14 @@ export async function patchTaskArchive(id: string, body: TaskArchivePatch, proje
     query: { id, project: projectId },
     body,
     errorMessage: (status) => t('common.errors.archiveTask', { status }),
+  })
+}
+
+export async function patchTaskName(id: string, body: TaskNamePatch, projectId?: string) {
+  return apiRequest('PUT', '/api/task-name', {
+    query: { id, project: projectId },
+    body,
+    errorMessage: (status) => t('common.errors.renameTask', { status }),
   })
 }
 
