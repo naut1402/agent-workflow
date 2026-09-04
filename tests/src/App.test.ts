@@ -330,6 +330,57 @@ describe('App', () => {
       expect(modeBtns(wrapper)[EDITOR].attributes('aria-expanded')).toBe('true')
     })
 
+    // Enter/Space trên một <button> được trình duyệt dịch thành click; jsdom không
+    // implement default activation đó, nên khoá lại đúng 2 điều kiện làm nên tương
+    // đương: control là <button> thật, focus được — và đường kích hoạt (`.click()`,
+    // chính là đường Enter/Space đi qua) cho cùng kết quả với chuột.
+    it('kích hoạt bằng bàn phím tương đương click', async () => {
+      const wrapper = mountApp()
+      await flushPromises()
+
+      const el = modeBtns(wrapper)[MONITOR].element as HTMLButtonElement
+      expect(el.tagName).toBe('BUTTON')
+      expect(el.disabled).toBe(false)
+      expect(el.getAttribute('tabindex')).toBeNull() // không bị đẩy khỏi tab order
+      el.focus()
+      expect(document.activeElement).toBe(el)
+
+      el.click()
+      await flushPromises()
+      expect(wrapper.findComponent(MonitorLayout as any).props('subSidebarCollapsed')).toBe(true)
+      expect(modeBtns(wrapper)[MONITOR].attributes('aria-expanded')).toBe('false')
+
+      ;(modeBtns(wrapper)[MONITOR].element as HTMLButtonElement).click()
+      await flushPromises()
+      expect(wrapper.findComponent(MonitorLayout as any).props('subSidebarCollapsed')).toBe(false)
+      expect(modeBtns(wrapper)[MONITOR].attributes('aria-expanded')).toBe('true')
+    })
+
+    // Toggle giờ xảy ra thường xuyên hơn nút cũ nhiều, mà `v-if` trong panel vẫn
+    // remount ProjectBar/TaskList mỗi lần hiện lại (out of scope, design §6/R6) —
+    // xác nhận lựa chọn project/task sống ở shell nên không mất theo chu kỳ ẩn/hiện.
+    it('ẩn rồi hiện lại monitor không mất project/task đang chọn', async () => {
+      const wrapper = mountApp()
+      await flushPromises()
+
+      const panel = () => wrapper.findComponent(MonitorLayout as any)
+      await panel().vm.$emit('select-project', 'p-7')
+      await panel().vm.$emit('select-task', 'B4488')
+      await flushPromises()
+      expect(panel().props('selectedProjectId')).toBe('p-7')
+      expect(panel().props('selectedId')).toBe('B4488')
+
+      await modeBtns(wrapper)[MONITOR].trigger('click') // ẩn
+      await flushPromises()
+      await modeBtns(wrapper)[MONITOR].trigger('click') // hiện lại
+      await flushPromises()
+
+      expect(panel().props('subSidebarCollapsed')).toBe(false)
+      expect(panel().props('selectedProjectId')).toBe('p-7')
+      expect(panel().props('selectedId')).toBe('B4488')
+      expect(errorSpy).not.toHaveBeenCalled()
+    })
+
     it('monitor nhớ trạng thái ẩn qua reload, editor thì không', async () => {
       const first = mountApp()
       await flushPromises()
