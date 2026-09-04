@@ -2,7 +2,7 @@
 
 Tham chiếu nhanh các **domain event** phát trên event bus nội bộ (`src/core/events/`). Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới.
 
-- Kernel / nguyên tắc: [`architecture.md`](architecture.md) §3.2 · [`roadmap/1.1.0-event-driven.md`](roadmap/1.1.0-event-driven.md)
+- Kernel / nguyên tắc: [`architecture.md`](architecture.md) §3.2
 - API: `emit(type, payload)` · `emitEntity(op, entity, payload)` → `entity.{created|updated|deleted}`
 - Quan sát: JSONL `~/.dev-team-dashboard/logs/events.jsonl` (prefs `logging.types.events`); UI Logs tab Events
 
@@ -103,7 +103,7 @@ Khai báo trong `DashboardEventType` (`eventBus.ts`); có thể xuất hiện kh
 |-------|---------|
 | `webhook.received` / `webhook.triggered` | Epic webhook — không nằm emit survey nhánh logs/events hiện tại |
 | `usage.recorded` | Token usage — tương tự |
-| `entity.*` cho pipeline-editor / agent-editor / knowledge | Follow-up CRUD emit (xem roadmap § checklist) |
+| `entity.*` cho pipeline-editor / agent-editor / knowledge | Follow-up CRUD emit — chưa wire (#256) |
 
 `DashboardEventType` còn `| string` — type tùy nghi vẫn emit được; ưu tiên dùng union đã có.
 
