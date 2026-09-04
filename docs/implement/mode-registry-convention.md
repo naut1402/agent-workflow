@@ -34,6 +34,7 @@ interface ModeEntry {
   statusKind: 'live' | 'paused'                          // 'live': hiện `common.status.updated` khi có lastUpdated; 'paused': hiện `common.status.paused.<key>`
   panel: Component                                       // component chính của mode — import trực tiếp (KHÔNG lazy `() => import(...)`, xem §5)
   visible?: (ctx: ShellContext) => boolean               // ẩn mode khỏi sidebar/status/main-panel khi false — mặc định luôn hiện
+  subSidebar?: { persistKey?: string }                   // mode có sub-sidebar thu/phóng: click lại mode icon đang active sẽ toggle (không khai = no-op); `persistKey` = localStorage key, bỏ trống = không nhớ qua reload
   bindings?: (ctx: ShellContext) => Record<string, unknown> // props + `onXxx` listener truyền cho `panel` — optional nếu panel 0 props
 }
 ```
@@ -42,8 +43,9 @@ interface ModeEntry {
 
 ## 3. `ShellContext` — state/hàm App.vue đang expose
 
-`ShellContext` cố tình gõ lỏng (`Record<string, unknown>`) — `App.vue` sở hữu state, mode chỉ đọc/gọi qua `bindings(ctx)`. Property hiện có (xem `shellContext` trong `App.vue`): `projects, tasks, selectedId, selected, selectedProjectId, defaultProjectId, connected, error, lastUpdated, sidebarCollapsed, editorScope, editorTaskId, openArtifact, showLogsTab, onSelectProject, onProjectsChanged, onSelectTask, onOpenArtifact, poll, onTaskDeleted, onCreateTaskOpen, onUpdateScope, onUpdateTaskId`.
+`ShellContext` cố tình gõ lỏng (`Record<string, unknown>`) — `App.vue` sở hữu state, mode chỉ đọc/gọi qua `bindings(ctx)`. Property hiện có (xem `shellContext` trong `App.vue`): `projects, tasks, selectedId, selected, selectedProjectId, defaultProjectId, connected, error, lastUpdated, sidebarCollapsed, editorScope, editorTaskId, openArtifact, showLogsTab, subSidebar, onSelectProject, onProjectsChanged, onSelectTask, onOpenArtifact, poll, onTaskDeleted, onCreateTaskOpen, onUpdateScope, onUpdateTaskId`.
 
+- `subSidebar` (`SubSidebarCollapse`) không map thẳng xuống panel — dùng helper `subSidebarBindings(ctx, '<key>')` (`src/core/shell/subSidebarBindings.ts`) để trải `subSidebarCollapsed` + `onUpdate:subSidebarCollapsed` vào `bindings()`; panel nhận nó như một `v-model`. Chỉ có tác dụng khi mode đã khai `subSidebar` ở §2.
 - Mode chỉ cần state **đã có** trong list trên (vd `selectedProjectId`, `defaultProjectId`) → **không đụng `App.vue`**, chỉ thêm `registerMode.ts`.
 - Mode cần state **App.vue chưa expose** (case hiếm — state mới thật sự thuộc về shell, không phải riêng feature) → phải thêm 1 dòng vào `shellContext` computed trong `App.vue`. Đây là điểm chạm còn lại **có chủ đích** (state phải sống ở đâu đó tại tầng shell) — không phải bug của kiến trúc; khác với trước đây (đụng `App.vue` ở 4 vị trí bất kể mode cần gì).
 - Convention đặt tên listener trong `bindings()`: đúng chuẩn Vue — event kebab-case `foo-bar` → key `onFooBar` (event có `:` như `update:scope` → key `'onUpdate:scope'`, phải quote vì có `:`).

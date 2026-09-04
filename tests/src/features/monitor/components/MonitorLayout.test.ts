@@ -3,8 +3,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
 import { STORAGE_KEY, useAppSettings } from '@/core/composables/useAppSettings'
 
-const SUB_SIDEBAR_KEY = 'dev-dashboard-monitor-subsidebar-collapsed'
-
 const tasks = [
   {
     task_id: 'B4488',
@@ -44,23 +42,34 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-describe('MonitorLayout — sub-sidebar collapse (mục 5)', () => {
-  it('toggling the collapse button flips the class and persists to localStorage', async () => {
-    const w = mount(MonitorLayout, { props: { tasks } })
-    expect(w.find('.monitor-sub-sidebar').classes()).not.toContain('monitor-sub-sidebar--collapsed')
-
-    await w.find('.monitor-sub-sidebar-collapse-btn').trigger('click')
+// Collapse state giờ sống ở shell (App.vue + useSubSidebarCollapse) và xuống đây
+// như một v-model — panel chỉ render theo prop và emit khi cần đổi.
+describe('MonitorLayout — sub-sidebar collapse (state từ shell)', () => {
+  it('prop subSidebarCollapsed=true thu gọn panel và bỏ mount nội dung', () => {
+    const w = mount(MonitorLayout, { props: { tasks, subSidebarCollapsed: true } })
 
     expect(w.find('.monitor-sub-sidebar').classes()).toContain('monitor-sub-sidebar--collapsed')
     expect(w.find('.monitor-layout').classes()).toContain('monitor-layout--sub-collapsed')
-    expect(localStorage.getItem(SUB_SIDEBAR_KEY)).toBe('1')
+    expect(w.find('.project-bar').exists()).toBe(false)
+    expect(w.find('.task-row').exists()).toBe(false)
   })
 
-  it('reads the persisted collapsed state on mount', async () => {
-    localStorage.setItem(SUB_SIDEBAR_KEY, '1')
+  it('prop subSidebarCollapsed=false (mặc định) hiện đủ nội dung panel', () => {
     const w = mount(MonitorLayout, { props: { tasks } })
-    await w.vm.$nextTick()
-    expect(w.find('.monitor-sub-sidebar').classes()).toContain('monitor-sub-sidebar--collapsed')
+
+    expect(w.find('.monitor-sub-sidebar').classes()).not.toContain('monitor-sub-sidebar--collapsed')
+    expect(w.find('.monitor-layout').classes()).not.toContain('monitor-layout--sub-collapsed')
+    expect(w.find('.project-bar').exists()).toBe(true)
+    expect(w.find('.task-row').exists()).toBe(true)
+  })
+
+  it('không còn nút thu/phóng bên trong sub-sidebar', () => {
+    const w = mount(MonitorLayout, { props: { tasks } })
+
+    expect(w.find('.monitor-sub-sidebar-collapse-btn').exists()).toBe(false)
+    // Panel thu gọn cũng không mọc lại nút nào — thu gọn thì chỉ còn dải rỗng 0px.
+    const collapsed = mount(MonitorLayout, { props: { tasks, subSidebarCollapsed: true } })
+    expect(collapsed.find('.monitor-sub-sidebar').findAll('button')).toHaveLength(0)
   })
 })
 
@@ -122,13 +131,12 @@ describe('MonitorLayout — auto-collapse sub-sidebar on outside click', () => {
     document.body.appendChild(outside)
 
     const w = mount(MonitorLayout, { attachTo: document.body, props: { tasks } })
-    expect(w.find('.monitor-sub-sidebar').classes()).not.toContain('monitor-sub-sidebar--collapsed')
     await flushMacrotask()
 
     dispatchOutsideClick(outside)
     await w.vm.$nextTick()
 
-    expect(w.find('.monitor-sub-sidebar').classes()).not.toContain('monitor-sub-sidebar--collapsed')
+    expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
     w.unmount()
   })
 
@@ -143,8 +151,7 @@ describe('MonitorLayout — auto-collapse sub-sidebar on outside click', () => {
     dispatchOutsideClick(outside)
     await w.vm.$nextTick()
 
-    expect(w.find('.monitor-sub-sidebar').classes()).toContain('monitor-sub-sidebar--collapsed')
-    expect(localStorage.getItem(SUB_SIDEBAR_KEY)).toBe('1')
+    expect(w.emitted('update:subSidebarCollapsed')).toEqual([[true]])
     w.unmount()
   })
 
@@ -163,8 +170,54 @@ describe('MonitorLayout — auto-collapse sub-sidebar on outside click', () => {
     dispatchOutsideClick(item)
     await w.vm.$nextTick()
 
-    expect(w.find('.monitor-sub-sidebar').classes()).not.toContain('monitor-sub-sidebar--collapsed')
+    expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
     expect(w.find('.project-bar').exists()).toBe(true)
+    w.unmount()
+  })
+
+  // Mode icon nằm trong `.sidebar` và giờ chính là nút toggle sub-sidebar: nếu
+  // click-outside vẫn bắn, cú click sẽ collapse rồi bị toggle mở lại ⇒ nhánh
+  // "đang hiện → ẩn" không bao giờ chạy được.
+  it('does not collapse when the click lands inside the rail .sidebar', async () => {
+    seedAppSettings({ collapseMonitorSubSidebarOnOutside: true })
+    const rail = document.createElement('aside')
+    rail.className = 'sidebar'
+    const modeBtn = document.createElement('button')
+    modeBtn.className = 'mode-btn'
+    rail.appendChild(modeBtn)
+    document.body.appendChild(rail)
+
+    const w = mount(MonitorLayout, { attachTo: document.body, props: { tasks } })
+    await flushMacrotask()
+
+    dispatchOutsideClick(modeBtn)
+    await w.vm.$nextTick()
+
+    expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
+    w.unmount()
+  })
+
+  // Chặn click từ rail chỉ được tắt nhánh sub-sidebar. `collapseTaskExpandOnOutside`
+  // là setting độc lập, có từ trước task này — click vào rail vẫn phải đóng file-list.
+  it('still collapses the task file-list on a rail click when only that setting is on', async () => {
+    seedAppSettings({ collapseTaskExpandOnOutside: true, collapseMonitorSubSidebarOnOutside: true })
+    const rail = document.createElement('aside')
+    rail.className = 'sidebar'
+    const modeBtn = document.createElement('button')
+    modeBtn.className = 'mode-btn'
+    rail.appendChild(modeBtn)
+    document.body.appendChild(rail)
+
+    const w = mount(MonitorLayout, { attachTo: document.body, props: { tasks } })
+    await w.find('.task-row').trigger('click')
+    expect(w.find('.file-list').exists()).toBe(true)
+    await flushMacrotask()
+
+    dispatchOutsideClick(modeBtn)
+    await w.vm.$nextTick()
+
+    expect(w.find('.file-list').exists()).toBe(false)
+    expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
     w.unmount()
   })
 })

@@ -5,6 +5,8 @@ export default {
   sidebar: {
     expand: 'Mở sidebar',
     collapse: 'Thu gọn sidebar',
+    expandSubSidebar: 'Mở panel',
+    collapseSubSidebar: 'Thu gọn panel',
     connected: 'live',
     disconnected: 'disconnected',
     settings: 'Cài đặt',

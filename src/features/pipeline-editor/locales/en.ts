@@ -11,8 +11,6 @@ export default {
     taskIdPlaceholder: 'Task ID',
   },
   leftPanel: {
-    expandTitle: 'Open catalog & rules',
-    collapseTitle: 'Collapse catalog',
     catalogOpenTitle: 'Catalog — open panel',
     rulesOpenTitle: 'Rules — open panel',
   },

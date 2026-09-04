@@ -8,7 +8,8 @@ import { useLocalToggle } from './core/composables/useLocalToggle'
 import { useAppSettings } from './core/composables/useAppSettings'
 import { navigateToModeKey, reloadProjectsKey } from './core/shell/keys'
 import { containerKey } from './core/shell/containerKey'
-import { modeRegistryToken, type ShellContext } from './core/shell/modeRegistry'
+import { modeRegistryToken, type ModeEntry, type ShellContext } from './core/shell/modeRegistry'
+import { useSubSidebarCollapse } from './core/shell/useSubSidebarCollapse'
 import {
   resolveCollapseAppSidebarOnOutside,
   resolveNotifyShowFloating,
@@ -49,6 +50,42 @@ const editorTaskId = ref('')
 const { state: sidebarCollapsed, toggle: toggleSidebar } = useLocalToggle(false)
 const sidebarRef = ref<HTMLElement | null>(null)
 const { settings } = useAppSettings()
+
+// Sub-sidebar của từng mode (monitor/editor) — state ở shell vì cú click toggle
+// nằm trên `.mode-btn` dưới đây, còn panel chỉ mount khi mode đang active.
+const subSidebar = useSubSidebarCollapse(modeRegistry.listModes())
+
+/**
+ * 3 trạng thái của cú click mode icon: mode chưa chọn → chọn mode; mode đang
+ * chọn + có sub-sidebar → toggle sub-sidebar; còn lại → no-op.
+ */
+function onModeClick(m: ModeEntry) {
+  if (mode.value !== m.key) {
+    mode.value = m.key
+    return
+  }
+  subSidebar.toggle(m.key)
+}
+
+/**
+ * `aria-expanded` chỉ có nghĩa khi nút đang thật sự điều khiển một vùng đóng/mở:
+ * mode đang active + có sub-sidebar. Ngoài ra trả `undefined` để Vue bỏ hẳn
+ * attribute, không tuyên bố disclosure không tồn tại.
+ */
+function modeBtnExpanded(m: ModeEntry): boolean | undefined {
+  if (mode.value !== m.key || !subSidebar.has(m.key)) return undefined
+  return !subSidebar.isCollapsed(m.key)
+}
+
+/** Mode đang active + có sub-sidebar thì tooltip gợi ý luôn hành động toggle. */
+function modeBtnTitle(m: ModeEntry): string {
+  const label = t(m.titleKey ?? m.labelKey)
+  if (mode.value !== m.key || !subSidebar.has(m.key)) return label
+  const action = subSidebar.isCollapsed(m.key)
+    ? t('common.sidebar.expandSubSidebar')
+    : t('common.sidebar.collapseSubSidebar')
+  return `${label} — ${action}`
+}
 
 // Ignore teleported modals so clicks inside them do not collapse the rail.
 onClickOutside(
@@ -287,6 +324,7 @@ const shellContext = computed<ShellContext>(() => ({
   editorTaskId: editorTaskId.value,
   openArtifact: openArtifact.value,
   showLogsTab: showLogsTab.value,
+  subSidebar,
   onSelectProject,
   onProjectsChanged,
   onSelectTask,
@@ -359,8 +397,9 @@ onUnmounted(() => {
           :key="m.key"
           class="mode-btn rail-icon-btn"
           :class="{ active: mode === m.key }"
-          :title="t(m.titleKey ?? m.labelKey)"
-          @click="mode = m.key"
+          :title="modeBtnTitle(m)"
+          :aria-expanded="modeBtnExpanded(m)"
+          @click="onModeClick(m)"
         >
           <RailIcon :name="m.icon" />
           <span v-if="!sidebarCollapsed" class="mode-btn-label">{{ t(m.labelKey) }}</span>

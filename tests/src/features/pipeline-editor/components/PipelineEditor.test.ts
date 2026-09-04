@@ -103,3 +103,36 @@ describe('PipelineEditor — catalog/rules follow the selected project', () => {
     }
   })
 })
+
+// Panel trái không còn nút thu/phóng riêng — state đến từ shell qua v-model
+// (`subSidebarCollapsed` + `update:subSidebarCollapsed`), control là mode icon.
+describe('PipelineEditor — panel trái nhận state thu/phóng từ shell', () => {
+  it('prop subSidebarCollapsed=true thu gọn panel, chỉ còn icon Catalog/Rules', async () => {
+    const w = mountEditor({ subSidebarCollapsed: true })
+    await flushPromises()
+
+    expect(w.find('.editor-left').classes()).toContain('editor-left-collapsed')
+    expect(w.find('.editor-layout').classes()).toContain('editor-layout--left-collapsed')
+    expect(w.findAll('.editor-left-tab-icon')).toHaveLength(2)
+    expect(w.find('.editor-scope-panel').exists()).toBe(false)
+  })
+
+  it('không còn nút thu/phóng bên trong panel trái', async () => {
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('.editor-left-collapse-btn').exists()).toBe(false)
+
+    const collapsed = mountEditor({ subSidebarCollapsed: true })
+    await flushPromises()
+    expect(collapsed.find('.editor-left-collapse-btn').exists()).toBe(false)
+  })
+
+  it('click icon Catalog khi đang thu gọn emit update:subSidebarCollapsed=false', async () => {
+    const w = mountEditor({ subSidebarCollapsed: true })
+    await flushPromises()
+
+    await w.findAll('.editor-left-tab-icon')[0].trigger('click')
+
+    expect(w.emitted('update:subSidebarCollapsed')).toEqual([[false]])
+  })
+})

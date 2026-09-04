@@ -1,4 +1,5 @@
 import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
+import { subSidebarBindings } from '../../core/shell/subSidebarBindings'
 import MonitorLayout from './components/MonitorLayout.vue'
 
 /** Mode mặc định của app — statusKind 'live' (khác 8 mode còn lại đều 'paused'). */
@@ -10,6 +11,8 @@ export function registerMode(registry: ModeRegistry): void {
     order: 1,
     statusKind: 'live',
     panel: MonitorLayout,
+    // Key giữ nguyên từ bản cũ (state từng nằm trong MonitorLayout) — user không mất preference.
+    subSidebar: { persistKey: 'dev-dashboard-monitor-subsidebar-collapsed' },
     bindings: (ctx: ShellContext) => {
       const c = ctx as Record<string, unknown>
       return {
@@ -32,6 +35,7 @@ export function registerMode(registry: ModeRegistry): void {
         onTaskArchived: c.poll,
         onTaskDeleted: c.onTaskDeleted,
         onCreateTask: c.onCreateTaskOpen,
+        ...subSidebarBindings(ctx, 'monitor'),
       }
     },
   })

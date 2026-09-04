@@ -29,9 +29,11 @@ const props = defineProps({
   tasks: { type: Array as () => any[], default: () => [] },
   projectId: { type: [String, null], default: null },
   appSidebarCollapsed: { type: Boolean, default: false },
+  /** v-model từ shell — mode icon trên rail sidebar là control ẩn/hiện panel trái. */
+  subSidebarCollapsed: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:scope', 'update:task-id'])
+const emit = defineEmits(['update:scope', 'update:task-id', 'update:subSidebarCollapsed'])
 
 const taskSelect = ref('')
 const taskManual = ref('')
@@ -134,11 +136,13 @@ const catalog = ref<any>({ skills: [], agents: [] })
 const rulesData = ref({ rules: [], categories: [] })
 const leftTab = ref('catalog')
 const highlightedCategory = ref(null)
-const { state: editorLeftCollapsed, toggle: toggleEditorLeft, setFalse: expandEditorLeft } = useLocalToggle(false)
+const editorLeftCollapsed = computed(() => props.subSidebarCollapsed)
 
 function openLeftTab(tab) {
   leftTab.value = tab
-  expandEditorLeft()
+  // Panel ghi ngược lên shell: state chung nên `aria-expanded` của mode icon
+  // không lệch pha khi panel tự mở lại từ icon Catalog/Rules.
+  emit('update:subSidebarCollapsed', false)
 }
 
 async function loadCatalog() {
@@ -557,15 +561,6 @@ const editorLayoutClass = computed(() => ({
           </template>
         </div>
         <div class="editor-left-tabs" :class="{ 'is-collapsed': editorLeftCollapsed }">
-          <button
-            type="button"
-            class="editor-left-collapse-btn rail-icon-btn"
-            :title="editorLeftCollapsed ? t('pipelineEditor.leftPanel.expandTitle') : t('pipelineEditor.leftPanel.collapseTitle')"
-            :aria-expanded="!editorLeftCollapsed"
-            @click="toggleEditorLeft"
-          >
-            <RailIcon :name="editorLeftCollapsed ? 'panelExpand' : 'panelCollapse'" />
-          </button>
           <template v-if="!editorLeftCollapsed">
             <button
               class="editor-left-tab"
@@ -816,27 +811,6 @@ const editorLayoutClass = computed(() => ({
   align-items: center;
   width: 100%;
   box-sizing: border-box;
-}
-.editor-left-collapse-btn {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--muted);
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  cursor: pointer;
-  padding: 0;
-  font-family: inherit;
-  margin: 0;
-}
-.editor-left-tabs.is-collapsed .editor-left-collapse-btn {
-  margin: 0;
-}
-.editor-left-collapse-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: rgba(var(--accent-rgb), 0.08);
 }
 .editor-left-tab {
   flex: 1;

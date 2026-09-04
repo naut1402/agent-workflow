@@ -15,8 +15,6 @@ export default {
     emptyHintSuffix: 'để bắt đầu.',
     connecting: 'Đang kết nối tới dev server…',
     selectTask: 'Chọn một task ở bên trái.',
-    collapseSubSidebar: 'Thu gọn danh sách task',
-    expandSubSidebar: 'Mở rộng danh sách task',
   },
   taskList: {
     title: 'Tasks',
