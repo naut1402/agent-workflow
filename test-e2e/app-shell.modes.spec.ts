@@ -62,8 +62,9 @@ test('mode icon toggles the sub-sidebar of the active mode (capture)', async ({ 
   await expect(monitorBtn).toHaveAttribute('aria-expanded', 'false')
   await expect(monitorBtn).toHaveClass(/active/)
   await expect(page.locator('.tasklist--active')).toHaveCount(0)
-  // No leftover empty rail where the removed button used to sit.
-  expect((await subSidebar.boundingBox())?.width ?? 0).toBeLessThanOrEqual(1)
+  // No leftover empty rail where the removed button used to sit. The column width is
+  // transitioned (0.2s), so poll instead of reading the box once mid-animation.
+  await expect.poll(async () => (await subSidebar.boundingBox())?.width ?? 0).toBeLessThanOrEqual(1)
   await capturePage(page, testInfo, 'monitor-sub-sidebar-collapsed')
 
   // Click again → shows it back.
