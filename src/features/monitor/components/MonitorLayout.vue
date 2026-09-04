@@ -56,21 +56,27 @@ const subSidebarRef = ref<HTMLElement | null>(null)
 const taskListRef = ref<InstanceType<typeof TaskList> | null>(null)
 const { settings } = useAppSettings()
 
-// Ignore teleported modals (FolderPicker, Settings, …): clicks there are outside
-// the sub-sidebar DOM but must not collapse it — otherwise v-if unmounts ProjectBar
-// and closes the picker mid-navigation.
+// Mode icon (trong `.sidebar`) giờ chính là nút toggle sub-sidebar, mà listener
+// capture của onClickOutside chạy TRƯỚC @click của nút: nếu collapse ở đây thì
+// @click sẽ toggle mở lại ⇒ nhánh "đang hiện → ẩn" chết. Chặn đúng nhánh đó chứ
+// KHÔNG đưa '.sidebar' vào `ignore` — `ignore` triệt tiêu cả callback, kéo theo
+// nhánh collapseTaskExpandOnOutside (setting độc lập) chết oan.
+function isFromRailSidebar(event: Event) {
+  return event.composedPath().some((el) => el instanceof Element && el.classList.contains('sidebar'))
+}
+
 onClickOutside(
   subSidebarRef,
-  () => {
+  (event) => {
     if (resolveCollapseTaskExpandOnOutside(settings.value)) taskListRef.value?.collapseAll()
-    if (resolveCollapseMonitorSubSidebarOnOutside(settings.value)) {
+    if (!isFromRailSidebar(event) && resolveCollapseMonitorSubSidebarOnOutside(settings.value)) {
       emit('update:subSidebarCollapsed', true)
     }
   },
-  // '.sidebar' (rail) — mode icon giờ chính là nút toggle sub-sidebar. Listener
-  // capture của onClickOutside chạy TRƯỚC @click của nút, không ignore thì cú
-  // click sẽ collapse rồi bị toggle mở lại ⇒ nhánh "đang hiện → ẩn" chết.
-  { ignore: ['.modal-backdrop', '.sidebar'] },
+  // Ignore teleported modals (FolderPicker, Settings, …): clicks there are outside
+  // the sub-sidebar DOM but must not collapse it — otherwise v-if unmounts ProjectBar
+  // and closes the picker mid-navigation.
+  { ignore: ['.modal-backdrop'] },
 )
 
 const monitorLayoutClass = computed(() => ({

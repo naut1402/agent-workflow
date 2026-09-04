@@ -196,4 +196,28 @@ describe('MonitorLayout — auto-collapse sub-sidebar on outside click', () => {
     expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
     w.unmount()
   })
+
+  // Chặn click từ rail chỉ được tắt nhánh sub-sidebar. `collapseTaskExpandOnOutside`
+  // là setting độc lập, có từ trước task này — click vào rail vẫn phải đóng file-list.
+  it('still collapses the task file-list on a rail click when only that setting is on', async () => {
+    seedAppSettings({ collapseTaskExpandOnOutside: true, collapseMonitorSubSidebarOnOutside: true })
+    const rail = document.createElement('aside')
+    rail.className = 'sidebar'
+    const modeBtn = document.createElement('button')
+    modeBtn.className = 'mode-btn'
+    rail.appendChild(modeBtn)
+    document.body.appendChild(rail)
+
+    const w = mount(MonitorLayout, { attachTo: document.body, props: { tasks } })
+    await w.find('.task-row').trigger('click')
+    expect(w.find('.file-list').exists()).toBe(true)
+    await flushMacrotask()
+
+    dispatchOutsideClick(modeBtn)
+    await w.vm.$nextTick()
+
+    expect(w.find('.file-list').exists()).toBe(false)
+    expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
+    w.unmount()
+  })
 })
