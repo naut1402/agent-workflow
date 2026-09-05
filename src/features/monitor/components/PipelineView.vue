@@ -591,14 +591,16 @@ async function submitHitl(action: 'approve' | 'reject') {
           <span>{{ t('monitor.pipeline.hitlHeading', { label: hitlLabel }) }}</span>
           <button class="modal-close" @click="hitlOpen = false">✕</button>
         </div>
-        <p class="modal-hint">
-          {{ t('monitor.pipeline.hitlWaiting') }} <code>{{ hitlGateId }}</code> {{ t('monitor.pipeline.hitlWaitingMid') }} <strong>{{ hitlTaskId }}</strong>.
-        </p>
-        <label class="hitl-feedback-label">
-          {{ t('monitor.pipeline.feedbackLabel') }}
-          <textarea v-model="hitlFeedback" class="profile-editor hitl-feedback" rows="3" />
-        </label>
-        <p v-if="hitlError" class="editor-error">{{ hitlError }}</p>
+        <div class="modal-body">
+          <p class="modal-hint">
+            {{ t('monitor.pipeline.hitlWaiting') }} <code>{{ hitlGateId }}</code> {{ t('monitor.pipeline.hitlWaitingMid') }} <strong>{{ hitlTaskId }}</strong>.
+          </p>
+          <label class="hitl-feedback-label">
+            {{ t('monitor.pipeline.feedbackLabel') }}
+            <textarea v-model="hitlFeedback" class="profile-editor hitl-feedback" rows="3" />
+          </label>
+          <p v-if="hitlError" class="editor-error">{{ hitlError }}</p>
+        </div>
         <div class="modal-actions">
           <button class="btn-ghost" :disabled="hitlBusy" @click="submitHitl('reject')">{{ t('monitor.pipeline.reject') }}</button>
           <button class="btn-primary" :disabled="hitlBusy" @click="submitHitl('approve')">
@@ -621,35 +623,37 @@ async function submitHitl(action: 'approve' | 'reject') {
           }}</span>
           <button class="modal-close" @click="cancelRunConfirm">✕</button>
         </div>
-        <template v-if="runConfirmSkipLabels.length">
-          <p class="modal-hint">
-            {{ t('monitor.pipeline.runConfirmSkipBody', { steps: runConfirmSkipLabels.join(', ') }) }}
-          </p>
-          <p v-if="runConfirmOverwrite.length" class="editor-error">
-            {{ t('monitor.pipeline.runConfirmOverwriteWarning', { files: runConfirmOverwrite.join(', ') }) }}
-          </p>
-          <div class="modal-actions">
-            <button class="btn-ghost" @click="cancelRunConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
-            <button class="btn-ghost" @click="confirmRunStep(false)">
-              {{ t('monitor.pipeline.runConfirmChainFromCurrent') }}
-            </button>
-            <button class="btn-primary" @click="confirmRunStep(true)">
-              {{ t('monitor.pipeline.runConfirmJumpOnly', { label: runConfirmNode?.label ?? '' }) }}
-            </button>
-          </div>
-        </template>
-        <template v-else>
-          <p class="modal-hint">{{ t('monitor.pipeline.runConfirmBody') }}</p>
-          <p v-if="runConfirmOverwrite.length" class="editor-error">
-            {{ t('monitor.pipeline.runConfirmOverwriteWarning', { files: runConfirmOverwrite.join(', ') }) }}
-          </p>
-          <div class="modal-actions">
-            <button class="btn-ghost" @click="cancelRunConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
-            <button class="btn-primary" @click="confirmRunStep(false)">
-              {{ runConfirmOverwrite.length ? t('monitor.pipeline.runConfirmRunOverwrite') : t('monitor.pipeline.runConfirmRun') }}
-            </button>
-          </div>
-        </template>
+        <div class="modal-body">
+          <template v-if="runConfirmSkipLabels.length">
+            <p class="modal-hint">
+              {{ t('monitor.pipeline.runConfirmSkipBody', { steps: runConfirmSkipLabels.join(', ') }) }}
+            </p>
+            <p v-if="runConfirmOverwrite.length" class="editor-error">
+              {{ t('monitor.pipeline.runConfirmOverwriteWarning', { files: runConfirmOverwrite.join(', ') }) }}
+            </p>
+          </template>
+          <template v-else>
+            <p class="modal-hint">{{ t('monitor.pipeline.runConfirmBody') }}</p>
+            <p v-if="runConfirmOverwrite.length" class="editor-error">
+              {{ t('monitor.pipeline.runConfirmOverwriteWarning', { files: runConfirmOverwrite.join(', ') }) }}
+            </p>
+          </template>
+        </div>
+        <div v-if="runConfirmSkipLabels.length" class="modal-actions">
+          <button class="btn-ghost" @click="cancelRunConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
+          <button class="btn-ghost" @click="confirmRunStep(false)">
+            {{ t('monitor.pipeline.runConfirmChainFromCurrent') }}
+          </button>
+          <button class="btn-primary" @click="confirmRunStep(true)">
+            {{ t('monitor.pipeline.runConfirmJumpOnly', { label: runConfirmNode?.label ?? '' }) }}
+          </button>
+        </div>
+        <div v-else class="modal-actions">
+          <button class="btn-ghost" @click="cancelRunConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
+          <button class="btn-primary" @click="confirmRunStep(false)">
+            {{ runConfirmOverwrite.length ? t('monitor.pipeline.runConfirmRunOverwrite') : t('monitor.pipeline.runConfirmRun') }}
+          </button>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -662,35 +666,37 @@ async function submitHitl(action: 'approve' | 'reject') {
           <span>{{ t('monitor.pipeline.resetConfirmHeading', { label: resetConfirmNode?.label ?? '' }) }}</span>
           <button class="modal-close" @click="cancelResetConfirm">✕</button>
         </div>
-        <template v-if="resetConfirmCascadeLabels.length">
-          <p class="modal-hint">
-            {{ t('monitor.pipeline.resetConfirmCascadeBody', { label: resetConfirmNode?.label ?? '' }) }}
-          </p>
-          <p v-if="resetConfirmCascadeFiles.length" class="editor-error">
-            {{ t('monitor.pipeline.resetConfirmDeleteWarning', { files: resetConfirmCascadeFiles.join(', ') }) }}
-          </p>
-          <div class="modal-actions">
-            <button class="btn-ghost" @click="cancelResetConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
-            <button class="btn-ghost" @click="confirmReset(false)">
-              {{ t('monitor.pipeline.resetConfirmOnlyThis') }}
-            </button>
-            <button class="btn-primary" @click="confirmReset(true)">
-              {{ t('monitor.pipeline.resetConfirmCascade', { steps: resetConfirmCascadeLabels.join(', ') }) }}
-            </button>
-          </div>
-        </template>
-        <template v-else>
-          <p class="modal-hint">{{ t('monitor.pipeline.resetConfirmBody', { label: resetConfirmNode?.label ?? '' }) }}</p>
-          <p v-if="resetConfirmOverwrite.length" class="editor-error">
-            {{ t('monitor.pipeline.resetConfirmDeleteWarning', { files: resetConfirmOverwrite.join(', ') }) }}
-          </p>
-          <div class="modal-actions">
-            <button class="btn-ghost" @click="cancelResetConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
-            <button class="btn-primary" @click="confirmReset(false)">
-              {{ t('monitor.pipeline.resetConfirmOnlyThis') }}
-            </button>
-          </div>
-        </template>
+        <div class="modal-body">
+          <template v-if="resetConfirmCascadeLabels.length">
+            <p class="modal-hint">
+              {{ t('monitor.pipeline.resetConfirmCascadeBody', { label: resetConfirmNode?.label ?? '' }) }}
+            </p>
+            <p v-if="resetConfirmCascadeFiles.length" class="editor-error">
+              {{ t('monitor.pipeline.resetConfirmDeleteWarning', { files: resetConfirmCascadeFiles.join(', ') }) }}
+            </p>
+          </template>
+          <template v-else>
+            <p class="modal-hint">{{ t('monitor.pipeline.resetConfirmBody', { label: resetConfirmNode?.label ?? '' }) }}</p>
+            <p v-if="resetConfirmOverwrite.length" class="editor-error">
+              {{ t('monitor.pipeline.resetConfirmDeleteWarning', { files: resetConfirmOverwrite.join(', ') }) }}
+            </p>
+          </template>
+        </div>
+        <div v-if="resetConfirmCascadeLabels.length" class="modal-actions">
+          <button class="btn-ghost" @click="cancelResetConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
+          <button class="btn-ghost" @click="confirmReset(false)">
+            {{ t('monitor.pipeline.resetConfirmOnlyThis') }}
+          </button>
+          <button class="btn-primary" @click="confirmReset(true)">
+            {{ t('monitor.pipeline.resetConfirmCascade', { steps: resetConfirmCascadeLabels.join(', ') }) }}
+          </button>
+        </div>
+        <div v-else class="modal-actions">
+          <button class="btn-ghost" @click="cancelResetConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
+          <button class="btn-primary" @click="confirmReset(false)">
+            {{ t('monitor.pipeline.resetConfirmOnlyThis') }}
+          </button>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -698,6 +704,13 @@ async function submitHitl(action: 'approve' | 'reject') {
 
 <style scoped lang="scss">
 .pipeline-wrap { margin-bottom: 14px; }
+
+/* bù gap của .modal bị mất khi bọc nội dung vào .modal-body */
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
 .pipeline-toolbar {
   display: flex;

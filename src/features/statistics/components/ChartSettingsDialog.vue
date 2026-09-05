@@ -116,187 +116,189 @@ function resetDefaults() {
           <Icon name="close" :size="16" />
         </button>
       </div>
-      <p class="muted chart-settings-hint">{{ t('statistics.settings.hint') }}</p>
+      <div class="modal-body">
+        <p class="muted chart-settings-hint">{{ t('statistics.settings.hint') }}</p>
 
-      <div class="chart-settings-row">
-        <label class="chart-settings-field">
-          <span>{{ t('statistics.kind.label') }}</span>
-          <CSelect
-            :model-value="model.kind"
-            :options="kindOptions"
-            :aria-label="t('statistics.kind.label')"
-            @update:model-value="patch({ kind: $event as ChartConfig['kind'] })"
-          />
-        </label>
-        <label class="chart-settings-field">
-          <span>{{ t('statistics.groupBy.label') }}</span>
-          <CSelect
-            :model-value="model.groupBy"
-            :options="groupByOptions"
-            :aria-label="t('statistics.groupBy.label')"
-            @update:model-value="patch({ groupBy: $event as ChartConfig['groupBy'] })"
-          />
-        </label>
-        <label class="chart-settings-field">
-          <span>{{ t('statistics.metric.label') }}</span>
-          <CSelect
-            :model-value="model.metric"
-            :options="metricOptions"
-            :aria-label="t('statistics.metric.label')"
-            @update:model-value="patch({ metric: $event as ChartConfig['metric'] })"
-          />
-        </label>
-        <template v-if="model.kind === 'chart'">
+        <div class="chart-settings-row">
           <label class="chart-settings-field">
-            <span>{{ t('statistics.chartType.label') }}</span>
+            <span>{{ t('statistics.kind.label') }}</span>
             <CSelect
-              :model-value="model.chartType"
-              :options="chartTypeOptions"
-              :aria-label="t('statistics.chartType.label')"
-              @update:model-value="patch({ chartType: $event as ChartConfig['chartType'] })"
-            />
-          </label>
-        </template>
-        <template v-else>
-          <label class="chart-settings-field chart-settings-field--num">
-            <span>{{ t('statistics.report.topN') }}</span>
-            <input
-              type="number"
-              :min="REPORT_TOP_N_MIN"
-              :max="REPORT_TOP_N_MAX"
-              :value="model.topN"
-              @input="patchTopN(($event.target as HTMLInputElement).value)"
+              :model-value="model.kind"
+              :options="kindOptions"
+              :aria-label="t('statistics.kind.label')"
+              @update:model-value="patch({ kind: $event as ChartConfig['kind'] })"
             />
           </label>
           <label class="chart-settings-field">
-            <span>{{ t('statistics.report.direction') }}</span>
+            <span>{{ t('statistics.groupBy.label') }}</span>
             <CSelect
-              :model-value="model.reportDirection"
-              :options="directionOptions"
-              :aria-label="t('statistics.report.direction')"
-              @update:model-value="patch({ reportDirection: $event as ChartConfig['reportDirection'] })"
+              :model-value="model.groupBy"
+              :options="groupByOptions"
+              :aria-label="t('statistics.groupBy.label')"
+              @update:model-value="patch({ groupBy: $event as ChartConfig['groupBy'] })"
             />
           </label>
-        </template>
-        <label class="chart-settings-field">
-          <span>{{ t('statistics.numberFormat.label') }}</span>
-          <CSelect
-            :model-value="model.numberFormat"
-            :options="numberFormatOptions"
-            :aria-label="t('statistics.numberFormat.label')"
-            @update:model-value="patch({ numberFormat: $event as ChartConfig['numberFormat'] })"
-          />
-        </label>
-      </div>
-
-      <label class="chart-settings-field">
-        <span>{{ t('statistics.settings.chartTitle') }}</span>
-        <input
-          type="text"
-          :value="model.title"
-          :placeholder="t('statistics.settings.noTitle')"
-          @input="patch({ title: ($event.target as HTMLInputElement).value })"
-        />
-      </label>
-
-      <template v-if="model.kind === 'chart' && model.chartType !== 'pie'">
-        <label class="chart-settings-field">
-          <span>{{ t('statistics.settings.xAxisTitle') }}</span>
-          <input
-            type="text"
-            :value="model.style.xAxisTitle"
-            :placeholder="t('statistics.settings.none')"
-            @input="patchStyle({ xAxisTitle: ($event.target as HTMLInputElement).value })"
-          />
-        </label>
-        <label class="chart-settings-field">
-          <span>{{ t('statistics.settings.yAxisLabel') }}</span>
-          <input
-            type="text"
-            :value="model.style.yAxisLabel"
-            :placeholder="t('statistics.settings.autoLabel')"
-            @input="patchStyle({ yAxisLabel: ($event.target as HTMLInputElement).value })"
-          />
-        </label>
-        <label class="chart-settings-field chart-settings-field--color">
-          <span>{{ t('statistics.settings.chartColor') }}</span>
-          <input
-            type="color"
-            :value="model.style.color || '#4A7DFF'"
-            @input="patchStyle({ color: ($event.target as HTMLInputElement).value })"
-          />
-        </label>
-      </template>
-
-      <div v-else-if="model.kind === 'chart'" class="chart-settings-field">
-        <span>{{ t('statistics.settings.pieColors') }}</span>
-        <div class="chart-settings-toggles">
-          <label class="chart-settings-toggle">
-            <input
-              type="checkbox"
-              :checked="model.style.pieShowLabels ?? true"
-              @change="patchStyle({ pieShowLabels: ($event.target as HTMLInputElement).checked })"
+          <label class="chart-settings-field">
+            <span>{{ t('statistics.metric.label') }}</span>
+            <CSelect
+              :model-value="model.metric"
+              :options="metricOptions"
+              :aria-label="t('statistics.metric.label')"
+              @update:model-value="patch({ metric: $event as ChartConfig['metric'] })"
             />
-            {{ t('statistics.settings.pieShowLabels') }}
           </label>
-          <label class="chart-settings-toggle">
-            <input
-              type="checkbox"
-              :checked="model.style.pieShowValues ?? false"
-              @change="patchStyle({ pieShowValues: ($event.target as HTMLInputElement).checked })"
+          <template v-if="model.kind === 'chart'">
+            <label class="chart-settings-field">
+              <span>{{ t('statistics.chartType.label') }}</span>
+              <CSelect
+                :model-value="model.chartType"
+                :options="chartTypeOptions"
+                :aria-label="t('statistics.chartType.label')"
+                @update:model-value="patch({ chartType: $event as ChartConfig['chartType'] })"
+              />
+            </label>
+          </template>
+          <template v-else>
+            <label class="chart-settings-field chart-settings-field--num">
+              <span>{{ t('statistics.report.topN') }}</span>
+              <input
+                type="number"
+                :min="REPORT_TOP_N_MIN"
+                :max="REPORT_TOP_N_MAX"
+                :value="model.topN"
+                @input="patchTopN(($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label class="chart-settings-field">
+              <span>{{ t('statistics.report.direction') }}</span>
+              <CSelect
+                :model-value="model.reportDirection"
+                :options="directionOptions"
+                :aria-label="t('statistics.report.direction')"
+                @update:model-value="patch({ reportDirection: $event as ChartConfig['reportDirection'] })"
+              />
+            </label>
+          </template>
+          <label class="chart-settings-field">
+            <span>{{ t('statistics.numberFormat.label') }}</span>
+            <CSelect
+              :model-value="model.numberFormat"
+              :options="numberFormatOptions"
+              :aria-label="t('statistics.numberFormat.label')"
+              @update:model-value="patch({ numberFormat: $event as ChartConfig['numberFormat'] })"
             />
-            {{ t('statistics.settings.pieShowValues') }}
-          </label>
-          <label class="chart-settings-toggle">
-            <input
-              type="checkbox"
-              :checked="model.style.pieShowPercent ?? false"
-              @change="patchStyle({ pieShowPercent: ($event.target as HTMLInputElement).checked })"
-            />
-            {{ t('statistics.settings.pieShowPercent') }}
           </label>
         </div>
-        <ul class="chart-settings-colors">
-          <li v-for="(color, index) in model.style.pieColors ?? []" :key="index">
-            <input
-              type="color"
-              :value="color"
-              :aria-label="`${t('statistics.settings.pieColors')} ${index + 1}`"
-              @input="
-                patchStyle({
-                  pieColors: (model.style.pieColors ?? []).map((c, i) =>
-                    i === index ? ($event.target as HTMLInputElement).value : c,
-                  ),
-                })
-              "
-            />
-            <button
-              type="button"
-              class="icon-btn"
-              :title="t('statistics.settings.removeColor')"
-              :aria-label="t('statistics.settings.removeColor')"
-              @click="removePieColor(index)"
-            >
-              <Icon name="close" :size="14" />
-            </button>
-          </li>
-        </ul>
-        <button type="button" class="chart-settings-add-color" @click="addPieColor">
-          {{ t('statistics.settings.addColor') }}
-        </button>
-      </div>
 
-      <div class="chart-settings-row">
-        <label class="chart-settings-field chart-settings-field--num">
-          <span>{{ t('statistics.settings.height') }}</span>
+        <label class="chart-settings-field">
+          <span>{{ t('statistics.settings.chartTitle') }}</span>
           <input
-            type="number"
-            :min="CHART_MIN_HEIGHT"
-            :max="CHART_MAX_HEIGHT"
-            :value="model.style.height"
-            @input="patchHeight(($event.target as HTMLInputElement).value)"
+            type="text"
+            :value="model.title"
+            :placeholder="t('statistics.settings.noTitle')"
+            @input="patch({ title: ($event.target as HTMLInputElement).value })"
           />
         </label>
+
+        <template v-if="model.kind === 'chart' && model.chartType !== 'pie'">
+          <label class="chart-settings-field">
+            <span>{{ t('statistics.settings.xAxisTitle') }}</span>
+            <input
+              type="text"
+              :value="model.style.xAxisTitle"
+              :placeholder="t('statistics.settings.none')"
+              @input="patchStyle({ xAxisTitle: ($event.target as HTMLInputElement).value })"
+            />
+          </label>
+          <label class="chart-settings-field">
+            <span>{{ t('statistics.settings.yAxisLabel') }}</span>
+            <input
+              type="text"
+              :value="model.style.yAxisLabel"
+              :placeholder="t('statistics.settings.autoLabel')"
+              @input="patchStyle({ yAxisLabel: ($event.target as HTMLInputElement).value })"
+            />
+          </label>
+          <label class="chart-settings-field chart-settings-field--color">
+            <span>{{ t('statistics.settings.chartColor') }}</span>
+            <input
+              type="color"
+              :value="model.style.color || '#4A7DFF'"
+              @input="patchStyle({ color: ($event.target as HTMLInputElement).value })"
+            />
+          </label>
+        </template>
+
+        <div v-else-if="model.kind === 'chart'" class="chart-settings-field">
+          <span>{{ t('statistics.settings.pieColors') }}</span>
+          <div class="chart-settings-toggles">
+            <label class="chart-settings-toggle">
+              <input
+                type="checkbox"
+                :checked="model.style.pieShowLabels ?? true"
+                @change="patchStyle({ pieShowLabels: ($event.target as HTMLInputElement).checked })"
+              />
+              {{ t('statistics.settings.pieShowLabels') }}
+            </label>
+            <label class="chart-settings-toggle">
+              <input
+                type="checkbox"
+                :checked="model.style.pieShowValues ?? false"
+                @change="patchStyle({ pieShowValues: ($event.target as HTMLInputElement).checked })"
+              />
+              {{ t('statistics.settings.pieShowValues') }}
+            </label>
+            <label class="chart-settings-toggle">
+              <input
+                type="checkbox"
+                :checked="model.style.pieShowPercent ?? false"
+                @change="patchStyle({ pieShowPercent: ($event.target as HTMLInputElement).checked })"
+              />
+              {{ t('statistics.settings.pieShowPercent') }}
+            </label>
+          </div>
+          <ul class="chart-settings-colors">
+            <li v-for="(color, index) in model.style.pieColors ?? []" :key="index">
+              <input
+                type="color"
+                :value="color"
+                :aria-label="`${t('statistics.settings.pieColors')} ${index + 1}`"
+                @input="
+                  patchStyle({
+                    pieColors: (model.style.pieColors ?? []).map((c, i) =>
+                      i === index ? ($event.target as HTMLInputElement).value : c,
+                    ),
+                  })
+                "
+              />
+              <button
+                type="button"
+                class="icon-btn"
+                :title="t('statistics.settings.removeColor')"
+                :aria-label="t('statistics.settings.removeColor')"
+                @click="removePieColor(index)"
+              >
+                <Icon name="close" :size="14" />
+              </button>
+            </li>
+          </ul>
+          <button type="button" class="chart-settings-add-color" @click="addPieColor">
+            {{ t('statistics.settings.addColor') }}
+          </button>
+        </div>
+
+        <div class="chart-settings-row">
+          <label class="chart-settings-field chart-settings-field--num">
+            <span>{{ t('statistics.settings.height') }}</span>
+            <input
+              type="number"
+              :min="CHART_MIN_HEIGHT"
+              :max="CHART_MAX_HEIGHT"
+              :value="model.style.height"
+              @input="patchHeight(($event.target as HTMLInputElement).value)"
+            />
+          </label>
+        </div>
       </div>
 
       <footer class="chart-settings-actions">
@@ -314,6 +316,12 @@ function resetDefaults() {
 <style scoped lang="scss">
 .chart-settings-dialog {
   width: min(560px, 94vw);
+  gap: 0.75rem;
+}
+/* bù gap của .modal bị mất khi bọc nội dung vào .modal-body */
+.chart-settings-dialog > .modal-body {
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
 }
 .chart-settings-hint {

@@ -142,7 +142,6 @@ function onTriggerKeydown(e: KeyboardEvent) {
   position: relative;
   display: block;
   width: 100%;
-  max-width: 360px;
 }
 
 .c-select-trigger {

@@ -820,7 +820,7 @@ onUnmounted(() => {
                   :options="commandSelectOptions"
                   :placeholder="t('runner.connectionDialog.commandPlaceholder')"
                   aria-label="Command"
-                  class="cfg-input"
+                  class="cfg-select"
                 />
                 <div v-if="selectedCommand?.custom" class="icon-btn-group">
                   <button
@@ -902,7 +902,7 @@ onUnmounted(() => {
                   :options="providerConfigSelectOptions"
                   :placeholder="t('runner.connectionDialog.providerPlaceholder')"
                   :aria-label="t('runner.connectionDialog.providerField')"
-                  class="cfg-input"
+                  class="cfg-select"
                 />
                 <div class="icon-btn-group">
                   <button
@@ -949,7 +949,7 @@ onUnmounted(() => {
                   :options="credentialSelectOptions"
                   :placeholder="t('runner.connectionDialog.credentialPlaceholder')"
                   :aria-label="t('runner.connectionDialog.credentialField')"
-                  class="cfg-input"
+                  class="cfg-select"
                 />
                 <div class="icon-btn-group">
                   <button
@@ -1207,7 +1207,8 @@ onUnmounted(() => {
   font-size: 0.9rem;
 }
 .field { margin-bottom: 0.75rem; }
-.field .cfg-input { width: 100%; }
+.field .cfg-input,
+.field .cfg-select { width: 100%; }
 .row-actions {
   display: flex;
   align-items: center;
@@ -1222,14 +1223,16 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.4rem;
 }
-.command-row .cfg-input { flex: 1; min-width: 0; }
+.command-row .cfg-input,
+.command-row .cfg-select { flex: 1; min-width: 0; }
 .cfg-combo-select { flex: 1; min-width: 0; }
 .credential-row {
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
-.credential-row .cfg-input { flex: 1; min-width: 0; }
+.credential-row .cfg-input,
+.credential-row .cfg-select { flex: 1; min-width: 0; }
 .icon-btn-group { display: inline-flex; align-items: center; gap: 0.15rem; flex-shrink: 0; }
 .path-hint { margin: 0.35rem 0 0; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }

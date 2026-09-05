@@ -896,3 +896,40 @@ describe('ConnectionDialog — local-console model (claude-code-cli)', () => {
     expect(document.body.textContent).not.toContain(loadedText)
   })
 })
+
+// Lưới an toàn cấu trúc cho regression UI của 1.1.0 (task Tb692264f) — xem ghi
+// chú cùng nhóm ở RunnerDialog.test.ts. jsdom không tính layout, phần hình học
+// do e2e gánh.
+describe('ConnectionDialog / ProviderDialog — cấu trúc chống regression UI', () => {
+  function assertNoNativeControlClass() {
+    const roots = qa('.c-select')
+    // Không có assert này thì test xanh giả khi markup/selector đổi.
+    expect(roots.length).toBeGreaterThan(0)
+    for (const root of roots) {
+      expect(root.classList.contains('cfg-input')).toBe(false)
+      expect(root.classList.contains('cfg-textarea')).toBe(false)
+    }
+  }
+
+  function assertSingleModalBody() {
+    const modal = q('.modal')
+    const bodies = modal.querySelectorAll('.modal-body')
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0].querySelector('.modal-head')).toBeNull()
+    expect(modal.querySelectorAll('.modal-actions button').length).toBeGreaterThan(0)
+  }
+
+  it('ConnectionDialog không truyền class control native vào CSelect', async () => {
+    const w = await mountConnectionOnAiProvider()
+    assertNoNativeControlClass()
+    assertSingleModalBody()
+    w.unmount()
+  })
+
+  it('ProviderDialog không truyền class control native vào CSelect', async () => {
+    const w = await mountProviderDialog()
+    assertNoNativeControlClass()
+    assertSingleModalBody()
+    w.unmount()
+  })
+})

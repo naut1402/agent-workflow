@@ -336,3 +336,32 @@ describe('StatisticsPanel — gallery đa chart + summary card', () => {
     expect(wrapper.find('.statistics-summary-card').exists()).toBe(false)
   })
 })
+
+// Lưới an toàn cấu trúc cho regression "hàng nút rơi ra ngoài border dưới"
+// (task Tb692264f). ChartSettingsDialog là dialog mới ở 1.1.0 và là chỗ user
+// gặp lỗi: nó đặt nội dung thẳng vào .modal mà không có .modal-body, nên khi
+// nội dung vượt max-height: 88vh thì hàng nút bị vẽ ngoài border. jsdom không
+// tính layout nên chỉ chốt được cấu trúc; hình học do test-e2e/statistics.spec.ts gánh.
+describe('ChartSettingsDialog — cấu trúc modal (.modal-body)', () => {
+  it('dialog thiết lập biểu đồ có đúng một .modal-body, head và hàng nút nằm ngoài', async () => {
+    mockStats(statsBody(['TB1', 'TA1']))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = mountWithI18n(StatisticsPanel, { props: { projectId: 'p1' } })
+    await flushPromises()
+    await wrapper.find('.chart-tile .chart-tile-actions .icon-btn').trigger('click')
+    const dialog = wrapper.findComponent({ name: 'ChartSettingsDialog' })
+    expect(dialog.exists()).toBe(true)
+
+    const modal = dialog.find('.modal').element
+    const bodies = modal.querySelectorAll('.modal-body')
+    // Đúng một: 0 → hàng nút tràn khỏi border; 2 → scrollbar lồng nhau.
+    expect(bodies).toHaveLength(1)
+    // Head và hàng nút phải cố định, không cuộn theo nội dung.
+    expect(bodies[0].querySelector('.modal-head')).toBeNull()
+    expect(bodies[0].querySelector('.chart-settings-actions')).toBeNull()
+    expect(modal.querySelectorAll('.chart-settings-actions button').length).toBeGreaterThan(0)
+    // Phần cuộn được phải thật sự chứa nội dung, không phải div rỗng.
+    expect(bodies[0].querySelectorAll('.c-select').length).toBeGreaterThan(0)
+  })
+})
