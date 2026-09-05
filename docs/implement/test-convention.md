@@ -132,6 +132,9 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 | `tests/src/server/runners` | bun | `features/runner/business`, `core/events`, `core/log` | 20 | `bun test tests/src/server/runners` |
 | `tests/src/server/settings` | bun | `features/settings/business` | 1 | `bun test tests/src/server/settings` |
 | `tests/src/server/tasks` | bun | `features/monitor/business`, `features/runner/business`, `core/events` | 4 | `bun test tests/src/server/tasks` |
+| `tests/tools` | bun | `tooling` | 1 | `bun test tests/tools` |
+
+Script tooling của repo (`.github/scripts/`) có test riêng ở `tests/tools/` — cùng runner bun, khai báo trong script `test` của `package.json`.
 
 E2E ở `test-e2e/`: `test-e2e/<feature>.spec.ts` + `test-e2e/fixtures/` (`.dev-team-agent/` giả + golden snapshot); `playwright.config.ts` trỏ `testDir` về đây.
 

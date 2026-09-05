@@ -47,7 +47,7 @@ interface Args {
   paths: string[]
 }
 
-function parseArgs(argv: string[]): Args {
+export function parseArgs(argv: string[]): Args {
   const out: Args = { base: null, list: false, catalog: false, paths: [] }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -102,7 +102,7 @@ function walk(dir: string, acc: string[] = []): string[] {
 const IMPORT_RE = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*)['"]([^'"]+)['"]/g
 
 /** Specifier → path repo-relative, hoặc null nếu là package ngoài. */
-function resolveSpecifier(fromFile: string, spec: string): string | null {
+export function resolveSpecifier(fromFile: string, spec: string): string | null {
   let base: string
   if (spec.startsWith('.')) base = path.resolve(path.dirname(path.join(ROOT, fromFile)), spec)
   else if (spec.startsWith('@configs/')) base = path.join(ROOT, 'src/core/configs', spec.slice('@configs/'.length))
@@ -130,7 +130,7 @@ function resolveSpecifier(fromFile: string, spec: string): string | null {
  * mà mọi route test đều dựng app qua đó. Thiếu cạnh này thì sửa controller/api
  * của một feature sẽ *không* kéo theo route test của chính nó.
  */
-function virtualEdges(files: string[]): Map<string, string[]> {
+export function virtualEdges(files: string[]): Map<string, string[]> {
   const featureApis = files.filter((f) => /^src\/features\/[^/]+\/api\.ts$/.test(f))
   return new Map([['src/api/apiServer.ts', featureApis]])
 }
@@ -157,7 +157,7 @@ function buildImportGraph(files: string[]): Map<string, string[]> {
 }
 
 /** Test file có chạm (transitive) vào bất kỳ file nào trong `targets` không? */
-function reaches(start: string, graph: Map<string, string[]>, targets: Set<string>): boolean {
+export function reaches(start: string, graph: Map<string, string[]>, targets: Set<string>): boolean {
   const seen = new Set<string>([start])
   const stack = [start]
   while (stack.length) {
@@ -186,7 +186,7 @@ function bunOwnedPrefixes(): string[] {
     .map((tok) => tok.replace(/\/$/, ''))
 }
 
-function isUnder(file: string, prefixes: string[]): boolean {
+export function isUnder(file: string, prefixes: string[]): boolean {
   return prefixes.some((p) => file === p || file.startsWith(`${p}/`))
 }
 
@@ -195,7 +195,7 @@ function isUnder(file: string, prefixes: string[]): boolean {
  * `components` chạy vitest — cùng feature, khác runner), phần còn lại gom ở
  * tầng khu vực.
  */
-function suiteOf(testFile: string): string {
+export function suiteOf(testFile: string): string {
   const seg = testFile.split('/')
   if (seg[1] === 'mcp' || seg.length <= 3) return seg.slice(0, -1).join('/')
   const depth = seg[2] === 'features' ? 5 : 4
@@ -203,8 +203,9 @@ function suiteOf(testFile: string): string {
 }
 
 /** `src/features/automations/business/x.ts` → `features/automations/business`. */
-function areaOf(sourceFile: string): string | null {
+export function areaOf(sourceFile: string): string | null {
   const seg = sourceFile.split('/')
+  if (seg[0] === '.github') return 'tooling'
   if (seg[0] !== 'src' && seg[0] !== 'mcp') return null
   if (seg[0] === 'mcp') return 'mcp'
   if (seg[1] === 'features') return seg.slice(1, 4).join('/')
@@ -320,4 +321,5 @@ function main(): number {
   return code
 }
 
-process.exit(main())
+// Chạy như CLI thì thoát theo mã lỗi; import từ test thì chỉ lấy hàm, không chạy gì.
+if (import.meta.main) process.exit(main())
