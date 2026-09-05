@@ -24,7 +24,7 @@ export const AutomationIdSchema = z.string().regex(AUTOMATION_ID_PATTERN, 'inval
  * slug đã lowercase + gạch nối. Regex chặt để id không bao giờ trở thành mảnh
  * path; path thật luôn lấy từ `registry.get(id).path` (đã canonical hoá).
  */
-export const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
+const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export const AUTOMATION_TRIGGER_KINDS = ['timer', 'event'] as const
 export type AutomationTriggerKind = (typeof AUTOMATION_TRIGGER_KINDS)[number]
