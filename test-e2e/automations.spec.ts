@@ -13,15 +13,25 @@ import { capturePage } from './_capture'
 /** Xa trong tương lai — scheduler của server thật không được kích hoạt rule này. */
 const FUTURE_START = '2030-01-01T00:00:00.000Z'
 
+const RULE_NAME = 'E2E smoke rule'
+
 test('automations mode: danh sách rule + dialog tạo rule (capture)', async ({ page, request }, testInfo) => {
   const projectsRes = await request.get('/api/projects')
   const projectsBody = (await projectsRes.json()) as { defaultId?: string | null }
   const projectId = projectsBody.defaultId || ''
   const q = projectId ? `?project=${encodeURIComponent(projectId)}` : ''
 
+  // Rule cùng tên còn sót lại (lần chạy trước timeout giữa chừng, cleanup không
+  // kịp) sẽ làm `toHaveCount(1)` bên dưới thấy 2 dòng — dọn trước cho idempotent.
+  const listed = await request.get(`/api/automations${q}`)
+  const before = (await listed.json()) as { automations: Array<{ id: string; name: string }> }
+  for (const stale of before.automations.filter((a) => a.name === RULE_NAME)) {
+    await request.delete(`/api/automations/${stale.id}${q}`)
+  }
+
   const created = await request.post(`/api/automations${q}`, {
     data: {
-      name: 'E2E smoke rule',
+      name: RULE_NAME,
       description: 'Rule do e2e seed — sẽ bị xoá ở cuối test',
       enabled: true,
       triggers: [{ kind: 'timer', startAt: FUTURE_START, repeat: { mode: 'once' } }],
@@ -39,9 +49,9 @@ test('automations mode: danh sách rule + dialog tạo rule (capture)', async ({
     await expect(page.locator('.automations-panel')).toBeVisible({ timeout: 15_000 })
 
     // Rule vừa seed hiển thị đúng tên + badge trạng thái.
-    const row = page.locator('.rule-row', { hasText: 'E2E smoke rule' })
+    const row = page.locator('.rule-row', { hasText: RULE_NAME })
     await expect(row).toHaveCount(1, { timeout: 10_000 })
-    await expect(row.locator('.rule-name')).toHaveText('E2E smoke rule')
+    await expect(row.locator('.rule-name')).toHaveText(RULE_NAME)
     await expect(row.locator('.rule-status-chip').first()).toHaveText('Đang bật')
     // Các lối vào hành động phải có mặt (không bấm "Chạy thử ngay").
     for (const title of ['Tắt automation', 'Chạy thử ngay', 'Lịch sử chạy', 'Sửa automation', 'Xoá automation']) {
@@ -66,7 +76,10 @@ test('automations mode: danh sách rule + dialog tạo rule (capture)', async ({
     await expect(targetProject).toBeVisible()
     // Mặc định trống = dùng project đang chọn.
     await expect(targetProject).toHaveValue('')
-    await dialog.locator('input[type="radio"][value="existing"]').first().check()
+    // Chip mode là <label> bọc radio `display: none` — `check()` sẽ chờ radio
+    // hiện ra tới hết timeout, phải click vào label.
+    await dialog.locator('label.chip-select', { hasText: 'Chạy task có sẵn' }).first().click()
+    await expect(dialog.locator('input[aria-label="Task ID"]')).toBeVisible()
     await expect(targetProject).toBeVisible()
 
     await capturePage(page, testInfo, 'automations')
