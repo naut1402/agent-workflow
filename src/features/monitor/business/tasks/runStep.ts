@@ -51,9 +51,14 @@ export async function runTaskStep(
     // Checked before reconcile so a request that is going to be refused anyway
     // leaves no trace: reconcile persists, and bumping `state_mtime` here would
     // make an open HITL modal fail its own 409 conflict check for nothing.
+    // Scoped to this project's data root: two projects can hold tasks with the
+    // same id (automation actions can target another project), and a job over
+    // there must not make this one look busy. Jobs written before `devTeamRoot`
+    // existed in metadata still count — conservative, same as before.
     const existing = listJobs(50).find(
       (j) =>
         j.metadata?.taskId === taskId &&
+        (!j.metadata?.devTeamRoot || j.metadata.devTeamRoot === root) &&
         (j.status === 'queued' || j.status === 'running'),
     )
     if (existing) {
@@ -81,9 +86,12 @@ export async function runTaskStep(
     // `last_reset_at` (never reset), behavior is unchanged: any succeeded job heals
     // a stuck phase.
     const resetAt = typeof state.last_reset_at === 'string' ? state.last_reset_at : null
+    // Same project scoping as the `existing` lookup above — a succeeded job for
+    // a same-named task in another project must not advance this task's cursor.
     const lastSucceeded = listJobs(200).find(
       (j) =>
         j.metadata?.taskId === taskId &&
+        (!j.metadata?.devTeamRoot || j.metadata.devTeamRoot === root) &&
         j.status === 'succeeded' &&
         !j.applyTarget &&
         j.metadata?.pipelineStepId === stepId &&

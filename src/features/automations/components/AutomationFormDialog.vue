@@ -14,7 +14,10 @@ const props = defineProps<{
   /** Rule đang sửa — null khi tạo mới. */
   editRule: AutomationListItem | null
   eventTypes: string[]
+  /** Options của project đang chọn. */
   formOptions: AutomationFormOptions
+  /** Options theo project đích của từng bước — khoá là project id. */
+  optionsByProject: Record<string, AutomationFormOptions>
   saving: boolean
   serverError: string
 }>()
@@ -22,6 +25,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   submit: [{ mode: 'create' | 'edit'; id?: string; body: CreateAutomationRequest | UpdateAutomationRequest }]
+  /** Bước nào đó trỏ tới project này — nhờ panel nạp options của nó. */
+  'request-options': [projectId: string]
 }>()
 
 const { t } = useI18nHelpers()
@@ -54,6 +59,8 @@ interface ActionRow {
   profileName: string
   runnerId: string
   taskId: string
+  /** Project đích — '' = project đang chọn. */
+  projectId: string
   // httpRequest
   method: HttpMethod
   url: string
@@ -66,6 +73,9 @@ interface ActionRow {
 
 const MAX_TRIGGERS = 5
 const MAX_ACTIONS = 10
+
+/** Bản sao FE của `PROJECT_ID_PATTERN` (schemas/automation.ts) — báo lỗi tại chỗ thay vì đợi 400. */
+const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 const form = reactive({
   name: '',
@@ -102,6 +112,7 @@ function newActionRow(): ActionRow {
     profileName: '',
     runnerId: '',
     taskId: '',
+    projectId: '',
     method: 'GET',
     url: '',
     headersText: '',
@@ -201,6 +212,7 @@ watch(
           row.profileName = a.profileName ?? ''
           row.taskId = a.taskId ?? ''
           row.runnerId = a.runnerId ?? ''
+          row.projectId = a.projectId ?? ''
         } else if (a.kind === 'httpRequest') {
           row.method = a.method
           row.url = a.url
@@ -252,6 +264,10 @@ const actionErrors = computed(() =>
         if (!row.taskId.trim()) return t('automations.action.taskIdRequired')
         if (!/^[A-Za-z0-9][\w-]{0,63}$/.test(row.taskId.trim())) return t('automations.action.taskIdInvalid')
       }
+      // Chặn giá trị rác khi rule được sửa tay ngoài UI rồi mở lại form.
+      if (row.projectId.trim() && !PROJECT_ID_RE.test(row.projectId.trim())) {
+        return t('automations.action.targetProjectInvalid')
+      }
       return ''
     }
     if (row.kind === 'httpRequest') {
@@ -286,16 +302,66 @@ const eventOptions = computed<CComboSelectOption[]>(() =>
   props.eventTypes.map((code) => ({ value: code, label: eventLabel(code) })),
 )
 
-const profileOptions = computed<CComboSelectOption[]>(() =>
-  props.formOptions.profiles.map((p) => ({ value: p, label: p })),
+/**
+ * Options của một bước: theo project đích của chính bước đó, mặc định là
+ * project đang chọn. Project đích chưa nạp xong → task/profile/runner rỗng
+ * (không mượn của project khác), riêng `projects` là global nên giữ nguyên.
+ */
+function optionsOf(row: ActionRow): AutomationFormOptions {
+  const key = row.projectId.trim()
+  if (!key) return props.formOptions
+  return (
+    props.optionsByProject[key] ?? {
+      tasks: [],
+      profiles: [],
+      runners: [],
+      projects: props.formOptions.projects,
+    }
+  )
+}
+
+function profileOptionsOf(row: ActionRow): CComboSelectOption[] {
+  return optionsOf(row).profiles.map((p) => ({ value: p, label: p }))
+}
+
+function runnerOptionsOf(row: ActionRow): CComboSelectOption[] {
+  return optionsOf(row).runners.map((r) => ({ value: r.id, label: r.label || r.id }))
+}
+
+function taskOptionsOf(row: ActionRow): CComboSelectOption[] {
+  return optionsOf(row).tasks.map((id) => ({ value: id, label: id }))
+}
+
+/** Danh sách project lấy từ registry (global) — luôn đọc từ options của project đang chọn. */
+const projectOptions = computed<CComboSelectOption[]>(() =>
+  props.formOptions.projects.map((p) => ({
+    value: p.id,
+    label: p.default ? `${p.name} (${t('automations.action.targetProjectDefaultTag')})` : p.name,
+  })),
 )
 
-const runnerOptions = computed<CComboSelectOption[]>(() =>
-  props.formOptions.runners.map((r) => ({ value: r.id, label: r.label || r.id })),
-)
+/**
+ * Đổi project đích: task/profile/runner đã chọn thuộc project cũ nên không còn
+ * hợp lệ — xoá thay vì để người dùng lưu một tổ hợp chắc chắn fail lúc chạy.
+ */
+function onTargetProjectChange(row: ActionRow, value: string): void {
+  if (row.projectId === value) return
+  row.projectId = value
+  row.taskId = ''
+  row.profileName = ''
+  row.runnerId = ''
+}
 
-const taskOptions = computed<CComboSelectOption[]>(() =>
-  props.formOptions.tasks.map((id) => ({ value: id, label: id })),
+// Bước nào trỏ project khác thì nhờ panel nạp options của project đó (kể cả khi
+// prefill từ rule đang sửa) — panel cache lại nên gọi lặp không tốn request.
+watch(
+  () => form.actions.map((a) => (a.kind === 'runTask' ? a.projectId.trim() : '')).join('|'),
+  () => {
+    for (const row of form.actions) {
+      if (row.kind === 'runTask' && row.projectId.trim()) emit('request-options', row.projectId.trim())
+    }
+  },
+  { immediate: true },
 )
 
 const HTTP_METHODS_UI: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
@@ -413,6 +479,8 @@ function buildActions(): CreateAutomationRequest['actions'] {
           }
         : { taskId: row.taskId.trim() }),
       ...(row.runnerId.trim() ? { runnerId: row.runnerId.trim() } : {}),
+      // Rỗng = không gửi khoá: rule cũ round-trip không mọc field mới.
+      ...(row.projectId.trim() ? { projectId: row.projectId.trim() } : {}),
     }
   })
 }
@@ -632,6 +700,19 @@ function submit(): void {
                     </label>
                   </div>
 
+                  <!-- Ngoài mọi v-if mode: project đích áp cho cả create lẫn existing. -->
+                  <div class="field">
+                    <span class="field-label">{{ t('automations.action.targetProject') }}</span>
+                    <CComboSelect
+                      :model-value="row.projectId"
+                      :options="projectOptions"
+                      :aria-label="t('automations.action.targetProject')"
+                      :placeholder="t('automations.action.targetProjectPlaceholder')"
+                      @update:model-value="onTargetProjectChange(row, $event)"
+                    />
+                    <span class="field-hint">{{ t('automations.action.targetProjectHint') }}</span>
+                  </div>
+
                   <label v-if="row.mode === 'create'" class="field">
                     <span class="field-label">{{ t('automations.action.prompt') }}</span>
                     <textarea v-model="row.prompt" rows="4" :placeholder="t('automations.action.promptPlaceholder')" />
@@ -640,7 +721,7 @@ function submit(): void {
                     <span class="field-label">{{ t('automations.action.profileName') }}</span>
                     <CComboSelect
                       v-model="row.profileName"
-                      :options="profileOptions"
+                      :options="profileOptionsOf(row)"
                       creatable
                       :aria-label="t('automations.action.profileName')"
                       :placeholder="t('automations.action.profileNamePlaceholder')"
@@ -650,7 +731,7 @@ function submit(): void {
                     <span class="field-label">{{ t('automations.action.taskId') }}</span>
                     <CComboSelect
                       v-model="row.taskId"
-                      :options="taskOptions"
+                      :options="taskOptionsOf(row)"
                       creatable
                       :aria-label="t('automations.action.taskId')"
                       :placeholder="t('automations.action.taskIdPlaceholder')"
@@ -661,7 +742,7 @@ function submit(): void {
                     <span class="field-label">{{ t('automations.action.runnerId') }}</span>
                     <CComboSelect
                       v-model="row.runnerId"
-                      :options="runnerOptions"
+                      :options="runnerOptionsOf(row)"
                       creatable
                       :aria-label="t('automations.action.runnerId')"
                       :placeholder="t('automations.action.runnerIdPlaceholder')"

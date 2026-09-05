@@ -233,3 +233,83 @@ describe('normaliseAutomationDoc → AutomationRuleRecord', () => {
     expect(parsed.success).toBe(false)
   })
 })
+
+/**
+ * `actions[].projectId` — project đích của bước `runTask` (T0d57ff58).
+ *
+ * Điểm nhìn: id này không bao giờ được dùng để dựng path (path thật lấy từ
+ * registry), nhưng schema vẫn là hàng rào đầu tiên — giá trị nào lưu được thì
+ * phải chạy được, giá trị nào không dùng được phải bị chặn ngay lúc lưu.
+ */
+describe('RunTaskAction.projectId', () => {
+  function ruleWith(action: Record<string, unknown>) {
+    return {
+      version: 1,
+      id: 'rule-a',
+      name: 'Rule A',
+      enabled: true,
+      triggers: [{ id: 't1', kind: 'event', eventType: 'job.failed' }],
+      actions: [action],
+      createdAt: '2026-01-02T03:04:05.000Z',
+      updatedAt: '2026-01-02T03:04:05.000Z',
+    }
+  }
+
+  test('mode=create kèm project đích hợp lệ → PASS, giữ nguyên giá trị', () => {
+    const parsed = AutomationRuleRecord.safeParse(
+      ruleWith({ kind: 'runTask', mode: 'create', prompt: 'x', projectId: 'proj-b-1a2b3c4d' }),
+    )
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.actions[0]).toMatchObject({ projectId: 'proj-b-1a2b3c4d' })
+  })
+
+  test('mode=existing kèm project đích hợp lệ → PASS (field áp cho cả 2 mode)', () => {
+    const parsed = AutomationRuleRecord.safeParse(
+      ruleWith({ kind: 'runTask', mode: 'existing', taskId: 'T123', projectId: 'proj-b-1a2b3c4d' }),
+    )
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.actions[0]).toMatchObject({ projectId: 'proj-b-1a2b3c4d' })
+  })
+
+  test.each([
+    ['vắng mặt', { kind: 'runTask', mode: 'create', prompt: 'x' }],
+    ['null', { kind: 'runTask', mode: 'create', prompt: 'x', projectId: null }],
+    ['existing vắng mặt', { kind: 'runTask', mode: 'existing', taskId: 'T123' }],
+  ])('không chọn project đích (%s) → vẫn PASS', (_label, action) => {
+    expect(AutomationRuleRecord.safeParse(ruleWith(action)).success).toBe(true)
+  })
+
+  test.each([
+    ['chuỗi rỗng', ''],
+    ['path traversal', '../other-project'],
+    ['có dấu /', 'a/b'],
+    ['có khoảng trắng', 'proj b'],
+    ['khoảng trắng đuôi', 'proj '],
+    ['chữ hoa', 'Proj-B'],
+    ['biến {{…}}', '{{trigger.payload.projectId}}'],
+    ['quá dài', 'a'.repeat(500)],
+  ])('project đích không dùng được (%s) → FAIL', (_label, projectId) => {
+    const parsed = AutomationRuleRecord.safeParse(
+      ruleWith({ kind: 'runTask', mode: 'create', prompt: 'x', projectId }),
+    )
+
+    expect(parsed.success).toBe(false)
+  })
+
+  test('normaliseAutomationDoc không đụng tới projectId', () => {
+    const doc = ruleWith({ kind: 'runTask', mode: 'create', prompt: 'x', projectId: 'proj-b-1a2b3c4d' })
+
+    expect(normaliseAutomationDoc(doc)).toEqual(doc)
+  })
+
+  test('rule cũ (không có projectId) round-trip không mọc khoá mới', () => {
+    const parsed = AutomationRuleRecord.safeParse(
+      ruleWith({ kind: 'runTask', mode: 'create', prompt: 'x' }),
+    )
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && Object.keys(parsed.data.actions[0])).not.toContain('projectId')
+  })
+})

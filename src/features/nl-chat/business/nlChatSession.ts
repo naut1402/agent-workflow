@@ -132,7 +132,8 @@ function schemaHintFor(entityType?: NlChatEntityType | null): string {
         'entityType = automation: JSON phải là subset field của CreateAutomationRequest cho rule tự động hoá (trigger → action).',
         'Bắt buộc: { "name": string, "trigger": {...}, "action": {...} }. Optional: "description", "enabled" (mặc định true).',
         'trigger là MỘT trong: { "kind": "time", "at": "<ISO datetime>" } (chạy một lần) | { "kind": "interval", "everyMs": <số ms, tối thiểu 60000> } (định kỳ) | { "kind": "cron", "cron": "<biểu thức 5 field, vd \'0 9 * * 1-5\'>" } | { "kind": "event", "eventType": "<domain event, vd \'job.failed\', \'hitl.pending\', \'task.created\'>" }.',
-        'action là MỘT trong: { "kind": "runTask", "mode": "create", "prompt": "<prompt cho task mới>" (+ optional "profileName", "runnerId") } | { "kind": "runTask", "mode": "existing", "taskId": "<id task>" } (+ optional "runnerId").',
+        'action là MỘT trong: { "kind": "runTask", "mode": "create", "prompt": "<prompt cho task mới>" (+ optional "profileName", "runnerId", "projectId") } | { "kind": "runTask", "mode": "existing", "taskId": "<id task>" } (+ optional "runnerId", "projectId").',
+        '"projectId" là id project trong registry — bỏ trống nghĩa là chạy trên project hiện tại. Không tự bịa id: chỉ điền khi người dùng nêu rõ project đích.',
         'Luôn hỏi người dùng muốn chạy task MỚI (cần prompt) hay task CÓ SẴN (cần taskId) khi chưa rõ.',
       ].join('\n')
     default:

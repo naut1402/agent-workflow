@@ -22,10 +22,18 @@ import {
 
 const POLL_MS = 10_000
 
+const EMPTY_OPTIONS: AutomationFormOptions = { tasks: [], profiles: [], runners: [], projects: [] }
+
 export function useAutomations(getProjectId: () => string | undefined) {
   const automations = ref<AutomationListItem[]>([])
   const eventTypes = ref<string[]>([])
-  const formOptions = ref<AutomationFormOptions>({ tasks: [], profiles: [], runners: [] })
+  /**
+   * Options theo project — khoá `''` là project đang chọn (hành vi cũ), các khoá
+   * khác là project đích của một bước action runTask.
+   */
+  const optionsByProject = ref<Record<string, AutomationFormOptions>>({})
+  /** Options của project đang chọn — giữ nguyên tên/kiểu cho call site cũ. */
+  const formOptions = computed<AutomationFormOptions>(() => optionsByProject.value[''] ?? EMPTY_OPTIONS)
   const loading = ref(false)
   const error = ref('')
   const actionError = ref('')
@@ -60,13 +68,31 @@ export function useAutomations(getProjectId: () => string | undefined) {
     }
   }
 
-  /** Options cho combobox task/profile/runner — load lại mỗi lần mở form. */
-  async function loadFormOptions(): Promise<void> {
+  /**
+   * Options cho combobox task/profile/runner — load lại mỗi lần mở form.
+   * `targetId` rỗng/không truyền = project đang chọn.
+   */
+  async function loadFormOptions(targetId?: string): Promise<void> {
+    const key = (targetId ?? '').trim()
     try {
-      formOptions.value = await fetchAutomationFormOptions(getProjectId())
+      const data = await fetchAutomationFormOptions(key || getProjectId())
+      optionsByProject.value = { ...optionsByProject.value, [key]: data }
     } catch {
-      formOptions.value = { tasks: [], profiles: [], runners: [] }
+      const next = { ...optionsByProject.value }
+      // Không cache kết quả lỗi của project đích: `ensureFormOptions` thấy khoá đã
+      // tồn tại là thôi fetch, nên một lần lỗi mạng sẽ làm combobox của project đó
+      // rỗng suốt phiên. Khoá '' vẫn ghi rỗng — call site cũ cần giá trị để render.
+      if (key) delete next[key]
+      else next[key] = { ...EMPTY_OPTIONS }
+      optionsByProject.value = next
     }
+  }
+
+  /** Nạp options của một project đích nếu chưa có — dialog gọi khi một bước đổi project. */
+  async function ensureFormOptions(targetId: string): Promise<void> {
+    const key = targetId.trim()
+    if (!key || optionsByProject.value[key]) return
+    await loadFormOptions(key)
   }
 
   async function create(payload: CreateAutomationRequest): Promise<boolean> {
@@ -163,9 +189,14 @@ export function useAutomations(getProjectId: () => string | undefined) {
   watch(
     () => getProjectId(),
     () => {
+      // Options cũ thuộc project trước — bỏ hết rồi nạp lại ngay khoá project đang
+      // chọn: badge "project đích" ở bảng rule cần `projects` để đổi id sang tên,
+      // không đợi tới lúc người dùng mở dialog.
+      optionsByProject.value = {}
       void load()
       void loadEventTypes()
       void loadRuns()
+      void loadFormOptions()
     },
     { immediate: true },
   )
@@ -176,6 +207,7 @@ export function useAutomations(getProjectId: () => string | undefined) {
     automations: sorted,
     eventTypes,
     formOptions,
+    optionsByProject,
     loading,
     error,
     actionError,
@@ -185,6 +217,7 @@ export function useAutomations(getProjectId: () => string | undefined) {
     load,
     loadEventTypes,
     loadFormOptions,
+    ensureFormOptions,
     create,
     update,
     toggle,
