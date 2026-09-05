@@ -87,8 +87,14 @@ test('automations mode: danh sách rule + dialog tạo rule (capture)', async ({
     await dialog.locator('.modal-close').click()
     await expect(dialog).toHaveCount(0)
   } finally {
-    // Dọn rule để fixture không rò state sang spec khác.
-    const deleted = await request.delete(`/api/automations/${ruleId}${q}`)
-    expect(deleted.status()).toBe(200)
+    // Dọn rule để fixture không rò state sang spec khác. Khi thân test timeout,
+    // Playwright đã đóng context nên lệnh này ném lỗi — nuốt lại, vì lỗi gốc
+    // (chỗ thật sự treo) mới là thứ cần thấy trong report. Rule sót lại sẽ được
+    // dọn ở đầu lần chạy sau: spec đã idempotent hoá phần seed.
+    try {
+      await request.delete(`/api/automations/${ruleId}${q}`)
+    } catch (err) {
+      console.warn(`[automations.spec] cleanup rule ${ruleId} thất bại:`, err)
+    }
   }
 })
