@@ -219,9 +219,6 @@ onMounted(() => {
   void load()
   void loadEventTypes()
   void loadRuns()
-  // `stepLabel` cần danh sách project để đổi id đích sang tên — nạp ngay khi mở
-  // panel thay vì đợi người dùng mở dialog.
-  void loadFormOptions()
   startPolling()
 })
 </script>

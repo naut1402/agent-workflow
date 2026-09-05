@@ -66,6 +66,13 @@ function makeAutomations(getProjectId: () => string | undefined) {
   return api
 }
 
+/** Nhả microtask cho các promise do watch/onMounted phát ra — không await trực tiếp được. */
+async function flush(): Promise<void> {
+  await nextTick()
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
 function rule(id: string, over: Record<string, unknown> = {}) {
   return {
     version: 1,
@@ -397,18 +404,20 @@ describe('ensureFormOptions — options của project đích', () => {
     expect(a.optionsByProject.value['proj-b-1a2b3c4d'].tasks).toEqual(['TB1'])
   })
 
-  it('lỗi khi nạp project đích → options rỗng, không giữ giá trị của project khác', async () => {
+  it('lỗi khi nạp project đích → không giữ giá trị của project khác, và thử lại được', async () => {
     const a = makeAutomations(() => 'P1')
     api.formOptions.mockRejectedValue(new Error('registry hỏng'))
 
     await a.ensureFormOptions('proj-b-1a2b3c4d')
 
-    expect(a.optionsByProject.value['proj-b-1a2b3c4d']).toEqual({
-      tasks: [],
-      profiles: [],
-      runners: [],
-      projects: [],
-    })
+    // Không cache kết quả lỗi: khoá phải trống để lần sau còn fetch lại, nếu ghi
+    // options rỗng vào đây thì combobox của project đó chết suốt phiên.
+    expect(a.optionsByProject.value['proj-b-1a2b3c4d']).toBeUndefined()
+
+    api.formOptions.mockResolvedValue(OPTIONS_B as never)
+    await a.ensureFormOptions('proj-b-1a2b3c4d')
+
+    expect(a.optionsByProject.value['proj-b-1a2b3c4d'].tasks).toEqual(['TB1'])
   })
 
   it('đổi project đang chọn → cache options cũ bị xoá', async () => {
@@ -422,5 +431,23 @@ describe('ensureFormOptions — options của project đích', () => {
     await nextTick()
 
     expect(a.optionsByProject.value['proj-b-1a2b3c4d']).toBeUndefined()
+  })
+
+  it('đổi project đang chọn → options của project mới được nạp lại ngay, không đợi mở dialog', async () => {
+    const projectId = ref<string | undefined>('P1')
+    api.formOptions.mockResolvedValue({ tasks: ['TA1'], profiles: [], runners: [], projects: [] } as never)
+    const a = makeAutomations(() => projectId.value)
+    await flush()
+    expect(a.formOptions.value.tasks).toEqual(['TA1'])
+
+    api.formOptions.mockResolvedValue({ tasks: ['TP2'], profiles: [], runners: [], projects: [] } as never)
+    projectId.value = 'P2'
+    await nextTick()
+    await flush()
+
+    // Badge "project đích" ở bảng rule đọc thẳng `formOptions.projects` — để rỗng
+    // tới lúc mở dialog thì cột "Các bước" hiện id thô thay vì tên project.
+    expect(api.formOptions).toHaveBeenLastCalledWith('P2')
+    expect(a.formOptions.value.tasks).toEqual(['TP2'])
   })
 })

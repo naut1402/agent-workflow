@@ -78,7 +78,13 @@ export function useAutomations(getProjectId: () => string | undefined) {
       const data = await fetchAutomationFormOptions(key || getProjectId())
       optionsByProject.value = { ...optionsByProject.value, [key]: data }
     } catch {
-      optionsByProject.value = { ...optionsByProject.value, [key]: { ...EMPTY_OPTIONS } }
+      const next = { ...optionsByProject.value }
+      // Không cache kết quả lỗi của project đích: `ensureFormOptions` thấy khoá đã
+      // tồn tại là thôi fetch, nên một lần lỗi mạng sẽ làm combobox của project đó
+      // rỗng suốt phiên. Khoá '' vẫn ghi rỗng — call site cũ cần giá trị để render.
+      if (key) delete next[key]
+      else next[key] = { ...EMPTY_OPTIONS }
+      optionsByProject.value = next
     }
   }
 
@@ -183,11 +189,14 @@ export function useAutomations(getProjectId: () => string | undefined) {
   watch(
     () => getProjectId(),
     () => {
-      // Options cũ thuộc project trước — bỏ hết, dialog sẽ yêu cầu nạp lại.
+      // Options cũ thuộc project trước — bỏ hết rồi nạp lại ngay khoá project đang
+      // chọn: badge "project đích" ở bảng rule cần `projects` để đổi id sang tên,
+      // không đợi tới lúc người dùng mở dialog.
       optionsByProject.value = {}
       void load()
       void loadEventTypes()
       void loadRuns()
+      void loadFormOptions()
     },
     { immediate: true },
   )
