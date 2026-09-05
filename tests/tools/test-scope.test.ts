@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import {
   areaOf,
+  expandTargets,
   isUnder,
   parseArgs,
   reaches,
   resolveSpecifier,
+  selectTests,
   suiteOf,
   virtualEdges,
 } from '../../.github/scripts/test-scope.js'
@@ -184,5 +186,64 @@ describe('areaOf — quy source về khu vực hiển thị', () => {
   test('ngoài src/ và mcp/ → null (không lên bảng)', () => {
     expect(areaOf('tests/src/server/x.test.ts')).toBe(null)
     expect(areaOf('docs/architecture.md')).toBe(null)
+  })
+})
+
+describe('selectTests — quyết định chạy gì', () => {
+  const graph = new Map<string, string[]>([
+    ['tests/src/server/automations/runAction.test.ts', ['src/features/automations/business/runAction.ts']],
+    ['tests/src/features/automations/components/Panel.test.ts', ['src/features/automations/components/Panel.vue']],
+    ['tests/src/features/monitor/business/x.test.ts', ['src/features/monitor/business/x.ts']],
+    ['src/features/automations/components/Panel.vue', ['src/features/automations/scripts/api.ts']],
+  ])
+  const testFiles = [
+    'tests/src/server/automations/runAction.test.ts',
+    'tests/src/features/automations/components/Panel.test.ts',
+    'tests/src/features/monitor/business/x.test.ts',
+  ]
+  const bunPrefixes = ['tests/src/server', 'tests/src/features/monitor/business']
+
+  test('sửa business backend → chỉ suite bun, vitest rỗng', () => {
+    const r = selectTests(testFiles, graph, new Set(['src/features/automations/business/runAction.ts']), bunPrefixes)
+    expect(r.bun).toEqual(['tests/src/server/automations/runAction.test.ts'])
+    expect(r.vitest).toEqual([])
+  })
+
+  test('sửa file FE bắc cầu qua component → chỉ suite vitest', () => {
+    const r = selectTests(testFiles, graph, new Set(['src/features/automations/scripts/api.ts']), bunPrefixes)
+    expect(r.bun).toEqual([])
+    expect(r.vitest).toEqual(['tests/src/features/automations/components/Panel.test.ts'])
+  })
+
+  test('cùng feature nhưng khác layer thì khác runner — không gom nhầm', () => {
+    const r = selectTests(testFiles, graph, new Set(['src/features/monitor/business/x.ts']), bunPrefixes)
+    expect(r.bun).toEqual(['tests/src/features/monitor/business/x.test.ts'])
+    expect(r.vitest).toEqual([])
+  })
+
+  test('sửa chính test file → test đó được chọn dù không import gì', () => {
+    const r = selectTests(testFiles, graph, new Set(['tests/src/features/monitor/business/x.test.ts']), bunPrefixes)
+    expect(r.bun).toEqual(['tests/src/features/monitor/business/x.test.ts'])
+  })
+
+  test('vùng không ai import → rỗng cả hai (caller phải cảnh báo, không im lặng)', () => {
+    const r = selectTests(testFiles, graph, new Set(['src/standalone.ts']), bunPrefixes)
+    expect(r.bun).toEqual([])
+    expect(r.vitest).toEqual([])
+  })
+})
+
+describe('expandTargets', () => {
+  test('bỏ file không phải code (doc, config yaml)', () => {
+    const t = expandTargets(['docs/architecture.md', 'src/App.vue'], () => [])
+    expect([...t]).toEqual(['src/App.vue'])
+  })
+
+  test('thư mục được nở ra thành file bên trong', () => {
+    const t = expandTargets(['src/features/automations'], () => [
+      'src/features/automations/controller.ts',
+      'src/features/automations/api.ts',
+    ])
+    expect([...t]).toEqual(['src/features/automations/controller.ts', 'src/features/automations/api.ts'])
   })
 })

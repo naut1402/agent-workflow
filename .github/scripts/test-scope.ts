@@ -248,6 +248,44 @@ function printCatalog(testFiles: string[], graph: Map<string, string[]>, bunPref
   }
 }
 
+/**
+ * Chọn test file cho một tập file đã đổi, tách sẵn theo runner. Hàm thuần —
+ * đây là quyết định quan trọng nhất của script nên phải test trực tiếp được,
+ * không đi vòng qua git/child_process.
+ */
+export function selectTests(
+  testFiles: string[],
+  graph: Map<string, string[]>,
+  targets: Set<string>,
+  bunPrefixes: string[],
+): { bun: string[]; vitest: string[] } {
+  const selected = testFiles.filter((t) => targets.has(t) || reaches(t, graph, targets))
+  return {
+    bun: selected.filter((f) => isUnder(f, bunPrefixes)),
+    vitest: selected.filter((f) => !isUnder(f, bunPrefixes)),
+  }
+}
+
+/** File/thư mục người dùng truyền vào (hoặc git trả về) → tập file code cụ thể. */
+export function expandTargets(changed: string[], listDir: (abs: string) => string[]): Set<string> {
+  const targets = new Set<string>()
+  for (const c of changed) {
+    const abs = path.join(ROOT, c)
+    if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) listDir(abs).forEach((f) => targets.add(f))
+    else if (CODE_EXT.includes(path.extname(c))) targets.add(c)
+  }
+  return targets
+}
+
+/** Quét file + dựng đồ thị — dùng chung cho cả chế độ chạy và `--catalog`. */
+function scanRepo(): { graph: Map<string, string[]>; testFiles: string[] } {
+  const allFiles = SOURCE_DIRS.flatMap((d) => walk(path.join(ROOT, d)))
+  return {
+    graph: buildImportGraph(allFiles),
+    testFiles: allFiles.filter((f) => /\.(test|spec)\.ts$/.test(f) && f.startsWith('tests/')),
+  }
+}
+
 function run(cmd: string, args: string[]): number {
   console.log(`\n$ ${cmd} ${args.join(' ')}\n`)
   const r = spawnSync(cmd, args, { cwd: ROOT, stdio: 'inherit' })
@@ -258,15 +296,12 @@ function main(): number {
   const args = parseArgs(process.argv.slice(2))
 
   if (args.catalog) {
-    const allFiles = SOURCE_DIRS.flatMap((d) => walk(path.join(ROOT, d)))
-    const graph = buildImportGraph(allFiles)
-    const testFiles = allFiles.filter((f) => /\.(test|spec)\.ts$/.test(f) && f.startsWith('tests/'))
+    const { graph, testFiles } = scanRepo()
     printCatalog(testFiles, graph, bunOwnedPrefixes())
     return 0
   }
 
   const changed = args.paths.length ? args.paths : changedFiles(args.base)
-
   if (!changed.length) {
     console.log('test-scope: không có thay đổi nào — bỏ qua (dùng `bun run test` nếu muốn chạy full).')
     return 0
@@ -279,34 +314,22 @@ function main(): number {
     return run('bun', ['run', 'test']) || run('bun', ['run', 'test:fe'])
   }
 
-  // Path do người dùng truyền vào có thể là thư mục — nở ra thành file.
-  const targets = new Set<string>()
-  for (const c of changed) {
-    const abs = path.join(ROOT, c)
-    if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) walk(abs).forEach((f) => targets.add(f))
-    else if (CODE_EXT.includes(path.extname(c))) targets.add(c)
-  }
+  const targets = expandTargets(changed, walk)
   if (!targets.size) {
     console.log('test-scope: thay đổi không chạm file code nào (doc/config) — không có suite nào để chạy.')
     return 0
   }
 
-  const allFiles = SOURCE_DIRS.flatMap((d) => walk(path.join(ROOT, d)))
-  const graph = buildImportGraph(allFiles)
-  const testFiles = allFiles.filter((f) => /\.(test|spec)\.ts$/.test(f) && f.startsWith('tests/'))
+  const { graph, testFiles } = scanRepo()
+  const { bun: bunTests, vitest: viteTests } = selectTests(testFiles, graph, targets, bunOwnedPrefixes())
 
-  const selected = testFiles.filter((t) => targets.has(t) || reaches(t, graph, targets))
-  const bunPrefixes = bunOwnedPrefixes()
-  const bunTests = selected.filter((f) => isUnder(f, bunPrefixes))
-  const viteTests = selected.filter((f) => !isUnder(f, bunPrefixes))
-
-  console.log(`test-scope: ${targets.size} file đổi → ${selected.length} test file`)
+  console.log(`test-scope: ${targets.size} file đổi → ${bunTests.length + viteTests.length} test file`)
   console.log(`  bun test : ${bunTests.length}`)
   for (const f of bunTests) console.log(`    - ${f}`)
   console.log(`  vitest   : ${viteTests.length}`)
   for (const f of viteTests) console.log(`    - ${f}`)
 
-  if (!selected.length) {
+  if (!bunTests.length && !viteTests.length) {
     console.log(
       '\ntest-scope: không test nào import tới vùng đã đổi. Vùng này đang KHÔNG có test —\n' +
         'viết test trước (test-convention.md §3), đừng coi đây là "đã xanh".',
