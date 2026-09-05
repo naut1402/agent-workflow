@@ -16,6 +16,27 @@ Coverage ưu tiên cao — mỗi module refactor phải kèm test (unit + e2e kh
 
 `bun run test:all` chạy tuần tự: typecheck → lint → bun test → vitest → playwright.
 
+### Vòng lặp local — chạy theo phạm vi
+
+Full suite (~1 phút: bun test ~20s + vitest ~40s) là việc của CI — mọi PR đều chạy đủ ở workflow `CI`. Ở local dùng:
+
+```bash
+bun run test:scope                       # suy ra phạm vi từ thay đổi chưa commit
+bun run test:scope --base origin/dev/1.1.1/main   # + các commit trên nhánh
+bun run test:scope src/features/automations       # ép phạm vi theo path/thư mục
+bun run test:scope --list                # chỉ in ra sẽ chạy gì
+```
+
+Script dựng đồ thị import của `src/` + `mcp/` + `tests/` rồi chọn mọi test file **đi tới được** file đã đổi (transitive), tách sẵn theo runner. Nó cố tình chọn rộng hơn là hẹp: sửa `src/core/lib/fileHelper.ts` kéo theo ~100 file test, sửa một component chỉ còn 2.
+
+Blind spot phải tự biết — trong các trường hợp này chạy full trước khi push:
+
+- **Nạp động**: `apiServer.ts` quét `features/<name>/api.ts` lúc chạy, không có cạnh import nào. Script bù bằng cạnh ảo cho đúng chỗ này; nếu thêm điểm nạp động khác thì phải khai báo thêm trong `.github/scripts/test-scope.ts`.
+- **Không đi qua import**: fixture, file JSON/YAML, snapshot, biến môi trường, dữ liệu trong `test-e2e/fixtures/`.
+- **Đổi hạ tầng** (`package.json`, `vitest.config.ts`, `tsconfig.json`, `bun.lock`, …) — script tự nhận ra và chạy full.
+
+Chọn hẹp chỉ giảm thời gian, không giảm trách nhiệm: **test xanh ở local vẫn có thể đỏ ở CI** vì môi trường khác (plugin cài sẵn trên máy, `/opt/bundled-plugins`, `~/.claude/…`, browser cho e2e). Test đụng filesystem/registry/agent resolution nên chạy thêm một lượt với env đã tước (`HOME` rỗng, biến plugin trỏ path không tồn tại) trước khi tin là xanh.
+
 **Chạy test trong container dashboard**: image có sẵn `bun` + `node` (Node 24 — `vitest`/`eslint`/`vue-tsc` là script `#!/usr/bin/env node`). `cd /data/project/<repo>` rồi chạy đúng các lệnh trong bảng trên, không cần thêm biến môi trường. `node_modules` lấy từ chính repo mount, không dùng `/app/node_modules`.
 
 ---
