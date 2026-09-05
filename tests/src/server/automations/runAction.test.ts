@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -203,6 +203,7 @@ describe('runTask action (regression — dispatch không đổi)', () => {
 describe('runTask action — project đích', () => {
   const PROJ_B = 'proj-b-1a2b3c4d'
   const RUNNER = 'stub-run-command-runner'
+  const AGENT = 'stub-automation-agent'
   let rootB: string
 
   /** Registry chỉ có project B; A cố tình đứng ngoài registry (giống DEV_TEAM_ROOT seed). */
@@ -234,9 +235,36 @@ describe('runTask action — project đích', () => {
     }
   }
 
+  /**
+   * Pipeline + agent nằm ngay trong data root (ref `dashboard:`) để job chạy được
+   * mà không cần plugin cài sẵn trên máy: pipeline mặc định trỏ
+   * `dev-agent-teams:investigator`, ref đó chỉ resolve khi host có plugin cache
+   * hoặc `/opt/bundled-plugins` — máy dev có, CI thì không.
+   */
+  function seedPipeline(dataRoot: string): void {
+    fs.mkdirSync(path.join(dataRoot, 'custom-agents'), { recursive: true })
+    fs.writeFileSync(
+      path.join(dataRoot, 'custom-agents', `${AGENT}.md`),
+      `---\nname: ${AGENT}\ndescription: agent stub cho test\n---\n\n## Vai trò\n\nStub.\n`,
+    )
+    fs.writeFileSync(
+      path.join(dataRoot, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: step-1\n    name: Step 1\n    agent: dashboard:${AGENT}\n    hitl:\n      mode: none\n`,
+    )
+  }
+
   beforeEach(() => {
     rootB = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-automations-rootb-'))
     seedRegistry()
+    seedPipeline(root)
+    seedPipeline(rootB)
+  })
+
+  // `home` dùng chung cả file: trả registry về rỗng để describe thêm sau không
+  // thừa hưởng project B một cách âm thầm.
+  afterEach(() => {
+    fs.rmSync(path.join(home, 'projects.json'), { force: true })
+    fs.rmSync(rootB, { recursive: true, force: true })
   })
 
   test('không chọn project đích → task tạo ở root của rule (regression)', async () => {
