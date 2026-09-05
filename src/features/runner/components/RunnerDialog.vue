@@ -268,7 +268,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 :options="connectionSelectOptions"
                 :placeholder="t('runner.fields.connectionPlaceholder')"
                 aria-label="Connection"
-                class="cfg-input"
+                class="cfg-select"
               />
               <div class="icon-btn-group">
                 <button
@@ -327,7 +327,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 v-model="timeoutModel"
                 :options="timeoutSelectOptions"
                 :aria-label="t('runner.fields.timeoutMs')"
-                class="cfg-input timeout-select"
+                class="cfg-select"
               />
             </label>
             <p class="muted hint">{{ t('runner.fields.timeoutMsHint') }}</p>
@@ -397,13 +397,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 <style scoped lang="scss">
 .runner-dialog { max-width: 520px; width: min(520px, 94vw); }
 .field { margin-bottom: 0.75rem; }
-.field .cfg-input { width: 100%; }
+.field .cfg-input,
+.field .cfg-select { width: 100%; }
 .connection-row {
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
-.connection-row .cfg-input { flex: 1; min-width: 0; }
+.connection-row .cfg-input,
+.connection-row .cfg-select { flex: 1; min-width: 0; }
 .hint { margin: 0.35rem 0 0; font-size: 0.8rem; }
 .enable-row {
   display: flex;

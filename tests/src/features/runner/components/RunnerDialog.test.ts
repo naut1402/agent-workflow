@@ -83,3 +83,32 @@ describe('RunnerDialog — timeout dropdown', () => {
     )
   })
 })
+
+// Lưới an toàn cấu trúc cho 2 regression UI của 1.1.0 (task Tb692264f). jsdom
+// không tính layout nên không assert được hình học — 2 case dưới chỉ chốt phần
+// cấu trúc gây ra lỗi; phần hình học do e2e (`test-e2e/runner.spec.ts`) gánh.
+describe('RunnerDialog — cấu trúc chống regression UI', () => {
+  it('không truyền class control native vào CSelect', () => {
+    mountDialog()
+    const roots = [...document.querySelectorAll('.c-select')]
+    // Không có assert này thì test xanh giả khi markup/selector đổi.
+    expect(roots.length).toBeGreaterThan(0)
+    for (const root of roots) {
+      expect(root.classList.contains('cfg-input')).toBe(false)
+      expect(root.classList.contains('cfg-textarea')).toBe(false)
+    }
+  })
+
+  // Đúng một vùng cuộn: 2 .modal-body lồng nhau sinh scrollbar kép, 0 thì hàng
+  // nút bị vẽ ra ngoài border dưới khi nội dung vượt max-height của .modal.
+  // Dialog này cố ý đặt .modal-actions *trong* .modal-body (margin-top: auto),
+  // nên chỉ assert .modal-head nằm ngoài.
+  it('dialog có đúng một .modal-body và .modal-head nằm ngoài nó', () => {
+    mountDialog()
+    const modal = document.querySelector('.modal')!
+    const bodies = modal.querySelectorAll('.modal-body')
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0].querySelector('.modal-head')).toBeNull()
+    expect(modal.querySelectorAll('.modal-actions button').length).toBeGreaterThan(0)
+  })
+})

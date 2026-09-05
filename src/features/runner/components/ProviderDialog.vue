@@ -132,7 +132,7 @@ onUnmounted(() => {
                 v-model="providerId"
                 :options="aiProviderSelectOptions"
                 :aria-label="t('runner.providerDialog.interfaceField')"
-                class="cfg-input"
+                class="cfg-select"
               />
             </label>
           </div>
@@ -171,7 +171,8 @@ onUnmounted(() => {
 .nested-backdrop { z-index: 1100; }
 .dialog-intro { margin: 0 0 0.75rem; }
 .field { margin-bottom: 0.75rem; }
-.field .cfg-input { width: 100%; }
+.field .cfg-input,
+.field .cfg-select { width: 100%; }
 .label-with-hint { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; flex-direction: row; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
 .modal-body { display: flex; flex-direction: column; }

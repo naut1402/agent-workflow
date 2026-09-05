@@ -1363,6 +1363,8 @@ onUnmounted(() => {
 
 .settings-select-wrap {
   margin-top: 10px;
+  /* giữ bề rộng cũ sau khi .c-select bỏ cap max-width: 360px */
+  max-width: 360px;
 }
 
 .settings-token-mask {

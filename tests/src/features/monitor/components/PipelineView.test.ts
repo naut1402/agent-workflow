@@ -757,3 +757,89 @@ describe('PipelineView — stopping a running step', () => {
     expect(w.text()).not.toContain('Đã dừng step')
   })
 })
+
+// Lưới an toàn cấu trúc cho regression "hàng nút rơi ra ngoài border dưới"
+// (task Tb692264f). .modal không khai báo overflow — nó dựa vào .modal-body
+// (flex: 1; min-height: 0; overflow-y: auto) để hút phần cao quá max-height:
+// 88vh. Modal thiếu .modal-body thì hàng nút bị vẽ ngoài border. jsdom không
+// tính layout nên chỉ chốt được cấu trúc; hình học do e2e gánh.
+describe('PipelineView — cấu trúc modal (.modal-body)', () => {
+  function nodeData(w: any, id: string) {
+    return w.findComponent({ name: 'VueFlow' }).props('nodes').find((n: any) => n.id === id).data
+  }
+
+  function assertModalContract() {
+    const modal = document.body.querySelector('.modal')
+    expect(modal).not.toBeNull()
+    const bodies = modal!.querySelectorAll('.modal-body')
+    // Đúng một: 0 → hàng nút tràn khỏi border; 2 → scrollbar lồng nhau.
+    expect(bodies).toHaveLength(1)
+    // Head và hàng nút phải cố định, không cuộn theo nội dung.
+    expect(bodies[0].querySelector('.modal-head')).toBeNull()
+    expect(bodies[0].querySelector('.modal-actions')).toBeNull()
+    expect(modal!.querySelectorAll('.modal-actions button').length).toBeGreaterThan(0)
+  }
+
+  it('modal HITL', async () => {
+    const task = { task_id: 'MB1', current_phase: 'investigator', hitl_pending: 'hitl-1', artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+    assertModalContract()
+    w.unmount()
+  })
+
+  it('modal xác nhận chạy step — nhánh không bỏ qua bước trung gian', async () => {
+    const task = { task_id: 'MB2', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+    await w.find('[data-testid="node-investigator"]').trigger('click')
+    await flushPromises()
+    assertModalContract()
+    w.unmount()
+  })
+
+  it('modal xác nhận chạy step — nhánh bỏ qua bước trung gian', async () => {
+    const task = { task_id: 'MB3', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+    await w.find('[data-testid="node-implementer"]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('Bỏ qua các bước trung gian')
+    assertModalContract()
+    w.unmount()
+  })
+
+  it('modal xác nhận reset — nhánh không cascade', async () => {
+    const task = {
+      task_id: 'MB4',
+      current_phase: 'reviewer',
+      hitl_pending: null,
+      artifacts: { 'phpstan.md': { exists: true } },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+    nodeData(w, 'implementer').onReset()
+    await flushPromises()
+    assertModalContract()
+    w.unmount()
+  })
+
+  it('modal xác nhận reset — nhánh cascade', async () => {
+    const task = {
+      task_id: 'MB5',
+      current_phase: 'reviewer',
+      hitl_pending: null,
+      artifacts: { 'phpstan.md': { exists: true }, 'review.md': { exists: true } },
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+    nodeData(w, 'implementer').onReset()
+    await flushPromises()
+    assertModalContract()
+    w.unmount()
+  })
+})

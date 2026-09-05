@@ -139,6 +139,10 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   justify-content: center;
   z-index: 1000;
 }
+/* Hợp đồng: dialog dùng .modal PHẢI có đúng một .modal-body bọc phần nội dung.
+   .modal không khai báo overflow — nó dựa vào .modal-body (flex: 1; min-height: 0;
+   overflow-y: auto) để hút phần cao quá max-height. Đặt nội dung thẳng vào .modal
+   thì khi vượt 88vh, hàng nút sẽ bị vẽ ra ngoài border dưới. */
 .modal {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -175,7 +179,7 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .modal-close:hover { color: var(--text); }
 .modal-hint { margin: 0; font-size: 12px; color: var(--muted); }
 
-.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
 
 .btn-ghost {
   background: none;
