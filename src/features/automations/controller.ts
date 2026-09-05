@@ -85,7 +85,20 @@ export class AutomationsController extends AbstractController {
       /* registry runner hỏng — combobox rỗng, vẫn gõ tay được */
     }
 
-    return this.ok({ tasks: taskIds, profiles, runners })
+    // Registry là global (không theo `?project=`) — dùng cho combobox "project đích"
+    // của action runTask, nên mọi lần fetch đều trả cùng danh sách.
+    let projects: Array<{ id: string; name: string; default: boolean }> = []
+    try {
+      projects = this.ctx.registry.list().projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        default: p.default === true,
+      }))
+    } catch {
+      /* registry hỏng — combobox project rỗng, form vẫn lưu được (field optional) */
+    }
+
+    return this.ok({ tasks: taskIds, profiles, runners, projects })
   }
 
   async createAutomation() {

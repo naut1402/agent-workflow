@@ -58,10 +58,21 @@ test('automations mode: danh sách rule + dialog tạo rule (capture)', async ({
     await page.locator('.automations-panel .btn-primary').click()
     const dialog = page.locator('.automation-form')
     await expect(dialog).toBeVisible()
-    await dialog.locator('.modal-close').click()
-    await expect(dialog).toHaveCount(0)
+
+    // Bước runTask có ô "Project đích" — áp cho cả mode create lẫn existing
+    // (T0d57ff58), nên nó phải nằm ngoài nhánh v-if của mode.
+    await dialog.getByRole('button', { name: /Thêm bước/ }).click()
+    const targetProject = dialog.locator('input[aria-label="Project đích (tuỳ chọn)"]')
+    await expect(targetProject).toBeVisible()
+    // Mặc định trống = dùng project đang chọn.
+    await expect(targetProject).toHaveValue('')
+    await dialog.locator('input[type="radio"][value="existing"]').first().check()
+    await expect(targetProject).toBeVisible()
 
     await capturePage(page, testInfo, 'automations')
+
+    await dialog.locator('.modal-close').click()
+    await expect(dialog).toHaveCount(0)
   } finally {
     // Dọn rule để fixture không rò state sang spec khác.
     const deleted = await request.delete(`/api/automations/${ruleId}${q}`)

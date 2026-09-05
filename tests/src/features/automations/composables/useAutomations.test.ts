@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h, ref } from 'vue'
+import { defineComponent, h, nextTick, ref } from 'vue'
 import { mount, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('@/features/automations/scripts/automationsApi', () => ({
@@ -85,7 +85,7 @@ function rule(id: string, over: Record<string, unknown> = {}) {
 beforeEach(() => {
   api.list.mockResolvedValue({ automations: [] } as never)
   api.eventTypes.mockResolvedValue({ types: [] } as never)
-  api.formOptions.mockResolvedValue({ tasks: [], profiles: [], runners: [] } as never)
+  api.formOptions.mockResolvedValue({ tasks: [], profiles: [], runners: [], projects: [] } as never)
   api.runs.mockResolvedValue({ runs: [] } as never)
   api.create.mockResolvedValue({} as never)
   api.update.mockResolvedValue({} as never)
@@ -287,7 +287,7 @@ describe('loadRuns() / loadEventTypes() / loadFormOptions()', () => {
 
     await a.loadFormOptions()
 
-    expect(a.formOptions.value).toEqual({ tasks: [], profiles: [], runners: [] })
+    expect(a.formOptions.value).toEqual({ tasks: [], profiles: [], runners: [], projects: [] })
   })
 })
 
@@ -342,5 +342,85 @@ describe('polling', () => {
 
     expect(api.list).toHaveBeenCalledTimes(1)
     a.stopPolling()
+  })
+})
+
+/**
+ * Options theo project đích (T0d57ff58).
+ *
+ * Một bước action có thể trỏ project khác, nên combobox task/profile/runner của
+ * bước đó phải gợi ý dữ liệu của **project đó** — gợi ý nhầm project còn tệ hơn
+ * không gợi ý, vì người dùng chọn từ dropdown rồi mới fail lúc chạy.
+ */
+describe('ensureFormOptions — options của project đích', () => {
+  const OPTIONS_B = { tasks: ['TB1'], profiles: ['pb'], runners: [], projects: [] }
+
+  it('nạp options của project đích và cache theo id', async () => {
+    const a = makeAutomations(() => 'P1')
+    api.formOptions.mockResolvedValue(OPTIONS_B as never)
+
+    await a.ensureFormOptions('proj-b-1a2b3c4d')
+
+    expect(api.formOptions).toHaveBeenLastCalledWith('proj-b-1a2b3c4d')
+    expect(a.optionsByProject.value['proj-b-1a2b3c4d']).toEqual(OPTIONS_B)
+  })
+
+  it('gọi lần hai cho cùng project không fetch lại', async () => {
+    const a = makeAutomations(() => 'P1')
+    api.formOptions.mockResolvedValue(OPTIONS_B as never)
+    await a.ensureFormOptions('proj-b-1a2b3c4d')
+    api.formOptions.mockClear()
+
+    await a.ensureFormOptions('proj-b-1a2b3c4d')
+
+    expect(api.formOptions).not.toHaveBeenCalled()
+  })
+
+  it('id rỗng → không fetch (rỗng nghĩa là project đang chọn)', async () => {
+    const a = makeAutomations(() => 'P1')
+    api.formOptions.mockClear()
+
+    await a.ensureFormOptions('   ')
+
+    expect(api.formOptions).not.toHaveBeenCalled()
+  })
+
+  it('options của project đích không đè lên formOptions của project đang chọn', async () => {
+    const a = makeAutomations(() => 'P1')
+    api.formOptions.mockResolvedValue({ tasks: ['TA1'], profiles: [], runners: [], projects: [] } as never)
+    await a.loadFormOptions()
+    api.formOptions.mockResolvedValue(OPTIONS_B as never)
+
+    await a.ensureFormOptions('proj-b-1a2b3c4d')
+
+    expect(a.formOptions.value.tasks).toEqual(['TA1'])
+    expect(a.optionsByProject.value['proj-b-1a2b3c4d'].tasks).toEqual(['TB1'])
+  })
+
+  it('lỗi khi nạp project đích → options rỗng, không giữ giá trị của project khác', async () => {
+    const a = makeAutomations(() => 'P1')
+    api.formOptions.mockRejectedValue(new Error('registry hỏng'))
+
+    await a.ensureFormOptions('proj-b-1a2b3c4d')
+
+    expect(a.optionsByProject.value['proj-b-1a2b3c4d']).toEqual({
+      tasks: [],
+      profiles: [],
+      runners: [],
+      projects: [],
+    })
+  })
+
+  it('đổi project đang chọn → cache options cũ bị xoá', async () => {
+    const projectId = ref<string | undefined>('P1')
+    const a = makeAutomations(() => projectId.value)
+    api.formOptions.mockResolvedValue(OPTIONS_B as never)
+    await a.ensureFormOptions('proj-b-1a2b3c4d')
+    expect(a.optionsByProject.value['proj-b-1a2b3c4d']).toBeTruthy()
+
+    projectId.value = 'P2'
+    await nextTick()
+
+    expect(a.optionsByProject.value['proj-b-1a2b3c4d']).toBeUndefined()
   })
 })

@@ -73,7 +73,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | Logging | `src/core/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit/events/usage JSONL (`UsageSnapshot`); job log text thuộc runner. |
 | Statistics | `src/features/statistics/business/` | Aggregation token usage từ `usage.jsonl` theo project/task/step/job/model/provider/date/source (`GET /api/statistics/usage`); tầng đọc gom 1 module để cắm sqlite fast-path (#229) sau. |
 | Runners | `src/features/runner/business/` | Job queue (+ reaper), connections, session ledger (+ capture), providers CLI. |
-| Automations | `src/features/automations/business/` | Rule CRUD (`automations/*.yaml` theo data root, đa trigger OR + chuỗi action tuần tự), scheduler tick (timer: once/interval/cron cùng mốc `startAt`), event trigger, action `runTask` (tái dùng `createTask` + `runTaskStep` của monitor) chạy nền + chờ job + biến `{{trigger.*}}`/`{{steps.N.*}}` (`lib/vars.ts`), run ledger ở `registryHome()/automations/` (#233). |
+| Automations | `src/features/automations/business/` | Rule CRUD (`automations/*.yaml` theo data root, đa trigger OR + chuỗi action tuần tự), scheduler tick (timer: once/interval/cron cùng mốc `startAt`), event trigger, action `runTask` (tái dùng `createTask` + `runTaskStep` của monitor) chạy nền + chờ job + biến `{{trigger.*}}`/`{{steps.N.*}}` (`lib/vars.ts`), run ledger ở `registryHome()/automations/` (#233). Action `runTask` có `projectId` optional — trỏ project khác trong registry thì bước chạy trên data root của project đó (`core/registry.get`), bỏ trống thì dùng project sở hữu rule; rule state + run history vẫn nằm ở project sở hữu rule. |
 | Settings | `src/features/settings/business/` | Dashboard settings, autoscan, fs browse. |
 | NL chat | `src/features/nl-chat/business/` | Session builder chat (prompt + parse trong cùng module). |
 | CLI | `src/runner-cli.mjs` | Runner CLI entry. |
@@ -103,7 +103,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | `quickAction` | `src/features/quick-action/` | `QuickActionPanel` — chạy nhanh 1 action (agent/runner) trên artifact/task đang chọn, không qua flow tạo task đầy đủ |
 | `knowledge` | `src/features/knowledge/` | `KnowledgePanel` |
 | `runner` | `src/features/runner/` | `RunnerConfigPanel`, `ConnectionDialog` |
-| `automations` | `src/features/automations/` | `AutomationsPanel`, `AutomationFormDialog`; composable `useAutomations.ts` — rule đa trigger (timer once/interval/cron + event) → chuỗi action `runTask` theo timeline, biến tham chiếu output bước trước (#233); chat NL tạo automation qua entity `'automation'` |
+| `automations` | `src/features/automations/` | `AutomationsPanel`, `AutomationFormDialog`; composable `useAutomations.ts` — rule đa trigger (timer once/interval/cron + event) → chuỗi action `runTask` theo timeline, biến tham chiếu output bước trước (#233); mỗi bước `runTask` chọn được "project đích" (combobox nạp từ `form-options`, options task/profile/runner đổi theo project đã chọn); chat NL tạo automation qua entity `'automation'` |
 | `logs` (Nhật ký) | `src/features/logs/` | `LogsPanel`, `TaskTimeline`; composable `useTaskTimeline.ts` |
 | `statistics` (Thống kê) | `src/features/statistics/` | `StatisticsPanel`, `ChartCard` (wrapper chart — mermaid P0, đổi renderer sau không sửa consumer); `lib/mermaidChart.ts` build pie/xychart-beta; drill-down project → task → step → job |
 

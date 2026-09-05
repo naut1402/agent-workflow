@@ -188,3 +188,168 @@ describe('runTask action (regression — dispatch không đổi)', () => {
     expect(final.steps![0].input).toEqual({ mode: 'existing', taskId: 'Tmissing1' })
   })
 })
+
+/**
+ * Project đích của action `runTask` (T0d57ff58).
+ *
+ * Bất biến: bước chạy trên đúng data root đã chỉ định — không chọn thì là
+ * project sở hữu rule (hành vi cũ), chọn id lạ thì **fail tường minh** chứ
+ * không âm thầm chạy nhầm project.
+ *
+ * Các case dùng `runnerId` của stub provider để job về `succeeded` — chỉ khi đó
+ * `executeSequence` mới đi tiếp sang bước sau và đọc `artifacts`, tức mới kiểm
+ * được "artifact đọc theo root của chính bước đó".
+ */
+describe('runTask action — project đích', () => {
+  const PROJ_B = 'proj-b-1a2b3c4d'
+  const RUNNER = 'stub-run-command-runner'
+  let rootB: string
+
+  /** Registry chỉ có project B; A cố tình đứng ngoài registry (giống DEV_TEAM_ROOT seed). */
+  function seedRegistry(): void {
+    fs.mkdirSync(home, { recursive: true })
+    fs.writeFileSync(
+      path.join(home, 'projects.json'),
+      JSON.stringify({
+        version: 1,
+        projects: [
+          {
+            id: PROJ_B,
+            name: 'Project B',
+            kind: 'local',
+            path: rootB,
+            addedAt: '2026-01-01T00:00:00.000Z',
+            default: false,
+          },
+        ],
+      }),
+    )
+  }
+
+  function tasksIn(dataRoot: string): string[] {
+    try {
+      return fs.readdirSync(path.join(dataRoot, 'tasks'))
+    } catch {
+      return []
+    }
+  }
+
+  beforeEach(() => {
+    rootB = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-automations-rootb-'))
+    seedRegistry()
+  })
+
+  test('không chọn project đích → task tạo ở root của rule (regression)', async () => {
+    const rule = baseRule({
+      id: 'target-default',
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'làm việc', runnerId: RUNNER }],
+    })
+    const run = runAutomation({ root, projectId: 'p1', rule, source: 'manual' })
+    const final = await waitForOutcome(run.runId, 'p1')
+
+    expect(final.outcome).toBe('succeeded')
+    expect(tasksIn(root)).toContain(final.steps![0].taskId!)
+    expect(tasksIn(rootB)).toEqual([])
+    expect(final.steps![0].input).not.toHaveProperty('projectId')
+  })
+
+  test('chọn project B → task tạo dưới root B, root A không đổi', async () => {
+    const rule = baseRule({
+      id: 'target-cross',
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'làm việc', runnerId: RUNNER, projectId: PROJ_B }],
+    })
+    const run = runAutomation({ root, projectId: 'p1', rule, source: 'manual' })
+    const final = await waitForOutcome(run.runId, 'p1')
+
+    expect(final.outcome).toBe('succeeded')
+    const taskId = final.steps![0].taskId
+    // Cả hai chiều: B có thêm VÀ A không đổi — assert một chiều là không đủ.
+    expect(tasksIn(rootB)).toContain(taskId!)
+    expect(tasksIn(root)).toEqual([])
+    expect(final.steps![0].input).toMatchObject({ projectId: PROJ_B })
+  })
+
+  test('artifact của bước cross-project đọc từ root B, không phải root của rule', async () => {
+    const rule = baseRule({
+      id: 'target-artifacts',
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'việc chạy ở B', runnerId: RUNNER, projectId: PROJ_B }],
+    })
+    const run = runAutomation({ root, projectId: 'p1', rule, source: 'manual' })
+    const final = await waitForOutcome(run.runId, 'p1')
+
+    // Task chỉ tồn tại dưới root B — đọc theo `input.root` sẽ ra rỗng.
+    expect(final.steps![0].artifacts?.request).toContain('việc chạy ở B')
+  })
+
+  test('project đích không có trong registry → step failed, không tạo task ở bất kỳ root nào', async () => {
+    const rule = baseRule({
+      id: 'target-unknown',
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'làm việc', runnerId: RUNNER, projectId: 'khong-ton-tai' }],
+    })
+    const run = runAutomation({ root, projectId: 'p1', rule, source: 'manual' })
+    const final = await waitForOutcome(run.runId, 'p1')
+
+    expect(final.outcome).toBe('failed')
+    expect(final.steps![0].status).toBe('failed')
+    expect(final.steps![0].error).toMatch(/unknown target project/)
+    expect(final.steps![0].jobId).toBeUndefined()
+    expect(tasksIn(root)).toEqual([])
+    expect(tasksIn(rootB)).toEqual([])
+  })
+
+  test('project đích trùng project của rule (không nằm trong registry) → vẫn chạy bình thường', async () => {
+    const rule = baseRule({
+      id: 'target-self',
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'làm việc', runnerId: RUNNER, projectId: 'p1' }],
+    })
+    const run = runAutomation({ root, projectId: 'p1', rule, source: 'manual' })
+    const final = await waitForOutcome(run.runId, 'p1')
+
+    expect(final.outcome).toBe('succeeded')
+    expect(tasksIn(root)).toContain(final.steps![0].taskId!)
+    expect(tasksIn(rootB)).toEqual([])
+  })
+
+  test('mode=existing với project đích: taskId không có ở B → fail của B, không đụng A', async () => {
+    const rule = baseRule({
+      id: 'target-existing-missing',
+      actions: [{ kind: 'runTask', mode: 'existing', taskId: 'Tmissing1', projectId: PROJ_B }],
+    })
+    const run = runAutomation({ root, projectId: 'p1', rule, source: 'manual' })
+    const final = await waitForOutcome(run.runId, 'p1')
+
+    expect(final.outcome).toBe('failed')
+    expect(final.steps![0].error).toBe('task not found')
+    expect(final.steps![0].input).toMatchObject({ mode: 'existing', taskId: 'Tmissing1', projectId: PROJ_B })
+  })
+
+  test('chuỗi 2 bước: bước 1 ở B, bước 2 ở A — mỗi bước độc lập project', async () => {
+    const rule = baseRule({
+      id: 'target-sequence',
+      actions: [
+        { kind: 'runTask', mode: 'create', prompt: 'bước ở B', runnerId: RUNNER, projectId: PROJ_B },
+        { kind: 'runTask', mode: 'create', prompt: 'bước ở A', runnerId: RUNNER },
+      ],
+    })
+    const run = runAutomation({ root, projectId: 'p1', rule, source: 'manual' })
+    const final = await waitForOutcome(run.runId, 'p1')
+
+    expect(final.outcome).toBe('succeeded')
+    const [stepB, stepA] = final.steps!
+    expect(tasksIn(rootB)).toEqual([stepB.taskId!])
+    // Bước 2 không "dính" project của bước trước.
+    expect(tasksIn(root)).toEqual([stepA.taskId!])
+  })
+
+  test('run history vẫn thuộc project sở hữu rule, không nằm ở project đích', async () => {
+    const rule = baseRule({
+      id: 'target-history',
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'làm việc', runnerId: RUNNER, projectId: PROJ_B }],
+    })
+    const run = runAutomation({ root, projectId: 'p1', rule, source: 'manual' })
+    await waitForOutcome(run.runId, 'p1')
+
+    expect(listRuns('p1', 50).some((r) => r.runId === run.runId)).toBe(true)
+    expect(listRuns(PROJ_B, 50).some((r) => r.runId === run.runId)).toBe(false)
+  })
+})

@@ -69,7 +69,7 @@ async function mountPanel() {
 beforeEach(() => {
   api.list.mockResolvedValue({ automations: [] } as never)
   api.eventTypes.mockResolvedValue({ types: ['job.failed'] } as never)
-  api.formOptions.mockResolvedValue({ tasks: [], profiles: [], runners: [] } as never)
+  api.formOptions.mockResolvedValue({ tasks: [], profiles: [], runners: [], projects: [] } as never)
   api.runs.mockResolvedValue({ runs: [] } as never)
   api.toggle.mockResolvedValue({} as never)
   api.remove.mockResolvedValue({} as never)
@@ -320,5 +320,51 @@ describe('lỗi API', () => {
 
     expect(wrapper.find('.rule-table').exists()).toBe(true)
     expect(wrapper.findAll('.run-row')).toHaveLength(0)
+  })
+})
+
+/**
+ * Badge project đích trong cột "Các bước" (T0d57ff58).
+ *
+ * Rule sống ở project đang chọn nhưng một bước có thể chạy ở project khác —
+ * không nói ra thì người đọc mặc định hiểu sai là task nằm ở project này.
+ */
+describe('cột "Các bước" — project đích của action runTask', () => {
+  const PROJECTS = [
+    { id: 'proj-b-1a2b3c4d', name: 'Project B', default: false },
+    { id: 'proj-c-5e6f7a8b', name: 'Project C', default: true },
+  ]
+
+  it('action có project đích → hiện tên project bên cạnh tên bước', async () => {
+    api.formOptions.mockResolvedValue({ tasks: [], profiles: [], runners: [], projects: PROJECTS } as never)
+    api.list.mockResolvedValue({
+      automations: [rule({ actions: [{ kind: 'runTask', mode: 'create', prompt: 'x', projectId: 'proj-b-1a2b3c4d' }] })],
+    } as never)
+
+    const wrapper = await mountPanel()
+
+    expect(wrapper.find('.rule-steps').text()).toContain('Project B')
+  })
+
+  it('project đích chưa có trong danh sách (đã bị gỡ khỏi registry) → hiện thẳng id', async () => {
+    api.formOptions.mockResolvedValue({ tasks: [], profiles: [], runners: [], projects: PROJECTS } as never)
+    api.list.mockResolvedValue({
+      automations: [rule({ actions: [{ kind: 'runTask', mode: 'create', prompt: 'x', projectId: 'da-bi-go' }] })],
+    } as never)
+
+    const wrapper = await mountPanel()
+
+    expect(wrapper.find('.rule-steps').text()).toContain('da-bi-go')
+  })
+
+  it('không chọn project đích → nhãn bước không đổi, không có mũi tên thừa', async () => {
+    api.formOptions.mockResolvedValue({ tasks: [], profiles: [], runners: [], projects: PROJECTS } as never)
+    api.list.mockResolvedValue({ automations: [rule()] } as never)
+
+    const wrapper = await mountPanel()
+
+    const steps = wrapper.find('.rule-steps').text()
+    expect(steps).toContain('Tạo task mới')
+    expect(steps).not.toContain('→')
   })
 })
