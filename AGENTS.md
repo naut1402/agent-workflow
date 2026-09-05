@@ -100,7 +100,7 @@ Thêm scan/endpoint mới không được phá các bất biến sau:
 
 ## 6. Checklist hoàn thành workflow
 
-Template agent (`docs/template/agents/*`) chỉ có **bước cuối generic**: đọc mục này. **Repo khác không có mục tương đương → agent bỏ qua.** Chi tiết catalog: [`docs/event-catalog.md`](docs/event-catalog.md).
+Template agent (`docs/template/agents/*`) chỉ có **bước cuối generic**: đọc mục này. **Repo khác không có mục tương đương → agent bỏ qua.** Chi tiết catalog event: [`docs/event-catalog.md`](docs/event-catalog.md); danh mục test suite: [`test-convention.md`](docs/implement/test-convention.md) §2.1.
 
 ### Survey / investigate
 
@@ -114,6 +114,16 @@ Khi survey call chain đụng persist / lifecycle / CRUD domain:
 
 - [ ] **Nêu rõ emit dự kiến trong design** (hoặc *không emit*).
 - [ ] **Đối chiếu catalog với code khi implement/review** — xem thêm [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) mục **Dữ liệu & An toàn**.
+
+### Implement — test suite
+
+Áp dụng cho **mọi** thay đổi code (không chỉ khi đụng event):
+
+- [ ] **Tra danh mục suite** [`test-convention.md`](docs/implement/test-convention.md) §2.1 — xác định suite nào phủ vùng vừa sửa (một hoặc nhiều, có thể khác runner).
+- [ ] **Chạy đúng các suite đó**: `bun run test:scope` (tự suy ra từ thay đổi) hoặc nối path thủ công — `bun test <suite>…` / `npx vitest run <suite>…`. Full suite là việc của CI, không cần chạy ở local.
+- [ ] **Vùng sửa chưa có suite nào** → viết test mới đặt theo layout §2 (business/server → bun; FE → vitest). `test:scope` chọn ra 0 file **không** phải là "đã xanh", nó là "chỗ này chưa ai test".
+- [ ] **Thêm/đổi thư mục test** → sinh lại bảng `bun run test:scope --catalog` và cập nhật §2.1 trong cùng thay đổi.
+- [ ] **Test đụng filesystem / registry / agent / plugin**: chạy thêm một lượt với env đã tước (`HOME` rỗng, biến plugin trỏ path không tồn tại) — máy dev có sẵn `/opt/bundled-plugins` và `~/.claude/plugins`, CI thì không, đây là nguồn "xanh local đỏ CI" đã gặp.
 
 ---
 

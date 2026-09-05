@@ -43,15 +43,17 @@ const CODE_EXT = ['.ts', '.tsx', '.vue', '.mjs', '.js']
 interface Args {
   base: string | null
   list: boolean
+  catalog: boolean
   paths: string[]
 }
 
 function parseArgs(argv: string[]): Args {
-  const out: Args = { base: null, list: false, paths: [] }
+  const out: Args = { base: null, list: false, catalog: false, paths: [] }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--base') out.base = argv[++i] ?? null
     else if (a === '--list') out.list = true
+    else if (a === '--catalog') out.catalog = true
     else out.paths.push(a)
   }
   return out
@@ -188,6 +190,63 @@ function isUnder(file: string, prefixes: string[]): boolean {
   return prefixes.some((p) => file === p || file.startsWith(`${p}/`))
 }
 
+/**
+ * Suite = thư mục gom test. Feature cần thêm một tầng (`business` chạy bun còn
+ * `components` chạy vitest — cùng feature, khác runner), phần còn lại gom ở
+ * tầng khu vực.
+ */
+function suiteOf(testFile: string): string {
+  const seg = testFile.split('/')
+  if (seg[1] === 'mcp' || seg.length <= 3) return seg.slice(0, -1).join('/')
+  const depth = seg[2] === 'features' ? 5 : 4
+  return seg.slice(0, Math.min(depth, seg.length - 1)).join('/')
+}
+
+/** `src/features/automations/business/x.ts` → `features/automations/business`. */
+function areaOf(sourceFile: string): string | null {
+  const seg = sourceFile.split('/')
+  if (seg[0] !== 'src' && seg[0] !== 'mcp') return null
+  if (seg[0] === 'mcp') return 'mcp'
+  if (seg[1] === 'features') return seg.slice(1, 4).join('/')
+  return seg.slice(1, 3).join('/')
+}
+
+/** Bảng tra suite — dán vào test-convention.md, sinh lại khi thêm thư mục test mới. */
+function printCatalog(testFiles: string[], graph: Map<string, string[]>, bunPrefixes: string[]): void {
+  const suites = new Map<string, string[]>()
+  for (const t of testFiles) {
+    const s = suiteOf(t)
+    suites.set(s, [...(suites.get(s) ?? []), t])
+  }
+
+  console.log('| Suite | Runner | Vùng source phủ | Số file | Lệnh chạy |')
+  console.log('|---|---|---|---|---|')
+  for (const suite of [...suites.keys()].sort()) {
+    const files = suites.get(suite)!
+    const bun = isUnder(files[0], bunPrefixes)
+    // Chỉ import trực tiếp: đủ để biết suite này "của" module nào, không lôi cả
+    // closure (mọi suite đều chạm core/lib nên closure sẽ nhiễu hết bảng).
+    const areas = new Map<string, number>()
+    for (const f of files) {
+      for (const dep of graph.get(f) ?? []) {
+        const a = areaOf(dep)
+        if (a) areas.set(a, (areas.get(a) ?? 0) + 1)
+      }
+    }
+    const top = [...areas.entries()]
+      .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))
+      .slice(0, 3)
+      .map(([a]) => `\`${a}\``)
+      .join(', ')
+    // Suite còn có suite con bên dưới (vd `tests/src/server`) — trỏ thẳng thư mục
+    // sẽ kéo cả cây con, nên dùng glob để lệnh khớp đúng số file của dòng này.
+    const hasChildSuite = [...suites.keys()].some((k) => k !== suite && k.startsWith(`${suite}/`))
+    const target = hasChildSuite ? `${suite}/*.test.ts` : suite
+    const cmd = bun ? `bun test ${target}` : `npx vitest run ${target}`
+    console.log(`| \`${suite}\` | ${bun ? 'bun' : 'vitest'} | ${top || '—'} | ${files.length} | \`${cmd}\` |`)
+  }
+}
+
 function run(cmd: string, args: string[]): number {
   console.log(`\n$ ${cmd} ${args.join(' ')}\n`)
   const r = spawnSync(cmd, args, { cwd: ROOT, stdio: 'inherit' })
@@ -196,6 +255,15 @@ function run(cmd: string, args: string[]): number {
 
 function main(): number {
   const args = parseArgs(process.argv.slice(2))
+
+  if (args.catalog) {
+    const allFiles = SOURCE_DIRS.flatMap((d) => walk(path.join(ROOT, d)))
+    const graph = buildImportGraph(allFiles)
+    const testFiles = allFiles.filter((f) => /\.(test|spec)\.ts$/.test(f) && f.startsWith('tests/'))
+    printCatalog(testFiles, graph, bunOwnedPrefixes())
+    return 0
+  }
+
   const changed = args.paths.length ? args.paths : changedFiles(args.base)
 
   if (!changed.length) {
