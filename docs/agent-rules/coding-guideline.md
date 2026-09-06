@@ -56,6 +56,7 @@ Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`. ESLint (f
 - **Kéo logic suy diễn ra khỏi `.vue`** xuống composable / lib thuần TS để test không cần render.
 - **Cấu trúc feature-module** — `src/features/<mode>/{components,composables,scripts/*Api.ts,styles,locales,schemas}` + nền `src/core/{ui,composables,lib,shell}`; plugin app-scope ở `src/plugins/`.
 - **Quy ước button** (ưu tiên icon-btn, default không viền, hover scale) — [`docs/ui-buttons.md`](../ui-buttons.md).
+- **Chiến lược tràn là bắt buộc, không phải tuỳ chọn** — mọi danh sách / vùng nội dung dài tuỳ dữ liệu phải có vùng cuộn giới hạn chiều cao ngay từ lúc viết, không được giả định "dữ liệu chắc là ngắn". Chuỗi sizing chuẩn (`overflow: hidden` ở container, `flex` + `min-height: 0` ở mỗi tầng, `overflow-y: auto` chỉ ở lá) — [`docs/ui-overflow.md`](../ui-overflow.md).
 
 Primitive dùng chung trong `src/core/ui/`:
 
