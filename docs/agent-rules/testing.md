@@ -60,8 +60,17 @@ Repo **không** còn thư mục `plugins/` ở root — bản agent template ch�
 ### 2.4 Chạy test trong container dashboard
 
 - **Image có sẵn `bun` + `node`** (Node 24 — `vitest` / `eslint` / `vue-tsc` là script `#!/usr/bin/env node`).
-- **`cd /data/project/<repo>` rồi chạy đúng lệnh ở bảng §1**, không cần thêm biến môi trường.
+- **`cd /data/project/<repo>` rồi chạy đúng lệnh ở bảng §1** — `bun test` / `vitest` không cần thêm biến môi trường; riêng **E2E cần một bước dựng thư viện hệ thống một lần**, xem §2.5.
 - **`node_modules` lấy từ repo mount**, không dùng `/app/node_modules`.
+
+### 2.5 E2E trên máy không có root
+
+- **Chromium của Playwright cần một loạt shared library** (glib, nss, x11, gbm, …) **và ít nhất một font** — container dashboard không có cái nào, cũng không có `sudo` nên `npx playwright install-deps` (đường chuẩn, cần root) không dùng được.
+- **Chạy một lần cho mỗi máy**: `bun run e2e:sysdeps`. Script tải browser + `.deb` của các lib đó vào `~/.cache/pw-sysdeps` (~375 MB sau khi giải), tự kiểm chứng bằng `ldd`; in `OK — prefix: …` là xong. Chạy lại lần sau thoát nhanh, không tải lại. Đổi chỗ prefix bằng `PW_SYSDEPS_PREFIX`.
+- **Sau đó `bun run test:e2e` chạy bình thường** — `playwright.config.ts` tự phát hiện prefix và trỏ `LD_LIBRARY_PATH` + `XDG_DATA_DIRS` cho **riêng tiến trình browser** (không đụng env của `webServer`). Không có prefix thì khối đó là no-op, nên CI và máy đã cài đủ lib bằng root hành xử không đổi.
+- **Tắt hẳn đường prefix** (máy đã cài đủ lib bằng root, hoặc nghi prefix cũ gây lỗi loader): `PW_SYSDEPS_PREFIX=/nonexistent bun run test:e2e`.
+- **Cạm bẫy phải biết** — thiếu font thì chrome **vẫn chạy** nhưng mọi text render ra bề rộng 0px, Playwright coi phần tử bounding-box rỗng là "không visible" ⇒ đỏ hàng loạt với message `not visible` / `timeout waiting for locator`. Thấy triệu chứng đó thì chạy lại `bun run e2e:sysdeps` và kiểm `ls ~/.cache/pw-sysdeps/usr/share/fonts` **trước** khi nghi ngờ code.
+- **CI không đi đường này** — workflow cài bằng root qua `playwright install --with-deps chromium`.
 
 ---
 
