@@ -19,6 +19,13 @@ export const AUTOMATION_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export const AutomationIdSchema = z.string().regex(AUTOMATION_ID_PATTERN, 'invalid automation id')
 
+/**
+ * Charset id project trong registry — `makeId()` sinh dạng `<slug>-<sha1_8>`,
+ * slug đã lowercase + gạch nối. Regex chặt để id không bao giờ trở thành mảnh
+ * path; path thật luôn lấy từ `registry.get(id).path` (đã canonical hoá).
+ */
+const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
+
 export const AUTOMATION_TRIGGER_KINDS = ['timer', 'event'] as const
 export type AutomationTriggerKind = (typeof AUTOMATION_TRIGGER_KINDS)[number]
 
@@ -96,6 +103,12 @@ const RunTaskAction = z.object({
   runnerId: z.string().min(1).nullish(),
   /** mode=existing: task cần chạy. */
   taskId: z.string().regex(/^[A-Za-z0-9][\w-]{0,63}$/, 'invalid task id').optional(),
+  /**
+   * Project đích của bước (registry project id) — áp cho cả `create` và
+   * `existing`. Không set/`null` → chạy trên project sở hữu rule (mặc định).
+   * Không nhận biến `{{…}}`: `{`/`}` trượt regex, giống `taskId` hôm nay.
+   */
+  projectId: z.string().regex(PROJECT_ID_PATTERN, 'invalid project id').nullish(),
 })
 export type RunTaskAction = z.infer<typeof RunTaskAction>
 

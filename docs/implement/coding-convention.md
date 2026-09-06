@@ -52,6 +52,7 @@ Tầng `business/` không biết HTTP — nhận `root`/`ctx`, trả data thuầ
 - **Custom UI primitives** trong `src/core/ui/`: đặt tên `C<Name>.vue` (`C` = Custom), class CSS gốc `c-<name>` (vd `CSelect.vue` / `.c-select`). Dùng khi thay control native (select, …) để theme/token đồng bộ và dễ decorate sau; không dùng prefix `App` cho các primitive này.
 - **Icon dùng chung** (`src/core/ui/Icon.vue`): mọi icon SVG trong component feature dùng `<Icon name="..." />` — **không** tự vẽ tay `<svg>`/`<path>` lặp lại trong từng component. Icon chưa có trong union `name` của `Icon.vue` thì thêm case mới trực tiếp vào `Icon.vue` (giữ nguyên viewBox/style gốc), không copy SVG ra file khác dù chỉ dùng 1 nơi.
 - **Dropdown/select dùng chung**: dropdown mới **không** dùng `<select>` native — dùng `CSelect` (`src/core/ui/CSelect.vue`, option cố định) hoặc `CComboSelect` (`src/core/ui/CComboSelect.vue`, option nhiều hoặc cần nhập giá trị mới/creatable). Chỉ giữ `<select>` native khi cần hành vi trình duyệt gốc không có API tương đương trong 2 component trên.
+- **Class truyền vào `CSelect`/`CComboSelect` chỉ được lo kích thước** (`width` / `flex` / `min-width`). Không truyền class của control native (`cfg-input`, `cfg-textarea`, …) vào 2 component này: class đó rơi vào `div` wrapper trong khi trigger bên trong đã có nền/viền/padding riêng → hộp lồng hộp. Mẫu đúng: `cfg-select` / `cfg-combo-select`.
 
 ---
 

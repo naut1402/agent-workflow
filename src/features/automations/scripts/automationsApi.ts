@@ -35,6 +35,8 @@ export interface AutomationFormOptions {
   tasks: string[]
   profiles: string[]
   runners: Array<{ id: string; label: string; family?: string }>
+  /** Registry project — nguồn cho combobox "project đích" của action runTask (global, không theo `?project=`). */
+  projects: Array<{ id: string; name: string; default: boolean }>
 }
 
 export async function fetchAutomations(projectId?: string) {

@@ -10,6 +10,7 @@
 
 import { joinPath, mkdirSync, randomBytes, randomUUID, readTextFileSync, readdirSync } from '../../../core/lib/fileHelper.js'
 import { emit } from '../../../core/events/index.js'
+import { get as getProject } from '../../../core/registry.js'
 import { submitJob, loadJob } from '../../runner/business/index.js'
 import type { JobRecord } from '../../runner/business/index.js'
 import { createTask, fetchUrlSafe, runTaskStep } from '../../monitor/business/index.js'
@@ -80,12 +81,40 @@ function buildStepInput(action: AutomationAction): Record<string, unknown> {
         prompt: cap(action.prompt ?? '', INPUT_FIELD_CAP),
         ...(action.profileName ? { profileName: action.profileName } : {}),
         ...(action.runnerId ? { runnerId: action.runnerId } : {}),
+        ...(action.projectId ? { projectId: action.projectId } : {}),
       }
     : {
         mode: 'existing',
         taskId: action.taskId,
         ...(action.runnerId ? { runnerId: action.runnerId } : {}),
+        ...(action.projectId ? { projectId: action.projectId } : {}),
       }
+}
+
+interface ActionTarget {
+  root: string
+  projectId: string | null
+}
+
+/**
+ * Project mà một action `runTask` thực sự chạy trên đó.
+ * - Không set / rỗng → project sở hữu rule (hành vi trước khi có field này).
+ * - Trùng project của rule → cũng dùng thẳng `input`: rule có thể chạy với
+ *   `projectId` không nằm trong registry (test, `DEV_TEAM_ROOT` seed), không
+ *   được biến trường hợp đó thành lỗi.
+ * - Id lạ / registry đọc hỏng (`loadRegistry` nuốt lỗi trả rỗng) → lỗi tường
+ *   minh, KHÔNG fallback: chạy nhầm project là thứ field này phải chặn.
+ */
+function resolveActionTarget(
+  input: RunAutomationInput,
+  action: RunTaskAction,
+): ActionTarget | { error: string } {
+  const id = (action.projectId ?? '').trim()
+  if (!id || id === input.projectId) return { root: input.root, projectId: input.projectId }
+
+  const project = getProject(id)
+  if (!project) return { error: `unknown target project: ${id}` }
+  return { root: project.path, projectId: project.id }
 }
 
 /** Task id do automation sinh — tuân TASK_ID_PATTERN, dễ nhận diện nguồn. */
@@ -147,6 +176,8 @@ export async function waitJobTerminal(jobId: string, timeoutMs: number): Promise
 interface StepExecution {
   taskId?: string
   jobId?: string
+  /** Data root mà bước này thực sự chạy trên đó — đọc artifacts theo đúng project đích. */
+  root?: string
   /** Có giá trị khi action không tạo job — kết quả chạy đồng bộ (httpRequest). */
   stdout?: string
   skipped?: boolean
@@ -162,11 +193,15 @@ async function executeCreateAction(
     return { error: 'action misconfigured: prompt required for mode=create' }
   }
 
+  // Resolve trước khi tạo bất cứ thứ gì — project đích hỏng thì không để lại task rác.
+  const target = resolveActionTarget(input, action)
+  if ('error' in target) return { error: target.error }
+
   // Mint + retry: id ngẫu nhiên gần như không trùng, nhưng 409 thì thử lại
   // vài lần thay vì fail cả run.
   let created: Awaited<ReturnType<typeof createTask>> | null = null
   for (let attempt = 0; attempt < 3; attempt++) {
-    const result = await createTask(input.root, {
+    const result = await createTask(target.root, {
       taskId: mintAutomationTaskId(),
       source: 'prompt',
       prompt: action.prompt,
@@ -185,26 +220,27 @@ async function executeCreateAction(
 
   const agentRef = created.firstStep?.agent
   if (typeof agentRef !== 'string' || !agentRef) {
-    return { taskId: created.taskId, error: 'pipeline has no first-step agent' }
+    return { taskId: created.taskId, root: target.root, error: 'pipeline has no first-step agent' }
   }
 
   const job = submitJob({
     runnerId: action.runnerId ?? undefined,
     agentRef,
-    workspace: joinPath(input.root, 'tasks', created.taskId),
+    workspace: joinPath(target.root, 'tasks', created.taskId),
     userPrompt: created.requestContent,
     metadata: {
-      projectRoot: joinPath(input.root, '..'),
-      devTeamRoot: input.root,
-      projectId: input.projectId || undefined,
+      projectRoot: joinPath(target.root, '..'),
+      devTeamRoot: target.root,
+      projectId: target.projectId || undefined,
       taskId: created.taskId,
       pipelineStepId: created.firstStep.id,
       createTaskRun: true,
+      // Rule vẫn thuộc project gốc — đây là đường truy vết ngược job → rule.
       automationId: input.rule.id,
       automationRunId: runId,
     },
   })
-  return { taskId: created.taskId, jobId: job.id }
+  return { taskId: created.taskId, jobId: job.id, root: target.root }
 }
 
 async function executeExistingAction(
@@ -214,17 +250,20 @@ async function executeExistingAction(
   if (action.mode !== 'existing' || !action.taskId) {
     return { error: 'action misconfigured: taskId required for mode=existing' }
   }
-  const result = await runTaskStep(input.root, input.projectId, action.taskId, {
+  const target = resolveActionTarget(input, action)
+  if ('error' in target) return { error: target.error }
+
+  const result = await runTaskStep(target.root, target.projectId, action.taskId, {
     runnerId: action.runnerId ?? null,
   })
   if ('error' in result) {
     // 409 = task đang có job chạy — không phải lỗi cấu hình, ghi skipped.
     if (result.status === 409) {
-      return { taskId: action.taskId, skipped: true, error: 'task busy — step already running' }
+      return { taskId: action.taskId, root: target.root, skipped: true, error: 'task busy — step already running' }
     }
-    return { taskId: action.taskId, error: result.error }
+    return { taskId: action.taskId, root: target.root, error: result.error }
   }
-  return { taskId: action.taskId, jobId: result.job.id }
+  return { taskId: action.taskId, jobId: result.job.id, root: target.root }
 }
 
 async function executeHttpRequestAction(action: HttpRequestAction): Promise<StepExecution> {
@@ -361,7 +400,8 @@ async function executeSequence(
           break
         }
         step.stdout = stdoutOf(job)
-        if (step.taskId) step.artifacts = artifactsOf(input.root, step.taskId)
+        // Artifact đọc theo root của CHÍNH bước đó — bước cross-project nằm ở data root khác.
+        if (step.taskId) step.artifacts = artifactsOf(executed.root ?? input.root, step.taskId)
       } else {
         // Không tạo job — kết quả chạy đồng bộ (httpRequest).
         step.status = 'succeeded'

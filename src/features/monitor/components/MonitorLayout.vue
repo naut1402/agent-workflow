@@ -1,18 +1,16 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import ProjectBar from './ProjectBar.vue'
 import TaskList from './TaskList.vue'
 import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
-import RailIcon from '../../../core/ui/RailIcon.vue'
 import Icon from '../../../core/ui/Icon.vue'
 import { patchTaskArchive, deleteTask, repairTaskState } from '../scripts/monitorApi'
 import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
 import { taskDisplayName } from '../lib/taskDisplay'
-import { useLocalToggle } from '../../../core/composables/useLocalToggle'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {
   resolveCollapseMonitorSubSidebarOnOutside,
@@ -20,7 +18,6 @@ import {
 } from '../../../core/configs/appSettings'
 
 const { t } = useI18nHelpers()
-const SUB_SIDEBAR_KEY = 'dev-dashboard-monitor-subsidebar-collapsed'
 
 const props = defineProps({
   projects: { type: Array, default: () => [] },
@@ -33,9 +30,12 @@ const props = defineProps({
   connected: { type: Boolean, default: false },
   error: { type: String, default: '' },
   lastUpdated: { type: String, default: '' },
+  /** v-model từ shell — mode icon trên rail sidebar là control ẩn/hiện panel này. */
+  subSidebarCollapsed: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
+  'update:subSidebarCollapsed',
   'select-project',
   'projects-changed',
   'select-task',
@@ -50,44 +50,37 @@ const emit = defineEmits([
 const archiveError = ref('')
 const needsRepair = computed(() => taskNeedsStateRepair(props.selected))
 
-// Sub-sidebar collapse (mục 5) — cùng pattern App.vue (sidebar chính):
-// useLocalToggle + localStorage key riêng.
-const { state: subSidebarCollapsed, toggle: toggleSubSidebar } = useLocalToggle(false)
-
-onMounted(() => {
-  try {
-    if (localStorage.getItem(SUB_SIDEBAR_KEY) === '1') subSidebarCollapsed.value = true
-  } catch { /* ignore */ }
-})
-
-watch(subSidebarCollapsed, (v) => {
-  try {
-    localStorage.setItem(SUB_SIDEBAR_KEY, v ? '1' : '0')
-  } catch { /* ignore */ }
-})
-
 // Setting mục 7 — auto-collapse file-list mở của TaskList khi click ra ngoài
 // vùng .monitor-sub-sidebar (kể cả click vào artifact panel bên phải).
 const subSidebarRef = ref<HTMLElement | null>(null)
 const taskListRef = ref<InstanceType<typeof TaskList> | null>(null)
 const { settings } = useAppSettings()
 
-// Ignore teleported modals (FolderPicker, Settings, …): clicks there are outside
-// the sub-sidebar DOM but must not collapse it — otherwise v-if unmounts ProjectBar
-// and closes the picker mid-navigation.
+// Mode icon (trong `.sidebar`) giờ chính là nút toggle sub-sidebar, mà listener
+// capture của onClickOutside chạy TRƯỚC @click của nút: nếu collapse ở đây thì
+// @click sẽ toggle mở lại ⇒ nhánh "đang hiện → ẩn" chết. Chặn đúng nhánh đó chứ
+// KHÔNG đưa '.sidebar' vào `ignore` — `ignore` triệt tiêu cả callback, kéo theo
+// nhánh collapseTaskExpandOnOutside (setting độc lập) chết oan.
+function isFromRailSidebar(event: Event) {
+  return event.composedPath().some((el) => el instanceof Element && el.classList.contains('sidebar'))
+}
+
 onClickOutside(
   subSidebarRef,
-  () => {
+  (event) => {
     if (resolveCollapseTaskExpandOnOutside(settings.value)) taskListRef.value?.collapseAll()
-    if (resolveCollapseMonitorSubSidebarOnOutside(settings.value)) {
-      subSidebarCollapsed.value = true
+    if (!isFromRailSidebar(event) && resolveCollapseMonitorSubSidebarOnOutside(settings.value)) {
+      emit('update:subSidebarCollapsed', true)
     }
   },
+  // Ignore teleported modals (FolderPicker, Settings, …): clicks there are outside
+  // the sub-sidebar DOM but must not collapse it — otherwise v-if unmounts ProjectBar
+  // and closes the picker mid-navigation.
   { ignore: ['.modal-backdrop'] },
 )
 
 const monitorLayoutClass = computed(() => ({
-  'monitor-layout--sub-collapsed': subSidebarCollapsed.value,
+  'monitor-layout--sub-collapsed': props.subSidebarCollapsed,
 }))
 
 async function toggleArchiveSelected() {
@@ -136,15 +129,6 @@ async function deleteSelected() {
 <template>
   <div class="monitor-layout" :class="monitorLayoutClass">
     <aside ref="subSidebarRef" class="monitor-sub-sidebar" :class="{ 'monitor-sub-sidebar--collapsed': subSidebarCollapsed }">
-      <button
-        type="button"
-        class="monitor-sub-sidebar-collapse-btn rail-icon-btn"
-        :title="subSidebarCollapsed ? t('monitor.layout.expandSubSidebar') : t('monitor.layout.collapseSubSidebar')"
-        :aria-expanded="!subSidebarCollapsed"
-        @click="toggleSubSidebar"
-      >
-        <RailIcon :name="subSidebarCollapsed ? 'panelExpand' : 'panelCollapse'" />
-      </button>
       <template v-if="!subSidebarCollapsed">
         <ProjectBar
           :projects="projects"
@@ -244,8 +228,10 @@ async function deleteSelected() {
   overflow: hidden;
   transition: grid-template-columns 0.2s ease;
 }
+// Thu về 0 chứ không 48px như bản cũ: dải đó chỉ chứa nút thu/phóng đã bỏ,
+// giữ lại sẽ là một cột xám rỗng. Editor vẫn giữ dải icon vì còn Catalog/Rules.
 .monitor-layout.monitor-layout--sub-collapsed {
-  grid-template-columns: 48px 1fr;
+  grid-template-columns: 0 1fr;
 }
 .monitor-sub-sidebar {
   display: flex;
@@ -257,27 +243,8 @@ async function deleteSelected() {
   overflow: hidden;
 }
 .monitor-sub-sidebar.monitor-sub-sidebar--collapsed {
-  padding: 10px 6px;
-  align-items: center;
-}
-.monitor-sub-sidebar-collapse-btn {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--muted);
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  cursor: pointer;
   padding: 0;
-  font-family: inherit;
-  margin: 0 0 8px;
-}
-.monitor-sub-sidebar--collapsed .monitor-sub-sidebar-collapse-btn { margin: 0; }
-.monitor-sub-sidebar-collapse-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: rgba(var(--accent-rgb), 0.08);
+  border-right: none;
 }
 .monitor-content {
   overflow-y: auto;

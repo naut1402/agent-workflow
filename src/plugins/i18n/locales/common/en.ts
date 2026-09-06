@@ -3,6 +3,8 @@ export default {
   sidebar: {
     expand: 'Expand sidebar',
     collapse: 'Collapse sidebar',
+    expandSubSidebar: 'Expand panel',
+    collapseSubSidebar: 'Collapse panel',
     connected: 'live',
     disconnected: 'disconnected',
     settings: 'Settings',

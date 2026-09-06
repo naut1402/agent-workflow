@@ -302,3 +302,107 @@ describe('automations CRUD API — vòng đời đọc lại được', () => {
     expect(list.automations).toEqual([])
   })
 })
+
+/**
+ * Project đích của action `runTask` (T0d57ff58) qua HTTP.
+ *
+ * Bất biến: giá trị nào lưu được thì phải chạy được — id sai charset bị chặn
+ * ngay ở API chứ không đợi tới lúc chạy rule mới fail.
+ */
+describe('automations API — project đích của action runTask', () => {
+  function ruleWithTarget(over: Record<string, unknown>) {
+    return {
+      ...validRule,
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'làm việc', ...over }],
+    }
+  }
+
+  test('lưu project đích hợp lệ → persist xuống file, đọc lại còn nguyên', async () => {
+    const res = await jsonReq('POST', '/api/automations', ruleWithTarget({ projectId: 'proj-b-1a2b3c4d' }))
+    expect(res.status).toBe(201)
+
+    // Đọc từ đĩa, không chỉ từ response — field phải thật sự được ghi.
+    expect(fs.readFileSync(ruleFile(RULE_ID), 'utf8')).toContain('proj-b-1a2b3c4d')
+
+    const list = await (await app.request(url('/api/automations'))).json()
+    expect(list.automations[0].actions[0]).toMatchObject({ projectId: 'proj-b-1a2b3c4d' })
+  })
+
+  test('mode=existing cũng lưu được project đích', async () => {
+    const res = await jsonReq('POST', '/api/automations', {
+      ...validRule,
+      actions: [{ kind: 'runTask', mode: 'existing', taskId: 'T123', projectId: 'proj-b-1a2b3c4d' }],
+    })
+    expect(res.status).toBe(201)
+
+    const list = await (await app.request(url('/api/automations'))).json()
+    expect(list.automations[0].actions[0]).toMatchObject({ taskId: 'T123', projectId: 'proj-b-1a2b3c4d' })
+  })
+
+  test('không chọn project đích → rule lưu bình thường, không mọc khoá projectId', async () => {
+    const res = await jsonReq('POST', '/api/automations', validRule)
+    expect(res.status).toBe(201)
+
+    expect(fs.readFileSync(ruleFile(RULE_ID), 'utf8')).not.toContain('projectId')
+
+    const list = await (await app.request(url('/api/automations'))).json()
+    expect(list.automations[0].actions[0].projectId).toBeUndefined()
+  })
+
+  test.each([
+    ['chuỗi rỗng', ''],
+    ['path traversal', '../other-project'],
+    ['có dấu /', 'a/b'],
+    ['có khoảng trắng', 'proj b'],
+    ['biến {{…}}', '{{trigger.payload.projectId}}'],
+    ['quá dài', 'a'.repeat(500)],
+  ])('project đích không dùng được (%s) → 4xx, không ghi rule xuống đĩa', async (_label, projectId) => {
+    const res = await jsonReq('POST', '/api/automations', ruleWithTarget({ projectId }))
+
+    expect(res.status).toBeGreaterThanOrEqual(400)
+    expect(res.status).toBeLessThan(500)
+    expect(fs.existsSync(ruleFile(RULE_ID))).toBe(false)
+    expect(events).toEqual([])
+  })
+})
+
+describe('GET /api/automations/form-options — danh sách project', () => {
+  test('registry rỗng → projects: []', async () => {
+    const res = await app.request(url('/api/automations/form-options'))
+
+    expect(res.status).toBe(200)
+    expect((await res.json()).projects).toEqual([])
+  })
+
+  test('registry có project → trả { id, name, default } cho combobox project đích', async () => {
+    const ctx = fakeCtx()
+    ctx.registry.list = () => ({
+      projects: [
+        { id: 'proj-a-1a2b3c4d', name: 'Project A', kind: 'local', path: root, addedAt: '', default: true },
+        { id: 'proj-b-5e6f7a8b', name: 'Project B', kind: 'local', path: root, addedAt: '', default: false },
+      ],
+      defaultId: 'proj-a-1a2b3c4d',
+    })
+    const appWithProjects = await createApp(ctx)
+
+    const body = await (await appWithProjects.request(url('/api/automations/form-options'))).json()
+
+    expect(body.projects).toEqual([
+      { id: 'proj-a-1a2b3c4d', name: 'Project A', default: true },
+      { id: 'proj-b-5e6f7a8b', name: 'Project B', default: false },
+    ])
+  })
+
+  test('registry ném lỗi → projects: [] chứ không 500 (form vẫn lưu được)', async () => {
+    const ctx = fakeCtx()
+    ctx.registry.list = () => {
+      throw new Error('projects.json hỏng')
+    }
+    const appBroken = await createApp(ctx)
+
+    const res = await appBroken.request(url('/api/automations/form-options'))
+
+    expect(res.status).toBe(200)
+    expect((await res.json()).projects).toEqual([])
+  })
+})

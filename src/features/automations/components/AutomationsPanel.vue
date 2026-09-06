@@ -16,6 +16,7 @@ const {
   automations,
   eventTypes,
   formOptions,
+  optionsByProject,
   loading,
   error,
   actionError,
@@ -25,6 +26,7 @@ const {
   load,
   loadEventTypes,
   loadFormOptions,
+  ensureFormOptions,
   create,
   update,
   toggle,
@@ -187,7 +189,15 @@ function stepLabel(rule: AutomationListItem, index: number): string {
   }
   const name = action.name?.trim() || t(action.mode === 'create' ? 'automations.action.create' : 'automations.action.existing')
   const detail = action.mode === 'existing' && action.taskId ? ` · ${action.taskId}` : ''
-  return `${name}${detail}`
+  // Rule sống ở project này nhưng bước có thể chạy ở project khác — nói rõ để
+  // người đọc không nhầm task nằm ở đâu.
+  const target = action.projectId ? ` · → ${projectName(action.projectId)}` : ''
+  return `${name}${detail}${target}`
+}
+
+/** Tên hiển thị của project đích; chưa nạp được registry thì hiện thẳng id. */
+function projectName(id: string): string {
+  return formOptions.value.projects.find((p) => p.id === id)?.name || id
 }
 
 /** Mọi timer một lần đã chạy và không còn lịch nào → hiển thị "one-shot đã chạy". */
@@ -499,10 +509,12 @@ onMounted(() => {
       :edit-rule="editRule"
       :event-types="eventTypes"
       :form-options="formOptions"
+      :options-by-project="optionsByProject"
       :saving="saving"
       :server-error="formServerError"
       @close="showForm = false"
       @submit="onFormSubmit"
+      @request-options="ensureFormOptions"
     />
   </section>
 </template>

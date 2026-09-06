@@ -1,10 +1,12 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createApp } from '../../../../src/api/apiServer.js'
 import type { RegistryContext } from '../../../../src/core/http/types.js'
-import { cancelJob, loadJob, listJobs, registerProvider, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
+import { cancelJob, loadJob, listJobs, registerProvider, submitJob, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
+import type { JobRecord } from '../../../../src/features/runner/business/index.js'
+import { runTaskStep } from '../../../../src/features/monitor/business/index.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 import { on } from '../../../../src/core/events/index.js'
 
@@ -762,5 +764,114 @@ describe('POST /api/tasks with run:true', () => {
     await settle(body.job.id)
     // Root pipeline's first step (implementer) is gate-less → advance to reviewer.
     await waitForPhase('CREATE1', (p) => p === 'reviewer')
+  })
+})
+
+/**
+ * Cùng `taskId` ở hai project khác nhau (T0d57ff58).
+ *
+ * Automation có thể trỏ một bước sang project khác, nên hai data root cùng giữ
+ * một task id là đường chạy thường chứ không còn là trùng hợp hiếm. Job của
+ * project này không được làm project kia trông như đang bận (409 giả), cũng
+ * không được đẩy con trỏ pipeline của task cùng tên bên kia.
+ *
+ * Gọi thẳng `runTaskStep` vì route chỉ resolve được một root.
+ */
+describe('runTaskStep — lọc job theo data root', () => {
+  const TASK = 'SHARED1'
+  let rootA: string
+  let rootB: string
+
+  function seedRoot(dataRoot: string): void {
+    fs.writeFileSync(
+      path.join(dataRoot, 'pipeline.yaml'),
+      ['version: 1', 'steps:', '  - id: implementer', "    agent: ' '", '  - id: reviewer', "    agent: ' '"].join('\n'),
+      'utf8',
+    )
+    fs.mkdirSync(path.join(dataRoot, '.dev-state'), { recursive: true })
+    fs.mkdirSync(path.join(dataRoot, 'tasks', TASK), { recursive: true })
+    fs.writeFileSync(
+      path.join(dataRoot, '.dev-state', `${TASK}.json`),
+      JSON.stringify({ task_id: TASK, current_phase: 'implementer' }),
+      'utf8',
+    )
+    fs.writeFileSync(path.join(dataRoot, 'tasks', TASK, 'request.md'), 'do the thing', 'utf8')
+  }
+
+  function phaseOf(dataRoot: string): string | null {
+    const state = JSON.parse(fs.readFileSync(path.join(dataRoot, '.dev-state', `${TASK}.json`), 'utf8'))
+    return state.current_phase ?? null
+  }
+
+  beforeEach(() => {
+    rootA = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-run-step-a-'))
+    rootB = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-run-step-b-'))
+    seedRoot(rootA)
+    seedRoot(rootB)
+  })
+
+  afterEach(() => {
+    fs.rmSync(rootA, { recursive: true, force: true })
+    fs.rmSync(rootB, { recursive: true, force: true })
+  })
+
+  test('job đang chạy ở project A không làm project B trả 409', async () => {
+    gated = true
+    const a = await runTaskStep(rootA, 'proj-a', TASK, { runnerId: 'stub-runner-run-step' })
+    expect(a.ok).toBe(true)
+    const jobA = (a as { ok: true; job: JobRecord }).job
+    for (let i = 0; i < 200 && loadJob(jobA.id)?.status !== 'running'; i++) await sleep(5)
+    expect(loadJob(jobA.id)?.status).toBe('running')
+
+    // Task cùng id ở project B đang rảnh — phải submit được.
+    const b = await runTaskStep(rootB, 'proj-b', TASK, { runnerId: 'stub-runner-run-step' })
+    expect(b.ok).toBe(true)
+    expect((b as { ok: true; job: JobRecord }).job.metadata?.devTeamRoot).toBe(rootB)
+
+    gated = false
+    resolveGate?.()
+    await settle(jobA.id)
+    await settle((b as { ok: true; job: JobRecord }).job.id)
+  })
+
+  test('job succeeded ở project A không auto-advance con trỏ pipeline của project B', async () => {
+    const a = await runTaskStep(rootA, 'proj-a', TASK, { runnerId: 'stub-runner-run-step' })
+    expect(a.ok).toBe(true)
+    await settle((a as { ok: true; job: JobRecord }).job.id)
+    // A tự tiến qua implementer rồi chuỗi tiếp (mọi step đều gate-less).
+    for (let i = 0; i < 400 && phaseOf(rootA) === 'implementer'; i++) await sleep(5)
+    expect(phaseOf(rootA)).not.toBe('implementer')
+
+    // B vẫn ở implementer: job succeeded của A không được kéo con trỏ của B đi.
+    expect(phaseOf(rootB)).toBe('implementer')
+    const b = await runTaskStep(rootB, 'proj-b', TASK, { runnerId: 'stub-runner-run-step' })
+
+    expect(b.ok).toBe(true)
+    expect((b as { ok: true; job: JobRecord }).job.metadata?.pipelineStepId).toBe('implementer')
+    await settle((b as { ok: true; job: JobRecord }).job.id)
+  })
+
+  test('job cũ không có devTeamRoot trong metadata vẫn chặn (backward-compat)', async () => {
+    gated = true
+    // Job submit thẳng, không qua runTaskStep → metadata giống job ghi trước
+    // khi `devTeamRoot` tồn tại.
+    const legacy = submitJob({
+      runnerId: 'stub-runner-run-step',
+      agentRef: ' ',
+      workspace: path.join(rootA, 'tasks', TASK),
+      userPrompt: 'legacy',
+      metadata: { taskId: TASK, pipelineStepId: 'implementer' },
+    })
+    for (let i = 0; i < 200 && loadJob(legacy.id)?.status !== 'running'; i++) await sleep(5)
+    expect(loadJob(legacy.id)?.status).toBe('running')
+
+    const blocked = await runTaskStep(rootA, 'proj-a', TASK, { runnerId: 'stub-runner-run-step' })
+
+    expect(blocked.ok).toBe(false)
+    expect((blocked as { ok: false; status: number }).status).toBe(409)
+
+    gated = false
+    resolveGate?.()
+    await settle(legacy.id)
   })
 })
