@@ -38,7 +38,7 @@
 - **Agent editor** — soạn agent riêng: sửa từng section prompt, template bước workflow, wizard sinh bản nháp từ mô tả tiếng Việt (cần `ANTHROPIC_API_KEY`).
 - **Automations** — đặt luật chạy tự động: trigger theo lịch (một lần / lặp / cron) hoặc theo sự kiện, chuỗi nhiều bước `runTask`, chọn project đích cho từng bước.
 - **Knowledge** — kho tri thức agent đọc khi làm việc: ghi chú theo scope project / system, chọn driver lưu trữ, tra cứu và sửa ngay trên UI.
-- **Runner** — chỗ công việc chạy thật: khai báo connection, quản lý credential (vault mã hoá bằng `DASHBOARD_SECRET_KEY`), theo dõi hàng đợi job và log stdout.
+- **Runner** — chỗ công việc chạy thật: khai báo connection, quản lý credential (vault mã hoá bằng `DASHBOARD_SECRET_KEY`), theo dõi hàng đợi job và log stdout; job đang chạy hiện ở panel nổi, xong thì báo qua chuông thông báo.
 - **Quick action** — chạy nhanh một action lên task/artifact đang chọn, không cần tạo task đầy đủ; menu lồng nhau.
 - **Logs** — soi lại chuyện đã xảy ra: audit thao tác, request HTTP, log job; bật/tắt từng loại trong Settings.
 - **Statistics** — thống kê drill-down project → task → step → job, biểu đồ pie / xychart.
@@ -90,29 +90,11 @@ bun run test:all     # typecheck → lint → test → test:fe → e2e
 bun run check:todo   # gate docs/todo (CI promote → main)
 ```
 
-## Danh mục tài liệu
+## Liên kết
 
-- [`docs/`](docs/)
-  - [`architecture.md`](docs/architecture.md) — data root, Hono trên 2 transport, cây `src/`, bất biến kiến trúc
-  - [`event-catalog.md`](docs/event-catalog.md) — mục lục domain event theo feature
-  - [`i18n.md`](docs/i18n.md) — cách tổ chức message vi/en
-  - [`ui-buttons.md`](docs/ui-buttons.md) — quy ước nút và trạng thái trên UI
-  - [`diagram/IoC.md`](docs/diagram/IoC.md) — sơ đồ bootstrap & runtime của service container / ModeRegistry
-  - [`implement/`](docs/implement/) — convention phát triển
-    - [`feature-organization-rule.md`](docs/implement/feature-organization-rule.md) — đặt file theo feature, `business/`, helper dùng chung
-    - [`coding-convention.md`](docs/implement/coding-convention.md) — ESM/TS, Zod, Vue, i18n
-    - [`mode-registry-convention.md`](docs/implement/mode-registry-convention.md) — thêm mode mới ở FE shell
-    - [`test-convention.md`](docs/implement/test-convention.md) — danh mục suite, chọn runner, phạm vi chạy
-    - [`doc-writing-convention.md`](docs/implement/doc-writing-convention.md) — viết `investigate.md` / `design.md`
-    - [`pr-docs-convention.md`](docs/implement/pr-docs-convention.md) — commit message, PR body, evidence test
-    - [`git-convention.md`](docs/implement/git-convention.md) — git hygiene, tách commit
-    - [`worktree-convention.md`](docs/implement/worktree-convention.md) — cô lập mỗi phiên làm việc
-    - [`review-checklist-rule.md`](docs/implement/review-checklist-rule.md) — checklist review PR
-    - [`todo-debt-convention.md`](docs/implement/todo-debt-convention.md) — hoãn docs/test, gate `dev/*/main` → `main`
-  - [`cookbook/core-path-reorg.md`](docs/cookbook/core-path-reorg.md) — bài học đợt tái cấu trúc core/feature
-  - [`template/`](docs/template/) — agent & pipeline mẫu
 - [`docker/`](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example)
 - Liên quan — [plugin Claude Code (bộ agent template)](docs/template/agents/) · [Issues](https://github.com/naut1402/agent-workflow/issues) · [Pull requests](https://github.com/naut1402/agent-workflow/pulls)
+- Tài liệu — [danh mục đầy đủ trong `docs/`](docs/README.md): kiến trúc, domain event, i18n, quy ước UI, template pipeline
 
 Branch phát hành theo dòng version: `dev/x.y.z/main` (vd `dev/1.1.2/main`). Không commit thẳng `main` — mọi thay đổi qua PR.
 
