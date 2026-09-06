@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildEditorGraph,
   gateLabelOf,
+  hasRemovalChange,
   isStepNode,
   stepEdgesOf,
   stepNodesOf,
@@ -146,5 +147,36 @@ describe('canvasGraph — buildEditorGraph', () => {
       labels,
     })
     expect(nodes.slice(0, 2).map((n) => n.id)).toEqual(['a', 'b'])
+  })
+})
+
+// T1 — vị từ lọc change của VueFlow. Sync ở mọi change làm node giật lúc kéo,
+// nên chỉ change `remove` mới được kích hoạt dựng lại graph phái sinh.
+describe('hasRemovalChange', () => {
+  it('true khi có ít nhất một change type "remove"', () => {
+    expect(hasRemovalChange([{ type: 'remove', id: 'a' } as any])).toBe(true)
+    expect(
+      hasRemovalChange([
+        { type: 'select', id: 'a' },
+        { type: 'remove', id: 'b' },
+      ] as any),
+    ).toBe(true)
+  })
+
+  it('false khi chỉ có select / position / dimensions', () => {
+    expect(
+      hasRemovalChange([
+        { type: 'select' },
+        { type: 'position' },
+        { type: 'dimensions' },
+      ] as any),
+    ).toBe(false)
+  })
+
+  it('false và không ném lỗi với mảng rỗng / null / undefined / phần tử null', () => {
+    expect(hasRemovalChange([])).toBe(false)
+    expect(hasRemovalChange(null)).toBe(false)
+    expect(hasRemovalChange(undefined)).toBe(false)
+    expect(hasRemovalChange([null, undefined])).toBe(false)
   })
 })

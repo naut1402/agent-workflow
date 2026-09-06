@@ -58,6 +58,11 @@ function canvasNodeIds(): string[] {
   return (flowStore.current?.getNodes.value ?? []).map((n: any) => n.id)
 }
 
+/** Id của mọi edge đang nằm trên canvas (kể cả edge dữ liệu de-*). */
+function canvasEdgeIds(): string[] {
+  return (flowStore.current?.getEdges.value ?? []).map((e: any) => e.id)
+}
+
 // `mockResolvedValue` trong từng test sống dai hơn `clearAllMocks` (chỉ xoá calls),
 // nên đặt lại implementation mặc định trước mỗi test để chúng không rò sang nhau.
 beforeEach(() => {
@@ -273,6 +278,99 @@ describe('PipelineEditor — node phái sinh không lọt vào pipeline lưu ra'
     expect(first.export_key).toBe('investigator')
     expect(first.name).toBe('Investigate')
     expect(first.hitl).toMatchObject({ mode: 'gate', gate_id: 'design-approved', retry: 3 })
+  })
+
+  // T2 — bug gốc: VueFlow xoá node bằng phím không đi qua deleteNode() của app,
+  // nên graph phái sinh không được dựng lại và node `art-*` + edge `de-*` ở lại
+  // mồ côi. `removeNodes()` trên store chính là đường phím Backspace đi qua.
+  describe('xoá step dọn sạch node/edge phái sinh', () => {
+    it('a — xoá bằng phím: node artifact và knowledge của step bị xoá biến mất', async () => {
+      await mountWithPipeline()
+      expect(canvasNodeIds()).toContain('art-investigator')
+
+      flowStore.current.removeNodes(['investigator'])
+      await flushPromises()
+
+      const ids = canvasNodeIds()
+      expect(ids).not.toContain('investigator')
+      expect(ids).not.toContain('art-investigator')
+      expect(ids).not.toContain('art-knowledge')
+      expect(ids).toContain('designer')
+      expect(ids).toContain('art-designer')
+    })
+
+    it('b — mọi edge dính step bị xoá đều mất, kể cả edge không kề nó', async () => {
+      await mountWithPipeline()
+      // `de-art-investigator-designer` có hai đầu là art-investigator → designer,
+      // không đầu nào là step bị xoá → phép dọn của thư viện không bắt được.
+      expect(canvasEdgeIds()).toContain('de-art-investigator-designer')
+
+      flowStore.current.removeNodes(['investigator'])
+      await flushPromises()
+
+      expect(canvasEdgeIds()).toEqual(['de-designer-art-designer'])
+    })
+
+    it('c — Save sau khi xoá bằng phím chỉ ghi step còn lại, không có id art-*', async () => {
+      const w = await mountWithPipeline()
+      flowStore.current.removeNodes(['investigator'])
+      await flushPromises()
+
+      await w.findComponent({ name: 'EditorTargetPanel' }).vm.$emit('save')
+      await flushPromises()
+
+      const pipeline = vi.mocked(writePipelineConfig).mock.calls[0][1] as any
+      expect(pipeline.steps.map((s: any) => s.id)).toEqual(['designer'])
+      expect(pipeline.steps.some((s: any) => String(s.id).startsWith('art-'))).toBe(false)
+    })
+
+    it('d — đường nút ✕ cho canvas giống hệt đường phím', async () => {
+      const w = await mountWithPipeline()
+
+      // Stub `<VueFlow>` không render slot node nên không emit `@delete` được —
+      // gọi thẳng handler mà `PipelineEditorNode` bind vào.
+      ;(w.vm as any).deleteNode('investigator')
+      await flushPromises()
+
+      expect(canvasNodeIds()).toEqual(['designer', 'art-designer'])
+      expect(canvasEdgeIds()).toEqual(['de-designer-art-designer'])
+    })
+
+    it('e — xoá edge phái sinh bằng phím thì nó mọc lại (phái sinh không sửa được bằng tay)', async () => {
+      await mountWithPipeline()
+      expect(canvasEdgeIds()).toContain('de-investigator-art-investigator')
+
+      // Edge `de-*` không đặt `selectable: false` nên người dùng chọn + Backspace
+      // được; hook `onEdgesChange` là chỗ duy nhất dựng nó lại. Gỡ hook đó ra thì
+      // edge mất hẳn, `art-investigator` treo lơ lửng không edge vào.
+      flowStore.current.removeEdges(['de-investigator-art-investigator'])
+      await flushPromises()
+
+      expect(canvasEdgeIds()).toContain('de-investigator-art-investigator')
+      expect(canvasNodeIds()).toContain('art-investigator')
+    })
+
+    it('f — panel cấu hình đóng khi step đang mở bị xoá', async () => {
+      const w = await mountWithPipeline()
+      ;(w.vm as any).openConfig('investigator', { label: 'Investigate' })
+      await flushPromises()
+
+      flowStore.current.removeNodes(['investigator'])
+      await flushPromises()
+
+      expect((w.vm as any).selectedNodeId).toBe(null)
+    })
+
+    it('g — panel giữ nguyên khi xoá step khác', async () => {
+      const w = await mountWithPipeline()
+      ;(w.vm as any).openConfig('designer', { label: 'Design' })
+      await flushPromises()
+
+      flowStore.current.removeNodes(['investigator'])
+      await flushPromises()
+
+      expect((w.vm as any).selectedNodeId).toBe('designer')
+    })
   })
 })
 

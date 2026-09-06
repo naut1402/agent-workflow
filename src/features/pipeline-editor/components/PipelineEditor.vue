@@ -12,7 +12,7 @@ import StepConfigPanel from './StepConfigPanel.vue'
 import EditorTargetPanel from './EditorTargetPanel.vue'
 import ArtifactNode from '../../../core/ui/ArtifactNode.vue'
 import { usePipelineProfiles } from '../composables/usePipelineProfiles'
-import { buildEditorGraph, stepEdgesOf, stepNodesOf } from '../lib/canvasGraph'
+import { buildEditorGraph, hasRemovalChange, stepEdgesOf, stepNodesOf } from '../lib/canvasGraph'
 import {
   extractPipelineMeta,
   extractStepPreservedMap,
@@ -151,6 +151,8 @@ const {
   getNodes,
   getEdges,
   onConnect,
+  onNodesChange,
+  onEdgesChange,
   fitView,
   screenToFlowCoordinate,
 } = useVueFlow()
@@ -413,10 +415,27 @@ function applyStepUpdate(nodeId, updatedData) {
 }
 
 function deleteNode(nodeId) {
+  // Đóng panel + dựng lại graph phái sinh do hook `onCanvasRemoval` lo, dùng
+  // chung với đường xoá bằng phím của VueFlow — đừng làm lại ở đây.
   removeNodes([nodeId])
-  if (selectedNodeId.value === nodeId) closeConfig()
+}
+
+/**
+ * Đường xoá thứ hai: nhấn `Backspace` khi node đang chọn thì VueFlow tự gọi
+ * `removeNodes` / `removeEdges` bên trong thư viện, **không** đi qua
+ * `deleteNode`. Không bắt ở đây thì node artifact của step vừa xoá ở lại canvas
+ * mồ côi cùng edge `de-art-<id>-<stepKế>`.
+ */
+function onCanvasRemoval(changes) {
+  if (!hasRemovalChange(changes)) return
+  if (selectedNodeId.value && !getNodes.value.some((n) => n.id === selectedNodeId.value)) {
+    closeConfig()
+  }
   syncDerivedGraph()
 }
+
+onNodesChange(onCanvasRemoval)
+onEdgesChange(onCanvasRemoval)
 
 function topoSort(nodeList, edgeList) {
   const adj = {}
