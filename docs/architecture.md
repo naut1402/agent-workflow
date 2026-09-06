@@ -3,7 +3,7 @@
 Tài liệu này mô tả **kiến trúc chi tiết** của `dev-team-dashboard`: cách backend và frontend được tổ chức, khái niệm "data root", cấu trúc thư mục, và cách một request đi qua hệ thống. Đây là **nguồn chính** cho phần kiến trúc + cấu trúc dự án cho người đọc — các tài liệu khác chỉ liên kết tới đây, không lặp lại.
 
 - Giới thiệu + hướng dẫn chạy nhanh: xem [`../README.md`](../README.md).
-- Coding / tổ chức feature: [`implement/coding-convention.md`](implement/coding-convention.md), [`implement/feature-organization-rule.md`](implement/feature-organization-rule.md).
+- Danh mục tài liệu: [`README.md`](README.md).
 
 > Tài liệu bám **cấu trúc thật** của nhánh hiện tại. Ngoại lệ đuôi file: `src/features/agent-editor/business/agentMarkdown.js` và `src/runner-cli.mjs` cố ý **chưa** chuyển `.ts` — ghi đúng đuôi.
 
@@ -92,7 +92,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 
 ## 3. Frontend (feature-module, 9 mode qua ModeRegistry)
 
-- `src/main.ts` mount `src/App.vue`. `App.vue` là shell mỏng: `inject` 1 service container (`src/core/container/`, DI/IoC trên native Vue `provide/inject`, không thêm thư viện ngoài) → `resolve` `ModeRegistry` (`src/core/shell/modeRegistry.ts`) → lặp `listModes()` để render sidebar nav / status text / main panel. `App.vue` **không** hard-code danh sách mode — mỗi feature tự đăng ký qua `src/features/<feature>/registerMode.ts` (export `registerMode(registry)`), `main.ts` tự quét toàn bộ bằng `import.meta.glob('./features/*/registerMode.ts', { eager: true })` (đồng bộ, chạy xong trước `app.mount()`) — thêm mode mới không cần sửa `main.ts`/`App.vue`. Quy ước chi tiết + checklist: [`implement/mode-registry-convention.md`](implement/mode-registry-convention.md); sơ đồ bootstrap + diễn giải: [`diagram/IoC.md`](diagram/IoC.md). Mode `monitor` **poll `/api/tasks` mỗi 1500ms** (qua `src/features/monitor/composables/useTaskPolling.ts`); các mode khác pause polling.
+- `src/main.ts` mount `src/App.vue`. `App.vue` là shell mỏng: `inject` 1 service container (`src/core/container/`, DI/IoC trên native Vue `provide/inject`, không thêm thư viện ngoài) → `resolve` `ModeRegistry` (`src/core/shell/modeRegistry.ts`) → lặp `listModes()` để render sidebar nav / status text / main panel. `App.vue` **không** hard-code danh sách mode — mỗi feature tự đăng ký qua `src/features/<feature>/registerMode.ts` (export `registerMode(registry)`), `main.ts` tự quét toàn bộ bằng `import.meta.glob('./features/*/registerMode.ts', { eager: true })` (đồng bộ, chạy xong trước `app.mount()`) — thêm mode mới không cần sửa `main.ts`/`App.vue`. Sơ đồ bootstrap + diễn giải: [`diagram/IoC.md`](diagram/IoC.md). Mode `monitor` **poll `/api/tasks` mỗi 1500ms** (qua `src/features/monitor/composables/useTaskPolling.ts`); các mode khác pause polling.
 
 | Mode (`ModeEntry.key`) | Thư mục | Component / thành phần chính |
 |---|---|---|
@@ -150,7 +150,7 @@ agent-workflow/
 └── .claude/
 ```
 
-> Quy ước phát triển cho người đọc nằm ở [`implement/`](implement/). Thư mục `.claude/` là state cục bộ của công cụ AI (worktree, cache, settings.local) — chỉ phần rules được version.
+> Thư mục `.claude/` là state cục bộ của công cụ AI (worktree, cache, settings.local) — chỉ phần rule được version. Danh mục tài liệu cho người đọc: [`README.md`](README.md).
 
 ---
 

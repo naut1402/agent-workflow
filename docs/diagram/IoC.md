@@ -1,6 +1,6 @@
 # IoC bootstrap + runtime flow — service container + ModeRegistry
 
-2 sơ đồ giải thích **khái niệm** vận hành của service container (DI/IoC) và danh sách mode (`ModeRegistry`) ở FE shell: **(1) bootstrap** — chuyện gì xảy ra lúc ứng dụng khởi động; **(2) runtime** — chuyện gì xảy ra mỗi khi người dùng chuyển mode. Tài liệu này viết theo hướng dễ hiểu ý tưởng, hạn chế trích code — muốn xem đúng dòng code/API cụ thể, xem bảng tham chiếu ở cuối hoặc [`../implement/mode-registry-convention.md`](../implement/mode-registry-convention.md) (quy ước dành cho người viết code). Kiến trúc tổng quan: [`../architecture.md`](../architecture.md) §3.
+2 sơ đồ giải thích **khái niệm** vận hành của service container (DI/IoC) và danh sách mode (`ModeRegistry`) ở FE shell: **(1) bootstrap** — chuyện gì xảy ra lúc ứng dụng khởi động; **(2) runtime** — chuyện gì xảy ra mỗi khi người dùng chuyển mode. Tài liệu này viết theo hướng dễ hiểu ý tưởng, hạn chế trích code — muốn xem đúng dòng code/API cụ thể, xem bảng tham chiếu ở cuối. Kiến trúc tổng quan: [`../architecture.md`](../architecture.md) §3.
 
 ---
 
@@ -128,5 +128,3 @@ Bảng dưới dành cho ai cần xem đúng code — sơ đồ + diễn giải 
 | Màn hình chính: lấy danh sách mode, vẽ sidebar/trạng thái/nội dung, xử lý theo dõi liên tục | `src/App.vue` |
 | Mỗi tính năng tự khai báo mode của mình | `src/features/<feature>/registerMode.ts` |
 | Theo dõi liên tục của mode Theo dõi (Monitor) | `src/features/monitor/composables/useTaskPolling.ts` |
-
-Quy ước dành cho người viết code (checklist thêm mode mới, field chi tiết): [`../implement/mode-registry-convention.md`](../implement/mode-registry-convention.md).
