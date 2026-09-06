@@ -1,6 +1,6 @@
 # Git convention — staging & cleanup
 
-Quy ước git hygiene **hiện hành**. Hub: [`AGENTS.md`](../../AGENTS.md). Worktree: [`worktree-convention.md`](worktree-convention.md).
+Quy ước git hygiene **hiện hành**. Worktree: [`worktree-convention.md`](worktree-convention.md).
 
 Ngăn 2 sự cố đã gặp: commit file ngoài phạm vi/generated/export, và xóa thiếu khi move/rename/migrate.
 
@@ -74,4 +74,4 @@ Khi PR lớn hoặc gom nhiều hạng mục độc lập trên cùng branch: **
 | `docs(git): quy ước tách commit theo xử lý` riêng | Nhét rule docs vào commit feature không liên quan |
 | `refactor(runner): …` rồi `fix(runner): …` | Refactor + đổi hành vi user trong cùng commit khó review |
 
-Agent/người: khi user hoặc task yêu cầu nhiều hạng mục — **áp dụng tách commit ngay lúc commit**, không chờ đến lúc mở PR mới chia.
+Khi một task yêu cầu nhiều hạng mục — **áp dụng tách commit ngay lúc commit**, không chờ đến lúc mở PR mới chia.

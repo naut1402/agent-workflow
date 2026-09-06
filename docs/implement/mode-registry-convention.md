@@ -1,6 +1,6 @@
 # Mode registry convention — thêm mode mới ở FE shell
 
-Quy ước khi thêm/sửa **mode** (`monitor`, `editor`, `agentEditor`, …) trong shell `src/App.vue`. Hub: [`AGENTS.md`](../../AGENTS.md); kiến trúc tổng quan: [`../architecture.md`](../architecture.md) §3.
+Quy ước khi thêm/sửa **mode** (`monitor`, `editor`, `agentEditor`, …) trong shell `src/App.vue`. Kiến trúc tổng quan: [`../architecture.md`](../architecture.md) §3.
 
 ---
 

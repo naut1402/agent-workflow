@@ -1,6 +1,6 @@
 # Todo debt — đánh dấu việc đối ứng sau
 
-Quy ước **hiện hành**. Hub: [`AGENTS.md`](../../AGENTS.md).
+Quy ước **hiện hành** cho nợ tài liệu / test hoãn lại (`docs/todo/`).
 
 ## 1. Bối cảnh
 

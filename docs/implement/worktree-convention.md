@@ -1,6 +1,6 @@
 # Worktree convention — cô lập mỗi instance agent
 
-Quy ước worktree **hiện hành**. Git hygiene: [`git-convention.md`](git-convention.md). Hub: [`AGENTS.md`](../../AGENTS.md).
+Quy ước worktree **hiện hành**. Git hygiene: [`git-convention.md`](git-convention.md).
 
 Nhiều instance agent có thể làm việc đồng thời trên cùng repo — để tránh race condition (giành working tree, `index.lock`, checkout đè branch, sửa trùng file, build/test ghi đè), mỗi phiên code nên dùng một git worktree riêng, không code chung trên cây chính.
 

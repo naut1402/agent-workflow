@@ -1,6 +1,6 @@
 # Doc-writing convention — `investigate.md` / `design.md`
 
-Quy ước viết artifact markdown của dev pipeline trong `.dev-team-agent/tasks/<id>/`. Hub: [`AGENTS.md`](../../AGENTS.md) §7 (bản rút gọn, tự đủ để viết doc).
+Quy ước viết artifact markdown của dev pipeline trong `.dev-team-agent/tasks/<id>/`. Đây là bản đầy đủ của quy ước; các bản rút gọn khác trong repo phải khớp với file này.
 
 ---
 
@@ -27,7 +27,7 @@ Hệ quả: một mục **chỉ xuất hiện ở đúng một section**. Chủ 
 
 ### 2.1 Skeleton
 
-Nguyên văn theo [`AGENTS.md`](../../AGENTS.md) §7 — khi hai bên lệch, `AGENTS.md` là đúng (đó là nguồn được bước quét rule đọc và được nhúng vào ngữ cảnh agent).
+Sáu heading dưới đây là bản chuẩn — bản rút gọn ở nơi khác lệch thì lấy file này làm đúng.
 
 > Các dòng heading trong khối dưới thụt vào 1 space theo đúng quy tắc ở §4 — bỏ space khi áp dụng thật.
 
@@ -97,7 +97,7 @@ Bất biến:
 - **Một bảng duy nhất** `| Module / File | Thay đổi dự kiến | Test hiện có | Confidence |` — không tách "files cần sửa" và "test coverage" thành hai bảng lặp lại cùng danh sách file.
   - Cột `Test hiện có`: test đang phủ / test cần thêm / *không có test*.
   - Mức mô tả: đường dẫn file + tên hàm/component. **Không số dòng** — code đổi sau vài commit là tài liệu sai.
-- Kèm vài câu blast radius (cái gì ngoài danh sách trên có thể vỡ), kết luận DB/schema, kết luận events theo [`AGENTS.md`](../../AGENTS.md) §6.
+- Kèm vài câu blast radius (cái gì ngoài danh sách trên có thể vỡ), kết luận DB/schema, kết luận events (thêm / sửa / xoá emit, hoặc *không đổi* kèm lý do) — danh mục event: [`../event-catalog.md`](../event-catalog.md).
 - **Empty state**: không chạm schema thì ghi *Không đổi schema*; không đụng event thì ghi *Events: không đổi — vì …*. Bỏ trống im lặng là chưa kết luận.
 
 #### §6. Phụ lục

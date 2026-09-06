@@ -1,6 +1,6 @@
 # PR & docs convention — xuất tài liệu
 
-Quy ước PR body, evidence test, commit message, ngôn ngữ tài liệu. Hub: [`AGENTS.md`](../../AGENTS.md).
+Quy ước PR body, evidence test, commit message, ngôn ngữ tài liệu.
 
 ---
 
@@ -89,7 +89,7 @@ Tài liệu & comment hướng người dùng/PR: tiếng Việt. Comment kỹ t
 
 ## 6. Commit message, PR title & issue title
 
-Áp dụng cho **mọi agent và người** khi tạo commit / PR / issue. CI **Commitlint** enforce trên PR target `dev/**/main` (xem `.github/workflows/commitlint.yml`, `commitlint.config.js`).
+Áp dụng cho **mọi** commit / PR / issue, bất kể do người hay công cụ tạo. CI **Commitlint** enforce trên PR target `dev/**/main` (xem `.github/workflows/commitlint.yml`, `commitlint.config.js`).
 
 PR lớn / nhiều xử lý độc lập: **tách commit theo từng concern** — xem [`git-convention.md`](git-convention.md) §6 (một commit ≈ một xử lý: feat / fix / refactor / docs…).
 
@@ -149,7 +149,7 @@ bunx commitlint --from origin/dev/1.0.0/main --to HEAD --verbose
 
 CI: workflow `Commitlint` chạy trên mọi PR có base khớp `dev/**/main` — lint **PR title** và **mọi commit** trong range base…head.
 
-### Ghi chú cho agent
+### Ghi chú khi sinh tài liệu tự động
 
 - Subject commit **và** PR title phải cùng format — squash-merge lấy PR title làm subject.
 - Không bịa type ngoài enum; không dùng `merge:` / `wip:` / `update:` làm type.
@@ -159,7 +159,7 @@ CI: workflow `Commitlint` chạy trên mọi PR có base khớp `dev/**/main` �
 
 ## 7. Nội dung tài liệu & comment code — viết theo lối manual
 
-Tài liệu tham khảo (`AGENTS.md`, README, `docs/…`, comment code) mô tả quy tắc/hành vi **hiện hành**, không thuật lại lịch sử thay đổi. **Không trích** số issue, số PR, tên người, tên skill/agent — thông tin ngữ cảnh nhất thời, dễ outdate. Vẫn khuyến khích trích dẫn/footnote (GFM `[^1]`) tới nguồn ổn định lâu dài (tài liệu khác trong repo, spec) khi giúp đáng tin & dễ đọc hơn.
+Tài liệu tham khảo (README, `docs/…`, comment code) mô tả quy tắc/hành vi **hiện hành**, không thuật lại lịch sử thay đổi. **Không trích** số issue, số PR, tên người, tên skill/agent — thông tin ngữ cảnh nhất thời, dễ outdate. Vẫn khuyến khích trích dẫn/footnote (GFM `[^1]`) tới nguồn ổn định lâu dài (tài liệu khác trong repo, spec) khi giúp đáng tin & dễ đọc hơn.
 
 Ngoại lệ: PR body vẫn phải có `Part of #n` ở đầu (§1) — PR là artifact tạm thời, không phải tài liệu tham khảo lâu dài.
 

@@ -1,6 +1,6 @@
 # Review checklist — feature / business / helper
 
-Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu trúc tương tự cookbook core/feature. Chi tiết quy ước: [`feature-organization-rule.md`](feature-organization-rule.md), [`coding-convention.md`](coding-convention.md), [`pr-docs-convention.md`](pr-docs-convention.md) (§1 trình bày PR); bất biến repo: [`AGENTS.md`](../../AGENTS.md) § Bất biến.
+Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu trúc tương tự cookbook core/feature. Chi tiết quy ước: [`feature-organization-rule.md`](feature-organization-rule.md), [`coding-convention.md`](coding-convention.md), [`pr-docs-convention.md`](pr-docs-convention.md) (§1 trình bày PR); bất biến repo: [`../architecture.md` §6](../architecture.md#6-bất-biến-kiến-trúc).
 
 Đánh dấu từng mục liên quan scope PR (không bắt buộc tick hết nếu PR không đụng vùng đó). 3 khối dưới đây theo luồng review: code nằm đúng chỗ chưa → dữ liệu/an toàn có bị phá không → quy trình/tài liệu đã đủ chưa.
 
@@ -65,7 +65,7 @@ Chi tiết type / nơi emit: [`../event-catalog.md`](../event-catalog.md).
 - [ ] **Tuân thủ commitlint**: commit/PR title đúng `type(scope): subject`, không trailer công cụ.
 - [ ] **Trình bày đúng nội dung PR**: phần riêng nhóm theo cây thư mục/lớp; fix/refactor có Logic trước → sau; phần chung nêu Core và/hoặc feature khác (hoặc *Không*) — [`pr-docs-convention.md`](pr-docs-convention.md) §1.1–§1.2.
 - [ ] **Dọn nợ docs/test trước merge main**: PR **`dev/x.y.z/main` → `main`** không còn thư mục `docs/todo/` — [`todo-debt-convention.md`](todo-debt-convention.md); PR feature → version main được mang nợ.
-- [ ] **Cập nhật convention khi đổi quy ước**: `feature-organization-rule.md`/`AGENTS.md`/`architecture.md` (mô tả **hiện hành**, không kể lịch sử issue); tái cấu trúc lớn → bổ sung đơn vị vào `docs/cookbook/`.
+- [ ] **Cập nhật convention khi đổi quy ước**: các file trong `docs/implement/` + `docs/architecture.md` (mô tả **hiện hành**, không kể lịch sử issue); tái cấu trúc lớn → bổ sung đơn vị vào `docs/cookbook/`.
 
 ---
 

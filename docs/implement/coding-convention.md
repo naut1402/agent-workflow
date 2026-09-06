@@ -1,6 +1,6 @@
 # Coding convention — ngôn ngữ, Zod, FE, i18n
 
-Quy ước code **hiện hành** (module, type, FE, i18n). Tổ chức feature/business/helper: [`feature-organization-rule.md`](feature-organization-rule.md). Bất biến bắt buộc: [`AGENTS.md`](../../AGENTS.md) § Bất biến.
+Quy ước code **hiện hành** (module, type, FE, i18n). Tổ chức feature/business/helper: [`feature-organization-rule.md`](feature-organization-rule.md). Bất biến bắt buộc: [`../architecture.md` §6](../architecture.md#6-bất-biến-kiến-trúc).
 
 ---
 

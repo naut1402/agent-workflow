@@ -22,13 +22,14 @@ Nguồn quy ước **hub** cho mọi AI agent trong repo. Chi tiết nằm ở `
 | i18n chi tiết | [`docs/i18n.md`](docs/i18n.md) |
 | Cookbook tái cấu trúc core/feature | [`docs/cookbook/core-path-reorg.md`](docs/cookbook/core-path-reorg.md) |
 | Template agent / pipeline | [`docs/template/`](docs/template/) |
+| Rule rút gọn cho công cụ AI (theo category) | [`.claude/rules/`](.claude/rules/) |
 | Claude Code | [`CLAUDE.md`](CLAUDE.md) |
 
 ---
 
 ## 1. Dự án này là gì
 
-`dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **dev-agent-teams orchestrator khác** — repo này không chạy orchestrator, chỉ quan sát. Với *state* từng task (`.dev-state/*.json`) thì chỉ đọc; với *config* (pipeline, custom agent, template, knowledge) và **artifact markdown** thì đọc/ghi được (ghi qua `PUT /api/artifact`).
+`dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **orchestrator agent chạy ngoài**; repo này quan sát và cấu hình, không chạy orchestrator. Với *state* từng task (`.dev-state/*.json`) thì chỉ đọc; với *config* (pipeline, custom agent, template, knowledge) và **artifact markdown** thì đọc/ghi được (ghi qua `PUT /api/artifact`).
 
 - **Backend**: Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Setup app-root ở `src/api/`; kernel HTTP ở `src/core/http/`; registry ở `src/core/registry.ts`. Entry: `src/standalone.ts`.
 - **Frontend**: `src/features/<mode>/` (components, scripts, styles, locales, schemas); nền `src/core/`; config shell `@configs` → `src/core/configs/`.
@@ -72,15 +73,9 @@ Ngoại lệ cố ý còn `.js`: `src/features/agent-editor/business/agentMarkdo
 
 ## 4. Bất biến bắt buộc giữ
 
-Thêm scan/endpoint mới không được phá các bất biến sau:
+Nội dung đầy đủ: [`docs/architecture.md` §6](docs/architecture.md#6-bất-biến-kiến-trúc) — đọc trước khi thêm scan/endpoint mới.
 
-- **Đọc filesystem phải phòng thủ**: `safeReadDir`/`statSafe` (`fileHelper`) / `readYamlSafe` (`yamlLib`) /`readState`/`loadRegistry` nuốt lỗi, trả empty/false thay vì throw — một file state ghi dở không được làm sập request.
-- **Chống path-traversal**: mọi input từ request phải sanitize tại feature sở hữu (`resolveArtifact` + `fileHelper.resolvePathUnder`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương. Hàm sanitize domain **không** nằm ở core — gắn vào module business liên quan (vd `pipeline/index`, `agents`, `tasks`, `jobLog`) và export qua `business/index.ts` nếu feature khác cần dùng.
-- **Ghi registry atomic** (temp file + rename trong `saveRegistry`).
-- **Fetch URL người dùng** phải qua `fetchUrlSafe` (https-only, chặn private host) — tránh SSRF.
-- **ESM thuần**; server import core `node:`-prefixed.
-- `ANTHROPIC_API_KEY` tùy chọn, bật NL agent-draft generation (`/api/custom-agents/generate`); không có key thì fallback heuristic.
-- `DASHBOARD_SECRET_KEY` **bắt buộc** để dùng credential kiểu "dán secret trực tiếp" (`stored:`) hoặc "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` — mã hoá `secret-vault.json` (`secretVault.ts`). Không set → 2 luồng đó fail rõ ràng (`DASHBOARD_SECRET_KEY is not set — required to store or read vault secrets`), các luồng khác (CLI, `env:`/`file:` secretRef) không bị ảnh hưởng.
+Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize tại feature sở hữu) · ghi registry atomic · `fetchUrlSafe` cho URL người dùng · ESM thuần · `ANTHROPIC_API_KEY` tuỳ chọn · `DASHBOARD_SECRET_KEY` bắt buộc cho vault.
 
 ---
 
@@ -125,11 +120,16 @@ Khi survey call chain đụng persist / lifecycle / CRUD domain:
 - [ ] **Thêm/đổi thư mục test** → sinh lại bảng `bun run test:scope --catalog` và cập nhật §2.1 trong cùng thay đổi.
 - [ ] **Test đụng filesystem / registry / agent / plugin**: chạy thêm một lượt với env đã tước (`HOME` rỗng, biến plugin trỏ path không tồn tại) — máy dev có sẵn `/opt/bundled-plugins` và `~/.claude/plugins`, CI thì không, đây là nguồn "xanh local đỏ CI" đã gặp.
 
+### Implement — đổi quy ước
+
+- [ ] **Cập nhật tầng tài liệu cho người**: `docs/implement/` + `docs/architecture.md` trong cùng thay đổi.
+- [ ] **Cập nhật tầng agent nếu quy ước đó cũng nằm ở đây**: file này + [`.claude/rules/`](.claude/rules/) — hai tầng lệch nhau là nợ, không phải chi tiết.
+
 ---
 
 ## 7. Rule viết tài liệu — `investigate.md` / `design.md` (doc-writing)
 
-Áp dụng cho artifact markdown trong `.dev-team-agent/tasks/<id>/`. Rule này **thắng** mọi template mặc định đi kèm công cụ sinh tài liệu. Bản đầy đủ (lý do, ví dụ, anti-pattern): [`docs/implement/doc-writing-convention.md`](docs/implement/doc-writing-convention.md).
+Áp dụng cho artifact markdown trong `.dev-team-agent/tasks/<id>/`. Rule này **thắng** mọi template mặc định đi kèm công cụ sinh tài liệu. Bản đầy đủ (lý do, ví dụ, anti-pattern): [`docs/implement/doc-writing-convention.md`](docs/implement/doc-writing-convention.md); khi hai bên lệch, bản đầy đủ là đúng.
 
 ### `investigate.md` — decision-first, 6 section
 

@@ -1,6 +1,6 @@
 # Test convention — coverage-first
 
-Quy ước test **hiện hành**. Hub agent: [`AGENTS.md`](../../AGENTS.md).
+Quy ước test **hiện hành** — danh mục suite, chọn runner, phạm vi chạy.
 
 Coverage ưu tiên cao — mỗi module refactor phải kèm test (unit + e2e khi thuộc phạm vi dưới đây).
 

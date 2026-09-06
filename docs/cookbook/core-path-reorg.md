@@ -1,6 +1,6 @@
 # Cookbook — tái cấu trúc core / feature (PR #174)
 
-Tài liệu chắt lọc từ nhánh `refactor/core-path-reorg` (base `dev/1.0.0/main`). Mục tiêu: tái hiện **vì sao** và **làm thế nào**, không thay [`../architecture.md`](../architecture.md) / [`../../AGENTS.md`](../../AGENTS.md) (hub + bất biến hiện hành).
+Tài liệu chắt lọc từ nhánh `refactor/core-path-reorg` (base `dev/1.0.0/main`). Mục tiêu: tái hiện **vì sao** và **làm thế nào**, không thay [`../architecture.md`](../architecture.md) (kiến trúc + bất biến hiện hành).
 
 **Phạm vi:** gom `shared` + `server` vào dưới `src/`, kernel mỏng (`core` / `api` / `plugins`), feature tự chứa route–business–UI–locale–styles–schemas, util/wrapper thống nhất trong `core/lib`.
 
@@ -585,7 +585,7 @@ runner: pidReaper / sessionCapture…   →  gắn jobQueue / sessionLedger / re
 
 ```
 TRƯỚC                              SAU
-AGENTS.md phình (mọi quy ước)  →  AGENTS = hub + bảng trỏ docs/
+Một file quy ước phình (mọi thứ) →  hub mỏng + bảng trỏ docs/
                                   docs/implement/*-rule|convention
                                   docs/cookbook/ (bài học đợt lớn)
 PR body bảng file phẳng        →  phần riêng theo cây feature;
@@ -810,7 +810,6 @@ Chi tiết quy ước đặt file & review: [`../implement/feature-organization-
 - Coding convention: [`../implement/coding-convention.md`](../implement/coding-convention.md)
 - PR / commit docs: [`../implement/pr-docs-convention.md`](../implement/pr-docs-convention.md)
 - Checklist review: [`../implement/review-checklist-rule.md`](../implement/review-checklist-rule.md)
-- Hub agent / bất biến: [`../../AGENTS.md`](../../AGENTS.md)
 - i18n: [`../i18n.md`](../i18n.md)
 - SCSS: [`../architecture.md`](../architecture.md) §3.3
 - PR: https://github.com/naut1402/agent-workflow/pull/174
