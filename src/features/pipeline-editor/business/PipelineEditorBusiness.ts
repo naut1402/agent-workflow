@@ -2,19 +2,19 @@ import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
 import { buildCatalog, parseCatalogAgentId, resolveCatalogAgentPath } from './catalog/index.js'
 import { buildRules } from './rules/index.js'
 import { loadPipelineConfig, knownArtifactsFor } from './pipeline/index.js'
-import { profilesDir, scanCustomAgents, customAgentsDir } from './index.js'
+import { profilesDir, scanCustomAgents, customAgentsDir, loadScanPatternsConfig } from './index.js'
 
 export class PipelineEditorBusiness extends AbstractBusiness {
   async getCatalog() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate
-    return buildCatalog(gate.root, { scanCustomAgents })
+    return buildCatalog(gate.root, { scanCustomAgents, scanPatterns: loadScanPatternsConfig() })
   }
 
   async getRules() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate
-    return buildRules(gate.root)
+    return buildRules(gate.root, { scanPatterns: loadScanPatternsConfig() })
   }
 
   profilesDir() {

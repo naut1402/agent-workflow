@@ -91,3 +91,78 @@ describe('buildRules', () => {
     expect(categories).toContain('test')
   })
 })
+
+describe('buildRules with custom scan patterns', () => {
+  let projectRoot: string
+  let root: string
+  beforeAll(async () => {
+    projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'rules-patterns-'))
+    root = path.join(projectRoot, '.dev-team-agent')
+    await fs.mkdir(path.join(projectRoot, 'docs', 'agent-rules'), { recursive: true })
+    await fs.writeFile(path.join(projectRoot, 'docs', 'agent-rules', 'testing.md'), '# t')
+    // Off-convention rules, reachable only through a pattern.
+    await fs.mkdir(path.join(projectRoot, 'guides', 'nested'), { recursive: true })
+    await fs.writeFile(path.join(projectRoot, 'guides', 'house-style.md'), '# s')
+    await fs.writeFile(path.join(projectRoot, 'guides', 'nested', 'deep-notes.mdc'), '# d')
+    await fs.writeFile(path.join(projectRoot, 'guides', 'notes.txt'), 'ignored')
+    await fs.mkdir(path.join(projectRoot, 'single'), { recursive: true })
+    await fs.writeFile(path.join(projectRoot, 'single', 'one-off.md'), '# o')
+  })
+  afterAll(async () => {
+    await fs.rm(projectRoot, { recursive: true, force: true })
+  })
+
+  test('omitting scanPatterns matches passing an empty list', async () => {
+    const without = await buildRules(root)
+    const withEmpty = await buildRules(root, { scanPatterns: { rules: [] } })
+    expect(withEmpty).toEqual(without)
+  })
+
+  test('a matched directory is walked recursively, non-markdown ignored', async () => {
+    const { rules } = await buildRules(root, { scanPatterns: { rules: ['guides'] } })
+    const fromPattern = rules.filter((r) => r.path.startsWith('guides/'))
+    expect(fromPattern.map((r) => r.path).sort()).toEqual([
+      'guides/house-style.md',
+      'guides/nested/deep-notes.mdc',
+    ])
+    expect(fromPattern.every((r) => r.scope === 'project')).toBe(true)
+  })
+
+  test('a matched file becomes a single rule with an inferred category', async () => {
+    const { rules } = await buildRules(root, { scanPatterns: { rules: ['single/one-off.md'] } })
+    const one = rules.find((r) => r.name === 'one-off')
+    expect(one).toMatchObject({
+      id: 'project:single/one-off.md',
+      path: 'single/one-off.md',
+      scope: 'project',
+      category: 'other',
+    })
+  })
+
+  test('a pattern pointing back at a default directory does not duplicate rules', async () => {
+    const { rules } = await buildRules(root, { scanPatterns: { rules: ['docs/**'] } })
+    const testing = rules.filter((r) => r.path === 'docs/agent-rules/testing.md')
+    expect(testing).toHaveLength(1)
+  })
+
+  test('two overlapping patterns do not duplicate rules', async () => {
+    const { rules } = await buildRules(root, {
+      scanPatterns: { rules: ['guides', 'guides/*.md'] },
+    })
+    expect(rules.filter((r) => r.path === 'guides/house-style.md')).toHaveLength(1)
+  })
+
+  test('patterns never touch the global scope line', async () => {
+    const before = (await buildRules(root)).rules.filter((r) => r.scope === 'global')
+    const after = (await buildRules(root, { scanPatterns: { rules: ['**'] } })).rules.filter(
+      (r) => r.scope === 'global',
+    )
+    expect(after).toEqual(before)
+  })
+
+  test('a pattern matching nothing leaves the listing unchanged', async () => {
+    const before = await buildRules(root)
+    const after = await buildRules(root, { scanPatterns: { rules: ['nope/**/*.md'] } })
+    expect(after).toEqual(before)
+  })
+})

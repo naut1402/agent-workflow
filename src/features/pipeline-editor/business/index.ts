@@ -4,4 +4,5 @@
  */
 
 export { sanitiseProfileName } from './pipeline/index.js'
+export { loadScanPatternsConfig } from '../../settings/business/index.js'
 export * from '../../agent-editor/business/index.js'

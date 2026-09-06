@@ -63,9 +63,9 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 |---|---|---|
 | Types | `src/core/http/types.ts` | Nguồn type thống nhất (`HonoEnv`, registry types). |
 | Registry | `src/core/registry.ts` | `projects.json`; REST + MCP. |
-| Settings | `src/features/settings/business/` | Autoscan, fs browse, github tokens config. |
+| Settings | `src/features/settings/business/` | Autoscan, fs browse, github tokens config, scan patterns. |
 | Pipeline | `src/features/pipeline-editor/business/pipeline/` | Layered pipeline config + merge (một module). |
-| Catalog / Rules | `src/features/pipeline-editor/business/{catalog,rules}/` | Catalog skills/agents (+ scan); rule project. |
+| Catalog / Rules | `src/features/pipeline-editor/business/{catalog,rules}/` | Catalog skills/agents (+ scan); rule project. Nguồn mặc định theo convention, cộng thêm path khớp `settings.scanPatterns` (matcher `business/scanPatterns.ts`, pattern inject từ controller). |
 | Agents | `src/features/agent-editor/business/` | `agents.ts` (CRUD/template/fetch) + NL generate. |
 | Tasks / artifacts | `src/features/monitor/business/` | Tasks, artifact actions, github issue, task chat. |
 | Knowledge | `src/features/knowledge/business/` | File driver + config/driver chọn trong cùng module. |
@@ -73,7 +73,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | Statistics | `src/features/statistics/business/` | Aggregation token usage từ `usage.jsonl` theo project/task/step/job/model/provider/date/source (`GET /api/statistics/usage`); tầng đọc gom 1 module để cắm sqlite fast-path (#229) sau. |
 | Runners | `src/features/runner/business/` | Job queue (+ reaper), connections, session ledger (+ capture), providers CLI. |
 | Automations | `src/features/automations/business/` | Rule CRUD (`automations/*.yaml` theo data root, đa trigger OR + chuỗi action tuần tự), scheduler tick (timer: once/interval/cron cùng mốc `startAt`), event trigger, action `runTask` (tái dùng `createTask` + `runTaskStep` của monitor) chạy nền + chờ job + biến `{{trigger.*}}`/`{{steps.N.*}}` (`lib/vars.ts`), run ledger ở `registryHome()/automations/` (#233). Action `runTask` có `projectId` optional — trỏ project khác trong registry thì bước chạy trên data root của project đó (`core/registry.get`), bỏ trống thì dùng project sở hữu rule; rule state + run history vẫn nằm ở project sở hữu rule. |
-| Settings | `src/features/settings/business/` | Dashboard settings, autoscan, fs browse. |
+| Settings | `src/features/settings/business/` | Dashboard settings, autoscan, fs browse, scan patterns. |
 | NL chat | `src/features/nl-chat/business/` | Session builder chat (prompt + parse trong cùng module). |
 | CLI | `src/runner-cli.mjs` | Runner CLI entry. |
 
@@ -81,7 +81,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 
 `src/core/configs/` giữ preference / version shell — không import HTTP kernel; domain/business import configs + `lib` + `registry` khi cần.
 
-- `src/core/configs/appSettings.ts` — preference shell (theme/locale/notifications UI); core/plugins dùng. **Không** nhầm với schema business của feature `settings` (`autoscan`, `dashboardSettings`, `githubTokens` ở `features/settings/schemas/`).
+- `src/core/configs/appSettings.ts` — preference shell (theme/locale/notifications UI); core/plugins dùng. **Không** nhầm với schema business của feature `settings` (`autoscan`, `dashboardSettings`, `githubTokens`, `scanPatterns` ở `features/settings/schemas/`).
 - `src/core/configs/appVersion.ts` — semver từ `package.json`.
 - Schema domain (task, log, autoscan, …) nằm ở `src/features/<feature>/schemas/` — Zod + `z.infer`, validate biên I/O của feature đó.
 - `src/core/lib/` — `*Utils` / `*Lib` / `fileHelper` (`resolvePathUnder`, …) + helper domain (phase, theme, …).
@@ -160,6 +160,7 @@ Thêm scan / endpoint / feature mới không được phá các bất biến sau
 
 - **Đọc filesystem phải phòng thủ**: `safeReadDir`/`statSafe` (`fileHelper`) / `readYamlSafe` (`yamlLib`) /`readState`/`loadRegistry` nuốt lỗi, trả empty/false thay vì throw — một file state ghi dở không được làm sập request.
 - **Chống path-traversal**: mọi input từ request phải sanitize tại feature sở hữu (`resolveArtifact` + `fileHelper.resolvePathUnder`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương. Hàm sanitize domain **không** nằm ở core — gắn vào module business liên quan (vd `pipeline/index`, `agents`, `tasks`, `jobLog`) và export qua `business/index.ts` nếu feature khác cần dùng.
+- **Pattern scan tuỳ chỉnh không escape project root**: pattern trong `settings.scanPatterns` bị loại ở `sanitiseScanPattern` (schema), lại ở `expandScanPatterns`, và mỗi match còn qua `resolvePathUnder(projectRoot, …)`.
 - **Ghi registry atomic** (temp file + rename trong `saveRegistry`).
 - **Fetch URL người dùng** phải qua `fetchUrlSafe` (https-only, chặn private host) — tránh SSRF.
 - **ESM thuần**; server import core `node:`-prefixed.
