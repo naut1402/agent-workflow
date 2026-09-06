@@ -8,6 +8,7 @@ export type RailIconName =
   | 'catalog'
   | 'rules'
   | 'agent'
+  | 'skills'
   | 'quickAction'
   | 'knowledge'
   | 'runner'

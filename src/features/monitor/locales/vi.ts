@@ -120,13 +120,6 @@ export default {
     chat: 'Chat',
     chatWithRunner: 'Chat với runner của step này',
   },
-  artifactNode: {
-    producesTitle: 'Đầu ra',
-    knowledgeTitle: 'Knowledge',
-    exists: 'Đã có',
-    missing: 'Thiếu',
-    fromStep: '→ {stepId}',
-  },
 
   qa: {
     head: '⚠ Pipeline đang chờ trả lời câu hỏi blocking',

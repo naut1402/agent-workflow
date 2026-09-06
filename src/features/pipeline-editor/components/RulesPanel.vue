@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed } from 'vue'
+import CollapsibleSection from './CollapsibleSection.vue'
 const { t } = useI18nHelpers()
 
 const props = defineProps({
@@ -8,9 +9,11 @@ const props = defineProps({
   categories: { type: Array as () => any[], default: () => [] },
   steps: { type: Array as () => any[], default: () => [] },
   highlightedCategory: { type: String, default: null },
+  /** Khoá section đang mở, do PipelineEditor giữ (dùng chung với CatalogPanel). */
+  openSections: { type: Object as () => Set<string>, default: () => new Set(['rules']) },
 })
 
-const emit = defineEmits(['select-rule'])
+const emit = defineEmits(['select-rule', 'toggle-section'])
 
 function stepUsesCategory(step, category) {
   const rc = step.rule_category
@@ -40,47 +43,57 @@ function onRuleClick(rule) {
 
 <template>
   <aside class="rules-panel">
-    <div class="rules-panel-head">Rules</div>
+    <CollapsibleSection
+      :title="t('pipelineEditor.sections.rules')"
+      :count="rules.length"
+      :open="openSections.has('rules')"
+      @toggle="emit('toggle-section', 'rules')"
+    >
+      <div class="rules-scroll">
+        <div v-if="!rules.length" class="rules-empty">{{ t('pipelineEditor.rules.empty') }}</div>
 
-    <div class="rules-scroll">
-      <div v-if="!rules.length" class="rules-empty">No rules found</div>
-
-      <template v-for="scopeLabel in ['project', 'global']" :key="scopeLabel">
-      <template v-if="Object.keys(groupedRules[scopeLabel]).length">
-        <div class="rules-scope-label">{{ scopeLabel === 'project' ? 'Project' : 'Global' }}</div>
-        <div
-          v-for="(scopeRules, category) in groupedRules[scopeLabel]"
-          :key="`${scopeLabel}-${category}`"
-          class="rules-category-group"
-        >
-          <div class="rules-category-head">
-            <span class="chip chip-category">{{ category }}</span>
-          </div>
-          <div
-            v-for="rule in scopeRules"
-            :key="rule.id"
-            class="rules-item"
-            :class="{
-              'rules-item-active': highlightedCategory === rule.category,
-            }"
-            @click="onRuleClick(rule)"
-          >
-            <div class="rules-item-name">{{ rule.name }}</div>
-            <div class="rules-item-path" :title="rule.path">{{ rule.path }}</div>
-            <div v-if="stepsForRule(rule).length" class="rules-item-steps">
-              → {{ stepsForRule(rule).map((s) => s.id || s.name).join(', ') }}
+        <template v-for="scopeLabel in ['project', 'global']" :key="scopeLabel">
+          <template v-if="Object.keys(groupedRules[scopeLabel]).length">
+            <div class="rules-scope-label">
+              {{ scopeLabel === 'project'
+                ? t('pipelineEditor.rules.scopeProject')
+                : t('pipelineEditor.rules.scopeGlobal') }}
             </div>
-            <div v-else class="rules-item-steps muted">{{ t('pipelineEditor.rules.noStepUsing') }}</div>
-          </div>
-        </div>
-      </template>
-    </template>
-    </div>
+            <div
+              v-for="(scopeRules, category) in groupedRules[scopeLabel]"
+              :key="`${scopeLabel}-${category}`"
+              class="rules-category-group"
+            >
+              <div class="rules-category-head">
+                <span class="chip chip-category">{{ category }}</span>
+              </div>
+              <div
+                v-for="rule in scopeRules"
+                :key="rule.id"
+                class="rules-item"
+                :class="{
+                  'rules-item-active': highlightedCategory === rule.category,
+                }"
+                @click="onRuleClick(rule)"
+              >
+                <div class="rules-item-name">{{ rule.name }}</div>
+                <div class="rules-item-path" :title="rule.path">{{ rule.path }}</div>
+                <div v-if="stepsForRule(rule).length" class="rules-item-steps">
+                  → {{ stepsForRule(rule).map((s) => s.id || s.name).join(', ') }}
+                </div>
+                <div v-else class="rules-item-steps muted">{{ t('pipelineEditor.rules.noStepUsing') }}</div>
+              </div>
+            </div>
+          </template>
+        </template>
+      </div>
+    </CollapsibleSection>
   </aside>
 </template>
 
 <style scoped lang="scss">
 .rules-panel {
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -91,14 +104,6 @@ function onRuleClick(rule) {
   flex: 1;
   overflow-y: auto;
   padding-bottom: 8px;
-}
-
-.rules-panel-head {
-  padding: 8px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
 }
 
 .rules-empty {

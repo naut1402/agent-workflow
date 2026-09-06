@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildArtifactNodesAndEdges } from '@/features/monitor/lib/pipelineArtifactGraph'
+import { buildArtifactNodesAndEdges } from '@/core/lib/pipelineArtifactGraph'
 
 const STEPS = [
   { id: 'investigator', produces: ['investigate.md'] },

@@ -1,14 +1,12 @@
 /* Pipeline-editor — rule bắc cầu giữa 2 component (tổ tiên ở SFC này, đích ở SFC
    khác) nên không đặt được trong <style scoped> của riêng ai; xem
-   docs/implement/feature-organization-rule.md §5. */
+   docs/agent-rules/feature-architecture-guideline.md §5. */
 
-/* .preview-active ở PipelineEditor → panel con */
+/* .preview-active ở PipelineEditor → panel con. Cụm action của EditorTargetPanel
+   cố ý KHÔNG bị khoá: nút Stop nằm trong đó. */
 .preview-active .catalog-panel { opacity: 0.5; pointer-events: none; }
 .preview-active .rules-panel { opacity: 0.5; pointer-events: none; }
 .preview-active .step-config-panel { opacity: 0.5; pointer-events: none; }
-
-/* .editor-left ở PipelineEditor → CatalogPanel */
-.editor-left .catalog-panel { border-right: none; flex: 1; }
 
 /* .node-rule-highlight ở PipelineEditor → PipelineEditorNode */
 .node-rule-highlight .node-editor {

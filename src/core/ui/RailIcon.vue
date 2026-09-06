@@ -60,6 +60,10 @@ withDefaults(
       <path d="M3 14c0-2.5 2.2-4 5-4s5 1.5 5 4" />
       <path d="M12 3.5l1.5 1.5M12 7.5l1.5-1.5" />
     </template>
+    <template v-else-if="name === 'skills'">
+      <path d="M6 1.5 7.1 4.6 10.2 5.7 7.1 6.8 6 9.9 4.9 6.8 1.8 5.7 4.9 4.6z" />
+      <path d="M11.3 8.6 12 10.5 13.9 11.2 12 11.9 11.3 13.8 10.6 11.9 8.7 11.2 10.6 10.5z" />
+    </template>
     <template v-else-if="name === 'quickAction'">
       <path d="M9 1.5 3 9h4l-1 5.5 6-8H8l1-5z" />
     </template>
