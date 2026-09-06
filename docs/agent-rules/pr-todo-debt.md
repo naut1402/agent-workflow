@@ -63,7 +63,7 @@ Khung chuẩn:
     → merge vào dev/x.y.z/main khi còn nợ (gate Todo debt KHÔNG chạy ở đây)
 
 [trước khi mở / merge PR promote: dev/x.y.z/main → main]
-    → cập nhật rule trong .claude/rules/ (nếu nợ convention)
+    → cập nhật rule trong docs/agent-rules/ (nếu nợ convention)
     → bổ sung test (nếu nợ test)
     → xoá hết docs/todo/ (cả thư mục)
     → CI Todo debt xanh → mới merge được lên main

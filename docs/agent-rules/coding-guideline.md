@@ -2,7 +2,7 @@
 
 Quy ước viết code **hiện hành** trong repo này.
 
-Kiến trúc và bất biến bắt buộc: [`docs/architecture.md` §6](../../docs/architecture.md#6-bất-biến-kiến-trúc). Đặt file theo feature: [`feature-architecture-guideline.md`](feature-architecture-guideline.md).
+Kiến trúc và bất biến bắt buộc: [`docs/architecture.md` §6](../architecture.md#6-bất-biến-kiến-trúc). Đặt file theo feature: [`feature-architecture-guideline.md`](feature-architecture-guideline.md).
 
 ---
 
@@ -55,7 +55,7 @@ Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`. ESLint (f
 - **`<script setup lang="ts">`** cho mọi SFC.
 - **Kéo logic suy diễn ra khỏi `.vue`** xuống composable / lib thuần TS để test không cần render.
 - **Cấu trúc feature-module** — `src/features/<mode>/{components,composables,scripts/*Api.ts,styles,locales,schemas}` + nền `src/core/{ui,composables,lib,shell}`; plugin app-scope ở `src/plugins/`.
-- **Quy ước button** (ưu tiên icon-btn, default không viền, hover scale) — [`docs/ui-buttons.md`](../../docs/ui-buttons.md).
+- **Quy ước button** (ưu tiên icon-btn, default không viền, hover scale) — [`docs/ui-buttons.md`](../ui-buttons.md).
 
 Primitive dùng chung trong `src/core/ui/`:
 
@@ -75,7 +75,7 @@ Primitive dùng chung trong `src/core/ui/`:
 - **Trong `<script setup>` dùng `useI18nHelpers()`** (`src/core/composables/useI18nHelpers.ts`) — **không** import `useI18n` từ `vue-i18n`. Ngoài setup: `import { t } from '@/plugins/i18n'`.
 - **Locale hiện tại ở `AppSettings.locale`** (localStorage), đổi qua `useLocale()`.
 - **Test mount component có `t()`** dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`).
-- **Thêm/sửa text UI** — thêm key ở `vi`; `en` khuyến nghị nhưng không bắt buộc. Chi tiết: [`docs/i18n.md`](../../docs/i18n.md).
+- **Thêm/sửa text UI** — thêm key ở `vi`; `en` khuyến nghị nhưng không bắt buộc. Chi tiết: [`docs/i18n.md`](../i18n.md).
 
 ---
 

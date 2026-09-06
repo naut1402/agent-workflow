@@ -2,7 +2,7 @@
 
 Quy ước khi thêm/sửa **mode** (`monitor`, `editor`, `agentEditor`, …) trong shell `src/App.vue`.
 
-Sơ đồ bootstrap và runtime: [`docs/diagram/IoC.md`](../../docs/diagram/IoC.md). Kiến trúc tổng quan: [`docs/architecture.md` §3](../../docs/architecture.md).
+Sơ đồ bootstrap và runtime: [`docs/diagram/IoC.md`](../diagram/IoC.md). Kiến trúc tổng quan: [`docs/architecture.md` §3](../architecture.md).
 
 ---
 

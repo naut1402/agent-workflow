@@ -2,7 +2,7 @@
 
 Quy ước **hiện hành** khi task đụng `src/features/*`, tầng `business/`, hoặc logic dùng chung.
 
-Kiến trúc tổng quan và bất biến: [`docs/architecture.md`](../../docs/architecture.md). Quy ước ngôn ngữ / Zod / Vue: [`coding-guideline.md`](coding-guideline.md).
+Kiến trúc tổng quan và bất biến: [`docs/architecture.md`](../architecture.md). Quy ước ngôn ngữ / Zod / Vue: [`coding-guideline.md`](coding-guideline.md).
 
 ---
 

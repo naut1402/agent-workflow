@@ -4,7 +4,7 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 
 - **Đánh dấu từng mục liên quan scope PR** — không bắt buộc tick hết nếu PR không đụng vùng đó.
 - **Thứ tự 3 khối theo luồng review** — code nằm đúng chỗ chưa → dữ liệu/an toàn có bị phá không → quy trình/tài liệu đã đủ chưa.
-- **Quy ước nền**: [`feature-architecture-guideline.md`](feature-architecture-guideline.md), [`coding-guideline.md`](coding-guideline.md), [`git-pr.md`](git-pr.md). Bất biến repo: [`docs/architecture.md` §6](../../docs/architecture.md#6-bất-biến-kiến-trúc).
+- **Quy ước nền**: [`feature-architecture-guideline.md`](feature-architecture-guideline.md), [`coding-guideline.md`](coding-guideline.md), [`git-pr.md`](git-pr.md). Bất biến repo: [`docs/architecture.md` §6](../architecture.md#6-bất-biến-kiến-trúc).
 
 ---
 
@@ -50,7 +50,7 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 
 ### 2.2 Domain events (khi đụng persist / lifecycle / CRUD)
 
-Chi tiết type và nơi emit: [`docs/event-catalog.md`](../../docs/event-catalog.md).
+Chi tiết type và nơi emit: [`docs/event-catalog.md`](../event-catalog.md).
 
 - [ ] **Cân nhắc emit** — thêm/sửa/xoá `emit` / `emitEntity` sau persist; payload không chứa secret.
 - [ ] **Đồng bộ catalog với code** — `docs/event-catalog.md` khớp, hoặc nợ `docs/todo/` có lý do.
@@ -71,7 +71,7 @@ Chi tiết type và nơi emit: [`docs/event-catalog.md`](../../docs/event-catalo
 - [ ] **Tuân thủ commitlint** — commit/PR title đúng `type(scope): subject`, không trailer công cụ.
 - [ ] **Trình bày đúng nội dung PR** — phần riêng nhóm theo cây thư mục; fix/refactor có Logic trước → sau; phần chung nêu Core và/hoặc feature khác (hoặc *Không*).
 - [ ] **Dọn nợ trước merge `main`** — PR `dev/x.y.z/main` → `main` không còn thư mục `docs/todo/`.
-- [ ] **Cập nhật quy ước khi đổi rule** — sửa file rule trong `.claude/rules/` và `docs/architecture.md` trong cùng thay đổi; mô tả **hiện hành**, không kể lịch sử issue.
+- [ ] **Cập nhật quy ước khi đổi rule** — sửa file rule trong `docs/agent-rules/` và `docs/architecture.md` trong cùng thay đổi; mô tả **hiện hành**, không kể lịch sử issue.
 
 ---
 
