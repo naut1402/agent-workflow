@@ -47,11 +47,17 @@ export async function walkRuleFiles(
   }
 }
 
-/** Build the rules listing for a data root: project `.claude/rules` + global `~/.cursor/rules`. */
+/**
+ * Build the rules listing for a data root: project rules + global `~/.cursor/rules`.
+ *
+ * Project rules live in `docs/agent-rules` (dùng chung cho mọi agent) hoặc `.claude/rules`
+ * (bố cục cũ, riêng một công cụ) — quét cả hai nên repo dùng layout nào cũng ra.
+ */
 export async function buildRules(root: string): Promise<{ rules: RuleItem[]; categories: string[] }> {
   const projectRoot = dirname(root)
   const rules: RuleItem[] = []
 
+  await walkRuleFiles(joinPath(projectRoot, 'docs', 'agent-rules'), 'project', projectRoot, rules)
   await walkRuleFiles(joinPath(projectRoot, '.claude', 'rules'), 'project', projectRoot, rules)
   await walkRuleFiles(joinPath(homeDir(), '.cursor', 'rules'), 'global', homeDir(), rules)
 

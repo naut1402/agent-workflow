@@ -1,8 +1,8 @@
 <!--
 PR template. Điền đầy đủ các mục.
 Title PR theo prefix: [<TASK>] <type>: <desc>  (type ∈ feat|fix|chore|docs|refactor|test) — gán label theo type.
-Quy ước hub: AGENTS.md. Chi tiết: docs/implement/pr-docs-convention.md (§1.1–§1.2), docs/implement/*-rule.md.
-Kiến trúc + cấu trúc thư mục: docs/architecture.md · feature map: docs/implement/feature-organization-rule.md.
+Quy ước hub: AGENTS.md. Chi tiết PR body: docs/agent-rules/git-pr.md (§8.1–§8.2).
+Kiến trúc + cấu trúc thư mục: docs/architecture.md · feature map: docs/agent-rules/feature-architecture-guideline.md.
 -->
 
 ## Issue
@@ -59,7 +59,7 @@ Fix/refactor: bắt buộc Logic trước → sau.
 - [ ] E2E (playwright) ở `test-e2e/` — chạy thật + gate CI; ảnh capture đính vào comment (không commit `docs/`)
 
 ## Todo debt (nếu PR `dev/x.y.z/main` → `main`)
-<!-- docs/implement/todo-debt-convention.md — CI Todo debt chỉ gate promote lên main. -->
+<!-- docs/agent-rules/pr-todo-debt.md — CI Todo debt chỉ gate promote lên main. -->
 - [ ] Không còn thư mục `docs/todo/` (đã đối ứng và xóa hết)
 - [ ] PR feature → `dev/x.y.z/main`: được mang nợ; không áp checklist này
 ## Checklist
@@ -67,8 +67,8 @@ Fix/refactor: bắt buộc Logic trước → sau.
 - [ ] PR body: phần riêng theo cấu trúc thư mục; phần chung nêu Core / feature khác (hoặc *Không*)
 - [ ] Fix/refactor: đã có Logic trước → sau
 - [ ] Test xanh local · CI/CD xanh
-- [ ] Tuân thủ `docs/implement/coding-convention.md` + `feature-organization-rule.md`
+- [ ] Tuân thủ `docs/agent-rules/coding-guideline.md` + `feature-architecture-guideline.md`
 - [ ] Icon mới/sửa dùng `<Icon name="..." />` (`src/core/ui/Icon.vue`) — không tự vẽ tay `<svg>`/`<path>`
 - [ ] Dropdown mới dùng `CSelect`/`CComboSelect` (`src/core/ui/`) — không dùng `<select>` native
-- [ ] **Git hygiene** (`docs/implement/git-convention.md`): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
+- [ ] **Git hygiene** (`docs/agent-rules/git-pr.md`): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
 - [ ] Rename/move dùng `git mv`; KHÔNG còn bản cũ trùng (vd `.js` lẫn `.ts`); test không lạc khỏi `tests/`·`test-e2e/`

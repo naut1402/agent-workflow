@@ -3,8 +3,7 @@
 Tài liệu này mô tả **kiến trúc chi tiết** của `dev-team-dashboard`: cách backend và frontend được tổ chức, khái niệm "data root", cấu trúc thư mục, và cách một request đi qua hệ thống. Đây là **nguồn chính** cho phần kiến trúc + cấu trúc dự án cho người đọc — các tài liệu khác chỉ liên kết tới đây, không lặp lại.
 
 - Giới thiệu + hướng dẫn chạy nhanh: xem [`../README.md`](../README.md).
-- Hub agent + bất biến: [`../AGENTS.md`](../AGENTS.md).
-- Coding / tổ chức feature: [`implement/coding-convention.md`](implement/coding-convention.md), [`implement/feature-organization-rule.md`](implement/feature-organization-rule.md).
+- Danh mục tài liệu: [`README.md`](README.md).
 
 > Tài liệu bám **cấu trúc thật** của nhánh hiện tại. Ngoại lệ đuôi file: `src/features/agent-editor/business/agentMarkdown.js` và `src/runner-cli.mjs` cố ý **chưa** chuyển `.ts` — ghi đúng đuôi.
 
@@ -27,7 +26,7 @@ Mọi thao tác đọc/ghi của backend đều **scope vào một thư mục `.
 | **Dev** (`vite.config.ts` → plugin `devTeamApi`) | root = `cwd/..` (dashboard được scaffold vào `.dev-team-agent/viewer/`, nên thư mục cha là data root); override bằng env `DEV_TEAM_ROOT` | Đường single-project cũ. |
 | **Standalone / multi-project** (`src/standalone.ts`) | root lấy từ **ProjectRegistry** tại `~/.dev-team-dashboard/projects.json` (override thư mục bằng `DEV_TEAM_DASHBOARD_HOME`); request mang `?project=<id>`; không có id → default project (registry default > env `DEV_TEAM_ROOT` > fallback cũ) | Xem `resolveProjectRoot` trong `src/core/registry.ts`. |
 
-Đọc/ghi filesystem theo triết lý **defensive** (helper nuốt lỗi, trả empty/false thay vì throw) và **path-traversal hardening** (sanitize mọi input từ request) — chi tiết ở [`AGENTS.md` § Bất biến](../AGENTS.md#4-bất-biến-bắt-buộc-giữ).
+Đọc/ghi filesystem theo triết lý **defensive** (helper nuốt lỗi, trả empty/false thay vì throw) và **path-traversal hardening** (sanitize mọi input từ request) — chi tiết ở [§6 Bất biến kiến trúc](#6-bất-biến-kiến-trúc).
 
 ---
 
@@ -93,7 +92,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 
 ## 3. Frontend (feature-module, 9 mode qua ModeRegistry)
 
-- `src/main.ts` mount `src/App.vue`. `App.vue` là shell mỏng: `inject` 1 service container (`src/core/container/`, DI/IoC trên native Vue `provide/inject`, không thêm thư viện ngoài) → `resolve` `ModeRegistry` (`src/core/shell/modeRegistry.ts`) → lặp `listModes()` để render sidebar nav / status text / main panel. `App.vue` **không** hard-code danh sách mode — mỗi feature tự đăng ký qua `src/features/<feature>/registerMode.ts` (export `registerMode(registry)`), `main.ts` tự quét toàn bộ bằng `import.meta.glob('./features/*/registerMode.ts', { eager: true })` (đồng bộ, chạy xong trước `app.mount()`) — thêm mode mới không cần sửa `main.ts`/`App.vue`. Quy ước chi tiết + checklist: [`implement/mode-registry-convention.md`](implement/mode-registry-convention.md); sơ đồ bootstrap + diễn giải: [`diagram/IoC.md`](diagram/IoC.md). Mode `monitor` **poll `/api/tasks` mỗi 1500ms** (qua `src/features/monitor/composables/useTaskPolling.ts`); các mode khác pause polling.
+- `src/main.ts` mount `src/App.vue`. `App.vue` là shell mỏng: `inject` 1 service container (`src/core/container/`, DI/IoC trên native Vue `provide/inject`, không thêm thư viện ngoài) → `resolve` `ModeRegistry` (`src/core/shell/modeRegistry.ts`) → lặp `listModes()` để render sidebar nav / status text / main panel. `App.vue` **không** hard-code danh sách mode — mỗi feature tự đăng ký qua `src/features/<feature>/registerMode.ts` (export `registerMode(registry)`), `main.ts` tự quét toàn bộ bằng `import.meta.glob('./features/*/registerMode.ts', { eager: true })` (đồng bộ, chạy xong trước `app.mount()`) — thêm mode mới không cần sửa `main.ts`/`App.vue`. Sơ đồ bootstrap + diễn giải: [`diagram/IoC.md`](diagram/IoC.md). Mode `monitor` **poll `/api/tasks` mỗi 1500ms** (qua `src/features/monitor/composables/useTaskPolling.ts`); các mode khác pause polling.
 
 | Mode (`ModeEntry.key`) | Thư mục | Component / thành phần chính |
 |---|---|---|
@@ -151,4 +150,18 @@ agent-workflow/
 └── .claude/
 ```
 
-> Quy ước phát triển repo này nằm ở [`../AGENTS.md`](../AGENTS.md) + [`implement/`](implement/), **không** ở `.claude/rules/`.
+> Thư mục `.claude/` là state cục bộ của công cụ AI (worktree, cache, settings.local) — chỉ phần rule được version. Danh mục tài liệu cho người đọc: [`README.md`](README.md).
+
+---
+
+## 6. Bất biến kiến trúc
+
+Thêm scan / endpoint / feature mới không được phá các bất biến sau:
+
+- **Đọc filesystem phải phòng thủ**: `safeReadDir`/`statSafe` (`fileHelper`) / `readYamlSafe` (`yamlLib`) /`readState`/`loadRegistry` nuốt lỗi, trả empty/false thay vì throw — một file state ghi dở không được làm sập request.
+- **Chống path-traversal**: mọi input từ request phải sanitize tại feature sở hữu (`resolveArtifact` + `fileHelper.resolvePathUnder`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương. Hàm sanitize domain **không** nằm ở core — gắn vào module business liên quan (vd `pipeline/index`, `agents`, `tasks`, `jobLog`) và export qua `business/index.ts` nếu feature khác cần dùng.
+- **Ghi registry atomic** (temp file + rename trong `saveRegistry`).
+- **Fetch URL người dùng** phải qua `fetchUrlSafe` (https-only, chặn private host) — tránh SSRF.
+- **ESM thuần**; server import core `node:`-prefixed.
+- `ANTHROPIC_API_KEY` tùy chọn, bật NL agent-draft generation (`/api/custom-agents/generate`); không có key thì fallback heuristic.
+- `DASHBOARD_SECRET_KEY` **bắt buộc** để dùng credential kiểu "dán secret trực tiếp" (`stored:`) hoặc "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` — mã hoá `secret-vault.json` (`secretVault.ts`). Không set → 2 luồng đó fail rõ ràng (`DASHBOARD_SECRET_KEY is not set — required to store or read vault secrets`), các luồng khác (CLI, `env:`/`file:` secretRef) không bị ảnh hưởng.

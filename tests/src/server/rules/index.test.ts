@@ -68,6 +68,8 @@ describe('buildRules', () => {
     root = path.join(projectRoot, '.dev-team-agent')
     await fs.mkdir(path.join(projectRoot, '.claude', 'rules'), { recursive: true })
     await fs.writeFile(path.join(projectRoot, '.claude', 'rules', 'coding-conv.md'), '# c')
+    await fs.mkdir(path.join(projectRoot, 'docs', 'agent-rules'), { recursive: true })
+    await fs.writeFile(path.join(projectRoot, 'docs', 'agent-rules', 'testing.md'), '# t')
   })
   afterAll(async () => {
     await fs.rm(projectRoot, { recursive: true, force: true })
@@ -78,5 +80,14 @@ describe('buildRules', () => {
     expect(rules.some((r) => r.name === 'coding-conv' && r.scope === 'project')).toBe(true)
     expect(categories).toContain('coding')
     expect(categories.every((c) => RULE_CATEGORIES.includes(c))).toBe(true)
+  })
+
+  test('discovers tool-agnostic rules in docs/agent-rules alongside legacy .claude/rules', async () => {
+    const { rules, categories } = await buildRules(root)
+    const testing = rules.find((r) => r.name === 'testing')
+    expect(testing).toBeDefined()
+    expect(testing!.scope).toBe('project')
+    expect(testing!.path).toBe('docs/agent-rules/testing.md')
+    expect(categories).toContain('test')
   })
 })
