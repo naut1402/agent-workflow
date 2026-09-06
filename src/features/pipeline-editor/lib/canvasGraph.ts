@@ -38,6 +38,15 @@ export function stepNodesOf<T extends StepNodeLike>(nodes: T[] | null | undefine
   return (nodes ?? []).filter(isStepNode)
 }
 
+/**
+ * Bù của `stepNodesOf` — node phái sinh (artifact / knowledge) đang nằm trên canvas.
+ * Định nghĩa theo phần bù chứ không theo `type === 'artifact'`, để loại node phái
+ * sinh thêm sau này tự động được giữ lại mà không phải sửa hàm.
+ */
+export function derivedNodesOf<T extends StepNodeLike>(nodes: T[] | null | undefined): T[] {
+  return (nodes ?? []).filter((n) => !isStepNode(n))
+}
+
 /** Edge điều khiển = cả 2 đầu đều là step node (loại edge dữ liệu `de-*`). */
 export function stepEdgesOf<T extends FlowEdgeLike>(
   edges: T[] | null | undefined,
