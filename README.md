@@ -96,7 +96,7 @@ bun run check:todo   # gate docs/todo (CI promote → main)
 - Liên quan — [plugin Claude Code (bộ agent template)](docs/template/agents/) · [Issues](https://github.com/naut1402/agent-workflow/issues) · [Pull requests](https://github.com/naut1402/agent-workflow/pulls)
 - Tài liệu — [danh mục đầy đủ trong `docs/`](docs/README.md): kiến trúc, domain event, i18n, quy ước UI, template pipeline
 
-Branch phát hành theo dòng version: `dev/x.y.z/main` (vd `dev/1.1.2/main`). Không commit thẳng `main` — mọi thay đổi qua PR.
+Branch phát hành theo dòng version: `dev/x.y.z/main` (vd `dev/1.1.2/main`). Branch task gắn version: `dev/x.y.z/{taskID}_{task-slug}` cắt từ `dev/x.y.z/main`; task không gắn version: `<type>/<TASK>/<slug>` cắt từ `main`. Không commit thẳng `main` — mọi thay đổi qua PR.
 
 ## License
 
