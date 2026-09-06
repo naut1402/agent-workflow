@@ -100,3 +100,19 @@ export function buildEditorGraph(opts: {
     edges: [...labelledEdges, ...keptDataFlowEdges],
   }
 }
+
+/** Change của VueFlow mà `canvasGraph` cần phân biệt — chỉ đọc tới `type`. */
+export type FlowChangeLike = { type?: string }
+
+/**
+ * Có phần tử nào vừa bị **xoá** khỏi canvas không.
+ *
+ * VueFlow bắn `nodesChange` / `edgesChange` cho cả `select` / `position` /
+ * `dimensions`; chỉ change `remove` mới cần dựng lại graph phái sinh, sync ở
+ * mọi change sẽ làm node giật lúc kéo.
+ */
+export function hasRemovalChange(
+  changes: readonly (FlowChangeLike | null | undefined)[] | null | undefined,
+): boolean {
+  return (changes ?? []).some((c) => c?.type === 'remove')
+}
