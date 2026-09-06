@@ -35,5 +35,5 @@ if (files.length === 0) {
     console.error(`  - ${path.relative(process.cwd(), f).split(path.sep).join('/')}`)
   }
 }
-console.error('See docs/implement/todo-debt-convention.md')
+console.error('See .claude/rules/pr-todo-debt.md')
 process.exit(1)

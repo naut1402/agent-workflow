@@ -3,8 +3,7 @@
  * Shared action/status icon set — extends the `RailIcon.vue` pattern (name-prop +
  * switch/case inline SVG) beyond the sidebar rail. Each icon keeps the viewBox and
  * fill-or-stroke treatment of whichever original hand-drawn SVG it replaces, so no
- * path was redrawn during migration — see docs/implement or design.md of
- * task 20260826_001 for the source-of-truth mapping.
+ * path was redrawn when an icon moved here.
  */
 type IconName = 'chatBubble' | 'close' | 'bell' | 'archiveBox' | 'trash' | 'plus' | 'pencil' | 'copy'
 

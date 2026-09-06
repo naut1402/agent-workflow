@@ -4,7 +4,7 @@
 # - PR title (quan trọng khi squash-merge — subject commit cuối = title)
 # - Mọi commit trong range base…head của PR
 #
-# Format: docs/implement/pr-docs-convention.md §6 / commitlint.config.js
+# Format: .claude/rules/git-pr.md §7 / commitlint.config.js
 
 name: Commitlint
 
