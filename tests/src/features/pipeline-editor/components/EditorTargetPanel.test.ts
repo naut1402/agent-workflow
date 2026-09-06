@@ -14,15 +14,52 @@ function mountPanel(props: Record<string, any> = {}) {
   })
 }
 
+/**
+ * `CSelect` là dropdown tự vẽ (`coding-guideline` §5) — menu chỉ tồn tại khi mở,
+ * nên phải bấm trigger trước rồi mới bấm option.
+ */
+async function openSelect(w: ReturnType<typeof mountPanel>, id: string) {
+  const root = w.find(id)
+  await root.find('.c-select-trigger').trigger('click')
+  return root
+}
+
+async function pickOption(w: ReturnType<typeof mountPanel>, id: string, label: string) {
+  const root = await openSelect(w, id)
+  const option = root.findAll('.c-select-option').find((o) => o.text() === label)
+  if (!option) throw new Error(`option "${label}" không có trong ${id}`)
+  await option.trigger('click')
+}
+
 describe('EditorTargetPanel — tab Profile', () => {
   it('select liệt kê profile của project, đổi select emit update:profileSelected', async () => {
     const w = mountPanel({ profileSelected: '' })
-    const select = w.find('#editor-target-profile')
-    expect(select.findAll('option').map((o) => o.attributes('value'))).toEqual(['', 'p1', 'p2'])
+    const select = await openSelect(w, '#editor-target-profile')
+    const options = select.findAll('.c-select-option')
+    expect(options.map((o) => o.text())).toEqual(['— Chọn profile —', 'p1', 'p2'])
 
-    await select.setValue('p2')
+    await options[2].trigger('click')
 
     expect(w.emitted('update:profileSelected')).toEqual([['p2']])
+  })
+
+  // coding-guideline §5 — dropdown mới không dùng `<select>` native.
+  it('dropdown dùng CSelect, không còn select native', () => {
+    const w = mountPanel({ profileSelected: 'p1' })
+    expect(w.find('select').exists()).toBe(false)
+    expect(w.find('#editor-target-profile .c-select-trigger').exists()).toBe(true)
+  })
+
+  // Trigger đọc thẳng từ prop nên không có DOM state riêng để lệch khi cha
+  // revert lựa chọn (vd người dùng huỷ hộp confirm "bỏ thay đổi?").
+  it('trigger hiển thị đúng profile theo prop, kể cả khi prop bị đặt lại', async () => {
+    const w = mountPanel({ profileSelected: 'p1' })
+    expect(w.find('#editor-target-profile .c-select-value').text()).toBe('p1')
+
+    await pickOption(w, '#editor-target-profile', 'p2')
+    await w.setProps({ profileSelected: 'p1' })
+
+    expect(w.find('#editor-target-profile .c-select-value').text()).toBe('p1')
   })
 
   it('có ô nhập tên để lưu profile mới, gõ vào emit update:profileName', async () => {
@@ -92,7 +129,7 @@ describe('EditorTargetPanel — tab Task', () => {
 
   it('b.1 — có select profile áp cho task, đổi chỉ emit update:taskProfile (không emit save)', async () => {
     const w = mountPanel({ tab: 'task' })
-    await w.find('#editor-target-task-profile').setValue('p1')
+    await pickOption(w, '#editor-target-task-profile', 'p1')
 
     expect(w.emitted('update:taskProfile')).toEqual([['p1']])
     expect(w.emitted('save')).toBeUndefined()
@@ -120,9 +157,20 @@ describe('EditorTargetPanel — tab Task', () => {
 describe('EditorTargetPanel — trạng thái thu gọn', () => {
   it('G3 — chỉ render icon, không render select/input', () => {
     const w = mountPanel({ collapsed: true, profileSelected: 'p1' })
-    expect(w.find('select').exists()).toBe(false)
+    expect(w.find('.c-select').exists()).toBe(false)
     expect(w.find('input').exists()).toBe(false)
     expect(w.findAll('.target-actions--rail .icon-btn').length).toBeGreaterThan(0)
+  })
+
+  // Cụm action là cùng một danh sách cho cả hai hướng xếp — sửa một nút không
+  // được phép quên nhánh kia.
+  it('dải thu gọn và cụm mở là cùng các nút', () => {
+    const label = (w: ReturnType<typeof mountPanel>) =>
+      w.findAll('.target-actions .icon-btn').map((b) => b.attributes('aria-label'))
+
+    expect(label(mountPanel({ collapsed: true, profileSelected: 'p1' }))).toEqual(
+      label(mountPanel({ collapsed: false, profileSelected: 'p1' })),
+    )
   })
 
   it('G4 — cụm action vẫn bấm được khi preview: hiện nút Stop', async () => {
@@ -133,14 +181,16 @@ describe('EditorTargetPanel — trạng thái thu gọn', () => {
     expect(w.emitted('stop')).toHaveLength(1)
   })
 
-  it('bấm icon Agents/Rules ở dải thu gọn emit open-section kèm khoá', async () => {
+  // Đủ 3 lối vào: thu gọn mà thiếu Skills thì không có đường mở thẳng section đó.
+  it('bấm icon Agents/Skills/Rules ở dải thu gọn emit open-section kèm khoá', async () => {
     const w = mountPanel({ collapsed: true })
     const icons = w.findAll('.target-section-icon')
-    expect(icons).toHaveLength(2)
+    expect(icons).toHaveLength(3)
 
     await icons[0].trigger('click')
     await icons[1].trigger('click')
+    await icons[2].trigger('click')
 
-    expect(w.emitted('open-section')).toEqual([['agents'], ['rules']])
+    expect(w.emitted('open-section')).toEqual([['agents'], ['skills'], ['rules']])
   })
 })

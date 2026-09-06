@@ -45,6 +45,8 @@ const tab = computed(() => (props.scope === 'task' ? 'task' : 'profile'))
 
 function switchTab(next: 'task' | 'profile') {
   if (tab.value === next) return
+  // Đổi tab là nạp lại canvas theo đối tượng của tab kia — bản sửa chưa lưu mất.
+  if (!confirmDiscardIfDirty()) return
   closeConfig()
   emit('update:scope', next === 'task' ? 'task' : 'global')
 }
@@ -306,17 +308,31 @@ watch(() => props.projectId, () => {
 let configDebounce = null
 watch(
   [() => props.scope, () => props.taskId, () => props.projectId],
-  () => {
+  ([scope, taskId, projectId], [, , prevProjectId]) => {
     closeConfig()
     clearTimeout(configDebounce)
-    if (props.scope === 'global') {
-      loadConfig()
+    if (scope === 'global') {
+      // Tab Profile cũng là `scope === 'global'`: quay lại tab mà nạp pipeline
+      // global sẽ khiến canvas và select nói về hai đối tượng khác nhau, và
+      // Save sau đó ghi đè profile bằng nội dung global. Đổi project là ngoại
+      // lệ — lựa chọn cũ không còn nghĩa nên watcher bên dưới xoá nó.
+      const keepSelection = projectId === prevProjectId
+      if (keepSelection && profileSelected.value) {
+        applyProfileToCanvas(profileSelected.value)
+      } else {
+        loadConfig()
+      }
       return
     }
-    if (!props.taskId?.trim()) {
+    if (!taskId?.trim()) {
       setNodes([])
       setEdges([])
       nodeCounter = 0
+      pipelineMeta.value = {}
+      stepPreserved.value = {}
+      // Canvas rỗng là "sạch" — không reset thì confirm "bỏ thay đổi?" bật lên
+      // trên một canvas chưa hề sửa.
+      lastLoadedSnapshot.value = snapshotCanvas()
       return
     }
     configDebounce = setTimeout(() => loadConfig(), 300)

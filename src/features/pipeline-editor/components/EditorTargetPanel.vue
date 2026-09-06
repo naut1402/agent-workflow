@@ -9,7 +9,10 @@
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed } from 'vue'
 import Icon from '../../../core/ui/Icon.vue'
+import CSelect from '../../../core/ui/CSelect.vue'
+import type { CSelectOption } from '../../../core/ui/CSelect.vue'
 import RailIcon from '../../../core/ui/RailIcon.vue'
+import type { RailIconName } from '../../../core/ui/railIconNames'
 import { taskDisplayName } from '../../monitor/lib/taskDisplay'
 
 const { t } = useI18nHelpers()
@@ -53,115 +56,118 @@ const emit = defineEmits([
 
 const isProfileTab = computed(() => props.tab === 'profile')
 
-function onSelectInput(event: Event, name: string) {
-  emit(name as any, (event.target as HTMLSelectElement).value)
+const profileOptions = computed<CSelectOption[]>(() => [
+  { value: '', label: t('pipelineEditor.target.selectProfile') },
+  ...props.profiles.map((p) => ({ value: p.name, label: p.name })),
+])
+
+const taskProfileOptions = computed<CSelectOption[]>(() => [
+  { value: '', label: t('pipelineEditor.target.taskProfileNone') },
+  ...props.profiles.map((p) => ({ value: p.name, label: p.name })),
+])
+
+const taskOptions = computed<CSelectOption[]>(() => [
+  { value: '', label: t('pipelineEditor.scope.selectTask') },
+  ...props.tasks.map((task) => ({ value: task.task_id, label: taskDisplayName(task) })),
+  { value: '__manual__', label: t('pipelineEditor.scope.manualEntry') },
+])
+
+type TargetAction = {
+  key: string
+  icon: 'save' | 'star' | 'trash' | 'layout' | 'play' | 'stop'
+  event: 'save' | 'set-default' | 'delete-profile' | 'auto-layout' | 'preview' | 'stop'
+  titleKey: string
+  labelKey: string
+  danger?: boolean
+  disabled?: boolean
 }
+
+/**
+ * Một nguồn duy nhất cho cụm action — dải icon lúc thu gọn và cụm lúc mở là
+ * **cùng** các nút, chỉ khác hướng xếp; tách ra thì sửa một nơi là đủ.
+ */
+const actions = computed<TargetAction[]>(() => {
+  const list: TargetAction[] = [
+    {
+      key: 'save',
+      icon: 'save',
+      event: 'save',
+      titleKey: 'pipelineEditor.target.saveTitle',
+      labelKey: 'pipelineEditor.target.save',
+      disabled: props.saving || props.saveDisabled,
+    },
+  ]
+  if (isProfileTab.value) {
+    list.push(
+      {
+        key: 'set-default',
+        icon: 'star',
+        event: 'set-default',
+        titleKey: 'pipelineEditor.target.setDefaultTitle',
+        labelKey: 'pipelineEditor.target.setDefault',
+        disabled: props.setDefaultDisabled,
+      },
+      {
+        key: 'delete-profile',
+        icon: 'trash',
+        event: 'delete-profile',
+        titleKey: 'pipelineEditor.target.deleteProfile',
+        labelKey: 'pipelineEditor.target.deleteProfile',
+        danger: true,
+        disabled: !props.profileSelected,
+      },
+    )
+  }
+  list.push({
+    key: 'auto-layout',
+    icon: 'layout',
+    event: 'auto-layout',
+    titleKey: 'pipelineEditor.target.autoLayout',
+    labelKey: 'pipelineEditor.target.autoLayout',
+  })
+  list.push(
+    props.previewing
+      ? {
+          key: 'stop',
+          icon: 'stop',
+          event: 'stop',
+          titleKey: 'pipelineEditor.target.stop',
+          labelKey: 'pipelineEditor.target.stop',
+          danger: true,
+        }
+      : {
+          key: 'preview',
+          icon: 'play',
+          event: 'preview',
+          titleKey: 'pipelineEditor.target.preview',
+          labelKey: 'pipelineEditor.target.preview',
+        },
+  )
+  return list
+})
+
+/** Lối vào thẳng từng section khi sub-sidebar đang thu gọn. */
+const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
+  { key: 'agents', icon: 'agent', titleKey: 'pipelineEditor.sections.agentsOpenTitle' },
+  { key: 'skills', icon: 'skills', titleKey: 'pipelineEditor.sections.skillsOpenTitle' },
+  { key: 'rules', icon: 'rules', titleKey: 'pipelineEditor.sections.rulesOpenTitle' },
+]
 </script>
 
 <template>
   <div class="editor-target-panel" :class="{ 'is-collapsed': collapsed }">
-    <!-- Thu gọn: chỉ dải icon dọc. Action giữ nguyên (kể cả Stop khi preview) -->
-    <template v-if="collapsed">
-      <div class="target-actions target-actions--rail">
-        <button
-          type="button"
-          class="icon-btn"
-          :title="t('pipelineEditor.target.saveTitle')"
-          :aria-label="t('pipelineEditor.target.save')"
-          :disabled="saving || saveDisabled"
-          @click="emit('save')"
-        >
-          <Icon name="save" />
-        </button>
-        <button
-          v-if="isProfileTab"
-          type="button"
-          class="icon-btn"
-          :title="t('pipelineEditor.target.setDefaultTitle')"
-          :aria-label="t('pipelineEditor.target.setDefault')"
-          :disabled="setDefaultDisabled"
-          @click="emit('set-default')"
-        >
-          <Icon name="star" />
-        </button>
-        <button
-          v-if="isProfileTab"
-          type="button"
-          class="icon-btn danger"
-          :title="t('pipelineEditor.target.deleteProfile')"
-          :aria-label="t('pipelineEditor.target.deleteProfile')"
-          :disabled="!profileSelected"
-          @click="emit('delete-profile')"
-        >
-          <Icon name="trash" />
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
-          :title="t('pipelineEditor.target.autoLayout')"
-          :aria-label="t('pipelineEditor.target.autoLayout')"
-          @click="emit('auto-layout')"
-        >
-          <Icon name="layout" />
-        </button>
-        <button
-          v-if="!previewing"
-          type="button"
-          class="icon-btn"
-          :title="t('pipelineEditor.target.preview')"
-          :aria-label="t('pipelineEditor.target.preview')"
-          @click="emit('preview')"
-        >
-          <Icon name="play" />
-        </button>
-        <button
-          v-else
-          type="button"
-          class="icon-btn danger"
-          :title="t('pipelineEditor.target.stop')"
-          :aria-label="t('pipelineEditor.target.stop')"
-          @click="emit('stop')"
-        >
-          <Icon name="stop" />
-        </button>
-      </div>
-      <div class="target-sections-rail">
-        <button
-          type="button"
-          class="rail-icon-btn target-section-icon"
-          :title="t('pipelineEditor.sections.agentsOpenTitle')"
-          :aria-label="t('pipelineEditor.sections.agentsOpenTitle')"
-          @click="emit('open-section', 'agents')"
-        >
-          <RailIcon name="catalog" />
-        </button>
-        <button
-          type="button"
-          class="rail-icon-btn target-section-icon"
-          :title="t('pipelineEditor.sections.rulesOpenTitle')"
-          :aria-label="t('pipelineEditor.sections.rulesOpenTitle')"
-          @click="emit('open-section', 'rules')"
-        >
-          <RailIcon name="rules" />
-        </button>
-      </div>
-    </template>
-
-    <template v-else>
-      <!-- 1.1 — select đối tượng: profile ở tab Profile, task ở tab Task -->
+    <!-- 1.1 — select đối tượng: profile ở tab Profile, task ở tab Task -->
+    <template v-if="!collapsed">
       <template v-if="isProfileTab">
-        <label class="target-label" for="editor-target-profile">
-          {{ t('pipelineEditor.target.profileLabel') }}
-        </label>
-        <select
+        <span class="target-label">{{ t('pipelineEditor.target.profileLabel') }}</span>
+        <CSelect
           id="editor-target-profile"
-          class="target-select cfg-input"
-          :value="profileSelected"
-          @change="onSelectInput($event, 'update:profileSelected')"
-        >
-          <option value="">{{ t('pipelineEditor.target.selectProfile') }}</option>
-          <option v-for="p in profiles" :key="p.name" :value="p.name">{{ p.name }}</option>
-        </select>
+          class="target-select"
+          :model-value="profileSelected"
+          :options="profileOptions"
+          :aria-label="t('pipelineEditor.target.profileLabel')"
+          @update:model-value="emit('update:profileSelected', $event)"
+        />
         <input
           class="target-input cfg-input"
           :value="profileName"
@@ -173,21 +179,15 @@ function onSelectInput(event: Event, name: string) {
       </template>
 
       <template v-else>
-        <label class="target-label" for="editor-target-task">
-          {{ t('pipelineEditor.target.taskLabel') }}
-        </label>
-        <select
+        <span class="target-label">{{ t('pipelineEditor.target.taskLabel') }}</span>
+        <CSelect
           id="editor-target-task"
-          class="target-select cfg-input"
-          :value="taskSelect"
-          @change="onSelectInput($event, 'update:taskSelect')"
-        >
-          <option value="">{{ t('pipelineEditor.scope.selectTask') }}</option>
-          <option v-for="task in tasks" :key="task.task_id" :value="task.task_id">
-            {{ taskDisplayName(task) }}
-          </option>
-          <option value="__manual__">{{ t('pipelineEditor.scope.manualEntry') }}</option>
-        </select>
+          class="target-select"
+          :model-value="taskSelect"
+          :options="taskOptions"
+          :aria-label="t('pipelineEditor.target.taskLabel')"
+          @update:model-value="emit('update:taskSelect', $event)"
+        />
         <input
           v-if="taskSelect === '__manual__'"
           class="target-input cfg-input"
@@ -198,85 +198,51 @@ function onSelectInput(event: Event, name: string) {
         />
 
         <!-- b.1 — đổi profile chỉ nạp bản nháp lên canvas, phải bấm Save mới ghi -->
-        <label class="target-label" for="editor-target-task-profile">
-          {{ t('pipelineEditor.target.taskProfileLabel') }}
-        </label>
-        <select
+        <span class="target-label">{{ t('pipelineEditor.target.taskProfileLabel') }}</span>
+        <CSelect
           id="editor-target-task-profile"
-          class="target-select cfg-input"
-          :value="taskProfile"
-          @change="onSelectInput($event, 'update:taskProfile')"
-        >
-          <option value="">{{ t('pipelineEditor.target.taskProfileNone') }}</option>
-          <option v-for="p in profiles" :key="p.name" :value="p.name">{{ p.name }}</option>
-        </select>
+          class="target-select"
+          :model-value="taskProfile"
+          :options="taskProfileOptions"
+          :aria-label="t('pipelineEditor.target.taskProfileLabel')"
+          @update:model-value="emit('update:taskProfile', $event)"
+        />
       </template>
+    </template>
 
-      <!-- 1.2 + 1.3 — một nút Save duy nhất, cụm action nằm hẳn trong sub-sidebar -->
-      <div class="target-actions">
-        <button
-          type="button"
-          class="icon-btn"
-          :title="t('pipelineEditor.target.saveTitle')"
-          :aria-label="t('pipelineEditor.target.save')"
-          :disabled="saving || saveDisabled"
-          @click="emit('save')"
-        >
-          <Icon name="save" />
-        </button>
-        <button
-          v-if="isProfileTab"
-          type="button"
-          class="icon-btn"
-          :title="t('pipelineEditor.target.setDefaultTitle')"
-          :aria-label="t('pipelineEditor.target.setDefault')"
-          :disabled="setDefaultDisabled"
-          @click="emit('set-default')"
-        >
-          <Icon name="star" />
-        </button>
-        <button
-          v-if="isProfileTab"
-          type="button"
-          class="icon-btn danger"
-          :title="t('pipelineEditor.target.deleteProfile')"
-          :aria-label="t('pipelineEditor.target.deleteProfile')"
-          :disabled="!profileSelected"
-          @click="emit('delete-profile')"
-        >
-          <Icon name="trash" />
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
-          :title="t('pipelineEditor.target.autoLayout')"
-          :aria-label="t('pipelineEditor.target.autoLayout')"
-          @click="emit('auto-layout')"
-        >
-          <Icon name="layout" />
-        </button>
-        <button
-          v-if="!previewing"
-          type="button"
-          class="icon-btn"
-          :title="t('pipelineEditor.target.preview')"
-          :aria-label="t('pipelineEditor.target.preview')"
-          @click="emit('preview')"
-        >
-          <Icon name="play" />
-        </button>
-        <button
-          v-else
-          type="button"
-          class="icon-btn danger"
-          :title="t('pipelineEditor.target.stop')"
-          :aria-label="t('pipelineEditor.target.stop')"
-          @click="emit('stop')"
-        >
-          <Icon name="stop" />
-        </button>
-      </div>
+    <!-- 1.2 + 1.3 — một nút Save duy nhất, cụm action nằm hẳn trong sub-sidebar.
+         Lúc thu gọn vẫn đủ cả 5 nút (kể cả Stop khi đang preview). -->
+    <div class="target-actions" :class="{ 'target-actions--rail': collapsed }">
+      <button
+        v-for="action in actions"
+        :key="action.key"
+        type="button"
+        class="icon-btn"
+        :class="{ danger: action.danger }"
+        :title="t(action.titleKey)"
+        :aria-label="t(action.labelKey)"
+        :disabled="action.disabled"
+        @click="emit(action.event)"
+      >
+        <Icon :name="action.icon" />
+      </button>
+    </div>
 
+    <div v-if="collapsed" class="target-sections-rail">
+      <button
+        v-for="section in SECTION_ICONS"
+        :key="section.key"
+        type="button"
+        class="rail-icon-btn target-section-icon"
+        :title="t(section.titleKey)"
+        :aria-label="t(section.titleKey)"
+        @click="emit('open-section', section.key)"
+      >
+        <RailIcon :name="section.icon" />
+      </button>
+    </div>
+
+    <template v-else>
       <div v-if="saving" class="target-msg">{{ t('pipelineEditor.target.saving') }}</div>
       <div v-else-if="message" class="target-msg">{{ message }}</div>
       <div v-if="warning" class="target-warning" role="status">{{ warning }}</div>
@@ -301,20 +267,10 @@ function onSelectInput(event: Event, name: string) {
 
 .target-label { font-size: 11px; color: var(--muted); }
 
-.target-select,
-.target-input {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 5px;
-  padding: 4px 7px;
-  font-size: 12px;
-  font-family: inherit;
-  min-width: 0;
-  outline: none;
-}
-.target-input:focus,
-.target-select:focus { border-color: var(--accent); }
+/* Class truyền vào CSelect chỉ lo kích thước — style control là của `.c-select`. */
+.target-select { width: 100%; }
+
+.target-input { padding: 4px 7px; font-size: 12px; min-width: 0; }
 
 .target-actions {
   display: flex;

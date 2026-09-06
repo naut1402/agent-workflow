@@ -135,7 +135,7 @@ describe('PipelineEditor — panel trái nhận state thu/phóng từ shell', ()
 
     expect(w.find('.editor-left').classes()).toContain('editor-left-collapsed')
     expect(w.find('.editor-layout').classes()).toContain('editor-layout--left-collapsed')
-    expect(w.findAll('.target-section-icon')).toHaveLength(2)
+    expect(w.findAll('.target-section-icon')).toHaveLength(3)
     // Không render select/input khi thu gọn — chỉ icon.
     expect(w.find('.target-select').exists()).toBe(false)
     expect(w.find('.editor-left-sections').exists()).toBe(false)
@@ -486,5 +486,106 @@ describe('PipelineEditor — trạng thái nút Save', () => {
     await flushPromises()
 
     expect(w.findComponent({ name: 'EditorTargetPanel' }).props('warning')).toContain('chờ gate')
+  })
+})
+
+// Bất biến của bố cục 2 tab: canvas và select luôn nói về **cùng một** đối tượng.
+// Tab Profile cũng là `scope === 'global'`, nên nếu quay lại tab mà nạp pipeline
+// global trong khi select vẫn giữ profile cũ thì Save sẽ ghi đè profile đó.
+describe('PipelineEditor — canvas và select luôn cùng một đối tượng', () => {
+  it('quay lại tab Profile nạp lại profile đang chọn, Save ghi đúng nội dung đó', async () => {
+    vi.mocked(fetchPipelineConfig).mockResolvedValue({
+      pipeline: { steps: [{ id: 'globalStep', name: 'Global' }] },
+    } as any)
+    vi.mocked(fetchPipelineProfile).mockResolvedValue({
+      pipeline: { steps: [{ id: 'fromP1', name: 'Từ p1' }] },
+    } as any)
+    const w = mountEditor({ scope: 'global' })
+    await flushPromises()
+
+    const panel = w.findComponent({ name: 'EditorTargetPanel' })
+    await panel.vm.$emit('update:profileSelected', 'p1')
+    await flushPromises()
+    expect(canvasNodeIds()).toContain('fromP1')
+
+    // Sang tab Task rồi quay lại tab Profile.
+    await w.setProps({ scope: 'task', taskId: '' })
+    await flushPromises()
+    await w.setProps({ scope: 'global' })
+    await flushPromises()
+
+    // Canvas phải là p1 (khớp select), không phải pipeline global.
+    expect(canvasNodeIds()).toContain('fromP1')
+    expect(canvasNodeIds()).not.toContain('globalStep')
+    expect(w.findComponent({ name: 'EditorTargetPanel' }).props('profileSelected')).toBe('p1')
+
+    await w.findComponent({ name: 'EditorTargetPanel' }).vm.$emit('save')
+    await flushPromises()
+
+    const [, savedPipeline] = vi.mocked(savePipelineProfile).mock.calls.at(-1) as any[]
+    expect(savedPipeline.steps.map((s: any) => s.id)).toEqual(['fromP1'])
+  })
+
+  it('đổi project khi đang ở tab Profile thì về pipeline global, không nạp profile cũ', async () => {
+    vi.mocked(fetchPipelineConfig).mockResolvedValue({
+      pipeline: { steps: [{ id: 'globalStep', name: 'Global' }] },
+    } as any)
+    vi.mocked(fetchPipelineProfile).mockResolvedValue({
+      pipeline: { steps: [{ id: 'fromP1', name: 'Từ p1' }] },
+    } as any)
+    const w = mountEditor({ scope: 'global', projectId: 'P1' })
+    await flushPromises()
+
+    await w.findComponent({ name: 'EditorTargetPanel' }).vm.$emit('update:profileSelected', 'p1')
+    await flushPromises()
+    vi.mocked(fetchPipelineProfile).mockClear()
+
+    await w.setProps({ projectId: 'P2' })
+    await flushPromises()
+
+    expect(fetchPipelineProfile).not.toHaveBeenCalled()
+    expect(canvasNodeIds()).toContain('globalStep')
+  })
+
+  it('đổi tab khi canvas bẩn phải hỏi trước; huỷ thì ở lại tab cũ', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    vi.mocked(fetchPipelineConfig).mockResolvedValue({
+      pipeline: { steps: [{ id: 'onCanvas', name: 'On canvas' }] },
+    } as any)
+    const w = mountEditor({ scope: 'global' })
+    await flushPromises()
+    flowStore.current.setNodes([
+      ...flowStore.current.getNodes.value,
+      { id: 'them-tay', type: 'pipelineEditor', position: { x: 0, y: 0 }, data: { label: 'x' } },
+    ])
+    await flushPromises()
+
+    await w.findAll('.editor-tab')[0].trigger('click')
+    await flushPromises()
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(w.emitted('update:scope')).toBeUndefined()
+    expect(canvasNodeIds()).toContain('them-tay')
+  })
+
+  // Canvas rỗng là "sạch" — confirm giả lặp lại khiến người dùng bấm OK theo
+  // phản xạ, làm confirm mất tác dụng ở đúng chỗ nó cần thiết.
+  it('tab Task chưa chọn task: canvas rỗng không bị coi là có thay đổi chưa lưu', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(fetchPipelineConfig).mockResolvedValue({
+      pipeline: { steps: [{ id: 'globalStep', name: 'Global' }] },
+    } as any)
+    const w = mountEditor({ scope: 'global' })
+    await flushPromises()
+
+    await w.setProps({ scope: 'task', taskId: '' })
+    await flushPromises()
+    expect(canvasNodeIds()).toEqual([])
+
+    confirmSpy.mockClear()
+    await w.findComponent({ name: 'EditorTargetPanel' }).vm.$emit('update:taskProfile', 'p1')
+    await flushPromises()
+
+    expect(confirmSpy).not.toHaveBeenCalled()
   })
 })
