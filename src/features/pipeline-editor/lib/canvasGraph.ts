@@ -6,48 +6,75 @@
  * ra YAML (`buildFullPipeline`, `topoSort`, `hasFanOut`…) phải lọc chúng qua
  * `stepNodesOf` / `stepEdgesOf` trước, nếu không YAML sẽ mọc step rác `art-*`.
  */
-import { buildArtifactNodesAndEdges } from '../../../core/lib/pipelineArtifactGraph'
+import {
+  buildArtifactNodesAndEdges,
+  type ArtifactGraphLabels,
+  type PhasePosition,
+  type PipelineStepLike,
+} from '../../../core/lib/pipelineArtifactGraph'
 
 export const STEP_NODE_TYPE = 'pipelineEditor'
 
-export function isStepNode(node: any): boolean {
+/** Node step trên canvas — chỉ khai báo phần `canvasGraph` thật sự đọc tới. */
+export type StepNodeLike = {
+  id: string
+  type?: string
+  position?: Partial<PhasePosition>
+  data?: { hitl?: { mode?: string; gate_id?: string } }
+}
+
+export type FlowEdgeLike = {
+  id?: string
+  source?: string
+  target?: string
+}
+
+export function isStepNode(node: StepNodeLike | null | undefined): boolean {
   return node?.type === STEP_NODE_TYPE
 }
 
-export function stepNodesOf(nodes: any[]): any[] {
+export function stepNodesOf<T extends StepNodeLike>(nodes: T[] | null | undefined): T[] {
   return (nodes ?? []).filter(isStepNode)
 }
 
 /** Edge điều khiển = cả 2 đầu đều là step node (loại edge dữ liệu `de-*`). */
-export function stepEdgesOf(edges: any[], stepIds: Set<string>): any[] {
-  return (edges ?? []).filter((e) => stepIds.has(e?.source) && stepIds.has(e?.target))
+export function stepEdgesOf<T extends FlowEdgeLike>(
+  edges: T[] | null | undefined,
+  stepIds: Set<string>,
+): T[] {
+  return (edges ?? []).filter(
+    (e) => stepIds.has(e?.source as string) && stepIds.has(e?.target as string),
+  )
 }
 
 /** Nhãn gate của một step = `gate_id`, chỉ khi HITL bật. */
-export function gateLabelOf(node: any): string {
+export function gateLabelOf(node: StepNodeLike | null | undefined): string {
   const hitl = node?.data?.hitl
   if (!hitl || !hitl.mode || hitl.mode === 'none') return ''
   return hitl.gate_id || ''
 }
 
 export function buildEditorGraph(opts: {
-  stepNodes: any[]
-  stepEdges: any[]
+  stepNodes: StepNodeLike[]
+  stepEdges: FlowEdgeLike[]
   /** = `currentSteps` (đã qua `buildStepFromNode`) — nguồn `produces`/`knowledge_inputs`. */
-  steps: any[]
-  labels: { producesTitle: string; knowledgeTitle: string }
+  steps: PipelineStepLike[]
+  labels: ArtifactGraphLabels
+  // Trả `any[]`: kết quả đi thẳng vào `setNodes`/`setEdges` của VueFlow, mà
+  // `Node`/`Edge` của thư viện đòi những field nominal (`XYPosition`,
+  // `MarkerType`) builder thuần này cố ý không biết tới.
 }): { nodes: any[]; edges: any[] } {
   const stepNodes = opts.stepNodes ?? []
   const stepIds = new Set(stepNodes.map((n) => n.id))
-  const byId = Object.fromEntries(stepNodes.map((n) => [n.id, n]))
+  const byId: Record<string, StepNodeLike> = Object.fromEntries(stepNodes.map((n) => [n.id, n]))
 
   const labelledEdges = (opts.stepEdges ?? []).map((e) => ({
     ...e,
-    label: gateLabelOf(byId[e.source]),
+    label: gateLabelOf(byId[e.source as string]),
     labelStyle: { fill: 'var(--muted)', fontWeight: 400 },
   }))
 
-  const phasePositions = Object.fromEntries(
+  const phasePositions: Record<string, PhasePosition> = Object.fromEntries(
     stepNodes.map((n) => [n.id, { x: n.position?.x ?? 0, y: n.position?.y ?? 0 }]),
   )
 

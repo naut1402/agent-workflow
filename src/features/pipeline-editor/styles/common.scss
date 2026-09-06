@@ -1,6 +1,6 @@
 /* Pipeline-editor — rule bắc cầu giữa 2 component (tổ tiên ở SFC này, đích ở SFC
    khác) nên không đặt được trong <style scoped> của riêng ai; xem
-   docs/implement/feature-organization-rule.md §5. */
+   docs/agent-rules/feature-architecture-guideline.md §5. */
 
 /* .preview-active ở PipelineEditor → panel con. Cụm action của EditorTargetPanel
    cố ý KHÔNG bị khoá: nút Stop nằm trong đó. */
