@@ -10,6 +10,7 @@ import ArtifactPanel from './ArtifactPanel.vue'
 import Icon from '../../../core/ui/Icon.vue'
 import { patchTaskArchive, deleteTask, repairTaskState } from '../scripts/monitorApi'
 import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
+import { hasInFlightJob } from '../lib/taskInFlight'
 import { taskDisplayName } from '../lib/taskDisplay'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
 import {
@@ -48,6 +49,7 @@ const emit = defineEmits([
 ])
 
 const archiveError = ref('')
+const deleting = ref(false)
 const needsRepair = computed(() => taskNeedsStateRepair(props.selected))
 
 // Setting mục 7 — auto-collapse file-list mở của TaskList khi click ra ngoài
@@ -115,13 +117,25 @@ async function repairSelected() {
 
 async function deleteSelected() {
   if (!props.selected) return
+  // `deleting` chặn double-click: handler async (dò job trước khi hỏi) nên không
+  // có guard thì mỗi cú click là một hộp confirm + một lượt DELETE.
+  if (deleting.value) return
   archiveError.value = ''
-  if (!confirm(t('monitor.layout.confirmDelete'))) return
+  deleting.value = true
+  // Chụp id ngay đầu handler: poll 1.5s có thể đổi `selected` giữa hai lần await.
+  const taskId = props.selected.task_id
   try {
-    await deleteTask(props.selected.task_id, props.selectedProjectId ?? undefined)
-    emit('task-deleted', props.selected.task_id)
+    const running = await hasInFlightJob(taskId, props.selectedProjectId)
+    const messageKey = running
+      ? 'monitor.layout.confirmDeleteRunning'
+      : 'monitor.layout.confirmDelete'
+    if (!confirm(t(messageKey))) return
+    await deleteTask(taskId, props.selectedProjectId ?? undefined)
+    emit('task-deleted', taskId)
   } catch (e: any) {
     archiveError.value = String(e.message || e)
+  } finally {
+    deleting.value = false
   }
 }
 </script>
@@ -176,9 +190,9 @@ async function deleteSelected() {
               @click="toggleArchiveSelected"
             ><template v-if="selected.archived">{{ t('monitor.layout.unarchive') }}</template><template v-else><Icon name="archiveBox" :size="14" /> {{ t('monitor.layout.archive') }}</template></button>
             <button
-              v-if="!selected.state_ok"
               type="button"
-              class="btn-archive-detail"
+              class="btn-archive-detail btn-delete-detail"
+              :disabled="deleting"
               @click="deleteSelected"
             >{{ t('monitor.layout.deleteTask') }}</button>
           </div>

@@ -9,6 +9,8 @@ export default {
     archive: 'Archive',
     deleteTask: 'Delete task',
     confirmDelete: 'Permanently delete this task? This cannot be undone.',
+    confirmDeleteRunning:
+      'This task has a running or queued job. Deleting now leaves an orphan job writing into a folder that no longer exists, and that job is NOT stopped. Still permanently delete this task? This cannot be undone.',
     emptyNoTasks: 'No tasks in',
     emptyHint: 'Run',
     emptyHintSuffix: 'to get started.',
@@ -34,6 +36,8 @@ export default {
     unarchive: 'Unarchive',
     deleteTask: 'Delete task',
     confirmDelete: 'Permanently delete this task? This cannot be undone.',
+    confirmDeleteRunning:
+      'This task has a running or queued job. Deleting now leaves an orphan job writing into a folder that no longer exists, and that job is NOT stopped. Still permanently delete this task? This cannot be undone.',
     deleteError: 'Failed to delete task',
     repairError: 'Failed to repair state',
     renameTitle: 'Double-click to rename',

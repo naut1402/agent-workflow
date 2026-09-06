@@ -3,6 +3,7 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, nextTick, ref } from 'vue'
 import { patchTaskArchive, patchTaskName, deleteTask, repairTaskState } from '../scripts/TaskListItemApi'
 import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
+import { hasInFlightJob } from '../lib/taskInFlight'
 import { taskDisplayName } from '../lib/taskDisplay'
 import Icon from '../../../core/ui/Icon.vue'
 
@@ -20,6 +21,7 @@ const emit = defineEmits([
 
 const { t } = useI18nHelpers()
 const archiveError = ref('')
+const deleting = ref(false)
 const needsRepair = computed(() => taskNeedsStateRepair(props.task))
 const renaming = ref(false)
 const draftName = ref('')
@@ -90,13 +92,25 @@ async function toggleArchive() {
 }
 
 async function removeTask() {
+  // `deleting` chặn double-click: handler async (dò job trước khi hỏi) nên không
+  // có guard thì mỗi cú click là một hộp confirm + một lượt DELETE.
+  if (deleting.value) return
   archiveError.value = ''
-  if (!confirm(t('monitor.taskItem.confirmDelete'))) return
+  deleting.value = true
+  // Chụp id ngay đầu handler: poll 1.5s có thể thay props giữa hai lần await.
+  const taskId = props.task.task_id
   try {
-    await deleteTask(props.task.task_id, props.projectId ?? undefined)
-    emit('task-deleted', props.task.task_id)
+    const running = await hasInFlightJob(taskId, props.projectId)
+    const messageKey = running
+      ? 'monitor.taskItem.confirmDeleteRunning'
+      : 'monitor.taskItem.confirmDelete'
+    if (!confirm(t(messageKey))) return
+    await deleteTask(taskId, props.projectId ?? undefined)
+    emit('task-deleted', taskId)
   } catch (e: any) {
     archiveError.value = String(e.message || e || t('monitor.taskItem.deleteError'))
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -239,9 +253,10 @@ function hiddenCount(task: any) {
         @click.stop="toggleArchive"
       ><template v-if="task.archived">↩</template><Icon v-else name="archiveBox" :size="14" /></button>
       <button
-        v-if="!task.state_ok"
         class="btn-delete"
         :title="t('monitor.taskItem.deleteTask')"
+        :aria-label="t('monitor.taskItem.deleteTask')"
+        :disabled="deleting"
         @click.stop="removeTask"
       >✕</button>
     </div>

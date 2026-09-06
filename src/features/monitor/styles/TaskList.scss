@@ -156,12 +156,17 @@
 .archived-group > summary::before { content: '›'; margin-right: 4px; display: inline-block; transition: transform 0.15s; }
 .archived-group[open] > summary::before { transform: rotate(90deg); color: var(--accent); }
 
+/* Không dùng `margin-left: auto` ở đây: `.tasklist .id` có `flex: 1 1 auto` nên
+   đã hút hết free space (auto margin chỉ được phân phối SAU khi flex-grow chạy)
+   — rule cũ là no-op, và sẽ chia đôi khoảng trống giữa các nút nếu ai đó bỏ
+   flex-grow của .id. Nhóm nút dính mép phải nhờ chính .id; `flex-shrink: 0`
+   giữ nút không bị bóp khi tên task dài trong sub-sidebar hẹp. */
 .btn-archive,
 .btn-repair,
 .btn-delete {
   display: inline-flex;
   align-items: center;
-  margin-left: auto;
+  flex-shrink: 0;
   font-size: 12px;
   background: none;
   border: none;
@@ -171,6 +176,8 @@
   cursor: pointer;
   line-height: 1.4;
 }
+/* Nút xoá async (dò job trước khi hỏi) — trạng thái chờ phải nhìn thấy được. */
+.btn-delete:disabled { opacity: 0.5; cursor: progress; }
 .btn-archive:hover { color: var(--accent); }
 .btn-repair:hover { color: var(--accent); }
 .btn-delete:hover { color: var(--danger); }
@@ -241,3 +248,5 @@
   font-family: inherit;
 }
 .btn-archive-detail:hover { color: var(--accent); border-color: var(--accent); }
+.btn-delete-detail:hover { color: var(--danger); border-color: var(--danger); }
+.btn-archive-detail:disabled { opacity: 0.5; cursor: progress; }

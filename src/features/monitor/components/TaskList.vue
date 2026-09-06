@@ -100,6 +100,7 @@ const archivedTasks = computed(() => props.tasks.filter((t) => t.archived))
           @toggle-expand="toggleExpand"
           @open-artifact="emit('open-artifact', $event)"
           @task-archived="emit('task-archived')"
+          @task-deleted="emit('task-deleted', $event)"
           @toggle-hide-missing="toggleHideMissing"
         />
       </ul>
