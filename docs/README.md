@@ -34,4 +34,6 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 ## Quy ước phát hành
 
 - **Branch phát hành theo dòng version** — `dev/x.y.z/main` (vd `dev/1.1.2/main`).
+- **Branch task gắn version** — `dev/x.y.z/{taskID}_{task-slug}`, cắt từ `dev/x.y.z/main`; task không gắn version dùng `<type>/<TASK>/<slug>` cắt từ `main`.
 - **Không commit thẳng `main`** — mọi thay đổi đi qua pull request.
+- **PR promote `dev/x.y.z/main` → `main`** dùng template `.github/PULL_REQUEST_TEMPLATE/release.md` — release note hướng người dùng, chỉ giữ section có nội dung thật.

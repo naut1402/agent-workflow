@@ -18,10 +18,13 @@ Git hygiene và commit: [`git-pr.md`](git-pr.md).
 
 ```bash
 git fetch origin
+# base: origin/main — task gắn version release thì dùng origin/dev/x.y.z/main
 git worktree add -b <branch-name> ../wt-<task> origin/main
 cd ../wt-<task>
 bun install            # node_modules riêng cho worktree
 ```
+
+Tên branch và base lấy theo [`git-pr.md`](git-pr.md) §4 (§4.2 khi task gắn version release).
 
 Harness có sẵn cơ chế cô lập worktree thì dùng luôn — nguyên tắc 1-instance-1-worktree vẫn giữ.
 
