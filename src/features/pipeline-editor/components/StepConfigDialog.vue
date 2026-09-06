@@ -4,6 +4,7 @@ import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import CSelect from '../../../core/ui/CSelect.vue'
 import type { CSelectOption } from '../../../core/ui/CSelect.vue'
 import { fetchKnowledgeList } from '../../knowledge/scripts/knowledgeApi'
+import { buildStepConfigDraft, buildStepUpdateFromDraft } from '../lib/stepConfigDraft'
 
 const props = defineProps({
   stepId: { type: String, default: null },
@@ -39,19 +40,7 @@ const draft = ref(null)
 
 watch(
   () => props.step,
-  (s) => {
-    if (!s) { draft.value = null; return }
-    draft.value = {
-      name: s.label || '',
-      agent: s.agent || '',
-      produces: [...(s.produces || [])],
-      hitl_mode: s.hitl?.mode || 'none',
-      hitl_gate_id: s.hitl?.gate_id || '',
-      hitl_optional_doc_review: s.hitl?.optional_doc_review ?? false,
-      hitl_blocking: s.hitl?.blocking ?? false,
-      knowledge_inputs: [...(s.knowledge_inputs || [])],
-    }
-  },
+  (s) => { draft.value = buildStepConfigDraft(s) },
   { immediate: true },
 )
 
@@ -90,21 +79,7 @@ function removeKnowledgeInput(i) {
 
 function apply() {
   if (!draft.value) return
-  const hitl = draft.value.hitl_mode === 'none'
-    ? { mode: 'none' }
-    : {
-        mode: draft.value.hitl_mode,
-        gate_id: draft.value.hitl_gate_id || `hitl-${props.stepId}`,
-        optional_doc_review: draft.value.hitl_optional_doc_review,
-        blocking: draft.value.hitl_blocking,
-      }
-  emit('update', props.stepId, {
-    label: draft.value.name,
-    agent: draft.value.agent,
-    produces: draft.value.produces,
-    knowledge_inputs: draft.value.knowledge_inputs,
-    hitl,
-  })
+  emit('update', props.stepId, buildStepUpdateFromDraft(draft.value, props.stepId))
 }
 </script>
 
