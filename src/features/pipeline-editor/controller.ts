@@ -134,7 +134,10 @@ export class PipelineEditorController extends AbstractController {
     if ('error' in gate) return gate.error
     const { root } = gate
 
-    return this.ok(await buildCatalog(root, { scanCustomAgents: pipelineEditorBusiness.scanCustomAgents }))
+    return this.ok(await buildCatalog(root, {
+      scanCustomAgents: pipelineEditorBusiness.scanCustomAgents,
+      scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig(),
+    }))
   }
 
   async getCatalogAgent() {
@@ -180,6 +183,8 @@ export class PipelineEditorController extends AbstractController {
     if ('error' in gate) return gate.error
     const { root } = gate
 
-    return this.ok(await buildRules(root))
+    return this.ok(await buildRules(root, {
+      scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig(),
+    }))
   }
 }
