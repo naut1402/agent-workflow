@@ -34,6 +34,19 @@ describe('Icon', () => {
     expect(customSize.find('svg').attributes('height')).toBe('24')
   })
 
+  it.each(['save', 'star', 'layout', 'play', 'stop'] as const)(
+    'renders the pipeline-editor action icon %s on a 16x16 viewBox without svg-level fill/stroke',
+    (name) => {
+      const wrapper = mount(Icon, { props: { name } })
+      const svg = wrapper.find('svg')
+      expect(svg.attributes('viewBox')).toBe('0 0 16 16')
+      expect(svg.attributes('fill')).toBeUndefined()
+      expect(svg.attributes('stroke')).toBeUndefined()
+      // Every new icon draws something — a missing v-else-if branch renders an empty svg.
+      expect(svg.element.children.length).toBeGreaterThan(0)
+    },
+  )
+
   it('forwards fallthrough class/attrs to the root svg', () => {
     const wrapper = mount(Icon, { props: { name: 'bell' }, attrs: { class: 'bell-icon' } })
     expect(wrapper.find('svg').classes()).toContain('bell-icon')

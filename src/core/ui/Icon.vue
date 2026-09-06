@@ -5,7 +5,20 @@
  * fill-or-stroke treatment of whichever original hand-drawn SVG it replaces, so no
  * path was redrawn when an icon moved here.
  */
-type IconName = 'chatBubble' | 'close' | 'bell' | 'archiveBox' | 'trash' | 'plus' | 'pencil' | 'copy'
+type IconName =
+  | 'chatBubble'
+  | 'close'
+  | 'bell'
+  | 'archiveBox'
+  | 'trash'
+  | 'plus'
+  | 'pencil'
+  | 'copy'
+  | 'save'
+  | 'star'
+  | 'layout'
+  | 'play'
+  | 'stop'
 
 const props = withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 16 })
 
@@ -18,6 +31,11 @@ const VIEW_BOX: Record<IconName, string> = {
   plus: '0 0 16 16',
   pencil: '0 0 16 16',
   copy: '0 0 16 16',
+  save: '0 0 16 16',
+  star: '0 0 16 16',
+  layout: '0 0 16 16',
+  play: '0 0 16 16',
+  stop: '0 0 16 16',
 }
 
 const viewBox = VIEW_BOX[props.name]
@@ -81,6 +99,36 @@ const viewBox = VIEW_BOX[props.name]
     <template v-else-if="name === 'copy'">
       <rect x="5.5" y="5.5" width="7" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
       <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M3.5 10.5V3.5h7" />
+    </template>
+    <template v-else-if="name === 'save'">
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M2.5 3.5a1 1 0 0 1 1-1h7L13.5 5.5v7a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9zM5 2.5v3.5h5V2.5M5 13.5V9.5h6v4"
+      />
+    </template>
+    <template v-else-if="name === 'star'">
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.3"
+        stroke-linejoin="round"
+        d="M8 2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.2 4.4 13.1l.7-4L2.2 6.3l4-.6L8 2z"
+      />
+    </template>
+    <template v-else-if="name === 'layout'">
+      <rect x="2" y="4.5" width="4.5" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.3" />
+      <rect x="9.5" y="4.5" width="4.5" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.3" />
+      <path fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" d="M6.5 8h3" />
+    </template>
+    <template v-else-if="name === 'play'">
+      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M5 3.2l7 4.8-7 4.8V3.2z" />
+    </template>
+    <template v-else-if="name === 'stop'">
+      <rect x="4" y="4" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
     </template>
   </svg>
 </template>

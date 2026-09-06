@@ -9,9 +9,10 @@ import PipelineEditorNode from './PipelineEditorNode.vue'
 import CatalogPanel from './CatalogPanel.vue'
 import RulesPanel from './RulesPanel.vue'
 import StepConfigPanel from './StepConfigPanel.vue'
-import ProfileManager from './ProfileManager.vue'
-import RailIcon from '../../../core/ui/RailIcon.vue'
-import { taskDisplayName } from '../../monitor/lib/taskDisplay'
+import EditorTargetPanel from './EditorTargetPanel.vue'
+import ArtifactNode from '../../../core/ui/ArtifactNode.vue'
+import { usePipelineProfiles } from '../composables/usePipelineProfiles'
+import { buildEditorGraph, stepEdgesOf, stepNodesOf } from '../lib/canvasGraph'
 import {
   extractPipelineMeta,
   extractStepPreservedMap,
@@ -35,6 +36,19 @@ const props = defineProps({
 
 const emit = defineEmits(['update:scope', 'update:task-id', 'update:subSidebarCollapsed'])
 
+/**
+ * Tab **là** biểu diễn của `scope` do shell giữ — tab Profile ↔ `scope='global'`,
+ * tab Task ↔ `scope='task'`. Không thêm state song song, nhờ vậy watcher
+ * `loadConfig` / xoá `taskId` khi rời tab Task giữ nguyên ý nghĩa.
+ */
+const tab = computed(() => (props.scope === 'task' ? 'task' : 'profile'))
+
+function switchTab(next: 'task' | 'profile') {
+  if (tab.value === next) return
+  closeConfig()
+  emit('update:scope', next === 'task' ? 'task' : 'global')
+}
+
 const taskSelect = ref('')
 const taskManual = ref('')
 
@@ -56,17 +70,26 @@ const taskWriteBlocked = computed(() => {
   return !!(known && !isTaskEditable(known))
 })
 
-function onScopeChange(event) {
-  emit('update:scope', event.target.value)
-}
+/** G6 — task đang chờ gate: lưu pipeline sẽ huỷ gate đó, cảnh báo trước khi bấm. */
+const taskHitlPending = computed(() => {
+  if (tab.value !== 'task') return false
+  const id = (props.taskId || '').trim()
+  if (!id) return false
+  return Boolean((props.tasks || []).find((t: any) => t.task_id === id)?.hitl_pending)
+})
 
-function onTaskSelectChange() {
-  if (taskSelect.value === '__manual__') {
+function onTaskSelectChange(value: string) {
+  taskSelect.value = value
+  if (value === '__manual__') {
     emit('update:task-id', taskManual.value)
   } else {
-    emit('update:task-id', taskSelect.value)
+    emit('update:task-id', value)
     taskManual.value = ''
   }
+}
+
+function onTaskManualChange(value: string) {
+  taskManual.value = value
 }
 
 watch(taskManual, (v) => {
@@ -114,7 +137,10 @@ watch(
   },
 )
 
-const nodeTypes = { pipelineEditor: markRaw(PipelineEditorNode) } as any
+const nodeTypes = {
+  pipelineEditor: markRaw(PipelineEditorNode),
+  artifact: markRaw(ArtifactNode),
+} as any
 const {
   setNodes,
   setEdges,
@@ -134,14 +160,24 @@ const pipelineMeta = ref<PipelineMeta>({})
 const stepPreserved = ref<StepPreservedMap>({})
 const catalog = ref<any>({ skills: [], agents: [] })
 const rulesData = ref({ rules: [], categories: [] })
-const leftTab = ref('catalog')
 const highlightedCategory = ref(null)
 const editorLeftCollapsed = computed(() => props.subSidebarCollapsed)
 
-function openLeftTab(tab) {
-  leftTab.value = tab
+// c.1 — Agents / Skills / Rules là 3 mục cùng cấp, mở/đóng độc lập. Gán lại
+// `new Set(...)` để Vue thấy thay đổi (pattern `expanded` của TaskList).
+const openSections = ref<Set<string>>(new Set(['agents']))
+
+function toggleSection(key: string) {
+  const next = new Set(openSections.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  openSections.value = next
+}
+
+function openSection(key: string) {
+  openSections.value = new Set(openSections.value).add(key)
   // Panel ghi ngược lên shell: state chung nên `aria-expanded` của mode icon
-  // không lệch pha khi panel tự mở lại từ icon Catalog/Rules.
+  // không lệch pha khi panel tự mở lại từ dải icon.
   emit('update:subSidebarCollapsed', false)
 }
 
@@ -174,10 +210,16 @@ function onRuleSelect(rule) {
     highlightedCategory.value === rule.category ? null : rule.category
 }
 
+/**
+ * Đường nạp pipeline **duy nhất** — meta (`version` / `defaults` / `doc_reviewer`)
+ * và field lạ của step chỉ được giữ nếu đi qua đây, nếu không profile lưu ra sẽ
+ * không mở lại đúng.
+ */
 function applyLoadedPipeline(pipeline) {
   pipelineMeta.value = extractPipelineMeta(pipeline)
   stepPreserved.value = extractStepPreservedMap(pipeline?.steps || [])
   buildFlowFromPipeline(pipeline)
+  lastLoadedSnapshot.value = snapshotCanvas()
 }
 
 async function loadConfig() {
@@ -221,14 +263,38 @@ function buildFlowFromPipeline(pipeline) {
   setNodes(newNodes)
   setEdges(newEdges)
   nodeCounter = steps.length
+  syncDerivedGraph()
+}
+
+/**
+ * Dựng lại node/edge phái sinh (gate label + artifact/knowledge) từ step hiện tại.
+ * Gọi sau **mọi** phép biến đổi canvas — trừ lúc đang kéo node (`setNodes` giữa
+ * drag làm node giật), nên chỉ chạy ở `@node-drag-stop`.
+ */
+function syncDerivedGraph() {
+  const stepNodes = stepNodesOf(getNodes.value)
+  const stepIds = new Set(stepNodes.map((n) => n.id))
+  const stepEdges = stepEdgesOf(getEdges.value, stepIds)
+  const { nodes: nextNodes, edges: nextEdges } = buildEditorGraph({
+    stepNodes,
+    stepEdges,
+    steps: currentSteps.value,
+    labels: {
+      producesTitle: t('common.artifactNode.producesTitle'),
+      knowledgeTitle: t('common.artifactNode.knowledgeTitle'),
+    },
+  })
+  setNodes(nextNodes)
+  setEdges(nextEdges)
 }
 
 onConnect((params) => {
   addEdges([{ ...params, markerEnd: { type: 'arrowclosed' } }] as any)
+  syncDerivedGraph()
 })
 
 onMounted(async () => {
-  await Promise.all([loadCatalog(), loadRules(), loadConfig()])
+  await Promise.all([loadCatalog(), loadRules(), loadConfig(), refreshProfiles()])
   setTimeout(() => fitView(), 100)
 })
 
@@ -276,7 +342,14 @@ function onDropOnCanvas(event) {
 
   const pos = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
 
-  const id = `step-${item.name}-${++nodeCounter}`
+  // `nodeCounter` chỉ đếm từ số step của pipeline vừa nạp, nên sau vài lần
+  // nạp/xoá nó có thể sinh lại một id đã tồn tại — tăng tiếp đến khi id trống.
+  const existing = new Set(stepNodesOf(getNodes.value).map((n) => n.id))
+  let id = `step-${item.name}-${++nodeCounter}`
+  while (existing.has(id)) {
+    id = `step-${item.name}-${++nodeCounter}`
+  }
+
   const newNode = {
     id,
     type: 'pipelineEditor',
@@ -292,7 +365,8 @@ function onDropOnCanvas(event) {
       hitl: { mode: 'none' },
     },
   }
-  setNodes([...getNodes.value, newNode])
+  setNodes([...stepNodesOf(getNodes.value), newNode])
+  syncDerivedGraph()
 }
 
 const selectedNodeId = ref(null)
@@ -313,15 +387,19 @@ function onPaneClick() {
 }
 
 function applyStepUpdate(nodeId, updatedData) {
-  nodes.value = nodes.value.map((n) =>
-    n.id === nodeId ? { ...n, data: { ...n.data, ...updatedData } } : n,
+  setNodes(
+    getNodes.value.map((n) =>
+      n.id === nodeId ? { ...n, data: { ...n.data, ...updatedData } } : n,
+    ),
   )
   closeConfig()
+  syncDerivedGraph()
 }
 
 function deleteNode(nodeId) {
   removeNodes([nodeId])
   if (selectedNodeId.value === nodeId) closeConfig()
+  syncDerivedGraph()
 }
 
 function topoSort(nodeList, edgeList) {
@@ -346,7 +424,21 @@ function topoSort(nodeList, edgeList) {
   return [...sorted, ...remaining.map((n) => n.id)]
 }
 
-const previewOrder = computed(() => topoSort(getNodes.value, getEdges.value))
+/**
+ * Step node + edge điều khiển hiện có trên canvas. Mọi phép tính sinh ra YAML
+ * hoặc thứ tự chạy phải đi qua đây — node artifact/knowledge chỉ để nhìn, lọt vào
+ * `buildFullPipeline` là sinh step rác `art-*` trong file lưu ra.
+ */
+function stepGraph(): { nodeList: any[]; edgeList: any[] } {
+  const nodeList = stepNodesOf(getNodes.value)
+  const edgeList = stepEdgesOf(getEdges.value, new Set(nodeList.map((n) => n.id)))
+  return { nodeList, edgeList }
+}
+
+const previewOrder = computed(() => {
+  const { nodeList, edgeList } = stepGraph()
+  return topoSort(nodeList, edgeList)
+})
 
 function getPreviewState(nodeId) {
   if (!previewing.value || !previewNodeId.value) {
@@ -366,7 +458,7 @@ function getPreviewState(nodeId) {
 
 const previewActiveStep = computed(() => {
   if (!previewing.value || !previewNodeId.value) return null
-  const node = getNodes.value.find((n) => n.id === previewNodeId.value)
+  const node = stepNodesOf(getNodes.value).find((n) => n.id === previewNodeId.value)
   if (!node) return null
   const idx = previewOrder.value.indexOf(previewNodeId.value)
   return {
@@ -378,8 +470,7 @@ const previewActiveStep = computed(() => {
 })
 
 function buildFullPipeline() {
-  const nodeList = getNodes.value
-  const edgeList = getEdges.value
+  const { nodeList, edgeList } = stepGraph()
   const order = topoSort(nodeList, edgeList)
   const nodeMap = Object.fromEntries(nodeList.map((n) => [n.id, n]))
   const steps = order
@@ -393,42 +484,197 @@ function buildFullPipeline() {
 }
 
 function autoLayout() {
-  const nodeList = getNodes.value
-  const edgeList = getEdges.value
+  const { nodeList, edgeList } = stepGraph()
   const order = topoSort(nodeList, edgeList)
   setNodes(nodeList.map((n) => {
     const idx = order.indexOf(n.id)
     return { ...n, position: { x: 20 + Math.max(0, idx) * 220, y: 60 } }
   }))
+  syncDerivedGraph()
   setTimeout(() => fitView(), 50)
 }
+
+/* ── Profile / task target ─────────────────────────────────────────────── */
+
+const {
+  profiles,
+  refresh: refreshProfiles,
+  load: loadProfile,
+  save: saveProfile,
+  remove: removeProfile,
+  error: profileError,
+} = usePipelineProfiles(() => props.projectId)
+
+/** Profile chọn trong select — nguồn của auto-load (a.1). */
+const profileSelected = ref('')
+/** Tên sẽ ghi khi bấm Save; gõ tên mới ở đây tạo profile mới. */
+const profileName = ref('')
+/** Profile được nạp làm bản nháp cho task — không tự ghi file (b.1). */
+const taskProfileName = ref('')
+
+/** So sánh nông để hỏi trước khi bỏ thay đổi chưa lưu (E3). */
+const lastLoadedSnapshot = ref('')
+
+function snapshotCanvas(): string {
+  try {
+    return JSON.stringify(buildFullPipeline())
+  } catch {
+    return ''
+  }
+}
+
+function confirmDiscardIfDirty(): boolean {
+  if (!lastLoadedSnapshot.value) return true
+  if (snapshotCanvas() === lastLoadedSnapshot.value) return true
+  return confirm(t('pipelineEditor.target.confirmDiscardChanges'))
+}
+
+async function applyProfileToCanvas(name: string): Promise<void> {
+  const pipeline = await loadProfile(name)
+  if (!pipeline) {
+    saveMsg.value = profileError.value ? `✗ ${profileError.value}` : ''
+    return
+  }
+  applyLoadedPipeline(pipeline)
+  setTimeout(() => fitView(), 100)
+}
+
+/**
+ * Đặt lại giá trị select mà không kích hoạt auto-load.
+ * Cần thiết vì watcher tự ghi ngược vào chính ref nó đang theo dõi (khi người
+ * dùng huỷ confirm, hoặc sau khi Save): không chặn thì mỗi lần huỷ lại hỏi lại.
+ */
+let suppressAutoLoad = false
+
+function setSelectionSilently(target: { value: string }, next: string) {
+  suppressAutoLoad = true
+  target.value = next
+  // Watcher chạy sau microtask của Vue — trả cờ lại ở đó, không phải ngay đây.
+  Promise.resolve().then(() => { suppressAutoLoad = false })
+}
+
+// a.1 — không còn nút "Load profile": đổi select là nạp luôn.
+watch(profileSelected, async (name, prev) => {
+  if (suppressAutoLoad || !name) return
+  if (!confirmDiscardIfDirty()) {
+    setSelectionSilently(profileSelected, prev ?? '')
+    return
+  }
+  profileName.value = name
+  await applyProfileToCanvas(name)
+})
+
+// b.1 — nạp bản nháp lên canvas, KHÔNG ghi `tasks/<id>/pipeline.yaml`.
+watch(taskProfileName, async (name, prev) => {
+  if (suppressAutoLoad || !name) return
+  if (!confirmDiscardIfDirty()) {
+    setSelectionSilently(taskProfileName, prev ?? '')
+    return
+  }
+  await applyProfileToCanvas(name)
+})
+
+// Profile của task trước không phải profile của task sau.
+watch(() => props.taskId, () => { taskProfileName.value = '' })
+
+// Danh sách profile là per-project — lựa chọn cũ không còn nghĩa.
+watch(() => props.projectId, () => {
+  profileSelected.value = ''
+  profileName.value = ''
+  taskProfileName.value = ''
+})
 
 const saving = ref(false)
 const saveMsg = ref('')
 
-async function saveToFile() {
-  if (taskWriteBlocked.value) {
-    saveMsg.value = '✗ Task is archived or completed'
-    return
-  }
+function flashSaved(msg: string) {
+  saveMsg.value = msg
+  setTimeout(() => {
+    if (saveMsg.value === msg) saveMsg.value = ''
+  }, 2500)
+}
+
+/** 1.2 — "Save" và "Save to file" gộp làm một, rẽ nhánh theo tab đang mở. */
+async function handleSave() {
   saving.value = true
   saveMsg.value = ''
   try {
-    const pipeline = buildFullPipeline()
-    await writePipelineConfig(
-      props.scope,
-      pipeline,
-      props.taskId || undefined,
-      props.projectId ?? undefined,
-    )
-    saveMsg.value = '✓ Saved'
-    setTimeout(() => { saveMsg.value = '' }, 2500)
+    if (tab.value === 'profile') {
+      const name = profileName.value.trim()
+      if (!name) {
+        saveMsg.value = t('pipelineEditor.target.needProfileName')
+        return
+      }
+      const ok = await saveProfile(name, buildFullPipeline())
+      if (!ok) {
+        saveMsg.value = `✗ ${profileError.value}`
+        return
+      }
+      await refreshProfiles()
+      lastLoadedSnapshot.value = snapshotCanvas()
+      // Canvas ĐANG là nội dung vừa ghi — nạp lại từ server chỉ tốn một vòng
+      // request và làm mất vị trí node người dùng vừa sắp.
+      if (profileSelected.value !== name) setSelectionSilently(profileSelected, name)
+    } else {
+      if (taskWriteBlocked.value) {
+        saveMsg.value = t('pipelineEditor.target.taskWriteBlocked')
+        return
+      }
+      if (!props.taskId?.trim()) {
+        saveMsg.value = t('pipelineEditor.target.needTask')
+        return
+      }
+      await writePipelineConfig('task', buildFullPipeline(), props.taskId, props.projectId ?? undefined)
+      lastLoadedSnapshot.value = snapshotCanvas()
+    }
+    flashSaved(t('pipelineEditor.target.saved'))
   } catch (e) {
     saveMsg.value = `✗ ${e.message}`
   } finally {
     saving.value = false
   }
 }
+
+async function handleDeleteProfile() {
+  const name = profileSelected.value
+  if (!name) return
+  if (!confirm(t('pipelineEditor.target.confirmDeleteProfile', { name }))) return
+  const ok = await removeProfile(name)
+  if (!ok) {
+    saveMsg.value = `✗ ${profileError.value}`
+    return
+  }
+  // Giữ nguyên canvas — người dùng vừa mất file, đừng mất luôn công việc đang mở.
+  profileSelected.value = ''
+  await refreshProfiles()
+}
+
+/**
+ * a.3 — "mặc định" = nội dung `pipeline.yaml` global, nên set-as-default ghi
+ * chính canvas đang mở xuống đó. Đây cũng là đường duy nhất còn lại để sửa trực
+ * tiếp pipeline global sau khi select `Scope` biến mất.
+ */
+async function handleSetDefault() {
+  if (!currentSteps.value.length) return
+  if (!confirm(t('pipelineEditor.target.confirmSetDefault'))) return
+  saving.value = true
+  saveMsg.value = ''
+  try {
+    await writePipelineConfig('global', buildFullPipeline(), undefined, props.projectId ?? undefined)
+    flashSaved(t('pipelineEditor.target.defaultSet'))
+  } catch (e) {
+    saveMsg.value = `✗ ${e.message}`
+  } finally {
+    saving.value = false
+  }
+}
+
+/**
+ * E7/E8 — chỉ khoá Save ở tab Task, nơi lý do (chưa chọn task / task đã đóng) đã
+ * hiển thị sẵn. Ở tab Profile để nút bấm được: thiếu tên thì `handleSave` nói rõ
+ * "nhập tên profile", còn nút xám không lý do thì người dùng chỉ biết bó tay.
+ */
+const saveDisabled = computed(() => tab.value === 'task' && taskWriteBlocked.value)
 
 const { state: previewing, setTrue: startPreview, setFalse: stopPreview } = useLocalToggle(false)
 const previewNodeId = ref(null)
@@ -439,7 +685,7 @@ async function runPreview() {
   if (previewing.value) return
   closeConfig()
   startPreview()
-  const order = topoSort(getNodes.value, getEdges.value)
+  const order = previewOrder.value
   previewNodeId.value = null
   previewHitlPause.value = false
 
@@ -449,7 +695,7 @@ async function runPreview() {
     previewHitlPause.value = false
     await sleep(600)
     if (!previewing.value) break
-    const node = getNodes.value.find((n) => n.id === id)
+    const node = stepNodesOf(getNodes.value).find((n) => n.id === id)
     const hitlMode = node?.data?.hitl?.mode
     if (hitlMode && hitlMode !== 'none') {
       previewHitlPause.value = true
@@ -473,11 +719,6 @@ function sleep(ms) {
   return new Promise((res) => { previewTimer = setTimeout(res, ms) })
 }
 
-function onProfileLoad(pipeline) {
-  applyLoadedPipeline(pipeline)
-  setTimeout(() => fitView(), 100)
-}
-
 const currentPipeline = computed(() => buildFullPipeline())
 const currentSteps = computed(() => {
   const steps = currentPipeline.value.steps
@@ -485,8 +726,9 @@ const currentSteps = computed(() => {
 })
 
 const hasFanOut = computed(() => {
+  const { edgeList } = stepGraph()
   const outDeg = {}
-  for (const e of getEdges.value) {
+  for (const e of edgeList) {
     outDeg[e.source] = (outDeg[e.source] || 0) + 1
   }
   return Object.values(outDeg).some((d: any) => d > 1)
@@ -500,113 +742,81 @@ const editorLayoutClass = computed(() => ({
 
 <template>
   <div class="editor-root" :class="{ 'preview-active': previewing }">
+    <!-- 1.3 — top chỉ còn nút chuyển Task / Profile; action nằm ở sub-sidebar -->
     <div class="editor-toolbar">
-      <ProfileManager
-        :current-pipeline="currentPipeline"
-        :project-id="projectId"
-        @load="onProfileLoad"
-      />
+      <div class="editor-tabs" role="tablist" :aria-label="t('pipelineEditor.tabs.ariaLabel')">
+        <button
+          type="button"
+          class="editor-tab"
+          role="tab"
+          :class="{ active: tab === 'task' }"
+          :aria-selected="tab === 'task'"
+          @click="switchTab('task')"
+        >{{ t('pipelineEditor.tabs.task') }}</button>
+        <button
+          type="button"
+          class="editor-tab"
+          role="tab"
+          :class="{ active: tab === 'profile' }"
+          :aria-selected="tab === 'profile'"
+          @click="switchTab('profile')"
+        >{{ t('pipelineEditor.tabs.profile') }}</button>
+      </div>
 
       <div v-if="hasFanOut" class="fanout-warning" role="status">
         {{ t('pipelineEditor.toolbar.fanOutWarning') }}
-      </div>
-
-      <div class="editor-toolbar-actions">
-        <button class="btn-ghost btn-sm" @click="autoLayout">Auto-layout</button>
-        <button
-          v-if="!previewing"
-          class="btn-ghost btn-sm"
-          @click="runPreview"
-        >▶ Preview</button>
-        <button
-          v-else
-          class="btn-danger btn-sm"
-          @click="stopDemo"
-        >■ Stop</button>
-        <button
-          class="btn-primary btn-sm"
-          :disabled="saving || taskWriteBlocked"
-          @click="saveToFile"
-        >{{ saving ? 'Saving…' : 'Save to file' }}</button>
-        <span v-if="saveMsg" class="save-msg">{{ saveMsg }}</span>
       </div>
     </div>
 
     <div class="editor-layout" :class="editorLayoutClass">
       <div class="editor-left" :class="{ 'editor-left-collapsed': editorLeftCollapsed }">
-        <div v-if="!editorLeftCollapsed" class="editor-scope-panel">
-          <label class="scope-label">Scope:</label>
-          <select :value="scope" class="scope-select cfg-input" @change="onScopeChange">
-            <option value="global">Global pipeline.yaml</option>
-            <option value="task">Per-task</option>
-          </select>
-          <template v-if="scope === 'task'">
-            <select
-              v-model="taskSelect"
-              class="scope-select cfg-input"
-              @change="onTaskSelectChange"
-            >
-              <option value="">{{ t('pipelineEditor.scope.selectTask') }}</option>
-              <option v-for="task in editableTasks" :key="task.task_id" :value="task.task_id">
-                {{ taskDisplayName(task) }}
-              </option>
-              <option value="__manual__">{{ t('pipelineEditor.scope.manualEntry') }}</option>
-            </select>
-            <input
-              v-if="taskSelect === '__manual__'"
-              v-model="taskManual"
-              class="scope-task-input cfg-input"
-              :placeholder="t('pipelineEditor.scope.taskIdPlaceholder')"
-            />
-          </template>
-        </div>
-        <div class="editor-left-tabs" :class="{ 'is-collapsed': editorLeftCollapsed }">
-          <template v-if="!editorLeftCollapsed">
-            <button
-              class="editor-left-tab"
-              :class="{ active: leftTab === 'catalog' }"
-              @click="leftTab = 'catalog'"
-            >
-              <RailIcon name="catalog" :size="14" />
-              <span>Catalog</span>
-            </button>
-            <button
-              class="editor-left-tab"
-              :class="{ active: leftTab === 'rules' }"
-              @click="leftTab = 'rules'"
-            >
-              <RailIcon name="rules" :size="14" />
-              <span>Rules</span>
-            </button>
-          </template>
-          <template v-else>
-            <button
-              class="editor-left-tab editor-left-tab-icon rail-icon-btn"
-              :class="{ active: leftTab === 'catalog' }"
-              :title="t('pipelineEditor.leftPanel.catalogOpenTitle')"
-              @click="openLeftTab('catalog')"
-            >
-              <RailIcon name="catalog" />
-            </button>
-            <button
-              class="editor-left-tab editor-left-tab-icon rail-icon-btn"
-              :class="{ active: leftTab === 'rules' }"
-              :title="t('pipelineEditor.leftPanel.rulesOpenTitle')"
-              @click="openLeftTab('rules')"
-            >
-              <RailIcon name="rules" />
-            </button>
-          </template>
-        </div>
-        <CatalogPanel v-if="leftTab === 'catalog' && !editorLeftCollapsed" :catalog="catalog" />
-        <RulesPanel
-          v-else-if="leftTab === 'rules' && !editorLeftCollapsed"
-          :rules="rulesData.rules"
-          :categories="rulesData.categories"
-          :steps="currentSteps"
-          :highlighted-category="highlightedCategory"
-          @select-rule="onRuleSelect"
+        <EditorTargetPanel
+          :tab="tab"
+          :collapsed="editorLeftCollapsed"
+          :profiles="profiles"
+          :profile-selected="profileSelected"
+          :profile-name="profileName"
+          :task-profile="taskProfileName"
+          :tasks="editableTasks"
+          :task-select="taskSelect"
+          :task-manual="taskManual"
+          :saving="saving"
+          :previewing="previewing"
+          :save-disabled="saveDisabled"
+          :set-default-disabled="!currentSteps.length"
+          :message="saveMsg"
+          :warning="taskHitlPending ? t('pipelineEditor.target.hitlPendingWarning') : ''"
+          @update:profile-selected="profileSelected = $event"
+          @update:profile-name="profileName = $event"
+          @update:task-profile="taskProfileName = $event"
+          @update:task-select="onTaskSelectChange"
+          @update:task-manual="onTaskManualChange"
+          @save="handleSave"
+          @delete-profile="handleDeleteProfile"
+          @set-default="handleSetDefault"
+          @auto-layout="autoLayout"
+          @preview="runPreview"
+          @stop="stopDemo"
+          @open-section="openSection"
         />
+
+        <!-- G4 — chỉ khoá phần nội dung khi preview; cụm action (có Stop) vẫn bấm được -->
+        <div v-if="!editorLeftCollapsed" class="editor-left-sections">
+          <CatalogPanel
+            :catalog="catalog"
+            :open-sections="openSections"
+            @toggle-section="toggleSection"
+          />
+          <RulesPanel
+            :rules="rulesData.rules"
+            :categories="rulesData.categories"
+            :steps="currentSteps"
+            :highlighted-category="highlightedCategory"
+            :open-sections="openSections"
+            @select-rule="onRuleSelect"
+            @toggle-section="toggleSection"
+          />
+        </div>
       </div>
 
       <div
@@ -627,6 +837,7 @@ const editorLayoutClass = computed(() => ({
           :elements-selectable="true"
           class="vflow"
           @pane-click="onPaneClick"
+          @node-drag-stop="syncDerivedGraph"
         >
           <template #node-pipelineEditor="nodeProps">
             <PipelineEditorNode
@@ -639,6 +850,9 @@ const editorLayoutClass = computed(() => ({
               @delete="deleteNode"
             />
           </template>
+          <template #node-artifact="nodeProps">
+            <ArtifactNode v-bind="nodeProps" />
+          </template>
         </VueFlow>
 
         <div v-if="previewing" class="preview-banner">
@@ -650,7 +864,9 @@ const editorLayoutClass = computed(() => ({
           </template>
           <template v-else>Simulation — no files written</template>
           &nbsp;
-          <button class="btn-danger btn-xs" @click="stopDemo">Stop</button>
+          <button type="button" class="btn-danger btn-xs" @click="stopDemo">
+            {{ t('pipelineEditor.target.stop') }}
+          </button>
         </div>
       </div>
 
@@ -668,25 +884,6 @@ const editorLayoutClass = computed(() => ({
 </template>
 
 <style scoped lang="scss">
-.scope-label { font-size: 11px; color: var(--muted); }
-.scope-select, .scope-task-input {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 5px;
-  padding: 4px 7px;
-  font-size: 12px;
-  font-family: inherit;
-}
-.scope-task-input { margin-top: 3px; }
-.editor-scope-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
 /* ── Editor root & layout ───────────────────────────────────────────────── */
 .editor-root {
   display: flex;
@@ -706,11 +903,29 @@ const editorLayoutClass = computed(() => ({
   flex-wrap: wrap;
 }
 
-.editor-toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
+.editor-tabs {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+.editor-tab {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 4px 14px;
+  font-size: 12px;
+  font-family: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.editor-tab:hover:not(.active) { color: var(--text); }
+.editor-tab.active {
+  background: var(--panel);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .fanout-warning {
@@ -748,7 +963,9 @@ const editorLayoutClass = computed(() => ({
   overflow: hidden;
   height: 100%;
 }
-.editor-canvas .vflow-container {
+/* c.2 — canvas mang cả 2 class, nên selector phải dính liền; viết rời (descendant)
+   thì rule không khớp và bo tròn 12px của `.vflow-container` dùng chung lại thắng. */
+.editor-canvas.vflow-container {
   height: 100%;
   border-radius: 0;
   border: none;
@@ -756,7 +973,7 @@ const editorLayoutClass = computed(() => ({
 }
 
 .preview-active .editor-toolbar { opacity: 0.6; pointer-events: none; }
-.preview-active .editor-left { opacity: 0.5; pointer-events: none; }
+.preview-active .editor-left-sections { opacity: 0.5; pointer-events: none; }
 
 .preview-banner {
   position: absolute;
@@ -782,7 +999,7 @@ const editorLayoutClass = computed(() => ({
 .preview-banner-agent { color: var(--muted); font-size: 11px; }
 .preview-banner-hitl { color: var(--waiting); font-weight: 600; }
 
-/* ── Editor left column (catalog + rules tabs) ───────────────────────────── */
+/* ── Editor left column (target panel + collapsible sections) ────────────── */
 .editor-left {
   display: flex;
   flex-direction: column;
@@ -797,51 +1014,11 @@ const editorLayoutClass = computed(() => ({
   min-width: 48px;
 }
 
-.editor-left-tabs {
+.editor-left-sections {
   display: flex;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  align-items: stretch;
-}
-.editor-left-tabs.is-collapsed {
   flex-direction: column;
-  border-bottom: none;
-  gap: 6px;
-  padding: 6px;
-  align-items: center;
-  width: 100%;
-  box-sizing: border-box;
-}
-.editor-left-tab {
   flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--muted);
-  padding: 8px 6px;
-  font-size: 12px;
-  cursor: pointer;
-  font-family: inherit;
+  min-height: 0;
+  overflow-y: auto;
 }
-.editor-left-tab-icon {
-  width: 36px;
-  height: 36px;
-  flex: none;
-  margin: 0;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--panel-2);
-  padding: 0 !important;
-}
-.editor-left-tab-icon.active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: rgba(var(--accent-rgb), 0.1);
-}
-.editor-left-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-.editor-left-tab:hover:not(.active) { color: var(--text); }
 </style>
