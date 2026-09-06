@@ -39,5 +39,10 @@ test-e2e/fixtures/project/.dev-team-agent/artifact-actions.yaml
 test-e2e/fixtures/project/.dev-team-agent/automations/
 
 # State cục bộ của công cụ AI agent (worktree, cache, settings.local) — chỉ tồn
-# tại trên máy dev, không bao giờ commit.
-.claude/
+# tại trên máy dev, không bao giờ commit. Riêng rules/ được version.
+.claude/*
+!.claude/rules/
+
+# Plugin Claude Code cài ở root — luôn là rác cục bộ / rò rỉ từ máy dev.
+# Neo `/` để KHÔNG nuốt src/plugins/ (i18n thật).
+/plugins/

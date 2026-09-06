@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // MCP (Model Context Protocol) stdio server for the dev-team-dashboard project
-// registry. Spawned by Claude Code (see plugins/dev-agent-teams/.mcp.json).
+// registry. Spawned by Claude Code qua cấu hình MCP cục bộ (.claude/settings.local.json).
 //
 // It exposes CRUD over the SAME projects.json the REST/standalone server uses
 // (via the shared core/registry.ts) — so projects added from Claude Code and
