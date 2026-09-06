@@ -1,7 +1,9 @@
 import { mountWithI18n as mount } from '../../../helpers/i18n'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
 import { STORAGE_KEY, useAppSettings } from '@/core/composables/useAppSettings'
+import viMonitor from '@/features/monitor/locales/vi'
 
 const tasks = [
   {
@@ -36,6 +38,8 @@ function flushMacrotask() {
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
   localStorage.clear()
   const { load } = useAppSettings()
   load()
@@ -219,5 +223,194 @@ describe('MonitorLayout — auto-collapse sub-sidebar on outside click', () => {
     expect(w.find('.file-list').exists()).toBe(false)
     expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
     w.unmount()
+  })
+})
+
+
+// Trước Tde5b317d nút xoá ở khu badge chỉ hiện khi `!selected.state_ok` ⇒ task
+// khoẻ và task đã lưu trữ không bao giờ xoá được từ đây.
+describe('MonitorLayout — nút xoá task (Tde5b317d)', () => {
+  const healthy = { ...tasks[0] }
+  const archived = { ...tasks[0], archived: true }
+  const broken = { ...tasks[0], state_ok: false }
+
+  /**
+   * Mount kèm `selected` — PipelineView dùng @vue-flow (`getBBox`, không có
+   * trong jsdom) và ArtifactPanel tự fetch; cả hai không liên quan tới nút xoá.
+   */
+  function mountLayout(props: Record<string, any>) {
+    return mount(MonitorLayout, {
+      props,
+      global: { stubs: { PipelineView: true, ArtifactPanel: true } },
+    })
+  }
+
+  /** fetch mock phân nhánh theo URL: /api/jobs (GET) vs /api/tasks/<id> (DELETE). */
+  function stubFetch(opts: { jobs?: Record<string, any[]>; deleteResponse?: any } = {}) {
+    const jobs = opts.jobs ?? {}
+    const fetchMock = vi.fn(async (input: any, init: any = {}) => {
+      const url = String(input)
+      if (url.includes('/api/jobs')) {
+        const status = new URL(url, 'http://x').searchParams.get('status') ?? ''
+        return { ok: true, status: 200, json: async () => ({ jobs: jobs[status] ?? [] }) }
+      }
+      if (url.includes('/api/tasks/')) {
+        return opts.deleteResponse ?? { ok: true, status: 200, json: async () => ({ ok: true }) }
+      }
+      throw new Error(`unexpected fetch: ${init.method ?? 'GET'} ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  function deleteCalls(fetchMock: any) {
+    return fetchMock.mock.calls.filter(([, init]: any[]) => init?.method === 'DELETE')
+  }
+
+  it.each([
+    ['task khoẻ', healthy],
+    ['task đã lưu trữ', archived],
+    ['task state hỏng', broken],
+  ])('hiện nút xoá ở khu badge cho %s', (_label, selected) => {
+    const w = mountLayout({ tasks, selected, selectedId: selected.task_id })
+    const btn = w.find('.badges .btn-delete-detail')
+    expect(btn.exists()).toBe(true)
+    expect(btn.text()).toBe(viMonitor.layout.deleteTask)
+    expect(btn.attributes('disabled')).toBeUndefined()
+  })
+
+  it('vá state xong nút xoá vẫn còn (đúng triệu chứng user báo)', async () => {
+    const w = mountLayout({ tasks, selected: broken, selectedId: 'B4488' })
+    expect(w.find('.badges .btn-delete-detail').exists()).toBe(true)
+
+    // state được vá ⇒ state_ok: true; nút xoá KHÔNG được biến mất theo.
+    await w.setProps({ selected: healthy })
+    expect(w.find('.badges .btn-delete-detail').exists()).toBe(true)
+  })
+
+  it('xác nhận rồi xoá: đúng một DELETE, đúng task + project, và emit task-deleted', async () => {
+    const fetchMock = stubFetch()
+    const confirmMock = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirmMock)
+
+    const w = mountLayout({
+      tasks,
+      selected: healthy,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+    })
+    await w.find('.badges .btn-delete-detail').trigger('click')
+    await flushPromises()
+
+    expect(confirmMock).toHaveBeenCalledWith(viMonitor.layout.confirmDelete)
+    const calls = deleteCalls(fetchMock)
+    expect(calls.length).toBe(1)
+    expect(String(calls[0][0])).toContain('/api/tasks/B4488')
+    expect(String(calls[0][0])).toContain('project=proj-1')
+    expect(w.emitted('task-deleted')?.[0]).toEqual(['B4488'])
+  })
+
+  it('cảnh báo mạnh hơn khi task còn job đang chạy', async () => {
+    stubFetch({ jobs: { running: [{ metadata: { taskId: 'B4488', projectId: 'proj-1' } }] } })
+    const confirmMock = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirmMock)
+
+    const w = mountLayout({
+      tasks,
+      selected: healthy,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+    })
+    await w.find('.badges .btn-delete-detail').trigger('click')
+    await flushPromises()
+
+    expect(confirmMock).toHaveBeenCalledWith(viMonitor.layout.confirmDeleteRunning)
+    expect(viMonitor.layout.confirmDeleteRunning).not.toBe(viMonitor.layout.confirmDelete)
+  })
+
+  it('không cảnh báo khi job sống thuộc project khác', async () => {
+    stubFetch({ jobs: { running: [{ metadata: { taskId: 'B4488', projectId: 'proj-2' } }] } })
+    const confirmMock = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirmMock)
+
+    const w = mountLayout({
+      tasks,
+      selected: healthy,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+    })
+    await w.find('.badges .btn-delete-detail').trigger('click')
+    await flushPromises()
+
+    expect(confirmMock).toHaveBeenCalledWith(viMonitor.layout.confirmDelete)
+  })
+
+  it('huỷ ở hộp xác nhận: không DELETE, không emit, nút dùng lại được', async () => {
+    const fetchMock = stubFetch({ jobs: { running: [{ metadata: { taskId: 'B4488' } }] } })
+    vi.stubGlobal('confirm', vi.fn(() => false))
+
+    const w = mountLayout({
+      tasks,
+      selected: healthy,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+    })
+    await w.find('.badges .btn-delete-detail').trigger('click')
+    await flushPromises()
+
+    expect(deleteCalls(fetchMock).length).toBe(0)
+    expect(w.emitted('task-deleted')).toBeFalsy()
+    expect(w.find('.badges .btn-delete-detail').attributes('disabled')).toBeUndefined()
+  })
+
+  it('bấm liên tiếp chỉ gửi một DELETE', async () => {
+    const fetchMock = stubFetch()
+    const confirmMock = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirmMock)
+
+    const w = mountLayout({
+      tasks,
+      selected: healthy,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+    })
+    const btn = w.find('.badges .btn-delete-detail')
+    btn.trigger('click')
+    btn.trigger('click')
+    await flushPromises()
+
+    expect(confirmMock).toHaveBeenCalledTimes(1)
+    expect(deleteCalls(fetchMock).length).toBe(1)
+  })
+
+  it('DELETE lỗi: không emit, hiện lỗi, nút không kẹt', async () => {
+    stubFetch({ deleteResponse: { ok: false, status: 500, json: async () => ({ error: 'nope' }) } })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const w = mountLayout({
+      tasks,
+      selected: healthy,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+    })
+    await w.find('.badges .btn-delete-detail').trigger('click')
+    await flushPromises()
+
+    expect(w.emitted('task-deleted')).toBeFalsy()
+    expect(w.find('.task-head .art-warning').text()).toContain('nope')
+    expect(w.find('.badges .btn-delete-detail').attributes('disabled')).toBeUndefined()
+  })
+
+  // Nhóm archived phải nối @task-deleted lên trên, nếu không hàng vừa xoá vẫn
+  // nằm lại trên màn hình cho tới lần poll sau.
+  it('chuyển tiếp task-deleted phát ra từ nhóm task đã lưu trữ', async () => {
+    stubFetch()
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const w = mountLayout({ tasks: [archived], selectedProjectId: 'proj-1' })
+    await w.find('.archived-group .btn-delete').trigger('click')
+    await flushPromises()
+
+    expect(w.emitted('task-deleted')?.[0]).toEqual(['B4488'])
   })
 })

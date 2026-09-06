@@ -27,6 +27,11 @@ const previewLabels = computed<Record<string, string>>(() => ({
   hitl: t('pipelineEditor.preview.status.hitl'),
 }))
 
+const hasGate = computed(() => {
+  const mode = props.data?.hitl?.mode
+  return Boolean(mode) && mode !== 'none'
+})
+
 function startEdit() {
   labelDraft.value = props.data.label || ''
   editing.value = true
@@ -77,11 +82,15 @@ function commitLabel() {
       </div>
     </div>
 
+    <!-- c.3 — nhãn gate nằm trên edge đi ra, nhưng step cuối không có edge nào;
+         badge trên node là chỗ duy nhất thấy được gate của nó. -->
+    <div v-if="hasGate" class="node-editor-gate">
+      <span aria-hidden="true">⏸</span>
+      <span v-if="data.hitl?.gate_id" class="node-editor-gate-id">{{ data.hitl.gate_id }}</span>
+    </div>
+
     <div v-if="data.agent" class="node-editor-agent">{{ data.agent }}</div>
 
-    <div v-if="data.skills?.length" class="node-editor-skills">
-      <span v-for="sk in data.skills" :key="sk" class="chip chip-skill">{{ sk }}</span>
-    </div>
 
     <Handle type="source" :position="Position.Right" />
   </div>
@@ -167,6 +176,24 @@ function commitLabel() {
 }
 .node-btn:hover { color: var(--text); }
 .node-btn-del:hover { color: var(--danger); }
+.node-editor-gate {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  color: var(--waiting);
+  background: rgba(227, 179, 65, 0.14);
+  border: 1px solid rgba(227, 179, 65, 0.4);
+}
+.node-editor-gate-id {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .node-editor-agent { font-size: 10px; color: var(--accent); margin-top: 3px; }
-.node-editor-skills { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 3px; }
 </style>

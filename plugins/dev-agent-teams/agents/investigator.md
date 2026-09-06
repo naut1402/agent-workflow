@@ -1,1 +1,0 @@
-../../../docs/template/agents/investigator.md

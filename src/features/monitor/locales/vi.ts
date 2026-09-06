@@ -10,6 +10,8 @@ export default {
     archive: 'Lưu trữ',
     deleteTask: 'Xoá task',
     confirmDelete: 'Xoá vĩnh viễn task này? Hành động không thể hoàn tác.',
+    confirmDeleteRunning:
+      'Task này đang có job chạy hoặc đang xếp hàng. Xoá bây giờ sẽ để lại job mồ côi ghi vào thư mục vừa bị xoá, và job đó KHÔNG bị dừng. Vẫn xoá vĩnh viễn task này? Hành động không thể hoàn tác.',
     emptyNoTasks: 'Chưa có task nào trong',
     emptyHint: 'Chạy',
     emptyHintSuffix: 'để bắt đầu.',
@@ -35,6 +37,8 @@ export default {
     unarchive: 'Bỏ lưu trữ',
     deleteTask: 'Xoá task',
     confirmDelete: 'Xoá vĩnh viễn task này? Hành động không thể hoàn tác.',
+    confirmDeleteRunning:
+      'Task này đang có job chạy hoặc đang xếp hàng. Xoá bây giờ sẽ để lại job mồ côi ghi vào thư mục vừa bị xoá, và job đó KHÔNG bị dừng. Vẫn xoá vĩnh viễn task này? Hành động không thể hoàn tác.',
     deleteError: 'Xoá task thất bại',
     repairError: 'Vá state thất bại',
     renameTitle: 'Double-click để đổi tên',
@@ -115,13 +119,6 @@ export default {
     stop: 'Dừng step',
     chat: 'Chat',
     chatWithRunner: 'Chat với runner của step này',
-  },
-  artifactNode: {
-    producesTitle: 'Đầu ra',
-    knowledgeTitle: 'Knowledge',
-    exists: 'Đã có',
-    missing: 'Thiếu',
-    fromStep: '→ {stepId}',
   },
 
   qa: {

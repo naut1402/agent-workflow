@@ -1,6 +1,6 @@
 # Quy ước UI button
 
-Quy ước dùng chung cho người và AI agent khi thêm/sửa nút trên dashboard. Class chuẩn nằm ở `src/styles/_shell.scss` (entry `src/styles/main.scss`).
+Quy ước khi thêm/sửa nút trên dashboard. Class chuẩn nằm ở `src/styles/_shell.scss` (entry `src/styles/main.scss`).
 
 ## Nguyên tắc
 
@@ -25,8 +25,8 @@ Hover scale (`scale(1.15)`) chỉ dùng cho toolbar / standalone. Nút nằm c�
 
 - Luôn có `type="button"` (trừ khi đúng là submit form).
 - Luôn có `title` và `aria-label` qua `t(...)` — icon-only không có nhãn chữ nên phụ thuộc hai thuộc tính này.
-- Icon bên trong dùng component chung `<Icon name="..." />` (`src/core/ui/Icon.vue`) — **không** tự vẽ tay `<svg>`/`<path>` (xem [`implement/coding-convention.md`](implement/coding-convention.md) §5). `Icon.vue` tự đặt `aria-hidden="true"` trên `<svg>` gốc.
-- Không hardcode chuỗi UI (xem quy ước i18n trong [`implement/coding-convention.md`](implement/coding-convention.md) / [`i18n.md`](i18n.md)).
+- Icon bên trong dùng component chung `<Icon name="..." />` (`src/core/ui/Icon.vue`) — **không** tự vẽ tay `<svg>`/`<path>`. `Icon.vue` tự đặt `aria-hidden="true"` trên `<svg>` gốc.
+- Không hardcode chuỗi UI — xem [`i18n.md`](i18n.md).
 
 ### Ví dụ
 

@@ -1,21 +1,28 @@
 <script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed } from 'vue'
 import { useSearch } from '../../../core/composables/useSearch'
+import CollapsibleSection from './CollapsibleSection.vue'
+
+const { t } = useI18nHelpers()
 
 const props = defineProps({
   catalog: { type: Object as () => any, required: true }, // { skills: [], agents: [] }
+  /** Khoá section đang mở, do PipelineEditor giữ (dùng chung với RulesPanel). */
+  openSections: { type: Object as () => Set<string>, default: () => new Set(['agents']) },
 })
 
-const activeTab = ref('agents') // 'agents' | 'skills' | 'rules'
+const emit = defineEmits(['toggle-section'])
+
 const sourceFilter = ref('all')
 
 const SOURCE_OPTIONS = [
-  { value: 'all', label: 'All sources' },
-  { value: 'project', label: 'Project' },
-  { value: 'repo', label: 'Repo' },
-  { value: 'plugin', label: 'Plugin' },
-  { value: 'user', label: 'User' },
-  { value: 'cursor', label: 'Cursor' },
+  { value: 'all', labelKey: 'pipelineEditor.catalog.sourceAll' },
+  { value: 'project', labelKey: 'pipelineEditor.catalog.sourceProject' },
+  { value: 'repo', labelKey: 'pipelineEditor.catalog.sourceRepo' },
+  { value: 'plugin', labelKey: 'pipelineEditor.catalog.sourcePlugin' },
+  { value: 'user', labelKey: 'pipelineEditor.catalog.sourceUser' },
+  { value: 'cursor', labelKey: 'pipelineEditor.catalog.sourceCursor' },
 ]
 
 function matchesSource(item) {
@@ -29,15 +36,9 @@ function matchesSource(item) {
 const agentItems = computed<any[]>(() =>
   (props.catalog.agents || []).filter(matchesSource),
 )
-const skillItems = computed<any[]>(() =>
-  (props.catalog.skills || []).filter(matchesSource),
-)
 
 const { query: agentQuery, setQuery: setAgentQuery, filteredItems: filteredAgents } =
   useSearch(agentItems, (a) => `${a.name} ${a.description} ${a.plugin} ${a.source}`)
-
-const { query: skillQuery, setQuery: setSkillQuery, filteredItems: filteredSkills } =
-  useSearch(skillItems, (s) => `${s.name} ${s.description} ${s.plugin} ${s.source}`)
 
 function sourceBadge(source) {
   if (!source) return ''
@@ -53,36 +54,24 @@ function onDragStart(event, item, type) {
 </script>
 
 <template>
-  <aside class="catalog-panel">
-    <div class="catalog-tabs">
-      <button
-        class="catalog-tab"
-        :class="{ active: activeTab === 'agents' }"
-        @click="activeTab = 'agents'"
-      >
-        Agents ({{ agentItems.length }})
-      </button>
-      <button
-        class="catalog-tab"
-        :class="{ active: activeTab === 'skills' }"
-        @click="activeTab = 'skills'"
-      >
-        Skills ({{ skillItems.length }})
-      </button>
-    </div>
-
+  <aside class="catalog-panel" :class="{ 'catalog-panel--open': openSections.has('agents') }">
     <select v-model="sourceFilter" class="catalog-source-filter">
       <option v-for="opt in SOURCE_OPTIONS" :key="opt.value" :value="opt.value">
-        {{ opt.label }}
+        {{ t(opt.labelKey) }}
       </option>
     </select>
 
-    <!-- Agents tab -->
-    <template v-if="activeTab === 'agents'">
+    <CollapsibleSection
+      :title="t('pipelineEditor.sections.agents')"
+      :count="agentItems.length"
+      :open="openSections.has('agents')"
+      @toggle="emit('toggle-section', 'agents')"
+    >
       <input
         class="catalog-search"
         :value="agentQuery"
-        placeholder="Search agents…"
+        :placeholder="t('pipelineEditor.catalog.searchAgents')"
+        :aria-label="t('pipelineEditor.catalog.searchAgents')"
         @input="setAgentQuery(($event.target as HTMLInputElement).value)"
       />
       <div class="catalog-list">
@@ -102,67 +91,26 @@ function onDragStart(event, item, type) {
             <span v-for="sk in agent.skills" :key="sk" class="chip chip-xs">{{ sk }}</span>
           </div>
         </div>
-        <div v-if="!filteredAgents.length" class="catalog-empty">No agents found</div>
-      </div>
-    </template>
-
-    <!-- Skills tab -->
-    <template v-else>
-      <input
-        class="catalog-search"
-        :value="skillQuery"
-        placeholder="Search skills…"
-        @input="setSkillQuery(($event.target as HTMLInputElement).value)"
-      />
-      <div class="catalog-list">
-        <div
-          v-for="skill in filteredSkills"
-          :key="skill.id"
-          class="catalog-item"
-          draggable="true"
-          @dragstart="onDragStart($event, skill, 'skill')"
-          :title="skill.description"
-        >
-          <div class="catalog-item-name">{{ skill.name }}</div>
-          <div class="catalog-item-meta">
-            <span class="source-badge">{{ sourceBadge(skill.source) || skill.plugin }}</span>
-          </div>
-          <div v-if="skill.description" class="catalog-item-desc">{{ skill.description }}</div>
+        <div v-if="!filteredAgents.length" class="catalog-empty">
+          {{ t('pipelineEditor.catalog.noAgents') }}
         </div>
-        <div v-if="!filteredSkills.length" class="catalog-empty">No skills found</div>
       </div>
-    </template>
+    </CollapsibleSection>
   </aside>
 </template>
 
 <style scoped lang="scss">
+/* Hợp đồng cuộn (docs/ui-overflow.md): panel chỉ giành chiều cao khi section của
+   nó đang mở — để basis 0 cố định thì panel đóng vẫn ăn nửa cột. Vùng cuộn duy
+   nhất là `.catalog-list`. */
 .catalog-panel {
-  background: var(--panel);
-  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
+  flex: 0 0 auto;
 }
-
-.catalog-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border);
-}
-
-.catalog-tab {
-  flex: 1;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--muted);
-  padding: 8px 6px;
-  font-size: 12px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.15s;
-}
-.catalog-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-.catalog-tab:hover:not(.active) { color: var(--text); }
+.catalog-panel--open { flex: 1 1 0; }
 
 .catalog-search {
   margin: 8px;
@@ -174,6 +122,7 @@ function onDragStart(event, item, type) {
   font-size: 12px;
   font-family: inherit;
   outline: none;
+  flex-shrink: 0;
 }
 .catalog-search:focus { border-color: var(--accent); }
 
@@ -181,6 +130,7 @@ function onDragStart(event, item, type) {
   flex: 1;
   overflow-y: auto;
   padding: 0 8px 8px;
+  min-height: 0;
 }
 
 .catalog-item {
@@ -197,12 +147,11 @@ function onDragStart(event, item, type) {
 
 .catalog-item-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .catalog-item-meta { font-size: 10px; color: var(--muted); margin-top: 1px; }
-.catalog-item-desc { font-size: 11px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .catalog-item-skills { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
 .catalog-empty { color: var(--muted); font-size: 12px; padding: 12px 0; text-align: center; }
 
 .catalog-source-filter {
-  margin: 6px 8px 0;
+  margin: 6px 8px;
   background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--text);
@@ -210,6 +159,7 @@ function onDragStart(event, item, type) {
   padding: 4px 7px;
   font-size: 11px;
   font-family: inherit;
+  flex-shrink: 0;
 }
 
 .source-badge {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../composables/useI18nHelpers'
 import { Handle, Position } from '@vue-flow/core'
 
 const props = defineProps({
@@ -35,7 +35,7 @@ const isKnowledge = () => props.data?.kind === 'knowledge'
         :key="f.name"
         class="anode-file"
         :class="f.exists ? 'exists' : 'missing'"
-        :title="f.exists ? t('monitor.artifactNode.exists') : t('monitor.artifactNode.missing')"
+        :title="f.exists ? t('common.artifactNode.exists') : t('common.artifactNode.missing')"
       >
         <span class="anode-file-mark">{{ f.exists ? '✓' : '○' }}</span>
         <span class="anode-file-name">{{ f.name }}</span>
@@ -48,7 +48,7 @@ const isKnowledge = () => props.data?.kind === 'knowledge'
         class="anode-entry"
       >
         <span class="anode-entry-id">{{ e.id }}</span>
-        <span class="anode-entry-step">{{ t('monitor.artifactNode.fromStep', { stepId: e.stepId }) }}</span>
+        <span class="anode-entry-step">{{ t('common.artifactNode.fromStep', { stepId: e.stepId }) }}</span>
       </li>
     </ul>
     <Handle type="source" :position="Position.Right" />

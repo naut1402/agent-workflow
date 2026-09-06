@@ -63,4 +63,11 @@ export default {
     select: 'Select this folder',
     selectDirRequired: 'Open a folder before selecting.',
   },
+  artifactNode: {
+    producesTitle: 'Artifacts',
+    knowledgeTitle: 'Knowledge',
+    exists: 'Exists',
+    missing: 'Missing',
+    fromStep: '→ {stepId}',
+  },
 }

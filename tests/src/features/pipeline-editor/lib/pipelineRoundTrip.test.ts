@@ -45,6 +45,28 @@ describe('extractStepPreservedMap', () => {
     })
   })
 
+  // skills / rule_category / rule_required không còn do canvas quản lý: chúng rơi
+  // vào `preserved` nên profile cũ mở lại rồi lưu lại vẫn giữ nguyên giá trị.
+  it('treats skills / rule_category / rule_required as preserved fields', () => {
+    const map = extractStepPreservedMap([
+      {
+        id: 'investigator',
+        name: 'Investigate',
+        agent: 'dev-agent-teams:investigator',
+        skills: ['survey-codebase'],
+        rule_category: 'doc-writing',
+        rule_required: false,
+        produces: ['investigate.md'],
+        knowledge_inputs: [],
+      },
+    ])
+    expect(map.investigator).toEqual({
+      skills: ['survey-codebase'],
+      rule_category: 'doc-writing',
+      rule_required: false,
+    })
+  })
+
   it('round-trips hitl.retry via extractStepPreservedMap → buildStepFromNode', () => {
     const steps = [
       {
@@ -65,9 +87,6 @@ describe('extractStepPreservedMap', () => {
       {
         label: 'Investigate',
         agent: 'dev-agent-teams:investigator',
-        skills: ['survey-codebase'],
-        rule_category: 'doc-writing',
-        rule_required: true,
         produces: ['investigate.md'],
         knowledge_inputs: [],
         hitl: { mode: 'manual', gate_id: 'hitl-1' },
@@ -80,6 +99,10 @@ describe('extractStepPreservedMap', () => {
       mode: 'manual',
       gate_id: 'hitl-1',
     })
+    // Node không còn mang 3 field đó, giá trị cũ vẫn phải xuất hiện trong file lưu ra.
+    expect(rebuilt.skills).toEqual(['survey-codebase'])
+    expect(rebuilt.rule_category).toBe('doc-writing')
+    expect(rebuilt.rule_required).toBe(true)
   })
 })
 
@@ -89,9 +112,6 @@ describe('buildStepFromNode', () => {
       {
         label: 'Investigate',
         agent: 'dev-agent-teams:investigator',
-        skills: ['survey-codebase'],
-        rule_category: 'doc-writing',
-        rule_required: true,
         produces: ['investigate.md'],
         knowledge_inputs: [],
         hitl: { mode: 'manual', gate_id: 'hitl-1' },
@@ -105,6 +125,17 @@ describe('buildStepFromNode', () => {
       mode: 'manual',
       gate_id: 'hitl-1',
     })
+  })
+
+  // Step tạo mới trong editor không sinh 3 key đã gỡ khỏi canvas.
+  it('omits skills / rule_category / rule_required for a brand-new node', () => {
+    const step = buildStepFromNode(
+      { label: 'New', agent: 'a', produces: [], knowledge_inputs: [], hitl: { mode: 'none' } },
+      'new-step',
+    )
+    expect(Object.keys(step)).toEqual([
+      'id', 'name', 'agent', 'produces', 'knowledge_inputs', 'hitl',
+    ])
   })
 
   it('returns mode none without preserved retry', () => {

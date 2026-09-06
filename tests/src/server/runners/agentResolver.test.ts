@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { resolveAgent, resolveAgentFilePath } from '../../../../src/features/runner/business/agentResolver.js'
+import { resolveAgent } from '../../../../src/features/runner/business/agentResolver.js'
 
 // Regression test for a real bug caught via the job-log payload (see PR history):
 // any agent markdown with an intro paragraph before the first canonical heading,
@@ -240,26 +240,3 @@ describe('resolveAgent — user (global) agent', () => {
 function countOccurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1
 }
-
-// Guard for the repo-tracked plugin override: `plugins/dev-agent-teams/agents/investigator.md`
-// is a symlink onto `docs/template/agents/investigator.md` (single source of truth) and sits at
-// the highest-priority slot in `resolveAgentFilePath`, so the in-repo agent wins over a stale
-// `~/.claude/plugins/cache` copy. A checkout without symlink support (Windows default,
-// `core.symlinks=false`) turns it into a text file holding the link path — the agent then parses
-// as empty and the runner silently falls back to the cached, outdated instructions.
-describe('repo plugin override — investigator', () => {
-  const repoRoot = path.resolve(import.meta.dir, '..', '..', '..', '..')
-  const overridePath = path.join(repoRoot, 'plugins', 'dev-agent-teams', 'agents', 'investigator.md')
-
-  test('resolves to docs/template/agents/investigator.md via symlink', async () => {
-    expect(fs.lstatSync(overridePath).isSymbolicLink()).toBe(true)
-    expect(fs.realpathSync(overridePath)).toBe(
-      fs.realpathSync(path.join(repoRoot, 'docs', 'template', 'agents', 'investigator.md')),
-    )
-  })
-
-  test('takes priority over the plugin cache for the pipeline agent ref', async () => {
-    const resolved = await resolveAgentFilePath(repoRoot, repoRoot, 'dev-agent-teams:investigator')
-    expect(resolved).toBe(overridePath)
-  })
-})
