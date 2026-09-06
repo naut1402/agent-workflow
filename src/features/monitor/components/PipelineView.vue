@@ -7,9 +7,9 @@ import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, res
 import { fetchJob, fetchJobs, cancelJob } from '../../runner/scripts/runnerApi'
 import { phasesFromPipeline, phaseStatus } from '../../../core/lib/phase'
 import PipelineNode from './PipelineNode.vue'
-import ArtifactNode from './ArtifactNode.vue'
+import ArtifactNode from '../../../core/ui/ArtifactNode.vue'
 import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
-import { buildArtifactNodesAndEdges } from '../lib/pipelineArtifactGraph'
+import { buildArtifactNodesAndEdges } from '../../../core/lib/pipelineArtifactGraph'
 
 const { t } = useI18nHelpers()
 const props = defineProps({
@@ -76,8 +76,8 @@ const artifactGraph = computed(() =>
     phasePositions: Object.fromEntries(phases.value.map((p) => [p.key, { x: p.x, y: p.y }])),
     artifacts: props.task.artifacts ?? {},
     labels: {
-      producesTitle: t('monitor.artifactNode.producesTitle'),
-      knowledgeTitle: t('monitor.artifactNode.knowledgeTitle'),
+      producesTitle: t('common.artifactNode.producesTitle'),
+      knowledgeTitle: t('common.artifactNode.knowledgeTitle'),
     },
   }),
 )

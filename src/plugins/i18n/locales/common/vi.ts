@@ -65,4 +65,12 @@ export default {
     select: 'Chọn thư mục này',
     selectDirRequired: 'Hãy mở một thư mục trước khi chọn.',
   },
+  // Node artifact/knowledge trên canvas VueFlow — dùng chung Monitor + Pipeline Editor.
+  artifactNode: {
+    producesTitle: 'Đầu ra',
+    knowledgeTitle: 'Knowledge',
+    exists: 'Đã có',
+    missing: 'Thiếu',
+    fromStep: '→ {stepId}',
+  },
 }
