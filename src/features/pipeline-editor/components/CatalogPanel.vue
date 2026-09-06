@@ -36,15 +36,9 @@ function matchesSource(item) {
 const agentItems = computed<any[]>(() =>
   (props.catalog.agents || []).filter(matchesSource),
 )
-const skillItems = computed<any[]>(() =>
-  (props.catalog.skills || []).filter(matchesSource),
-)
 
 const { query: agentQuery, setQuery: setAgentQuery, filteredItems: filteredAgents } =
   useSearch(agentItems, (a) => `${a.name} ${a.description} ${a.plugin} ${a.source}`)
-
-const { query: skillQuery, setQuery: setSkillQuery, filteredItems: filteredSkills } =
-  useSearch(skillItems, (s) => `${s.name} ${s.description} ${s.plugin} ${s.source}`)
 
 function sourceBadge(source) {
   if (!source) return ''
@@ -60,7 +54,7 @@ function onDragStart(event, item, type) {
 </script>
 
 <template>
-  <aside class="catalog-panel">
+  <aside class="catalog-panel" :class="{ 'catalog-panel--open': openSections.has('agents') }">
     <select v-model="sourceFilter" class="catalog-source-filter">
       <option v-for="opt in SOURCE_OPTIONS" :key="opt.value" :value="opt.value">
         {{ t(opt.labelKey) }}
@@ -102,50 +96,21 @@ function onDragStart(event, item, type) {
         </div>
       </div>
     </CollapsibleSection>
-
-    <CollapsibleSection
-      :title="t('pipelineEditor.sections.skills')"
-      :count="skillItems.length"
-      :open="openSections.has('skills')"
-      @toggle="emit('toggle-section', 'skills')"
-    >
-      <input
-        class="catalog-search"
-        :value="skillQuery"
-        :placeholder="t('pipelineEditor.catalog.searchSkills')"
-        :aria-label="t('pipelineEditor.catalog.searchSkills')"
-        @input="setSkillQuery(($event.target as HTMLInputElement).value)"
-      />
-      <div class="catalog-list">
-        <div
-          v-for="skill in filteredSkills"
-          :key="skill.id"
-          class="catalog-item"
-          draggable="true"
-          @dragstart="onDragStart($event, skill, 'skill')"
-          :title="skill.description"
-        >
-          <div class="catalog-item-name">{{ skill.name }}</div>
-          <div class="catalog-item-meta">
-            <span class="source-badge">{{ sourceBadge(skill.source) || skill.plugin }}</span>
-          </div>
-          <div v-if="skill.description" class="catalog-item-desc">{{ skill.description }}</div>
-        </div>
-        <div v-if="!filteredSkills.length" class="catalog-empty">
-          {{ t('pipelineEditor.catalog.noSkills') }}
-        </div>
-      </div>
-    </CollapsibleSection>
   </aside>
 </template>
 
 <style scoped lang="scss">
+/* Hợp đồng cuộn (docs/ui-overflow.md): panel chỉ giành chiều cao khi section của
+   nó đang mở — để basis 0 cố định thì panel đóng vẫn ăn nửa cột. Vùng cuộn duy
+   nhất là `.catalog-list`. */
 .catalog-panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  flex: 0 0 auto;
 }
+.catalog-panel--open { flex: 1 1 0; }
 
 .catalog-search {
   margin: 8px;
@@ -182,7 +147,6 @@ function onDragStart(event, item, type) {
 
 .catalog-item-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .catalog-item-meta { font-size: 10px; color: var(--muted); margin-top: 1px; }
-.catalog-item-desc { font-size: 11px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .catalog-item-skills { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 3px; }
 .catalog-empty { color: var(--muted); font-size: 12px; padding: 12px 0; text-align: center; }
 

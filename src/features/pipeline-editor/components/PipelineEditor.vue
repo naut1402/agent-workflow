@@ -8,7 +8,7 @@ import { useLocalToggle } from '../../../core/composables/useLocalToggle'
 import PipelineEditorNode from './PipelineEditorNode.vue'
 import CatalogPanel from './CatalogPanel.vue'
 import RulesPanel from './RulesPanel.vue'
-import StepConfigPanel from './StepConfigPanel.vue'
+import StepConfigDialog from './StepConfigDialog.vue'
 import EditorTargetPanel from './EditorTargetPanel.vue'
 import ArtifactNode from '../../../core/ui/ArtifactNode.vue'
 import { usePipelineProfiles } from '../composables/usePipelineProfiles'
@@ -171,10 +171,9 @@ const pipelineMeta = ref<PipelineMeta>({})
 const stepPreserved = ref<StepPreservedMap>({})
 const catalog = ref<any>({ skills: [], agents: [] })
 const rulesData = ref({ rules: [], categories: [] })
-const highlightedCategory = ref(null)
 const editorLeftCollapsed = computed(() => props.subSidebarCollapsed)
 
-// c.1 — Agents / Skills / Rules là 3 mục cùng cấp, mở/đóng độc lập. Gán lại
+// c.1 — Agents / Rules là 2 mục cùng cấp, mở/đóng độc lập. Gán lại
 // `new Set(...)` để Vue thấy thay đổi (pattern `expanded` của TaskList).
 const openSections = ref<Set<string>>(new Set(['agents']))
 
@@ -206,19 +205,6 @@ async function loadRules() {
   } catch {
     rulesData.value = { rules: [], categories: [] }
   }
-}
-
-function nodeMatchesHighlight(nodeData) {
-  if (!highlightedCategory.value) return false
-  const rc = nodeData?.rule_category
-  if (!rc) return false
-  if (Array.isArray(rc)) return rc.includes(highlightedCategory.value)
-  return rc === highlightedCategory.value
-}
-
-function onRuleSelect(rule) {
-  highlightedCategory.value =
-    highlightedCategory.value === rule.category ? null : rule.category
 }
 
 /**
@@ -255,9 +241,6 @@ function buildFlowFromPipeline(pipeline) {
     data: {
       label: step.name || step.id,
       agent: step.agent || '',
-      skills: Array.isArray(step.skills) ? step.skills : [],
-      rule_category: step.rule_category || '',
-      rule_required: step.rule_required ?? true,
       produces: Array.isArray(step.produces) ? step.produces : [],
       knowledge_inputs: Array.isArray(step.knowledge_inputs) ? step.knowledge_inputs : [],
       hitl: step.hitl || { mode: 'none' },
@@ -400,10 +383,9 @@ function onDropOnCanvas(event) {
     position: { x: pos.x - 60, y: pos.y - 25 },
     data: {
       label: item.name,
+      // Mục Skills đã bị gỡ khỏi catalog nên chỉ còn agent được kéo vào, nhưng
+      // `dataTransfer` là kênh mở — giữ nhánh phòng thủ cho payload lạ.
       agent: item._type === 'agent' ? item.id : '',
-      skills: item._type === 'agent' ? (item.skills || []) : [item.name],
-      rule_category: '',
-      rule_required: true,
       produces: [],
       knowledge_inputs: [],
       hitl: { mode: 'none' },
@@ -417,6 +399,9 @@ const selectedNodeId = ref(null)
 const selectedNodeData = ref(null)
 
 function openConfig(nodeId, data) {
+  // Dialog teleport ra <body> nên rule `.preview-active …` không với tới nó —
+  // phải chặn bằng logic, không dựa vào CSS.
+  if (previewing.value) return
   selectedNodeId.value = nodeId
   selectedNodeData.value = { ...data }
 }
@@ -799,7 +784,6 @@ const hasFanOut = computed(() => {
 
 const editorLayoutClass = computed(() => ({
   'editor-layout--left-collapsed': editorLeftCollapsed.value,
-  'editor-layout--no-config': !selectedNodeId.value,
 }))
 </script>
 
@@ -872,11 +856,7 @@ const editorLayoutClass = computed(() => ({
           />
           <RulesPanel
             :rules="rulesData.rules"
-            :categories="rulesData.categories"
-            :steps="currentSteps"
-            :highlighted-category="highlightedCategory"
             :open-sections="openSections"
-            @select-rule="onRuleSelect"
             @toggle-section="toggleSection"
           />
         </div>
@@ -906,9 +886,6 @@ const editorLayoutClass = computed(() => ({
             <PipelineEditorNode
               v-bind="nodeProps"
               :preview-state="getPreviewState(nodeProps.id)"
-              :class="{
-                'node-rule-highlight': nodeMatchesHighlight(nodeProps.data),
-              }"
               @edit="openConfig"
               @delete="deleteNode"
             />
@@ -933,12 +910,11 @@ const editorLayoutClass = computed(() => ({
         </div>
       </div>
 
-      <StepConfigPanel
+      <StepConfigDialog
         v-if="selectedNodeId"
         :step-id="selectedNodeId"
         :step="selectedNodeData"
         :catalog="catalog"
-        :rule-categories="rulesData.categories"
         @update="applyStepUpdate"
         @close="closeConfig"
       />
@@ -1005,19 +981,13 @@ const editorLayoutClass = computed(() => ({
 }
 .editor-layout {
   display: grid;
-  grid-template-columns: 240px 1fr 280px;
+  grid-template-columns: 240px 1fr;
   flex: 1;
   overflow: hidden;
   isolation: isolate;
   transition: grid-template-columns 0.2s ease;
 }
 .editor-layout.editor-layout--left-collapsed {
-  grid-template-columns: 48px 1fr 280px;
-}
-.editor-layout.editor-layout--no-config {
-  grid-template-columns: 240px 1fr;
-}
-.editor-layout.editor-layout--left-collapsed.editor-layout--no-config {
   grid-template-columns: 48px 1fr;
 }
 
@@ -1077,11 +1047,14 @@ const editorLayoutClass = computed(() => ({
   min-width: 48px;
 }
 
+/* Hợp đồng cuộn của Task list (docs/ui-overflow.md): container ngoài KHÔNG cuộn,
+   chỉ lá (`.catalog-list` / `.rules-scroll`) mới mang `overflow-y: auto`. Để
+   `auto` ở đây là dựng scroller thứ hai và nuốt mất trách nhiệm cuộn của lá. */
 .editor-left-sections {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
 }
 </style>

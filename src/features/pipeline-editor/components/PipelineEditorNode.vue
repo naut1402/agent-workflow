@@ -91,9 +91,6 @@ function commitLabel() {
 
     <div v-if="data.agent" class="node-editor-agent">{{ data.agent }}</div>
 
-    <div v-if="data.skills?.length" class="node-editor-skills">
-      <span v-for="sk in data.skills" :key="sk" class="chip chip-skill">{{ sk }}</span>
-    </div>
 
     <Handle type="source" :position="Position.Right" />
   </div>
@@ -199,5 +196,4 @@ function commitLabel() {
   white-space: nowrap;
 }
 .node-editor-agent { font-size: 10px; color: var(--accent); margin-top: 3px; }
-.node-editor-skills { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 3px; }
 </style>

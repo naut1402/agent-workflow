@@ -140,7 +140,7 @@ describe('PipelineEditor — panel trái nhận state thu/phóng từ shell', ()
 
     expect(w.find('.editor-left').classes()).toContain('editor-left-collapsed')
     expect(w.find('.editor-layout').classes()).toContain('editor-layout--left-collapsed')
-    expect(w.findAll('.target-section-icon')).toHaveLength(3)
+    expect(w.findAll('.target-section-icon')).toHaveLength(2)
     // Không render select/input khi thu gọn — chỉ icon.
     expect(w.find('.target-select').exists()).toBe(false)
     expect(w.find('.editor-left-sections').exists()).toBe(false)

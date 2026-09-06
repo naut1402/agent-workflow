@@ -181,16 +181,15 @@ describe('EditorTargetPanel — trạng thái thu gọn', () => {
     expect(w.emitted('stop')).toHaveLength(1)
   })
 
-  // Đủ 3 lối vào: thu gọn mà thiếu Skills thì không có đường mở thẳng section đó.
-  it('bấm icon Agents/Skills/Rules ở dải thu gọn emit open-section kèm khoá', async () => {
+  // Đủ lối vào: thu gọn mà thiếu một section thì không có đường mở thẳng nó.
+  it('bấm icon Agents/Rules ở dải thu gọn emit open-section kèm khoá', async () => {
     const w = mountPanel({ collapsed: true })
     const icons = w.findAll('.target-section-icon')
-    expect(icons).toHaveLength(3)
+    expect(icons).toHaveLength(2)
 
     await icons[0].trigger('click')
     await icons[1].trigger('click')
-    await icons[2].trigger('click')
 
-    expect(w.emitted('open-section')).toEqual([['agents'], ['skills'], ['rules']])
+    expect(w.emitted('open-section')).toEqual([['agents'], ['rules']])
   })
 })

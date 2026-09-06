@@ -1,10 +1,9 @@
 /** Keys của step do canvas/UI quản lý — phần còn lại vào preserved */
 const CANVAS_STEP_KEYS = new Set([
-  'id', 'name', 'agent', 'skills', 'rule_category', 'rule_required',
-  'produces', 'knowledge_inputs', 'hitl',
+  'id', 'name', 'agent', 'produces', 'knowledge_inputs', 'hitl',
 ])
 
-/** Subfield hitl do StepConfigPanel quản lý — giữ lại phần còn lại (vd. retry) */
+/** Subfield hitl do StepConfigDialog quản lý — giữ lại phần còn lại (vd. retry) */
 const CANVAS_HITL_KEYS = new Set(['mode', 'gate_id', 'optional_doc_review', 'blocking'])
 
 function extractPreservedHitl(hitl: unknown): Record<string, unknown> | undefined {
@@ -72,9 +71,6 @@ export function buildStepFromNode(
     id: stepId,
     name: nodeData.label || stepId,
     agent: nodeData.agent || '',
-    skills: nodeData.skills || [],
-    rule_category: nodeData.rule_category || '',
-    rule_required: nodeData.rule_required ?? true,
     produces: nodeData.produces || [],
     knowledge_inputs: nodeData.knowledge_inputs || [],
     hitl: nodeData.hitl || { mode: 'none' },
