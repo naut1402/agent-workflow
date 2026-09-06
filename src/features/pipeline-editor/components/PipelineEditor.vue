@@ -12,7 +12,13 @@ import StepConfigPanel from './StepConfigPanel.vue'
 import EditorTargetPanel from './EditorTargetPanel.vue'
 import ArtifactNode from '../../../core/ui/ArtifactNode.vue'
 import { usePipelineProfiles } from '../composables/usePipelineProfiles'
-import { buildEditorGraph, hasRemovalChange, stepEdgesOf, stepNodesOf } from '../lib/canvasGraph'
+import {
+  buildEditorGraph,
+  derivedNodesOf,
+  hasRemovalChange,
+  stepEdgesOf,
+  stepNodesOf,
+} from '../lib/canvasGraph'
 import {
   extractPipelineMeta,
   extractStepPreservedMap,
@@ -146,6 +152,7 @@ const nodeTypes = {
 const {
   setNodes,
   setEdges,
+  updateNode,
   addEdges,
   removeNodes,
   getNodes,
@@ -264,10 +271,29 @@ function buildFlowFromPipeline(pipeline) {
     markerEnd: { type: 'arrowclosed' },
   }))
 
-  setNodes(newNodes)
+  // Không đảo `setEdges` lên trước: `setEdges` loại bỏ edge có source/target
+  // chưa nằm trong store, nên node phải vào trước.
+  setStepNodes(newNodes)
   setEdges(newEdges)
   nodeCounter = steps.length
   syncDerivedGraph()
+}
+
+/**
+ * Ghi danh sách step node lên canvas mà **không** làm rơi node phái sinh đang có.
+ *
+ * VueFlow tra node cũ theo id để cập nhật tại chỗ; id vắng mặt ở lần `setNodes`
+ * này sẽ được cấp một object mới ở lần sau. Component `art-*` thì chụp object
+ * lúc setup và không remount (renderer memo theo id), nên nó tiếp tục render
+ * object cũ đã rời store — node đứng yên ở toạ độ trước đó, ngoài khung `fitView`.
+ * Vì vậy mọi `setNodes` phải mang theo cả node phái sinh, kể cả khi ngay sau đó
+ * `syncDerivedGraph()` dựng lại chúng.
+ */
+function setStepNodes(nextStepNodes) {
+  const stepIds = new Set(nextStepNodes.map((n) => n.id))
+  // Step thật thắng khi trùng id — cùng luật với `buildEditorGraph`.
+  const kept = derivedNodesOf(getNodes.value).filter((n) => !stepIds.has(n.id))
+  setNodes([...nextStepNodes, ...kept])
 }
 
 /**
@@ -383,7 +409,7 @@ function onDropOnCanvas(event) {
       hitl: { mode: 'none' },
     },
   }
-  setNodes([...stepNodesOf(getNodes.value), newNode])
+  setStepNodes([...stepNodesOf(getNodes.value), newNode])
   syncDerivedGraph()
 }
 
@@ -521,10 +547,12 @@ function buildFullPipeline() {
 function autoLayout() {
   const { nodeList, edgeList } = stepGraph()
   const order = topoSort(nodeList, edgeList)
-  setNodes(nodeList.map((n) => {
+  // Cập nhật tại chỗ thay vì dựng lại mảng: auto-layout chỉ đổi toạ độ, không
+  // đổi tập node — xem `setStepNodes` về việc mất định danh node phái sinh.
+  for (const n of nodeList) {
     const idx = order.indexOf(n.id)
-    return { ...n, position: { x: 20 + Math.max(0, idx) * 220, y: 60 } }
-  }))
+    updateNode(n.id, { position: { x: 20 + Math.max(0, idx) * 220, y: 60 } })
+  }
   syncDerivedGraph()
   setTimeout(() => fitView(), 50)
 }

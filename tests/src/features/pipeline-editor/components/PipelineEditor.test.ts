@@ -372,6 +372,82 @@ describe('PipelineEditor — node phái sinh không lọt vào pipeline lưu ra'
       expect((w.vm as any).selectedNodeId).toBe('designer')
     })
   })
+
+  // T194108b3 — bug gốc: mọi phép ghi canvas dạng `setNodes(<chỉ step node>)` rồi
+  // `syncDerivedGraph()` làm node `art-*` rời store một nhịp, nên lần `setNodes`
+  // sau cấp cho chúng object mới. Component `art-*` không remount (renderer memo
+  // theo id) nên vẫn render object cũ đã rời store — node đứng yên ở toạ độ
+  // trước đó, ngoài khung `fitView`, người dùng thấy artifact biến mất.
+  //
+  // Stub `<VueFlow>` không chạy `NodeWrapper` nên hiện tượng "node vô hình"
+  // không tái hiện được ở tầng unit; bất biến kiểm được là **định danh object
+  // node trong store** — đúng cái bị bug phá.
+  describe('phép ghi canvas không làm mất định danh node phái sinh', () => {
+    /** Map id → object node đang nằm trong store, để so sánh tham chiếu. */
+    function canvasNodesById(): Map<string, any> {
+      return new Map((flowStore.current?.getNodes.value ?? []).map((n: any) => [n.id, n]))
+    }
+
+    const DERIVED_IDS = ['art-investigator', 'art-designer', 'art-knowledge']
+
+    it('a — Tự sắp xếp giữ nguyên object node artifact', async () => {
+      const w = await mountWithPipeline()
+      const before = canvasNodesById()
+      expect(DERIVED_IDS.every((id) => before.has(id))).toBe(true)
+
+      await w.findComponent({ name: 'EditorTargetPanel' }).vm.$emit('auto-layout')
+      await flushPromises()
+
+      const after = canvasNodesById()
+      for (const id of DERIVED_IDS) {
+        expect(after.get(id)).toBe(before.get(id))
+      }
+    })
+
+    it('b — Tự sắp xếp đưa artifact về đúng vị trí bám theo step', async () => {
+      const w = await mountWithPipeline()
+      // Kéo step ra thật xa — kịch bản người dùng gặp bug.
+      flowStore.current.updateNode('designer', { position: { x: 4000, y: 2000 } })
+      await flushPromises()
+
+      await w.findComponent({ name: 'EditorTargetPanel' }).vm.$emit('auto-layout')
+      await flushPromises()
+
+      const byId = canvasNodesById()
+      expect(DERIVED_IDS.every((id) => byId.has(id))).toBe(true)
+      for (const stepId of ['investigator', 'designer']) {
+        const step = byId.get(stepId)
+        // `derivedProducesX` = x của step + 40; y = y của step + ARTIFACT_Y_OFFSET (100).
+        expect(byId.get(`art-${stepId}`).position).toEqual({
+          x: step.position.x + 40,
+          y: step.position.y + 100,
+        })
+      }
+    })
+
+    it('c — nạp profile khác giữ nguyên object artifact của step trùng id', async () => {
+      const w = await mountWithPipeline()
+      const before = canvasNodesById()
+
+      vi.mocked(fetchPipelineProfile).mockResolvedValue({
+        pipeline: {
+          steps: [
+            { id: 'investigator', name: 'Investigate', agent: 'dev:investigator', produces: ['investigate.md'] },
+            { id: 'implementer', name: 'Implement', agent: 'dev:implementer', produces: ['lint.md'] },
+          ],
+        },
+      } as any)
+
+      await w.findComponent({ name: 'EditorTargetPanel' }).vm.$emit('update:profile-selected', 'p2')
+      await flushPromises()
+
+      const after = canvasNodesById()
+      expect(after.get('art-investigator')).toBe(before.get('art-investigator'))
+      expect(after.has('art-implementer')).toBe(true)
+      // E2 — step sinh ra `art-designer` không còn ở profile mới nên nó bị gỡ hẳn.
+      expect(after.has('art-designer')).toBe(false)
+    })
+  })
 })
 
 // 1.2 / a.1 / a.3 — một nút Save rẽ theo tab; profile tự nạp khi đổi select.

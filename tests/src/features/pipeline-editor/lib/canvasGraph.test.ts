@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildEditorGraph,
+  derivedNodesOf,
   gateLabelOf,
   hasRemovalChange,
   isStepNode,
@@ -28,6 +29,21 @@ describe('canvasGraph — lọc node/edge phái sinh', () => {
   it('stepNodesOf chịu được đầu vào rỗng / undefined', () => {
     expect(stepNodesOf([])).toEqual([])
     expect(stepNodesOf(undefined as any)).toEqual([])
+  })
+
+  it('derivedNodesOf chỉ giữ node không phải step', () => {
+    const nodes = [
+      stepNode('a'),
+      { id: 'art-a', type: 'artifact' },
+      stepNode('b'),
+      { id: 'art-knowledge', type: 'artifact' },
+    ]
+    expect(derivedNodesOf(nodes).map((n) => n.id)).toEqual(['art-a', 'art-knowledge'])
+  })
+
+  it('derivedNodesOf chịu được đầu vào rỗng / undefined', () => {
+    expect(derivedNodesOf([])).toEqual([])
+    expect(derivedNodesOf(undefined as any)).toEqual([])
   })
 
   it('stepEdgesOf chỉ giữ edge có cả 2 đầu là step (loại edge dữ liệu de-*)', () => {
