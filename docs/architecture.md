@@ -97,7 +97,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | Mode (`ModeEntry.key`) | Thư mục | Component / thành phần chính |
 |---|---|---|
 | `monitor` | `src/features/monitor/` | `MonitorLayout`, `TaskList`, `PipelineView`, `PipelineNode`, `QaPanel`, `ArtifactPanel`, `ProjectBar`, `SectionSaveIndicator`; composables `useTaskPolling.ts`, `useInlineMarkdownEdit.ts` |
-| `editor` (Pipeline Editor) | `src/features/pipeline-editor/` | `PipelineEditor`, `PipelineEditorNode`, `StepConfigPanel`, `CatalogPanel`, `RulesPanel`, `ProfileManager`; `lib/pipelineRoundTrip.ts` |
+| `editor` (Pipeline Editor) | `src/features/pipeline-editor/` | `PipelineEditor`, `PipelineEditorNode`, `StepConfigDialog`, `CatalogPanel`, `RulesPanel`, `ProfileManager`; `lib/pipelineRoundTrip.ts` |
 | `agentEditor` | `src/features/agent-editor/` | `AgentEditor`, `AgentSectionEditor`, `WorkflowSectionEditor`, `AgentTemplatePicker`, `AgentNlWizard` |
 | `quickAction` | `src/features/quick-action/` | `QuickActionPanel` — chạy nhanh 1 action (agent/runner) trên artifact/task đang chọn, không qua flow tạo task đầy đủ |
 | `knowledge` | `src/features/knowledge/` | `KnowledgePanel` |

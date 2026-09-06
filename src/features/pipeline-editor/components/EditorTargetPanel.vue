@@ -149,7 +149,6 @@ const actions = computed<TargetAction[]>(() => {
 /** Lối vào thẳng từng section khi sub-sidebar đang thu gọn. */
 const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
   { key: 'agents', icon: 'agent', titleKey: 'pipelineEditor.sections.agentsOpenTitle' },
-  { key: 'skills', icon: 'skills', titleKey: 'pipelineEditor.sections.skillsOpenTitle' },
   { key: 'rules', icon: 'rules', titleKey: 'pipelineEditor.sections.rulesOpenTitle' },
 ]
 </script>

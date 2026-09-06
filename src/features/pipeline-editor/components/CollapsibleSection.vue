@@ -34,8 +34,24 @@ const emit = defineEmits(['toggle'])
   min-height: 0;
   border-bottom: 1px solid var(--border);
 }
+/* Section mở là nơi chia chiều cao còn lại — basis 0 để hai section mở cùng lúc
+   chia đều thay vì ăn theo chiều cao nội dung; section đóng chỉ cao bằng header. */
 .editor-section[open] {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+.editor-section:not([open]) {
+  flex: 0 0 auto;
+}
+/* Chrome ≥131 chèn hộp `::details-content` giữa <details> và nội dung của nó, nên
+   `.editor-section-body` không còn là flex item trực tiếp: không khai báo ở đây thì
+   chuỗi flex đứt tại hộp này và vùng cuộn ở lá không nhận được chiều cao xác định.
+   Trình duyệt chưa hỗ trợ pseudo này bỏ qua rule, giữ nguyên hành vi cũ. */
+.editor-section[open]::details-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
   overflow: hidden;
 }
 

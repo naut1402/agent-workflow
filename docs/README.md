@@ -19,6 +19,7 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 - **[`i18n.md`](i18n.md)** — tổ chức message `vi` / `en`, namespace theo feature, cách thêm và đổi chuỗi UI.
 - **[`ui-buttons.md`](ui-buttons.md)** — quy ước nút và trạng thái trên UI, class chuẩn ở `src/styles/_shell.scss`.
+- **[`ui-overflow.md`](ui-overflow.md)** — chiến lược tràn cho danh sách và vùng nội dung dài: chuỗi sizing chuẩn, ví dụ trong repo, checklist review.
 
 ## Mẫu dùng lại
 
