@@ -23,6 +23,7 @@ Cột **Event** trên UI = giá trị `type` trong bảng dưới.
 | `hitl.resolved` (`reason: pipeline_changed`) | Pipeline đổi khiến gate đang pending không còn được step hiện tại khai báo — hệ thống tự huỷ (`action: 'cancelled'`) hoặc chuẩn hoá legacy `true` về gate id (`action: 'normalized'`) | `taskId`, `gateId` (giá trị cũ, null nếu legacy `true`), `action`, `reason`, `currentPhase` | `state.ts` `reconcileGateStateAssumingLock` |
 | `entity.updated` (`entity: task-state`) | Repair / cập nhật state task | `id`, `projectId`, `detail` | `monitor/controller.ts` |
 | `entity.deleted` (`entity: task-state`) | Xóa task | `id`, `projectId` | `monitor/controller.ts` |
+| `entity.deleted` (`entity: worktree`) | Dọn git worktree của task từ dashboard | `id` (taskId), `projectId`, `detail` (`path`, `branch`, `prunedOnly`) | `monitor/controller.ts` `deleteTaskWorktree` |
 
 **Pipeline / pipeline step (gián tiếp):**
 

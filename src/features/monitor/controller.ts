@@ -15,7 +15,7 @@ import {
   withTaskLock,
 } from './business/tasks/state.js'
 import { generateAndApplyTaskName } from './business/tasks/generateTaskName.js'
-import { isResettableTarget } from './lib/pipelineRunGuards.js'
+import { isFinishedTaskState, isResettableTarget } from './lib/pipelineRunGuards.js'
 import * as monitorBusiness from './business/index.js'
 import { emitAudit } from '../../core/log/store.js'
 import { emit, emitEntity } from '../../core/events/index.js'
@@ -646,6 +646,63 @@ export class MonitorController extends AbstractController {
     emitAudit({ op: 'delete', entity: 'task-state', identifier: id, projectId: this.projectId })
     emitEntity('deleted', 'task-state', { id, projectId: this.projectId })
     return this.ok({ id, deleted: true })
+  }
+
+  async getTaskWorktree() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const id = this.c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+
+    // `root` is <repo>/.dev-team-agent — git commands need the repo itself.
+    const result = monitorBusiness.findTaskWorktree(path.dirname(root), id)
+    if ('error' in result) {
+      return this.json(result.status, { error: result.error, detail: result.detail, taskId: id })
+    }
+    return this.ok({
+      taskId: id,
+      worktree: result.worktree,
+      ambiguous: result.ambiguous,
+      candidates: result.candidates,
+    })
+  }
+
+  async deleteTaskWorktree() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const id = this.c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+
+    // The button is hidden for unfinished tasks, but the guard belongs on the
+    // server too — a running step may still be writing into that worktree.
+    const before = await readState(path.join(root, '.dev-state', `${id}.json`))
+    if (before.ok && !isFinishedTaskState(before.state)) {
+      return this.json(409, { error: 'task_not_finished', taskId: id })
+    }
+
+    const result = monitorBusiness.removeTaskWorktree(path.dirname(root), id)
+    if ('error' in result) {
+      const { ok: _ok, status, ...rest } = result
+      return this.json(status, { ...rest, taskId: id })
+    }
+
+    const detail = { path: result.path, branch: result.branch, prunedOnly: result.prunedOnly }
+    emitAudit({
+      op: 'delete',
+      entity: 'worktree',
+      identifier: id,
+      projectId: this.projectId,
+      detail,
+    })
+    emitEntity('deleted', 'worktree', { id, projectId: this.projectId, detail })
+    return this.ok({
+      taskId: id,
+      removed: result.path,
+      branch: result.branch,
+      prunedOnly: result.prunedOnly,
+    })
   }
 
   async repairTaskState() {

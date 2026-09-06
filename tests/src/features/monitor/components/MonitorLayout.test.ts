@@ -1,5 +1,5 @@
 import { mountWithI18n as mount } from '../../../helpers/i18n'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
 import { STORAGE_KEY, useAppSettings } from '@/core/composables/useAppSettings'
@@ -227,6 +227,82 @@ describe('MonitorLayout — auto-collapse sub-sidebar on outside click', () => {
 })
 
 
+/**
+ * Mount kèm `selected` — PipelineView dùng @vue-flow (`getBBox`, không có
+ * trong jsdom) và ArtifactPanel tự fetch; cả hai không liên quan tới nút xoá.
+ */
+function mountLayout(props: Record<string, any>) {
+  return mount(MonitorLayout, {
+    props,
+    global: { stubs: { PipelineView: true, ArtifactPanel: true } },
+  })
+}
+
+/** fetch mock phân nhánh theo URL: /api/jobs · /worktree · /api/tasks/<id>. */
+function stubFetch(
+  opts: {
+    jobs?: Record<string, any[]>
+    deleteResponse?: any
+    /** Response cho GET /api/tasks/:id/worktree; hàm để đổi giữa các lần gọi. */
+    worktreeResponse?: any | (() => any)
+  } = {},
+) {
+  const jobs = opts.jobs ?? {}
+  const fetchMock = vi.fn(async (input: any, init: any = {}) => {
+    const url = String(input)
+    if (url.includes('/api/jobs')) {
+      const status = new URL(url, 'http://x').searchParams.get('status') ?? ''
+      return { ok: true, status: 200, json: async () => ({ jobs: jobs[status] ?? [] }) }
+    }
+    // Phải đứng trước nhánh /api/tasks/ — nếu không, GET trạng thái worktree
+    // rơi vào response của DELETE task.
+    if (url.includes('/worktree')) {
+      if (String(init.method ?? 'GET').toUpperCase() !== 'GET') {
+        return opts.deleteResponse ?? { ok: true, status: 200, json: async () => ({ ok: true }) }
+      }
+      // Chỉ gọi factory ở nhánh GET — ca "đọc lại sau khi xoá" đếm số lần đọc.
+      const wt =
+        typeof opts.worktreeResponse === 'function'
+          ? opts.worktreeResponse()
+          : opts.worktreeResponse
+      return wt ?? { ok: true, status: 200, json: async () => ({ worktree: null, ambiguous: false }) }
+    }
+    if (url.includes('/api/tasks/')) {
+      return opts.deleteResponse ?? { ok: true, status: 200, json: async () => ({ ok: true }) }
+    }
+    throw new Error(`unexpected fetch: ${init.method ?? 'GET'} ${url}`)
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+const cleanWorktree = {
+  path: '/repo/.claude/worktrees/B4488',
+  relPath: '.claude/worktrees/B4488',
+  branch: 'fix/B4488/demo',
+  detached: false,
+  exists: true,
+  dirty: false,
+  dirtyCount: 0,
+  locked: false,
+  lockReason: null,
+  removable: true,
+  blockedBy: null,
+}
+
+function worktreeOk(worktree: any, ambiguous = false) {
+  return { ok: true, status: 200, json: async () => ({ worktree, ambiguous }) }
+}
+
+function deleteCalls(fetchMock: any) {
+  return fetchMock.mock.calls.filter(([, init]: any[]) => init?.method === 'DELETE')
+}
+
+/** Chuỗi truyền vào lần `confirm()` đầu tiên. */
+function confirmArg(confirmMock: any, index = 0): string {
+  return String(confirmMock.mock.calls[index]?.[0] ?? '')
+}
+
 // Trước Tde5b317d nút xoá ở khu badge chỉ hiện khi `!selected.state_ok` ⇒ task
 // khoẻ và task đã lưu trữ không bao giờ xoá được từ đây.
 describe('MonitorLayout — nút xoá task (Tde5b317d)', () => {
@@ -234,38 +310,12 @@ describe('MonitorLayout — nút xoá task (Tde5b317d)', () => {
   const archived = { ...tasks[0], archived: true }
   const broken = { ...tasks[0], state_ok: false }
 
-  /**
-   * Mount kèm `selected` — PipelineView dùng @vue-flow (`getBBox`, không có
-   * trong jsdom) và ArtifactPanel tự fetch; cả hai không liên quan tới nút xoá.
-   */
-  function mountLayout(props: Record<string, any>) {
-    return mount(MonitorLayout, {
-      props,
-      global: { stubs: { PipelineView: true, ArtifactPanel: true } },
-    })
-  }
 
-  /** fetch mock phân nhánh theo URL: /api/jobs (GET) vs /api/tasks/<id> (DELETE). */
-  function stubFetch(opts: { jobs?: Record<string, any[]>; deleteResponse?: any } = {}) {
-    const jobs = opts.jobs ?? {}
-    const fetchMock = vi.fn(async (input: any, init: any = {}) => {
-      const url = String(input)
-      if (url.includes('/api/jobs')) {
-        const status = new URL(url, 'http://x').searchParams.get('status') ?? ''
-        return { ok: true, status: 200, json: async () => ({ jobs: jobs[status] ?? [] }) }
-      }
-      if (url.includes('/api/tasks/')) {
-        return opts.deleteResponse ?? { ok: true, status: 200, json: async () => ({ ok: true }) }
-      }
-      throw new Error(`unexpected fetch: ${init.method ?? 'GET'} ${url}`)
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    return fetchMock
-  }
-
-  function deleteCalls(fetchMock: any) {
-    return fetchMock.mock.calls.filter(([, init]: any[]) => init?.method === 'DELETE')
-  }
+  // Mount kèm `selected` luôn kéo GET /api/tasks/:id/worktree — không stub thì
+  // mọi ca dưới đây đều bắn một fetch thật vào jsdom.
+  beforeEach(() => {
+    stubFetch()
+  })
 
   it.each([
     ['task khoẻ', healthy],
@@ -412,5 +462,198 @@ describe('MonitorLayout — nút xoá task (Tde5b317d)', () => {
     await flushPromises()
 
     expect(w.emitted('task-deleted')?.[0]).toEqual(['B4488'])
+  })
+})
+
+// Nút "Dọn worktree" (T161678b4) — badge trạng thái + xoá thủ công từ task detail.
+describe('MonitorLayout — nút dọn worktree (T161678b4)', () => {
+  const completed = { ...tasks[0], current_phase: 'completed' }
+  const archivedDone = { ...tasks[0], archived: true }
+  const running = { ...tasks[0], current_phase: 'designer' }
+
+  function mountDone(props: Record<string, any> = {}) {
+    return mountLayout({
+      tasks,
+      selected: completed,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+      ...props,
+    })
+  }
+
+  beforeEach(() => {
+    stubFetch()
+  })
+
+  it('task đã hoàn tất + có worktree: hiện badge và nút dọn', async () => {
+    stubFetch({ worktreeResponse: worktreeOk(cleanWorktree) })
+
+    const w = mountDone()
+    await flushPromises()
+
+    const badge = w.find('.badges .badge.worktree')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('fix/B4488/demo')
+    expect(badge.attributes('title')).toBe(cleanWorktree.path)
+
+    const btn = w.find('.badges .btn-clean-worktree')
+    expect(btn.exists()).toBe(true)
+    expect(btn.text()).toContain(viMonitor.layout.cleanWorktree)
+    expect(btn.attributes('title')).toBe(viMonitor.layout.cleanWorktreeTitle)
+    expect(btn.attributes('aria-label')).toBe(viMonitor.layout.cleanWorktree)
+    expect(btn.attributes('disabled')).toBeUndefined()
+  })
+
+  it('task đã lưu trữ cũng dọn được', async () => {
+    stubFetch({ worktreeResponse: worktreeOk(cleanWorktree) })
+
+    const w = mountDone({ selected: archivedDone })
+    await flushPromises()
+
+    expect(w.find('.badges .btn-clean-worktree').exists()).toBe(true)
+  })
+
+  it('task chưa xong: badge vẫn hiện nhưng nút bị ẩn', async () => {
+    stubFetch({ worktreeResponse: worktreeOk(cleanWorktree) })
+
+    const w = mountDone({ selected: running })
+    await flushPromises()
+
+    expect(w.find('.badges .badge.worktree').exists()).toBe(true)
+    expect(w.find('.badges .btn-clean-worktree').exists()).toBe(false)
+  })
+
+  it('không có worktree: không badge, không nút', async () => {
+    const w = mountDone()
+    await flushPromises()
+
+    expect(w.find('.badges .badge.worktree').exists()).toBe(false)
+    expect(w.find('.badges .btn-clean-worktree').exists()).toBe(false)
+  })
+
+  it('nhiều worktree cùng khớp: badge cảnh báo, không có nút', async () => {
+    stubFetch({ worktreeResponse: worktreeOk(null, true) })
+
+    const w = mountDone()
+    await flushPromises()
+
+    const badge = w.find('.badges .badge.err')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toBe(viMonitor.layout.worktreeAmbiguous)
+    expect(w.find('.badges .btn-clean-worktree').exists()).toBe(false)
+  })
+
+  it('xác nhận rồi dọn: đúng một DELETE tới /worktree, đúng task + project', async () => {
+    const fetchMock = stubFetch({ worktreeResponse: worktreeOk(cleanWorktree) })
+    const confirmMock = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirmMock)
+
+    const w = mountDone()
+    await flushPromises()
+    await w.find('.badges .btn-clean-worktree').trigger('click')
+    await flushPromises()
+
+    const message = confirmArg(confirmMock)
+    expect(message).toContain(cleanWorktree.relPath)
+    expect(message).toContain(cleanWorktree.branch)
+
+    const calls = deleteCalls(fetchMock)
+    expect(calls.length).toBe(1)
+    expect(String(calls[0][0])).toContain('/api/tasks/B4488/worktree')
+    expect(String(calls[0][0])).toContain('project=proj-1')
+  })
+
+  it('huỷ ở hộp xác nhận: không DELETE, nút không kẹt disabled', async () => {
+    const fetchMock = stubFetch({ worktreeResponse: worktreeOk(cleanWorktree) })
+    vi.stubGlobal('confirm', vi.fn(() => false))
+
+    const w = mountDone()
+    await flushPromises()
+    await w.find('.badges .btn-clean-worktree').trigger('click')
+    await flushPromises()
+
+    expect(deleteCalls(fetchMock).length).toBe(0)
+    expect(w.find('.badges .btn-clean-worktree').attributes('disabled')).toBeUndefined()
+  })
+
+  it('bấm liên tiếp chỉ gửi một DELETE', async () => {
+    const fetchMock = stubFetch({ worktreeResponse: worktreeOk(cleanWorktree) })
+    const confirmMock = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirmMock)
+
+    const w = mountDone()
+    await flushPromises()
+    const btn = w.find('.badges .btn-clean-worktree')
+    btn.trigger('click')
+    btn.trigger('click')
+    await flushPromises()
+
+    expect(confirmMock).toHaveBeenCalledTimes(1)
+    expect(deleteCalls(fetchMock).length).toBe(1)
+  })
+
+  it('task còn job đang chạy: dùng hộp xác nhận cảnh báo mạnh hơn', async () => {
+    stubFetch({
+      worktreeResponse: worktreeOk(cleanWorktree),
+      jobs: { running: [{ metadata: { taskId: 'B4488', projectId: 'proj-1' } }] },
+    })
+    const confirmMock = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirmMock)
+
+    const w = mountDone()
+    await flushPromises()
+    await w.find('.badges .btn-clean-worktree').trigger('click')
+    await flushPromises()
+
+    const message = confirmArg(confirmMock)
+    expect(message).toContain(viMonitor.layout.confirmCleanWorktreeRunning.split('{')[0])
+  })
+
+  it('worktree bẩn: hiện lỗi kèm số lượng và tên file, nút không kẹt', async () => {
+    stubFetch({
+      worktreeResponse: worktreeOk(cleanWorktree),
+      deleteResponse: {
+        ok: false,
+        status: 409,
+        json: async () => ({
+          error: 'worktree_dirty',
+          dirtyCount: 2,
+          dirtyFiles: ['M src/a.ts', '?? b.txt'],
+        }),
+      },
+    })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const w = mountDone()
+    await flushPromises()
+    await w.find('.badges .btn-clean-worktree').trigger('click')
+    await flushPromises()
+
+    const warning = w.findAll('.task-head .art-warning').at(-1)!
+    expect(warning.text()).toContain('2')
+    expect(warning.text()).toContain('src/a.ts')
+    expect(w.find('.badges .btn-clean-worktree').attributes('disabled')).toBeUndefined()
+  })
+
+  it('dọn xong đọc lại trạng thái: badge và nút biến mất', async () => {
+    let calls = 0
+    stubFetch({
+      worktreeResponse: () => {
+        calls += 1
+        return calls === 1 ? worktreeOk(cleanWorktree) : worktreeOk(null)
+      },
+    })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const w = mountDone()
+    await flushPromises()
+    expect(w.find('.badges .btn-clean-worktree').exists()).toBe(true)
+
+    await w.find('.badges .btn-clean-worktree').trigger('click')
+    await flushPromises()
+
+    expect(calls).toBe(2)
+    expect(w.find('.badges .badge.worktree').exists()).toBe(false)
+    expect(w.find('.badges .btn-clean-worktree').exists()).toBe(false)
   })
 })

@@ -2,10 +2,9 @@
  * Clone a git repo into dashboard workspace and register as a project.
  */
 
-import type { SpawnSyncReturns } from '../../../../core/lib/processHelper.js'
-import { spawnSync } from '../../../../core/lib/processHelper.js'
 import fs from 'node:fs'
 import path from 'node:path'
+import { formatGitFailure, runGit, GIT_CLONE_TIMEOUT_MS } from '../git.js'
 import { registryHome, add, loadRegistry, saveRegistry, get, type Project } from '../../../../core/registry.js'
 import { isPrivateHostname } from '../../../agent-editor/business/index.js'
 import {
@@ -65,48 +64,6 @@ function ensureDevTeamAgent(repoDir: string): string {
     fs.mkdirSync(path.join(inner, '.dev-state'), { recursive: true })
   }
   return fs.realpathSync(inner)
-}
-
-/** Prefer real git.exe on Windows when PATH is incomplete (IDE-launched servers). */
-function resolveGitCommand(): string {
-  if (process.platform !== 'win32') return 'git'
-  const candidates = [
-    process.env.GIT_EXEC_PATH && path.join(process.env.GIT_EXEC_PATH, 'git.exe'),
-    'C:\\Program Files\\Git\\cmd\\git.exe',
-    'C:\\Program Files\\Git\\bin\\git.exe',
-    'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
-  ].filter(Boolean) as string[]
-  for (const c of candidates) {
-    try {
-      if (fs.existsSync(c)) return c
-    } catch {
-      /* ignore */
-    }
-  }
-  return 'git'
-}
-
-function runGit(args: string[]): SpawnSyncReturns<string> {
-  // Never shell:true — argv is joined into a shell string and user-controlled
-  // cloneUrl / extraHeader would become command-injection / token-leak surfaces.
-  return spawnSync(resolveGitCommand(), args, {
-    encoding: 'utf8' as const,
-    windowsHide: true,
-    timeout: 300_000,
-    env: process.env,
-  })
-}
-
-function formatGitFailure(result: SpawnSyncReturns<string>): string {
-  const spawnErr = result.error as NodeJS.ErrnoException | undefined
-  if (spawnErr?.code === 'ENOENT') {
-    return 'Không tìm thấy git trên PATH. Cài Git for Windows hoặc mở terminal có git rồi chạy lại dashboard.'
-  }
-  if (spawnErr) return `git spawn failed: ${spawnErr.message}`
-  if (result.signal) return `git clone killed (${result.signal})`
-  const out = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
-  if (out) return out
-  return `git clone thất bại (exit ${result.status ?? 'unknown'})`
 }
 
 /** Last path segment of URL / SSH ref, without `.git`. */
@@ -253,14 +210,14 @@ export function cloneProject(input: {
     auth.cloneUrl,
     dest,
   ]
-  const result = runGit(gitArgs)
+  const result = runGit(gitArgs, { timeout: GIT_CLONE_TIMEOUT_MS })
   if (result.status !== 0) {
     try {
       fs.rmSync(dest, { recursive: true, force: true })
     } catch {
       /* ignore */
     }
-    let err = formatGitFailure(result)
+    let err = formatGitFailure(result, 'git clone')
     if (/Authentication failed|could not read Username|403|401|Permission denied/i.test(err)) {
       err += auth.usedToken
         ? ' (đã dùng token Settings — kiểm tra quyền repo / PAT).'

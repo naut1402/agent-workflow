@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import ProjectBar from './ProjectBar.vue'
 import TaskList from './TaskList.vue'
@@ -8,8 +8,15 @@ import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
 import Icon from '../../../core/ui/Icon.vue'
-import { patchTaskArchive, deleteTask, repairTaskState } from '../scripts/monitorApi'
-import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
+import {
+  patchTaskArchive,
+  deleteTask,
+  repairTaskState,
+  fetchTaskWorktree,
+  cleanupTaskWorktree,
+  describeWorktreeError,
+} from '../scripts/monitorApi'
+import { isFinishedTaskState, taskNeedsStateRepair } from '../lib/pipelineRunGuards'
 import { hasInFlightJob } from '../lib/taskInFlight'
 import { taskDisplayName } from '../lib/taskDisplay'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
@@ -51,6 +58,43 @@ const emit = defineEmits([
 const archiveError = ref('')
 const deleting = ref(false)
 const needsRepair = computed(() => taskNeedsStateRepair(props.selected))
+
+const worktree = ref<any>(null)
+const worktreeAmbiguous = ref(false)
+const worktreeError = ref('')
+const cleaning = ref(false)
+
+// Cleanup is offered only for tasks that already ended — a running step may
+// still be writing into that worktree. The server enforces the same rule.
+const canCleanWorktree = computed(
+  () => !!worktree.value && !worktreeAmbiguous.value && isFinishedTaskState(props.selected),
+)
+
+async function loadWorktree(taskId: string | null) {
+  worktree.value = null
+  worktreeAmbiguous.value = false
+  if (!taskId) return
+  try {
+    const r: any = await fetchTaskWorktree(taskId, props.selectedProjectId ?? undefined)
+    // Poll 1.5s may have switched task between the two awaits — drop stale data.
+    if (props.selected?.task_id !== taskId) return
+    worktree.value = r?.worktree ?? null
+    worktreeAmbiguous.value = !!r?.ambiguous
+  } catch {
+    // Swallowed on purpose: this is auxiliary info. Surfacing it would blink a
+    // warning in `.task-head` on every task switch when the backend has no git.
+    worktree.value = null
+  }
+}
+
+watch(
+  () => props.selected?.task_id ?? null,
+  (id) => {
+    worktreeError.value = ''
+    loadWorktree(id)
+  },
+  { immediate: true },
+)
 
 // Setting mục 7 — auto-collapse file-list mở của TaskList khi click ra ngoài
 // vùng .monitor-sub-sidebar (kể cả click vào artifact panel bên phải).
@@ -138,6 +182,30 @@ async function deleteSelected() {
     deleting.value = false
   }
 }
+
+async function cleanWorktreeSelected() {
+  if (!props.selected || !worktree.value) return
+  if (cleaning.value) return
+  worktreeError.value = ''
+  // Same reason as deleteSelected: the handler awaits, `selected` may move.
+  const taskId = props.selected.task_id
+  const wtPath = worktree.value.relPath || worktree.value.path
+  const branch = worktree.value.branch || '—'
+  cleaning.value = true
+  try {
+    const running = await hasInFlightJob(taskId, props.selectedProjectId)
+    const messageKey = running
+      ? 'monitor.layout.confirmCleanWorktreeRunning'
+      : 'monitor.layout.confirmCleanWorktree'
+    if (!confirm(t(messageKey, { path: wtPath, branch }))) return
+    await cleanupTaskWorktree(taskId, props.selectedProjectId ?? undefined)
+    await loadWorktree(props.selected?.task_id ?? null)
+  } catch (e: any) {
+    worktreeError.value = describeWorktreeError(e)
+  } finally {
+    cleaning.value = false
+  }
+}
 </script>
 
 <template>
@@ -189,6 +257,20 @@ async function deleteSelected() {
               class="btn-archive-detail"
               @click="toggleArchiveSelected"
             ><template v-if="selected.archived">{{ t('monitor.layout.unarchive') }}</template><template v-else><Icon name="archiveBox" :size="14" /> {{ t('monitor.layout.archive') }}</template></button>
+            <span v-if="worktree" class="badge worktree" :title="worktree.path">
+              {{ t('monitor.layout.worktreeBadge', { branch: worktree.branch || worktree.relPath }) }}
+              <template v-if="worktree.dirty">⚠</template>
+            </span>
+            <span v-else-if="worktreeAmbiguous" class="badge err">{{ t('monitor.layout.worktreeAmbiguous') }}</span>
+            <button
+              v-if="canCleanWorktree"
+              type="button"
+              class="btn-archive-detail btn-clean-worktree"
+              :disabled="cleaning"
+              :title="t('monitor.layout.cleanWorktreeTitle')"
+              :aria-label="t('monitor.layout.cleanWorktree')"
+              @click="cleanWorktreeSelected"
+            ><Icon name="trash" :size="14" /> {{ t('monitor.layout.cleanWorktree') }}</button>
             <button
               type="button"
               class="btn-archive-detail btn-delete-detail"
@@ -197,6 +279,7 @@ async function deleteSelected() {
             >{{ t('monitor.layout.deleteTask') }}</button>
           </div>
           <p v-if="archiveError" class="art-warning">{{ archiveError }}</p>
+          <p v-if="worktreeError" class="art-warning">{{ worktreeError }}</p>
         </div>
 
         <QaPanel
