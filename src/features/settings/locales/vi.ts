@@ -29,6 +29,13 @@ export default {
     queue: 'Hàng đợi (chờ step hiện tại xong)',
     immediate: 'Gửi ngay (huỷ step đang chạy)',
   },
+  chatEnter: {
+    title: 'Phím Enter trong khung chat',
+    desc: 'Chọn Enter gửi tin nhắn hay xuống hàng. Ctrl/⌘+Enter luôn gửi.',
+    groupLabel: 'Trong khung chat, nhấn Enter để',
+    send: 'Gửi tin nhắn (Shift+Enter xuống hàng)',
+    newline: 'Xuống hàng (Ctrl/⌘+Enter để gửi)',
+  },
   taskList: {
     title: 'Danh sách task',
     desc: 'Tuỳ chọn hành vi danh sách task ở Monitor mode.',

@@ -54,6 +54,11 @@ export default {
   select: {
     empty: 'Không có tuỳ chọn.',
   },
+  // Copy-to-clipboard flash — dùng chung mọi nút copy (useCopyText).
+  copy: {
+    done: 'Đã copy',
+    fail: 'Copy thất bại',
+  },
   folderPicker: {
     title: 'Chọn thư mục',
     close: 'Đóng',

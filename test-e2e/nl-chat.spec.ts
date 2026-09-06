@@ -87,7 +87,9 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
   const win = page.locator('.nl-chat-window')
   await expect(win).toBeVisible({ timeout: 15_000 })
 
-  // Idle: no status icon at all (it only appears when something is happening).
+  // Idle: the header badge is the dashboard connection dot, and the right-hand
+  // status slot is empty (it now only shows a terminal done/error outcome).
+  await expect(win.locator('.nl-chat-badge .dot')).toBeVisible()
   await expect(win.locator('.nl-chat-status')).toHaveCount(0)
 
   // Multi-line composer: Shift+Enter adds a line and the box grows; Enter sends.
@@ -103,9 +105,10 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
   await composer.fill('tạo task sửa bug đăng nhập')
   await composer.press('Enter')
 
-  // While the turn is in flight: busy status icon (spinner) + typing indicator.
-  await expect(win.locator('.nl-chat-status')).toHaveClass(/is-busy/)
-  await expect(win.locator('.nl-chat-status .nl-chat-spinner')).toBeVisible()
+  // While the turn is in flight: the spinner takes the badge's place (the dot
+  // steps aside) and the typing indicator runs in the transcript.
+  await expect(win.locator('.nl-chat-badge .nl-chat-spinner')).toBeVisible()
+  await expect(win.locator('.nl-chat-badge .dot')).toHaveCount(0)
   await expect(win.locator('.nl-chat-typing')).toBeVisible()
   await capture(page, testInfo, 'nl-chat-thinking')
 
@@ -113,7 +116,7 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
     timeout: 15_000,
   })
   await expect(win.locator('.nl-chat-typing')).toHaveCount(0)
-  await expect(win.locator('.nl-chat-status')).toHaveCount(0)
+  await expect(win.locator('.nl-chat-badge .dot')).toBeVisible()
 
   const userRow = (await win.locator('.nl-chat-row-user').boundingBox())!
   const assistantRow = (await win.locator('.nl-chat-row-assistant').boundingBox())!
@@ -179,13 +182,13 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
 
   const win = page.locator('.nl-chat-window')
   await expect(win).toBeVisible()
-  // Badge icon replaces the prose title; the title carries task + step instead.
-  await expect(win.locator('.nl-chat-badge.is-task')).toBeVisible()
+  // The title carries task + step; the badge carries connection/busy state.
   await expect(win.locator('.nl-chat-title')).toContainText('DEMO-1')
   await expect(win.locator('.nl-chat-title')).toContainText('Design')
-  // Live runner: icon-only status, label kept as the tooltip.
-  await expect(win.locator('.nl-chat-status')).toHaveClass(/is-busy/)
-  await expect(win.locator('.nl-chat-status')).toHaveAttribute('title', /Runner đang chạy/)
+  // Live runner: the spinner sits in the badge, label kept as its tooltip.
+  await expect(win.locator('.nl-chat-badge .nl-chat-spinner')).toBeVisible()
+  await expect(win.locator('.nl-chat-badge')).toHaveAttribute('title', /Runner đang chạy/)
+  await expect(win.locator('.nl-chat-status')).toHaveCount(0)
 
   // History from the session: both roles plus the tool-activity line.
   await expect(win.locator('.nl-chat-message-user')).toContainText('chạy step design')
@@ -209,9 +212,11 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
   await info.hover()
   const popover = win.locator('.nl-chat-info-popover')
   await expect(popover).toBeVisible()
-  await expect(popover).toContainText('Project')
   await expect(popover).toContainText('DEMO-1')
   await expect(popover).toContainText('Design')
+  // Shell context rows: the dashboard mode this chat was opened from.
+  await expect(popover).toContainText('Mode')
+  await expect(popover).toContainText('Monitor')
   // Runner name + live status (the stub reports a running job).
   await expect(popover).toContainText('Runner E2E')
   await expect(popover).toContainText('đang chạy')
@@ -226,9 +231,10 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
     route.fulfill({ json: { ok: true } })
   })
   await win.locator('.nl-chat-icon-btn[title="Phiên chat mới"]').click()
-  await expect(win.locator('.nl-chat-badge.is-task')).toHaveCount(0)
   await expect(win.locator('.nl-chat-title')).toHaveText('Trợ lý tạo mới')
   expect(closeSessionCalled).toBe(false)
+  // Two sessions now → the header grows arrows and a counter.
+  await expect(win.locator('.nl-chat-session-counter')).toHaveText('2/2')
 
   // Leaving the icon hides it again.
   await win.locator('.nl-chat-title').hover()
@@ -315,4 +321,104 @@ test('nl chat: resize by dragging corners, size persists across reloads (capture
   const restored = (await page.locator('.nl-chat-window').boundingBox())!
   expect(Math.round(restored.width)).toBe(Math.round(resized.width))
   expect(Math.round(restored.height)).toBe(Math.round(resized.height))
+})
+
+test('nl chat: an unsubmitted draft survives switching to a step chat and back', async ({ page }, testInfo) => {
+  // The bug this task fixes: typing into the creation chat, opening a step's
+  // chat, and finding no way back to what was typed. Nothing is ever sent, so
+  // no job is submitted against the shared e2e runner.
+  await page.route(/\/api\/tasks\/[^/]+\/chat/, (route) => {
+    const url = new URL(route.request().url())
+    route.fulfill({
+      json: {
+        taskId: 'DEMO-1',
+        stepId: url.searchParams.get('stepId'),
+        sessionId: 'sess-switch',
+        transcriptFound: true,
+        total: 1,
+        turns: [{ index: 0, role: 'user', text: 'chạy step design' }],
+        running: null,
+        runner: { id: 'runner-e2e', name: 'Runner E2E', enabled: true },
+        canSend: true,
+        queued: false,
+      },
+    })
+  })
+
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await page.locator('.task-row', { hasText: 'DEMO-1' }).click()
+
+  // Session A: the creation assistant, with a draft left unsent.
+  await page.locator('.nl-chat-fab').click()
+  const win = page.locator('.nl-chat-window')
+  await expect(win).toBeVisible({ timeout: 15_000 })
+  // Every open session stays mounted, so the composer must be addressed through
+  // the visible session — two textareas exist as soon as there are two sessions.
+  const composer = win.locator('.nl-chat-session:visible .nl-chat-input-row textarea')
+  const draft = 'tạo task sửa bug đăng nhập — chưa gửi'
+  await composer.fill(draft)
+
+  // Session B: a step's runner chat, opened from the pipeline node.
+  const node = page.locator('.pnode', { hasText: 'Design' }).first()
+  await expect(node).toBeVisible({ timeout: 15_000 })
+  await node.locator('.pnode-chat-btn').click()
+  await expect(win.locator('.nl-chat-title')).toContainText('DEMO-1')
+
+  // The arrows appear once there is more than one session.
+  const counter = win.locator('.nl-chat-session-counter')
+  await expect(counter).toHaveText('2/2')
+  await capture(page, testInfo, 'nl-chat-two-sessions')
+
+  // Back to session A — the draft is still there, untouched.
+  await win.locator('.icon-btn[title="Phiên trước"]').click()
+  await expect(win.locator('.nl-chat-title')).toHaveText('Trợ lý tạo mới')
+  await expect(counter).toHaveText('1/2')
+  await expect(composer).toHaveValue(draft)
+
+  // Forward again lands back on the step chat, and wraps around from the end.
+  await win.locator('.icon-btn[title="Phiên sau"]').click()
+  await expect(win.locator('.nl-chat-title')).toContainText('DEMO-1')
+  await win.locator('.icon-btn[title="Phiên sau"]').click()
+  await expect(win.locator('.nl-chat-title')).toHaveText('Trợ lý tạo mới')
+})
+
+test('nl chat: × hides the window, with one session and with several', async ({ page }) => {
+  // The session registry drops the closed session AND the window must go away.
+  // Re-seeding the registry once it empties must not bounce the window open.
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+
+  const win = page.locator('.nl-chat-window')
+  const closeBtn = win.locator('.nl-chat-icon-btn[title="Đóng"]')
+
+  await page.locator('.nl-chat-fab').click()
+  await expect(win).toBeVisible({ timeout: 15_000 })
+  await closeBtn.click()
+  await expect(win).toBeHidden()
+
+  // Same with more than one session: closing one leaves the window hidden, not
+  // re-pointed at a neighbour and shown again.
+  await page.locator('.nl-chat-fab').click()
+  await expect(win).toBeVisible()
+  await win.locator('.nl-chat-icon-btn[title="Phiên chat mới"]').click()
+  await expect(win.locator('.nl-chat-session-counter')).toHaveText('2/2')
+  await closeBtn.click()
+  await expect(win).toBeHidden()
+})
+
+test('nl chat: the header badge shows the dashboard connection state in builder mode', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await page.locator('.nl-chat-fab').click()
+
+  const win = page.locator('.nl-chat-window')
+  await expect(win).toBeVisible({ timeout: 15_000 })
+
+  // The old chat-bubble badge is gone; a live poll shows the same dot as the
+  // sidebar. Previously the builder chat had no badge at all.
+  const dot = win.locator('.nl-chat-badge .dot')
+  await expect(dot).toBeVisible()
+  await expect(dot).toHaveClass(/live/)
+  await expect(win.locator('.nl-chat-badge svg')).toHaveCount(0)
 })

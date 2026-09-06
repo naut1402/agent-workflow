@@ -52,6 +52,10 @@ export default {
   select: {
     empty: 'No options.',
   },
+  copy: {
+    done: 'Copied',
+    fail: 'Copy failed',
+  },
   folderPicker: {
     title: 'Choose folder',
     close: 'Close',

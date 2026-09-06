@@ -120,6 +120,13 @@ Khai báo trong `DashboardEventType` (`eventBus.ts`); có thể xuất hiện kh
 
 Cùng một thao tác (vd tạo task) có thể vừa `task.created` (events) vừa dòng `audit` — không thay thế nhau.
 
+**Chỉ có audit, không có domain event** — thao tác không phải lifecycle của entity có màn hình quản lý:
+
+| Audit `entity` | `op` | Khi nào | `detail` | File |
+|---|---|---|---|---|
+| `nl-chat-session` | `create` / `update` | Mở / gửi tiếp / huỷ phiên chat tạo mới | `entityType`, `jobId`, `action` | `features/nl-chat/controller.ts` |
+| `nl-chat-attachment` | `create` | Upload tập tin đính kèm từ khung chat | `count`, `bytes` (không kèm nội dung file) | `features/nl-chat/controller.ts` |
+
 ---
 
 ## 8. Cách cập nhật tài liệu này

@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTaskChat } from '../composables/useTaskChat'
-import { parseMarkdown } from '../../../core/lib/markdownLib'
+import { useChatAttachments } from '../composables/useChatAttachments'
+import { appendAttachments } from '../lib/attachmentPrompt'
+import ChatMessageBubble from './ChatMessageBubble.vue'
+import ChatAttachmentBar from './ChatAttachmentBar.vue'
+import { useDrop } from '../../../core/composables/useDrop'
+import { useAppSettings } from '../../../core/composables/useAppSettings'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { resolveChatEnterToSend } from '../../../core/configs/appSettings'
 
 // Body of the floating chat window when it is scoped to a pipeline step: the
 // runner's own conversation history (CLI session transcript) plus an input that
@@ -28,46 +35,52 @@ const chat = useTaskChat({
   getProjectId: () => props.projectId ?? undefined,
 })
 
+const { t } = useI18nHelpers()
 const inputText = ref('')
-const expanded = ref<Set<number>>(new Set())
-/** Long turns (step prompts are whole files) are collapsed until asked for. */
+/** Above this, a user turn gets a "Xem thêm" toggle — step prompts are whole files. */
 const COLLAPSE_CHARS = 240
 
 const messagesRef = ref<HTMLElement | null>(null)
 
-/** Only user turns collapse: a step's prompt is a whole file, and slicing
- *  markdown mid-syntax would render broken. */
-function canCollapse(turn: { role: string; text: string }): boolean {
-  return turn.role === 'user' && turn.text.length > COLLAPSE_CHARS
-}
-
-function isCollapsed(turn: { index: number; role: string; text: string }): boolean {
-  return canCollapse(turn) && !expanded.value.has(turn.index)
-}
-
-function toggle(index: number): void {
-  const next = new Set(expanded.value)
-  if (next.has(index)) next.delete(index)
-  else next.add(index)
-  expanded.value = next
-}
-
-function shown(turn: { index: number; role: string; text: string }): string {
-  return isCollapsed(turn) ? `${turn.text.slice(0, COLLAPSE_CHARS)}…` : turn.text
-}
-
 /**
- * Display-ordered turns (real + pending, interleaved by send time) with assistant
- * markdown pre-rendered — a `computed` re-runs only when `timeline` changes, not on
- * every re-render (e.g. when `running`/`total` change but the turns themselves don't),
- * same pattern as `ArtifactPanel.vue`'s `blocks`.
+ * Display-ordered turns (real + pending, interleaved by send time). Rendering
+ * lives in `ChatMessageBubble`; this only flags which turns are long enough to
+ * fold — a `computed` re-runs only when `timeline` changes, not on every
+ * re-render (e.g. when `running`/`total` change but the turns don't), same
+ * pattern as `ArtifactPanel.vue`'s `blocks`.
  */
 const displayTurns = computed(() =>
   chat.timeline.value.map((turn) => ({
     ...turn,
-    html: turn.role === 'assistant' ? parseMarkdown(turn.text) : undefined,
+    clampable: turn.role === 'user' && turn.text.length > COLLAPSE_CHARS,
   })),
 )
+
+// ── attachments ───────────────────────────────────────────────────────────
+const attachments = useChatAttachments({
+  getProjectId: () => props.projectId ?? undefined,
+  getTaskId: () => props.taskId,
+})
+const canAttach = computed(() => chat.canSend.value && !chat.sending.value)
+const { isOverDropZone } = useDrop(messagesRef, (files) => {
+  if (!canAttach.value) return
+  attachments.add(files)
+})
+
+// ── Enter behaviour ───────────────────────────────────────────────────────
+const { settings } = useAppSettings()
+const enterToSend = computed(() => resolveChatEnterToSend(settings.value))
+const composerHint = computed(() =>
+  enterToSend.value ? t('nlChat.composer.enterToSend') : t('nlChat.composer.enterToNewline'),
+)
+
+function onEnterKey(e: KeyboardEvent): void {
+  // Vietnamese IME: Enter commits the word being typed — never a send.
+  if (e.isComposing) return
+  if (!enterToSend.value) return // no preventDefault → the textarea inserts a newline
+  e.preventDefault()
+  void onSend()
+}
 
 async function scrollToEnd(): Promise<void> {
   await nextTick()
@@ -75,12 +88,19 @@ async function scrollToEnd(): Promise<void> {
   if (el) el.scrollTop = el.scrollHeight
 }
 
-function onSend(): void {
-  const text = inputText.value
-  if (!text.trim()) return
+async function onSend(): Promise<void> {
+  if (!chat.canSend.value || chat.sending.value || attachments.uploading.value) return
+  const text = inputText.value.trim()
+  if (!text && attachments.items.value.length === 0) return
+
+  const uploaded = await attachments.upload()
+  if (uploaded === null) return // upload failed — keep text + chips so it can be retried
+  const finalText = appendAttachments(text, uploaded)
+
   inputText.value = ''
+  attachments.clear()
   nextTick(autoGrow)
-  void chat.send(text).then(scrollToEnd)
+  void chat.send(finalText).then(scrollToEnd)
 }
 
 const inputRef = ref<HTMLTextAreaElement | null>(null)
@@ -142,7 +162,8 @@ onUnmounted(() => chat.stop())
 
 <template>
   <div class="task-chat">
-    <div ref="messagesRef" class="nl-chat-messages">
+    <div ref="messagesRef" class="nl-chat-messages" :class="{ 'is-drop-over': isOverDropZone }">
+      <p v-if="isOverDropZone" class="nl-chat-drop-hint">{{ t('nlChat.attachment.dropHint') }}</p>
       <p v-if="chat.loading.value" class="nl-chat-hint">Đang tải hội thoại của runner…</p>
       <p v-else-if="!chat.sessionId.value && chat.turns.value.length === 0" class="nl-chat-hint">
         Step này chưa có phiên CLI nào — chạy step trước rồi quay lại đây.
@@ -164,22 +185,12 @@ onUnmounted(() => chat.stop())
         </p>
         <div v-else class="nl-chat-row" :class="`nl-chat-row-${turn.role}`">
           <span class="nl-chat-role">{{ turn.pending ? 'Bạn · đang gửi' : turn.role === 'user' ? 'Bạn' : 'Runner' }}</span>
-          <!-- eslint-disable-next-line vue/no-v-html -- agent markdown, same trust level as artifacts -->
-          <div
-            v-if="turn.role === 'assistant'"
-            class="nl-chat-message nl-chat-message-assistant md"
-            v-html="turn.html"
-          ></div>
-          <p
-            v-else
-            class="nl-chat-message"
-            :class="[`nl-chat-message-${turn.role}`, { 'is-pending': turn.pending }]"
-          >
-            {{ shown(turn) }}
-          </p>
-          <button v-if="canCollapse(turn)" type="button" class="task-chat-more" @click="toggle(turn.index)">
-            {{ isCollapsed(turn) ? 'Xem thêm' : 'Thu lại' }}
-          </button>
+          <ChatMessageBubble
+            :role="turn.role === 'assistant' ? 'assistant' : 'user'"
+            :text="turn.text"
+            :pending="turn.pending"
+            :clampable="turn.clampable"
+          />
         </div>
       </template>
 
@@ -189,18 +200,36 @@ onUnmounted(() => chat.stop())
       </p>
     </div>
 
+    <ChatAttachmentBar
+      :items="attachments.items.value"
+      :error="attachments.error.value"
+      :disabled="!canAttach"
+      @pick="attachments.add"
+      @remove="attachments.remove"
+    />
+
     <form class="nl-chat-input-row" @submit.prevent="onSend">
       <textarea
         ref="inputRef"
         v-model="inputText"
         rows="1"
         :placeholder="placeholder"
-        title="Enter để gửi, Shift+Enter để xuống dòng"
+        :title="composerHint"
         :disabled="!chat.canSend.value || chat.sending.value"
         @input="autoGrow"
-        @keydown.enter.exact.prevent="onSend"
+        @keydown.enter.exact="onEnterKey"
+        @keydown.ctrl.enter.prevent="onSend"
+        @keydown.meta.enter.prevent="onSend"
       ></textarea>
-      <button type="submit" :disabled="!chat.canSend.value || chat.sending.value || !inputText.trim()">
+      <button
+        type="submit"
+        :disabled="
+          !chat.canSend.value ||
+          chat.sending.value ||
+          attachments.uploading.value ||
+          (!inputText.trim() && attachments.items.value.length === 0)
+        "
+      >
         Gửi
       </button>
     </form>
@@ -233,16 +262,5 @@ onUnmounted(() => chat.stop())
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.task-chat-more {
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 11px;
-  padding: 0;
-}
-.is-pending {
-  opacity: 0.6;
 }
 </style>

@@ -10,6 +10,8 @@ import {
   ensureNlChatBuilderAgent,
   scanCustomAgents,
   buildCatalog,
+  saveChatAttachments,
+  checkAttachmentLimits,
 } from './business/index.js'
 
 /**
@@ -130,5 +132,63 @@ export class NlChatController extends AbstractController {
     })
 
     return this.ok({ cancelled: true, chatSessionId: id })
+  }
+
+  /**
+   * Files dropped into the chat composer. They are written under the data root
+   * and the FE appends their paths to the message, so the agent reads them from
+   * disk — no attachment field on the message/feedback schemas.
+   *
+   * Body is parsed with `c.req.formData()`: the hand-rolled multipart parsers
+   * in knowledge/agent-editor coerce the body to a string and corrupt binaries.
+   */
+  async uploadAttachments() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+
+    let form: FormData
+    try {
+      form = await this.c.req.formData()
+    } catch {
+      return this.badRequest('invalid multipart body')
+    }
+
+    const raw = form.getAll('files').filter((v): v is File => v instanceof File)
+    const taskIdField = form.get('taskId')
+
+    // Refuse on the File metadata BEFORE `arrayBuffer()`: reading first would put
+    // an oversized upload entirely in memory just to reject it afterwards.
+    const refusal = checkAttachmentLimits(raw)
+    if (refusal) return this.json(refusal.status, { error: refusal.error })
+
+    const files = []
+    for (const f of raw) {
+      files.push({
+        name: f.name,
+        type: f.type,
+        size: f.size,
+        bytes: new Uint8Array(await f.arrayBuffer()),
+      })
+    }
+
+    const result = await saveChatAttachments(root, files, {
+      taskId: typeof taskIdField === 'string' && taskIdField ? taskIdField : undefined,
+    })
+    if ('error' in result) return this.json(result.status, { error: result.error })
+
+    // Audit carries the sanitized names + sizes only — never file contents.
+    emitAudit({
+      op: 'create',
+      entity: 'nl-chat-attachment',
+      identifier: result.saved.map((f) => f.name).join(', '),
+      projectId: this.projectId,
+      detail: {
+        count: result.saved.length,
+        bytes: result.saved.reduce((sum, f) => sum + f.size, 0),
+      },
+    })
+
+    return this.created({ files: result.saved })
   }
 }

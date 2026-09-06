@@ -23,6 +23,8 @@ export const AppSettingsSchema = z
     notificationUiPlacement: z.enum(['sidebar', 'floating', 'both']).optional(),
     /** Feedback while a step's job is running: wait for it, or cancel + resume now. Missing → 'queue'. */
     chatFeedbackMode: z.enum(['queue', 'immediate']).optional(),
+    /** Enter in the chat composer sends the message (true) or inserts a newline (false). Missing → true. */
+    chatEnterToSend: z.boolean().optional(),
   })
   .passthrough()
 
@@ -155,4 +157,11 @@ export function resolveChatFeedbackMode(
   settings: Pick<AppSettings, 'chatFeedbackMode'> | null | undefined,
 ): ChatFeedbackMode {
   return settings?.chatFeedbackMode === 'immediate' ? 'immediate' : 'queue'
+}
+
+/** Effective "Enter sends the message" preference: missing → true (keeps the previous behaviour). */
+export function resolveChatEnterToSend(
+  settings: Pick<AppSettings, 'chatEnterToSend'> | null | undefined,
+): boolean {
+  return settings?.chatEnterToSend !== false
 }
