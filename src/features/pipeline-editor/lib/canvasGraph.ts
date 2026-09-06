@@ -13,7 +13,8 @@ import {
   type PipelineStepLike,
 } from '../../../core/lib/pipelineArtifactGraph'
 
-export const STEP_NODE_TYPE = 'pipelineEditor'
+/** Type của node step trên canvas — node phái sinh dùng type `artifact`. */
+const STEP_NODE_TYPE = 'pipelineEditor'
 
 /** Node step trên canvas — chỉ khai báo phần `canvasGraph` thật sự đọc tới. */
 export type StepNodeLike = {
