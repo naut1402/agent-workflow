@@ -40,6 +40,7 @@ export default tseslint.config(
       'test-results/**',
       '.dev-team-agent/**',
       'node_modules/**',
+      '.claude/**',
       'logs/**',
       'test-e2e/.runtime/**',
     ],

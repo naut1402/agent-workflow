@@ -37,3 +37,7 @@ test-e2e/fixtures/project/.dev-team-agent/knowledge.config.yaml
 test-e2e/fixtures/project/.dev-team-agent/pipeline.yaml
 test-e2e/fixtures/project/.dev-team-agent/artifact-actions.yaml
 test-e2e/fixtures/project/.dev-team-agent/automations/
+
+# State cục bộ của công cụ AI agent (worktree, cache, settings.local) — chỉ tồn
+# tại trên máy dev, không bao giờ commit.
+.claude/
