@@ -11,6 +11,22 @@ export default {
     confirmDelete: 'Permanently delete this task? This cannot be undone.',
     confirmDeleteRunning:
       'This task has a running or queued job. Deleting now leaves an orphan job writing into a folder that no longer exists, and that job is NOT stopped. Still permanently delete this task? This cannot be undone.',
+    worktreeBadge: 'worktree: {branch}',
+    worktreeAmbiguous: 'Several worktrees match this task — clean them up manually with the CLI.',
+    cleanWorktree: 'Clean worktree',
+    cleanWorktreeTitle: "Delete this task's git worktree (the branch and all its commits are kept)",
+    confirmCleanWorktree:
+      'Delete worktree "{path}"?\n\nBranch "{branch}" and every commit on it ARE KEPT. Task artifacts live in the main data folder and are not affected.',
+    confirmCleanWorktreeRunning:
+      'This task still has a running or queued job — that job may be writing into the worktree and will fail if the folder disappears.\n\nStill delete worktree "{path}"? Branch "{branch}" and every commit on it ARE KEPT.',
+    worktreeErrDirty:
+      'The worktree still has {count} uncommitted change(s): {files}. Commit or discard them in the worktree, then try again.',
+    worktreeErrLocked: 'The worktree is locked ({reason}). Run `git worktree unlock`, then try again.',
+    worktreeErrNotFound: 'No worktree found for this task — it may already have been cleaned up.',
+    worktreeErrNotFinished: 'This task has not finished — only completed or archived tasks can have their worktree cleaned.',
+    worktreeErrOutside:
+      'The worktree lives outside the repo and outside its sibling folder — the dashboard refuses to delete it. Clean it up with the CLI.',
+    worktreeErrRemoveFailed: 'Could not delete the worktree: {detail}',
     emptyNoTasks: 'No tasks in',
     emptyHint: 'Run',
     emptyHintSuffix: 'to get started.',

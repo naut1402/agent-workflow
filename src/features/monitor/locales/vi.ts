@@ -12,6 +12,22 @@ export default {
     confirmDelete: 'Xoá vĩnh viễn task này? Hành động không thể hoàn tác.',
     confirmDeleteRunning:
       'Task này đang có job chạy hoặc đang xếp hàng. Xoá bây giờ sẽ để lại job mồ côi ghi vào thư mục vừa bị xoá, và job đó KHÔNG bị dừng. Vẫn xoá vĩnh viễn task này? Hành động không thể hoàn tác.',
+    worktreeBadge: 'worktree: {branch}',
+    worktreeAmbiguous: 'Nhiều worktree cùng khớp task này — dọn thủ công bằng CLI cho chắc.',
+    cleanWorktree: 'Dọn worktree',
+    cleanWorktreeTitle: 'Xoá git worktree của task này (branch và mọi commit được giữ lại)',
+    confirmCleanWorktree:
+      'Xoá worktree "{path}"?\n\nBranch "{branch}" và mọi commit trên đó ĐƯỢC GIỮ LẠI. Artifact của task nằm ở thư mục dữ liệu chính nên không bị ảnh hưởng.',
+    confirmCleanWorktreeRunning:
+      'Task này còn job đang chạy hoặc đang xếp hàng — job đó có thể đang ghi vào worktree và sẽ lỗi nếu thư mục biến mất.\n\nVẫn xoá worktree "{path}"? Branch "{branch}" và mọi commit trên đó ĐƯỢC GIỮ LẠI.',
+    worktreeErrDirty:
+      'Worktree còn {count} thay đổi chưa commit: {files}. Commit hoặc bỏ thay đổi trong worktree rồi thử lại.',
+    worktreeErrLocked: 'Worktree đang bị khoá ({reason}). Chạy `git worktree unlock` rồi thử lại.',
+    worktreeErrNotFound: 'Không tìm thấy worktree của task này — có thể đã được dọn rồi.',
+    worktreeErrNotFinished: 'Task chưa kết thúc — chỉ dọn được worktree của task đã hoàn tất hoặc đã lưu trữ.',
+    worktreeErrOutside:
+      'Worktree nằm ngoài repo và ngoài thư mục anh em của repo — dashboard từ chối xoá. Dọn thủ công bằng CLI.',
+    worktreeErrRemoveFailed: 'Không xoá được worktree: {detail}',
     emptyNoTasks: 'Chưa có task nào trong',
     emptyHint: 'Chạy',
     emptyHintSuffix: 'để bắt đầu.',
