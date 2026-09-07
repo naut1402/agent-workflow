@@ -107,7 +107,7 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 | `tests/mcp` | bun | `mcp` | 1 | `bun test tests/mcp` |
 | `tests/src` | vitest | `core/shell`, `App.vue`, `core/container` | 1 | `npx vitest run tests/src/*.test.ts` |
 | `tests/src/api` | vitest | `features/pipeline-editor/scripts`, `features/agent-editor/scripts` | 2 | `npx vitest run tests/src/api` |
-| `tests/src/core/composables` | vitest | `core/composables` | 4 | `npx vitest run tests/src/core/composables` |
+| `tests/src/core/composables` | vitest | `core/composables` | 5 | `npx vitest run tests/src/core/composables` |
 | `tests/src/core/configs` | vitest | `core/configs` | 3 | `npx vitest run tests/src/core/configs` |
 | `tests/src/core/container` | vitest | `core/container` | 1 | `npx vitest run tests/src/core/container` |
 | `tests/src/core/events` | bun | `core/events` | 1 | `bun test tests/src/core/events` |
