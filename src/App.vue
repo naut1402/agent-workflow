@@ -340,6 +340,8 @@ const modes = computed(() =>
   modeRegistry.listModes().filter((m) => !m.visible || m.visible(shellContext.value)),
 )
 const activeMode = computed(() => modeRegistry.getMode(mode.value))
+/** Shell context the chat window shows in its info popover — null hides the row. */
+const chatShellModeLabel = computed(() => (activeMode.value ? t(activeMode.value.labelKey) : null))
 
 watch(mode, async (m) => {
   stop()
@@ -459,7 +461,12 @@ onUnmounted(() => {
       @select="onNotificationSelect"
     />
 
-    <FloatingChatButton :project-id="selectedProjectId" />
+    <FloatingChatButton
+      :project-id="selectedProjectId"
+      :connected="connected"
+      :shell-mode-label="chatShellModeLabel"
+      :shell-task-id="selectedId"
+    />
 
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
     <CreateTaskDialog

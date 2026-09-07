@@ -36,8 +36,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Badge instead of a prose title: the icon says which chat this is, the title
-   text is then free to carry the task/step identity. */
+/* Header badge: the same connection dot as the dashboard sidebar, replaced by
+   the busy spinner while a step's job runs (the spinner used to sit on the
+   right-hand status slot). No fill — it frames a dot, not an icon. */
 .nl-chat-badge {
   display: flex;
   align-items: center;
@@ -46,8 +47,14 @@
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: var(--accent-dim);
   color: var(--accent);
+}
+/* Which session of how many, between the title and the → arrow. */
+.nl-chat-session-counter {
+  flex: none;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
 }
 /* Icon-only status (a coloured dot + text read as online/offline). */
 .nl-chat-status {
@@ -105,7 +112,7 @@
 }
 .nl-chat-info-label {
   flex: none;
-  width: 62px;
+  width: 78px;
   color: var(--muted);
 }
 .nl-chat-info-value {
@@ -130,7 +137,15 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+/* One per open session — all mounted, only the active one displayed, so an
+   unsubmitted draft survives switching to another chat. */
+.nl-chat-session {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .nl-chat-messages {
   display: flex;
@@ -224,6 +239,95 @@
 .nl-chat-message.md h3 {
   font-size: 13px;
   margin: 6px 0 4px;
+}
+/* Clamp long user turns with CSS instead of slicing the source: slicing a code
+   fence or list in half renders broken markup (design §3.3). */
+.nl-chat-message.is-clamped .nl-chat-message-md {
+  max-height: 7.5em;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+}
+/* Moved out of TaskChatBody's scoped block when the bubble became shared. */
+.task-chat-more {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+}
+.nl-chat-message.is-pending {
+  opacity: 0.6;
+}
+/* Copy / expand row under a bubble — inherits the row's user/assistant side. */
+.nl-chat-message-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.nl-chat-copy-flash {
+  font-size: 10px;
+  color: var(--muted);
+}
+/* Drag-and-drop target is the message list itself. */
+.nl-chat-messages.is-drop-over {
+  outline: 1px dashed var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+.nl-chat-drop-hint {
+  align-self: center;
+  font-size: 11px;
+  color: var(--accent);
+}
+/* Composer attachment strip: paperclip + one chip per staged file. */
+.nl-chat-attach {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.nl-chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.nl-chat-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 4px 2px 6px;
+  font-size: 11px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.nl-chat-chip-thumb {
+  width: 16px;
+  height: 16px;
+  object-fit: cover;
+  border-radius: 3px;
+}
+.nl-chat-chip-name {
+  min-width: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nl-chat-chip-size {
+  flex: none;
+  color: var(--muted);
+}
+.nl-chat-attach-error {
+  flex-basis: 100%;
+  font-size: 11px;
 }
 .nl-chat-typing {
   display: flex;

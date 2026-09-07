@@ -4,6 +4,7 @@ import {
   DEFAULT_APP_SETTINGS,
   parseAppSettings,
   resolveArtifactViewMode,
+  resolveChatEnterToSend,
   resolveChatFeedbackMode,
   resolveCollapseAppSidebarOnOutside,
   resolveCollapseMonitorSubSidebarOnOutside,
@@ -247,5 +248,27 @@ describe('AppSettingsSchema — new optional fields (mục 1, 7)', () => {
       collapseAppSidebarOnOutside: true,
       collapseMonitorSubSidebarOnOutside: true,
     })
+  })
+})
+
+describe('resolveChatEnterToSend', () => {
+  it('missing → true (keeps the previous Enter-sends behaviour)', () => {
+    expect(resolveChatEnterToSend({})).toBe(true)
+    expect(resolveChatEnterToSend(undefined)).toBe(true)
+    expect(resolveChatEnterToSend(null)).toBe(true)
+  })
+
+  it('only an explicit false switches Enter to newline', () => {
+    expect(resolveChatEnterToSend({ chatEnterToSend: false })).toBe(false)
+    expect(resolveChatEnterToSend({ chatEnterToSend: true })).toBe(true)
+  })
+
+  it('a non-boolean stored value falls back to sending', () => {
+    expect(resolveChatEnterToSend({ chatEnterToSend: 'nope' as any })).toBe(true)
+  })
+
+  it('parseAppSettings round-trips both values', () => {
+    expect(parseAppSettings({ chatEnterToSend: false })).toEqual({ chatEnterToSend: false })
+    expect(parseAppSettings({ chatEnterToSend: true })).toEqual({ chatEnterToSend: true })
   })
 })

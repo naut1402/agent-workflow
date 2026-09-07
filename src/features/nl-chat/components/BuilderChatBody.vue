@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useNlChatSession, type NlChatEntityType } from '../composables/useNlChatSession'
+import { useChatComposer } from '../composables/useChatComposer'
+import ChatMessageBubble from './ChatMessageBubble.vue'
+import ChatComposer from './ChatComposer.vue'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 
 // Body of the floating chat window for the creation flow (F0012): chat freely,
 // the agent infers whether you want a Task / Pipeline / Agent and hands back a
@@ -41,24 +45,23 @@ watch(draft, (d) => {
   draftParseError.value = null
 })
 
-const inputText = ref('')
+const { t } = useI18nHelpers()
 
-function onSend(): void {
-  const text = inputText.value.trim()
-  if (!text) return
-  inputText.value = ''
-  nextTick(autoGrow)
-  void sendMessage(text)
-}
+// Keep the newest message in view as the conversation grows; also the drop zone.
+const messagesRef = ref<HTMLElement | null>(null)
 
-const inputRef = ref<HTMLTextAreaElement | null>(null)
-/** Grow with the text up to the CSS max-height, then scroll. */
-function autoGrow(): void {
-  const el = inputRef.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = `${el.scrollHeight}px`
-}
+// Attachments, drop zone, Enter behaviour and the send guard — shared with
+// TaskChatBody, which only differs in what blocks a send and where text goes.
+// `ChatComposer` renders it; only the drop-zone flag is needed here, for the
+// message list this body owns.
+const composer = useChatComposer({
+  dropZone: messagesRef,
+  getProjectId: () => props.projectId ?? undefined,
+  canSend: () => step.value !== 'done',
+  sending: () => sending.value,
+  send: (text) => void sendMessage(text),
+})
+const { isOverDropZone } = composer
 
 // design.md §4.4: pipeline draft's steps[].agent must be validated against
 // fetchCatalog() before "Xác nhận" is allowed — see useNlChatSession.ts.
@@ -149,8 +152,6 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
 
 watch(status, (s) => emit('status', s), { immediate: true })
 
-// Keep the newest message in view as the conversation grows.
-const messagesRef = ref<HTMLElement | null>(null)
 watch([() => messages.value.length, () => sending.value], async () => {
   await nextTick()
   const el = messagesRef.value
@@ -160,13 +161,14 @@ watch([() => messages.value.length, () => sending.value], async () => {
 
 <template>
   <template v-if="step === 'chatting' || step === 'confirming' || step === 'done' || step === 'error'">
-    <div ref="messagesRef" class="nl-chat-messages">
+    <div ref="messagesRef" class="nl-chat-messages" :class="{ 'is-drop-over': isOverDropZone }">
+      <p v-if="isOverDropZone" class="nl-chat-drop-hint">{{ t('nlChat.attachment.dropHint') }}</p>
       <p v-if="messages.length === 0" class="nl-chat-hint">
         Mô tả điều bạn muốn — mình sẽ hỏi thêm nếu thiếu, rồi dựng draft Task, Pipeline hoặc Agent cho bạn.
       </p>
       <div v-for="(m, i) in messages" :key="i" class="nl-chat-row" :class="`nl-chat-row-${m.role}`">
         <span class="nl-chat-role">{{ m.role === 'user' ? 'Bạn' : 'Trợ lý' }}</span>
-        <p class="nl-chat-message" :class="`nl-chat-message-${m.role}`">{{ m.text }}</p>
+        <ChatMessageBubble :role="m.role === 'user' ? 'user' : 'assistant'" :text="m.text" />
       </div>
       <div v-if="sending" class="nl-chat-row nl-chat-row-assistant">
         <span class="nl-chat-role">Trợ lý</span>
@@ -183,19 +185,7 @@ watch([() => messages.value.length, () => sending.value], async () => {
       <p v-if="error" class="nl-chat-error">{{ error }}</p>
       <p v-if="step === 'done'" class="nl-chat-done">Đã tạo thành công.</p>
     </div>
-    <form class="nl-chat-input-row" @submit.prevent="onSend">
-      <textarea
-        ref="inputRef"
-        v-model="inputText"
-        rows="1"
-        placeholder="Nhập tin nhắn..."
-        title="Enter để gửi, Shift+Enter để xuống dòng"
-        :disabled="sending || step === 'done'"
-        @input="autoGrow"
-        @keydown.enter.exact.prevent="onSend"
-      ></textarea>
-      <button type="submit" :disabled="sending || !inputText.trim() || step === 'done'">Gửi</button>
-    </form>
+    <ChatComposer :composer="composer" placeholder="Nhập tin nhắn..." />
   </template>
 
   <div v-else-if="step === 'previewDraft'" class="nl-chat-preview">

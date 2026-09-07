@@ -49,6 +49,7 @@ export const AUDIT_ENTITIES = [
   'task-state',
   'worktree',
   'nl-chat-session',
+  'nl-chat-attachment',
   'automation',
 ] as const
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number]

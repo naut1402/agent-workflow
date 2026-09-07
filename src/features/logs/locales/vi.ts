@@ -50,8 +50,6 @@ export default {
   },
   copy: {
     hint: 'Click để copy',
-    done: 'Đã copy',
-    fail: 'Copy thất bại',
   },
   empty: {
     log: 'Chưa có log.',

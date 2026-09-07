@@ -28,6 +28,13 @@ export default {
     queue: 'Queue (wait for the current step)',
     immediate: 'Send now (cancels the running step)',
   },
+  chatEnter: {
+    title: 'Enter key in the chat box',
+    desc: 'Whether Enter sends the message or inserts a new line. Ctrl/⌘+Enter always sends.',
+    groupLabel: 'In the chat box, pressing Enter',
+    send: 'Sends the message (Shift+Enter for a new line)',
+    newline: 'Inserts a new line (Ctrl/⌘+Enter sends)',
+  },
   taskList: {
     title: 'Task list',
     desc: 'Task list behaviour preferences in Monitor mode.',
