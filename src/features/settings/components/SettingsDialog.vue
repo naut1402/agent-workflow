@@ -8,6 +8,7 @@ import { reloadProjectsKey } from '../../../core/shell/keys'
 import {
   resolveArtifactViewMode,
   resolveChatFeedbackMode,
+  resolveChatEnterToSend,
   resolveCollapseAppSidebarOnOutside,
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
@@ -83,6 +84,13 @@ const chatFeedbackMode = computed(() => resolveChatFeedbackMode(settings.value))
 function setChatFeedbackMode(mode: ChatFeedbackMode) {
   if (chatFeedbackMode.value === mode) return
   update({ chatFeedbackMode: mode })
+}
+
+const chatEnterToSend = computed(() => resolveChatEnterToSend(settings.value))
+
+function setChatEnterToSend(value: boolean) {
+  if (chatEnterToSend.value === value) return
+  update({ chatEnterToSend: value })
 }
 
 function setTheme(mode: ThemePreference) {
@@ -693,6 +701,36 @@ onUnmounted(() => {
                       @change="setChatFeedbackMode('immediate')"
                     />
                     {{ t('settings.chatFeedback.immediate') }}
+                  </label>
+                </div>
+              </section>
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.chatEnter.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.chatEnter.desc') }}</p>
+                <div
+                  class="settings-radio-group"
+                  role="radiogroup"
+                  :aria-label="t('settings.chatEnter.groupLabel')"
+                >
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="chatEnterToSend"
+                      value="send"
+                      :checked="chatEnterToSend"
+                      @change="setChatEnterToSend(true)"
+                    />
+                    {{ t('settings.chatEnter.send') }}
+                  </label>
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="chatEnterToSend"
+                      value="newline"
+                      :checked="!chatEnterToSend"
+                      @change="setChatEnterToSend(false)"
+                    />
+                    {{ t('settings.chatEnter.newline') }}
                   </label>
                 </div>
               </section>

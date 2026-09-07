@@ -333,4 +333,44 @@ describe('SettingsDialog', () => {
       notificationUiPlacement: 'floating',
     })
   })
+
+  it('chat Enter section: defaults to "Enter sends" with nothing persisted', () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    const send = document.querySelector(
+      'input[name="chatEnterToSend"][value="send"]',
+    ) as HTMLInputElement
+    const newline = document.querySelector(
+      'input[name="chatEnterToSend"][value="newline"]',
+    ) as HTMLInputElement
+    expect(send.checked).toBe(true)
+    expect(newline.checked).toBe(false)
+    // The old behaviour is the default, so it costs nothing in storage.
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+
+  it('chat Enter section: choosing "newline" persists chatEnterToSend false', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    const newline = document.querySelector(
+      'input[name="chatEnterToSend"][value="newline"]',
+    ) as HTMLInputElement
+    newline.checked = true
+    newline.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({ chatEnterToSend: false })
+  })
+
+  it('chat Enter section: a seeded false shows the newline radio checked', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ chatEnterToSend: false }))
+    const { load } = useAppSettings()
+    load()
+    mount(SettingsDialog, { attachTo: document.body })
+    const send = document.querySelector(
+      'input[name="chatEnterToSend"][value="send"]',
+    ) as HTMLInputElement
+    const newline = document.querySelector(
+      'input[name="chatEnterToSend"][value="newline"]',
+    ) as HTMLInputElement
+    expect(newline.checked).toBe(true)
+    expect(send.checked).toBe(false)
+  })
 })

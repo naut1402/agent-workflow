@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useNlChatSession, type NlChatEntityType } from '../composables/useNlChatSession'
+import { useChatAttachments } from '../composables/useChatAttachments'
+import { appendAttachments } from '../lib/attachmentPrompt'
+import ChatMessageBubble from './ChatMessageBubble.vue'
+import ChatAttachmentBar from './ChatAttachmentBar.vue'
+import { useDrop } from '../../../core/composables/useDrop'
+import { useAppSettings } from '../../../core/composables/useAppSettings'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { resolveChatEnterToSend } from '../../../core/configs/appSettings'
 
 // Body of the floating chat window for the creation flow (F0012): chat freely,
 // the agent infers whether you want a Task / Pipeline / Agent and hands back a
@@ -41,14 +49,48 @@ watch(draft, (d) => {
   draftParseError.value = null
 })
 
+const { t } = useI18nHelpers()
 const inputText = ref('')
 
-function onSend(): void {
+// Keep the newest message in view as the conversation grows; also the drop zone.
+const messagesRef = ref<HTMLElement | null>(null)
+
+// ── attachments ───────────────────────────────────────────────────────────
+const attachments = useChatAttachments({ getProjectId: () => props.projectId ?? undefined })
+const canAttach = computed(() => !sending.value && step.value !== 'done')
+const { isOverDropZone } = useDrop(messagesRef, (files) => {
+  if (!canAttach.value) return
+  attachments.add(files)
+})
+
+// ── Enter behaviour ───────────────────────────────────────────────────────
+const { settings } = useAppSettings()
+const enterToSend = computed(() => resolveChatEnterToSend(settings.value))
+const composerHint = computed(() =>
+  enterToSend.value ? t('nlChat.composer.enterToSend') : t('nlChat.composer.enterToNewline'),
+)
+
+function onEnterKey(e: KeyboardEvent): void {
+  // Vietnamese IME: Enter commits the word being typed — never a send.
+  if (e.isComposing) return
+  if (!enterToSend.value) return // no preventDefault → the textarea inserts a newline
+  e.preventDefault()
+  void onSend()
+}
+
+async function onSend(): Promise<void> {
+  if (sending.value || step.value === 'done' || attachments.uploading.value) return
   const text = inputText.value.trim()
-  if (!text) return
+  if (!text && attachments.items.value.length === 0) return
+
+  const uploaded = await attachments.upload()
+  if (uploaded === null) return // upload failed — keep text + chips so it can be retried
+  const finalText = appendAttachments(text, uploaded)
+
   inputText.value = ''
+  attachments.clear()
   nextTick(autoGrow)
-  void sendMessage(text)
+  void sendMessage(finalText)
 }
 
 const inputRef = ref<HTMLTextAreaElement | null>(null)
@@ -149,8 +191,6 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
 
 watch(status, (s) => emit('status', s), { immediate: true })
 
-// Keep the newest message in view as the conversation grows.
-const messagesRef = ref<HTMLElement | null>(null)
 watch([() => messages.value.length, () => sending.value], async () => {
   await nextTick()
   const el = messagesRef.value
@@ -160,13 +200,14 @@ watch([() => messages.value.length, () => sending.value], async () => {
 
 <template>
   <template v-if="step === 'chatting' || step === 'confirming' || step === 'done' || step === 'error'">
-    <div ref="messagesRef" class="nl-chat-messages">
+    <div ref="messagesRef" class="nl-chat-messages" :class="{ 'is-drop-over': isOverDropZone }">
+      <p v-if="isOverDropZone" class="nl-chat-drop-hint">{{ t('nlChat.attachment.dropHint') }}</p>
       <p v-if="messages.length === 0" class="nl-chat-hint">
         Mô tả điều bạn muốn — mình sẽ hỏi thêm nếu thiếu, rồi dựng draft Task, Pipeline hoặc Agent cho bạn.
       </p>
       <div v-for="(m, i) in messages" :key="i" class="nl-chat-row" :class="`nl-chat-row-${m.role}`">
         <span class="nl-chat-role">{{ m.role === 'user' ? 'Bạn' : 'Trợ lý' }}</span>
-        <p class="nl-chat-message" :class="`nl-chat-message-${m.role}`">{{ m.text }}</p>
+        <ChatMessageBubble :role="m.role === 'user' ? 'user' : 'assistant'" :text="m.text" />
       </div>
       <div v-if="sending" class="nl-chat-row nl-chat-row-assistant">
         <span class="nl-chat-role">Trợ lý</span>
@@ -183,18 +224,37 @@ watch([() => messages.value.length, () => sending.value], async () => {
       <p v-if="error" class="nl-chat-error">{{ error }}</p>
       <p v-if="step === 'done'" class="nl-chat-done">Đã tạo thành công.</p>
     </div>
+    <ChatAttachmentBar
+      :items="attachments.items.value"
+      :error="attachments.error.value"
+      :disabled="!canAttach"
+      @pick="attachments.add"
+      @remove="attachments.remove"
+    />
     <form class="nl-chat-input-row" @submit.prevent="onSend">
       <textarea
         ref="inputRef"
         v-model="inputText"
         rows="1"
         placeholder="Nhập tin nhắn..."
-        title="Enter để gửi, Shift+Enter để xuống dòng"
+        :title="composerHint"
         :disabled="sending || step === 'done'"
         @input="autoGrow"
-        @keydown.enter.exact.prevent="onSend"
+        @keydown.enter.exact="onEnterKey"
+        @keydown.ctrl.enter.prevent="onSend"
+        @keydown.meta.enter.prevent="onSend"
       ></textarea>
-      <button type="submit" :disabled="sending || !inputText.trim() || step === 'done'">Gửi</button>
+      <button
+        type="submit"
+        :disabled="
+          sending ||
+          step === 'done' ||
+          attachments.uploading.value ||
+          (!inputText.trim() && attachments.items.value.length === 0)
+        "
+      >
+        Gửi
+      </button>
     </form>
   </template>
 

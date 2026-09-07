@@ -23,3 +23,7 @@ export {
   cancelNlChatSession,
   isNlChatSessionId,
 } from './nlChatSession.js'
+
+// Only what the controller consumes; the rest of `chatAttachments` is internal
+// to the module and its tests import it directly.
+export { saveChatAttachments, checkAttachmentLimits } from './chatAttachments.js'

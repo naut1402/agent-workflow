@@ -8,14 +8,21 @@ import Icon from '../../../core/ui/Icon.vue'
 // anchor for the NL chat surface shared by Task/Pipeline/Agent creation
 // (design.md F0012 quyết định #1). Position persists across reloads.
 
-defineProps<{ projectId?: string | null }>()
+defineProps<{
+  projectId?: string | null
+  /** Dashboard polling state + shell context, forwarded to the window header/info. */
+  connected?: boolean
+  shellModeLabel?: string | null
+  shellTaskId?: string | null
+}>()
 
 const POSITION_KEY = 'dev-dashboard-nlchat-position'
 const DEFAULT_POSITION = { right: 24, bottom: 24 }
 
-// Open state + context live in a module-level composable so a pipeline node's
-// popover can open this same window scoped to its step.
-const { open, context, toggle, close, resetToBuilder, openBuilderChat } = useChatSurface()
+// Open state + the session registry live in a module-level composable so a
+// pipeline node's popover can open this same window scoped to its step.
+const { open, sessions, activeId, context, toggle, close, openBuilderChat, closeSession } =
+  useChatSurface()
 const position = reactive(loadPosition())
 
 // Once opened, the window stays mounted and is only hidden — minimizing must
@@ -83,23 +90,29 @@ function onClick(): void {
     dragMoved = false
     return
   }
-  // While a step's chat is open, the FAB means "start a new chat" (its
-  // tooltip) rather than hide/show — minimizing already has its own button
-  // (—) in the window header for the ẩn-giữ-context case.
+  // While a step's chat is open, the FAB means "back to the creation assistant"
+  // rather than hide/show — and thanks to the registry that RESUMES the earlier
+  // builder session (with whatever was typed into it) instead of starting over.
+  // Minimizing has its own button (—) in the header for the ẩn-giữ-context case.
   if (open.value && context.value.mode === 'task') {
     openBuilderChat()
     return
   }
-  // Show/hide only — the context is preserved, so reopening after a minimize
-  // resumes the same runner chat instead of resetting it to the builder. The
-  // × button is what forgets the context.
+  // Nothing opened yet → seed the builder session.
+  if (!open.value && sessions.value.length === 0) {
+    openBuilderChat()
+    return
+  }
+  // Show/hide only — sessions are preserved, so reopening after a minimize
+  // resumes the same chat. The × button is what forgets one.
   toggle()
 }
 
-/** × — hide and drop the step context, so the next open is the creation flow. */
+/** × — hide and drop the active session; an emptied registry re-seeds a builder one. */
 function onClose(): void {
+  const id = activeId.value
   close()
-  resetToBuilder()
+  if (id) closeSession(id)
 }
 
 onMounted(() => {
@@ -132,9 +145,11 @@ onUnmounted(() => {
     :anchor="position"
     :context="context"
     :visible="open"
+    :connected="connected"
+    :shell-mode-label="shellModeLabel"
+    :shell-task-id="shellTaskId"
     @minimize="close"
     @close="onClose"
-    @new-session="openBuilderChat"
   />
 </template>
 

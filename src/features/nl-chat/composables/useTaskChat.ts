@@ -202,6 +202,10 @@ export function useTaskChat(opts: UseTaskChatOptions) {
   }
 
   async function start(): Promise<void> {
+    // Idempotent: the body calls start() from mount, from the re-scope watcher
+    // and from the active watcher — without clearing first, switching sessions
+    // quickly leaves two poll chains running against the same session.
+    stop()
     stopped = false
     await refresh(false)
     scheduleNext()

@@ -19,6 +19,9 @@ type IconName =
   | 'layout'
   | 'play'
   | 'stop'
+  | 'chevronLeft'
+  | 'chevronRight'
+  | 'paperclip'
 
 const props = withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 16 })
 
@@ -36,6 +39,9 @@ const VIEW_BOX: Record<IconName, string> = {
   layout: '0 0 16 16',
   play: '0 0 16 16',
   stop: '0 0 16 16',
+  chevronLeft: '0 0 16 16',
+  chevronRight: '0 0 16 16',
+  paperclip: '0 0 16 16',
 }
 
 const viewBox = VIEW_BOX[props.name]
@@ -129,6 +135,22 @@ const viewBox = VIEW_BOX[props.name]
     </template>
     <template v-else-if="name === 'stop'">
       <rect x="4" y="4" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
+    </template>
+    <template v-else-if="name === 'chevronLeft'">
+      <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M10 3.5L5.5 8l4.5 4.5" />
+    </template>
+    <template v-else-if="name === 'chevronRight'">
+      <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5L10.5 8 6 12.5" />
+    </template>
+    <template v-else-if="name === 'paperclip'">
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M11.5 7.5l-4.2 4.2a2.4 2.4 0 0 1-3.4-3.4l5-5a1.7 1.7 0 0 1 2.4 2.4l-5 5a.9.9 0 0 1-1.3-1.3l4.2-4.2"
+      />
     </template>
   </svg>
 </template>
