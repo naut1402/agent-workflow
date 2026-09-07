@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createApp } from '../../../../src/api/apiServer.js'
+import { on } from '../../../../src/core/events/index.js'
 import type { RegistryContext } from '../../../../src/core/http/types.js'
 
 // Route contract for GET/DELETE /api/tasks/:id/worktree (T161678b4). The whole
@@ -14,6 +15,8 @@ const hasGit = spawnSync('git', ['--version'], { encoding: 'utf8' }).status === 
 
 let repo: string
 let root: string
+/** Deep dir neither inside the repo nor a sibling of it — the policy refuses it. */
+let outsideRoot: string
 let app: Awaited<ReturnType<typeof createApp>>
 const savedEnv = { ...process.env }
 
@@ -61,6 +64,7 @@ function worktreePaths(): string[] {
 
 beforeAll(async () => {
   repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-wt-route-')))
+  outsideRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-wt-outside-')))
   // `root` is the data root the controller receives — <repo>/.dev-team-agent.
   root = path.join(repo, '.dev-team-agent')
   fs.mkdirSync(path.join(root, '.dev-state'), { recursive: true })
@@ -80,6 +84,7 @@ beforeAll(async () => {
 afterAll(() => {
   process.env = savedEnv
   fs.rmSync(repo, { recursive: true, force: true })
+  fs.rmSync(outsideRoot, { recursive: true, force: true })
 })
 
 // The id guard runs before any git call, so it holds with or without git.
@@ -237,5 +242,129 @@ describe.skipIf(!hasGit)('DELETE /api/tasks/:id/worktree', () => {
     expect(fs.existsSync(drop)).toBe(false)
     expect(fs.existsSync(keep)).toBe(true)
     expect(worktreePaths()).toContain(repo)
+  })
+})
+
+// Error branches and the invariants the docs promise. Each one is a path a user
+// can hit from the button, so each gets an end-to-end assertion.
+describe.skipIf(!hasGit)('DELETE /api/tasks/:id/worktree — refusals', () => {
+  test('409: refuses a locked worktree and names the reason', async () => {
+    seedTask('D10')
+    const wt = addWorktree('D10', 'fix/D10/locked')
+    git('worktree', 'lock', '--reason', 'in use', wt)
+
+    const res = await app.request('/api/tasks/D10/worktree', { method: 'DELETE' })
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.error).toBe('worktree_locked')
+    expect(body.lockReason).toBe('in use')
+    expect(fs.existsSync(wt)).toBe(true)
+
+    git('worktree', 'unlock', wt)
+  })
+
+  test('403: refuses a worktree outside the repo and its sibling dirs', async () => {
+    seedTask('D11')
+    const outside = path.join(outsideRoot, 'nested', 'D11')
+    fs.mkdirSync(path.dirname(outside), { recursive: true })
+    git('worktree', 'add', '-b', 'fix/D11/outside', outside)
+
+    const res = await app.request('/api/tasks/D11/worktree', { method: 'DELETE' })
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe('worktree_outside_policy')
+    expect(fs.existsSync(outside)).toBe(true)
+
+    git('worktree', 'remove', '--force', outside)
+  })
+
+  test('409: unreadable task state counts as "still running", worktree untouched', async () => {
+    seedTask('D12')
+    const wt = addWorktree('D12', 'fix/D12/nostate')
+    // Same shape as a half-written record from the orchestrator: the dashboard
+    // cannot prove the task ended, so it must not remove anything.
+    fs.rmSync(path.join(root, '.dev-state', 'D12.json'))
+
+    const res = await app.request('/api/tasks/D12/worktree', { method: 'DELETE' })
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe('task_not_finished')
+    expect(fs.existsSync(wt)).toBe(true)
+  })
+
+  test('409: a modified tracked file blocks removal', async () => {
+    seedTask('D13')
+    const wt = addWorktree('D13', 'fix/D13/modified')
+    fs.writeFileSync(path.join(wt, 'README.md'), '# edited\n', 'utf8')
+
+    const res = await app.request('/api/tasks/D13/worktree', { method: 'DELETE' })
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.error).toBe('worktree_dirty')
+    expect(body.dirtyFiles.join(' ')).toContain('README.md')
+    expect(fs.existsSync(wt)).toBe(true)
+  })
+
+  test('409: a deleted tracked file blocks removal', async () => {
+    seedTask('D14')
+    const wt = addWorktree('D14', 'fix/D14/deleted')
+    fs.rmSync(path.join(wt, 'README.md'))
+
+    const res = await app.request('/api/tasks/D14/worktree', { method: 'DELETE' })
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe('worktree_dirty')
+    expect(fs.existsSync(wt)).toBe(true)
+  })
+
+  test('200: cleaning the worktree makes the retry succeed', async () => {
+    seedTask('D15')
+    const wt = addWorktree('D15', 'fix/D15/retry')
+    const scratch = path.join(wt, 'scratch.txt')
+    fs.writeFileSync(scratch, 'wip\n', 'utf8')
+
+    expect((await app.request('/api/tasks/D15/worktree', { method: 'DELETE' })).status).toBe(409)
+    fs.rmSync(scratch)
+    expect((await app.request('/api/tasks/D15/worktree', { method: 'DELETE' })).status).toBe(200)
+    expect(fs.existsSync(wt)).toBe(false)
+  })
+})
+
+// The event is a published contract (docs/event-catalog.md) — without a test
+// nothing catches its removal.
+describe.skipIf(!hasGit)('DELETE /api/tasks/:id/worktree — domain event', () => {
+  test('emits entity.deleted for the worktree after git succeeded', async () => {
+    seedTask('D16')
+    const wt = addWorktree('D16', 'fix/D16/event')
+    const seen: Record<string, unknown>[] = []
+    const off = on('entity.deleted', (e) => {
+      seen.push(e.payload)
+    })
+
+    try {
+      expect((await app.request('/api/tasks/D16/worktree', { method: 'DELETE' })).status).toBe(200)
+    } finally {
+      off()
+    }
+
+    const worktreeEvents = seen.filter((p) => p.entity === 'worktree')
+    expect(worktreeEvents).toHaveLength(1)
+    expect(worktreeEvents[0].id).toBe('D16')
+    expect((worktreeEvents[0].detail as any).path).toBe(wt)
+    expect((worktreeEvents[0].detail as any).prunedOnly).toBe(false)
+  })
+
+  test('a refused removal emits nothing', async () => {
+    seedTask('D17')
+    const wt = addWorktree('D17', 'fix/D17/silent')
+    fs.writeFileSync(path.join(wt, 'scratch.txt'), 'wip\n', 'utf8')
+    const seen: unknown[] = []
+    const off = on('entity.deleted', (e) => {
+      if ((e.payload as any).entity === 'worktree') seen.push(e.payload)
+    })
+
+    try {
+      expect((await app.request('/api/tasks/D17/worktree', { method: 'DELETE' })).status).toBe(409)
+    } finally {
+      off()
+    }
+    expect(seen).toHaveLength(0)
   })
 })

@@ -238,38 +238,37 @@ function mountLayout(props: Record<string, any>) {
   })
 }
 
+function jsonRes(body: any, status = 200) {
+  return { ok: status < 400, status, json: async () => body }
+}
+
+interface StubOpts {
+  jobs?: Record<string, any[]>
+  deleteResponse?: any
+  /** Response cho GET /api/tasks/:id/worktree; hàm để đổi giữa các lần gọi. */
+  worktreeResponse?: any | (() => any)
+}
+
+/** Chỉ gọi factory ở nhánh GET — ca "đọc lại sau khi xoá" đếm số lần đọc. */
+function worktreeRes(opts: StubOpts) {
+  const wt =
+    typeof opts.worktreeResponse === 'function' ? opts.worktreeResponse() : opts.worktreeResponse
+  return wt ?? jsonRes({ worktree: null, ambiguous: false })
+}
+
 /** fetch mock phân nhánh theo URL: /api/jobs · /worktree · /api/tasks/<id>. */
-function stubFetch(
-  opts: {
-    jobs?: Record<string, any[]>
-    deleteResponse?: any
-    /** Response cho GET /api/tasks/:id/worktree; hàm để đổi giữa các lần gọi. */
-    worktreeResponse?: any | (() => any)
-  } = {},
-) {
-  const jobs = opts.jobs ?? {}
+function stubFetch(opts: StubOpts = {}) {
   const fetchMock = vi.fn(async (input: any, init: any = {}) => {
     const url = String(input)
+    const isGet = String(init.method ?? 'GET').toUpperCase() === 'GET'
     if (url.includes('/api/jobs')) {
       const status = new URL(url, 'http://x').searchParams.get('status') ?? ''
-      return { ok: true, status: 200, json: async () => ({ jobs: jobs[status] ?? [] }) }
+      return jsonRes({ jobs: opts.jobs?.[status] ?? [] })
     }
     // Phải đứng trước nhánh /api/tasks/ — nếu không, GET trạng thái worktree
     // rơi vào response của DELETE task.
-    if (url.includes('/worktree')) {
-      if (String(init.method ?? 'GET').toUpperCase() !== 'GET') {
-        return opts.deleteResponse ?? { ok: true, status: 200, json: async () => ({ ok: true }) }
-      }
-      // Chỉ gọi factory ở nhánh GET — ca "đọc lại sau khi xoá" đếm số lần đọc.
-      const wt =
-        typeof opts.worktreeResponse === 'function'
-          ? opts.worktreeResponse()
-          : opts.worktreeResponse
-      return wt ?? { ok: true, status: 200, json: async () => ({ worktree: null, ambiguous: false }) }
-    }
-    if (url.includes('/api/tasks/')) {
-      return opts.deleteResponse ?? { ok: true, status: 200, json: async () => ({ ok: true }) }
-    }
+    if (url.includes('/worktree') && isGet) return worktreeRes(opts)
+    if (url.includes('/api/tasks/')) return opts.deleteResponse ?? jsonRes({ ok: true })
     throw new Error(`unexpected fetch: ${init.method ?? 'GET'} ${url}`)
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -291,7 +290,7 @@ const cleanWorktree = {
 }
 
 function worktreeOk(worktree: any, ambiguous = false) {
-  return { ok: true, status: 200, json: async () => ({ worktree, ambiguous }) }
+  return jsonRes({ worktree, ambiguous })
 }
 
 function deleteCalls(fetchMock: any) {
