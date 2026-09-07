@@ -220,3 +220,29 @@ describe('scanSkillsByPatterns', () => {
     expect(await scanSkillsByPatterns(root, null)).toEqual([])
   })
 })
+
+describe('malformed wildcard segments stay cheap', () => {
+  // `*` compiled naively to `[^/]*` per star gives `[^/]*[^/]*…`, which backtracks
+  // exponentially on a non-matching name: 8 stars measured at ~3.5s, 10 stars did not
+  // finish. SCAN_PATTERN_MAX_LENGTH is 200, so a user can type far more than that, and
+  // the blowup happens inside one RegExp.test where no walker budget can intervene.
+  test.each([3, 8, 12, 30])('a %i-star segment resolves promptly', async (stars) => {
+    const started = Date.now()
+    await expandScanPatterns(root, [`${'*'.repeat(stars)}x-no-such-name`])
+    expect(Date.now() - started).toBeLessThan(1000)
+  })
+
+  test('collapsing runs of stars does not change what matches', async () => {
+    // `*`, `**` (as a plain segment body) and `***` all mean "any name in this dir".
+    const single = rel(await expandScanPatterns(root, ['flat-skills/*.md']))
+    expect(rel(await expandScanPatterns(root, ['flat-skills/***.md']))).toEqual(single)
+    expect(rel(await expandScanPatterns(root, ['flat-skills/****.md']))).toEqual(single)
+    expect(single.length).toBeGreaterThan(0)
+  })
+
+  test('stars mixed with literals still anchor on the literals', async () => {
+    expect(rel(await expandScanPatterns(root, ['.agents/**investigator**.md'])))
+      .toEqual(['.agents/investigator.agent.md'])
+    expect(await expandScanPatterns(root, ['.agents/***no-such-prefix*.md'])).toEqual([])
+  })
+})

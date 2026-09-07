@@ -1,5 +1,11 @@
 import { basename, dirname, homeDir, joinPath, relativePath, safeReadDir } from '../../../../core/lib/fileHelper.js'
-import { expandScanPatterns } from '../scanPatterns.js'
+import {
+  DENY_DIRS,
+  SCAN_PATTERN_MAX_DEPTH,
+  SCAN_PATTERN_MAX_DIRS,
+  SCAN_PATTERN_MAX_MATCHES,
+  expandScanPatterns,
+} from '../scanPatterns.js'
 
 export const RULE_CATEGORIES = ['coding', 'doc-writing', 'doc-review', 'test', 'git-pr', 'other']
 
@@ -22,6 +28,21 @@ export function inferRuleCategory(filePath: string, fileName: string): string {
   return 'other'
 }
 
+const RULE_FILE_EXT = /\.(md|mdc)$/i
+
+/** Describe one rule file relative to the base it was collected under. */
+function toRuleItem(full: string, scope: string, baseDir: string): RuleItem {
+  const rel = relativePath(baseDir, full).replace(/\\/g, '/')
+  const fileName = basename(full)
+  return {
+    id: `${scope}:${rel}`,
+    name: fileName.replace(RULE_FILE_EXT, ''),
+    path: rel,
+    scope,
+    category: inferRuleCategory(rel, fileName),
+  }
+}
+
 /** Recursively collect .md/.mdc rule files under `dir` into `out`. */
 export async function walkRuleFiles(
   dir: string,
@@ -35,43 +56,72 @@ export async function walkRuleFiles(
       await walkRuleFiles(full, scope, baseDir, out)
       continue
     }
-    if (!/\.(md|mdc)$/i.test(entry.name)) continue
-    const rel = relativePath(baseDir, full).replace(/\\/g, '/')
-    const name = entry.name.replace(/\.(md|mdc)$/i, '')
-    out.push({
-      id: `${scope}:${rel}`,
-      name,
-      path: rel,
-      scope,
-      category: inferRuleCategory(rel, entry.name),
-    })
+    if (!RULE_FILE_EXT.test(entry.name)) continue
+    out.push(toRuleItem(full, scope, baseDir))
+  }
+}
+
+interface RuleWalkBudget {
+  dirs: number
+  files: number
+}
+
+/**
+ * Same collection as `walkRuleFiles`, but for a directory reached through a USER
+ * pattern rather than one of the three fixed sources.
+ *
+ * The ceilings in `expandScanPatterns` only bound the search for the matching
+ * directory — they say nothing about what lives inside it. `**` matches zero
+ * segments, so it yields `projectRoot` itself; handing that to the unbounded
+ * walker means reading every `.md` under `node_modules` (900+ in this repo), plus
+ * every `node_modules` nested under a monorepo package. The denylist and budget
+ * therefore have to be enforced here, at the point of the actual work.
+ */
+async function walkRuleFilesBounded(
+  dir: string,
+  baseDir: string,
+  out: RuleItem[],
+  depth: number,
+  budget: RuleWalkBudget,
+): Promise<void> {
+  if (depth > SCAN_PATTERN_MAX_DEPTH) return
+  if (budget.files >= SCAN_PATTERN_MAX_MATCHES || budget.dirs >= SCAN_PATTERN_MAX_DIRS) return
+  budget.dirs++
+  for (const entry of await safeReadDir(dir)) {
+    if (DENY_DIRS.has(entry.name)) continue
+    const full = joinPath(dir, entry.name)
+    if (entry.isDirectory()) {
+      await walkRuleFilesBounded(full, baseDir, out, depth + 1, budget)
+      continue
+    }
+    if (!RULE_FILE_EXT.test(entry.name)) continue
+    if (budget.files >= SCAN_PATTERN_MAX_MATCHES) return
+    budget.files++
+    out.push(toRuleItem(full, 'project', baseDir))
   }
 }
 
 /**
- * Rules from custom scan patterns. A matched directory is walked recursively;
- * a matched file becomes a single rule. Pattern rules are always project-scoped.
+ * Rules from custom scan patterns. A matched directory is walked recursively
+ * under a shared budget; a matched file becomes a single rule. Pattern rules are
+ * always project-scoped.
  */
 async function scanRulesByPatterns(
   projectRoot: string,
   patterns: string[] | null | undefined,
   out: RuleItem[],
 ): Promise<void> {
+  // One budget for the whole batch — 20 patterns must not each get a fresh 200.
+  const budget: RuleWalkBudget = { dirs: 0, files: 0 }
   for (const match of await expandScanPatterns(projectRoot, patterns)) {
     if (match.isDirectory) {
-      await walkRuleFiles(match.path, 'project', projectRoot, out)
+      await walkRuleFilesBounded(match.path, projectRoot, out, 0, budget)
       continue
     }
-    if (!/\.(md|mdc)$/i.test(match.path)) continue
-    const rel = relativePath(projectRoot, match.path).replace(/\\/g, '/')
-    const fileName = basename(match.path)
-    out.push({
-      id: `project:${rel}`,
-      name: fileName.replace(/\.(md|mdc)$/i, ''),
-      path: rel,
-      scope: 'project',
-      category: inferRuleCategory(rel, fileName),
-    })
+    if (!RULE_FILE_EXT.test(match.path)) continue
+    if (budget.files >= SCAN_PATTERN_MAX_MATCHES) break
+    budget.files++
+    out.push(toRuleItem(match.path, 'project', projectRoot))
   }
 }
 

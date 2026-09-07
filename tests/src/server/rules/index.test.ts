@@ -107,6 +107,18 @@ describe('buildRules with custom scan patterns', () => {
     await fs.writeFile(path.join(projectRoot, 'guides', 'notes.txt'), 'ignored')
     await fs.mkdir(path.join(projectRoot, 'single'), { recursive: true })
     await fs.writeFile(path.join(projectRoot, 'single', 'one-off.md'), '# o')
+    // Denylisted dirs, both at the root and nested inside a monorepo-style package:
+    // a directory match must never walk into either.
+    await fs.mkdir(path.join(projectRoot, 'node_modules', 'pkg'), { recursive: true })
+    await fs.writeFile(path.join(projectRoot, 'node_modules', 'pkg', 'README.md'), '# junk')
+    await fs.mkdir(path.join(projectRoot, 'packages', 'app', 'node_modules', 'dep'), {
+      recursive: true,
+    })
+    await fs.writeFile(
+      path.join(projectRoot, 'packages', 'app', 'node_modules', 'dep', 'README.md'),
+      '# junk',
+    )
+    await fs.writeFile(path.join(projectRoot, 'packages', 'app', 'house-rules.md'), '# real')
   })
   afterAll(async () => {
     await fs.rm(projectRoot, { recursive: true, force: true })
@@ -164,5 +176,20 @@ describe('buildRules with custom scan patterns', () => {
     const before = await buildRules(root)
     const after = await buildRules(root, { scanPatterns: { rules: ['nope/**/*.md'] } })
     expect(after).toEqual(before)
+  })
+
+  // `**` matches zero segments, so it yields projectRoot itself. The directory branch
+  // must apply the denylist itself — the expander's ceilings stop at finding the dir.
+  test('a directory match never walks into a denylisted directory', async () => {
+    const { rules } = await buildRules(root, { scanPatterns: { rules: ['**'] } })
+    expect(rules.filter((r) => r.path.includes('node_modules'))).toEqual([])
+    // The real file sitting next to a nested node_modules is still collected.
+    expect(rules.some((r) => r.path === 'packages/app/house-rules.md')).toBe(true)
+  })
+
+  test('a directory match reached through an explicit path is denylisted too', async () => {
+    const { rules } = await buildRules(root, { scanPatterns: { rules: ['packages/app'] } })
+    expect(rules.filter((r) => r.path.includes('node_modules'))).toEqual([])
+    expect(rules.some((r) => r.path === 'packages/app/house-rules.md')).toBe(true)
   })
 })

@@ -13,9 +13,9 @@ import { joinPath, resolvePathUnder, safeReadDir } from '../../../core/lib/fileH
 
 export const SCAN_PATTERN_MAX_DEPTH = 8
 export const SCAN_PATTERN_MAX_MATCHES = 200
-const SCAN_PATTERN_MAX_DIRS = 4000
+export const SCAN_PATTERN_MAX_DIRS = 4000
 
-const DENY_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.output', '.cache'])
+export const DENY_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.output', '.cache'])
 
 export interface PatternMatch {
   path: string
@@ -29,6 +29,11 @@ interface Budget {
 
 function segmentToRegExp(seg: string): RegExp {
   const body = seg
+    // Collapse runs of `*` FIRST. `[^/]*[^/]*` is semantically identical to `[^/]*`, but
+    // on a non-matching name it backtracks exponentially — a 10-star segment (well within
+    // SCAN_PATTERN_MAX_LENGTH) hangs the single Node thread for minutes inside one
+    // `RegExp.test`, where no walker budget can reach it.
+    .replace(/\*{2,}/g, '*')
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
     .replace(/\*/g, '[^/]*')
     .replace(/\?/g, '[^/]')
