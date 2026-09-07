@@ -91,3 +91,105 @@ describe('buildRules', () => {
     expect(categories).toContain('test')
   })
 })
+
+describe('buildRules with custom scan patterns', () => {
+  let projectRoot: string
+  let root: string
+  beforeAll(async () => {
+    projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'rules-patterns-'))
+    root = path.join(projectRoot, '.dev-team-agent')
+    await fs.mkdir(path.join(projectRoot, 'docs', 'agent-rules'), { recursive: true })
+    await fs.writeFile(path.join(projectRoot, 'docs', 'agent-rules', 'testing.md'), '# t')
+    // Off-convention rules, reachable only through a pattern.
+    await fs.mkdir(path.join(projectRoot, 'guides', 'nested'), { recursive: true })
+    await fs.writeFile(path.join(projectRoot, 'guides', 'house-style.md'), '# s')
+    await fs.writeFile(path.join(projectRoot, 'guides', 'nested', 'deep-notes.mdc'), '# d')
+    await fs.writeFile(path.join(projectRoot, 'guides', 'notes.txt'), 'ignored')
+    await fs.mkdir(path.join(projectRoot, 'single'), { recursive: true })
+    await fs.writeFile(path.join(projectRoot, 'single', 'one-off.md'), '# o')
+    // Denylisted dirs, both at the root and nested inside a monorepo-style package:
+    // a directory match must never walk into either.
+    await fs.mkdir(path.join(projectRoot, 'node_modules', 'pkg'), { recursive: true })
+    await fs.writeFile(path.join(projectRoot, 'node_modules', 'pkg', 'README.md'), '# junk')
+    await fs.mkdir(path.join(projectRoot, 'packages', 'app', 'node_modules', 'dep'), {
+      recursive: true,
+    })
+    await fs.writeFile(
+      path.join(projectRoot, 'packages', 'app', 'node_modules', 'dep', 'README.md'),
+      '# junk',
+    )
+    await fs.writeFile(path.join(projectRoot, 'packages', 'app', 'house-rules.md'), '# real')
+  })
+  afterAll(async () => {
+    await fs.rm(projectRoot, { recursive: true, force: true })
+  })
+
+  test('omitting scanPatterns matches passing an empty list', async () => {
+    const without = await buildRules(root)
+    const withEmpty = await buildRules(root, { scanPatterns: { rules: [] } })
+    expect(withEmpty).toEqual(without)
+  })
+
+  test('a matched directory is walked recursively, non-markdown ignored', async () => {
+    const { rules } = await buildRules(root, { scanPatterns: { rules: ['guides'] } })
+    const fromPattern = rules.filter((r) => r.path.startsWith('guides/'))
+    expect(fromPattern.map((r) => r.path).sort()).toEqual([
+      'guides/house-style.md',
+      'guides/nested/deep-notes.mdc',
+    ])
+    expect(fromPattern.every((r) => r.scope === 'project')).toBe(true)
+  })
+
+  test('a matched file becomes a single rule with an inferred category', async () => {
+    const { rules } = await buildRules(root, { scanPatterns: { rules: ['single/one-off.md'] } })
+    const one = rules.find((r) => r.name === 'one-off')
+    expect(one).toMatchObject({
+      id: 'project:single/one-off.md',
+      path: 'single/one-off.md',
+      scope: 'project',
+      category: 'other',
+    })
+  })
+
+  test('a pattern pointing back at a default directory does not duplicate rules', async () => {
+    const { rules } = await buildRules(root, { scanPatterns: { rules: ['docs/**'] } })
+    const testing = rules.filter((r) => r.path === 'docs/agent-rules/testing.md')
+    expect(testing).toHaveLength(1)
+  })
+
+  test('two overlapping patterns do not duplicate rules', async () => {
+    const { rules } = await buildRules(root, {
+      scanPatterns: { rules: ['guides', 'guides/*.md'] },
+    })
+    expect(rules.filter((r) => r.path === 'guides/house-style.md')).toHaveLength(1)
+  })
+
+  test('patterns never touch the global scope line', async () => {
+    const before = (await buildRules(root)).rules.filter((r) => r.scope === 'global')
+    const after = (await buildRules(root, { scanPatterns: { rules: ['**'] } })).rules.filter(
+      (r) => r.scope === 'global',
+    )
+    expect(after).toEqual(before)
+  })
+
+  test('a pattern matching nothing leaves the listing unchanged', async () => {
+    const before = await buildRules(root)
+    const after = await buildRules(root, { scanPatterns: { rules: ['nope/**/*.md'] } })
+    expect(after).toEqual(before)
+  })
+
+  // `**` matches zero segments, so it yields projectRoot itself. The directory branch
+  // must apply the denylist itself — the expander's ceilings stop at finding the dir.
+  test('a directory match never walks into a denylisted directory', async () => {
+    const { rules } = await buildRules(root, { scanPatterns: { rules: ['**'] } })
+    expect(rules.filter((r) => r.path.includes('node_modules'))).toEqual([])
+    // The real file sitting next to a nested node_modules is still collected.
+    expect(rules.some((r) => r.path === 'packages/app/house-rules.md')).toBe(true)
+  })
+
+  test('a directory match reached through an explicit path is denylisted too', async () => {
+    const { rules } = await buildRules(root, { scanPatterns: { rules: ['packages/app'] } })
+    expect(rules.filter((r) => r.path.includes('node_modules'))).toEqual([])
+    expect(rules.some((r) => r.path === 'packages/app/house-rules.md')).toBe(true)
+  })
+})

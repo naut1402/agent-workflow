@@ -26,11 +26,16 @@ vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
     },
   })),
   saveLoggingConfig: vi.fn(async (c: object) => ({ config: c })),
+  fetchScanPatternsConfig: vi.fn(async () => ({
+    config: { agents: [], skills: [], rules: [] },
+  })),
+  saveScanPatternsConfig: vi.fn(async (c: object) => ({ config: c })),
 }))
 
 import {
   fetchLoggingConfig,
   saveLoggingConfig,
+  saveScanPatternsConfig,
 } from '@/features/settings/scripts/SettingsDialogApi'
 
 beforeEach(() => {
@@ -53,6 +58,7 @@ afterEach(() => {
     },
   })
   vi.mocked(saveLoggingConfig).mockImplementation(async (c: object) => ({ config: c }))
+  vi.mocked(saveScanPatternsConfig).mockClear()
 })
 
 describe('SettingsDialog', () => {
@@ -332,5 +338,93 @@ describe('SettingsDialog', () => {
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({
       notificationUiPlacement: 'floating',
     })
+  })
+})
+
+describe('SettingsDialog — scan patterns', () => {
+  const openProjects = async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    ;(document.querySelector('.settings-nav-item[data-group="projects"]') as HTMLButtonElement).click()
+    await flushPromises()
+    return document.querySelector('.settings-pane.modal-body') as HTMLElement
+  }
+
+  const kindBlock = (kind: string) =>
+    document.querySelector(`.settings-scan-patterns .settings-subsection[data-kind="${kind}"]`) as HTMLElement
+
+  const addPattern = async (kind: string, value: string) => {
+    const block = kindBlock(kind)
+    const input = block.querySelector('input') as HTMLInputElement
+    input.value = value
+    input.dispatchEvent(new Event('input'))
+    await flushPromises()
+    ;(block.querySelector('.settings-whitelist-add button') as HTMLButtonElement).click()
+    await flushPromises()
+  }
+
+  it('renders one list per kind inside the Projects group', async () => {
+    const pane = await openProjects()
+    expect(pane.textContent).toContain('Pattern scan agents / skills / rules')
+    for (const kind of ['agents', 'skills', 'rules']) {
+      expect(kindBlock(kind)).toBeTruthy()
+    }
+  })
+
+  it('empty state names the defaults still in use', async () => {
+    await openProjects()
+    const empty = kindBlock('rules').querySelector('.settings-whitelist-empty') as HTMLElement
+    expect(empty.textContent).toContain('Chưa có pattern')
+    expect(empty.textContent).toContain('docs/agent-rules/')
+  })
+
+  it('adding a valid pattern persists it for that kind only', async () => {
+    await openProjects()
+    await addPattern('agents', './.agents/*.md')
+    expect(vi.mocked(saveScanPatternsConfig)).toHaveBeenCalledWith({
+      agents: ['.agents/*.md'],
+      skills: [],
+      rules: [],
+    })
+    expect(kindBlock('agents').textContent).toContain('.agents/*.md')
+  })
+
+  it('rejects an unsafe pattern in place without calling the API', async () => {
+    const pane = await openProjects()
+    await addPattern('rules', '../outside')
+    expect(vi.mocked(saveScanPatternsConfig)).not.toHaveBeenCalled()
+    expect(pane.textContent).toContain('Pattern không hợp lệ')
+  })
+
+  it('removing a pattern persists the shorter list', async () => {
+    await openProjects()
+    await addPattern('skills', 'packages/*/skills')
+    vi.mocked(saveScanPatternsConfig).mockClear()
+    const removeBtn = kindBlock('skills').querySelector(
+      '.settings-whitelist-item .icon-btn',
+    ) as HTMLButtonElement
+    removeBtn.click()
+    await flushPromises()
+    expect(vi.mocked(saveScanPatternsConfig)).toHaveBeenCalledWith({
+      agents: [],
+      skills: [],
+      rules: [],
+    })
+  })
+
+  it('keeps several patterns of one kind in insertion order', async () => {
+    await openProjects()
+    await addPattern('rules', 'docs/rules')
+    await addPattern('rules', 'guides')
+    const shown = Array.from(
+      kindBlock('rules').querySelectorAll('.settings-whitelist-path'),
+    ).map((el) => el.textContent)
+    expect(shown).toEqual(['docs/rules', 'guides'])
+  })
+
+  it('surfaces a failed save to the user', async () => {
+    vi.mocked(saveScanPatternsConfig).mockRejectedValueOnce(new Error('boom'))
+    const pane = await openProjects()
+    await addPattern('agents', '.agents')
+    expect(pane.textContent).toContain('boom')
   })
 })

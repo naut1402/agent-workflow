@@ -10,6 +10,7 @@ import {
   ensureNlChatBuilderAgent,
   scanCustomAgents,
   buildCatalog,
+  loadScanPatternsConfig,
 } from './business/index.js'
 
 /**
@@ -41,7 +42,10 @@ export class NlChatController extends AbstractController {
     // Auto mode may end up drafting a pipeline, so the catalog refs must be in
     // the turn-1 context there too — not only when 'pipeline' was pinned.
     if (entityType === 'pipeline' || !entityType) {
-      const catalog = await buildCatalog(root, { scanCustomAgents })
+      const catalog = await buildCatalog(root, {
+        scanCustomAgents,
+        scanPatterns: loadScanPatternsConfig(),
+      })
       const refs = (catalog.agents || [])
         .map((a: any) => a?.id)
         .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
