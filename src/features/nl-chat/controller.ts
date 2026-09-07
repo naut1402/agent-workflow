@@ -1,3 +1,7 @@
+// fallow-ignore-file unused-file -- `registerFeatureRoutes` (src/api/apiServer.ts)
+// discovers every `features/<name>/api.ts` by scanning the directory and
+// dynamic-importing it, and that module is what imports this controller. Static
+// reachability cannot follow that edge, so the file reads as unreachable.
 import type { Context } from 'hono'
 import { AbstractController } from '../../core/http/AbstractController.js'
 import type { HonoEnv } from '../../core/http/types.js'
