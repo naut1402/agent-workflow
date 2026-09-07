@@ -24,6 +24,12 @@ import {
   type RecoverySettings,
 } from './recovery'
 import {
+  DEFAULT_SCAN_PATTERNS_CONFIG,
+  ScanPatternsConfigSchema,
+  parseScanPatternsConfig,
+  type ScanPatternsConfig,
+} from './scanPatterns'
+import {
   DEFAULT_SECURITY_CONFIG,
   SecurityConfigSchema,
   parseSecurityConfig,
@@ -40,6 +46,7 @@ export const DashboardSettingsSchema = z
     githubTokens: GithubTokensConfigSchema.optional(),
     logging: LoggingConfigSchema.optional(),
     recovery: RecoverySettingsSchema.optional(),
+    scanPatterns: ScanPatternsConfigSchema.optional(),
     security: SecurityConfigSchema.optional(),
   })
   .passthrough()
@@ -51,6 +58,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   githubTokens: { ...DEFAULT_GITHUB_TOKENS_CONFIG, repos: [] },
   logging: { ...DEFAULT_LOGGING_CONFIG, types: { ...DEFAULT_LOGGING_CONFIG.types } },
   recovery: { ...DEFAULT_RECOVERY_SETTINGS, backoffMs: [...DEFAULT_RECOVERY_SETTINGS.backoffMs!] },
+  scanPatterns: { ...DEFAULT_SCAN_PATTERNS_CONFIG, agents: [], skills: [], rules: [] },
   security: { rateLimit: { ...DEFAULT_SECURITY_CONFIG.rateLimit! }, cors: { ...DEFAULT_SECURITY_CONFIG.cors! } },
 }
 
@@ -62,6 +70,7 @@ export function parseDashboardSettings(raw: unknown): DashboardSettings {
       githubTokens: { repos: [] },
       logging: { ...DEFAULT_LOGGING_CONFIG, types: { ...DEFAULT_LOGGING_CONFIG.types } },
       recovery: { ...DEFAULT_RECOVERY_SETTINGS, backoffMs: [...DEFAULT_RECOVERY_SETTINGS.backoffMs!] },
+      scanPatterns: { ...DEFAULT_SCAN_PATTERNS_CONFIG, agents: [], skills: [], rules: [] },
       security: { rateLimit: { ...DEFAULT_SECURITY_CONFIG.rateLimit! }, cors: { ...DEFAULT_SECURITY_CONFIG.cors! } },
     }
   }
@@ -71,6 +80,7 @@ export function parseDashboardSettings(raw: unknown): DashboardSettings {
     githubTokens: parseGithubTokensConfig(parsed.data.githubTokens ?? DEFAULT_GITHUB_TOKENS_CONFIG),
     logging: parseLoggingConfig(parsed.data.logging ?? DEFAULT_LOGGING_CONFIG),
     recovery: parseRecoverySettings(parsed.data.recovery ?? DEFAULT_RECOVERY_SETTINGS),
+    scanPatterns: parseScanPatternsConfig(parsed.data.scanPatterns ?? DEFAULT_SCAN_PATTERNS_CONFIG),
     security: parseSecurityConfig(parsed.data.security ?? DEFAULT_SECURITY_CONFIG),
   }
 }
@@ -97,6 +107,12 @@ export function resolveRecoveryFromDashboard(
   settings: DashboardSettings | null | undefined,
 ): RecoverySettings {
   return parseRecoverySettings(settings?.recovery ?? DEFAULT_RECOVERY_SETTINGS)
+}
+
+export function resolveScanPatternsFromDashboard(
+  settings: DashboardSettings | null | undefined,
+): ScanPatternsConfig {
+  return parseScanPatternsConfig(settings?.scanPatterns ?? DEFAULT_SCAN_PATTERNS_CONFIG)
 }
 
 export function resolveSecurityFromDashboard(

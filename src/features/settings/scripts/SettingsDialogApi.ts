@@ -48,3 +48,15 @@ export async function saveRecoveryConfig(config: {
 }) {
   return apiRequest('PUT', '/api/recovery-config', { body: config })
 }
+
+export async function fetchScanPatternsConfig() {
+  return apiGet('/api/scan-patterns')
+}
+
+export async function saveScanPatternsConfig(config: {
+  agents?: string[]
+  skills?: string[]
+  rules?: string[]
+}) {
+  return apiRequest('PUT', '/api/scan-patterns', { body: config })
+}

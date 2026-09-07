@@ -8,6 +8,7 @@ import {
   ensureNlChatBuilderAgent,
   scanCustomAgents,
   buildCatalog,
+  loadScanPatternsConfig,
 } from './index.js'
 
 export class NlChatBusiness extends AbstractBusiness {
@@ -21,7 +22,10 @@ export class NlChatBusiness extends AbstractBusiness {
   async catalogAgentRefs() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate
-    const catalog = await buildCatalog(gate.root, { scanCustomAgents })
+    const catalog = await buildCatalog(gate.root, {
+      scanCustomAgents,
+      scanPatterns: loadScanPatternsConfig(),
+    })
     return (catalog.agents || [])
       .map((a: any) => a?.id)
       .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)

@@ -8,6 +8,7 @@ export {
   scanCustomAgents,
 } from '../../agent-editor/business/index.js'
 export { buildCatalog } from '../../pipeline-editor/business/catalog/index.js'
+export { loadScanPatternsConfig } from '../../settings/business/index.js'
 export {
   submitJob,
   sendTaskFeedback,

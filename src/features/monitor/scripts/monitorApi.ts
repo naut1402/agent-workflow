@@ -99,3 +99,45 @@ export async function fetchPipelineExport(id: string, projectId?: string) {
 export async function createTask(payload: unknown, projectId?: string) {
   return apiPost('/api/tasks', payload, { query: { project: projectId } })
 }
+
+export async function fetchTaskWorktree(id: string, projectId?: string) {
+  return apiGet(`/api/tasks/${encodeURIComponent(id)}/worktree`, { project: projectId })
+}
+
+export async function cleanupTaskWorktree(id: string, projectId?: string) {
+  return apiRequest('DELETE', `/api/tasks/${encodeURIComponent(id)}/worktree`, {
+    query: { project: projectId },
+    errorMessage: (status) => t('common.errors.cleanWorktree', { status }),
+  })
+}
+
+/**
+ * The server returns an error *code* (`worktree_dirty`, …), never a display
+ * string — wording lives in i18n on this side. `apiRequest` attaches the
+ * response body to `err.data`.
+ */
+export function describeWorktreeError(err: any): string {
+  const data = err?.data ?? {}
+  switch (data.error) {
+    case 'worktree_dirty':
+      return t('monitor.layout.worktreeErrDirty', {
+        count: data.dirtyCount ?? 0,
+        files: (data.dirtyFiles ?? []).join(', '),
+      })
+    case 'worktree_locked':
+      return t('monitor.layout.worktreeErrLocked', { reason: data.lockReason || '—' })
+    case 'worktree_not_found':
+      return t('monitor.layout.worktreeErrNotFound')
+    case 'worktree_ambiguous':
+      return t('monitor.layout.worktreeAmbiguous')
+    case 'worktree_outside_policy':
+      return t('monitor.layout.worktreeErrOutside')
+    case 'task_not_finished':
+      return t('monitor.layout.worktreeErrNotFinished')
+    case 'worktree_remove_failed':
+    case 'git_failed':
+      return t('monitor.layout.worktreeErrRemoveFailed', { detail: data.detail || '' })
+    default:
+      return String(err?.message || err)
+  }
+}
