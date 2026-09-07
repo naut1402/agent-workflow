@@ -34,4 +34,3 @@ export type { CreateTaskInput, CreateTaskResult, CreatedTask } from './tasks/ind
 export { cloneProject, setProjectBranch } from './projects/index.js'
 export type { CloneResult } from './projects/index.js'
 export { findTaskWorktree, removeTaskWorktree } from './worktree.js'
-export type { WorktreeView, WorktreeEntry, RemoveWorktreeResult } from './worktree.js'

@@ -14,7 +14,7 @@ export const GIT_WRITE_TIMEOUT_MS = 30_000
 export const GIT_CLONE_TIMEOUT_MS = 300_000
 
 /** Prefer real git.exe on Windows when PATH is incomplete (IDE-launched servers). */
-export function resolveGitCommand(): string {
+function resolveGitCommand(): string {
   if (process.platform !== 'win32') return 'git'
   const candidates = [
     process.env.GIT_EXEC_PATH && joinPath(process.env.GIT_EXEC_PATH, 'git.exe'),

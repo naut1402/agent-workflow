@@ -40,6 +40,39 @@ export interface WorktreeEntry {
  * separated by a blank line, each line `<key> <rest>`; `detached` / `bare` /
  * `prunable` / `locked` may appear without a value.
  */
+/** Apply one `<key> <value>` line of a porcelain block onto its entry. */
+function applyWorktreeField(entry: WorktreeEntry, line: string): void {
+  const sp = line.indexOf(' ')
+  const key = sp === -1 ? line : line.slice(0, sp)
+  const value = sp === -1 ? '' : line.slice(sp + 1).trim()
+  switch (key) {
+    case 'worktree':
+      entry.path = value
+      break
+    case 'HEAD':
+      entry.head = value || null
+      break
+    case 'branch':
+      entry.branch = value.replace(/^refs\/heads\//, '') || null
+      break
+    case 'detached':
+      entry.detached = true
+      break
+    case 'bare':
+      entry.bare = true
+      break
+    case 'prunable':
+      entry.prunable = true
+      break
+    case 'locked':
+      entry.locked = true
+      entry.lockReason = value || null
+      break
+    default:
+      break
+  }
+}
+
 export function parseWorktreeList(stdout: string): WorktreeEntry[] {
   const blocks = String(stdout ?? '').split(/\r?\n\s*\r?\n/)
   const entries: WorktreeEntry[] = []
@@ -58,37 +91,7 @@ export function parseWorktreeList(stdout: string): WorktreeEntry[] {
       prunable: false,
       isMain: entries.length === 0,
     }
-    for (const line of lines) {
-      const sp = line.indexOf(' ')
-      const key = sp === -1 ? line : line.slice(0, sp)
-      const value = sp === -1 ? '' : line.slice(sp + 1).trim()
-      switch (key) {
-        case 'worktree':
-          entry.path = value
-          break
-        case 'HEAD':
-          entry.head = value || null
-          break
-        case 'branch':
-          entry.branch = value.replace(/^refs\/heads\//, '') || null
-          break
-        case 'detached':
-          entry.detached = true
-          break
-        case 'bare':
-          entry.bare = true
-          break
-        case 'prunable':
-          entry.prunable = true
-          break
-        case 'locked':
-          entry.locked = true
-          entry.lockReason = value || null
-          break
-        default:
-          break
-      }
-    }
+    for (const line of lines) applyWorktreeField(entry, line)
     // A block without a path is not a worktree — `isMain` must not shift, so
     // only blocks that made it into `entries` count as "first".
     if (!entry.path) continue
@@ -166,14 +169,44 @@ export type FindWorktreeResult =
   | { ok: true; worktree: WorktreeView | null; ambiguous: boolean; candidates: string[] }
   | { ok: false; status: 500; error: 'git_failed'; detail: string }
 
-/** Uncommitted changes in a worktree; git failure counts as dirty (do not guess). */
-function readDirtyLines(wtPath: string): { ok: boolean; lines: string[] } {
+/** `strict: false` in tsconfig — narrow with `'error' in read`, not a boolean flag. */
+type DirtyRead = { lines: string[] } | { error: string }
+
+/** Uncommitted changes in a worktree. A failed `git status` is not "0 changes". */
+function readDirtyLines(wtPath: string): DirtyRead {
   // --no-optional-locks: never write index.lock into a worktree someone else uses.
   const res = runGit(['--no-optional-locks', '-C', wtPath, 'status', '--porcelain'], {
     timeout: GIT_READ_TIMEOUT_MS,
   })
-  if (res.status !== 0) return { ok: false, lines: [] }
-  return { ok: true, lines: String(res.stdout ?? '').split(/\r?\n/).filter(Boolean) }
+  if (res.status !== 0) return { error: formatGitFailure(res, 'git status') }
+  return { lines: String(res.stdout ?? '').split(/\r?\n/).filter(Boolean) }
+}
+
+/**
+ * Removability facts of a matched entry. On the read path a failed `git status`
+ * still shows as dirty — the badge must not claim a worktree is safe to drop
+ * when its state could not be read.
+ */
+function buildWorktreeView(repoRoot: string, entry: WorktreeEntry): WorktreeView {
+  const exists = existsSync(entry.path)
+  const read: DirtyRead = exists ? readDirtyLines(entry.path) : { lines: [] }
+  const lines = 'error' in read ? [] : read.lines
+  const dirty = exists && ('error' in read || lines.length > 0)
+  const removable = isRemovableWorktreePath(repoRoot, entry.path)
+
+  return {
+    path: entry.path,
+    relPath: relativePath(repoRoot, entry.path) || entry.path,
+    branch: entry.branch,
+    detached: entry.detached,
+    exists,
+    dirty,
+    dirtyCount: lines.length,
+    locked: entry.locked,
+    lockReason: entry.lockReason,
+    removable,
+    blockedBy: !removable ? 'outside_policy' : entry.locked ? 'locked' : dirty ? 'dirty' : null,
+  }
 }
 
 export function findTaskWorktree(repoRoot: string, taskId: string): FindWorktreeResult {
@@ -195,29 +228,11 @@ export function findTaskWorktree(repoRoot: string, taskId: string): FindWorktree
   }
   if (!match.entry) return { ok: true, worktree: null, ambiguous: false, candidates: [] }
 
-  const entry = match.entry
-  const exists = existsSync(entry.path)
-  const status = exists ? readDirtyLines(entry.path) : { ok: true, lines: [] as string[] }
-  const dirty = exists && (!status.ok || status.lines.length > 0)
-  const removable = isRemovableWorktreePath(repoRoot, entry.path)
-
   return {
     ok: true,
     ambiguous: false,
     candidates: [],
-    worktree: {
-      path: entry.path,
-      relPath: relativePath(repoRoot, entry.path) || entry.path,
-      branch: entry.branch,
-      detached: entry.detached,
-      exists,
-      dirty,
-      dirtyCount: status.lines.length,
-      locked: entry.locked,
-      lockReason: entry.lockReason,
-      removable,
-      blockedBy: !removable ? 'outside_policy' : entry.locked ? 'locked' : dirty ? 'dirty' : null,
-    },
+    worktree: buildWorktreeView(repoRoot, match.entry),
   }
 }
 
@@ -246,6 +261,47 @@ export type RemoveWorktreeResult =
 /** Max dirty paths echoed back to the UI — the list is a hint, not a report. */
 const DIRTY_SAMPLE_LIMIT = 10
 
+type RemovalBlocker = Extract<RemoveWorktreeResult, { ok: false }>
+
+/**
+ * Everything that must stop a removal, in the order git itself would refuse:
+ * outside the allowed paths, locked, uncommitted changes. A failed `git status`
+ * gets its own code — "cannot confirm this worktree is clean" must not reach
+ * the user as "0 uncommitted changes", which points at the wrong fix.
+ */
+function findRemovalBlocker(wt: WorktreeView): RemovalBlocker | null {
+  if (!wt.removable) {
+    return { ok: false, status: 403, error: 'worktree_outside_policy', path: wt.path }
+  }
+  if (wt.locked) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'worktree_locked',
+      path: wt.path,
+      lockReason: wt.lockReason,
+    }
+  }
+  if (!wt.exists) return null
+
+  // Re-run status here (instead of reusing the count) to name the files.
+  const read = readDirtyLines(wt.path)
+  if ('error' in read) {
+    return { ok: false, status: 500, error: 'git_failed', path: wt.path, detail: read.error }
+  }
+  if (read.lines.length > 0) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'worktree_dirty',
+      path: wt.path,
+      dirtyFiles: read.lines.slice(0, DIRTY_SAMPLE_LIMIT),
+      dirtyCount: read.lines.length,
+    }
+  }
+  return null
+}
+
 /**
  * Remove the worktree of `taskId`. The target is resolved here from git, never
  * taken from the caller — a client-supplied path would be an attack surface.
@@ -261,32 +317,10 @@ export function removeTaskWorktree(repoRoot: string, taskId: string): RemoveWork
   const wt = found.worktree
   if (!wt) return { ok: false, status: 404, error: 'worktree_not_found' }
 
-  if (!wt.removable) {
-    return { ok: false, status: 403, error: 'worktree_outside_policy', path: wt.path }
-  }
-  if (wt.locked) {
-    return {
-      ok: false,
-      status: 409,
-      error: 'worktree_locked',
-      path: wt.path,
-      lockReason: wt.lockReason,
-    }
-  }
-  if (wt.exists) {
-    // Re-run status here (instead of reusing the count) to name the files.
-    const status = readDirtyLines(wt.path)
-    if (!status.ok || status.lines.length > 0) {
-      return {
-        ok: false,
-        status: 409,
-        error: 'worktree_dirty',
-        path: wt.path,
-        dirtyFiles: status.lines.slice(0, DIRTY_SAMPLE_LIMIT),
-        dirtyCount: status.lines.length,
-      }
-    }
+  const blocked = findRemovalBlocker(wt)
+  if (blocked) return blocked
 
+  if (wt.exists) {
     const removed = runGit(['-C', repoRoot, 'worktree', 'remove', wt.path], {
       timeout: GIT_WRITE_TIMEOUT_MS,
     })

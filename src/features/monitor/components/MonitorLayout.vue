@@ -183,21 +183,25 @@ async function deleteSelected() {
   }
 }
 
+/** Text of the destructive confirm — stronger wording while a job is in flight. */
+async function worktreeConfirmMessage(taskId: string, wt: any): Promise<string> {
+  const running = await hasInFlightJob(taskId, props.selectedProjectId)
+  const key = running
+    ? 'monitor.layout.confirmCleanWorktreeRunning'
+    : 'monitor.layout.confirmCleanWorktree'
+  return t(key, { path: wt.relPath || wt.path, branch: wt.branch || '—' })
+}
+
 async function cleanWorktreeSelected() {
-  if (!props.selected || !worktree.value) return
-  if (cleaning.value) return
-  worktreeError.value = ''
+  const wt = worktree.value
+  if (!wt || cleaning.value) return
   // Same reason as deleteSelected: the handler awaits, `selected` may move.
-  const taskId = props.selected.task_id
-  const wtPath = worktree.value.relPath || worktree.value.path
-  const branch = worktree.value.branch || '—'
+  const taskId = props.selected?.task_id
+  if (!taskId) return
+  worktreeError.value = ''
   cleaning.value = true
   try {
-    const running = await hasInFlightJob(taskId, props.selectedProjectId)
-    const messageKey = running
-      ? 'monitor.layout.confirmCleanWorktreeRunning'
-      : 'monitor.layout.confirmCleanWorktree'
-    if (!confirm(t(messageKey, { path: wtPath, branch }))) return
+    if (!confirm(await worktreeConfirmMessage(taskId, wt))) return
     await cleanupTaskWorktree(taskId, props.selectedProjectId ?? undefined)
     await loadWorktree(props.selected?.task_id ?? null)
   } catch (e: any) {

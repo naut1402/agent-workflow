@@ -648,15 +648,35 @@ export class MonitorController extends AbstractController {
     return this.ok({ id, deleted: true })
   }
 
-  async getTaskWorktree() {
+  /**
+   * `requireRoot` + task id guard, shared by the per-task worktree routes.
+   * `repoRoot` is `dirname(root)`: `root` is `<repo>/.dev-team-agent`, git needs
+   * the repo itself. The id guard runs before any value reaches a git argument.
+   */
+  private worktreeGate(): { error: Response } | { root: string; repoRoot: string; id: string } {
     const gate = this.requireRoot()
-    if ('error' in gate) return gate.error
-    const { root } = gate
+    if ('error' in gate) return gate
     const id = this.c.req.param('id')
-    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+    if (!id || /[^\w\-]/.test(id)) return { error: this.badRequest('invalid task id') }
+    return { root: gate.root, repoRoot: path.dirname(gate.root), id }
+  }
 
-    // `root` is <repo>/.dev-team-agent — git commands need the repo itself.
-    const result = monitorBusiness.findTaskWorktree(path.dirname(root), id)
+  /**
+   * Not reading the state is not proof the task ended — `.dev-state/*.json` is
+   * written by the orchestrator outside this process, so a read may land on a
+   * half-written record. Fail closed: unknown counts as "still running".
+   */
+  private async taskHasFinished(root: string, id: string): Promise<boolean> {
+    const state = await readState(path.join(root, '.dev-state', `${id}.json`))
+    return state.ok && isFinishedTaskState(state.state)
+  }
+
+  async getTaskWorktree() {
+    const gate = this.worktreeGate()
+    if ('error' in gate) return gate.error
+    const { repoRoot, id } = gate
+
+    const result = monitorBusiness.findTaskWorktree(repoRoot, id)
     if ('error' in result) {
       return this.json(result.status, { error: result.error, detail: result.detail, taskId: id })
     }
@@ -669,20 +689,17 @@ export class MonitorController extends AbstractController {
   }
 
   async deleteTaskWorktree() {
-    const gate = this.requireRoot()
+    const gate = this.worktreeGate()
     if ('error' in gate) return gate.error
-    const { root } = gate
-    const id = this.c.req.param('id')
-    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+    const { root, repoRoot, id } = gate
 
     // The button is hidden for unfinished tasks, but the guard belongs on the
     // server too — a running step may still be writing into that worktree.
-    const before = await readState(path.join(root, '.dev-state', `${id}.json`))
-    if (before.ok && !isFinishedTaskState(before.state)) {
+    if (!(await this.taskHasFinished(root, id))) {
       return this.json(409, { error: 'task_not_finished', taskId: id })
     }
 
-    const result = monitorBusiness.removeTaskWorktree(path.dirname(root), id)
+    const result = monitorBusiness.removeTaskWorktree(repoRoot, id)
     if ('error' in result) {
       const { ok: _ok, status, ...rest } = result
       return this.json(status, { ...rest, taskId: id })
