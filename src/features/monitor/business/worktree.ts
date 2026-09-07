@@ -40,37 +40,38 @@ export interface WorktreeEntry {
  * separated by a blank line, each line `<key> <rest>`; `detached` / `bare` /
  * `prunable` / `locked` may appear without a value.
  */
+/** One setter per porcelain key; unknown keys are ignored (git adds new ones). */
+const WORKTREE_FIELDS: Record<string, (entry: WorktreeEntry, value: string) => void> = {
+  worktree: (e, v) => {
+    e.path = v
+  },
+  HEAD: (e, v) => {
+    e.head = v || null
+  },
+  branch: (e, v) => {
+    e.branch = v.replace(/^refs\/heads\//, '') || null
+  },
+  detached: (e) => {
+    e.detached = true
+  },
+  bare: (e) => {
+    e.bare = true
+  },
+  prunable: (e) => {
+    e.prunable = true
+  },
+  locked: (e, v) => {
+    e.locked = true
+    e.lockReason = v || null
+  },
+}
+
 /** Apply one `<key> <value>` line of a porcelain block onto its entry. */
 function applyWorktreeField(entry: WorktreeEntry, line: string): void {
   const sp = line.indexOf(' ')
   const key = sp === -1 ? line : line.slice(0, sp)
   const value = sp === -1 ? '' : line.slice(sp + 1).trim()
-  switch (key) {
-    case 'worktree':
-      entry.path = value
-      break
-    case 'HEAD':
-      entry.head = value || null
-      break
-    case 'branch':
-      entry.branch = value.replace(/^refs\/heads\//, '') || null
-      break
-    case 'detached':
-      entry.detached = true
-      break
-    case 'bare':
-      entry.bare = true
-      break
-    case 'prunable':
-      entry.prunable = true
-      break
-    case 'locked':
-      entry.locked = true
-      entry.lockReason = value || null
-      break
-    default:
-      break
-  }
+  WORKTREE_FIELDS[key]?.(entry, value)
 }
 
 export function parseWorktreeList(stdout: string): WorktreeEntry[] {

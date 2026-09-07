@@ -256,15 +256,17 @@ function worktreeRes(opts: StubOpts) {
   return wt ?? jsonRes({ worktree: null, ambiguous: false })
 }
 
+function jobsRes(url: string, jobs: StubOpts['jobs']) {
+  const status = new URL(url, 'http://x').searchParams.get('status') ?? ''
+  return jsonRes({ jobs: jobs?.[status] ?? [] })
+}
+
 /** fetch mock phân nhánh theo URL: /api/jobs · /worktree · /api/tasks/<id>. */
 function stubFetch(opts: StubOpts = {}) {
   const fetchMock = vi.fn(async (input: any, init: any = {}) => {
     const url = String(input)
     const isGet = String(init.method ?? 'GET').toUpperCase() === 'GET'
-    if (url.includes('/api/jobs')) {
-      const status = new URL(url, 'http://x').searchParams.get('status') ?? ''
-      return jsonRes({ jobs: opts.jobs?.[status] ?? [] })
-    }
+    if (url.includes('/api/jobs')) return jobsRes(url, opts.jobs)
     // Phải đứng trước nhánh /api/tasks/ — nếu không, GET trạng thái worktree
     // rơi vào response của DELETE task.
     if (url.includes('/worktree') && isGet) return worktreeRes(opts)

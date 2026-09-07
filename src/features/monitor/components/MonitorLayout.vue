@@ -203,7 +203,7 @@ async function cleanWorktreeSelected() {
   try {
     if (!confirm(await worktreeConfirmMessage(taskId, wt))) return
     await cleanupTaskWorktree(taskId, props.selectedProjectId ?? undefined)
-    await loadWorktree(props.selected?.task_id ?? null)
+    await loadWorktree(props.selected ? props.selected.task_id : null)
   } catch (e: any) {
     worktreeError.value = describeWorktreeError(e)
   } finally {
