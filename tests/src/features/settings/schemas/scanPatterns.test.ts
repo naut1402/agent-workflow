@@ -5,6 +5,7 @@ import {
   SCAN_PATTERN_MAX_COUNT,
   SCAN_PATTERN_MAX_LENGTH,
   hasAnyScanPattern,
+  mergeScanPatternsConfig,
   parseScanPatternsConfig,
   sanitiseScanPattern,
 } from '@/features/settings/schemas/scanPatterns'
@@ -107,5 +108,33 @@ describe('hasAnyScanPattern', () => {
   it('is true when any kind has a pattern', () => {
     expect(hasAnyScanPattern({ agents: ['x'], skills: [], rules: [] })).toBe(true)
     expect(hasAnyScanPattern({ agents: [], skills: [], rules: ['y'] })).toBe(true)
+  })
+})
+
+describe('mergeScanPatternsConfig', () => {
+  const current = { agents: ['.agents'], skills: ['packages/*/skills'], rules: ['guides'] }
+
+  it('a patch carrying one kind leaves the other two untouched', () => {
+    expect(mergeScanPatternsConfig(current, { agents: ['tools/*.md'] })).toEqual({
+      agents: ['tools/*.md'],
+      skills: ['packages/*/skills'],
+      rules: ['guides'],
+    })
+  })
+
+  it('an explicit empty list clears that kind — only a missing key falls back', () => {
+    expect(mergeScanPatternsConfig(current, { skills: [] }).skills).toEqual([])
+    expect(mergeScanPatternsConfig(current, { skills: null }).skills).toEqual(['packages/*/skills'])
+  })
+
+  it('keeps the current config when the patch is not an object', () => {
+    for (const patch of [null, undefined, 'x', 42, []]) {
+      expect(mergeScanPatternsConfig(current, patch)).toEqual(current)
+    }
+  })
+
+  it('sanitises patched patterns instead of trusting them', () => {
+    expect(mergeScanPatternsConfig(current, { rules: ['../etc', './docs/', 42] }).rules)
+      .toEqual(['docs'])
   })
 })

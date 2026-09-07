@@ -207,6 +207,30 @@ export async function scanAgentsByPatterns(
   return agents
 }
 
+/** Load ONE skill markdown file matched by a pattern. Returns null when unusable. */
+async function readSkillFile(file: string, includeContractSkills: boolean): Promise<any | null> {
+  try {
+    const fm = parseFrontmatter(await readTextFile(file))
+    const fmName = typeof fm.name === 'string' ? fm.name.trim() : ''
+    // No frontmatter name: a SKILL.md is named after its folder, anything else after the file.
+    const name = fmName
+      || (SKILL_ENTRY_FILE.test(basename(file)) ? basename(dirname(file)) : deriveItemName(file))
+    if (!name) return null
+    const userInvocable = fm['user-invocable'] !== false
+    if (!includeContractSkills && !userInvocable) return null
+    return {
+      id: `project:${name}`,
+      name,
+      plugin: 'project',
+      source: 'project',
+      description: (fm.description || '').slice(0, 140),
+      user_invocable: userInvocable,
+    }
+  } catch {
+    return null
+  }
+}
+
 /** Skills from custom scan patterns — same dir/file split as scanAgentsByPatterns. */
 export async function scanSkillsByPatterns(
   projectRoot: string,
@@ -221,28 +245,8 @@ export async function scanSkillsByPatterns(
       continue
     }
     if (!PATTERN_MD_EXT.test(match.path)) continue
-    try {
-      const fm = parseFrontmatter(await readTextFile(match.path))
-      const fmName = typeof fm.name === 'string' ? fm.name.trim() : ''
-      // No frontmatter name: a SKILL.md is named after its folder, anything else after the file.
-      const name = fmName
-        || (SKILL_ENTRY_FILE.test(basename(match.path))
-          ? basename(dirname(match.path))
-          : deriveItemName(match.path))
-      if (!name) continue
-      const userInvocable = fm['user-invocable'] !== false
-      if (!includeContractSkills && !userInvocable) continue
-      skills.push({
-        id: `project:${name}`,
-        name,
-        plugin: 'project',
-        source: 'project',
-        description: (fm.description || '').slice(0, 140),
-        user_invocable: userInvocable,
-      })
-    } catch {
-      /* skip */
-    }
+    const item = await readSkillFile(match.path, includeContractSkills)
+    if (item) skills.push(item)
   }
   return skills
 }

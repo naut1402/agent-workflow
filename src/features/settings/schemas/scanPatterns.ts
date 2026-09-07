@@ -78,3 +78,18 @@ export function hasAnyScanPattern(config: ScanPatternsConfig | null | undefined)
   if (!config) return false
   return SCAN_PATTERN_KINDS.some((k) => (config[k]?.length ?? 0) > 0)
 }
+
+/**
+ * Merge a partial patch over the stored config, one kind at a time: a `PUT` body
+ * carrying only `agents` must leave `skills` and `rules` untouched rather than
+ * resetting them to empty.
+ */
+export function mergeScanPatternsConfig(
+  current: ScanPatternsConfig,
+  patch: unknown,
+): ScanPatternsConfig {
+  const source = patch && typeof patch === 'object' ? (patch as Record<string, unknown>) : {}
+  const merged: Record<string, unknown> = {}
+  for (const kind of SCAN_PATTERN_KINDS) merged[kind] = source[kind] ?? current[kind]
+  return parseScanPatternsConfig(merged)
+}

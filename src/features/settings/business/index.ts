@@ -8,8 +8,6 @@ import {
   saveLoggingConfig,
   loadRecoverySettings,
   saveRecoverySettings,
-  loadScanPatternsConfig,
-  saveScanPatternsConfig,
 } from './dashboardSettings.js'
 import { runAutoscan } from './autoscan.js'
 import { browseDirectory } from './fsBrowse.js'
@@ -49,14 +47,6 @@ export class SettingsBusiness extends AbstractBusiness {
 
   saveRecoverySettings(next: Parameters<typeof saveRecoverySettings>[0]) {
     return saveRecoverySettings(next)
-  }
-
-  getScanPatternsConfig() {
-    return loadScanPatternsConfig()
-  }
-
-  saveScanPatternsConfig(next: Parameters<typeof saveScanPatternsConfig>[0]) {
-    return saveScanPatternsConfig(next)
   }
 
   browseDirectory(pathParam?: string) {

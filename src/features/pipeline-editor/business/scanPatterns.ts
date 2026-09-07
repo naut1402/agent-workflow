@@ -13,7 +13,7 @@ import { joinPath, resolvePathUnder, safeReadDir } from '../../../core/lib/fileH
 
 export const SCAN_PATTERN_MAX_DEPTH = 8
 export const SCAN_PATTERN_MAX_MATCHES = 200
-export const SCAN_PATTERN_MAX_DIRS = 4000
+const SCAN_PATTERN_MAX_DIRS = 4000
 
 const DENY_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.output', '.cache'])
 
@@ -55,47 +55,68 @@ function push(
   budget.matches++
 }
 
-async function walk(
-  projectRoot: string,
+/** One walk position: everything except the entries currently being scanned. */
+interface WalkCursor {
+  projectRoot: string
+  segs: string[]
+  seen: Map<string, PatternMatch>
+  budget: Budget
+}
+
+type DirEntries = Awaited<ReturnType<typeof safeReadDir>>
+
+/** `**` consumes zero or more directory levels, so it recurses on both readings. */
+async function walkDoubleStar(
+  cursor: WalkCursor,
   dir: string,
-  segs: string[],
+  entries: DirEntries,
   i: number,
   depth: number,
-  seen: Map<string, PatternMatch>,
-  budget: Budget,
 ): Promise<void> {
+  // Reading 1: `**` matched zero segments — retry the same dir against segs[i + 1].
+  await walk(cursor, dir, i + 1, depth)
+  for (const entry of entries) {
+    // A symlink is not `isDirectory()`, so recursion can never loop or leave the root.
+    if (!entry.isDirectory() || DENY_DIRS.has(entry.name) || entry.name.startsWith('.')) continue
+    // Reading 2: `**` swallowed this level — descend, still on segs[i].
+    await walk(cursor, joinPath(dir, entry.name), i, depth + 1)
+  }
+}
+
+/** A literal/wildcard segment: match it against this directory's entries only. */
+async function walkSegment(
+  cursor: WalkCursor,
+  entries: DirEntries,
+  dir: string,
+  i: number,
+  depth: number,
+): Promise<void> {
+  const seg = cursor.segs[i]
+  const last = i === cursor.segs.length - 1
+  for (const entry of entries) {
+    if (DENY_DIRS.has(entry.name) || !segmentMatches(seg, entry.name)) continue
+    const full = joinPath(dir, entry.name)
+    if (last) push(cursor.projectRoot, full, entry.isDirectory(), cursor.seen, cursor.budget)
+    else if (entry.isDirectory()) await walk(cursor, full, i + 1, depth + 1)
+  }
+}
+
+async function walk(cursor: WalkCursor, dir: string, i: number, depth: number): Promise<void> {
+  const { budget, segs } = cursor
   if (budget.matches >= SCAN_PATTERN_MAX_MATCHES || depth > SCAN_PATTERN_MAX_DEPTH) return
 
   // Segments exhausted → `dir` itself is the match (pattern ended with `**`).
   if (i >= segs.length) {
-    push(projectRoot, dir, true, seen, budget)
+    push(cursor.projectRoot, dir, true, cursor.seen, budget)
     return
   }
 
   if (budget.dirs >= SCAN_PATTERN_MAX_DIRS) return
   budget.dirs++
   const entries = await safeReadDir(dir)
-  const seg = segs[i]
 
-  if (seg === '**') {
-    // `**` also matches zero segments.
-    await walk(projectRoot, dir, segs, i + 1, depth, seen, budget)
-    for (const entry of entries) {
-      // A symlink is not `isDirectory()`, so recursion can never loop or leave the root.
-      if (!entry.isDirectory()) continue
-      if (DENY_DIRS.has(entry.name) || entry.name.startsWith('.')) continue
-      await walk(projectRoot, joinPath(dir, entry.name), segs, i, depth + 1, seen, budget)
-    }
-    return
-  }
-
-  const last = i === segs.length - 1
-  for (const entry of entries) {
-    if (DENY_DIRS.has(entry.name) || !segmentMatches(seg, entry.name)) continue
-    const full = joinPath(dir, entry.name)
-    if (last) push(projectRoot, full, entry.isDirectory(), seen, budget)
-    else if (entry.isDirectory()) await walk(projectRoot, full, segs, i + 1, depth + 1, seen, budget)
-  }
+  if (segs[i] === '**') await walkDoubleStar(cursor, dir, entries, i, depth)
+  else await walkSegment(cursor, entries, dir, i, depth)
 }
 
 /** Expand every pattern of ONE kind, sharing a single budget across them. */
@@ -113,7 +134,7 @@ export async function expandScanPatterns(
       .filter((s) => s && s !== '.')
     // Last traversal guard, independent of the settings schema.
     if (!segs.length || segs.includes('..')) continue
-    await walk(projectRoot, projectRoot, segs, 0, 0, seen, budget)
+    await walk({ projectRoot, segs, seen, budget }, projectRoot, 0, 0)
   }
   return [...seen.values()]
 }
