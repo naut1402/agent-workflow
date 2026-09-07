@@ -130,7 +130,7 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 | `tests/src/features/logs/composables` | vitest | `core/log`, `features/logs/composables` | 3 | `npx vitest run tests/src/features/logs/composables` |
 | `tests/src/features/logs/scripts` | vitest | `features/logs/scripts` | 1 | `npx vitest run tests/src/features/logs/scripts` |
 | `tests/src/features/monitor` | vitest | `features/monitor/composables` | 1 | `npx vitest run tests/src/features/monitor/*.test.ts` |
-| `tests/src/features/monitor/business` | bun | `features/monitor/business`, `core/lib`, `features/runner/business` | 4 | `bun test tests/src/features/monitor/business` |
+| `tests/src/features/monitor/business` | bun | `features/monitor/business`, `core/lib`, `features/runner/business` | 5 | `bun test tests/src/features/monitor/business` |
 | `tests/src/features/monitor/components` | vitest | `features/monitor/components`, `features/monitor/scripts`, `core/composables` | 10 | `npx vitest run tests/src/features/monitor/components` |
 | `tests/src/features/monitor/composables` | vitest | `features/monitor/composables`, `features/runner/scripts` | 6 | `npx vitest run tests/src/features/monitor/composables` |
 | `tests/src/features/monitor/lib` | vitest | `features/monitor/lib` | 4 | `npx vitest run tests/src/features/monitor/lib` |
@@ -166,7 +166,7 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 | `tests/src/server/catalog` | bun | `features/pipeline-editor/business` | 4 | `bun test tests/src/server/catalog` |
 | `tests/src/server/chat` | bun | `features/runner/business`, `features/monitor/business`, `features/nl-chat/business` | 5 | `bun test tests/src/server/chat` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `api/apiServer.ts`, `core/registry.ts` | 2 | `bun test tests/src/server/github` |
-| `tests/src/server/http` | bun | `api/apiServer.ts`, `core/http`, `features/runner/business` | 23 | `bun test tests/src/server/http` |
+| `tests/src/server/http` | bun | `api/apiServer.ts`, `core/http`, `features/runner/business` | 24 | `bun test tests/src/server/http` |
 | `tests/src/server/lib` | bun | `core/lib` | 1 | `bun test tests/src/server/lib` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
