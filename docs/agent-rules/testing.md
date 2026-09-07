@@ -113,7 +113,7 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 | `tests/src/core/events` | bun | `core/events` | 1 | `bun test tests/src/core/events` |
 | `tests/src/core/http` | vitest | `core/http` | 1 | `npx vitest run tests/src/core/http` |
 | `tests/src/core/i18n` | vitest | `core/composables`, `core/configs`, `plugins/i18n` | 1 | `npx vitest run tests/src/core/i18n` |
-| `tests/src/core/lib` | vitest | `core/lib`, `core/http` | 8 | `npx vitest run tests/src/core/lib` |
+| `tests/src/core/lib` | vitest | `core/lib`, `core/http` | 9 | `npx vitest run tests/src/core/lib` |
 | `tests/src/core/log` | bun | `core/log`, `features/logs/business`, `core/events` | 4 | `bun test tests/src/core/log` |
 | `tests/src/core/shell` | vitest | `core/shell` | 2 | `npx vitest run tests/src/core/shell` |
 | `tests/src/core/ui` | vitest | `core/ui` | 4 | `npx vitest run tests/src/core/ui` |
@@ -141,8 +141,9 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 | `tests/src/features/notifications/composables` | vitest | `features/notifications/lib`, `core/composables`, `features/notifications/composables` | 1 | `npx vitest run tests/src/features/notifications/composables` |
 | `tests/src/features/notifications/lib` | vitest | `features/notifications/lib` | 2 | `npx vitest run tests/src/features/notifications/lib` |
 | `tests/src/features/pipeline-editor/business` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/features/pipeline-editor/business` |
-| `tests/src/features/pipeline-editor/components` | vitest | `features/pipeline-editor/components`, `features/pipeline-editor/scripts` | 3 | `npx vitest run tests/src/features/pipeline-editor/components` |
-| `tests/src/features/pipeline-editor/lib` | vitest | `features/pipeline-editor/lib` | 1 | `npx vitest run tests/src/features/pipeline-editor/lib` |
+| `tests/src/features/pipeline-editor/components` | vitest | `features/pipeline-editor/components`, `features/pipeline-editor/scripts` | 6 | `npx vitest run tests/src/features/pipeline-editor/components` |
+| `tests/src/features/pipeline-editor/composables` | vitest | `features/pipeline-editor/composables`, `features/pipeline-editor/scripts` | 1 | `npx vitest run tests/src/features/pipeline-editor/composables` |
+| `tests/src/features/pipeline-editor/lib` | vitest | `features/pipeline-editor/lib` | 3 | `npx vitest run tests/src/features/pipeline-editor/lib` |
 | `tests/src/features/pipeline-editor/scripts` | vitest | `features/pipeline-editor/scripts` | 1 | `npx vitest run tests/src/features/pipeline-editor/scripts` |
 | `tests/src/features/quick-action/components` | vitest | `features/quick-action/components`, `features/quick-action/scripts`, `features/runner/scripts` | 1 | `npx vitest run tests/src/features/quick-action/components` |
 | `tests/src/features/quick-action/composables` | vitest | `features/quick-action/composables` | 1 | `npx vitest run tests/src/features/quick-action/composables` |
@@ -154,7 +155,7 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 | `tests/src/features/running-jobs/composables` | vitest | `features/runner/scripts`, `features/running-jobs/composables` | 1 | `npx vitest run tests/src/features/running-jobs/composables` |
 | `tests/src/features/running-jobs/lib` | vitest | `features/running-jobs/lib` | 1 | `npx vitest run tests/src/features/running-jobs/lib` |
 | `tests/src/features/settings/components` | vitest | `core/composables`, `features/settings/components`, `features/settings/scripts` | 1 | `npx vitest run tests/src/features/settings/components` |
-| `tests/src/features/settings/schemas` | vitest | `features/settings/schemas` | 4 | `npx vitest run tests/src/features/settings/schemas` |
+| `tests/src/features/settings/schemas` | vitest | `features/settings/schemas` | 5 | `npx vitest run tests/src/features/settings/schemas` |
 | `tests/src/features/statistics/business` | bun | `core/log`, `features/statistics/business` | 1 | `bun test tests/src/features/statistics/business` |
 | `tests/src/features/statistics/components` | vitest | `features/statistics/components`, `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/components` |
 | `tests/src/features/statistics/lib` | vitest | `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/lib` |
@@ -162,15 +163,15 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 | `tests/src/server/agents` | bun | `features/agent-editor/business` | 5 | `bun test tests/src/server/agents` |
 | `tests/src/server/artifactActions` | bun | `features/monitor/business`, `features/monitor/schemas` | 1 | `bun test tests/src/server/artifactActions` |
 | `tests/src/server/automations` | bun | `features/automations/business`, `features/automations/schemas`, `core/events` | 9 | `bun test tests/src/server/automations` |
-| `tests/src/server/catalog` | bun | `features/pipeline-editor/business` | 3 | `bun test tests/src/server/catalog` |
+| `tests/src/server/catalog` | bun | `features/pipeline-editor/business` | 4 | `bun test tests/src/server/catalog` |
 | `tests/src/server/chat` | bun | `features/runner/business`, `features/monitor/business`, `features/nl-chat/business` | 5 | `bun test tests/src/server/chat` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `api/apiServer.ts`, `core/registry.ts` | 2 | `bun test tests/src/server/github` |
-| `tests/src/server/http` | bun | `api/apiServer.ts`, `core/http`, `features/runner/business` | 22 | `bun test tests/src/server/http` |
+| `tests/src/server/http` | bun | `api/apiServer.ts`, `core/http`, `features/runner/business` | 23 | `bun test tests/src/server/http` |
 | `tests/src/server/lib` | bun | `core/lib` | 1 | `bun test tests/src/server/lib` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
 | `tests/src/server/runners` | bun | `features/runner/business`, `core/events`, `core/log` | 20 | `bun test tests/src/server/runners` |
-| `tests/src/server/settings` | bun | `features/settings/business` | 1 | `bun test tests/src/server/settings` |
+| `tests/src/server/settings` | bun | `features/settings/business` | 2 | `bun test tests/src/server/settings` |
 | `tests/src/server/tasks` | bun | `features/monitor/business`, `features/runner/business`, `core/events` | 4 | `bun test tests/src/server/tasks` |
 | `tests/tools` | bun | `tooling` | 1 | `bun test tests/tools` |
 

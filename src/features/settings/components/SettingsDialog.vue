@@ -22,8 +22,14 @@ import {
   type NotificationUiPlacement,
   type ThemePreference,
 } from '../../../core/configs/appSettings'
-import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig, fetchLoggingConfig, saveLoggingConfig, fetchRecoveryConfig, saveRecoveryConfig } from '../scripts/SettingsDialogApi'
+import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig, fetchLoggingConfig, saveLoggingConfig, fetchRecoveryConfig, saveRecoveryConfig, fetchScanPatternsConfig, saveScanPatternsConfig } from '../scripts/SettingsDialogApi'
 import { parseGithubRepoRef } from '../schemas/githubTokens'
+import {
+  SCAN_PATTERN_KINDS,
+  SCAN_PATTERN_MAX_COUNT,
+  sanitiseScanPattern,
+  type ScanPatternKind,
+} from '../schemas/scanPatterns'
 import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 import CSelect from '../../../core/ui/CSelect.vue'
 
@@ -405,6 +411,68 @@ async function scanNow() {
   }
 }
 
+// ── Scan patterns (server-backed) ────────────────────────────────────────────
+
+const scanPatterns = ref<Record<ScanPatternKind, string[]>>({ agents: [], skills: [], rules: [] })
+const scanPatternDraft = ref<Record<ScanPatternKind, string>>({ agents: '', skills: '', rules: '' })
+const scanPatternsBusy = ref(false)
+const scanPatternsMsg = ref('')
+const scanPatternsErr = ref('')
+
+function applyScanPatternsConfig(cfg: Record<string, unknown>) {
+  for (const kind of SCAN_PATTERN_KINDS) {
+    const list = cfg[kind]
+    scanPatterns.value[kind] = Array.isArray(list) ? list.map((p) => String(p)) : []
+  }
+}
+
+async function loadScanPatterns() {
+  scanPatternsErr.value = ''
+  try {
+    const data = await fetchScanPatternsConfig()
+    applyScanPatternsConfig(data.config || {})
+  } catch {
+    scanPatternsErr.value = t('settings.scanPatterns.loadError')
+  }
+}
+
+async function persistScanPatterns() {
+  scanPatternsBusy.value = true
+  scanPatternsMsg.value = ''
+  scanPatternsErr.value = ''
+  try {
+    const data = await saveScanPatternsConfig({ ...scanPatterns.value })
+    applyScanPatternsConfig(data.config || {})
+    scanPatternsMsg.value = t('settings.scanPatterns.saved')
+  } catch (e) {
+    scanPatternsErr.value = String((e as Error).message || e)
+  } finally {
+    scanPatternsBusy.value = false
+  }
+}
+
+function addScanPattern(kind: ScanPatternKind) {
+  const p = sanitiseScanPattern(scanPatternDraft.value[kind])
+  if (!p) {
+    scanPatternsErr.value = t('settings.scanPatterns.invalid')
+    return
+  }
+  if (scanPatterns.value[kind].length >= SCAN_PATTERN_MAX_COUNT) {
+    scanPatternsErr.value = t('settings.scanPatterns.tooMany', { max: SCAN_PATTERN_MAX_COUNT })
+    return
+  }
+  if (!scanPatterns.value[kind].includes(p)) {
+    scanPatterns.value[kind] = [...scanPatterns.value[kind], p]
+  }
+  scanPatternDraft.value[kind] = ''
+  void persistScanPatterns()
+}
+
+function removeScanPattern(kind: ScanPatternKind, pattern: string) {
+  scanPatterns.value[kind] = scanPatterns.value[kind].filter((x) => x !== pattern)
+  void persistScanPatterns()
+}
+
 // ── GitHub repo tokens (server-backed) ───────────────────────────────────────
 
 type GithubTokenRow = { repo: string; token: string }
@@ -521,6 +589,7 @@ onMounted(() => {
   void loadGithubTokens()
   void loadLogging()
   void loadRecovery()
+  void loadScanPatterns()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -1022,6 +1091,61 @@ onUnmounted(() => {
                 <p v-if="githubTokensMsg" class="settings-autoscan-msg">{{ githubTokensMsg }}</p>
                 <p v-if="githubTokensErr" class="settings-autoscan-err">⚠ {{ githubTokensErr }}</p>
               </section>
+              <section class="settings-section settings-scan-patterns">
+                <h3 class="settings-section-title">{{ t('settings.scanPatterns.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.scanPatterns.desc') }}</p>
+                <p class="settings-section-desc">{{ t('settings.scanPatterns.hint') }}</p>
+                <div
+                  v-for="kind in SCAN_PATTERN_KINDS"
+                  :key="kind"
+                  class="settings-subsection"
+                  :data-kind="kind"
+                >
+                  <h4 class="settings-subsection-title">
+                    {{ t(`settings.scanPatterns.kind.${kind}`) }}
+                  </h4>
+                  <ul class="settings-whitelist">
+                    <li v-for="p in scanPatterns[kind]" :key="p" class="settings-whitelist-item">
+                      <code class="settings-whitelist-path" :title="p">{{ p }}</code>
+                      <span class="icon-btn-group">
+                        <button
+                          type="button"
+                          class="icon-btn icon-btn-inline danger"
+                          :title="t('settings.scanPatterns.remove')"
+                          :aria-label="t('settings.scanPatterns.remove')"
+                          :disabled="scanPatternsBusy"
+                          @click="removeScanPattern(kind, p)"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </li>
+                    <li v-if="!scanPatterns[kind].length" class="settings-whitelist-empty">
+                      {{ t('settings.scanPatterns.empty') }}
+                      {{ t(`settings.scanPatterns.defaults.${kind}`) }}
+                    </li>
+                  </ul>
+                  <div class="settings-whitelist-add">
+                    <input
+                      v-model="scanPatternDraft[kind]"
+                      class="settings-input"
+                      :placeholder="t('settings.scanPatterns.placeholder')"
+                      :disabled="scanPatternsBusy"
+                      @keyup.enter="addScanPattern(kind)"
+                    />
+                    <button
+                      type="button"
+                      class="btn-ghost btn-sm"
+                      :disabled="scanPatternsBusy"
+                      @click="addScanPattern(kind)"
+                    >
+                      {{ t('settings.scanPatterns.add') }}
+                    </button>
+                  </div>
+                </div>
+                <p v-if="scanPatternsMsg" class="settings-autoscan-msg">{{ scanPatternsMsg }}</p>
+                <p v-if="scanPatternsErr" class="settings-autoscan-err">⚠ {{ scanPatternsErr }}</p>
+              </section>
             </template>
 
             <template v-else-if="selectedGroup === 'notifications'">
@@ -1286,6 +1410,19 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 1.45;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.settings-subsection {
+  margin-top: 10px;
+}
+
+.settings-subsection-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .settings-whitelist {

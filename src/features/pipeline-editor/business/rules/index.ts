@@ -1,4 +1,5 @@
-import { dirname, homeDir, joinPath, relativePath, safeReadDir } from '../../../../core/lib/fileHelper.js'
+import { basename, dirname, homeDir, joinPath, relativePath, safeReadDir } from '../../../../core/lib/fileHelper.js'
+import { expandScanPatterns } from '../scanPatterns.js'
 
 export const RULE_CATEGORIES = ['coding', 'doc-writing', 'doc-review', 'test', 'git-pr', 'other']
 
@@ -48,18 +49,57 @@ export async function walkRuleFiles(
 }
 
 /**
+ * Rules from custom scan patterns. A matched directory is walked recursively;
+ * a matched file becomes a single rule. Pattern rules are always project-scoped.
+ */
+async function scanRulesByPatterns(
+  projectRoot: string,
+  patterns: string[] | null | undefined,
+  out: RuleItem[],
+): Promise<void> {
+  for (const match of await expandScanPatterns(projectRoot, patterns)) {
+    if (match.isDirectory) {
+      await walkRuleFiles(match.path, 'project', projectRoot, out)
+      continue
+    }
+    if (!/\.(md|mdc)$/i.test(match.path)) continue
+    const rel = relativePath(projectRoot, match.path).replace(/\\/g, '/')
+    const fileName = basename(match.path)
+    out.push({
+      id: `project:${rel}`,
+      name: fileName.replace(/\.(md|mdc)$/i, ''),
+      path: rel,
+      scope: 'project',
+      category: inferRuleCategory(rel, fileName),
+    })
+  }
+}
+
+/**
  * Build the rules listing for a data root: project rules + global `~/.cursor/rules`.
  *
  * Project rules live in `docs/agent-rules` (dùng chung cho mọi agent) hoặc `.claude/rules`
  * (bố cục cũ, riêng một công cụ) — quét cả hai nên repo dùng layout nào cũng ra.
  */
-export async function buildRules(root: string): Promise<{ rules: RuleItem[]; categories: string[] }> {
+export async function buildRules(
+  root: string,
+  opts: { scanPatterns?: { rules?: string[] } | null } = {},
+): Promise<{ rules: RuleItem[]; categories: string[] }> {
   const projectRoot = dirname(root)
-  const rules: RuleItem[] = []
+  const found: RuleItem[] = []
 
-  await walkRuleFiles(joinPath(projectRoot, 'docs', 'agent-rules'), 'project', projectRoot, rules)
-  await walkRuleFiles(joinPath(projectRoot, '.claude', 'rules'), 'project', projectRoot, rules)
-  await walkRuleFiles(joinPath(homeDir(), '.cursor', 'rules'), 'global', homeDir(), rules)
+  await walkRuleFiles(joinPath(projectRoot, 'docs', 'agent-rules'), 'project', projectRoot, found)
+  await walkRuleFiles(joinPath(projectRoot, '.claude', 'rules'), 'project', projectRoot, found)
+  await walkRuleFiles(joinPath(homeDir(), '.cursor', 'rules'), 'global', homeDir(), found)
+  // Pattern rules only ever run against projectRoot — the global ~/.cursor/rules line is untouched.
+  if (opts.scanPatterns?.rules?.length) {
+    await scanRulesByPatterns(projectRoot, opts.scanPatterns.rules, found)
+  }
+
+  // A pattern may point back at a default directory (e.g. `docs/**`); keep the first hit.
+  const byId = new Map<string, RuleItem>()
+  for (const r of found) if (!byId.has(r.id)) byId.set(r.id, r)
+  const rules = [...byId.values()]
 
   rules.sort(
     (a, b) =>

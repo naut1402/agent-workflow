@@ -10,6 +10,7 @@ import {
   resolveGithubTokensFromDashboard,
   resolveLoggingFromDashboard,
   resolveRecoveryFromDashboard,
+  resolveScanPatternsFromDashboard,
   resolveSecurityFromDashboard,
   type DashboardSettings,
 } from '../schemas/dashboardSettings.js'
@@ -25,6 +26,7 @@ import {
 import { parseLoggingConfig, type LoggingConfig } from '../../../core/log/loggingPrefs.js'
 import { invalidateLoggingPrefsCache } from '../../../core/log/loggingPrefsIo.js'
 import { parseRecoverySettings, type RecoverySettings } from '../schemas/recovery.js'
+import { parseScanPatternsConfig, type ScanPatternsConfig } from '../schemas/scanPatterns.js'
 import { DEFAULT_SECURITY_CONFIG, parseSecurityConfig, type SecurityConfig } from '../schemas/security.js'
 import { registryHome } from '../../../core/registry.js'
 
@@ -62,6 +64,7 @@ export function loadDashboardSettings(): DashboardSettings {
     githubTokens: { repos: [] },
     logging: parseLoggingConfig(undefined),
     recovery: parseRecoverySettings(undefined),
+    scanPatterns: parseScanPatternsConfig(undefined),
     security: parseSecurityConfig(undefined),
   }
 }
@@ -135,6 +138,20 @@ export function saveRecoverySettings(config: RecoverySettings): RecoverySettings
     recovery: normalised,
   })
   return resolveRecoveryFromDashboard(saved)
+}
+
+export function loadScanPatternsConfig(): ScanPatternsConfig {
+  return resolveScanPatternsFromDashboard(loadDashboardSettings())
+}
+
+export function saveScanPatternsConfig(config: ScanPatternsConfig): ScanPatternsConfig {
+  const current = loadDashboardSettings()
+  const normalised = parseScanPatternsConfig(config)
+  const saved = saveDashboardSettings({
+    ...current,
+    scanPatterns: normalised,
+  })
+  return resolveScanPatternsFromDashboard(saved)
 }
 
 export function loadSecurityConfig(): SecurityConfig {

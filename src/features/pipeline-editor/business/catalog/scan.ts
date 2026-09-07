@@ -1,5 +1,6 @@
 import { basename, dirname, homeDir, joinPath, readDir, readFile, readTextFile, resolvePath, safeReadDir, statSafe } from '../../../../core/lib/fileHelper.js'
 import { parseFrontmatter } from '../../../../core/lib/yamlLib.js'
+import { expandScanPatterns } from '../scanPatterns.js'
 
 export interface ScanOpts {
   includeContractSkills?: boolean
@@ -127,6 +128,48 @@ export async function scanSkillsFlatDir(
   return skills
 }
 
+/** Markdown extensions accepted for a file matched by a custom scan pattern. */
+const PATTERN_MD_EXT = /\.(md|mdc|markdown)$/i
+const SKILL_ENTRY_FILE = /^skill\.(md|mdc|markdown)$/i
+
+/** Item name derived from a file name: drop the extension, then a `.agent` / `.skill` suffix. */
+function deriveItemName(file: string): string {
+  return basename(file)
+    .replace(PATTERN_MD_EXT, '')
+    .replace(/\.(agent|agents|skill|skills)$/i, '')
+    .trim()
+}
+
+/**
+ * Read one agent markdown file. `opts.name` pins the name (convention scan keeps
+ * using the file name so its output never shifts); `preferFrontmatterName` is only
+ * for the custom-pattern branch, where the file name may be arbitrary.
+ */
+async function readAgentFile(
+  file: string,
+  source: string,
+  pluginLabel: string,
+  opts: { name?: string; preferFrontmatterName?: boolean } = {},
+): Promise<any | null> {
+  try {
+    const raw = await readFile(file, 'utf8')
+    const fm = parseFrontmatter(raw)
+    const fmName = typeof fm.name === 'string' ? fm.name.trim() : ''
+    const name = opts.preferFrontmatterName && fmName ? fmName : opts.name ?? deriveItemName(file)
+    if (!name) return null
+    return {
+      id: `${source}:${name}`,
+      name,
+      plugin: pluginLabel,
+      source,
+      description: (fm.description || '').slice(0, 140),
+      skills: Array.isArray(fm.skills) ? fm.skills : [],
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function scanAgentsInDir(
   agentsRoot: string,
   source: string,
@@ -135,23 +178,77 @@ export async function scanAgentsInDir(
   const agents: any[] = []
   for (const entry of await safeReadDir(agentsRoot)) {
     if (!entry.isFile() || !entry.name.endsWith('.md')) continue
-    const agentName = entry.name.replace(/\.md$/, '')
-    try {
-      const raw = await readFile(joinPath(agentsRoot, entry.name), 'utf8')
-      const fm = parseFrontmatter(raw)
-      agents.push({
-        id: `${source}:${agentName}`,
-        name: agentName,
-        plugin: pluginLabel,
-        source,
-        description: (fm.description || '').slice(0, 140),
-        skills: Array.isArray(fm.skills) ? fm.skills : [],
-      })
-    } catch {
-      /* skip */
-    }
+    const item = await readAgentFile(joinPath(agentsRoot, entry.name), source, pluginLabel, {
+      name: entry.name.replace(/\.md$/, ''),
+    })
+    if (item) agents.push(item)
   }
   return agents
+}
+
+/**
+ * Agents from custom scan patterns. A matched directory goes through the normal
+ * directory scanner; a matched file is loaded on its own.
+ */
+export async function scanAgentsByPatterns(
+  projectRoot: string,
+  patterns: string[] | null | undefined,
+): Promise<any[]> {
+  const agents: any[] = []
+  for (const match of await expandScanPatterns(projectRoot, patterns)) {
+    if (match.isDirectory) {
+      agents.push(...(await scanAgentsInDir(match.path, 'project', 'project')))
+      continue
+    }
+    if (!PATTERN_MD_EXT.test(match.path)) continue
+    const item = await readAgentFile(match.path, 'project', 'project', { preferFrontmatterName: true })
+    if (item) agents.push(item)
+  }
+  return agents
+}
+
+/** Load ONE skill markdown file matched by a pattern. Returns null when unusable. */
+async function readSkillFile(file: string, includeContractSkills: boolean): Promise<any | null> {
+  try {
+    const fm = parseFrontmatter(await readTextFile(file))
+    const fmName = typeof fm.name === 'string' ? fm.name.trim() : ''
+    // No frontmatter name: a SKILL.md is named after its folder, anything else after the file.
+    const name = fmName
+      || (SKILL_ENTRY_FILE.test(basename(file)) ? basename(dirname(file)) : deriveItemName(file))
+    if (!name) return null
+    const userInvocable = fm['user-invocable'] !== false
+    if (!includeContractSkills && !userInvocable) return null
+    return {
+      id: `project:${name}`,
+      name,
+      plugin: 'project',
+      source: 'project',
+      description: (fm.description || '').slice(0, 140),
+      user_invocable: userInvocable,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Skills from custom scan patterns — same dir/file split as scanAgentsByPatterns. */
+export async function scanSkillsByPatterns(
+  projectRoot: string,
+  patterns: string[] | null | undefined,
+  opts: ScanOpts = {},
+): Promise<any[]> {
+  const { includeContractSkills = true } = opts
+  const skills: any[] = []
+  for (const match of await expandScanPatterns(projectRoot, patterns)) {
+    if (match.isDirectory) {
+      skills.push(...(await scanSkillsFlatDir(match.path, 'project', 'project', opts)))
+      continue
+    }
+    if (!PATTERN_MD_EXT.test(match.path)) continue
+    const item = await readSkillFile(match.path, includeContractSkills)
+    if (item) skills.push(item)
+  }
+  return skills
 }
 
 export async function scanRepoPlugins(projectRoot: string, opts: ScanOpts = {}): Promise<ScanResult> {

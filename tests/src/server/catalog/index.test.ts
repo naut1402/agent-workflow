@@ -60,3 +60,110 @@ describe('buildCatalog fallback', () => {
     expect(cat.agents.some((a) => a.name === 'zzz-unique')).toBe(true)
   })
 })
+
+describe('buildCatalog with custom scan patterns', () => {
+  let projectRoot: string
+  let root: string
+  let emptyHome: string
+  const savedHome = process.env.HOME
+  const savedUserProfile = process.env.USERPROFILE
+
+  beforeAll(async () => {
+    projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'catalog-patterns-'))
+    root = path.join(projectRoot, '.dev-team-agent')
+    await fs.mkdir(root, { recursive: true })
+    emptyHome = await fs.mkdtemp(path.join(os.tmpdir(), 'catalog-empty-home-'))
+
+    // Convention source: .claude/agents holds `dup`.
+    await fs.mkdir(path.join(projectRoot, '.claude', 'agents'), { recursive: true })
+    await fs.writeFile(
+      path.join(projectRoot, '.claude', 'agents', 'dup.md'),
+      '---\ndescription: from the default source\n---\n',
+    )
+    // Off-convention sources reachable only through patterns.
+    await fs.mkdir(path.join(projectRoot, '.agents'), { recursive: true })
+    await fs.writeFile(
+      path.join(projectRoot, '.agents', 'odd-agent.agent.md'),
+      '---\ndescription: found by pattern\n---\n',
+    )
+    await fs.writeFile(
+      path.join(projectRoot, '.agents', 'dup.md'),
+      '---\ndescription: from the pattern source\n---\n',
+    )
+    await fs.mkdir(path.join(projectRoot, 'flat-skills'), { recursive: true })
+    await fs.writeFile(
+      path.join(projectRoot, 'flat-skills', 'odd-skill.md'),
+      '---\ndescription: skill by pattern\n---\n',
+    )
+  })
+
+  afterAll(async () => {
+    await fs.rm(projectRoot, { recursive: true, force: true })
+    await fs.rm(emptyHome, { recursive: true, force: true })
+  })
+
+  const withEmptyHome = async <T>(fn: () => Promise<T>): Promise<T> => {
+    process.env.HOME = emptyHome
+    process.env.USERPROFILE = emptyHome
+    try {
+      return await fn()
+    } finally {
+      if (savedHome === undefined) delete process.env.HOME
+      else process.env.HOME = savedHome
+      if (savedUserProfile === undefined) delete process.env.USERPROFILE
+      else process.env.USERPROFILE = savedUserProfile
+    }
+  }
+
+  test('omitting scanPatterns matches passing three empty lists', async () => {
+    const without = await buildCatalog(root, { scanCustomAgents: async () => [] })
+    const withEmpty = await buildCatalog(root, {
+      scanCustomAgents: async () => [],
+      scanPatterns: { agents: [], skills: [], rules: [] },
+    })
+    expect(withEmpty).toEqual(without)
+  })
+
+  test('agents and skills from patterns are added to the catalog', async () => {
+    const cat = await buildCatalog(root, {
+      scanCustomAgents: async () => [],
+      scanPatterns: { agents: ['.agents/*.md'], skills: ['flat-skills/*.md'], rules: [] },
+    })
+    expect(cat.agents.some((a) => a.name === 'odd-agent')).toBe(true)
+    expect(cat.skills.some((s) => s.name === 'odd-skill')).toBe(true)
+  })
+
+  test('on a name clash the default source wins over the pattern source', async () => {
+    const cat = await buildCatalog(root, {
+      scanCustomAgents: async () => [],
+      scanPatterns: { agents: ['.agents/*.md'], skills: [], rules: [] },
+    })
+    const dup = cat.agents.filter((a) => a.name === 'dup')
+    expect(dup).toHaveLength(1)
+    expect(dup[0].description).toBe('from the default source')
+  })
+
+  test('a pattern hit stops the builtin fallback from kicking in', async () => {
+    const bare = await fs.mkdtemp(path.join(os.tmpdir(), 'catalog-bare-'))
+    const bareRoot = path.join(bare, '.dev-team-agent')
+    await fs.mkdir(path.join(bare, 'odd'), { recursive: true })
+    await fs.writeFile(path.join(bare, 'odd', 'only-agent.md'), '---\ndescription: only one\n---\n')
+    try {
+      const builtin = await withEmptyHome(() =>
+        buildCatalog(bareRoot, { scanCustomAgents: async () => [] }),
+      )
+      expect(builtin.agents.length).toBeGreaterThan(1)
+
+      const patterned = await withEmptyHome(() =>
+        buildCatalog(bareRoot, {
+          scanCustomAgents: async () => [],
+          scanPatterns: { agents: ['odd/*.md'], skills: [], rules: [] },
+        }),
+      )
+      expect(patterned.agents.map((a) => a.name)).toEqual(['only-agent'])
+      expect(patterned.skills).toEqual([])
+    } finally {
+      await fs.rm(bare, { recursive: true, force: true })
+    }
+  })
+})

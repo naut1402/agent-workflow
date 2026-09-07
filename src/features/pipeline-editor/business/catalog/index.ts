@@ -56,7 +56,9 @@ import {
   scanEnabledInstalledPlugins,
   scanPluginCache,
   scanProjectClaude,
+  scanAgentsByPatterns,
   scanRepoPlugins,
+  scanSkillsByPatterns,
   scanUserAgents,
   scanUserSkills,
   type ScanResult,
@@ -68,16 +70,27 @@ export interface Catalog {
   agents: any[]
 }
 
+/** Custom scan patterns, injected by the controller — catalog never reads settings itself. */
+export interface CatalogScanPatterns {
+  agents?: string[]
+  skills?: string[]
+  rules?: string[]
+}
+
 /**
  * Aggregate skills + agents from every source, dedupe by name (source priority),
  * fall back to BUILTIN_CATALOG when nothing is found.
  *
  * `deps.scanCustomAgents` is injected (it belongs to the agents module) so the
- * catalog module stays decoupled from agents.
+ * catalog module stays decoupled from agents. `deps.scanPatterns` comes from
+ * global dashboard settings and only adds to the default sources.
  */
 export async function buildCatalog(
   root: string,
-  deps: { scanCustomAgents: (root: string) => Promise<any[]> },
+  deps: {
+    scanCustomAgents: (root: string) => Promise<any[]>
+    scanPatterns?: CatalogScanPatterns | null
+  },
 ): Promise<Catalog> {
   const projectRoot = dirname(root)
   const catalogOpts = { includeContractSkills: true }
@@ -99,6 +112,16 @@ export async function buildCatalog(
     }),
     await scanProjectClaude(projectRoot, catalogOpts),
   ]
+
+  // Must stay AFTER the convention sources: dedupeCatalogItems compares with `>`,
+  // so on equal priority (both 'project') the item seen first wins.
+  const patterns = deps.scanPatterns
+  if (patterns?.agents?.length || patterns?.skills?.length) {
+    batches.push({
+      skills: await scanSkillsByPatterns(projectRoot, patterns.skills, catalogOpts),
+      agents: await scanAgentsByPatterns(projectRoot, patterns.agents),
+    })
+  }
 
   const allSkills: any[] = []
   const allAgents: any[] = []

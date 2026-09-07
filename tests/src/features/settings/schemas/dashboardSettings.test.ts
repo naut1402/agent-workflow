@@ -5,6 +5,7 @@ import {
   resolveAutoscanFromDashboard,
   resolveGithubTokensFromDashboard,
   resolveLoggingFromDashboard,
+  resolveScanPatternsFromDashboard,
 } from '@/features/settings/schemas/dashboardSettings'
 
 describe('parseDashboardSettings', () => {
@@ -13,6 +14,9 @@ describe('parseDashboardSettings', () => {
     expect(parseDashboardSettings('x').autoscan?.enabled).toBe(false)
     expect(parseDashboardSettings(null).githubTokens).toEqual({ repos: [] })
     expect(parseDashboardSettings(null).logging).toEqual(DEFAULT_DASHBOARD_SETTINGS.logging)
+    expect(parseDashboardSettings(null).scanPatterns).toEqual(
+      DEFAULT_DASHBOARD_SETTINGS.scanPatterns,
+    )
   })
 
   it('nests autoscan under global settings', () => {
@@ -24,6 +28,31 @@ describe('parseDashboardSettings', () => {
       whitelist: ['/ws'],
       intervalMs: 45_000,
     })
+  })
+
+  it('nests scanPatterns under global settings', () => {
+    const parsed = parseDashboardSettings({
+      scanPatterns: { agents: ['./.agents/'], skills: [], rules: ['docs/rules'] },
+    })
+    expect(parsed.scanPatterns).toEqual({
+      agents: ['.agents'],
+      skills: [],
+      rules: ['docs/rules'],
+    })
+  })
+
+  it('keeps other blocks when scanPatterns holds junk', () => {
+    const parsed = parseDashboardSettings({
+      autoscan: { enabled: true, whitelist: ['/ws'], intervalMs: 60_000 },
+      scanPatterns: { agents: ['/abs', 3, '../up'], skills: 'nope', rules: [] },
+    })
+    expect(parsed.autoscan?.enabled).toBe(true)
+    expect(parsed.scanPatterns).toEqual({ agents: [], skills: [], rules: [] })
+  })
+
+  it('reads a settings file written before scanPatterns existed', () => {
+    const parsed = parseDashboardSettings({ autoscan: { enabled: false, whitelist: [] } })
+    expect(parsed.scanPatterns).toEqual({ agents: [], skills: [], rules: [] })
   })
 
   it('nests githubTokens under global settings', () => {
@@ -70,5 +99,24 @@ describe('resolveLoggingFromDashboard', () => {
       events: false,
       usage: true,
     })
+  })
+})
+
+describe('resolveScanPatternsFromDashboard', () => {
+  it('falls back to three empty lists', () => {
+    expect(resolveScanPatternsFromDashboard({})).toEqual({ agents: [], skills: [], rules: [] })
+    expect(resolveScanPatternsFromDashboard(undefined)).toEqual({
+      agents: [],
+      skills: [],
+      rules: [],
+    })
+  })
+
+  it('normalises the stored patterns', () => {
+    expect(
+      resolveScanPatternsFromDashboard({
+        scanPatterns: { agents: ['packages\\*\\agents'], skills: [], rules: [] },
+      }),
+    ).toEqual({ agents: ['packages/*/agents'], skills: [], rules: [] })
   })
 })
