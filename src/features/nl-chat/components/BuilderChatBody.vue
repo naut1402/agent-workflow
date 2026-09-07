@@ -1,14 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useNlChatSession, type NlChatEntityType } from '../composables/useNlChatSession'
-import { useChatAttachments } from '../composables/useChatAttachments'
-import { appendAttachments } from '../lib/attachmentPrompt'
+import { useChatComposer } from '../composables/useChatComposer'
 import ChatMessageBubble from './ChatMessageBubble.vue'
-import ChatAttachmentBar from './ChatAttachmentBar.vue'
-import { useDrop } from '../../../core/composables/useDrop'
-import { useAppSettings } from '../../../core/composables/useAppSettings'
+import ChatComposer from './ChatComposer.vue'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { resolveChatEnterToSend } from '../../../core/configs/appSettings'
 
 // Body of the floating chat window for the creation flow (F0012): chat freely,
 // the agent infers whether you want a Task / Pipeline / Agent and hands back a
@@ -50,57 +46,22 @@ watch(draft, (d) => {
 })
 
 const { t } = useI18nHelpers()
-const inputText = ref('')
 
 // Keep the newest message in view as the conversation grows; also the drop zone.
 const messagesRef = ref<HTMLElement | null>(null)
 
-// ── attachments ───────────────────────────────────────────────────────────
-const attachments = useChatAttachments({ getProjectId: () => props.projectId ?? undefined })
-const canAttach = computed(() => !sending.value && step.value !== 'done')
-const { isOverDropZone } = useDrop(messagesRef, (files) => {
-  if (!canAttach.value) return
-  attachments.add(files)
+// Attachments, drop zone, Enter behaviour and the send guard — shared with
+// TaskChatBody, which only differs in what blocks a send and where text goes.
+// `ChatComposer` renders it; only the drop-zone flag is needed here, for the
+// message list this body owns.
+const composer = useChatComposer({
+  dropZone: messagesRef,
+  getProjectId: () => props.projectId ?? undefined,
+  canSend: () => step.value !== 'done',
+  sending: () => sending.value,
+  send: (text) => void sendMessage(text),
 })
-
-// ── Enter behaviour ───────────────────────────────────────────────────────
-const { settings } = useAppSettings()
-const enterToSend = computed(() => resolveChatEnterToSend(settings.value))
-const composerHint = computed(() =>
-  enterToSend.value ? t('nlChat.composer.enterToSend') : t('nlChat.composer.enterToNewline'),
-)
-
-function onEnterKey(e: KeyboardEvent): void {
-  // Vietnamese IME: Enter commits the word being typed — never a send.
-  if (e.isComposing) return
-  if (!enterToSend.value) return // no preventDefault → the textarea inserts a newline
-  e.preventDefault()
-  void onSend()
-}
-
-async function onSend(): Promise<void> {
-  if (sending.value || step.value === 'done' || attachments.uploading.value) return
-  const text = inputText.value.trim()
-  if (!text && attachments.items.value.length === 0) return
-
-  const uploaded = await attachments.upload()
-  if (uploaded === null) return // upload failed — keep text + chips so it can be retried
-  const finalText = appendAttachments(text, uploaded)
-
-  inputText.value = ''
-  attachments.clear()
-  nextTick(autoGrow)
-  void sendMessage(finalText)
-}
-
-const inputRef = ref<HTMLTextAreaElement | null>(null)
-/** Grow with the text up to the CSS max-height, then scroll. */
-function autoGrow(): void {
-  const el = inputRef.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = `${el.scrollHeight}px`
-}
+const { isOverDropZone } = composer
 
 // design.md §4.4: pipeline draft's steps[].agent must be validated against
 // fetchCatalog() before "Xác nhận" is allowed — see useNlChatSession.ts.
@@ -224,38 +185,7 @@ watch([() => messages.value.length, () => sending.value], async () => {
       <p v-if="error" class="nl-chat-error">{{ error }}</p>
       <p v-if="step === 'done'" class="nl-chat-done">Đã tạo thành công.</p>
     </div>
-    <ChatAttachmentBar
-      :items="attachments.items.value"
-      :error="attachments.error.value"
-      :disabled="!canAttach"
-      @pick="attachments.add"
-      @remove="attachments.remove"
-    />
-    <form class="nl-chat-input-row" @submit.prevent="onSend">
-      <textarea
-        ref="inputRef"
-        v-model="inputText"
-        rows="1"
-        placeholder="Nhập tin nhắn..."
-        :title="composerHint"
-        :disabled="sending || step === 'done'"
-        @input="autoGrow"
-        @keydown.enter.exact="onEnterKey"
-        @keydown.ctrl.enter.prevent="onSend"
-        @keydown.meta.enter.prevent="onSend"
-      ></textarea>
-      <button
-        type="submit"
-        :disabled="
-          sending ||
-          step === 'done' ||
-          attachments.uploading.value ||
-          (!inputText.trim() && attachments.items.value.length === 0)
-        "
-      >
-        Gửi
-      </button>
-    </form>
+    <ChatComposer :composer="composer" placeholder="Nhập tin nhắn..." />
   </template>
 
   <div v-else-if="step === 'previewDraft'" class="nl-chat-preview">

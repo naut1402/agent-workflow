@@ -490,7 +490,6 @@ function onNewSession(): void {
           :ref="(el) => bindBody(s.id, el)"
           :task-id="s.context.taskId"
           :step-id="s.context.stepId"
-          :step-label="s.context.stepLabel"
           :project-id="projectId"
           :active="s.id === activeId && visible !== false"
           @status="statuses[s.id] = $event"

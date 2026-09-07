@@ -135,8 +135,9 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 | `tests/src/features/monitor/composables` | vitest | `features/monitor/composables`, `features/runner/scripts` | 6 | `npx vitest run tests/src/features/monitor/composables` |
 | `tests/src/features/monitor/lib` | vitest | `features/monitor/lib` | 4 | `npx vitest run tests/src/features/monitor/lib` |
 | `tests/src/features/monitor/schemas` | vitest | `features/monitor/schemas` | 1 | `npx vitest run tests/src/features/monitor/schemas` |
-| `tests/src/features/nl-chat/composables` | vitest | `features/nl-chat/composables` | 2 | `npx vitest run tests/src/features/nl-chat/composables` |
-| `tests/src/features/nl-chat/lib` | vitest | `features/nl-chat/lib` | 1 | `npx vitest run tests/src/features/nl-chat/lib` |
+| `tests/src/features/nl-chat/components` | vitest | `features/nl-chat/components`, `core/composables`, `features/nl-chat/composables` | 2 | `npx vitest run tests/src/features/nl-chat/components` |
+| `tests/src/features/nl-chat/composables` | vitest | `features/nl-chat/composables` | 3 | `npx vitest run tests/src/features/nl-chat/composables` |
+| `tests/src/features/nl-chat/lib` | vitest | `features/nl-chat/lib` | 2 | `npx vitest run tests/src/features/nl-chat/lib` |
 | `tests/src/features/notifications/components` | vitest | `features/notifications/components`, `features/notifications/lib` | 3 | `npx vitest run tests/src/features/notifications/components` |
 | `tests/src/features/notifications/composables` | vitest | `features/notifications/lib`, `core/composables`, `features/notifications/composables` | 1 | `npx vitest run tests/src/features/notifications/composables` |
 | `tests/src/features/notifications/lib` | vitest | `features/notifications/lib` | 2 | `npx vitest run tests/src/features/notifications/lib` |
@@ -164,9 +165,9 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 | `tests/src/server/artifactActions` | bun | `features/monitor/business`, `features/monitor/schemas` | 1 | `bun test tests/src/server/artifactActions` |
 | `tests/src/server/automations` | bun | `features/automations/business`, `features/automations/schemas`, `core/events` | 9 | `bun test tests/src/server/automations` |
 | `tests/src/server/catalog` | bun | `features/pipeline-editor/business` | 4 | `bun test tests/src/server/catalog` |
-| `tests/src/server/chat` | bun | `features/runner/business`, `features/monitor/business`, `features/nl-chat/business` | 5 | `bun test tests/src/server/chat` |
+| `tests/src/server/chat` | bun | `features/runner/business`, `features/nl-chat/business`, `features/monitor/business` | 6 | `bun test tests/src/server/chat` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `api/apiServer.ts`, `core/registry.ts` | 2 | `bun test tests/src/server/github` |
-| `tests/src/server/http` | bun | `api/apiServer.ts`, `core/http`, `features/runner/business` | 24 | `bun test tests/src/server/http` |
+| `tests/src/server/http` | bun | `api/apiServer.ts`, `core/http`, `features/runner/business` | 25 | `bun test tests/src/server/http` |
 | `tests/src/server/lib` | bun | `core/lib` | 1 | `bun test tests/src/server/lib` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
