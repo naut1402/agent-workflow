@@ -3,7 +3,7 @@ import { parseAutoscanConfig } from './schemas/autoscan.js'
 import { parseGithubTokensConfig } from './schemas/githubTokens.js'
 import { parseLoggingConfig } from '../../core/log/loggingPrefs.js'
 import { parseRecoverySettings } from './schemas/recovery.js'
-import { parseScanPatternsConfig } from './schemas/scanPatterns.js'
+import { mergeScanPatternsConfig } from './schemas/scanPatterns.js'
 import { parseSecurityConfig } from './schemas/security.js'
 import { emitAudit } from '../../core/log/store.js'
 import { hasJwtSecret } from '../../core/http/security/jwtGuard.js'
@@ -125,12 +125,7 @@ export class SettingsController extends AbstractController {
     const b = await this.parseBody()
     if (!b.ok) return this.badRequest('invalid JSON')
     // Merge per kind so a body carrying only one kind leaves the other two alone.
-    const current = settingsBusiness.loadScanPatternsConfig()
-    const next = parseScanPatternsConfig({
-      agents: b.value?.agents ?? current.agents,
-      skills: b.value?.skills ?? current.skills,
-      rules: b.value?.rules ?? current.rules,
-    })
+    const next = mergeScanPatternsConfig(settingsBusiness.loadScanPatternsConfig(), b.value)
     const saved = settingsBusiness.saveScanPatternsConfig(next)
     emitAudit({ op: 'update', entity: 'scan-patterns', identifier: 'config', projectId: null })
     return this.ok({ config: saved })

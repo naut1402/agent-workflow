@@ -52,7 +52,7 @@ export async function walkRuleFiles(
  * Rules from custom scan patterns. A matched directory is walked recursively;
  * a matched file becomes a single rule. Pattern rules are always project-scoped.
  */
-export async function scanRulesByPatterns(
+async function scanRulesByPatterns(
   projectRoot: string,
   patterns: string[] | null | undefined,
   out: RuleItem[],
