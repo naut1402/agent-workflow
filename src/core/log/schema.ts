@@ -46,6 +46,7 @@ export const AUDIT_ENTITIES = [
   'artifact',
   'artifact-actions',
   'task-state',
+  'worktree',
   'nl-chat-session',
   'automation',
 ] as const

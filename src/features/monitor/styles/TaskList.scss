@@ -249,4 +249,5 @@
 }
 .btn-archive-detail:hover { color: var(--accent); border-color: var(--accent); }
 .btn-delete-detail:hover { color: var(--danger); border-color: var(--danger); }
+.btn-clean-worktree:hover { color: var(--waiting); border-color: var(--waiting); }
 .btn-archive-detail:disabled { opacity: 0.5; cursor: progress; }
