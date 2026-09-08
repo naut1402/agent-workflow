@@ -28,8 +28,11 @@ export function useCopyText(opts?: { flashMs?: number }) {
         ta.style.left = '-9999px'
         document.body.appendChild(ta)
         ta.select()
-        document.execCommand('copy')
-        document.body.removeChild(ta)
+        try {
+          if (!document.execCommand('copy')) throw new Error('execCommand copy returned false')
+        } finally {
+          document.body.removeChild(ta)
+        }
       }
       copyFlash.value = t('common.copy.done')
     } catch {

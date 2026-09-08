@@ -4,6 +4,7 @@ import { flushPromises } from '@vue/test-utils'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
 import { STORAGE_KEY, useAppSettings } from '@/core/composables/useAppSettings'
 import viMonitor from '@/features/monitor/locales/vi'
+import enMonitor from '@/features/monitor/locales/en'
 
 const tasks = [
   {
@@ -657,4 +658,253 @@ describe('MonitorLayout — nút dọn worktree (T161678b4)', () => {
     expect(w.find('.badges .badge.worktree').exists()).toBe(false)
     expect(w.find('.badges .btn-clean-worktree').exists()).toBe(false)
   })
+})
+
+// Hai mã lỗi mới của bước dọn worktree phải ra chữ tiếng Việt của khoá tương
+// ứng, không rơi vào nhánh thông báo chung.
+describe('MonitorLayout — mã lỗi mới khi dọn worktree', () => {
+  function mountDone(props: Record<string, any> = {}) {
+    return mountLayout({
+      tasks,
+      selected: { ...tasks[0], current_phase: 'completed' },
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+      ...props,
+    })
+  }
+
+  async function clickCleanWith(error: string) {
+    stubFetch({
+      worktreeResponse: worktreeOk(cleanWorktree),
+      deleteResponse: { ok: false, status: 409, json: async () => ({ error }) },
+    })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const w = mountDone()
+    await flushPromises()
+    await w.find('.badges .btn-clean-worktree').trigger('click')
+    await flushPromises()
+    return w.findAll('.task-head .art-warning').at(-1)!.text()
+  }
+
+  it('task còn job đang chạy: nói rõ là do job, không phải lỗi chung', async () => {
+    expect(await clickCleanWith('task_job_in_flight')).toBe(
+      viMonitor.layout.worktreeErrJobInFlight,
+    )
+  })
+
+  it('worktree detached: nói rõ commit sẽ mất ref và chỉ đường CLI', async () => {
+    expect(await clickCleanWith('worktree_detached')).toBe(viMonitor.layout.worktreeErrDetached)
+  })
+
+  it('mã lạ vẫn hiện được một thông báo, không để trống', async () => {
+    const text = await clickCleanWith('cai_gi_do_moi')
+    expect(text.length).toBeGreaterThan(0)
+    expect(text).not.toBe(viMonitor.layout.worktreeErrDetached)
+  })
+})
+
+// Trạng thái worktree treo theo *cặp* (task, project): hai project khác nhau
+// giữ được task cùng id, nên chỉ so task id là chưa đủ để biết response còn
+// đúng chỗ hay không.
+describe('MonitorLayout — trạng thái worktree bám cả task lẫn project', () => {
+  const completed = { ...tasks[0], current_phase: 'completed' }
+
+  /** Worktree của project khác — relPath khác để phân biệt trong DOM. */
+  const otherWorktree = { ...cleanWorktree, relPath: '.claude/worktrees/other', branch: 'x/other' }
+
+  it('đổi project khi GET còn treo: response cũ không ghi vào state', async () => {
+    const pending: ((body: any) => void)[] = []
+    const fetchMock = vi.fn(async (input: any, init: any = {}) => {
+      const url = String(input)
+      const isGet = String(init.method ?? 'GET').toUpperCase() === 'GET'
+      if (url.includes('/api/jobs')) return jsonRes({ jobs: [] })
+      if (url.includes('/worktree') && isGet) {
+        return new Promise((resolve) => {
+          pending.push((body) => resolve(jsonRes(body)))
+        })
+      }
+      throw new Error(`unexpected fetch: ${init.method ?? 'GET'} ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const w = mountLayout({
+      tasks,
+      selected: completed,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+    })
+    // Người dùng đổi project trước khi request đầu tiên kịp trả về.
+    await w.setProps({ selectedProjectId: 'proj-2' })
+    await flushPromises()
+    expect(pending.length).toBe(2)
+
+    // Request của proj-2 về trước, rồi mới tới request cũ của proj-1.
+    pending[1]({ worktree: otherWorktree, ambiguous: false })
+    await flushPromises()
+    pending[0]({ worktree: cleanWorktree, ambiguous: false })
+    await flushPromises()
+
+    // Badge phải còn là worktree của proj-2 — response cũ không được sơn lên.
+    expect(w.find('.badges .badge.worktree').text()).toContain(otherWorktree.branch)
+  })
+
+  /**
+   * Cửa sổ đua thật nằm ở lần `await` **trước** hộp xác nhận: soạn câu confirm
+   * phải hỏi `/api/jobs` xem task còn job không. `confirm()` của trình duyệt
+   * chặn hẳn event loop nên trong lúc nó mở không có JS nào chạy — nhưng trong
+   * lúc chờ `/api/jobs` thì selection dời được.
+   */
+  function stubWithPendingJobs() {
+    const pendingJobs: (() => void)[] = []
+    const fetchMock = vi.fn(async (input: any, init: any = {}) => {
+      const url = String(input)
+      const isGet = String(init.method ?? 'GET').toUpperCase() === 'GET'
+      if (url.includes('/api/jobs')) {
+        return new Promise((resolve) => {
+          pendingJobs.push(() => resolve(jsonRes({ jobs: [] })))
+        })
+      }
+      if (url.includes('/worktree') && isGet) return worktreeOk(cleanWorktree)
+      if (url.includes('/api/tasks/')) return jsonRes({ ok: true })
+      throw new Error(`unexpected fetch: ${init.method ?? 'GET'} ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    return { fetchMock, releaseJobs: () => pendingJobs.forEach((r) => r()) }
+  }
+
+  it('đổi project trong lúc soạn câu xác nhận: không gửi DELETE nào', async () => {
+    const { fetchMock, releaseJobs } = stubWithPendingJobs()
+    const w = mountLayout({
+      tasks,
+      selected: completed,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+    })
+    await flushPromises()
+
+    void w.find('.badges .btn-clean-worktree').trigger('click')
+    await flushPromises()
+    await w.setProps({ selectedProjectId: 'proj-2' })
+    releaseJobs()
+    await flushPromises()
+
+    expect(deleteCalls(fetchMock).length).toBe(0)
+  })
+
+  it('đổi task trong lúc soạn câu xác nhận: không gửi DELETE nào', async () => {
+    const { fetchMock, releaseJobs } = stubWithPendingJobs()
+    const w = mountLayout({
+      tasks,
+      selected: completed,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+    })
+    await flushPromises()
+
+    void w.find('.badges .btn-clean-worktree').trigger('click')
+    await flushPromises()
+    await w.setProps({
+      selected: { ...tasks[1], current_phase: 'completed' },
+      selectedId: 'F003',
+    })
+    releaseJobs()
+    await flushPromises()
+
+    expect(deleteCalls(fetchMock).length).toBe(0)
+  })
+
+  it('đổi project đọc lại trạng thái worktree, không giữ badge của project cũ', async () => {
+    let call = 0
+    stubFetch({
+      worktreeResponse: () => {
+        call += 1
+        return call === 1 ? worktreeOk(cleanWorktree) : worktreeOk(null)
+      },
+    })
+
+    const w = mountLayout({
+      tasks,
+      selected: completed,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+    })
+    await flushPromises()
+    expect(w.find('.badges .badge.worktree').exists()).toBe(true)
+
+    await w.setProps({ selectedProjectId: 'proj-2' })
+    await flushPromises()
+
+    expect(call).toBe(2)
+    expect(w.find('.badges .badge.worktree').exists()).toBe(false)
+  })
+
+  /**
+   * Poll 1.5s thay `selected` bằng một object mới **cùng giá trị** mỗi nhịp. Nếu
+   * watch so theo identity (một getter trả array literal) thì mỗi nhịp poll xoá
+   * sạch `worktreeError` và bắn thêm một GET /worktree — người dùng không kịp
+   * đọc lý do bị từ chối, còn server ăn thêm một `git status` mỗi 1.5s.
+   */
+  it('prop selected mới cùng giá trị: không đọc lại worktree, không xoá thông báo lỗi', async () => {
+    let gets = 0
+    stubFetch({
+      worktreeResponse: () => {
+        gets += 1
+        return worktreeOk(cleanWorktree)
+      },
+      deleteResponse: {
+        ok: false,
+        status: 409,
+        json: async () => ({ error: 'worktree_detached' }),
+      },
+    })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const w = mountLayout({
+      tasks,
+      selected: completed,
+      selectedId: 'B4488',
+      selectedProjectId: 'proj-1',
+    })
+    await flushPromises()
+    await w.find('.badges .btn-clean-worktree').trigger('click')
+    await flushPromises()
+
+    const shownError = () => w.find('.task-head .art-warning').text()
+    expect(shownError()).toBe(viMonitor.layout.worktreeErrDetached)
+    const getsBeforePoll = gets
+
+    // Một nhịp poll: object khác, giá trị y hệt.
+    await w.setProps({ selected: { ...completed } })
+    await flushPromises()
+
+    expect(gets).toBe(getsBeforePoll)
+    expect(shownError()).toBe(viMonitor.layout.worktreeErrDetached)
+  })
+})
+
+// Repo không có test đối chiếu key vi ↔ en, nên chuỗi mới phải tự khoá ở đây:
+// thiếu bên `en` sẽ im lặng fallback về `vi` và lọt qua mọi suite khác.
+describe('MonitorLayout — chuỗi worktree mới có ở cả hai locale', () => {
+  it.each(['worktreeErrDetached', 'worktreeErrJobInFlight'] as const)(
+    '%s có ở vi và en, và hai bên khác chữ',
+    (key) => {
+      for (const messages of [viMonitor, enMonitor]) {
+        expect(typeof (messages.layout as any)[key]).toBe('string')
+        expect((messages.layout as any)[key].length).toBeGreaterThan(0)
+      }
+      expect((enMonitor.layout as any)[key]).not.toBe((viMonitor.layout as any)[key])
+    },
+  )
+
+  it.each(['cleanWorktreeTitle', 'confirmCleanWorktree', 'confirmCleanWorktreeRunning'] as const)(
+    '%s không còn khẳng định giữ được "mọi commit" nói chung',
+    (key) => {
+      // Xoá worktree chỉ giữ những commit đã nằm trên branch; commit chỉ có ở
+      // HEAD detached thì không. Câu cũ nói quá phạm vi đó.
+      expect((viMonitor.layout as any)[key]).toContain('đã nằm trên branch đó')
+      expect((enMonitor.layout as any)[key]).toContain('already on that branch')
+    },
+  )
 })

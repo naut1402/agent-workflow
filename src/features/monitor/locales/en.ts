@@ -14,16 +14,21 @@ export default {
     worktreeBadge: 'worktree: {branch}',
     worktreeAmbiguous: 'Several worktrees match this task — clean them up manually with the CLI.',
     cleanWorktree: 'Clean worktree',
-    cleanWorktreeTitle: "Delete this task's git worktree (the branch and all its commits are kept)",
+    cleanWorktreeTitle:
+      "Delete this task's git worktree (the branch and every commit already on that branch are kept)",
     confirmCleanWorktree:
-      'Delete worktree "{path}"?\n\nBranch "{branch}" and every commit on it ARE KEPT. Task artifacts live in the main data folder and are not affected.',
+      'Delete worktree "{path}"?\n\nBranch "{branch}" and every commit already on that branch ARE KEPT. Task artifacts live in the main data folder and are not affected.',
     confirmCleanWorktreeRunning:
-      'This task still has a running or queued job — that job may be writing into the worktree and will fail if the folder disappears.\n\nStill delete worktree "{path}"? Branch "{branch}" and every commit on it ARE KEPT.',
+      'This task still has a running or queued job — that job may be writing into the worktree and will fail if the folder disappears.\n\nStill delete worktree "{path}"? Branch "{branch}" and every commit already on that branch ARE KEPT.',
     worktreeErrDirty:
       'The worktree still has {count} uncommitted change(s): {files}. Commit or discard them in the worktree, then try again.',
     worktreeErrLocked: 'The worktree is locked ({reason}). Run `git worktree unlock`, then try again.',
     worktreeErrNotFound: 'No worktree found for this task — it may already have been cleaned up.',
     worktreeErrNotFinished: 'This task has not finished — only completed or archived tasks can have their worktree cleaned.',
+    worktreeErrJobInFlight:
+      'The task still has a running or queued job that may be writing into the worktree. Wait for it to finish, then try again.',
+    worktreeErrDetached:
+      'This worktree is detached (no branch attached) — deleting it would leave its commits with no ref holding them. Attach a branch to the worktree and try again, or clean it up with the CLI.',
     worktreeErrOutside:
       'The worktree lives outside the repo and outside its sibling folder — the dashboard refuses to delete it. Clean it up with the CLI.',
     worktreeErrRemoveFailed: 'Could not delete the worktree: {detail}',

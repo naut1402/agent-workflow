@@ -83,6 +83,11 @@ export function hasAnyScanPattern(config: ScanPatternsConfig | null | undefined)
  * Merge a partial patch over the stored config, one kind at a time: a `PUT` body
  * carrying only `agents` must leave `skills` and `rules` untouched rather than
  * resetting them to empty.
+ *
+ * Only an actual array counts as "the caller means to set this kind". A wrong
+ * type (`"a,b"`, `{}`, `null`) would otherwise be sanitised down to `[]` and
+ * silently wipe the stored list; keeping `current` makes it a no-op instead. An
+ * explicit `[]` still clears the list — that one is a real intent.
  */
 export function mergeScanPatternsConfig(
   current: ScanPatternsConfig,
@@ -90,6 +95,9 @@ export function mergeScanPatternsConfig(
 ): ScanPatternsConfig {
   const source = patch && typeof patch === 'object' ? (patch as Record<string, unknown>) : {}
   const merged: Record<string, unknown> = {}
-  for (const kind of SCAN_PATTERN_KINDS) merged[kind] = source[kind] ?? current[kind]
+  for (const kind of SCAN_PATTERN_KINDS) {
+    const incoming = source[kind]
+    merged[kind] = Array.isArray(incoming) ? incoming : current[kind]
+  }
   return parseScanPatternsConfig(merged)
 }

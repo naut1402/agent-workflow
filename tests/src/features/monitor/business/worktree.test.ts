@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import path from 'node:path'
 import {
+  buildWorktreeView,
+  findRemovalBlocker,
   isRemovableWorktreePath,
   matchWorktreeForTask,
   parseWorktreeList,
@@ -185,5 +187,64 @@ describe('isRemovableWorktreePath', () => {
   test('refuses empty inputs', () => {
     expect(isRemovableWorktreePath(repo, '')).toBe(false)
     expect(isRemovableWorktreePath('', repo)).toBe(false)
+  })
+})
+
+// Guard `detached` chỉ có test đi qua `git` (suite HTTP bọc `skipIf(!hasGit)`) —
+// ở image CI không cài git thì nó im lặng bị skip. Hai hàm dưới đây thuần logic:
+// gọi thẳng với entry dựng tay, và dùng path KHÔNG tồn tại để `buildWorktreeView`
+// không chạm `git status` lần nào.
+describe('buildWorktreeView / findRemovalBlocker — không cần git', () => {
+  const repo = '/repo'
+  const ghost = path.join(repo, '.claude', 'worktrees', 'T0001')
+
+  test('detached + thư mục đã biến mất vẫn bị chặn', () => {
+    const view = buildWorktreeView(repo, entry({ path: ghost, detached: true, branch: null }))
+
+    expect(view.exists).toBe(false)
+    expect(view.blockedBy).toBe('detached')
+    expect(view.removable).toBe(true)
+
+    // `!wt.exists` bail đứng SAU nhánh detached: xoá worktree không branch là
+    // bỏ ref duy nhất giữ các commit trên đó, kể cả khi thư mục đã mất.
+    expect(findRemovalBlocker(view)).toMatchObject({
+      ok: false,
+      status: 409,
+      error: 'worktree_detached',
+      path: ghost,
+    })
+  })
+
+  test('có branch, sạch, trong policy: không blocker nào', () => {
+    const view = buildWorktreeView(
+      repo,
+      entry({ path: ghost, detached: false, branch: 'fix/T0001/demo' }),
+    )
+
+    expect(view.blockedBy).toBe(null)
+    expect(findRemovalBlocker(view)).toBe(null)
+  })
+
+  test('ngoài policy thắng detached — báo đúng lý do người dùng sửa được', () => {
+    const outside = '/tmp/somewhere-else'
+    const view = buildWorktreeView(repo, entry({ path: outside, detached: true }))
+
+    expect(view.removable).toBe(false)
+    expect(view.blockedBy).toBe('outside_policy')
+    expect(findRemovalBlocker(view)).toMatchObject({ status: 403, error: 'worktree_outside_policy' })
+  })
+
+  test('locked thắng detached', () => {
+    const view = buildWorktreeView(
+      repo,
+      entry({ path: ghost, detached: true, locked: true, lockReason: 'đang chạy' }),
+    )
+
+    expect(view.blockedBy).toBe('locked')
+    expect(findRemovalBlocker(view)).toMatchObject({
+      status: 409,
+      error: 'worktree_locked',
+      lockReason: 'đang chạy',
+    })
   })
 })

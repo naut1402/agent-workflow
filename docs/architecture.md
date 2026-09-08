@@ -160,7 +160,7 @@ Thêm scan / endpoint / feature mới không được phá các bất biến sau
 
 - **Đọc filesystem phải phòng thủ**: `safeReadDir`/`statSafe` (`fileHelper`) / `readYamlSafe` (`yamlLib`) /`readState`/`loadRegistry` nuốt lỗi, trả empty/false thay vì throw — một file state ghi dở không được làm sập request.
 - **Chống path-traversal**: mọi input từ request phải sanitize tại feature sở hữu (`resolveArtifact` + `fileHelper.resolvePathUnder`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương. Hàm sanitize domain **không** nằm ở core — gắn vào module business liên quan (vd `pipeline/index`, `agents`, `tasks`, `jobLog`) và export qua `business/index.ts` nếu feature khác cần dùng.
-- **Pattern scan tuỳ chỉnh không escape project root**: pattern trong `settings.scanPatterns` bị loại ở `sanitiseScanPattern` (schema), lại ở `expandScanPatterns`, và mỗi match còn qua `resolvePathUnder(projectRoot, …)`.
+- **Pattern scan tuỳ chỉnh không escape project root**: pattern trong `settings.scanPatterns` bị loại ở `sanitiseScanPattern` (schema dùng chung FE/BE của feature `settings` — không import `node:` để `SettingsDialog.vue` dùng lại được), lại ở `expandScanPatterns` (bỏ qua mọi symlink), và mỗi match còn qua `resolvePathUnder(projectRoot, …)`.
 - **Ghi registry atomic** (temp file + rename trong `saveRegistry`).
 - **Fetch URL người dùng** phải qua `fetchUrlSafe` (https-only, chặn private host) — tránh SSRF.
 - **ESM thuần**; server import core `node:`-prefixed.

@@ -14,6 +14,12 @@ import type { ChatAttachmentItem } from '../composables/useChatAttachments'
 const props = defineProps<{
   items: ChatAttachmentItem[]
   error?: string | null
+  /**
+   * True only while an upload is in flight. Deliberately not `canAttach`: that
+   * also folds in `canSend`, which the server flips off mid-poll — chips staged
+   * just before would then be neither sendable nor removable.
+   */
+  disabled?: boolean
 }>()
 const emit = defineEmits<{
   remove: [string]
@@ -43,6 +49,9 @@ function releasePreview(id: string): void {
 }
 
 function onRemove(id: string): void {
+  // Guarded here too, not just via the button's `disabled`: a chip removed
+  // mid-upload would drop a file the upload is already carrying.
+  if (props.disabled) return
   releasePreview(id)
   emit('remove', id)
 }
@@ -85,6 +94,7 @@ onUnmounted(() => {
           class="icon-btn icon-btn-inline"
           :title="t('nlChat.attachment.remove')"
           :aria-label="t('nlChat.attachment.remove')"
+          :disabled="disabled"
           @click="onRemove(item.id)"
         >
           <Icon name="close" :size="11" />

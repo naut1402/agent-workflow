@@ -82,6 +82,13 @@ export function useTaskChat(opts: UseTaskChatOptions) {
 
   let timer: ReturnType<typeof setTimeout> | null = null
   let stopped = false
+  /**
+   * Bumped by every `start` and every `stop`. A poll chain carries the value it
+   * was born with and drops out the moment it stops matching, which is the only
+   * way to cancel a chain already parked between two `await`s — `clearTimeout`
+   * alone cannot reach it, so the in-flight response would still land in state.
+   */
+  let generation = 0
 
   const blockedText = computed(() => {
     if (blockedReason.value) return BLOCKED_TEXT[blockedReason.value]
@@ -159,62 +166,81 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     reconcilePending(turns.value, data)
   }
 
-  async function refresh(incremental = true): Promise<void> {
-    const taskId = opts.getTaskId()
-    if (!taskId) return
-    // While an optimistic send is waiting, always reload from 0. Job-fallback
-    // turns use a 0-based index space that resets per response shape; polling
-    // with from=<old total> returns [] forever and leaves "Đang gửi" stuck.
+  /**
+   * Clear whatever the coming fetch is about to replace, and answer whether it
+   * may ask for a delta. While an optimistic send is waiting we always reload
+   * from 0: job-fallback turns use a 0-based index space that resets per
+   * response shape, so `from=<old total>` returns [] forever and leaves
+   * "Đang gửi" stuck.
+   */
+  function prepareFetchWindow(incremental: boolean): boolean {
     const useIncremental = incremental && pendingItems.value.length === 0
-    if (!useIncremental && !incremental) {
+    if (!useIncremental) {
       turns.value = []
       total.value = 0
-      pendingItems.value = []
-    } else if (!useIncremental) {
-      // Keep pending; replace turns from a full snapshot.
-      turns.value = []
-      total.value = 0
+      // Only an explicitly requested full reload drops the echoes. A reload
+      // *forced* by a pending echo must keep it — it is still waiting.
+      if (!incremental) pendingItems.value = []
     }
     loading.value = turns.value.length === 0 && pendingItems.value.length === 0
+    return useIncremental
+  }
+
+  async function refresh(incremental = true, gen: number = generation): Promise<void> {
+    const taskId = opts.getTaskId()
+    if (!taskId) return
+    const useIncremental = prepareFetchWindow(incremental)
     try {
       const data = await fetchTaskChat(
         taskId,
         { stepId: opts.getStepId(), from: useIncremental ? total.value : 0 },
         opts.getProjectId(),
       )
+      if (gen !== generation) return // superseded while the request was in flight
       applyState(data, useIncremental)
       error.value = null
     } catch (e: any) {
+      if (gen !== generation) return
       error.value = String(e?.message || e)
     } finally {
-      loading.value = false
+      if (gen === generation) loading.value = false
     }
   }
 
-  function scheduleNext(): void {
-    if (stopped) return
+  function scheduleNext(gen: number): void {
+    if (stopped || gen !== generation) return
     // Poll fast while a send is in flight or a job is running.
     const delay = running.value || pendingItems.value.length ? runningPollMs : idlePollMs
     timer = setTimeout(async () => {
-      await refresh(true)
-      scheduleNext()
+      if (gen !== generation) return
+      await refresh(true, gen)
+      scheduleNext(gen)
     }, delay)
   }
 
   async function start(): Promise<void> {
     // Idempotent: the body calls start() from mount, from the re-scope watcher
     // and from the active watcher — without clearing first, switching sessions
-    // quickly leaves two poll chains running against the same session.
+    // quickly leaves two poll chains running against the same session. `stop()`
+    // also invalidates the previous generation, so a chain sitting inside the
+    // initial `refresh` below cannot come back and schedule a second timer.
     stop()
+    const gen = ++generation
     stopped = false
-    await refresh(false)
-    scheduleNext()
+    await refresh(false, gen)
+    if (gen !== generation) return
+    scheduleNext(gen)
   }
 
   function stop(): void {
     stopped = true
+    generation++
     if (timer) clearTimeout(timer)
     timer = null
+    // Nothing is fetching once the chain is cancelled, and the cancelled chain
+    // will not clear this itself — it can no longer tell whether a newer chain
+    // has since set it.
+    loading.value = false
   }
 
   async function send(text: string): Promise<void> {

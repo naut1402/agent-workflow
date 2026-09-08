@@ -15,16 +15,21 @@ export default {
     worktreeBadge: 'worktree: {branch}',
     worktreeAmbiguous: 'Nhiều worktree cùng khớp task này — dọn thủ công bằng CLI cho chắc.',
     cleanWorktree: 'Dọn worktree',
-    cleanWorktreeTitle: 'Xoá git worktree của task này (branch và mọi commit được giữ lại)',
+    cleanWorktreeTitle:
+      'Xoá git worktree của task này (branch và mọi commit đã nằm trên branch đó được giữ lại)',
     confirmCleanWorktree:
-      'Xoá worktree "{path}"?\n\nBranch "{branch}" và mọi commit trên đó ĐƯỢC GIỮ LẠI. Artifact của task nằm ở thư mục dữ liệu chính nên không bị ảnh hưởng.',
+      'Xoá worktree "{path}"?\n\nBranch "{branch}" và mọi commit đã nằm trên branch đó ĐƯỢC GIỮ LẠI. Artifact của task nằm ở thư mục dữ liệu chính nên không bị ảnh hưởng.',
     confirmCleanWorktreeRunning:
-      'Task này còn job đang chạy hoặc đang xếp hàng — job đó có thể đang ghi vào worktree và sẽ lỗi nếu thư mục biến mất.\n\nVẫn xoá worktree "{path}"? Branch "{branch}" và mọi commit trên đó ĐƯỢC GIỮ LẠI.',
+      'Task này còn job đang chạy hoặc đang xếp hàng — job đó có thể đang ghi vào worktree và sẽ lỗi nếu thư mục biến mất.\n\nVẫn xoá worktree "{path}"? Branch "{branch}" và mọi commit đã nằm trên branch đó ĐƯỢC GIỮ LẠI.',
     worktreeErrDirty:
       'Worktree còn {count} thay đổi chưa commit: {files}. Commit hoặc bỏ thay đổi trong worktree rồi thử lại.',
     worktreeErrLocked: 'Worktree đang bị khoá ({reason}). Chạy `git worktree unlock` rồi thử lại.',
     worktreeErrNotFound: 'Không tìm thấy worktree của task này — có thể đã được dọn rồi.',
     worktreeErrNotFinished: 'Task chưa kết thúc — chỉ dọn được worktree của task đã hoàn tất hoặc đã lưu trữ.',
+    worktreeErrJobInFlight:
+      'Task còn job đang chạy hoặc đang xếp hàng — job đó có thể đang ghi vào worktree. Đợi job kết thúc rồi thử lại.',
+    worktreeErrDetached:
+      'Worktree đang ở trạng thái detached (không gắn branch nào) — xoá đi thì các commit trên đó không còn ref nào giữ. Gắn branch cho worktree rồi thử lại, hoặc dọn thủ công bằng CLI.',
     worktreeErrOutside:
       'Worktree nằm ngoài repo và ngoài thư mục anh em của repo — dashboard từ chối xoá. Dọn thủ công bằng CLI.',
     worktreeErrRemoveFailed: 'Không xoá được worktree: {detail}',

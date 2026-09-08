@@ -15,7 +15,7 @@ import {
   withTaskLock,
 } from './business/tasks/state.js'
 import { generateAndApplyTaskName } from './business/tasks/generateTaskName.js'
-import { isFinishedTaskState, isResettableTarget } from './lib/pipelineRunGuards.js'
+import { isResettableTarget } from './lib/pipelineRunGuards.js'
 import * as monitorBusiness from './business/index.js'
 import { emitAudit } from '../../core/log/store.js'
 import { emit, emitEntity } from '../../core/events/index.js'
@@ -661,16 +661,6 @@ export class MonitorController extends AbstractController {
     return { root: gate.root, repoRoot: path.dirname(gate.root), id }
   }
 
-  /**
-   * Not reading the state is not proof the task ended — `.dev-state/*.json` is
-   * written by the orchestrator outside this process, so a read may land on a
-   * half-written record. Fail closed: unknown counts as "still running".
-   */
-  private async taskHasFinished(root: string, id: string): Promise<boolean> {
-    const state = await readState(path.join(root, '.dev-state', `${id}.json`))
-    return state.ok && isFinishedTaskState(state.state)
-  }
-
   async getTaskWorktree() {
     const gate = this.worktreeGate()
     if ('error' in gate) return gate.error
@@ -693,13 +683,9 @@ export class MonitorController extends AbstractController {
     if ('error' in gate) return gate.error
     const { root, repoRoot, id } = gate
 
-    // The button is hidden for unfinished tasks, but the guard belongs on the
-    // server too — a running step may still be writing into that worktree.
-    if (!(await this.taskHasFinished(root, id))) {
-      return this.json(409, { error: 'task_not_finished', taskId: id })
-    }
-
-    const result = monitorBusiness.removeTaskWorktree(repoRoot, id)
+    // Both guards (task finished, no job in flight) live in business so they
+    // run under the same task lock as the removal itself.
+    const result = await monitorBusiness.cleanupTaskWorktreeForTask(root, repoRoot, id)
     if ('error' in result) {
       const { ok: _ok, status, ...rest } = result
       return this.json(status, { ...rest, taskId: id })

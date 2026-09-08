@@ -70,14 +70,20 @@ const canCleanWorktree = computed(
   () => !!worktree.value && !worktreeAmbiguous.value && isFinishedTaskState(props.selected),
 )
 
-async function loadWorktree(taskId: string | null) {
+/**
+ * `projectId` travels as an argument, never read off the prop after an `await`:
+ * a task id alone does not identify a worktree — two projects can hold the same
+ * id, so a response for the old project would otherwise paint over the new one.
+ */
+async function loadWorktree(taskId: string | null, projectId: string | null) {
   worktree.value = null
   worktreeAmbiguous.value = false
   if (!taskId) return
   try {
-    const r: any = await fetchTaskWorktree(taskId, props.selectedProjectId ?? undefined)
-    // Poll 1.5s may have switched task between the two awaits — drop stale data.
+    const r: any = await fetchTaskWorktree(taskId, projectId ?? undefined)
+    // Poll 1.5s may have switched task or project between the two awaits — drop stale data.
     if (props.selected?.task_id !== taskId) return
+    if ((props.selectedProjectId ?? null) !== projectId) return
     worktree.value = r?.worktree ?? null
     worktreeAmbiguous.value = !!r?.ambiguous
   } catch {
@@ -87,11 +93,14 @@ async function loadWorktree(taskId: string | null) {
   }
 }
 
+// An array OF getters, not a getter returning an array: the latter builds a new
+// array every run, so `Object.is` always reports "changed" and the callback would
+// re-fire on every 1.5s poll — wiping `worktreeError` before anyone can read it.
 watch(
-  () => props.selected?.task_id ?? null,
-  (id) => {
+  [() => props.selected?.task_id ?? null, () => props.selectedProjectId ?? null],
+  ([id, projectId]) => {
     worktreeError.value = ''
-    loadWorktree(id)
+    loadWorktree(id, projectId)
   },
   { immediate: true },
 )
@@ -184,8 +193,12 @@ async function deleteSelected() {
 }
 
 /** Text of the destructive confirm — stronger wording while a job is in flight. */
-async function worktreeConfirmMessage(taskId: string, wt: any): Promise<string> {
-  const running = await hasInFlightJob(taskId, props.selectedProjectId)
+async function worktreeConfirmMessage(
+  taskId: string,
+  projectId: string | null,
+  wt: any,
+): Promise<string> {
+  const running = await hasInFlightJob(taskId, projectId)
   const key = running
     ? 'monitor.layout.confirmCleanWorktreeRunning'
     : 'monitor.layout.confirmCleanWorktree'
@@ -195,15 +208,21 @@ async function worktreeConfirmMessage(taskId: string, wt: any): Promise<string> 
 async function cleanWorktreeSelected() {
   const wt = worktree.value
   if (!wt || cleaning.value) return
-  // Same reason as deleteSelected: the handler awaits, `selected` may move.
+  // Same reason as deleteSelected: the handler awaits, `selected` may move —
+  // and `confirm()` holds it open for as long as the user takes to read it, so
+  // both halves of the identity are snapshotted before that and re-checked
+  // after, rather than read off the props at request time.
   const taskId = props.selected?.task_id
   if (!taskId) return
+  const projectId = props.selectedProjectId ?? null
   worktreeError.value = ''
   cleaning.value = true
   try {
-    if (!confirm(await worktreeConfirmMessage(taskId, wt))) return
-    await cleanupTaskWorktree(taskId, props.selectedProjectId ?? undefined)
-    await loadWorktree(props.selected ? props.selected.task_id : null)
+    if (!confirm(await worktreeConfirmMessage(taskId, projectId, wt))) return
+    if (props.selected?.task_id !== taskId) return
+    if ((props.selectedProjectId ?? null) !== projectId) return
+    await cleanupTaskWorktree(taskId, projectId ?? undefined)
+    await loadWorktree(taskId, projectId)
   } catch (e: any) {
     worktreeError.value = describeWorktreeError(e)
   } finally {
