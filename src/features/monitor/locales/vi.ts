@@ -182,6 +182,10 @@ export default {
     fullscreen: 'Toàn màn hình',
     exitFullscreen: 'Thoát toàn màn hình',
     untitledSection: 'Chi tiết',
+    linkOutsideTask: 'Link trỏ ra ngoài thư mục task hiện tại nên không mở được: {href}',
+    linkNotArtifact: 'Chỉ mở được artifact .md không ẩn trong task: {href}',
+    linkMissing: 'Không tìm thấy artifact "{name}" trong task này.',
+    linkBlocked: 'Link bị chặn vì không an toàn: {href}',
   },
   proposal: {
     reviewTitle: 'Xem lại đề xuất —',

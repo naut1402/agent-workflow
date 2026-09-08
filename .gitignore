@@ -30,6 +30,7 @@ test-e2e/.runtime/
 test-e2e/fixtures/project/.dev-team-agent/custom-agents/
 test-e2e/fixtures/project/.dev-team-agent/agent-templates/
 test-e2e/fixtures/project/.dev-team-agent/pipeline-profiles/
+test-e2e/fixtures/project/.dev-team-agent/tasks/DEMO-1/paste-target.md
 test-e2e/fixtures/project/.dev-team-agent/workflow-step-templates/
 test-e2e/fixtures/project/.dev-team-agent/flow-profiles/
 test-e2e/fixtures/project/.dev-team-agent/knowledge/

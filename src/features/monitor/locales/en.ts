@@ -181,6 +181,10 @@ export default {
     fullscreen: 'Fullscreen',
     exitFullscreen: 'Exit fullscreen',
     untitledSection: 'Details',
+    linkOutsideTask: 'This link points outside the current task folder: {href}',
+    linkNotArtifact: 'Only non-hidden .md artifacts inside the task can be opened: {href}',
+    linkMissing: 'Artifact "{name}" was not found in this task.',
+    linkBlocked: 'Link blocked as unsafe: {href}',
   },
   proposal: {
     reviewTitle: 'Review proposal —',
