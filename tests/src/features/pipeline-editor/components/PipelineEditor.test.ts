@@ -90,6 +90,21 @@ describe('PipelineEditor — catalog/rules follow the selected project', () => {
     expect(fetchRules).toHaveBeenCalledWith('P1')
   })
 
+  // `categories` của `GET /api/rules` từng được nạp mà không consumer nào —
+  // RulesPanel cần nó để dựng option của select lọc.
+  it('passes the rule categories from fetchRules down to RulesPanel', async () => {
+    vi.mocked(fetchRules).mockResolvedValue({
+      rules: [{ id: 'r1', name: 'r', path: 'r.md', category: 'coding', scope: 'project' }],
+      categories: ['coding', 'test'],
+    } as any)
+
+    const w = mountEditor()
+    await flushPromises()
+
+    const panel = w.findComponent({ name: 'RulesPanel' })
+    expect(panel.props('categories')).toEqual(['coding', 'test'])
+  })
+
   it('omits the project when projectId is null (default project) — no regression', async () => {
     mountEditor({ projectId: null })
     await flushPromises()
@@ -140,7 +155,7 @@ describe('PipelineEditor — panel trái nhận state thu/phóng từ shell', ()
 
     expect(w.find('.editor-left').classes()).toContain('editor-left-collapsed')
     expect(w.find('.editor-layout').classes()).toContain('editor-layout--left-collapsed')
-    expect(w.findAll('.target-section-icon')).toHaveLength(2)
+    expect(w.findAll('.target-section-icon')).toHaveLength(3)
     // Không render select/input khi thu gọn — chỉ icon.
     expect(w.find('.target-select').exists()).toBe(false)
     expect(w.find('.editor-left-sections').exists()).toBe(false)

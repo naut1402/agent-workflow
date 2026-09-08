@@ -19,9 +19,8 @@ test('pipeline editor mode mounts the canvas (capture)', async ({ page }, testIn
   await expect(page.locator('.editor-toolbar .editor-tab')).toHaveCount(2)
   await expect(page.locator('.editor-target-panel')).toBeVisible()
 
-  // c.1 — Agents / Rules là 2 mục collapsible cùng cấp, không còn card Catalog
-  // và không còn mục Skills.
-  await expect(page.locator('.editor-left-sections .editor-section')).toHaveCount(2)
+  // c.1 — Agents / Skills / Rules là 3 mục collapsible cùng cấp, không còn card Catalog.
+  await expect(page.locator('.editor-left-sections .editor-section')).toHaveCount(3)
   expect(await page.locator('.catalog-tabs').count()).toBe(0)
 
   // UX2 (ported from verify-ux): no step-config dialog until a node is selected.
@@ -35,12 +34,12 @@ test('pipeline editor mode mounts the canvas (capture)', async ({ page }, testIn
 // fixture có sẵn `test-e2e/fixtures/project/docs/agent-rules/` (không spec nào khác
 // đọc rules, nên seed ở đây không kéo theo assert của spec khác).
 test('sub-sidebar lists scroll instead of clipping', async ({ page }) => {
-  // 560px là chiều cao đủ thấp để cả 2 danh sách tràn nhưng vẫn còn chỗ nhìn thấy
+  // 560px là chiều cao đủ thấp để cả 3 danh sách tràn nhưng vẫn còn chỗ nhìn thấy
   // mục cuối sau khi cuộn — thấp hơn nữa thì vùng cuộn co lại còn vài px.
   await page.setViewportSize({ width: 1280, height: 560 })
   await openEditor(page)
 
-  // Mở cả 2 section để chúng chia nhau chiều cao còn lại.
+  // Mở cả 3 section để chúng chia nhau chiều cao còn lại.
   const heads = page.locator('.editor-left-sections .editor-section-head')
   for (let i = 0; i < (await heads.count()); i++) {
     const section = page.locator('.editor-left-sections .editor-section').nth(i)
@@ -49,7 +48,7 @@ test('sub-sidebar lists scroll instead of clipping', async ({ page }) => {
     }
   }
 
-  // Cả 2 danh sách nạp bất đồng bộ — đo trước khi có dữ liệu thì phép đo vô nghĩa.
+  // Cả 3 danh sách nạp bất đồng bộ — đo trước khi có dữ liệu thì phép đo vô nghĩa.
   await expect(page.locator('.catalog-item').first()).toBeVisible()
   await expect(page.locator('.rules-item').first()).toBeVisible()
 
@@ -89,4 +88,44 @@ test('sub-sidebar lists scroll instead of clipping', async ({ page }) => {
   // đủ dài để tràn — nếu không thì phép đo ở trên không chứng minh được gì.
   const rules = page.locator('.rules-scroll')
   expect(await rules.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+})
+
+// Ngân sách chiều cao của cột trái: 3 mục mở cùng lúc chia nhau một cột, mỗi mục
+// còn phải trả phần cố định cho header + toolbar. Đo trực tiếp chiều cao vùng
+// cuộn thay vì chỉ dựa vào `toBeInViewport` — vùng cuộn 8px vẫn "in viewport" khi
+// nó chỉ còn đúng phần padding, nên phép đo lỏng không bắt được sụp chiều cao.
+test('sub-sidebar keeps every open list usable at a low viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 560 })
+  await openEditor(page)
+
+  const heads = page.locator('.editor-left-sections .editor-section-head')
+  const sectionAt = (i: number) => page.locator('.editor-left-sections .editor-section').nth(i)
+  async function setOpen(i: number, open: boolean) {
+    if ((await sectionAt(i).evaluate((el) => (el as HTMLDetailsElement).open)) !== open) {
+      await heads.nth(i).click()
+    }
+  }
+
+  // Sàn cho vùng cuộn: đủ chứa một item (item catalog ~50px) chứ không chỉ padding.
+  const FLOOR = 48
+
+  // Cả 3 mục mở — trường hợp chật nhất. Đo được 60/60/62px ở 560px.
+  for (let i = 0; i < 3; i++) await setOpen(i, true)
+  await expect(page.locator('.catalog-item').first()).toBeVisible()
+  await expect(page.locator('.rules-item').first()).toBeVisible()
+  for (const leaf of ['.catalog-list', '.rules-scroll']) {
+    for (const h of await page.locator(leaf).evaluateAll((els) =>
+      els.map((el) => el.clientHeight),
+    )) {
+      expect(h).toBeGreaterThanOrEqual(FLOOR)
+    }
+  }
+
+  // TC-C09 — chỉ mở mục Skills: panel catalog phải giành chiều cao dù mục Agents
+  // đang đóng, và danh sách Skills không được thu về 0.
+  await setOpen(0, false)
+  await setOpen(2, false)
+  const skillList = page.locator('.catalog-list').nth(1)
+  await expect(skillList).toBeVisible()
+  expect(await skillList.evaluate((el) => el.clientHeight)).toBeGreaterThanOrEqual(FLOOR)
 })

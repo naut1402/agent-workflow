@@ -82,8 +82,8 @@ test('mode icon toggles the sub-sidebar of the active mode (capture)', async ({ 
 
   await editorBtn.click()
   await expect(page.locator('.editor-left')).toHaveClass(/editor-left-collapsed/)
-  // Editor keeps its icon rail (Agents/Rules) instead of shrinking to zero.
-  await expect(page.locator('.target-section-icon')).toHaveCount(2)
+  // Editor keeps its icon rail (Agents/Skills/Rules) instead of shrinking to zero.
+  await expect(page.locator('.target-section-icon')).toHaveCount(3)
   await capturePage(page, testInfo, 'editor-sub-sidebar-collapsed')
 
   // Reopening from inside the panel keeps the mode icon's state in sync.

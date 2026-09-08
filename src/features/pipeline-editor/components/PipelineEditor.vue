@@ -173,7 +173,7 @@ const catalog = ref<any>({ skills: [], agents: [] })
 const rulesData = ref({ rules: [], categories: [] })
 const editorLeftCollapsed = computed(() => props.subSidebarCollapsed)
 
-// c.1 — Agents / Rules là 2 mục cùng cấp, mở/đóng độc lập. Gán lại
+// c.1 — Agents / Skills / Rules là các mục cùng cấp, mở/đóng độc lập. Gán lại
 // `new Set(...)` để Vue thấy thay đổi (pattern `expanded` của TaskList).
 const openSections = ref<Set<string>>(new Set(['agents']))
 
@@ -383,8 +383,9 @@ function onDropOnCanvas(event) {
     position: { x: pos.x - 60, y: pos.y - 25 },
     data: {
       label: item.name,
-      // Mục Skills đã bị gỡ khỏi catalog nên chỉ còn agent được kéo vào, nhưng
-      // `dataTransfer` là kênh mở — giữ nhánh phòng thủ cho payload lạ.
+      // Mục Skills là danh sách tra cứu: item không `draggable` nên không có
+      // nguồn phát skill. `dataTransfer` vẫn là kênh mở — giữ nhánh phòng thủ
+      // cho payload lạ.
       agent: item._type === 'agent' ? item.id : '',
       produces: [],
       knowledge_inputs: [],
@@ -856,6 +857,7 @@ const editorLayoutClass = computed(() => ({
           />
           <RulesPanel
             :rules="rulesData.rules"
+            :categories="rulesData.categories"
             :open-sections="openSections"
             @toggle-section="toggleSection"
           />
