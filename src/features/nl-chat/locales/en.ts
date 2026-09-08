@@ -2,6 +2,9 @@ export default {
   window: {
     builderTitle: 'Creation assistant',
     statusReady: 'Ready',
+    statusBusy: 'Working',
+    statusDone: 'Finished',
+    statusError: 'Error',
     newSession: 'New chat session',
     prevSession: 'Previous session',
     nextSession: 'Next session',
@@ -9,6 +12,7 @@ export default {
     close: 'Close',
     connected: 'Dashboard connected',
     disconnected: 'Dashboard disconnected',
+    infoTitle: 'Context info',
     infoProject: 'Project',
     infoShellMode: 'Dashboard mode',
     infoShellTask: 'Selected task',
@@ -16,6 +20,7 @@ export default {
     infoStep: 'Step',
     infoChatMode: 'Chat mode',
     infoRunner: 'Runner',
+    infoConnection: 'Connection',
     chatModeBuilder: 'Create by chatting (no task bound)',
     runnerRunning: 'running',
     runnerReady: 'ready',
@@ -38,5 +43,6 @@ export default {
   composer: {
     enterToSend: 'Enter sends, Shift+Enter for a new line',
     enterToNewline: 'Enter for a new line, Ctrl/⌘+Enter sends',
+    addMenu: 'Add',
   },
 }

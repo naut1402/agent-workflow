@@ -2,6 +2,9 @@ export default {
   window: {
     builderTitle: 'Trợ lý tạo mới',
     statusReady: 'Sẵn sàng',
+    statusBusy: 'Đang xử lý',
+    statusDone: 'Hoàn tất',
+    statusError: 'Có lỗi',
     newSession: 'Phiên chat mới',
     prevSession: 'Phiên trước',
     nextSession: 'Phiên sau',
@@ -9,6 +12,7 @@ export default {
     close: 'Đóng',
     connected: 'Dashboard đang kết nối',
     disconnected: 'Dashboard mất kết nối',
+    infoTitle: 'Thông tin context',
     infoProject: 'Project',
     infoShellMode: 'Mode dashboard',
     infoShellTask: 'Task đang chọn',
@@ -16,6 +20,7 @@ export default {
     infoStep: 'Step',
     infoChatMode: 'Chế độ chat',
     infoRunner: 'Runner',
+    infoConnection: 'Kết nối',
     chatModeBuilder: 'Tạo mới bằng chat (chưa gắn task)',
     runnerRunning: 'đang chạy',
     runnerReady: 'sẵn sàng',
@@ -38,5 +43,6 @@ export default {
   composer: {
     enterToSend: 'Enter để gửi, Shift+Enter để xuống dòng',
     enterToNewline: 'Enter để xuống dòng, Ctrl/⌘+Enter để gửi',
+    addMenu: 'Thêm',
   },
 }

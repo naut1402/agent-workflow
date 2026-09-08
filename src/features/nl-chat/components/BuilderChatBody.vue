@@ -145,7 +145,12 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
         : `Agent đang suy nghĩ… ${waitingSeconds.value}s`,
     }
   }
-  if (step.value === 'error' || error.value) return { kind: 'error', text: 'Có lỗi' }
+  // The message itself when there is one — the title's tooltip is the only place
+  // the error is described now that the status icon is gone. `step === 'error'`
+  // can arrive without any message, hence the fallback.
+  if (step.value === 'error' || error.value) {
+    return { kind: 'error', text: error.value ? `Có lỗi: ${error.value}` : 'Có lỗi' }
+  }
   if (step.value === 'done') return { kind: 'done', text: 'Hoàn tất' }
   return { kind: 'idle', text: 'Sẵn sàng' }
 })

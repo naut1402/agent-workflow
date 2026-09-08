@@ -109,7 +109,9 @@ const placeholder = computed(() => {
 // Header status: a running step is the interesting state — that is the whole
 // point of watching a runner live.
 const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string }>(() => {
-  if (chat.error.value) return { kind: 'error', text: 'Có lỗi' }
+  // The message itself, not just "Có lỗi": the title's tooltip is the only place
+  // the error is described now that the status icon is gone.
+  if (chat.error.value) return { kind: 'error', text: `Có lỗi: ${chat.error.value}` }
   if (chat.sending.value) return { kind: 'busy', text: 'Đang gửi…' }
   if (chat.running.value) {
     const step = chat.running.value.stepId

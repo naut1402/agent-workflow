@@ -87,28 +87,49 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
   const win = page.locator('.nl-chat-window')
   await expect(win).toBeVisible({ timeout: 15_000 })
 
-  // Idle: the header badge is the dashboard connection dot, and the right-hand
-  // status slot is empty (it now only shows a terminal done/error outcome).
-  await expect(win.locator('.nl-chat-badge .dot')).toBeVisible()
+  // Idle: the status is carried by the title's own colour class. The dot badge
+  // and the separate status slot are both gone from the header.
+  const title = win.locator('.nl-chat-title')
+  await expect(title).toHaveClass(/is-idle/)
+  await expect(win.locator('.nl-chat-badge')).toHaveCount(0)
   await expect(win.locator('.nl-chat-status')).toHaveCount(0)
 
-  // Multi-line composer: Shift+Enter adds a line and the box grows; Enter sends.
+  // Two-line composer. The empty box already stands two lines tall, and that is
+  // a FLOOR: typing must never shrink it back to one line (the box auto-grows by
+  // writing an inline height, which the CSS min-height has to outrank).
   const composer = win.locator('.nl-chat-input-row textarea')
-  const oneLine = (await composer.boundingBox())!.height
+  const twoLines = (await composer.boundingBox())!.height
+  expect(twoLines).toBeGreaterThanOrEqual(40)
+
   await composer.click()
+  await composer.type('a')
+  expect((await composer.boundingBox())!.height).toBe(twoLines)
+
+  // Past two lines it grows again; Shift+Enter is still the newline key.
+  await composer.fill('')
   await composer.type('dòng 1')
   await composer.press('Shift+Enter')
   await composer.type('dòng 2')
+  await composer.press('Shift+Enter')
+  await composer.type('dòng 3')
   expect(await composer.inputValue()).toContain('\n')
-  expect((await composer.boundingBox())!.height).toBeGreaterThan(oneLine)
+  expect((await composer.boundingBox())!.height).toBeGreaterThan(twoLines)
+
+  // Clearing it drops back to the floor, not below.
+  await composer.fill('')
+  expect((await composer.boundingBox())!.height).toBe(twoLines)
 
   await composer.fill('tạo task sửa bug đăng nhập')
   await composer.press('Enter')
 
-  // While the turn is in flight: the spinner takes the badge's place (the dot
-  // steps aside) and the typing indicator runs in the transcript.
-  await expect(win.locator('.nl-chat-badge .nl-chat-spinner')).toBeVisible()
-  await expect(win.locator('.nl-chat-badge .dot')).toHaveCount(0)
+  // Sending resets the box — and the reset must land on the floor too.
+  await expect(composer).toHaveValue('')
+  expect((await composer.boundingBox())!.height).toBe(twoLines)
+
+  // While the turn is in flight the title takes the busy colour; no spinner is
+  // left anywhere in the header.
+  await expect(title).toHaveClass(/is-busy/)
+  await expect(win.locator('.nl-chat-spinner')).toHaveCount(0)
   await expect(win.locator('.nl-chat-typing')).toBeVisible()
   await capture(page, testInfo, 'nl-chat-thinking')
 
@@ -116,7 +137,7 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
     timeout: 15_000,
   })
   await expect(win.locator('.nl-chat-typing')).toHaveCount(0)
-  await expect(win.locator('.nl-chat-badge .dot')).toBeVisible()
+  await expect(title).not.toHaveClass(/is-busy/)
 
   const userRow = (await win.locator('.nl-chat-row-user').boundingBox())!
   const assistantRow = (await win.locator('.nl-chat-row-assistant').boundingBox())!
@@ -182,13 +203,20 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
 
   const win = page.locator('.nl-chat-window')
   await expect(win).toBeVisible()
-  // The title carries task + step; the badge carries connection/busy state.
-  await expect(win.locator('.nl-chat-title')).toContainText('DEMO-1')
-  await expect(win.locator('.nl-chat-title')).toContainText('Design')
-  // Live runner: the spinner sits in the badge, label kept as its tooltip.
-  await expect(win.locator('.nl-chat-badge .nl-chat-spinner')).toBeVisible()
-  await expect(win.locator('.nl-chat-badge')).toHaveAttribute('title', /Runner đang chạy/)
+  // The title carries task + step AND the status: colour class plus the status
+  // spelled out in its tooltip, since there is no status icon any more.
+  const title = win.locator('.nl-chat-title')
+  await expect(title).toContainText('DEMO-1')
+  await expect(title).toContainText('Design')
+  await expect(title).toHaveClass(/is-busy/)
+  await expect(title).toHaveAttribute('title', /Runner đang chạy/)
   await expect(win.locator('.nl-chat-status')).toHaveCount(0)
+  await expect(win.locator('.nl-chat-badge')).toHaveCount(0)
+  // The same status as text, for anyone who cannot read the colour. The live
+  // region announces the KIND, not the tooltip text — the busy text can carry a
+  // ticking seconds counter, and a polite live region would re-read it every
+  // second. The detail stays in the tooltip asserted just above.
+  await expect(win.locator('.nl-chat-sr-only[role="status"]')).toHaveText('Đang xử lý')
 
   // History from the session: both roles plus the tool-activity line.
   await expect(win.locator('.nl-chat-message-user')).toContainText('chạy step design')
@@ -206,7 +234,8 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
   await expect(input).toBeEnabled()
   await expect(input).toHaveAttribute('placeholder', /sẽ được gửi/)
 
-  // Info icon after the title: hover shows what this chat is bound to.
+  // Info icon leads the header now (it took the connection dot's slot): hover
+  // shows what this chat is bound to.
   const info = win.locator('.nl-chat-info')
   await expect(win.locator('.nl-chat-info-popover')).toHaveCount(0)
   await info.hover()
@@ -220,25 +249,144 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
   // Runner name + live status (the stub reports a running job).
   await expect(popover).toContainText('Runner E2E')
   await expect(popover).toContainText('đang chạy')
+  // The connection state the dropped dot used to carry lives here now.
+  await expect(popover).toContainText('Kết nối')
+  // Anchored left, under the icon, and it must not spill out of the window.
+  const winBox = (await win.boundingBox())!
+  const popBox = (await popover.boundingBox())!
+  expect(popBox.x).toBeGreaterThanOrEqual(winBox.x - 1)
+  expect(popBox.x + popBox.width).toBeLessThanOrEqual(winBox.x + winBox.width + 1)
 
   await capture(page, testInfo, 'nl-chat-runner-session')
+  await win.locator('.nl-chat-title').hover()
+  await expect(popover).toHaveCount(0)
 
-  // + switches to a brand new (builder) chat instead of tearing down and
-  // recreating the step's own session — no close-session call goes out.
+  // Hover is not the only way in — the connection row lives in here now, and a
+  // touch device has no hover at all. Clicking pins the popover so it survives
+  // the pointer moving off the 14px icon.
+  await info.locator('button').click()
+  await expect(popover).toBeVisible()
+  await win.locator('.nl-chat-title').hover()
+  await expect(popover).toBeVisible()
+  // ...and all three ways back out close it.
+  await info.locator('button').click()
+  await expect(popover).toHaveCount(0)
+
+  await info.locator('button').click()
+  await expect(popover).toBeVisible()
+  // The composer, not the message list — the popover hangs over the top of the
+  // list, so a click up there would land on the popover itself.
+  await win.locator('.nl-chat-input-row textarea').click()
+  await expect(popover).toHaveCount(0)
+
+  await info.locator('button').click()
+  await expect(popover).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(popover).toHaveCount(0)
+
+  // A new session now comes from the composer's + menu, and it still only
+  // pushes a builder chat on top — the step's own session is left alone, so no
+  // close-session call goes out.
   let closeSessionCalled = false
   await page.route(/\/api\/tasks\/[^/]+\/close-session/, (route) => {
     closeSessionCalled = true
     route.fulfill({ json: { ok: true } })
   })
-  await win.locator('.nl-chat-icon-btn[title="Phiên chat mới"]').click()
-  await expect(win.locator('.nl-chat-title')).toHaveText('Trợ lý tạo mới')
+  await expect(win.locator('.nl-chat-icon-btn[title="Phiên chat mới"]')).toHaveCount(0)
+  await win.locator('.nl-chat-session:visible .nl-chat-composer-add > button').click()
+  await win.locator('.nl-chat-composer-menu-item', { hasText: 'Phiên chat mới' }).click()
+
+  await expect(title).toHaveText('Trợ lý tạo mới')
   expect(closeSessionCalled).toBe(false)
   // Two sessions now → the header grows arrows and a counter.
   await expect(win.locator('.nl-chat-session-counter')).toHaveText('2/2')
+  // Choosing an item closes the menu behind it.
+  await expect(win.locator('.nl-chat-composer-menu')).toHaveCount(0)
+})
 
-  // Leaving the icon hides it again.
-  await win.locator('.nl-chat-title').hover()
-  await expect(popover).toHaveCount(0)
+test('nl chat: the + menu leads the input row and opens upward (capture)', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await page.locator('.nl-chat-fab').click()
+
+  const win = page.locator('.nl-chat-window')
+  await expect(win).toBeVisible({ timeout: 15_000 })
+
+  // No standalone paperclip is left anywhere in the window.
+  await expect(win.locator(`.icon-btn[title="Đính kèm tập tin"]`)).toHaveCount(0)
+
+  // "+" sits at the head of the input row, to the left of the text box.
+  const add = win.locator('.nl-chat-composer-add > button')
+  const textarea = win.locator('.nl-chat-input-row textarea')
+  const addBox = (await add.boundingBox())!
+  const inputBox = (await textarea.boundingBox())!
+  expect(addBox.x).toBeLessThan(inputBox.x)
+
+  // Shrink the window to its floor: the menu is at its most likely to spill.
+  const grip = (await win.locator('.nl-chat-resize.is-tl').boundingBox())!
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(grip.x + 900, grip.y + 900, { steps: 8 })
+  await page.mouse.up()
+
+  await add.click()
+  const menu = win.locator('.nl-chat-composer-menu')
+  await expect(menu).toBeVisible()
+
+  // Opens UPWARD off the trigger — the composer sits at the bottom edge of the
+  // window, so a menu dropped below it would fall out of the viewport.
+  const trigger = (await add.boundingBox())!
+  const menuBox = (await menu.boundingBox())!
+  expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(trigger.y + 1)
+
+  // Fully on screen, and not spilling out the side of the (now smallest) window.
+  const viewport = page.viewportSize()!
+  const winBox = (await win.boundingBox())!
+  expect(menuBox.x).toBeGreaterThanOrEqual(0)
+  expect(menuBox.y).toBeGreaterThanOrEqual(0)
+  expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(viewport.width)
+  expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(viewport.height)
+  expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(winBox.x + winBox.width + 1)
+
+  // Both items are clickable, not clipped to a sliver.
+  for (const item of await menu.locator('.nl-chat-composer-menu-item').all()) {
+    const box = (await item.boundingBox())!
+    expect(box.width).toBeGreaterThan(80)
+    expect(box.height).toBeGreaterThan(10)
+  }
+
+  await capture(page, testInfo, 'nl-chat-add-menu-open')
+  // Both themes: the info icon must read as blue and the menu must stay legible.
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'))
+  await capture(page, testInfo, 'nl-chat-add-menu-open-dark')
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'))
+
+  // Attaching from the menu stages a chip on the strip above the input.
+  const chooser = page.waitForEvent('filechooser')
+  await menu.locator('.nl-chat-composer-menu-item', { hasText: 'Đính kèm tập tin' }).click()
+  await (await chooser).setFiles({
+    name: 'note.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('ghi chú'),
+  })
+
+  await expect(win.locator('.nl-chat-chip-name')).toHaveText('note.txt')
+  await expect(menu).toHaveCount(0)
+  await capture(page, testInfo, 'nl-chat-attachment-chip')
+
+  // Every way out of the menu works — the pattern it copies its look from has
+  // no dismissal at all, so this is the part most likely to be missing.
+  await add.click()
+  await expect(menu).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+
+  await add.click()
+  await expect(menu).toBeVisible()
+  await win.locator('.nl-chat-header').click()
+  await expect(menu).toHaveCount(0)
 })
 
 test('step node corner actions: run opens the confirm dialog, chat sits next to it (capture)', async ({
@@ -401,13 +549,16 @@ test('nl chat: × hides the window, with one session and with several', async ({
   // re-pointed at a neighbour and shown again.
   await page.locator('.nl-chat-fab').click()
   await expect(win).toBeVisible()
-  await win.locator('.nl-chat-icon-btn[title="Phiên chat mới"]').click()
+  await win.locator('.nl-chat-session:visible .nl-chat-composer-add > button').click()
+  await win.locator('.nl-chat-composer-menu-item', { hasText: 'Phiên chat mới' }).click()
   await expect(win.locator('.nl-chat-session-counter')).toHaveText('2/2')
   await closeBtn.click()
   await expect(win).toBeHidden()
 })
 
-test('nl chat: the header badge shows the dashboard connection state in builder mode', async ({ page }) => {
+test('nl chat: the info popover carries the dashboard connection state in builder mode', async ({
+  page,
+}) => {
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   await page.locator('.nl-chat-fab').click()
@@ -415,10 +566,26 @@ test('nl chat: the header badge shows the dashboard connection state in builder 
   const win = page.locator('.nl-chat-window')
   await expect(win).toBeVisible({ timeout: 15_000 })
 
-  // The old chat-bubble badge is gone; a live poll shows the same dot as the
-  // sidebar. Previously the builder chat had no badge at all.
-  const dot = win.locator('.nl-chat-badge .dot')
-  await expect(dot).toBeVisible()
-  await expect(dot).toHaveClass(/live/)
-  await expect(win.locator('.nl-chat-badge svg')).toHaveCount(0)
+  // The connection dot is gone from the header; what it said now lives in the
+  // info popover, so the signal is not lost. The icon leads the header and is
+  // drawn in --accent (blue) rather than the muted default of `.icon-btn`.
+  await expect(win.locator('.nl-chat-badge')).toHaveCount(0)
+  await expect(win.locator('.nl-chat-header > :first-child')).toHaveClass(/nl-chat-info/)
+
+  const [iconColor, accent] = await win.evaluate((el) => {
+    const btn = el.querySelector('.nl-chat-info .icon-btn')!
+    const probe = document.createElement('div')
+    probe.style.color = 'var(--accent)'
+    document.body.appendChild(probe)
+    const resolved = getComputedStyle(probe).color
+    probe.remove()
+    return [getComputedStyle(btn).color, resolved]
+  })
+  expect(iconColor).toBe(accent)
+
+  await win.locator('.nl-chat-info').hover()
+  const popover = win.locator('.nl-chat-info-popover')
+  await expect(popover).toBeVisible()
+  await expect(popover).toContainText('Kết nối')
+  await expect(popover).toContainText('Dashboard đang kết nối')
 })

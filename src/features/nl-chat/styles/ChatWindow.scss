@@ -36,18 +36,31 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Header badge: the same connection dot as the dashboard sidebar, replaced by
-   the busy spinner while a step's job runs (the spinner used to sit on the
-   right-hand status slot). No fill — it frames a dot, not an icon. */
-.nl-chat-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  color: var(--accent);
+/* The title IS the status indicator now — the header carries no status icon
+   any more. Palette taken over from the dropped `.nl-chat-status` rules;
+   `is-idle` is deliberately absent so it inherits the window's --text. Busy is
+   --waiting, not --accent: --accent already means "info icon" in this header. */
+.nl-chat-title.is-busy {
+  color: var(--waiting);
+}
+.nl-chat-title.is-done {
+  color: var(--ok);
+}
+.nl-chat-title.is-error {
+  color: var(--danger);
+}
+/* Status as text for screen readers: colour alone would make the status
+   unreadable for anyone who cannot tell the three apart (WCAG 1.4.1). */
+.nl-chat-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 /* Which session of how many, between the title and the → arrow. */
 .nl-chat-session-counter {
@@ -56,45 +69,30 @@
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
-/* Icon-only status (a coloured dot + text read as online/offline). */
-.nl-chat-status {
-  display: flex;
-  align-items: center;
-  flex: none;
-  color: var(--muted);
-}
-.nl-chat-status.is-busy {
-  color: var(--accent);
-}
-.nl-chat-status.is-done {
-  color: var(--ok);
-}
-.nl-chat-status.is-error {
-  color: var(--danger);
-}
-.nl-chat-spinner {
-  animation: nl-chat-spin 0.9s linear infinite;
-}
-@keyframes nl-chat-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-/* Info affordance: hover reveals which project/task/step/runner this chat is
-   bound to, without spending header width on it. */
+/* Info affordance: leads the header (where the connection dot used to be) and
+   hover reveals which project/task/step/runner this chat is bound to, without
+   spending header width on it. */
 .nl-chat-info {
   position: relative;
   display: flex;
   align-items: center;
   flex: none;
 }
+/* Blue, in both themes (--accent is #4aa3ff dark / #0969da light). The hover
+   state needs its own rule: the global .icon-btn:hover pulls it back to --text. */
+.nl-chat-info .icon-btn,
+.nl-chat-info .icon-btn:hover:not(:disabled) {
+  color: var(--accent);
+}
+/* Anchored left now that the icon leads the header; the ceiling keeps it inside
+   the window at its 260px minimum width. */
 .nl-chat-info-popover {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
+  left: 0;
   z-index: 3;
-  min-width: 200px;
-  max-width: 280px;
+  min-width: 180px;
+  max-width: 240px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -368,6 +366,55 @@
   display: flex;
   align-items: flex-end;
   gap: 6px;
+  /* Anchor for the "+" menu, which is absolutely positioned inside this row. */
+  position: relative;
+}
+.nl-chat-composer-add {
+  position: relative;
+  flex: none;
+}
+/* Opens UPWARD: the composer sits at the bottom edge of a floating window, so a
+   menu dropped below it would fall outside the viewport. */
+.nl-chat-composer-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+/* `.nl-chat-input-row button` below gives every button in the form the send
+   button's panel/border look. The rules here are what keep the "+" and the menu
+   items flat instead — they must outrank it, hence the row prefix. */
+.nl-chat-input-row .icon-btn {
+  padding: 0;
+  background: none;
+  border: none;
+}
+.nl-chat-input-row .nl-chat-composer-menu button {
+  padding: 0.45rem 0.7rem;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.nl-chat-input-row .nl-chat-composer-menu button:hover:not(:disabled) {
+  background: var(--hover-surface);
+  color: var(--accent);
+}
+/* The row prefix above outranks the shared `button:disabled` rule further down,
+   so the disabled cursor has to be restated at this specificity. */
+.nl-chat-input-row .nl-chat-composer-menu button:disabled {
+  cursor: not-allowed;
 }
 .nl-chat-input-row textarea,
 .nl-chat-pipeline-name input,
@@ -378,7 +425,11 @@
   border-radius: 6px;
   padding: 5px 8px;
 }
-/* Multi-line composer: grows with the text (Enter sends, Shift+Enter newline). */
+/* Multi-line composer: grows with the text (Enter sends, Shift+Enter newline).
+   Two lines is the FLOOR, not just the starting size — `autoGrow()` writes an
+   inline `height` on every input, which a CSS `min-height` outranks. That also
+   covers the reset after sending, where the box would otherwise drop to one
+   line. 2 × 1.45em + padding 5px×2 + border 1px×2, with box-sizing: border-box. */
 .nl-chat-input-row textarea {
   flex: 1;
   min-width: 0;
@@ -387,6 +438,7 @@
   line-height: 1.45;
   resize: none;
   overflow-y: auto;
+  min-height: calc(1.45em * 2 + 12px);
   max-height: 120px;
 }
 .nl-chat-input-row button,
