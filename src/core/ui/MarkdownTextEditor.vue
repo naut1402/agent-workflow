@@ -69,6 +69,40 @@ function emitMarkdown() {
   emit('update:modelValue', editor.getMarkdown())
 }
 
+/**
+ * Toast UI's markdown editor focuses a hidden `pseudo-clipboard` textarea when it
+ * sees Ctrl/Cmd+V, which fires a real `blur` on the editing surface before the
+ * pasted text lands. Callers wire `@blur` to auto-save-on-blur, so re-emitting
+ * that blur tears the editor down mid-paste and the paste is lost.
+ *
+ * Track whether focus is anywhere inside our root and only re-emit once focus has
+ * truly left it. `focusout` is watched alongside Toast's own `blur` event because
+ * an empty clipboard leaves focus parked on the hidden textarea — Toast never
+ * fires `blur` again from there, so without `focusout` the editor would be stuck
+ * in edit mode until the user clicked back in.
+ */
+let focusInside = false
+
+function onEditorFocusIn() {
+  focusInside = true
+}
+
+function handleEditorBlur() {
+  queueMicrotask(() => {
+    // Unmounted while the microtask was queued — Vue clears the template ref.
+    if (!rootEl.value) return
+    if (rootEl.value.contains(document.activeElement)) return
+    if (!focusInside) return
+    focusInside = false
+    emit('blur')
+  })
+}
+
+function handleEditorFocus() {
+  focusInside = true
+  emit('focus')
+}
+
 async function createEditor() {
   if (!rootEl.value) return
   const { default: ToastEditor } = await import('@toast-ui/editor')
@@ -88,8 +122,8 @@ async function createEditor() {
     usageStatistics: false,
     events: {
       change: () => emitMarkdown(),
-      blur: () => emit('blur'),
-      focus: () => emit('focus'),
+      blur: () => handleEditorBlur(),
+      focus: () => handleEditorFocus(),
     },
   })
   applyEditorTheme(theme)
@@ -171,7 +205,12 @@ const rootClass = computed(() => ({
 
 <template>
   <div :class="rootClass" data-testid="markdown-text-editor">
-    <div ref="rootEl" class="md-text-editor__host" />
+    <div
+      ref="rootEl"
+      class="md-text-editor__host"
+      @focusin="onEditorFocusIn"
+      @focusout="handleEditorBlur"
+    />
   </div>
 </template>
 

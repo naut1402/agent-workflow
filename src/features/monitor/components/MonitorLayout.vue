@@ -305,6 +305,7 @@ async function cleanWorktreeSelected() {
           :task="selected"
           :project-id="selectedProjectId"
           :open-artifact="openArtifact && openArtifact.taskId === selected.task_id ? openArtifact : null"
+          @open-artifact="emit('open-artifact', $event)"
         />
       </template>
       <div v-else class="empty">
