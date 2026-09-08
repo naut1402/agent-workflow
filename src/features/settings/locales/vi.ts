@@ -29,6 +29,13 @@ export default {
     queue: 'Hàng đợi (chờ step hiện tại xong)',
     immediate: 'Gửi ngay (huỷ step đang chạy)',
   },
+  chatEnter: {
+    title: 'Phím Enter trong khung chat',
+    desc: 'Chọn Enter gửi tin nhắn hay xuống hàng. Ctrl/⌘+Enter luôn gửi.',
+    groupLabel: 'Trong khung chat, nhấn Enter để',
+    send: 'Gửi tin nhắn (Shift+Enter xuống hàng)',
+    newline: 'Xuống hàng (Ctrl/⌘+Enter để gửi)',
+  },
   taskList: {
     title: 'Danh sách task',
     desc: 'Tuỳ chọn hành vi danh sách task ở Monitor mode.',
@@ -86,6 +93,29 @@ export default {
     resultNone: 'Không tìm thấy project mới.',
     pathRequired: 'Nhập đường dẫn tuyệt đối.',
     loadError: 'Không tải được cấu hình autoscan.',
+  },
+  scanPatterns: {
+    title: 'Pattern scan agents / skills / rules',
+    desc: 'Đường dẫn tương đối từ gốc project, hỗ trợ * và **. Khớp thư mục thì quét cả thư mục; khớp file thì nạp đúng file đó.',
+    hint: 'Pattern được cộng thêm vào nguồn mặc định, không thay thế. Ký tự * và ** không khớp tên bắt đầu bằng dấu chấm — muốn vào .claude thì gõ đủ.',
+    kind: {
+      agents: 'Agents',
+      skills: 'Skills',
+      rules: 'Rules',
+    },
+    defaults: {
+      agents: 'Mặc định: .claude/agents/, agents/ của plugin, ~/.claude/agents/',
+      skills: 'Mặc định: .claude/skills/<slug>/SKILL.md, skills/ của plugin, ~/.claude/skills/, ~/.cursor/skills-cursor/',
+      rules: 'Mặc định: docs/agent-rules/, .claude/rules/, ~/.cursor/rules/',
+    },
+    placeholder: 'vd .agents/*.md hoặc packages/*/skills',
+    add: 'Thêm',
+    remove: 'Xoá pattern',
+    empty: 'Chưa có pattern — đang dùng mặc định.',
+    saved: 'Đã lưu.',
+    invalid: 'Pattern không hợp lệ — dùng đường dẫn tương đối, không dùng ".." hay đường dẫn tuyệt đối.',
+    tooMany: 'Tối đa {max} pattern mỗi loại.',
+    loadError: 'Không tải được cấu hình pattern scan.',
   },
   githubTokens: {
     title: 'Token GitHub theo repo',

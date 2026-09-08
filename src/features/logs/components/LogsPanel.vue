@@ -6,9 +6,15 @@ import { fetchLogs } from '../scripts/LogsPanelApi'
 import { fetchJobs } from '../../runner/scripts/runnerApi'
 import { fetchLoggingConfig } from '../../settings/scripts/SettingsDialogApi'
 import { useLogsTable } from '../composables/useLogsTable'
+import { useCopyText } from '../../../core/composables/useCopyText'
 import JobLogDialog from './JobLogDialog.vue'
 
 const { t } = useI18nHelpers()
+
+// This panel grew the copy-with-flash pattern first; it now lives in
+// `core/composables/useCopyText` so the chat bubbles share it instead of
+// carrying a second copy of the `execCommand` fallback.
+const { copyFlash, copyText } = useCopyText()
 
 type Tab = 'audit' | 'request' | 'events' | 'usage' | 'jobs'
 
@@ -141,35 +147,6 @@ function payloadPreview(entry: LogEntry): string {
   }
 }
 
-const copyFlash = ref('')
-let copyFlashTimer: ReturnType<typeof setTimeout> | null = null
-
-async function copyText(text: string) {
-  const value = String(text ?? '')
-  if (!value) return
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value)
-    } else {
-      const ta = document.createElement('textarea')
-      ta.value = value
-      ta.style.position = 'fixed'
-      ta.style.left = '-9999px'
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
-    }
-    copyFlash.value = t('logs.copy.done')
-  } catch {
-    copyFlash.value = t('logs.copy.fail')
-  }
-  if (copyFlashTimer) clearTimeout(copyFlashTimer)
-  copyFlashTimer = setTimeout(() => {
-    copyFlash.value = ''
-  }, 1500)
-}
-
 // React to tab changes (covers both programmatic and click-driven switches).
 watch(
   tab,
@@ -189,7 +166,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (copyFlashTimer) clearTimeout(copyFlashTimer)
   window.removeEventListener('dev-dashboard:logging-changed', onLoggingChanged)
 })
 </script>

@@ -8,6 +8,7 @@ export {
   scanCustomAgents,
 } from '../../agent-editor/business/index.js'
 export { buildCatalog } from '../../pipeline-editor/business/catalog/index.js'
+export { loadScanPatternsConfig } from '../../settings/business/index.js'
 export {
   submitJob,
   sendTaskFeedback,
@@ -23,3 +24,8 @@ export {
   cancelNlChatSession,
   isNlChatSessionId,
 } from './nlChatSession.js'
+
+// Only what the controller consumes; the rest of `chatAttachments` is internal
+// to the module and its tests import it directly.
+export { saveChatAttachments, checkAttachmentLimits } from './chatAttachments.js'
+export type { IncomingAttachment } from './chatAttachments.js'

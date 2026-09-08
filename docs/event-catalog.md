@@ -23,6 +23,7 @@ Cột **Event** trên UI = giá trị `type` trong bảng dưới.
 | `hitl.resolved` (`reason: pipeline_changed`) | Pipeline đổi khiến gate đang pending không còn được step hiện tại khai báo — hệ thống tự huỷ (`action: 'cancelled'`) hoặc chuẩn hoá legacy `true` về gate id (`action: 'normalized'`) | `taskId`, `gateId` (giá trị cũ, null nếu legacy `true`), `action`, `reason`, `currentPhase` | `state.ts` `reconcileGateStateAssumingLock` |
 | `entity.updated` (`entity: task-state`) | Repair / cập nhật state task | `id`, `projectId`, `detail` | `monitor/controller.ts` |
 | `entity.deleted` (`entity: task-state`) | Xóa task | `id`, `projectId` | `monitor/controller.ts` |
+| `entity.deleted` (`entity: worktree`) | Dọn git worktree của task từ dashboard | `id` (taskId), `projectId`, `detail` (`path`, `branch`, `prunedOnly`) | `monitor/controller.ts` `deleteTaskWorktree` |
 
 **Pipeline / pipeline step (gián tiếp):**
 
@@ -119,6 +120,13 @@ Khai báo trong `DashboardEventType` (`eventBus.ts`); có thể xuất hiện kh
 | Jobs (tab) | (không phải JSONL type) | Stdout file job runner |
 
 Cùng một thao tác (vd tạo task) có thể vừa `task.created` (events) vừa dòng `audit` — không thay thế nhau.
+
+**Chỉ có audit, không có domain event** — thao tác không phải lifecycle của entity có màn hình quản lý:
+
+| Audit `entity` | `op` | Khi nào | `detail` | File |
+|---|---|---|---|---|
+| `nl-chat-session` | `create` / `update` | Mở / gửi tiếp / huỷ phiên chat tạo mới | `entityType`, `jobId`, `action` | `features/nl-chat/controller.ts` |
+| `nl-chat-attachment` | `create` | Upload tập tin đính kèm từ khung chat | `count`, `bytes` (không kèm nội dung file) | `features/nl-chat/controller.ts` |
 
 ---
 

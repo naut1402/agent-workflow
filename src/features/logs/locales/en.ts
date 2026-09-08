@@ -50,8 +50,6 @@ export default {
   },
   copy: {
     hint: 'Click to copy',
-    done: 'Copied',
-    fail: 'Copy failed',
   },
   empty: {
     log: 'No logs yet.',

@@ -279,4 +279,86 @@ describe('useTaskChat', () => {
     expect(fetchMock.mock.calls.length).toBe(afterStart + 1)
     vi.useRealTimers()
   })
+
+  /**
+   * `TaskChatBody` calls `start()` from mount, from the re-scope watcher and
+   * from the active watcher, so overlapping calls are the normal case rather
+   * than an edge one. Each surviving chain polls on its own timer against the
+   * same session, so a leaked one shows up as doubled request traffic and as
+   * state written by whichever chain answers last.
+   */
+  it('overlapping start() calls leave exactly one poll chain', async () => {
+    vi.useFakeTimers()
+    const fetchMock = stubApi([{ ...READY, running: { jobId: 'j9' } }])
+    const c = make({ runningPollMs: 1000, idlePollMs: 60_000 })
+
+    await Promise.all([c.start(), c.start(), c.start()])
+    const afterStart = fetchMock.mock.calls.length
+
+    // One tick must produce exactly one request — three chains would make three.
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(fetchMock.mock.calls.length).toBe(afterStart + 1)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(fetchMock.mock.calls.length).toBe(afterStart + 2)
+
+    c.stop()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(fetchMock.mock.calls.length).toBe(afterStart + 2)
+    vi.useRealTimers()
+  })
+
+  it('stop() during an in-flight refresh keeps its response out of the state', async () => {
+    let release: (() => void) | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: any) => {
+        if (!String(input).includes('/chat')) throw new Error('unexpected fetch')
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+        return { ok: true, status: 200, json: async () => structuredClone(READY) }
+      }),
+    )
+
+    const c = make()
+    const pending = c.start()
+    c.stop()
+    release!()
+    await pending
+
+    // The chain was cancelled mid-flight, so its answer must not land.
+    expect(c.turns.value).toEqual([])
+    expect(c.sessionId.value).toBeNull()
+    expect(c.loading.value).toBe(false)
+  })
+
+  it('a superseded chain does not overwrite the newer one\'s transcript', async () => {
+    const releases: (() => void)[] = []
+    const bodies = [
+      { ...READY, sessionId: 'cũ', turns: [{ index: 0, role: 'user', text: 'phiên cũ' }], total: 1 },
+      { ...READY, sessionId: 'mới', turns: [{ index: 0, role: 'user', text: 'phiên mới' }], total: 1 },
+    ]
+    let call = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: any) => {
+        if (!String(input).includes('/chat')) throw new Error('unexpected fetch')
+        const body = bodies[Math.min(call, bodies.length - 1)]
+        call += 1
+        await new Promise<void>((resolve) => releases.push(resolve))
+        return { ok: true, status: 200, json: async () => structuredClone(body) }
+      }),
+    )
+
+    const c = make()
+    const first = c.start()
+    const second = c.start()
+    // The first request answers LAST — the ordering that makes a stale write win.
+    releases[1]()
+    releases[0]()
+    await Promise.all([first, second])
+
+    expect(c.sessionId.value).toBe('mới')
+    expect(c.turns.value.map((t: any) => t.text)).toEqual(['phiên mới'])
+  })
 })

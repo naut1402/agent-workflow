@@ -47,10 +47,15 @@ export default {
     renameTask: 'Could not rename task (error {status})',
     deleteTask: 'Could not delete task (error {status})',
     repairTaskState: 'Could not repair task state (error {status})',
+    cleanWorktree: 'Could not clean the worktree (error {status})',
     saveCustomAgent: 'Could not save custom agent (server returned no name).',
   },
   select: {
     empty: 'No options.',
+  },
+  copy: {
+    done: 'Copied',
+    fail: 'Copy failed',
   },
   folderPicker: {
     title: 'Choose folder',

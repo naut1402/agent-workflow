@@ -22,6 +22,8 @@ import { navigateToModeKey } from '../../../core/shell/keys'
 import { resolveArtifactViewMode } from '../../../core/configs/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
+import { classifyArtifactHref } from '../lib/artifactLink'
+import type { ArtifactLinkTarget } from '../lib/artifactLink'
 
 const { t } = useI18nHelpers()
 const props = defineProps({
@@ -29,6 +31,8 @@ const props = defineProps({
   openArtifact: { type: Object, default: null },
   projectId: { type: String, default: null },
 })
+
+const emit = defineEmits<{ 'open-artifact': [{ taskId: string; name: string }] }>()
 
 const { settings } = useAppSettings()
 
@@ -73,6 +77,10 @@ const {
   setContent: (v) => { content.value = v },
   onSave: async (nextContent) => {
     if (!props.openArtifact) return
+    // Clicking a link while editing runs blur→save and the navigation in the same
+    // gesture; without this key the save response would overwrite the artifact the
+    // link just opened.
+    const key = loadedKey.value
     message.value = ''
     const res = await saveArtifact(
       props.openArtifact.taskId,
@@ -81,6 +89,7 @@ const {
       props.projectId ?? undefined,
       loadedMtime.value ?? undefined,
     )
+    if (loadedKey.value !== key) return
     content.value = res.content
     loadedMtime.value = res.mtime
     externalChange.value = false
@@ -331,7 +340,11 @@ async function load(taskId: string, name: string) {
       loadedMtime.value = res.mtime
     }
   } catch {
-    if (loadedKey.value === key) content.value = ''
+    // Artifact trong thư mục con không có entry ở `task.artifacts` nên link tới nó
+    // không kiểm tồn tại trước được — đây là chỗ duy nhất biết nó không mở được.
+    if (loadedKey.value !== key) return
+    content.value = ''
+    message.value = t('monitor.artifact.linkMissing', { name })
   }
 }
 
@@ -345,6 +358,72 @@ async function scheduleMermaid() {
   await nextTick()
   await renderMermaid(viewRoot.value)
   attachMermaidControls(viewRoot.value, { onToggleFullscreen: onToggleMermaidFullscreen })
+}
+
+// ── Link tương đối giữa các artifact ─────────────────────────────────────────
+const LINK_ERROR_KEY = {
+  escape: 'monitor.artifact.linkOutsideTask',
+  'not-markdown': 'monitor.artifact.linkNotArtifact',
+  unsafe: 'monitor.artifact.linkBlocked',
+} as const
+
+function openLinkedArtifact(name: string) {
+  if (!props.openArtifact) return
+  if (name === props.openArtifact.name) return // trỏ về chính nó — no-op
+  // `task.artifacts` chỉ liệt kê .md phẳng ở gốc task; path subtask ('Tsub/x.md')
+  // không có entry nên bỏ qua bước kiểm tồn tại, để GET /api/artifact quyết định.
+  if (!name.includes('/') && !props.task?.artifacts?.[name]?.exists) {
+    message.value = t('monitor.artifact.linkMissing', { name })
+    return
+  }
+  message.value = ''
+  emit('open-artifact', { taskId: props.openArtifact.taskId, name })
+}
+
+/** Thẻ `a` mà click này nhắm tới, hoặc `null` nếu không phải link điều hướng. */
+function navigableAnchor(ev: MouseEvent): HTMLAnchorElement | null {
+  if (ev.defaultPrevented || ev.button !== 0) return null
+  const anchor = (ev.target as HTMLElement | null)?.closest?.('a') as HTMLAnchorElement | null
+  if (!anchor || !viewRoot.value?.contains(anchor)) return null
+  // Editor sống bên trong `viewRoot`; thẻ `a` ở tab Preview / surface WYSIWYG của
+  // Toast UI là nội dung đang soạn, không phải link điều hướng của artifact — bắt
+  // chúng sẽ mở artifact khác và vứt luôn draft chưa lưu.
+  if (anchor.closest('.art-editor, .toastui-editor-defaultUI')) return null
+  return anchor
+}
+
+/**
+ * Phím bổ trợ chỉ có nghĩa với link web thật (tab/cửa sổ mới, tải về). Href của
+ * artifact là đường dẫn file — nhường trình duyệt sẽ mở tab trỏ tới URL rác.
+ */
+function leaveToBrowser(ev: MouseEvent, target: ArtifactLinkTarget): boolean {
+  if (target.kind !== 'external') return false
+  return ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey
+}
+
+function followLink(target: ArtifactLinkTarget, href: string) {
+  if (target.kind === 'external') {
+    window.open(target.href, '_blank', 'noopener,noreferrer')
+  } else if (target.kind === 'invalid') {
+    message.value = t(LINK_ERROR_KEY[target.reason], { href })
+  } else if (target.kind === 'artifact') {
+    openLinkedArtifact(target.name)
+  }
+}
+
+// Markdown được render qua `v-html`, không có router — nếu để trình duyệt đi
+// theo href tương đối thì cả SPA điều hướng sang một URL rác. Delegate ở
+// `viewRoot` phủ mọi block ở cả hai view mode với một listener.
+function onViewClick(ev: MouseEvent) {
+  const anchor = navigableAnchor(ev)
+  if (!anchor || !props.openArtifact) return
+
+  const href = anchor.getAttribute('href') ?? ''
+  const target = classifyArtifactHref(href, props.openArtifact.name)
+  if (target.kind === 'ignore' || leaveToBrowser(ev, target)) return
+
+  ev.preventDefault()
+  followLink(target, href)
 }
 
 function onBlockToggle(i: number, ev: Event) {
@@ -574,7 +653,7 @@ onUpdated(() => scheduleMermaid())
         </div>
       </Teleport>
 
-      <div ref="viewRoot">
+      <div ref="viewRoot" @click="onViewClick">
         <div v-if="blockMode" class="block-list">
           <details
             v-for="(block, i) in blocks"

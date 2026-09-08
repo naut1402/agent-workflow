@@ -28,6 +28,19 @@ export function taskNeedsStateRepair(task: {
 }
 
 /**
+ * True when the task has reached an end state — pipeline finished, or archived.
+ * "Merged" is not observable without the GitHub API, so this is the local
+ * stand-in used to gate destructive per-task cleanup (worktree removal).
+ */
+export function isFinishedTaskState(task: {
+  current_phase?: string | null
+  archived?: boolean
+} | null | undefined): boolean {
+  if (!task) return false
+  return task.current_phase === 'completed' || task.archived === true
+}
+
+/**
  * Only the current phase and phases after it may be clicked to run.
  * A past pending/done node must not submit — the server always starts from
  * `current_phase`, so clicking a past id would re-run the current step and

@@ -36,6 +36,7 @@ export const AUDIT_ENTITIES = [
   'autoscan',
   'github-tokens',
   'logging',
+  'scan-patterns',
   'security',
   'recovery',
   'runner',
@@ -46,7 +47,9 @@ export const AUDIT_ENTITIES = [
   'artifact',
   'artifact-actions',
   'task-state',
+  'worktree',
   'nl-chat-session',
+  'nl-chat-attachment',
   'automation',
 ] as const
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number]

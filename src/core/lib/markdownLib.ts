@@ -1,24 +1,29 @@
+import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 
 const MERMAID_PRE =
   /<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g
 
-function decodeHtmlEntities(text: string): string {
-  return text
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-}
-
-/** Parse markdown to HTML; mermaid fenced blocks become `.mermaid` divs. */
+/**
+ * Parse markdown to HTML; mermaid fenced blocks become `.mermaid` divs.
+ *
+ * The output goes straight into `v-html` on four surfaces (chat bubble,
+ * artifact panel, QA panel, log dialog), so it is sanitised here — one hop
+ * instead of one per surface.
+ *
+ * Sanitising runs before the mermaid swap so the sanitiser only ever sees
+ * `marked`'s own output. `class` survives DOMPurify's default allowlist, so
+ * the fenced mermaid block is still matchable afterwards.
+ *
+ * The invariant that actually keeps this safe is that the diagram body stays
+ * HTML-escaped: `renderMermaid` reads it back through `node.textContent`,
+ * which the browser decodes exactly once. Decoding it here by hand instead
+ * would turn `&lt;img onerror=…&gt;` inside a mermaid fence into a live tag,
+ * outside the sanitiser's reach — the fence is diagram source, not markup.
+ */
 export function parseMarkdown(source: string): string {
-  const html = marked.parse(source || '') as string
-  return html.replace(MERMAID_PRE, (_, body: string) => {
-    const text = decodeHtmlEntities(body.trim())
-    return `<div class="mermaid">${text}</div>\n`
-  })
+  const html = DOMPurify.sanitize(marked.parse(source || '') as string)
+  return html.replace(MERMAID_PRE, (_, body: string) => `<div class="mermaid">${body.trim()}</div>\n`)
 }
 
 function mermaidTheme(): 'dark' | 'default' {

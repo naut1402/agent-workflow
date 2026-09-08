@@ -10,3 +10,8 @@ Xác minh task list + artifact panel render đúng với fixture.
 ## Phạm vi
 
 Bao gồm investigate.md và design.md trong DEMO-1.
+
+## Liên kết
+
+Link tương đối tới artifact khác: [Design](design.md).
+Link tới artifact không tồn tại: [Khong co](khong-co.md).

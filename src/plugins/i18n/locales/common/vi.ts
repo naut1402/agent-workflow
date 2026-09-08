@@ -49,10 +49,16 @@ export default {
     renameTask: 'Không thể đổi tên task (mã lỗi {status})',
     deleteTask: 'Không thể xoá task (mã lỗi {status})',
     repairTaskState: 'Không thể vá state task (mã lỗi {status})',
+    cleanWorktree: 'Không thể dọn worktree (mã lỗi {status})',
     saveCustomAgent: 'Không lưu được custom agent (server không trả về tên).',
   },
   select: {
     empty: 'Không có tuỳ chọn.',
+  },
+  // Copy-to-clipboard flash — dùng chung mọi nút copy (useCopyText).
+  copy: {
+    done: 'Đã copy',
+    fail: 'Copy thất bại',
   },
   folderPicker: {
     title: 'Chọn thư mục',

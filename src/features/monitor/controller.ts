@@ -648,6 +648,66 @@ export class MonitorController extends AbstractController {
     return this.ok({ id, deleted: true })
   }
 
+  /**
+   * `requireRoot` + task id guard, shared by the per-task worktree routes.
+   * `repoRoot` is `dirname(root)`: `root` is `<repo>/.dev-team-agent`, git needs
+   * the repo itself. The id guard runs before any value reaches a git argument.
+   */
+  private worktreeGate(): { error: Response } | { root: string; repoRoot: string; id: string } {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate
+    const id = this.c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return { error: this.badRequest('invalid task id') }
+    return { root: gate.root, repoRoot: path.dirname(gate.root), id }
+  }
+
+  async getTaskWorktree() {
+    const gate = this.worktreeGate()
+    if ('error' in gate) return gate.error
+    const { repoRoot, id } = gate
+
+    const result = monitorBusiness.findTaskWorktree(repoRoot, id)
+    if ('error' in result) {
+      return this.json(result.status, { error: result.error, detail: result.detail, taskId: id })
+    }
+    return this.ok({
+      taskId: id,
+      worktree: result.worktree,
+      ambiguous: result.ambiguous,
+      candidates: result.candidates,
+    })
+  }
+
+  async deleteTaskWorktree() {
+    const gate = this.worktreeGate()
+    if ('error' in gate) return gate.error
+    const { root, repoRoot, id } = gate
+
+    // Both guards (task finished, no job in flight) live in business so they
+    // run under the same task lock as the removal itself.
+    const result = await monitorBusiness.cleanupTaskWorktreeForTask(root, repoRoot, id)
+    if ('error' in result) {
+      const { ok: _ok, status, ...rest } = result
+      return this.json(status, { ...rest, taskId: id })
+    }
+
+    const detail = { path: result.path, branch: result.branch, prunedOnly: result.prunedOnly }
+    emitAudit({
+      op: 'delete',
+      entity: 'worktree',
+      identifier: id,
+      projectId: this.projectId,
+      detail,
+    })
+    emitEntity('deleted', 'worktree', { id, projectId: this.projectId, detail })
+    return this.ok({
+      taskId: id,
+      removed: result.path,
+      branch: result.branch,
+      prunedOnly: result.prunedOnly,
+    })
+  }
+
   async repairTaskState() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error

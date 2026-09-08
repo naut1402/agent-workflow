@@ -28,6 +28,13 @@ export default {
     queue: 'Queue (wait for the current step)',
     immediate: 'Send now (cancels the running step)',
   },
+  chatEnter: {
+    title: 'Enter key in the chat box',
+    desc: 'Whether Enter sends the message or inserts a new line. Ctrl/⌘+Enter always sends.',
+    groupLabel: 'In the chat box, pressing Enter',
+    send: 'Sends the message (Shift+Enter for a new line)',
+    newline: 'Inserts a new line (Ctrl/⌘+Enter sends)',
+  },
   taskList: {
     title: 'Task list',
     desc: 'Task list behaviour preferences in Monitor mode.',
@@ -85,6 +92,29 @@ export default {
     resultNone: 'No new projects found.',
     pathRequired: 'Enter an absolute path.',
     loadError: 'Could not load autoscan config.',
+  },
+  scanPatterns: {
+    title: 'Scan patterns for agents / skills / rules',
+    desc: 'Paths relative to the project root, with * and ** support. A matched directory is scanned as a whole; a matched file is loaded on its own.',
+    hint: 'Patterns are added to the default sources, they do not replace them. * and ** never match dot-names — type .claude out in full to reach it.',
+    kind: {
+      agents: 'Agents',
+      skills: 'Skills',
+      rules: 'Rules',
+    },
+    defaults: {
+      agents: 'Defaults: .claude/agents/, plugin agents/, ~/.claude/agents/',
+      skills: 'Defaults: .claude/skills/<slug>/SKILL.md, plugin skills/, ~/.claude/skills/, ~/.cursor/skills-cursor/',
+      rules: 'Defaults: docs/agent-rules/, .claude/rules/, ~/.cursor/rules/',
+    },
+    placeholder: 'e.g. .agents/*.md or packages/*/skills',
+    add: 'Add',
+    remove: 'Remove pattern',
+    empty: 'No patterns yet — defaults are in use.',
+    saved: 'Saved.',
+    invalid: 'Invalid pattern — use a relative path, no ".." and no absolute paths.',
+    tooMany: 'At most {max} patterns per kind.',
+    loadError: 'Could not load scan pattern config.',
   },
   githubTokens: {
     title: 'GitHub tokens per repo',
