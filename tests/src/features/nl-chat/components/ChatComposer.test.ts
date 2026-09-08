@@ -4,6 +4,7 @@ import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n } from '../../../helpers/i18n'
 import ChatComposer from '@/features/nl-chat/components/ChatComposer.vue'
 import { useChatComposer } from '@/features/nl-chat/composables/useChatComposer'
+import { useChatSurface } from '@/features/nl-chat/composables/useChatSurface'
 import { useAppSettings } from '@/core/composables/useAppSettings'
 
 /**
@@ -70,6 +71,12 @@ beforeEach(() => {
   // The settings store is a module singleton; reset the Enter preference so an
   // earlier test's `update()` cannot leak into the next one.
   useAppSettings().update({ chatEnterToSend: true })
+  // Same for the session registry, which the "+" menu's new-session item writes to.
+  const { sessions, activeId, closeSession, openBuilderChat, close } = useChatSurface()
+  openBuilderChat()
+  const builderId = activeId.value
+  for (const s of [...sessions.value]) if (s.id !== builderId) closeSession(s.id)
+  close()
 })
 
 afterEach(() => {
@@ -165,7 +172,61 @@ describe('ChatComposer — Enter behaviour', () => {
   })
 })
 
+describe('ChatComposer — input row layout', () => {
+  it('opens on two lines', () => {
+    const { textarea } = make()
+    // jsdom does not lay out, so this is the attribute half of the two-line
+    // floor; the CSS min-height half is pinned by the e2e suite.
+    expect(textarea.attributes('rows')).toBe('2')
+  })
+
+  it('leads the row with the add menu, and keeps no standalone paperclip', async () => {
+    const { wrapper } = make()
+    const row = wrapper.find('.nl-chat-input-row')
+
+    expect([...row.element.firstElementChild!.classList]).toContain('nl-chat-composer-add')
+    // The attach action is reachable, but only from inside the menu.
+    expect(wrapper.findAll('.nl-chat-composer-menu-item')).toHaveLength(0)
+    await row.find('.nl-chat-composer-add > button').trigger('click')
+    expect(wrapper.findAll('.nl-chat-composer-menu-item').map((i) => i.text())).toEqual([
+      'Đính kèm tập tin',
+      'Phiên chat mới',
+    ])
+  })
+
+  it('hides the attachment strip until something is staged', async () => {
+    const { wrapper, composer } = make()
+    expect(wrapper.findAll('.nl-chat-attach')).toHaveLength(0)
+
+    composer.attachments.add([pngChip()])
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.nl-chat-attach')).toHaveLength(1)
+  })
+})
+
 describe('ChatComposer — attachments', () => {
+  it('a file picked through the + menu is staged as a chip', async () => {
+    const { wrapper, composer } = make()
+    await wrapper.find('.nl-chat-composer-add > button').trigger('click')
+
+    const input = wrapper.find('input[type="file"]')
+    const files = [new File(['x'], 'note.txt', { type: 'text/plain' })]
+    Object.defineProperty(input.element, 'files', { value: files, configurable: true })
+    await input.trigger('change')
+
+    expect(composer.attachments.items.value.map((i) => i.file.name)).toEqual(['note.txt'])
+    expect(wrapper.find('.nl-chat-chip-name').text()).toBe('note.txt')
+  })
+
+  it('a staged chip can be removed again', async () => {
+    const { wrapper, composer } = make()
+    composer.attachments.add([pngChip('a.png'), pngChip('b.png')])
+    await wrapper.vm.$nextTick()
+
+    await wrapper.findAll('.nl-chat-chip button')[0].trigger('click')
+    expect(composer.attachments.items.value.map((i) => i.file.name)).toEqual(['b.png'])
+  })
+
   it('uploaded paths are appended to the message and the chips are cleared', async () => {
     stubUpload({ files: [{ name: 'shot.png', path: '/root/tasks/T1/attachments/u/shot.png' }] })
     const { textarea, button, sent, composer, wrapper } = make()

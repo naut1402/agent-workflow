@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ChatAttachmentBar from './ChatAttachmentBar.vue'
+import ChatComposerMenu from './ChatComposerMenu.vue'
 import type { UseChatComposer } from '../composables/useChatComposer'
 
 /**
@@ -26,16 +27,16 @@ function bindInput(el: unknown): void {
   <ChatAttachmentBar
     :items="c.attachments.items.value"
     :error="c.attachments.error.value"
-    :disabled="!c.canAttach.value"
-    @pick="c.attachments.add"
     @remove="c.attachments.remove"
   />
 
   <form class="nl-chat-input-row" @submit.prevent="c.onSend">
+    <!-- The add menu leads the row: "+" sits at the head of the chat box. -->
+    <ChatComposerMenu :disabled="!c.canAttach.value" @pick="c.attachments.add" />
     <textarea
       :ref="bindInput"
       v-model="c.inputText.value"
-      rows="1"
+      rows="2"
       :placeholder="placeholder"
       :title="c.composerHint.value"
       :disabled="!c.canAttach.value"

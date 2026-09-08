@@ -37,8 +37,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18nHelpers()
-const { sessions, activeId, activeIndex, newBuilderChat, nextSession, prevSession } =
-  useChatSurface()
+const { sessions, activeId, activeIndex, nextSession, prevSession } = useChatSurface()
 const context = computed<ChatContext>(() => props.context ?? { mode: 'builder' })
 
 /** Body instances by session id — × needs the ACTIVE one to end its session. */
@@ -49,8 +48,8 @@ function bindBody(id: string, el: unknown): void {
 }
 const activeBody = computed(() => bodyRefs[activeId.value ?? ''] ?? null)
 
-// Task mode identifies itself by the task + step it is scoped to (the badge
-// carries the connection meaning, so no prose title).
+// Task mode identifies itself by the task + step it is scoped to (the title
+// itself now carries the status meaning, so no prose title).
 const title = computed(() => {
   const ctx = context.value
   if (ctx.mode !== 'task') return t('nlChat.window.builderTitle')
@@ -97,7 +96,8 @@ async function loadDefaultRunner(): Promise<void> {
     const data = await fetchRunners()
     const runners: any[] = Array.isArray(data?.runners) ? data.runners : []
     const picked =
-      runners.find((r) => r?.id === data?.defaultRunnerId) ?? runners.find((r) => r?.enabled !== false)
+      runners.find((r) => r?.id === data?.defaultRunnerId) ??
+      runners.find((r) => r?.enabled !== false)
     if (picked) {
       defaultRunner.value = {
         id: picked.id,
@@ -111,11 +111,71 @@ async function loadDefaultRunner(): Promise<void> {
 }
 
 const infoOpen = ref(false)
+/**
+ * The popover opens on hover AND on click, and the two need different closing
+ * rules: a hover-opened popover follows the pointer out, a clicked-open one
+ * stays put until it is dismissed. Without this flag, moving the mouse off a
+ * popover the user deliberately clicked open would yank it away — and the
+ * connection row now lives in there, so it has to be readable without hover
+ * (touch devices have none at all).
+ */
+const infoPinned = ref(false)
+const infoRef = ref<HTMLElement | null>(null)
+const infoTriggerRef = ref<HTMLButtonElement | null>(null)
+/** Plain `let`, not a ref: it is only read inside the synchronous focus() call. */
+let infoRefocusing = false
 
-function onInfoEnter(): void {
+function openInfo(): void {
   infoOpen.value = true
   // Only the builder needs a lookup; task mode gets its runner from the body.
   if (context.value.mode !== 'task') void loadDefaultRunner()
+}
+
+function closeInfo(): void {
+  infoOpen.value = false
+  infoPinned.value = false
+}
+
+function onInfoEnter(): void {
+  // Escape hands focus back to the trigger, which fires `focusin` on this very
+  // wrapper — without the guard it would reopen what Escape just shut.
+  if (infoRefocusing) return
+  openInfo()
+}
+
+/** Hover/focus leaving only closes what hover/focus opened. */
+function onInfoLeave(): void {
+  if (!infoPinned.value) infoOpen.value = false
+}
+
+/**
+ * Click pins, a second click unpins — keyed off `infoPinned`, not `infoOpen`.
+ * With a mouse, `pointerenter` has already opened the popover by the time the
+ * click lands; toggling on `infoOpen` would read that as "open, so close it"
+ * and the first click would never open anything.
+ */
+function onInfoToggle(): void {
+  if (infoPinned.value) {
+    closeInfo()
+    return
+  }
+  infoPinned.value = true
+  openInfo()
+}
+
+/** Capture phase, so a click on the trigger is seen before its own handler. */
+function onInfoDocClick(e: MouseEvent): void {
+  if (!infoOpen.value) return
+  if (infoRef.value?.contains(e.target as Node)) return
+  closeInfo()
+}
+
+function onInfoKeydown(e: KeyboardEvent): void {
+  if (e.key !== 'Escape' || !infoOpen.value) return
+  closeInfo()
+  infoRefocusing = true
+  infoTriggerRef.value?.focus()
+  infoRefocusing = false
 }
 
 const activeRunner = computed<RunnerInfo | null>(() =>
@@ -164,14 +224,41 @@ const infoRows = computed(() => {
       value: `${activeRunner.value.name} (${runnerStatusText.value})`,
     })
   }
+  // Last row: this one is about the dashboard, not about the chat session. It
+  // carries what the connection dot used to say before the dot was dropped.
+  // Unconditional — Vue casts an absent Boolean prop to `false`, so there is no
+  // "unknown" state to hide the row for.
+  rows.push({
+    label: t('nlChat.window.infoConnection'),
+    value: props.connected ? t('nlChat.window.connected') : t('nlChat.window.disconnected'),
+  })
   return rows
 })
 
-/** The badge shows the busy spinner while a step's job runs, the connection dot otherwise. */
-const badgeTitle = computed(() => {
-  if (status.value.kind === 'busy') return status.value.text
-  return props.connected ? t('nlChat.window.connected') : t('nlChat.window.disconnected')
-})
+/**
+ * The title is the status indicator now: colour-coded by `status.kind`, with the
+ * status text appended as its tooltip. Idle adds nothing, so a long title still
+ * gets the plain-title tooltip it needs to be readable through the ellipsis.
+ */
+const titleTooltip = computed(() =>
+  status.value.kind === 'idle' ? title.value : `${title.value} — ${status.value.text}`,
+)
+
+const STATUS_ANNOUNCEMENT: Record<Status['kind'], string> = {
+  idle: 'nlChat.window.statusReady',
+  busy: 'nlChat.window.statusBusy',
+  done: 'nlChat.window.statusDone',
+  error: 'nlChat.window.statusError',
+}
+
+/**
+ * What the live region announces — the KIND, not `status.text`. The busy text
+ * of a builder chat carries a seconds counter that ticks every second, and a
+ * polite live region would read the whole thing out again on every tick. The
+ * counter already has its own visible channel; screen readers only need to hear
+ * that the state changed.
+ */
+const statusAnnouncement = computed(() => t(STATUS_ANNOUNCEMENT[status.value.kind]))
 
 const DEFAULT_WIDTH = 340
 const DEFAULT_HEIGHT_RATIO = 0.6
@@ -286,10 +373,14 @@ function onResizeEnd(): void {
 onMounted(() => {
   window.addEventListener('pointermove', onResizeMove)
   window.addEventListener('pointerup', onResizeEnd)
+  document.addEventListener('click', onInfoDocClick, true)
+  document.addEventListener('keydown', onInfoKeydown)
 })
 onUnmounted(() => {
   window.removeEventListener('pointermove', onResizeMove)
   window.removeEventListener('pointerup', onResizeEnd)
+  document.removeEventListener('click', onInfoDocClick, true)
+  document.removeEventListener('keydown', onInfoKeydown)
 })
 
 // The window is anchored to the (draggable) icon rather than pinned to the
@@ -328,37 +419,45 @@ async function onCloseClick(): Promise<void> {
   await dismissActiveSession()
   emit('close')
 }
-
-/**
- * + starts a fresh chat. It must NOT touch the current session — in task mode
- * that used to close the step's CLI session out from under it. A new builder
- * session is simply pushed on top; the arrows walk back.
- */
-function onNewSession(): void {
-  newBuilderChat()
-}
 </script>
 
 <template>
-  <div ref="windowRef" class="nl-chat-window" role="dialog" :aria-label="title" :style="anchorStyle">
+  <div
+    ref="windowRef"
+    class="nl-chat-window"
+    role="dialog"
+    :aria-label="title"
+    :style="anchorStyle"
+  >
     <header class="nl-chat-header">
-      <!-- Connection dot by default (same dot as the dashboard sidebar); while a
-           step's job runs, the busy spinner takes this spot instead. -->
-      <span class="nl-chat-badge" role="img" :aria-label="badgeTitle" :title="badgeTitle">
-        <svg
-          v-if="status.kind === 'busy'"
-          class="nl-chat-spinner"
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.4"
-          stroke-linecap="round"
+      <!-- Info takes the slot the connection dot used to hold: which
+           project/mode/task/step/runner this chat is bound to, plus the
+           dashboard connection state the dot used to carry on its own. -->
+      <span
+        ref="infoRef"
+        class="nl-chat-info"
+        @pointerenter="onInfoEnter"
+        @pointerleave="onInfoLeave"
+        @focusin="onInfoEnter"
+        @focusout="onInfoLeave"
+      >
+        <button
+          ref="infoTriggerRef"
+          type="button"
+          class="icon-btn icon-btn-inline"
+          :title="t('nlChat.window.infoTitle')"
+          :aria-label="t('nlChat.window.infoTitle')"
+          :aria-expanded="infoOpen"
+          @click.stop="onInfoToggle"
         >
-          <path d="M12 3a9 9 0 1 0 9 9" />
-        </svg>
-        <span v-else class="dot" :class="{ live: connected }" aria-hidden="true"></span>
+          <Icon name="info" :size="14" />
+        </button>
+        <div v-if="infoOpen" class="nl-chat-info-popover" role="tooltip">
+          <p v-for="row in infoRows" :key="row.label" class="nl-chat-info-row">
+            <span class="nl-chat-info-label">{{ row.label }}</span>
+            <span class="nl-chat-info-value">{{ row.value }}</span>
+          </p>
+        </div>
       </span>
 
       <button
@@ -372,7 +471,14 @@ function onNewSession(): void {
         <Icon name="chevronLeft" :size="14" />
       </button>
 
-      <span class="nl-chat-title">{{ title }}</span>
+      <!-- The status icons are gone; the title itself is colour-coded and
+           spells the status out in its tooltip. -->
+      <span class="nl-chat-title" :class="`is-${status.kind}`" :title="titleTooltip">{{
+        title
+      }}</span>
+      <!-- Colour must never be the only channel (WCAG 1.4.1): the same status
+           text again, for screen readers. -->
+      <span class="nl-chat-sr-only" role="status">{{ statusAnnouncement }}</span>
 
       <template v-if="sessions.length > 1">
         <span class="nl-chat-session-counter">{{ activeIndex + 1 }}/{{ sessions.length }}</span>
@@ -387,74 +493,9 @@ function onNewSession(): void {
         </button>
       </template>
 
-      <!-- Info: which project/mode/task/step/runner this chat is bound to. -->
-      <span
-        class="nl-chat-info"
-        @pointerenter="onInfoEnter"
-        @pointerleave="infoOpen = false"
-        @focusin="onInfoEnter"
-        @focusout="infoOpen = false"
-      >
-        <button type="button" class="nl-chat-icon-btn" title="Thông tin context" aria-label="Thông tin context">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            aria-hidden="true"
-          >
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 11v5.5" />
-            <path d="M12 7.6v.6" />
-          </svg>
-        </button>
-        <div v-if="infoOpen" class="nl-chat-info-popover" role="tooltip">
-          <p v-for="row in infoRows" :key="row.label" class="nl-chat-info-row">
-            <span class="nl-chat-info-label">{{ row.label }}</span>
-            <span class="nl-chat-info-value">{{ row.value }}</span>
-          </p>
-        </div>
-      </span>
-
-      <!-- Terminal outcomes only: the busy spinner moved to the badge. -->
-      <span
-        v-if="status.kind === 'done' || status.kind === 'error'"
-        class="nl-chat-status"
-        :class="`is-${status.kind}`"
-        :title="status.text"
-      >
-        <svg
-          v-if="status.kind === 'done'"
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.4"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M5 13l4 4L19 7" />
-        </svg>
-        <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 3l9.5 16.5H2.5zM11 9h2v5h-2zm0 6.5h2V18h-2z" />
-        </svg>
-      </span>
-
       <!-- Minimize hides the whole window (keeping this chat), matching what
-           clicking the floating icon does — a header-only strip looked broken. -->
-      <button
-        type="button"
-        class="nl-chat-icon-btn"
-        :title="t('nlChat.window.newSession')"
-        :aria-label="t('nlChat.window.newSession')"
-        @click="onNewSession"
-      >
-        +
-      </button>
+           clicking the floating icon does — a header-only strip looked broken.
+           + moved down to the composer, where it opens the add menu. -->
       <button
         type="button"
         class="nl-chat-icon-btn"
@@ -470,11 +511,13 @@ function onNewSession(): void {
         :title="t('nlChat.window.close')"
         :aria-label="t('nlChat.window.close')"
         @click="onCloseClick"
-      >×</button>
+      >
+        ×
+      </button>
     </header>
 
     <div
-      v-for="corner in (['tl', 'tr', 'bl', 'br'] as const)"
+      v-for="corner in ['tl', 'tr', 'bl', 'br'] as const"
       :key="corner"
       class="nl-chat-resize"
       :class="`is-${corner}`"
