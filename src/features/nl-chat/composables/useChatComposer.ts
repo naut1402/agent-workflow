@@ -42,7 +42,15 @@ export function useChatComposer(opts: ChatComposerOptions) {
     getTaskId: opts.getTaskId,
   })
 
-  const canAttach = computed(() => opts.canSend() && !opts.sending())
+  /**
+   * Also false while an upload is in flight: `attachments.upload()` snapshots
+   * the list it is uploading, so a file staged mid-upload never reaches the
+   * server yet gets cleared with the rest once the send completes — it vanishes
+   * with no error anywhere.
+   */
+  const canAttach = computed(
+    () => opts.canSend() && !opts.sending() && !attachments.uploading.value,
+  )
   const { isOverDropZone } = useDrop(opts.dropZone, (files) => {
     if (!canAttach.value) return
     attachments.add(files)

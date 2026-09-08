@@ -127,6 +127,16 @@ describe('mergeScanPatternsConfig', () => {
     expect(mergeScanPatternsConfig(current, { skills: null }).skills).toEqual(['packages/*/skills'])
   })
 
+  it('a wrong-typed kind is a no-op, not a wipe', () => {
+    // Each of these sanitises down to `[]`, so treating them as "the caller set
+    // this kind" would silently erase the stored list and persist the erasure.
+    for (const junk of ['.agents,tools', {}, 42, true, 'tools/*.md']) {
+      expect(mergeScanPatternsConfig(current, { agents: junk }).agents).toEqual(['.agents'])
+    }
+    // …and it must not take the untouched kinds down with it either.
+    expect(mergeScanPatternsConfig(current, { agents: 'sai-kieu' })).toEqual(current)
+  })
+
   it('keeps the current config when the patch is not an object', () => {
     for (const patch of [null, undefined, 'x', 42, []]) {
       expect(mergeScanPatternsConfig(current, patch)).toEqual(current)

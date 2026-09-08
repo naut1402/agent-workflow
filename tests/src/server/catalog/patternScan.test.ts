@@ -13,6 +13,8 @@ import {
 } from '../../../../src/features/pipeline-editor/business/catalog/scan'
 
 let root: string
+/** A sibling of `root`, reachable only by following a symlink out of it. */
+let outside: string
 
 const rel = (matches: { path: string }[]) =>
   matches.map((m) => path.relative(root, m.path).replace(/\\/g, '/')).sort()
@@ -58,10 +60,28 @@ beforeAll(async () => {
     await mk(...deep.split('/'))
   }
   await wr('d1/d2/d3/marker.md', '# shallow')
+
+  // Symlinks: the one way a pattern under the root can still reach content
+  // outside it. `outside` is a sibling temp dir, never a child of `root`.
+  outside = await fs.mkdtemp(path.join(os.tmpdir(), 'pattern-scan-outside-'))
+  await fs.mkdir(path.join(outside, 'agents'), { recursive: true })
+  await fs.writeFile(path.join(outside, 'secret.md'), '---\ndescription: leaked\n---\n')
+  await fs.writeFile(path.join(outside, 'agents', 'nested-secret.md'), '---\n---\n')
+
+  await mk('links')
+  await fs.symlink(path.join(outside, 'secret.md'), path.join(root, 'links', 'escape.md'))
+  await fs.symlink(path.join(outside, 'agents'), path.join(root, 'links', 'escape-dir'))
+  // Also inside the root — a symlink is skipped for pointing anywhere at all,
+  // not for where it happens to point.
+  await fs.symlink(
+    path.join(root, '.agents', 'investigator.agent.md'),
+    path.join(root, 'links', 'inside.md'),
+  )
 })
 
 afterAll(async () => {
   await fs.rm(root, { recursive: true, force: true })
+  await fs.rm(outside, { recursive: true, force: true })
 })
 
 describe('expandScanPatterns — matching', () => {
@@ -149,6 +169,28 @@ describe('expandScanPatterns — guards', () => {
 
   test('a pattern matching nothing returns nothing, without throwing', async () => {
     expect(await expandScanPatterns(root, ['does/not/exist/*.md'])).toEqual([])
+  })
+
+  test('a symlinked file is never returned, even when the pattern names it', async () => {
+    expect(await expandScanPatterns(root, ['links/escape.md'])).toEqual([])
+    expect(rel(await expandScanPatterns(root, ['links/*.md']))).toEqual([])
+    // Pointing back inside the root does not redeem it either.
+    expect(await expandScanPatterns(root, ['links/inside.md'])).toEqual([])
+  })
+
+  test('a symlinked directory is neither matched nor descended into', async () => {
+    expect(await expandScanPatterns(root, ['links/escape-dir'])).toEqual([])
+    expect(await expandScanPatterns(root, ['links/escape-dir/*.md'])).toEqual([])
+    expect(rel(await expandScanPatterns(root, ['links/**']))).toEqual(['links'])
+  })
+
+  test('a recursive wildcard never surfaces anything reached through a symlink', async () => {
+    const out = await expandScanPatterns(root, ['**', '**/*.md'])
+    const names = out.map((m) => path.basename(m.path))
+    expect(names).not.toContain('secret.md')
+    expect(names).not.toContain('nested-secret.md')
+    expect(names).not.toContain('escape.md')
+    expect(names).not.toContain('inside.md')
   })
 })
 

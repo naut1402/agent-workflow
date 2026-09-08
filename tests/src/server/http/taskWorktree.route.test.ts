@@ -55,6 +55,45 @@ function addWorktree(dir: string, branch: string): string {
   return target
 }
 
+/**
+ * Write a job record the way the runner would, so `listJobs` sees the task as
+ * busy. `devTeamRoot` scopes it to this data root — the same field the run-step
+ * guard filters on.
+ */
+function seedJob(
+  jobId: string,
+  taskId: string,
+  status: 'queued' | 'running' | 'succeeded',
+  over: { devTeamRoot?: string | null } = {},
+): void {
+  const jobsDir = path.join(repo, '.home', 'jobs')
+  fs.mkdirSync(jobsDir, { recursive: true })
+  const metadata: Record<string, unknown> = { taskId, pipelineStepId: 'implementer' }
+  if (over.devTeamRoot !== null) metadata.devTeamRoot = over.devTeamRoot ?? root
+  fs.writeFileSync(
+    path.join(jobsDir, `${jobId}.json`),
+    JSON.stringify({
+      id: jobId,
+      status,
+      runnerId: 'stub-runner-worktree',
+      agentRef: ' ',
+      workspace: path.join(root, 'tasks', taskId),
+      userPrompt: 'do the thing',
+      createdAt: new Date().toISOString(),
+      startedAt: status === 'queued' ? null : new Date().toISOString(),
+      finishedAt: status === 'succeeded' ? new Date().toISOString() : null,
+      exitCode: status === 'succeeded' ? 0 : null,
+      pid: null,
+      metadata,
+    }),
+    'utf8',
+  )
+}
+
+function dropJob(jobId: string): void {
+  fs.rmSync(path.join(repo, '.home', 'jobs', `${jobId}.json`), { force: true })
+}
+
 function worktreePaths(): string[] {
   return git('worktree', 'list', '--porcelain')
     .split(/\r?\n/)
@@ -140,6 +179,19 @@ describe.skipIf(!hasGit)('GET /api/tasks/:id/worktree', () => {
     expect(body.worktree.dirty).toBe(true)
     expect(body.worktree.dirtyCount).toBeGreaterThanOrEqual(1)
     expect(body.worktree.blockedBy).toBe('dirty')
+  })
+
+  test('200: a detached worktree reports itself as blocked', async () => {
+    seedTask('W3')
+    const wt = path.join(repo, '.claude', 'worktrees', 'W3')
+    git('worktree', 'add', '--detach', wt)
+
+    const body = await (await app.request('/api/tasks/W3/worktree')).json()
+    expect(body.worktree.detached).toBe(true)
+    expect(body.worktree.branch).toBeNull()
+    expect(body.worktree.blockedBy).toBe('detached')
+
+    git('worktree', 'remove', '--force', wt)
   })
 
   test('200: never reports the main worktree for a task named after it', async () => {
@@ -290,6 +342,130 @@ describe.skipIf(!hasGit)('DELETE /api/tasks/:id/worktree — refusals', () => {
     expect(fs.existsSync(wt)).toBe(true)
   })
 
+  test('409: refuses a detached worktree — its commits have no ref holding them', async () => {
+    seedTask('D18')
+    const wt = path.join(repo, '.claude', 'worktrees', 'D18')
+    git('worktree', 'add', '--detach', wt)
+
+    const res = await app.request('/api/tasks/D18/worktree', { method: 'DELETE' })
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.error).toBe('worktree_detached')
+    expect(body.path).toBe(wt)
+    expect(fs.existsSync(wt)).toBe(true)
+    expect(worktreePaths()).toContain(wt)
+
+    git('worktree', 'remove', '--force', wt)
+  })
+
+  test('409: still refuses a detached worktree whose directory is already gone', async () => {
+    seedTask('D19')
+    const wt = path.join(repo, '.claude', 'worktrees', 'D19')
+    git('worktree', 'add', '--detach', wt)
+    fs.rmSync(wt, { recursive: true, force: true })
+
+    // A prune here would take the last ref to those commits with it, so
+    // "the folder is missing anyway" is not a reason to let it through.
+    const res = await app.request('/api/tasks/D19/worktree', { method: 'DELETE' })
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe('worktree_detached')
+    expect(worktreePaths()).toContain(wt)
+
+    git('worktree', 'remove', '--force', wt)
+  })
+
+  test('409: refuses while the task still has a running job, worktree untouched', async () => {
+    // An archived task counts as finished, yet a job it started can still be
+    // running and writing into this very directory.
+    seedTask('D20', { current_phase: 'implementer', archived: true })
+    const wt = addWorktree('D20', 'fix/D20/busy')
+    seedJob('job-D20', 'D20', 'running')
+
+    try {
+      const res = await app.request('/api/tasks/D20/worktree', { method: 'DELETE' })
+      expect(res.status).toBe(409)
+      const body = await res.json()
+      expect(body.error).toBe('task_job_in_flight')
+      expect(body.jobId).toBe('job-D20')
+      expect(body.taskId).toBe('D20')
+      expect(fs.existsSync(wt)).toBe(true)
+      expect(worktreePaths()).toContain(wt)
+    } finally {
+      dropJob('job-D20')
+    }
+  })
+
+  test('409: a queued job blocks removal too', async () => {
+    seedTask('D21')
+    const wt = addWorktree('D21', 'fix/D21/queued')
+    seedJob('job-D21', 'D21', 'queued')
+
+    try {
+      const res = await app.request('/api/tasks/D21/worktree', { method: 'DELETE' })
+      expect(res.status).toBe(409)
+      expect((await res.json()).error).toBe('task_job_in_flight')
+      expect(fs.existsSync(wt)).toBe(true)
+    } finally {
+      dropJob('job-D21')
+    }
+  })
+
+  test('200: a finished job does not block removal', async () => {
+    seedTask('D22')
+    const wt = addWorktree('D22', 'fix/D22/done')
+    seedJob('job-D22', 'D22', 'succeeded')
+
+    try {
+      expect((await app.request('/api/tasks/D22/worktree', { method: 'DELETE' })).status).toBe(200)
+      expect(fs.existsSync(wt)).toBe(false)
+    } finally {
+      dropJob('job-D22')
+    }
+  })
+
+  test('200: a running job of a task in ANOTHER data root does not block removal', async () => {
+    seedTask('D23')
+    const wt = addWorktree('D23', 'fix/D23/other-project')
+    seedJob('job-D23', 'D23', 'running', { devTeamRoot: path.join(outsideRoot, '.dev-team-agent') })
+
+    try {
+      // Two projects can hold tasks with the same id; a job over there says
+      // nothing about this worktree.
+      expect((await app.request('/api/tasks/D23/worktree', { method: 'DELETE' })).status).toBe(200)
+      expect(fs.existsSync(wt)).toBe(false)
+    } finally {
+      dropJob('job-D23')
+    }
+  })
+
+  test('409: a legacy job record with no devTeamRoot still counts as in-flight', async () => {
+    seedTask('D24')
+    const wt = addWorktree('D24', 'fix/D24/legacy')
+    seedJob('job-D24', 'D24', 'running', { devTeamRoot: null })
+
+    try {
+      const res = await app.request('/api/tasks/D24/worktree', { method: 'DELETE' })
+      expect(res.status).toBe(409)
+      expect((await res.json()).error).toBe('task_job_in_flight')
+      expect(fs.existsSync(wt)).toBe(true)
+    } finally {
+      dropJob('job-D24')
+    }
+  })
+
+  test('a job belonging to a different task never blocks this one', async () => {
+    seedTask('D25')
+    const wt = addWorktree('D25', 'fix/D25/unrelated')
+    seedJob('job-other', 'D26', 'running')
+
+    try {
+      expect((await app.request('/api/tasks/D25/worktree', { method: 'DELETE' })).status).toBe(200)
+      expect(fs.existsSync(wt)).toBe(false)
+    } finally {
+      dropJob('job-other')
+    }
+  })
+
   test('409: a modified tracked file blocks removal', async () => {
     seedTask('D13')
     const wt = addWorktree('D13', 'fix/D13/modified')
@@ -349,6 +525,24 @@ describe.skipIf(!hasGit)('DELETE /api/tasks/:id/worktree — domain event', () =
     expect(worktreeEvents[0].id).toBe('D16')
     expect((worktreeEvents[0].detail as any).path).toBe(wt)
     expect((worktreeEvents[0].detail as any).prunedOnly).toBe(false)
+  })
+
+  test('a removal refused for an in-flight job emits nothing', async () => {
+    seedTask('D27')
+    addWorktree('D27', 'fix/D27/busy-silent')
+    seedJob('job-D27', 'D27', 'running')
+    const seen: unknown[] = []
+    const off = on('entity.deleted', (e) => {
+      if ((e.payload as any).entity === 'worktree') seen.push(e.payload)
+    })
+
+    try {
+      expect((await app.request('/api/tasks/D27/worktree', { method: 'DELETE' })).status).toBe(409)
+    } finally {
+      off()
+      dropJob('job-D27')
+    }
+    expect(seen).toHaveLength(0)
   })
 
   test('a refused removal emits nothing', async () => {

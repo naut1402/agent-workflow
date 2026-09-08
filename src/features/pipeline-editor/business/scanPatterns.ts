@@ -81,7 +81,8 @@ async function walkDoubleStar(
   // Reading 1: `**` matched zero segments — retry the same dir against segs[i + 1].
   await walk(cursor, dir, i + 1, depth)
   for (const entry of entries) {
-    // A symlink is not `isDirectory()`, so recursion can never loop or leave the root.
+    // Symlinks are skipped outright, so the walk can never loop or leave the root.
+    if (entry.isSymbolicLink()) continue
     if (!entry.isDirectory() || DENY_DIRS.has(entry.name) || entry.name.startsWith('.')) continue
     // Reading 2: `**` swallowed this level — descend, still on segs[i].
     await walk(cursor, joinPath(dir, entry.name), i, depth + 1)
@@ -99,6 +100,9 @@ async function walkSegment(
   const seg = cursor.segs[i]
   const last = i === cursor.segs.length - 1
   for (const entry of entries) {
+    // A symlink can point anywhere, including outside the project root — a
+    // matching one must not be reported as a file nor descended into.
+    if (entry.isSymbolicLink()) continue
     if (DENY_DIRS.has(entry.name) || !segmentMatches(seg, entry.name)) continue
     const full = joinPath(dir, entry.name)
     if (last) push(cursor.projectRoot, full, entry.isDirectory(), cursor.seen, cursor.budget)

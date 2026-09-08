@@ -134,6 +134,10 @@ export function describeWorktreeError(err: any): string {
       return t('monitor.layout.worktreeErrOutside')
     case 'task_not_finished':
       return t('monitor.layout.worktreeErrNotFinished')
+    case 'task_job_in_flight':
+      return t('monitor.layout.worktreeErrJobInFlight')
+    case 'worktree_detached':
+      return t('monitor.layout.worktreeErrDetached')
     case 'worktree_remove_failed':
     case 'git_failed':
       return t('monitor.layout.worktreeErrRemoveFailed', { detail: data.detail || '' })

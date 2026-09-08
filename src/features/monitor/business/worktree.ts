@@ -163,7 +163,7 @@ export interface WorktreeView {
   locked: boolean
   lockReason: string | null
   removable: boolean
-  blockedBy: 'dirty' | 'locked' | 'outside_policy' | null
+  blockedBy: 'dirty' | 'detached' | 'locked' | 'outside_policy' | null
 }
 
 export type FindWorktreeResult =
@@ -188,7 +188,7 @@ function readDirtyLines(wtPath: string): DirtyRead {
  * still shows as dirty — the badge must not claim a worktree is safe to drop
  * when its state could not be read.
  */
-function buildWorktreeView(repoRoot: string, entry: WorktreeEntry): WorktreeView {
+export function buildWorktreeView(repoRoot: string, entry: WorktreeEntry): WorktreeView {
   const exists = existsSync(entry.path)
   const read: DirtyRead = exists ? readDirtyLines(entry.path) : { lines: [] }
   const lines = 'error' in read ? [] : read.lines
@@ -206,7 +206,15 @@ function buildWorktreeView(repoRoot: string, entry: WorktreeEntry): WorktreeView
     locked: entry.locked,
     lockReason: entry.lockReason,
     removable,
-    blockedBy: !removable ? 'outside_policy' : entry.locked ? 'locked' : dirty ? 'dirty' : null,
+    blockedBy: !removable
+      ? 'outside_policy'
+      : entry.locked
+        ? 'locked'
+        : entry.detached
+          ? 'detached'
+          : dirty
+            ? 'dirty'
+            : null,
   }
 }
 
@@ -250,6 +258,7 @@ export type RemoveWorktreeResult =
       dirtyCount: number
     }
   | { ok: false; status: 409; error: 'worktree_locked'; path: string; lockReason: string | null }
+  | { ok: false; status: 409; error: 'worktree_detached'; path: string }
   | { ok: false; status: 403; error: 'worktree_outside_policy'; path: string }
   | {
       ok: false
@@ -266,11 +275,11 @@ type RemovalBlocker = Extract<RemoveWorktreeResult, { ok: false }>
 
 /**
  * Everything that must stop a removal, in the order git itself would refuse:
- * outside the allowed paths, locked, uncommitted changes. A failed `git status`
- * gets its own code — "cannot confirm this worktree is clean" must not reach
- * the user as "0 uncommitted changes", which points at the wrong fix.
+ * outside the allowed paths, locked, detached, uncommitted changes. A failed
+ * `git status` gets its own code — "cannot confirm this worktree is clean" must
+ * not reach the user as "0 uncommitted changes", which points at the wrong fix.
  */
-function findRemovalBlocker(wt: WorktreeView): RemovalBlocker | null {
+export function findRemovalBlocker(wt: WorktreeView): RemovalBlocker | null {
   if (!wt.removable) {
     return { ok: false, status: 403, error: 'worktree_outside_policy', path: wt.path }
   }
@@ -282,6 +291,13 @@ function findRemovalBlocker(wt: WorktreeView): RemovalBlocker | null {
       path: wt.path,
       lockReason: wt.lockReason,
     }
+  }
+  // Deliberately ahead of the `!wt.exists` bail: with no branch attached, the
+  // `HEAD` ref under `.git/worktrees/<name>/` is the only thing holding those
+  // commits, and `git worktree prune` at the end of a removal drops it. The
+  // error message points at the CLI as the way out.
+  if (wt.detached) {
+    return { ok: false, status: 409, error: 'worktree_detached', path: wt.path }
   }
   if (!wt.exists) return null
 

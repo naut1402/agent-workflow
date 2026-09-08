@@ -36,6 +36,29 @@ function stubUpload(result: { files?: { name: string; path: string }[]; status?:
   return fetchMock
 }
 
+/**
+ * Like `stubUpload`, but the upload never settles until the returned `release`
+ * is called — the only way to observe the composer while `uploading` is true.
+ */
+function stubSlowUpload() {
+  let release: (() => void) | null = null
+  const started = vi.fn()
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: any) => {
+      if (!String(input).includes('/api/nl-chat/attachments')) {
+        throw new Error(`unexpected fetch: ${String(input)}`)
+      }
+      started()
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return { ok: true, status: 201, json: async () => ({ files: [] }) }
+    }),
+  )
+  return { started, release: () => release?.() }
+}
+
 function make(over: { canSend?: boolean; sending?: boolean } = {}) {
   const sent: string[] = []
   const canSend = ref(over.canSend ?? true)
@@ -60,6 +83,16 @@ function make(over: { canSend?: boolean; sending?: boolean } = {}) {
 
   const wrapper = mountWithI18n(Host, { attachTo: document.body })
   return { wrapper, sent, canSend, sending, composer: composer!, textarea: wrapper.find('textarea'), button: wrapper.find('button[type="submit"]') }
+}
+
+/**
+ * jsdom ships no `DataTransfer`, and `useDropZone` only ever reads
+ * `dataTransfer.files` — so a plain object standing in for it is enough.
+ */
+function dropFile(zone: HTMLElement, file: File): void {
+  const ev = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(ev, 'dataTransfer', { value: { files: [file] } })
+  zone.dispatchEvent(ev)
 }
 
 /** A chip the composer will upload — `File` is enough, nothing reads the bytes. */
@@ -134,24 +167,39 @@ describe('ChatComposer — send guard', () => {
 })
 
 describe('ChatComposer — Enter behaviour', () => {
+  /**
+   * Whether Enter inserts a newline is the browser's decision, and it hinges on
+   * one thing only: did the handler call `preventDefault`? jsdom never performs
+   * that insertion, so `defaultPrevented` on the dispatched event is what has to
+   * be asserted — reading the textarea's value back would pass either way.
+   */
+  function pressEnter(textarea: any): KeyboardEvent {
+    const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    ;(textarea.element as HTMLTextAreaElement).dispatchEvent(ev)
+    return ev
+  }
+
   it('Enter sends when the setting says so', async () => {
     const { textarea, sent, wrapper } = make()
     await textarea.setValue('gửi bằng Enter')
-    await textarea.trigger('keydown', { key: 'Enter' })
+    const ev = pressEnter(textarea)
     await wrapper.vm.$nextTick()
+
     expect(sent).toEqual(['gửi bằng Enter'])
+    // preventDefault → no stray newline left in the box after the send.
+    expect(ev.defaultPrevented).toBe(true)
   })
 
   it('Enter inserts a newline instead when the setting is off', async () => {
     useAppSettings().update({ chatEnterToSend: false })
     const { textarea, sent, wrapper } = make()
     await textarea.setValue('xuống hàng thôi')
-    await textarea.trigger('keydown', { key: 'Enter' })
+    const ev = pressEnter(textarea)
     await wrapper.vm.$nextTick()
 
     expect(sent).toEqual([])
     // No preventDefault → the browser's own newline insertion stands.
-    expect((textarea.element as HTMLTextAreaElement).value).toBe('xuống hàng thôi')
+    expect(ev.defaultPrevented).toBe(false)
   })
 
   it('Enter committing an IME word never sends', async () => {
@@ -253,6 +301,85 @@ describe('ChatComposer — attachments', () => {
     await button.trigger('submit')
     await flushPromises()
     expect(composer.attachments.items.value).toEqual([])
+  })
+
+  /**
+   * `upload()` snapshots the list it is sending, so anything staged after it
+   * starts is never uploaded — yet `onSend` clears every chip once the send
+   * completes. The file simply disappears, with no error shown anywhere, which
+   * is why the whole strip closes for the duration instead.
+   */
+  it('attachment editing is locked while an upload is in flight', async () => {
+    const { release } = stubSlowUpload()
+    const { textarea, button, composer, wrapper } = make()
+
+    composer.attachments.add([pngChip('đang-lên.png')])
+    await textarea.setValue('kèm ảnh')
+    void button.trigger('submit')
+    await flushPromises()
+
+    expect(composer.attachments.uploading.value).toBe(true)
+    expect(composer.canAttach.value).toBe(false)
+    expect(textarea.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.nl-chat-chip button').attributes('disabled')).toBeDefined()
+
+    // The "+" trigger itself stays live — "new session" must remain reachable —
+    // but its attach item does not.
+    await wrapper.find('.nl-chat-composer-add > button').trigger('click')
+    expect(wrapper.find('.nl-chat-composer-menu-item').attributes('disabled')).toBeDefined()
+
+    release()
+    await flushPromises()
+  })
+
+  it('a dropped file is staged as a chip', async () => {
+    const { composer, wrapper } = make()
+    // The drop listener binds on a post-flush tick, so a drop dispatched
+    // before it would silently hit nothing and make the guard cases below
+    // pass for the wrong reason.
+    await flushPromises()
+
+    dropFile(wrapper.element as HTMLElement, pngChip('kéo-thả.png'))
+    await flushPromises()
+
+    expect(composer.attachments.items.value.map((i) => i.file.name)).toEqual(['kéo-thả.png'])
+  })
+
+  it('a file dropped mid-upload is not silently swallowed', async () => {
+    const { release } = stubSlowUpload()
+    const { textarea, button, composer, wrapper } = make()
+
+    composer.attachments.add([pngChip('đang-lên.png')])
+    await textarea.setValue('kèm ảnh')
+    void button.trigger('submit')
+    await flushPromises()
+
+    dropFile(wrapper.element as HTMLElement, pngChip('muộn.png'))
+    await flushPromises()
+
+    // Refused outright rather than staged into a list that is about to be cleared.
+    expect(composer.attachments.items.value.map((i) => i.file.name)).not.toContain('muộn.png')
+
+    release()
+    await flushPromises()
+  })
+
+  it('clicking a disabled chip remove button does not drop the file', async () => {
+    const { release } = stubSlowUpload()
+    const { textarea, button, composer, wrapper } = make()
+
+    composer.attachments.add([pngChip('đang-lên.png')])
+    await textarea.setValue('kèm ảnh')
+    void button.trigger('submit')
+    await flushPromises()
+
+    // Not only the DOM attribute: the handler itself refuses, so a
+    // programmatic click cannot take a file out from under the upload.
+    await wrapper.find('.nl-chat-chip button').trigger('click')
+    expect(composer.attachments.items.value.map((i) => i.file.name)).toEqual(['đang-lên.png'])
+
+    release()
+    await flushPromises()
   })
 
   it('a failed upload keeps the text AND the chips so it can be retried', async () => {

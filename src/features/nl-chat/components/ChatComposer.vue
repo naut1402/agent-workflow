@@ -24,9 +24,13 @@ function bindInput(el: unknown): void {
 </script>
 
 <template>
+  <!-- `disabled` tracks `uploading` only, not `canAttach`: `canAttach` folds in
+       `canSend`, which the server flips off mid-poll, and chips staged just before
+       would then be stuck — not sendable, and with ✕ disabled, not removable either. -->
   <ChatAttachmentBar
     :items="c.attachments.items.value"
     :error="c.attachments.error.value"
+    :disabled="c.attachments.uploading.value"
     @remove="c.attachments.remove"
   />
 

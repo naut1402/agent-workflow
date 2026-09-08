@@ -142,7 +142,11 @@ describe('buildRules with custom scan patterns', () => {
 
   test('a matched file becomes a single rule with an inferred category', async () => {
     const { rules } = await buildRules(root, { scanPatterns: { rules: ['single/one-off.md'] } })
-    const one = rules.find((r) => r.name === 'one-off')
+    // Matched on path + scope, not on `name`: the user-scope scan reads the real
+    // `$HOME`, where a rule of the same name would otherwise be picked up first
+    // and make this pass (or fail) for reasons that have nothing to do with the
+    // pattern under test.
+    const one = rules.find((r) => r.path === 'single/one-off.md' && r.scope === 'project')
     expect(one).toMatchObject({
       id: 'project:single/one-off.md',
       path: 'single/one-off.md',
