@@ -122,6 +122,99 @@ describe('MarkdownTextEditor', () => {
     w.unmount()
   })
 
+  // Toast UI focuses a hidden `pseudo-clipboard` textarea on Ctrl/Cmd+V, which
+  // blurs the editing surface before the pasted text lands. Callers auto-save on
+  // `@blur`, so that blur must not escape the component.
+  describe('blur guard', () => {
+    /** Mount attached to the document so focus/`activeElement` behave for real. */
+    async function mountAttached() {
+      const w = mount(MarkdownTextEditor, {
+        props: { modelValue: '# hello' },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      const host = w.find('.md-text-editor__host').element as HTMLElement
+      // The mock editor renders no children — stand in for Toast UI's editing
+      // surface and its hidden clipboard textarea.
+      const surface = document.createElement('div')
+      surface.tabIndex = 0
+      const clipboard = document.createElement('textarea')
+      host.append(surface, clipboard)
+      surface.focus()
+      await flushPromises()
+      return { w, surface, clipboard }
+    }
+
+    function fireBlur() {
+      ;(lastOptions!.events as { blur: () => void }).blur()
+    }
+
+    it('does not re-emit blur when focus moved to the hidden clipboard textarea', async () => {
+      const { w, clipboard } = await mountAttached()
+      clipboard.focus()
+      fireBlur()
+      await flushPromises()
+      expect(w.emitted('blur')).toBeUndefined()
+      w.unmount()
+    })
+
+    it('re-emits blur when focus truly left the editor', async () => {
+      const { w } = await mountAttached()
+      const outside = document.createElement('button')
+      document.body.append(outside)
+      outside.focus()
+      fireBlur()
+      await flushPromises()
+      expect(w.emitted('blur')).toHaveLength(1)
+      outside.remove()
+      w.unmount()
+    })
+
+    it('emits blur only once when both focusout and the editor blur fire', async () => {
+      const { w, surface } = await mountAttached()
+      const outside = document.createElement('button')
+      document.body.append(outside)
+      outside.focus()
+      surface.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
+      fireBlur()
+      await flushPromises()
+      expect(w.emitted('blur')).toHaveLength(1)
+      outside.remove()
+      w.unmount()
+    })
+
+    // Empty clipboard: Ctrl/Cmd+V parks focus on the hidden textarea and Toast UI
+    // never fires `blur` again from there. Without the `focusout` listener the
+    // editor would stay in edit mode forever.
+    it('emits blur when focus leaves from the hidden clipboard textarea', async () => {
+      const { w, clipboard } = await mountAttached()
+      clipboard.focus()
+      fireBlur()
+      await flushPromises()
+      expect(w.emitted('blur')).toBeUndefined()
+
+      const outside = document.createElement('button')
+      document.body.append(outside)
+      outside.focus()
+      await flushPromises()
+      expect(w.emitted('blur')).toHaveLength(1)
+      outside.remove()
+      w.unmount()
+    })
+
+    it('does not emit blur after unmount', async () => {
+      const { w } = await mountAttached()
+      const outside = document.createElement('button')
+      document.body.append(outside)
+      outside.focus()
+      fireBlur()
+      w.unmount()
+      await flushPromises()
+      expect(w.emitted('blur')).toBeUndefined()
+      outside.remove()
+    })
+  })
+
   it('can be used via v-model from a parent', async () => {
     const Parent = defineComponent({
       components: { MarkdownTextEditor },
