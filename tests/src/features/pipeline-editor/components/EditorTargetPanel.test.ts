@@ -182,14 +182,21 @@ describe('EditorTargetPanel — trạng thái thu gọn', () => {
   })
 
   // Đủ lối vào: thu gọn mà thiếu một section thì không có đường mở thẳng nó.
-  it('bấm icon Agents/Rules ở dải thu gọn emit open-section kèm khoá', async () => {
+  // Thứ tự dải icon khớp thứ tự mục trong cột trái: Agents -> Skills -> Rules.
+  it('bấm icon Agents/Skills/Rules ở dải thu gọn emit open-section kèm khoá', async () => {
     const w = mountPanel({ collapsed: true })
     const icons = w.findAll('.target-section-icon')
-    expect(icons).toHaveLength(2)
+    expect(icons).toHaveLength(3)
+    expect(icons.map((i) => i.attributes('aria-label'))).toEqual([
+      'Agents — mở panel',
+      'Skills — mở panel',
+      'Rules — mở panel',
+    ])
 
     await icons[0].trigger('click')
     await icons[1].trigger('click')
+    await icons[2].trigger('click')
 
-    expect(w.emitted('open-section')).toEqual([['agents'], ['rules']])
+    expect(w.emitted('open-section')).toEqual([['agents'], ['skills'], ['rules']])
   })
 })
