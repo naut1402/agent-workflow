@@ -28,6 +28,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { parseJsonObject } from './lib/json.js'
 
 const ROOT = path.resolve(import.meta.dir, '..', '..')
 
@@ -120,14 +121,7 @@ export function normalizeSha(value: string | undefined, flag: string): string {
 
 /** Baseline phải parse được **và** có ít nhất một chỉ số — nửa vời thì cổng vô nghĩa. */
 export function parseBaseline(raw: string, file: string): Baseline {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch (e) {
-    throw new Error(`Baseline ${file} không phải JSON hợp lệ: ${e instanceof Error ? e.message : String(e)}`, { cause: e })
-  }
-  if (!parsed || typeof parsed !== 'object') throw new Error(`Baseline ${file} phải là object JSON.`)
-  const b = parsed as Baseline
+  const b = parseJsonObject(raw, `Baseline ${file}`) as Baseline
   const fe = b.frontend ?? {}
   const be = b.backend ?? {}
   const nums = [...Object.values(fe), be.lines].filter((v) => v !== undefined)

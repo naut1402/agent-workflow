@@ -33,6 +33,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { parseJsonObject } from './lib/json.js'
 import { versionOf } from './test-ref.js'
 
 const ROOT = path.resolve(import.meta.dir, '..', '..')
@@ -132,10 +133,14 @@ const EXPLAIN: Record<AnchorVerdict, string[]> = {
     'Baseline chưa có khoá `source_sha` — đây là baseline được ghi **trước** khi có cơ chế neo.',
     'Chưa có gì để so, nên cổng không chặn; nhưng 🚫 đây **không** phải "đạt".',
     '',
-    'Neo được ghi ở job `report` của `test-overlay.yml` (lượt push kế tiếp của dòng test), hoặc tay:',
+    'Neo được ghi **tự động** ở job `report` của `test-overlay.yml` (lượt push kế tiếp của dòng test).',
+    'Muốn ghi tay thì phải có coverage của chính lượt đó trước, nếu không `--update` đỏ vì thiếu dữ liệu:',
     '',
     '```bash',
-    'bun run coverage:gate -- --update --source-sha "$(git rev-parse HEAD)" --test-sha "$TEST_SHA"',
+    'bun run test:fe && bun run test -- --coverage --coverage-reporter=lcov --coverage-dir=coverage/backend',
+    'bun run coverage:gate -- --update \\',
+    '  --source-sha "$(git rev-parse HEAD)" \\',
+    '  --test-sha "$(git rev-parse origin/test/x.y.z/main)"',
     '```',
   ],
   'anchor-gone': [
@@ -214,20 +219,19 @@ function git(repo: string, ...args: string[]): GitResult {
   return { ok: r.status === 0, status: r.status, out: (r.stdout ?? '').trim() }
 }
 
+export interface Anchor {
+  source_sha?: string
+  test_sha?: string
+  source_ref?: string
+}
+
 /**
  * Đọc `source_sha` / `test_sha` mà **không** validate phần số của baseline —
  * đây là cổng neo, coverage đã có cổng riêng. Nhưng file không parse được thì
  * phải là lỗi công cụ (exit 2), không được suy thành `no-anchor`.
  */
-export function readAnchor(raw: string, file: string): { source_sha?: string; test_sha?: string; source_ref?: string } {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch (e) {
-    throw new Error(`Không đọc được neo: ${file} không phải JSON hợp lệ (${e instanceof Error ? e.message : String(e)}).`, { cause: e })
-  }
-  if (!parsed || typeof parsed !== 'object') throw new Error(`Không đọc được neo: ${file} phải là object JSON.`)
-  const b = parsed as Record<string, unknown>
+export function readAnchor(raw: string, file: string): Anchor {
+  const b = parseJsonObject(raw, `Không đọc được neo: ${file}`)
   const str = (k: string) => (typeof b[k] === 'string' && b[k] ? (b[k] as string) : undefined)
   return { source_sha: str('source_sha'), test_sha: str('test_sha'), source_ref: str('source_ref') }
 }
@@ -251,6 +255,43 @@ function anchorExists(repo: string, sha: string): boolean {
   return git(repo, 'cat-file', '-e', `${sha}^{commit}`).ok
 }
 
+/** Lỗi "cổng không đọc được dữ liệu" ⇒ exit 2, tách hẳn khỏi "cổng kết luận đỏ" (exit 1). */
+class ToolError extends Error {}
+
+/** Baseline có mặt và đọc được neo ra — thiếu file là exit 2, 🚫 không phải "đạt". */
+function loadAnchor(repo: string, baseline: string): Anchor {
+  const file = path.isAbsolute(baseline) ? baseline : path.join(repo, baseline)
+  if (!fs.existsSync(file)) {
+    throw new ToolError(
+      `Không đọc được neo: không thấy baseline ${baseline}.\n` +
+        'Thiếu baseline KHÔNG phải "đạt" — cổng coverage của `release-test-gate.yml` chặn ca này.',
+    )
+  }
+  return readAnchor(fs.readFileSync(file, 'utf8'), baseline)
+}
+
+/**
+ * Neo mất tích *và* remote không tới được là hai chuyện khác nhau: một cái là kết
+ * luận của cổng (exit 1), một cái là công cụ không đọc được dữ liệu (exit 2).
+ * Kết luận `anchor-gone` phải theo cái **remote** thấy được, không theo cái
+ * workspace này tình cờ còn — nên chỉ kết luận khi đã hỏi được remote.
+ * `ls-remote --exit-code` thoát 2 = remote tới được nhưng KHÔNG có ref nào
+ * (remote rỗng ⇒ neo thật sự không còn), khác hẳn lỗi mạng/quyền.
+ */
+function anchorReachable(repo: string, sha: string | undefined): boolean {
+  if (!sha) return false
+  if (anchorExists(repo, sha)) return true
+
+  const probe = git(repo, 'ls-remote', '--exit-code', 'origin')
+  if (probe.status !== 0 && probe.status !== 2) {
+    throw new ToolError(
+      `Không đọc được neo: không tới được remote để kiểm SHA neo ${sha}.\n` +
+        'Đây KHÔNG phải "neo không còn tồn tại" và cũng KHÔNG phải "đạt" — sửa mạng/quyền (hoặc `fetch-depth: 0`) rồi chạy lại.',
+    )
+  }
+  return false
+}
+
 export function main(argv: string[], repo: string = ROOT): number {
   const args = parseArgs(argv)
   const g = (...a: string[]) => git(repo, ...a)
@@ -260,47 +301,21 @@ export function main(argv: string[], repo: string = ROOT): number {
     return 2
   }
 
-  const baselineFile = path.isAbsolute(args.baseline) ? args.baseline : path.join(repo, args.baseline)
-  if (!fs.existsSync(baselineFile)) {
-    console.error(
-      `Không đọc được neo: không thấy baseline ${args.baseline}.\n` +
-        'Thiếu baseline KHÔNG phải "đạt" — cổng coverage của `release-test-gate.yml` chặn ca này.',
-    )
-    return 2
-  }
-
-  let anchor: { source_sha?: string; test_sha?: string; source_ref?: string }
+  let anchor: Anchor
+  let exists: boolean
+  let headSha: string
+  let headRef: string
   try {
-    anchor = readAnchor(fs.readFileSync(baselineFile, 'utf8'), args.baseline)
+    anchor = loadAnchor(repo, args.baseline)
+    headSha = args.headSha?.trim() || g('rev-parse', 'HEAD').out
+    headRef = args.headRef?.trim() || g('branch', '--show-current').out
+    if (!headSha) {
+      throw new ToolError('Không đọc được neo: không suy được head SHA. Truyền `--head-sha <sha>` (trên CI: head SHA của PR).')
+    }
+    exists = anchorReachable(repo, anchor.source_sha)
   } catch (e) {
     console.error(e instanceof Error ? e.message : String(e))
     return 2
-  }
-
-  const headSha = args.headSha?.trim() || g('rev-parse', 'HEAD').out
-  const headRef = args.headRef?.trim() || g('branch', '--show-current').out
-  if (!headSha) {
-    console.error('Không đọc được neo: không suy được head SHA. Truyền `--head-sha <sha>` (trên CI: head SHA của PR).')
-    return 2
-  }
-
-  const exists = anchor.source_sha ? anchorExists(repo, anchor.source_sha) : false
-
-  // Neo mất tích *và* remote không tới được là hai chuyện khác nhau: một cái là
-  // kết luận của cổng (exit 1), một cái là công cụ không đọc được dữ liệu (exit 2).
-  // Kết luận `anchor-gone` phải theo cái **remote** thấy được, không theo cái
-  // workspace này tình cờ còn — nên chỉ kết luận khi đã hỏi được remote.
-  // `ls-remote --exit-code` thoát 2 = remote tới được nhưng KHÔNG có ref nào
-  // (remote rỗng ⇒ neo thật sự không còn), khác hẳn lỗi mạng/quyền.
-  if (anchor.source_sha && !exists) {
-    const probe = g('ls-remote', '--exit-code', 'origin')
-    if (probe.status !== 0 && probe.status !== 2) {
-      console.error(
-        `Không đọc được neo: không tới được remote để kiểm SHA neo ${anchor.source_sha}.\n` +
-          'Đây KHÔNG phải "neo không còn tồn tại" và cũng KHÔNG phải "đạt" — sửa mạng/quyền (hoặc `fetch-depth: 0`) rồi chạy lại.',
-      )
-      return 2
-    }
   }
 
   const input: AnchorInput = {
