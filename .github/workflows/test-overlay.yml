@@ -61,12 +61,16 @@ jobs:
       direction: ${{ steps.refs.outputs.direction }}
       skip: ${{ steps.refs.outputs.skip }}
     steps:
-      # Dòng test là cây orphan chỉ chứa `tests/` + `test-e2e/` + `reports/` —
-      # KHÔNG có `.github/scripts/`. Nên script suy ref phải lấy từ `main`.
-      - name: Checkout main (chỉ để lấy script suy ref)
+      # Checkout ref đang trigger — dòng test mang **cây đầy** của dòng source nên
+      # nó có sẵn `.github/scripts/`.
+      #
+      # 🚫 KHÔNG `ref: main`: tooling dòng test (`test-ref.ts`, `coverage-gate.ts`)
+      # chỉ lên `main` khi version mở nó được release. Trước lúc đó, lấy script từ
+      # `main` cho `Module not found` — mà lỗi đó đọc ra như "cổng hỏng", không
+      # phải "chưa tới lượt". Ref đang trigger luôn là ref vừa mang chính tooling ấy.
+      - name: Checkout ref đang trigger (mang theo script suy ref)
         uses: actions/checkout@v5
         with:
-          ref: main
           fetch-depth: 1
 
       - name: Setup Bun

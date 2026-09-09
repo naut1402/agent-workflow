@@ -23,15 +23,12 @@ jobs:
   commitlint:
     runs-on: ubuntu-latest
     steps:
-      # Dòng test là cây orphan, KHÔNG có `package.json` / `commitlint.config.js`
-      # — với base `test/**` thì toolchain phải lấy từ `main`, còn commit cần
-      # lint thì fetch riêng.
-      # ⚠️ Chỉ đảo ref cho dòng test. Ép `ref: main` cho cả PR vào `dev/**/main`
-      # thì PR nào sửa `commitlint.config.js` cũng được lint bằng config cũ và
-      # xanh, luật mới chỉ có hiệu lực sau khi merge lên `main` — im lặng, khó đoán.
+      # Dòng test mang cây đầy của dòng source nên có `package.json` +
+      # `commitlint.config.js` riêng — 🚫 không đảo ref sang `main` nữa.
+      # ⚠️ Đảo ref là bẫy im lặng: PR nào sửa `commitlint.config.js` cũng được lint
+      # bằng config CŨ và xanh, luật mới chỉ có hiệu lực sau khi merge lên `main`.
       - uses: actions/checkout@v5
         with:
-          ref: ${{ startsWith(github.base_ref, 'test/') && 'main' || '' }}
           fetch-depth: 0
 
       - name: Setup Bun
@@ -42,17 +39,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Fetch commit range của PR
-        # Chỉ cần khi checkout đã bị đảo sang `main`: cây orphan không reachable
-        # từ đó. PR dòng `dev/**` checkout đúng merge ref của PR nên đã có range.
-        if: startsWith(github.base_ref, 'test/')
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          # Cây orphan không reachable từ `main` nên fetch-depth:0 ở trên không kéo về.
-          git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
 
       - name: Lint PR title
         env:
