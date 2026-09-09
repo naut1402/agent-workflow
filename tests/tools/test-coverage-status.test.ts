@@ -126,6 +126,12 @@ describe('parseExemptions — sai định dạng là ĐỎ, không phải "miễ
     expect(() => parseExemptions('{}', EXEMPTIONS_FILE)).toThrow(/thiếu khoá "exemptions"/)
   })
 
+  test('JSON parse được nhưng không phải object → ĐỎ, 🚫 không coi như "không có miễn trừ"', () => {
+    expect(() => parseExemptions('[]', EXEMPTIONS_FILE)).toThrow(/phải là object JSON/)
+    expect(() => parseExemptions('null', EXEMPTIONS_FILE)).toThrow(/phải là object JSON/)
+    expect(() => parseExemptions('"x"', EXEMPTIONS_FILE)).toThrow(/phải là object JSON/)
+  })
+
   test('"exemptions" không phải mảng → throw', () => {
     expect(() => parseExemptions('{"exemptions":{}}', EXEMPTIONS_FILE)).toThrow(/phải là mảng/)
   })
@@ -163,6 +169,53 @@ describe('computeStatus', () => {
     expect(r.reverted.map((t) => t.taskId)).toEqual(['T1'])
     expect(r.missing).toEqual([])
     expect(r.untagged).toEqual([])
+  })
+
+  test('revert MỘT PHẦN: task còn commit sống vẫn nằm trong "thiếu test"', () => {
+    // Đây là ca cho xanh giả nếu gom revert theo taskID: chỉ commit "thêm A" bị
+    // revert, còn "thêm B" vẫn nguyên trên dòng version nên T1 vẫn phải có test.
+    const r = computeStatus({
+      ...base,
+      sourceSubjects: ['[T1] feat(x): thêm A', '[T1] feat(x): thêm B', 'Revert "[T1] feat(x): thêm A"'],
+      testSubjects: [],
+    })
+    expect(r.reverted).toEqual([])
+    expect(r.missing.map((t) => t.taskId)).toEqual(['T1'])
+    expect([...r.partialRevert]).toEqual(['T1'])
+    expect(r.untagged).toEqual([])
+  })
+
+  test('revert một phần được gắn nhãn trong báo cáo, không im lặng', () => {
+    const r = computeStatus({
+      ...base,
+      sourceSubjects: ['[T1] feat(x): thêm A', '[T1] feat(x): thêm B', 'Revert "[T1] feat(x): thêm A"'],
+      testSubjects: [],
+    })
+    const text = renderStatus(r, { version: '1.1.4', strict: false })
+    expect(text).toContain('revert **một phần**')
+    // 🚫 Không được đóng bằng ✅ khi còn commit sống chưa có test.
+    expect(text).not.toContain('✅ Mọi task đã merge đều có test')
+  })
+
+  test('re-revert (Revert của Revert) là KHÔI PHỤC ⇒ task quay lại "thiếu test"', () => {
+    const r = computeStatus({
+      ...base,
+      sourceSubjects: ['[T1] feat: a', 'Revert "[T1] feat: a"', 'Revert "Revert "[T1] feat: a""'],
+      testSubjects: [],
+    })
+    expect(r.reverted).toEqual([])
+    expect(r.missing.map((t) => t.taskId)).toEqual(['T1'])
+  })
+
+  test('mọi commit của task đều bị revert ⇒ không đòi test', () => {
+    const r = computeStatus({
+      ...base,
+      sourceSubjects: ['[T1] feat: a', '[T1] feat: b', 'Revert "[T1] feat: a"', 'Revert "[T1] feat: b"'],
+      testSubjects: [],
+    })
+    expect(r.reverted.map((t) => t.taskId)).toEqual(['T1'])
+    expect(r.missing).toEqual([])
+    expect([...r.partialRevert]).toEqual([])
   })
 
   test('miễn trừ hợp lệ loại task khỏi "thiếu", nhưng vẫn đếm tách bạch', () => {
