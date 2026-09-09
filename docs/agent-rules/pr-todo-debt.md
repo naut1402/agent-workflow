@@ -37,6 +37,7 @@ Test code sống ở dòng branch riêng ([`git-pr.md`](git-pr.md) §4.3), nên 
 
 - **Vì sao khác nhau** — nợ docs chỉ người đọc phát hiện được, còn nợ test thì máy chạy ra được. Cái đo được thì gác bằng cách đo, không gác bằng file đánh dấu.
 - **Loại nợ `test` trong khung §3 vẫn giữ** cho trường hợp còn lại: task cố ý **miễn trừ** test (chỉ đổi tài liệu, chỉ đổi tên biến nội bộ) — ghi lý do miễn trừ để người duyệt thấy, thay vì để cổng đỏ vô cớ.
+- **Miễn trừ test khai ở đâu** — [`tests/exemptions.json`](../../tests/exemptions.json) (dòng test), đọc bởi `.github/scripts/test-coverage-status.ts`. Mỗi bản ghi bắt buộc đủ `taskId` + `version` + `reason` + `approved_by`; thiếu `reason`/`approved_by`, dùng wildcard, hay trùng entry đều là **ĐỎ**. 🚫 Không đi qua `docs/todo/` (trộn lại đúng hai loại nợ mà mục này vừa cố ý tách) và 🚫 không miễn cấp version. Cách khai: [`testing.md`](testing.md) §3.1.
 
 ---
 
