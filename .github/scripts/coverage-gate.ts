@@ -177,6 +177,30 @@ export interface BaselineMeta {
  * Khoá lạ do tooling khác ghi vẫn còn sau khi ghi (round-trip không được làm
  * mất dữ liệu của người khác), nên `out` bắt đầu từ chính `baseline`.
  */
+/**
+ * Neo là khoá **đã biết**, nên xử lý tường minh chứ 🚫 không để nó sống sót nhờ
+ * `{ ...baseline }`. Lượt ghi số mà không khai neo thì neo cũ **không còn mô tả**
+ * số mới: giữ lại là để `test-anchor.ts` so head PR với một cây khác rồi in "neo
+ * khớp" — đúng loại xanh giả mà epic này dựng ra để diệt. Bỏ neo ⇒ verdict
+ * `no-anchor`, tức một cảnh báo **nhìn thấy được**, không phải một kết luận sai.
+ *
+ * Hai khoá xử lý độc lập: khai nửa neo thì nửa còn lại cũng không còn đúng.
+ */
+function applyAnchor(out: Baseline, baseline: Baseline, meta: BaselineMeta): void {
+  for (const k of ['source_sha', 'test_sha'] as const) {
+    if (meta[k]) {
+      out[k] = meta[k]
+      continue
+    }
+    if (!baseline[k]) continue
+    delete out[k]
+    console.warn(
+      `Cảnh báo: lượt --update này không khai --${k.replace('_', '-')} — bỏ neo cũ (${baseline[k]}) ` +
+        'để cổng neo báo `no-anchor` thay vì so với neo lệch.',
+    )
+  }
+}
+
 export function mergeBaseline(baseline: Baseline, now: Measured, meta: BaselineMeta): Baseline {
   const frontend: Partial<Record<FeMetric, number>> = { ...(baseline.frontend ?? {}) }
   for (const m of FE_METRICS) {
@@ -192,25 +216,7 @@ export function mergeBaseline(baseline: Baseline, now: Measured, meta: BaselineM
   if (Object.keys(backend).length) out.backend = backend
   if (meta.source_ref) out.source_ref = meta.source_ref
   if (meta.test_ref) out.test_ref = meta.test_ref
-
-  // Neo là khoá **đã biết**, nên xử lý tường minh chứ 🚫 không để nó sống sót nhờ
-  // `...baseline`. Lượt ghi số mà không khai neo thì neo cũ **không còn mô tả** số
-  // mới: giữ lại là để `test-anchor.ts` so head PR với một cây khác rồi in "neo
-  // khớp" — đúng loại xanh giả mà epic này dựng ra để diệt. Bỏ neo ⇒ verdict
-  // `no-anchor`, tức một cảnh báo **nhìn thấy được**, không phải một kết luận sai.
-  //
-  // Hai khoá xử lý độc lập: khai nửa neo thì nửa còn lại cũng không còn đúng.
-  for (const k of ['source_sha', 'test_sha'] as const) {
-    if (meta[k]) {
-      out[k] = meta[k]
-    } else if (baseline[k]) {
-      delete out[k]
-      console.warn(
-        `Cảnh báo: lượt --update này không khai --${k.replace('_', '-')} — bỏ neo cũ (${baseline[k]}) ` +
-          'để cổng neo báo `no-anchor` thay vì so với neo lệch.',
-      )
-    }
-  }
+  applyAnchor(out, baseline, meta)
   return out
 }
 
