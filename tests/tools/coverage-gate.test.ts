@@ -412,9 +412,33 @@ describe('mergeBaseline — neo SHA', () => {
     expect(next.test_sha).toBe('1'.repeat(40))
   })
 
-  test('lượt không truyền neo thì giữ neo cũ, không xoá mất', () => {
-    const next = mergeBaseline({ frontend: { lines: 60 }, source_sha: 'a'.repeat(40) }, { frontend: { lines: 61 }, backend: {} }, { at })
-    expect(next.source_sha).toBe('a'.repeat(40))
+  test('lượt ghi số mà KHÔNG khai neo thì BỎ neo cũ — thà `no-anchor` còn hơn neo lệch', () => {
+    // Neo cũ mô tả cây khác, mà số coverage vừa được nâng theo lượt mới. Giữ lại là
+    // để cổng neo so head PR với cây đó rồi in "neo khớp" cho số đo ở nơi khác.
+    const next = mergeBaseline(
+      { frontend: { lines: 60 }, source_sha: 'a'.repeat(40), test_sha: 'b'.repeat(40) },
+      { frontend: { lines: 61 }, backend: {} },
+      { at },
+    )
+    expect('source_sha' in next).toBe(false)
+    expect('test_sha' in next).toBe(false)
+    expect(next.frontend?.lines).toBe(61)
+  })
+
+  test('hai khoá neo độc lập: khai nửa neo thì nửa còn lại bị bỏ', () => {
+    const next = mergeBaseline(
+      { frontend: { lines: 60 }, source_sha: 'a'.repeat(40), test_sha: 'b'.repeat(40) },
+      { frontend: { lines: 60 }, backend: {} },
+      { source_sha: 'c'.repeat(40), at },
+    )
+    expect(next.source_sha).toBe('c'.repeat(40))
+    expect('test_sha' in next).toBe(false)
+  })
+
+  test('baseline chưa có neo + lượt không khai neo → vẫn không có neo, không cảnh báo vô cớ', () => {
+    const next = mergeBaseline({ frontend: { lines: 60 } }, { frontend: { lines: 61 }, backend: {} }, { at })
+    expect('source_sha' in next).toBe(false)
+    expect(next.frontend?.lines).toBe(61)
   })
 
   test('nửa neo: chỉ có source_sha thì không dựng khoá test_sha rỗng', () => {

@@ -26,9 +26,22 @@ Dữ liệu mà **cả người và CI** đọc để biết coverage đang ở 
   (vd xoá hẳn một module) thì sửa file bằng tay trong một PR có ghi lý do.
 - **Neo ghi đè, không `max()`.** Neo là *thời điểm*: lượt mới nhất thắng, vì `max()`
   trên chuỗi SHA là vô nghĩa. Cổng `test-anchor.ts` so `source_sha` với head của PR
-  phát hành; neo **không còn tồn tại** (force-push) là đỏ, không phải "bỏ qua".
-- **Chỗ ở cuối cùng của thư mục này là dòng test** (`test/main`). Nó đang nằm ở
-  dòng source vì cổng coverage được dựng **trước** khi cắt `tests/` — có baseline
-  đo trên cây còn nguyên thì mới có mốc để so về sau.
+  phát hành; neo **không tới được** (force-push, commit bị bỏ, hoặc workspace không
+  fetch được theo SHA) là đỏ, không phải "bỏ qua".
+- **Lượt ghi số mà không khai neo thì neo cũ bị BỎ.** `coverage-gate --update` không
+  kèm `--source-sha`/`--test-sha` sẽ xoá neo đang có và in cảnh báo. Vì số coverage
+  vừa đổi theo lượt mới, còn neo cũ mô tả cây khác — giữ lại là để cổng neo so head
+  PR với cây đó rồi in *"neo khớp"*. Không có neo cho ra `no-anchor`, một cảnh báo
+  **nhìn thấy được**; neo lệch cho ra một kết luận **sai**. Chạy tay thì truyền đủ
+  hai cờ, hoặc chấp nhận về `no-anchor` cho tới lượt CI kế tiếp.
+- **Neo phải là SHA đầy đủ (40 hex).** Cả đường ghi (`normalizeSha`) và đường đọc
+  (`readAnchor`) đều chặn SHA viết tắt: cổng so bằng **chuỗi**, nên `a3b60a5` sẽ
+  luôn lệch dù git resolve được nó. Sửa tay mà ghi SHA tắt là lỗi công cụ (exit 2),
+  không phải `no-anchor`.
+- **Nguồn sự thật của thư mục này là dòng test.** Bản trên dòng source đóng băng từ
+  lúc cổng coverage được dựng (trước khi tách), nên mọi cổng đều lấy `reports/` từ
+  dòng test bằng `git archive <ref-test> reports` — 🚫 không đọc bản của dòng source.
+  Dòng test mang cây đầy nên hai bản cùng tồn tại; chấm theo bản đóng băng là chấm
+  theo số cũ, tức xanh giả.
 
 Quy ước đầy đủ: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §6.
