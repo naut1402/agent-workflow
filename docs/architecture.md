@@ -124,7 +124,7 @@ Util / wrapper thư viện dùng chung (không gắn domain mode): `src/core/lib
 
 ### 3.3 Styling
 
-Entry SCSS: `src/styles/main.scss` (tokens + scrollbar + shell, import từ `src/main.ts`). Style theo feature: `src/features/<mode>/styles/` (`common.scss` + `{Component}.scss` + `index.scss`) — **tự nạp** trong `src/main.ts` qua `import.meta.glob('./features/*/styles/index.scss', { eager: true })`, không liệt kê từng feature trong `main.scss`. Theme/runtime token (`_tokens` / `_shell`) là CSS variables trên `:root` nên sửa hàng loạt vẫn ảnh hưởng mọi module. Vite: `sass-embedded` + `scss.api = 'modern-compiler'`.
+Entry SCSS: `src/styles/main.scss` (tokens + scrollbar + shell, import từ `src/main.ts`). Style theo feature: `src/features/<mode>/styles/` (`common.scss` + `{Component}.scss` + `index.scss`) — **tự nạp** trong `src/main.ts` qua `import.meta.glob('./features/*/styles/index.scss', { eager: true })`, không liệt kê từng feature trong `main.scss`. Theme/runtime token (`_tokens` / `_shell`) là CSS variables trên `:root` nên sửa hàng loạt vẫn ảnh hưởng mọi module. Vite: `sass-embedded` (Vite 8 chỉ còn modern compiler API, không khai báo `scss.api` nữa).
 
 ---
 
