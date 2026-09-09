@@ -38,6 +38,28 @@ on:
       - 'test/main'
       - 'test/*/main'
       - 'dev/*/main'
+    # ⚠️ VAN CHẶN VÒNG LẶP — đừng bỏ.
+    #
+    # Job `report` của chính workflow này push `reports/` trở lại dòng test. Khi
+    # repo có `AUTO_MERGE_TOKEN` (PAT), push đó **kích lại** workflow này ⇒
+    # report → overlay → report, chạy full suite mãi không dừng. Đã xảy ra thật:
+    # 3 lượt liên tiếp cách nhau ~4,5 phút, mỗi lượt một suite đầy đủ.
+    #
+    # Trước khi có PAT thì `GITHUB_TOKEN` chặn vòng này (GitHub cố ý không cho nó
+    # trigger workflow tiếp theo) — nhưng đó là van **ẩn**, mất ngay khi ai đó khai
+    # secret. Van phải tường minh và không phụ thuộc token đang dùng là cái nào.
+    #
+    # 🚫 Không đổi `report` sang `github.token` để thay van này: token ở đó là để
+    # **có quyền push** khi dòng test bị branch protection (D5 của epic). Hai việc
+    # khác nhau — token là quyền, `paths-ignore` là vòng lặp.
+    #
+    # `reports/` là **đầu ra** của suite, không phải đầu vào, nên bỏ qua nó không
+    # mất phủ: commit chỉ đụng `reports/` thì không có gì mới để chạy. Commit đụng
+    # cả `reports/` và path khác **vẫn chạy** (đúng semantics của `paths-ignore`).
+    # Sửa baseline bằng tay vẫn được gác: nó đi qua PR, mà `pull_request` ở trên
+    # 🚫 không có `paths-ignore`.
+    paths-ignore:
+      - 'reports/**'
 
 concurrency:
   group: test-overlay-${{ github.ref }}
