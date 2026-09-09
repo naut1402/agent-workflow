@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test'
+import { spawnSync } from 'node:child_process'
+import fs from 'node:fs'
+import path from 'node:path'
 import {
+  GLOBAL_FILES,
   areaOf,
   expandTargets,
   isUnder,
@@ -245,5 +249,45 @@ describe('expandTargets', () => {
       'src/features/automations/api.ts',
     ])
     expect([...t]).toEqual(['src/features/automations/controller.ts', 'src/features/automations/api.ts'])
+  })
+})
+
+describe('--catalog — lệnh sinh lại phải tái tạo được nguyên file', () => {
+  const ROOT = path.resolve(import.meta.dir, '..', '..')
+
+  /**
+   * Lệnh được tài liệu hoá ở 3 chỗ là `bun run test:scope --catalog >
+   * tests/CATALOG.md`. Nếu output chỉ có phần bảng thì chạy đúng lệnh đó sẽ xoá
+   * sạch phần mở đầu của chính file — nên phần mở đầu phải nằm trong output.
+   */
+  const out = spawnSync('bun', ['.github/scripts/test-scope.ts', '--catalog'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
+
+  test('output gồm cả phần mở đầu, không chỉ bảng', () => {
+    expect(out.status).toBe(0)
+    expect(out.stdout.startsWith('# Danh mục suite test\n')).toBe(true)
+    expect(out.stdout).toContain('bun run test:scope --catalog > tests/CATALOG.md')
+  })
+
+  test('chạy lệnh cho ra đúng tests/CATALOG.md đang commit — idempotent', () => {
+    const committed = fs.readFileSync(path.join(ROOT, 'tests/CATALOG.md'), 'utf8')
+    expect(out.stdout).toBe(committed)
+  })
+})
+
+describe('GLOBAL_FILES', () => {
+  // Sau khi phân runner rời khỏi `package.json` sang `tests/runners.json`, file
+  // mới phải nằm trong danh sách "chạy full": đổi phân runner là mọi suite có
+  // thể đổi chủ, phạm vi hẹp tính theo import không còn đúng.
+  test('gồm tests/runners.json — nguồn phân runner', () => {
+    expect(GLOBAL_FILES).toContain('tests/runners.json')
+  })
+
+  test('vẫn gồm các file hạ tầng build/test cũ', () => {
+    for (const f of ['package.json', 'bun.lock', 'vitest.config.ts', 'tsconfig.json']) {
+      expect(GLOBAL_FILES).toContain(f)
+    }
   })
 })
