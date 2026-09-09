@@ -40,7 +40,7 @@ Thiếu `test-spec.md` → tạo `qa.md`, dừng. **Không** tự đặt case th
 
 ### Bước 2: Đứng trên worktree dòng source, mở dòng test nếu chưa có
 
-⚠️ **Làm việc trên worktree của branch source đã chốt, KHÔNG checkout cây orphan của dòng test.** Cây orphan không có `package.json` / config runner / `node_modules`, đứng ở đó thì không chạy được lệnh nào. Cây test sẽ được đẩy sang dòng test ở Bước 5 bằng một lệnh.
+⚠️ **Làm việc trên worktree của branch source đã chốt.** Dòng test mang cây đầy nên đứng ở đó *chạy* được, nhưng bản `src/` ở đó chỉ là bản sao được CI sync định kỳ — viết test dựa vào nó là viết theo code có thể đã lệch. Cây test sẽ được đẩy sang dòng test ở Bước 5 bằng một lệnh.
 
 Suy version `x.y.z` và `{taskID}_{slug}` từ **chính tên branch source** của task — hai dòng dùng cùng taskID và cùng slug, đó là cách truy từ PR code sang PR test.
 
@@ -54,7 +54,7 @@ git ls-remote --exit-code origin refs/heads/test/x.y.z/main \
 
 - **Không cần branch task dòng test ở local** — `bun run test:push` (Bước 5) tự cắt nó từ `test/x.y.z/main` trong một worktree tạm.
 - **Tên thư mục worktree phải đúng bằng task id** — hai branch `dev/x.y.z/T1_x` và `test/x.y.z/T1_x` cùng khớp quy tắc suy theo tên branch, dashboard sẽ coi là `ambiguous` và từ chối dọn worktree. Tên thư mục = task id thì né được.
-- **Dòng test là cây orphan** — chỉ có `tests/`, `test-e2e/`, `reports/`. 🚫 Không thêm `package.json` / `*.config.ts` / `tsconfig.json` / `src/`.
+- **Dòng test mang cây đầy của dòng source** + `tests/`, `test-e2e/`, `reports/`. Phần code là bản sao do CI sync — 🚫 không sửa `src/` / config trên dòng test, sửa ở dòng source rồi để sync mang sang.
 
 ### Bước 3: Ghép cây để chạy được test
 
