@@ -306,3 +306,55 @@ describe('main — trên repo git thật', () => {
     expect(main(['--head-sha', shas.c], plain)).toBe(2)
   })
 })
+
+describe('readAnchor — đường đọc cùng ràng buộc với đường ghi', () => {
+  const full = 'a'.repeat(40)
+
+  test('SHA viết tắt trong baseline → THROW (exit 2), 🚫 không suy thành no-anchor', () => {
+    // Baseline sửa tay được, nên SHA tắt vào được file qua đường khác. Khi đó
+    // `cat-file -e` thành công nhưng so `===` luôn false ⇒ `behind` với "0 commit
+    // source sau neo": cảnh báo sai chỗ, không truy ra được vì sao.
+    expect(() => readAnchor(JSON.stringify({ source_sha: 'a3b60a5' }), 'b.json')).toThrow(/không phải SHA đầy đủ/)
+    expect(() => readAnchor(JSON.stringify({ test_sha: 'deadbee' }), 'b.json')).toThrow(/test_sha/)
+  })
+
+  test('SHA không phải hex → THROW', () => {
+    expect(() => readAnchor(JSON.stringify({ source_sha: 'z'.repeat(40) }), 'b.json')).toThrow(/không phải SHA đầy đủ/)
+  })
+
+  test('SHA đầy đủ chữ HOA → nhận, chuẩn hoá về chữ thường (so bằng chuỗi nên phải cùng dạng)', () => {
+    expect(readAnchor(JSON.stringify({ source_sha: full.toUpperCase() }), 'b.json').source_sha).toBe(full)
+  })
+
+  test('baseline không có khoá neo → không throw, trả undefined (đó là no-anchor thật)', () => {
+    const a = readAnchor(JSON.stringify({ frontend: { lines: 60 } }), 'b.json')
+    expect(a.source_sha).toBeUndefined()
+    expect(a.test_sha).toBeUndefined()
+  })
+})
+
+describe('renderAnchor — thông điệp anchor-gone không khẳng định quá phạm vi biết được', () => {
+  const input = {
+    anchorSha: 'a'.repeat(40),
+    headSha: 'b'.repeat(40),
+    headRef: 'dev/1.1.4/main',
+    exists: false,
+    isAncestor: false,
+    isDescendant: false,
+  }
+
+  test('nêu cả ba nguyên nhân, kể cả clone nông — 🚫 không quy hết về force-push', () => {
+    const text = renderAnchor('anchor-gone', input, [])
+    expect(text).toContain('force-push')
+    expect(text).toContain('clone nông')
+    expect(text).toMatch(/allowReachableSHA1InWant/)
+    // Vẫn phải nói rõ là CHẶN, không được đọc thành cảnh báo.
+    expect(text).toContain('chặn')
+  })
+
+  test('kèm cách kiểm nguyên nhân "chưa fetch đủ sâu" trước khi kết luận force-push', () => {
+    const text = renderAnchor('anchor-gone', input, [])
+    expect(text).toContain('fetch-depth: 0')
+    expect(text).toContain('cat-file -e')
+  })
+})

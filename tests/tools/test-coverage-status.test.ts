@@ -443,3 +443,19 @@ describe('main — trên repo git thật', () => {
     expect(main(['--version', '1.1.4', '--strict'], repo)).toBe(1)
   })
 })
+
+describe('renderStatus — fallback sang HEAD phải nói ra', () => {
+  const empty = computeStatus({ sourceSubjects: [], testSubjects: [], exemptions: [], version: '1.1.4' })
+
+  test('sourceFallback → cảnh báo rõ là đếm trên HEAD, không phải dòng version', () => {
+    const text = renderStatus(empty, { version: '1.1.4', strict: false, sourceFallback: true })
+    expect(text).toContain('`dev/1.1.4/main` chưa có trên origin')
+    expect(text).toContain('HEAD')
+    expect(text).toContain('--source-ref')
+  })
+
+  test('không fallback → 🚫 không in cảnh báo đó', () => {
+    const text = renderStatus(empty, { version: '1.1.4', strict: false })
+    expect(text).not.toContain('chưa có trên origin')
+  })
+})
