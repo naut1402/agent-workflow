@@ -1,0 +1,20 @@
+# .gitignore của DÒNG TEST (cây orphan `test/main`) — viết riêng, 🚫 không copy
+# từ dòng source: dòng source ignore `dist/`, `coverage/`, `playwright-report/`,
+# `test-results/`… vì đó là output build của nó. Ở đây `reports/` là **sản phẩm
+# được commit** (tầng nhẹ), nên ignore theo nếp dòng source sẽ chặn đúng thứ
+# dòng test sinh ra để giữ.
+#
+# ⚠️ Mọi pattern rác cục bộ phải NEO Ở GỐC (`/…`). Không neo thì nó khớp ở mọi
+# độ sâu và ăn mất fixture: `.dev-team-agent/` không neo sẽ loại cả
+# `test-e2e/fixtures/project/.dev-team-agent/**` — fixture thật của e2e.
+
+/node_modules/
+/.claude/
+/.dev-team-agent/
+
+# Runtime của e2e — sinh lúc chạy, không phải fixture.
+/test-e2e/.runtime/
+
+# Rác OS / editor
+.DS_Store
+*.log
