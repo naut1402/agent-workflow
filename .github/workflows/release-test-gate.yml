@@ -1,0 +1,196 @@
+# Cổng **thật** của việc tách test sang dòng branch riêng.
+#
+# Sau khi test không còn nằm trong diff của PR dòng source, không còn chỗ nào
+# tự nhiên phát hiện "version này chưa ai viết test". Workflow này là chỗ đó:
+# chạy đúng một lần, ở PR phát hành `dev/x.y.z/main` → `main`, và **chặn cứng**.
+#
+# Bốn thứ nó chặn, bốn thông điệp khác nhau:
+#   1. dòng test `test/x.y.z/main` không tồn tại  → chưa viết test
+#   2. dòng test chưa có `reports/`               → chưa có baseline để chấm
+#   3. suite trên cây ghép đỏ                     → test đỏ
+#   4. cổng coverage đỏ                           → coverage tụt
+#
+# `todo-debt.yml` KHÔNG gánh việc này — nó chỉ kiểm `docs/todo/` có tồn tại hay
+# không (honor-system), còn đây kiểm bằng cách chạy thật.
+
+name: Release test gate
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: release-test-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Xác định dòng test của version
+    # Chỉ PR phát hành. PR khác vào `main` (hotfix, docs) không bị cổng này.
+    # `if` để rộng (`dev/**/main`) để bắt cả branch epic `dev/x.y.z/<epic>/main`;
+    # branch `dev/<slug>/main` không mang version được lọc tiếp ở bước dưới.
+    if: startsWith(github.head_ref, 'dev/') && endsWith(github.head_ref, '/main')
+    runs-on: ubuntu-latest
+    outputs:
+      applies: ${{ steps.line.outputs.applies }}
+      test_line: ${{ steps.line.outputs.test_line }}
+      version: ${{ steps.line.outputs.version }}
+    steps:
+      - name: Checkout head SHA của PR
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Suy dòng test
+        id: line
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+
+          # `test-ref.ts` throw khi tên branch không mang version — dùng chính nó
+          # làm bộ lọc, thay vì để throw lọt ra ngoài thành "cổng hỏng".
+          if ! TEST_LINE="$(bun .github/scripts/test-ref.ts test "$HEAD_REF" 2>/dev/null)"; then
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Cổng dòng test — không áp dụng"
+              echo ""
+              echo "Head \`${HEAD_REF}\` không thuộc dòng version (\`dev/x.y.z/…\`),"
+              echo "nên không có dòng test tương ứng để đối chiếu."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          VERSION="$(bun .github/scripts/test-ref.ts version "$HEAD_REF")"
+          {
+            echo "applies=true"
+            echo "test_line=$TEST_LINE"
+            echo "version=$VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+          if ! git ls-remote --exit-code origin "refs/heads/${TEST_LINE}" >/dev/null 2>&1; then
+            {
+              echo "## ❌ Cổng dòng test — CHẶN"
+              echo ""
+              echo "Dòng test \`${TEST_LINE}\` **chưa tồn tại** — test của version \`${VERSION}\` chưa được viết."
+              echo ""
+              echo "Tạo dòng test rồi mở PR test theo \`docs/agent-rules/git-pr.md\` §4.3:"
+              echo ""
+              echo '```bash'
+              echo "git switch -c ${TEST_LINE} origin/test/main"
+              echo "git push -u origin ${TEST_LINE}"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Dòng test ${TEST_LINE} chưa tồn tại — test của version ${VERSION} chưa được viết."
+            exit 1
+          fi
+
+  gate:
+    name: Suite + coverage trên cây ghép
+    needs: probe
+    if: needs.probe.outputs.applies == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout head SHA của PR
+        uses: actions/checkout@v5
+        with:
+          # Head SHA, KHÔNG phải merge commit: cây được release là cây này.
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Overlay dòng test lên head của PR
+        env:
+          TEST_LINE: ${{ needs.probe.outputs.test_line }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "+refs/heads/${TEST_LINE}:refs/remotes/origin/${TEST_LINE}"
+          TEST_SHA="$(git rev-parse "origin/${TEST_LINE}")"
+          echo "TEST_SHA=$TEST_SHA" >> "$GITHUB_ENV"
+          rm -rf tests test-e2e
+          git archive "$TEST_SHA" tests test-e2e | tar -x -C .
+          COUNT="$(find tests test-e2e -name '*.test.ts' -o -name '*.spec.ts' | wc -l)"
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "::error::Dòng test ${TEST_LINE} rỗng (0 file test) — không được coi là đã có test."
+            exit 1
+          fi
+          {
+            echo "## Cổng dòng test"
+            echo ""
+            echo "| Vai trò | Ref |"
+            echo "|---|---|"
+            echo "| source (head PR) | \`${{ github.head_ref }}\` @ \`${{ github.event.pull_request.head.sha }}\` |"
+            echo "| test | \`${TEST_LINE}\` @ \`${TEST_SHA}\` |"
+            echo "| số file test | ${COUNT} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ⚠️ Dọn `reports/` của dòng source TRƯỚC rồi mới lấy của dòng test. Cây
+      # source mang sẵn `reports/coverage-baseline.json` (commit ở Đợt 2) và nó
+      # đóng băng từ lúc đó — thấp hơn baseline thật của dòng test. Nuốt lỗi
+      # archive ở đây là cổng chặn merge cuối cùng chấm theo số cũ và xanh giả.
+      - name: Lấy baseline coverage của dòng test
+        env:
+          TEST_LINE: ${{ needs.probe.outputs.test_line }}
+        run: |
+          set -euo pipefail
+          rm -rf reports
+          if ! git archive "$TEST_SHA" reports | tar -x -C .; then
+            {
+              echo "## ❌ Cổng dòng test — CHẶN"
+              echo ""
+              echo "Dòng test \`${TEST_LINE}\` chưa có \`reports/\` — không có baseline để chấm coverage."
+              echo ""
+              echo "Khởi tạo baseline trên dòng test (một lần), rồi chạy lại cổng:"
+              echo ""
+              echo '```bash'
+              echo "bun run coverage:gate -- --update --allow-missing"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Dòng test ${TEST_LINE} chưa có reports/ — thiếu baseline là CHẶN, không phải đạt."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Suite backend (bun test) + coverage
+        run: bun run test -- --coverage --coverage-reporter=lcov --coverage-dir=coverage/backend
+
+      - name: Suite frontend (vitest) + coverage
+        run: bun run test:fe
+
+      - name: Build
+        run: bun run build
+
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+
+      - name: Suite E2E (playwright)
+        run: bun run test:e2e
+
+      - name: Cổng coverage
+        run: bun run coverage:gate -- --check --baseline reports/coverage-baseline.json
+
+      - name: Upload evidence của cổng phát hành
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-gate-evidence-${{ needs.probe.outputs.version }}
+          path: |
+            coverage/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 90

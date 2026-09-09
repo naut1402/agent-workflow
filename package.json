@@ -35,9 +35,12 @@
     "lint:commit": "commitlint",
     "check:todo": "bun .github/scripts/check-todo-debt.ts",
     "format": "prettier --write .",
-    "test": "bun test tests/src/server tests/src/features/knowledge/business tests/src/features/logs/business tests/src/features/statistics/business tests/src/features/agent-editor/business tests/src/features/pipeline-editor/business tests/src/features/monitor/business tests/src/features/runner/business tests/src/core/lib/fileHelper.test.ts tests/src/core/lib/phase.test.ts tests/src/core/log tests/src/core/events tests/mcp tests/tools",
+    "test": "bun .github/scripts/run-bun-tests.ts",
     "test:fe": "vitest run --coverage",
     "test:scope": "bun .github/scripts/test-scope.ts",
+    "test:overlay": "bash .github/scripts/overlay-tests.sh",
+    "test:push": "bash .github/scripts/push-tests.sh",
+    "coverage:gate": "bun .github/scripts/coverage-gate.ts",
     "e2e:sysdeps": "bash .github/scripts/setup-e2e-sysdeps.sh",
     "test:e2e": "playwright test --pass-with-no-tests",
     "test:all": "bun run typecheck && bun run lint && bun run test && bun run test:fe && bun run test:e2e"

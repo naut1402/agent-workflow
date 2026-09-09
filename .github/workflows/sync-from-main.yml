@@ -79,4 +79,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: bash .github/scripts/sync-from-main.sh
+          # Script tham số hoá theo dòng branch; dòng test dùng `sync-test-line.yml`.
+          SRC_REF: main
+          TARGET_NS: dev
+        run: bash .github/scripts/sync-line.sh

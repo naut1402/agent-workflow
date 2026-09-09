@@ -50,7 +50,8 @@ agent-workflow/
 | 🔍 Investigate · Design | `doc-writing` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) — bố cục `investigate.md` / `design.md`, quy tắc trình bày |
 | 🛠️ Implement | `coding` | [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) · [`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) |
 | 🔎 Review | `coding` + `test` | [`review-checklist-guideline.md`](docs/agent-rules/review-checklist-guideline.md) · [`testing.md`](docs/agent-rules/testing.md) |
-| 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, PR phát hành §8.4 · [`git-worktree.md`](docs/agent-rules/git-worktree.md) · [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md) |
+| 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, cổng coverage §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
+| 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, PR phát hành §8.4 · [`git-worktree.md`](docs/agent-rules/git-worktree.md) · [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md) |
 
 Tài liệu tra cứu kèm theo (không phải rule):
 
@@ -81,8 +82,8 @@ Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize t
 | Viết/sửa code feature | [`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md) + [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) + bất biến §4 |
 | Thêm mode mới ở FE shell (`App.vue`) | [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) — checklist §5 |
 | Review PR | [`review-checklist-guideline.md`](docs/agent-rules/review-checklist-guideline.md) — mục **Dữ liệu & An toàn** có domain event khi đụng persist |
-| Test / CI | [`testing.md`](docs/agent-rules/testing.md) |
-| Commit / PR / docs | [`git-pr.md`](docs/agent-rules/git-pr.md) — tách commit §6 khi PR nhiều xử lý; branch task gắn version §4.2; PR phát hành §8.4 |
+| Test / CI | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test + `test:overlay` §3.1; cổng coverage §6 |
+| Commit / PR / docs | [`git-pr.md`](docs/agent-rules/git-pr.md) — tách commit §6 khi PR nhiều xử lý; branch task gắn version §4.2; **dòng test §4.3**; PR phát hành §8.4 |
 | Hoãn docs/test (hotfix, POC) | [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md) — gate CI chỉ khi PR `dev/x.y.z/main` → `main` |
 | Agent chạy song song | [`git-worktree.md`](docs/agent-rules/git-worktree.md) |
 | Viết `investigate.md` / `design.md` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) |
@@ -110,11 +111,12 @@ Khi survey call chain đụng persist / lifecycle / CRUD domain:
 
 Áp dụng cho **mọi** thay đổi code:
 
-- [ ] **Tra danh mục suite** [`testing.md`](docs/agent-rules/testing.md) §4 — xác định suite nào phủ vùng vừa sửa (có thể nhiều suite, khác runner).
+- [ ] **Tra danh mục suite** [`tests/CATALOG.md`](tests/CATALOG.md) — xác định suite nào phủ vùng vừa sửa (có thể nhiều suite, khác runner). Sau khi `tests/` bị cắt khỏi dòng source thì file này không có ở đây: `bun run test:overlay` trước, hoặc xem [bản trên `test/main`](https://github.com/naut1402/agent-workflow/blob/test/main/tests/CATALOG.md).
 - [ ] **Chạy đúng các suite đó** — `bun run test:scope` hoặc nối path thủ công. Full suite là việc của CI.
 - [ ] **Vùng sửa chưa có suite nào** → viết test mới đặt theo layout (business/server → bun; FE → vitest). `test:scope` chọn ra 0 file **không** phải "đã xanh", nó là "chỗ này chưa ai test".
-- [ ] **Thêm/đổi thư mục test** → sinh lại bảng `bun run test:scope --catalog` và cập nhật §4 của rule trong cùng thay đổi.
+- [ ] **Thêm/đổi thư mục test** → khai vào `tests/runners.json` **và** sinh lại `bun run test:scope --catalog > tests/CATALOG.md` trong cùng thay đổi.
 - [ ] **Test đụng filesystem / registry / agent / plugin** → chạy thêm một lượt với env đã tước (`HOME` rỗng, biến plugin trỏ path không tồn tại).
+- [ ] **Test viết trên dòng branch riêng** khi pipeline có bước `test-implementer` — [`testing.md`](docs/agent-rules/testing.md) §3.1. Đang ở dòng source thì `bun run test:overlay` trước khi chạy được suite nào.
 
 ### Implement — đổi quy ước
 
