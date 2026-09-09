@@ -12,6 +12,13 @@ name: Sync test/main into test version mains
 on:
   push:
     branches: ['test/main']
+    # `reports/` là đầu ra RIÊNG của từng dòng: mỗi dòng tự tích baseline +
+    # history của nó. Sync commit chỉ-đụng-`reports/` từ `test/main` xuống các
+    # dòng version là kéo baseline của dòng này đè lên dòng kia — hai bên đều đổi
+    # độc lập nên sớm muộn conflict, và mỗi conflict mở một PR `auto-merge-conflict`.
+    # Commit đụng cả `reports/` và test thật **vẫn** sync (semantics `paths-ignore`).
+    paths-ignore:
+      - 'reports/**'
   workflow_dispatch:
 
 concurrency:
