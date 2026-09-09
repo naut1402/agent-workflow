@@ -120,7 +120,8 @@ bun run test:status -- --version 1.1.4              # task nào đã merge mà d
 bun run test:anchor -- --baseline reports/coverage-baseline.json   # baseline đang neo ở commit nào
 ```
 
-- **Nguồn của "task nào đã merge"** là subject commit `[<taskID>]` ([`git-pr.md`](git-pr.md) §7) ở hai khoảng đối xứng: `main..dev/x.y.z/main` (đã merge) ↔ `test/main..test/x.y.z/main` (đã có test). Sai format commit ⇒ task rơi vào mục *không truy được task*, nên format không phải chuyện thẩm mỹ.
+- **Nguồn của "task nào đã merge"** là subject commit `[<taskID>]` ([`git-pr.md`](git-pr.md) §7) ở hai khoảng đối xứng: `main..dev/x.y.z/main` (đã merge) ↔ `test/main..test/x.y.z/main` (đã có test). Commit **không** mang `[<taskID>]` — §7 cho phép bỏ — thì không quy được về task nào: 🚫 không tính là thiếu test, nhưng cũng không bỏ qua im lặng, nó vào mục *không truy được task* để người duyệt tự xác nhận là không cần test.
+- **Revert tính ở mức từng commit, không ở mức task** — task chỉ được miễn test khi **mọi** commit của nó đã bị revert. Còn một commit sống thì task vẫn nằm ở *thiếu test*, gắn nhãn *revert một phần*. Revert của revert là **khôi phục**, không phải revert hai lần.
 - **Báo cáo ở mức TỪNG task**, kèm cột type commit để thấy ngay ứng viên miễn trừ. 🚫 Cổng **không** tự miễn theo type — một `chore` vẫn sửa được code.
 - ⚠️ **`exit 0` của `test:status` ở đợt đầu là *báo cáo*, không phải "đã đủ test".** Siết thành chặn bằng `--strict` (một cờ ở workflow, không sửa script).
 - **Miễn trừ test khai ở [`tests/exemptions.json`](../../tests/exemptions.json)** — sống ở dòng test, đi theo `git archive … tests` sẵn có nên cổng đọc được mà không thêm bước fetch nào:
