@@ -1,0 +1,290 @@
+<script setup lang="ts">
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { computed, nextTick, ref } from 'vue'
+import { patchTaskArchive, patchTaskName, deleteTask, repairTaskState } from '../scripts/TaskListItemApi'
+import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
+import { hasInFlightJob } from '../lib/taskInFlight'
+import { taskDisplayName } from '../lib/taskDisplay'
+import Icon from '../../../core/ui/Icon.vue'
+
+const props = defineProps({
+  task: { type: Object, required: true },
+  selectedId: { type: String, default: null },
+  openArtifact: { type: Object, default: null }, // { taskId, name }
+  isExpanded: { type: Boolean, default: false },
+  projectId: { type: String, default: null },
+  hideMissing: { type: Boolean, default: true },
+})
+const emit = defineEmits([
+  'select', 'toggle-expand', 'open-artifact', 'task-archived', 'task-deleted', 'toggle-hide-missing',
+])
+
+const { t } = useI18nHelpers()
+const archiveError = ref('')
+const deleting = ref(false)
+const needsRepair = computed(() => taskNeedsStateRepair(props.task))
+const renaming = ref(false)
+const draftName = ref('')
+const renameInput = ref<HTMLInputElement | null>(null)
+const idEl = ref<HTMLElement | null>(null)
+const marqueeDistance = ref(0)
+
+/** Measure overflow on hover so the marquee travels exactly far enough to reveal the tail — 0 when the name already fits. */
+function onIdMouseEnter() {
+  const el = idEl.value
+  if (!el) return
+  marqueeDistance.value = Math.max(0, el.scrollWidth - el.clientWidth)
+}
+
+function startRename() {
+  if (renaming.value) return
+  draftName.value = taskDisplayName(props.task)
+  renaming.value = true
+  nextTick(() => {
+    renameInput.value?.focus()
+    renameInput.value?.select()
+  })
+}
+
+async function commitRename() {
+  if (!renaming.value) return
+  renaming.value = false
+  const next = draftName.value.trim()
+  const current = taskDisplayName(props.task)
+  if (!next || next === current) return
+  archiveError.value = ''
+  try {
+    await patchTaskName(
+      props.task.task_id,
+      { name: next, mtime: props.task.state_mtime },
+      props.projectId ?? undefined,
+    )
+    emit('task-archived')
+  } catch (e: any) {
+    if (e?.status === 409) {
+      emit('task-archived')
+    } else {
+      archiveError.value = String(e.message || e)
+    }
+  }
+}
+
+function cancelRename() {
+  renaming.value = false
+}
+
+async function toggleArchive() {
+  archiveError.value = ''
+  try {
+    await patchTaskArchive(
+      props.task.task_id,
+      { archived: !props.task.archived, mtime: props.task.state_mtime },
+      props.projectId ?? undefined,
+    )
+    emit('task-archived')
+  } catch (e: any) {
+    if (e?.status === 409) {
+      emit('task-archived')
+    } else {
+      archiveError.value = String(e.message || e)
+    }
+  }
+}
+
+async function removeTask() {
+  // `deleting` chặn double-click: handler async (dò job trước khi hỏi) nên không
+  // có guard thì mỗi cú click là một hộp confirm + một lượt DELETE.
+  if (deleting.value) return
+  archiveError.value = ''
+  deleting.value = true
+  // Chụp id ngay đầu handler: poll 1.5s có thể thay props giữa hai lần await.
+  const taskId = props.task.task_id
+  try {
+    const running = await hasInFlightJob(taskId, props.projectId)
+    const messageKey = running
+      ? 'monitor.taskItem.confirmDeleteRunning'
+      : 'monitor.taskItem.confirmDelete'
+    if (!confirm(t(messageKey))) return
+    await deleteTask(taskId, props.projectId ?? undefined)
+    emit('task-deleted', taskId)
+  } catch (e: any) {
+    archiveError.value = String(e.message || e || t('monitor.taskItem.deleteError'))
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function repairState() {
+  archiveError.value = ''
+  try {
+    await repairTaskState(props.task.task_id, props.projectId ?? undefined)
+    emit('task-archived')
+  } catch (e: any) {
+    archiveError.value = String(e.message || e || t('monitor.taskItem.repairError'))
+  }
+}
+
+function selectTask() {
+  emit('select', props.task.task_id)
+  if (!props.isExpanded) emit('toggle-expand', props.task.task_id)
+}
+
+function taskStatusKey(task: any): 'error' | 'waiting' | 'done' | 'active' | 'pending' {
+  if (task.state_ok === false || needsRepair.value) return 'error'
+  if (task.has_qa || task.hitl_pending) return 'waiting'
+  if (task.current_phase === 'completed') return 'done'
+  if (task.current_phase) return 'active'
+  return 'pending'
+}
+
+function statusIcon(task: any): string {
+  if (task.state_ok === false || needsRepair.value) return '⚠'
+  // has_qa: SVG chat icon in template (not a text glyph)
+  if (task.has_qa) return ''
+  if (task.hitl_pending) return '⏸'
+  if (task.current_phase === 'completed') return '✓'
+  if (task.current_phase) return '▶'
+  return '○'
+}
+
+function isQaFlag(task: any): boolean {
+  return !!(task.state_ok !== false && !needsRepair.value && task.has_qa)
+}
+
+function flagClass(task: any): string {
+  if (task.state_ok === false || needsRepair.value) return 'error'
+  if (task.has_qa) return 'qa'
+  if (task.hitl_pending) return 'hitl'
+  return taskStatusKey(task)
+}
+
+const ORDER = [
+  'investigate.md', 'investigate-po.md',
+  'design.md', 'design-po.md',
+  'phpstan.md', 'review.md', 'test-spec.md', 'pr-desc.md',
+  'qa.md',
+]
+
+function allSortedArtifacts(task: any) {
+  const a = task.artifacts || {}
+  const names = Object.keys(a)
+  names.sort((x, y) => {
+    const ix = ORDER.indexOf(x)
+    const iy = ORDER.indexOf(y)
+    return (ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy) || x.localeCompare(y)
+  })
+  return names.map((name) => ({ name, ...a[name] }))
+}
+
+function sortedArtifacts(task: any) {
+  const all = allSortedArtifacts(task)
+  return props.hideMissing ? all.filter((it) => it.exists) : all
+}
+
+// Always counted against the UNFILTERED list so the toggle keeps reporting
+// how many files are hidden even while hideMissing is on.
+function hiddenCount(task: any) {
+  return allSortedArtifacts(task).length - sortedArtifacts(task).length
+}
+</script>
+
+<template>
+  <li
+    class="task-entry"
+    :class="{ active: task.task_id === selectedId, attention: task.has_qa }"
+  >
+    <div class="task-row" @click="selectTask">
+      <span
+        class="expand-chevron"
+        :class="{ open: isExpanded }"
+        @click.stop="emit('toggle-expand', task.task_id)"
+      >›</span>
+      <span
+        class="flag"
+        :class="flagClass(task)"
+        :title="needsRepair ? t('monitor.taskItem.stateError') : task.has_qa ? t('monitor.taskItem.flagQa') : task.hitl_pending ? t('monitor.taskItem.flagHitl') : undefined"
+      >
+        <Icon v-if="isQaFlag(task)" name="chatBubble" :size="14" class="flag-chat" />
+        <template v-else>{{ statusIcon(task) }}</template>
+      </span>
+      <input
+        v-if="renaming"
+        ref="renameInput"
+        v-model="draftName"
+        class="id-rename-input"
+        type="text"
+        @click.stop
+        @blur="commitRename"
+        @keyup.enter="($event.target as HTMLInputElement).blur()"
+        @keyup.escape="cancelRename"
+      />
+      <span
+        v-else
+        ref="idEl"
+        class="id"
+        :class="'id-' + taskStatusKey(task)"
+        :style="marqueeDistance ? { '--marquee-distance': marqueeDistance + 'px' } : undefined"
+        :title="`${task.task_id} — ${t('monitor.taskItem.renameTitle')}`"
+        @dblclick.stop="startRename"
+        @mouseenter="onIdMouseEnter"
+      ><span>{{ taskDisplayName(task) }}</span></span>
+      <button
+        v-if="needsRepair"
+        type="button"
+        class="btn-repair"
+        :title="t('monitor.taskItem.repairStateTitle')"
+        :aria-label="t('monitor.taskItem.repairState')"
+        @click.stop="repairState"
+      ><svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.25"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        ><path d="M10.5 2.5a3 3 0 0 1 3 3l-2 2-1.5-.5-.5-1.5 2-2z" /><path d="M9.5 6.5 3 13l-1-1 6.5-6.5" /></svg></button>
+      <button
+        v-if="task.state_ok"
+        class="btn-archive"
+        :title="task.archived ? t('monitor.taskItem.unarchive') : t('monitor.taskItem.archive')"
+        @click.stop="toggleArchive"
+      ><template v-if="task.archived">↩</template><Icon v-else name="archiveBox" :size="14" /></button>
+      <button
+        class="btn-delete"
+        :title="t('monitor.taskItem.deleteTask')"
+        :aria-label="t('monitor.taskItem.deleteTask')"
+        :disabled="deleting"
+        @click.stop="removeTask"
+      >✕</button>
+    </div>
+    <p v-if="archiveError" class="art-warning">{{ archiveError }}</p>
+
+    <ul v-if="isExpanded" class="file-list">
+      <li
+        v-if="allSortedArtifacts(task).length"
+        class="file-list-toggle"
+        @click.stop="emit('toggle-hide-missing')"
+      >{{
+        hideMissing && hiddenCount(task) > 0
+          ? t('monitor.fileList.showMissing', { count: hiddenCount(task) })
+          : t('monitor.fileList.hideMissing')
+      }}</li>
+      <li
+        v-for="it in sortedArtifacts(task)"
+        :key="it.name"
+        class="file-item"
+        :class="{
+          missing: !it.exists,
+          active: openArtifact && openArtifact.taskId === task.task_id && openArtifact.name === it.name,
+        }"
+        @click="it.exists && emit('open-artifact', { taskId: task.task_id, name: it.name })"
+      >
+        <span class="file-dot">{{ it.exists ? '●' : '○' }}</span>
+        <span class="file-name">{{ it.name }}</span>
+      </li>
+    </ul>
+  </li>
+</template>

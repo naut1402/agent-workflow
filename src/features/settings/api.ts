@@ -1,0 +1,30 @@
+import type { Hono } from 'hono'
+import type { HonoEnv } from '../../core/http/types.js'
+import { bind } from '../../core/http/AbstractController.js'
+import { SettingsController } from './controller.js'
+
+/** Fs / autoscan / github-tokens / logging — trước runner & logs. */
+export const routeOrder = 10
+
+export function registerRoutes(app: Hono<HonoEnv>): void {
+  app.get('/api/fs/browse', bind(SettingsController, 'browseFs'))
+
+  app.get('/api/autoscan', bind(SettingsController, 'getAutoscan'))
+  app.put('/api/autoscan', bind(SettingsController, 'updateAutoscan'))
+  app.post('/api/autoscan/run', bind(SettingsController, 'runAutoscan'))
+
+  app.get('/api/github/tokens', bind(SettingsController, 'getGithubTokens'))
+  app.put('/api/github/tokens', bind(SettingsController, 'updateGithubTokens'))
+
+  app.get('/api/logging-config', bind(SettingsController, 'getLogging'))
+  app.put('/api/logging-config', bind(SettingsController, 'updateLogging'))
+
+  app.get('/api/recovery-config', bind(SettingsController, 'getRecovery'))
+  app.put('/api/recovery-config', bind(SettingsController, 'updateRecovery'))
+
+  app.get('/api/scan-patterns', bind(SettingsController, 'getScanPatterns'))
+  app.put('/api/scan-patterns', bind(SettingsController, 'updateScanPatterns'))
+
+  app.get('/api/security-config', bind(SettingsController, 'getSecurity'))
+  app.put('/api/security-config', bind(SettingsController, 'updateSecurity'))
+}

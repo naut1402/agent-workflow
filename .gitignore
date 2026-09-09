@@ -1,20 +1,48 @@
-# .gitignore của DÒNG TEST (cây orphan `test/main`) — viết riêng, 🚫 không copy
-# từ dòng source: dòng source ignore `dist/`, `coverage/`, `playwright-report/`,
-# `test-results/`… vì đó là output build của nó. Ở đây `reports/` là **sản phẩm
-# được commit** (tầng nhẹ), nên ignore theo nếp dòng source sẽ chặn đúng thứ
-# dòng test sinh ra để giữ.
-#
-# ⚠️ Mọi pattern rác cục bộ phải NEO Ở GỐC (`/…`). Không neo thì nó khớp ở mọi
-# độ sâu và ăn mất fixture: `.dev-team-agent/` không neo sẽ loại cả
-# `test-e2e/fixtures/project/.dev-team-agent/**` — fixture thật của e2e.
+node_modules/
+dist/
+CLAUDE.local.md
 
-/node_modules/
-/.claude/
+# Docker local secrets / machine paths
+docker/.env
+.env
+.env.local
+
+# Runtime staging — never commit
+docker/.runtime/
+
+# Staged corporate CA for image build (host copies via install.sh)
+docker/certs/**
+!docker/certs/.gitkeep
+!docker/certs/README.md
+
+# Orchestrator's own transient state for THIS repo (root only; e2e fixtures below
+# are handled separately). Dashboard reads TARGET projects' .dev-team-agent/.
 /.dev-team-agent/
 
-# Runtime của e2e — sinh lúc chạy, không phải fixture.
-/test-e2e/.runtime/
+# Test / coverage artifacts
+coverage/
+playwright-report/
+test-results/
+.vite/
 
-# Rác OS / editor
-.DS_Store
-*.log
+# E2E runtime state (isolated registry home + mutable writes into the fixture)
+test-e2e/.runtime/
+test-e2e/fixtures/project/.dev-team-agent/custom-agents/
+test-e2e/fixtures/project/.dev-team-agent/agent-templates/
+test-e2e/fixtures/project/.dev-team-agent/pipeline-profiles/
+test-e2e/fixtures/project/.dev-team-agent/tasks/DEMO-1/paste-target.md
+test-e2e/fixtures/project/.dev-team-agent/workflow-step-templates/
+test-e2e/fixtures/project/.dev-team-agent/flow-profiles/
+test-e2e/fixtures/project/.dev-team-agent/knowledge/
+test-e2e/fixtures/project/.dev-team-agent/knowledge.config.yaml
+test-e2e/fixtures/project/.dev-team-agent/pipeline.yaml
+test-e2e/fixtures/project/.dev-team-agent/artifact-actions.yaml
+test-e2e/fixtures/project/.dev-team-agent/automations/
+
+# State cục bộ của công cụ AI agent (worktree, cache, settings.local) — chỉ tồn
+# tại trên máy dev, không bao giờ commit.
+.claude/
+
+# Plugin Claude Code cài ở root — luôn là rác cục bộ / rò rỉ từ máy dev.
+# Neo `/` để KHÔNG nuốt src/plugins/ (i18n thật).
+/plugins/

@@ -1,0 +1,13 @@
+{
+  "serverUrl": "https://dashboard.example.com",
+  "projectId": "my-repo-a1b2c3d4",
+  "projectName": "my-repo",
+  "apiToken": null,
+  "runnerMode": "local",
+  "runnerId": null,
+  "syncAfterState": true,
+  "syncAfterStep": true,
+  "syncMessage": "chore(dev-team): sync orchestrator artifacts",
+  "resolvedAt": "2026-07-04T12:00:00.000Z",
+  "resolvedBy": "gitUrl+branch"
+}
