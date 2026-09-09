@@ -2,7 +2,9 @@
 # Tài liệu: https://fallow.mintlify.app/integrations/ci
 #
 # Phạm vi chạy:
-# - PR có base `main` hoặc nhánh phiên bản `dev/x.y.z/main` (glob `dev/**/main`)
+# - PR có base `main`, nhánh phiên bản `dev/x.y.z/main` (glob `dev/**/main`),
+#   hoặc dòng test `test/x.y.z/main` (glob `test/**/main`) — dòng test cũng là
+#   TS/JS nên có finding thật, nhưng vẫn giữ soft-launch như dòng source
 # - Không chạy trên PR release `dev/x.y.z/main` → `main` (xem `if` ở job bên dưới)
 # - Không chạy trên push: fallow so trực tiếp với base SHA của PR, không cần baseline
 #   server-side như SonarCloud
@@ -23,6 +25,7 @@ on:
     branches:
       - main
       - 'dev/**/main'
+      - 'test/**/main'
 
 concurrency:
   group: fallow-${{ github.ref }}

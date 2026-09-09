@@ -1,24 +1,36 @@
 #!/usr/bin/env bash
-# Sync origin/main vào mọi branch dev/**/main + extra_targets.
+# Sync ref gốc của một dòng branch vào mọi branch `<ns>/**/main` của dòng đó.
+#
+#   SRC_REF=main       TARGET_NS=dev   → main      → dev/x.y.z/main  (+ extra_targets)
+#   SRC_REF=test/main  TARGET_NS=test  → test/main → test/x.y.z/main
+#
 # Chạy trong GitHub Actions (cần git fetch-depth:0, GH_TOKEN, gh CLI).
+#
+# ⚠️ `EXTRA_FILE` chỉ có nghĩa với dòng source: script merge `SRC_REF` **vào**
+# target, nên khai dòng test vào `auto-merge-targets.yml` là nhập cả cây source
+# vào cây orphan của dòng test. Dòng test truyền `EXTRA_FILE=""` để tắt hẳn.
 set -euo pipefail
 
 SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY required}"
 
-# Đảm bảo có đủ remote refs (checkout có thể chưa fetch hết pattern dev/**).
+SRC_REF="${SRC_REF:-main}"
+TARGET_NS="${TARGET_NS:-dev}"
+# Dùng `${VAR-default}` (không phải `:-`) để phân biệt "chưa khai" với "khai rỗng".
+EXTRA_FILE="${EXTRA_FILE-.github/auto-merge-targets.yml}"
+
+# Đảm bảo có đủ remote refs (checkout có thể chưa fetch hết pattern dev/** hoặc test/**).
 git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
 
 {
-  echo "## Sync main → version/epic mains"
+  echo "## Sync ${SRC_REF} → ${TARGET_NS}/**/main"
   echo ""
   echo "| Target | Result | Note |"
   echo "| --- | --- | --- |"
 } >> "$SUMMARY"
 
-EXTRA_FILE=".github/auto-merge-targets.yml"
 EXTRA_TARGETS=()
-if [[ -f "$EXTRA_FILE" ]]; then
+if [[ -n "$EXTRA_FILE" && -f "$EXTRA_FILE" ]]; then
   mapfile -t EXTRA_TARGETS < <(python3 - "$EXTRA_FILE" <<'PY'
 import re
 import sys
@@ -51,8 +63,10 @@ PY
   )
 fi
 
-mapfile -t DEV_MAINS < <(
-  git for-each-ref --format='%(refname:short)' refs/remotes/origin/dev \
+# ⚠️ Với TARGET_NS=test, for-each-ref trả về **cả** `test/main` — vòng lọc dưới
+# loại `SRC_REF` ra, thiếu bước đó là script tự merge SRC_REF vào chính nó.
+mapfile -t LINE_MAINS < <(
+  git for-each-ref --format='%(refname:short)' "refs/remotes/origin/${TARGET_NS}" \
     | sed 's#^origin/##' \
     | grep '/main$' \
     | sort -u || true
@@ -60,8 +74,8 @@ mapfile -t DEV_MAINS < <(
 
 declare -A SEEN=()
 TARGETS=()
-for t in "${DEV_MAINS[@]+"${DEV_MAINS[@]}"}" "${EXTRA_TARGETS[@]+"${EXTRA_TARGETS[@]}"}"; do
-  [[ -z "${t:-}" || "$t" == "main" ]] && continue
+for t in "${LINE_MAINS[@]+"${LINE_MAINS[@]}"}" "${EXTRA_TARGETS[@]+"${EXTRA_TARGETS[@]}"}"; do
+  [[ -z "${t:-}" || "$t" == "$SRC_REF" || "$t" == "main" ]] && continue
   if [[ -z "${SEEN[$t]:-}" ]]; then
     SEEN[$t]=1
     TARGETS+=("$t")
@@ -87,8 +101,8 @@ for target in "${TARGETS[@]}"; do
     continue
   fi
 
-  if git merge-base --is-ancestor origin/main "origin/${target}"; then
-    echo "| \`${target}\` | skipped | Đã chứa origin/main |" >> "$SUMMARY"
+  if git merge-base --is-ancestor "origin/${SRC_REF}" "origin/${target}"; then
+    echo "| \`${target}\` | skipped | Đã chứa origin/${SRC_REF} |" >> "$SUMMARY"
     echo "Up-to-date — skip."
     echo "::endgroup::"
     continue
@@ -96,7 +110,7 @@ for target in "${TARGETS[@]}"; do
 
   git checkout -B "$target" "origin/${target}"
 
-  if git merge --no-ff origin/main -m "chore: sync main into ${target}"; then
+  if git merge --no-ff "origin/${SRC_REF}" -m "chore: sync ${SRC_REF} into ${target}"; then
     if git push origin "HEAD:${target}"; then
       echo "| \`${target}\` | synced | Pushed merge commit |" >> "$SUMMARY"
       echo "Synced OK."
@@ -111,7 +125,7 @@ for target in "${TARGETS[@]}"; do
     echo "Conflict — mở/reuse PR."
 
     EXISTING="$(gh pr list --repo "$REPO" \
-      --base "$target" --head main --state open \
+      --base "$target" --head "$SRC_REF" --state open \
       --json number --jq '.[0].number // empty')"
 
     if [[ -n "$EXISTING" ]]; then
@@ -121,17 +135,17 @@ for target in "${TARGETS[@]}"; do
       BODY="$(cat <<EOF
 ## Sync conflict
 
-Tự động sync \`main\` → \`${target}\` bị **conflict**.
+Tự động sync \`${SRC_REF}\` → \`${target}\` bị **conflict**.
 
 Resolve conflict trên PR này rồi merge để tiếp tục đồng bộ.
 
-Workflow: \`sync-from-main.yml\`
+Script: \`.github/scripts/sync-line.sh\`
 EOF
 )"
       if PR_URL="$(gh pr create --repo "$REPO" \
         --base "$target" \
-        --head main \
-        --title "chore: sync main into ${target}" \
+        --head "$SRC_REF" \
+        --title "chore: sync ${SRC_REF} into ${target}" \
         --label auto-merge-conflict \
         --body "$BODY")"; then
         echo "| \`${target}\` | conflict-PR | ${PR_URL} |" >> "$SUMMARY"
