@@ -112,6 +112,15 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           SRC_REF: ${{ steps.pair.outputs.src }}
           TARGETS_OVERRIDE: ${{ steps.pair.outputs.target }}
+          # Vùng do DÒNG TEST sở hữu — lượt sync 🚫 không được đụng. Thiếu khai này
+          # thì sau Đợt 5 (dòng source cắt `tests/`) lượt sync sẽ mang phép xoá đó
+          # sang và **xoá sạch test trên dòng test**, im lặng, không conflict.
+          #
+          # `.gitignore` cũng phải bảo lưu, và đây là chỗ hai dòng **buộc phải lệch**:
+          # dòng source ignore `/tests/` để cây overlay local không bị `git add -A`
+          # nuốt vào commit; dòng test thì phải **track** đúng thư mục đó. Để nó đi
+          # sang là `push-tests.sh` (`git add tests test-e2e`) hết thêm được test mới.
+          PRESERVE_PATHS: 'tests test-e2e reports .gitignore'
           # 🚫 `auto-merge-targets.yml` là danh sách của dòng source — khai vào
           # đây là nhập thêm cây lạ vào dòng test.
           EXTRA_FILE: ''
