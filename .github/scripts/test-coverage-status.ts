@@ -291,6 +291,8 @@ export interface RenderOpts {
   testLineMissing?: boolean
   /** Chưa có `test/main` để làm mốc ⇒ khoảng đếm ở dòng test rộng hơn thực tế. */
   noTestTrunk?: boolean
+  /** `dev/<version>/main` chưa có trên origin ⇒ lượt này đếm trên `HEAD`, không phải dòng version. */
+  sourceFallback?: boolean
   sourceRange?: string
   testRange?: string
 }
@@ -324,6 +326,14 @@ function sectionCaveats(opts: RenderOpts): string[] {
     lines.push(
       '⚠️ **Chưa có `test/main` để làm mốc** — khoảng đếm ở dòng test là toàn bộ lịch sử của nó,',
       'nên số task "đã có test" có thể rộng hơn thực tế.',
+      '',
+    )
+  }
+  if (opts.sourceFallback) {
+    lines.push(
+      `⚠️ **\`dev/${opts.version}/main\` chưa có trên origin** — lượt này đếm trên \`HEAD\` (cây đang`,
+      'đứng), **không phải** dòng version. Báo cáo vẫn mang tên version nên đừng đọc nó như đã',
+      'chấm dòng version; truyền `--source-ref <ref|sha>` nếu muốn chỉ định tường minh.',
       '',
     )
   }
@@ -575,6 +585,8 @@ interface Scope {
   testRange: string | null
   testLineMissing: boolean
   noTestTrunk: boolean
+  /** `dev/<version>/main` không có trên origin ⇒ đã phải đếm trên `HEAD`, không phải dòng version. */
+  sourceFallback: boolean
 }
 
 /**
@@ -586,7 +598,11 @@ function resolveScope(repo: string, version: string, sourceRef: string | undefin
   const mainRef = resolveRef(repo, 'main')
   if (!mainRef) throw new ToolError('Không thấy `main` trên origin — không có mốc nào để đếm task đã merge.')
 
-  const sourceHead = sourceRef?.trim() || resolveRef(repo, `dev/${version}/main`) || 'HEAD'
+  // Biết được là đã fallback thì phải nói ra: `HEAD` là cây đang đứng (branch task),
+  // không phải dòng version — báo cáo vẫn mang tiêu đề version nên người đọc dễ tin
+  // là đã chấm trên dòng version.
+  const versionRef = resolveRef(repo, `dev/${version}/main`)
+  const sourceHead = sourceRef?.trim() || versionRef || 'HEAD'
   const testLineRef = resolveRef(repo, testLineOf(`dev/${version}/main`))
   const testTrunk = testLineRef ? resolveRef(repo, 'test/main') : null
 
@@ -595,6 +611,7 @@ function resolveScope(repo: string, version: string, sourceRef: string | undefin
     testRange: testLineRef ? (testTrunk ? `${testTrunk}..${testLineRef}` : testLineRef) : null,
     testLineMissing: !testLineRef,
     noTestTrunk: Boolean(testLineRef && !testTrunk),
+    sourceFallback: !sourceRef?.trim() && !versionRef,
   }
 }
 
@@ -634,6 +651,7 @@ export function main(argv: string[], repo: string = ROOT): number {
       strict: args.strict,
       testLineMissing: scope.testLineMissing,
       noTestTrunk: scope.noTestTrunk,
+      sourceFallback: scope.sourceFallback,
       sourceRange: scope.sourceRange,
       testRange: scope.testRange ?? undefined,
     })
