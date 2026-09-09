@@ -4,11 +4,16 @@
 # tự nhiên phát hiện "version này chưa ai viết test". Workflow này là chỗ đó:
 # chạy đúng một lần, ở PR phát hành `dev/x.y.z/main` → `main`, và **chặn cứng**.
 #
-# Bốn thứ nó chặn, bốn thông điệp khác nhau:
+# Năm thứ nó chặn, năm thông điệp khác nhau:
 #   1. dòng test `test/x.y.z/main` không tồn tại  → chưa viết test
 #   2. dòng test chưa có `reports/`               → chưa có baseline để chấm
-#   3. suite trên cây ghép đỏ                     → test đỏ
-#   4. cổng coverage đỏ                           → coverage tụt
+#   3. SHA neo trong baseline không còn tồn tại   → không kết luận được gì (TC-E9)
+#   4. suite trên cây ghép đỏ                     → test đỏ
+#   5. cổng coverage đỏ                           → coverage tụt
+#
+# Và hai thứ nó **cảnh báo** (đợt đầu KHÔNG chặn, siết sau bằng `--strict`):
+#   - neo cũ / lệch nhánh / thuộc version khác    → test xanh nhưng viết cho ref cũ (TC-F4)
+#   - còn task đã merge chưa có test              → liệt kê từng task (TC-E6)
 #
 # `todo-debt.yml` KHÔNG gánh việc này — nó chỉ kiểm `docs/todo/` có tồn tại hay
 # không (honor-system), còn đây kiểm bằng cách chạy thật.
@@ -162,6 +167,24 @@ jobs:
             echo "::error::Dòng test ${TEST_LINE} chưa có reports/ — thiếu baseline là CHẶN, không phải đạt."
             exit 1
           fi
+
+      # ⚠️ Hai cổng dưới đặt TRƯỚC `bun install`: chúng chỉ cần `git` + bun
+      # runtime, nên PR phát hành biết mình lệch neo trong ~10s thay vì sau ~10
+      # phút suite + build + playwright.
+      - name: Cổng neo SHA (TC-F4 · TC-E9)
+        run: |
+          bun .github/scripts/test-anchor.ts \
+            --baseline reports/coverage-baseline.json \
+            --head-sha "${{ github.event.pull_request.head.sha }}" \
+            --head-ref "${{ github.head_ref }}"
+
+      # Cảnh báo, không chặn: liệt kê task đã merge mà dòng test chưa phủ. Thêm
+      # `--strict` vào đây là siết thành chặn, không phải sửa lại script.
+      - name: Trạng thái test theo task (TC-E6 · TC-E7)
+        run: |
+          bun .github/scripts/test-coverage-status.ts \
+            --version "${{ needs.probe.outputs.version }}" \
+            --source-ref "${{ github.event.pull_request.head.sha }}"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

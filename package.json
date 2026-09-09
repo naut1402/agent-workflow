@@ -40,6 +40,8 @@
     "test:scope": "bun .github/scripts/test-scope.ts",
     "test:overlay": "bash .github/scripts/overlay-tests.sh",
     "test:push": "bash .github/scripts/push-tests.sh",
+    "test:status": "bun .github/scripts/test-coverage-status.ts",
+    "test:anchor": "bun .github/scripts/test-anchor.ts",
     "coverage:gate": "bun .github/scripts/coverage-gate.ts",
     "e2e:sysdeps": "bash .github/scripts/setup-e2e-sysdeps.sh",
     "test:e2e": "playwright test --pass-with-no-tests",
