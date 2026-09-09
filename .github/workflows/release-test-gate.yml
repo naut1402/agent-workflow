@@ -117,9 +117,15 @@ jobs:
         with:
           bun-version: latest
 
+      # ⚠️ Giá trị do NGƯỜI MỞ PR đặt (tên branch) phải đi qua "env:" rồi mới tới
+      # shell. Nội suy "${{ }}" xảy ra TRƯỚC khi shell chạy, mà tên branch git
+      # được phép chứa dollar, backtick, dấu chấm phẩy và ngoặc — nội suy thẳng
+      # vào "run:" là cho thực thi lệnh tuỳ ý trên runner, kể cả PR từ fork.
       - name: Overlay dòng test lên head của PR
         env:
           TEST_LINE: ${{ needs.probe.outputs.test_line }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           git fetch --no-tags --depth=1 origin "+refs/heads/${TEST_LINE}:refs/remotes/origin/${TEST_LINE}"
@@ -137,7 +143,7 @@ jobs:
             echo ""
             echo "| Vai trò | Ref |"
             echo "|---|---|"
-            echo "| source (head PR) | \`${{ github.head_ref }}\` @ \`${{ github.event.pull_request.head.sha }}\` |"
+            echo "| source (head PR) | \`${HEAD_REF}\` @ \`${HEAD_SHA}\` |"
             echo "| test | \`${TEST_LINE}\` @ \`${TEST_SHA}\` |"
             echo "| số file test | ${COUNT} |"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -172,19 +178,25 @@ jobs:
       # runtime, nên PR phát hành biết mình lệch neo trong ~10s thay vì sau ~10
       # phút suite + build + playwright.
       - name: Cổng neo SHA (TC-F4 · TC-E9)
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           bun .github/scripts/test-anchor.ts \
             --baseline reports/coverage-baseline.json \
-            --head-sha "${{ github.event.pull_request.head.sha }}" \
-            --head-ref "${{ github.head_ref }}"
+            --head-sha "$HEAD_SHA" \
+            --head-ref "$HEAD_REF"
 
       # Cảnh báo, không chặn: liệt kê task đã merge mà dòng test chưa phủ. Thêm
       # `--strict` vào đây là siết thành chặn, không phải sửa lại script.
       - name: Trạng thái test theo task (TC-E6 · TC-E7)
+        env:
+          VERSION: ${{ needs.probe.outputs.version }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           bun .github/scripts/test-coverage-status.ts \
-            --version "${{ needs.probe.outputs.version }}" \
-            --source-ref "${{ github.event.pull_request.head.sha }}"
+            --version "$VERSION" \
+            --source-ref "$HEAD_SHA"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
