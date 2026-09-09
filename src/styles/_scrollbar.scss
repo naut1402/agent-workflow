@@ -1,0 +1,36 @@
+/* Scrollbar dùng chung — track trong suốt, thumb mảnh lấy màu từ token theme
+   (`--scrollbar-*` ở `_tokens.scss`) nên tự đổi theo dark/light.
+   Firefox dùng `scrollbar-width`/`scrollbar-color`; WebKit/Blink dùng
+   pseudo-element. Thumb có border trong suốt + `background-clip: padding-box`
+   để phần nhìn thấy mảnh hơn máng cuộn. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+/* Bỏ nút mũi tên đầu/cuối máng cuộn (Windows/Chromium) */
+*::-webkit-scrollbar-button {
+  display: none;
+}

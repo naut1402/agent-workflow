@@ -1,0 +1,20 @@
+# Normalize line endings to LF in the repo (CI runs on Linux).
+# Prevents the CRLF churn warnings on Windows checkouts.
+* text=auto eol=lf
+
+# Cây test gập sẵn khi review diff trên GitHub — test chiếm 35–51% số file của
+# một PR task, mà người review PR code cần thấy phần code trước.
+# ⚠️ Chỉ dùng trong **giai đoạn đệm**, khi `tests/` còn nằm trên dòng source.
+# Sau khi cắt sang dòng `test/**` thì xoá hai dòng này (không còn file để gập).
+tests/** linguist-generated=true
+test-e2e/** linguist-generated=true
+
+# Binary assets — never normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+bun.lockb binary

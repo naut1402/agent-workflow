@@ -1,0 +1,552 @@
+// Floating chat surface (nl-chat feature): the window chrome plus the message
+// bubbles. Global rather than scoped because the window shell and its two
+// bodies (creation-flow builder, task/runner chat) are separate components that
+// must share one look — see docs/architecture.md §3.3.
+/* Theme tokens only (see src/styles/_tokens.scss) — the panel must follow the
+   light/dark theme instead of the previous hardcoded white surface. */
+.nl-chat-window {
+  position: fixed;
+  /* Width/height come from the inline resize state (ChatWindow.vue); these are
+     only the pre-mount fallback. */
+  width: 340px;
+  height: 60vh;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 1000;
+}
+.nl-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.nl-chat-title {
+  font-weight: 600;
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The title IS the status indicator now — the header carries no status icon
+   any more. Palette taken over from the dropped `.nl-chat-status` rules;
+   `is-idle` is deliberately absent so it inherits the window's --text. Busy is
+   --waiting, not --accent: --accent already means "info icon" in this header. */
+.nl-chat-title.is-busy {
+  color: var(--waiting);
+}
+.nl-chat-title.is-done {
+  color: var(--ok);
+}
+.nl-chat-title.is-error {
+  color: var(--danger);
+}
+/* Status as text for screen readers: colour alone would make the status
+   unreadable for anyone who cannot tell the three apart (WCAG 1.4.1). */
+.nl-chat-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+/* Which session of how many, between the title and the → arrow. */
+.nl-chat-session-counter {
+  flex: none;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+/* Info affordance: leads the header (where the connection dot used to be) and
+   hover reveals which project/task/step/runner this chat is bound to, without
+   spending header width on it. */
+.nl-chat-info {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+/* Blue, in both themes (--accent is #4aa3ff dark / #0969da light). The hover
+   state needs its own rule: the global .icon-btn:hover pulls it back to --text. */
+.nl-chat-info .icon-btn,
+.nl-chat-info .icon-btn:hover:not(:disabled) {
+  color: var(--accent);
+}
+/* Anchored left now that the icon leads the header; the ceiling keeps it inside
+   the window at its 260px minimum width. */
+.nl-chat-info-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 3;
+  min-width: 180px;
+  max-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  font-size: 11px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+}
+.nl-chat-info-row {
+  display: flex;
+  gap: 8px;
+}
+.nl-chat-info-label {
+  flex: none;
+  width: 78px;
+  color: var(--muted);
+}
+.nl-chat-info-value {
+  overflow-wrap: anywhere;
+}
+.nl-chat-icon-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+.nl-chat-icon-btn:hover {
+  color: var(--text);
+}
+.nl-chat-body {
+  padding: 10px 12px;
+  /* Takes the height the user resized to; the message list scrolls inside. */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* One per open session — all mounted, only the active one displayed, so an
+   unsubmitted draft survives switching to another chat. */
+.nl-chat-session {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.nl-chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.nl-chat-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+/* User right, assistant left — the offset (plus max-width and the role label)
+   is what makes the two sides readable at a glance. */
+.nl-chat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 85%;
+}
+.nl-chat-row-user {
+  align-self: flex-end;
+  align-items: flex-end;
+  text-align: right;
+}
+.nl-chat-row-assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.nl-chat-role {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.nl-chat-message {
+  padding: 6px 10px;
+  /* Explicit size: without it a plain-text bubble inherited the app font while
+     the rendered-markdown one had its own, so user messages looked oversized. */
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.nl-chat-message-user {
+  background: var(--accent-dim);
+  border-radius: 10px 10px 2px 10px;
+}
+.nl-chat-message-assistant {
+  background: var(--panel-2);
+  border-radius: 10px 10px 10px 2px;
+}
+/* Runner replies render as markdown through the shared `.md` styles
+   (src/styles/_monitor.scss) — scaled down for the chat bubble. */
+.nl-chat-message.md {
+  font-size: 12px;
+  line-height: 1.5;
+  /* The plain-text bubble keeps newlines with pre-wrap; on rendered HTML that
+     would turn every newline BETWEEN tags into a blank line. */
+  white-space: normal;
+}
+.nl-chat-message.md :first-child {
+  margin-top: 0;
+}
+.nl-chat-message.md :last-child {
+  margin-bottom: 0;
+}
+.nl-chat-message.md pre {
+  padding: 8px;
+  font-size: 11px;
+}
+.nl-chat-message.md ul,
+.nl-chat-message.md ol {
+  padding-left: 18px;
+  margin: 4px 0;
+}
+/* marked emits <p> inside <li> for loose lists — its default margins turn a
+   3-item list into a wall of gaps inside a small bubble. */
+.nl-chat-message.md li {
+  margin: 2px 0;
+}
+.nl-chat-message.md li > p {
+  margin: 0;
+}
+.nl-chat-message.md p {
+  margin: 4px 0;
+}
+.nl-chat-message.md h1,
+.nl-chat-message.md h2,
+.nl-chat-message.md h3 {
+  font-size: 13px;
+  margin: 6px 0 4px;
+}
+/* Clamp long user turns with CSS instead of slicing the source: slicing a code
+   fence or list in half renders broken markup (design §3.3). */
+.nl-chat-message.is-clamped .nl-chat-message-md {
+  max-height: 7.5em;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+}
+/* Moved out of TaskChatBody's scoped block when the bubble became shared. */
+.task-chat-more {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+}
+.nl-chat-message.is-pending {
+  opacity: 0.6;
+}
+/* Copy / expand row under a bubble — inherits the row's user/assistant side. */
+.nl-chat-message-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.nl-chat-copy-flash {
+  font-size: 10px;
+  color: var(--muted);
+}
+/* Drag-and-drop target is the message list itself. */
+.nl-chat-messages.is-drop-over {
+  outline: 1px dashed var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+.nl-chat-drop-hint {
+  align-self: center;
+  font-size: 11px;
+  color: var(--accent);
+}
+/* Composer attachment strip: paperclip + one chip per staged file. */
+.nl-chat-attach {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.nl-chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.nl-chat-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 4px 2px 6px;
+  font-size: 11px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.nl-chat-chip-thumb {
+  width: 16px;
+  height: 16px;
+  object-fit: cover;
+  border-radius: 3px;
+}
+.nl-chat-chip-name {
+  min-width: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nl-chat-chip-size {
+  flex: none;
+  color: var(--muted);
+}
+.nl-chat-attach-error {
+  flex-basis: 100%;
+  font-size: 11px;
+}
+.nl-chat-typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.nl-chat-typing-label {
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.nl-chat-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: nl-chat-bounce 1.1s ease-in-out infinite;
+}
+.nl-chat-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.nl-chat-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes nl-chat-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.nl-chat-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  /* Anchor for the "+" menu, which is absolutely positioned inside this row. */
+  position: relative;
+}
+.nl-chat-composer-add {
+  position: relative;
+  flex: none;
+}
+/* Opens UPWARD: the composer sits at the bottom edge of a floating window, so a
+   menu dropped below it would fall outside the viewport. */
+.nl-chat-composer-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+/* `.nl-chat-input-row button` below gives every button in the form the send
+   button's panel/border look. The rules here are what keep the "+" and the menu
+   items flat instead — they must outrank it, hence the row prefix. */
+.nl-chat-input-row .icon-btn {
+  padding: 0;
+  background: none;
+  border: none;
+}
+.nl-chat-input-row .nl-chat-composer-menu button {
+  padding: 0.45rem 0.7rem;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.nl-chat-input-row .nl-chat-composer-menu button:hover:not(:disabled) {
+  background: var(--hover-surface);
+  color: var(--accent);
+}
+/* The row prefix above outranks the shared `button:disabled` rule further down,
+   so the disabled cursor has to be restated at this specificity. */
+.nl-chat-input-row .nl-chat-composer-menu button:disabled {
+  cursor: not-allowed;
+}
+.nl-chat-input-row textarea,
+.nl-chat-pipeline-name input,
+.nl-chat-draft-textarea {
+  background: var(--input-surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+/* Multi-line composer: grows with the text (Enter sends, Shift+Enter newline).
+   Two lines is the FLOOR, not just the starting size — `autoGrow()` writes an
+   inline `height` on every input, which a CSS `min-height` outranks. That also
+   covers the reset after sending, where the box would otherwise drop to one
+   line. 2 × 1.45em + padding 5px×2 + border 1px×2, with box-sizing: border-box. */
+.nl-chat-input-row textarea {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: none;
+  overflow-y: auto;
+  min-height: calc(1.45em * 2 + 12px);
+  max-height: 120px;
+}
+.nl-chat-input-row button,
+.nl-chat-preview-actions button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.nl-chat-input-row button:hover:not(:disabled),
+.nl-chat-preview-actions button:hover:not(:disabled) {
+  background: var(--hover-surface);
+  border-color: var(--accent);
+}
+.nl-chat-input-row button:disabled,
+.nl-chat-preview-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.nl-chat-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.nl-chat-draft-textarea {
+  flex: 1 1 auto;
+  min-height: 120px;
+}
+
+/* Resize grips, one per corner. The window is anchored bottom-right, so the
+   bottom/right corners shift the anchor offset while growing — see
+   ChatWindow.vue onResizeMove(). */
+.nl-chat-resize {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  z-index: 2;
+  touch-action: none;
+}
+.nl-chat-resize.is-tl {
+  top: -3px;
+  left: -3px;
+  cursor: nwse-resize;
+}
+.nl-chat-resize.is-tr {
+  top: -3px;
+  right: -3px;
+  cursor: nesw-resize;
+}
+.nl-chat-resize.is-bl {
+  bottom: -3px;
+  left: -3px;
+  cursor: nesw-resize;
+}
+.nl-chat-resize.is-br {
+  bottom: -3px;
+  right: -3px;
+  cursor: nwse-resize;
+}
+.nl-chat-entity-badge {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.nl-chat-pipeline-name,
+.nl-chat-agent-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.nl-chat-agent-scope select {
+  background: var(--input-surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.nl-chat-draft-textarea {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  resize: vertical;
+}
+.nl-chat-preview-actions {
+  display: flex;
+  gap: 8px;
+}
+.nl-chat-error {
+  color: var(--danger);
+}
+.nl-chat-nudge {
+  font-style: italic;
+  color: var(--muted);
+}
+.nl-chat-done {
+  color: var(--ok);
+  font-weight: 600;
+}

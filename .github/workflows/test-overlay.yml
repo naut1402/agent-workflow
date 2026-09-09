@@ -1,0 +1,343 @@
+# CI của **dòng test** (`test/main`, `test/x.y.z/**`) và cổng phát hiện lệch pha
+# của dòng source.
+#
+# Test code sống ở dòng branch riêng, source code ở dòng `dev/**`. Không commit
+# nào chứa cả hai cây, nên workflow này ghép hai ref lại rồi mới chạy suite:
+#
+#   1. suy cặp ref (`.github/scripts/test-ref.ts`)
+#   2. checkout ref source, rồi `git archive <sha-test> tests test-e2e | tar -x`
+#      lên chính cây đó
+#   3. chạy full suite + cổng coverage trên cây đã ghép
+#
+# Hai chiều kích hoạt, cùng một cây ghép:
+#
+#   test → source  (PR/push dòng test)   : test vừa đổi, source giữ nguyên
+#   source → test  (push `dev/x.y.z/main`): source vừa đổi, test giữ nguyên
+#
+# Chiều thứ hai là cơ chế **phát hiện test lệch pha**: PR code merge vào dòng
+# version sau khi test đã viết thì cặp (source mới, test cũ) phải được chạy lại
+# ngay, chứ không đợi tới PR phát hành — lúc đó sửa đắt hơn nhiều.
+#
+# Chỉ liệt kê **đúng 2 path** khi archive: archive toàn cây sẽ để `.gitignore`
+# và `reports/` của dòng test đè lên config gốc của dòng source.
+#
+# 🚫 Không `--pass-with-no-tests` cho suite unit ở đây: trên dòng test, "0 file
+# test" là đỏ, không phải "đã xanh".
+#
+# Job `report` chỉ chạy trên `push` **của dòng test**: PR từ fork không có secret
+# và không được phép ghi, còn chiều nghịch thì không có gì mới để ghi.
+
+name: Test overlay CI
+
+on:
+  pull_request:
+    branches:
+      - 'test/**'
+  push:
+    branches:
+      - 'test/main'
+      - 'test/*/main'
+      - 'dev/*/main'
+
+concurrency:
+  group: test-overlay-${{ github.ref }}
+  # PR thì cancel lượt cũ (đúng và tiết kiệm). Push thì KHÔNG: job `report` ghi
+  # baseline rồi push về dòng test, bị giết giữa `commit` và `push` là mất lượt.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Mặc định chỉ đọc; job `report` tự nâng quyền của riêng nó.
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Suy cặp ref source ↔ test
+    runs-on: ubuntu-latest
+    outputs:
+      source: ${{ steps.refs.outputs.source }}
+      test_ref: ${{ steps.refs.outputs.test_ref }}
+      test_sha: ${{ steps.refs.outputs.test_sha }}
+      version: ${{ steps.refs.outputs.version }}
+      direction: ${{ steps.refs.outputs.direction }}
+      skip: ${{ steps.refs.outputs.skip }}
+    steps:
+      # Dòng test là cây orphan chỉ chứa `tests/` + `test-e2e/` + `reports/` —
+      # KHÔNG có `.github/scripts/`. Nên script suy ref phải lấy từ `main`.
+      - name: Checkout main (chỉ để lấy script suy ref)
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Suy cặp ref
+        id: refs
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          # PR: `base_ref` là branch dòng test đang nhận merge.
+          BASE_REF: ${{ github.base_ref }}
+          # PR phải chạy đúng commit của PR, không phải đầu branch base.
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT" == 'push' && "$REF_NAME" == dev/* ]]; then
+            # Chiều nghịch: source vừa đổi, lấy đầu dòng test hiện có.
+            DIRECTION=source
+            SOURCE="$REF_NAME"
+            TEST_REF="$(bun .github/scripts/test-ref.ts test "$REF_NAME")"
+            TEST_SHA="$(git ls-remote origin "refs/heads/${TEST_REF}" | cut -f1)"
+            if [[ -z "$TEST_SHA" ]]; then
+              # Chưa ai viết test cho version này. Đây KHÔNG phải lỗi ở đây —
+              # `release-test-gate.yml` mới là chỗ chặn cứng việc thiếu test.
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              {
+                echo "### Bỏ qua — dòng test chưa tồn tại"
+                echo ""
+                echo "Source \`${SOURCE}\` vừa đổi, nhưng \`${TEST_REF}\` chưa có trên remote."
+                echo "Chưa có gì để đối chiếu, nên lượt này không chạy suite."
+                echo ""
+                echo "⚠️ Đây **không** phải \"đã test và xanh\". Cổng chặn cứng nằm ở"
+                echo "\`release-test-gate.yml\` (PR phát hành \`dev/x.y.z/main\` → \`main\`)."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          else
+            DIRECTION=test
+            TEST_REF="$([[ "$EVENT" == 'pull_request' ]] && echo "$BASE_REF" || echo "$REF_NAME")"
+            TEST_SHA="$([[ "$EVENT" == 'pull_request' ]] && echo "$PR_HEAD_SHA" || echo "$PUSH_SHA")"
+            SOURCE="$(bun .github/scripts/test-ref.ts source "$TEST_REF")"
+          fi
+
+          VERSION="$(bun .github/scripts/test-ref.ts version "$TEST_REF")"
+          {
+            echo "skip=false"
+            echo "direction=$DIRECTION"
+            echo "source=$SOURCE"
+            echo "test_ref=$TEST_REF"
+            echo "test_sha=$TEST_SHA"
+            echo "version=$VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+          # Truy vết: đỏ ở đây phải nói được đã chạy cặp ref nào (test lệch pha
+          # so với source là nguyên nhân số 1, và nó không đọc được từ log suite).
+          {
+            if [[ "$DIRECTION" == 'source' ]]; then
+              echo "### Đối chiếu lệch pha — source vừa đổi"
+              echo ""
+              echo "Đỏ ở lượt này nghĩa là **test cũ không còn khớp source mới**, không phải test sai."
+              echo "Xử lý: mở task sửa test trên dòng \`${TEST_REF}\`."
+            else
+              echo "### Cặp ref đang chạy"
+            fi
+            echo ""
+            echo "| Vai trò | Ref |"
+            echo "|---|---|"
+            echo "| source | \`$SOURCE\` |"
+            echo "| test | \`$TEST_REF\` @ \`$TEST_SHA\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  overlay:
+    name: Suite trên cây ghép
+    needs: resolve
+    if: needs.resolve.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ref source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.source }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Overlay cây test
+        env:
+          TEST_SHA: ${{ needs.resolve.outputs.test_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$TEST_SHA"
+          # Giai đoạn đệm: dòng source vẫn còn `tests/` tracked. Không dọn thì
+          # file cũ sót lại và suite chạy trên cây lẫn hai phiên bản.
+          rm -rf tests test-e2e
+          git archive "$TEST_SHA" tests test-e2e | tar -x -C .
+          test -d tests || { echo "::error::Ref test $TEST_SHA không có thư mục tests/ — dừng ngay ở bước ghép."; exit 1; }
+          echo "Đã overlay $TEST_SHA — số file test:"
+          find tests test-e2e -name '*.test.ts' -o -name '*.spec.ts' | wc -l
+
+      # Baseline sống ở dòng test, mà cây overlay chỉ mang `tests/`+`test-e2e/`.
+      # ⚠️ Phải dọn `reports/` của dòng source TRƯỚC: checkout source mang sẵn
+      # `reports/coverage-baseline.json` (commit ở Đợt 2). Nuốt lỗi archive ở đây
+      # là cổng lặng lẽ chấm theo baseline đóng băng của dòng source — thấp hơn
+      # baseline thật, tức là xanh giả.
+      - name: Lấy baseline coverage của dòng test
+        id: baseline
+        env:
+          TEST_SHA: ${{ needs.resolve.outputs.test_sha }}
+        run: |
+          set -euo pipefail
+          rm -rf reports
+          if git archive "$TEST_SHA" reports | tar -x -C .; then
+            echo "allow_missing=" >> "$GITHUB_OUTPUT"
+          else
+            # Lượt đầu của một dòng test: chưa có baseline nào để so. Cho qua ở
+            # đây (job `report` ngay sau sẽ ghi baseline đầu tiên), nhưng phải nói
+            # ra. Ở `release-test-gate.yml` thì trường hợp này là ĐỎ.
+            echo "::warning::Dòng test $TEST_SHA chưa có reports/ — lượt này khởi tạo baseline thay vì so sánh."
+            echo "allow_missing=--allow-missing" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck (vue-tsc)
+        run: bun run typecheck
+
+      - name: Lint (ESLint)
+        run: bun run lint
+
+      - name: Unit + integration tests (backend, bun test) + coverage
+        run: bun run test -- --coverage --coverage-reporter=lcov --coverage-dir=coverage/backend
+
+      - name: Unit tests (frontend, vitest) + coverage
+        run: bun run test:fe
+
+      - name: Build
+        run: bun run build
+
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+
+      - name: E2E tests (playwright)
+        run: bun run test:e2e
+
+      - name: Cổng coverage
+        run: bun run coverage:gate -- --check --baseline reports/coverage-baseline.json ${{ steps.baseline.outputs.allow_missing }}
+
+      - name: Upload coverage & reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-evidence-${{ needs.resolve.outputs.version }}-${{ github.run_id }}
+          path: |
+            coverage/
+            playwright-report/
+          if-no-files-found: ignore
+          # Bằng chứng phải sống đủ lâu để dùng khi review PR phát hành của cả
+          # dòng version, không chỉ trong lúc PR test còn mở. Bản nặng lâu dài
+          # đi Release asset ở job `report`.
+          retention-days: 90
+
+  report:
+    name: Đẩy coverage về dòng test
+    # Chỉ trên push CỦA DÒNG TEST: PR (nhất là từ fork) không có secret và không
+    # được ghi; chiều nghịch (push dòng source) không sinh dữ liệu mới cho dòng test.
+    if: github.event_name == 'push' && needs.resolve.outputs.direction == 'test'
+    needs: [resolve, overlay]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Hai push cùng branch không được ghi đè nhau — xếp hàng, không cancel.
+    concurrency:
+      group: test-reports-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout ref source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.source }}
+          fetch-depth: 0
+
+      # ⚠️ Cây riêng, KHÔNG commit từ cây overlay: cây overlay chịu `.gitignore`
+      # của dòng source (có `coverage/`), `git add` từ đó trượt im lặng.
+      - name: Checkout dòng test ra thư mục riêng
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.test_ref }}
+          path: testline
+          fetch-depth: 0
+          token: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Lấy lại coverage của job `overlay` thay vì chạy suite lần hai — cùng một
+      # lượt chạy thì phải cùng một con số, và chạy lại còn tốn gấp đôi.
+      - name: Tải coverage của job overlay
+        uses: actions/download-artifact@v6
+        with:
+          name: test-evidence-${{ needs.resolve.outputs.version }}-${{ github.run_id }}
+
+      - name: Cập nhật baseline + lịch sử
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          SOURCE_REF: ${{ needs.resolve.outputs.source }}
+          TEST_REF: ${{ needs.resolve.outputs.test_ref }}
+        run: |
+          set -euo pipefail
+          mkdir -p "testline/reports/${VERSION}"
+          cp coverage/frontend/coverage-summary.json "testline/reports/${VERSION}/coverage-summary.json"
+          bun run coverage:gate -- --update \
+            --baseline "testline/reports/coverage-baseline.json" \
+            --history "testline/reports/coverage-history.md" \
+            --source-ref "$SOURCE_REF" \
+            --test-ref "$TEST_REF"
+
+      - name: Commit + push tầng nhẹ
+        working-directory: testline
+        env:
+          TEST_REF: ${{ needs.resolve.outputs.test_ref }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports
+          if git diff --cached --quiet; then
+            echo "Không có thay đổi report — bỏ qua."
+            exit 0
+          fi
+          git commit -m "chore(reports): cập nhật coverage ${TEST_REF}"
+          # Chịu được race giữa hai job report của cùng dòng test.
+          git pull --rebase origin "$TEST_REF"
+          git push origin "HEAD:${TEST_REF}"
+
+      # Evidence nặng đi Release asset — không có `retention-days`, và không làm
+      # phình repo (một lượt chạy ~7,7 MB nén so với ~3,5 MB toàn bộ history).
+      - name: Đẩy evidence nặng lên Release asset
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          TEST_REF: ${{ needs.resolve.outputs.test_ref }}
+        run: |
+          set -euo pipefail
+          TAG="reports-${VERSION}"
+          ASSETS=()
+          if [[ -d coverage ]]; then
+            tar -czf coverage.tgz coverage
+            ASSETS+=(coverage.tgz)
+          fi
+          if [[ -d playwright-report ]]; then
+            tar -czf playwright-report.tgz playwright-report
+            ASSETS+=(playwright-report.tgz)
+          fi
+          if [[ ${#ASSETS[@]} -eq 0 ]]; then
+            echo "Không có evidence nào để đẩy — bỏ qua." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "${{ github.repository }}" \
+                 --draft --title "Test evidence ${VERSION}" \
+                 --notes "Bằng chứng test của dòng \`${TEST_REF}\`. Sinh tự động bởi CI."
+          gh release upload "$TAG" "${ASSETS[@]}" --repo "${{ github.repository }}" --clobber
+          echo "Evidence: $(gh release view "$TAG" --repo "${{ github.repository }}" --json url --jq .url)" >> "$GITHUB_STEP_SUMMARY"

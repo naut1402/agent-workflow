@@ -1,0 +1,13 @@
+/* Monitor — rule bắc cầu giữa 2 component (tổ tiên ở SFC này, đích ở SFC khác)
+   nên không đặt được trong <style scoped> của riêng ai; xem
+   docs/implement/feature-organization-rule.md §5. */
+
+/* .monitor-sub-sidebar ở MonitorLayout → TaskList */
+.monitor-sub-sidebar .tasklist-panel {
+  flex: 1;
+  min-height: 0;
+}
+.monitor-sub-sidebar .tasklist {
+  flex: 1;
+  min-height: 0;
+}

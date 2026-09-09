@@ -1,0 +1,138 @@
+/** Peer: advance task phase after a successful pipeline job (owned by monitor). */
+export { advanceStepOnJobSuccess, queuePendingFeedback, takePendingFeedback } from '../../monitor/business/tasks/state.js'
+export type { PendingFeedback } from '../../monitor/business/tasks/state.js'
+/** Peer: layered pipeline config (owned by pipeline-editor). */
+export { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
+
+export {
+  loadRunners,
+  saveRunners,
+  listRunners,
+  getRunner,
+  getDefaultRunner,
+  upsertRunner,
+  deleteRunner,
+  setDefaultRunner,
+  substituteConfig,
+  normalizeRunner,
+} from './registry.js'
+export {
+  loadCredentials,
+  saveCredentials,
+  listCredentials,
+  getCredential,
+  upsertCredential,
+  deleteCredential,
+  resolveSecretRef,
+  isDirectSecretType,
+} from './credentials.js'
+export type { ResolvedSecret } from './credentials.js'
+export { isOAuthCapable } from './oauthProviders.js'
+export { hasVaultKey } from './secretVault.js'
+export {
+  startOAuth,
+  completeFromCallback,
+  completeFromPaste,
+  getOAuthStatus,
+  ensureFreshOAuthToken,
+} from './oauthCredentials.js'
+export {
+  loadConnections,
+  saveConnections,
+  listConnections,
+  getConnection,
+  upsertConnection,
+  deleteConnection,
+  ensureLegacyConnection,
+  listProviderCatalog,
+  scanLocalCommands,
+} from './connections.js'
+export {
+  loadProviderConfigs,
+  saveProviderConfigs,
+  listProviderConfigs,
+  getProviderConfig,
+  upsertProviderConfig,
+  deleteProviderConfig,
+} from './providerConfigs.js'
+export {
+  loadCommands,
+  saveCommands,
+  listCustomCommands,
+  getCustomCommand,
+  upsertCustomCommand,
+  deleteCustomCommand,
+} from './commands.js'
+export { resolveAgent, resolveAgentFilePath, normalizeAgentRef, describeAgentSearchPaths } from './agentResolver.js'
+export { getProvider, listProviderIds, registerProvider } from './registry.js'
+export { listAvailableModels } from './modelCatalog.js'
+export type { ListModelsInput, ListModelsResult } from './modelCatalog.js'
+export {
+  AGENT_CLI_PROVIDER_IDS,
+  isAgentCliProviderId,
+  isAgentCliProvider,
+  providerFamilyOf,
+} from './providers/agentCli.js'
+export type { AgentCliProvider, AgentCliCapabilities, TokenUsage, ProviderFamily as AgentProviderFamily } from './providers/agentCli.js'
+export {
+  submitJob,
+  submitAndWait,
+  loadJob,
+  listJobs,
+  cancelJob,
+  submitApprovalJob,
+  sendJobFeedback,
+  sendTaskFeedback,
+  getApprovalDiff,
+  approveJob,
+  discardJob,
+  findSelectionRange,
+  extractLines,
+  stepIdOf,
+} from './jobQueue.js'
+export { reapOrphanedRunningJobs, isPidAlive, FAILURE_MAX_ATTEMPTS } from './jobQueue.js'
+export { classifyJobFailure, parseUsageResetAt } from './classifyJobFailure.js'
+export type { JobFailureKind } from './classifyJobFailure.js'
+export {
+  saveRecoverEntry,
+  loadRecoverEntry,
+  removeRecoverEntry,
+  listRecoverEntries,
+} from './recoverLedger.js'
+export type { RecoverEntry } from './recoverLedger.js'
+export { tickRecoverPoller, startRecoverPoller, resumeRecoveredJob } from './recoverPoller.js'
+export {
+  loadTaskSessionLedger,
+  resolveSessionPlan,
+  recordSessionUsage,
+  isSessionEntryValid,
+  closeTaskSession,
+} from './sessionLedger.js'
+export type { SessionEntry, TaskSessionLedger, SessionEntryStatus } from './sessionLedger.js'
+export {
+  parseCursorJsonOutput,
+  buildCursorJsonArgs,
+  buildCursorJsonInvocation,
+  prepareSessionInvocation,
+  mintSessionId,
+} from './sessionLedger.js'
+
+export type {
+  CredentialProfile,
+  Connection,
+  ConnectionKind,
+  CustomCommand,
+  ProviderCatalogEntry,
+  ScannedCommand,
+  RunnerConfig,
+  ResolvedAgent,
+  ExecuteRequest,
+  ExecuteResult,
+  JobStatus,
+  JobRecord,
+  RunnerProvider,
+  MutationResult,
+  ProviderFamily,
+  ProviderConfig,
+  ProviderConfigsStore,
+} from './types.js'

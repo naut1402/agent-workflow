@@ -1,0 +1,82 @@
+// Shell + shared UI strings (sidebar, status, language switcher, API error
+// fallbacks). Feature-specific strings live in their own namespace file.
+export default {
+  brand: 'Dev Team',
+  sidebar: {
+    expand: 'Mở sidebar',
+    collapse: 'Thu gọn sidebar',
+    expandSubSidebar: 'Mở panel',
+    collapseSubSidebar: 'Thu gọn panel',
+    connected: 'live',
+    disconnected: 'disconnected',
+    settings: 'Cài đặt',
+    version: 'Phiên bản {version}',
+  },
+  modes: {
+    monitor: 'Monitor',
+    pipelineEditor: 'Pipeline Editor',
+    agentEditor: 'Agent Editor',
+    quickAction: 'Quick Action',
+    knowledge: 'Knowledge',
+    runner: 'Runner',
+    runnerConfig: 'Runner Config',
+    automations: 'Automations',
+    logs: 'Nhật ký',
+    statistics: 'Thống kê',
+  },
+  status: {
+    updated: 'cập nhật {time}',
+    paused: {
+      editor: 'editor mode — polling paused',
+      agentEditor: 'agent editor — polling paused',
+      quickAction: 'quick action — polling paused',
+      knowledge: 'knowledge — polling paused',
+      runner: 'runner config — polling paused',
+      automations: 'automations — polling paused',
+      logs: 'nhật ký — polling paused',
+      statistics: 'thống kê — polling paused',
+    },
+  },
+  language: {
+    title: 'Ngôn ngữ',
+    desc: 'Chọn ngôn ngữ hiển thị của giao diện.',
+    vi: 'Tiếng Việt',
+    en: 'English',
+  },
+  errors: {
+    updateTaskStatus: 'Không thể cập nhật trạng thái task (mã lỗi {status})',
+    archiveTask: 'Không thể lưu trữ task (mã lỗi {status})',
+    renameTask: 'Không thể đổi tên task (mã lỗi {status})',
+    deleteTask: 'Không thể xoá task (mã lỗi {status})',
+    repairTaskState: 'Không thể vá state task (mã lỗi {status})',
+    cleanWorktree: 'Không thể dọn worktree (mã lỗi {status})',
+    saveCustomAgent: 'Không lưu được custom agent (server không trả về tên).',
+  },
+  select: {
+    empty: 'Không có tuỳ chọn.',
+  },
+  // Copy-to-clipboard flash — dùng chung mọi nút copy (useCopyText).
+  copy: {
+    done: 'Đã copy',
+    fail: 'Copy thất bại',
+  },
+  folderPicker: {
+    title: 'Chọn thư mục',
+    close: 'Đóng',
+    up: 'Lên thư mục cha',
+    roots: 'Ổ đĩa / gốc',
+    loading: 'Đang tải…',
+    empty: 'Không có thư mục con.',
+    cancel: 'Huỷ',
+    select: 'Chọn thư mục này',
+    selectDirRequired: 'Hãy mở một thư mục trước khi chọn.',
+  },
+  // Node artifact/knowledge trên canvas VueFlow — dùng chung Monitor + Pipeline Editor.
+  artifactNode: {
+    producesTitle: 'Đầu ra',
+    knowledgeTitle: 'Knowledge',
+    exists: 'Đã có',
+    missing: 'Thiếu',
+    fromStep: '→ {stepId}',
+  },
+}

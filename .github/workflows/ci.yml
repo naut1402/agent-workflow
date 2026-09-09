@@ -1,0 +1,123 @@
+# CI của **dòng source** (`main`, `dev/**`, `refactor/**`, mọi PR).
+#
+# Tách hai job theo ngữ cảnh, để cùng một file phục vụ được cả trước và sau khi
+# `tests/` bị cắt khỏi dòng source:
+#
+#   code — typecheck · lint · build. Không cần cây test, luôn chạy.
+#   full — suite test. Chỉ chạy khi cây test **có mặt** trong checkout.
+#
+# Vì sao dò cây test thay vì `--pass-with-no-tests`: `bun test <thư-mục-không-
+# tồn-tại>` và `vitest run` không tìm thấy test đều exit 1. Nới thành "rỗng là
+# xanh" sẽ làm mất luôn tác dụng của cổng ở dòng test, nơi rỗng **phải** là đỏ.
+#
+# Sau khi cắt: job `full` skip với trạng thái nhìn thấy được trên PR, và việc
+# chạy test chuyển hẳn sang `test-overlay.yml` (PR dòng test) +
+# `release-test-gate.yml` (PR phát hành).
+
+name: CI
+
+on:
+  push:
+    branches: [main, 'refactor/**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  code:
+    name: Typecheck · Lint · Build
+    runs-on: ubuntu-latest
+    outputs:
+      has_tests: ${{ steps.probe.outputs.has_tests }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Dò cây test trong checkout
+        id: probe
+        run: |
+          set -euo pipefail
+          if [[ -d tests && -f tests/runners.json ]]; then
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Suite test: không chạy ở đây"
+              echo ""
+              echo "Ref này không có cây test — test sống ở dòng \`test/**\`."
+              echo "Suite được chạy bởi \`test-overlay.yml\` (PR dòng test) và"
+              echo "\`release-test-gate.yml\` (PR phát hành \`dev/x.y.z/main\` → \`main\`)."
+              echo ""
+              echo "⚠️ Đây **không** phải \"đã test và xanh\"."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Typecheck (vue-tsc)
+        run: bun run typecheck
+
+      - name: Lint (ESLint)
+        run: bun run lint
+
+      - name: Build
+        run: bun run build
+
+  full:
+    name: Suite test (cây test có mặt)
+    needs: code
+    if: needs.code.outputs.has_tests == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Unit + integration tests (backend, bun test) + coverage
+        run: bun run test -- --coverage --coverage-reporter=lcov --coverage-dir=coverage/backend
+
+      - name: Unit tests (frontend, vitest) + coverage
+        run: bun run test:fe
+
+      # 🚫 Cố ý KHÔNG có bước `Build` ở job này: job `code` đã build mọi PR, và
+      # `playwright.config.ts` tự chạy `bun run build` trong `webServer.command`.
+      # Thêm bước build ở đây là lần build thứ ba cho cùng một PR — đi ngược mục
+      # tiêu "giảm chi phí mỗi PR" của chính việc tách dòng test.
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+
+      - name: E2E tests (playwright)
+        run: bun run test:e2e
+
+      # 🚫 Cố ý KHÔNG gác cổng coverage ở đây. Cổng chỉ đặt ở ba chỗ: PR dòng
+      # test, push dòng test, và PR phát hành (`release-test-gate.yml`). Gác cả
+      # ở PR feature sẽ chặn mọi PR thêm source trước khi test kịp viết — đúng
+      # cái vòng phụ thuộc mà việc tách dòng test đang muốn phá.
+      - name: Upload coverage & reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-evidence
+          path: |
+            coverage/
+            playwright-report/
+          if-no-files-found: ignore
+          # Bằng chứng phải còn sống khi review PR phát hành của cả dòng version,
+          # không chỉ trong tuần mở PR feature.
+          retention-days: 90

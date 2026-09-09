@@ -1,0 +1,106 @@
+<script setup lang="ts">
+import { onUnmounted, watch } from 'vue'
+import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import Icon from '../../../core/ui/Icon.vue'
+import type { ChatAttachmentItem } from '../composables/useChatAttachments'
+
+/**
+ * Composer strip: one chip per staged file. Files are only uploaded when the
+ * message is sent, so chips are removable until then. Picking files moved to
+ * the composer's "+" menu (`ChatComposerMenu`), so this strip is now purely a
+ * display of what is staged — and shows nothing at all when nothing is.
+ */
+
+const props = defineProps<{
+  items: ChatAttachmentItem[]
+  error?: string | null
+  /**
+   * True only while an upload is in flight. Deliberately not `canAttach`: that
+   * also folds in `canSend`, which the server flips off mid-poll — chips staged
+   * just before would then be neither sendable nor removable.
+   */
+  disabled?: boolean
+}>()
+const emit = defineEmits<{
+  remove: [string]
+}>()
+
+const { t } = useI18nHelpers()
+
+/** Object URLs must be revoked or the browser keeps every previewed file alive. */
+const previews = new Map<string, string>()
+
+function previewUrl(item: ChatAttachmentItem): string | null {
+  if (!item.file.type.startsWith('image/')) return null
+  let url = previews.get(item.id)
+  if (!url) {
+    url = URL.createObjectURL(item.file)
+    previews.set(item.id, url)
+  }
+  return url
+}
+
+function releasePreview(id: string): void {
+  const url = previews.get(id)
+  if (url) {
+    URL.revokeObjectURL(url)
+    previews.delete(id)
+  }
+}
+
+function onRemove(id: string): void {
+  // Guarded here too, not just via the button's `disabled`: a chip removed
+  // mid-upload would drop a file the upload is already carrying.
+  if (props.disabled) return
+  releasePreview(id)
+  emit('remove', id)
+}
+
+// Sync on the list itself, not on the remove event: sending a message clears all
+// chips at once (`attachments.clear()`) without going through `onRemove`, and the
+// body now lives as long as its session, so those blobs would never be released.
+watch(
+  () => props.items,
+  (list) => {
+    const live = new Set(list.map((i) => i.id))
+    for (const id of [...previews.keys()]) if (!live.has(id)) releasePreview(id)
+  },
+  { deep: true },
+)
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+onUnmounted(() => {
+  for (const url of previews.values()) URL.revokeObjectURL(url)
+  previews.clear()
+})
+</script>
+
+<template>
+  <!-- No picker button left, so an empty strip has nothing to show: it must not
+       keep taking up a row above the input. -->
+  <div v-if="items.length || error" class="nl-chat-attach">
+    <ul v-if="items.length" class="nl-chat-chips">
+      <li v-for="item in items" :key="item.id" class="nl-chat-chip">
+        <img v-if="previewUrl(item)" class="nl-chat-chip-thumb" :src="previewUrl(item)!" alt="" />
+        <span class="nl-chat-chip-name" :title="item.file.name">{{ item.file.name }}</span>
+        <span class="nl-chat-chip-size">{{ formatSize(item.file.size) }}</span>
+        <button
+          type="button"
+          class="icon-btn icon-btn-inline"
+          :title="t('nlChat.attachment.remove')"
+          :aria-label="t('nlChat.attachment.remove')"
+          :disabled="disabled"
+          @click="onRemove(item.id)"
+        >
+          <Icon name="close" :size="11" />
+        </button>
+      </li>
+    </ul>
+    <p v-if="error" class="nl-chat-error nl-chat-attach-error">{{ error }}</p>
+  </div>
+</template>

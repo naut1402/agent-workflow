@@ -1,0 +1,225 @@
+import {
+  access,
+  basename,
+  joinPath,
+  readDir,
+  readTextFile,
+  safeReadDir,
+  stat,
+} from '../../../core/lib/fileHelper.js'
+import os from 'node:os'
+import {
+  parseAgentMarkdown,
+  ensureSectionOrder,
+  getSectionTitle,
+} from '../../agent-editor/business/agentMarkdown.js'
+import { sanitiseAgentName } from '../../agent-editor/business/agents.js'
+import type { ResolvedAgent } from './types.js'
+
+function homeDir(): string {
+  return process.env.HOME || process.env.USERPROFILE || os.homedir()
+}
+
+export function normalizeAgentRef(ref: unknown): unknown {
+  if (typeof ref !== 'string') return ref
+  if (ref.startsWith('dev-agent-teams:')) {
+    return `repo:dev-agent-teams:${ref.slice('dev-agent-teams:'.length)}`
+  }
+  return ref
+}
+
+function parseCatalogAgentId(id: unknown): { source: string; name: string } | null {
+  if (typeof id !== 'string' || !id.includes(':')) return null
+  const i = id.lastIndexOf(':')
+  if (i <= 0) return null
+  return { source: id.slice(0, i), name: id.slice(i + 1) }
+}
+
+async function safeAccess(p: string): Promise<boolean> {
+  try {
+    await access(p)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function findInPluginCache(pluginName: string, fileName: string): Promise<string | null> {
+  const cacheRoot = joinPath(homeDir(), '.claude', 'plugins', 'cache')
+  let bestPath: string | null = null
+  let bestMtime = 0
+  try {
+    const markets = await readDir(cacheRoot, { withFileTypes: true })
+    for (const market of markets) {
+      if (!market.isDirectory()) continue
+      const pluginPath = joinPath(cacheRoot, market.name, pluginName)
+      let versions
+      try {
+        versions = await readDir(pluginPath, { withFileTypes: true })
+      } catch {
+        continue
+      }
+      for (const v of versions) {
+        if (!v.isDirectory()) continue
+        const candidate = joinPath(pluginPath, v.name, 'agents', fileName)
+        if (!(await safeAccess(candidate))) continue
+        let mtime = 0
+        try {
+          mtime = (await stat(candidate)).mtimeMs
+        } catch {
+          mtime = 0
+        }
+        if (!bestPath || mtime >= bestMtime) {
+          bestPath = candidate
+          bestMtime = mtime
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return bestPath
+}
+
+async function resolveAgentFilePath(
+  projectRoot: string,
+  devTeamRoot: string,
+  agentRef: string,
+): Promise<string | null> {
+  const id = normalizeAgentRef(agentRef)
+  const parsed = parseCatalogAgentId(id)
+  if (!parsed?.name) return null
+  const { source } = parsed
+  const name = sanitiseAgentName(parsed.name)
+  if (!name) return null
+  const fileName = `${name}.md`
+
+  if (source === 'dashboard') {
+    const p = joinPath(devTeamRoot, 'custom-agents', fileName)
+    return (await safeAccess(p)) ? p : null
+  }
+  if (source === 'user') {
+    const p = joinPath(homeDir(), '.claude', 'agents', fileName)
+    return (await safeAccess(p)) ? p : null
+  }
+  if (source === 'project') {
+    return joinPath(projectRoot, '.claude', 'agents', fileName)
+  }
+  if (source.startsWith('repo:') || source.startsWith('plugin:')) {
+    const rawPlugin = source.includes(':') ? source.slice(source.indexOf(':') + 1) : source
+    const pluginName = sanitiseAgentName(rawPlugin)
+    if (!pluginName) return null
+    const builtin = joinPath(projectRoot, 'plugins', pluginName, 'agents', fileName)
+    if (await safeAccess(builtin)) return builtin
+    const cached = await findInPluginCache(pluginName, fileName)
+    if (cached) return cached
+    // Image / DEV_TEAM_BUNDLED_PLUGINS fallback (docs/template/agents)
+    const bundledRoots = [
+      process.env.DEV_TEAM_BUNDLED_PLUGINS?.trim(),
+      '/opt/bundled-plugins',
+    ].filter(Boolean) as string[]
+    for (const root of bundledRoots) {
+      const bundled = joinPath(root, pluginName, 'agents', fileName)
+      if (await safeAccess(bundled)) return bundled
+    }
+  }
+  return null
+}
+
+/** Paths consulted for dashboard:/repo:/plugin: refs — used in error messages. */
+export async function describeAgentSearchPaths(
+  projectRoot: string,
+  devTeamRoot: string,
+  agentRef: string,
+): Promise<string[]> {
+  const id = normalizeAgentRef(agentRef)
+  const parsed = parseCatalogAgentId(id)
+  if (!parsed?.name) return []
+  const { source } = parsed
+  const name = sanitiseAgentName(parsed.name)
+  if (!name) return []
+  const fileName = `${name}.md`
+
+  if (source === 'dashboard') {
+    const dir = joinPath(devTeamRoot, 'custom-agents')
+    const p = joinPath(dir, fileName)
+    const available = (await safeReadDir(dir))
+      .filter((e) => e.isFile() && e.name.endsWith('.md'))
+      .map((e) => e.name.slice(0, -3))
+    return available.length ? [`${p} (agent có sẵn trong project: ${available.join(', ')})`] : [p]
+  }
+
+  if (source === 'user') {
+    const dir = joinPath(homeDir(), '.claude', 'agents')
+    const p = joinPath(dir, fileName)
+    const available = (await safeReadDir(dir))
+      .filter((e) => e.isFile() && e.name.endsWith('.md'))
+      .map((e) => e.name.slice(0, -3))
+    return available.length ? [`${p} (agent có sẵn (global): ${available.join(', ')})`] : [p]
+  }
+
+  if (!(source.startsWith('repo:') || source.startsWith('plugin:'))) return []
+  const rawPlugin = source.includes(':') ? source.slice(source.indexOf(':') + 1) : source
+  const pluginName = sanitiseAgentName(rawPlugin)
+  if (!pluginName) return []
+  const paths = [
+    joinPath(projectRoot, 'plugins', pluginName, 'agents', fileName),
+    joinPath(homeDir(), '.claude', 'plugins', 'cache', '*', pluginName, '*', 'agents', fileName),
+    joinPath('/opt/bundled-plugins', pluginName, 'agents', fileName),
+  ]
+  if (process.env.DEV_TEAM_BUNDLED_PLUGINS?.trim()) {
+    paths.push(joinPath(process.env.DEV_TEAM_BUNDLED_PLUGINS.trim(), pluginName, 'agents', fileName))
+  }
+  return paths
+}
+
+function buildSystemPrompt(draft: any): string {
+  // `ensureSectionOrder` (agent-editor/business/agentMarkdown) already appends 'unclassified'
+  // to the order whenever it has content — it's how the Agent Editor form shows
+  // a trailing "Chưa phân loại" box for headings it couldn't classify. Rendering
+  // it again here after the loop used to duplicate the whole catch-all block
+  // (agentRef `dev-agent-teams:doc-reviewer` reliably triggers this: the
+  // agent's intro paragraph + its "Đầu vào" heading aren't canonical sections,
+  // so they land in `unclassified` and were sent to the runner twice).
+  const parts: string[] = []
+  for (const key of ensureSectionOrder(draft)) {
+    const content = draft.sections?.[key]
+    if (content?.trim()) {
+      parts.push(`## ${getSectionTitle(key, draft)}\n\n${content.trim()}`)
+    }
+  }
+  return parts.join('\n\n')
+}
+
+/** Resolve agentRef to a provider-agnostic ResolvedAgent. A blank ref is a
+ * deliberate "no agent" job (e.g. a quick action whose prompt_template is
+ * already a complete, free-form instruction) — it runs with no system prompt
+ * merged in, just the job's own userPrompt (see buildPrompt in
+ * providers/claude-code-cli.ts). */
+export async function resolveAgent(
+  agentRef: string,
+  ctx: { projectRoot: string; devTeamRoot: string },
+): Promise<ResolvedAgent> {
+  if (!agentRef?.trim()) {
+    return { ref: '', name: 'ad-hoc', description: '', systemPrompt: '', skills: [] }
+  }
+  const agentPath = await resolveAgentFilePath(ctx.projectRoot, ctx.devTeamRoot, agentRef)
+  if (!agentPath) {
+    const looked = await describeAgentSearchPaths(ctx.projectRoot, ctx.devTeamRoot, agentRef)
+    const hint = looked.length ? ` (looked in: ${looked.join(', ')})` : ''
+    throw new Error(`agent file not found for ref: ${agentRef}${hint}`)
+  }
+  const raw = await readTextFile(agentPath)
+  const draft: any = parseAgentMarkdown(raw)
+  return {
+    ref: agentRef,
+    name: draft.name || basename(agentPath, '.md'),
+    description: draft.description || '',
+    systemPrompt: buildSystemPrompt(draft),
+    skills: draft.skills || [],
+    model: draft.model,
+    agentFilePath: agentPath,
+  }
+}
+
+export { resolveAgentFilePath }
