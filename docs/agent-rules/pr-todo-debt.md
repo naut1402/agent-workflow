@@ -25,6 +25,19 @@ Commit và PR: [`git-pr.md`](git-pr.md).
 - **`<issue>` / `<task-id>`** là slug chữ-số/gạch ngang (vd `174`, `F0012`, `hotfix-logs`). Không có issue GitHub thì dùng id task nội bộ hoặc `adhoc`.
 - **Bất biến**: trên `main` (sau merge từ dòng version), `docs/todo` **không tồn tại**.
 
+### 2.1 Nợ test KHÔNG đi qua `docs/todo/`
+
+Test code sống ở dòng branch riêng ([`git-pr.md`](git-pr.md) §4.3), nên nợ test có bề mặt cứng của riêng nó — **không** ghi vào `docs/todo/` nữa:
+
+| | Nợ docs/convention | Nợ test |
+|---|---|---|
+| Đánh dấu bằng | file `docs/todo/<issue>/<task-id>.md` | **dòng `test/x.y.z/main` chưa tồn tại hoặc rỗng** |
+| Gate | `todo-debt.yml` — kiểm thư mục có tồn tại (honor-system) | `release-test-gate.yml` — **chạy thật**: overlay dòng test, chạy full suite, gác cổng coverage |
+| Nới được không | được, bằng cách trả nợ trước khi promote | **không** nới bằng sửa cấu hình cổng. Hotfix gấp thì bỏ qua bằng thao tác có dấu vết (admin merge / ghi rõ ở PR body), không bằng cách tắt gate |
+
+- **Vì sao khác nhau** — nợ docs chỉ người đọc phát hiện được, còn nợ test thì máy chạy ra được. Cái đo được thì gác bằng cách đo, không gác bằng file đánh dấu.
+- **Loại nợ `test` trong khung §3 vẫn giữ** cho trường hợp còn lại: task cố ý **miễn trừ** test (chỉ đổi tài liệu, chỉ đổi tên biến nội bộ) — ghi lý do miễn trừ để người duyệt thấy, thay vì để cổng đỏ vô cớ.
+
 ---
 
 ## 3. Nội dung file nợ
@@ -78,12 +91,14 @@ Theo dõi nợ dài hạn ngoài gate này thì dùng GitHub Issue.
 - **Script gate**: `.github/scripts/check-todo-debt.ts`; workflow `.github/workflows/todo-debt.yml`.
 - **Chỉ chạy khi** `pull_request` có **base** = `main` và **head** khớp `dev/<…>/main`.
 - **`bun run check:todo`** fail nếu `docs/todo` còn tồn tại.
+- **Nợ test có gate riêng** — `.github/workflows/release-test-gate.yml`, cùng loại PR, nhưng chặn bằng cách chạy thật (§2.1). `todo-debt.yml` **không** gánh việc đó.
 
 ---
 
 ## 6. Checklist nhanh
 
-- [ ] Có hoãn docs/test? → đã có `docs/todo/<issue>/<task-id>.md`
+- [ ] Có hoãn docs/convention? → đã có `docs/todo/<issue>/<task-id>.md`
 - [ ] PR feature → `dev/x.y.z/main`? → được mang nợ; Todo debt **không** chặn
 - [ ] PR `dev/x.y.z/main` → `main`? → **không còn** thư mục `docs/todo/`; `bun run check:todo` xanh
 - [ ] Đã trả nợ? → đã xoá toàn bộ `docs/todo/`
+- [ ] Nợ **test**? → không ghi vào `docs/todo/`; dòng `test/x.y.z/main` phải tồn tại và xanh trước khi promote (§2.1)

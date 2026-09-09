@@ -73,6 +73,62 @@ git switch -c dev/1.1.2/T0000abcd_ten-task-ngan origin/dev/1.1.2/main
 - **Commitlint** chạy trên PR base `dev/**/main` → PR title và **mọi** commit phải đúng format §7.
 - **Epic branch (§5) thắng về base** — task vừa gắn version vừa thuộc epic thì cắt từ branch epic, tên branch vẫn theo §4.2.
 
+### 4.3 Branch dòng test
+
+**Test code không nằm cùng branch với code đối ứng.** Nó có dòng branch riêng, đối xứng hoàn toàn với dòng source:
+
+```
+dòng source :  dev/x.y.z/{taskID}_{slug}  →  dev/x.y.z/main   →  main
+dòng test   :  test/x.y.z/{taskID}_{slug} →  test/x.y.z/main  →  test/main
+```
+
+- **`test/main` là cây orphan** — không chung tổ tiên với `main`, chỉ chứa `tests/` · `test-e2e/` · `reports/`. 🚫 Không có `package.json` · `*.config.ts` · `tsconfig.json` · `src/`: dependency và config runner thuộc dòng source, thêm vào đây là tạo nguồn sự thật thứ hai.
+- **Bất biến neo `test/main` ↔ `main`** — `test/main` chỉ nhận test của version **đã release**, nên overlay `test/main` lên `main` luôn xanh. Vì bất biến này mà dòng test phải hai tầng: gộp thẳng branch task vào `test/main` sẽ đưa test của version chưa release vào đó và làm cây neo đỏ thường trú.
+- **`{taskID}_{slug}` giống hệt §4.2** — cùng task thì cùng taskID và cùng slug ở hai dòng, đó là cách truy từ PR code sang PR test mà không cần bảng tra.
+- **Tên branch task không được kết thúc bằng `/main`.**
+
+```bash
+# Mở dòng test của một version (một lần cho mỗi version)
+git switch -c test/1.1.4/main origin/test/main
+git push -u origin test/1.1.4/main
+
+# Branch task của dòng test
+git switch -c test/1.1.4/T0000abcd_ten-task-ngan origin/test/1.1.4/main
+```
+
+**Dựng `test/main` — một lần cho cả repo.** Chạy trong một worktree riêng, không đứng trên cây đang làm việc:
+
+```bash
+git worktree add ../testline-bootstrap --detach main
+cd ../testline-bootstrap
+git checkout --orphan test/main
+git rm -r --cached . -q
+git add tests test-e2e reports
+git commit -m "test: dựng dòng test gốc từ main@<sha>"
+git push -u origin test/main
+cd -
+git worktree remove --force ../testline-bootstrap   # --force: worktree còn cây source untracked
+```
+
+- ⚠️ **`git checkout --orphan`, không phải `git switch --orphan`.** `switch --orphan` dọn sạch working tree ("all tracked files are removed") nên sau nó không còn `tests/` để `git add`, commit gốc sẽ rỗng. `checkout --orphan` giữ nguyên cây, đúng cái cần ở đây.
+- 🚫 **Không dùng `git clean -fdx` ở gốc repo** để dọn phần thừa. Nó xoá **mọi** file bị ignore — ở repo này là `/.dev-team-agent/` (toàn bộ task state, uploads, knowledge), `node_modules/`, `.env`. `git rm -r --cached .` đã đủ: nó dọn index, còn file thừa trong worktree tạm thì biến mất cùng worktree.
+
+- **Nội dung `test/main` lấy từ `main`**, không lấy từ dòng version đang mở — bất biến neo là `test/main` ↔ `main`.
+- **Viết `.gitignore` mới cho dòng test**, không copy từ dòng source: chỉ ignore rác cục bộ (`node_modules/`, `.claude/`, `test-e2e/.runtime/`, fixture mutable). ⚠️ **Không** ignore `coverage/` · `playwright-report/` · `test-results/` — không cần, và có thể chặn `reports/` sau này.
+- **Chạy dry-run trọn vòng** (`overlay` → `report` → `promote` → `sync`) trên cặp branch nháp `test/0.0.0/main` + `dev/0.0.0/main` trước khi cắt `tests/` khỏi dòng source. Bước cắt là một chiều.
+
+| Việc | Ai làm | Khi nào |
+|---|---|---|
+| Mở `test/x.y.z/main` | người mở dòng version | cùng lúc mở `dev/x.y.z/main` |
+| Sync `test/main` → `test/x.y.z/main` | CI (`sync-test-line.yml`) | mỗi push vào `test/main` |
+| Thăng `test/x.y.z/main` → `test/main` | CI (`promote-test-line.yml`) | ngay khi version lên `main` |
+| Chặn release thiếu test | CI (`release-test-gate.yml`) | PR `dev/x.y.z/main` → `main` |
+
+- **PR của branch task dòng test target `test/x.y.z/main`** — không phải `test/main`, không phải `main`. Dùng template `?template=test.md`.
+- **Commitlint chạy trên base `test/**/main`** → PR title và mọi commit đúng format §7, `type` là `test` (hoặc `chore` cho commit report do CI đẩy).
+- **Viết và chạy test ở local vẫn đứng trên worktree dòng source** — cây orphan không có `package.json` nên không chạy được lệnh nào. `bun run test:overlay` kéo cây test về, `bun run test:push <branch-test> "<message>"` đẩy ngược lên dòng test. Xem [`testing.md`](testing.md) §3.1.
+- **Dòng test mồ côi** (version bị huỷ, không release) không bao giờ vào `test/main`; dọn bằng cách xoá branch, không merge.
+
 ---
 
 ## 5. Feature lớn — issue → branch → breakdown → plan
@@ -102,6 +158,7 @@ Feature/epic lớn thì không code trước khi có issue + plan:
 4. **Stage chọn lọc theo path** (`git add <path>`), không `git add -A` khi working tree còn file ngoài concern hiện tại.
 5. **Subject nêu *vì sao / xử lý nào***, không liệt kê hết file.
 6. **Tách ngay lúc commit**, không dồn lại rồi chia khi mở PR.
+7. **Test luôn là commit `test:` riêng** — không bao giờ dính trong commit `feat`/`fix`. Trong giai đoạn `tests/` còn nằm trên dòng source, đây là điều kiện để cherry-pick phần test sang dòng test (§4.3) mà không kéo theo code.
 
 | Tách tốt | Tránh |
 |----------|--------|
@@ -217,6 +274,8 @@ PR promote dòng version lên `main` là **release note hướng người dùng 
 - **Mỗi gạch đầu dòng mở bằng tên tính năng / hiện tượng in đậm**, rồi tới mô tả; nêu cả hành vi mặc định khi bỏ trống và cách báo lỗi nếu có.
 - **Nội dung không rơi vào 4 section** (vd breaking change) → đặt vào section gần nhất và nêu rõ trong mô tả; không tự thêm section mới.
 - **Trước khi mở PR: không còn thư mục `docs/todo/`** — gate CI Todo debt chỉ chặn đúng loại PR này ([`pr-todo-debt.md`](pr-todo-debt.md)).
+- **Dòng test của version phải tồn tại và xanh** — gate CI `Release test gate` chạy đúng ở loại PR này: nó overlay `test/x.y.z/main` lên head SHA của PR, chạy full suite rồi gác cổng coverage. Ba thông điệp chặn khác nhau: *chưa viết test* (dòng test không tồn tại hoặc rỗng) · *test đỏ* · *coverage tụt*. Đây là cổng cứng, không phải cảnh báo.
+- **Body nêu link sang dòng/PR test của version** — người duyệt release phải biết test nằm đâu mà không phải đi tìm. Đặt vào `## Nội bộ & công cụ dev`, hoặc ngay dưới title nếu không có section nào phù hợp.
 - **Mở PR trên web kèm `?template=release.md`** để GitHub áp đúng template; mở thẳng sẽ ra template PR feature, khi đó xoá body và dán lại theo mục này.
 
 ---

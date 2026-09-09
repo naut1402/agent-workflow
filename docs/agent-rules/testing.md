@@ -14,6 +14,8 @@ Quy ước test **hiện hành**. Coverage ưu tiên cao: mỗi module refactor 
 
 `bun run test:all` chạy tuần tự: typecheck → lint → bun test → vitest → playwright.
 
+⚠️ **Test code sống ở dòng branch riêng** (`test/x.y.z/…`) — trên dòng source phải `bun run test:overlay` trước khi các lệnh trên có gì để chạy. Xem §3.1.
+
 ---
 
 ## 2. Vòng lặp local — chạy theo phạm vi
@@ -77,9 +79,39 @@ Repo **không** còn thư mục `plugins/` ở root — bản agent template ch�
 ## 3. Layout test — gom vào `tests/` + `test-e2e/`
 
 - **Unit test mirror cây source trong `tests/`** — không co-locate cạnh source.
-- **Runner theo path** — `tests/src/server/**` + `tests/src/features/**/business/**` + `tests/mcp/**` → bun test; `tests/src/**` (FE) → vitest.
+- **Runner theo path** — khai trong `tests/runners.json` (khoá `bunTest`); phần còn lại dưới `tests/src/**` là vitest. Đây là **nguồn sự thật duy nhất**: cả `bun run test` và `bun run test:scope` đọc file này, nên thêm một thư mục test chỉ khai một chỗ.
 - **Script tooling của repo** (`.github/scripts/`) có test riêng ở `tests/tools/`, cùng runner bun.
 - **E2E ở `test-e2e/`** — `test-e2e/<feature>.spec.ts` + `test-e2e/fixtures/`; `playwright.config.ts` trỏ `testDir` về đây.
+
+### 3.1 Test sống ở dòng branch riêng
+
+Test code có dòng branch riêng, đối xứng với dòng source — quy ước đầy đủ ở [`git-pr.md`](git-pr.md) §4.3:
+
+```
+test/x.y.z/{taskID}_{slug}  →  test/x.y.z/main  →  test/main   (cây orphan, chỉ test)
+```
+
+Không commit nào chứa cả source và test, nên **chạy test = ghép hai cây** — cây test đặt đúng gốc repo (`tests/` + `test-e2e/`), cùng vị trí cây tracked cũ:
+
+```bash
+bun run test:overlay                    # suy ref test từ branch đang đứng
+bun run test:overlay test/1.1.4/main    # ép ref cụ thể
+bun run test:all                        # rồi chạy như bình thường
+```
+
+**Viết test thì vẫn đứng trên worktree dòng source** — cây orphan không có `package.json`, config runner hay `node_modules` nên chạy được đúng con số không lệnh nào. Viết xong, đẩy cây test sang dòng test bằng một lệnh:
+
+```bash
+bun run test:push test/1.1.4/T0000abcd_ten-task "[T0000abcd] test(monitor): phủ TC-01…TC-07"
+```
+
+- **Idempotent** — chạy lại là ghi đè; file đã xoá ở ref mới cũng biến mất ở local. `test:push` cũng vậy: nó thay nguyên cây test ở dòng test, không merge từng file.
+- **Cây test đang bẩn thì `test:overlay` dừng** thay vì xoá thay đổi chưa commit (giai đoạn đệm `tests/` còn tracked trên dòng source). Chấp nhận mất thì `FORCE=1`.
+- **🚫 Không symlink** — vite/vitest resolve qua realpath, symlink ra ngoài gốc repo làm alias `@/…` và shim `zod` vỡ. Cây test phải là file thật trong gốc repo.
+- **Chưa overlay mà chạy `bun run test` / `test:scope`** → báo lỗi nêu đúng lệnh cần chạy, **exit khác 0**. "Không tìm thấy test" không bao giờ được hiểu là "đã xanh".
+- **Không kéo được dòng test** (mất mạng, dòng test chưa tồn tại) → thông điệp phân biệt rõ với "test đỏ".
+- **Trong CI** — `test-overlay.yml` ghép cặp (ref test, ref source) rồi chạy full suite; `ci.yml` job `full` chỉ chạy khi cây test có mặt trong checkout, và khi skip thì ghi rõ ra job summary rằng **đây không phải "đã test và xanh"**.
+- **Lệch pha bắt ở cả hai chiều** — `test-overlay.yml` chạy lại cặp ref khi *test* đổi (PR/push dòng test) **và** khi *source* đổi (push `dev/x.y.z/main`). Nhờ chiều thứ hai, một PR code merge sau khi test đã viết mà làm test hỏng thì đỏ ngay ở dòng version, không phải đợi tới PR phát hành. Dòng test của version chưa tồn tại thì lượt đó skip kèm ghi chú, không đỏ vô cớ.
 
 ---
 
@@ -87,12 +119,14 @@ Repo **không** còn thư mục `plugins/` ở root — bản agent template ch�
 
 Tra bảng này để biết **vùng mình sửa đã có suite nào** (chạy đúng suite đó) và **chỗ nào chưa có** (phải bổ sung test).
 
-Cột "Vùng source phủ" lấy từ import trực tiếp của test trong suite — nó nói suite đó *của* module nào, không phải toàn bộ closure.
+**Bảng nằm ở [`tests/CATALOG.md`](../../tests/CATALOG.md)** — cùng cây với test, nên nó đi theo dòng test và không lệch khi hai dòng branch cập nhật lệch nhịp. Ở đây chỉ trỏ tới, không chép lại: chép là có hai bảng, và bảng lệch là bảng vô dụng.
 
-**Sinh lại bảng sau khi thêm/đổi thư mục test** — bảng lệch là bảng vô dụng:
+⚠️ **Đang đứng trên dòng source sau khi `tests/` đã bị cắt thì link tương đối ở trên không có file.** Hai cách tới bảng: chạy `bun run test:overlay` để kéo cây test về, hoặc mở bản trên dòng test — [`tests/CATALOG.md` @ `test/main`](https://github.com/naut1402/agent-workflow/blob/test/main/tests/CATALOG.md) (link tuyệt đối, không phụ thuộc branch đang đứng).
+
+**Sinh lại bảng sau khi thêm/đổi thư mục test**, ngay trong cùng thay đổi — sinh **sau khi đã overlay** (cần đồng thời `package.json` của dòng source và cây `tests/` của dòng test):
 
 ```bash
-bun run test:scope --catalog
+bun run test:scope --catalog > tests/CATALOG.md
 ```
 
 Chạy nhiều suite một lượt thì nối path (cùng runner):
@@ -101,80 +135,6 @@ Chạy nhiều suite một lượt thì nối path (cùng runner):
 bun test tests/src/server/automations tests/src/features/monitor/business
 npx vitest run tests/src/features/automations tests/src/core/ui
 ```
-
-| Suite | Runner | Vùng source phủ | Số file | Lệnh chạy |
-|---|---|---|---|---|
-| `tests/mcp` | bun | `mcp` | 1 | `bun test tests/mcp` |
-| `tests/src` | vitest | `core/shell`, `App.vue`, `core/container` | 1 | `npx vitest run tests/src/*.test.ts` |
-| `tests/src/api` | vitest | `features/pipeline-editor/scripts`, `features/agent-editor/scripts` | 2 | `npx vitest run tests/src/api` |
-| `tests/src/core/composables` | vitest | `core/composables` | 5 | `npx vitest run tests/src/core/composables` |
-| `tests/src/core/configs` | vitest | `core/configs` | 3 | `npx vitest run tests/src/core/configs` |
-| `tests/src/core/container` | vitest | `core/container` | 1 | `npx vitest run tests/src/core/container` |
-| `tests/src/core/events` | bun | `core/events` | 1 | `bun test tests/src/core/events` |
-| `tests/src/core/http` | vitest | `core/http` | 1 | `npx vitest run tests/src/core/http` |
-| `tests/src/core/i18n` | vitest | `core/composables`, `core/configs`, `plugins/i18n` | 1 | `npx vitest run tests/src/core/i18n` |
-| `tests/src/core/lib` | vitest | `core/lib`, `core/http` | 9 | `npx vitest run tests/src/core/lib` |
-| `tests/src/core/log` | bun | `core/log`, `features/logs/business`, `core/events` | 4 | `bun test tests/src/core/log` |
-| `tests/src/core/shell` | vitest | `core/shell` | 2 | `npx vitest run tests/src/core/shell` |
-| `tests/src/core/ui` | vitest | `core/ui` | 4 | `npx vitest run tests/src/core/ui` |
-| `tests/src/features/agent-editor/business` | bun | `features/agent-editor/business` | 2 | `bun test tests/src/features/agent-editor/business` |
-| `tests/src/features/agent-editor/components` | vitest | `features/agent-editor/components`, `core/lib`, `features/agent-editor/business` | 3 | `npx vitest run tests/src/features/agent-editor/components` |
-| `tests/src/features/agent-editor/composables` | vitest | `features/agent-editor/composables` | 1 | `npx vitest run tests/src/features/agent-editor/composables` |
-| `tests/src/features/automations/components` | vitest | `features/automations/components`, `features/automations/scripts` | 2 | `npx vitest run tests/src/features/automations/components` |
-| `tests/src/features/automations/composables` | vitest | `features/automations/composables`, `features/automations/scripts` | 1 | `npx vitest run tests/src/features/automations/composables` |
-| `tests/src/features/automations/scripts` | vitest | `features/automations/scripts` | 1 | `npx vitest run tests/src/features/automations/scripts` |
-| `tests/src/features/knowledge/business` | bun | `features/knowledge/business` | 3 | `bun test tests/src/features/knowledge/business` |
-| `tests/src/features/knowledge/components` | vitest | `features/knowledge/components` | 1 | `npx vitest run tests/src/features/knowledge/components` |
-| `tests/src/features/logs/business` | bun | `features/logs/business`, `features/runner/business`, `core/log` | 3 | `bun test tests/src/features/logs/business` |
-| `tests/src/features/logs/components` | vitest | `features/logs/components`, `features/settings/scripts` | 1 | `npx vitest run tests/src/features/logs/components` |
-| `tests/src/features/logs/composables` | vitest | `core/log`, `features/logs/composables` | 3 | `npx vitest run tests/src/features/logs/composables` |
-| `tests/src/features/logs/scripts` | vitest | `features/logs/scripts` | 1 | `npx vitest run tests/src/features/logs/scripts` |
-| `tests/src/features/monitor` | vitest | `features/monitor/composables` | 1 | `npx vitest run tests/src/features/monitor/*.test.ts` |
-| `tests/src/features/monitor/business` | bun | `features/monitor/business`, `core/lib`, `features/runner/business` | 5 | `bun test tests/src/features/monitor/business` |
-| `tests/src/features/monitor/components` | vitest | `features/monitor/components`, `features/monitor/scripts`, `core/composables` | 10 | `npx vitest run tests/src/features/monitor/components` |
-| `tests/src/features/monitor/composables` | vitest | `features/monitor/composables`, `features/runner/scripts` | 6 | `npx vitest run tests/src/features/monitor/composables` |
-| `tests/src/features/monitor/lib` | vitest | `features/monitor/lib` | 4 | `npx vitest run tests/src/features/monitor/lib` |
-| `tests/src/features/monitor/schemas` | vitest | `features/monitor/schemas` | 1 | `npx vitest run tests/src/features/monitor/schemas` |
-| `tests/src/features/nl-chat/components` | vitest | `features/nl-chat/components`, `core/composables`, `features/nl-chat/composables` | 2 | `npx vitest run tests/src/features/nl-chat/components` |
-| `tests/src/features/nl-chat/composables` | vitest | `features/nl-chat/composables` | 3 | `npx vitest run tests/src/features/nl-chat/composables` |
-| `tests/src/features/nl-chat/lib` | vitest | `features/nl-chat/lib` | 2 | `npx vitest run tests/src/features/nl-chat/lib` |
-| `tests/src/features/notifications/components` | vitest | `features/notifications/components`, `features/notifications/lib` | 3 | `npx vitest run tests/src/features/notifications/components` |
-| `tests/src/features/notifications/composables` | vitest | `features/notifications/lib`, `core/composables`, `features/notifications/composables` | 1 | `npx vitest run tests/src/features/notifications/composables` |
-| `tests/src/features/notifications/lib` | vitest | `features/notifications/lib` | 2 | `npx vitest run tests/src/features/notifications/lib` |
-| `tests/src/features/pipeline-editor/business` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/features/pipeline-editor/business` |
-| `tests/src/features/pipeline-editor/components` | vitest | `features/pipeline-editor/components`, `features/pipeline-editor/scripts` | 6 | `npx vitest run tests/src/features/pipeline-editor/components` |
-| `tests/src/features/pipeline-editor/composables` | vitest | `features/pipeline-editor/composables`, `features/pipeline-editor/scripts` | 1 | `npx vitest run tests/src/features/pipeline-editor/composables` |
-| `tests/src/features/pipeline-editor/lib` | vitest | `features/pipeline-editor/lib` | 3 | `npx vitest run tests/src/features/pipeline-editor/lib` |
-| `tests/src/features/pipeline-editor/scripts` | vitest | `features/pipeline-editor/scripts` | 1 | `npx vitest run tests/src/features/pipeline-editor/scripts` |
-| `tests/src/features/quick-action/components` | vitest | `features/quick-action/components`, `features/quick-action/scripts`, `features/runner/scripts` | 1 | `npx vitest run tests/src/features/quick-action/components` |
-| `tests/src/features/quick-action/composables` | vitest | `features/quick-action/composables` | 1 | `npx vitest run tests/src/features/quick-action/composables` |
-| `tests/src/features/quick-action/lib` | vitest | `features/quick-action/lib` | 1 | `npx vitest run tests/src/features/quick-action/lib` |
-| `tests/src/features/runner/business` | bun | `features/runner/business` | 8 | `bun test tests/src/features/runner/business` |
-| `tests/src/features/runner/components` | vitest | `features/runner/components`, `features/runner/scripts`, `features/runner/locales` | 2 | `npx vitest run tests/src/features/runner/components` |
-| `tests/src/features/runner/scripts` | vitest | `features/runner/scripts` | 1 | `npx vitest run tests/src/features/runner/scripts` |
-| `tests/src/features/running-jobs/components` | vitest | `features/running-jobs/components`, `features/running-jobs/lib` | 1 | `npx vitest run tests/src/features/running-jobs/components` |
-| `tests/src/features/running-jobs/composables` | vitest | `features/runner/scripts`, `features/running-jobs/composables` | 1 | `npx vitest run tests/src/features/running-jobs/composables` |
-| `tests/src/features/running-jobs/lib` | vitest | `features/running-jobs/lib` | 1 | `npx vitest run tests/src/features/running-jobs/lib` |
-| `tests/src/features/settings/components` | vitest | `core/composables`, `features/settings/components`, `features/settings/scripts` | 1 | `npx vitest run tests/src/features/settings/components` |
-| `tests/src/features/settings/schemas` | vitest | `features/settings/schemas` | 5 | `npx vitest run tests/src/features/settings/schemas` |
-| `tests/src/features/statistics/business` | bun | `core/log`, `features/statistics/business` | 1 | `bun test tests/src/features/statistics/business` |
-| `tests/src/features/statistics/components` | vitest | `features/statistics/components`, `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/components` |
-| `tests/src/features/statistics/lib` | vitest | `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/lib` |
-| `tests/src/server` | bun | `features/settings/business`, `core/registry.ts`, `api/apiServer.ts` | 3 | `bun test tests/src/server/*.test.ts` |
-| `tests/src/server/agents` | bun | `features/agent-editor/business` | 5 | `bun test tests/src/server/agents` |
-| `tests/src/server/artifactActions` | bun | `features/monitor/business`, `features/monitor/schemas` | 1 | `bun test tests/src/server/artifactActions` |
-| `tests/src/server/automations` | bun | `features/automations/business`, `features/automations/schemas`, `core/events` | 9 | `bun test tests/src/server/automations` |
-| `tests/src/server/catalog` | bun | `features/pipeline-editor/business` | 4 | `bun test tests/src/server/catalog` |
-| `tests/src/server/chat` | bun | `features/runner/business`, `features/nl-chat/business`, `features/monitor/business` | 6 | `bun test tests/src/server/chat` |
-| `tests/src/server/github` | bun | `features/monitor/business`, `api/apiServer.ts`, `core/registry.ts` | 2 | `bun test tests/src/server/github` |
-| `tests/src/server/http` | bun | `api/apiServer.ts`, `core/http`, `features/runner/business` | 25 | `bun test tests/src/server/http` |
-| `tests/src/server/lib` | bun | `core/lib` | 1 | `bun test tests/src/server/lib` |
-| `tests/src/server/pipeline` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/server/pipeline` |
-| `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
-| `tests/src/server/runners` | bun | `features/runner/business`, `core/events`, `core/log` | 20 | `bun test tests/src/server/runners` |
-| `tests/src/server/settings` | bun | `features/settings/business` | 2 | `bun test tests/src/server/settings` |
-| `tests/src/server/tasks` | bun | `features/monitor/business`, `features/runner/business`, `core/events` | 4 | `bun test tests/src/server/tasks` |
-| `tests/tools` | bun | `tooling` | 1 | `bun test tests/tools` |
 
 ---
 
@@ -187,11 +147,28 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 
 ---
 
-## 6. Coverage threshold
+## 6. Coverage — ngưỡng và cổng
 
-- **Khởi điểm 0%, tăng dần theo từng module** khi test module đó land.
-- **Mục tiêu global ~60%** rồi siết lên — đừng đòi coverage cao ngay từ đầu.
-- **Cập nhật threshold ở `vitest.config.ts`** (frontend); backend xem qua `bun test --coverage`.
+Tách test sang dòng branch riêng thì coverage tụt không còn tự hiện ra trong diff PR. Nên có **hai lớp cổng**, phục vụ hai việc khác nhau:
+
+| Lớp | Ở đâu | Chặn gì |
+|---|---|---|
+| `thresholds` | `vitest.config.ts` | Sàn cứng, đỏ **ngay trong lượt chạy** vitest. Đặt bằng baseline làm tròn xuống ~1 điểm % |
+| `coverage-gate` | `.github/scripts/coverage-gate.ts` | **Xu hướng tụt dần**, dung sai 0,5 điểm % so với baseline đã chốt |
+
+```bash
+bun run test:fe                                              # sinh coverage/frontend/
+bun run test -- --coverage --coverage-reporter=lcov \
+  --coverage-dir=coverage/backend                            # sinh coverage/backend/lcov.info
+bun run coverage:gate -- --check                              # gác cổng
+```
+
+- **Baseline là dữ liệu, không phải niềm tin** — `reports/coverage-baseline.json` (máy đọc, là cổng) + `reports/coverage-history.md` (log cho người). Xem [`reports/README.md`](../../reports/README.md).
+- **Baseline chỉ đi lên** — `--update` lấy `max(cũ, mới)`. Muốn hạ (vd xoá hẳn một module) thì sửa file bằng tay trong một PR test có ghi lý do.
+- **Thiếu baseline là ĐỎ**, không phải "đạt". Khởi tạo lần đầu mới cần `--allow-missing`.
+- **Cả hai runner đều được gác** — frontend 4 chỉ số từ `coverage-summary.json`, backend một chỉ số `lines` từ `lcov.info`. Vùng không đo được thì cổng nói ra, không im lặng gác một nửa.
+- **Ba nơi cổng chạy** — PR dòng test (`test-overlay.yml`) · push dòng test · **PR phát hành** (`release-test-gate.yml`). Nơi cuối là cổng chặn merge thật. 🚫 Cố ý **không** gác ở PR feature của dòng source: làm vậy sẽ chặn mọi PR thêm source trước khi test kịp viết.
+- **Test lệch pha với source** là rủi ro số 1 của mô hình tách. Cơ chế phát hiện, tách riêng khỏi coverage: job summary của mọi lượt CI ghi **cặp ref (source, test) + SHA** đã dùng; PR test ghi `Source ref đã overlay`; cổng phát hành chặn khi dòng test của version không tồn tại hoặc rỗng.
 
 ---
 

@@ -3,6 +3,7 @@ PR template. Điền đầy đủ các mục.
 Title PR theo prefix: [<TASK>] <type>: <desc>  (type ∈ feat|fix|chore|docs|refactor|test) — gán label theo type.
 Quy ước hub: AGENTS.md. Chi tiết PR body: docs/agent-rules/git-pr.md (§8.1–§8.2).
 PR phát hành (main ← dev/x.y.z/main): dùng .github/PULL_REQUEST_TEMPLATE/release.md (mở PR kèm ?template=release.md) — bố cục ở docs/agent-rules/git-pr.md §8.4.
+PR dòng test (test/x.y.z/main ← test/x.y.z/{taskID}_{slug}): dùng .github/PULL_REQUEST_TEMPLATE/test.md (?template=test.md) — quy ước dòng test ở docs/agent-rules/git-pr.md §4.3.
 Kiến trúc + cấu trúc thư mục: docs/architecture.md · feature map: docs/agent-rules/feature-architecture-guideline.md.
 -->
 
@@ -23,7 +24,8 @@ Part of #
 ### Chi tiết chỉnh sửa (phần riêng)
 <!--
 Nhóm theo lớp của feature chính (chỉ mục có đổi):
-api/controller · business · schemas · components/composables/scripts/locales/styles · tests
+api/controller · business · schemas · components/composables/scripts/locales/styles
+Test KHÔNG thuộc PR này — nó ở PR dòng test (xem mục `## PR test liên quan`).
 Fix/refactor: bắt buộc Logic trước → sau.
 -->
 
@@ -44,20 +46,14 @@ Fix/refactor: bắt buộc Logic trước → sau.
 |-------|-----|---------|
 |       |     |         |
 
-## Test view point & test case
-<!-- Liệt kê quan điểm test + test case. Nếu quá dài, bọc trong <details>. -->
-<details>
-<summary>Test view point & test case</summary>
-
-- [ ] ...
-
-</details>
-
-## Loại test đã thêm/migrate
-- [ ] Unit (bun test — backend) ở `tests/server` · `tests/mcp` · `tests/src` (bun)
-- [ ] Unit (vitest — frontend) ở `tests/src` · `tests/shared`
-- [ ] Integration API (Hono `app.request`)
-- [ ] E2E (playwright) ở `test-e2e/` — chạy thật + gate CI; ảnh capture đính vào comment (không commit `docs/`)
+## PR test liên quan
+<!--
+Test code sống ở dòng branch riêng (`test/x.y.z/{taskID}_{slug}`) — xem
+docs/agent-rules/git-pr.md §4.3. Điền link PR test, hoặc ghi
+"chưa mở (dự kiến: …)". Test view point & test case nằm ở PR test đó.
+Cổng `Release test gate` chặn PR phát hành nếu dòng test của version không có.
+-->
+- Chưa mở (dự kiến: …)
 
 ## Todo debt (nếu PR `dev/x.y.z/main` → `main`)
 <!-- docs/agent-rules/pr-todo-debt.md — CI Todo debt chỉ gate promote lên main. -->
@@ -67,9 +63,10 @@ Fix/refactor: bắt buộc Logic trước → sau.
 - [ ] Không thay đổi hành vi public (hoặc đã ghi rõ thay đổi)
 - [ ] PR body: phần riêng theo cấu trúc thư mục; phần chung nêu Core / feature khác (hoặc *Không*)
 - [ ] Fix/refactor: đã có Logic trước → sau
-- [ ] Test xanh local · CI/CD xanh
+- [ ] **Suite hiện có** xanh local · CI/CD xanh (không hồi quy). Test *mới* cho thay đổi này thuộc PR dòng test
 - [ ] Tuân thủ `docs/agent-rules/coding-guideline.md` + `feature-architecture-guideline.md`
 - [ ] Icon mới/sửa dùng `<Icon name="..." />` (`src/core/ui/Icon.vue`) — không tự vẽ tay `<svg>`/`<path>`
 - [ ] Dropdown mới dùng `CSelect`/`CComboSelect` (`src/core/ui/`) — không dùng `<select>` native
 - [ ] **Git hygiene** (`docs/agent-rules/git-pr.md`): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
-- [ ] Rename/move dùng `git mv`; KHÔNG còn bản cũ trùng (vd `.js` lẫn `.ts`); test không lạc khỏi `tests/`·`test-e2e/`
+- [ ] Rename/move dùng `git mv`; KHÔNG còn bản cũ trùng (vd `.js` lẫn `.ts`)
+- [ ] Test không nằm trong PR này — dòng test của version đã hoạt động thì file dưới `tests/`·`test-e2e/` chuyển sang PR dòng test; **giai đoạn đệm** (dòng test chưa dựng cho version này) thì test vẫn ở đây nhưng phải đi commit `test:` riêng (`docs/agent-rules/git-pr.md` §6.2)
