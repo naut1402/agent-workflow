@@ -26,6 +26,15 @@ bun install            # node_modules riêng cho worktree
 
 Tên branch và base lấy theo [`git-pr.md`](git-pr.md) §4 (§4.2 khi task gắn version release).
 
+**Một task có cả worktree dòng source và dòng test** (`dev/x.y.z/{taskID}_{slug}` + `test/x.y.z/{taskID}_{slug}`) thì **đặt tên thư mục worktree đúng bằng taskID** cho cái đang làm việc chính:
+
+```bash
+git worktree add -b dev/1.1.4/T0000abcd_ten-task  ../T0000abcd       origin/dev/1.1.4/main
+git worktree add -b test/1.1.4/T0000abcd_ten-task ../T0000abcd-test  origin/test/1.1.4/main
+```
+
+Vì sao: dashboard map task → worktree theo **hai tầng** — tên thư mục trước, rồi mới tới taskID trong tên branch. Hai worktree cùng mang taskID trong tên branch mà không có thư mục nào tên đúng bằng taskID thì tầng hai thấy **hai** ứng viên và **từ chối đoán** (không remove gì cả). Đặt đúng một thư mục tên `<taskID>` là tầng một khớp ngay, tầng hai không phải chạy.
+
 Harness có sẵn cơ chế cô lập worktree thì dùng luôn — nguyên tắc 1-instance-1-worktree vẫn giữ.
 
 ---
