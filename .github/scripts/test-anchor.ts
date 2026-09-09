@@ -144,11 +144,19 @@ const EXPLAIN: Record<AnchorVerdict, string[]> = {
     '```',
   ],
   'anchor-gone': [
-    'SHA neo **không còn tồn tại** sau khi đã thử fetch từ remote — dòng source đã bị force-push',
-    'hoặc commit đã bị bỏ. Không có cây nào để đối chiếu ⇒ không kết luận được gì về lệch pha,',
-    'nên cổng **chặn** thay vì bỏ qua.',
+    'SHA neo **không tới được** sau khi đã thử fetch theo SHA từ remote. Ba nguyên nhân cho',
+    'cùng một kết quả, và cổng 🚫 **không** phân biệt được chúng từ đây:',
     '',
-    'Xử lý: chạy lại CI dòng test trên head hiện tại để ghi neo mới.',
+    '1. dòng source đã bị **force-push**, commit neo không còn trên remote;',
+    '2. commit neo đã bị **bỏ** (branch xoá, history viết lại);',
+    '3. workspace **không fetch được theo SHA** — clone nông, hoặc server không bật',
+    '   `uploadpack.allowReachableSHA1InWant`.',
+    '',
+    'Cả ba dẫn tới cùng một chỗ: không có cây nào để đối chiếu ⇒ không kết luận được gì',
+    'về lệch pha, nên cổng **chặn** thay vì bỏ qua.',
+    '',
+    'Kiểm nguyên nhân 3 trước: `fetch-depth: 0` ở step checkout, rồi `git cat-file -e <sha>^{commit}`.',
+    'Nếu là 1 hoặc 2: chạy lại CI dòng test trên head hiện tại để ghi neo mới.',
   ],
 }
 
@@ -230,10 +238,34 @@ export interface Anchor {
  * đây là cổng neo, coverage đã có cổng riêng. Nhưng file không parse được thì
  * phải là lỗi công cụ (exit 2), không được suy thành `no-anchor`.
  */
+const SHA_RE = /^[0-9a-f]{40}$/i
+
 export function readAnchor(raw: string, file: string): Anchor {
   const b = parseJsonObject(raw, `Không đọc được neo: ${file}`)
   const str = (k: string) => (typeof b[k] === 'string' && b[k] ? (b[k] as string) : undefined)
-  return { source_sha: str('source_sha'), test_sha: str('test_sha'), source_ref: str('source_ref') }
+
+  /**
+   * Đường **đọc** phải cùng ràng buộc với đường **ghi** (`normalizeSha` ở
+   * `coverage-gate.ts`). Baseline sửa tay được (`reports/README.md` nói thế), nên
+   * SHA viết tắt vào được file qua đường khác. Khi đó `cat-file -e` **thành công**
+   * (git resolve viết tắt) và `merge-base` cũng đúng ⇒ `exists: true`, nhưng phép so
+   * `anchorSha === headSha` là so chuỗi nên luôn false ⇒ verdict `behind` kèm
+   * "0 commit source sau neo": cảnh báo sai chỗ, không ai truy ra được vì sao.
+   *
+   * 🚫 Không suy thành `no-anchor` — đó là "baseline cũ chưa có cơ chế neo", khác hẳn
+   * "neo có nhưng không dùng được". Đây là lỗi công cụ ⇒ exit 2.
+   */
+  const sha = (k: 'source_sha' | 'test_sha') => {
+    const v = str(k)
+    if (v && !SHA_RE.test(v)) {
+      throw new Error(
+        `Không đọc được neo: ${file} có ${k} = "${v}" không phải SHA đầy đủ (40 hex) — ` +
+          'cổng neo so bằng chuỗi nên SHA viết tắt cho kết luận sai.',
+      )
+    }
+    return v?.toLowerCase()
+  }
+  return { source_sha: sha('source_sha'), test_sha: sha('test_sha'), source_ref: str('source_ref') }
 }
 
 function summary(text: string): void {
