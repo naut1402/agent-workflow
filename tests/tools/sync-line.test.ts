@@ -155,3 +155,110 @@ describe('sync-line.sh — dòng test', () => {
     expect(r.summary).toContain('Sync test/main → test/**/main')
   })
 })
+
+/**
+ * Dựng **hai dòng đối xứng** với cây đầy: dòng source (`main`, `dev/x.y.z/main`)
+ * và dòng test (`test/main`, `test/x.y.z/main`). Commit mới chỉ ở
+ * `dev/1.1.4/main` ⇒ đúng một cặp cần sync.
+ */
+function setupPairedLines(): { work: string; origin: string } {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-sync-pair-'))
+  tmpDirs.push(base)
+  const origin = path.join(base, 'origin.git')
+  const work = path.join(base, 'work')
+
+  git(base, 'init', '--bare', '--initial-branch=main', origin)
+  git(base, 'clone', origin, work)
+  git(work, 'config', 'user.email', 'ci@example.com')
+  git(work, 'config', 'user.name', 'CI')
+
+  commit(work, 'src/app.ts', '// v1\n', 'feat: khởi tạo')
+  for (const ref of ['main', 'dev/1.1.3/main', 'dev/1.1.4/main', 'test/main', 'test/1.1.3/main', 'test/1.1.4/main']) {
+    git(work, 'push', 'origin', `HEAD:refs/heads/${ref}`)
+  }
+
+  // Commit CHỈ ở dev/1.1.4/main → chỉ test/1.1.4/main cần nhận.
+  git(work, 'checkout', '-B', 'dev/1.1.4/main', 'origin/dev/1.1.4/main')
+  commit(work, 'src/feature.ts', '// mới\n', 'feat: thêm feature của 1.1.4')
+  git(work, 'push', 'origin', 'HEAD:refs/heads/dev/1.1.4/main')
+  git(work, 'fetch', 'origin')
+
+  return { work, origin }
+}
+
+describe('sync-line.sh — TARGETS_OVERRIDE (sync theo cặp source ↔ test)', () => {
+  test('chỉ dòng test CÙNG version nhận commit; dòng test version khác không bị đụng', () => {
+    const { work, origin } = setupPairedLines()
+    const before113 = git(origin, 'rev-parse', 'refs/heads/test/1.1.3/main')
+
+    const r = runSync(work, {
+      SRC_REF: 'dev/1.1.4/main',
+      TARGETS_OVERRIDE: 'test/1.1.4/main',
+      EXTRA_FILE: '',
+    })
+
+    expect(r.code).toBe(0)
+    expect(git(origin, 'ls-tree', '-r', '--name-only', 'refs/heads/test/1.1.4/main')).toContain('src/feature.ts')
+    // Bẫy chính của chế độ này: discover theo namespace sẽ merge 1.1.4 vào cả 1.1.3.
+    expect(git(origin, 'rev-parse', 'refs/heads/test/1.1.3/main')).toBe(before113)
+    expect(git(origin, 'ls-tree', '-r', '--name-only', 'refs/heads/test/1.1.3/main')).not.toContain('src/feature.ts')
+  })
+
+  test('TARGETS_OVERRIDE bỏ hẳn discover — 🚫 không merge vào dòng test khác dù namespace khớp', () => {
+    const { work, origin } = setupPairedLines()
+    const r = runSync(work, {
+      SRC_REF: 'dev/1.1.4/main',
+      TARGETS_OVERRIDE: 'test/1.1.4/main',
+      EXTRA_FILE: '',
+    })
+
+    expect(r.code).toBe(0)
+    const targetRows = r.summary.split('\n').filter((l) => /^\| `/.test(l))
+    expect(targetRows).toHaveLength(1)
+    expect(targetRows[0]).toContain('test/1.1.4/main')
+    expect(git(origin, 'rev-parse', 'refs/heads/test/main')).toBe(git(origin, 'rev-parse', 'refs/heads/main'))
+  })
+
+  test('TARGETS_OVERRIDE cũng bỏ EXTRA_FILE — target khai trong file KHÔNG được sync', () => {
+    const { work, origin } = setupPairedLines()
+    const extra = path.join(work, 'extra-targets.yml')
+    fs.writeFileSync(extra, 'extra_targets:\n  - test/1.1.3/main\n', 'utf8')
+    const before113 = git(origin, 'rev-parse', 'refs/heads/test/1.1.3/main')
+
+    const r = runSync(work, {
+      SRC_REF: 'dev/1.1.4/main',
+      TARGETS_OVERRIDE: 'test/1.1.4/main',
+      EXTRA_FILE: extra,
+    })
+
+    expect(r.code).toBe(0)
+    expect(git(origin, 'rev-parse', 'refs/heads/test/1.1.3/main')).toBe(before113)
+  })
+
+  test('TARGETS_OVERRIDE trỏ branch không tồn tại → ghi "missing", exit 0 (không phải "đã sync")', () => {
+    const { work } = setupPairedLines()
+    const r = runSync(work, {
+      SRC_REF: 'dev/1.1.4/main',
+      TARGETS_OVERRIDE: 'test/9.9.9/main',
+      EXTRA_FILE: '',
+    })
+
+    expect(r.code).toBe(0)
+    expect(r.summary).toContain('missing')
+    expect(r.summary).not.toContain('synced')
+  })
+
+  test('lượt hai không tạo merge commit rỗng', () => {
+    const { work, origin } = setupPairedLines()
+    const env = { SRC_REF: 'dev/1.1.4/main', TARGETS_OVERRIDE: 'test/1.1.4/main', EXTRA_FILE: '' }
+    runSync(work, env)
+    const after1 = git(origin, 'rev-parse', 'refs/heads/test/1.1.4/main')
+
+    git(work, 'fetch', 'origin')
+    const second = runSync(work, env)
+
+    expect(second.code).toBe(0)
+    expect(second.summary).toContain('skipped')
+    expect(git(origin, 'rev-parse', 'refs/heads/test/1.1.4/main')).toBe(after1)
+  })
+})

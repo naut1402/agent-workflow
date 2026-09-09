@@ -82,7 +82,8 @@ dòng source :  dev/x.y.z/{taskID}_{slug}  →  dev/x.y.z/main   →  main
 dòng test   :  test/x.y.z/{taskID}_{slug} →  test/x.y.z/main  →  test/main
 ```
 
-- **`test/main` là cây orphan** — không chung tổ tiên với `main`, chỉ chứa `tests/` · `test-e2e/` · `reports/`. 🚫 Không có `package.json` · `*.config.ts` · `tsconfig.json` · `src/`: dependency và config runner thuộc dòng source, thêm vào đây là tạo nguồn sự thật thứ hai.
+- **Dòng test mang cây đầy của dòng source** — `test/x.y.z/main` = cây của `dev/x.y.z/main` cộng thêm test; `test/main` = cây của `main` cộng thêm test. Nhờ vậy dòng test **chạy độc lập được** (`bun install && bun test` ngay trên branch đó, không cần ghép cây) và các workflow của dòng test có `.github/` để kích hoạt.
+- **Bản `src/` trên dòng test là bản sao, không phải nguồn sự thật.** CI (`sync-source-to-test.yml`) merge `dev/x.y.z/main` → `test/x.y.z/main` ở mỗi push, nên nó không lạc hậu. ⚠️ Nhưng khi **chấm** thì vẫn ghép cây: `test-overlay.yml` và `release-test-gate.yml` checkout ref **dòng source** rồi đắp `tests/` của dòng test lên. Chấm trên bản sao là chấm sai cây — bản sao có thể lệch trong khoảng giữa hai lượt sync.
 - **Bất biến neo `test/main` ↔ `main`** — `test/main` chỉ nhận test của version **đã release**, nên overlay `test/main` lên `main` luôn xanh. Vì bất biến này mà dòng test phải hai tầng: gộp thẳng branch task vào `test/main` sẽ đưa test của version chưa release vào đó và làm cây neo đỏ thường trú.
 - **`{taskID}_{slug}` giống hệt §4.2** — cùng task thì cùng taskID và cùng slug ở hai dòng, đó là cách truy từ PR code sang PR test mà không cần bảng tra.
 - **Tên branch task không được kết thúc bằng `/main`.**
@@ -96,37 +97,31 @@ git push -u origin test/1.1.4/main
 git switch -c test/1.1.4/T0000abcd_ten-task-ngan origin/test/1.1.4/main
 ```
 
-**Dựng `test/main` — một lần cho cả repo.** Chạy trong một worktree riêng, không đứng trên cây đang làm việc:
+**Dựng `test/main` — một lần cho cả repo.** Nó là bản sao của `main`, nên chỉ là một branch thường:
 
 ```bash
-git worktree add ../testline-bootstrap --detach main
-cd ../testline-bootstrap
-git checkout --orphan test/main
-git rm -r --cached . -q
-git add tests test-e2e reports
-git commit -m "test: dựng dòng test gốc từ main@<sha>"
-git push -u origin test/main
-cd -
-git worktree remove --force ../testline-bootstrap   # --force: worktree còn cây source untracked
+git fetch origin
+git push origin origin/main:refs/heads/test/main
 ```
 
-- ⚠️ **`git checkout --orphan`, không phải `git switch --orphan`.** `switch --orphan` dọn sạch working tree ("all tracked files are removed") nên sau nó không còn `tests/` để `git add`, commit gốc sẽ rỗng. `checkout --orphan` giữ nguyên cây, đúng cái cần ở đây.
-- 🚫 **Không dùng `git clean -fdx` ở gốc repo** để dọn phần thừa. Nó xoá **mọi** file bị ignore — ở repo này là `/.dev-team-agent/` (toàn bộ task state, uploads, knowledge), `node_modules/`, `.env`. `git rm -r --cached .` đã đủ: nó dọn index, còn file thừa trong worktree tạm thì biến mất cùng worktree.
-
-- **Nội dung `test/main` lấy từ `main`**, không lấy từ dòng version đang mở — bất biến neo là `test/main` ↔ `main`.
-- **Viết `.gitignore` mới cho dòng test**, không copy từ dòng source: chỉ ignore rác cục bộ (`node_modules/`, `.claude/`, `test-e2e/.runtime/`, fixture mutable). ⚠️ **Không** ignore `coverage/` · `playwright-report/` · `test-results/` — không cần, và có thể chặn `reports/` sau này.
+- 🚫 **Không dựng bằng `git checkout --orphan`.** Cây orphan chỉ có `tests/`+`test-e2e/`+`reports/` thì (a) không chạy độc lập được vì thiếu `package.json`, và (b) **không có `.github/workflows/`** — mà GitHub Actions đọc định nghĩa workflow từ **chính ref được push**, nên mọi trigger `push: test/**` sẽ im lặng không chạy. Đây là loại lỗi không có thông báo: branch push xong, 0 run, không ai biết.
+- **`.gitignore` thừa hưởng từ dòng source** — 🚫 đừng viết bản riêng. Bản riêng vừa lệch dòng source, vừa dễ ăn mất fixture: pattern không neo ở gốc (`.dev-team-agent/` thay vì `/.dev-team-agent/`) khớp ở **mọi** độ sâu và loại luôn `test-e2e/fixtures/**/.dev-team-agent/**`.
 - **Chạy dry-run trọn vòng** (`overlay` → `report` → `promote` → `sync`) trên cặp branch nháp `test/0.0.0/main` + `dev/0.0.0/main` trước khi cắt `tests/` khỏi dòng source. Bước cắt là một chiều.
+- ⚠️ **`promote-test-line.yml` không có tham số target** — nó luôn ghi vào `test/main` thật. Dry-run bước `promote` sẽ đẩy nội dung nháp vào cây neo; cô lập trước hoặc chấp nhận một commit dọn.
 
 | Việc | Ai làm | Khi nào |
 |---|---|---|
 | Mở `test/x.y.z/main` | người mở dòng version | cùng lúc mở `dev/x.y.z/main` |
+| Sync `main` → `test/main` · `dev/x.y.z/main` → `test/x.y.z/main` | CI (`sync-source-to-test.yml`) | mỗi push vào dòng source |
 | Sync `test/main` → `test/x.y.z/main` | CI (`sync-test-line.yml`) | mỗi push vào `test/main` |
 | Thăng `test/x.y.z/main` → `test/main` | CI (`promote-test-line.yml`) | ngay khi version lên `main` |
 | Chặn release thiếu test | CI (`release-test-gate.yml`) | PR `dev/x.y.z/main` → `main` |
 
 - **PR của branch task dòng test target `test/x.y.z/main`** — không phải `test/main`, không phải `main`. Dùng template `?template=test.md`.
 - **Commitlint chạy trên base `test/**/main`** → PR title và mọi commit đúng format §7, `type` là `test` (hoặc `chore` cho commit report do CI đẩy).
-- **Viết và chạy test ở local vẫn đứng trên worktree dòng source** — cây orphan không có `package.json` nên không chạy được lệnh nào. `bun run test:overlay` kéo cây test về, `bun run test:push <branch-test> "<message>"` đẩy ngược lên dòng test. Xem [`testing.md`](testing.md) §3.1.
+- **Workflow của dòng test checkout ref đang trigger, 🚫 không `ref: main`** — tooling dòng test (`test-ref.ts`, `coverage-gate.ts`, `sync-line.sh`) chỉ có mặt trên `main` sau khi version mở nó được release. Lấy script từ `main` trước lúc đó cho `Module not found`, mà lỗi đó đọc ra như "cổng hỏng" chứ không phải "chưa tới lượt".
+- **Lượt sync do CI đẩy không kích workflow tiếp theo** khi repo chưa có `AUTO_MERGE_TOKEN` (GitHub cố ý không cho `GITHUB_TOKEN` trigger tiếp). Đó là điều muốn với sync source → test (tránh vòng lặp CI ở mọi commit), nhưng nó cũng có nghĩa **job `report` của `test-overlay.yml` chỉ chạy khi *người* push/merge vào dòng test** — đó là lượt duy nhất ghi `source_sha`/`test_sha` vào baseline.
+- **Viết và chạy test ở local**: đứng thẳng trên branch dòng test cũng chạy được (cây đầy). Muốn chấm đúng cặp ref như CI thì `bun run test:overlay` kéo cây test về cây source đang đứng, `bun run test:push <branch-test> "<message>"` đẩy ngược lên dòng test. Xem [`testing.md`](testing.md) §3.1.
 - **Dòng test mồ côi** (version bị huỷ, không release) không bao giờ vào `test/main`; dọn bằng cách xoá branch, không merge.
 
 ---

@@ -88,7 +88,7 @@ Repo **không** còn thư mục `plugins/` ở root — bản agent template ch�
 Test code có dòng branch riêng, đối xứng với dòng source — quy ước đầy đủ ở [`git-pr.md`](git-pr.md) §4.3:
 
 ```
-test/x.y.z/{taskID}_{slug}  →  test/x.y.z/main  →  test/main   (cây orphan, chỉ test)
+test/x.y.z/{taskID}_{slug}  →  test/x.y.z/main  →  test/main   (cây đầy của dòng source + test)
 ```
 
 Không commit nào chứa cả source và test, nên **chạy test = ghép hai cây** — cây test đặt đúng gốc repo (`tests/` + `test-e2e/`), cùng vị trí cây tracked cũ:
@@ -99,7 +99,7 @@ bun run test:overlay test/1.1.4/main    # ép ref cụ thể
 bun run test:all                        # rồi chạy như bình thường
 ```
 
-**Viết test thì vẫn đứng trên worktree dòng source** — cây orphan không có `package.json`, config runner hay `node_modules` nên chạy được đúng con số không lệnh nào. Viết xong, đẩy cây test sang dòng test bằng một lệnh:
+**Đứng trên branch dòng test cũng chạy được** (cây đầy có `package.json` + config runner). Nhưng để chấm đúng **cặp ref** như CI — test của dòng test trên code của dòng source — thì viết trên worktree dòng source rồi đẩy sang, vì bản `src/` ở dòng test chỉ là bản sao được sync định kỳ:
 
 ```bash
 bun run test:push test/1.1.4/T0000abcd_ten-task "[T0000abcd] test(monitor): phủ TC-01…TC-07"
@@ -112,6 +112,26 @@ bun run test:push test/1.1.4/T0000abcd_ten-task "[T0000abcd] test(monitor): ph�
 - **Không kéo được dòng test** (mất mạng, dòng test chưa tồn tại) → thông điệp phân biệt rõ với "test đỏ".
 - **Trong CI** — `test-overlay.yml` ghép cặp (ref test, ref source) rồi chạy full suite; `ci.yml` job `full` chỉ chạy khi cây test có mặt trong checkout, và khi skip thì ghi rõ ra job summary rằng **đây không phải "đã test và xanh"**.
 - **Lệch pha bắt ở cả hai chiều** — `test-overlay.yml` chạy lại cặp ref khi *test* đổi (PR/push dòng test) **và** khi *source* đổi (push `dev/x.y.z/main`). Nhờ chiều thứ hai, một PR code merge sau khi test đã viết mà làm test hỏng thì đỏ ngay ở dòng version, không phải đợi tới PR phát hành. Dòng test của version chưa tồn tại thì lượt đó skip kèm ghi chú, không đỏ vô cớ.
+
+#### Đọc trạng thái thiếu test, trước khi mở PR phát hành
+
+```bash
+bun run test:status -- --version 1.1.4              # task nào đã merge mà dòng test chưa phủ
+bun run test:anchor -- --baseline reports/coverage-baseline.json   # baseline đang neo ở commit nào
+```
+
+- **Nguồn của "task nào đã merge"** là subject commit `[<taskID>]` ([`git-pr.md`](git-pr.md) §7) ở hai khoảng đối xứng: `main..dev/x.y.z/main` (đã merge) ↔ `test/main..test/x.y.z/main` (đã có test). Commit **không** mang `[<taskID>]` — §7 cho phép bỏ — thì không quy được về task nào: 🚫 không tính là thiếu test, nhưng cũng không bỏ qua im lặng, nó vào mục *không truy được task* để người duyệt tự xác nhận là không cần test.
+- **Revert tính ở mức từng commit, không ở mức task** — task chỉ được miễn test khi **mọi** commit của nó đã bị revert. Còn một commit sống thì task vẫn nằm ở *thiếu test*, gắn nhãn *revert một phần*. Revert của revert là **khôi phục**, không phải revert hai lần.
+- **Báo cáo ở mức TỪNG task**, kèm cột type commit để thấy ngay ứng viên miễn trừ. 🚫 Cổng **không** tự miễn theo type — một `chore` vẫn sửa được code.
+- ⚠️ **`exit 0` của `test:status` ở đợt đầu là *báo cáo*, không phải "đã đủ test".** Siết thành chặn bằng `--strict` (một cờ ở workflow, không sửa script).
+- **Miễn trừ test khai ở [`tests/exemptions.json`](../../tests/exemptions.json)** — sống ở dòng test, đi theo `git archive … tests` sẵn có nên cổng đọc được mà không thêm bước fetch nào:
+
+```json
+{ "exemptions": [{ "taskId": "T0313a84c", "version": "1.1.4", "reason": "Chỉ đổi tài liệu, không đụng code sản phẩm", "approved_by": "@tech-lead" }] }
+```
+
+  Bốn field đều **bắt buộc**; `version` phải khớp version đang chấm. 🚫 Không wildcard, không khoá cấp version. Sai định dạng · thiếu `reason`/`approved_by` · trùng entry là **ĐỎ**, không phải "miễn hết". Miễn trừ của version khác và miễn trừ trỏ task không tồn tại được nêu ra để dọn, không âm thầm áp dụng.
+- **Bảy kết luận của cổng neo** — `match` (khớp) · `behind` (test viết cho ref cũ) · `ahead` (test chờ source) · `diverged` (neo lệch nhánh) · `other-version` (neo của version khác) · `no-anchor` (baseline trước cơ chế neo) · `anchor-gone` (**đỏ**: SHA neo không còn tồn tại). Exit code: `0` = đạt/cảnh báo · `1` = chặn · `2` = cổng không đọc được dữ liệu. Ba trạng thái mà mô hình tách phải phân biệt — *"chưa viết test"* (`test:status`) · *"test chờ source"* (`ahead`) · *"test lệch ref"* (`behind`/`diverged`) — nằm ở ba thông điệp khác nhau, không gộp.
 
 ---
 
@@ -169,6 +189,7 @@ bun run coverage:gate -- --check                              # gác cổng
 - **Cả hai runner đều được gác** — frontend 4 chỉ số từ `coverage-summary.json`, backend một chỉ số `lines` từ `lcov.info`. Vùng không đo được thì cổng nói ra, không im lặng gác một nửa.
 - **Ba nơi cổng chạy** — PR dòng test (`test-overlay.yml`) · push dòng test · **PR phát hành** (`release-test-gate.yml`). Nơi cuối là cổng chặn merge thật. 🚫 Cố ý **không** gác ở PR feature của dòng source: làm vậy sẽ chặn mọi PR thêm source trước khi test kịp viết.
 - **Test lệch pha với source** là rủi ro số 1 của mô hình tách. Cơ chế phát hiện, tách riêng khỏi coverage: job summary của mọi lượt CI ghi **cặp ref (source, test) + SHA** đã dùng; PR test ghi `Source ref đã overlay`; cổng phát hành chặn khi dòng test của version không tồn tại hoặc rỗng.
+- **Baseline lưu SHA neo** — `source_sha` · `test_sha` là cặp commit mà số coverage này đo trên. Tên branch thì di chuyển, SHA thì không: đây là thứ duy nhất cho `test-anchor.ts` so được baseline với head của PR phát hành. Neo **ghi đè** theo lượt mới nhất (không `max()` như các chỉ số), và neo **không còn tồn tại** (force-push) là **ĐỎ** — "không so được" không bao giờ được kết luận là đạt.
 
 ---
 

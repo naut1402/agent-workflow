@@ -61,5 +61,6 @@ truy được sau này.
 - [ ] **Không** thêm `package.json` / `*.config.ts` / `tsconfig.json` vào dòng test — dependency và config runner thuộc dòng source
 - [ ] Thêm/đổi thư mục test → đã khai vào `tests/runners.json` và sinh lại `tests/CATALOG.md`
 - [ ] Coverage không tụt so với baseline (cổng xanh)
+- [ ] SHA neo đã vào `reports/coverage-baseline.json` (`source_sha` · `test_sha`, do job `report` của CI dòng test ghi)
 - [ ] Base PR là `test/x.y.z/main` (không phải `test/main`, không phải `main`)
 - [ ] Gặp bug ở source → đã ghi lại và mở task ở dòng source; **không** tự sửa source trong PR này

@@ -1,0 +1,4 @@
+{
+  "$comment": "Miễn trừ test tường minh, đọc bởi .github/scripts/test-coverage-status.ts. BẤT BIẾN: mỗi bản ghi phải đủ taskId + version + reason + approved_by; không wildcard, không miễn cấp version. Sai định dạng là ĐỎ, không phải 'miễn hết'. File sống ở dòng test.",
+  "exemptions": []
+}

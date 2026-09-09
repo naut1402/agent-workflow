@@ -61,12 +61,16 @@ jobs:
       direction: ${{ steps.refs.outputs.direction }}
       skip: ${{ steps.refs.outputs.skip }}
     steps:
-      # Dòng test là cây orphan chỉ chứa `tests/` + `test-e2e/` + `reports/` —
-      # KHÔNG có `.github/scripts/`. Nên script suy ref phải lấy từ `main`.
-      - name: Checkout main (chỉ để lấy script suy ref)
+      # Checkout ref đang trigger — dòng test mang **cây đầy** của dòng source nên
+      # nó có sẵn `.github/scripts/`.
+      #
+      # 🚫 KHÔNG `ref: main`: tooling dòng test (`test-ref.ts`, `coverage-gate.ts`)
+      # chỉ lên `main` khi version mở nó được release. Trước lúc đó, lấy script từ
+      # `main` cho `Module not found` — mà lỗi đó đọc ra như "cổng hỏng", không
+      # phải "chưa tới lượt". Ref đang trigger luôn là ref vừa mang chính tooling ấy.
+      - name: Checkout ref đang trigger (mang theo script suy ref)
         uses: actions/checkout@v5
         with:
-          ref: main
           fetch-depth: 1
 
       - name: Setup Bun
@@ -148,12 +152,23 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.skip != 'true'
     runs-on: ubuntu-latest
+    outputs:
+      # Neo của lượt chạy — xem ghi chú ở step "Ghi SHA source của lượt chạy".
+      source_sha: ${{ steps.src.outputs.sha }}
     steps:
       - name: Checkout ref source
         uses: actions/checkout@v5
         with:
           ref: ${{ needs.resolve.outputs.source }}
           fetch-depth: 0
+
+      # ⚠️ Neo phải lấy ở ĐÂY, không lấy lại ở job `report`: `report` checkout
+      # ref source trong workspace khác, nên nếu source vừa được push giữa hai
+      # job thì neo ghi ra là commit CHƯA TỪNG chạy suite. Một lượt chạy phải
+      # cho đúng một cặp (SHA source, SHA test).
+      - name: Ghi SHA source của lượt chạy
+        id: src
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -284,6 +299,10 @@ jobs:
           VERSION: ${{ needs.resolve.outputs.version }}
           SOURCE_REF: ${{ needs.resolve.outputs.source }}
           TEST_REF: ${{ needs.resolve.outputs.test_ref }}
+          # Neo SHA: thứ duy nhất cho `test-anchor.ts` biết baseline này đo trên
+          # cây nào. Tên branch thì di chuyển, SHA thì không.
+          SOURCE_SHA: ${{ needs.overlay.outputs.source_sha }}
+          TEST_SHA: ${{ needs.resolve.outputs.test_sha }}
         run: |
           set -euo pipefail
           mkdir -p "testline/reports/${VERSION}"
@@ -292,7 +311,9 @@ jobs:
             --baseline "testline/reports/coverage-baseline.json" \
             --history "testline/reports/coverage-history.md" \
             --source-ref "$SOURCE_REF" \
-            --test-ref "$TEST_REF"
+            --test-ref "$TEST_REF" \
+            --source-sha "$SOURCE_SHA" \
+            --test-sha "$TEST_SHA"
 
       - name: Commit + push tầng nhẹ
         working-directory: testline

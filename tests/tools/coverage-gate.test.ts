@@ -9,6 +9,7 @@ import {
   historyRow,
   main,
   mergeBaseline,
+  normalizeSha,
   parseArgs,
   parseBaseline,
   parseLcovLines,
@@ -332,5 +333,134 @@ describe('main (exit code)', () => {
   test('baseline có backend mà lượt chạy không đo được → exit khác 0', () => {
     const f = fixture({ baseline: { frontend: { lines: 60 }, backend: { lines: 75 } }, fe: { lines: 60 } })
     expect(main(['--check', ...f.args])).not.toBe(0)
+  })
+
+  const SHA_A = 'a'.repeat(40)
+  const SHA_B = 'b'.repeat(40)
+
+  test('--update ghi đúng 2 khoá neo, giữ nguyên giá trị VÀ nghĩa của khoá cũ', () => {
+    const f = fixture({ baseline: { frontend: { lines: 60 }, backend: { lines: 75 }, source_ref: 'dev/1.1.3/main', test_ref: 'test/1.1.3/main' }, fe: { lines: 60 }, be: BE_75 })
+    expect(main(['--update', '--source-ref', 'dev/1.1.4/main', '--test-ref', 'test/1.1.4/main', '--source-sha', SHA_A, '--test-sha', SHA_B, ...f.args])).toBe(0)
+    const b = JSON.parse(fs.readFileSync(f.baselineFile, 'utf8'))
+    expect(b).toMatchObject({
+      source_ref: 'dev/1.1.4/main',
+      test_ref: 'test/1.1.4/main',
+      source_sha: SHA_A,
+      test_sha: SHA_B,
+      frontend: { lines: 60 },
+      backend: { lines: 75 },
+    })
+  })
+
+  test('chạy lại với cùng cặp SHA không sinh diff rác (chỉ updated_at đổi) + có newline cuối file', () => {
+    const f = fixture({ baseline: { frontend: { lines: 60 } }, fe: { lines: 60 }, be: BE_75 })
+    const run = () => {
+      expect(main(['--update', '--source-sha', SHA_A, '--test-sha', SHA_B, ...f.args])).toBe(0)
+      return fs.readFileSync(f.baselineFile, 'utf8')
+    }
+    const first = run()
+    const second = run()
+    expect(second.endsWith('\n')).toBe(true)
+    const strip = (t: string) => t.replace(/^\s*"updated_at".*$/m, '')
+    expect(strip(second)).toBe(strip(first))
+  })
+
+  test('khoá lạ do tooling khác ghi vẫn còn sau --update (round-trip không mất dữ liệu)', () => {
+    const f = fixture({ baseline: { $comment: 'ghi chú của người khác', frontend: { lines: 60 } }, fe: { lines: 60 }, be: BE_75 })
+    expect(main(['--update', '--source-sha', SHA_A, ...f.args])).toBe(0)
+    expect(JSON.parse(fs.readFileSync(f.baselineFile, 'utf8')).$comment).toBe('ghi chú của người khác')
+  })
+
+  test('SHA rỗng → exit khác 0 và KHÔNG ghi khoá neo rỗng vào baseline', () => {
+    const f = fixture({ baseline: { frontend: { lines: 60 } }, fe: { lines: 60 }, be: BE_75 })
+    expect(main(['--update', '--source-sha', '', ...f.args])).toBe(2)
+    const b = JSON.parse(fs.readFileSync(f.baselineFile, 'utf8'))
+    expect('source_sha' in b).toBe(false)
+    // Cả file cũng không được ghi nửa vời: số cũ giữ nguyên.
+    expect(b.frontend.lines).toBe(60)
+  })
+
+  test('SHA viết tắt bị TỪ CHỐI — không lưu chuỗi tắt rồi so bằng chuỗi ở cổng neo', () => {
+    const f = fixture({ baseline: { frontend: { lines: 60 } }, fe: { lines: 60 }, be: BE_75 })
+    expect(main(['--update', '--source-sha', 'abc1234', ...f.args])).toBe(2)
+    expect('source_sha' in JSON.parse(fs.readFileSync(f.baselineFile, 'utf8'))).toBe(false)
+  })
+
+  test('baseline CHƯA có khoá neo vẫn --check bình thường (không đỏ vô cớ sau PR neo)', () => {
+    const f = fixture({ baseline: { frontend: { lines: 60 }, backend: { lines: 75 }, source_ref: 'dev/1.1.3/main' }, fe: { lines: 60 }, be: BE_75 })
+    expect(main(['--check', ...f.args])).toBe(0)
+  })
+
+  test('có neo mà coverage tụt → vẫn chặn vì COVERAGE (hai lý do chặn không trộn)', () => {
+    const f = fixture({ baseline: { frontend: { lines: 60 }, source_sha: SHA_A }, fe: { lines: 50 }, be: BE_75 })
+    expect(main(['--check', ...f.args])).toBe(1)
+  })
+})
+
+describe('mergeBaseline — neo SHA', () => {
+  const at = '2026-09-09T00:00:00.000Z'
+
+  test('ghi neo từ meta', () => {
+    const next = mergeBaseline({}, { frontend: { lines: 60 }, backend: {} }, { source_sha: 'a'.repeat(40), test_sha: 'b'.repeat(40), at })
+    expect(next).toMatchObject({ source_sha: 'a'.repeat(40), test_sha: 'b'.repeat(40) })
+  })
+
+  test('neo GHI ĐÈ, KHÔNG max() — neo là thời điểm, max() trên chuỗi SHA là vô nghĩa', () => {
+    const old = { frontend: { lines: 60 }, source_sha: 'f'.repeat(40), test_sha: 'f'.repeat(40) }
+    const next = mergeBaseline(old, { frontend: { lines: 60 }, backend: {} }, { source_sha: '0'.repeat(40), test_sha: '1'.repeat(40), at })
+    expect(next.source_sha).toBe('0'.repeat(40))
+    expect(next.test_sha).toBe('1'.repeat(40))
+  })
+
+  test('lượt không truyền neo thì giữ neo cũ, không xoá mất', () => {
+    const next = mergeBaseline({ frontend: { lines: 60 }, source_sha: 'a'.repeat(40) }, { frontend: { lines: 61 }, backend: {} }, { at })
+    expect(next.source_sha).toBe('a'.repeat(40))
+  })
+
+  test('nửa neo: chỉ có source_sha thì không dựng khoá test_sha rỗng', () => {
+    const next = mergeBaseline({}, { frontend: { lines: 60 }, backend: {} }, { source_sha: 'a'.repeat(40), at })
+    expect(next.test_sha).toBeUndefined()
+  })
+
+  test('historyRow vẫn ĐÚNG 5 cột sau khi meta có thêm neo', () => {
+    const row = historyRow({ frontend: { lines: 60 }, backend: { lines: 75 } }, { source_ref: 'dev/1.1.4/main', test_ref: 'test/1.1.4/main', source_sha: 'a'.repeat(40), at })
+    expect(row.split('|').filter((c) => c.trim()).length).toBe(5)
+    expect(row).not.toContain('a'.repeat(40))
+  })
+})
+
+describe('normalizeSha', () => {
+  test('SHA đủ 40 hex → nhận, hạ về chữ thường', () => {
+    expect(normalizeSha('A'.repeat(40), '--source-sha')).toBe('a'.repeat(40))
+  })
+
+  test('rỗng / chỉ space → throw, nêu đúng cờ nào thiếu', () => {
+    expect(() => normalizeSha('', '--source-sha')).toThrow(/--source-sha rỗng/)
+    expect(() => normalizeSha('   ', '--test-sha')).toThrow(/--test-sha rỗng/)
+  })
+
+  test('viết tắt hoặc không phải hex → throw', () => {
+    expect(() => normalizeSha('abc1234', '--source-sha')).toThrow(/không phải SHA đầy đủ/)
+    expect(() => normalizeSha('z'.repeat(40), '--source-sha')).toThrow(/không phải SHA đầy đủ/)
+  })
+})
+
+describe('parseArgs — cờ neo SHA', () => {
+  test('nhận 2 cờ mới', () => {
+    const a = parseArgs(['--update', '--source-sha', 'a'.repeat(40), '--test-sha', 'b'.repeat(40)])
+    expect(a).toMatchObject({ mode: 'update', sourceSha: 'a'.repeat(40), testSha: 'b'.repeat(40) })
+  })
+
+  test('bảng cờ giữ đúng hai kiểu "thiếu tham số" của bản cũ', () => {
+    // Cờ đường dẫn: giữ default. Cờ ref/sha: undefined (để main báo cách dùng).
+    expect(parseArgs(['--check', '--baseline']).baseline).toBe('reports/coverage-baseline.json')
+    expect(parseArgs(['--check', '--source-ref']).sourceRef).toBeUndefined()
+    expect(parseArgs(['--check', '--source-sha']).sourceSha).toBeUndefined()
+    expect(parseArgs(['--check', '--tolerance']).tolerance).toBe(0)
+  })
+
+  test('cờ lạ bị bỏ qua, không làm hỏng các cờ sau nó', () => {
+    const a = parseArgs(['--check', '--khong-ton-tai', '--source-sha', 'a'.repeat(40)])
+    expect(a).toMatchObject({ mode: 'check', sourceSha: 'a'.repeat(40) })
   })
 })

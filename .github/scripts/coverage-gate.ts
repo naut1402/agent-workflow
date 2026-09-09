@@ -17,12 +17,18 @@
  *   - `--update` không bao giờ **hạ** baseline; muốn hạ thì sửa file bằng tay
  *     trong một PR test có ghi lý do.
  *
+ *   - **Neo chỉ được GHI ở đây, không so ở đây.** So neo với head của PR phát
+ *     hành là việc của `test-anchor.ts` — nhờ vậy cổng này không cần biết mình
+ *     đang chạy ở dòng test hay ở PR phát hành.
+ *
  *   bun run coverage:gate -- --check
- *   bun run coverage:gate -- --update --source-ref dev/1.1.3/main --test-ref test/1.1.3/main
+ *   bun run coverage:gate -- --update --source-ref dev/1.1.3/main --test-ref test/1.1.3/main \
+ *     --source-sha "$(git rev-parse HEAD)" --test-sha "$TEST_SHA"
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { parseJsonObject } from './lib/json.js'
 
 const ROOT = path.resolve(import.meta.dir, '..', '..')
 
@@ -38,6 +44,10 @@ export interface Baseline {
   updated_at?: string
   source_ref?: string
   test_ref?: string
+  /** Neo: commit dòng source mà lượt chạy này đo trên. So neo ở `test-anchor.ts`. */
+  source_sha?: string
+  /** Neo: commit dòng test đã được overlay ở lượt chạy này. */
+  test_sha?: string
 }
 
 export interface Measured {
@@ -88,16 +98,30 @@ export function readBackend(file: string): { lines?: number } {
   return pct === null ? {} : { lines: Math.round(pct * 100) / 100 }
 }
 
+const SHA_RE = /^[0-9a-f]{40}$/i
+
+/**
+ * SHA neo phải là **hash đầy đủ**; rỗng · viết tắt · không phải hex đều là lỗi.
+ *
+ * Vì sao chặt: git cho phép viết tắt, nên lưu `abc1234` rồi so bằng `===` ở
+ * `test-anchor.ts` sẽ báo "lệch neo" giả. Ghi khoá rỗng còn tệ hơn — cổng neo
+ * đọc ra `no-anchor` rồi tưởng đây là baseline cũ trước khi có cơ chế neo.
+ * Lượt chạy không có neo thì **bỏ hẳn cờ**, không truyền chuỗi rỗng.
+ */
+export function normalizeSha(value: string | undefined, flag: string): string {
+  const v = (value ?? '').trim()
+  if (!v) {
+    throw new Error(`${flag} rỗng — không lấy được SHA của lượt chạy. Lượt không có neo thì bỏ hẳn cờ, đừng truyền chuỗi rỗng.`)
+  }
+  if (!SHA_RE.test(v)) {
+    throw new Error(`${flag} = "${v}" không phải SHA đầy đủ (40 hex). Lấy bằng \`git rev-parse HEAD\`; SHA viết tắt không dùng được vì cổng neo so bằng chuỗi.`)
+  }
+  return v.toLowerCase()
+}
+
 /** Baseline phải parse được **và** có ít nhất một chỉ số — nửa vời thì cổng vô nghĩa. */
 export function parseBaseline(raw: string, file: string): Baseline {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch (e) {
-    throw new Error(`Baseline ${file} không phải JSON hợp lệ: ${e instanceof Error ? e.message : String(e)}`, { cause: e })
-  }
-  if (!parsed || typeof parsed !== 'object') throw new Error(`Baseline ${file} phải là object JSON.`)
-  const b = parsed as Baseline
+  const b = parseJsonObject(raw, `Baseline ${file}`) as Baseline
   const fe = b.frontend ?? {}
   const be = b.backend ?? {}
   const nums = [...Object.values(fe), be.lines].filter((v) => v !== undefined)
@@ -136,8 +160,24 @@ export function compare(baseline: Baseline, now: Measured, tolerance = TOLERANCE
   return rows
 }
 
-/** Baseline mới = max(cũ, mới) từng chỉ số. Không bao giờ hạ. */
-export function mergeBaseline(baseline: Baseline, now: Measured, meta: { source_ref?: string; test_ref?: string; at?: string }): Baseline {
+export interface BaselineMeta {
+  source_ref?: string
+  test_ref?: string
+  source_sha?: string
+  test_sha?: string
+  at?: string
+}
+
+/**
+ * Baseline mới = max(cũ, mới) từng chỉ số. Không bao giờ hạ.
+ *
+ * ⚠️ **Neo thì ngược lại: ghi đè, không `max()`.** Neo là *thời điểm*, và
+ * `max()` trên chuỗi SHA là vô nghĩa — lượt mới nhất thắng.
+ *
+ * Khoá lạ do tooling khác ghi vẫn còn sau khi ghi (round-trip không được làm
+ * mất dữ liệu của người khác), nên `out` bắt đầu từ chính `baseline`.
+ */
+export function mergeBaseline(baseline: Baseline, now: Measured, meta: BaselineMeta): Baseline {
   const frontend: Partial<Record<FeMetric, number>> = { ...(baseline.frontend ?? {}) }
   for (const m of FE_METRICS) {
     const cur = now.frontend[m]
@@ -147,15 +187,18 @@ export function mergeBaseline(baseline: Baseline, now: Measured, meta: { source_
   const backend = { ...(baseline.backend ?? {}) }
   if (now.backend.lines !== undefined) backend.lines = Math.max(backend.lines ?? 0, now.backend.lines)
 
-  const out: Baseline = { updated_at: meta.at ?? new Date().toISOString() }
+  const out: Baseline = { ...baseline, updated_at: meta.at ?? new Date().toISOString() }
   if (Object.keys(frontend).length) out.frontend = frontend
   if (Object.keys(backend).length) out.backend = backend
   if (meta.source_ref) out.source_ref = meta.source_ref
   if (meta.test_ref) out.test_ref = meta.test_ref
+  if (meta.source_sha) out.source_sha = meta.source_sha
+  if (meta.test_sha) out.test_sha = meta.test_sha
   return out
 }
 
-export function historyRow(now: Measured, meta: { source_ref?: string; test_ref?: string; at?: string }): string {
+/** ⚠️ Giữ đúng 5 cột: thêm SHA vào log cho người là đổi mọi dòng cũ (ngoài phạm vi). */
+export function historyRow(now: Measured, meta: BaselineMeta): string {
   const pct = (v: number | undefined) => (v === undefined ? '—' : `${v.toFixed(2)}%`)
   const at = (meta.at ?? new Date().toISOString()).slice(0, 19).replace('T', ' ')
   return `| ${at} | ${meta.test_ref ?? '—'} | ${meta.source_ref ?? '—'} | ${pct(now.frontend.lines)} | ${pct(now.backend.lines)} |`
@@ -197,8 +240,35 @@ interface Args {
   history: string
   sourceRef?: string
   testRef?: string
+  sourceSha?: string
+  testSha?: string
   allowMissing: boolean
   tolerance: number
+}
+
+/**
+ * Bảng cờ khai báo thay cho chuỗi `else if`: cổng này nhận thêm cờ ở mỗi đợt
+ * của mô hình tách test, mà mỗi `else if` lại thêm một nhánh vào cùng một hàm.
+ *
+ * ⚠️ Hai kiểu "thiếu tham số" **không** được sửa cho đều — test đang khoá hành
+ * vi này: cờ đường dẫn thiếu giá trị thì giữ default, cờ ref/sha thì `undefined`.
+ */
+const VALUE_FLAGS: Record<string, (o: Args, v: string | undefined) => void> = {
+  '--baseline': (o, v) => (o.baseline = v ?? o.baseline),
+  '--fe': (o, v) => (o.fe = v ?? o.fe),
+  '--be': (o, v) => (o.be = v ?? o.be),
+  '--history': (o, v) => (o.history = v ?? o.history),
+  '--source-ref': (o, v) => (o.sourceRef = v),
+  '--test-ref': (o, v) => (o.testRef = v),
+  '--source-sha': (o, v) => (o.sourceSha = v),
+  '--test-sha': (o, v) => (o.testSha = v),
+  '--tolerance': (o, v) => (o.tolerance = Number(v) || 0),
+}
+
+const BOOL_FLAGS: Record<string, (o: Args) => void> = {
+  '--check': (o) => (o.mode = 'check'),
+  '--update': (o) => (o.mode = 'update'),
+  '--allow-missing': (o) => (o.allowMissing = true),
 }
 
 export function parseArgs(argv: string[]): Args {
@@ -213,16 +283,12 @@ export function parseArgs(argv: string[]): Args {
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
-    if (a === '--check') out.mode = 'check'
-    else if (a === '--update') out.mode = 'update'
-    else if (a === '--baseline') out.baseline = argv[++i] ?? out.baseline
-    else if (a === '--fe') out.fe = argv[++i] ?? out.fe
-    else if (a === '--be') out.be = argv[++i] ?? out.be
-    else if (a === '--history') out.history = argv[++i] ?? out.history
-    else if (a === '--source-ref') out.sourceRef = argv[++i]
-    else if (a === '--test-ref') out.testRef = argv[++i]
-    else if (a === '--allow-missing') out.allowMissing = true
-    else if (a === '--tolerance') out.tolerance = Number(argv[++i]) || 0
+    const bool = BOOL_FLAGS[a]
+    if (bool) {
+      bool(out)
+      continue
+    }
+    VALUE_FLAGS[a]?.(out, argv[++i])
   }
   return out
 }
@@ -239,7 +305,21 @@ function summary(text: string): void {
 export function main(argv: string[]): number {
   const args = parseArgs(argv)
   if (!args.mode) {
-    console.error('Cách dùng: coverage-gate.ts (--check | --update) [--baseline <path>] [--fe <path>] [--be <path>]')
+    console.error(
+      'Cách dùng: coverage-gate.ts (--check | --update) [--baseline <path>] [--fe <path>] [--be <path>]\n' +
+        '           [--source-ref <ref>] [--test-ref <ref>] [--source-sha <sha40>] [--test-sha <sha40>]',
+    )
+    return 2
+  }
+
+  // Validate neo TRƯỚC khi đọc/ghi gì: SHA sai thì không được ghi baseline nửa vời.
+  let sourceSha: string | undefined
+  let testSha: string | undefined
+  try {
+    if (args.sourceSha !== undefined) sourceSha = normalizeSha(args.sourceSha, '--source-sha')
+    if (args.testSha !== undefined) testSha = normalizeSha(args.testSha, '--test-sha')
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e))
     return 2
   }
 
@@ -282,7 +362,7 @@ export function main(argv: string[]): number {
 
   if (args.mode === 'update') {
     const at = new Date().toISOString()
-    const meta = { source_ref: args.sourceRef, test_ref: args.testRef, at }
+    const meta: BaselineMeta = { source_ref: args.sourceRef, test_ref: args.testRef, source_sha: sourceSha, test_sha: testSha, at }
     const next = mergeBaseline(baseline, now, meta)
     fs.mkdirSync(path.dirname(baselineFile), { recursive: true })
     fs.writeFileSync(baselineFile, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
