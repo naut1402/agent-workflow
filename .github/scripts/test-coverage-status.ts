@@ -198,35 +198,45 @@ export interface StatusReport {
  *
  * Lớp lẻ = huỷ (+1), lớp chẵn = khôi phục (−1); tổng > 0 mới là "đang bị revert".
  */
+/** Ba loại subject mà `collect` cần phân biệt — tách ra để chỗ gom không phải vừa phân loại vừa cộng dồn. */
+type Classified =
+  | { kind: 'revert'; base: string; delta: number }
+  | { kind: 'task'; id: string; subject: string }
+  | { kind: 'untagged'; subject: string }
+
+function classifySubject(subject: string): Classified {
+  const { base, depth } = unwrapRevert(subject)
+  if (depth > 0) {
+    // Revert của commit không mang định danh task thì cũng không quy được về
+    // task nào — nêu ra như commit thường, 🚫 không bỏ qua im lặng.
+    return taskIdOf(base) ? { kind: 'revert', base, delta: depth % 2 === 1 ? 1 : -1 } : { kind: 'untagged', subject }
+  }
+  const id = taskIdOf(subject)
+  return id ? { kind: 'task', id, subject } : { kind: 'untagged', subject }
+}
+
+/** E13: một task nhiều commit vẫn tính MỘT task, nhưng giữ đủ subject làm căn cứ. */
+function addTaskCommit(byId: Map<string, TaskEntry>, id: string, subject: string): void {
+  const entry = byId.get(id) ?? { taskId: id, subjects: [], types: [] }
+  entry.subjects.push(subject)
+  const type = typeOf(subject)
+  if (type && !entry.types.includes(type)) entry.types.push(type)
+  byId.set(id, entry)
+}
+
 function collect(subjects: string[]): { tasks: TaskEntry[]; untagged: string[]; revertedSubjects: Set<string> } {
   const byId = new Map<string, TaskEntry>()
   const untagged: string[] = []
   const balance = new Map<string, number>()
 
-  for (const s of subjects) {
-    const subject = s.trim()
+  for (const raw of subjects) {
+    const subject = raw.trim()
     if (!subject) continue
 
-    const { base, depth } = unwrapRevert(subject)
-    if (depth > 0) {
-      // Revert của commit không mang định danh task thì cũng không quy được về
-      // task nào — nêu ra như commit thường, 🚫 không bỏ qua im lặng.
-      if (taskIdOf(base)) balance.set(base, (balance.get(base) ?? 0) + (depth % 2 === 1 ? 1 : -1))
-      else untagged.push(subject)
-      continue
-    }
-
-    const id = taskIdOf(subject)
-    if (!id) {
-      untagged.push(subject)
-      continue
-    }
-    // E13: một task nhiều commit vẫn tính MỘT task.
-    const entry = byId.get(id) ?? { taskId: id, subjects: [], types: [] }
-    entry.subjects.push(subject)
-    const type = typeOf(subject)
-    if (type && !entry.types.includes(type)) entry.types.push(type)
-    byId.set(id, entry)
+    const c = classifySubject(subject)
+    if (c.kind === 'untagged') untagged.push(c.subject)
+    else if (c.kind === 'revert') balance.set(c.base, (balance.get(c.base) ?? 0) + c.delta)
+    else addTaskCommit(byId, c.id, c.subject)
   }
 
   const revertedSubjects = new Set([...balance].filter(([, n]) => n > 0).map(([subject]) => subject))
@@ -511,6 +521,13 @@ function summary(text: string): void {
 class ToolError extends Error {}
 
 /**
+ * Kết luận ĐỎ của cổng (exit 1) — tách hẳn khỏi `ToolError` (exit 2, "cổng không
+ * đọc được dữ liệu"). Nhờ hai lớp lỗi này `main()` chỉ còn một `try` duy nhất mà
+ * vẫn giữ nguyên contract exit code đã ghi trong `testing.md` §3.1.
+ */
+class GateError extends Error {}
+
+/**
  * Ref dùng được ở local — có sẵn thì dùng, thiếu thì hỏi remote **rồi mới** kết luận.
  *
  * Ba kết quả phải tách bạch (bất biến `testing.md` §3.1): ref có · ref **chưa
@@ -545,7 +562,12 @@ function readExemptions(repo: string, file: string): Exemption[] {
   const abs = path.isAbsolute(file) ? file : path.join(repo, file)
   // E8: đa số version không có miễn trừ nào — thiếu file là hợp lệ, không phải lỗi.
   if (!fs.existsSync(abs)) return []
-  return parseExemptions(fs.readFileSync(abs, 'utf8'), file)
+  try {
+    return parseExemptions(fs.readFileSync(abs, 'utf8'), file)
+  } catch (e) {
+    // Miễn trừ sai định dạng là ĐỎ: đây là chỗ người ta sẽ thử nới cổng.
+    throw new GateError(e instanceof Error ? e.message : String(e))
+  }
 }
 
 interface Scope {
@@ -596,23 +618,9 @@ export function main(argv: string[], repo: string = ROOT): number {
     return 2
   }
 
-  let version: string
-  let exemptions: Exemption[]
   try {
-    version = resolveVersion(repo, args.version)
-  } catch (e) {
-    console.error(e instanceof Error ? e.message : String(e))
-    return 2
-  }
-  try {
-    exemptions = readExemptions(repo, args.exemptions)
-  } catch (e) {
-    // Miễn trừ sai định dạng là ĐỎ: đây là chỗ người ta sẽ thử nới cổng.
-    console.error(`::error::${e instanceof Error ? e.message : String(e)}`)
-    return 1
-  }
-
-  try {
+    const version = resolveVersion(repo, args.version)
+    const exemptions = readExemptions(repo, args.exemptions)
     const scope = resolveScope(repo, version, args.sourceRef)
     const report = computeStatus({
       sourceSubjects: subjectsOf(repo, scope.sourceRange),
@@ -638,9 +646,9 @@ export function main(argv: string[], repo: string = ROOT): number {
     }
     return 0
   } catch (e) {
-    if (e instanceof ToolError) {
-      console.error(e.message)
-      return 2
+    if (e instanceof GateError) {
+      console.error(`::error::${e.message}`)
+      return 1
     }
     console.error(e instanceof Error ? e.message : String(e))
     return 2
