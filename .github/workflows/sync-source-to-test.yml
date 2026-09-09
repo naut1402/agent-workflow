@@ -1,0 +1,118 @@
+# Sync cây source sang dòng test **theo cặp version**.
+#
+#   main             →  test/main
+#   dev/x.y.z/main   →  test/x.y.z/main
+#
+# Vì sao cần: dòng test mang **cây đầy** của dòng source (để chạy độc lập được),
+# nên `src/` tồn tại ở hai dòng branch. Không có đường sync này thì bản copy trên
+# dòng test lạc hậu dần, và "suite xanh trên dòng test" không còn nói gì về cây
+# source đang phát hành — đúng loại xanh giả mà mô hình tách test sinh ra để diệt.
+#
+# Quan hệ là **1–1 theo version**, nên dùng `TARGETS_OVERRIDE` chứ không discover
+# theo namespace: discover sẽ merge dòng version này vào dòng test của version KHÁC.
+#
+# Chiều ngược lại (test → source) KHÔNG tồn tại: test code chỉ đi từ dòng test
+# lên, qua `promote-test-line.yml`.
+#
+# ⚠️ Push ở đây dùng `github.token` khi không có `AUTO_MERGE_TOKEN`, và GitHub cố
+# ý không cho `GITHUB_TOKEN` trigger workflow tiếp theo. Nghĩa là lượt sync này
+# **không** kích `test-overlay.yml` trên dòng test — đó là điều muốn (tránh vòng
+# lặp CI ở mọi commit source). Lượt overlay của dòng test chạy khi **người** merge
+# PR test vào `test/x.y.z/main`.
+
+name: Sync source line into test line
+
+on:
+  push:
+    branches:
+      - main
+      - 'dev/*/main'
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Ref dòng source cần sync (vd dev/1.1.4/main). Bỏ trống = branch đang chạy'
+        required: false
+        type: string
+
+concurrency:
+  group: sync-source-to-test-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout ref đang trigger — nó mang sẵn `.github/scripts/`. 🚫 Không
+      # `ref: main`: dòng test và các dòng version mở trước khi tooling lên `main`
+      # sẽ không tìm thấy script (lỗi `Module not found`, không phải "không có gì để sync").
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Suy cặp source ↔ test
+        id: pair
+        env:
+          INPUT_REF: ${{ inputs.source_ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          SRC="${INPUT_REF:-$REF_NAME}"
+
+          # `test-ref.ts` là nguồn sự thật DUY NHẤT của mapping hai dòng (nó map cả
+          # `main` → `test/main`). 🚫 Không đặc biệt hoá `main` ở đây: hai bản
+          # mapping thì chỉ cần một bản đổi là hai dòng trỏ lệch nhau âm thầm.
+          # Nó throw khi tên không khớp — dùng chính nó làm bộ lọc, thay vì để
+          # throw lọt ra ngoài thành "sync hỏng".
+          if ! TARGET="$(bun .github/scripts/test-ref.ts test "$SRC" 2>/dev/null)"; then
+            {
+              echo "## Sync source → test — không áp dụng"
+              echo ""
+              echo "Ref \`${SRC}\` không thuộc dòng source (\`main\` hoặc \`dev/x.y.z/main\`) nên không có dòng test tương ứng."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "src=$SRC" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "Cặp sync: ${SRC} → ${TARGET}"
+
+      - name: Ensure conflict label exists
+        if: steps.pair.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+        run: |
+          gh label create auto-merge-conflict \
+            --repo "${{ github.repository }}" \
+            --description "Sync gốc dòng → target bị conflict — cần resolve tay" \
+            --color B60205 \
+            || true
+
+      - name: Sync
+        if: steps.pair.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SRC_REF: ${{ steps.pair.outputs.src }}
+          TARGETS_OVERRIDE: ${{ steps.pair.outputs.target }}
+          # 🚫 `auto-merge-targets.yml` là danh sách của dòng source — khai vào
+          # đây là nhập thêm cây lạ vào dòng test.
+          EXTRA_FILE: ''
+        run: bash .github/scripts/sync-line.sh

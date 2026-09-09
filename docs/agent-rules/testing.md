@@ -88,7 +88,7 @@ Repo **không** còn thư mục `plugins/` ở root — bản agent template ch�
 Test code có dòng branch riêng, đối xứng với dòng source — quy ước đầy đủ ở [`git-pr.md`](git-pr.md) §4.3:
 
 ```
-test/x.y.z/{taskID}_{slug}  →  test/x.y.z/main  →  test/main   (cây orphan, chỉ test)
+test/x.y.z/{taskID}_{slug}  →  test/x.y.z/main  →  test/main   (cây đầy của dòng source + test)
 ```
 
 Không commit nào chứa cả source và test, nên **chạy test = ghép hai cây** — cây test đặt đúng gốc repo (`tests/` + `test-e2e/`), cùng vị trí cây tracked cũ:
@@ -99,7 +99,7 @@ bun run test:overlay test/1.1.4/main    # ép ref cụ thể
 bun run test:all                        # rồi chạy như bình thường
 ```
 
-**Viết test thì vẫn đứng trên worktree dòng source** — cây orphan không có `package.json`, config runner hay `node_modules` nên chạy được đúng con số không lệnh nào. Viết xong, đẩy cây test sang dòng test bằng một lệnh:
+**Đứng trên branch dòng test cũng chạy được** (cây đầy có `package.json` + config runner). Nhưng để chấm đúng **cặp ref** như CI — test của dòng test trên code của dòng source — thì viết trên worktree dòng source rồi đẩy sang, vì bản `src/` ở dòng test chỉ là bản sao được sync định kỳ:
 
 ```bash
 bun run test:push test/1.1.4/T0000abcd_ten-task "[T0000abcd] test(monitor): phủ TC-01…TC-07"

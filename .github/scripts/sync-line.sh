@@ -4,6 +4,15 @@
 #   SRC_REF=main       TARGET_NS=dev   → main      → dev/x.y.z/main  (+ extra_targets)
 #   SRC_REF=test/main  TARGET_NS=test  → test/main → test/x.y.z/main
 #
+# Sync THEO CẶP thì khai target tường minh, không discover theo namespace:
+#
+#   SRC_REF=dev/1.1.4/main  TARGETS_OVERRIDE=test/1.1.4/main
+#
+# Cần chế độ này vì dòng test mang cây đầy của dòng source: quan hệ là 1–1 theo
+# version (`dev/x.y.z/main` ↔ `test/x.y.z/main`), không phải một gốc toả ra
+# nhiều target. Discover theo namespace ở đây sẽ merge dòng version này vào dòng
+# test của version KHÁC.
+#
 # Chạy trong GitHub Actions (cần git fetch-depth:0, GH_TOKEN, gh CLI).
 #
 # ⚠️ `EXTRA_FILE` chỉ có nghĩa với dòng source: script merge `SRC_REF` **vào**
@@ -16,6 +25,9 @@ REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY required}"
 
 SRC_REF="${SRC_REF:-main}"
 TARGET_NS="${TARGET_NS:-dev}"
+# Danh sách target tường minh (cách nhau bởi space/newline). Khai thì BỎ HẲN
+# bước discover — dùng `${VAR-}` để "khai rỗng" khác "chưa khai".
+TARGETS_OVERRIDE="${TARGETS_OVERRIDE-}"
 # Dùng `${VAR-default}` (không phải `:-`) để phân biệt "chưa khai" với "khai rỗng".
 EXTRA_FILE="${EXTRA_FILE-.github/auto-merge-targets.yml}"
 
@@ -30,7 +42,12 @@ git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
 } >> "$SUMMARY"
 
 EXTRA_TARGETS=()
-if [[ -n "$EXTRA_FILE" && -f "$EXTRA_FILE" ]]; then
+if [[ -n "$TARGETS_OVERRIDE" ]]; then
+  # Target tường minh: 🚫 không đọc `EXTRA_FILE`, 🚫 không discover. Sai target ở
+  # chế độ này là merge sai cây, nên thà không có target còn hơn đoán thêm.
+  read -r -a EXTRA_TARGETS <<< "$TARGETS_OVERRIDE"
+  EXTRA_FILE=''
+elif [[ -n "$EXTRA_FILE" && -f "$EXTRA_FILE" ]]; then
   mapfile -t EXTRA_TARGETS < <(python3 - "$EXTRA_FILE" <<'PY'
 import re
 import sys
@@ -65,12 +82,15 @@ fi
 
 # ⚠️ Với TARGET_NS=test, for-each-ref trả về **cả** `test/main` — vòng lọc dưới
 # loại `SRC_REF` ra, thiếu bước đó là script tự merge SRC_REF vào chính nó.
-mapfile -t LINE_MAINS < <(
-  git for-each-ref --format='%(refname:short)' "refs/remotes/origin/${TARGET_NS}" \
-    | sed 's#^origin/##' \
-    | grep '/main$' \
-    | sort -u || true
-)
+LINE_MAINS=()
+if [[ -z "$TARGETS_OVERRIDE" ]]; then
+  mapfile -t LINE_MAINS < <(
+    git for-each-ref --format='%(refname:short)' "refs/remotes/origin/${TARGET_NS}" \
+      | sed 's#^origin/##' \
+      | grep '/main$' \
+      | sort -u || true
+  )
+fi
 
 declare -A SEEN=()
 TARGETS=()
