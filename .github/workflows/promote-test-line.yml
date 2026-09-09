@@ -22,6 +22,13 @@ on:
         description: 'Version cần thăng (bỏ trống = lấy từ package.json trên main)'
         required: false
         type: string
+      # Chỉ để DRY-RUN trên cặp branch nháp (git-pr.md §4.3). Không khai thì đích
+      # là `test/main` — cây neo thật. Có tham số này thì dry-run bước promote
+      # không còn ghi vào cây neo, tức V2 chạy được mà không phải dọn sau.
+      target:
+        description: 'Branch đích (bỏ trống = test/main). CHỈ dùng cho dry-run, vd test/0.0.0/trunk'
+        required: false
+        type: string
 
 concurrency:
   group: promote-test-line
@@ -51,12 +58,28 @@ jobs:
         id: line
         env:
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_TARGET: ${{ inputs.target }}
         run: |
           set -euo pipefail
           VERSION="${INPUT_VERSION:-$(node -p "require('./package.json').version")}"
           TEST_LINE="test/${VERSION}/main"
+          TARGET="${INPUT_TARGET:-test/main}"
+
+          # 🚫 Đích phải nằm trong dòng test và KHÔNG được là chính nguồn: khai sai
+          # ở đây là ghi cây lạ vào một branch bất kỳ bằng quyền của PAT.
+          case "$TARGET" in
+            test/*) ;;
+            *) echo "::error::target \"$TARGET\" không thuộc dòng test (phải khớp test/*)."; exit 1 ;;
+          esac
+          if [[ "$TARGET" == "$TEST_LINE" ]]; then
+            echo "::error::target trùng nguồn ($TEST_LINE) — không tự merge vào chính nó."
+            exit 1
+          fi
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "test_line=$TEST_LINE" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "Thăng: ${TEST_LINE} → ${TARGET}"
           git fetch --prune origin '+refs/heads/test/*:refs/remotes/origin/test/*'
           if git rev-parse --verify "origin/${TEST_LINE}" >/dev/null 2>&1; then
             echo "found=true" >> "$GITHUB_OUTPUT"
@@ -82,26 +105,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
           TEST_LINE: ${{ steps.line.outputs.test_line }}
+          TARGET: ${{ steps.line.outputs.target }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin '+refs/heads/test/main:refs/remotes/origin/test/main' || true
+          git fetch --no-tags origin "+refs/heads/${TARGET}:refs/remotes/origin/${TARGET}" || true
 
-          if git rev-parse --verify origin/test/main >/dev/null 2>&1; then
-            git checkout -B test/main origin/test/main
+          if git rev-parse --verify "origin/${TARGET}" >/dev/null 2>&1; then
+            git checkout -B "$TARGET" "origin/${TARGET}"
           else
-            echo "::error::Chưa có branch test/main — dựng dòng test gốc trước (docs/agent-rules/git-pr.md §4.3)."
+            echo "::error::Chưa có branch ${TARGET} — dựng dòng test gốc trước (docs/agent-rules/git-pr.md §4.3)."
             exit 1
           fi
 
           if git merge-base --is-ancestor "origin/${TEST_LINE}" HEAD; then
-            echo "test/main đã chứa ${TEST_LINE} — bỏ qua."
-            echo "\`test/main\` đã chứa \`${TEST_LINE}\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "${TARGET} đã chứa ${TEST_LINE} — bỏ qua."
+            echo "\`${TARGET}\` đã chứa \`${TEST_LINE}\`." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          if git merge --no-ff "origin/${TEST_LINE}" -m "chore: promote ${TEST_LINE} into test/main"; then
-            git push origin HEAD:test/main
-            echo "Đã thăng \`${TEST_LINE}\` → \`test/main\`." >> "$GITHUB_STEP_SUMMARY"
+          if git merge --no-ff "origin/${TEST_LINE}" -m "chore: promote ${TEST_LINE} into ${TARGET}"; then
+            git push origin "HEAD:${TARGET}"
+            echo "Đã thăng \`${TEST_LINE}\` → \`${TARGET}\`." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -109,7 +133,7 @@ jobs:
           # còn tệ hơn một PR phải resolve tay.
           git merge --abort || true
           EXISTING="$(gh pr list --repo "${{ github.repository }}" \
-            --base test/main --head "$TEST_LINE" --state open \
+            --base "$TARGET" --head "$TEST_LINE" --state open \
             --json number --jq '.[0].number // empty')"
           if [[ -n "$EXISTING" ]]; then
             gh pr edit "$EXISTING" --repo "${{ github.repository }}" --add-label auto-merge-conflict || true
@@ -124,8 +148,8 @@ jobs:
               '' \
               'Workflow: `promote-test-line.yml`')"
             gh pr create --repo "${{ github.repository }}" \
-              --base test/main --head "$TEST_LINE" \
-              --title "chore: promote ${TEST_LINE} into test/main" \
+              --base "$TARGET" --head "$TEST_LINE" \
+              --title "chore: promote ${TEST_LINE} into ${TARGET}" \
               --label auto-merge-conflict \
               --body "$BODY" \
               || { echo "::error::Conflict và không tạo được PR."; exit 1; }
