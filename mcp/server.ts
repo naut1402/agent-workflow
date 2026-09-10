@@ -12,6 +12,7 @@
 //   add_project    { path, name? }         → { project } (validated)
 //   remove_project { id }                  → { removed: true }
 //   get_project    { id }                  → { project }
+//   get_knowledge_bundle { ids, project? } → { bundle }   (knowledge_inputs → nội dung)
 //
 // Design ref: U0001 design.md §4.4.
 
@@ -19,7 +20,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { APP_VERSION } from '../src/core/configs/appVersion.js'
-import { list, get, add, remove } from '../src/core/registry.js'
+import { list, get, add, remove, resolveProjectRoot } from '../src/core/registry.js'
+import { loadKnowledgeBundle } from '../src/features/knowledge/business/index.js'
 
 // Return `any` to stay decoupled from the SDK's literal content-type unions.
 export function ok(payload: unknown): any {
@@ -53,6 +55,17 @@ export function handleRemoveProject({ id }: { id: string }): any {
   const result = remove(id)
   if ('error' in result) return fail(result.error)
   return ok({ removed: true })
+}
+
+/**
+ * Đường vào knowledge cho agent không nói HTTP. Song song với
+ * `GET /api/knowledge/bundle` — cùng gọi `loadKnowledgeBundle`, nên hai đường
+ * không lệch nhau.
+ */
+export async function handleGetKnowledgeBundle({ ids, project }: { ids: string[]; project?: string }): Promise<any> {
+  const root = resolveProjectRoot(project ?? null)
+  if (!root) return fail(`unknown project: ${project}`)
+  return ok({ bundle: await loadKnowledgeBundle(root, ids) })
 }
 
 // ── Server wiring ──────────────────────────────────────────────────────────────
@@ -91,6 +104,18 @@ export function createMcpServer(): McpServer {
       + 'Removing the default project promotes the next remaining project (if any) to default.',
     { id: z.string().describe('Project id to remove.') },
     async ({ id }) => handleRemoveProject({ id }),
+  )
+
+  server.tool(
+    'get_knowledge_bundle',
+    'Read knowledge entries by id (`<scope>/<slug>`, e.g. `global/coding-convention`). '
+      + 'Resolves the ids listed in a task `knowledge_inputs`. Unknown ids come back as '
+      + '{ id, error } instead of failing the whole call.',
+    {
+      ids: z.array(z.string()).max(50).describe('Entry ids to read.'),
+      project: z.string().optional().describe('Project id (from list_projects); omit for the default project.'),
+    },
+    async ({ ids, project }) => handleGetKnowledgeBundle({ ids, project }),
   )
 
   return server

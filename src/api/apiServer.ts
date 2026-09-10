@@ -6,7 +6,6 @@ import type { HonoEnv, RegistryContext } from '../core/http/types.js'
 import { j, json } from '../core/http/responseHelper.js'
 import { dirnameFromImportMeta, resolvePath } from '../core/lib/fileHelper.js'
 import { loadModulesUnder } from '../core/lib/dirModuleLoader.js'
-import { handleKnowledgeApi } from '../features/knowledge/business/knowledgeApi.js'
 import { appendRequestLog } from '../core/log/store.js'
 import { installEventLogSubscriber } from '../core/log/eventLogSubscriber.js'
 import { initLogDriverFromPrefs } from '../core/log/driverInit.js'
@@ -15,14 +14,9 @@ import {
   formatResponsePreview,
 } from '../core/log/schema.js'
 import { resolveTraceIdFromRequest, runWithTraceIdAsync } from '../core/log/traceContext.js'
-import { createJwtMiddleware, verifyJwtHeader } from '../core/http/security/jwtGuard.js'
-import {
-  createRateLimitMiddleware,
-  matchRateLimitGroup,
-  checkAndConsume,
-  resolveClientIp,
-} from '../core/http/security/rateLimiter.js'
-import { createCorsMiddleware, resolveCorsHeaders } from '../core/http/security/corsGuard.js'
+import { createJwtMiddleware } from '../core/http/security/jwtGuard.js'
+import { createRateLimitMiddleware } from '../core/http/security/rateLimiter.js'
+import { createCorsMiddleware } from '../core/http/security/corsGuard.js'
 import { loadSecurityConfig } from '../features/settings/business/dashboardSettings.js'
 
 // ── API server (Hono app + Node bridge) ─────────────────────────────────────
@@ -31,9 +25,8 @@ import { loadSecurityConfig } from '../features/settings/business/dashboardSetti
 // that returns `true` when it produced a response for an /api/* request, and
 // `false` for non-api paths (caller falls through to static / next middleware).
 //
-// /api/knowledge is still served by the node-res-based handleKnowledgeApi
-// (knowledge module's own HTTP surface); everything else is routed through the
-// Hono app via a node→Web Request bridge.
+// Every /api/* request goes through the Hono app via a node→Web Request
+// bridge — no feature keeps its own node-res branch above it.
 //
 // createApp(ctx) builds the Hono instance (exported for tests via app.request).
 // Feature routes: moi src/features/<name>/api.ts export registerRoutes +
@@ -142,8 +135,7 @@ export function createApiHandler(ctx: RegistryContext) {
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url || '/', 'http://localhost')
     if (!url.pathname.startsWith('/api/')) return false
-    // Single chokepoint for ALL /api/* traffic on both transports — the only
-    // layer above both the knowledge (node-res) and Hono branches. Request
+    // Single chokepoint for ALL /api/* traffic on both transports. Request
     // logging is fire-and-forget in `finally`, never awaited into the response.
     const started = Date.now()
     const projectId = url.searchParams.get('project') || null
@@ -155,52 +147,6 @@ export function createApiHandler(ctx: RegistryContext) {
       try {
         // Set early so clients can correlate even if the handler throws later.
         if (!res.headersSent) res.setHeader('X-Trace-Id', traceId)
-        if (url.pathname.startsWith('/api/knowledge')) {
-          const security = loadSecurityConfig()
-          const corsHeaders = resolveCorsHeaders(req.headers.origin as string | undefined, security.cors)
-          if (corsHeaders) for (const [k, v] of Object.entries(corsHeaders)) res.setHeader(k, v)
-          if (security.cors.enabled && (req.method || 'GET').toUpperCase() === 'OPTIONS') {
-            res.statusCode = 204
-            res.end()
-            return true
-          }
-          if (security.rateLimit.enabled) {
-            const { windowMs, max, groupId } = matchRateLimitGroup(url.pathname, security.rateLimit)
-            const { allowed, retryAfterMs } = checkAndConsume(
-              `${groupId}:${resolveClientIp(req)}`,
-              windowMs,
-              max,
-              Date.now(),
-            )
-            if (!allowed) {
-              res.setHeader('Retry-After', String(Math.ceil(retryAfterMs / 1000)))
-              const body = JSON.stringify({ error: 'rate limit exceeded' })
-              responsePreview = formatResponsePreview(Buffer.from(body), 'application/json')
-              json(res, 429, { error: 'rate limit exceeded' })
-              return true
-            }
-          }
-          const authResult = await verifyJwtHeader(req.headers.authorization as string | undefined)
-          if (authResult.ok === false) {
-            responsePreview = formatResponsePreview(
-              Buffer.from(JSON.stringify({ error: authResult.error })),
-              'application/json',
-            )
-            json(res, authResult.status, { error: authResult.error })
-            return true
-          }
-          const root = ctx.resolveProjectRoot(projectId)
-          if (!root) {
-            const body = JSON.stringify({ error: 'unknown project', project: projectId })
-            responsePreview = formatResponsePreview(Buffer.from(body), 'application/json')
-            json(res, 404, { error: 'unknown project', project: projectId })
-            return true
-          }
-          await handleKnowledgeApi(req, res, url, root)
-          // Knowledge writes directly to the node response — body not mirrored here.
-          responsePreview = ''
-          return true
-        }
         const app = await getApp()
         const response = await app.fetch(await nodeToWebRequest(req, url))
         // Prefer inbound/minted id on the wire (overwrite if Hono also set one).

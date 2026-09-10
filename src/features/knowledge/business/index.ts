@@ -1,8 +1,7 @@
 import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
 import { getKnowledgeDriver, loadKnowledgeConfig } from './fileDriver.js'
-import { handleKnowledgeApi } from './knowledgeApi.js'
 
-/** Facade knowledge — HTTP node-res vẫn qua handleKnowledgeApi. */
+/** Facade knowledge — HTTP đi qua `api.ts` + `controller.ts` như mọi feature. */
 export class KnowledgeBusiness extends AbstractBusiness {
   getDriver() {
     const gate = this.requireRoot()
@@ -24,4 +23,13 @@ export {
   knowledgeRoot,
   loadKnowledgeBundle,
 } from './fileDriver.js'
-export { handleKnowledgeApi } from './knowledgeApi.js'
+export { CollectionsFileError } from './collections.js'
+export {
+  listCollections,
+  createCollection,
+  updateCollection,
+  deleteCollection,
+  renameTag,
+  resolveCollectionEntries,
+} from './collections.js'
+export type { KnowledgeCollection, CollectionsDoc } from './collections.js'

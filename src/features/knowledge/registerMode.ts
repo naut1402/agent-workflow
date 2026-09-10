@@ -1,4 +1,4 @@
-import type { ModeRegistry } from '../../core/shell/modeRegistry'
+import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
 import KnowledgePanel from './components/KnowledgePanel.vue'
 
 export function registerMode(registry: ModeRegistry): void {
@@ -9,5 +9,8 @@ export function registerMode(registry: ModeRegistry): void {
     order: 5,
     statusKind: 'paused',
     panel: KnowledgePanel,
+    bindings: (ctx: ShellContext) => ({
+      projectId: (ctx as Record<string, unknown>).selectedProjectId,
+    }),
   })
 }

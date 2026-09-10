@@ -86,6 +86,10 @@ Nơi emit: `runner/controller.ts` (sau mutation OK).
 | `automation.run_succeeded` | Action `runTask` xong (job đã submit) | `automationId`, `projectId`, `runId`, `taskId?`, `jobId?` | `runAction.ts` |
 | `automation.run_failed` | Action lỗi hoặc bị skip (task đang bận) | `automationId`, `projectId`, `runId`, `outcome` (`failed`/`skipped`), `error?`, `taskId?` | `runAction.ts` |
 | `entity.created|updated|deleted` (`entity: automation`) | CRUD rule | `id`, `projectId` (+`detail.enabled` khi toggle) | `automations/controller.ts` |
+| `entity.created|updated|deleted` (`entity: knowledge`) | CRUD entry knowledge (kể cả upload và mỗi entry bị `renameTag` chạm) | `id` (`<scope>/<slug>`), `projectId`, `detail.scope` (không có khi xoá / rename tag) | `knowledge/controller.ts` |
+| `entity.created|updated|deleted` (`entity: knowledge-collection`) | CRUD collection trong `collections.yaml` | `id`, `projectId`, `detail.scope` (không có khi xoá) | `knowledge/controller.ts` |
+
+⚠️ **Payload knowledge cố ý tối thiểu** — không kèm nội dung entry: tài liệu nội bộ có thể rất dài và event đi thẳng vào `events.jsonl`.
 
 Ghi chú:
 
@@ -104,7 +108,7 @@ Khai báo trong `DashboardEventType` (`eventBus.ts`); có thể xuất hiện kh
 |-------|---------|
 | `webhook.received` / `webhook.triggered` | Epic webhook — không nằm emit survey nhánh logs/events hiện tại |
 | `usage.recorded` | Token usage — tương tự |
-| `entity.*` cho pipeline-editor / agent-editor / knowledge | Follow-up CRUD emit — chưa wire (#256) |
+| `entity.*` cho pipeline-editor / agent-editor | Follow-up CRUD emit — chưa wire (#256). `knowledge` đã wire, xem §4 |
 
 `DashboardEventType` còn `| string` — type tùy nghi vẫn emit được; ưu tiên dùng union đã có.
 

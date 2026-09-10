@@ -40,6 +40,10 @@ export default {
     unsupported: '{name} is an unsupported file type.',
     uploadFailed: 'Could not upload the files: {error}',
   },
+  knowledge: {
+    pick: 'Pick knowledge',
+    resolveFailed: 'Could not read the knowledge, message sent without it: {error}',
+  },
   composer: {
     enterToSend: 'Enter sends, Shift+Enter for a new line',
     enterToNewline: 'Enter for a new line, Ctrl/⌘+Enter sends',

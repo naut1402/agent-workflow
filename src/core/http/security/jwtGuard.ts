@@ -19,7 +19,7 @@ export function createJwtMiddleware(): MiddlewareHandler<HonoEnv> {
 
 export type JwtCheckResult = { ok: true } | { ok: false; status: 401; error: string }
 
-/** Guard thủ công cho nhánh /api/knowledge (ngoài Hono) — dùng lại `verify()` của hono/jwt. */
+/** Guard thủ công ngoài Hono — dùng lại `verify()` của hono/jwt. */
 export async function verifyJwtHeader(authHeader: string | undefined): Promise<JwtCheckResult> {
   const secret = process.env.DASHBOARD_JWT_SECRET
   if (!secret) return { ok: true }

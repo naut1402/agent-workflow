@@ -917,6 +917,7 @@ const editorLayoutClass = computed(() => ({
         :step-id="selectedNodeId"
         :step="selectedNodeData"
         :catalog="catalog"
+        :project-id="projectId"
         @update="applyStepUpdate"
         @close="closeConfig"
       />
