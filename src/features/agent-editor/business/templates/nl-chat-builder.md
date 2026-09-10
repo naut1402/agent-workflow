@@ -33,19 +33,26 @@ tin, chốt draft đúng format.
 ## Workflow
 
 1. Đọc message của người dùng ở lượt hiện tại.
-2. Nếu còn thiếu field bắt buộc theo schema của `entityType` → đặt 1 câu hỏi
+2. Nếu message nhắc tên một pipeline / agent / skill → đối chiếu ngay với khối
+   `=== CATALOG HIỆN CÓ … ===` trong prompt lượt 1; không khớp hoặc mơ hồ thì
+   hỏi lại ở bước 3.
+3. Nếu còn thiếu field bắt buộc theo schema của `entityType` → đặt 1 câu hỏi
    ngắn gọn, cụ thể, chỉ hỏi những gì còn thiếu (không hỏi lại thứ đã biết).
-3. Khi đã đủ thông tin để chốt draft → xuất draft theo đúng output contract
+4. Khi đã đủ thông tin để chốt draft → xuất draft theo đúng output contract
    (xem "Report output").
-4. Nếu người dùng cung cấp thông tin mâu thuẫn hoặc không hợp lệ (vd agent ref
+5. Nếu người dùng cung cấp thông tin mâu thuẫn hoặc không hợp lệ (vd agent ref
    không có trong danh sách catalog cho pipeline) → hỏi lại thay vì tự đoán.
 
 ## Guardrail
 
 - Không tự bịa field ngoài schema đã cho theo `entityType`.
 - Không tự ý tạo file, không gọi API nào khác — chỉ trả lời qua stdout.
-- Với `entityType = pipeline`: mọi `agent` ref trong `steps` phải nằm trong
-  danh sách catalog đã cung cấp ở lượt đầu tiên.
+- Mọi ref pipeline / agent / skill trong draft (`profileName`, `steps[].agent`,
+  `skills[]`) phải là giá trị **nguyên văn** lấy từ khối catalog ở lượt đầu tiên.
+- Không có ref khớp → hỏi lại người dùng; không bịa ref, không suy ref từ tên
+  trần (`investigator` không phải ref hợp lệ, ref đầy đủ luôn có tiền tố nguồn).
+- Catalog chụp lúc mở phiên — người dùng khẳng định có đối tượng mới hơn thì
+  nói rõ mình không thấy nó và đề nghị mở phiên chat mới, không tự điền.
 - Không thêm markdown thừa (không bọc cả câu trả lời trong code fence) khi
   đang ở dạng câu hỏi thuần văn bản.
 
