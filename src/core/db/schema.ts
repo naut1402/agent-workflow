@@ -1,13 +1,14 @@
 import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 /**
- * Drizzle schema — kept SQLite/Postgres-portable (no SQLite-only feature) so
- * a later switch to Postgres (docs/../design.md §3.3) only swaps the driver.
+ * Drizzle schema — kept SQLite/Postgres-portable (no SQLite-only feature) so a
+ * later switch to Postgres only swaps the driver.
  *
- * `payload` holds the full JSON-serialised `LogEntry` (schema.ts in core/log) —
- * the indexed columns (`type`, `ts`, `project_id`) mirror exactly what
- * `readLogs()` filters/sorts on today; everything else stays in `payload` so
- * per-type fields never force a wide, mostly-NULL table.
+ * `payload` holds the full JSON-serialised `LogEntry` (schema.ts in core/log);
+ * per-type fields stay in there so they never force a wide, mostly-NULL table.
+ * `type`/`ts`/`project_id` are lifted out and indexed because `readLogs()`
+ * filters and sorts on them; `level`/`trace_id` are spare columns for filters
+ * that do not exist yet, so nothing reads them.
  */
 export const logEntries = sqliteTable(
   'log_entries',

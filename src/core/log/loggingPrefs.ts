@@ -15,7 +15,7 @@ export const LoggingTypesSchema = z.object({
   usage: z.boolean().optional(),
 })
 
-/** Storage backends for the log write/read path (design.md B202608_2201 §3.1). */
+/** Storage backends for the log write/read path. */
 export const LOG_DRIVER_KINDS = ['file', 'sqlite'] as const
 export type LogDriverKind = (typeof LOG_DRIVER_KINDS)[number]
 

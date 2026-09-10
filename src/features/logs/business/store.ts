@@ -9,7 +9,10 @@ import { parseLogLine, type LogEntry, type LogType } from '../../../core/log/sch
 
 type ReadLogsOpts = { type?: LogType; project?: string | null; limit?: number }
 
-/** SQLite read path — mirrors the file path's filter/sort/limit semantics exactly. */
+/**
+ * SQLite read path — same filters, sort and limit as the file path. `limit` applies
+ * in SQL before parsing, so unparseable payloads shorten the result below `limit`.
+ */
 async function readLogsFromSqlite(types: LogType[], opts: ReadLogsOpts): Promise<LogEntry[]> {
   const enabledTypes = types.filter((t) => isLogTypeEnabled(t))
   if (!enabledTypes.length) return []
