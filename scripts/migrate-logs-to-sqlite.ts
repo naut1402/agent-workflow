@@ -1,0 +1,18 @@
+#!/usr/bin/env bun
+// One-off migration: copy `~/.dev-team-dashboard/logs/*.jsonl` into `dashboard.sqlite`.
+// Run manually: `bun run scripts/migrate-logs-to-sqlite.ts`.
+// Only reads the JSONL files, so it is safe before or after switching `logging.driver`.
+// NOT idempotent — truncate `log_entries` before re-running or rows duplicate.
+import { migrateLogsToSqlite } from '../src/core/db/migrateLogs.js'
+
+const results = await migrateLogsToSqlite()
+let totalMigrated = 0
+let totalSkipped = 0
+for (const r of results) {
+  totalMigrated += r.migrated
+  totalSkipped += r.skipped
+  console.log(
+    `${r.type}: sourceExists=${r.sourceExists} migrated=${r.migrated} skipped=${r.skipped}`,
+  )
+}
+console.log(`Total: migrated=${totalMigrated} skipped=${totalSkipped}`)

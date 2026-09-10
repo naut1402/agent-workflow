@@ -53,6 +53,7 @@ export default defineConfig({
       'tests/src/core/lib/fileHelper.test.ts',
       'tests/src/core/lib/phase.test.ts',
       'tests/src/core/log/**',
+      'tests/src/core/db/**',
       'tests/src/core/events/**',
       'tests/src/features/**/business/**',
       'tests/src/features/**/server/**',
