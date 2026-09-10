@@ -36,6 +36,36 @@ jobs:
       has_tests: ${{ steps.probe.outputs.has_tests }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Báo cáo, không gate: ngưỡng cứng báo oan với file nhỏ và file mở đầu bằng
+      # docblock dài. Người duyệt tự đọc số. Rule: coding-guideline.md §7.
+      - name: Comment ratio of changed files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Comment ratio — file đổi trong PR"
+            echo ""
+            echo "| File | Comment | Dòng code | Tỉ lệ |"
+            echo "|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          git diff --name-only --diff-filter=d "$BASE_SHA" "$HEAD_SHA" \
+            | grep -E '\.(ts|vue|sh|yml)$' \
+            | while read -r f; do
+                [[ -f "$f" ]] || continue
+                tot="$(grep -cve '^[[:space:]]*$' "$f" || true)"
+                [[ "${tot:-0}" -lt 20 ]] && continue
+                cm="$(grep -cE '^[[:space:]]*(#|//|\*|/\*)' "$f" || true)"
+                echo "| \`$f\` | $cm | $tot | $((cm * 100 / tot))% |" >> "$GITHUB_STEP_SUMMARY"
+              done
+
+          { echo ""; echo "Nền repo ~10–20%. Cao hơn nhiều thì soát lại theo \`coding-guideline.md\` §7."; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

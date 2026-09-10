@@ -1,24 +1,9 @@
-# Sync cây source sang dòng test **theo cặp version**.
+# `dev/x.y.z/main` → `test/x.y.z/main`. Dòng test mang cây đầy của dòng source
+# nên bản `src/` bên đó cần được làm mới; `tests/` thì không (PRESERVE_PATHS).
 #
-#   dev/x.y.z/main   →  test/x.y.z/main
-#
-# 🚫 Không lắng nghe `main`: lúc release, `promote-test-line.yml` cũng push vào
-# `test/main` và hai workflow có concurrency group khác nhau nên chạy song song —
-# một lượt push sẽ bị từ chối non-fast-forward. `test/main` nhận code qua promote
-# (dòng test của version đã mang sẵn cây source), không cần ghép lại từ `main`.
-# `workflow_dispatch` vẫn nhận `source_ref: main` cho ca chữa tay.
-#
-# Vì sao cần: dòng test mang **cây đầy** của dòng source (để chạy độc lập được),
-# nên `src/` tồn tại ở hai dòng branch. Không có đường sync này thì bản copy trên
-# dòng test lạc hậu dần, và "suite xanh trên dòng test" không còn nói gì về cây
-# source đang phát hành — đúng loại xanh giả mà mô hình tách test sinh ra để diệt.
-#
-# Quan hệ là **1–1 theo version**, nên dùng `TARGETS_OVERRIDE` chứ không discover
-# theo namespace: discover sẽ merge dòng version này vào dòng test của version KHÁC.
-#
-# Chiều ngược lại (test → source) KHÔNG tồn tại: test code chỉ đi từ dòng test
-# lên, qua `promote-test-line.yml`.
-#
+# Không lắng nghe `main`: lúc release `promote-test-line.yml` cũng push vào
+# `test/main`, concurrency group khác nhau nên một lượt push sẽ bị từ chối.
+# Quy ước dòng test: docs/agent-rules/git-pr.md §4.3
 
 
 name: Sync source line into test line
