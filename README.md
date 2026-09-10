@@ -7,7 +7,8 @@
 [![Hono](https://img.shields.io/badge/API-Hono-e36002)](https://hono.dev)
 [![GitHub stars](https://img.shields.io/github/stars/naut1402/agent-workflow?style=social)](https://github.com/naut1402/agent-workflow)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/naut1402/agent-workflow/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/naut1402/agent-workflow/actions/workflows/ci.yml?query=branch%3Amain)
+[![Build](https://github.com/naut1402/agent-workflow/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/naut1402/agent-workflow/actions/workflows/ci.yml?query=branch%3Amain)
+[![Test](https://github.com/naut1402/agent-workflow/actions/workflows/test-overlay.yml/badge.svg?branch=test%2Fmain)](https://github.com/naut1402/agent-workflow/actions/workflows/test-overlay.yml?query=branch%3Atest%2Fmain)
 
 ---
 
@@ -83,12 +84,17 @@ bun run mcp          # MCP stdio — project registry
 bun run lint         # ESLint
 bun run lint:fix     # ESLint --fix
 bun run format       # Prettier
+bun run test:overlay # ghép cây test từ dòng `test/**` vào cây làm việc — CHẠY TRƯỚC
 bun run test         # bun test — domain / API
 bun run test:fe      # vitest — frontend + coverage
 bun run test:e2e     # Playwright
 bun run test:all     # typecheck → lint → test → test:fe → e2e
+bun run test:push    # đẩy cây test đã sửa lên dòng `test/**`
+bun run test:status  # task nào đã merge mà dòng test chưa phủ
 bun run check:todo   # gate docs/todo (CI promote → main)
 ```
+
+Test code không nằm trên dòng source: `tests/` và `test-e2e/` sống ở dòng branch riêng (`test/x.y.z/main` → `test/main`). Nên `bun run test` cần `bun run test:overlay` trước, nếu không nó báo chưa có cây test. Quy ước: [`docs/agent-rules/testing.md`](docs/agent-rules/testing.md) · [`git-pr.md` §4.3](docs/agent-rules/git-pr.md).
 
 ## Liên kết
 
@@ -97,6 +103,8 @@ bun run check:todo   # gate docs/todo (CI promote → main)
 - Tài liệu — [danh mục đầy đủ trong `docs/`](docs/README.md): kiến trúc, domain event, i18n, quy ước UI, template pipeline
 
 Branch phát hành theo dòng version: `dev/x.y.z/main` (vd `dev/1.1.2/main`). Branch task gắn version: `dev/x.y.z/{taskID}_{task-slug}` cắt từ `dev/x.y.z/main`; task không gắn version: `<type>/<TASK>/<slug>` cắt từ `main`. Không commit thẳng `main` — mọi thay đổi qua PR.
+
+Dòng test đối xứng với dòng source: `test/x.y.z/{taskID}_{task-slug}` → `test/x.y.z/main` → `test/main`. Kết quả test của bản đã phát hành đọc ở badge **Test** (`test-overlay.yml` trên `test/main`); badge **Build** chỉ phủ typecheck · lint · build của `main`.
 
 ## License
 
