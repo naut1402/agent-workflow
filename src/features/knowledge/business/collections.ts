@@ -2,7 +2,7 @@ import type { z } from 'zod'
 import { joinPath, readTextFile, writeTextFileAtomic } from '../../../core/lib/fileHelper.js'
 import { loadYaml, dumpYaml } from '../../../core/lib/yamlLib.js'
 import type { CollectionBody, TagRenameBody } from '../schemas/knowledge.js'
-import { createFileDriver, ensureDirs, sanitiseSlug, sanitiseTags, type KnowledgeBases } from './fileDriver.js'
+import { createFileDriver, resolveBases, sanitiseSlug, sanitiseTags, type KnowledgeBases } from './fileDriver.js'
 
 /**
  * Collection = nhóm knowledge, lưu ở **sidecar** `collections.yaml` cạnh cây
@@ -47,15 +47,55 @@ function emptyDoc(): CollectionsDoc {
   return { version: 1, collections: [], tag_aliases: {} }
 }
 
-/** Thiếu file (hoặc file hỏng) → doc rỗng, không phải lỗi: sidecar là tuỳ chọn. */
+/** Sidecar không parse được — dùng để **chặn mọi đường ghi** vào base đó. */
+export class CollectionsFileError extends Error {
+  constructor(
+    readonly base: string,
+    cause?: unknown,
+  ) {
+    super(`collections.yaml không đọc được (${base}): ${(cause as Error)?.message ?? cause}`)
+    this.name = 'CollectionsFileError'
+  }
+}
+
+/**
+ * Thiếu file → doc rỗng (sidecar là tuỳ chọn). **Parse hỏng → ném.**
+ *
+ * Hai ca này không được gộp: nuốt lỗi parse thành doc rỗng thì lần
+ * `createCollection`/`updateCollection`/`deleteCollection` kế tiếp ghi đè mất
+ * toàn bộ collection + alias đang có trên đĩa — im lặng, không khôi phục được,
+ * mà file này người dùng sửa tay được nên một tab thừa là đủ.
+ */
 export async function readCollectionsFile(base: string): Promise<CollectionsDoc> {
+  let raw: string
   try {
-    const doc: any = loadYaml(await readTextFile(joinPath(base, COLLECTIONS_FILE))) || {}
-    return {
-      version: Number(doc.version) || 1,
-      collections: Array.isArray(doc.collections) ? doc.collections : [],
-      tag_aliases: doc.tag_aliases && typeof doc.tag_aliases === 'object' ? doc.tag_aliases : {},
-    }
+    raw = await readTextFile(joinPath(base, COLLECTIONS_FILE))
+  } catch {
+    return emptyDoc()
+  }
+  let doc: any
+  try {
+    doc = loadYaml(raw) || {}
+  } catch (e) {
+    throw new CollectionsFileError(base, e)
+  }
+  if (typeof doc !== 'object' || Array.isArray(doc)) {
+    throw new CollectionsFileError(base, 'nội dung không phải mapping YAML')
+  }
+  return {
+    version: Number(doc.version) || 1,
+    collections: Array.isArray(doc.collections) ? doc.collections : [],
+    tag_aliases: doc.tag_aliases && typeof doc.tag_aliases === 'object' ? doc.tag_aliases : {},
+  }
+}
+
+/**
+ * Bản cho **đường đọc entry** (lọc theo collection, giải alias tag): sidecar
+ * hỏng chỉ làm mất phần nhóm, 🚫 không được đánh sập danh sách knowledge.
+ */
+export async function readCollectionsFileSafe(base: string): Promise<CollectionsDoc> {
+  try {
+    return await readCollectionsFile(base)
   } catch {
     return emptyDoc()
   }
@@ -98,7 +138,7 @@ async function findStoreOf(bases: KnowledgeBases, id: string) {
 }
 
 export async function listCollections(devTeamRoot: string) {
-  const bases = await ensureDirs(devTeamRoot)
+  const bases = resolveBases(devTeamRoot)
   const entries = await createFileDriver(devTeamRoot).list({ scope: 'all' })
   const collections: KnowledgeCollection[] = []
   let tagAliases: Record<string, string> = {}
@@ -121,7 +161,7 @@ export async function createCollection(
   devTeamRoot: string,
   body: z.infer<typeof CollectionBody>,
 ) {
-  const bases = await ensureDirs(devTeamRoot)
+  const bases = resolveBases(devTeamRoot)
   const base = bases[body.scope]
   if (!base) return { status: 400, error: `invalid scope: ${body.scope}` }
   const id = sanitiseSlug(body.name)
@@ -150,10 +190,15 @@ export async function updateCollection(
   id: string,
   body: z.infer<typeof CollectionBody>,
 ) {
-  const bases = await ensureDirs(devTeamRoot)
+  const bases = resolveBases(devTeamRoot)
   const found = await findStoreOf(bases, id)
   if (!found) return { status: 404, error: `unknown collection: ${id}` }
 
+  // Đổi scope là đổi store, tức đổi con trỏ của mọi nơi tham chiếu nhóm →
+  // từ chối thẳng thay vì nhận 200 rồi im lặng không đổi gì.
+  if (body.scope && body.scope !== found.scope) {
+    return { status: 400, error: `collection ${id} thuộc scope ${found.scope}, không đổi được sang ${body.scope}` }
+  }
   const prev = found.doc.collections[found.index]
   const next: KnowledgeCollection = {
     ...prev,
@@ -170,7 +215,7 @@ export async function updateCollection(
 
 /** Chỉ gỡ nhóm khỏi sidecar — **không** xoá entry nào trên đĩa. */
 export async function deleteCollection(devTeamRoot: string, id: string) {
-  const bases = await ensureDirs(devTeamRoot)
+  const bases = resolveBases(devTeamRoot)
   const found = await findStoreOf(bases, id)
   if (!found) return { status: 404, error: `unknown collection: ${id}` }
   found.doc.collections.splice(found.index, 1)
@@ -196,23 +241,35 @@ export async function renameTag(devTeamRoot: string, { from, to }: z.infer<typeo
   if (to && !dst) return { status: 400, error: 'invalid tag: to' }
   if (src === dst) return { renamed: 0, entries: [], alias: null }
 
-  const bases = await ensureDirs(devTeamRoot)
+  const bases = resolveBases(devTeamRoot)
   const driver = createFileDriver(devTeamRoot)
   const matches = await driver.list({ scope: 'all', tags: [src] })
 
   const touched: string[] = []
   for (const meta of matches) {
-    const entry = await driver.read(meta.id)
-    const next = [...new Set(entry.tags.map((t) => (t === src ? dst : t)).filter(Boolean))]
-    await driver.write({
-      id: entry.id,
-      title: entry.title,
-      slug: entry.slug,
-      scope: entry.scope,
-      tags: next,
-      content: entry.content,
-    })
-    touched.push(entry.id)
+    try {
+      const entry = await driver.read(meta.id)
+      const next = [...new Set(entry.tags.map((t) => (t === src ? dst : t)).filter(Boolean))]
+      await driver.write({
+        id: entry.id,
+        title: entry.title,
+        slug: entry.slug,
+        scope: entry.scope,
+        tags: next,
+        content: entry.content,
+      })
+      touched.push(entry.id)
+    } catch (e) {
+      // Dừng tại entry hỏng và trả kèm phần đã xong: người dùng phải biết kho
+      // đang ở trạng thái nửa chừng nào mới quyết được chạy lại hay khôi phục.
+      return {
+        status: 500,
+        error: `đổi tag thất bại tại ${meta.id}: ${(e as Error)?.message ?? e}`,
+        renamed: touched.length,
+        entries: touched,
+        failedId: meta.id,
+      }
+    }
   }
 
   // Chỉ đụng base thực sự có entry bị chạm: `global/*` → global base,

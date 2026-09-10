@@ -55,6 +55,7 @@ function removeKnowledge(id: string): void {
     <!-- The add menu leads the row: "+" sits at the head of the chat box. -->
     <ChatComposerMenu
       :disabled="!c.canAttach.value"
+      :knowledge-disabled="!c.canPickKnowledge.value"
       @pick="c.attachments.add"
       @pick-knowledge="showKnowledgePicker = true"
     />

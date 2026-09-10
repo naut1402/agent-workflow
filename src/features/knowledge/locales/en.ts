@@ -33,6 +33,7 @@ export default {
     created: 'Created collection {id}',
     deleted: 'Deleted collection {id}',
     entryAdded: 'Added to {id}',
+    loadFailed: 'Cannot read collections.yaml: {error}. Fix the file on disk and reload — collection actions are disabled so nothing overwrites it.',
   },
   tagAdmin: {
     from: 'Rename tag…',

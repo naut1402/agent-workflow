@@ -4,6 +4,15 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { fetchKnowledgeList, fetchKnowledgeEntry, saveKnowledgeEntry, createKnowledgeEntry, deleteKnowledgeEntry, uploadKnowledgeFile, fetchKnowledgeCollections, createKnowledgeCollection, saveKnowledgeCollection, deleteKnowledgeCollection, renameKnowledgeTag } from '../scripts/KnowledgePanelApi'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
+/**
+ * `projectId` phải xuống tới **mọi** lời gọi: nhóm và tag có đường **ghi**
+ * (`renameTag` rewrite front-matter hàng loạt, `deleteCollection`), nên chạy
+ * nhầm root không còn là xem sai danh sách mà là hỏng dữ liệu project khác.
+ */
+const props = defineProps<{
+  projectId?: string
+}>()
+
 const { t } = useI18nHelpers()
 
 const scope = ref('project')
@@ -13,6 +22,7 @@ const query = ref('')
 const entries = ref([])
 const allTags = ref([])
 const collections = ref([])
+const collectionsError = ref('')
 const activeCollection = ref('')
 const selectedId = ref(null)
 const loading = ref(false)
@@ -60,6 +70,7 @@ async function loadList() {
       scope: scope.value || undefined,
       collection: activeCollection.value || undefined,
       include: 'tags',
+      projectId: props.projectId,
     })
     entries.value = data.entries || []
     allTags.value = data.tags || []
@@ -70,13 +81,20 @@ async function loadList() {
   }
 }
 
+/**
+ * Sidecar hỏng không được làm chết cả panel — entry vẫn xem được.
+ *
+ * Nhưng cũng 🚫 không được hiện thành "chưa có nhóm nào": người dùng tạo nhóm
+ * mới ngay lúc đó là ghi đè mất dữ liệu cũ. Lỗi hiện ra và khoá đường tạo.
+ */
 async function loadCollections() {
+  collectionsError.value = ''
   try {
-    const data = await fetchKnowledgeCollections()
+    const data = await fetchKnowledgeCollections(props.projectId)
     collections.value = data.collections || []
-  } catch {
-    // Sidecar hỏng không được làm chết cả panel — cây nhóm rỗng, entry vẫn xem được.
+  } catch (e) {
     collections.value = []
+    collectionsError.value = String(e.message || e)
   }
 }
 
@@ -94,7 +112,7 @@ async function selectEntry(id) {
   selectedId.value = id
   message.value = ''
   try {
-    const data = await fetchKnowledgeEntry(id)
+    const data = await fetchKnowledgeEntry(id, props.projectId)
     const e = data.entry
     draft.value = {
       title: e.title,
@@ -140,7 +158,7 @@ async function addCollection() {
   if (!name) return
   error.value = ''
   try {
-    const data = await createKnowledgeCollection({ name, scope: newCollectionScope.value })
+    const data = await createKnowledgeCollection({ name, scope: newCollectionScope.value }, props.projectId)
     newCollectionName.value = ''
     message.value = t('knowledge.collections.created', { id: data.collection.id })
     await loadCollections()
@@ -154,7 +172,7 @@ async function removeCollection(id) {
   if (!confirm(t('knowledge.collections.confirmDelete', { id }))) return
   error.value = ''
   try {
-    await deleteKnowledgeCollection(id)
+    await deleteKnowledgeCollection(id, props.projectId)
     if (activeCollection.value === id) activeCollection.value = ''
     message.value = t('knowledge.collections.deleted', { id })
     await loadCollections()
@@ -170,12 +188,16 @@ async function addSelectedToCollection(collection) {
   error.value = ''
   try {
     const entryIds = [...new Set([...(collection.entry_ids || []), selectedId.value])]
-    await saveKnowledgeCollection(collection.id, {
-      name: collection.name,
-      description: collection.description,
-      tags: collection.tags || [],
-      entryIds,
-    })
+    await saveKnowledgeCollection(
+      collection.id,
+      {
+        name: collection.name,
+        description: collection.description,
+        tags: collection.tags || [],
+        entryIds,
+      },
+      props.projectId,
+    )
     message.value = t('knowledge.collections.entryAdded', { id: collection.id })
     await loadCollections()
     if (activeCollection.value) await loadList()
@@ -194,7 +216,7 @@ async function applyRenameTag() {
   if (!renameFrom.value) return
   error.value = ''
   try {
-    const data = await renameKnowledgeTag(renameFrom.value, renameTo.value.trim() || undefined)
+    const data = await renameKnowledgeTag(renameFrom.value, renameTo.value.trim() || undefined, props.projectId)
     message.value = t('knowledge.tagAdmin.done', { count: data.renamed })
     tagFilter.value = tagFilter.value.filter((tag) => tag !== renameFrom.value)
     renameFrom.value = ''
@@ -219,8 +241,8 @@ async function save() {
       content: draft.value.content,
     }
     const data = selectedId.value
-      ? await saveKnowledgeEntry(selectedId.value, payload)
-      : await createKnowledgeEntry(payload)
+      ? await saveKnowledgeEntry(selectedId.value, payload, props.projectId)
+      : await createKnowledgeEntry(payload, props.projectId)
     selectedId.value = data.entry.id
     message.value = t('knowledge.messages.saved', { id: data.entry.id })
     await loadList()
@@ -233,7 +255,7 @@ async function remove() {
   if (!selectedId.value) return
   if (!confirm(t('knowledge.messages.confirmDelete', { id: selectedId.value }))) return
   try {
-    await deleteKnowledgeEntry(selectedId.value)
+    await deleteKnowledgeEntry(selectedId.value, props.projectId)
     message.value = t('knowledge.messages.deleted')
     newEntry()
     await loadList()
@@ -249,7 +271,7 @@ async function onFileUpload(event) {
   error.value = ''
   try {
     const tags = uploadTags.value.split(/[,;]+/).map((t) => t.trim()).filter(Boolean)
-    const data = await uploadKnowledgeFile(file, { scope: uploadScope.value, tags })
+    const data = await uploadKnowledgeFile(file, { scope: uploadScope.value, tags, projectId: props.projectId })
     message.value = t('knowledge.messages.uploaded', { id: data.entry.id })
     showUpload.value = false
     uploadTags.value = ''
@@ -264,6 +286,15 @@ async function onFileUpload(event) {
 }
 
 watch([scope, activeCollection], () => loadList())
+// Đổi project là đổi cả cây entry lẫn cây nhóm — nạp lại cả hai.
+watch(
+  () => props.projectId,
+  async () => {
+    activeCollection.value = ''
+    await loadList()
+    await loadCollections()
+  },
+)
 onMounted(async () => {
   await loadList()
   await loadCollections()
@@ -313,8 +344,11 @@ onMounted(async () => {
               @click="activeCollection = ''"
             >{{ t('knowledge.collections.clear') }}</button>
           </div>
+          <p v-if="collectionsError" class="knowledge-collections-error">
+            {{ t('knowledge.collections.loadFailed', { error: collectionsError }) }}
+          </p>
           <ul class="knowledge-collection-list">
-            <li v-if="!collections.length" class="muted">{{ t('knowledge.collections.empty') }}</li>
+            <li v-if="!collections.length && !collectionsError" class="muted">{{ t('knowledge.collections.empty') }}</li>
             <li
               v-for="c in collections"
               :key="c.id"
@@ -344,13 +378,14 @@ onMounted(async () => {
               v-model="newCollectionName"
               class="cfg-input cfg-input-sm"
               :placeholder="t('knowledge.collections.namePlaceholder')"
+              :disabled="!!collectionsError"
               @keydown.enter.prevent="addCollection"
             />
-            <select v-model="newCollectionScope" class="cfg-input cfg-input-sm">
+            <select v-model="newCollectionScope" class="cfg-input cfg-input-sm" :disabled="!!collectionsError">
               <option value="project">project</option>
               <option value="global">global</option>
             </select>
-            <button type="button" class="btn-ghost btn-sm" @click="addCollection">
+            <button type="button" class="btn-ghost btn-sm" :disabled="!!collectionsError" @click="addCollection">
               {{ t('knowledge.collections.create') }}
             </button>
           </div>
@@ -543,6 +578,11 @@ onMounted(async () => {
   justify-content: space-between;
   font-size: 12px;
   font-weight: 600;
+}
+.knowledge-collections-error {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--danger, #c0392b);
 }
 .knowledge-collection-list {
   list-style: none;

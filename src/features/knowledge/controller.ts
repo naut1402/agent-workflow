@@ -1,6 +1,7 @@
 import { AbstractController } from '../../core/http/AbstractController.js'
 import { emitEntity } from '../../core/events/index.js'
 import {
+  CollectionsFileError,
   createCollection,
   deleteCollection,
   getKnowledgeDriver,
@@ -31,6 +32,20 @@ export class KnowledgeController extends AbstractController {
     if ('error' in gate) return gate
     const { driver } = await getKnowledgeDriver(gate.root)
     return { driver, root: gate.root }
+  }
+
+  /**
+   * Sidecar `collections.yaml` hỏng là lỗi **trạng thái trên đĩa**, không phải
+   * lỗi request → 500 kèm đúng file hỏng để người dùng sửa tay được. Business
+   * đã từ chối ghi trong ca này nên không có dữ liệu nào bị đè.
+   */
+  private async collectionOp(run: () => Promise<Response>): Promise<Response> {
+    try {
+      return await run()
+    } catch (e) {
+      if (e instanceof CollectionsFileError) return this.json(500, { error: e.message })
+      throw e
+    }
   }
 
   /** `?id=` phân biệt read và list: id chứa `/` nên không nhét vào path param. */
@@ -156,7 +171,7 @@ export class KnowledgeController extends AbstractController {
   async listCollections() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
-    return this.ok(await listCollections(gate.root))
+    return this.collectionOp(async () => this.ok(await listCollections(gate.root)))
   }
 
   async createCollection() {
@@ -166,14 +181,16 @@ export class KnowledgeController extends AbstractController {
     if ('error' in b) return b.error
     const parsed = CollectionBody.safeParse(b.value)
     if (!parsed.success) return this.badRequest('invalid body')
-    const result = await createCollection(gate.root, parsed.data)
-    if ('error' in result) return this.json(result.status, { error: result.error })
-    emitEntity('created', 'knowledge-collection', {
-      id: result.collection.id,
-      projectId: this.projectId,
-      detail: { scope: result.collection.scope },
+    return this.collectionOp(async () => {
+      const result = await createCollection(gate.root, parsed.data)
+      if ('error' in result) return this.json(result.status, { error: result.error })
+      emitEntity('created', 'knowledge-collection', {
+        id: result.collection.id,
+        projectId: this.projectId,
+        detail: { scope: result.collection.scope },
+      })
+      return this.created(result)
     })
-    return this.created(result)
   }
 
   async updateCollection() {
@@ -183,24 +200,28 @@ export class KnowledgeController extends AbstractController {
     if ('error' in b) return b.error
     const parsed = CollectionBody.safeParse(b.value)
     if (!parsed.success) return this.badRequest('invalid body')
-    const result = await updateCollection(gate.root, this.c.req.param('id'), parsed.data)
-    if ('error' in result) return this.json(result.status, { error: result.error })
-    emitEntity('updated', 'knowledge-collection', {
-      id: result.collection.id,
-      projectId: this.projectId,
-      detail: { scope: result.collection.scope },
+    return this.collectionOp(async () => {
+      const result = await updateCollection(gate.root, this.c.req.param('id'), parsed.data)
+      if ('error' in result) return this.json(result.status, { error: result.error })
+      emitEntity('updated', 'knowledge-collection', {
+        id: result.collection.id,
+        projectId: this.projectId,
+        detail: { scope: result.collection.scope },
+      })
+      return this.ok(result)
     })
-    return this.ok(result)
   }
 
   /** Xoá **nhóm**, không xoá tài liệu — entry trên đĩa giữ nguyên. */
   async deleteCollection() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
-    const result = await deleteCollection(gate.root, this.c.req.param('id'))
-    if ('error' in result) return this.json(result.status, { error: result.error })
-    emitEntity('deleted', 'knowledge-collection', { id: result.id, projectId: this.projectId })
-    return this.ok(result)
+    return this.collectionOp(async () => {
+      const result = await deleteCollection(gate.root, this.c.req.param('id'))
+      if ('error' in result) return this.json(result.status, { error: result.error })
+      emitEntity('deleted', 'knowledge-collection', { id: result.id, projectId: this.projectId })
+      return this.ok(result)
+    })
   }
 
   async renameTag() {
@@ -210,12 +231,16 @@ export class KnowledgeController extends AbstractController {
     if ('error' in b) return b.error
     const parsed = TagRenameBody.safeParse(b.value)
     if (!parsed.success) return this.badRequest('invalid body')
-    const result = await renameTag(gate.root, parsed.data)
-    if ('error' in result) return this.json(result.status, { error: result.error })
-    for (const id of result.entries) {
-      emitEntity('updated', 'knowledge', { id, projectId: this.projectId })
-    }
-    return this.ok(result)
+    return this.collectionOp(async () => {
+      const result = await renameTag(gate.root, parsed.data)
+      // Rename hỏng giữa chừng vẫn đã ghi được một phần → emit cho đúng những
+      // entry đó và trả cả danh sách, đừng để client tưởng không có gì đổi.
+      for (const id of 'entries' in result ? result.entries : []) {
+        emitEntity('updated', 'knowledge', { id, projectId: this.projectId })
+      }
+      if ('error' in result) return this.json(result.status, result)
+      return this.ok(result)
+    })
   }
 
   // ── bundle ───────────────────────────────────────────────────────────────
@@ -226,12 +251,20 @@ export class KnowledgeController extends AbstractController {
     if ('error' in gate) return gate.error
     const parsed = BundleQuery.safeParse(this.c.req.query())
     if (!parsed.success) return this.badRequest('invalid query')
-    const ids = parsed.data.ids
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .slice(0, MAX_BUNDLE_IDS)
+    // Id lặp gộp lại, quá ngưỡng thì **từ chối** — cắt bớt im lặng nghĩa là
+    // agent nhận bundle thiếu mà không có tín hiệu nào để tự phát hiện.
+    const ids = [
+      ...new Set(
+        parsed.data.ids
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    ]
     if (!ids.length) return this.badRequest('missing ids')
+    if (ids.length > MAX_BUNDLE_IDS) {
+      return this.badRequest(`too many ids (max ${MAX_BUNDLE_IDS})`, { count: ids.length })
+    }
     return this.ok({ bundle: await loadKnowledgeBundle(gate.root, ids) })
   }
 }

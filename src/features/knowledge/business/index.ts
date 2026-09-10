@@ -23,6 +23,7 @@ export {
   knowledgeRoot,
   loadKnowledgeBundle,
 } from './fileDriver.js'
+export { CollectionsFileError } from './collections.js'
 export {
   listCollections,
   createCollection,

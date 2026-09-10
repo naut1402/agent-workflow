@@ -34,6 +34,7 @@ export default {
     created: 'Đã tạo collection {id}',
     deleted: 'Đã xoá collection {id}',
     entryAdded: 'Đã thêm vào {id}',
+    loadFailed: 'Không đọc được collections.yaml: {error}. Sửa file trên đĩa rồi tải lại — tạm khoá thao tác nhóm để không ghi đè mất dữ liệu cũ.',
   },
   tagAdmin: {
     from: 'Đổi tên tag…',

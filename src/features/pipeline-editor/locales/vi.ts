@@ -92,7 +92,6 @@ export default {
     produces: 'Sản phẩm (artifact)',
     producesPlaceholder: 'vd. investigate.md',
     knowledgeInputs: 'Knowledge inputs',
-    knowledgePlaceholder: 'project/slug…',
     knowledgePick: 'Chọn knowledge…',
     add: 'Thêm',
     hitlGate: 'HITL gate',

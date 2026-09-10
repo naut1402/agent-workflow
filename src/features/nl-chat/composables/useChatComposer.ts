@@ -56,6 +56,11 @@ export function useChatComposer(opts: ChatComposerOptions) {
   const canAttach = computed(
     () => opts.canSend() && !opts.sending() && !attachments.uploading.value,
   )
+  /**
+   * Chọn knowledge **không** upload gì, nên nó không chờ `attachments.uploading`
+   * như `canAttach`. Cùng một cổng cho hai việc khác nhau chỉ khoá nhầm nút.
+   */
+  const canPickKnowledge = computed(() => opts.canSend() && !opts.sending())
   const { isOverDropZone } = useDrop(opts.dropZone, (files) => {
     if (!canAttach.value) return
     attachments.add(files)
@@ -144,6 +149,7 @@ export function useChatComposer(opts: ChatComposerOptions) {
     projectId: computed(() => opts.getProjectId() ?? null),
     attachments,
     canAttach,
+    canPickKnowledge,
     canSubmit,
     isOverDropZone,
     enterToSend,
