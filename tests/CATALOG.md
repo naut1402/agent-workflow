@@ -32,7 +32,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/core/log` | bun | `core/log`, `features/logs/business`, `core/events` | 4 | `bun test tests/src/core/log` |
 | `tests/src/core/shell` | vitest | `core/shell` | 3 | `npx vitest run tests/src/core/shell` |
 | `tests/src/core/ui` | vitest | `core/ui` | 4 | `npx vitest run tests/src/core/ui` |
-| `tests/src/features/agent-editor/business` | bun | `features/agent-editor/business` | 2 | `bun test tests/src/features/agent-editor/business` |
+| `tests/src/features/agent-editor/business` | bun | `features/agent-editor/business` | 3 | `bun test tests/src/features/agent-editor/business` |
 | `tests/src/features/agent-editor/components` | vitest | `features/agent-editor/components`, `core/lib`, `features/agent-editor/business` | 3 | `npx vitest run tests/src/features/agent-editor/components` |
 | `tests/src/features/agent-editor/composables` | vitest | `features/agent-editor/composables` | 1 | `npx vitest run tests/src/features/agent-editor/composables` |
 | `tests/src/features/automations/components` | vitest | `features/automations/components`, `features/automations/scripts` | 2 | `npx vitest run tests/src/features/automations/components` |
@@ -81,7 +81,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/artifactActions` | bun | `features/monitor/business`, `features/monitor/schemas` | 1 | `bun test tests/src/server/artifactActions` |
 | `tests/src/server/automations` | bun | `features/automations/business`, `features/automations/schemas`, `core/events` | 9 | `bun test tests/src/server/automations` |
 | `tests/src/server/catalog` | bun | `features/pipeline-editor/business` | 4 | `bun test tests/src/server/catalog` |
-| `tests/src/server/chat` | bun | `features/runner/business`, `features/nl-chat/business`, `features/monitor/business` | 6 | `bun test tests/src/server/chat` |
+| `tests/src/server/chat` | bun | `features/nl-chat/business`, `features/runner/business`, `features/monitor/business` | 7 | `bun test tests/src/server/chat` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `api/apiServer.ts`, `core/registry.ts` | 2 | `bun test tests/src/server/github` |
 | `tests/src/server/http` | bun | `api/apiServer.ts`, `core/http`, `features/runner/business` | 26 | `bun test tests/src/server/http` |
 | `tests/src/server/knowledge` | bun | `api/apiServer.ts`, `core/events`, `core/http` | 1 | `bun test tests/src/server/knowledge` |

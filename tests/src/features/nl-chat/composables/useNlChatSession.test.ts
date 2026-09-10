@@ -7,7 +7,8 @@ import { useNlChatSession } from '@/features/nl-chat/composables/useNlChatSessio
 //   GET  /api/jobs/:id                     → { job } (poll)
 //   GET  /api/nl-chat/sessions/:id         → { kind, draft|text }
 //   GET  /api/catalog                      → { skills, agents } (pipeline draft agent-ref guard)
-//   POST /api/tasks | /api/pipeline-profiles | /api/custom-agents → confirm
+//   GET  /api/pipeline-profiles            → { profiles } (task/automation draft profileName guard)
+//   POST /api/tasks | /api/pipeline-profiles | /api/custom-agents | /api/automations → confirm
 //   POST /api/nl-chat/sessions/:id/cancel  → { cancelled: true }
 
 function stubApi(opts: {
@@ -17,6 +18,8 @@ function stubApi(opts: {
   turn?: any
   confirmOk?: boolean
   catalog?: any
+  profiles?: any
+  profilesFail?: boolean
 }) {
   let jobCall = 0
   const fetchMock = vi.fn(async (input: any, init: any = {}) => {
@@ -41,13 +44,27 @@ function stubApi(opts: {
     if (url.includes('/api/catalog') && method === 'GET') {
       return { ok: true, status: 200, json: async () => opts.catalog ?? { skills: [], agents: [{ id: 'agent-a' }, { id: 'agent-b' }] } }
     }
+    if (url.includes('/api/pipeline-profiles') && method === 'GET') {
+      if (opts.profilesFail) return { ok: false, status: 500, json: async () => ({ error: 'boom' }) }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => opts.profiles ?? { profiles: [{ name: 'quality-first-pipeline' }] },
+      }
+    }
     if (url.includes('/api/jobs/') && method === 'GET') {
       const states = opts.jobStates ?? [{ id: 'jobZ', status: 'succeeded' }]
       const job = states[Math.min(jobCall, states.length - 1)]
       jobCall += 1
       return { ok: true, status: 200, json: async () => ({ job }) }
     }
-    if ((url.includes('/api/tasks') || url.includes('/api/pipeline-profiles') || url.includes('/api/custom-agents')) && method === 'POST') {
+    if (
+      (url.includes('/api/tasks') ||
+        url.includes('/api/pipeline-profiles') ||
+        url.includes('/api/custom-agents') ||
+        url.includes('/api/automations')) &&
+      method === 'POST'
+    ) {
       if (opts.confirmOk === false) return { ok: false, status: 400, json: async () => ({ error: 'bad request' }) }
       return { ok: true, status: 200, json: async () => ({ ok: true }) }
     }
@@ -286,6 +303,134 @@ describe('useNlChatSession', () => {
     await s.confirm({ name: 'a' })
 
     expect(s.step.value).toBe('done')
+  })
+
+  // ── Tf2fec630: draft automation + guard profileName ───────────────────────
+
+  // Hồi quy G5: nhánh lọc cũ chỉ nhận task|pipeline|agent nên draft automation
+  // bị chặn lại ở "chatting" kèm câu "chưa rõ", dù confirm() đã biết persist nó.
+  it('an automation draft reaches previewDraft instead of being bounced back to chat', async () => {
+    stubApi({
+      turn: {
+        status: 'ready',
+        kind: 'draft',
+        entityType: 'automation',
+        draft: { name: 'r', triggers: [{ kind: 'event', eventType: 'job.failed' }], actions: [] },
+      },
+    })
+    const s = make()
+    await s.sendMessage('tạo rule chạy lại khi job fail')
+
+    expect(s.step.value).toBe('previewDraft')
+    expect(s.entityType.value).toBe('automation')
+  })
+
+  it('confirm(task) blocks when profileName is not an existing pipeline profile', async () => {
+    const fetchMock = stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { taskId: 't1', prompt: 'p', profileName: 'khong-ton-tai' } },
+    })
+    const s = make()
+    await s.sendMessage('tạo task dùng pipeline khong-ton-tai')
+    await new Promise((r) => setTimeout(r, 5))
+
+    await s.confirm({ taskId: 't1', prompt: 'p', profileName: 'khong-ton-tai' })
+
+    expect(s.step.value).toBe('previewDraft')
+    expect(s.error.value).toContain('Pipeline profile không tồn tại')
+    expect(s.error.value).toContain('khong-ton-tai')
+    const created = fetchMock.mock.calls.some(
+      ([url, init]: any[]) => String(url).includes('/api/tasks') && (init?.method || 'GET').toUpperCase() === 'POST',
+    )
+    expect(created).toBe(false)
+  })
+
+  it('confirm(task) goes through when profileName matches a real pipeline profile', async () => {
+    stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { taskId: 't1', prompt: 'p', profileName: 'quality-first-pipeline' } },
+      confirmOk: true,
+    })
+    const s = make()
+    await s.sendMessage('m')
+    await new Promise((r) => setTimeout(r, 5))
+
+    await s.confirm({ taskId: 't1', prompt: 'p', profileName: 'quality-first-pipeline' })
+
+    expect(s.step.value).toBe('done')
+    expect(s.error.value).toBeNull()
+  })
+
+  // E8: draft không chỉ định pipeline thì không có gì để soát — không được
+  // fail-closed oan.
+  it('a task draft without profileName confirms without being blocked', async () => {
+    stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { taskId: 't1', prompt: 'p' } },
+      confirmOk: true,
+    })
+    const s = make()
+    await s.sendMessage('m')
+    await new Promise((r) => setTimeout(r, 5))
+
+    await s.confirm({ taskId: 't1', prompt: 'p' })
+
+    expect(s.step.value).toBe('done')
+    expect(s.error.value).toBeNull()
+  })
+
+  // Hồi quy: danh sách profile được nạp theo LOẠI draft, không theo nội dung
+  // draft lúc nhận. Nạp có điều kiện thì người dùng tự thêm `profileName` vào
+  // textarea preview sẽ kẹt vĩnh viễn ở "đang kiểm tra" → nút Xác nhận disabled
+  // → không còn chỗ nào nạp danh sách nữa.
+  it('a task draft without profileName still loads the profile list, so a hand-typed profileName is checkable', async () => {
+    stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { taskId: 't1', prompt: 'p' } },
+      confirmOk: true,
+    })
+    const s = make()
+    await s.sendMessage('m')
+    await new Promise((r) => setTimeout(r, 5))
+
+    // Người dùng gõ thêm một profile CÓ THẬT vào draft đang xem.
+    const edited = { taskId: 't1', prompt: 'p', profileName: 'quality-first-pipeline' }
+    expect(s.profileNameError(edited, 'task')).toBeNull()
+
+    await s.confirm(edited)
+    expect(s.step.value).toBe('done')
+    expect(s.error.value).toBeNull()
+  })
+
+  it('confirm(automation) blocks when an actions[].profileName does not exist', async () => {
+    const draft = {
+      name: 'r',
+      triggers: [{ kind: 'event', eventType: 'job.failed' }],
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'p', profileName: 'ma-khong-co' }],
+    }
+    const fetchMock = stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'automation', draft } })
+    const s = make()
+    await s.sendMessage('m')
+    await new Promise((r) => setTimeout(r, 5))
+
+    await s.confirm(draft)
+
+    expect(s.step.value).toBe('previewDraft')
+    expect(s.error.value).toContain('ma-khong-co')
+    const created = fetchMock.mock.calls.some(
+      ([url, init]: any[]) => String(url).includes('/api/automations') && (init?.method || 'GET').toUpperCase() === 'POST',
+    )
+    expect(created).toBe(false)
+  })
+
+  // E10: fail closed — rơi về pipeline mặc định âm thầm chính là bug đang sửa.
+  it('confirm(task) blocks when the profile list cannot be loaded', async () => {
+    const draft = { taskId: 't1', prompt: 'p', profileName: 'quality-first-pipeline' }
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft }, profilesFail: true })
+    const s = make()
+    await s.sendMessage('m')
+    await new Promise((r) => setTimeout(r, 5))
+
+    await s.confirm(draft)
+
+    expect(s.step.value).toBe('previewDraft')
+    expect(s.error.value).toContain('Không tải được danh sách pipeline profile')
   })
 
   it('cancel resets back to an empty chat', async () => {
