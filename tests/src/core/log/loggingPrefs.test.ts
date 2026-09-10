@@ -49,6 +49,7 @@ describe('parseLoggingConfig', () => {
     expect(parseLoggingConfig(undefined)).toEqual({
       showLogsTab: true,
       types: { audit: true, request: true, jobs: true, events: false, usage: true },
+      driver: 'file',
     })
   })
 
@@ -61,6 +62,7 @@ describe('parseLoggingConfig', () => {
     ).toEqual({
       showLogsTab: false,
       types: { audit: false, request: true, jobs: false, events: false, usage: true },
+      driver: 'file',
     })
     expect(
       parseLoggingConfig({
@@ -69,7 +71,16 @@ describe('parseLoggingConfig', () => {
     ).toEqual({
       showLogsTab: true,
       types: { audit: true, request: true, jobs: true, events: true, usage: false },
+      driver: 'file',
     })
+  })
+
+  // Backend log chọn bằng `logging.driver`; giá trị lạ phải rơi về `file` chứ
+  // không được lọt xuống `getDb()` và đẻ file SQLite ngoài ý muốn.
+  test('driver: chỉ nhận sqlite; thiếu hoặc lạ đều về file', () => {
+    expect(parseLoggingConfig({ driver: 'sqlite' }).driver).toBe('sqlite')
+    expect(parseLoggingConfig({ driver: 'postgres' }).driver).toBe('file')
+    expect(parseLoggingConfig({}).driver).toBe('file')
   })
 })
 
