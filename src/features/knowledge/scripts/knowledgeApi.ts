@@ -1,12 +1,24 @@
 import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
 
+export interface KnowledgeListParams {
+  scope?: string
+  tags?: string[]
+  q?: string
+  collection?: string
+  /** `'tags'` trả kèm facet tag trong cùng response — tránh gọi thêm `/tags`. */
+  include?: 'tags'
+  projectId?: string
+}
+
 export async function fetchKnowledgeList(
-  { scope, tags, q, projectId }: { scope?: string; tags?: string[]; q?: string; projectId?: string } = {},
+  { scope, tags, q, collection, include, projectId }: KnowledgeListParams = {},
 ) {
   return apiGet('/api/knowledge', {
     scope,
     tags: tags?.join(','),
     q,
+    collection,
+    include,
     project: projectId,
   })
 }
@@ -50,4 +62,46 @@ export async function uploadKnowledgeFile(
     rawBody: fd,
     skipJsonContentType: true,
   })
+}
+
+// ── collection & tag admin ──────────────────────────────────────────────────
+
+export interface CollectionPayload {
+  name: string
+  description?: string
+  scope?: string
+  tags?: string[]
+  entryIds?: string[]
+}
+
+export async function fetchKnowledgeCollections(projectId?: string) {
+  return apiGet('/api/knowledge/collections', { project: projectId })
+}
+
+export async function createKnowledgeCollection(payload: CollectionPayload, projectId?: string) {
+  return apiPost('/api/knowledge/collections', payload, { query: { project: projectId } })
+}
+
+export async function saveKnowledgeCollection(id: string, payload: CollectionPayload, projectId?: string) {
+  return apiRequest('PUT', `/api/knowledge/collections/${encodeURIComponent(id)}`, {
+    query: { project: projectId },
+    body: payload,
+  })
+}
+
+/** Xoá nhóm, **không** xoá entry nào. */
+export async function deleteKnowledgeCollection(id: string, projectId?: string) {
+  return apiRequest('DELETE', `/api/knowledge/collections/${encodeURIComponent(id)}`, {
+    query: { project: projectId },
+  })
+}
+
+/** `to` bỏ trống = xoá tag khỏi mọi entry; `to` đã tồn tại = merge. */
+export async function renameKnowledgeTag(from: string, to: string | undefined, projectId?: string) {
+  return apiPost('/api/knowledge/tags/rename', { from, to }, { query: { project: projectId } })
+}
+
+/** Resolve id → nội dung + đường dẫn, cho khung chat chèn vào prompt. */
+export async function fetchKnowledgeBundle(ids: string[], projectId?: string) {
+  return apiGet('/api/knowledge/bundle', { ids: ids.join(','), project: projectId })
 }

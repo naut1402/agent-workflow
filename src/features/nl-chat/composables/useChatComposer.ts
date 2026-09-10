@@ -1,6 +1,8 @@
 import { computed, nextTick, ref, type Ref } from 'vue'
 import { useChatAttachments } from './useChatAttachments'
 import { appendAttachments } from '../lib/attachmentPrompt'
+import { appendKnowledge } from '../lib/knowledgePrompt'
+import { fetchKnowledgeBundle } from '../../knowledge/scripts/knowledgeApi'
 import { useDrop } from '../../../core/composables/useDrop'
 import { useAppSettings } from '../../../core/composables/useAppSettings'
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
@@ -36,6 +38,9 @@ export function useChatComposer(opts: ChatComposerOptions) {
 
   const inputText = ref('')
   const inputRef = ref<HTMLTextAreaElement | null>(null)
+  /** Id knowledge đã chọn — con trỏ, resolve thành đường dẫn lúc gửi. */
+  const knowledgeIds = ref<string[]>([])
+  const knowledgeError = ref('')
 
   const attachments = useChatAttachments({
     getProjectId: opts.getProjectId,
@@ -95,17 +100,48 @@ export function useChatComposer(opts: ChatComposerOptions) {
 
     const uploaded = await attachments.upload()
     if (uploaded === null) return // upload failed — keep text + chips so it can be retried
-    const text = appendAttachments(inputText.value.trim(), uploaded)
+
+    // Resolve id → path at send time, not at pick time: knowledge edited between
+    // two turns then reaches the next turn in its new state, which is the whole
+    // point of `knowledge_inputs` being a pointer.
+    // Không chọn knowledge thì không thêm await nào — đường gửi thường giữ
+    // nguyên số microtask, thứ mà cả UI lẫn test đang dựa vào.
+    const bundle = knowledgeIds.value.length ? await resolveKnowledge() : []
+    const text = appendKnowledge(appendAttachments(inputText.value.trim(), uploaded), bundle)
 
     inputText.value = ''
     attachments.clear()
+    knowledgeIds.value = []
     nextTick(autoGrow)
     opts.send(text)
+  }
+
+  /**
+   * A failed bundle must not eat the turn: the message still goes out, just
+   * without the knowledge block, and the warning stays on screen. Losing what
+   * the user typed is worse than sending it without the paths.
+   */
+  async function resolveKnowledge(): Promise<{ id: string; title?: string; path?: string }[]> {
+    knowledgeError.value = ''
+    if (!knowledgeIds.value.length) return []
+    try {
+      const data = await fetchKnowledgeBundle(knowledgeIds.value, opts.getProjectId())
+      return data.bundle || []
+    } catch (e: unknown) {
+      knowledgeError.value = t('nlChat.knowledge.resolveFailed', {
+        error: String((e as Error)?.message ?? e),
+      })
+      return []
+    }
   }
 
   return {
     inputText,
     inputRef,
+    knowledgeIds,
+    knowledgeError,
+    /** Cho `KnowledgePickerDialog` biết đọc knowledge của project nào. */
+    projectId: computed(() => opts.getProjectId() ?? null),
     attachments,
     canAttach,
     canSubmit,

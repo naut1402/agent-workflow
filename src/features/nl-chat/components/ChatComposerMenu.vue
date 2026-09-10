@@ -13,7 +13,7 @@ import { useChatSurface } from '../composables/useChatSurface'
  * `QuickActionMenuDropdown`, because the Statistics one has none.
  */
 defineProps<{ disabled?: boolean }>()
-const emit = defineEmits<{ pick: [File[]] }>()
+const emit = defineEmits<{ pick: [File[]]; pickKnowledge: [] }>()
 
 const { t } = useI18nHelpers()
 const { newBuilderChat } = useChatSurface()
@@ -26,6 +26,12 @@ const fileInput = ref<HTMLInputElement | null>(null)
 function onAttach(): void {
   open.value = false
   fileInput.value?.click()
+}
+
+/** Knowledge đã có sẵn trong hệ thống — chọn id, không upload lại file. */
+function onPickKnowledge(): void {
+  open.value = false
+  emit('pickKnowledge')
 }
 
 /**
@@ -97,6 +103,14 @@ onBeforeUnmount(() => {
         @click="onAttach"
       >
         {{ t('nlChat.attachment.pick') }}
+      </button>
+      <button
+        type="button"
+        class="nl-chat-composer-menu-item"
+        :disabled="disabled"
+        @click="onPickKnowledge"
+      >
+        {{ t('nlChat.knowledge.pick') }}
       </button>
       <button type="button" class="nl-chat-composer-menu-item" @click="onNewSession">
         {{ t('nlChat.window.newSession') }}

@@ -274,6 +274,7 @@ export default {
     removeKnowledge: 'Bỏ chọn',
     uploadTags: 'Tag upload (tuỳ chọn)',
     uploadTagsHint: 'tag1, tag2',
+    uploadScope: 'Scope upload',
     uploadFile: 'Upload .md / .txt',
     uploading: 'Đang upload…',
     previewTaskId: 'Task ID',

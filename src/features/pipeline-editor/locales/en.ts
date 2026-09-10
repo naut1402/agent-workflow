@@ -93,6 +93,7 @@ export default {
     producesPlaceholder: 'e.g. investigate.md',
     knowledgeInputs: 'Knowledge inputs',
     knowledgePlaceholder: 'project/slug…',
+    knowledgePick: 'Pick knowledge…',
     add: 'Add',
     hitlGate: 'HITL gate',
     hitlNone: 'None',

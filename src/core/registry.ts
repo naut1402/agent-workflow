@@ -69,6 +69,15 @@ export function registryFile(): string {
   return path.join(registryHome(), 'projects.json')
 }
 
+/**
+ * Store của knowledge scope `global` — dùng chung mọi project nên nằm ở
+ * registry home (đúng tiền lệ của log, automations ledger, settings.json),
+ * không dưới project nào.
+ */
+export function globalKnowledgeRoot(): string {
+  return path.join(registryHome(), 'knowledge')
+}
+
 // ── Load / save ────────────────────────────────────────────────────────────────
 
 function emptyRegistry(): Registry {

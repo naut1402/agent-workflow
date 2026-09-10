@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, onMounted, watch } from 'vue'
-import { fetchKnowledgeList, fetchKnowledgeEntry, saveKnowledgeEntry, createKnowledgeEntry, deleteKnowledgeEntry, uploadKnowledgeFile, fetchKnowledgeTags } from '../scripts/KnowledgePanelApi'
+import { fetchKnowledgeList, fetchKnowledgeEntry, saveKnowledgeEntry, createKnowledgeEntry, deleteKnowledgeEntry, uploadKnowledgeFile, fetchKnowledgeCollections, createKnowledgeCollection, saveKnowledgeCollection, deleteKnowledgeCollection, renameKnowledgeTag } from '../scripts/KnowledgePanelApi'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
 
 const { t } = useI18nHelpers()
 
 const scope = ref('project')
-const tagFilter = ref('')
+/** Đa chọn: entry phải mang **đủ** mọi tag đang bật, giống filter phía driver. */
+const tagFilter = ref([])
 const query = ref('')
 const entries = ref([])
 const allTags = ref([])
+const collections = ref([])
+const activeCollection = ref('')
 const selectedId = ref(null)
 const loading = ref(false)
 const error = ref('')
@@ -32,8 +35,7 @@ const showUpload = ref(false)
 
 const filteredEntries = computed(() => {
   let list = entries.value
-  if (scope.value) list = list.filter((e) => e.scope === scope.value)
-  if (tagFilter.value) list = list.filter((e) => e.tags?.includes(tagFilter.value))
+  if (tagFilter.value.length) list = list.filter((e) => tagFilter.value.every((tag) => e.tags?.includes(tag)))
   if (query.value.trim()) {
     const q = query.value.trim().toLowerCase()
     list = list.filter(
@@ -46,21 +48,46 @@ const filteredEntries = computed(() => {
   return list
 })
 
+/**
+ * Một request cho cả entry lẫn facet tag (`include=tags`) — trước đây là hai,
+ * và cái thứ hai (`/tags`) walk lại toàn bộ store.
+ */
 async function loadList() {
   loading.value = true
   error.value = ''
   try {
-    const [listData, tagData] = await Promise.all([
-      fetchKnowledgeList({ scope: scope.value || undefined }),
-      fetchKnowledgeTags(),
-    ])
-    entries.value = listData.entries || []
-    allTags.value = tagData.tags || []
+    const data = await fetchKnowledgeList({
+      scope: scope.value || undefined,
+      collection: activeCollection.value || undefined,
+      include: 'tags',
+    })
+    entries.value = data.entries || []
+    allTags.value = data.tags || []
   } catch (e) {
     error.value = String(e.message || e)
   } finally {
     loading.value = false
   }
+}
+
+async function loadCollections() {
+  try {
+    const data = await fetchKnowledgeCollections()
+    collections.value = data.collections || []
+  } catch {
+    // Sidecar hỏng không được làm chết cả panel — cây nhóm rỗng, entry vẫn xem được.
+    collections.value = []
+  }
+}
+
+function toggleTagFilter(tag) {
+  const i = tagFilter.value.indexOf(tag)
+  if (i >= 0) tagFilter.value.splice(i, 1)
+  else tagFilter.value.push(tag)
+}
+
+function selectCollection(id) {
+  activeCollection.value = activeCollection.value === id ? '' : id
 }
 
 async function selectEntry(id) {
@@ -101,6 +128,82 @@ function addTag() {
 
 function removeTag(i) {
   draft.value.tags.splice(i, 1)
+}
+
+// ── collection ─────────────────────────────────────────────────────────────
+
+const newCollectionName = ref('')
+const newCollectionScope = ref('project')
+
+async function addCollection() {
+  const name = newCollectionName.value.trim()
+  if (!name) return
+  error.value = ''
+  try {
+    const data = await createKnowledgeCollection({ name, scope: newCollectionScope.value })
+    newCollectionName.value = ''
+    message.value = t('knowledge.collections.created', { id: data.collection.id })
+    await loadCollections()
+  } catch (e) {
+    error.value = String(e.message || e)
+  }
+}
+
+/** Xoá nhóm — tài liệu bên trong **không** bị xoá, nhãn nút phải nói rõ. */
+async function removeCollection(id) {
+  if (!confirm(t('knowledge.collections.confirmDelete', { id }))) return
+  error.value = ''
+  try {
+    await deleteKnowledgeCollection(id)
+    if (activeCollection.value === id) activeCollection.value = ''
+    message.value = t('knowledge.collections.deleted', { id })
+    await loadCollections()
+    await loadList()
+  } catch (e) {
+    error.value = String(e.message || e)
+  }
+}
+
+/** Gán entry đang mở vào nhóm — `entry_ids` là cách gom thủ công, cạnh gom theo tag. */
+async function addSelectedToCollection(collection) {
+  if (!selectedId.value) return
+  error.value = ''
+  try {
+    const entryIds = [...new Set([...(collection.entry_ids || []), selectedId.value])]
+    await saveKnowledgeCollection(collection.id, {
+      name: collection.name,
+      description: collection.description,
+      tags: collection.tags || [],
+      entryIds,
+    })
+    message.value = t('knowledge.collections.entryAdded', { id: collection.id })
+    await loadCollections()
+    if (activeCollection.value) await loadList()
+  } catch (e) {
+    error.value = String(e.message || e)
+  }
+}
+
+// ── tag admin ──────────────────────────────────────────────────────────────
+
+const renameFrom = ref('')
+const renameTo = ref('')
+
+/** `to` rỗng = xoá tag khỏi mọi entry; `to` trùng tag có sẵn = merge hai tag. */
+async function applyRenameTag() {
+  if (!renameFrom.value) return
+  error.value = ''
+  try {
+    const data = await renameKnowledgeTag(renameFrom.value, renameTo.value.trim() || undefined)
+    message.value = t('knowledge.tagAdmin.done', { count: data.renamed })
+    tagFilter.value = tagFilter.value.filter((tag) => tag !== renameFrom.value)
+    renameFrom.value = ''
+    renameTo.value = ''
+    await loadList()
+    await loadCollections()
+  } catch (e) {
+    error.value = String(e.message || e)
+  }
 }
 
 async function save() {
@@ -160,8 +263,11 @@ async function onFileUpload(event) {
   }
 }
 
-watch(scope, () => loadList())
-onMounted(loadList)
+watch([scope, activeCollection], () => loadList())
+onMounted(async () => {
+  await loadList()
+  await loadCollections()
+})
 </script>
 
 <template>
@@ -180,6 +286,7 @@ onMounted(loadList)
         <select v-model="uploadScope" class="cfg-input">
           <option value="project">project</option>
           <option value="system">system</option>
+          <option value="global">global</option>
         </select>
       </label>
       <label class="cfg-label">
@@ -194,6 +301,61 @@ onMounted(loadList)
 
     <div class="knowledge-layout">
       <aside class="knowledge-list-pane">
+        <!-- Cây collection nằm TRÊN cụm tab scope: một nhóm gom được entry của
+             nhiều scope, nên nó không phải là nhánh con của scope nào. -->
+        <div class="knowledge-collections">
+          <div class="knowledge-collections-head">
+            <span>{{ t('knowledge.collections.title') }}</span>
+            <button
+              v-if="activeCollection"
+              type="button"
+              class="btn-ghost btn-sm"
+              @click="activeCollection = ''"
+            >{{ t('knowledge.collections.clear') }}</button>
+          </div>
+          <ul class="knowledge-collection-list">
+            <li v-if="!collections.length" class="muted">{{ t('knowledge.collections.empty') }}</li>
+            <li
+              v-for="c in collections"
+              :key="c.id"
+              class="knowledge-collection-item"
+              :class="{ active: activeCollection === c.id }"
+            >
+              <button type="button" class="knowledge-collection-name" @click="selectCollection(c.id)">
+                {{ c.name }} <span class="muted">({{ c.entryCount }} · {{ c.scope }})</span>
+              </button>
+              <button
+                v-if="selectedId"
+                type="button"
+                class="btn-ghost btn-sm"
+                :title="t('knowledge.collections.addEntry')"
+                @click="addSelectedToCollection(c)"
+              >+</button>
+              <button
+                type="button"
+                class="btn-ghost btn-sm"
+                :title="t('knowledge.collections.delete')"
+                @click="removeCollection(c.id)"
+              >✕</button>
+            </li>
+          </ul>
+          <div class="knowledge-collection-new">
+            <input
+              v-model="newCollectionName"
+              class="cfg-input cfg-input-sm"
+              :placeholder="t('knowledge.collections.namePlaceholder')"
+              @keydown.enter.prevent="addCollection"
+            />
+            <select v-model="newCollectionScope" class="cfg-input cfg-input-sm">
+              <option value="project">project</option>
+              <option value="global">global</option>
+            </select>
+            <button type="button" class="btn-ghost btn-sm" @click="addCollection">
+              {{ t('knowledge.collections.create') }}
+            </button>
+          </div>
+        </div>
+
         <div class="knowledge-filters">
           <div class="knowledge-scope-tabs">
             <button
@@ -206,14 +368,39 @@ onMounted(loadList)
               :class="{ active: scope === 'system' }"
               @click="scope = 'system'"
             >{{ t('knowledge.scopeTabs.system') }}</button>
+            <button
+              class="knowledge-scope-tab"
+              :class="{ active: scope === 'global' }"
+              @click="scope = 'global'"
+            >{{ t('knowledge.scopeTabs.global') }}</button>
           </div>
           <input v-model="query" class="cfg-input cfg-input-sm" :placeholder="t('knowledge.filters.searchPlaceholder')" />
-          <select v-model="tagFilter" class="cfg-input cfg-input-sm">
-            <option value="">{{ t('knowledge.filters.allTags') }}</option>
-            <option v-for="t in allTags" :key="t.tag" :value="t.tag">
-              {{ t.tag }} ({{ t.count }})
-            </option>
-          </select>
+          <div class="tag-row knowledge-tag-filter">
+            <span v-if="!allTags.length" class="muted">{{ t('knowledge.filters.allTags') }}</span>
+            <button
+              v-for="tag in allTags"
+              :key="tag.tag"
+              type="button"
+              class="chip chip-skill"
+              :class="{ active: tagFilter.includes(tag.tag) }"
+              @click="toggleTagFilter(tag.tag)"
+            >{{ tag.tag }} ({{ tag.count }})</button>
+          </div>
+          <div class="knowledge-tag-admin">
+            <select v-model="renameFrom" class="cfg-input cfg-input-sm">
+              <option value="">{{ t('knowledge.tagAdmin.from') }}</option>
+              <option v-for="tag in allTags" :key="tag.tag" :value="tag.tag">{{ tag.tag }}</option>
+            </select>
+            <input
+              v-model="renameTo"
+              class="cfg-input cfg-input-sm"
+              :placeholder="t('knowledge.tagAdmin.toPlaceholder')"
+              @keydown.enter.prevent="applyRenameTag"
+            />
+            <button type="button" class="btn-ghost btn-sm" :disabled="!renameFrom" @click="applyRenameTag">
+              {{ t('knowledge.tagAdmin.apply') }}
+            </button>
+          </div>
         </div>
 
         <ul class="knowledge-list">
@@ -246,9 +433,12 @@ onMounted(loadList)
         </label>
         <label class="cfg-label">
           {{ t('knowledge.fields.scope') }}
+          <!-- Khoá khi sửa: scope nằm trong id, đổi scope là đổi id và phá mọi
+               `knowledge_inputs` đang trỏ tới entry này. -->
           <select v-model="draft.scope" class="cfg-input" :disabled="!!selectedId">
             <option value="project">project</option>
             <option value="system">system</option>
+            <option value="global">global</option>
           </select>
         </label>
         <label class="cfg-label">
@@ -340,6 +530,51 @@ onMounted(loadList)
   flex-direction: column;
   gap: 8px;
 }
+.knowledge-collections {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.knowledge-collections-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+}
+.knowledge-collection-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.knowledge-collection-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+.knowledge-collection-item.active { background: var(--accent-dim); }
+.knowledge-collection-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 2px;
+}
+.knowledge-collection-new { display: flex; gap: 4px; }
+.knowledge-tag-filter { flex-wrap: wrap; gap: 4px; }
+.knowledge-tag-filter .chip { cursor: pointer; border: 1px solid transparent; }
+.knowledge-tag-filter .chip.active { border-color: var(--accent); }
+.knowledge-tag-admin { display: flex; gap: 4px; }
 .knowledge-scope-tabs { display: flex; gap: 6px; }
 .knowledge-scope-tab {
   flex: 1;

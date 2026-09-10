@@ -273,6 +273,7 @@ export default {
     removeKnowledge: 'Remove',
     uploadTags: 'Upload tags (optional)',
     uploadTagsHint: 'tag1, tag2',
+    uploadScope: 'Upload scope',
     uploadFile: 'Upload .md / .txt',
     uploading: 'Uploading…',
     previewTaskId: 'Task ID',

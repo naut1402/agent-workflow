@@ -3,34 +3,29 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import CSelect from '../../../core/ui/CSelect.vue'
 import type { CSelectOption } from '../../../core/ui/CSelect.vue'
-import { fetchKnowledgeList } from '../../knowledge/scripts/knowledgeApi'
+import KnowledgePickerDialog from '../../../core/ui/KnowledgePickerDialog.vue'
 import { buildStepConfigDraft, buildStepUpdateFromDraft } from '../lib/stepConfigDraft'
 
 const props = defineProps({
   stepId: { type: String, default: null },
   step: { type: Object as () => any, default: null },  // current step data
   catalog: { type: Object as () => any, required: true },
+  projectId: { type: String, default: null },
 })
 
 const emit = defineEmits(['update', 'close'])
 
 const { t } = useI18nHelpers()
 
-const knowledgeEntries = ref([])
-const knowledgeInput = ref('')
+const showKnowledgePicker = ref(false)
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') emit('close')
+  // Picker cũng nghe Escape — nó đang mở thì đóng picker, không đóng cả dialog.
+  if (e.key === 'Escape' && !showKnowledgePicker.value) emit('close')
 }
 
-onMounted(async () => {
+onMounted(() => {
   window.addEventListener('keydown', onKeydown)
-  try {
-    const data = await fetchKnowledgeList()
-    knowledgeEntries.value = data.entries || []
-  } catch {
-    knowledgeEntries.value = []
-  }
 })
 
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
@@ -65,13 +60,13 @@ function removeProduces(i) {
   draft.value.produces.splice(i, 1)
 }
 
-function addKnowledgeInput() {
-  const v = knowledgeInput.value.trim()
-  if (v && draft.value && !draft.value.knowledge_inputs.includes(v)) {
-    draft.value.knowledge_inputs.push(v)
-  }
-  knowledgeInput.value = ''
-}
+/** Picker ghi thẳng vào draft — `v-model` của nó là mảng id đang chọn. */
+const knowledgeInputs = computed({
+  get: () => draft.value?.knowledge_inputs ?? [],
+  set: (ids: string[]) => {
+    if (draft.value) draft.value.knowledge_inputs = ids
+  },
+})
 
 function removeKnowledgeInput(i) {
   draft.value.knowledge_inputs.splice(i, 1)
@@ -160,18 +155,8 @@ function apply() {
               >{{ kid }} ✕</span>
             </div>
             <div class="tag-input-row">
-              <input
-                v-model="knowledgeInput"
-                class="cfg-input cfg-input-sm"
-                list="knowledge-entries-list"
-                :placeholder="t('pipelineEditor.stepConfig.knowledgePlaceholder')"
-                @keydown.enter.prevent="addKnowledgeInput"
-              />
-              <datalist id="knowledge-entries-list">
-                <option v-for="e in knowledgeEntries" :key="e.id" :value="e.id">{{ e.title }}</option>
-              </datalist>
-              <button type="button" class="btn-ghost btn-sm" @click="addKnowledgeInput">
-                {{ t('pipelineEditor.stepConfig.add') }}
+              <button type="button" class="btn-ghost btn-sm" @click="showKnowledgePicker = true">
+                {{ t('pipelineEditor.stepConfig.knowledgePick') }}
               </button>
             </div>
           </label>
@@ -214,6 +199,13 @@ function apply() {
         </div>
       </div>
     </div>
+
+    <KnowledgePickerDialog
+      v-if="showKnowledgePicker"
+      v-model="knowledgeInputs"
+      :project-id="projectId"
+      @close="showKnowledgePicker = false"
+    />
   </Teleport>
 </template>
 

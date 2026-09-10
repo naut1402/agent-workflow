@@ -16,10 +16,30 @@ export default {
   scopeTabs: {
     project: 'Project',
     system: 'System',
+    global: 'Global',
   },
   filters: {
     searchPlaceholder: 'Tìm…',
     allTags: 'Tất cả tags',
+  },
+  collections: {
+    title: 'Collection',
+    empty: 'Chưa có collection.',
+    clear: 'Bỏ lọc',
+    create: 'Thêm',
+    namePlaceholder: 'Tên collection…',
+    addEntry: 'Thêm entry đang mở vào collection này',
+    delete: 'Xoá collection (không xoá tài liệu)',
+    confirmDelete: 'Xoá collection "{id}"? Tài liệu bên trong vẫn giữ nguyên.',
+    created: 'Đã tạo collection {id}',
+    deleted: 'Đã xoá collection {id}',
+    entryAdded: 'Đã thêm vào {id}',
+  },
+  tagAdmin: {
+    from: 'Đổi tên tag…',
+    toPlaceholder: 'tên mới (bỏ trống = xoá tag)',
+    apply: 'Đổi tên',
+    done: 'Đã cập nhật {count} entry',
   },
   list: {
     loading: 'Đang tải…',
