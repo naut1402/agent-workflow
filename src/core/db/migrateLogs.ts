@@ -15,9 +15,8 @@ export type LogMigrationResult = {
 
 /**
  * One-off migration: copy existing JSONL log files into `log_entries`.
- * Read-only against the source files (never deletes/rewrites them — they stay
- * as a backup, design.md §4.3). Not run automatically; invoked manually via
- * `scripts/migrate-logs-to-sqlite.ts`.
+ * Read-only against the source files — they stay as a backup. Not run
+ * automatically; invoked manually via `scripts/migrate-logs-to-sqlite.ts`.
  *
  * Not idempotent: running twice inserts duplicate rows (no unique constraint —
  * `ts` can collide across entries). Truncate `log_entries` before re-running
@@ -34,7 +33,7 @@ export async function migrateLogsToSqlite(): Promise<LogMigrationResult[]> {
       results.push({ type, sourceExists: false, migrated: 0, skipped: 0 })
       continue
     }
-    let migrated = 0
+    const rows: (typeof logEntries.$inferInsert)[] = []
     let skipped = 0
     for (const line of raw.split('\n')) {
       if (!line.trim()) continue
@@ -43,19 +42,20 @@ export async function migrateLogsToSqlite(): Promise<LogMigrationResult[]> {
         skipped++
         continue
       }
-      db.insert(logEntries)
-        .values({
-          type: entry.type,
-          ts: entry.ts,
-          level: entry.level,
-          traceId: entry.traceId,
-          projectId: entry.projectId ?? null,
-          payload: JSON.stringify(entry),
-        })
-        .run()
-      migrated++
+      rows.push({
+        type: entry.type,
+        ts: entry.ts,
+        level: entry.level,
+        traceId: entry.traceId,
+        projectId: entry.projectId ?? null,
+        payload: JSON.stringify(entry),
+      })
     }
-    results.push({ type, sourceExists: true, migrated, skipped })
+    // One transaction per source file: a crash mid-file leaves no half-migrated type behind.
+    db.transaction((tx) => {
+      for (const row of rows) tx.insert(logEntries).values(row).run()
+    })
+    results.push({ type, sourceExists: true, migrated: rows.length, skipped })
   }
   return results
 }

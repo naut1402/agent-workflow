@@ -7,22 +7,19 @@ import { registryHome } from '../registry.js'
 import * as schema from './schema.js'
 
 /**
- * Shared `dashboard.sqlite` connection — one file for every subsystem migrated
- * off file-based storage (design.md §3.3). WAL mode: many readers run
- * alongside the single writer without blocking (deployment is single-container,
- * so single-writer is not a real constraint here).
+ * Shared `dashboard.sqlite` connection — one file for every subsystem that moves
+ * off file-based storage. WAL lets readers run alongside the single writer.
  *
- * Bun-only modules (`bun:sqlite`, `drizzle-orm/bun-sqlite`) are imported
- * dynamically ON PURPOSE: `vite.config.ts` pulls this file into its module
- * graph via `src/api/apiServer.ts`, and `vite build` loads that config under
- * Node, which cannot resolve the `bun:` scheme. Static imports here break
- * `bun run build` for the whole repo. Keep them dynamic.
+ * Bun-only modules are imported dynamically because `vite build` loads
+ * `vite.config.ts` under Node, which cannot resolve the `bun:` scheme — static
+ * imports here break `bun run build` (`docs/architecture.md` §6).
  */
 
 export type Db = BunSQLiteDatabase<typeof schema>
 
 let cached: { db: Db; sqlite: Database } | null = null
 let opening: Promise<Db> | null = null
+let warnedUnavailable = false
 
 function dbFilePath(): string {
   return path.join(registryHome(), 'dashboard.sqlite')
@@ -50,14 +47,26 @@ async function openDb(): Promise<Db> {
 export function getDb(): Promise<Db> {
   if (cached) return Promise.resolve(cached.db)
   if (!opening) {
-    opening = openDb().finally(() => {
-      opening = null
-    })
+    opening = openDb()
+      .catch((err: unknown) => {
+        // Callers swallow failures to stay non-throwing, so without this an unusable backend reads exactly like "no logs yet".
+        if (!warnedUnavailable) {
+          warnedUnavailable = true
+          console.error('[log] sqlite backend unavailable — log entries are being dropped:', err)
+        }
+        throw err
+      })
+      .finally(() => {
+        opening = null
+      })
   }
   return opening
 }
 
-/** Tests only — drop the cached connection (e.g. after switching DEV_TEAM_DASHBOARD_HOME). */
+/**
+ * Tests only — drop the cached connection (e.g. after switching DEV_TEAM_DASHBOARD_HOME).
+ * Not safe while an `openDb()` is in flight: it resolves afterwards and re-caches the old path.
+ */
 export function resetDbForTest(): void {
   if (cached) {
     try {
@@ -68,4 +77,5 @@ export function resetDbForTest(): void {
   }
   cached = null
   opening = null
+  warnedUnavailable = false
 }
