@@ -262,3 +262,135 @@ describe('sync-line.sh — TARGETS_OVERRIDE (sync theo cặp source ↔ test)', 
     expect(git(origin, 'rev-parse', 'refs/heads/test/1.1.4/main')).toBe(after1)
   })
 })
+
+/**
+ * Hai dòng đối xứng, nhưng dòng source **đã cắt** `tests/` (Đợt 5 của epic).
+ * Đây là ca mà `git merge` xoá sạch test trên dòng test — im lặng, không conflict.
+ */
+function setupAfterCut(): { work: string; origin: string } {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-sync-cut-'))
+  tmpDirs.push(base)
+  const origin = path.join(base, 'origin.git')
+  const work = path.join(base, 'work')
+
+  git(base, 'init', '--bare', '--initial-branch=main', origin)
+  git(base, 'clone', origin, work)
+  git(work, 'config', 'user.email', 'ci@example.com')
+  git(work, 'config', 'user.name', 'CI')
+
+  fs.mkdirSync(path.join(work, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(work, 'src/app.ts'), '// v1\n', 'utf8')
+  commit(work, 'tests/a.test.ts', '// a\n', 'chore: khởi tạo')
+  git(work, 'add', 'src')
+  git(work, 'commit', '-m', 'chore: src')
+  for (const ref of ['main', 'dev/1.1.4/main', 'test/1.1.4/main']) {
+    git(work, 'push', 'origin', `HEAD:refs/heads/${ref}`)
+  }
+
+  // Dòng test thêm test riêng (thứ PHẢI không bị mất).
+  git(work, 'checkout', '-B', 'test/1.1.4/main', 'origin/test/1.1.4/main')
+  commit(work, 'tests/b.test.ts', '// b\n', 'test: thêm b ở dòng test')
+  git(work, 'push', 'origin', 'HEAD:refs/heads/test/1.1.4/main')
+
+  // Dòng source CẮT tests/ + đổi code.
+  git(work, 'checkout', '-B', 'dev/1.1.4/main', 'origin/dev/1.1.4/main')
+  git(work, 'rm', '-r', '-q', 'tests')
+  git(work, 'commit', '-m', 'chore: cắt tests khỏi dòng source')
+  fs.writeFileSync(path.join(work, 'src/app.ts'), '// v2\n', 'utf8')
+  git(work, 'add', 'src')
+  git(work, 'commit', '-m', 'feat: đổi code')
+  git(work, 'push', 'origin', 'HEAD:refs/heads/dev/1.1.4/main')
+  git(work, 'fetch', 'origin')
+
+  return { work, origin }
+}
+
+describe('sync-line.sh — PRESERVE_PATHS (dòng source đã cắt tests/)', () => {
+  const ENV = { SRC_REF: 'dev/1.1.4/main', TARGETS_OVERRIDE: 'test/1.1.4/main', EXTRA_FILE: '' }
+
+  test('🚫 KHÔNG khai PRESERVE_PATHS → test dòng test KHÔNG sửa bị xoá im lặng (ca hồi quy)', () => {
+    const { work, origin } = setupAfterCut()
+    expect(runSync(work, ENV).code).toBe(0)
+
+    const files = git(origin, 'ls-tree', '-r', '--name-only', 'refs/heads/test/1.1.4/main')
+    // `a.test.ts` có từ trước merge-base và dòng test KHÔNG sửa ⇒ git coi phép xoá
+    // của dòng source là không tranh chấp và áp thẳng. 🚫 Không conflict, không cảnh báo.
+    expect(files).not.toContain('tests/a.test.ts')
+    // `b.test.ts` do dòng test tự thêm SAU merge-base nên sống sót. Đây mới là chỗ
+    // nguy: mất đúng những file dòng test không đụng tới — tức gần như toàn bộ suite.
+    expect(files).toContain('tests/b.test.ts')
+  })
+
+  test('khai PRESERVE_PATHS → code đi sang, test của dòng test GIỮ NGUYÊN', () => {
+    const { work, origin } = setupAfterCut()
+    const r = runSync(work, { ...ENV, PRESERVE_PATHS: 'tests test-e2e reports' })
+
+    expect(r.code).toBe(0)
+    const files = git(origin, 'ls-tree', '-r', '--name-only', 'refs/heads/test/1.1.4/main')
+    // Test của dòng test còn đủ — cả file có từ trước lẫn file dòng test tự thêm.
+    expect(files).toContain('tests/a.test.ts')
+    expect(files).toContain('tests/b.test.ts')
+    // Code mới của dòng source đã sang.
+    expect(git(origin, 'show', 'refs/heads/test/1.1.4/main:src/app.ts')).toContain('v2')
+  })
+
+  test('commit sync là commit HAI CHA — quan hệ tổ tiên còn đúng nên lượt sau skip được', () => {
+    const { work, origin } = setupAfterCut()
+    const env = { ...ENV, PRESERVE_PATHS: 'tests test-e2e reports' }
+    expect(runSync(work, env).code).toBe(0)
+
+    const parents = git(origin, 'rev-list', '--parents', '-n', '1', 'refs/heads/test/1.1.4/main').split(' ')
+    expect(parents).toHaveLength(3) // commit + 2 cha
+    expect(parents).toContain(git(origin, 'rev-parse', 'refs/heads/dev/1.1.4/main'))
+
+    const after1 = git(origin, 'rev-parse', 'refs/heads/test/1.1.4/main')
+    git(work, 'fetch', 'origin')
+    const second = runSync(work, env)
+    expect(second.code).toBe(0)
+    expect(second.summary).toContain('skipped')
+    expect(git(origin, 'rev-parse', 'refs/heads/test/1.1.4/main')).toBe(after1)
+  })
+
+  test('dòng source thêm file dưới vùng bảo lưu → 🚫 không lọt sang dòng test', () => {
+    const { work, origin } = setupAfterCut()
+    // Giai đoạn đệm: có người vẫn commit test vào dòng source.
+    git(work, 'checkout', '-B', 'dev/1.1.4/main', 'origin/dev/1.1.4/main')
+    commit(work, 'tests/lot.test.ts', '// lọt\n', 'test: commit sai chỗ ở dòng source')
+    git(work, 'push', 'origin', 'HEAD:refs/heads/dev/1.1.4/main')
+    git(work, 'fetch', 'origin')
+
+    expect(runSync(work, { ...ENV, PRESERVE_PATHS: 'tests test-e2e reports' }).code).toBe(0)
+    const files = git(origin, 'ls-tree', '-r', '--name-only', 'refs/heads/test/1.1.4/main')
+    expect(files).not.toContain('tests/lot.test.ts')
+    expect(files).toContain('tests/b.test.ts')
+  })
+})
+
+describe('sync-line.sh — PRESERVE_PATHS giữ được file lẻ, không chỉ thư mục', () => {
+  test('.gitignore của target không bị bản của source ghi đè', () => {
+    const { work, origin } = setupAfterCut()
+
+    // Dòng source chặn /tests/ (đúng việc của nó sau Đợt 5); dòng test phải track.
+    git(work, 'checkout', '-B', 'dev/1.1.4/main', 'origin/dev/1.1.4/main')
+    commit(work, '.gitignore', '/tests/\n/test-e2e/\n', 'chore: source ignore cây overlay')
+    git(work, 'push', 'origin', 'HEAD:refs/heads/dev/1.1.4/main')
+
+    git(work, 'checkout', '-B', 'test/1.1.4/main', 'origin/test/1.1.4/main')
+    commit(work, '.gitignore', 'node_modules/\n', 'chore: gitignore dòng test')
+    git(work, 'push', 'origin', 'HEAD:refs/heads/test/1.1.4/main')
+    git(work, 'fetch', 'origin')
+
+    expect(runSync(work, {
+      SRC_REF: 'dev/1.1.4/main',
+      TARGETS_OVERRIDE: 'test/1.1.4/main',
+      EXTRA_FILE: '',
+      PRESERVE_PATHS: 'tests test-e2e reports .gitignore',
+    }).code).toBe(0)
+
+    const gi = git(origin, 'show', 'refs/heads/test/1.1.4/main:.gitignore')
+    expect(gi).toContain('node_modules/')
+    expect(gi).not.toContain('/tests/')
+    // Và test vẫn còn — hai phép bảo lưu không đè nhau.
+    expect(git(origin, 'ls-tree', '-r', '--name-only', 'refs/heads/test/1.1.4/main')).toContain('tests/b.test.ts')
+  })
+})
