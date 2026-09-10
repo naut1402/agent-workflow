@@ -1,7 +1,12 @@
 # Sync cây source sang dòng test **theo cặp version**.
 #
-#   main             →  test/main
 #   dev/x.y.z/main   →  test/x.y.z/main
+#
+# 🚫 Không lắng nghe `main`: lúc release, `promote-test-line.yml` cũng push vào
+# `test/main` và hai workflow có concurrency group khác nhau nên chạy song song —
+# một lượt push sẽ bị từ chối non-fast-forward. `test/main` nhận code qua promote
+# (dòng test của version đã mang sẵn cây source), không cần ghép lại từ `main`.
+# `workflow_dispatch` vẫn nhận `source_ref: main` cho ca chữa tay.
 #
 # Vì sao cần: dòng test mang **cây đầy** của dòng source (để chạy độc lập được),
 # nên `src/` tồn tại ở hai dòng branch. Không có đường sync này thì bản copy trên
@@ -25,7 +30,6 @@ name: Sync source line into test line
 on:
   push:
     branches:
-      - main
       - 'dev/*/main'
   workflow_dispatch:
     inputs:
