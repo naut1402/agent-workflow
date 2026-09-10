@@ -27,6 +27,21 @@ export function profilesDir(root: string): string {
   return joinPath(root, 'pipeline-profiles')
 }
 
+/**
+ * Tên các pipeline profile trong `<root>/pipeline-profiles/` — chính là giá trị
+ * hợp lệ của `CreateTaskRequest.profileName` / `RunTaskAction.profileName`.
+ * Thư mục chưa có → []. Bỏ file `.tmp` (ghi atomic dở dang).
+ */
+export async function listPipelineProfileNames(root: string): Promise<string[]> {
+  const names: string[] = []
+  for (const entry of await safeReadDir(profilesDir(root))) {
+    if (!entry.isFile()) continue
+    if (!entry.name.endsWith('.yaml') || entry.name.endsWith('.tmp')) continue
+    names.push(entry.name.replace(/\.yaml$/, ''))
+  }
+  return names.sort()
+}
+
 export function customAgentsDir(root: string): string {
   return joinPath(root, 'custom-agents')
 }
