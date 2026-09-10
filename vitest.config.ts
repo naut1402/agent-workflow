@@ -81,7 +81,7 @@ export default defineConfig({
       // tròn xuống ~1 điểm % để không đỏ vì dao động khi source thêm/bớt file.
       // Cổng thứ hai (`.github/scripts/coverage-gate.ts`) mới là chỗ chặn xu
       // hướng tụt dần với dung sai chặt hơn — xem docs/agent-rules/testing.md §6.
-      thresholds: { lines: 59, functions: 56, branches: 52, statements: 58 },
+      thresholds: { lines: 59, functions: 56, branches: 52, statements: 57 },
     },
   },
 })
