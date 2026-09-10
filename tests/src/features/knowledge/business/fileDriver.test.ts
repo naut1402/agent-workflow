@@ -3,15 +3,27 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createFileDriver, knowledgeRoot, loadKnowledgeBundle } from '../../../../../src/features/knowledge/business/fileDriver'
+import { MAX_BUNDLE_BYTES } from '../../../../../src/features/knowledge/schemas/knowledge'
 
 let root: string
+let home: string
 let driver: ReturnType<typeof createFileDriver>
+const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
 
+/**
+ * `DEV_TEAM_DASHBOARD_HOME` phải cô lập: scope `global` đọc thẳng registry
+ * home, nên không cô lập thì suite ăn cả knowledge global thật của máy đang
+ * chạy — xanh trên CI trống, đỏ ngẫu nhiên trên máy dev.
+ */
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'kn-'))
+  home = path.join(root, '.home')
+  process.env.DEV_TEAM_DASHBOARD_HOME = home
   driver = createFileDriver(root)
 })
 afterEach(async () => {
+  if (prevHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
+  else process.env.DEV_TEAM_DASHBOARD_HOME = prevHome
   await fs.rm(root, { recursive: true, force: true })
 })
 
@@ -91,5 +103,79 @@ describe('loadKnowledgeBundle', () => {
   })
   test('empty ids → []', async () => {
     expect(await loadKnowledgeBundle(root, [])).toEqual([])
+  })
+})
+
+describe('scope global — đa root', () => {
+  test('entry global nằm ở registry home, không dưới project (TC-G1)', async () => {
+    const entry = await driver.write({ slug: 'shared', scope: 'global', content: 'g' })
+    expect(entry.id).toBe('global/shared')
+    expect(await fs.readFile(path.join(home, 'knowledge', 'global', 'shared.md'), 'utf8')).toContain('g')
+    expect(entry.path.startsWith(knowledgeRoot(root))).toBe(false)
+  })
+
+  test('project khác cùng home đọc được entry global, không thấy entry project (TC-G2 · TC-G3)', async () => {
+    await driver.write({ slug: 'shared', scope: 'global', content: 'g' })
+    await driver.write({ slug: 'mine', scope: 'project', content: 'p' })
+
+    const otherRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'kn-other-'))
+    try {
+      const ids = (await createFileDriver(otherRoot).list()).map((e) => e.id)
+      expect(ids).toEqual(['global/shared'])
+    } finally {
+      await fs.rm(otherRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('trùng slug khác scope là hai file độc lập (TC-G9)', async () => {
+    await driver.write({ slug: 'x', scope: 'project', content: 'p' })
+    await driver.write({ slug: 'x', scope: 'global', content: 'g' })
+    await driver.write({ id: 'global/x', slug: 'x', scope: 'global', content: 'g2' })
+
+    expect((await driver.read('project/x')).content.trim()).toBe('p')
+    expect((await driver.read('global/x')).content.trim()).toBe('g2')
+  })
+
+  test('scope lạ trả rỗng và KHÔNG đẻ thư mục (TC-G7)', async () => {
+    await driver.write({ slug: 'a', content: 'c' })
+    expect(await driver.list({ scope: 'Global' })).toEqual([])
+    expect(await fs.readdir(knowledgeRoot(root))).not.toContain('Global')
+  })
+
+  test('chỉ đọc thì không tạo thư mục nào trên đĩa (TC-G10)', async () => {
+    expect(await driver.list()).toEqual([])
+    expect(await driver.listTags()).toEqual([])
+    await expect(fs.stat(home)).rejects.toThrow()
+    await expect(fs.stat(knowledgeRoot(root))).rejects.toThrow()
+  })
+})
+
+describe('front-matter khoá lạ (TC-G13)', () => {
+  test('round-trip giữ nguyên khoá API không biết', async () => {
+    await driver.write({ slug: 'e', tags: ['a'], content: 'body' })
+    const file = path.join(knowledgeRoot(root), 'project', 'e.md')
+    await fs.writeFile(file, (await fs.readFile(file, 'utf8')).replace('---\n\nbody', 'owner: tuan\nweight: 3\n---\n\nbody'))
+
+    await driver.write({ id: 'project/e', slug: 'e', tags: ['a', 'b'], content: 'body 2' })
+
+    const raw = await fs.readFile(file, 'utf8')
+    expect(raw).toContain('owner: tuan')
+    expect(raw).toContain('weight: 3')
+    expect((await driver.read('project/e')).tags).toEqual(['a', 'b'])
+  })
+})
+
+describe('cap byte của bundle (TC-I7)', () => {
+  test('entry to bị từ chối KHÔNG làm hỏng entry đứng sau nó', async () => {
+    await driver.write({ slug: 'small-1', content: 'a'.repeat(1000) })
+    await driver.write({ slug: 'huge', content: 'b'.repeat(MAX_BUNDLE_BYTES) })
+    await driver.write({ slug: 'small-2', content: 'c'.repeat(1000) })
+
+    const bundle = await loadKnowledgeBundle(root, ['project/small-1', 'project/huge', 'project/small-2'])
+
+    expect(bundle[0].content).toBeDefined()
+    expect(bundle[1]).toEqual({ id: 'project/huge', error: 'bundle size limit' })
+    // Byte của entry bị từ chối không được tính vào tổng.
+    expect(bundle[2].content).toBeDefined()
   })
 })

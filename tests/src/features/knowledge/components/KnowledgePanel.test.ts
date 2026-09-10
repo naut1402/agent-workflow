@@ -41,7 +41,10 @@ describe('KnowledgePanel', () => {
   it('mounts and loads the list (fetch stubbed)', async () => {
     const fetchMock = vi.fn(async (url: string) => ({
       ok: true,
-      json: async () => (url.includes('/tags') ? { tags: ['php'] } : { entries: [] }),
+      json: async () =>
+        String(url).includes('/collections')
+          ? { collections: [] }
+          : { entries: [], tags: [{ tag: 'php', count: 1 }] },
     }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -49,16 +52,18 @@ describe('KnowledgePanel', () => {
     await flushPromises()
 
     expect(w.find('.knowledge-panel').exists()).toBe(true)
-    // onMounted → loadList hits both the list + tags endpoints.
+    // onMounted → MỘT request mang cả entry lẫn facet tag (`include=tags`);
+    // `/api/knowledge/tags` walk lại toàn store nên không được gọi thêm nữa.
     const urls = fetchMock.mock.calls.map((c) => String(c[0]))
-    expect(urls.some((u) => u.startsWith('/api/knowledge'))).toBe(true)
-    expect(urls.some((u) => u.includes('/api/knowledge/tags'))).toBe(true)
+    expect(urls.some((u) => u.includes('include=tags'))).toBe(true)
+    expect(urls.some((u) => u.startsWith('/api/knowledge/tags'))).toBe(false)
   })
 
   it('mounts MarkdownTextEditor and binds draft.content via v-model', async () => {
     const fetchMock = vi.fn(async (url: string) => ({
       ok: true,
-      json: async () => (url.includes('/tags') ? { tags: [] } : { entries: [] }),
+      json: async () =>
+        String(url).includes('/collections') ? { collections: [] } : { entries: [], tags: [] },
     }))
     vi.stubGlobal('fetch', fetchMock)
 
