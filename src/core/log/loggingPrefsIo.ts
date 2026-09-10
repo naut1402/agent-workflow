@@ -5,6 +5,7 @@ import {
   parseLoggingConfig,
   type LoggingConfig,
   type LoggingTypeKey,
+  type LogDriverKind,
 } from './loggingPrefs.js'
 
 /**
@@ -48,4 +49,9 @@ export function loadLoggingPrefs(): LoggingConfig {
 /** Whether a log type should be written / shown. */
 export function isLogTypeEnabled(type: LoggingTypeKey): boolean {
   return loadLoggingPrefs().types[type] !== false
+}
+
+/** Configured log storage backend — defaults to `'file'`. */
+export function getLogDriverPref(): LogDriverKind {
+  return loadLoggingPrefs().driver
 }

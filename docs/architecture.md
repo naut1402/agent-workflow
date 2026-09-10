@@ -69,13 +69,23 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | Agents | `src/features/agent-editor/business/` | `agents.ts` (CRUD/template/fetch) + NL generate. |
 | Tasks / artifacts | `src/features/monitor/business/` | Tasks, artifact actions, github issue, task chat. |
 | Knowledge | `src/features/knowledge/business/` | File driver + config/driver chọn trong cùng module. |
-| Logging | `src/core/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit/events/usage JSONL (`UsageSnapshot`); job log text thuộc runner. |
-| Statistics | `src/features/statistics/business/` | Aggregation token usage từ `usage.jsonl` theo project/task/step/job/model/provider/date/source (`GET /api/statistics/usage`); tầng đọc gom 1 module để cắm sqlite fast-path (#229) sau. |
+| Logging | `src/core/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit/events/usage — **hai backend**: `file` (JSONL, mặc định) và `sqlite`, chọn bằng `logging.driver` trong `settings.json` (`loggingPrefs.ts`), đọc/ghi đều đi theo driver đang active (`activeLogDriverKind()`); job log text thuộc runner. |
+| DB (SQLite) | `src/core/db/` | Connection dùng chung `dashboard.sqlite` + schema Drizzle + migration. Mới chỉ phục vụ log backend `sqlite` (PoC #229) — các subsystem khác vẫn file-based. |
+| Statistics | `src/features/statistics/business/` | Aggregation token usage từ `usage.jsonl` theo project/task/step/job/model/provider/date/source (`GET /api/statistics/usage`); tầng đọc gom 1 module (`readUsageEntries()`) nhưng **chưa** rẽ theo `logging.driver` — xem giới hạn ở §2.4. |
 | Runners | `src/features/runner/business/` | Job queue (+ reaper), connections, session ledger (+ capture), providers CLI. |
 | Automations | `src/features/automations/business/` | Rule CRUD (`automations/*.yaml` theo data root, đa trigger OR + chuỗi action tuần tự), scheduler tick (timer: once/interval/cron cùng mốc `startAt`), event trigger, action `runTask` (tái dùng `createTask` + `runTaskStep` của monitor) chạy nền + chờ job + biến `{{trigger.*}}`/`{{steps.N.*}}` (`lib/vars.ts`), run ledger ở `registryHome()/automations/` (#233). Action `runTask` có `projectId` optional — trỏ project khác trong registry thì bước chạy trên data root của project đó (`core/registry.get`), bỏ trống thì dùng project sở hữu rule; rule state + run history vẫn nằm ở project sở hữu rule. |
 | Settings | `src/features/settings/business/` | Dashboard settings, autoscan, fs browse, scan patterns. |
 | NL chat | `src/features/nl-chat/business/` | Session builder chat (prompt + parse trong cùng module). |
 | CLI | `src/runner-cli.mjs` | Runner CLI entry. |
+
+**Tầng DB `src/core/db/`.** Một file SQLite dùng chung cho mọi subsystem chuyển khỏi lưu trữ file-based. Hiện mới có log backend `sqlite` dùng tới — coi như PoC, không phải cam kết migrate toàn bộ.
+
+- **Vị trí file**: `registryHome()/dashboard.sqlite` — **nằm ngoài cây repo**, cùng chỗ với `projects.json`. Không có file DB nào sinh trong repo, `.gitignore` không phải đụng.
+- **`client.ts`** giữ connection cache dùng chung (`getDb()`), bật `WAL` + `foreign_keys`, và chạy migration Drizzle khi mở lần đầu (idempotent). Mặc định `logging.driver = 'file'` ⇒ `getDb()` không bao giờ được gọi ⇒ **không file DB nào được tạo**.
+- **`schema.ts` + `migrations/`** — schema Drizzle giữ portable (không dùng feature riêng của SQLite) để sau này đổi sang Postgres không phải viết lại.
+- **`migrateLogs.ts`** + `scripts/migrate-logs-to-sqlite.ts` — nạp JSONL cũ vào bảng `log_entries`, một transaction cho mỗi file nguồn. Chỉ đọc, **không xoá** file nguồn; **không idempotent** (chạy lại sinh bản ghi trùng).
+- **Giới hạn đã biết — `logging.driver = 'sqlite'` làm mode Thống kê rỗng.** `readUsageEntries()` (`src/features/statistics/business/`) đọc `usage.jsonl` vô điều kiện, không hỏi `activeLogDriverKind()`, nên khi driver là `sqlite` thì entry `usage` chỉ vào `log_entries` và `GET /api/statistics/usage` trả 0 mà không báo lỗi. Chỉ bật `sqlite` để thử PoC, đừng bật khi cần số liệu usage.
+- **Backend không dùng được thì cảnh báo một lần, không throw.** `getDb()` in `[log] sqlite backend unavailable` ra stderr lần đầu mở thất bại (vd chạy dưới Node, không có `bun:sqlite`); đường ghi/đọc vẫn nuốt lỗi để giữ bất biến *append không bao giờ throw*, nên nếu không có dòng cảnh báo đó thì log rỗng trông y hệt "chưa có log".
 
 ### 2.5 Config dùng chung `src/core/configs/` (alias `@configs`)
 
@@ -164,5 +174,6 @@ Thêm scan / endpoint / feature mới không được phá các bất biến sau
 - **Ghi registry atomic** (temp file + rename trong `saveRegistry`).
 - **Fetch URL người dùng** phải qua `fetchUrlSafe` (https-only, chặn private host) — tránh SSRF.
 - **ESM thuần**; server import core `node:`-prefixed.
+- **Module `bun:*` không được import tĩnh trên đường nạp `vite.config.ts`.** `bun run build` = `vite build` chạy dưới **Node**, mà Node ESM loader không hiểu scheme `bun:`. `vite.config.ts` kéo `src/api/apiServer.ts` vào module graph, nên mọi file với tới được từ đó (hiện tại: `src/core/db/client.ts`) phải nạp `bun:sqlite` và `drizzle-orm/bun-sqlite` bằng `await import(...)`, phần type dùng `import type`. Đổi về import tĩnh là làm đỏ build của **cả repo** — cửa chặn là step `Build` trong CI.
 - `ANTHROPIC_API_KEY` tùy chọn, bật NL agent-draft generation (`/api/custom-agents/generate`); không có key thì fallback heuristic.
 - `DASHBOARD_SECRET_KEY` **bắt buộc** để dùng credential kiểu "dán secret trực tiếp" (`stored:`) hoặc "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` — mã hoá `secret-vault.json` (`secretVault.ts`). Không set → 2 luồng đó fail rõ ràng (`DASHBOARD_SECRET_KEY is not set — required to store or read vault secrets`), các luồng khác (CLI, `env:`/`file:` secretRef) không bị ảnh hưởng.
