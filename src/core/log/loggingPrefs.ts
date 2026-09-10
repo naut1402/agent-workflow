@@ -15,10 +15,16 @@ export const LoggingTypesSchema = z.object({
   usage: z.boolean().optional(),
 })
 
+/** Storage backends for the log write/read path (design.md B202608_2201 §3.1). */
+export const LOG_DRIVER_KINDS = ['file', 'sqlite'] as const
+export type LogDriverKind = (typeof LOG_DRIVER_KINDS)[number]
+
 export const LoggingConfigSchema = z
   .object({
     showLogsTab: z.boolean().optional(),
     types: LoggingTypesSchema.optional(),
+    /** Log storage backend — invalid/missing falls back to `'file'`. */
+    driver: z.enum(LOG_DRIVER_KINDS).optional(),
   })
   .passthrough()
 
@@ -33,6 +39,7 @@ export type LoggingTypes = {
 export type LoggingConfig = {
   showLogsTab: boolean
   types: LoggingTypes
+  driver: LogDriverKind
 }
 
 export type LoggingTypeKey = keyof LoggingTypes
@@ -40,6 +47,7 @@ export type LoggingTypeKey = keyof LoggingTypes
 export const DEFAULT_LOGGING_CONFIG: LoggingConfig = {
   showLogsTab: true,
   types: { audit: true, request: true, jobs: true, events: false, usage: true },
+  driver: 'file',
 }
 
 export function parseLoggingConfig(raw: unknown): LoggingConfig {
@@ -56,6 +64,7 @@ export function parseLoggingConfig(raw: unknown): LoggingConfig {
       events: d.types?.events === true,
       usage: d.types?.usage !== false,
     },
+    driver: d.driver === 'sqlite' ? 'sqlite' : 'file',
   }
 }
 

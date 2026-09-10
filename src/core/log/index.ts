@@ -21,8 +21,15 @@ export {
   type UsageSnapshot,
 } from './schema.js'
 
-export { getLogDriver, setLogDriver, resetLogDriver, type LogDriver } from './driver.js'
+export { getLogDriver, setLogDriver, resetLogDriver, activeLogDriverKind, type LogDriver } from './driver.js'
 export { logsDir, logFile, appendFileLog } from './fileDriver.js'
+export { sqliteLogDriver } from './sqliteDriver.js'
+export { initLogDriverFromPrefs } from './driverInit.js'
+export {
+  LOG_DRIVER_KINDS,
+  type LogDriverKind,
+} from './loggingPrefs.js'
+export { getLogDriverPref } from './loggingPrefsIo.js'
 export { appendLog, appendRequestLog, appendUsageLog, emitAudit } from './store.js'
 export {
   installEventLogSubscriber,
