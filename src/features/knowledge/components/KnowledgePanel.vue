@@ -3,6 +3,7 @@ import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
 import { ref, computed, onMounted, watch } from 'vue'
 import { fetchKnowledgeList, fetchKnowledgeEntry, saveKnowledgeEntry, createKnowledgeEntry, deleteKnowledgeEntry, uploadKnowledgeFile, fetchKnowledgeCollections, createKnowledgeCollection, saveKnowledgeCollection, deleteKnowledgeCollection, renameKnowledgeTag } from '../scripts/KnowledgePanelApi'
 import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
+import CSelect from '../../../core/ui/CSelect.vue'
 
 /**
  * `projectId` phải xuống tới **mọi** lời gọi: nhóm và tag có đường **ghi**
@@ -152,6 +153,11 @@ function removeTag(i) {
 
 const newCollectionName = ref('')
 const newCollectionScope = ref('project')
+/** Nhóm chỉ có sidecar riêng ở hai store: `system` dùng chung file với `project`. */
+const collectionScopeOptions = [
+  { value: 'project', label: 'project' },
+  { value: 'global', label: 'global' },
+]
 
 async function addCollection() {
   const name = newCollectionName.value.trim()
@@ -210,6 +216,10 @@ async function addSelectedToCollection(collection) {
 
 const renameFrom = ref('')
 const renameTo = ref('')
+const renameFromOptions = computed(() => [
+  { value: '', label: t('knowledge.tagAdmin.from') },
+  ...allTags.value.map((tag) => ({ value: tag.tag, label: tag.tag })),
+])
 
 /** `to` rỗng = xoá tag khỏi mọi entry; `to` trùng tag có sẵn = merge hai tag. */
 async function applyRenameTag() {
@@ -381,10 +391,13 @@ onMounted(async () => {
               :disabled="!!collectionsError"
               @keydown.enter.prevent="addCollection"
             />
-            <select v-model="newCollectionScope" class="cfg-input cfg-input-sm" :disabled="!!collectionsError">
-              <option value="project">project</option>
-              <option value="global">global</option>
-            </select>
+            <CSelect
+              v-model="newCollectionScope"
+              :options="collectionScopeOptions"
+              :disabled="!!collectionsError"
+              :aria-label="t('knowledge.collections.scope')"
+              class="cfg-input-sm"
+            />
             <button type="button" class="btn-ghost btn-sm" :disabled="!!collectionsError" @click="addCollection">
               {{ t('knowledge.collections.create') }}
             </button>
@@ -422,10 +435,12 @@ onMounted(async () => {
             >{{ tag.tag }} ({{ tag.count }})</button>
           </div>
           <div class="knowledge-tag-admin">
-            <select v-model="renameFrom" class="cfg-input cfg-input-sm">
-              <option value="">{{ t('knowledge.tagAdmin.from') }}</option>
-              <option v-for="tag in allTags" :key="tag.tag" :value="tag.tag">{{ tag.tag }}</option>
-            </select>
+            <CSelect
+              v-model="renameFrom"
+              :options="renameFromOptions"
+              :aria-label="t('knowledge.tagAdmin.from')"
+              class="cfg-input-sm"
+            />
             <input
               v-model="renameTo"
               class="cfg-input cfg-input-sm"

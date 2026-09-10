@@ -24,6 +24,7 @@ export default {
   collections: {
     title: 'Collections',
     empty: 'No collection yet.',
+    scope: 'Collection scope',
     clear: 'Clear',
     create: 'Add',
     namePlaceholder: 'Collection name…',

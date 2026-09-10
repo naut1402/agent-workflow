@@ -25,6 +25,7 @@ export default {
   collections: {
     title: 'Collection',
     empty: 'Chưa có collection.',
+    scope: 'Phạm vi collection',
     clear: 'Bỏ lọc',
     create: 'Thêm',
     namePlaceholder: 'Tên collection…',
