@@ -1,0 +1,16 @@
+{
+  "updated_at": "2026-09-10T01:19:18.365Z",
+  "frontend": {
+    "lines": 60.68,
+    "statements": 59.13,
+    "functions": 57.82,
+    "branches": 53.86
+  },
+  "backend": {
+    "lines": 83.62
+  },
+  "source_ref": "dev/1.1.4/main",
+  "test_ref": "test/1.1.4/main",
+  "source_sha": "b01aa677a3d19d3c206d532ddd81b179d06498e0",
+  "test_sha": "6de7135017d55e5d73c2007afba0ff2c8c96e78d"
+}

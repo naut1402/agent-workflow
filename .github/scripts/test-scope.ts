@@ -10,9 +10,10 @@
  * `tests/src/server/<x>` và `src/features/<x>` chỉ đúng một phần, và đồ thị thì
  * luôn đúng.
  *
- * Runner nào chạy file nào: đọc thẳng path list trong script `test` của
- * package.json (bun test), phần còn lại dưới `tests/src/**` là vitest — giữ một
- * nguồn sự thật, thêm/bớt path ở package.json là script này theo ngay.
+ * Runner nào chạy file nào: đọc `tests/runners.json` (xem `lib/runners.ts`) —
+ * path list của `bun test`, phần còn lại dưới `tests/src/**` là vitest. Một
+ * nguồn sự thật, và nó sống ở **dòng test** nên thêm/bớt thư mục test không
+ * phải sửa file nào ở dòng source.
  *
  *   bun run test:scope                  # thay đổi chưa commit (staged + unstaged + untracked)
  *   bun run test:scope --base origin/dev/1.1.1/main   # + các commit so với base
@@ -23,11 +24,12 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { RUNNERS_FILE, readRunners } from './lib/runners.js'
 
 const ROOT = path.resolve(import.meta.dir, '..', '..')
 
 /** Đổi cả bộ máy build/test → phạm vi không còn tính được, phải chạy full. */
-const GLOBAL_FILES = [
+export const GLOBAL_FILES = [
   'package.json',
   'bun.lock',
   'vitest.config.ts',
@@ -35,6 +37,8 @@ const GLOBAL_FILES = [
   'tsconfig.json',
   'playwright.config.ts',
   'eslint.config.js',
+  // Đổi phân runner ⇒ mọi suite có thể đổi chủ, không suy được phạm vi hẹp.
+  RUNNERS_FILE,
 ]
 
 const SOURCE_DIRS = ['src', 'mcp', 'tests']
@@ -174,16 +178,12 @@ export function reaches(start: string, graph: Map<string, string[]>, targets: Se
 }
 
 /**
- * Path list mà `bun test` sở hữu — lấy từ chính script `test` của package.json để
- * không phải chép lại danh sách ở hai nơi.
+ * Path list mà `bun test` sở hữu — lấy từ `tests/runners.json`, cùng nguồn với
+ * `run-bun-tests.ts`. Thiếu file ⇒ cây test chưa ghép, và đó là lỗi phải nói ra
+ * chứ không phải "không có test nào".
  */
 function bunOwnedPrefixes(): string[] {
-  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
-  const script: string = pkg.scripts?.test ?? ''
-  return script
-    .split(/\s+/)
-    .filter((tok) => tok.startsWith('tests/'))
-    .map((tok) => tok.replace(/\/$/, ''))
+  return readRunners(ROOT).bunTest
 }
 
 export function isUnder(file: string, prefixes: string[]): boolean {
@@ -212,7 +212,35 @@ export function areaOf(sourceFile: string): string | null {
   return seg.slice(1, 3).join('/')
 }
 
-/** Bảng tra suite — dán vào test-convention.md, sinh lại khi thêm thư mục test mới. */
+/**
+ * Phần mở đầu của `tests/CATALOG.md`. Nằm ở đây chứ không nằm trong file: lệnh
+ * sinh lại được tài liệu hoá là `--catalog > tests/CATALOG.md`, nên header nào
+ * chỉ sống trong file sẽ bị chính lệnh đó xoá ở lần chạy thứ hai. Cùng khuôn với
+ * `HISTORY_HEADER` của `coverage-gate.ts`.
+ */
+const CATALOG_HEADER = [
+  '# Danh mục suite test',
+  '',
+  'Bảng **sinh tự động** — đừng sửa tay:',
+  '',
+  '```bash',
+  'bun run test:scope --catalog > tests/CATALOG.md',
+  '```',
+  '',
+  'Sinh **sau khi đã overlay** cây test: `--catalog` cần đồng thời `package.json` /',
+  '`vitest.config.ts` của dòng source và cây `tests/` của dòng test.',
+  '',
+  '- **Runner** — theo `tests/runners.json` (khoá `bunTest`); phần còn lại là vitest.',
+  '- **Vùng source phủ** — lấy từ import **trực tiếp** của test trong suite: nó nói',
+  '  suite đó *của* module nào, không phải toàn bộ closure.',
+  '- **Suite không có mặt trong bảng** = vùng đó chưa ai test. `bun run test:scope`',
+  '  chọn ra 0 file **không** phải "đã xanh".',
+  '',
+  'Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3–§4.',
+  '',
+]
+
+/** Bảng tra suite — ghi vào `tests/CATALOG.md`, sinh lại khi thêm thư mục test mới. */
 function printCatalog(testFiles: string[], graph: Map<string, string[]>, bunPrefixes: string[]): void {
   const suites = new Map<string, string[]>()
   for (const t of testFiles) {
@@ -220,6 +248,7 @@ function printCatalog(testFiles: string[], graph: Map<string, string[]>, bunPref
     suites.set(s, [...(suites.get(s) ?? []), t])
   }
 
+  for (const line of CATALOG_HEADER) console.log(line)
   console.log('| Suite | Runner | Vùng source phủ | Số file | Lệnh chạy |')
   console.log('|---|---|---|---|---|')
   for (const suite of [...suites.keys()].sort()) {
@@ -345,4 +374,13 @@ function main(): number {
 }
 
 // Chạy như CLI thì thoát theo mã lỗi; import từ test thì chỉ lấy hàm, không chạy gì.
-if (import.meta.main) process.exit(main())
+// Lỗi đọc phân runner (chưa overlay cây test) phải ra thông điệp đọc được và
+// **mã lỗi khác 0** — im lặng trả 0 ở đây là đúng cái bẫy "0 test = đã xanh".
+if (import.meta.main) {
+  try {
+    process.exit(main())
+  } catch (e) {
+    console.error(`test-scope: ${e instanceof Error ? e.message : String(e)}`)
+    process.exit(1)
+  }
+}

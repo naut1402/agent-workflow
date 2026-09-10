@@ -59,7 +59,10 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html', 'lcov'],
+      // `json-summary` sinh `coverage-summary.json` — đây là file mà cổng
+      // coverage (`.github/scripts/coverage-gate.ts`) đọc, và cũng là tầng nhẹ
+      // duy nhất được commit vào dòng test. `html`/`lcov` chỉ dùng cho người.
+      reporter: ['text', 'html', 'lcov', 'json-summary'],
       reportsDirectory: './coverage/frontend',
       include: ['src/**/*.{ts,vue}'],
       exclude: [
@@ -73,9 +76,11 @@ export default defineConfig({
         'src/runner-cli.mjs',
         'src/features/**/business/**',
       ],
-      // Thresholds start at 0 (no tests yet on setup branch) and are raised
-      // per-module as each module's tests land. Target: 60% global, then tighten.
-      thresholds: { lines: 0, functions: 0, branches: 0, statements: 0 },
+      // Sàn cứng, chặn **ngay trong lượt chạy**. Lấy baseline đo được rồi làm
+      // tròn xuống ~1 điểm % để không đỏ vì dao động khi source thêm/bớt file.
+      // Cổng thứ hai (`.github/scripts/coverage-gate.ts`) mới là chỗ chặn xu
+      // hướng tụt dần với dung sai chặt hơn — xem docs/agent-rules/testing.md §6.
+      thresholds: { lines: 59, functions: 56, branches: 52, statements: 58 },
     },
   },
 })

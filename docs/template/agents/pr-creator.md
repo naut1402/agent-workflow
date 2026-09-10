@@ -40,6 +40,14 @@ Theo convention git/PR (project rule ưu tiên, `create-pr` fallback):
 
 `short-description`: 3–5 từ tiếng Anh, kebab-case, mô tả thay đổi chính.
 
+**Branch hiện tại thuộc dòng test** (tên khớp `test/x.y.z/<taskID>_<slug>`) → đây là PR test, không phải PR code:
+
+- Base PR là `test/x.y.z/main` (không phải `main`, không phải dòng `dev/**`)
+- Dùng template PR test của project nếu có (vd `?template=test.md`), không dùng template PR code
+- `type` của commit/PR title là `test`
+- Body phải nêu **cặp ref** (source ref + SHA đã overlay) và link sang PR code tương ứng — liên kết hai chiều giữa hai dòng
+- Không mô tả thay đổi source: PR này chỉ chứa `tests/` + `test-e2e/`
+
 ### Bước 3: Amend commit message
 
 Theo format trong `create-pr`. Amend commit implement thành message chuẩn:

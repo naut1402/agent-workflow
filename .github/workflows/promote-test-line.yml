@@ -1,0 +1,158 @@
+# Thăng dòng test của version vừa release lên `test/main`.
+#
+# Bất biến của mô hình: **`test/main` luôn khớp `main`** — overlay `test/main`
+# lên `main` phải xanh. Muốn giữ được bất biến đó thì `test/main` chỉ được nhận
+# test của version **đã** release, và phải nhận ngay khi release xong (khoảng đỏ
+# tính bằng phút, không phải bằng ngày).
+#
+# Trigger là push vào `main` — tức chính lúc PR phát hành được merge.
+#
+# Token: dùng `AUTO_MERGE_TOKEN` (PAT) chứ không `github.token`. GitHub cố ý
+# không cho push bằng `GITHUB_TOKEN` trigger workflow tiếp theo, mà lần push vào
+# `test/main` ở đây phải trigger được `sync-test-line.yml`.
+
+name: Promote test line
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version cần thăng (bỏ trống = lấy từ package.json trên main)'
+        required: false
+        type: string
+      # Chỉ để DRY-RUN trên cặp branch nháp (git-pr.md §4.3). Không khai thì đích
+      # là `test/main` — cây neo thật. Có tham số này thì dry-run bước promote
+      # không còn ghi vào cây neo, tức V2 chạy được mà không phải dọn sau.
+      target:
+        description: 'Branch đích (bỏ trống = test/main). CHỈ dùng cho dry-run, vd test/0.0.0/trunk'
+        required: false
+        type: string
+
+concurrency:
+  group: promote-test-line
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve test line to promote
+        id: line
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          VERSION="${INPUT_VERSION:-$(node -p "require('./package.json').version")}"
+          TEST_LINE="test/${VERSION}/main"
+          TARGET="${INPUT_TARGET:-test/main}"
+
+          # 🚫 Đích phải nằm trong dòng test và KHÔNG được là chính nguồn: khai sai
+          # ở đây là ghi cây lạ vào một branch bất kỳ bằng quyền của PAT.
+          case "$TARGET" in
+            test/*) ;;
+            *) echo "::error::target \"$TARGET\" không thuộc dòng test (phải khớp test/*)."; exit 1 ;;
+          esac
+          if [[ "$TARGET" == "$TEST_LINE" ]]; then
+            echo "::error::target trùng nguồn ($TEST_LINE) — không tự merge vào chính nó."
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "test_line=$TEST_LINE" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "Thăng: ${TEST_LINE} → ${TARGET}"
+          git fetch --prune origin '+refs/heads/test/*:refs/remotes/origin/test/*'
+          if git rev-parse --verify "origin/${TEST_LINE}" >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Version bị skip (main nhảy 1.1.3 → 1.1.5) hoặc hotfix bỏ cổng: ghi rõ
+      # rồi thoát xanh. `release-test-gate.yml` đã chặn từ trước, nên trạng thái
+      # này là ngoại lệ có chủ ý, không phải lỗi của bước thăng.
+      - name: No test line — skip
+        if: steps.line.outputs.found != 'true'
+        run: |
+          {
+            echo "## Promote test line — bỏ qua"
+            echo ""
+            echo "Không tìm thấy \`${{ steps.line.outputs.test_line }}\` trên origin."
+            echo "Version \`${{ steps.line.outputs.version }}\` chưa có dòng test, hoặc đã được thăng trước đó."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Merge version test line into target
+        if: steps.line.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+          TEST_LINE: ${{ steps.line.outputs.test_line }}
+          TARGET: ${{ steps.line.outputs.target }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/${TARGET}:refs/remotes/origin/${TARGET}" || true
+
+          if git rev-parse --verify "origin/${TARGET}" >/dev/null 2>&1; then
+            git checkout -B "$TARGET" "origin/${TARGET}"
+          else
+            echo "::error::Chưa có branch ${TARGET} — dựng dòng test gốc trước (docs/agent-rules/git-pr.md §4.3)."
+            exit 1
+          fi
+
+          if git merge-base --is-ancestor "origin/${TEST_LINE}" HEAD; then
+            echo "${TARGET} đã chứa ${TEST_LINE} — bỏ qua."
+            echo "\`${TARGET}\` đã chứa \`${TEST_LINE}\`." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if git merge --no-ff "origin/${TEST_LINE}" -m "chore: promote ${TEST_LINE} into ${TARGET}"; then
+            git push origin "HEAD:${TARGET}"
+            echo "Đã thăng \`${TEST_LINE}\` → \`${TARGET}\`." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Conflict: KHÔNG tự resolve. Mở PR để người xử lý — mất test âm thầm
+          # còn tệ hơn một PR phải resolve tay.
+          git merge --abort || true
+          EXISTING="$(gh pr list --repo "${{ github.repository }}" \
+            --base "$TARGET" --head "$TEST_LINE" --state open \
+            --json number --jq '.[0].number // empty')"
+          if [[ -n "$EXISTING" ]]; then
+            gh pr edit "$EXISTING" --repo "${{ github.repository }}" --add-label auto-merge-conflict || true
+            echo "Conflict — reuse PR #${EXISTING}." >> "$GITHUB_STEP_SUMMARY"
+          else
+            BODY="$(printf '%s\n' \
+              '## Promote conflict' \
+              '' \
+              "Thăng dòng test của version đã release lên \`test/main\` bị **conflict**." \
+              '' \
+              'Resolve rồi merge để giữ bất biến — overlay `test/main` lên `main` phải xanh.' \
+              '' \
+              'Workflow: `promote-test-line.yml`')"
+            gh pr create --repo "${{ github.repository }}" \
+              --base "$TARGET" --head "$TEST_LINE" \
+              --title "chore: promote ${TEST_LINE} into ${TARGET}" \
+              --label auto-merge-conflict \
+              --body "$BODY" \
+              || { echo "::error::Conflict và không tạo được PR."; exit 1; }
+            echo "Conflict — đã mở PR." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 1

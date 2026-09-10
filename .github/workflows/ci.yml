@@ -1,3 +1,19 @@
+# CI của **dòng source** (`main`, `dev/**`, `refactor/**`, mọi PR).
+#
+# Tách hai job theo ngữ cảnh, để cùng một file phục vụ được cả trước và sau khi
+# `tests/` bị cắt khỏi dòng source:
+#
+#   code — typecheck · lint · build. Không cần cây test, luôn chạy.
+#   full — suite test. Chỉ chạy khi cây test **có mặt** trong checkout.
+#
+# Vì sao dò cây test thay vì `--pass-with-no-tests`: `bun test <thư-mục-không-
+# tồn-tại>` và `vitest run` không tìm thấy test đều exit 1. Nới thành "rỗng là
+# xanh" sẽ làm mất luôn tác dụng của cổng ở dòng test, nơi rỗng **phải** là đỏ.
+#
+# Sau khi cắt: job `full` skip với trạng thái nhìn thấy được trên PR, và việc
+# chạy test chuyển hẳn sang `test-overlay.yml` (PR dòng test) +
+# `release-test-gate.yml` (PR phát hành).
+
 name: CI
 
 on:
@@ -9,8 +25,88 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  code:
+    name: Typecheck · Lint · Build
+    runs-on: ubuntu-latest
+    outputs:
+      has_tests: ${{ steps.probe.outputs.has_tests }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Báo cáo, không gate: ngưỡng cứng báo oan với file nhỏ và file mở đầu bằng
+      # docblock dài. Người duyệt tự đọc số. Rule: coding-guideline.md §7.
+      - name: Comment ratio of changed files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Comment ratio — file đổi trong PR"
+            echo ""
+            echo "| File | Comment | Dòng code | Tỉ lệ |"
+            echo "|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          git diff --name-only --diff-filter=d "$BASE_SHA" "$HEAD_SHA" \
+            | grep -E '\.(ts|vue|sh|yml)$' \
+            | while read -r f; do
+                [[ -f "$f" ]] || continue
+                tot="$(grep -cve '^[[:space:]]*$' "$f" || true)"
+                [[ "${tot:-0}" -lt 20 ]] && continue
+                cm="$(grep -cE '^[[:space:]]*(#|//|\*|/\*)' "$f" || true)"
+                echo "| \`$f\` | $cm | $tot | $((cm * 100 / tot))% |" >> "$GITHUB_STEP_SUMMARY"
+              done
+
+          { echo ""; echo "Nền repo ~10–20%. Cao hơn nhiều thì soát lại theo \`coding-guideline.md\` §7."; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Probe test tree in checkout
+        id: probe
+        run: |
+          set -euo pipefail
+          if [[ -d tests && -f tests/runners.json ]]; then
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Suite test: không chạy ở đây"
+              echo ""
+              echo "Ref này không có cây test — test sống ở dòng \`test/**\`."
+              echo "Suite được chạy bởi \`test-overlay.yml\` (PR dòng test) và"
+              echo "\`release-test-gate.yml\` (PR phát hành \`dev/x.y.z/main\` → \`main\`)."
+              echo ""
+              echo "⚠️ Đây **không** phải \"đã test và xanh\"."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Typecheck (vue-tsc)
+        run: bun run typecheck
+
+      - name: Lint (ESLint)
+        run: bun run lint
+
+      - name: Build
+        run: bun run build
+
+  full:
+    name: Test suite (test tree present)
+    needs: code
+    if: needs.code.outputs.has_tests == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -23,27 +119,26 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Typecheck (vue-tsc)
-        run: bun run typecheck
-
-      - name: Lint (ESLint)
-        run: bun run lint
-
-      - name: Unit + integration tests (backend, bun test)
-        run: bun run test
+      - name: Unit + integration tests (backend, bun test) + coverage
+        run: bun run test -- --coverage --coverage-reporter=lcov --coverage-dir=coverage/backend
 
       - name: Unit tests (frontend, vitest) + coverage
         run: bun run test:fe
 
-      - name: Build
-        run: bun run build
-
+      # 🚫 Cố ý KHÔNG có bước `Build` ở job này: job `code` đã build mọi PR, và
+      # `playwright.config.ts` tự chạy `bun run build` trong `webServer.command`.
+      # Thêm bước build ở đây là lần build thứ ba cho cùng một PR — đi ngược mục
+      # tiêu "giảm chi phí mỗi PR" của chính việc tách dòng test.
       - name: Install Playwright browser
         run: bunx playwright install --with-deps chromium
 
       - name: E2E tests (playwright)
         run: bun run test:e2e
 
+      # 🚫 Cố ý KHÔNG gác cổng coverage ở đây. Cổng chỉ đặt ở ba chỗ: PR dòng
+      # test, push dòng test, và PR phát hành (`release-test-gate.yml`). Gác cả
+      # ở PR feature sẽ chặn mọi PR thêm source trước khi test kịp viết — đúng
+      # cái vòng phụ thuộc mà việc tách dòng test đang muốn phá.
       - name: Upload coverage & reports
         if: always()
         uses: actions/upload-artifact@v6
@@ -53,4 +148,6 @@ jobs:
             coverage/
             playwright-report/
           if-no-files-found: ignore
-          retention-days: 7
+          # Bằng chứng phải còn sống khi review PR phát hành của cả dòng version,
+          # không chỉ trong tuần mở PR feature.
+          retention-days: 90

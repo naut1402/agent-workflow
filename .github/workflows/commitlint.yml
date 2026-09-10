@@ -1,4 +1,5 @@
-# Commitlint trên nhánh phát hành `dev/x.y.z/main` (và PR target vào đó).
+# Commitlint trên nhánh phát hành `dev/x.y.z/main` và trên dòng test
+# `test/**/main` (và PR target vào đó).
 #
 # Kiểm tra:
 # - PR title (quan trọng khi squash-merge — subject commit cuối = title)
@@ -12,6 +13,7 @@ on:
   pull_request:
     branches:
       - 'dev/**/main'
+      - 'test/**/main'
 
 concurrency:
   group: commitlint-${{ github.ref }}
@@ -21,6 +23,10 @@ jobs:
   commitlint:
     runs-on: ubuntu-latest
     steps:
+      # Dòng test mang cây đầy của dòng source nên có `package.json` +
+      # `commitlint.config.js` riêng — 🚫 không đảo ref sang `main` nữa.
+      # ⚠️ Đảo ref là bẫy im lặng: PR nào sửa `commitlint.config.js` cũng được lint
+      # bằng config CŨ và xanh, luật mới chỉ có hiệu lực sau khi merge lên `main`.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
@@ -32,6 +38,7 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
 
       - name: Lint PR title
         env:

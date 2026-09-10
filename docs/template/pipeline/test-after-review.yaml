@@ -1,0 +1,144 @@
+# Profile "viết test sau review" — test code đi vào dòng branch riêng
+# (`test/x.y.z/{taskID}_{slug}`), viết **sau** khi review đã chốt source.
+#
+# Vì sao đây là mặc định của mô hình tách test:
+#   - Test viết trên source đã chốt ⇒ mỗi vòng review sửa source KHÔNG kéo theo
+#     sửa test. Đó chính là chi phí mà việc tách đang muốn bỏ.
+#   - Diff PR code không còn 35–51% số file là test ⇒ review rẻ hơn.
+#
+# "Song song" thì KHÔNG cấu hình được ở đây: orchestrator chạy các step của một
+# task nghiêm ngặt tuần tự (`jobQueue` serial theo task), và `steps[]` là danh
+# sách phẳng, không có khái niệm nhánh. Muốn song song thật thì tách thành **hai
+# task riêng** (task code + task test), mỗi task một worktree — xem
+# docs/agent-rules/git-worktree.md. Chọn cách nào: xem điều kiện ở
+# docs/agent-rules/testing.md §3.1.
+#
+# Cài đặt: copy file này vào `.dev-team-agent/pipeline-profiles/` của project.
+
+version: 1
+
+defaults:
+  review_retry_max: 2
+  auto_review: false
+  export_json: false
+
+steps:
+  - export_key: investigator
+    id: investigator
+    name: Investigate
+    agent: dev-agent-teams:investigator
+    skills: []
+    rule_category: doc-writing
+    rule_required: true
+    produces:
+      - investigate.md
+    knowledge_inputs: []
+    hitl:
+      mode: manual
+      gate_id: hitl-investigator
+      optional_doc_review: false
+      blocking: false
+
+  - export_key: designer
+    id: designer
+    name: Design
+    agent: dev-agent-teams:designer
+    skills: []
+    rule_category: doc-writing
+    rule_required: true
+    produces:
+      - design.md
+    knowledge_inputs: []
+    hitl:
+      mode: manual
+      gate_id: hitl-designer
+      optional_doc_review: false
+      blocking: false
+
+  - export_key: test_designer
+    id: test-designer
+    name: Test Design
+    agent: dev-agent-teams:test-designer
+    skills: []
+    rule_category: test
+    rule_required: true
+    produces:
+      - test-spec.md
+    knowledge_inputs: []
+    hitl:
+      mode: manual
+      gate_id: hitl-test-designer
+      optional_doc_review: false
+      blocking: false
+
+  # Implement KHÔNG commit test — test đi vào dòng test ở step test-implementer.
+  - export_key: implementer
+    id: implementer
+    name: Implement
+    agent: dev-agent-teams:implementer
+    skills: []
+    rule_category: coding
+    rule_required: true
+    produces: []
+    knowledge_inputs: []
+    hitl:
+      mode: manual
+      gate_id: hitl-implementer
+      optional_doc_review: false
+      blocking: false
+
+  # Review ghi nhận TC nào cần test, KHÔNG đòi test có mặt trong diff.
+  # Vòng retry của gate này quay về `implementer`, nên test-implementer bên dưới
+  # chỉ chạy ở vòng cuối — đúng mục tiêu "không sửa test theo từng vòng review".
+  - export_key: reviewer
+    id: reviewer
+    name: Review
+    agent: dev-agent-teams:reviewer
+    skills: []
+    rule_category: coding
+    rule_required: true
+    produces:
+      - review.md
+    knowledge_inputs: []
+    hitl:
+      mode: manual
+      gate_id: hitl-reviewer
+      optional_doc_review: false
+      blocking: true
+      retry:
+        on: must_fix
+        restart_from: implementer
+        max: 2
+
+  - export_key: test_implementer
+    id: test-implementer
+    name: Test Implement
+    agent: dev-agent-teams:test-implementer
+    skills: []
+    rule_category: test
+    rule_required: true
+    produces:
+      - test-result.md
+    knowledge_inputs: []
+    hitl:
+      mode: none
+
+  - export_key: pr_creator
+    id: pr-creator
+    name: PR
+    agent: dev-agent-teams:pr-creator
+    skills: []
+    rule_category: git-pr
+    rule_required: true
+    produces:
+      - pr-desc.md
+    knowledge_inputs: []
+    hitl:
+      mode: none
+
+doc_reviewer:
+  agent: dev-agent-teams:doc-reviewer
+  skills:
+    - doc-review
+  rule_category: doc-review
+  rule_required: true
