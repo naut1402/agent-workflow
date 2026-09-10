@@ -94,6 +94,30 @@ const AUTO_MODE_HEADER = [
   'Khi chốt draft, JSON trong code block phải là wrapper: { "entityType": "task" | "pipeline" | "agent" | "automation", "draft": { ...draft đúng schema của entityType đó... } }.',
 ].join('\n')
 
+// Đồng bộ thủ công với KNOWN_AUTOMATION_EVENT_TYPES (automations/business/index.ts).
+// Không import: hằng đó nằm cùng barrel với side-effect scheduler, còn giá trị
+// thì đổi rất ít — đánh đổi là hai nơi phải sửa cùng nhau.
+const AUTOMATION_EVENT_TYPES_HINT = [
+  'job.queued',
+  'job.started',
+  'job.finished',
+  'job.failed',
+  'job.cancelled',
+  'job.awaiting_recovery',
+  'job.retry_scheduled',
+  'job.recovered',
+  'task.created',
+  'task.advanced',
+  'hitl.pending',
+  'hitl.resolved',
+  'entity.created',
+  'entity.updated',
+  'entity.deleted',
+  'webhook.received',
+  'webhook.triggered',
+  'usage.recorded',
+].join(' | ')
+
 function schemaHintFor(entityType?: NlChatEntityType | null): string {
   if (!entityType) {
     return [
@@ -114,26 +138,40 @@ function schemaHintFor(entityType?: NlChatEntityType | null): string {
         'entityType = task: JSON phải là subset field của CreateTaskRequest.',
         'Tối thiểu bắt buộc: { "prompt": string, "name": string (≤60 ký tự, mô tả ngắn gọn task, khác với "taskId") }. Field "taskId" là optional — nếu người dùng không chỉ định, hệ thống sẽ tự sinh mã ngẫu nhiên.',
         'Các field khác (source, profileName, pipeline, knowledgeInputs, ...) là optional — chỉ thêm khi người dùng cung cấp, giữ nguyên default của Zod nếu không.',
+        '"profileName" phải là MỘT TÊN CÓ TRONG danh sách [PIPELINE PROFILE] ở khối catalog; muốn dùng pipeline mặc định của project thì BỎ TRỐNG field này. Không có tên nào khớp → hỏi lại người dùng, không tự đặt tên.',
       ].join('\n')
     case 'pipeline':
       return [
         'entityType = pipeline: JSON phải theo shape CreateTaskPipeline: { "version": 1, "steps": [ ... ] }.',
         'Mỗi step BẮT BUỘC có "id" (slug kebab-case, duy nhất trong pipeline) và "name" — Pipeline Editor dùng "id" làm khoá node, thiếu thì profile lưu ra không mở lại được.',
-        'Mỗi step phải dùng field "agent" là một ref NẰM TRONG danh sách catalog agent hợp lệ đã cung cấp ở lượt đầu tiên — không được bịa ref không có trong danh sách.',
+        'Mỗi step phải dùng field "agent" là một ref NẰM TRONG section [AGENT] của khối catalog, chép NGUYÊN VĂN cả tiền tố nguồn — không được bịa ref, không được suy ref từ tên trần.',
         'Các field optional khác của step: skills, produces, knowledge_inputs (mảng), hitl ({ "mode": "none" | ... }).',
+        '"skills" của step chỉ nhận TÊN có trong section [SKILL] của khối catalog (không có tiền tố nguồn).',
       ].join('\n')
     case 'agent':
       return [
         'entityType = agent: JSON phải theo đúng shape AgentDraft hiện có của dashboard (name, description, model, skills, sections, section_order).',
         'Tái dùng đúng schema draft agent đã có, không tự bịa field mới.',
+        '"skills" chỉ nhận TÊN có trong section [SKILL] của khối catalog — không có tiền tố nguồn, không bịa tên.',
       ].join('\n')
     case 'automation':
       return [
-        'entityType = automation: JSON phải là subset field của CreateAutomationRequest cho rule tự động hoá (trigger → action).',
-        'Bắt buộc: { "name": string, "trigger": {...}, "action": {...} }. Optional: "description", "enabled" (mặc định true).',
-        'trigger là MỘT trong: { "kind": "time", "at": "<ISO datetime>" } (chạy một lần) | { "kind": "interval", "everyMs": <số ms, tối thiểu 60000> } (định kỳ) | { "kind": "cron", "cron": "<biểu thức 5 field, vd \'0 9 * * 1-5\'>" } | { "kind": "event", "eventType": "<domain event, vd \'job.failed\', \'hitl.pending\', \'task.created\'>" }.',
-        'action là MỘT trong: { "kind": "runTask", "mode": "create", "prompt": "<prompt cho task mới>" (+ optional "profileName", "runnerId", "projectId") } | { "kind": "runTask", "mode": "existing", "taskId": "<id task>" } (+ optional "runnerId", "projectId").',
-        '"projectId" là id project trong registry — bỏ trống nghĩa là chạy trên project hiện tại. Không tự bịa id: chỉ điền khi người dùng nêu rõ project đích.',
+        'entityType = automation: JSON phải là subset field của CreateAutomationRequest.',
+        'Bắt buộc: { "name": string (≤100), "triggers": [ …≥1, ≤5 ], "actions": [ …≥1, ≤10 ] }. Optional: "description" (≤500), "enabled" (mặc định true).',
+        'Mỗi trigger là MỘT trong:',
+        ' - { "kind": "timer", "startAt": "<ISO datetime>", "repeat": { "mode": "once" } }',
+        ' - { "kind": "timer", "startAt": "<ISO datetime>", "repeat": { "mode": "interval", "everyMs": <số ms, tối thiểu 60000> } }',
+        ' - { "kind": "timer", "startAt": "<ISO datetime>", "repeat": { "mode": "cron", "expr": "<biểu thức 5 field, vd \'0 9 * * 1-5\'>" } }',
+        ` - { "kind": "event", "eventType": "<một trong: ${AUTOMATION_EVENT_TYPES_HINT}>" }`,
+        'Rule chạy khi BẤT KỲ trigger nào khớp (OR). Nhiều action chạy TUẦN TỰ theo thứ tự mảng.',
+        'Mỗi action là MỘT trong:',
+        ' - { "kind": "runTask", "mode": "create", "prompt": "<nội dung request.md của task mới>" } (+ optional "name", "description", "profileName", "runnerId", "projectId")',
+        ' - { "kind": "runTask", "mode": "existing", "taskId": "<id task>" } (+ optional "name", "description", "runnerId", "projectId")',
+        ' - { "kind": "httpRequest", "url": "<https URL>" } (+ optional "method" mặc định GET, "headers", "body")',
+        ' - { "kind": "runCommand", "runnerId": "<id runner>" } (+ optional "params")',
+        '"profileName" của action runTask cũng phải nằm trong section [PIPELINE PROFILE] của khối catalog — bỏ trống nghĩa là dùng pipeline mặc định.',
+        '"projectId" là id project trong registry — bỏ trống nghĩa là project hiện tại. KHÔNG tự bịa id.',
+        '"runnerId" KHÔNG có trong catalog: chỉ điền khi người dùng nêu rõ, còn lại bỏ trống để hệ thống chọn runner mặc định.',
         'Luôn hỏi người dùng muốn chạy task MỚI (cần prompt) hay task CÓ SẴN (cần taskId) khi chưa rõ.',
       ].join('\n')
     default:
@@ -164,6 +202,9 @@ export function buildTurnPrompt(input: BuildTurnPromptInput): string {
       ? `draft đúng schema ${input.entityType}`
       : 'wrapper { "entityType": ..., "draft": ... } đúng schema của entityType bạn đã suy ra'
     parts.push(`(Nhắc lại ngắn gọn output contract: nếu đủ thông tin, dòng đầu tiên phải là ${'`'}===DRAFT_READY===${'`'} theo sau là fenced ${'```'}json chứa ${draftShape}; nếu chưa đủ, chỉ hỏi lại bằng văn bản thuần.)`)
+    // Catalog chỉ được bơm ở lượt 1 (session CLI nhớ lịch sử) — lượt sau chỉ
+    // cần một câu nhắc tĩnh, không dựng lại catalog.
+    parts.push('(Nhắc lại: chỉ dùng ref/tên có trong catalog đã cung cấp ở lượt 1; không khớp hoặc mơ hồ thì hỏi lại, không tự bịa.)')
     parts.push('')
     parts.push(`Người dùng (lượt ${input.turnIndex}): ${input.message}`)
   }
