@@ -9,6 +9,13 @@ import { parseLogLine, type LogEntry, type LogType } from '../../../core/log/sch
 
 type ReadLogsOpts = { type?: LogType; project?: string | null; limit?: number }
 
+const DEFAULT_LIMIT = 200
+
+/** `null` = mọi project — caller truyền `undefined` hay `null` đều nghĩa là không lọc. */
+function projectFilterOf(opts: ReadLogsOpts): string | null {
+  return opts.project ?? null
+}
+
 /**
  * SQLite read path — same filters, sort and limit as the file path. `limit` applies
  * in SQL before parsing, so unparseable payloads shorten the result below `limit`.
@@ -16,18 +23,17 @@ type ReadLogsOpts = { type?: LogType; project?: string | null; limit?: number }
 async function readLogsFromSqlite(types: LogType[], opts: ReadLogsOpts): Promise<LogEntry[]> {
   const enabledTypes = types.filter((t) => isLogTypeEnabled(t))
   if (!enabledTypes.length) return []
+  const project = projectFilterOf(opts)
   try {
     const conditions = [inArray(logEntries.type, enabledTypes)]
-    if (opts.project !== undefined && opts.project !== null) {
-      conditions.push(eq(logEntries.projectId, opts.project))
-    }
+    if (project !== null) conditions.push(eq(logEntries.projectId, project))
     const db = await getDb()
     const rows = db
       .select()
       .from(logEntries)
       .where(and(...conditions))
       .orderBy(desc(logEntries.ts))
-      .limit(opts.limit ?? 200)
+      .limit(opts.limit ?? DEFAULT_LIMIT)
       .all()
     const out: LogEntry[] = []
     for (const row of rows) {
@@ -40,15 +46,9 @@ async function readLogsFromSqlite(types: LogType[], opts: ReadLogsOpts): Promise
   }
 }
 
-/**
- * Read log entries newest-first (feature UI). Write path sống ở `src/core/log`.
- * Missing file → []. Malformed lines are skipped. `limit` defaults to 200.
- * Disabled types (settings) → skipped / empty.
- * Read backend follows the active log driver (`logging.driver` — file or sqlite).
- */
-export async function readLogs(opts: ReadLogsOpts = {}): Promise<LogEntry[]> {
-  const types: LogType[] = opts.type ? [opts.type] : ['request', 'audit', 'usage']
-  if (activeLogDriverKind() === 'sqlite') return readLogsFromSqlite(types, opts)
+/** JSONL read path — mỗi type một file, parse phòng thủ, sort và cắt `limit` trong bộ nhớ. */
+async function readLogsFromFile(types: LogType[], opts: ReadLogsOpts): Promise<LogEntry[]> {
+  const project = projectFilterOf(opts)
   const out: LogEntry[] = []
   for (const t of types) {
     if (!isLogTypeEnabled(t)) continue
@@ -61,12 +61,25 @@ export async function readLogs(opts: ReadLogsOpts = {}): Promise<LogEntry[]> {
     for (const line of raw.split('\n')) {
       const entry = parseLogLine(line)
       if (!entry) continue
-      if (opts.project !== undefined && opts.project !== null && entry.projectId !== opts.project) continue
+      if (project !== null && entry.projectId !== project) continue
       out.push(entry)
     }
   }
   out.sort((a, b) => b.ts - a.ts)
-  return out.slice(0, opts.limit ?? 200)
+  return out.slice(0, opts.limit ?? DEFAULT_LIMIT)
+}
+
+/**
+ * Read log entries newest-first (feature UI). Write path sống ở `src/core/log`.
+ * Missing file → []. Malformed lines are skipped. `limit` defaults to 200.
+ * Disabled types (settings) → skipped / empty.
+ * Read backend follows the active log driver (`logging.driver` — file or sqlite).
+ */
+export async function readLogs(opts: ReadLogsOpts = {}): Promise<LogEntry[]> {
+  const types: LogType[] = opts.type ? [opts.type] : ['request', 'audit', 'usage']
+  return activeLogDriverKind() === 'sqlite'
+    ? readLogsFromSqlite(types, opts)
+    : readLogsFromFile(types, opts)
 }
 
 // Re-export write helpers so existing `logs/business` imports keep working.
