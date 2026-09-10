@@ -5,6 +5,7 @@ export default {
   close: 'Đóng',
   groups: {
     general: 'Chung',
+    modes: 'Chế độ',
     projects: 'Projects',
     notifications: 'Thông báo',
   },
@@ -46,6 +47,17 @@ export default {
     desc: 'Tự động thu gọn thanh bên khi click ra ngoài vùng sidebar.',
     collapseAppOnOutsideClick: 'Tự thu gọn sidebar chính khi click ra ngoài',
     collapseMonitorSubOnOutsideClick: 'Tự thu gọn sub-sidebar Monitor khi click ra ngoài',
+  },
+  modes: {
+    title: 'Chế độ hiển thị',
+    desc: 'Bật/tắt từng mode trên sidebar. Mode đã tắt bị ẩn khỏi sidebar và không mở được từ nơi khác.',
+    alwaysOnHint: 'Mode mặc định của dashboard — không tắt được.',
+    maturity: {
+      beta: 'Beta',
+      experimental: 'Thử nghiệm',
+    },
+    saved: 'Đã lưu.',
+    loadError: 'Không tải được cấu hình mode.',
   },
   logging: {
     title: 'Logs',

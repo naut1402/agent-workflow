@@ -23,7 +23,10 @@ import {
   type NotificationUiPlacement,
   type ThemePreference,
 } from '../../../core/configs/appSettings'
-import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig, fetchLoggingConfig, saveLoggingConfig, fetchRecoveryConfig, saveRecoveryConfig, fetchScanPatternsConfig, saveScanPatternsConfig } from '../scripts/SettingsDialogApi'
+import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig, fetchLoggingConfig, saveLoggingConfig, fetchModesConfig, saveModesConfig, fetchRecoveryConfig, saveRecoveryConfig, fetchScanPatternsConfig, saveScanPatternsConfig } from '../scripts/SettingsDialogApi'
+import { isEnabledByDefault } from '../../../core/shell/modeAccess'
+import type { ModeEntry } from '../../../core/shell/modeRegistry'
+import { parseModesConfig, resolveModeEnabled } from '../schemas/modes'
 import { parseGithubRepoRef } from '../schemas/githubTokens'
 import {
   SCAN_PATTERN_KINDS,
@@ -34,6 +37,8 @@ import {
 import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
 import CSelect from '../../../core/ui/CSelect.vue'
 
+/** Catalog do App.vue truyền xuống — dialog không tự resolve ModeRegistry. */
+const props = defineProps<{ modeCatalog?: ModeEntry[] }>()
 const emit = defineEmits<{ close: [] }>()
 
 const { t } = useI18nHelpers()
@@ -43,12 +48,13 @@ const { locale, setLocale } = useLocale()
 /** Optional: App.vue provides this so scan can refresh the project list. */
 const reloadProjects = inject(reloadProjectsKey, undefined)
 
-type SettingsGroupId = 'general' | 'projects' | 'notifications'
+type SettingsGroupId = 'general' | 'modes' | 'projects' | 'notifications'
 
 const selectedGroup = ref<SettingsGroupId>('general')
 
 const GROUPS: { id: SettingsGroupId; labelKey: string }[] = [
   { id: 'general', labelKey: 'settings.groups.general' },
+  { id: 'modes', labelKey: 'settings.groups.modes' },
   { id: 'projects', labelKey: 'settings.groups.projects' },
   { id: 'notifications', labelKey: 'settings.groups.notifications' },
 ]
@@ -170,6 +176,58 @@ function onNotificationUiPlacementUpdate(value: string) {
   if (value === 'sidebar' || value === 'floating' || value === 'both') {
     update({ notificationUiPlacement: value as NotificationUiPlacement })
   }
+}
+
+// ── Modes (server-backed) ────────────────────────────────────────────────────
+
+const modeCatalog = computed(() => props.modeCatalog ?? [])
+const modesEnabled = ref<Record<string, boolean>>({})
+const modesBusy = ref(false)
+const modesErr = ref('')
+
+function syncModesFromConfig(raw: unknown) {
+  const cfg = parseModesConfig(raw)
+  const next: Record<string, boolean> = {}
+  for (const m of modeCatalog.value) {
+    next[m.key] = m.alwaysOn === true || resolveModeEnabled(cfg, m.key, isEnabledByDefault(m))
+  }
+  modesEnabled.value = next
+}
+
+async function loadModes() {
+  if (!modeCatalog.value.length) return
+  modesErr.value = ''
+  try {
+    const data = await fetchModesConfig()
+    syncModesFromConfig(data.config)
+  } catch {
+    modesErr.value = t('settings.modes.loadError')
+  }
+}
+
+async function persistModes() {
+  modesBusy.value = true
+  modesErr.value = ''
+  try {
+    const data = await saveModesConfig({ enabled: { ...modesEnabled.value } })
+    syncModesFromConfig(data.config)
+    // Không có store dùng chung giữa dialog và shell — phát tán như logging-changed.
+    window.dispatchEvent(
+      new CustomEvent('dev-dashboard:modes-changed', {
+        detail: { enabled: { ...modesEnabled.value } },
+      }),
+    )
+  } catch (e) {
+    modesErr.value = String((e as Error).message || e)
+  } finally {
+    modesBusy.value = false
+  }
+}
+
+function toggleMode(m: ModeEntry) {
+  if (m.alwaysOn) return
+  modesEnabled.value = { ...modesEnabled.value, [m.key]: !modesEnabled.value[m.key] }
+  void persistModes()
 }
 
 // ── Logging (server-backed) ──────────────────────────────────────────────────
@@ -596,6 +654,7 @@ onMounted(() => {
   void loadAutoscan()
   void loadGithubTokens()
   void loadLogging()
+  void loadModes()
   void loadRecovery()
   void loadScanPatterns()
   window.addEventListener('keydown', onKeydown)
@@ -926,6 +985,33 @@ onUnmounted(() => {
                 </template>
                 <p v-if="recoveryMsg" class="settings-autoscan-msg">{{ recoveryMsg }}</p>
                 <p v-if="recoveryErr" class="settings-autoscan-err">{{ recoveryErr }}</p>
+              </section>
+            </template>
+
+            <template v-else-if="selectedGroup === 'modes'">
+              <section class="settings-section">
+                <h3 class="settings-section-title">{{ t('settings.modes.title') }}</h3>
+                <p class="settings-section-desc">{{ t('settings.modes.desc') }}</p>
+                <p v-if="modesErr" class="settings-autoscan-err">⚠ {{ modesErr }}</p>
+                <label
+                  v-for="m in modeCatalog"
+                  :key="m.key"
+                  class="settings-checkbox settings-mode-row"
+                  :title="m.alwaysOn ? t('settings.modes.alwaysOnHint') : undefined"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="modesEnabled[m.key]"
+                    :disabled="modesBusy || m.alwaysOn"
+                    @change="toggleMode(m)"
+                  />
+                  <span class="settings-mode-label">{{ t(m.labelKey) }}</span>
+                  <span
+                    v-if="m.maturity && m.maturity !== 'stable'"
+                    class="settings-mode-badge"
+                  >{{ t(`settings.modes.maturity.${m.maturity}`) }}</span>
+                  <span v-if="m.descriptionKey" class="settings-mode-desc">{{ t(m.descriptionKey) }}</span>
+                </label>
               </section>
             </template>
 
@@ -1388,6 +1474,31 @@ onUnmounted(() => {
 .settings-checkbox input[type='checkbox'] {
   margin: 0;
   accent-color: var(--accent);
+}
+
+.settings-mode-row {
+  flex-wrap: wrap;
+}
+
+.settings-mode-label {
+  font-weight: 500;
+}
+
+.settings-mode-badge {
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.14);
+}
+
+.settings-mode-desc {
+  flex: 1 1 100%;
+  /* Thụt bằng bề ngang checkbox + gap để mô tả thẳng hàng với label. */
+  padding-left: 22px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .settings-checkbox-row {

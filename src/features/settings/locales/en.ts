@@ -4,6 +4,7 @@ export default {
   close: 'Close',
   groups: {
     general: 'General',
+    modes: 'Modes',
     projects: 'Projects',
     notifications: 'Notifications',
   },
@@ -45,6 +46,17 @@ export default {
     desc: 'Auto-collapse sidebars when clicking outside the sidebar area.',
     collapseAppOnOutsideClick: 'Auto-collapse the main sidebar on outside click',
     collapseMonitorSubOnOutsideClick: 'Auto-collapse the Monitor sub-sidebar on outside click',
+  },
+  modes: {
+    title: 'Visible modes',
+    desc: 'Turn each sidebar mode on or off. A disabled mode is hidden from the sidebar and cannot be opened from anywhere else.',
+    alwaysOnHint: 'Default dashboard mode — cannot be turned off.',
+    maturity: {
+      beta: 'Beta',
+      experimental: 'Experimental',
+    },
+    saved: 'Saved.',
+    loadError: 'Could not load mode config.',
   },
   logging: {
     title: 'Logs',

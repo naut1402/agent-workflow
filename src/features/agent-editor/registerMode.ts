@@ -9,6 +9,9 @@ export function registerMode(registry: ModeRegistry): void {
     order: 3,
     statusKind: 'paused',
     panel: AgentEditor,
+    descriptionKey: 'common.modeDesc.agentEditor',
+    maturity: 'stable',
+    defaultEnabled: true,
     bindings: (ctx: ShellContext) => ({
       projectId: (ctx as Record<string, unknown>).selectedProjectId,
     }),

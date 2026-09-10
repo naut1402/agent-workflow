@@ -11,5 +11,8 @@ export function registerMode(registry: ModeRegistry): void {
     order: 6,
     statusKind: 'paused',
     panel: RunnerConfigPanel,
+    descriptionKey: 'common.modeDesc.runner',
+    maturity: 'stable',
+    defaultEnabled: true,
   })
 }

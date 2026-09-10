@@ -9,6 +9,9 @@ export function registerMode(registry: ModeRegistry): void {
     order: 4,
     statusKind: 'paused',
     panel: QuickActionPanel,
+    descriptionKey: 'common.modeDesc.quickAction',
+    maturity: 'stable',
+    defaultEnabled: true,
     bindings: (ctx: ShellContext) => ({
       projectId: (ctx as Record<string, unknown>).selectedProjectId,
     }),

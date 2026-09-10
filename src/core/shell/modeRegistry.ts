@@ -24,6 +24,14 @@ export interface ModeEntry {
   subSidebar?: { persistKey?: string }
   /** Props + `onXxx` listeners truyền cho `panel`. Optional cho mode 0 props. */
   bindings?: (ctx: ShellContext) => Record<string, unknown>
+  /** i18n key mô tả ngắn, hiện ở group "Chế độ" trong Settings. */
+  descriptionKey?: string
+  /** Độ hoàn thiện — chỉ để hiện badge. Mặc định 'stable'. */
+  maturity?: 'stable' | 'beta' | 'experimental'
+  /** Trạng thái khi settings.json chưa nói gì về mode này. Mặc định true (opt-out). */
+  defaultEnabled?: boolean
+  /** Không tắt được: shell luôn còn lối về. Chỉ `monitor` khai true. */
+  alwaysOn?: boolean
 }
 
 export interface ModeRegistry {

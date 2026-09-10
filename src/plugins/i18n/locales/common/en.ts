@@ -22,6 +22,17 @@ export default {
     logs: 'Logs',
     statistics: 'Statistics',
   },
+  modeDesc: {
+    monitor: 'Watch running tasks and pipelines.',
+    editor: 'Author and edit pipelines per project or per task.',
+    agentEditor: 'Manage custom agents and agent templates.',
+    quickAction: 'Run a single agent outside a pipeline.',
+    knowledge: 'Shared knowledge base for agents.',
+    runner: 'Configure the runner and agent providers.',
+    automations: 'Scheduled and event-driven automations.',
+    logs: 'Audit, request, job and event logs.',
+    statistics: 'Usage, runtime and cost statistics.',
+  },
   status: {
     updated: 'updated {time}',
     paused: {

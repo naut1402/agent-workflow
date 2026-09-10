@@ -9,6 +9,7 @@ import { useAppSettings } from './core/composables/useAppSettings'
 import { navigateToModeKey, reloadProjectsKey } from './core/shell/keys'
 import { containerKey } from './core/shell/containerKey'
 import { modeRegistryToken, type ModeEntry, type ShellContext } from './core/shell/modeRegistry'
+import { modeAccessToken } from './core/shell/modeAccess'
 import { useSubSidebarCollapse } from './core/shell/useSubSidebarCollapse'
 import {
   resolveCollapseAppSidebarOnOutside,
@@ -33,6 +34,7 @@ if (!container) {
   throw new Error('App.vue: container chưa được provide — kiểm tra installPlugins() ở main.ts')
 }
 const modeRegistry = container.resolve(modeRegistryToken)
+const modeAccess = container.resolve(modeAccessToken)
 
 const SIDEBAR_KEY = 'dev-dashboard-sidebar-collapsed'
 const PROJECT_KEY = 'dev-dashboard-selected-project'
@@ -40,7 +42,9 @@ const PROJECT_KEY = 'dev-dashboard-selected-project'
 const { t } = useI18nHelpers()
 
 // ── Mode ─────────────────────────────────────────────────────────────────────
-const mode = ref('monitor')
+const FALLBACK_MODE = 'monitor'
+
+const mode = ref(FALLBACK_MODE)
 const settingsOpen = ref(false)
 const showLogsTab = ref(true)
 
@@ -53,7 +57,8 @@ const { settings } = useAppSettings()
 
 // Sub-sidebar của từng mode (monitor/editor) — state ở shell vì cú click toggle
 // nằm trên `.mode-btn` dưới đây, còn panel chỉ mount khi mode đang active.
-const subSidebar = useSubSidebarCollapse(modeRegistry.listModes())
+const allModes = modeRegistry.listModes()
+const subSidebar = useSubSidebarCollapse(allModes)
 
 /**
  * 3 trạng thái của cú click mode icon: mode chưa chọn → chọn mode; mode đang
@@ -61,7 +66,7 @@ const subSidebar = useSubSidebarCollapse(modeRegistry.listModes())
  */
 function onModeClick(m: ModeEntry) {
   if (mode.value !== m.key) {
-    mode.value = m.key
+    setMode(m.key)
     return
   }
   subSidebar.toggle(m.key)
@@ -99,9 +104,7 @@ onClickOutside(
 // Central mode switch, so any nested wizard/panel (Agent Editor's Build NL
 // gate, ArtifactPanel's QuickAction gate) can send the user to Runner mode
 // without bubbling a custom event through every intermediate component.
-provide(navigateToModeKey, (m: string) => {
-  mode.value = m
-})
+provide(navigateToModeKey, setMode)
 
 // Multi-project state. `selectedProjectId` (null = default project) drives which
 // project's tasks the monitor view polls; persisted to localStorage.
@@ -261,10 +264,15 @@ async function loadLoggingPrefs() {
     const data = await fetchLoggingConfig()
     const cfg = data.config || {}
     showLogsTab.value = cfg.showLogsTab !== false
-    if (!showLogsTab.value && mode.value === 'logs') mode.value = 'monitor'
   } catch {
     showLogsTab.value = true
   }
+}
+
+function onModesChanged(ev: Event) {
+  const detail = (ev as CustomEvent).detail
+  if (detail && typeof detail === 'object') modeAccess.applyOverrides(detail)
+  else void modeAccess.load()
 }
 
 function onLoggingChanged(ev: Event) {
@@ -274,7 +282,6 @@ function onLoggingChanged(ev: Event) {
   } else {
     void loadLoggingPrefs()
   }
-  if (!showLogsTab.value && mode.value === 'logs') mode.value = 'monitor'
 }
 
 watch(sidebarCollapsed, (v) => {
@@ -337,8 +344,34 @@ const shellContext = computed<ShellContext>(() => ({
 }))
 
 const modes = computed(() =>
-  modeRegistry.listModes().filter((m) => !m.visible || m.visible(shellContext.value)),
+  allModes.filter(
+    (m) =>
+      modeAccess.canAccessMode(m.key, { shell: shellContext.value }) &&
+      (!m.visible || m.visible(shellContext.value)),
+  ),
 )
+
+/**
+ * Lối vào mode duy nhất — sidebar và `navigateToMode` đều đi qua đây; repo không
+ * có router nên đây là chỗ tương đương route guard. Kiểm tra `modes` (đã AND
+ * `canAccessMode` với `visible(ctx)`) nên chỉ một điều kiện phải nhớ.
+ */
+function setMode(key: string): void {
+  if (!modes.value.some((m) => m.key === key)) return
+  mode.value = key
+}
+
+/**
+ * Watch chuỗi key, không watch thẳng `modes`: shellContext dựng object mới mỗi
+ * nhịp poll 1500ms nên `modes` đổi identity liên tục dù nội dung không đổi.
+ */
+const reachableModeKeys = computed(() => modes.value.map((m) => m.key).join('|'))
+
+// Ghi thẳng `mode.value` (không che ở template) để `watch(mode)` bên dưới vẫn
+// stop/start polling khi mode đang mở bị tắt.
+watch(reachableModeKeys, () => {
+  if (!modes.value.some((m) => m.key === mode.value)) setMode(FALLBACK_MODE)
+})
 const activeMode = computed(() => modeRegistry.getMode(mode.value))
 /** Shell context the chat window shows in its info popover — null hides the row. */
 const chatShellModeLabel = computed(() => (activeMode.value ? t(activeMode.value.labelKey) : null))
@@ -353,11 +386,13 @@ onMounted(async () => {
   loadSidebarPref()
   await loadProjects()
   void loadLoggingPrefs()
+  void modeAccess.load()
   start()
   startRunningJobs()
   window.addEventListener('dev-dashboard:autoscan-changed', onAutoscanChanged)
   window.addEventListener('dev-dashboard:projects-changed', onProjectsChangedEvent)
   window.addEventListener('dev-dashboard:logging-changed', onLoggingChanged)
+  window.addEventListener('dev-dashboard:modes-changed', onModesChanged)
   void startAutoscanLoop()
 })
 onUnmounted(() => {
@@ -367,6 +402,7 @@ onUnmounted(() => {
   window.removeEventListener('dev-dashboard:autoscan-changed', onAutoscanChanged)
   window.removeEventListener('dev-dashboard:projects-changed', onProjectsChangedEvent)
   window.removeEventListener('dev-dashboard:logging-changed', onLoggingChanged)
+  window.removeEventListener('dev-dashboard:modes-changed', onModesChanged)
 })
 </script>
 
@@ -468,7 +504,7 @@ onUnmounted(() => {
       :shell-task-id="selectedId"
     />
 
-    <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
+    <SettingsDialog v-if="settingsOpen" :mode-catalog="allModes" @close="settingsOpen = false" />
     <CreateTaskDialog
       v-if="createTaskOpen"
       :project-id="selectedProjectId"

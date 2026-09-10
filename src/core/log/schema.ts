@@ -36,6 +36,7 @@ export const AUDIT_ENTITIES = [
   'autoscan',
   'github-tokens',
   'logging',
+  'modes',
   'scan-patterns',
   'security',
   'recovery',
