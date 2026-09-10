@@ -48,6 +48,12 @@ Tuân theo rule coding (project rule ưu tiên, `coding-rules` fallback):
 - Code (và test do implementer viết) phải thoả từng TC trong `test-spec.md`; có thể viết thêm test bổ sung cho chi tiết kỹ thuật nội bộ nhưng không thay thế TC đã định
 - Nếu một TC trong `test-spec.md` mâu thuẫn với cách implement ở `design.md §4` hoặc nằm ngoài `§6 Out of scope`: tạo `qa.md`, dừng — không tự sửa `test-spec.md`, không tự nới case về phía dễ code hơn
 
+**Khi pipeline có bước `test-implementer` sau `reviewer`**: viết test **không** thuộc bước này.
+
+- Không commit file test nào — test đi vào dòng branch riêng ở bước `test-implementer`
+- Vẫn phải bảo đảm code thoả từng TC trong `test-spec.md`, và **suite hiện có** không hồi quy
+- Chạy được suite hiện có thì chạy; cây test không có mặt trên branch source thì ghi nhận trạng thái đó, **không** coi "0 test" là "đã xanh"
+
 Sau khi viết xong, commit toàn bộ thay đổi:
 ```shell
 git add <các file đã sửa>

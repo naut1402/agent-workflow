@@ -52,7 +52,13 @@ Theo rule coding (project rule ưu tiên, `coding-rules` fallback), kiểm tra t
 
 **Test coverage (đối chiếu với `test-spec.md`, không tự soạn mới)**:
 
-Với mỗi TC trong `test-spec.md`:
+⚠️ **Khi pipeline có bước `test-implementer` sau bước này**: test **không** có mặt trong diff, và đó là đúng thiết kế — không đánh `[must]` vì "thiếu test trong diff". Việc của reviewer chuyển thành **ghi nhận TC nào cần test**:
+
+- Với mỗi TC trong `test-spec.md`, ghi `needs-test` kèm bề mặt cần phủ (hàm/route/hành vi công khai) — đây là đầu vào của bước `test-implementer`
+- TC nào diff làm cho **không còn khả thi** (design đổi cách làm) → đánh `[must]` và nêu rõ, vì đó là mâu thuẫn spec chứ không phải thiếu test
+- Code không có bề mặt nào test được (không export, không route, không effect quan sát được) → `[should]`: đó là vấn đề của **code**, không phải của test
+
+Khi pipeline **không** có bước `test-implementer` (test đi cùng diff), áp dụng như dưới. Với mỗi TC trong `test-spec.md`:
 - Tìm test code tương ứng trong diff
   - Không có: đánh `[must]` hoặc `[should]` (theo mức rủi ro của TC)
   - Có nhưng chỉ mock network layer trực tiếp (`fetch`/HTTP client) cho code gọi API 3rd-party:
@@ -76,10 +82,17 @@ Format cho mỗi finding:
   Suggestion: <code gợi ý hoặc cách sửa>
 ```
 
-Ghi covered/gap cho từng TC trong `test-spec.md`:
+Ghi trạng thái từng TC trong `test-spec.md`:
 ```markdown
 ## Test coverage
 - [covered|gap] TC<n>: <mô tả> — <test tương ứng trong diff, hoặc lý do gap>
+```
+
+Khi pipeline có bước `test-implementer` (test viết sau review, ở dòng branch riêng):
+```markdown
+## Test coverage
+- [needs-test] TC<n>: <mô tả> — bề mặt cần phủ: <hàm/route/hành vi công khai>
+- [must] TC<n>: <mô tả> — diff làm TC này không còn khả thi vì …
 ```
 
 Tổng kết cuối file:

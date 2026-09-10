@@ -26,6 +26,12 @@ test-results/
 .vite/
 
 # E2E runtime state (isolated registry home + mutable writes into the fixture)
+# Cây test sống ở dòng `test/**`; `bun run test:overlay` ghép nó vào đúng đây nên
+# không ignore là sớm muộn `git add -A` commit lại cả suite vào dòng source.
+# Dòng test giữ `.gitignore` riêng (`PRESERVE_PATHS`) nên vẫn track được.
+/tests/
+/test-e2e/
+
 test-e2e/.runtime/
 test-e2e/fixtures/project/.dev-team-agent/custom-agents/
 test-e2e/fixtures/project/.dev-team-agent/agent-templates/

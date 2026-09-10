@@ -1,0 +1,67 @@
+# Sync `test/main` → mọi branch `test/x.y.z/main` đang mở.
+#
+# Đối xứng với `sync-from-main.yml` ở dòng source, dùng chung script
+# `.github/scripts/sync-line.sh` (tham số hoá `SRC_REF` / `TARGET_NS`).
+#
+# ⚠️ `EXTRA_FILE=""` — `auto-merge-targets.yml` là danh sách target của dòng
+# source. Script merge `SRC_REF` **vào** target, nên gộp hai danh sách là nhập
+# cây source vào cây orphan của dòng test.
+
+name: Sync test/main into test version mains
+
+on:
+  push:
+    branches: ['test/main']
+    # `reports/` là đầu ra RIÊNG của từng dòng: mỗi dòng tự tích baseline +
+    # history của nó. Sync commit chỉ-đụng-`reports/` từ `test/main` xuống các
+    # dòng version là kéo baseline của dòng này đè lên dòng kia — hai bên đều đổi
+    # độc lập nên sớm muộn conflict, và mỗi conflict mở một PR `auto-merge-conflict`.
+    # Commit đụng cả `reports/` và test thật **vẫn** sync (semantics `paths-ignore`).
+    paths-ignore:
+      - 'reports/**'
+  workflow_dispatch:
+
+concurrency:
+  group: sync-test-line
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout ref đang trigger (`test/main`) — dòng test mang cây đầy nên có
+      # sẵn `sync-line.sh`. 🚫 Không `ref: main`: `main` chỉ có `sync-from-main.sh`
+      # cho tới khi version đổi tên script được release.
+      - name: Checkout triggering ref (sync script)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Ensure conflict label exists
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+        run: |
+          gh label create auto-merge-conflict \
+            --repo "${{ github.repository }}" \
+            --description "Sync gốc dòng → target bị conflict — cần resolve tay" \
+            --color B60205 \
+            || true
+
+      - name: Discover targets and sync
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SRC_REF: test/main
+          TARGET_NS: test
+          EXTRA_FILE: ''
+        run: bash .github/scripts/sync-line.sh

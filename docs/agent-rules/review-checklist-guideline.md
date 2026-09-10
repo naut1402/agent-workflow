@@ -63,15 +63,18 @@ Chi tiết type và nơi emit: [`docs/event-catalog.md`](../event-catalog.md).
 
 ### 3.1 Test & CI
 
-- [ ] **Đảm bảo coverage** — có unit/integration tương ứng vùng đổi; test mirror dưới `tests/`.
-- [ ] **Chọn đúng runner** — domain/fs → **bun test**; FE/component → vitest.
+- [ ] **Xác định bề mặt cần phủ** — mỗi vùng đổi có hàm/route/hành vi công khai test được. Không có bề mặt nào test được là vấn đề của **code**, không phải của test.
+- [ ] **PR dòng source: test KHÔNG nằm trong diff** — test đi ở PR dòng test ([`git-pr.md`](git-pr.md) §4.3). Thấy file `tests/`·`test-e2e/` trong diff PR code → yêu cầu chuyển sang PR dòng test.
+- [ ] **Suite hiện có không hồi quy** — "chọn ra 0 file test" KHÔNG phải "đã xanh" ([`testing.md`](testing.md) §3.1).
+- [ ] **PR dòng test: chọn đúng runner** — domain/fs → **bun test**; FE/component → vitest; khai path mới vào `tests/runners.json` và sinh lại `tests/CATALOG.md`.
+- [ ] **PR dòng test: nêu cặp ref đã overlay** (source ref + SHA) — không có nó thì "test lệch pha với source" không truy được.
 - [ ] **Giữ build xanh** — PR đụng helper FE+BE hoặc `fileHelper` → typecheck/build xanh cả local và CI.
 
 ### 3.2 PR body & tài liệu
 
 - [ ] **Tuân thủ commitlint** — commit/PR title đúng `type(scope): subject`, không trailer công cụ.
 - [ ] **Trình bày đúng nội dung PR** — phần riêng nhóm theo cây thư mục; fix/refactor có Logic trước → sau; phần chung nêu Core và/hoặc feature khác (hoặc *Không*).
-- [ ] **Dọn nợ trước merge `main`** — PR `dev/x.y.z/main` → `main` không còn thư mục `docs/todo/`.
+- [ ] **Dọn nợ trước merge `main`** — PR `dev/x.y.z/main` → `main` không còn thư mục `docs/todo/`, và dòng `test/x.y.z/main` của version tồn tại + xanh ([`pr-todo-debt.md`](pr-todo-debt.md) §2.1).
 - [ ] **Cập nhật quy ước khi đổi rule** — sửa file rule trong `docs/agent-rules/` và `docs/architecture.md` trong cùng thay đổi; mô tả **hiện hành**, không kể lịch sử issue.
 
 ---
