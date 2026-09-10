@@ -238,6 +238,7 @@ describe('ChatComposer — input row layout', () => {
     await row.find('.nl-chat-composer-add > button').trigger('click')
     expect(wrapper.findAll('.nl-chat-composer-menu-item').map((i) => i.text())).toEqual([
       'Đính kèm tập tin',
+      'Chọn knowledge',
       'Phiên chat mới',
     ])
   })

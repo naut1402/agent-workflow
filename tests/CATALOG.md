@@ -38,7 +38,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/automations/components` | vitest | `features/automations/components`, `features/automations/scripts` | 2 | `npx vitest run tests/src/features/automations/components` |
 | `tests/src/features/automations/composables` | vitest | `features/automations/composables`, `features/automations/scripts` | 1 | `npx vitest run tests/src/features/automations/composables` |
 | `tests/src/features/automations/scripts` | vitest | `features/automations/scripts` | 1 | `npx vitest run tests/src/features/automations/scripts` |
-| `tests/src/features/knowledge/business` | bun | `features/knowledge/business` | 3 | `bun test tests/src/features/knowledge/business` |
+| `tests/src/features/knowledge/business` | bun | `features/knowledge/business`, `features/knowledge/schemas` | 3 | `bun test tests/src/features/knowledge/business` |
 | `tests/src/features/knowledge/components` | vitest | `features/knowledge/components` | 1 | `npx vitest run tests/src/features/knowledge/components` |
 | `tests/src/features/logs/business` | bun | `features/logs/business`, `features/runner/business`, `core/log` | 3 | `bun test tests/src/features/logs/business` |
 | `tests/src/features/logs/components` | vitest | `features/logs/components`, `features/settings/scripts` | 1 | `npx vitest run tests/src/features/logs/components` |
@@ -52,7 +52,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/monitor/schemas` | vitest | `features/monitor/schemas` | 1 | `npx vitest run tests/src/features/monitor/schemas` |
 | `tests/src/features/nl-chat/components` | vitest | `features/nl-chat/components`, `features/nl-chat/composables`, `core/composables` | 4 | `npx vitest run tests/src/features/nl-chat/components` |
 | `tests/src/features/nl-chat/composables` | vitest | `features/nl-chat/composables` | 3 | `npx vitest run tests/src/features/nl-chat/composables` |
-| `tests/src/features/nl-chat/lib` | vitest | `features/nl-chat/lib` | 2 | `npx vitest run tests/src/features/nl-chat/lib` |
+| `tests/src/features/nl-chat/lib` | vitest | `features/nl-chat/lib` | 3 | `npx vitest run tests/src/features/nl-chat/lib` |
 | `tests/src/features/notifications/components` | vitest | `features/notifications/components`, `features/notifications/lib` | 3 | `npx vitest run tests/src/features/notifications/components` |
 | `tests/src/features/notifications/composables` | vitest | `features/notifications/lib`, `core/composables`, `features/notifications/composables` | 1 | `npx vitest run tests/src/features/notifications/composables` |
 | `tests/src/features/notifications/lib` | vitest | `features/notifications/lib` | 2 | `npx vitest run tests/src/features/notifications/lib` |
@@ -83,6 +83,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/chat` | bun | `features/runner/business`, `features/nl-chat/business`, `features/monitor/business` | 6 | `bun test tests/src/server/chat` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `api/apiServer.ts`, `core/registry.ts` | 2 | `bun test tests/src/server/github` |
 | `tests/src/server/http` | bun | `api/apiServer.ts`, `core/http`, `features/runner/business` | 25 | `bun test tests/src/server/http` |
+| `tests/src/server/knowledge` | bun | `api/apiServer.ts`, `core/events`, `core/http` | 1 | `bun test tests/src/server/knowledge` |
 | `tests/src/server/lib` | bun | `core/lib` | 1 | `bun test tests/src/server/lib` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
