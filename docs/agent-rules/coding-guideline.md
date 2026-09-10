@@ -83,7 +83,10 @@ Primitive dùng chung trong `src/core/ui/`:
 ## 7. Comment code (KISS)
 
 - **Chỉ comment khi cần giải thích *why*** — constraint ẩn, workaround, invariant khó thấy. Không giải thích *what*: tên biến/hàm tốt đã đủ.
+- **Thử đổi tên trước khi thêm comment.** Comment giải thích một tên xấu là trả lãi mãi; đổi tên là trả gốc một lần. `BEFORE` → `TARGET_SHA` bỏ được cả câu giải thích nó là gì.
+- **Một why = một dòng.** Cần đoạn văn mới nói hết thì đó là dấu hiệu bối cảnh thuộc chỗ khác: PR body, hoặc `docs/`. Trong code để lại đúng câu chốt + link tới mục tài liệu.
+- **Không markup nhấn mạnh trong comment code** — `**bold**`, 🚫, ⚠️, khung `── ─` là ngôn ngữ của tài liệu và PR. Trong code chúng thành nhiễu, và khung rỗng kéo comment dài ra cho "xứng".
 - **Sửa nhỏ lẻ thì giữ nguyên comment cũ** — chỉ sửa khi nó đã outdate/sai so với code hiện tại.
 - **Không thêm comment tường thuật thay đổi vừa làm** — cấm dạng `// sửa theo review`, `// fix CI`, `// đổi X vì lỗi Y`.
-- **Comment mô tả hành vi hiện hành**, không kể lịch sử, không trích số issue / số PR / tên người.
+- **Comment mô tả hành vi hiện hành**, không kể lịch sử, không trích số issue / số PR / tên người, không nhắc định danh nội bộ của quy trình (số đợt, tên khối việc, mã task) — code sống lâu hơn kế hoạch.
 - **Ngôn ngữ theo mật độ code xung quanh** — khối comment tiếng Anh thì viết tiếp tiếng Anh, không trộn nửa Anh nửa Việt.
