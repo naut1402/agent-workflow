@@ -161,21 +161,24 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     }
   }
 
+  /** Tên đã trim, hoặc null khi không phải một `profileName` dùng được. */
+  function trimmedProfileName(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim() : null
+  }
+
   /** Các `profileName` mà draft này thật sự tham chiếu (task: 1; automation: mỗi action runTask). */
   function referencedProfileNames(
     d: Record<string, unknown> | null,
     type: NlChatEntityType | null,
   ): string[] {
-    if (!d) return []
-    if (type === 'task') {
-      return typeof d.profileName === 'string' && d.profileName.trim() ? [d.profileName.trim()] : []
-    }
-    if (type !== 'automation') return []
-    const actions = Array.isArray(d.actions) ? d.actions : []
-    return actions
-      .map((a) => (a && typeof a === 'object' ? (a as { profileName?: unknown }).profileName : undefined))
-      .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
-      .map((n) => n.trim())
+    const actions = Array.isArray(d?.actions) ? (d.actions as unknown[]) : []
+    const raw =
+      type === 'task'
+        ? [d?.profileName]
+        : type === 'automation'
+          ? actions.map((a) => (a as { profileName?: unknown } | null)?.profileName)
+          : []
+    return raw.map(trimmedProfileName).filter((n): n is string => n !== null)
   }
 
   /**
