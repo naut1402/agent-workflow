@@ -112,6 +112,9 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           SRC_REF: ${{ steps.pair.outputs.src }}
           TARGETS_OVERRIDE: ${{ steps.pair.outputs.target }}
+          # Vùng do dòng test sở hữu. `.gitignore` phải có trong đây: dòng source
+          # ignore `/tests/`, dòng test phải track nó.
+          PRESERVE_PATHS: 'tests test-e2e reports .gitignore'
           # 🚫 `auto-merge-targets.yml` là danh sách của dòng source — khai vào
           # đây là nhập thêm cây lạ vào dòng test.
           EXTRA_FILE: ''

@@ -28,6 +28,8 @@ TARGET_NS="${TARGET_NS:-dev}"
 # Danh sách target tường minh (cách nhau bởi space/newline). Khai thì BỎ HẲN
 # bước discover — dùng `${VAR-}` để "khai rỗng" khác "chưa khai".
 TARGETS_OVERRIDE="${TARGETS_OVERRIDE-}"
+# Path do target sở hữu; khai thì sync chuyển sang ghép cây thay vì `git merge`.
+PRESERVE_PATHS="${PRESERVE_PATHS-}"
 # Dùng `${VAR-default}` (không phải `:-`) để phân biệt "chưa khai" với "khai rỗng".
 EXTRA_FILE="${EXTRA_FILE-.github/auto-merge-targets.yml}"
 
@@ -129,6 +131,45 @@ for target in "${TARGETS[@]}"; do
   fi
 
   git checkout -B "$target" "origin/${target}"
+
+  # `git merge` mang theo phép xoá của dòng source: cắt `tests/` bên đó là dòng
+  # test mất sạch test, im lặng, không conflict. Nên dựng cây tường minh thay vì merge.
+  if [[ -n "$PRESERVE_PATHS" ]]; then
+    TARGET_SHA="$(git rev-parse HEAD)"
+    SRC_SHA="$(git rev-parse "origin/${SRC_REF}")"
+
+    git read-tree -u --reset "$SRC_SHA"
+    # -f vì `read-tree` để index lệch HEAD, không có nó `git rm` từ chối.
+    # shellcheck disable=SC2086
+    git rm -rqf --ignore-unmatch -- $PRESERVE_PATHS || true
+
+    # Từng path một: `git checkout <ref> -- a b c` fail nguyên tử khi thiếu một path.
+    for p in $PRESERVE_PATHS; do
+      if git cat-file -e "${TARGET_SHA}:${p}" 2>/dev/null; then
+        git checkout "$TARGET_SHA" -- "$p"
+      fi
+    done
+
+    TREE="$(git write-tree)"
+    if [[ "$TREE" == "$(git rev-parse "${TARGET_SHA}^{tree}")" ]]; then
+      echo "| \`${target}\` | skipped | Cây không đổi sau khi ghép |" >> "$SUMMARY"
+      git reset -q --hard "$TARGET_SHA"
+      echo "::endgroup::"
+      continue
+    fi
+
+    # Hai cha để `is-ancestor` ở trên còn skip được lượt sau.
+    MERGED="$(git commit-tree "$TREE" -p "$TARGET_SHA" -p "$SRC_SHA" -m "chore: sync ${SRC_REF} into ${target}")"
+    if git push origin "${MERGED}:${target}"; then
+      echo "| \`${target}\` | synced | Ghép cây (giữ ${PRESERVE_PATHS}) |" >> "$SUMMARY"
+    else
+      echo "| \`${target}\` | failed | git push thất bại |" >> "$SUMMARY"
+      FAIL=1
+    fi
+    git reset -q --hard "$TARGET_SHA"
+    echo "::endgroup::"
+    continue
+  fi
 
   if git merge --no-ff "origin/${SRC_REF}" -m "chore: sync ${SRC_REF} into ${target}"; then
     if git push origin "HEAD:${target}"; then
