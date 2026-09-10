@@ -19,11 +19,7 @@
 # Chiều ngược lại (test → source) KHÔNG tồn tại: test code chỉ đi từ dòng test
 # lên, qua `promote-test-line.yml`.
 #
-# ⚠️ Push ở đây dùng `github.token` khi không có `AUTO_MERGE_TOKEN`, và GitHub cố
-# ý không cho `GITHUB_TOKEN` trigger workflow tiếp theo. Nghĩa là lượt sync này
-# **không** kích `test-overlay.yml` trên dòng test — đó là điều muốn (tránh vòng
-# lặp CI ở mọi commit source). Lượt overlay của dòng test chạy khi **người** merge
-# PR test vào `test/x.y.z/main`.
+
 
 name: Sync source line into test line
 
@@ -53,11 +49,14 @@ jobs:
       # Checkout ref đang trigger — nó mang sẵn `.github/scripts/`. 🚫 Không
       # `ref: main`: dòng test và các dòng version mở trước khi tooling lên `main`
       # sẽ không tìm thấy script (lỗi `Module not found`, không phải "không có gì để sync").
+      # `github.token` cố ý: GitHub không cho nó kích workflow tiếp theo, nên lượt
+      # sync không sinh thêm một lượt `test-overlay.yml`. Lượt đó sẽ chạy lại đúng
+      # cặp cây mà chiều source vừa chạy — sync không bao giờ đụng `tests/`.
       - name: Checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          token: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+          token: ${{ github.token }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

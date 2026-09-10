@@ -276,9 +276,9 @@ jobs:
 
   report:
     name: Đẩy coverage về dòng test
-    # Chỉ trên push CỦA DÒNG TEST: PR (nhất là từ fork) không có secret và không
-    # được ghi; chiều nghịch (push dòng source) không sinh dữ liệu mới cho dòng test.
-    if: github.event_name == 'push' && needs.resolve.outputs.direction == 'test'
+    # Cả hai chiều push đều ghi neo, nhờ đó `source_sha` luôn khớp head dòng
+    # version. PR bị loại vì fork không có secret để push.
+    if: github.event_name == 'push'
     needs: [resolve, overlay]
     runs-on: ubuntu-latest
     permissions:
