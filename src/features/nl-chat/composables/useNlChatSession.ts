@@ -264,9 +264,13 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         if (resolved === 'pipeline') {
           void loadCatalogIfNeeded()
         }
-        // Chỉ nạp khi draft THẬT SỰ trỏ tới một profile — draft không chỉ định
-        // pipeline thì không có gì để soát, không được fail-closed oan (E8).
-        if (referencedProfileNames(draft.value, resolved).length > 0) {
+        // Nạp theo LOẠI draft, không theo nội dung draft lúc nhận: textarea
+        // preview sửa được, người dùng tự gõ thêm `profileName` sau đó thì
+        // `profileNameError` kẹt ở "đang kiểm tra" → `canConfirm` false → nút
+        // Xác nhận disabled → không còn code path nào nạp danh sách nữa.
+        // E8 (không fail-closed oan) vẫn giữ: `profileNameError` trả null khi
+        // draft không tham chiếu profile nào.
+        if (resolved === 'task' || resolved === 'automation') {
           void loadProfilesIfNeeded()
         }
       } else {
