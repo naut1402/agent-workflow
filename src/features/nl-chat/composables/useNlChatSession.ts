@@ -3,7 +3,7 @@ import { normalizePipelineDraft } from '../lib/pipelineDraft'
 import { startNlChat, sendNlChatMessage, fetchNlChatTurn, cancelNlChat } from '../scripts/ChatWindowApi'
 import { fetchJob } from '../../runner/scripts/runnerApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
-import { savePipelineProfile } from '../../pipeline-editor/scripts/ProfileManagerApi'
+import { fetchPipelineProfiles, savePipelineProfile } from '../../pipeline-editor/scripts/ProfileManagerApi'
 import { createTask } from '../../monitor/scripts/monitorApi'
 import { saveCustomAgent } from '../../agent-editor/scripts/agentEditorApi'
 import { createAutomation } from '../../automations/scripts/automationsApi'
@@ -22,6 +22,9 @@ import { TASK_ID_PATTERN } from '../../monitor/schemas/taskCreate'
 
 export type NlChatEntityType = 'task' | 'pipeline' | 'agent' | 'automation'
 export type NlChatStep = 'chatting' | 'previewDraft' | 'confirming' | 'done' | 'error'
+
+/** Loại draft `confirm()` biết persist — draft ngoài danh sách này quay lại chat. */
+const PERSISTABLE_ENTITY_TYPES: readonly NlChatEntityType[] = ['task', 'pipeline', 'agent', 'automation']
 export type NlChatAgentScope = 'project' | 'global'
 
 export interface NlChatMessage {
@@ -86,6 +89,15 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   const catalogError = ref<string | null>(null)
   const loadingCatalog = ref(false)
 
+  // Cùng lý do với `catalogAgentIds`, cho `profileName` (design Tf2fec630
+  // §3.5): `CreateTaskRequest.profileName` không tồn tại trên đĩa vẫn là body
+  // hợp lệ — `resolvePipelineOverride` chỉ trả `null` và task ÂM THẦM chạy
+  // pipeline mặc định. Không có gate nào ở server, nên guard này là chỗ duy
+  // nhất chặn được một ref bịa trước khi task được tạo.
+  const catalogProfileNames = ref<Set<string> | null>(null)
+  const profileError = ref<string | null>(null)
+  const loadingProfiles = ref(false)
+
   const pollMs = opts.pollMs ?? 1200
   const maxWaitMs = opts.maxWaitMs ?? 5 * 60 * 1000
   const nudgeAfterTurns = opts.nudgeAfterTurns ?? 8
@@ -127,6 +139,63 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     } finally {
       loadingCatalog.value = false
     }
+  }
+
+  async function loadProfilesIfNeeded(): Promise<void> {
+    if (catalogProfileNames.value || loadingProfiles.value) return
+    loadingProfiles.value = true
+    profileError.value = null
+    try {
+      const res = await fetchPipelineProfiles(opts.getProjectId())
+      const raw: unknown = res?.profiles
+      const names: string[] = Array.isArray(raw)
+        ? raw
+            .filter((p: unknown): p is { name: string } => !!p && typeof p === 'object' && typeof (p as { name?: unknown }).name === 'string')
+            .map((p) => p.name)
+        : []
+      catalogProfileNames.value = new Set(names)
+    } catch {
+      profileError.value = 'Không tải được danh sách pipeline profile để kiểm tra — vui lòng thử lại.'
+    } finally {
+      loadingProfiles.value = false
+    }
+  }
+
+  /** Các `profileName` mà draft này thật sự tham chiếu (task: 1; automation: mỗi action runTask). */
+  function referencedProfileNames(
+    d: Record<string, unknown> | null,
+    type: NlChatEntityType | null,
+  ): string[] {
+    if (!d) return []
+    if (type === 'task') {
+      return typeof d.profileName === 'string' && d.profileName.trim() ? [d.profileName.trim()] : []
+    }
+    if (type !== 'automation') return []
+    const actions = Array.isArray(d.actions) ? d.actions : []
+    return actions
+      .map((a) => (a && typeof a === 'object' ? (a as { profileName?: unknown }).profileName : undefined))
+      .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+      .map((n) => n.trim())
+  }
+
+  /**
+   * Lỗi hiển thị cho draft đang xem, hoặc null khi không có gì để soát / mọi
+   * ref đều khớp. So khớp CHÍNH XÁC: `pipeline-profiles/` phân biệt hoa thường
+   * trên Linux, tự chuẩn hoá mà đoán sai lại rơi về pipeline mặc định âm thầm.
+   */
+  function profileNameError(
+    d: Record<string, unknown> | null,
+    type: NlChatEntityType | null = entityType.value,
+  ): string | null {
+    const refs = referencedProfileNames(d, type)
+    if (refs.length === 0) return null
+    if (profileError.value) return profileError.value
+    const known = catalogProfileNames.value
+    if (!known) return 'Đang kiểm tra danh sách pipeline profile...'
+    const invalid = refs.filter((n) => !known.has(n))
+    return invalid.length > 0
+      ? `Pipeline profile không tồn tại: ${invalid.join(', ')} — sửa lại hoặc bỏ trống để dùng pipeline mặc định.`
+      : null
   }
 
   /** Returns the `steps[].agent` refs in `pipelineDraft` that are not in the loaded catalog. */
@@ -176,12 +245,12 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         // In free-chat mode the agent reports which entity the draft is for;
         // a pinned entityType (selectEntity) still wins if the agent omits it.
         const resolved = (turn.entityType ?? entityType.value) as NlChatEntityType | null | undefined
-        if (resolved !== 'task' && resolved !== 'pipeline' && resolved !== 'agent') {
+        if (!resolved || !PERSISTABLE_ENTITY_TYPES.includes(resolved)) {
           // Draft with no usable entity type — stay in chat and ask, instead
           // of stranding the user on a preview we cannot persist.
           messages.value.push({
             role: 'assistant',
-            text: 'Mình chưa rõ bạn muốn tạo Task, Pipeline hay Agent — bạn nói rõ giúp mình nhé?',
+            text: 'Mình chưa rõ bạn muốn tạo Task, Pipeline, Agent hay Automation — bạn nói rõ giúp mình nhé?',
           })
           return
         }
@@ -194,6 +263,11 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         step.value = 'previewDraft'
         if (resolved === 'pipeline') {
           void loadCatalogIfNeeded()
+        }
+        // Chỉ nạp khi draft THẬT SỰ trỏ tới một profile — draft không chỉ định
+        // pipeline thì không có gì để soát, không được fail-closed oan (E8).
+        if (referencedProfileNames(draft.value, resolved).length > 0) {
+          void loadProfilesIfNeeded()
         }
       } else {
         messages.value.push({ role: 'assistant', text: turn.text || '' })
@@ -224,6 +298,19 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         step.value = 'previewDraft'
         return
       }
+    }
+    // Cùng thái độ fail-closed với guard agent ref ở trên: draft có
+    // `profileName` mà chưa soát được thì chặn, vì rơi về pipeline mặc định
+    // âm thầm chính là hiện tượng người dùng báo. Draft không chỉ định
+    // pipeline (`refs` rỗng) đi qua như hôm nay.
+    if (referencedProfileNames(editedDraft, entityType.value).length > 0) {
+      await loadProfilesIfNeeded()
+    }
+    const profileMsg = profileNameError(editedDraft, entityType.value)
+    if (profileMsg) {
+      error.value = profileMsg
+      step.value = 'previewDraft'
+      return
     }
     const projectId = opts.getProjectId()
     if (entityType.value === 'agent' && agentScope.value === 'project' && !projectId) {
@@ -287,6 +374,9 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     catalogAgentIds.value = null
     catalogError.value = null
     loadingCatalog.value = false
+    catalogProfileNames.value = null
+    profileError.value = null
+    loadingProfiles.value = false
   }
 
   return {
@@ -306,6 +396,9 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     catalogAgentIds,
     catalogError,
     loadingCatalog,
+    catalogProfileNames,
+    profileError,
+    loadingProfiles,
     // actions
     selectEntity,
     sendMessage,
@@ -313,5 +406,6 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     cancel,
     reset,
     findInvalidPipelineAgentRefs,
+    profileNameError,
   }
 }
