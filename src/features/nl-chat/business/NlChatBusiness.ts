@@ -6,9 +6,6 @@ import {
   cancelNlChatSession,
   isNlChatSessionId,
   ensureNlChatBuilderAgent,
-  scanCustomAgents,
-  buildCatalog,
-  loadScanPatternsConfig,
 } from './index.js'
 
 export class NlChatBusiness extends AbstractBusiness {
@@ -17,18 +14,6 @@ export class NlChatBusiness extends AbstractBusiness {
     if ('error' in gate) return gate
     await ensureNlChatBuilderAgent(gate.root)
     return { root: gate.root }
-  }
-
-  async catalogAgentRefs() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate
-    const catalog = await buildCatalog(gate.root, {
-      scanCustomAgents,
-      scanPatterns: loadScanPatternsConfig(),
-    })
-    return (catalog.agents || [])
-      .map((a: any) => a?.id)
-      .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
   }
 
   startSession(input: Parameters<typeof startNlChatSession>[0]) {

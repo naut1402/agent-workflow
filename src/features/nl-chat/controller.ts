@@ -15,7 +15,8 @@ import {
   isNlChatSessionId,
   ensureNlChatBuilderAgent,
   scanCustomAgents,
-  buildCatalog,
+  buildNlChatCatalog,
+  renderNlChatCatalog,
   saveChatAttachments,
   checkAttachmentLimits,
   loadScanPatternsConfig,
@@ -88,19 +89,15 @@ export class NlChatController extends AbstractController {
 
     const projectId = this.projectId || ''
     const entityType = parsed.data.entityType ?? undefined
-    let extraContext: string | undefined
-    // Auto mode may end up drafting a pipeline, so the catalog refs must be in
-    // the turn-1 context there too — not only when 'pipeline' was pinned.
-    if (entityType === 'pipeline' || !entityType) {
-      const catalog = await buildCatalog(root, {
-        scanCustomAgents,
-        scanPatterns: loadScanPatternsConfig(),
-      })
-      const refs = (catalog.agents || [])
-        .map((a: any) => a?.id)
-        .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
-      extraContext = `Danh sách agent ref hợp lệ cho step.agent (chỉ được dùng các giá trị này):\n${refs.map((r) => `- ${r}`).join('\n')}`
-    }
+    // Mọi entityType đều cần catalog, không riêng 'pipeline': draft `task` tham
+    // chiếu `profileName`, draft `agent` tham chiếu `skills`, draft `automation`
+    // tham chiếu cả hai. `renderNlChatCatalog` tự lọc section theo entityType.
+    const catalog = await buildNlChatCatalog(root, {
+      scanCustomAgents,
+      scanPatterns: loadScanPatternsConfig(),
+    })
+    const rendered = renderNlChatCatalog(catalog, entityType)
+    const extraContext = rendered || undefined
 
     const { chatSessionId, job } = startNlChatSession({
       projectId,
