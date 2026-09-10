@@ -7,4 +7,9 @@ export {
   deleteKnowledgeEntry,
   fetchKnowledgeTags,
   uploadKnowledgeFile,
+  fetchKnowledgeCollections,
+  createKnowledgeCollection,
+  saveKnowledgeCollection,
+  deleteKnowledgeCollection,
+  renameKnowledgeTag,
 } from './knowledgeApi'

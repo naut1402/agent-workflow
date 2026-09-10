@@ -17,7 +17,7 @@ Mọi thao tác đọc/ghi của backend đều **scope vào một thư mục `.
 - `tasks/<task-id>/*.md` — artifact từng phase: `investigate.md`, `design.md`, `phpstan.md`, `review.md`, `test-spec.md`, `pr-desc.md`, `qa.md`, các sidecar `*-po.md` (doc-review).
 - `pipeline.yaml` (global) và `tasks/<id>/pipeline.yaml` (per-task) — override cấu hình pipeline.
 - Thư mục cấu hình do dashboard quản lý: `pipeline-profiles/`, `custom-agents/`, `agent-templates/`, `workflow-step-templates/`, `flow-profiles/`.
-- `knowledge.config.yaml` + knowledge store (driver `file`).
+- `knowledge.config.yaml` + knowledge store (driver `file`): `knowledge/{project,system}/*.md` + sidecar `knowledge/collections.yaml`. Scope `global` **không** nằm ở đây — nó ở `registryHome()/knowledge/global/`, dùng chung mọi project.
 
 ### 1.1 Hai run mode resolve root
 
@@ -44,7 +44,7 @@ Backend là **một app Hono duy nhất** chạy trên **hai transport** khác n
 - `src/features/<name>/api.ts` — **chỉ** map route → `bind(...)` + `routeOrder` / `registerRoutes`. Feature mới có `api.ts` thì được nạp (không sửa registry tay).
 - `src/core/http/{responseHelper,types,client}.ts` — helper response (Node `json` + Hono `j`) + type tầng HTTP; `client.ts` là FE fetch (`apiGet`/`apiPost`/…).
 
-> **Lưu ý routing:** `/api/knowledge` **không** đi qua Hono — nó được `handleKnowledgeApi` (node-res thuần trong module knowledge) xử lý và **chặn trước** nhánh Hono ngay trong `createApiHandler`. Đừng mô tả "mọi route đều qua Hono". `createApiHandler` cũng là **điểm chốt duy nhất** ghi request log (fire-and-forget trong `finally`, không await vào response).
+> **Lưu ý routing:** **mọi** route `/api/*` đều đi qua Hono — không feature nào còn nhánh node-res chặn trước (`/api/knowledge` là ngoại lệ cuối, đã migrate). `createApiHandler` là **điểm chốt duy nhất** ghi request log (fire-and-forget trong `finally`, không await vào response).
 
 ### 2.2 Shim tương thích
 
@@ -68,7 +68,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | Catalog / Rules | `src/features/pipeline-editor/business/{catalog,rules}/` | Catalog skills/agents (+ scan); rule project. Nguồn mặc định theo convention, cộng thêm path khớp `settings.scanPatterns` (matcher `business/scanPatterns.ts`, pattern inject từ controller). |
 | Agents | `src/features/agent-editor/business/` | `agents.ts` (CRUD/template/fetch) + NL generate. |
 | Tasks / artifacts | `src/features/monitor/business/` | Tasks, artifact actions, github issue, task chat. |
-| Knowledge | `src/features/knowledge/business/` | File driver + config/driver chọn trong cùng module. |
+| Knowledge | `src/features/knowledge/business/` | File driver đa root (`scope → base`: `project`/`system` ở data root, `global` ở `registryHome()`) + collection/tag sidecar `collections.yaml` + config/driver chọn trong cùng module. |
 | Logging | `src/core/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit/events/usage — **hai backend**: `file` (JSONL, mặc định) và `sqlite`, chọn bằng `logging.driver` trong `settings.json` (`loggingPrefs.ts`), đọc/ghi đều đi theo driver đang active (`activeLogDriverKind()`); job log text thuộc runner. |
 | DB (SQLite) | `src/core/db/` | Connection dùng chung `dashboard.sqlite` + schema Drizzle + migration. Mới chỉ phục vụ log backend `sqlite` (PoC #229) — các subsystem khác vẫn file-based. |
 | Statistics | `src/features/statistics/business/` | Aggregation token usage từ `usage.jsonl` theo project/task/step/job/model/provider/date/source (`GET /api/statistics/usage`); tầng đọc gom 1 module (`readUsageEntries()`) nhưng **chưa** rẽ theo `logging.driver` — xem giới hạn ở §2.4. |

@@ -15,10 +15,32 @@ export default {
   scopeTabs: {
     project: 'Project',
     system: 'System',
+    global: 'Global',
   },
   filters: {
     searchPlaceholder: 'Search…',
     allTags: 'All tags',
+  },
+  collections: {
+    title: 'Collections',
+    empty: 'No collection yet.',
+    scope: 'Collection scope',
+    clear: 'Clear',
+    create: 'Add',
+    namePlaceholder: 'Collection name…',
+    addEntry: 'Add the open entry to this collection',
+    delete: 'Delete the collection (keeps the documents)',
+    confirmDelete: 'Delete collection "{id}"? The documents stay.',
+    created: 'Created collection {id}',
+    deleted: 'Deleted collection {id}',
+    entryAdded: 'Added to {id}',
+    loadFailed: 'Cannot read collections.yaml: {error}. Fix the file on disk and reload — collection actions are disabled so nothing overwrites it.',
+  },
+  tagAdmin: {
+    from: 'Rename tag…',
+    toPlaceholder: 'new name (empty = remove)',
+    apply: 'Rename',
+    done: 'Updated {count} entries',
   },
   list: {
     loading: 'Loading…',

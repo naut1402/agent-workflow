@@ -12,8 +12,8 @@ import { useChatSurface } from '../composables/useChatSurface'
  * Shape follows the Statistics panel's add-card button; the dismissal follows
  * `QuickActionMenuDropdown`, because the Statistics one has none.
  */
-defineProps<{ disabled?: boolean }>()
-const emit = defineEmits<{ pick: [File[]] }>()
+defineProps<{ disabled?: boolean; knowledgeDisabled?: boolean }>()
+const emit = defineEmits<{ pick: [File[]]; pickKnowledge: [] }>()
 
 const { t } = useI18nHelpers()
 const { newBuilderChat } = useChatSurface()
@@ -26,6 +26,12 @@ const fileInput = ref<HTMLInputElement | null>(null)
 function onAttach(): void {
   open.value = false
   fileInput.value?.click()
+}
+
+/** Knowledge đã có sẵn trong hệ thống — chọn id, không upload lại file. */
+function onPickKnowledge(): void {
+  open.value = false
+  emit('pickKnowledge')
 }
 
 /**
@@ -89,16 +95,35 @@ onBeforeUnmount(() => {
          for the same reason. Tab and Escape are the keyboard story here. -->
     <div v-if="open" class="nl-chat-composer-menu">
       <!-- Only attaching is gated: a new session must stay reachable when the
-           flow has finished or the step has no CLI session to send into. -->
+           flow has finished or the step has no CLI session to send into.
+           `data-testid` so callers pick an item by identity, not by position —
+           this list has already grown once. -->
       <button
         type="button"
         class="nl-chat-composer-menu-item"
+        data-testid="composer-menu-attach"
         :disabled="disabled"
         @click="onAttach"
       >
         {{ t('nlChat.attachment.pick') }}
       </button>
-      <button type="button" class="nl-chat-composer-menu-item" @click="onNewSession">
+      <!-- Chọn knowledge không upload gì nên nó có cổng riêng, không đi chung
+           với `disabled` của đính kèm. -->
+      <button
+        type="button"
+        class="nl-chat-composer-menu-item"
+        data-testid="composer-menu-knowledge"
+        :disabled="knowledgeDisabled"
+        @click="onPickKnowledge"
+      >
+        {{ t('nlChat.knowledge.pick') }}
+      </button>
+      <button
+        type="button"
+        class="nl-chat-composer-menu-item"
+        data-testid="composer-menu-new-session"
+        @click="onNewSession"
+      >
         {{ t('nlChat.window.newSession') }}
       </button>
     </div>

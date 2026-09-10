@@ -25,6 +25,8 @@ const loading = ref(false)
 const error = ref('')
 const uploading = ref(false)
 const uploadTags = ref('')
+/** `global` dùng chung mọi project — chọn được ngay ở picker, không phải mở panel. */
+const uploadScope = ref('project')
 
 const selected = computed({
   get: () => new Set(props.modelValue),
@@ -76,7 +78,7 @@ async function onUpload(e: Event) {
       .map((s) => s.trim())
       .filter(Boolean)
     const data = await uploadKnowledgeFile(file, {
-      scope: 'project',
+      scope: uploadScope.value,
       tags,
       projectId: props.projectId ?? undefined,
     })
@@ -165,6 +167,12 @@ watch(
           <div class="knowledge-picker-upload">
             <label class="cfg-label">{{ t('monitor.createTask.uploadTags') }}</label>
             <input v-model="uploadTags" class="cfg-input" :placeholder="t('monitor.createTask.uploadTagsHint')" />
+            <label class="cfg-label">{{ t('monitor.createTask.uploadScope') }}</label>
+            <select v-model="uploadScope" class="cfg-input">
+              <option value="project">project</option>
+              <option value="system">system</option>
+              <option value="global">global</option>
+            </select>
             <label class="btn-ghost btn-sm knowledge-upload-btn">
               {{ uploading ? t('monitor.createTask.uploading') : t('monitor.createTask.uploadFile') }}
               <input

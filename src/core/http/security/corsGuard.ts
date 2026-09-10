@@ -11,7 +11,7 @@ export function createCorsMiddleware(loadConfig: () => CorsConfig): MiddlewareHa
   }
 }
 
-/** Guard thủ công cho nhánh /api/knowledge — set header nếu origin khớp allowlist. */
+/** Guard thủ công ngoài Hono — set header nếu origin khớp allowlist. */
 export function resolveCorsHeaders(
   originHeader: string | undefined,
   config: CorsConfig,

@@ -192,6 +192,23 @@ export async function openFile(
   return fsPromises.open(p, flags)
 }
 
+/**
+ * Bản async của `writeTextFileAtomicSync` — cho business không muốn chặn event
+ * loop. Temp file mang pid + random nên hai ghi song song không giẫm lên nhau;
+ * ghi hỏng thì dọn temp và ném tiếp, không để lại file rách.
+ */
+export async function writeTextFileAtomic(target: string, data: string): Promise<void> {
+  await mkdir(dirname(target), { recursive: true })
+  const tmp = `${target}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
+  try {
+    await writeTextFile(tmp, data)
+    await rename(tmp, target)
+  } catch (err) {
+    await rm(tmp, { force: true }).catch(() => {})
+    throw err
+  }
+}
+
 // ── sync fs ────────────────────────────────────────────────────────────────
 
 export function existsSync(p: string): boolean {
