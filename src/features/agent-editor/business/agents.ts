@@ -44,6 +44,7 @@ export function profilesDir(root: string): string {
  * tạo đúng cái bug đang đi sửa. Profile do dashboard tạo luôn qua sanitise nên
  * không mất mục nào; chỉ file thêm tay vào repo mới bị loại.
  */
+// fallow-ignore-next-line unused-export -- consumer đi qua barrel `nl-chat/business/index.ts`
 export async function listPipelineProfileNames(root: string): Promise<string[]> {
   const names: string[] = []
   for (const entry of await safeReadDir(profilesDir(root))) {

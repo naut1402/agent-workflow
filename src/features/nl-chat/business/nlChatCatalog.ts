@@ -1,3 +1,4 @@
+// fallow-ignore-file unused-file -- consumer là `controller.ts` qua barrel `business/index.ts`
 /**
  * Catalog "những gì đang có trong hệ thống" cho agent `nl-chat-builder`.
  *
@@ -101,6 +102,7 @@ function skillNamesOf(value: unknown): string[] {
  * Gộp 4 nguồn thành catalog thuần dữ liệu. `deps` được controller inject —
  * business không tự đọc settings, giống hợp đồng của `buildCatalog`.
  */
+// fallow-ignore-next-line unused-export
 export async function buildNlChatCatalog(
   root: string,
   deps: NlChatCatalogDeps,
@@ -264,6 +266,7 @@ function renderSection(catalog: NlChatCatalog, key: SectionKey): string {
  * section nào được in — draft `agent` chỉ tham chiếu skill nên không cần
  * gánh cả danh sách pipeline.
  */
+// fallow-ignore-next-line unused-export
 export function renderNlChatCatalog(
   catalog: NlChatCatalog,
   entityType?: NlChatEntityType | null,
