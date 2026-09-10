@@ -36,7 +36,7 @@ jobs:
       # Checkout ref đang trigger (`test/main`) — dòng test mang cây đầy nên có
       # sẵn `sync-line.sh`. 🚫 Không `ref: main`: `main` chỉ có `sync-from-main.sh`
       # cho tới khi version đổi tên script được release.
-      - name: Checkout ref đang trigger (script sync)
+      - name: Checkout triggering ref (sync script)
         uses: actions/checkout@v5
         with:
           fetch-depth: 0

@@ -33,7 +33,7 @@ permissions:
 
 jobs:
   probe:
-    name: Xác định dòng test của version
+    name: Resolve version test line
     # Chỉ PR phát hành. PR khác vào `main` (hotfix, docs) không bị cổng này.
     # `if` để rộng (`dev/**/main`) để bắt cả branch epic `dev/x.y.z/<epic>/main`;
     # branch `dev/<slug>/main` không mang version được lọc tiếp ở bước dưới.
@@ -44,7 +44,7 @@ jobs:
       test_line: ${{ steps.line.outputs.test_line }}
       version: ${{ steps.line.outputs.version }}
     steps:
-      - name: Checkout head SHA của PR
+      - name: Checkout PR head SHA
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -55,7 +55,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Suy dòng test
+      - name: Resolve test line
         id: line
         env:
           HEAD_REF: ${{ github.head_ref }}
@@ -100,12 +100,12 @@ jobs:
           fi
 
   gate:
-    name: Suite + coverage trên cây ghép
+    name: Suite + coverage on grafted tree
     needs: probe
     if: needs.probe.outputs.applies == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout head SHA của PR
+      - name: Checkout PR head SHA
         uses: actions/checkout@v5
         with:
           # Head SHA, KHÔNG phải merge commit: cây được release là cây này.
@@ -121,7 +121,7 @@ jobs:
       # shell. Nội suy "${{ }}" xảy ra TRƯỚC khi shell chạy, mà tên branch git
       # được phép chứa dollar, backtick, dấu chấm phẩy và ngoặc — nội suy thẳng
       # vào "run:" là cho thực thi lệnh tuỳ ý trên runner, kể cả PR từ fork.
-      - name: Overlay dòng test lên head của PR
+      - name: Overlay test tree onto PR head
         env:
           TEST_LINE: ${{ needs.probe.outputs.test_line }}
           HEAD_REF: ${{ github.head_ref }}
@@ -152,7 +152,7 @@ jobs:
       # source mang sẵn `reports/coverage-baseline.json` (commit ở Đợt 2) và nó
       # đóng băng từ lúc đó — thấp hơn baseline thật của dòng test. Nuốt lỗi
       # archive ở đây là cổng chặn merge cuối cùng chấm theo số cũ và xanh giả.
-      - name: Lấy baseline coverage của dòng test
+      - name: Fetch coverage baseline from test line
         env:
           TEST_LINE: ${{ needs.probe.outputs.test_line }}
         run: |
@@ -177,7 +177,7 @@ jobs:
       # ⚠️ Hai cổng dưới đặt TRƯỚC `bun install`: chúng chỉ cần `git` + bun
       # runtime, nên PR phát hành biết mình lệch neo trong ~10s thay vì sau ~10
       # phút suite + build + playwright.
-      - name: Cổng neo SHA (TC-F4 · TC-E9)
+      - name: SHA anchor gate
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           HEAD_REF: ${{ github.head_ref }}
@@ -189,7 +189,7 @@ jobs:
 
       # Cảnh báo, không chặn: liệt kê task đã merge mà dòng test chưa phủ. Thêm
       # `--strict` vào đây là siết thành chặn, không phải sửa lại script.
-      - name: Trạng thái test theo task (TC-E6 · TC-E7)
+      - name: Per-task test status
         env:
           VERSION: ${{ needs.probe.outputs.version }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -216,10 +216,10 @@ jobs:
       - name: Suite E2E (playwright)
         run: bun run test:e2e
 
-      - name: Cổng coverage
+      - name: Coverage gate
         run: bun run coverage:gate -- --check --baseline reports/coverage-baseline.json
 
-      - name: Upload evidence của cổng phát hành
+      - name: Upload release gate evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:

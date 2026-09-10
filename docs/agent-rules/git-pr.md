@@ -97,15 +97,18 @@ git push -u origin test/1.1.4/main
 git switch -c test/1.1.4/T0000abcd_ten-task-ngan origin/test/1.1.4/main
 ```
 
-**Dựng `test/main` — một lần cho cả repo.** Nó là bản sao của `main`, nên chỉ là một branch thường:
+**Dựng `test/main` — một lần cho cả repo.** Nó là bản sao của cây source **còn `tests/`**, nên chỉ là một branch thường:
 
 ```bash
 git fetch origin
-git push origin origin/main:refs/heads/test/main
+# <sha> = commit cuối TRƯỚC khi `tests/` bị cắt khỏi dòng source
+git push origin <sha>:refs/heads/test/main
 ```
 
+- ⚠️ **Không lấy từ `main` hiện tại.** Sau Đợt 5, `main` không còn `tests/` và `.gitignore` của nó chặn `/tests/` — dựng từ đó cho `test/main` rỗng test **và** chặn luôn việc thêm test mới. Repo đã cắt rồi thì lấy `<sha>` trước lượt cắt, hoặc nhân bản từ một dòng test đang có (`git push origin origin/test/main:refs/heads/test/1.1.5/main`).
 - 🚫 **Không dựng bằng `git checkout --orphan`.** Cây orphan chỉ có `tests/`+`test-e2e/`+`reports/` thì (a) không chạy độc lập được vì thiếu `package.json`, và (b) **không có `.github/workflows/`** — mà GitHub Actions đọc định nghĩa workflow từ **chính ref được push**, nên mọi trigger `push: test/**` sẽ im lặng không chạy. Đây là loại lỗi không có thông báo: branch push xong, 0 run, không ai biết.
-- **`.gitignore` thừa hưởng từ dòng source** — 🚫 đừng viết bản riêng. Bản riêng vừa lệch dòng source, vừa dễ ăn mất fixture: pattern không neo ở gốc (`.dev-team-agent/` thay vì `/.dev-team-agent/`) khớp ở **mọi** độ sâu và loại luôn `test-e2e/fixtures/**/.dev-team-agent/**`.
+- **`.gitignore` của dòng test phải KHÔNG chặn `tests/` · `test-e2e/`** — nó nằm trong `PRESERVE_PATHS` của `sync-source-to-test.yml` nên bản của dòng source không đi sang. Đây là chỗ duy nhất hai dòng cố ý lệch nhau. Chặn ở đây là `push-tests.sh` (`git add tests test-e2e`) hết thêm được test mới.
+- 🚫 **Đừng viết `.gitignore` mới từ đầu cho dòng test** — pattern không neo ở gốc (`.dev-team-agent/` thay vì `/.dev-team-agent/`) khớp ở **mọi** độ sâu và ăn mất `test-e2e/fixtures/**/.dev-team-agent/**`. Thừa hưởng bản của dòng source tại thời điểm dựng, rồi để `PRESERVE_PATHS` giữ nó.
 - **Chạy dry-run trọn vòng** (`overlay` → `report` → `promote` → `sync`) trên cặp branch nháp `test/0.0.0/main` + `dev/0.0.0/main` trước khi cắt `tests/` khỏi dòng source. Bước cắt là một chiều.
 - ⚠️ **`promote-test-line.yml` không có tham số target** — nó luôn ghi vào `test/main` thật. Dry-run bước `promote` sẽ đẩy nội dung nháp vào cây neo; cô lập trước hoặc chấp nhận một commit dọn.
 
@@ -280,6 +283,8 @@ PR promote dòng version lên `main` là **release note hướng người dùng 
 ## 9. Ngôn ngữ & lối viết tài liệu
 
 - **Tài liệu và comment hướng người dùng/PR: tiếng Việt.** Comment kỹ thuật trong code: ngắn gọn, theo mật độ code xung quanh — quy ước đầy đủ ở [`coding-guideline.md`](coding-guideline.md) §7.
+- **Định danh thì tiếng Anh, nội dung thì tiếng Việt.** Tên job / step / check run của workflow là **định danh**: branch protection khớp required check theo đúng string đó, và `gh pr checks` in nó ra. Đặt tiếng Anh như tên biến. Còn thứ chúng *in ra* — job summary, thông điệp lỗi, `::error::` — theo tiếng Việt như mọi bề mặt người đọc khác.
+- **Đổi tên job đang là required check là breaking change** — protection trỏ vào tên cũ sẽ thành "expected — waiting". Đổi thì sửa protection cùng lượt.
 - **Tài liệu tham khảo mô tả quy tắc/hành vi hiện hành**, không thuật lại lịch sử thay đổi.
 - **Không trích số issue, số PR, tên người, tên skill/agent** trong tài liệu tham khảo và comment code — thông tin nhất thời, dễ outdate.
 - **Vẫn khuyến khích trích dẫn tới nguồn ổn định** (tài liệu khác trong repo, spec) khi giúp đáng tin và dễ đọc hơn.

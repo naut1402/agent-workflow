@@ -54,7 +54,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Xác định dòng test cần thăng
+      - name: Resolve test line to promote
         id: line
         env:
           INPUT_VERSION: ${{ inputs.version }}
@@ -90,7 +90,7 @@ jobs:
       # Version bị skip (main nhảy 1.1.3 → 1.1.5) hoặc hotfix bỏ cổng: ghi rõ
       # rồi thoát xanh. `release-test-gate.yml` đã chặn từ trước, nên trạng thái
       # này là ngoại lệ có chủ ý, không phải lỗi của bước thăng.
-      - name: Không có dòng test — bỏ qua
+      - name: No test line — skip
         if: steps.line.outputs.found != 'true'
         run: |
           {
@@ -100,7 +100,7 @@ jobs:
             echo "Version \`${{ steps.line.outputs.version }}\` chưa có dòng test, hoặc đã được thăng trước đó."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Merge dòng test version → test/main
+      - name: Merge version test line into target
         if: steps.line.outputs.found == 'true'
         env:
           GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
