@@ -3,7 +3,7 @@ import type { HonoEnv } from '../../core/http/types.js'
 import { bind } from '../../core/http/AbstractController.js'
 import { SettingsController } from './controller.js'
 
-/** Fs / autoscan / github-tokens / logging — trước runner & logs. */
+/** Fs / autoscan / github-tokens / logging / modes / recovery / scan-patterns / security — trước runner & logs. */
 export const routeOrder = 10
 
 export function registerRoutes(app: Hono<HonoEnv>): void {

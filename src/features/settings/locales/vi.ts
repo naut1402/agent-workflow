@@ -58,6 +58,7 @@ export default {
     },
     saved: 'Đã lưu.',
     loadError: 'Không tải được cấu hình mode.',
+    logsAlsoHiddenHint: 'Đang bị ẩn thêm bởi công tắc "Hiện mode Logs" ở nhóm Logs.',
   },
   logging: {
     title: 'Logs',

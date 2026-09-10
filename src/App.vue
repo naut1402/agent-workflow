@@ -140,12 +140,12 @@ const showFloatingNotification = computed(() => resolveNotifyShowFloating(settin
 
 function onNotificationSelect(event: { id: string; taskId: string }) {
   markRead(event.id)
-  mode.value = 'monitor'
+  setMode(FALLBACK_MODE)
   selectedId.value = event.taskId
 }
 
 function onRunningJobSelect(taskId: string) {
-  mode.value = 'monitor'
+  setMode(FALLBACK_MODE)
   selectedId.value = taskId
 }
 

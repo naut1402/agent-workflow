@@ -183,7 +183,10 @@ function onNotificationUiPlacementUpdate(value: string) {
 const modeCatalog = computed(() => props.modeCatalog ?? [])
 const modesEnabled = ref<Record<string, boolean>>({})
 const modesBusy = ref(false)
+const modesMsg = ref('')
 const modesErr = ref('')
+/** Nạp lỗi thì các toggle đang hiện mặc định của catalog, không phải giá trị thật → khoá thao tác. */
+const modesLoaded = ref(false)
 
 function syncModesFromConfig(raw: unknown) {
   const cfg = parseModesConfig(raw)
@@ -194,30 +197,41 @@ function syncModesFromConfig(raw: unknown) {
   modesEnabled.value = next
 }
 
+// Hiện mặc định catalog ngay từ nhịp render đầu: `{}` sẽ render "tắt hết" trong
+// khi mọi mode thật vẫn bật.
+syncModesFromConfig(undefined)
+
 async function loadModes() {
   if (!modeCatalog.value.length) return
   modesErr.value = ''
   try {
     const data = await fetchModesConfig()
     syncModesFromConfig(data.config)
+    modesLoaded.value = true
   } catch {
+    syncModesFromConfig(undefined)
+    modesLoaded.value = false
     modesErr.value = t('settings.modes.loadError')
   }
 }
 
-async function persistModes() {
+/** Gửi delta 1 key — controller merge theo key, nên settings.json chỉ chứa mode đã đụng tới. */
+async function persistMode(key: string, prev: Record<string, boolean>) {
   modesBusy.value = true
+  modesMsg.value = ''
   modesErr.value = ''
   try {
-    const data = await saveModesConfig({ enabled: { ...modesEnabled.value } })
+    const data = await saveModesConfig({ enabled: { [key]: modesEnabled.value[key] } })
     syncModesFromConfig(data.config)
+    modesMsg.value = t('settings.modes.saved')
     // Không có store dùng chung giữa dialog và shell — phát tán như logging-changed.
+    // Phát `data.config` (bản đã merge ở server), không phải map cục bộ 1 key.
     window.dispatchEvent(
-      new CustomEvent('dev-dashboard:modes-changed', {
-        detail: { enabled: { ...modesEnabled.value } },
-      }),
+      new CustomEvent('dev-dashboard:modes-changed', { detail: data.config }),
     )
   } catch (e) {
+    // Ghi hỏng thì không để checkbox nói một đằng, server và sidebar nói một nẻo.
+    modesEnabled.value = prev
     modesErr.value = String((e as Error).message || e)
   } finally {
     modesBusy.value = false
@@ -226,8 +240,9 @@ async function persistModes() {
 
 function toggleMode(m: ModeEntry) {
   if (m.alwaysOn) return
-  modesEnabled.value = { ...modesEnabled.value, [m.key]: !modesEnabled.value[m.key] }
-  void persistModes()
+  const prev = modesEnabled.value
+  modesEnabled.value = { ...prev, [m.key]: !prev[m.key] }
+  void persistMode(m.key, prev)
 }
 
 // ── Logging (server-backed) ──────────────────────────────────────────────────
@@ -992,6 +1007,7 @@ onUnmounted(() => {
               <section class="settings-section">
                 <h3 class="settings-section-title">{{ t('settings.modes.title') }}</h3>
                 <p class="settings-section-desc">{{ t('settings.modes.desc') }}</p>
+                <p v-if="modesMsg" class="settings-autoscan-msg">{{ modesMsg }}</p>
                 <p v-if="modesErr" class="settings-autoscan-err">⚠ {{ modesErr }}</p>
                 <label
                   v-for="m in modeCatalog"
@@ -1002,7 +1018,7 @@ onUnmounted(() => {
                   <input
                     type="checkbox"
                     :checked="modesEnabled[m.key]"
-                    :disabled="modesBusy || m.alwaysOn"
+                    :disabled="modesBusy || m.alwaysOn || !modesLoaded"
                     @change="toggleMode(m)"
                   />
                   <span class="settings-mode-label">{{ t(m.labelKey) }}</span>
@@ -1011,6 +1027,10 @@ onUnmounted(() => {
                     class="settings-mode-badge"
                   >{{ t(`settings.modes.maturity.${m.maturity}`) }}</span>
                   <span v-if="m.descriptionKey" class="settings-mode-desc">{{ t(m.descriptionKey) }}</span>
+                  <!-- `logs` có 2 công tắc (mode + cờ cũ showLogsTab) — nói rõ vì sao sidebar vẫn thiếu. -->
+                  <span v-if="m.key === 'logs' && !showLogsTab" class="settings-mode-desc">
+                    ⚠ {{ t('settings.modes.logsAlsoHiddenHint') }}
+                  </span>
                 </label>
               </section>
             </template>

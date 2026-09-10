@@ -57,6 +57,7 @@ export default {
     },
     saved: 'Saved.',
     loadError: 'Could not load mode config.',
+    logsAlsoHiddenHint: 'Also hidden by the "Show Logs mode" switch in the Logs group.',
   },
   logging: {
     title: 'Logs',
