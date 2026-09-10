@@ -20,7 +20,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | Suite | Runner | Vùng source phủ | Số file | Lệnh chạy |
 |---|---|---|---|---|
 | `tests/mcp` | bun | `mcp` | 1 | `bun test tests/mcp` |
-| `tests/src` | vitest | `core/shell`, `App.vue`, `core/container` | 1 | `npx vitest run tests/src/*.test.ts` |
+| `tests/src` | vitest | `core/shell`, `App.vue`, `core/container` | 2 | `npx vitest run tests/src/*.test.ts` |
 | `tests/src/api` | vitest | `features/pipeline-editor/scripts`, `features/agent-editor/scripts` | 2 | `npx vitest run tests/src/api` |
 | `tests/src/core/composables` | vitest | `core/composables` | 5 | `npx vitest run tests/src/core/composables` |
 | `tests/src/core/configs` | vitest | `core/configs` | 3 | `npx vitest run tests/src/core/configs` |
@@ -30,7 +30,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/core/i18n` | vitest | `core/composables`, `core/configs`, `plugins/i18n` | 1 | `npx vitest run tests/src/core/i18n` |
 | `tests/src/core/lib` | vitest | `core/lib`, `core/http` | 9 | `npx vitest run tests/src/core/lib` |
 | `tests/src/core/log` | bun | `core/log`, `features/logs/business`, `core/events` | 4 | `bun test tests/src/core/log` |
-| `tests/src/core/shell` | vitest | `core/shell` | 2 | `npx vitest run tests/src/core/shell` |
+| `tests/src/core/shell` | vitest | `core/shell` | 3 | `npx vitest run tests/src/core/shell` |
 | `tests/src/core/ui` | vitest | `core/ui` | 4 | `npx vitest run tests/src/core/ui` |
 | `tests/src/features/agent-editor/business` | bun | `features/agent-editor/business` | 2 | `bun test tests/src/features/agent-editor/business` |
 | `tests/src/features/agent-editor/components` | vitest | `features/agent-editor/components`, `core/lib`, `features/agent-editor/business` | 3 | `npx vitest run tests/src/features/agent-editor/components` |
@@ -70,8 +70,9 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/running-jobs/components` | vitest | `features/running-jobs/components`, `features/running-jobs/lib` | 1 | `npx vitest run tests/src/features/running-jobs/components` |
 | `tests/src/features/running-jobs/composables` | vitest | `features/runner/scripts`, `features/running-jobs/composables` | 1 | `npx vitest run tests/src/features/running-jobs/composables` |
 | `tests/src/features/running-jobs/lib` | vitest | `features/running-jobs/lib` | 1 | `npx vitest run tests/src/features/running-jobs/lib` |
-| `tests/src/features/settings/components` | vitest | `core/composables`, `features/settings/components`, `features/settings/scripts` | 1 | `npx vitest run tests/src/features/settings/components` |
-| `tests/src/features/settings/schemas` | vitest | `features/settings/schemas` | 5 | `npx vitest run tests/src/features/settings/schemas` |
+| `tests/src/features/settings/components` | vitest | `core/composables`, `features/settings/components`, `features/settings/scripts` | 2 | `npx vitest run tests/src/features/settings/components` |
+| `tests/src/features/settings/schemas` | vitest | `features/settings/schemas` | 6 | `npx vitest run tests/src/features/settings/schemas` |
+| `tests/src/features/settings/scripts` | vitest | `features/settings/scripts`, `core/shell` | 1 | `npx vitest run tests/src/features/settings/scripts` |
 | `tests/src/features/statistics/business` | bun | `core/log`, `features/statistics/business` | 1 | `bun test tests/src/features/statistics/business` |
 | `tests/src/features/statistics/components` | vitest | `features/statistics/components`, `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/components` |
 | `tests/src/features/statistics/lib` | vitest | `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/lib` |
@@ -82,7 +83,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/catalog` | bun | `features/pipeline-editor/business` | 4 | `bun test tests/src/server/catalog` |
 | `tests/src/server/chat` | bun | `features/runner/business`, `features/nl-chat/business`, `features/monitor/business` | 6 | `bun test tests/src/server/chat` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `api/apiServer.ts`, `core/registry.ts` | 2 | `bun test tests/src/server/github` |
-| `tests/src/server/http` | bun | `api/apiServer.ts`, `core/http`, `features/runner/business` | 25 | `bun test tests/src/server/http` |
+| `tests/src/server/http` | bun | `api/apiServer.ts`, `core/http`, `features/runner/business` | 26 | `bun test tests/src/server/http` |
 | `tests/src/server/knowledge` | bun | `api/apiServer.ts`, `core/events`, `core/http` | 1 | `bun test tests/src/server/knowledge` |
 | `tests/src/server/lib` | bun | `core/lib` | 1 | `bun test tests/src/server/lib` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/server/pipeline` |
