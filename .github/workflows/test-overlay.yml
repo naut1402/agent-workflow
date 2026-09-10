@@ -73,7 +73,7 @@ permissions:
 
 jobs:
   resolve:
-    name: Suy cặp ref source ↔ test
+    name: Resolve source ↔ test pair
     runs-on: ubuntu-latest
     outputs:
       source: ${{ steps.refs.outputs.source }}
@@ -90,7 +90,7 @@ jobs:
       # chỉ lên `main` khi version mở nó được release. Trước lúc đó, lấy script từ
       # `main` cho `Module not found` — mà lỗi đó đọc ra như "cổng hỏng", không
       # phải "chưa tới lượt". Ref đang trigger luôn là ref vừa mang chính tooling ấy.
-      - name: Checkout ref đang trigger (mang theo script suy ref)
+      - name: Checkout triggering ref (carries ref-resolve script)
         uses: actions/checkout@v5
         with:
           fetch-depth: 1
@@ -100,7 +100,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Suy cặp ref
+      - name: Resolve ref pair
         id: refs
         env:
           EVENT: ${{ github.event_name }}
@@ -170,7 +170,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   overlay:
-    name: Suite trên cây ghép
+    name: Suite on grafted tree
     needs: resolve
     if: needs.resolve.outputs.skip != 'true'
     runs-on: ubuntu-latest
@@ -188,7 +188,7 @@ jobs:
       # ref source trong workspace khác, nên nếu source vừa được push giữa hai
       # job thì neo ghi ra là commit CHƯA TỪNG chạy suite. Một lượt chạy phải
       # cho đúng một cặp (SHA source, SHA test).
-      - name: Ghi SHA source của lượt chạy
+      - name: Record source SHA of this run
         id: src
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
@@ -197,7 +197,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Overlay cây test
+      - name: Overlay test tree
         env:
           TEST_SHA: ${{ needs.resolve.outputs.test_sha }}
         run: |
@@ -216,7 +216,7 @@ jobs:
       # `reports/coverage-baseline.json` (commit ở Đợt 2). Nuốt lỗi archive ở đây
       # là cổng lặng lẽ chấm theo baseline đóng băng của dòng source — thấp hơn
       # baseline thật, tức là xanh giả.
-      - name: Lấy baseline coverage của dòng test
+      - name: Fetch coverage baseline from test line
         id: baseline
         env:
           TEST_SHA: ${{ needs.resolve.outputs.test_sha }}
@@ -257,7 +257,7 @@ jobs:
       - name: E2E tests (playwright)
         run: bun run test:e2e
 
-      - name: Cổng coverage
+      - name: Coverage gate
         run: bun run coverage:gate -- --check --baseline reports/coverage-baseline.json ${{ steps.baseline.outputs.allow_missing }}
 
       - name: Upload coverage & reports
@@ -275,7 +275,7 @@ jobs:
           retention-days: 90
 
   report:
-    name: Đẩy coverage về dòng test
+    name: Push coverage to test line
     # Cả hai chiều push đều ghi neo, nhờ đó `source_sha` luôn khớp head dòng
     # version. PR bị loại vì fork không có secret để push.
     if: github.event_name == 'push'
@@ -296,7 +296,7 @@ jobs:
 
       # ⚠️ Cây riêng, KHÔNG commit từ cây overlay: cây overlay chịu `.gitignore`
       # của dòng source (có `coverage/`), `git add` từ đó trượt im lặng.
-      - name: Checkout dòng test ra thư mục riêng
+      - name: Checkout test line into separate dir
         uses: actions/checkout@v5
         with:
           ref: ${{ needs.resolve.outputs.test_ref }}
@@ -311,12 +311,12 @@ jobs:
 
       # Lấy lại coverage của job `overlay` thay vì chạy suite lần hai — cùng một
       # lượt chạy thì phải cùng một con số, và chạy lại còn tốn gấp đôi.
-      - name: Tải coverage của job overlay
+      - name: Download coverage from overlay job
         uses: actions/download-artifact@v6
         with:
           name: test-evidence-${{ needs.resolve.outputs.version }}-${{ github.run_id }}
 
-      - name: Cập nhật baseline + lịch sử
+      - name: Update baseline + history
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
           SOURCE_REF: ${{ needs.resolve.outputs.source }}
@@ -337,7 +337,7 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --test-sha "$TEST_SHA"
 
-      - name: Commit + push tầng nhẹ
+      - name: Commit + push light layer
         working-directory: testline
         env:
           TEST_REF: ${{ needs.resolve.outputs.test_ref }}
@@ -357,7 +357,7 @@ jobs:
 
       # Evidence nặng đi Release asset — không có `retention-days`, và không làm
       # phình repo (một lượt chạy ~7,7 MB nén so với ~3,5 MB toàn bộ history).
-      - name: Đẩy evidence nặng lên Release asset
+      - name: Upload heavy evidence to Release asset
         env:
           GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
           VERSION: ${{ needs.resolve.outputs.version }}

@@ -45,7 +45,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Dò cây test trong checkout
+      - name: Probe test tree in checkout
         id: probe
         run: |
           set -euo pipefail
@@ -74,7 +74,7 @@ jobs:
         run: bun run build
 
   full:
-    name: Suite test (cây test có mặt)
+    name: Test suite (test tree present)
     needs: code
     if: needs.code.outputs.has_tests == 'true'
     runs-on: ubuntu-latest
