@@ -127,13 +127,13 @@ Bảng dưới dành cho ai cần xem đúng code — sơ đồ + diễn giải 
 
 | Khái niệm trong sơ đồ | File |
 |---|---|
-| Tự quét + đăng ký mode lúc khởi động, tạo container | `src/main.ts` |
-| Danh sách mode (`ModeEntry`, `ModeRegistry`) | `src/core/shell/modeRegistry.ts` |
-| Bộ quyết định mode nào dùng được — giao diện + khoá (`canAccessMode`) | `src/core/shell/modeAccess.ts` |
+| Tự quét + đăng ký mode lúc khởi động, tạo container | `src/frontend/main.ts` |
+| Danh sách mode (`ModeEntry`, `ModeRegistry`) | `src/frontend/shell/modeRegistry.ts` |
+| Bộ quyết định mode nào dùng được — giao diện + khoá (`canAccessMode`) | `src/frontend/shell/modeAccess.ts` |
 | Bản hiện thực đọc cấu hình bật/tắt mode trong Cài đặt | `src/features/settings/scripts/settingsModeAccess.ts` |
-| Service container (`register`/`resolve`) | `src/core/container/{index,types}.ts` |
-| Khoá để lấy container trong giao diện | `src/core/shell/containerKey.ts` |
-| Bước cài đặt container vào giao diện | `src/plugins/index.ts` |
-| Màn hình chính: lấy danh sách mode, vẽ sidebar/trạng thái/nội dung, xử lý theo dõi liên tục | `src/App.vue` |
+| Service container (`register`/`resolve`) | `src/frontend/container/{index,types}.ts` |
+| Khoá để lấy container trong giao diện | `src/frontend/shell/containerKey.ts` |
+| Bước cài đặt container vào giao diện | `src/frontend/plugins/index.ts` |
+| Màn hình chính: lấy danh sách mode, vẽ sidebar/trạng thái/nội dung, xử lý theo dõi liên tục | `src/frontend/App.vue` |
 | Mỗi tính năng tự khai báo mode của mình | `src/features/<feature>/registerMode.ts` |
 | Theo dõi liên tục của mode Theo dõi (Monitor) | `src/features/monitor/composables/useTaskPolling.ts` |

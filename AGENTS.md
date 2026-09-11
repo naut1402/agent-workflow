@@ -15,8 +15,9 @@
 
 - **State từng task** (`.dev-state/*.json`) — chỉ đọc.
 - **Config + artifact markdown** (pipeline, custom agent, template, knowledge) — đọc/ghi được, ghi qua `PUT /api/artifact`.
-- **Backend** — Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Setup app-root ở `src/api/`; kernel HTTP ở `src/core/http/`; registry ở `src/core/registry.ts`. Entry: `src/standalone.ts`.
-- **Frontend** — `src/features/<mode>/` (components, scripts, styles, locales, schemas); nền `src/core/`; config shell `@configs` → `src/core/configs/`.
+- **Backend** — Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Setup app-root ở `src/backend/`; kernel HTTP ở `src/backend/http/`; registry ở `src/backend/registry.ts`. Entry: `src/backend/standalone.ts`.
+- **Frontend** — `src/features/<mode>/` (components, scripts, styles, locales, schemas); nền `src/frontend/`.
+- **Shared** — `src/shared/`: chỉ logic/type thuần dùng thật ở cả hai phía; cấm `node:*`/`bun:*`/`hono`/`drizzle-orm`/`vue` (ESLint, không whitelist). Xem `src/{backend,frontend,shared}/README.md`.
 - **Data root** — `.dev-team-agent/`; standalone qua `ProjectRegistry` (`?project=<id>`).
 - **Pipeline** — `DEFAULT_PIPELINE` ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`.
 - **MCP** — `bun run mcp`, CRUD registry, không cần HTTP server.
@@ -29,7 +30,7 @@ Chi tiết: [`docs/architecture.md`](docs/architecture.md).
 
 ```
 agent-workflow/
-├── src/          # features/, core/, api/, plugins/, styles/
+├── src/          # backend/ (Node), frontend/ (browser), shared/ (cả hai), features/
 ├── mcp/
 ├── tests/        # unit (bun + vitest)
 ├── test-e2e/
@@ -39,7 +40,7 @@ agent-workflow/
     └── architecture.md, event-catalog.md, i18n.md, ui-buttons.md, diagram/
 ```
 
-⚠️ Ngoại lệ cố ý còn `.js`: `src/features/agent-editor/business/agentMarkdown.js`, `src/runner-cli.mjs`. Tooling `vite` / `vitest` / `playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
+⚠️ Ngoại lệ cố ý còn `.js`: `src/features/agent-editor/business/agentMarkdown.js`, `src/backend/runner-cli.mjs`. Tooling `vite` / `vitest` / `playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
 
 ---
 
