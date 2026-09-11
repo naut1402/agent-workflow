@@ -148,10 +148,11 @@ jobs:
       - name: E2E tests (playwright)
         run: bun run test:e2e
 
-      # 🚫 Cố ý KHÔNG gác cổng coverage ở đây. Cổng chỉ đặt ở ba chỗ: PR dòng
-      # test, push dòng test, và PR phát hành (`release-test-gate.yml`). Gác cả
-      # ở PR feature sẽ chặn mọi PR thêm source trước khi test kịp viết — đúng
-      # cái vòng phụ thuộc mà việc tách dòng test đang muốn phá.
+      # 🚫 Cố ý KHÔNG gác gì theo coverage ở đây — và từ 2026-09-11 thì 🚫 KHÔNG
+      # ở đâu cả: mức phủ không còn là cổng (`docs/agent-rules/testing.md` §6), nợ
+      # test gác theo TASK ở `release-test-gate.yml`. Gác theo % ở PR feature còn
+      # chặn mọi PR thêm source trước khi test kịp viết — đúng cái vòng phụ thuộc
+      # mà việc tách dòng test đang muốn phá.
       - name: Upload coverage & reports
         if: always()
         uses: actions/upload-artifact@v6

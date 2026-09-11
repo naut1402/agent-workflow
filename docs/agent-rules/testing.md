@@ -111,7 +111,7 @@ bun run test:push test/1.1.4/T0000abcd_ten-task "[T0000abcd] test(monitor): ph�
 - **Chưa overlay mà chạy `bun run test` / `test:scope`** → báo lỗi nêu đúng lệnh cần chạy, **exit khác 0**. "Không tìm thấy test" không bao giờ được hiểu là "đã xanh".
 - **Không kéo được dòng test** (mất mạng, dòng test chưa tồn tại) → thông điệp phân biệt rõ với "test đỏ".
 - **Trong CI** — `test-overlay.yml` ghép cặp (ref test, ref source) rồi chạy full suite; `ci.yml` job `full` chỉ chạy khi cây test có mặt trong checkout, và khi skip thì ghi rõ ra job summary rằng **đây không phải "đã test và xanh"**.
-- **PR dòng test được ghép với branch task dòng source cùng `{taskID}`** khi branch đó còn trên remote (`.github/scripts/pair-source.ts`). Không có nó thì PR dòng test **luôn** đỏ cho tới khi PR code merge — "đỏ vì chưa tới lượt" lẫn với "đỏ vì hỏng thật", và khi đỏ thành mặc định thì cổng hết là tín hiệu. Job summary in `Ghép theo` (5 giá trị, bảng ở [`git-pr.md`](git-pr.md) §4.3); thứ tự merge bắt buộc ở cùng mục đó và được bước `Merge order guard` chặn cứng — nó đỏ **sau** toàn bộ suite nên 🚫 không che kết quả nào, chỉ chặn quyền merge. 🚫 Ghép cặp **không** nới ngưỡng coverage, nó chỉ đổi cây được chấm.
+- **PR dòng test được ghép với branch task dòng source cùng `{taskID}`** khi branch đó còn trên remote (`.github/scripts/pair-source.ts`). Không có nó thì PR dòng test **luôn** đỏ cho tới khi PR code merge — "đỏ vì chưa tới lượt" lẫn với "đỏ vì hỏng thật", và khi đỏ thành mặc định thì cổng hết là tín hiệu. Job summary in `Ghép theo` (5 giá trị, bảng ở [`git-pr.md`](git-pr.md) §4.3); thứ tự merge bắt buộc ở cùng mục đó và được bước `Merge order guard` chặn cứng — nó đỏ **sau** toàn bộ suite nên 🚫 không che kết quả nào, chỉ chặn quyền merge. 🚫 Ghép cặp chỉ đổi **cây được chấm**, không đổi gì khác.
 - **Lệch pha bắt ở cả hai chiều** — `test-overlay.yml` chạy lại cặp ref khi *test* đổi (PR/push dòng test) **và** khi *source* đổi (push `dev/x.y.z/main`). Nhờ chiều thứ hai, một PR code merge sau khi test đã viết mà làm test hỏng thì đỏ ngay ở dòng version, không phải đợi tới PR phát hành. Dòng test của version chưa tồn tại thì lượt đó skip kèm ghi chú, không đỏ vô cớ.
 
 #### Đọc trạng thái thiếu test, trước khi mở PR phát hành
@@ -124,7 +124,7 @@ bun run test:anchor -- --baseline reports/coverage-baseline.json   # baseline đ
 - **Nguồn của "task nào đã merge"** là subject commit `[<taskID>]` ([`git-pr.md`](git-pr.md) §7) ở hai khoảng đối xứng: `main..dev/x.y.z/main` (đã merge) ↔ `test/main..test/x.y.z/main` (đã có test). Commit **không** mang `[<taskID>]` — §7 cho phép bỏ — thì không quy được về task nào: 🚫 không tính là thiếu test, nhưng cũng không bỏ qua im lặng, nó vào mục *không truy được task* để người duyệt tự xác nhận là không cần test.
 - **Revert tính ở mức từng commit, không ở mức task** — task chỉ được miễn test khi **mọi** commit của nó đã bị revert. Còn một commit sống thì task vẫn nằm ở *thiếu test*, gắn nhãn *revert một phần*. Revert của revert là **khôi phục**, không phải revert hai lần.
 - **Báo cáo ở mức TỪNG task**, kèm cột type commit để thấy ngay ứng viên miễn trừ. 🚫 Cổng **không** tự miễn theo type — một `chore` vẫn sửa được code.
-- ⚠️ **`exit 0` của `test:status` ở đợt đầu là *báo cáo*, không phải "đã đủ test".** Siết thành chặn bằng `--strict` (một cờ ở workflow, không sửa script).
+- ⚠️ **`exit 0` của `test:status` KHÔNG phải "đã đủ test"** khi gọi trần — đó là chế độ *báo cáo*. Chế độ **chặn** là `--strict`, và nó đang bật ở `release-test-gate.yml` (§6): còn task thiếu test thì PR phát hành đỏ.
 - **Miễn trừ test khai ở [`tests/exemptions.json`](../../tests/exemptions.json)** — sống ở dòng test, đi theo `git archive … tests` sẵn có nên cổng đọc được mà không thêm bước fetch nào:
 
 ```json
@@ -168,78 +168,36 @@ npx vitest run tests/src/features/automations tests/src/core/ui
 
 ---
 
-## 6. Coverage — ngưỡng và cổng
+## 6. Coverage là mốc tham chiếu — nợ test mới là cổng
 
-Tách test sang dòng branch riêng thì coverage tụt không còn tự hiện ra trong diff PR. Nên có **hai lớp cổng**, phục vụ hai việc khác nhau:
+📌 **Chốt 2026-09-11: mức phủ 🚫 KHÔNG gác merge.** Không có ngưỡng, không có dung sai, không có cảnh báo theo phần trăm. Thứ được gác là **nợ test**, và nợ được định nghĩa ở mức **task**:
 
-| Lớp | Ở đâu | Chặn gì |
+> **Nợ test = task đã merge vào dòng version mà dòng test chưa có test cho nó.**
+
+Vì sao đổi: một cổng theo % trả lời sai câu hỏi. Nó đỏ khi mẫu số tăng — thêm code *có* test đầy đủ vẫn hạ % (#304) — và xanh khi một task merge không kèm test nào, miễn là % tổng không tụt. Nó cũng đẻ ra một quy trình sửa file bằng tay để tự gỡ kẹt (#310), tức cổng nới được bằng chính người bị nó chặn.
+
+| Thứ | Ở đâu | Vai trò |
 |---|---|---|
-| `thresholds` | `vitest.config.ts` | Sàn cứng, đỏ **ngay trong lượt chạy** vitest. Đặt bằng baseline làm tròn xuống ~1 điểm % |
-| `coverage-gate` | `.github/scripts/coverage-gate.ts` | **Xu hướng tụt dần**, dung sai 0,5 điểm % so với baseline đã chốt |
+| `reports/coverage-baseline.json` | dòng test | **Mốc tham chiếu** (số của lượt ghi gần nhất) + **neo SHA**. 🚫 Không phải cổng |
+| `coverage-gate.ts --update` | job `report` của `test-overlay.yml` | Nơi **duy nhất** ghi mốc + neo |
+| `test-coverage-status.ts --strict` | `release-test-gate.yml`, bước `Per-task test status (gate)` | **Cổng chặn merge**: còn task thiếu test là đỏ |
+| `tests/exemptions.json` | dòng test | Đường thoát duy nhất, và nó **có ký tên** |
 
 ```bash
 bun run test:fe                                              # sinh coverage/frontend/
 bun run test -- --coverage --coverage-reporter=lcov \
   --coverage-dir=coverage/backend                            # sinh coverage/backend/lcov.info
-bun run coverage:gate -- --check                              # gác cổng
+bun run test:status -- --version 1.1.5 --strict              # cổng thật: nợ test theo task
 ```
 
-- **Baseline là dữ liệu, không phải niềm tin** — `reports/coverage-baseline.json` (máy đọc, là cổng) + `reports/coverage-history.md` (log cho người). Xem [`reports/README.md`](../../reports/README.md).
-- **Baseline chỉ đi lên** — `--update` lấy `max(cũ, mới)`. Muốn hạ (vd xoá hẳn một module) thì sửa file bằng tay trong một PR test có ghi lý do.
-- **Thiếu baseline là ĐỎ**, không phải "đạt". Khởi tạo lần đầu mới cần `--allow-missing`.
-- **Cả hai runner đều được gác** — frontend 4 chỉ số từ `coverage-summary.json`, backend một chỉ số `lines` từ `lcov.info`. Vùng không đo được thì cổng nói ra, không im lặng gác một nửa.
-- **Ba nơi cổng chạy** — PR dòng test (`test-overlay.yml`) · push dòng test · **PR phát hành** (`release-test-gate.yml`). Nơi cuối là cổng chặn merge thật. 🚫 Cố ý **không** gác ở PR feature của dòng source: làm vậy sẽ chặn mọi PR thêm source trước khi test kịp viết.
-- **Test lệch pha với source** là rủi ro số 1 của mô hình tách. Cơ chế phát hiện, tách riêng khỏi coverage: job summary của mọi lượt CI ghi **cặp ref (source, test) + SHA** đã dùng; PR test ghi `Source ref đã overlay`; cổng phát hành chặn khi dòng test của version không tồn tại hoặc rỗng.
-- **Suite đỏ ⇒ job `report` KHÔNG ghi gì** — nó `needs: [overlay]` và cố ý không `if: always()`. Nhìn như vòng khoá (overlay đỏ ⇒ baseline không ghi lại ⇒ overlay vẫn đỏ), nhưng cho `report` chạy thêm 🚫 **không** mở được vòng đó: `--update` lấy `max(cũ, mới)` nên baseline không bao giờ tự hạ, mà số **thừa hưởng từ dòng version trước** mới là thứ làm cổng đỏ. Ghi neo từ một lượt suite đỏ còn tệ hơn — `test-anchor` sẽ in `match` cho baseline đo ở cây khác, tức xanh giả. Đường thoát đúng là runbook *Neo lại baseline* ngay dưới; bước `Escape hatch` của `test-overlay.yml` in nó ra mỗi lần **chính cổng coverage** đỏ (điều kiện theo `steps.gate.conclusion`, 🚫 không phải `failure()` trần — lượt đỏ vì typecheck không được quy sai nguyên nhân cho coverage).
-- **Baseline lưu SHA neo** — `source_sha` · `test_sha` là cặp commit mà số coverage này đo trên. Tên branch thì di chuyển, SHA thì không: đây là thứ duy nhất cho `test-anchor.ts` so được baseline với head của PR phát hành. Neo **ghi đè** theo lượt mới nhất (không `max()` như các chỉ số), và neo **không còn tồn tại** (force-push) là **ĐỎ** — "không so được" không bao giờ được kết luận là đạt.
-
-### Runbook — neo lại baseline khi mở dòng version mới
-
-Chạy **một lần cho mỗi version**, ngay sau lượt `test-overlay` đầu tiên của `test/x.y.z/main` (phân công ở [`git-pr.md`](git-pr.md) §4.3). Không làm bước này thì baseline vẫn neo ở dòng version **trước**, và vì `--update` chỉ đi lên, **mọi** PR dòng test của version mới đỏ ở `Coverage gate` — kể cả PR chỉ sửa hai dòng fixture.
-
-```bash
-# 1. Lấy số đo thật của lượt overlay đầu tiên trên cặp cây mới
-gh run download <run-id> -n "test-evidence-<version>-<run-id>" -D /tmp/ev
-
-# 2. Ghi số + ref mới, XOÁ neo cũ (để `test:anchor` báo `no-anchor` thay vì `match` sai).
-#    Chạy TỪ GỐC CÂY dòng test. Script tự chứa, 🚫 không import `coverage-gate.ts`:
-#    file đặt ngoài repo resolve import theo chỗ nó nằm, không theo gốc repo.
-cat > reanchor.local.ts <<'TS'
-import fs from 'node:fs'
-const EV = process.env.EV ?? '/tmp/ev'
-const f = 'reports/coverage-baseline.json'
-const b = JSON.parse(fs.readFileSync(f, 'utf8'))
-
-const total = JSON.parse(fs.readFileSync(`${EV}/coverage/frontend/coverage-summary.json`, 'utf8')).total
-b.frontend = Object.fromEntries(['lines', 'statements', 'functions', 'branches'].map((m) => [m, total[m].pct]))
-
-let found = 0
-let hit = 0
-for (const line of fs.readFileSync(`${EV}/coverage/backend/lcov.info`, 'utf8').split('\n')) {
-  const t = line.trim()
-  if (t.startsWith('LF:')) found += Number(t.slice(3)) || 0
-  else if (t.startsWith('LH:')) hit += Number(t.slice(3)) || 0
-}
-if (!found) throw new Error('lcov.info không có record nào — lấy lại artifact, 🚫 không ghi 0%')
-b.backend = { lines: Math.round((hit / found) * 10000) / 100 }
-
-b.source_ref = process.env.SRC
-b.test_ref = process.env.TEST
-delete b.source_sha
-delete b.test_sha
-b.updated_at = new Date().toISOString()
-fs.writeFileSync(f, `${JSON.stringify(b, null, 2)}\n`)
-TS
-EV=/tmp/ev SRC=dev/1.1.6/main TEST=test/1.1.6/main bun reanchor.local.ts && rm reanchor.local.ts
-
-# 3. Mở PR trên `test/1.1.6/main`, body ghi rõ lý do hạ số
-#    (vd: "mở dòng 1.1.6 — neo lại theo cây dòng version mới; số cũ là của 1.1.5")
-# 4. Lượt `report` xanh đầu tiên sau đó tự ghi lại `source_sha`/`test_sha`.
-```
-
-- ⚠️ **Bước 3 bắt buộc** — hạ baseline chỉ được làm trong một PR dòng test **có ghi lý do**. Đó là bất biến cố ý của `coverage-gate.ts`, không phải thủ tục thừa.
-- 🚫 **Không thêm cờ `--reset` cho `coverage-gate.ts`**, và 🚫 không tự động hoá bước này bằng workflow: tự động hạ baseline là tự động nới cổng, mà "ai được quyền hạ" chưa có câu trả lời.
-- **Hạ neo là để cổng đo lại được xu hướng, 🚫 không phải xoá nợ test.** Nợ vẫn nằm ở `test:status` và vẫn bị `release-test-gate.yml` chấm ở PR phát hành.
+- 🚫 **Không đặt thêm cổng nào theo phần trăm** — kể cả `thresholds` của vitest, kể cả dưới dạng cảnh báo. Đặt lại sàn ở `vitest.config.ts` không phải là "nhẹ hơn": nó chỉ **dời** cổng vào trong lượt `vitest run`, nơi đỏ phát ra mà không có step nào mang tên cổng để truy.
+- **Mốc ghi đè, 🚫 không `max()`** — `--update` ghi số của **lượt này**. Mốc mô tả lượt gần nhất, không phải mức cao nhất từng đạt; nhờ vậy 🚫 không còn việc nào phải sửa baseline bằng tay. Chỉ số mà lượt này không đo được thì **giữ giá trị cũ**, và lượt đó có cảnh báo riêng.
+- **Mở dòng version mới 🚫 không cần neo lại gì** — lượt `report` xanh **đầu tiên** của dòng đó ghi đè cả số lẫn neo. Trước lượt đó `test:anchor` báo `other-version`, và đó là thông tin **đúng**: version này chưa có lượt test xanh nào.
+- **Không đọc được dữ liệu coverage nào là ĐỎ** (exit 1) — ràng buộc về **dữ liệu** (*"lượt chạy có thật sự đo không"*), 🚫 không phải về mức phủ, nên nó không đi theo cổng cũ. Tương tự, thiếu baseline vẫn là lỗi: sai đường dẫn `--baseline` 🚫 không được âm thầm tạo file mới. Khởi tạo lần đầu mới dùng `--allow-missing`.
+- **Suite đỏ ⇒ job `report` KHÔNG ghi gì**, và đó là **đúng**: neo trả lời *"suite đã xanh trên cây nào"*, nên ghi neo từ một lượt đỏ là khai sai đúng cái nó tồn tại để khai. 🚫 Đừng cho job đó `if: always()` — `test-anchor` sẽ in `match` cho một cây suite chưa từng xanh trên, biến `SHA anchor gate` của PR phát hành thành con dấu.
+- **Baseline lưu SHA neo** — `source_sha` · `test_sha` là cặp commit mà **suite đã xanh trên**. Tên branch thì di chuyển, SHA thì không: đây là thứ duy nhất cho `test-anchor.ts` so được với head của PR phát hành. Neo **ghi đè** theo lượt mới nhất, và neo **không còn tồn tại** (force-push) là **ĐỎ** — "không so được" không bao giờ được kết luận là đạt.
+- **`coverage-history.md` là chỗ duy nhất còn lưu các mốc cũ** sau khi bỏ `max()` — log cho người, 🚫 không cổng nào đọc nó. Đừng cắt.
+- **Test lệch pha với source** là rủi ro số 1 của mô hình tách, và nó được phát hiện **tách riêng** khỏi coverage: job summary của mọi lượt CI ghi cặp ref (source, test) + SHA; cổng phát hành chặn khi dòng test của version không tồn tại hoặc rỗng, và `SHA anchor gate` chặn khi neo không còn tồn tại.
 
 ---
 

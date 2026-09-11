@@ -7,7 +7,7 @@
 #   1. suy cặp ref (`.github/scripts/test-ref.ts`)
 #   2. checkout ref source, rồi `git archive <sha-test> tests test-e2e | tar -x`
 #      lên chính cây đó
-#   3. chạy full suite + cổng coverage trên cây đã ghép
+#   3. chạy full suite trên cây đã ghép, rồi ghi **mốc** coverage + **neo** SHA
 #
 # Hai chiều kích hoạt, cùng một cây ghép:
 #
@@ -245,12 +245,13 @@ jobs:
           echo "Đã overlay $TEST_SHA — số file test:"
           find tests test-e2e -name '*.test.ts' -o -name '*.spec.ts' | wc -l
 
-      # Baseline sống ở dòng test, mà cây overlay chỉ mang `tests/`+`test-e2e/`.
-      # ⚠️ Phải dọn `reports/` của dòng source TRƯỚC: checkout source mang sẵn
-      # `reports/coverage-baseline.json` (commit ở Đợt 2). Nuốt lỗi archive ở đây
-      # là cổng lặng lẽ chấm theo baseline đóng băng của dòng source — thấp hơn
-      # baseline thật, tức là xanh giả.
-      - name: Fetch coverage baseline from test line
+      # `reports/` sống ở dòng test, mà cây overlay chỉ mang `tests/`+`test-e2e/`.
+      # Bước `Anchor status` ngay dưới cần file này để đọc **neo**.
+      #
+      # ⚠️ Phải dọn `reports/` của dòng source TRƯỚC: checkout source mang sẵn một
+      # bản `coverage-baseline.json` **đóng băng** (commit ở Đợt 2), nên **neo**
+      # trong đó cũng là neo cũ — đọc nó ra là kết luận về một cây khác.
+      - name: Fetch baseline (anchor + coverage mark) from test line
         id: baseline
         env:
           TEST_SHA: ${{ needs.resolve.outputs.test_sha }}
@@ -260,17 +261,16 @@ jobs:
           if git archive "$TEST_SHA" reports | tar -x -C .; then
             echo "allow_missing=" >> "$GITHUB_OUTPUT"
           else
-            # Lượt đầu của một dòng test: chưa có baseline nào để so. Cho qua ở
-            # đây (job `report` ngay sau sẽ ghi baseline đầu tiên), nhưng phải nói
-            # ra. Ở `release-test-gate.yml` thì trường hợp này là ĐỎ.
-            echo "::warning::Dòng test $TEST_SHA chưa có reports/ — lượt này khởi tạo baseline thay vì so sánh."
+            # Lượt đầu của một dòng test: chưa có neo nào để đọc. Cho qua ở đây
+            # (job `report` ngay sau sẽ ghi mốc + neo đầu tiên), nhưng phải nói ra.
+            # Ở `release-test-gate.yml` thì trường hợp này là ĐỎ.
+            echo "::warning::Dòng test $TEST_SHA chưa có reports/ — lượt này khởi tạo mốc + neo thay vì đọc neo cũ."
             echo "allow_missing=--allow-missing" >> "$GITHUB_OUTPUT"
           fi
 
       # Báo cáo, 🚫 KHÔNG gate. `test-anchor.ts` vốn chỉ chạy ở cổng PR phát hành,
-      # nên baseline neo lệch dòng version chỉ lộ ra ở đó — trong khi chính nó là
-      # một nguyên nhân làm `Coverage gate` dưới đây đỏ. Chạy ở đây = lệch neo
-      # hiện ra trong MỘT lượt CI, ngay cạnh cổng mà nó làm đỏ.
+      # nên neo lệch dòng version chỉ lộ ra ở đó — tức ở PR phát hành, lúc sửa đắt
+      # nhất. Chạy ở đây = lệch neo hiện ra ngay trong MỘT lượt CI của dòng test.
       #
       # Đặt trước typecheck để vẫn in ra khi suite đỏ; `continue-on-error` để cả
       # verdict `anchor-gone` (exit 1) cũng không biến bước báo cáo thành cổng.
@@ -312,38 +312,13 @@ jobs:
       - name: E2E tests (playwright)
         run: bun run test:e2e
 
-      - name: Coverage gate
-        id: gate
-        run: bun run coverage:gate -- --check --baseline reports/coverage-baseline.json ${{ steps.baseline.outputs.allow_missing }}
+      # 🚫 KHÔNG có bước cổng coverage ở đây. Mức phủ thôi không gác merge từ
+      # 2026-09-11 (`docs/agent-rules/testing.md` §6): nợ test được gác theo TASK ở
+      # `release-test-gate.yml` (`test:status --strict`), còn phần trăm chỉ được
+      # **ghi lại** ở job `report` dưới đây. 🚫 Đừng thêm lại một bước theo %.
 
-      # Cổng đỏ mà không nói được đường thoát thì người bị kẹt đi tìm `if: always()`
-      # cho job `report` — cách đó KHÔNG mở được vòng khoá (xem comment ở job đó).
-      #
-      # ⚠️ Điều kiện theo CHÍNH cổng, 🚫 không `if: failure()` trần: `failure()` đúng
-      # khi bất kỳ step nào trước đó đỏ, mà typecheck đỏ ("test chờ source") là kiểu
-      # đỏ phổ biến nhất trên dòng test. Khi đó `Coverage gate` bị skip
-      # (`conclusion == 'skipped'`) nhưng khối chữ dưới đây vẫn in, đẩy người đọc đi
-      # sửa baseline cho một lượt đỏ chẳng liên quan tới coverage — đúng loại "đỏ mất
-      # tín hiệu" mà chính file này đang gỡ.
-      - name: Escape hatch when the gate is red
-        if: failure() && steps.gate.conclusion == 'failure'
-        env:
-          VERSION: ${{ needs.resolve.outputs.version }}
-          TEST_REF: ${{ needs.resolve.outputs.test_ref }}
-        run: |
-          {
-            echo "### Cổng coverage đỏ — hai nguyên nhân, hai cách xử lý"
-            echo ""
-            echo "1. **Thiếu test thật** → viết test trên \`${TEST_REF}\`, cổng tự xanh khi số lên."
-            echo "2. **Baseline neo ở dòng version khác** (xem bước \`Anchor status\` phía trên:"
-            echo "   verdict \`other-version\` / \`behind\`) → dòng \`${VERSION}\` đang bị chấm theo số"
-            echo "   của dòng trước. \`coverage:gate --update\` 🚫 KHÔNG hạ được số (nó lấy \`max\`),"
-            echo "   nên phải **neo lại bằng tay** theo runbook \`testing.md\` §6 — một PR trên dòng"
-            echo "   test, có ghi lý do."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # Cổng thứ tự merge (`git-pr.md` §4.3). Đặt SAU toàn bộ suite + cổng coverage
-      # nên 🚫 không che kết quả nào: các bước trên đã chạy xong và đã ghi summary,
+      # Cổng thứ tự merge (`git-pr.md` §4.3). Đặt SAU toàn bộ suite nên 🚫 không
+      # che kết quả nào: các bước trên đã chạy xong và đã ghi summary,
       # lượt này vẫn dùng được để viết test. Nó chỉ chặn đúng một việc — merge PR
       # dòng test trước PR code đối ứng.
       #
@@ -378,17 +353,14 @@ jobs:
     # Cả hai chiều push đều ghi neo, nhờ đó `source_sha` luôn khớp head dòng
     # version. PR bị loại vì fork không có secret để push.
     #
-    # 🚫 Cố ý KHÔNG `if: always()`, dù `needs: [overlay]` nhìn như một vòng khoá
-    # (overlay đỏ ⇒ report skipped ⇒ baseline không ghi lại ⇒ overlay vẫn đỏ).
-    # Một lượt `report` chạy thêm không mở được vòng đó: `mergeBaseline()` lấy
-    # `max(cũ, mới)` (`coverage-gate.ts`) nên baseline KHÔNG BAO GIỜ tự hạ, mà số
-    # thừa hưởng từ dòng version trước mới đúng là thứ làm `overlay` đỏ. Ghi neo
-    # từ một lượt suite đỏ còn tệ hơn: `test-anchor` sẽ in `match` cho baseline đo
-    # ở cây khác — xanh giả.
+    # 🚫 Cố ý KHÔNG `if: always()`. Neo (`source_sha`/`test_sha`) trả lời đúng một
+    # câu: **suite đã xanh trên cây nào**. Ghi neo từ một lượt suite đỏ là khai sai
+    # đúng cái nó tồn tại để khai — `test-anchor` sẽ in `match` cho một cây suite
+    # chưa từng xanh trên, biến `SHA anchor gate` của PR phát hành thành con dấu.
     #
-    # Đường thoát đúng là neo lại tường minh: runbook `testing.md` §6, một PR dòng
-    # test có ghi lý do. Bước `Escape hatch` của job `overlay` in đúng lối đó khi
-    # cổng đỏ, nên "report skipped" không còn là tín hiệu mồ côi.
+    # Từ 2026-09-11 mức phủ 🚫 không còn là cổng (`testing.md` §6), nên cũng không
+    # còn "vòng khoá baseline" nào để gỡ bằng `always()`: lượt đỏ đơn giản là chưa
+    # có số và chưa có cây xanh để neo.
     if: github.event_name == 'push'
     needs: [resolve, overlay]
     runs-on: ubuntu-latest
@@ -440,7 +412,11 @@ jobs:
           set -euo pipefail
           mkdir -p "testline/reports/${VERSION}"
           cp coverage/frontend/coverage-summary.json "testline/reports/${VERSION}/coverage-summary.json"
-          bun run coverage:gate -- --update \
+          # `--allow-missing`: dòng test vừa dựng chưa có `reports/` thì lượt xanh
+          # ĐẦU TIÊN tự khởi tạo mốc + neo, thay vì exit 1. 🚫 Không làm mất cổng nào —
+          # điều kiện "dòng test chưa có `reports/`" ở PR phát hành vẫn chặn, nó đọc
+          # file **đã commit** trên dòng test chứ không đọc cây tạm của lượt này.
+          bun run coverage:gate -- --update --allow-missing \
             --baseline "testline/reports/coverage-baseline.json" \
             --history "testline/reports/coverage-history.md" \
             --source-ref "$SOURCE_REF" \

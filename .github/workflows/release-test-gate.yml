@@ -6,14 +6,16 @@
 #
 # Năm thứ nó chặn, năm thông điệp khác nhau:
 #   1. dòng test `test/x.y.z/main` không tồn tại  → chưa viết test
-#   2. dòng test chưa có `reports/`               → chưa có baseline để chấm
+#   2. dòng test chưa có `reports/`               → không có neo SHA để đối chiếu
 #   3. SHA neo trong baseline không còn tồn tại   → không kết luận được gì (TC-E9)
-#   4. suite trên cây ghép đỏ                     → test đỏ
-#   5. cổng coverage đỏ                           → coverage tụt
+#   4. còn task đã merge chưa có test             → nợ test theo task (`--strict`)
+#   5. suite trên cây ghép đỏ                     → test đỏ
 #
-# Và hai thứ nó **cảnh báo** (đợt đầu KHÔNG chặn, siết sau bằng `--strict`):
+# Và một thứ nó **cảnh báo** (chưa chặn, siết sau bằng `--strict` của `test-anchor`):
 #   - neo cũ / lệch nhánh / thuộc version khác    → test xanh nhưng viết cho ref cũ (TC-F4)
-#   - còn task đã merge chưa có test              → liệt kê từng task (TC-E6)
+#
+# 🚫 KHÔNG còn cổng mức phủ. Coverage là **mốc tham chiếu** (`docs/agent-rules/testing.md`
+# §6); nợ test gác theo TASK ở điều kiện 4, 🚫 không theo phần trăm.
 #
 # `todo-debt.yml` KHÔNG gánh việc này — nó chỉ kiểm `docs/todo/` có tồn tại hay
 # không (honor-system), còn đây kiểm bằng cách chạy thật.
@@ -150,9 +152,9 @@ jobs:
 
       # ⚠️ Dọn `reports/` của dòng source TRƯỚC rồi mới lấy của dòng test. Cây
       # source mang sẵn `reports/coverage-baseline.json` (commit ở Đợt 2) và nó
-      # đóng băng từ lúc đó — thấp hơn baseline thật của dòng test. Nuốt lỗi
-      # archive ở đây là cổng chặn merge cuối cùng chấm theo số cũ và xanh giả.
-      - name: Fetch coverage baseline from test line
+      # đóng băng từ lúc đó, nên **neo** trong bản đó trỏ về một cây khác. Nuốt lỗi
+      # archive ở đây là cổng chặn merge cuối cùng đối chiếu với neo sai — xanh giả.
+      - name: Fetch SHA anchor from test line
         env:
           TEST_LINE: ${{ needs.probe.outputs.test_line }}
         run: |
@@ -162,15 +164,19 @@ jobs:
             {
               echo "## ❌ Cổng dòng test — CHẶN"
               echo ""
-              echo "Dòng test \`${TEST_LINE}\` chưa có \`reports/\` — không có baseline để chấm coverage."
+              echo "Dòng test \`${TEST_LINE}\` chưa có \`reports/\` — **không có neo SHA** để đối chiếu."
               echo ""
-              echo "Khởi tạo baseline trên dòng test (một lần), rồi chạy lại cổng:"
+              echo "Neo (\`source_sha\`/\`test_sha\` trong \`reports/coverage-baseline.json\`) là thứ duy nhất"
+              echo "cho biết suite đã xanh trên **cây nào**. Không có nó thì \`test-anchor.ts\` không kết"
+              echo "luận được gì, mà *\"không kết luận được\"* 🚫 không bao giờ là *đạt*."
+              echo ""
+              echo "Khởi tạo một lần trên dòng test (hoặc chỉ cần một lượt \`test-overlay\` xanh của dòng đó):"
               echo ""
               echo '```bash'
               echo "bun run coverage:gate -- --update --allow-missing"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Dòng test ${TEST_LINE} chưa có reports/ — thiếu baseline là CHẶN, không phải đạt."
+            echo "::error::Dòng test ${TEST_LINE} chưa có reports/ — không có neo SHA để đối chiếu, đó là CHẶN chứ không phải đạt."
             exit 1
           fi
 
@@ -187,16 +193,24 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --head-ref "$HEAD_REF"
 
-      # Cảnh báo, không chặn: liệt kê task đã merge mà dòng test chưa phủ. Thêm
-      # `--strict` vào đây là siết thành chặn, không phải sửa lại script.
-      - name: Per-task test status
+      # Cổng nợ test theo task. `--strict` làm nó CHẶN, khớp đúng định nghĩa nợ ở
+      # `docs/agent-rules/testing.md` §6: nợ = task đã merge mà dòng test chưa có test
+      # cho nó. Sau khi cổng mức phủ bị bỏ (2026-09-11), đây là chỗ duy nhất gác việc
+      # thiếu test ở mức TỪNG task — hai điều kiện còn lại (dòng test không tồn tại /
+      # rỗng) chỉ gác được ở mức cả dòng.
+      #
+      # Đường thoát 🚫 KHÔNG phải sửa code: khai miễn trừ có `reason` + `approved_by`
+      # ở `tests/exemptions.json` (dòng test). Nhờ vậy "vẫn phát hành khi còn nợ" luôn
+      # là một quyết định **có ký tên**, không phải một lượt CI im lặng.
+      - name: Per-task test status (gate)
         env:
           VERSION: ${{ needs.probe.outputs.version }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           bun .github/scripts/test-coverage-status.ts \
             --version "$VERSION" \
-            --source-ref "$HEAD_SHA"
+            --source-ref "$HEAD_SHA" \
+            --strict
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -216,8 +230,8 @@ jobs:
       - name: Suite E2E (playwright)
         run: bun run test:e2e
 
-      - name: Coverage gate
-        run: bun run coverage:gate -- --check --baseline reports/coverage-baseline.json
+      # 🚫 KHÔNG có bước cổng coverage ở đây — xem header. Nợ test đã được gác ở
+      # `Per-task test status (gate)` phía trên, theo TASK chứ 🚫 không theo %.
 
       - name: Upload release gate evidence
         if: always()
