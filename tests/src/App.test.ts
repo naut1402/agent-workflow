@@ -13,6 +13,7 @@ import LogsPanel from '@/features/logs/components/LogsPanel.vue'
 import StatisticsPanel from '@/features/statistics/components/StatisticsPanel.vue'
 import { createContainer } from '@/core/container'
 import { containerKey } from '@/core/shell/containerKey'
+import { createStaticModeAccess, modeAccessToken } from '@/core/shell/modeAccess'
 import { createModeRegistry, modeRegistryToken, type ModeRegistry } from '@/core/shell/modeRegistry'
 
 // Cùng cơ chế auto-discovery với `main.ts` (glob thay vì import + gọi từng
@@ -72,6 +73,8 @@ function buildContainer() {
 
   const container = createContainer()
   container.register(modeRegistryToken, () => registry)
+  // Shell resolve thêm token này để lọc mode — không đăng ký là App.vue throw ngay ở setup.
+  container.register(modeAccessToken, () => createStaticModeAccess(registry))
   return container
 }
 
