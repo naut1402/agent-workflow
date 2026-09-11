@@ -14,6 +14,7 @@
     "tests/src/backend/log",
     "tests/src/backend/events",
     "tests/mcp",
-    "tests/tools"
+    "tests/tools",
+    "tests/architecture"
   ]
 }

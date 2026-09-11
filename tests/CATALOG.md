@@ -19,6 +19,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 
 | Suite | Runner | Vùng source phủ | Số file | Lệnh chạy |
 |---|---|---|---|---|
+| `tests/architecture` | bun | — | 1 | `bun test tests/architecture` |
 | `tests/mcp` | bun | `mcp` | 1 | `bun test tests/mcp` |
 | `tests/src` | vitest | — | 1 | `npx vitest run tests/src/*.test.ts` |
 | `tests/src/backend/configs` | vitest | `backend/configs` | 1 | `npx vitest run tests/src/backend/configs` |
