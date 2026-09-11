@@ -1,4 +1,4 @@
-import { readTextFile } from '../../../../core/lib/fileHelper.js'
+import { readTextFile } from '../../../../backend/lib/fileHelper.js'
 import { resolveArtifact } from './index.js'
 
 /**

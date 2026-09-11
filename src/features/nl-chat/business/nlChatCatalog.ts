@@ -15,7 +15,7 @@
  * runner.
  */
 
-import { existsSync, joinPath } from '../../../core/lib/fileHelper.js'
+import { existsSync, joinPath } from '../../../backend/lib/fileHelper.js'
 import type { NlChatEntityType } from './nlChatSession.js'
 import {
   buildCatalog,

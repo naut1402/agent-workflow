@@ -2,7 +2,7 @@
 // Autoscan lives at settings.autoscan; legacy autoscan.json is still read once
 // for migration so existing installs keep working.
 
-import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
 import {
   DEFAULT_DASHBOARD_SETTINGS,
   parseDashboardSettings,
@@ -24,13 +24,13 @@ import {
   parseGithubTokensConfig,
   type GithubTokensConfig,
 } from '../schemas/githubTokens.js'
-import { parseLoggingConfig, type LoggingConfig } from '../../../core/log/loggingPrefs.js'
-import { invalidateLoggingPrefsCache } from '../../../core/log/loggingPrefsIo.js'
+import { parseLoggingConfig, type LoggingConfig } from '../../../shared/log/loggingPrefs.js'
+import { invalidateLoggingPrefsCache } from '../../../backend/log/loggingPrefsIo.js'
 import { parseModesConfig, type ModesConfig } from '../schemas/modes.js'
 import { parseRecoverySettings, type RecoverySettings } from '../schemas/recovery.js'
 import { parseScanPatternsConfig, type ScanPatternsConfig } from '../schemas/scanPatterns.js'
 import { DEFAULT_SECURITY_CONFIG, parseSecurityConfig, type SecurityConfig } from '../schemas/security.js'
-import { registryHome } from '../../../core/registry.js'
+import { registryHome } from '../../../backend/registry.js'
 
 export function dashboardSettingsFile(): string {
   return joinPath(registryHome(), 'settings.json')

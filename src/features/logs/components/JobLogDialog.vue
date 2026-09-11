@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { fetchJobLog } from '../scripts/LogsPanelApi'
 import { parseJobLogSections, type JobLogSectionKind } from '../scripts/logSections'
-import { parseMarkdown } from '../../../core/lib/markdownLib'
+import { parseMarkdown } from '../../../frontend/lib/markdownLib'
 
 const props = defineProps<{ jobId: string }>()
 

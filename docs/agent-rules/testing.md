@@ -8,7 +8,7 @@ Quy ước test **hiện hành**. Coverage ưu tiên cao: mỗi module refactor 
 
 | Tầng | Runner | Phạm vi | Lệnh |
 |------|--------|---------|------|
-| Unit/integration backend | **bun test** | `src/core/**` (http/registry), `src/features/**/business/**`, `mcp/**` | `bun run test` |
+| Unit/integration backend | **bun test** | `src/backend/**` (http/registry), `src/features/**/business/**`, `mcp/**` | `bun run test` |
 | Unit frontend | **vitest** (jsdom) | `src/**` (features, core, configs) | `bun run test:fe` |
 | E2E | **@playwright/test** | full stack: server thật + fixture `.dev-team-agent/` + browser | `bun run test:e2e` |
 
@@ -154,7 +154,7 @@ Chạy nhiều suite một lượt thì nối path (cùng runner):
 
 ```bash
 bun test tests/src/server/automations tests/src/features/monitor/business
-npx vitest run tests/src/features/automations tests/src/core/ui
+npx vitest run tests/src/features/automations tests/src/frontend/ui
 ```
 
 ---

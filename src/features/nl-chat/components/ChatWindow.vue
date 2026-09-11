@@ -5,8 +5,8 @@ import TaskChatBody from './TaskChatBody.vue'
 import { useChatSurface, type ChatContext } from '../composables/useChatSurface'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
 import { closeTaskChatSession } from '../../monitor/scripts/monitorApi'
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import Icon from '../../../core/ui/Icon.vue'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
+import Icon from '../../../frontend/ui/Icon.vue'
 
 // Shell of the floating chat window: position (docked to the draggable icon),
 // header, and the bodies of every open session —

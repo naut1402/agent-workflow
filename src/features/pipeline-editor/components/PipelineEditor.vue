@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, markRaw, onMounted, watch } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { fetchCatalog, fetchPipelineConfig, fetchRules, writePipelineConfig } from '../scripts/pipelineEditorApi'
-import { useLocalToggle } from '../../../core/composables/useLocalToggle'
+import { useLocalToggle } from '../../../frontend/composables/useLocalToggle'
 import PipelineEditorNode from './PipelineEditorNode.vue'
 import CatalogPanel from './CatalogPanel.vue'
 import RulesPanel from './RulesPanel.vue'
 import StepConfigDialog from './StepConfigDialog.vue'
 import EditorTargetPanel from './EditorTargetPanel.vue'
-import ArtifactNode from '../../../core/ui/ArtifactNode.vue'
+import ArtifactNode from '../../../frontend/ui/ArtifactNode.vue'
 import { usePipelineProfiles } from '../composables/usePipelineProfiles'
 import {
   buildEditorGraph,

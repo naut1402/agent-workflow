@@ -5,7 +5,7 @@ Tài liệu này mô tả **kiến trúc chi tiết** của `dev-team-dashboard`
 - Giới thiệu + hướng dẫn chạy nhanh: xem [`../README.md`](../README.md).
 - Danh mục tài liệu: [`README.md`](README.md).
 
-> Tài liệu bám **cấu trúc thật** của nhánh hiện tại. Ngoại lệ đuôi file: `src/features/agent-editor/business/agentMarkdown.js` và `src/runner-cli.mjs` cố ý **chưa** chuyển `.ts` — ghi đúng đuôi.
+> Tài liệu bám **cấu trúc thật** của nhánh hiện tại. Ngoại lệ đuôi file: `src/features/agent-editor/business/agentMarkdown.js` và `src/backend/runner-cli.mjs` cố ý **chưa** chuyển `.ts` — ghi đúng đuôi.
 
 ---
 
@@ -24,7 +24,7 @@ Mọi thao tác đọc/ghi của backend đều **scope vào một thư mục `.
 | Run mode | Cách resolve root | Ghi chú |
 |---|---|---|
 | **Dev** (`vite.config.ts` → plugin `devTeamApi`) | root = `cwd/..` (dashboard được scaffold vào `.dev-team-agent/viewer/`, nên thư mục cha là data root); override bằng env `DEV_TEAM_ROOT` | Đường single-project cũ. |
-| **Standalone / multi-project** (`src/standalone.ts`) | root lấy từ **ProjectRegistry** tại `~/.dev-team-dashboard/projects.json` (override thư mục bằng `DEV_TEAM_DASHBOARD_HOME`); request mang `?project=<id>`; không có id → default project (registry default > env `DEV_TEAM_ROOT` > fallback cũ) | Xem `resolveProjectRoot` trong `src/core/registry.ts`. |
+| **Standalone / multi-project** (`src/backend/standalone.ts`) | root lấy từ **ProjectRegistry** tại `~/.dev-team-dashboard/projects.json` (override thư mục bằng `DEV_TEAM_DASHBOARD_HOME`); request mang `?project=<id>`; không có id → default project (registry default > env `DEV_TEAM_ROOT` > fallback cũ) | Xem `resolveProjectRoot` trong `src/backend/registry.ts`. |
 
 Đọc/ghi filesystem theo triết lý **defensive** (helper nuốt lỗi, trả empty/false thay vì throw) và **path-traversal hardening** (sanitize mọi input từ request) — chi tiết ở [§6 Bất biến kiến trúc](#6-bất-biến-kiến-trúc).
 
@@ -36,49 +36,49 @@ Backend là **một app Hono duy nhất** chạy trên **hai transport** khác n
 
 ### 2.1 Tầng HTTP (Hono)
 
-- `src/api/apiServer.ts` — `createApp(ctx)` dựng Hono + middleware resolve root từ `?project=` / tự duyệt `features/<name>/api.ts` (`registerFeatureRoutes`); `createApiHandler(ctx)` là **cầu nối Node ⇆ Hono** (lazy-await `createApp`).
-- `src/core/http/AbstractController.ts` — base controller (json/ok/requireRoot/parseBody/…) + `bind(Controller, method)`.
-- `src/core/business/AbstractBusiness.ts` — base tầng domain (requireRoot/fail; không biết HTTP).
+- `src/backend/apiServer.ts` — `createApp(ctx)` dựng Hono + middleware resolve root từ `?project=` / tự duyệt `features/<name>/api.ts` (`registerFeatureRoutes`); `createApiHandler(ctx)` là **cầu nối Node ⇆ Hono** (lazy-await `createApp`).
+- `src/backend/http/AbstractController.ts` — base controller (json/ok/requireRoot/parseBody/…) + `bind(Controller, method)`.
+- `src/backend/business/AbstractBusiness.ts` — base tầng domain (requireRoot/fail; không biết HTTP).
 - `src/features/<name>/controller.ts` — HTTP handler (extends AbstractController); gọi `XxxBusiness`.
 - `src/features/<name>/business/` — domain + class `XxxBusiness` (extends AbstractBusiness).
 - `src/features/<name>/api.ts` — **chỉ** map route → `bind(...)` + `routeOrder` / `registerRoutes`. Feature mới có `api.ts` thì được nạp (không sửa registry tay).
-- `src/core/http/{responseHelper,types,client}.ts` — helper response (Node `json` + Hono `j`) + type tầng HTTP; `client.ts` là FE fetch (`apiGet`/`apiPost`/…).
+- `src/backend/http/{responseHelper,types}.ts` — helper response (Node `json` + Hono `j`) + type tầng HTTP. FE fetch client **không** ở đây: `src/frontend/http/client.ts` (§3.1).
 
 > **Lưu ý routing:** **mọi** route `/api/*` đều đi qua Hono — không feature nào còn nhánh node-res chặn trước (`/api/knowledge` là ngoại lệ cuối, đã migrate). `createApiHandler` là **điểm chốt duy nhất** ghi request log (fire-and-forget trong `finally`, không await vào response).
 
 ### 2.2 Shim tương thích
 
-`src/api/devTeamApi.ts` (36 dòng) chỉ là **shim** giữ hợp đồng cũ: re-export `createApiHandler` + export Vite plugin `devTeamApi({root})`. Nó **không** còn chứa logic core (khác hẳn mô tả cũ về "dispatcher `(req,res)=>boolean` là core").
+`src/backend/devTeamApi.ts` (36 dòng) chỉ là **shim** giữ hợp đồng cũ: re-export `createApiHandler` + export Vite plugin `devTeamApi({root})`. Nó **không** còn chứa logic core (khác hẳn mô tả cũ về "dispatcher `(req,res)=>boolean` là core").
 
 ### 2.3 Hai transport
 
 - **Vite middleware** (`bun run dev`): plugin `devTeamApi({root})` mount handler vào dev server (port 5174).
-- **Node standalone** (`src/standalone.ts`, chạy bằng `bun run serve`, cần `dist/`): HTTP server phục vụ `dist/` (SPA fallback) + mount `createApiHandler`; `PORT = DEV_TEAM_DASHBOARD_PORT | PORT | 5174`.
+- **Node standalone** (`src/backend/standalone.ts`, chạy bằng `bun run serve`, cần `dist/`): HTTP server phục vụ `dist/` (SPA fallback) + mount `createApiHandler`; `PORT = DEV_TEAM_DASHBOARD_PORT | PORT | 5174`.
 
 ### 2.4 Domain / business (data thuần, không biết HTTP)
 
-Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/configs` + `core/lib` → business → controller → `src/api` (Hono setup). Registry ở `src/core/registry.ts`; entry `src/standalone.ts`. Trong feature, `business/` gom theo **nghiệp vụ đang xử lý cái gì** — tránh tách nhiều file theo loại thao tác kỹ thuật làm phân tán không cần thiết.
+Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `backend/configs` + `backend/lib` + `shared/lib` → business → controller → `src/backend` (Hono setup). Registry ở `src/backend/registry.ts`; entry `src/backend/standalone.ts`. Trong feature, `business/` gom theo **nghiệp vụ đang xử lý cái gì** — tránh tách nhiều file theo loại thao tác kỹ thuật làm phân tán không cần thiết.
 
 | Module | Đường dẫn thật | Vai trò |
 |---|---|---|
-| Types | `src/core/http/types.ts` | Nguồn type thống nhất (`HonoEnv`, registry types). |
-| Registry | `src/core/registry.ts` | `projects.json`; REST + MCP. |
+| Types | `src/backend/http/types.ts` | Nguồn type thống nhất (`HonoEnv`, registry types). |
+| Registry | `src/backend/registry.ts` | `projects.json`; REST + MCP. |
 | Settings | `src/features/settings/business/` | Autoscan, fs browse, github tokens config, scan patterns. |
 | Pipeline | `src/features/pipeline-editor/business/pipeline/` | Layered pipeline config + merge (một module). |
 | Catalog / Rules | `src/features/pipeline-editor/business/{catalog,rules}/` | Catalog skills/agents (+ scan); rule project. Nguồn mặc định theo convention, cộng thêm path khớp `settings.scanPatterns` (matcher `business/scanPatterns.ts`, pattern inject từ controller). |
 | Agents | `src/features/agent-editor/business/` | `agents.ts` (CRUD/template/fetch) + NL generate. |
 | Tasks / artifacts | `src/features/monitor/business/` | Tasks, artifact actions, github issue, task chat. |
 | Knowledge | `src/features/knowledge/business/` | File driver đa root (`scope → base`: `project`/`system` ở data root, `global` ở `registryHome()`) + collection/tag sidecar `collections.yaml` + config/driver chọn trong cùng module. |
-| Logging | `src/core/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit/events/usage — **hai backend**: `file` (JSONL, mặc định) và `sqlite`, chọn bằng `logging.driver` trong `settings.json` (`loggingPrefs.ts`), đọc/ghi đều đi theo driver đang active (`activeLogDriverKind()`); job log text thuộc runner. |
-| DB (SQLite) | `src/core/db/` | Connection dùng chung `dashboard.sqlite` + schema Drizzle + migration. Mới chỉ phục vụ log backend `sqlite` (PoC #229) — các subsystem khác vẫn file-based. |
+| Logging | `src/backend/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit/events/usage — **hai backend**: `file` (JSONL, mặc định) và `sqlite`, chọn bằng `logging.driver` trong `settings.json` (`loggingPrefs.ts`), đọc/ghi đều đi theo driver đang active (`activeLogDriverKind()`); job log text thuộc runner. |
+| DB (SQLite) | `src/backend/db/` | Connection dùng chung `dashboard.sqlite` + schema Drizzle + migration. Mới chỉ phục vụ log backend `sqlite` (PoC #229) — các subsystem khác vẫn file-based. |
 | Statistics | `src/features/statistics/business/` | Aggregation token usage từ `usage.jsonl` theo project/task/step/job/model/provider/date/source (`GET /api/statistics/usage`); tầng đọc gom 1 module (`readUsageEntries()`) nhưng **chưa** rẽ theo `logging.driver` — xem giới hạn ở §2.4. |
 | Runners | `src/features/runner/business/` | Job queue (+ reaper), connections, session ledger (+ capture), providers CLI. |
-| Automations | `src/features/automations/business/` | Rule CRUD (`automations/*.yaml` theo data root, đa trigger OR + chuỗi action tuần tự), scheduler tick (timer: once/interval/cron cùng mốc `startAt`), event trigger, action `runTask` (tái dùng `createTask` + `runTaskStep` của monitor) chạy nền + chờ job + biến `{{trigger.*}}`/`{{steps.N.*}}` (`lib/vars.ts`), run ledger ở `registryHome()/automations/` (#233). Action `runTask` có `projectId` optional — trỏ project khác trong registry thì bước chạy trên data root của project đó (`core/registry.get`), bỏ trống thì dùng project sở hữu rule; rule state + run history vẫn nằm ở project sở hữu rule. |
+| Automations | `src/features/automations/business/` | Rule CRUD (`automations/*.yaml` theo data root, đa trigger OR + chuỗi action tuần tự), scheduler tick (timer: once/interval/cron cùng mốc `startAt`), event trigger, action `runTask` (tái dùng `createTask` + `runTaskStep` của monitor) chạy nền + chờ job + biến `{{trigger.*}}`/`{{steps.N.*}}` (`lib/vars.ts`), run ledger ở `registryHome()/automations/` (#233). Action `runTask` có `projectId` optional — trỏ project khác trong registry thì bước chạy trên data root của project đó (`src/backend/registry`.get), bỏ trống thì dùng project sở hữu rule; rule state + run history vẫn nằm ở project sở hữu rule. |
 | Settings | `src/features/settings/business/` | Dashboard settings, autoscan, fs browse, scan patterns. |
 | NL chat | `src/features/nl-chat/business/` | Session builder chat (prompt + parse trong cùng module). |
-| CLI | `src/runner-cli.mjs` | Runner CLI entry. |
+| CLI | `src/backend/runner-cli.mjs` | Runner CLI entry. |
 
-**Tầng DB `src/core/db/`.** Một file SQLite dùng chung cho mọi subsystem chuyển khỏi lưu trữ file-based. Hiện mới có log backend `sqlite` dùng tới — coi như PoC, không phải cam kết migrate toàn bộ.
+**Tầng DB `src/backend/db/`.** Một file SQLite dùng chung cho mọi subsystem chuyển khỏi lưu trữ file-based. Hiện mới có log backend `sqlite` dùng tới — coi như PoC, không phải cam kết migrate toàn bộ.
 
 - **Vị trí file**: `registryHome()/dashboard.sqlite` — **nằm ngoài cây repo**, cùng chỗ với `projects.json`. Không có file DB nào sinh trong repo, `.gitignore` không phải đụng.
 - **`client.ts`** giữ connection cache dùng chung (`getDb()`), bật `WAL` + `foreign_keys`, và chạy migration Drizzle khi mở lần đầu (idempotent). Mặc định `logging.driver = 'file'` ⇒ `getDb()` không bao giờ được gọi ⇒ **không file DB nào được tạo**.
@@ -87,14 +87,14 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 - **Giới hạn đã biết — `logging.driver = 'sqlite'` làm mode Thống kê rỗng.** `readUsageEntries()` (`src/features/statistics/business/`) đọc `usage.jsonl` vô điều kiện, không hỏi `activeLogDriverKind()`, nên khi driver là `sqlite` thì entry `usage` chỉ vào `log_entries` và `GET /api/statistics/usage` trả 0 mà không báo lỗi. Chỉ bật `sqlite` để thử PoC, đừng bật khi cần số liệu usage.
 - **Backend không dùng được thì cảnh báo một lần, không throw.** `getDb()` in `[log] sqlite backend unavailable` ra stderr lần đầu mở thất bại (vd chạy dưới Node, không có `bun:sqlite`); đường ghi/đọc vẫn nuốt lỗi để giữ bất biến *append không bao giờ throw*, nên nếu không có dòng cảnh báo đó thì log rỗng trông y hệt "chưa có log".
 
-### 2.5 Config dùng chung `src/core/configs/` (alias `@configs`)
+### 2.5 Config shell — `src/frontend/configs/` và `src/backend/configs/`
 
-`src/core/configs/` giữ preference / version shell — không import HTTP kernel; domain/business import configs + `lib` + `registry` khi cần.
+Preference / version shell tách theo scope chạy: `src/frontend/configs/` cho preference đọc trên browser, `src/backend/configs/` cho thứ phải đọc `package.json`. Không import HTTP kernel; domain/business import configs + `lib` + `registry` khi cần. (Alias `@configs` đã bỏ — hai file trong đó rơi về hai bucket khác nhau.)
 
-- `src/core/configs/appSettings.ts` — preference shell (theme/locale/notifications UI); core/plugins dùng. **Không** nhầm với schema business của feature `settings` (`autoscan`, `dashboardSettings`, `githubTokens`, `scanPatterns` ở `features/settings/schemas/`).
-- `src/core/configs/appVersion.ts` — semver từ `package.json`.
+- `src/frontend/configs/appSettings.ts` — preference shell (theme/locale/notifications UI); core/plugins dùng. **Không** nhầm với schema business của feature `settings` (`autoscan`, `dashboardSettings`, `githubTokens`, `scanPatterns` ở `features/settings/schemas/`).
+- `src/backend/configs/appVersion.ts` — semver từ `package.json`.
 - Schema domain (task, log, autoscan, …) nằm ở `src/features/<feature>/schemas/` — Zod + `z.infer`, validate biên I/O của feature đó.
-- `src/core/lib/` — `*Utils` / `*Lib` / `fileHelper` (`resolvePathUnder`, …) + helper domain (phase, theme, …).
+- `src/backend/lib/` — helper Node-only (`fileHelper` `resolvePathUnder`, `processHelper`, `yamlLib`, `dirModuleLoader`, `arrayUtils`, `dateUtils`). `src/frontend/lib/` — helper thuần browser (`theme`, `markdownLib`, `diffLib`, `authToken`, `workflowSteps`, `pipelineArtifactGraph`, `appVersion`). `src/shared/lib/` — logic thuần dùng cả hai phía (`phase`, `stringUtils`).
 - Sanitize / peer API gắn vào business hiện có và **re-export qua `business/index.ts`** khi feature khác cần dùng. Feature tiêu thụ chỉ import peer từ **index của chính nó**, không import thẳng `features/<khác>/business/...` (trừ khi tránh vòng barrel — xem feature-organization-rule).
 - Round-trip agent markdown: `src/features/agent-editor/business/agentMarkdown.js` (**vẫn `.js`**) — sở hữu agent-editor; peer import sâu `agentMarkdown.js` khi cần tránh cycle.
 
@@ -102,7 +102,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 
 ## 3. Frontend (feature-module, 9 mode qua ModeRegistry)
 
-- `src/main.ts` mount `src/App.vue`. `App.vue` là shell mỏng: `inject` 1 service container (`src/core/container/`, DI/IoC trên native Vue `provide/inject`, không thêm thư viện ngoài) → `resolve` `ModeRegistry` (`src/core/shell/modeRegistry.ts`) → lặp `listModes()` để render sidebar nav / status text / main panel. `App.vue` **không** hard-code danh sách mode — mỗi feature tự đăng ký qua `src/features/<feature>/registerMode.ts` (export `registerMode(registry)`), `main.ts` tự quét toàn bộ bằng `import.meta.glob('./features/*/registerMode.ts', { eager: true })` (đồng bộ, chạy xong trước `app.mount()`) — thêm mode mới không cần sửa `main.ts`/`App.vue`. Sơ đồ bootstrap + diễn giải: [`diagram/IoC.md`](diagram/IoC.md). Mode `monitor` **poll `/api/tasks` mỗi 1500ms** (qua `src/features/monitor/composables/useTaskPolling.ts`); các mode khác pause polling.
+- `src/frontend/main.ts` mount `src/frontend/App.vue`. `App.vue` là shell mỏng: `inject` 1 service container (`src/frontend/container/`, DI/IoC trên native Vue `provide/inject`, không thêm thư viện ngoài) → `resolve` `ModeRegistry` (`src/frontend/shell/modeRegistry.ts`) → lặp `listModes()` để render sidebar nav / status text / main panel. `App.vue` **không** hard-code danh sách mode — mỗi feature tự đăng ký qua `src/features/<feature>/registerMode.ts` (export `registerMode(registry)`), `main.ts` tự quét toàn bộ bằng `import.meta.glob('../features/*/registerMode.ts', { eager: true })` (đồng bộ, chạy xong trước `app.mount()`) — thêm mode mới không cần sửa `main.ts`/`App.vue`. Sơ đồ bootstrap + diễn giải: [`diagram/IoC.md`](diagram/IoC.md). Mode `monitor` **poll `/api/tasks` mỗi 1500ms** (qua `src/features/monitor/composables/useTaskPolling.ts`); các mode khác pause polling.
 
 | Mode (`ModeEntry.key`) | Thư mục | Component / thành phần chính |
 |---|---|---|
@@ -116,31 +116,31 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `core/conf
 | `logs` (Nhật ký) | `src/features/logs/` | `LogsPanel`, `TaskTimeline`; composable `useTaskTimeline.ts` |
 | `statistics` (Thống kê) | `src/features/statistics/` | `StatisticsPanel`, `ChartCard` (wrapper chart — mermaid P0, đổi renderer sau không sửa consumer); `lib/mermaidChart.ts` build pie/xychart-beta; drill-down project → task → step → job |
 
-- `src/features/notifications/` — không phải mode, mount xuyên suốt mọi mode trong `App.vue` (bell trong `sidebar-footer` và/hoặc `FloatingNotificationIcon` overlay góc trên-phải toàn cục — chọn qua Settings › Thông báo › Vị trí hiển thị: `notificationUiPlacement` = `sidebar` | `floating` | `both`, mặc định `both`; ẩn float khi `unreadCount` về 0). Khi có unread, icon chuông rung + scale (CSS animation). Badge cho HITL-pending/QA-ready **client-only**, suy ra từ chính `tasks` ref đã poll qua `useTaskPolling.ts` (diff `hitl_pending`/`has_qa` qua các lần poll để bắt cạnh chuyển false→true) — không có endpoint/schema backend riêng, vì `.dev-state/<task-id>.json` đã phản ánh đồng nhất cả task chạy từ orchestrator lẫn task chạy từ runner của dashboard (`src/features/runner/business/jobQueue.ts`). Trạng thái đã đọc lưu `localStorage`. Composable `useNotifications.ts` đọc `src/core/configs/appSettings.ts` (`notificationsEnabled`, `notifyHitlPending`, `notifyQaReady`, `notifyBrowserEnabled`, `notifySoundEnabled`, `notificationUiPlacement` — cấu hình ở Settings › Thông báo) để bật/tắt notify theo loại sự kiện, vị trí UI, browser `Notification` API (`lib/browserNotification.ts`), và âm thanh Web Audio API (`lib/sound.ts`). Component dropdown dùng chung `components/NotificationList.vue`.
+- `src/features/notifications/` — không phải mode, mount xuyên suốt mọi mode trong `App.vue` (bell trong `sidebar-footer` và/hoặc `FloatingNotificationIcon` overlay góc trên-phải toàn cục — chọn qua Settings › Thông báo › Vị trí hiển thị: `notificationUiPlacement` = `sidebar` | `floating` | `both`, mặc định `both`; ẩn float khi `unreadCount` về 0). Khi có unread, icon chuông rung + scale (CSS animation). Badge cho HITL-pending/QA-ready **client-only**, suy ra từ chính `tasks` ref đã poll qua `useTaskPolling.ts` (diff `hitl_pending`/`has_qa` qua các lần poll để bắt cạnh chuyển false→true) — không có endpoint/schema backend riêng, vì `.dev-state/<task-id>.json` đã phản ánh đồng nhất cả task chạy từ orchestrator lẫn task chạy từ runner của dashboard (`src/features/runner/business/jobQueue.ts`). Trạng thái đã đọc lưu `localStorage`. Composable `useNotifications.ts` đọc `src/frontend/configs/appSettings.ts` (`notificationsEnabled`, `notifyHitlPending`, `notifyQaReady`, `notifyBrowserEnabled`, `notifySoundEnabled`, `notificationUiPlacement` — cấu hình ở Settings › Thông báo) để bật/tắt notify theo loại sự kiện, vị trí UI, browser `Notification` API (`lib/browserNotification.ts`), và âm thanh Web Audio API (`lib/sound.ts`). Component dropdown dùng chung `components/NotificationList.vue`.
 
 ### 3.1 API layer
 
-- **Server setup** (`src/api/`): `apiServer.ts` (`createApp` + `createApiHandler` + đăng ký feature routes), `devTeamApi.ts` (Vite plugin). Kernel HTTP (`types`, `AbstractController`, `responseHelper`, FE `client`) ở `src/core/http/`. Không có barrel FE trong `src/api/`.
-- **FE fetch**: `src/core/http/client.ts` (`apiGet`/`apiPost`/…). Fetch theo consumer ở `src/features/<mode>/scripts/`. Hono route đăng ký ở `features/*/api.ts`.
-- Suy diễn trạng thái phase (`PHASES`, `phasesFromPipeline`, `phaseStatus`) nằm ở `src/core/lib/phase.ts`. Phase status **được suy từ sự tồn tại của artifact** + con trỏ live — phản chiếu đúng quy tắc của orchestrator (status không bao giờ được encode, chỉ suy ra).
+- **Server setup** (`src/backend/`): `apiServer.ts` (`createApp` + `createApiHandler` + đăng ký feature routes), `devTeamApi.ts` (Vite plugin). Kernel HTTP (`types`, `AbstractController`, `responseHelper`) ở `src/backend/http/`; FE `client` ở `src/frontend/http/`. Không có barrel FE trong `src/backend/`.
+- **FE fetch**: `src/frontend/http/client.ts` (`apiGet`/`apiPost`/…). Fetch theo consumer ở `src/features/<mode>/scripts/`. Hono route đăng ký ở `features/*/api.ts`.
+- Suy diễn trạng thái phase (`PHASES`, `phasesFromPipeline`, `phaseStatus`) nằm ở `src/shared/lib/phase.ts`. Phase status **được suy từ sự tồn tại của artifact** + con trỏ live — phản chiếu đúng quy tắc của orchestrator (status không bao giờ được encode, chỉ suy ra).
 
-### 3.2 Core frontend (`src/core`)
+### 3.2 Nền frontend (`src/frontend`)
 
-Nền tảng FE / shell: `composables/*`, `lib/` (phase, `*Utils`, `*Lib`, `fileHelper`, …), `ui/`, `shell/keys.ts`, cộng `configs/` (preference shell + `appVersion`, alias `@configs` — xem §2.5). Schema domain ở `features/<name>/schemas/`. i18n cài qua `src/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`.
+Nền tảng FE / shell: `composables/*`, `lib/` (helper thuần browser), `ui/`, `shell/keys.ts`, `container/`, `http/client.ts`, cộng `configs/` (preference shell — xem §2.5). Suy diễn phase và helper chuỗi dùng chung nằm ở `src/shared/lib/`. Schema domain ở `features/<name>/schemas/`. i18n cài qua `src/frontend/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`.
 
-Util / wrapper thư viện dùng chung (không gắn domain mode): `src/core/lib/{stringUtils,arrayUtils,dateUtils,yamlLib,markdownLib,diffLib,fileHelper,dirModuleLoader}.ts`.
+Util / wrapper thư viện dùng chung (không gắn domain mode) chia theo scope chạy: `src/backend/lib/{arrayUtils,dateUtils,dirModuleLoader,fileHelper,processHelper,yamlLib}.ts` · `src/frontend/lib/{markdownLib,diffLib,theme,authToken,workflowSteps,pipelineArtifactGraph,appVersion}.ts` · `src/shared/lib/{phase,stringUtils}.ts`.
 
-**Kernel (1.1.0+ — Epic D):** event bus nội bộ tại `src/core/events/` (`emit` / `on` / `once`, `emitEntity` cho CRUD `entity.*`, trigger registry). Nguyên tắc: **persist rồi mới emit** (`saveJob` / `writeStateAtomic` / `saveRegistry` → `emit`); handler lỗi bị nuốt + `console.warn`. Runtime trigger (schedule tick + event subscriber) do feature **automations** (#233) wire — rule đang bật được đồng bộ vào trigger registry qua `syncTriggerRegistry`. **Mục lục event theo feature:** [`event-catalog.md`](event-catalog.md). Quan sát UI / prefs ghi event log → #195 / #196 (base `dev/1.1.0/event-driven`). ModeRegistry (§3) là service container/DI riêng cho FE shell — bổ sung cho event bus, không thay thế; 2 cơ chế độc lập.
+**Kernel (1.1.0+ — Epic D):** event bus nội bộ tại `src/backend/events/` (`emit` / `on` / `once`, `emitEntity` cho CRUD `entity.*`, trigger registry). Nguyên tắc: **persist rồi mới emit** (`saveJob` / `writeStateAtomic` / `saveRegistry` → `emit`); handler lỗi bị nuốt + `console.warn`. Runtime trigger (schedule tick + event subscriber) do feature **automations** (#233) wire — rule đang bật được đồng bộ vào trigger registry qua `syncTriggerRegistry`. **Mục lục event theo feature:** [`event-catalog.md`](event-catalog.md). Quan sát UI / prefs ghi event log → #195 / #196 (base `dev/1.1.0/event-driven`). ModeRegistry (§3) là service container/DI riêng cho FE shell — bổ sung cho event bus, không thay thế; 2 cơ chế độc lập.
 
 ### 3.3 Styling
 
-Entry SCSS: `src/styles/main.scss` (tokens + scrollbar + shell, import từ `src/main.ts`). Style theo feature: `src/features/<mode>/styles/` (`common.scss` + `{Component}.scss` + `index.scss`) — **tự nạp** trong `src/main.ts` qua `import.meta.glob('./features/*/styles/index.scss', { eager: true })`, không liệt kê từng feature trong `main.scss`. Theme/runtime token (`_tokens` / `_shell`) là CSS variables trên `:root` nên sửa hàng loạt vẫn ảnh hưởng mọi module. Vite: `sass-embedded` + `scss.api = 'modern-compiler'`.
+Entry SCSS: `src/frontend/styles/main.scss` (tokens + scrollbar + shell, import từ `src/frontend/main.ts`). Style theo feature: `src/features/<mode>/styles/` (`common.scss` + `{Component}.scss` + `index.scss`) — **tự nạp** trong `src/frontend/main.ts` qua `import.meta.glob('../features/*/styles/index.scss', { eager: true })`, không liệt kê từng feature trong `main.scss`. Theme/runtime token (`_tokens` / `_shell`) là CSS variables trên `:root` nên sửa hàng loạt vẫn ảnh hưởng mọi module. Vite: `sass-embedded` + `scss.api = 'modern-compiler'`.
 
 ---
 
 ## 4. MCP server
 
-`mcp/server.ts` (`bun run mcp`) là stdio entrypoint riêng, expose CRUD project-registry (`list_projects`/`get_project`/`add_project`/`remove_project`) cho Claude Code, nói chuyện trực tiếp với `src/core/registry.ts`. **Không** cần HTTP server chạy. Bật qua `.claude/settings.local.json` (`enabledMcpjsonServers`). Vì dùng chung `src/core/registry.ts`, project thêm từ Claude Code và từ UI luôn nhất quán.
+`mcp/server.ts` (`bun run mcp`) là stdio entrypoint riêng, expose CRUD project-registry (`list_projects`/`get_project`/`add_project`/`remove_project`) cho Claude Code, nói chuyện trực tiếp với `src/backend/registry.ts`. **Không** cần HTTP server chạy. Bật qua `.claude/settings.local.json` (`enabledMcpjsonServers`). Vì dùng chung `src/backend/registry.ts`, project thêm từ Claude Code và từ UI luôn nhất quán.
 
 ---
 
@@ -151,9 +151,13 @@ Cây thư mục top-level. Chi tiết từng file backend/shared/frontend/mcp đ
 ```
 agent-workflow/
 ├── index.html, vite.config.ts, package.json, tsconfig.json, …
-├── src/                    # SPA (features/, core/ + lib/) + api/
+├── src/
+│   ├── backend/            # scope Node/Bun — HTTP kernel, db, events, log, registry, entry
+│   ├── frontend/           # scope browser — app root, composables, ui, shell, plugins, styles
+│   ├── shared/             # dùng chung cả hai phía — logic/type thuần, không hạ tầng
+│   └── features/           # feature-module (giữ nguyên cấu trúc)
 ├── mcp/                    # MCP stdio — xem §4
-├── tests/                  # mirror: tests/src/server · tests/src/core · tests/mcp
+├── tests/                  # mirror: tests/src/server · tests/src/{backend,frontend,shared} · tests/mcp
 ├── test-e2e/
 ├── docs/
 ├── dist/
@@ -169,11 +173,12 @@ agent-workflow/
 Thêm scan / endpoint / feature mới không được phá các bất biến sau:
 
 - **Đọc filesystem phải phòng thủ**: `safeReadDir`/`statSafe` (`fileHelper`) / `readYamlSafe` (`yamlLib`) /`readState`/`loadRegistry` nuốt lỗi, trả empty/false thay vì throw — một file state ghi dở không được làm sập request.
-- **Chống path-traversal**: mọi input từ request phải sanitize tại feature sở hữu (`resolveArtifact` + `fileHelper.resolvePathUnder`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương. Hàm sanitize domain **không** nằm ở core — gắn vào module business liên quan (vd `pipeline/index`, `agents`, `tasks`, `jobLog`) và export qua `business/index.ts` nếu feature khác cần dùng.
+- **Chống path-traversal**: mọi input từ request phải sanitize tại feature sở hữu (`resolveArtifact` + `fileHelper.resolvePathUnder`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương. Hàm sanitize domain **không** nằm ở `src/backend` / `src/shared` — gắn vào module business liên quan (vd `pipeline/index`, `agents`, `tasks`, `jobLog`) và export qua `business/index.ts` nếu feature khác cần dùng.
 - **Pattern scan tuỳ chỉnh không escape project root**: pattern trong `settings.scanPatterns` bị loại ở `sanitiseScanPattern` (schema dùng chung FE/BE của feature `settings` — không import `node:` để `SettingsDialog.vue` dùng lại được), lại ở `expandScanPatterns` (bỏ qua mọi symlink), và mỗi match còn qua `resolvePathUnder(projectRoot, …)`.
 - **Ghi registry atomic** (temp file + rename trong `saveRegistry`).
 - **Fetch URL người dùng** phải qua `fetchUrlSafe` (https-only, chặn private host) — tránh SSRF.
-- **ESM thuần**; server import core `node:`-prefixed.
-- **Module `bun:*` không được import tĩnh trên đường nạp `vite.config.ts`.** `bun run build` = `vite build` chạy dưới **Node**, mà Node ESM loader không hiểu scheme `bun:`. `vite.config.ts` kéo `src/api/apiServer.ts` vào module graph, nên mọi file với tới được từ đó (hiện tại: `src/core/db/client.ts`) phải nạp `bun:sqlite` và `drizzle-orm/bun-sqlite` bằng `await import(...)`, phần type dùng `import type`. Đổi về import tĩnh là làm đỏ build của **cả repo** — cửa chặn là step `Build` trong CI.
+- **Ranh giới scope `src/backend` ⟂ `src/frontend`.** Code frontend **không** import `src/backend/**` hay `node:*` / `bun:*` / `hono` / `drizzle-orm` — kể cả gián tiếp qua một module `business/`. Code backend không import `src/frontend/**` hay `vue`. Thứ dùng thật ở cả hai phía đi vào `src/shared/**`, nơi bị cấm import hạ tầng lẫn hai bucket kia nên không phình thành "misc". Cả ba luật do `no-restricted-imports` trong `eslint.config.js` chặn, **không có whitelist** — xem `src/{backend,frontend,shared}/README.md`.
+- **ESM thuần**; phía server import module Node bằng dạng `node:`-prefixed.
+- **Module `bun:*` không được import tĩnh trên đường nạp `vite.config.ts`.** `bun run build` = `vite build` chạy dưới **Node**, mà Node ESM loader không hiểu scheme `bun:`. `vite.config.ts` kéo `src/backend/apiServer.ts` vào module graph, nên mọi file với tới được từ đó (hiện tại: `src/backend/db/client.ts`) phải nạp `bun:sqlite` và `drizzle-orm/bun-sqlite` bằng `await import(...)`, phần type dùng `import type`. Đổi về import tĩnh là làm đỏ build của **cả repo** — cửa chặn là step `Build` trong CI.
 - `ANTHROPIC_API_KEY` tùy chọn, bật NL agent-draft generation (`/api/custom-agents/generate`); không có key thì fallback heuristic.
 - `DASHBOARD_SECRET_KEY` **bắt buộc** để dùng credential kiểu "dán secret trực tiếp" (`stored:`) hoặc "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` — mã hoá `secret-vault.json` (`secretVault.ts`). Không set → 2 luồng đó fail rõ ràng (`DASHBOARD_SECRET_KEY is not set — required to store or read vault secrets`), các luồng khác (CLI, `env:`/`file:` secretRef) không bị ảnh hưởng.

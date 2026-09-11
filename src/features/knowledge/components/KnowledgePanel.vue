@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, onMounted, watch } from 'vue'
 import { fetchKnowledgeList, fetchKnowledgeEntry, saveKnowledgeEntry, createKnowledgeEntry, deleteKnowledgeEntry, uploadKnowledgeFile, fetchKnowledgeCollections, createKnowledgeCollection, saveKnowledgeCollection, deleteKnowledgeCollection, renameKnowledgeTag } from '../scripts/KnowledgePanelApi'
-import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
-import CSelect from '../../../core/ui/CSelect.vue'
+import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
+import CSelect from '../../../frontend/ui/CSelect.vue'
 
 /**
  * `projectId` phải xuống tới **mọi** lời gọi: nhóm và tag có đường **ghi**

@@ -1,4 +1,4 @@
-import { AbstractController } from '../../core/http/AbstractController.js'
+import { AbstractController } from '../../backend/http/AbstractController.js'
 import * as statisticsBusiness from './business/index.js'
 import { UsageStatsQuerySchema } from './schemas/usageStats.js'
 

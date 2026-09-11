@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
+import { apiGet, apiPost, apiRequest } from '../../../frontend/http/client'
 
 export async function fetchCredentials() {
   return apiGet('/api/credentials')

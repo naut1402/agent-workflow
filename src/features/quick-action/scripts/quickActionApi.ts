@@ -1,4 +1,4 @@
-import { apiGet, apiRequest } from '../../../core/http/client'
+import { apiGet, apiRequest } from '../../../frontend/http/client'
 
 export async function fetchArtifactActionsCatalog() {
   return apiGet('/api/artifact-actions')

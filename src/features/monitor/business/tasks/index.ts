@@ -1,5 +1,5 @@
-import { joinPath, readDir, readFile, readTextFile, resolvePathUnder, statSafe } from '../../../../core/lib/fileHelper.js'
-import { resolveHitlPending, gateStepsFromConfig } from '../../../../core/lib/phase.js'
+import { joinPath, readDir, readFile, readTextFile, resolvePathUnder, statSafe } from '../../../../backend/lib/fileHelper.js'
+import { resolveHitlPending, gateStepsFromConfig } from '../../../../shared/lib/phase.js'
 import { knownArtifactsFor, loadPipelineConfig } from '../peers.js'
 
 /**

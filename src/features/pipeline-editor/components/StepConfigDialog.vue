@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
-import CSelect from '../../../core/ui/CSelect.vue'
-import type { CSelectOption } from '../../../core/ui/CSelect.vue'
-import KnowledgePickerDialog from '../../../core/ui/KnowledgePickerDialog.vue'
+import CSelect from '../../../frontend/ui/CSelect.vue'
+import type { CSelectOption } from '../../../frontend/ui/CSelect.vue'
+import KnowledgePickerDialog from '../../../frontend/ui/KnowledgePickerDialog.vue'
 import { buildStepConfigDraft, buildStepUpdateFromDraft } from '../lib/stepConfigDraft'
 
 const props = defineProps({
@@ -212,7 +212,7 @@ function apply() {
 <style scoped lang="scss">
 .step-config-dialog { width: min(520px, 94vw); }
 
-/* `.modal-body` là vùng cuộn duy nhất (hợp đồng ở src/styles/_shell.scss); ở đây
+/* `.modal-body` là vùng cuộn duy nhất (hợp đồng ở src/frontend/styles/_shell.scss); ở đây
    chỉ xếp các nhóm control theo cột. */
 .step-config-dialog-body {
   display: flex;

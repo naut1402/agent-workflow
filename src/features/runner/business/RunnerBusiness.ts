@@ -1,4 +1,4 @@
-import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
+import { AbstractBusiness } from '../../../backend/business/AbstractBusiness.js'
 import * as runners from './index.js'
 import type { JobStatus } from './types.js'
 

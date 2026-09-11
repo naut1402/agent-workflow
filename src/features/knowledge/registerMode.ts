@@ -1,4 +1,4 @@
-import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
+import type { ModeRegistry, ShellContext } from '../../frontend/shell/modeRegistry'
 import KnowledgePanel from './components/KnowledgePanel.vue'
 
 export function registerMode(registry: ModeRegistry): void {

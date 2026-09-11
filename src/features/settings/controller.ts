@@ -1,13 +1,13 @@
-import { AbstractController } from '../../core/http/AbstractController.js'
+import { AbstractController } from '../../backend/http/AbstractController.js'
 import { parseAutoscanConfig } from './schemas/autoscan.js'
 import { parseGithubTokensConfig } from './schemas/githubTokens.js'
-import { parseLoggingConfig } from '../../core/log/loggingPrefs.js'
+import { parseLoggingConfig } from '../../shared/log/loggingPrefs.js'
 import { parseModesConfig } from './schemas/modes.js'
 import { parseRecoverySettings } from './schemas/recovery.js'
 import { mergeScanPatternsConfig } from './schemas/scanPatterns.js'
 import { parseSecurityConfig } from './schemas/security.js'
-import { emitAudit } from '../../core/log/store.js'
-import { hasJwtSecret } from '../../core/http/security/jwtGuard.js'
+import { emitAudit } from '../../backend/log/store.js'
+import { hasJwtSecret } from '../../backend/http/security/jwtGuard.js'
 import * as settingsBusiness from './business/index.js'
 
 export class SettingsController extends AbstractController {

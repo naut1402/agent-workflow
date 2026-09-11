@@ -1,5 +1,5 @@
-import { joinPath, readTextFileSync } from '../../../core/lib/fileHelper.js'
-import { registryHome } from '../../../core/registry.js'
+import { joinPath, readTextFileSync } from '../../../backend/lib/fileHelper.js'
+import { registryHome } from '../../../backend/registry.js'
 import type { TranscriptResult, TranscriptTurn } from './sessionTranscript.js'
 
 /**

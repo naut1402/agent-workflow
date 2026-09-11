@@ -1,4 +1,4 @@
-import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
+import { AbstractBusiness } from '../../../backend/business/AbstractBusiness.js'
 import { getKnowledgeDriver, loadKnowledgeConfig } from './fileDriver.js'
 
 /** Facade knowledge — HTTP đi qua `api.ts` + `controller.ts` như mọi feature. */

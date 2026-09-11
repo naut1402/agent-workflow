@@ -16,9 +16,9 @@ import {
   renameSync,
   rmSync,
   writeTextFileSync,
-} from '../../../core/lib/fileHelper.js'
-import { dumpYaml, loadYaml } from '../../../core/lib/yamlLib.js'
-import { listTriggers, registerTrigger, unregisterTrigger } from '../../../core/events/index.js'
+} from '../../../backend/lib/fileHelper.js'
+import { dumpYaml, loadYaml } from '../../../backend/lib/yamlLib.js'
+import { listTriggers, registerTrigger, unregisterTrigger } from '../../../backend/events/index.js'
 import {
   AUTOMATION_ID_PATTERN,
   AutomationRuleRecord,

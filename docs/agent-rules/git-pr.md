@@ -262,7 +262,7 @@ Mô tả PR nhóm theo **cùng bản đồ thư mục của code**, không liệ
 
 Luôn có mục này (ghi *Không* nếu không đụng) để reviewer thấy blast radius:
 
-- **Core** (`src/core/…`) — đổi **logic** (hành vi helper, gate, schema dùng chung, middleware) thì nêu module + thay đổi; rename/import-only ghi một dòng ngắn hoặc *Không*.
+- **Backend / Frontend / Shared** (`src/backend/…`, `src/frontend/…`, `src/shared/…`) — đổi **logic** (hành vi helper, gate, schema dùng chung, middleware) thì nêu module + thay đổi; rename/import-only ghi một dòng ngắn hoặc *Không*.
 - **Feature khác** (`src/features/<peer>/…`) — sửa logic / API / contract của feature không phải phạm vi chính thì nêu feature + chỗ đụng.
 
 ### 8.3 Test view point & kết quả

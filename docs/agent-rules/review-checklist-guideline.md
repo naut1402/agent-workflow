@@ -1,6 +1,6 @@
 # Review checklist guideline — feature / business / helper
 
-Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu trúc tương tự.
+Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**`, `src/shared/**`, hoặc tái cấu trúc tương tự.
 
 - **Đánh dấu từng mục liên quan scope PR** — không bắt buộc tick hết nếu PR không đụng vùng đó.
 - **Thứ tự 3 khối theo luồng review** — code nằm đúng chỗ chưa → dữ liệu/an toàn có bị phá không → quy trình/tài liệu đã đủ chưa.
@@ -17,7 +17,7 @@ Dùng khi review PR đụng `src/features/*`, `src/core/lib`, hoặc tái cấu 
 - [ ] **Đặt đúng schema domain** — ở `features/<f>/schemas/`; không nhét schema shell vào feature.
 - [ ] **Chuẩn hoá UI string & FE API** — string qua i18n (`locales/`); gọi API qua `scripts/*Api.ts` + `apiGet` / `apiPost`.
 - [ ] **Không wiring thủ công** — không thêm tay nếu glob/auto-load đã đủ (route / styles / locales / `registerMode`).
-- [ ] **Đặt style đúng tầng** — 1 component render selector gốc → `<style scoped>`; ≥2 cùng feature → `features/<f>/styles/`; xuyên feature → `src/styles/`. Không thêm file `styles/*.scss` chỉ-comment.
+- [ ] **Đặt style đúng tầng** — 1 component render selector gốc → `<style scoped>`; ≥2 cùng feature → `features/<f>/styles/`; xuyên feature → `src/frontend/styles/`. Không thêm file `styles/*.scss` chỉ-comment.
 - [ ] **Danh sách dài không bị cắt cụt** — vùng nội dung dài tuỳ dữ liệu đã thử với dữ liệu dài **và** rỗng: cuộn được tới mục cuối, chỉ có **một** thanh cuộn trên trục đó, nội dung không tràn ra ngoài khung. Chi tiết: [`docs/ui-overflow.md`](../ui-overflow.md).
 - [ ] **Tuân thủ mode-registry khi thêm/sửa mode** — không sửa `main.ts`, không đụng `App.vue` ngoài `shellContext`, `MODE_DEFS` trong `App.test.ts` đã cập nhật.
 

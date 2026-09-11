@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { useAutomations } from '../composables/useAutomations'
-import Icon from '../../../core/ui/Icon.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
 import type { AutomationListItem, AutomationStepResult } from '../scripts/automationsApi'
 import AutomationFormDialog from './AutomationFormDialog.vue'
 

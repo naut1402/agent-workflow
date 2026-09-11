@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import ChatAttachmentBar from './ChatAttachmentBar.vue'
 import ChatComposerMenu from './ChatComposerMenu.vue'
-import KnowledgePickerDialog from '../../../core/ui/KnowledgePickerDialog.vue'
+import KnowledgePickerDialog from '../../../frontend/ui/KnowledgePickerDialog.vue'
 import type { UseChatComposer } from '../composables/useChatComposer'
 
 /**

@@ -1,5 +1,5 @@
-import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
-import { subSidebarBindings } from '../../core/shell/subSidebarBindings'
+import type { ModeRegistry, ShellContext } from '../../frontend/shell/modeRegistry'
+import { subSidebarBindings } from '../../frontend/shell/subSidebarBindings'
 import PipelineEditor from './components/PipelineEditor.vue'
 
 export function registerMode(registry: ModeRegistry): void {

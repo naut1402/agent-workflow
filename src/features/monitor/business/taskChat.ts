@@ -8,7 +8,7 @@ import {
   stepIdOf,
 } from './index.js'
 import type { JobRecord, SessionEntry, TaskSessionLedger } from './index.js'
-import { readTextFileSync } from '../../../core/lib/fileHelper.js'
+import { readTextFileSync } from '../../../backend/lib/fileHelper.js'
 import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.js'
 import { readCursorSessionTranscript, stripCursorUserWrapper } from './cursorSessionTranscript.js'
 import { readApiAgentTranscript } from './apiAgentTranscript.js'

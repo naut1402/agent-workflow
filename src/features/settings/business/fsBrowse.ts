@@ -2,7 +2,7 @@
 // never file contents. Defensive: missing/unreadable paths → empty entries.
 
 import os from 'node:os'
-import { type Stats, dirname, existsSync, homeDir, isAbsolutePath, joinPath, parsePath, realpathSync, resolvePath, safeReadDir, statSync } from '../../../core/lib/fileHelper.js'
+import { type Stats, dirname, existsSync, homeDir, isAbsolutePath, joinPath, parsePath, realpathSync, resolvePath, safeReadDir, statSync } from '../../../backend/lib/fileHelper.js'
 
 export interface BrowseEntry {
   name: string

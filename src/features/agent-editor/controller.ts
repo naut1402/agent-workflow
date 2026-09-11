@@ -1,9 +1,9 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { AbstractController } from '../../core/http/AbstractController.js'
+import { AbstractController } from '../../backend/http/AbstractController.js'
 import * as agentEditorBusiness from './business/index.js'
-import { safeReadDir } from '../../core/lib/fileHelper.js'
-import { emitAudit } from '../../core/log/store.js'
+import { safeReadDir } from '../../backend/lib/fileHelper.js'
+import { emitAudit } from '../../backend/log/store.js'
 import type { AgentScope } from './business/index.js'
 
 function readScope(raw: unknown): AgentScope {

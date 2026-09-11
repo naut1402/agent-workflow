@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { onBeforeUnmount, onMounted, ref, toRaw } from 'vue'
 import type { ArtifactMenuNode } from '../lib/menuTypes'
-import Icon from '../../../core/ui/Icon.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
 
 const props = defineProps<{
   menus: ArtifactMenuNode[]

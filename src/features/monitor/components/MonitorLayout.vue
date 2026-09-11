@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, ref, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import ProjectBar from './ProjectBar.vue'
@@ -7,7 +7,7 @@ import TaskList from './TaskList.vue'
 import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
-import Icon from '../../../core/ui/Icon.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
 import {
   patchTaskArchive,
   deleteTask,
@@ -19,11 +19,11 @@ import {
 import { isFinishedTaskState, taskNeedsStateRepair } from '../lib/pipelineRunGuards'
 import { hasInFlightJob } from '../lib/taskInFlight'
 import { taskDisplayName } from '../lib/taskDisplay'
-import { useAppSettings } from '../../../core/composables/useAppSettings'
+import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 import {
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
-} from '../../../core/configs/appSettings'
+} from '../../../frontend/configs/appSettings'
 
 const { t } = useI18nHelpers()
 

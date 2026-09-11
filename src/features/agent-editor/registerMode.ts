@@ -1,4 +1,4 @@
-import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
+import type { ModeRegistry, ShellContext } from '../../frontend/shell/modeRegistry'
 import AgentEditor from './components/AgentEditor.vue'
 
 export function registerMode(registry: ModeRegistry): void {

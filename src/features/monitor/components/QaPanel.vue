@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, watch, nextTick, onUpdated, reactive } from 'vue'
-import { parseMarkdown, renderMermaid } from '../../../core/lib/markdownLib'
+import { parseMarkdown, renderMermaid } from '../../../frontend/lib/markdownLib'
 import { saveArtifact, sendTaskFeedback } from '../scripts/QaPanelApi'
 import {
   bindFocusableEditRef,
@@ -9,7 +9,7 @@ import {
 } from '../composables/useInlineMarkdownEdit'
 import { parseQaBlocks, applyAnswer, type QaBlock } from '../composables/useQaQuestions'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
-import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
+import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
 
 const { t } = useI18nHelpers()
 

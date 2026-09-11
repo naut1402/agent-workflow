@@ -18,12 +18,11 @@
     "forceConsistentCasingInFileNames": true,
 
     "paths": {
-      "@configs/*": ["./src/core/configs/*"],
       "@/*": ["./src/*"]
     }
   },
   "include": [
-    "src/core/configs/**/*","mcp/**/*",
+    "mcp/**/*",
     "src/**/*",
     "scripts/**/*",
     "tests/**/*",

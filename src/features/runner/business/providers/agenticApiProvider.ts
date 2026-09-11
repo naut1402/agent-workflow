@@ -9,9 +9,9 @@ import {
   relativePath,
   resolvePathUnder,
   writeTextFileSync,
-} from '../../../../core/lib/fileHelper.js'
-import type { Dirent } from '../../../../core/lib/fileHelper.js'
-import { spawnSync } from '../../../../core/lib/processHelper.js'
+} from '../../../../backend/lib/fileHelper.js'
+import type { Dirent } from '../../../../backend/lib/fileHelper.js'
+import { spawnSync } from '../../../../backend/lib/processHelper.js'
 import { fetchUrlSafe } from '../../../agent-editor/business/index.js'
 import { isDirectSecretType, resolveSecretRef } from '../credentials.js'
 import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'

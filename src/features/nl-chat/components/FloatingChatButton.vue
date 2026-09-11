@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import ChatWindow from './ChatWindow.vue'
 import { useChatSurface } from '../composables/useChatSurface'
-import Icon from '../../../core/ui/Icon.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
 
 // Floating chat icon, bottom-right by default, draggable — the single UI
 // anchor for the NL chat surface shared by Task/Pipeline/Agent creation

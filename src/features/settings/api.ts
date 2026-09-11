@@ -1,6 +1,6 @@
 import type { Hono } from 'hono'
-import type { HonoEnv } from '../../core/http/types.js'
-import { bind } from '../../core/http/AbstractController.js'
+import type { HonoEnv } from '../../backend/http/types.js'
+import { bind } from '../../backend/http/AbstractController.js'
 import { SettingsController } from './controller.js'
 
 /** Fs / autoscan / github-tokens / logging / modes / recovery / scan-patterns / security — trước runner & logs. */
