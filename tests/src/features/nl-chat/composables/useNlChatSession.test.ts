@@ -18,10 +18,16 @@ function stubApi(opts: {
   turn?: any
   confirmOk?: boolean
   catalog?: any
+  /** Response cho lần GET /api/catalog thứ n — phần tử `'fail'` trả 500. */
+  catalogSeq?: any[]
   profiles?: any
   profilesFail?: boolean
+  /** Response cho lần GET /api/pipeline-profiles thứ n — lần vượt quá dùng phần tử cuối. */
+  profilesSeq?: any[]
 }) {
   let jobCall = 0
+  let profilesCall = 0
+  let catalogCall = 0
   const fetchMock = vi.fn(async (input: any, init: any = {}) => {
     const url = String(input)
     const method = (init.method || 'GET').toUpperCase()
@@ -42,15 +48,22 @@ function stubApi(opts: {
       return { ok: true, status: 200, json: async () => opts.turn ?? { status: 'ready', kind: 'question', text: '?' } }
     }
     if (url.includes('/api/catalog') && method === 'GET') {
-      return { ok: true, status: 200, json: async () => opts.catalog ?? { skills: [], agents: [{ id: 'agent-a' }, { id: 'agent-b' }] } }
+      const seq = opts.catalogSeq
+      const body = seq
+        ? seq[Math.min(catalogCall, seq.length - 1)]
+        : (opts.catalog ?? { skills: [], agents: [{ id: 'agent-a' }, { id: 'agent-b' }] })
+      catalogCall += 1
+      if (body === 'fail') return { ok: false, status: 500, json: async () => ({ error: 'boom' }) }
+      return { ok: true, status: 200, json: async () => body }
     }
     if (url.includes('/api/pipeline-profiles') && method === 'GET') {
       if (opts.profilesFail) return { ok: false, status: 500, json: async () => ({ error: 'boom' }) }
-      return {
-        ok: true,
-        status: 200,
-        json: async () => opts.profiles ?? { profiles: [{ name: 'quality-first-pipeline' }] },
-      }
+      const seq = opts.profilesSeq
+      const body = seq
+        ? seq[Math.min(profilesCall, seq.length - 1)]
+        : (opts.profiles ?? { profiles: [{ name: 'quality-first-pipeline' }] })
+      profilesCall += 1
+      return { ok: true, status: 200, json: async () => body }
     }
     if (url.includes('/api/jobs/') && method === 'GET') {
       const states = opts.jobStates ?? [{ id: 'jobZ', status: 'succeeded' }]
@@ -229,6 +242,51 @@ describe('useNlChatSession', () => {
     await new Promise((r) => setTimeout(r, 5))
 
     await s.confirm({ steps: [{ agent: 'agent-a' }, { agent: 'agent-b' }] })
+
+    expect(s.step.value).toBe('done')
+    expect(s.error.value).toBeNull()
+  })
+
+  // T536c80fd: bỏ cache-một-lần-mỗi-phiên làm tổ hợp "set agent cũ vẫn còn +
+  // lần nạp gần nhất hỏng" trở nên khả thi. Soát draft trên set cũ là để lọt
+  // ref của agent vừa bị xoá — guard phải fail-closed theo `catalogError`.
+  it('confirm(pipeline) chặn khi lần nạp catalog gần nhất hỏng, dù set cũ vẫn còn', async () => {
+    stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'pipeline', draft: { steps: [{ agent: 'agent-a' }] } },
+      // Lần 1 (lúc nhận draft): OK. Lần 2 (lúc `confirm()` soát lại): hỏng.
+      catalogSeq: [{ skills: [], agents: [{ id: 'agent-a' }] }, 'fail'],
+      confirmOk: true,
+    })
+    const s = make()
+    s.pipelineName.value = 'my-pipeline'
+    await s.sendMessage('tạo pipeline')
+    await new Promise((r) => setTimeout(r, 5))
+
+    await s.confirm({ steps: [{ agent: 'agent-a' }] })
+
+    expect(s.step.value).toBe('previewDraft')
+    expect(s.error.value).toContain('Không tải được danh sách agent')
+  })
+
+  // Đối xứng với ca `profileName` ở dưới: agent tạo ở tab khác SAU lúc nhận
+  // draft vẫn phải soát được ngay, không phải mở phiên chat mới (D4).
+  it('agent tạo giữa phiên được chấp nhận ở lần soát của confirm()', async () => {
+    stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'pipeline', draft: { steps: [{ agent: 'agent-vua-tao' }] } },
+      catalogSeq: [
+        { skills: [], agents: [{ id: 'agent-a' }] },
+        { skills: [], agents: [{ id: 'agent-a' }, { id: 'agent-vua-tao' }] },
+      ],
+      confirmOk: true,
+    })
+    const s = make()
+    s.pipelineName.value = 'my-pipeline'
+    await s.sendMessage('tạo pipeline')
+    await new Promise((r) => setTimeout(r, 5))
+    // Lúc nhận draft, catalog chưa có agent đó → ref bị coi là không hợp lệ.
+    expect(s.findInvalidPipelineAgentRefs({ steps: [{ agent: 'agent-vua-tao' }] })).toEqual(['agent-vua-tao'])
+
+    await s.confirm({ steps: [{ agent: 'agent-vua-tao' }] })
 
     expect(s.step.value).toBe('done')
     expect(s.error.value).toBeNull()
@@ -431,6 +489,68 @@ describe('useNlChatSession', () => {
 
     expect(s.step.value).toBe('previewDraft')
     expect(s.error.value).toContain('Không tải được danh sách pipeline profile')
+  })
+
+  // T536c80fd D4: guard FE cũng đóng băng theo phiên — agent thấy pipeline mới
+  // nhưng nút "Xác nhận" vẫn báo "Pipeline profile không tồn tại".
+  function profilesGets(fetchMock: any): any[] {
+    return fetchMock.mock.calls.filter(
+      ([url, init]: any[]) =>
+        String(url).includes('/api/pipeline-profiles') && (init?.method || 'GET').toUpperCase() === 'GET',
+    )
+  }
+
+  it('draft thứ hai trong cùng phiên nạp lại danh sách pipeline profile', async () => {
+    const draft = { taskId: 't1', prompt: 'p', profileName: 'quality-first-pipeline' }
+    const fetchMock = stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft } })
+    const s = make()
+
+    await s.sendMessage('m')
+    await new Promise((r) => setTimeout(r, 5))
+    expect(profilesGets(fetchMock).length).toBe(1)
+
+    await s.sendMessage('m2')
+    await new Promise((r) => setTimeout(r, 5))
+    expect(profilesGets(fetchMock).length).toBe(2)
+  })
+
+  it('pipeline tạo giữa phiên được chấp nhận ở lần soát sau, không cần mở phiên mới', async () => {
+    const draft = { taskId: 't1', prompt: 'p', profileName: 'pipeline-vua-tao' }
+    stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'task', draft },
+      // Lần 1: chưa có. Lần 2 (người dùng vừa tạo ở tab khác): đã có.
+      profilesSeq: [
+        { profiles: [{ name: 'quality-first-pipeline' }] },
+        { profiles: [{ name: 'quality-first-pipeline' }, { name: 'pipeline-vua-tao' }] },
+      ],
+    })
+    const s = make()
+
+    await s.sendMessage('m')
+    await new Promise((r) => setTimeout(r, 5))
+    expect(s.profileNameError(draft, 'task')).toContain('pipeline-vua-tao')
+
+    // `confirm()` nạp lại trước khi soát → thấy profile mới, đi tiếp.
+    await s.confirm(draft)
+    expect(s.profileNameError(draft, 'task')).toBeNull()
+    expect(s.step.value).not.toBe('previewDraft')
+  })
+
+  it('hai lời gọi chồng nhau chỉ bắn một request pipeline-profiles', async () => {
+    const draft = { taskId: 't1', prompt: 'p', profileName: 'quality-first-pipeline' }
+    const fetchMock = stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft } })
+    const s = make()
+
+    // Đúng chuỗi thao tác thật: draft về → `sendMessage` bắn `loadProfiles()`
+    // KHÔNG await → người dùng bấm "Xác nhận" ngay, `confirm()` gọi lần hai
+    // khi request đầu còn đang bay. Không có `setTimeout` xen giữa, nếu không
+    // request đầu đã xong và đây không còn là ca chồng nhau.
+    await s.sendMessage('m')
+    expect(s.entityType.value).toBe('task')
+    await s.confirm(draft)
+    await new Promise((r) => setTimeout(r, 5))
+
+    expect(profilesGets(fetchMock).length).toBe(1)
   })
 
   it('cancel resets back to an empty chat', async () => {

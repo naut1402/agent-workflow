@@ -212,6 +212,27 @@ describe('renderNlChatCatalog (nửa prompt)', () => {
     automations: [{ id: 'daily-report', name: 'Bao cao', enabled: true }],
   })
 
+  // T536c80fd: khối được dựng lại ở mỗi lượt, nên văn bản không được dạy agent
+  // rằng danh sách đã cũ — đó chính là câu làm người dùng phải mở phiên mới.
+  test('header không còn nói catalog là ảnh chụp lúc mở phiên', () => {
+    const text = renderNlChatCatalog(full, 'task')
+    expect(text).not.toContain('chụp lúc mở phiên')
+    expect(text).toContain('=== CATALOG HIỆN CÓ TRONG HỆ THỐNG (đọc mới ở lượt này) ===')
+  })
+
+  test('rule #5 không còn khuyên mở phiên chat mới', () => {
+    const text = renderNlChatCatalog(full, 'task')
+    expect(text).not.toContain('mở phiên chat mới')
+    expect(text).toContain('cấp LẠI ở mỗi lượt')
+    // Session CLI được `--resume` nên transcript còn giữ khối catalog của các
+    // lượt trước; không phủ định chúng thì ca xoá/đổi tên (TC-02) vẫn lấy được
+    // tên cũ từ khối cũ, dù khối mới không còn tên đó.
+    expect(text).toContain('các lượt TRƯỚC đã hết hiệu lực')
+    // Rule #1–#4 giữ nguyên: tươi hơn không có nghĩa là được đoán.
+    expect(text).toContain('KHÔNG tự điền')
+    expect(text).toContain('KHÔNG bịa ref')
+  })
+
   test('entityType = task → chỉ [PIPELINE PROFILE] và [AGENT]', () => {
     const text = renderNlChatCatalog(full, 'task')
     expect(text).toContain('[PIPELINE PROFILE]')
