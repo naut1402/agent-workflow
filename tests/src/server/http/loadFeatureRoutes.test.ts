@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Hono } from 'hono'
-import { registerFeatureRoutes } from '../../../../src/api/apiServer.js'
-import type { HonoEnv } from '../../../../src/core/http/types.js'
+import { registerFeatureRoutes } from '../../../../src/backend/apiServer.js'
+import type { HonoEnv } from '../../../../src/backend/http/types.js'
 
 describe('registerFeatureRoutes', () => {
   test('loads feature api modules and registers known routes', async () => {

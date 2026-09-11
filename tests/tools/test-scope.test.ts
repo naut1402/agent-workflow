@@ -67,7 +67,7 @@ describe('resolveSpecifier', () => {
   })
 
   test('alias @configs/ trỏ vào src/core/configs', () => {
-    expect(resolveSpecifier('src/App.vue', '@configs/appSettings.js')).toBe('src/core/configs/appSettings.ts')
+    expect(resolveSpecifier('src/App.vue', '@/frontend/configs/appSettings.js')).toBe('src/frontend/configs/appSettings.ts')
   })
 
   test('alias trỏ file không tồn tại → null, không bịa ra path', () => {
@@ -75,36 +75,36 @@ describe('resolveSpecifier', () => {
   })
 
   test('import .vue giữ nguyên đuôi', () => {
-    expect(resolveSpecifier('tests/src/App.test.ts', '@/App.vue')).toBe('src/App.vue')
+    expect(resolveSpecifier('tests/src/frontend/App.test.ts', '@/frontend/App.vue')).toBe('src/frontend/App.vue')
   })
 
   test('package ngoài → null (không dựng cạnh rác)', () => {
-    expect(resolveSpecifier('src/api/apiServer.ts', 'hono')).toBe(null)
-    expect(resolveSpecifier('src/api/apiServer.ts', 'node:fs')).toBe(null)
+    expect(resolveSpecifier('src/backend/apiServer.ts', 'hono')).toBe(null)
+    expect(resolveSpecifier('src/backend/apiServer.ts', 'node:fs')).toBe(null)
   })
 
   test('path tương đối không tồn tại → null', () => {
-    expect(resolveSpecifier('src/api/apiServer.ts', './khong-co-that.js')).toBe(null)
+    expect(resolveSpecifier('src/backend/apiServer.ts', './khong-co-that.js')).toBe(null)
   })
 })
 
 describe('virtualEdges — nạp động không có trong text', () => {
   test('apiServer nối tới mọi features/<name>/api.ts', () => {
     const edges = virtualEdges([
-      'src/api/apiServer.ts',
+      'src/backend/apiServer.ts',
       'src/features/automations/api.ts',
       'src/features/monitor/api.ts',
       'src/features/monitor/controller.ts',
       'src/features/monitor/business/x.ts',
     ])
-    expect(edges.get('src/api/apiServer.ts')).toEqual([
+    expect(edges.get('src/backend/apiServer.ts')).toEqual([
       'src/features/automations/api.ts',
       'src/features/monitor/api.ts',
     ])
   })
 
   test('không có api.ts nào → cạnh rỗng, không throw', () => {
-    expect(virtualEdges(['src/api/apiServer.ts']).get('src/api/apiServer.ts')).toEqual([])
+    expect(virtualEdges(['src/backend/apiServer.ts']).get('src/backend/apiServer.ts')).toEqual([])
   })
 })
 
@@ -166,7 +166,7 @@ describe('suiteOf — gom test thành suite', () => {
   test('file nằm ngay dưới thư mục gốc → chính thư mục đó', () => {
     expect(suiteOf('tests/src/server/registry.test.ts')).toBe('tests/src/server')
     expect(suiteOf('tests/mcp/server.test.ts')).toBe('tests/mcp')
-    expect(suiteOf('tests/src/App.test.ts')).toBe('tests/src')
+    expect(suiteOf('tests/src/frontend/App.test.ts')).toBe('tests/src/frontend')
   })
 })
 
@@ -175,8 +175,12 @@ describe('areaOf — quy source về khu vực hiển thị', () => {
     expect(areaOf('src/features/automations/business/runAction.ts')).toBe('features/automations/business')
   })
 
-  test('core giữ tới tầng module', () => {
-    expect(areaOf('src/core/lib/fileHelper.ts')).toBe('core/lib')
+  // 3 bucket sau khi tách `src/core` — areaOf phải phân biệt được scope, vì đây là
+  // cột mà bảng CATALOG dùng để trả lời "suite này phủ phía nào".
+  test('bucket giữ tới tầng module', () => {
+    expect(areaOf('src/backend/lib/fileHelper.ts')).toBe('backend/lib')
+    expect(areaOf('src/frontend/ui/Icon.vue')).toBe('frontend/ui')
+    expect(areaOf('src/shared/lib/phase.ts')).toBe('shared/lib')
   })
 
   test('mcp gom về một khu vực', () => {

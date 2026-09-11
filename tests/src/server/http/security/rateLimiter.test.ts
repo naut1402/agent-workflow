@@ -3,7 +3,7 @@ import {
   checkAndConsume,
   matchRateLimitGroup,
   __resetRateLimitBuckets,
-} from '../../../../../src/core/http/security/rateLimiter'
+} from '../../../../../src/backend/http/security/rateLimiter'
 import type { RateLimitConfig } from '../../../../../src/features/settings/schemas/security'
 
 beforeEach(() => {

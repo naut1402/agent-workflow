@@ -3,10 +3,10 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { sign } from 'hono/jwt'
-import { createApp } from '../../../../src/api/apiServer'
-import { createRegistryContext } from '../../../../src/core/registry'
+import { createApp } from '../../../../src/backend/apiServer'
+import { createRegistryContext } from '../../../../src/backend/registry'
 import { saveSecurityConfig } from '../../../../src/features/settings/business/dashboardSettings'
-import { __resetRateLimitBuckets } from '../../../../src/core/http/security/rateLimiter'
+import { __resetRateLimitBuckets } from '../../../../src/backend/http/security/rateLimiter'
 
 // Cross-cutting integration: middleware order/no-bypass on the Hono app, one
 // level above the pure-function unit tests (jwtGuard/rateLimiter/corsGuard).

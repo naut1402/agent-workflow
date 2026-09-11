@@ -139,7 +139,7 @@ describe('logging/store', () => {
   })
 
   test('emitAudit / appendRequestLog pick up ALS traceId', async () => {
-    const { runWithTraceId } = await import('../../../../../src/core/log/traceContext.js')
+    const { runWithTraceId } = await import('../../../../../src/backend/log/traceContext.js')
     runWithTraceId('corr-42', () => {
       appendRequestLog({ method: 'GET', path: '/api/traced', projectId: null, status: 200, durationMs: 1 })
       emitAudit({ op: 'update', entity: 'logging', identifier: null, projectId: null })

@@ -2,7 +2,7 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import TaskList from '@/features/monitor/components/TaskList.vue'
-import { STORAGE_KEY, useAppSettings } from '@/core/composables/useAppSettings'
+import { STORAGE_KEY, useAppSettings } from '@/frontend/composables/useAppSettings'
 import viMonitor from '@/features/monitor/locales/vi'
 import enMonitor from '@/features/monitor/locales/en'
 
@@ -572,7 +572,7 @@ describe('TaskList', () => {
   })
 })
 
-// Repo không có test đối chiếu key vi ↔ en (tests/src/core/i18n chỉ phủ
+// Repo không có test đối chiếu key vi ↔ en (tests/src/frontend/plugins/i18n chỉ phủ
 // locale/fallback/interpolation) — chuỗi cảnh báo mới phải tự khoá ở đây, nếu
 // không thiếu bên `en` sẽ fallback về `vi` và lọt qua mọi suite khác.
 describe('chuỗi xác nhận xoá — vi ↔ en', () => {

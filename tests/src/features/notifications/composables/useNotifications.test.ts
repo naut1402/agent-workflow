@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
 import { useNotifications } from '@/features/notifications/composables/useNotifications'
-import { useAppSettings } from '@/core/composables/useAppSettings'
+import { useAppSettings } from '@/frontend/composables/useAppSettings'
 
 vi.mock('@/features/notifications/lib/sound', () => ({ playNotificationSound: vi.fn() }))
 vi.mock('@/features/notifications/lib/browserNotification', () => ({ sendBrowserNotification: vi.fn() }))

@@ -2,10 +2,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { createApp } from '../../../../src/api/apiServer.js'
-import type { RegistryContext } from '../../../../src/core/http/types.js'
-import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
-import type { DashboardEvent } from '../../../../src/core/events/index.js'
+import { createApp } from '../../../../src/backend/apiServer.js'
+import type { RegistryContext } from '../../../../src/backend/http/types.js'
+import { on, _resetEventBusForTest } from '../../../../src/backend/events/index.js'
+import type { DashboardEvent } from '../../../../src/backend/events/index.js'
 
 /**
  * Bề mặt HTTP của knowledge sau khi migrate sang Hono — thay cho

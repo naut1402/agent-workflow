@@ -8,8 +8,8 @@ import {
   dashboardSettingsFile,
   saveAutoscanConfig,
 } from '../../../../src/features/settings/business/dashboardSettings'
-import { createRegistryContext } from '../../../../src/core/registry'
-import { createApp } from '../../../../src/api/apiServer'
+import { createRegistryContext } from '../../../../src/backend/registry'
+import { createApp } from '../../../../src/backend/apiServer'
 import { fetchGithubIssue } from '../../../../src/features/monitor/business/github/index'
 
 let home: string

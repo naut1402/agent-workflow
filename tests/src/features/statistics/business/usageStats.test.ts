@@ -8,7 +8,7 @@ import {
   parseTimeBoundMs,
   resetUsageStatsCacheForTest,
 } from '../../../../../src/features/statistics/business/usageStats.js'
-import type { UsageLogEntry } from '../../../../../src/core/log/schema.js'
+import type { UsageLogEntry } from '../../../../../src/shared/log/schema.js'
 
 // Usage-stats aggregation round-trips against a tmp DEV_TEAM_DASHBOARD_HOME —
 // never touches the real ~/.dev-team-dashboard.

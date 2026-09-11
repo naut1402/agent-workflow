@@ -3,8 +3,8 @@ import http from 'node:http'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApiHandler } from '../../../../src/api/devTeamApi.js'
-import { createRegistryContext } from '../../../../src/core/registry.js'
+import { createApiHandler } from '../../../../src/backend/devTeamApi.js'
+import { createRegistryContext } from '../../../../src/backend/registry.js'
 
 // ── Golden / characterization test for the whole /api surface ──────────────────
 //

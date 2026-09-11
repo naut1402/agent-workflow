@@ -9,11 +9,12 @@
     "tests/src/features/pipeline-editor/business",
     "tests/src/features/monitor/business",
     "tests/src/features/runner/business",
-    "tests/src/core/lib/fileHelper.test.ts",
-    "tests/src/core/lib/phase.test.ts",
-    "tests/src/core/log",
-    "tests/src/core/events",
+    "tests/src/backend/lib/fileHelper.test.ts",
+    "tests/src/shared/lib/phase.test.ts",
+    "tests/src/backend/log",
+    "tests/src/backend/events",
     "tests/mcp",
-    "tests/tools"
+    "tests/tools",
+    "tests/architecture"
   ]
 }

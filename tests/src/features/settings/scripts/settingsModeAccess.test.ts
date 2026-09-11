@@ -6,7 +6,7 @@ vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
 
 import { createSettingsModeAccess } from '@/features/settings/scripts/settingsModeAccess'
 import { fetchModesConfig } from '@/features/settings/scripts/SettingsDialogApi'
-import { createModeRegistry, type ModeEntry, type ModeRegistry } from '@/core/shell/modeRegistry'
+import { createModeRegistry, type ModeEntry, type ModeRegistry } from '@/frontend/shell/modeRegistry'
 
 const PANEL = { name: 'Stub', template: '<div />' }
 
