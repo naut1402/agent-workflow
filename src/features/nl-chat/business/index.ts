@@ -37,6 +37,7 @@ export {
   cancelNlChatSession,
   isNlChatSessionId,
 } from './nlChatSession.js'
+export type { NlChatEntityType } from './nlChatSession.js'
 
 // Only what the controller consumes; the rest of `chatAttachments` is internal
 // to the module and its tests import it directly.
