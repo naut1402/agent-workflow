@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { fetchTaskChat, sendTaskFeedback } from '../../monitor/scripts/monitorApi'
-import { resolveChatFeedbackMode } from '../../../core/configs/appSettings'
-import { useAppSettings } from '../../../core/composables/useAppSettings'
+import { resolveChatFeedbackMode } from '../../../frontend/configs/appSettings'
+import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 
 /**
  * Chat with the runner of a task's pipeline step: replays the CLI session's own

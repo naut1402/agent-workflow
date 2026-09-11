@@ -1,6 +1,6 @@
 # Mục lục domain events (theo feature)
 
-Tham chiếu nhanh các **domain event** phát trên event bus nội bộ (`src/core/events/`). Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới.
+Tham chiếu nhanh các **domain event** phát trên event bus nội bộ (`src/backend/events/`). Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới.
 
 - Kernel / nguyên tắc: [`architecture.md`](architecture.md) §3.2
 - API: `emit(type, payload)` · `emitEntity(op, entity, payload)` → `entity.{created|updated|deleted}`
@@ -139,5 +139,5 @@ Cùng một thao tác (vd tạo task) có thể vừa `task.created` (events) v�
 Khi thêm / sửa / xoá emit:
 
 1. Thêm / cập nhật / gỡ hàng trong bảng feature tương ứng (event, khi nào, payload, file).
-2. Nếu type mới hoặc đổi tên: `DashboardEventType` (`src/core/events/eventBus.ts`) + §5 nếu cần.
+2. Nếu type mới hoặc đổi tên: `DashboardEventType` (`src/backend/events/eventBus.ts`) + §5 nếu cần.
 3. Giữ nguyên tắc persist → emit; không log secret trong payload.

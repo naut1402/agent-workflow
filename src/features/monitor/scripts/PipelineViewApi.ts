@@ -1,6 +1,6 @@
 import type { TaskStatePatch } from '../schemas/task'
-import { t } from '../../../plugins/i18n'
-import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
+import { t } from '../../../frontend/plugins/i18n'
+import { apiGet, apiPost, apiRequest } from '../../../frontend/http/client'
 
 export async function patchTaskState(id: string, body: TaskStatePatch, projectId?: string) {
   return apiRequest('PUT', '/api/task-state', {

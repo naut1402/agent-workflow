@@ -6,7 +6,7 @@ import {
   readTextFile,
   safeReadDir,
   stat,
-} from '../../../core/lib/fileHelper.js'
+} from '../../../backend/lib/fileHelper.js'
 import os from 'node:os'
 import {
   parseAgentMarkdown,

@@ -1,6 +1,6 @@
-import { AbstractController } from '../../core/http/AbstractController.js'
+import { AbstractController } from '../../backend/http/AbstractController.js'
 import * as logsBusiness from './business/index.js'
-import type { LogType } from '../../core/log/schema.js'
+import type { LogType } from '../../shared/log/schema.js'
 
 export class LogsController extends AbstractController {
   private biz() {

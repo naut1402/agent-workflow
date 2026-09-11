@@ -3,7 +3,7 @@
 // Run manually: `bun run scripts/migrate-logs-to-sqlite.ts`.
 // Only reads the JSONL files, so it is safe before or after switching `logging.driver`.
 // NOT idempotent — truncate `log_entries` before re-running or rows duplicate.
-import { migrateLogsToSqlite } from '../src/core/db/migrateLogs.js'
+import { migrateLogsToSqlite } from '../src/backend/db/migrateLogs.js'
 
 const results = await migrateLogsToSqlite()
 let totalMigrated = 0

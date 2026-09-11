@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { slugify } from '../../../core/lib/stringUtils'
+import { slugify } from '../../../shared/lib/stringUtils'
 import {
   saveConnection,
   scanLocalCommands,
@@ -19,10 +19,10 @@ import {
 import { fetchProviderConfigs, saveProviderConfig, deleteProviderConfig } from '../scripts/ProviderDialogApi'
 import { DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
 import type { ConnectionKind, ConnectionOption, ProviderConfigOption, ProviderEntry } from '../types'
-import CComboSelect from '../../../core/ui/CComboSelect.vue'
-import CSelect from '../../../core/ui/CSelect.vue'
-import Icon from '../../../core/ui/Icon.vue'
-import InfoTooltip from '../../../core/ui/InfoTooltip.vue'
+import CComboSelect from '../../../frontend/ui/CComboSelect.vue'
+import CSelect from '../../../frontend/ui/CSelect.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
+import InfoTooltip from '../../../frontend/ui/InfoTooltip.vue'
 import ProviderDialog from './ProviderDialog.vue'
 
 interface RegisteredCommand {

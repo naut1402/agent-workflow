@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
 import {
   fetchCustomAgents,
@@ -10,7 +10,7 @@ import {
   type AgentScope,
 } from '../scripts/agentEditorApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
-import { emptyDraft } from '../business/agentMarkdown.js'
+import { emptyDraft } from '../business/agentDraft.js'
 import AgentSectionEditor from './AgentSectionEditor.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'
 import AgentNlWizard from './AgentNlWizard.vue'

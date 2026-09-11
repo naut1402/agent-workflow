@@ -1,5 +1,5 @@
-import { t } from '../../../plugins/i18n'
-import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
+import { t } from '../../../frontend/plugins/i18n'
+import { apiGet, apiPost, apiRequest } from '../../../frontend/http/client'
 import { submitJob } from '../../runner/scripts/runnerApi'
 
 export type AgentScope = 'project' | 'global'

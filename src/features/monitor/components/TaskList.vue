@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, ref } from 'vue'
 import TaskListItem from './TaskListItem.vue'
-import { useAppSettings } from '../../../core/composables/useAppSettings'
-import { resolveHideMissingArtifacts } from '../../../core/configs/appSettings'
+import { useAppSettings } from '../../../frontend/composables/useAppSettings'
+import { resolveHideMissingArtifacts } from '../../../frontend/configs/appSettings'
 
 const props = defineProps({
   tasks: { type: Array as () => any[], required: true },

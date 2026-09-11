@@ -1,4 +1,4 @@
-import { apiGet } from '../../../core/http/client'
+import { apiGet } from '../../../frontend/http/client'
 
 export async function fetchLogs(
   { type, project, limit }: { type?: string; project?: string; limit?: number } = {},

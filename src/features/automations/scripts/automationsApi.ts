@@ -3,7 +3,7 @@
  * pattern monitorApi.
  */
 
-import { apiGet, apiPost, apiRequest } from '../../../core/http/client.js'
+import { apiGet, apiPost, apiRequest } from '../../../frontend/http/client.js'
 import type {
   AutomationAction,
   AutomationRuleRecord,

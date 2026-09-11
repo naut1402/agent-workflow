@@ -1,4 +1,4 @@
-import { joinPath, resolvePathUnder, safeReadDir } from '../../../core/lib/fileHelper.js'
+import { joinPath, resolvePathUnder, safeReadDir } from '../../../backend/lib/fileHelper.js'
 
 /**
  * Expand user-configured scan patterns (`settings.scanPatterns`) into concrete

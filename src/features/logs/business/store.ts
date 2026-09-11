@@ -1,11 +1,11 @@
 import { and, desc, eq, inArray } from 'drizzle-orm'
-import { getDb } from '../../../core/db/client.js'
-import { logEntries } from '../../../core/db/schema.js'
-import { readTextFile } from '../../../core/lib/fileHelper.js'
-import { activeLogDriverKind } from '../../../core/log/driver.js'
-import { logFile } from '../../../core/log/fileDriver.js'
-import { isLogTypeEnabled } from '../../../core/log/loggingPrefsIo.js'
-import { parseLogLine, type LogEntry, type LogType } from '../../../core/log/schema.js'
+import { getDb } from '../../../backend/db/client.js'
+import { logEntries } from '../../../backend/db/schema.js'
+import { readTextFile } from '../../../backend/lib/fileHelper.js'
+import { activeLogDriverKind } from '../../../backend/log/driver.js'
+import { logFile } from '../../../backend/log/fileDriver.js'
+import { isLogTypeEnabled } from '../../../backend/log/loggingPrefsIo.js'
+import { parseLogLine, type LogEntry, type LogType } from '../../../shared/log/schema.js'
 
 type ReadLogsOpts = { type?: LogType; project?: string | null; limit?: number }
 
@@ -70,7 +70,7 @@ async function readLogsFromFile(types: LogType[], opts: ReadLogsOpts): Promise<L
 }
 
 /**
- * Read log entries newest-first (feature UI). Write path sống ở `src/core/log`.
+ * Read log entries newest-first (feature UI). Write path sống ở `src/backend/log`.
  * Missing file → []. Malformed lines are skipped. `limit` defaults to 200.
  * Disabled types (settings) → skipped / empty.
  * Read backend follows the active log driver (`logging.driver` — file or sqlite).
@@ -83,4 +83,4 @@ export async function readLogs(opts: ReadLogsOpts = {}): Promise<LogEntry[]> {
 }
 
 // Re-export write helpers so existing `logs/business` imports keep working.
-export { appendLog, appendRequestLog, emitAudit } from '../../../core/log/store.js'
+export { appendLog, appendRequestLog, emitAudit } from '../../../backend/log/store.js'

@@ -1,4 +1,4 @@
-import type { ModeRegistry } from '../../core/shell/modeRegistry'
+import type { ModeRegistry } from '../../frontend/shell/modeRegistry'
 import RunnerConfigPanel from './components/RunnerConfigPanel.vue'
 
 export function registerMode(registry: ModeRegistry): void {

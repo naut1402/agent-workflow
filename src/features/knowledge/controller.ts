@@ -1,5 +1,5 @@
-import { AbstractController } from '../../core/http/AbstractController.js'
-import { emitEntity } from '../../core/events/index.js'
+import { AbstractController } from '../../backend/http/AbstractController.js'
+import { emitEntity } from '../../backend/events/index.js'
 import {
   CollectionsFileError,
   createCollection,

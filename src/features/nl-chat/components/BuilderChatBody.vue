@@ -4,7 +4,7 @@ import { useNlChatSession, type NlChatEntityType } from '../composables/useNlCha
 import { useChatComposer } from '../composables/useChatComposer'
 import ChatMessageBubble from './ChatMessageBubble.vue'
 import ChatComposer from './ChatComposer.vue'
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 
 // Body of the floating chat window for the creation flow (F0012): chat freely,
 // the agent infers whether you want a Task / Pipeline / Agent and hands back a

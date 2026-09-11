@@ -12,7 +12,7 @@
  * response.
  */
 
-import { joinPath } from '../../../../core/lib/fileHelper.js'
+import { joinPath } from '../../../../backend/lib/fileHelper.js'
 import { isFinishedTaskState } from '../../lib/pipelineRunGuards.js'
 import { listJobs, removeTaskWorktree } from '../index.js'
 import type { RemoveWorktreeResult } from '../worktree.js'

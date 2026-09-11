@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed } from 'vue'
 import {
   FIXED_SECTION_KEYS,
   getSectionTitle,
   emptyDraft,
-} from '../business/agentMarkdown.js'
-import { slugifySectionKey } from '../../../core/lib/stringUtils'
-import { useSortable } from '../../../core/composables/useSortable'
+} from '../business/agentDraft.js'
+import { slugifySectionKey } from '../../../shared/lib/stringUtils'
+import { useSortable } from '../../../frontend/composables/useSortable'
 import { saveAgentTemplate } from '../scripts/AgentSectionEditorApi'
-import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
+import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
 import WorkflowSectionEditor from './WorkflowSectionEditor.vue'
 
 const { t } = useI18nHelpers()

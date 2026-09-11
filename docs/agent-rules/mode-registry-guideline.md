@@ -1,6 +1,6 @@
 # Mode registry guideline — thêm mode mới ở FE shell
 
-Quy ước khi thêm/sửa **mode** (`monitor`, `editor`, `agentEditor`, …) trong shell `src/App.vue`.
+Quy ước khi thêm/sửa **mode** (`monitor`, `editor`, `agentEditor`, …) trong shell `src/frontend/App.vue`.
 
 Sơ đồ bootstrap và runtime: [`docs/diagram/IoC.md`](../diagram/IoC.md). Kiến trúc tổng quan: [`docs/architecture.md` §3](../architecture.md).
 
@@ -12,11 +12,11 @@ Sơ đồ bootstrap và runtime: [`docs/diagram/IoC.md`](../diagram/IoC.md). Ki�
 
 | Lớp | File | Vai trò |
 |---|---|---|
-| Container (DI) | `src/core/container/` | `register` / `resolve` lazy singleton trên `Symbol` token; không phụ thuộc Vue |
-| ModeRegistry | `src/core/shell/modeRegistry.ts` | `ModeEntry` + `createModeRegistry()` (`registerMode` / `listModes` / `getMode`) |
+| Container (DI) | `src/frontend/container/` | `register` / `resolve` lazy singleton trên `Symbol` token; không phụ thuộc Vue |
+| ModeRegistry | `src/frontend/shell/modeRegistry.ts` | `ModeEntry` + `createModeRegistry()` (`registerMode` / `listModes` / `getMode`) |
 | Đăng ký mode | `src/features/<f>/registerMode.ts` | Mỗi feature tự khai `ModeEntry`, export `registerMode(registry)` |
 
-- **`src/main.ts` tự quét** `src/features/*/registerMode.ts` bằng `import.meta.glob(..., { eager: true })` — không import/gọi tay từng feature.
+- **`src/frontend/main.ts` tự quét** `src/features/*/registerMode.ts` bằng `import.meta.glob(..., { eager: true })` — không import/gọi tay từng feature.
 - **`App.vue` chỉ `inject` → `resolve(modeRegistryToken)` → lặp `listModes()`** để render sidebar / status / main panel.
 
 ---
@@ -46,7 +46,7 @@ Sơ đồ bootstrap và runtime: [`docs/diagram/IoC.md`](../diagram/IoC.md). Ki�
 
 - **Mode chỉ cần state đã có** (vd `selectedProjectId`, `defaultProjectId`) → **không đụng `App.vue`**, chỉ thêm `registerMode.ts`.
 - **Mode cần state shell chưa expose** → thêm đúng 1 dòng vào `shellContext` computed trong `App.vue`. Đây là điểm chạm còn lại **có chủ đích**.
-- **`subSidebar` không map thẳng xuống panel** — dùng helper `subSidebarBindings(ctx, '<key>')` (`src/core/shell/subSidebarBindings.ts`); chỉ có tác dụng khi mode đã khai `subSidebar`.
+- **`subSidebar` không map thẳng xuống panel** — dùng helper `subSidebarBindings(ctx, '<key>')` (`src/frontend/shell/subSidebarBindings.ts`); chỉ có tác dụng khi mode đã khai `subSidebar`.
 - **Đặt tên listener theo chuẩn Vue** — event kebab-case `foo-bar` → key `onFooBar`; event có `:` như `update:scope` → key `'onUpdate:scope'` (phải quote).
 
 ---
@@ -72,7 +72,7 @@ Sơ đồ bootstrap và runtime: [`docs/diagram/IoC.md`](../diagram/IoC.md). Ki�
 - [ ] **Ẩn/hiện động qua `visible(ctx)`**, không tự thêm `v-if` riêng trong `App.vue`.
 - [ ] **Khai `descriptionKey` + `maturity`** (và `defaultEnabled: false` nếu mode chưa hoàn thiện) — group "Chế độ" trong Settings đọc thẳng từ đây.
 - [ ] **Không tự đọc `settings.modes` trong feature** — quyết định hiển thị là việc của `canAccessMode` ở shell (§7).
-- [ ] **Không sửa `src/main.ts`** — thấy cần sửa nghĩa là đang làm sai convention.
+- [ ] **Không sửa `src/frontend/main.ts`** — thấy cần sửa nghĩa là đang làm sai convention.
 - [ ] **Cập nhật `MODE_DEFS` trong `App.test.ts`** để mode mới được cover trong cả 3 test lặp qua `MODE_DEFS`.
 - [ ] **Giữ xanh trước khi PR** — `vue-tsc --noEmit`, `vitest run tests/src/App.test.ts`, và test riêng của feature.
 
@@ -82,7 +82,7 @@ Sơ đồ bootstrap và runtime: [`docs/diagram/IoC.md`](../diagram/IoC.md). Ki�
 
 ```ts
 // src/features/<feature>/registerMode.ts
-import type { ModeRegistry } from '../../core/shell/modeRegistry'
+import type { ModeRegistry } from '../../frontend/shell/modeRegistry'
 import MyPanel from './components/MyPanel.vue'
 
 export function registerMode(registry: ModeRegistry): void {
@@ -108,10 +108,10 @@ Bật/tắt mode chia làm **3 lớp tách rời**, đừng trộn vào nhau:
 | Lớp | File | Trách nhiệm |
 |---|---|---|
 | **Catalog** — mode nào tồn tại | `registerMode.ts` của từng feature | Khai báo tĩnh (§2). Không chứa logic quyết định |
-| **Nguồn cấu hình** — provider | Interface + token: `src/core/shell/modeAccess.ts`; implementation hôm nay: `src/features/settings/scripts/settingsModeAccess.ts` | Đọc `modes.enabled` từ `settings.json`, giữ state reactive |
+| **Nguồn cấu hình** — provider | Interface + token: `src/frontend/shell/modeAccess.ts`; implementation hôm nay: `src/features/settings/scripts/settingsModeAccess.ts` | Đọc `modes.enabled` từ `settings.json`, giữ state reactive |
 | **Quyết định hiển thị** | `canAccessMode(modeKey, ctx)`, shell gọi trong `App.vue` | UI **không bao giờ** đọc trực tiếp `settings.modes.enabled` |
 
-Chỉ interface + token nằm ở `core/`: implementation phải gọi `fetchModesConfig()` của `features/settings`, để nguyên trong `core/` là import ngược chiều layering.
+Chỉ interface + token nằm ở `src/frontend/shell/`: implementation phải gọi `fetchModesConfig()` của `features/settings`, để nguyên trong `src/frontend/` là import ngược chiều layering.
 
 ### Điểm gọi trong shell — đúng 2 chỗ
 
@@ -134,7 +134,7 @@ Các bước khi làm:
 
 1. Viết `features/auth/scripts/permissionModeAccess.ts` implement đúng `ModeAccessProvider`.
 2. Điền `ctx.user` (`{ id, roles }`) — field đã có sẵn trong `ModeAccessContext`, thêm field mới không phá chữ ký `canAccessMode`.
-3. Đổi **một dòng** ở `src/main.ts`: `container.register(modeAccessToken, () => createPermissionModeAccess(...))`.
+3. Đổi **một dòng** ở `src/frontend/main.ts`: `container.register(modeAccessToken, () => createPermissionModeAccess(...))`.
 
 Không có file UI nào phải sửa — đó là lý do lớp này tồn tại.
 

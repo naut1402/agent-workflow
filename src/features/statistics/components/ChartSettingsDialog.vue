@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import CSelect from '../../../core/ui/CSelect.vue'
-import Icon from '../../../core/ui/Icon.vue'
-import type { CSelectOption } from '../../../core/ui/CSelect.vue'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
+import CSelect from '../../../frontend/ui/CSelect.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
+import type { CSelectOption } from '../../../frontend/ui/CSelect.vue'
 import { computed } from 'vue'
 import {
   CHART_MAX_HEIGHT,

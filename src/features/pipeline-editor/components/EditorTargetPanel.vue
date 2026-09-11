@@ -6,13 +6,13 @@
  * Thuần trình bày — không gọi API, không đụng canvas. Mọi thao tác đi ra ngoài
  * bằng emit để `PipelineEditor` giữ nguyên vai trò nơi duy nhất nạp/ghi pipeline.
  */
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed } from 'vue'
-import Icon from '../../../core/ui/Icon.vue'
-import CSelect from '../../../core/ui/CSelect.vue'
-import type { CSelectOption } from '../../../core/ui/CSelect.vue'
-import RailIcon from '../../../core/ui/RailIcon.vue'
-import type { RailIconName } from '../../../core/ui/railIconNames'
+import Icon from '../../../frontend/ui/Icon.vue'
+import CSelect from '../../../frontend/ui/CSelect.vue'
+import type { CSelectOption } from '../../../frontend/ui/CSelect.vue'
+import RailIcon from '../../../frontend/ui/RailIcon.vue'
+import type { RailIconName } from '../../../frontend/ui/railIconNames'
 import { taskDisplayName } from '../../monitor/lib/taskDisplay'
 
 const { t } = useI18nHelpers()

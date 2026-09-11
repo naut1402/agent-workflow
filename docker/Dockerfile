@@ -102,4 +102,4 @@ COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 EXPOSE 5174
 
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["bun", "src/standalone.ts"]
+CMD ["bun", "src/backend/standalone.ts"]

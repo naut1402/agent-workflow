@@ -1,13 +1,13 @@
 import { type Ref, computed, ref, watch } from 'vue'
-import { t } from '../../../plugins/i18n'
-import { useAppSettings } from '../../../core/composables/useAppSettings'
+import { t } from '../../../frontend/plugins/i18n'
+import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 import {
   resolveNotificationsEnabled,
   resolveNotifyBrowserEnabled,
   resolveNotifyHitlPending,
   resolveNotifyQaReady,
   resolveNotifySoundEnabled,
-} from '../../../core/configs/appSettings'
+} from '../../../frontend/configs/appSettings'
 import type { NotificationEvent, NotificationKind } from '../lib/notificationTypes'
 import { sendBrowserNotification } from '../lib/browserNotification'
 import { playNotificationSound } from '../lib/sound'

@@ -17,17 +17,17 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 | Domain thuần (đọc/ghi root, rule nghiệp vụ) | `business/` |
 | Zod schema domain | `schemas/` của feature |
 | UI Vue / composable | `components/`, `composables/` |
-| FE gọi API | `scripts/*Api.ts` (dùng `apiGet` / `apiPost` từ `core/http`) |
+| FE gọi API | `scripts/*Api.ts` (dùng `apiGet` / `apiPost` từ `src/frontend/http/client`) |
 | Chuỗi UI | `locales/vi.ts` (+ `en` khuyến nghị) |
 | Style chỉ **1** component render selector gốc | `<style scoped lang="scss">` trong chính `.vue` |
 | Style **≥2** component cùng feature | `features/<f>/styles/*.scss` + `@use` từ `styles/index.scss` |
-| Style xuyên feature, hoặc element do JS/`core` tạo runtime | `src/styles/` (shell) hoặc primitive `core/ui/C<Name>.vue` |
-| Prefer shell / theme / locale app | `src/core/configs/` hoặc plugins |
-| Helper kiểu dữ liệu / wrap package / FS | `src/core/lib/` |
-| Ghi audit / request log | `src/core/log/` — feature `logs` chỉ đọc/stream |
+| Style xuyên feature, hoặc element do JS/`core` tạo runtime | `src/frontend/styles/` (shell) hoặc primitive `src/frontend/ui/C<Name>.vue` |
+| Prefer shell / theme / locale app | `src/frontend/configs/` hoặc `src/frontend/plugins/` |
+| Helper kiểu dữ liệu / wrap package / FS | `src/backend/lib/` (Node) hoặc `src/frontend/lib/` (browser) |
+| Ghi audit / request log | `src/backend/log/` — feature `logs` chỉ đọc/stream |
 
 - **Không tạo cây song song** kiểu `server/<domain>` hay helper "misc" ngoài convention.
-- **Feature tự mang `styles/index.scss` và `locales/{vi,en}.ts`** — glob eager ở `src/main.ts` tự nạp, không liệt kê tay, không sửa hub wiring.
+- **Feature tự mang `styles/index.scss` và `locales/{vi,en}.ts`** — glob eager ở `src/frontend/main.ts` tự nạp, không liệt kê tay, không sửa hub wiring.
 
 ---
 
@@ -65,12 +65,12 @@ Helper nhỏ (sanitize tên, parse một format) **gắn vào module đang xử 
 
 Thứ tự quyết định:
 
-1. **Đã có trong `src/core/lib/`?** → dùng lại.
+1. **Đã có trong `src/backend/lib/` · `src/frontend/lib/` · `src/shared/lib/`?** → dùng lại.
 2. **Cùng kiểu, thiếu API?** → **mở rộng** helper hiện có (giữ tên & overload TypeScript ổn định).
 3. **Loại hoàn toàn mới, dùng ≥ 2 feature hoặc FE+BE?** → thêm helper mới theo quy ước tên dưới đây.
-4. **Chỉ một feature / một capability?** → để trong `business/` của feature đó, **không** đẩy lên core sớm.
+4. **Chỉ một feature / một capability?** → để trong `business/` của feature đó, **không** đẩy lên `backend/` · `frontend/` · `shared/` sớm.
 
-### 3.1 Quy ước tên trong `core/lib`
+### 3.1 Quy ước tên trong `backend/lib` · `frontend/lib` · `shared/lib`
 
 | Loại | Tên | Ví dụ |
 |------|-----|--------|
@@ -85,27 +85,28 @@ Thứ tự quyết định:
 - **`apiServer` không liệt kê feature tay** — `loadModulesUnder(featuresRoot, { entryFile: 'api.ts' })` rồi sort `routeOrder`; giữ `node:http` / `node:buffer` ở tầng transport.
 - **Đổi chữ ký helper → chạy `bun run typecheck`** (CI gate).
 
-### 3.2 Không thuộc `core/lib`
+### 3.2 Không thuộc `*/lib`
 
 - **Rule / sanitize domain** (tên agent, profile, task id, artifact path) → business feature sở hữu.
-- **Preference shell** (`locale`, theme) → `core/configs` / plugins.
-- **Driver log ghi hạ tầng** → `core/log`.
+- **Preference shell** (`locale`, theme) → `src/frontend/configs` / `src/frontend/plugins`.
+- **Driver log ghi hạ tầng** → `src/backend/log`.
 
 ---
 
 ## 4. Hướng phụ thuộc
 
 ```
-core/lib, core/configs, core/log, core/registry
+backend/{lib,configs,log,registry}   shared/{lib,log}   frontend/{lib,configs,ui,composables,shell}
         ↑
 features/*/business
         ↑
 features/*/controller + api.ts
         ↑
-src/api (setup) / main.ts (glob)
+src/backend (setup) / src/frontend/main.ts (glob)
 ```
 
-- **Không vòng tròn**; `core` **không** import `features`.
+- **Không vòng tròn**; `backend` / `frontend` / `shared` **không** import `features`.
+- **Ranh giới scope**: `frontend` 🚫 `backend` (và 🚫 `node:*` / `bun:*` / `hono` / `drizzle-orm`), `backend` 🚫 `frontend` (và 🚫 `vue`), `shared` 🚫 cả hai + 🚫 hạ tầng. Lint chặn, không whitelist.
 - **Zod một nguồn chân lý** tại `schemas/`; `safeParse` ở biên I/O; fail → default an toàn.
 
 ---
@@ -118,12 +119,12 @@ Tiêu chí **duy nhất** chọn nơi đặt style là **bao nhiêu component re
 |------------------------------|--------|
 | Đúng **1** component | `<style scoped lang="scss">` trong chính `.vue` đó |
 | **≥2** component **cùng** feature | `features/<f>/styles/<Nhóm>.scss` + `@use` từ `styles/index.scss` |
-| **≥2** feature, hoặc element do JS/composable `core` tạo runtime | `src/styles/` (shell), hoặc primitive `core/ui/C<Name>.vue` + class `c-<name>` |
+| **≥2** feature, hoặc element do JS/composable `core` tạo runtime | `src/frontend/styles/` (shell), hoặc primitive `src/frontend/ui/C<Name>.vue` + class `c-<name>` |
 
 - **Kích thước file không phải lý do tách** — 300 dòng `<style scoped>` cạnh template vẫn dễ định vị hơn 300 dòng ở file rời.
 - **Đếm theo compound CUỐI của selector, không phải tổ tiên** — `scoped` gắn `[data-v-…]` vào compound cuối. Rule *bắc cầu* (tổ tiên ở SFC này, đích ở SFC khác) tính là **≥2 component**.
 - **Giữ đúng thứ tự nạp cũ khi gộp nhiều file** vào một `<style scoped>` — rule cùng specificity dựa vào source order để thắng.
-- **Giữ global, không scope hoá**: `src/styles/_tokens.scss` (`:root` vars), `_shell.scss`, `_scrollbar.scss`.
+- **Giữ global, không scope hoá**: `src/frontend/styles/_tokens.scss` (`:root` vars), `_shell.scss`, `_scrollbar.scss`.
 
 Không làm:
 
@@ -131,7 +132,7 @@ Không làm:
 - **File SCSS chỉ có comment, 0 rule** → xoá cả dòng `@use`.
 - **`styles/index.scss` chỉ tồn tại để `@use` lại file private** → xoá cả thư mục `styles/`; glob ở `main.ts` là pattern-based nên **không** sửa `main.ts`.
 - **Đặt tên `common.scss` cho nội dung chỉ một component dùng** — tên sai lệch còn tệ hơn phân mảnh.
-- **Định nghĩa primitive xuyên feature** (`.cfg-input`, `.chip`) trong `styles/` của một feature — feature khác sẽ phụ thuộc ngầm vào thứ tự glob; đưa lên `src/styles/`.
+- **Định nghĩa primitive xuyên feature** (`.cfg-input`, `.chip`) trong `styles/` của một feature — feature khác sẽ phụ thuộc ngầm vào thứ tự glob; đưa lên `src/frontend/styles/`.
 
 ---
 
@@ -141,7 +142,7 @@ Không làm:
 2. **Kế thừa abstract** — controller `extends AbstractController`; business `extends AbstractBusiness`.
 3. **Gom `business/` theo nghiệp vụ**; peer chỉ qua `business/index.ts`.
 4. **Không sửa `apiServer` registry tay** — để glob nạp.
-5. **Schema domain để trong feature**, đừng đẩy vào `core/configs` trừ shell preference thật sự.
+5. **Schema domain để trong feature**, đừng đẩy vào `src/frontend/configs` trừ shell preference thật sự.
 6. **Dùng `*Utils` / `*Lib` / `fileHelper` có sẵn**, mở rộng helper trước khi copy logic.
 7. **Business không import trực tiếp `node:fs` / `node:path`.**
 8. **Chạy `bun run typecheck` + `bun run build`** nếu đụng cả FE và Node.
@@ -155,5 +156,5 @@ Không làm:
 |--------|----------------|
 | Hàm thuần / business | `tests/` mirror path; runner **bun** nếu đụng fs |
 | Composable / component | vitest + `mountWithI18n` nếu có `t()` |
-| Helper `core/lib` dùng ở FE | `bun run build` nếu nghi `node:fs` lọt bundle |
+| Helper `src/*/lib` dùng ở FE | `bun run build` nếu nghi `node:fs` lọt bundle |
 | Đổi overload `fileHelper` | `bun run typecheck` |

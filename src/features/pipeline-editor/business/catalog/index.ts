@@ -47,7 +47,7 @@ export const BUILTIN_CATALOG = {
   ],
 }
 
-import { basename, dirname, homeDir, joinPath, resolvePath } from '../../../../core/lib/fileHelper.js'
+import { basename, dirname, homeDir, joinPath, resolvePath } from '../../../../backend/lib/fileHelper.js'
 import {
   findMarketplaceJson,
   latestPluginCacheDir,

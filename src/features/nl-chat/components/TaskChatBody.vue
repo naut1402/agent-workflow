@@ -4,7 +4,7 @@ import { useTaskChat } from '../composables/useTaskChat'
 import { useChatComposer } from '../composables/useChatComposer'
 import ChatMessageBubble from './ChatMessageBubble.vue'
 import ChatComposer from './ChatComposer.vue'
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 
 // Body of the floating chat window when it is scoped to a pipeline step: the
 // runner's own conversation history (CLI session transcript) plus an input that

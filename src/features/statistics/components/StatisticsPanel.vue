@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ChartCard from './ChartCard.vue'
 import ChartSettingsDialog from './ChartSettingsDialog.vue'
 import ChartTile from './ChartTile.vue'
 import ReportCard from './ReportCard.vue'
-import CSelect from '../../../core/ui/CSelect.vue'
-import type { CSelectOption } from '../../../core/ui/CSelect.vue'
+import CSelect from '../../../frontend/ui/CSelect.vue'
+import type { CSelectOption } from '../../../frontend/ui/CSelect.vue'
 import { fetchUsageStats } from '../scripts/usageStatsApi'
 import {
   USAGE_METRICS,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onUnmounted, ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import type { TaskGroup } from '../lib/groupRunningJobs'
 import RunningJobsList from './RunningJobsList.vue'
 

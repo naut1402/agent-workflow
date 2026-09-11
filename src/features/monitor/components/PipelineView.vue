@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, resetPipelineStep } from '../scripts/PipelineViewApi'
 import { fetchJob, fetchJobs, cancelJob } from '../../runner/scripts/runnerApi'
-import { phasesFromPipeline, phaseStatus } from '../../../core/lib/phase'
+import { phasesFromPipeline, phaseStatus } from '../../../shared/lib/phase'
 import PipelineNode from './PipelineNode.vue'
-import ArtifactNode from '../../../core/ui/ArtifactNode.vue'
+import ArtifactNode from '../../../frontend/ui/ArtifactNode.vue'
 import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
-import { buildArtifactNodesAndEdges } from '../../../core/lib/pipelineArtifactGraph'
+import { buildArtifactNodesAndEdges } from '../../../frontend/lib/pipelineArtifactGraph'
 
 const { t } = useI18nHelpers()
 const props = defineProps({

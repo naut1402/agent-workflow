@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { t } from '../../../plugins/i18n'
+import { t } from '../../../frontend/plugins/i18n'
 import { buildAndRunAgent, generateAgentDraft } from '../scripts/agentEditorApi'
 import { fetchJob, fetchRunners } from '../../runner/scripts/runnerApi'
 

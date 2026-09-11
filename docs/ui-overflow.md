@@ -1,6 +1,6 @@
 # Chiến lược tràn cho danh sách và vùng nội dung dài
 
-Quy ước cho mọi vùng UI có chiều cao phụ thuộc dữ liệu (danh sách, cây, body dialog, panel log). Class nền nằm ở `src/styles/_shell.scss` (entry `src/styles/main.scss`).
+Quy ước cho mọi vùng UI có chiều cao phụ thuộc dữ liệu (danh sách, cây, body dialog, panel log). Class nền nằm ở `src/frontend/styles/_shell.scss` (entry `src/frontend/styles/main.scss`).
 
 ## Phương châm
 
@@ -33,7 +33,7 @@ Khi một panel chỉ nên giành chiều cao lúc nội dung của nó đang m�
 
 **Task list ở Monitor** — `src/features/monitor/styles/TaskList.scss`. `.tasklist-panel` là `flex` + `min-height: 0` + `overflow: hidden`; `.tasklist` là lá mang `overflow-y: auto; flex: 1; min-height: 0`. Hai chế độ sizing là hai class khác nhau: `.tasklist--active` chia phần còn lại, `.tasklist--archived` cap `max-height: min(40vh, 280px)`.
 
-**Dialog `.modal`** — `src/styles/_shell.scss` ghi thẳng hợp đồng: *dialog dùng `.modal` PHẢI có đúng một `.modal-body` bọc phần nội dung*. `.modal` không khai báo `overflow`; nó dựa vào `.modal-body` (`flex: 1; min-height: 0; overflow-y: auto`) để hút phần cao quá `max-height: 88vh`. Đặt nội dung thẳng vào `.modal` thì khi vượt 88vh, hàng nút `.modal-actions` bị vẽ ra ngoài border dưới.
+**Dialog `.modal`** — `src/frontend/styles/_shell.scss` ghi thẳng hợp đồng: *dialog dùng `.modal` PHẢI có đúng một `.modal-body` bọc phần nội dung*. `.modal` không khai báo `overflow`; nó dựa vào `.modal-body` (`flex: 1; min-height: 0; overflow-y: auto`) để hút phần cao quá `max-height: 88vh`. Đặt nội dung thẳng vào `.modal` thì khi vượt 88vh, hàng nút `.modal-actions` bị vẽ ra ngoài border dưới.
 
 ## Checklist trước khi báo hoàn thành
 
