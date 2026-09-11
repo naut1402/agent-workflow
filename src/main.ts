@@ -9,6 +9,8 @@ import { resolveThemePreference, resolveLocale } from './core/configs/appSetting
 import { installPlugins, setI18nLocale } from './plugins'
 import { createContainer } from './core/container'
 import { createModeRegistry, modeRegistryToken, type ModeRegistry } from './core/shell/modeRegistry'
+import { modeAccessToken } from './core/shell/modeAccess'
+import { createSettingsModeAccess } from './features/settings/scripts/settingsModeAccess'
 
 const { settings, load } = useAppSettings()
 load()
@@ -33,5 +35,9 @@ for (const mod of Object.values(modeModules)) {
 
 const container = createContainer()
 container.register(modeRegistryToken, () => modeRegistry)
+// Dòng duy nhất phải đổi khi thay nguồn quyết định sang role/permission trong DB
+// — xem docs/agent-rules/mode-registry-guideline.md §7.
+const modeAccess = createSettingsModeAccess(modeRegistry)
+container.register(modeAccessToken, () => modeAccess)
 
 installPlugins(createApp(App), { i18n: { locale }, container }).mount('#app')

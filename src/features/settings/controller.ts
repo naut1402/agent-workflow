@@ -2,6 +2,7 @@ import { AbstractController } from '../../core/http/AbstractController.js'
 import { parseAutoscanConfig } from './schemas/autoscan.js'
 import { parseGithubTokensConfig } from './schemas/githubTokens.js'
 import { parseLoggingConfig } from '../../core/log/loggingPrefs.js'
+import { parseModesConfig } from './schemas/modes.js'
 import { parseRecoverySettings } from './schemas/recovery.js'
 import { mergeScanPatternsConfig } from './schemas/scanPatterns.js'
 import { parseSecurityConfig } from './schemas/security.js'
@@ -98,6 +99,26 @@ export class SettingsController extends AbstractController {
     })
     const saved = settingsBusiness.saveLoggingConfig(next)
     emitAudit({ op: 'update', entity: 'logging', identifier: 'config', projectId: null })
+    return this.ok({ config: saved })
+  }
+
+  getModes() {
+    return this.ok({ config: settingsBusiness.loadModesConfig() })
+  }
+
+  async updateModes() {
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON')
+    // Merge per key: PUT một phần không xoá cấu hình của mode khác (như logging.types).
+    const current = settingsBusiness.loadModesConfig()
+    const next = parseModesConfig({
+      enabled: {
+        ...current.enabled,
+        ...(b.value?.enabled && typeof b.value.enabled === 'object' ? b.value.enabled : {}),
+      },
+    })
+    const saved = settingsBusiness.saveModesConfig(next)
+    emitAudit({ op: 'update', entity: 'modes', identifier: 'config', projectId: null })
     return this.ok({ config: saved })
   }
 

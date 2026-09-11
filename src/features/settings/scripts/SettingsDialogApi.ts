@@ -37,6 +37,14 @@ export async function saveLoggingConfig(config: {
   return apiRequest('PUT', '/api/logging-config', { body: config })
 }
 
+export async function fetchModesConfig() {
+  return apiGet('/api/modes-config')
+}
+
+export async function saveModesConfig(config: { enabled?: Record<string, boolean> }) {
+  return apiRequest('PUT', '/api/modes-config', { body: config })
+}
+
 export async function fetchRecoveryConfig() {
   return apiGet('/api/recovery-config')
 }

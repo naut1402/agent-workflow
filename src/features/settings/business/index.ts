@@ -6,6 +6,8 @@ import {
   saveGithubTokensConfig,
   loadLoggingConfig,
   saveLoggingConfig,
+  loadModesConfig,
+  saveModesConfig,
   loadRecoverySettings,
   saveRecoverySettings,
 } from './dashboardSettings.js'
@@ -39,6 +41,14 @@ export class SettingsBusiness extends AbstractBusiness {
 
   saveLoggingConfig(next: Parameters<typeof saveLoggingConfig>[0]) {
     return saveLoggingConfig(next)
+  }
+
+  getModesConfig() {
+    return loadModesConfig()
+  }
+
+  saveModesConfig(next: Parameters<typeof saveModesConfig>[0]) {
+    return saveModesConfig(next)
   }
 
   getRecoverySettings() {

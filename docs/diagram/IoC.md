@@ -29,6 +29,7 @@ sequenceDiagram
 
     main->>container: Tạo service container (nơi giữ các thành phần dùng chung)
     main->>container: Đưa danh sách mode vào container
+    main->>container: Đưa thêm "bộ quyết định mode nào dùng được" vào container
     Note over container: Container chỉ giữ chỗ —<br/>danh sách mode đã đầy đủ từ bước trên, container không tự tạo thêm gì
 
     main->>app: Cài đặt (đa ngôn ngữ, container, ...) rồi khởi chạy giao diện
@@ -52,7 +53,7 @@ sequenceDiagram
 
 **2. Mỗi tính năng tự "giới thiệu" mode của mình.** Thông tin cần thiết (tên, icon, thứ tự hiển thị, giao diện tương ứng...) do chính tính năng khai báo, đẩy vào 1 danh sách dùng chung. Nếu 2 tính năng lỡ trùng tên mode, ứng dụng báo lỗi ngay lúc khởi động thay vì để lỗi âm thầm xuất hiện khi người dùng đang thao tác.
 
-**3. Container chỉ là nơi giữ chỗ, không tự tạo dữ liệu.** Service container không tự xây danh sách mode — nó chỉ giữ 1 đường dẫn tới danh sách đã có sẵn (đã đầy đủ từ bước trước). Danh sách mode luôn hoàn chỉnh trước khi container "biết" tới nó.
+**3. Container chỉ là nơi giữ chỗ, không tự tạo dữ liệu.** Service container không tự xây danh sách mode — nó chỉ giữ đường dẫn tới những thứ đã có sẵn. Nó giữ 2 thứ: **danh sách mode** (đã đầy đủ từ bước trước, luôn hoàn chỉnh trước khi container "biết" tới nó), và **bộ quyết định mode nào đang dùng được** (đọc cấu hình bật/tắt mode trong Cài đặt). Tách ra như vậy để sau này đổi nguồn quyết định sang phân quyền theo người dùng chỉ phải sửa đúng 1 dòng ở bước khởi động — xem [`../agent-rules/mode-registry-guideline.md`](../agent-rules/mode-registry-guideline.md) §7.
 
 **4. Container được gắn vào toàn bộ giao diện ở 1 chỗ duy nhất.** Bước cài đặt đưa container vào gốc của cây giao diện, để bất kỳ phần nào bên trong (ở đây là màn hình chính) cũng lấy được, không cần truyền tay qua nhiều lớp trung gian.
 
@@ -69,6 +70,8 @@ Bootstrap chỉ chạy 1 lần lúc tải trang. Sơ đồ dưới mô tả đi�
 ```mermaid
 flowchart TD
     click["Người dùng bấm 1 mode khác trong sidebar"]
+    gate{"Mode đó có đang dùng được không?<br/>(còn bật trong Cài đặt)"}
+    denied["Không làm gì —<br/>mode đã tắt thì mọi lối vào đều bị chặn"]
     setMode["Ứng dụng ghi nhận mode đang chọn đã đổi"]
     stopOld["Dừng việc theo dõi liên tục của mode trước"]
     pollBranch{"Mode mới có phải<br/>Theo dõi (Monitor) không?"}
@@ -84,7 +87,9 @@ flowchart TD
     panelSwitch["Nội dung chính: gỡ hẳn giao diện cũ<br/>(dừng luôn mọi việc nó đang làm),<br/>hiển thị giao diện của mode mới"]
     freshData["Giao diện mới được cấp đúng<br/>dữ liệu/hành động nó cần từ ứng dụng"]
 
-    click --> setMode
+    click --> gate
+    gate -->|không| denied
+    gate -->|có| setMode
     setMode --> stopOld --> pollBranch
     pollBranch -->|có| startLive
     pollBranch -->|không| pollOnce
@@ -110,7 +115,9 @@ flowchart TD
 
 **4. Chuyển mode = thay hẳn giao diện, không phải ẩn/hiện.** Điểm dễ nhầm nhất: mỗi lần chuyển mode, ứng dụng **gỡ bỏ hoàn toàn** giao diện của mode cũ (dừng luôn mọi việc nó đang tự làm ngầm, như theo dõi hay tải dữ liệu riêng) rồi mới dựng giao diện mới cho mode sắp hiện, cấp lại đúng dữ liệu/hành động nó cần. Nếu chỉ *ẩn* giao diện cũ thay vì gỡ hẳn, mọi mode sẽ cùng chạy ngầm 1 lúc — sai, vì nhiều mode tự tải dữ liệu/theo dõi riêng ngay khi hiện lên lần đầu.
 
-**5. Ẩn/hiện 1 mode khỏi sidebar là chuyện khác, không nằm trong flow này.** 1 mode có thể tự ẩn khỏi sidebar tuỳ theo cấu hình khác của ứng dụng (vd tắt 1 tính năng trong Cài đặt) — việc này xảy ra khi cấu hình đó đổi, không phải khi người dùng bấm chuyển mode như sơ đồ trên.
+**5. Mọi lối vào mode đều đi qua 1 cửa kiểm tra.** Trước khi ghi nhận mode mới, ứng dụng hỏi bộ quyết định xem mode đó có đang dùng được không; mode đã tắt trong Cài đặt thì cú bấm **không có tác dụng**. Cửa kiểm tra này dùng chung cho cả nút sidebar lẫn lối điều hướng do màn hình khác kích hoạt — ứng dụng chưa có router, nên đây là chỗ tương đương "chặn theo đường dẫn". Nếu mode đang mở bị tắt giữa chừng, ứng dụng tự đưa người dùng về mode Theo dõi.
+
+**6. Ẩn/hiện 1 mode khỏi sidebar là chuyện khác, không nằm trong flow này.** 1 mode có thể tự ẩn khỏi sidebar tuỳ theo cấu hình khác của ứng dụng (vd tắt 1 tính năng trong Cài đặt) — việc này xảy ra khi cấu hình đó đổi, không phải khi người dùng bấm chuyển mode như sơ đồ trên.
 
 ---
 
@@ -122,6 +129,8 @@ Bảng dưới dành cho ai cần xem đúng code — sơ đồ + diễn giải 
 |---|---|
 | Tự quét + đăng ký mode lúc khởi động, tạo container | `src/main.ts` |
 | Danh sách mode (`ModeEntry`, `ModeRegistry`) | `src/core/shell/modeRegistry.ts` |
+| Bộ quyết định mode nào dùng được — giao diện + khoá (`canAccessMode`) | `src/core/shell/modeAccess.ts` |
+| Bản hiện thực đọc cấu hình bật/tắt mode trong Cài đặt | `src/features/settings/scripts/settingsModeAccess.ts` |
 | Service container (`register`/`resolve`) | `src/core/container/{index,types}.ts` |
 | Khoá để lấy container trong giao diện | `src/core/shell/containerKey.ts` |
 | Bước cài đặt container vào giao diện | `src/plugins/index.ts` |

@@ -33,6 +33,10 @@ Sơ đồ bootstrap và runtime: [`docs/diagram/IoC.md`](../diagram/IoC.md). Ki�
 - **`visible?(ctx)`** — ẩn mode khỏi sidebar/status/main-panel khi `false`; mặc định luôn hiện.
 - **`subSidebar?`** — mode có sub-sidebar thu/phóng; `persistKey` là localStorage key, bỏ trống là không nhớ qua reload.
 - **`bindings?(ctx)`** — props + listener `onXxx` truyền cho `panel`; bỏ qua nếu panel không nhận props.
+- **`descriptionKey?`** — i18n key mô tả ngắn (`common.modeDesc.<key>`), hiện ở group "Chế độ" trong Settings.
+- **`maturity?`** — `'stable'` (mặc định) | `'beta'` | `'experimental'`; **chỉ để hiện badge**, không ảnh hưởng quyền truy cập.
+- **`defaultEnabled?`** — trạng thái khi `settings.json` chưa nói gì về mode này. Mặc định `true` (opt-out, giống `showLogsTab`); mode chưa hoàn thiện muốn tắt sẵn thì khai `false`.
+- **`alwaysOn?`** — mode không tắt được, shell luôn còn một lối về. Chỉ `monitor` khai `true`; thắng mọi cấu hình, kể cả sửa tay `settings.json`.
 
 ---
 
@@ -66,6 +70,8 @@ Sơ đồ bootstrap và runtime: [`docs/diagram/IoC.md`](../diagram/IoC.md). Ki�
 - [ ] **Import `panel` trực tiếp** ở top-level, không lazy-load.
 - [ ] **`bindings(ctx)` chỉ lấy state đã có trong `ShellContext`**; cần state mới thì thêm đúng 1 dòng vào `shellContext`.
 - [ ] **Ẩn/hiện động qua `visible(ctx)`**, không tự thêm `v-if` riêng trong `App.vue`.
+- [ ] **Khai `descriptionKey` + `maturity`** (và `defaultEnabled: false` nếu mode chưa hoàn thiện) — group "Chế độ" trong Settings đọc thẳng từ đây.
+- [ ] **Không tự đọc `settings.modes` trong feature** — quyết định hiển thị là việc của `canAccessMode` ở shell (§7).
 - [ ] **Không sửa `src/main.ts`** — thấy cần sửa nghĩa là đang làm sai convention.
 - [ ] **Cập nhật `MODE_DEFS` trong `App.test.ts`** để mode mới được cover trong cả 3 test lặp qua `MODE_DEFS`.
 - [ ] **Giữ xanh trước khi PR** — `vue-tsc --noEmit`, `vitest run tests/src/App.test.ts`, và test riêng của feature.
@@ -92,3 +98,54 @@ export function registerMode(registry: ModeRegistry): void {
 ```
 
 Mẫu phức tạp hơn: `src/features/automations/registerMode.ts` hoặc `src/features/statistics/registerMode.ts` (có `bindings`); nhiều props + event: `src/features/monitor/registerMode.ts`.
+
+---
+
+## 7. Lớp truy cập mode & đường lên phân quyền DB
+
+Bật/tắt mode chia làm **3 lớp tách rời**, đừng trộn vào nhau:
+
+| Lớp | File | Trách nhiệm |
+|---|---|---|
+| **Catalog** — mode nào tồn tại | `registerMode.ts` của từng feature | Khai báo tĩnh (§2). Không chứa logic quyết định |
+| **Nguồn cấu hình** — provider | Interface + token: `src/core/shell/modeAccess.ts`; implementation hôm nay: `src/features/settings/scripts/settingsModeAccess.ts` | Đọc `modes.enabled` từ `settings.json`, giữ state reactive |
+| **Quyết định hiển thị** | `canAccessMode(modeKey, ctx)`, shell gọi trong `App.vue` | UI **không bao giờ** đọc trực tiếp `settings.modes.enabled` |
+
+Chỉ interface + token nằm ở `core/`: implementation phải gọi `fetchModesConfig()` của `features/settings`, để nguyên trong `core/` là import ngược chiều layering.
+
+### Điểm gọi trong shell — đúng 2 chỗ
+
+- Computed `modes` trong `App.vue`: `canAccessMode(key, { shell })` **AND** `visible(ctx)`.
+- Hàm `setMode(key)`: lối vào mode duy nhất (nút sidebar **và** `provide(navigateToModeKey)`). Repo chưa có router nên đây là chỗ tương đương route guard — thêm `vue-router` hay deep-link `?mode=` sau này vẫn gọi vào `setMode()`, không viết lại lớp access.
+
+Watcher `reachableModeKeys` đá về `monitor` khi mode đang mở bị tắt.
+
+### Đổi nguồn sang role/permission trong DB
+
+Mô hình dữ liệu dự kiến:
+
+```
+users ──< user_roles >── roles ──< role_permissions >── permissions
+                                                            │
+                                                   permission.mode_key
+```
+
+Các bước khi làm:
+
+1. Viết `features/auth/scripts/permissionModeAccess.ts` implement đúng `ModeAccessProvider`.
+2. Điền `ctx.user` (`{ id, roles }`) — field đã có sẵn trong `ModeAccessContext`, thêm field mới không phá chữ ký `canAccessMode`.
+3. Đổi **một dòng** ở `src/main.ts`: `container.register(modeAccessToken, () => createPermissionModeAccess(...))`.
+
+Không có file UI nào phải sửa — đó là lý do lớp này tồn tại.
+
+### Luật kết hợp — chốt trước, code theo đúng nó
+
+```
+canAccessMode = alwaysOn || (globalEnabled && userPermitted)
+```
+
+**Mode bị tắt toàn cục thì luôn ẩn, kể cả user có quyền.** `settings.json` giữ vai trò công tắc vận hành toàn cục; DB không thay thế nó. Hôm nay `userPermitted` luôn `true`.
+
+### Không phải biên giới bảo mật
+
+Tắt mode là **kiểm soát phạm vi UI**. Endpoint `/api/*` của feature bị tắt vẫn gọi được bằng `curl`. Kiểm soát thật cần auth theo user và phải chặn ở tầng server — đi cùng lượt DB ở trên.

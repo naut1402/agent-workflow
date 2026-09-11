@@ -24,6 +24,17 @@ export default {
     logs: 'Nhật ký',
     statistics: 'Thống kê',
   },
+  modeDesc: {
+    monitor: 'Theo dõi task và pipeline đang chạy.',
+    editor: 'Soạn và sửa pipeline cho project hoặc từng task.',
+    agentEditor: 'Quản lý custom agent và template agent.',
+    quickAction: 'Chạy nhanh một agent lẻ ngoài pipeline.',
+    knowledge: 'Kho tri thức dùng chung cho agent.',
+    runner: 'Cấu hình runner và provider chạy agent.',
+    automations: 'Lịch chạy và automation theo sự kiện.',
+    logs: 'Nhật ký audit, request, jobs và event.',
+    statistics: 'Thống kê usage, thời gian chạy và chi phí.',
+  },
   status: {
     updated: 'cập nhật {time}',
     paused: {
