@@ -21,6 +21,7 @@ export type LogDriverKind = (typeof LOG_DRIVER_KINDS)[number]
 
 export const LoggingConfigSchema = z
   .object({
+    /** @deprecated Nguồn chính đã đổi sang `modes.enabled.logs`; giữ để AND thêm điều kiện cũ. */
     showLogsTab: z.boolean().optional(),
     types: LoggingTypesSchema.optional(),
     /** Log storage backend — invalid/missing falls back to `'file'`. */

@@ -18,6 +18,12 @@ import {
   type LoggingConfig,
 } from '../../../core/log/loggingPrefs'
 import {
+  DEFAULT_MODES_CONFIG,
+  ModesConfigSchema,
+  parseModesConfig,
+  type ModesConfig,
+} from './modes'
+import {
   DEFAULT_RECOVERY_SETTINGS,
   RecoverySettingsSchema,
   parseRecoverySettings,
@@ -45,6 +51,7 @@ export const DashboardSettingsSchema = z
     autoscan: AutoscanConfigSchema.optional(),
     githubTokens: GithubTokensConfigSchema.optional(),
     logging: LoggingConfigSchema.optional(),
+    modes: ModesConfigSchema.optional(),
     recovery: RecoverySettingsSchema.optional(),
     scanPatterns: ScanPatternsConfigSchema.optional(),
     security: SecurityConfigSchema.optional(),
@@ -57,6 +64,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   autoscan: { ...DEFAULT_AUTOSCAN_CONFIG, whitelist: [] },
   githubTokens: { ...DEFAULT_GITHUB_TOKENS_CONFIG, repos: [] },
   logging: { ...DEFAULT_LOGGING_CONFIG, types: { ...DEFAULT_LOGGING_CONFIG.types } },
+  modes: { enabled: { ...DEFAULT_MODES_CONFIG.enabled } },
   recovery: { ...DEFAULT_RECOVERY_SETTINGS, backoffMs: [...DEFAULT_RECOVERY_SETTINGS.backoffMs!] },
   scanPatterns: { ...DEFAULT_SCAN_PATTERNS_CONFIG, agents: [], skills: [], rules: [] },
   security: { rateLimit: { ...DEFAULT_SECURITY_CONFIG.rateLimit! }, cors: { ...DEFAULT_SECURITY_CONFIG.cors! } },
@@ -69,6 +77,7 @@ export function parseDashboardSettings(raw: unknown): DashboardSettings {
       autoscan: { ...DEFAULT_AUTOSCAN_CONFIG, whitelist: [] },
       githubTokens: { repos: [] },
       logging: { ...DEFAULT_LOGGING_CONFIG, types: { ...DEFAULT_LOGGING_CONFIG.types } },
+      modes: { enabled: { ...DEFAULT_MODES_CONFIG.enabled } },
       recovery: { ...DEFAULT_RECOVERY_SETTINGS, backoffMs: [...DEFAULT_RECOVERY_SETTINGS.backoffMs!] },
       scanPatterns: { ...DEFAULT_SCAN_PATTERNS_CONFIG, agents: [], skills: [], rules: [] },
       security: { rateLimit: { ...DEFAULT_SECURITY_CONFIG.rateLimit! }, cors: { ...DEFAULT_SECURITY_CONFIG.cors! } },
@@ -79,6 +88,7 @@ export function parseDashboardSettings(raw: unknown): DashboardSettings {
     autoscan: parseAutoscanConfig(parsed.data.autoscan ?? DEFAULT_AUTOSCAN_CONFIG),
     githubTokens: parseGithubTokensConfig(parsed.data.githubTokens ?? DEFAULT_GITHUB_TOKENS_CONFIG),
     logging: parseLoggingConfig(parsed.data.logging ?? DEFAULT_LOGGING_CONFIG),
+    modes: parseModesConfig(parsed.data.modes ?? DEFAULT_MODES_CONFIG),
     recovery: parseRecoverySettings(parsed.data.recovery ?? DEFAULT_RECOVERY_SETTINGS),
     scanPatterns: parseScanPatternsConfig(parsed.data.scanPatterns ?? DEFAULT_SCAN_PATTERNS_CONFIG),
     security: parseSecurityConfig(parsed.data.security ?? DEFAULT_SECURITY_CONFIG),
@@ -101,6 +111,12 @@ export function resolveLoggingFromDashboard(
   settings: DashboardSettings | null | undefined,
 ): LoggingConfig {
   return parseLoggingConfig(settings?.logging ?? DEFAULT_LOGGING_CONFIG)
+}
+
+export function resolveModesFromDashboard(
+  settings: DashboardSettings | null | undefined,
+): ModesConfig {
+  return parseModesConfig(settings?.modes ?? DEFAULT_MODES_CONFIG)
 }
 
 export function resolveRecoveryFromDashboard(

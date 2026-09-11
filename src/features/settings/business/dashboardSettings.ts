@@ -9,6 +9,7 @@ import {
   resolveAutoscanFromDashboard,
   resolveGithubTokensFromDashboard,
   resolveLoggingFromDashboard,
+  resolveModesFromDashboard,
   resolveRecoveryFromDashboard,
   resolveScanPatternsFromDashboard,
   resolveSecurityFromDashboard,
@@ -25,6 +26,7 @@ import {
 } from '../schemas/githubTokens.js'
 import { parseLoggingConfig, type LoggingConfig } from '../../../core/log/loggingPrefs.js'
 import { invalidateLoggingPrefsCache } from '../../../core/log/loggingPrefsIo.js'
+import { parseModesConfig, type ModesConfig } from '../schemas/modes.js'
 import { parseRecoverySettings, type RecoverySettings } from '../schemas/recovery.js'
 import { parseScanPatternsConfig, type ScanPatternsConfig } from '../schemas/scanPatterns.js'
 import { DEFAULT_SECURITY_CONFIG, parseSecurityConfig, type SecurityConfig } from '../schemas/security.js'
@@ -124,6 +126,20 @@ export function saveLoggingConfig(config: LoggingConfig): LoggingConfig {
     logging: normalised,
   })
   return resolveLoggingFromDashboard(saved)
+}
+
+export function loadModesConfig(): ModesConfig {
+  return resolveModesFromDashboard(loadDashboardSettings())
+}
+
+export function saveModesConfig(config: ModesConfig): ModesConfig {
+  const current = loadDashboardSettings()
+  const normalised = parseModesConfig(config)
+  const saved = saveDashboardSettings({
+    ...current,
+    modes: normalised,
+  })
+  return resolveModesFromDashboard(saved)
 }
 
 export function loadRecoverySettings(): RecoverySettings {
