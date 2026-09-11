@@ -86,13 +86,45 @@ describe('buildTurnPrompt', () => {
     expect(prompt).toContain('entityType')
   })
 
-  test('turn > 1 reminds the builder to stick to the turn-1 catalog', () => {
+  // T536c80fd: không còn khái niệm "catalog của lượt 1". Caller không cấp
+  // catalog (facade `NlChatBusiness`) vẫn phải nhận câu nhắc chống bịa ref,
+  // nhưng câu đó KHÔNG được trỏ người đọc về lượt 1 nữa.
+  test('turn > 1 without extraContext still reminds the anti-fabrication rule', () => {
     const prompt = buildTurnPrompt({ entityType: 'task', turnIndex: 4, message: 'm' })
     expect(prompt).toContain('chỉ dùng ref/tên có trong catalog')
+    expect(prompt).not.toContain('lượt 1')
   })
 
-  test('turn > 1 ignores extraContext (only relevant for turn 1)', () => {
-    const prompt = buildTurnPrompt({ entityType: 'pipeline', turnIndex: 2, message: 'm', extraContext: 'SHOULD_NOT_APPEAR' })
-    expect(prompt).not.toContain('SHOULD_NOT_APPEAR')
+  // Ca hồi quy trực tiếp của bug: lượt > 1 trước đây bỏ qua `extraContext`,
+  // nên pipeline tạo giữa phiên không bao giờ tới được agent.
+  test('turn > 1 cũng nối extraContext', () => {
+    const prompt = buildTurnPrompt({ entityType: 'pipeline', turnIndex: 2, message: 'm', extraContext: 'SHOULD_APPEAR' })
+    expect(prompt).toContain('SHOULD_APPEAR')
+  })
+
+  // Thứ tự bắt buộc: nhắc contract → catalog → message. Catalog nằm sau
+  // message thì rule "không khớp thì hỏi lại" không còn ràng buộc câu vừa nhận.
+  test('turn > 1 đặt extraContext TRƯỚC message của người dùng', () => {
+    const prompt = buildTurnPrompt({ entityType: 'pipeline', turnIndex: 2, message: 'm', extraContext: 'SHOULD_APPEAR' })
+    expect(prompt.indexOf('SHOULD_APPEAR')).toBeLessThan(prompt.indexOf('Người dùng (lượt 2)'))
+  })
+
+  // Lượt > 1 nhận đúng khối catalog mà lượt 1 nhận — không có nhánh render thứ hai.
+  test('turn > 1 carries the freshly rendered catalog, not a static reminder', () => {
+    const extraContext = renderNlChatCatalog(
+      {
+        agents: [],
+        skills: [],
+        pipelineProfiles: ['pipeline-vua-tao'],
+        hasGlobalPipeline: false,
+        automations: [],
+        unreadable: [],
+      },
+      'task',
+    )
+    const prompt = buildTurnPrompt({ entityType: 'task', turnIndex: 3, message: 'đổi sang pipeline vừa tạo', extraContext })
+
+    expect(prompt).toContain('[PIPELINE PROFILE]')
+    expect(prompt).toContain('pipeline-vua-tao')
   })
 })

@@ -87,7 +87,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/catalog` | bun | `features/pipeline-editor/business` | 4 | `bun test tests/src/server/catalog` |
 | `tests/src/server/chat` | bun | `features/nl-chat/business`, `features/runner/business`, `features/monitor/business` | 7 | `bun test tests/src/server/chat` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `backend/apiServer.ts`, `backend/registry.ts` | 2 | `bun test tests/src/server/github` |
-| `tests/src/server/http` | bun | `backend/apiServer.ts`, `backend/http`, `features/runner/business` | 26 | `bun test tests/src/server/http` |
+| `tests/src/server/http` | bun | `backend/apiServer.ts`, `backend/http`, `features/runner/business` | 27 | `bun test tests/src/server/http` |
 | `tests/src/server/knowledge` | bun | `backend/apiServer.ts`, `backend/events`, `backend/http` | 1 | `bun test tests/src/server/knowledge` |
 | `tests/src/server/lib` | bun | `backend/lib` | 1 | `bun test tests/src/server/lib` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/server/pipeline` |
