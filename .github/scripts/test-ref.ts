@@ -30,6 +30,28 @@ export function testLineOf(sourceRef: string): string {
   return `test/${m[1]}/main`
 }
 
+/**
+ * Tên branch task (ở cả hai dòng) → taskID; branch đầu dòng → `null`.
+ *
+ * Tách ở dấu `_` **cuối cùng**: `git-pr.md` §4.2 quy định `{task-slug}` là
+ * kebab-case (không chứa `_`), còn `{taskID}` thì **được phép** có `_`
+ * (`commitlint.config.js`) — `B202608_2201`, `20260911_001`. Tách ở dấu `_`
+ * đầu tiên sẽ cắt `B202608_2201` thành `B202608`, tức ghép cặp vào một task
+ * không tồn tại.
+ *
+ * Thuần theo tên như cả file này: 🚫 không đọc gì bên ngoài. Phần có I/O (dò ref
+ * thật trên remote) nằm ở `pair-source.ts`.
+ *
+ *   taskIdOfBranch('test/1.1.5/T3166f31f_mode-toggle')            // → 'T3166f31f'
+ *   taskIdOfBranch('dev/1.1.5/B202608_2201_sqlite-log-driver')    // → 'B202608_2201'
+ *   taskIdOfBranch('test/1.1.5/main')                             // → null
+ */
+export function taskIdOfBranch(ref: string): string | null {
+  // `(.+)` tham lam ⇒ khớp tới dấu `_` cuối cùng mà phần đuôi vẫn là kebab-case.
+  const m = new RegExp(`^(?:dev|test)/(?:${VERSION})/(.+)_([a-z0-9-]+)$`).exec(ref)
+  return m ? m[1] : null
+}
+
 /** Version của một ref bất kỳ ở hai dòng; `main` / `test/main` không mang version. */
 export function versionOf(ref: string): string | null {
   const m = new RegExp(`^(?:dev|test)/(${VERSION})/`).exec(ref)

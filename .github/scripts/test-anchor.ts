@@ -235,8 +235,9 @@ export interface Anchor {
 
 /**
  * Đọc `source_sha` / `test_sha` mà **không** validate phần số của baseline —
- * đây là cổng neo, coverage đã có cổng riêng. Nhưng file không parse được thì
- * phải là lỗi công cụ (exit 2), không được suy thành `no-anchor`.
+ * phần số là **mốc tham chiếu**, không phải cổng (`testing.md` §6), nên số hỏng
+ * 🚫 không được làm hỏng kết luận về neo. Nhưng file không parse được thì phải là
+ * lỗi công cụ (exit 2), không được suy thành `no-anchor`.
  */
 const SHA_RE = /^[0-9a-f]{40}$/i
 
@@ -246,8 +247,8 @@ export function readAnchor(raw: string, file: string): Anchor {
 
   /**
    * Đường **đọc** phải cùng ràng buộc với đường **ghi** (`normalizeSha` ở
-   * `coverage-gate.ts`). Baseline sửa tay được (`reports/README.md` nói thế), nên
-   * SHA viết tắt vào được file qua đường khác. Khi đó `cat-file -e` **thành công**
+   * `coverage-gate.ts`). Baseline là file người sửa được, nên SHA viết tắt vào
+   * được file qua đường khác. Khi đó `cat-file -e` **thành công**
    * (git resolve viết tắt) và `merge-base` cũng đúng ⇒ `exists: true`, nhưng phép so
    * `anchorSha === headSha` là so chuỗi nên luôn false ⇒ verdict `behind` kèm
    * "0 commit source sau neo": cảnh báo sai chỗ, không ai truy ra được vì sao.
@@ -296,7 +297,8 @@ function loadAnchor(repo: string, baseline: string): Anchor {
   if (!fs.existsSync(file)) {
     throw new ToolError(
       `Không đọc được neo: không thấy baseline ${baseline}.\n` +
-        'Thiếu baseline KHÔNG phải "đạt" — cổng coverage của `release-test-gate.yml` chặn ca này.',
+        'Thiếu baseline KHÔNG phải "đạt": không có file thì không có neo, mà "không kết luận được"\n' +
+        'chưa bao giờ là "đạt". `release-test-gate.yml` chặn ca này ở bước "Fetch SHA anchor from test line".',
     )
   }
   return readAnchor(fs.readFileSync(file, 'utf8'), baseline)
