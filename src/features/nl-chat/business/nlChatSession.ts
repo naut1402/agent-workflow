@@ -72,8 +72,11 @@ export interface BuildTurnPromptInput {
   /** The user's latest message for this turn. */
   message: string
   /**
-   * Extra context to append on turn 1 only — e.g. the valid `agent` refs from
-   * the catalog, needed so a `pipeline` draft only references real agents.
+   * Catalog/ngữ cảnh phụ nối vào CUỐI prompt của lượt này — e.g. the valid
+   * `agent` refs from the catalog, needed so a `pipeline` draft only
+   * references real agents. Được dựng lại ở MỌI lượt (không còn là snapshot
+   * lượt 1) để pipeline/agent tạo giữa phiên vào được prompt — xem
+   * design.md T536c80fd §3.
    */
   extraContext?: string
 }
@@ -202,9 +205,17 @@ export function buildTurnPrompt(input: BuildTurnPromptInput): string {
       ? `draft đúng schema ${input.entityType}`
       : 'wrapper { "entityType": ..., "draft": ... } đúng schema của entityType bạn đã suy ra'
     parts.push(`(Nhắc lại ngắn gọn output contract: nếu đủ thông tin, dòng đầu tiên phải là ${'`'}===DRAFT_READY===${'`'} theo sau là fenced ${'```'}json chứa ${draftShape}; nếu chưa đủ, chỉ hỏi lại bằng văn bản thuần.)`)
-    // Catalog chỉ được bơm ở lượt 1 (session CLI nhớ lịch sử) — lượt sau chỉ
-    // cần một câu nhắc tĩnh, không dựng lại catalog.
-    parts.push('(Nhắc lại: chỉ dùng ref/tên có trong catalog đã cung cấp ở lượt 1; không khớp hoặc mơ hồ thì hỏi lại, không tự bịa.)')
+    if (input.extraContext?.trim()) {
+      // Thứ tự bắt buộc: nhắc contract → catalog → message. Đặt catalog sau
+      // message thì rule "không khớp thì hỏi lại" đọc như chú thích rời, không
+      // còn ràng buộc câu hỏi vừa nhận.
+      parts.push('')
+      parts.push(input.extraContext.trim())
+    } else {
+      // Caller không cấp catalog (facade `NlChatBusiness`): vẫn phải chặn bịa
+      // ref, chỉ là không có danh sách để đối chiếu.
+      parts.push('(Nhắc lại: chỉ dùng ref/tên có trong catalog đã được cung cấp; không khớp hoặc mơ hồ thì hỏi lại, không tự bịa.)')
+    }
     parts.push('')
     parts.push(`Người dùng (lượt ${input.turnIndex}): ${input.message}`)
   }
@@ -257,7 +268,7 @@ export interface StartNlChatSessionInput {
   entityType?: NlChatEntityType | null
   message: string
   runnerId?: string
-  /** Extra system context appended to turn 1 only (e.g. valid catalog agent refs for a pipeline draft). */
+  /** Extra system context appended to this turn (e.g. valid catalog agent refs for a pipeline draft). */
   extraContext?: string
   /**
    * Resolved `.dev-team-agent/` root — required so `resolveAgent()` can find
@@ -310,6 +321,15 @@ export function startNlChatSession(input: StartNlChatSessionInput): NlChatSessio
 }
 
 /**
+ * Dựng khối catalog cho lượt sắp gửi. Business biết `entityType` (suy từ job
+ * cuối) nhưng KHÔNG được đọc `root`/settings, nên nó hỏi ngược caller —
+ * controller là nơi duy nhất cầm cả hai.
+ */
+export type NlChatExtraContextBuilder = (
+  entityType: NlChatEntityType | null,
+) => Promise<string | undefined>
+
+/**
  * Continue an existing chat session with a follow-up message. Does not
  * re-implement any resume logic — delegates entirely to `sendTaskFeedback`
  * (F0011), which resumes the CLI session recorded in the chat session's
@@ -319,6 +339,7 @@ export async function continueNlChatSession(
   chatSessionId: string,
   projectId: string,
   message: string,
+  buildExtraContext?: NlChatExtraContextBuilder,
 ): Promise<MutationResult<{ job: JobRecord }>> {
   const jobs = findChatJobs(chatSessionId)
   // A session is known by having at least one tagged job — `entityType` may be
@@ -326,10 +347,14 @@ export async function continueNlChatSession(
   if (jobs.length === 0) return { ok: false, status: 404, error: 'unknown chat session' }
   const entityType = entityTypeOf(jobs[jobs.length - 1])
 
+  // Dựng SAU guard 404: phiên không tồn tại thì không tốn một lượt quét đĩa.
+  const extraContext = buildExtraContext ? await buildExtraContext(entityType) : undefined
+
   const prompt = buildTurnPrompt({
     entityType,
     turnIndex: jobs.length + 1,
     message,
+    extraContext,
   })
   // Chat sessions here are scratch-only (no `.dev-state` file), so
   // `sendTaskFeedback` can never actually return `{ queued: true }` for one —

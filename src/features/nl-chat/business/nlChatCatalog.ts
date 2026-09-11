@@ -13,6 +13,10 @@
  * chat là `nlchat-scratch/<id>` (không thấy `pipeline-profiles/`), và 2 provider
  * API thuần không có tool nào — prompt là đường duy nhất chạy được với mọi
  * runner.
+ *
+ * Khối này được dựng lại ở MỖI lượt chat (`createSession` và `postMessage`
+ * của `controller.ts`), không phải snapshot của cả phiên: pipeline/agent tạo
+ * ra giữa phiên phải vào được prompt của lượt kế tiếp (design.md T536c80fd).
  */
 
 import { existsSync, joinPath } from '../../../core/lib/fileHelper.js'
@@ -159,7 +163,7 @@ export async function buildNlChatCatalog(
 const CAPS = { agents: 60, skills: 80, pipelineProfiles: 50, automations: 30 }
 const DESC_MAX = 100
 
-const CATALOG_HEADER = '=== CATALOG HIỆN CÓ TRONG HỆ THỐNG (chụp lúc mở phiên chat) ==='
+const CATALOG_HEADER = '=== CATALOG HIỆN CÓ TRONG HỆ THỐNG (đọc mới ở lượt này) ==='
 
 const CATALOG_RULES = [
   'QUY TẮC DÙNG CATALOG (bắt buộc, thắng mọi suy đoán):',
@@ -167,7 +171,7 @@ const CATALOG_RULES = [
   '2. Không có mục nào khớp → KHÔNG chốt draft. Hỏi lại người dùng, kèm tối đa 5 tên gần nhất trong catalog.',
   '3. Khớp mơ hồ (từ 2 mục trở lên) → hỏi người dùng chọn, KHÔNG tự đoán.',
   '4. KHÔNG bịa ref và KHÔNG tự suy ref từ tên trần: `investigator` không phải ref hợp lệ, ref đầy đủ luôn có tiền tố nguồn.',
-  '5. Danh sách này chụp lúc mở phiên. Người dùng khẳng định có đối tượng mới hơn → nói rõ bạn không thấy nó và đề nghị mở phiên chat mới, KHÔNG tự điền.',
+  '5. Danh sách trên được cấp LẠI ở mỗi lượt và luôn là trạng thái mới nhất tại thời điểm này — MỌI khối catalog xuất hiện ở các lượt TRƯỚC đã hết hiệu lực, KHÔNG được lấy ref từ chúng (mục biến mất khỏi danh sách mới nghĩa là nó đã bị xoá hoặc đổi tên). Người dùng khẳng định có đối tượng mới hơn mà danh sách không có → nói rõ bạn vừa đọc lại và vẫn không thấy nó, hỏi lại tên chính xác, KHÔNG tự điền.',
 ].join('\n')
 
 /** Section nào thật sự được draft của từng `entityType` tham chiếu tới. */
@@ -262,7 +266,7 @@ function renderSection(catalog: NlChatCatalog, key: SectionKey): string {
 }
 
 /**
- * Khối văn bản bơm vào `extraContext` của lượt 1. `entityType` quyết định
+ * Khối văn bản bơm vào `extraContext` của MỘT lượt bất kỳ. `entityType` quyết định
  * section nào được in — draft `agent` chỉ tham chiếu skill nên không cần
  * gánh cả danh sách pipeline.
  */
