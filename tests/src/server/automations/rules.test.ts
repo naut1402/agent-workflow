@@ -17,7 +17,7 @@ import { CreateAutomationRequest } from '../../../../src/features/automations/sc
 import {
   _resetTriggersForTest,
   listTriggers,
-} from '../../../../src/core/events/index.js'
+} from '../../../../src/backend/events/index.js'
 
 let root: string
 

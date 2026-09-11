@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n as mount, createTestI18n } from '../../../helpers/i18n'
 import SettingsDialog from '@/features/settings/components/SettingsDialog.vue'
-import { useAppSettings } from '@/core/composables/useAppSettings'
-import type { ModeEntry } from '@/core/shell/modeRegistry'
+import { useAppSettings } from '@/frontend/composables/useAppSettings'
+import type { ModeEntry } from '@/frontend/shell/modeRegistry'
 
 vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
   fetchAutoscanConfig: vi.fn(async () => ({

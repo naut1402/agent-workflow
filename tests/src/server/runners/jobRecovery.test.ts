@@ -14,7 +14,7 @@ import {
 import { loadJob, FAILURE_MAX_ATTEMPTS } from '../../../../src/features/runner/business/jobQueue.js'
 import { classifyJobFailure } from '../../../../src/features/runner/business/classifyJobFailure.js'
 import type { ExecuteResult } from '../../../../src/features/runner/business/types.js'
-import { on, type DashboardEvent } from '../../../../src/core/events/index.js'
+import { on, type DashboardEvent } from '../../../../src/backend/events/index.js'
 
 let home: string
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME

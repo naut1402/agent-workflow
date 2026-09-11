@@ -6,8 +6,8 @@ import {
   formatRequestQuery,
   formatResponsePreview,
   type LogEntry,
-} from '@/core/log/schema'
-import { getTraceId, runWithTraceId } from '@/core/log/traceContext'
+} from '@/shared/log/schema'
+import { getTraceId, runWithTraceId } from '@/backend/log/traceContext'
 import { useLogsTable } from '@/features/logs/composables/useLogsTable'
 
 describe('levelFromHttpStatus', () => {
@@ -78,7 +78,7 @@ describe('traceContext', () => {
   })
 
   test('resolveTraceIdFromRequest rejects control characters', async () => {
-    const { resolveTraceIdFromRequest } = await import('@/core/log/traceContext')
+    const { resolveTraceIdFromRequest } = await import('@/backend/log/traceContext')
     const bad = resolveTraceIdFromRequest({
       headers: { 'x-trace-id': 'abc\ndef' },
     } as any)

@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { cancelJob, loadJob, registerProvider, submitJob, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { ExecuteRequest, ExecuteResult, JobRecord, JobStatus, RunnerProvider } from '../../../../src/features/runner/business/types.js'
-import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
+import { on, _resetEventBusForTest } from '../../../../src/backend/events/index.js'
 
 // `cancelJob` has no OS pid to SIGTERM for providers with no subprocess
 // (AgenticApiProvider subclasses — see providers/agenticApiProvider.ts, which

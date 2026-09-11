@@ -6,8 +6,8 @@ import ArtifactPanel from '@/features/monitor/components/ArtifactPanel.vue'
 import {
   STORAGE_KEY,
   useAppSettings,
-} from '@/core/composables/useAppSettings'
-import { navigateToModeKey } from '@/core/shell/keys'
+} from '@/frontend/composables/useAppSettings'
+import { navigateToModeKey } from '@/frontend/shell/keys'
 import { fetchArtifact, fetchArtifactActions, runArtifactAction, saveArtifact } from '../../../../../src/features/monitor/scripts/ArtifactPanelApi'
 import { fetchJob, fetchRunners } from '../../../../../src/features/runner/scripts/runnerApi'
 
@@ -93,7 +93,7 @@ vi.mock('@/features/runner/scripts/runnerApi', () => ({
 
 // Keeps `[text](href)` and `**bold**` as real elements — the click-delegation
 // tests below need an <a> (and a child node inside one) in the rendered output.
-vi.mock('@/core/lib/markdownLib', () => ({
+vi.mock('@/frontend/lib/markdownLib', () => ({
   parseMarkdown: (s: string) =>
     `<p>${s
       .replace(/\[([^\]]*)\]\(([^)]*)\)/g, '<a href="$2">$1</a>')

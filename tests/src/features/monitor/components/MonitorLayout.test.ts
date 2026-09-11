@@ -2,7 +2,7 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
-import { STORAGE_KEY, useAppSettings } from '@/core/composables/useAppSettings'
+import { STORAGE_KEY, useAppSettings } from '@/frontend/composables/useAppSettings'
 import viMonitor from '@/features/monitor/locales/vi'
 import enMonitor from '@/features/monitor/locales/en'
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { ref } from 'vue'
-import { parseLogLine, type LogEntry } from '@/core/log/schema'
+import { parseLogLine, type LogEntry } from '@/shared/log/schema'
 import { useLogsTable } from '@/features/logs/composables/useLogsTable'
 
 /** Isolated from useLogsTable.test.ts (traceContext / node: builtins break vitest load). */

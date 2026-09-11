@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/api/apiServer.js'
-import type { RegistryContext } from '../../../../src/core/http/types.js'
+import { createApp } from '../../../../src/backend/apiServer.js'
+import type { RegistryContext } from '../../../../src/backend/http/types.js'
 
 // Route-level contract for POST /api/nl-chat/attachments — the only multipart
 // endpoint of the chat surface. It is parsed with `c.req.formData()` rather
