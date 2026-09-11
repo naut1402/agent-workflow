@@ -19,8 +19,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { APP_VERSION } from '../src/core/configs/appVersion.js'
-import { list, get, add, remove, resolveProjectRoot } from '../src/core/registry.js'
+import { APP_VERSION } from '../src/backend/configs/appVersion.js'
+import { list, get, add, remove, resolveProjectRoot } from '../src/backend/registry.js'
 import { loadKnowledgeBundle } from '../src/features/knowledge/business/index.js'
 
 // Return `any` to stay decoupled from the SDK's literal content-type unions.

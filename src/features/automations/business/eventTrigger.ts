@@ -9,8 +9,8 @@
  *   `MIN_EVENT_REFIRE_MS` (10s) — chặn storm job.* liên tiếp.
  */
 
-import { on, type DashboardEvent } from '../../../core/events/index.js'
-import { loadRegistry } from '../../../core/registry.js'
+import { on, type DashboardEvent } from '../../../backend/events/index.js'
+import { loadRegistry } from '../../../backend/registry.js'
 import { getRuleState } from './runLedger.js'
 import { listAutomations } from './rules.js'
 import { getBoundAutomationRunner } from './scheduler.js'

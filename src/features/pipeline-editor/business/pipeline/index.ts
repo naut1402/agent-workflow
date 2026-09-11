@@ -52,8 +52,8 @@ export function perTaskStepsReplace(baseSteps: Step[], per: any): boolean {
   return !per.steps.some((s: Step) => s.id && baseIds.has(s.id))
 }
 
-import { joinPath } from '../../../../core/lib/fileHelper.js'
-import { readYamlChecked } from '../../../../core/lib/yamlLib.js'
+import { joinPath } from '../../../../backend/lib/fileHelper.js'
+import { readYamlChecked } from '../../../../backend/lib/yamlLib.js'
 
 
 /**

@@ -10,7 +10,7 @@ import {
   readTextFile,
   safeReadDir,
   writeTextFile,
-} from '../../../core/lib/fileHelper.js'
+} from '../../../backend/lib/fileHelper.js'
 // Peer sâu, y như barrel `agent-editor/business/index.ts` đang làm: đi qua
 // `pipeline-editor/business/index.js` sẽ thành vòng vì barrel đó re-export lại
 // chính agent-editor.

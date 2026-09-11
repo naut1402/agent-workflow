@@ -1,6 +1,6 @@
 import type { z } from 'zod'
-import { joinPath, readTextFile, writeTextFileAtomic } from '../../../core/lib/fileHelper.js'
-import { loadYaml, dumpYaml } from '../../../core/lib/yamlLib.js'
+import { joinPath, readTextFile, writeTextFileAtomic } from '../../../backend/lib/fileHelper.js'
+import { loadYaml, dumpYaml } from '../../../backend/lib/yamlLib.js'
 import type { CollectionBody, TagRenameBody } from '../schemas/knowledge.js'
 import { createFileDriver, resolveBases, sanitiseSlug, sanitiseTags, type KnowledgeBases } from './fileDriver.js'
 

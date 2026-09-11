@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
+import { apiGet, apiPost, apiRequest } from '../../../frontend/http/client'
 import type { NlChatEntityType, UploadedAttachment } from '../schemas/nlChat'
 
 export async function startNlChat(

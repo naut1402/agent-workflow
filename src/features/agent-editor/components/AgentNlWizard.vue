@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, inject, onMounted } from 'vue'
 import { useAgentBuild } from '../composables/useAgentBuild'
-import { navigateToModeKey } from '../../../core/shell/keys'
+import { navigateToModeKey } from '../../../frontend/shell/keys'
 
 // Merged NL build wizard (Correction A / F0005): describe → preview → optional
 // "Lưu & chạy thử" smoke-run, replacing both the draft-only AS-IS wizard here

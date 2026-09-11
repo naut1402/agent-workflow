@@ -1,5 +1,5 @@
-import { joinPath, mkdirSync, readTextFileSync, readdirSync, rmSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
-import { registryHome } from '../../../core/registry.js'
+import { joinPath, mkdirSync, readTextFileSync, readdirSync, rmSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
+import { registryHome } from '../../../backend/registry.js'
 import type { JobFailureKind } from './types.js'
 
 export interface RecoverEntry {

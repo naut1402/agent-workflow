@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, inject, onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { useAppSettings } from '../../../core/composables/useAppSettings'
-import { useLocale } from '../../../core/composables/useLocale'
-import { reloadProjectsKey } from '../../../core/shell/keys'
+import { useAppSettings } from '../../../frontend/composables/useAppSettings'
+import { useLocale } from '../../../frontend/composables/useLocale'
+import { reloadProjectsKey } from '../../../frontend/shell/keys'
 import {
   resolveArtifactViewMode,
   resolveChatFeedbackMode,
@@ -22,10 +22,10 @@ import {
   type ChatFeedbackMode,
   type NotificationUiPlacement,
   type ThemePreference,
-} from '../../../core/configs/appSettings'
+} from '../../../frontend/configs/appSettings'
 import { fetchAutoscanConfig, saveAutoscanConfig, runAutoscan, fetchGithubTokensConfig, saveGithubTokensConfig, fetchLoggingConfig, saveLoggingConfig, fetchModesConfig, saveModesConfig, fetchRecoveryConfig, saveRecoveryConfig, fetchScanPatternsConfig, saveScanPatternsConfig } from '../scripts/SettingsDialogApi'
-import { isEnabledByDefault } from '../../../core/shell/modeAccess'
-import type { ModeEntry } from '../../../core/shell/modeRegistry'
+import { isEnabledByDefault } from '../../../frontend/shell/modeAccess'
+import type { ModeEntry } from '../../../frontend/shell/modeRegistry'
 import { parseModesConfig, resolveModeEnabled } from '../schemas/modes'
 import { parseGithubRepoRef } from '../schemas/githubTokens'
 import {
@@ -34,8 +34,8 @@ import {
   sanitiseScanPattern,
   type ScanPatternKind,
 } from '../schemas/scanPatterns'
-import FolderPickerDialog from '../../../core/ui/FolderPickerDialog.vue'
-import CSelect from '../../../core/ui/CSelect.vue'
+import FolderPickerDialog from '../../../frontend/ui/FolderPickerDialog.vue'
+import CSelect from '../../../frontend/ui/CSelect.vue'
 
 /** Catalog do App.vue truyền xuống — dialog không tự resolve ModeRegistry. */
 const props = defineProps<{ modeCatalog?: ModeEntry[] }>()

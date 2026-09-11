@@ -2,9 +2,9 @@
  * Shared git process helpers for the monitor feature (clone, worktree, …).
  */
 
-import type { SpawnSyncReturns } from '../../../core/lib/processHelper.js'
-import { spawnSync } from '../../../core/lib/processHelper.js'
-import { existsSync, joinPath } from '../../../core/lib/fileHelper.js'
+import type { SpawnSyncReturns } from '../../../backend/lib/processHelper.js'
+import { spawnSync } from '../../../backend/lib/processHelper.js'
+import { existsSync, joinPath } from '../../../backend/lib/fileHelper.js'
 
 /** Local read command (`worktree list`, `status`) — hanging longer is abnormal. */
 export const GIT_READ_TIMEOUT_MS = 10_000

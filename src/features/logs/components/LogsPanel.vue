@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import type { LogEntry, LogLevel } from '../../../core/log/schema'
+import type { LogEntry, LogLevel } from '../../../shared/log/schema'
 import { fetchLogs } from '../scripts/LogsPanelApi'
 import { fetchJobs } from '../../runner/scripts/runnerApi'
 import { fetchLoggingConfig } from '../../settings/scripts/SettingsDialogApi'
 import { useLogsTable } from '../composables/useLogsTable'
-import { useCopyText } from '../../../core/composables/useCopyText'
+import { useCopyText } from '../../../frontend/composables/useCopyText'
 import JobLogDialog from './JobLogDialog.vue'
 
 const { t } = useI18nHelpers()

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, onMounted, watch } from 'vue'
-import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../core/lib/workflowSteps'
-import { useSortable } from '../../../core/composables/useSortable'
-import { slugifySectionKey } from '../../../core/lib/stringUtils'
+import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../frontend/lib/workflowSteps'
+import { useSortable } from '../../../frontend/composables/useSortable'
+import { slugifySectionKey } from '../../../shared/lib/stringUtils'
 import { fetchPipelineConfig } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { fetchWorkflowStepTemplates, fetchWorkflowStepTemplate, saveWorkflowStepTemplate } from '../scripts/WorkflowSectionEditorApi'
-import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
+import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
 
 const { t } = useI18nHelpers()
 const props = defineProps({

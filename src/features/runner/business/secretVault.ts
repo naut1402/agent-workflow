@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
-import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
-import { registryHome } from '../../../core/registry.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
+import { registryHome } from '../../../backend/registry.js'
 
 /**
  * Encrypted-at-rest store for real secret material (pasted API keys, OAuth

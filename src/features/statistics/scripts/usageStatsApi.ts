@@ -1,4 +1,4 @@
-import { apiGet } from '../../../core/http/client'
+import { apiGet } from '../../../frontend/http/client'
 import { UsageStatsResultSchema, type UsageStatsResult } from '../schemas/usageStats'
 
 export interface UsageStatsParams {

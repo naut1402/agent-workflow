@@ -2,7 +2,7 @@
 import Chart, { type ChartConfiguration } from 'chart.js/auto'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { formatNumber, type NumberFormat } from '../lib/format'
 import type { ChartKind, ChartStyleConfig } from '../lib/chartConfig'
 

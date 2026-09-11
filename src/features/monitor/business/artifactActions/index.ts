@@ -1,6 +1,6 @@
-import { joinPath, mkdir, rename, writeTextFile } from '../../../../core/lib/fileHelper.js'
-import { dumpYaml, readYamlSafe } from '../../../../core/lib/yamlLib.js'
-import { registryHome } from '../../../../core/registry.js'
+import { joinPath, mkdir, rename, writeTextFile } from '../../../../backend/lib/fileHelper.js'
+import { dumpYaml, readYamlSafe } from '../../../../backend/lib/yamlLib.js'
+import { registryHome } from '../../../../backend/registry.js'
 import {
   ArtifactActionsFile,
   type ArtifactAction,

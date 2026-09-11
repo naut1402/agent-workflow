@@ -1,6 +1,6 @@
-import { access, basename, extname, joinPath, readDir, readTextFile, unlink, writeTextFileAtomic } from '../../../core/lib/fileHelper.js'
-import { loadYaml, dumpYaml } from '../../../core/lib/yamlLib.js'
-import { globalKnowledgeRoot } from '../../../core/registry.js'
+import { access, basename, extname, joinPath, readDir, readTextFile, unlink, writeTextFileAtomic } from '../../../backend/lib/fileHelper.js'
+import { loadYaml, dumpYaml } from '../../../backend/lib/yamlLib.js'
+import { globalKnowledgeRoot } from '../../../backend/registry.js'
 import { KNOWLEDGE_SCOPES, MAX_BUNDLE_BYTES } from '../schemas/knowledge.js'
 // Vòng import với `collections.js` chỉ ở mức hàm (không đọc binding lúc
 // evaluate module), nên ESM giải được: collections cần driver để rewrite tag,

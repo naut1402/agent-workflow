@@ -1,5 +1,5 @@
-import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
-import { subSidebarBindings } from '../../core/shell/subSidebarBindings'
+import type { ModeRegistry, ShellContext } from '../../frontend/shell/modeRegistry'
+import { subSidebarBindings } from '../../frontend/shell/subSidebarBindings'
 import MonitorLayout from './components/MonitorLayout.vue'
 
 /** Mode mặc định của app — statusKind 'live' (khác 8 mode còn lại đều 'paused'). */

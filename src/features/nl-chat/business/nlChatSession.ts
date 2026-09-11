@@ -211,9 +211,9 @@ export function buildTurnPrompt(input: BuildTurnPromptInput): string {
   return parts.join('\n')
 }
 
-import { dirname, joinPath, mkdirSync, readTextFileSync, rmSync } from '../../../core/lib/fileHelper.js'
+import { dirname, joinPath, mkdirSync, readTextFileSync, rmSync } from '../../../backend/lib/fileHelper.js'
 import crypto from 'node:crypto'
-import { registryHome } from '../../../core/registry.js'
+import { registryHome } from '../../../backend/registry.js'
 import {
   submitJob,
   sendTaskFeedback,

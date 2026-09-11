@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, nextTick, ref } from 'vue'
 import { patchTaskArchive, patchTaskName, deleteTask, repairTaskState } from '../scripts/TaskListItemApi'
 import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
 import { hasInFlightJob } from '../lib/taskInFlight'
 import { taskDisplayName } from '../lib/taskDisplay'
-import Icon from '../../../core/ui/Icon.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
 
 const props = defineProps({
   task: { type: Object, required: true },

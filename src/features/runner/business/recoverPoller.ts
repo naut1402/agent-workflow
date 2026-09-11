@@ -1,6 +1,6 @@
 import { listRecoverEntries, loadRecoverEntry, removeRecoverEntry } from './recoverLedger.js'
 import type { JobRecord } from './types.js'
-import { emit } from '../../../core/events/index.js'
+import { emit } from '../../../backend/events/index.js'
 import { loadRecoverySettings } from '../../settings/business/dashboardSettings.js'
 import { resolveRecoveryPollIntervalMs } from '../../settings/schemas/recovery.js'
 

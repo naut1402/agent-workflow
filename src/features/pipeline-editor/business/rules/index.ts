@@ -1,4 +1,4 @@
-import { basename, dirname, homeDir, joinPath, relativePath, safeReadDir } from '../../../../core/lib/fileHelper.js'
+import { basename, dirname, homeDir, joinPath, relativePath, safeReadDir } from '../../../../backend/lib/fileHelper.js'
 import {
   DENY_DIRS,
   SCAN_PATTERN_MAX_DEPTH,

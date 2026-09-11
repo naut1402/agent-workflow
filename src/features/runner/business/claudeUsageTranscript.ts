@@ -5,7 +5,7 @@ import {
   resolvePath,
   resolvePathUnder,
   safeReadDir,
-} from '../../../core/lib/fileHelper.js'
+} from '../../../backend/lib/fileHelper.js'
 
 /**
  * Claude Code CLI transcript reader — parse `~/.claude/projects/…` JSONL for

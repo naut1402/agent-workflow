@@ -1,6 +1,6 @@
 import type { Hono } from 'hono'
-import type { HonoEnv } from '../../core/http/types.js'
-import { bind } from '../../core/http/AbstractController.js'
+import type { HonoEnv } from '../../backend/http/types.js'
+import { bind } from '../../backend/http/AbstractController.js'
 import { KnowledgeController } from './controller.js'
 
 /** Khe trống giữa `pipeline-editor` (80) và `agent-editor` (90). */

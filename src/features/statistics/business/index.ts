@@ -1,4 +1,4 @@
-import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
+import { AbstractBusiness } from '../../../backend/business/AbstractBusiness.js'
 import { getUsageStats } from './usageStats.js'
 import type { UsageStatsQuery } from '../schemas/usageStats.js'
 

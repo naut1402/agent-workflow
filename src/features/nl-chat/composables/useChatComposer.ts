@@ -3,10 +3,10 @@ import { useChatAttachments } from './useChatAttachments'
 import { appendAttachments } from '../lib/attachmentPrompt'
 import { appendKnowledge } from '../lib/knowledgePrompt'
 import { fetchKnowledgeBundle } from '../../knowledge/scripts/knowledgeApi'
-import { useDrop } from '../../../core/composables/useDrop'
-import { useAppSettings } from '../../../core/composables/useAppSettings'
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { resolveChatEnterToSend } from '../../../core/configs/appSettings'
+import { useDrop } from '../../../frontend/composables/useDrop'
+import { useAppSettings } from '../../../frontend/composables/useAppSettings'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
+import { resolveChatEnterToSend } from '../../../frontend/configs/appSettings'
 
 /**
  * The composer half of a chat body: attachment chips, the drop zone bound to the

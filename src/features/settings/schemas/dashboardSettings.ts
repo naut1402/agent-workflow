@@ -16,7 +16,7 @@ import {
   LoggingConfigSchema,
   parseLoggingConfig,
   type LoggingConfig,
-} from '../../../core/log/loggingPrefs'
+} from '../../../shared/log/loggingPrefs'
 import {
   DEFAULT_MODES_CONFIG,
   ModesConfigSchema,

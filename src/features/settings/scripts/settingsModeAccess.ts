@@ -1,6 +1,6 @@
 import { ref } from 'vue'
-import { isEnabledByDefault, type ModeAccessProvider } from '../../../core/shell/modeAccess'
-import type { ModeRegistry } from '../../../core/shell/modeRegistry'
+import { isEnabledByDefault, type ModeAccessProvider } from '../../../frontend/shell/modeAccess'
+import type { ModeRegistry } from '../../../frontend/shell/modeRegistry'
 import { parseModesConfig, resolveModeEnabled, type ModesConfig } from '../schemas/modes'
 import { fetchModesConfig } from './SettingsDialogApi'
 

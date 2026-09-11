@@ -1,6 +1,6 @@
 // Shared types for the runner execution plane (U0005).
 
-import type { UsageSnapshot } from '../../../core/log/schema.js'
+import type { UsageSnapshot } from '../../../shared/log/schema.js'
 
 export interface CredentialProfile {
   id: string
