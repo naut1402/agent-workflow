@@ -11,6 +11,10 @@ import {
   safeReadDir,
   writeTextFile,
 } from '../../../core/lib/fileHelper.js'
+// Peer sâu, y như barrel `agent-editor/business/index.ts` đang làm: đi qua
+// `pipeline-editor/business/index.js` sẽ thành vòng vì barrel đó re-export lại
+// chính agent-editor.
+import { sanitiseProfileName } from '../../pipeline-editor/business/pipeline/index.js'
 
 // ── paths under data root ──────────────────────────────────────────────────
 
@@ -25,6 +29,31 @@ export type AgentScope = 'project' | 'global'
 
 export function profilesDir(root: string): string {
   return joinPath(root, 'pipeline-profiles')
+}
+
+/**
+ * Tên các pipeline profile trong `<root>/pipeline-profiles/` — chính là giá trị
+ * hợp lệ của `CreateTaskRequest.profileName` / `RunTaskAction.profileName`.
+ * Thư mục chưa có → []. File ghi atomic dở dang (`<tên>.yaml.tmp`) rụng ở vế
+ * `.yaml`.
+ *
+ * Chỉ trả tên mà `sanitiseProfileName` giữ NGUYÊN VĂN. Đường tiêu thụ thật
+ * (`resolvePipelineOverride`) sanitise trước khi đọc file, nên tên có dấu
+ * tiếng Việt / ký tự lạ / dài quá 64 sẽ trỏ sang một stem khác, không thấy
+ * file, và task ÂM THẦM chạy pipeline mặc định — quảng cáo tên như vậy là tái
+ * tạo đúng cái bug đang đi sửa. Profile do dashboard tạo luôn qua sanitise nên
+ * không mất mục nào; chỉ file thêm tay vào repo mới bị loại.
+ */
+// fallow-ignore-next-line unused-export -- consumer đi qua barrel `nl-chat/business/index.ts`
+export async function listPipelineProfileNames(root: string): Promise<string[]> {
+  const names: string[] = []
+  for (const entry of await safeReadDir(profilesDir(root))) {
+    if (!entry.isFile() || !entry.name.endsWith('.yaml')) continue
+    const name = entry.name.slice(0, -'.yaml'.length)
+    if (!name || sanitiseProfileName(name) !== name) continue
+    names.push(name)
+  }
+  return names.sort()
 }
 
 export function customAgentsDir(root: string): string {

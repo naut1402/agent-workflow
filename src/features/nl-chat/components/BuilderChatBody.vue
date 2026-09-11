@@ -35,6 +35,7 @@ const {
   cancel,
   reset,
   findInvalidPipelineAgentRefs,
+  profileNameError,
 } = useNlChatSession({ getProjectId: () => props.projectId ?? undefined })
 
 const draftText = ref('')
@@ -83,11 +84,25 @@ const pipelineAgentError = computed<string | null>(() => {
   return invalid.length > 0 ? `Agent không tồn tại trong catalog: ${invalid.join(', ')}` : null
 })
 
+// Cùng lối với `pipelineAgentError`, cho `profileName` của draft task /
+// automation — `useNlChatSession.profileNameError` giữ luôn thông điệp để
+// component không mang literal mới (i18n của nl-chat chưa migrate).
+const taskProfileError = computed<string | null>(() => {
+  if (step.value !== 'previewDraft') return null
+  if (entityType.value !== 'task' && entityType.value !== 'automation') return null
+  try {
+    return profileNameError(JSON.parse(draftText.value), entityType.value)
+  } catch {
+    return null // JSON sai đã được draftParseError báo ở lúc bấm Xác nhận
+  }
+})
+
 const canConfirm = computed(
   () =>
     step.value === 'previewDraft' &&
     (entityType.value !== 'pipeline' || pipelineName.value.trim().length > 0) &&
     (entityType.value !== 'pipeline' || !pipelineAgentError.value) &&
+    !taskProfileError.value &&
     (entityType.value !== 'agent' || agentScope.value === 'global' || !!props.projectId),
 )
 
@@ -209,6 +224,7 @@ watch([() => messages.value.length, () => sending.value], async () => {
     <textarea v-model="draftText" class="nl-chat-draft-textarea" rows="14"></textarea>
     <p v-if="draftParseError" class="nl-chat-error">{{ draftParseError }}</p>
     <p v-if="entityType === 'pipeline' && pipelineAgentError" class="nl-chat-error">{{ pipelineAgentError }}</p>
+    <p v-if="taskProfileError" class="nl-chat-error">{{ taskProfileError }}</p>
     <p v-if="entityType === 'agent' && agentScope === 'project' && !props.projectId" class="nl-chat-error">
       Chưa chọn project ở header — chọn project hoặc đổi phạm vi agent sang "Toàn cục".
     </p>
