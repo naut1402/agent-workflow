@@ -53,13 +53,11 @@ export default tseslint.config(
   {
     files: [
       'src/**/*.{ts,tsx,js}',
-      'src/core/**/*.{ts,tsx,js,mjs}',
-      'src/standalone.ts',
-      'src/runner-cli.mjs',
+      'src/backend/**/*.{ts,tsx,js,mjs}',
+      'src/shared/**/*.ts',
       'src/features/**/api.ts',
       'src/features/**/controller.ts',
       'src/features/**/business/**/*.{ts,tsx,js}',
-      'src/core/configs/**/*.{ts,tsx,js}',
       'mcp/**/*.{ts,tsx,js}',
       'tests/**/*.{ts,tsx,js,mjs}',
       'test-e2e/**/*.{ts,tsx,js,mjs}',
@@ -112,6 +110,89 @@ export default tseslint.config(
     },
   },
 
+  // ── Ranh giới scope: src/backend ⟂ src/frontend, src/shared thuần ──────────
+  //
+  // `no-restricted-imports` khớp minimatch trên **chuỗi specifier**, nên pattern
+  // `**/backend/**` bắt được cả dạng relative (`../../backend/log/store.js`) —
+  // không cần alias theo bucket. Mức `warn` để đồng bộ triết lý của file này
+  // (recommended hạ error → warn, CI không dùng `--max-warnings 0`).
+  {
+    // `files` phải phủ TRỌN phần frontend của feature, không chỉ 3 thư mục hiển nhiên:
+    // `lib/` · `schemas/` · `locales/` · `registerMode.ts` cũng là FE, và trước đây chúng
+    // rơi vào vùng chết của cả hai hàng rào (rule BE chỉ nhận `api.ts`/`controller.ts`/
+    // `business/**`). `schemas/` đặc biệt đáng phủ: architecture.md §6 mô tả nó là schema
+    // dùng chung FE/BE, nên nó là đường ngắn nhất để một component kéo `src/backend/**` vào.
+    files: [
+      'src/frontend/**/*.{ts,vue}',
+      'src/features/**/{components,composables,scripts,lib,schemas,locales}/**/*.{ts,vue}',
+      'src/features/*/registerMode.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'warn',
+        {
+          patterns: [
+            {
+              group: ['**/backend/**', 'node:*', 'bun:*', 'hono', 'hono/*', 'drizzle-orm', 'drizzle-orm/*'],
+              message:
+                'Code frontend không được import scope backend hay module Node-only — xem src/frontend/README.md.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    files: [
+      'src/backend/**/*.ts',
+      'src/features/**/api.ts',
+      'src/features/**/controller.ts',
+      'src/features/**/business/**/*.{ts,js}',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'warn',
+        {
+          patterns: [
+            {
+              group: ['**/frontend/**', 'vue', 'vue/*'],
+              message: 'Code backend không được import scope frontend — xem src/backend/README.md.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    files: ['src/shared/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'warn',
+        {
+          patterns: [
+            {
+              group: [
+                '**/backend/**',
+                '**/frontend/**',
+                'node:*',
+                'bun:*',
+                'hono',
+                'hono/*',
+                'drizzle-orm',
+                'drizzle-orm/*',
+                'vue',
+                'vue/*',
+              ],
+              message:
+                'src/shared/ chỉ chứa logic/type thuần — không hạ tầng, không import bucket khác. Xem src/shared/README.md.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     files: ['vite.config.*', 'vitest.config.*', 'playwright.config.*'],
     languageOptions: {
