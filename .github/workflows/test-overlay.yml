@@ -82,6 +82,9 @@ jobs:
       version: ${{ steps.refs.outputs.version }}
       direction: ${{ steps.refs.outputs.direction }}
       skip: ${{ steps.refs.outputs.skip }}
+      # Ghép theo taskID hay lùi về đầu dòng version — xem `pair-source.ts`.
+      paired: ${{ steps.refs.outputs.paired }}
+      pair_note: ${{ steps.refs.outputs.pair_note }}
     steps:
       # Checkout ref đang trigger — dòng test mang **cây đầy** của dòng source nên
       # nó có sẵn `.github/scripts/`.
@@ -107,11 +110,20 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           # PR: `base_ref` là branch dòng test đang nhận merge.
           BASE_REF: ${{ github.base_ref }}
+          # PR: `head_ref` là branch task dòng test — nơi DUY NHẤT mang `{taskID}`.
+          # `base_ref` là `test/x.y.z/main`, không mang taskID nào.
+          # 🚫 Không nội suy `${{ … }}` thẳng vào `run:` — tên branch do người mở PR đặt.
+          HEAD_REF: ${{ github.head_ref }}
           # PR phải chạy đúng commit của PR, không phải đầu branch base.
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PUSH_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+
+          # Chiều nghịch (`direction=source`) không có `head_ref` ⇒ không ghép
+          # theo taskID; giá trị mặc định ở đây là của chính nhánh đó.
+          PAIRED=not-applicable
+          NOTE='push vào dòng source — chiều nghịch, không ghép theo taskID'
 
           if [[ "$EVENT" == 'push' && "$REF_NAME" == dev/* ]]; then
             # Chiều nghịch: source vừa đổi, lấy đầu dòng test hiện có.
@@ -138,7 +150,19 @@ jobs:
             DIRECTION=test
             TEST_REF="$([[ "$EVENT" == 'pull_request' ]] && echo "$BASE_REF" || echo "$REF_NAME")"
             TEST_SHA="$([[ "$EVENT" == 'pull_request' ]] && echo "$PR_HEAD_SHA" || echo "$PUSH_SHA")"
-            SOURCE="$(bun .github/scripts/test-ref.ts source "$TEST_REF")"
+            if [[ "$EVENT" == 'pull_request' ]]; then
+              # Ghép với branch task dòng source cùng `{taskID}` khi branch đó CÒN
+              # trên remote. Không ghép thì PR dòng test LUÔN đỏ tới khi PR code
+              # merge — "đỏ vì chưa tới lượt" lẫn với "đỏ vì hỏng thật".
+              PAIR_OUT="$(bun .github/scripts/pair-source.ts "$TEST_REF" "$HEAD_REF")"
+              SOURCE="$(printf '%s\n' "$PAIR_OUT" | sed -n 's/^source=//p')"
+              PAIRED="$(printf '%s\n' "$PAIR_OUT" | sed -n 's/^paired=//p')"
+              NOTE="$(printf '%s\n' "$PAIR_OUT" | sed -n 's/^note=//p')"
+            else
+              SOURCE="$(bun .github/scripts/test-ref.ts source "$TEST_REF")"
+              PAIRED=not-applicable
+              NOTE='push vào đầu dòng test — luôn ghép với đầu dòng version'
+            fi
           fi
 
           VERSION="$(bun .github/scripts/test-ref.ts version "$TEST_REF")"
@@ -149,6 +173,8 @@ jobs:
             echo "test_ref=$TEST_REF"
             echo "test_sha=$TEST_SHA"
             echo "version=$VERSION"
+            echo "paired=$PAIRED"
+            echo "pair_note=$NOTE"
           } >> "$GITHUB_OUTPUT"
 
           # Truy vết: đỏ ở đây phải nói được đã chạy cặp ref nào (test lệch pha
@@ -167,6 +193,14 @@ jobs:
             echo "|---|---|"
             echo "| source | \`$SOURCE\` |"
             echo "| test | \`$TEST_REF\` @ \`$TEST_SHA\` |"
+            echo "| Ghép theo | \`$PAIRED\` — $NOTE |"
+            if [[ "$PAIRED" == 'taskid' ]]; then
+              echo ""
+              echo "⚠️ Lượt này chấm trên **branch task dòng source chưa merge**."
+              echo "🚫 Không merge PR dòng test trước PR code đối ứng. Sau khi PR code merge (branch task"
+              echo "bị xoá), chạy lại lượt này: nó tự ghép với \`dev/x.y.z/main\` (\`paired: no-match\`)"
+              echo "— **đó** mới là lượt xanh có quyền merge."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   overlay:
@@ -233,6 +267,27 @@ jobs:
             echo "allow_missing=--allow-missing" >> "$GITHUB_OUTPUT"
           fi
 
+      # Báo cáo, 🚫 KHÔNG gate. `test-anchor.ts` vốn chỉ chạy ở cổng PR phát hành,
+      # nên baseline neo lệch dòng version chỉ lộ ra ở đó — trong khi chính nó là
+      # một nguyên nhân làm `Coverage gate` dưới đây đỏ. Chạy ở đây = lệch neo
+      # hiện ra trong MỘT lượt CI, ngay cạnh cổng mà nó làm đỏ.
+      #
+      # Đặt trước typecheck để vẫn in ra khi suite đỏ; `continue-on-error` để cả
+      # verdict `anchor-gone` (exit 1) cũng không biến bước báo cáo thành cổng.
+      #
+      # 🚫 KHÔNG `if: always()`: `continue-on-error` đã đủ để không gate, còn
+      # `always()` thì chạy cả khi chưa có baseline để đọc — đúng lượt khởi tạo một
+      # dòng version mới — và `test:anchor` exit 2 ở đó, tức UI hiện một ❌ nhiễu
+      # ngay lượt đầu của mỗi dòng. Có baseline thì mới có neo để báo cáo.
+      - name: Anchor status (report only)
+        if: steps.baseline.outputs.allow_missing == ''
+        continue-on-error: true
+        env:
+          SOURCE_REF: ${{ needs.resolve.outputs.source }}
+        run: |
+          bun run test:anchor -- --baseline reports/coverage-baseline.json \
+            --head-sha "$(git rev-parse HEAD)" --head-ref "$SOURCE_REF"
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -258,7 +313,51 @@ jobs:
         run: bun run test:e2e
 
       - name: Coverage gate
+        id: gate
         run: bun run coverage:gate -- --check --baseline reports/coverage-baseline.json ${{ steps.baseline.outputs.allow_missing }}
+
+      # Cổng đỏ mà không nói được đường thoát thì người bị kẹt đi tìm `if: always()`
+      # cho job `report` — cách đó KHÔNG mở được vòng khoá (xem comment ở job đó).
+      #
+      # ⚠️ Điều kiện theo CHÍNH cổng, 🚫 không `if: failure()` trần: `failure()` đúng
+      # khi bất kỳ step nào trước đó đỏ, mà typecheck đỏ ("test chờ source") là kiểu
+      # đỏ phổ biến nhất trên dòng test. Khi đó `Coverage gate` bị skip
+      # (`conclusion == 'skipped'`) nhưng khối chữ dưới đây vẫn in, đẩy người đọc đi
+      # sửa baseline cho một lượt đỏ chẳng liên quan tới coverage — đúng loại "đỏ mất
+      # tín hiệu" mà chính file này đang gỡ.
+      - name: Escape hatch when the gate is red
+        if: failure() && steps.gate.conclusion == 'failure'
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          TEST_REF: ${{ needs.resolve.outputs.test_ref }}
+        run: |
+          {
+            echo "### Cổng coverage đỏ — hai nguyên nhân, hai cách xử lý"
+            echo ""
+            echo "1. **Thiếu test thật** → viết test trên \`${TEST_REF}\`, cổng tự xanh khi số lên."
+            echo "2. **Baseline neo ở dòng version khác** (xem bước \`Anchor status\` phía trên:"
+            echo "   verdict \`other-version\` / \`behind\`) → dòng \`${VERSION}\` đang bị chấm theo số"
+            echo "   của dòng trước. \`coverage:gate --update\` 🚫 KHÔNG hạ được số (nó lấy \`max\`),"
+            echo "   nên phải **neo lại bằng tay** theo runbook \`testing.md\` §6 — một PR trên dòng"
+            echo "   test, có ghi lý do."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Cổng thứ tự merge (`git-pr.md` §4.3). Đặt SAU toàn bộ suite + cổng coverage
+      # nên 🚫 không che kết quả nào: các bước trên đã chạy xong và đã ghi summary,
+      # lượt này vẫn dùng được để viết test. Nó chỉ chặn đúng một việc — merge PR
+      # dòng test trước PR code đối ứng.
+      #
+      # Đỏ ở đây 🚫 KHÔNG phải "đỏ mất tín hiệu": có đúng MỘT nguyên nhân và nêu
+      # thẳng việc phải làm. Không có nó thì tín hiệu duy nhất là khối chữ ở job
+      # summary, mà repo hiện không có branch protection nào ⇒ ghép cặp sẽ biến
+      # "đỏ nhưng vẫn merge" thành "xanh rồi merge", dễ xảy ra hơn chứ không khó hơn.
+      - name: Merge order guard — paired with unmerged source
+        if: needs.resolve.outputs.paired == 'taskid'
+        env:
+          PAIR_NOTE: ${{ needs.resolve.outputs.pair_note }}
+        run: |
+          echo "::error::Lượt này chấm trên branch task dòng source CHƯA MERGE ($PAIR_NOTE). Suite ở trên đã chạy và kết quả vẫn đọc được, nhưng 🚫 không merge PR dòng test trước PR code: merge PR code, rồi chạy lại lượt này để có 'Ghép theo: no-match' — đó mới là lượt có quyền merge (git-pr.md §4.3)."
+          exit 1
 
       - name: Upload coverage & reports
         if: always()
@@ -278,6 +377,18 @@ jobs:
     name: Push coverage to test line
     # Cả hai chiều push đều ghi neo, nhờ đó `source_sha` luôn khớp head dòng
     # version. PR bị loại vì fork không có secret để push.
+    #
+    # 🚫 Cố ý KHÔNG `if: always()`, dù `needs: [overlay]` nhìn như một vòng khoá
+    # (overlay đỏ ⇒ report skipped ⇒ baseline không ghi lại ⇒ overlay vẫn đỏ).
+    # Một lượt `report` chạy thêm không mở được vòng đó: `mergeBaseline()` lấy
+    # `max(cũ, mới)` (`coverage-gate.ts`) nên baseline KHÔNG BAO GIỜ tự hạ, mà số
+    # thừa hưởng từ dòng version trước mới đúng là thứ làm `overlay` đỏ. Ghi neo
+    # từ một lượt suite đỏ còn tệ hơn: `test-anchor` sẽ in `match` cho baseline đo
+    # ở cây khác — xanh giả.
+    #
+    # Đường thoát đúng là neo lại tường minh: runbook `testing.md` §6, một PR dòng
+    # test có ghi lý do. Bước `Escape hatch` của job `overlay` in đúng lối đó khi
+    # cổng đỏ, nên "report skipped" không còn là tín hiệu mồ côi.
     if: github.event_name == 'push'
     needs: [resolve, overlay]
     runs-on: ubuntu-latest

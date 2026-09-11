@@ -58,7 +58,7 @@ dev/x.y.z/{taskID}_{task-slug}
 |---|---|
 | `x.y.z` | Lấy từ base branch hoặc version nêu trong request (base `dev/1.1.2/main` → `1.1.2`) |
 | `{taskID}` | Giữ nguyên id task, đúng chữ hoa/thường |
-| `_` | Đúng **một** dấu gạch dưới ngăn taskID với slug |
+| `_` | Dấu gạch dưới ngăn taskID với slug. ⚠️ `{taskID}` **được phép** chứa `_` (§7), còn `{task-slug}` là `kebab-case` nên không chứa `_` ⇒ tooling tách hai phần ở dấu `_` **cuối cùng** (`taskIdOfBranch()` trong `.github/scripts/test-ref.ts`), vd `dev/1.1.5/B202608_2201_sqlite-log-driver-poc` → taskID `B202608_2201` |
 | `{task-slug}` | `kebab-case` toàn chữ thường, 3–5 từ, mô tả nội dung task |
 
 ```bash
@@ -115,11 +115,24 @@ git push origin <sha>:refs/heads/test/main
 | Việc | Ai làm | Khi nào |
 |---|---|---|
 | Mở `test/x.y.z/main` | người mở dòng version | cùng lúc mở `dev/x.y.z/main` |
+| **Neo lại baseline sang dòng version mới** (hạ số theo cây mới) | người mở dòng version | ngay sau lượt `test-overlay` **đầu tiên** của `test/x.y.z/main` — runbook [`testing.md`](testing.md) §6 |
 | Sync `main` → `test/main` · `dev/x.y.z/main` → `test/x.y.z/main` | CI (`sync-source-to-test.yml`) | mỗi push vào dòng source |
 | Sync `test/main` → `test/x.y.z/main` | CI (`sync-test-line.yml`) | mỗi push vào `test/main` |
 | Thăng `test/x.y.z/main` → `test/main` | CI (`promote-test-line.yml`) | ngay khi version lên `main` |
 | Chặn release thiếu test | CI (`release-test-gate.yml`) | PR `dev/x.y.z/main` → `main` |
 
+- **Merge PR code TRƯỚC PR test.** `test-overlay.yml` ghép PR dòng test với branch task dòng source cùng `{taskID}` khi branch đó **còn** trên remote — job summary in `Ghép theo: taskid`. Lượt đó chấm trên code **chưa merge**: hữu ích để viết test, 🚫 **không** đủ để merge, và bước `Merge order guard` chặn cứng bằng cách cho job đỏ **sau** khi suite đã chạy (kết quả vẫn đọc được, chỉ quyền merge bị chặn). Lượt có quyền merge là lượt `Ghép theo: no-match` — PR code đã merge, branch task đã xoá, nên cặp ghép quay về `dev/x.y.z/main`.
+
+| `Ghép theo` | Nghĩa | Kết luận được về thứ tự merge? |
+|---|---|---|
+| `taskid` | ghép với branch task dòng source còn trên remote | ✅ PR code **chưa** merge ⇒ 🚫 chưa được merge PR test |
+| `no-match` | không còn branch `dev/*/{taskID}_*` nào | ✅ PR code đã merge ⇒ đây là lượt **có quyền merge** |
+| `ambiguous` | ≥ 2 branch dòng source cùng taskID ⇒ cổng 🚫 không chọn bừa, lùi về đầu dòng version | ❌ dọn branch thừa rồi chạy lại |
+| `lookup-failed` | 🚫 không dò được remote (mất mạng, hết quyền) ⇒ lùi về đầu dòng version | ❌ **chạy lại lượt đó**, 🚫 đừng đọc thành "PR code đã merge" |
+| `not-applicable` | ref không mang taskID, vd push thẳng vào đầu dòng test | — không áp dụng |
+
+⚠️ `lookup-failed` cố ý **không** dùng chung tên với `no-match`: gộp hai thứ đó lại là khẳng định một điều chưa kiểm chứng về trạng thái merge của dòng source, và người duyệt đọc job summary sẽ kết luận sai.
+- ⚠️ **Ghép cặp chỉ đổi *cây được chấm*, 🚫 không nới ngưỡng.** Cổng coverage vẫn so với baseline của dòng test ở mọi giá trị `Ghép theo`.
 - **PR của branch task dòng test target `test/x.y.z/main`** — không phải `test/main`, không phải `main`. Dùng template `?template=test.md`.
 - **Commitlint chạy trên base `test/**/main`** → PR title và mọi commit đúng format §7, `type` là `test` (hoặc `chore` cho commit report do CI đẩy).
 - **Workflow của dòng test checkout ref đang trigger, 🚫 không `ref: main`** — tooling dòng test (`test-ref.ts`, `coverage-gate.ts`, `sync-line.sh`) chỉ có mặt trên `main` sau khi version mở nó được release. Lấy script từ `main` trước lúc đó cho `Module not found`, mà lỗi đó đọc ra như "cổng hỏng" chứ không phải "chưa tới lượt".
@@ -180,7 +193,7 @@ Format:
 
 | Phần | Bắt buộc? | Quy tắc |
 |------|-----------|---------|
-| `[<TASK>]` | Không | ID task/issue chữ-số/gạch ngang, vd `[E0003]`. Không có task thì **bỏ hẳn**, không để `[]` |
+| `[<TASK>]` | Không | ID task/issue gồm chữ-số, `-` và `_`, vd `[E0003]` · `[B202608_2201]` · `[20260911_001]`. Không có task thì **bỏ hẳn**, không để `[]` |
 | `<type>` | Có | `feat` \| `fix` \| `chore` \| `docs` \| `refactor` \| `test` |
 | `(<scope>)` | Không | `kebab-case`, vd `(monitor)`, `(runners)` |
 | `!` sau type/scope | Không | Đánh dấu breaking change, vd `feat!:`, `fix(api)!:` |
@@ -189,8 +202,10 @@ Format:
 Regex khớp commitlint:
 
 ```
-^(?:\[[A-Za-z0-9][A-Za-z0-9-]*\] )?(feat|fix|chore|docs|refactor|test)(\([a-z0-9-]+\))?(!)?: .+
+^(?:\[[A-Za-z0-9][A-Za-z0-9_-]*\] )?(feat|fix|chore|docs|refactor|test)(\([a-z0-9-]+\))?(!)?: .+
 ```
+
+⚠️ **Một regex, ba nơi dùng** — `commitlint.config.js`, `.github/scripts/test-coverage-status.ts` (`TASK_RE`) và bảng trên phải khớp nhau. Lệch một ký tự là có commit qua được commitlint mà **rơi khỏi sổ nợ test**: `[B202608_2201] feat(log): …` từng qua `bun run lint:commit` nhưng bị `test:status` xếp vào *không truy được task*, mà loại đó theo đúng tài liệu thì **không tính là thiếu test**.
 
 Ràng buộc thêm:
 

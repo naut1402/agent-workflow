@@ -20,6 +20,14 @@ on:
   push:
     branches: [main, 'refactor/**']
   pull_request:
+    # Dòng test có CI riêng (`test-overlay.yml`) chấm trên cây GHÉP. Ở đây cây là
+    # bản sao `src/` do `sync-source-to-test.yml` đẩy sang, nên typecheck/lint/build
+    # chấm sai cây (`testing.md` §3.1) và job `full` chạy lại nguyên suite lần hai.
+    # ⚠️ Bật branch protection cho `test/*/main` thì check bắt buộc phải là
+    # `Suite on grafted tree`, 🚫 không được có check của file này — sau thay đổi
+    # này nó không chạy ở PR dòng test nữa nên sẽ treo mãi.
+    branches-ignore:
+      - 'test/**'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -55,8 +63,13 @@ jobs:
             echo "|---|---|---|---|"
           } >> "$GITHUB_STEP_SUMMARY"
 
+          # ⚠️ `|| true`: PR không có file `.ts/.vue/.sh/.yml` nào (vd PR chỉ đụng
+          # `reports/` do job `report` sinh ra) làm `grep` exit 1, mà `pipefail`
+          # + `set -e` giết cả bước TRƯỚC khi kịp typecheck. Nó nuốt luôn exit 2
+          # (lỗi thật của `grep`) — giá chấp nhận được vì bước này chỉ **báo cáo**,
+          # không gate; 🚫 đừng copy mẫu này sang bước có gate.
           git diff --name-only --diff-filter=d "$BASE_SHA" "$HEAD_SHA" \
-            | grep -E '\.(ts|vue|sh|yml)$' \
+            | { grep -E '\.(ts|vue|sh|yml)$' || true; } \
             | while read -r f; do
                 [[ -f "$f" ]] || continue
                 tot="$(grep -cve '^[[:space:]]*$' "$f" || true)"
