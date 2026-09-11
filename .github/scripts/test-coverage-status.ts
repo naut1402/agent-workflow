@@ -41,8 +41,21 @@ export const EXEMPTIONS_FILE = 'tests/exemptions.json'
 /** Lý do một chữ ("wip", "n/a") không phải lý do — người duyệt không quyết được gì với nó. */
 export const MIN_REASON = 10
 
-/** Đúng regex định danh task của `git-pr.md` §7; phần sau (`feat(ci): …`, hậu tố `(#123)` của squash) không ảnh hưởng. */
-const TASK_RE = /^\[([A-Za-z0-9][A-Za-z0-9-]*)\]\s/
+/**
+ * Đúng regex định danh task của `git-pr.md` §7 **và** `commitlint.config.js` —
+ * gồm cả `_`, vì task do dashboard sinh có dạng `20260911_001`. Ba nguồn lệch
+ * nhau từng làm `[B202608_2201] feat(log): …` qua commitlint mà rơi vào mục
+ * *không truy được task* ⇒ một PR tính năng biến mất khỏi sổ nợ test.
+ *
+ * 🚫 Không nhân bản hằng này: nó là nguồn duy nhất cho CẢ HAI đường — nhận diện
+ * commit (`taskIdOf`) và validate `tests/exemptions.json` (`parseEntry`).
+ *
+ * Phần sau (`feat(ci): …`, hậu tố `(#123)` của squash) không ảnh hưởng.
+ */
+const TASK_RE = /^\[([A-Za-z0-9][A-Za-z0-9_-]*)\]\s/
+
+/** Có `[…]` ở đầu subject — dùng để tách *sai format* khỏi *không mang định danh*. */
+const BRACKET_RE = /^\[[^\]]*\]/
 const REVERT_RE = /^Revert\s+"(.+)"\s*$/
 const TYPE_RE = /^\[[^\]]+\]\s+([a-z]+)(?:\([^)]*\))?!?:/
 
@@ -173,7 +186,11 @@ export interface StatusReport {
   exempt: Exemption[]
   /** `merged − tested − exempt − reverted`. */
   missing: TaskEntry[]
-  /** Subject không mang định danh task — không quy được về task nào. */
+  /**
+   * Subject không quy được về task nào — hai ca, `sectionUntagged` tách khi render:
+   * không có `[…]` (§7 **cho phép**) và có `[…]` nhưng sai format (đang **rơi khỏi**
+   * sổ nợ test).
+   */
   untagged: string[]
   /** Miễn trừ của version khác — nêu ra, **không** áp dụng. */
   staleExempt: Exemption[]
@@ -350,7 +367,7 @@ function sectionCounts(r: StatusReport): string[] {
     `| **thiếu test** | **${r.missing.length}** |`,
     `| miễn trừ (áp dụng version này) | ${r.exempt.length} |`,
     `| đã revert (mọi commit) | ${r.reverted.length} |`,
-    `| commit không truy được task | ${r.untagged.length} |`,
+    `| commit không quy được về task | ${r.untagged.length} |`,
     '',
   ]
 }
@@ -445,18 +462,44 @@ function sectionReverted(r: StatusReport): string[] {
   ]
 }
 
+/**
+ * Hai ca rất khác nhau, 🚫 không gộp một thông điệp: sau khi `TASK_RE` đã nới cho
+ * `_`, một subject **vẫn** lọt ra ngoài mà lại có `[…]` thì đó là **sai format**,
+ * không phải "được phép bỏ định danh". Gộp chung là nói sai sự thật về đúng loại
+ * commit đang lặng lẽ rơi khỏi sổ nợ test.
+ *
+ * 📌 Exit code không đổi: `badTag` là báo cáo, `--strict` vẫn chỉ chặn theo `missing`.
+ */
 function sectionUntagged(r: StatusReport): string[] {
   if (!r.untagged.length) return []
-  return [
-    `### ⚠️ ${r.untagged.length} commit không truy được task`,
-    '',
-    'Subject không mang `[<taskID>]` nên không quy được về task nào. `git-pr.md` §7 **cho phép** bỏ',
-    'định danh task, nên đây 🚫 không tính là thiếu test và cũng 🚫 không phải sai format —',
-    'nhưng cũng không bỏ qua im lặng: người duyệt tự xác nhận những commit này không cần test.',
-    '',
-    ...r.untagged.map((x) => `- ${x}`),
-    '',
-  ]
+  const noTag = r.untagged.filter((s) => !BRACKET_RE.test(s))
+  const badTag = r.untagged.filter((s) => BRACKET_RE.test(s))
+  const out: string[] = []
+  if (noTag.length) {
+    out.push(
+      `### ⚠️ ${noTag.length} commit không mang định danh task`,
+      '',
+      'Subject không mang `[<taskID>]` nên không quy được về task nào. `git-pr.md` §7 **cho phép** bỏ',
+      'định danh task, nên đây 🚫 không tính là thiếu test và cũng 🚫 không phải sai format —',
+      'nhưng cũng không bỏ qua im lặng: người duyệt tự xác nhận những commit này không cần test.',
+      '',
+      ...noTag.map((x) => `- ${x}`),
+      '',
+    )
+  }
+  if (badTag.length) {
+    out.push(
+      `### ❌ ${badTag.length} commit có định danh nhưng SAI FORMAT`,
+      '',
+      'Subject có `[…]` mà không khớp định danh task của `git-pr.md` §7 — ký tự ngoài',
+      '`[A-Za-z0-9_-]`, hoặc thiếu space sau `]`. Đây 🚫 **không** phải ca "được phép bỏ định danh":',
+      'commit này đang **rơi khỏi sổ nợ test**. Sửa quy ước hoặc sửa subject, không để nguyên.',
+      '',
+      ...badTag.map((x) => `- ${x}`),
+      '',
+    )
+  }
+  return out
 }
 
 /**

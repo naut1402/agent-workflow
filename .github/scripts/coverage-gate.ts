@@ -1,27 +1,27 @@
 #!/usr/bin/env bun
 /**
- * Cổng coverage — chặn **xu hướng tụt**, không chỉ chặn một ngưỡng tuyệt đối.
+ * Máy ghi **mốc coverage** của một dòng version, và là nơi duy nhất ghi **neo SHA**.
  *
- * Vì sao cần: sau khi test tách sang dòng branch riêng, PR ở dòng source không
- * còn mang test nào theo, nên "coverage tụt" không còn tự hiện ra trong diff.
- * Cổng này là chỗ duy nhất phát hiện việc đó.
+ * 🚫 Đây KHÔNG còn là cổng. Từ 2026-09-11 mức phủ không gác merge nữa
+ * (`docs/agent-rules/testing.md` §6): "nợ test" được định nghĩa là **task đã merge
+ * mà dòng test chưa có test cho nó**, và nó được gác theo TASK ở
+ * `test-coverage-status.ts --strict`. Phần trăm chỉ được **ghi lại** để người đọc
+ * thấy xu hướng — 🚫 đừng dựng lại một cổng theo phần trăm ở đây hay ở chỗ khác.
  *
- * Hai chế độ:
- *   --check    so số của lượt chạy hiện tại với baseline, tụt quá dung sai → exit 1
- *   --update   nâng baseline lên số mới (chỉ đi lên) + ghi một dòng lịch sử
+ * Một chế độ:
+ *   --update   ghi mốc = số của lượt này (GHI ĐÈ) + neo + một dòng lịch sử
  *
- * Bất biến:
- *   - **Thiếu baseline là lỗi**, không phải "đạt" — trừ khi khai `--allow-missing`
- *     (chỉ dùng cho lượt khởi tạo baseline đầu tiên của repo).
- *   - Baseline sai định dạng là lỗi — không suy ra 0% rồi kết luận đạt.
- *   - `--update` không bao giờ **hạ** baseline; muốn hạ thì sửa file bằng tay
- *     trong một PR test có ghi lý do.
- *
+ * Bất biến còn lại:
+ *   - **Không đọc được dữ liệu coverage nào là lỗi** (exit 1). Đây là ràng buộc về
+ *     *dữ liệu* — "lượt chạy có thật sự đo không" — 🚫 không phải về mức phủ, nên
+ *     nó không đi cùng cổng.
+ *   - **Thiếu baseline là lỗi**, trừ khi khai `--allow-missing`: sai đường dẫn
+ *     `--baseline` 🚫 không được âm thầm tạo một file mới.
+ *   - Baseline sai định dạng là lỗi — 🚫 không suy ra 0% rồi ghi tiếp.
  *   - **Neo chỉ được GHI ở đây, không so ở đây.** So neo với head của PR phát
- *     hành là việc của `test-anchor.ts` — nhờ vậy cổng này không cần biết mình
+ *     hành là việc của `test-anchor.ts` — nhờ vậy file này không cần biết mình
  *     đang chạy ở dòng test hay ở PR phát hành.
  *
- *   bun run coverage:gate -- --check
  *   bun run coverage:gate -- --update --source-ref dev/1.1.3/main --test-ref test/1.1.3/main \
  *     --source-sha "$(git rev-parse HEAD)" --test-sha "$TEST_SHA"
  */
@@ -31,9 +31,6 @@ import process from 'node:process'
 import { parseJsonObject } from './lib/json.js'
 
 const ROOT = path.resolve(import.meta.dir, '..', '..')
-
-/** Điểm phần trăm. Hấp thụ dao động do source thêm/bớt file, không phải để nới cho test tụt. */
-export const TOLERANCE = 0.5
 
 export const FE_METRICS = ['lines', 'statements', 'functions', 'branches'] as const
 type FeMetric = (typeof FE_METRICS)[number]
@@ -119,7 +116,7 @@ export function normalizeSha(value: string | undefined, flag: string): string {
   return v.toLowerCase()
 }
 
-/** Baseline phải parse được **và** có ít nhất một chỉ số — nửa vời thì cổng vô nghĩa. */
+/** Baseline phải parse được **và** có ít nhất một chỉ số — nửa vời thì mốc vô nghĩa. */
 export function parseBaseline(raw: string, file: string): Baseline {
   const b = parseJsonObject(raw, `Baseline ${file}`) as Baseline
   const fe = b.frontend ?? {}
@@ -136,24 +133,30 @@ export function parseBaseline(raw: string, file: string): Baseline {
 
 export interface Row {
   metric: string
-  baseline: number
+  /** Mốc đang lưu trong baseline TRƯỚC lượt ghi này. */
+  baseline: number | undefined
   current: number | undefined
   delta: number | undefined
-  status: 'ok' | 'within-tolerance' | 'regressed' | 'missing'
 }
 
-/** So từng chỉ số **có mặt ở baseline**; chỉ số mới xuất hiện ở lượt chạy không bị đòi hỏi. */
-export function compare(baseline: Baseline, now: Measured, tolerance = TOLERANCE): Row[] {
+/**
+ * So mốc trước với lượt này — **để hiển thị**. 🚫 Không phán quyết: từ 2026-09-11
+ * mức phủ không còn là cổng (`testing.md` §6), nợ test gác theo task ở
+ * `test-coverage-status.ts`. Vì vậy 🚫 không còn cột kết luận và 🚫 không còn dung sai.
+ *
+ * Lấy **hợp** của hai phía, 🚫 không chỉ lấy khoá có ở baseline: chỉ số mới xuất
+ * hiện ở lượt chạy cũng là thông tin, mà mốc thì không còn là "hợp đồng" để đòi hỏi.
+ */
+export function compare(baseline: Baseline, now: Measured): Row[] {
   const rows: Row[] = []
   const push = (metric: string, base: number | undefined, cur: number | undefined) => {
-    if (base === undefined) return
-    if (cur === undefined) {
-      rows.push({ metric, baseline: base, current: undefined, delta: undefined, status: 'missing' })
-      return
-    }
-    const delta = cur - base
-    const status = delta >= 0 ? 'ok' : delta >= -tolerance ? 'within-tolerance' : 'regressed'
-    rows.push({ metric, baseline: base, current: cur, delta, status })
+    if (base === undefined && cur === undefined) return
+    rows.push({
+      metric,
+      baseline: base,
+      current: cur,
+      delta: base === undefined || cur === undefined ? undefined : cur - base,
+    })
   }
   for (const m of FE_METRICS) push(`frontend.${m}`, baseline.frontend?.[m], now.frontend[m])
   push('backend.lines', baseline.backend?.lines, now.backend.lines)
@@ -168,15 +171,6 @@ export interface BaselineMeta {
   at?: string
 }
 
-/**
- * Baseline mới = max(cũ, mới) từng chỉ số. Không bao giờ hạ.
- *
- * ⚠️ **Neo thì ngược lại: ghi đè, không `max()`.** Neo là *thời điểm*, và
- * `max()` trên chuỗi SHA là vô nghĩa — lượt mới nhất thắng.
- *
- * Khoá lạ do tooling khác ghi vẫn còn sau khi ghi (round-trip không được làm
- * mất dữ liệu của người khác), nên `out` bắt đầu từ chính `baseline`.
- */
 /**
  * Neo là khoá **đã biết**, nên xử lý tường minh chứ 🚫 không để nó sống sót nhờ
  * `{ ...baseline }`. Lượt ghi số mà không khai neo thì neo cũ **không còn mô tả**
@@ -201,15 +195,28 @@ function applyAnchor(out: Baseline, baseline: Baseline, meta: BaselineMeta): voi
   }
 }
 
+/**
+ * Mốc mới = số của **lượt này**. 🚫 Không `max()` nữa: từ 2026-09-11 baseline là
+ * **mốc tham chiếu**, không phải ngưỡng, nên "chỉ đi lên" sẽ làm nó mô tả một lượt
+ * chạy đã không còn tồn tại — và chính bất biến đó đẻ ra quy trình sửa file bằng
+ * tay (#310). Chỉ số lượt này 🚫 không đo được thì **giữ giá trị cũ** (không xoá):
+ * lượt chạy thiếu dữ liệu đã có cảnh báo riêng ở `main()`.
+ *
+ * ⚠️ Neo vẫn xử lý tường minh qua `applyAnchor` — nó 🚫 KHÔNG đổi nghĩa: nó vẫn
+ * trả lời "suite đã xanh trên cây nào".
+ *
+ * Khoá lạ do tooling khác ghi vẫn còn sau khi ghi (round-trip không được làm mất
+ * dữ liệu của người khác), nên `out` bắt đầu từ chính `baseline`.
+ */
 export function mergeBaseline(baseline: Baseline, now: Measured, meta: BaselineMeta): Baseline {
   const frontend: Partial<Record<FeMetric, number>> = { ...(baseline.frontend ?? {}) }
   for (const m of FE_METRICS) {
     const cur = now.frontend[m]
     if (cur === undefined) continue
-    frontend[m] = Math.max(frontend[m] ?? 0, cur)
+    frontend[m] = cur
   }
   const backend = { ...(baseline.backend ?? {}) }
-  if (now.backend.lines !== undefined) backend.lines = Math.max(backend.lines ?? 0, now.backend.lines)
+  if (now.backend.lines !== undefined) backend.lines = now.backend.lines
 
   const out: Baseline = { ...baseline, updated_at: meta.at ?? new Date().toISOString() }
   if (Object.keys(frontend).length) out.frontend = frontend
@@ -230,8 +237,9 @@ export function historyRow(now: Measured, meta: BaselineMeta): string {
 const HISTORY_HEADER = [
   '# Lịch sử coverage',
   '',
-  'Log cho **người đọc** — cổng chặn merge đọc `coverage-baseline.json`, không đọc file này.',
-  'Mỗi dòng là một lượt CI đã cập nhật baseline.',
+  'Log cho **người đọc**. Sau khi bỏ `max()`, đây là chỗ duy nhất còn lưu các mốc cũ —',
+  '`coverage-baseline.json` chỉ giữ mốc của lượt gần nhất. 🚫 Không cổng nào đọc file này.',
+  'Mỗi dòng là một lượt CI đã ghi mốc.',
   '',
   '| Thời điểm (UTC) | Ref test | Ref source | FE lines | BE lines |',
   '|---|---|---|---|---|',
@@ -245,18 +253,23 @@ export function appendHistory(file: string, row: string): void {
   fs.writeFileSync(file, `${body}${row}\n`, 'utf8')
 }
 
+/** 4 cột, 🚫 không cột kết luận — không còn dung sai nào để phân loại. */
 function table(rows: Row[]): string {
   const fmt = (v: number | undefined, suffix = '%') => (v === undefined ? '—' : `${v.toFixed(2)}${suffix}`)
   const sign = (v: number | undefined) => (v === undefined ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}`)
   return [
-    '| Chỉ số | Baseline | Hiện tại | Delta | Kết luận |',
-    '|---|---|---|---|---|',
-    ...rows.map((r) => `| \`${r.metric}\` | ${fmt(r.baseline)} | ${fmt(r.current)} | ${sign(r.delta)} | ${r.status} |`),
+    '| Chỉ số | Mốc trước | Lượt này | Δ |',
+    '|---|---|---|---|',
+    ...rows.map((r) => `| \`${r.metric}\` | ${fmt(r.baseline)} | ${fmt(r.current)} | ${sign(r.delta)} |`),
   ].join('\n')
 }
 
 interface Args {
-  mode: 'check' | 'update' | null
+  /**
+   * 🚫 Vẫn **bắt buộc khai** `--update`, dù chỉ còn một chế độ: gọi trần không
+   * được phép ghi đè file mốc.
+   */
+  mode: 'update' | null
   baseline: string
   fe: string
   be: string
@@ -266,11 +279,10 @@ interface Args {
   sourceSha?: string
   testSha?: string
   allowMissing: boolean
-  tolerance: number
 }
 
 /**
- * Bảng cờ khai báo thay cho chuỗi `else if`: cổng này nhận thêm cờ ở mỗi đợt
+ * Bảng cờ khai báo thay cho chuỗi `else if`: file này nhận thêm cờ ở mỗi đợt
  * của mô hình tách test, mà mỗi `else if` lại thêm một nhánh vào cùng một hàm.
  *
  * ⚠️ Hai kiểu "thiếu tham số" **không** được sửa cho đều — test đang khoá hành
@@ -285,11 +297,15 @@ const VALUE_FLAGS: Record<string, (o: Args, v: string | undefined) => void> = {
   '--test-ref': (o, v) => (o.testRef = v),
   '--source-sha': (o, v) => (o.sourceSha = v),
   '--test-sha': (o, v) => (o.testSha = v),
-  '--tolerance': (o, v) => (o.tolerance = Number(v) || 0),
 }
 
+/**
+ * 🚫 `--check` cố ý KHÔNG có mặt ở đây. Nó là cổng mức phủ, đã bị bỏ 2026-09-11
+ * (`testing.md` §6). Cờ không khai báo thì rơi xuống `VALUE_FLAGS[a]?.()` → no-op,
+ * nên `--check` trần cho `mode = null` ⇒ exit 2 kèm *Cách dùng*, 🚫 không âm thầm
+ * chạy như `--update`. Thêm lại nó là dựng lại cổng — đọc `testing.md` §6 trước.
+ */
 const BOOL_FLAGS: Record<string, (o: Args) => void> = {
-  '--check': (o) => (o.mode = 'check'),
   '--update': (o) => (o.mode = 'update'),
   '--allow-missing': (o) => (o.allowMissing = true),
 }
@@ -302,7 +318,6 @@ export function parseArgs(argv: string[]): Args {
     be: 'coverage/backend/lcov.info',
     history: 'reports/coverage-history.md',
     allowMissing: false,
-    tolerance: TOLERANCE,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -329,8 +344,11 @@ export function main(argv: string[]): number {
   const args = parseArgs(argv)
   if (!args.mode) {
     console.error(
-      'Cách dùng: coverage-gate.ts (--check | --update) [--baseline <path>] [--fe <path>] [--be <path>]\n' +
-        '           [--source-ref <ref>] [--test-ref <ref>] [--source-sha <sha40>] [--test-sha <sha40>]',
+      'Cách dùng: coverage-gate.ts --update [--allow-missing] [--baseline <path>] [--fe <path>] [--be <path>]\n' +
+        '           [--source-ref <ref>] [--test-ref <ref>] [--source-sha <sha40>] [--test-sha <sha40>]\n' +
+        '\n' +
+        '`--check` đã bị bỏ: mức phủ 🚫 không còn là cổng (docs/agent-rules/testing.md §6).\n' +
+        'Nợ test gác theo TASK: `bun run test:status -- --version <x.y.z> --strict`.',
     )
     return 2
   }
@@ -352,22 +370,25 @@ export function main(argv: string[]): number {
   if (!Object.keys(now.frontend).length && now.backend.lines === undefined) {
     console.error(
       `Không đọc được dữ liệu coverage nào (${args.fe} · ${args.be}).\n` +
-        'Chạy `bun run test:fe` (frontend) và `bun run test -- --coverage` (backend) trước khi gọi cổng.',
+        'Chạy `bun run test:fe` (frontend) và `bun run test -- --coverage` (backend) trước khi ghi mốc.',
     )
     return 1
   }
 
-  // Vùng chưa đo được phải nói ra, không im lặng gác nửa cây test (TC-D8).
+  // Vùng chưa đo được phải nói ra, không im lặng ghi nửa cây test (TC-D8). Mốc
+  // "pha trộn hai lượt" 🚫 không còn nguy hiểm vì nó không phán quyết gì, nhưng
+  // đọc một con số backend của lượt trước mà tưởng là của lượt này thì vẫn sai.
   if (now.backend.lines === undefined) {
-    console.warn(`Cảnh báo: không có dữ liệu coverage backend (${args.be}) — cổng chỉ gác vùng frontend ở lượt này.`)
+    console.warn(`Cảnh báo: không có dữ liệu coverage backend (${args.be}) — lượt này chỉ ghi lại mốc của vùng frontend.`)
   }
 
   let baseline: Baseline
   if (!fs.existsSync(baselineFile)) {
     if (!args.allowMissing) {
+      // Vẫn là lỗi: sai đường dẫn `--baseline` 🚫 không được âm thầm tạo file mới.
       console.error(
         `Không thấy baseline ${args.baseline}.\n` +
-          'Thiếu baseline KHÔNG được coi là đạt. Khởi tạo một lần bằng:\n' +
+          'Khởi tạo lần đầu của một dòng test phải khai tường minh:\n' +
           `  bun run coverage:gate -- --update --allow-missing --baseline ${args.baseline}`,
       )
       return 1
@@ -383,42 +404,21 @@ export function main(argv: string[]): number {
     }
   }
 
-  if (args.mode === 'update') {
-    const at = new Date().toISOString()
-    const meta: BaselineMeta = { source_ref: args.sourceRef, test_ref: args.testRef, source_sha: sourceSha, test_sha: testSha, at }
-    const next = mergeBaseline(baseline, now, meta)
-    fs.mkdirSync(path.dirname(baselineFile), { recursive: true })
-    fs.writeFileSync(baselineFile, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
-    appendHistory(abs(args.history), historyRow(now, meta))
-    console.log(`Đã cập nhật ${args.baseline}:\n${JSON.stringify(next, null, 2)}`)
-    summary(`### Coverage baseline\n\n${table(compare(next, now, args.tolerance))}`)
-    return 0
-  }
-
-  const rows = compare(baseline, now, args.tolerance)
-  if (!rows.length) {
-    console.error(`Baseline ${args.baseline} không có chỉ số nào trùng với lượt chạy hiện tại — không so được, coi là đỏ.`)
-    return 1
-  }
-
+  const at = new Date().toISOString()
+  const meta: BaselineMeta = { source_ref: args.sourceRef, test_ref: args.testRef, source_sha: sourceSha, test_sha: testSha, at }
+  // ⚠️ Tính Δ TRƯỚC khi ghi đè: sau `mergeBaseline` thì mốc == lượt này, bảng in
+  // toàn `+0.00`. Cái người đọc cần là "so với mốc trước", không phải so với chính nó.
+  const rows = compare(baseline, now)
+  const next = mergeBaseline(baseline, now, meta)
+  fs.mkdirSync(path.dirname(baselineFile), { recursive: true })
+  fs.writeFileSync(baselineFile, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+  appendHistory(abs(args.history), historyRow(now, meta))
+  console.log(`Đã ghi mốc ${args.baseline}:\n${JSON.stringify(next, null, 2)}`)
   console.log(table(rows))
-  summary(`### Cổng coverage (dung sai ${args.tolerance} điểm %)\n\n${table(rows)}`)
-
-  const regressed = rows.filter((r) => r.status === 'regressed')
-  const missing = rows.filter((r) => r.status === 'missing')
-  for (const r of rows.filter((x) => x.status === 'within-tolerance')) {
-    console.warn(`Cảnh báo: \`${r.metric}\` giảm ${Math.abs(r.delta!).toFixed(2)} điểm % (còn trong dung sai ${args.tolerance}).`)
-  }
-  for (const r of missing) {
-    console.error(`\`${r.metric}\` có trong baseline (${r.baseline.toFixed(2)}%) nhưng lượt chạy này không đo được — thiếu dữ liệu, không phải đạt.`)
-  }
-  if (regressed.length || missing.length) {
-    console.error(
-      `\nCổng coverage ĐỎ: ${regressed.length} chỉ số tụt quá dung sai ${args.tolerance} điểm %, ${missing.length} chỉ số không đo được.`,
-    )
-    return 1
-  }
-  console.log(`\nCổng coverage XANH (dung sai ${args.tolerance} điểm %).`)
+  summary(
+    `### Mốc coverage của version\n\n${table(rows)}\n\n` +
+      'Mốc tham chiếu, 🚫 không phải cổng — nợ test gác theo task: `bun run test:status`.',
+  )
   return 0
 }
 

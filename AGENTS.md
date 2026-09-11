@@ -50,7 +50,7 @@ agent-workflow/
 | 🔍 Investigate · Design | `doc-writing` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) — bố cục `investigate.md` / `design.md`, quy tắc trình bày |
 | 🛠️ Implement | `coding` | [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) · [`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) |
 | 🔎 Review | `coding` + `test` | [`review-checklist-guideline.md`](docs/agent-rules/review-checklist-guideline.md) · [`testing.md`](docs/agent-rules/testing.md) |
-| 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, cổng coverage §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
+| 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
 | 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, PR phát hành §8.4 · [`git-worktree.md`](docs/agent-rules/git-worktree.md) · [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md) |
 
 Tài liệu tra cứu kèm theo (không phải rule):
@@ -82,7 +82,7 @@ Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize t
 | Viết/sửa code feature | [`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md) + [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) + bất biến §4 |
 | Thêm mode mới ở FE shell (`App.vue`) | [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) — checklist §5 |
 | Review PR | [`review-checklist-guideline.md`](docs/agent-rules/review-checklist-guideline.md) — mục **Dữ liệu & An toàn** có domain event khi đụng persist |
-| Test / CI | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test + `test:overlay` §3.1; cổng coverage §6 |
+| Test / CI | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test + `test:overlay` §3.1; mốc coverage + nợ test theo task §6 |
 | Commit / PR / docs | [`git-pr.md`](docs/agent-rules/git-pr.md) — tách commit §6 khi PR nhiều xử lý; branch task gắn version §4.2; **dòng test §4.3**; PR phát hành §8.4 |
 | Hoãn docs/test (hotfix, POC) | [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md) — gate CI chỉ khi PR `dev/x.y.z/main` → `main` |
 | Agent chạy song song | [`git-worktree.md`](docs/agent-rules/git-worktree.md) |
