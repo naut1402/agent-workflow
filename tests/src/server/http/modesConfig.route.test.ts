@@ -101,6 +101,7 @@ describe('HTTP modes-config', () => {
     saveLoggingConfig({
       showLogsTab: false,
       types: { audit: false, request: true, jobs: true, events: false, usage: true },
+      driver: 'file',
     })
     invalidateLoggingPrefsCache()
 
@@ -208,6 +209,7 @@ describe('HTTP modes-config', () => {
     saveLoggingConfig({
       showLogsTab: true,
       types: { audit: true, request: true, jobs: true, events: false, usage: true },
+      driver: 'file',
     })
     invalidateLoggingPrefsCache()
     const app = await createApp(createRegistryContext({ defaultRoot: null }))
