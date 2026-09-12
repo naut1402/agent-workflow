@@ -11,6 +11,7 @@ import RulesPanel from './RulesPanel.vue'
 import StepConfigDialog from './StepConfigDialog.vue'
 import EditorTargetPanel from './EditorTargetPanel.vue'
 import ArtifactNode from '../../../frontend/ui/ArtifactNode.vue'
+import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import { usePipelineProfiles } from '../composables/usePipelineProfiles'
 import {
   buildEditorGraph,
@@ -49,13 +50,19 @@ const emit = defineEmits(['update:scope', 'update:task-id', 'update:subSidebarCo
  */
 const tab = computed(() => (props.scope === 'task' ? 'task' : 'profile'))
 
-function switchTab(next: 'task' | 'profile') {
+function switchTab(next: string) {
+  if (previewing.value) return
   if (tab.value === next) return
   // Đổi tab là nạp lại canvas theo đối tượng của tab kia — bản sửa chưa lưu mất.
   if (!confirmDiscardIfDirty()) return
   closeConfig()
   emit('update:scope', next === 'task' ? 'task' : 'global')
 }
+
+const tabs = computed(() => [
+  { key: 'task', label: t('pipelineEditor.tabs.task') },
+  { key: 'profile', label: t('pipelineEditor.tabs.profile') },
+])
 
 const taskSelect = ref('')
 const taskManual = ref('')
@@ -783,41 +790,25 @@ const hasFanOut = computed(() => {
   return Object.values(outDeg).some((d: any) => d > 1)
 })
 
-const editorLayoutClass = computed(() => ({
-  'editor-layout--left-collapsed': editorLeftCollapsed.value,
-}))
 </script>
 
 <template>
   <div class="editor-root" :class="{ 'preview-active': previewing }">
-    <!-- 1.3 — top chỉ còn nút chuyển Task / Profile; action nằm ở sub-sidebar -->
-    <div class="editor-toolbar">
-      <div class="editor-tabs" role="tablist" :aria-label="t('pipelineEditor.tabs.ariaLabel')">
-        <button
-          type="button"
-          class="editor-tab"
-          role="tab"
-          :class="{ active: tab === 'task' }"
-          :aria-selected="tab === 'task'"
-          @click="switchTab('task')"
-        >{{ t('pipelineEditor.tabs.task') }}</button>
-        <button
-          type="button"
-          class="editor-tab"
-          role="tab"
-          :class="{ active: tab === 'profile' }"
-          :aria-selected="tab === 'profile'"
-          @click="switchTab('profile')"
-        >{{ t('pipelineEditor.tabs.profile') }}</button>
-      </div>
+    <CScreenLayout
+      :tabs="tabs"
+      :active-tab-key="tab"
+      :tabs-aria-label="t('pipelineEditor.tabs.ariaLabel')"
+      :sub-sidebar-collapsed="editorLeftCollapsed"
+      main-overflow="hidden"
+      @update:active-tab-key="switchTab"
+    >
+      <template #top-extra>
+        <div v-if="hasFanOut" class="fanout-warning" role="status">
+          {{ t('pipelineEditor.toolbar.fanOutWarning') }}
+        </div>
+      </template>
 
-      <div v-if="hasFanOut" class="fanout-warning" role="status">
-        {{ t('pipelineEditor.toolbar.fanOutWarning') }}
-      </div>
-    </div>
-
-    <div class="editor-layout" :class="editorLayoutClass">
-      <div class="editor-left" :class="{ 'editor-left-collapsed': editorLeftCollapsed }">
+      <template #left>
         <EditorTargetPanel
           :tab="tab"
           :collapsed="editorLeftCollapsed"
@@ -862,66 +853,68 @@ const editorLayoutClass = computed(() => ({
             @toggle-section="toggleSection"
           />
         </div>
-      </div>
+      </template>
 
-      <div
-        class="vflow-container editor-canvas"
-        ref="canvasRef"
-        @dragover="onDragOver"
-        @drop="onDropOnCanvas"
-      >
-        <VueFlow
-          v-model:nodes="nodes"
-          v-model:edges="edges"
-          :node-types="nodeTypes"
-          fit-view-on-init
-          :zoom-on-scroll="false"
-          :pan-on-drag="true"
-          :nodes-draggable="!previewing"
-          :nodes-connectable="!previewing"
-          :elements-selectable="true"
-          class="vflow"
-          @pane-click="onPaneClick"
-          @node-drag-stop="syncDerivedGraph"
+      <template #main>
+        <div
+          class="vflow-container editor-canvas"
+          ref="canvasRef"
+          @dragover="onDragOver"
+          @drop="onDropOnCanvas"
         >
-          <template #node-pipelineEditor="nodeProps">
-            <PipelineEditorNode
-              v-bind="nodeProps"
-              :preview-state="getPreviewState(nodeProps.id)"
-              @edit="openConfig"
-              @delete="deleteNode"
-            />
-          </template>
-          <template #node-artifact="nodeProps">
-            <ArtifactNode v-bind="nodeProps" />
-          </template>
-        </VueFlow>
+          <VueFlow
+            v-model:nodes="nodes"
+            v-model:edges="edges"
+            :node-types="nodeTypes"
+            fit-view-on-init
+            :zoom-on-scroll="false"
+            :pan-on-drag="true"
+            :nodes-draggable="!previewing"
+            :nodes-connectable="!previewing"
+            :elements-selectable="true"
+            class="vflow"
+            @pane-click="onPaneClick"
+            @node-drag-stop="syncDerivedGraph"
+          >
+            <template #node-pipelineEditor="nodeProps">
+              <PipelineEditorNode
+                v-bind="nodeProps"
+                :preview-state="getPreviewState(nodeProps.id)"
+                @edit="openConfig"
+                @delete="deleteNode"
+              />
+            </template>
+            <template #node-artifact="nodeProps">
+              <ArtifactNode v-bind="nodeProps" />
+            </template>
+          </VueFlow>
 
-        <div v-if="previewing" class="preview-banner">
-          <template v-if="previewActiveStep">
-            <strong>{{ previewActiveStep.index }}/{{ previewActiveStep.total }}</strong>
-            {{ previewActiveStep.label }}
-            <span v-if="previewActiveStep.agent" class="preview-banner-agent">({{ previewActiveStep.agent }})</span>
-            <span v-if="previewHitlPause" class="preview-banner-hitl">{{ t('pipelineEditor.preview.waitingHitl') }}</span>
-          </template>
-          <template v-else>Simulation — no files written</template>
-          &nbsp;
-          <button type="button" class="btn-danger btn-xs" @click="stopDemo">
-            {{ t('pipelineEditor.target.stop') }}
-          </button>
+          <div v-if="previewing" class="preview-banner">
+            <template v-if="previewActiveStep">
+              <strong>{{ previewActiveStep.index }}/{{ previewActiveStep.total }}</strong>
+              {{ previewActiveStep.label }}
+              <span v-if="previewActiveStep.agent" class="preview-banner-agent">({{ previewActiveStep.agent }})</span>
+              <span v-if="previewHitlPause" class="preview-banner-hitl">{{ t('pipelineEditor.preview.waitingHitl') }}</span>
+            </template>
+            <template v-else>Simulation — no files written</template>
+            &nbsp;
+            <button type="button" class="btn-danger btn-xs" @click="stopDemo">
+              {{ t('pipelineEditor.target.stop') }}
+            </button>
+          </div>
         </div>
-      </div>
+      </template>
+    </CScreenLayout>
 
-      <StepConfigDialog
-        v-if="selectedNodeId"
-        :step-id="selectedNodeId"
-        :step="selectedNodeData"
-        :catalog="catalog"
-        :project-id="projectId"
-        @update="applyStepUpdate"
-        @close="closeConfig"
-      />
-    </div>
+    <StepConfigDialog
+      v-if="selectedNodeId"
+      :step-id="selectedNodeId"
+      :step="selectedNodeData"
+      :catalog="catalog"
+      :project-id="projectId"
+      @update="applyStepUpdate"
+      @close="closeConfig"
+    />
   </div>
 </template>
 
@@ -932,42 +925,6 @@ const editorLayoutClass = computed(() => ({
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-}
-
-.editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-
-.editor-tabs {
-  display: inline-flex;
-  gap: 2px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 2px;
-}
-.editor-tab {
-  background: none;
-  border: none;
-  color: var(--muted);
-  padding: 4px 14px;
-  font-size: 12px;
-  font-family: inherit;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.editor-tab:hover:not(.active) { color: var(--text); }
-.editor-tab.active {
-  background: var(--panel);
-  color: var(--accent);
-  font-weight: 600;
 }
 
 .fanout-warning {
@@ -982,18 +939,6 @@ const editorLayoutClass = computed(() => ({
   border: 1px solid rgba(184, 134, 11, 0.35);
   border-radius: 4px;
 }
-.editor-layout {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  flex: 1;
-  overflow: hidden;
-  isolation: isolate;
-  transition: grid-template-columns 0.2s ease;
-}
-.editor-layout.editor-layout--left-collapsed {
-  grid-template-columns: 48px 1fr;
-}
-
 .editor-canvas {
   position: relative;
   overflow: hidden;
@@ -1008,7 +953,6 @@ const editorLayoutClass = computed(() => ({
   border-left: 1px solid var(--border);
 }
 
-.preview-active .editor-toolbar { opacity: 0.6; pointer-events: none; }
 .preview-active .editor-left-sections { opacity: 0.5; pointer-events: none; }
 
 .preview-banner {
@@ -1036,20 +980,6 @@ const editorLayoutClass = computed(() => ({
 .preview-banner-hitl { color: var(--waiting); font-weight: 600; }
 
 /* ── Editor left column (target panel + collapsible sections) ────────────── */
-.editor-left {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--panel);
-  border-right: 1px solid var(--border);
-  transition: width 0.2s ease;
-  min-width: 0;
-}
-.editor-left.editor-left-collapsed {
-  width: 48px;
-  min-width: 48px;
-}
-
 /* Hợp đồng cuộn của Task list (docs/ui-overflow.md): container ngoài KHÔNG cuộn,
    chỉ lá (`.catalog-list` / `.rules-scroll`) mới mang `overflow-y: auto`. Để
    `auto` ở đây là dựng scroller thứ hai và nuốt mất trách nhiệm cuộn của lá. */

@@ -19,7 +19,6 @@ export default {
     makeDefault: 'Set as default',
     copyRunner: 'Copy runner',
     deleteRunner: 'Delete runner',
-    recentJobs: 'Recent jobs',
   },
   toggle: {
     enable: 'Enable runner',

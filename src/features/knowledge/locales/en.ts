@@ -7,6 +7,12 @@ export default {
     save: 'Save',
     delete: 'Delete',
   },
+  form: {
+    createTitle: 'Create entry',
+    editTitle: 'Edit entry — {id}',
+    cancel: 'Cancel',
+    close: 'Close',
+  },
   upload: {
     scope: 'Scope',
     tags: 'Tags (comma-separated)',

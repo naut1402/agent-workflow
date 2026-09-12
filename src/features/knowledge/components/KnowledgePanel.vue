@@ -2,8 +2,9 @@
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, onMounted, watch } from 'vue'
 import { fetchKnowledgeList, fetchKnowledgeEntry, saveKnowledgeEntry, createKnowledgeEntry, deleteKnowledgeEntry, uploadKnowledgeFile, fetchKnowledgeCollections, createKnowledgeCollection, saveKnowledgeCollection, deleteKnowledgeCollection, renameKnowledgeTag } from '../scripts/KnowledgePanelApi'
-import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
+import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import CSelect from '../../../frontend/ui/CSelect.vue'
+import KnowledgeFormDialog from './KnowledgeFormDialog.vue'
 
 /**
  * `projectId` phải xuống tới **mọi** lời gọi: nhóm và tag có đường **ghi**
@@ -12,6 +13,7 @@ import CSelect from '../../../frontend/ui/CSelect.vue'
  */
 const props = defineProps<{
   projectId?: string
+  subSidebarCollapsed?: boolean
 }>()
 
 const { t } = useI18nHelpers()
@@ -29,6 +31,7 @@ const selectedId = ref(null)
 const loading = ref(false)
 const error = ref('')
 const message = ref('')
+const showDialog = ref(false)
 
 const draft = ref({
   title: '',
@@ -38,7 +41,6 @@ const draft = ref({
   content: '',
 })
 
-const tagInput = ref('')
 const uploadTags = ref('')
 const uploadScope = ref('project')
 const uploading = ref(false)
@@ -122,6 +124,7 @@ async function selectEntry(id) {
       tags: [...(e.tags || [])],
       content: e.content || '',
     }
+    showDialog.value = true
   } catch (e) {
     error.value = String(e.message || e)
   }
@@ -137,16 +140,11 @@ function newEntry() {
     content: '',
   }
   message.value = ''
+  showDialog.value = true
 }
 
-function addTag() {
-  const t = tagInput.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '')
-  if (t && !draft.value.tags.includes(t)) draft.value.tags.push(t)
-  tagInput.value = ''
-}
-
-function removeTag(i) {
-  draft.value.tags.splice(i, 1)
+function closeDialog() {
+  showDialog.value = false
 }
 
 // ── collection ─────────────────────────────────────────────────────────────
@@ -267,7 +265,8 @@ async function remove() {
   try {
     await deleteKnowledgeEntry(selectedId.value, props.projectId)
     message.value = t('knowledge.messages.deleted')
-    newEntry()
+    showDialog.value = false
+    selectedId.value = null
     await loadList()
   } catch (e) {
     error.value = String(e.message || e)
@@ -312,145 +311,151 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="knowledge-panel">
-    <header class="knowledge-head">
-      <h2>{{ t('knowledge.title') }}</h2>
-      <div class="knowledge-head-actions">
-        <button class="btn-ghost btn-sm" @click="showUpload = !showUpload">{{ t('knowledge.actions.upload') }}</button>
-        <button class="btn-primary btn-sm" @click="newEntry">{{ t('knowledge.actions.create') }}</button>
-      </div>
-    </header>
-
-    <div v-if="showUpload" class="knowledge-upload-box">
-      <label class="cfg-label">
-        {{ t('knowledge.upload.scope') }}
-        <select v-model="uploadScope" class="cfg-input">
-          <option value="project">project</option>
-          <option value="system">system</option>
-          <option value="global">global</option>
-        </select>
-      </label>
-      <label class="cfg-label">
-        {{ t('knowledge.upload.tags') }}
-        <input v-model="uploadTags" class="cfg-input" placeholder="pipeline, vue" />
-      </label>
-      <label class="cfg-label">
-        {{ t('knowledge.upload.file') }}
-        <input type="file" accept=".md,.txt,text/plain,text/markdown" :disabled="uploading" @change="onFileUpload" />
-      </label>
-    </div>
-
-    <div class="knowledge-layout">
-      <aside class="knowledge-list-pane">
-        <!-- Cây collection nằm TRÊN cụm tab scope: một nhóm gom được entry của
-             nhiều scope, nên nó không phải là nhánh con của scope nào. -->
-        <div class="knowledge-collections">
-          <div class="knowledge-collections-head">
-            <span>{{ t('knowledge.collections.title') }}</span>
-            <button
-              v-if="activeCollection"
-              type="button"
-              class="btn-ghost btn-sm"
-              @click="activeCollection = ''"
-            >{{ t('knowledge.collections.clear') }}</button>
-          </div>
-          <p v-if="collectionsError" class="knowledge-collections-error">
-            {{ t('knowledge.collections.loadFailed', { error: collectionsError }) }}
-          </p>
-          <ul class="knowledge-collection-list">
-            <li v-if="!collections.length && !collectionsError" class="muted">{{ t('knowledge.collections.empty') }}</li>
-            <li
-              v-for="c in collections"
-              :key="c.id"
-              class="knowledge-collection-item"
-              :class="{ active: activeCollection === c.id }"
-            >
-              <button type="button" class="knowledge-collection-name" @click="selectCollection(c.id)">
-                {{ c.name }} <span class="muted">({{ c.entryCount }} · {{ c.scope }})</span>
+  <CScreenLayout :sub-sidebar-collapsed="subSidebarCollapsed">
+    <template #left>
+      <div class="knowledge-left" :class="{ 'knowledge-left--collapsed': subSidebarCollapsed }">
+        <template v-if="!subSidebarCollapsed">
+          <!-- Cây collection nằm TRÊN cụm tab scope: một nhóm gom được entry của
+               nhiều scope, nên nó không phải là nhánh con của scope nào. -->
+          <div class="knowledge-collections">
+            <div class="knowledge-collections-head">
+              <span>{{ t('knowledge.collections.title') }}</span>
+              <button
+                v-if="activeCollection"
+                type="button"
+                class="btn-ghost btn-sm"
+                @click="activeCollection = ''"
+              >{{ t('knowledge.collections.clear') }}</button>
+            </div>
+            <p v-if="collectionsError" class="knowledge-collections-error">
+              {{ t('knowledge.collections.loadFailed', { error: collectionsError }) }}
+            </p>
+            <ul class="knowledge-collection-list">
+              <li v-if="!collections.length && !collectionsError" class="muted">{{ t('knowledge.collections.empty') }}</li>
+              <li
+                v-for="c in collections"
+                :key="c.id"
+                class="knowledge-collection-item"
+                :class="{ active: activeCollection === c.id }"
+              >
+                <button type="button" class="knowledge-collection-name" @click="selectCollection(c.id)">
+                  {{ c.name }} <span class="muted">({{ c.entryCount }} · {{ c.scope }})</span>
+                </button>
+                <button
+                  v-if="selectedId"
+                  type="button"
+                  class="btn-ghost btn-sm"
+                  :title="t('knowledge.collections.addEntry')"
+                  @click="addSelectedToCollection(c)"
+                >+</button>
+                <button
+                  type="button"
+                  class="btn-ghost btn-sm"
+                  :title="t('knowledge.collections.delete')"
+                  @click="removeCollection(c.id)"
+                >✕</button>
+              </li>
+            </ul>
+            <div class="knowledge-collection-new">
+              <input
+                v-model="newCollectionName"
+                class="cfg-input cfg-input-sm"
+                :placeholder="t('knowledge.collections.namePlaceholder')"
+                :disabled="!!collectionsError"
+                @keydown.enter.prevent="addCollection"
+              />
+              <CSelect
+                v-model="newCollectionScope"
+                :options="collectionScopeOptions"
+                :disabled="!!collectionsError"
+                :aria-label="t('knowledge.collections.scope')"
+                class="cfg-input-sm"
+              />
+              <button type="button" class="btn-ghost btn-sm" :disabled="!!collectionsError" @click="addCollection">
+                {{ t('knowledge.collections.create') }}
               </button>
-              <button
-                v-if="selectedId"
-                type="button"
-                class="btn-ghost btn-sm"
-                :title="t('knowledge.collections.addEntry')"
-                @click="addSelectedToCollection(c)"
-              >+</button>
-              <button
-                type="button"
-                class="btn-ghost btn-sm"
-                :title="t('knowledge.collections.delete')"
-                @click="removeCollection(c.id)"
-              >✕</button>
-            </li>
-          </ul>
-          <div class="knowledge-collection-new">
-            <input
-              v-model="newCollectionName"
-              class="cfg-input cfg-input-sm"
-              :placeholder="t('knowledge.collections.namePlaceholder')"
-              :disabled="!!collectionsError"
-              @keydown.enter.prevent="addCollection"
-            />
-            <CSelect
-              v-model="newCollectionScope"
-              :options="collectionScopeOptions"
-              :disabled="!!collectionsError"
-              :aria-label="t('knowledge.collections.scope')"
-              class="cfg-input-sm"
-            />
-            <button type="button" class="btn-ghost btn-sm" :disabled="!!collectionsError" @click="addCollection">
-              {{ t('knowledge.collections.create') }}
-            </button>
+            </div>
           </div>
-        </div>
 
-        <div class="knowledge-filters">
-          <div class="knowledge-scope-tabs">
-            <button
-              class="knowledge-scope-tab"
-              :class="{ active: scope === 'project' }"
-              @click="scope = 'project'"
-            >{{ t('knowledge.scopeTabs.project') }}</button>
-            <button
-              class="knowledge-scope-tab"
-              :class="{ active: scope === 'system' }"
-              @click="scope = 'system'"
-            >{{ t('knowledge.scopeTabs.system') }}</button>
-            <button
-              class="knowledge-scope-tab"
-              :class="{ active: scope === 'global' }"
-              @click="scope = 'global'"
-            >{{ t('knowledge.scopeTabs.global') }}</button>
+          <div class="knowledge-filters">
+            <div class="knowledge-scope-tabs">
+              <button
+                class="knowledge-scope-tab"
+                :class="{ active: scope === 'project' }"
+                @click="scope = 'project'"
+              >{{ t('knowledge.scopeTabs.project') }}</button>
+              <button
+                class="knowledge-scope-tab"
+                :class="{ active: scope === 'system' }"
+                @click="scope = 'system'"
+              >{{ t('knowledge.scopeTabs.system') }}</button>
+              <button
+                class="knowledge-scope-tab"
+                :class="{ active: scope === 'global' }"
+                @click="scope = 'global'"
+              >{{ t('knowledge.scopeTabs.global') }}</button>
+            </div>
+            <input v-model="query" class="cfg-input cfg-input-sm" :placeholder="t('knowledge.filters.searchPlaceholder')" />
+            <div class="tag-row knowledge-tag-filter">
+              <span v-if="!allTags.length" class="muted">{{ t('knowledge.filters.allTags') }}</span>
+              <button
+                v-for="tag in allTags"
+                :key="tag.tag"
+                type="button"
+                class="chip chip-skill"
+                :class="{ active: tagFilter.includes(tag.tag) }"
+                @click="toggleTagFilter(tag.tag)"
+              >{{ tag.tag }} ({{ tag.count }})</button>
+            </div>
+            <div class="knowledge-tag-admin">
+              <CSelect
+                v-model="renameFrom"
+                :options="renameFromOptions"
+                :aria-label="t('knowledge.tagAdmin.from')"
+                class="cfg-input-sm"
+              />
+              <input
+                v-model="renameTo"
+                class="cfg-input cfg-input-sm"
+                :placeholder="t('knowledge.tagAdmin.toPlaceholder')"
+                @keydown.enter.prevent="applyRenameTag"
+              />
+              <button type="button" class="btn-ghost btn-sm" :disabled="!renameFrom" @click="applyRenameTag">
+                {{ t('knowledge.tagAdmin.apply') }}
+              </button>
+            </div>
           </div>
-          <input v-model="query" class="cfg-input cfg-input-sm" :placeholder="t('knowledge.filters.searchPlaceholder')" />
-          <div class="tag-row knowledge-tag-filter">
-            <span v-if="!allTags.length" class="muted">{{ t('knowledge.filters.allTags') }}</span>
-            <button
-              v-for="tag in allTags"
-              :key="tag.tag"
-              type="button"
-              class="chip chip-skill"
-              :class="{ active: tagFilter.includes(tag.tag) }"
-              @click="toggleTagFilter(tag.tag)"
-            >{{ tag.tag }} ({{ tag.count }})</button>
+        </template>
+      </div>
+    </template>
+
+    <template #main>
+      <div class="knowledge-panel">
+        <header class="knowledge-head">
+          <h2>{{ t('knowledge.title') }}</h2>
+          <div class="knowledge-head-actions">
+            <button class="btn-ghost btn-sm" @click="showUpload = !showUpload">{{ t('knowledge.actions.upload') }}</button>
+            <button class="btn-primary btn-sm" @click="newEntry">{{ t('knowledge.actions.create') }}</button>
           </div>
-          <div class="knowledge-tag-admin">
-            <CSelect
-              v-model="renameFrom"
-              :options="renameFromOptions"
-              :aria-label="t('knowledge.tagAdmin.from')"
-              class="cfg-input-sm"
-            />
-            <input
-              v-model="renameTo"
-              class="cfg-input cfg-input-sm"
-              :placeholder="t('knowledge.tagAdmin.toPlaceholder')"
-              @keydown.enter.prevent="applyRenameTag"
-            />
-            <button type="button" class="btn-ghost btn-sm" :disabled="!renameFrom" @click="applyRenameTag">
-              {{ t('knowledge.tagAdmin.apply') }}
-            </button>
-          </div>
+        </header>
+
+        <div v-if="showUpload" class="knowledge-upload-box">
+          <label class="cfg-label">
+            {{ t('knowledge.upload.scope') }}
+            <select v-model="uploadScope" class="cfg-input">
+              <option value="project">project</option>
+              <option value="system">system</option>
+              <option value="global">global</option>
+            </select>
+          </label>
+          <label class="cfg-label">
+            {{ t('knowledge.upload.tags') }}
+            <input v-model="uploadTags" class="cfg-input" placeholder="pipeline, vue" />
+          </label>
+          <label class="cfg-label">
+            {{ t('knowledge.upload.file') }}
+            <input type="file" accept=".md,.txt,text/plain,text/markdown" :disabled="uploading" @change="onFileUpload" />
+          </label>
         </div>
 
         <ul class="knowledge-list">
@@ -470,77 +475,40 @@ onMounted(async () => {
             </div>
           </li>
         </ul>
-      </aside>
+      </div>
 
-      <section class="knowledge-editor-pane" v-if="draft">
-        <label class="cfg-label">
-          {{ t('knowledge.fields.title') }}
-          <input v-model="draft.title" class="cfg-input" />
-        </label>
-        <label class="cfg-label">
-          {{ t('knowledge.fields.slug') }}
-          <input v-model="draft.slug" class="cfg-input" :disabled="!!selectedId" :placeholder="t('knowledge.fields.slugPlaceholder')" />
-        </label>
-        <label class="cfg-label">
-          {{ t('knowledge.fields.scope') }}
-          <!-- Khoá khi sửa: scope nằm trong id, đổi scope là đổi id và phá mọi
-               `knowledge_inputs` đang trỏ tới entry này. -->
-          <select v-model="draft.scope" class="cfg-input" :disabled="!!selectedId">
-            <option value="project">project</option>
-            <option value="system">system</option>
-            <option value="global">global</option>
-          </select>
-        </label>
-        <label class="cfg-label">
-          {{ t('knowledge.fields.tags') }}
-          <div class="tag-row">
-            <span
-              v-for="(t, i) in draft.tags"
-              :key="t"
-              class="chip chip-rm"
-              @click="removeTag(i)"
-            >{{ t }} ✕</span>
-          </div>
-          <div class="tag-input-row">
-            <input
-              v-model="tagInput"
-              class="cfg-input cfg-input-sm"
-              list="knowledge-tag-suggestions"
-              :placeholder="t('knowledge.fields.addTagPlaceholder')"
-              @keydown.enter.prevent="addTag"
-            />
-            <datalist id="knowledge-tag-suggestions">
-              <option v-for="t in allTags" :key="t.tag" :value="t.tag" />
-            </datalist>
-            <button class="btn-ghost btn-sm" type="button" @click="addTag">+</button>
-          </div>
-        </label>
-        <div class="cfg-label knowledge-content-label">
-          <span>{{ t('knowledge.fields.content') }}</span>
-          <MarkdownTextEditor v-model="draft.content" height="400px" />
-        </div>
-        <div class="knowledge-editor-actions">
-          <button type="button" class="btn-primary btn-sm" @click="save">{{ t('knowledge.actions.save') }}</button>
-          <button v-if="selectedId" type="button" class="btn-danger btn-sm" @click="remove">{{ t('knowledge.actions.delete') }}</button>
-          <span v-if="message" class="save-msg">{{ message }}</span>
-          <span v-if="error" class="err">{{ error }}</span>
-        </div>
-      </section>
-      <section v-else class="knowledge-editor-pane empty">
-        <p class="muted">{{ t('knowledge.editor.empty') }}</p>
-      </section>
-    </div>
-  </div>
+      <KnowledgeFormDialog
+        v-if="showDialog"
+        v-model:draft="draft"
+        :selected-id="selectedId"
+        :all-tags="allTags"
+        :message="message"
+        :error="error"
+        @close="closeDialog"
+        @save="save"
+        @delete="remove"
+      />
+    </template>
+  </CScreenLayout>
 </template>
 
 <style scoped lang="scss">
-.knowledge-panel {
+.knowledge-left {
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 0;
+  overflow-y: auto;
+}
+.knowledge-left--collapsed {
+  overflow: hidden;
+}
+.knowledge-panel {
+  height: 100%;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+  min-height: 0;
 }
 .knowledge-head {
   display: flex;
@@ -557,21 +525,6 @@ onMounted(async () => {
   display: grid;
   gap: 8px;
   max-width: 480px;
-}
-.knowledge-layout {
-  display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 12px;
-  flex: 1;
-  min-height: 0;
-}
-.knowledge-list-pane {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
 }
 .knowledge-filters {
   padding: 10px;
@@ -648,44 +601,20 @@ onMounted(async () => {
 .knowledge-list {
   list-style: none;
   margin: 0;
-  padding: 8px;
+  padding: 0;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
 }
 .knowledge-list-item {
   padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
   margin-bottom: 4px;
+  border: 1px solid var(--border);
 }
 .knowledge-list-item:hover { background: var(--panel-2); }
 .knowledge-list-item.active { background: var(--accent-dim); }
 .knowledge-list-title { font-size: 13px; font-weight: 600; }
 .knowledge-list-meta { font-size: 11px; color: var(--muted); }
-.knowledge-editor-pane {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
-  padding: 12px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-/* flex:1 + min-height:<content> lets the label shrink below Toast UI height,
-   so the editor overflows and covers the Save row (esp. visible in light theme). */
-.knowledge-content-label {
-  display: flex;
-  flex-direction: column;
-  flex: 0 0 auto;
-}
-.knowledge-editor-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  position: relative;
-  z-index: 1;
-}
 </style>

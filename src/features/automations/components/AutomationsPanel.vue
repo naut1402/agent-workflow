@@ -5,6 +5,7 @@ import { useAutomations } from '../composables/useAutomations'
 import Icon from '../../../frontend/ui/Icon.vue'
 import type { AutomationListItem, AutomationStepResult } from '../scripts/automationsApi'
 import AutomationFormDialog from './AutomationFormDialog.vue'
+import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 
 const props = defineProps<{
   projectId?: string
@@ -87,6 +88,19 @@ async function onRunNow(rule: AutomationListItem): Promise<void> {
 function openHistoryTab(): void {
   activeTab.value = 'history'
   void loadRuns()
+}
+
+const tabs = computed(() => [
+  { key: 'list', label: t('automations.tabs.list') },
+  { key: 'history', label: t('automations.tabs.history') },
+])
+
+function onTabChange(key: string): void {
+  if (key === 'history') {
+    openHistoryTab()
+  } else {
+    activeTab.value = 'list'
+  }
 }
 
 function onOpenRuleHistory(rule: AutomationListItem): void {
@@ -224,6 +238,8 @@ onMounted(() => {
 </script>
 
 <template>
+  <CScreenLayout :tabs="tabs" :active-tab-key="activeTab" @update:active-tab-key="onTabChange">
+  <template #main>
   <section class="automations-panel">
     <header class="panel-head">
       <div>
@@ -250,27 +266,6 @@ onMounted(() => {
     </header>
 
     <p v-if="error" class="panel-error">{{ t('automations.loadError') }} — {{ error }}</p>
-
-    <div class="panel-tabs" role="tablist">
-      <button
-        type="button"
-        class="panel-tab"
-        role="tab"
-        :class="{ active: activeTab === 'list' }"
-        @click="activeTab = 'list'"
-      >
-        {{ t('automations.tabs.list') }}
-      </button>
-      <button
-        type="button"
-        class="panel-tab"
-        role="tab"
-        :class="{ active: activeTab === 'history' }"
-        @click="openHistoryTab"
-      >
-        {{ t('automations.tabs.history') }}
-      </button>
-    </div>
 
     <template v-if="activeTab === 'list'">
       <div v-if="loading && emptyList" class="panel-empty muted">…</div>
@@ -517,6 +512,8 @@ onMounted(() => {
       @request-options="ensureFormOptions"
     />
   </section>
+  </template>
+  </CScreenLayout>
 </template>
 
 <style scoped lang="scss">
@@ -740,27 +737,6 @@ onMounted(() => {
   .outcome-failed { color: var(--danger); }
   .outcome-skipped,
   .outcome-running { color: var(--muted); }
-
-  .panel-tabs {
-    display: flex;
-    gap: 4px;
-  }
-
-  .panel-tab {
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    padding: 6px 14px;
-    border-radius: 6px;
-    cursor: pointer;
-    font: inherit;
-    font-size: 13px;
-
-    &.active {
-      background: rgba(var(--accent-rgb), 0.15);
-      color: var(--accent);
-    }
-  }
 
   .history-toolbar {
     display: flex;

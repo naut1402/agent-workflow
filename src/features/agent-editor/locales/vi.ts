@@ -1,6 +1,8 @@
 // Strings for the `agentEditor` feature module. vi is the source of truth.
 export default {
   list: {
+    title: 'Agent tùy chỉnh',
+    newButton: '+ Agent mới',
     empty: 'Chưa có agent tùy chỉnh',
   },
   actions: {
@@ -8,8 +10,18 @@ export default {
     delete: 'Xóa',
     export: 'Export',
     close: 'Đóng',
+    templateCopy: 'Template / Sao chép',
+    buildNl: 'Tạo từ mô tả',
+  },
+  form: {
+    createTitle: 'Tạo agent mới',
+    editTitle: 'Sửa agent — {name}',
+    cancel: 'Hủy',
+    close: 'Đóng',
   },
   fields: {
+    name: 'Tên',
+    description: 'Mô tả',
     descriptionPlaceholder: 'Mô tả ngắn',
     recommendedModel: 'Model khuyến nghị',
     scope: 'Phạm vi',
