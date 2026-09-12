@@ -8,6 +8,12 @@ export default {
     save: 'Lưu',
     delete: 'Xóa',
   },
+  form: {
+    createTitle: 'Tạo entry mới',
+    editTitle: 'Sửa entry — {id}',
+    cancel: 'Hủy',
+    close: 'Đóng',
+  },
   upload: {
     scope: 'Scope',
     tags: 'Tags (phân cách bằng dấu phẩy)',

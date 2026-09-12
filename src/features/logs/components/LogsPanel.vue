@@ -8,6 +8,7 @@ import { fetchLoggingConfig } from '../../settings/scripts/SettingsDialogApi'
 import { useLogsTable } from '../composables/useLogsTable'
 import { useCopyText } from '../../../frontend/composables/useCopyText'
 import JobLogDialog from './JobLogDialog.vue'
+import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 
 const { t } = useI18nHelpers()
 
@@ -171,6 +172,8 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <CScreenLayout>
+  <template #main>
   <div class="logs-panel">
     <header class="logs-head">
       <h2>{{ t('logs.title') }}</h2>
@@ -588,6 +591,8 @@ onUnmounted(() => {
 
     <JobLogDialog v-if="dialogJobId" :job-id="dialogJobId" @close="dialogJobId = ''" />
   </div>
+  </template>
+  </CScreenLayout>
 </template>
 
 <style scoped lang="scss">

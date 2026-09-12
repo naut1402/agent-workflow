@@ -1,6 +1,8 @@
 // English translations for the `agentEditor` namespace — keys mirror vi/agentEditor.ts.
 export default {
   list: {
+    title: 'Custom agents',
+    newButton: '+ New agent',
     empty: 'No custom agents yet',
   },
   actions: {
@@ -8,8 +10,18 @@ export default {
     delete: 'Delete',
     export: 'Export',
     close: 'Close',
+    templateCopy: 'Template / Copy',
+    buildNl: 'Build from description',
+  },
+  form: {
+    createTitle: 'Create agent',
+    editTitle: 'Edit agent — {name}',
+    cancel: 'Cancel',
+    close: 'Close',
   },
   fields: {
+    name: 'Name',
+    description: 'Description',
     descriptionPlaceholder: 'Short description',
     recommendedModel: 'Recommended model',
     scope: 'Scope',
