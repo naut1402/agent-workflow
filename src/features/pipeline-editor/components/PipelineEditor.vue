@@ -954,6 +954,7 @@ const hasFanOut = computed(() => {
 }
 
 .preview-active .editor-left-sections { opacity: 0.5; pointer-events: none; }
+.preview-active :deep(.c-screen-layout__top) { opacity: 0.6; pointer-events: none; }
 
 .preview-banner {
   position: absolute;
