@@ -7,6 +7,7 @@ import ChartTile from './ChartTile.vue'
 import ReportCard from './ReportCard.vue'
 import CSelect from '../../../frontend/ui/CSelect.vue'
 import type { CSelectOption } from '../../../frontend/ui/CSelect.vue'
+import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import { fetchUsageStats } from '../scripts/usageStatsApi'
 import {
   USAGE_METRICS,
@@ -460,6 +461,8 @@ onMounted(() => {
 </script>
 
 <template>
+  <CScreenLayout>
+  <template #main>
   <div class="statistics-panel">
     <header class="statistics-head">
       <h2>{{ t('statistics.title') }}</h2>
@@ -724,6 +727,8 @@ onMounted(() => {
       @close="settingsFor = ''"
     />
   </div>
+  </template>
+  </CScreenLayout>
 </template>
 
 <style scoped lang="scss">

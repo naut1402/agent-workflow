@@ -1,39 +1,26 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
-import {
-  fetchCustomAgents,
-  fetchCustomAgent,
-  saveCustomAgent,
-  deleteCustomAgent,
-  exportCustomAgent,
-  type AgentScope,
-} from '../scripts/agentEditorApi'
+import { fetchCustomAgents, type AgentScope } from '../scripts/agentEditorApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
-import { emptyDraft } from '../business/agentDraft.js'
-import AgentSectionEditor from './AgentSectionEditor.vue'
-import AgentTemplatePicker from './AgentTemplatePicker.vue'
-import AgentNlWizard from './AgentNlWizard.vue'
+import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
+import AgentFormDialog from './AgentFormDialog.vue'
 
 const props = defineProps<{ projectId?: string | null }>()
 
 const { t } = useI18nHelpers()
-const agents = ref([])
+const agents = ref<{ name: string; scope: AgentScope }[]>([])
 const catalog = ref({ skills: [], agents: [] })
-const draft = ref(emptyDraft())
-const selectedName = ref('')
-const scope = ref<AgentScope>('project')
-const saving = ref(false)
-const message = ref('')
 const error = ref('')
-const showTemplates = ref(false)
-const showNl = ref(false)
+
+const showDialog = ref(false)
+const editingAgent = ref<{ name: string; scope: AgentScope } | null>(null)
 
 async function loadList() {
   try {
     const data = await fetchCustomAgents(props.projectId ?? undefined)
     agents.value = data.agents || []
-  } catch (e) {
+  } catch (e: any) {
     error.value = String(e.message || e)
   }
 }
@@ -51,179 +38,84 @@ onMounted(async () => {
 })
 
 function newAgent() {
-  selectedName.value = ''
-  scope.value = 'project'
-  draft.value = emptyDraft({ name: 'new-agent' })
-  message.value = ''
+  editingAgent.value = null
+  showDialog.value = true
 }
 
-async function selectAgent(agent) {
-  try {
-    const agentScope = agent.scope === 'global' ? 'global' : 'project'
-    const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agentScope)
-    selectedName.value = agent.name
-    scope.value = agentScope
-    draft.value = { ...data.draft, name: data.name }
-    message.value = ''
-  } catch (e) {
-    error.value = String(e.message || e)
-  }
+function selectAgent(agent: { name: string; scope: AgentScope }) {
+  editingAgent.value = agent
+  showDialog.value = true
 }
 
-async function save() {
-  saving.value = true
-  error.value = ''
-  message.value = ''
-  try {
-    const result = await saveCustomAgent(draft.value, props.projectId ?? undefined, scope.value)
-    selectedName.value = result.name
-    message.value = t('agentEditor.messages.saved', { name: result.name })
-    await loadList()
-    await loadCatalog()
-  } catch (e) {
-    error.value = String(e.message || e)
-  } finally {
-    saving.value = false
-  }
+function closeDialog() {
+  showDialog.value = false
 }
 
-async function remove() {
-  if (!selectedName.value) return
-  if (!confirm(t('agentEditor.messages.confirmDelete', { name: selectedName.value }))) return
-  try {
-    await deleteCustomAgent(selectedName.value, props.projectId ?? undefined, scope.value)
-    message.value = t('agentEditor.messages.deleted')
-    newAgent()
-    await loadList()
-    await loadCatalog()
-  } catch (e) {
-    error.value = String(e.message || e)
-  }
+async function onSaved() {
+  await Promise.all([loadList(), loadCatalog()])
 }
 
-async function doExport(overwrite = false) {
-  if (!selectedName.value) {
-    error.value = t('agentEditor.messages.saveBeforeExport')
-    return
-  }
-  try {
-    const result = await exportCustomAgent(selectedName.value, overwrite, props.projectId ?? undefined, scope.value)
-    message.value = `Exported → ${result.path}`
-  } catch (e) {
-    const msg = String(e.message || e)
-    if (msg.includes('file exists') && confirm(t('agentEditor.messages.confirmOverwrite'))) {
-      await doExport(true)
-    } else {
-      error.value = msg
-    }
-  }
-}
-
-function applyDraft(newDraft) {
-  draft.value = { ...emptyDraft(), ...newDraft }
-  selectedName.value = ''
+async function onDeleted() {
+  await Promise.all([loadList(), loadCatalog()])
 }
 </script>
 
 <template>
-  <div class="agent-editor">
-    <aside class="agent-list-panel">
-      <div class="agent-list-head">
-        <h2>Custom Agents</h2>
-        <button type="button" class="btn-primary btn-sm" @click="newAgent">+ New</button>
-      </div>
-      <ul class="agent-list">
-        <li
-          v-for="a in agents"
-          :key="`${a.scope}:${a.name}`"
-          class="agent-list-item"
-          :class="{ active: selectedName === a.name && scope === a.scope }"
-          @click="selectAgent(a)"
-        >
-          <span class="agent-list-name">{{ a.name }}</span>
-          <span class="chip chip-xs">{{ a.scope === 'global' ? t('agentEditor.fields.scopeGlobal') : t('agentEditor.fields.scopeProject') }}</span>
-        </li>
-        <li v-if="!agents.length" class="muted agent-list-empty">{{ t('agentEditor.list.empty') }}</li>
-      </ul>
-    </aside>
+  <CScreenLayout>
+    <template #main>
+      <div class="agent-editor">
+        <header class="agent-editor-head">
+          <h2>{{ t('agentEditor.list.title') }}</h2>
+          <button type="button" class="btn-primary btn-sm" @click="newAgent">{{ t('agentEditor.list.newButton') }}</button>
+        </header>
 
-    <div class="agent-form-panel">
-      <div class="agent-toolbar">
-        <button type="button" class="btn-ghost btn-sm" @click="showTemplates = true">Template / Copy</button>
-        <button type="button" class="btn-ghost btn-sm" @click="showNl = true">Build NL</button>
-        <button type="button" class="btn-ghost btn-sm" :disabled="!selectedName" @click="doExport(false)">Export .claude/agents</button>
-        <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">{{ t('agentEditor.actions.save') }}</button>
-        <button type="button" class="btn-ghost btn-sm btn-danger" :disabled="!selectedName" @click="remove">{{ t('agentEditor.actions.delete') }}</button>
-      </div>
+        <p v-if="error" class="err">{{ error }}</p>
 
-      <p v-if="message" class="ok-msg">{{ message }}</p>
-      <p v-if="error" class="err">{{ error }}</p>
+        <ul class="agent-list">
+          <li
+            v-for="a in agents"
+            :key="`${a.scope}:${a.name}`"
+            class="agent-list-item"
+            @click="selectAgent(a)"
+          >
+            <span class="agent-list-name">{{ a.name }}</span>
+            <span class="chip chip-xs">{{ a.scope === 'global' ? t('agentEditor.fields.scopeGlobal') : t('agentEditor.fields.scopeProject') }}</span>
+          </li>
+          <li v-if="!agents.length" class="muted agent-list-empty">{{ t('agentEditor.list.empty') }}</li>
+        </ul>
 
-      <div v-if="showTemplates" class="agent-modal">
-        <AgentTemplatePicker @apply-draft="applyDraft" @close="showTemplates = false" />
+        <AgentFormDialog
+          v-if="showDialog"
+          :agent="editingAgent"
+          :project-id="projectId"
+          :catalog="catalog"
+          @close="closeDialog"
+          @saved="onSaved"
+          @deleted="onDeleted"
+        />
       </div>
-      <div v-if="showNl" class="agent-modal">
-        <AgentNlWizard :project-id="projectId" @apply-draft="applyDraft" @close="showNl = false" />
-      </div>
-
-      <div class="agent-basic-fields">
-        <label class="cfg-label">
-          Name
-          <input v-model="draft.name" class="cfg-input" placeholder="agent-name" />
-        </label>
-        <label class="cfg-label">
-          Description
-          <input v-model="draft.description" class="cfg-input" :placeholder="t('agentEditor.fields.descriptionPlaceholder')" />
-        </label>
-        <label class="cfg-label">
-          {{ t('agentEditor.fields.recommendedModel') }}
-          <input v-model="draft.model" class="cfg-input" placeholder="claude-sonnet-4-6" />
-        </label>
-        <label class="cfg-label">
-          {{ t('agentEditor.fields.scope') }}
-          <select v-model="scope" class="cfg-input">
-            <option value="project">{{ t('agentEditor.fields.scopeProject') }}</option>
-            <option value="global">{{ t('agentEditor.fields.scopeGlobal') }}</option>
-          </select>
-        </label>
-      </div>
-
-      <AgentSectionEditor
-        :draft="draft"
-        :catalog="catalog"
-        @update:draft="draft = $event"
-        @message="message = $event; error = ''"
-        @error="error = $event; message = ''"
-      />
-    </div>
-  </div>
+    </template>
+  </CScreenLayout>
 </template>
 
 <style scoped lang="scss">
 .agent-editor {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 0;
-  height: 100%;
-  min-height: 0;
+  padding: 16px;
+  max-width: 720px;
 }
-.agent-list-panel {
-  border-right: 1px solid var(--border);
-  background: var(--panel);
-  padding: 12px;
-  overflow-y: auto;
-}
-.agent-list-head {
+.agent-editor-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
-.agent-list-head h2 { font-size: 14px; margin: 0; }
+.agent-editor-head h2 { font-size: 16px; margin: 0; }
 .agent-list { list-style: none; margin: 0; padding: 0; }
 .agent-list-item {
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-bottom: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -232,29 +124,5 @@ function applyDraft(newDraft) {
   font-size: 13px;
 }
 .agent-list-item:hover { background: var(--panel-2); }
-.agent-list-item.active { background: var(--accent-dim); border: 1px solid var(--accent); }
-.agent-list-empty { padding: 8px; }
-.agent-form-panel {
-  padding: 16px;
-  overflow-y: auto;
-}
-.agent-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.agent-basic-fields {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 16px;
-  max-width: 560px;
-}
-.agent-modal {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px;
-  margin-bottom: 14px;
-}
+.agent-list-empty { padding: 8px; border: none; cursor: default; }
 </style>

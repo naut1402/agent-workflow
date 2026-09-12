@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
-import { fetchRunners, fetchJobs } from '../scripts/runnerApi'
+import { fetchRunners } from '../scripts/runnerApi'
 import { saveRunner, deleteRunner, setDefaultRunner, fetchConnections } from '../scripts/RunnerConfigPanelApi'
 import { fetchProviderConfigs } from '../scripts/ProviderDialogApi'
 import RunnerDialog from './RunnerDialog.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
+import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderConfigOption, ProviderFamily } from '../types'
 
 const { t } = useI18nHelpers()
@@ -17,7 +18,6 @@ const providers = ref<ProviderEntry[]>([])
 const providerConfigs = ref<ProviderConfigOption[]>([])
 const message = ref('')
 const error = ref('')
-const recentJobs = ref<any[]>([])
 const showRunnerDialog = ref(false)
 const editingRunner = ref<RunnerDraft | null>(null)
 
@@ -44,27 +44,12 @@ function canBeDefaultAi(r: RunnerDraft): boolean {
   return family === 'agent-cli' || family === 'ai-api'
 }
 
-function jobStatusLabel(status: string | undefined): string {
-  if (!status) return '—'
-  const key = `runner.jobStatus.${status}`
-  const translated = t(key)
-  return translated !== key ? translated : status
-}
-
-function jobStatusClass(status: string | undefined): string {
-  if (status === 'awaiting_recovery') return 'job-status-recovering'
-  if (status === 'running' || status === 'queued') return 'job-status-active'
-  if (status === 'failed') return 'job-status-failed'
-  return ''
-}
-
 async function load() {
   error.value = ''
   try {
-    const [rData, cData, jData, pData] = await Promise.all([
+    const [rData, cData, pData] = await Promise.all([
       fetchRunners(),
       fetchConnections(),
-      fetchJobs(10),
       fetchProviderConfigs(),
     ])
     runners.value = rData.runners || []
@@ -72,7 +57,6 @@ async function load() {
     providers.value = (rData.providers || cData.providers || []) as ProviderEntry[]
     connections.value = cData.connections || rData.connections || []
     providerConfigs.value = pData.providerConfigs || []
-    recentJobs.value = jData.jobs || []
     if (editingRunner.value?.id) {
       const updated = runners.value.find((r) => r.id === editingRunner.value?.id)
       if (updated) editingRunner.value = JSON.parse(JSON.stringify(updated))
@@ -160,6 +144,8 @@ async function remove(r: RunnerDraft, e: Event) {
 </script>
 
 <template>
+  <CScreenLayout>
+  <template #main>
   <div class="runner-config">
     <header class="runner-head">
       <h2>{{ t('runner.panel.title') }}</h2>
@@ -254,23 +240,6 @@ async function remove(r: RunnerDraft, e: Event) {
       </li>
     </ul>
 
-    <section v-if="recentJobs.length" class="recent-jobs">
-      <h3>{{ t('runner.panel.recentJobs') }}</h3>
-      <table>
-        <thead>
-          <tr><th>ID</th><th>Status</th><th>Agent</th><th>Created</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="(j, idx) in recentJobs" :key="j.id || `job-${idx}`">
-            <td>{{ j.id ? `${String(j.id).slice(0, 8)}…` : '—' }}</td>
-            <td :class="jobStatusClass(j.status)">{{ jobStatusLabel(j.status) }}</td>
-            <td>{{ j.agentRef || '—' }}</td>
-            <td>{{ j.createdAt || '—' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
     <RunnerDialog
       v-if="showRunnerDialog"
       :runner="editingRunner"
@@ -282,6 +251,8 @@ async function remove(r: RunnerDraft, e: Event) {
       @refreshed="load"
     />
   </div>
+  </template>
+  </CScreenLayout>
 </template>
 
 <style scoped lang="scss">
@@ -329,10 +300,4 @@ async function remove(r: RunnerDraft, e: Event) {
   border-radius: 6px;
   margin: 0.5rem 0;
 }
-.recent-jobs { margin-top: 2rem; }
-.recent-jobs table { width: 100%; font-size: 0.85rem; border-collapse: collapse; }
-.recent-jobs th, .recent-jobs td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); }
-.job-status-recovering { color: var(--waiting, #d97706); font-weight: 500; }
-.job-status-active { color: var(--accent); }
-.job-status-failed { color: var(--danger, #ef4444); }
 </style>

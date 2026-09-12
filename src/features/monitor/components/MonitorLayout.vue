@@ -8,6 +8,7 @@ import PipelineView from './PipelineView.vue'
 import QaPanel from './QaPanel.vue'
 import ArtifactPanel from './ArtifactPanel.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
+import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import {
   patchTaskArchive,
   deleteTask,
@@ -134,10 +135,6 @@ onClickOutside(
   { ignore: ['.modal-backdrop'] },
 )
 
-const monitorLayoutClass = computed(() => ({
-  'monitor-layout--sub-collapsed': props.subSidebarCollapsed,
-}))
-
 async function toggleArchiveSelected() {
   if (!props.selected) return
   archiveError.value = ''
@@ -232,30 +229,34 @@ async function cleanWorktreeSelected() {
 </script>
 
 <template>
-  <div class="monitor-layout" :class="monitorLayoutClass">
-    <aside ref="subSidebarRef" class="monitor-sub-sidebar" :class="{ 'monitor-sub-sidebar--collapsed': subSidebarCollapsed }">
-      <template v-if="!subSidebarCollapsed">
-        <ProjectBar
-          :projects="projects"
-          :default-id="defaultProjectId"
-          :selected-id="selectedProjectId"
-          @select="emit('select-project', $event)"
-          @changed="emit('projects-changed')"
-        />
-        <TaskList
-          ref="taskListRef"
-          :tasks="tasks"
-          :selected-id="selectedId"
-          :open-artifact="openArtifact"
-          :project-id="selectedProjectId"
-          @select="emit('select-task', $event)"
-          @open-artifact="emit('open-artifact', $event)"
-          @task-archived="emit('task-archived')"
-          @task-deleted="emit('task-deleted', $event)"
-          @create-task="emit('create-task')"
-        />
-      </template>
-    </aside>
+  <CScreenLayout class="monitor-layout" :sub-sidebar-collapsed="subSidebarCollapsed">
+    <template #left>
+      <aside ref="subSidebarRef" class="monitor-sub-sidebar" :class="{ 'monitor-sub-sidebar--collapsed': subSidebarCollapsed }">
+        <template v-if="!subSidebarCollapsed">
+          <ProjectBar
+            :projects="projects"
+            :default-id="defaultProjectId"
+            :selected-id="selectedProjectId"
+            @select="emit('select-project', $event)"
+            @changed="emit('projects-changed')"
+          />
+          <TaskList
+            ref="taskListRef"
+            :tasks="tasks"
+            :selected-id="selectedId"
+            :open-artifact="openArtifact"
+            :project-id="selectedProjectId"
+            @select="emit('select-task', $event)"
+            @open-artifact="emit('open-artifact', $event)"
+            @task-archived="emit('task-archived')"
+            @task-deleted="emit('task-deleted', $event)"
+            @create-task="emit('create-task')"
+          />
+        </template>
+      </aside>
+    </template>
+
+    <template #main>
     <section class="monitor-content">
       <template v-if="selected">
         <div class="task-head">
@@ -336,22 +337,19 @@ async function cleanWorktreeSelected() {
         <p v-else>{{ t('monitor.layout.selectTask') }}</p>
       </div>
     </section>
-  </div>
+    </template>
+  </CScreenLayout>
 </template>
 
 <style scoped lang="scss">
 .monitor-layout {
-  display: grid;
-  grid-template-columns: 240px 1fr;
   flex: 1;
   height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  transition: grid-template-columns 0.2s ease;
 }
-// Thu về 0 chứ không 48px như bản cũ: dải đó chỉ chứa nút thu/phóng đã bỏ,
-// giữ lại sẽ là một cột xám rỗng. Editor vẫn giữ dải icon vì còn Catalog/Rules.
-.monitor-layout.monitor-layout--sub-collapsed {
+// Thu về 0 chứ không 48px mặc định của CScreenLayout: dải đó chỉ chứa nút
+// thu/phóng đã bỏ, giữ lại sẽ là một cột xám rỗng. Editor vẫn giữ dải icon
+// vì còn Catalog/Rules.
+.monitor-layout :deep(.c-screen-layout__body--left-collapsed) {
   grid-template-columns: 0 1fr;
 }
 .monitor-sub-sidebar {
