@@ -54,7 +54,7 @@ describe('MonitorLayout — sub-sidebar collapse (state từ shell)', () => {
     const w = mount(MonitorLayout, { props: { tasks, subSidebarCollapsed: true } })
 
     expect(w.find('.monitor-sub-sidebar').classes()).toContain('monitor-sub-sidebar--collapsed')
-    expect(w.find('.monitor-layout').classes()).toContain('monitor-layout--sub-collapsed')
+    expect(w.find('.c-screen-layout__body').classes()).toContain('c-screen-layout__body--left-collapsed')
     expect(w.find('.project-bar').exists()).toBe(false)
     expect(w.find('.task-row').exists()).toBe(false)
   })
