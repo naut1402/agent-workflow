@@ -69,6 +69,8 @@ describe('KnowledgePanel', () => {
 
     const w = mountPanel()
     await flushPromises()
+    ;(w.vm as unknown as { newEntry: () => void }).newEntry()
+    await flushPromises()
 
     const editor = w.find('.mock-md-editor')
     expect(editor.exists()).toBe(true)
