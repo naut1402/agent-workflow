@@ -101,6 +101,7 @@ export default {
     noRunnerParen: '(chưa có runner khả dụng)',
     noRunner: 'Chưa có runner khả dụng.',
     openRunner: 'Mở Runner',
+    runnerModeOff: 'Chế độ Runner đang tắt trong Cài đặt — bật lại để mở',
     noRunnerSuffix: 'để bật/cấu hình, rồi thử lại.',
     back: '← Quay lại',
     applyEditor: 'Áp dụng vào editor',

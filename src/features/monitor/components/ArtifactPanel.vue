@@ -18,7 +18,7 @@ import { splitActionsByMenu } from '../../quick-action/lib/menuTree'
 import type { ArtifactMenuNode } from '../schemas/artifactAction'
 import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 import { attachMermaidControls } from '../../../frontend/composables/useMermaidControls'
-import { navigateToModeKey } from '../../../frontend/shell/keys'
+import { canNavigateToModeKey, navigateToModeKey } from '../../../frontend/shell/keys'
 import { resolveArtifactViewMode } from '../../../frontend/configs/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
@@ -39,6 +39,11 @@ const { settings } = useAppSettings()
 // Provided by App.vue — lets the runner gate below send the user to Runner
 // mode without bubbling a custom event through Monitor/App.
 const navigateToMode = inject(navigateToModeKey, undefined)
+const canNavigateToMode = inject(canNavigateToModeKey, undefined)
+
+// Không có shell (mount độc lập trong unit test) ⇒ coi như tới được, giữ đúng
+// hành vi trước đây thay vì disabled nhầm.
+const runnerReachable = computed(() => canNavigateToMode?.('runner') ?? true)
 
 const content = ref('')
 const loadedKey = ref<string | null>(null)
@@ -605,7 +610,11 @@ onUpdated(() => scheduleMermaid())
       </p>
       <p v-if="gateError" class="art-warning">
         {{ gateError }}
-        <button type="button" class="btn-link" @click="goToRunner">{{ t('monitor.artifact.openRunner') }}</button>
+        <span :title="runnerReachable ? undefined : t('monitor.artifact.runnerModeOff')">
+          <button type="button" class="btn-link" :disabled="!runnerReachable" @click="goToRunner">
+            {{ t('monitor.artifact.openRunner') }}
+          </button>
+        </span>
         <button type="button" class="btn-link" @click="gateError = ''">{{ t('monitor.artifact.hide') }}</button>
       </p>
       <p v-if="message" class="art-message">{{ message }}</p>

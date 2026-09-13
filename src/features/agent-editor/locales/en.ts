@@ -99,6 +99,7 @@ export default {
     noRunnerParen: '(no runner available)',
     noRunner: 'No runner available.',
     openRunner: 'Open Runner',
+    runnerModeOff: 'Runner mode is turned off in Settings — enable it to open',
     noRunnerSuffix: 'to enable/configure, then try again.',
     back: '← Back',
     applyEditor: 'Apply to editor',
