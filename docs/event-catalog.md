@@ -87,7 +87,8 @@ Nơi emit: `runner/controller.ts` (sau mutation OK).
 | `automation.run_failed` | Action lỗi hoặc bị skip (task đang bận) | `automationId`, `projectId`, `runId`, `outcome` (`failed`/`skipped`), `error?`, `taskId?` | `runAction.ts` |
 | `entity.created|updated|deleted` (`entity: automation`) | CRUD rule | `id`, `projectId` (+`detail.enabled` khi toggle) | `automations/controller.ts` |
 | `entity.created|updated|deleted` (`entity: knowledge`) | CRUD entry knowledge (kể cả upload và mỗi entry bị `renameTag` chạm) | `id` (`<scope>/<slug>`), `projectId`, `detail.scope` (không có khi xoá / rename tag) | `knowledge/controller.ts` |
-| `entity.created|updated|deleted` (`entity: knowledge-collection`) | CRUD collection trong `collections.yaml` | `id`, `projectId`, `detail.scope` (không có khi xoá) | `knowledge/controller.ts` |
+| `entity.created|updated|deleted` (`entity: knowledge-collection`) | CRUD collection trong bảng `knowledge_collections` (`dashboard.sqlite`) | `id`, `projectId`, `detail.scope` (không có khi xoá) | `knowledge/controller.ts` |
+| `entity.created|updated` (`entity: knowledge-tag`) | Tạo/sửa **metadata** tag (màu, mô tả) trong bảng `knowledge_tags`. 🚫 Không có `deleted`: xoá tag đi đường `POST /tags/rename` với `to` rỗng và phát `entity: knowledge` cho từng entry bị chạm | `id` (tên tag), `projectId`, `detail.scope` | `knowledge/controller.ts` |
 
 ⚠️ **Payload knowledge cố ý tối thiểu** — không kèm nội dung entry: tài liệu nội bộ có thể rất dài và event đi thẳng vào `events.jsonl`.
 

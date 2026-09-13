@@ -49,10 +49,16 @@ export function getDb(): Promise<Db> {
   if (!opening) {
     opening = openDb()
       .catch((err: unknown) => {
-        // Callers swallow failures to stay non-throwing, so without this an unusable backend reads exactly like "no logs yet".
+        // Two consumers, two failure modes — name both: the log path swallows
+        // failures to stay non-throwing (an unusable backend reads exactly like
+        // "no logs yet"), while knowledge surfaces `KnowledgeDbError` as a 500.
+        // A message about logs alone sends knowledge debugging the wrong way.
         if (!warnedUnavailable) {
           warnedUnavailable = true
-          console.error('[log] sqlite backend unavailable — log entries are being dropped:', err)
+          console.error(
+            '[db] sqlite unavailable — log entries are being dropped; knowledge collection/tag return 500:',
+            err,
+          )
         }
         throw err
       })

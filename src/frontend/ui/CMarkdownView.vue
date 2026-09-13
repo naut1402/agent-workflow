@@ -1,13 +1,35 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { useAppSettings } from '../../../frontend/composables/useAppSettings'
-import { resolveArtifactViewMode } from '../../../frontend/configs/appSettings'
-import { parseMarkdown, renderMermaid } from '../../../frontend/lib/markdownLib'
-import { buildAgentBlocks, fenceYaml } from '../lib/agentMarkdownBlocks'
+import { useI18nHelpers } from '../composables/useI18nHelpers'
+import { useAppSettings } from '../composables/useAppSettings'
+import { resolveArtifactViewMode } from '../configs/appSettings'
+import { parseMarkdown, renderMermaid } from '../lib/markdownLib'
+import { buildMarkdownBlocks, fenceYaml } from '../lib/markdownBlocks'
 
-/** Viewer thuần trình bày — không gọi API, `content` do cha nạp và truyền xuống. */
-const props = defineProps<{ name: string; content: string }>()
+/**
+ * Viewer markdown dùng chung (agent editor + knowledge) — thuần trình bày,
+ * không gọi API: `content` do cha nạp và truyền xuống.
+ *
+ * `withFrontmatter` chỉ bật cho nguồn đọc nguyên file `.md`; nguồn đã bóc
+ * front-matter sẵn mà bật là nuốt mất phần đầu nội dung thật.
+ */
+const props = withDefaults(
+  defineProps<{
+    title: string
+    content: string
+    withFrontmatter?: boolean
+    /**
+     * Khoá định danh tài liệu — đổi giá trị này là mở lại mọi block.
+     *
+     * 🚫 Không dùng `title` làm khoá: title của knowledge entry **không** duy
+     * nhất (chính vì thế driver mới phải thêm hậu tố cho slug khi trùng), nên
+     * chuyển giữa hai entry cùng tên sẽ giữ nguyên trạng thái gập của tài liệu
+     * trước. Bỏ trống thì rơi về `title`, đủ cho nguồn có tên duy nhất.
+     */
+    docKey?: string
+  }>(),
+  { withFrontmatter: false, docKey: '' },
+)
 
 const { t } = useI18nHelpers()
 const { settings } = useAppSettings()
@@ -18,12 +40,12 @@ const openBlocks = ref<Set<number>>(new Set())
 const viewRoot = ref<HTMLElement | null>(null)
 
 const blocks = computed(() =>
-  buildAgentBlocks(props.content).map((b) => ({
+  buildMarkdownBlocks(props.content, { withFrontmatter: props.withFrontmatter }).map((b) => ({
     ...b,
     label:
       b.kind === 'frontmatter'
-        ? t('agentEditor.viewer.metadata')
-        : b.heading || t('agentEditor.viewer.untitledSection'),
+        ? t('common.markdownView.metadata')
+        : b.heading || t('common.markdownView.untitledSection'),
     html: parseMarkdown(b.kind === 'frontmatter' ? fenceYaml(b.source) : b.source),
   })),
 )
@@ -59,9 +81,9 @@ function toggleAllBlocks() {
   }
 }
 
-// Đổi agent → mở lại tất cả block: index của agent trước không còn cùng ý nghĩa.
+// Đổi tài liệu → mở lại tất cả block: index của tài liệu trước không còn cùng ý nghĩa.
 watch(
-  () => props.name,
+  () => props.docKey || props.title,
   () => {
     openBlocks.value = new Set(blocks.value.map((_, i) => i))
   },
@@ -72,14 +94,14 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
 </script>
 
 <template>
-  <div class="agent-md-view">
-    <div class="agent-md-toolbar">
+  <div class="c-md-view">
+    <div class="c-md-toolbar">
       <button
         v-if="blockMode && blocks.length"
         type="button"
         class="icon-btn"
-        :title="allBlocksOpen ? t('agentEditor.viewer.collapseAll') : t('agentEditor.viewer.expandAll')"
-        :aria-label="allBlocksOpen ? t('agentEditor.viewer.collapseAll') : t('agentEditor.viewer.expandAll')"
+        :title="allBlocksOpen ? t('common.markdownView.collapseAll') : t('common.markdownView.expandAll')"
+        :aria-label="allBlocksOpen ? t('common.markdownView.collapseAll') : t('common.markdownView.expandAll')"
         @click="toggleAllBlocks"
       >
         <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -93,14 +115,14 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
           />
         </svg>
       </button>
-      <span class="agent-md-title">{{ name }}</span>
+      <span class="c-md-title">{{ title }}</span>
       <button
         v-if="blocks.length > 1"
         type="button"
         class="icon-btn"
         :class="{ active: blockMode }"
-        :title="blockMode ? t('agentEditor.viewer.toFull') : t('agentEditor.viewer.toBlock')"
-        :aria-label="blockMode ? t('agentEditor.viewer.toFull') : t('agentEditor.viewer.toBlock')"
+        :title="blockMode ? t('common.markdownView.toFull') : t('common.markdownView.toBlock')"
+        :aria-label="blockMode ? t('common.markdownView.toFull') : t('common.markdownView.toBlock')"
         @click="blockMode = !blockMode"
       >
         <!-- đang ở block mode → icon "toàn văn", bấm là chuyển sang full -->
@@ -115,7 +137,7 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
       </button>
     </div>
 
-    <div ref="viewRoot" class="agent-md-body">
+    <div ref="viewRoot" class="c-md-body">
       <div v-if="blockMode" class="block-list">
         <details
           v-for="(block, i) in blocks"
@@ -137,8 +159,8 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
 </template>
 
 <style scoped lang="scss">
-/* Toolbar cố định, chỉ `.agent-md-body` cuộn (docs/ui-overflow.md). */
-.agent-md-view {
+/* Toolbar cố định, chỉ `.c-md-body` cuộn (docs/ui-overflow.md). */
+.c-md-view {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -146,7 +168,7 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
   overflow: hidden;
 }
 
-.agent-md-toolbar {
+.c-md-toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -155,7 +177,7 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
   flex-shrink: 0;
 }
 
-.agent-md-title {
+.c-md-title {
   flex: 1;
   min-width: 0;
   font-family: ui-monospace, monospace;
@@ -166,7 +188,7 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
   white-space: nowrap;
 }
 
-.agent-md-body {
+.c-md-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;

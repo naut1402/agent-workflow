@@ -82,6 +82,15 @@ export default {
     select: 'Chọn thư mục này',
     selectDirRequired: 'Hãy mở một thư mục trước khi chọn.',
   },
+  // Viewer markdown dùng chung (`CMarkdownView`) — agent editor + knowledge.
+  markdownView: {
+    metadata: 'Metadata',
+    untitledSection: 'Phần không tiêu đề',
+    toFull: 'Xem toàn văn',
+    toBlock: 'Xem theo block',
+    expandAll: 'Mở tất cả',
+    collapseAll: 'Thu gọn tất cả',
+  },
   // Node artifact/knowledge trên canvas VueFlow — dùng chung Monitor + Pipeline Editor.
   artifactNode: {
     producesTitle: 'Đầu ra',

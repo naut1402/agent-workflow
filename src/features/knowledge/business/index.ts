@@ -23,13 +23,16 @@ export {
   knowledgeRoot,
   loadKnowledgeBundle,
 } from './fileDriver.js'
-export { CollectionsFileError } from './collections.js'
+export { KnowledgeDbError } from './knowledgeDb.js'
 export {
   listCollections,
   createCollection,
   updateCollection,
   deleteCollection,
+  findCollectionSafe,
   renameTag,
   resolveCollectionEntries,
 } from './collections.js'
-export type { KnowledgeCollection, CollectionsDoc } from './collections.js'
+export type { KnowledgeCollection } from './collections.js'
+export { createTag, updateTag, listTagMeta, decorateTagFacets } from './tags.js'
+export type { KnowledgeTagMeta, KnowledgeTagFacet } from './tags.js'

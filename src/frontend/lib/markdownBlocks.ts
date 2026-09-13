@@ -1,13 +1,13 @@
-import { splitMarkdownSections } from '../../../frontend/lib/markdownSections'
+import { splitMarkdownSections } from './markdownSections'
 
 /**
- * Một khối hiển thị trong viewer agent.
+ * Một khối hiển thị trong viewer markdown dùng chung (`CMarkdownView`).
  *
  * `frontmatter` tách riêng khỏi `section` vì nó không phải markdown: đẩy thẳng
  * `--- … ---` vào marked thì ra hai thẻ `<hr>`, nên viewer bọc nó thành fence
  * yaml trước khi parse.
  */
-export interface AgentBlock {
+export interface MarkdownBlock {
   /** Tiêu đề `##` đã bỏ dấu; `null` khi khối không mở đầu bằng heading cấp 2. */
   heading: string | null
   kind: 'frontmatter' | 'section'
@@ -32,10 +32,26 @@ export function splitFrontmatter(content: string): { frontmatter: string | null;
   }
 }
 
-/** Frontmatter thành một khối riêng, phần còn lại cắt theo heading cấp 2. */
-export function buildAgentBlocks(content: string): AgentBlock[] {
-  const { frontmatter, body } = splitFrontmatter(content)
-  const blocks: AgentBlock[] = []
+export interface BuildMarkdownBlocksOptions {
+  /**
+   * Tách khối `---` ở đầu nội dung thành block metadata riêng.
+   *
+   * Mặc định `false`: knowledge nạp qua `driver.read()` vốn đã bóc front-matter
+   * sẵn, nên một entry mở đầu bằng `---` là nội dung thật của người dùng chứ
+   * không phải meta. Agent editor đọc nguyên file `.md` nên bật `true`.
+   */
+  withFrontmatter?: boolean
+}
+
+/** Frontmatter thành một khối riêng (khi bật), phần còn lại cắt theo heading cấp 2. */
+export function buildMarkdownBlocks(
+  content: string,
+  { withFrontmatter = false }: BuildMarkdownBlocksOptions = {},
+): MarkdownBlock[] {
+  const { frontmatter, body } = withFrontmatter
+    ? splitFrontmatter(content)
+    : { frontmatter: null as string | null, body: content || '' }
+  const blocks: MarkdownBlock[] = []
   if (frontmatter) blocks.push({ heading: null, kind: 'frontmatter', source: frontmatter })
   for (const source of splitMarkdownSections(body)) {
     const firstLine = source.split('\n')[0] ?? ''

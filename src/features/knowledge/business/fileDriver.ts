@@ -1,11 +1,16 @@
+import crypto from 'node:crypto'
 import { access, basename, extname, joinPath, readDir, readTextFile, unlink, writeTextFileAtomic } from '../../../backend/lib/fileHelper.js'
 import { loadYaml, dumpYaml } from '../../../backend/lib/yamlLib.js'
 import { globalKnowledgeRoot } from '../../../backend/registry.js'
+import { slugify } from '../../../shared/lib/stringUtils.js'
 import { KNOWLEDGE_SCOPES, MAX_BUNDLE_BYTES } from '../schemas/knowledge.js'
-// Vòng import với `collections.js` chỉ ở mức hàm (không đọc binding lúc
-// evaluate module), nên ESM giải được: collections cần driver để rewrite tag,
-// driver cần collection để lọc `list({ collection })`.
-import { readCollectionsFileSafe, resolveCollectionEntries } from './collections.js'
+// ⚠️ Vòng import ba cạnh: `fileDriver ↔ collections`, và
+// `fileDriver → tags → knowledgeDb → fileDriver` (knowledgeDb cần `resolveBases`
+// để dựng `store_key`). ESM giải được **chỉ vì** mọi tham chiếu qua vòng nằm
+// trong thân hàm, không đọc binding lúc evaluate module — thêm một lời gọi ở
+// top level của bất kỳ module nào trong vòng là hỏng ngay.
+import { findCollectionSafe, resolveCollectionEntries } from './collections.js'
+import { decorateTagFacets, readTagAliasesSafe } from './tags.js'
 
 const SCOPES: readonly string[] = KNOWLEDGE_SCOPES
 const MAX_UPLOAD_BYTES = 512 * 1024
@@ -133,11 +138,6 @@ export function resolveBases(devTeamRoot): KnowledgeBases {
   return bases
 }
 
-/** Các base khác nhau (project và system dùng chung một base) — cho `collections.yaml`. */
-function distinctBases(bases: KnowledgeBases): string[] {
-  return [...new Set(Object.values(bases).filter((b): b is string => Boolean(b)))]
-}
-
 function entryPath(bases: KnowledgeBases, scope, slug) {
   if (!SCOPES.includes(scope)) throw new Error('invalid scope')
   const base = bases[scope]
@@ -145,6 +145,44 @@ function entryPath(bases: KnowledgeBases, scope, slug) {
   const clean = sanitiseSlug(slug)
   if (!clean) throw new Error('invalid slug')
   return { id: `${scope}/${clean}`, filePath: joinPath(base, scope, `${clean}.md`) }
+}
+
+/** Trần độ dài của `sanitiseSlug`; hậu tố chống trùng phải nằm **lọt** trong đó. */
+const SLUG_MAX = 80
+/** `-` + 4 hex. */
+const SLUG_SUFFIX_LEN = 5
+
+/**
+ * Slug chưa dùng trong scope — chỉ cho đường **tạo mới**.
+ *
+ * Hai entry cùng title trước đây ghi đè nhau im lặng: slug suy từ title là
+ * tên file, không có bước kiểm tra nào. Hậu tố ngẫu nhiên **ngắn** và **chỉ khi
+ * trùng** để id vẫn đọc được (`kien-truc`, rồi `kien-truc-a3f1`).
+ *
+ * ⚠️ Phần thân phải cắt sẵn về `SLUG_MAX - SLUG_SUFFIX_LEN`: `entryPath` sẽ
+ * `sanitiseSlug` lần nữa và cắt còn `SLUG_MAX`, nên nếu ghép hậu tố vào một
+ * seed đã sát trần thì (a) giá trị trả về khác hẳn thứ nằm trên đĩa ⇒
+ * front-matter `slug` lệch tên file, và (b) với seed đúng `SLUG_MAX` thì **mọi**
+ * candidate bị cắt về lại chính seed ⇒ vòng lặp không bao giờ tìm ra chỗ trống
+ * và title dài thứ hai không tạo được entry.
+ */
+async function uniqueSlug(bases: KnowledgeBases, scope: string, seed: string): Promise<string> {
+  // Sanitise ngay ở đây để giá trị trả về **bằng đúng** thứ `entryPath` dựng ra.
+  const base = sanitiseSlug(seed)
+  const stem = base.slice(0, SLUG_MAX - SLUG_SUFFIX_LEN).replace(/-+$/, '')
+  for (let i = 0; i < 5; i++) {
+    const candidate = i === 0 ? base : `${stem}-${crypto.randomBytes(2).toString('hex')}`
+    const { filePath } = entryPath(bases, scope, candidate)
+    try {
+      await access(filePath)
+    } catch (e: any) {
+      // Chỉ ENOENT mới là "chỗ trống"; lỗi quyền phải nổi lên chứ không được
+      // hiểu thành có thể ghi đè.
+      if (e?.code === 'ENOENT') return candidate
+      throw e
+    }
+  }
+  throw new Error('không sinh được slug chưa dùng')
 }
 
 /** `onlyScopes` để `list({ scope })` không quét root nó không cần. */
@@ -182,8 +220,8 @@ function resolveWantScopes(bases: KnowledgeBases, scope?: string): readonly stri
   return available.includes(scope) ? [scope] : []
 }
 
-function countTags(entries) {
-  const counts = {}
+function countTags(entries): { tag: string; count: number }[] {
+  const counts: Record<string, number> = {}
   for (const e of entries) {
     for (const t of e.tags) counts[t] = (counts[t] || 0) + 1
   }
@@ -193,16 +231,13 @@ function countTags(entries) {
 }
 
 /**
- * Tag client gửi lên → tên **hiện hành**, theo alias trong `collections.yaml`.
+ * Tag client gửi lên → tên **hiện hành**, theo alias trong `knowledge_tag_aliases`.
  *
  * Không có bước này thì `?tags=` và bookmark của người dùng chết ngay sau một
  * lần rename — mà giữ alias chính là lý do `renameTag` ghi nó ra.
  */
-async function resolveTagAliases(bases: KnowledgeBases, tags: string[]): Promise<string[]> {
-  const aliases: Record<string, string> = {}
-  for (const base of distinctBases(bases)) {
-    Object.assign(aliases, (await readCollectionsFileSafe(base)).tag_aliases)
-  }
+async function resolveTagAliases(devTeamRoot: string, tags: string[]): Promise<string[]> {
+  const aliases = await readTagAliasesSafe(devTeamRoot)
   if (!Object.keys(aliases).length) return tags
   return [
     ...new Set(
@@ -216,14 +251,14 @@ async function resolveTagAliases(bases: KnowledgeBases, tags: string[]): Promise
   ]
 }
 
-async function applyFilters(bases: KnowledgeBases, entries, { tags, query, collection }: any) {
+async function applyFilters(devTeamRoot: string, entries, { tags, query, collection }: any) {
   let list = entries
   if (collection) {
-    const found = await findCollection(bases, collection)
+    const found = await findCollectionSafe(devTeamRoot, collection)
     list = found ? resolveCollectionEntries(found, list) : []
   }
   if (tags?.length) {
-    const want = await resolveTagAliases(bases, sanitiseTags(tags))
+    const want = await resolveTagAliases(devTeamRoot, sanitiseTags(tags))
     list = list.filter((e) => want.every((t) => e.tags.includes(t)))
   }
   if (query) {
@@ -239,15 +274,6 @@ async function applyFilters(bases: KnowledgeBases, entries, { tags, query, colle
   return list
 }
 
-async function findCollection(bases: KnowledgeBases, id: string) {
-  for (const base of distinctBases(bases)) {
-    const doc = await readCollectionsFileSafe(base)
-    const hit = doc.collections.find((c) => c.id === id)
-    if (hit) return hit
-  }
-  return null
-}
-
 const stripContent = ({ content: _c, path: _p, ...meta }) => meta
 
 export function createFileDriver(devTeamRoot: string) {
@@ -255,7 +281,7 @@ export function createFileDriver(devTeamRoot: string) {
     async list({ tags, scope, query, collection }: { tags?: any; scope?: string; query?: string; collection?: string } = {}) {
       const bases = resolveBases(devTeamRoot)
       const entries = await walkEntries(bases, resolveWantScopes(bases, scope))
-      return (await applyFilters(bases, entries, { tags, query, collection })).map(stripContent)
+      return (await applyFilters(devTeamRoot, entries, { tags, query, collection })).map(stripContent)
     },
 
     /**
@@ -265,12 +291,16 @@ export function createFileDriver(devTeamRoot: string) {
      * đếm sau thì chọn một tag làm mọi tag khác về 0 và không chọn tiếp được.
      * `collection` cũng nằm ngoài phạm vi đếm vì cùng lý do — chip tag là số
      * của cả scope, không thu hẹp theo nhóm đang chọn.
+     *
+     * Facet đi kèm `color`/`description` từ DB và kèm cả tag **chưa entry nào
+     * gắn**: panel nạp facet qua đúng request này, 🚫 không được gọi thêm
+     * `/api/knowledge/tags`.
      */
     async listWithTags({ tags, scope, query, collection }: { tags?: any; scope?: string; query?: string; collection?: string } = {}) {
       const bases = resolveBases(devTeamRoot)
       const scoped = await walkEntries(bases, resolveWantScopes(bases, scope))
-      const tagFacets = countTags(scoped)
-      const entries = (await applyFilters(bases, scoped, { tags, query, collection })).map(stripContent)
+      const tagFacets = await decorateTagFacets(devTeamRoot, countTags(scoped))
+      const entries = (await applyFilters(devTeamRoot, scoped, { tags, query, collection })).map(stripContent)
       return { entries, tags: tagFacets }
     },
 
@@ -295,10 +325,26 @@ export function createFileDriver(devTeamRoot: string) {
           targetSlug = rest.join('/')
         }
       }
-      const { id: entryId, filePath } = entryPath(bases, targetScope, targetSlug || title)
+
+      // `finalSlug` phải tính đúng MỘT lần rồi dùng lại: `entryPath` và
+      // `serialiseEntry` mà mỗi bên tự tính sẽ ra hai giá trị khác nhau sau khi
+      // có hậu tố chống trùng, và front-matter `slug` lệch tên file trên đĩa.
+      let finalSlug: string
+      if (id) {
+        // Đường **sửa**: slug lấy từ `id`, tham số `slug` client gửi bị bỏ qua.
+        finalSlug = sanitiseSlug(targetSlug || title)
+      } else {
+        // Đường **tạo mới**: slug là phần nội suy, dialog không còn ô nhập.
+        // `sanitiseSlug(title)` băm nát tiếng Việt (`Giảm số token` →
+        // `gi-m-s-token`), nên đi qua `slugify` — có NFD + map đ→d — trước.
+        const seed = sanitiseSlug(slug || '') || slugify(title || '', { maxLength: 80, fallback: 'entry' })
+        finalSlug = await uniqueSlug(bases, targetScope, seed)
+      }
+
+      const { id: entryId, filePath } = entryPath(bases, targetScope, finalSlug)
       const body = serialiseEntry({
-        title: title || targetSlug,
-        slug: sanitiseSlug(targetSlug || title),
+        title: title || finalSlug,
+        slug: finalSlug,
         scope: targetScope,
         tags,
         content: content ?? '',

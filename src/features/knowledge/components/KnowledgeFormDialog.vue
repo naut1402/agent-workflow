@@ -3,9 +3,13 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref } from 'vue'
 import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
 
+/**
+ * 🚫 Không còn `slug`: nó là phần **nội suy** từ title (driver tự sinh và tự
+ * chống trùng), đúng như mọi chỗ khác trong dashboard. Ở đường sửa thì slug vốn
+ * đã lấy từ `id` và giá trị client gửi bị bỏ qua, nên ô này chưa bao giờ có tác dụng.
+ */
 export interface KnowledgeDraft {
   title: string
-  slug: string
   scope: string
   tags: string[]
   content: string
@@ -20,7 +24,8 @@ defineProps<{
 
 const draft = defineModel<KnowledgeDraft>('draft', { required: true })
 
-const emit = defineEmits<{ close: []; save: []; delete: [] }>()
+// 🚫 Không còn `delete`: nút xoá đã chuyển ra hàng danh sách ở cột trái.
+const emit = defineEmits<{ close: []; save: [] }>()
 
 const { t } = useI18nHelpers()
 const tagInput = ref('')
@@ -56,10 +61,6 @@ function removeTag(i: number) {
         <label class="cfg-label">
           {{ t('knowledge.fields.title') }}
           <input v-model="draft.title" class="cfg-input" />
-        </label>
-        <label class="cfg-label">
-          {{ t('knowledge.fields.slug') }}
-          <input v-model="draft.slug" class="cfg-input" :disabled="!!selectedId" :placeholder="t('knowledge.fields.slugPlaceholder')" />
         </label>
         <label class="cfg-label">
           {{ t('knowledge.fields.scope') }}
@@ -101,14 +102,12 @@ function removeTag(i: number) {
         </div>
       </div>
 
+      <!-- `Lưu` đứng TRƯỚC `Hủy`, đúng thứ tự `AgentFormDialog` đã land. -->
       <div class="modal-foot">
-        <button v-if="selectedId" type="button" class="btn-ghost btn-danger" @click="emit('delete')">
-          {{ t('knowledge.actions.delete') }}
-        </button>
         <span v-if="message" class="save-msg">{{ message }}</span>
         <span v-if="error" class="err">{{ error }}</span>
-        <button type="button" class="btn-ghost" @click="emit('close')">{{ t('knowledge.form.cancel') }}</button>
         <button type="button" class="btn-primary" @click="emit('save')">{{ t('knowledge.actions.save') }}</button>
+        <button type="button" class="btn-ghost" @click="emit('close')">{{ t('knowledge.form.cancel') }}</button>
       </div>
     </div>
   </div>
@@ -132,7 +131,6 @@ function removeTag(i: number) {
   flex-direction: column;
   flex: 0 0 auto;
 }
-.modal-foot {
-  flex-wrap: wrap;
-}
+/* 🚫 Không khai `.modal-foot` cục bộ nữa — padding và thứ tự lấy bản chung ở
+   `_shell.scss`, để mọi dialog của dashboard canh giống nhau. */
 </style>
