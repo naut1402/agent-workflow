@@ -28,8 +28,9 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/backend/lib` | vitest | `backend/lib`, `shared/lib` | 3 | `npx vitest run tests/src/backend/lib` |
 | `tests/src/backend/log` | bun | `backend/log`, `features/logs/business`, `backend/events` | 3 | `bun test tests/src/backend/log` |
 | `tests/src/features/agent-editor/business` | bun | `features/agent-editor/business` | 3 | `bun test tests/src/features/agent-editor/business` |
-| `tests/src/features/agent-editor/components` | vitest | `features/agent-editor/components`, `features/agent-editor/business`, `frontend/lib` | 3 | `npx vitest run tests/src/features/agent-editor/components` |
+| `tests/src/features/agent-editor/components` | vitest | `features/agent-editor/components`, `frontend/lib`, `features/agent-editor/business` | 6 | `npx vitest run tests/src/features/agent-editor/components` |
 | `tests/src/features/agent-editor/composables` | vitest | `features/agent-editor/composables` | 1 | `npx vitest run tests/src/features/agent-editor/composables` |
+| `tests/src/features/agent-editor/lib` | vitest | `features/agent-editor/lib` | 1 | `npx vitest run tests/src/features/agent-editor/lib` |
 | `tests/src/features/agent-editor/scripts` | vitest | `features/agent-editor/scripts` | 1 | `npx vitest run tests/src/features/agent-editor/scripts` |
 | `tests/src/features/automations/components` | vitest | `features/automations/components`, `features/automations/scripts` | 2 | `npx vitest run tests/src/features/automations/components` |
 | `tests/src/features/automations/composables` | vitest | `features/automations/composables`, `features/automations/scripts` | 1 | `npx vitest run tests/src/features/automations/composables` |
@@ -76,10 +77,10 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/frontend/composables` | vitest | `frontend/composables` | 5 | `npx vitest run tests/src/frontend/composables` |
 | `tests/src/frontend/configs` | vitest | `frontend/configs` | 1 | `npx vitest run tests/src/frontend/configs` |
 | `tests/src/frontend/container` | vitest | `frontend/container` | 1 | `npx vitest run tests/src/frontend/container` |
-| `tests/src/frontend/lib` | vitest | `frontend/lib` | 5 | `npx vitest run tests/src/frontend/lib` |
+| `tests/src/frontend/lib` | vitest | `frontend/lib`, `features/monitor/composables` | 6 | `npx vitest run tests/src/frontend/lib` |
 | `tests/src/frontend/plugins` | vitest | `frontend/composables`, `frontend/configs`, `frontend/plugins` | 1 | `npx vitest run tests/src/frontend/plugins` |
 | `tests/src/frontend/shell` | vitest | `frontend/shell` | 3 | `npx vitest run tests/src/frontend/shell` |
-| `tests/src/frontend/ui` | vitest | `frontend/ui` | 4 | `npx vitest run tests/src/frontend/ui` |
+| `tests/src/frontend/ui` | vitest | `frontend/ui` | 5 | `npx vitest run tests/src/frontend/ui` |
 | `tests/src/server` | bun | `features/settings/business`, `backend/registry.ts`, `backend/apiServer.ts` | 3 | `bun test tests/src/server/*.test.ts` |
 | `tests/src/server/agents` | bun | `features/agent-editor/business` | 5 | `bun test tests/src/server/agents` |
 | `tests/src/server/artifactActions` | bun | `features/monitor/business`, `features/monitor/schemas` | 1 | `bun test tests/src/server/artifactActions` |
