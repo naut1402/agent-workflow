@@ -1,4 +1,5 @@
 import { ref, nextTick, type ComponentPublicInstance, type Ref } from 'vue'
+import { splitMarkdownSections, joinMarkdownSections } from '../../../frontend/lib/markdownSections'
 
 export type EditSection = 'full' | number
 
@@ -16,14 +17,10 @@ export function bindFocusableEditRef(
   }
 }
 
-export function splitMarkdownSections(source: string): string[] {
-  if (!source.trim()) return []
-  return source.split(/^(?=##\s)/m).filter((p) => p.trim())
-}
-
-export function joinMarkdownSections(parts: string[]): string {
-  return parts.filter((p) => p.trim()).join('\n\n')
-}
+// Hai hàm thuần đã chuyển sang `frontend/lib/markdownSections` (tầng dưới, dùng
+// chung với agent-editor). Re-export để mọi import cũ qua composable này giữ
+// nguyên đường dẫn.
+export { splitMarkdownSections, joinMarkdownSections }
 
 export function useInlineMarkdownEdit(options: {
   getContent: () => string

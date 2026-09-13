@@ -25,6 +25,7 @@ type IconName =
   | 'info'
   | 'download'
   | 'upload'
+  | 'eye'
 
 const props = withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 16 })
 
@@ -50,6 +51,7 @@ const VIEW_BOX: Record<IconName, string> = {
   info: '0 0 24 24',
   download: '0 0 16 16',
   upload: '0 0 16 16',
+  eye: '0 0 16 16',
 }
 
 const viewBox = VIEW_BOX[props.name]
@@ -174,6 +176,10 @@ const viewBox = VIEW_BOX[props.name]
     <template v-else-if="name === 'upload'">
       <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M8 9.5v-7M5 5.5L8 2.5 11 5.5" />
       <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M3 11.5V13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1.5" />
+    </template>
+    <template v-else-if="name === 'eye'">
+      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M1.5 8s2.4-4 6.5-4 6.5 4 6.5 4-2.4 4-6.5 4-6.5-4-6.5-4z" />
+      <circle cx="8" cy="8" r="1.8" fill="none" stroke="currentColor" stroke-width="1.4" />
     </template>
   </svg>
 </template>

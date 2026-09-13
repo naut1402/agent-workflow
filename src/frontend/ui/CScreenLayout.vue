@@ -11,10 +11,19 @@ const props = withDefaults(
     tabsAriaLabel?: string
     /** No-op when the `left` slot isn't used. */
     subSidebarCollapsed?: boolean
+    /** Collapse `main` away entirely so `left` takes the full width. */
+    hideMain?: boolean
     /** Canvas content (e.g. VueFlow) needs `hidden` to avoid a double scrollbar. */
     mainOverflow?: 'auto' | 'hidden'
   }>(),
-  { tabs: () => [], activeTabKey: '', tabsAriaLabel: '', subSidebarCollapsed: false, mainOverflow: 'auto' },
+  {
+    tabs: () => [],
+    activeTabKey: '',
+    tabsAriaLabel: '',
+    subSidebarCollapsed: false,
+    hideMain: false,
+    mainOverflow: 'auto',
+  },
 )
 
 const emit = defineEmits<{ 'update:activeTabKey': [key: string] }>()
@@ -22,6 +31,15 @@ const emit = defineEmits<{ 'update:activeTabKey': [key: string] }>()
 const slots = useSlots()
 
 const hasLeft = computed(() => !!slots.left)
+/**
+ * `--left-collapsed` wins over `hideMain`: with `left` shrunk to a rail there
+ * would be nothing left to look at, so `main` comes back to carry the empty
+ * state. Resolved here instead of in CSS source order, so the losing modifier
+ * is never emitted at all.
+ */
+const hideMainEffective = computed(
+  () => props.hideMain && hasLeft.value && !props.subSidebarCollapsed,
+)
 const showTop = computed(() => (props.tabs?.length ?? 0) > 1 || !!slots['top-extra'])
 
 function selectTab(key: string) {
@@ -57,6 +75,7 @@ function selectTab(key: string) {
       :class="{
         'c-screen-layout__body--no-left': !hasLeft,
         'c-screen-layout__body--left-collapsed': hasLeft && subSidebarCollapsed,
+        'c-screen-layout__body--no-main': hideMainEffective,
       }"
     >
       <div v-if="hasLeft" class="c-screen-layout__left"><slot name="left" /></div>
@@ -123,6 +142,13 @@ function selectTab(key: string) {
 }
 .c-screen-layout__body--no-left {
   grid-template-columns: 1fr;
+}
+/* `1fr 0`, not the single-column `1fr` of `--no-left`: `main` is always
+   rendered, so a one-track grid would wrap it onto a second row instead of
+   hiding it. Zero width + main's own overflow clips it, and the shared grid
+   transition still animates the collapse. */
+.c-screen-layout__body--no-main {
+  grid-template-columns: 1fr 0;
 }
 
 .c-screen-layout__left {

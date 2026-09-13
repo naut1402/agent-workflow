@@ -1,13 +1,27 @@
 // Strings for the `agentEditor` feature module. vi is the source of truth.
 export default {
   list: {
-    title: 'Agent tùy chỉnh',
     newButton: '+ Agent mới',
     empty: 'Chưa có agent tùy chỉnh',
+    groupProject: 'Agent của project',
+    groupGlobal: 'Agent toàn cục',
+    view: 'Xem nội dung',
+    edit: 'Chỉnh sửa agent',
+    delete: 'Xóa agent',
+    exportHint: 'Chọn một agent trước khi export',
+  },
+  viewer: {
+    empty: 'Chọn một agent ở danh sách bên trái để xem nội dung',
+    loading: 'Đang tải nội dung agent…',
+    metadata: 'Metadata',
+    untitledSection: 'Phần không tiêu đề',
+    toFull: 'Xem toàn văn',
+    toBlock: 'Xem theo block',
+    expandAll: 'Mở tất cả',
+    collapseAll: 'Thu gọn tất cả',
   },
   actions: {
     save: 'Lưu',
-    delete: 'Xóa',
     export: 'Export',
     close: 'Đóng',
     templateCopy: 'Template / Sao chép',
@@ -32,7 +46,7 @@ export default {
     saved: 'Đã lưu {name}',
     deleted: 'Đã xóa',
     confirmDelete: 'Xóa agent "{name}"?',
-    saveBeforeExport: 'Lưu agent trước khi export',
+    exported: 'Đã export → {path}',
     confirmOverwrite: 'File đã tồn tại. Ghi đè?',
   },
   section: {
