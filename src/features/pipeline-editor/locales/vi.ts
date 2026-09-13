@@ -41,6 +41,13 @@ export default {
     taskWriteBlocked: '✗ Task đã lưu trữ hoặc đã hoàn tất',
     hitlPendingWarning: '⚠ Task đang chờ gate — lưu pipeline sẽ huỷ gate đang chờ',
     confirmDiscardChanges: 'Canvas có thay đổi chưa lưu. Nạp pipeline khác và bỏ thay đổi?',
+    downloadProfile: 'Tải về',
+    downloadProfileTitle: 'Tải profile này về máy (.yaml)',
+    importProfile: 'Nạp từ file',
+    importProfileTitle: 'Nạp profile từ file .yaml trên máy',
+    confirmOverwriteProfile: 'Đã có profile "{name}". Ghi đè bằng nội dung file vừa chọn?',
+    importInvalidYaml: 'File không phải YAML hợp lệ',
+    importInvalidSteps: 'File thiếu "steps" dạng danh sách',
   },
   sections: {
     agents: 'Agents',

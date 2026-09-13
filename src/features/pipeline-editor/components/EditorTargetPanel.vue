@@ -7,7 +7,7 @@
  * bằng emit để `PipelineEditor` giữ nguyên vai trò nơi duy nhất nạp/ghi pipeline.
  */
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import CSelect from '../../../frontend/ui/CSelect.vue'
 import type { CSelectOption } from '../../../frontend/ui/CSelect.vue'
@@ -52,6 +52,8 @@ const emit = defineEmits([
   'preview',
   'stop',
   'open-section',
+  'download',
+  'import-file',
 ])
 
 const isProfileTab = computed(() => props.tab === 'profile')
@@ -74,8 +76,8 @@ const taskOptions = computed<CSelectOption[]>(() => [
 
 type TargetAction = {
   key: string
-  icon: 'save' | 'star' | 'trash' | 'layout' | 'play' | 'stop'
-  event: 'save' | 'set-default' | 'delete-profile' | 'auto-layout' | 'preview' | 'stop'
+  icon: 'save' | 'star' | 'trash' | 'layout' | 'play' | 'stop' | 'download' | 'upload'
+  event: 'save' | 'set-default' | 'delete-profile' | 'auto-layout' | 'preview' | 'stop' | 'download' | 'import-file'
   titleKey: string
   labelKey: string
   danger?: boolean
@@ -143,8 +145,38 @@ const actions = computed<TargetAction[]>(() => {
           labelKey: 'pipelineEditor.target.preview',
         },
   )
+  if (isProfileTab.value) {
+    list.push(
+      {
+        key: 'download',
+        icon: 'download',
+        event: 'download',
+        titleKey: 'pipelineEditor.target.downloadProfileTitle',
+        labelKey: 'pipelineEditor.target.downloadProfile',
+        disabled: !props.profileSelected,
+      },
+      {
+        key: 'import-file',
+        icon: 'upload',
+        event: 'import-file',
+        titleKey: 'pipelineEditor.target.importProfileTitle',
+        labelKey: 'pipelineEditor.target.importProfile',
+      },
+    )
+  }
   return list
 })
+
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+/** `import-file` mở file picker thay vì emit thẳng — emit thật xảy ra ở `@change`. */
+function handleActionClick(action: TargetAction) {
+  if (action.key === 'import-file') {
+    fileInputRef.value?.click()
+    return
+  }
+  emit(action.event)
+}
 
 /** Lối vào thẳng từng section khi sub-sidebar đang thu gọn. */
 const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
@@ -222,10 +254,17 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
         :title="t(action.titleKey)"
         :aria-label="t(action.labelKey)"
         :disabled="action.disabled"
-        @click="emit(action.event)"
+        @click="handleActionClick(action)"
       >
         <Icon :name="action.icon" />
       </button>
+      <input
+        ref="fileInputRef"
+        type="file"
+        accept=".yaml,.yml"
+        class="visually-hidden"
+        @change="emit('import-file', $event)"
+      />
     </div>
 
     <div v-if="collapsed" class="target-sections-rail">
@@ -284,6 +323,18 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
   gap: 4px;
   margin-top: 0;
   flex-wrap: nowrap;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .target-sections-rail {
