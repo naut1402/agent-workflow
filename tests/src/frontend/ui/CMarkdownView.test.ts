@@ -1,7 +1,15 @@
-import { mountWithI18n as mount } from '../../../helpers/i18n'
+import { mountWithI18n as mount } from '../../helpers/i18n'
 import { describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
-import AgentMarkdownView from '@/features/agent-editor/components/AgentMarkdownView.vue'
+import CMarkdownView from '@/frontend/ui/CMarkdownView.vue'
+
+/**
+ * Viewer markdown dùng chung — nâng từ `AgentMarkdownView` khi knowledge cũng
+ * cần đúng bề mặt đó (toggle block ↔ full, gập theo section).
+ *
+ * Hai khác biệt so với bản cũ, cả hai có describe riêng cuối file:
+ * `withFrontmatter` là opt-in, và khoá reset là `docKey` chứ không phải `title`.
+ */
 
 // mermaid không chạy được trong jsdom; parseMarkdown giữ nguyên bản thật để còn
 // chấm được việc frontmatter ra khối code và markdown thật sự được render.
@@ -29,10 +37,11 @@ Xem xét **code**.
 - b1
 `
 
-const mountView = (content = CONTENT, name = 'reviewer') =>
-  mount(AgentMarkdownView, { props: { name, content } })
+/** Mặc định bật `withFrontmatter` — đây là hành vi mà agent editor đang dùng. */
+const mountView = (content = CONTENT, title = 'reviewer', props: Record<string, unknown> = {}) =>
+  mount(CMarkdownView, { props: { title, content, withFrontmatter: true, ...props } })
 
-describe('AgentMarkdownView — render markdown (TC-27)', () => {
+describe('CMarkdownView — render markdown (TC-27)', () => {
   it('render markdown thật, không đổ text thô', () => {
     const html = mountView().html()
     expect(html).toContain('<h2')
@@ -60,7 +69,7 @@ describe('AgentMarkdownView — render markdown (TC-27)', () => {
   })
 })
 
-describe('AgentMarkdownView — toggle block ↔ full (TC-28, E10)', () => {
+describe('CMarkdownView — toggle block ↔ full (TC-28, E10)', () => {
   it('mặc định ở chế độ block', () => {
     expect(mountView().find('.block-list').exists()).toBe(true)
   })
@@ -69,7 +78,7 @@ describe('AgentMarkdownView — toggle block ↔ full (TC-28, E10)', () => {
     const w = mountView()
     await w.find('[aria-label="Xem toàn văn"]').trigger('click')
     expect(w.find('.block-list').exists()).toBe(false)
-    const text = w.find('.agent-md-body').text()
+    const text = w.find('.c-md-body').text()
     for (const s of ['Role', 'Skills', 'Workflow']) expect(text).toContain(s)
   })
 
@@ -87,7 +96,7 @@ describe('AgentMarkdownView — toggle block ↔ full (TC-28, E10)', () => {
   })
 })
 
-describe('AgentMarkdownView — gập từng section (TC-29)', () => {
+describe('CMarkdownView — gập từng section (TC-29)', () => {
   it('mặc định mở tất cả block', () => {
     const w = mountView()
     expect(w.findAll('.block-item').every((d) => d.attributes('open') !== undefined)).toBe(true)
@@ -113,27 +122,56 @@ describe('AgentMarkdownView — gập từng section (TC-29)', () => {
   })
 })
 
-describe('AgentMarkdownView — đổi agent (TC-34, E11)', () => {
-  it('đổi agent ⇒ nội dung mới, không sót block của agent cũ', async () => {
+describe('CMarkdownView — đổi tài liệu (TC-34, E11)', () => {
+  it('đổi tài liệu ⇒ nội dung mới, không sót block của tài liệu cũ', async () => {
     const w = mountView()
-    await w.setProps({ name: 'other', content: '## Khác\n\nnội dung khác' })
+    await w.setProps({ title: 'other', content: '## Khác\n\nnội dung khác' })
     await nextTick()
     const labels = w.findAll('.block-item summary').map((s) => s.text())
     expect(labels).toEqual(['Khác'])
     expect(w.html()).not.toContain('Workflow')
   })
 
-  it('đổi agent ⇒ mở lại tất cả block, không giữ index của agent trước', async () => {
+  it('đổi tài liệu ⇒ mở lại tất cả block, không giữ index của tài liệu trước', async () => {
     const w = mountView()
     await w.find('[aria-label="Thu gọn tất cả"]').trigger('click')
-    await w.setProps({ name: 'other', content: '## A\n\na\n\n## B\n\nb' })
+    await w.setProps({ title: 'other', content: '## A\n\na\n\n## B\n\nb' })
+    await nextTick()
+    expect(w.findAll('.block-item').every((d) => d.attributes('open') !== undefined)).toBe(true)
+  })
+
+  /**
+   * Khoá reset phải là `docKey` khi nguồn có title trùng nhau được — knowledge
+   * là đúng ca đó (driver phải thêm hậu tố slug chính vì hai entry trùng title
+   * là chuyện thật). Dùng `title` làm khoá thì chuyển giữa hai entry cùng tên
+   * sẽ giữ nguyên trạng thái gập của tài liệu trước.
+   */
+  it('đổi docKey mà title GIỮ NGUYÊN vẫn mở lại tất cả block', async () => {
+    const w = mountView('## A\n\na\n\n## B\n\nb', 'Trùng tên', { docKey: 'project/a' })
+    await w.find('[aria-label="Thu gọn tất cả"]').trigger('click')
+    expect(w.findAll('.block-item').every((d) => d.attributes('open') === undefined)).toBe(true)
+
+    await w.setProps({ docKey: 'project/b', content: '## C\n\nc\n\n## D\n\nd' })
     await nextTick()
     expect(w.findAll('.block-item').every((d) => d.attributes('open') !== undefined)).toBe(true)
   })
 })
 
-// TC-32: nội dung agent do người dùng ghi được, giờ render ở một bề mặt mới.
-describe('AgentMarkdownView — sanitise nội dung (TC-32)', () => {
+/**
+ * Nguồn đã bóc front-matter sẵn (knowledge) thì khối `---` đầu nội dung là
+ * **nội dung thật**, không phải metadata.
+ */
+describe('CMarkdownView — withFrontmatter mặc định false', () => {
+  it('không tách block Metadata, nội dung `---` vẫn hiện trong thân tài liệu', () => {
+    const w = mount(CMarkdownView, { props: { title: 'entry', content: CONTENT } })
+    const labels = w.findAll('.block-item summary').map((s) => s.text())
+    expect(labels).not.toContain('Metadata')
+    expect(w.text()).toContain('name: reviewer')
+  })
+})
+
+// TC-32: nội dung do người dùng ghi được, render ở một bề mặt dùng chung.
+describe('CMarkdownView — sanitise nội dung (TC-32)', () => {
   it('loại script và handler inline, giữ phần nội dung lành', () => {
     const w = mountView(
       '## X\n\n<script>alert(1)</script>\n\n<img src=x onerror="alert(2)">\n\nvẫn đọc được',
