@@ -6,7 +6,7 @@ import { fetchProjects } from '../features/monitor/scripts/monitorApi'
 import { fetchAutoscanConfig, runAutoscan, fetchLoggingConfig } from '../features/settings/scripts/SettingsDialogApi'
 import { useLocalToggle } from './composables/useLocalToggle'
 import { useAppSettings } from './composables/useAppSettings'
-import { navigateToModeKey, reloadProjectsKey } from './shell/keys'
+import { canNavigateToModeKey, navigateToModeKey, reloadProjectsKey } from './shell/keys'
 import { containerKey } from './shell/containerKey'
 import { modeRegistryToken, type ModeEntry, type ShellContext } from './shell/modeRegistry'
 import { modeAccessToken } from './shell/modeAccess'
@@ -105,6 +105,11 @@ onClickOutside(
 // gate, ArtifactPanel's QuickAction gate) can send the user to Runner mode
 // without bubbling a custom event through every intermediate component.
 provide(navigateToModeKey, setMode)
+
+// Cùng điều kiện với `setMode`, nhưng ở dạng hỏi được trước khi bấm: call site
+// cần biết mode đích có tới được không để disable nút, thay vì để người dùng bấm
+// vào một chỗ không đi tới đâu.
+provide(canNavigateToModeKey, isModeReachable)
 
 // Multi-project state. `selectedProjectId` (null = default project) drives which
 // project's tasks the monitor view polls; persisted to localStorage.
@@ -352,12 +357,20 @@ const modes = computed(() =>
 )
 
 /**
- * Lối vào mode duy nhất — sidebar và `navigateToMode` đều đi qua đây; repo không
- * có router nên đây là chỗ tương đương route guard. Kiểm tra `modes` (đã AND
+ * Điều kiện tới được của một mode, tách khỏi `setMode` để call site lồng bên
+ * trong hỏi được **trước** khi render nút. Kiểm tra `modes` (đã AND
  * `canAccessMode` với `visible(ctx)`) nên chỉ một điều kiện phải nhớ.
  */
+function isModeReachable(key: string): boolean {
+  return modes.value.some((m) => m.key === key)
+}
+
+/**
+ * Lối vào mode duy nhất — sidebar và `navigateToMode` đều đi qua đây; repo không
+ * có router nên đây là chỗ tương đương route guard.
+ */
 function setMode(key: string): void {
-  if (!modes.value.some((m) => m.key === key)) return
+  if (!isModeReachable(key)) return
   mode.value = key
 }
 
