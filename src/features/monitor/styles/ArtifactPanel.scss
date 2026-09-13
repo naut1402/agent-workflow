@@ -45,48 +45,8 @@
   color: var(--muted);
   flex: 1;
 }
-/* Block view */
-.block-list { display: flex; flex-direction: column; gap: 6px; }
-.block-item {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.block-item > summary {
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  user-select: none;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.block-item > summary::before { content: '›'; color: var(--muted); transition: transform 0.15s; }
-.block-item[open] > summary::before { transform: rotate(90deg); color: var(--accent); }
-.block-item > summary:hover { background: rgba(var(--accent-rgb), 0.05); }
-.block-content { padding: 8px 14px 14px; border-top: 1px solid var(--border); }
-
-/* Markdown */
-.md { line-height: 1.6; font-size: 14px; overflow-wrap: anywhere; }
-.md h1, .md h2, .md h3 { border-bottom: 1px solid var(--border); padding-bottom: 4px; }
-.md pre { background: var(--bg); padding: 12px; border-radius: 8px; overflow-x: auto; }
-.md code { background: var(--bg); }
-.md table { border-collapse: collapse; }
-.md th, .md td { border: 1px solid var(--border); padding: 5px 10px; }
-.md a { color: var(--accent); }
-.md .mermaid {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  margin: 12px 0;
-  overflow-x: auto;
-  text-align: center;
-}
-.md .mermaid svg { max-width: 100%; height: auto; }
+/* `.block-*` + `.md` đã lên `src/frontend/styles/_markdown.scss` — dùng chung
+   với agent-editor viewer. Còn lại ở đây là phần chỉ monitor render. */
 
 .art-toolbar-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .selection-toolbar {
