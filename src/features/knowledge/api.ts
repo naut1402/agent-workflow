@@ -9,7 +9,11 @@ export const routeOrder = 85
 export function registerRoutes(app: Hono<HonoEnv>): void {
   // Hono match theo thứ tự đăng ký → route con phải đứng trước route gốc.
   app.get('/api/knowledge/tags', bind(KnowledgeController, 'listTags'))
+  // `/tags/rename` phải đứng TRƯỚC `/tags/:tag`, nếu không `rename` bị nuốt
+  // thành một giá trị `:tag`.
   app.post('/api/knowledge/tags/rename', bind(KnowledgeController, 'renameTag'))
+  app.post('/api/knowledge/tags', bind(KnowledgeController, 'createTag'))
+  app.put('/api/knowledge/tags/:tag', bind(KnowledgeController, 'updateTag'))
   app.get('/api/knowledge/bundle', bind(KnowledgeController, 'getBundle'))
   app.get('/api/knowledge/collections', bind(KnowledgeController, 'listCollections'))
   app.post('/api/knowledge/collections', bind(KnowledgeController, 'createCollection'))

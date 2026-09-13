@@ -1,12 +1,30 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, onMounted, watch } from 'vue'
-import { fetchKnowledgeList, fetchKnowledgeEntry, saveKnowledgeEntry, createKnowledgeEntry, deleteKnowledgeEntry, uploadKnowledgeFile, fetchKnowledgeCollections, createKnowledgeCollection, saveKnowledgeCollection, deleteKnowledgeCollection, renameKnowledgeTag } from '../scripts/KnowledgePanelApi'
+import {
+  fetchKnowledgeList,
+  fetchKnowledgeEntry,
+  saveKnowledgeEntry,
+  createKnowledgeEntry,
+  deleteKnowledgeEntry,
+  fetchKnowledgeCollections,
+  deleteKnowledgeCollection,
+  fetchKnowledgeBundle,
+  type KnowledgeCollectionView,
+  type KnowledgeEntryMeta,
+  type KnowledgeTagFacetView,
+} from '../scripts/KnowledgePanelApi'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
-import CSelect from '../../../frontend/ui/CSelect.vue'
-import KnowledgeFormDialog from './KnowledgeFormDialog.vue'
+import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
+import KnowledgeSideMenu from './KnowledgeSideMenu.vue'
+import KnowledgeFormDialog, { type KnowledgeDraft } from './KnowledgeFormDialog.vue'
+import KnowledgeUploadDialog from './KnowledgeUploadDialog.vue'
+import KnowledgeCollectionDialog from './KnowledgeCollectionDialog.vue'
+import KnowledgeTagDialog from './KnowledgeTagDialog.vue'
 
 /**
+ * Orchestrator màn knowledge: cột trái là sub-menu, `main` là viewer markdown.
+ *
  * `projectId` phải xuống tới **mọi** lời gọi: nhóm và tag có đường **ghi**
  * (`renameTag` rewrite front-matter hàng loạt, `deleteCollection`), nên chạy
  * nhầm root không còn là xem sai danh sách mà là hỏng dữ liệu project khác.
@@ -20,31 +38,36 @@ const { t } = useI18nHelpers()
 
 const scope = ref('project')
 /** Đa chọn: entry phải mang **đủ** mọi tag đang bật, giống filter phía driver. */
-const tagFilter = ref([])
+const tagFilter = ref<string[]>([])
 const query = ref('')
-const entries = ref([])
-const allTags = ref([])
-const collections = ref([])
+const entries = ref<KnowledgeEntryMeta[]>([])
+const allTags = ref<KnowledgeTagFacetView[]>([])
+const collections = ref<KnowledgeCollectionView[]>([])
 const collectionsError = ref('')
 const activeCollection = ref('')
-const selectedId = ref(null)
 const loading = ref(false)
 const error = ref('')
 const message = ref('')
+
+/**
+ * Hai state tách hẳn nhau — trước đây bấm một dòng vừa chọn vừa mở dialog:
+ * `viewingId` là entry hiển thị ở `main` (icon eye / bấm tên), `editingId` là
+ * entry đang mở trong dialog (icon pencil).
+ */
+const viewingId = ref<string | null>(null)
+const viewingEntry = ref<any>(null)
+const viewLoading = ref(false)
+const editingId = ref<string | null>(null)
 const showDialog = ref(false)
+const deletingId = ref<string | null>(null)
 
-const draft = ref({
-  title: '',
-  slug: '',
-  scope: 'project',
-  tags: [],
-  content: '',
-})
-
-const uploadTags = ref('')
-const uploadScope = ref('project')
-const uploading = ref(false)
 const showUpload = ref(false)
+const showCollectionDialog = ref(false)
+const editingCollection = ref<KnowledgeCollectionView | null>(null)
+const showTagDialog = ref(false)
+const editingTag = ref<KnowledgeTagFacetView | null>(null)
+
+const draft = ref<KnowledgeDraft>({ title: '', scope: 'project', tags: [], content: '' })
 
 const filteredEntries = computed(() => {
   let list = entries.value
@@ -55,7 +78,7 @@ const filteredEntries = computed(() => {
       (e) =>
         e.title?.toLowerCase().includes(q) ||
         e.id?.toLowerCase().includes(q) ||
-        e.tags?.some((t) => t.includes(q)),
+        e.tags?.some((tag) => tag.includes(q)),
     )
   }
   return list
@@ -77,7 +100,7 @@ async function loadList() {
     })
     entries.value = data.entries || []
     allTags.value = data.tags || []
-  } catch (e) {
+  } catch (e: any) {
     error.value = String(e.message || e)
   } finally {
     loading.value = false
@@ -85,60 +108,70 @@ async function loadList() {
 }
 
 /**
- * Sidecar hỏng không được làm chết cả panel — entry vẫn xem được.
+ * DB hỏng không được làm chết cả panel — entry đọc từ file nên vẫn xem/sửa được.
  *
  * Nhưng cũng 🚫 không được hiện thành "chưa có nhóm nào": người dùng tạo nhóm
- * mới ngay lúc đó là ghi đè mất dữ liệu cũ. Lỗi hiện ra và khoá đường tạo.
+ * mới ngay lúc đó là ghi đè mất dữ liệu cũ. Lỗi hiện ra và khoá đường ghi.
  */
 async function loadCollections() {
   collectionsError.value = ''
   try {
     const data = await fetchKnowledgeCollections(props.projectId)
     collections.value = data.collections || []
-  } catch (e) {
+  } catch (e: any) {
     collections.value = []
     collectionsError.value = String(e.message || e)
   }
 }
 
-function toggleTagFilter(tag) {
+function toggleTagFilter(tag: string) {
   const i = tagFilter.value.indexOf(tag)
   if (i >= 0) tagFilter.value.splice(i, 1)
   else tagFilter.value.push(tag)
 }
 
-function selectCollection(id) {
+function selectCollection(id: string) {
   activeCollection.value = activeCollection.value === id ? '' : id
 }
 
-async function selectEntry(id) {
-  selectedId.value = id
+// ── viewer ─────────────────────────────────────────────────────────────────
+
+async function openViewer(id: string) {
+  viewingId.value = id
+  viewLoading.value = true
+  message.value = ''
+  try {
+    const data = await fetchKnowledgeEntry(id, props.projectId)
+    viewingEntry.value = data.entry
+  } catch (e: any) {
+    // Entry có thể vừa bị xoá ngoài dashboard — trả `main` về empty state thay
+    // vì kẹt ở spinner; lỗi hiện bên cột trái.
+    error.value = String(e.message || e)
+    viewingId.value = null
+    viewingEntry.value = null
+  } finally {
+    viewLoading.value = false
+  }
+}
+
+// ── editor ─────────────────────────────────────────────────────────────────
+
+async function openEditor(id: string) {
   message.value = ''
   try {
     const data = await fetchKnowledgeEntry(id, props.projectId)
     const e = data.entry
-    draft.value = {
-      title: e.title,
-      slug: e.slug,
-      scope: e.scope,
-      tags: [...(e.tags || [])],
-      content: e.content || '',
-    }
+    editingId.value = id
+    draft.value = { title: e.title, scope: e.scope, tags: [...(e.tags || [])], content: e.content || '' }
     showDialog.value = true
-  } catch (e) {
+  } catch (e: any) {
     error.value = String(e.message || e)
   }
 }
 
 function newEntry() {
-  selectedId.value = null
-  draft.value = {
-    title: '',
-    slug: '',
-    scope: scope.value,
-    tags: [],
-    content: '',
-  }
+  editingId.value = null
+  draft.value = { title: '', scope: scope.value, tags: [], content: '' }
   message.value = ''
   showDialog.value = true
 }
@@ -147,32 +180,131 @@ function closeDialog() {
   showDialog.value = false
 }
 
-// ── collection ─────────────────────────────────────────────────────────────
-
-const newCollectionName = ref('')
-const newCollectionScope = ref('project')
-/** Nhóm chỉ có sidecar riêng ở hai store: `system` dùng chung file với `project`. */
-const collectionScopeOptions = [
-  { value: 'project', label: 'project' },
-  { value: 'global', label: 'global' },
-]
-
-async function addCollection() {
-  const name = newCollectionName.value.trim()
-  if (!name) return
+/** 🚫 Không gửi `slug`: driver nội suy từ title và tự chống trùng. */
+async function save() {
   error.value = ''
+  message.value = ''
   try {
-    const data = await createKnowledgeCollection({ name, scope: newCollectionScope.value }, props.projectId)
-    newCollectionName.value = ''
-    message.value = t('knowledge.collections.created', { id: data.collection.id })
-    await loadCollections()
-  } catch (e) {
+    const payload = {
+      id: editingId.value || undefined,
+      title: draft.value.title,
+      scope: draft.value.scope,
+      tags: draft.value.tags,
+      content: draft.value.content,
+    }
+    const data = editingId.value
+      ? await saveKnowledgeEntry(editingId.value, payload, props.projectId)
+      : await createKnowledgeEntry(payload, props.projectId)
+    editingId.value = data.entry.id
+    message.value = t('knowledge.messages.saved', { id: data.entry.id })
+    await loadList()
+    // Đang xem chính entry vừa sửa thì viewer phải theo kịp, không hiện bản cũ.
+    if (viewingId.value === data.entry.id) await openViewer(data.entry.id)
+  } catch (e: any) {
     error.value = String(e.message || e)
   }
 }
 
-/** Xoá nhóm — tài liệu bên trong **không** bị xoá, nhãn nút phải nói rõ. */
-async function removeCollection(id) {
+async function removeEntry(id: string) {
+  if (deletingId.value) return // chặn double-click
+  if (!confirm(t('knowledge.messages.confirmDelete', { id }))) return
+  deletingId.value = id
+  error.value = ''
+  try {
+    await deleteKnowledgeEntry(id, props.projectId)
+    message.value = t('knowledge.messages.deleted')
+    // Xoá entry đang xem → `main` thu về 0, cột trái chiếm full width.
+    if (viewingId.value === id) {
+      viewingId.value = null
+      viewingEntry.value = null
+    }
+    if (editingId.value === id) showDialog.value = false
+    await loadList()
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  } finally {
+    deletingId.value = null
+  }
+}
+
+// ── download ───────────────────────────────────────────────────────────────
+
+/** Blob → `<a download>` → revoke, đúng mẫu đã có ở `PipelineEditor`. */
+function saveBlob(text: string, filename: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+function stamp() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function toMarkdownSection(item: any): string {
+  // Item vượt trần 1MB của bundle trả `{ id, error }` — ghi thành chú thích
+  // trong file gộp, 🚫 không bỏ im lặng.
+  if (item.error) return `<!-- ${item.id}: ${item.error} -->`
+  const tags = (item.tags || []).join(', ')
+  return `---\ntitle: ${item.title}\nid: ${item.id}\ntags: [${tags}]\n---\n\n${item.content ?? ''}`
+}
+
+/** Gộp entry **đang lọc** thành một file. Chia lô 50 — đúng trần `MAX_BUNDLE_IDS`. */
+async function downloadFiltered() {
+  const ids = filteredEntries.value.map((e) => e.id)
+  if (!ids.length) return
+  error.value = ''
+  try {
+    const items: any[] = []
+    for (let i = 0; i < ids.length; i += 50) {
+      const { bundle } = await fetchKnowledgeBundle(ids.slice(i, i + 50), props.projectId)
+      items.push(...bundle)
+    }
+    saveBlob(items.map(toMarkdownSection).join('\n\n'), `knowledge-${scope.value}-${stamp()}.md`)
+    const failed = items.filter((i) => i.error).length
+    message.value = failed ? t('knowledge.messages.downloadPartial', { count: failed }) : ''
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
+async function downloadEntry(id: string) {
+  error.value = ''
+  try {
+    const { entry } = await fetchKnowledgeEntry(id, props.projectId)
+    saveBlob(toMarkdownSection(entry), `${entry.slug || entry.id.replace('/', '-')}.md`)
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
+// ── collection ─────────────────────────────────────────────────────────────
+
+function newCollection() {
+  editingCollection.value = null
+  showCollectionDialog.value = true
+}
+
+function editCollection(collection: KnowledgeCollectionView) {
+  editingCollection.value = collection
+  showCollectionDialog.value = true
+}
+
+async function onCollectionSaved(id: string, created: boolean) {
+  showCollectionDialog.value = false
+  message.value = created
+    ? t('knowledge.collections.created', { id })
+    : t('knowledge.collections.updated', { id })
+  await loadCollections()
+  if (activeCollection.value) await loadList()
+}
+
+/** Xoá **nhóm** — tài liệu bên trong không bị xoá; câu xác nhận phải nói rõ. */
+async function removeCollection(id: string) {
   if (!confirm(t('knowledge.collections.confirmDelete', { id }))) return
   error.value = ''
   try {
@@ -181,125 +313,53 @@ async function removeCollection(id) {
     message.value = t('knowledge.collections.deleted', { id })
     await loadCollections()
     await loadList()
-  } catch (e) {
+  } catch (e: any) {
     error.value = String(e.message || e)
   }
 }
 
-/** Gán entry đang mở vào nhóm — `entry_ids` là cách gom thủ công, cạnh gom theo tag. */
-async function addSelectedToCollection(collection) {
-  if (!selectedId.value) return
-  error.value = ''
-  try {
-    const entryIds = [...new Set([...(collection.entry_ids || []), selectedId.value])]
-    await saveKnowledgeCollection(
-      collection.id,
-      {
-        name: collection.name,
-        description: collection.description,
-        tags: collection.tags || [],
-        entryIds,
-      },
-      props.projectId,
-    )
-    message.value = t('knowledge.collections.entryAdded', { id: collection.id })
-    await loadCollections()
-    if (activeCollection.value) await loadList()
-  } catch (e) {
-    error.value = String(e.message || e)
-  }
+// ── tag ────────────────────────────────────────────────────────────────────
+
+function newTag() {
+  editingTag.value = null
+  showTagDialog.value = true
 }
 
-// ── tag admin ──────────────────────────────────────────────────────────────
-
-const renameFrom = ref('')
-const renameTo = ref('')
-const renameFromOptions = computed(() => [
-  { value: '', label: t('knowledge.tagAdmin.from') },
-  ...allTags.value.map((tag) => ({ value: tag.tag, label: tag.tag })),
-])
-
-/** `to` rỗng = xoá tag khỏi mọi entry; `to` trùng tag có sẵn = merge hai tag. */
-async function applyRenameTag() {
-  if (!renameFrom.value) return
-  error.value = ''
-  try {
-    const data = await renameKnowledgeTag(renameFrom.value, renameTo.value.trim() || undefined, props.projectId)
-    message.value = t('knowledge.tagAdmin.done', { count: data.renamed })
-    tagFilter.value = tagFilter.value.filter((tag) => tag !== renameFrom.value)
-    renameFrom.value = ''
-    renameTo.value = ''
-    await loadList()
-    await loadCollections()
-  } catch (e) {
-    error.value = String(e.message || e)
-  }
+function editTag(tag: KnowledgeTagFacetView) {
+  editingTag.value = tag
+  showTagDialog.value = true
 }
 
-async function save() {
-  error.value = ''
-  message.value = ''
-  try {
-    const payload = {
-      id: selectedId.value || undefined,
-      title: draft.value.title,
-      slug: draft.value.slug || draft.value.title,
-      scope: draft.value.scope,
-      tags: draft.value.tags,
-      content: draft.value.content,
-    }
-    const data = selectedId.value
-      ? await saveKnowledgeEntry(selectedId.value, payload, props.projectId)
-      : await createKnowledgeEntry(payload, props.projectId)
-    selectedId.value = data.entry.id
-    message.value = t('knowledge.messages.saved', { id: data.entry.id })
-    await loadList()
-  } catch (e) {
-    error.value = String(e.message || e)
-  }
+async function onTagSaved(tag: string, created: boolean) {
+  showTagDialog.value = false
+  message.value = created
+    ? t('knowledge.tags.created', { tag })
+    : t('knowledge.tags.updated', { tag })
+  await loadList()
 }
 
-async function remove() {
-  if (!selectedId.value) return
-  if (!confirm(t('knowledge.messages.confirmDelete', { id: selectedId.value }))) return
-  try {
-    await deleteKnowledgeEntry(selectedId.value, props.projectId)
-    message.value = t('knowledge.messages.deleted')
-    showDialog.value = false
-    selectedId.value = null
-    await loadList()
-  } catch (e) {
-    error.value = String(e.message || e)
-  }
-}
-
-async function onFileUpload(event) {
-  const file = event.target.files?.[0]
-  if (!file) return
-  uploading.value = true
-  error.value = ''
-  try {
-    const tags = uploadTags.value.split(/[,;]+/).map((t) => t.trim()).filter(Boolean)
-    const data = await uploadKnowledgeFile(file, { scope: uploadScope.value, tags, projectId: props.projectId })
-    message.value = t('knowledge.messages.uploaded', { id: data.entry.id })
-    showUpload.value = false
-    uploadTags.value = ''
-    await loadList()
-    await selectEntry(data.entry.id)
-  } catch (e) {
-    error.value = String(e.message || e)
-  } finally {
-    uploading.value = false
-    event.target.value = ''
-  }
+/** Đổi tên tag rewrite front-matter hàng loạt → nạp lại cả entry lẫn nhóm. */
+async function onTagRenamed(count: number, metaError: string) {
+  showTagDialog.value = false
+  const from = editingTag.value?.tag
+  if (from) tagFilter.value = tagFilter.value.filter((tag) => tag !== from)
+  message.value = metaError
+    ? t('knowledge.tags.renamedNoMeta', { count, error: metaError })
+    : t('knowledge.tags.renamed', { count })
+  await loadList()
+  await loadCollections()
+  if (viewingId.value) await openViewer(viewingId.value)
 }
 
 watch([scope, activeCollection], () => loadList())
-// Đổi project là đổi cả cây entry lẫn cây nhóm — nạp lại cả hai.
+// Đổi project là đổi cả cây entry lẫn cây nhóm — reset lựa chọn rồi nạp lại cả hai.
 watch(
   () => props.projectId,
   async () => {
+    viewingId.value = null
+    viewingEntry.value = null
     activeCollection.value = ''
+    tagFilter.value = []
     await loadList()
     await loadCollections()
   },
@@ -311,185 +371,112 @@ onMounted(async () => {
 </script>
 
 <template>
-  <CScreenLayout :sub-sidebar-collapsed="subSidebarCollapsed">
+  <!-- Class `.knowledge-panel` ở ROOT chứ 🚫 không trên `main`: `hideMain` thu
+       `main` về 0 khi chưa chọn entry, spec e2e chờ nó visible sẽ đỏ ngay lúc
+       mở màn. Đây đúng cách `AgentEditor` giữ neo `.agent-editor`. -->
+  <CScreenLayout
+    class="knowledge-panel knowledge-layout"
+    :sub-sidebar-collapsed="subSidebarCollapsed"
+    :hide-main="!viewingId"
+  >
     <template #left>
-      <div class="knowledge-left" :class="{ 'knowledge-left--collapsed': subSidebarCollapsed }">
+      <div class="knowledge-left">
         <template v-if="!subSidebarCollapsed">
-          <!-- Cây collection nằm TRÊN cụm tab scope: một nhóm gom được entry của
-               nhiều scope, nên nó không phải là nhánh con của scope nào. -->
-          <div class="knowledge-collections">
-            <div class="knowledge-collections-head">
-              <span>{{ t('knowledge.collections.title') }}</span>
-              <button
-                v-if="activeCollection"
-                type="button"
-                class="btn-ghost btn-sm"
-                @click="activeCollection = ''"
-              >{{ t('knowledge.collections.clear') }}</button>
-            </div>
-            <p v-if="collectionsError" class="knowledge-collections-error">
-              {{ t('knowledge.collections.loadFailed', { error: collectionsError }) }}
-            </p>
-            <ul class="knowledge-collection-list">
-              <li v-if="!collections.length && !collectionsError" class="muted">{{ t('knowledge.collections.empty') }}</li>
-              <li
-                v-for="c in collections"
-                :key="c.id"
-                class="knowledge-collection-item"
-                :class="{ active: activeCollection === c.id }"
-              >
-                <button type="button" class="knowledge-collection-name" @click="selectCollection(c.id)">
-                  {{ c.name }} <span class="muted">({{ c.entryCount }} · {{ c.scope }})</span>
-                </button>
-                <button
-                  v-if="selectedId"
-                  type="button"
-                  class="btn-ghost btn-sm"
-                  :title="t('knowledge.collections.addEntry')"
-                  @click="addSelectedToCollection(c)"
-                >+</button>
-                <button
-                  type="button"
-                  class="btn-ghost btn-sm"
-                  :title="t('knowledge.collections.delete')"
-                  @click="removeCollection(c.id)"
-                >✕</button>
-              </li>
-            </ul>
-            <div class="knowledge-collection-new">
-              <input
-                v-model="newCollectionName"
-                class="cfg-input cfg-input-sm"
-                :placeholder="t('knowledge.collections.namePlaceholder')"
-                :disabled="!!collectionsError"
-                @keydown.enter.prevent="addCollection"
-              />
-              <CSelect
-                v-model="newCollectionScope"
-                :options="collectionScopeOptions"
-                :disabled="!!collectionsError"
-                :aria-label="t('knowledge.collections.scope')"
-                class="cfg-input-sm"
-              />
-              <button type="button" class="btn-ghost btn-sm" :disabled="!!collectionsError" @click="addCollection">
-                {{ t('knowledge.collections.create') }}
-              </button>
-            </div>
-          </div>
-
-          <div class="knowledge-filters">
-            <div class="knowledge-scope-tabs">
-              <button
-                class="knowledge-scope-tab"
-                :class="{ active: scope === 'project' }"
-                @click="scope = 'project'"
-              >{{ t('knowledge.scopeTabs.project') }}</button>
-              <button
-                class="knowledge-scope-tab"
-                :class="{ active: scope === 'system' }"
-                @click="scope = 'system'"
-              >{{ t('knowledge.scopeTabs.system') }}</button>
-              <button
-                class="knowledge-scope-tab"
-                :class="{ active: scope === 'global' }"
-                @click="scope = 'global'"
-              >{{ t('knowledge.scopeTabs.global') }}</button>
-            </div>
-            <input v-model="query" class="cfg-input cfg-input-sm" :placeholder="t('knowledge.filters.searchPlaceholder')" />
-            <div class="tag-row knowledge-tag-filter">
-              <span v-if="!allTags.length" class="muted">{{ t('knowledge.filters.allTags') }}</span>
-              <button
-                v-for="tag in allTags"
-                :key="tag.tag"
-                type="button"
-                class="chip chip-skill"
-                :class="{ active: tagFilter.includes(tag.tag) }"
-                @click="toggleTagFilter(tag.tag)"
-              >{{ tag.tag }} ({{ tag.count }})</button>
-            </div>
-            <div class="knowledge-tag-admin">
-              <CSelect
-                v-model="renameFrom"
-                :options="renameFromOptions"
-                :aria-label="t('knowledge.tagAdmin.from')"
-                class="cfg-input-sm"
-              />
-              <input
-                v-model="renameTo"
-                class="cfg-input cfg-input-sm"
-                :placeholder="t('knowledge.tagAdmin.toPlaceholder')"
-                @keydown.enter.prevent="applyRenameTag"
-              />
-              <button type="button" class="btn-ghost btn-sm" :disabled="!renameFrom" @click="applyRenameTag">
-                {{ t('knowledge.tagAdmin.apply') }}
-              </button>
-            </div>
-          </div>
+          <KnowledgeSideMenu
+            v-model:scope="scope"
+            v-model:query="query"
+            :entries="filteredEntries"
+            :loading="loading"
+            :collections="collections"
+            :collections-error="collectionsError"
+            :active-collection="activeCollection"
+            :tags="allTags"
+            :tag-filter="tagFilter"
+            :viewing-id="viewingId"
+            :busy-id="deletingId"
+            @upload="showUpload = true"
+            @download="downloadFiltered"
+            @new="newEntry"
+            @view="openViewer"
+            @edit="openEditor"
+            @download-entry="downloadEntry"
+            @delete="removeEntry"
+            @select-collection="selectCollection"
+            @new-collection="newCollection"
+            @edit-collection="editCollection"
+            @delete-collection="removeCollection"
+            @toggle-tag="toggleTagFilter"
+            @new-tag="newTag"
+            @edit-tag="editTag"
+          />
+          <p v-if="error" class="err knowledge-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg knowledge-msg">{{ message }}</p>
         </template>
       </div>
     </template>
 
     <template #main>
-      <div class="knowledge-panel">
-        <header class="knowledge-head">
-          <h2>{{ t('knowledge.title') }}</h2>
-          <div class="knowledge-head-actions">
-            <button class="btn-ghost btn-sm" @click="showUpload = !showUpload">{{ t('knowledge.actions.upload') }}</button>
-            <button class="btn-primary btn-sm" @click="newEntry">{{ t('knowledge.actions.create') }}</button>
-          </div>
-        </header>
-
-        <div v-if="showUpload" class="knowledge-upload-box">
-          <label class="cfg-label">
-            {{ t('knowledge.upload.scope') }}
-            <select v-model="uploadScope" class="cfg-input">
-              <option value="project">project</option>
-              <option value="system">system</option>
-              <option value="global">global</option>
-            </select>
-          </label>
-          <label class="cfg-label">
-            {{ t('knowledge.upload.tags') }}
-            <input v-model="uploadTags" class="cfg-input" placeholder="pipeline, vue" />
-          </label>
-          <label class="cfg-label">
-            {{ t('knowledge.upload.file') }}
-            <input type="file" accept=".md,.txt,text/plain,text/markdown" :disabled="uploading" @change="onFileUpload" />
-          </label>
-        </div>
-
-        <ul class="knowledge-list">
-          <li v-if="loading" class="muted">{{ t('knowledge.list.loading') }}</li>
-          <li v-else-if="!filteredEntries.length" class="muted">{{ t('knowledge.list.empty') }}</li>
-          <li
-            v-for="e in filteredEntries"
-            :key="e.id"
-            class="knowledge-list-item"
-            :class="{ active: selectedId === e.id }"
-            @click="selectEntry(e.id)"
-          >
-            <div class="knowledge-list-title">{{ e.title }}</div>
-            <div class="knowledge-list-meta">{{ e.id }}</div>
-            <div v-if="e.tags?.length" class="tag-row">
-              <span v-for="t in e.tags" :key="t" class="chip chip-skill">{{ t }}</span>
-            </div>
-          </li>
-        </ul>
+      <div class="knowledge-main">
+        <!-- Sub-menu thu về rail thì cột trái rộng 0, nên chỗ duy nhất còn thấy
+             được là main. Hai trạng thái loại trừ nhau nên thông báo không bao
+             giờ render hai lần. -->
+        <template v-if="subSidebarCollapsed">
+          <p v-if="error" class="err knowledge-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg knowledge-msg">{{ message }}</p>
+        </template>
+        <!-- 🚫 `with-frontmatter`: `driver.read()` đã bóc front-matter sẵn, nên
+             chỉ còn phần text — đúng yêu cầu "không hiển thị siêu dữ liệu". -->
+        <CMarkdownView
+          v-if="viewingId && viewingEntry && !viewLoading"
+          :title="viewingEntry.title"
+          :content="viewingEntry.content || ''"
+        />
+        <p v-else-if="viewLoading" class="muted knowledge-main-empty">{{ t('knowledge.viewer.loading') }}</p>
+        <div v-else class="muted knowledge-main-empty">{{ t('knowledge.viewer.empty') }}</div>
       </div>
-
-      <KnowledgeFormDialog
-        v-if="showDialog"
-        v-model:draft="draft"
-        :selected-id="selectedId"
-        :all-tags="allTags"
-        :message="message"
-        :error="error"
-        @close="closeDialog"
-        @save="save"
-        @delete="remove"
-      />
     </template>
   </CScreenLayout>
+
+  <!-- 4 dialog là modal ngang hàng, đứng ngoài CScreenLayout. -->
+  <KnowledgeFormDialog
+    v-if="showDialog"
+    v-model:draft="draft"
+    :selected-id="editingId"
+    :all-tags="allTags"
+    :message="message"
+    :error="error"
+    @close="closeDialog"
+    @save="save"
+  />
+  <KnowledgeUploadDialog
+    v-if="showUpload"
+    :project-id="projectId"
+    @close="showUpload = false"
+    @uploaded="
+      (id) => {
+        showUpload = false
+        message = t('knowledge.messages.uploaded', { id })
+        loadList()
+        openViewer(id)
+      }
+    "
+  />
+  <KnowledgeCollectionDialog
+    v-if="showCollectionDialog"
+    :collection="editingCollection"
+    :tags="allTags"
+    :project-id="projectId"
+    @close="showCollectionDialog = false"
+    @saved="onCollectionSaved"
+  />
+  <KnowledgeTagDialog
+    v-if="showTagDialog"
+    :tag="editingTag"
+    :project-id="projectId"
+    @close="showTagDialog = false"
+    @saved="onTagSaved"
+    @renamed="onTagRenamed"
+  />
 </template>
 
 <style scoped lang="scss">
@@ -497,124 +484,40 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: auto;
-}
-.knowledge-left--collapsed {
+  min-height: 0;
   overflow: hidden;
 }
-.knowledge-panel {
-  height: 100%;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
+// Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là một
+// cột xám rỗng. Selector đích nằm TRÊN slot "left" nên override neo vào gốc.
+.knowledge-layout :deep(.c-screen-layout__body--left-collapsed) {
+  grid-template-columns: 0 1fr;
 }
-.knowledge-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.knowledge-head h2 { margin: 0; font-size: 16px; }
-.knowledge-head-actions { display: flex; gap: 8px; }
-.knowledge-upload-box {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  background: var(--panel);
-  display: grid;
-  gap: 8px;
-  max-width: 480px;
-}
-.knowledge-filters {
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.knowledge-collections {
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.knowledge-collections-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  font-weight: 600;
-}
-.knowledge-collections-error {
-  margin: 4px 0 0;
-  font-size: 11px;
-  color: var(--danger, #c0392b);
-}
-.knowledge-collection-list {
-  list-style: none;
+.knowledge-msg {
   margin: 0;
-  padding: 0;
-  max-height: 140px;
-  overflow-y: auto;
-}
-.knowledge-collection-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  border-radius: 6px;
-  padding: 2px 4px;
-}
-.knowledge-collection-item.active { background: var(--accent-dim); }
-.knowledge-collection-name {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-  background: none;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 4px 2px;
-}
-.knowledge-collection-new { display: flex; gap: 4px; }
-.knowledge-tag-filter { flex-wrap: wrap; gap: 4px; }
-.knowledge-tag-filter .chip { cursor: pointer; border: 1px solid transparent; }
-.knowledge-tag-filter .chip.active { border-color: var(--accent); }
-.knowledge-tag-admin { display: flex; gap: 4px; }
-.knowledge-scope-tabs { display: flex; gap: 6px; }
-.knowledge-scope-tab {
-  flex: 1;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--panel-2);
-  cursor: pointer;
-  font-size: 12px;
-}
-.knowledge-scope-tab.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-.knowledge-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-}
-.knowledge-list-item {
   padding: 8px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-bottom: 4px;
-  border: 1px solid var(--border);
+  font-size: 12px;
+  flex-shrink: 0;
 }
-.knowledge-list-item:hover { background: var(--panel-2); }
-.knowledge-list-item.active { background: var(--accent-dim); }
-.knowledge-list-title { font-size: 13px; font-weight: 600; }
-.knowledge-list-meta { font-size: 11px; color: var(--muted); }
+.knowledge-main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+// Root của component con nhận luôn scope id của cha, nên không cần `:deep`.
+.knowledge-main > .c-md-view {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.knowledge-main-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+}
 </style>

@@ -13,12 +13,6 @@ export default {
   viewer: {
     empty: 'Pick an agent on the left to view it',
     loading: 'Loading agent content…',
-    metadata: 'Metadata',
-    untitledSection: 'Untitled section',
-    toFull: 'Switch to full view',
-    toBlock: 'Switch to block view',
-    expandAll: 'Expand all',
-    collapseAll: 'Collapse all',
   },
   actions: {
     save: 'Save',

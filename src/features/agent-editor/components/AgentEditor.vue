@@ -11,7 +11,7 @@ import {
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import AgentSideMenu from './AgentSideMenu.vue'
-import AgentMarkdownView from './AgentMarkdownView.vue'
+import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
 import AgentFormDialog from './AgentFormDialog.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'
 import AgentNlWizard from './AgentNlWizard.vue'
@@ -200,10 +200,13 @@ async function onSaved(savedName: string) {
           <p v-if="error" class="err agent-editor-msg">{{ error }}</p>
           <p v-if="message" class="ok-msg agent-editor-msg">{{ message }}</p>
         </template>
-        <AgentMarkdownView
+        <!-- `with-frontmatter`: agent đọc nguyên file `.md`, khối `---` đầu file
+             đúng là metadata nên tách ra thành block riêng. -->
+        <CMarkdownView
           v-if="viewing && !viewLoading"
-          :name="viewing.name"
+          :title="viewing.name"
           :content="viewContent"
+          with-frontmatter
         />
         <p v-else-if="viewLoading" class="muted agent-main-empty">{{ t('agentEditor.viewer.loading') }}</p>
         <div v-else class="muted agent-main-empty">{{ t('agentEditor.viewer.empty') }}</div>
@@ -267,7 +270,7 @@ async function onSaved(savedName: string) {
   min-height: 0;
 }
 // Root của component con nhận luôn scope id của cha, nên không cần `:deep`.
-.agent-main > .agent-md-view {
+.agent-main > .c-md-view {
   flex: 1;
   min-height: 0;
   height: auto;

@@ -1,14 +1,17 @@
 import { AbstractController } from '../../backend/http/AbstractController.js'
 import { emitEntity } from '../../backend/events/index.js'
 import {
-  CollectionsFileError,
   createCollection,
+  createTag,
+  decorateTagFacets,
   deleteCollection,
   getKnowledgeDriver,
+  KnowledgeDbError,
   listCollections,
   loadKnowledgeBundle,
   renameTag,
   updateCollection,
+  updateTag,
 } from './business/index.js'
 import {
   BundleQuery,
@@ -17,7 +20,9 @@ import {
   KnowledgeUploadScope,
   KnowledgeWriteBody,
   MAX_BUNDLE_IDS,
+  TagCreateBody,
   TagRenameBody,
+  TagUpdateBody,
 } from './schemas/knowledge.js'
 
 /**
@@ -35,15 +40,17 @@ export class KnowledgeController extends AbstractController {
   }
 
   /**
-   * Sidecar `collections.yaml` hỏng là lỗi **trạng thái trên đĩa**, không phải
-   * lỗi request → 500 kèm đúng file hỏng để người dùng sửa tay được. Business
-   * đã từ chối ghi trong ca này nên không có dữ liệu nào bị đè.
+   * Không mở được `dashboard.sqlite` là lỗi **hạ tầng**, không phải lỗi request
+   * → 500 kèm nguyên nhân để người dùng sửa được.
+   *
+   * 🚫 Không nuốt thành danh sách rỗng: người dùng đọc đó là "chưa có nhóm nào"
+   * rồi tạo mới, và ghi đè mất dữ liệu cũ.
    */
-  private async collectionOp(run: () => Promise<Response>): Promise<Response> {
+  private async knowledgeDbOp(run: () => Promise<Response>): Promise<Response> {
     try {
       return await run()
     } catch (e) {
-      if (e instanceof CollectionsFileError) return this.json(500, { error: e.message })
+      if (e instanceof KnowledgeDbError) return this.json(500, { error: e.message })
       throw e
     }
   }
@@ -117,10 +124,52 @@ export class KnowledgeController extends AbstractController {
     }
   }
 
+  /** Facet tag kèm metadata (màu, mô tả) — gồm cả tag chưa entry nào gắn. */
   async listTags() {
     const d = await this.driverFor()
     if ('error' in d) return d.error
-    return this.ok({ tags: await d.driver.listTags() })
+    return this.knowledgeDbOp(async () =>
+      this.ok({ tags: await decorateTagFacets(d.root, await d.driver.listTags()) }),
+    )
+  }
+
+  async createTag() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const b = await this.requireJsonBody()
+    if ('error' in b) return b.error
+    const parsed = TagCreateBody.safeParse(b.value)
+    if (!parsed.success) return this.badRequest('invalid body')
+    return this.knowledgeDbOp(async () => {
+      const result = await createTag(gate.root, parsed.data)
+      if ('error' in result) return this.json(result.status, { error: result.error })
+      emitEntity('created', 'knowledge-tag', {
+        id: result.tag.tag,
+        projectId: this.projectId,
+        detail: { scope: result.tag.scope },
+      })
+      return this.created(result)
+    })
+  }
+
+  /** Sửa **metadata** tag (màu, mô tả). Đổi *tên* tag đi `POST /tags/rename`. */
+  async updateTag() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const b = await this.requireJsonBody()
+    if ('error' in b) return b.error
+    const parsed = TagUpdateBody.safeParse(b.value)
+    if (!parsed.success) return this.badRequest('invalid body')
+    return this.knowledgeDbOp(async () => {
+      const result = await updateTag(gate.root, this.c.req.param('tag'), parsed.data)
+      if ('error' in result) return this.json(result.status, { error: result.error })
+      emitEntity('updated', 'knowledge-tag', {
+        id: result.tag.tag,
+        projectId: this.projectId,
+        detail: { scope: result.tag.scope },
+      })
+      return this.ok(result)
+    })
   }
 
   /**
@@ -171,7 +220,7 @@ export class KnowledgeController extends AbstractController {
   async listCollections() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
-    return this.collectionOp(async () => this.ok(await listCollections(gate.root)))
+    return this.knowledgeDbOp(async () => this.ok(await listCollections(gate.root)))
   }
 
   async createCollection() {
@@ -181,7 +230,7 @@ export class KnowledgeController extends AbstractController {
     if ('error' in b) return b.error
     const parsed = CollectionBody.safeParse(b.value)
     if (!parsed.success) return this.badRequest('invalid body')
-    return this.collectionOp(async () => {
+    return this.knowledgeDbOp(async () => {
       const result = await createCollection(gate.root, parsed.data)
       if ('error' in result) return this.json(result.status, { error: result.error })
       emitEntity('created', 'knowledge-collection', {
@@ -200,7 +249,7 @@ export class KnowledgeController extends AbstractController {
     if ('error' in b) return b.error
     const parsed = CollectionBody.safeParse(b.value)
     if (!parsed.success) return this.badRequest('invalid body')
-    return this.collectionOp(async () => {
+    return this.knowledgeDbOp(async () => {
       const result = await updateCollection(gate.root, this.c.req.param('id'), parsed.data)
       if ('error' in result) return this.json(result.status, { error: result.error })
       emitEntity('updated', 'knowledge-collection', {
@@ -216,7 +265,7 @@ export class KnowledgeController extends AbstractController {
   async deleteCollection() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
-    return this.collectionOp(async () => {
+    return this.knowledgeDbOp(async () => {
       const result = await deleteCollection(gate.root, this.c.req.param('id'))
       if ('error' in result) return this.json(result.status, { error: result.error })
       emitEntity('deleted', 'knowledge-collection', { id: result.id, projectId: this.projectId })
@@ -231,7 +280,7 @@ export class KnowledgeController extends AbstractController {
     if ('error' in b) return b.error
     const parsed = TagRenameBody.safeParse(b.value)
     if (!parsed.success) return this.badRequest('invalid body')
-    return this.collectionOp(async () => {
+    return this.knowledgeDbOp(async () => {
       const result = await renameTag(gate.root, parsed.data)
       // Rename hỏng giữa chừng vẫn đã ghi được một phần → emit cho đúng những
       // entry đó và trả cả danh sách, đừng để client tưởng không có gì đổi.

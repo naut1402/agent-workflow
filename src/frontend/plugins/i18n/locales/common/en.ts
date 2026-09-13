@@ -79,6 +79,14 @@ export default {
     select: 'Select this folder',
     selectDirRequired: 'Open a folder before selecting.',
   },
+  markdownView: {
+    metadata: 'Metadata',
+    untitledSection: 'Untitled section',
+    toFull: 'Switch to full view',
+    toBlock: 'Switch to block view',
+    expandAll: 'Expand all',
+    collapseAll: 'Collapse all',
+  },
   artifactNode: {
     producesTitle: 'Artifacts',
     knowledgeTitle: 'Knowledge',

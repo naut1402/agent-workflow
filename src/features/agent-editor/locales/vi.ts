@@ -10,15 +10,11 @@ export default {
     delete: 'Xóa agent',
     exportHint: 'Chọn một agent trước khi export',
   },
+  // Empty state của `main`, KHÔNG phải của viewer — phần trong viewer đã lên
+  // `common.markdownView.*` khi `CMarkdownView` thành component dùng chung.
   viewer: {
     empty: 'Chọn một agent ở danh sách bên trái để xem nội dung',
     loading: 'Đang tải nội dung agent…',
-    metadata: 'Metadata',
-    untitledSection: 'Phần không tiêu đề',
-    toFull: 'Xem toàn văn',
-    toBlock: 'Xem theo block',
-    expandAll: 'Mở tất cả',
-    collapseAll: 'Thu gọn tất cả',
   },
   actions: {
     save: 'Lưu',
