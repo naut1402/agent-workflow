@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createFileDriver, knowledgeRoot, loadKnowledgeBundle } from '../../../../../src/features/knowledge/business/fileDriver'
+import { resetDbForTest } from '../../../../../src/backend/db/client'
 import { MAX_BUNDLE_BYTES } from '../../../../../src/features/knowledge/schemas/knowledge'
 
 let root: string
@@ -19,6 +20,9 @@ beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'kn-'))
   home = path.join(root, '.home')
   process.env.DEV_TEAM_DASHBOARD_HOME = home
+  // Driver đụng DB qua alias tag / lọc theo nhóm — reset để không dùng lại
+  // connection trỏ home của test trước (getDb cache theo process).
+  resetDbForTest()
   driver = createFileDriver(root)
 })
 afterEach(async () => {
@@ -177,5 +181,84 @@ describe('cap byte của bundle (TC-I7)', () => {
     expect(bundle[1]).toEqual({ id: 'project/huge', error: 'bundle size limit' })
     // Byte của entry bị từ chối không được tính vào tổng.
     expect(bundle[2].content).toBeDefined()
+  })
+})
+
+/**
+ * Slug là phần **nội suy**: dialog không còn ô nhập, driver tự sinh từ title và
+ * tự chống trùng. Ba bất biến ở đây, cả ba từng hỏng theo cách im lặng:
+ * đọc được (G1) · không ghi đè (G2) · client không lái được slug khi sửa (G3).
+ */
+describe('nội suy slug khi tạo mới', () => {
+  /** Tên file trên đĩa và `slug` trong front-matter phải là **một** giá trị. */
+  async function slugOnDisk(id: string): Promise<{ file: string; fm: string }> {
+    const file = id.split('/')[1]
+    const raw = await fs.readFile(path.join(knowledgeRoot(root), 'project', `${file}.md`), 'utf8')
+    return { file, fm: /^slug: (.*)$/m.exec(raw)?.[1] ?? '' }
+  }
+
+  test('title tiếng Việt ra slug ĐỌC ĐƯỢC, không bị băm theo dấu (G1)', async () => {
+    const w = await driver.write({ title: 'Kiến trúc hệ thống', content: 'c' })
+    expect(w.id).toBe('project/kien-truc-he-thong')
+  })
+
+  test('trùng title sinh hậu tố chứ KHÔNG ghi đè entry cũ (G2 · E4)', async () => {
+    const a = await driver.write({ title: 'Ghi chú', content: 'bản 1' })
+    const b = await driver.write({ title: 'Ghi chú', content: 'bản 2' })
+
+    expect(a.id).toBe('project/ghi-chu')
+    expect(b.id).toMatch(/^project\/ghi-chu-[0-9a-f]{4}$/)
+    expect((await driver.read(a.id)).content.trim()).toBe('bản 1')
+    expect(await driver.list()).toHaveLength(2)
+  })
+
+  test('front-matter `slug` khớp tên file ở cả entry gốc lẫn entry có hậu tố', async () => {
+    const a = await driver.write({ title: 'Ghi chú', content: 'c' })
+    const b = await driver.write({ title: 'Ghi chú', content: 'c' })
+    for (const id of [a.id, b.id]) {
+      const { file, fm } = await slugOnDisk(id)
+      expect(fm).toBe(file)
+    }
+  })
+
+  /**
+   * TC-46b — hậu tố phải nằm **lọt** trong trần 80 ký tự của `sanitiseSlug`.
+   * Ghép hậu tố vào seed đã sát trần thì `entryPath` cắt lại: entry thứ hai
+   * hoặc mang front-matter lệch tên file, hoặc không tạo được vì mọi ứng viên
+   * bị cắt về đúng seed cũ.
+   */
+  test('title 80 ký tự vẫn tạo được entry thứ hai, slug khớp tên file (TC-46b)', async () => {
+    const long = 'a'.repeat(80)
+    const a = await driver.write({ title: long, content: '1' })
+    const b = await driver.write({ title: long, content: '2' })
+
+    expect(b.id).not.toBe(a.id)
+    for (const id of [a.id, b.id]) {
+      const { file, fm } = await slugOnDisk(id)
+      expect(file.length).toBeLessThanOrEqual(80)
+      expect(fm).toBe(file)
+    }
+  })
+
+  test('title toàn ký tự không ASCII rơi về `entry`, không ném invalid slug (E5)', async () => {
+    expect((await driver.write({ title: '日本語', content: 'c' })).id).toBe('project/entry')
+  })
+
+  test('SỬA entry thì bỏ qua `slug` client gửi — slug lấy từ id (G3)', async () => {
+    const a = await driver.write({ title: 'Gốc', content: 'c' })
+    const again = await driver.write({ id: a.id, title: 'Đổi title', slug: 'client-tu-dat', content: 'c2' })
+
+    expect(again.id).toBe(a.id)
+    expect(await driver.list()).toHaveLength(1)
+    const { file, fm } = await slugOnDisk(a.id)
+    expect(fm).toBe(file)
+  })
+
+  /** `upload()` gọi `write({ id })` nên phải rơi vào nhánh **sửa**, giữ guard riêng của nó. */
+  test('upload trùng tên file vẫn báo lỗi thay vì âm thầm sinh hậu tố', async () => {
+    await driver.upload({ filename: 'note.md', content: 'a', scope: 'project' })
+    expect(driver.upload({ filename: 'note.md', content: 'b', scope: 'project' })).rejects.toThrow(
+      /already exists/,
+    )
   })
 })

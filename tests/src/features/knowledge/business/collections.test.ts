@@ -1,40 +1,43 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
-import { existsSync, writeFileSync, mkdirSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
-  CollectionsFileError,
   createCollection,
   deleteCollection,
+  findCollectionSafe,
   listCollections,
-  readCollectionsFile,
-  readCollectionsFileSafe,
   renameTag,
   resolveCollectionEntries,
   updateCollection,
 } from '../../../../../src/features/knowledge/business/collections'
+import { createTag, listTagMeta } from '../../../../../src/features/knowledge/business/tags'
 import { createFileDriver, knowledgeRoot } from '../../../../../src/features/knowledge/business/fileDriver'
+import { resetDbForTest } from '../../../../../src/backend/db/client'
 
 /**
- * Collection + tag admin ở mức business.
+ * Collection + tag admin ở mức business, nguồn là `dashboard.sqlite`.
  *
- * `DEV_TEAM_DASHBOARD_HOME` cô lập vì scope `global` đọc thẳng registry home —
- * không cô lập thì case đếm entry ăn cả knowledge global thật của máy.
+ * ⚠️ Hai bước cô lập, thiếu bước nào cũng hỏng:
+ * - `DEV_TEAM_DASHBOARD_HOME` — `dashboard.sqlite` **và** store `global` đều
+ *   nằm dưới registry home; không cô lập là suite ghi vào DB thật của máy.
+ * - `resetDbForTest()` **sau** khi đổi biến môi trường — `getDb()` cache
+ *   connection theo process, và `bun test` chạy nhiều file trong cùng process,
+ *   nên không reset thì mọi truy vấn vẫn trỏ file của test trước.
  */
 
 let root: string
 let driver: ReturnType<typeof createFileDriver>
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
 
-const sidecar = (base: string) => path.join(base, 'collections.yaml')
-
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'kn-coll-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = path.join(root, '.home')
+  resetDbForTest()
   driver = createFileDriver(root)
 })
 afterEach(async () => {
+  resetDbForTest()
   if (prevHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
   else process.env.DEV_TEAM_DASHBOARD_HOME = prevHome
   await fs.rm(root, { recursive: true, force: true })
@@ -61,11 +64,12 @@ describe('thành viên collection = entry_ids ∪ tags', () => {
 describe('CRUD collection', () => {
   test('nhóm rỗng tồn tại được và đếm đúng sau khi có thành viên (TC-T8 · TC-T9)', async () => {
     const made = await createCollection(root, { name: 'Nhóm A', scope: 'project' } as any)
-    expect(made).toMatchObject({ collection: { id: 'nh-m-a', scope: 'project' } })
+    // Id đi qua `slugify` (NFD + đ→d) nên còn đọc được, không phải `nh-m-a`.
+    expect(made).toMatchObject({ collection: { id: 'nhom-a', scope: 'project' } })
     expect((await listCollections(root)).collections[0].entryCount).toBe(0)
 
     await driver.write({ slug: 'm1', tags: ['grp'], content: 'c' })
-    await updateCollection(root, 'nh-m-a', { name: 'Nhóm A', tags: ['grp'] } as any)
+    await updateCollection(root, 'nhom-a', { name: 'Nhóm A', tags: ['grp'] } as any)
     expect((await listCollections(root)).collections[0].entryCount).toBe(1)
   })
 
@@ -93,60 +97,70 @@ describe('CRUD collection', () => {
     expect(await driver.list()).toHaveLength(1)
   })
 
-  test('nhóm global và nhóm project nằm ở hai sidecar khác nhau (TC-T17)', async () => {
+  test('không đổi được scope của nhóm đã có', async () => {
+    await createCollection(root, { name: 'S', scope: 'project' } as any)
+    expect(await updateCollection(root, 's', { name: 'S', scope: 'global' } as any)).toMatchObject({ status: 400 })
+  })
+
+  test('id lạ → 404 ở cả update lẫn delete', async () => {
+    expect(await updateCollection(root, 'khong-co', { name: 'X' } as any)).toMatchObject({ status: 404 })
+    expect(await deleteCollection(root, 'khong-co')).toMatchObject({ status: 404 })
+  })
+})
+
+describe('phân vùng theo store_key', () => {
+  test('nhóm global và nhóm project là hai hàng độc lập (TC-T17)', async () => {
     await createCollection(root, { name: 'G', scope: 'global' } as any)
     await createCollection(root, { name: 'P', scope: 'project' } as any)
 
     const scopes = (await listCollections(root)).collections.map((c) => `${c.id}:${c.scope}`)
     expect(scopes.sort()).toEqual(['g:global', 'p:project'])
-    expect(existsSync(sidecar(path.join(root, '.home', 'knowledge')))).toBe(true)
-    expect(existsSync(sidecar(knowledgeRoot(root)))).toBe(true)
   })
 
-  test('không đổi được scope của nhóm đã có', async () => {
-    await createCollection(root, { name: 'S', scope: 'project' } as any)
-    expect(await updateCollection(root, 's', { name: 'S', scope: 'global' } as any)).toMatchObject({ status: 400 })
+  /**
+   * Hai project **khác thư mục** thì `store_key` khác nhau ⇒ nhóm không lẫn
+   * sang nhau. Đây là bất biến thay cho "mỗi store một `collections.yaml`".
+   */
+  test('hai project khác nhau không thấy nhóm của nhau (TC-T18)', async () => {
+    const other = await fs.mkdtemp(path.join(os.tmpdir(), 'kn-other-'))
+    try {
+      await createCollection(root, { name: 'Của A', scope: 'project' } as any)
+      await createCollection(other, { name: 'Của B', scope: 'project' } as any)
+
+      expect((await listCollections(root)).collections.map((c) => c.id)).toEqual(['cua-a'])
+      expect((await listCollections(other)).collections.map((c) => c.id)).toEqual(['cua-b'])
+    } finally {
+      await fs.rm(other, { recursive: true, force: true })
+    }
+  })
+
+  test('`system` dùng CHUNG store với `project` — entry system vẫn vào nhóm project', async () => {
+    await driver.write({ slug: 's1', scope: 'system', tags: ['grp'], content: 'c' })
+    await createCollection(root, { name: 'C', scope: 'project', tags: ['grp'] } as any)
+    expect((await listCollections(root)).collections[0].entryCount).toBe(1)
   })
 })
 
-describe('sidecar hỏng', () => {
-  const corrupt = 'collections: [\n  x: : :\n'
+describe('findCollectionSafe — đường ĐỌC entry', () => {
+  test('trả nhóm khi có, null khi id lạ; lọc `list({ collection })` khớp', async () => {
+    await driver.write({ slug: 'in', tags: ['grp'], content: 'c' })
+    await driver.write({ slug: 'out', content: 'c' })
+    await createCollection(root, { name: 'C', scope: 'project', tags: ['grp'] } as any)
 
-  function writeCorrupt(): string {
-    const file = sidecar(knowledgeRoot(root))
-    mkdirSync(path.dirname(file), { recursive: true })
-    writeFileSync(file, corrupt)
-    return file
-  }
-
-  test('thiếu file → doc rỗng; parse hỏng → ném', async () => {
-    expect(await readCollectionsFile(knowledgeRoot(root))).toEqual({ version: 1, collections: [], tag_aliases: {} })
-    writeCorrupt()
-    expect(readCollectionsFile(knowledgeRoot(root))).rejects.toBeInstanceOf(CollectionsFileError)
+    expect(await findCollectionSafe(root, 'c')).toMatchObject({ id: 'c', tags: ['grp'] })
+    expect(await findCollectionSafe(root, 'khong-co')).toBeNull()
+    expect((await driver.list({ collection: 'c' })).map((e) => e.id)).toEqual(['project/in'])
   })
 
-  test('bản Safe nuốt lỗi — đường ĐỌC entry không được chết theo', async () => {
-    writeCorrupt()
-    expect(await readCollectionsFileSafe(knowledgeRoot(root))).toEqual({ version: 1, collections: [], tag_aliases: {} })
-    await driver.write({ slug: 'alive', content: 'c' })
-    expect(await driver.list()).toHaveLength(1)
-  })
-
-  test('mọi đường ghi bị chặn, file trên đĩa còn nguyên', async () => {
-    const file = writeCorrupt()
-    for (const op of [
-      () => createCollection(root, { name: 'X', scope: 'project' } as any),
-      () => updateCollection(root, 'x', { name: 'X' } as any),
-      () => deleteCollection(root, 'x'),
-    ]) {
-      expect(op()).rejects.toBeInstanceOf(CollectionsFileError)
-    }
-    expect(await fs.readFile(file, 'utf8')).toBe(corrupt)
+  /** Nhóm không tồn tại ⇒ **rỗng**, 🚫 không phải "trả hết": lọc hụt an toàn hơn lọc thừa. */
+  test('lọc theo nhóm không tồn tại trả rỗng, không trả toàn bộ', async () => {
+    await driver.write({ slug: 'x', content: 'c' })
+    expect(await driver.list({ collection: 'khong-co' })).toHaveLength(0)
   })
 })
 
 describe('renameTag', () => {
-  test('đổi tên trên mọi entry mang tag và ghi alias tên cũ (TC-T1)', async () => {
+  test('đổi tên trên mọi entry mang tag và ghi alias tên cũ (TC-T1 · TC-T2)', async () => {
     await driver.write({ slug: 'e1', tags: ['a'], content: 'c' })
     await driver.write({ slug: 'e2', tags: ['a', 'z'], content: 'c' })
     await driver.write({ slug: 'e3', tags: ['z'], content: 'c' })
@@ -157,7 +171,7 @@ describe('renameTag', () => {
     expect((await driver.read('project/e3')).tags).toEqual(['z'])
     expect((await listCollections(root)).tagAliases).toEqual({ a: 'b' })
 
-    // Alias phải ĐƯỢC DÙNG: lọc theo tên cũ vẫn ra đúng hai entry (TC-T2).
+    // Alias phải ĐƯỢC DÙNG: lọc theo tên cũ vẫn ra đúng hai entry.
     expect((await driver.list({ tags: ['a'] })).map((e) => e.id).sort()).toEqual(['project/e1', 'project/e2'])
   })
 
@@ -176,6 +190,25 @@ describe('renameTag', () => {
     const c = (await listCollections(root)).collections[0]
     expect(c.tags).toEqual(['b'])
     expect(c.entryCount).toBe(1)
+  })
+
+  /**
+   * TC-41c — tag **0 entry** là trạng thái hợp lệ từ khi tag là thực thể, nên
+   * `renamed: 0` 🚫 không được biến thành "không ghi gì cả": alias và tag của
+   * collection vẫn phải chuyển, nếu không hàm trả `alias` mô tả một hàng chưa
+   * tồn tại.
+   */
+  test('đổi tên tag KHÔNG có entry nào vẫn ghi alias + dời tag của nhóm (TC-41c)', async () => {
+    await createTag(root, { tag: 'alpha', color: 'blue', scope: 'project' } as any)
+    await createCollection(root, { name: 'Nhom A', scope: 'project', tags: ['alpha'] } as any)
+
+    expect(await renameTag(root, { from: 'alpha', to: 'beta' })).toMatchObject({
+      renamed: 0,
+      alias: ['alpha', 'beta'],
+    })
+    expect((await listCollections(root)).tagAliases).toEqual({ alpha: 'beta' })
+    expect((await listCollections(root)).collections[0].tags).toEqual(['beta'])
+    expect((await listTagMeta(root)).map((m) => m.tag)).toEqual(['beta'])
   })
 
   test('from/to không hợp lệ → 400, không đụng entry nào (TC-T4)', async () => {

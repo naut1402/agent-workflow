@@ -64,7 +64,7 @@ describe('AgentEditor — ẩn/hiện main (TC-01, TC-02, TC-03)', () => {
 
     expect(fetchCustomAgent).toHaveBeenCalledWith('alpha', undefined, 'project')
     expect(body(w).classes()).not.toContain('c-screen-layout__body--no-main')
-    expect(w.find('.agent-md-view').exists()).toBe(true)
+    expect(w.find('.c-md-view').exists()).toBe(true)
     expect(w.text()).toContain('nội dung alpha')
   })
 
@@ -91,14 +91,14 @@ describe('AgentEditor — xoá agent (TC-18, TC-19, TC-20, E2, E3)', () => {
     const w = await mountEditor()
     await w.findAll('.agent-list-name')[0].trigger('click')
     await flushPromises()
-    expect(w.find('.agent-md-view').exists()).toBe(true)
+    expect(w.find('.c-md-view').exists()).toBe(true)
 
     fetchCustomAgents.mockResolvedValue({ agents: [BETA] })
     await w.findAll('.agent-list-item')[0].findAll('.icon-btn')[2].trigger('click')
     await flushPromises()
 
     expect(deleteCustomAgent).toHaveBeenCalledWith('alpha', undefined, 'project')
-    expect(w.find('.agent-md-view').exists()).toBe(false)
+    expect(w.find('.c-md-view').exists()).toBe(false)
     expect(body(w).classes()).toContain('c-screen-layout__body--no-main')
     expect(w.text()).not.toContain('nội dung alpha')
   })
@@ -113,7 +113,7 @@ describe('AgentEditor — xoá agent (TC-18, TC-19, TC-20, E2, E3)', () => {
     await w.findAll('.agent-list-item')[1].findAll('.icon-btn')[2].trigger('click')
     await flushPromises()
 
-    expect(w.find('.agent-md-view').exists()).toBe(true)
+    expect(w.find('.c-md-view').exists()).toBe(true)
     expect(w.text()).toContain('nội dung alpha')
   })
 
@@ -295,7 +295,7 @@ describe('AgentEditor — nạp viewer thất bại (E12)', () => {
     await w.findAll('.agent-list-name')[0].trigger('click')
     await flushPromises()
 
-    expect(w.find('.agent-md-view').exists()).toBe(false)
+    expect(w.find('.c-md-view').exists()).toBe(false)
     expect(w.text()).not.toContain('Đang tải')
     expect(w.find('.err').text()).toContain('ENOENT')
     expect(body(w).classes()).toContain('c-screen-layout__body--no-main')

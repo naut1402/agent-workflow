@@ -6,6 +6,7 @@ import { createApp } from '../../../../src/backend/apiServer.js'
 import type { RegistryContext } from '../../../../src/backend/http/types.js'
 import { on, _resetEventBusForTest } from '../../../../src/backend/events/index.js'
 import type { DashboardEvent } from '../../../../src/backend/events/index.js'
+import { resetDbForTest } from '../../../../src/backend/db/client.js'
 
 /**
  * Bề mặt HTTP của knowledge sau khi migrate sang Hono — thay cho
@@ -85,6 +86,13 @@ beforeEach(() => {
   for (const dir of [path.join(root, 'knowledge'), path.join(otherRoot, 'knowledge'), path.join(home, 'knowledge')]) {
     fs.rmSync(dir, { recursive: true, force: true })
   }
+  // Collection/tag sống trong `dashboard.sqlite` chứ không còn trong cây file,
+  // nên xoá thư mục knowledge KHÔNG dọn được chúng. Bỏ hẳn file DB + thả
+  // connection cache: thiếu bước này thì hàng của test trước rò sang test sau.
+  resetDbForTest()
+  for (const suffix of ['', '-wal', '-shm']) {
+    fs.rmSync(path.join(home, `dashboard.sqlite${suffix}`), { force: true })
+  }
   _resetEventBusForTest()
   events = []
   captureEntityEvents()
@@ -128,10 +136,13 @@ describe('knowledge entry CRUD qua Hono', () => {
     expect(events.map((e) => e.type)).toEqual(['entity.updated', 'entity.deleted'])
   })
 
-  test('GET /tags đếm tag; body JSON hỏng → 400; method lạ → 405', async () => {
+  test('GET /tags đếm tag kèm metadata; body JSON hỏng → 400; method lạ → 405', async () => {
     await create({ slug: 'a', tags: ['x'], content: 'c' })
     const tags = await app.request(url('/api/knowledge/tags'))
-    expect((await tags.json()).tags).toEqual([{ tag: 'x', count: 1 }])
+    // Facet nay mang cả màu + mô tả; tag chưa đặt màu rơi về token mặc định.
+    expect((await tags.json()).tags).toEqual([
+      { tag: 'x', count: 1, color: 'slate', description: '', scope: 'project' },
+    ])
 
     const bad = await app.request(url('/api/knowledge'), {
       method: 'POST',
@@ -161,7 +172,25 @@ describe('knowledge entry CRUD qua Hono', () => {
     const res = await app.request(url('/api/knowledge?include=tags'))
     const body = await res.json()
     expect(body.entries).toHaveLength(1)
-    expect(body.tags).toEqual([{ tag: 'x', count: 1 }])
+    expect(body.tags).toEqual([
+      { tag: 'x', count: 1, color: 'slate', description: '', scope: 'project' },
+    ])
+  })
+
+  /**
+   * Panel nạp facet qua đúng request này, nên màu phải có mặt ở đây — 🚫 không
+   * được bắt client gọi thêm `/api/knowledge/tags`.
+   */
+  test('include=tags trả kèm màu đã đặt và cả tag chưa entry nào gắn', async () => {
+    await create({ slug: 'a', tags: ['x'], content: 'c' })
+    await jsonReq('PUT', '/api/knowledge/tags/x', { color: 'green' })
+    await jsonReq('POST', '/api/knowledge/tags', { tag: 'chua-dung', color: 'purple' })
+
+    const body = await (await app.request(url('/api/knowledge?include=tags'))).json()
+    expect(body.tags).toEqual([
+      { tag: 'chua-dung', count: 0, color: 'purple', description: '', scope: 'project' },
+      { tag: 'x', count: 1, color: 'green', description: '', scope: 'project' },
+    ])
   })
 })
 
@@ -220,11 +249,12 @@ describe('collection + tag admin (nhóm T)', () => {
     expect((await createCollection({ name: 'Nhóm A', scope: 'project' })).status).toBe(201)
     const listed = await (await app.request(url('/api/knowledge/collections'))).json()
     expect(listed.collections).toHaveLength(1)
-    expect(listed.collections[0]).toMatchObject({ id: 'nh-m-a', entryCount: 0, scope: 'project' })
+    // Id qua `slugify` nên còn đọc được (trước đây `sanitiseSlug` cho `nh-m-a`).
+    expect(listed.collections[0]).toMatchObject({ id: 'nhom-a', entryCount: 0, scope: 'project' })
 
     await create({ slug: 'keep', tags: ['grp'], content: 'c' })
-    await jsonReq('PUT', '/api/knowledge/collections/nh-m-a', { name: 'Nhóm A', tags: ['grp'] })
-    expect((await jsonReq('DELETE', '/api/knowledge/collections/nh-m-a')).status).toBe(200)
+    await jsonReq('PUT', '/api/knowledge/collections/nhom-a', { name: 'Nhóm A', tags: ['grp'] })
+    expect((await jsonReq('DELETE', '/api/knowledge/collections/nhom-a')).status).toBe(200)
 
     const entries = (await (await app.request(url('/api/knowledge'))).json()).entries
     expect(entries.map((e: { id: string }) => e.id)).toEqual(['project/keep'])
@@ -268,7 +298,7 @@ describe('collection + tag admin (nhóm T)', () => {
     const entry = (await (await app.request(url('/api/knowledge?id=project/x'))).json()).entry
     expect(entry.tags).toEqual(['b'])
     const tags = (await (await app.request(url('/api/knowledge/tags'))).json()).tags
-    expect(tags).toEqual([{ tag: 'b', count: 1 }])
+    expect(tags).toEqual([{ tag: 'b', count: 1, color: 'slate', description: '', scope: 'project' }])
   })
 
   test('rename với tên chuẩn hoá thành rỗng → 400, không entry nào bị sửa (TC-T4)', async () => {
@@ -281,27 +311,114 @@ describe('collection + tag admin (nhóm T)', () => {
     expect(fs.readFileSync(path.join(root, 'knowledge', 'project', 'safe.md'), 'utf8')).toBe(before)
   })
 
-  test('sidecar hỏng: entry vẫn liệt kê, phần collection báo lỗi rõ (TC-T15)', async () => {
-    await create({ slug: 'alive', content: 'c' })
-    fs.writeFileSync(path.join(root, 'knowledge', 'collections.yaml'), 'collections: [\n  broken: : :\n')
+  /**
+   * TC-T15 (E1) — thay cho ca "sidecar hỏng" cũ: nguồn giờ là
+   * `dashboard.sqlite`. Mô phỏng DB không mở được bằng cách trỏ registry home
+   * vào một **file** (mkdir thất bại ⇒ `getDb()` ném).
+   */
+  describe('DB không mở được', () => {
+    let blocker: string
+    beforeEach(() => {
+      blocker = path.join(root, 'blocker')
+      fs.writeFileSync(blocker, 'not a dir')
+      process.env.DEV_TEAM_DASHBOARD_HOME = path.join(blocker, 'home')
+      resetDbForTest()
+    })
+    afterEach(() => {
+      process.env.DEV_TEAM_DASHBOARD_HOME = home
+      resetDbForTest()
+    })
 
-    const entries = await app.request(url('/api/knowledge'))
-    expect(entries.status).toBe(200)
-    expect((await entries.json()).entries).toHaveLength(1)
+    test('entry vẫn liệt kê được; phần collection báo lỗi rõ chứ không "rỗng"', async () => {
+      await create({ slug: 'alive', content: 'c' })
 
-    const collections = await app.request(url('/api/knowledge/collections'))
-    expect(collections.status).toBe(500)
-    expect((await collections.json()).error).toContain('collections.yaml')
+      const entries = await app.request(url('/api/knowledge'))
+      expect(entries.status).toBe(200)
+      expect((await entries.json()).entries).toHaveLength(1)
+
+      const collections = await app.request(url('/api/knowledge/collections'))
+      expect(collections.status).toBe(500)
+      expect((await collections.json()).error).toContain('dashboard.sqlite')
+    })
+
+    test('mọi đường GHI collection/tag trả 500, không nuốt thành 2xx', async () => {
+      for (const res of [
+        await jsonReq('POST', '/api/knowledge/collections', { name: 'Mới' }),
+        await jsonReq('PUT', '/api/knowledge/collections/moi', { name: 'Mới' }),
+        await jsonReq('DELETE', '/api/knowledge/collections/moi'),
+        await jsonReq('POST', '/api/knowledge/tags', { tag: 'moi' }),
+        await jsonReq('PUT', '/api/knowledge/tags/moi', { color: 'red' }),
+      ]) {
+        expect(res.status).toBe(500)
+      }
+    })
+  })
+})
+
+describe('tag là thực thể — POST /tags · PUT /tags/:tag', () => {
+  test('tạo tag chưa entry nào gắn rồi đổi màu, phát entity.knowledge-tag', async () => {
+    const made = await jsonReq('POST', '/api/knowledge/tags', { tag: 'moi', color: 'purple' })
+    expect(made.status).toBe(201)
+    expect((await made.json()).tag).toMatchObject({ tag: 'moi', color: 'purple', scope: 'project' })
+
+    const updated = await jsonReq('PUT', '/api/knowledge/tags/moi', { color: 'teal', description: 'mô tả' })
+    expect(updated.status).toBe(200)
+    expect((await updated.json()).tag).toMatchObject({ color: 'teal', description: 'mô tả' })
+
+    expect(events.map((e) => e.type)).toEqual(['entity.created', 'entity.updated'])
+    for (const e of events) expect(e.payload).toMatchObject({ entity: 'knowledge-tag', id: 'moi' })
   })
 
-  test('sidecar hỏng thì đường GHI bị chặn, không đè mất dữ liệu cũ', async () => {
-    const file = path.join(root, 'knowledge', 'collections.yaml')
-    fs.mkdirSync(path.dirname(file), { recursive: true })
-    const corrupt = 'collections: [\n  broken: : :\n'
-    fs.writeFileSync(file, corrupt)
+  test('trùng tên → 400; màu ngoài palette → 400; tên không hợp lệ → 400', async () => {
+    await jsonReq('POST', '/api/knowledge/tags', { tag: 'moi' })
+    expect((await jsonReq('POST', '/api/knowledge/tags', { tag: 'moi' })).status).toBe(400)
+    expect((await jsonReq('POST', '/api/knowledge/tags', { tag: 'khac', color: 'neon' })).status).toBe(400)
+    expect((await jsonReq('POST', '/api/knowledge/tags', { tag: '!!!' })).status).toBe(400)
+  })
 
-    expect((await jsonReq('POST', '/api/knowledge/collections', { name: 'Mới' })).status).toBe(500)
-    expect(fs.readFileSync(file, 'utf8')).toBe(corrupt)
+  /** `/tags/rename` phải khớp TRƯỚC `/tags/:tag`, nếu không `rename` bị nuốt thành một `:tag`. */
+  test('`/tags/rename` không bị `:tag` nuốt mất', async () => {
+    await create({ slug: 'e', tags: ['a'], content: 'c' })
+    const res = await jsonReq('POST', '/api/knowledge/tags/rename', { from: 'a', to: 'b' })
+    expect(res.status).toBe(200)
+    expect((await res.json()).renamed).toBe(1)
+    // Không có hàng metadata nào tên `rename` được tạo ra.
+    const tags = (await (await app.request(url('/api/knowledge/tags'))).json()).tags
+    expect(tags.map((t: { tag: string }) => t.tag)).toEqual(['b'])
+  })
+
+  /**
+   * TC-41b — đổi tên phải **dời** metadata, không để lại hàng mang tên cũ:
+   * facet cố ý liệt kê mọi tag chỉ-có-trong-DB nên hàng mồ côi hiện vĩnh viễn
+   * với `count: 0`, mà xoá tag thì ngoài phạm vi.
+   */
+  test('sau khi đổi tên, tên CŨ biến mất và màu theo sang tên mới (TC-41b)', async () => {
+    await create({ slug: 'e', tags: ['alpha'], content: 'c' })
+    await jsonReq('PUT', '/api/knowledge/tags/alpha', { color: 'amber' })
+
+    await jsonReq('POST', '/api/knowledge/tags/rename', { from: 'alpha', to: 'beta' })
+
+    const tags = (await (await app.request(url('/api/knowledge/tags'))).json()).tags
+    expect(tags).toEqual([{ tag: 'beta', count: 1, color: 'amber', description: '', scope: 'project' }])
+  })
+
+  /** TC-41c — tag 0 entry: `renamed: 0` 🚫 không được nghĩa là "không ghi gì". */
+  test('đổi tên tag KHÔNG có entry vẫn ghi alias + dời tag của nhóm (TC-41c)', async () => {
+    await jsonReq('POST', '/api/knowledge/tags', { tag: 'alpha', color: 'blue' })
+    await jsonReq('POST', '/api/knowledge/collections', { name: 'Nhom A', scope: 'project', tags: ['alpha'] })
+
+    const res = await jsonReq('POST', '/api/knowledge/tags/rename', { from: 'alpha', to: 'beta' })
+    expect(await res.json()).toMatchObject({ renamed: 0, alias: ['alpha', 'beta'] })
+
+    const listed = await (await app.request(url('/api/knowledge/collections'))).json()
+    expect(listed.collections[0].tags).toEqual(['beta'])
+    expect(listed.tagAliases).toEqual({ alpha: 'beta' })
+  })
+
+  test('tag của project A không lẫn sang project B', async () => {
+    await jsonReq('POST', '/api/knowledge/tags', { tag: 'chi-a', color: 'red' })
+    const fromB = await (await app.request(url('/api/knowledge/tags', OTHER_PROJECT_ID))).json()
+    expect(fromB.tags).toEqual([])
   })
 })
 
