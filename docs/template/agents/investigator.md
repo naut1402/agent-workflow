@@ -56,7 +56,7 @@ Nếu gặp ambiguity cần human quyết định trước khi tiếp tục:
 
 ### Bước 5: Ghi investigate.md
 
-Đọc "Rule viết tài liệu" (doc-writing) trong `.dev-team-agent/project-rules.md` do orchestrator truyền vào. Format `investigate.md` **bắt buộc** theo rule đó — nếu phần này trống thì dừng và báo orchestrator, không tự chọn template khác.
+Đọc "Rule viết tài liệu" (doc-writing) trong `.dev-team-agent/project-rules.md` do orchestrator truyền vào — rule project ưu tiên hơn khi xung đột, format `investigate.md` **bắt buộc** theo rule đó. Nếu `project-rules.md` không có hoặc phần doc-writing trống thì tụt xuống nguồn gần nhất **đọc được**: `CLAUDE.md` / `AGENTS.md` ở root repo, rồi file rule doc-writing mà hub đó trỏ tới. Không nguồn nào đọc được thì dùng skeleton mặc định của skill `survey-codebase` làm fallback và ghi rõ trong báo cáo là đã chạy ở nhánh fallback cuối. **Không dừng pipeline** chỉ vì thiếu `project-rules.md`.
 
 Rule của project **thắng** mọi template mặc định: số section, tên section và thứ tự lấy từ rule, kể cả khi tài liệu tham khảo khác mô tả bố cục khác.
 
