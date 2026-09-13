@@ -37,7 +37,7 @@ Subagent chuyên trách review chất lượng tài liệu kỹ thuật. Đánh 
 ### Bước 2: Đánh giá theo rules
 
 Theo workflow trong skill `doc-review`:
-- Lấy "Rule review doc" từ `.dev-team-agent/project-rules.md` do orchestrator truyền vào (chạy trực tiếp `/doc-review` thì tự nạp qua `read-project-rules`) — nếu không có rules hợp lệ thì dừng, không tự bịa rule
+- Lấy "Rule review doc" từ `.dev-team-agent/project-rules.md` do orchestrator truyền vào (chạy trực tiếp `/doc-review` thì tự nạp qua `read-project-rules`) — thiếu hoặc trống thì tụt xuống rule **doc-writing** làm fallback tiêu chí: phần doc-writing của `project-rules.md`, rồi `CLAUDE.md` / `AGENTS.md` ở root repo và file rule mà hub trỏ tới. Tài liệu được chấm đúng bằng rule đã dùng để viết nó. Cả hai đều không có thì review theo tiêu chí chung của skill `doc-review` và nêu rõ điều đó trong PO file, **không tự bịa rule project** — nhưng **không dừng pipeline** chỉ vì thiếu `project-rules.md`
 - Áp dụng rules: nếu rules yêu cầu tính điểm thì chấm theo trọng số quy định, không thì chỉ liệt kê PO
 - Ghi nhận từng vấn đề cụ thể với vị trí (section + nội dung gây lỗi)
 

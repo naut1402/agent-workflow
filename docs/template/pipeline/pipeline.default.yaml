@@ -11,7 +11,8 @@ steps:
     agent: dev-agent-teams:investigator
     skills: [survey-codebase]
     rule_category: doc-writing
-    rule_required: true
+    rule_required: false
+    rule_fallback_skill: survey-codebase
     produces: [investigate.md]
     knowledge_inputs: []
     export_key: investigator
@@ -25,7 +26,8 @@ steps:
     agent: dev-agent-teams:designer
     skills: [write-design]
     rule_category: doc-writing
-    rule_required: true
+    rule_required: false
+    rule_fallback_skill: write-design
     produces: [design.md]
     export_key: designer
     hitl:
@@ -79,4 +81,5 @@ doc_reviewer:
   agent: dev-agent-teams:doc-reviewer
   skills: [doc-review]
   rule_category: doc-review
-  rule_required: true
+  rule_required: false
+  rule_fallback_skill: doc-review
