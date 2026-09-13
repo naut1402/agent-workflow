@@ -109,6 +109,17 @@ export async function apiRequest<T = any>(
   }
 }
 
+/** GET text (không parse JSON) — dùng cho download file thô (vd YAML). */
+export async function apiGetText(path: string, query?: ApiQuery): Promise<string> {
+  const url = buildUrl(path, query)
+  const r = await apiFetch(url)
+  if (!r.ok) {
+    logApi('error', `GET ${url} → ${r.status}`)
+    throw makeError(`GET ${path} → ${r.status}`, r.status, undefined, 'none')
+  }
+  return r.text()
+}
+
 /** GET JSON — query optional. */
 export async function apiGet<T = any>(
   path: string,

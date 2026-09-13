@@ -41,6 +41,13 @@ export default {
     taskWriteBlocked: '✗ Task is archived or completed',
     hitlPendingWarning: '⚠ Task is waiting at a gate — saving the pipeline cancels that gate',
     confirmDiscardChanges: 'The canvas has unsaved changes. Load another pipeline and discard them?',
+    downloadProfile: 'Download',
+    downloadProfileTitle: 'Download this profile to your machine (.yaml)',
+    importProfile: 'Import from file',
+    importProfileTitle: 'Load a profile from a .yaml file on your machine',
+    confirmOverwriteProfile: 'Profile "{name}" already exists. Overwrite it with the selected file?',
+    importInvalidYaml: 'File is not valid YAML',
+    importInvalidSteps: 'File is missing a "steps" list',
   },
   sections: {
     agents: 'Agents',

@@ -559,6 +559,8 @@ const {
   save: saveProfile,
   remove: removeProfile,
   error: profileError,
+  download: downloadProfile,
+  importFromFile,
 } = usePipelineProfiles(() => props.projectId)
 
 /** Profile chọn trong select — nguồn của auto-load (a.1). */
@@ -705,6 +707,42 @@ async function handleDeleteProfile() {
   await refreshProfiles()
 }
 
+async function handleDownloadProfile() {
+  const name = profileSelected.value
+  if (!name) return
+  try {
+    const text = await downloadProfile(name)
+    const blob = new Blob([text], { type: 'text/yaml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${name}.yaml`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (e: any) {
+    saveMsg.value = `✗ ${e.message}`
+  }
+}
+
+async function handleImportProfileFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  const ok = await importFromFile(file, {
+    confirmOverwrite: (name) => Promise.resolve(confirm(t('pipelineEditor.target.confirmOverwriteProfile', { name }))),
+  })
+  if (ok === null) return // user huỷ ghi đè — no-op, không phải lỗi
+  if (!ok) {
+    saveMsg.value = `✗ ${profileError.value}`
+    return
+  }
+  await refreshProfiles()
+  flashSaved(t('pipelineEditor.target.saved'))
+}
+
 /**
  * a.3 — "mặc định" = nội dung `pipeline.yaml` global, nên set-as-default ghi
  * chính canvas đang mở xuống đó. Đây cũng là đường duy nhất còn lại để sửa trực
@@ -837,6 +875,8 @@ const hasFanOut = computed(() => {
           @preview="runPreview"
           @stop="stopDemo"
           @open-section="openSection"
+          @download="handleDownloadProfile"
+          @import-file="handleImportProfileFile"
         />
 
         <!-- G4 — chỉ khoá phần nội dung khi preview; cụm action (có Stop) vẫn bấm được -->
