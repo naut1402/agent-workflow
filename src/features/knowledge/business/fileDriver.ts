@@ -4,9 +4,11 @@ import { loadYaml, dumpYaml } from '../../../backend/lib/yamlLib.js'
 import { globalKnowledgeRoot } from '../../../backend/registry.js'
 import { slugify } from '../../../shared/lib/stringUtils.js'
 import { KNOWLEDGE_SCOPES, MAX_BUNDLE_BYTES } from '../schemas/knowledge.js'
-// Vòng import với `collections.js` chỉ ở mức hàm (không đọc binding lúc
-// evaluate module), nên ESM giải được: collections cần driver để rewrite tag,
-// driver cần collection để lọc `list({ collection })`.
+// ⚠️ Vòng import ba cạnh: `fileDriver ↔ collections`, và
+// `fileDriver → tags → knowledgeDb → fileDriver` (knowledgeDb cần `resolveBases`
+// để dựng `store_key`). ESM giải được **chỉ vì** mọi tham chiếu qua vòng nằm
+// trong thân hàm, không đọc binding lúc evaluate module — thêm một lời gọi ở
+// top level của bất kỳ module nào trong vòng là hỏng ngay.
 import { findCollectionSafe, resolveCollectionEntries } from './collections.js'
 import { decorateTagFacets, readTagAliasesSafe } from './tags.js'
 
@@ -145,16 +147,31 @@ function entryPath(bases: KnowledgeBases, scope, slug) {
   return { id: `${scope}/${clean}`, filePath: joinPath(base, scope, `${clean}.md`) }
 }
 
+/** Trần độ dài của `sanitiseSlug`; hậu tố chống trùng phải nằm **lọt** trong đó. */
+const SLUG_MAX = 80
+/** `-` + 4 hex. */
+const SLUG_SUFFIX_LEN = 5
+
 /**
  * Slug chưa dùng trong scope — chỉ cho đường **tạo mới**.
  *
  * Hai entry cùng title trước đây ghi đè nhau im lặng: slug suy từ title là
  * tên file, không có bước kiểm tra nào. Hậu tố ngẫu nhiên **ngắn** và **chỉ khi
  * trùng** để id vẫn đọc được (`kien-truc`, rồi `kien-truc-a3f1`).
+ *
+ * ⚠️ Phần thân phải cắt sẵn về `SLUG_MAX - SLUG_SUFFIX_LEN`: `entryPath` sẽ
+ * `sanitiseSlug` lần nữa và cắt còn `SLUG_MAX`, nên nếu ghép hậu tố vào một
+ * seed đã sát trần thì (a) giá trị trả về khác hẳn thứ nằm trên đĩa ⇒
+ * front-matter `slug` lệch tên file, và (b) với seed đúng `SLUG_MAX` thì **mọi**
+ * candidate bị cắt về lại chính seed ⇒ vòng lặp không bao giờ tìm ra chỗ trống
+ * và title dài thứ hai không tạo được entry.
  */
 async function uniqueSlug(bases: KnowledgeBases, scope: string, seed: string): Promise<string> {
+  // Sanitise ngay ở đây để giá trị trả về **bằng đúng** thứ `entryPath` dựng ra.
+  const base = sanitiseSlug(seed)
+  const stem = base.slice(0, SLUG_MAX - SLUG_SUFFIX_LEN).replace(/-+$/, '')
   for (let i = 0; i < 5; i++) {
-    const candidate = i === 0 ? seed : `${seed}-${crypto.randomBytes(2).toString('hex')}`
+    const candidate = i === 0 ? base : `${stem}-${crypto.randomBytes(2).toString('hex')}`
     const { filePath } = entryPath(bases, scope, candidate)
     try {
       await access(filePath)

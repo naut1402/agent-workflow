@@ -32,6 +32,16 @@ export async function knowledgeDb(): Promise<Db> {
   }
 }
 
+/**
+ * Handle transaction của `db.transaction((tx) => …)`.
+ *
+ * Khai ra để module này chia được một transaction cho module khác: đổi tên tag
+ * đụng **ba** bảng (alias · metadata · tag của collection) và cả ba phải cùng
+ * thành/cùng bại, nhưng bảng metadata thuộc `tags.ts` còn transaction do
+ * `collections.ts` mở.
+ */
+export type KnowledgeTx = Parameters<Parameters<Db['transaction']>[0]>[0]
+
 export interface KnowledgeStoreKeys {
   /** Scope của collection/tag (`project` | `global`) → khoá store. */
   byScope: Partial<Record<string, string>>

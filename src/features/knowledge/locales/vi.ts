@@ -67,9 +67,8 @@ export default {
     created: 'Đã tạo tag {tag}',
     updated: 'Đã cập nhật tag {tag}',
     renamed: 'Đã cập nhật {count} entry',
-    // Bước rewrite front-matter xong nhưng bước ghi metadata hỏng — entry an toàn,
-    // chỉ màu chưa theo sang. Nói rõ để người dùng chỉ cần chọn lại màu.
-    renamedNoMeta: 'Đã đổi tên {count} entry, nhưng chưa lưu được màu cho tag mới: {error}',
+    // Đổi tên xong nhưng bước áp màu mới hỏng — entry an toàn, tag giữ màu cũ.
+    renamedNoMeta: 'Đã đổi tên {count} entry; tag giữ nguyên màu cũ vì chưa lưu được màu mới: {error}',
     dialog: {
       createTitle: 'Thêm tag',
       editTitle: 'Sửa tag — {tag}',

@@ -1,9 +1,8 @@
-import path from 'node:path'
 import { eq } from 'drizzle-orm'
 import { knowledgeCollections, knowledgeTagAliases } from './schema.js'
 import { getDb } from './client.js'
 import { globalKnowledgeRoot, loadRegistry } from '../registry.js'
-import { access, joinPath } from '../lib/fileHelper.js'
+import { access, joinPath, resolvePath } from '../lib/fileHelper.js'
 import {
   COLLECTIONS_FILE,
   readCollectionsFile,
@@ -34,7 +33,7 @@ function storesToScan(): { storeKey: string; scope: string }[] {
   // Project mặc định qua `DEV_TEAM_ROOT` có thể chưa đăng ký trong registry —
   // bỏ sót nó là dashboard chạy xong migrate mà vẫn trống collection.
   const envRoot = process.env.DEV_TEAM_ROOT?.trim()
-  if (envRoot) stores.push({ storeKey: knowledgeRoot(path.resolve(envRoot)), scope: 'project' })
+  if (envRoot) stores.push({ storeKey: knowledgeRoot(resolvePath(envRoot)), scope: 'project' })
   try {
     stores.push({ storeKey: globalKnowledgeRoot(), scope: 'global' })
   } catch {

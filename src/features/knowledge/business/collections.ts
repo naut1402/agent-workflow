@@ -1,10 +1,11 @@
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import type { z } from 'zod'
 import { knowledgeCollections, knowledgeTagAliases } from '../../../backend/db/schema.js'
 import { slugify } from '../../../shared/lib/stringUtils.js'
 import type { CollectionBody, TagRenameBody } from '../schemas/knowledge.js'
 import { createFileDriver, sanitiseTags } from './fileDriver.js'
 import { knowledgeDb, storeKeysOf, type KnowledgeStoreKeys } from './knowledgeDb.js'
+import { moveTagMetaInTx, readTagMetaRows } from './tags.js'
 
 /**
  * Collection = nhóm knowledge, lưu ở bảng `knowledge_collections` của
@@ -85,8 +86,22 @@ async function rowsOf(keys: KnowledgeStoreKeys): Promise<CollectionRow[]> {
     .all()
 }
 
+/** Lọc ở DB chứ không ở tầng app — hàm này nằm trên đường đọc danh sách entry. */
 async function findRow(keys: KnowledgeStoreKeys, id: string): Promise<CollectionRow | null> {
-  return (await rowsOf(keys)).find((r) => r.collectionId === id) ?? null
+  if (!keys.all.length) return null
+  const db = await knowledgeDb()
+  return (
+    db
+      .select()
+      .from(knowledgeCollections)
+      .where(
+        and(
+          inArray(knowledgeCollections.storeKey, keys.all),
+          eq(knowledgeCollections.collectionId, id),
+        ),
+      )
+      .get() ?? null
+  )
 }
 
 /**
@@ -236,10 +251,11 @@ export async function deleteCollection(devTeamRoot: string, id: string) {
  * Lỗi giữa chừng thì dừng tại đó và trả phần đã xong — chạy lại là an toàn vì
  * entry đã đổi không còn `from` nên lần sau bị bỏ qua.
  *
- * 🚫 Không dời metadata màu ở đây: rewrite front-matter đụng file, ghi
- * metadata đụng DB, không dựng được transaction xuyên hai thứ đó. Client gọi
- * `PUT /api/knowledge/tags/:tag` sau — hỏng bước hai thì tag mới chỉ mất màu,
- * không mất entry nào.
+ * Phần DB — alias, metadata tag, tag của collection — đi **cùng một**
+ * transaction sau khi rewrite file xong. Không dựng được transaction xuyên
+ * file + DB, nên thứ tự là: file trước (thứ có thể chạy lại an toàn), DB sau
+ * (thứ nguyên tử). Hỏng ở bước DB thì entry đã mang tên mới còn alias chưa có
+ * — chạy lại lệnh đổi tên là hết, không entry nào mất.
  */
 export async function renameTag(devTeamRoot: string, { from, to }: z.infer<typeof TagRenameBody>) {
   const src = sanitiseTags([from])[0]
@@ -279,20 +295,21 @@ export async function renameTag(devTeamRoot: string, { from, to }: z.infer<typeo
     }
   }
 
-  // Chỉ đụng store thực sự có entry bị chạm: `global/*` → store global,
-  // `project/*` và `system/*` → store project.
-  const touchedStores = new Set(
-    touched
-      .map((id) => (id.split('/')[0] === 'global' ? keys.byScope.global : keys.byScope.project))
-      .filter((v): v is string => !!v),
-  )
-  if (touchedStores.size) {
+  // Phạm vi bên DB là **mọi** store, 🚫 không phải store có entry bị chạm.
+  //
+  // `driver.list({ scope: 'all' })` ở trên vốn đã quét mọi scope; và từ khi tag
+  // là thực thể, "tag 0 entry" là trạng thái hợp lệ thường gặp — bám theo
+  // `touched` thì đúng lúc alias + metadata là thứ duy nhất cần sửa lại là lúc
+  // không có gì được ghi, trong khi hàm vẫn trả `alias` như đã ghi xong.
+  if (keys.all.length) {
     const db = await knowledgeDb()
     const rows = await rowsOf(keys)
-    // Một transaction cho cả alias lẫn tag của nhóm: nửa vời ở đây nghĩa là
-    // alias trỏ tới tag mà không nhóm nào còn mang.
+    const tagRows = await readTagMetaRows(devTeamRoot)
+    const now = new Date().toISOString()
+    // Một transaction cho cả ba bảng: nửa vời ở đây nghĩa là alias trỏ tới tag
+    // mà không nhóm nào còn mang, hoặc metadata mồ côi mang tên đã biến mất.
     db.transaction((tx) => {
-      for (const storeKey of touchedStores) {
+      for (const storeKey of keys.all) {
         if (dst) {
           tx.insert(knowledgeTagAliases)
             .values({ storeKey, fromTag: src, toTag: dst })
@@ -302,12 +319,13 @@ export async function renameTag(devTeamRoot: string, { from, to }: z.infer<typeo
             })
             .run()
         }
+        moveTagMetaInTx(tx, { storeKey, from: src, to: dst, rows: tagRows, now })
         for (const row of rows.filter((r) => r.storeKey === storeKey)) {
           const tags = parseList(row.tags)
           if (!tags.includes(src)) continue
           const nextTags = [...new Set(tags.map((t) => (t === src ? dst : t)).filter(Boolean))]
           tx.update(knowledgeCollections)
-            .set({ tags: JSON.stringify(nextTags) })
+            .set({ tags: JSON.stringify(nextTags), updatedAt: now })
             .where(eq(knowledgeCollections.rowId, row.rowId))
             .run()
         }

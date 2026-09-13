@@ -65,7 +65,7 @@ export default {
     created: 'Created tag {tag}',
     updated: 'Updated tag {tag}',
     renamed: 'Updated {count} entries',
-    renamedNoMeta: 'Renamed {count} entries, but the colour of the new tag was not saved: {error}',
+    renamedNoMeta: 'Renamed {count} entries; the tag kept its previous colour because the new one was not saved: {error}',
     dialog: {
       createTitle: 'Add a tag',
       editTitle: 'Edit tag — {tag}',

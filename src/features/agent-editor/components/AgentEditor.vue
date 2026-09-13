@@ -205,6 +205,7 @@ async function onSaved(savedName: string) {
         <CMarkdownView
           v-if="viewing && !viewLoading"
           :title="viewing.name"
+          :doc-key="selectedKey ?? ''"
           :content="viewContent"
           with-frontmatter
         />

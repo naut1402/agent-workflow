@@ -14,8 +14,21 @@ import { buildMarkdownBlocks, fenceYaml } from '../lib/markdownBlocks'
  * front-matter sẵn mà bật là nuốt mất phần đầu nội dung thật.
  */
 const props = withDefaults(
-  defineProps<{ title: string; content: string; withFrontmatter?: boolean }>(),
-  { withFrontmatter: false },
+  defineProps<{
+    title: string
+    content: string
+    withFrontmatter?: boolean
+    /**
+     * Khoá định danh tài liệu — đổi giá trị này là mở lại mọi block.
+     *
+     * 🚫 Không dùng `title` làm khoá: title của knowledge entry **không** duy
+     * nhất (chính vì thế driver mới phải thêm hậu tố cho slug khi trùng), nên
+     * chuyển giữa hai entry cùng tên sẽ giữ nguyên trạng thái gập của tài liệu
+     * trước. Bỏ trống thì rơi về `title`, đủ cho nguồn có tên duy nhất.
+     */
+    docKey?: string
+  }>(),
+  { withFrontmatter: false, docKey: '' },
 )
 
 const { t } = useI18nHelpers()
@@ -70,7 +83,7 @@ function toggleAllBlocks() {
 
 // Đổi tài liệu → mở lại tất cả block: index của tài liệu trước không còn cùng ý nghĩa.
 watch(
-  () => props.title,
+  () => props.docKey || props.title,
   () => {
     openBlocks.value = new Set(blocks.value.map((_, i) => i))
   },

@@ -9,7 +9,12 @@ import {
   type TagUpdateBody,
 } from '../schemas/knowledge.js'
 import { sanitiseTags } from './fileDriver.js'
-import { knowledgeDb, storeKeysOf, type KnowledgeStoreKeys } from './knowledgeDb.js'
+import {
+  knowledgeDb,
+  storeKeysOf,
+  type KnowledgeStoreKeys,
+  type KnowledgeTx,
+} from './knowledgeDb.js'
 
 /**
  * Metadata của tag (màu, mô tả) trên `dashboard.sqlite`.
@@ -195,6 +200,55 @@ export async function updateTag(
       .run()
   }
   return { tag: { tag, ...next, scope: body.scope } }
+}
+
+// ── đổi tên ────────────────────────────────────────────────────────────────
+
+type TagMetaRow = typeof knowledgeTags.$inferSelect
+
+/** Hàng metadata thô của mọi store — đọc **trước** khi mở transaction đổi tên. */
+export async function readTagMetaRows(devTeamRoot: string): Promise<TagMetaRow[]> {
+  const keys = storeKeysOf(devTeamRoot)
+  if (!keys.all.length) return []
+  const db = await knowledgeDb()
+  return db.select().from(knowledgeTags).where(inArray(knowledgeTags.storeKey, keys.all)).all()
+}
+
+/**
+ * Dời (hoặc gỡ) metadata tag khi đổi tên, **bên trong** transaction mà
+ * `collections.renameTag` đang mở — xem `KnowledgeTx`.
+ *
+ * Vì sao không để client gọi `PUT /tags/:tag` riêng: `decorateTagFacets` cố ý
+ * liệt kê mọi tag chỉ-có-trong-DB với `count: 0`, nên một hàng mang tên **cũ**
+ * còn sót lại sẽ hiện vĩnh viễn trong nhóm Tag — mà xoá tag nằm ngoài phạm vi
+ * task này, người dùng không có cách nào gỡ nó.
+ *
+ * `to = null` (xoá tag khỏi mọi entry) ⇒ metadata đi theo.
+ */
+export function moveTagMetaInTx(
+  tx: KnowledgeTx,
+  { storeKey, from, to, rows, now }: {
+    storeKey: string
+    from: string
+    to: string | null
+    rows: TagMetaRow[]
+    now: string
+  },
+): void {
+  const at = (tag: string) =>
+    and(eq(knowledgeTags.storeKey, storeKey), eq(knowledgeTags.tag, tag))
+
+  if (!to) {
+    tx.delete(knowledgeTags).where(at(from)).run()
+    return
+  }
+  // Tên đích đã có metadata riêng → giữ nguyên nó và chỉ gỡ hàng nguồn: đây là
+  // ca merge, tag đích là tag **sống sót** nên màu của nó là màu đang đúng.
+  if (rows.some((r) => r.storeKey === storeKey && r.tag === to)) {
+    tx.delete(knowledgeTags).where(at(from)).run()
+    return
+  }
+  tx.update(knowledgeTags).set({ tag: to, updatedAt: now }).where(at(from)).run()
 }
 
 // ── alias ──────────────────────────────────────────────────────────────────

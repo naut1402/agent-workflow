@@ -245,12 +245,27 @@ function stamp() {
   return new Date().toISOString().slice(0, 10)
 }
 
+/**
+ * `JSON.stringify` cho mọi giá trị: YAML nhận double-quoted scalar, nên một
+ * title chứa `:`, xuống dòng hay chính dòng `---` không cắt đôi được khối
+ * front-matter của file tải về.
+ */
+const yamlStr = (v: unknown) => JSON.stringify(String(v ?? ''))
+
 function toMarkdownSection(item: any): string {
   // Item vượt trần 1MB của bundle trả `{ id, error }` — ghi thành chú thích
   // trong file gộp, 🚫 không bỏ im lặng.
   if (item.error) return `<!-- ${item.id}: ${item.error} -->`
-  const tags = (item.tags || []).join(', ')
-  return `---\ntitle: ${item.title}\nid: ${item.id}\ntags: [${tags}]\n---\n\n${item.content ?? ''}`
+  const tags = (item.tags || []).map(yamlStr).join(', ')
+  return [
+    '---',
+    `title: ${yamlStr(item.title)}`,
+    `id: ${yamlStr(item.id)}`,
+    `tags: [${tags}]`,
+    '---',
+    '',
+    item.content ?? '',
+  ].join('\n')
 }
 
 /** Gộp entry **đang lọc** thành một file. Chia lô 50 — đúng trần `MAX_BUNDLE_IDS`. */
@@ -426,9 +441,12 @@ onMounted(async () => {
         </template>
         <!-- 🚫 `with-frontmatter`: `driver.read()` đã bóc front-matter sẵn, nên
              chỉ còn phần text — đúng yêu cầu "không hiển thị siêu dữ liệu". -->
+        <!-- `doc-key` là id chứ không phải title: hai entry trùng title là ca
+             thật (driver phải thêm hậu tố slug chính vì thế). -->
         <CMarkdownView
           v-if="viewingId && viewingEntry && !viewLoading"
           :title="viewingEntry.title"
+          :doc-key="viewingId"
           :content="viewingEntry.content || ''"
         />
         <p v-else-if="viewLoading" class="muted knowledge-main-empty">{{ t('knowledge.viewer.loading') }}</p>

@@ -69,9 +69,10 @@ async function save() {
       return
     }
 
-    // Đổi tên là HAI bước trên hai nơi lưu khác nhau (file rồi DB), không dựng
-    // được transaction xuyên qua cả hai. Bước 1 xong mà bước 2 hỏng thì tag mới
-    // chỉ mất màu — 🚫 không entry nào mất — nên báo ra rồi vẫn coi là thành công.
+    // `rename` đã tự dời metadata sang tên mới (cùng transaction), nên bước
+    // `PUT` sau đây chỉ để áp **màu người dùng vừa chọn**. Hỏng bước hai thì
+    // tag mới giữ nguyên màu cũ — 🚫 không entry nào mất, không hàng mồ côi —
+    // nên báo ra rồi vẫn coi là thành công.
     const renamed = await renameKnowledgeTag(props.tag.tag, next, props.projectId)
     let metaError = ''
     try {

@@ -394,6 +394,9 @@ function tagStyle(tag: KnowledgeTagFacetView) {
 .knowledge-group[open] > summary::before { transform: rotate(90deg); color: var(--accent); }
 .knowledge-group-add { margin-left: auto; }
 
+/* Lá DUY NHẤT cuộn. 🚫 Không cap `max-height` ở đây: phần chiều cao mà
+   `.knowledge-group[open]` giành được ĐÃ là trần rồi, thêm cap nữa chỉ tạo
+   khoảng chết bên trong nhóm và đẩy hai nhóm còn lại xuống đáy cột. */
 .knowledge-list {
   list-style: none;
   margin: 0;
@@ -401,8 +404,6 @@ function tagStyle(tag: KnowledgeTagFacetView) {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
-  /* Trần theo viewport để một nhóm rất dài không đẩy hai nhóm kia ra khỏi màn. */
-  max-height: 40vh;
 }
 
 .knowledge-list-msg {
