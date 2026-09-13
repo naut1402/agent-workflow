@@ -23,6 +23,11 @@ export class PipelineEditorController extends AbstractController {
       if (!name) return this.badRequest('invalid profile name')
       try {
         const raw = await fs.readFile(path.join(dir, `${name}.yaml`), 'utf8')
+        if (this.c.req.query('download') === '1') {
+          this.c.header('Content-Disposition', `attachment; filename="${name}.yaml"`)
+          this.c.header('Cache-Control', 'no-store')
+          return this.c.text(raw, 200, { 'Content-Type': 'text/yaml; charset=utf-8' })
+        }
         return this.ok({ name, pipeline: loadYaml(raw) })
       } catch {
         return this.notFound('profile not found')

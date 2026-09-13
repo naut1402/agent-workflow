@@ -4,7 +4,10 @@ import {
   fetchPipelineProfile,
   savePipelineProfile,
   deletePipelineProfile,
+  downloadPipelineProfile,
 } from '../scripts/ProfileManagerApi'
+import { loadYaml } from '../../../shared/lib/yamlLib'
+import { t } from '../../../frontend/plugins/i18n'
 
 /**
  * State + thao tác CRUD cho pipeline profile của project đang chọn.
@@ -82,8 +85,41 @@ export function usePipelineProfiles(getProjectId: () => string | null | undefine
     }
   }
 
+  async function download(name: string): Promise<string> {
+    return downloadPipelineProfile(name, projectId())
+  }
+
+  /**
+   * `null` = user huỷ dialog ghi đè (no-op, không phải lỗi) — caller không nên
+   * hiện banner lỗi cho trường hợp này, khác với `false` (lỗi thật).
+   */
+  async function importFromFile(
+    file: File,
+    { confirmOverwrite }: { confirmOverwrite: (name: string) => Promise<boolean> },
+  ): Promise<boolean | null> {
+    error.value = ''
+    const text = await file.text()
+    let parsed: any
+    try {
+      parsed = loadYaml(text)
+    } catch {
+      error.value = t('pipelineEditor.target.importInvalidYaml')
+      return false
+    }
+    if (!parsed || !Array.isArray(parsed.steps)) {
+      error.value = t('pipelineEditor.target.importInvalidSteps')
+      return false
+    }
+
+    const name = file.name.replace(/\.ya?ml$/i, '')
+    const isDuplicate = profiles.value.some((p) => p.name === name)
+    if (isDuplicate && !(await confirmOverwrite(name))) return null
+
+    return save(name, parsed)
+  }
+
   // Danh sách profile là per-project — đổi project phải nạp lại.
   watch(() => getProjectId(), () => { refresh() })
 
-  return { profiles, loading, error, refresh, load, save, remove }
+  return { profiles, loading, error, refresh, load, save, remove, download, importFromFile }
 }

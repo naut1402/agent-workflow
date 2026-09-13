@@ -23,6 +23,8 @@ type IconName =
   | 'chevronRight'
   | 'paperclip'
   | 'info'
+  | 'download'
+  | 'upload'
 
 const props = withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 16 })
 
@@ -46,6 +48,8 @@ const VIEW_BOX: Record<IconName, string> = {
   // 24-grid, unlike the 16-grid icons around it: the path comes verbatim from
   // the hand-drawn info SVG that used to live in ChatWindow.vue.
   info: '0 0 24 24',
+  download: '0 0 16 16',
+  upload: '0 0 16 16',
 }
 
 const viewBox = VIEW_BOX[props.name]
@@ -162,6 +166,14 @@ const viewBox = VIEW_BOX[props.name]
       <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" />
       <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 11v5.5" />
       <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 7.6v.6" />
+    </template>
+    <template v-else-if="name === 'download'">
+      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M8 2v7M5 6.5L8 9.5 11 6.5" />
+      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M3 11.5V13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1.5" />
+    </template>
+    <template v-else-if="name === 'upload'">
+      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M8 9.5v-7M5 5.5L8 2.5 11 5.5" />
+      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M3 11.5V13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1.5" />
     </template>
   </svg>
 </template>
