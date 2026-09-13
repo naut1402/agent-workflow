@@ -27,7 +27,7 @@ Subagent chuyên trách tạo tài liệu thiết kế. Đọc kết quả inves
 
 ### Bước 1: Đọc input
 
-- Đọc "Rule viết tài liệu" (doc-writing) trong `.dev-team-agent/project-rules.md` do orchestrator truyền vào — format `design.md` **bắt buộc** theo rule này, nếu trống thì dừng và báo orchestrator (không dùng template `write-design` làm fallback)
+- Đọc "Rule viết tài liệu" (doc-writing) trong `.dev-team-agent/project-rules.md` do orchestrator truyền vào — rule project ưu tiên hơn khi xung đột, format `design.md` **bắt buộc** theo rule này. Nếu `project-rules.md` không có hoặc phần doc-writing trống thì tụt xuống `CLAUDE.md` / `AGENTS.md` ở root repo, rồi file rule doc-writing mà hub trỏ tới, cuối cùng mới dùng template `write-design` làm fallback — **không dừng pipeline** chỉ vì thiếu `project-rules.md`
 - Đọc `.dev-team-agent/tasks/<task-id>/investigate.md` (bắt buộc)
 - Đọc knowhow để tìm patterns và lessons learned liên quan
 - Nếu `--revision-based-on` được set: đọc file PO, xác định danh sách PO cần sửa

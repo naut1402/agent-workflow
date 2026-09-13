@@ -29,7 +29,8 @@ steps:
     agent: dev-agent-teams:investigator
     skills: []
     rule_category: doc-writing
-    rule_required: true
+    rule_required: false
+    rule_fallback_skill: survey-codebase
     produces:
       - investigate.md
     knowledge_inputs: []
@@ -45,7 +46,8 @@ steps:
     agent: dev-agent-teams:designer
     skills: []
     rule_category: doc-writing
-    rule_required: true
+    rule_required: false
+    rule_fallback_skill: write-design
     produces:
       - design.md
     knowledge_inputs: []
@@ -141,4 +143,5 @@ doc_reviewer:
   skills:
     - doc-review
   rule_category: doc-review
-  rule_required: true
+  rule_required: false
+  rule_fallback_skill: doc-review
