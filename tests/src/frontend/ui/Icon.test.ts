@@ -34,7 +34,7 @@ describe('Icon', () => {
     expect(customSize.find('svg').attributes('height')).toBe('24')
   })
 
-  it.each(['save', 'star', 'layout', 'play', 'stop'] as const)(
+  it.each(['save', 'star', 'layout', 'play', 'stop', 'eye'] as const)(
     'renders the pipeline-editor action icon %s on a 16x16 viewBox without svg-level fill/stroke',
     (name) => {
       const wrapper = mount(Icon, { props: { name } })
