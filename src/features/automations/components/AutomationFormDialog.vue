@@ -1011,14 +1011,6 @@ function submit(): void {
     }
   }
 
-  .modal-foot {
-    border-top: 1px solid var(--border);
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    padding: 10px 16px;
-  }
-
   /* ── Trigger rows ── */
   .trigger-row {
     border: 1px solid var(--border);

@@ -1,13 +1,21 @@
 // English translations for the `agentEditor` namespace — keys mirror vi/agentEditor.ts.
 export default {
   list: {
-    title: 'Custom agents',
     newButton: '+ New agent',
     empty: 'No custom agents yet',
+    groupProject: 'Project agents',
+    groupGlobal: 'Global agents',
+    view: 'View content',
+    edit: 'Edit agent',
+    delete: 'Delete agent',
+    exportHint: 'Select an agent before exporting',
+  },
+  viewer: {
+    empty: 'Pick an agent on the left to view it',
+    loading: 'Loading agent content…',
   },
   actions: {
     save: 'Save',
-    delete: 'Delete',
     export: 'Export',
     close: 'Close',
     templateCopy: 'Template / Copy',
@@ -32,7 +40,7 @@ export default {
     saved: 'Saved {name}',
     deleted: 'Deleted',
     confirmDelete: 'Delete agent "{name}"?',
-    saveBeforeExport: 'Save the agent before exporting',
+    exported: 'Exported → {path}',
     confirmOverwrite: 'File already exists. Overwrite?',
   },
   section: {

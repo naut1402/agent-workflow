@@ -46,7 +46,7 @@ export const BundleQuery = z.object({ ids: z.string().min(1).max(4000) })
 export const CollectionBody = z.object({
   name: z.string().min(1).max(80),
   description: z.string().max(300).optional(),
-  /** Quyết định `collections.yaml` nào chứa nó, không phải scope của entry. */
+  /** Quyết định store nào (`store_key`) chứa nó, không phải scope của entry. */
   scope: z.enum(['project', 'global']).default('project'),
   tags: z.array(z.string()).max(16).optional(),
   entryIds: z.array(z.string().min(1)).max(200).optional(),
@@ -54,3 +54,40 @@ export const CollectionBody = z.object({
 
 /** `to` bỏ trống = xoá tag khỏi mọi entry (không tạo alias). */
 export const TagRenameBody = z.object({ from: z.string().min(1), to: z.string().optional() })
+
+/**
+ * Palette màu tag — DB lưu **tên token**, không lưu hex.
+ *
+ * Mỗi token khai hai giá trị trong `_tokens.scss` theo `[data-theme]` nên chip
+ * tương phản đúng ở cả hai theme; hex tự do thì màu chọn ở theme tối thành
+ * không đọc được ở theme sáng. Đổi bảng màu sau này không phải migrate dữ liệu.
+ */
+export const TAG_COLORS = [
+  'slate',
+  'blue',
+  'green',
+  'amber',
+  'red',
+  'purple',
+  'pink',
+  'teal',
+] as const
+
+export type TagColor = (typeof TAG_COLORS)[number]
+
+export const DEFAULT_TAG_COLOR: TagColor = 'slate'
+
+/** `scope` quyết định bảng thuộc store nào, cùng quy ước `CollectionBody`. */
+export const TagCreateBody = z.object({
+  tag: z.string().min(1).max(32),
+  color: z.enum(TAG_COLORS).default(DEFAULT_TAG_COLOR),
+  description: z.string().max(300).optional(),
+  scope: z.enum(['project', 'global']).default('project'),
+})
+
+/** Sửa metadata tag. Đổi **tên** tag đi đường `/tags/rename` (rewrite front-matter). */
+export const TagUpdateBody = z.object({
+  color: z.enum(TAG_COLORS).optional(),
+  description: z.string().max(300).optional(),
+  scope: z.enum(['project', 'global']).default('project'),
+})

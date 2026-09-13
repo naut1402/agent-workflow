@@ -12,4 +12,12 @@ export {
   saveKnowledgeCollection,
   deleteKnowledgeCollection,
   renameKnowledgeTag,
+  createKnowledgeTag,
+  saveKnowledgeTag,
+  fetchKnowledgeBundle,
+} from './knowledgeApi'
+export type {
+  KnowledgeEntryMeta,
+  KnowledgeCollectionView,
+  KnowledgeTagFacetView,
 } from './knowledgeApi'

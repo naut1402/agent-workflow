@@ -181,6 +181,20 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
 
+/* Chân dialog có đường kẻ ngăn với .modal-body — dùng chung cho mọi dialog
+   thay vì mỗi feature tự khai lại (agent-editor, knowledge, automations). */
+.modal-foot {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+/* Action phá huỷ tách hẳn về mép trái, không đứng cạnh CTA xác nhận. */
+.modal-foot > .btn-danger { margin-right: auto; }
+
 .btn-ghost {
   background: none;
   border: 1px solid var(--border);
@@ -388,6 +402,15 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .chip-rm:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 .chip-skill { background: rgba(var(--accent-rgb),0.12); border: 1px solid rgba(var(--accent-rgb),0.3); color: var(--accent); }
 .chip-xs { font-size: 9px; padding: 1px 5px; }
+/* Chip tag knowledge — màu đọc từ biến inline `--tag-c` / `--tag-c-rgb` mà
+   component set theo token trong DB. Nằm ở tầng chung chứ không trong feature:
+   chip tag hiện ở cả side menu, dialog collection và dialog tag.
+   Không khai token nào → rơi về `--tag-slate`, không bao giờ ra chip mất màu. */
+.chip-tag {
+  color: var(--tag-c, var(--tag-slate));
+  background: rgba(var(--tag-c-rgb, var(--tag-slate-rgb)), 0.12);
+  border: 1px solid rgba(var(--tag-c-rgb, var(--tag-slate-rgb)), 0.4);
+}
 .tag-row { display: flex; flex-wrap: wrap; gap: 4px; min-height: 20px; }
 .tag-input-row { display: flex; gap: 5px; align-items: center; }
 
