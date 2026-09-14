@@ -14,10 +14,10 @@ import { moveTagMetaInTx, readTagMetaRows } from './tags.js'
  * Vì sao không phải thư mục con hay front-matter:
  * - Thư mục con sẽ đổi id của mọi entry (`slug` thành `collection/slug`) và
  *   phá mọi `knowledge_inputs` đang trỏ tới.
- * - Front-matter thì collection **rỗng** không tồn tại được, và liệt kê
+ * - Front-matter thì collection rỗng không tồn tại được, và liệt kê
  *   collection phải đọc toàn bộ file `.md`.
  *
- * Thành viên = **hợp** của `entry_ids` và `tags`, resolve lúc đọc — nên entry
+ * Thành viên = hợp của `entry_ids` và `tags`, resolve lúc đọc — nên entry
  * bị xoá tay ngoài dashboard chỉ đơn giản biến mất khỏi nhóm, không cần job dọn.
  * Đó cũng là lý do `tags`/`entry_ids` là cột JSON chứ không phải bảng liên kết:
  * repo không có truy vấn "collection nào chứa entry X".
@@ -63,7 +63,7 @@ function toCollection(row: CollectionRow): KnowledgeCollection {
 }
 
 /**
- * Thành viên của collection = `entry_ids` ∪ (entry mang **đủ** mọi tag của nhóm).
+ * Thành viên của collection = `entry_ids` ∪ (entry mang đủ mọi tag của nhóm).
  * Id treo không khớp entry nào nên tự rơi ra — đó là cách nhóm tự dọn.
  */
 export function resolveCollectionEntries<T extends { id: string; tags: string[] }>(
@@ -105,8 +105,8 @@ async function findRow(keys: KnowledgeStoreKeys, id: string): Promise<Collection
 }
 
 /**
- * Bản cho **đường đọc entry** (lọc `list({ collection })`): DB hỏng chỉ làm mất
- * phần nhóm, 🚫 không được đánh sập danh sách knowledge vốn đọc từ file.
+ * Bản cho đường đọc entry (lọc `list({ collection })`): DB hỏng chỉ làm mất
+ * phần nhóm, không được đánh sập danh sách knowledge vốn đọc từ file.
  */
 export async function findCollectionSafe(
   devTeamRoot: string,
@@ -230,7 +230,7 @@ export async function updateCollection(
   return { collection: next }
 }
 
-/** Chỉ gỡ **nhóm** — 🚫 không xoá entry nào trên đĩa. */
+/** Chỉ gỡ nhóm — không xoá entry nào trên đĩa. */
 export async function deleteCollection(devTeamRoot: string, id: string) {
   const keys = storeKeysOf(devTeamRoot)
   const row = await findRow(keys, id)
@@ -241,17 +241,17 @@ export async function deleteCollection(devTeamRoot: string, id: string) {
 }
 
 /**
- * Đổi tên tag trên **mọi** entry chứa nó, và ghi alias `from → to`.
+ * Đổi tên tag trên mọi entry chứa nó, và ghi alias `from → to`.
  *
  * Merge không cần nhánh riêng: entry đã mang `to` thì `Set` gộp lại, nên
  * "rename vào tag đã tồn tại" chính là merge.
  *
- * `to` bỏ trống = **xoá** tag khỏi mọi entry, không tạo alias.
+ * `to` bỏ trống = xoá tag khỏi mọi entry, không tạo alias.
  *
  * Lỗi giữa chừng thì dừng tại đó và trả phần đã xong — chạy lại là an toàn vì
  * entry đã đổi không còn `from` nên lần sau bị bỏ qua.
  *
- * Phần DB — alias, metadata tag, tag của collection — đi **cùng một**
+ * Phần DB — alias, metadata tag, tag của collection — đi cùng một
  * transaction sau khi rewrite file xong. Không dựng được transaction xuyên
  * file + DB, nên thứ tự là: file trước (thứ có thể chạy lại an toàn), DB sau
  * (thứ nguyên tử). Hỏng ở bước DB thì entry đã mang tên mới còn alias chưa có
@@ -295,7 +295,7 @@ export async function renameTag(devTeamRoot: string, { from, to }: z.infer<typeo
     }
   }
 
-  // Phạm vi bên DB là **mọi** store, 🚫 không phải store có entry bị chạm.
+  // Phạm vi bên DB là mọi store, không phải store có entry bị chạm.
   //
   // `driver.list({ scope: 'all' })` ở trên vốn đã quét mọi scope; và từ khi tag
   // là thực thể, "tag 0 entry" là trạng thái hợp lệ thường gặp — bám theo

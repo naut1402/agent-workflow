@@ -28,7 +28,7 @@ import {
 /**
  * Bề mặt HTTP của knowledge: entry CRUD + tag + collection + bundle.
  *
- * CORS, rate-limit và JWT **không** xuất hiện ở đây — middleware `/api/*` của
+ * CORS, rate-limit và JWT không xuất hiện ở đây — middleware `/api/*` của
  * Hono đã lo cả ba; trước migrate feature này tự áp tay từng cái một.
  */
 export class KnowledgeController extends AbstractController {
@@ -40,10 +40,10 @@ export class KnowledgeController extends AbstractController {
   }
 
   /**
-   * Không mở được `dashboard.sqlite` là lỗi **hạ tầng**, không phải lỗi request
+   * Không mở được `dashboard.sqlite` là lỗi hạ tầng, không phải lỗi request
    * → 500 kèm nguyên nhân để người dùng sửa được.
    *
-   * 🚫 Không nuốt thành danh sách rỗng: người dùng đọc đó là "chưa có nhóm nào"
+   * Không nuốt thành danh sách rỗng: người dùng đọc đó là "chưa có nhóm nào"
    * rồi tạo mới, và ghi đè mất dữ liệu cũ.
    */
   private async knowledgeDbOp(run: () => Promise<Response>): Promise<Response> {
@@ -152,7 +152,7 @@ export class KnowledgeController extends AbstractController {
     })
   }
 
-  /** Sửa **metadata** tag (màu, mô tả). Đổi *tên* tag đi `POST /tags/rename`. */
+  /** Sửa metadata tag (màu, mô tả). Đổi *tên* tag đi `POST /tags/rename`. */
   async updateTag() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
@@ -215,7 +215,7 @@ export class KnowledgeController extends AbstractController {
     return this.methodNotAllowed()
   }
 
-  // ── collection ───────────────────────────────────────────────────────────
+  // ── collection
 
   async listCollections() {
     const gate = this.requireRoot()
@@ -261,7 +261,7 @@ export class KnowledgeController extends AbstractController {
     })
   }
 
-  /** Xoá **nhóm**, không xoá tài liệu — entry trên đĩa giữ nguyên. */
+  /** Xoá nhóm, không xoá tài liệu — entry trên đĩa giữ nguyên. */
   async deleteCollection() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
@@ -292,7 +292,7 @@ export class KnowledgeController extends AbstractController {
     })
   }
 
-  // ── bundle ───────────────────────────────────────────────────────────────
+  // ── bundle
 
   /** Resolve `knowledge_inputs` (id) → nội dung cho agent chạy ngoài repo. */
   async getBundle() {
@@ -300,7 +300,7 @@ export class KnowledgeController extends AbstractController {
     if ('error' in gate) return gate.error
     const parsed = BundleQuery.safeParse(this.c.req.query())
     if (!parsed.success) return this.badRequest('invalid query')
-    // Id lặp gộp lại, quá ngưỡng thì **từ chối** — cắt bớt im lặng nghĩa là
+    // Id lặp gộp lại, quá ngưỡng thì từ chối — cắt bớt im lặng nghĩa là
     // agent nhận bundle thiếu mà không có tín hiệu nào để tự phát hiện.
     const ids = [
       ...new Set(

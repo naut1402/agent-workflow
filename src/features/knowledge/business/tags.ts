@@ -19,11 +19,11 @@ import {
 /**
  * Metadata của tag (màu, mô tả) trên `dashboard.sqlite`.
  *
- * Tag lần đầu là **thực thể**: trước đây nó chỉ là facet đếm tại chỗ từ
+ * Tag lần đầu là thực thể: trước đây nó chỉ là facet đếm tại chỗ từ
  * front-matter, nên một tag chưa entry nào gắn thì không tồn tại — và
  * "tạo tag rồi chọn màu" không có chỗ để sống.
  *
- * 🚫 Bảng này **không** giữ quan hệ tag↔entry: gán tag vẫn nằm ở front-matter
+ * Bảng này không giữ quan hệ tag↔entry: gán tag vẫn nằm ở front-matter
  * của `.md`, nên bundle gửi cho agent chạy ngoài repo không đổi.
  */
 
@@ -87,12 +87,12 @@ export async function listTagMeta(devTeamRoot: string): Promise<KnowledgeTagMeta
 }
 
 /**
- * Gắn `color` / `description` vào facet của `countTags`, và **thêm** tag chỉ
+ * Gắn `color` / `description` vào facet của `countTags`, và thêm tag chỉ
  * có trong DB với `count: 0` — tag rỗng là trạng thái hợp lệ mới, giấu nó đi
  * thì vừa tạo tag xong đã không thấy đâu.
  *
- * **Safe theo thiết kế**: đây là đường đọc danh sách entry (`include=tags`),
- * DB hỏng chỉ được làm mất phần màu, 🚫 không được đánh sập danh sách
+ * Safe theo thiết kế: đây là đường đọc danh sách entry (`include=tags`),
+ * DB hỏng chỉ được làm mất phần màu, không được đánh sập danh sách
  * knowledge vốn đọc từ file. Lỗi DB nổi lên ở đường đọc collection và mọi
  * đường ghi, nên người dùng vẫn nhận tín hiệu và vẫn bị khoá ghi.
  */
@@ -163,7 +163,7 @@ export async function createTag(devTeamRoot: string, body: z.infer<typeof TagCre
 }
 
 /**
- * Sửa màu / mô tả. Tag chưa có hàng metadata thì **tạo** — phần lớn tag sinh ra
+ * Sửa màu / mô tả. Tag chưa có hàng metadata thì tạo — phần lớn tag sinh ra
  * từ front-matter chứ không qua dialog, nên "chọn màu cho tag đang có" phải
  * chạy được mà không bắt người dùng tạo lại tag.
  */
@@ -202,11 +202,11 @@ export async function updateTag(
   return { tag: { tag, ...next, scope: body.scope } }
 }
 
-// ── đổi tên ────────────────────────────────────────────────────────────────
+// ── đổi tên
 
 type TagMetaRow = typeof knowledgeTags.$inferSelect
 
-/** Hàng metadata thô của mọi store — đọc **trước** khi mở transaction đổi tên. */
+/** Hàng metadata thô của mọi store — đọc trước khi mở transaction đổi tên. */
 export async function readTagMetaRows(devTeamRoot: string): Promise<TagMetaRow[]> {
   const keys = storeKeysOf(devTeamRoot)
   if (!keys.all.length) return []
@@ -215,11 +215,11 @@ export async function readTagMetaRows(devTeamRoot: string): Promise<TagMetaRow[]
 }
 
 /**
- * Dời (hoặc gỡ) metadata tag khi đổi tên, **bên trong** transaction mà
+ * Dời (hoặc gỡ) metadata tag khi đổi tên, bên trong transaction mà
  * `collections.renameTag` đang mở — xem `KnowledgeTx`.
  *
  * Vì sao không để client gọi `PUT /tags/:tag` riêng: `decorateTagFacets` cố ý
- * liệt kê mọi tag chỉ-có-trong-DB với `count: 0`, nên một hàng mang tên **cũ**
+ * liệt kê mọi tag chỉ-có-trong-DB với `count: 0`, nên một hàng mang tên cũ
  * còn sót lại sẽ hiện vĩnh viễn trong nhóm Tag — mà xoá tag nằm ngoài phạm vi
  * task này, người dùng không có cách nào gỡ nó.
  *
@@ -243,7 +243,7 @@ export function moveTagMetaInTx(
     return
   }
   // Tên đích đã có metadata riêng → giữ nguyên nó và chỉ gỡ hàng nguồn: đây là
-  // ca merge, tag đích là tag **sống sót** nên màu của nó là màu đang đúng.
+  // ca merge, tag đích là tag sống sót nên màu của nó là màu đang đúng.
   if (rows.some((r) => r.storeKey === storeKey && r.tag === to)) {
     tx.delete(knowledgeTags).where(at(from)).run()
     return
@@ -251,13 +251,13 @@ export function moveTagMetaInTx(
   tx.update(knowledgeTags).set({ tag: to, updatedAt: now }).where(at(from)).run()
 }
 
-// ── alias ──────────────────────────────────────────────────────────────────
+// ── alias
 
 /**
  * Alias `from → to` của mọi store.
  *
- * **Safe**: đây là đường **đọc entry** (`?tags=` đi qua `resolveTagAliases`),
- * DB hỏng chỉ được làm mất bước giải alias chứ 🚫 không đánh sập danh sách.
+ * Safe: đây là đường đọc entry (`?tags=` đi qua `resolveTagAliases`),
+ * DB hỏng chỉ được làm mất bước giải alias chứ không đánh sập danh sách.
  */
 export async function readTagAliasesSafe(devTeamRoot: string): Promise<Record<string, string>> {
   try {

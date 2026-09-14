@@ -60,7 +60,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       // `json-summary` sinh `coverage-summary.json` — file mà `coverage-gate.ts`
-      // đọc để ghi **mốc** coverage của version vào `reports/`, và cũng là tầng nhẹ
+      // đọc để ghi mốc coverage của version vào `reports/`, và cũng là tầng nhẹ
       // duy nhất được commit vào dòng test. `html`/`lcov` chỉ dùng cho người.
       reporter: ['text', 'html', 'lcov', 'json-summary'],
       reportsDirectory: './coverage/frontend',
@@ -70,13 +70,13 @@ export default defineConfig({
         'src/backend/**',
         'src/features/**/business/**',
       ],
-      // 🚫 KHÔNG khai `thresholds`. Từ 2026-09-11 mức phủ không còn là cổng
+      // KHÔNG khai `thresholds`. Từ 2026-09-11 mức phủ không còn là cổng
       // (`docs/agent-rules/testing.md` §6): nợ test gác theo TASK ở
-      // `.github/scripts/test-coverage-status.ts`, còn phần trăm chỉ được **ghi lại**.
+      // `.github/scripts/test-coverage-status.ts`, còn phần trăm chỉ được ghi lại.
       // `thresholds` là sàn tuyệt đối chạy trong chính lượt `vitest run --coverage`,
-      // nên giữ lại thì cổng chỉ **dời chỗ** — và đỏ ở đó khó truy hơn vì không phát
-      // ra từ step nào mang tên cổng. #304 (hạ ngưỡng statements về 57) là bằng chứng
-      // sàn này vốn đã bị hạ bằng tay chứ không hoạt động như sàn.
+      // nên giữ lại thì cổng chỉ dời chỗ — và đỏ ở đó khó truy hơn vì không phát
+      // ra từ step nào mang tên cổng. Sàn này từng bị hạ bằng tay — bằng chứng
+      // nó không hoạt động như một sàn thật.
     },
   },
 })

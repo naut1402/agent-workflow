@@ -1,29 +1,29 @@
 #!/usr/bin/env bun
 /**
- * Cổng **neo SHA** — trả lời đúng một câu: *số coverage và lượt test xanh trong
+ * Cổng neo SHA — trả lời đúng một câu: *số coverage và lượt test xanh trong
  * baseline được đo trên commit source nào, và commit đó có phải cái đang phát
  * hành không?*
  *
- * Vì sao cần: `coverage-baseline.json` trước đây chỉ lưu **tên branch**
+ * Vì sao cần: `coverage-baseline.json` trước đây chỉ lưu tên branch
  * (`source_ref: "dev/1.1.3/main"`), mà tên branch thì di chuyển. "Test xanh"
  * đọc từ đó không nói được nó xanh trên cây nào ⇒ PR phát hành có thể merge một
  * cây source chưa lượt test nào chạy qua, mà không cổng nào thấy.
  *
  * Bảy kết luận, mỗi cái một nguyên nhân và một cách xử lý khác nhau:
  *
- *   match          neo == head PR                       → ✅ exit 0
- *   behind         neo là tổ tiên của head              → ⚠️ test viết cho ref cũ
- *   ahead          head là tổ tiên của neo              → ⚠️ test chờ source
- *   diverged       neo tồn tại, không có quan hệ tổ tiên → ⚠️ không so được khoảng cách
- *   other-version  neo thuộc dòng version khác          → ⚠️ version này chưa có lượt test nào
- *   no-anchor      baseline chưa có khoá neo            → ⚠️ chưa so được
- *   anchor-gone    SHA neo không còn tồn tại            → ❌ exit 1
+ *   match          neo == head PR                       → exit 0
+ *   behind         neo là tổ tiên của head              → test viết cho ref cũ
+ *   ahead          head là tổ tiên của neo              → test chờ source
+ *   diverged       neo tồn tại, không có quan hệ tổ tiên → không so được khoảng cách
+ *   other-version  neo thuộc dòng version khác          → version này chưa có lượt test nào
+ *   no-anchor      baseline chưa có khoá neo            → chưa so được
+ *   anchor-gone    SHA neo không còn tồn tại            → exit 1
  *
- * Bất biến: 🚫 **không nhánh nào in "đạt"** ngoài `match`. "Không so được" là
+ * Bất biến: không nhánh nào in "đạt" ngoài `match`. "Không so được" là
  * cảnh báo hoặc chặn, không bao giờ là kết luận đạt — đó đúng là cái lỗ mà
  * force-push (`TC-E9`) chui qua.
  *
- * Mặc định chỉ `anchor-gone` chặn; `--strict` làm **mọi** kết luận khác `match`
+ * Mặc định chỉ `anchor-gone` chặn; `--strict` làm mọi kết luận khác `match`
  * chặn. Siết cổng về sau = thêm một cờ ở workflow, không sửa lại script.
  *
  *   bun run test:anchor -- --baseline reports/coverage-baseline.json
@@ -46,13 +46,13 @@ export type AnchorVerdict = 'match' | 'behind' | 'ahead' | 'diverged' | 'other-v
 export interface AnchorInput {
   /** `baseline.source_sha` — neo của dòng source. */
   anchorSha?: string
-  /** `baseline.source_ref` — chỉ dùng để so **version**, không dùng để kết luận khớp. */
+  /** `baseline.source_ref` — chỉ dùng để so version, không dùng để kết luận khớp. */
   anchorRef?: string
   /** `baseline.test_sha` — neo của dòng test; in ra để truy vết, không tham gia phân loại. */
   testAnchorSha?: string
   headSha: string
   headRef: string
-  /** Object của `anchorSha` có tới được **sau khi đã thử fetch** hay không. */
+  /** Object của `anchorSha` có tới được sau khi đã thử fetch hay không. */
   exists: boolean
   /** `git merge-base --is-ancestor <anchor> <head>`. */
   isAncestor: boolean
@@ -61,7 +61,7 @@ export interface AnchorInput {
 }
 
 /**
- * Thứ tự nhánh là phần **quan trọng nhất** của hàm này: nhánh sau không được
+ * Thứ tự nhánh là phần quan trọng nhất của hàm này: nhánh sau không được
  * che nhánh trước. Cụ thể `!exists` phải nằm trên mọi phép so quan hệ tổ tiên —
  * `merge-base` với object không tồn tại trả về "false", tức là trông giống
  * `diverged` (cảnh báo, exit 0) trong khi thực tế là `anchor-gone` (chặn).
@@ -219,7 +219,7 @@ interface GitResult {
 
 /**
  * `repo` là tham số chứ không phải `ROOT` cố định: cổng này chỉ đúng/sai theo
- * **contract của git thật** (object còn hay mất, quan hệ tổ tiên), nên test phải
+ * contract của git thật (object còn hay mất, quan hệ tổ tiên), nên test phải
  * dựng được repo + origin tạm để chạy, không mock lại git theo giả định.
  */
 function git(repo: string, ...args: string[]): GitResult {
@@ -234,9 +234,9 @@ export interface Anchor {
 }
 
 /**
- * Đọc `source_sha` / `test_sha` mà **không** validate phần số của baseline —
- * phần số là **mốc tham chiếu**, không phải cổng (`testing.md` §6), nên số hỏng
- * 🚫 không được làm hỏng kết luận về neo. Nhưng file không parse được thì phải là
+ * Đọc `source_sha` / `test_sha` mà không validate phần số của baseline —
+ * phần số là mốc tham chiếu, không phải cổng (`testing.md` §6), nên số hỏng
+ * không được làm hỏng kết luận về neo. Nhưng file không parse được thì phải là
  * lỗi công cụ (exit 2), không được suy thành `no-anchor`.
  */
 const SHA_RE = /^[0-9a-f]{40}$/i
@@ -246,14 +246,14 @@ export function readAnchor(raw: string, file: string): Anchor {
   const str = (k: string) => (typeof b[k] === 'string' && b[k] ? (b[k] as string) : undefined)
 
   /**
-   * Đường **đọc** phải cùng ràng buộc với đường **ghi** (`normalizeSha` ở
+   * Đường đọc phải cùng ràng buộc với đường ghi (`normalizeSha` ở
    * `coverage-gate.ts`). Baseline là file người sửa được, nên SHA viết tắt vào
-   * được file qua đường khác. Khi đó `cat-file -e` **thành công**
+   * được file qua đường khác. Khi đó `cat-file -e` thành công
    * (git resolve viết tắt) và `merge-base` cũng đúng ⇒ `exists: true`, nhưng phép so
    * `anchorSha === headSha` là so chuỗi nên luôn false ⇒ verdict `behind` kèm
    * "0 commit source sau neo": cảnh báo sai chỗ, không ai truy ra được vì sao.
    *
-   * 🚫 Không suy thành `no-anchor` — đó là "baseline cũ chưa có cơ chế neo", khác hẳn
+   * Không suy thành `no-anchor` — đó là "baseline cũ chưa có cơ chế neo", khác hẳn
    * "neo có nhưng không dùng được". Đây là lỗi công cụ ⇒ exit 2.
    */
   const sha = (k: 'source_sha' | 'test_sha') => {
@@ -275,11 +275,11 @@ function summary(text: string): void {
 }
 
 /**
- * Object có tới được không — **sau khi** đã thử fetch một lượt.
+ * Object có tới được không — sau khi đã thử fetch một lượt.
  *
  * `actions/checkout` chỉ lấy đủ history của head ref, nên neo nằm ở dòng version
  * trước (vd `dev/1.1.3/main`) thì `cat-file` fail dù commit vẫn còn trên remote.
- * Kết luận `anchor-gone` mà không thử fetch là báo động giả ở **mọi** release
+ * Kết luận `anchor-gone` mà không thử fetch là báo động giả ở mọi release
  * đầu version.
  */
 function anchorExists(repo: string, sha: string): boolean {
@@ -291,7 +291,7 @@ function anchorExists(repo: string, sha: string): boolean {
 /** Lỗi "cổng không đọc được dữ liệu" ⇒ exit 2, tách hẳn khỏi "cổng kết luận đỏ" (exit 1). */
 class ToolError extends Error {}
 
-/** Baseline có mặt và đọc được neo ra — thiếu file là exit 2, 🚫 không phải "đạt". */
+/** Baseline có mặt và đọc được neo ra — thiếu file là exit 2, không phải "đạt". */
 function loadAnchor(repo: string, baseline: string): Anchor {
   const file = path.isAbsolute(baseline) ? baseline : path.join(repo, baseline)
   if (!fs.existsSync(file)) {
@@ -307,7 +307,7 @@ function loadAnchor(repo: string, baseline: string): Anchor {
 /**
  * Neo mất tích *và* remote không tới được là hai chuyện khác nhau: một cái là kết
  * luận của cổng (exit 1), một cái là công cụ không đọc được dữ liệu (exit 2).
- * Kết luận `anchor-gone` phải theo cái **remote** thấy được, không theo cái
+ * Kết luận `anchor-gone` phải theo cái remote thấy được, không theo cái
  * workspace này tình cờ còn — nên chỉ kết luận khi đã hỏi được remote.
  * `ls-remote --exit-code` thoát 2 = remote tới được nhưng KHÔNG có ref nào
  * (remote rỗng ⇒ neo thật sự không còn), khác hẳn lỗi mạng/quyền.

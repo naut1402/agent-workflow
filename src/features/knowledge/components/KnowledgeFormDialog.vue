@@ -4,7 +4,7 @@ import { ref } from 'vue'
 import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
 
 /**
- * 🚫 Không còn `slug`: nó là phần **nội suy** từ title (driver tự sinh và tự
+ * Không còn `slug`: nó là phần nội suy từ title (driver tự sinh và tự
  * chống trùng), đúng như mọi chỗ khác trong dashboard. Ở đường sửa thì slug vốn
  * đã lấy từ `id` và giá trị client gửi bị bỏ qua, nên ô này chưa bao giờ có tác dụng.
  */
@@ -24,7 +24,7 @@ defineProps<{
 
 const draft = defineModel<KnowledgeDraft>('draft', { required: true })
 
-// 🚫 Không còn `delete`: nút xoá đã chuyển ra hàng danh sách ở cột trái.
+// Không còn `delete`: nút xoá đã chuyển ra hàng danh sách ở cột trái.
 const emit = defineEmits<{ close: []; save: [] }>()
 
 const { t } = useI18nHelpers()
@@ -131,6 +131,6 @@ function removeTag(i: number) {
   flex-direction: column;
   flex: 0 0 auto;
 }
-/* 🚫 Không khai `.modal-foot` cục bộ nữa — padding và thứ tự lấy bản chung ở
+/* Không khai `.modal-foot` cục bộ nữa — padding và thứ tự lấy bản chung ở
    `_shell.scss`, để mọi dialog của dashboard canh giống nhau. */
 </style>

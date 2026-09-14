@@ -5,7 +5,7 @@
  * inline edit của monitor lẫn viewer của agent-editor đều cắt section theo
  * đúng luật này, và hai bản regex lệch nhau là bug âm thầm.
  *
- * 🚫 Tách khỏi `markdownLib.ts` có chủ đích: module đó kéo theo `marked` +
+ * Tách khỏi `markdownLib.ts` có chủ đích: module đó kéo theo `marked` +
  * `DOMPurify` + `mermaid`, nên nhiều suite phải `vi.mock` nó. Hàm thuần nằm
  * chung ở đó sẽ biến mất theo mock, dù test chỉ muốn thay mỗi `parseMarkdown`.
  */

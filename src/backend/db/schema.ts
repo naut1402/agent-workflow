@@ -29,13 +29,13 @@ export const logEntries = sqliteTable(
 
 /**
  * Collection + tag của knowledge — rời sidecar `collections.yaml` về đây để
- * một collection/tag **rỗng** cũng tồn tại được (điều kiện để "tạo tag + chọn
+ * một collection/tag rỗng cũng tồn tại được (điều kiện để "tạo tag + chọn
  * màu" có nghĩa), và để một đường ghi duy nhất.
  *
- * `store_key` là **đường dẫn tuyệt đối của store base** (`<root>/knowledge`
+ * `store_key` là đường dẫn tuyệt đối của store base (`<root>/knowledge`
  * cho project+system, `globalKnowledgeRoot()` cho global) — đúng thứ đang mang
  * nghĩa phân vùng hôm nay: `collections.yaml` nằm ở đâu thì hàng thuộc về đó.
- * 🚫 Không dùng `project_id` như `log_entries`: nó `null` khi request không
+ * Không dùng `project_id` như `log_entries`: nó `null` khi request không
  * truyền `?project=`, nên cùng một thư mục sinh ra hai khoá khác nhau — và
  * `UNIQUE` với cột NULL trong SQLite không ràng buộc được gì, khiến lệnh
  * migrate nhân đôi dữ liệu mỗi lần chạy lại.
@@ -67,7 +67,7 @@ export const knowledgeCollections = sqliteTable(
 )
 
 /**
- * Metadata của tag (màu, mô tả). Gán tag cho entry **vẫn ở front-matter** —
+ * Metadata của tag (màu, mô tả). Gán tag cho entry vẫn ở front-matter —
  * bảng này cố ý không có cột nào trỏ tới entry, nên bundle gửi cho agent chạy
  * ngoài repo không đổi một byte.
  */

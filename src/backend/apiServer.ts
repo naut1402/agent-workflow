@@ -19,7 +19,7 @@ import { createRateLimitMiddleware } from './http/security/rateLimiter.js'
 import { createCorsMiddleware } from './http/security/corsGuard.js'
 import { loadSecurityConfig } from '../features/settings/business/dashboardSettings.js'
 
-// ── API server (Hono app + Node bridge) ─────────────────────────────────────
+// ── API server (Hono app + Node bridge)
 //
 // Public contract: createApiHandler(ctx) → async (req,res)=>boolean
 // that returns `true` when it produced a response for an /api/* request, and

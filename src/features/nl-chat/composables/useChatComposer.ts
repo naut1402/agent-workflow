@@ -57,7 +57,7 @@ export function useChatComposer(opts: ChatComposerOptions) {
     () => opts.canSend() && !opts.sending() && !attachments.uploading.value,
   )
   /**
-   * Chọn knowledge **không** upload gì, nên nó không chờ `attachments.uploading`
+   * Chọn knowledge không upload gì, nên nó không chờ `attachments.uploading`
    * như `canAttach`. Cùng một cổng cho hai việc khác nhau chỉ khoá nhầm nút.
    */
   const canPickKnowledge = computed(() => opts.canSend() && !opts.sending())

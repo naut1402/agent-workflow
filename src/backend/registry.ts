@@ -54,7 +54,7 @@ export interface RegistryContext {
   resolveProjectRoot: (projectId: string | null) => string | null
 }
 
-// ── Locations ─────────────────────────────────────────────────────────────────
+// ── Locations
 
 // Config home for the registry. Override with DEV_TEAM_DASHBOARD_HOME so the
 // store can live somewhere else (tests, multi-instance). Falls back to
@@ -78,7 +78,7 @@ export function globalKnowledgeRoot(): string {
   return path.join(registryHome(), 'knowledge')
 }
 
-// ── Load / save ────────────────────────────────────────────────────────────────
+// ── Load / save
 
 function emptyRegistry(): Registry {
   return { version: REGISTRY_VERSION, projects: [] }
@@ -124,7 +124,7 @@ export function saveRegistry(reg: Registry): Registry {
   return reg
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers
 
 function slug(name: unknown): string {
   return String(name || '')
@@ -139,7 +139,7 @@ function shortHash(input: unknown): string {
   return crypto.createHash('sha1').update(String(input)).digest('hex').slice(0, 8)
 }
 
-// ── Validation (shared by REST + MCP) ──────────────────────────────────────────
+// ── Validation (shared by REST + MCP)
 
 // Validate + canonicalise a user-supplied project path. Returns
 //   { ok: true, path: <canonical .dev-team-agent dir>, name: <derived> }
@@ -205,7 +205,7 @@ function makeId(name: string, canonicalPath: string): string {
   return `${slug(name)}-${shortHash(canonicalPath)}`
 }
 
-// ── CRUD ───────────────────────────────────────────────────────────────────────
+// ── CRUD
 
 // List all registered projects + the default project id (if any).
 export function list(): { projects: Project[]; defaultId: string | null } {
@@ -279,7 +279,7 @@ export function seedDefault(devTeamRoot: string | null | undefined): Project | n
   return res.ok ? res.project : null
 }
 
-// ── Root resolution (backward-compat) ───────────────────────────────────────────
+// ── Root resolution (backward-compat)
 
 // Resolve a projectId to an absolute `.dev-team-agent/` path.
 //   - explicit, known id → that project's path

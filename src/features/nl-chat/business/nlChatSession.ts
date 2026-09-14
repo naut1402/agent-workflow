@@ -75,8 +75,7 @@ export interface BuildTurnPromptInput {
    * Catalog/ngữ cảnh phụ nối vào CUỐI prompt của lượt này — e.g. the valid
    * `agent` refs from the catalog, needed so a `pipeline` draft only
    * references real agents. Được dựng lại ở MỌI lượt (không còn là snapshot
-   * lượt 1) để pipeline/agent tạo giữa phiên vào được prompt — xem
-   * design.md T536c80fd §3.
+   * lượt 1) để pipeline/agent tạo giữa phiên vào được prompt.
    */
   extraContext?: string
 }

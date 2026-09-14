@@ -8,13 +8,13 @@ import type { KnowledgeCollectionView, KnowledgeEntryMeta, KnowledgeTagFacetView
  * dưới là 3 nhóm `<details>` — tài liệu · collection · tag — mỗi nhóm cuộn riêng.
  *
  * Thuần trình bày: mọi thao tác đi lên `KnowledgePanel` qua emit, component này
- * 🚫 không gọi API.
+ * không gọi API.
  */
 const props = defineProps<{
   entries: KnowledgeEntryMeta[]
   loading: boolean
   collections: KnowledgeCollectionView[]
-  /** Lỗi đọc DB — hiện ra và **khoá** đường ghi của nhóm collection/tag. */
+  /** Lỗi đọc DB — hiện ra và khoá đường ghi của nhóm collection/tag. */
   collectionsError: string
   activeCollection: string
   tags: KnowledgeTagFacetView[]
@@ -394,7 +394,7 @@ function tagStyle(tag: KnowledgeTagFacetView) {
 .knowledge-group[open] > summary::before { transform: rotate(90deg); color: var(--accent); }
 .knowledge-group-add { margin-left: auto; }
 
-/* Lá DUY NHẤT cuộn. 🚫 Không cap `max-height` ở đây: phần chiều cao mà
+/* Lá DUY NHẤT cuộn. Không cap `max-height` ở đây: phần chiều cao mà
    `.knowledge-group[open]` giành được ĐÃ là trần rồi, thêm cap nữa chỉ tạo
    khoảng chết bên trong nhóm và đẩy hai nhóm còn lại xuống đáy cột. */
 .knowledge-list {

@@ -21,7 +21,7 @@ const props = withDefaults(
     /**
      * Khoá định danh tài liệu — đổi giá trị này là mở lại mọi block.
      *
-     * 🚫 Không dùng `title` làm khoá: title của knowledge entry **không** duy
+     * Không dùng `title` làm khoá: title của knowledge entry không duy
      * nhất (chính vì thế driver mới phải thêm hậu tố cho slug khi trùng), nên
      * chuyển giữa hai entry cùng tên sẽ giữ nguyên trạng thái gập của tài liệu
      * trước. Bỏ trống thì rơi về `title`, đủ cho nguồn có tên duy nhất.

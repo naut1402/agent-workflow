@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Trạng thái test **theo từng task** của một version — cổng phát hành hiện có
+ * Trạng thái test theo từng task của một version — cổng phát hành hiện có
  * chỉ biết dòng test *tồn tại / rỗng* ở mức version, nên "version có 12 task,
  * test viết cho 9" là một trạng thái không ai đọc ra được.
  *
@@ -9,20 +9,20 @@
  *   dòng source:  origin/main       .. dev/<version>/main   → task ĐÃ MERGE
  *   dòng test:    origin/test/main  .. test/<version>/main   → task ĐÃ CÓ TEST
  *
- * Nguồn định danh task là **subject commit** (`[T0313a84c] feat(ci): …`) —
+ * Nguồn định danh task là subject commit (`[T0313a84c] feat(ci): …`) —
  * format bắt buộc ở `docs/agent-rules/git-pr.md` §7. Không có bảng tra
  * task↔branch nào để đối chiếu, nên commit không mang định danh phải được **nêu
  * ra** (`untagged`), không im lặng bỏ: im lặng bỏ đúng là loại xanh giả mà epic
  * tách test đang diệt.
  *
  * Miễn trừ (`tests/exemptions.json`) là bề mặt cứng cho task cố ý không cần
- * test. Ba mệnh đề bắt buộc: người duyệt **thấy được lý do** · task được miễn
- * **không** làm cổng đỏ · 🚫 **không** miễn cả version (không wildcard, không
+ * test. Ba mệnh đề bắt buộc: người duyệt thấy được lý do · task được miễn
+ * không làm cổng đỏ · không miễn cả version (không wildcard, không
  * khoá cấp version — `version` là field bắt buộc và phải khớp version đang chấm).
  *
- * Đợt đầu là **báo cáo**: mặc định exit 0 kèm ⚠️. `--strict` biến "còn task
+ * Đợt đầu là báo cáo: mặc định exit 0 kèm . `--strict` biến "còn task
  * thiếu test" thành đỏ — siết cổng về sau là thêm một cờ, không sửa lại script.
- * 🚫 exit 0 ở đây **không** có nghĩa "đã đủ test".
+ * exit 0 ở đây không có nghĩa "đã đủ test".
  *
  *   bun run test:status -- --version 1.1.4
  *   bun run test:status -- --version 1.1.4 --source-ref "$PR_HEAD_SHA" --strict
@@ -42,12 +42,12 @@ export const EXEMPTIONS_FILE = 'tests/exemptions.json'
 export const MIN_REASON = 10
 
 /**
- * Đúng regex định danh task của `git-pr.md` §7 **và** `commitlint.config.js` —
+ * Đúng regex định danh task của `git-pr.md` §7 và `commitlint.config.js` —
  * gồm cả `_`, vì task do dashboard sinh có dạng `20260911_001`. Ba nguồn lệch
  * nhau từng làm `[B202608_2201] feat(log): …` qua commitlint mà rơi vào mục
  * *không truy được task* ⇒ một PR tính năng biến mất khỏi sổ nợ test.
  *
- * 🚫 Không nhân bản hằng này: nó là nguồn duy nhất cho CẢ HAI đường — nhận diện
+ * Không nhân bản hằng này: nó là nguồn duy nhất cho CẢ HAI đường — nhận diện
  * commit (`taskIdOf`) và validate `tests/exemptions.json` (`parseEntry`).
  *
  * Phần sau (`feat(ci): …`, hậu tố `(#123)` của squash) không ảnh hưởng.
@@ -66,8 +66,8 @@ export function taskIdOf(subject: string): string | null {
 /**
  * Bóc mọi lớp `Revert "…"` lồng nhau, trả về subject gốc + số lớp.
  *
- * Cần **số lớp**, không chỉ cần biết "có phải revert": revert của một revert là
- * **khôi phục**. Lớp lẻ ⇒ subject gốc đang bị huỷ, lớp chẵn ⇒ đang sống lại.
+ * Cần số lớp, không chỉ cần biết "có phải revert": revert của một revert là
+ * khôi phục. Lớp lẻ ⇒ subject gốc đang bị huỷ, lớp chẵn ⇒ đang sống lại.
  * Chỉ đếm "có commit revert" thì ca re-revert bị đọc thành "đã revert" ⇒ cổng
  * miễn test cho code đang sống.
  */
@@ -84,7 +84,7 @@ export function unwrapRevert(subject: string): { base: string; depth: number } {
 
 /**
  * Commit revert do GitHub tạo mang subject `Revert "<subject gốc>"`, nên định
- * danh task nằm **bên trong** dấu ngoặc kép. Không bóc ra thì công việc đã bị
+ * danh task nằm bên trong dấu ngoặc kép. Không bóc ra thì công việc đã bị
  * revert vẫn bị đòi test, và bản thân commit revert lại rơi vào `untagged`.
  */
 export function revertedTaskIdOf(subject: string): string | null {
@@ -92,7 +92,7 @@ export function revertedTaskIdOf(subject: string): string | null {
   return depth > 0 ? taskIdOf(base) : null
 }
 
-/** `feat` · `docs` · `chore` … — chỉ để **hiện** ứng viên miễn trừ, 🚫 không tự động miễn. */
+/** `feat` · `docs` · `chore` … — chỉ để hiện ứng viên miễn trừ, không tự động miễn. */
 export function typeOf(subject: string): string | null {
   return TYPE_RE.exec(subject)?.[1] ?? null
 }
@@ -107,7 +107,7 @@ export interface Exemption {
 const REQUIRED = ['taskId', 'version', 'reason', 'approved_by'] as const
 
 /**
- * Bất biến: **sai định dạng là ĐỎ**, không phải "coi như không có miễn trừ".
+ * Bất biến: sai định dạng là ĐỎ, không phải "coi như không có miễn trừ".
  * Fallback im lặng theo chiều nào cũng là kết luận âm thầm, mà đây đúng là chỗ
  * người ta sẽ thử nới cổng.
  */
@@ -182,22 +182,22 @@ export interface StatusReport {
   tested: Set<string>
   /** Căn cứ của kết luận "đã có test": chính commit ở dòng test. */
   testedDetail: TaskEntry[]
-  /** Miễn trừ **áp dụng** cho version đang chấm. */
+  /** Miễn trừ áp dụng cho version đang chấm. */
   exempt: Exemption[]
   /** `merged − tested − exempt − reverted`. */
   missing: TaskEntry[]
   /**
    * Subject không quy được về task nào — hai ca, `sectionUntagged` tách khi render:
-   * không có `[…]` (§7 **cho phép**) và có `[…]` nhưng sai format (đang **rơi khỏi**
+   * không có `[…]` (§7 cho phép) và có `[…]` nhưng sai format (đang rơi khỏi
    * sổ nợ test).
    */
   untagged: string[]
-  /** Miễn trừ của version khác — nêu ra, **không** áp dụng. */
+  /** Miễn trừ của version khác — nêu ra, không áp dụng. */
   staleExempt: Exemption[]
-  /** Task mà **mọi** commit đều đã bị revert — không đòi test. */
+  /** Task mà mọi commit đều đã bị revert — không đòi test. */
   reverted: TaskEntry[]
   /**
-   * Task bị revert **một phần**: có commit đã revert nhưng vẫn còn commit sống.
+   * Task bị revert một phần: có commit đã revert nhưng vẫn còn commit sống.
    * Vẫn nằm trong `missing` — đây là chỗ mà "có revert ⇒ miễn test" cho xanh giả.
    */
   partialRevert: Set<string>
@@ -206,11 +206,11 @@ export interface StatusReport {
 }
 
 /**
- * Revert được cân bằng ở mức **subject**, không ở mức task.
+ * Revert được cân bằng ở mức subject, không ở mức task.
  *
  * Vì sao: gom vào một `Set` theo taskID thì task 3 commit mà chỉ 1 commit bị
  * revert cũng bị coi là "đã revert" ⇒ hai commit còn sống trên dòng version
- * không bị đòi test nữa, và báo cáo đóng bằng dấu ✅. Đúng loại xanh giả mà
+ * không bị đòi test nữa, và báo cáo đóng bằng dấu . Đúng loại xanh giả mà
  * `TC-E6` sinh ra để chặn.
  *
  * Lớp lẻ = huỷ (+1), lớp chẵn = khôi phục (−1); tổng > 0 mới là "đang bị revert".
@@ -225,7 +225,7 @@ function classifySubject(subject: string): Classified {
   const { base, depth } = unwrapRevert(subject)
   if (depth > 0) {
     // Revert của commit không mang định danh task thì cũng không quy được về
-    // task nào — nêu ra như commit thường, 🚫 không bỏ qua im lặng.
+    // task nào — nêu ra như commit thường, không bỏ qua im lặng.
     return taskIdOf(base) ? { kind: 'revert', base, delta: depth % 2 === 1 ? 1 : -1 } : { kind: 'untagged', subject }
   }
   const id = taskIdOf(subject)
@@ -463,12 +463,12 @@ function sectionReverted(r: StatusReport): string[] {
 }
 
 /**
- * Hai ca rất khác nhau, 🚫 không gộp một thông điệp: sau khi `TASK_RE` đã nới cho
- * `_`, một subject **vẫn** lọt ra ngoài mà lại có `[…]` thì đó là **sai format**,
+ * Hai ca rất khác nhau, không gộp một thông điệp: sau khi `TASK_RE` đã nới cho
+ * `_`, một subject vẫn lọt ra ngoài mà lại có `[…]` thì đó là sai format,
  * không phải "được phép bỏ định danh". Gộp chung là nói sai sự thật về đúng loại
  * commit đang lặng lẽ rơi khỏi sổ nợ test.
  *
- * 📌 Exit code không đổi: `badTag` là báo cáo, `--strict` vẫn chỉ chặn theo `missing`.
+ * Exit code không đổi: `badTag` là báo cáo, `--strict` vẫn chỉ chặn theo `missing`.
  */
 function sectionUntagged(r: StatusReport): string[] {
   if (!r.untagged.length) return []
@@ -503,7 +503,7 @@ function sectionUntagged(r: StatusReport): string[] {
 }
 
 /**
- * ⚠️ Không có task nào thì KHÔNG được đóng bằng dấu ✅: 0 task nghĩa là không có
+ * Không có task nào thì KHÔNG được đóng bằng dấu : 0 task nghĩa là không có
  * gì để chấm, mà "chọn ra 0 thứ" chưa bao giờ là "đã xanh".
  */
 function closingLine(r: StatusReport, opts: RenderOpts): string {
@@ -581,10 +581,10 @@ class ToolError extends Error {}
 class GateError extends Error {}
 
 /**
- * Ref dùng được ở local — có sẵn thì dùng, thiếu thì hỏi remote **rồi mới** kết luận.
+ * Ref dùng được ở local — có sẵn thì dùng, thiếu thì hỏi remote rồi mới kết luận.
  *
  * Ba kết quả phải tách bạch (bất biến `testing.md` §3.1): ref có · ref **chưa
- * tồn tại** · **không kéo được** (mất mạng / mất quyền). Trộn hai ca cuối là
+ * tồn tại · không kéo được** (mất mạng / mất quyền). Trộn hai ca cuối là
  * đọc "không kéo được dòng test" thành "thiếu test".
  */
 function resolveRef(repo: string, ref: string): string | null {

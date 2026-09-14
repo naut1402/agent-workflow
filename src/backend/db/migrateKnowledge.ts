@@ -54,11 +54,11 @@ async function countRows(db: Awaited<ReturnType<typeof getDb>>, storeKey: string
  * Chuyển collection + tag alias từ sidecar `collections.yaml` vào
  * `dashboard.sqlite`. Chạy tay: `bun run scripts/migrate-knowledge-to-sqlite.ts`.
  *
- * **Idempotent** — `UNIQUE(store_key, collection_id)` + `onConflictDoNothing()`:
- * chạy lại không thêm gì, và bản ghi đã sửa trên dashboard 🚫 không bị YAML cũ
+ * Idempotent — `UNIQUE(store_key, collection_id)` + `onConflictDoNothing()`:
+ * chạy lại không thêm gì, và bản ghi đã sửa trên dashboard không bị YAML cũ
  * ghi đè. (Khác `migrateLogs`, vốn không có khoá ổn định nào để chống trùng.)
  *
- * **Chỉ đọc nguồn** — `collections.yaml` ở lại trên đĩa làm bản lưu, đúng cách
+ * Chỉ đọc nguồn — `collections.yaml` ở lại trên đĩa làm bản lưu, đúng cách
  * `migrateLogs` đối xử với JSONL nguồn.
  */
 export async function migrateKnowledgeToSqlite(): Promise<KnowledgeMigrationResult[]> {
@@ -79,7 +79,7 @@ export async function migrateKnowledgeToSqlite(): Promise<KnowledgeMigrationResu
     try {
       doc = await readCollectionsFile(storeKey)
     } catch (e) {
-      // Sidecar hỏng: báo ra rồi đi tiếp — một project hỏng 🚫 không được chặn
+      // Sidecar hỏng: báo ra rồi đi tiếp — một project hỏng không được chặn
       // mọi project còn lại.
       console.warn(`[knowledge] bỏ qua ${storeKey}: ${(e as Error)?.message ?? e}`)
       results.push({ storeKey, sourceExists: false, collections: 0, aliases: 0, skipped: 0 })
