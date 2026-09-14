@@ -15,8 +15,9 @@
 
 - **State từng task** (`.dev-state/*.json`) — chỉ đọc.
 - **Config + artifact markdown** (pipeline, custom agent, template, knowledge) — đọc/ghi được, ghi qua `PUT /api/artifact`.
-- **Backend** — Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Setup app-root ở `src/api/`; kernel HTTP ở `src/core/http/`; registry ở `src/core/registry.ts`. Entry: `src/standalone.ts`.
-- **Frontend** — `src/features/<mode>/` (components, scripts, styles, locales, schemas); nền `src/core/`; config shell `@configs` → `src/core/configs/`.
+- **Backend** — Hono trên 2 transport. Feature: `api.ts` + `controller.ts` + `business/`. Setup app-root ở `src/backend/`; kernel HTTP ở `src/backend/http/`; registry ở `src/backend/registry.ts`. Entry: `src/backend/standalone.ts`.
+- **Frontend** — `src/features/<mode>/` (components, scripts, styles, locales, schemas); nền `src/frontend/`.
+- **Shared** — `src/shared/`: chỉ logic/type thuần dùng thật ở cả hai phía; cấm `node:*`/`bun:*`/`hono`/`drizzle-orm`/`vue` (ESLint, không whitelist). Xem `src/{backend,frontend,shared}/README.md`.
 - **Data root** — `.dev-team-agent/`; standalone qua `ProjectRegistry` (`?project=<id>`).
 - **Pipeline** — `DEFAULT_PIPELINE` ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`.
 - **MCP** — `bun run mcp`, CRUD registry, không cần HTTP server.
@@ -29,7 +30,7 @@ Chi tiết: [`docs/architecture.md`](docs/architecture.md).
 
 ```
 agent-workflow/
-├── src/          # features/, core/, api/, plugins/, styles/
+├── src/          # backend/ (Node), frontend/ (browser), shared/ (cả hai), features/
 ├── mcp/
 ├── tests/        # unit (bun + vitest)
 ├── test-e2e/
@@ -39,7 +40,7 @@ agent-workflow/
     └── architecture.md, event-catalog.md, i18n.md, ui-buttons.md, diagram/
 ```
 
-⚠️ Ngoại lệ cố ý còn `.js`: `src/features/agent-editor/business/agentMarkdown.js`, `src/runner-cli.mjs`. Tooling `vite` / `vitest` / `playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
+⚠️ Ngoại lệ cố ý còn `.js`: `src/features/agent-editor/business/agentMarkdown.js`, `src/backend/runner-cli.mjs`. Tooling `vite` / `vitest` / `playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
 
 ---
 
@@ -50,7 +51,7 @@ agent-workflow/
 | 🔍 Investigate · Design | `doc-writing` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) — bố cục `investigate.md` / `design.md`, quy tắc trình bày |
 | 🛠️ Implement | `coding` | [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) · [`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) |
 | 🔎 Review | `coding` + `test` | [`review-checklist-guideline.md`](docs/agent-rules/review-checklist-guideline.md) · [`testing.md`](docs/agent-rules/testing.md) |
-| 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, cổng coverage §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
+| 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
 | 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, PR phát hành §8.4 · [`git-worktree.md`](docs/agent-rules/git-worktree.md) · [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md) |
 
 Tài liệu tra cứu kèm theo (không phải rule):
@@ -82,7 +83,7 @@ Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize t
 | Viết/sửa code feature | [`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md) + [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) + bất biến §4 |
 | Thêm mode mới ở FE shell (`App.vue`) | [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) — checklist §5 |
 | Review PR | [`review-checklist-guideline.md`](docs/agent-rules/review-checklist-guideline.md) — mục **Dữ liệu & An toàn** có domain event khi đụng persist |
-| Test / CI | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test + `test:overlay` §3.1; cổng coverage §6 |
+| Test / CI | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test + `test:overlay` §3.1; mốc coverage + nợ test theo task §6 |
 | Commit / PR / docs | [`git-pr.md`](docs/agent-rules/git-pr.md) — tách commit §6 khi PR nhiều xử lý; branch task gắn version §4.2; **dòng test §4.3**; PR phát hành §8.4 |
 | Hoãn docs/test (hotfix, POC) | [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md) — gate CI chỉ khi PR `dev/x.y.z/main` → `main` |
 | Agent chạy song song | [`git-worktree.md`](docs/agent-rules/git-worktree.md) |

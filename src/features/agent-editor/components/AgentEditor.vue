@@ -1,39 +1,50 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import { ref, onMounted } from 'vue'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
+import { ref, computed, onMounted } from 'vue'
 import {
   fetchCustomAgents,
   fetchCustomAgent,
-  saveCustomAgent,
   deleteCustomAgent,
   exportCustomAgent,
-  type AgentScope,
+  type AgentMeta,
 } from '../scripts/agentEditorApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
-import { emptyDraft } from '../business/agentMarkdown.js'
-import AgentSectionEditor from './AgentSectionEditor.vue'
+import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
+import AgentSideMenu from './AgentSideMenu.vue'
+import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
+import AgentFormDialog from './AgentFormDialog.vue'
 import AgentTemplatePicker from './AgentTemplatePicker.vue'
 import AgentNlWizard from './AgentNlWizard.vue'
 
-const props = defineProps<{ projectId?: string | null }>()
+const props = defineProps<{ projectId?: string | null; subSidebarCollapsed?: boolean }>()
 
 const { t } = useI18nHelpers()
-const agents = ref([])
+
+const agents = ref<AgentMeta[]>([])
 const catalog = ref({ skills: [], agents: [] })
-const draft = ref(emptyDraft())
-const selectedName = ref('')
-const scope = ref<AgentScope>('project')
-const saving = ref(false)
-const message = ref('')
 const error = ref('')
+const message = ref('')
+
+// Agent đang xem ở main — cũng là target của nút Export (QA Q1 → A).
+const viewing = ref<AgentMeta | null>(null)
+const viewContent = ref('')
+const viewLoading = ref(false)
+const deletingKey = ref<string | null>(null)
+
+const showDialog = ref(false)
+const editingAgent = ref<AgentMeta | null>(null)
+const initialDraft = ref<Record<string, unknown> | null>(null)
 const showTemplates = ref(false)
 const showNl = ref(false)
+
+const keyOf = (a: AgentMeta) => `${a.scope}:${a.name}`
+const selectedKey = computed(() => (viewing.value ? keyOf(viewing.value) : null))
 
 async function loadList() {
   try {
     const data = await fetchCustomAgents(props.projectId ?? undefined)
     agents.value = data.agents || []
-  } catch (e) {
+  } catch (e: any) {
     error.value = String(e.message || e)
   }
 }
@@ -50,66 +61,70 @@ onMounted(async () => {
   await Promise.all([loadList(), loadCatalog()])
 })
 
-function newAgent() {
-  selectedName.value = ''
-  scope.value = 'project'
-  draft.value = emptyDraft({ name: 'new-agent' })
-  message.value = ''
-}
-
-async function selectAgent(agent) {
-  try {
-    const agentScope = agent.scope === 'global' ? 'global' : 'project'
-    const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agentScope)
-    selectedName.value = agent.name
-    scope.value = agentScope
-    draft.value = { ...data.draft, name: data.name }
-    message.value = ''
-  } catch (e) {
-    error.value = String(e.message || e)
-  }
-}
-
-async function save() {
-  saving.value = true
+async function openViewer(agent: AgentMeta) {
+  viewing.value = agent
+  viewLoading.value = true
   error.value = ''
   message.value = ''
   try {
-    const result = await saveCustomAgent(draft.value, props.projectId ?? undefined, scope.value)
-    selectedName.value = result.name
-    message.value = t('agentEditor.messages.saved', { name: result.name })
-    await loadList()
-    await loadCatalog()
-  } catch (e) {
+    const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agent.scope)
+    viewContent.value = data.content ?? ''
+  } catch (e: any) {
+    // Agent có thể vừa bị xoá ngoài dashboard — trả main về empty state thay vì
+    // kẹt ở spinner, lỗi hiện bên cột trái.
     error.value = String(e.message || e)
+    viewing.value = null
+    viewContent.value = ''
   } finally {
-    saving.value = false
+    viewLoading.value = false
   }
 }
 
-async function remove() {
-  if (!selectedName.value) return
-  if (!confirm(t('agentEditor.messages.confirmDelete', { name: selectedName.value }))) return
+function openEditor(agent: AgentMeta) {
+  editingAgent.value = agent
+  initialDraft.value = null
+  showDialog.value = true
+}
+
+function newAgent() {
+  editingAgent.value = null
+  initialDraft.value = null
+  showDialog.value = true
+}
+
+async function removeAgent(agent: AgentMeta) {
+  if (deletingKey.value) return // chặn double-click
+  if (!confirm(t('agentEditor.messages.confirmDelete', { name: agent.name }))) return
+  deletingKey.value = keyOf(agent)
+  error.value = ''
   try {
-    await deleteCustomAgent(selectedName.value, props.projectId ?? undefined, scope.value)
+    await deleteCustomAgent(agent.name, props.projectId ?? undefined, agent.scope)
+    if (viewing.value && keyOf(viewing.value) === keyOf(agent)) {
+      viewing.value = null
+      viewContent.value = ''
+    }
+    await Promise.all([loadList(), loadCatalog()])
     message.value = t('agentEditor.messages.deleted')
-    newAgent()
-    await loadList()
-    await loadCatalog()
-  } catch (e) {
+  } catch (e: any) {
     error.value = String(e.message || e)
+  } finally {
+    deletingKey.value = null
   }
 }
 
 async function doExport(overwrite = false) {
-  if (!selectedName.value) {
-    error.value = t('agentEditor.messages.saveBeforeExport')
-    return
-  }
+  const agent = viewing.value
+  if (!agent) return
   try {
-    const result = await exportCustomAgent(selectedName.value, overwrite, props.projectId ?? undefined, scope.value)
-    message.value = `Exported → ${result.path}`
-  } catch (e) {
+    const result = await exportCustomAgent(
+      agent.name,
+      overwrite,
+      props.projectId ?? undefined,
+      agent.scope,
+    )
+    message.value = t('agentEditor.messages.exported', { path: result.path })
+    error.value = ''
+  } catch (e: any) {
     const msg = String(e.message || e)
     if (msg.includes('file exists') && confirm(t('agentEditor.messages.confirmOverwrite'))) {
       await doExport(true)
@@ -119,142 +134,156 @@ async function doExport(overwrite = false) {
   }
 }
 
-function applyDraft(newDraft) {
-  draft.value = { ...emptyDraft(), ...newDraft }
-  selectedName.value = ''
+/** Draft từ 2 wizard — đóng wizard rồi mới mở dialog, hai cái loại trừ nhau. */
+function applyDraft(draft: Record<string, unknown>) {
+  showTemplates.value = false
+  showNl.value = false
+  editingAgent.value = null
+  initialDraft.value = draft
+  showDialog.value = true
+}
+
+function closeDialog() {
+  showDialog.value = false
+}
+
+/**
+ * `savedName` là tên SAU khi lưu (đã qua sanitize của backend) — đổi field
+ * `name` rồi lưu là đổi luôn file đích, nên bám theo `viewing` cũ sẽ hiện lại
+ * bản chưa đổi. Ưu tiên đúng scope, vì dialog cho phép đổi cả scope.
+ */
+async function onSaved(savedName: string) {
+  await Promise.all([loadList(), loadCatalog()])
+  const current = viewing.value
+  if (!current) return
+  const byName = agents.value.filter((a) => a.name === savedName)
+  const next = byName.find((a) => a.scope === current.scope) ?? byName[0]
+  await openViewer(next ?? current)
 }
 </script>
 
 <template>
-  <div class="agent-editor">
-    <aside class="agent-list-panel">
-      <div class="agent-list-head">
-        <h2>Custom Agents</h2>
-        <button type="button" class="btn-primary btn-sm" @click="newAgent">+ New</button>
+  <CScreenLayout
+    class="agent-editor-layout"
+    :sub-sidebar-collapsed="subSidebarCollapsed"
+    :hide-main="!viewing"
+  >
+    <template #left>
+      <!-- class `.agent-editor` giữ nguyên: đây là neo ổn định của 2 spec e2e. -->
+      <div class="agent-editor">
+        <template v-if="!subSidebarCollapsed">
+          <AgentSideMenu
+            :agents="agents"
+            :selected-key="selectedKey"
+            :busy-key="deletingKey"
+            :can-export="!!viewing"
+            @new="newAgent"
+            @templates="showTemplates = true"
+            @nl="showNl = true"
+            @export="doExport(false)"
+            @view="openViewer"
+            @edit="openEditor"
+            @delete="removeAgent"
+          />
+          <p v-if="error" class="err agent-editor-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg agent-editor-msg">{{ message }}</p>
+        </template>
       </div>
-      <ul class="agent-list">
-        <li
-          v-for="a in agents"
-          :key="`${a.scope}:${a.name}`"
-          class="agent-list-item"
-          :class="{ active: selectedName === a.name && scope === a.scope }"
-          @click="selectAgent(a)"
-        >
-          <span class="agent-list-name">{{ a.name }}</span>
-          <span class="chip chip-xs">{{ a.scope === 'global' ? t('agentEditor.fields.scopeGlobal') : t('agentEditor.fields.scopeProject') }}</span>
-        </li>
-        <li v-if="!agents.length" class="muted agent-list-empty">{{ t('agentEditor.list.empty') }}</li>
-      </ul>
-    </aside>
+    </template>
 
-    <div class="agent-form-panel">
-      <div class="agent-toolbar">
-        <button type="button" class="btn-ghost btn-sm" @click="showTemplates = true">Template / Copy</button>
-        <button type="button" class="btn-ghost btn-sm" @click="showNl = true">Build NL</button>
-        <button type="button" class="btn-ghost btn-sm" :disabled="!selectedName" @click="doExport(false)">Export .claude/agents</button>
-        <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">{{ t('agentEditor.actions.save') }}</button>
-        <button type="button" class="btn-ghost btn-sm btn-danger" :disabled="!selectedName" @click="remove">{{ t('agentEditor.actions.delete') }}</button>
+    <template #main>
+      <div class="agent-main">
+        <!-- Sub-menu thu lại thì cột trái rộng 0 (override bên dưới), nên chỗ
+             duy nhất còn thấy được là main. Hai trạng thái loại trừ nhau nên
+             thông báo không bao giờ render hai lần. -->
+        <template v-if="subSidebarCollapsed">
+          <p v-if="error" class="err agent-editor-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg agent-editor-msg">{{ message }}</p>
+        </template>
+        <!-- `with-frontmatter`: agent đọc nguyên file `.md`, khối `---` đầu file
+             đúng là metadata nên tách ra thành block riêng. -->
+        <CMarkdownView
+          v-if="viewing && !viewLoading"
+          :title="viewing.name"
+          :doc-key="selectedKey ?? ''"
+          :content="viewContent"
+          with-frontmatter
+        />
+        <p v-else-if="viewLoading" class="muted agent-main-empty">{{ t('agentEditor.viewer.loading') }}</p>
+        <div v-else class="muted agent-main-empty">{{ t('agentEditor.viewer.empty') }}</div>
       </div>
+    </template>
+  </CScreenLayout>
 
-      <p v-if="message" class="ok-msg">{{ message }}</p>
-      <p v-if="error" class="err">{{ error }}</p>
-
-      <div v-if="showTemplates" class="agent-modal">
+  <!-- Dialog + 2 wizard là modal ngang hàng, đứng ngoài CScreenLayout. -->
+  <AgentFormDialog
+    v-if="showDialog"
+    :agent="editingAgent"
+    :initial-draft="initialDraft"
+    :project-id="projectId"
+    :catalog="catalog"
+    @close="closeDialog"
+    @saved="onSaved"
+  />
+  <!-- `.modal-body` là bắt buộc theo hợp đồng ghi ở `_shell.scss`: `.modal`
+       không khai overflow, nội dung cao quá 88vh mà không có tầng này thì bị
+       vẽ ra ngoài viền. Cả 2 wizard đều không tự khai overflow ở root. -->
+  <div v-if="showTemplates" class="modal-backdrop" @click.self="showTemplates = false">
+    <div class="modal">
+      <div class="modal-body">
         <AgentTemplatePicker @apply-draft="applyDraft" @close="showTemplates = false" />
       </div>
-      <div v-if="showNl" class="agent-modal">
+    </div>
+  </div>
+  <div v-if="showNl" class="modal-backdrop" @click.self="showNl = false">
+    <div class="modal">
+      <div class="modal-body">
         <AgentNlWizard :project-id="projectId" @apply-draft="applyDraft" @close="showNl = false" />
       </div>
-
-      <div class="agent-basic-fields">
-        <label class="cfg-label">
-          Name
-          <input v-model="draft.name" class="cfg-input" placeholder="agent-name" />
-        </label>
-        <label class="cfg-label">
-          Description
-          <input v-model="draft.description" class="cfg-input" :placeholder="t('agentEditor.fields.descriptionPlaceholder')" />
-        </label>
-        <label class="cfg-label">
-          {{ t('agentEditor.fields.recommendedModel') }}
-          <input v-model="draft.model" class="cfg-input" placeholder="claude-sonnet-4-6" />
-        </label>
-        <label class="cfg-label">
-          {{ t('agentEditor.fields.scope') }}
-          <select v-model="scope" class="cfg-input">
-            <option value="project">{{ t('agentEditor.fields.scopeProject') }}</option>
-            <option value="global">{{ t('agentEditor.fields.scopeGlobal') }}</option>
-          </select>
-        </label>
-      </div>
-
-      <AgentSectionEditor
-        :draft="draft"
-        :catalog="catalog"
-        @update:draft="draft = $event"
-        @message="message = $event; error = ''"
-        @error="error = $event; message = ''"
-      />
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
 .agent-editor {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+// Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là một
+// cột xám rỗng — cùng cách MonitorLayout xử lý. Selector đích nằm TRÊN slot
+// "left", nên override phải neo vào chính gốc CScreenLayout.
+.agent-editor-layout :deep(.c-screen-layout__body--left-collapsed) {
+  grid-template-columns: 0 1fr;
+}
+.agent-editor-msg {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.agent-main {
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
 }
-.agent-list-panel {
-  border-right: 1px solid var(--border);
-  background: var(--panel);
-  padding: 12px;
-  overflow-y: auto;
+// Root của component con nhận luôn scope id của cha, nên không cần `:deep`.
+.agent-main > .c-md-view {
+  flex: 1;
+  min-height: 0;
+  height: auto;
 }
-.agent-list-head {
+.agent-main-empty {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.agent-list-head h2 { font-size: 14px; margin: 0; }
-.agent-list { list-style: none; margin: 0; padding: 0; }
-.agent-list-item {
-  padding: 8px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  padding: 24px;
+  text-align: center;
   font-size: 13px;
-}
-.agent-list-item:hover { background: var(--panel-2); }
-.agent-list-item.active { background: var(--accent-dim); border: 1px solid var(--accent); }
-.agent-list-empty { padding: 8px; }
-.agent-form-panel {
-  padding: 16px;
-  overflow-y: auto;
-}
-.agent-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.agent-basic-fields {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 16px;
-  max-width: 560px;
-}
-.agent-modal {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px;
-  margin-bottom: 14px;
 }
 </style>

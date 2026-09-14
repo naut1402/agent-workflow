@@ -2,7 +2,7 @@
 // bubbles. Global rather than scoped because the window shell and its two
 // bodies (creation-flow builder, task/runner chat) are separate components that
 // must share one look — see docs/architecture.md §3.3.
-/* Theme tokens only (see src/styles/_tokens.scss) — the panel must follow the
+/* Theme tokens only (see src/frontend/styles/_tokens.scss) — the panel must follow the
    light/dark theme instead of the previous hardcoded white surface. */
 .nl-chat-window {
   position: fixed;
@@ -198,7 +198,7 @@
   border-radius: 10px 10px 10px 2px;
 }
 /* Runner replies render as markdown through the shared `.md` styles
-   (src/styles/_monitor.scss) — scaled down for the chat bubble. */
+   (src/frontend/styles/_monitor.scss) — scaled down for the chat bubble. */
 .nl-chat-message.md {
   font-size: 12px;
   line-height: 1.5;

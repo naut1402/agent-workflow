@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { parseMarkdown } from '../../../core/lib/markdownLib'
-import { useCopyText } from '../../../core/composables/useCopyText'
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import Icon from '../../../core/ui/Icon.vue'
+import { parseMarkdown } from '../../../frontend/lib/markdownLib'
+import { useCopyText } from '../../../frontend/composables/useCopyText'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
+import Icon from '../../../frontend/ui/Icon.vue'
 
 /**
  * One chat message, shared by both bodies (builder + task) — the only place in

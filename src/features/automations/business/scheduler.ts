@@ -8,7 +8,7 @@
  * `registryHome()/automations/` — khi boot quét lại là tính tiếp due.
  */
 
-import { loadRegistry } from '../../../core/registry.js'
+import { loadRegistry } from '../../../backend/registry.js'
 import type { AutomationRuleRecord } from '../schemas/automation.js'
 import { evaluateRuleTriggers } from './matcher.js'
 import { clearStaleInFlight, getRuleState } from './runLedger.js'

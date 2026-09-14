@@ -2,25 +2,29 @@
  * Parse / compile custom agent markdown ↔ AgentDraft JSON.
  */
 
-import { asArray } from '../../../core/lib/arrayUtils.ts'
-import { loadYaml, dumpYaml } from '../../../core/lib/yamlLib.ts'
-import { slugifySectionKey } from '../../../core/lib/stringUtils.ts'
+import { asArray } from '../../../backend/lib/arrayUtils.ts'
+import { loadYaml, dumpYaml } from '../../../backend/lib/yamlLib.ts'
+import { slugifySectionKey } from '../../../shared/lib/stringUtils.ts'
+import {
+  DEFAULT_SECTION_ORDER,
+  SECTION_TITLES,
+  FIXED_SECTION_KEYS,
+  getSectionTitle,
+  ensureSectionOrder,
+  emptyDraft,
+  draftFromCatalogAgent,
+} from './agentDraft.js'
 
 export { slugifySectionKey }
-
-const DEFAULT_SECTION_ORDER = ['role', 'skills', 'workflow', 'guardrail', 'output']
-
-const SECTION_TITLES = {
-  role: 'Vai trò',
-  skills: 'Skills',
-  workflow: 'Workflow',
-  guardrail: 'Guardrail',
-  output: 'Report output',
-  unclassified: 'Chưa phân loại',
+export {
+  DEFAULT_SECTION_ORDER,
+  SECTION_TITLES,
+  FIXED_SECTION_KEYS,
+  getSectionTitle,
+  ensureSectionOrder,
+  emptyDraft,
+  draftFromCatalogAgent,
 }
-
-/** Sections that cannot be removed from the editor. */
-export const FIXED_SECTION_KEYS = ['role', 'workflow']
 
 const HEADING_ALIASES = {
   'vai trò': 'role',
@@ -65,49 +69,7 @@ function appendUnclassified(sections, heading, content) {
     : block.trim()
 }
 
-export function getSectionTitle(key, draft = {}) {
-  return draft.section_labels?.[key] || SECTION_TITLES[key] || key
-}
-
-export function ensureSectionOrder(draft) {
-  const order = [...(draft.section_order || DEFAULT_SECTION_ORDER)]
-  const sections = draft.sections || {}
-
-  for (const key of FIXED_SECTION_KEYS) {
-    if (!order.includes(key)) order.push(key)
-  }
-
-  for (const key of Object.keys(sections)) {
-    if (sections[key]?.trim() && !order.includes(key)) order.push(key)
-  }
-
-  return order
-}
-
-export function emptyDraft(overrides = {}) {
-  const draft = {
-    name: '',
-    description: '',
-    model: 'claude-sonnet-4-6',
-    skills: [],
-    parameters: [],
-    sections: {
-      role: '',
-      skills: '',
-      workflow: '',
-      guardrail: '',
-      output: '',
-      unclassified: '',
-    },
-    section_order: [...DEFAULT_SECTION_ORDER],
-    section_labels: {},
-    ...overrides,
-  }
-  draft.section_order = ensureSectionOrder(draft)
-  return draft
-}
-
-/** Parse agent markdown (YAML via `src/core/lib/yamlLib`). */
+/** Parse agent markdown (YAML via `src/backend/lib/yamlLib`). */
 export function parseAgentMarkdown(raw) {
   const lines = raw.split(/\r?\n/)
   if (lines[0]?.trim() !== '---') {
@@ -210,19 +172,6 @@ export function compileAgentMarkdown(draft) {
   return `---\n${fmYaml}\n---\n\n${bodyParts.join('\n\n')}\n`
 }
 
-export function draftFromCatalogAgent(agent) {
-  const skills = agent.skills || []
-  return emptyDraft({
-    name: `${agent.name}-copy`,
-    description: agent.description || '',
-    skills: [...skills],
-    sections: {
-      role: `Agent dựa trên **${agent.name}** (${agent.source || agent.plugin}).\n\nMô tả gốc: ${agent.description || '—'}`,
-      skills: skills.length ? skills.map((s) => `- ${s}`).join('\n') : '',
-    },
-  })
-}
-
 /** Build draft from full agent markdown (catalog copy). */
 export function draftFromAgentMarkdown(raw, agentMeta = {}) {
   const parsed = parseAgentMarkdown(raw)
@@ -259,5 +208,3 @@ export function heuristicDraftFromDescription(description) {
   draft.sections.output = '- Artifact markdown trong `.dev-team-agent/tasks/<id>/`'
   return draft
 }
-
-export { DEFAULT_SECTION_ORDER, SECTION_TITLES }

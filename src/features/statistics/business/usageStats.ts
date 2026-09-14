@@ -1,7 +1,7 @@
-import { readTextFile, statSafe } from '../../../core/lib/fileHelper.js'
-import { logFile } from '../../../core/log/fileDriver.js'
-import { isLogTypeEnabled } from '../../../core/log/loggingPrefsIo.js'
-import { parseLogLine, type UsageLogEntry } from '../../../core/log/schema.js'
+import { readTextFile, statSafe } from '../../../backend/lib/fileHelper.js'
+import { logFile } from '../../../backend/log/fileDriver.js'
+import { isLogTypeEnabled } from '../../../backend/log/loggingPrefsIo.js'
+import { parseLogLine, type UsageLogEntry } from '../../../shared/log/schema.js'
 import type {
   UsageGroup,
   UsageGroupBy,
@@ -11,13 +11,12 @@ import type {
 } from '../schemas/usageStats.js'
 
 /**
- * Aggregation token usage cho mode Thống kê (issue #231). Đọc `usage.jsonl`
- * defensive (file thiếu / dòng hỏng → bỏ qua, không throw) rồi group/sum theo
- * dimension có sẵn trên `UsageLogEntry` (projectId/taskId/stepId/jobId/…).
+ * Aggregation token usage cho mode Thống kê. Đọc `usage.jsonl` defensive (file
+ * thiếu / dòng hỏng → bỏ qua, không throw) rồi group/sum theo dimension có sẵn
+ * trên `UsageLogEntry` (projectId/taskId/stepId/jobId/…).
  *
- * `readUsageEntries()` là ĐƠN VỊ ĐỌC duy nhất của feature: khi PR #229 (SQLite
- * log backend) merge, nhánh fast-path SQL cắm tại đây mà không sửa
- * controller/UI — bên ngoài vẫn thấy mảng entry như cũ.
+ * `readUsageEntries()` là đơn vị đọc duy nhất của feature, và nó chỉ đọc JSONL —
+ * chưa rẽ theo `logging.driver`, nên bật driver `sqlite` là mode Thống kê rỗng.
  */
 
 /** Số group tối đa trả về — tránh xychart/pie nổ khi có hàng trăm task/job. */

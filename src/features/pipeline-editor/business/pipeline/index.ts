@@ -14,7 +14,7 @@ export const DEFAULT_PIPELINE: any = {
     { id: 'reviewer', name: 'Review', agent: 'dev-agent-teams:reviewer', produces: ['review.md', 'test-spec.md'], export_key: 'reviewer', hitl: { mode: 'manual', gate_id: 'hitl-3', blocking: true, retry: { on: 'must_fix', restart_from: 'implementer', max: 2 } } },
     { id: 'pr-creator', name: 'PR', agent: 'dev-agent-teams:pr-creator', produces: ['pr-desc.md'], export_key: 'pr_creator', hitl: { mode: 'none' } },
   ],
-  doc_reviewer: { agent: 'dev-agent-teams:doc-reviewer', skills: ['doc-review'], rule_category: 'doc-review', rule_required: true },
+  doc_reviewer: { agent: 'dev-agent-teams:doc-reviewer', skills: ['doc-review'], rule_category: 'doc-review', rule_required: false, rule_fallback_skill: 'doc-review' },
 }
 
 type Step = Record<string, any>
@@ -52,8 +52,8 @@ export function perTaskStepsReplace(baseSteps: Step[], per: any): boolean {
   return !per.steps.some((s: Step) => s.id && baseIds.has(s.id))
 }
 
-import { joinPath } from '../../../../core/lib/fileHelper.js'
-import { readYamlChecked } from '../../../../core/lib/yamlLib.js'
+import { joinPath } from '../../../../backend/lib/fileHelper.js'
+import { readYamlChecked } from '../../../../backend/lib/yamlLib.js'
 
 
 /**

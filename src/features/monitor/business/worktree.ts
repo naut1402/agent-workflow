@@ -13,7 +13,7 @@ import {
   relativePath,
   resolvePath,
   resolvePathUnder,
-} from '../../../core/lib/fileHelper.js'
+} from '../../../backend/lib/fileHelper.js'
 import {
   formatGitFailure,
   runGit,

@@ -11,7 +11,7 @@
  * doesn't comply, and is applied to the (user-editable) draft before saving.
  */
 
-import { slugify as slugifyBase } from '../../../core/lib/stringUtils'
+import { slugify as slugifyBase } from '../../../shared/lib/stringUtils'
 
 const DEFAULT_VERSION = 1
 

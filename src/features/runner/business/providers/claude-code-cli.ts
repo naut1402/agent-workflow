@@ -1,5 +1,5 @@
-import { appendTextFileSync, existsSync, joinPath } from '../../../../core/lib/fileHelper.js'
-import { spawn } from '../../../../core/lib/processHelper.js'
+import { appendTextFileSync, existsSync, joinPath } from '../../../../backend/lib/fileHelper.js'
+import { spawn } from '../../../../backend/lib/processHelper.js'
 import { resolveSecretRef } from '../credentials.js'
 import {
   buildCursorJsonInvocation,

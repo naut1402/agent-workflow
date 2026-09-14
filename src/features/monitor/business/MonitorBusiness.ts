@@ -1,4 +1,4 @@
-import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
+import { AbstractBusiness } from '../../../backend/business/AbstractBusiness.js'
 import { collectTasks, flowProfilePath, createTask, readState } from './tasks/index.js'
 import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, deleteTask, repairTaskState } from './tasks/state.js'
 import { loadPipelineConfig } from './index.js'

@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from '../../../core/http/client'
+import { apiGet, apiPost } from '../../../frontend/http/client'
 
 export async function fetchGithubIssue(url: string, projectId?: string) {
   return apiPost('/api/github/issue', { url }, { query: { project: projectId } })

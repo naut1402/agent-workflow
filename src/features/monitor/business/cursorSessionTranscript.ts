@@ -1,4 +1,4 @@
-import { existsSync, joinPath, readdirSync, statSync } from '../../../core/lib/fileHelper.js'
+import { existsSync, joinPath, readdirSync, statSync } from '../../../backend/lib/fileHelper.js'
 import fs from 'node:fs'
 import os from 'node:os'
 import {

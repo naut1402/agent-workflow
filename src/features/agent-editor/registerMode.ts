@@ -1,4 +1,5 @@
-import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
+import type { ModeRegistry, ShellContext } from '../../frontend/shell/modeRegistry'
+import { subSidebarBindings } from '../../frontend/shell/subSidebarBindings'
 import AgentEditor from './components/AgentEditor.vue'
 
 export function registerMode(registry: ModeRegistry): void {
@@ -9,8 +10,13 @@ export function registerMode(registry: ModeRegistry): void {
     order: 3,
     statusKind: 'paused',
     panel: AgentEditor,
+    descriptionKey: 'common.modeDesc.agentEditor',
+    maturity: 'stable',
+    defaultEnabled: true,
+    subSidebar: { persistKey: 'dev-dashboard-agent-editor-subsidebar-collapsed' },
     bindings: (ctx: ShellContext) => ({
       projectId: (ctx as Record<string, unknown>).selectedProjectId,
+      ...subSidebarBindings(ctx, 'agentEditor'),
     }),
   })
 }

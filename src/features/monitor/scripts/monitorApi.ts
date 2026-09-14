@@ -1,6 +1,6 @@
 import type { TaskArchivePatch, TaskNamePatch } from '../schemas/task'
-import { t } from '../../../plugins/i18n'
-import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
+import { t } from '../../../frontend/plugins/i18n'
+import { apiGet, apiPost, apiRequest } from '../../../frontend/http/client'
 
 export async function fetchProjects() {
   return apiGet('/api/projects')

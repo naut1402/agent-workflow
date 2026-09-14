@@ -1,6 +1,6 @@
-import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
-import { spawnSync } from '../../../core/lib/processHelper.js'
-import { registryHome } from '../../../core/registry.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
+import { spawnSync } from '../../../backend/lib/processHelper.js'
+import { registryHome } from '../../../backend/registry.js'
 import { listCustomCommands } from './commands.js'
 import {
   CONNECTIONS_VERSION,

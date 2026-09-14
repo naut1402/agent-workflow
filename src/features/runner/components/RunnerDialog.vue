@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { slugify } from '../../../core/lib/stringUtils'
+import { slugify } from '../../../shared/lib/stringUtils'
 import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
 import { deleteConnection } from '../scripts/ConnectionDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
-import CSelect from '../../../core/ui/CSelect.vue'
-import Icon from '../../../core/ui/Icon.vue'
+import CSelect from '../../../frontend/ui/CSelect.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
 import type { ConnectionOption, ProviderEntry, ProviderConfigOption, RunnerDraft } from '../types'
 
 const props = defineProps<{

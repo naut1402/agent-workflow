@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, inject, onMounted } from 'vue'
 import { useAgentBuild } from '../composables/useAgentBuild'
-import { navigateToModeKey } from '../../../core/shell/keys'
+import { canNavigateToModeKey, navigateToModeKey } from '../../../frontend/shell/keys'
 
 // Merged NL build wizard (Correction A / F0005): describe → preview → optional
 // "Lưu & chạy thử" smoke-run, replacing both the draft-only AS-IS wizard here
@@ -24,6 +24,10 @@ const emit = defineEmits<{
 // Runner mode without bubbling a custom event through every intermediate
 // component.
 const navigateToMode = inject(navigateToModeKey, undefined)
+const canNavigateToMode = inject(canNavigateToModeKey, undefined)
+
+// Không có shell (mount lẻ trong unit test) ⇒ coi như tới được, giữ hành vi cũ.
+const runnerReachable = computed(() => canNavigateToMode?.('runner') ?? true)
 
 const build = useAgentBuild({
   getProjectId: () => props.projectId ?? null,
@@ -141,7 +145,11 @@ function close() {
       </label>
       <p v-if="!build.hasUsableRunner.value" class="err">
         {{ t('agentEditor.nl.noRunner') }}
-        <button type="button" class="btn-link" @click="goToRunner">{{ t('agentEditor.nl.openRunner') }}</button>
+        <span :title="runnerReachable ? undefined : t('agentEditor.nl.runnerModeOff')">
+          <button type="button" class="btn-link" :disabled="!runnerReachable" @click="goToRunner">
+            {{ t('agentEditor.nl.openRunner') }}
+          </button>
+        </span>
         {{ t('agentEditor.nl.noRunnerSuffix') }}
       </p>
 

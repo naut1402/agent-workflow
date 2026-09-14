@@ -32,7 +32,7 @@ Test code sống ở dòng branch riêng ([`git-pr.md`](git-pr.md) §4.3), nên 
 | | Nợ docs/convention | Nợ test |
 |---|---|---|
 | Đánh dấu bằng | file `docs/todo/<issue>/<task-id>.md` | **dòng `test/x.y.z/main` chưa tồn tại hoặc rỗng** |
-| Gate | `todo-debt.yml` — kiểm thư mục có tồn tại (honor-system) | `release-test-gate.yml` — **chạy thật**: overlay dòng test, chạy full suite, gác cổng coverage |
+| Gate | `todo-debt.yml` — kiểm thư mục có tồn tại (honor-system) | `release-test-gate.yml` — **chạy thật**: overlay dòng test, chạy full suite, gác nợ test theo task (`test:status --strict`) |
 | Nới được không | được, bằng cách trả nợ trước khi promote | **không** nới bằng sửa cấu hình cổng. Hotfix gấp thì bỏ qua bằng thao tác có dấu vết (admin merge / ghi rõ ở PR body), không bằng cách tắt gate |
 
 - **Vì sao khác nhau** — nợ docs chỉ người đọc phát hiện được, còn nợ test thì máy chạy ra được. Cái đo được thì gác bằng cách đo, không gác bằng file đánh dấu.

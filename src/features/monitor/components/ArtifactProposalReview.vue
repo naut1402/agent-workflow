@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { onMounted, ref } from 'vue'
 import { useArtifactProposal } from '../composables/useArtifactProposal'
 

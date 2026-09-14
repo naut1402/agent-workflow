@@ -109,7 +109,6 @@ const IMPORT_RE = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*)['"]([^'"]+)[
 export function resolveSpecifier(fromFile: string, spec: string): string | null {
   let base: string
   if (spec.startsWith('.')) base = path.resolve(path.dirname(path.join(ROOT, fromFile)), spec)
-  else if (spec.startsWith('@configs/')) base = path.join(ROOT, 'src/core/configs', spec.slice('@configs/'.length))
   else if (spec.startsWith('@/')) base = path.join(ROOT, 'src', spec.slice(2))
   else return null
 
@@ -136,7 +135,7 @@ export function resolveSpecifier(fromFile: string, spec: string): string | null 
  */
 export function virtualEdges(files: string[]): Map<string, string[]> {
   const featureApis = files.filter((f) => /^src\/features\/[^/]+\/api\.ts$/.test(f))
-  return new Map([['src/api/apiServer.ts', featureApis]])
+  return new Map([['src/backend/apiServer.ts', featureApis]])
 }
 
 /** file → các file trong repo mà nó import. */

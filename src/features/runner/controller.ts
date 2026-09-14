@@ -1,7 +1,7 @@
 import path from 'node:path'
-import { AbstractController } from '../../core/http/AbstractController.js'
-import { emitAudit } from '../../core/log/store.js'
-import { emitEntity } from '../../core/events/index.js'
+import { AbstractController } from '../../backend/http/AbstractController.js'
+import { emitAudit } from '../../backend/log/store.js'
+import { emitEntity } from '../../backend/events/index.js'
 import * as runnerStore from './business/index.js'
 import type { JobStatus } from './business/types.js'
 

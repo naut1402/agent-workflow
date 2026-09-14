@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import CComboSelect from '../../../core/ui/CComboSelect.vue'
-import type { CComboSelectOption } from '../../../core/ui/CComboSelect.vue'
-import Icon from '../../../core/ui/Icon.vue'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
+import CComboSelect from '../../../frontend/ui/CComboSelect.vue'
+import type { CComboSelectOption } from '../../../frontend/ui/CComboSelect.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
 import { varsSkeletonForStep } from '../lib/vars'
 import type { AutomationListItem } from '../scripts/automationsApi'
 import type { AutomationFormOptions } from '../scripts/automationsApi'
@@ -1009,14 +1009,6 @@ function submit(): void {
     input {
       margin: 0;
     }
-  }
-
-  .modal-foot {
-    border-top: 1px solid var(--border);
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    padding: 10px 16px;
   }
 
   /* ── Trigger rows ── */

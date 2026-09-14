@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import { useChatSurface } from '../../nl-chat/composables/useChatSurface'
-import Icon from '../../../core/ui/Icon.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
 
 const props = defineProps({
   data: { type: Object, required: true },

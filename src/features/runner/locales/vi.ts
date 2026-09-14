@@ -18,7 +18,6 @@ export default {
     makeDefault: 'Đặt làm mặc định',
     copyRunner: 'Sao chép runner',
     deleteRunner: 'Xóa runner',
-    recentJobs: 'Jobs gần đây',
   },
   toggle: {
     enable: 'Bật runner',

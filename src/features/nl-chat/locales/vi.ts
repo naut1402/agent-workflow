@@ -40,6 +40,10 @@ export default {
     unsupported: '{name} thuộc loại không được hỗ trợ.',
     uploadFailed: 'Không upload được tập tin: {error}',
   },
+  knowledge: {
+    pick: 'Chọn knowledge',
+    resolveFailed: 'Không đọc được knowledge, đã gửi message không kèm: {error}',
+  },
   composer: {
     enterToSend: 'Enter để gửi, Shift+Enter để xuống dòng',
     enterToNewline: 'Enter để xuống dòng, Ctrl/⌘+Enter để gửi',

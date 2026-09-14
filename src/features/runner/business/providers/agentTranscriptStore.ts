@@ -4,8 +4,8 @@ import {
   readTextFileSync,
   joinPath,
   writeTextFileAtomicSync,
-} from '../../../../core/lib/fileHelper.js'
-import { registryHome } from '../../../../core/registry.js'
+} from '../../../../backend/lib/fileHelper.js'
+import { registryHome } from '../../../../backend/registry.js'
 
 /**
  * Transcript store for the API-based agentic providers (`AgenticApiProvider`

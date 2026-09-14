@@ -7,7 +7,7 @@
  * Trả kết quả thuần (không biết HTTP) — controller map sang response.
  */
 
-import { dirname, joinPath, readTextFile } from '../../../../core/lib/fileHelper.js'
+import { dirname, joinPath, readTextFile } from '../../../../backend/lib/fileHelper.js'
 import { isRunnableTarget } from '../../lib/pipelineRunGuards.js'
 import { loadPipelineConfig } from '../peers.js'
 import { listJobs, submitJob } from '../index.js'

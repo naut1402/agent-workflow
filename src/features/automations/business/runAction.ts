@@ -8,9 +8,9 @@
  * trong run record (outcome failed/skipped), không ném lỗi lên caller.
  */
 
-import { joinPath, mkdirSync, randomBytes, randomUUID, readTextFileSync, readdirSync } from '../../../core/lib/fileHelper.js'
-import { emit } from '../../../core/events/index.js'
-import { get as getProject } from '../../../core/registry.js'
+import { joinPath, mkdirSync, randomBytes, randomUUID, readTextFileSync, readdirSync } from '../../../backend/lib/fileHelper.js'
+import { emit } from '../../../backend/events/index.js'
+import { get as getProject } from '../../../backend/registry.js'
 import { submitJob, loadJob } from '../../runner/business/index.js'
 import type { JobRecord } from '../../runner/business/index.js'
 import { createTask, fetchUrlSafe, runTaskStep } from '../../monitor/business/index.js'

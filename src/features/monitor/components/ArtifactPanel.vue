@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, onUpdated, inject } from 'vue'
 import { useFullscreen } from '@vueuse/core'
-import { parseMarkdown, renderMermaid } from '../../../core/lib/markdownLib'
+import { parseMarkdown, renderMermaid } from '../../../frontend/lib/markdownLib'
 import { fetchArtifact, saveArtifact, fetchArtifactActions } from '../scripts/ArtifactPanelApi'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
 import {
@@ -16,12 +16,12 @@ import ArtifactProposalReview from './ArtifactProposalReview.vue'
 import QuickActionMenuDropdown from '../../quick-action/components/QuickActionMenuDropdown.vue'
 import { splitActionsByMenu } from '../../quick-action/lib/menuTree'
 import type { ArtifactMenuNode } from '../schemas/artifactAction'
-import { useAppSettings } from '../../../core/composables/useAppSettings'
-import { attachMermaidControls } from '../../../core/composables/useMermaidControls'
-import { navigateToModeKey } from '../../../core/shell/keys'
-import { resolveArtifactViewMode } from '../../../core/configs/appSettings'
+import { useAppSettings } from '../../../frontend/composables/useAppSettings'
+import { attachMermaidControls } from '../../../frontend/composables/useMermaidControls'
+import { canNavigateToModeKey, navigateToModeKey } from '../../../frontend/shell/keys'
+import { resolveArtifactViewMode } from '../../../frontend/configs/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
-import MarkdownTextEditor from '../../../core/ui/MarkdownTextEditor.vue'
+import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
 import { classifyArtifactHref } from '../lib/artifactLink'
 import type { ArtifactLinkTarget } from '../lib/artifactLink'
 
@@ -39,6 +39,10 @@ const { settings } = useAppSettings()
 // Provided by App.vue — lets the runner gate below send the user to Runner
 // mode without bubbling a custom event through Monitor/App.
 const navigateToMode = inject(navigateToModeKey, undefined)
+const canNavigateToMode = inject(canNavigateToModeKey, undefined)
+
+// Không có shell (mount lẻ trong unit test) ⇒ coi như tới được, giữ hành vi cũ.
+const runnerReachable = computed(() => canNavigateToMode?.('runner') ?? true)
 
 const content = ref('')
 const loadedKey = ref<string | null>(null)
@@ -605,7 +609,11 @@ onUpdated(() => scheduleMermaid())
       </p>
       <p v-if="gateError" class="art-warning">
         {{ gateError }}
-        <button type="button" class="btn-link" @click="goToRunner">{{ t('monitor.artifact.openRunner') }}</button>
+        <span :title="runnerReachable ? undefined : t('monitor.artifact.runnerModeOff')">
+          <button type="button" class="btn-link" :disabled="!runnerReachable" @click="goToRunner">
+            {{ t('monitor.artifact.openRunner') }}
+          </button>
+        </span>
         <button type="button" class="btn-link" @click="gateError = ''">{{ t('monitor.artifact.hide') }}</button>
       </p>
       <p v-if="message" class="art-message">{{ message }}</p>

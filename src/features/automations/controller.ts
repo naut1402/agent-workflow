@@ -1,7 +1,7 @@
-import { joinPath, readdirSync } from '../../core/lib/fileHelper.js'
-import { AbstractController } from '../../core/http/AbstractController.js'
-import { emitAudit } from '../../core/log/store.js'
-import { emitEntity } from '../../core/events/index.js'
+import { joinPath, readdirSync } from '../../backend/lib/fileHelper.js'
+import { AbstractController } from '../../backend/http/AbstractController.js'
+import { emitAudit } from '../../backend/log/store.js'
+import { emitEntity } from '../../backend/events/index.js'
 import { getConnection, listRunners, providerFamilyOf } from '../runner/business/index.js'
 import { profilesDir } from '../monitor/business/index.js'
 import {

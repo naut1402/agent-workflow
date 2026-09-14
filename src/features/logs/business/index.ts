@@ -1,8 +1,8 @@
-import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
+import { AbstractBusiness } from '../../../backend/business/AbstractBusiness.js'
 import { readLogs } from './store.js'
 import { readJobLog, readJobLogDelta, readTaskJobLogDelta } from './jobLog.js'
-import { isLogTypeEnabled } from '../../../core/log/loggingPrefsIo.js'
-import type { LogType } from '../../../core/log/schema.js'
+import { isLogTypeEnabled } from '../../../backend/log/loggingPrefsIo.js'
+import type { LogType } from '../../../shared/log/schema.js'
 
 export class LogsBusiness extends AbstractBusiness {
   listLogs(opts: { type?: LogType; project?: string; limit?: number }) {
@@ -53,5 +53,5 @@ export { loadJob, listJobs } from '../../runner/business/jobQueue.js'
 export type { JobRecord, JobStatus } from '../../runner/business/types.js'
 
 export { readLogs }
-export { emitAudit, appendRequestLog } from '../../../core/log/store.js'
+export { emitAudit, appendRequestLog } from '../../../backend/log/store.js'
 export { readJobLog, readJobLogDelta, readTaskJobLogDelta, sanitiseJobId } from './jobLog.js'

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, ref, watch } from 'vue'
 import CollapsibleSection from './CollapsibleSection.vue'
 const { t } = useI18nHelpers()

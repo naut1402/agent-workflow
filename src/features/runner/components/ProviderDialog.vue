@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { slugify } from '../../../core/lib/stringUtils'
+import { slugify } from '../../../shared/lib/stringUtils'
 import { saveProviderConfig, deleteProviderConfig } from '../scripts/ProviderDialogApi'
 import { DEFAULT_BASE_URLS } from '../scripts/agenticProviderDefaults'
 import type { ProviderConfigOption, ProviderEntry } from '../types'
-import CSelect from '../../../core/ui/CSelect.vue'
-import InfoTooltip from '../../../core/ui/InfoTooltip.vue'
+import CSelect from '../../../frontend/ui/CSelect.vue'
+import InfoTooltip from '../../../frontend/ui/InfoTooltip.vue'
 
 const props = defineProps<{
   providers: ProviderEntry[]

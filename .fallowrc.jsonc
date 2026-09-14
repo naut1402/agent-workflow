@@ -1,0 +1,5 @@
+{
+  // Dòng source gitignore `/tests/` nên Fallow không thấy consumer nào là test.
+  // Gói chỉ test dùng phải khai ở đây — gỡ khỏi `package.json` sẽ làm suite chết.
+  "ignoreDependencies": ["@vue/test-utils"]
+}
