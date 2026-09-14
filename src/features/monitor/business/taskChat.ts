@@ -9,6 +9,7 @@ import {
 } from './index.js'
 import type { JobRecord, SessionEntry, TaskSessionLedger } from './index.js'
 import { readTextFileSync } from '../../../backend/lib/fileHelper.js'
+import { DECISION_SENTINEL, ORCHESTRATOR_STEP_ID } from '../../../shared/lib/orchestrator.js'
 import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.js'
 import { readCursorSessionTranscript, stripCursorUserWrapper } from './cursorSessionTranscript.js'
 import { readApiAgentTranscript } from './apiAgentTranscript.js'
@@ -28,6 +29,20 @@ function clipFallback(text: string): string {
  * the job log — same approach as nl-chat's `agentStdoutOf`.
  */
 function agentOutputFromJob(job: JobRecord): string {
+  const text = rawAgentOutputFromJob(job)
+  // Người dùng đọc nhật ký điều phối, không đọc dòng lệnh máy.
+  return job.metadata?.orchestratorJob === true ? stripDecisionLine(text) : text
+}
+
+function stripDecisionLine(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => !line.trim().replace(/^`+/, '').replace(/`+$/, '').trim().startsWith(DECISION_SENTINEL))
+    .join('\n')
+    .trim()
+}
+
+function rawAgentOutputFromJob(job: JobRecord): string {
   if (typeof job.stdout === 'string' && job.stdout.trim()) {
     return stripCursorUserWrapper(extractAgentText(job.stdout))
   }
@@ -260,6 +275,33 @@ export function resolveChatSession(
   dismissedForStep?: boolean
 } {
   const jobs = jobsOfTask(taskId)
+
+  // Node điều phối có session riêng. Không tìm thấy thì trả rỗng: rơi về entry
+  // `open` mới nhất là hiển thị khung chat của một step khác, và một step đang
+  // chạy cũng không được chiếm khung chat của node.
+  if (stepId === ORCHESTRATOR_STEP_ID) {
+    const own = jobs.find((j) => j.metadata?.orchestratorJob === true && j.sessionId)
+    if (own?.sessionId) {
+      return {
+        sessionId: own.sessionId,
+        workspace: own.workspace,
+        providerId: providerIdOfJob(own),
+        job: own,
+      }
+    }
+    const ownEntry = [...loadTaskSessionLedger(projectId, taskId).sessions]
+      .reverse()
+      .find((s) => s.sessionId && s.stepIds?.includes(ORCHESTRATOR_STEP_ID))
+    return ownEntry
+      ? {
+          sessionId: ownEntry.sessionId,
+          workspace: ownEntry.workspace,
+          entry: ownEntry,
+          providerId: ownEntry.providerId,
+        }
+      : { sessionId: null }
+  }
+
   const running = jobs.find((j) => j.status === 'queued' || j.status === 'running')
   if (running?.sessionId && (!stepId || stepIdOf(running) === stepId || !stepIdOf(running))) {
     return {
@@ -357,14 +399,18 @@ export function getTaskChatState(
       })
     : { turns: [], total: 0, file: null, matchedProvider: hint as TranscriptProviderHint }
 
+  // Node điều phối không mượn runner của step nào: rơi về job step gần nhất là
+  // panel hiện tên runner của một step khác.
+  const orchestratorPanel = opts.stepId === ORCHESTRATOR_STEP_ID
   const runnerJob =
     runningJob ??
     (opts.stepId
       ? jobs.find((j) => stepIdOf(j) === opts.stepId && (j.status === 'succeeded' || j.status === 'failed'))
       : undefined) ??
     resolved.job ??
-    jobs.find((j) => j.status === 'succeeded' || j.status === 'failed') ??
-    jobs[0]
+    (orchestratorPanel
+      ? undefined
+      : (jobs.find((j) => j.status === 'succeeded' || j.status === 'failed') ?? jobs[0]))
   const runnerConfig = runnerJob ? getRunner(runnerJob.runnerId) : null
 
   // Cursor/agent-cli often leave no on-disk transcript (or one that lags behind

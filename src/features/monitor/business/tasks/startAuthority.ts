@@ -54,6 +54,32 @@ export async function setOrchestratorEnabledFlag(
 }
 
 /**
+ * Lưu pipeline scope `task` ⇒ đồng bộ `.dev-state` với YAML vừa ghi.
+ *
+ * Ghi cờ cache `orchestrator_enabled` (điều kiện để lượt quét nhặt được task) và
+ * xoá cờ halt: lưu lại checkbox là cách người dùng reset node điều phối.
+ */
+export async function applyOrchestratorConfigChange(
+  root: string,
+  taskId: string,
+  enabled: boolean,
+): Promise<void> {
+  const stateFile = stateFileOf(root, taskId)
+  await withTaskLock(root, taskId, async () => {
+    const read = await readState(stateFile)
+    if (!read.ok) return
+    const state = read.state as Record<string, unknown>
+    if (state.orchestrator_enabled === enabled && state.orchestrator_halted !== true) return
+    await writeStateAtomic(stateFile, {
+      ...state,
+      orchestrator_enabled: enabled,
+      orchestrator_halted: false,
+      orchestrator_halted_at: null,
+    })
+  })
+}
+
+/**
  * Trạng thái điều phối của một task, đọc từ pipeline thật + state thật.
  * Đồng thời **tự chữa** cờ cache khi nó lệch với pipeline (pipeline được bật/tắt
  * giữa chừng): đường async đúng ngay, cờ cache chỉ lệch tới lần gọi kế tiếp.
