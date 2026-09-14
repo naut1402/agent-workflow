@@ -29,6 +29,15 @@ export const TaskState = z
     archived_at: z.string().nullable().optional(),
     /** Human-readable task title, written by the orchestrator or the create flow. */
     name: z.string().optional(),
+    /**
+     * Cờ cache của `pipeline.orchestrator.enabled` — nguồn chân lý vẫn là
+     * `pipeline.yaml`; cờ này tồn tại để `submitJob` (đồng bộ, không await
+     * được `loadPipelineConfig`) có cái để đọc ở lớp chặn cuối.
+     */
+    orchestrator_enabled: z.boolean().optional(),
+    /** Người bấm Stop / agent trả `halt` — trả quyền start về chế độ tay. */
+    orchestrator_halted: z.boolean().optional(),
+    orchestrator_halted_at: z.string().nullable().optional(),
   })
   .passthrough()
 
@@ -60,6 +69,14 @@ export const TaskNamePatch = z.object({
 
 export type TaskNamePatch = z.infer<typeof TaskNamePatch>
 
+/** Body cho nút Stop của node orchestrator (`PUT /api/task-orchestrator`). */
+export const TaskOrchestratorPatch = z.object({
+  halted: z.boolean(),
+  mtime: z.number(),
+})
+
+export type TaskOrchestratorPatch = z.infer<typeof TaskOrchestratorPatch>
+
 /** UI-facing projection of task state with the same safe defaults the API applies. */
 export interface TaskStateView {
   parent_task_id: string | null
@@ -73,6 +90,9 @@ export interface TaskStateView {
   archived: boolean
   archived_at: string | null
   name: string | null
+  orchestrator_enabled: boolean
+  orchestrator_halted: boolean
+  orchestrator_halted_at: string | null
 }
 
 /**
@@ -97,5 +117,8 @@ export function parseTaskState(raw: unknown): TaskStateView {
     archived: s.archived ?? false,
     archived_at: s.archived_at ?? null,
     name: typeof s.name === 'string' && s.name.trim() ? s.name.trim() : null,
+    orchestrator_enabled: s.orchestrator_enabled ?? false,
+    orchestrator_halted: s.orchestrator_halted ?? false,
+    orchestrator_halted_at: s.orchestrator_halted_at ?? null,
   }
 }

@@ -15,6 +15,9 @@ export const DEFAULT_PIPELINE: any = {
     { id: 'pr-creator', name: 'PR', agent: 'dev-agent-teams:pr-creator', produces: ['pr-desc.md'], export_key: 'pr_creator', hitl: { mode: 'none' } },
   ],
   doc_reviewer: { agent: 'dev-agent-teams:doc-reviewer', skills: ['doc-review'], rule_category: 'doc-review', rule_required: false, rule_fallback_skill: 'doc-review' },
+  // Tắt mặc định: một pipeline.yaml không có key `orchestrator` phải chạy y hệt
+  // như trước khi có tính năng này.
+  orchestrator: { enabled: false, agent: 'dev-agent-teams:orchestrator' },
 }
 
 type Step = Record<string, any>
@@ -77,6 +80,7 @@ export async function loadPipelineConfig(root: string, id: string | null): Promi
     if (Array.isArray(global.steps)) cfg.steps = global.steps
     if (global.defaults) cfg.defaults = { ...cfg.defaults, ...global.defaults }
     if (global.doc_reviewer) cfg.doc_reviewer = { ...cfg.doc_reviewer, ...global.doc_reviewer }
+    if (global.orchestrator) cfg.orchestrator = { ...cfg.orchestrator, ...global.orchestrator }
     if (global.version != null) cfg.version = global.version
     source = 'global'
   }
@@ -97,6 +101,7 @@ export async function loadPipelineConfig(root: string, id: string | null): Promi
       }
       if (per.defaults) cfg.defaults = { ...cfg.defaults, ...per.defaults }
       if (per.doc_reviewer) cfg.doc_reviewer = { ...cfg.doc_reviewer, ...per.doc_reviewer }
+      if (per.orchestrator) cfg.orchestrator = { ...cfg.orchestrator, ...per.orchestrator }
     }
   }
 

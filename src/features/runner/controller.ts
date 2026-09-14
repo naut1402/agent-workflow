@@ -285,6 +285,14 @@ export class RunnerController extends AbstractController {
     if (typeof parsed.agentRef !== 'string' || !parsed.workspace) {
       return this.badRequest('agentRef and workspace are required')
     }
+    // `POST /api/jobs` spread nguyên metadata của caller, nên nó là một đường
+    // start step đầy đủ — phải qua cùng cửa quyền như run-step/chain/automation.
+    const taskId = parsed.metadata?.taskId
+    if (parsed.metadata?.pipelineStepId && typeof taskId === 'string' && taskId) {
+      const check = await runnerStore.assertStartAllowed(root, taskId, 'api')
+      if ('error' in check) return this.json(check.status, { error: check.error, taskId })
+    }
+
     const projectRoot = path.dirname(root)
     const job = runnerStore.submitJob({
       runnerId: parsed.runnerId,

@@ -40,6 +40,9 @@ export const KNOWN_AUTOMATION_EVENT_TYPES: string[] = [
   'webhook.received',
   'webhook.triggered',
   'usage.recorded',
+  'orchestrator.dispatched',
+  'orchestrator.halted',
+  'orchestrator.start_requested',
 ]
 
 if (!process.env.BUN_TEST) {

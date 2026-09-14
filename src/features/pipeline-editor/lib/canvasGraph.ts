@@ -12,6 +12,10 @@ import {
   type PhasePosition,
   type PipelineStepLike,
 } from '../../../frontend/lib/pipelineArtifactGraph'
+import {
+  ORCHESTRATOR_NODE_ID,
+  orchestratorPositionOf,
+} from '../../../frontend/lib/orchestratorNode'
 
 /** Type của node step trên canvas — node phái sinh dùng type `artifact`. */
 const STEP_NODE_TYPE = 'pipelineEditor'
@@ -70,6 +74,14 @@ export function buildEditorGraph(opts: {
   /** = `currentSteps` (đã qua `buildStepFromNode`) — nguồn `produces`/`knowledge_inputs`. */
   steps: PipelineStepLike[]
   labels: ArtifactGraphLabels
+  /**
+   * Key `orchestrator` của pipeline. Node sinh từ **meta**, không phải từ canvas:
+   * nó không nằm trong `steps[]` nên mỗi lần `syncDerivedGraph()` chạy lại là nó
+   * bị dựng lại từ đầu — meta là nguồn duy nhất còn sống qua vòng đó.
+   */
+  orchestrator?: { enabled?: boolean; agent?: string } | null
+  /** Nhãn node điều phối (i18n do caller truyền — builder này thuần). */
+  orchestratorLabel?: string
   // Trả `any[]`: kết quả đi thẳng vào `setNodes`/`setEdges` của VueFlow, mà
   // `Node`/`Edge` của thư viện đòi những field nominal (`XYPosition`,
   // `MarkerType`) builder thuần này cố ý không biết tới.
@@ -104,8 +116,29 @@ export function buildEditorGraph(opts: {
     (e) => !droppedIds.has(e.source) && !droppedIds.has(e.target),
   )
 
+  // Type `orchestrator` (KHÔNG phải `pipelineEditor`) là thứ giữ node này nằm
+  // ngoài `stepNodesOf` — nhờ vậy `stepGraph()` / `topoSort` / `buildFullPipeline`
+  // tự động bỏ qua nó và YAML lưu ra không mọc step rác `__orchestrator__`.
+  const orchestratorNodes =
+    opts.orchestrator?.enabled === true
+      ? [
+          {
+            id: ORCHESTRATOR_NODE_ID,
+            type: 'orchestrator',
+            position: orchestratorPositionOf(phasePositions),
+            draggable: false,
+            selectable: false,
+            deletable: false,
+            data: {
+              label: opts.orchestratorLabel ?? 'Orchestrator',
+              agent: opts.orchestrator.agent ?? '',
+            },
+          },
+        ]
+      : []
+
   return {
-    nodes: [...stepNodes, ...keptArtifactNodes],
+    nodes: [...stepNodes, ...keptArtifactNodes, ...orchestratorNodes],
     edges: [...labelledEdges, ...keptDataFlowEdges],
   }
 }
