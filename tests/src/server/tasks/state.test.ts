@@ -387,7 +387,12 @@ describe('advanceStepOnJobSuccess', () => {
       events.push(e.payload)
     })
     await advanceStepOnJobSuccess(root, 'T10e', 'implementer')
-    expect(events).toEqual([{ taskId: 'T10e', stepId: 'implementer', currentPhase: 'reviewer' }])
+    // `devTeamRoot` (Tbdb4491a): node điều phối chạy nền, ngoài mọi request, nên
+    // nó phải tự biết event thuộc data root nào. Giữ `toEqual` (không nới thành
+    // `toMatchObject`) để đây vẫn là drift guard của payload.
+    expect(events).toEqual([
+      { taskId: 'T10e', stepId: 'implementer', currentPhase: 'reviewer', devTeamRoot: root },
+    ])
   })
 })
 
@@ -514,6 +519,7 @@ describe('advanceStepOnJobSuccess — review retry', () => {
         stepId: 'reviewer',
         currentPhase: 'implementer',
         reason: 'review_retry',
+        devTeamRoot: root,
       },
     ])
   })
