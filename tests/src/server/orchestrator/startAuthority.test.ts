@@ -111,9 +111,14 @@ describe('assertStartAllowed — điều phối BẬT', () => {
   })
 
   test('thông báo lỗi nêu rõ lý do, không phải mã trần', async () => {
-    const res = await assertStartAllowed(root, 'A1', 'manual')
-    if (res.allowed) throw new Error('kỳ vọng bị từ chối')
-    expect(res.error).toContain('orchestrat')
+    // Khẳng định thẳng trên object thay vì hẹp kiểu bằng `if (res.allowed) throw`:
+    // `tsconfig` của repo để `strict: false`, mà không có `strictNullChecks` thì TS
+    // KHÔNG narrow union theo discriminant boolean — `res.error` sẽ đỏ typecheck dù
+    // logic đúng. Cách viết này cũng đồng bộ với các case `toMatchObject` ở trên.
+    expect(await assertStartAllowed(root, 'A1', 'manual')).toMatchObject({
+      allowed: false,
+      error: expect.stringContaining('orchestrat'),
+    })
   })
 })
 

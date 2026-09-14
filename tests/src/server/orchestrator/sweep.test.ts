@@ -56,7 +56,11 @@ beforeEach(() => {
   _resetEventBusForTest()
   _resetOrchestratorForTest()
   dispatched.length = 0
-  on('orchestrator.dispatched', (e) => dispatched.push((e.payload ?? {}) as Record<string, any>))
+  // Thân hàm phải là block: `Array.push` trả `number`, mà `EventHandler` khai
+  // `void | Promise<void>` — viết arrow rút gọn là trả giá trị vào chỗ không nhận.
+  on('orchestrator.dispatched', (e) => {
+    dispatched.push((e.payload ?? {}) as Record<string, any>)
+  })
 })
 afterEach(() => {
   _resetEventBusForTest()
