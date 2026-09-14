@@ -1,17 +1,5 @@
 {
-  // Fallow tôn trọng `.gitignore`, mà dòng source ignore `/tests/` + `/test-e2e/`
-  // (xem `.gitignore` §"Dòng test giữ .gitignore riêng"). Nên mọi consumer nằm
-  // trong test đều VÔ HÌNH với phân tích chạy ở dòng này.
-  //
-  // Đã kiểm: khai `entry: ["tests/**"]` KHÔNG cứu được — entry không ghi đè
-  // gitignore; overlay `tests/` vào đĩa cũng không, vì file vẫn bị ignore.
-  // Đối chứng: trên PR dòng test (nơi `tests/` được track) Fallow báo 0 finding
-  // `unused-dev-dependency`.
-  //
-  // ⚠️ Khớp theo CHUỖI CHÍNH XÁC, không phải glob — sai tên là no-op im lặng.
-  // 🚫 Đừng gỡ gói khỏi `package.json` để né finding: cây ghép mà CI chấm
-  // (`release-test-gate.yml`) cài từ `package.json` của DÒNG SOURCE, và
-  // `sync-source-to-test.yml` không giữ `package.json` riêng cho dòng test
-  // (`PRESERVE_PATHS='tests test-e2e reports .gitignore'`) — gỡ là suite chết.
+  // Dòng source gitignore `/tests/` nên Fallow không thấy consumer nào là test.
+  // Gói chỉ test dùng phải khai ở đây — gỡ khỏi `package.json` sẽ làm suite chết.
   "ignoreDependencies": ["@vue/test-utils"]
 }

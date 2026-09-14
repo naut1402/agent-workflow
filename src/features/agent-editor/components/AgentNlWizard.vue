@@ -26,8 +26,7 @@ const emit = defineEmits<{
 const navigateToMode = inject(navigateToModeKey, undefined)
 const canNavigateToMode = inject(canNavigateToModeKey, undefined)
 
-// Không có shell (mount độc lập trong unit test) ⇒ coi như tới được, giữ đúng
-// hành vi trước đây thay vì disabled nhầm.
+// Không có shell (mount lẻ trong unit test) ⇒ coi như tới được, giữ hành vi cũ.
 const runnerReachable = computed(() => canNavigateToMode?.('runner') ?? true)
 
 const build = useAgentBuild({
