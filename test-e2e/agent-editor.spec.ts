@@ -12,20 +12,25 @@ test('agent editor: mount, save agent, open template & NL modals (capture)', asy
   await expect(page.locator('.agent-editor')).toBeVisible({ timeout: 15_000 })
 
   // Create + save a custom agent → appears in the list.
-  await page.getByRole('button', { name: '+ New' }).click()
+  await page.getByRole('button', { name: '+ Agent mới' }).click()
   await page.locator('.agent-basic-fields input').first().fill('e2e-verify-agent')
-  await page.locator('.agent-toolbar').getByRole('button', { name: 'Lưu' }).click()
+  await page.locator('.agent-form-dialog .modal-foot').getByRole('button', { name: 'Lưu' }).click()
   await expect(page.locator('.agent-list-item', { hasText: 'e2e-verify-agent' })).toBeVisible({ timeout: 10_000 })
+
+  // Lưu KHÔNG tự đóng dialog (message hiện ngay trong form), nên phải đóng tay —
+  // backdrop còn đó thì mọi click vào cụm nút cột trái bên dưới đều bị nuốt.
+  await page.locator('.agent-form-dialog').getByRole('button', { name: 'Hủy' }).click()
+  await expect(page.locator('.agent-form-dialog')).toHaveCount(0)
 
   await capturePage(page, testInfo, 'agent-editor')
 
   // Template picker modal opens then closes.
-  await page.getByRole('button', { name: 'Template / Copy' }).click()
+  await page.getByRole('button', { name: 'Template / Sao chép' }).click()
   await expect(page.locator('.agent-template-picker')).toBeVisible()
   await page.locator('.agent-template-picker').getByRole('button', { name: 'Đóng' }).click()
 
   // NL wizard modal opens.
-  await page.getByRole('button', { name: 'Build NL' }).click()
+  await page.getByRole('button', { name: 'Tạo từ mô tả' }).click()
   await expect(page.locator('.agent-nl-wizard')).toBeVisible()
 })
 
@@ -56,7 +61,7 @@ test('agent editor Build NL: no usable runner → run disabled + CTA, apply-draf
   await page.getByRole('button', { name: 'Agent Editor' }).click()
   await expect(page.locator('.agent-editor')).toBeVisible({ timeout: 15_000 })
 
-  await page.getByRole('button', { name: 'Build NL' }).click()
+  await page.getByRole('button', { name: 'Tạo từ mô tả' }).click()
   await page.locator('.agent-nl-wizard textarea').fill('agent không cần runner')
   await page.getByRole('button', { name: 'Generate draft' }).click()
 
