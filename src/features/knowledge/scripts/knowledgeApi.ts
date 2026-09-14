@@ -100,7 +100,7 @@ export async function uploadKnowledgeFile(
   })
 }
 
-// ── collection & tag admin ──────────────────────────────────────────────────
+// ── collection & tag admin
 
 export interface CollectionPayload {
   name: string
@@ -125,7 +125,7 @@ export async function saveKnowledgeCollection(id: string, payload: CollectionPay
   })
 }
 
-/** Xoá nhóm, **không** xoá entry nào. */
+/** Xoá nhóm, không xoá entry nào. */
 export async function deleteKnowledgeCollection(id: string, projectId?: string) {
   return apiRequest('DELETE', `/api/knowledge/collections/${encodeURIComponent(id)}`, {
     query: { project: projectId },

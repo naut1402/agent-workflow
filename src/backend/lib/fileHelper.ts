@@ -22,7 +22,7 @@ export function homeDir(): string {
   return process.env.USERPROFILE || process.env.HOME || ''
 }
 
-// ── path wrappers ──────────────────────────────────────────────────────────
+// ── path wrappers
 
 export function joinPath(...parts: string[]): string {
   return path.join(...parts)
@@ -92,7 +92,7 @@ export function resolvePathUnder(baseDir: string, ...segments: string[]): string
   return target
 }
 
-// ── async fs ───────────────────────────────────────────────────────────────
+// ── async fs
 
 /** Read a directory, returning [] instead of throwing on any error. */
 export async function safeReadDir(dir: string): Promise<Dirent[]> {
@@ -209,7 +209,7 @@ export async function writeTextFileAtomic(target: string, data: string): Promise
   }
 }
 
-// ── sync fs ────────────────────────────────────────────────────────────────
+// ── sync fs
 
 export function existsSync(p: string): boolean {
   return fs.existsSync(p)

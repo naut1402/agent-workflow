@@ -11,8 +11,8 @@ import {
 } from '../scripts/KnowledgePanelApi'
 
 /**
- * Tạo / sửa collection. Thành viên gom bằng **hai cơ chế cộng dồn** trong cùng
- * một form: chọn tài liệu thủ công (`entryIds`) **và** chọn tag (`tags`).
+ * Tạo / sửa collection. Thành viên gom bằng hai cơ chế cộng dồn trong cùng
+ * một form: chọn tài liệu thủ công (`entryIds`) và chọn tag (`tags`).
  *
  * Backend resolve hợp của hai tập lúc đọc (`resolveCollectionEntries`), nên ở
  * đây không phải tính trước danh sách thành viên.
@@ -42,7 +42,7 @@ const error = ref('')
 const isEdit = computed(() => !!props.collection)
 
 /**
- * Nguồn chọn thủ công là entry của **mọi** scope, không phải tab scope đang mở:
+ * Nguồn chọn thủ công là entry của mọi scope, không phải tab scope đang mở:
  * một nhóm gom được entry của nhiều scope, nên lọc theo tab đang mở sẽ giấu mất
  * đúng những entry người dùng định thêm.
  */

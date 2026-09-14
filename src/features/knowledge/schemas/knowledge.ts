@@ -6,7 +6,7 @@ import { z } from 'zod'
  *
  * `KNOWLEDGE_SCOPES` là nguồn duy nhất của danh sách scope: `fileDriver` tra
  * bảng `scope → base` theo đúng thứ tự này, nên thêm scope là sửa một chỗ.
- * Scope nằm **trong** id (`<scope>/<slug>`) nên chỉ được *thêm* giá trị mới,
+ * Scope nằm trong id (`<scope>/<slug>`) nên chỉ được *thêm* giá trị mới,
  * đổi giá trị cũ là đổi id của mọi entry đang tồn tại.
  */
 export const KNOWLEDGE_SCOPES = ['project', 'system', 'global'] as const
@@ -56,7 +56,7 @@ export const CollectionBody = z.object({
 export const TagRenameBody = z.object({ from: z.string().min(1), to: z.string().optional() })
 
 /**
- * Palette màu tag — DB lưu **tên token**, không lưu hex.
+ * Palette màu tag — DB lưu tên token, không lưu hex.
  *
  * Mỗi token khai hai giá trị trong `_tokens.scss` theo `[data-theme]` nên chip
  * tương phản đúng ở cả hai theme; hex tự do thì màu chọn ở theme tối thành
@@ -85,7 +85,7 @@ export const TagCreateBody = z.object({
   scope: z.enum(['project', 'global']).default('project'),
 })
 
-/** Sửa metadata tag. Đổi **tên** tag đi đường `/tags/rename` (rewrite front-matter). */
+/** Sửa metadata tag. Đổi tên tag đi đường `/tags/rename` (rewrite front-matter). */
 export const TagUpdateBody = z.object({
   color: z.enum(TAG_COLORS).optional(),
   description: z.string().max(300).optional(),

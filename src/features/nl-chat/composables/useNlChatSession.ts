@@ -82,7 +82,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   // tightening — §3.1), so this client-side guard is the ONLY thing that
   // stops a pipeline draft with a bogus `steps[].agent` ref from reaching
   // "Xác nhận". Nạp lại ở MỖI lần soát draft (agent tạo ở tab khác giữa phiên
-  // phải soát được ngay — T536c80fd D4); re-validated against the live-edited
+  // phải soát được ngay); re-validated against the live-edited
   // draft right before `confirm()` actually calls `savePipelineProfile()` as a
   // hard safety net, in addition to `ChatWindow.vue` disabling the button
   // reactively.
@@ -90,8 +90,8 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   const catalogError = ref<string | null>(null)
   const loadingCatalog = ref(false)
 
-  // Cùng lý do với `catalogAgentIds`, cho `profileName` (design Tf2fec630
-  // §3.5): `CreateTaskRequest.profileName` không tồn tại trên đĩa vẫn là body
+  // Cùng lý do với `catalogAgentIds`, cho `profileName`:
+  // `CreateTaskRequest.profileName` không tồn tại trên đĩa vẫn là body
   // hợp lệ — `resolvePipelineOverride` chỉ trả `null` và task ÂM THẦM chạy
   // pipeline mặc định. Không có gate nào ở server, nên guard này là chỗ duy
   // nhất chặn được một ref bịa trước khi task được tạo.
@@ -123,7 +123,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   }
 
   // Không cache theo phiên nữa: agent/pipeline tạo ở tab khác giữa phiên phải
-  // soát được ngay (design.md T536c80fd D4). `inflight` chỉ gộp các lời gọi
+  // soát được ngay. `inflight` chỉ gộp các lời gọi
   // CHỒNG NHAU, không phải cache — và phải là biến trong closure của
   // composable, không phải module scope, để hai instance không dùng chung.
   let catalogInflight: Promise<void> | null = null
@@ -316,7 +316,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     // just the original one from the agent.
     if (entityType.value === 'pipeline') {
       // Đối xứng với nhánh `profileName` bên dưới: nạp lại ngay trước khi soát,
-      // vì agent có thể vừa được tạo ở tab khác sau lúc nhận draft (T536c80fd D4).
+      // vì agent có thể vừa được tạo ở tab khác sau lúc nhận draft.
       await loadCatalog()
       // Fail-closed cả khi set cũ còn đó nhưng lần nạp gần nhất hỏng: từ khi bỏ
       // cache-một-lần-mỗi-phiên, `catalogAgentIds` có thể là dữ liệu cũ hơn

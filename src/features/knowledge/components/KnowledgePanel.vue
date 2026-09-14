@@ -25,7 +25,7 @@ import KnowledgeTagDialog from './KnowledgeTagDialog.vue'
 /**
  * Orchestrator màn knowledge: cột trái là sub-menu, `main` là viewer markdown.
  *
- * `projectId` phải xuống tới **mọi** lời gọi: nhóm và tag có đường **ghi**
+ * `projectId` phải xuống tới mọi lời gọi: nhóm và tag có đường ghi
  * (`renameTag` rewrite front-matter hàng loạt, `deleteCollection`), nên chạy
  * nhầm root không còn là xem sai danh sách mà là hỏng dữ liệu project khác.
  */
@@ -37,7 +37,7 @@ const props = defineProps<{
 const { t } = useI18nHelpers()
 
 const scope = ref('project')
-/** Đa chọn: entry phải mang **đủ** mọi tag đang bật, giống filter phía driver. */
+/** Đa chọn: entry phải mang đủ mọi tag đang bật, giống filter phía driver. */
 const tagFilter = ref<string[]>([])
 const query = ref('')
 const entries = ref<KnowledgeEntryMeta[]>([])
@@ -110,7 +110,7 @@ async function loadList() {
 /**
  * DB hỏng không được làm chết cả panel — entry đọc từ file nên vẫn xem/sửa được.
  *
- * Nhưng cũng 🚫 không được hiện thành "chưa có nhóm nào": người dùng tạo nhóm
+ * Nhưng cũng không được hiện thành "chưa có nhóm nào": người dùng tạo nhóm
  * mới ngay lúc đó là ghi đè mất dữ liệu cũ. Lỗi hiện ra và khoá đường ghi.
  */
 async function loadCollections() {
@@ -134,7 +134,7 @@ function selectCollection(id: string) {
   activeCollection.value = activeCollection.value === id ? '' : id
 }
 
-// ── viewer ─────────────────────────────────────────────────────────────────
+// ── viewer
 
 async function openViewer(id: string) {
   viewingId.value = id
@@ -154,7 +154,7 @@ async function openViewer(id: string) {
   }
 }
 
-// ── editor ─────────────────────────────────────────────────────────────────
+// ── editor
 
 async function openEditor(id: string) {
   message.value = ''
@@ -180,7 +180,7 @@ function closeDialog() {
   showDialog.value = false
 }
 
-/** 🚫 Không gửi `slug`: driver nội suy từ title và tự chống trùng. */
+/** Không gửi `slug`: driver nội suy từ title và tự chống trùng. */
 async function save() {
   error.value = ''
   message.value = ''
@@ -227,7 +227,7 @@ async function removeEntry(id: string) {
   }
 }
 
-// ── download ───────────────────────────────────────────────────────────────
+// ── download
 
 /** Blob → `<a download>` → revoke, đúng mẫu đã có ở `PipelineEditor`. */
 function saveBlob(text: string, filename: string) {
@@ -254,7 +254,7 @@ const yamlStr = (v: unknown) => JSON.stringify(String(v ?? ''))
 
 function toMarkdownSection(item: any): string {
   // Item vượt trần 1MB của bundle trả `{ id, error }` — ghi thành chú thích
-  // trong file gộp, 🚫 không bỏ im lặng.
+  // trong file gộp, không bỏ im lặng.
   if (item.error) return `<!-- ${item.id}: ${item.error} -->`
   const tags = (item.tags || []).map(yamlStr).join(', ')
   return [
@@ -268,7 +268,7 @@ function toMarkdownSection(item: any): string {
   ].join('\n')
 }
 
-/** Gộp entry **đang lọc** thành một file. Chia lô 50 — đúng trần `MAX_BUNDLE_IDS`. */
+/** Gộp entry đang lọc thành một file. Chia lô 50 — đúng trần `MAX_BUNDLE_IDS`. */
 async function downloadFiltered() {
   const ids = filteredEntries.value.map((e) => e.id)
   if (!ids.length) return
@@ -297,7 +297,7 @@ async function downloadEntry(id: string) {
   }
 }
 
-// ── collection ─────────────────────────────────────────────────────────────
+// ── collection
 
 function newCollection() {
   editingCollection.value = null
@@ -318,7 +318,7 @@ async function onCollectionSaved(id: string, created: boolean) {
   if (activeCollection.value) await loadList()
 }
 
-/** Xoá **nhóm** — tài liệu bên trong không bị xoá; câu xác nhận phải nói rõ. */
+/** Xoá nhóm — tài liệu bên trong không bị xoá; câu xác nhận phải nói rõ. */
 async function removeCollection(id: string) {
   if (!confirm(t('knowledge.collections.confirmDelete', { id }))) return
   error.value = ''
@@ -333,7 +333,7 @@ async function removeCollection(id: string) {
   }
 }
 
-// ── tag ────────────────────────────────────────────────────────────────────
+// ── tag
 
 function newTag() {
   editingTag.value = null

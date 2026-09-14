@@ -41,7 +41,7 @@ const PROJECT_KEY = 'dev-dashboard-selected-project'
 
 const { t } = useI18nHelpers()
 
-// ── Mode ─────────────────────────────────────────────────────────────────────
+// ── Mode
 const FALLBACK_MODE = 'monitor'
 
 const mode = ref(FALLBACK_MODE)

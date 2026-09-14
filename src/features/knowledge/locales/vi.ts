@@ -117,7 +117,7 @@ export default {
     uploaded: 'Đã upload {id}',
     confirmDelete: 'Xóa "{id}"?',
     // Bundle trả `{ id, error }` cho item vượt trần — ghi vào file gộp VÀ báo
-    // lên UI, 🚫 không bỏ im lặng.
+    // lên UI, không bỏ im lặng.
     downloadPartial: 'Đã tải, nhưng {count} entry không lấy được nội dung (xem chú thích trong file).',
   },
 }

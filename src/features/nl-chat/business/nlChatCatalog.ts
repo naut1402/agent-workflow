@@ -2,11 +2,11 @@
 /**
  * Catalog "những gì đang có trong hệ thống" cho agent `nl-chat-builder`.
  *
- * Tách đôi có chủ đích (design.md Tf2fec630 §4.2):
- * - `buildNlChatCatalog` — **nửa dữ liệu**: gộp 4 nguồn đã có sẵn trên server,
+ * Tách đôi có chủ đích:
+ * - `buildNlChatCatalog` — nửa dữ liệu: gộp 4 nguồn đã có sẵn trên server,
  *   trả object JSON-serializable, KHÔNG cap, KHÔNG cắt chữ. Tiến trình khác
  *   (vd tool MCP về sau) dùng lại được nguyên trạng.
- * - `renderNlChatCatalog` — **nửa prompt**: lọc theo `entityType`, cap số mục,
+ * - `renderNlChatCatalog` — nửa prompt: lọc theo `entityType`, cap số mục,
  *   cắt mô tả, ghép khối "quy tắc dùng catalog".
  *
  * Vì sao bơm vào prompt thay vì để agent tự đọc đĩa: workspace của một phiên
@@ -16,7 +16,7 @@
  *
  * Khối này được dựng lại ở MỖI lượt chat (`createSession` và `postMessage`
  * của `controller.ts`), không phải snapshot của cả phiên: pipeline/agent tạo
- * ra giữa phiên phải vào được prompt của lượt kế tiếp (design.md T536c80fd).
+ * ra giữa phiên phải vào được prompt của lượt kế tiếp.
  */
 
 import { existsSync, joinPath } from '../../../backend/lib/fileHelper.js'
@@ -153,7 +153,7 @@ export async function buildNlChatCatalog(
   }
 }
 
-// ── render ────────────────────────────────────────────────────────────────
+// ── render
 
 /**
  * Trần số mục mỗi section. `buildCatalog` quét `~/.claude/skills`, plugin cache

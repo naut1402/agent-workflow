@@ -124,7 +124,7 @@ function toggleCollapseMonitorSubSidebarOnOutside() {
   })
 }
 
-// ── Notifications ────────────────────────────────────────────────────────────
+// ── Notifications
 
 const notificationsEnabled = computed(() => resolveNotificationsEnabled(settings.value))
 const notifyHitlPending = computed(() => resolveNotifyHitlPending(settings.value))
@@ -178,7 +178,7 @@ function onNotificationUiPlacementUpdate(value: string) {
   }
 }
 
-// ── Modes (server-backed) ────────────────────────────────────────────────────
+// ── Modes (server-backed)
 
 const modeCatalog = computed(() => props.modeCatalog ?? [])
 const modesEnabled = ref<Record<string, boolean>>({})
@@ -245,7 +245,7 @@ function toggleMode(m: ModeEntry) {
   void persistMode(m.key, prev)
 }
 
-// ── Logging (server-backed) ──────────────────────────────────────────────────
+// ── Logging (server-backed)
 
 const showLogsTab = ref(true)
 const logTypeAudit = ref(true)
@@ -347,7 +347,7 @@ function toggleLogTypeUsage() {
   void persistLogging()
 }
 
-// ── Recovery (server-backed) ─────────────────────────────────────────────────
+// ── Recovery (server-backed)
 
 const recoveryEnabled = ref(true)
 const recoveryMaxAttempts = ref(3)
@@ -392,7 +392,7 @@ function toggleRecoveryEnabled() {
   void persistRecovery()
 }
 
-// ── Autoscan (server-backed) ─────────────────────────────────────────────────
+// ── Autoscan (server-backed)
 
 const autoscanEnabled = ref(false)
 const whitelist: Ref<string[]> = ref([])
@@ -492,7 +492,7 @@ async function scanNow() {
   }
 }
 
-// ── Scan patterns (server-backed) ────────────────────────────────────────────
+// ── Scan patterns (server-backed)
 
 const scanPatterns = ref<Record<ScanPatternKind, string[]>>({ agents: [], skills: [], rules: [] })
 const scanPatternDraft = ref<Record<ScanPatternKind, string>>({ agents: '', skills: '', rules: '' })
@@ -554,7 +554,7 @@ function removeScanPattern(kind: ScanPatternKind, pattern: string) {
   void persistScanPatterns()
 }
 
-// ── GitHub repo tokens (server-backed) ───────────────────────────────────────
+// ── GitHub repo tokens (server-backed)
 
 type GithubTokenRow = { repo: string; token: string }
 
