@@ -8,7 +8,7 @@ import LogsPanel from '@/features/logs/components/LogsPanel.vue'
 import StatisticsPanel from '@/features/statistics/components/StatisticsPanel.vue'
 import { createContainer } from '@/frontend/container/index'
 import { containerKey } from '@/frontend/shell/containerKey'
-import { navigateToModeKey } from '@/frontend/shell/keys'
+import { canNavigateToModeKey, navigateToModeKey } from '@/frontend/shell/keys'
 import { isEnabledByDefault, modeAccessToken, type ModeAccessProvider } from '@/frontend/shell/modeAccess'
 import { createModeRegistry, modeRegistryToken, type ModeRegistry } from '@/frontend/shell/modeRegistry'
 
@@ -63,10 +63,14 @@ const t = (key: string, params?: Record<string, unknown>) =>
  * mode giả để test gọi được đúng lối vào đó, không phải lối click sidebar.
  */
 let navigateFromPanel: ((key: string) => void) | undefined
+let canNavigateFromPanel: ((key: string) => boolean) | undefined
 const ProbePanel = {
   name: 'ProbePanel',
   setup() {
     navigateFromPanel = inject(navigateToModeKey, undefined) as ((k: string) => void) | undefined
+    // [T2d5cea18] Predicate đi kèm `navigateToMode`: call site cần hỏi được "mode
+    // đích có tới được không" TRƯỚC khi render nút, chứ không phải bấm rồi mới biết.
+    canNavigateFromPanel = inject(canNavigateToModeKey, undefined) as ((k: string) => boolean) | undefined
     return () => null
   },
 }
@@ -135,6 +139,7 @@ describe('App — mode bị tắt (AC-3)', () => {
   beforeEach(() => {
     localStorage.clear()
     navigateFromPanel = undefined
+    canNavigateFromPanel = undefined
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.mocked(fetchLoggingConfig).mockResolvedValue({ config: { showLogsTab: true } })
@@ -212,6 +217,47 @@ describe('App — mode bị tắt (AC-3)', () => {
     await flushPromises()
     expect(wrapper.findComponent(ProbePanel as any).exists()).toBe(true)
     expect(errorSpy).not.toHaveBeenCalled()
+  })
+
+  // [T2d5cea18] `canNavigateToMode` — cùng một điều kiện với `setMode`, nhưng hỏi
+  // được TRƯỚC khi bấm. Không có nó thì call site chỉ còn cách render một cái nút
+  // rồi để người dùng phát hiện nó chết bằng cách bấm vào.
+  it('predicate trả đúng trạng thái: mode bật → true, mode tắt → false, key lạ → false', async () => {
+    const { container } = buildHarness({ disabled: ['runner'], withProbeMode: true })
+    const wrapper = mountApp(container)
+    await flushPromises()
+
+    const probeIndex = labels(wrapper).length - 1
+    await wrapper.findAll('.mode-toggle .mode-btn')[probeIndex].trigger('click')
+    await flushPromises()
+
+    expect(canNavigateFromPanel).toBeTypeOf('function')
+    expect(canNavigateFromPanel!('monitor')).toBe(true)
+    expect(canNavigateFromPanel!('runner')).toBe(false)
+    expect(canNavigateFromPanel!('khong-ton-tai')).toBe(false)
+  })
+
+  it('predicate và setMode luôn cùng kết luận — 🚫 không được lệch nhau', async () => {
+    // Hai lối đi qua cùng một `isModeReachable`. Nếu tách đôi thành hai điều kiện
+    // thì sẽ có ngày nút bấm được mà điều hướng vẫn bị chặn (hoặc ngược lại).
+    const { container, access } = buildHarness({ disabled: ['runner'], withProbeMode: true })
+    const wrapper = mountApp(container)
+    await flushPromises()
+
+    const probeIndex = labels(wrapper).length - 1
+    await wrapper.findAll('.mode-toggle .mode-btn')[probeIndex].trigger('click')
+    await flushPromises()
+
+    // Mode tắt: predicate false, và `setMode` cũng không đổi mode (bất biến TC-B3).
+    expect(canNavigateFromPanel!('runner')).toBe(false)
+    navigateFromPanel!('runner')
+    await flushPromises()
+    expect(wrapper.findComponent(ProbePanel as any).exists()).toBe(true)
+
+    // Bật lại trong Cài đặt → predicate đổi theo ngay, không cần remount (E1).
+    access.setDisabled([])
+    await flushPromises()
+    expect(canNavigateFromPanel!('runner')).toBe(true)
   })
 
   it('lối điều hướng vẫn mở được mode đang bật — gate không chặn nhầm', async () => {

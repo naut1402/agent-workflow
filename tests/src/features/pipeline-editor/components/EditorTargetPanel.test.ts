@@ -158,7 +158,11 @@ describe('EditorTargetPanel — trạng thái thu gọn', () => {
   it('G3 — chỉ render icon, không render select/input', () => {
     const w = mountPanel({ collapsed: true, profileSelected: 'p1' })
     expect(w.find('.c-select').exists()).toBe(false)
-    expect(w.find('input').exists()).toBe(false)
+    // ⚠️ 🚫 Không dùng `find('input')` trần: `<input type="file" class="visually-hidden">`
+    // của chức năng nạp profile render KHÔNG điều kiện (cần `ref` sẵn để action
+    // click vào), nên nó luôn có mặt kể cả khi thu gọn — và nó không phải ô nhập
+    // liệu người dùng nhìn thấy. Ý định của case này là "không còn ô nhập hiện hữu".
+    expect(w.findAll('input').filter((i) => !i.classes('visually-hidden'))).toHaveLength(0)
     expect(w.findAll('.target-actions--rail .icon-btn').length).toBeGreaterThan(0)
   })
 

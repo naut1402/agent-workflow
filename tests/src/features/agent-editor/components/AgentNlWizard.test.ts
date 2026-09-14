@@ -2,6 +2,7 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import AgentNlWizard from '@/features/agent-editor/components/AgentNlWizard.vue'
+import { canNavigateToModeKey, navigateToModeKey } from '@/frontend/shell/keys'
 
 // Correction A (F0005): the wizard is now multi-step (describe → preview →
 // optional run), merged from the deleted Monitor-only AgentBuildWizard. Unlike
@@ -101,5 +102,47 @@ describe('AgentNlWizard', () => {
 
     const runBtn = w.findAll('button').find((b) => b.text().includes('Lưu & chạy thử'))
     expect(runBtn?.attributes('disabled')).toBeUndefined()
+  })
+
+  // [T2d5cea18] Nút "Mở Runner" từng là no-op im lặng khi mode Runner bị tắt trong
+  // Cài đặt: bấm vào không đi tới đâu, không một lời giải thích. `App.vue` nay
+  // provide predicate `canNavigateToMode` để call site biết TRƯỚC khi render nút.
+  describe('nút "Mở Runner" khi mode đích đang tắt', () => {
+    async function toPreview(provide: Record<symbol, unknown>) {
+      stubApi({ runners: [], defaultRunnerId: null })
+      const w = mount(AgentNlWizard, { global: { provide } })
+      await flushPromises()
+      await w.find('textarea').setValue('agent review code PHP')
+      await w.find('button.btn-primary').trigger('click')
+      await flushPromises()
+      return w
+    }
+    const openRunnerBtn = (w: any) => w.findAll('button').find((b: any) => b.text().includes('Mở Runner'))
+
+    it('mode Runner đang TẮT → nút disabled kèm tooltip giải thích', async () => {
+      const w = await toPreview({ [canNavigateToModeKey as symbol]: () => false })
+      const btn = openRunnerBtn(w)
+      expect(btn?.attributes('disabled')).toBeDefined()
+      // Tooltip nằm ở <span> bọc ngoài: Chrome nuốt pointer event trên button disabled
+      // nên đặt `title` lên chính button thì không bao giờ hiện.
+      expect(btn?.element.parentElement?.getAttribute('title')).toContain('Chế độ Runner đang tắt')
+    })
+
+    it('mode Runner đang BẬT → nút bấm được và điều hướng đúng một lần', async () => {
+      const navigate = vi.fn()
+      const w = await toPreview({
+        [canNavigateToModeKey as symbol]: () => true,
+        [navigateToModeKey as symbol]: navigate,
+      })
+      const btn = openRunnerBtn(w)
+      expect(btn?.attributes('disabled')).toBeUndefined()
+      await btn?.trigger('click')
+      expect(navigate).toHaveBeenCalledTimes(1)
+      expect(navigate).toHaveBeenCalledWith('runner')
+    })
+
+    it('mount KHÔNG có shell (không inject được) → vẫn bấm được, giữ đúng hành vi cũ', async () => {
+      expect(openRunnerBtn(await toPreview({}))?.attributes('disabled')).toBeUndefined()
+    })
   })
 })
