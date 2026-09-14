@@ -130,7 +130,14 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "+refs/heads/${TEST_LINE}:refs/remotes/origin/${TEST_LINE}"
+          # ⚠️ KHÔNG dùng `--depth=1` ở đây. `test-coverage-status.ts` đọc nợ test
+          # bằng khoảng `origin/test/main..origin/<test_line>`; cây cụt chỉ có đúng
+          # commit đầu, mà commit đầu của dòng test là **merge commit** do
+          # `sync-source-to-test.yml` tạo, nên `git log --no-merges` lọc sạch và
+          # khoảng ra RỖNG. `git log` vẫn exit 0 ⇒ không ai báo lỗi, cổng quy mọi
+          # task thành "thiếu test". Lỗi im lặng, đã xảy ra thật ở PR phát hành 1.1.5.
+          git fetch --no-tags origin "+refs/heads/${TEST_LINE}:refs/remotes/origin/${TEST_LINE}"
+          git fetch --no-tags origin '+refs/heads/test/main:refs/remotes/origin/test/main'
           TEST_SHA="$(git rev-parse "origin/${TEST_LINE}")"
           echo "TEST_SHA=$TEST_SHA" >> "$GITHUB_ENV"
           rm -rf tests test-e2e
@@ -207,10 +214,14 @@ jobs:
           VERSION: ${{ needs.probe.outputs.version }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          # BÁO CÁO, không chặn. Bỏ `--strict` có chủ đích: khi cổng vừa đọc sai vừa
+          # chặn cứng, người duyệt không phân biệt nổi "thiếu test" với "test không
+          # chạy được" — và đó là loại tín hiệu tệ hơn không có tín hiệu.
+          # Nợ test vẫn được in đầy đủ vào job summary để người duyệt quyết định.
+          # 🚫 Đừng đọc lượt xanh ở đây thành "đã đủ test" — script tự nói điều đó.
           bun .github/scripts/test-coverage-status.ts \
             --version "$VERSION" \
-            --source-ref "$HEAD_SHA" \
-            --strict
+            --source-ref "$HEAD_SHA"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

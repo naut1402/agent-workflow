@@ -605,11 +605,26 @@ function resolveRef(repo: string, ref: string): string | null {
   return `origin/${ref}`
 }
 
-function subjectsOf(repo: string, range: string): string[] {
-  const r = git(repo, 'log', '--no-merges', '--pretty=%s', range)
+function subjectsOf(repo: string, range: string, paths?: string[]): string[] {
+  const args = ['log', '--no-merges', '--pretty=%s', range]
+  if (paths?.length) args.push('--', ...paths)
+  const r = git(repo, ...args)
   if (!r.ok) throw new ToolError(`Không đọc được lịch sử \`${range}\` — thiếu lịch sử trong workspace? (CI cần \`fetch-depth: 0\`).`)
   return r.out.split('\n').filter(Boolean)
 }
+
+/**
+ * Ở dòng test, "task có mặt" 🚫 KHÔNG đồng nghĩa "task có test".
+ *
+ * `sync-source-to-test.yml` merge dòng source vào dòng test ở mỗi push, nên **mọi**
+ * commit dòng source đều nằm trong khoảng của dòng test. Đếm theo subject trần thì
+ * mọi task tự động được tính là đã có test — cổng xanh vĩnh viễn, đúng lỗ
+ * honor-system mà cổng này sinh ra để bịt. Đã đo thật ở 1.1.5: 19 commit trong
+ * khoảng, chỉ 1 commit đụng `tests/`.
+ *
+ * Nên căn cứ phải là **có commit đụng cây test**, không phải có tên task.
+ */
+const TEST_PATHS = ['tests', 'test-e2e']
 
 function readExemptions(repo: string, file: string): Exemption[] {
   const abs = path.isAbsolute(file) ? file : path.join(repo, file)
@@ -684,7 +699,7 @@ export function main(argv: string[], repo: string = ROOT): number {
     const scope = resolveScope(repo, version, args.sourceRef)
     const report = computeStatus({
       sourceSubjects: subjectsOf(repo, scope.sourceRange),
-      testSubjects: scope.testRange ? subjectsOf(repo, scope.testRange) : [],
+      testSubjects: scope.testRange ? subjectsOf(repo, scope.testRange, TEST_PATHS) : [],
       exemptions,
       version,
     })
