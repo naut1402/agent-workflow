@@ -318,6 +318,16 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
   margin-top: 4px;
   flex-wrap: wrap;
 }
+/* Cột trái rộng 240px ⇒ hàng action rộng 215px. Tab Profile có 7 nút, mà
+   `.icon-btn` chuẩn 32px cần 7×32 + 6×2 = 236px ⇒ nút thứ 7 xuống dòng và hàng
+   cao 66px thay vì 32px. 34px đó bị trừ thẳng vào 3 danh sách bên dưới (chúng
+   chia nhau phần còn lại), kéo vùng cuộn xuống dưới ngưỡng dùng được ở viewport
+   thấp. 28px cho 7×28 + 6×2 = 208px — vừa một hàng, và là số cố định nên không
+   phụ thuộc font của máy chạy. */
+.target-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+}
 .target-actions--rail {
   flex-direction: column;
   gap: 4px;
