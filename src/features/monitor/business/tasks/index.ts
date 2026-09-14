@@ -157,12 +157,7 @@ export { createTask, renderRequestMarkdown } from './create.js'
 export type { CreateTaskInput, CreateTaskResult, CreatedTask } from './create.js'
 export { runTaskStep } from './runStep.js'
 export type { RunTaskStepInput, RunTaskStepResult } from './runStep.js'
-export {
-  assertStartAllowed,
-  assertStartAllowedSync,
-  resolveOrchestration,
-  setOrchestratorEnabledFlag,
-  stateFileOf,
-} from './startAuthority.js'
-export type { Orchestration, StartDecision, StartOrigin } from './startAuthority.js'
+// `startAuthority` cố ý không re-export ở đây: mọi caller — `runner/business/index.ts`,
+// `orchestrator/business/`, và test — đều import thẳng `./startAuthority.js`, nên lớp
+// trung gian này là dead weight mà audit gate bắt đúng.
 export { cleanupTaskWorktreeForTask } from './worktreeCleanup.js'

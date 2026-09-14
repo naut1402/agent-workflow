@@ -31,9 +31,10 @@ export type { JobRecord } from '../../runner/business/index.js'
 // `resolveArtifact` deliberately absent: its callers reach for `./tasks/index.js`
 // directly, so re-exporting it here is dead weight the audit gate flags.
 export { runTaskStep, createTask, cleanupTaskWorktreeForTask } from './tasks/index.js'
-export { assertStartAllowed, resolveOrchestration } from './tasks/index.js'
-export type { Orchestration, StartOrigin } from './tasks/index.js'
-export { applyOrchestratorHaltAction } from './tasks/state.js'
+// Chỉ `resolveOrchestration` đi qua barrel này (`automations/business/runAction.ts`
+// dùng). `assertStartAllowed`/`applyOrchestratorHaltAction` và các type kèm theo thì
+// không: caller của chúng import thẳng module sâu, nên re-export ở đây là dead weight.
+export { resolveOrchestration } from './tasks/startAuthority.js'
 export type { RunTaskStepInput, RunTaskStepResult } from './tasks/index.js'
 export type { CreateTaskInput, CreateTaskResult, CreatedTask } from './tasks/index.js'
 export { cloneProject, setProjectBranch } from './projects/index.js'
