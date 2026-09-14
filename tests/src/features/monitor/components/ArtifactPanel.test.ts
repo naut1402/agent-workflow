@@ -7,7 +7,7 @@ import {
   STORAGE_KEY,
   useAppSettings,
 } from '@/frontend/composables/useAppSettings'
-import { navigateToModeKey } from '@/frontend/shell/keys'
+import { canNavigateToModeKey, navigateToModeKey } from '@/frontend/shell/keys'
 import { fetchArtifact, fetchArtifactActions, runArtifactAction, saveArtifact } from '../../../../../src/features/monitor/scripts/ArtifactPanelApi'
 import { fetchJob, fetchRunners } from '../../../../../src/features/runner/scripts/runnerApi'
 
@@ -380,6 +380,54 @@ describe('ArtifactPanel — QuickAction title toolbar + runner gate', () => {
     expect(ctaButtons).toHaveLength(1)
     await ctaButtons[0].trigger('click')
     expect(navigateToMode).toHaveBeenCalledWith('runner')
+  })
+
+  // [T2d5cea18] CTA ở trên chỉ đi tới đâu khi mode Runner đang BẬT. Trước đây mode
+  // bị tắt trong Cài đặt thì bấm vào không phản hồi gì — `canNavigateToMode` cho
+  // call site biết trước để disable nút thay vì để người dùng bấm vào chỗ chết.
+  async function mountWithGateError(provide: Record<symbol, unknown>) {
+    vi.mocked(fetchArtifactActions).mockResolvedValue({
+      menus: [],
+      actions: [{ id: 'a-title', label: 'Title action', agent_ref: 'x', confirm: false, attach_points: ['artifact-title'] }],
+    })
+    vi.mocked(fetchRunners).mockResolvedValue({ runners: [{ id: 'r1', name: 'A', enabled: false }], defaultRunnerId: null })
+
+    const w = mount(ArtifactPanel, {
+      props: { task, openArtifact: { taskId: 'DEMO-1', name: 'design.md' }, projectId: null },
+      global: { provide, stubs: { MarkdownTextEditor: MarkdownTextEditorStub } },
+    })
+    await flushPromises()
+    // Bấm quick-action khi không có runner khả dụng ⇒ dựng `gateError` ⇒ khối CTA render.
+    await w.find('.art-toolbar-actions .btn-quick-action').trigger('click')
+    await flushPromises()
+    return w
+  }
+  const runnerCta = (w: any) => w.findAll('button').filter((b: any) => b.text().includes('Mở cấu hình Runner'))[0]
+
+  it('mode Runner đang TẮT → CTA disabled kèm tooltip giải thích', async () => {
+    const w = await mountWithGateError({ [canNavigateToModeKey as symbol]: () => false })
+    const btn = runnerCta(w)
+    expect(btn.attributes('disabled')).toBeDefined()
+    // `title` ở <span> bọc ngoài — button disabled không nhận pointer event.
+    expect(btn.element.parentElement?.getAttribute('title')).toContain('Chế độ Runner đang tắt')
+  })
+
+  it('mode Runner đang BẬT → CTA bấm được và điều hướng đúng một lần', async () => {
+    const navigateToMode = vi.fn()
+    const w = await mountWithGateError({
+      [canNavigateToModeKey as symbol]: () => true,
+      [navigateToModeKey as symbol]: navigateToMode,
+    })
+    const btn = runnerCta(w)
+    expect(btn.attributes('disabled')).toBeUndefined()
+    await btn.trigger('click')
+    expect(navigateToMode).toHaveBeenCalledTimes(1)
+    expect(navigateToMode).toHaveBeenCalledWith('runner')
+  })
+
+  it('không inject được predicate → CTA vẫn bấm được, giữ đúng hành vi cũ', async () => {
+    const w = await mountWithGateError({ [navigateToModeKey as symbol]: vi.fn() })
+    expect(runnerCta(w).attributes('disabled')).toBeUndefined()
   })
 
   it('runs a title action when a usable runner exists', async () => {
