@@ -5,7 +5,7 @@ import { mountWithI18n } from '../../../helpers/i18n'
 import ChatComposer from '@/features/nl-chat/components/ChatComposer.vue'
 import { useChatComposer } from '@/features/nl-chat/composables/useChatComposer'
 import { useChatSurface } from '@/features/nl-chat/composables/useChatSurface'
-import { useAppSettings } from '@/core/composables/useAppSettings'
+import { useAppSettings } from '@/frontend/composables/useAppSettings'
 
 /**
  * `useChatComposer` + `ChatComposer.vue` are the halves BuilderChatBody and
@@ -238,6 +238,7 @@ describe('ChatComposer — input row layout', () => {
     await row.find('.nl-chat-composer-add > button').trigger('click')
     expect(wrapper.findAll('.nl-chat-composer-menu-item').map((i) => i.text())).toEqual([
       'Đính kèm tập tin',
+      'Chọn knowledge',
       'Phiên chat mới',
     ])
   })

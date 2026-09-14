@@ -5,7 +5,7 @@ import SettingsDialog from '@/features/settings/components/SettingsDialog.vue'
 import {
   STORAGE_KEY,
   useAppSettings,
-} from '@/core/composables/useAppSettings'
+} from '@/frontend/composables/useAppSettings'
 
 vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
   fetchAutoscanConfig: vi.fn(async () => ({

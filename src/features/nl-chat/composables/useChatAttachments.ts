@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { uploadChatAttachments } from '../scripts/nlChatApi'
 import {
   MAX_ATTACHMENTS_PER_TURN,

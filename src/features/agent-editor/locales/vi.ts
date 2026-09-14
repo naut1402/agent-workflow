@@ -1,15 +1,37 @@
 // Strings for the `agentEditor` feature module. vi is the source of truth.
 export default {
   list: {
+    newButton: '+ Agent mới',
     empty: 'Chưa có agent tùy chỉnh',
+    groupProject: 'Agent của project',
+    groupGlobal: 'Agent toàn cục',
+    view: 'Xem nội dung',
+    edit: 'Chỉnh sửa agent',
+    delete: 'Xóa agent',
+    exportHint: 'Chọn một agent trước khi export',
+  },
+  // Empty state của `main`, KHÔNG phải của viewer — phần trong viewer đã lên
+  // `common.markdownView.*` khi `CMarkdownView` thành component dùng chung.
+  viewer: {
+    empty: 'Chọn một agent ở danh sách bên trái để xem nội dung',
+    loading: 'Đang tải nội dung agent…',
   },
   actions: {
     save: 'Lưu',
-    delete: 'Xóa',
     export: 'Export',
+    close: 'Đóng',
+    templateCopy: 'Template / Sao chép',
+    buildNl: 'Tạo từ mô tả',
+  },
+  form: {
+    createTitle: 'Tạo agent mới',
+    editTitle: 'Sửa agent — {name}',
+    cancel: 'Hủy',
     close: 'Đóng',
   },
   fields: {
+    name: 'Tên',
+    description: 'Mô tả',
     descriptionPlaceholder: 'Mô tả ngắn',
     recommendedModel: 'Model khuyến nghị',
     scope: 'Phạm vi',
@@ -20,7 +42,7 @@ export default {
     saved: 'Đã lưu {name}',
     deleted: 'Đã xóa',
     confirmDelete: 'Xóa agent "{name}"?',
-    saveBeforeExport: 'Lưu agent trước khi export',
+    exported: 'Đã export → {path}',
     confirmOverwrite: 'File đã tồn tại. Ghi đè?',
   },
   section: {
@@ -79,6 +101,7 @@ export default {
     noRunnerParen: '(chưa có runner khả dụng)',
     noRunner: 'Chưa có runner khả dụng.',
     openRunner: 'Mở Runner',
+    runnerModeOff: 'Chế độ Runner đang tắt trong Cài đặt — bật lại để mở',
     noRunnerSuffix: 'để bật/cấu hình, rồi thử lại.',
     back: '← Quay lại',
     applyEditor: 'Áp dụng vào editor',

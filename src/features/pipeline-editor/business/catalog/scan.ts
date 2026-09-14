@@ -1,5 +1,5 @@
-import { basename, dirname, homeDir, joinPath, readDir, readFile, readTextFile, resolvePath, safeReadDir, statSafe } from '../../../../core/lib/fileHelper.js'
-import { parseFrontmatter } from '../../../../core/lib/yamlLib.js'
+import { basename, dirname, homeDir, joinPath, readDir, readFile, readTextFile, resolvePath, safeReadDir, statSafe } from '../../../../backend/lib/fileHelper.js'
+import { parseFrontmatter } from '../../../../backend/lib/yamlLib.js'
 import { expandScanPatterns } from '../scanPatterns.js'
 
 export interface ScanOpts {

@@ -5,7 +5,7 @@
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import type { App, Plugin } from 'vue'
-import { loadLocaleMessages, I18N_HELPERS_KEY, I18N_REGISTRY_KEY, type I18nHelpers } from '@/plugins/i18n'
+import { loadLocaleMessages, I18N_HELPERS_KEY, I18N_REGISTRY_KEY, type I18nHelpers } from '@/frontend/plugins/i18n/index'
 
 export function createTestI18n(locale: 'vi' | 'en' = 'vi') {
   const messages = loadLocaleMessages()

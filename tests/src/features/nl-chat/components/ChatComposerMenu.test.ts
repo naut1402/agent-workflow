@@ -40,6 +40,12 @@ const triggerOf = (wrapper: ReturnType<typeof mountInForm>['wrapper']) =>
   wrapper.find('.nl-chat-composer-add > button')
 const itemsOf = (wrapper: ReturnType<typeof mountInForm>['wrapper']) =>
   wrapper.findAll('.nl-chat-composer-menu-item')
+/**
+ * Chọn theo `data-testid`, KHÔNG theo chỉ số: danh sách này đã dài thêm một
+ * lần (mục knowledge chèn vào giữa) và làm cả hai case dưới bắt nhầm nút.
+ */
+const itemOf = (wrapper: ReturnType<typeof mountInForm>['wrapper'], id: string) =>
+  wrapper.get(`[data-testid="composer-menu-${id}"]`)
 
 /** The session registry is a module singleton — drain what a test pushed. */
 function resetSurface(): void {
@@ -114,7 +120,7 @@ describe('ChatComposerMenu — attaching files', () => {
     const { wrapper } = mountInForm()
 
     await triggerOf(wrapper).trigger('click')
-    await itemsOf(wrapper)[0].trigger('click')
+    await itemOf(wrapper, 'attach').trigger('click')
 
     expect(click).toHaveBeenCalledTimes(1)
     expect(menuOf(wrapper).exists()).toBe(false)
@@ -154,7 +160,7 @@ describe('ChatComposerMenu — attaching files', () => {
     const { wrapper, picked } = mountInForm()
 
     await triggerOf(wrapper).trigger('click')
-    await itemsOf(wrapper)[0].trigger('click')
+    await itemOf(wrapper, 'attach').trigger('click')
 
     // Cancelling fires no `change` at all, so nothing is ever handed up.
     expect(picked).toEqual([])
@@ -166,11 +172,22 @@ describe('ChatComposerMenu — disabled surface', () => {
     const { wrapper } = mountInForm({ disabled: true })
     await triggerOf(wrapper).trigger('click')
 
-    const [attach, newSession] = itemsOf(wrapper)
     expect(triggerOf(wrapper).attributes('disabled')).toBeUndefined()
-    expect(attach.attributes('disabled')).toBeDefined()
+    expect(itemOf(wrapper, 'attach').attributes('disabled')).toBeDefined()
     // A finished flow (or a step with no CLI session) still needs a way out.
-    expect(newSession.attributes('disabled')).toBeUndefined()
+    expect(itemOf(wrapper, 'new-session').attributes('disabled')).toBeUndefined()
+  })
+
+  it('keeps knowledge on its own gate — `disabled` is the attach gate', async () => {
+    // `disabled` gộp cả `attachments.uploading`; chọn knowledge không upload gì
+    // nên nó không được chờ theo.
+    const { wrapper } = mountInForm({ disabled: true })
+    await triggerOf(wrapper).trigger('click')
+    expect(itemOf(wrapper, 'knowledge').attributes('disabled')).toBeUndefined()
+
+    const locked = mountInForm({ knowledgeDisabled: true })
+    await triggerOf(locked.wrapper).trigger('click')
+    expect(itemOf(locked.wrapper, 'knowledge').attributes('disabled')).toBeDefined()
   })
 })
 
@@ -181,7 +198,7 @@ describe('ChatComposerMenu — new session', () => {
     const { wrapper } = mountInForm()
 
     await triggerOf(wrapper).trigger('click')
-    await itemsOf(wrapper)[1].trigger('click')
+    await itemOf(wrapper, 'new-session').trigger('click')
 
     expect(sessions.value.length).toBe(before + 1)
     expect(menuOf(wrapper).exists()).toBe(false)

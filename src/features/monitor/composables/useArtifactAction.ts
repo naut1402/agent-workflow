@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { runArtifactAction } from '../scripts/ArtifactPanelApi'
 import { fetchJob } from '../../runner/scripts/runnerApi'
-import { t } from '../../../plugins/i18n'
+import { t } from '../../../frontend/plugins/i18n'
 
 // Drives an artifact quick-action end to end: submit the job, poll
 // `GET /api/jobs?id=` until it settles, then invoke `onReload` on success so the

@@ -9,13 +9,13 @@ import {
   stat,
   writeFile,
   writeTextFile,
-} from '../../../../core/lib/fileHelper.js'
-import { resolveHitlPending, gateStepsFromConfig } from '../../../../core/lib/phase.js'
+} from '../../../../backend/lib/fileHelper.js'
+import { resolveHitlPending, gateStepsFromConfig } from '../../../../shared/lib/phase.js'
 import { TaskArchivePatch, TaskNamePatch, TaskStatePatch } from '../../schemas/task.js'
 import { loadPipelineConfig } from '../peers.js'
 import { readState, flowProfilePath } from './index.js'
 import { checkReviewRetry } from './reviewVerdict.js'
-import { emit } from '../../../../core/events/index.js'
+import { emit } from '../../../../backend/events/index.js'
 
 export type HitlApplyResult =
   | { ok: true; state: Record<string, unknown>; mtime: number }

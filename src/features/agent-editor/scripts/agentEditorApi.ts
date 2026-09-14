@@ -1,10 +1,20 @@
-import { t } from '../../../plugins/i18n'
-import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
+import { t } from '../../../frontend/plugins/i18n'
+import { apiGet, apiPost, apiRequest } from '../../../frontend/http/client'
 import { submitJob } from '../../runner/scripts/runnerApi'
 
 export type AgentScope = 'project' | 'global'
 
-export async function fetchCustomAgents(projectId?: string) {
+/** Một dòng trong danh sách agent — đúng 5 trường `GET /api/custom-agents` trả về. */
+export interface AgentMeta {
+  name: string
+  description?: string
+  model?: string
+  /** `false` khi agent không do dashboard tạo và tự khai `editable: false`. */
+  editable?: boolean
+  scope: AgentScope
+}
+
+export async function fetchCustomAgents(projectId?: string): Promise<{ agents: AgentMeta[] }> {
   return apiGet('/api/custom-agents', { project: projectId })
 }
 

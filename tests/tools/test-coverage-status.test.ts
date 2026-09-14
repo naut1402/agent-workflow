@@ -334,9 +334,31 @@ describe('main — trên repo git thật', () => {
     return r.stdout.trim()
   }
 
+  /**
+   * ⚠️ Commit của DÒNG TEST phải đụng thật vào `tests/`, không được `--allow-empty`.
+   *
+   * `sync-source-to-test.yml` merge dòng source vào dòng test ở mỗi push, nên mọi
+   * commit dòng source đều nằm trong khoảng của dòng test. Vì thế căn cứ "task đã
+   * có test" là **có commit chạm cây test**, chứ không phải "task-id có mặt" —
+   * đếm theo tên task thì mọi task tự động xanh. `subjectsOf` lọc theo path đúng
+   * vì lẽ đó, nên fixture phải tạo ra thứ lọt được qua bộ lọc ấy.
+   *
+   * Dòng source vẫn `--allow-empty`: ở đó commit **không** chạm `tests/` mới đúng thực tế.
+   */
   function line(branch: string, from: string, subjects: string[]): void {
     git(repo, 'switch', '--quiet', '-c', branch, from)
-    for (const s of subjects) git(repo, 'commit', '--allow-empty', '-m', s)
+    const isTestLine = branch.startsWith('test/')
+    for (const [i, s] of subjects.entries()) {
+      if (isTestLine) {
+        const f = path.join(repo, 'tests', `${branch.replace(/[^a-z0-9]/gi, '_')}_${i}.test.ts`)
+        fs.mkdirSync(path.dirname(f), { recursive: true })
+        fs.writeFileSync(f, `// ${s}\n`, 'utf8')
+        git(repo, 'add', '--', 'tests')
+        git(repo, 'commit', '-m', s)
+      } else {
+        git(repo, 'commit', '--allow-empty', '-m', s)
+      }
+    }
     git(repo, 'push', '--quiet', 'origin', branch)
   }
 
@@ -375,6 +397,25 @@ describe('main — trên repo git thật', () => {
     const md = fs.readFileSync(summaryFile, 'utf8')
     expect(md).toContain('| **thiếu test** | **1** |')
     expect(md).toContain('`T3`')
+  })
+
+  test('commit dòng source trôi sang dòng test qua sync 🚫 KHÔNG tính là đã có test', () => {
+    // Đây là lỗ xanh-giả thật, đo được ở bản 1.1.5: `sync-source-to-test.yml` merge
+    // dòng source vào dòng test mỗi push, nên 19 commit nằm trong khoảng của dòng
+    // test mà chỉ 1 commit chạm `tests/`. Đếm theo task-id thì cả 12 task tự động
+    // "đã có test" và cổng xanh vĩnh viễn — đúng thứ nó sinh ra để bịt.
+    line('dev/1.1.4/main', 'main', ['[T1] feat: a'])
+    line('test/main', 'main', [])
+    // Dòng test mang đúng task-id T1, nhưng KHÔNG có commit nào chạm `tests/`
+    // (mô phỏng lượt sync: chỉ merge cây source sang).
+    git(repo, 'switch', '--quiet', '-c', 'test/1.1.4/main', 'test/main')
+    git(repo, 'merge', '--quiet', '--no-ff', '-m', 'chore: sync dev/1.1.4/main into test/1.1.4/main', 'dev/1.1.4/main')
+    git(repo, 'push', '--quiet', 'origin', 'test/1.1.4/main')
+
+    expect(main(['--version', '1.1.4'], repo)).toBe(0)
+    const md = fs.readFileSync(summaryFile, 'utf8')
+    expect(md).toContain('| **thiếu test** | **1** |')
+    expect(md).toContain('`T1`')
   })
 
   test('cùng dữ kiện + --strict → exit 1', () => {

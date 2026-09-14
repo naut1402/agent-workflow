@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { sign } from 'hono/jwt'
 import { Hono } from 'hono'
-import { hasJwtSecret, createJwtMiddleware, verifyJwtHeader } from '../../../../../src/core/http/security/jwtGuard'
+import { hasJwtSecret, createJwtMiddleware, verifyJwtHeader } from '../../../../../src/backend/http/security/jwtGuard'
 
 const savedSecret = process.env.DASHBOARD_JWT_SECRET
 

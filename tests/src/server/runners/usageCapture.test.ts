@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { invalidateLoggingPrefsCache } from '../../../../src/core/log/loggingPrefsIo.js'
+import { invalidateLoggingPrefsCache } from '../../../../src/backend/log/loggingPrefsIo.js'
 import { captureJobUsage, captureTokenUsageFromExecute } from '../../../../src/features/runner/business/usageCapture.js'
 import {
   encodeCwdForClaudeProjects,
@@ -15,7 +15,7 @@ import {
 } from '../../../../src/features/runner/business/sessionLedger.js'
 import { loadJob, mergeJobUsage } from '../../../../src/features/runner/business/jobQueue.js'
 import type { JobRecord } from '../../../../src/features/runner/business/types.js'
-import { registryHome } from '../../../../src/core/registry.js'
+import { registryHome } from '../../../../src/backend/registry.js'
 
 let home: string
 let prevHome: string | undefined

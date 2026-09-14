@@ -2,8 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/api/apiServer.js'
-import type { RegistryContext } from '../../../../src/core/http/types.js'
+import { createApp } from '../../../../src/backend/apiServer.js'
+import type { RegistryContext } from '../../../../src/backend/http/types.js'
 
 let root: string
 let home: string

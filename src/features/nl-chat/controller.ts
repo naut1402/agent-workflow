@@ -1,12 +1,12 @@
-// fallow-ignore-file unused-file -- `registerFeatureRoutes` (src/api/apiServer.ts)
+// fallow-ignore-file unused-file -- `registerFeatureRoutes` (src/backend/apiServer.ts)
 // discovers every `features/<name>/api.ts` by scanning the directory and
 // dynamic-importing it, and that module is what imports this controller. Static
 // reachability cannot follow that edge, so the file reads as unreachable.
 import type { Context } from 'hono'
-import { AbstractController } from '../../core/http/AbstractController.js'
-import type { HonoEnv } from '../../core/http/types.js'
+import { AbstractController } from '../../backend/http/AbstractController.js'
+import type { HonoEnv } from '../../backend/http/types.js'
 import { StartNlChatRequest, NlChatMessageRequest } from './schemas/nlChat.js'
-import { emitAudit } from '../../core/log/store.js'
+import { emitAudit } from '../../backend/log/store.js'
 import {
   startNlChatSession,
   continueNlChatSession,
@@ -15,12 +15,13 @@ import {
   isNlChatSessionId,
   ensureNlChatBuilderAgent,
   scanCustomAgents,
-  buildCatalog,
+  buildNlChatCatalog,
+  renderNlChatCatalog,
   saveChatAttachments,
   checkAttachmentLimits,
   loadScanPatternsConfig,
 } from './business/index.js'
-import type { IncomingAttachment } from './business/index.js'
+import type { IncomingAttachment, NlChatEntityType } from './business/index.js'
 
 /** `taskId` field of an upload — absent or empty means "not task-scoped". */
 function readTaskIdField(form: FormData): string | undefined {
@@ -72,6 +73,31 @@ async function readAttachmentForm(
  * `POST /api/tasks/:id/feedback` intentionally 404s on it (readState guard).
  */
 export class NlChatController extends AbstractController {
+  /**
+   * Khối catalog cho MỘT lượt chat — đọc đĩa tại thời điểm gọi, nên lượt 2
+   * thấy pipeline tạo sau lượt 1. Không ném: catalog hỏng chỉ làm agent mất
+   * danh sách (đã có fallback trong `buildTurnPrompt`), không được làm hỏng
+   * cả lượt chat.
+   */
+  private async renderCatalogContext(
+    root: string,
+    entityType?: NlChatEntityType | null,
+  ): Promise<string | undefined> {
+    try {
+      const catalog = await buildNlChatCatalog(root, {
+        scanCustomAgents,
+        scanPatterns: loadScanPatternsConfig(),
+      })
+      return renderNlChatCatalog(catalog, entityType) || undefined
+    } catch (e) {
+      // Vẫn không ném, nhưng phải để lại dấu vết: không có dòng này thì một
+      // project settings hỏng sẽ chat bình thường mà agent không có catalog
+      // nào suốt phiên — triệu chứng gần giống hệt bug đang sửa.
+      console.warn(`[nl-chat] không dựng được catalog: ${String((e as Error)?.message || e)}`)
+      return undefined
+    }
+  }
+
   async createSession() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
@@ -88,19 +114,10 @@ export class NlChatController extends AbstractController {
 
     const projectId = this.projectId || ''
     const entityType = parsed.data.entityType ?? undefined
-    let extraContext: string | undefined
-    // Auto mode may end up drafting a pipeline, so the catalog refs must be in
-    // the turn-1 context there too — not only when 'pipeline' was pinned.
-    if (entityType === 'pipeline' || !entityType) {
-      const catalog = await buildCatalog(root, {
-        scanCustomAgents,
-        scanPatterns: loadScanPatternsConfig(),
-      })
-      const refs = (catalog.agents || [])
-        .map((a: any) => a?.id)
-        .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
-      extraContext = `Danh sách agent ref hợp lệ cho step.agent (chỉ được dùng các giá trị này):\n${refs.map((r) => `- ${r}`).join('\n')}`
-    }
+    // Mọi entityType đều cần catalog, không riêng 'pipeline': draft `task` tham
+    // chiếu `profileName`, draft `agent` tham chiếu `skills`, draft `automation`
+    // tham chiếu cả hai. `renderNlChatCatalog` tự lọc section theo entityType.
+    const extraContext = await this.renderCatalogContext(root, entityType)
 
     const { chatSessionId, job } = startNlChatSession({
       projectId,
@@ -125,6 +142,7 @@ export class NlChatController extends AbstractController {
   async postMessage() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
+    const { root } = gate
 
     const id = this.c.req.param('id')
     if (!id || !isNlChatSessionId(id)) return this.badRequest('invalid chat session id')
@@ -137,7 +155,11 @@ export class NlChatController extends AbstractController {
     }
 
     const projectId = this.projectId || ''
-    const result = await continueNlChatSession(id, projectId, parsed.data.message)
+    // `entityType` do business suy ra từ job cuối của phiên, nên section được
+    // lọc y hệt lượt 1 — draft `agent` vẫn không phải gánh danh sách pipeline.
+    const result = await continueNlChatSession(id, projectId, parsed.data.message, (entityType) =>
+      this.renderCatalogContext(root, entityType),
+    )
     if ('error' in result) {
       return this.json(result.status || 400, { error: result.error, chatSessionId: id })
     }

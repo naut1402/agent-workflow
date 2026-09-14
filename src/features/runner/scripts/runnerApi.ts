@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiRequest } from '../../../core/http/client'
+import { apiGet, apiPost, apiRequest } from '../../../frontend/http/client'
 
 /** Runners/jobs dùng chung nhiều feature. */
 export async function fetchRunners() {

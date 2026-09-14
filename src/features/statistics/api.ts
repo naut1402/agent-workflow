@@ -1,6 +1,6 @@
 import type { Hono } from 'hono'
-import type { HonoEnv } from '../../core/http/types.js'
-import { bind } from '../../core/http/AbstractController.js'
+import type { HonoEnv } from '../../backend/http/types.js'
+import { bind } from '../../backend/http/AbstractController.js'
 import { StatisticsController } from './controller.js'
 
 /** Sau logs (60) — không có route `:param` tranh chấp, giữ thứ tự ổn định. */

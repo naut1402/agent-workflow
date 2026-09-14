@@ -1,5 +1,5 @@
-import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
-import { registryHome } from '../../../core/registry.js'
+import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
+import { registryHome } from '../../../backend/registry.js'
 import {
   PROVIDER_CONFIGS_VERSION,
   sanitiseProviderConfigId,

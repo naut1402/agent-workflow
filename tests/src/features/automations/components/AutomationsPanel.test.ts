@@ -255,7 +255,7 @@ describe('tab lịch sử thực thi', () => {
     } as never)
     const wrapper = await mountPanel()
 
-    await wrapper.findAll('.panel-tab')[1].trigger('click')
+    await wrapper.findAll('.c-screen-layout__tab')[1].trigger('click')
     await flushPromises()
 
     const runRows = wrapper.findAll('.run-row')
@@ -285,7 +285,7 @@ describe('tab lịch sử thực thi', () => {
       ],
     } as never)
     const wrapper = await mountPanel()
-    await wrapper.findAll('.panel-tab')[1].trigger('click')
+    await wrapper.findAll('.c-screen-layout__tab')[1].trigger('click')
     await flushPromises()
 
     await wrapper.find('.run-row').trigger('click')
@@ -315,7 +315,7 @@ describe('lỗi API', () => {
     api.runs.mockRejectedValue(new Error('lỗi đọc history'))
 
     const wrapper = await mountPanel()
-    await wrapper.findAll('.panel-tab')[1].trigger('click')
+    await wrapper.findAll('.c-screen-layout__tab')[1].trigger('click')
     await flushPromises()
 
     expect(wrapper.find('.rule-table').exists()).toBe(true)

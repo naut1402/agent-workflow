@@ -1,6 +1,6 @@
 # Quy ước UI button
 
-Quy ước khi thêm/sửa nút trên dashboard. Class chuẩn nằm ở `src/styles/_shell.scss` (entry `src/styles/main.scss`).
+Quy ước khi thêm/sửa nút trên dashboard. Class chuẩn nằm ở `src/frontend/styles/_shell.scss` (entry `src/frontend/styles/main.scss`).
 
 ## Nguyên tắc
 
@@ -25,7 +25,7 @@ Hover scale (`scale(1.15)`) chỉ dùng cho toolbar / standalone. Nút nằm c�
 
 - Luôn có `type="button"` (trừ khi đúng là submit form).
 - Luôn có `title` và `aria-label` qua `t(...)` — icon-only không có nhãn chữ nên phụ thuộc hai thuộc tính này.
-- Icon bên trong dùng component chung `<Icon name="..." />` (`src/core/ui/Icon.vue`) — **không** tự vẽ tay `<svg>`/`<path>`. `Icon.vue` tự đặt `aria-hidden="true"` trên `<svg>` gốc.
+- Icon bên trong dùng component chung `<Icon name="..." />` (`src/frontend/ui/Icon.vue`) — **không** tự vẽ tay `<svg>`/`<path>`. `Icon.vue` tự đặt `aria-hidden="true"` trên `<svg>` gốc.
 - Không hardcode chuỗi UI — xem [`i18n.md`](i18n.md).
 
 ### Ví dụ
@@ -55,7 +55,7 @@ Hover scale (`scale(1.15)`) chỉ dùng cho toolbar / standalone. Nút nằm c�
 
 ## Class chuẩn: `.btn-quick-action`
 
-Nút **có nhãn chữ** (label bắt buộc) cho quick action — cùng triết lý borderless + hover scale với `.icon-btn`. Dùng chung Monitor (`ArtifactPanel`) và menu dropdown quick action. Class nằm ở `src/styles/_shell.scss`.
+Nút **có nhãn chữ** (label bắt buộc) cho quick action — cùng triết lý borderless + hover scale với `.icon-btn`. Dùng chung Monitor (`ArtifactPanel`) và menu dropdown quick action. Class nằm ở `src/frontend/styles/_shell.scss`.
 
 ```html
 <button type="button" class="btn-quick-action" :title="..." :aria-label="...">

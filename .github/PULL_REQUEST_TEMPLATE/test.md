@@ -45,8 +45,10 @@ truy được sau này.
 - [ ] E2E (playwright) ở `test-e2e/` — ảnh capture đính vào comment, không commit vào `docs/`
 
 ## Coverage trước → sau
-<!-- Lấy từ job summary "Cổng coverage" của CI dòng test. -->
-| Chỉ số | Baseline | Sau PR này |
+<!-- Lấy từ job summary "Mốc coverage của version" của CI dòng test.
+     📌 Đây là **mốc tham chiếu**, không phải cổng — số tụt 🚫 không tự làm PR đỏ
+     (`docs/agent-rules/testing.md` §6). Điền để người duyệt thấy xu hướng. -->
+| Chỉ số | Mốc trước | Sau PR này |
 |---|---|---|
 | FE lines | | |
 | BE lines | | |

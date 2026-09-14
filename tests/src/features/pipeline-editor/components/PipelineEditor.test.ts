@@ -153,8 +153,7 @@ describe('PipelineEditor — panel trái nhận state thu/phóng từ shell', ()
     const w = mountEditor({ subSidebarCollapsed: true })
     await flushPromises()
 
-    expect(w.find('.editor-left').classes()).toContain('editor-left-collapsed')
-    expect(w.find('.editor-layout').classes()).toContain('editor-layout--left-collapsed')
+    expect(w.find('.c-screen-layout__body').classes()).toContain('c-screen-layout__body--left-collapsed')
     expect(w.findAll('.target-section-icon')).toHaveLength(3)
     // Không render select/input khi thu gọn — chỉ icon.
     expect(w.find('.target-select').exists()).toBe(false)
@@ -195,7 +194,7 @@ describe('PipelineEditor — top bar 2 tab Task / Profile', () => {
     const w = mountEditor()
     await flushPromises()
 
-    const tabs = w.findAll('.editor-tab')
+    const tabs = w.findAll('.c-screen-layout__tab')
     expect(tabs).toHaveLength(2)
     expect(tabs.map((b) => b.text())).toEqual(['Task', 'Profile'])
     expect(w.find('.profile-manager').exists()).toBe(false)
@@ -205,27 +204,27 @@ describe('PipelineEditor — top bar 2 tab Task / Profile', () => {
   it('scope=global đánh dấu tab Profile là tab đang chọn', async () => {
     const w = mountEditor({ scope: 'global' })
     await flushPromises()
-    expect(w.findAll('.editor-tab')[1].attributes('aria-selected')).toBe('true')
-    expect(w.findAll('.editor-tab')[0].attributes('aria-selected')).toBe('false')
+    expect(w.findAll('.c-screen-layout__tab')[1].attributes('aria-selected')).toBe('true')
+    expect(w.findAll('.c-screen-layout__tab')[0].attributes('aria-selected')).toBe('false')
   })
 
   it('bấm tab Task emit update:scope="task"; bấm tab Profile emit "global"', async () => {
     const w = mountEditor({ scope: 'global' })
     await flushPromises()
 
-    await w.findAll('.editor-tab')[0].trigger('click')
+    await w.findAll('.c-screen-layout__tab')[0].trigger('click')
     expect(w.emitted('update:scope')).toEqual([['task']])
 
     const onTask = mountEditor({ scope: 'task', taskId: '' })
     await flushPromises()
-    await onTask.findAll('.editor-tab')[1].trigger('click')
+    await onTask.findAll('.c-screen-layout__tab')[1].trigger('click')
     expect(onTask.emitted('update:scope')).toEqual([['global']])
   })
 
   it('bấm lại tab đang mở không emit gì', async () => {
     const w = mountEditor({ scope: 'global' })
     await flushPromises()
-    await w.findAll('.editor-tab')[1].trigger('click')
+    await w.findAll('.c-screen-layout__tab')[1].trigger('click')
     expect(w.emitted('update:scope')).toBeUndefined()
   })
 })
@@ -749,7 +748,7 @@ describe('PipelineEditor — canvas và select luôn cùng một đối tượng
     ])
     await flushPromises()
 
-    await w.findAll('.editor-tab')[0].trigger('click')
+    await w.findAll('.c-screen-layout__tab')[0].trigger('click')
     await flushPromises()
 
     expect(confirmSpy).toHaveBeenCalledTimes(1)

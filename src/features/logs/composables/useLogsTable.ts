@@ -1,5 +1,5 @@
 import { computed, ref, type Ref } from 'vue'
-import { LOG_LEVELS, type LogEntry, type LogLevel } from '../../../core/log/schema'
+import { LOG_LEVELS, type LogEntry, type LogLevel } from '../../../shared/log/schema'
 
 export type SortDir = 'asc' | 'desc'
 

@@ -1,4 +1,4 @@
-import { AbstractBusiness } from '../../../core/business/AbstractBusiness.js'
+import { AbstractBusiness } from '../../../backend/business/AbstractBusiness.js'
 import { buildCatalog, parseCatalogAgentId, resolveCatalogAgentPath } from './catalog/index.js'
 import { buildRules } from './rules/index.js'
 import { loadPipelineConfig, knownArtifactsFor } from './pipeline/index.js'

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { dumpYaml, loadYaml } from '../../../../src/core/lib/yamlLib.js'
+import { dumpYaml, loadYaml } from '../../../../src/backend/lib/yamlLib.js'
 import { createTask, renderRequestMarkdown } from '../../../../src/features/monitor/business/tasks/create'
 import { DEFAULT_PIPELINE } from '../../../../src/features/pipeline-editor/business/pipeline/index'
 

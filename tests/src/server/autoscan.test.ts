@@ -10,8 +10,8 @@ import {
   autoscanFile,
 } from '../../../src/features/settings/business/dashboardSettings'
 import { runAutoscan } from '../../../src/features/settings/business/autoscan'
-import { add, list, createRegistryContext } from '../../../src/core/registry'
-import { createApp } from '../../../src/api/apiServer'
+import { add, list, createRegistryContext } from '../../../src/backend/registry'
+import { createApp } from '../../../src/backend/apiServer'
 
 let home: string
 let workspaceParent: string

@@ -2,10 +2,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/api/apiServer.js'
-import type { RegistryContext } from '../../../../src/core/http/types.js'
-import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
-import type { DashboardEvent } from '../../../../src/core/events/index.js'
+import { createApp } from '../../../../src/backend/apiServer.js'
+import type { RegistryContext } from '../../../../src/backend/http/types.js'
+import { on, _resetEventBusForTest } from '../../../../src/backend/events/index.js'
+import type { DashboardEvent } from '../../../../src/backend/events/index.js'
 
 /**
  * TC-14 (nợ roadmap 1.1.0 §5): CRUD qua HTTP phát đúng `entity.*`.

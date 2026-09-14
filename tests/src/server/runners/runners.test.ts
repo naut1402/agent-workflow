@@ -42,7 +42,7 @@ import {
   listJobs,
   cancelJob,
 } from '../../../../src/features/runner/business/index.js'
-import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
+import { on, _resetEventBusForTest } from '../../../../src/backend/events/index.js'
 import { readSecret, storeSecret } from '../../../../src/features/runner/business/secretVault.js'
 
 // Characterization test for the runners execution plane (U0005), written

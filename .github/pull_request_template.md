@@ -16,7 +16,7 @@ KHÔNG dùng Closes/Fixes/Resolves — merge PR KHÔNG được đóng issue tra
 Part of #
 
 ## Module / Phạm vi
-<!-- Feature / module chính, vd: src/features/settings, src/core/log -->
+<!-- Feature / module chính, vd: src/features/settings, src/backend/log -->
 
 ## Nội dung thay đổi
 <!-- Tóm tắt 1–3 câu mục tiêu PR. Chi tiết theo § dưới — bám cây thư mục, không liệt kê phẳng. -->
@@ -38,7 +38,7 @@ Fix/refactor: bắt buộc Logic trước → sau.
 
 ### Chi tiết chỉnh sửa (phần chung)
 <!-- Luôn điền. Ghi "Không" nếu không đụng. -->
-- **Core** (`src/core/…`): …
+- **Backend** (`src/backend/…`) / **Frontend** (`src/frontend/…`) / **Shared** (`src/shared/…`): …
 - **Feature khác**: … / Không
 
 ### Mapping file (khi rename / split / migrate path)
@@ -65,8 +65,8 @@ Cổng `Release test gate` chặn PR phát hành nếu dòng test của version 
 - [ ] Fix/refactor: đã có Logic trước → sau
 - [ ] **Suite hiện có** xanh local · CI/CD xanh (không hồi quy). Test *mới* cho thay đổi này thuộc PR dòng test
 - [ ] Tuân thủ `docs/agent-rules/coding-guideline.md` + `feature-architecture-guideline.md`
-- [ ] Icon mới/sửa dùng `<Icon name="..." />` (`src/core/ui/Icon.vue`) — không tự vẽ tay `<svg>`/`<path>`
-- [ ] Dropdown mới dùng `CSelect`/`CComboSelect` (`src/core/ui/`) — không dùng `<select>` native
+- [ ] Icon mới/sửa dùng `<Icon name="..." />` (`src/frontend/ui/Icon.vue`) — không tự vẽ tay `<svg>`/`<path>`
+- [ ] Dropdown mới dùng `CSelect`/`CComboSelect` (`src/frontend/ui/`) — không dùng `<select>` native
 - [ ] **Git hygiene** (`docs/agent-rules/git-pr.md`): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
 - [ ] Rename/move dùng `git mv`; KHÔNG còn bản cũ trùng (vd `.js` lẫn `.ts`)
 - [ ] Test không nằm trong PR này — dòng test của version đã hoạt động thì file dưới `tests/`·`test-e2e/` chuyển sang PR dòng test; **giai đoạn đệm** (dòng test chưa dựng cho version này) thì test vẫn ở đây nhưng phải đi commit `test:` riêng (`docs/agent-rules/git-pr.md` §6.2)

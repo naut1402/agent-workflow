@@ -7,8 +7,8 @@ import {
   rename,
   rm,
   writeTextFile,
-} from '../../../../core/lib/fileHelper.js'
-import { dumpYaml, readYamlSafe } from '../../../../core/lib/yamlLib.js'
+} from '../../../../backend/lib/fileHelper.js'
+import { dumpYaml, readYamlSafe } from '../../../../backend/lib/yamlLib.js'
 import { sanitiseProfileName, profilesDir, loadPipelineConfig } from '../peers.js'
 import { TASK_ID_PATTERN } from '../../schemas/taskCreate.js'
 import type { CreateTaskRequest } from '../../schemas/taskCreate.js'

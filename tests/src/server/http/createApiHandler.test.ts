@@ -2,9 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApiHandler } from '../../../../src/api/apiServer.js'
+import { createApiHandler } from '../../../../src/backend/apiServer.js'
 import { readLogs } from '../../../../src/features/logs/business/store.js'
-import type { RegistryContext } from '../../../../src/core/http/types.js'
+import type { RegistryContext } from '../../../../src/backend/http/types.js'
 
 // Drives the node⇆Hono bridge directly to assert the request-logging hook
 // (which lives in createApiHandler, NOT the Hono middleware, so app.request

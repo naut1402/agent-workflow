@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
-import Icon from '../../../core/ui/Icon.vue'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
+import Icon from '../../../frontend/ui/Icon.vue'
 import { TILE_MIN_SPAN, TILE_MAX_SPAN, snapChartHeight } from '../lib/chartConfig'
 
 /**

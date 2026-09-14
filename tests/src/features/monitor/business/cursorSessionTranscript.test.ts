@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdirSync, writeTextFileSync, joinPath } from '../../../../../src/core/lib/fileHelper.js'
+import { mkdirSync, writeTextFileSync, joinPath } from '../../../../../src/backend/lib/fileHelper.js'
 import os from 'node:os'
 import {
   findCursorTranscriptFile,

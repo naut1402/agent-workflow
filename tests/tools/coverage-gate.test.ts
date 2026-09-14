@@ -3,7 +3,6 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
-  TOLERANCE,
   appendHistory,
   compare,
   historyRow,
@@ -18,14 +17,17 @@ import {
 } from '../../.github/scripts/coverage-gate.js'
 
 /**
- * Cổng coverage là chỗ **duy nhất** phát hiện coverage tụt sau khi test tách
- * sang dòng branch riêng — PR dòng source không còn mang test nào theo, nên
- * không còn chỗ nào tự nhiên lộ ra việc đó.
+ * 🚫 Đây KHÔNG còn là cổng. Từ 2026-09-11 mức phủ chỉ là **mốc tham chiếu**
+ * (`docs/agent-rules/testing.md` §6); nợ test gác theo TASK ở
+ * `test-coverage-status.ts`. `coverage-gate.ts` nay chỉ đo, ghi mốc và in bảng.
  *
- * Ba bất biến phải test trực tiếp:
- *  - "thiếu dữ liệu" KHÔNG bao giờ được kết luận là "đạt";
- *  - `--update` chỉ đi lên, không tự hạ baseline;
- *  - dung sai hấp thụ dao động nhưng vẫn phải cảnh báo, không im lặng.
+ * Ba bất biến còn lại phải test trực tiếp:
+ *  - `--check` đã bị bỏ ⇒ exit 2 kèm *Cách dùng*, 🚫 không âm thầm chạy như `--update`;
+ *  - `--update` ghi **số đo của lượt này**, kể cả khi tụt — mốc 🚫 không phải ratchet;
+ *  - vùng không đo được phải nói ra (cảnh báo), 🚫 không im lặng giữ số của lượt trước.
+ *
+ * ⚠️ Mức phủ tụt 🚫 không còn làm exit khác 0. Case nào khẳng định "tụt → chặn"
+ * là đang test một hợp đồng đã chết.
  */
 
 function tmp(): string {
@@ -112,47 +114,51 @@ describe('parseBaseline', () => {
 describe('compare', () => {
   const baseline = { frontend: { lines: 60, statements: 59 }, backend: { lines: 83 } }
 
-  test('bằng baseline → ok', () => {
+  // Từ 2026-09-11 mức phủ 🚫 không còn là cổng (`testing.md` §6) — nợ test gác theo
+  // task ở `test-coverage-status.ts`. Nên `compare` chỉ còn **hiển thị**: không cột
+  // kết luận (`status`), không dung sai. Các case dưới khoá đúng hợp đồng đó.
+
+  test('bằng baseline → delta 0, và 🚫 không có cột kết luận nào', () => {
     const rows = compare(baseline, { frontend: { lines: 60, statements: 59 }, backend: { lines: 83 } })
-    expect(rows.every((r) => r.status === 'ok')).toBe(true)
+    expect(rows.every((r) => r.delta === 0)).toBe(true)
+    expect(rows.every((r) => !('status' in r))).toBe(true)
   })
 
-  test('cao hơn baseline → ok', () => {
+  test('cao hơn baseline → delta dương', () => {
     const rows = compare(baseline, { frontend: { lines: 70, statements: 65 }, backend: { lines: 90 } })
-    expect(rows.every((r) => r.status === 'ok')).toBe(true)
+    expect(rows.find((r) => r.metric === 'frontend.lines')).toMatchObject({ baseline: 60, current: 70, delta: 10 })
   })
 
-  test('giảm trong dung sai → within-tolerance (đạt nhưng có dấu hiệu)', () => {
-    const rows = compare(baseline, { frontend: { lines: 59.6, statements: 59 }, backend: { lines: 83 } })
-    expect(rows.find((r) => r.metric === 'frontend.lines')?.status).toBe('within-tolerance')
+  test('giảm → delta âm, KHÔNG phán quyết — sụt bao nhiêu cũng chỉ là số', () => {
+    const rows = compare(baseline, { frontend: { lines: 40, statements: 59 }, backend: { lines: 83 } })
+    expect(rows.find((r) => r.metric === 'frontend.lines')).toMatchObject({ baseline: 60, current: 40, delta: -20 })
   })
 
-  test('giảm đúng bằng dung sai vẫn đạt — biên trên là "còn trong dung sai"', () => {
-    const rows = compare(baseline, { frontend: { lines: 60 - TOLERANCE, statements: 59 }, backend: { lines: 83 } })
-    expect(rows.find((r) => r.metric === 'frontend.lines')?.status).toBe('within-tolerance')
-  })
-
-  test('giảm quá dung sai → regressed', () => {
-    const rows = compare(baseline, { frontend: { lines: 59.4, statements: 59 }, backend: { lines: 83 } })
-    expect(rows.find((r) => r.metric === 'frontend.lines')?.status).toBe('regressed')
-  })
-
-  test('chỉ số có ở baseline mà lượt chạy không đo được → missing, KHÔNG phải đạt', () => {
+  test('chỉ số có ở baseline mà lượt chạy không đo được → vẫn hiện, current/delta undefined', () => {
     const rows = compare(baseline, { frontend: { lines: 60, statements: 59 }, backend: {} })
-    expect(rows.find((r) => r.metric === 'backend.lines')?.status).toBe('missing')
+    expect(rows.find((r) => r.metric === 'backend.lines')).toMatchObject({ baseline: 83, current: undefined, delta: undefined })
   })
 
-  test('chỉ số mới xuất hiện ở lượt chạy không bị đòi hỏi — baseline là hợp đồng', () => {
+  test('chỉ số mới xuất hiện ở lượt chạy VẪN hiện — lấy hợp, baseline 🚫 không còn là hợp đồng', () => {
     const rows = compare({ frontend: { lines: 60 } }, { frontend: { lines: 60, branches: 10 }, backend: {} })
+    expect(rows.map((r) => r.metric)).toEqual(['frontend.lines', 'frontend.branches'])
+    expect(rows.find((r) => r.metric === 'frontend.branches')).toMatchObject({ baseline: undefined, current: 10, delta: undefined })
+  })
+
+  test('không bên nào có chỉ số → 🚫 không đẻ ra dòng rỗng', () => {
+    const rows = compare({ frontend: { lines: 60 } }, { frontend: { lines: 60 }, backend: {} })
     expect(rows.map((r) => r.metric)).toEqual(['frontend.lines'])
   })
 })
 
 describe('mergeBaseline', () => {
-  test('chỉ đi lên: số mới thấp hơn thì giữ số cũ', () => {
+  // Bản cũ "chỉ đi lên" (số mới thấp hơn thì giữ số cũ) đã bỏ cùng cổng mức phủ:
+  // mốc nay là **số đo của lượt gần nhất**, không phải hợp đồng phải giữ. Giữ lại
+  // hành vi ratchet ở đây sẽ làm mốc nói dối về cây hiện tại.
+  test('số mới thấp hơn vẫn ghi đè — mốc là số đo, 🚫 không phải ratchet', () => {
     const next = mergeBaseline({ frontend: { lines: 60 }, backend: { lines: 83 } }, { frontend: { lines: 50 }, backend: { lines: 70 } }, {})
-    expect(next.frontend?.lines).toBe(60)
-    expect(next.backend?.lines).toBe(83)
+    expect(next.frontend?.lines).toBe(50)
+    expect(next.backend?.lines).toBe(70)
   })
 
   test('số mới cao hơn thì nâng lên', () => {
@@ -219,8 +225,8 @@ describe('lịch sử', () => {
 
 describe('parseArgs', () => {
   test('mặc định trỏ đúng ba file dữ liệu của cổng', () => {
-    const a = parseArgs(['--check'])
-    expect(a.mode).toBe('check')
+    const a = parseArgs(['--update'])
+    expect(a.mode).toBe('update')
     expect(a.baseline).toBe('reports/coverage-baseline.json')
     expect(a.fe).toBe('coverage/frontend/coverage-summary.json')
     expect(a.be).toBe('coverage/backend/lcov.info')
@@ -235,9 +241,9 @@ describe('parseArgs', () => {
     expect(parseArgs(['--check', '--allow-missing']).allowMissing).toBe(true)
   })
 
-  test('override được đường dẫn và dung sai', () => {
-    const a = parseArgs(['--update', '--baseline', 'x/b.json', '--history', 'x/h.md', '--tolerance', '1.5'])
-    expect(a).toMatchObject({ mode: 'update', baseline: 'x/b.json', history: 'x/h.md', tolerance: 1.5 })
+  test('override được đường dẫn (🚫 không còn --tolerance: dung sai đi cùng cổng đã bỏ)', () => {
+    const a = parseArgs(['--update', '--baseline', 'x/b.json', '--history', 'x/h.md'])
+    expect(a).toMatchObject({ mode: 'update', baseline: 'x/b.json', history: 'x/h.md' })
   })
 })
 
@@ -269,24 +275,20 @@ describe('main (exit code)', () => {
 
   const BE_75 = 'SF:a.ts\nLF:4\nLH:3\nend_of_record'
 
-  test('coverage ≥ baseline → exit 0', () => {
-    const f = fixture({ baseline: { frontend: { lines: 60 }, backend: { lines: 75 } }, fe: { lines: 60 }, be: BE_75 })
-    expect(main(['--check', ...f.args])).toBe(0)
+  // ⚠️ Cụm này trước đây gọi `--check`. Sau khi cổng mức phủ bị bỏ, `--check` trả
+  // exit 2 (lỗi cách dùng) nên mọi case `not.toBe(0)` vẫn xanh — nhưng xanh vì
+  // "cờ không tồn tại", không phải vì điều nó định khẳng định. Đã đổi hết sang
+  // `--update` để test lại nói đúng thứ nó kiểm.
+
+  test('coverage tụt sâu vẫn exit 0 — mức phủ 🚫 không còn chặn', () => {
+    const f = fixture({ baseline: { frontend: { lines: 60 } }, fe: { lines: 20 }, be: BE_75 })
+    expect(main(['--update', ...f.args])).toBe(0)
+    expect(JSON.parse(fs.readFileSync(f.baselineFile, 'utf8')).frontend.lines).toBe(20)
   })
 
-  test('tụt quá dung sai → exit khác 0', () => {
-    const f = fixture({ baseline: { frontend: { lines: 60 } }, fe: { lines: 55 }, be: BE_75 })
-    expect(main(['--check', ...f.args])).not.toBe(0)
-  })
-
-  test('tụt trong dung sai → exit 0 (có cảnh báo trên stderr)', () => {
-    const f = fixture({ baseline: { frontend: { lines: 60 } }, fe: { lines: 59.7 }, be: BE_75 })
-    expect(main(['--check', ...f.args])).toBe(0)
-  })
-
-  test('thiếu baseline → exit khác 0, KHÔNG coi là đạt', () => {
+  test('thiếu baseline → exit khác 0, KHÔNG âm thầm khởi tạo', () => {
     const f = fixture({ fe: { lines: 60 }, be: BE_75 })
-    expect(main(['--check', ...f.args])).not.toBe(0)
+    expect(main(['--update', ...f.args])).not.toBe(0)
   })
 
   test('thiếu baseline + --allow-missing → khởi tạo được (chỉ dùng lần đầu)', () => {
@@ -297,30 +299,30 @@ describe('main (exit code)', () => {
 
   test('baseline sai định dạng → exit khác 0, không suy ra 0% rồi kết luận đạt', () => {
     const f = fixture({ baseline: '{ khong-phai-json', fe: { lines: 60 }, be: BE_75 })
-    expect(main(['--check', ...f.args])).not.toBe(0)
+    expect(main(['--update', ...f.args])).not.toBe(0)
   })
 
   test('baseline rỗng chỉ số → exit khác 0', () => {
     const f = fixture({ baseline: {}, fe: { lines: 60 }, be: BE_75 })
-    expect(main(['--check', ...f.args])).not.toBe(0)
+    expect(main(['--update', ...f.args])).not.toBe(0)
   })
 
   test('không có dữ liệu coverage nào → exit khác 0', () => {
     const f = fixture({ baseline: { frontend: { lines: 60 } } })
-    expect(main(['--check', ...f.args])).not.toBe(0)
+    expect(main(['--update', ...f.args])).not.toBe(0)
   })
 
-  test('--check KHÔNG tự nâng baseline (chỉ --update mới nâng)', () => {
+  test('`--check` bị từ chối (exit 2) và 🚫 KHÔNG đụng vào baseline', () => {
     const f = fixture({ baseline: { frontend: { lines: 60 } }, fe: { lines: 80 }, be: BE_75 })
-    expect(main(['--check', ...f.args])).toBe(0)
+    expect(main(['--check', ...f.args])).toBe(2)
     expect(JSON.parse(fs.readFileSync(f.baselineFile, 'utf8')).frontend.lines).toBe(60)
   })
 
-  test('--update chỉ đi lên và ghi thêm một dòng lịch sử', () => {
+  test('--update ghi đè cả khi số tụt, và ghi thêm một dòng lịch sử', () => {
     const f = fixture({ baseline: { frontend: { lines: 90 } }, fe: { lines: 60 }, be: BE_75 })
     expect(main(['--update', '--source-ref', 'dev/1.1.3/main', '--test-ref', 'test/1.1.3/main', ...f.args])).toBe(0)
     const b = JSON.parse(fs.readFileSync(f.baselineFile, 'utf8'))
-    expect(b.frontend.lines).toBe(90)
+    expect(b.frontend.lines).toBe(60)
     expect(b.backend.lines).toBe(75)
     expect(fs.readFileSync(f.historyFile, 'utf8')).toContain('test/1.1.3/main')
   })
@@ -330,9 +332,14 @@ describe('main (exit code)', () => {
     expect(main([...f.args])).toBe(2)
   })
 
-  test('baseline có backend mà lượt chạy không đo được → exit khác 0', () => {
-    const f = fixture({ baseline: { frontend: { lines: 60 }, backend: { lines: 75 } }, fe: { lines: 60 } })
-    expect(main(['--check', ...f.args])).not.toBe(0)
+  test('lượt chạy không đo được backend → CẢNH BÁO rồi exit 0, chỉ ghi mốc vùng frontend (TC-D8)', () => {
+    // 🚫 Không còn chặn, nhưng cũng 🚫 không im lặng: giữ nguyên số backend cũ mà
+    // không nói gì là để người đọc tưởng đó là số của lượt này.
+    const f = fixture({ baseline: { frontend: { lines: 60 }, backend: { lines: 75 } }, fe: { lines: 70 } })
+    expect(main(['--update', ...f.args])).toBe(0)
+    const b = JSON.parse(fs.readFileSync(f.baselineFile, 'utf8'))
+    expect(b.frontend.lines).toBe(70)
+    expect(b.backend.lines).toBe(75)
   })
 
   const SHA_A = 'a'.repeat(40)
@@ -388,12 +395,14 @@ describe('main (exit code)', () => {
 
   test('baseline CHƯA có khoá neo vẫn --check bình thường (không đỏ vô cớ sau PR neo)', () => {
     const f = fixture({ baseline: { frontend: { lines: 60 }, backend: { lines: 75 }, source_ref: 'dev/1.1.3/main' }, fe: { lines: 60 }, be: BE_75 })
-    expect(main(['--check', ...f.args])).toBe(0)
+    expect(main(['--update', ...f.args])).toBe(0)
   })
 
-  test('có neo mà coverage tụt → vẫn chặn vì COVERAGE (hai lý do chặn không trộn)', () => {
+  test('có neo mà coverage tụt → exit 0: coverage 🚫 không còn là lý do chặn', () => {
+    // Bản cũ trả 1 ở đây để "hai lý do chặn không trộn". Nay chỉ còn MỘT lý do
+    // chặn liên quan neo (SHA lệch), còn mức phủ thì không chặn nữa.
     const f = fixture({ baseline: { frontend: { lines: 60 }, source_sha: SHA_A }, fe: { lines: 50 }, be: BE_75 })
-    expect(main(['--check', ...f.args])).toBe(1)
+    expect(main(['--update', ...f.args])).toBe(0)
   })
 })
 
@@ -477,14 +486,17 @@ describe('parseArgs — cờ neo SHA', () => {
 
   test('bảng cờ giữ đúng hai kiểu "thiếu tham số" của bản cũ', () => {
     // Cờ đường dẫn: giữ default. Cờ ref/sha: undefined (để main báo cách dùng).
-    expect(parseArgs(['--check', '--baseline']).baseline).toBe('reports/coverage-baseline.json')
-    expect(parseArgs(['--check', '--source-ref']).sourceRef).toBeUndefined()
-    expect(parseArgs(['--check', '--source-sha']).sourceSha).toBeUndefined()
-    expect(parseArgs(['--check', '--tolerance']).tolerance).toBe(0)
+    expect(parseArgs(['--update', '--baseline']).baseline).toBe('reports/coverage-baseline.json')
+    expect(parseArgs(['--update', '--source-ref']).sourceRef).toBeUndefined()
+    expect(parseArgs(['--update', '--source-sha']).sourceSha).toBeUndefined()
+  })
+
+  test('`--check` đã bị bỏ ⇒ cờ lạ ⇒ mode null, để CLI báo cách dùng thay vì âm thầm chạy', () => {
+    expect(parseArgs(['--check']).mode).toBe(null)
   })
 
   test('cờ lạ bị bỏ qua, không làm hỏng các cờ sau nó', () => {
-    const a = parseArgs(['--check', '--khong-ton-tai', '--source-sha', 'a'.repeat(40)])
-    expect(a).toMatchObject({ mode: 'check', sourceSha: 'a'.repeat(40) })
+    const a = parseArgs(['--update', '--khong-ton-tai', '--source-sha', 'a'.repeat(40)])
+    expect(a).toMatchObject({ mode: 'update', sourceSha: 'a'.repeat(40) })
   })
 })

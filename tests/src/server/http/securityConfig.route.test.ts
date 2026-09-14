@@ -3,8 +3,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { sign } from 'hono/jwt'
-import { createApp } from '../../../../src/api/apiServer'
-import { createRegistryContext } from '../../../../src/core/registry'
+import { createApp } from '../../../../src/backend/apiServer'
+import { createRegistryContext } from '../../../../src/backend/registry'
 import { loadSecurityConfig } from '../../../../src/features/settings/business/dashboardSettings'
 
 let home: string

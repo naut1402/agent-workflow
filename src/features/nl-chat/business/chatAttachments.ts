@@ -7,7 +7,7 @@ import {
   randomUUID,
   resolvePathUnder,
   writeFile,
-} from '../../../core/lib/fileHelper.js'
+} from '../../../backend/lib/fileHelper.js'
 import {
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_TURN,

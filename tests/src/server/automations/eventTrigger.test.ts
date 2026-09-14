@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { emit, _resetEventBusForTest } from '../../../../src/core/events/index.js'
+import { emit, _resetEventBusForTest } from '../../../../src/backend/events/index.js'
 import {
   handleEvent,
   startEventTriggers,

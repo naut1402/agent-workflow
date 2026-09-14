@@ -1,5 +1,5 @@
-import type { ModeRegistry, ShellContext } from '../../core/shell/modeRegistry'
-import { subSidebarBindings } from '../../core/shell/subSidebarBindings'
+import type { ModeRegistry, ShellContext } from '../../frontend/shell/modeRegistry'
+import { subSidebarBindings } from '../../frontend/shell/subSidebarBindings'
 import MonitorLayout from './components/MonitorLayout.vue'
 
 /** Mode mặc định của app — statusKind 'live' (khác 8 mode còn lại đều 'paused'). */
@@ -11,6 +11,10 @@ export function registerMode(registry: ModeRegistry): void {
     order: 1,
     statusKind: 'live',
     panel: MonitorLayout,
+    descriptionKey: 'common.modeDesc.monitor',
+    maturity: 'stable',
+    // Mode fallback của shell — không tắt được, luôn còn một lối về.
+    alwaysOn: true,
     // Key giữ nguyên từ bản cũ (state từng nằm trong MonitorLayout) — user không mất preference.
     subSidebar: { persistKey: 'dev-dashboard-monitor-subsidebar-collapsed' },
     bindings: (ctx: ShellContext) => {

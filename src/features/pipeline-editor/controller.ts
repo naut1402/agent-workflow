@@ -1,12 +1,12 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { loadYaml, dumpYaml } from '../../core/lib/yamlLib.js'
-import { AbstractController } from '../../core/http/AbstractController.js'
-import { statSafe, writeTextFileAtomicSync } from '../../core/lib/fileHelper.js'
+import { loadYaml, dumpYaml } from '../../backend/lib/yamlLib.js'
+import { AbstractController } from '../../backend/http/AbstractController.js'
+import { statSafe, writeTextFileAtomicSync } from '../../backend/lib/fileHelper.js'
 import * as pipelineEditorBusiness from './business/index.js'
 import { draftFromAgentMarkdown } from '../agent-editor/business/agentMarkdown.js'
-import { parseFrontmatter } from '../../core/lib/yamlLib.js'
-import { emitAudit } from '../../core/log/store.js'
+import { parseFrontmatter } from '../../backend/lib/yamlLib.js'
+import { emitAudit } from '../../backend/log/store.js'
 import { buildCatalog, parseCatalogAgentId, resolveCatalogAgentPath } from './business/catalog/index.js'
 import { buildRules } from './business/rules/index.js'
 
@@ -23,6 +23,11 @@ export class PipelineEditorController extends AbstractController {
       if (!name) return this.badRequest('invalid profile name')
       try {
         const raw = await fs.readFile(path.join(dir, `${name}.yaml`), 'utf8')
+        if (this.c.req.query('download') === '1') {
+          this.c.header('Content-Disposition', `attachment; filename="${name}.yaml"`)
+          this.c.header('Cache-Control', 'no-store')
+          return this.c.text(raw, 200, { 'Content-Type': 'text/yaml; charset=utf-8' })
+        }
         return this.ok({ name, pipeline: loadYaml(raw) })
       } catch {
         return this.notFound('profile not found')

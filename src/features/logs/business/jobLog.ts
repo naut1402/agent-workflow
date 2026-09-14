@@ -1,5 +1,5 @@
-import { type FSWatcher, joinPath, openFile, stat, watch } from '../../../core/lib/fileHelper.js'
-import { registryHome } from '../../../core/registry.js'
+import { type FSWatcher, joinPath, openFile, stat, watch } from '../../../backend/lib/fileHelper.js'
+import { registryHome } from '../../../backend/registry.js'
 import type { JobRecord, JobStatus } from './index.js'
 import { loadJob, listJobs } from './index.js'
 

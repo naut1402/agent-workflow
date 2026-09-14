@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/api/apiServer.js'
-import { createRegistryContext } from '../../../../src/core/registry.js'
+import { createApp } from '../../../../src/backend/apiServer.js'
+import { createRegistryContext } from '../../../../src/backend/registry.js'
 import { resetUsageStatsCacheForTest } from '../../../../src/features/statistics/business/usageStats.js'
 
 let home: string

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { resolveCorsHeaders } from '../../../../../src/core/http/security/corsGuard'
+import { resolveCorsHeaders } from '../../../../../src/backend/http/security/corsGuard'
 import type { CorsConfig } from '../../../../../src/features/settings/schemas/security'
 
 const baseConfig: CorsConfig = {

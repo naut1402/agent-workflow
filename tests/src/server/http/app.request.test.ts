@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/api/apiServer.js'
+import { createApp } from '../../../../src/backend/apiServer.js'
 import { readLogs } from '../../../../src/features/logs/business/store.js'
-import type { RegistryContext } from '../../../../src/core/http/types.js'
+import type { RegistryContext } from '../../../../src/backend/http/types.js'
 
 // Integration tests via Hono's app.request — no server boot, no node req/res
 // mock. This is the testability win of the Hono migration: routing + the

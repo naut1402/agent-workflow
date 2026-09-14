@@ -1,0 +1,88 @@
+:root,
+[data-theme="dark"] {
+  --bg: #0f1419;
+  --panel: #1a2027;
+  --panel-2: #232b34;
+  --border: #2e3742;
+  --text: #d7dde4;
+  --muted: #8b97a3;
+  --accent: #4aa3ff;
+  --accent-rgb: 74, 163, 255;
+  --accent-dim: rgba(74, 163, 255, 0.15);
+  --done: #3fb950;
+  --active: #4aa3ff;
+  --waiting: #e3b341;
+  --danger: #f85149;
+  --ok: #3fb950;
+  --err: #f85149;
+  --text-muted: #8b97a3;
+  --hover-surface: rgba(255, 255, 255, 0.06);
+  --input-surface: rgba(0, 0, 0, 0.25);
+  --scrollbar-size: 8px;
+  --scrollbar-thumb: rgba(215, 221, 228, 0.18);
+  --scrollbar-thumb-hover: rgba(215, 221, 228, 0.34);
+
+  /* Palette màu tag knowledge — mỗi token khai hai giá trị theo `[data-theme]`
+     nên chip đọc được ở cả hai theme. DB chỉ lưu TÊN token (`TAG_COLORS`),
+     không lưu hex: đổi bảng màu sau này không phải migrate dữ liệu.
+     `-rgb` để `.chip-tag` pha nền/viền bằng `rgba()`. */
+  --tag-slate: #8b97a3;
+  --tag-slate-rgb: 139, 151, 163;
+  --tag-blue: #4aa3ff;
+  --tag-blue-rgb: 74, 163, 255;
+  --tag-green: #3fb950;
+  --tag-green-rgb: 63, 185, 80;
+  --tag-amber: #e3b341;
+  --tag-amber-rgb: 227, 179, 65;
+  --tag-red: #f85149;
+  --tag-red-rgb: 248, 81, 73;
+  --tag-purple: #a371f7;
+  --tag-purple-rgb: 163, 113, 247;
+  --tag-pink: #f778ba;
+  --tag-pink-rgb: 247, 120, 186;
+  --tag-teal: #39c5bb;
+  --tag-teal-rgb: 57, 197, 187;
+
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+[data-theme="light"] {
+  --bg: #f4f6f9;
+  --panel: #ffffff;
+  --panel-2: #eef1f6;
+  --border: #d0d7e2;
+  --text: #1a2332;
+  --muted: #5c6b7a;
+  --accent: #0969da;
+  --accent-rgb: 9, 105, 218;
+  --accent-dim: rgba(9, 105, 218, 0.12);
+  --done: #1a7f37;
+  --active: #0969da;
+  --waiting: #9a6700;
+  --danger: #cf222e;
+  --ok: #1a7f37;
+  --err: #cf222e;
+  --text-muted: #5c6b7a;
+  --hover-surface: rgba(0, 0, 0, 0.04);
+  --input-surface: #eef1f6;
+  --scrollbar-thumb: rgba(26, 35, 50, 0.2);
+  --scrollbar-thumb-hover: rgba(26, 35, 50, 0.36);
+
+  /* Cùng 8 token, giá trị tối hơn: bản dark trên nền sáng không đủ tương phản. */
+  --tag-slate: #5c6b7a;
+  --tag-slate-rgb: 92, 107, 122;
+  --tag-blue: #0969da;
+  --tag-blue-rgb: 9, 105, 218;
+  --tag-green: #1a7f37;
+  --tag-green-rgb: 26, 127, 55;
+  --tag-amber: #9a6700;
+  --tag-amber-rgb: 154, 103, 0;
+  --tag-red: #cf222e;
+  --tag-red-rgb: 207, 34, 46;
+  --tag-purple: #8250df;
+  --tag-purple-rgb: 130, 80, 223;
+  --tag-pink: #bf3989;
+  --tag-pink-rgb: 191, 57, 137;
+  --tag-teal: #137e76;
+  --tag-teal-rgb: 19, 126, 118;
+}

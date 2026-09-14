@@ -1,7 +1,7 @@
-import { joinPath, mkdirSync, readTextFileSync, resolvePath, writeTextFileAtomicSync } from '../../../core/lib/fileHelper.js'
+import { joinPath, mkdirSync, readTextFileSync, resolvePath, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
 import crypto from 'node:crypto'
 import os from 'node:os'
-import { registryHome } from '../../../core/registry.js'
+import { registryHome } from '../../../backend/registry.js'
 
 export type SessionPolicy = 'single' | 'per-step' | 'per-runner'
 export type SessionEntryStatus = 'open' | 'closed' | 'stale' | 'archived'

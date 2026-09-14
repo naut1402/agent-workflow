@@ -2,7 +2,7 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
-import { STORAGE_KEY, useAppSettings } from '@/core/composables/useAppSettings'
+import { STORAGE_KEY, useAppSettings } from '@/frontend/composables/useAppSettings'
 import viMonitor from '@/features/monitor/locales/vi'
 import enMonitor from '@/features/monitor/locales/en'
 
@@ -54,7 +54,7 @@ describe('MonitorLayout — sub-sidebar collapse (state từ shell)', () => {
     const w = mount(MonitorLayout, { props: { tasks, subSidebarCollapsed: true } })
 
     expect(w.find('.monitor-sub-sidebar').classes()).toContain('monitor-sub-sidebar--collapsed')
-    expect(w.find('.monitor-layout').classes()).toContain('monitor-layout--sub-collapsed')
+    expect(w.find('.c-screen-layout__body').classes()).toContain('c-screen-layout__body--left-collapsed')
     expect(w.find('.project-bar').exists()).toBe(false)
     expect(w.find('.task-row').exists()).toBe(false)
   })

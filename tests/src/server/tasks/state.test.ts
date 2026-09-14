@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, applyRenameAction, deleteTask, reconcileGateState, repairTaskState, resetPipelineStepAssumingLock, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
-import { on, _resetEventBusForTest } from '../../../../src/core/events/index.js'
+import { on, _resetEventBusForTest } from '../../../../src/backend/events/index.js'
 import { listJobs, loadJob, registerProvider, submitJob, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 

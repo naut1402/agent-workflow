@@ -2,13 +2,13 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/api/apiServer.js'
-import type { RegistryContext } from '../../../../src/core/http/types.js'
+import { createApp } from '../../../../src/backend/apiServer.js'
+import type { RegistryContext } from '../../../../src/backend/http/types.js'
 import { cancelJob, loadJob, listJobs, registerProvider, submitJob, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { JobRecord } from '../../../../src/features/runner/business/index.js'
 import { runTaskStep } from '../../../../src/features/monitor/business/index.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
-import { on } from '../../../../src/core/events/index.js'
+import { on } from '../../../../src/backend/events/index.js'
 
 // Route-level contract for POST /api/tasks/:id/run-step — clicking a pipeline
 // node to run the task's current step. Every successful gate-less step keeps

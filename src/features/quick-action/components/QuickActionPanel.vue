@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { useI18nHelpers } from '../../../core/composables/useI18nHelpers'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { slugify } from '../../../core/lib/stringUtils'
+import { slugify } from '../../../shared/lib/stringUtils'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
 import QuickActionMenuDialog from './QuickActionMenuDialog.vue'
-import Icon from '../../../core/ui/Icon.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
+import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import type { ArtifactMenuNode } from '../../monitor/schemas/artifactAction'
 import {
   addMenuGroup,
@@ -372,6 +373,8 @@ async function removeAction(a: QuickActionDraft) {
 </script>
 
 <template>
+  <CScreenLayout>
+  <template #main>
   <div class="quick-action-panel">
     <header class="qa-panel-head">
       <h2>{{ t('quickAction.title') }}</h2>
@@ -689,6 +692,8 @@ async function removeAction(a: QuickActionDraft) {
       @close="closeMenuDialog"
     />
   </div>
+  </template>
+  </CScreenLayout>
 </template>
 
 <style scoped lang="scss">

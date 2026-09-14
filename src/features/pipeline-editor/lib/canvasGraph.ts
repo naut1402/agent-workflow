@@ -11,7 +11,7 @@ import {
   type ArtifactGraphLabels,
   type PhasePosition,
   type PipelineStepLike,
-} from '../../../core/lib/pipelineArtifactGraph'
+} from '../../../frontend/lib/pipelineArtifactGraph'
 
 /** Type của node step trên canvas — node phái sinh dùng type `artifact`. */
 const STEP_NODE_TYPE = 'pipelineEditor'

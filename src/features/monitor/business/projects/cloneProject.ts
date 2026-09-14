@@ -5,7 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { formatGitFailure, runGit, GIT_CLONE_TIMEOUT_MS } from '../git.js'
-import { registryHome, add, loadRegistry, saveRegistry, get, type Project } from '../../../../core/registry.js'
+import { registryHome, add, loadRegistry, saveRegistry, get, type Project } from '../../../../backend/registry.js'
 import { isPrivateHostname } from '../../../agent-editor/business/index.js'
 import {
   loadGithubTokensConfig,

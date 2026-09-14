@@ -3,9 +3,9 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createApp } from '../../../../src/api/apiServer.js'
-import { on } from '../../../../src/core/events/index.js'
-import type { RegistryContext } from '../../../../src/core/http/types.js'
+import { createApp } from '../../../../src/backend/apiServer.js'
+import { on } from '../../../../src/backend/events/index.js'
+import type { RegistryContext } from '../../../../src/backend/http/types.js'
 
 // Route contract for GET/DELETE /api/tasks/:id/worktree (T161678b4). The whole
 // point of the feature is what git actually does, so these run against a real

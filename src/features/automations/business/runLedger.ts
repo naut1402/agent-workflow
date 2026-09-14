@@ -18,8 +18,8 @@ import {
   renameSync,
   rmSync,
   writeTextFileSync,
-} from '../../../core/lib/fileHelper.js'
-import { registryHome } from '../../../core/registry.js'
+} from '../../../backend/lib/fileHelper.js'
+import { registryHome } from '../../../backend/registry.js'
 import type { AutomationRun, AutomationRunOutcome, RuleRuntimeState } from '../schemas/automation.js'
 
 export type { AutomationRun, AutomationRunOutcome, RuleRuntimeState }
