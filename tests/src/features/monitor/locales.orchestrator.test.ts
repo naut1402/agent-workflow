@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { createTestI18n } from '../../helpers/i18n'
 
-// TC-34: mọi nhãn mới phải có bản dịch ở **cả** locale repo hỗ trợ. Test chỉ
+// TC-38: mọi nhãn mới phải có bản dịch ở **cả** locale repo hỗ trợ. Test chỉ
 // kiểm "không thiếu khoá", không kiểm từ ngữ — `design.md` §6 ghi nhận chuỗi
 // "orchestrator" trong repo đang mang hai nghĩa và cố ý không đổi ở task này.
 
 const KEYS = [
   'monitor.pipeline.orchestrator',
   'monitor.pipeline.orchestratorHalted',
+  // Nhãn mới của task T05fde6f6 — nút Run trên node điều phối (TC-38).
+  'monitor.pipeline.orchestratorStarted',
+  'monitor.pipelineNode.clickToStartOrchestrator',
+  'monitor.pipelineNode.startOrchestrator',
   'monitor.pipelineNode.clickToStopOrchestrator',
   'monitor.pipelineNode.stopOrchestrator',
   'monitor.pipelineNode.orchestrated',

@@ -843,3 +843,110 @@ describe('PipelineView — cấu trúc modal (.modal-body)', () => {
     w.unmount()
   })
 })
+
+// TC-01/TC-03/TC-05 — canvas monitor là bề mặt người dùng thấy triệu chứng ①
+// ("không có cách nào start pipeline; UI chỉ hiển thị một nút dừng"). Chấm trên
+// `data` mà view đưa xuống node — đó là thứ quyết định nút nào render ra.
+describe('PipelineView — node điều phối', () => {
+  const ORCH_ID = '__orchestrator__'
+  const ORCH_PIPELINE = { ...SAMPLE_PIPELINE, orchestrator: { enabled: true, agent: 'a:orch' } }
+
+  function nodeData(w: any, id: string) {
+    return w.findComponent({ name: 'VueFlow' }).props('nodes').find((n: any) => n.id === id)?.data
+  }
+
+  function orchestratorTask(over: Record<string, any> = {}) {
+    return {
+      task_id: 'ORCH-1',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: {},
+      state_mtime: 1000,
+      pipeline: ORCH_PIPELINE,
+      ...over,
+    }
+  }
+
+  it('checkbox TẮT ⇒ không có node điều phối trên canvas (TC-26, TC-32)', async () => {
+    const w = mountPipeline({ ...orchestratorTask(), pipeline: SAMPLE_PIPELINE })
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toBeUndefined()
+    w.unmount()
+  })
+
+  it('checkbox BẬT ⇒ node hiện, ở trạng thái lắng nghe và KHÔNG bận (có Run)', async () => {
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({
+      kind: 'orchestrator',
+      orchestratorState: 'listening',
+      orchestratorBusy: false,
+    })
+    w.unmount()
+  })
+
+  // TC-25 vế (a)+(b): sau khi reset bằng checkbox, node rời trạng thái dừng và
+  // lại có Run. Ở đây chấm vế "đã dừng thì vẫn có Run" — đúng chỗ bug gốc.
+  it('đã DỪNG ⇒ vẫn không bận, tức node vẫn có đường chạy lại (TC-04)', async () => {
+    const w = mountPipeline(orchestratorTask({ orchestrator_halted: true }))
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({
+      orchestratorState: 'halted',
+      orchestratorBusy: false,
+    })
+    w.unmount()
+  })
+
+  it('có lượt của node đang chạy ⇒ bận (đổi sang Stop) và trạng thái là dispatching', async () => {
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [
+        {
+          id: 'job-orch',
+          status: 'running',
+          metadata: { taskId: 'ORCH-1', orchestratorJob: true },
+        },
+      ],
+    } as any)
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'dispatching', orchestratorBusy: true })
+    w.unmount()
+  })
+
+  it('có step đang chạy ⇒ node bận, nhưng vẫn ở trạng thái lắng nghe', async () => {
+    vi.mocked(fetchJob).mockResolvedValue({
+      job: { id: 'job-step', status: 'running', metadata: { taskId: 'ORCH-1', pipelineStepId: 'investigator' } },
+    } as any)
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [
+        {
+          id: 'job-step',
+          status: 'running',
+          metadata: { taskId: 'ORCH-1', pipelineStepId: 'investigator' },
+        },
+      ],
+    } as any)
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'listening', orchestratorBusy: true })
+    w.unmount()
+  })
+
+  it('node mang đủ hai handler Run/Stop để không có trạng thái cụt đường', async () => {
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    const data = nodeData(w, ORCH_ID)
+    expect(typeof data.onRun).toBe('function')
+    expect(typeof data.onStop).toBe('function')
+    w.unmount()
+  })
+
+  // TC-13 — khung chat mở từ node phải trỏ vào chính node, không vào step nào.
+  it('khung chat của node trỏ đúng stepId của node', async () => {
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID).stepId).toBe(ORCH_ID)
+    expect(nodeData(w, ORCH_ID).executed).toBe(true)
+    w.unmount()
+  })
+})

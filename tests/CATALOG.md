@@ -86,12 +86,12 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/artifactActions` | bun | `features/monitor/business`, `features/monitor/schemas` | 1 | `bun test tests/src/server/artifactActions` |
 | `tests/src/server/automations` | bun | `features/automations/business`, `features/automations/schemas`, `backend/events` | 9 | `bun test tests/src/server/automations` |
 | `tests/src/server/catalog` | bun | `features/pipeline-editor/business` | 4 | `bun test tests/src/server/catalog` |
-| `tests/src/server/chat` | bun | `features/nl-chat/business`, `features/runner/business`, `features/monitor/business` | 7 | `bun test tests/src/server/chat` |
+| `tests/src/server/chat` | bun | `features/runner/business`, `features/nl-chat/business`, `features/monitor/business` | 8 | `bun test tests/src/server/chat` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `backend/apiServer.ts`, `backend/registry.ts` | 2 | `bun test tests/src/server/github` |
-| `tests/src/server/http` | bun | `backend/apiServer.ts`, `backend/http`, `features/runner/business` | 27 | `bun test tests/src/server/http` |
+| `tests/src/server/http` | bun | `backend/apiServer.ts`, `backend/http`, `features/runner/business` | 28 | `bun test tests/src/server/http` |
 | `tests/src/server/knowledge` | bun | `backend/apiServer.ts`, `backend/db`, `backend/events` | 1 | `bun test tests/src/server/knowledge` |
 | `tests/src/server/lib` | bun | `backend/lib` | 1 | `bun test tests/src/server/lib` |
-| `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/orchestrator/schemas`, `backend/events` | 6 | `bun test tests/src/server/orchestrator` |
+| `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/orchestrator/schemas`, `features/runner/business` | 6 | `bun test tests/src/server/orchestrator` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
 | `tests/src/server/runners` | bun | `features/runner/business`, `backend/events`, `backend/log` | 20 | `bun test tests/src/server/runners` |
