@@ -37,6 +37,8 @@ const props = defineProps({
   setDefaultDisabled: { type: Boolean, default: false },
   message: { type: String, default: '' },
   warning: { type: String, default: '' },
+  /** Checkbox "Có node điều phối" — bật/tắt key `orchestrator` của pipeline. */
+  orchestratorEnabled: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -45,6 +47,7 @@ const emit = defineEmits([
   'update:taskProfile',
   'update:taskSelect',
   'update:taskManual',
+  'update:orchestratorEnabled',
   'save',
   'delete-profile',
   'set-default',
@@ -242,6 +245,19 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
       </template>
     </template>
 
+    <!-- Node điều phối: bỏ tick là cách DUY NHẤT gỡ node khỏi canvas (node không
+         có nút ✕). Ẩn khi thu gọn — dải icon chỉ dành cho action. -->
+    <label v-if="!collapsed" class="target-check">
+      <input
+        type="checkbox"
+        :checked="orchestratorEnabled"
+        @change="emit('update:orchestratorEnabled', ($event.target as HTMLInputElement).checked)"
+      />
+      <span :title="t('pipelineEditor.orchestrator.checkboxTitle')">
+        {{ t('pipelineEditor.orchestrator.checkbox') }}
+      </span>
+    </label>
+
     <!-- 1.2 + 1.3 — một nút Save duy nhất, cụm action nằm hẳn trong sub-sidebar.
          Lúc thu gọn vẫn đủ cả 5 nút (kể cả Stop khi đang preview). -->
     <div class="target-actions" :class="{ 'target-actions--rail': collapsed }">
@@ -311,12 +327,32 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
 
 .target-input { padding: 4px 7px; font-size: 12px; min-width: 0; }
 
+.target-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.target-check input { margin: 0; cursor: pointer; }
+
 .target-actions {
   display: flex;
   align-items: center;
   gap: 2px;
   margin-top: 4px;
   flex-wrap: wrap;
+}
+/* Cột trái rộng 240px ⇒ hàng action rộng 215px. Tab Profile có 7 nút, mà
+   `.icon-btn` chuẩn 32px cần 7×32 + 6×2 = 236px ⇒ nút thứ 7 xuống dòng và hàng
+   cao 66px thay vì 32px. 34px đó bị trừ thẳng vào 3 danh sách bên dưới (chúng
+   chia nhau phần còn lại), kéo vùng cuộn xuống dưới ngưỡng dùng được ở viewport
+   thấp. 28px cho 7×28 + 6×2 = 208px — vừa một hàng, và là số cố định nên không
+   phụ thuộc font của máy chạy. */
+.target-actions .icon-btn {
+  width: 28px;
+  height: 28px;
 }
 .target-actions--rail {
   flex-direction: column;

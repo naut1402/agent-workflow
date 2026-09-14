@@ -6,7 +6,7 @@ Tham chiếu nhanh các **domain event** phát trên event bus nội bộ (`src/
 - API: `emit(type, payload)` · `emitEntity(op, entity, payload)` → `entity.{created|updated|deleted}`
 - Quan sát: JSONL `~/.dev-team-dashboard/logs/events.jsonl` (prefs `logging.types.events`); UI Logs tab Events
 
-**Quy ước:** emit **sau** persist thành công; payload tối thiểu (id / taskId / stepId …); không đưa secret. Không có type riêng `pipeline.*` / `step.*` — tiến trình step gắn qua `job.*` + `task.advanced` / `hitl.*`.
+**Quy ước:** emit **sau** persist thành công; payload tối thiểu (id / taskId / stepId …); không đưa secret. Không có type riêng `pipeline.*` / `step.*` — tiến trình step gắn qua `job.*` + `task.advanced` / `hitl.*`. Riêng nhóm `orchestrator.*` (§6) là quyết định **điều phối**, không phải tiến trình step.
 
 Cột **Event** trên UI = giá trị `type` trong bảng dưới.
 
@@ -17,9 +17,9 @@ Cột **Event** trên UI = giá trị `type` trong bảng dưới.
 | Event | Khi nào | Payload gợi ý | Nơi emit |
 |-------|---------|---------------|----------|
 | `task.created` | Tạo task (dialog / chat NL) | `taskId`, `projectId` | `monitor/controller.ts` `createTask` |
-| `task.advanced` | Đổi `current_phase` sau job success (không gate), `review_retry`, hoặc reset step (nút reset) | `taskId`, `stepId`, `currentPhase`, đôi khi `reason` (+ `cascade`, `removedSteps` khi `reason: reset`) | `monitor/business/tasks/state.ts` `advanceStepOnJobSuccess` / `resetPipelineStepAssumingLock` |
-| `hitl.pending` | Step có `hitl.gate_id` — mở cổng chờ duyệt | `taskId`, `gateId`, `stepId` | `state.ts` `advanceStepOnJobSuccess` |
-| `hitl.resolved` | Approve / reject HITL | `taskId`, `gateId`, `action`, `currentPhase` | `state.ts` `applyHitlAction` |
+| `task.advanced` | Đổi `current_phase` sau job success (không gate), `review_retry`, hoặc reset step (nút reset) | `taskId`, `stepId`, `currentPhase`, `devTeamRoot`, đôi khi `reason` (+ `cascade`, `removedSteps` khi `reason: reset`) | `monitor/business/tasks/state.ts` `advanceStepOnJobSuccess` / `resetPipelineStepAssumingLock` |
+| `hitl.pending` | Step có `hitl.gate_id` — mở cổng chờ duyệt | `taskId`, `gateId`, `stepId`, `devTeamRoot` | `state.ts` `advanceStepOnJobSuccess` |
+| `hitl.resolved` | Approve / reject HITL | `taskId`, `gateId`, `action`, `currentPhase`, `stepId`, `projectId`, `devTeamRoot` | `state.ts` `applyHitlAction` |
 | `hitl.resolved` (`reason: pipeline_changed`) | Pipeline đổi khiến gate đang pending không còn được step hiện tại khai báo — hệ thống tự huỷ (`action: 'cancelled'`) hoặc chuẩn hoá legacy `true` về gate id (`action: 'normalized'`) | `taskId`, `gateId` (giá trị cũ, null nếu legacy `true`), `action`, `reason`, `currentPhase` | `state.ts` `reconcileGateStateAssumingLock` |
 | `entity.updated` (`entity: task-state`) | Repair / cập nhật state task | `id`, `projectId`, `detail` | `monitor/controller.ts` |
 | `entity.deleted` (`entity: task-state`) | Xóa task | `id`, `projectId` | `monitor/controller.ts` |
@@ -101,7 +101,30 @@ Ghi chú:
 
 ---
 
-## 6. Type đã khai báo nhưng chưa / ít wire trên nhánh này
+## 6. Orchestrator — node điều phối pipeline
+
+Chỉ phát khi pipeline bật `orchestrator.enabled` (checkbox "Có node điều phối" trong
+pipeline editor). Tắt ⇒ **không** event nào ở nhóm này, và pipeline chạy y như cũ.
+
+| Event | Khi nào | Payload | Nơi emit |
+|-------|---------|---------|----------|
+| `orchestrator.dispatched` | Mỗi quyết định điều phối — kể cả `action: 'idle'` khi pipeline đã `completed` (mốc kết thúc trong lịch sử) | `taskId`, `projectId`, `devTeamRoot`, `stepId`, `action` (`start` \| `resume` \| `idle`), `reason` | `orchestrator/business/decisionLoop.ts` |
+| `orchestrator.halted` | Người bấm Stop, agent trả `halt`, output quyết định không hợp lệ, hoặc job của chính orchestrator failed | `taskId`, `projectId`, `devTeamRoot`, `reason` | `decisionLoop.ts` `haltTask` · `monitor/controller.ts` `putTaskOrchestrator` |
+| `orchestrator.start_requested` | Automation `mode: existing` trỏ vào task đang được điều phối — bị từ chối (403) và ghi `skipped` thay vì `failed` | `taskId`, `projectId`, `devTeamRoot`, `automationId` | `automations/business/runAction.ts` |
+
+Ghi chú:
+
+- Subscriber của orchestrator **bỏ qua mọi** event `orchestrator.*` (chống vòng lặp
+  dispatch → job → event → dispatch), đúng cách `automations` bỏ qua `automation.*`.
+- Nó *nghe* mọi event của task (gồm `job.failed`) nhưng chỉ **hành động** ở
+  `task.advanced` / `hitl.resolved` / `job.failed`. `hitl.pending` cố ý không kích
+  hoạt gì — cổng đang chờ người, không chờ orchestrator.
+- Halt là **trả quyền chạy tay**, không phải trạng thái lỗi: sau halt thì Run/Reset
+  trên node step hiện lại.
+
+---
+
+## 7. Type đã khai báo nhưng chưa / ít wire trên nhánh này
 
 Khai báo trong `DashboardEventType` (`eventBus.ts`); có thể xuất hiện khi feature tương ứng đã emit:
 
@@ -115,7 +138,7 @@ Khai báo trong `DashboardEventType` (`eventBus.ts`); có thể xuất hiện kh
 
 ---
 
-## 7. Phân biệt với audit / request log
+## 8. Phân biệt với audit / request log
 
 | Kênh | `type` JSONL | Mục đích |
 |------|--------------|----------|
@@ -135,7 +158,7 @@ Cùng một thao tác (vd tạo task) có thể vừa `task.created` (events) v�
 
 ---
 
-## 8. Cách cập nhật tài liệu này
+## 9. Cách cập nhật tài liệu này
 
 Khi thêm / sửa / xoá emit:
 

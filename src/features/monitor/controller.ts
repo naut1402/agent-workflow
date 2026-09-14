@@ -2,12 +2,15 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { AbstractController } from '../../backend/http/AbstractController.js'
 import { resolveArtifact } from './business/tasks/index.js'
+import { resolveOrchestration } from './business/tasks/startAuthority.js'
+import { ORCHESTRATOR_STEP_ID } from '../../shared/lib/orchestrator.js'
 import { collectTasks, flowProfilePath, createTask, readState } from './business/tasks/index.js'
 import { runTaskStep as runTaskStepCore } from './business/tasks/index.js'
 import {
   advanceStepOnJobSuccess,
   applyArchiveAction,
   applyHitlAction,
+  applyOrchestratorHaltAction,
   applyRenameAction,
   deleteTask,
   repairTaskState,
@@ -19,7 +22,7 @@ import { isResettableTarget } from './lib/pipelineRunGuards.js'
 import * as monitorBusiness from './business/index.js'
 import { emitAudit } from '../../backend/log/store.js'
 import { emit, emitEntity } from '../../backend/events/index.js'
-import { TaskArchivePatch, TaskNamePatch, TaskStatePatch } from './schemas/task.js'
+import { TaskArchivePatch, TaskNamePatch, TaskOrchestratorPatch, TaskStatePatch } from './schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from './schemas/taskCreate.js'
 import { mintTaskId } from './lib/createTaskForm.js'
 import { RunStepRequest } from './schemas/runStep.js'
@@ -604,6 +607,28 @@ export class MonitorController extends AbstractController {
       if (typeof agentRef !== 'string' || !agentRef) {
         return this.badRequest('pipeline has no first-step agent', { taskId: result.taskId })
       }
+      // Pipeline có node điều phối ⇒ quyền start là của nó: giao task cho
+      // orchestrator thay vì submit thẳng step đầu (nếu không thì step đầu chạy
+      // với `request.md` thô và orchestrator mất luôn quyền điều phối bước sau).
+      // Import động: monitor → orchestrator → monitor là vòng nếu nối tĩnh.
+      const orchestration = await resolveOrchestration(root, result.taskId)
+      if (orchestration.active) {
+        const { dispatchOrchestrator } = await import('../orchestrator/business/index.js')
+        void dispatchOrchestrator(root, this.projectId, result.taskId, 'task_created').catch(
+          (err) => console.warn('[monitor] orchestrator dispatch failed', err),
+        )
+        return this.created({
+          task: {
+            taskId: result.taskId,
+            state: result.state,
+            pipeline: result.pipeline,
+            firstStep: result.firstStep,
+            requestFile: result.requestFile,
+            pipelineFile: result.pipelineFile,
+          },
+          orchestrated: true,
+        })
+      }
       job = monitorBusiness.submitJob({
         runnerId: body.runnerId ?? undefined,
         agentRef,
@@ -872,6 +897,51 @@ export class MonitorController extends AbstractController {
     })
   }
 
+  /**
+   * Nút Stop của node orchestrator. Halt **trả quyền start về chế độ tay**, nên
+   * đây cũng là lối thoát khi điều phối kẹt: sau khi Stop, Run/Reset trên node
+   * step hiện lại và người dùng chạy tay tiếp được.
+   */
+  async putTaskOrchestrator() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const id = this.c.req.query('id') || ''
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON body')
+    const parsed = TaskOrchestratorPatch.safeParse(b.value)
+    if (!parsed.success) {
+      return this.badRequest('invalid patch', { details: parsed.error.flatten() })
+    }
+
+    const result = await applyOrchestratorHaltAction(root, id, parsed.data)
+    if ('error' in result) {
+      const body: Record<string, unknown> = { error: result.error, id }
+      if (result.state) body.state = result.state
+      if (result.mtime != null) body.mtime = result.mtime
+      return this.json(result.status, body)
+    }
+
+    emitAudit({
+      op: 'update',
+      entity: 'task-state',
+      identifier: id,
+      projectId: this.projectId,
+      detail: { action: parsed.data.halted ? 'orchestrator-halt' : 'orchestrator-resume' },
+    })
+    if (parsed.data.halted) {
+      emit('orchestrator.halted', {
+        taskId: id,
+        projectId: this.projectId || undefined,
+        devTeamRoot: root,
+        reason: 'user_stop',
+      })
+    }
+    return this.ok({ id, state: result.state, mtime: result.mtime })
+  }
+
   async postTaskFeedback() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
@@ -889,6 +959,13 @@ export class MonitorController extends AbstractController {
     const stateFile = path.join(root, '.dev-state', `${id}.json`)
     const read = await readState(stateFile)
     if (!read.ok) return this.notFound('task not found', { taskId: id })
+
+    // Chat với node điều phối là cách bật lại sau khi Stop — nói chuyện được
+    // với nó nghĩa là người dùng muốn nó cầm lái tiếp.
+    if (parsed.data.stepId === ORCHESTRATOR_STEP_ID && read.state?.orchestrator_halted === true) {
+      const mtime = (await fs.stat(stateFile)).mtimeMs
+      await applyOrchestratorHaltAction(root, id, { halted: false, mtime })
+    }
 
     const projectId = this.projectId || ''
     const result = await monitorBusiness.sendTaskFeedback(id, projectId, parsed.data.feedback, {

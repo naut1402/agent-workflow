@@ -10,6 +10,7 @@ import CatalogPanel from './CatalogPanel.vue'
 import RulesPanel from './RulesPanel.vue'
 import StepConfigDialog from './StepConfigDialog.vue'
 import EditorTargetPanel from './EditorTargetPanel.vue'
+import OrchestratorNode from './OrchestratorNode.vue'
 import ArtifactNode from '../../../frontend/ui/ArtifactNode.vue'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import { usePipelineProfiles } from '../composables/usePipelineProfiles'
@@ -155,6 +156,7 @@ watch(
 const nodeTypes = {
   pipelineEditor: markRaw(PipelineEditorNode),
   artifact: markRaw(ArtifactNode),
+  orchestrator: markRaw(OrchestratorNode),
 } as any
 const {
   setNodes,
@@ -175,6 +177,22 @@ const nodes = ref([])
 const edges = ref([])
 
 const pipelineMeta = ref<PipelineMeta>({})
+
+/**
+ * Checkbox "Có node điều phối". Nguồn sự thật là `pipelineMeta.orchestrator` —
+ * computed ghi thẳng vào meta để `assemblePipeline` mang key này ra YAML, và để
+ * `syncDerivedGraph()` dựng lại node sau mỗi lần canvas đổi.
+ */
+const orchestratorEnabled = computed({
+  get: () => pipelineMeta.value.orchestrator?.enabled === true,
+  set: (enabled: boolean) => {
+    pipelineMeta.value = {
+      ...pipelineMeta.value,
+      orchestrator: { ...(pipelineMeta.value.orchestrator ?? {}), enabled },
+    }
+    syncDerivedGraph()
+  },
+})
 const stepPreserved = ref<StepPreservedMap>({})
 const catalog = ref<any>({ skills: [], agents: [] })
 const rulesData = ref({ rules: [], categories: [] })
@@ -303,6 +321,8 @@ function syncDerivedGraph() {
       producesTitle: t('common.artifactNode.producesTitle'),
       knowledgeTitle: t('common.artifactNode.knowledgeTitle'),
     },
+    orchestrator: pipelineMeta.value.orchestrator as { enabled?: boolean; agent?: string } | undefined,
+    orchestratorLabel: t('pipelineEditor.orchestrator.nodeLabel'),
   })
   setNodes(nextNodes)
   setEdges(nextEdges)
@@ -450,6 +470,9 @@ function onCanvasRemoval(changes) {
   if (selectedNodeId.value && !getNodes.value.some((n) => n.id === selectedNodeId.value)) {
     closeConfig()
   }
+  // Node điều phối không xoá được: `syncDerivedGraph()` dựng lại nó từ meta
+  // chừng nào checkbox còn tick. Đây cũng là chỗ chặn đường xoá bằng `Backspace`,
+  // đường mà nút ✕ (vốn không có trên node này) không với tới.
   syncDerivedGraph()
 }
 
@@ -861,6 +884,7 @@ const hasFanOut = computed(() => {
           :previewing="previewing"
           :save-disabled="saveDisabled"
           :set-default-disabled="!currentSteps.length"
+          :orchestrator-enabled="orchestratorEnabled"
           :message="saveMsg"
           :warning="taskHitlPending ? t('pipelineEditor.target.hitlPendingWarning') : ''"
           @update:profile-selected="profileSelected = $event"
@@ -868,6 +892,7 @@ const hasFanOut = computed(() => {
           @update:task-profile="taskProfileName = $event"
           @update:task-select="onTaskSelectChange"
           @update:task-manual="onTaskManualChange"
+          @update:orchestrator-enabled="orchestratorEnabled = $event"
           @save="handleSave"
           @delete-profile="handleDeleteProfile"
           @set-default="handleSetDefault"
@@ -926,6 +951,9 @@ const hasFanOut = computed(() => {
             </template>
             <template #node-artifact="nodeProps">
               <ArtifactNode v-bind="nodeProps" />
+            </template>
+            <template #node-orchestrator="nodeProps">
+              <OrchestratorNode v-bind="nodeProps" />
             </template>
           </VueFlow>
 

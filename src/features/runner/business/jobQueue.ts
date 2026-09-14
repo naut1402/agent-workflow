@@ -14,7 +14,15 @@ import { isAgentCliProviderId } from './providers/agentCli.js'
 import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js'
 import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
-import { advanceStepOnJobSuccess, loadPipelineConfig, queuePendingFeedback, takePendingFeedback } from './index.js'
+import {
+  advanceStepOnJobSuccess,
+  assertStartAllowedSync,
+  loadPipelineConfig,
+  queuePendingFeedback,
+  resolveOrchestration,
+  takePendingFeedback,
+} from './index.js'
+import type { PendingFeedback } from './index.js'
 import { classifyJobFailure, parseUsageResetAt } from './classifyJobFailure.js'
 import { loadRecoverEntry, removeRecoverEntry, saveRecoverEntry } from './recoverLedger.js'
 import { bindRecoverPoller, startRecoverPoller } from './recoverPoller.js'
@@ -46,6 +54,11 @@ const jobAbortControllers = new Map<string, AbortController>()
 /** Persist agent reply on the job record for chat UI (NL + pipeline task chat). */
 function shouldPersistStdout(job: JobRecord, providerId: string | undefined): boolean {
   if (job.metadata?.isNlChat) return true
+  // Với job quyết định của orchestrator, stdout LÀ kênh truyền lệnh (dòng
+  // `ORCHESTRATOR_DECISION:`). Không persist thì mọi connection không phải
+  // agent-CLI (`*-api`, `console-command`) sẽ khiến quyết định biến mất và
+  // pipeline đứng im — kết cục tệ hơn hẳn một lần halt tường minh.
+  if (job.metadata?.orchestratorJob) return true
   return Boolean(providerId && isAgentCliProviderId(providerId))
 }
 
@@ -734,9 +747,19 @@ async function runJob(job: JobRecord): Promise<void> {
   // is still `running`, then mark succeeded — so the UI cannot submit another
   // run-step against a stale phase between "job done" and "phase advanced".
   // Chat-feedback jobs skip advance (they must not move the pipeline cursor).
-  if (result.ok && !isApprovalJob && !isChatFeedback) {
+  //
+  // Ngoại lệ: lượt orchestrator resume một step cũng đi bằng đường chat-feedback,
+  // nhưng nó LÀ lượt chạy lại của step đó — không cho advance thì pipeline đứng
+  // ngay sau lần resume đầu tiên.
+  const isOrchestratorResume = job.metadata?.orchestratorResume === true
+  if (result.ok && !isApprovalJob && (!isChatFeedback || isOrchestratorResume)) {
     try {
       await advancePipelineStepChain(job)
+    } catch (err) {
+      // Chain hỏng không được kéo theo `saveJob`/`emit` bên dưới: job NÀY đã
+      // chạy xong thật, và mất `job.finished` là mất luôn tín hiệu mà cả UI lẫn
+      // orchestrator đang chờ.
+      console.error('[jobQueue] advancePipelineStepChain failed', err)
     } finally {
       saveJob({
         ...(loadJob(job.id) as JobRecord),
@@ -798,8 +821,18 @@ async function resubmitPendingFeedback(job: JobRecord): Promise<void> {
   if (!taskId || !devTeamRoot) return
   const pending = await takePendingFeedback(devTeamRoot, taskId)
   if (!pending) return
+  // Phản hồi sinh ra từ một lần reject cổng HITL: khi orchestrator đang điều
+  // phối thì chính nó quyết định gửi gì cho step bị reject, nên mục còn sót lại
+  // ở đây phải bỏ — gửi tiếp là step nhận phản hồi hai lần.
+  if (pending.source === 'gate') {
+    const orch = await resolveOrchestration(devTeamRoot, taskId)
+    if (orch.active) return
+  }
   try {
-    const res = await sendTaskFeedback(taskId, projectId, pending.feedback, { stepId: pending.stepId })
+    const res = await sendTaskFeedback(taskId, projectId, pending.feedback, {
+      stepId: pending.stepId,
+      source: pending.source,
+    })
     if (res.ok === false) {
       console.error('[jobQueue] queued feedback rejected on resubmit', res.error)
       await queuePendingFeedback(devTeamRoot, taskId, pending)
@@ -829,6 +862,17 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
 
   const advanced = await advanceStepOnJobSuccess(devTeamRoot, taskId, pipelineStepId)
   if (!advanced) return
+
+  // Có node điều phối ⇒ quyền start là của nó: cursor đã đi, `task.advanced` /
+  // `hitl.pending` đã phát (trong `advanceStepOnJobSuccess`), dừng ở đây. Phải
+  // đặt SAU advance — đặt trước thì orchestrator không bao giờ nhận được tín hiệu.
+  //
+  // `awaitFlagSync`: hàm này không giữ khoá task, và nếu người dùng vừa TẮT điều
+  // phối thì `submitJob` bên dưới sẽ đọc lại cờ cache ở lớp chặn đồng bộ. Cờ cũ
+  // chưa kịp ghi lại = một lần throw ngay giữa đường chain (E2).
+  const orch = await resolveOrchestration(devTeamRoot, taskId, undefined, { awaitFlagSync: true })
+  if (orch.active) return
+
   // Stop once the clicked node itself has run, even if it advanced further —
   // the user only asked to reach `chainTarget`, not run past it.
   if (chainTarget && pipelineStepId === chainTarget) return
@@ -853,7 +897,14 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   // job — it marks only the job it was set on (a chat-resume round), and would
   // otherwise leak forward onto every step the chain submits afterwards,
   // wrongly suppressing advancePipelineStepChain for all of them.
-  const { isChatFeedback: _isChatFeedback, ...carryMetadata } = job.metadata || {}
+  // `orchestratorDispatch` / `orchestratorResume` cùng loại: chúng là vé của
+  // đúng một lượt, mang sang job sau là cấp quyền start cho một đường không xin.
+  const {
+    isChatFeedback: _isChatFeedback,
+    orchestratorDispatch: _orchestratorDispatch,
+    orchestratorResume: _orchestratorResume,
+    ...carryMetadata
+  } = job.metadata || {}
 
   submitJob({
     runnerId: job.runnerId === 'unknown' ? undefined : job.runnerId,
@@ -872,6 +923,10 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
 }
 
 export function submitJob(input: SubmitJobInput): JobRecord {
+  // Lưới an toàn cuối cho quyền start. Guard thật là `assertStartAllowed` ở
+  // tầng async của từng call-site; chạm được vào đây nghĩa là còn một đường
+  // start bị bỏ sót, nên nó ném lỗi thay vì lọc im lặng.
+  assertStartAllowedSync(input.metadata)
   const id = crypto.randomUUID()
   const runner = input.runnerId ? getRunner(input.runnerId) : getDefaultRunner()
 
@@ -1075,11 +1130,33 @@ export async function sendTaskFeedback(
   taskId: string,
   projectId: string,
   feedback: string,
-  opts: { stepId?: string; mode?: 'queue' | 'immediate' } = {},
+  opts: {
+    stepId?: string
+    mode?: 'queue' | 'immediate'
+    /** Nguồn phản hồi — đi kèm khi phải xếp hàng (`PendingFeedback.source`). */
+    source?: PendingFeedback['source']
+    /**
+     * Lượt orchestrator resume một step. Đánh dấu trên job để `runJob` vẫn chạy
+     * advance sau lượt này, dù nó đi bằng đường chat-feedback.
+     */
+    orchestratorResume?: boolean
+    /**
+     * Bắt buộc phải có job đã kết thúc **của đúng `stepId`** để resume.
+     *
+     * Người dùng chat thì fallback "job xong gần nhất" là đúng ý (họ đang nói
+     * chuyện với task). Orchestrator resume một step **chưa từng chạy** thì
+     * fallback đó lại đẩy phản hồi vào session của một step khác — phải trả lỗi
+     * để nó halt kèm lý do.
+     */
+    requireStepMatch?: boolean
+  } = {},
 ): Promise<MutationResult<{ job: JobRecord } | { queued: true }>> {
   const active = listJobs(50).find(
     (j) =>
       j.metadata?.taskId === taskId &&
+      // Job "orchestrator đang nghĩ" không phải step đang chạy: coi nó là bận thì
+      // chat với một step trong lúc đó bị xếp hàng, phá ngoại lệ "chat không giới hạn".
+      j.metadata?.orchestratorJob !== true &&
       (j.status === 'queued' || j.status === 'running' || j.status === 'awaiting_recovery'),
   )
 
@@ -1099,13 +1176,24 @@ export async function sendTaskFeedback(
         // with a `.dev-state` file) — nl-chat's scratch sessions reuse this
         // same function but have none, so they keep the original "busy" error
         // instead of a `queued: true` that would never actually resubmit.
-        const queued = devTeamRoot && (await queuePendingFeedback(devTeamRoot, taskId, { feedback, stepId: opts.stepId }))
+        const queued =
+          devTeamRoot &&
+          (await queuePendingFeedback(devTeamRoot, taskId, {
+            feedback,
+            stepId: opts.stepId,
+            ...(opts.source ? { source: opts.source } : {}),
+          }))
         if (queued) {
           // Job may have finished between the active check and the write — reclaim and send now.
           const after = loadJob(active.id)
           if (after && after.status !== 'queued' && after.status !== 'running' && after.status !== 'awaiting_recovery') {
             const taken = await takePendingFeedback(devTeamRoot, taskId)
-            if (taken) return sendTaskFeedback(taskId, projectId, taken.feedback, { stepId: taken.stepId })
+            if (taken) {
+              return sendTaskFeedback(taskId, projectId, taken.feedback, {
+                stepId: taken.stepId,
+                source: taken.source,
+              })
+            }
           }
           return { ok: true, queued: true }
         }
@@ -1122,13 +1210,22 @@ export async function sendTaskFeedback(
         (j) =>
           j.metadata?.taskId === taskId &&
           !j.applyTarget &&
+          // Job quyết định của orchestrator không thuộc step nào; để nó lọt vào
+          // fallback `finished[0]` là gửi phản hồi của một step vào session của
+          // orchestrator — lượt đó không advance, và khi xong lại bị đọc như một
+          // quyết định (không có sentinel ⇒ im lặng). Task đứng, không dấu vết.
+          j.metadata?.orchestratorJob !== true &&
           (j.status === 'succeeded' || j.status === 'failed' || j.status === 'cancelled'),
       )
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
     // Chatting from a step's popover must land in THAT step's session, not
     // whatever ran last — prefer the newest finished job of the requested step
     // (its metadata carries the session/workspace the resume plan reuses).
-    parent = (opts.stepId ? finished.find((j) => stepIdOf(j) === opts.stepId) : undefined) ?? finished[0]
+    const ofStep = opts.stepId ? finished.find((j) => stepIdOf(j) === opts.stepId) : undefined
+    if (!ofStep && opts.requireStepMatch) {
+      return { ok: false, status: 400, error: `no completed job for step ${opts.stepId}` }
+    }
+    parent = ofStep ?? finished[0]
   }
   if (!parent) return { ok: false, status: 400, error: 'no completed job to give feedback on' }
 
@@ -1147,7 +1244,13 @@ export async function sendTaskFeedback(
     if (step?.agent) agentRef = step.agent
   }
 
-  const { isChatFeedback: _isChatFeedback, ...parentMetadata } = parent.metadata || {}
+  // Vé của đúng một lượt — xem `advancePipelineStepChain`.
+  const {
+    isChatFeedback: _isChatFeedback,
+    orchestratorDispatch: _orchestratorDispatch,
+    orchestratorResume: _orchestratorResume,
+    ...parentMetadata
+  } = parent.metadata || {}
   const job = submitJob({
     runnerId: parent.runnerId === 'unknown' ? undefined : parent.runnerId,
     agentRef,
@@ -1162,6 +1265,7 @@ export async function sendTaskFeedback(
       ...parentMetadata,
       parentJobId: parent.id,
       isChatFeedback: true,
+      ...(opts.orchestratorResume ? { orchestratorResume: true } : {}),
     },
     parentJobId: parent.id,
   })
