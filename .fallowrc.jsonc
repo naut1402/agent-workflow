@@ -41,6 +41,18 @@
   // key đó chỉ nói về *dependency chết*, không nói về *specifier không resolve được*.
   "ignoreUnresolvedImports": ["zod"],
 
+  // Method của controller được gắn route bằng CHUỖI — `bind(MonitorController,
+  // 'putTaskOrchestrator')` ở `features/<name>/api.ts` — nên không có tham chiếu
+  // tĩnh nào tới method, và Fallow báo mọi handler mới là `unused-class-member`.
+  // Đây là khuôn của TOÀN BỘ controller trong repo (`backend/http/AbstractController.ts`),
+  // không riêng feature nào ⇒ tắt theo đường dẫn thay vì rắc suppression từng method.
+  "overrides": [
+    {
+      "files": ["src/features/*/controller.ts"],
+      "rules": { "unused-class-members": "off" }
+    }
+  ],
+
   // ── 3. Export có consumer, nhưng consumer nằm ở dòng test ───────────────
   // Hàm được tách ra và export *để test gọi thẳng không cần LLM / không cần
   // dựng cả vòng lặp*. Trên dòng source chúng trông như không ai dùng.
