@@ -106,9 +106,7 @@ onClickOutside(
 // without bubbling a custom event through every intermediate component.
 provide(navigateToModeKey, setMode)
 
-// Cùng điều kiện với `setMode`, nhưng ở dạng hỏi được trước khi bấm: call site
-// cần biết mode đích có tới được không để disable nút, thay vì để người dùng bấm
-// vào một chỗ không đi tới đâu.
+// Cùng điều kiện với `setMode`, nhưng hỏi được trước khi bấm — để call site disable nút.
 provide(canNavigateToModeKey, isModeReachable)
 
 // Multi-project state. `selectedProjectId` (null = default project) drives which
@@ -356,11 +354,7 @@ const modes = computed(() =>
   ),
 )
 
-/**
- * Điều kiện tới được của một mode, tách khỏi `setMode` để call site lồng bên
- * trong hỏi được **trước** khi render nút. Kiểm tra `modes` (đã AND
- * `canAccessMode` với `visible(ctx)`) nên chỉ một điều kiện phải nhớ.
- */
+/** `modes` đã AND `canAccessMode` với `visible(ctx)` — một điều kiện duy nhất cho cả điều hướng lẫn trạng thái nút. */
 function isModeReachable(key: string): boolean {
   return modes.value.some((m) => m.key === key)
 }

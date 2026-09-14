@@ -613,17 +613,7 @@ function subjectsOf(repo: string, range: string, paths?: string[]): string[] {
   return r.out.split('\n').filter(Boolean)
 }
 
-/**
- * Ở dòng test, "task có mặt" 🚫 KHÔNG đồng nghĩa "task có test".
- *
- * `sync-source-to-test.yml` merge dòng source vào dòng test ở mỗi push, nên **mọi**
- * commit dòng source đều nằm trong khoảng của dòng test. Đếm theo subject trần thì
- * mọi task tự động được tính là đã có test — cổng xanh vĩnh viễn, đúng lỗ
- * honor-system mà cổng này sinh ra để bịt. Đã đo thật ở 1.1.5: 19 commit trong
- * khoảng, chỉ 1 commit đụng `tests/`.
- *
- * Nên căn cứ phải là **có commit đụng cây test**, không phải có tên task.
- */
+/** Sync bê commit dòng source sang dòng test, nên "có tên task" ≠ "có test" — chỉ commit chạm cây test mới tính. */
 const TEST_PATHS = ['tests', 'test-e2e']
 
 function readExemptions(repo: string, file: string): Exemption[] {
