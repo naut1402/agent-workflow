@@ -29,7 +29,7 @@ test('agent editor Build NL wizard: describe → preview (capture)', async ({ pa
   await page.getByRole('button', { name: 'Agent Editor' }).click()
   await expect(page.locator('.agent-editor')).toBeVisible({ timeout: 15_000 })
 
-  await page.getByRole('button', { name: 'Build NL' }).click()
+  await page.getByRole('button', { name: 'Tạo từ mô tả' }).click()
   await expect(page.locator('.agent-nl-wizard')).toBeVisible()
 
   await page.locator('.agent-nl-wizard textarea').fill('Agent review code cho E2E test')
