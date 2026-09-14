@@ -118,6 +118,9 @@ const AUTOMATION_EVENT_TYPES_HINT = [
   'webhook.received',
   'webhook.triggered',
   'usage.recorded',
+  'orchestrator.dispatched',
+  'orchestrator.halted',
+  'orchestrator.start_requested',
 ].join(' | ')
 
 function schemaHintFor(entityType?: NlChatEntityType | null): string {
