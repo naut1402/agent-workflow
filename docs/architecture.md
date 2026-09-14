@@ -11,7 +11,7 @@ Tài liệu này mô tả **kiến trúc chi tiết** của `dev-team-dashboard`
 
 ## 1. Data root `.dev-team-agent/` — khái niệm trung tâm
 
-Mọi thao tác đọc/ghi của backend đều **scope vào một thư mục `.dev-team-agent/`** (gọi là "root"). Thư mục này thuộc sở hữu của orchestrator plugin, **không** phải repo này — dashboard chỉ quan sát nó. Bên trong root:
+Mọi thao tác đọc/ghi của backend đều **scope vào một thư mục `.dev-team-agent/`** (gọi là "root"). Thư mục này thuộc sở hữu của orchestrator plugin **chạy ngoài**, không phải repo này — dashboard chủ yếu quan sát nó. Ngoại lệ duy nhất: pipeline bật **node điều phối** (`orchestrator.enabled`, §2.4) thì chính dashboard giữ quyền start step của task đó. Bên trong root:
 
 - `.dev-state/<task-id>.json` — trạng thái sống của từng task (`current_phase`, `hitl_pending`, `review_round`, `doc_review_round`, …).
 - `tasks/<task-id>/*.md` — artifact từng phase: `investigate.md`, `design.md`, `phpstan.md`, `review.md`, `test-spec.md`, `pr-desc.md`, `qa.md`, các sidecar `*-po.md` (doc-review).
@@ -73,6 +73,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `backend/c
 | DB (SQLite) | `src/backend/db/` | Connection dùng chung `dashboard.sqlite` + schema Drizzle + migration. Hai subsystem dùng tới: log backend `sqlite` (opt-in qua `logging.driver`) và collection/tag của knowledge (luôn bật). |
 | Statistics | `src/features/statistics/business/` | Aggregation token usage từ `usage.jsonl` theo project/task/step/job/model/provider/date/source (`GET /api/statistics/usage`); tầng đọc gom 1 module (`readUsageEntries()`) nhưng **chưa** rẽ theo `logging.driver` — xem giới hạn ở §2.4. |
 | Runners | `src/features/runner/business/` | Job queue (+ reaper), connections, session ledger (+ capture), providers CLI. |
+| Orchestrator | `src/features/orchestrator/business/` | **Opt-in** (`pipeline.orchestrator.enabled`). Subscriber wildcard trên event bus quyết định step nào được start / resume / dừng, thay cho chuỗi tự nối của `advancePipelineStepChain`; soạn *brief* (`brief.ts`) cấp bối cảnh cho từng step; `decision.ts` đọc quyết định của agent theo sentinel `ORCHESTRATOR_DECISION:`. Quyền start nằm ở `monitor/business/tasks/startAuthority.ts` (monitor sở hữu task state, runner/automations đều gọi tới). Feature không có route riêng — `api.ts` chỉ là điểm nạp để `registerFeatureRoutes` khởi động vòng lặp. Tắt ⇒ không một dòng hành vi nào đổi. |
 | Automations | `src/features/automations/business/` | Rule CRUD (`automations/*.yaml` theo data root, đa trigger OR + chuỗi action tuần tự), scheduler tick (timer: once/interval/cron cùng mốc `startAt`), event trigger, action `runTask` (tái dùng `createTask` + `runTaskStep` của monitor) chạy nền + chờ job + biến `{{trigger.*}}`/`{{steps.N.*}}` (`lib/vars.ts`), run ledger ở `registryHome()/automations/` (#233). Action `runTask` có `projectId` optional — trỏ project khác trong registry thì bước chạy trên data root của project đó (`src/backend/registry`.get), bỏ trống thì dùng project sở hữu rule; rule state + run history vẫn nằm ở project sở hữu rule. |
 | Settings | `src/features/settings/business/` | Dashboard settings, autoscan, fs browse, scan patterns. |
 | NL chat | `src/features/nl-chat/business/` | Session builder chat (prompt + parse trong cùng module). |

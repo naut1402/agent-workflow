@@ -132,6 +132,10 @@ export async function collectTasks(root: string): Promise<any[]> {
       export_json: state?.export_json ?? false,
       archived: state?.archived ?? false,
       archived_at: state?.archived_at ?? null,
+      // Canvas monitor dựng node điều phối từ `pipeline.orchestrator`, còn trạng
+      // thái dừng/chạy của nó nằm ở state — cả hai phải cùng đi ra ở đây.
+      orchestrator_halted: state?.orchestrator_halted ?? false,
+      orchestrator_halted_at: state?.orchestrator_halted_at ?? null,
       name: typeof state?.name === 'string' && state.name.trim() ? state.name.trim() : null,
       artifacts,
       subtasks,
@@ -153,4 +157,12 @@ export { createTask, renderRequestMarkdown } from './create.js'
 export type { CreateTaskInput, CreateTaskResult, CreatedTask } from './create.js'
 export { runTaskStep } from './runStep.js'
 export type { RunTaskStepInput, RunTaskStepResult } from './runStep.js'
+export {
+  assertStartAllowed,
+  assertStartAllowedSync,
+  resolveOrchestration,
+  setOrchestratorEnabledFlag,
+  stateFileOf,
+} from './startAuthority.js'
+export type { Orchestration, StartDecision, StartOrigin } from './startAuthority.js'
 export { cleanupTaskWorktreeForTask } from './worktreeCleanup.js'

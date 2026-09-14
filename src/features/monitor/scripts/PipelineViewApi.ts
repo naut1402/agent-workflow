@@ -37,3 +37,15 @@ export async function fetchFlowProfile(id: string) {
 export async function saveFlowProfile(id: string, profile: unknown) {
   return apiPost('/api/flow-profile', profile, { query: { id } })
 }
+
+/**
+ * Stop node điều phối. Halt trả quyền start về chế độ tay, nên đây cũng là lối
+ * thoát khi điều phối kẹt — xem `applyOrchestratorHaltAction`.
+ */
+export async function stopOrchestrator(id: string, mtime: number, projectId?: string) {
+  return apiRequest('PUT', '/api/task-orchestrator', {
+    query: { id, project: projectId },
+    body: { halted: true, mtime },
+    errorMessage: (status) => t('common.errors.updateTaskStatus', { status }),
+  })
+}

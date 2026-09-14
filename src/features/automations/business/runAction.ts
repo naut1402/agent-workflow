@@ -13,7 +13,8 @@ import { emit } from '../../../backend/events/index.js'
 import { get as getProject } from '../../../backend/registry.js'
 import { submitJob, loadJob } from '../../runner/business/index.js'
 import type { JobRecord } from '../../runner/business/index.js'
-import { createTask, fetchUrlSafe, runTaskStep } from '../../monitor/business/index.js'
+import { createTask, fetchUrlSafe, resolveOrchestration, runTaskStep } from '../../monitor/business/index.js'
+import { dispatchOrchestrator } from '../../orchestrator/business/index.js'
 import type {
   AutomationAction,
   AutomationRuleRecord,
@@ -223,6 +224,15 @@ async function executeCreateAction(
     return { taskId: created.taskId, root: target.root, error: 'pipeline has no first-step agent' }
   }
 
+  // Pipeline có node điều phối ⇒ giao cho nó, y như nhánh "Chạy ngay" của
+  // createTask. Không có jobId để chờ nên bước dừng ở đây: tiến độ về sau nằm ở
+  // event `orchestrator.*` và trên canvas của task.
+  const orchestration = await resolveOrchestration(target.root, created.taskId)
+  if (orchestration.active) {
+    await dispatchOrchestrator(target.root, target.projectId, created.taskId, 'task_created')
+    return { taskId: created.taskId, root: target.root }
+  }
+
   const job = submitJob({
     runnerId: action.runnerId ?? undefined,
     agentRef,
@@ -255,11 +265,29 @@ async function executeExistingAction(
 
   const result = await runTaskStep(target.root, target.projectId, action.taskId, {
     runnerId: action.runnerId ?? null,
+    origin: 'automation',
   })
   if ('error' in result) {
     // 409 = task đang có job chạy — không phải lỗi cấu hình, ghi skipped.
     if (result.status === 409) {
       return { taskId: action.taskId, root: target.root, skipped: true, error: 'task busy — step already running' }
+    }
+    // 403 = task do orchestrator điều phối. Cũng ghi `skipped` chứ không `failed`:
+    // biến một automation đang chạy tốt thành đỏ hàng loạt chỉ vì người dùng bật
+    // checkbox điều phối là phản ứng sai. Phát tín hiệu để orchestrator tự quyết.
+    if (result.status === 403) {
+      emit('orchestrator.start_requested', {
+        taskId: action.taskId,
+        projectId: target.projectId || undefined,
+        devTeamRoot: target.root,
+        automationId: input.rule.id,
+      })
+      return {
+        taskId: action.taskId,
+        root: target.root,
+        skipped: true,
+        error: 'task is orchestrated — start requested via orchestrator',
+      }
     }
     return { taskId: action.taskId, root: target.root, error: result.error }
   }

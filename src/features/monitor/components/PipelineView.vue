@@ -3,13 +3,18 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, resetPipelineStep } from '../scripts/PipelineViewApi'
+import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, resetPipelineStep, stopOrchestrator } from '../scripts/PipelineViewApi'
 import { fetchJob, fetchJobs, cancelJob } from '../../runner/scripts/runnerApi'
 import { phasesFromPipeline, phaseStatus } from '../../../shared/lib/phase'
 import PipelineNode from './PipelineNode.vue'
 import ArtifactNode from '../../../frontend/ui/ArtifactNode.vue'
 import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
 import { buildArtifactNodesAndEdges } from '../../../frontend/lib/pipelineArtifactGraph'
+import {
+  ORCHESTRATOR_NODE_ID,
+  isOrchestratorNode,
+  orchestratorPositionOf,
+} from '../../../frontend/lib/orchestratorNode'
 
 const { t } = useI18nHelpers()
 const props = defineProps({
@@ -62,6 +67,14 @@ const phases = computed(() => {
 
 const phaseKeys = computed(() => phases.value.map((p) => p.key))
 
+/**
+ * Điều phối đang cầm lái: node step không cho Run/Reset (server cũng từ chối
+ * bằng 403), chỉ còn chat. Halt ⇒ về chế độ tay, nút hiện lại ngay.
+ */
+const orchestratorEnabled = computed(() => props.task.pipeline?.orchestrator?.enabled === true)
+const orchestratorHalted = computed(() => props.task.orchestrator_halted === true)
+const orchestrated = computed(() => orchestratorEnabled.value && !orchestratorHalted.value)
+
 // Full `produces[]` for a step — unlike `phase.artifact` (first produced file
 // only), needed to delete/check every file a multi-produces step wrote
 // (e.g. reviewer: review.md + test-spec.md).
@@ -95,6 +108,7 @@ const nodes = computed(() => {
     // is healthy and no in-flight run is already tracked for this task.
     const runnable =
       stateOk &&
+      !orchestrated.value &&
       !runningStepId.value &&
       !running &&
       inScope &&
@@ -109,7 +123,8 @@ const nodes = computed(() => {
     // run — but Run always wins when both are true (e.g. `implementer` after
     // a reviewer reject: `executed` from the earlier run, `runnable` again
     // because current_phase moved back here), so the two never show together.
-    const resettable = stateOk && !runningStepId.value && !running && executed && !runnable
+    const resettable =
+      stateOk && !orchestrated.value && !runningStepId.value && !running && executed && !runnable
     return {
       id: p.key,
       type: 'pipeline',
@@ -129,6 +144,8 @@ const nodes = computed(() => {
         runnable,
         executed,
         resettable,
+        // Nhãn phụ "do orchestrator điều phối" — nói rõ vì sao Run/Reset biến mất.
+        orchestrated: orchestrated.value,
         // The node's Run button goes through the same confirm dialog as
         // clicking the node, so both paths share the overwrite warning.
         onRun: () => openRunConfirm({ id: p.key, label: p.label }),
@@ -137,7 +154,37 @@ const nodes = computed(() => {
       },
     }
   })
-  return [...stepNodes, ...artifactGraph.value.artifactNodes]
+  // Node điều phối KHÔNG nằm trong `steps[]` (nó không phải một bước), nên
+  // `phasesFromPipeline` / `phaseStatus` / `isRunnableTarget` không đổi một dòng
+  // và nó cũng không có edge nối với step nào.
+  const orchestratorNodes = orchestratorEnabled.value
+    ? [
+        {
+          id: ORCHESTRATOR_NODE_ID,
+          type: 'pipeline',
+          draggable: false,
+          position: orchestratorPositionOf(
+            Object.fromEntries(phases.value.map((p) => [p.key, { x: p.x, y: p.y }])),
+          ),
+          data: {
+            kind: 'orchestrator',
+            label: t('monitor.pipeline.orchestrator'),
+            taskId: props.task.task_id,
+            stepId: ORCHESTRATOR_NODE_ID,
+            executed: true,
+            orchestratorState: orchestratorHalted.value
+              ? 'halted'
+              : orchestratorJobId.value
+                ? 'dispatching'
+                : 'listening',
+            running: Boolean(orchestratorJobId.value),
+            onStop: () => stopOrchestratorNode(),
+          },
+        },
+      ]
+    : []
+
+  return [...stepNodes, ...artifactGraph.value.artifactNodes, ...orchestratorNodes]
 })
 
 const edges = computed((): any[] => {
@@ -162,7 +209,8 @@ const edges = computed((): any[] => {
 // Persist node positions when user drags them. Positions are keyed by phase id
 // and overlaid onto the config-derived phase list.
 function onNodeDragStop({ node }) {
-  if (node.type === 'artifact') return
+  // Toạ độ node điều phối là phái sinh (tính từ dải step), không lưu vào flow profile.
+  if (node.type === 'artifact' || isOrchestratorNode(node)) return
   const updated = {
     phases: phases.value.map((p) =>
       p.key === node.id
@@ -213,6 +261,9 @@ const runningStepId = ref<string | null>(null)
 const recoveringStepId = ref<string | null>(null)
 // The job currently being polled, so the Stop button has an id to cancel.
 const activeJobId = ref<string | null>(null)
+// Job "orchestrator đang nghĩ" — tách riêng khỏi `activeJobId` vì nó không chạy
+// một step nào: gộp chung thì spinner hiện nhầm lên node `current_phase`.
+const orchestratorJobId = ref<string | null>(null)
 const runError = ref('')
 const runToast = ref('')
 let runPollTimer: ReturnType<typeof setTimeout> | null = null
@@ -230,11 +281,12 @@ async function syncInFlightRun() {
   try {
     const data = await fetchJobs(50)
     const jobs = Array.isArray(data?.jobs) ? data.jobs : []
-    const inflight = jobs.find(
-      (j: any) =>
-        j?.metadata?.taskId === props.task.task_id &&
-        (j.status === 'queued' || j.status === 'running' || j.status === 'awaiting_recovery'),
-    )
+    const live = (j: any) =>
+      j?.metadata?.taskId === props.task.task_id &&
+      (j.status === 'queued' || j.status === 'running' || j.status === 'awaiting_recovery')
+    orchestratorJobId.value =
+      jobs.find((j: any) => live(j) && j?.metadata?.orchestratorJob === true)?.id ?? null
+    const inflight = jobs.find((j: any) => live(j) && j?.metadata?.orchestratorJob !== true)
     if (!inflight?.id) {
       activeJobId.value = null
       return
@@ -255,9 +307,14 @@ watch(() => props.task.task_id, () => {
   runningStepId.value = null
   recoveringStepId.value = null
   activeJobId.value = null
+  orchestratorJobId.value = null
   runError.value = ''
   syncInFlightRun()
 }, { immediate: true })
+
+// Task được poll lại ở tầng trên (`hitl-action` → refetch); bám theo `state_mtime`
+// để trạng thái node điều phối (listening / dispatching) không đứng hình.
+watch(() => props.task.state_mtime, () => { syncInFlightRun() })
 
 onBeforeUnmount(clearRunPoll)
 
@@ -353,6 +410,31 @@ async function runStep(node: { id: string }, opts: { skipIntermediate?: boolean 
     } else {
       runError.value = String(e.message || e)
     }
+  }
+}
+
+/**
+ * Stop node điều phối — hai tầng: huỷ job quyết định đang chạy (nếu có), rồi ghi
+ * `orchestrator_halted`. Không có Restart: khởi động lại là chạy tay một step
+ * hoặc chat với node (`postTaskFeedback` clear cờ halt).
+ */
+async function stopOrchestratorNode() {
+  runError.value = ''
+  try {
+    if (orchestratorJobId.value) {
+      await cancelJob(orchestratorJobId.value)
+      orchestratorJobId.value = null
+    }
+    if (props.task.state_mtime == null) {
+      runError.value = t('monitor.pipeline.missingMtime')
+      return
+    }
+    await stopOrchestrator(props.task.task_id, props.task.state_mtime, props.projectId ?? undefined)
+    runToast.value = t('monitor.pipeline.orchestratorHalted')
+    emit('hitl-action')
+    setTimeout(() => { runToast.value = '' }, 4000)
+  } catch (e: any) {
+    runError.value = e?.status === 409 ? t('monitor.pipeline.stateChanged') : String(e.message || e)
   }
 }
 
@@ -483,6 +565,8 @@ function confirmReset(cascade: boolean) {
 
 function onNodeClick({ node }) {
   if (node.type === 'artifact') return
+  // Node điều phối không chạy bằng click — nó chỉ có chat + stop.
+  if (isOrchestratorNode(node)) return
   if (node.data?.status === 'waiting' && node.data?.hitl) {
     openHitlModal({ key: node.id, label: node.data.label, hitl: node.data.hitl })
     return

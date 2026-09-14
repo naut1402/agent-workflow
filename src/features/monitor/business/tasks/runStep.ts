@@ -13,6 +13,7 @@ import { loadPipelineConfig } from '../peers.js'
 import { listJobs, submitJob } from '../index.js'
 import type { JobRecord } from '../index.js'
 import { readState } from './index.js'
+import { assertStartAllowed, type StartOrigin } from './startAuthority.js'
 import {
   advanceStepOnJobSuccessAssumingLock,
   jumpToPipelineStepAssumingLock,
@@ -25,6 +26,14 @@ export interface RunTaskStepInput {
   /** Step đích khi nhảy/chuỗi (run-step với target). */
   targetStepId?: string | null
   skipIntermediate?: boolean
+  /** Ai gọi — quyết định có qua được `assertStartAllowed` khi orchestrator đang điều phối. */
+  origin?: StartOrigin
+  /**
+   * Prompt thay cho `request.md` thô. Orchestrator dùng để cấp *brief* (request
+   * + tóm tắt bước trước + knowledge). `request.md` vẫn phải tồn tại: thiếu nó
+   * là dấu hiệu task hỏng, không phải lý do chạy với prompt rỗng.
+   */
+  userPrompt?: string
 }
 
 export type RunTaskStepResult =
@@ -37,6 +46,13 @@ export async function runTaskStep(
   taskId: string,
   input: RunTaskStepInput,
 ): Promise<RunTaskStepResult> {
+  // Guard **ngoài** `withTaskLock`: nó đọc state của chính task này, và mọi thứ
+  // bên trong khoá phải không được chờ một lượt khoá mới của cùng file.
+  const startCheck = await assertStartAllowed(root, taskId, input.origin ?? 'manual')
+  if ('error' in startCheck) {
+    return { ok: false, status: startCheck.status, error: startCheck.error, extra: { taskId } }
+  }
+
   // Everything below reads-checks-writes task state and, on success, creates
   // the step's job. Serialize per task: without this, two concurrent callers
   // can both observe "no job running", each move current_phase, and both
@@ -55,10 +71,14 @@ export async function runTaskStep(
     // same id (automation actions can target another project), and a job over
     // there must not make this one look busy. Jobs written before `devTeamRoot`
     // existed in metadata still count — conservative, same as before.
+    // Job "orchestrator đang nghĩ" (`orchestratorJob`) không chạy step nào — tính
+    // nó là bận thì một lượt chat với node điều phối sẽ chặn luôn bước kế tiếp
+    // của pipeline. Cùng lý do với lookup `active` trong `sendTaskFeedback`.
     const existing = listJobs(50).find(
       (j) =>
         j.metadata?.taskId === taskId &&
         (!j.metadata?.devTeamRoot || j.metadata.devTeamRoot === root) &&
+        j.metadata?.orchestratorJob !== true &&
         (j.status === 'queued' || j.status === 'running'),
     )
     if (existing) {
@@ -80,6 +100,15 @@ export async function runTaskStep(
     }
 
     let stepId = String(state.current_phase ?? '')
+
+    // Caller đã chỉ đúng step phải chạy (orchestrator dispatch). Khối tự-chữa
+    // bên dưới **phải** tắt trong trường hợp đó: nó tìm một job `succeeded` của
+    // `current_phase` rồi advance qua step đó — đúng thứ phá lượt `review_retry`,
+    // vì cursor vừa được lùi về `implementer` mà lượt implementer trước đó vẫn
+    // còn `succeeded` (review-retry không ghi `last_reset_at`), nên nó lập tức
+    // nhảy lên `reviewer` và chạy lại reviewer trên đúng bộ artifact cũ.
+    const pinned = input.origin === 'orchestrator' && !!input.targetStepId
+
     // A restart sets `last_reset_at` (state.ts::resetPipelineStepAssumingLock) — a
     // `succeeded` job for this step that finished BEFORE that reset is the run being
     // reset away from, not a signal to auto-advance past the step just reset. Absent
@@ -88,7 +117,7 @@ export async function runTaskStep(
     const resetAt = typeof state.last_reset_at === 'string' ? state.last_reset_at : null
     // Same project scoping as the `existing` lookup above — a succeeded job for
     // a same-named task in another project must not advance this task's cursor.
-    const lastSucceeded = listJobs(200).find(
+    const lastSucceeded = pinned ? undefined : listJobs(200).find(
       (j) =>
         j.metadata?.taskId === taskId &&
         (!j.metadata?.devTeamRoot || j.metadata.devTeamRoot === root) &&
@@ -119,6 +148,10 @@ export async function runTaskStep(
     // chain run past where the caller meant to stop.
     const chainTarget = !skip && !!target && target !== stepId
 
+    // Lượt pin của orchestrator đi vào đây khi step đích khác `current_phase`:
+    // `isRunnableTarget` chỉ cho tiến, nên một `start <stepId>` trỏ về phía sau
+    // bị từ chối 400 → `dispatchStep` halt kèm lý do. Đó là hành vi đúng: brief
+    // đã soạn cho step đích, chạy một step khác là nói dối cả hai bên.
     if ((skip || chainTarget) && target) {
       if (!phaseKeys.includes(target) || !isRunnableTarget(phaseKeys, stepId, target)) {
         return {
@@ -146,6 +179,7 @@ export async function runTaskStep(
     } catch {
       return { ok: false, status: 404, error: 'request.md not found', extra: { taskId } }
     }
+    if (input.userPrompt?.trim()) userPrompt = input.userPrompt
 
     if (skip && target) {
       const jumped = await jumpToPipelineStepAssumingLock(stateFile, target)
@@ -170,6 +204,9 @@ export async function runTaskStep(
         taskId,
         pipelineStepId: stepId,
         ...(chainTarget && target ? { chainTarget: target } : {}),
+        // Vé đi qua lớp chặn đồng bộ của `submitJob` — chỉ dispatch của
+        // orchestrator mới được mang.
+        ...(input.origin === 'orchestrator' ? { orchestratorDispatch: true } : {}),
       },
     })
 

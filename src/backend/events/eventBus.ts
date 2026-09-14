@@ -29,6 +29,9 @@ export type DashboardEventType =
   | 'automation.triggered'
   | 'automation.run_succeeded'
   | 'automation.run_failed'
+  | 'orchestrator.dispatched'
+  | 'orchestrator.halted'
+  | 'orchestrator.start_requested'
   | string
 
 export interface DashboardEvent<T = Record<string, unknown>> {

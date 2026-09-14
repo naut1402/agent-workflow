@@ -10,6 +10,40 @@ import { emitAudit } from '../../backend/log/store.js'
 import { buildCatalog, parseCatalogAgentId, resolveCatalogAgentPath } from './business/catalog/index.js'
 import { buildRules } from './business/rules/index.js'
 
+/**
+ * Chuẩn hoá phần pipeline do người dùng nhập **trước khi ghi ra đĩa**.
+ *
+ * - `orchestrator.agent` là agent ref người dùng gõ tự do — phần tên của nó sẽ
+ *   trở thành path khi `resolveAgent` đi tìm file, nên phải qua `sanitiseAgentName`
+ *   (bất biến chống path-traversal, AGENTS.md §4). Ref hỏng ⇒ 400, KHÔNG lưu im lặng.
+ * - Step id bắt đầu bằng `__` bị từ chối: `__orchestrator__` là id dành riêng cho
+ *   node điều phối, trùng vào là session ledger và chat surface lẫn hai thứ.
+ *
+ * Chạy ở **cả hai** đường ghi (`writePipelineConfig` và `createPipelineProfile`)
+ * — chỉ chặn một đường thì đường kia vẫn lưu được nội dung độc hại.
+ */
+function validatePipelinePayload(pipeline: any): string | null {
+  for (const step of pipeline.steps ?? []) {
+    if (typeof step?.id === 'string' && step.id.startsWith('__')) {
+      return `step id must not start with "__": ${step.id}`
+    }
+  }
+  const agent = pipeline.orchestrator?.agent
+  if (agent != null && agent !== '') {
+    if (typeof agent !== 'string') return 'invalid orchestrator.agent'
+    // Ref dạng `<source>:<name>` (source có thể nhiều đoạn, vd `repo:dev-agent-teams`).
+    // **Mọi** đoạn đều có thể thành một thành phần path ở `resolveAgentFilePath`,
+    // nên kiểm cả ref chứ không chỉ đoạn cuối. So sánh bằng (không chỉ "khác
+    // null") để một đoạn bị `sanitiseAgentName` *gọt* cũng là từ chối, chứ không
+    // âm thầm lưu bản đã gọt.
+    const segments = agent.split(':')
+    if (segments.some((seg) => pipelineEditorBusiness.sanitiseAgentName(seg) !== seg)) {
+      return 'invalid orchestrator.agent'
+    }
+  }
+  return null
+}
+
 export class PipelineEditorController extends AbstractController {
   async getPipelineProfiles() {
     const gate = this.requireRoot()
@@ -60,6 +94,8 @@ export class PipelineEditorController extends AbstractController {
     if (!b.value.pipeline || !Array.isArray(b.value.pipeline.steps)) {
       return this.badRequest('pipeline.steps must be an array')
     }
+    const invalid = validatePipelinePayload(b.value.pipeline)
+    if (invalid) return this.badRequest(invalid)
     await fs.mkdir(dir, { recursive: true })
     await fs.writeFile(path.join(dir, `${name}.yaml`), dumpYaml(b.value.pipeline), 'utf8')
     emitAudit({ op: 'create', entity: 'pipeline-profile', identifier: name, projectId: this.projectId })
@@ -94,6 +130,8 @@ export class PipelineEditorController extends AbstractController {
     if (!pipeline || !Array.isArray(pipeline.steps)) {
       return this.badRequest('pipeline.steps must be an array')
     }
+    const invalid = validatePipelinePayload(pipeline)
+    if (invalid) return this.badRequest(invalid)
     let target: string
     if (scope === 'global') {
       target = path.join(root, 'pipeline.yaml')

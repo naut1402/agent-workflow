@@ -1,6 +1,13 @@
 /** Peer: advance task phase after a successful pipeline job (owned by monitor). */
 export { advanceStepOnJobSuccess, queuePendingFeedback, takePendingFeedback } from '../../monitor/business/tasks/state.js'
 export type { PendingFeedback } from '../../monitor/business/tasks/state.js'
+/** Peer: quyền start step khi pipeline có node điều phối (owned by monitor). */
+export {
+  assertStartAllowed,
+  assertStartAllowedSync,
+  resolveOrchestration,
+} from '../../monitor/business/tasks/startAuthority.js'
+export type { Orchestration, StartOrigin } from '../../monitor/business/tasks/startAuthority.js'
 /** Peer: layered pipeline config (owned by pipeline-editor). */
 export { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
 

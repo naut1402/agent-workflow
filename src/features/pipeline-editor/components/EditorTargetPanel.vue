@@ -37,6 +37,8 @@ const props = defineProps({
   setDefaultDisabled: { type: Boolean, default: false },
   message: { type: String, default: '' },
   warning: { type: String, default: '' },
+  /** Checkbox "Có node điều phối" — bật/tắt key `orchestrator` của pipeline. */
+  orchestratorEnabled: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -45,6 +47,7 @@ const emit = defineEmits([
   'update:taskProfile',
   'update:taskSelect',
   'update:taskManual',
+  'update:orchestratorEnabled',
   'save',
   'delete-profile',
   'set-default',
@@ -242,6 +245,19 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
       </template>
     </template>
 
+    <!-- Node điều phối: bỏ tick là cách DUY NHẤT gỡ node khỏi canvas (node không
+         có nút ✕). Ẩn khi thu gọn — dải icon chỉ dành cho action. -->
+    <label v-if="!collapsed" class="target-check">
+      <input
+        type="checkbox"
+        :checked="orchestratorEnabled"
+        @change="emit('update:orchestratorEnabled', ($event.target as HTMLInputElement).checked)"
+      />
+      <span :title="t('pipelineEditor.orchestrator.checkboxTitle')">
+        {{ t('pipelineEditor.orchestrator.checkbox') }}
+      </span>
+    </label>
+
     <!-- 1.2 + 1.3 — một nút Save duy nhất, cụm action nằm hẳn trong sub-sidebar.
          Lúc thu gọn vẫn đủ cả 5 nút (kể cả Stop khi đang preview). -->
     <div class="target-actions" :class="{ 'target-actions--rail': collapsed }">
@@ -310,6 +326,16 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
 .target-select { width: 100%; }
 
 .target-input { padding: 4px 7px; font-size: 12px; min-width: 0; }
+
+.target-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.target-check input { margin: 0; cursor: pointer; }
 
 .target-actions {
   display: flex;

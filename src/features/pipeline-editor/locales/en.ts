@@ -49,6 +49,14 @@ export default {
     importInvalidYaml: 'File is not valid YAML',
     importInvalidSteps: 'File is missing a "steps" list',
   },
+  orchestrator: {
+    checkbox: 'Add orchestrator node',
+    checkboxTitle:
+      'Add the orchestrator node: it decides when each step starts, instead of the pipeline chaining steps itself. Unticking is the only way to remove the node.',
+    nodeLabel: 'Orchestrator',
+    nodeTitle: 'Orchestrator node — remove it by unticking "Add orchestrator node"',
+    noAgent: 'no agent selected',
+  },
   sections: {
     agents: 'Agents',
     skills: 'Skills',
