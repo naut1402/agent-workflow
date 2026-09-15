@@ -30,12 +30,30 @@ const { copyFlash, copyText } = useCopyText()
 const html = computed(() => parseMarkdown(props.text))
 const expanded = ref(false)
 const clamped = computed(() => props.clampable === true && !expanded.value)
+
+/**
+ * Heuristic "looks like markdown" — a user turn is plain chat text far more
+ * often than not, so this only flips for lines that actually carry markdown
+ * syntax (list/heading markers, a fence, a table row), not just any line.
+ * Assistant turns render markdown unconditionally already; this only decides
+ * whether a USER bubble keeps its right alignment (design §D2) — right-aligned
+ * list/heading markup reads backwards.
+ */
+function looksLikeMarkdown(text: string): boolean {
+  return text
+    .split('\n')
+    .some((line) => /^\s{0,3}(#{1,6}\s|[-*+]\s|\d+[.)]\s|```|\|.*\|)/.test(line))
+}
+const isMarkdown = computed(() => props.role === 'user' && looksLikeMarkdown(props.text))
 </script>
 
 <template>
   <div
     class="nl-chat-message md"
-    :class="[`nl-chat-message-${role}`, { 'is-pending': pending, 'is-clamped': clamped }]"
+    :class="[
+      `nl-chat-message-${role}`,
+      { 'is-pending': pending, 'is-clamped': clamped, 'is-markdown': isMarkdown },
+    ]"
   >
     <!-- eslint-disable-next-line vue/no-v-html -- same trust level as artifacts, see design §6 -->
     <div class="nl-chat-message-md" v-html="html"></div>

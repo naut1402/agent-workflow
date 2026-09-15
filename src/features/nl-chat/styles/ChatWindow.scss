@@ -84,6 +84,20 @@
 .nl-chat-info .icon-btn:hover:not(:disabled) {
   color: var(--accent);
 }
+/* The info button swaps its icon for this while a step/job is busy — `Icon.vue`
+   draws the shape only, the caller owns the animation (see Icon.vue's spinner
+   comment). */
+.nl-chat-spin {
+  animation: nl-chat-spin 0.9s linear infinite;
+}
+@keyframes nl-chat-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
 /* Anchored left now that the icon leads the header; the ceiling keeps it inside
    the window at its 260px minimum width. */
 .nl-chat-info-popover {
@@ -169,6 +183,12 @@
   align-self: flex-end;
   align-items: flex-end;
   text-align: right;
+}
+/* A user bubble detected as markdown (ChatMessageBubble's `looksLikeMarkdown`)
+   keeps its position on the right but reads left-to-right inside — a
+   right-aligned list/heading looks broken, plain chat text does not. */
+.nl-chat-row-user .nl-chat-message.is-markdown {
+  text-align: left;
 }
 .nl-chat-row-assistant {
   align-self: flex-start;
@@ -362,12 +382,23 @@
     transform: translateY(-2px);
   }
 }
+/* One bordered shell around "+", the textarea and the send button — they used
+   to be three visually separate blocks (own border each); the children below
+   go flat/borderless so this box reads as the single input it already was
+   structurally (one <form>). */
 .nl-chat-input-row {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  gap: 4px;
   /* Anchor for the "+" menu, which is absolutely positioned inside this row. */
   position: relative;
+  background: var(--input-surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 4px 6px 4px 8px;
+}
+.nl-chat-input-row:focus-within {
+  border-color: var(--accent);
 }
 .nl-chat-composer-add {
   position: relative;
@@ -389,9 +420,9 @@
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
-/* `.nl-chat-input-row button` below gives every button in the form the send
-   button's panel/border look. The rules here are what keep the "+" and the menu
-   items flat instead — they must outrank it, hence the row prefix. */
+/* Both buttons left standing in the row ("+" trigger, send) are `.icon-btn` —
+   flat/borderless, so they read as part of the one shell instead of stacking
+   another box inside it. */
 .nl-chat-input-row .icon-btn {
   padding: 0;
   background: none;
@@ -416,7 +447,6 @@
 .nl-chat-input-row .nl-chat-composer-menu button:disabled {
   cursor: not-allowed;
 }
-.nl-chat-input-row textarea,
 .nl-chat-pipeline-name input,
 .nl-chat-draft-textarea {
   background: var(--input-surface);
@@ -429,19 +459,25 @@
    Two lines is the FLOOR, not just the starting size — `autoGrow()` writes an
    inline `height` on every input, which a CSS `min-height` outranks. That also
    covers the reset after sending, where the box would otherwise drop to one
-   line. 2 × 1.45em + padding 5px×2 + border 1px×2, with box-sizing: border-box. */
+   line. 2 × 1.45em + padding 5px×2, with box-sizing: border-box — no border of
+   its own now, the shell (`.nl-chat-input-row`) carries the one visible border. */
 .nl-chat-input-row textarea {
   flex: 1;
   min-width: 0;
+  background: none;
+  border: none;
+  color: var(--text);
   font-family: inherit;
   font-size: 12px;
   line-height: 1.45;
   resize: none;
   overflow-y: auto;
-  min-height: calc(1.45em * 2 + 12px);
+  padding: 5px 4px;
+  min-height: calc(1.45em * 2 + 10px);
   max-height: 120px;
 }
-.nl-chat-input-row button,
+/* Only the draft preview's "Xác nhận & tạo" / "Huỷ" keep the boxed look now —
+   the input row has nothing plain left to style (see `.icon-btn` note above). */
 .nl-chat-preview-actions button {
   background: var(--panel-2);
   color: var(--text);
@@ -450,12 +486,10 @@
   padding: 5px 10px;
   cursor: pointer;
 }
-.nl-chat-input-row button:hover:not(:disabled),
 .nl-chat-preview-actions button:hover:not(:disabled) {
   background: var(--hover-surface);
   border-color: var(--accent);
 }
-.nl-chat-input-row button:disabled,
 .nl-chat-preview-actions button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
