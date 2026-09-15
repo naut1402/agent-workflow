@@ -26,6 +26,8 @@ type IconName =
   | 'download'
   | 'upload'
   | 'eye'
+  | 'spinner'
+  | 'send'
 
 const props = withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 16 })
 
@@ -52,6 +54,9 @@ const VIEW_BOX: Record<IconName, string> = {
   download: '0 0 16 16',
   upload: '0 0 16 16',
   eye: '0 0 16 16',
+  // Same 24-grid as `info`: it replaces `info` in place, in the same button.
+  spinner: '0 0 24 24',
+  send: '0 0 16 16',
 }
 
 const viewBox = VIEW_BOX[props.name]
@@ -180,6 +185,15 @@ const viewBox = VIEW_BOX[props.name]
     <template v-else-if="name === 'eye'">
       <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M1.5 8s2.4-4 6.5-4 6.5 4 6.5 4-2.4 4-6.5 4-6.5-4-6.5-4z" />
       <circle cx="8" cy="8" r="1.8" fill="none" stroke="currentColor" stroke-width="1.4" />
+    </template>
+    <!-- Track + one arc, same 24-grid as `info` — the caller applies the spin
+         animation (this component adds no effect classes of its own). -->
+    <template v-else-if="name === 'spinner'">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" opacity="0.25" />
+      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 12a9 9 0 0 0-9-9" />
+    </template>
+    <template v-else-if="name === 'send'">
+      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M14 2L2 7.5l4.7 1.8L8.5 14 14 2zM6.7 9.3L14 2" />
     </template>
   </svg>
 </template>
