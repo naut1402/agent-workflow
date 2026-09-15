@@ -434,7 +434,6 @@ onUnmounted(() => {
           :title="connected ? t('common.sidebar.connected') : t('common.sidebar.disconnected')"
         ></span>
       </header>
-      <p v-if="!sidebarCollapsed" class="root" :title="root">{{ root || '…' }}</p>
 
       <div class="mode-toggle">
         <button
@@ -461,7 +460,6 @@ onUnmounted(() => {
         />
         <footer v-if="!sidebarCollapsed" class="status">
           <span v-if="error" class="err">⚠ {{ error }}</span>
-          <span v-else-if="activeMode?.statusKind === 'live' && lastUpdated">{{ t('common.status.updated', { time: lastUpdated }) }}</span>
           <span v-else-if="activeMode?.statusKind === 'paused'" class="muted">{{ t(`common.status.paused.${mode}`) }}</span>
         </footer>
         <button

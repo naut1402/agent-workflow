@@ -88,6 +88,9 @@ export default {
     filterCategory: 'Filter rules by category',
     scopeProject: 'Project',
     scopeGlobal: 'Global',
+    close: 'Close',
+    loading: 'Loading rule content…',
+    loadError: 'Failed to load rule content.',
   },
   stepConfig: {
     title: 'Configure step',

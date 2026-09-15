@@ -13,4 +13,5 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.get('/api/catalog', bind(PipelineEditorController, 'getCatalog'))
   app.get('/api/catalog-agent', bind(PipelineEditorController, 'getCatalogAgent'))
   app.get('/api/rules', bind(PipelineEditorController, 'getRules'))
+  app.get('/api/rule-content', bind(PipelineEditorController, 'getRuleContent'))
 }

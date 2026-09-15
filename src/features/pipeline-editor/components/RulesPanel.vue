@@ -12,7 +12,7 @@ const props = defineProps({
   openSections: { type: Object as () => Set<string>, default: () => new Set(['rules']) },
 })
 
-const emit = defineEmits(['toggle-section'])
+const emit = defineEmits(['toggle-section', 'view'])
 
 const categoryFilter = ref('all')
 
@@ -98,7 +98,12 @@ watch(
               <div class="rules-category-head">
                 <span class="chip chip-category">{{ category }}</span>
               </div>
-              <div v-for="rule in scopeRules" :key="rule.id" class="rules-item">
+              <div
+                v-for="rule in scopeRules"
+                :key="rule.id"
+                class="rules-item"
+                @click="emit('view', rule)"
+              >
                 <div class="rules-item-name">{{ rule.name }}</div>
                 <div class="rules-item-path" :title="rule.path">{{ rule.path }}</div>
               </div>
@@ -180,7 +185,9 @@ watch(
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 6px;
+  cursor: pointer;
 }
+.rules-item:hover { border-color: var(--accent); }
 
 .rules-item-name { font-size: 12px; font-weight: 600; }
 .rules-item-path {

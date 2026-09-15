@@ -8,7 +8,7 @@ import { draftFromAgentMarkdown } from '../agent-editor/business/agentMarkdown.j
 import { parseFrontmatter } from '../../backend/lib/yamlLib.js'
 import { emitAudit } from '../../backend/log/store.js'
 import { buildCatalog, parseCatalogAgentId, resolveCatalogAgentPath } from './business/catalog/index.js'
-import { buildRules } from './business/rules/index.js'
+import { buildRules, resolveRuleContentPathWithPatterns } from './business/rules/index.js'
 
 export class PipelineEditorController extends AbstractController {
   async getPipelineProfiles() {
@@ -191,5 +191,25 @@ export class PipelineEditorController extends AbstractController {
     return this.ok(await buildRules(root, {
       scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig(),
     }))
+  }
+
+  async getRuleContent() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+
+    const id = this.c.req.query('id')
+    if (!id) return this.badRequest('missing id')
+    const projectRoot = path.dirname(root)
+    const rulePath = await resolveRuleContentPathWithPatterns(projectRoot, id, {
+      scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig(),
+    })
+    if (!rulePath) return this.notFound('rule file not found')
+    try {
+      const raw = await fs.readFile(rulePath, 'utf8')
+      return this.ok({ id, content: raw })
+    } catch (e: any) {
+      return this.json(500, { error: String(e.message || e) })
+    }
   }
 }

@@ -34,7 +34,6 @@ export default {
     statistics: 'Usage, runtime and cost statistics.',
   },
   status: {
-    updated: 'updated {time}',
     paused: {
       editor: 'editor mode — polling paused',
       agentEditor: 'agent editor — polling paused',

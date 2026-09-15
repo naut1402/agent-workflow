@@ -19,6 +19,8 @@ export default {
   actions: {
     save: 'Lưu',
     export: 'Export',
+    download: 'Download agent',
+    upload: 'Upload agent',
     close: 'Đóng',
     templateCopy: 'Template / Sao chép',
     buildNl: 'Tạo từ mô tả',

@@ -3,7 +3,14 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, markRaw, onMounted, watch } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { fetchCatalog, fetchPipelineConfig, fetchRules, writePipelineConfig } from '../scripts/pipelineEditorApi'
+import {
+  fetchCatalog,
+  fetchPipelineConfig,
+  fetchRuleContent,
+  fetchRules,
+  writePipelineConfig,
+} from '../scripts/pipelineEditorApi'
+import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
 import { useLocalToggle } from '../../../frontend/composables/useLocalToggle'
 import PipelineEditorNode from './PipelineEditorNode.vue'
 import CatalogPanel from './CatalogPanel.vue'
@@ -214,6 +221,40 @@ async function loadRules() {
   }
 }
 
+// Xem markdown của 1 rule thay canvas — `v-if`/`v-else` thật ở slot `#main`
+// để unmount VueFlow (không chỉ ẩn bằng CSS), tránh hook của nó bắt phím/sự
+// kiện ngầm phía sau trong lúc đang xem rule.
+const viewingRule = ref<any>(null)
+const viewingRuleContent = ref('')
+const viewingRuleLoading = ref(false)
+const viewingRuleError = ref('')
+
+async function openRuleView(rule: any) {
+  if (viewingRule.value?.id === rule.id) {
+    closeRuleView()
+    return
+  }
+  closeConfig()
+  viewingRule.value = rule
+  viewingRuleLoading.value = true
+  viewingRuleError.value = ''
+  try {
+    const data = await fetchRuleContent(rule.id, props.projectId ?? undefined)
+    viewingRuleContent.value = data.content ?? ''
+  } catch (e: any) {
+    viewingRuleContent.value = ''
+    viewingRuleError.value = String(e.message || e)
+  } finally {
+    viewingRuleLoading.value = false
+  }
+}
+
+function closeRuleView() {
+  viewingRule.value = null
+  viewingRuleContent.value = ''
+  viewingRuleError.value = ''
+}
+
 /**
  * Đường nạp pipeline **duy nhất** — meta (`version` / `defaults` / `doc_reviewer`)
  * và field lạ của step chỉ được giữ nếu đi qua đây, nếu không profile lưu ra sẽ
@@ -328,6 +369,7 @@ watch(
   [() => props.scope, () => props.taskId, () => props.projectId],
   ([scope, taskId, projectId], [, , prevProjectId]) => {
     closeConfig()
+    closeRuleView()
     clearTimeout(configDebounce)
     if (scope === 'global') {
       // Tab Profile cũng là `scope === 'global'`: quay lại tab mà nạp pipeline
@@ -409,7 +451,7 @@ const selectedNodeData = ref(null)
 function openConfig(nodeId, data) {
   // Dialog teleport ra <body> nên rule `.preview-active …` không với tới nó —
   // phải chặn bằng logic, không dựa vào CSS.
-  if (previewing.value) return
+  if (previewing.value || viewingRule.value) return
   selectedNodeId.value = nodeId
   selectedNodeData.value = { ...data }
 }
@@ -778,6 +820,7 @@ let previewTimer = null
 async function runPreview() {
   if (previewing.value) return
   closeConfig()
+  closeRuleView()
   startPreview()
   const order = previewOrder.value
   previewNodeId.value = null
@@ -891,12 +934,30 @@ const hasFanOut = computed(() => {
             :categories="rulesData.categories"
             :open-sections="openSections"
             @toggle-section="toggleSection"
+            @view="openRuleView"
           />
         </div>
       </template>
 
       <template #main>
+        <div v-if="viewingRule" class="rule-view">
+          <div class="rule-view-header">
+            <span class="rule-view-title">{{ viewingRule.name }}</span>
+            <button type="button" class="btn-ghost btn-sm" @click="closeRuleView">
+              {{ t('pipelineEditor.rules.close') }}
+            </button>
+          </div>
+          <p v-if="viewingRuleLoading" class="muted rule-view-status">{{ t('pipelineEditor.rules.loading') }}</p>
+          <p v-else-if="viewingRuleError" class="err rule-view-status">{{ t('pipelineEditor.rules.loadError') }}</p>
+          <CMarkdownView
+            v-else
+            :title="viewingRule.name"
+            :doc-key="viewingRule.id"
+            :content="viewingRuleContent"
+          />
+        </div>
         <div
+          v-else
           class="vflow-container editor-canvas"
           ref="canvasRef"
           @dragover="onDragOver"
@@ -983,6 +1044,31 @@ const hasFanOut = computed(() => {
   position: relative;
   overflow: hidden;
   height: 100%;
+}
+.rule-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+}
+.rule-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.rule-view-title { font-size: 13px; font-weight: 600; }
+.rule-view-status { padding: 16px; }
+.rule-view-status.err { color: var(--danger); }
+.rule-view > .c-md-view {
+  flex: 1;
+  min-height: 0;
+  height: auto;
 }
 /* c.2 — canvas mang cả 2 class, nên selector phải dính liền; viết rời (descendant)
    thì rule không khớp và bo tròn 12px của `.vflow-container` dùng chung lại thắng. */
