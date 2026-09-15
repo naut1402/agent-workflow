@@ -450,11 +450,7 @@ async function onCloseClick(): Promise<void> {
           :aria-expanded="infoOpen"
           @click.stop="onInfoToggle"
         >
-          <Icon
-            :name="status.kind === 'busy' ? 'spinner' : 'info'"
-            :size="14"
-            :class="{ 'nl-chat-spin': status.kind === 'busy' }"
-          />
+          <Icon name="info" :size="14" />
         </button>
         <div v-if="infoOpen" class="nl-chat-info-popover" role="tooltip">
           <p v-for="row in infoRows" :key="row.label" class="nl-chat-info-row">
