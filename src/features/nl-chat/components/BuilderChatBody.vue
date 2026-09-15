@@ -172,7 +172,20 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
 
 watch(status, (s) => emit('status', s), { immediate: true })
 
+/** Within this many px of the bottom counts as "still following the tail" (see TaskChatBody.vue). */
+const SCROLL_BOTTOM_THRESHOLD = 48
+
+function isNearBottom(): boolean {
+  const el = messagesRef.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD
+}
+
+// Measured before the new message/typing-dots are patched into the DOM
+// (default `watch` flush is 'pre') — only follow the tail when already at it,
+// so scrolling up to reread history is not fought on every tick.
 watch([() => messages.value.length, () => sending.value], async () => {
+  if (!isNearBottom()) return
   await nextTick()
   const el = messagesRef.value
   if (el) el.scrollTop = el.scrollHeight

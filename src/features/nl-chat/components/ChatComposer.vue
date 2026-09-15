@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import ChatAttachmentBar from './ChatAttachmentBar.vue'
 import ChatComposerMenu from './ChatComposerMenu.vue'
 import KnowledgePickerDialog from '../../../frontend/ui/KnowledgePickerDialog.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import type { UseChatComposer } from '../composables/useChatComposer'
 
 /**
@@ -19,6 +21,7 @@ import type { UseChatComposer } from '../composables/useChatComposer'
 const props = defineProps<{ composer: UseChatComposer; placeholder: string }>()
 const c = props.composer
 
+const { t } = useI18nHelpers()
 const showKnowledgePicker = ref(false)
 
 /** The textarea lives here, but `autoGrow` measures it from the composable. */
@@ -71,7 +74,15 @@ function removeKnowledge(id: string): void {
       @keydown.ctrl.enter.prevent="c.onSend"
       @keydown.meta.enter.prevent="c.onSend"
     ></textarea>
-    <button type="submit" :disabled="!c.canSubmit.value">Gửi</button>
+    <button
+      type="submit"
+      class="icon-btn icon-btn-inline nl-chat-send"
+      :disabled="!c.canSubmit.value"
+      :title="t('nlChat.composer.send')"
+      :aria-label="t('nlChat.composer.send')"
+    >
+      <Icon name="send" :size="14" />
+    </button>
   </form>
 
   <KnowledgePickerDialog
