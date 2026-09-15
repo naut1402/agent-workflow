@@ -162,46 +162,70 @@ function isOrchestratorJob(job: JobRecord | null): boolean {
 }
 
 /**
- * Job của một step thật. Loại job orchestrator, job approval, và lượt chat của
- * người dùng — lượt chat kế thừa `pipelineStepId` của job cha nhưng không đẩy
- * pipeline (cùng quy tắc `runJob` dùng để bỏ qua advance).
+ * Lượt không đẩy cursor pipeline: job approval, hoặc lượt chat của người dùng —
+ * lượt chat kế thừa `pipelineStepId` của job cha (cùng quy tắc `runJob` dùng để
+ * bỏ qua advance). Lượt orchestrator resume thì LÀ lượt chạy lại của step.
  */
-function isStepJob(job: JobRecord | null): boolean {
-  if (!job?.metadata?.pipelineStepId) return false
-  if (job.metadata.orchestratorJob === true || job.applyTarget) return false
-  if (job.metadata.isChatFeedback === true && job.metadata.orchestratorResume !== true) return false
-  return true
+function isNonAdvancingTurn(job: JobRecord): boolean {
+  const meta = job.metadata ?? {}
+  return Boolean(job.applyTarget) || (meta.isChatFeedback === true && meta.orchestratorResume !== true)
+}
+
+/** Job của một step thật — mốc duy nhất mở một lượt agent. */
+function isStepJob(job: JobRecord): boolean {
+  const meta = job.metadata ?? {}
+  return Boolean(meta.pipelineStepId) && meta.orchestratorJob !== true && !isNonAdvancingTurn(job)
 }
 
 function isLiveStatus(status: string | undefined): boolean {
   return status === 'queued' || status === 'running' || status === 'awaiting_recovery'
 }
 
+/** `devTeamRoot` thiếu ở job cũ — coi như thuộc root đang xét. */
+function jobBelongsToTask(job: JobRecord, root: string, taskId: string): boolean {
+  const meta = job.metadata ?? {}
+  return meta.taskId === taskId && (!meta.devTeamRoot || meta.devTeamRoot === root)
+}
+
+function liveJobsOfTask(root: string, taskId: string): JobRecord[] {
+  return listJobs(50).filter((j) => isLiveStatus(j.status) && jobBelongsToTask(j, root, taskId))
+}
+
 /** Job đang sống của task — bỏ qua job quyết định của chính orchestrator. */
 function hasActiveStepJob(root: string, taskId: string): boolean {
-  return listJobs(50).some(
-    (j) =>
-      j.metadata?.taskId === taskId &&
-      (!j.metadata?.devTeamRoot || j.metadata.devTeamRoot === root) &&
-      j.metadata?.orchestratorJob !== true &&
-      isLiveStatus(j.status),
-  )
+  return liveJobsOfTask(root, taskId).some((j) => !isOrchestratorJob(j))
 }
 
 /** Lượt agent đang chạy dở. Hai job cùng `resume` một session là hỏng transcript. */
 function hasActiveOrchestratorJob(root: string, taskId: string): boolean {
-  return listJobs(50).some(
-    (j) =>
-      j.metadata?.taskId === taskId &&
-      (!j.metadata?.devTeamRoot || j.metadata.devTeamRoot === root) &&
-      j.metadata?.orchestratorJob === true &&
-      isLiveStatus(j.status),
-  )
+  return liveJobsOfTask(root, taskId).some(isOrchestratorJob)
 }
 
 async function readStateRecord(root: string, taskId: string): Promise<Record<string, unknown> | null> {
   const read = await readState(stateFileOf(root, taskId))
   return read.ok ? (read.state as Record<string, unknown>) : null
+}
+
+/** Ảnh chụp cursor của task — nguồn chung cho mọi nhánh cần "đang ở bước nào". */
+interface TaskPhase {
+  phase: string
+  /** Gate đang chờ người duyệt, nếu có. */
+  gatePending?: string
+}
+
+async function readTaskPhase(root: string, taskId: string): Promise<TaskPhase> {
+  const state = (await readStateRecord(root, taskId)) ?? {}
+  const gate = state.hitl_pending
+  return { phase: String(state.current_phase ?? ''), gatePending: gate ? String(gate) : undefined }
+}
+
+/** Còn bước để chạy — cursor chưa đi hết pipeline. */
+function hasPendingStep(at: TaskPhase): boolean {
+  return Boolean(at.phase) && at.phase !== 'completed'
+}
+
+function refOf(root: string, projectId: string | null, taskId: string): TaskRef {
+  return { root, taskId, projectId: projectId || projectIdOfRoot(root) }
 }
 
 /* Hành động */
@@ -405,26 +429,20 @@ interface DecisionOutcomeContext {
   completed: boolean
 }
 
-/** Thi hành quyết định đã parse. Mọi nhánh không hợp lệ đều đã bị chặn trước đó. */
-async function applyDecision(
+async function applySummary(
   ref: TaskRef,
   decision: OrchestratorDecision,
   ctx: DecisionOutcomeContext,
 ): Promise<void> {
-  if (decision.action === 'halt') {
-    await haltTask(ref, decision.reason || 'agent decided to halt')
-    return
-  }
-  if (decision.action === 'summary') {
-    emitDispatched(ref, { action: 'summary', reason: decision.reason || 'summary' })
-    if (ctx.completed) forgetTask(ref.root, ref.taskId)
-    return
-  }
-  if (decision.action === 'resume') {
-    // `message` đã được schema bắt buộc — không có thì `parseDecision` đã chặn.
-    await resumeStep(ref, decision.stepId as string, decision.message as string)
-    return
-  }
+  emitDispatched(ref, { action: 'summary', reason: decision.reason || 'summary' })
+  if (ctx.completed) forgetTask(ref.root, ref.taskId)
+}
+
+async function applyStart(
+  ref: TaskRef,
+  decision: OrchestratorDecision,
+  ctx: DecisionOutcomeContext,
+): Promise<void> {
   // `start` khi cổng đang chờ người là quyết định không thi hành được
   // (`runTaskStep` trả 400) — hạ xuống `summary`: pipeline đang chờ đúng quy
   // trình, không phải lỗi.
@@ -438,16 +456,38 @@ async function applyDecision(
   })
 }
 
+type DecisionHandler = (
+  ref: TaskRef,
+  decision: OrchestratorDecision,
+  ctx: DecisionOutcomeContext,
+) => Promise<void>
+
+/** Mỗi hành động một nhánh thi hành. `message` của `resume` đã được schema bắt buộc. */
+const ACTION_HANDLERS: Record<OrchestratorDecision['action'], DecisionHandler> = {
+  halt: (ref, decision) => haltTask(ref, decision.reason || 'agent decided to halt'),
+  summary: applySummary,
+  resume: (ref, decision) => resumeStep(ref, decision.stepId as string, decision.message as string),
+  start: applyStart,
+}
+
+/** Thi hành quyết định đã parse. Mọi nhánh không hợp lệ đều đã bị chặn trước đó. */
+function applyDecision(
+  ref: TaskRef,
+  decision: OrchestratorDecision,
+  ctx: DecisionOutcomeContext,
+): Promise<void> {
+  return ACTION_HANDLERS[decision.action](ref, decision, ctx)
+}
+
 /**
  * Lượt agent không dùng được ⇒ chuyển tiếp theo thứ tự pipeline thay vì dừng.
  * Chỉ gọi với trigger mà bước kế là tất định (xem `FALLBACK_TRIGGERS`).
  */
 async function fallbackDispatch(ref: TaskRef, reason: string): Promise<void> {
-  const state = await readStateRecord(ref.root, ref.taskId)
-  const phase = String(state?.current_phase ?? '')
-  if (!phase || phase === 'completed' || state?.hitl_pending) return
-  emitDispatched(ref, { stepId: phase, action: 'start', reason: `agent_fallback: ${reason}` })
-  await dispatchStep(ref, phase, 'advance')
+  const at = await readTaskPhase(ref.root, ref.taskId)
+  if (!hasPendingStep(at) || at.gatePending) return
+  emitDispatched(ref, { stepId: at.phase, action: 'start', reason: `agent_fallback: ${reason}` })
+  await dispatchStep(ref, at.phase, 'advance')
 }
 
 /** Lượt agent hỏng: chuyển tiếp tất định nếu bước kế biết trước, còn lại thì halt. */
@@ -498,20 +538,15 @@ export async function decide(
 
   if (event.type === 'job.finished') {
     const job = eventJob ?? jobOfEvent(event)
-    if (!isStepJob(job)) return
-    const stepId = String(job?.metadata?.pipelineStepId ?? '')
-    const state = await readStateRecord(ref.root, ref.taskId)
-    const phase = String(state?.current_phase ?? '')
+    if (!job || !isStepJob(job)) return
+    const at = await readTaskPhase(ref.root, ref.taskId)
     // Pipeline tiến được một bước ⇒ chuỗi lỗi (nếu có) của step đó đã được gỡ.
+    const stepId = String(job.metadata?.pipelineStepId ?? '')
     failureAsks.delete(`${keyOf(ref.root, ref.taskId)}::${stepId}`)
-    await askAgent(ref, orch, phase === 'completed' ? 'pipeline_completed' : 'step_finished', phase, {
-      stepResult: {
-        stepId,
-        status: 'succeeded',
-        artifacts: job?.artifactsFound ?? [],
-        output: typeof job?.stdout === 'string' ? job.stdout : '',
-      },
-      gatePending: state?.hitl_pending ? String(state.hitl_pending) : undefined,
+    const trigger = hasPendingStep(at) ? 'step_finished' : 'pipeline_completed'
+    await askAgent(ref, orch, trigger, at.phase, {
+      stepResult: stepResultOf(job, stepId, 'succeeded'),
+      gatePending: at.gatePending,
     })
     return
   }
@@ -543,14 +578,22 @@ export async function decide(
     failureAsks.set(key, asked)
     await askAgent(ref, orch, 'job_failed', stepId, {
       detail: String(payload.error ?? job?.error ?? ''),
-      stepResult: {
-        stepId,
-        status: 'failed',
-        artifacts: job?.artifactsFound ?? [],
-        output: typeof job?.stdout === 'string' ? job.stdout : '',
-      },
+      stepResult: stepResultOf(job, stepId, 'failed'),
     })
   }
+}
+
+function stdoutOf(job: JobRecord | null): string {
+  return typeof job?.stdout === 'string' ? job.stdout : ''
+}
+
+/** Kết quả một lượt chạy step, gói lại cho prompt của agent. */
+function stepResultOf(
+  job: JobRecord | null,
+  stepId: string,
+  status: StepResult['status'],
+): StepResult {
+  return { stepId, status, artifacts: job?.artifactsFound ?? [], output: stdoutOf(job) }
 }
 
 /* Subscriber */
@@ -617,7 +660,7 @@ async function consumeAgentDecision(ref: TaskRef, job: JobRecord): Promise<void>
   const orch = await resolveOrchestration(ref.root, ref.taskId)
   if (!orch.active) return
 
-  const stdout = typeof job.stdout === 'string' ? job.stdout : ''
+  const stdout = stdoutOf(job)
   const trigger = job.metadata?.orchestratorTrigger as DecisionTrigger | undefined
 
   // "Không có output" ≠ "chỉ là hội thoại". Một lượt quyết định mà không đọc
@@ -636,12 +679,8 @@ async function consumeAgentDecision(ref: TaskRef, job: JobRecord): Promise<void>
     return
   }
 
-  const state = await readStateRecord(ref.root, ref.taskId)
-  const phase = String(state?.current_phase ?? '')
-  await applyDecision(ref, decision, {
-    gatePending: state?.hitl_pending ? String(state.hitl_pending) : undefined,
-    completed: !phase || phase === 'completed',
-  })
+  const at = await readTaskPhase(ref.root, ref.taskId)
+  await applyDecision(ref, decision, { gatePending: at.gatePending, completed: !hasPendingStep(at) })
 }
 
 /**
@@ -657,12 +696,10 @@ export async function startOrchestratorTurn(
   const orch = await resolveOrchestration(root, taskId)
   if (!orch.active) return null
   ensureSweepScheduled()
-  const state = await readStateRecord(root, taskId)
-  const phase = String(state?.current_phase ?? '')
-  if (!phase || phase === 'completed') return null
-  const ref: TaskRef = { root, taskId, projectId: projectId || projectIdOfRoot(root) }
-  return askAgent(ref, orch, trigger, phase, {
-    gatePending: state?.hitl_pending ? String(state.hitl_pending) : undefined,
+  const at = await readTaskPhase(root, taskId)
+  if (!hasPendingStep(at)) return null
+  return askAgent(refOf(root, projectId, taskId), orch, trigger, at.phase, {
+    gatePending: at.gatePending,
   })
 }
 
@@ -679,11 +716,10 @@ export async function chatWithOrchestrator(
 ): Promise<TurnResult> {
   const orch = await resolveOrchestration(root, taskId)
   if (!orch.active) return { error: 'orchestrator is not active for this task', status: 409 }
-  const state = await readStateRecord(root, taskId)
-  const ref: TaskRef = { root, taskId, projectId: projectId || projectIdOfRoot(root) }
-  return askAgent(ref, orch, 'chat', String(state?.current_phase ?? ''), {
+  const at = await readTaskPhase(root, taskId)
+  return askAgent(refOf(root, projectId, taskId), orch, 'chat', at.phase, {
     detail: message,
-    gatePending: state?.hitl_pending ? String(state.hitl_pending) : undefined,
+    gatePending: at.gatePending,
   })
 }
 
@@ -706,10 +742,9 @@ export async function dispatchOrchestrator(
     await startOrchestratorTurn(root, projectId, taskId)
     return
   }
-  const state = await readStateRecord(root, taskId)
-  const stepId = String(state?.current_phase ?? '')
-  if (!stepId || stepId === 'completed') return
-  await dispatchStep({ root, taskId, projectId: projectId || projectIdOfRoot(root) }, stepId, reason)
+  const at = await readTaskPhase(root, taskId)
+  if (!hasPendingStep(at)) return
+  await dispatchStep(refOf(root, projectId, taskId), at.phase, reason)
 }
 
 /**

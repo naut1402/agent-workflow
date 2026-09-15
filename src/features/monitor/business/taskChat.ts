@@ -29,20 +29,6 @@ function clipFallback(text: string): string {
  * the job log — same approach as nl-chat's `agentStdoutOf`.
  */
 function agentOutputFromJob(job: JobRecord): string {
-  const text = rawAgentOutputFromJob(job)
-  // Người dùng đọc nhật ký điều phối, không đọc dòng lệnh máy.
-  return job.metadata?.orchestratorJob === true ? stripDecisionLine(text) : text
-}
-
-function stripDecisionLine(text: string): string {
-  return text
-    .split('\n')
-    .filter((line) => !line.trim().replace(/^`+/, '').replace(/`+$/, '').trim().startsWith(DECISION_SENTINEL))
-    .join('\n')
-    .trim()
-}
-
-function rawAgentOutputFromJob(job: JobRecord): string {
   if (typeof job.stdout === 'string' && job.stdout.trim()) {
     return stripCursorUserWrapper(extractAgentText(job.stdout))
   }
@@ -67,6 +53,23 @@ function rawAgentOutputFromJob(job: JobRecord): string {
   return stripCursorUserWrapper(extractAgentText(stripped))
 }
 
+/**
+ * Nội dung hiển thị trong khung chat. Job của node điều phối mang thêm dòng lệnh
+ * máy đọc ở cuối — người dùng đọc nhật ký điều phối, không đọc sentinel.
+ */
+function chatTextOfJob(job: JobRecord): string {
+  const text = agentOutputFromJob(job)
+  return job.metadata?.orchestratorJob === true ? stripDecisionLine(text) : text
+}
+
+function isDecisionLine(line: string): boolean {
+  return line.trim().replace(/^`+/, '').replace(/`+$/, '').trim().startsWith(DECISION_SENTINEL)
+}
+
+function stripDecisionLine(text: string): string {
+  return text.split('\n').filter((line) => !isDecisionLine(line)).join('\n').trim()
+}
+
 /** Prefer Cursor/agent JSON `result` field when stdout is still raw JSON. */
 function extractAgentText(raw: string): string {
   const trimmed = raw.trim()
@@ -83,7 +86,7 @@ function synthesizeTurnsFromJob(job: JobRecord, startIndex = 0): TranscriptTurn[
   if (prompt) {
     turns.push({ index: startIndex + turns.length, role: 'user', text: clipFallback(prompt) })
   }
-  const out = agentOutputFromJob(job)
+  const out = chatTextOfJob(job)
   if (out) {
     turns.push({
       index: startIndex + turns.length,
@@ -124,7 +127,7 @@ function finishedJobsForChat(jobs: JobRecord[], stepId?: string, sessionId?: str
 function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | undefined): boolean {
   if (!latest) return true
   const prompt = typeof latest.userPrompt === 'string' ? latest.userPrompt.trim() : ''
-  const out = agentOutputFromJob(latest)
+  const out = chatTextOfJob(latest)
   if (!prompt && !out) return true
   const texts = turns.map((t) => t.text.trim())
   if (prompt && texts.some((t) => t === clipFallback(prompt) || t.includes(prompt.slice(0, 80)))) {
@@ -384,6 +387,7 @@ export function getTaskChatState(
   opts: GetTaskChatStateOptions = {},
 ): TaskChatState {
   const jobs = jobsOfTask(taskId)
+  const orchestratorPanel = opts.stepId === ORCHESTRATOR_STEP_ID
   const runningJob = jobs.find((j) => j.status === 'queued' || j.status === 'running')
   const hasFinished = jobs.some((j) => j.status === 'succeeded' || j.status === 'failed')
 
@@ -401,7 +405,6 @@ export function getTaskChatState(
 
   // Node điều phối không mượn runner của step nào: rơi về job step gần nhất là
   // panel hiện tên runner của một step khác.
-  const orchestratorPanel = opts.stepId === ORCHESTRATOR_STEP_ID
   const runnerJob =
     runningJob ??
     (opts.stepId

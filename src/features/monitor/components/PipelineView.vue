@@ -432,8 +432,13 @@ async function startOrchestratorNode() {
     emit('hitl-action')
     setTimeout(() => { runToast.value = '' }, 4000)
   } catch (e: any) {
-    runError.value = e?.status === 409 ? t('monitor.pipeline.stateChanged') : String(e.message || e)
+    reportOrchestratorError(e)
   }
+}
+
+/** 409 ở hai nút của node điều phối luôn là `state_mtime` cũ — bảo người dùng refetch. */
+function reportOrchestratorError(e: any): void {
+  runError.value = e?.status === 409 ? t('monitor.pipeline.stateChanged') : String(e.message || e)
 }
 
 /**
@@ -456,7 +461,7 @@ async function stopOrchestratorNode() {
     emit('hitl-action')
     setTimeout(() => { runToast.value = '' }, 4000)
   } catch (e: any) {
-    runError.value = e?.status === 409 ? t('monitor.pipeline.stateChanged') : String(e.message || e)
+    reportOrchestratorError(e)
   }
 }
 

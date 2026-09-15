@@ -117,6 +117,11 @@ function renderBundle(bundle: any[]): string {
     .join('\n\n')
 }
 
+/** Phần agent điều phối soạn, đã chuẩn hoá — rỗng khi pipeline không bật điều phối. */
+function agentPart(ctx: AgentContext | undefined, key: keyof AgentContext): string {
+  return ctx?.[key]?.trim() ?? ''
+}
+
 function renderAssignment(step: any, input: StepBriefInput): string {
   const produces = Array.isArray(step?.produces) && step.produces.length
     ? step.produces.join(', ')
@@ -129,7 +134,7 @@ function renderAssignment(step: any, input: StepBriefInput): string {
   // Phản hồi của reviewer / người duyệt đi nguyên văn xuống đây — ĐÂY là kênh
   // giao tiếp giữa hai node mà đề bài yêu cầu, đừng tóm tắt mất chi tiết.
   if (input.detail?.trim()) lines.push(`\n### Nội dung cần xử lý\n\n${input.detail.trim()}`)
-  const agentNote = input.agentContext?.context?.trim()
+  const agentNote = agentPart(input.agentContext, 'context')
   if (agentNote) lines.push(`\n### Bối cảnh từ node điều phối\n\n${agentNote}`)
   return lines.join('\n')
 }
@@ -191,7 +196,7 @@ export async function composeStepBrief(input: StepBriefInput): Promise<string> {
 
   const parts = [
     { title: SECTION_CONTEXT, body: request.trim() },
-    { title: SECTION_ORCHESTRATOR, body: (input.agentContext?.summary ?? '').trim() },
+    { title: SECTION_ORCHESTRATOR, body: agentPart(input.agentContext, 'summary') },
     { title: SECTION_PREVIOUS, body: summarizeExport(exportJson, steps, input.stepId, fallbackArtifacts) },
     { title: SECTION_KNOWLEDGE, body: renderBundle(bundle) },
   ].filter((p) => p.body.trim())

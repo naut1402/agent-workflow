@@ -37,20 +37,33 @@ export function stateFileOf(root: string, taskId: string): string {
   return joinPath(root, '.dev-state', `${taskId}.json`)
 }
 
+/**
+ * Đọc state dưới khoá task rồi áp phần `build` trả về. `build` trả `null` nghĩa
+ * là không có gì đổi — không ghi, để `state_mtime` mà UI đang giữ khỏi nhảy.
+ */
+async function patchOrchestratorFlags(
+  root: string,
+  taskId: string,
+  build: (state: Record<string, unknown>) => Record<string, unknown> | null,
+): Promise<void> {
+  const stateFile = stateFileOf(root, taskId)
+  await withTaskLock(root, taskId, async () => {
+    const read = await readState(stateFile)
+    if (!read.ok) return
+    const next = build(read.state as Record<string, unknown>)
+    if (next) await writeStateAtomic(stateFile, { ...read.state, ...next })
+  })
+}
+
 /** Ghi lại cờ cache `orchestrator_enabled` — chỉ ghi khi thật sự lệch. */
 export async function setOrchestratorEnabledFlag(
   root: string,
   taskId: string,
   enabled: boolean,
 ): Promise<void> {
-  const stateFile = stateFileOf(root, taskId)
-  await withTaskLock(root, taskId, async () => {
-    const read = await readState(stateFile)
-    if (!read.ok) return
-    const state = read.state as Record<string, unknown>
-    if (state.orchestrator_enabled === enabled) return
-    await writeStateAtomic(stateFile, { ...state, orchestrator_enabled: enabled })
-  })
+  await patchOrchestratorFlags(root, taskId, (state) =>
+    state.orchestrator_enabled === enabled ? null : { orchestrator_enabled: enabled },
+  )
 }
 
 /**
@@ -64,19 +77,11 @@ export async function applyOrchestratorConfigChange(
   taskId: string,
   enabled: boolean,
 ): Promise<void> {
-  const stateFile = stateFileOf(root, taskId)
-  await withTaskLock(root, taskId, async () => {
-    const read = await readState(stateFile)
-    if (!read.ok) return
-    const state = read.state as Record<string, unknown>
-    if (state.orchestrator_enabled === enabled && state.orchestrator_halted !== true) return
-    await writeStateAtomic(stateFile, {
-      ...state,
-      orchestrator_enabled: enabled,
-      orchestrator_halted: false,
-      orchestrator_halted_at: null,
-    })
-  })
+  await patchOrchestratorFlags(root, taskId, (state) =>
+    state.orchestrator_enabled === enabled && state.orchestrator_halted !== true
+      ? null
+      : { orchestrator_enabled: enabled, orchestrator_halted: false, orchestrator_halted_at: null },
+  )
 }
 
 /**
