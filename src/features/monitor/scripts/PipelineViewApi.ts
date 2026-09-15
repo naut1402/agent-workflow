@@ -49,3 +49,15 @@ export async function stopOrchestrator(id: string, mtime: number, projectId?: st
     errorMessage: (status) => t('common.errors.updateTaskStatus', { status }),
   })
 }
+
+/**
+ * Run trên node điều phối: xoá cờ halt và giao một lượt cho agent. Cùng endpoint
+ * với Stop — trạng thái node chỉ là cờ `orchestrator_halted`.
+ */
+export async function startOrchestrator(id: string, mtime: number, projectId?: string) {
+  return apiRequest('PUT', '/api/task-orchestrator', {
+    query: { id, project: projectId },
+    body: { halted: false, mtime },
+    errorMessage: (status) => t('common.errors.updateTaskStatus', { status }),
+  })
+}

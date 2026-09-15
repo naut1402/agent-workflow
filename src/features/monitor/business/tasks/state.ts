@@ -548,9 +548,11 @@ export async function advanceStepOnJobSuccess(
       state.current_phase = next ? next.id : 'completed'
     }
 
-    // Emit after persist so listeners never read stale state.
+    // Emit after persist so listeners never read stale state. Điều kiện đọc
+    // state đã ghi, không đọc `gateId`: với `auto_review` thì step có gate vẫn
+    // đẩy cursor, và event phải nói đúng chuyện đó.
     const mtime = await writeStateAtomic(stateFile, state)
-    if (gateId) {
+    if (state.hitl_pending) {
       emit('hitl.pending', { taskId, gateId, stepId, devTeamRoot: root })
     } else {
       emit('task.advanced', { taskId, stepId, currentPhase: state.current_phase, devTeamRoot: root })

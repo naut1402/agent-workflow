@@ -5,10 +5,25 @@
  * không cần bus, không cần job, không cần LLM.
  */
 
-import { DECISION_SENTINEL, OrchestratorDecision } from '../schemas/orchestrator.js'
+import { DECISION_SENTINEL, MAX_AGENT_CONTEXT_BYTES, OrchestratorDecision } from '../schemas/orchestrator.js'
 
-/** Vì sao orchestrator phải hỏi agent — 3 nhánh duy nhất tốn lượt LLM. */
-export type DecisionTrigger = 'gate_rejected' | 'job_failed' | 'chat'
+/** Vì sao orchestrator phải hỏi agent. */
+export type DecisionTrigger =
+  | 'step_finished'
+  | 'gate_approved'
+  | 'gate_rejected'
+  | 'job_failed'
+  | 'chat'
+  | 'manual_start'
+  | 'pipeline_completed'
+
+/** Kết quả bước vừa xong — dữ liệu agent cần để tóm tắt và quyết bước kế. */
+export interface StepResult {
+  stepId: string
+  status: 'succeeded' | 'failed'
+  artifacts: string[]
+  output: string
+}
 
 export interface DecisionContext {
   taskId: string
@@ -21,12 +36,43 @@ export interface DecisionContext {
   detail?: string
   /** Vài event gần nhất của task, để agent thấy bối cảnh thay vì đoán. */
   recent?: string[]
+  /** Chỉ có với `step_finished` / `job_failed` / `pipeline_completed`. */
+  stepResult?: StepResult
+  /** Gate đang chờ người (`state.hitl_pending`) — agent không được start khi có. */
+  gatePending?: string
 }
 
 const TRIGGER_BRIEF: Record<DecisionTrigger, string> = {
+  step_finished: 'Một step vừa CHẠY XONG. Kết quả của nó ở phần "Kết quả bước vừa xong".',
+  gate_approved: 'Cổng HITL vừa được người duyệt CHẤP THUẬN — pipeline đi tiếp được.',
   gate_rejected: 'Cổng HITL vừa bị người duyệt TỪ CHỐI. Phản hồi của họ ở phần "Chi tiết".',
   job_failed: 'Job của một step vừa THẤT BẠI. Lỗi ở phần "Chi tiết".',
   chat: 'Người dùng vừa nhắn cho bạn. Nội dung ở phần "Chi tiết".',
+  manual_start: 'Người dùng vừa giao quyền điều phối cho bạn. Hãy khởi động pipeline.',
+  pipeline_completed: 'Pipeline đã hoàn tất. Không còn bước nào để chạy.',
+}
+
+/** Đuôi giữ nguyên: kết luận của một agent CLI nằm ở cuối output, không ở đầu. */
+function tailOf(text: string): string {
+  const raw = String(text ?? '')
+  if (Buffer.byteLength(raw, 'utf8') <= MAX_AGENT_CONTEXT_BYTES) return raw
+  const buf = Buffer.from(raw, 'utf8')
+  return `…(đã cắt phần đầu)\n${buf.subarray(buf.length - MAX_AGENT_CONTEXT_BYTES).toString('utf8')}`
+}
+
+function renderStepResult(result: StepResult): string {
+  const artifacts = result.artifacts.length ? result.artifacts.join(', ') : '(không có)'
+  const output = tailOf(result.output).trim() || '(không có output)'
+  return [
+    `## Kết quả bước vừa xong`,
+    '',
+    `**Step:** \`${result.stepId}\` — ${result.status === 'succeeded' ? 'thành công' : 'thất bại'}`,
+    `**Artifact ghi được:** ${artifacts}`,
+    '',
+    '```text',
+    output,
+    '```',
+  ].join('\n')
 }
 
 /**
@@ -37,15 +83,32 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
   const actions = [
     `- \`start\` — chạy một step mới. \`stepId\` phải nằm trong: ${ctx.stepIds.join(', ')}`,
     '- `resume` — gửi tiếp phản hồi cho step đã chạy (giữ nguyên `current_phase`). Đặt nội dung vào `message`.',
+    '- `summary` — ghi nhận kết quả, không chạy step nào. Dùng khi cổng HITL đang chờ người, hoặc pipeline đã xong.',
     '- `halt` — dừng điều phối, trả quyền chạy tay lại cho người dùng.',
   ]
+  const constraints: string[] = []
+  if (ctx.gatePending) {
+    constraints.push(
+      `- Cổng \`${ctx.gatePending}\` đang chờ người duyệt: chỉ được trả \`summary\` hoặc \`halt\`.`,
+    )
+  }
+  if (ctx.trigger === 'pipeline_completed') {
+    constraints.push('- Pipeline đã hoàn tất: tóm tắt toàn bộ quá trình rồi trả `summary`.')
+  }
+  constraints.push(
+    `- Với \`start\`, đặt phần bối cảnh bạn muốn step kế đọc vào \`context\` — nó sẽ nằm trong prompt của step đó.`,
+    `- Đặt tóm tắt bước vừa xong vào \`summary\`. Cả \`summary\` lẫn \`context\` tối đa ${MAX_AGENT_CONTEXT_BYTES} byte.`,
+  )
+
   const parts = [
     `# Quyết định điều phối — task ${ctx.taskId}`,
     `**Bước hiện tại:** \`${ctx.currentPhase || '(chưa có)'}\``,
     `**Tình huống:** ${TRIGGER_BRIEF[ctx.trigger]}`,
+    ctx.stepResult ? renderStepResult(ctx.stepResult) : '',
     ctx.detail?.trim() ? `## Chi tiết\n\n${ctx.detail.trim()}` : '',
     ctx.recent?.length ? `## Event gần đây\n\n${ctx.recent.map((r) => `- ${r}`).join('\n')}` : '',
     `## Hành động cho phép\n\n${actions.join('\n')}`,
+    `## Ràng buộc\n\n${constraints.join('\n')}`,
     [
       '## Định dạng trả lời (bắt buộc)',
       '',
@@ -56,7 +119,7 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
       '```',
       '',
       'Không có dòng này, hoặc JSON hỏng, hoặc `stepId` không nằm trong danh sách trên',
-      '⇒ pipeline sẽ **dừng** và chờ người xử lý tay.',
+      '⇒ orchestrator tự chuyển tiếp theo thứ tự pipeline mà không có bối cảnh bạn soạn.',
     ].join('\n'),
   ]
   return parts.filter(Boolean).join('\n\n')
@@ -79,8 +142,8 @@ export type ParsedDecision = OrchestratorDecision | { error: string }
 /**
  * Đọc quyết định từ output agent.
  *
- * Mọi nhánh `{ error }` là tín hiệu **halt**, không phải tín hiệu thử lại: đoán
- * ý một output hỏng đúng là cách pipeline chạy sai mà không ai thấy.
+ * Mọi nhánh `{ error }` là tín hiệu **không dùng được lượt này**; caller quyết
+ * định halt hay chuyển tiếp tất định — đoán ý một output hỏng thì không.
  */
 export function parseDecision(stdout: string, stepIds: string[]): ParsedDecision {
   const line = lastDecisionLine(stdout)
@@ -97,7 +160,8 @@ export function parseDecision(stdout: string, stepIds: string[]): ParsedDecision
   if (!parsed.success) return { error: 'malformed decision' }
 
   const decision = parsed.data
-  if (decision.action !== 'halt' && !stepIds.includes(decision.stepId as string)) {
+  const needsStep = decision.action === 'start' || decision.action === 'resume'
+  if (needsStep && !stepIds.includes(decision.stepId as string)) {
     return { error: `unknown stepId: ${decision.stepId}` }
   }
   return decision

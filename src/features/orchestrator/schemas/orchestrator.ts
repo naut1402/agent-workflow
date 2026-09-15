@@ -1,13 +1,14 @@
 import { z } from 'zod'
 
-/** Nguồn duy nhất — dùng chung với canvas, xem `shared/lib/orchestrator.ts`. */
-export { ORCHESTRATOR_STEP_ID } from '../../../shared/lib/orchestrator.js'
-
-/** Dòng cuối output agent phải bắt đầu bằng chuỗi này thì mới được coi là quyết định. */
-export const DECISION_SENTINEL = 'ORCHESTRATOR_DECISION:'
+/** Nguồn duy nhất — dùng chung với canvas và khung chat, xem `shared/lib/orchestrator.ts`. */
+export { DECISION_SENTINEL, ORCHESTRATOR_STEP_ID } from '../../../shared/lib/orchestrator.js'
 
 /** Ngân sách brief — bằng `CHAT_STDOUT_LIMIT` của jobQueue. */
 export const MAX_BRIEF_BYTES = 64 * 1024
+
+// Dòng quyết định là một dòng JSON nằm trong stdout, mà stdout bị cắt ở
+// `CHAT_STDOUT_LIMIT` — phần agent tự soạn vượt trần này làm JSON đứt.
+export const MAX_AGENT_CONTEXT_BYTES = 8 * 1024
 
 /** Key `orchestrator` trong `pipeline.yaml`. Thiếu key ⇒ `enabled: false` ⇒ pipeline chạy như cũ. */
 export const OrchestratorConfig = z
@@ -23,18 +24,22 @@ export type OrchestratorConfig = z.infer<typeof OrchestratorConfig>
  * Quyết định của agent điều phối, đọc từ dòng `ORCHESTRATOR_DECISION: {json}`.
  *
  * `stepId` bắt buộc với `start`/`resume` (kiểm thêm "có trong pipeline" ở
- * `parseDecision`); `halt` thì không cần. `message` là nội dung gửi kèm khi
- * resume — chính là kênh giao tiếp reviewer → implementer.
+ * `parseDecision`); `halt` và `summary` thì không cần. `message` là nội dung
+ * gửi kèm khi resume — chính là kênh giao tiếp reviewer → implementer.
  */
 export const OrchestratorDecision = z
   .object({
-    action: z.enum(['start', 'resume', 'halt']),
+    action: z.enum(['start', 'resume', 'halt', 'summary']),
     stepId: z.string().min(1).optional(),
     reason: z.string().optional(),
     message: z.string().optional(),
+    /** Tóm tắt kết quả bước vừa xong — hiện ở chat của node, đi vào brief bước kế. */
+    summary: z.string().max(MAX_AGENT_CONTEXT_BYTES).optional(),
+    /** Bối cảnh agent soạn riêng cho step sắp chạy. Chỉ dùng cùng `start`. */
+    context: z.string().max(MAX_AGENT_CONTEXT_BYTES).optional(),
   })
   .superRefine((d, ctx) => {
-    if (d.action !== 'halt' && !d.stepId) {
+    if ((d.action === 'start' || d.action === 'resume') && !d.stepId) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'stepId required', path: ['stepId'] })
     }
     // `resume` không có nội dung nghĩa là step nhận `userPrompt` rỗng — chặn ở

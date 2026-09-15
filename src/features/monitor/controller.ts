@@ -898,9 +898,10 @@ export class MonitorController extends AbstractController {
   }
 
   /**
-   * Nút Stop của node orchestrator. Halt **trả quyền start về chế độ tay**, nên
-   * đây cũng là lối thoát khi điều phối kẹt: sau khi Stop, Run/Reset trên node
-   * step hiện lại và người dùng chạy tay tiếp được.
+   * Nút Run/Stop của node orchestrator. Halt **trả quyền start về chế độ tay**,
+   * nên đây cũng là lối thoát khi điều phối kẹt: sau khi Stop, Run/Reset trên
+   * node step hiện lại và người dùng chạy tay tiếp được. Bỏ halt thì ngược lại —
+   * giao ngay một lượt cho agent, vì không còn đường nào khác cấp lượt đầu tiên.
    */
   async putTaskOrchestrator() {
     const gate = this.requireRoot()
@@ -938,6 +939,12 @@ export class MonitorController extends AbstractController {
         devTeamRoot: root,
         reason: 'user_stop',
       })
+    } else {
+      // Không `await`: lượt agent là một job, kết quả đọc ở `job.finished`.
+      const { startOrchestratorTurn } = await import('../orchestrator/business/index.js')
+      void startOrchestratorTurn(root, this.projectId, id).catch((err) =>
+        console.warn('[monitor] orchestrator start failed', err),
+      )
     }
     return this.ok({ id, state: result.state, mtime: result.mtime })
   }
@@ -962,9 +969,24 @@ export class MonitorController extends AbstractController {
 
     // Chat với node điều phối là cách bật lại sau khi Stop — nói chuyện được
     // với nó nghĩa là người dùng muốn nó cầm lái tiếp.
-    if (parsed.data.stepId === ORCHESTRATOR_STEP_ID && read.state?.orchestrator_halted === true) {
-      const mtime = (await fs.stat(stateFile)).mtimeMs
-      await applyOrchestratorHaltAction(root, id, { halted: false, mtime })
+    if (parsed.data.stepId === ORCHESTRATOR_STEP_ID) {
+      if (read.state?.orchestrator_halted === true) {
+        const mtime = (await fs.stat(stateFile)).mtimeMs
+        await applyOrchestratorHaltAction(root, id, { halted: false, mtime })
+      }
+      // Không đi qua `sendTaskFeedback`: hàm đó chọn "job step xong gần nhất"
+      // làm job cha, nên phản hồi rơi vào session của step đầu.
+      const { chatWithOrchestrator } = await import('../orchestrator/business/index.js')
+      const turn = await chatWithOrchestrator(root, this.projectId, id, parsed.data.feedback)
+      if ('error' in turn) return this.json(turn.status || 400, { error: turn.error, taskId: id })
+      emitAudit({
+        op: 'update',
+        entity: 'task-state',
+        identifier: id,
+        projectId: this.projectId,
+        detail: { action: 'feedback', jobId: turn.job.id, stepId: ORCHESTRATOR_STEP_ID },
+      })
+      return this.created({ job: turn.job })
     }
 
     const projectId = this.projectId || ''

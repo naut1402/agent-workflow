@@ -26,8 +26,8 @@ const { openTaskChat } = useChatSurface()
 const hasRunHistory = computed(() => Boolean(props.data.taskId) && Boolean(props.data.executed))
 
 /**
- * Biến thể node điều phối: chat + stop, **không** Run/Reset ở bất kỳ trạng thái
- * nào (yêu cầu #3 của đề bài — node này không restart được).
+ * Biến thể node điều phối: chat + một nút hành động — Run khi rảnh, Stop khi
+ * đang có lượt chạy. Không có Reset: trạng thái của node chỉ là cờ halt.
  */
 const isOrchestrator = computed(() => props.data.kind === 'orchestrator')
 
@@ -90,13 +90,23 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
     ]"
   >
     <div class="pnode-actions">
-      <!-- Stop = ghi `orchestrator_halted`, luôn hợp lệ khi đang điều phối; huỷ
-           job chỉ là bước phụ khi có job đang chạy. Gắn nó vào `data.running`
-           thì phần lớn thời gian (dispatch tất định, không có job quyết định
-           nào) node không có nút nào — mà Run/Reset trên mọi step cũng đã ẩn,
-           nên người dùng mất sạch lối thoát đúng lúc cần nó nhất (E11). -->
+      <!-- Rảnh thì Run, bận thì Stop. Chỉ có Stop thì ở trạng thái `halted`
+           node trắng nút, mà Run/Reset trên mọi step cũng đã ẩn — người dùng mất
+           sạch lối thoát đúng lúc cần nó nhất. -->
       <button
-        v-if="isOrchestrator && data.orchestratorState !== 'halted'"
+        v-if="isOrchestrator && !data.orchestratorBusy"
+        type="button"
+        class="pnode-action pnode-action-center pnode-run-btn"
+        :title="t('monitor.pipelineNode.clickToStartOrchestrator')"
+        :aria-label="t('monitor.pipelineNode.startOrchestrator')"
+        @click.stop="onRun"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5.5v13l11-6.5z" />
+        </svg>
+      </button>
+      <button
+        v-else-if="isOrchestrator"
         type="button"
         class="pnode-action pnode-action-center pnode-stop-btn"
         :title="t('monitor.pipelineNode.clickToStopOrchestrator')"

@@ -162,6 +162,22 @@ export class PipelineEditorController extends AbstractController {
     // `readYamlSafe` would return null, the pipeline would fall back to
     // global/builtin — and reconcile could clear a legitimate gate.
     writeTextFileAtomicSync(target, dumpYaml(toWrite))
+    if (scope === 'task' && taskId) {
+      // Import động: barrel monitor kéo theo runner (`node:child_process`), còn
+      // barrel orchestrator có side-effect khởi động vòng lặp lúc module-eval.
+      // Lỗi ở đây không được làm hỏng lượt ghi YAML — nó đã ghi xong rồi.
+      try {
+        const { applyOrchestratorConfigChange } = await import('../monitor/business/index.js')
+        const enabled = pipeline.orchestrator?.enabled === true
+        await applyOrchestratorConfigChange(root, taskId, enabled)
+        if (enabled) {
+          const { ensureSweepScheduled } = await import('../orchestrator/business/index.js')
+          ensureSweepScheduled()
+        }
+      } catch (err) {
+        console.warn('[pipeline-editor] orchestrator state sync failed', err)
+      }
+    }
     emitAudit({
       op: 'update',
       entity: 'pipeline',

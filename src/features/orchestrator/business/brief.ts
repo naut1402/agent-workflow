@@ -32,15 +32,15 @@ export interface StepBriefInput {
   reason: DispatchReason
   /** Phản hồi gate / verdict reviewer / `job.error` — nguyên văn, không tóm tắt. */
   detail?: string
+  /** Phần do agent điều phối soạn. Rỗng ⇒ brief giữ nguyên hình dạng cũ. */
+  agentContext?: AgentContext
 }
 
-export interface ComposeBriefOptions {
-  /**
-   * Nấc 2 của ngân sách: nhờ agent tóm tắt lại. Trả `null` (hoặc không truyền)
-   * ⇒ bỏ qua nấc này, xuống thẳng nấc 3. Tách thành callback để `brief.ts` test
-   * được mà không cần LLM.
-   */
-  condense?: (text: string) => Promise<string | null>
+export interface AgentContext {
+  /** Tóm tắt bước vừa xong. */
+  summary?: string
+  /** Bối cảnh agent soạn riêng cho step sắp chạy. */
+  context?: string
 }
 
 const REASON_TEXT: Record<DispatchReason, string> = {
@@ -117,6 +117,11 @@ function renderBundle(bundle: any[]): string {
     .join('\n\n')
 }
 
+/** Phần agent điều phối soạn, đã chuẩn hoá — rỗng khi pipeline không bật điều phối. */
+function agentPart(ctx: AgentContext | undefined, key: keyof AgentContext): string {
+  return ctx?.[key]?.trim() ?? ''
+}
+
 function renderAssignment(step: any, input: StepBriefInput): string {
   const produces = Array.isArray(step?.produces) && step.produces.length
     ? step.produces.join(', ')
@@ -129,10 +134,13 @@ function renderAssignment(step: any, input: StepBriefInput): string {
   // Phản hồi của reviewer / người duyệt đi nguyên văn xuống đây — ĐÂY là kênh
   // giao tiếp giữa hai node mà đề bài yêu cầu, đừng tóm tắt mất chi tiết.
   if (input.detail?.trim()) lines.push(`\n### Nội dung cần xử lý\n\n${input.detail.trim()}`)
+  const agentNote = agentPart(input.agentContext, 'context')
+  if (agentNote) lines.push(`\n### Bối cảnh từ node điều phối\n\n${agentNote}`)
   return lines.join('\n')
 }
 
 const SECTION_CONTEXT = 'Bối cảnh task'
+const SECTION_ORCHESTRATOR = 'Tóm tắt của node điều phối'
 const SECTION_PREVIOUS = 'Kết quả các bước trước'
 const SECTION_KNOWLEDGE = 'Knowledge'
 
@@ -141,15 +149,13 @@ function byteLength(text: string): number {
 }
 
 /**
- * Ba nấc ngân sách (D5) — **không bao giờ** cắt im lặng:
+ * Hai nấc ngân sách — không bao giờ cắt im lặng:
  *  1. rút gọn tất định phần "Kết quả các bước trước";
- *  2. nhờ agent tóm tắt (nếu caller cấp `condense`);
- *  3. gắn nhãn `⚠️ ĐÃ LƯỢC BỎ` lên đầu và bỏ các mục nặng nhất.
+ *  2. gắn nhãn `ĐÃ LƯỢC BỎ` lên đầu và bỏ các mục nặng nhất.
  */
 export async function applyBudget(
   parts: { title: string; body: string }[],
   assignment: string,
-  opts: ComposeBriefOptions = {},
 ): Promise<string> {
   const join = (list: { title: string; body: string }[]) =>
     [...list.map((p) => `## ${p.title}\n\n${p.body}`), assignment].join('\n\n')
@@ -166,13 +172,7 @@ export async function applyBudget(
   text = join(trimmed)
   if (byteLength(text) <= MAX_BRIEF_BYTES) return text
 
-  // Nấc 2 — nhờ agent tóm tắt lại.
-  if (opts.condense) {
-    const condensed = await opts.condense(text).catch(() => null)
-    if (condensed && byteLength(condensed) <= MAX_BRIEF_BYTES) return condensed
-  }
-
-  // Nấc 3 — bỏ mục nặng, nhưng nói rõ đã bỏ gì.
+  // Nấc 2 — bỏ mục nặng, nhưng nói rõ đã bỏ gì.
   const kept: { title: string; body: string }[] = []
   const dropped: string[] = []
   for (const part of trimmed) {
@@ -184,10 +184,7 @@ export async function applyBudget(
 }
 
 /** Brief đầy đủ cho một step. Ném lỗi khi thiếu `request.md` (task hỏng, không đoán). */
-export async function composeStepBrief(
-  input: StepBriefInput,
-  opts: ComposeBriefOptions = {},
-): Promise<string> {
+export async function composeStepBrief(input: StepBriefInput): Promise<string> {
   const pipeline = await loadPipelineConfig(input.root, input.taskId)
   const steps = Array.isArray(pipeline.steps) ? pipeline.steps : []
   const step = steps.find((s: any) => s?.id === input.stepId) ?? { id: input.stepId }
@@ -199,12 +196,13 @@ export async function composeStepBrief(
 
   const parts = [
     { title: SECTION_CONTEXT, body: request.trim() },
+    { title: SECTION_ORCHESTRATOR, body: agentPart(input.agentContext, 'summary') },
     { title: SECTION_PREVIOUS, body: summarizeExport(exportJson, steps, input.stepId, fallbackArtifacts) },
     { title: SECTION_KNOWLEDGE, body: renderBundle(bundle) },
   ].filter((p) => p.body.trim())
 
   const assignment = `## Việc của bạn\n\n${renderAssignment(step, input)}`
-  return applyBudget(parts, assignment, opts)
+  return applyBudget(parts, assignment)
 }
 
 async function listTaskMarkdown(root: string, taskId: string): Promise<string[]> {
