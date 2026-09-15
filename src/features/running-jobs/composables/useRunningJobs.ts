@@ -1,12 +1,14 @@
 import { computed, ref } from 'vue'
+import { buildEventSourceUrl } from '../../../core/http/client'
 import { fetchJobs } from '../../runner/scripts/runnerApi'
 import { groupRunningJobs, type JobLite } from '../lib/groupRunningJobs'
 
-export function useRunningJobs(pollMs = 1500) {
+// `_pollMs` no longer drives a client-side interval (server pushes over SSE) —
+// kept so callers (`App.vue`) don't need to change their call signature.
+export function useRunningJobs(_pollMs = 1500) {
   const jobs = ref<JobLite[]>([])
   const error = ref<string | null>(null)
-  let timer: ReturnType<typeof setTimeout> | null = null
-  let running = false
+  let source: EventSource | null = null
 
   async function poll() {
     try {
@@ -23,25 +25,22 @@ export function useRunningJobs(pollMs = 1500) {
   const runningCount = computed(() => grouped.value.totalJobs)
 
   function stop() {
-    running = false
-    if (timer) {
-      clearTimeout(timer)
-      timer = null
-    }
-  }
-
-  // Chain via setTimeout (not setInterval) so a poll slower than `pollMs`
-  // can't overlap with the next one and have its response race a newer poll's.
-  async function scheduleNext() {
-    if (!running) return
-    await poll()
-    if (running) timer = setTimeout(scheduleNext, pollMs)
+    source?.close()
+    source = null
   }
 
   function start() {
     stop()
-    running = true
-    scheduleNext()
+    source = new EventSource(buildEventSourceUrl('/api/jobs/stream'))
+    source.addEventListener('jobs', (ev: MessageEvent) => {
+      const data = JSON.parse(ev.data)
+      jobs.value = Array.isArray(data.jobs) ? (data.jobs as JobLite[]) : []
+      error.value = null
+    })
+    source.onerror = () => {
+      error.value = 'connection lost'
+      // keep previous jobs — do not clear badge on a single connection drop
+    }
   }
 
   return { jobs, grouped, runningCount, error, poll, start, stop }

@@ -4,9 +4,12 @@ import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import type { HonoEnv, RegistryContext } from '../core/http/types.js'
 import { j, json } from '../core/http/responseHelper.js'
-import { dirnameFromImportMeta, resolvePath } from '../core/lib/fileHelper.js'
+import { dirnameFromImportMeta, joinPath, resolvePath, watch } from '../core/lib/fileHelper.js'
 import { loadModulesUnder } from '../core/lib/dirModuleLoader.js'
+import { registryHome } from '../core/registry.js'
 import { handleKnowledgeApi } from '../features/knowledge/business/knowledgeApi.js'
+import { collectTasks } from '../features/monitor/business/tasks/index.js'
+import { listJobs } from '../features/runner/business/jobQueue.js'
 import { appendRequestLog } from '../core/log/store.js'
 import { installEventLogSubscriber } from '../core/log/eventLogSubscriber.js'
 import {
@@ -31,8 +34,11 @@ import { loadSecurityConfig } from '../features/settings/business/dashboardSetti
 // `false` for non-api paths (caller falls through to static / next middleware).
 //
 // /api/knowledge is still served by the node-res-based handleKnowledgeApi
-// (knowledge module's own HTTP surface); everything else is routed through the
-// Hono app via a node→Web Request bridge.
+// (knowledge module's own HTTP surface); /api/tasks/stream and /api/jobs/stream
+// are SSE routes handled the same way (bypass Hono — the bridge below buffers
+// the whole response via `response.arrayBuffer()`, which never resolves for an
+// open stream); everything else is routed through the Hono app via a
+// node→Web Request bridge.
 //
 // createApp(ctx) builds the Hono instance (exported for tests via app.request).
 // Feature routes: moi src/features/<name>/api.ts export registerRoutes +
@@ -197,6 +203,116 @@ export function createApiHandler(ctx: RegistryContext) {
           // Knowledge writes directly to the node response — body not mirrored here.
           responsePreview = ''
           return true
+        }
+        if (url.pathname === '/api/tasks/stream' || url.pathname === '/api/jobs/stream') {
+          const security = loadSecurityConfig()
+          const corsHeaders = resolveCorsHeaders(req.headers.origin as string | undefined, security.cors)
+          if (corsHeaders) for (const [k, v] of Object.entries(corsHeaders)) res.setHeader(k, v)
+          if (security.cors.enabled && (req.method || 'GET').toUpperCase() === 'OPTIONS') {
+            res.statusCode = 204
+            res.end()
+            return true
+          }
+          if (security.rateLimit.enabled) {
+            const { windowMs, max, groupId } = matchRateLimitGroup(url.pathname, security.rateLimit)
+            const { allowed, retryAfterMs } = checkAndConsume(
+              `${groupId}:${resolveClientIp(req)}`,
+              windowMs,
+              max,
+              Date.now(),
+            )
+            if (!allowed) {
+              res.setHeader('Retry-After', String(Math.ceil(retryAfterMs / 1000)))
+              const body = JSON.stringify({ error: 'rate limit exceeded' })
+              responsePreview = formatResponsePreview(Buffer.from(body), 'application/json')
+              json(res, 429, { error: 'rate limit exceeded' })
+              return true
+            }
+          }
+          // EventSource can't set custom headers — fall back to `?token=` when
+          // no Authorization header is present (`token` is already redacted by
+          // SENSITIVE_KEY_RE in core/log/schema.ts).
+          const tokenParam = url.searchParams.get('token')
+          const authHeader =
+            (req.headers.authorization as string | undefined) ??
+            (tokenParam ? `Bearer ${tokenParam}` : undefined)
+          const authResult = await verifyJwtHeader(authHeader)
+          if (authResult.ok === false) {
+            responsePreview = formatResponsePreview(
+              Buffer.from(JSON.stringify({ error: authResult.error })),
+              'application/json',
+            )
+            json(res, authResult.status, { error: authResult.error })
+            return true
+          }
+
+          const isTasks = url.pathname === '/api/tasks/stream'
+          let taskRoot: string | null = null
+          if (isTasks) {
+            taskRoot = ctx.resolveProjectRoot(projectId)
+            if (!taskRoot) {
+              const body = JSON.stringify({ error: 'unknown project', project: projectId })
+              responsePreview = formatResponsePreview(Buffer.from(body), 'application/json')
+              json(res, 404, { error: 'unknown project', project: projectId })
+              return true
+            }
+          }
+
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          })
+          // Body is an open stream, not a single buffer — nothing to mirror into the request log.
+          responsePreview = ''
+
+          let closed = false
+          const send = (event: string, data: unknown) => {
+            if (!closed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+          }
+
+          let debounceTimer: ReturnType<typeof setTimeout> | null = null
+          const pushSnapshot = () => {
+            if (debounceTimer) clearTimeout(debounceTimer)
+            debounceTimer = setTimeout(async () => {
+              try {
+                if (isTasks) send('tasks', { root: taskRoot, tasks: await collectTasks(taskRoot as string) })
+                else send('jobs', { jobs: listJobs(undefined, 'running') })
+              } catch {
+                // Root/jobs dir vanished mid-stream — degrade to an empty snapshot instead of dropping the connection.
+                send(isTasks ? 'tasks' : 'jobs', isTasks ? { root: taskRoot, tasks: [] } : { jobs: [] })
+              }
+            }, 200)
+          }
+
+          pushSnapshot() // snapshot ngay khi kết nối mở, không chờ watch-event đầu tiên
+
+          const watchDir = isTasks ? joinPath(taskRoot as string, '.dev-state') : joinPath(registryHome(), 'jobs')
+          let watcher: ReturnType<typeof watch> | null = null
+          const tryWatch = () => {
+            try {
+              watcher = watch(watchDir, () => pushSnapshot())
+            } catch {
+              watcher = null
+            }
+          }
+          tryWatch()
+
+          const heartbeat = setInterval(() => {
+            if (closed) return
+            res.write(': ping\n\n')
+            if (!watcher) tryWatch() // watchDir chưa tồn tại lúc mở kết nối — thử lại định kỳ
+          }, 15000)
+
+          req.on('close', () => {
+            closed = true
+            if (debounceTimer) clearTimeout(debounceTimer)
+            clearInterval(heartbeat)
+            watcher?.close()
+          })
+
+          return true // không await lifetime kết nối — `finally` bên dưới log ngay lúc mở
         }
         const app = await getApp()
         const response = await app.fetch(await nodeToWebRequest(req, url))

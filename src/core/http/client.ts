@@ -49,6 +49,16 @@ function buildUrl(path: string, query?: ApiQuery): string {
   return `${path}${qs(query)}`
 }
 
+/**
+ * Build an EventSource URL. `EventSource` can't set custom headers, so the
+ * API token (when configured) rides along as `?token=` instead of an
+ * `Authorization` header — the SSE branch in `apiServer.ts` accepts either.
+ */
+export function buildEventSourceUrl(path: string, query?: ApiQuery): string {
+  const token = getApiToken()
+  return buildUrl(path, { ...query, token })
+}
+
 function logApi(level: 'warn' | 'error', message: string, detail?: unknown) {
   const line = `[api] ${message}`
   if (detail !== undefined) console[level](line, detail)

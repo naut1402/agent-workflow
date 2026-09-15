@@ -46,6 +46,13 @@ Backend là **một app Hono duy nhất** chạy trên **hai transport** khác n
 
 > **Lưu ý routing:** `/api/knowledge` **không** đi qua Hono — nó được `handleKnowledgeApi` (node-res thuần trong module knowledge) xử lý và **chặn trước** nhánh Hono ngay trong `createApiHandler`. Đừng mô tả "mọi route đều qua Hono". `createApiHandler` cũng là **điểm chốt duy nhất** ghi request log (fire-and-forget trong `finally`, không await vào response).
 
+#### Convention SSE (`*/stream`)
+
+- **Route phát Server-Sent Events đặt tên `/api/<resource>/stream`** (vd `/api/tasks/stream`, `/api/jobs/stream`) và **bypass Hono** y hệt `/api/knowledge` — nhánh riêng trong `createApiHandler`, tự `res.writeHead`/`res.write`, vì bridge Node⇆Hono buffer toàn bộ response qua `response.arrayBuffer()` (`writeWebResponse`), không bao giờ resolve với một kết nối mở vô thời hạn.
+- **Format wire chuẩn**: mỗi lần push là một block `event: <name>\ndata: <json>\n\n`; heartbeat là comment SSE `: ping\n\n` (không mang `event:`/`data:`), gửi định kỳ để giữ kết nối và dò lại nguồn khi nguồn dữ liệu chưa sẵn sàng lúc mở stream.
+- **Xác thực**: `EventSource` không set được header tuỳ ý — token JWT (khi `DASHBOARD_JWT_SECRET` bật) truyền qua `?token=`, route tự dựng lại `Authorization: Bearer <token>` rồi gọi `verifyJwtHeader` sẵn có thay vì thêm cơ chế auth mới. FE dựng URL qua `buildEventSourceUrl` (`core/http/client.ts`).
+- **Nguồn phát hiện thay đổi**: `fs.watch` trên thư mục dữ liệu liên quan (debounce trước khi đọc lại + push) — không polling nội bộ, không phụ thuộc event bus `core/events/`.
+
 ### 2.2 Shim tương thích
 
 `src/api/devTeamApi.ts` (36 dòng) chỉ là **shim** giữ hợp đồng cũ: re-export `createApiHandler` + export Vite plugin `devTeamApi({root})`. Nó **không** còn chứa logic core (khác hẳn mô tả cũ về "dispatcher `(req,res)=>boolean` là core").
