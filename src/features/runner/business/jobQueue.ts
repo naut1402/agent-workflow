@@ -13,6 +13,7 @@ import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSess
 import { isAgentCliProviderId } from './providers/agentCli.js'
 import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js'
 import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
+import type { RunTaskStepResult } from '../../monitor/business/tasks/runStep.js'
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
 import {
   advanceStepOnJobSuccess,
@@ -35,6 +36,117 @@ import {
 
 /** Cap on stdout persisted for chat surfaces (NL chat + task chat fallback). */
 const CHAT_STDOUT_LIMIT = 64 * 1024
+
+/** Matches a standalone `ORCHESTRATOR_DECISION: {...}` line, JSON on one line. */
+const ORCHESTRATOR_DECISION_RE = /^\s*ORCHESTRATOR_DECISION:\s*(\{.*\})\s*$/gm
+
+/** Actions the chat→dispatch bridge below will act on — `stop`/`monitor` etc. are out of scope (design.md §6). */
+const SUPPORTED_ORCHESTRATOR_ACTIONS = new Set(['start', 'resume'])
+
+interface OrchestratorDecision {
+  action: 'start' | 'resume'
+  stepId: string
+}
+
+/**
+ * Parse the orchestrator agent's `ORCHESTRATOR_DECISION:` line out of a chat
+ * job's stdout, if present. Only the LAST match counts — an agent reply may
+ * mention the syntax before actually deciding. Returns null for anything that
+ * isn't a real, supported decision (no line, invalid JSON, unsupported
+ * action, missing stepId) rather than throwing.
+ */
+export function parseOrchestratorDecision(stdout: string): OrchestratorDecision | null {
+  const matches = [...stdout.matchAll(ORCHESTRATOR_DECISION_RE)]
+  if (matches.length === 0) return null
+  const raw = matches[matches.length - 1][1]
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (err) {
+    console.warn('[jobQueue] orchestrator decision: invalid JSON', err)
+    return null
+  }
+
+  if (!parsed || typeof parsed !== 'object') return null
+  const action = (parsed as Record<string, unknown>).action
+  const stepId = (parsed as Record<string, unknown>).stepId
+  if (typeof action !== 'string' || !SUPPORTED_ORCHESTRATOR_ACTIONS.has(action)) {
+    console.info('[jobQueue] orchestrator decision: unsupported action, out of scope', { action })
+    return null
+  }
+  if (typeof stepId !== 'string' || !stepId) return null
+
+  return { action: action as 'start' | 'resume', stepId }
+}
+
+/**
+ * Bridge for "chat → dispatch step" (issue #337): an orchestrator agent chat
+ * reply's `ORCHESTRATOR_DECISION` line was, until now, never actually wired
+ * to run anything — chat always just resumes the chatting step's own session.
+ * Called once a chat-feedback job (`metadata.isChatFeedback`) finishes
+ * successfully; forwards the parsed decision to the existing `runTaskStep`
+ * dispatcher (lock/HITL/validate all reused as-is, see design.md §4.2).
+ * Never throws — a failure here must not swallow the `resubmitPendingFeedback`
+ * call right after it in `runJob`.
+ */
+async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): Promise<void> {
+  try {
+    const decision = parseOrchestratorDecision(stdout)
+    if (!decision) return
+
+    const taskId = typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined
+    const devTeamRoot = typeof job.metadata?.devTeamRoot === 'string' ? job.metadata.devTeamRoot : undefined
+    const projectId = typeof job.metadata?.projectId === 'string' ? job.metadata.projectId : ''
+    if (!taskId || !devTeamRoot) return
+
+    // `runTaskStep`'s forward-only chain guard (`isRunnableTarget`) treats the
+    // `current_phase: "completed"` sentinel as "not in pipeline.steps" and
+    // always rejects — exactly the headline repro in request.md (task already
+    // completed, orchestrator says "start implementer", nothing happens).
+    // `jumpToPipelineStep` alone does not fix this: it only moves
+    // `current_phase` and leaves `last_reset_at` untouched, so `runTaskStep`'s
+    // own "heal a stuck phase" fallback (runStep.ts:81-97) finds the step's
+    // pre-existing `succeeded` job — the exact job that got the task to
+    // `completed` in the first place — and immediately advances `current_phase`
+    // right back past it before any job is submitted, reproducing the same
+    // no-op one hop later (review round 2). Use `resetPipelineStep` instead:
+    // the primitive built specifically to restart an already-run step, which
+    // sets `last_reset_at` (so the heal fallback no longer treats this as
+    // "stuck") and clears the step's stale artifacts — matching request.md's
+    // expectation of a fresh `phpstan.md` timestamp. `cascade: false` so only
+    // the decided step's artifacts are cleared, not everything after it. Only
+    // for a stepId that's actually in this pipeline — `resetPipelineStep`
+    // 400s otherwise, which the `res.ok === false` branch below logs.
+    const stateFile = joinPath(devTeamRoot, '.dev-state', `${taskId}.json`)
+    const { readState } = await import('../../monitor/business/tasks/index.js')
+    const read = await readState(stateFile)
+    if (read.ok && read.state?.current_phase === 'completed') {
+      const pipeline = await loadPipelineConfig(devTeamRoot, taskId)
+      const phaseKeys = (pipeline.steps || []).map((s: any) => s.id).filter(Boolean)
+      if (phaseKeys.includes(decision.stepId)) {
+        const { resetPipelineStep } = await import('../../monitor/business/tasks/state.js')
+        await resetPipelineStep(devTeamRoot, taskId, decision.stepId, false)
+      }
+    }
+
+    // Dynamic import avoids a static runner→monitor cycle (monitor's business
+    // index re-exports from runner's) — same pattern as usageCapture.ts.
+    const { runTaskStep } = await import('../../monitor/business/tasks/runStep.js')
+    const res: RunTaskStepResult = await runTaskStep(devTeamRoot, projectId || null, taskId, {
+      targetStepId: decision.stepId,
+    })
+    if (res.ok === false) {
+      console.warn('[jobQueue] orchestrator decision dispatch skipped', {
+        taskId,
+        stepId: decision.stepId,
+        error: res.error,
+      })
+    }
+  } catch (err) {
+    console.warn('[jobQueue] orchestrator decision dispatch failed', err)
+  }
+}
 
 /** Compile-time default — actual cap is `settings.recovery.maxAttempts` (Settings › Job recovery). */
 export const FAILURE_MAX_ATTEMPTS = DEFAULT_RECOVERY_SETTINGS.maxAttempts!
@@ -805,6 +917,9 @@ async function runJob(job: JobRecord): Promise<void> {
     projectId,
     ...(result.ok ? {} : { error: result.error }),
   })
+  if (result.ok && isChatFeedback) {
+    await tryDispatchOrchestratorDecision(job, result.stdout ?? '')
+  }
   if (!isApprovalJob) await resubmitPendingFeedback(job)
 }
 
