@@ -48,6 +48,5 @@ export default {
     enterToSend: 'Enter để gửi, Shift+Enter để xuống dòng',
     enterToNewline: 'Enter để xuống dòng, Ctrl/⌘+Enter để gửi',
     addMenu: 'Thêm',
-    send: 'Gửi',
   },
 }
