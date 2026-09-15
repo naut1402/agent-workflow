@@ -5,6 +5,7 @@ import path from 'node:path'
 import {
   assertStartAllowed,
   assertStartAllowedSync,
+  applyOrchestratorConfigChange,
   resolveOrchestration,
   setOrchestratorEnabledFlag,
 } from '../../../../src/features/monitor/business/tasks/startAuthority.js'
@@ -178,5 +179,75 @@ describe('assertStartAllowedSync — lưới an toàn cuối trong submitJob', (
     expect(() =>
       assertStartAllowedSync({ taskId: 'khong-ton-tai', devTeamRoot: root, pipelineStepId: 'implementer' }),
     ).not.toThrow()
+  })
+})
+
+/* AC-5 — bật/tắt checkbox node điều phối rồi LƯU là cách reset trạng thái node.
+ * Bề mặt chấm: state của task đọc lại được (đó cũng là thứ `GET /api/tasks` trả
+ * về và thứ canvas monitor vẽ nhãn trạng thái từ đó). */
+describe('applyOrchestratorConfigChange — lưu checkbox đồng bộ state (TC-25…TC-29)', () => {
+  test('TC-25 — node đang DỪNG, lưu lại checkbox bật ⇒ cờ dừng bị xoá', async () => {
+    seedTask('E1', {
+      orchestrator_enabled: true,
+      orchestrator_halted: true,
+      orchestrator_halted_at: '2026-01-01T00:00:00.000Z',
+    })
+    await applyOrchestratorConfigChange(root, 'E1', true)
+
+    const state = readState('E1')
+    expect(state.orchestrator_enabled).toBe(true)
+    expect(state.orchestrator_halted).toBe(false)
+    expect(state.orchestrator_halted_at).toBeNull()
+    // Và sau khi reset thì start lại được — đúng vế (c) của TC-25.
+    expect(await resolveOrchestration(root, 'E1')).toMatchObject({ active: true, halted: false })
+  })
+
+  test('TC-26 — bỏ tick + lưu ⇒ pipeline về chế độ không điều phối', async () => {
+    writePipeline(false)
+    seedTask('E2', { orchestrator_enabled: true, orchestrator_halted: true })
+    await applyOrchestratorConfigChange(root, 'E2', false)
+
+    expect(readState('E2').orchestrator_enabled).toBe(false)
+    expect(await resolveOrchestration(root, 'E2')).toMatchObject({ enabled: false, active: false })
+    // Chạy tay mở lại như trước khi có tính năng.
+    expect(await assertStartAllowed(root, 'E2', 'manual')).toEqual({ allowed: true })
+  })
+
+  test('TC-27 — bật lại sau khi đã tắt ⇒ trạng thái sạch, không kế thừa cờ dừng cũ', async () => {
+    seedTask('E3', { orchestrator_enabled: false, orchestrator_halted: true })
+    await applyOrchestratorConfigChange(root, 'E3', true)
+    expect(readState('E3')).toMatchObject({ orchestrator_enabled: true, orchestrator_halted: false })
+  })
+
+  // TC-28 — chặn fix quá tay: reset là hệ quả của việc ĐỔI checkbox, không phải
+  // của mọi lần lưu. State không lệch ⇒ không ghi lại gì (mtime giữ nguyên).
+  test('TC-28 — lưu mà không đổi gì ⇒ state không bị viết lại', async () => {
+    seedTask('E4', { orchestrator_enabled: true, review_round: 2 })
+    const before = fs.statSync(path.join(root, '.dev-state', 'E4.json')).mtimeMs
+    await applyOrchestratorConfigChange(root, 'E4', true)
+    expect(fs.statSync(path.join(root, '.dev-state', 'E4.json')).mtimeMs).toBe(before)
+    expect(readState('E4').review_round).toBe(2)
+  })
+
+  test('TC-29 — không đụng field nào khác của state', async () => {
+    seedTask('E5', {
+      orchestrator_enabled: false,
+      orchestrator_halted: true,
+      current_phase: 'reviewer',
+      review_round: 3,
+      hitl_pending: 'hitl-review',
+    })
+    await applyOrchestratorConfigChange(root, 'E5', true)
+    expect(readState('E5')).toMatchObject({
+      current_phase: 'reviewer',
+      review_round: 3,
+      hitl_pending: 'hitl-review',
+      task_id: 'E5',
+    })
+  })
+
+  test('task không có state ⇒ không tạo file rỗng, không ném', async () => {
+    await applyOrchestratorConfigChange(root, 'khong-ton-tai', true)
+    expect(fs.existsSync(path.join(root, '.dev-state', 'khong-ton-tai.json'))).toBe(false)
   })
 })

@@ -123,3 +123,105 @@ describe('buildDecisionPrompt', () => {
     expect(prompt).not.toContain('## Chi tiết')
   })
 })
+
+// AC-3/AC-4 — lượt điều phối phải mang được kết quả bước vừa xong và bối cảnh
+// cho bước kế. Chấm trên hai bề mặt quan sát được: quyết định parse ra, và
+// prompt gửi cho agent (đọc lại được ở `job.userPrompt`).
+describe('parseDecision — summary/context do agent soạn (TC-15, TC-20)', () => {
+  test('summary đi kèm mọi action, kể cả summary không cần stepId', () => {
+    expect(
+      parseDecision(line('{"action":"summary","summary":"step-1 xong, cổng đang chờ người"}'), STEPS),
+    ).toEqual({ action: 'summary', summary: 'step-1 xong, cổng đang chờ người' })
+  })
+
+  test('start mang context cho bước kế', () => {
+    expect(
+      parseDecision(line('{"action":"start","stepId":"reviewer","summary":"S","context":"C"}'), STEPS),
+    ).toEqual({ action: 'start', stepId: 'reviewer', summary: 'S', context: 'C' })
+  })
+
+  test('summary/context vắng mặt vẫn hợp lệ — agent không bắt buộc soạn', () => {
+    expect(parseDecision(line('{"action":"start","stepId":"reviewer"}'), STEPS)).toEqual({
+      action: 'start',
+      stepId: 'reviewer',
+    })
+  })
+})
+
+describe('buildDecisionPrompt — bối cảnh đủ cho AC-3/AC-4', () => {
+  // TC-15: agent phải thấy kết quả của step vừa xong, không chỉ tên nó.
+  test('kết quả bước vừa xong (artifact + output) nằm trong prompt', () => {
+    const prompt = buildDecisionPrompt({
+      taskId: 'T1',
+      currentPhase: 'reviewer',
+      stepIds: STEPS,
+      trigger: 'step_finished',
+      stepResult: {
+        stepId: 'implementer',
+        status: 'succeeded',
+        artifacts: ['design.md', 'review.md'],
+        output: 'M2-marker ở cuối output',
+      },
+    })
+    expect(prompt).toContain('implementer')
+    expect(prompt).toContain('design.md')
+    expect(prompt).toContain('M2-marker ở cuối output')
+  })
+
+  // TC-16: output rất dài ⇒ prompt vẫn hữu hạn, phần bị cắt được NÓI RA, và
+  // dấu hiệu nằm ở CUỐI output thì phải còn (kết luận agent CLI nằm ở cuối).
+  test('output rất dài ⇒ giữ đuôi, nói rõ đã cắt, không phình vô hạn', () => {
+    const marker = 'M3-cuoi-output'
+    const prompt = buildDecisionPrompt({
+      taskId: 'T1',
+      currentPhase: 'reviewer',
+      stepIds: STEPS,
+      trigger: 'step_finished',
+      stepResult: {
+        stepId: 'implementer',
+        status: 'succeeded',
+        artifacts: [],
+        output: `${'x'.repeat(300_000)}\n${marker}`,
+      },
+    })
+    expect(prompt).toContain(marker)
+    expect(prompt).toContain('đã cắt phần đầu')
+    expect(prompt).not.toContain('x'.repeat(100_000))
+  })
+
+  // TC-21 — bất biến an toàn: node điều phối KHÔNG được tự duyệt cổng thay người.
+  test('cổng đang chờ người ⇒ prompt chỉ cho phép summary/halt', () => {
+    const prompt = buildDecisionPrompt({
+      taskId: 'T1',
+      currentPhase: 'reviewer',
+      stepIds: STEPS,
+      trigger: 'step_finished',
+      gatePending: 'hitl-review',
+    })
+    expect(prompt).toContain('hitl-review')
+    expect(prompt).toMatch(/chỉ được trả `summary` hoặc `halt`/)
+  })
+
+  test('pipeline đã xong ⇒ prompt yêu cầu tóm tắt rồi summary', () => {
+    const prompt = buildDecisionPrompt({
+      taskId: 'T1',
+      currentPhase: 'completed',
+      stepIds: STEPS,
+      trigger: 'pipeline_completed',
+    })
+    expect(prompt).toContain('hoàn tất')
+    expect(prompt).toContain('`summary`')
+  })
+
+  test('event gần đây được đưa vào — agent thấy bối cảnh cả pipeline, không chỉ step đầu', () => {
+    const prompt = buildDecisionPrompt({
+      taskId: 'T1',
+      currentPhase: 'reviewer',
+      stepIds: STEPS,
+      trigger: 'step_finished',
+      recent: ['2026-01-01 task.advanced — implementer', '2026-01-02 hitl.pending — hitl-review'],
+    })
+    expect(prompt).toContain('Event gần đây')
+    expect(prompt).toContain('hitl.pending')
+  })
+})

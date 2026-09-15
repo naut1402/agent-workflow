@@ -123,7 +123,7 @@ describe('summarizeExport — degrade khi thiếu pipeline-export.json', () => {
   })
 })
 
-describe('applyBudget — ba nấc, KHÔNG bao giờ cắt im lặng', () => {
+describe('applyBudget — hai nấc, KHÔNG bao giờ cắt im lặng', () => {
   const assignment = '## Việc của bạn\n\nlàm X'
 
   test('dưới ngưỡng ⇒ giữ nguyên mọi phần', async () => {
@@ -140,20 +140,19 @@ describe('applyBudget — ba nấc, KHÔNG bao giờ cắt im lặng', () => {
     expect(out).not.toContain('ĐÃ LƯỢC BỎ')
   })
 
-  test('nấc 2 — callback condense được dùng khi vượt ngưỡng', async () => {
-    const huge = 'x'.repeat(MAX_BRIEF_BYTES + 1_000)
-    let called = false
-    const out = await applyBudget([{ title: 'Bối cảnh task', body: huge }], assignment, {
-      condense: async () => {
-        called = true
-        return 'bản tóm tắt ngắn gọn'
-      },
-    })
-    expect(called).toBe(true)
-    expect(out).toBe('bản tóm tắt ngắn gọn')
+  // Nấc 1 rút gọn "Kết quả các bước trước" một cách tất định: giữ tiêu đề `###`
+  // và dòng `overall_confidence`, bỏ phần thân. Không còn nấc "nhờ LLM tóm tắt" —
+  // một lượt LLM ẩn bên trong đường soạn brief là chi phí không ai nhìn thấy.
+  test('nấc 1 — rút gọn "Kết quả các bước trước" mà KHÔNG gọi LLM nào', async () => {
+    const huge = ['### Investigate', 'overall_confidence: High', 'x'.repeat(MAX_BRIEF_BYTES + 1_000)].join('\n')
+    const out = await applyBudget([{ title: 'Kết quả các bước trước', body: huge }], assignment)
+    expect(out).toContain('### Investigate')
+    expect(out).toContain('overall_confidence: High')
+    expect(out).not.toContain('ĐÃ LƯỢC BỎ')
+    expect(out).toContain('làm X')
   })
 
-  test('nấc 3 — không có condense ⇒ gắn nhãn ĐÃ LƯỢC BỎ, nêu rõ bỏ mục nào', async () => {
+  test('nấc 2 — phần không rút gọn được thì gắn nhãn ĐÃ LƯỢC BỎ, nêu rõ bỏ mục nào', async () => {
     const huge = 'x'.repeat(MAX_BRIEF_BYTES + 1_000)
     const out = await applyBudget(
       [
@@ -168,21 +167,81 @@ describe('applyBudget — ba nấc, KHÔNG bao giờ cắt im lặng', () => {
     expect(out).toContain('làm X')
   })
 
-  test('nấc 3 — condense trả về vẫn quá dài thì rơi tiếp xuống nhãn lược bỏ', async () => {
+  // TC-16: một step in ra output rất lớn vẫn phải cho ra brief dùng được, và
+  // phần bị bỏ phải được NÓI RA — 🚫 không âm thầm cắt rồi kết luận như đã đọc đủ.
+  test('TC-16 — mọi phần đều quá khổ ⇒ vẫn trả brief hợp lệ kèm nhãn lược bỏ', async () => {
     const huge = 'x'.repeat(MAX_BRIEF_BYTES + 1_000)
-    const out = await applyBudget([{ title: 'Bối cảnh task', body: huge }], assignment, {
-      condense: async () => 'y'.repeat(MAX_BRIEF_BYTES + 500),
+    const out = await applyBudget(
+      [
+        { title: 'Bối cảnh task', body: huge },
+        { title: 'Kết quả các bước trước', body: huge },
+        { title: 'Knowledge', body: huge },
+      ],
+      assignment,
+    )
+    expect(out.startsWith('⚠️ ĐÃ LƯỢC BỎ')).toBe(true)
+    expect(out).toContain('làm X')
+  })
+})
+
+// AC-3 — node điều phối soạn bối cảnh cho bước kế. Chấm trên chuỗi brief trả về:
+// đó chính là `job.userPrompt` mà người dùng đọc lại được trong job record.
+describe('composeStepBrief — bối cảnh do node điều phối soạn (TC-15)', () => {
+  test('summary của node đi vào brief thành một mục riêng, nhận ra được', async () => {
+    seedTask('T5', { 'request.md': '# r' })
+    const brief = await composeStepBrief({
+      root,
+      taskId: 'T5',
+      stepId: 'implementer',
+      reason: 'agent_start',
+      agentContext: { summary: 'Investigate xong, chốt sửa ở decisionLoop.' },
     })
-    expect(out).toContain('ĐÃ LƯỢC BỎ')
+    expect(brief).toContain('Tóm tắt của node điều phối')
+    expect(brief).toContain('Investigate xong, chốt sửa ở decisionLoop.')
   })
 
-  test('condense ném lỗi cũng không làm hỏng brief', async () => {
-    const huge = 'x'.repeat(MAX_BRIEF_BYTES + 1_000)
-    const out = await applyBudget([{ title: 'Bối cảnh task', body: huge }], assignment, {
-      condense: async () => {
-        throw new Error('LLM down')
-      },
+  test('context đi vào phần "việc của bạn" — thứ step đọc để biết phải làm gì', async () => {
+    seedTask('T6', { 'request.md': '# r' })
+    const brief = await composeStepBrief({
+      root,
+      taskId: 'T6',
+      stepId: 'implementer',
+      reason: 'agent_start',
+      agentContext: { context: 'Ưu tiên nhánh job.finished, bỏ qua job chat.' },
     })
-    expect(out).toContain('ĐÃ LƯỢC BỎ')
+    expect(brief).toContain('Bối cảnh từ node điều phối')
+    expect(brief).toContain('Ưu tiên nhánh job.finished, bỏ qua job chat.')
+  })
+
+  // AC-6 — pipeline KHÔNG bật điều phối phải nhận brief y hệt trước thay đổi.
+  test('không có bối cảnh agent ⇒ brief không đổi một byte so với lượt thường', async () => {
+    seedTask('T7', { 'request.md': '# r' })
+    const base = await composeStepBrief({ root, taskId: 'T7', stepId: 'implementer', reason: 'advance' })
+    for (const agentContext of [undefined, {}, { summary: '   ', context: '\n' }]) {
+      const withEmpty = await composeStepBrief({
+        root,
+        taskId: 'T7',
+        stepId: 'implementer',
+        reason: 'advance',
+        agentContext,
+      })
+      expect(withEmpty).toBe(base)
+    }
+    expect(base).not.toContain('node điều phối')
+  })
+
+  test('cả hai phần cùng có ⇒ cùng xuất hiện, không phần nào nuốt phần nào', async () => {
+    seedTask('T8', { 'request.md': '# r' })
+    const brief = await composeStepBrief({
+      root,
+      taskId: 'T8',
+      stepId: 'reviewer',
+      reason: 'agent_start',
+      detail: 'phản hồi nguyên văn của người duyệt',
+      agentContext: { summary: 'SUM-marker', context: 'CTX-marker' },
+    })
+    expect(brief).toContain('SUM-marker')
+    expect(brief).toContain('CTX-marker')
+    expect(brief).toContain('phản hồi nguyên văn của người duyệt')
   })
 })

@@ -9,6 +9,7 @@ import {
   identifyTask,
 } from '../../../../src/features/orchestrator/business/decisionLoop.js'
 import { DECISION_SENTINEL } from '../../../../src/features/orchestrator/schemas/orchestrator.js'
+import { listJobs } from '../../../../src/features/runner/business/index.js'
 
 // Bảng quyết định §4.2.4 + các bất biến chống vòng lặp. Chấm bằng event phát ra
 // (`orchestrator.dispatched` / `orchestrator.halted`) — đúng bề mặt mà
@@ -266,5 +267,296 @@ describe('cách ly giữa các task (TC-30)', () => {
     // B không bị đụng tới: state của nó không có cờ halt.
     const stateB = JSON.parse(fs.readFileSync(path.join(root, '.dev-state', 'P2.json'), 'utf8'))
     expect(stateB.orchestrator_halted).toBeUndefined()
+  })
+})
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * AC-1/AC-2/AC-4 — mốc mở lượt agent.
+ *
+ * Bề mặt chấm là **job của node điều phối** (đọc lại được qua API job / log của
+ * task): một lượt = một job mang `orchestratorJob: true`. Job giả do `writeJob`
+ * seed không có `userPrompt`, nên lọc theo trường đó tách được "lượt thật vừa
+ * mở" khỏi "bối cảnh đã seed".
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Lượt agent đã được mở cho task — job của node, theo thứ tự mới nhất trước. */
+function turnsOf(taskId: string): any[] {
+  return listJobs(200).filter(
+    (j) => j.metadata?.taskId === taskId && j.metadata?.orchestratorJob === true && j.userPrompt,
+  )
+}
+
+function triggersOf(taskId: string): string[] {
+  return turnsOf(taskId).map((j) => String(j.metadata?.orchestratorTrigger))
+}
+
+/** Job step đã chạy xong — mốc duy nhất mở lượt agent. */
+function finishedStepJob(
+  id: string,
+  taskId: string,
+  meta: Record<string, unknown> = {},
+  extra: Record<string, unknown> = {},
+) {
+  return writeJob(
+    id,
+    { taskId, pipelineStepId: 'implementer', ...meta },
+    { status: 'succeeded', stdout: 'step-1 đã xong', artifactsFound: ['design.md'], ...extra },
+  )
+}
+
+describe('job.finished của một step ⇒ ĐÚNG MỘT lượt agent (AC-2)', () => {
+  test('step xong ⇒ mở lượt, job mang đúng trigger và KHÔNG mang pipelineStepId', async () => {
+    seedTask('Q1', { current_phase: 'reviewer' })
+    const id = finishedStepJob('q1', 'Q1')
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'Q1', devTeamRoot: root }))
+
+    const turns = turnsOf('Q1')
+    expect(turns).toHaveLength(1)
+    expect(turns[0].metadata.orchestratorTrigger).toBe('step_finished')
+    expect(turns[0].metadata.stepId).toBe('__orchestrator__')
+    // Job của node KHÔNG phải một step: mang `pipelineStepId` là đẩy cursor khi xong.
+    expect(turns[0].metadata.pipelineStepId).toBeUndefined()
+    // Kết quả step vừa xong phải nằm trong lượt — đây là "context đầy đủ" của AC-3.
+    expect(turns[0].userPrompt).toContain('step-1 đã xong')
+    expect(turns[0].userPrompt).toContain('design.md')
+  })
+
+  // E1 — nhánh này phải đứng TRƯỚC bộ lọc ACTIONABLE, nếu không mỗi lượt agent
+  // tự kích lượt kế: đó là cách sinh bão job (TC-24).
+  test('job.finished của CHÍNH node điều phối ⇒ không mở lượt mới', async () => {
+    seedTask('Q2', { current_phase: 'reviewer' })
+    const id = writeJob(
+      'q2',
+      { taskId: 'Q2', orchestratorJob: true, orchestratorTrigger: 'chat' },
+      { status: 'succeeded', stdout: 'chỉ là trò chuyện' },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'Q2', devTeamRoot: root }))
+    expect(turnsOf('Q2')).toHaveLength(0)
+  })
+
+  // E2 — lượt chat của người dùng kế thừa `pipelineStepId` của job cha nhưng
+  // không đẩy pipeline, nên nó cũng không được tính là "bước xong".
+  test('lượt chat với node step ⇒ không mở lượt (TC-17)', async () => {
+    seedTask('Q3', { current_phase: 'reviewer' })
+    const id = finishedStepJob('q3', 'Q3', { isChatFeedback: true })
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'Q3', devTeamRoot: root }))
+    expect(turnsOf('Q3')).toHaveLength(0)
+  })
+
+  test('lượt resume DO node điều phối gửi vẫn là bước xong ⇒ mở lượt', async () => {
+    seedTask('Q4', { current_phase: 'reviewer' })
+    const id = finishedStepJob('q4', 'Q4', { isChatFeedback: true, orchestratorResume: true })
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'Q4', devTeamRoot: root }))
+    expect(turnsOf('Q4')).toHaveLength(1)
+  })
+
+  // E3 — job áp artifact không phải một bước của pipeline.
+  test('job applyTarget ⇒ không mở lượt', async () => {
+    seedTask('Q5', { current_phase: 'reviewer' })
+    const id = finishedStepJob('q5', 'Q5', {}, { applyTarget: '/tmp/x.md' })
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'Q5', devTeamRoot: root }))
+    expect(turnsOf('Q5')).toHaveLength(0)
+  })
+
+  test('job không thuộc step nào ⇒ không mở lượt', async () => {
+    seedTask('Q6', { current_phase: 'reviewer' })
+    const id = writeJob('q6', { taskId: 'Q6' }, { status: 'succeeded' })
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'Q6', devTeamRoot: root }))
+    expect(turnsOf('Q6')).toHaveLength(0)
+  })
+
+  // TC-24 — `task.advanced` đi kèm cùng lần chạy job; tính nó là một mốc nữa là
+  // hai lượt cho một lần chuyển bước.
+  test('task.advanced giữa chừng ⇒ KHÔNG mở lượt (một bước xong = một lượt)', async () => {
+    seedTask('Q7', { current_phase: 'reviewer' })
+    await handleEvent(ev('task.advanced', { taskId: 'Q7', devTeamRoot: root, currentPhase: 'reviewer' }))
+    expect(turnsOf('Q7')).toHaveLength(0)
+    expect(dispatched()).toHaveLength(0)
+  })
+
+  test('step cuối xong ⇒ lượt tổng kết mang trigger pipeline_completed', async () => {
+    seedTask('Q8', { current_phase: 'completed' })
+    const id = finishedStepJob('q8', 'Q8')
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'Q8', devTeamRoot: root }))
+    expect(triggersOf('Q8')).toEqual(['pipeline_completed'])
+  })
+
+  // AC-6 — pipeline không bật điều phối phải chạy y như trước: không lượt LLM nào.
+  test('điều phối TẮT ⇒ step xong cũng không mở lượt nào (TC-31)', async () => {
+    writePipeline(false)
+    seedTask('Q9', { current_phase: 'reviewer', orchestrator_enabled: false })
+    const id = finishedStepJob('q9', 'Q9')
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'Q9', devTeamRoot: root }))
+    expect(turnsOf('Q9')).toHaveLength(0)
+  })
+
+  test('đã dừng (halted) ⇒ step xong không mở lượt (TC-04a)', async () => {
+    seedTask('Q10', { current_phase: 'reviewer', orchestrator_halted: true })
+    const id = finishedStepJob('q10', 'Q10')
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'Q10', devTeamRoot: root }))
+    expect(turnsOf('Q10')).toHaveLength(0)
+  })
+})
+
+describe('cổng HITL — node vẫn có lượt, nhưng KHÔNG vượt cổng (AC-4)', () => {
+  // TC-20: "step xong, cổng pending, node hoàn toàn không có động tĩnh" là đúng
+  // triệu chứng ② của đề bài.
+  test('step xong + cổng đang chờ người ⇒ vẫn mở lượt, và lượt biết có cổng', async () => {
+    seedTask('S1', { current_phase: 'reviewer', hitl_pending: 'hitl-review' })
+    const id = finishedStepJob('s1', 'S1')
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'S1', devTeamRoot: root }))
+
+    const turns = turnsOf('S1')
+    expect(turns).toHaveLength(1)
+    expect(turns[0].userPrompt).toContain('hitl-review')
+  })
+
+  // TC-21 — bất biến an toàn: agent đòi chạy step kế trong lúc cổng chờ người thì
+  // bị hạ xuống tóm tắt, KHÔNG có step nào được start.
+  test('agent trả start trong lúc cổng chờ ⇒ hạ xuống summary, không start step nào', async () => {
+    seedTask('S2', { current_phase: 'reviewer', hitl_pending: 'hitl-review' })
+    const id = writeJob(
+      's2',
+      { taskId: 'S2', orchestratorJob: true, orchestratorTrigger: 'step_finished' },
+      { status: 'succeeded', stdout: `${DECISION_SENTINEL} {"action":"start","stepId":"reviewer"}` },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'S2', devTeamRoot: root }))
+
+    const d = dispatched()
+    expect(d).toHaveLength(1)
+    expect(d[0].payload.action).toBe('summary')
+    expect(d.some((e) => e.payload.action === 'start')).toBe(false)
+  })
+
+  test('agent trả summary ⇒ ghi nhận quan sát được, không chạy step nào', async () => {
+    seedTask('S3', { current_phase: 'reviewer', hitl_pending: 'hitl-review' })
+    const id = writeJob(
+      's3',
+      { taskId: 'S3', orchestratorJob: true, orchestratorTrigger: 'step_finished' },
+      {
+        status: 'succeeded',
+        stdout: `${DECISION_SENTINEL} {"action":"summary","summary":"đã xong implementer","reason":"chờ người duyệt"}`,
+      },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'S3', devTeamRoot: root }))
+
+    const d = dispatched()
+    expect(d).toHaveLength(1)
+    expect(d[0].payload.action).toBe('summary')
+    expect(d[0].payload.reason).toBe('chờ người duyệt')
+    expect(haltReasons()).toHaveLength(0)
+  })
+
+  test('người duyệt cổng ⇒ đúng một lượt, mang trigger gate_approved (TC-22)', async () => {
+    seedTask('S4', { current_phase: 'reviewer' })
+    await handleEvent(
+      ev('hitl.resolved', { taskId: 'S4', devTeamRoot: root, action: 'approve', currentPhase: 'reviewer' }),
+    )
+    expect(triggersOf('S4')).toEqual(['gate_approved'])
+  })
+
+  test('người từ chối cổng ⇒ đúng một lượt, mang trigger gate_rejected (TC-23)', async () => {
+    seedTask('S5', { current_phase: 'implementer' })
+    fs.writeFileSync(
+      path.join(root, 'tasks', 'S5', 'hitl-feedback.md'),
+      '## 2026-01-01 — hitl-review\n\nThiếu test cho nhánh lỗi.\n',
+      'utf8',
+    )
+    await handleEvent(
+      ev('hitl.resolved', { taskId: 'S5', devTeamRoot: root, action: 'reject', currentPhase: 'implementer' }),
+    )
+    const turns = turnsOf('S5')
+    expect(turns).toHaveLength(1)
+    expect(turns[0].metadata.orchestratorTrigger).toBe('gate_rejected')
+    // Phản hồi của người duyệt đi NGUYÊN VĂN vào lượt — đó là thứ agent phải đọc.
+    expect(turns[0].userPrompt).toContain('Thiếu test cho nhánh lỗi.')
+  })
+
+  // Gate bị hệ thống tự huỷ vì pipeline đổi hình dạng — không phải quyết định
+  // của người, không có gì để điều phối.
+  test('gate bị huỷ do pipeline đổi ⇒ không mở lượt', async () => {
+    seedTask('S6', { current_phase: 'reviewer' })
+    await handleEvent(
+      ev('hitl.resolved', {
+        taskId: 'S6',
+        devTeamRoot: root,
+        action: 'approve',
+        currentPhase: 'reviewer',
+        reason: 'pipeline_changed',
+      }),
+    )
+    expect(turnsOf('S6')).toHaveLength(0)
+  })
+})
+
+describe('trần số lượt — không tự kích vòng lặp (TC-24, TC-35)', () => {
+  // E7: hai job cùng `resume` một session là hỏng transcript, nên lượt mới phải
+  // đợi lượt cũ xong.
+  test('đang có lượt chạy dở ⇒ không mở lượt chồng', async () => {
+    seedTask('U1', { current_phase: 'reviewer' })
+    writeJob('u1-busy', { taskId: 'U1', orchestratorJob: true }, { status: 'running' })
+    const id = finishedStepJob('u1', 'U1')
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'U1', devTeamRoot: root }))
+    expect(turnsOf('U1')).toHaveLength(0)
+  })
+
+  // E6 — agent trả `start` trỏ lại chính step vừa xong là một vòng vô hạn tốn
+  // LLM. Trần đếm theo (task, phase); vượt trần thì dừng hẳn kèm lý do.
+  test('quá trần lượt ở cùng một phase ⇒ halt kèm lý do đọc được', async () => {
+    seedTask('U2', { current_phase: 'reviewer' })
+    for (let i = 1; i <= 8; i++) {
+      const id = finishedStepJob(`u2-${i}`, 'U2')
+      await handleEvent(ev('job.finished', { jobId: id, taskId: 'U2', devTeamRoot: root }))
+    }
+    expect(haltReasons().some((r) => r.startsWith('orchestrator turn loop'))).toBe(true)
+    // Trần là hữu hạn và nhỏ — 🚫 không phải "mỗi event một lượt".
+    expect(turnsOf('U2').length).toBeLessThanOrEqual(6)
+  })
+})
+
+describe('lượt agent hỏng ⇒ pipeline KHÔNG kẹt (TC-35)', () => {
+  // Bước kế tất định (step vừa xong / vừa duyệt cổng / người vừa bấm Run) thì
+  // output hỏng không được làm pipeline đứng — rơi về thứ tự pipeline.
+  for (const trigger of ['step_finished', 'manual_start', 'gate_approved']) {
+    test(`JSON hỏng ở trigger ${trigger} ⇒ chuyển tiếp tất định, không halt`, async () => {
+      const taskId = `V-${trigger}`
+      seedTask(taskId, { current_phase: 'reviewer' })
+      const id = writeJob(
+        `v-${trigger}`,
+        { taskId, orchestratorJob: true, orchestratorTrigger: trigger },
+        { status: 'succeeded', stdout: `${DECISION_SENTINEL} {khong-phai-json` },
+      )
+      await handleEvent(ev('job.finished', { jobId: id, taskId, devTeamRoot: root }))
+
+      const fallback = dispatched().filter((e) => String(e.payload.reason ?? '').startsWith('agent_fallback'))
+      expect(fallback).toHaveLength(1)
+      expect(fallback[0].payload.stepId).toBe('reviewer')
+      expect(haltReasons()).toHaveLength(0)
+    })
+  }
+
+  // Với gate_rejected / job_failed thì KHÔNG có bước kế nào đúng — đoán bừa là
+  // chạy sai mà không ai thấy, nên ở đó phải halt tường minh.
+  test('JSON hỏng ở trigger gate_rejected ⇒ halt, không đoán bước kế', async () => {
+    seedTask('V2', { current_phase: 'reviewer' })
+    const id = writeJob(
+      'v2',
+      { taskId: 'V2', orchestratorJob: true, orchestratorTrigger: 'gate_rejected' },
+      { status: 'succeeded', stdout: `${DECISION_SENTINEL} {khong-phai-json` },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'V2', devTeamRoot: root }))
+    expect(haltReasons().some((r) => r.includes('invalid decision'))).toBe(true)
+    expect(dispatched().filter((e) => e.payload.action === 'start')).toHaveLength(0)
+  })
+
+  test('cổng đang chờ người ⇒ lưới tất định KHÔNG vượt cổng', async () => {
+    seedTask('V3', { current_phase: 'reviewer', hitl_pending: 'hitl-review' })
+    const id = writeJob(
+      'v3',
+      { taskId: 'V3', orchestratorJob: true, orchestratorTrigger: 'step_finished' },
+      { status: 'succeeded', stdout: `${DECISION_SENTINEL} {khong-phai-json` },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'V3', devTeamRoot: root }))
+    expect(dispatched()).toHaveLength(0)
   })
 })

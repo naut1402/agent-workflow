@@ -1270,3 +1270,61 @@ describe('repairTaskState — stale gate with a valid current_phase', () => {
     expect(result.state.hitl_pending).toBe('hitl-1')
   })
 })
+
+// Tín hiệu chuyển bước là thứ node điều phối nghe để biết "một bước vừa xong".
+// Với `auto_review` thì step có `gate_id` vẫn đẩy cursor — phát `hitl.pending`
+// ở đó là nói dối: không có cổng nào chờ người, mà node lại tưởng đang pending
+// và đứng im (đúng triệu chứng ② "node không có action tiếp theo").
+describe('advanceStepOnJobSuccess — auto_review vượt cổng thì event phải nói đúng', () => {
+  const PIPELINE_WITH_GATE = `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`
+
+  function captureAdvanceEvents(): Array<{ type: string; payload: Record<string, any> }> {
+    const seen: Array<{ type: string; payload: Record<string, any> }> = []
+    for (const type of ['task.advanced', 'hitl.pending'] as const) {
+      on(type, (e) => {
+        seen.push({ type, payload: (e.payload ?? {}) as Record<string, any> })
+      })
+    }
+    return seen
+  }
+
+  test('auto_review: true + step có gate ⇒ phát task.advanced, KHÔNG phát hitl.pending', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), PIPELINE_WITH_GATE, 'utf8')
+    await seedTask(root, 'G8a', { current_phase: 'investigator', auto_review: true })
+    const seen = captureAdvanceEvents()
+
+    await advanceStepOnJobSuccess(root, 'G8a', 'investigator')
+
+    expect(seen.map((e) => e.type)).toEqual(['task.advanced'])
+    expect(seen[0].payload).toMatchObject({ taskId: 'G8a', currentPhase: 'designer', devTeamRoot: root })
+  })
+
+  test('auto_review: false + step có gate ⇒ vẫn phát hitl.pending như trước (TC-31)', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), PIPELINE_WITH_GATE, 'utf8')
+    await seedTask(root, 'G8b', { current_phase: 'investigator' })
+    const seen = captureAdvanceEvents()
+
+    await advanceStepOnJobSuccess(root, 'G8b', 'investigator')
+
+    expect(seen.map((e) => e.type)).toEqual(['hitl.pending'])
+    expect(seen[0].payload).toMatchObject({ taskId: 'G8b', gateId: 'hitl-1', devTeamRoot: root })
+  })
+
+  test('auto_review: true + step cuối ⇒ task.advanced mang currentPhase completed', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n`,
+      'utf8',
+    )
+    await seedTask(root, 'G8c', { current_phase: 'investigator', auto_review: true })
+    const seen = captureAdvanceEvents()
+
+    await advanceStepOnJobSuccess(root, 'G8c', 'investigator')
+
+    expect(seen.map((e) => e.type)).toEqual(['task.advanced'])
+    expect(seen[0].payload.currentPhase).toBe('completed')
+  })
+})

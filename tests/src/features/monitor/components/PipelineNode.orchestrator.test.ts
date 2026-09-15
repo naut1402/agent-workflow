@@ -2,8 +2,10 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { describe, expect, it, vi } from 'vitest'
 import PipelineNode from '@/features/monitor/components/PipelineNode.vue'
 
-// AC-3: node điều phối **chat được**, **stop được**, và **KHÔNG restart được**.
-// Chấm theo tập control render ra — đúng bề mặt mà test-spec chỉ định cho TC-24.
+// TC-03 của test-spec: node điều phối phải có **ít nhất một đường thoát khả dụng**
+// ở MỌI trạng thái. Triệu chứng ① của đề bài là đúng cảnh ngược lại — "UI chỉ
+// hiển thị một nút dừng; bấm nút dừng thì hoàn toàn không thể start lại".
+// Chấm theo tập control render ra, đúng bề mặt mà test-spec chỉ định.
 
 function mountOrchestrator(data: Record<string, any> = {}) {
   return mount(PipelineNode, {
@@ -22,16 +24,47 @@ function mountOrchestrator(data: Record<string, any> = {}) {
   })
 }
 
-describe('biến thể orchestrator — tập control (TC-24)', () => {
-  it('KHÔNG có nút Run ở mọi trạng thái', () => {
+/** Tập control hành động đang hiện trên node. */
+function controls(w: ReturnType<typeof mountOrchestrator>): string[] {
+  return ['pnode-run-btn', 'pnode-stop-btn', 'pnode-reset-btn', 'pnode-chat-btn'].filter((c) =>
+    w.find(`.${c}`).exists(),
+  )
+}
+
+describe('TC-03 — mọi trạng thái đều có đường thoát', () => {
+  // Đây là cổng chặn regression của bug gốc: 🚫 không tồn tại trạng thái nào mà
+  // tập control còn lại chỉ là nút dừng, hoặc rỗng.
+  it('không trạng thái nào chỉ còn mỗi nút dừng, cũng không trạng thái nào trắng nút', () => {
     for (const state of ['listening', 'dispatching', 'halted']) {
-      for (const runnable of [true, false]) {
-        const w = mountOrchestrator({ orchestratorState: state, runnable })
-        expect(w.find('.pnode-run-btn').exists()).toBe(false)
+      for (const busy of [true, false]) {
+        const set = controls(mountOrchestrator({ orchestratorState: state, orchestratorBusy: busy }))
+        expect(set.length).toBeGreaterThan(0)
+        expect(set).not.toEqual(['pnode-stop-btn'])
       }
     }
   })
 
+  it('rảnh ⇒ có nút Run (kể cả khi đang ở trạng thái đã dừng)', () => {
+    for (const state of ['listening', 'dispatching', 'halted']) {
+      const w = mountOrchestrator({ orchestratorState: state, orchestratorBusy: false })
+      expect(w.find('.pnode-run-btn').exists()).toBe(true)
+      expect(w.find('.pnode-stop-btn').exists()).toBe(false)
+    }
+  })
+
+  // TC-25 vế (b): sau khi reset bằng checkbox, node trở lại trạng thái có Run.
+  it('đã dừng ⇒ vẫn có đường chạy lại', () => {
+    expect(controls(mountOrchestrator({ orchestratorState: 'halted' }))).toContain('pnode-run-btn')
+  })
+
+  it('đang bận ⇒ đổi sang nút Stop, không hiện Run cùng lúc', () => {
+    const w = mountOrchestrator({ orchestratorState: 'dispatching', orchestratorBusy: true })
+    expect(w.find('.pnode-stop-btn').exists()).toBe(true)
+    expect(w.find('.pnode-run-btn').exists()).toBe(false)
+  })
+
+  // Node điều phối không phải một step: trạng thái của nó chỉ là cờ dừng, không
+  // có artifact để xoá, nên Reset không có nghĩa ở đây.
   it('KHÔNG có nút Reset ở mọi trạng thái', () => {
     for (const state of ['listening', 'dispatching', 'halted']) {
       for (const resettable of [true, false]) {
@@ -41,35 +74,45 @@ describe('biến thể orchestrator — tập control (TC-24)', () => {
     }
   })
 
-  it('có nút chat', () => {
-    expect(mountOrchestrator().find('.pnode-chat-btn').exists()).toBe(true)
+  it('luôn chat được với node', () => {
+    for (const state of ['listening', 'dispatching', 'halted']) {
+      for (const busy of [true, false]) {
+        expect(
+          mountOrchestrator({ orchestratorState: state, orchestratorBusy: busy }).find('.pnode-chat-btn').exists(),
+        ).toBe(true)
+      }
+    }
   })
 })
 
-describe('nút Stop luôn sẵn sàng khi đang điều phối (TC-23, TC-25)', () => {
-  // Phần lớn thời gian orchestrator dispatch tất định, không có job nào của nó
-  // chạy. Gắn Stop vào "đang chạy job" thì đúng lúc task đứng — lúc cần Stop
-  // nhất — node lại không có nút nào, mà Run/Reset trên step cũng đã ẩn.
-  it('hiện cả khi orchestrator đang rảnh (listening)', () => {
-    const w = mountOrchestrator({ orchestratorState: 'listening', running: false })
-    expect(w.find('.pnode-stop-btn').exists()).toBe(true)
+describe('TC-01/TC-04 — hai nút gọi đúng hai đường', () => {
+  it('bấm Run gọi handler start', async () => {
+    const onRun = vi.fn()
+    const w = mountOrchestrator({ orchestratorBusy: false, onRun })
+    await w.find('.pnode-run-btn').trigger('click')
+    expect(onRun).toHaveBeenCalledTimes(1)
   })
 
-  it('hiện khi đang quyết định (dispatching)', () => {
-    const w = mountOrchestrator({ orchestratorState: 'dispatching', running: true })
-    expect(w.find('.pnode-stop-btn').exists()).toBe(true)
-  })
-
-  it('ẩn khi đã dừng — không stop hai lần', () => {
-    const w = mountOrchestrator({ orchestratorState: 'halted' })
-    expect(w.find('.pnode-stop-btn').exists()).toBe(false)
-  })
-
-  it('bấm Stop gọi đúng handler', async () => {
+  it('bấm Stop gọi handler stop', async () => {
     const onStop = vi.fn()
-    const w = mountOrchestrator({ onStop })
+    const w = mountOrchestrator({ orchestratorBusy: true, onStop })
     await w.find('.pnode-stop-btn').trigger('click')
     expect(onStop).toHaveBeenCalledTimes(1)
+  })
+
+  // TC-38 — nhãn/nút mới phải đi qua i18n, không lộ khoá thô ra UI.
+  it('hai nút có nhãn trợ năng đã dịch, không lộ khoá thô', () => {
+    for (const [busy, cls] of [
+      [false, '.pnode-run-btn'],
+      [true, '.pnode-stop-btn'],
+    ] as const) {
+      const btn = mountOrchestrator({ orchestratorBusy: busy }).find(cls)
+      for (const attr of ['aria-label', 'title']) {
+        const text = btn.attributes(attr) ?? ''
+        expect(text.length).toBeGreaterThan(0)
+        expect(text).not.toContain('monitor.pipelineNode')
+      }
+    }
   })
 })
 
@@ -106,15 +149,24 @@ describe('node step khi đang bị điều phối', () => {
     expect(w.find('.pnode-orchestrated').text()).not.toContain('monitor.pipelineNode')
   })
 
-  it('không bị điều phối ⇒ không có nhãn phụ, Run vẫn như cũ (TC-12)', () => {
+  // TC-31/TC-33 — pipeline không bật điều phối chạy y như trước.
+  it('không bị điều phối ⇒ không có nhãn phụ, Run vẫn như cũ', () => {
     const w = mountStep({ orchestrated: false, runnable: true })
     expect(w.find('.pnode-orchestrated').exists()).toBe(false)
     expect(w.find('.pnode-run-btn').exists()).toBe(true)
   })
 
-  // TC-27 — chat với step vẫn hoạt động khi orchestrator bật.
+  // TC-17 — chat với step vẫn hoạt động khi orchestrator bật.
   it('vẫn chat được với step khi đang bị điều phối', () => {
     const w = mountStep({ orchestrated: true, executed: true, runnable: false })
     expect(w.find('.pnode-chat-btn').exists()).toBe(true)
+  })
+
+  // Cờ `orchestratorBusy` là của node điều phối; nó không được đổi hành vi nút
+  // trên node step.
+  it('cờ bận của node điều phối không rò sang node step', () => {
+    const w = mountStep({ orchestratorBusy: true, runnable: true, running: false })
+    expect(w.find('.pnode-run-btn').exists()).toBe(true)
+    expect(w.find('.pnode-stop-btn').exists()).toBe(false)
   })
 })
