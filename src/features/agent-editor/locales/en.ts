@@ -17,6 +17,8 @@ export default {
   actions: {
     save: 'Save',
     export: 'Export',
+    download: 'Download agent',
+    upload: 'Upload agent',
     close: 'Close',
     templateCopy: 'Template / Copy',
     buildNl: 'Build from description',

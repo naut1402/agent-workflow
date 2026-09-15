@@ -16,6 +16,10 @@ export async function fetchRules(projectId?: string) {
   return apiGet('/api/rules', { project: projectId })
 }
 
+export async function fetchRuleContent(id: string, projectId?: string) {
+  return apiGet('/api/rule-content', { id, project: projectId })
+}
+
 export async function writePipelineConfig(
   scope: string,
   pipeline: unknown,

@@ -8,6 +8,7 @@ import {
   exportCustomAgent,
   type AgentMeta,
 } from '../scripts/agentEditorApi'
+import { draftFromAgentMarkdown } from '../business/agentMarkdown.js'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import AgentSideMenu from './AgentSideMenu.vue'
@@ -134,6 +135,33 @@ async function doExport(overwrite = false) {
   }
 }
 
+function handleDownloadAgent() {
+  if (!viewing.value) return
+  const blob = new Blob([viewContent.value], { type: 'text/markdown' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${viewing.value.name}.md`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+async function handleUploadAgentFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    const text = await file.text()
+    const draft = draftFromAgentMarkdown(text, {})
+    applyDraft(draft)
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
 /** Draft từ 2 wizard — đóng wizard rồi mới mở dialog, hai cái loại trừ nhau. */
 function applyDraft(draft: Record<string, unknown>) {
   showTemplates.value = false
@@ -181,6 +209,8 @@ async function onSaved(savedName: string) {
             @templates="showTemplates = true"
             @nl="showNl = true"
             @export="doExport(false)"
+            @download="handleDownloadAgent"
+            @upload-file="handleUploadAgentFile"
             @view="openViewer"
             @edit="openEditor"
             @delete="removeAgent"
