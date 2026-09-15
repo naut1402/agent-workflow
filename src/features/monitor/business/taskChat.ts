@@ -446,14 +446,6 @@ export function getTaskChatState(
     }
   }
 
-  // Turn 0 (role 'user') of a fresh session is the step's system prompt
-  // (request.md, loaded as job.userPrompt in runStep.ts) — not something the
-  // user typed in chat. Filter it out of both branches here, at the point they
-  // are unified, so neither the real transcript nor the job-fallback path can
-  // leak it. `total` stays the real count so `from`/poll-cursor math elsewhere
-  // (useTaskChat.ts) is unaffected.
-  turns = turns.filter((t) => !(t.index === 0 && t.role === 'user'))
-
   if (resolved.sessionId && !transcriptFound) {
     if (transcript.matchedProvider === 'cursor-cli' || hint === 'cursor-cli') {
       transcriptMissingReason =
