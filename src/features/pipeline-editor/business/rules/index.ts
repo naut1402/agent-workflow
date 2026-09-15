@@ -1,10 +1,20 @@
-import { basename, dirname, homeDir, joinPath, relativePath, safeReadDir } from '../../../../backend/lib/fileHelper.js'
+import {
+  basename,
+  dirname,
+  homeDir,
+  isAbsolutePath,
+  joinPath,
+  relativePath,
+  resolvePathUnder,
+  safeReadDir,
+} from '../../../../backend/lib/fileHelper.js'
 import {
   DENY_DIRS,
   SCAN_PATTERN_MAX_DEPTH,
   SCAN_PATTERN_MAX_DIRS,
   SCAN_PATTERN_MAX_MATCHES,
   expandScanPatterns,
+  type PatternMatch,
 } from '../scanPatterns.js'
 
 export const RULE_CATEGORIES = ['coding', 'doc-writing', 'doc-review', 'test', 'git-pr', 'other']
@@ -162,4 +172,66 @@ export async function buildRules(
   const categories = RULE_CATEGORIES.filter((c) => foundCategories.has(c))
 
   return { rules, categories }
+}
+
+/** True when `full` is `base` itself or a path descendant of it. */
+function isUnderBase(base: string, full: string): boolean {
+  if (full === base) return true
+  const rel = relativePath(base, full)
+  return rel !== '' && !rel.startsWith('..') && !isAbsolutePath(rel)
+}
+
+/**
+ * Resolve a rule's on-disk path from its listing id (`${scope}:${relPath}`,
+ * the format `toRuleItem` produces).
+ *
+ * `resolvePathUnder` alone only blocks `..` escaping `projectRoot` — it does
+ * NOT stop `id=project:docs/todo/notes.md` from reading any `.md`/`.mdc` file
+ * that merely lives under the project, whether or not `buildRules` ever
+ * listed it. The id must additionally land under one of the sources
+ * `buildRules` actually scans: `docs/agent-rules`, `.claude/rules` (both
+ * fixed, under `projectRoot`), or a match from `scanPatterns.rules` — passed
+ * in pre-expanded via `extraAllowed` since expanding patterns needs I/O and
+ * this function stays sync/pure for unit testing. `global` scope
+ * (`~/.cursor/rules`) is unaffected — only `project` scope was over-broad.
+ */
+export function resolveRuleContentPath(
+  projectRoot: string,
+  id: string,
+  extraAllowed: PatternMatch[] = [],
+): string | null {
+  const sep = id.indexOf(':')
+  if (sep <= 0) return null
+  const scope = id.slice(0, sep)
+  const relPath = id.slice(sep + 1)
+  if (!relPath || !RULE_FILE_EXT.test(relPath)) return null
+
+  if (scope === 'global') return resolvePathUnder(homeDir(), relPath)
+  if (scope !== 'project') return null
+
+  const full = resolvePathUnder(projectRoot, relPath)
+  if (!full) return null
+
+  const fixedBases = [
+    joinPath(projectRoot, 'docs', 'agent-rules'),
+    joinPath(projectRoot, '.claude', 'rules'),
+  ]
+  if (fixedBases.some((base) => isUnderBase(base, full))) return full
+  if (extraAllowed.some((m) => (m.isDirectory ? isUnderBase(m.path, full) : full === m.path))) return full
+  return null
+}
+
+/**
+ * Async wrapper — expands `scanPatterns.rules` (the one allowed-base source
+ * that needs I/O) before delegating to the pure `resolveRuleContentPath`.
+ */
+export async function resolveRuleContentPathWithPatterns(
+  projectRoot: string,
+  id: string,
+  opts: { scanPatterns?: { rules?: string[] } | null } = {},
+): Promise<string | null> {
+  const extraAllowed = opts.scanPatterns?.rules?.length
+    ? await expandScanPatterns(projectRoot, opts.scanPatterns.rules)
+    : []
+  return resolveRuleContentPath(projectRoot, id, extraAllowed)
 }

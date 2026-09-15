@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import Icon from '../../../frontend/ui/Icon.vue'
 import type { AgentMeta } from '../scripts/agentEditorApi'
@@ -18,12 +18,16 @@ const emit = defineEmits<{
   templates: []
   nl: []
   export: []
+  download: []
+  'upload-file': [e: Event]
   view: [agent: AgentMeta]
   edit: [agent: AgentMeta]
   delete: [agent: AgentMeta]
 }>()
 
 const { t } = useI18nHelpers()
+
+const fileInput = ref<HTMLInputElement | null>(null)
 
 const keyOf = (a: AgentMeta) => `${a.scope}:${a.name}`
 
@@ -66,6 +70,25 @@ const groups = computed(() =>
       >
         {{ t('agentEditor.actions.export') }}
       </button>
+      <button
+        type="button"
+        class="btn-ghost btn-sm"
+        :disabled="!canExport"
+        :title="canExport ? undefined : t('agentEditor.list.exportHint')"
+        @click="emit('download')"
+      >
+        {{ t('agentEditor.actions.download') }}
+      </button>
+      <button type="button" class="btn-ghost btn-sm" @click="fileInput?.click()">
+        {{ t('agentEditor.actions.upload') }}
+      </button>
+      <input
+        ref="fileInput"
+        type="file"
+        accept=".md"
+        hidden
+        @change="(e) => emit('upload-file', e)"
+      />
     </div>
 
     <div class="agent-side-groups">

@@ -96,6 +96,9 @@ export default {
     filterCategory: 'Lọc rule theo category',
     scopeProject: 'Project',
     scopeGlobal: 'Global',
+    close: 'Đóng',
+    loading: 'Đang tải nội dung rule…',
+    loadError: 'Không tải được nội dung rule.',
   },
   stepConfig: {
     title: 'Cấu hình step',

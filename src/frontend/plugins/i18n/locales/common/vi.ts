@@ -36,7 +36,6 @@ export default {
     statistics: 'Thống kê usage, thời gian chạy và chi phí.',
   },
   status: {
-    updated: 'cập nhật {time}',
     paused: {
       editor: 'editor mode — polling paused',
       agentEditor: 'agent editor — polling paused',
