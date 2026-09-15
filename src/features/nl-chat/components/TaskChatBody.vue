@@ -86,6 +86,16 @@ async function scrollToEnd(): Promise<void> {
   if (el) el.scrollTop = el.scrollHeight
 }
 
+/** Within this many px of the bottom counts as "still following the live tail". */
+const SCROLL_BOTTOM_THRESHOLD = 48
+
+/** Measured before the watcher's new turn/tool-activity is patched into the DOM. */
+function isNearBottom(): boolean {
+  const el = messagesRef.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD
+}
+
 // Attachments, drop zone, Enter behaviour and the send guard — shared with
 // BuilderChatBody, which only differs in what blocks a send and where text goes.
 // `ChatComposer` renders it; only the drop-zone flag is needed here, for the
@@ -123,7 +133,14 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
 watch(status, (s) => emit('status', s), { immediate: true })
 watch(chat.runner, (r) => emit('runner', r), { immediate: true })
 
-watch([() => chat.turns.value.length, () => chat.pending.value.length], scrollToEnd)
+// Tool-activity turns arrive every 2s while a step runs (sessionTranscript.ts),
+// so an unconditional scroll here would yank the user back to the bottom on
+// every one of them even while they are reading older history — only follow
+// the tail when they were already at it (default `watch` flush is 'pre', so
+// this runs before the new turn is patched into the DOM).
+watch([() => chat.turns.value.length, () => chat.pending.value.length], () => {
+  if (isNearBottom()) void scrollToEnd()
+})
 
 // Re-scope (and restart polling) when the user opens the chat from another step.
 watch(
