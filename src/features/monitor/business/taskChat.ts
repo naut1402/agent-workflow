@@ -9,6 +9,7 @@ import {
 } from './index.js'
 import type { JobRecord, SessionEntry, TaskSessionLedger } from './index.js'
 import { readTextFileSync } from '../../../backend/lib/fileHelper.js'
+import { DECISION_SENTINEL, ORCHESTRATOR_STEP_ID } from '../../../shared/lib/orchestrator.js'
 import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.js'
 import { readCursorSessionTranscript, stripCursorUserWrapper } from './cursorSessionTranscript.js'
 import { readApiAgentTranscript } from './apiAgentTranscript.js'
@@ -52,6 +53,23 @@ function agentOutputFromJob(job: JobRecord): string {
   return stripCursorUserWrapper(extractAgentText(stripped))
 }
 
+/**
+ * Nội dung hiển thị trong khung chat. Job của node điều phối mang thêm dòng lệnh
+ * máy đọc ở cuối — người dùng đọc nhật ký điều phối, không đọc sentinel.
+ */
+function chatTextOfJob(job: JobRecord): string {
+  const text = agentOutputFromJob(job)
+  return job.metadata?.orchestratorJob === true ? stripDecisionLine(text) : text
+}
+
+function isDecisionLine(line: string): boolean {
+  return line.trim().replace(/^`+/, '').replace(/`+$/, '').trim().startsWith(DECISION_SENTINEL)
+}
+
+function stripDecisionLine(text: string): string {
+  return text.split('\n').filter((line) => !isDecisionLine(line)).join('\n').trim()
+}
+
 /** Prefer Cursor/agent JSON `result` field when stdout is still raw JSON. */
 function extractAgentText(raw: string): string {
   const trimmed = raw.trim()
@@ -68,7 +86,7 @@ function synthesizeTurnsFromJob(job: JobRecord, startIndex = 0): TranscriptTurn[
   if (prompt) {
     turns.push({ index: startIndex + turns.length, role: 'user', text: clipFallback(prompt) })
   }
-  const out = agentOutputFromJob(job)
+  const out = chatTextOfJob(job)
   if (out) {
     turns.push({
       index: startIndex + turns.length,
@@ -109,7 +127,7 @@ function finishedJobsForChat(jobs: JobRecord[], stepId?: string, sessionId?: str
 function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | undefined): boolean {
   if (!latest) return true
   const prompt = typeof latest.userPrompt === 'string' ? latest.userPrompt.trim() : ''
-  const out = agentOutputFromJob(latest)
+  const out = chatTextOfJob(latest)
   if (!prompt && !out) return true
   const texts = turns.map((t) => t.text.trim())
   if (prompt && texts.some((t) => t === clipFallback(prompt) || t.includes(prompt.slice(0, 80)))) {
@@ -260,6 +278,33 @@ export function resolveChatSession(
   dismissedForStep?: boolean
 } {
   const jobs = jobsOfTask(taskId)
+
+  // Node điều phối có session riêng. Không tìm thấy thì trả rỗng: rơi về entry
+  // `open` mới nhất là hiển thị khung chat của một step khác, và một step đang
+  // chạy cũng không được chiếm khung chat của node.
+  if (stepId === ORCHESTRATOR_STEP_ID) {
+    const own = jobs.find((j) => j.metadata?.orchestratorJob === true && j.sessionId)
+    if (own?.sessionId) {
+      return {
+        sessionId: own.sessionId,
+        workspace: own.workspace,
+        providerId: providerIdOfJob(own),
+        job: own,
+      }
+    }
+    const ownEntry = [...loadTaskSessionLedger(projectId, taskId).sessions]
+      .reverse()
+      .find((s) => s.sessionId && s.stepIds?.includes(ORCHESTRATOR_STEP_ID))
+    return ownEntry
+      ? {
+          sessionId: ownEntry.sessionId,
+          workspace: ownEntry.workspace,
+          entry: ownEntry,
+          providerId: ownEntry.providerId,
+        }
+      : { sessionId: null }
+  }
+
   const running = jobs.find((j) => j.status === 'queued' || j.status === 'running')
   if (running?.sessionId && (!stepId || stepIdOf(running) === stepId || !stepIdOf(running))) {
     return {
@@ -342,7 +387,14 @@ export function getTaskChatState(
   opts: GetTaskChatStateOptions = {},
 ): TaskChatState {
   const jobs = jobsOfTask(taskId)
-  const runningJob = jobs.find((j) => j.status === 'queued' || j.status === 'running')
+  // Panel của node điều phối chỉ nói về node: một step đang chạy không được
+  // chiếm ô `running`, cũng không được bật `queued` — đường gửi của node đi
+  // thẳng qua `chatWithOrchestrator`, không xếp hàng sau job của step.
+  const orchestratorPanel = opts.stepId === ORCHESTRATOR_STEP_ID
+  const ownJobs = orchestratorPanel ? jobs.filter((j) => j.metadata?.orchestratorJob === true) : jobs
+  const runningJob = ownJobs.find((j) => j.status === 'queued' || j.status === 'running')
+  // `hasFinished` vẫn đọc cả task: node chưa chạy lượt nào vẫn phải nhắn được
+  // (lượt đầu chính là thứ mở session cho nó).
   const hasFinished = jobs.some((j) => j.status === 'succeeded' || j.status === 'failed')
 
   let blockedReason: TaskChatBlockedReason | undefined
@@ -357,14 +409,17 @@ export function getTaskChatState(
       })
     : { turns: [], total: 0, file: null, matchedProvider: hint as TranscriptProviderHint }
 
+  // Node điều phối không mượn runner của step nào: rơi về job step gần nhất là
+  // panel hiện tên runner của một step khác.
   const runnerJob =
     runningJob ??
     (opts.stepId
       ? jobs.find((j) => stepIdOf(j) === opts.stepId && (j.status === 'succeeded' || j.status === 'failed'))
       : undefined) ??
     resolved.job ??
-    jobs.find((j) => j.status === 'succeeded' || j.status === 'failed') ??
-    jobs[0]
+    (orchestratorPanel
+      ? undefined
+      : (jobs.find((j) => j.status === 'succeeded' || j.status === 'failed') ?? jobs[0]))
   const runnerConfig = runnerJob ? getRunner(runnerJob.runnerId) : null
 
   // Cursor/agent-cli often leave no on-disk transcript (or one that lags behind

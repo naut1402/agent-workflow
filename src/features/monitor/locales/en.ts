@@ -127,6 +127,7 @@ export default {
     resetDone: 'Step reset — pipeline updated.',
     orchestrator: 'Orchestrator',
     orchestratorHalted: 'Orchestration stopped — the pipeline is back to manual runs.',
+    orchestratorStarted: 'Handed a turn to the orchestrator node.',
   },
   pipelineNode: {
     clickToApprove: 'Click to approve',
@@ -143,6 +144,8 @@ export default {
     chatWithRunner: "Chat with this step's runner",
     clickToStopOrchestrator: 'Click to stop orchestration (pipeline returns to manual runs)',
     stopOrchestrator: 'Stop orchestration',
+    clickToStartOrchestrator: 'Click to hand a turn to the orchestrator node',
+    startOrchestrator: 'Run orchestration',
     orchestrated: 'driven by the orchestrator',
     orchestratorState: {
       listening: 'listening',

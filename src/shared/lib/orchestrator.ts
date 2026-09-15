@@ -12,3 +12,10 @@
  * mọi step id bắt đầu bằng `__`.
  */
 export const ORCHESTRATOR_STEP_ID = '__orchestrator__'
+
+/**
+ * Dòng cuối output agent phải bắt đầu bằng chuỗi này thì mới được coi là quyết
+ * định. Nằm cạnh `ORCHESTRATOR_STEP_ID` vì cùng là hằng của giao thức điều phối:
+ * `orchestrator` sinh ra nó, `monitor` phải nhận ra để giấu khỏi khung chat.
+ */
+export const DECISION_SENTINEL = 'ORCHESTRATOR_DECISION:'

@@ -3,7 +3,7 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
-import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, resetPipelineStep, stopOrchestrator } from '../scripts/PipelineViewApi'
+import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, resetPipelineStep, startOrchestrator, stopOrchestrator } from '../scripts/PipelineViewApi'
 import { fetchJob, fetchJobs, cancelJob } from '../../runner/scripts/runnerApi'
 import { phasesFromPipeline, phaseStatus } from '../../../shared/lib/phase'
 import PipelineNode from './PipelineNode.vue'
@@ -178,6 +178,9 @@ const nodes = computed(() => {
                 ? 'dispatching'
                 : 'listening',
             running: Boolean(orchestratorJobId.value),
+            // Hai trạng thái duy nhất mà Stop có việc để làm; còn lại node hiện Run.
+            orchestratorBusy: Boolean(orchestratorJobId.value) || Boolean(runningStepId.value),
+            onRun: () => startOrchestratorNode(),
             onStop: () => stopOrchestratorNode(),
           },
         },
@@ -414,9 +417,33 @@ async function runStep(node: { id: string }, opts: { skipIntermediate?: boolean 
 }
 
 /**
+ * Run node điều phối — xoá cờ halt và giao một lượt cho agent. Đây là đường cấp
+ * lượt đầu tiên: không có nó thì pipeline bật điều phối không start được.
+ */
+async function startOrchestratorNode() {
+  runError.value = ''
+  if (props.task.state_mtime == null) {
+    runError.value = t('monitor.pipeline.missingMtime')
+    return
+  }
+  try {
+    await startOrchestrator(props.task.task_id, props.task.state_mtime, props.projectId ?? undefined)
+    runToast.value = t('monitor.pipeline.orchestratorStarted')
+    emit('hitl-action')
+    setTimeout(() => { runToast.value = '' }, 4000)
+  } catch (e: any) {
+    reportOrchestratorError(e)
+  }
+}
+
+/** 409 ở hai nút của node điều phối luôn là `state_mtime` cũ — bảo người dùng refetch. */
+function reportOrchestratorError(e: any): void {
+  runError.value = e?.status === 409 ? t('monitor.pipeline.stateChanged') : String(e.message || e)
+}
+
+/**
  * Stop node điều phối — hai tầng: huỷ job quyết định đang chạy (nếu có), rồi ghi
- * `orchestrator_halted`. Không có Restart: khởi động lại là chạy tay một step
- * hoặc chat với node (`postTaskFeedback` clear cờ halt).
+ * `orchestrator_halted`. Bấm Run lại là giao lượt mới cho agent.
  */
 async function stopOrchestratorNode() {
   runError.value = ''
@@ -434,7 +461,7 @@ async function stopOrchestratorNode() {
     emit('hitl-action')
     setTimeout(() => { runToast.value = '' }, 4000)
   } catch (e: any) {
-    runError.value = e?.status === 409 ? t('monitor.pipeline.stateChanged') : String(e.message || e)
+    reportOrchestratorError(e)
   }
 }
 
