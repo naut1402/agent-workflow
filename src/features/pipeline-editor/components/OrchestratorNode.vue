@@ -4,9 +4,10 @@
  * được bằng cách bỏ tick checkbox "Có node điều phối" ở panel trái — xoá được
  * trên canvas thì canvas và YAML sẽ nói hai chuyện khác nhau.
  *
- * Nó cũng không có handle: nó không nằm trong `steps[]` nên không nối edge với
- * step nào (xem `buildEditorGraph`).
+ * Có handle `source`: khi orchestrator bật, `buildEditorGraph` vẽ 1 edge từ
+ * node này tới từng step (hub edge) — handle là điểm neo cho các edge đó.
  */
+import { Handle, Position } from '@vue-flow/core'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 
 const { t } = useI18nHelpers()
@@ -23,6 +24,7 @@ defineProps({
     <div v-else class="onode-agent onode-agent--missing">
       {{ t('pipelineEditor.orchestrator.noAgent') }}
     </div>
+    <Handle type="source" :position="Position.Bottom" />
   </div>
 </template>
 

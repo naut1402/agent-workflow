@@ -1,5 +1,5 @@
 import { AbstractBusiness } from '../../../backend/business/AbstractBusiness.js'
-import { buildCatalog, parseCatalogAgentId, resolveCatalogAgentPath } from './catalog/index.js'
+import { buildCatalog, parseCatalogItemId, resolveCatalogAgentPath } from './catalog/index.js'
 import { buildRules } from './rules/index.js'
 import { loadPipelineConfig, knownArtifactsFor } from './pipeline/index.js'
 import { profilesDir, scanCustomAgents, customAgentsDir, loadScanPatternsConfig } from './index.js'
@@ -32,7 +32,7 @@ export class PipelineEditorBusiness extends AbstractBusiness {
 
 export {
   buildCatalog,
-  parseCatalogAgentId,
+  parseCatalogItemId,
   resolveCatalogAgentPath,
   buildRules,
   loadPipelineConfig,

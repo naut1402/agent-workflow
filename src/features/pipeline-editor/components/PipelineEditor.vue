@@ -5,9 +5,11 @@ import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import {
   fetchCatalog,
+  fetchCatalogAgent,
   fetchPipelineConfig,
   fetchRuleContent,
   fetchRules,
+  fetchSkillContent,
   writePipelineConfig,
 } from '../scripts/pipelineEditorApi'
 import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
@@ -239,38 +241,43 @@ async function loadRules() {
   }
 }
 
-// Xem markdown của 1 rule thay canvas — `v-if`/`v-else` thật ở slot `#main`
-// để unmount VueFlow (không chỉ ẩn bằng CSS), tránh hook của nó bắt phím/sự
-// kiện ngầm phía sau trong lúc đang xem rule.
-const viewingRule = ref<any>(null)
-const viewingRuleContent = ref('')
-const viewingRuleLoading = ref(false)
-const viewingRuleError = ref('')
+// Xem markdown của 1 rule/agent/skill thay canvas — `v-if`/`v-else` thật ở
+// slot `#main` để unmount VueFlow (không chỉ ẩn bằng CSS), tránh hook của nó
+// bắt phím/sự kiện ngầm phía sau trong lúc đang xem.
+const viewingDoc = ref<{ kind: 'rule' | 'agent' | 'skill'; id: string; name: string } | null>(null)
+const viewingDocContent = ref('')
+const viewingDocLoading = ref(false)
+const viewingDocError = ref('')
 
-async function openRuleView(rule: any) {
-  if (viewingRule.value?.id === rule.id) {
-    closeRuleView()
+async function openDocView(kind: 'rule' | 'agent' | 'skill', item: any) {
+  if (viewingDoc.value?.kind === kind && viewingDoc.value?.id === item.id) {
+    closeDocView()
     return
   }
   closeConfig()
-  viewingRule.value = rule
-  viewingRuleLoading.value = true
-  viewingRuleError.value = ''
+  viewingDoc.value = { kind, id: item.id, name: item.name }
+  viewingDocLoading.value = true
+  viewingDocError.value = ''
   try {
-    const data = await fetchRuleContent(rule.id, props.projectId ?? undefined)
-    viewingRuleContent.value = data.content ?? ''
+    const data =
+      kind === 'rule'
+        ? await fetchRuleContent(item.id, props.projectId ?? undefined)
+        : kind === 'agent'
+          ? await fetchCatalogAgent(item.id)
+          : await fetchSkillContent(item.id, props.projectId ?? undefined)
+    viewingDocContent.value = data.content ?? ''
   } catch (e: any) {
-    viewingRuleContent.value = ''
-    viewingRuleError.value = String(e.message || e)
+    viewingDocContent.value = ''
+    viewingDocError.value = String(e.message || e)
   } finally {
-    viewingRuleLoading.value = false
+    viewingDocLoading.value = false
   }
 }
 
-function closeRuleView() {
-  viewingRule.value = null
-  viewingRuleContent.value = ''
-  viewingRuleError.value = ''
+function closeDocView() {
+  viewingDoc.value = null
+  viewingDocContent.value = ''
+  viewingDocError.value = ''
 }
 
 /**
@@ -389,7 +396,7 @@ watch(
   [() => props.scope, () => props.taskId, () => props.projectId],
   ([scope, taskId, projectId], [, , prevProjectId]) => {
     closeConfig()
-    closeRuleView()
+    closeDocView()
     clearTimeout(configDebounce)
     if (scope === 'global') {
       // Tab Profile cũng là `scope === 'global'`: quay lại tab mà nạp pipeline
@@ -471,7 +478,7 @@ const selectedNodeData = ref(null)
 function openConfig(nodeId, data) {
   // Dialog teleport ra <body> nên rule `.preview-active …` không với tới nó —
   // phải chặn bằng logic, không dựa vào CSS.
-  if (previewing.value || viewingRule.value) return
+  if (previewing.value || viewingDoc.value) return
   selectedNodeId.value = nodeId
   selectedNodeData.value = { ...data }
 }
@@ -843,7 +850,7 @@ let previewTimer = null
 async function runPreview() {
   if (previewing.value) return
   closeConfig()
-  closeRuleView()
+  closeDocView()
   startPreview()
   const order = previewOrder.value
   previewNodeId.value = null
@@ -953,32 +960,34 @@ const hasFanOut = computed(() => {
             :catalog="catalog"
             :open-sections="openSections"
             @toggle-section="toggleSection"
+            @view-agent="(a) => openDocView('agent', a)"
+            @view-skill="(s) => openDocView('skill', s)"
           />
           <RulesPanel
             :rules="rulesData.rules"
             :categories="rulesData.categories"
             :open-sections="openSections"
             @toggle-section="toggleSection"
-            @view="openRuleView"
+            @view="(rule) => openDocView('rule', rule)"
           />
         </div>
       </template>
 
       <template #main>
-        <div v-if="viewingRule" class="rule-view">
+        <div v-if="viewingDoc" class="rule-view">
           <div class="rule-view-header">
-            <span class="rule-view-title">{{ viewingRule.name }}</span>
-            <button type="button" class="btn-ghost btn-sm" @click="closeRuleView">
-              {{ t('pipelineEditor.rules.close') }}
+            <span class="rule-view-title">{{ viewingDoc.name }}</span>
+            <button type="button" class="btn-ghost btn-sm" @click="closeDocView">
+              {{ t('pipelineEditor.docView.close') }}
             </button>
           </div>
-          <p v-if="viewingRuleLoading" class="muted rule-view-status">{{ t('pipelineEditor.rules.loading') }}</p>
-          <p v-else-if="viewingRuleError" class="err rule-view-status">{{ t('pipelineEditor.rules.loadError') }}</p>
+          <p v-if="viewingDocLoading" class="muted rule-view-status">{{ t('pipelineEditor.docView.loading') }}</p>
+          <p v-else-if="viewingDocError" class="err rule-view-status">{{ t('pipelineEditor.docView.loadError') }}</p>
           <CMarkdownView
             v-else
-            :title="viewingRule.name"
-            :doc-key="viewingRule.id"
-            :content="viewingRuleContent"
+            :title="viewingDoc.name"
+            :doc-key="viewingDoc.id"
+            :content="viewingDocContent"
           />
         </div>
         <div
