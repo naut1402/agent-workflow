@@ -8,7 +8,6 @@ export function registerMode(registry: ModeRegistry): void {
     labelKey: 'common.modes.knowledge',
     icon: 'knowledge',
     order: 5,
-    statusKind: 'paused',
     panel: KnowledgePanel,
     descriptionKey: 'common.modeDesc.knowledge',
     maturity: 'stable',

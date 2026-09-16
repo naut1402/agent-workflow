@@ -1,9 +1,22 @@
 import path from 'node:path'
 import { AbstractController } from '../../backend/http/AbstractController.js'
 import { emitAudit } from '../../backend/log/store.js'
-import { emitEntity } from '../../backend/events/index.js'
+import { emitEntity, on } from '../../backend/events/index.js'
+import { sseResponse } from '../../backend/http/sseHelper.js'
 import * as runnerStore from './business/index.js'
 import type { JobStatus } from './business/types.js'
+
+/** Event type nào kích hoạt đẩy lại snapshot running-jobs qua SSE. */
+const JOB_STREAM_EVENTS = new Set([
+  'job.queued',
+  'job.started',
+  'job.finished',
+  'job.failed',
+  'job.cancelled',
+  'job.awaiting_recovery',
+  'job.retry_scheduled',
+  'job.recovered',
+])
 
 export class RunnerController extends AbstractController {
   listRunners() {
@@ -251,6 +264,17 @@ export class RunnerController extends AbstractController {
     const status = runnerStore.getOAuthStatus(state)
     if (!status) return this.notFound('unknown oauth state')
     return this.ok(status)
+  }
+
+  /** SSE thay REST poll — global, không scope theo project (khớp `listOrGetJobs`). */
+  streamJobs() {
+    return sseResponse((send) => {
+      const pushSnapshot = () => send('jobs', { jobs: runnerStore.listJobs(undefined, 'running') })
+      pushSnapshot()
+      return on('*', (event) => {
+        if (JOB_STREAM_EVENTS.has(event.type)) pushSnapshot()
+      })
+    })
   }
 
   listOrGetJobs() {

@@ -7,7 +7,6 @@ export function registerMode(registry: ModeRegistry): void {
     labelKey: 'common.modes.quickAction',
     icon: 'quickAction',
     order: 4,
-    statusKind: 'paused',
     panel: QuickActionPanel,
     descriptionKey: 'common.modeDesc.quickAction',
     maturity: 'stable',

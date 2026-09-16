@@ -1,49 +1,68 @@
 import { ref } from 'vue'
 import { fetchTasks } from '../scripts/monitorApi'
+import { openSseStream, type SseStream } from '../../../frontend/lib/sseClient'
 
-// Encapsulates the monitor task-polling loop (root/tasks/selection + connection
-// state + the 1500ms interval) so the shell stays thin and the polling logic is
-// unit-testable without rendering. `getProjectId` returns the active project id
-// (null = default project).
-export function useTaskPolling(getProjectId: () => string | null, pollMs = 1500) {
+// Encapsulates the monitor task-list stream (root/tasks/selection + connection
+// state) so the shell stays thin and the logic is unit-testable without
+// rendering. `getProjectId` returns the active project id (null = default
+// project). Backed by SSE (`/api/tasks/stream`) instead of polling — `poll()`
+// stays a one-off REST fetch for call sites that need an immediate refresh
+// right after their own mutation (create/delete task, switch project).
+export function useTaskPolling(getProjectId: () => string | null) {
   const root = ref('')
   const tasks = ref<any[]>([])
   const selectedId = ref<string | null>(null)
   const error = ref<string | null>(null)
   const lastUpdated = ref<string | null>(null)
   const connected = ref(false)
-  let timer: ReturnType<typeof setInterval> | null = null
+  let stream: SseStream | null = null
+
+  function applyTasks(data: { root: string; tasks: any[] }) {
+    root.value = data.root
+    tasks.value = data.tasks
+    error.value = null
+    lastUpdated.value = new Date().toLocaleTimeString()
+    // Auto-select a task on first load, preferring one needing attention.
+    if (!selectedId.value && tasks.value.length) {
+      const needsAttention = tasks.value.find((t: any) => t.has_qa || t.hitl_pending)
+      selectedId.value = (needsAttention || tasks.value[0]).task_id
+    }
+  }
 
   async function poll() {
     try {
       const data = await fetchTasks(getProjectId() ?? undefined)
-      root.value = data.root
-      tasks.value = data.tasks
-      connected.value = true
-      error.value = null
-      lastUpdated.value = new Date().toLocaleTimeString()
-      // Auto-select a task on first load, preferring one needing attention.
-      if (!selectedId.value && tasks.value.length) {
-        const needsAttention = tasks.value.find((t: any) => t.has_qa || t.hitl_pending)
-        selectedId.value = (needsAttention || tasks.value[0]).task_id
-      }
+      applyTasks(data)
     } catch (e: any) {
-      connected.value = false
       error.value = String(e.message || e)
     }
   }
 
   function stop() {
-    if (timer) {
-      clearInterval(timer)
-      timer = null
-    }
+    stream?.close()
+    stream = null
+    connected.value = false
   }
 
   function start() {
     stop()
-    poll()
-    timer = setInterval(poll, pollMs)
+    stream = openSseStream(
+      '/api/tasks/stream',
+      { project: getProjectId() ?? undefined },
+      {
+        onOpen: () => {
+          connected.value = true
+        },
+        onEvent: (type, data) => {
+          if (type !== 'tasks') return
+          applyTasks(data as { root: string; tasks: any[] })
+        },
+        onError: (e: any) => {
+          connected.value = false
+          error.value = String(e?.message || e)
+        },
+      },
+    )
   }
 
   return { root, tasks, selectedId, error, lastUpdated, connected, poll, start, stop }
