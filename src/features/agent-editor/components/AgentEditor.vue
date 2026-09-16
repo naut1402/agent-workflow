@@ -52,7 +52,7 @@ async function loadList() {
 
 async function loadCatalog() {
   try {
-    catalog.value = await fetchCatalog()
+    catalog.value = await fetchCatalog(props.projectId ?? undefined)
   } catch {
     catalog.value = { skills: [], agents: [] }
   }
@@ -261,7 +261,7 @@ async function onSaved(savedName: string) {
   <div v-if="showTemplates" class="modal-backdrop" @click.self="showTemplates = false">
     <div class="modal">
       <div class="modal-body">
-        <AgentTemplatePicker @apply-draft="applyDraft" @close="showTemplates = false" />
+        <AgentTemplatePicker :project-id="projectId" @apply-draft="applyDraft" @close="showTemplates = false" />
       </div>
     </div>
   </div>

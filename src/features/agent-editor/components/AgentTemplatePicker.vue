@@ -6,6 +6,7 @@ import { fetchCatalog, fetchCatalogAgent } from '../../pipeline-editor/scripts/p
 import { draftFromCatalogAgent } from '../business/agentDraft.js'
 
 const { t } = useI18nHelpers()
+const props = defineProps<{ projectId?: string | null }>()
 const emit = defineEmits(['apply-draft', 'close'])
 
 const templates = ref([])
@@ -18,7 +19,7 @@ const fileInput = ref(null)
 
 onMounted(async () => {
   try {
-    const [t, c] = await Promise.all([fetchAgentTemplates(), fetchCatalog()])
+    const [t, c] = await Promise.all([fetchAgentTemplates(), fetchCatalog(props.projectId ?? undefined)])
     templates.value = t.templates || []
     catalog.value = c
   } catch (e) {
@@ -40,7 +41,7 @@ async function loadTemplate(name) {
 async function copyCatalogAgent(agent) {
   error.value = ''
   try {
-    const data = await fetchCatalogAgent(agent.id)
+    const data = await fetchCatalogAgent(agent.id, props.projectId ?? undefined)
     emit('apply-draft', { ...data.draft, name: `${agent.name}-copy` })
     emit('close')
   } catch (e) {

@@ -176,7 +176,7 @@ async function loadRunnerOptions() {
 
 async function loadAgentOptions() {
   try {
-    const res = await fetchCatalog()
+    const res = await fetchCatalog(props.projectId ?? undefined)
     agents.value = Array.isArray(res?.agents)
       ? res.agents.filter((a: any) => a && typeof a.id === 'string')
       : []

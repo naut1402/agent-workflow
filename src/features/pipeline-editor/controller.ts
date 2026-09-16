@@ -233,6 +233,7 @@ export class PipelineEditorController extends AbstractController {
       if (Array.isArray(fm.skills) && fm.skills.length) draft.skills = [...fm.skills]
       return this.ok({ id, path: agentPath, content: raw, draft })
     } catch (e: any) {
+      if (e?.code === 'ENOENT') return this.notFound('agent file not found')
       return this.json(500, { error: String(e.message || e) })
     }
   }
@@ -263,6 +264,7 @@ export class PipelineEditorController extends AbstractController {
       const raw = await fs.readFile(rulePath, 'utf8')
       return this.ok({ id, content: raw })
     } catch (e: any) {
+      if (e?.code === 'ENOENT') return this.notFound('rule file not found')
       return this.json(500, { error: String(e.message || e) })
     }
   }
