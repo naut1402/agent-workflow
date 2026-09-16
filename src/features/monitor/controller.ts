@@ -198,9 +198,18 @@ export class MonitorController extends AbstractController {
       const pushSnapshot = async () => {
         send('tasks', { root, tasks: await collectTasks(root), ...(projectId ? { project: projectId } : {}) })
       }
-      void pushSnapshot()
+      // `void pushSnapshot()` discards the promise, so its rejection never
+      // reaches `eventBus.ts`'s `run()` wrapper (it only catches when the
+      // handler *returns* the promise) — an unhandled rejection here can
+      // crash the whole process. Catch locally instead.
+      const safePushSnapshot = () => {
+        pushSnapshot().catch((err) => {
+          console.warn('[monitor] streamTasks pushSnapshot failed:', err)
+        })
+      }
+      safePushSnapshot()
       return on('*', (event) => {
-        if (TASK_STREAM_EVENTS.has(event.type)) void pushSnapshot()
+        if (TASK_STREAM_EVENTS.has(event.type)) safePushSnapshot()
       })
     })
   }
