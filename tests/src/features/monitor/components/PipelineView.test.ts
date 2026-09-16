@@ -950,3 +950,72 @@ describe('PipelineView — node điều phối', () => {
     w.unmount()
   })
 })
+
+// TC-A1/TC-A2/TC-A8 (T21270146) — canvas monitor: node điều phối vẽ hub edge
+// tới từng step khi bật, giữ nguyên chuỗi step-step khi tắt.
+describe('PipelineView — hub edge', () => {
+  const ORCH_ID = '__orchestrator__'
+  const HUB_PIPELINE = { ...SAMPLE_PIPELINE, orchestrator: { enabled: true, agent: 'a:orch' } }
+
+  function flowEdges(w: any): any[] {
+    // Loại edge dữ liệu (`de-*`, phái sinh từ artifact/knowledge) — chỉ so control/hub edge.
+    return (w.findComponent({ name: 'VueFlow' }).props('edges') as any[]).filter(
+      (e) => !String(e.id).startsWith('de-'),
+    )
+  }
+
+  function nodeData(w: any, id: string) {
+    return w.findComponent({ name: 'VueFlow' }).props('nodes').find((n: any) => n.id === id)?.data
+  }
+
+  it('TC-A1: bật ⇒ mỗi step có đúng 1 edge từ node điều phối, không còn edge step-step', async () => {
+    const task = {
+      task_id: 'HUB1',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: {},
+      pipeline: HUB_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    const edges = flowEdges(w)
+    expect(edges).toHaveLength(SAMPLE_PIPELINE.steps.length)
+    expect(edges.every((e) => e.source === ORCH_ID)).toBe(true)
+    expect(edges.map((e) => e.target).sort()).toEqual(SAMPLE_PIPELINE.steps.map((s) => s.id).sort())
+    w.unmount()
+  })
+
+  it('TC-A2: tắt ⇒ edges là chuỗi step-step nối tiếp như cũ, không có edge nào từ node điều phối', async () => {
+    const task = {
+      task_id: 'HUB2',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: {},
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    const edges = flowEdges(w)
+    expect(edges).toHaveLength(SAMPLE_PIPELINE.steps.length - 1)
+    expect(edges.every((e) => e.source !== ORCH_ID && e.target !== ORCH_ID)).toBe(true)
+    w.unmount()
+  })
+
+  it('TC-A8 (regression): trạng thái step (active/done) vẫn hiển thị đúng ở chế độ hub edge', async () => {
+    const task = {
+      task_id: 'HUB3',
+      current_phase: 'designer',
+      hitl_pending: null,
+      artifacts: { 'investigate.md': { exists: true } },
+      pipeline: HUB_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    expect(nodeData(w, 'designer')?.status).toBe('active')
+    expect(nodeData(w, 'investigator')?.status).toBe('done')
+    w.unmount()
+  })
+})
