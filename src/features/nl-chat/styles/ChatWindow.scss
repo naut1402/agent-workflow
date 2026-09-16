@@ -388,7 +388,7 @@
    structurally (one <form>). */
 .nl-chat-input-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 4px;
   /* Anchor for the "+" menu, which is absolutely positioned inside this row. */
   position: relative;
@@ -456,16 +456,18 @@
   padding: 5px 8px;
 }
 /* Multi-line composer: grows with the text (Enter sends, Shift+Enter newline).
-   Two lines is the FLOOR, not just the starting size — `autoGrow()` writes an
+   One line is the FLOOR, not just the starting size — `autoGrow()` writes an
    inline `height` on every input, which a CSS `min-height` outranks. That also
-   covers the reset after sending, where the box would otherwise drop to one
-   line. 2 × 1.45em + padding 5px×2, with box-sizing: border-box — no border of
-   its own now, the shell (`.nl-chat-input-row`) carries the one visible border. */
+   covers the reset after sending, where the box would otherwise drop back
+   below one line. 1 × 1.45em + padding 5px×2, with box-sizing: border-box — no
+   border of its own now, the shell (`.nl-chat-input-row`) carries the one
+   visible border. */
 .nl-chat-input-row textarea {
   flex: 1;
   min-width: 0;
   background: none;
   border: none;
+  outline: none;
   color: var(--text);
   font-family: inherit;
   font-size: 12px;
@@ -473,7 +475,7 @@
   resize: none;
   overflow-y: auto;
   padding: 5px 4px;
-  min-height: calc(1.45em * 2 + 10px);
+  min-height: calc(1.45em * 1 + 10px);
   max-height: 120px;
 }
 /* Only the draft preview's "Xác nhận & tạo" / "Huỷ" keep the boxed look now —
