@@ -2,7 +2,15 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import PipelineEditor from '@/features/pipeline-editor/components/PipelineEditor.vue'
-import { fetchCatalog, fetchRules, fetchPipelineConfig, writePipelineConfig } from '@/features/pipeline-editor/scripts/pipelineEditorApi'
+import {
+  fetchCatalog,
+  fetchRules,
+  fetchPipelineConfig,
+  fetchCatalogAgent,
+  fetchSkillContent,
+  fetchRuleContent,
+  writePipelineConfig,
+} from '@/features/pipeline-editor/scripts/pipelineEditorApi'
 import { fetchPipelineProfile, savePipelineProfile, deletePipelineProfile } from '@/features/pipeline-editor/scripts/ProfileManagerApi'
 
 // Regression for Tb8e8ad44: Catalog/Rules tabs kept showing the default
@@ -16,6 +24,8 @@ vi.mock('@/features/pipeline-editor/scripts/pipelineEditorApi', () => ({
   fetchRules: vi.fn(async () => ({ rules: [], categories: [] })),
   fetchPipelineConfig: vi.fn(async () => ({ pipeline: { steps: [] } })),
   fetchCatalogAgent: vi.fn(),
+  fetchSkillContent: vi.fn(),
+  fetchRuleContent: vi.fn(),
   writePipelineConfig: vi.fn(),
 }))
 
@@ -775,5 +785,146 @@ describe('PipelineEditor — canvas và select luôn cùng một đối tượng
     await flushPromises()
 
     expect(confirmSpy).not.toHaveBeenCalled()
+  })
+})
+
+// TC-B1..TC-B8 (T21270146) — click 1 agent/skill trong Catalog panel mở nội
+// dung markdown của nó, tái dùng đúng cơ chế "xem rule" đã có (canvas bị thay
+// bởi CMarkdownView, đóng/mở lại, toggle, đổi loại không cần đóng trước).
+describe('PipelineEditor — xem markdown agent/skill/rule', () => {
+  const AGENT = { id: 'repo:dev:investigator', name: 'investigator', description: 'x', plugin: 'dev', source: 'repo:dev', skills: [] }
+  const SKILL = { id: 'repo:dev:survey-codebase', name: 'survey-codebase', description: 'y', plugin: 'dev', source: 'repo:dev' }
+  const RULE = { id: 'r1', name: 'coding rule', path: 'docs/agent-rules/coding.md', category: 'coding', scope: 'project' }
+
+  beforeEach(() => {
+    vi.mocked(fetchCatalog).mockResolvedValue({ agents: [AGENT], skills: [SKILL] } as any)
+    vi.mocked(fetchRules).mockResolvedValue({ rules: [RULE], categories: ['coding'] } as any)
+    vi.mocked(fetchCatalogAgent).mockResolvedValue({ id: AGENT.id, content: 'NOI DUNG AGENT' } as any)
+    vi.mocked(fetchSkillContent).mockResolvedValue({ id: SKILL.id, content: 'NOI DUNG SKILL' } as any)
+    vi.mocked(fetchRuleContent).mockResolvedValue({ id: RULE.id, content: 'NOI DUNG RULE' } as any)
+  })
+
+  // Agents luôn ở section 0, skills ở section 1 (thứ tự template CatalogPanel).
+  function agentItem(w: any) {
+    return w.findAll('.catalog-item')[0]
+  }
+  function skillItem(w: any) {
+    return w.findAll('.catalog-item')[1]
+  }
+  function ruleItem(w: any) {
+    return w.find('.rules-item')
+  }
+  function canvasVisible(w: any): boolean {
+    return w.find('.editor-canvas').exists()
+  }
+  function docTitle(w: any): string {
+    return w.find('.rule-view-title').text()
+  }
+
+  it('TC-B1: click 1 agent → hiện nội dung markdown, ẩn canvas', async () => {
+    const w = mountEditor({ projectId: 'P1' })
+    await flushPromises()
+
+    await agentItem(w).trigger('click')
+    await flushPromises()
+
+    expect(fetchCatalogAgent).toHaveBeenCalledWith(AGENT.id)
+    expect(canvasVisible(w)).toBe(false)
+    expect(docTitle(w)).toBe(AGENT.name)
+    expect(w.text()).toContain('NOI DUNG AGENT')
+  })
+
+  it('TC-B2: click 1 skill → hiện nội dung markdown, ẩn canvas', async () => {
+    const w = mountEditor({ projectId: 'P1' })
+    await flushPromises()
+
+    await skillItem(w).trigger('click')
+    await flushPromises()
+
+    expect(fetchSkillContent).toHaveBeenCalledWith(SKILL.id, 'P1')
+    expect(canvasVisible(w)).toBe(false)
+    expect(docTitle(w)).toBe(SKILL.name)
+    expect(w.text()).toContain('NOI DUNG SKILL')
+  })
+
+  it('TC-B3: đang xem markdown thì canvas không hiển thị đồng thời', async () => {
+    const w = mountEditor({ projectId: 'P1' })
+    await flushPromises()
+
+    await agentItem(w).trigger('click')
+    await flushPromises()
+
+    expect(w.find('.rule-view').exists()).toBe(true)
+    expect(canvasVisible(w)).toBe(false)
+  })
+
+  it('TC-B4: đóng khung xem → canvas hiển thị lại, markdown không còn', async () => {
+    const w = mountEditor({ projectId: 'P1' })
+    await flushPromises()
+
+    await agentItem(w).trigger('click')
+    await flushPromises()
+    await w.find('.rule-view-header button').trigger('click')
+
+    expect(w.find('.rule-view').exists()).toBe(false)
+    expect(canvasVisible(w)).toBe(true)
+  })
+
+  it('TC-B5: click lại đúng agent đang xem → đóng về canvas (toggle)', async () => {
+    const w = mountEditor({ projectId: 'P1' })
+    await flushPromises()
+
+    await agentItem(w).trigger('click')
+    await flushPromises()
+    await agentItem(w).trigger('click')
+    await flushPromises()
+
+    expect(w.find('.rule-view').exists()).toBe(false)
+    expect(canvasVisible(w)).toBe(true)
+  })
+
+  it('TC-B6: đang xem rule, click sang skill khác → chuyển thẳng, không cần đóng trước', async () => {
+    const w = mountEditor({ projectId: 'P1' })
+    await flushPromises()
+
+    await ruleItem(w).trigger('click')
+    await flushPromises()
+    expect(docTitle(w)).toBe(RULE.name)
+
+    await skillItem(w).trigger('click')
+    await flushPromises()
+
+    expect(docTitle(w)).toBe(SKILL.name)
+    expect(w.text()).toContain('NOI DUNG SKILL')
+    expect(w.text()).not.toContain('NOI DUNG RULE')
+    expect(canvasVisible(w)).toBe(false)
+  })
+
+  it('TC-B7 (regression): luồng "xem rule" hiện có vẫn hoạt động đúng như trước', async () => {
+    const w = mountEditor({ projectId: 'P1' })
+    await flushPromises()
+
+    await ruleItem(w).trigger('click')
+    await flushPromises()
+
+    expect(fetchRuleContent).toHaveBeenCalledWith(RULE.id, 'P1')
+    expect(canvasVisible(w)).toBe(false)
+    expect(docTitle(w)).toBe(RULE.name)
+    expect(w.text()).toContain('NOI DUNG RULE')
+
+    await w.find('.rule-view-header button').trigger('click')
+    expect(canvasVisible(w)).toBe(true)
+  })
+
+  it('TC-B8: nội dung không tải được → hiện lỗi, không crash, không lẫn canvas', async () => {
+    vi.mocked(fetchSkillContent).mockRejectedValue(new Error('not found'))
+    const w = mountEditor({ projectId: 'P1' })
+    await flushPromises()
+
+    await skillItem(w).trigger('click')
+    await flushPromises()
+
+    expect(w.find('.rule-view-status.err').exists()).toBe(true)
+    expect(canvasVisible(w)).toBe(false)
   })
 })

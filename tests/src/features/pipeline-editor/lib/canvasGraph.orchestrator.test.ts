@@ -61,9 +61,14 @@ describe('không lọt vào YAML (TC-32)', () => {
     expect(node.type).toBe('orchestrator')
   })
 
-  it('không có edge nào nối với step (nó không nằm trong steps[])', () => {
+  // T21270146 đảo ngược có chủ đích quyết định cũ ("không nối edge với step
+  // nào"): khi bật, node điều phối vẽ hub edge tới từng step (source luôn là
+  // ORCHESTRATOR_NODE_ID) — nhưng `stepEdgesOf` (nguồn build YAML) vẫn phải lọc
+  // sạch hub edge đó, vì source không nằm trong `stepIds`.
+  it('vẽ hub edge tới từng step, nhưng stepEdgesOf (build YAML) chỉ thấy step-edge cũ', () => {
     const { nodes, edges } = build({ enabled: true })
-    expect(edges.some((e: any) => e.source === ORCHESTRATOR_NODE_ID || e.target === ORCHESTRATOR_NODE_ID)).toBe(false)
+    const hubEdges = edges.filter((e: any) => e.source === ORCHESTRATOR_NODE_ID)
+    expect(hubEdges.map((e: any) => e.target)).toEqual(['a', 'b'])
     const stepIds = new Set(stepNodesOf(nodes).map((n: any) => n.id))
     expect(stepEdgesOf(edges, stepIds).map((e: any) => e.id)).toEqual(['e-a-b'])
   })
@@ -111,5 +116,51 @@ describe('vị trí (TC-05, TC-06)', () => {
     expect(node).toBeTruthy()
     expect(Number.isFinite(node.position.x)).toBe(true)
     expect(Number.isFinite(node.position.y)).toBe(true)
+  })
+})
+
+// T21270146 — hub edge: khi bật, node điều phối vẽ 1 edge tới TỪNG step, thay
+// vì để step nối step trực tiếp. Khi tắt, hành vi step-step giữ nguyên.
+describe('Hub edge — TC-A1/A2/A5/A6/A7', () => {
+  it('TC-A1: bật ⇒ đúng N hub edge (N = số step), source luôn là node điều phối', () => {
+    const { edges } = build({ enabled: true, agent: 'a:orch' })
+    const hub = edges.filter((e: any) => e.source === ORCHESTRATOR_NODE_ID)
+    expect(hub).toHaveLength(2)
+    expect(hub.map((e: any) => e.target).sort()).toEqual(['a', 'b'])
+    expect(hub.every((e: any) => e.id === `e-${ORCHESTRATOR_NODE_ID}-${e.target}`)).toBe(true)
+  })
+
+  it('TC-A1: step-edge cũ bị ẩn (hidden: true) khi hub bật, không bị loại khỏi mảng (D2)', () => {
+    const { edges } = build({ enabled: true })
+    const stepEdge = edges.find((e: any) => e.id === 'e-a-b')
+    expect(stepEdge).toBeTruthy()
+    expect(stepEdge.hidden).toBe(true)
+  })
+
+  it('TC-A2/TC-A5: tắt (hoặc không truyền orchestrator) ⇒ không hub edge nào, step-edge hiện lại (hidden: false)', () => {
+    for (const orchestrator of [undefined, { enabled: false }]) {
+      const { edges } = build(orchestrator)
+      expect(edges.some((e: any) => e.source === ORCHESTRATOR_NODE_ID)).toBe(false)
+      expect(edges.find((e: any) => e.id === 'e-a-b').hidden).toBe(false)
+    }
+  })
+
+  it('TC-A6: đúng 1 step ⇒ đúng 1 hub edge tới đúng step đó', () => {
+    const { edges } = build({ enabled: true }, [stepNode('solo', 0)])
+    const hub = edges.filter((e: any) => e.source === ORCHESTRATOR_NODE_ID)
+    expect(hub).toHaveLength(1)
+    expect(hub[0]).toMatchObject({ target: 'solo' })
+  })
+
+  it('TC-A7: 0 step ⇒ không hub edge nào, không lỗi', () => {
+    const { nodes, edges } = buildEditorGraph({
+      stepNodes: [],
+      stepEdges: [],
+      steps: [],
+      labels: LABELS,
+      orchestrator: { enabled: true },
+    })
+    expect(edges).toEqual([])
+    expect(nodes.some((n: any) => n.id === ORCHESTRATOR_NODE_ID)).toBe(true)
   })
 })
