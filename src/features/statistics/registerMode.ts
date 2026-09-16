@@ -7,7 +7,6 @@ export function registerMode(registry: ModeRegistry): void {
     labelKey: 'common.modes.statistics',
     icon: 'statistics',
     order: 9,
-    statusKind: 'paused',
     panel: StatisticsPanel,
     descriptionKey: 'common.modeDesc.statistics',
     maturity: 'stable',

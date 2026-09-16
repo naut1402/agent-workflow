@@ -1,12 +1,15 @@
 import { computed, ref } from 'vue'
 import { fetchJobs } from '../../runner/scripts/runnerApi'
 import { groupRunningJobs, type JobLite } from '../lib/groupRunningJobs'
+import { openSseStream, type SseStream } from '../../../frontend/lib/sseClient'
 
-export function useRunningJobs(pollMs = 1500) {
+// Backed by SSE (`/api/jobs/stream`, global — không scope theo project) thay
+// vì polling. `poll()` giữ lại là 1 lần fetch REST cho call site cần refresh
+// ngay sau hành động của chính user.
+export function useRunningJobs() {
   const jobs = ref<JobLite[]>([])
   const error = ref<string | null>(null)
-  let timer: ReturnType<typeof setTimeout> | null = null
-  let running = false
+  let stream: SseStream | null = null
 
   async function poll() {
     try {
@@ -23,25 +26,24 @@ export function useRunningJobs(pollMs = 1500) {
   const runningCount = computed(() => grouped.value.totalJobs)
 
   function stop() {
-    running = false
-    if (timer) {
-      clearTimeout(timer)
-      timer = null
-    }
-  }
-
-  // Chain via setTimeout (not setInterval) so a poll slower than `pollMs`
-  // can't overlap with the next one and have its response race a newer poll's.
-  async function scheduleNext() {
-    if (!running) return
-    await poll()
-    if (running) timer = setTimeout(scheduleNext, pollMs)
+    stream?.close()
+    stream = null
   }
 
   function start() {
     stop()
-    running = true
-    scheduleNext()
+    stream = openSseStream('/api/jobs/stream', undefined, {
+      onEvent: (type, data) => {
+        if (type !== 'jobs') return
+        const jobsData = (data as { jobs: unknown }).jobs
+        jobs.value = Array.isArray(jobsData) ? (jobsData as JobLite[]) : []
+        error.value = null
+      },
+      onError: (e: any) => {
+        error.value = String(e?.message || e)
+        // keep previous jobs — do not clear badge on a single stream failure
+      },
+    })
   }
 
   return { jobs, grouped, runningCount, error, poll, start, stop }

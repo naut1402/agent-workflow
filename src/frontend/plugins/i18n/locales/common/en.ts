@@ -33,18 +33,6 @@ export default {
     logs: 'Audit, request, job and event logs.',
     statistics: 'Usage, runtime and cost statistics.',
   },
-  status: {
-    paused: {
-      editor: 'editor mode — polling paused',
-      agentEditor: 'agent editor — polling paused',
-      quickAction: 'quick action — polling paused',
-      knowledge: 'knowledge — polling paused',
-      runner: 'runner config — polling paused',
-      automations: 'automations — polling paused',
-      logs: 'logs — polling paused',
-      statistics: 'statistics — polling paused',
-    },
-  },
   language: {
     title: 'Language',
     desc: 'Choose the display language of the interface.',

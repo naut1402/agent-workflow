@@ -9,7 +9,6 @@ export function registerMode(registry: ModeRegistry): void {
     titleKey: 'common.modes.runnerConfig',
     icon: 'runner',
     order: 6,
-    statusKind: 'paused',
     panel: RunnerConfigPanel,
     descriptionKey: 'common.modeDesc.runner',
     maturity: 'stable',

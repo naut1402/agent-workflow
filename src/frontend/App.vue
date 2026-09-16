@@ -117,10 +117,10 @@ const selectedProjectId = ref(loadSelectedProject())
 const openArtifact = ref(null)
 const createTaskOpen = ref(false)
 
-// Task polling (root/tasks/selectedId + connection state + 1500ms loop) lives in
-// a composable so the shell stays thin and the loop is unit-testable.
+// Task list (root/tasks/selectedId + connection state) lives in a composable,
+// backed by SSE, so the shell stays thin and the logic is unit-testable.
 const { root, tasks, selectedId, error, lastUpdated, connected, poll, start, stop } =
-  useTaskPolling(() => selectedProjectId.value, 1500)
+  useTaskPolling(() => selectedProjectId.value)
 
 const selected = computed(
   () => tasks.value.find((t) => t.task_id === selectedId.value) || null,
@@ -136,7 +136,7 @@ const {
   runningCount,
   start: startRunningJobs,
   stop: stopRunningJobs,
-} = useRunningJobs(1500)
+} = useRunningJobs()
 
 const showSidebarNotification = computed(() => resolveNotifyShowSidebar(settings.value))
 const showFloatingNotification = computed(() => resolveNotifyShowFloating(settings.value))
@@ -383,10 +383,11 @@ const activeMode = computed(() => modeRegistry.getMode(mode.value))
 /** Shell context the chat window shows in its info popover — null hides the row. */
 const chatShellModeLabel = computed(() => (activeMode.value ? t(activeMode.value.labelKey) : null))
 
-watch(mode, async (m) => {
+// Stream mở cố định theo project lúc `start()` — đổi project phải đóng/mở lại
+// stream, nếu không sidebar tiếp tục hiện task của project cũ.
+watch(selectedProjectId, () => {
   stop()
-  if (m === 'monitor') start()
-  else await poll()
+  start()
 })
 
 onMounted(async () => {
@@ -460,7 +461,6 @@ onUnmounted(() => {
         />
         <footer v-if="!sidebarCollapsed" class="status">
           <span v-if="error" class="err">⚠ {{ error }}</span>
-          <span v-else-if="activeMode?.statusKind === 'paused'" class="muted">{{ t(`common.status.paused.${mode}`) }}</span>
         </footer>
         <button
           type="button"
