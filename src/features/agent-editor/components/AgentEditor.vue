@@ -5,7 +5,6 @@ import {
   fetchCustomAgents,
   fetchCustomAgent,
   deleteCustomAgent,
-  exportCustomAgent,
   type AgentMeta,
 } from '../scripts/agentEditorApi'
 import { draftFromAgentMarkdown } from '../business/agentMarkdown.js'
@@ -14,8 +13,6 @@ import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import AgentSideMenu from './AgentSideMenu.vue'
 import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
 import AgentFormDialog from './AgentFormDialog.vue'
-import AgentTemplatePicker from './AgentTemplatePicker.vue'
-import AgentNlWizard from './AgentNlWizard.vue'
 
 const props = defineProps<{ projectId?: string | null; subSidebarCollapsed?: boolean }>()
 
@@ -26,7 +23,7 @@ const catalog = ref({ skills: [], agents: [] })
 const error = ref('')
 const message = ref('')
 
-// Agent đang xem ở main — cũng là target của nút Export (QA Q1 → A).
+// Agent đang xem ở main.
 const viewing = ref<AgentMeta | null>(null)
 const viewContent = ref('')
 const viewLoading = ref(false)
@@ -35,8 +32,6 @@ const deletingKey = ref<string | null>(null)
 const showDialog = ref(false)
 const editingAgent = ref<AgentMeta | null>(null)
 const initialDraft = ref<Record<string, unknown> | null>(null)
-const showTemplates = ref(false)
-const showNl = ref(false)
 
 const keyOf = (a: AgentMeta) => `${a.scope}:${a.name}`
 const selectedKey = computed(() => (viewing.value ? keyOf(viewing.value) : null))
@@ -113,39 +108,31 @@ async function removeAgent(agent: AgentMeta) {
   }
 }
 
-async function doExport(overwrite = false) {
-  const agent = viewing.value
-  if (!agent) return
+async function handleDownloadAgent(agent: AgentMeta) {
   try {
-    const result = await exportCustomAgent(
-      agent.name,
-      overwrite,
-      props.projectId ?? undefined,
-      agent.scope,
-    )
-    message.value = t('agentEditor.messages.exported', { path: result.path })
-    error.value = ''
+    const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agent.scope)
+    const blob = new Blob([data.content ?? ''], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${agent.name}.md`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   } catch (e: any) {
-    const msg = String(e.message || e)
-    if (msg.includes('file exists') && confirm(t('agentEditor.messages.confirmOverwrite'))) {
-      await doExport(true)
-    } else {
-      error.value = msg
-    }
+    error.value = String(e.message || e)
   }
 }
 
-function handleDownloadAgent() {
-  if (!viewing.value) return
-  const blob = new Blob([viewContent.value], { type: 'text/markdown' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${viewing.value.name}.md`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+async function handleDuplicateAgent(agent: AgentMeta) {
+  try {
+    const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agent.scope)
+    const draft = draftFromAgentMarkdown(data.content ?? '', agent)
+    applyDraft(draft)
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
 }
 
 async function handleUploadAgentFile(e: Event) {
@@ -162,10 +149,7 @@ async function handleUploadAgentFile(e: Event) {
   }
 }
 
-/** Draft từ 2 wizard — đóng wizard rồi mới mở dialog, hai cái loại trừ nhau. */
 function applyDraft(draft: Record<string, unknown>) {
-  showTemplates.value = false
-  showNl.value = false
   editingAgent.value = null
   initialDraft.value = draft
   showDialog.value = true
@@ -204,12 +188,9 @@ async function onSaved(savedName: string) {
             :agents="agents"
             :selected-key="selectedKey"
             :busy-key="deletingKey"
-            :can-export="!!viewing"
             @new="newAgent"
-            @templates="showTemplates = true"
-            @nl="showNl = true"
-            @export="doExport(false)"
             @download="handleDownloadAgent"
+            @duplicate="handleDuplicateAgent"
             @upload-file="handleUploadAgentFile"
             @view="openViewer"
             @edit="openEditor"
@@ -245,7 +226,7 @@ async function onSaved(savedName: string) {
     </template>
   </CScreenLayout>
 
-  <!-- Dialog + 2 wizard là modal ngang hàng, đứng ngoài CScreenLayout. -->
+  <!-- Dialog là modal ngang hàng, đứng ngoài CScreenLayout. -->
   <AgentFormDialog
     v-if="showDialog"
     :agent="editingAgent"
@@ -255,23 +236,6 @@ async function onSaved(savedName: string) {
     @close="closeDialog"
     @saved="onSaved"
   />
-  <!-- `.modal-body` là bắt buộc theo hợp đồng ghi ở `_shell.scss`: `.modal`
-       không khai overflow, nội dung cao quá 88vh mà không có tầng này thì bị
-       vẽ ra ngoài viền. Cả 2 wizard đều không tự khai overflow ở root. -->
-  <div v-if="showTemplates" class="modal-backdrop" @click.self="showTemplates = false">
-    <div class="modal">
-      <div class="modal-body">
-        <AgentTemplatePicker @apply-draft="applyDraft" @close="showTemplates = false" />
-      </div>
-    </div>
-  </div>
-  <div v-if="showNl" class="modal-backdrop" @click.self="showNl = false">
-    <div class="modal">
-      <div class="modal-body">
-        <AgentNlWizard :project-id="projectId" @apply-draft="applyDraft" @close="showNl = false" />
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped lang="scss">
