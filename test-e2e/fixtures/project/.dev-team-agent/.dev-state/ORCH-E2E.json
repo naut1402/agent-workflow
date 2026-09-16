@@ -4,7 +4,5 @@
   "hitl_pending": null,
   "review_round": 0,
   "auto_review": false,
-  "orchestrator_enabled": true,
-  "orchestrator_halted": true,
-  "orchestrator_halted_at": "2026-09-16T16:20:55.433Z"
+  "orchestrator_enabled": true
 }
