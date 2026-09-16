@@ -7,7 +7,12 @@ import * as pipelineEditorBusiness from './business/index.js'
 import { draftFromAgentMarkdown } from '../agent-editor/business/agentMarkdown.js'
 import { parseFrontmatter } from '../../backend/lib/yamlLib.js'
 import { emitAudit } from '../../backend/log/store.js'
-import { buildCatalog, parseCatalogAgentId, resolveCatalogAgentPath } from './business/catalog/index.js'
+import {
+  buildCatalog,
+  parseCatalogItemId,
+  resolveCatalogAgentPath,
+  resolveCatalogSkillPath,
+} from './business/catalog/index.js'
 import { buildRules, resolveRuleContentPathWithPatterns } from './business/rules/index.js'
 
 /**
@@ -211,7 +216,7 @@ export class PipelineEditorController extends AbstractController {
       customAgentsDir: pipelineEditorBusiness.customAgentsDir,
     })
     if (!agentPath) {
-      const parsed = parseCatalogAgentId(id)
+      const parsed = parseCatalogItemId(id)
       if (parsed?.source?.startsWith('repo:')) {
         const pluginName = parsed.source.slice('repo:'.length)
         const builtin = path.join(projectRoot, 'plugins', pluginName, 'agents', `${parsed.name}.md`)
@@ -226,12 +231,54 @@ export class PipelineEditorController extends AbstractController {
     if (!agentPath) return this.notFound('agent file not found')
     try {
       const raw = await fs.readFile(agentPath, 'utf8')
-      const meta = parseCatalogAgentId(id)
+      const meta = parseCatalogItemId(id)
       const draft = draftFromAgentMarkdown(raw, { name: meta?.name, description: '' })
       const fm = parseFrontmatter(raw)
       if (fm.description) draft.description = fm.description
       if (Array.isArray(fm.skills) && fm.skills.length) draft.skills = [...fm.skills]
       return this.ok({ id, path: agentPath, content: raw, draft })
+    } catch (e: any) {
+      return this.json(500, { error: String(e.message || e) })
+    }
+  }
+
+  async getSkillContent() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+
+    const id = this.c.req.query('id')
+    if (!id) return this.badRequest('missing id')
+    const projectRoot = path.dirname(root)
+    let skillPath = await resolveCatalogSkillPath(projectRoot, id, {
+      sanitiseName: pipelineEditorBusiness.sanitiseAgentName,
+    })
+    if (!skillPath) {
+      const parsed = parseCatalogItemId(id)
+      // `pluginName` cũng đi thẳng vào `path.join` như `name` — phải qua cùng
+      // whitelist ký tự (AGENTS.md §4), nếu không `id=repo:../../..:x` thoát
+      // khỏi thư mục `plugins/`. Resolve + `startsWith` bên dưới là lớp chặn
+      // thứ hai, độc lập với whitelist, cho path kết quả.
+      if (parsed?.source?.startsWith('repo:') && pipelineEditorBusiness.sanitiseAgentName(parsed.name) === parsed.name) {
+        const pluginName = parsed.source.slice('repo:'.length)
+        if (pipelineEditorBusiness.sanitiseAgentName(pluginName) === pluginName) {
+          const pluginsDir = path.resolve(projectRoot, 'plugins')
+          const builtin = path.resolve(pluginsDir, pluginName, 'skills', parsed.name, 'SKILL.md')
+          if (builtin.startsWith(pluginsDir + path.sep)) {
+            try {
+              await fs.access(builtin)
+              skillPath = builtin
+            } catch {
+              /* not found */
+            }
+          }
+        }
+      }
+    }
+    if (!skillPath) return this.notFound('skill file not found')
+    try {
+      const raw = await fs.readFile(skillPath, 'utf8')
+      return this.ok({ id, content: raw })
     } catch (e: any) {
       return this.json(500, { error: String(e.message || e) })
     }

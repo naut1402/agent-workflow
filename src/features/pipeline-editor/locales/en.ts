@@ -96,9 +96,11 @@ export default {
     filterCategory: 'Filter rules by category',
     scopeProject: 'Project',
     scopeGlobal: 'Global',
+  },
+  docView: {
     close: 'Close',
-    loading: 'Loading rule content…',
-    loadError: 'Failed to load rule content.',
+    loading: 'Loading content…',
+    loadError: 'Failed to load content.',
   },
   stepConfig: {
     title: 'Configure step',
