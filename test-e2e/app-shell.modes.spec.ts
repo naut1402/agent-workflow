@@ -29,7 +29,7 @@ test('sidebar switches across modes incl. runner (capture)', async ({ page }, te
   await expect(page.locator('.quick-action-panel')).toBeVisible()
   await capturePage(page, testInfo, 'quick-action')
 
-  // Back to monitor — polling resumes, task list renders again.
+  // Back to monitor — task-list SSE stream stays open across modes, list renders again.
   await page.locator('button[title^="Monitor"]').click()
   await expect(page.locator('.tasklist--active')).toBeVisible()
 
@@ -48,9 +48,7 @@ test('mode icon toggles the sub-sidebar of the active mode (capture)', async ({ 
   await page.waitForLoadState('networkidle')
 
   const monitorBtn = page.locator('button[title^="Monitor"]')
-  // Trạng thái thu gọn nay do CScreenLayout giữ (`__body--left-collapsed`);
-  // `.monitor-layout` chỉ còn là gốc bọc, không mang modifier nào.
-  const monitorBody = page.locator('.monitor-layout .c-screen-layout__body')
+  const monitorLayout = page.locator('.monitor-layout')
   const subSidebar = page.locator('.monitor-sub-sidebar')
 
   await expect(page.locator('.tasklist--active')).toBeVisible({ timeout: 15_000 })
@@ -60,7 +58,7 @@ test('mode icon toggles the sub-sidebar of the active mode (capture)', async ({ 
 
   // Active mode + sub-sidebar showing → one click hides it, mode stays Monitor.
   await monitorBtn.click()
-  await expect(monitorBody).toHaveClass(/c-screen-layout__body--left-collapsed/)
+  await expect(monitorLayout).toHaveClass(/monitor-layout--sub-collapsed/)
   await expect(monitorBtn).toHaveAttribute('aria-expanded', 'false')
   await expect(monitorBtn).toHaveClass(/active/)
   await expect(page.locator('.tasklist--active')).toHaveCount(0)
@@ -71,26 +69,25 @@ test('mode icon toggles the sub-sidebar of the active mode (capture)', async ({ 
 
   // Click again → shows it back.
   await monitorBtn.click()
-  await expect(monitorBody).not.toHaveClass(/c-screen-layout__body--left-collapsed/)
+  await expect(monitorLayout).not.toHaveClass(/monitor-layout--sub-collapsed/)
   await expect(monitorBtn).toHaveAttribute('aria-expanded', 'true')
   await expect(page.locator('.tasklist--active')).toBeVisible()
 
   // Editor: selecting the mode must not toggle its panel; clicking again must.
   const editorBtn = page.locator('button[title^="Pipeline Editor"]')
-  const editorBody = page.locator('.editor-root .c-screen-layout__body')
   await editorBtn.click()
-  await expect(editorBody).not.toHaveClass(/c-screen-layout__body--left-collapsed/)
+  await expect(page.locator('.editor-left')).not.toHaveClass(/editor-left-collapsed/)
   await expect(page.locator('.editor-left-collapse-btn')).toHaveCount(0)
   await capturePage(page, testInfo, 'editor-sub-sidebar-expanded')
 
   await editorBtn.click()
-  await expect(editorBody).toHaveClass(/c-screen-layout__body--left-collapsed/)
+  await expect(page.locator('.editor-left')).toHaveClass(/editor-left-collapsed/)
   // Editor keeps its icon rail (Agents/Skills/Rules) instead of shrinking to zero.
   await expect(page.locator('.target-section-icon')).toHaveCount(3)
   await capturePage(page, testInfo, 'editor-sub-sidebar-collapsed')
 
   // Reopening from inside the panel keeps the mode icon's state in sync.
   await page.locator('.target-section-icon').first().click()
-  await expect(editorBody).not.toHaveClass(/c-screen-layout__body--left-collapsed/)
+  await expect(page.locator('.editor-left')).not.toHaveClass(/editor-left-collapsed/)
   await expect(editorBtn).toHaveAttribute('aria-expanded', 'true')
 })
