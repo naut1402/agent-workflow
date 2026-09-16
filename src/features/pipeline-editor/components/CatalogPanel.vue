@@ -12,7 +12,7 @@ const props = defineProps({
   openSections: { type: Object as () => Set<string>, default: () => new Set(['agents']) },
 })
 
-const emit = defineEmits(['toggle-section'])
+const emit = defineEmits(['toggle-section', 'view-agent', 'view-skill'])
 
 // Một state cho mỗi danh sách — control lọc phải thuộc về đúng mục nó phục vụ,
 // nếu không người dùng không biết select đang lọc danh sách nào.
@@ -143,6 +143,7 @@ function onDragStart(event, item, type) {
           class="catalog-item"
           draggable="true"
           @dragstart="onDragStart($event, agent, 'agent')"
+          @click="emit('view-agent', agent)"
           :title="agent.description"
         >
           <div class="catalog-item-name">{{ agent.name }}</div>
@@ -185,12 +186,13 @@ function onDragStart(event, item, type) {
         />
       </div>
       <div class="catalog-list">
-        <!-- Danh sách tra cứu: skill không kéo được vào canvas (thả skill chỉ
+        <!-- Click để xem markdown; không kéo được vào canvas (thả skill chỉ
              sinh step rác mang tên skill) nên không đặt `draggable`. -->
         <div
           v-for="skill in filteredSkills"
           :key="skill.id"
           class="catalog-item catalog-item--static"
+          @click="emit('view-skill', skill)"
           :title="skill.description"
         >
           <div class="catalog-item-name">{{ skill.name }}</div>
@@ -271,12 +273,6 @@ function onDragStart(event, item, type) {
 }
 .catalog-item:hover { border-color: var(--accent); }
 .catalog-item:active { cursor: grabbing; }
-
-/* Item chỉ để tra cứu — không kéo được thì không dùng con trỏ grab, và cũng
-   không sáng viền accent như item tương tác được. */
-.catalog-item--static { cursor: default; }
-.catalog-item--static:active { cursor: default; }
-.catalog-item--static:hover { border-color: var(--border); }
 
 .catalog-item-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .catalog-item-meta { font-size: 10px; color: var(--muted); margin-top: 1px; }

@@ -195,7 +195,7 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
     >
       {{ data.qa_count }}Q
     </span>
-    <Handle v-if="!isOrchestrator" type="source" :position="Position.Right" />
+    <Handle type="source" :position="Position.Right" />
   </div>
 </template>
 

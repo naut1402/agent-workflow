@@ -96,9 +96,11 @@ export default {
     filterCategory: 'Lọc rule theo category',
     scopeProject: 'Project',
     scopeGlobal: 'Global',
+  },
+  docView: {
     close: 'Đóng',
-    loading: 'Đang tải nội dung rule…',
-    loadError: 'Không tải được nội dung rule.',
+    loading: 'Đang tải nội dung…',
+    loadError: 'Không tải được nội dung.',
   },
   stepConfig: {
     title: 'Cấu hình step',
