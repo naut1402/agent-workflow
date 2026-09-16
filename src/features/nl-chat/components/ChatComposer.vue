@@ -65,7 +65,7 @@ function removeKnowledge(id: string): void {
     <textarea
       :ref="bindInput"
       v-model="c.inputText.value"
-      rows="2"
+      rows="1"
       :placeholder="placeholder"
       :title="c.composerHint.value"
       :disabled="!c.canAttach.value"
