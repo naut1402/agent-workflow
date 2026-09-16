@@ -10,7 +10,6 @@ function makeEntry(key: string, subSidebar?: ModeEntry['subSidebar']): ModeEntry
     labelKey: `common.modes.${key}`,
     icon: 'monitor',
     order: 1,
-    statusKind: 'paused',
     panel: { name: 'StubPanel', render: () => null },
     ...(subSidebar ? { subSidebar } : {}),
   }
