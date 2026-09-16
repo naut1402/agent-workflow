@@ -9,6 +9,8 @@ export default {
     edit: 'Edit agent',
     delete: 'Delete agent',
     exportHint: 'Select an agent before exporting',
+    download: 'Download agent',
+    duplicate: 'Duplicate agent',
   },
   viewer: {
     empty: 'Pick an agent on the left to view it',
