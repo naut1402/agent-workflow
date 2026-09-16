@@ -21,7 +21,8 @@ import { generateAndApplyTaskName } from './business/tasks/generateTaskName.js'
 import { isResettableTarget } from './lib/pipelineRunGuards.js'
 import * as monitorBusiness from './business/index.js'
 import { emitAudit } from '../../backend/log/store.js'
-import { emit, emitEntity } from '../../backend/events/index.js'
+import { emit, emitEntity, on } from '../../backend/events/index.js'
+import { sseResponse } from '../../backend/http/sseHelper.js'
 import { TaskArchivePatch, TaskNamePatch, TaskOrchestratorPatch, TaskStatePatch } from './schemas/task.js'
 import { CreateTaskRequest, GithubIssueRequest } from './schemas/taskCreate.js'
 import { mintTaskId } from './lib/createTaskForm.js'
@@ -63,6 +64,17 @@ async function withArtifactWriteLock<T>(target: string, fn: () => Promise<T>): P
     if (artifactWriteLocks.get(target) === chain) artifactWriteLocks.delete(target)
   }
 }
+
+/** Event type nào kích hoạt đẩy lại snapshot task-list qua SSE. */
+const TASK_STREAM_EVENTS = new Set([
+  'task.created',
+  'task.advanced',
+  'hitl.pending',
+  'hitl.resolved',
+  'entity.created',
+  'entity.updated',
+  'entity.deleted',
+])
 
 export class MonitorController extends AbstractController {
   // Project registry CRUD — no per-project root needed (Monitor owns project ↔ task UX).
@@ -169,6 +181,28 @@ export class MonitorController extends AbstractController {
     const payload: any = { root, tasks: await collectTasks(root) }
     if (this.projectId) payload.project = this.projectId
     return this.ok(payload)
+  }
+
+  /**
+   * SSE thay REST poll. Không lọc theo `payload.projectId` của event (nhiều
+   * event vòng đời không mang field này) — mỗi kết nối tự `collectTasks` lại
+   * đúng `root` của chính nó bất kể event nổ ra từ project nào.
+   */
+  streamTasks() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const projectId = this.projectId
+
+    return sseResponse((send) => {
+      const pushSnapshot = async () => {
+        send('tasks', { root, tasks: await collectTasks(root), ...(projectId ? { project: projectId } : {}) })
+      }
+      void pushSnapshot()
+      return on('*', (event) => {
+        if (TASK_STREAM_EVENTS.has(event.type)) void pushSnapshot()
+      })
+    })
   }
 
   async getPipelineConfig() {

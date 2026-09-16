@@ -12,7 +12,6 @@ export interface ModeEntry {
   titleKey?: string
   icon: RailIconName
   order: number
-  statusKind: 'live' | 'paused'
   panel: Component
   /** Ẩn mode khỏi sidebar/status/main khi false (vd `logs` theo `showLogsTab`). Mặc định luôn hiện. */
   visible?: (ctx: ShellContext) => boolean

@@ -13,6 +13,7 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.all('/api/projects', bind(MonitorController, 'projectsMethodNotAllowed'))
 
   app.get('/api/tasks', bind(MonitorController, 'listTasks'))
+  app.get('/api/tasks/stream', bind(MonitorController, 'streamTasks'))
   app.get('/api/pipeline-config', bind(MonitorController, 'getPipelineConfig'))
   app.get('/api/artifact', bind(MonitorController, 'getArtifact'))
   app.put('/api/artifact', bind(MonitorController, 'putArtifact'))

@@ -118,6 +118,49 @@ function writeWebResponse(res: ServerResponse, status: number, headers: Headers,
   res.end(buf)
 }
 
+/**
+ * Pipe một `text/event-stream` Response xuống Node `res` theo chunk thay vì
+ * buffer toàn bộ (`arrayBuffer()`) như path JSON thường. Resolve khi kết nối
+ * đóng — do client ngắt (`req.on('close')`) hoặc stream tự kết thúc.
+ */
+function streamSseResponse(
+  req: IncomingMessage,
+  res: ServerResponse,
+  response: Response,
+  headers: Headers,
+): Promise<void> {
+  return new Promise((resolve) => {
+    res.statusCode = response.status
+    headers.forEach((value, key) => res.setHeader(key, value))
+    res.flushHeaders?.()
+
+    const reader = response.body!.getReader()
+    let closed = false
+    const finish = () => {
+      if (closed) return
+      closed = true
+      reader.cancel().catch(() => {})
+      resolve()
+    }
+    req.on('close', finish)
+
+    void (async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done || res.writableEnded) break
+          res.write(Buffer.from(value))
+        }
+      } catch {
+        // Socket lỗi giữa chừng — nuốt, không throw lên `handle()`.
+      } finally {
+        if (!res.writableEnded) res.end()
+        finish()
+      }
+    })()
+  })
+}
+
 export function createApiHandler(ctx: RegistryContext) {
   // Lazy init: first /api request awaits feature route registration once.
   // Reset on failure so a transient init error does not pin every later request to 500.
@@ -152,9 +195,18 @@ export function createApiHandler(ctx: RegistryContext) {
         // Prefer inbound/minted id on the wire (overwrite if Hono also set one).
         const headers = new Headers(response.headers)
         headers.set('X-Trace-Id', traceId)
-        const buf = Buffer.from(await response.arrayBuffer())
-        responsePreview = formatResponsePreview(buf, headers.get('content-type'))
-        writeWebResponse(res, response.status, headers, buf)
+        const contentType = headers.get('content-type') || ''
+        if (contentType.startsWith('text/event-stream')) {
+          // durationMs ghi bên dưới ở `finally` phản ánh cả phiên kết nối SSE,
+          // không phải thời gian xử lý 1 request thường — chấp nhận được vì
+          // route stream không dùng số này cho mục đích gì khác.
+          responsePreview = '[sse stream]'
+          await streamSseResponse(req, res, response, headers)
+        } else {
+          const buf = Buffer.from(await response.arrayBuffer())
+          responsePreview = formatResponsePreview(buf, headers.get('content-type'))
+          writeWebResponse(res, response.status, headers, buf)
+        }
       } catch (err: any) {
         errored = String(err && err.message ? err.message : err)
         responsePreview = formatResponsePreview(
