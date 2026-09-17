@@ -39,7 +39,7 @@ Nếu có điểm mơ hồ trong `design.md §4` cần xác nhận trước khi 
 
 ### Bước 2: Viết code
 
-Đọc "Rule coding" trong `.dev-team-agent/project-rules.md` do orchestrator truyền vào — rule project ưu tiên hơn khi xung đột; nếu phần coding trống thì dùng `coding-rules` làm fallback.
+Đọc "Rule coding" từ chỉ dẫn agent của project — `CLAUDE.md` / `AGENTS.md` ở root repo, rồi file rule coding mà hub đó trỏ tới; rule project ưu tiên hơn khi xung đột. Không nguồn nào đọc được thì dùng `coding-rules` làm fallback — **không dừng pipeline** chỉ vì thiếu rule project.
 
 Tuân theo rule coding (project rule ưu tiên, `coding-rules` fallback):
 - Chỉ sửa files được chỉ định trong design §4.1
