@@ -47,11 +47,13 @@ export const BUILTIN_CATALOG = {
   ],
 }
 
-import { basename, dirname, homeDir, joinPath, resolvePath } from '../../../../backend/lib/fileHelper.js'
+import { basename, dirname, homeDir, joinPath, resolvePath, statSafe } from '../../../../backend/lib/fileHelper.js'
 import {
   findMarketplaceJson,
   latestPluginCacheDir,
   loadEnabledPluginInstalls,
+  resolveAgentPathByPatterns,
+  resolveSkillPathByPatterns,
   scanCursorSkills,
   scanEnabledInstalledPlugins,
   scanPluginCache,
@@ -151,12 +153,19 @@ export function parseCatalogItemId(id: unknown): { source: string; name: string 
 /**
  * Resolve the on-disk path of a catalog agent's markdown by its catalog id.
  * `deps.customAgentsDir` is injected (agents module) to keep catalog decoupled.
+ *
+ * `source === 'project'` has two possible origins in the catalog: the fixed
+ * convention (`.claude/agents/<name>.md`, via `scanProjectClaude`) and a
+ * `scanPatterns.agents` wildcard match (via `scanAgentsByPatterns`) — both
+ * produce the same `id` shape (`project:<name>`), so this must try the
+ * convention path first, then fall back to re-expanding the patterns, or a
+ * catalog entry found only through wildcard scan can never be opened.
  */
 export async function resolveCatalogAgentPath(
   projectRoot: string,
   root: string,
   id: string,
-  deps: { customAgentsDir: (root: string) => string },
+  deps: { customAgentsDir: (root: string) => string; scanPatterns?: string[] | null },
 ): Promise<string | null> {
   const parsed = parseCatalogItemId(id)
   if (!parsed?.name) return null
@@ -170,7 +179,9 @@ export async function resolveCatalogAgentPath(
     return joinPath(homeDir(), '.claude', 'agents', fileName)
   }
   if (source === 'project') {
-    return joinPath(projectRoot, '.claude', 'agents', fileName)
+    const conventional = joinPath(projectRoot, '.claude', 'agents', fileName)
+    if ((await statSafe(conventional)).exists) return conventional
+    return resolveAgentPathByPatterns(projectRoot, name, deps.scanPatterns)
   }
   if (source.startsWith('repo:')) {
     const pluginName = source.slice('repo:'.length)
@@ -203,7 +214,7 @@ export async function resolveCatalogAgentPath(
 export async function resolveCatalogSkillPath(
   projectRoot: string,
   id: string,
-  deps: { sanitiseName: (name: string) => string | null },
+  deps: { sanitiseName: (name: string) => string | null; scanPatterns?: string[] | null },
 ): Promise<string | null> {
   const parsed = parseCatalogItemId(id)
   if (!parsed?.name) return null
@@ -212,7 +223,11 @@ export async function resolveCatalogSkillPath(
 
   if (source === 'user') return joinPath(homeDir(), '.claude', 'skills', name, 'SKILL.md')
   if (source === 'cursor') return joinPath(homeDir(), '.cursor', 'skills-cursor', name, 'SKILL.md')
-  if (source === 'project') return joinPath(projectRoot, '.claude', 'skills', name, 'SKILL.md')
+  if (source === 'project') {
+    const conventional = joinPath(projectRoot, '.claude', 'skills', name, 'SKILL.md')
+    if ((await statSafe(conventional)).exists) return conventional
+    return resolveSkillPathByPatterns(projectRoot, name, deps.scanPatterns)
+  }
   if (source.startsWith('repo:')) {
     const pluginName = source.slice('repo:'.length)
     const found = await findMarketplaceJson(projectRoot)

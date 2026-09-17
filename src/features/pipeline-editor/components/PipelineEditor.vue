@@ -263,7 +263,7 @@ async function openDocView(kind: 'rule' | 'agent' | 'skill', item: any) {
       kind === 'rule'
         ? await fetchRuleContent(item.id, props.projectId ?? undefined)
         : kind === 'agent'
-          ? await fetchCatalogAgent(item.id)
+          ? await fetchCatalogAgent(item.id, props.projectId ?? undefined)
           : await fetchSkillContent(item.id, props.projectId ?? undefined)
     viewingDocContent.value = data.content ?? ''
   } catch (e: any) {
