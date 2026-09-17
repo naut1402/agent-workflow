@@ -34,7 +34,7 @@ Vì sao tách: khi test nằm cùng branch với code, mỗi vòng review sửa 
 - `.dev-team-agent/tasks/<task-id>/design.md` §4 — hiểu bề mặt công khai của thay đổi
 - `.dev-team-agent/tasks/<task-id>/review.md` — TC nào review đã đánh `gap`, và các điểm `[must]` đã đối ứng
 - `git log --oneline -5` + `git show <commit>` — diff code đã được duyệt
-- Đọc "Rule test" trong `.dev-team-agent/project-rules.md` do orchestrator truyền vào — rule project ưu tiên hơn khi xung đột; trống thì dùng `write-tests` làm fallback
+- Đọc "Rule test" từ chỉ dẫn agent của project — `CLAUDE.md` / `AGENTS.md` ở root repo, rồi file rule test mà hub đó trỏ tới; rule project ưu tiên hơn khi xung đột. Không nguồn nào đọc được thì dùng `write-tests` làm fallback — **không dừng pipeline** chỉ vì thiếu rule project
 
 Thiếu `test-spec.md` → tạo `qa.md`, dừng. **Không** tự đặt case thay thế.
 

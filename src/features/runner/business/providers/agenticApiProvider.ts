@@ -331,23 +331,22 @@ export abstract class AgenticApiProvider implements RunnerProvider {
     ].join('\n')
   }
 
-  /** Chars kept per embedded file in `buildProjectContextPreamble()` — enough for AGENTS.md/project-rules.md,
+  /** Chars kept per embedded file in `buildProjectContextPreamble()` — enough for AGENTS.md/CLAUDE.md,
    * bounded so a runaway file doesn't blow the context budget of small models. */
   private static readonly PROJECT_CONTEXT_FILE_LIMIT = 12_000
 
   /**
-   * Agent markdown (designer.md, reviewer.md, ...) universally instructs the model to read
-   * `AGENTS.md` (project root) and `.dev-team-agent/project-rules.md` — paths that sit *above*
+   * Agent markdown (designer.md, reviewer.md, ...) universally instructs the model to read the
+   * project's agent hub — `AGENTS.md` / `CLAUDE.md` at the project root — paths that sit *above*
    * `workspace` (the task folder). The sandbox tools here intentionally can't reach outside
    * `workspace` (see `resolvePathUnder` — a security invariant, not an oversight), and unlike the
    * CLI providers (real filesystem access, can walk up a directory when a literal path 404s) a
-   * weak model just hits "path outside workspace" or silently skips the rule. Embedding both
+   * weak model just hits "path outside workspace" or silently skips the rule. Embedding those
    * files' content directly in the system prompt sidesteps the read entirely.
    */
   protected buildProjectContextPreamble(req: ExecuteRequest): string {
     const meta = req.metadata || {}
     const projectRoot = typeof meta.projectRoot === 'string' ? meta.projectRoot : undefined
-    const devTeamRoot = typeof meta.devTeamRoot === 'string' ? meta.devTeamRoot : undefined
     const sections: string[] = []
     const tryEmbed = (dir: string | undefined, fileName: string) => {
       if (!dir) return
@@ -359,12 +358,12 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       }
     }
     tryEmbed(projectRoot, 'AGENTS.md')
-    tryEmbed(devTeamRoot, 'project-rules.md')
+    tryEmbed(projectRoot, 'CLAUDE.md')
     if (!sections.length) return ''
     return [
       '## Nội dung file ngoài workspace (đã nhúng sẵn — KHÔNG gọi tool để đọc lại các file này)',
-      'Hướng dẫn bên dưới có thể yêu cầu đọc `AGENTS.md` hoặc `.dev-team-agent/project-rules.md` — ' +
-        '2 file này nằm ngoài workspace hiện tại nên không đọc được qua tool. Nội dung đã được nhúng ' +
+      'Hướng dẫn bên dưới có thể yêu cầu đọc `AGENTS.md` hoặc `CLAUDE.md` ở root repo — ' +
+        'các file này nằm ngoài workspace hiện tại nên không đọc được qua tool. Nội dung đã được nhúng ' +
         'sẵn dưới đây, dùng trực tiếp:',
       ...sections,
     ].join('\n\n')
