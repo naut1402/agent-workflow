@@ -828,7 +828,7 @@ describe('PipelineEditor — xem markdown agent/skill/rule', () => {
     await agentItem(w).trigger('click')
     await flushPromises()
 
-    expect(fetchCatalogAgent).toHaveBeenCalledWith(AGENT.id)
+    expect(fetchCatalogAgent).toHaveBeenCalledWith(AGENT.id, 'P1')
     expect(canvasVisible(w)).toBe(false)
     expect(docTitle(w)).toBe(AGENT.name)
     expect(w.text()).toContain('NOI DUNG AGENT')
