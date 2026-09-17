@@ -804,13 +804,13 @@ describe('AgenticApiProvider — buildProjectContextPreamble()', () => {
     devTeamRoot = path.join(projectRoot, '.dev-team-agent')
     fs.mkdirSync(devTeamRoot, { recursive: true })
     fs.writeFileSync(path.join(projectRoot, 'AGENTS.md'), '# AGENTS\n\nbat bien quan trong')
-    fs.writeFileSync(path.join(devTeamRoot, 'project-rules.md'), '# Rules\n\nrule coding')
+    fs.writeFileSync(path.join(projectRoot, 'CLAUDE.md'), '# CLAUDE\n\nrule coding')
   })
   afterAll(() => {
     fs.rmSync(projectRoot, { recursive: true, force: true })
   })
 
-  test('embeds AGENTS.md and project-rules.md content when metadata points at them', () => {
+  test('embeds AGENTS.md and CLAUDE.md content when metadata points at them', () => {
     const p = new FakeAgenticProvider()
     const text = p.projectContextPreamble(baseRequest({ metadata: { projectRoot, devTeamRoot } }))
     expect(text).toContain('bat bien quan trong')
