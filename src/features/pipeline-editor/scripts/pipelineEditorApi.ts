@@ -8,8 +8,8 @@ export async function fetchCatalog(projectId?: string) {
   return apiGet('/api/catalog', { project: projectId })
 }
 
-export async function fetchCatalogAgent(id: string) {
-  return apiGet('/api/catalog-agent', { id })
+export async function fetchCatalogAgent(id: string, projectId?: string) {
+  return apiGet('/api/catalog-agent', { id, project: projectId })
 }
 
 export async function fetchSkillContent(id: string, projectId?: string) {

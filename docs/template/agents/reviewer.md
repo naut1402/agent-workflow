@@ -31,7 +31,7 @@ Subagent chuyên trách code review. Đọc git diff của commit implement và 
 
 ### Bước 2: Review code
 
-Đọc "Rule coding" trong `.dev-team-agent/project-rules.md` do orchestrator truyền vào — rule project ưu tiên hơn khi xung đột; nếu trống thì dùng `coding-rules` làm fallback.
+Đọc "Rule coding" từ chỉ dẫn agent của project — `CLAUDE.md` / `AGENTS.md` ở root repo, rồi file rule coding mà hub đó trỏ tới; rule project ưu tiên hơn khi xung đột. Không nguồn nào đọc được thì dùng `coding-rules` làm fallback — **không dừng pipeline** chỉ vì thiếu rule project.
 
 Theo rule coding (project rule ưu tiên, `coding-rules` fallback), kiểm tra từng file trong diff:
 
