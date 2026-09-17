@@ -949,6 +949,81 @@ describe('PipelineView — node điều phối', () => {
     expect(nodeData(w, ORCH_ID).executed).toBe(true)
     w.unmount()
   })
+
+  // Bug B (test-spec.md TC-15…TC-20) — root cause G2: trước fix, node chỉ
+  // re-sync khi `props.task.state_mtime` đổi giá trị. Nhưng vòng lặp orchestrator
+  // "đang nghĩ" giữa hai lần dispatch KHÔNG ghi state file, nên `state_mtime` bất
+  // biến trong lúc chính đó. Các case dưới đây cố tình giữ NGUYÊN `state_mtime`
+  // và chỉ đổi identity của object `task` (đúng như `collectTasks()` làm ở mỗi
+  // snapshot SSE) — nếu watch còn bám `state_mtime` như code cũ, các case này đỏ.
+  it('TC-15/TC-18: có lượt orchestrator mới dù state_mtime KHÔNG đổi ⇒ node chuyển dispatching ngay, không đứng hình', async () => {
+    vi.mocked(fetchJobs).mockResolvedValue({ jobs: [] } as any)
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'listening', orchestratorBusy: false })
+
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [{ id: 'job-orch-2', status: 'running', metadata: { taskId: 'ORCH-1', orchestratorJob: true } }],
+    } as any)
+    // Object MỚI (identity khác) nhưng state_mtime giữ nguyên 1000 — đúng khoảng
+    // "giữa hai lượt quyết định" mà request.md mô tả cho triệu chứng ②.
+    await w.setProps({ task: orchestratorTask() })
+    await flushPromises()
+
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'dispatching', orchestratorBusy: true })
+    w.unmount()
+  })
+
+  // TC-16/TC-17 — Stop (người bấm) và tự halt (agent tự quyết định) phải cập
+  // nhật UI như nhau: request.md không phân biệt nguồn gốc dừng.
+  it('TC-16/TC-17: dừng (Stop hoặc tự halt) ⇒ hết "đang lắng nghe" ngay dù state_mtime không đổi', async () => {
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [{ id: 'job-orch-3', status: 'running', metadata: { taskId: 'ORCH-1', orchestratorJob: true } }],
+    } as any)
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'dispatching', orchestratorBusy: true })
+
+    vi.mocked(fetchJobs).mockResolvedValue({ jobs: [] } as any)
+    await w.setProps({ task: orchestratorTask({ orchestrator_halted: true }) }) // cùng state_mtime: 1000
+    await flushPromises()
+
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'halted', orchestratorBusy: false })
+    w.unmount()
+  })
+
+  // TC-19 — chuyển trạng thái dồn dập vẫn phải hội tụ đúng vào giá trị mới nhất
+  // ở mỗi bước, không kẹt ở trạng thái trung gian của bước trước.
+  it('TC-19: start → stop → start liên tiếp ⇒ luôn phản ánh đúng trạng thái mới nhất', async () => {
+    vi.mocked(fetchJobs).mockResolvedValue({ jobs: [] } as any)
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [{ id: 'job-a', status: 'running', metadata: { taskId: 'ORCH-1', orchestratorJob: true } }],
+    } as any)
+    await w.setProps({ task: orchestratorTask() })
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'dispatching' })
+
+    vi.mocked(fetchJobs).mockResolvedValue({ jobs: [] } as any)
+    await w.setProps({ task: orchestratorTask({ orchestrator_halted: true }) })
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'halted' })
+
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [{ id: 'job-b', status: 'running', metadata: { taskId: 'ORCH-1', orchestratorJob: true } }],
+    } as any)
+    await w.setProps({ task: orchestratorTask() })
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'dispatching', orchestratorBusy: true })
+    w.unmount()
+  })
+
+  // TC-20 (mở lại/refresh giữa lúc đang chạy) — bề mặt là mount ĐẦU ("reload" =
+  // component mount mới với `fetchJobs` đã có job orchestrator từ trước). Đã có
+  // coverage tương đương ở case "có lượt của node đang chạy ⇒ bận..." phía trên
+  // (initial mount, không phải setProps) — không lặp lại ở đây.
 })
 
 // TC-A1/TC-A2/TC-A8 (T21270146) — canvas monitor: node điều phối vẽ hub edge

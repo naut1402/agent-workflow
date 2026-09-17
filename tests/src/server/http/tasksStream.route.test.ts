@@ -87,6 +87,35 @@ describe('GET /api/tasks/stream', () => {
     await reader.cancel().catch(() => {})
   })
 
+  // Bug B (test-spec.md TC-18) — root cause G1: `orchestrator.dispatched` /
+  // `orchestrator.halted` không nằm trong `TASK_STREAM_EVENTS`, nên một vòng đời
+  // orchestrator đổi (start/halt) mà KHÔNG kèm dispatch step mới không đẩy
+  // snapshot nào — dashboard đứng ở "đang lắng nghe" dù orchestrator đã dừng.
+  test('TC-18: orchestrator.dispatched pushes a new snapshot even without a step job', async () => {
+    const res = await app.request('/api/tasks/stream')
+    const reader = res.body!.getReader()
+    await readFrame(reader) // initial snapshot
+
+    emit('orchestrator.dispatched', { taskId: 'A1', devTeamRoot: root, action: 'start', stepId: 'implementer' })
+    const second = await readFrame(reader)
+    expect(second).not.toBeNull()
+    expect(parseFrame(second!).type).toBe('tasks')
+    await reader.cancel().catch(() => {})
+  })
+
+  // TC-17 — orchestrator tự halt (không qua nút Stop) phải cập nhật UI y hệt.
+  test('TC-16/TC-17: orchestrator.halted pushes a new snapshot (Stop button OR self-halt)', async () => {
+    const res = await app.request('/api/tasks/stream')
+    const reader = res.body!.getReader()
+    await readFrame(reader) // initial snapshot
+
+    emit('orchestrator.halted', { taskId: 'A1', devTeamRoot: root, reason: 'agent decided to halt' })
+    const second = await readFrame(reader)
+    expect(second).not.toBeNull()
+    expect(parseFrame(second!).type).toBe('tasks')
+    await reader.cancel().catch(() => {})
+  })
+
   test('TC-A4: unknown project → 400/404 like the REST fetch-once, no stream opened', async () => {
     const res = await app.request('/api/tasks/stream?project=ghost')
     expect(res.status).toBe(404)
