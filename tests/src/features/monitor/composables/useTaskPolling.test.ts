@@ -30,6 +30,71 @@ describe('useTaskPolling', () => {
     expect(p.selectedId.value).toBe('X')
   })
 
+  it('fallback skips a finished task at the front of the array and selects the first candidate still open', async () => {
+    stubTasks({
+      root: '/r',
+      tasks: [
+        { task_id: 'A', current_phase: 'completed' },
+        { task_id: 'B', archived: true },
+        { task_id: 'C' },
+      ],
+    })
+    const p = useTaskPolling(() => null)
+    await p.poll()
+    expect(p.selectedId.value).toBe('C')
+  })
+
+  it('selects nothing when every task is finished', async () => {
+    stubTasks({
+      root: '/r',
+      tasks: [
+        { task_id: 'A', current_phase: 'completed' },
+        { task_id: 'B', archived: true },
+      ],
+    })
+    const p = useTaskPolling(() => null)
+    await p.poll()
+    expect(p.selectedId.value).toBeNull()
+  })
+
+  it('keeps the previous behavior when the first task is already open', async () => {
+    stubTasks({ root: '/r', tasks: [{ task_id: 'A' }, { task_id: 'B', current_phase: 'completed' }] })
+    const p = useTaskPolling(() => null)
+    await p.poll()
+    expect(p.selectedId.value).toBe('A')
+  })
+
+  it('a task needing attention still wins even when it is also archived', async () => {
+    stubTasks({
+      root: '/r',
+      tasks: [
+        { task_id: 'A', archived: true, has_qa: true },
+        { task_id: 'B' },
+      ],
+    })
+    const p = useTaskPolling(() => null)
+    await p.poll()
+    expect(p.selectedId.value).toBe('A')
+  })
+
+  it('does not auto-select an archived task after switching project resets the selection', async () => {
+    stubTasks({ root: '/r', tasks: [{ task_id: 'X' }] })
+    const p = useTaskPolling(() => null)
+    await p.poll()
+    expect(p.selectedId.value).toBe('X')
+
+    p.selectedId.value = null
+    stubTasks({
+      root: '/r2',
+      tasks: [
+        { task_id: 'A', current_phase: 'completed' },
+        { task_id: 'B', archived: true },
+      ],
+    })
+    await p.poll()
+    expect(p.selectedId.value).toBeNull()
+  })
+
   it('poll() records the error on fetch failure', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('boom') }))
     const p = useTaskPolling(() => null)
