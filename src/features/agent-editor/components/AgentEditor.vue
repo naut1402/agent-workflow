@@ -47,7 +47,7 @@ async function loadList() {
 
 async function loadCatalog() {
   try {
-    catalog.value = await fetchCatalog()
+    catalog.value = await fetchCatalog(props.projectId ?? undefined)
   } catch {
     catalog.value = { skills: [], agents: [] }
   }

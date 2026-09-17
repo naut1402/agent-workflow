@@ -135,7 +135,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     catalogError.value = null
     catalogInflight = (async () => {
       try {
-        const catalog = await fetchCatalog()
+        const catalog = await fetchCatalog(opts.getProjectId() ?? undefined)
         const rawAgents: unknown = catalog?.agents
         const ids: string[] = Array.isArray(rawAgents)
           ? rawAgents
