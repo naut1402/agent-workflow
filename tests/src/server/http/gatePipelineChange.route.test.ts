@@ -904,4 +904,38 @@ describe('reconcile ngay khi ghi pipeline scope task, KHÔNG cần run-step trư
     expect(res.status).toBe(200)
     expect(fs.existsSync(stateFileOf(taskId))).toBe(false)
   })
+
+  // TC-05 — ghi pipeline (gỡ gate) và approve ĐÚNG gate đó gần như đồng thời.
+  // `reconcileGateState` và `applyHitlAction` khoá qua cùng `withStateFileLock`
+  // (§4.4 design.md), nên bất kể ai thắng, không được có 500 và không được có
+  // trạng thái mâu thuẫn (gate vừa "đã duyệt" vừa "đã bị xoá").
+  test('TC-05: ghi pipeline gỡ gate ĐỒNG THỜI với approve đúng gate đó ⇒ không 500, kết quả cuối nhất quán', async () => {
+    const taskId = 'TORCH5'
+    seedTask(taskId, { current_phase: 'designer', hitl_pending: 'g1' })
+    const before = await taskRow(taskId)
+
+    const [writeRes, approveRes] = await Promise.all([
+      app.request('/api/pipeline-config-write', {
+        method: 'POST',
+        body: JSON.stringify({ scope: 'task', taskId, pipeline: pipelineBody(P_NOGATE) }),
+      }),
+      app.request(`/api/task-state?id=${taskId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ action: 'approve', gate_id: 'g1', mtime: before.state_mtime }),
+      }),
+    ])
+
+    // Ghi pipeline luôn thành công (đã ghi file YAML xong trước khi chạm state).
+    expect(writeRes.status).toBe(200)
+    // Approve có thể thắng (200, chạy trước reconcile) hoặc thua vì state đã đổi
+    // dưới chân nó (409 mtime conflict / 400 gate mismatch) — không bao giờ 500.
+    expect([200, 400, 409]).toContain(approveRes.status)
+
+    // Dù ai thắng: gate không còn treo, và `/api/tasks` + state trên đĩa khớp nhau.
+    await expectConsistent(taskId, null)
+    expect(readStateFile(taskId).hitl_pending).toBeNull()
+    // current_phase là MỘT trong hai giá trị hợp lệ tuỳ thứ tự — không được là
+    // gì khác (vd. undefined/corrupt) chứng tỏ hai thao tác dẫm lên nhau.
+    expect(['designer', 'implementer']).toContain(readStateFile(taskId).current_phase)
+  })
 })
