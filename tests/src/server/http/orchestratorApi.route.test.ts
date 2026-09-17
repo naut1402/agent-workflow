@@ -334,3 +334,83 @@ describe('Xác thực token — TC-09/TC-10', () => {
     expect(body.currentPhase).toBe('implementer')
   })
 })
+
+/**
+ * Td735db94 — TC-01/TC-02/TC-03: đổi pipeline gate → không-gate phải được
+ * chính 2 route mà orchestrator gọi ngược vào server phản ánh đúng NGAY —
+ * đây là bề mặt thật của bug report (orchestrator vẫn báo "chờ duyệt" trong
+ * khi UI đã hết gate). `orchestratorNode.route.test.ts`/`orchestratorApi.route.test.ts`
+ * trước đây chưa có case nào đụng `/api/pipeline-config-write`.
+ */
+describe('Đổi pipeline gate → không-gate — Td735db94 TC-01/TC-02/TC-03', () => {
+  function writeGatedGlobalPipeline(gateId: string) {
+    fs.writeFileSync(
+      path.join(root, 'pipeline.yaml'),
+      [
+        'version: 1',
+        'orchestrator: { enabled: true, agent: "a:orch" }',
+        'steps:',
+        `  - { id: implementer, name: Implement, agent: " ", hitl: { mode: manual, gate_id: ${gateId} } }`,
+        '  - { id: reviewer, name: Review, agent: " " }',
+      ].join('\n'),
+      'utf8',
+    )
+  }
+
+  async function writeTaskPipeline(taskId: string, steps: Array<{ id: string; gate?: string }>) {
+    return app.request('/api/pipeline-config-write', {
+      method: 'POST',
+      body: JSON.stringify({
+        scope: 'task',
+        taskId,
+        pipeline: {
+          version: 1,
+          orchestrator: { enabled: true, agent: 'a:orch' },
+          steps: steps.map((s) => ({
+            id: s.id,
+            agent: ' ',
+            ...(s.gate ? { hitl: { mode: 'manual', gate_id: s.gate } } : {}),
+          })),
+        },
+      }),
+    })
+  }
+
+  test('TC-01/TC-02: gate bị pipeline gỡ ⇒ GET /status hết báo chặn NGAY (không cần request trung gian nào khác)', async () => {
+    writeGatedGlobalPipeline('g1')
+    seedTask('P1', { current_phase: 'implementer', hitl_pending: 'g1' })
+
+    const before = await (await status(tokenFor('P1'))).json()
+    expect(before.gatePending).toBe('g1')
+
+    const write = await writeTaskPipeline('P1', [{ id: 'implementer' }, { id: 'reviewer' }])
+    expect(write.status).toBe(200)
+
+    // Request độc lập, ngay sau khi ghi xong — không có run-step/approve nào ở giữa.
+    const after = await (await status(tokenFor('P1'))).json()
+    expect(after.gatePending).toBeNull()
+  })
+
+  test('TC-01: sau khi gate bị gỡ, POST /decide {action:start} dispatch THẬT, không còn bị applyStart hạ xuống summary vì "gate_pending"', async () => {
+    writeGatedGlobalPipeline('g2')
+    seedTask('P1b', { current_phase: 'implementer', hitl_pending: 'g2' })
+    await writeTaskPipeline('P1b', [{ id: 'implementer' }, { id: 'reviewer' }])
+
+    const res = await decide(tokenFor('P1b'), { action: 'start', stepId: 'implementer' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ applied: 'start' })
+    expect(
+      listJobs(200).some((j) => j.metadata?.taskId === 'P1b' && j.metadata?.pipelineStepId === 'implementer'),
+    ).toBe(true)
+  })
+
+  test('TC-03: task không có gate đang mở ⇒ ghi pipeline khác không tự sinh chặn ngoài ý muốn', async () => {
+    seedTask('P2', { current_phase: 'implementer' })
+    const write = await writeTaskPipeline('P2', [{ id: 'implementer' }, { id: 'reviewer', gate: 'g9' }])
+    expect(write.status).toBe(200)
+
+    const body = await (await status(tokenFor('P2'))).json()
+    expect(body.gatePending).toBeNull()
+    expect(body.currentPhase).toBe('implementer')
+  })
+})

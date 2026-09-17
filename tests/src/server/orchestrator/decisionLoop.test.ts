@@ -7,6 +7,7 @@ import {
   _resetOrchestratorForTest,
   handleEvent,
   identifyTask,
+  readTaskPhase,
 } from '../../../../src/features/orchestrator/business/decisionLoop.js'
 import { DECISION_SENTINEL } from '../../../../src/features/orchestrator/schemas/orchestrator.js'
 import { listJobs } from '../../../../src/features/runner/business/index.js'
@@ -40,7 +41,12 @@ function writePipeline(enabled: boolean) {
       `orchestrator: { enabled: ${enabled}, agent: "a:orch" }`,
       'steps:',
       '  - { id: implementer, name: Implement, agent: "a:impl" }',
-      '  - { id: reviewer, name: Review, agent: "a:rev" }',
+      // Gate khai đúng ở `reviewer` — mọi fixture `hitl_pending: 'hitl-review'`
+      // trong file này giả định "cổng đang chờ người" phải là một cổng THẬT SỰ
+      // còn sống trên pipeline hiện tại, không chỉ là cờ đơn độc trên state
+      // (đó chính xác là điều `readTaskPhase` giờ đòi hỏi, khớp `resolveHitlPending`
+      // mà `/api/tasks` đã dùng — xem `shared/lib/phase.ts`).
+      '  - { id: reviewer, name: Review, agent: "a:rev", hitl: { mode: manual, gate_id: hitl-review } }',
     ].join('\n'),
     'utf8',
   )
@@ -153,6 +159,73 @@ describe('chống tự kích & lọc event', () => {
     seedTask('L5', { orchestrator_halted: true })
     await handleEvent(ev('task.advanced', { taskId: 'L5', devTeamRoot: root, currentPhase: 'reviewer' }))
     expect(dispatched()).toHaveLength(0)
+  })
+})
+
+/*
+ * Td735db94 — TC-01/TC-02: đổi pipeline gate → không-gate phải được phản ánh
+ * NGAY qua `readTaskPhase` (nguồn mà `decide()`/`askAgent`/`applyStart` và 2
+ * route REST orchestrator dùng chung), không cần đợi một `hitl.resolved`
+ * (`reason: 'pipeline_changed'`) chạy qua trước — đó đúng là gap: test dòng
+ * 493-505 (mục "cổng HITL" ở trên) chỉ xác nhận decisionLoop bỏ qua sự kiện đó
+ * SAU KHI nó đã được phát, chưa test việc tự đọc đúng khi CHƯA có event nào.
+ */
+describe('readTaskPhase — chuẩn hoá gate theo pipeline SỐNG, không phụ thuộc event trước đó (TC-01/TC-02)', () => {
+  test('hitl_pending trỏ gate đã bị gỡ khỏi pipeline hiện tại ⇒ gatePending biến mất ngay lập tức', async () => {
+    // `writePipeline(true)` (beforeEach) khai gate `hitl-review` ở `reviewer` —
+    // đổi sang một pipeline không còn gate nào, y hệt kịch bản bug report.
+    fs.writeFileSync(
+      path.join(root, 'pipeline.yaml'),
+      [
+        'version: 1',
+        'orchestrator: { enabled: true, agent: "a:orch" }',
+        'steps:',
+        '  - { id: implementer, name: Implement, agent: "a:impl" }',
+        '  - { id: reviewer, name: Review, agent: "a:rev" }',
+      ].join('\n'),
+      'utf8',
+    )
+    seedTask('W1', { current_phase: 'reviewer', hitl_pending: 'hitl-review' })
+    const at = await readTaskPhase(root, 'W1')
+    expect(at.gatePending).toBeUndefined()
+  })
+
+  test('gate vẫn còn khai đúng ở step hiện tại ⇒ gatePending giữ nguyên (đối chứng — không vá lố, không nhả gate thật)', async () => {
+    // Pipeline mặc định của `beforeEach` đã khai `hitl-review` ở `reviewer`.
+    seedTask('W2', { current_phase: 'reviewer', hitl_pending: 'hitl-review' })
+    const at = await readTaskPhase(root, 'W2')
+    expect(at.gatePending).toBe('hitl-review')
+  })
+
+  test('pipeline task-scope (không phải global) cũng được đọc SỐNG — gỡ gate qua override riêng task vẫn nhận ra ngay', async () => {
+    fs.mkdirSync(path.join(root, 'tasks', 'W3'), { recursive: true })
+    // `steps_replace: true` — đúng cách `writePipelineConfig` ghi override scope
+    // `task` qua editor thật (controller.ts:164): thay NGUYÊN mảng steps, không
+    // patch từng field theo id (patch giữ nguyên `hitl` cũ nếu step mới không
+    // khai lại field đó — xem `mergeStep`/`patchSteps`).
+    fs.writeFileSync(
+      path.join(root, 'tasks', 'W3', 'pipeline.yaml'),
+      [
+        'version: 1',
+        'steps_replace: true',
+        'steps:',
+        '  - { id: implementer, name: Implement, agent: "a:impl" }',
+        '  - { id: reviewer, name: Review, agent: "a:rev" }',
+      ].join('\n'),
+      'utf8',
+    )
+    seedTask('W3', { current_phase: 'reviewer', hitl_pending: 'hitl-review' })
+    const at = await readTaskPhase(root, 'W3')
+    expect(at.gatePending).toBeUndefined()
+  })
+
+  test('pipeline task-scope không đọc được (untrusted) ⇒ fail-closed, giữ nguyên gate cũ thay vì nhả bừa (TC-08)', async () => {
+    fs.mkdirSync(path.join(root, 'tasks', 'W4'), { recursive: true })
+    // YAML hỏng cú pháp — `loadPipelineConfig` phải trả cấu hình `untrusted`.
+    fs.writeFileSync(path.join(root, 'tasks', 'W4', 'pipeline.yaml'), 'steps: [ {', 'utf8')
+    seedTask('W4', { current_phase: 'reviewer', hitl_pending: 'hitl-review' })
+    const at = await readTaskPhase(root, 'W4')
+    expect(at.gatePending).toBe('hitl-review')
   })
 })
 
