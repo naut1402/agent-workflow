@@ -813,3 +813,95 @@ describe('concurrency and audit trail', () => {
     }
   })
 })
+
+/**
+ * Td735db94 — TC-01/TC-02: `writePipelineConfig` (scope `task`) phải reconcile
+ * ON-DISK state NGAY tại thời điểm ghi, không đợi một `run-step`/`approve` nào
+ * chạy sau đó trước. Mọi case ở trên xác nhận qua `/api/tasks` (live
+ * projection, luôn đúng bất kể có reconcile ghi lại hay không) hoặc chỉ đọc
+ * state SAU KHI đã `runAndSettle` — chưa case nào đọc file state ngay sau lệnh
+ * ghi pipeline, trước bất kỳ request nào khác. Đây đúng là bề mặt mà
+ * `readTaskPhase` của orchestrator (`decisionLoop.ts`) và 2 route
+ * `GET /api/orchestrator/status` / `POST /api/orchestrator/decide` phụ thuộc.
+ */
+describe('reconcile ngay khi ghi pipeline scope task, KHÔNG cần run-step trước (Td735db94 TC-01/TC-02)', () => {
+  test('gỡ gate qua pipeline-config-write ⇒ state trên đĩa đúng NGAY, kèm event, dù orchestrator đang bật', async () => {
+    const taskId = 'TORCH1'
+    seedTask(taskId, { current_phase: 'designer', hitl_pending: 'g1', orchestrator_enabled: true })
+    seedSucceededJob(taskId, 'designer')
+
+    const events: any[] = []
+    const off = on('hitl.resolved', (e: any) => {
+      if (e.payload?.taskId === taskId) events.push(e.payload)
+    })
+    try {
+      const before = readStateFile(taskId)
+      expect(before.hitl_pending).toBe('g1')
+
+      const res = await app.request('/api/pipeline-config-write', {
+        method: 'POST',
+        body: JSON.stringify({
+          scope: 'task',
+          taskId,
+          // Bật orchestrator TRONG CHÍNH pipeline mới ghi — reconcile không được
+          // phép bị bỏ qua chỉ vì task này cũng đang chạy dưới node điều phối.
+          pipeline: { ...pipelineBody(P_NOGATE), orchestrator: { enabled: true, agent: 'a:orch' } },
+        }),
+      })
+      expect(res.status).toBe(200)
+
+      // Không có runStep/approve nào chạy giữa lệnh ghi và lượt đọc này.
+      const after = readStateFile(taskId)
+      expect(after.hitl_pending).toBeNull()
+      expect(typeof after.gate_reconciled_at).toBe('string')
+      expect(after.orchestrator_enabled).toBe(true)
+
+      const resolved = events.find((e) => e.reason === 'pipeline_changed')
+      expect(resolved).toBeTruthy()
+      expect(resolved.gateId).toBe('g1')
+      expect(resolved.action).toBe('cancelled')
+    } finally {
+      off()
+    }
+  })
+
+  test('task KHÔNG có gate đang mở ⇒ ghi pipeline không tự sinh state_mtime/event mới (TC-03)', async () => {
+    const taskId = 'TORCH2'
+    seedTask(taskId, { current_phase: 'implementer' })
+    const before = readStateFile(taskId)
+
+    const events: any[] = []
+    const off = on('hitl.resolved', (e: any) => {
+      if (e.payload?.taskId === taskId) events.push(e.payload)
+    })
+    try {
+      const res = await app.request('/api/pipeline-config-write', {
+        method: 'POST',
+        body: JSON.stringify({ scope: 'task', taskId, pipeline: pipelineBody(P_GATE) }),
+      })
+      expect(res.status).toBe(200)
+
+      const after = readStateFile(taskId)
+      expect(after.hitl_pending ?? null).toBeNull()
+      expect(after.current_phase).toBe(before.current_phase)
+      expect(after.gate_reconciled_at).toBeUndefined()
+      expect(events).toHaveLength(0)
+    } finally {
+      off()
+    }
+  })
+
+  test('task chưa từng có state file ⇒ ghi pipeline lần đầu không lỗi, không có gì để reconcile (TC-07)', async () => {
+    const taskId = 'TORCH3'
+    fs.mkdirSync(path.join(root, 'tasks', taskId), { recursive: true })
+    fs.writeFileSync(path.join(root, 'tasks', taskId, 'request.md'), 'do the thing', 'utf8')
+    expect(fs.existsSync(stateFileOf(taskId))).toBe(false)
+
+    const res = await app.request('/api/pipeline-config-write', {
+      method: 'POST',
+      body: JSON.stringify({ scope: 'task', taskId, pipeline: pipelineBody(P_GATE) }),
+    })
+    expect(res.status).toBe(200)
+    expect(fs.existsSync(stateFileOf(taskId))).toBe(false)
+  })
+})
