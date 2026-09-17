@@ -389,6 +389,9 @@ export async function reconcileGateStateAssumingLock(
     action: after ? 'normalized' : 'cancelled',
     reason: 'pipeline_changed',
     currentPhase: state.current_phase,
+    // Node điều phối nghe event này để quyết bước kế. Nó chạy nền, ngoài
+    // mọi request, nên phải tự biết task thuộc data root nào.
+    devTeamRoot: root,
   })
   return { state, mtime, from: before, to: after }
 }
