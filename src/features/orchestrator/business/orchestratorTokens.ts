@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import type { TaskRef } from './decisionLoop.js'
 
 /**
- * Token → `TaskRef` cho route MCP-over-HTTP của orchestrator (`/api/mcp/orchestrator`).
+ * Token → `TaskRef` cho API REST của orchestrator (`orchestrator/api.ts`).
  *
  * Vòng đời gắn với job: mint lúc `askAgent()` submit job quyết định, revoke khi
  * job đó xong/lỗi hoặc orchestrator halt (bằng nút Stop hoặc tự quyết `halt`) —
@@ -12,17 +12,17 @@ import type { TaskRef } from './decisionLoop.js'
  */
 const tokens = new Map<string, TaskRef>()
 
-export function mintMcpToken(ref: TaskRef): string {
+export function mintOrchestratorToken(ref: TaskRef): string {
   const token = randomBytes(24).toString('base64url')
   tokens.set(token, ref)
   return token
 }
 
-export function resolveMcpToken(token: string): TaskRef | null {
+export function resolveOrchestratorToken(token: string): TaskRef | null {
   return tokens.get(token) ?? null
 }
 
-export function revokeMcpTokensFor(ref: { root: string; taskId: string }): void {
+export function revokeOrchestratorTokensFor(ref: { root: string; taskId: string }): void {
   for (const [token, r] of tokens) {
     if (r.root === ref.root && r.taskId === ref.taskId) tokens.delete(token)
   }

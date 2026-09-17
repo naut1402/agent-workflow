@@ -985,9 +985,9 @@ export class MonitorController extends AbstractController {
         reason: 'user_stop',
       })
       // Đường Stop này KHÔNG đi qua `haltTask()` của decisionLoop (đường riêng) —
-      // thu hồi token MCP ngay, không đợi job quyết định của agent tự thoát.
-      const { revokeMcpTokensFor } = await import('../orchestrator/business/index.js')
-      revokeMcpTokensFor({ root, taskId: id })
+      // thu hồi token ngay, không đợi job quyết định của agent tự thoát.
+      const { revokeOrchestratorTokensFor } = await import('../orchestrator/business/index.js')
+      revokeOrchestratorTokensFor({ root, taskId: id })
     } else {
       // Không `await`: lượt agent là một job, kết quả đọc ở `job.finished`.
       const { startOrchestratorTurn } = await import('../orchestrator/business/index.js')

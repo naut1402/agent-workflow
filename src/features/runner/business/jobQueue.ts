@@ -420,13 +420,13 @@ export function mergeJobUsage(id: string, usage: UsageSnapshot): JobRecord | nul
 }
 
 /**
- * Đánh dấu job orchestrator đã thi hành 1 quyết định qua tool `orchestrator_decide`
+ * Đánh dấu job orchestrator đã thi hành 1 quyết định qua `POST /api/orchestrator/decide`
  * — chặn `consumeAgentDecision` đọc lại sentinel cuối output cho CÙNG lượt (G4).
  */
-export function markMcpDecisionApplied(id: string): void {
+export function markDirectDecisionApplied(id: string): void {
   const cur = loadJob(id)
   if (!cur) return
-  saveJob({ ...cur, metadata: { ...cur.metadata, mcpDecisionApplied: true } })
+  saveJob({ ...cur, metadata: { ...cur.metadata, directDecisionApplied: true } })
 }
 
 export function listJobs(limit?: number, status?: JobStatus): JobRecord[] {

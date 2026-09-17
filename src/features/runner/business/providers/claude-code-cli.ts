@@ -58,8 +58,6 @@ export interface ClaudeInvocationInput {
   sessionId?: string
   resumeSessionId?: string
   model?: string
-  /** JSON compact (`--mcp-config`) cấp kênh MCP-over-HTTP cho job orchestrator — xem `execute()`. */
-  mcpConfig?: string
 }
 
 export interface ClaudeInvocation {
@@ -87,9 +85,6 @@ export function buildClaudeInvocation(input: ClaudeInvocationInput): ClaudeInvoc
   if (input.model) {
     args.push('--model', input.model)
   }
-  if (input.mcpConfig) {
-    args.push('--mcp-config', input.mcpConfig)
-  }
   // Approval-flow session continuity — exactly one is ever set (see
   // ExecuteRequest.sessionId/resumeSessionId doc comment).
   if (input.sessionId) args.push('--session-id', input.sessionId)
@@ -107,11 +102,29 @@ function resolveEffectiveFlags(flags: unknown, credential: CredentialProfile): s
   return list
 }
 
-function buildChildEnv(credential: CredentialProfile): NodeJS.ProcessEnv {
+/**
+ * Cấp token + base URL cho job orchestrator qua env (thay `--mcp-config` của
+ * bản trước — xem design.md T528bf0ed §1/§4.2 bản v2): tiến trình `claude`/
+ * `cursor-agent`/`codex` con kế thừa env này, và khi CHÍNH nó dùng tool Bash để
+ * chạy `curl`, subprocess đó lại kế thừa env của nó — không cần plumbing gì
+ * thêm ngoài cơ chế kế thừa env chuẩn của OS. Token không đi qua argv/prompt
+ * text nên không có vấn đề Windows argv-quoting, và model không "nhìn thấy"
+ * giá trị thật của token trong context/transcript (chỉ viết literal tên biến
+ * trong lệnh `curl`, shell mới thay giá trị lúc thực thi).
+ */
+function buildChildEnv(credential: CredentialProfile, metadata?: Record<string, unknown>): NodeJS.ProcessEnv {
   const env = { ...process.env }
   const auth = resolveSecretRef(credential)
   if (auth.type === 'env' && auth.key && auth.value) {
     env[auth.key] = auth.value
+  }
+  if (
+    metadata?.orchestratorJob === true
+    && typeof metadata.orchestratorToken === 'string'
+    && process.env.DEV_TEAM_SELF_BASE_URL
+  ) {
+    env.DASHBOARD_ORCHESTRATOR_TOKEN = metadata.orchestratorToken
+    env.DASHBOARD_ORCHESTRATOR_BASE_URL = process.env.DEV_TEAM_SELF_BASE_URL
   }
   return env
 }
@@ -374,28 +387,6 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
       let args: string[]
       let stdinInput: string | undefined
       if (useClaudeStyle) {
-        // Cấp kênh MCP-over-HTTP cho job orchestrator gọi ngược vào chính server
-        // (§4.1/§4.2 design T528bf0ed) — gate chặt theo provider + đúng job
-        // orchestrator, không phát cho job step thường. Compact JSON (không
-        // indent): argv element không được chứa khoảng trắng, cùng lý do prompt
-        // phải đi qua stdin thay vì argv ở trên (Windows `shell:true` space-join).
-        let mcpConfig: string | undefined
-        if (
-          opts.providerId === 'claude-code-cli'
-          && req.metadata?.orchestratorJob === true
-          && typeof req.metadata?.mcpToken === 'string'
-          && process.env.DEV_TEAM_SELF_BASE_URL
-        ) {
-          mcpConfig = JSON.stringify({
-            mcpServers: {
-              'dev-team-orchestrator': {
-                type: 'http',
-                url: `${process.env.DEV_TEAM_SELF_BASE_URL}/api/mcp/orchestrator`,
-                headers: { 'X-Dashboard-Orchestrator-Token': req.metadata.mcpToken },
-              },
-            },
-          })
-        }
         const invocation = buildClaudeInvocation({
           flags,
           prompt,
@@ -404,7 +395,6 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
           sessionId: sessionPlan.sessionId,
           resumeSessionId: sessionPlan.resumeSessionId,
           model: runnerConfig.model,
-          mcpConfig,
         })
         args = invocation.args
         stdinInput = invocation.stdinInput
@@ -468,7 +458,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
       try {
         procResult = await runProcess(cliPath, args, {
           cwd: req.workspace,
-          env: buildChildEnv(credential),
+          env: buildChildEnv(credential, req.metadata),
           timeoutMs,
           onLog: wrappedOnLog,
           onStart: wrappedOnStart,

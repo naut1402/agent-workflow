@@ -34,7 +34,7 @@ import {
   type DecisionTrigger,
   type StepResult,
 } from './decision.js'
-import { mintMcpToken, revokeMcpTokensFor } from './mcpTokens.js'
+import { mintOrchestratorToken, revokeOrchestratorTokensFor } from './orchestratorTokens.js'
 
 /** Quét lại task treo mỗi 60s — lưới cứu khi event bus (in-process) mất tín hiệu. */
 export const SWEEP_INTERVAL_MS = 60_000
@@ -266,7 +266,7 @@ export async function haltTask(ref: TaskRef, reason: string): Promise<void> {
     devTeamRoot: ref.root,
     reason,
   })
-  revokeMcpTokensFor(ref)
+  revokeOrchestratorTokensFor(ref)
 }
 
 /**
@@ -397,7 +397,7 @@ async function askAgent(
   // Mint NGAY TRƯỚC submitJob: metadata đi vào job lúc submit và không sửa lại
   // được sau (job file là snapshot) — mint muộn hơn nghĩa là job không bao giờ
   // biết token của chính nó.
-  const mcpToken = mintMcpToken(ref)
+  const orchestratorToken = mintOrchestratorToken(ref)
   const job = submitJob({
     agentRef: orch.agent,
     workspace: joinPath(ref.root, 'tasks', ref.taskId),
@@ -424,7 +424,7 @@ async function askAgent(
       // Phân biệt "lượt quyết định" với "lượt trò chuyện": output rỗng ở lượt
       // quyết định là sự cố phải xử lý, ở lượt chat thì chỉ là im lặng.
       orchestratorTrigger: trigger,
-      mcpToken,
+      orchestratorToken,
     },
   })
   return { job }
@@ -627,12 +627,12 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
     if (event.type === 'job.failed') {
       const trigger = job?.metadata?.orchestratorTrigger as DecisionTrigger | undefined
       await recoverFromBadTurn(ref, trigger, 'orchestrator_job_failed')
-      revokeMcpTokensFor(ref)
+      revokeOrchestratorTokensFor(ref)
       return
     }
     if (event.type === 'job.finished') {
       await consumeAgentDecision(ref, job as JobRecord)
-      revokeMcpTokensFor(ref)
+      revokeOrchestratorTokensFor(ref)
     }
     return
   }
@@ -668,9 +668,9 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
  * chat với node), không làm gì. Có sentinel nhưng hỏng ⇒ lưới tất định.
  */
 async function consumeAgentDecision(ref: TaskRef, job: JobRecord): Promise<void> {
-  // G4 — agent đã thi hành quyết định qua tool `orchestrator_decide` giữa lượt;
-  // đọc lại sentinel cuối output ở đây sẽ áp dụng quyết định đó LẦN NỮA.
-  if (job.metadata?.mcpDecisionApplied === true) return
+  // G4 — agent đã thi hành quyết định qua `POST /api/orchestrator/decide` giữa
+  // lượt; đọc lại sentinel cuối output ở đây sẽ áp dụng quyết định đó LẦN NỮA.
+  if (job.metadata?.directDecisionApplied === true) return
 
   const orch = await resolveOrchestration(ref.root, ref.taskId)
   if (!orch.active) return

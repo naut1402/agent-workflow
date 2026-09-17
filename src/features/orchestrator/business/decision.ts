@@ -121,12 +121,28 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
       'Không có dòng này, hoặc JSON hỏng, hoặc `stepId` không nằm trong danh sách trên',
       '⇒ orchestrator tự chuyển tiếp theo thứ tự pipeline mà không có bối cảnh bạn soạn.',
       '',
-      'Nếu bạn có tool `orchestrator_decide`, ƯU TIÊN gọi tool đó thay vì in dòng JSON — ',
-      'tool cho biết ngay kết quả (dispatch được hay không) và bạn không cần đợi hết lượt. ',
-      'Gọi tool rồi thì KHÔNG in lại dòng ORCHESTRATOR_DECISION nữa (double-dispatch). ',
-      'Không có tool (agent CLI khác) thì vẫn dùng dòng JSON như trên. Tool `orchestrator_status` ',
-      'và `orchestrator_read_output` (nếu có) cho biết trạng thái/step khác đang chạy giữa lượt, ',
-      'không cần đợi lượt này kết thúc.',
+      'Nếu 2 biến môi trường DASHBOARD_ORCHESTRATOR_TOKEN và DASHBOARD_ORCHESTRATOR_BASE_URL',
+      'có mặt, bạn có thể gọi TRỰC TIẾP API điều phối bằng lệnh shell, giữa lượt — biết ngay',
+      'kết quả (dispatch được hay không) và không cần đợi hết lượt:',
+      '',
+      '```',
+      '# Trạng thái thật của task — step đang chạy (nếu có), gate đang chờ, event gần đây',
+      'curl -s "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/status" \\',
+      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN"',
+      '',
+      '# Output hiện tại của step đang/đã chạy — không cần chờ job đó kết thúc',
+      'curl -s "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/output?offset=0" \\',
+      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN"',
+      '',
+      '# Ra lệnh start/resume/halt/summary — cùng ngữ nghĩa với dòng JSON ở trên',
+      'curl -s -X POST "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/decide" \\',
+      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN" \\',
+      '  -H "Content-Type: application/json" \\',
+      '  -d \'{"action":"start","stepId":"..."}\'',
+      '```',
+      '',
+      'Gọi API rồi thì KHÔNG in lại dòng ORCHESTRATOR_DECISION nữa (double-dispatch).',
+      'Không có 2 biến môi trường trên (agent CLI khác) thì vẫn dùng dòng JSON như trên.',
     ].join('\n'),
   ]
   return parts.filter(Boolean).join('\n\n')
@@ -148,8 +164,8 @@ export type ParsedDecision = OrchestratorDecision | { error: string }
 
 /**
  * Kiểm tra một quyết định đã ở dạng object (JSON đã parse) — dùng chung cho cả
- * đường sentinel (text, qua `parseDecision`) lẫn đường tool `orchestrator_decide`
- * (object trực tiếp từ tham số tool, không qua text).
+ * đường sentinel (text, qua `parseDecision`) lẫn đường `POST /api/orchestrator/decide`
+ * (object đã parse từ JSON body, không qua text).
  */
 export function validateDecision(raw: unknown, stepIds: string[]): ParsedDecision {
   const parsed = OrchestratorDecision.safeParse(raw)
