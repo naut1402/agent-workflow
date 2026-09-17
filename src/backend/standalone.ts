@@ -123,8 +123,12 @@ function main(): void {
   server.listen(PORT, HOST, () => {
     // Cho `claude-code-cli.ts` biết base URL gọi ngược vào chính server này
     // (route MCP orchestrator) — spawn con kế thừa qua `buildChildEnv` (spread
-    // `process.env`) sẵn có, không cần plumbing thêm.
-    process.env.DEV_TEAM_SELF_BASE_URL = `http://${HOST}:${PORT}`
+    // `process.env`) sẵn có, không cần plumbing thêm. Luôn `127.0.0.1`, KHÔNG
+    // dùng `HOST` cấu hình được: child process gọi ngược luôn nằm trên cùng máy
+    // bất kể server bind ra interface nào cho client bên ngoài (vd `0.0.0.0`
+    // không phải một địa chỉ đích hợp lệ để tự kết nối) — cùng cách `devTeamApi.ts`
+    // (transport Vite dev) đã xử lý cho cùng nhu cầu.
+    process.env.DEV_TEAM_SELF_BASE_URL = `http://127.0.0.1:${PORT}`
     const { projects } = list()
     if (!fs.existsSync(distDir)) {
       console.warn(`[dev-team-dashboard] dist/ not found — run \`bun run build\` first (${distDir})`)
