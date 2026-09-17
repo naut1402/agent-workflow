@@ -253,16 +253,16 @@ describe('đọc quyết định từ job của orchestrator', () => {
     expect(haltReasons()).toContain('cần người xem')
   })
 
-  // TC-11 — tool `orchestrator_decide` đánh dấu `mcpDecisionApplied` trên job
-  // TRƯỚC khi thi hành quyết định (xem `mcpTools.test.ts`). Khi job đó sau này
-  // `job.finished`, sentinel cuối output của CÙNG lượt không được áp dụng lần
-  // nữa — nếu không, một quyết định gọi qua tool sẽ bị dispatch hai lần (một
-  // lần lúc gọi tool, một lần nữa khi đọc lại dòng JSON cuối output).
-  test('TC-11: đã áp dụng qua tool (mcpDecisionApplied) ⇒ bỏ qua sentinel cùng lượt, không dispatch lần 2', async () => {
+  // TC-11 — `POST /api/orchestrator/decide` đánh dấu `directDecisionApplied`
+  // trên job TRƯỚC khi thi hành quyết định (xem `orchestratorApi.route.test.ts`).
+  // Khi job đó sau này `job.finished`, sentinel cuối output của CÙNG lượt không
+  // được áp dụng lần nữa — nếu không, một quyết định gọi qua API sẽ bị dispatch
+  // hai lần (một lần lúc gọi API, một lần nữa khi đọc lại dòng JSON cuối output).
+  test('TC-11: đã áp dụng qua API (directDecisionApplied) ⇒ bỏ qua sentinel cùng lượt, không dispatch lần 2', async () => {
     seedTask('O6')
     const id = writeJob(
       'o6',
-      { taskId: 'O6', orchestratorJob: true, orchestratorTrigger: 'step_finished', mcpDecisionApplied: true },
+      { taskId: 'O6', orchestratorJob: true, orchestratorTrigger: 'step_finished', directDecisionApplied: true },
       { status: 'succeeded', stdout: `${DECISION_SENTINEL} {"action":"start","stepId":"reviewer"}` },
     )
     await handleEvent(ev('job.finished', { jobId: id, taskId: 'O6', devTeamRoot: root }))

@@ -653,24 +653,30 @@ describe('createLocalConsoleProvider — agent instructions on resume', () => {
   })
 })
 
-// Bug A (test-spec.md TC-05…TC-14) — orchestrator job cấp kênh MCP-over-HTTP
-// cho `claude` CLI qua `--mcp-config` (design §3.1/§4.1). Real spawn (không
+// Bug A (test-spec.md TC-05…TC-14, bản REST v2) — orchestrator job cấp
+// token/base URL cho tiến trình con qua ENV VAR (`buildChildEnv`), thay
+// `--mcp-config` của bản MCP cũ (design §1/§4.2 bản v2). Real spawn (không
 // mock child_process — không có cách nào trong codebase, xem comment đầu
-// file), fake CLI echo argv để chấm đúng JSON/argv thật đi qua OS.
-describe('claude-code-cli — mcp-config cho job orchestrator (Bug A)', () => {
+// file), fake CLI echo cả argv lẫn 2 biến env quan tâm để chấm đúng giá trị
+// thật đi qua OS.
+describe('claude-code-cli — env token/base URL cho job orchestrator (Bug A)', () => {
   const savedEnv = { ...process.env }
-  const MCP_URL_BASE = 'http://127.0.0.1:54999'
+  const SELF_BASE_URL = 'http://127.0.0.1:54999'
 
   afterEach(() => {
     process.env = { ...savedEnv }
   })
 
-  function argvEchoCli(home: string): string {
-    const fakeCli = path.join(home, 'fake-cli-argv.mjs')
+  function argvEnvEchoCli(home: string): string {
+    const fakeCli = path.join(home, 'fake-cli-argv-env.mjs')
     fs.writeFileSync(
       fakeCli,
       [
         "process.stdout.write('ARGV:' + JSON.stringify(process.argv.slice(2)) + '\\n')",
+        "process.stdout.write('ENV:' + JSON.stringify({",
+        '  token: process.env.DASHBOARD_ORCHESTRATOR_TOKEN ?? null,',
+        '  baseUrl: process.env.DASHBOARD_ORCHESTRATOR_BASE_URL ?? null,',
+        "}) + '\\n')",
         'process.stdin.resume()',
         "process.stdin.on('end', () => process.exit(0))",
         '',
@@ -684,7 +690,7 @@ describe('claude-code-cli — mcp-config cho job orchestrator (Bug A)', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
     try {
-      const fakeCli = argvEchoCli(home)
+      const fakeCli = argvEnvEchoCli(home)
       const provider = createLocalConsoleProvider({
         providerId,
         defaultCliPath: process.execPath,
@@ -694,7 +700,7 @@ describe('claude-code-cli — mcp-config cho job orchestrator (Bug A)', () => {
       let output = ''
       const result = await provider.execute(
         {
-          jobId: 'job-mcp',
+          jobId: 'job-orch-env',
           resolvedAgent,
           userPrompt: 'quyết định điều phối',
           workspace,
@@ -710,57 +716,58 @@ describe('claude-code-cli — mcp-config cho job orchestrator (Bug A)', () => {
       )
       expect(result.ok).toBe(true)
       const argvLine = output.split('\n').find((l) => l.startsWith('ARGV:'))
-      return JSON.parse(argvLine!.slice('ARGV:'.length)) as string[]
+      const envLine = output.split('\n').find((l) => l.startsWith('ENV:'))
+      return {
+        argv: JSON.parse(argvLine!.slice('ARGV:'.length)) as string[],
+        env: JSON.parse(envLine!.slice('ENV:'.length)) as { token: string | null; baseUrl: string | null },
+      }
     } finally {
       fs.rmSync(home, { recursive: true, force: true })
       fs.rmSync(workspace, { recursive: true, force: true })
     }
   }
 
-  // TC-13/TC-14 — contract xác nhận thật của `claude` CLI: `--mcp-config` nhận
-  // 1 chuỗi JSON làm 1 argv element (không phải file). JSON phải compact (không
-  // khoảng trắng nội bộ) vì tiến trình con có thể bị spawn qua shell join-argv
-  // bằng dấu cách trên một số OS (Windows) — xem comment ở `execute()`.
-  test('job orchestrator (claude-code-cli, đủ điều kiện) ⇒ --mcp-config là MỘT argv element, JSON hợp lệ, header đúng token', async () => {
-    process.env.DEV_TEAM_SELF_BASE_URL = MCP_URL_BASE
-    const argv = await runWith({ orchestratorJob: true, mcpToken: 'tok-abc-123' })
+  test('job orchestrator đủ điều kiện ⇒ tiến trình con nhận đúng token + base URL qua env, KHÔNG qua argv', async () => {
+    process.env.DEV_TEAM_SELF_BASE_URL = SELF_BASE_URL
+    const { argv, env } = await runWith({ orchestratorJob: true, orchestratorToken: 'tok-abc-123' })
 
-    const flagIdx = argv.indexOf('--mcp-config')
-    expect(flagIdx).toBeGreaterThan(-1)
-    const configArg = argv[flagIdx + 1]
-    expect(configArg).not.toContain(' ') // compact JSON — an toàn khi shell join-argv bằng space
-
-    const parsed = JSON.parse(configArg)
-    const server = parsed.mcpServers['dev-team-orchestrator']
-    expect(server.type).toBe('http')
-    expect(server.url).toBe(`${MCP_URL_BASE}/api/mcp/orchestrator`)
-    expect(server.headers['X-Dashboard-Orchestrator-Token']).toBe('tok-abc-123')
-  })
-
-  test('job step THƯỜNG (không phải orchestratorJob) ⇒ KHÔNG có --mcp-config', async () => {
-    process.env.DEV_TEAM_SELF_BASE_URL = MCP_URL_BASE
-    const argv = await runWith({ pipelineStepId: 'implementer' })
+    expect(env.token).toBe('tok-abc-123')
+    expect(env.baseUrl).toBe(SELF_BASE_URL)
+    // Không còn `--mcp-config`/JSON nào trong argv — token/URL chỉ đi qua env.
     expect(argv).not.toContain('--mcp-config')
+    expect(argv.some((a) => a.includes('tok-abc-123'))).toBe(false)
   })
 
-  test('orchestratorJob nhưng thiếu mcpToken ⇒ KHÔNG có --mcp-config', async () => {
-    process.env.DEV_TEAM_SELF_BASE_URL = MCP_URL_BASE
-    const argv = await runWith({ orchestratorJob: true })
-    expect(argv).not.toContain('--mcp-config')
+  test('job step THƯỜNG (không phải orchestratorJob) ⇒ KHÔNG set 2 biến env', async () => {
+    process.env.DEV_TEAM_SELF_BASE_URL = SELF_BASE_URL
+    const { env } = await runWith({ pipelineStepId: 'implementer' })
+    expect(env.token).toBeNull()
+    expect(env.baseUrl).toBeNull()
   })
 
-  test('orchestratorJob + mcpToken nhưng server chưa biết base URL của chính nó ⇒ KHÔNG có --mcp-config', async () => {
+  test('orchestratorJob nhưng thiếu orchestratorToken ⇒ KHÔNG set 2 biến env', async () => {
+    process.env.DEV_TEAM_SELF_BASE_URL = SELF_BASE_URL
+    const { env } = await runWith({ orchestratorJob: true })
+    expect(env.token).toBeNull()
+    expect(env.baseUrl).toBeNull()
+  })
+
+  test('orchestratorJob + token nhưng server chưa biết base URL của chính nó ⇒ KHÔNG set 2 biến env', async () => {
     delete process.env.DEV_TEAM_SELF_BASE_URL
-    const argv = await runWith({ orchestratorJob: true, mcpToken: 'tok-xyz' })
-    expect(argv).not.toContain('--mcp-config')
+    const { env } = await runWith({ orchestratorJob: true, orchestratorToken: 'tok-xyz' })
+    expect(env.token).toBeNull()
+    expect(env.baseUrl).toBeNull()
   })
 
-  // TC-12 — agent CLI không hỗ trợ kênh mới (khác `claude-code-cli`) vẫn điều
-  // phối được bằng cơ chế cũ: gate theo `providerId`, không có branch nào phát
-  // `--mcp-config` cho provider khác, kể cả khi metadata trùng khớp hệt job orchestrator.
-  test('TC-12: provider khác claude-code-cli (vd cursor-cli) ⇒ KHÔNG bao giờ có --mcp-config dù metadata giống hệt', async () => {
-    process.env.DEV_TEAM_SELF_BASE_URL = MCP_URL_BASE
-    const argv = await runWith({ orchestratorJob: true, mcpToken: 'tok-abc-123' }, 'cursor-cli')
-    expect(argv).not.toContain('--mcp-config')
+  // Khác biệt có chủ đích so với bản MCP cũ (từng gate riêng `claude-code-cli`,
+  // TC-12 cũ khẳng định provider khác KHÔNG có kênh trực tiếp) — env injection
+  // đặt ở tầng `execute()` DÙNG CHUNG cho cả 3 provider CLI (`createLocalConsoleProvider`),
+  // nên giờ `cursor-cli`/`codex-cli` cũng nhận được token/base URL để tự chạy
+  // shell command, không cần hỗ trợ riêng giao thức MCP.
+  test('provider khác claude-code-cli (vd cursor-cli) cũng nhận được token/base URL qua env — áp dụng chung mọi provider CLI', async () => {
+    process.env.DEV_TEAM_SELF_BASE_URL = SELF_BASE_URL
+    const { env } = await runWith({ orchestratorJob: true, orchestratorToken: 'tok-abc-123' }, 'cursor-cli')
+    expect(env.token).toBe('tok-abc-123')
+    expect(env.baseUrl).toBe(SELF_BASE_URL)
   })
 })

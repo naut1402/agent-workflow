@@ -89,7 +89,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/http` | bun | `backend/apiServer.ts`, `backend/http`, `features/runner/business` | 36 | `bun test tests/src/server/http` |
 | `tests/src/server/knowledge` | bun | `backend/apiServer.ts`, `backend/db`, `backend/events` | 1 | `bun test tests/src/server/knowledge` |
 | `tests/src/server/lib` | bun | `backend/lib` | 1 | `bun test tests/src/server/lib` |
-| `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/runner/business`, `features/orchestrator/schemas` | 8 | `bun test tests/src/server/orchestrator` |
+| `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/orchestrator/schemas`, `features/runner/business` | 7 | `bun test tests/src/server/orchestrator` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
 | `tests/src/server/runners` | bun | `features/runner/business`, `backend/events`, `backend/log` | 20 | `bun test tests/src/server/runners` |
