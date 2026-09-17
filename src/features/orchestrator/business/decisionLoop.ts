@@ -25,6 +25,7 @@ import { applyOrchestratorHaltAction } from '../../monitor/business/tasks/state.
 import { listJobs, loadJob, loadTaskSessionLedger, submitJob } from '../../runner/business/index.js'
 import type { JobRecord } from '../../runner/business/index.js'
 import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
+import { resolveHitlPending, gateStepsFromConfig } from '../../../shared/lib/phase.js'
 import { ORCHESTRATOR_STEP_ID, type OrchestratorDecision } from '../schemas/orchestrator.js'
 import { composeStepBrief, type AgentContext, type DispatchReason } from './brief.js'
 import {
@@ -213,10 +214,12 @@ interface TaskPhase {
   gatePending?: string
 }
 
-async function readTaskPhase(root: string, taskId: string): Promise<TaskPhase> {
+export async function readTaskPhase(root: string, taskId: string): Promise<TaskPhase> {
   const state = (await readStateRecord(root, taskId)) ?? {}
-  const gate = state.hitl_pending
-  return { phase: String(state.current_phase ?? ''), gatePending: gate ? String(gate) : undefined }
+  const currentPhase = state.current_phase
+  const cfg = await loadPipelineConfig(root, taskId)
+  const gate = resolveHitlPending(gateStepsFromConfig(cfg), currentPhase, state.hitl_pending)
+  return { phase: String(currentPhase ?? ''), gatePending: gate ? String(gate) : undefined }
 }
 
 /** Còn bước để chạy — cursor chưa đi hết pipeline. */
