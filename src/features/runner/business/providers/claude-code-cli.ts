@@ -58,6 +58,8 @@ export interface ClaudeInvocationInput {
   sessionId?: string
   resumeSessionId?: string
   model?: string
+  /** JSON compact (`--mcp-config`) cấp kênh MCP-over-HTTP cho job orchestrator — xem `execute()`. */
+  mcpConfig?: string
 }
 
 export interface ClaudeInvocation {
@@ -84,6 +86,9 @@ export function buildClaudeInvocation(input: ClaudeInvocationInput): ClaudeInvoc
   }
   if (input.model) {
     args.push('--model', input.model)
+  }
+  if (input.mcpConfig) {
+    args.push('--mcp-config', input.mcpConfig)
   }
   // Approval-flow session continuity — exactly one is ever set (see
   // ExecuteRequest.sessionId/resumeSessionId doc comment).
@@ -369,6 +374,28 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
       let args: string[]
       let stdinInput: string | undefined
       if (useClaudeStyle) {
+        // Cấp kênh MCP-over-HTTP cho job orchestrator gọi ngược vào chính server
+        // (§4.1/§4.2 design T528bf0ed) — gate chặt theo provider + đúng job
+        // orchestrator, không phát cho job step thường. Compact JSON (không
+        // indent): argv element không được chứa khoảng trắng, cùng lý do prompt
+        // phải đi qua stdin thay vì argv ở trên (Windows `shell:true` space-join).
+        let mcpConfig: string | undefined
+        if (
+          opts.providerId === 'claude-code-cli'
+          && req.metadata?.orchestratorJob === true
+          && typeof req.metadata?.mcpToken === 'string'
+          && process.env.DEV_TEAM_SELF_BASE_URL
+        ) {
+          mcpConfig = JSON.stringify({
+            mcpServers: {
+              'dev-team-orchestrator': {
+                type: 'http',
+                url: `${process.env.DEV_TEAM_SELF_BASE_URL}/api/mcp/orchestrator`,
+                headers: { 'X-Dashboard-Orchestrator-Token': req.metadata.mcpToken },
+              },
+            },
+          })
+        }
         const invocation = buildClaudeInvocation({
           flags,
           prompt,
@@ -377,6 +404,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
           sessionId: sessionPlan.sessionId,
           resumeSessionId: sessionPlan.resumeSessionId,
           model: runnerConfig.model,
+          mcpConfig,
         })
         args = invocation.args
         stdinInput = invocation.stdinInput

@@ -34,6 +34,7 @@ import {
   type DecisionTrigger,
   type StepResult,
 } from './decision.js'
+import { mintMcpToken, revokeMcpTokensFor } from './mcpTokens.js'
 
 /** Quét lại task treo mỗi 60s — lưới cứu khi event bus (in-process) mất tín hiệu. */
 export const SWEEP_INTERVAL_MS = 60_000
@@ -112,7 +113,7 @@ function forgetTask(root: string, taskId: string): void {
   }
 }
 
-function recentOf(root: string, taskId: string, count = 8): string[] {
+export function recentOf(root: string, taskId: string, count = 8): string[] {
   return (observations.get(keyOf(root, taskId)) ?? []).slice(-count)
 }
 
@@ -157,7 +158,7 @@ function jobOfEvent(event: DashboardEvent): JobRecord | null {
   return typeof jobId === 'string' ? loadJob(jobId) : null
 }
 
-function isOrchestratorJob(job: JobRecord | null): boolean {
+export function isOrchestratorJob(job: JobRecord | null): boolean {
   return job?.metadata?.orchestratorJob === true
 }
 
@@ -187,7 +188,7 @@ function jobBelongsToTask(job: JobRecord, root: string, taskId: string): boolean
   return meta.taskId === taskId && (!meta.devTeamRoot || meta.devTeamRoot === root)
 }
 
-function liveJobsOfTask(root: string, taskId: string): JobRecord[] {
+export function liveJobsOfTask(root: string, taskId: string): JobRecord[] {
   return listJobs(50).filter((j) => isLiveStatus(j.status) && jobBelongsToTask(j, root, taskId))
 }
 
@@ -213,14 +214,14 @@ interface TaskPhase {
   gatePending?: string
 }
 
-async function readTaskPhase(root: string, taskId: string): Promise<TaskPhase> {
+export async function readTaskPhase(root: string, taskId: string): Promise<TaskPhase> {
   const state = (await readStateRecord(root, taskId)) ?? {}
   const gate = state.hitl_pending
   return { phase: String(state.current_phase ?? ''), gatePending: gate ? String(gate) : undefined }
 }
 
 /** Còn bước để chạy — cursor chưa đi hết pipeline. */
-function hasPendingStep(at: TaskPhase): boolean {
+export function hasPendingStep(at: TaskPhase): boolean {
   return Boolean(at.phase) && at.phase !== 'completed'
 }
 
@@ -265,6 +266,7 @@ export async function haltTask(ref: TaskRef, reason: string): Promise<void> {
     devTeamRoot: ref.root,
     reason,
   })
+  revokeMcpTokensFor(ref)
 }
 
 /**
@@ -392,6 +394,10 @@ async function askAgent(
     (s) => s.status === 'open' && s.stepIds?.includes(ORCHESTRATOR_STEP_ID),
   )
 
+  // Mint NGAY TRƯỚC submitJob: metadata đi vào job lúc submit và không sửa lại
+  // được sau (job file là snapshot) — mint muộn hơn nghĩa là job không bao giờ
+  // biết token của chính nó.
+  const mcpToken = mintMcpToken(ref)
   const job = submitJob({
     agentRef: orch.agent,
     workspace: joinPath(ref.root, 'tasks', ref.taskId),
@@ -418,6 +424,7 @@ async function askAgent(
       // Phân biệt "lượt quyết định" với "lượt trò chuyện": output rỗng ở lượt
       // quyết định là sự cố phải xử lý, ở lượt chat thì chỉ là im lặng.
       orchestratorTrigger: trigger,
+      mcpToken,
     },
   })
   return { job }
@@ -471,7 +478,7 @@ const ACTION_HANDLERS: Record<OrchestratorDecision['action'], DecisionHandler> =
 }
 
 /** Thi hành quyết định đã parse. Mọi nhánh không hợp lệ đều đã bị chặn trước đó. */
-function applyDecision(
+export function applyDecision(
   ref: TaskRef,
   decision: OrchestratorDecision,
   ctx: DecisionOutcomeContext,
@@ -620,9 +627,13 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
     if (event.type === 'job.failed') {
       const trigger = job?.metadata?.orchestratorTrigger as DecisionTrigger | undefined
       await recoverFromBadTurn(ref, trigger, 'orchestrator_job_failed')
+      revokeMcpTokensFor(ref)
       return
     }
-    if (event.type === 'job.finished') await consumeAgentDecision(ref, job as JobRecord)
+    if (event.type === 'job.finished') {
+      await consumeAgentDecision(ref, job as JobRecord)
+      revokeMcpTokensFor(ref)
+    }
     return
   }
 
@@ -657,6 +668,10 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
  * chat với node), không làm gì. Có sentinel nhưng hỏng ⇒ lưới tất định.
  */
 async function consumeAgentDecision(ref: TaskRef, job: JobRecord): Promise<void> {
+  // G4 — agent đã thi hành quyết định qua tool `orchestrator_decide` giữa lượt;
+  // đọc lại sentinel cuối output ở đây sẽ áp dụng quyết định đó LẦN NỮA.
+  if (job.metadata?.mcpDecisionApplied === true) return
+
   const orch = await resolveOrchestration(ref.root, ref.taskId)
   if (!orch.active) return
 

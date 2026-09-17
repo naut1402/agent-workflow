@@ -80,7 +80,14 @@ export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
   // dụng bất kể đã auth chưa) → JWT. Cả 3 no-op mặc định (degrade-by-default).
   app.use('/api/*', createCorsMiddleware(() => loadSecurityConfig().cors))
   app.use('/api/*', createRateLimitMiddleware(() => loadSecurityConfig().rateLimit))
-  app.use('/api/*', createJwtMiddleware())
+  // Route MCP của orchestrator không dành cho người dùng cuối (chỉ chính child
+  // process do server tự spawn gọi vào) và dùng token riêng theo job, không
+  // phải `Authorization` — loại khỏi JWT dashboard để hono/jwt không đọc nhầm.
+  const jwtMiddleware = createJwtMiddleware()
+  app.use('/api/*', async (c, next) => {
+    if (c.req.path === '/api/mcp/orchestrator') return next()
+    return jwtMiddleware(c, next)
+  })
 
   await registerFeatureRoutes(app)
 
