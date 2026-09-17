@@ -214,6 +214,7 @@ export class PipelineEditorController extends AbstractController {
     const projectRoot = path.dirname(root)
     let agentPath = await resolveCatalogAgentPath(projectRoot, root, id, {
       customAgentsDir: pipelineEditorBusiness.customAgentsDir,
+      scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig().agents,
     })
     if (!agentPath) {
       const parsed = parseCatalogItemId(id)
@@ -253,6 +254,7 @@ export class PipelineEditorController extends AbstractController {
     const projectRoot = path.dirname(root)
     let skillPath = await resolveCatalogSkillPath(projectRoot, id, {
       sanitiseName: pipelineEditorBusiness.sanitiseAgentName,
+      scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig().skills,
     })
     if (!skillPath) {
       const parsed = parseCatalogItemId(id)
