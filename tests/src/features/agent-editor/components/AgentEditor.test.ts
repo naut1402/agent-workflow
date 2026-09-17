@@ -2,8 +2,6 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import AgentEditor from '@/features/agent-editor/components/AgentEditor.vue'
-import AgentSideMenu from '@/features/agent-editor/components/AgentSideMenu.vue'
-import AgentTemplatePicker from '@/features/agent-editor/components/AgentTemplatePicker.vue'
 
 const fetchCustomAgents = vi.fn()
 const fetchCustomAgent = vi.fn()
@@ -385,16 +383,12 @@ describe('AgentEditor — nạp viewer thất bại (E12)', () => {
 // T8ee57185: catalog phải nạp theo project đang mở, không âm thầm rơi về
 // project default của registry (regression trước đây gây 500 khi xem/copy
 // agent scope=project không phải project default).
-describe('AgentEditor — forward projectId khi nạp catalog / mở Template picker (TC-E01, TC-E02)', () => {
+// TC-E02 (AgentTemplatePicker nhận projectId) đã bỏ: component + modal
+// Template/Copy không còn tồn tại trong AgentEditor.vue sau refactor
+// T5fd30b3c (gọn toolbar, dời sao chép ra icon-button mỗi item).
+describe('AgentEditor — forward projectId khi nạp catalog (TC-E01)', () => {
   it('mount với projectId → loadCatalog nội bộ forward đúng vào fetchCatalog', async () => {
     await mountEditor({ projectId: 'P1' })
     expect(fetchCatalog).toHaveBeenCalledWith('P1')
-  })
-
-  it('mở modal Template/Copy → AgentTemplatePicker con nhận đúng projectId của AgentEditor', async () => {
-    const w = await mountEditor({ projectId: 'P1' })
-    await w.findComponent(AgentSideMenu).vm.$emit('templates')
-    await flushPromises()
-    expect(w.findComponent(AgentTemplatePicker).props('projectId')).toBe('P1')
   })
 })

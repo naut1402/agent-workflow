@@ -8,6 +8,8 @@ import {
   expandScanPatterns,
 } from '../../../../src/features/pipeline-editor/business/scanPatterns'
 import {
+  resolveAgentPathByPatterns,
+  resolveSkillPathByPatterns,
   scanAgentsByPatterns,
   scanSkillsByPatterns,
 } from '../../../../src/features/pipeline-editor/business/catalog/scan'
@@ -260,6 +262,62 @@ describe('scanSkillsByPatterns', () => {
   test('no patterns means no work', async () => {
     expect(await scanSkillsByPatterns(root, [])).toEqual([])
     expect(await scanSkillsByPatterns(root, null)).toEqual([])
+  })
+})
+
+// T8ee57185 §7: the resolve-by-name counterpart of scanAgentsByPatterns —
+// used when the fixed `.claude/agents/<name>.md` convention path is missing,
+// to find the exact file that made an id findable via wildcard scan.
+describe('resolveAgentPathByPatterns', () => {
+  test('a matched directory: resolves by exact file name', async () => {
+    const p = await resolveAgentPathByPatterns(root, 'designer', ['tools/*/agents'])
+    expect(p).toBe(path.join(root, 'tools', 'squad', 'agents', 'designer.md'))
+  })
+
+  test('a matched directory: unknown name returns null', async () => {
+    expect(await resolveAgentPathByPatterns(root, 'nope', ['tools/*/agents'])).toBeNull()
+  })
+
+  test('a matched file: resolves by the derived file name', async () => {
+    const p = await resolveAgentPathByPatterns(root, 'no-frontmatter', ['.agents/*.md'])
+    expect(p).toBe(path.join(root, '.agents', 'no-frontmatter.md'))
+  })
+
+  test('a matched file: resolves by frontmatter name, not file name', async () => {
+    const p = await resolveAgentPathByPatterns(root, 'real-agent-name', ['custom/*.md'])
+    expect(p).toBe(path.join(root, 'custom', 'weird-file-name.md'))
+    expect(await resolveAgentPathByPatterns(root, 'weird-file-name', ['custom/*.md'])).toBeNull()
+  })
+
+  test('no patterns means no match', async () => {
+    expect(await resolveAgentPathByPatterns(root, 'designer', [])).toBeNull()
+    expect(await resolveAgentPathByPatterns(root, 'designer', undefined)).toBeNull()
+  })
+})
+
+describe('resolveSkillPathByPatterns', () => {
+  test('a matched directory (flat skills root): resolves by name from its SKILL.md', async () => {
+    const p = await resolveSkillPathByPatterns(root, 'build-thing', ['packages/*/skills'])
+    expect(p).toBe(path.join(root, 'packages', 'core', 'skills', 'build-thing', 'SKILL.md'))
+  })
+
+  test('a matched directory: unknown name returns null', async () => {
+    expect(await resolveSkillPathByPatterns(root, 'nope', ['packages/*/skills'])).toBeNull()
+  })
+
+  test('a matched flat file: resolves by name', async () => {
+    const p = await resolveSkillPathByPatterns(root, 'lint-code', ['flat-skills/*.md'])
+    expect(p).toBe(path.join(root, 'flat-skills', 'lint-code.md'))
+  })
+
+  test('a matched SKILL.md without a name resolves by its folder-derived name', async () => {
+    const p = await resolveSkillPathByPatterns(root, 'entry-skill', ['entry-skill/SKILL.md'])
+    expect(p).toBe(path.join(root, 'entry-skill', 'SKILL.md'))
+  })
+
+  test('no patterns means no match', async () => {
+    expect(await resolveSkillPathByPatterns(root, 'build-thing', [])).toBeNull()
+    expect(await resolveSkillPathByPatterns(root, 'build-thing', null)).toBeNull()
   })
 })
 

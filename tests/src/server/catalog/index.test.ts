@@ -34,12 +34,69 @@ describe('resolveCatalogAgentPath', () => {
     const p = await resolveCatalogAgentPath(projectRoot, root, 'dashboard:my-agent', { customAgentsDir })
     expect(p).toBe(path.join(root, 'custom-agents', 'my-agent.md'))
   })
-  test('project source resolves under projectRoot/.claude/agents', async () => {
-    const p = await resolveCatalogAgentPath(projectRoot, root, 'project:foo', { customAgentsDir })
-    expect(p).toBe(path.join(projectRoot, '.claude', 'agents', 'foo.md'))
-  })
   test('returns null for an invalid id', async () => {
     expect(await resolveCatalogAgentPath(projectRoot, root, 'bogus', { customAgentsDir })).toBeNull()
+  })
+
+  // `project` source has two possible origins with the same id shape
+  // (`project:<name>`): the fixed `.claude/agents/<name>.md` convention, and a
+  // `scanPatterns.agents` wildcard match — T8ee57185 §7 (investigate.md):
+  // before this, an agent findable only via wildcard scan could never be
+  // opened, because this function always assumed the convention path.
+  describe('project source', () => {
+    let tmpProjectRoot: string
+    let tmpRoot: string
+
+    beforeAll(async () => {
+      tmpProjectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'catalog-agent-project-'))
+      tmpRoot = path.join(tmpProjectRoot, '.dev-team-agent')
+      await fs.mkdir(path.join(tmpProjectRoot, '.claude', 'agents'), { recursive: true })
+      await fs.writeFile(path.join(tmpProjectRoot, '.claude', 'agents', 'conventional.md'), '# body')
+      await fs.mkdir(path.join(tmpProjectRoot, 'docs', 'template', 'agents'), { recursive: true })
+      await fs.writeFile(path.join(tmpProjectRoot, 'docs', 'template', 'agents', 'wildcard-only.md'), '# body')
+    })
+
+    afterAll(async () => {
+      await fs.rm(tmpProjectRoot, { recursive: true, force: true })
+    })
+
+    test('resolves the conventional path when the file exists on disk', async () => {
+      const p = await resolveCatalogAgentPath(tmpProjectRoot, tmpRoot, 'project:conventional', { customAgentsDir })
+      expect(p).toBe(path.join(tmpProjectRoot, '.claude', 'agents', 'conventional.md'))
+    })
+
+    test('falls back to scanPatterns.agents when the conventional path does not exist', async () => {
+      const p = await resolveCatalogAgentPath(tmpProjectRoot, tmpRoot, 'project:wildcard-only', {
+        customAgentsDir,
+        scanPatterns: ['docs/template/agents'],
+      })
+      expect(p).toBe(path.join(tmpProjectRoot, 'docs', 'template', 'agents', 'wildcard-only.md'))
+    })
+
+    test('the conventional path wins over a same-named scanPatterns match', async () => {
+      const patternDir = path.join(tmpProjectRoot, 'docs', 'template', 'agents2')
+      await fs.mkdir(patternDir, { recursive: true })
+      await fs.writeFile(path.join(patternDir, 'conventional.md'), '# must not win')
+
+      const p = await resolveCatalogAgentPath(tmpProjectRoot, tmpRoot, 'project:conventional', {
+        customAgentsDir,
+        scanPatterns: ['docs/template/agents2'],
+      })
+      expect(p).toBe(path.join(tmpProjectRoot, '.claude', 'agents', 'conventional.md'))
+    })
+
+    test('returns null when the conventional path is missing and no scanPatterns are configured', async () => {
+      const p = await resolveCatalogAgentPath(tmpProjectRoot, tmpRoot, 'project:wildcard-only', { customAgentsDir })
+      expect(p).toBeNull()
+    })
+
+    test('returns null when neither the conventional path nor any pattern matches', async () => {
+      const p = await resolveCatalogAgentPath(tmpProjectRoot, tmpRoot, 'project:missing', {
+        customAgentsDir,
+        scanPatterns: ['docs/template/agents'],
+      })
+      expect(p).toBeNull()
+    })
   })
 })
 
@@ -60,9 +117,47 @@ describe('resolveCatalogSkillPath', () => {
     expect(p).toBe(path.join(os.homedir(), '.cursor', 'skills-cursor', 'foo', 'SKILL.md'))
   })
 
-  test('project source resolves under projectRoot/.claude/skills', async () => {
-    const p = await resolveCatalogSkillPath(projectRoot, 'project:foo', deps)
-    expect(p).toBe(path.join(projectRoot, '.claude', 'skills', 'foo', 'SKILL.md'))
+  // Mirror của nhóm test `resolveCatalogAgentPath` — `project` source cho skill
+  // cũng có 2 nguồn cùng id shape (`project:<name>`): convention và
+  // `scanPatterns.skills` wildcard (T8ee57185 §7).
+  describe('project source', () => {
+    let tmpProjectRoot: string
+
+    beforeAll(async () => {
+      tmpProjectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'catalog-skill-project-'))
+      await fs.mkdir(path.join(tmpProjectRoot, '.claude', 'skills', 'conventional'), { recursive: true })
+      await fs.writeFile(
+        path.join(tmpProjectRoot, '.claude', 'skills', 'conventional', 'SKILL.md'),
+        '---\nname: conventional\n---\n',
+      )
+      await fs.mkdir(path.join(tmpProjectRoot, 'docs', 'template', 'skills', 'wildcard-only'), { recursive: true })
+      await fs.writeFile(
+        path.join(tmpProjectRoot, 'docs', 'template', 'skills', 'wildcard-only', 'SKILL.md'),
+        '---\nname: wildcard-only\n---\n',
+      )
+    })
+
+    afterAll(async () => {
+      await fs.rm(tmpProjectRoot, { recursive: true, force: true })
+    })
+
+    test('resolves the conventional path when the file exists on disk', async () => {
+      const p = await resolveCatalogSkillPath(tmpProjectRoot, 'project:conventional', deps)
+      expect(p).toBe(path.join(tmpProjectRoot, '.claude', 'skills', 'conventional', 'SKILL.md'))
+    })
+
+    test('falls back to scanPatterns.skills when the conventional path does not exist', async () => {
+      const p = await resolveCatalogSkillPath(tmpProjectRoot, 'project:wildcard-only', {
+        ...deps,
+        scanPatterns: ['docs/template/skills'],
+      })
+      expect(p).toBe(path.join(tmpProjectRoot, 'docs', 'template', 'skills', 'wildcard-only', 'SKILL.md'))
+    })
+
+    test('returns null when the conventional path is missing and no scanPatterns are configured', async () => {
+      const p = await resolveCatalogSkillPath(tmpProjectRoot, 'project:wildcard-only', deps)
+      expect(p).toBeNull()
+    })
   })
 
   test('returns null for an invalid id (no colon)', async () => {
