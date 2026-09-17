@@ -26,6 +26,14 @@ export function devTeamApi({ root }: { root: string }) {
       server.config.logger.info(
         `\n  dev-team-dashboard → default root: ${root}${exists ? '' : '  (does not exist yet)'}\n`,
       )
+      // Tương đương `standalone.ts` cho transport Vite dev — cho
+      // `claude-code-cli.ts` biết base URL gọi ngược vào route MCP orchestrator.
+      server.httpServer?.once('listening', () => {
+        const addr = server.httpServer.address()
+        if (addr && typeof addr === 'object') {
+          process.env.DEV_TEAM_SELF_BASE_URL = `http://127.0.0.1:${addr.port}`
+        }
+      })
       server.middlewares.use(async (req: any, res: any, next: any) => {
         const handled = await apiHandler(req, res)
         if (!handled) return next()

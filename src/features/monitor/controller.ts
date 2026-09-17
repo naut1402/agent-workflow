@@ -71,6 +71,8 @@ const TASK_STREAM_EVENTS = new Set([
   'task.advanced',
   'hitl.pending',
   'hitl.resolved',
+  'orchestrator.dispatched',
+  'orchestrator.halted',
   'entity.created',
   'entity.updated',
   'entity.deleted',
@@ -982,6 +984,10 @@ export class MonitorController extends AbstractController {
         devTeamRoot: root,
         reason: 'user_stop',
       })
+      // Đường Stop này KHÔNG đi qua `haltTask()` của decisionLoop (đường riêng) —
+      // thu hồi token ngay, không đợi job quyết định của agent tự thoát.
+      const { revokeOrchestratorTokensFor } = await import('../orchestrator/business/index.js')
+      revokeOrchestratorTokensFor({ root, taskId: id })
     } else {
       // Không `await`: lượt agent là một job, kết quả đọc ở `job.finished`.
       const { startOrchestratorTurn } = await import('../orchestrator/business/index.js')

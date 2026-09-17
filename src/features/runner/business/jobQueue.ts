@@ -419,6 +419,16 @@ export function mergeJobUsage(id: string, usage: UsageSnapshot): JobRecord | nul
   return saveJob({ ...cur, usage })
 }
 
+/**
+ * Đánh dấu job orchestrator đã thi hành 1 quyết định qua `POST /api/orchestrator/decide`
+ * — chặn `consumeAgentDecision` đọc lại sentinel cuối output cho CÙNG lượt (G4).
+ */
+export function markDirectDecisionApplied(id: string): void {
+  const cur = loadJob(id)
+  if (!cur) return
+  saveJob({ ...cur, metadata: { ...cur.metadata, directDecisionApplied: true } })
+}
+
 export function listJobs(limit?: number, status?: JobStatus): JobRecord[] {
   ensureJobsDir()
   const files = readdirSync(jobsDir()).filter((f) => f.endsWith('.json'))

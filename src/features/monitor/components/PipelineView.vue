@@ -334,9 +334,12 @@ watch(() => props.task.task_id, () => {
   syncInFlightRun()
 }, { immediate: true })
 
-// Task được poll lại ở tầng trên (`hitl-action` → refetch); bám theo `state_mtime`
-// để trạng thái node điều phối (listening / dispatching) không đứng hình.
-watch(() => props.task.state_mtime, () => { syncInFlightRun() })
+// Task được poll lại ở tầng trên (`hitl-action` → refetch); bám theo cả object
+// `props.task` (không chỉ `state_mtime`) vì `collectTasks()` tạo object mới mỗi
+// snapshot SSE — vòng đời orchestrator (dispatched/halted) đổi identity của
+// `props.task` mà không nhất thiết đổi `state_mtime`, nên trạng thái node điều
+// phối (listening / dispatching) không được đứng hình giữa các lượt đó.
+watch(() => props.task, () => { syncInFlightRun() })
 
 onBeforeUnmount(clearRunPoll)
 
