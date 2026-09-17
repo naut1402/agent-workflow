@@ -172,7 +172,8 @@ export class PipelineEditorController extends AbstractController {
       // barrel orchestrator có side-effect khởi động vòng lặp lúc module-eval.
       // Lỗi ở đây không được làm hỏng lượt ghi YAML — nó đã ghi xong rồi.
       try {
-        const { applyOrchestratorConfigChange } = await import('../monitor/business/index.js')
+        const { applyOrchestratorConfigChange, reconcileGateState } = await import('../monitor/business/index.js')
+        await reconcileGateState(root, taskId)
         const enabled = pipeline.orchestrator?.enabled === true
         await applyOrchestratorConfigChange(root, taskId, enabled)
         if (enabled) {
