@@ -102,11 +102,29 @@ function resolveEffectiveFlags(flags: unknown, credential: CredentialProfile): s
   return list
 }
 
-function buildChildEnv(credential: CredentialProfile): NodeJS.ProcessEnv {
+/**
+ * Cấp token + base URL cho job orchestrator qua env (thay `--mcp-config` của
+ * bản trước — xem design.md T528bf0ed §1/§4.2 bản v2): tiến trình `claude`/
+ * `cursor-agent`/`codex` con kế thừa env này, và khi CHÍNH nó dùng tool Bash để
+ * chạy `curl`, subprocess đó lại kế thừa env của nó — không cần plumbing gì
+ * thêm ngoài cơ chế kế thừa env chuẩn của OS. Token không đi qua argv/prompt
+ * text nên không có vấn đề Windows argv-quoting, và model không "nhìn thấy"
+ * giá trị thật của token trong context/transcript (chỉ viết literal tên biến
+ * trong lệnh `curl`, shell mới thay giá trị lúc thực thi).
+ */
+function buildChildEnv(credential: CredentialProfile, metadata?: Record<string, unknown>): NodeJS.ProcessEnv {
   const env = { ...process.env }
   const auth = resolveSecretRef(credential)
   if (auth.type === 'env' && auth.key && auth.value) {
     env[auth.key] = auth.value
+  }
+  if (
+    metadata?.orchestratorJob === true
+    && typeof metadata.orchestratorToken === 'string'
+    && process.env.DEV_TEAM_SELF_BASE_URL
+  ) {
+    env.DASHBOARD_ORCHESTRATOR_TOKEN = metadata.orchestratorToken
+    env.DASHBOARD_ORCHESTRATOR_BASE_URL = process.env.DEV_TEAM_SELF_BASE_URL
   }
   return env
 }
@@ -440,7 +458,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
       try {
         procResult = await runProcess(cliPath, args, {
           cwd: req.workspace,
-          env: buildChildEnv(credential),
+          env: buildChildEnv(credential, req.metadata),
           timeoutMs,
           onLog: wrappedOnLog,
           onStart: wrappedOnStart,

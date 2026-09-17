@@ -120,6 +120,29 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
       '',
       'Không có dòng này, hoặc JSON hỏng, hoặc `stepId` không nằm trong danh sách trên',
       '⇒ orchestrator tự chuyển tiếp theo thứ tự pipeline mà không có bối cảnh bạn soạn.',
+      '',
+      'Nếu 2 biến môi trường DASHBOARD_ORCHESTRATOR_TOKEN và DASHBOARD_ORCHESTRATOR_BASE_URL',
+      'có mặt, bạn có thể gọi TRỰC TIẾP API điều phối bằng lệnh shell, giữa lượt — biết ngay',
+      'kết quả (dispatch được hay không) và không cần đợi hết lượt:',
+      '',
+      '```',
+      '# Trạng thái thật của task — step đang chạy (nếu có), gate đang chờ, event gần đây',
+      'curl -s "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/status" \\',
+      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN"',
+      '',
+      '# Output hiện tại của step đang/đã chạy — không cần chờ job đó kết thúc',
+      'curl -s "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/output?offset=0" \\',
+      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN"',
+      '',
+      '# Ra lệnh start/resume/halt/summary — cùng ngữ nghĩa với dòng JSON ở trên',
+      'curl -s -X POST "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/decide" \\',
+      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN" \\',
+      '  -H "Content-Type: application/json" \\',
+      '  -d \'{"action":"start","stepId":"..."}\'',
+      '```',
+      '',
+      'Gọi API rồi thì KHÔNG in lại dòng ORCHESTRATOR_DECISION nữa (double-dispatch).',
+      'Không có 2 biến môi trường trên (agent CLI khác) thì vẫn dùng dòng JSON như trên.',
     ].join('\n'),
   ]
   return parts.filter(Boolean).join('\n\n')
@@ -140,6 +163,23 @@ function lastDecisionLine(stdout: string): string | null {
 export type ParsedDecision = OrchestratorDecision | { error: string }
 
 /**
+ * Kiểm tra một quyết định đã ở dạng object (JSON đã parse) — dùng chung cho cả
+ * đường sentinel (text, qua `parseDecision`) lẫn đường `POST /api/orchestrator/decide`
+ * (object đã parse từ JSON body, không qua text).
+ */
+export function validateDecision(raw: unknown, stepIds: string[]): ParsedDecision {
+  const parsed = OrchestratorDecision.safeParse(raw)
+  if (!parsed.success) return { error: 'malformed decision' }
+
+  const decision = parsed.data
+  const needsStep = decision.action === 'start' || decision.action === 'resume'
+  if (needsStep && !stepIds.includes(decision.stepId as string)) {
+    return { error: `unknown stepId: ${decision.stepId}` }
+  }
+  return decision
+}
+
+/**
  * Đọc quyết định từ output agent.
  *
  * Mọi nhánh `{ error }` là tín hiệu **không dùng được lượt này**; caller quyết
@@ -156,15 +196,7 @@ export function parseDecision(stdout: string, stepIds: string[]): ParsedDecision
     return { error: 'malformed decision json' }
   }
 
-  const parsed = OrchestratorDecision.safeParse(raw)
-  if (!parsed.success) return { error: 'malformed decision' }
-
-  const decision = parsed.data
-  const needsStep = decision.action === 'start' || decision.action === 'resume'
-  if (needsStep && !stepIds.includes(decision.stepId as string)) {
-    return { error: `unknown stepId: ${decision.stepId}` }
-  }
-  return decision
+  return validateDecision(raw, stepIds)
 }
 
 /** Output agent có mang quyết định không — dùng để phân biệt "chat thường" với "lệnh". */
