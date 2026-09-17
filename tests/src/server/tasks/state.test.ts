@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { advanceStepOnJobSuccess, applyArchiveAction, applyHitlAction, applyRenameAction, deleteTask, reconcileGateState, repairTaskState, resetPipelineStepAssumingLock, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
+import { advanceStepOnJobSuccess, advanceStepOnJobSuccessAssumingLock, applyArchiveAction, applyHitlAction, applyRenameAction, deleteTask, reconcileGateState, repairTaskState, resetPipelineStepAssumingLock, writeStateAtomic } from '../../../../src/features/monitor/business/tasks/state'
 import { on, _resetEventBusForTest } from '../../../../src/backend/events/index.js'
 import { listJobs, loadJob, registerProvider, submitJob, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
@@ -594,6 +594,63 @@ describe('advanceStepOnJobSuccess — review retry', () => {
   })
 })
 
+// G6 — `AssumingLock` (dùng bởi `runStep.ts` khi caller đã giữ lock) trước đây
+// đổi state nhưng không phát event ở 2 nhánh: gate/advance cuối hàm và
+// review_retry. Test đối xứng với `advanceStepOnJobSuccess` ở trên, chấm thẳng
+// vào hàm `AssumingLock` (không qua `withStateFileLock`, không cần thiết cho unit test).
+describe('advanceStepOnJobSuccessAssumingLock — emit song song với advanceStepOnJobSuccess (G6)', () => {
+  test('mở gate ⇒ emit hitl.pending đúng gateId/stepId/devTeamRoot', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: investigator\n    hitl: { mode: manual, gate_id: hitl-1 }\n  - id: designer\n`,
+      'utf8',
+    )
+    const stateFile = await seedTask(root, 'AL1', { current_phase: 'investigator' })
+    const events: Array<Record<string, unknown>> = []
+    on('hitl.pending', (e) => events.push(e.payload))
+
+    const result = await advanceStepOnJobSuccessAssumingLock(root, 'AL1', 'investigator', stateFile)
+    expect(result).not.toBeNull()
+    expect(result?.state.hitl_pending).toBe('hitl-1')
+    expect(events).toEqual([{ taskId: 'AL1', gateId: 'hitl-1', stepId: 'investigator', devTeamRoot: root }])
+  })
+
+  test('tiến sang phase mới (không gate) ⇒ emit task.advanced đúng devTeamRoot', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), `version: 1\nsteps:\n  - id: implementer\n  - id: reviewer\n`, 'utf8')
+    const stateFile = await seedTask(root, 'AL2', { current_phase: 'implementer' })
+    const events: Array<Record<string, unknown>> = []
+    on('task.advanced', (e) => events.push(e.payload))
+
+    const result = await advanceStepOnJobSuccessAssumingLock(root, 'AL2', 'implementer', stateFile)
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('reviewer')
+    expect(events).toEqual([{ taskId: 'AL2', stepId: 'implementer', currentPhase: 'reviewer', devTeamRoot: root }])
+  })
+
+  test('nhánh review-retry ⇒ đúng một task.advanced với reason review_retry', async () => {
+    const root = await tmp()
+    await fs.writeFile(
+      path.join(root, 'pipeline.yaml'),
+      `version: 1\nsteps:\n  - id: implementer\n  - id: reviewer\n    produces: [review.md]\n    hitl: { mode: manual, gate_id: hitl-3, retry: { on: must_fix, restart_from: implementer, max: 2 } }\n`,
+      'utf8',
+    )
+    const stateFile = await seedTask(root, 'AL3', { current_phase: 'reviewer', review_round: 0 })
+    await fs.mkdir(path.join(root, 'tasks', 'AL3'), { recursive: true })
+    await fs.writeFile(path.join(root, 'tasks', 'AL3', 'review.md'), '## Summary\nRecommendation: NEEDS_CHANGES\n', 'utf8')
+    const events: Array<Record<string, unknown>> = []
+    on('task.advanced', (e) => events.push(e.payload))
+
+    const result = await advanceStepOnJobSuccessAssumingLock(root, 'AL3', 'reviewer', stateFile)
+    expect(result).not.toBeNull()
+    expect(result?.state.current_phase).toBe('implementer')
+    expect(events).toEqual([
+      { taskId: 'AL3', stepId: 'reviewer', currentPhase: 'implementer', reason: 'review_retry', devTeamRoot: root },
+    ])
+  })
+})
+
 describe('applyArchiveAction', () => {
   test('archives a task, writing archived + archived_at', async () => {
     const root = await tmp()
@@ -1054,6 +1111,8 @@ describe('reconcileGateState', () => {
         gateId: 'hitl-1',
         action: 'cancelled',
         reason: 'pipeline_changed',
+        // G7 — subscriber chạy nền (orchestrator) cần field này để tra data root.
+        devTeamRoot: root,
       })
     } finally {
       off()
