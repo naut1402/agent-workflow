@@ -12,6 +12,10 @@ export async function fetchCatalogAgent(id: string, projectId?: string) {
   return apiGet('/api/catalog-agent', { id, project: projectId })
 }
 
+export async function fetchSkillContent(id: string, projectId?: string) {
+  return apiGet('/api/skill-content', { id, project: projectId })
+}
+
 export async function fetchRules(projectId?: string) {
   return apiGet('/api/rules', { project: projectId })
 }

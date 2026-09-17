@@ -10,16 +10,13 @@ const props = defineProps<{
   selectedKey: string | null
   /** Dòng đang xoá dở; chặn double-click ngay ở nút. */
   busyKey: string | null
-  canExport: boolean
 }>()
 
 const emit = defineEmits<{
   new: []
-  templates: []
-  nl: []
-  export: []
-  download: []
   'upload-file': [e: Event]
+  download: [agent: AgentMeta]
+  duplicate: [agent: AgentMeta]
   view: [agent: AgentMeta]
   edit: [agent: AgentMeta]
   delete: [agent: AgentMeta]
@@ -55,32 +52,14 @@ const groups = computed(() =>
       <button type="button" class="btn-primary btn-sm" @click="emit('new')">
         {{ t('agentEditor.list.newButton') }}
       </button>
-      <button type="button" class="btn-ghost btn-sm" @click="emit('templates')">
-        {{ t('agentEditor.actions.templateCopy') }}
-      </button>
-      <button type="button" class="btn-ghost btn-sm" @click="emit('nl')">
-        {{ t('agentEditor.actions.buildNl') }}
-      </button>
       <button
         type="button"
-        class="btn-ghost btn-sm"
-        :disabled="!canExport"
-        :title="canExport ? undefined : t('agentEditor.list.exportHint')"
-        @click="emit('export')"
+        class="icon-btn"
+        :title="t('agentEditor.actions.upload')"
+        :aria-label="t('agentEditor.actions.upload')"
+        @click="fileInput?.click()"
       >
-        {{ t('agentEditor.actions.export') }}
-      </button>
-      <button
-        type="button"
-        class="btn-ghost btn-sm"
-        :disabled="!canExport"
-        :title="canExport ? undefined : t('agentEditor.list.exportHint')"
-        @click="emit('download')"
-      >
-        {{ t('agentEditor.actions.download') }}
-      </button>
-      <button type="button" class="btn-ghost btn-sm" @click="fileInput?.click()">
-        {{ t('agentEditor.actions.upload') }}
+        <Icon name="upload" :size="14" />
       </button>
       <input
         ref="fileInput"
@@ -113,6 +92,24 @@ const groups = computed(() =>
             >{{ a.name }}</button>
             <span v-if="a.model" class="chip chip-xs">{{ a.model }}</span>
             <div class="icon-btn-group">
+              <button
+                type="button"
+                class="icon-btn icon-btn-inline"
+                :title="t('agentEditor.list.download')"
+                :aria-label="t('agentEditor.list.download')"
+                @click="emit('download', a)"
+              >
+                <Icon name="download" :size="14" />
+              </button>
+              <button
+                type="button"
+                class="icon-btn icon-btn-inline"
+                :title="t('agentEditor.list.duplicate')"
+                :aria-label="t('agentEditor.list.duplicate')"
+                @click="emit('duplicate', a)"
+              >
+                <Icon name="copy" :size="14" />
+              </button>
               <button
                 type="button"
                 class="icon-btn icon-btn-inline"

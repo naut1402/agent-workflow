@@ -140,7 +140,8 @@ export async function buildCatalog(
   return { skills, agents }
 }
 
-export function parseCatalogAgentId(id: unknown): { source: string; name: string } | null {
+/** Hàm thuần theo id `<source>:<name>` — dùng chung cho agent + skill. */
+export function parseCatalogItemId(id: unknown): { source: string; name: string } | null {
   if (typeof id !== 'string' || !id.includes(':')) return null
   const i = id.lastIndexOf(':')
   if (i <= 0) return null
@@ -157,7 +158,7 @@ export async function resolveCatalogAgentPath(
   id: string,
   deps: { customAgentsDir: (root: string) => string },
 ): Promise<string | null> {
-  const parsed = parseCatalogAgentId(id)
+  const parsed = parseCatalogItemId(id)
   if (!parsed?.name) return null
   const { source, name } = parsed
   const fileName = `${name}.md`
@@ -189,6 +190,45 @@ export async function resolveCatalogAgentPath(
     }
     const cacheDir = await latestPluginCacheDir(pluginName)
     if (cacheDir) return joinPath(cacheDir, 'agents', fileName)
+  }
+  return null
+}
+
+/**
+ * Resolve the on-disk path of a catalog skill's `SKILL.md` by its catalog id.
+ * Mirror của `resolveCatalogAgentPath`, nhưng tự sanitize `name` — route mới
+ * (`getSkillContent`) không được mang theo lỗ hổng path-traversal có sẵn ở
+ * route agent (AGENTS.md §4: chặn path-traversal ở feature sở hữu).
+ */
+export async function resolveCatalogSkillPath(
+  projectRoot: string,
+  id: string,
+  deps: { sanitiseName: (name: string) => string | null },
+): Promise<string | null> {
+  const parsed = parseCatalogItemId(id)
+  if (!parsed?.name) return null
+  const { source, name } = parsed
+  if (deps.sanitiseName(name) !== name) return null
+
+  if (source === 'user') return joinPath(homeDir(), '.claude', 'skills', name, 'SKILL.md')
+  if (source === 'cursor') return joinPath(homeDir(), '.cursor', 'skills-cursor', name, 'SKILL.md')
+  if (source === 'project') return joinPath(projectRoot, '.claude', 'skills', name, 'SKILL.md')
+  if (source.startsWith('repo:')) {
+    const pluginName = source.slice('repo:'.length)
+    const found = await findMarketplaceJson(projectRoot)
+    if (!found) return null
+    const plugins = Array.isArray(found.data.plugins) ? found.data.plugins : []
+    const hit = plugins.find((p: any) => (p.name || basename(p.source)) === pluginName)
+    if (!hit?.source) return null
+    return joinPath(resolvePath(found.dir, hit.source), 'skills', name, 'SKILL.md')
+  }
+  if (source.startsWith('plugin:')) {
+    const pluginName = source.slice('plugin:'.length)
+    const installs = await loadEnabledPluginInstalls()
+    const install = installs.find((i) => i.name === pluginName)
+    if (install?.installPath) return joinPath(install.installPath, 'skills', name, 'SKILL.md')
+    const cacheDir = await latestPluginCacheDir(pluginName)
+    if (cacheDir) return joinPath(cacheDir, 'skills', name, 'SKILL.md')
   }
   return null
 }

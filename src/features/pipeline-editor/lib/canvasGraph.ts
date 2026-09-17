@@ -90,10 +90,16 @@ export function buildEditorGraph(opts: {
   const stepIds = new Set(stepNodes.map((n) => n.id))
   const byId: Record<string, StepNodeLike> = Object.fromEntries(stepNodes.map((n) => [n.id, n]))
 
+  const hubEnabled = opts.orchestrator?.enabled === true
+
+  // Step-edge vẫn tính label như cũ, chỉ ẩn hiển thị khi hub bật — KHÔNG loại
+  // khỏi mảng trả về, để `getEdges.value` (nguồn duy nhất của `stepGraph()`)
+  // vẫn thấy đủ khi hub tắt lại (D2, xem design.md §2).
   const labelledEdges = (opts.stepEdges ?? []).map((e) => ({
     ...e,
     label: gateLabelOf(byId[e.source as string]),
     labelStyle: { fill: 'var(--muted)', fontWeight: 400 },
+    hidden: hubEnabled,
   }))
 
   const phasePositions: Record<string, PhasePosition> = Object.fromEntries(
@@ -137,9 +143,21 @@ export function buildEditorGraph(opts: {
         ]
       : []
 
+  // Hub edge: source luôn là `ORCHESTRATOR_NODE_ID` (type `orchestrator`, không
+  // phải step) — `stepEdgesOf` yêu cầu cả 2 đầu nằm trong `stepIds` nên tự động
+  // loại hub edge, `buildFullPipeline`/`topoSort`/`hasFanOut` không cần sửa.
+  const hubEdges = hubEnabled
+    ? stepNodes.map((n) => ({
+        id: `e-${ORCHESTRATOR_NODE_ID}-${n.id}`,
+        source: ORCHESTRATOR_NODE_ID,
+        target: n.id,
+        markerEnd: { type: 'arrowclosed' },
+      }))
+    : []
+
   return {
     nodes: [...stepNodes, ...keptArtifactNodes, ...orchestratorNodes],
-    edges: [...labelledEdges, ...keptDataFlowEdges],
+    edges: [...labelledEdges, ...keptDataFlowEdges, ...hubEdges],
   }
 }
 

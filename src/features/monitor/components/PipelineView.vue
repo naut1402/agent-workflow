@@ -155,8 +155,9 @@ const nodes = computed(() => {
     }
   })
   // Node điều phối KHÔNG nằm trong `steps[]` (nó không phải một bước), nên
-  // `phasesFromPipeline` / `phaseStatus` / `isRunnableTarget` không đổi một dòng
-  // và nó cũng không có edge nối với step nào.
+  // `phasesFromPipeline` / `phaseStatus` / `isRunnableTarget` không đổi một dòng.
+  // Nó CÓ vẽ edge tới từng step khi bật — xem nhánh `orchestratorEnabled` của
+  // `edges` computed dưới.
   const orchestratorNodes = orchestratorEnabled.value
     ? [
         {
@@ -190,23 +191,41 @@ const nodes = computed(() => {
   return [...stepNodes, ...artifactGraph.value.artifactNodes, ...orchestratorNodes]
 })
 
+// Cùng điều kiện đang gate render `orchestratorNodes` ở `nodes` computed
+// (không phải `orchestrated` = enabled && !halted) — node và edge của nó phải
+// luôn xuất hiện/biến mất cùng nhau. Halt chỉ đổi badge/khả năng Run, không
+// đổi topology hiển thị.
 const edges = computed((): any[] => {
   const keys = phaseKeys.value
-  const control = phases.value.slice(0, -1).map((p, i) => {
-    const next = phases.value[i + 1]
-    const isWaiting = p.hitl && props.task.hitl_pending === p.hitl
-    return {
-      id: `e-${p.key}-${next.key}`,
-      source: p.key,
-      target: next.key,
-      animated: phaseStatus(p, props.task, keys) === 'active',
-      label: p.hitl || '',
-      labelStyle: { fill: isWaiting ? 'var(--waiting)' : 'var(--muted)', fontWeight: isWaiting ? 700 : 400 },
-      style: { stroke: isWaiting ? 'var(--waiting)' : 'var(--border)', strokeWidth: 2 },
-      markerEnd: { type: 'arrowclosed', color: isWaiting ? 'var(--waiting)' : 'var(--border)' },
-    }
-  })
-  return [...control, ...artifactGraph.value.dataFlowEdges]
+  const core = orchestratorEnabled.value
+    ? phases.value.map((p) => {
+        const isWaiting = p.hitl && props.task.hitl_pending === p.hitl
+        return {
+          id: `e-${ORCHESTRATOR_NODE_ID}-${p.key}`,
+          source: ORCHESTRATOR_NODE_ID,
+          target: p.key,
+          animated: phaseStatus(p, props.task, keys) === 'active',
+          label: p.hitl || '',
+          labelStyle: { fill: isWaiting ? 'var(--waiting)' : 'var(--muted)', fontWeight: isWaiting ? 700 : 400 },
+          style: { stroke: isWaiting ? 'var(--waiting)' : 'var(--border)', strokeWidth: 2 },
+          markerEnd: { type: 'arrowclosed', color: isWaiting ? 'var(--waiting)' : 'var(--border)' },
+        }
+      })
+    : phases.value.slice(0, -1).map((p, i) => {
+        const next = phases.value[i + 1]
+        const isWaiting = p.hitl && props.task.hitl_pending === p.hitl
+        return {
+          id: `e-${p.key}-${next.key}`,
+          source: p.key,
+          target: next.key,
+          animated: phaseStatus(p, props.task, keys) === 'active',
+          label: p.hitl || '',
+          labelStyle: { fill: isWaiting ? 'var(--waiting)' : 'var(--muted)', fontWeight: isWaiting ? 700 : 400 },
+          style: { stroke: isWaiting ? 'var(--waiting)' : 'var(--border)', strokeWidth: 2 },
+          markerEnd: { type: 'arrowclosed', color: isWaiting ? 'var(--waiting)' : 'var(--border)' },
+        }
+      })
+  return [...core, ...artifactGraph.value.dataFlowEdges]
 })
 
 // Persist node positions when user drags them. Positions are keyed by phase id
