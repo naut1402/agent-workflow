@@ -415,6 +415,38 @@ describe('job.finished của một step ⇒ ĐÚNG MỘT lượt agent (AC-2)', 
   })
 })
 
+// G5 — automation bị `askAgent` từ chối (409) vì task đang được điều phối,
+// nên phát `orchestrator.start_requested` xin lại một lượt quyết định. Trước
+// fix, guard chống tự-kích ở `handleEvent` nuốt mất event này vì nó rơi vào
+// tiền tố `orchestrator.*`.
+describe('orchestrator.start_requested — trả nợ G5', () => {
+  test('có pending step, orchestration đang active ⇒ mở đúng 1 lượt, trigger manual_start', async () => {
+    seedTask('M1', { current_phase: 'reviewer' })
+    await handleEvent(ev('orchestrator.start_requested', { taskId: 'M1', devTeamRoot: root }))
+    expect(turnsOf('M1')).toHaveLength(1)
+    expect(triggersOf('M1')).toEqual(['manual_start'])
+  })
+
+  test('orchestration không active ⇒ không mở lượt nào', async () => {
+    writePipeline(false)
+    seedTask('M2', { current_phase: 'reviewer', orchestrator_enabled: false })
+    await handleEvent(ev('orchestrator.start_requested', { taskId: 'M2', devTeamRoot: root }))
+    expect(turnsOf('M2')).toHaveLength(0)
+  })
+
+  test('không còn pending step (completed) ⇒ không mở lượt nào', async () => {
+    seedTask('M3', { current_phase: 'completed' })
+    await handleEvent(ev('orchestrator.start_requested', { taskId: 'M3', devTeamRoot: root }))
+    expect(turnsOf('M3')).toHaveLength(0)
+  })
+
+  test('đang có gate chờ người ⇒ không mở lượt nào', async () => {
+    seedTask('M4', { current_phase: 'reviewer', hitl_pending: 'hitl-1' })
+    await handleEvent(ev('orchestrator.start_requested', { taskId: 'M4', devTeamRoot: root }))
+    expect(turnsOf('M4')).toHaveLength(0)
+  })
+})
+
 describe('cổng HITL — node vẫn có lượt, nhưng KHÔNG vượt cổng (AC-4)', () => {
   // TC-20: "step xong, cổng pending, node hoàn toàn không có động tĩnh" là đúng
   // triệu chứng ② của đề bài.
