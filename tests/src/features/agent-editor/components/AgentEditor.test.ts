@@ -14,10 +14,10 @@ vi.mock('@/features/agent-editor/scripts/agentEditorApi', () => ({
   saveCustomAgent: vi.fn(),
 }))
 
-const fetchCatalog = vi.fn(async () => ({ skills: [], agents: [] }))
+const fetchCatalog = vi.fn(async (_projectId?: string) => ({ skills: [], agents: [] }))
 
 vi.mock('@/features/pipeline-editor/scripts/pipelineEditorApi', () => ({
-  fetchCatalog: (...a: unknown[]) => fetchCatalog(...a),
+  fetchCatalog: (projectId?: string) => fetchCatalog(projectId),
 }))
 
 vi.mock('@/frontend/lib/markdownLib', async (importOriginal) => ({

@@ -31,7 +31,7 @@ vi.mock('@/features/runner/scripts/runnerApi', () => ({
   })),
 }))
 
-const fetchCatalog = vi.fn(async () => ({
+const fetchCatalog = vi.fn(async (_projectId?: string) => ({
   skills: [],
   agents: [
     { id: 'dashboard:my-agent', name: 'my-agent', description: '' },
@@ -40,7 +40,7 @@ const fetchCatalog = vi.fn(async () => ({
 }))
 
 vi.mock('@/features/pipeline-editor/scripts/pipelineEditorApi', () => ({
-  fetchCatalog: (...a: unknown[]) => fetchCatalog(...a),
+  fetchCatalog: (projectId?: string) => fetchCatalog(projectId),
 }))
 
 import { saveArtifactActionsCatalog } from '../../../../../src/features/quick-action/scripts/QuickActionPanelApi'
