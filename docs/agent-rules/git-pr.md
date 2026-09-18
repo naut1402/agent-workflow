@@ -276,22 +276,47 @@ Luôn có mục này (ghi *Không* nếu không đụng) để reviewer thấy b
 PR promote dòng version lên `main` là **release note hướng người dùng cuối** — mô tả *người dùng thấy gì đổi*, không liệt kê file/hàm. **Không** áp dụng `## Issue`, `## Module / Phạm vi`, bảng mapping file hay checklist của §8 / §8.1–§8.3.
 
 - **Title** — `Release version x.y.z`, khớp `version` trong `package.json` của dòng đó.
-- **Body** — chọn trong 4 section sau, giữ nguyên tên và thứ tự:
+- **Body** — dùng 5 section sau, giữ nguyên tên và thứ tự:
 
-| Section | Dùng cho |
-|---|---|
-| `## Tính năng mới` | Chức năng người dùng chưa từng có |
-| `## Cải tiến` | Chức năng đã có, nay dùng tốt hơn |
-| `## Sửa lỗi` | Hiện tượng sai đã được sửa |
-| `## Nội bộ & công cụ dev` | Không tác động người dùng cuối: tooling, quy ước, CI |
+| Section | Dùng cho | Bắt buộc |
+|---|---|---|
+| `## Tính năng mới` | Chức năng người dùng chưa từng có — lần đầu phát hành ở chính version này | không |
+| `## Cải tiến` | Chức năng **đã release ở version trước**, nay dùng tốt hơn | không |
+| `## Sửa lỗi` | Hiện tượng sai **người dùng gặp được trên bản đã release**, nay đã sửa | không |
+| `## Nội bộ & công cụ dev` | Không tác động người dùng cuối: tooling, quy ước, CI | không |
+| `## PR đã merge` | Danh sách PR đã merge vào dòng version — gồm cả PR sửa cho tính năng mới | **có** |
 
-- **Không section nào bắt buộc** — chỉ giữ section thật sự có nội dung, **xoá hẳn** section rỗng. Không viết "Không có" và **không bịa** nội dung để lấp chỗ trống.
+- **4 section mô tả không bắt buộc** — chỉ giữ section thật sự có nội dung, **xoá hẳn** section rỗng. Không viết "Không có" và **không bịa** nội dung để lấp chỗ trống.
 - **Mỗi gạch đầu dòng mở bằng tên tính năng / hiện tượng in đậm**, rồi tới mô tả; nêu cả hành vi mặc định khi bỏ trống và cách báo lỗi nếu có.
-- **Nội dung không rơi vào 4 section** (vd breaking change) → đặt vào section gần nhất và nêu rõ trong mô tả; không tự thêm section mới.
+- **Nội dung không rơi vào 4 section mô tả** (vd breaking change) → đặt vào section gần nhất và nêu rõ trong mô tả; không tự thêm section mới.
 - **Trước khi mở PR: không còn thư mục `docs/todo/`** — gate CI Todo debt chỉ chặn đúng loại PR này ([`pr-todo-debt.md`](pr-todo-debt.md)).
 - **Dòng test của version phải tồn tại và xanh** — gate CI `Release test gate` chạy đúng ở loại PR này: nó overlay `test/x.y.z/main` lên head SHA của PR rồi chạy full suite. Ba thông điệp chặn khác nhau: *chưa viết test* (dòng test không tồn tại · rỗng · hoặc còn task thiếu test theo `test:status --strict`) · *không có neo* (dòng test chưa có `reports/`, hoặc SHA neo không còn tồn tại) · *test đỏ*. Đây là cổng cứng, không phải cảnh báo. 🚫 Không còn cổng theo phần trăm coverage — xem [`testing.md`](testing.md) §6.
 - **Body nêu link sang dòng/PR test của version** — người duyệt release phải biết test nằm đâu mà không phải đi tìm. Đặt vào `## Nội bộ & công cụ dev`, hoặc ngay dưới title nếu không có section nào phù hợp.
 - **Mở PR trên web kèm `?template=release.md`** để GitHub áp đúng template; mở thẳng sẽ ra template PR feature, khi đó xoá body và dán lại theo mục này.
+
+#### Mốc so sánh: version đã release trước đó
+
+Release note viết cho người đang chạy **bản đã release gần nhất**, không phải cho người theo dõi dòng `dev/**`. Mốc so sánh là cây `main` trước lượt promote này.
+
+- **Tính năng lần đầu phát hành ở version này chỉ xuất hiện ở `## Tính năng mới`.** Mọi lượt sửa lỗi, tinh chỉnh UI, đổi cách gọi API của nó trong lúc phát triển là **quá trình làm ra tính năng**, không phải "cải tiến" hay "sửa lỗi" theo nghĩa người dùng — họ chưa từng thấy bản lỗi. Mô tả **trạng thái cuối** của tính năng trong đúng một gạch đầu dòng; 🚫 không tách thành dòng riêng ở `## Cải tiến` / `## Sửa lỗi`.
+- **`## Cải tiến` / `## Sửa lỗi` chỉ nói về thứ đã có trong bản người dùng đang chạy.** Phép thử một câu: *"người dùng ở version đã release trước đó có gặp được điều này không?"* — không thì nội dung đó thuộc `## Tính năng mới`.
+- **Tính năng ẩn sau cờ tắt mặc định vẫn là tính năng mới** khi lần đầu phát hành; nêu rõ trong mô tả rằng mặc định tắt và bật ở đâu.
+- **Dấu vết từng lượt sửa không mất** — nó nằm ở `## PR đã merge`, nơi duy nhất được phép liệt kê PR sửa cho tính năng mới.
+
+#### `## PR đã merge`
+
+Section bắt buộc, đặt **cuối body**. Cho người duyệt release truy ngược từng thay đổi mà không phải mở `git log`, và là nơi chứa các PR không lên được 4 section mô tả (fix cho tính năng mới, sửa nội bộ vụn).
+
+- **Mỗi dòng `- #<số> — <title PR>`** — GitHub tự render link và trạng thái. Giữ nguyên title gốc của PR, không viết lại theo giọng người dùng cuối.
+- **Thứ tự cũ → mới** theo thời điểm merge.
+- **Dài quá ~20 dòng thì bọc `<details><summary>Danh sách PR</summary> … </details>`** để body vẫn đọc được.
+
+```bash
+gh pr list --base dev/x.y.z/main --state merged --limit 300 \
+  --json number,title --jq 'reverse | .[] | "- #\(.number) — \(.title)"'
+```
+
+⚠️ Lệnh trên chỉ lấy PR nhắm thẳng `dev/x.y.z/main`. Dòng version có branch epic hoặc nhận merge từ dòng khác thì đối chiếu thêm `git log --merges origin/main..origin/dev/x.y.z/main` và bổ sung tay.
 
 ---
 
