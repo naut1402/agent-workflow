@@ -118,7 +118,7 @@ function streamSseResponse(
   res: ServerResponse,
   response: Response,
   headers: Headers,
-): Promise<void> {
+): Promise<string | null> {
   return new Promise((resolve) => {
     res.statusCode = response.status
     headers.forEach((value, key) => res.setHeader(key, value))
@@ -126,11 +126,12 @@ function streamSseResponse(
 
     const reader = response.body!.getReader()
     let closed = false
+    let streamError: string | null = null
     const finish = () => {
       if (closed) return
       closed = true
       reader.cancel().catch(() => {})
-      resolve()
+      resolve(streamError)
     }
     req.on('close', finish)
 
@@ -142,9 +143,8 @@ function streamSseResponse(
           res.write(Buffer.from(value))
         }
       } catch (err) {
-        // Không throw lên `handle()` — response đã bắt đầu stream, ném lỗi ở đây vô nghĩa.
-        // `closed` đã true nghĩa là client tự đóng kết nối (qua `finish()`), không phải lỗi thật.
-        if (!closed) console.warn('[sse] lỗi đọc stream giữa chừng:', err)
+        // `closed` đã true ⇒ client tự đóng kết nối, không phải lỗi thật — không throw lên `handle()` (response đã bắt đầu stream).
+        if (!closed) streamError = String(err instanceof Error ? err.message : err)
       } finally {
         if (!res.writableEnded) res.end()
         finish()
@@ -189,7 +189,7 @@ export function createApiHandler(ctx: RegistryContext) {
         if (contentType.startsWith('text/event-stream')) {
           // durationMs ở `finally` tính luôn thời gian sống của kết nối SSE — chấp nhận vì route stream không dùng số này việc khác.
           responsePreview = '[sse stream]'
-          await streamSseResponse(req, res, response, headers)
+          errored = await streamSseResponse(req, res, response, headers)
         } else {
           const buf = Buffer.from(await response.arrayBuffer())
           responsePreview = formatResponsePreview(buf, headers.get('content-type'))
