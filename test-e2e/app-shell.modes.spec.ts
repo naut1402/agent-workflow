@@ -29,7 +29,7 @@ test('sidebar switches across modes incl. runner (capture)', async ({ page }, te
   await expect(page.locator('.quick-action-panel')).toBeVisible()
   await capturePage(page, testInfo, 'quick-action')
 
-  // Back to monitor — polling resumes, task list renders again.
+  // Back to monitor — task-list SSE stream stays open across modes, list renders again.
   await page.locator('button[title^="Monitor"]').click()
   await expect(page.locator('.tasklist--active')).toBeVisible()
 

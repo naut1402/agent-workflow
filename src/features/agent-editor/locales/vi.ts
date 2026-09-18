@@ -9,9 +9,10 @@ export default {
     edit: 'Chỉnh sửa agent',
     delete: 'Xóa agent',
     exportHint: 'Chọn một agent trước khi export',
+    download: 'Download agent',
+    duplicate: 'Sao chép agent',
   },
-  // Empty state của `main`, KHÔNG phải của viewer — phần trong viewer đã lên
-  // `common.markdownView.*` khi `CMarkdownView` thành component dùng chung.
+  // Empty state của `main`, KHÔNG phải của viewer — phần đó đã lên `common.markdownView.*`.
   viewer: {
     empty: 'Chọn một agent ở danh sách bên trái để xem nội dung',
     loading: 'Đang tải nội dung agent…',
@@ -19,6 +20,8 @@ export default {
   actions: {
     save: 'Lưu',
     export: 'Export',
+    download: 'Download agent',
+    upload: 'Upload agent',
     close: 'Đóng',
     templateCopy: 'Template / Sao chép',
     buildNl: 'Tạo từ mô tả',

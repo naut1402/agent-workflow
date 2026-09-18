@@ -42,6 +42,7 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.post('/api/credentials/oauth/exchange', bind(RunnerController, 'exchangeOAuthCode'))
   app.get('/api/credentials/oauth/status', bind(RunnerController, 'oauthStatus'))
 
+  app.get('/api/jobs/stream', bind(RunnerController, 'streamJobs'))
   app.get('/api/jobs', bind(RunnerController, 'listOrGetJobs'))
   app.post('/api/jobs', bind(RunnerController, 'submitJob'))
   app.all('/api/jobs', bind(RunnerController, 'jobsMethodNotAllowed'))

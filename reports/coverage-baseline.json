@@ -1,16 +1,16 @@
 {
-  "updated_at": "2026-09-11T02:11:08.361Z",
+  "updated_at": "2026-09-14T15:56:15.759Z",
   "frontend": {
-    "lines": 59.74,
-    "statements": 58.19,
-    "functions": 57.07,
-    "branches": 53.46
+    "lines": 61.8,
+    "statements": 60.05,
+    "functions": 59.92,
+    "branches": 54.84
   },
   "backend": {
-    "lines": 84.27
+    "lines": 84.81
   },
-  "source_ref": "dev/1.1.5/main",
-  "test_ref": "test/1.1.5/main",
-  "source_sha": "f11ddb6f5afd5d1319380e60f6e1250141e919d7",
-  "test_sha": "f32ede932f67e5915b85fffcbc55abb0dc95b1cf"
+  "source_ref": "dev/1.1.6/main",
+  "test_ref": "test/1.1.6/main",
+  "source_sha": "3cc3f3f20302d14afb2cdd39b9104281ae9d7fdb",
+  "test_sha": "59039cd40a5be845282ca618568ec7b3b5c1bc6a"
 }

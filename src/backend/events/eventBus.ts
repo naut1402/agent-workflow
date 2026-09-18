@@ -29,6 +29,9 @@ export type DashboardEventType =
   | 'automation.triggered'
   | 'automation.run_succeeded'
   | 'automation.run_failed'
+  | 'orchestrator.dispatched'
+  | 'orchestrator.halted'
+  | 'orchestrator.start_requested'
   | string
 
 export interface DashboardEvent<T = Record<string, unknown>> {
@@ -119,8 +122,8 @@ export function _resetEventBusForTest(): void {
 
 /**
  * Registry cho trigger (schedule / event / webhook) — quan sát "trigger đang sống".
- * Runtime thật nằm ở feature automations (#233): scheduler tick + event
- * subscriber đồng bộ rule đang bật vào đây qua `syncTriggerRegistry`.
+ * Runtime thật nằm ở feature automations: scheduler tick + event subscriber
+ * đồng bộ rule đang bật vào đây qua `syncTriggerRegistry`.
  */
 export type TriggerKind = 'schedule' | 'event' | 'webhook'
 

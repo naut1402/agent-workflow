@@ -1,70 +1,126 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { capturePage } from './_capture'
 
-// E2E for features/agent-editor — ported from scripts/verify-agent-editor.mjs.
-// Mode mount + create/save a custom agent + open the template & NL modals.
+// `.agent-list-item` chứa cả tên VÀ nhãn nút hành động, nên `hasText` chuỗi
+// thường (substring) khớp nhầm "foo" vào cả "foo-copy" — luôn khớp CHÍNH XÁC
+// qua `.agent-list-name` (chỉ chứa mỗi tên agent).
+function agentRow(page: Page, exactName: string) {
+  return page
+    .locator('.agent-list-item')
+    .filter({ has: page.locator('.agent-list-name', { hasText: new RegExp(`^${exactName}$`) }) })
+}
 
-test('agent editor: mount, save agent, open template & NL modals (capture)', async ({ page }, testInfo) => {
+// E2E for features/agent-editor — ported from scripts/verify-agent-editor.mjs.
+// Mode mount + create/save a custom agent + per-item download/duplicate/upload
+// (T5fd30b3c: toolbar dọn "Template/Sao chép", "Tạo từ mô tả", "Export"; Upload
+// và Download/Sao chép chuyển thành icon-button, Download+Sao chép dời xuống
+// từng item trong danh sách).
+
+test('agent editor: mount, save agent, toolbar chỉ còn 2 điều khiển (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. `.click()`/`toBeVisible()` bên dưới tự
+  // chờ phần tử actionable, không cần networkidle.
 
   await page.getByRole('button', { name: 'Agent Editor' }).click()
   await expect(page.locator('.agent-editor')).toBeVisible({ timeout: 15_000 })
+
+  // TC-A1: toolbar chỉ còn "Agent mới" + icon-button Upload — không còn
+  // Template/Sao chép, Tạo từ mô tả, Export.
+  const toolbarButtons = page.locator('.agent-side-actions > button')
+  await expect(toolbarButtons).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'Template / Sao chép' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Tạo từ mô tả' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Export' })).toHaveCount(0)
+
+  // TC-C1: Upload chỉ còn icon, tra được qua aria-label/tooltip.
+  const uploadBtn = page.getByRole('button', { name: 'Upload agent' })
+  await expect(uploadBtn).toBeVisible()
+  await expect(uploadBtn).toHaveText('')
 
   // Create + save a custom agent → appears in the list.
-  await page.getByRole('button', { name: '+ New' }).click()
+  await page.getByRole('button', { name: '+ Agent mới' }).click()
   await page.locator('.agent-basic-fields input').first().fill('e2e-verify-agent')
-  await page.locator('.agent-toolbar').getByRole('button', { name: 'Lưu' }).click()
+  await page.locator('.agent-form-dialog .modal-foot').getByRole('button', { name: 'Lưu' }).click()
   await expect(page.locator('.agent-list-item', { hasText: 'e2e-verify-agent' })).toBeVisible({ timeout: 10_000 })
 
+  // Lưu KHÔNG tự đóng dialog (message hiện ngay trong form), nên phải đóng tay —
+  // backdrop còn đó thì mọi click vào cụm nút cột trái bên dưới đều bị nuốt.
+  await page.locator('.agent-form-dialog').getByRole('button', { name: 'Hủy' }).click()
+  await expect(page.locator('.agent-form-dialog')).toHaveCount(0)
+
   await capturePage(page, testInfo, 'agent-editor')
-
-  // Template picker modal opens then closes.
-  await page.getByRole('button', { name: 'Template / Copy' }).click()
-  await expect(page.locator('.agent-template-picker')).toBeVisible()
-  await page.locator('.agent-template-picker').getByRole('button', { name: 'Đóng' }).click()
-
-  // NL wizard modal opens.
-  await page.getByRole('button', { name: 'Build NL' }).click()
-  await expect(page.locator('.agent-nl-wizard')).toBeVisible()
 })
 
-// Correction A: Build NL now offers a preview + optional smoke-run ("Lưu & chạy
-// thử"), gated behind a usable runner — a fresh env has none configured, so the
-// run button stays disabled with a CTA pointing at Runner mode. "Áp dụng vào
-// editor" never needs a runner (draft-only, same as the old AS-IS behaviour).
-test('agent editor Build NL: no usable runner → run disabled + CTA, apply-draft still works', async ({
-  page,
-}) => {
-  await page.route('**/api/runners', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ runners: [], defaultRunnerId: null }),
-    })
-  })
-  await page.route('**/api/custom-agents/generate', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ draft: { name: 'e2e-gate-agent', description: 'gate test' } }),
-    })
-  })
-
+// TC-B1/TC-B2: mỗi item có icon-button Download riêng, tải đúng nội dung của
+// item vừa bấm — không phụ thuộc agent nào đang xem ở panel chính.
+test('agent editor: Download ở mỗi item tải đúng nội dung của item đó', async ({ page }) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. `.click()`/`toBeVisible()` bên dưới tự
+  // chờ phần tử actionable, không cần networkidle.
   await page.getByRole('button', { name: 'Agent Editor' }).click()
   await expect(page.locator('.agent-editor')).toBeVisible({ timeout: 15_000 })
 
-  await page.getByRole('button', { name: 'Build NL' }).click()
-  await page.locator('.agent-nl-wizard textarea').fill('agent không cần runner')
-  await page.getByRole('button', { name: 'Generate draft' }).click()
+  for (const name of ['e2e-download-a', 'e2e-download-b']) {
+    await page.getByRole('button', { name: '+ Agent mới' }).click()
+    await page.locator('.agent-basic-fields input').first().fill(name)
+    await page.locator('.agent-form-dialog .modal-foot').getByRole('button', { name: 'Lưu' }).click()
+    await expect(page.locator('.agent-list-item', { hasText: name })).toBeVisible({ timeout: 10_000 })
+    await page.locator('.agent-form-dialog').getByRole('button', { name: 'Hủy' }).click()
+    await expect(page.locator('.agent-form-dialog')).toHaveCount(0)
+  }
 
-  await expect(page.locator('.agent-nl-wizard')).toContainText('Chưa có runner khả dụng')
-  await expect(page.getByRole('button', { name: 'Lưu & chạy thử →' })).toBeDisabled()
+  // Mở agent A để xem ở panel chính…
+  const rowA = agentRow(page, 'e2e-download-a')
+  await rowA.getByRole('button', { name: 'Xem nội dung' }).click()
+  await expect(page.locator('.c-md-view')).toContainText('e2e-download-a')
 
-  // Draft-only path still works without a runner.
-  await page.getByRole('button', { name: 'Áp dụng vào editor' }).click()
-  await expect(page.locator('.agent-nl-wizard')).toHaveCount(0)
-  await expect(page.locator('.agent-basic-fields input').first()).toHaveValue('e2e-gate-agent')
+  // …rồi bấm Download ở dòng B — file tải về phải là của B.
+  const rowB = agentRow(page, 'e2e-download-b')
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    rowB.getByRole('button', { name: 'Download agent' }).click(),
+  ])
+  expect(download.suggestedFilename()).toBe('e2e-download-b.md')
+
+  // Panel chính không đổi theo thao tác download.
+  await expect(page.locator('.c-md-view')).toContainText('e2e-download-a')
+})
+
+// TC-D1/TC-D2/TC-D3: mỗi item có icon-button "sao chép" riêng, mở form tạo
+// mới điền sẵn theo agent gốc, lưu tạo ra agent độc lập mới trong danh sách.
+test('agent editor: Sao chép agent mở form tạo mới điền sẵn, lưu ra agent độc lập', async ({ page }) => {
+  await page.goto('/')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. `.click()`/`toBeVisible()` bên dưới tự
+  // chờ phần tử actionable, không cần networkidle.
+  await page.getByRole('button', { name: 'Agent Editor' }).click()
+  await expect(page.locator('.agent-editor')).toBeVisible({ timeout: 15_000 })
+
+  await page.getByRole('button', { name: '+ Agent mới' }).click()
+  await page.locator('.agent-basic-fields input').first().fill('e2e-duplicate-src')
+  await page.locator('.agent-form-dialog .modal-foot').getByRole('button', { name: 'Lưu' }).click()
+  await expect(agentRow(page, 'e2e-duplicate-src')).toBeVisible({ timeout: 10_000 })
+  await page.locator('.agent-form-dialog').getByRole('button', { name: 'Hủy' }).click()
+  await expect(page.locator('.agent-form-dialog')).toHaveCount(0)
+
+  await agentRow(page, 'e2e-duplicate-src').getByRole('button', { name: 'Sao chép agent' }).click()
+
+  // Form tạo mới (không phải form sửa agent gốc), tên đề xuất phái sinh, không trùng y nguyên.
+  await expect(page.locator('.agent-form-dialog .modal-head')).toContainText('Tạo agent mới')
+  const nameInput = page.locator('.agent-basic-fields input').first()
+  await expect(nameInput).toHaveValue('e2e-duplicate-src-copy')
+
+  await page.locator('.agent-form-dialog .modal-foot').getByRole('button', { name: 'Lưu' }).click()
+  await expect(agentRow(page, 'e2e-duplicate-src-copy')).toBeVisible({ timeout: 10_000 })
+  await page.locator('.agent-form-dialog').getByRole('button', { name: 'Hủy' }).click()
+  await expect(page.locator('.agent-form-dialog')).toHaveCount(0)
+
+  // Agent gốc vẫn còn nguyên, cả hai tồn tại độc lập.
+  await expect(agentRow(page, 'e2e-duplicate-src')).toBeVisible()
+  await expect(agentRow(page, 'e2e-duplicate-src-copy')).toBeVisible()
 })

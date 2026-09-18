@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n as mount, createTestI18n } from '../helpers/i18n'
+import { makeSseStream } from '../helpers/sseStream'
 import App from '../../../src/frontend/App.vue'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
 import PipelineEditor from '@/features/pipeline-editor/components/PipelineEditor.vue'
@@ -51,15 +52,15 @@ vi.mock('@vue-flow/core', async (importOriginal) => {
 
 // `key` = thứ tự nút trong `.mode-toggle` (khớp thứ tự template hiện tại của App.vue).
 const MODE_DEFS = [
-  { key: 'monitor', labelKey: 'common.modes.monitor', statusKind: 'live', component: MonitorLayout },
-  { key: 'editor', labelKey: 'common.modes.pipelineEditor', statusKind: 'paused', component: PipelineEditor },
-  { key: 'agentEditor', labelKey: 'common.modes.agentEditor', statusKind: 'paused', component: AgentEditor },
-  { key: 'quickAction', labelKey: 'common.modes.quickAction', statusKind: 'paused', component: QuickActionPanel },
-  { key: 'knowledge', labelKey: 'common.modes.knowledge', statusKind: 'paused', component: KnowledgePanel },
-  { key: 'runner', labelKey: 'common.modes.runner', statusKind: 'paused', component: RunnerConfigPanel },
-  { key: 'automations', labelKey: 'common.modes.automations', statusKind: 'paused', component: AutomationsPanel },
-  { key: 'logs', labelKey: 'common.modes.logs', statusKind: 'paused', component: LogsPanel },
-  { key: 'statistics', labelKey: 'common.modes.statistics', statusKind: 'paused', component: StatisticsPanel },
+  { key: 'monitor', labelKey: 'common.modes.monitor', component: MonitorLayout },
+  { key: 'editor', labelKey: 'common.modes.pipelineEditor', component: PipelineEditor },
+  { key: 'agentEditor', labelKey: 'common.modes.agentEditor', component: AgentEditor },
+  { key: 'quickAction', labelKey: 'common.modes.quickAction', component: QuickActionPanel },
+  { key: 'knowledge', labelKey: 'common.modes.knowledge', component: KnowledgePanel },
+  { key: 'runner', labelKey: 'common.modes.runner', component: RunnerConfigPanel },
+  { key: 'automations', labelKey: 'common.modes.automations', component: AutomationsPanel },
+  { key: 'logs', labelKey: 'common.modes.logs', component: LogsPanel },
+  { key: 'statistics', labelKey: 'common.modes.statistics', component: StatisticsPanel },
 ]
 
 const i18n = createTestI18n('vi')
@@ -133,7 +134,7 @@ describe('App', () => {
   })
 
   it.each(MODE_DEFS)(
-    'mode "$key": active sidebar + status text + main panel đúng component',
+    'mode "$key": active sidebar + main panel đúng component',
     async (def) => {
       const wrapper = mountApp()
       await flushPromises()
@@ -149,13 +150,9 @@ describe('App', () => {
         expect(btn.classes('active')).toBe(i === index)
       })
 
-      // Status text: 'live' cho monitor, 'paused.<mode>' cho các mode khác.
-      const status = wrapper.find('footer.status')
-      if (def.statusKind === 'live') {
-        expect(status.text()).not.toContain(t(`common.status.paused.${def.key}`))
-      } else {
-        expect(status.text()).toContain(t(`common.status.paused.${def.key}`))
-      }
+      // TC-E1 (test-spec.md §E): không mode nào còn hiện message "tạm dừng polling" ở footer —
+      // khái niệm statusKind live/paused đã bỏ hẳn cùng lúc chuyển sang SSE (design.md §3.5).
+      expect(wrapper.find('footer.status').text()).not.toMatch(/paused|tạm dừng/i)
 
       // Main panel: đúng component, đã mount trong <main>.
       const panel = wrapper.findComponent(def.component as any)
@@ -164,6 +161,56 @@ describe('App', () => {
       wrapper.unmount()
     },
   )
+
+  it('TC-E2: dot trạng thái kết nối vẫn hiện đúng connected/disconnected, không bị xoá theo message paused', async () => {
+    // Ghi đè fetch mặc định (luôn OK) để mở stream lỗi ngay lần đầu → onError → disconnected.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down') }))
+    const wrapper = mountApp()
+    await flushPromises()
+
+    const dot = () => wrapper.find('.sidebar .brand .dot')
+    expect(dot().exists()).toBe(true)
+    expect(dot().classes()).not.toContain('live')
+    expect(dot().attributes('title')).toBe(t('common.sidebar.disconnected'))
+
+    // Ghi đè lại thành công cho lần retry tiếp theo → connected trở lại true.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })),
+    )
+    await vi.waitUntil(() => dot().classes().includes('live'), { timeout: 3000, interval: 50 })
+    expect(dot().attributes('title')).toBe(t('common.sidebar.connected'))
+
+    wrapper.unmount()
+  })
+
+  it('TC-A5: đổi project đóng stream cũ, mở lại task-stream đúng project mới', async () => {
+    const calls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        calls.push(url)
+        if (url.includes('/stream')) return { ok: true, body: makeSseStream().stream }
+        return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
+      }),
+    )
+    const wrapper = mountApp()
+    await flushPromises()
+
+    const tasksStreamCalls = () => calls.filter((u) => u.includes('/api/tasks/stream'))
+    expect(tasksStreamCalls()).toHaveLength(1)
+    expect(tasksStreamCalls()[0]).not.toContain('project=')
+
+    const panel = wrapper.findComponent(MonitorLayout as any)
+    await panel.vm.$emit('select-project', 'p-7')
+    await flushPromises()
+
+    expect(tasksStreamCalls()).toHaveLength(2) // stream cũ đóng, stream mới mở lại
+    expect(tasksStreamCalls()[1]).toContain('project=p-7')
+
+    wrapper.unmount()
+  })
 
   it('mode monitor: MonitorLayout nhận đủ 11 props + 10 event listener', async () => {
     const wrapper = mountApp()

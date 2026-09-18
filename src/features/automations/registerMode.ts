@@ -7,7 +7,6 @@ export function registerMode(registry: ModeRegistry): void {
     labelKey: 'common.modes.automations',
     icon: 'automations',
     order: 7,
-    statusKind: 'paused',
     panel: AutomationsPanel,
     descriptionKey: 'common.modeDesc.automations',
     maturity: 'stable',

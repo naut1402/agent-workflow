@@ -35,19 +35,6 @@ export default {
     logs: 'Nhật ký audit, request, jobs và event.',
     statistics: 'Thống kê usage, thời gian chạy và chi phí.',
   },
-  status: {
-    updated: 'cập nhật {time}',
-    paused: {
-      editor: 'editor mode — polling paused',
-      agentEditor: 'agent editor — polling paused',
-      quickAction: 'quick action — polling paused',
-      knowledge: 'knowledge — polling paused',
-      runner: 'runner config — polling paused',
-      automations: 'automations — polling paused',
-      logs: 'nhật ký — polling paused',
-      statistics: 'thống kê — polling paused',
-    },
-  },
   language: {
     title: 'Ngôn ngữ',
     desc: 'Chọn ngôn ngữ hiển thị của giao diện.',

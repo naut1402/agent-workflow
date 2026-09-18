@@ -13,8 +13,17 @@ import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSess
 import { isAgentCliProviderId } from './providers/agentCli.js'
 import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js'
 import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
+import type { RunTaskStepResult } from '../../monitor/business/tasks/runStep.js'
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
-import { advanceStepOnJobSuccess, loadPipelineConfig, queuePendingFeedback, takePendingFeedback } from './index.js'
+import {
+  advanceStepOnJobSuccess,
+  assertStartAllowedSync,
+  loadPipelineConfig,
+  queuePendingFeedback,
+  resolveOrchestration,
+  takePendingFeedback,
+} from './index.js'
+import type { PendingFeedback } from './index.js'
 import { classifyJobFailure, parseUsageResetAt } from './classifyJobFailure.js'
 import { loadRecoverEntry, removeRecoverEntry, saveRecoverEntry } from './recoverLedger.js'
 import { bindRecoverPoller, startRecoverPoller } from './recoverPoller.js'
@@ -27,6 +36,108 @@ import {
 
 /** Cap on stdout persisted for chat surfaces (NL chat + task chat fallback). */
 const CHAT_STDOUT_LIMIT = 64 * 1024
+
+/** Matches a standalone `ORCHESTRATOR_DECISION: {...}` line, JSON on one line. */
+const ORCHESTRATOR_DECISION_RE = /^\s*ORCHESTRATOR_DECISION:\s*(\{.*\})\s*$/gm
+
+/** Actions the chat→dispatch bridge below will act on — `stop`/`monitor` etc. are out of scope (design.md §6). */
+const SUPPORTED_ORCHESTRATOR_ACTIONS = new Set(['start', 'resume'])
+
+interface OrchestratorDecision {
+  action: 'start' | 'resume'
+  stepId: string
+}
+
+/**
+ * Parse the orchestrator agent's `ORCHESTRATOR_DECISION:` line out of a chat
+ * job's stdout, if present. Only the LAST match counts — an agent reply may
+ * mention the syntax before actually deciding. Returns null for anything that
+ * isn't a real, supported decision (no line, invalid JSON, unsupported
+ * action, missing stepId) rather than throwing.
+ */
+export function parseOrchestratorDecision(stdout: string): OrchestratorDecision | null {
+  const matches = [...stdout.matchAll(ORCHESTRATOR_DECISION_RE)]
+  if (matches.length === 0) return null
+  const raw = matches[matches.length - 1][1]
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (err) {
+    console.warn('[jobQueue] orchestrator decision: invalid JSON', err)
+    return null
+  }
+
+  if (!parsed || typeof parsed !== 'object') return null
+  const action = (parsed as Record<string, unknown>).action
+  const stepId = (parsed as Record<string, unknown>).stepId
+  if (typeof action !== 'string' || !SUPPORTED_ORCHESTRATOR_ACTIONS.has(action)) {
+    console.info('[jobQueue] orchestrator decision: unsupported action, out of scope', { action })
+    return null
+  }
+  if (typeof stepId !== 'string' || !stepId) return null
+
+  return { action: action as 'start' | 'resume', stepId }
+}
+
+/**
+ * Bridge "chat → dispatch step": forwards an orchestrator agent chat reply's
+ * `ORCHESTRATOR_DECISION` line to the existing `runTaskStep` dispatcher
+ * (lock/HITL/validate all reused as-is, see design.md §4.2) — a chat job by
+ * itself only resumes the chatting step's own session. Called once a
+ * chat-feedback job (`metadata.isChatFeedback`) finishes successfully. Never
+ * throws — a failure here must not swallow the `resubmitPendingFeedback` call
+ * right after it in `runJob`.
+ */
+async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): Promise<void> {
+  try {
+    const decision = parseOrchestratorDecision(stdout)
+    if (!decision) return
+
+    const taskId = typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined
+    const devTeamRoot = typeof job.metadata?.devTeamRoot === 'string' ? job.metadata.devTeamRoot : undefined
+    const projectId = typeof job.metadata?.projectId === 'string' ? job.metadata.projectId : ''
+    if (!taskId || !devTeamRoot) return
+
+    // For a `completed` task, `runTaskStep`'s forward-only chain guard always
+    // rejects the decided step, and `jumpToPipelineStep` alone can't fix that:
+    // it only moves `current_phase`, so the "heal a stuck phase" fallback in
+    // `runTaskStep` finds the step's pre-existing `succeeded` job and advances
+    // `current_phase` right back past it before any job is submitted. Use
+    // `resetPipelineStep` instead — it sets `last_reset_at` (so the heal
+    // fallback no longer treats this as stuck) and clears the step's stale
+    // artifacts. `cascade: false` limits the reset to just the decided step,
+    // and only for a stepId that's actually in this pipeline (`resetPipelineStep`
+    // 400s otherwise, which the `res.ok === false` branch below logs).
+    const stateFile = joinPath(devTeamRoot, '.dev-state', `${taskId}.json`)
+    const { readState } = await import('../../monitor/business/tasks/index.js')
+    const read = await readState(stateFile)
+    if (read.ok && read.state?.current_phase === 'completed') {
+      const pipeline = await loadPipelineConfig(devTeamRoot, taskId)
+      const phaseKeys = (pipeline.steps || []).map((s: any) => s.id).filter(Boolean)
+      if (phaseKeys.includes(decision.stepId)) {
+        const { resetPipelineStep } = await import('../../monitor/business/tasks/state.js')
+        await resetPipelineStep(devTeamRoot, taskId, decision.stepId, false)
+      }
+    }
+
+    // Dynamic import avoids a static runner→monitor cycle (monitor's business
+    // index re-exports from runner's) — same pattern as usageCapture.ts.
+    const { runTaskStep } = await import('../../monitor/business/tasks/runStep.js')
+    const res: RunTaskStepResult = await runTaskStep(devTeamRoot, projectId || null, taskId, {
+      targetStepId: decision.stepId,
+    })
+    if (res.ok === false) {
+      console.warn('[jobQueue] orchestrator decision dispatch skipped', {
+        taskId,
+        stepId: decision.stepId,
+        error: res.error,
+      })
+    }
+  } catch (err) {
+    console.warn('[jobQueue] orchestrator decision dispatch failed', err)
+  }
+}
 
 /** Compile-time default — actual cap is `settings.recovery.maxAttempts` (Settings › Job recovery). */
 export const FAILURE_MAX_ATTEMPTS = DEFAULT_RECOVERY_SETTINGS.maxAttempts!
@@ -46,6 +157,11 @@ const jobAbortControllers = new Map<string, AbortController>()
 /** Persist agent reply on the job record for chat UI (NL + pipeline task chat). */
 function shouldPersistStdout(job: JobRecord, providerId: string | undefined): boolean {
   if (job.metadata?.isNlChat) return true
+  // Với job quyết định của orchestrator, stdout LÀ kênh truyền lệnh (dòng
+  // `ORCHESTRATOR_DECISION:`). Không persist thì mọi connection không phải
+  // agent-CLI (`*-api`, `console-command`) sẽ khiến quyết định biến mất và
+  // pipeline đứng im — kết cục tệ hơn hẳn một lần halt tường minh.
+  if (job.metadata?.orchestratorJob) return true
   return Boolean(providerId && isAgentCliProviderId(providerId))
 }
 
@@ -120,8 +236,8 @@ function ensureJobsDir(): void {
   mkdirSync(jobsDir(), { recursive: true })
 }
 
-// ── Approval flow (see JobRecord's sessionId/applyTarget/approvalArtifact/
-// parentJobId doc comments in types.ts) ─────────────────────────────────────
+// Approval flow (see JobRecord's sessionId/applyTarget/approvalArtifact/
+// parentJobId doc comments in types.ts).
 // A `require_approval` quick action runs against a throwaway copy of the task
 // workspace under the dashboard's own registry home — never the real project
 // tree — so nothing is written to the user's files until they explicitly
@@ -151,7 +267,7 @@ function removeScratchWorkspace(scratchPath: string): void {
   }
 }
 
-// ── Selection splice helpers (pure) ─────────────────────────────────────────
+// Selection splice helpers (pure).
 // A selection quick action must only ever touch the lines the user picked. The
 // agent improves just the snippet (in a scratch file); the server then splices
 // that result back into a copy of the real artifact at the same line range so
@@ -292,6 +408,16 @@ export function mergeJobUsage(id: string, usage: UsageSnapshot): JobRecord | nul
   const cur = loadJob(id)
   if (!cur) return null
   return saveJob({ ...cur, usage })
+}
+
+/**
+ * Đánh dấu job orchestrator đã thi hành 1 quyết định qua `POST /api/orchestrator/decide`
+ * — chặn `consumeAgentDecision` đọc lại sentinel cuối output cho CÙNG lượt (G4).
+ */
+export function markDirectDecisionApplied(id: string): void {
+  const cur = loadJob(id)
+  if (!cur) return
+  saveJob({ ...cur, metadata: { ...cur.metadata, directDecisionApplied: true } })
 }
 
 export function listJobs(limit?: number, status?: JobStatus): JobRecord[] {
@@ -734,9 +860,19 @@ async function runJob(job: JobRecord): Promise<void> {
   // is still `running`, then mark succeeded — so the UI cannot submit another
   // run-step against a stale phase between "job done" and "phase advanced".
   // Chat-feedback jobs skip advance (they must not move the pipeline cursor).
-  if (result.ok && !isApprovalJob && !isChatFeedback) {
+  //
+  // Ngoại lệ: lượt orchestrator resume một step cũng đi bằng đường chat-feedback,
+  // nhưng nó LÀ lượt chạy lại của step đó — không cho advance thì pipeline đứng
+  // ngay sau lần resume đầu tiên.
+  const isOrchestratorResume = job.metadata?.orchestratorResume === true
+  if (result.ok && !isApprovalJob && (!isChatFeedback || isOrchestratorResume)) {
     try {
       await advancePipelineStepChain(job)
+    } catch (err) {
+      // Chain hỏng không được kéo theo `saveJob`/`emit` bên dưới: job NÀY đã
+      // chạy xong thật, và mất `job.finished` là mất luôn tín hiệu mà cả UI lẫn
+      // orchestrator đang chờ.
+      console.error('[jobQueue] advancePipelineStepChain failed', err)
     } finally {
       saveJob({
         ...(loadJob(job.id) as JobRecord),
@@ -782,6 +918,9 @@ async function runJob(job: JobRecord): Promise<void> {
     projectId,
     ...(result.ok ? {} : { error: result.error }),
   })
+  if (result.ok && isChatFeedback) {
+    await tryDispatchOrchestratorDecision(job, result.stdout ?? '')
+  }
   if (!isApprovalJob) await resubmitPendingFeedback(job)
 }
 
@@ -798,8 +937,18 @@ async function resubmitPendingFeedback(job: JobRecord): Promise<void> {
   if (!taskId || !devTeamRoot) return
   const pending = await takePendingFeedback(devTeamRoot, taskId)
   if (!pending) return
+  // Phản hồi sinh ra từ một lần reject cổng HITL: khi orchestrator đang điều
+  // phối thì chính nó quyết định gửi gì cho step bị reject, nên mục còn sót lại
+  // ở đây phải bỏ — gửi tiếp là step nhận phản hồi hai lần.
+  if (pending.source === 'gate') {
+    const orch = await resolveOrchestration(devTeamRoot, taskId)
+    if (orch.active) return
+  }
   try {
-    const res = await sendTaskFeedback(taskId, projectId, pending.feedback, { stepId: pending.stepId })
+    const res = await sendTaskFeedback(taskId, projectId, pending.feedback, {
+      stepId: pending.stepId,
+      source: pending.source,
+    })
     if (res.ok === false) {
       console.error('[jobQueue] queued feedback rejected on resubmit', res.error)
       await queuePendingFeedback(devTeamRoot, taskId, pending)
@@ -829,6 +978,17 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
 
   const advanced = await advanceStepOnJobSuccess(devTeamRoot, taskId, pipelineStepId)
   if (!advanced) return
+
+  // Có node điều phối ⇒ quyền start là của nó: cursor đã đi, `task.advanced` /
+  // `hitl.pending` đã phát (trong `advanceStepOnJobSuccess`), dừng ở đây. Phải
+  // đặt SAU advance — đặt trước thì orchestrator không bao giờ nhận được tín hiệu.
+  //
+  // `awaitFlagSync`: hàm này không giữ khoá task, và nếu người dùng vừa TẮT điều
+  // phối thì `submitJob` bên dưới sẽ đọc lại cờ cache ở lớp chặn đồng bộ. Cờ cũ
+  // chưa kịp ghi lại = một lần throw ngay giữa đường chain (E2).
+  const orch = await resolveOrchestration(devTeamRoot, taskId, undefined, { awaitFlagSync: true })
+  if (orch.active) return
+
   // Stop once the clicked node itself has run, even if it advanced further —
   // the user only asked to reach `chainTarget`, not run past it.
   if (chainTarget && pipelineStepId === chainTarget) return
@@ -853,7 +1013,14 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   // job — it marks only the job it was set on (a chat-resume round), and would
   // otherwise leak forward onto every step the chain submits afterwards,
   // wrongly suppressing advancePipelineStepChain for all of them.
-  const { isChatFeedback: _isChatFeedback, ...carryMetadata } = job.metadata || {}
+  // `orchestratorDispatch` / `orchestratorResume` cùng loại: chúng là vé của
+  // đúng một lượt, mang sang job sau là cấp quyền start cho một đường không xin.
+  const {
+    isChatFeedback: _isChatFeedback,
+    orchestratorDispatch: _orchestratorDispatch,
+    orchestratorResume: _orchestratorResume,
+    ...carryMetadata
+  } = job.metadata || {}
 
   submitJob({
     runnerId: job.runnerId === 'unknown' ? undefined : job.runnerId,
@@ -872,6 +1039,10 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
 }
 
 export function submitJob(input: SubmitJobInput): JobRecord {
+  // Lưới an toàn cuối cho quyền start. Guard thật là `assertStartAllowed` ở
+  // tầng async của từng call-site; chạm được vào đây nghĩa là còn một đường
+  // start bị bỏ sót, nên nó ném lỗi thay vì lọc im lặng.
+  assertStartAllowedSync(input.metadata)
   const id = crypto.randomUUID()
   const runner = input.runnerId ? getRunner(input.runnerId) : getDefaultRunner()
 
@@ -1075,11 +1246,33 @@ export async function sendTaskFeedback(
   taskId: string,
   projectId: string,
   feedback: string,
-  opts: { stepId?: string; mode?: 'queue' | 'immediate' } = {},
+  opts: {
+    stepId?: string
+    mode?: 'queue' | 'immediate'
+    /** Nguồn phản hồi — đi kèm khi phải xếp hàng (`PendingFeedback.source`). */
+    source?: PendingFeedback['source']
+    /**
+     * Lượt orchestrator resume một step. Đánh dấu trên job để `runJob` vẫn chạy
+     * advance sau lượt này, dù nó đi bằng đường chat-feedback.
+     */
+    orchestratorResume?: boolean
+    /**
+     * Bắt buộc phải có job đã kết thúc **của đúng `stepId`** để resume.
+     *
+     * Người dùng chat thì fallback "job xong gần nhất" là đúng ý (họ đang nói
+     * chuyện với task). Orchestrator resume một step **chưa từng chạy** thì
+     * fallback đó lại đẩy phản hồi vào session của một step khác — phải trả lỗi
+     * để nó halt kèm lý do.
+     */
+    requireStepMatch?: boolean
+  } = {},
 ): Promise<MutationResult<{ job: JobRecord } | { queued: true }>> {
   const active = listJobs(50).find(
     (j) =>
       j.metadata?.taskId === taskId &&
+      // Job "orchestrator đang nghĩ" không phải step đang chạy: coi nó là bận thì
+      // chat với một step trong lúc đó bị xếp hàng, phá ngoại lệ "chat không giới hạn".
+      j.metadata?.orchestratorJob !== true &&
       (j.status === 'queued' || j.status === 'running' || j.status === 'awaiting_recovery'),
   )
 
@@ -1099,13 +1292,24 @@ export async function sendTaskFeedback(
         // with a `.dev-state` file) — nl-chat's scratch sessions reuse this
         // same function but have none, so they keep the original "busy" error
         // instead of a `queued: true` that would never actually resubmit.
-        const queued = devTeamRoot && (await queuePendingFeedback(devTeamRoot, taskId, { feedback, stepId: opts.stepId }))
+        const queued =
+          devTeamRoot &&
+          (await queuePendingFeedback(devTeamRoot, taskId, {
+            feedback,
+            stepId: opts.stepId,
+            ...(opts.source ? { source: opts.source } : {}),
+          }))
         if (queued) {
           // Job may have finished between the active check and the write — reclaim and send now.
           const after = loadJob(active.id)
           if (after && after.status !== 'queued' && after.status !== 'running' && after.status !== 'awaiting_recovery') {
             const taken = await takePendingFeedback(devTeamRoot, taskId)
-            if (taken) return sendTaskFeedback(taskId, projectId, taken.feedback, { stepId: taken.stepId })
+            if (taken) {
+              return sendTaskFeedback(taskId, projectId, taken.feedback, {
+                stepId: taken.stepId,
+                source: taken.source,
+              })
+            }
           }
           return { ok: true, queued: true }
         }
@@ -1122,13 +1326,22 @@ export async function sendTaskFeedback(
         (j) =>
           j.metadata?.taskId === taskId &&
           !j.applyTarget &&
+          // Job quyết định của orchestrator không thuộc step nào; để nó lọt vào
+          // fallback `finished[0]` là gửi phản hồi của một step vào session của
+          // orchestrator — lượt đó không advance, và khi xong lại bị đọc như một
+          // quyết định (không có sentinel ⇒ im lặng). Task đứng, không dấu vết.
+          j.metadata?.orchestratorJob !== true &&
           (j.status === 'succeeded' || j.status === 'failed' || j.status === 'cancelled'),
       )
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
     // Chatting from a step's popover must land in THAT step's session, not
     // whatever ran last — prefer the newest finished job of the requested step
     // (its metadata carries the session/workspace the resume plan reuses).
-    parent = (opts.stepId ? finished.find((j) => stepIdOf(j) === opts.stepId) : undefined) ?? finished[0]
+    const ofStep = opts.stepId ? finished.find((j) => stepIdOf(j) === opts.stepId) : undefined
+    if (!ofStep && opts.requireStepMatch) {
+      return { ok: false, status: 400, error: `no completed job for step ${opts.stepId}` }
+    }
+    parent = ofStep ?? finished[0]
   }
   if (!parent) return { ok: false, status: 400, error: 'no completed job to give feedback on' }
 
@@ -1147,7 +1360,13 @@ export async function sendTaskFeedback(
     if (step?.agent) agentRef = step.agent
   }
 
-  const { isChatFeedback: _isChatFeedback, ...parentMetadata } = parent.metadata || {}
+  // Vé của đúng một lượt — xem `advancePipelineStepChain`.
+  const {
+    isChatFeedback: _isChatFeedback,
+    orchestratorDispatch: _orchestratorDispatch,
+    orchestratorResume: _orchestratorResume,
+    ...parentMetadata
+  } = parent.metadata || {}
   const job = submitJob({
     runnerId: parent.runnerId === 'unknown' ? undefined : parent.runnerId,
     agentRef,
@@ -1162,6 +1381,7 @@ export async function sendTaskFeedback(
       ...parentMetadata,
       parentJobId: parent.id,
       isChatFeedback: true,
+      ...(opts.orchestratorResume ? { orchestratorResume: true } : {}),
     },
     parentJobId: parent.id,
   })
@@ -1237,7 +1457,7 @@ export function discardJob(id: string): MutationResult<{ job: JobRecord }> {
   return { ok: true, job: updated }
 }
 
-// ── orphan reaper ──────────────────────────────────────────────────────────
+// orphan reaper
 
 /** Best-effort liveness check — `(pid, startedAt)` pair from the job record. */
 export function isPidAlive(pid: number | null | undefined): boolean {

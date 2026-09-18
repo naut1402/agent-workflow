@@ -11,7 +11,7 @@ import {
   writeTextFile,
 } from '../../../../backend/lib/fileHelper.js'
 import { resolveHitlPending, gateStepsFromConfig } from '../../../../shared/lib/phase.js'
-import { TaskArchivePatch, TaskNamePatch, TaskStatePatch } from '../../schemas/task.js'
+import { TaskArchivePatch, TaskNamePatch, TaskOrchestratorPatch, TaskStatePatch } from '../../schemas/task.js'
 import { loadPipelineConfig } from '../peers.js'
 import { readState, flowProfilePath } from './index.js'
 import { checkReviewRetry } from './reviewVerdict.js'
@@ -293,9 +293,20 @@ export async function applyHitlAction(
       gateId: patch.gate_id,
       action: patch.action,
       currentPhase: state.current_phase,
+      stepId: currentStep.id,
+      projectId: projectId || undefined,
+      devTeamRoot: root,
     })
 
-    if (patch.action === 'reject' && patch.feedback?.trim() && currentStep) {
+    // Điều phối bật ⇒ KHÔNG gửi phản hồi ở đây: orchestrator nghe `hitl.resolved`,
+    // đọc `hitl-feedback.md` rồi tự quyết resume step nào và gửi gì. Gửi cả hai
+    // nơi thì step bị reject nhận phản hồi hai lần. Tính tại chỗ từ `pipeline` +
+    // `state` đã có sẵn — bằng đúng thứ `resolveOrchestration` đọc, mà không kéo
+    // `startAuthority` vào đây (module đó import ngược lại chính file này).
+    const orchestratorActive =
+      pipeline?.orchestrator?.enabled === true && state.orchestrator_halted !== true
+
+    if (patch.action === 'reject' && patch.feedback?.trim() && currentStep && !orchestratorActive) {
       // `sendTaskFeedback` lives behind the full `../index.js` barrel, which
       // re-exports runner — and runner re-exports this module. Import it lazily
       // so the cycle never runs at module-eval time (that's why the static
@@ -303,7 +314,11 @@ export async function applyHitlAction(
       const feedback = patch.feedback.trim()
       const stepId = currentStep.id
       void import('../index.js')
-        .then(({ sendTaskFeedback }) => sendTaskFeedback(taskId, projectId, feedback, { stepId }))
+        .then(({ sendTaskFeedback }) =>
+          // `source: 'gate'` để nếu phản hồi này phải xếp hàng (step còn job đang
+          // chạy), lượt resubmit sau đó biết bỏ nó khi orchestrator đã cầm lái.
+          sendTaskFeedback(taskId, projectId, feedback, { stepId, source: 'gate' }),
+        )
         .catch(() => {
           // Best-effort: reject already persisted OK even if feedback dispatch fails
           // (step "cooled down", job busy, etc).
@@ -374,6 +389,9 @@ export async function reconcileGateStateAssumingLock(
     action: after ? 'normalized' : 'cancelled',
     reason: 'pipeline_changed',
     currentPhase: state.current_phase,
+    // Read by the orchestrator to decide the next step; it runs off-request,
+    // so it must carry its own data root.
+    devTeamRoot: root,
   })
   return { state, mtime, from: before, to: after }
 }
@@ -387,15 +405,7 @@ export async function reconcileGateState(root: string, taskId: string) {
 
 /**
  * Update task state after a dashboard-triggered "run step" job succeeds —
- * fills the bookkeeping gap that only the external orchestrator CLI used to
- * cover:
- * - Gate-less step: advance `current_phase` to the next step (or
- *   `'completed'`) straight away, same as `applyHitlAction`'s approve branch.
- * - Gated step: the artifact is now ready for review, so open the gate
- *   (`hitl_pending = gate_id`) instead of advancing — `current_phase` stays on
- *   this step until the user approves/rejects via `applyHitlAction`, same as
- *   if the orchestrator had run it.
- *
+ * fills the bookkeeping gap the external orchestrator CLI used to cover.
  * No-ops (returns null) if `current_phase` no longer matches `stepId` (raced
  * by another action) or a gate is already pending — callers should treat a
  * null result as "nothing to do", not an error.
@@ -444,6 +454,13 @@ export async function advanceStepOnJobSuccessAssumingLock(
         state.current_phase = retry.restart_from
         state.hitl_pending = null
         const mtime = await writeStateAtomic(stateFile, state)
+        emit('task.advanced', {
+          taskId,
+          stepId,
+          currentPhase: state.current_phase,
+          reason: 'review_retry',
+          devTeamRoot: root,
+        })
         return { state, mtime }
       }
       // Past `retry.max`: fall through to the gate/advance logic below —
@@ -461,6 +478,11 @@ export async function advanceStepOnJobSuccessAssumingLock(
   }
 
   const mtime = await writeStateAtomic(stateFile, state)
+  if (state.hitl_pending) {
+    emit('hitl.pending', { taskId, gateId, stepId, devTeamRoot: root })
+  } else {
+    emit('task.advanced', { taskId, stepId, currentPhase: state.current_phase, devTeamRoot: root })
+  }
   return { state, mtime }
 }
 
@@ -513,6 +535,9 @@ export async function advanceStepOnJobSuccess(
             stepId,
             currentPhase: state.current_phase,
             reason: 'review_retry',
+            // Read by the orchestrator to decide the next step; it runs
+            // off-request, so it must carry its own data root.
+            devTeamRoot: root,
           })
           return { state, mtime }
         }
@@ -530,12 +555,14 @@ export async function advanceStepOnJobSuccess(
       state.current_phase = next ? next.id : 'completed'
     }
 
-    // Emit after persist so listeners never read stale state.
+    // Emit after persist so listeners never read stale state, and read the
+    // state we just wrote rather than `gateId` alone — `auto_review` still
+    // advances the cursor on a gated step, and the event must say so.
     const mtime = await writeStateAtomic(stateFile, state)
-    if (gateId) {
-      emit('hitl.pending', { taskId, gateId, stepId })
+    if (state.hitl_pending) {
+      emit('hitl.pending', { taskId, gateId, stepId, devTeamRoot: root })
     } else {
-      emit('task.advanced', { taskId, stepId, currentPhase: state.current_phase })
+      emit('task.advanced', { taskId, stepId, currentPhase: state.current_phase, devTeamRoot: root })
     }
     return { state, mtime }
   })
@@ -544,6 +571,12 @@ export async function advanceStepOnJobSuccess(
 export interface PendingFeedback {
   feedback: string
   stepId?: string
+  /**
+   * Ai xếp hàng phản hồi này. `gate` là phản hồi sinh ra từ một lần reject cổng
+   * HITL — khi orchestrator đang điều phối thì chính nó quyết định gửi gì cho
+   * step bị reject, nên mục `gate` còn sót lại không được tự gửi.
+   */
+  source?: 'chat' | 'gate' | 'orchestrator'
 }
 
 /**
@@ -632,6 +665,48 @@ export async function applyArchiveAction(
   })
 }
 
+/**
+ * Bấm Stop trên node orchestrator: ghi `orchestrator_halted`. Cùng hình dạng
+ * khoá / kiểm mtime / ghi atomic như `applyArchiveAction`.
+ *
+ * Halt không chỉ là tắt điều phối — nó trả quyền start về chế độ tay
+ * (`assertStartAllowed` đọc `enabled && !halted`), nên sau khi Stop thì Run/Reset
+ * trên node step hiện lại và người dùng chạy tay tiếp được.
+ */
+export async function applyOrchestratorHaltAction(
+  root: string,
+  taskId: string,
+  patch: TaskOrchestratorPatch,
+): Promise<HitlApplyResult> {
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
+
+  return withStateFileLock(stateFile, async () => {
+    const read = await readState(stateFile)
+    if (!read.ok) {
+      return { ok: false, error: 'state not found', status: 404 }
+    }
+
+    let currentMtime: number | null = null
+    try {
+      const s = await stat(stateFile)
+      currentMtime = s.mtimeMs
+    } catch {
+      currentMtime = null
+    }
+
+    if (currentMtime != null && currentMtime !== patch.mtime) {
+      return { ok: false, error: 'conflict', status: 409, state: read.state, mtime: currentMtime }
+    }
+
+    const state = { ...read.state } as Record<string, unknown>
+    state.orchestrator_halted = patch.halted
+    state.orchestrator_halted_at = patch.halted ? new Date().toISOString() : null
+
+    const mtime = await writeStateAtomic(stateFile, state)
+    return { ok: true, state, mtime }
+  })
+}
+
 /** Rename a task. Mirrors applyArchiveAction's lock/mtime-check/write shape. */
 export async function applyRenameAction(
   root: string,
@@ -676,7 +751,7 @@ export async function applyRenameAction(
  * Permanently delete a task's files. Unlike applyArchiveAction, this does NOT
  * require readState() to succeed first — it exists specifically to remove
  * tasks whose state file is missing/corrupt and therefore have no other
- * available action (see B0009 §5).
+ * available action.
  */
 export async function deleteTask(
   root: string,

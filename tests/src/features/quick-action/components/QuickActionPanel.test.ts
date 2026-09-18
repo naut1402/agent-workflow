@@ -31,19 +31,32 @@ vi.mock('@/features/runner/scripts/runnerApi', () => ({
   })),
 }))
 
+const fetchCatalog = vi.fn(async (_projectId?: string) => ({
+  skills: [],
+  agents: [
+    { id: 'dashboard:my-agent', name: 'my-agent', description: '' },
+    { id: 'repo:dev-agent-teams:doc-reviewer', name: 'doc-reviewer', description: '' },
+  ],
+}))
+
 vi.mock('@/features/pipeline-editor/scripts/pipelineEditorApi', () => ({
-  fetchCatalog: vi.fn(async () => ({
-    skills: [],
-    agents: [
-      { id: 'dashboard:my-agent', name: 'my-agent', description: '' },
-      { id: 'repo:dev-agent-teams:doc-reviewer', name: 'doc-reviewer', description: '' },
-    ],
-  })),
+  fetchCatalog: (projectId?: string) => fetchCatalog(projectId),
 }))
 
 import { saveArtifactActionsCatalog } from '../../../../../src/features/quick-action/scripts/QuickActionPanelApi'
 
 afterEach(() => vi.clearAllMocks())
+
+// T8ee57185: loadAgentOptions() used to call fetchCatalog() with no
+// `project` at all, so the "agent" dropdown offered by the current project
+// silently showed the registry default project's agents instead.
+describe('QuickActionPanel — forward projectId khi nạp danh sách agent (TC-G01)', () => {
+  it('mount với projectId cụ thể → dropdown agent nạp catalog theo đúng project', async () => {
+    mountWithI18n(QuickActionPanel, { props: { projectId: 'P1' } })
+    await flushPromises()
+    expect(fetchCatalog).toHaveBeenCalledWith('P1')
+  })
+})
 
 describe('QuickActionPanel', () => {
   it('lists the loaded catalog (label / agent / attach, no id column)', async () => {

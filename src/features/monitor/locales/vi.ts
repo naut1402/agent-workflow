@@ -126,6 +126,9 @@ export default {
     resetConfirmOnlyThis: 'Chỉ xoá step này',
     resetConfirmCascade: 'Xoá cả các step sau: {steps}',
     resetDone: 'Đã reset step — pipeline đã cập nhật.',
+    orchestrator: 'Điều phối',
+    orchestratorHalted: 'Đã dừng điều phối — pipeline trở về chế độ chạy tay.',
+    orchestratorStarted: 'Đã giao lượt cho node điều phối.',
   },
   pipelineNode: {
     clickToApprove: 'Nhấn để duyệt',
@@ -140,6 +143,16 @@ export default {
     stop: 'Dừng step',
     chat: 'Chat',
     chatWithRunner: 'Chat với runner của step này',
+    clickToStopOrchestrator: 'Nhấn để dừng điều phối (pipeline về chế độ chạy tay)',
+    stopOrchestrator: 'Dừng điều phối',
+    clickToStartOrchestrator: 'Nhấn để giao lượt cho node điều phối',
+    startOrchestrator: 'Chạy điều phối',
+    orchestrated: 'do orchestrator điều phối',
+    orchestratorState: {
+      listening: 'đang lắng nghe',
+      dispatching: 'đang quyết định',
+      halted: 'đã dừng',
+    },
   },
 
   qa: {

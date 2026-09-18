@@ -1,5 +1,81 @@
+// Cấu hình Fallow — https://fallow.mintlify.app/configuration/overview
+//
+// Hai nguồn false positive có hệ thống của repo này, cả hai đều là *cấu trúc*
+// chứ không phải code sai, nên khai ở đây thay vì sửa code cho vừa lòng tool:
+//
+//  1. Nạp module bằng glob lúc chạy — Fallow đọc tĩnh nên không thấy đường nào
+//     dẫn vào `src/features/**` và báo nguyên cây là dead code.
+//  2. Dòng source gitignore `/tests/` (`docs/agent-rules/git-pr.md` §4.3) nên
+//     không có consumer nào là test, và cũng không có alias/shim nào của dòng
+//     test để resolve import.
 {
-  // Dòng source gitignore `/tests/` nên Fallow không thấy consumer nào là test.
-  // Gói chỉ test dùng phải khai ở đây — gỡ khỏi `package.json` sẽ làm suite chết.
-  "ignoreDependencies": ["@vue/test-utils"]
+  // ── 1. Điểm nạp động ────────────────────────────────────────────────────
+  // Không có static import nào trỏ tới các file dưới đây; chúng được gom bằng
+  // glob lúc chạy. Thiếu mục này thì mỗi feature mới đều kéo theo một loạt
+  // `unused-file` + `unused-export` cho toàn bộ cây của nó.
+  "dynamicallyLoaded": [
+    // Backend: `registerFeatureRoutes` quét `src/features/<name>/api.ts` bằng
+    // `loadModulesUnder` (`src/backend/apiServer.ts`). Đây là điểm nạp feature
+    // DUY NHẤT của backend — mọi thứ khác của feature treo dưới file này.
+    "src/features/*/api.ts",
+    // Frontend: `import.meta.glob(..., { eager: true })` ở `frontend/main.ts`
+    // (mode registry) và `frontend/plugins/i18n/loadLocales.ts` (locale).
+    "src/features/*/registerMode.ts",
+    "src/features/*/locales/*.ts",
+    "src/frontend/plugins/i18n/locales/*/*.ts"
+  ],
+
+  // ── 2. Gói chỉ dòng test dùng / chỉ dòng test resolve được ───────────────
+  // "Luôn coi là đã dùng và luôn coi là có mặt."
+  "ignoreDependencies": [
+    // Gói chỉ test dùng — gỡ khỏi `package.json` sẽ làm suite chết.
+    "@vue/test-utils"
+  ],
+
+  // `zod` CÓ trong `package.json`, nhưng alias của nó trỏ vào `tests/shims/zod.ts`
+  // (`vitest.config.ts`: zod 3.25 dual-package làm Vite để named `{ z }` undefined).
+  // Shim sống ở dòng test nên bước Fallow không resolve được, và MỌI
+  // `src/features/*/schemas/*.ts` báo `unresolved-import`.
+  // ⚠️ Phải là `ignoreUnresolvedImports`, không phải `ignoreDependencies`: đã thử
+  // `ignoreDependencies` trước và 7 finding `unresolved-import` vẫn còn nguyên —
+  // key đó chỉ nói về *dependency chết*, không nói về *specifier không resolve được*.
+  "ignoreUnresolvedImports": ["zod"],
+
+  // Method của controller được gắn route bằng CHUỖI — `bind(MonitorController,
+  // 'putTaskOrchestrator')` ở `features/<name>/api.ts` — nên không có tham chiếu
+  // tĩnh nào tới method, và Fallow báo mọi handler mới là `unused-class-member`.
+  // Đây là khuôn của TOÀN BỘ controller trong repo (`backend/http/AbstractController.ts`),
+  // không riêng feature nào ⇒ tắt theo đường dẫn thay vì rắc suppression từng method.
+  "overrides": [
+    {
+      "files": ["src/features/*/controller.ts"],
+      "rules": { "unused-class-members": "off" }
+    }
+  ],
+
+  // ── 3. Export có consumer, nhưng consumer nằm ở dòng test ───────────────
+  // Hàm được tách ra và export *để test gọi thẳng không cần LLM / không cần
+  // dựng cả vòng lặp*. Trên dòng source chúng trông như không ai dùng.
+  // Bật cờ này trước: phần lớn nhóm đó vẫn được gọi ngay trong file khai nó,
+  // nên không cần liệt kê tay.
+  "ignoreExportsUsedInFile": true,
+
+  // Phần còn lại — export KHÔNG được dùng trong chính file khai, consumer duy
+  // nhất là test ở `test/x.y.z/…`. Khai theo từng file, không dùng `"*"` ở mức
+  // thư mục, để export chết thật vẫn bị bắt.
+  "ignoreExports": [
+    {
+      // `_resetOrchestratorForTest` (dọn state giữa các case) và
+      // `SWEEP_INTERVAL_MS` (test khẳng định chu kỳ quét).
+      "file": "src/features/orchestrator/business/decisionLoop.ts",
+      "exports": ["_resetOrchestratorForTest", "SWEEP_INTERVAL_MS"]
+    },
+    {
+      // `setOrchestratorEnabledFlag` — production chỉ gọi nội bộ trong
+      // `resolveOrchestration`; test gọi thẳng để kiểm nó không đụng field khác
+      // của task state.
+      "file": "src/features/monitor/business/tasks/startAuthority.ts",
+      "exports": ["setOrchestratorEnabledFlag"]
+    }
+  ]
 }

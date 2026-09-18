@@ -18,11 +18,8 @@ import {
 
 const { t } = useI18nHelpers()
 
-// CRUD panel for the artifact-actions catalog (Correction B / F0005): create,
-// edit, delete a "quick action" — the prompt/agent/attach-point/runner binding
-// that shows up as a button on the artifact title toolbar and/or the
-// text-selection toolbar in Monitor's ArtifactPanel. The editor is a resizable
-// modal dialog; the action id is derived from the label (not entered).
+// CRUD panel for the artifact-actions catalog — quick actions render as
+// buttons on the artifact title/selection toolbars in Monitor's ArtifactPanel.
 
 const props = defineProps<{
   projectId?: string | null
@@ -60,12 +57,9 @@ function menuOptionLabel(opt: { label: string; depth: number }): string {
   return `${'— '.repeat(opt.depth)}${opt.label}`
 }
 
-// Danh sách placeholder hỗ trợ trong `prompt_template` — khớp với
-// `substitutePrompt()` (server/artifactActions/index.ts). `{{selection}}` và
-// `{{selection_lines}}` chỉ có giá trị khi action được chạy từ selection
-// toolbar (tức action có gắn attach point "Text selection" và người dùng bôi
-// đen một đoạn trong artifact rồi bấm nút) — chạy từ title toolbar thì hai
-// placeholder này luôn rỗng.
+// Danh sách placeholder hỗ trợ trong `prompt_template`, khớp với
+// `substitutePrompt()` (server/artifactActions/index.ts); `{{selection}}` và
+// `{{selection_lines}}` chỉ có giá trị khi chạy từ selection toolbar, ngược lại rỗng.
 const PROMPT_PLACEHOLDERS = computed<Array<{ token: string; desc: string; selectionOnly?: boolean }>>(() => [
   { token: '{{artifact_name}}', desc: t('quickAction.promptHelp.placeholders.artifactName') },
   { token: '{{artifact_base}}', desc: t('quickAction.promptHelp.placeholders.artifactBase') },
@@ -81,9 +75,7 @@ const PROMPT_PLACEHOLDERS = computed<Array<{ token: string; desc: string; select
   },
 ])
 
-// Floating help popover for the prompt_template placeholders. Rendered as an
-// absolutely-positioned overlay (does NOT push the fields below it down) that
-// closes on a second click of ❓, a click anywhere outside it, or Esc.
+// Floating popover for the prompt_template placeholders (overlay, not inline).
 const promptHelpRef = ref<HTMLElement | null>(null)
 const helpBtnRef = ref<HTMLElement | null>(null)
 
@@ -97,8 +89,7 @@ function onDocKey(e: KeyboardEvent) {
 }
 function openPromptHelp() {
   showPromptHelp.value = true
-  // Defer binding so the click that opened the popover doesn't immediately
-  // close it via the capture-phase outside-click handler.
+  // Defer binding — otherwise the opening click also triggers the capture-phase outside-click handler.
   nextTick(() => {
     document.addEventListener('click', onDocClick, true)
     document.addEventListener('keydown', onDocKey)
@@ -148,10 +139,8 @@ const effectiveProviderId = computed(() => {
 /** Console-command runners: no agent_ref / system prompt — prompt is extra CLI argv. */
 const isConsoleCommandRunner = computed(() => effectiveProviderId.value === 'console-command')
 
-// Derive a stable action id from the label (the id field is no longer entered).
-// Strip diacritics/emoji/punctuation to an ascii kebab slug; ensure uniqueness
-// against the existing catalog. Only used when creating — an edited action
-// keeps its original id so its identity is stable.
+// Action id is derived from the label — only when creating; an edited action
+// keeps its original id so its identity stays stable.
 function deriveId(label: string): string {
   const base = slugify(label, { maxLength: 80, fallback: 'quick-action' })
   const taken = new Set(catalog.actions.value.map((a) => a.id))
@@ -176,7 +165,7 @@ async function loadRunnerOptions() {
 
 async function loadAgentOptions() {
   try {
-    const res = await fetchCatalog()
+    const res = await fetchCatalog(props.projectId ?? undefined)
     agents.value = Array.isArray(res?.agents)
       ? res.agents.filter((a: any) => a && typeof a.id === 'string')
       : []

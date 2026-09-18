@@ -843,3 +843,254 @@ describe('PipelineView — cấu trúc modal (.modal-body)', () => {
     w.unmount()
   })
 })
+
+// TC-01/TC-03/TC-05 — canvas monitor là bề mặt người dùng thấy triệu chứng ①
+// ("không có cách nào start pipeline; UI chỉ hiển thị một nút dừng"). Chấm trên
+// `data` mà view đưa xuống node — đó là thứ quyết định nút nào render ra.
+describe('PipelineView — node điều phối', () => {
+  const ORCH_ID = '__orchestrator__'
+  const ORCH_PIPELINE = { ...SAMPLE_PIPELINE, orchestrator: { enabled: true, agent: 'a:orch' } }
+
+  function nodeData(w: any, id: string) {
+    return w.findComponent({ name: 'VueFlow' }).props('nodes').find((n: any) => n.id === id)?.data
+  }
+
+  function orchestratorTask(over: Record<string, any> = {}) {
+    return {
+      task_id: 'ORCH-1',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: {},
+      state_mtime: 1000,
+      pipeline: ORCH_PIPELINE,
+      ...over,
+    }
+  }
+
+  it('checkbox TẮT ⇒ không có node điều phối trên canvas (TC-26, TC-32)', async () => {
+    const w = mountPipeline({ ...orchestratorTask(), pipeline: SAMPLE_PIPELINE })
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toBeUndefined()
+    w.unmount()
+  })
+
+  it('checkbox BẬT ⇒ node hiện, ở trạng thái lắng nghe và KHÔNG bận (có Run)', async () => {
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({
+      kind: 'orchestrator',
+      orchestratorState: 'listening',
+      orchestratorBusy: false,
+    })
+    w.unmount()
+  })
+
+  // TC-25 vế (a)+(b): sau khi reset bằng checkbox, node rời trạng thái dừng và
+  // lại có Run. Ở đây chấm vế "đã dừng thì vẫn có Run" — đúng chỗ bug gốc.
+  it('đã DỪNG ⇒ vẫn không bận, tức node vẫn có đường chạy lại (TC-04)', async () => {
+    const w = mountPipeline(orchestratorTask({ orchestrator_halted: true }))
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({
+      orchestratorState: 'halted',
+      orchestratorBusy: false,
+    })
+    w.unmount()
+  })
+
+  it('có lượt của node đang chạy ⇒ bận (đổi sang Stop) và trạng thái là dispatching', async () => {
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [
+        {
+          id: 'job-orch',
+          status: 'running',
+          metadata: { taskId: 'ORCH-1', orchestratorJob: true },
+        },
+      ],
+    } as any)
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'dispatching', orchestratorBusy: true })
+    w.unmount()
+  })
+
+  it('có step đang chạy ⇒ node bận, nhưng vẫn ở trạng thái lắng nghe', async () => {
+    vi.mocked(fetchJob).mockResolvedValue({
+      job: { id: 'job-step', status: 'running', metadata: { taskId: 'ORCH-1', pipelineStepId: 'investigator' } },
+    } as any)
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [
+        {
+          id: 'job-step',
+          status: 'running',
+          metadata: { taskId: 'ORCH-1', pipelineStepId: 'investigator' },
+        },
+      ],
+    } as any)
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'listening', orchestratorBusy: true })
+    w.unmount()
+  })
+
+  it('node mang đủ hai handler Run/Stop để không có trạng thái cụt đường', async () => {
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    const data = nodeData(w, ORCH_ID)
+    expect(typeof data.onRun).toBe('function')
+    expect(typeof data.onStop).toBe('function')
+    w.unmount()
+  })
+
+  // TC-13 — khung chat mở từ node phải trỏ vào chính node, không vào step nào.
+  it('khung chat của node trỏ đúng stepId của node', async () => {
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID).stepId).toBe(ORCH_ID)
+    expect(nodeData(w, ORCH_ID).executed).toBe(true)
+    w.unmount()
+  })
+
+  // Bug B (test-spec.md TC-15…TC-20) — root cause G2: trước fix, node chỉ
+  // re-sync khi `props.task.state_mtime` đổi giá trị. Nhưng vòng lặp orchestrator
+  // "đang nghĩ" giữa hai lần dispatch KHÔNG ghi state file, nên `state_mtime` bất
+  // biến trong lúc chính đó. Các case dưới đây cố tình giữ NGUYÊN `state_mtime`
+  // và chỉ đổi identity của object `task` (đúng như `collectTasks()` làm ở mỗi
+  // snapshot SSE) — nếu watch còn bám `state_mtime` như code cũ, các case này đỏ.
+  it('TC-15/TC-18: có lượt orchestrator mới dù state_mtime KHÔNG đổi ⇒ node chuyển dispatching ngay, không đứng hình', async () => {
+    vi.mocked(fetchJobs).mockResolvedValue({ jobs: [] } as any)
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'listening', orchestratorBusy: false })
+
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [{ id: 'job-orch-2', status: 'running', metadata: { taskId: 'ORCH-1', orchestratorJob: true } }],
+    } as any)
+    // Object MỚI (identity khác) nhưng state_mtime giữ nguyên 1000 — đúng khoảng
+    // "giữa hai lượt quyết định" mà request.md mô tả cho triệu chứng ②.
+    await w.setProps({ task: orchestratorTask() })
+    await flushPromises()
+
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'dispatching', orchestratorBusy: true })
+    w.unmount()
+  })
+
+  // TC-16/TC-17 — Stop (người bấm) và tự halt (agent tự quyết định) phải cập
+  // nhật UI như nhau: request.md không phân biệt nguồn gốc dừng.
+  it('TC-16/TC-17: dừng (Stop hoặc tự halt) ⇒ hết "đang lắng nghe" ngay dù state_mtime không đổi', async () => {
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [{ id: 'job-orch-3', status: 'running', metadata: { taskId: 'ORCH-1', orchestratorJob: true } }],
+    } as any)
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'dispatching', orchestratorBusy: true })
+
+    vi.mocked(fetchJobs).mockResolvedValue({ jobs: [] } as any)
+    await w.setProps({ task: orchestratorTask({ orchestrator_halted: true }) }) // cùng state_mtime: 1000
+    await flushPromises()
+
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'halted', orchestratorBusy: false })
+    w.unmount()
+  })
+
+  // TC-19 — chuyển trạng thái dồn dập vẫn phải hội tụ đúng vào giá trị mới nhất
+  // ở mỗi bước, không kẹt ở trạng thái trung gian của bước trước.
+  it('TC-19: start → stop → start liên tiếp ⇒ luôn phản ánh đúng trạng thái mới nhất', async () => {
+    vi.mocked(fetchJobs).mockResolvedValue({ jobs: [] } as any)
+    const w = mountPipeline(orchestratorTask())
+    await flushPromises()
+
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [{ id: 'job-a', status: 'running', metadata: { taskId: 'ORCH-1', orchestratorJob: true } }],
+    } as any)
+    await w.setProps({ task: orchestratorTask() })
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'dispatching' })
+
+    vi.mocked(fetchJobs).mockResolvedValue({ jobs: [] } as any)
+    await w.setProps({ task: orchestratorTask({ orchestrator_halted: true }) })
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'halted' })
+
+    vi.mocked(fetchJobs).mockResolvedValue({
+      jobs: [{ id: 'job-b', status: 'running', metadata: { taskId: 'ORCH-1', orchestratorJob: true } }],
+    } as any)
+    await w.setProps({ task: orchestratorTask() })
+    await flushPromises()
+    expect(nodeData(w, ORCH_ID)).toMatchObject({ orchestratorState: 'dispatching', orchestratorBusy: true })
+    w.unmount()
+  })
+
+  // TC-20 (mở lại/refresh giữa lúc đang chạy) — bề mặt là mount ĐẦU ("reload" =
+  // component mount mới với `fetchJobs` đã có job orchestrator từ trước). Đã có
+  // coverage tương đương ở case "có lượt của node đang chạy ⇒ bận..." phía trên
+  // (initial mount, không phải setProps) — không lặp lại ở đây.
+})
+
+// TC-A1/TC-A2/TC-A8 (T21270146) — canvas monitor: node điều phối vẽ hub edge
+// tới từng step khi bật, giữ nguyên chuỗi step-step khi tắt.
+describe('PipelineView — hub edge', () => {
+  const ORCH_ID = '__orchestrator__'
+  const HUB_PIPELINE = { ...SAMPLE_PIPELINE, orchestrator: { enabled: true, agent: 'a:orch' } }
+
+  function flowEdges(w: any): any[] {
+    // Loại edge dữ liệu (`de-*`, phái sinh từ artifact/knowledge) — chỉ so control/hub edge.
+    return (w.findComponent({ name: 'VueFlow' }).props('edges') as any[]).filter(
+      (e) => !String(e.id).startsWith('de-'),
+    )
+  }
+
+  function nodeData(w: any, id: string) {
+    return w.findComponent({ name: 'VueFlow' }).props('nodes').find((n: any) => n.id === id)?.data
+  }
+
+  it('TC-A1: bật ⇒ mỗi step có đúng 1 edge từ node điều phối, không còn edge step-step', async () => {
+    const task = {
+      task_id: 'HUB1',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: {},
+      pipeline: HUB_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    const edges = flowEdges(w)
+    expect(edges).toHaveLength(SAMPLE_PIPELINE.steps.length)
+    expect(edges.every((e) => e.source === ORCH_ID)).toBe(true)
+    expect(edges.map((e) => e.target).sort()).toEqual(SAMPLE_PIPELINE.steps.map((s) => s.id).sort())
+    w.unmount()
+  })
+
+  it('TC-A2: tắt ⇒ edges là chuỗi step-step nối tiếp như cũ, không có edge nào từ node điều phối', async () => {
+    const task = {
+      task_id: 'HUB2',
+      current_phase: 'investigator',
+      hitl_pending: null,
+      artifacts: {},
+      pipeline: SAMPLE_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    const edges = flowEdges(w)
+    expect(edges).toHaveLength(SAMPLE_PIPELINE.steps.length - 1)
+    expect(edges.every((e) => e.source !== ORCH_ID && e.target !== ORCH_ID)).toBe(true)
+    w.unmount()
+  })
+
+  it('TC-A8 (regression): trạng thái step (active/done) vẫn hiển thị đúng ở chế độ hub edge', async () => {
+    const task = {
+      task_id: 'HUB3',
+      current_phase: 'designer',
+      hitl_pending: null,
+      artifacts: { 'investigate.md': { exists: true } },
+      pipeline: HUB_PIPELINE,
+    }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    expect(nodeData(w, 'designer')?.status).toBe('active')
+    expect(nodeData(w, 'investigator')?.status).toBe('done')
+    w.unmount()
+  })
+})

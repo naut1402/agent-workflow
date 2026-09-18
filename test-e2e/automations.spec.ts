@@ -59,9 +59,9 @@ test('automations mode: danh sách rule + dialog tạo rule (capture)', async ({
     }
 
     // Tab lịch sử thực thi mở được (rule chưa chạy → danh sách rỗng).
-    await page.locator('.panel-tab', { hasText: 'Lịch sử' }).click()
+    await page.locator('.c-screen-layout__tab', { hasText: 'Lịch sử' }).click()
     await expect(page.locator('.history-toolbar')).toBeVisible()
-    await page.locator('.panel-tab').first().click()
+    await page.locator('.c-screen-layout__tab').first().click()
     await expect(page.locator('.rule-table')).toBeVisible()
 
     // Dialog tạo rule mở và đóng được.

@@ -7,7 +7,6 @@ function makeEntry(overrides: Partial<ModeEntry> = {}): ModeEntry {
     labelKey: 'common.modes.monitor',
     icon: 'monitor',
     order: 1,
-    statusKind: 'live',
     panel: { name: 'StubPanel', render: () => null },
     ...overrides,
   }

@@ -8,7 +8,6 @@ export function registerMode(registry: ModeRegistry): void {
     labelKey: 'common.modes.pipelineEditor',
     icon: 'pipeline',
     order: 2,
-    statusKind: 'paused',
     panel: PipelineEditor,
     descriptionKey: 'common.modeDesc.editor',
     maturity: 'stable',

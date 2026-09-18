@@ -212,6 +212,35 @@ describe('useNlChatSession', () => {
     expect(s.error.value).toBeTruthy()
   })
 
+  // T8ee57185: loadCatalog() (fired by a pipeline draft) used to call
+  // GET /api/catalog with no `project` at all, so the agent-ref guard
+  // checked against the registry's default project's catalog instead of
+  // the session's actual project — forward `opts.getProjectId()` the same
+  // way `PipelineEditor.vue`/`AgentEditor.vue` already do.
+  it('a pipeline draft loads the catalog scoped to the session project', async () => {
+    const fetchMock = stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'pipeline', draft: { steps: [{ agent: 'agent-a' }] } },
+    })
+    const s = make({ getProjectId: () => 'proj-x' })
+    await s.sendMessage('tạo pipeline')
+    await new Promise((r) => setTimeout(r, 5))
+
+    const catalogCall = fetchMock.mock.calls.find(([url]: any[]) => String(url).includes('/api/catalog'))
+    expect(String(catalogCall?.[0])).toContain('project=proj-x')
+  })
+
+  it('a pipeline draft with no project selected still loads the catalog (back-compat)', async () => {
+    const fetchMock = stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'pipeline', draft: { steps: [{ agent: 'agent-a' }] } },
+    })
+    const s = make()
+    await s.sendMessage('tạo pipeline')
+    await new Promise((r) => setTimeout(r, 5))
+
+    const catalogCall = fetchMock.mock.calls.find(([url]: any[]) => String(url).includes('/api/catalog'))
+    expect(String(catalogCall?.[0])).not.toContain('project=')
+  })
+
   it('confirm(pipeline) blocks and errors when a draft.steps[].agent ref is not in the catalog', async () => {
     stubApi({
       turn: { status: 'ready', kind: 'draft', entityType: 'pipeline', draft: { steps: [{ agent: 'agent-a' }, { agent: 'ghost-agent' }] } },

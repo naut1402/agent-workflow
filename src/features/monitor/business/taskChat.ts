@@ -9,6 +9,7 @@ import {
 } from './index.js'
 import type { JobRecord, SessionEntry, TaskSessionLedger } from './index.js'
 import { readTextFileSync } from '../../../backend/lib/fileHelper.js'
+import { DECISION_SENTINEL, ORCHESTRATOR_STEP_ID } from '../../../shared/lib/orchestrator.js'
 import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.js'
 import { readCursorSessionTranscript, stripCursorUserWrapper } from './cursorSessionTranscript.js'
 import { readApiAgentTranscript } from './apiAgentTranscript.js'
@@ -22,11 +23,7 @@ function clipFallback(text: string): string {
   return t.length > MAX_FALLBACK_CHARS ? `${t.slice(0, MAX_FALLBACK_CHARS)}\n…(đã cắt bớt)` : t
 }
 
-/**
- * Agent reply for a finished job when the CLI transcript file is missing.
- * Prefer persisted `job.stdout` (NL chat / agent-cli); else strip framing from
- * the job log — same approach as nl-chat's `agentStdoutOf`.
- */
+/** Agent reply for a finished job when the CLI transcript file is missing. */
 function agentOutputFromJob(job: JobRecord): string {
   if (typeof job.stdout === 'string' && job.stdout.trim()) {
     return stripCursorUserWrapper(extractAgentText(job.stdout))
@@ -52,6 +49,20 @@ function agentOutputFromJob(job: JobRecord): string {
   return stripCursorUserWrapper(extractAgentText(stripped))
 }
 
+/** Job của node điều phối mang thêm dòng sentinel máy đọc — cắt trước khi hiển thị. */
+function chatTextOfJob(job: JobRecord): string {
+  const text = agentOutputFromJob(job)
+  return job.metadata?.orchestratorJob === true ? stripDecisionLine(text) : text
+}
+
+function isDecisionLine(line: string): boolean {
+  return line.trim().replace(/^`+/, '').replace(/`+$/, '').trim().startsWith(DECISION_SENTINEL)
+}
+
+function stripDecisionLine(text: string): string {
+  return text.split('\n').filter((line) => !isDecisionLine(line)).join('\n').trim()
+}
+
 /** Prefer Cursor/agent JSON `result` field when stdout is still raw JSON. */
 function extractAgentText(raw: string): string {
   const trimmed = raw.trim()
@@ -68,7 +79,7 @@ function synthesizeTurnsFromJob(job: JobRecord, startIndex = 0): TranscriptTurn[
   if (prompt) {
     turns.push({ index: startIndex + turns.length, role: 'user', text: clipFallback(prompt) })
   }
-  const out = agentOutputFromJob(job)
+  const out = chatTextOfJob(job)
   if (out) {
     turns.push({
       index: startIndex + turns.length,
@@ -80,11 +91,7 @@ function synthesizeTurnsFromJob(job: JobRecord, startIndex = 0): TranscriptTurn[
   return turns
 }
 
-/**
- * Conversation reconstructed from finished pipeline/feedback jobs when the CLI
- * transcript file is missing or empty. Jobs are oldest→newest so chat-feedback
- * rounds append after the original step run — stable indices for poll `from`.
- */
+/** Fallback conversation from finished jobs, oldest→newest so indices stay stable for poll `from`. */
 function synthesizeTurnsFromJobs(jobs: JobRecord[]): TranscriptTurn[] {
   const chronological = [...jobs].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
   const turns: TranscriptTurn[] = []
@@ -109,7 +116,7 @@ function finishedJobsForChat(jobs: JobRecord[], stepId?: string, sessionId?: str
 function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | undefined): boolean {
   if (!latest) return true
   const prompt = typeof latest.userPrompt === 'string' ? latest.userPrompt.trim() : ''
-  const out = agentOutputFromJob(latest)
+  const out = chatTextOfJob(latest)
   if (!prompt && !out) return true
   const texts = turns.map((t) => t.text.trim())
   if (prompt && texts.some((t) => t === clipFallback(prompt) || t.includes(prompt.slice(0, 80)))) {
@@ -123,23 +130,19 @@ function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | 
 }
 
 /**
- * State for "chat trực tiếp với runner": the conversation history of the CLI
- * session a pipeline step ran under, plus whether a message can be sent right
- * now. History comes from the CLI's own session transcript
- * (`sessionTranscript.ts` / `cursorSessionTranscript.ts`), which the CLI
- * appends to while it works — so the same endpoint doubles as live monitoring
- * of a running step instead of only showing the result once it finishes.
+ * State for "chat trực tiếp với runner": conversation history plus whether a
+ * message can be sent right now. History comes from the CLI's own session
+ * transcript, which the CLI appends to while it works — so the same endpoint
+ * doubles as live monitoring of a running step.
  *
- * Sending itself stays `sendTaskFeedback()` (F0011); this module only mirrors
- * its guards so the UI can explain *why* the input is blocked before the user
- * types, instead of surfacing a 400/409 after the fact.
+ * Sending itself stays `sendTaskFeedback()`; this module only mirrors its
+ * guards so the UI can explain why the input is blocked before the user types.
  */
 
 export type TaskChatBlockedReason = 'noCompletedJob'
 
-// `providerFamilyOf(id) === 'ai-api'` (agentCli.ts) is the single source of truth for
-// which provider ids are `AgenticApiProvider` subclasses — no separate id list to keep
-// in sync here (any current or future `*-api` provider is picked up automatically).
+// `providerFamilyOf(id) === 'ai-api'` (agentCli.ts) is the source of truth for
+// `AgenticApiProvider` ids — no separate list to keep in sync here.
 export type TranscriptProviderHint = 'claude-code-cli' | 'cursor-cli' | 'unknown' | (string & {})
 
 export interface TaskChatRunningJob {
@@ -260,6 +263,33 @@ export function resolveChatSession(
   dismissedForStep?: boolean
 } {
   const jobs = jobsOfTask(taskId)
+
+  // Node điều phối có session riêng. Không tìm thấy thì trả rỗng: rơi về entry
+  // `open` mới nhất là hiển thị khung chat của một step khác, và một step đang
+  // chạy cũng không được chiếm khung chat của node.
+  if (stepId === ORCHESTRATOR_STEP_ID) {
+    const own = jobs.find((j) => j.metadata?.orchestratorJob === true && j.sessionId)
+    if (own?.sessionId) {
+      return {
+        sessionId: own.sessionId,
+        workspace: own.workspace,
+        providerId: providerIdOfJob(own),
+        job: own,
+      }
+    }
+    const ownEntry = [...loadTaskSessionLedger(projectId, taskId).sessions]
+      .reverse()
+      .find((s) => s.sessionId && s.stepIds?.includes(ORCHESTRATOR_STEP_ID))
+    return ownEntry
+      ? {
+          sessionId: ownEntry.sessionId,
+          workspace: ownEntry.workspace,
+          entry: ownEntry,
+          providerId: ownEntry.providerId,
+        }
+      : { sessionId: null }
+  }
+
   const running = jobs.find((j) => j.status === 'queued' || j.status === 'running')
   if (running?.sessionId && (!stepId || stepIdOf(running) === stepId || !stepIdOf(running))) {
     return {
@@ -342,7 +372,14 @@ export function getTaskChatState(
   opts: GetTaskChatStateOptions = {},
 ): TaskChatState {
   const jobs = jobsOfTask(taskId)
-  const runningJob = jobs.find((j) => j.status === 'queued' || j.status === 'running')
+  // Panel của node điều phối chỉ nói về node: một step đang chạy không được
+  // chiếm ô `running`, cũng không được bật `queued` — đường gửi của node đi
+  // thẳng qua `chatWithOrchestrator`, không xếp hàng sau job của step.
+  const orchestratorPanel = opts.stepId === ORCHESTRATOR_STEP_ID
+  const ownJobs = orchestratorPanel ? jobs.filter((j) => j.metadata?.orchestratorJob === true) : jobs
+  const runningJob = ownJobs.find((j) => j.status === 'queued' || j.status === 'running')
+  // `hasFinished` vẫn đọc cả task: node chưa chạy lượt nào vẫn phải nhắn được
+  // (lượt đầu chính là thứ mở session cho nó).
   const hasFinished = jobs.some((j) => j.status === 'succeeded' || j.status === 'failed')
 
   let blockedReason: TaskChatBlockedReason | undefined
@@ -357,14 +394,17 @@ export function getTaskChatState(
       })
     : { turns: [], total: 0, file: null, matchedProvider: hint as TranscriptProviderHint }
 
+  // Node điều phối không mượn runner của step nào: rơi về job step gần nhất là
+  // panel hiện tên runner của một step khác.
   const runnerJob =
     runningJob ??
     (opts.stepId
       ? jobs.find((j) => stepIdOf(j) === opts.stepId && (j.status === 'succeeded' || j.status === 'failed'))
       : undefined) ??
     resolved.job ??
-    jobs.find((j) => j.status === 'succeeded' || j.status === 'failed') ??
-    jobs[0]
+    (orchestratorPanel
+      ? undefined
+      : (jobs.find((j) => j.status === 'succeeded' || j.status === 'failed') ?? jobs[0]))
   const runnerConfig = runnerJob ? getRunner(runnerJob.runnerId) : null
 
   // Cursor/agent-cli often leave no on-disk transcript (or one that lags behind
@@ -390,6 +430,14 @@ export function getTaskChatState(
       transcriptFound = true
     }
   }
+
+  // Turn 0 (role 'user') of a fresh session is the step's system prompt
+  // (request.md, loaded as job.userPrompt in runStep.ts) — not something the
+  // user typed in chat. Filter it out of both branches here, at the point they
+  // are unified, so neither the real transcript nor the job-fallback path can
+  // leak it. `total` stays the real count so `from`/poll-cursor math elsewhere
+  // (useTaskChat.ts) is unaffected.
+  turns = turns.filter((t) => !(t.index === 0 && t.role === 'user'))
 
   if (resolved.sessionId && !transcriptFound) {
     if (transcript.matchedProvider === 'cursor-cli' || hint === 'cursor-cli') {

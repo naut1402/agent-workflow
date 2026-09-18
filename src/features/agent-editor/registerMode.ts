@@ -8,7 +8,6 @@ export function registerMode(registry: ModeRegistry): void {
     labelKey: 'common.modes.agentEditor',
     icon: 'agent',
     order: 3,
-    statusKind: 'paused',
     panel: AgentEditor,
     descriptionKey: 'common.modeDesc.agentEditor',
     maturity: 'stable',

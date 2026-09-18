@@ -6,10 +6,7 @@ import ChatMessageBubble from './ChatMessageBubble.vue'
 import ChatComposer from './ChatComposer.vue'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 
-// Body of the floating chat window for the creation flow (F0012): chat freely,
-// the agent infers whether you want a Task / Pipeline / Agent and hands back a
-// draft to review. The window shell (position, header, minimize) lives in
-// ChatWindow.vue; this component only reports status up to it.
+// Body of the floating chat window for the creation flow (F0012). The window shell (position, header, minimize) lives in ChatWindow.vue; this component only reports status up to it.
 
 const props = defineProps<{ projectId?: string | null }>()
 const emit = defineEmits<{
@@ -51,10 +48,7 @@ const { t } = useI18nHelpers()
 // Keep the newest message in view as the conversation grows; also the drop zone.
 const messagesRef = ref<HTMLElement | null>(null)
 
-// Attachments, drop zone, Enter behaviour and the send guard — shared with
-// TaskChatBody, which only differs in what blocks a send and where text goes.
-// `ChatComposer` renders it; only the drop-zone flag is needed here, for the
-// message list this body owns.
+// Attachments, drop zone, Enter behaviour and the send guard — shared with TaskChatBody, which only differs in what blocks a send and where text goes.
 const composer = useChatComposer({
   dropZone: messagesRef,
   getProjectId: () => props.projectId ?? undefined,
@@ -64,11 +58,7 @@ const composer = useChatComposer({
 })
 const { isOverDropZone } = composer
 
-// design.md §4.4: pipeline draft's steps[].agent must be validated against
-// fetchCatalog() before "Xác nhận" is allowed — see useNlChatSession.ts.
-// Re-parses the (possibly user-edited) draftText live so the button reacts
-// as soon as the user fixes/breaks a ref, not just at the moment the agent
-// first returned the draft.
+// design.md §4.4: re-parses the (possibly user-edited) draftText live so the confirm button reacts as soon as the user fixes/breaks an agent ref, not just when the draft first arrived.
 const pipelineAgentError = computed<string | null>(() => {
   if (entityType.value !== 'pipeline' || step.value !== 'previewDraft') return null
   if (catalogError.value) return catalogError.value
@@ -84,9 +74,7 @@ const pipelineAgentError = computed<string | null>(() => {
   return invalid.length > 0 ? `Agent không tồn tại trong catalog: ${invalid.join(', ')}` : null
 })
 
-// Cùng lối với `pipelineAgentError`, cho `profileName` của draft task /
-// automation — `useNlChatSession.profileNameError` giữ luôn thông điệp để
-// component không mang literal mới (i18n của nl-chat chưa migrate).
+// Cùng lối với `pipelineAgentError`, cho `profileName` của draft task/automation — `profileNameError` giữ luôn thông điệp vì i18n của nl-chat chưa migrate.
 const taskProfileError = computed<string | null>(() => {
   if (step.value !== 'previewDraft') return null
   if (entityType.value !== 'task' && entityType.value !== 'automation') return null
@@ -130,8 +118,7 @@ const ENTITY_LABELS: Record<NlChatEntityType, string> = {
   automation: 'Automation',
 }
 
-// A turn is a CLI round trip that can take tens of seconds, so "đang suy nghĩ"
-// alone reads as frozen — the elapsed counter is the progress signal.
+// A turn is a CLI round trip that can take tens of seconds, so "đang suy nghĩ" alone reads as frozen — the elapsed counter is the progress signal.
 const waitingSeconds = ref(0)
 let waitTimer: ReturnType<typeof setInterval> | null = null
 
@@ -160,9 +147,7 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
         : `Agent đang suy nghĩ… ${waitingSeconds.value}s`,
     }
   }
-  // The message itself when there is one — the title's tooltip is the only place
-  // the error is described now that the status icon is gone. `step === 'error'`
-  // can arrive without any message, hence the fallback.
+  // `step === 'error'` can arrive without any message, hence the fallback text.
   if (step.value === 'error' || error.value) {
     return { kind: 'error', text: error.value ? `Có lỗi: ${error.value}` : 'Có lỗi' }
   }
@@ -172,7 +157,18 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
 
 watch(status, (s) => emit('status', s), { immediate: true })
 
+/** Within this many px of the bottom counts as "still following the tail" (see TaskChatBody.vue). */
+const SCROLL_BOTTOM_THRESHOLD = 48
+
+function isNearBottom(): boolean {
+  const el = messagesRef.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD
+}
+
+// Measured before the new message/typing-dots are patched into the DOM (default `watch` flush is 'pre') — only follow the tail when already at it, so reading older history isn't fought.
 watch([() => messages.value.length, () => sending.value], async () => {
+  if (!isNearBottom()) return
   await nextTick()
   const el = messagesRef.value
   if (el) el.scrollTop = el.scrollHeight

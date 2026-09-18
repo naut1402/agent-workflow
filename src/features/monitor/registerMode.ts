@@ -2,14 +2,12 @@ import type { ModeRegistry, ShellContext } from '../../frontend/shell/modeRegist
 import { subSidebarBindings } from '../../frontend/shell/subSidebarBindings'
 import MonitorLayout from './components/MonitorLayout.vue'
 
-/** Mode mặc định của app — statusKind 'live' (khác 8 mode còn lại đều 'paused'). */
 export function registerMode(registry: ModeRegistry): void {
   registry.registerMode({
     key: 'monitor',
     labelKey: 'common.modes.monitor',
     icon: 'monitor',
     order: 1,
-    statusKind: 'live',
     panel: MonitorLayout,
     descriptionKey: 'common.modeDesc.monitor',
     maturity: 'stable',
