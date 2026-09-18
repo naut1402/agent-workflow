@@ -7,8 +7,46 @@ import * as pipelineEditorBusiness from './business/index.js'
 import { draftFromAgentMarkdown } from '../agent-editor/business/agentMarkdown.js'
 import { parseFrontmatter } from '../../backend/lib/yamlLib.js'
 import { emitAudit } from '../../backend/log/store.js'
-import { buildCatalog, parseCatalogAgentId, resolveCatalogAgentPath } from './business/catalog/index.js'
-import { buildRules } from './business/rules/index.js'
+import {
+  buildCatalog,
+  parseCatalogItemId,
+  resolveCatalogAgentPath,
+  resolveCatalogSkillPath,
+} from './business/catalog/index.js'
+import { buildRules, resolveRuleContentPathWithPatterns } from './business/rules/index.js'
+
+/**
+ * Chuẩn hoá phần pipeline do người dùng nhập trước khi ghi ra đĩa.
+ *
+ * - `orchestrator.agent` là agent ref người dùng gõ tự do — tên của nó sẽ thành
+ *   path khi `resolveAgent` đi tìm file, nên phải qua `sanitiseAgentName` (chống
+ *   path-traversal, AGENTS.md §4). Ref hỏng ⇒ 400, không lưu im lặng.
+ * - Step id bắt đầu bằng `__` bị từ chối: `__orchestrator__` là id dành riêng cho
+ *   node điều phối, trùng vào là session ledger và chat surface lẫn hai thứ.
+ *
+ * Chạy ở cả hai đường ghi (`writePipelineConfig` và `createPipelineProfile`) —
+ * chỉ chặn một đường thì đường kia vẫn lưu được nội dung độc hại.
+ */
+function validatePipelinePayload(pipeline: any): string | null {
+  for (const step of pipeline.steps ?? []) {
+    if (typeof step?.id === 'string' && step.id.startsWith('__')) {
+      return `step id must not start with "__": ${step.id}`
+    }
+  }
+  const agent = pipeline.orchestrator?.agent
+  if (agent != null && agent !== '') {
+    if (typeof agent !== 'string') return 'invalid orchestrator.agent'
+    // Ref dạng `<source>:<name>` (source có thể nhiều đoạn, vd `repo:dev-agent-teams`).
+    // Mọi đoạn đều có thể thành một thành phần path ở `resolveAgentFilePath`, nên
+    // kiểm cả ref chứ không chỉ đoạn cuối, và so sánh bằng để một đoạn bị
+    // `sanitiseAgentName` gọt cũng bị từ chối thay vì âm thầm lưu bản đã gọt.
+    const segments = agent.split(':')
+    if (segments.some((seg) => pipelineEditorBusiness.sanitiseAgentName(seg) !== seg)) {
+      return 'invalid orchestrator.agent'
+    }
+  }
+  return null
+}
 
 export class PipelineEditorController extends AbstractController {
   async getPipelineProfiles() {
@@ -60,6 +98,8 @@ export class PipelineEditorController extends AbstractController {
     if (!b.value.pipeline || !Array.isArray(b.value.pipeline.steps)) {
       return this.badRequest('pipeline.steps must be an array')
     }
+    const invalid = validatePipelinePayload(b.value.pipeline)
+    if (invalid) return this.badRequest(invalid)
     await fs.mkdir(dir, { recursive: true })
     await fs.writeFile(path.join(dir, `${name}.yaml`), dumpYaml(b.value.pipeline), 'utf8')
     emitAudit({ op: 'create', entity: 'pipeline-profile', identifier: name, projectId: this.projectId })
@@ -94,6 +134,8 @@ export class PipelineEditorController extends AbstractController {
     if (!pipeline || !Array.isArray(pipeline.steps)) {
       return this.badRequest('pipeline.steps must be an array')
     }
+    const invalid = validatePipelinePayload(pipeline)
+    if (invalid) return this.badRequest(invalid)
     let target: string
     if (scope === 'global') {
       target = path.join(root, 'pipeline.yaml')
@@ -119,11 +161,26 @@ export class PipelineEditorController extends AbstractController {
       return this.badRequest('scope must be "global" or "task" (with taskId)')
     }
     const toWrite = scope === 'task' ? { ...pipeline, steps_replace: true } : pipeline
-    // Atomic (temp + rename): gate reconciliation now depends on reading an
-    // intact YAML. A read landing mid-write would see a truncated file,
-    // `readYamlSafe` would return null, the pipeline would fall back to
-    // global/builtin — and reconcile could clear a legitimate gate.
+    // Atomic (temp + rename): a read landing mid-write would see a truncated file,
+    // fall back to global/builtin, and reconcile could clear a legitimate gate.
     writeTextFileAtomicSync(target, dumpYaml(toWrite))
+    if (scope === 'task' && taskId) {
+      // Import động: barrel monitor kéo theo runner (`node:child_process`), còn
+      // barrel orchestrator có side-effect khởi động vòng lặp lúc module-eval.
+      // Lỗi ở đây không được làm hỏng lượt ghi YAML — nó đã ghi xong rồi.
+      try {
+        const { applyOrchestratorConfigChange, reconcileGateState } = await import('../monitor/business/index.js')
+        await reconcileGateState(root, taskId)
+        const enabled = pipeline.orchestrator?.enabled === true
+        await applyOrchestratorConfigChange(root, taskId, enabled)
+        if (enabled) {
+          const { ensureSweepScheduled } = await import('../orchestrator/business/index.js')
+          ensureSweepScheduled()
+        }
+      } catch (err) {
+        console.warn('[pipeline-editor] orchestrator state sync failed', err)
+      }
+    }
     emitAudit({
       op: 'update',
       entity: 'pipeline',
@@ -155,9 +212,10 @@ export class PipelineEditorController extends AbstractController {
     const projectRoot = path.dirname(root)
     let agentPath = await resolveCatalogAgentPath(projectRoot, root, id, {
       customAgentsDir: pipelineEditorBusiness.customAgentsDir,
+      scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig().agents,
     })
     if (!agentPath) {
-      const parsed = parseCatalogAgentId(id)
+      const parsed = parseCatalogItemId(id)
       if (parsed?.source?.startsWith('repo:')) {
         const pluginName = parsed.source.slice('repo:'.length)
         const builtin = path.join(projectRoot, 'plugins', pluginName, 'agents', `${parsed.name}.md`)
@@ -172,12 +230,55 @@ export class PipelineEditorController extends AbstractController {
     if (!agentPath) return this.notFound('agent file not found')
     try {
       const raw = await fs.readFile(agentPath, 'utf8')
-      const meta = parseCatalogAgentId(id)
+      const meta = parseCatalogItemId(id)
       const draft = draftFromAgentMarkdown(raw, { name: meta?.name, description: '' })
       const fm = parseFrontmatter(raw)
       if (fm.description) draft.description = fm.description
       if (Array.isArray(fm.skills) && fm.skills.length) draft.skills = [...fm.skills]
       return this.ok({ id, path: agentPath, content: raw, draft })
+    } catch (e: any) {
+      if (e?.code === 'ENOENT') return this.notFound('agent file not found')
+      return this.json(500, { error: String(e.message || e) })
+    }
+  }
+
+  async getSkillContent() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+
+    const id = this.c.req.query('id')
+    if (!id) return this.badRequest('missing id')
+    const projectRoot = path.dirname(root)
+    let skillPath = await resolveCatalogSkillPath(projectRoot, id, {
+      sanitiseName: pipelineEditorBusiness.sanitiseAgentName,
+      scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig().skills,
+    })
+    if (!skillPath) {
+      const parsed = parseCatalogItemId(id)
+      // `pluginName` đi thẳng vào `path.join` như `name` nên cũng phải qua whitelist
+      // ký tự (AGENTS.md §4), nếu không `id=repo:../../..:x` thoát khỏi `plugins/`.
+      // Resolve + `startsWith` bên dưới là lớp chặn thứ hai, độc lập với whitelist.
+      if (parsed?.source?.startsWith('repo:') && pipelineEditorBusiness.sanitiseAgentName(parsed.name) === parsed.name) {
+        const pluginName = parsed.source.slice('repo:'.length)
+        if (pipelineEditorBusiness.sanitiseAgentName(pluginName) === pluginName) {
+          const pluginsDir = path.resolve(projectRoot, 'plugins')
+          const builtin = path.resolve(pluginsDir, pluginName, 'skills', parsed.name, 'SKILL.md')
+          if (builtin.startsWith(pluginsDir + path.sep)) {
+            try {
+              await fs.access(builtin)
+              skillPath = builtin
+            } catch {
+              /* not found */
+            }
+          }
+        }
+      }
+    }
+    if (!skillPath) return this.notFound('skill file not found')
+    try {
+      const raw = await fs.readFile(skillPath, 'utf8')
+      return this.ok({ id, content: raw })
     } catch (e: any) {
       return this.json(500, { error: String(e.message || e) })
     }
@@ -191,5 +292,26 @@ export class PipelineEditorController extends AbstractController {
     return this.ok(await buildRules(root, {
       scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig(),
     }))
+  }
+
+  async getRuleContent() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+
+    const id = this.c.req.query('id')
+    if (!id) return this.badRequest('missing id')
+    const projectRoot = path.dirname(root)
+    const rulePath = await resolveRuleContentPathWithPatterns(projectRoot, id, {
+      scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig(),
+    })
+    if (!rulePath) return this.notFound('rule file not found')
+    try {
+      const raw = await fs.readFile(rulePath, 'utf8')
+      return this.ok({ id, content: raw })
+    } catch (e: any) {
+      if (e?.code === 'ENOENT') return this.notFound('rule file not found')
+      return this.json(500, { error: String(e.message || e) })
+    }
   }
 }

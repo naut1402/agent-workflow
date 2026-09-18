@@ -1,10 +1,20 @@
-import { basename, dirname, homeDir, joinPath, relativePath, safeReadDir } from '../../../../backend/lib/fileHelper.js'
+import {
+  basename,
+  dirname,
+  homeDir,
+  isAbsolutePath,
+  joinPath,
+  relativePath,
+  resolvePathUnder,
+  safeReadDir,
+} from '../../../../backend/lib/fileHelper.js'
 import {
   DENY_DIRS,
   SCAN_PATTERN_MAX_DEPTH,
   SCAN_PATTERN_MAX_DIRS,
   SCAN_PATTERN_MAX_MATCHES,
   expandScanPatterns,
+  type PatternMatch,
 } from '../scanPatterns.js'
 
 export const RULE_CATEGORIES = ['coding', 'doc-writing', 'doc-review', 'test', 'git-pr', 'other']
@@ -67,15 +77,11 @@ interface RuleWalkBudget {
 }
 
 /**
- * Same collection as `walkRuleFiles`, but for a directory reached through a USER
- * pattern rather than one of the three fixed sources.
- *
- * The ceilings in `expandScanPatterns` only bound the search for the matching
- * directory — they say nothing about what lives inside it. `**` matches zero
- * segments, so it yields `projectRoot` itself; handing that to the unbounded
- * walker means reading every `.md` under `node_modules` (900+ in this repo), plus
- * every `node_modules` nested under a monorepo package. The denylist and budget
- * therefore have to be enforced here, at the point of the actual work.
+ * Same as `walkRuleFiles`, but for a directory reached through a user pattern.
+ * `expandScanPatterns`'s ceilings only bound the search for the matching dir, not
+ * what's inside it — `**` can yield `projectRoot` itself, and an unbounded walk
+ * from there means reading every `.md` under every `node_modules`. Denylist and
+ * budget are therefore enforced here, at the point of actual work.
  */
 async function walkRuleFilesBounded(
   dir: string,
@@ -127,9 +133,8 @@ async function scanRulesByPatterns(
 
 /**
  * Build the rules listing for a data root: project rules + global `~/.cursor/rules`.
- *
- * Project rules live in `docs/agent-rules` (dùng chung cho mọi agent) hoặc `.claude/rules`
- * (bố cục cũ, riêng một công cụ) — quét cả hai nên repo dùng layout nào cũng ra.
+ * Project rules live in `docs/agent-rules` (shared by every agent) or the older
+ * `.claude/rules` layout (single tool) — scanning both works regardless of layout.
  */
 export async function buildRules(
   root: string,
@@ -162,4 +167,61 @@ export async function buildRules(
   const categories = RULE_CATEGORIES.filter((c) => foundCategories.has(c))
 
   return { rules, categories }
+}
+
+/** True when `full` is `base` itself or a path descendant of it. */
+function isUnderBase(base: string, full: string): boolean {
+  if (full === base) return true
+  const rel = relativePath(base, full)
+  return rel !== '' && !rel.startsWith('..') && !isAbsolutePath(rel)
+}
+
+/**
+ * Resolve a rule's on-disk path from its listing id (`${scope}:${relPath}`).
+ * `resolvePathUnder` alone blocks `..` but not an arbitrary `.md` that merely
+ * lives under the project and was never listed by `buildRules` — the id must
+ * also land under one of `buildRules`' actual sources (`docs/agent-rules`,
+ * `.claude/rules`, or a pre-expanded `scanPatterns.rules` match passed via
+ * `extraAllowed`, since this function stays sync/pure). `global` scope is
+ * unaffected — only `project` was over-broad.
+ */
+export function resolveRuleContentPath(
+  projectRoot: string,
+  id: string,
+  extraAllowed: PatternMatch[] = [],
+): string | null {
+  const sep = id.indexOf(':')
+  if (sep <= 0) return null
+  const scope = id.slice(0, sep)
+  const relPath = id.slice(sep + 1)
+  if (!relPath || !RULE_FILE_EXT.test(relPath)) return null
+
+  if (scope === 'global') return resolvePathUnder(homeDir(), relPath)
+  if (scope !== 'project') return null
+
+  const full = resolvePathUnder(projectRoot, relPath)
+  if (!full) return null
+
+  const fixedBases = [
+    joinPath(projectRoot, 'docs', 'agent-rules'),
+    joinPath(projectRoot, '.claude', 'rules'),
+  ]
+  if (fixedBases.some((base) => isUnderBase(base, full))) return full
+  if (extraAllowed.some((m) => (m.isDirectory ? isUnderBase(m.path, full) : full === m.path))) return full
+  return null
+}
+
+/**
+ * Async wrapper — expands `scanPatterns.rules` (the one allowed-base source
+ * that needs I/O) before delegating to the pure `resolveRuleContentPath`.
+ */
+export async function resolveRuleContentPathWithPatterns(
+  projectRoot: string,
+  id: string,
+  opts: { scanPatterns?: { rules?: string[] } | null } = {},
+): Promise<string | null> {
+  const extraAllowed = opts.scanPatterns?.rules?.length
+    ? await expandScanPatterns(projectRoot, opts.scanPatterns.rules)
+    : []
+  return resolveRuleContentPath(projectRoot, id, extraAllowed)
 }

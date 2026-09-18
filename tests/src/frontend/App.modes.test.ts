@@ -110,7 +110,6 @@ function buildHarness({
       labelKey: 'common.modes.monitor',
       icon: 'monitor',
       order: 99,
-      statusKind: 'paused',
       panel: ProbePanel,
     })
   }
@@ -191,9 +190,6 @@ describe('App — mode bị tắt (AC-3)', () => {
 
     expect(wrapper.findComponent(StatisticsPanel as any).exists()).toBe(false)
     expect(wrapper.findAll('main.main-editor')).toHaveLength(1)
-    expect(wrapper.find('footer.status').text()).not.toContain(
-      t('common.status.paused.statistics'),
-    )
   })
 
   it('TC-B3/TC-B4: lối điều hướng từ panel khác không mở được mode đã tắt', async () => {
@@ -282,9 +278,6 @@ describe('App — mode bị tắt (AC-3)', () => {
     const index = ALL_KEYS.indexOf('automations')
     await wrapper.findAll('.mode-toggle .mode-btn')[index].trigger('click')
     await flushPromises()
-    expect(wrapper.find('footer.status').text()).toContain(
-      t('common.status.paused.automations'),
-    )
 
     access.setDisabled(['automations'])
     await flushPromises()

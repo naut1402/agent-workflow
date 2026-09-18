@@ -3,22 +3,18 @@ import { ref } from 'vue'
 import ChatAttachmentBar from './ChatAttachmentBar.vue'
 import ChatComposerMenu from './ChatComposerMenu.vue'
 import KnowledgePickerDialog from '../../../frontend/ui/KnowledgePickerDialog.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import type { UseChatComposer } from '../composables/useChatComposer'
 
 /**
- * Attachment chips + the input row. Once `useChatComposer` owns the behaviour,
- * this markup is identical in both chat bodies apart from the placeholder, so it
- * lives here instead of twice.
- *
- * It takes the composer object whole rather than a dozen separate props: the
- * object's identity is stable for the lifetime of the body that owns it, and
- * adding a field to the composable then does not mean threading one more prop
- * through both call sites. Fields are refs, so the template reads `.value` — the
- * same way `TaskChatBody` already reads its `useTaskChat` object.
+ * Attachment chips + the input row — identical markup in both chat bodies apart from the placeholder, so it lives here once instead of twice.
+ * Takes the composer object whole rather than a dozen props, so adding a composable field doesn't mean threading one more prop through both call sites; fields are refs, so the template reads `.value`.
  */
 const props = defineProps<{ composer: UseChatComposer; placeholder: string }>()
 const c = props.composer
 
+const { t } = useI18nHelpers()
 const showKnowledgePicker = ref(false)
 
 /** The textarea lives here, but `autoGrow` measures it from the composable. */
@@ -32,9 +28,7 @@ function removeKnowledge(id: string): void {
 </script>
 
 <template>
-  <!-- `disabled` tracks `uploading` only, not `canAttach`: `canAttach` folds in
-       `canSend`, which the server flips off mid-poll, and chips staged just before
-       would then be stuck — not sendable, and with ✕ disabled, not removable either. -->
+  <!-- `disabled` tracks `uploading` only, not `canAttach`: `canAttach` folds in `canSend`, which the server flips off mid-poll and would strand staged chips as unremovable. -->
   <ChatAttachmentBar
     :items="c.attachments.items.value"
     :error="c.attachments.error.value"
@@ -42,8 +36,7 @@ function removeKnowledge(id: string): void {
     @remove="c.attachments.remove"
   />
 
-  <!-- Knowledge chips: ids only. The paths are resolved at send time, so a chip
-       standing here does not pin the content it had when it was picked. -->
+  <!-- Knowledge chips: ids only — paths are resolved at send time, so a chip here doesn't pin the content it had when picked. -->
   <div v-if="c.knowledgeIds.value.length || c.knowledgeError.value" class="nl-chat-knowledge-bar">
     <span v-for="id in c.knowledgeIds.value" :key="id" class="chip chip-rm" @click="removeKnowledge(id)">
       {{ id }} ✕
@@ -62,7 +55,7 @@ function removeKnowledge(id: string): void {
     <textarea
       :ref="bindInput"
       v-model="c.inputText.value"
-      rows="2"
+      rows="1"
       :placeholder="placeholder"
       :title="c.composerHint.value"
       :disabled="!c.canAttach.value"
@@ -71,7 +64,15 @@ function removeKnowledge(id: string): void {
       @keydown.ctrl.enter.prevent="c.onSend"
       @keydown.meta.enter.prevent="c.onSend"
     ></textarea>
-    <button type="submit" :disabled="!c.canSubmit.value">Gửi</button>
+    <button
+      type="submit"
+      class="icon-btn icon-btn-inline nl-chat-send"
+      :disabled="!c.canSubmit.value"
+      :title="t('nlChat.composer.send')"
+      :aria-label="t('nlChat.composer.send')"
+    >
+      <Icon name="send" :size="14" />
+    </button>
   </form>
 
   <KnowledgePickerDialog

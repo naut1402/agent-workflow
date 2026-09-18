@@ -204,6 +204,21 @@ describe('CatalogPanel', () => {
     expect(w.emitted('toggle-section')).toEqual([['agents'], ['skills']])
   })
 
+  // TC-B1 — click 1 agent → cho phép xem nội dung markdown của nó.
+  it('clicking an agent item emits view-agent with that agent', async () => {
+    const w = mountPanel(ALL_OPEN)
+    await section(w, 0).findAll('.catalog-item')[0].trigger('click')
+    expect(w.emitted('view-agent')).toEqual([[catalog.agents[0]]])
+  })
+
+  // TC-B2 — click 1 skill → cho phép xem nội dung markdown của nó (skill giờ
+  // click được, dù vẫn không draggable — xem test "marks skill items as static" ở trên).
+  it('clicking a skill item emits view-skill with that skill', async () => {
+    const w = mountPanel(ALL_OPEN)
+    await section(w, 1).findAll('.catalog-item')[0].trigger('click')
+    expect(w.emitted('view-skill')).toEqual([[catalog.skills[0]]])
+  })
+
   it('tolerates an empty catalog without crashing', () => {
     const w = mountWithI18n(CatalogPanel, {
       props: { catalog: { agents: [], skills: [] }, openSections: ALL_OPEN },

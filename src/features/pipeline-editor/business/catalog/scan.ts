@@ -251,6 +251,60 @@ export async function scanSkillsByPatterns(
   return skills
 }
 
+/**
+ * Resolve one agent's on-disk path by name via `scanPatterns.agents` — the
+ * wildcard-scan counterpart of the fixed `.claude/agents/<name>.md` path.
+ * Mirrors `scanAgentsByPatterns` match-by-match so a name it lists there
+ * always maps back to the exact file that produced it.
+ */
+export async function resolveAgentPathByPatterns(
+  projectRoot: string,
+  name: string,
+  patterns: string[] | null | undefined,
+): Promise<string | null> {
+  for (const match of await expandScanPatterns(projectRoot, patterns)) {
+    if (match.isDirectory) {
+      const candidate = joinPath(match.path, `${name}.md`)
+      if ((await statSafe(candidate)).exists) return candidate
+      continue
+    }
+    if (!PATTERN_MD_EXT.test(match.path)) continue
+    const item = await readAgentFile(match.path, 'project', 'project', { preferFrontmatterName: true })
+    if (item?.name === name) return match.path
+  }
+  return null
+}
+
+/**
+ * Resolve one skill's on-disk path by name via `scanPatterns.skills`. Mirrors
+ * `scanSkillsByPatterns`: a directory match is a folder of skill subfolders
+ * (name comes from each `SKILL.md`'s frontmatter, not the folder name), a
+ * file match is one markdown matched directly.
+ */
+export async function resolveSkillPathByPatterns(
+  projectRoot: string,
+  name: string,
+  patterns: string[] | null | undefined,
+  opts: ScanOpts = {},
+): Promise<string | null> {
+  const { includeContractSkills = true } = opts
+  for (const match of await expandScanPatterns(projectRoot, patterns)) {
+    if (match.isDirectory) {
+      for (const entry of await safeReadDir(match.path)) {
+        if (!entry.isDirectory()) continue
+        const skillMd = joinPath(match.path, entry.name, 'SKILL.md')
+        const item = await readSkillFile(skillMd, includeContractSkills)
+        if (item?.name === name) return skillMd
+      }
+      continue
+    }
+    if (!PATTERN_MD_EXT.test(match.path)) continue
+    const item = await readSkillFile(match.path, includeContractSkills)
+    if (item?.name === name) return match.path
+  }
+  return null
+}
+
 export async function scanRepoPlugins(projectRoot: string, opts: ScanOpts = {}): Promise<ScanResult> {
   const found = await findMarketplaceJson(projectRoot)
   if (!found) return { skills: [], agents: [] }

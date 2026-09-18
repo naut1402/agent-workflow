@@ -41,7 +41,6 @@ const PROJECT_KEY = 'dev-dashboard-selected-project'
 
 const { t } = useI18nHelpers()
 
-// ── Mode
 const FALLBACK_MODE = 'monitor'
 
 const mode = ref(FALLBACK_MODE)
@@ -101,34 +100,33 @@ onClickOutside(
   { ignore: ['.modal-backdrop'] },
 )
 
-// Central mode switch, so any nested wizard/panel (Agent Editor's Build NL
-// gate, ArtifactPanel's QuickAction gate) can send the user to Runner mode
-// without bubbling a custom event through every intermediate component.
+// Central mode switch, so nested panels can navigate without bubbling a
+// custom event through every intermediate component.
 provide(navigateToModeKey, setMode)
 
 // Cùng điều kiện với `setMode`, nhưng hỏi được trước khi bấm — để call site disable nút.
 provide(canNavigateToModeKey, isModeReachable)
 
-// Multi-project state. `selectedProjectId` (null = default project) drives which
-// project's tasks the monitor view polls; persisted to localStorage.
+// `selectedProjectId` (null = default project) drives which project's tasks
+// the monitor view polls; persisted to localStorage.
 const projects = ref([])
 const defaultProjectId = ref(null)
 const selectedProjectId = ref(loadSelectedProject())
 const openArtifact = ref(null)
 const createTaskOpen = ref(false)
 
-// Task polling (root/tasks/selectedId + connection state + 1500ms loop) lives in
-// a composable so the shell stays thin and the loop is unit-testable.
+// Task list (root/tasks/selectedId + connection state) lives in a composable,
+// backed by SSE, so the shell stays thin and the logic is unit-testable.
 const { root, tasks, selectedId, error, lastUpdated, connected, poll, start, stop } =
-  useTaskPolling(() => selectedProjectId.value, 1500)
+  useTaskPolling(() => selectedProjectId.value)
 
 const selected = computed(
   () => tasks.value.find((t) => t.task_id === selectedId.value) || null,
 )
 
 // HITL-pending / QA-ready notifications, derived from the same polled `tasks`
-// list — no separate transport needed, orchestrator- and dashboard-run tasks
-// both surface these flags through `.dev-state/<id>.json` via `/api/tasks`.
+// list — flags surface via `.dev-state/<id>.json` through `/api/tasks`, no
+// separate transport needed.
 const { history, unreadCount, markRead, markAllRead } = useNotifications(tasks)
 
 const {
@@ -136,7 +134,7 @@ const {
   runningCount,
   start: startRunningJobs,
   stop: stopRunningJobs,
-} = useRunningJobs(1500)
+} = useRunningJobs()
 
 const showSidebarNotification = computed(() => resolveNotifyShowSidebar(settings.value))
 const showFloatingNotification = computed(() => resolveNotifyShowFloating(settings.value))
@@ -383,10 +381,11 @@ const activeMode = computed(() => modeRegistry.getMode(mode.value))
 /** Shell context the chat window shows in its info popover — null hides the row. */
 const chatShellModeLabel = computed(() => (activeMode.value ? t(activeMode.value.labelKey) : null))
 
-watch(mode, async (m) => {
+// Stream mở cố định theo project lúc `start()` — đổi project phải đóng/mở lại
+// stream, nếu không sidebar tiếp tục hiện task của project cũ.
+watch(selectedProjectId, () => {
   stop()
-  if (m === 'monitor') start()
-  else await poll()
+  start()
 })
 
 onMounted(async () => {
@@ -434,7 +433,6 @@ onUnmounted(() => {
           :title="connected ? t('common.sidebar.connected') : t('common.sidebar.disconnected')"
         ></span>
       </header>
-      <p v-if="!sidebarCollapsed" class="root" :title="root">{{ root || '…' }}</p>
 
       <div class="mode-toggle">
         <button
@@ -461,8 +459,6 @@ onUnmounted(() => {
         />
         <footer v-if="!sidebarCollapsed" class="status">
           <span v-if="error" class="err">⚠ {{ error }}</span>
-          <span v-else-if="activeMode?.statusKind === 'live' && lastUpdated">{{ t('common.status.updated', { time: lastUpdated }) }}</span>
-          <span v-else-if="activeMode?.statusKind === 'paused'" class="muted">{{ t(`common.status.paused.${mode}`) }}</span>
         </footer>
         <button
           type="button"

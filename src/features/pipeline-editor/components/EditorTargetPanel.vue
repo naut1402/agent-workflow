@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Đầu sub-sidebar của Pipeline Editor: chọn **đối tượng đang sửa** (profile ở tab
+ * Đầu sub-sidebar của Pipeline Editor: chọn đối tượng đang sửa (profile ở tab
  * Profile, task ở tab Task) và cụm nút action.
  *
  * Thuần trình bày — không gọi API, không đụng canvas. Mọi thao tác đi ra ngoài
@@ -37,6 +37,8 @@ const props = defineProps({
   setDefaultDisabled: { type: Boolean, default: false },
   message: { type: String, default: '' },
   warning: { type: String, default: '' },
+  /** Checkbox "Có node điều phối" — bật/tắt key `orchestrator` của pipeline. */
+  orchestratorEnabled: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -45,6 +47,7 @@ const emit = defineEmits([
   'update:taskProfile',
   'update:taskSelect',
   'update:taskManual',
+  'update:orchestratorEnabled',
   'save',
   'delete-profile',
   'set-default',
@@ -86,7 +89,7 @@ type TargetAction = {
 
 /**
  * Một nguồn duy nhất cho cụm action — dải icon lúc thu gọn và cụm lúc mở là
- * **cùng** các nút, chỉ khác hướng xếp; tách ra thì sửa một nơi là đủ.
+ * cùng các nút, chỉ khác hướng xếp; tách ra thì sửa một nơi là đủ.
  */
 const actions = computed<TargetAction[]>(() => {
   const list: TargetAction[] = [
@@ -188,7 +191,7 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
 
 <template>
   <div class="editor-target-panel" :class="{ 'is-collapsed': collapsed }">
-    <!-- 1.1 — select đối tượng: profile ở tab Profile, task ở tab Task -->
+    <!-- Select đối tượng: profile ở tab Profile, task ở tab Task -->
     <template v-if="!collapsed">
       <template v-if="isProfileTab">
         <span class="target-label">{{ t('pipelineEditor.target.profileLabel') }}</span>
@@ -229,7 +232,7 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
           @input="emit('update:taskManual', ($event.target as HTMLInputElement).value)"
         />
 
-        <!-- b.1 — đổi profile chỉ nạp bản nháp lên canvas, phải bấm Save mới ghi -->
+        <!-- Đổi profile chỉ nạp bản nháp lên canvas, phải bấm Save mới ghi -->
         <span class="target-label">{{ t('pipelineEditor.target.taskProfileLabel') }}</span>
         <CSelect
           id="editor-target-task-profile"
@@ -242,8 +245,21 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
       </template>
     </template>
 
-    <!-- 1.2 + 1.3 — một nút Save duy nhất, cụm action nằm hẳn trong sub-sidebar.
-         Lúc thu gọn vẫn đủ cả 5 nút (kể cả Stop khi đang preview). -->
+    <!-- Node điều phối: bỏ tick là cách DUY NHẤT gỡ node khỏi canvas (node không
+         có nút ✕). Ẩn khi thu gọn — dải icon chỉ dành cho action. -->
+    <label v-if="!collapsed" class="target-check">
+      <input
+        type="checkbox"
+        :checked="orchestratorEnabled"
+        @change="emit('update:orchestratorEnabled', ($event.target as HTMLInputElement).checked)"
+      />
+      <span :title="t('pipelineEditor.orchestrator.checkboxTitle')">
+        {{ t('pipelineEditor.orchestrator.checkbox') }}
+      </span>
+    </label>
+
+    <!-- Một nút Save duy nhất, cụm action nằm hẳn trong sub-sidebar. Lúc thu gọn
+         vẫn đủ cả 5 nút (kể cả Stop khi đang preview). -->
     <div class="target-actions" :class="{ 'target-actions--rail': collapsed }">
       <button
         v-for="action in actions"
@@ -311,12 +327,29 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
 
 .target-input { padding: 4px 7px; font-size: 12px; min-width: 0; }
 
+.target-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.target-check input { margin: 0; cursor: pointer; }
+
 .target-actions {
   display: flex;
   align-items: center;
   gap: 2px;
   margin-top: 4px;
   flex-wrap: wrap;
+}
+/* Cột trái 240px ⇒ hàng action 215px. 7 nút Tab Profile ở `.icon-btn` chuẩn 32px
+   cần 236px nên xuống dòng, hàng cao gấp đôi ăn vào vùng cuộn bên dưới. 28px cho
+   7×28 + 6×2 = 208px vừa một hàng, và là số cố định nên không phụ thuộc font. */
+.target-actions .icon-btn {
+  width: 28px;
+  height: 28px;
 }
 .target-actions--rail {
   flex-direction: column;

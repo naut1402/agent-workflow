@@ -6,18 +6,18 @@ import AgentEditor from '@/features/agent-editor/components/AgentEditor.vue'
 const fetchCustomAgents = vi.fn()
 const fetchCustomAgent = vi.fn()
 const deleteCustomAgent = vi.fn()
-const exportCustomAgent = vi.fn()
 
 vi.mock('@/features/agent-editor/scripts/agentEditorApi', () => ({
   fetchCustomAgents: (...a: unknown[]) => fetchCustomAgents(...a),
   fetchCustomAgent: (...a: unknown[]) => fetchCustomAgent(...a),
   deleteCustomAgent: (...a: unknown[]) => deleteCustomAgent(...a),
-  exportCustomAgent: (...a: unknown[]) => exportCustomAgent(...a),
   saveCustomAgent: vi.fn(),
 }))
 
+const fetchCatalog = vi.fn(async (_projectId?: string) => ({ skills: [], agents: [] }))
+
 vi.mock('@/features/pipeline-editor/scripts/pipelineEditorApi', () => ({
-  fetchCatalog: vi.fn(async () => ({ skills: [], agents: [] })),
+  fetchCatalog: (projectId?: string) => fetchCatalog(projectId),
 }))
 
 vi.mock('@/frontend/lib/markdownLib', async (importOriginal) => ({
@@ -30,8 +30,6 @@ const BETA = { name: 'beta', scope: 'project' as const, editable: true }
 
 const stubs = {
   AgentFormDialog: { template: '<div class="stub-dialog" />', props: ['agent', 'initialDraft'] },
-  AgentTemplatePicker: { template: '<div class="stub-templates" />' },
-  AgentNlWizard: { template: '<div class="stub-nl" />' },
 }
 
 async function mountEditor(props: Record<string, unknown> = {}) {
@@ -41,13 +39,35 @@ async function mountEditor(props: Record<string, unknown> = {}) {
 }
 
 const body = (w: Awaited<ReturnType<typeof mountEditor>>) => w.find('.c-screen-layout__body')
+const rowIcons = (w: Awaited<ReturnType<typeof mountEditor>>, i: number) =>
+  w.findAll('.agent-list-item')[i].findAll('.icon-btn')
 
 beforeEach(() => {
   vi.clearAllMocks()
   fetchCustomAgents.mockResolvedValue({ agents: [ALPHA, BETA] })
-  fetchCustomAgent.mockResolvedValue({ name: 'alpha', content: '## Role\n\nnội dung alpha' })
+  fetchCustomAgent.mockImplementation(async (name: string) => ({
+    name,
+    content: `## Role\n\nnội dung ${name}`,
+  }))
   deleteCustomAgent.mockResolvedValue({})
-  exportCustomAgent.mockResolvedValue({ path: '/tmp/alpha.md' })
+  // jsdom không cài createObjectURL/revokeObjectURL — cần stub cho luồng download.
+  URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+  URL.revokeObjectURL = vi.fn()
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+})
+
+describe('AgentEditor — toolbar dọn sạch (TC-A1, TC-A3)', () => {
+  it('không còn nút Template/Sao chép, Tạo từ mô tả, Export ở toolbar, kể cả khi đang xem agent', async () => {
+    const w = await mountEditor()
+    await w.findAll('.agent-list-name')[0].trigger('click')
+    await flushPromises()
+
+    const texts = w.findAll('.agent-side-actions button').map((b) => b.text())
+    for (const forbidden of ['Template / Sao chép', 'Tạo từ mô tả', 'Export', 'Download']) {
+      expect(texts.join(' | ')).not.toContain(forbidden)
+    }
+    expect(w.findAll('.agent-side-actions button')).toHaveLength(2)
+  })
 })
 
 describe('AgentEditor — ẩn/hiện main (TC-01, TC-02, TC-03)', () => {
@@ -76,16 +96,16 @@ describe('AgentEditor — ẩn/hiện main (TC-01, TC-02, TC-03)', () => {
   })
 })
 
-describe('AgentEditor — xoá agent (TC-18, TC-19, TC-20, E2, E3)', () => {
+describe('AgentEditor — xoá agent (TC-E1, E2, E3)', () => {
   it('hủy confirm ⇒ không gọi API xoá', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
     const w = await mountEditor()
-    await w.findAll('.agent-list-item')[0].findAll('.icon-btn')[2].trigger('click')
+    await rowIcons(w, 0).at(-1)?.trigger('click')
     await flushPromises()
     expect(deleteCustomAgent).not.toHaveBeenCalled()
   })
 
-  // E2/TC-19: xoá đúng agent đang xem ⇒ main phải về rỗng, không giữ nội dung cũ.
+  // E2: xoá đúng agent đang xem ⇒ main phải về rỗng, không giữ nội dung cũ.
   it('xoá agent đang xem ⇒ main về empty state, --no-main bật lại', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     const w = await mountEditor()
@@ -94,7 +114,7 @@ describe('AgentEditor — xoá agent (TC-18, TC-19, TC-20, E2, E3)', () => {
     expect(w.find('.c-md-view').exists()).toBe(true)
 
     fetchCustomAgents.mockResolvedValue({ agents: [BETA] })
-    await w.findAll('.agent-list-item')[0].findAll('.icon-btn')[2].trigger('click')
+    await rowIcons(w, 0).at(-1)?.trigger('click')
     await flushPromises()
 
     expect(deleteCustomAgent).toHaveBeenCalledWith('alpha', undefined, 'project')
@@ -110,19 +130,19 @@ describe('AgentEditor — xoá agent (TC-18, TC-19, TC-20, E2, E3)', () => {
     await flushPromises()
 
     fetchCustomAgents.mockResolvedValue({ agents: [ALPHA] })
-    await w.findAll('.agent-list-item')[1].findAll('.icon-btn')[2].trigger('click')
+    await rowIcons(w, 1).at(-1)?.trigger('click')
     await flushPromises()
 
     expect(w.find('.c-md-view').exists()).toBe(true)
     expect(w.text()).toContain('nội dung alpha')
   })
 
-  // TC-20: xoá lỗi ⇒ báo lỗi đọc được, agent vẫn còn.
+  // TC-E1: xoá lỗi ⇒ báo lỗi đọc được, agent vẫn còn.
   it('xoá thất bại ⇒ hiện lỗi, danh sách không mất mục', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     deleteCustomAgent.mockRejectedValue(new Error('EACCES: khoá file'))
     const w = await mountEditor()
-    await w.findAll('.agent-list-item')[0].findAll('.icon-btn')[2].trigger('click')
+    await rowIcons(w, 0).at(-1)?.trigger('click')
     await flushPromises()
 
     expect(w.find('.err').text()).toContain('EACCES')
@@ -130,62 +150,144 @@ describe('AgentEditor — xoá agent (TC-18, TC-19, TC-20, E2, E3)', () => {
   })
 })
 
-describe('AgentEditor — Export (qa.md Q1 → A, E6, E7)', () => {
-  it('chưa chọn agent ⇒ Export disabled', async () => {
+describe('AgentEditor — Download mỗi item (TC-B2, TC-B3, TC-B4)', () => {
+  it('TC-B2: tải đúng nội dung của item vừa bấm, không phụ thuộc agent đang xem', async () => {
     const w = await mountEditor()
-    expect(w.findAll('.agent-side-actions button')[3].attributes('disabled')).toBeDefined()
-  })
-
-  it('đang xem agent ⇒ Export gọi đúng agent đó và báo đường dẫn', async () => {
-    const w = await mountEditor()
-    await w.findAll('.agent-list-name')[1].trigger('click')
-    await flushPromises()
-
-    await w.findAll('.agent-side-actions button')[3].trigger('click')
-    await flushPromises()
-
-    expect(exportCustomAgent).toHaveBeenCalledWith('beta', false, undefined, 'project')
-    expect(w.find('.ok-msg').text()).toContain('/tmp/alpha.md')
-  })
-
-  // E7: trúng file đã tồn tại ⇒ confirm rồi gọi lại với overwrite.
-  it('file đã tồn tại + đồng ý ghi đè ⇒ gọi lại với overwrite=true', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    exportCustomAgent
-      .mockRejectedValueOnce(new Error('file exists'))
-      .mockResolvedValueOnce({ path: '/tmp/alpha.md' })
-
-    const w = await mountEditor()
+    // Đang xem alpha ở panel chính…
     await w.findAll('.agent-list-name')[0].trigger('click')
     await flushPromises()
-    await w.findAll('.agent-side-actions button')[3].trigger('click')
+    expect(w.text()).toContain('nội dung alpha')
+
+    // …nhưng bấm Download ở dòng beta.
+    await rowIcons(w, 1)[0].trigger('click')
     await flushPromises()
 
-    expect(exportCustomAgent).toHaveBeenLastCalledWith('alpha', true, undefined, 'project')
+    expect(fetchCustomAgent).toHaveBeenLastCalledWith('beta', undefined, 'project')
+    const blob = (URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as Blob
+    await expect(blob.text()).resolves.toContain('nội dung beta')
+    // Panel chính không đổi theo thao tác download.
+    expect(w.text()).toContain('nội dung alpha')
   })
 
-  it('file đã tồn tại + từ chối ghi đè ⇒ hiện lỗi, không gọi lại', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
-    exportCustomAgent.mockRejectedValue(new Error('file exists'))
-
+  // TC-B3 (edge): agent bị xoá ở nơi khác — download báo lỗi, không crash,
+  // các item còn lại vẫn thao tác bình thường sau đó.
+  it('TC-B3: download agent vừa bị xoá ở nơi khác ⇒ hiện lỗi, các item khác vẫn dùng được', async () => {
+    fetchCustomAgent.mockRejectedValueOnce(new Error('ENOENT: alpha không còn tồn tại'))
     const w = await mountEditor()
-    await w.findAll('.agent-list-name')[0].trigger('click')
-    await flushPromises()
-    await w.findAll('.agent-side-actions button')[3].trigger('click')
+
+    await rowIcons(w, 0)[0].trigger('click')
     await flushPromises()
 
-    expect(exportCustomAgent).toHaveBeenCalledTimes(1)
-    expect(w.find('.err').text()).toContain('file exists')
+    expect(w.find('.err').text()).toContain('ENOENT')
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+
+    // Item còn lại (beta) vẫn thao tác được bình thường.
+    fetchCustomAgent.mockResolvedValueOnce({ name: 'beta', content: '## Role\n\nnội dung beta' })
+    await rowIcons(w, 1)[0].trigger('click')
+    await flushPromises()
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
+  })
+
+  // TC-B4 (edge): hiển thị bất kể quyền chỉnh sửa — đã phủ ở AgentSideMenu.test.ts
+  // (unit), ở đây xác nhận thêm handler thật sự chạy được trên item không editable.
+  it('TC-B4: download hoạt động trên agent không editable', async () => {
+    fetchCustomAgents.mockResolvedValue({ agents: [{ ...BETA, editable: false }] })
+    const w = await mountEditor()
+    await rowIcons(w, 0)[0].trigger('click')
+    await flushPromises()
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
   })
 })
 
-describe('AgentEditor — dialog và wizard (TC-17, E13, D4)', () => {
+describe('AgentEditor — Upload icon-button (TC-C2)', () => {
+  it('chọn file .md hợp lệ ⇒ mở form tạo mới với draft đọc từ file, hành vi như trước', async () => {
+    const w = await mountEditor()
+    const file = new File(['## Role\n\nnội dung từ file'], 'imported.md', { type: 'text/markdown' })
+    const input = w.find('input[type="file"]').element as HTMLInputElement
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+
+    await w.find('input[type="file"]').trigger('change')
+    await flushPromises()
+
+    const dialog = w.findComponent(stubs.AgentFormDialog)
+    expect(dialog.props('agent')).toBeNull()
+    expect((dialog.props('initialDraft') as any).sections.role).toContain('nội dung từ file')
+  })
+})
+
+describe('AgentEditor — sao chép agent mỗi item (TC-D2, TC-D3, TC-D5, TC-D6)', () => {
+  it('TC-D2: bấm sao chép ⇒ mở form tạo mới, tên đề xuất là "<gốc>-copy", nội dung theo agent gốc', async () => {
+    const w = await mountEditor()
+    await rowIcons(w, 0)[1].trigger('click')
+    await flushPromises()
+
+    expect(fetchCustomAgent).toHaveBeenCalledWith('alpha', undefined, 'project')
+    const dialog = w.findComponent(stubs.AgentFormDialog)
+    expect(dialog.props('agent')).toBeNull()
+    const draft = dialog.props('initialDraft') as any
+    expect(draft.name).toBe('alpha-copy')
+    expect(draft.sections.role).toContain('nội dung alpha')
+  })
+
+  // TC-D3: sau khi lưu bản sao, danh sách có thêm item mới, agent gốc còn nguyên.
+  it('TC-D3: lưu bản sao ⇒ danh sách có thêm agent mới, agent gốc vẫn còn', async () => {
+    const w = await mountEditor()
+    await rowIcons(w, 0)[1].trigger('click')
+    await flushPromises()
+
+    const COPY = { name: 'alpha-copy', scope: 'project' as const, editable: true }
+    fetchCustomAgents.mockResolvedValue({ agents: [ALPHA, BETA, COPY] })
+    w.findComponent(stubs.AgentFormDialog).vm.$emit('saved', 'alpha-copy')
+    await flushPromises()
+
+    const names = w.findAll('.agent-list-name').map((n) => n.text())
+    expect(names).toEqual(expect.arrayContaining(['alpha', 'alpha-copy']))
+  })
+
+  // TC-D5: bấm sao chép khi form khác đang mở dở ⇒ thay bằng form sao chép mới,
+  // không có confirm mất dữ liệu (hành vi kế thừa nguyên trạng của mở-form-mới).
+  it('TC-D5: sao chép khi dialog sửa agent khác đang mở ⇒ thay props, không confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    const w = await mountEditor()
+
+    await rowIcons(w, 1)[3].trigger('click') // mở dialog sửa beta (icon edit)
+    await flushPromises()
+    expect(w.findComponent(stubs.AgentFormDialog).props('agent')).toMatchObject({ name: 'beta' })
+
+    await rowIcons(w, 0)[1].trigger('click') // sao chép alpha trong khi dialog beta còn mở
+    await flushPromises()
+
+    expect(confirmSpy).not.toHaveBeenCalled()
+    const dialog = w.findComponent(stubs.AgentFormDialog)
+    expect(dialog.props('agent')).toBeNull()
+    expect((dialog.props('initialDraft') as any).name).toBe('alpha-copy')
+  })
+
+  // TC-D6 (edge): agent bị xoá ở nơi khác ⇒ báo lỗi, form KHÔNG mở ra.
+  it('TC-D6: sao chép agent vừa bị xoá ở nơi khác ⇒ hiện lỗi, không mở form, danh sách vẫn dùng được', async () => {
+    fetchCustomAgent.mockRejectedValueOnce(new Error('ENOENT: alpha không còn tồn tại'))
+    const w = await mountEditor()
+
+    await rowIcons(w, 0)[1].trigger('click')
+    await flushPromises()
+
+    expect(w.find('.err').text()).toContain('ENOENT')
+    expect(w.find('.stub-dialog').exists()).toBe(false)
+
+    // Danh sách vẫn thao tác được — sao chép item còn lại hoạt động bình thường.
+    await rowIcons(w, 1)[1].trigger('click')
+    await flushPromises()
+    expect(w.find('.stub-dialog').exists()).toBe(true)
+  })
+})
+
+describe('AgentEditor — dialog (TC-17)', () => {
   it('icon sửa ⇒ mở dialog với đúng agent, không đổi agent đang xem', async () => {
     const w = await mountEditor()
     await w.findAll('.agent-list-name')[0].trigger('click')
     await flushPromises()
 
-    await w.findAll('.agent-list-item')[1].findAll('.icon-btn')[1].trigger('click')
+    await rowIcons(w, 1)[3].trigger('click')
     await flushPromises()
 
     expect(w.findComponent(stubs.AgentFormDialog).props('agent')).toMatchObject({ name: 'beta' })
@@ -199,30 +301,6 @@ describe('AgentEditor — dialog và wizard (TC-17, E13, D4)', () => {
     expect(dialog.props('agent')).toBeNull()
     expect(dialog.props('initialDraft')).toBeNull()
   })
-
-  it.each([
-    [1, '.stub-templates'],
-    [2, '.stub-nl'],
-  ])('nút thứ %i mở wizard trong .modal-body', async (index, selector) => {
-    const w = await mountEditor()
-    await w.findAll('.agent-side-actions button')[index].trigger('click')
-    expect(w.find(selector).exists()).toBe(true)
-    // Hợp đồng .modal ở _shell.scss: nội dung PHẢI nằm trong đúng một .modal-body.
-    expect(w.find(`.modal > .modal-body ${selector}`).exists()).toBe(true)
-  })
-
-  // E13/D4: apply-draft đóng wizard rồi mới mở dialog — hai cái loại trừ nhau.
-  it('apply-draft ⇒ đóng wizard, mở dialog kèm initialDraft', async () => {
-    const w = await mountEditor()
-    await w.findAll('.agent-side-actions button')[1].trigger('click')
-    w.findComponent(stubs.AgentTemplatePicker).vm.$emit('apply-draft', { name: 'từ-template' })
-    await flushPromises()
-
-    expect(w.find('.stub-templates').exists()).toBe(false)
-    const dialog = w.findComponent(stubs.AgentFormDialog)
-    expect(dialog.props('agent')).toBeNull()
-    expect(dialog.props('initialDraft')).toEqual({ name: 'từ-template' })
-  })
 })
 
 // Review [should]: payload `name` của emit `saved` phải được dùng, nếu không
@@ -233,7 +311,7 @@ describe('AgentEditor — sau khi lưu (TC-35)', () => {
     await w.findAll('.agent-list-name')[0].trigger('click')
     await flushPromises()
 
-    await w.findAll('.agent-list-item')[0].findAll('.icon-btn')[1].trigger('click')
+    await rowIcons(w, 0)[3].trigger('click')
     await flushPromises()
 
     fetchCustomAgent.mockResolvedValue({ name: 'alpha', content: '## Role\n\nbản mới' })
@@ -248,7 +326,7 @@ describe('AgentEditor — sau khi lưu (TC-35)', () => {
     await w.findAll('.agent-list-name')[0].trigger('click')
     await flushPromises()
 
-    await w.findAll('.agent-list-item')[0].findAll('.icon-btn')[1].trigger('click')
+    await rowIcons(w, 0)[3].trigger('click')
     await flushPromises()
 
     const renamed = { name: 'alpha-doi-ten', scope: 'project' as const, editable: true }
@@ -299,5 +377,18 @@ describe('AgentEditor — nạp viewer thất bại (E12)', () => {
     expect(w.text()).not.toContain('Đang tải')
     expect(w.find('.err').text()).toContain('ENOENT')
     expect(body(w).classes()).toContain('c-screen-layout__body--no-main')
+  })
+})
+
+// T8ee57185: catalog phải nạp theo project đang mở, không âm thầm rơi về
+// project default của registry (regression trước đây gây 500 khi xem/copy
+// agent scope=project không phải project default).
+// TC-E02 (AgentTemplatePicker nhận projectId) đã bỏ: component + modal
+// Template/Copy không còn tồn tại trong AgentEditor.vue sau refactor
+// T5fd30b3c (gọn toolbar, dời sao chép ra icon-button mỗi item).
+describe('AgentEditor — forward projectId khi nạp catalog (TC-E01)', () => {
+  it('mount với projectId → loadCatalog nội bộ forward đúng vào fetchCatalog', async () => {
+    await mountEditor({ projectId: 'P1' })
+    expect(fetchCatalog).toHaveBeenCalledWith('P1')
   })
 })

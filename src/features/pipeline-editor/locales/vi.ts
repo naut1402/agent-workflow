@@ -49,6 +49,14 @@ export default {
     importInvalidYaml: 'File không phải YAML hợp lệ',
     importInvalidSteps: 'File thiếu "steps" dạng danh sách',
   },
+  orchestrator: {
+    checkbox: 'Có node điều phối',
+    checkboxTitle:
+      'Thêm node orchestrator: mọi bước sẽ do nó quyết định start, thay vì pipeline tự nối bước. Bỏ tick là cách duy nhất gỡ node.',
+    nodeLabel: 'Điều phối',
+    nodeTitle: 'Node điều phối — gỡ bằng cách bỏ tick "Có node điều phối"',
+    noAgent: 'chưa chọn agent',
+  },
   sections: {
     agents: 'Agents',
     skills: 'Skills',
@@ -88,6 +96,11 @@ export default {
     filterCategory: 'Lọc rule theo category',
     scopeProject: 'Project',
     scopeGlobal: 'Global',
+  },
+  docView: {
+    close: 'Đóng',
+    loading: 'Đang tải nội dung…',
+    loadError: 'Không tải được nội dung.',
   },
   stepConfig: {
     title: 'Cấu hình step',

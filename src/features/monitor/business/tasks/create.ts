@@ -178,6 +178,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
 
     const pipeline = await loadPipelineConfig(root, taskId)
     const firstStep = pipeline.steps?.[0] ?? null
+    const orchestratorEnabled = pipeline.orchestrator?.enabled === true
     const state: Record<string, unknown> = {
       task_id: taskId,
       parent_task_id: input.parentTaskId ?? null,
@@ -185,7 +186,17 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       hitl_pending: null,
       review_round: 0,
       auto_review: input.autoReview ?? pipeline.defaults?.auto_review ?? false,
-      export_json: input.exportJson ?? pipeline.defaults?.export_json ?? false,
+      // Brief của orchestrator tóm tắt các bước trước từ `pipeline-export.json`,
+      // nên bật điều phối thì bật luôn export cho task này — lựa chọn tường minh
+      // của người dùng (`input.exportJson`) vẫn thắng. Đặt ở đây chứ không ở
+      // `loadPipelineConfig` (tầng ĐỌC): sửa giá trị trả về ở đó sẽ bị ghi bền
+      // ngược vào `pipeline.yaml` lần Save kế tiếp qua editor.
+      export_json:
+        input.exportJson ??
+        (orchestratorEnabled ? true : (pipeline.defaults?.export_json ?? false)),
+      // Cờ cache cho lớp chặn đồng bộ trong `submitJob` — nguồn chân lý vẫn là
+      // `pipeline.yaml`, `resolveOrchestration` làm tươi lại mỗi khi thấy lệch.
+      orchestrator_enabled: orchestratorEnabled,
       doc_review_round: { investigate: 0, design: 0 },
       inherit_from_parent: [],
       ...(input.branch ? { branch: input.branch } : {}),

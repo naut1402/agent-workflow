@@ -15,7 +15,20 @@ describe('parseTaskState', () => {
       archived: false,
       archived_at: null,
       name: null,
+      // Tbdb4491a — node điều phối. Mặc định phải là "tắt / chưa dừng": state file
+      // của mọi task cũ không có ba khoá này, và chúng không được đọc ra thành
+      // "đang điều phối".
+      orchestrator_enabled: false,
+      orchestrator_halted: false,
+      orchestrator_halted_at: null,
     })
+  })
+
+  it('orchestrator flags: giữ giá trị thật khi state có khai', () => {
+    const v = parseTaskState({ orchestrator_enabled: true, orchestrator_halted: true, orchestrator_halted_at: '2026-01-01T00:00:00.000Z' })
+    expect(v.orchestrator_enabled).toBe(true)
+    expect(v.orchestrator_halted).toBe(true)
+    expect(v.orchestrator_halted_at).toBe('2026-01-01T00:00:00.000Z')
   })
 
   it('defaults gracefully on non-object input (never throws)', () => {

@@ -12,18 +12,28 @@ const props = defineProps({
 const { t } = useI18nHelpers()
 const { openTaskChat } = useChatSurface()
 
-// Actions sit ON the node's top border (the border runs through their middle)
-// and are always visible — a hover-only popover outside the node lost hover the
-// moment the cursor travelled to it, so the button vanished before it could be
-// clicked. Run is centred on the node, chat sits at the top-right corner.
-//
-// Run mirrors what clicking the node does, and shows under exactly the same
-// condition (`data.runnable`).
-//
-// Chat only appears for a step that has actually run (`data.executed`, computed
-// in PipelineView) — a step that never ran has no CLI session, so there is no
-// history to replay.
+// Actions sit on the node's border and stay always visible — a hover-only
+// popover outside the node lost hover as the cursor travelled to it, so the
+// button vanished before it could be clicked.
+// Chat only appears once a step has actually run (`data.executed`) — a step
+// that never ran has no CLI session to replay.
 const hasRunHistory = computed(() => Boolean(props.data.taskId) && Boolean(props.data.executed))
+
+/**
+ * Biến thể node điều phối: chat + một nút hành động — Run khi rảnh, Stop khi
+ * đang có lượt chạy. Không có Reset: trạng thái của node chỉ là cờ halt.
+ */
+const isOrchestrator = computed(() => props.data.kind === 'orchestrator')
+
+const ORCHESTRATOR_ICON: Record<string, string> = {
+  listening: '👂',
+  dispatching: '⏳',
+  halted: '⏹',
+}
+
+const orchestratorSub = computed(() =>
+  t(`monitor.pipelineNode.orchestratorState.${props.data.orchestratorState ?? 'listening'}`),
+)
 
 function onRun(): void {
   props.data.onRun?.()
@@ -48,6 +58,9 @@ function onChat(): void {
 const STATUS_ICON = { done: '✓', active: '▶', waiting: '⏸', pending: '○' }
 
 function bubbleTitle(data: Record<string, any>): string | undefined {
+  if (data.kind === 'orchestrator') {
+    return t(`monitor.pipelineNode.orchestratorState.${data.orchestratorState ?? 'listening'}`)
+  }
   if (data.recovering) return t('monitor.pipelineNode.awaitingRecovery')
   if (data.running) return t('monitor.pipelineNode.running')
   if (data.status === 'waiting') return t('monitor.pipelineNode.clickToApprove')
@@ -62,16 +75,44 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
     :class="[
       data.status,
       {
-        'pnode-waiting': data.status === 'waiting',
-        'pnode-runnable': !!data.runnable,
+        'pnode-orchestrator': isOrchestrator,
+        'pnode-waiting': !isOrchestrator && data.status === 'waiting',
+        'pnode-runnable': !isOrchestrator && !!data.runnable,
         'pnode-running': data.running && !data.recovering,
         'pnode-recovering': !!data.recovering,
       },
     ]"
   >
     <div class="pnode-actions">
+      <!-- Rảnh thì Run, bận thì Stop. Chỉ có Stop thì ở trạng thái `halted`
+           node trắng nút, mà Run/Reset trên mọi step cũng đã ẩn — người dùng mất
+           sạch lối thoát đúng lúc cần nó nhất. -->
       <button
-        v-if="data.running"
+        v-if="isOrchestrator && !data.orchestratorBusy"
+        type="button"
+        class="pnode-action pnode-action-center pnode-run-btn"
+        :title="t('monitor.pipelineNode.clickToStartOrchestrator')"
+        :aria-label="t('monitor.pipelineNode.startOrchestrator')"
+        @click.stop="onRun"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5.5v13l11-6.5z" />
+        </svg>
+      </button>
+      <button
+        v-else-if="isOrchestrator"
+        type="button"
+        class="pnode-action pnode-action-center pnode-stop-btn"
+        :title="t('monitor.pipelineNode.clickToStopOrchestrator')"
+        :aria-label="t('monitor.pipelineNode.stopOrchestrator')"
+        @click.stop="onStop"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <rect x="6" y="6" width="12" height="12" />
+        </svg>
+      </button>
+      <button
+        v-else-if="!isOrchestrator && data.running"
         type="button"
         class="pnode-action pnode-action-center pnode-stop-btn"
         :title="t('monitor.pipelineNode.clickToStop')"
@@ -83,7 +124,7 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
         </svg>
       </button>
       <button
-        v-else-if="data.runnable"
+        v-else-if="!isOrchestrator && data.runnable"
         type="button"
         class="pnode-action pnode-action-center pnode-run-btn"
         :title="t('monitor.pipelineNode.clickToRun')"
@@ -95,7 +136,7 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
         </svg>
       </button>
       <button
-        v-else-if="data.resettable"
+        v-else-if="!isOrchestrator && data.resettable"
         type="button"
         class="pnode-action pnode-action-center pnode-reset-btn"
         :title="t('monitor.pipelineNode.clickToReset')"
@@ -128,12 +169,19 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
         <Icon name="chatBubble" :size="15" />
       </button>
     </div>
-    <Handle type="target" :position="Position.Left" />
+    <Handle v-if="!isOrchestrator" type="target" :position="Position.Left" />
     <div class="pnode-bubble" :title="bubbleTitle(data)">
-      {{ data.recovering ? '⏸' : (data.running ? '⏳' : (STATUS_ICON[data.status] || '○')) }}
+      <template v-if="isOrchestrator">{{ ORCHESTRATOR_ICON[data.orchestratorState] || '👂' }}</template>
+      <template v-else>{{ data.recovering ? '⏸' : (data.running ? '⏳' : (STATUS_ICON[data.status] || '○')) }}</template>
     </div>
     <div class="pnode-label">{{ data.label }}</div>
-    <div class="pnode-sub">{{ data.recovering ? t('monitor.pipelineNode.awaitingRecovery') : data.status }}</div>
+    <div class="pnode-sub">
+      <template v-if="isOrchestrator">{{ orchestratorSub }}</template>
+      <template v-else>{{ data.recovering ? t('monitor.pipelineNode.awaitingRecovery') : data.status }}</template>
+    </div>
+    <div v-if="data.orchestrated" class="pnode-orchestrated">
+      {{ t('monitor.pipelineNode.orchestrated') }}
+    </div>
     <span
       v-if="data.qa_count > 0"
       class="qa-badge"
@@ -152,7 +200,7 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
   border-radius: 10px;
   padding: 8px 14px;
   // Wide enough that the top-right action buttons (run/chat) never crowd the
-  // centred status bubble — see PipelineNode.vue.
+  // centred status bubble.
   min-width: 110px;
   text-align: center;
   cursor: default;
@@ -178,6 +226,16 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
   line-height: 1;
 }
 .pnode-label { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.pnode-orchestrated {
+  font-size: 9px;
+  color: var(--accent);
+  margin-top: 2px;
+  letter-spacing: 0.3px;
+}
+.pnode-orchestrator {
+  border-style: dashed;
+  border-color: var(--accent);
+}
 .pnode-sub { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
 .pnode.done { border-color: var(--done); }

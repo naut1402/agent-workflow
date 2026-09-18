@@ -13,6 +13,7 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.all('/api/projects', bind(MonitorController, 'projectsMethodNotAllowed'))
 
   app.get('/api/tasks', bind(MonitorController, 'listTasks'))
+  app.get('/api/tasks/stream', bind(MonitorController, 'streamTasks'))
   app.get('/api/pipeline-config', bind(MonitorController, 'getPipelineConfig'))
   app.get('/api/artifact', bind(MonitorController, 'getArtifact'))
   app.put('/api/artifact', bind(MonitorController, 'putArtifact'))
@@ -23,6 +24,7 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.post('/api/flow-profile', bind(MonitorController, 'postFlowProfile'))
   app.put('/api/task-state', bind(MonitorController, 'putTaskState'))
   app.put('/api/task-archive', bind(MonitorController, 'putTaskArchive'))
+  app.put('/api/task-orchestrator', bind(MonitorController, 'putTaskOrchestrator'))
   app.put('/api/task-name', bind(MonitorController, 'putTaskName'))
   app.get('/api/artifact-actions', bind(MonitorController, 'getArtifactActions'))
   app.put('/api/artifact-actions', bind(MonitorController, 'putArtifactActions'))

@@ -1,9 +1,22 @@
 import path from 'node:path'
 import { AbstractController } from '../../backend/http/AbstractController.js'
 import { emitAudit } from '../../backend/log/store.js'
-import { emitEntity } from '../../backend/events/index.js'
+import { emitEntity, on } from '../../backend/events/index.js'
+import { sseResponse } from '../../backend/http/sseHelper.js'
 import * as runnerStore from './business/index.js'
 import type { JobStatus } from './business/types.js'
+
+/** Event type nào kích hoạt đẩy lại snapshot running-jobs qua SSE. */
+const JOB_STREAM_EVENTS = new Set([
+  'job.queued',
+  'job.started',
+  'job.finished',
+  'job.failed',
+  'job.cancelled',
+  'job.awaiting_recovery',
+  'job.retry_scheduled',
+  'job.recovered',
+])
 
 export class RunnerController extends AbstractController {
   listRunners() {
@@ -253,6 +266,17 @@ export class RunnerController extends AbstractController {
     return this.ok(status)
   }
 
+  /** SSE thay REST poll — global, không scope theo project (khớp `listOrGetJobs`). */
+  streamJobs() {
+    return sseResponse((send) => {
+      const pushSnapshot = () => send('jobs', { jobs: runnerStore.listJobs(undefined, 'running') })
+      pushSnapshot()
+      return on('*', (event) => {
+        if (JOB_STREAM_EVENTS.has(event.type)) pushSnapshot()
+      })
+    })
+  }
+
   listOrGetJobs() {
     const id = this.c.req.query('id')
     if (id) {
@@ -285,6 +309,14 @@ export class RunnerController extends AbstractController {
     if (typeof parsed.agentRef !== 'string' || !parsed.workspace) {
       return this.badRequest('agentRef and workspace are required')
     }
+    // `POST /api/jobs` spread nguyên metadata của caller, nên nó là một đường
+    // start step đầy đủ — phải qua cùng cửa quyền như run-step/chain/automation.
+    const taskId = parsed.metadata?.taskId
+    if (parsed.metadata?.pipelineStepId && typeof taskId === 'string' && taskId) {
+      const check = await runnerStore.assertStartAllowed(root, taskId, 'api')
+      if ('error' in check) return this.json(check.status, { error: check.error, taskId })
+    }
+
     const projectRoot = path.dirname(root)
     const job = runnerStore.submitJob({
       runnerId: parsed.runnerId,

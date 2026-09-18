@@ -16,7 +16,7 @@ test('pipeline editor mode mounts the canvas (capture)', async ({ page }, testIn
   await openEditor(page)
 
   // 1.3 — top bar giờ chỉ còn 2 nút tab Task / Profile; mọi action nằm ở sub-sidebar.
-  await expect(page.locator('.editor-toolbar .editor-tab')).toHaveCount(2)
+  await expect(page.locator('.editor-root .c-screen-layout__tab')).toHaveCount(2)
   await expect(page.locator('.editor-target-panel')).toBeVisible()
 
   // c.1 — Agents / Skills / Rules là 3 mục collapsible cùng cấp, không còn card Catalog.

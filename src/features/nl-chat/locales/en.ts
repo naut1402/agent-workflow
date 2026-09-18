@@ -48,5 +48,6 @@ export default {
     enterToSend: 'Enter sends, Shift+Enter for a new line',
     enterToNewline: 'Enter for a new line, Ctrl/⌘+Enter sends',
     addMenu: 'Add',
+    send: 'Send',
   },
 }

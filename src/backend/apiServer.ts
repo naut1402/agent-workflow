@@ -19,18 +19,8 @@ import { createRateLimitMiddleware } from './http/security/rateLimiter.js'
 import { createCorsMiddleware } from './http/security/corsGuard.js'
 import { loadSecurityConfig } from '../features/settings/business/dashboardSettings.js'
 
-// ── API server (Hono app + Node bridge)
-//
-// Public contract: createApiHandler(ctx) → async (req,res)=>boolean
-// that returns `true` when it produced a response for an /api/* request, and
-// `false` for non-api paths (caller falls through to static / next middleware).
-//
-// Every /api/* request goes through the Hono app via a node→Web Request
-// bridge — no feature keeps its own node-res branch above it.
-//
-// createApp(ctx) builds the Hono instance (exported for tests via app.request).
-// Feature routes: moi src/features/<name>/api.ts export registerRoutes +
-// optional routeOrder (so nho chay truoc) — nap dong bang loadModulesUnder.
+// createApiHandler(ctx) is the single entrypoint for /api/* on both transports
+// — no feature keeps its own node-res branch above it. See docs/architecture.md §2.
 
 type FeatureApiModule = {
   registerRoutes?: (app: Hono<HonoEnv>) => void
@@ -76,11 +66,15 @@ export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
     await next()
   })
 
-  // Thứ tự: CORS (preflight OPTIONS không kèm Authorization) → rate-limit (áp
-  // dụng bất kể đã auth chưa) → JWT. Cả 3 no-op mặc định (degrade-by-default).
+  // Thứ tự bắt buộc: CORS → rate-limit (áp dụng cả khi chưa auth) → JWT; cả 3 no-op mặc định.
   app.use('/api/*', createCorsMiddleware(() => loadSecurityConfig().cors))
   app.use('/api/*', createRateLimitMiddleware(() => loadSecurityConfig().rateLimit))
-  app.use('/api/*', createJwtMiddleware())
+  // Route orchestrator dùng token riêng theo job (không phải Authorization) nên loại khỏi JWT dashboard.
+  const jwtMiddleware = createJwtMiddleware()
+  app.use('/api/*', async (c, next) => {
+    if (c.req.path.startsWith('/api/orchestrator/')) return next()
+    return jwtMiddleware(c, next)
+  })
 
   await registerFeatureRoutes(app)
 
@@ -118,9 +112,49 @@ function writeWebResponse(res: ServerResponse, status: number, headers: Headers,
   res.end(buf)
 }
 
+/** Pipe SSE Response xuống Node `res` theo chunk (không buffer arrayBuffer); resolve khi client đóng kết nối hoặc stream tự kết thúc. */
+function streamSseResponse(
+  req: IncomingMessage,
+  res: ServerResponse,
+  response: Response,
+  headers: Headers,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    res.statusCode = response.status
+    headers.forEach((value, key) => res.setHeader(key, value))
+    res.flushHeaders?.()
+
+    const reader = response.body!.getReader()
+    let closed = false
+    let streamError: string | null = null
+    const finish = () => {
+      if (closed) return
+      closed = true
+      reader.cancel().catch(() => {})
+      resolve(streamError)
+    }
+    req.on('close', finish)
+
+    void (async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done || res.writableEnded) break
+          res.write(Buffer.from(value))
+        }
+      } catch (err) {
+        // `closed` đã true ⇒ client tự đóng kết nối, không phải lỗi thật — không throw lên `handle()` (response đã bắt đầu stream).
+        if (!closed) streamError = String(err instanceof Error ? err.message : err)
+      } finally {
+        if (!res.writableEnded) res.end()
+        finish()
+      }
+    })()
+  })
+}
+
 export function createApiHandler(ctx: RegistryContext) {
-  // Lazy init: first /api request awaits feature route registration once.
-  // Reset on failure so a transient init error does not pin every later request to 500.
+  // Lazy init, memoized; reset on failure so a transient error doesn't pin every later request to 500.
   let appPromise: Promise<Awaited<ReturnType<typeof createApp>>> | null = null
   const getApp = () => {
     if (!appPromise) {
@@ -135,8 +169,7 @@ export function createApiHandler(ctx: RegistryContext) {
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url || '/', 'http://localhost')
     if (!url.pathname.startsWith('/api/')) return false
-    // Single chokepoint for ALL /api/* traffic on both transports. Request
-    // logging is fire-and-forget in `finally`, never awaited into the response.
+    // Request logging is fire-and-forget in `finally`, never awaited into the response.
     const started = Date.now()
     const projectId = url.searchParams.get('project') || null
     const traceId = resolveTraceIdFromRequest(req)
@@ -152,9 +185,16 @@ export function createApiHandler(ctx: RegistryContext) {
         // Prefer inbound/minted id on the wire (overwrite if Hono also set one).
         const headers = new Headers(response.headers)
         headers.set('X-Trace-Id', traceId)
-        const buf = Buffer.from(await response.arrayBuffer())
-        responsePreview = formatResponsePreview(buf, headers.get('content-type'))
-        writeWebResponse(res, response.status, headers, buf)
+        const contentType = headers.get('content-type') || ''
+        if (contentType.startsWith('text/event-stream')) {
+          // durationMs ở `finally` tính luôn thời gian sống của kết nối SSE — chấp nhận vì route stream không dùng số này việc khác.
+          responsePreview = '[sse stream]'
+          errored = await streamSseResponse(req, res, response, headers)
+        } else {
+          const buf = Buffer.from(await response.arrayBuffer())
+          responsePreview = formatResponsePreview(buf, headers.get('content-type'))
+          writeWebResponse(res, response.status, headers, buf)
+        }
       } catch (err: any) {
         errored = String(err && err.message ? err.message : err)
         responsePreview = formatResponsePreview(

@@ -54,4 +54,4 @@ export type { JobRecord, JobStatus } from '../../runner/business/types.js'
 
 export { readLogs }
 export { emitAudit, appendRequestLog } from '../../../backend/log/store.js'
-export { readJobLog, readJobLogDelta, readTaskJobLogDelta, sanitiseJobId } from './jobLog.js'
+export { readJobLog, readJobLogDelta, readTaskJobLogDelta, resolveTaskJobId, sanitiseJobId } from './jobLog.js'

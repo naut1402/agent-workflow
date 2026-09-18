@@ -28,7 +28,6 @@ Sơ đồ bootstrap và runtime: [`docs/diagram/IoC.md`](../diagram/IoC.md). Ki�
 - **`titleKey?`** — i18n key cho tooltip nếu khác `labelKey`.
 - **`icon`** — tên icon đã đăng ký trong `RailIcon.vue`.
 - **`order`** — thứ tự hiển thị, **phải unique**; trùng thì thứ tự không xác định.
-- **`statusKind`** — `'live'` hiện `common.status.updated` khi có `lastUpdated`; `'paused'` hiện `common.status.paused.<key>`.
 - **`panel`** — component chính, **import trực tiếp** (xem §4).
 - **`visible?(ctx)`** — ẩn mode khỏi sidebar/status/main-panel khi `false`; mặc định luôn hiện.
 - **`subSidebar?`** — mode có sub-sidebar thu/phóng; `persistKey` là localStorage key, bỏ trống là không nhớ qua reload.
@@ -65,7 +64,7 @@ Sơ đồ bootstrap và runtime: [`docs/diagram/IoC.md`](../diagram/IoC.md). Ki�
 - [ ] **Export đúng tên `registerMode(registry: ModeRegistry): void`** — glob ở `main.ts` gọi cố định `mod.registerMode(...)`.
 - [ ] **`key` duy nhất** — trùng thì `registerMode()` throw lúc khởi động (fail-fast).
 - [ ] **`order` duy nhất**, phù hợp vị trí mong muốn trong sidebar.
-- [ ] **`labelKey` (+ `titleKey`) trỏ đúng key** đã có trong `plugins/i18n/locales/common/{vi,en}.ts` → `modes.*`; `statusKind: 'paused'` cần thêm `status.paused.<key>` ở **cả 2 locale**.
+- [ ] **`labelKey` (+ `titleKey`) trỏ đúng key** đã có trong `plugins/i18n/locales/common/{vi,en}.ts` → `modes.*`.
 - [ ] **`icon` khớp tên đã đăng ký** trong `RailIcon.vue`.
 - [ ] **Import `panel` trực tiếp** ở top-level, không lazy-load.
 - [ ] **`bindings(ctx)` chỉ lấy state đã có trong `ShellContext`**; cần state mới thì thêm đúng 1 dòng vào `shellContext`.
@@ -91,7 +90,6 @@ export function registerMode(registry: ModeRegistry): void {
     labelKey: 'common.modes.myFeature',
     icon: 'myFeature',
     order: 10,
-    statusKind: 'paused',
     panel: MyPanel,
   })
 }

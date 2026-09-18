@@ -11,7 +11,7 @@
 
 ## 1. Dự án này là gì
 
-`dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **orchestrator agent chạy ngoài**. Repo này quan sát và cấu hình, không chạy orchestrator.
+`dev-team-dashboard` là SPA Vue 3 + Vite trực quan hoá runtime state của một **orchestrator agent chạy ngoài**. Repo này quan sát và cấu hình. Ngoại lệ duy nhất: pipeline bật tuỳ chọn **node điều phối** (`orchestrator.enabled`) thì dashboard tự điều phối task đó — xem `src/features/orchestrator/`.
 
 - **State từng task** (`.dev-state/*.json`) — chỉ đọc.
 - **Config + artifact markdown** (pipeline, custom agent, template, knowledge) — đọc/ghi được, ghi qua `PUT /api/artifact`.
@@ -19,7 +19,7 @@
 - **Frontend** — `src/features/<mode>/` (components, scripts, styles, locales, schemas); nền `src/frontend/`.
 - **Shared** — `src/shared/`: chỉ logic/type thuần dùng thật ở cả hai phía; cấm `node:*`/`bun:*`/`hono`/`drizzle-orm`/`vue` (ESLint, không whitelist). Xem `src/{backend,frontend,shared}/README.md`.
 - **Data root** — `.dev-team-agent/`; standalone qua `ProjectRegistry` (`?project=<id>`).
-- **Pipeline** — `DEFAULT_PIPELINE` ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`.
+- **Pipeline** — `DEFAULT_PIPELINE` ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`. Key `orchestrator` (opt-in, mặc định tắt) merge cùng 3 tầng như `doc_reviewer`.
 - **MCP** — `bun run mcp`, CRUD registry, không cần HTTP server.
 
 Chi tiết: [`docs/architecture.md`](docs/architecture.md).

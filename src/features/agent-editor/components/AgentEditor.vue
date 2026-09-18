@@ -5,16 +5,14 @@ import {
   fetchCustomAgents,
   fetchCustomAgent,
   deleteCustomAgent,
-  exportCustomAgent,
   type AgentMeta,
 } from '../scripts/agentEditorApi'
+import { draftFromAgentMarkdown } from '../business/agentMarkdown.js'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import AgentSideMenu from './AgentSideMenu.vue'
 import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
 import AgentFormDialog from './AgentFormDialog.vue'
-import AgentTemplatePicker from './AgentTemplatePicker.vue'
-import AgentNlWizard from './AgentNlWizard.vue'
 
 const props = defineProps<{ projectId?: string | null; subSidebarCollapsed?: boolean }>()
 
@@ -25,7 +23,7 @@ const catalog = ref({ skills: [], agents: [] })
 const error = ref('')
 const message = ref('')
 
-// Agent đang xem ở main — cũng là target của nút Export (QA Q1 → A).
+// Agent đang xem ở main.
 const viewing = ref<AgentMeta | null>(null)
 const viewContent = ref('')
 const viewLoading = ref(false)
@@ -34,8 +32,6 @@ const deletingKey = ref<string | null>(null)
 const showDialog = ref(false)
 const editingAgent = ref<AgentMeta | null>(null)
 const initialDraft = ref<Record<string, unknown> | null>(null)
-const showTemplates = ref(false)
-const showNl = ref(false)
 
 const keyOf = (a: AgentMeta) => `${a.scope}:${a.name}`
 const selectedKey = computed(() => (viewing.value ? keyOf(viewing.value) : null))
@@ -51,7 +47,7 @@ async function loadList() {
 
 async function loadCatalog() {
   try {
-    catalog.value = await fetchCatalog()
+    catalog.value = await fetchCatalog(props.projectId ?? undefined)
   } catch {
     catalog.value = { skills: [], agents: [] }
   }
@@ -70,8 +66,7 @@ async function openViewer(agent: AgentMeta) {
     const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agent.scope)
     viewContent.value = data.content ?? ''
   } catch (e: any) {
-    // Agent có thể vừa bị xoá ngoài dashboard — trả main về empty state thay vì
-    // kẹt ở spinner, lỗi hiện bên cột trái.
+    // Agent có thể vừa bị xoá ngoài dashboard — trả main về empty state thay vì kẹt ở spinner.
     error.value = String(e.message || e)
     viewing.value = null
     viewContent.value = ''
@@ -112,32 +107,48 @@ async function removeAgent(agent: AgentMeta) {
   }
 }
 
-async function doExport(overwrite = false) {
-  const agent = viewing.value
-  if (!agent) return
+async function handleDownloadAgent(agent: AgentMeta) {
   try {
-    const result = await exportCustomAgent(
-      agent.name,
-      overwrite,
-      props.projectId ?? undefined,
-      agent.scope,
-    )
-    message.value = t('agentEditor.messages.exported', { path: result.path })
-    error.value = ''
+    const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agent.scope)
+    const blob = new Blob([data.content ?? ''], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${agent.name}.md`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   } catch (e: any) {
-    const msg = String(e.message || e)
-    if (msg.includes('file exists') && confirm(t('agentEditor.messages.confirmOverwrite'))) {
-      await doExport(true)
-    } else {
-      error.value = msg
-    }
+    error.value = String(e.message || e)
   }
 }
 
-/** Draft từ 2 wizard — đóng wizard rồi mới mở dialog, hai cái loại trừ nhau. */
+async function handleDuplicateAgent(agent: AgentMeta) {
+  try {
+    const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agent.scope)
+    const draft = draftFromAgentMarkdown(data.content ?? '', agent)
+    applyDraft(draft)
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
+async function handleUploadAgentFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    const text = await file.text()
+    const draft = draftFromAgentMarkdown(text, {})
+    applyDraft(draft)
+  } catch (e: any) {
+    error.value = String(e.message || e)
+  }
+}
+
 function applyDraft(draft: Record<string, unknown>) {
-  showTemplates.value = false
-  showNl.value = false
   editingAgent.value = null
   initialDraft.value = draft
   showDialog.value = true
@@ -147,11 +158,7 @@ function closeDialog() {
   showDialog.value = false
 }
 
-/**
- * `savedName` là tên SAU khi lưu (đã qua sanitize của backend) — đổi field
- * `name` rồi lưu là đổi luôn file đích, nên bám theo `viewing` cũ sẽ hiện lại
- * bản chưa đổi. Ưu tiên đúng scope, vì dialog cho phép đổi cả scope.
- */
+/** `savedName` là tên SAU sanitize của backend, có thể khác `viewing` cũ — phải nạp lại theo tên (và scope). */
 async function onSaved(savedName: string) {
   await Promise.all([loadList(), loadCatalog()])
   const current = viewing.value
@@ -176,11 +183,10 @@ async function onSaved(savedName: string) {
             :agents="agents"
             :selected-key="selectedKey"
             :busy-key="deletingKey"
-            :can-export="!!viewing"
             @new="newAgent"
-            @templates="showTemplates = true"
-            @nl="showNl = true"
-            @export="doExport(false)"
+            @download="handleDownloadAgent"
+            @duplicate="handleDuplicateAgent"
+            @upload-file="handleUploadAgentFile"
             @view="openViewer"
             @edit="openEditor"
             @delete="removeAgent"
@@ -193,15 +199,12 @@ async function onSaved(savedName: string) {
 
     <template #main>
       <div class="agent-main">
-        <!-- Sub-menu thu lại thì cột trái rộng 0 (override bên dưới), nên chỗ
-             duy nhất còn thấy được là main. Hai trạng thái loại trừ nhau nên
-             thông báo không bao giờ render hai lần. -->
+        <!-- Sub-menu thu lại thì cột trái rộng 0 (override bên dưới), nên thông báo phải chuyển sang render ở main. -->
         <template v-if="subSidebarCollapsed">
           <p v-if="error" class="err agent-editor-msg">{{ error }}</p>
           <p v-if="message" class="ok-msg agent-editor-msg">{{ message }}</p>
         </template>
-        <!-- `with-frontmatter`: agent đọc nguyên file `.md`, khối `---` đầu file
-             đúng là metadata nên tách ra thành block riêng. -->
+        <!-- `with-frontmatter`: agent đọc nguyên file `.md`, nên khối `---` đầu file được tách thành block metadata riêng. -->
         <CMarkdownView
           v-if="viewing && !viewLoading"
           :title="viewing.name"
@@ -215,7 +218,7 @@ async function onSaved(savedName: string) {
     </template>
   </CScreenLayout>
 
-  <!-- Dialog + 2 wizard là modal ngang hàng, đứng ngoài CScreenLayout. -->
+  <!-- Dialog là modal ngang hàng, đứng ngoài CScreenLayout. -->
   <AgentFormDialog
     v-if="showDialog"
     :agent="editingAgent"
@@ -225,23 +228,6 @@ async function onSaved(savedName: string) {
     @close="closeDialog"
     @saved="onSaved"
   />
-  <!-- `.modal-body` là bắt buộc theo hợp đồng ghi ở `_shell.scss`: `.modal`
-       không khai overflow, nội dung cao quá 88vh mà không có tầng này thì bị
-       vẽ ra ngoài viền. Cả 2 wizard đều không tự khai overflow ở root. -->
-  <div v-if="showTemplates" class="modal-backdrop" @click.self="showTemplates = false">
-    <div class="modal">
-      <div class="modal-body">
-        <AgentTemplatePicker @apply-draft="applyDraft" @close="showTemplates = false" />
-      </div>
-    </div>
-  </div>
-  <div v-if="showNl" class="modal-backdrop" @click.self="showNl = false">
-    <div class="modal">
-      <div class="modal-body">
-        <AgentNlWizard :project-id="projectId" @apply-draft="applyDraft" @close="showNl = false" />
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped lang="scss">
@@ -252,9 +238,7 @@ async function onSaved(savedName: string) {
   min-height: 0;
   overflow: hidden;
 }
-// Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là một
-// cột xám rỗng — cùng cách MonitorLayout xử lý. Selector đích nằm TRÊN slot
-// "left", nên override phải neo vào chính gốc CScreenLayout.
+// Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là cột xám rỗng vô ích.
 .agent-editor-layout :deep(.c-screen-layout__body--left-collapsed) {
   grid-template-columns: 0 1fr;
 }

@@ -12,7 +12,7 @@ const props = defineProps({
   openSections: { type: Object as () => Set<string>, default: () => new Set(['agents']) },
 })
 
-const emit = defineEmits(['toggle-section'])
+const emit = defineEmits(['toggle-section', 'view-agent', 'view-skill'])
 
 // Một state cho mỗi danh sách — control lọc phải thuộc về đúng mục nó phục vụ,
 // nếu không người dùng không biết select đang lọc danh sách nào.
@@ -73,10 +73,9 @@ function resetIfGone(options: { value: string }[], selected: { value: string }) 
 watch(agentSourceOptions, (opts) => resetIfGone(opts, agentSource))
 watch(skillSourceOptions, (opts) => resetIfGone(opts, skillSource))
 
-// Panel này gói 2 mục còn `RulesPanel` chỉ có 1; chia cột theo số panel thì mỗi
-// mục của catalog chỉ được nửa phần của Rules. Chia theo SỐ MỤC ĐANG MỞ để mọi
-// mục mở được phần bằng nhau (grow đổi, basis vẫn 0 — không trộn basis giữa các
-// anh em cùng cấp, docs/ui-overflow.md).
+// Panel này gói 2 mục còn `RulesPanel` chỉ có 1; chia cột theo số panel sẽ cho
+// catalog chỉ nửa phần của Rules. Chia theo số mục đang mở để mọi mục mở được
+// phần bằng nhau (grow đổi, basis vẫn 0, docs/ui-overflow.md).
 const openCatalogCount = computed(
   () => ['agents', 'skills'].filter((k) => props.openSections.has(k)).length,
 )
@@ -143,6 +142,7 @@ function onDragStart(event, item, type) {
           class="catalog-item"
           draggable="true"
           @dragstart="onDragStart($event, agent, 'agent')"
+          @click="emit('view-agent', agent)"
           :title="agent.description"
         >
           <div class="catalog-item-name">{{ agent.name }}</div>
@@ -185,12 +185,13 @@ function onDragStart(event, item, type) {
         />
       </div>
       <div class="catalog-list">
-        <!-- Danh sách tra cứu: skill không kéo được vào canvas (thả skill chỉ
+        <!-- Click để xem markdown; không kéo được vào canvas (thả skill chỉ
              sinh step rác mang tên skill) nên không đặt `draggable`. -->
         <div
           v-for="skill in filteredSkills"
           :key="skill.id"
           class="catalog-item catalog-item--static"
+          @click="emit('view-skill', skill)"
           :title="skill.description"
         >
           <div class="catalog-item-name">{{ skill.name }}</div>
@@ -220,11 +221,9 @@ function onDragStart(event, item, type) {
 }
 .catalog-panel--open { flex: 1 1 0; }
 
-/* Hàng công cụ của một mục: xếp NGANG, một hàng duy nhất. Cột trái chia chiều
-   cao cho 3 mục nên ngân sách cố định của mỗi mục trực tiếp trừ vào vùng cuộn:
-   xếp dọc tốn ~70px/mục, đủ để `.catalog-list` sụp còn vài px ở viewport thấp
-   (docs/ui-overflow.md — cắt cụt tệ hơn cuộn). Đổi lại nhãn nguồn đang chọn có
-   thể bị ellipsis; `:title` trên select bù phần đọc đầy đủ. */
+/* Hàng công cụ xếp ngang, một hàng duy nhất — xếp dọc tốn ~70px/mục, đủ để
+   `.catalog-list` sụp còn vài px ở viewport thấp (docs/ui-overflow.md). Đổi lại
+   nhãn nguồn có thể bị ellipsis; `:title` trên select bù phần đọc đầy đủ. */
 .catalog-toolbar {
   display: flex;
   flex-direction: row;
@@ -271,12 +270,6 @@ function onDragStart(event, item, type) {
 }
 .catalog-item:hover { border-color: var(--accent); }
 .catalog-item:active { cursor: grabbing; }
-
-/* Item chỉ để tra cứu — không kéo được thì không dùng con trỏ grab, và cũng
-   không sáng viền accent như item tương tác được. */
-.catalog-item--static { cursor: default; }
-.catalog-item--static:active { cursor: default; }
-.catalog-item--static:hover { border-color: var(--border); }
 
 .catalog-item-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .catalog-item-meta { font-size: 10px; color: var(--muted); margin-top: 1px; }
