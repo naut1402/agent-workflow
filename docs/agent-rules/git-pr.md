@@ -299,7 +299,9 @@ PR promote dòng version lên `main` là **release note hướng người dùng 
 Release note viết cho người đang chạy **bản đã release gần nhất**, không phải cho người theo dõi dòng `dev/**`. Mốc so sánh là cây `main` trước lượt promote này.
 
 - **Tính năng lần đầu phát hành ở version này chỉ xuất hiện ở `## Tính năng mới`.** Mọi lượt sửa lỗi, tinh chỉnh UI, đổi cách gọi API của nó trong lúc phát triển là **quá trình làm ra tính năng**, không phải "cải tiến" hay "sửa lỗi" theo nghĩa người dùng — họ chưa từng thấy bản lỗi. Mô tả **trạng thái cuối** của tính năng trong đúng một gạch đầu dòng; 🚫 không tách thành dòng riêng ở `## Cải tiến` / `## Sửa lỗi`.
-- **`## Cải tiến` / `## Sửa lỗi` chỉ nói về thứ đã có trong bản người dùng đang chạy.** Phép thử một câu: *"người dùng ở version đã release trước đó có gặp được điều này không?"* — không thì nội dung đó thuộc `## Tính năng mới`.
+- **`## Cải tiến` / `## Sửa lỗi` chỉ nói về thứ đã có trong bản người dùng đang chạy.** Phép thử một câu: *"người dùng ở version đã release trước đó có gặp được điều này không?"* — **không** thì nội dung đó không lên hai section này; gộp vào gạch đầu dòng của chính thứ nó thuộc về:
+  - lỗi/tinh chỉnh của **tính năng mới** → gộp vào gạch đầu dòng ở `## Tính năng mới`;
+  - lỗi của một **cải tiến cũng phát hành ở version này** → gộp vào đúng gạch đầu dòng cải tiến đó ở `## Cải tiến`, không mở dòng riêng ở `## Sửa lỗi`.
 - **Tính năng ẩn sau cờ tắt mặc định vẫn là tính năng mới** khi lần đầu phát hành; nêu rõ trong mô tả rằng mặc định tắt và bật ở đâu.
 - **Dấu vết từng lượt sửa không mất** — nó nằm ở `## PR đã merge`, nơi duy nhất được phép liệt kê PR sửa cho tính năng mới.
 
