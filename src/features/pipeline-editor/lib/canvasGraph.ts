@@ -1,6 +1,6 @@
 /**
  * Dựng graph render cho canvas editor: step node/edge do người dùng sửa, cộng
- * thêm node artifact/knowledge + edge dữ liệu **phái sinh** từ chính các step đó.
+ * thêm node artifact/knowledge + edge dữ liệu phái sinh từ chính các step đó.
  *
  * Node phái sinh chỉ tồn tại để nhìn — chúng không phải step. Mọi phép tính sinh
  * ra YAML (`buildFullPipeline`, `topoSort`, `hasFanOut`…) phải lọc chúng qua
@@ -12,6 +12,10 @@ import {
   type PhasePosition,
   type PipelineStepLike,
 } from '../../../frontend/lib/pipelineArtifactGraph'
+import {
+  ORCHESTRATOR_NODE_ID,
+  orchestratorPositionOf,
+} from '../../../frontend/lib/orchestratorNode'
 
 /** Type của node step trên canvas — node phái sinh dùng type `artifact`. */
 const STEP_NODE_TYPE = 'pipelineEditor'
@@ -70,6 +74,14 @@ export function buildEditorGraph(opts: {
   /** = `currentSteps` (đã qua `buildStepFromNode`) — nguồn `produces`/`knowledge_inputs`. */
   steps: PipelineStepLike[]
   labels: ArtifactGraphLabels
+  /**
+   * Key `orchestrator` của pipeline. Node sinh từ meta, không phải từ canvas:
+   * nó không nằm trong `steps[]` nên mỗi lần `syncDerivedGraph()` chạy lại nó bị
+   * dựng lại từ đầu, và meta là nguồn duy nhất còn sống qua vòng đó.
+   */
+  orchestrator?: { enabled?: boolean; agent?: string } | null
+  /** Nhãn node điều phối (i18n do caller truyền — builder này thuần). */
+  orchestratorLabel?: string
   // Trả `any[]`: kết quả đi thẳng vào `setNodes`/`setEdges` của VueFlow, mà
   // `Node`/`Edge` của thư viện đòi những field nominal (`XYPosition`,
   // `MarkerType`) builder thuần này cố ý không biết tới.
@@ -78,10 +90,16 @@ export function buildEditorGraph(opts: {
   const stepIds = new Set(stepNodes.map((n) => n.id))
   const byId: Record<string, StepNodeLike> = Object.fromEntries(stepNodes.map((n) => [n.id, n]))
 
+  const hubEnabled = opts.orchestrator?.enabled === true
+
+  // Step-edge vẫn tính label như cũ, chỉ ẩn hiển thị khi hub bật — không loại khỏi
+  // mảng trả về, để `getEdges.value` (nguồn duy nhất của `stepGraph()`) vẫn thấy
+  // đủ khi hub tắt lại (xem design.md §2).
   const labelledEdges = (opts.stepEdges ?? []).map((e) => ({
     ...e,
     label: gateLabelOf(byId[e.source as string]),
     labelStyle: { fill: 'var(--muted)', fontWeight: 400 },
+    hidden: hubEnabled,
   }))
 
   const phasePositions: Record<string, PhasePosition> = Object.fromEntries(
@@ -104,9 +122,42 @@ export function buildEditorGraph(opts: {
     (e) => !droppedIds.has(e.source) && !droppedIds.has(e.target),
   )
 
+  // Type `orchestrator` (KHÔNG phải `pipelineEditor`) là thứ giữ node này nằm
+  // ngoài `stepNodesOf` — nhờ vậy `stepGraph()` / `topoSort` / `buildFullPipeline`
+  // tự động bỏ qua nó và YAML lưu ra không mọc step rác `__orchestrator__`.
+  const orchestratorNodes =
+    opts.orchestrator?.enabled === true
+      ? [
+          {
+            id: ORCHESTRATOR_NODE_ID,
+            type: 'orchestrator',
+            position: orchestratorPositionOf(phasePositions),
+            draggable: false,
+            selectable: false,
+            deletable: false,
+            data: {
+              label: opts.orchestratorLabel ?? 'Orchestrator',
+              agent: opts.orchestrator.agent ?? '',
+            },
+          },
+        ]
+      : []
+
+  // Hub edge: source luôn là `ORCHESTRATOR_NODE_ID` (type `orchestrator`, không
+  // phải step) — `stepEdgesOf` yêu cầu cả 2 đầu nằm trong `stepIds` nên tự động
+  // loại hub edge, `buildFullPipeline`/`topoSort`/`hasFanOut` không cần sửa.
+  const hubEdges = hubEnabled
+    ? stepNodes.map((n) => ({
+        id: `e-${ORCHESTRATOR_NODE_ID}-${n.id}`,
+        source: ORCHESTRATOR_NODE_ID,
+        target: n.id,
+        markerEnd: { type: 'arrowclosed' },
+      }))
+    : []
+
   return {
-    nodes: [...stepNodes, ...keptArtifactNodes],
-    edges: [...labelledEdges, ...keptDataFlowEdges],
+    nodes: [...stepNodes, ...keptArtifactNodes, ...orchestratorNodes],
+    edges: [...labelledEdges, ...keptDataFlowEdges, ...hubEdges],
   }
 }
 
@@ -114,11 +165,9 @@ export function buildEditorGraph(opts: {
 export type FlowChangeLike = { type?: string }
 
 /**
- * Có phần tử nào vừa bị **xoá** khỏi canvas không.
- *
- * VueFlow bắn `nodesChange` / `edgesChange` cho cả `select` / `position` /
- * `dimensions`; chỉ change `remove` mới cần dựng lại graph phái sinh, sync ở
- * mọi change sẽ làm node giật lúc kéo.
+ * Có phần tử nào vừa bị xoá khỏi canvas không. VueFlow bắn `nodesChange` /
+ * `edgesChange` cho cả `select` / `position` / `dimensions`; chỉ change `remove`
+ * mới cần dựng lại graph phái sinh, sync ở mọi change sẽ làm node giật lúc kéo.
  */
 export function hasRemovalChange(
   changes: readonly (FlowChangeLike | null | undefined)[] | null | undefined,

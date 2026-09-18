@@ -2,19 +2,12 @@ import fsSync from 'node:fs'
 import { createRegistryContext } from './registry.js'
 import { createApiHandler } from './apiServer.js'
 
-// API setup entrypoints:
-//
-//   createApiHandler(ctx) → async (req,res)=>boolean   (shared by both transports)
-//   devTeamApi({ root })  → Vite middleware plugin      (dev mode)
-//
-// The standalone entry (src/backend/standalone.ts) mounts createApiHandler too.
+// Shim: re-exports createApiHandler + the Vite dev-mode plugin devTeamApi(). See docs/architecture.md §2.2.
 
 export { createApiHandler }
 
-// Vite plugin wrapper around the shared core handler. Builds a ctx whose
-// default project root is the legacy `root` (cwd/.. or DEV_TEAM_ROOT), then
-// serves /api/* through createApiHandler — dev mode behaves exactly as before
-// while gaining multi-project support via `?project=`.
+// Default root is the legacy `root` (cwd/.. or DEV_TEAM_ROOT) so existing
+// single-project use still works, while `?project=` opts into multi-project.
 export function devTeamApi({ root }: { root: string }) {
   const ctx = createRegistryContext({ defaultRoot: root })
   const apiHandler = createApiHandler(ctx)
@@ -26,6 +19,13 @@ export function devTeamApi({ root }: { root: string }) {
       server.config.logger.info(
         `\n  dev-team-dashboard → default root: ${root}${exists ? '' : '  (does not exist yet)'}\n`,
       )
+      // Tương đương standalone.ts cho transport Vite dev — cho claude-code-cli.ts biết base URL gọi ngược route MCP orchestrator.
+      server.httpServer?.once('listening', () => {
+        const addr = server.httpServer.address()
+        if (addr && typeof addr === 'object') {
+          process.env.DEV_TEAM_SELF_BASE_URL = `http://127.0.0.1:${addr.port}`
+        }
+      })
       server.middlewares.use(async (req: any, res: any, next: any) => {
         const handled = await apiHandler(req, res)
         if (!handled) return next()

@@ -114,12 +114,9 @@ export async function collectTasks(root: string): Promise<any[]> {
       // a partially-written file.
       parent_task_id: state?.parent_task_id ?? null,
       current_phase: state?.current_phase ?? null,
-      // A gate only still counts if the CURRENT pipeline declares it on the step
-      // the cursor sits on — normalise here so the ⏸ badge, the `waiting` node,
-      // notifications and the timeline can never contradict the server. `cfg` is
-      // already loaded above, so this costs no extra I/O. Same `gateStepsFromConfig`
-      // as the write side: when the YAML is unreadable both keep the gate, so the
-      // UI still draws a node for whatever the server is still blocking on.
+      // Recompute against the CURRENT pipeline so the UI never contradicts a
+      // stale gate; same `gateStepsFromConfig` as the write side, so an
+      // unreadable YAML keeps the gate on both ends.
       hitl_pending: resolveHitlPending(
         gateStepsFromConfig(cfg),
         state?.current_phase,
@@ -132,6 +129,10 @@ export async function collectTasks(root: string): Promise<any[]> {
       export_json: state?.export_json ?? false,
       archived: state?.archived ?? false,
       archived_at: state?.archived_at ?? null,
+      // Canvas monitor dựng node điều phối từ `pipeline.orchestrator`, còn trạng
+      // thái dừng/chạy của nó nằm ở state — cả hai phải cùng đi ra ở đây.
+      orchestrator_halted: state?.orchestrator_halted ?? false,
+      orchestrator_halted_at: state?.orchestrator_halted_at ?? null,
       name: typeof state?.name === 'string' && state.name.trim() ? state.name.trim() : null,
       artifacts,
       subtasks,
@@ -153,4 +154,7 @@ export { createTask, renderRequestMarkdown } from './create.js'
 export type { CreateTaskInput, CreateTaskResult, CreatedTask } from './create.js'
 export { runTaskStep } from './runStep.js'
 export type { RunTaskStepInput, RunTaskStepResult } from './runStep.js'
+// `startAuthority` cố ý không re-export ở đây: mọi caller — `runner/business/index.ts`,
+// `orchestrator/business/`, và test — đều import thẳng `./startAuthority.js`, nên lớp
+// trung gian này là dead weight mà audit gate bắt đúng.
 export { cleanupTaskWorktreeForTask } from './worktreeCleanup.js'

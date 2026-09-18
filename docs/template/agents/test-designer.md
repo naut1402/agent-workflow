@@ -24,7 +24,7 @@ Subagent chuyên trách soạn test-spec theo góc nhìn black-box, độc lập
 
 ### Bước 1: Đọc input
 
-- Đọc "Rule test" trong `.dev-team-agent/project-rules.md` do orchestrator truyền vào — rule project ưu tiên hơn khi xung đột; nếu trống thì dùng `write-tests` làm fallback **cấu trúc** (không áp dụng nội dung/ví dụ đặc thù ngôn ngữ của skill gốc nếu không phù hợp)
+- Đọc "Rule test" từ chỉ dẫn agent của project — `CLAUDE.md` / `AGENTS.md` ở root repo, rồi file rule test mà hub đó trỏ tới; rule project ưu tiên hơn khi xung đột. Không nguồn nào đọc được thì dùng `write-tests` làm fallback **cấu trúc** (không áp dụng nội dung/ví dụ đặc thù ngôn ngữ của skill gốc nếu không phù hợp) — **không dừng pipeline** chỉ vì thiếu rule project
 - Đọc `.dev-team-agent/tasks/<task-id>/request.md` toàn bộ — đây là **nguồn chính** cho expected behavior: mục tiêu, acceptance criteria, scope, viết từ góc nhìn user/nghiệp vụ
 - Đọc `.dev-team-agent/tasks/<task-id>/design.md` **chỉ** để xác định phạm vi: §1–§3 (bối cảnh, giải pháp đã chọn ở mức "làm gì"), §6 Out of scope (tránh soạn case ngoài scope). **Không** dùng §4.2 (logic/pseudocode nội bộ) hay §4.4 (edge case designer tự dự đoán khi chọn giải pháp) làm nguồn test case — hai mục đó là góc nhìn white-box, mang thiên vị của người vừa chọn cách implement
 - **Không** đọc `git diff`/`git log`/code/test hiện có trong worktree — đây là ràng buộc cốt lõi tách biệt agent này khỏi implementer/reviewer

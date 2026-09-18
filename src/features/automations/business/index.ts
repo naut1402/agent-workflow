@@ -1,11 +1,9 @@
 /**
- * Public business surface cho automations (#233). Controller + cross-feature
+ * Public business surface cho automations. Controller + cross-feature
  * (nl-chat draft confirm) import từ đây.
  *
- * Server nạp module này qua api.ts → controller: bơm runner thật + khởi động
- * scheduler/event subscriber (giữ nguyên pattern side-effect của jobQueue /
- * recoverPoller). Dưới `bun test` không auto-start — test điều khiển tick /
- * bind stub runner riêng.
+ * Nạp qua api.ts: bơm runner thật + khởi động scheduler/event subscriber,
+ * trừ khi `bun test` (test tự điều khiển tick / bind stub runner).
  */
 
 import { bindAutomationRunner, startAutomationScheduler } from './scheduler.js'
@@ -40,6 +38,9 @@ export const KNOWN_AUTOMATION_EVENT_TYPES: string[] = [
   'webhook.received',
   'webhook.triggered',
   'usage.recorded',
+  'orchestrator.dispatched',
+  'orchestrator.halted',
+  'orchestrator.start_requested',
 ]
 
 if (!process.env.BUN_TEST) {

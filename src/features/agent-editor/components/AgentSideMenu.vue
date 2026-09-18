@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import Icon from '../../../frontend/ui/Icon.vue'
 import type { AgentMeta } from '../scripts/agentEditorApi'
@@ -10,14 +10,13 @@ const props = defineProps<{
   selectedKey: string | null
   /** Dòng đang xoá dở; chặn double-click ngay ở nút. */
   busyKey: string | null
-  canExport: boolean
 }>()
 
 const emit = defineEmits<{
   new: []
-  templates: []
-  nl: []
-  export: []
+  'upload-file': [e: Event]
+  download: [agent: AgentMeta]
+  duplicate: [agent: AgentMeta]
   view: [agent: AgentMeta]
   edit: [agent: AgentMeta]
   delete: [agent: AgentMeta]
@@ -25,10 +24,11 @@ const emit = defineEmits<{
 
 const { t } = useI18nHelpers()
 
+const fileInput = ref<HTMLInputElement | null>(null)
+
 const keyOf = (a: AgentMeta) => `${a.scope}:${a.name}`
 
-// Nhóm rỗng không render `<details>` (E5) — lọc ngay ở computed để template
-// chỉ còn một `v-for` thuần, không trộn `v-if` cùng cấp.
+// Nhóm rỗng không render `<details>` (E5) — lọc ngay ở computed để template chỉ còn một `v-for` thuần.
 const groups = computed(() =>
   [
     {
@@ -51,21 +51,22 @@ const groups = computed(() =>
       <button type="button" class="btn-primary btn-sm" @click="emit('new')">
         {{ t('agentEditor.list.newButton') }}
       </button>
-      <button type="button" class="btn-ghost btn-sm" @click="emit('templates')">
-        {{ t('agentEditor.actions.templateCopy') }}
-      </button>
-      <button type="button" class="btn-ghost btn-sm" @click="emit('nl')">
-        {{ t('agentEditor.actions.buildNl') }}
-      </button>
       <button
         type="button"
-        class="btn-ghost btn-sm"
-        :disabled="!canExport"
-        :title="canExport ? undefined : t('agentEditor.list.exportHint')"
-        @click="emit('export')"
+        class="icon-btn"
+        :title="t('agentEditor.actions.upload')"
+        :aria-label="t('agentEditor.actions.upload')"
+        @click="fileInput?.click()"
       >
-        {{ t('agentEditor.actions.export') }}
+        <Icon name="upload" :size="14" />
       </button>
+      <input
+        ref="fileInput"
+        type="file"
+        accept=".md"
+        hidden
+        @change="(e) => emit('upload-file', e)"
+      />
     </div>
 
     <div class="agent-side-groups">
@@ -90,6 +91,24 @@ const groups = computed(() =>
             >{{ a.name }}</button>
             <span v-if="a.model" class="chip chip-xs">{{ a.model }}</span>
             <div class="icon-btn-group">
+              <button
+                type="button"
+                class="icon-btn icon-btn-inline"
+                :title="t('agentEditor.list.download')"
+                :aria-label="t('agentEditor.list.download')"
+                @click="emit('download', a)"
+              >
+                <Icon name="download" :size="14" />
+              </button>
+              <button
+                type="button"
+                class="icon-btn icon-btn-inline"
+                :title="t('agentEditor.list.duplicate')"
+                :aria-label="t('agentEditor.list.duplicate')"
+                @click="emit('duplicate', a)"
+              >
+                <Icon name="copy" :size="14" />
+              </button>
               <button
                 type="button"
                 class="icon-btn icon-btn-inline"
@@ -154,11 +173,7 @@ const groups = computed(() =>
   padding: 6px;
 }
 
-/* 🚫 Cố ý KHÔNG khai `.agent-group::details-content`: docs/ui-overflow.md chỉ
-   đòi khai nó khi chuỗi flex phải đi XUYÊN QUA `<details>`. Ở đây chuỗi dừng
-   ở `.agent-side-groups` (lá mang `overflow-y: auto`), còn `<details>` chỉ là
-   block con chiều cao tự nhiên — thêm `flex: 1 1 0` + `overflow: hidden` vào
-   `::details-content` sẽ cắt mất nội dung nhóm. */
+/* Cố ý KHÔNG khai `.agent-group::details-content`: chuỗi overflow đã dừng ở `.agent-side-groups`, không cần đi xuyên qua `<details>` (docs/ui-overflow.md). */
 .agent-group > summary {
   display: flex;
   align-items: center;

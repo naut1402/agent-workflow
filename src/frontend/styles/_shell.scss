@@ -85,7 +85,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .mode-btn-label { line-height: 1; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); }
 .dot.live { background: var(--done); box-shadow: 0 0 6px var(--done); }
-.root { font-size: 11px; color: var(--muted); margin: 6px 0 12px; word-break: break-all; }
 .sidebar-footer {
   margin-top: auto;
   flex-shrink: 0;

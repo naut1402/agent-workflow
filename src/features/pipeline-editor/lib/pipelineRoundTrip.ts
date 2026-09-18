@@ -19,6 +19,8 @@ export type PipelineMeta = {
   version?: number
   defaults?: Record<string, unknown>
   doc_reviewer?: Record<string, unknown>
+  /** Key `orchestrator` — canvas chỉ đọc `enabled`/`agent`, phần còn lại đi khứ hồi nguyên vẹn. */
+  orchestrator?: Record<string, unknown>
 }
 
 export type StepPreservedMap = Record<string, Record<string, unknown>>
@@ -31,6 +33,9 @@ export function extractPipelineMeta(pipeline: unknown): PipelineMeta {
   if (p.defaults && typeof p.defaults === 'object') meta.defaults = { ...(p.defaults as object) }
   if (p.doc_reviewer && typeof p.doc_reviewer === 'object') {
     meta.doc_reviewer = { ...(p.doc_reviewer as object) }
+  }
+  if (p.orchestrator && typeof p.orchestrator === 'object') {
+    meta.orchestrator = { ...(p.orchestrator as object) }
   }
   return meta
 }
@@ -91,5 +96,6 @@ export function assemblePipeline(
   if (meta.defaults) out.defaults = { ...meta.defaults }
   out.steps = steps
   if (meta.doc_reviewer) out.doc_reviewer = { ...meta.doc_reviewer }
+  if (meta.orchestrator) out.orchestrator = { ...meta.orchestrator }
   return out
 }
