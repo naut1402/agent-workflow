@@ -514,7 +514,7 @@ describe('orchestrator.start_requested — trả nợ G5', () => {
   })
 
   test('đang có gate chờ người ⇒ không mở lượt nào', async () => {
-    seedTask('M4', { current_phase: 'reviewer', hitl_pending: 'hitl-1' })
+    seedTask('M4', { current_phase: 'reviewer', hitl_pending: 'hitl-review' })
     await handleEvent(ev('orchestrator.start_requested', { taskId: 'M4', devTeamRoot: root }))
     expect(turnsOf('M4')).toHaveLength(0)
   })
