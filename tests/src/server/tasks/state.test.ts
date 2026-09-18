@@ -608,7 +608,9 @@ describe('advanceStepOnJobSuccessAssumingLock — emit song song với advanceSt
     )
     const stateFile = await seedTask(root, 'AL1', { current_phase: 'investigator' })
     const events: Array<Record<string, unknown>> = []
-    on('hitl.pending', (e) => events.push(e.payload))
+    on('hitl.pending', (e) => {
+      events.push(e.payload)
+    })
 
     const result = await advanceStepOnJobSuccessAssumingLock(root, 'AL1', 'investigator', stateFile)
     expect(result).not.toBeNull()
@@ -621,7 +623,9 @@ describe('advanceStepOnJobSuccessAssumingLock — emit song song với advanceSt
     await fs.writeFile(path.join(root, 'pipeline.yaml'), `version: 1\nsteps:\n  - id: implementer\n  - id: reviewer\n`, 'utf8')
     const stateFile = await seedTask(root, 'AL2', { current_phase: 'implementer' })
     const events: Array<Record<string, unknown>> = []
-    on('task.advanced', (e) => events.push(e.payload))
+    on('task.advanced', (e) => {
+      events.push(e.payload)
+    })
 
     const result = await advanceStepOnJobSuccessAssumingLock(root, 'AL2', 'implementer', stateFile)
     expect(result).not.toBeNull()
@@ -640,7 +644,9 @@ describe('advanceStepOnJobSuccessAssumingLock — emit song song với advanceSt
     await fs.mkdir(path.join(root, 'tasks', 'AL3'), { recursive: true })
     await fs.writeFile(path.join(root, 'tasks', 'AL3', 'review.md'), '## Summary\nRecommendation: NEEDS_CHANGES\n', 'utf8')
     const events: Array<Record<string, unknown>> = []
-    on('task.advanced', (e) => events.push(e.payload))
+    on('task.advanced', (e) => {
+      events.push(e.payload)
+    })
 
     const result = await advanceStepOnJobSuccessAssumingLock(root, 'AL3', 'reviewer', stateFile)
     expect(result).not.toBeNull()
