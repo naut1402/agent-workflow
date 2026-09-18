@@ -28,8 +28,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 const keyOf = (a: AgentMeta) => `${a.scope}:${a.name}`
 
-// Nhóm rỗng không render `<details>` (E5) — lọc ngay ở computed để template
-// chỉ còn một `v-for` thuần, không trộn `v-if` cùng cấp.
+// Nhóm rỗng không render `<details>` (E5) — lọc ngay ở computed để template chỉ còn một `v-for` thuần.
 const groups = computed(() =>
   [
     {
@@ -174,11 +173,7 @@ const groups = computed(() =>
   padding: 6px;
 }
 
-/* 🚫 Cố ý KHÔNG khai `.agent-group::details-content`: docs/ui-overflow.md chỉ
-   đòi khai nó khi chuỗi flex phải đi XUYÊN QUA `<details>`. Ở đây chuỗi dừng
-   ở `.agent-side-groups` (lá mang `overflow-y: auto`), còn `<details>` chỉ là
-   block con chiều cao tự nhiên — thêm `flex: 1 1 0` + `overflow: hidden` vào
-   `::details-content` sẽ cắt mất nội dung nhóm. */
+/* Cố ý KHÔNG khai `.agent-group::details-content`: chuỗi overflow đã dừng ở `.agent-side-groups`, không cần đi xuyên qua `<details>` (docs/ui-overflow.md). */
 .agent-group > summary {
   display: flex;
   align-items: center;

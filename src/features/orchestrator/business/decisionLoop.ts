@@ -1,7 +1,7 @@
 /**
  * Vòng lặp điều phối — một subscriber wildcard duy nhất trên event bus.
  *
- * Agent được hỏi ở **mọi** chuyển tiếp: mốc duy nhất là `job.finished` của một
+ * Agent được hỏi ở mọi chuyển tiếp: mốc duy nhất là `job.finished` của một
  * job step, vì chỉ ở đó cursor đã dịch và `stdout`/`artifactsFound` đã được ghi.
  * Dispatch tất định vẫn còn, nhưng lùi về làm lưới an toàn khi lượt agent không
  * dùng được — pipeline không dừng vì một output hỏng.
@@ -47,7 +47,7 @@ const OBSERVATION_LIMIT = 50
 const OBSERVED_TASK_LIMIT = 200
 
 /**
- * Số lần được hỏi agent vì **job lỗi** cho mỗi `(task, step)` trước khi dừng hẳn.
+ * Số lần được hỏi agent vì job lỗi cho mỗi `(task, step)` trước khi dừng hẳn.
  * Không có mốc này thì một step lỗi cố định (agent ref sai, worktree hỏng) sẽ
  * đốt một lượt LLM + một lượt job mỗi vòng, vô hạn. Đặt bằng `review_retry_max`
  * mặc định để hai cơ chế lùi-bước có cùng độ kiên nhẫn.
@@ -62,7 +62,7 @@ const MAX_FAILURE_ASKS = 2
 const MAX_TURNS_PER_PHASE = 6
 
 /**
- * Event khiến orchestrator **hành động**. Nó vẫn nghe mọi event và ghi vào ring
+ * Event khiến orchestrator hành động. Nó vẫn nghe mọi event và ghi vào ring
  * buffer. `job.finished` của một job step là mốc "bước xong" duy nhất;
  * `task.advanced` ở đây chỉ để dọn khi pipeline hoàn tất, không tốn lượt LLM.
  */
@@ -253,7 +253,7 @@ function emitDispatched(
 }
 
 /**
- * Dừng điều phối và **trả quyền chạy tay** cho người dùng: `assertStartAllowed`
+ * Dừng điều phối và trả quyền chạy tay cho người dùng: `assertStartAllowed`
  * đọc `enabled && !halted`, nên sau halt thì Run/Reset trên node step hiện lại.
  * Đây là lối thoát duy nhất khi orchestrator không quyết được — không đoán bừa.
  */
@@ -683,7 +683,7 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
 /**
  * Đọc quyết định từ output của job orchestrator.
  *
- * Output **không có** dòng sentinel ⇒ đây chỉ là một lượt hội thoại (người dùng
+ * Output không có dòng sentinel ⇒ đây chỉ là một lượt hội thoại (người dùng
  * chat với node), không làm gì. Có sentinel nhưng hỏng ⇒ lưới tất định.
  */
 async function consumeAgentDecision(ref: TaskRef, job: JobRecord): Promise<void> {
@@ -782,12 +782,12 @@ export async function dispatchOrchestrator(
 }
 
 /**
- * Task **có thể** đang được điều phối, đọc từ cờ cache trong `.dev-state`.
+ * Task có thể đang được điều phối, đọc từ cờ cache trong `.dev-state`.
  *
  * Cố ý không dùng `collectTasks`: hàm đó quét thêm thư mục artifact và
  * `loadPipelineConfig` cho từng task, tức là áp một vòng I/O mỗi phút lên cả
  * người dùng chưa bao giờ tick checkbox — trong khi cam kết nền của tính năng
- * là "tắt ⇒ chạy y hệt hiện tại". Cờ cache đủ để **lọc**; sự thật vẫn được
+ * là "tắt ⇒ chạy y hệt hiện tại". Cờ cache đủ để lọc; sự thật vẫn được
  * `resolveOrchestration` xác nhận lại cho từng ứng viên.
  */
 async function orchestratedCandidates(root: string): Promise<Record<string, unknown>[]> {
@@ -842,9 +842,9 @@ export async function sweepStuckTasks(root: string, projectId: string): Promise<
     )
 
     if (last?.status === 'succeeded' && last.metadata?.pipelineStepId === phase) {
-      // Job của bước hiện tại đã xong nhưng cursor chưa đi: `task.advanced` bị
-      // mất. Đẩy cursor **tường minh** ở đây — trước kia chỗ này dựa vào khối
-      // tự-chữa bên trong `runTaskStep`, thứ nay đã tắt cho lượt dispatch pin.
+      // Job của bước hiện tại đã xong nhưng cursor chưa đi (`task.advanced` bị
+      // mất) — đẩy cursor tường minh ở đây vì `runTaskStep` không tự-chữa việc
+      // này cho lượt dispatch pin.
       const advanced = await advanceStepOnJobSuccess(root, taskId, phase)
       const nextPhase = String(advanced?.state?.current_phase ?? '')
       if (!advanced || advanced.state.hitl_pending) continue // gate vừa mở — chờ người
@@ -879,7 +879,7 @@ async function sweepAllProjects(): Promise<number> {
  * Hẹn giờ quét — chỉ bật khi đã biết chắc có task đang được điều phối.
  *
  * Dashboard không ai bật checkbox thì sau một lượt quét lúc khởi động (readdir
- * `.dev-state` mỗi project) sẽ **không** còn I/O định kỳ nào. `handleEvent` và
+ * `.dev-state` mỗi project) sẽ không còn I/O định kỳ nào. `handleEvent` và
  * đường lưu pipeline gọi lại hàm này ngay khi thấy task orchestrated đầu tiên,
  * nên bật checkbox giữa chừng không phải restart dashboard.
  */

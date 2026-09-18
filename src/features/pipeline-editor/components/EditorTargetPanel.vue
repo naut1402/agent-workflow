@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Đầu sub-sidebar của Pipeline Editor: chọn **đối tượng đang sửa** (profile ở tab
+ * Đầu sub-sidebar của Pipeline Editor: chọn đối tượng đang sửa (profile ở tab
  * Profile, task ở tab Task) và cụm nút action.
  *
  * Thuần trình bày — không gọi API, không đụng canvas. Mọi thao tác đi ra ngoài
@@ -89,7 +89,7 @@ type TargetAction = {
 
 /**
  * Một nguồn duy nhất cho cụm action — dải icon lúc thu gọn và cụm lúc mở là
- * **cùng** các nút, chỉ khác hướng xếp; tách ra thì sửa một nơi là đủ.
+ * cùng các nút, chỉ khác hướng xếp; tách ra thì sửa một nơi là đủ.
  */
 const actions = computed<TargetAction[]>(() => {
   const list: TargetAction[] = [
@@ -191,7 +191,7 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
 
 <template>
   <div class="editor-target-panel" :class="{ 'is-collapsed': collapsed }">
-    <!-- 1.1 — select đối tượng: profile ở tab Profile, task ở tab Task -->
+    <!-- Select đối tượng: profile ở tab Profile, task ở tab Task -->
     <template v-if="!collapsed">
       <template v-if="isProfileTab">
         <span class="target-label">{{ t('pipelineEditor.target.profileLabel') }}</span>
@@ -232,7 +232,7 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
           @input="emit('update:taskManual', ($event.target as HTMLInputElement).value)"
         />
 
-        <!-- b.1 — đổi profile chỉ nạp bản nháp lên canvas, phải bấm Save mới ghi -->
+        <!-- Đổi profile chỉ nạp bản nháp lên canvas, phải bấm Save mới ghi -->
         <span class="target-label">{{ t('pipelineEditor.target.taskProfileLabel') }}</span>
         <CSelect
           id="editor-target-task-profile"
@@ -258,8 +258,8 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
       </span>
     </label>
 
-    <!-- 1.2 + 1.3 — một nút Save duy nhất, cụm action nằm hẳn trong sub-sidebar.
-         Lúc thu gọn vẫn đủ cả 5 nút (kể cả Stop khi đang preview). -->
+    <!-- Một nút Save duy nhất, cụm action nằm hẳn trong sub-sidebar. Lúc thu gọn
+         vẫn đủ cả 5 nút (kể cả Stop khi đang preview). -->
     <div class="target-actions" :class="{ 'target-actions--rail': collapsed }">
       <button
         v-for="action in actions"
@@ -344,12 +344,9 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
   margin-top: 4px;
   flex-wrap: wrap;
 }
-/* Cột trái rộng 240px ⇒ hàng action rộng 215px. Tab Profile có 7 nút, mà
-   `.icon-btn` chuẩn 32px cần 7×32 + 6×2 = 236px ⇒ nút thứ 7 xuống dòng và hàng
-   cao 66px thay vì 32px. 34px đó bị trừ thẳng vào 3 danh sách bên dưới (chúng
-   chia nhau phần còn lại), kéo vùng cuộn xuống dưới ngưỡng dùng được ở viewport
-   thấp. 28px cho 7×28 + 6×2 = 208px — vừa một hàng, và là số cố định nên không
-   phụ thuộc font của máy chạy. */
+/* Cột trái 240px ⇒ hàng action 215px. 7 nút Tab Profile ở `.icon-btn` chuẩn 32px
+   cần 236px nên xuống dòng, hàng cao gấp đôi ăn vào vùng cuộn bên dưới. 28px cho
+   7×28 + 6×2 = 208px vừa một hàng, và là số cố định nên không phụ thuộc font. */
 .target-actions .icon-btn {
   width: 28px;
   height: 28px;

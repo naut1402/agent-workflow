@@ -66,8 +66,7 @@ async function openViewer(agent: AgentMeta) {
     const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agent.scope)
     viewContent.value = data.content ?? ''
   } catch (e: any) {
-    // Agent có thể vừa bị xoá ngoài dashboard — trả main về empty state thay vì
-    // kẹt ở spinner, lỗi hiện bên cột trái.
+    // Agent có thể vừa bị xoá ngoài dashboard — trả main về empty state thay vì kẹt ở spinner.
     error.value = String(e.message || e)
     viewing.value = null
     viewContent.value = ''
@@ -159,11 +158,7 @@ function closeDialog() {
   showDialog.value = false
 }
 
-/**
- * `savedName` là tên SAU khi lưu (đã qua sanitize của backend) — đổi field
- * `name` rồi lưu là đổi luôn file đích, nên bám theo `viewing` cũ sẽ hiện lại
- * bản chưa đổi. Ưu tiên đúng scope, vì dialog cho phép đổi cả scope.
- */
+/** `savedName` là tên SAU sanitize của backend, có thể khác `viewing` cũ — phải nạp lại theo tên (và scope). */
 async function onSaved(savedName: string) {
   await Promise.all([loadList(), loadCatalog()])
   const current = viewing.value
@@ -204,15 +199,12 @@ async function onSaved(savedName: string) {
 
     <template #main>
       <div class="agent-main">
-        <!-- Sub-menu thu lại thì cột trái rộng 0 (override bên dưới), nên chỗ
-             duy nhất còn thấy được là main. Hai trạng thái loại trừ nhau nên
-             thông báo không bao giờ render hai lần. -->
+        <!-- Sub-menu thu lại thì cột trái rộng 0 (override bên dưới), nên thông báo phải chuyển sang render ở main. -->
         <template v-if="subSidebarCollapsed">
           <p v-if="error" class="err agent-editor-msg">{{ error }}</p>
           <p v-if="message" class="ok-msg agent-editor-msg">{{ message }}</p>
         </template>
-        <!-- `with-frontmatter`: agent đọc nguyên file `.md`, khối `---` đầu file
-             đúng là metadata nên tách ra thành block riêng. -->
+        <!-- `with-frontmatter`: agent đọc nguyên file `.md`, nên khối `---` đầu file được tách thành block metadata riêng. -->
         <CMarkdownView
           v-if="viewing && !viewLoading"
           :title="viewing.name"
@@ -246,9 +238,7 @@ async function onSaved(savedName: string) {
   min-height: 0;
   overflow: hidden;
 }
-// Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là một
-// cột xám rỗng — cùng cách MonitorLayout xử lý. Selector đích nằm TRÊN slot
-// "left", nên override phải neo vào chính gốc CScreenLayout.
+// Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là cột xám rỗng vô ích.
 .agent-editor-layout :deep(.c-screen-layout__body--left-collapsed) {
   grid-template-columns: 0 1fr;
 }

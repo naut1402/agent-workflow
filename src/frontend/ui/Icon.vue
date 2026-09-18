@@ -48,8 +48,8 @@ const VIEW_BOX: Record<IconName, string> = {
   chevronLeft: '0 0 16 16',
   chevronRight: '0 0 16 16',
   paperclip: '0 0 16 16',
-  // 24-grid, unlike the 16-grid icons around it: the path comes verbatim from
-  // the hand-drawn info SVG that used to live in ChatWindow.vue.
+  // 24-grid, unlike the 16-grid icons around it — path kept verbatim from the
+  // original hand-drawn SVG.
   info: '0 0 24 24',
   download: '0 0 16 16',
   upload: '0 0 16 16',
@@ -167,8 +167,7 @@ const viewBox = VIEW_BOX[props.name]
         d="M11.5 7.5l-4.2 4.2a2.4 2.4 0 0 1-3.4-3.4l5-5a1.7 1.7 0 0 1 2.4 2.4l-5 5a.9.9 0 0 1-1.3-1.3l4.2-4.2"
       />
     </template>
-    <!-- fill/stroke sit on each child, not on the shared <svg>: the original
-         carried them on its own <svg>, and this one has neither. -->
+    <!-- fill/stroke sit on each child, not the shared <svg>, unlike the icons above. -->
     <template v-else-if="name === 'info'">
       <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" />
       <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 11v5.5" />

@@ -1,8 +1,8 @@
 /**
  * Core của "chạy task có sẵn" — tách từ MonitorController.runTaskStep để
- * automations (#233) tái sử dụng đúng một đường: serialise per-task
- * (withTaskLock), chặn HITL pending, chặn job đang chạy (409), auto-advance
- * qua step đã succeeded, rồi submit job bước hiện tại.
+ * automations tái sử dụng đúng một đường: serialise per-task (withTaskLock),
+ * chặn HITL pending, chặn job đang chạy (409), auto-advance qua step đã
+ * succeeded, rồi submit job bước hiện tại.
  *
  * Trả kết quả thuần (không biết HTTP) — controller map sang response.
  */
@@ -46,7 +46,7 @@ export async function runTaskStep(
   taskId: string,
   input: RunTaskStepInput,
 ): Promise<RunTaskStepResult> {
-  // Guard **ngoài** `withTaskLock`: nó đọc state của chính task này, và mọi thứ
+  // Guard ngoài `withTaskLock`: nó đọc state của chính task này, và mọi thứ
   // bên trong khoá phải không được chờ một lượt khoá mới của cùng file.
   const startCheck = await assertStartAllowed(root, taskId, input.origin ?? 'manual')
   if ('error' in startCheck) {
@@ -64,16 +64,12 @@ export async function runTaskStep(
     if (!read.ok) return { ok: false, status: 404, error: 'task not found', extra: { taskId } }
     let state = read.state as Record<string, unknown>
 
-    // Checked before reconcile so a request that is going to be refused anyway
-    // leaves no trace: reconcile persists, and bumping `state_mtime` here would
-    // make an open HITL modal fail its own 409 conflict check for nothing.
-    // Scoped to this project's data root: two projects can hold tasks with the
-    // same id (automation actions can target another project), and a job over
-    // there must not make this one look busy. Jobs written before `devTeamRoot`
-    // existed in metadata still count — conservative, same as before.
-    // Job "orchestrator đang nghĩ" (`orchestratorJob`) không chạy step nào — tính
-    // nó là bận thì một lượt chat với node điều phối sẽ chặn luôn bước kế tiếp
-    // của pipeline. Cùng lý do với lookup `active` trong `sendTaskFeedback`.
+    // Checked before reconcile so a doomed request leaves no trace (reconcile
+    // persists, and touching `state_mtime` would break an open HITL modal's
+    // 409 check). Scoped to this project's root: another project's job with
+    // the same task id must not make this one look busy. An orchestrator
+    // "thinking" job isn't a step run — counting it as busy would block the
+    // next step just from chatting with the orchestrator node.
     const existing = listJobs(50).find(
       (j) =>
         j.metadata?.taskId === taskId &&
@@ -85,13 +81,11 @@ export async function runTaskStep(
       return { ok: false, status: 409, error: 'step already running', extra: { taskId, job: existing } }
     }
 
-    // The pipeline may have been edited while the gate was open: a gate the
-    // current step no longer declares leaves nobody able to approve it (the UI
-    // draws no node, `applyHitlAction` refuses) — clear it here instead of
-    // returning 400 into a deadlock. This doubles as the automatic way out for
-    // tasks already stuck. Must persist (not just patch in memory) because
+    // A gate the current pipeline no longer declares would otherwise deadlock
+    // (no node to approve it, `applyHitlAction` refuses) — clear it here, which
+    // also heals already-stuck tasks. Must persist, not just patch in memory:
     // `jumpToPipelineStepAssumingLock` re-reads the file and blocks on
-    // `hitl_pending` too. Has to stay ahead of the `hitl_pending` check below.
+    // `hitl_pending` too, so this has to run before the check below.
     const reconciled = await reconcileGateStateAssumingLock(root, taskId, stateFile, { state })
     if (reconciled) state = reconciled.state
 
@@ -101,12 +95,9 @@ export async function runTaskStep(
 
     let stepId = String(state.current_phase ?? '')
 
-    // Caller đã chỉ đúng step phải chạy (orchestrator dispatch). Khối tự-chữa
-    // bên dưới **phải** tắt trong trường hợp đó: nó tìm một job `succeeded` của
-    // `current_phase` rồi advance qua step đó — đúng thứ phá lượt `review_retry`,
-    // vì cursor vừa được lùi về `implementer` mà lượt implementer trước đó vẫn
-    // còn `succeeded` (review-retry không ghi `last_reset_at`), nên nó lập tức
-    // nhảy lên `reviewer` và chạy lại reviewer trên đúng bộ artifact cũ.
+    // Caller đã chỉ đúng step phải chạy (orchestrator dispatch): khối tự-chữa
+    // bên dưới phải tắt, nếu không nó auto-advance qua step `review_retry` vừa
+    // lùi về, dựa trên job `succeeded` cũ từ trước lần reset.
     const pinned = input.origin === 'orchestrator' && !!input.targetStepId
 
     // A restart sets `last_reset_at` (state.ts::resetPipelineStepAssumingLock) — a

@@ -71,12 +71,7 @@ export interface BuildTurnPromptInput {
   turnIndex: number
   /** The user's latest message for this turn. */
   message: string
-  /**
-   * Catalog/ngữ cảnh phụ nối vào CUỐI prompt của lượt này — e.g. the valid
-   * `agent` refs from the catalog, needed so a `pipeline` draft only
-   * references real agents. Được dựng lại ở MỌI lượt (không còn là snapshot
-   * lượt 1) để pipeline/agent tạo giữa phiên vào được prompt.
-   */
+  /** Extra context appended to the end of this turn's prompt (e.g. valid catalog agent refs) — rebuilt every turn, not just turn 1, so entities created mid-session are included. */
   extraContext?: string
 }
 
@@ -96,9 +91,7 @@ const AUTO_MODE_HEADER = [
   'Khi chốt draft, JSON trong code block phải là wrapper: { "entityType": "task" | "pipeline" | "agent" | "automation", "draft": { ...draft đúng schema của entityType đó... } }.',
 ].join('\n')
 
-// Đồng bộ thủ công với KNOWN_AUTOMATION_EVENT_TYPES (automations/business/index.ts).
-// Không import: hằng đó nằm cùng barrel với side-effect scheduler, còn giá trị
-// thì đổi rất ít — đánh đổi là hai nơi phải sửa cùng nhau.
+// Đồng bộ thủ công với KNOWN_AUTOMATION_EVENT_TYPES (automations/business/index.ts) — không import vì hằng đó nằm cùng barrel với side-effect scheduler.
 const AUTOMATION_EVENT_TYPES_HINT = [
   'job.queued',
   'job.started',
@@ -208,14 +201,11 @@ export function buildTurnPrompt(input: BuildTurnPromptInput): string {
       : 'wrapper { "entityType": ..., "draft": ... } đúng schema của entityType bạn đã suy ra'
     parts.push(`(Nhắc lại ngắn gọn output contract: nếu đủ thông tin, dòng đầu tiên phải là ${'`'}===DRAFT_READY===${'`'} theo sau là fenced ${'```'}json chứa ${draftShape}; nếu chưa đủ, chỉ hỏi lại bằng văn bản thuần.)`)
     if (input.extraContext?.trim()) {
-      // Thứ tự bắt buộc: nhắc contract → catalog → message. Đặt catalog sau
-      // message thì rule "không khớp thì hỏi lại" đọc như chú thích rời, không
-      // còn ràng buộc câu hỏi vừa nhận.
+      // Thứ tự bắt buộc: nhắc contract → catalog → message, để rule "không khớp thì hỏi lại" còn ràng buộc câu hỏi vừa nhận.
       parts.push('')
       parts.push(input.extraContext.trim())
     } else {
-      // Caller không cấp catalog (facade `NlChatBusiness`): vẫn phải chặn bịa
-      // ref, chỉ là không có danh sách để đối chiếu.
+      // Caller không cấp catalog (facade `NlChatBusiness`): vẫn phải chặn bịa ref, chỉ là không có danh sách để đối chiếu.
       parts.push('(Nhắc lại: chỉ dùng ref/tên có trong catalog đã được cung cấp; không khớp hoặc mơ hồ thì hỏi lại, không tự bịa.)')
     }
     parts.push('')
@@ -272,11 +262,7 @@ export interface StartNlChatSessionInput {
   runnerId?: string
   /** Extra system context appended to this turn (e.g. valid catalog agent refs for a pipeline draft). */
   extraContext?: string
-  /**
-   * Resolved `.dev-team-agent/` root — required so `resolveAgent()` can find
-   * `custom-agents/nl-chat-builder.md` under THIS root (not the scratch
-   * workspace, which is what `devTeamRoot` would otherwise default to).
-   */
+  /** Resolved `.dev-team-agent/` root, so `resolveAgent()` finds `custom-agents/nl-chat-builder.md` here instead of defaulting to the scratch workspace. */
   devTeamRoot: string
 }
 
@@ -322,11 +308,7 @@ export function startNlChatSession(input: StartNlChatSessionInput): NlChatSessio
   return { chatSessionId, job }
 }
 
-/**
- * Dựng khối catalog cho lượt sắp gửi. Business biết `entityType` (suy từ job
- * cuối) nhưng KHÔNG được đọc `root`/settings, nên nó hỏi ngược caller —
- * controller là nơi duy nhất cầm cả hai.
- */
+/** Dựng khối catalog cho lượt sắp gửi — business biết `entityType` nhưng không được đọc `root`/settings, nên hỏi ngược caller (controller cầm cả hai). */
 export type NlChatExtraContextBuilder = (
   entityType: NlChatEntityType | null,
 ) => Promise<string | undefined>
@@ -344,8 +326,7 @@ export async function continueNlChatSession(
   buildExtraContext?: NlChatExtraContextBuilder,
 ): Promise<MutationResult<{ job: JobRecord }>> {
   const jobs = findChatJobs(chatSessionId)
-  // A session is known by having at least one tagged job — `entityType` may be
-  // absent (auto mode), so it can no longer double as the existence check.
+  // A session is known by having at least one tagged job — `entityType` may be absent (auto mode), so it can't double as the existence check.
   if (jobs.length === 0) return { ok: false, status: 404, error: 'unknown chat session' }
   const entityType = entityTypeOf(jobs[jobs.length - 1])
 
@@ -358,9 +339,7 @@ export async function continueNlChatSession(
     message,
     extraContext,
   })
-  // Chat sessions here are scratch-only (no `.dev-state` file), so
-  // `sendTaskFeedback` can never actually return `{ queued: true }` for one —
-  // an active job still surfaces as the original "busy" error.
+  // Chat sessions here are scratch-only (no `.dev-state` file), so `sendTaskFeedback` never returns `{ queued: true }` for one — an active job stays a "busy" error.
   const result = await sendTaskFeedback(chatSessionId, projectId, prompt)
   if ('error' in result) return result
   if ('job' in result) return { ok: true, job: result.job }
@@ -388,13 +367,7 @@ export function getNlChatTurn(chatSessionId: string): NlChatTurnResult {
 const RESPONSE_HEADER = '=== Phản hồi của runner (stdout/stderr) ==='
 const RESULT_HEADER = '=== Kết quả ==='
 
-/**
- * The agent's own answer for this turn. `job.stdout` is the CLI's raw stdout,
- * persisted for NL chat jobs precisely for this. The log file is only a
- * fallback (jobs from before that was persisted): it also holds the payload +
- * full prompt, so the framing must be stripped — otherwise the chat surface
- * echoes the whole runner log back at the user.
- */
+/** The agent's own answer for this turn; falls back to the log file (older jobs) with its payload/prompt framing stripped so the chat surface doesn't echo the whole runner log. */
 function agentStdoutOf(job: JobRecord): string {
   if (typeof job.stdout === 'string' && job.stdout.trim()) return job.stdout
 

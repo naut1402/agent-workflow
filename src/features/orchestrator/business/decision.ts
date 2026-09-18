@@ -1,5 +1,5 @@
 /**
- * Prompt + parser cho lượt **phán đoán** của node điều phối.
+ * Prompt + parser cho lượt phán đoán của node điều phối.
  *
  * Tách khỏi `decisionLoop` để test được toàn bộ phần "đọc hiểu output agent" mà
  * không cần bus, không cần job, không cần LLM.
@@ -76,7 +76,7 @@ function renderStepResult(result: StepResult): string {
 }
 
 /**
- * Prompt cho lượt quyết định. Cố ý mô tả **định dạng trả lời trước**, vì guard
+ * Prompt cho lượt quyết định. Cố ý mô tả định dạng trả lời trước, vì guard
  * phía sau không đoán: sai định dạng là pipeline halt tường minh.
  */
 export function buildDecisionPrompt(ctx: DecisionContext): string {
@@ -182,7 +182,7 @@ export function validateDecision(raw: unknown, stepIds: string[]): ParsedDecisio
 /**
  * Đọc quyết định từ output agent.
  *
- * Mọi nhánh `{ error }` là tín hiệu **không dùng được lượt này**; caller quyết
+ * Mọi nhánh `{ error }` là tín hiệu không dùng được lượt này; caller quyết
  * định halt hay chuyển tiếp tất định — đoán ý một output hỏng thì không.
  */
 export function parseDecision(stdout: string, stepIds: string[]): ParsedDecision {

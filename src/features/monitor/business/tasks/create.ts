@@ -187,11 +187,10 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       review_round: 0,
       auto_review: input.autoReview ?? pipeline.defaults?.auto_review ?? false,
       // Brief của orchestrator tóm tắt các bước trước từ `pipeline-export.json`,
-      // nên bật điều phối thì bật luôn export **cho task này** — lựa chọn tường
-      // minh của người dùng (`input.exportJson`) vẫn thắng. Cố ý đặt ở đây chứ
-      // không ở `loadPipelineConfig`: hàm đó là tầng ĐỌC, sửa giá trị trả về ở
-      // đó sẽ theo `/api/pipeline-config` vào editor rồi bị ghi bền ngược vào
-      // `pipeline.yaml` lần Save kế tiếp, mà người dùng không hề chọn.
+      // nên bật điều phối thì bật luôn export cho task này — lựa chọn tường minh
+      // của người dùng (`input.exportJson`) vẫn thắng. Đặt ở đây chứ không ở
+      // `loadPipelineConfig` (tầng ĐỌC): sửa giá trị trả về ở đó sẽ bị ghi bền
+      // ngược vào `pipeline.yaml` lần Save kế tiếp qua editor.
       export_json:
         input.exportJson ??
         (orchestratorEnabled ? true : (pipeline.defaults?.export_json ?? false)),

@@ -103,11 +103,11 @@ function resolveEffectiveFlags(flags: unknown, credential: CredentialProfile): s
 }
 
 /**
- * Cấp token + base URL cho job orchestrator qua env (thay `--mcp-config` của
- * bản trước — xem design.md T528bf0ed §1/§4.2 bản v2): tiến trình `claude`/
- * `cursor-agent`/`codex` con kế thừa env này, và khi CHÍNH nó dùng tool Bash để
- * chạy `curl`, subprocess đó lại kế thừa env của nó — không cần plumbing gì
- * thêm ngoài cơ chế kế thừa env chuẩn của OS. Token không đi qua argv/prompt
+ * Cấp token + base URL cho job orchestrator qua env, không dùng `--mcp-config`
+ * (xem design.md §1/§4.2): tiến trình `claude`/`cursor-agent`/`codex` con kế
+ * thừa env này, và khi CHÍNH nó dùng tool Bash để chạy `curl`, subprocess đó
+ * lại kế thừa env của nó — không cần plumbing gì thêm ngoài cơ chế kế thừa env
+ * chuẩn của OS. Token không đi qua argv/prompt
  * text nên không có vấn đề Windows argv-quoting, và model không "nhìn thấy"
  * giá trị thật của token trong context/transcript (chỉ viết literal tên biến
  * trong lệnh `curl`, shell mới thay giá trị lúc thực thi).

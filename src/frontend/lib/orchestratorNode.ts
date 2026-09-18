@@ -1,7 +1,7 @@
 /**
  * Vị trí + định danh của node điều phối trên canvas. Thuần tính toán, dùng chung
- * cho **cả hai** canvas (pipeline editor và monitor) — hai bên vẽ cùng một node
- * thì phải cùng một phép tính, nếu không node nhảy chỗ khi chuyển màn.
+ * cho cả hai canvas (pipeline editor và monitor) — hai bên vẽ cùng một node thì
+ * phải cùng một phép tính, nếu không node nhảy chỗ khi chuyển màn.
  */
 import { ORCHESTRATOR_STEP_ID } from '../../shared/lib/orchestrator'
 import { NODE_Y, type PhasePosition } from './pipelineArtifactGraph'

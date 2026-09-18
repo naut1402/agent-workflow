@@ -12,8 +12,7 @@ export default {
     download: 'Download agent',
     duplicate: 'Sao chép agent',
   },
-  // Empty state của `main`, KHÔNG phải của viewer — phần trong viewer đã lên
-  // `common.markdownView.*` khi `CMarkdownView` thành component dùng chung.
+  // Empty state của `main`, KHÔNG phải của viewer — phần đó đã lên `common.markdownView.*`.
   viewer: {
     empty: 'Chọn một agent ở danh sách bên trái để xem nội dung',
     loading: 'Đang tải nội dung agent…',

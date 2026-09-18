@@ -23,11 +23,7 @@ function clipFallback(text: string): string {
   return t.length > MAX_FALLBACK_CHARS ? `${t.slice(0, MAX_FALLBACK_CHARS)}\n…(đã cắt bớt)` : t
 }
 
-/**
- * Agent reply for a finished job when the CLI transcript file is missing.
- * Prefer persisted `job.stdout` (NL chat / agent-cli); else strip framing from
- * the job log — same approach as nl-chat's `agentStdoutOf`.
- */
+/** Agent reply for a finished job when the CLI transcript file is missing. */
 function agentOutputFromJob(job: JobRecord): string {
   if (typeof job.stdout === 'string' && job.stdout.trim()) {
     return stripCursorUserWrapper(extractAgentText(job.stdout))
@@ -53,10 +49,7 @@ function agentOutputFromJob(job: JobRecord): string {
   return stripCursorUserWrapper(extractAgentText(stripped))
 }
 
-/**
- * Nội dung hiển thị trong khung chat. Job của node điều phối mang thêm dòng lệnh
- * máy đọc ở cuối — người dùng đọc nhật ký điều phối, không đọc sentinel.
- */
+/** Job của node điều phối mang thêm dòng sentinel máy đọc — cắt trước khi hiển thị. */
 function chatTextOfJob(job: JobRecord): string {
   const text = agentOutputFromJob(job)
   return job.metadata?.orchestratorJob === true ? stripDecisionLine(text) : text
@@ -98,11 +91,7 @@ function synthesizeTurnsFromJob(job: JobRecord, startIndex = 0): TranscriptTurn[
   return turns
 }
 
-/**
- * Conversation reconstructed from finished pipeline/feedback jobs when the CLI
- * transcript file is missing or empty. Jobs are oldest→newest so chat-feedback
- * rounds append after the original step run — stable indices for poll `from`.
- */
+/** Fallback conversation from finished jobs, oldest→newest so indices stay stable for poll `from`. */
 function synthesizeTurnsFromJobs(jobs: JobRecord[]): TranscriptTurn[] {
   const chronological = [...jobs].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
   const turns: TranscriptTurn[] = []
@@ -141,23 +130,19 @@ function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | 
 }
 
 /**
- * State for "chat trực tiếp với runner": the conversation history of the CLI
- * session a pipeline step ran under, plus whether a message can be sent right
- * now. History comes from the CLI's own session transcript
- * (`sessionTranscript.ts` / `cursorSessionTranscript.ts`), which the CLI
- * appends to while it works — so the same endpoint doubles as live monitoring
- * of a running step instead of only showing the result once it finishes.
+ * State for "chat trực tiếp với runner": conversation history plus whether a
+ * message can be sent right now. History comes from the CLI's own session
+ * transcript, which the CLI appends to while it works — so the same endpoint
+ * doubles as live monitoring of a running step.
  *
- * Sending itself stays `sendTaskFeedback()` (F0011); this module only mirrors
- * its guards so the UI can explain *why* the input is blocked before the user
- * types, instead of surfacing a 400/409 after the fact.
+ * Sending itself stays `sendTaskFeedback()`; this module only mirrors its
+ * guards so the UI can explain why the input is blocked before the user types.
  */
 
 export type TaskChatBlockedReason = 'noCompletedJob'
 
-// `providerFamilyOf(id) === 'ai-api'` (agentCli.ts) is the single source of truth for
-// which provider ids are `AgenticApiProvider` subclasses — no separate id list to keep
-// in sync here (any current or future `*-api` provider is picked up automatically).
+// `providerFamilyOf(id) === 'ai-api'` (agentCli.ts) is the source of truth for
+// `AgenticApiProvider` ids — no separate list to keep in sync here.
 export type TranscriptProviderHint = 'claude-code-cli' | 'cursor-cli' | 'unknown' | (string & {})
 
 export interface TaskChatRunningJob {

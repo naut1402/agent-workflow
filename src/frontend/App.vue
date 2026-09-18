@@ -41,7 +41,6 @@ const PROJECT_KEY = 'dev-dashboard-selected-project'
 
 const { t } = useI18nHelpers()
 
-// ── Mode
 const FALLBACK_MODE = 'monitor'
 
 const mode = ref(FALLBACK_MODE)
@@ -101,16 +100,15 @@ onClickOutside(
   { ignore: ['.modal-backdrop'] },
 )
 
-// Central mode switch, so any nested wizard/panel (Agent Editor's Build NL
-// gate, ArtifactPanel's QuickAction gate) can send the user to Runner mode
-// without bubbling a custom event through every intermediate component.
+// Central mode switch, so nested panels can navigate without bubbling a
+// custom event through every intermediate component.
 provide(navigateToModeKey, setMode)
 
 // Cùng điều kiện với `setMode`, nhưng hỏi được trước khi bấm — để call site disable nút.
 provide(canNavigateToModeKey, isModeReachable)
 
-// Multi-project state. `selectedProjectId` (null = default project) drives which
-// project's tasks the monitor view polls; persisted to localStorage.
+// `selectedProjectId` (null = default project) drives which project's tasks
+// the monitor view polls; persisted to localStorage.
 const projects = ref([])
 const defaultProjectId = ref(null)
 const selectedProjectId = ref(loadSelectedProject())
@@ -127,8 +125,8 @@ const selected = computed(
 )
 
 // HITL-pending / QA-ready notifications, derived from the same polled `tasks`
-// list — no separate transport needed, orchestrator- and dashboard-run tasks
-// both surface these flags through `.dev-state/<id>.json` via `/api/tasks`.
+// list — flags surface via `.dev-state/<id>.json` through `/api/tasks`, no
+// separate transport needed.
 const { history, unreadCount, markRead, markAllRead } = useNotifications(tasks)
 
 const {

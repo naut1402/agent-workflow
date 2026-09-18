@@ -855,7 +855,7 @@ export class MonitorController extends AbstractController {
 
     // Core (per-task lock, HITL gate, busy 409, auto-advance incl. the
     // `last_reset_at` guard, submit) lives in business `runTaskStep` — shared
-    // with automations (#233).
+    // with automations.
     const result = await runTaskStepCore(root, this.projectId, id, {
       runnerId: body.runnerId ?? null,
       targetStepId: body.targetStepId ?? null,
@@ -943,7 +943,7 @@ export class MonitorController extends AbstractController {
   }
 
   /**
-   * Nút Run/Stop của node orchestrator. Halt **trả quyền start về chế độ tay**,
+   * Nút Run/Stop của node orchestrator. Halt trả quyền start về chế độ tay,
    * nên đây cũng là lối thoát khi điều phối kẹt: sau khi Stop, Run/Reset trên
    * node step hiện lại và người dùng chạy tay tiếp được. Bỏ halt thì ngược lại —
    * giao ngay một lượt cho agent, vì không còn đường nào khác cấp lượt đầu tiên.

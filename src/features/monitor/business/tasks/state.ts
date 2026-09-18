@@ -389,8 +389,8 @@ export async function reconcileGateStateAssumingLock(
     action: after ? 'normalized' : 'cancelled',
     reason: 'pipeline_changed',
     currentPhase: state.current_phase,
-    // Node điều phối nghe event này để quyết bước kế. Nó chạy nền, ngoài
-    // mọi request, nên phải tự biết task thuộc data root nào.
+    // Read by the orchestrator to decide the next step; it runs off-request,
+    // so it must carry its own data root.
     devTeamRoot: root,
   })
   return { state, mtime, from: before, to: after }
@@ -405,15 +405,7 @@ export async function reconcileGateState(root: string, taskId: string) {
 
 /**
  * Update task state after a dashboard-triggered "run step" job succeeds —
- * fills the bookkeeping gap that only the external orchestrator CLI used to
- * cover:
- * - Gate-less step: advance `current_phase` to the next step (or
- *   `'completed'`) straight away, same as `applyHitlAction`'s approve branch.
- * - Gated step: the artifact is now ready for review, so open the gate
- *   (`hitl_pending = gate_id`) instead of advancing — `current_phase` stays on
- *   this step until the user approves/rejects via `applyHitlAction`, same as
- *   if the orchestrator had run it.
- *
+ * fills the bookkeeping gap the external orchestrator CLI used to cover.
  * No-ops (returns null) if `current_phase` no longer matches `stepId` (raced
  * by another action) or a gate is already pending — callers should treat a
  * null result as "nothing to do", not an error.
@@ -543,8 +535,8 @@ export async function advanceStepOnJobSuccess(
             stepId,
             currentPhase: state.current_phase,
             reason: 'review_retry',
-            // Node điều phối nghe event này để quyết bước kế. Nó chạy nền, ngoài
-            // mọi request, nên phải tự biết task thuộc data root nào.
+            // Read by the orchestrator to decide the next step; it runs
+            // off-request, so it must carry its own data root.
             devTeamRoot: root,
           })
           return { state, mtime }
@@ -563,9 +555,9 @@ export async function advanceStepOnJobSuccess(
       state.current_phase = next ? next.id : 'completed'
     }
 
-    // Emit after persist so listeners never read stale state. Điều kiện đọc
-    // state đã ghi, không đọc `gateId`: với `auto_review` thì step có gate vẫn
-    // đẩy cursor, và event phải nói đúng chuyện đó.
+    // Emit after persist so listeners never read stale state, and read the
+    // state we just wrote rather than `gateId` alone — `auto_review` still
+    // advances the cursor on a gated step, and the event must say so.
     const mtime = await writeStateAtomic(stateFile, state)
     if (state.hitl_pending) {
       emit('hitl.pending', { taskId, gateId, stepId, devTeamRoot: root })
@@ -677,7 +669,7 @@ export async function applyArchiveAction(
  * Bấm Stop trên node orchestrator: ghi `orchestrator_halted`. Cùng hình dạng
  * khoá / kiểm mtime / ghi atomic như `applyArchiveAction`.
  *
- * Halt **không** chỉ là tắt điều phối — nó trả quyền start về chế độ tay
+ * Halt không chỉ là tắt điều phối — nó trả quyền start về chế độ tay
  * (`assertStartAllowed` đọc `enabled && !halted`), nên sau khi Stop thì Run/Reset
  * trên node step hiện lại và người dùng chạy tay tiếp được.
  */
@@ -759,7 +751,7 @@ export async function applyRenameAction(
  * Permanently delete a task's files. Unlike applyArchiveAction, this does NOT
  * require readState() to succeed first — it exists specifically to remove
  * tasks whose state file is missing/corrupt and therefore have no other
- * available action (see B0009 §5).
+ * available action.
  */
 export async function deleteTask(
   root: string,

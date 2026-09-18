@@ -1,9 +1,6 @@
-// Last-resort fallback when NO pipeline.yaml exists anywhere (rare: /dev-dashboard
-// setup always scaffolds .dev-team-agent/pipeline.yaml). The canonical source of
-// the default flow is dev-team-orchestrator/assets/pipeline.default.yaml — this
-// JS literal is a self-contained copy because the viewer is copied out of the
-// plugin tree into the project and can't read that asset at runtime. Keep the two
-// in sync (only the structure matters here; comments live in the YAML).
+// Last-resort default (rare: setup always scaffolds .dev-team-agent/pipeline.yaml).
+// Self-contained copy of dev-team-orchestrator/assets/pipeline.default.yaml — the
+// viewer can't read that asset at runtime. Keep the two in sync.
 export const DEFAULT_PIPELINE: any = {
   version: 1,
   defaults: { review_retry_max: 2, auto_review: false, export_json: false },
@@ -15,8 +12,7 @@ export const DEFAULT_PIPELINE: any = {
     { id: 'pr-creator', name: 'PR', agent: 'dev-agent-teams:pr-creator', produces: ['pr-desc.md'], export_key: 'pr_creator', hitl: { mode: 'none' } },
   ],
   doc_reviewer: { agent: 'dev-agent-teams:doc-reviewer', skills: ['doc-review'], rule_category: 'doc-review', rule_required: false, rule_fallback_skill: 'doc-review' },
-  // Tắt mặc định: một pipeline.yaml không có key `orchestrator` phải chạy y hệt
-  // như trước khi có tính năng này.
+  // Tắt mặc định: pipeline.yaml không có key `orchestrator` phải chạy y hệt như trước.
   orchestrator: { enabled: false, agent: 'dev-agent-teams:orchestrator' },
 }
 
@@ -66,11 +62,9 @@ import { readYamlChecked } from '../../../../backend/lib/yamlLib.js'
 export async function loadPipelineConfig(root: string, id: string | null): Promise<any> {
   const cfg = JSON.parse(JSON.stringify(DEFAULT_PIPELINE))
   let source = 'builtin'
-  // A pipeline.yaml that exists but will not parse must not read as "no such
-  // override" — otherwise `cfg.steps` silently becomes the global/builtin flow
-  // and a caller comparing against it concludes the task's gate was removed.
-  // We cannot know the real shape, so we say so and let callers hold their
-  // ground (see `resolveHitlPending`'s unreadable branch).
+  // Unreadable ≠ absent: falling back silently to global/builtin here would make a
+  // caller think the task's gate was removed. Flag it so callers hold their ground
+  // (see `resolveHitlPending`'s unreadable branch).
   let untrusted = false
 
   const globalRead = await readYamlChecked(joinPath(root, 'pipeline.yaml'))

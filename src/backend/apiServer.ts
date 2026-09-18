@@ -19,18 +19,8 @@ import { createRateLimitMiddleware } from './http/security/rateLimiter.js'
 import { createCorsMiddleware } from './http/security/corsGuard.js'
 import { loadSecurityConfig } from '../features/settings/business/dashboardSettings.js'
 
-// ── API server (Hono app + Node bridge)
-//
-// Public contract: createApiHandler(ctx) → async (req,res)=>boolean
-// that returns `true` when it produced a response for an /api/* request, and
-// `false` for non-api paths (caller falls through to static / next middleware).
-//
-// Every /api/* request goes through the Hono app via a node→Web Request
-// bridge — no feature keeps its own node-res branch above it.
-//
-// createApp(ctx) builds the Hono instance (exported for tests via app.request).
-// Feature routes: moi src/features/<name>/api.ts export registerRoutes +
-// optional routeOrder (so nho chay truoc) — nap dong bang loadModulesUnder.
+// createApiHandler(ctx) is the single entrypoint for /api/* on both transports
+// — no feature keeps its own node-res branch above it. See docs/architecture.md §2.
 
 type FeatureApiModule = {
   registerRoutes?: (app: Hono<HonoEnv>) => void
@@ -76,15 +66,10 @@ export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
     await next()
   })
 
-  // Thứ tự: CORS (preflight OPTIONS không kèm Authorization) → rate-limit (áp
-  // dụng bất kể đã auth chưa) → JWT. Cả 3 no-op mặc định (degrade-by-default).
+  // Thứ tự bắt buộc: CORS → rate-limit (áp dụng cả khi chưa auth) → JWT; cả 3 no-op mặc định.
   app.use('/api/*', createCorsMiddleware(() => loadSecurityConfig().cors))
   app.use('/api/*', createRateLimitMiddleware(() => loadSecurityConfig().rateLimit))
-  // Route REST của orchestrator (`orchestrator/api.ts`) không dành cho người
-  // dùng cuối (chỉ chính child process do server tự spawn gọi ngược vào) và
-  // dùng token riêng theo job, không phải `Authorization` — loại khỏi JWT
-  // dashboard để hono/jwt không đọc nhầm. Endpoint cho người dùng cuối của
-  // node điều phối nằm ở path khác (`/api/task-orchestrator`, feature `monitor`).
+  // Route orchestrator dùng token riêng theo job (không phải Authorization) nên loại khỏi JWT dashboard.
   const jwtMiddleware = createJwtMiddleware()
   app.use('/api/*', async (c, next) => {
     if (c.req.path.startsWith('/api/orchestrator/')) return next()
@@ -127,11 +112,7 @@ function writeWebResponse(res: ServerResponse, status: number, headers: Headers,
   res.end(buf)
 }
 
-/**
- * Pipe một `text/event-stream` Response xuống Node `res` theo chunk thay vì
- * buffer toàn bộ (`arrayBuffer()`) như path JSON thường. Resolve khi kết nối
- * đóng — do client ngắt (`req.on('close')`) hoặc stream tự kết thúc.
- */
+/** Pipe SSE Response xuống Node `res` theo chunk (không buffer arrayBuffer); resolve khi client đóng kết nối hoặc stream tự kết thúc. */
 function streamSseResponse(
   req: IncomingMessage,
   res: ServerResponse,
@@ -171,8 +152,7 @@ function streamSseResponse(
 }
 
 export function createApiHandler(ctx: RegistryContext) {
-  // Lazy init: first /api request awaits feature route registration once.
-  // Reset on failure so a transient init error does not pin every later request to 500.
+  // Lazy init, memoized; reset on failure so a transient error doesn't pin every later request to 500.
   let appPromise: Promise<Awaited<ReturnType<typeof createApp>>> | null = null
   const getApp = () => {
     if (!appPromise) {
@@ -187,8 +167,7 @@ export function createApiHandler(ctx: RegistryContext) {
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url || '/', 'http://localhost')
     if (!url.pathname.startsWith('/api/')) return false
-    // Single chokepoint for ALL /api/* traffic on both transports. Request
-    // logging is fire-and-forget in `finally`, never awaited into the response.
+    // Request logging is fire-and-forget in `finally`, never awaited into the response.
     const started = Date.now()
     const projectId = url.searchParams.get('project') || null
     const traceId = resolveTraceIdFromRequest(req)
@@ -206,9 +185,7 @@ export function createApiHandler(ctx: RegistryContext) {
         headers.set('X-Trace-Id', traceId)
         const contentType = headers.get('content-type') || ''
         if (contentType.startsWith('text/event-stream')) {
-          // durationMs ghi bên dưới ở `finally` phản ánh cả phiên kết nối SSE,
-          // không phải thời gian xử lý 1 request thường — chấp nhận được vì
-          // route stream không dùng số này cho mục đích gì khác.
+          // durationMs ở `finally` tính luôn thời gian sống của kết nối SSE — chấp nhận vì route stream không dùng số này việc khác.
           responsePreview = '[sse stream]'
           await streamSseResponse(req, res, response, headers)
         } else {
