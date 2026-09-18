@@ -1,15 +1,24 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { fetchRunners } from '../scripts/runnerApi'
 import { saveRunner, deleteRunner, setDefaultRunner, fetchConnections } from '../scripts/RunnerConfigPanelApi'
 import { fetchProviderConfigs } from '../scripts/ProviderDialogApi'
 import RunnerDialog from './RunnerDialog.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
+import McpPanel from '../../mcp/components/McpPanel.vue'
 import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderConfigOption, ProviderFamily } from '../types'
 
 const { t } = useI18nHelpers()
+
+type RunnerTabKey = 'runner' | 'mcp'
+
+const activeTab = ref<RunnerTabKey>('runner')
+const tabs = computed(() => [
+  { key: 'runner', label: t('runner.tabs.runner') },
+  { key: 'mcp', label: t('runner.tabs.mcp') },
+])
 
 const runners = ref<RunnerDraft[]>([])
 const defaultRunnerId = ref('')
@@ -144,9 +153,15 @@ async function remove(r: RunnerDraft, e: Event) {
 </script>
 
 <template>
-  <CScreenLayout>
+  <CScreenLayout
+    :tabs="tabs"
+    :active-tab-key="activeTab"
+    :tabs-aria-label="t('runner.tabs.ariaLabel')"
+    @update:active-tab-key="activeTab = $event as RunnerTabKey"
+  >
   <template #main>
-  <div class="runner-config">
+  <!-- v-if, không v-show: chưa mở tab MCP thì không gọi /api/mcp-servers. -->
+  <div v-if="activeTab === 'runner'" class="runner-config">
     <header class="runner-head">
       <h2>{{ t('runner.panel.title') }}</h2>
       <p class="muted">{{ t('runner.panel.subtitle') }}</p>
@@ -251,6 +266,7 @@ async function remove(r: RunnerDraft, e: Event) {
       @refreshed="load"
     />
   </div>
+  <McpPanel v-else />
   </template>
   </CScreenLayout>
 </template>

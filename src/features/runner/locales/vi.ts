@@ -10,6 +10,11 @@ export default {
     awaiting_approval: 'Chờ duyệt',
     awaiting_recovery: 'Đang chờ phục hồi',
   },
+  tabs: {
+    runner: 'Runner',
+    mcp: 'MCP',
+    ariaLabel: 'Tab màn Runner Config',
+  },
   panel: {
     title: 'Runner Config',
     subtitle: 'Quản lý AI Agent Runner (global ~/.dev-team-dashboard/)',
@@ -136,6 +141,10 @@ export default {
     extraToolSearchHint: 'Tìm 1 chuỗi con trong các file text của workspace',
     extraToolWeb: 'Web search',
     extraToolWebHint: 'Tìm kiếm web (cần BRAVE_SEARCH_API_KEY trên server) và tải nội dung URL https công khai',
+    mcpServersLabel: 'MCP server',
+    mcpServersHint: 'Chỉ MCP server đang bật mới hiện ở đây. Không chọn gì thì lệnh chạy runner không đổi.',
+    mcpUnsupported: 'Provider này chưa nhận cấu hình MCP — lựa chọn vẫn được lưu để dùng sau.',
+    mcpEmpty: 'Chưa có MCP server nào đang bật. Thêm ở tab MCP.',
     connectViaBrowser: 'Connect via browser',
     oauthPendingHint: 'Đã mở tab mới để đăng nhập. Nếu tab đó không mở được dashboard này, copy URL/code nó hiện ra rồi dán vào ô bên dưới.',
     oauthPastePlaceholder: 'Dán URL redirect hoặc code vào đây',
