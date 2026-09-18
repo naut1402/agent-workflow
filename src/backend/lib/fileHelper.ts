@@ -219,8 +219,9 @@ export function readTextFileSync(p: string): string {
   return fs.readFileSync(p, 'utf8')
 }
 
-export function writeTextFileSync(p: string, data: string): void {
-  fs.writeFileSync(p, data, 'utf8')
+/** `mode` chỉ có tác dụng khi file được TẠO — ghi đè giữ nguyên quyền cũ. */
+export function writeTextFileSync(p: string, data: string, opts?: { mode?: number }): void {
+  fs.writeFileSync(p, data, { encoding: 'utf8', ...(opts?.mode != null ? { mode: opts.mode } : {}) })
 }
 
 export function appendTextFileSync(p: string, data: string): void {
@@ -229,6 +230,11 @@ export function appendTextFileSync(p: string, data: string): void {
 
 export function mkdirSync(p: string, opts?: { recursive?: boolean }): string | undefined {
   return fs.mkdirSync(p, opts) ?? undefined
+}
+
+/** Đặt quyền POSIX. Trên win32 gần như vô nghĩa — đừng dựa vào nó làm rào duy nhất. */
+export function chmodSync(p: string, mode: number): void {
+  fs.chmodSync(p, mode)
 }
 
 export function renameSync(from: string, to: string): void {

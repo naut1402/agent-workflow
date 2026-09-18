@@ -141,9 +141,17 @@ Entry SCSS: `src/frontend/styles/main.scss` (tokens + scrollbar + shell, import 
 
 ---
 
-## 4. MCP server
+## 4. MCP — repo đứng ở cả hai vai
 
-`mcp/server.ts` (`bun run mcp`) là stdio entrypoint riêng, expose CRUD project-registry (`list_projects`/`get_project`/`add_project`/`remove_project`) cho Claude Code, nói chuyện trực tiếp với `src/backend/registry.ts`. **Không** cần HTTP server chạy. Bật qua `.claude/settings.local.json` (`enabledMcpjsonServers`). Vì dùng chung `src/backend/registry.ts`, project thêm từ Claude Code và từ UI luôn nhất quán.
+⚠️ Hai chiều hoàn toàn khác nhau, đừng lẫn:
+
+**4.1 Vai server — repo *expose* tool ra ngoài.** `mcp/server.ts` (`bun run mcp`) là stdio entrypoint riêng, expose CRUD project-registry (`list_projects`/`get_project`/`add_project`/`remove_project`) cho Claude Code, nói chuyện trực tiếp với `src/backend/registry.ts`. **Không** cần HTTP server chạy. Bật qua `.claude/settings.local.json` (`enabledMcpjsonServers`). Vì dùng chung `src/backend/registry.ts`, project thêm từ Claude Code và từ UI luôn nhất quán.
+
+**4.2 Vai client — dashboard *tiêu thụ* MCP server của người dùng.** Feature `src/features/mcp/`: store `mcp-servers.json` dưới `registryHome()`, chốt URL riêng (`assertMcpEndpoint`: `https` mọi host · `http` chỉ loopback/private — cố ý **không** dùng `fetchUrlSafe`), client bọc `@modelcontextprotocol/sdk` cho nút *Kiểm tra kết nối*, và serializer sinh JSON `mcpServers` dùng chung cho mọi CLI. Khai báo ở tab `MCP` của màn Runner; gắn vào job theo **Connection** (`config.mcpServers: string[]`).
+
+Đường tiêu thụ: `runner/business/providers/mcpJobConfig.ts` lọc server đang bật → resolve credential → serialize → ghi file `0600` dưới `registryHome()/mcp-runtime/` → `claude-code-cli.ts` truyền `--mcp-config <file> --strict-mcp-config` → xoá file ở `finally`.
+
+🚫 **Bất biến:** không Connection nào bật MCP thì argv của CLI **không đổi một byte** và không file nào chạm đĩa — `claude-code-cli.ts` là provider dùng chung cho cả ba Agent CLI. Phụ thuộc chỉ đi một chiều `runner/business/**` → `mcp/business/index.ts`; credential được tiêm ngược vào qua callback.
 
 ---
 
