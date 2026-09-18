@@ -141,8 +141,10 @@ function streamSseResponse(
           if (done || res.writableEnded) break
           res.write(Buffer.from(value))
         }
-      } catch {
-        // Socket lỗi giữa chừng — nuốt, không throw lên `handle()`.
+      } catch (err) {
+        // Không throw lên `handle()` — response đã bắt đầu stream, ném lỗi ở đây vô nghĩa.
+        // `closed` đã true nghĩa là client tự đóng kết nối (qua `finish()`), không phải lỗi thật.
+        if (!closed) console.warn('[sse] lỗi đọc stream giữa chừng:', err)
       } finally {
         if (!res.writableEnded) res.end()
         finish()
