@@ -1,8 +1,7 @@
 /**
- * Soạn *brief* — prompt mà orchestrator cấp cho một step, thay cho `request.md`
- * thô. Đây là câu trả lời cho bối cảnh #2 của đề bài: mỗi step là một session
- * CLI mới, không có brief thì node nào cũng phải tự đọc lại repo để dựng lại
- * bối cảnh.
+ * Soạn brief — prompt mà orchestrator cấp cho một step, thay cho `request.md`
+ * thô: mỗi step là một session CLI mới, không có brief thì node nào cũng phải
+ * tự đọc lại repo để dựng lại bối cảnh.
  *
  * Thuần I/O đọc — không ghi file nào (brief đi trong `job.userPrompt`, truy vết
  * được ở job record), nên `MACHINE_FILES` không đổi.
@@ -72,7 +71,7 @@ function renderExportValue(value: unknown): string {
 }
 
 /**
- * Tóm tắt kết quả các step **trước** `stepId` từ `pipeline-export.json`.
+ * Tóm tắt kết quả các step trước `stepId` từ `pipeline-export.json`.
  * Không có file (task cũ, `export_json: false`) ⇒ nói thẳng là chưa có, kèm
  * danh sách artifact `.md` đang tồn tại — degrade rõ ràng, không im lặng.
  */

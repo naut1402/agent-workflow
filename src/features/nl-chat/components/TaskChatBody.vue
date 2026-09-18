@@ -6,10 +6,7 @@ import ChatMessageBubble from './ChatMessageBubble.vue'
 import ChatComposer from './ChatComposer.vue'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 
-// Body of the floating chat window when it is scoped to a pipeline step: the
-// runner's own conversation history (CLI session transcript) plus an input that
-// resumes that exact session. Tool activity turns are what make a running step
-// observable while it works.
+// Body of the floating chat window when scoped to a pipeline step: the runner's own conversation history (CLI session transcript) plus an input that resumes that exact session.
 
 const props = defineProps<{
   taskId: string
@@ -36,14 +33,7 @@ const COLLAPSE_CHARS = 240
 
 const messagesRef = ref<HTMLElement | null>(null)
 
-/**
- * Display-ordered turns (real + pending, interleaved by send time). Rendering
- * lives in `ChatMessageBubble`; this only decides which turns fold and how they
- * are labelled, so the template keeps no branching of its own — a `computed`
- * re-runs only when `timeline` changes, not on every re-render (e.g. when
- * `running`/`total` change but the turns don't), same pattern as
- * `ArtifactPanel.vue`'s `blocks`.
- */
+/** Display-ordered turns (real + pending, interleaved by send time) — only decides which turns fold and how they're labelled, so the template keeps no branching of its own. */
 const displayTurns = computed(() =>
   chat.timeline.value.map((turn) => ({
     ...turn,
@@ -69,11 +59,7 @@ function noTurnsHint(): string | null {
   return null
 }
 
-/**
- * The one line shown in place of a transcript, or null when there is a transcript
- * to show. Resolving the four mutually exclusive reasons here keeps the template
- * down to a single `v-if`.
- */
+/** The one line shown in place of a transcript, or null when there is one — resolves the mutually exclusive reasons here so the template keeps a single `v-if`. */
 const emptyHint = computed<string | null>(() => {
   if (chat.loading.value) return 'Đang tải hội thoại của runner…'
   if (chat.turns.value.length > 0) return null
@@ -96,10 +82,7 @@ function isNearBottom(): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD
 }
 
-// Attachments, drop zone, Enter behaviour and the send guard — shared with
-// BuilderChatBody, which only differs in what blocks a send and where text goes.
-// `ChatComposer` renders it; only the drop-zone flag is needed here, for the
-// message list this body owns.
+// Attachments, drop zone, Enter behaviour and the send guard — shared with BuilderChatBody, which only differs in what blocks a send and where text goes.
 const composer = useChatComposer({
   dropZone: messagesRef,
   getProjectId: () => props.projectId ?? undefined,
@@ -119,8 +102,7 @@ const placeholder = computed(() => {
 // Header status: a running step is the interesting state — that is the whole
 // point of watching a runner live.
 const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string }>(() => {
-  // The message itself, not just "Có lỗi": the title's tooltip is the only place
-  // the error is described now that the status icon is gone.
+  // The message itself, not just "Có lỗi": the title's tooltip is the only place the error is described.
   if (chat.error.value) return { kind: 'error', text: `Có lỗi: ${chat.error.value}` }
   if (chat.sending.value) return { kind: 'busy', text: 'Đang gửi…' }
   if (chat.running.value) {
@@ -133,11 +115,7 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
 watch(status, (s) => emit('status', s), { immediate: true })
 watch(chat.runner, (r) => emit('runner', r), { immediate: true })
 
-// Tool-activity turns arrive every 2s while a step runs (sessionTranscript.ts),
-// so an unconditional scroll here would yank the user back to the bottom on
-// every one of them even while they are reading older history — only follow
-// the tail when they were already at it (default `watch` flush is 'pre', so
-// this runs before the new turn is patched into the DOM).
+// Tool-activity turns arrive every 2s while a step runs (sessionTranscript.ts), so only follow the tail when already at it — an unconditional scroll would yank the user back while reading older history.
 watch([() => chat.turns.value.length, () => chat.pending.value.length], () => {
   if (isNearBottom()) void scrollToEnd()
 })

@@ -12,17 +12,11 @@ const props = defineProps({
 const { t } = useI18nHelpers()
 const { openTaskChat } = useChatSurface()
 
-// Actions sit ON the node's top border (the border runs through their middle)
-// and are always visible — a hover-only popover outside the node lost hover the
-// moment the cursor travelled to it, so the button vanished before it could be
-// clicked. Run is centred on the node, chat sits at the top-right corner.
-//
-// Run mirrors what clicking the node does, and shows under exactly the same
-// condition (`data.runnable`).
-//
-// Chat only appears for a step that has actually run (`data.executed`, computed
-// in PipelineView) — a step that never ran has no CLI session, so there is no
-// history to replay.
+// Actions sit on the node's border and stay always visible — a hover-only
+// popover outside the node lost hover as the cursor travelled to it, so the
+// button vanished before it could be clicked.
+// Chat only appears once a step has actually run (`data.executed`) — a step
+// that never ran has no CLI session to replay.
 const hasRunHistory = computed(() => Boolean(props.data.taskId) && Boolean(props.data.executed))
 
 /**
@@ -206,7 +200,7 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
   border-radius: 10px;
   padding: 8px 14px;
   // Wide enough that the top-right action buttons (run/chat) never crowd the
-  // centred status bubble — see PipelineNode.vue.
+  // centred status bubble.
   min-width: 110px;
   text-align: center;
   cursor: default;

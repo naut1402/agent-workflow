@@ -73,10 +73,9 @@ function resetIfGone(options: { value: string }[], selected: { value: string }) 
 watch(agentSourceOptions, (opts) => resetIfGone(opts, agentSource))
 watch(skillSourceOptions, (opts) => resetIfGone(opts, skillSource))
 
-// Panel này gói 2 mục còn `RulesPanel` chỉ có 1; chia cột theo số panel thì mỗi
-// mục của catalog chỉ được nửa phần của Rules. Chia theo SỐ MỤC ĐANG MỞ để mọi
-// mục mở được phần bằng nhau (grow đổi, basis vẫn 0 — không trộn basis giữa các
-// anh em cùng cấp, docs/ui-overflow.md).
+// Panel này gói 2 mục còn `RulesPanel` chỉ có 1; chia cột theo số panel sẽ cho
+// catalog chỉ nửa phần của Rules. Chia theo số mục đang mở để mọi mục mở được
+// phần bằng nhau (grow đổi, basis vẫn 0, docs/ui-overflow.md).
 const openCatalogCount = computed(
   () => ['agents', 'skills'].filter((k) => props.openSections.has(k)).length,
 )
@@ -222,11 +221,9 @@ function onDragStart(event, item, type) {
 }
 .catalog-panel--open { flex: 1 1 0; }
 
-/* Hàng công cụ của một mục: xếp NGANG, một hàng duy nhất. Cột trái chia chiều
-   cao cho 3 mục nên ngân sách cố định của mỗi mục trực tiếp trừ vào vùng cuộn:
-   xếp dọc tốn ~70px/mục, đủ để `.catalog-list` sụp còn vài px ở viewport thấp
-   (docs/ui-overflow.md — cắt cụt tệ hơn cuộn). Đổi lại nhãn nguồn đang chọn có
-   thể bị ellipsis; `:title` trên select bù phần đọc đầy đủ. */
+/* Hàng công cụ xếp ngang, một hàng duy nhất — xếp dọc tốn ~70px/mục, đủ để
+   `.catalog-list` sụp còn vài px ở viewport thấp (docs/ui-overflow.md). Đổi lại
+   nhãn nguồn có thể bị ellipsis; `:title` trên select bù phần đọc đầy đủ. */
 .catalog-toolbar {
   display: flex;
   flex-direction: row;

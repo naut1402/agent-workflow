@@ -16,8 +16,7 @@ export interface ModeEntry {
   /** Ẩn mode khỏi sidebar/status/main khi false (vd `logs` theo `showLogsTab`). Mặc định luôn hiện. */
   visible?: (ctx: ShellContext) => boolean
   /**
-   * Mode có sub-sidebar thu/phóng được. Có khai = click lại mode icon đang active
-   * sẽ toggle sub-sidebar; không khai = click lại là no-op.
+   * Khai báo → click lại mode icon đang active toggle sub-sidebar; không khai → no-op.
    * `persistKey`: localStorage key lưu trạng thái; bỏ trống = không persist.
    */
   subSidebar?: { persistKey?: string }

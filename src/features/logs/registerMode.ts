@@ -11,8 +11,7 @@ export function registerMode(registry: ModeRegistry): void {
     descriptionKey: 'common.modeDesc.logs',
     maturity: 'stable',
     defaultEnabled: true,
-    // Tab Logs có thể bị ẩn qua Settings (`showLogsTab`) — giữ đúng hành vi gốc
-    // (nút chỉ hiện khi bật), không lộ ra sidebar khi tắt.
+    // Tab Logs có thể bị ẩn qua Settings (`showLogsTab`) — không lộ ra sidebar khi tắt.
     visible: (ctx: ShellContext) => Boolean((ctx as Record<string, unknown>).showLogsTab),
   })
 }

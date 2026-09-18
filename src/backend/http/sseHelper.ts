@@ -31,7 +31,7 @@ export function sseResponse(subscribe: SseSubscribe): Response {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-store',
       Connection: 'keep-alive',
-      // Phòng khi có reverse proxy sau này — không có deployment thật để verify hôm nay.
+      // Phòng khi có reverse proxy phía trước (chưa có deployment thực tế để kiểm chứng).
       'X-Accel-Buffering': 'no',
     },
   })

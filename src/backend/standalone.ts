@@ -1,20 +1,7 @@
 #!/usr/bin/env bun
-// Standalone dev-team-dashboard server.
-//
-//   bun src/backend/standalone.ts
-//
-// A neutral HTTP server that does NOT live inside any single
-// `.dev-team-agent/` workspace. It:
-//   - serves the built Vue SPA from `dist/` (run `bun run build` first),
-//   - mounts the shared API handler (createApiHandler) at `/api/*`,
-//   - resolves each request's project via the shared ProjectRegistry
-//     (~/.dev-team-dashboard/projects.json),
-//   - binds to 127.0.0.1:5174 (local-first; MVP does not expose to the network).
-//
-// If the registry is empty and DEV_TEAM_ROOT is set, that root is seeded as the
-// default project so the legacy single-project run still "just works".
-//
-// Design ref: U0001 design.md §4.0 (architecture), §4.6 (run mode).
+// Standalone dev-team-dashboard server (bun src/backend/standalone.ts) — a
+// neutral HTTP server not tied to any single `.dev-team-agent/` workspace.
+// Binds 127.0.0.1 only; MVP does not expose to the network. See docs/architecture.md §2.3.
 
 import http from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'

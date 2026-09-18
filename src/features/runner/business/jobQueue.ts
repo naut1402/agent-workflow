@@ -81,14 +81,13 @@ export function parseOrchestratorDecision(stdout: string): OrchestratorDecision 
 }
 
 /**
- * Bridge for "chat → dispatch step" (issue #337): an orchestrator agent chat
- * reply's `ORCHESTRATOR_DECISION` line was, until now, never actually wired
- * to run anything — chat always just resumes the chatting step's own session.
- * Called once a chat-feedback job (`metadata.isChatFeedback`) finishes
- * successfully; forwards the parsed decision to the existing `runTaskStep`
- * dispatcher (lock/HITL/validate all reused as-is, see design.md §4.2).
- * Never throws — a failure here must not swallow the `resubmitPendingFeedback`
- * call right after it in `runJob`.
+ * Bridge "chat → dispatch step": forwards an orchestrator agent chat reply's
+ * `ORCHESTRATOR_DECISION` line to the existing `runTaskStep` dispatcher
+ * (lock/HITL/validate all reused as-is, see design.md §4.2) — a chat job by
+ * itself only resumes the chatting step's own session. Called once a
+ * chat-feedback job (`metadata.isChatFeedback`) finishes successfully. Never
+ * throws — a failure here must not swallow the `resubmitPendingFeedback` call
+ * right after it in `runJob`.
  */
 async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): Promise<void> {
   try {
@@ -100,24 +99,16 @@ async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): 
     const projectId = typeof job.metadata?.projectId === 'string' ? job.metadata.projectId : ''
     if (!taskId || !devTeamRoot) return
 
-    // `runTaskStep`'s forward-only chain guard (`isRunnableTarget`) treats the
-    // `current_phase: "completed"` sentinel as "not in pipeline.steps" and
-    // always rejects — exactly the headline repro in request.md (task already
-    // completed, orchestrator says "start implementer", nothing happens).
-    // `jumpToPipelineStep` alone does not fix this: it only moves
-    // `current_phase` and leaves `last_reset_at` untouched, so `runTaskStep`'s
-    // own "heal a stuck phase" fallback (runStep.ts:81-97) finds the step's
-    // pre-existing `succeeded` job — the exact job that got the task to
-    // `completed` in the first place — and immediately advances `current_phase`
-    // right back past it before any job is submitted, reproducing the same
-    // no-op one hop later (review round 2). Use `resetPipelineStep` instead:
-    // the primitive built specifically to restart an already-run step, which
-    // sets `last_reset_at` (so the heal fallback no longer treats this as
-    // "stuck") and clears the step's stale artifacts — matching request.md's
-    // expectation of a fresh `phpstan.md` timestamp. `cascade: false` so only
-    // the decided step's artifacts are cleared, not everything after it. Only
-    // for a stepId that's actually in this pipeline — `resetPipelineStep`
-    // 400s otherwise, which the `res.ok === false` branch below logs.
+    // For a `completed` task, `runTaskStep`'s forward-only chain guard always
+    // rejects the decided step, and `jumpToPipelineStep` alone can't fix that:
+    // it only moves `current_phase`, so the "heal a stuck phase" fallback in
+    // `runTaskStep` finds the step's pre-existing `succeeded` job and advances
+    // `current_phase` right back past it before any job is submitted. Use
+    // `resetPipelineStep` instead — it sets `last_reset_at` (so the heal
+    // fallback no longer treats this as stuck) and clears the step's stale
+    // artifacts. `cascade: false` limits the reset to just the decided step,
+    // and only for a stepId that's actually in this pipeline (`resetPipelineStep`
+    // 400s otherwise, which the `res.ok === false` branch below logs).
     const stateFile = joinPath(devTeamRoot, '.dev-state', `${taskId}.json`)
     const { readState } = await import('../../monitor/business/tasks/index.js')
     const read = await readState(stateFile)
@@ -245,8 +236,8 @@ function ensureJobsDir(): void {
   mkdirSync(jobsDir(), { recursive: true })
 }
 
-// ── Approval flow (see JobRecord's sessionId/applyTarget/approvalArtifact/
-// parentJobId doc comments in types.ts) ─────────────────────────────────────
+// Approval flow (see JobRecord's sessionId/applyTarget/approvalArtifact/
+// parentJobId doc comments in types.ts).
 // A `require_approval` quick action runs against a throwaway copy of the task
 // workspace under the dashboard's own registry home — never the real project
 // tree — so nothing is written to the user's files until they explicitly
@@ -276,7 +267,7 @@ function removeScratchWorkspace(scratchPath: string): void {
   }
 }
 
-// ── Selection splice helpers (pure) ─────────────────────────────────────────
+// Selection splice helpers (pure).
 // A selection quick action must only ever touch the lines the user picked. The
 // agent improves just the snippet (in a scratch file); the server then splices
 // that result back into a copy of the real artifact at the same line range so
@@ -1466,7 +1457,7 @@ export function discardJob(id: string): MutationResult<{ job: JobRecord }> {
   return { ok: true, job: updated }
 }
 
-// ── orphan reaper ──────────────────────────────────────────────────────────
+// orphan reaper
 
 /** Best-effort liveness check — `(pid, startedAt)` pair from the job record. */
 export function isPidAlive(pid: number | null | undefined): boolean {

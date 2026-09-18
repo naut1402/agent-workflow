@@ -9,10 +9,7 @@ export function sourcePriority(source: string): number {
   return 0
 }
 
-/**
- * Dedupe catalog items by `name`, keeping the highest-priority source, then
- * sort by name. Pure — the core of catalog source precedence.
- */
+/** Dedupe catalog items by `name`; `sourcePriority` decides the winner on collision. */
 export function dedupeCatalogItems<T extends { name: string; source: string }>(items: T[]): T[] {
   const byName = new Map<string, T>()
   for (const item of items) {
@@ -24,8 +21,7 @@ export function dedupeCatalogItems<T extends { name: string; source: string }>(i
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
-// Built-in fallback catalog when no skills/agents are discovered on disk
-// (e.g. marketplace.json not found and no installed plugins).
+// Fallback catalog when no skills/agents are discovered on disk.
 export const BUILTIN_CATALOG = {
   skills: [
     { id: 'repo:dev-agent-teams:survey-codebase', name: 'survey-codebase', plugin: 'dev-agent-teams', source: 'repo:dev-agent-teams', description: 'Survey codebase, trace call chains' },
@@ -80,12 +76,9 @@ export interface CatalogScanPatterns {
 }
 
 /**
- * Aggregate skills + agents from every source, dedupe by name (source priority),
- * fall back to BUILTIN_CATALOG when nothing is found.
- *
- * `deps.scanCustomAgents` is injected (it belongs to the agents module) so the
- * catalog module stays decoupled from agents. `deps.scanPatterns` comes from
- * global dashboard settings and only adds to the default sources.
+ * `deps.scanCustomAgents` is injected to keep this module decoupled from the
+ * agents module; `deps.scanPatterns` comes from global settings and only adds
+ * to the default sources.
  */
 export async function buildCatalog(
   root: string,
@@ -115,8 +108,7 @@ export async function buildCatalog(
     await scanProjectClaude(projectRoot, catalogOpts),
   ]
 
-  // Must stay AFTER the convention sources: dedupeCatalogItems compares with `>`,
-  // so on equal priority (both 'project') the item seen first wins.
+  // Must stay after the convention sources: on equal priority, dedupeCatalogItems keeps the first-seen item.
   const patterns = deps.scanPatterns
   if (patterns?.agents?.length || patterns?.skills?.length) {
     batches.push({
@@ -142,7 +134,7 @@ export async function buildCatalog(
   return { skills, agents }
 }
 
-/** Hàm thuần theo id `<source>:<name>` — dùng chung cho agent + skill. */
+/** Pure parser for the `<source>:<name>` id shape, shared by agents and skills. */
 export function parseCatalogItemId(id: unknown): { source: string; name: string } | null {
   if (typeof id !== 'string' || !id.includes(':')) return null
   const i = id.lastIndexOf(':')
@@ -151,15 +143,9 @@ export function parseCatalogItemId(id: unknown): { source: string; name: string 
 }
 
 /**
- * Resolve the on-disk path of a catalog agent's markdown by its catalog id.
- * `deps.customAgentsDir` is injected (agents module) to keep catalog decoupled.
- *
- * `source === 'project'` has two possible origins in the catalog: the fixed
- * convention (`.claude/agents/<name>.md`, via `scanProjectClaude`) and a
- * `scanPatterns.agents` wildcard match (via `scanAgentsByPatterns`) — both
- * produce the same `id` shape (`project:<name>`), so this must try the
- * convention path first, then fall back to re-expanding the patterns, or a
- * catalog entry found only through wildcard scan can never be opened.
+ * `source === 'project'` can come from the fixed convention path or a
+ * `scanPatterns.agents` match — both share the `project:<name>` id shape, so
+ * convention must be tried first or pattern-only entries can never resolve.
  */
 export async function resolveCatalogAgentPath(
   projectRoot: string,
@@ -206,10 +192,8 @@ export async function resolveCatalogAgentPath(
 }
 
 /**
- * Resolve the on-disk path of a catalog skill's `SKILL.md` by its catalog id.
- * Mirror của `resolveCatalogAgentPath`, nhưng tự sanitize `name` — route mới
- * (`getSkillContent`) không được mang theo lỗ hổng path-traversal có sẵn ở
- * route agent (AGENTS.md §4: chặn path-traversal ở feature sở hữu).
+ * Mirrors `resolveCatalogAgentPath` but sanitizes `name` itself — this newer
+ * route must not inherit the agent route's path-traversal gap (AGENTS.md §4).
  */
 export async function resolveCatalogSkillPath(
   projectRoot: string,

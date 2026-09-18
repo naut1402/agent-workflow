@@ -43,7 +43,7 @@ export const EMPTY_REPLY_NUDGE_TEXT =
   'bằng một câu văn bản ngắn xác nhận. Nếu chưa, hãy gọi đúng 1 trong các tool đã được ' +
   'liệt kê ở đầu system prompt.'
 
-/** Marker line reprinted right before the model's response in the job log — now emitted by `onSystemPrompt` (see execute()) instead of unconditionally by describePayload(). */
+/** Marker line reprinted right before the model's response in the job log — emitted by `onSystemPrompt` (see execute()). */
 export const RUNNER_RESPONSE_MARKER = '\n=== Phản hồi của runner ===\n\n'
 
 /** Thrown when the turn after the nudge is still empty — surfaces as a clear `ok:false` instead of a silent `succeeded`. */

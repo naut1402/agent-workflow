@@ -16,16 +16,16 @@ import {
 import { buildRules, resolveRuleContentPathWithPatterns } from './business/rules/index.js'
 
 /**
- * Chuẩn hoá phần pipeline do người dùng nhập **trước khi ghi ra đĩa**.
+ * Chuẩn hoá phần pipeline do người dùng nhập trước khi ghi ra đĩa.
  *
- * - `orchestrator.agent` là agent ref người dùng gõ tự do — phần tên của nó sẽ
- *   trở thành path khi `resolveAgent` đi tìm file, nên phải qua `sanitiseAgentName`
- *   (bất biến chống path-traversal, AGENTS.md §4). Ref hỏng ⇒ 400, KHÔNG lưu im lặng.
+ * - `orchestrator.agent` là agent ref người dùng gõ tự do — tên của nó sẽ thành
+ *   path khi `resolveAgent` đi tìm file, nên phải qua `sanitiseAgentName` (chống
+ *   path-traversal, AGENTS.md §4). Ref hỏng ⇒ 400, không lưu im lặng.
  * - Step id bắt đầu bằng `__` bị từ chối: `__orchestrator__` là id dành riêng cho
  *   node điều phối, trùng vào là session ledger và chat surface lẫn hai thứ.
  *
- * Chạy ở **cả hai** đường ghi (`writePipelineConfig` và `createPipelineProfile`)
- * — chỉ chặn một đường thì đường kia vẫn lưu được nội dung độc hại.
+ * Chạy ở cả hai đường ghi (`writePipelineConfig` và `createPipelineProfile`) —
+ * chỉ chặn một đường thì đường kia vẫn lưu được nội dung độc hại.
  */
 function validatePipelinePayload(pipeline: any): string | null {
   for (const step of pipeline.steps ?? []) {
@@ -37,10 +37,9 @@ function validatePipelinePayload(pipeline: any): string | null {
   if (agent != null && agent !== '') {
     if (typeof agent !== 'string') return 'invalid orchestrator.agent'
     // Ref dạng `<source>:<name>` (source có thể nhiều đoạn, vd `repo:dev-agent-teams`).
-    // **Mọi** đoạn đều có thể thành một thành phần path ở `resolveAgentFilePath`,
-    // nên kiểm cả ref chứ không chỉ đoạn cuối. So sánh bằng (không chỉ "khác
-    // null") để một đoạn bị `sanitiseAgentName` *gọt* cũng là từ chối, chứ không
-    // âm thầm lưu bản đã gọt.
+    // Mọi đoạn đều có thể thành một thành phần path ở `resolveAgentFilePath`, nên
+    // kiểm cả ref chứ không chỉ đoạn cuối, và so sánh bằng để một đoạn bị
+    // `sanitiseAgentName` gọt cũng bị từ chối thay vì âm thầm lưu bản đã gọt.
     const segments = agent.split(':')
     if (segments.some((seg) => pipelineEditorBusiness.sanitiseAgentName(seg) !== seg)) {
       return 'invalid orchestrator.agent'
@@ -162,10 +161,8 @@ export class PipelineEditorController extends AbstractController {
       return this.badRequest('scope must be "global" or "task" (with taskId)')
     }
     const toWrite = scope === 'task' ? { ...pipeline, steps_replace: true } : pipeline
-    // Atomic (temp + rename): gate reconciliation now depends on reading an
-    // intact YAML. A read landing mid-write would see a truncated file,
-    // `readYamlSafe` would return null, the pipeline would fall back to
-    // global/builtin — and reconcile could clear a legitimate gate.
+    // Atomic (temp + rename): a read landing mid-write would see a truncated file,
+    // fall back to global/builtin, and reconcile could clear a legitimate gate.
     writeTextFileAtomicSync(target, dumpYaml(toWrite))
     if (scope === 'task' && taskId) {
       // Import động: barrel monitor kéo theo runner (`node:child_process`), còn
@@ -259,10 +256,9 @@ export class PipelineEditorController extends AbstractController {
     })
     if (!skillPath) {
       const parsed = parseCatalogItemId(id)
-      // `pluginName` cũng đi thẳng vào `path.join` như `name` — phải qua cùng
-      // whitelist ký tự (AGENTS.md §4), nếu không `id=repo:../../..:x` thoát
-      // khỏi thư mục `plugins/`. Resolve + `startsWith` bên dưới là lớp chặn
-      // thứ hai, độc lập với whitelist, cho path kết quả.
+      // `pluginName` đi thẳng vào `path.join` như `name` nên cũng phải qua whitelist
+      // ký tự (AGENTS.md §4), nếu không `id=repo:../../..:x` thoát khỏi `plugins/`.
+      // Resolve + `startsWith` bên dưới là lớp chặn thứ hai, độc lập với whitelist.
       if (parsed?.source?.startsWith('repo:') && pipelineEditorBusiness.sanitiseAgentName(parsed.name) === parsed.name) {
         const pluginName = parsed.source.slice('repo:'.length)
         if (pipelineEditorBusiness.sanitiseAgentName(pluginName) === pluginName) {

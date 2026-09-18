@@ -1,6 +1,6 @@
 /**
  * Dựng graph render cho canvas editor: step node/edge do người dùng sửa, cộng
- * thêm node artifact/knowledge + edge dữ liệu **phái sinh** từ chính các step đó.
+ * thêm node artifact/knowledge + edge dữ liệu phái sinh từ chính các step đó.
  *
  * Node phái sinh chỉ tồn tại để nhìn — chúng không phải step. Mọi phép tính sinh
  * ra YAML (`buildFullPipeline`, `topoSort`, `hasFanOut`…) phải lọc chúng qua
@@ -75,9 +75,9 @@ export function buildEditorGraph(opts: {
   steps: PipelineStepLike[]
   labels: ArtifactGraphLabels
   /**
-   * Key `orchestrator` của pipeline. Node sinh từ **meta**, không phải từ canvas:
-   * nó không nằm trong `steps[]` nên mỗi lần `syncDerivedGraph()` chạy lại là nó
-   * bị dựng lại từ đầu — meta là nguồn duy nhất còn sống qua vòng đó.
+   * Key `orchestrator` của pipeline. Node sinh từ meta, không phải từ canvas:
+   * nó không nằm trong `steps[]` nên mỗi lần `syncDerivedGraph()` chạy lại nó bị
+   * dựng lại từ đầu, và meta là nguồn duy nhất còn sống qua vòng đó.
    */
   orchestrator?: { enabled?: boolean; agent?: string } | null
   /** Nhãn node điều phối (i18n do caller truyền — builder này thuần). */
@@ -92,9 +92,9 @@ export function buildEditorGraph(opts: {
 
   const hubEnabled = opts.orchestrator?.enabled === true
 
-  // Step-edge vẫn tính label như cũ, chỉ ẩn hiển thị khi hub bật — KHÔNG loại
-  // khỏi mảng trả về, để `getEdges.value` (nguồn duy nhất của `stepGraph()`)
-  // vẫn thấy đủ khi hub tắt lại (D2, xem design.md §2).
+  // Step-edge vẫn tính label như cũ, chỉ ẩn hiển thị khi hub bật — không loại khỏi
+  // mảng trả về, để `getEdges.value` (nguồn duy nhất của `stepGraph()`) vẫn thấy
+  // đủ khi hub tắt lại (xem design.md §2).
   const labelledEdges = (opts.stepEdges ?? []).map((e) => ({
     ...e,
     label: gateLabelOf(byId[e.source as string]),
@@ -165,11 +165,9 @@ export function buildEditorGraph(opts: {
 export type FlowChangeLike = { type?: string }
 
 /**
- * Có phần tử nào vừa bị **xoá** khỏi canvas không.
- *
- * VueFlow bắn `nodesChange` / `edgesChange` cho cả `select` / `position` /
- * `dimensions`; chỉ change `remove` mới cần dựng lại graph phái sinh, sync ở
- * mọi change sẽ làm node giật lúc kéo.
+ * Có phần tử nào vừa bị xoá khỏi canvas không. VueFlow bắn `nodesChange` /
+ * `edgesChange` cho cả `select` / `position` / `dimensions`; chỉ change `remove`
+ * mới cần dựng lại graph phái sinh, sync ở mọi change sẽ làm node giật lúc kéo.
  */
 export function hasRemovalChange(
   changes: readonly (FlowChangeLike | null | undefined)[] | null | undefined,

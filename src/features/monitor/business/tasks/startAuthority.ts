@@ -86,7 +86,7 @@ export async function applyOrchestratorConfigChange(
 
 /**
  * Trạng thái điều phối của một task, đọc từ pipeline thật + state thật.
- * Đồng thời **tự chữa** cờ cache khi nó lệch với pipeline (pipeline được bật/tắt
+ * Đồng thời tự chữa cờ cache khi nó lệch với pipeline (pipeline được bật/tắt
  * giữa chừng): đường async đúng ngay, cờ cache chỉ lệch tới lần gọi kế tiếp.
  */
 export async function resolveOrchestration(
@@ -97,9 +97,9 @@ export async function resolveOrchestration(
     /**
      * `await` lượt ghi cờ cache thay vì để nó chạy nền.
      *
-     * Bắt buộc với caller **không** giữ khoá task mà ngay sau đó sẽ `submitJob`
-     * (đường chain): backstop đồng bộ đọc chính cờ này và **ném lỗi**, nên một
-     * cờ `true` cũ chưa kịp ghi lại sẽ làm `submitJob` throw đúng lúc người dùng
+     * Bắt buộc với caller không giữ khoá task mà ngay sau đó sẽ `submitJob`
+     * (đường chain): backstop đồng bộ đọc chính cờ này và ném lỗi, nên một cờ
+     * `true` cũ chưa kịp ghi lại sẽ làm `submitJob` throw đúng lúc người dùng
      * vừa tắt điều phối. Caller đang ở trong `withTaskLock` thì KHÔNG được bật —
      * chờ một lượt khoá mới của cùng state file từ trong khoá đó là deadlock.
      */
@@ -112,7 +112,7 @@ export async function resolveOrchestration(
   const state = read.ok ? (read.state as Record<string, unknown>) : null
   const halted = state?.orchestrator_halted === true
   // Mặc định KHÔNG `await`: guard được gọi cả từ bên trong `withTaskLock` (vd
-  // `runTaskStep`), và chờ một lượt khoá mới của **cùng** state file từ trong
+  // `runTaskStep`), và chờ một lượt khoá mới của cùng state file từ trong
   // khoá đó là deadlock. Caller sắp `submitJob` ngay sau đây phải bật
   // `awaitFlagSync` — xem ghi chú ở `opts`.
   if (state && state.orchestrator_enabled !== enabled) {
@@ -161,9 +161,9 @@ function readStateSyncSafe(root: string, taskId: string): Record<string, unknown
 
 /**
  * Lưới an toàn cuối trong `submitJob`. Chỉ soi job của một step pipeline; chat
- * (`isChatFeedback`) là ngoại lệ **không giới hạn** theo yêu cầu đề bài.
+ * (`isChatFeedback`) là ngoại lệ không giới hạn theo yêu cầu đề bài.
  *
- * ⚠️ Ném lỗi chứ không lọc im lặng: mọi call-site hợp lệ đã qua `assertStartAllowed`,
+ * Ném lỗi chứ không lọc im lặng: mọi call-site hợp lệ đã qua `assertStartAllowed`,
  * nên chạm được vào đây nghĩa là còn một đường start bị bỏ sót — phải đỏ to.
  */
 export function assertStartAllowedSync(metadata: Record<string, any> | undefined): void {

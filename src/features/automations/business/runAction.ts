@@ -1,11 +1,10 @@
 /**
- * Thực thi chuỗi action của automation rule (#233). Action chạy **tuần tự**;
- * mỗi bước chờ job của nó kết thúc rồi capture stdout + artifacts làm biến
+ * Thực thi chuỗi action của automation rule. Action chạy tuần tự; mỗi bước
+ * chờ job của nó kết thúc rồi capture stdout + artifacts làm biến
  * (`{{steps.N.stdout}}`, `{{steps.N.artifacts.<name>}}`) cho bước sau.
  *
- * Chuỗi chạy nền (fire-and-forget) để không chặn tick scheduler — state
- * `inFlight` phủ toàn chuỗi, chặn event-trigger chạy chồng. Mọi thất bại nằm
- * trong run record (outcome failed/skipped), không ném lỗi lên caller.
+ * Chuỗi chạy nền (fire-and-forget) để không chặn tick scheduler — `inFlight`
+ * chặn event-trigger chạy chồng. Thất bại nằm trong run record, không ném lỗi lên caller.
  */
 
 import { joinPath, mkdirSync, randomBytes, randomUUID, readTextFileSync, readdirSync } from '../../../backend/lib/fileHelper.js'
@@ -198,8 +197,7 @@ async function executeCreateAction(
   const target = resolveActionTarget(input, action)
   if ('error' in target) return { error: target.error }
 
-  // Mint + retry: id ngẫu nhiên gần như không trùng, nhưng 409 thì thử lại
-  // vài lần thay vì fail cả run.
+  // Mint + retry: id gần như không trùng, nhưng 409 thì thử lại vài lần thay vì fail cả run.
   let created: Awaited<ReturnType<typeof createTask>> | null = null
   for (let attempt = 0; attempt < 3; attempt++) {
     const result = await createTask(target.root, {
@@ -224,9 +222,8 @@ async function executeCreateAction(
     return { taskId: created.taskId, root: target.root, error: 'pipeline has no first-step agent' }
   }
 
-  // Pipeline có node điều phối ⇒ giao cho nó, y như nhánh "Chạy ngay" của
-  // createTask. Không có jobId để chờ nên bước dừng ở đây: tiến độ về sau nằm ở
-  // event `orchestrator.*` và trên canvas của task.
+  // Pipeline có node điều phối ⇒ giao cho nó (như nhánh "Chạy ngay" của createTask);
+  // không có jobId để chờ, tiến độ theo dõi qua event `orchestrator.*`.
   const orchestration = await resolveOrchestration(target.root, created.taskId)
   if (orchestration.active) {
     await dispatchOrchestrator(target.root, target.projectId, created.taskId, 'task_created')
@@ -272,9 +269,8 @@ async function executeExistingAction(
     if (result.status === 409) {
       return { taskId: action.taskId, root: target.root, skipped: true, error: 'task busy — step already running' }
     }
-    // 403 = task do orchestrator điều phối. Cũng ghi `skipped` chứ không `failed`:
-    // biến một automation đang chạy tốt thành đỏ hàng loạt chỉ vì người dùng bật
-    // checkbox điều phối là phản ứng sai. Phát tín hiệu để orchestrator tự quyết.
+    // 403 = task do orchestrator điều phối — ghi `skipped` (không `failed`) để không
+    // biến automation đang chạy tốt thành đỏ hàng loạt; phát tín hiệu để orchestrator tự quyết.
     if (result.status === 403) {
       emit('orchestrator.start_requested', {
         taskId: action.taskId,
@@ -477,7 +473,7 @@ async function executeSequence(
 
 /**
  * Kích hoạt rule một lần: ghi run + state, emit `automation.triggered`, rồi
- * **chạy nền** chuỗi action. Trả về run record đang `running` — kết quả cuối
+ * chạy nền chuỗi action. Trả về run record đang `running` — kết quả cuối
  * nằm trong history (UI poll) và event `automation.run_succeeded|run_failed`.
  */
 export function runAutomation(input: RunAutomationInput): AutomationRun {
@@ -485,9 +481,8 @@ export function runAutomation(input: RunAutomationInput): AutomationRun {
   const startedAt = new Date().toISOString()
   const runId = randomUUID()
 
-  // Đánh dấu chạy trước khi execute: lastRunAt neo lịch tính due kế tiếp,
-  // inFlight chặn event-trigger chạy chồng; one-shot `once` tới hạn coi như
-  // đã kích hoạt (kể cả khi action fail thì không chạy lại).
+  // Đánh dấu chạy trước khi execute: lastRunAt neo lịch due kế tiếp, inFlight chặn
+  // trigger chạy chồng, one-shot `once` tới hạn coi như đã kích hoạt dù action fail.
   const prevState = getRuleState(projectId, rule.id)
   const triggerFired = {
     ...(prevState.triggerFired ?? {}),
@@ -501,9 +496,8 @@ export function runAutomation(input: RunAutomationInput): AutomationRun {
   }
   setRuleState(projectId, rule.id, state)
 
-  // Rule thuần one-shot đã chạy → disable NGAY TRONG FILE YAML: runtime state
-  // ở registryHome mất khi redeploy docker (container mới), còn rule file ở
-  // data root (volume mount) nên đây là lớp chặn chạy lại bền vững.
+  // One-shot đã chạy → disable ngay trong file YAML: runtime state ở registryHome
+  // mất khi redeploy docker, còn rule file ở data root (volume mount) nên bền vững.
   if (disableIfAllOnceTriggersSpent(input.root, rule)) {
     syncTriggerRegistry(input.root, String(projectId || ''))
     emit('entity.updated', {
