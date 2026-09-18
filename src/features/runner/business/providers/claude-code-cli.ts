@@ -8,7 +8,10 @@ import {
   type SessionCaptureMode,
 } from '../sessionLedger.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ResolvedAgent, RunnerProvider } from '../types.js'
-import type { AgentCliProvider } from './agentCli.js'
+import type { AgentCliProvider, McpDelivery } from './agentCli.js'
+import { mcpDeliveryOf } from './agentCli.js'
+import { prepareMcpConfigForJob, type McpJobConfigHandle } from './mcpJobConfig.js'
+import { maskSecretText } from '../../../mcp/business/index.js'
 import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 
 interface ProcResult {
@@ -58,6 +61,8 @@ export interface ClaudeInvocationInput {
   sessionId?: string
   resumeSessionId?: string
   model?: string
+  /** Đường dẫn file JSON `mcpServers`; có giá trị mới sinh cờ `--mcp-config`. */
+  mcpConfigPath?: string
 }
 
 export interface ClaudeInvocation {
@@ -81,6 +86,11 @@ export function buildClaudeInvocation(input: ClaudeInvocationInput): ClaudeInvoc
   }
   if (input.dangerouslySkipPermissions) {
     args.push('--dangerously-skip-permissions')
+  }
+  // `--strict-mcp-config` đi kèm bắt buộc: không có nó, job còn ăn thêm MCP
+  // server cấu hình sẵn trên máy chạy dashboard.
+  if (input.mcpConfigPath) {
+    args.push('--mcp-config', input.mcpConfigPath, '--strict-mcp-config')
   }
   if (input.model) {
     args.push('--model', input.model)
@@ -316,6 +326,8 @@ export interface LocalConsoleProviderOptions {
   claudeStyleArgs?: boolean
   /** How this provider captures/presets CLI session ids. */
   sessionCapture?: SessionCaptureMode
+  /** Override for tests; production reads `mcpDeliveryOf(providerId)`. */
+  mcpDelivery?: McpDelivery
 }
 
 /** Shared Agent CLI spawn provider (Claude / Cursor / Codex) — not console-command. */
@@ -353,6 +365,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         maxConcurrency: 1,
         sessionCapture,
         supportsTokenUsage: false,
+        mcpDelivery: opts.mcpDelivery ?? mcpDeliveryOf(opts.providerId),
       }
     },
 
@@ -384,146 +397,202 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         useClaudeStyle &&
         runnerConfig.dangerouslySkipPermissions !== false &&
         runnerConfig.dangerouslySkipPermissions !== 'false'
-      let args: string[]
-      let stdinInput: string | undefined
-      if (useClaudeStyle) {
-        const invocation = buildClaudeInvocation({
-          flags,
-          prompt,
-          allowedTools: runnerConfig.allowedTools,
-          dangerouslySkipPermissions: skipPermissions,
-          sessionId: sessionPlan.sessionId,
-          resumeSessionId: sessionPlan.resumeSessionId,
-          model: runnerConfig.model,
-        })
-        args = invocation.args
-        stdinInput = invocation.stdinInput
-      } else if (sessionCapture === 'parse-json') {
-        // Same Windows argv-splitting class as Claude: prompt must not be an
-        // argv element under shell:true. Also pass --resume so multi-turn NL
-        // chat (and approval feedback) keeps the captured session_id.
-        const invocation = buildCursorJsonInvocation({
-          flags,
-          prompt,
-          resumeSessionId: sessionPlan.resumeSessionId,
-        })
-        args = invocation.args
-        stdinInput = invocation.stdinInput
-      } else {
-        args = [...flags, prompt]
-      }
 
       const logPath = req.metadata?.logPath as string | undefined
+      let mcpHandle: McpJobConfigHandle | null = null
+      // Đọc `mcpHandle` lúc gọi chứ không lúc khai: handle chỉ có sau khi serialize
+      // xong, mà mọi dòng log đều phải đi qua cùng một bộ lọc.
+      const maskLog = (text: string) =>
+        mcpHandle?.secrets.length ? maskSecretText(text, mcpHandle.secrets) : text
       const appendLog = (text: string) => {
         if (!logPath) return
         try {
-          appendTextFileSync(logPath, text)
+          appendTextFileSync(logPath, maskLog(text))
         } catch {
           /* ignore */
         }
       }
 
-      appendLog(
-        describePayload({
-          resolvedAgent: req.resolvedAgent,
-          workspace: req.workspace,
-          cliPath,
-          flags,
-          claudeStyle: useClaudeStyle,
-          argv: args,
-          promptViaStdin: stdinInput != null,
-          allowedTools: runnerConfig.allowedTools,
-          dangerouslySkipPermissions: skipPermissions,
-          sessionId: sessionPlan.sessionId,
-          resumeSessionId: sessionPlan.resumeSessionId,
-          prompt,
-          metadata: req.metadata,
-        }),
-      )
+      // Một biểu thức quyết định cả "có sinh file" lẫn "có đẩy cờ": cờ chỉ được
+      // thêm trong nhánh claude-style, nên sinh file ngoài nhánh đó là ghi rồi xoá
+      // một file không ai đọc.
+      const useMcpConfigFile =
+        (opts.mcpDelivery ?? mcpDeliveryOf(opts.providerId)) === 'config-file-flag' && useClaudeStyle
 
-      const wrappedOnLog = (chunk: string) => {
-        onLog?.(chunk)
-        appendLog(chunk)
-      }
-
-      const wrappedOnStart = (info: { pid: number | null }) => {
-        onStart?.(info)
-        // So the UI delta stream is not stuck on an empty "=== Phản hồi ==="
-        // section while the CLI is still thinking / using tools.
-        appendLog(`[runner] process started pid=${info.pid ?? 'null'} — chờ stdout/stderr…\n`)
-      }
-
-      const timeoutMs = req.timeoutMs || runnerConfig.timeoutMs || 600_000
-      let procResult: ProcResult
+      // try/finally phải ôm TOÀN BỘ phần còn lại, kể cả lời gọi sinh file và nhánh
+      // trả ExecuteResult sớm khi runProcess ném — nếu không, file 0600 chứa secret
+      // ở lại trên đĩa.
       try {
-        procResult = await runProcess(cliPath, args, {
-          cwd: req.workspace,
-          env: buildChildEnv(credential, req.metadata),
-          timeoutMs,
-          onLog: wrappedOnLog,
-          onStart: wrappedOnStart,
-          stdinInput,
-        })
-      } catch (err: any) {
+        if (useMcpConfigFile) {
+          try {
+            mcpHandle = prepareMcpConfigForJob({
+              ids: runnerConfig.mcpServers,
+              workspace: req.workspace,
+              jobId: req.jobId,
+            })
+          } catch (err: any) {
+            // Chạy tiếp mà thiếu tool là kiểu hỏng tệ nhất: job fail vì lý do
+            // không liên quan và không ai truy được về đây.
+            const result: ExecuteResult = {
+              ok: false,
+              exitCode: null,
+              durationMs: Date.now() - started,
+              logPath,
+              error: `không sinh được file cấu hình MCP: ${String(err?.message ?? err)}`,
+            }
+            appendLog(describeResult(result))
+            return result
+          }
+        }
+
+        let args: string[]
+        let stdinInput: string | undefined
+        if (useClaudeStyle) {
+          const invocation = buildClaudeInvocation({
+            flags,
+            prompt,
+            allowedTools: runnerConfig.allowedTools,
+            dangerouslySkipPermissions: skipPermissions,
+            sessionId: sessionPlan.sessionId,
+            resumeSessionId: sessionPlan.resumeSessionId,
+            model: runnerConfig.model,
+            mcpConfigPath: mcpHandle?.path,
+          })
+          args = invocation.args
+          stdinInput = invocation.stdinInput
+        } else if (sessionCapture === 'parse-json') {
+          // Same Windows argv-splitting class as Claude: prompt must not be an
+          // argv element under shell:true. Also pass --resume so multi-turn NL
+          // chat (and approval feedback) keeps the captured session_id.
+          const invocation = buildCursorJsonInvocation({
+            flags,
+            prompt,
+            resumeSessionId: sessionPlan.resumeSessionId,
+          })
+          args = invocation.args
+          stdinInput = invocation.stdinInput
+        } else {
+          args = [...flags, prompt]
+        }
+
+        appendLog(
+          describePayload({
+            resolvedAgent: req.resolvedAgent,
+            workspace: req.workspace,
+            cliPath,
+            flags,
+            claudeStyle: useClaudeStyle,
+            argv: args,
+            promptViaStdin: stdinInput != null,
+            allowedTools: runnerConfig.allowedTools,
+            dangerouslySkipPermissions: skipPermissions,
+            sessionId: sessionPlan.sessionId,
+            resumeSessionId: sessionPlan.resumeSessionId,
+            prompt,
+            metadata: req.metadata,
+          }),
+        )
+
+        // Chỉ id server + đường dẫn: nội dung file chứa env/header đã giải.
+        if (mcpHandle) {
+          appendLog(
+            `[runner] MCP: ${mcpHandle.count} server (${mcpHandle.names.join(', ')}) → ${mcpHandle.path}\n`,
+          )
+          for (const warning of mcpHandle.warnings) {
+            appendLog(`[runner] MCP warning: ${warning}\n`)
+          }
+        }
+
+        // MCP server (hoặc chính CLI) in token ra stderr là chuyện thường —
+        // `401 Unauthorized: Bearer sk-…`. File config được bảo vệ 0600 mà log job
+        // thì không, nên lọc ở đúng một chỗ trước khi chunk đi bất cứ đâu.
+        const wrappedOnLog = (chunk: string) => {
+          const text = maskLog(chunk)
+          onLog?.(text)
+          appendLog(text)
+        }
+
+        const wrappedOnStart = (info: { pid: number | null }) => {
+          onStart?.(info)
+          // So the UI delta stream is not stuck on an empty "=== Phản hồi ==="
+          // section while the CLI is still thinking / using tools.
+          appendLog(`[runner] process started pid=${info.pid ?? 'null'} — chờ stdout/stderr…\n`)
+        }
+
+        const timeoutMs = req.timeoutMs || runnerConfig.timeoutMs || 600_000
+        let procResult: ProcResult
+        try {
+          procResult = await runProcess(cliPath, args, {
+            cwd: req.workspace,
+            env: buildChildEnv(credential, req.metadata),
+            timeoutMs,
+            onLog: wrappedOnLog,
+            onStart: wrappedOnStart,
+            stdinInput,
+          })
+        } catch (err: any) {
+          const result: ExecuteResult = {
+            ok: false,
+            exitCode: null,
+            durationMs: Date.now() - started,
+            logPath,
+            error: String(err.message || err),
+          }
+          appendLog(describeResult(result))
+          return result
+        }
+
+        const artifactsFound: string[] = []
+        if (req.produces?.length) {
+          for (const name of req.produces) {
+            const fp = joinPath(req.workspace, name)
+            if (existsSync(fp)) artifactsFound.push(name)
+          }
+        }
+
+        const ok = procResult.exitCode === 0 && !procResult.killed
+        let stdout = procResult.stdout
+        let capturedSessionId: string | null | undefined = sessionPlan.presetSessionId ?? undefined
+        let tokenUsage: ExecuteResult['tokenUsage']
+
+        if (sessionCapture === 'parse-json') {
+          const parsed = parseCursorJsonOutput(procResult.stdout)
+          if (parsed.result != null) stdout = parsed.result
+          if (parsed.session_id) capturedSessionId = parsed.session_id
+          if (parsed.usage) {
+            const total =
+              parsed.usage.inputTokens +
+              parsed.usage.outputTokens +
+              parsed.usage.cacheReadTokens +
+              parsed.usage.cacheWriteTokens
+            tokenUsage = {
+              inputTokens: parsed.usage.inputTokens,
+              outputTokens: parsed.usage.outputTokens,
+              cacheReadTokens: parsed.usage.cacheReadTokens,
+              cacheWriteTokens: parsed.usage.cacheWriteTokens,
+              totalTokens: total,
+              model: parsed.model,
+            }
+          }
+        }
+
         const result: ExecuteResult = {
-          ok: false,
-          exitCode: null,
+          ok,
+          exitCode: procResult.exitCode,
           durationMs: Date.now() - started,
           logPath,
-          error: String(err.message || err),
+          artifactsFound,
+          error: ok ? undefined : formatFailure(procResult, timeoutMs),
+          timedOut: procResult.killed,
+          stdout,
+          sessionId: capturedSessionId,
+          tokenUsage,
         }
         appendLog(describeResult(result))
         return result
+      } finally {
+        mcpHandle?.dispose()
       }
-
-      const artifactsFound: string[] = []
-      if (req.produces?.length) {
-        for (const name of req.produces) {
-          const fp = joinPath(req.workspace, name)
-          if (existsSync(fp)) artifactsFound.push(name)
-        }
-      }
-
-      const ok = procResult.exitCode === 0 && !procResult.killed
-      let stdout = procResult.stdout
-      let capturedSessionId: string | null | undefined = sessionPlan.presetSessionId ?? undefined
-      let tokenUsage: ExecuteResult['tokenUsage']
-
-      if (sessionCapture === 'parse-json') {
-        const parsed = parseCursorJsonOutput(procResult.stdout)
-        if (parsed.result != null) stdout = parsed.result
-        if (parsed.session_id) capturedSessionId = parsed.session_id
-        if (parsed.usage) {
-          const total =
-            parsed.usage.inputTokens +
-            parsed.usage.outputTokens +
-            parsed.usage.cacheReadTokens +
-            parsed.usage.cacheWriteTokens
-          tokenUsage = {
-            inputTokens: parsed.usage.inputTokens,
-            outputTokens: parsed.usage.outputTokens,
-            cacheReadTokens: parsed.usage.cacheReadTokens,
-            cacheWriteTokens: parsed.usage.cacheWriteTokens,
-            totalTokens: total,
-            model: parsed.model,
-          }
-        }
-      }
-
-      const result: ExecuteResult = {
-        ok,
-        exitCode: procResult.exitCode,
-        durationMs: Date.now() - started,
-        logPath,
-        artifactsFound,
-        error: ok ? undefined : formatFailure(procResult, timeoutMs),
-        timedOut: procResult.killed,
-        stdout,
-        sessionId: capturedSessionId,
-        tokenUsage,
-      }
-      appendLog(describeResult(result))
-      return result
     },
   }
 }

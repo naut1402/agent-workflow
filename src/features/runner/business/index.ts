@@ -80,8 +80,11 @@ export {
   isAgentCliProviderId,
   isAgentCliProvider,
   providerFamilyOf,
+  mcpDeliveryOf,
 } from './providers/agentCli.js'
 export type { AgentCliProvider, AgentCliCapabilities, TokenUsage, ProviderFamily as AgentProviderFamily } from './providers/agentCli.js'
+export { prepareMcpConfigForJob } from './providers/mcpJobConfig.js'
+export type { McpJobConfigHandle } from './providers/mcpJobConfig.js'
 export {
   submitJob,
   submitAndWait,
@@ -143,4 +146,5 @@ export type {
   ProviderFamily,
   ProviderConfig,
   ProviderConfigsStore,
+  McpDelivery,
 } from './types.js'

@@ -2,6 +2,7 @@ import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '
 import { spawnSync } from '../../../backend/lib/processHelper.js'
 import { registryHome } from '../../../backend/registry.js'
 import { listCustomCommands } from './commands.js'
+import { mcpDeliveryOf } from './providers/agentCli.js'
 import {
   CONNECTIONS_VERSION,
   DEFAULT_CONNECTION_ID,
@@ -206,7 +207,7 @@ export function ensureLegacyConnection(legacy: {
 }
 
 export function listProviderCatalog(): ProviderCatalogEntry[] {
-  return [...PROVIDER_CATALOG]
+  return PROVIDER_CATALOG.map((e) => ({ ...e, mcpDelivery: mcpDeliveryOf(e.id) }))
 }
 
 function resolveCommandPath(command: string): string | null {
