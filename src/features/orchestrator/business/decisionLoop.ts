@@ -66,7 +66,13 @@ const MAX_TURNS_PER_PHASE = 6
  * buffer. `job.finished` của một job step là mốc "bước xong" duy nhất;
  * `task.advanced` ở đây chỉ để dọn khi pipeline hoàn tất, không tốn lượt LLM.
  */
-const ACTIONABLE = new Set(['job.finished', 'job.failed', 'hitl.resolved', 'task.advanced'])
+const ACTIONABLE = new Set([
+  'job.finished',
+  'job.failed',
+  'hitl.resolved',
+  'task.advanced',
+  'orchestrator.start_requested',
+])
 
 /**
  * Trigger mà bước kế là tất định — lượt agent hỏng thì chuyển tiếp theo thứ tự
@@ -561,6 +567,15 @@ export async function decide(
     return
   }
 
+  if (event.type === 'orchestrator.start_requested') {
+    // Automation bị từ chối (409) vì task đang được điều phối — xin một lượt
+    // quyết định thay vì tự chạy step.
+    const at = await readTaskPhase(ref.root, ref.taskId)
+    if (!hasPendingStep(at) || at.gatePending) return
+    await askAgent(ref, orch, 'manual_start', at.phase, { gatePending: at.gatePending })
+    return
+  }
+
   if (event.type === 'hitl.resolved') {
     // Gate bị hệ thống tự huỷ vì pipeline đổi hình dạng — không phải quyết định
     // của người, không có gì để điều phối.
@@ -613,8 +628,9 @@ function stepResultOf(
  * thẳng — đăng ký thật nằm ở `startOrchestratorLoop`.
  */
 export async function handleEvent(event: DashboardEvent): Promise<void> {
-  // Chống tự-kích: mọi thứ orchestrator phát ra đều không được quay lại nó.
-  if (String(event.type).startsWith('orchestrator.')) return
+  // Chống tự-kích: mọi thứ orchestrator phát ra đều không được quay lại nó —
+  // trừ `orchestrator.start_requested`, event automation xin một lượt quyết định.
+  if (event.type !== 'orchestrator.start_requested' && String(event.type).startsWith('orchestrator.')) return
 
   // Một lần `loadJob` cho cả `identifyTask` lẫn các nhánh bên dưới — hàm này
   // chạy trên MỌI event của bus, nên mỗi lần đọc đĩa thừa là thừa toàn cục.

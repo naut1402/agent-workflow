@@ -389,6 +389,9 @@ export async function reconcileGateStateAssumingLock(
     action: after ? 'normalized' : 'cancelled',
     reason: 'pipeline_changed',
     currentPhase: state.current_phase,
+    // Node điều phối nghe event này để quyết bước kế. Nó chạy nền, ngoài
+    // mọi request, nên phải tự biết task thuộc data root nào.
+    devTeamRoot: root,
   })
   return { state, mtime, from: before, to: after }
 }
@@ -459,6 +462,13 @@ export async function advanceStepOnJobSuccessAssumingLock(
         state.current_phase = retry.restart_from
         state.hitl_pending = null
         const mtime = await writeStateAtomic(stateFile, state)
+        emit('task.advanced', {
+          taskId,
+          stepId,
+          currentPhase: state.current_phase,
+          reason: 'review_retry',
+          devTeamRoot: root,
+        })
         return { state, mtime }
       }
       // Past `retry.max`: fall through to the gate/advance logic below —
@@ -476,6 +486,11 @@ export async function advanceStepOnJobSuccessAssumingLock(
   }
 
   const mtime = await writeStateAtomic(stateFile, state)
+  if (state.hitl_pending) {
+    emit('hitl.pending', { taskId, gateId, stepId, devTeamRoot: root })
+  } else {
+    emit('task.advanced', { taskId, stepId, currentPhase: state.current_phase, devTeamRoot: root })
+  }
   return { state, mtime }
 }
 
