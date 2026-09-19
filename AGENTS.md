@@ -70,7 +70,7 @@ Tài liệu tra cứu kèm theo (không phải rule):
 
 ## 4. Bất biến bắt buộc giữ
 
-🚫 Nội dung đầy đủ: [`docs/architecture/2-container/README.md` — Bất biến kiến trúc](docs/architecture/2-container/README.md#bất-biến-kiến-trúc) — đọc trước khi thêm scan/endpoint mới.
+🚫 Nội dung đầy đủ: [`docs/architecture/4-code/README.md` — Bất biến kiến trúc](docs/architecture/4-code/README.md#bất-biến-kiến-trúc) — đọc trước khi thêm scan/endpoint mới.
 
 Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize tại feature sở hữu) · ghi registry atomic · `fetchUrlSafe` cho URL người dùng · ESM thuần · `ANTHROPIC_API_KEY` tuỳ chọn · `DASHBOARD_SECRET_KEY` bắt buộc cho vault.
 

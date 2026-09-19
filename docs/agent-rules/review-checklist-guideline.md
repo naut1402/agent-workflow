@@ -4,7 +4,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 
 - **Đánh dấu từng mục liên quan scope PR** — không bắt buộc tick hết nếu PR không đụng vùng đó.
 - **Thứ tự 3 khối theo luồng review** — code nằm đúng chỗ chưa → dữ liệu/an toàn có bị phá không → quy trình/tài liệu đã đủ chưa.
-- **Quy ước nền**: [`feature-architecture-guideline.md`](feature-architecture-guideline.md), [`coding-guideline.md`](coding-guideline.md), [`git-pr.md`](git-pr.md). Bất biến repo: [`docs/architecture/2-container/` — Bất biến kiến trúc](../architecture/2-container/README.md#bất-biến-kiến-trúc).
+- **Quy ước nền**: [`feature-architecture-guideline.md`](feature-architecture-guideline.md), [`coding-guideline.md`](coding-guideline.md), [`git-pr.md`](git-pr.md). Bất biến repo: [`docs/architecture/4-code/` — Bất biến kiến trúc](../architecture/4-code/README.md#bất-biến-kiến-trúc).
 
 ---
 

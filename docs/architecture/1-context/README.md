@@ -16,7 +16,7 @@ C4Context
 
   Rel(user, dashboard, "Xem trạng thái, sửa pipeline/agent/knowledge", "HTTPS")
   BiRel(dashboard, orchestrator, "Đọc/ghi state + artifact", "Filesystem .dev-team-agent/")
-  Rel(dashboard, claude, "Gọi API sinh nội dung", "HTTPS, tuỳ chọn ANTHROPIC_API_KEY")
+  Rel(dashboard, claude, "Gọi API sinh nội dung", "HTTPS, key cấu hình tuỳ chọn")
   BiRel(dashboard, github, "Đọc/ghi issue", "REST API, token cấu hình")
   Rel(claudeCli, dashboard, "list/get/add/remove project", "MCP stdio")
 ```
@@ -25,10 +25,10 @@ C4Context
 
 | Actor | Quan hệ với dashboard | Ghi chú |
 |---|---|---|
-| **Dev / PM** | Người dùng chính, thao tác qua trình duyệt | Nhiều mode (monitor, editor, agentEditor, …) — chi tiết ở cấp Component |
-| **Orchestrator agent** | Ghi `.dev-state/*.json` + artifact khi chạy pipeline; dashboard đọc để hiển thị | Ngoại lệ: pipeline bật `orchestrator.enabled` thì dashboard tự giữ quyền start step (`src/features/orchestrator/`) |
-| **Claude Code / AI provider** | Sinh nội dung khi người dùng bấm "generate" (agent draft, NL chat) | Không có `ANTHROPIC_API_KEY` → fallback heuristic, không chặn luồng |
-| **GitHub** | Liên kết issue với task, đọc/ghi qua REST API | Token cấu hình per-project trong Settings |
-| **Claude Code (CLI/IDE)** | Gọi MCP server (`mcp/server.ts`) để CRUD project registry | Không cần HTTP server chạy — chi tiết ở cấp Container |
+| **Dev / PM** | Người dùng chính, thao tác qua trình duyệt | Truy cập qua nhiều khu vực chức năng khác nhau trong UI — chi tiết ở cấp Component |
+| **Orchestrator agent** | Ghi trạng thái + artifact khi chạy pipeline; dashboard đọc để hiển thị | Ngoại lệ: pipeline bật tuỳ chọn điều phối thì dashboard tự giữ quyền điều khiển bước chạy |
+| **Claude Code / AI provider** | Sinh nội dung khi người dùng yêu cầu (agent draft, NL chat) | Không cấu hình provider → fallback heuristic, không chặn luồng |
+| **GitHub** | Liên kết issue với task, đọc/ghi qua REST API | Token cấu hình theo từng project |
+| **Claude Code (CLI/IDE)** | Gọi MCP server để CRUD project registry | Không cần HTTP server chạy — chi tiết ở cấp Container |
 
-Bất biến áp dụng xuyên suốt mọi cấp — xem mục **Bất biến kiến trúc** ở cấp Container ([danh mục](../README.md)).
+Bất biến áp dụng xuyên suốt mọi cấp — xem mục **Bất biến kiến trúc** ở cấp Code ([danh mục](../README.md)).
