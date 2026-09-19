@@ -335,7 +335,8 @@ export async function dispatchStep(
 
 /**
  * Gửi tiếp cho step đang chạy dở — cơ chế *resume* của đề bài.
- * KHÔNG dùng `resetPipelineStep*`: đường đó xoá artifact của step (và cascade).
+ * KHÔNG dùng `resetPipelineStep*`: đường đó lùi con trỏ pipeline và (tuỳ
+ * `deleteScope`) xoá artifact của step.
  */
 export async function resumeStep(ref: TaskRef, stepId: string, message: string): Promise<void> {
   emitDispatched(ref, { stepId, action: 'resume', reason: 'resume' })
