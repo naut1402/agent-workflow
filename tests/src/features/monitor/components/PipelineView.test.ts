@@ -4,7 +4,8 @@ import { flushPromises, mount as mountRaw } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import PipelineView from '@/features/monitor/components/PipelineView.vue'
 import { fetchJob, fetchJobs, cancelJob } from '../../../../../src/features/runner/scripts/runnerApi'
-import { runPipelineStep, resetPipelineStep, patchTaskState } from '../../../../../src/features/monitor/scripts/PipelineViewApi'
+import { runPipelineStep, resetPipelineStep, patchTaskState, saveFlowProfile } from '../../../../../src/features/monitor/scripts/PipelineViewApi'
+import { writePipelineConfig } from '../../../../../src/features/pipeline-editor/scripts/pipelineEditorApi'
 
 vi.mock('@/features/monitor/scripts/PipelineViewApi', () => ({
   fetchFlowProfile: vi.fn(async () => ({ exists: false, profile: null })),
@@ -18,6 +19,20 @@ vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchJob: vi.fn(),
   fetchJobs: vi.fn(async () => ({ jobs: [] })),
   cancelJob: vi.fn(),
+}))
+
+// ProfileSwitchDialog (mounted for real when the swap icon is clicked) hits
+// these two APIs — mock them here too so opening it from PipelineView doesn't
+// call through to unmocked modules.
+vi.mock('@/features/pipeline-editor/scripts/ProfileManagerApi', () => ({
+  fetchPipelineProfiles: vi.fn(async () => ({ profiles: [{ name: 'dev' }] })),
+  fetchPipelineProfile: vi.fn(async () => ({
+    pipeline: { steps: [{ id: 'investigator', label: 'Investigate' }] },
+  })),
+}))
+
+vi.mock('@/features/pipeline-editor/scripts/pipelineEditorApi', () => ({
+  writePipelineConfig: vi.fn(async () => ({})),
 }))
 
 // VueFlow's canvas (SVG getBBox / ResizeObserver) does not run under jsdom.
@@ -1676,6 +1691,220 @@ describe('PipelineView — hub edge', () => {
 
     expect(nodeData(w, 'designer')?.status).toBe('active')
     expect(nodeData(w, 'investigator')?.status).toBe('done')
+    w.unmount()
+  })
+})
+
+// Tebf65c74 — 2 icon mới góc trên-phải canvas: auto-layout + đổi pipeline profile.
+// AC-1/AC-3: overlay chỉ render khi task editable (D3 — ẩn cả 2 icon cùng lúc
+// trên task archived/completed, xem design.md §2 D3 + test-spec.md TC-14).
+describe('PipelineView — canvas corner actions (auto-layout, đổi profile)', () => {
+  it('TC-02/TC-13: overlay góc trên-phải render đủ 2 icon (layout, đổi profile) khi task đang chỉnh sửa được', async () => {
+    const task = { task_id: 'CA1', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    const actions = w.find('.canvas-corner-actions')
+    expect(actions.exists()).toBe(true)
+    const buttons = actions.findAll('button.icon-btn')
+    expect(buttons).toHaveLength(2)
+
+    // TC-12: mỗi icon-only button phải có title/aria-label đọc được — không có
+    // nhãn này thì Tab-focus tới nút cũng không biết nút làm gì.
+    expect(buttons[0].attributes('aria-label')).toBe('Tự sắp xếp layout')
+    expect(buttons[0].attributes('title')).toBe('Tự sắp xếp layout')
+    expect(buttons[1].attributes('aria-label')).toBe('Đổi pipeline profile')
+    expect(buttons[1].attributes('title')).toBe('Đổi pipeline profile')
+    w.unmount()
+  })
+
+  it('TC-14: ẩn cả 2 icon khi task đã archived', async () => {
+    const task = { task_id: 'CA2', current_phase: 'investigator', hitl_pending: null, artifacts: {}, archived: true }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    expect(w.find('.canvas-corner-actions').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('TC-14: ẩn cả 2 icon khi task đã ở current_phase completed', async () => {
+    const task = { task_id: 'CA3', current_phase: 'completed', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    expect(w.find('.canvas-corner-actions').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('TC-09/TC-10: click icon auto-layout dàn đều phaseKeys theo NODE_SPACING/NODE_Y, giữ nguyên tập step', async () => {
+    const task = { task_id: 'CA4', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    const layoutBtn = w.findAll('.canvas-corner-actions button.icon-btn')[0]
+    await layoutBtn.trigger('click')
+    await flushPromises()
+
+    expect(saveFlowProfile).toHaveBeenCalledTimes(1)
+    const [taskId, payload] = vi.mocked(saveFlowProfile).mock.calls[0]
+    expect(taskId).toBe('CA4')
+    // Tập step + thứ tự không đổi so với phaseKeys mặc định (investigator →
+    // designer → implementer → reviewer → pr-creator) — chỉ toạ độ đổi.
+    expect((payload as any).phases.map((p: any) => p.key)).toEqual([
+      'investigator',
+      'designer',
+      'implementer',
+      'reviewer',
+      'pr-creator',
+    ])
+    expect((payload as any).phases).toEqual([
+      { key: 'investigator', x: 0, y: 40 },
+      { key: 'designer', x: 200, y: 40 },
+      { key: 'implementer', x: 400, y: 40 },
+      { key: 'reviewer', x: 600, y: 40 },
+      { key: 'pr-creator', x: 800, y: 40 },
+    ])
+    w.unmount()
+  })
+
+  it('TC-11: bấm auto-layout nhiều lần liên tiếp không lỗi, kết quả cuối vẫn nhất quán', async () => {
+    const task = { task_id: 'CA5', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    const layoutBtn = w.findAll('.canvas-corner-actions button.icon-btn')[0]
+    await layoutBtn.trigger('click')
+    await layoutBtn.trigger('click')
+    await layoutBtn.trigger('click')
+    await flushPromises()
+
+    expect(saveFlowProfile).toHaveBeenCalledTimes(3)
+    // Mỗi lượt ghi đè cùng một kết quả xác định — không debounce (§4.4 #3),
+    // không có step nào biến mất/trùng lặp ở lần gọi cuối.
+    const lastCall = vi.mocked(saveFlowProfile).mock.calls.at(-1)![1] as any
+    expect(lastCall.phases.map((p: any) => p.key)).toEqual([
+      'investigator',
+      'designer',
+      'implementer',
+      'reviewer',
+      'pr-creator',
+    ])
+    expect(w.find('.canvas-corner-actions').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('TC-04: click icon đổi profile mở dialog, người dùng vẫn ở màn Monitor', async () => {
+    const task = { task_id: 'CA6', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    const swapBtn = w.findAll('.canvas-corner-actions button.icon-btn')[1]
+    await swapBtn.trigger('click')
+    await flushPromises()
+
+    const dialog = document.body.querySelector('.modal[role="dialog"]')
+    expect(dialog).not.toBeNull()
+    expect(dialog?.getAttribute('aria-label')).toBe('Đổi pipeline profile')
+    // Không điều hướng/rời PipelineView — component vẫn còn nguyên trong DOM.
+    expect(w.find('.vflow-container').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('TC-04: dialog nhận đúng task-id/project-id/hitl-pending khi mở', async () => {
+    const task = {
+      task_id: 'CA7',
+      current_phase: 'investigator',
+      hitl_pending: 'hitl-1',
+      artifacts: {},
+    }
+    const w = mount(PipelineView, { props: { task, projectId: 'proj-9' } })
+    await flushPromises()
+
+    const swapBtn = w.findAll('.canvas-corner-actions button.icon-btn')[1]
+    await swapBtn.trigger('click')
+    await flushPromises()
+    // hitlPending=true chỉ hiện cảnh báo SAU khi người dùng chọn 1 profile —
+    // chọn option đầu tiên (duy nhất, mock trả về 1 profile 'dev') để bộc lộ nó.
+    const select = document.body.querySelector('.modal select') as HTMLSelectElement
+    expect(select).not.toBeNull()
+    select.value = 'dev'
+    select.dispatchEvent(new Event('change'))
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('Task đang có gate HITL chờ duyệt — ghi đè pipeline sẽ huỷ gate đó.')
+    w.unmount()
+  })
+
+  it('TC-05: chọn profile và Áp dụng → writePipelineConfig ghi pipeline task, dialog đóng và Monitor được báo refetch', async () => {
+    const task = { task_id: 'CA8', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mount(PipelineView, { props: { task, projectId: 'proj-1' } })
+    await flushPromises()
+
+    await w.findAll('.canvas-corner-actions button.icon-btn')[1].trigger('click')
+    await flushPromises()
+
+    const select = document.body.querySelector('.modal select') as HTMLSelectElement
+    select.value = 'dev'
+    select.dispatchEvent(new Event('change'))
+    await flushPromises()
+
+    const applyBtn = document.body.querySelector('.modal .btn-primary') as HTMLButtonElement
+    expect(applyBtn.disabled).toBe(false)
+    applyBtn.click()
+    await flushPromises()
+
+    expect(writePipelineConfig).toHaveBeenCalledWith(
+      'task',
+      { steps: [{ id: 'investigator', label: 'Investigate' }] },
+      'CA8',
+      'proj-1',
+    )
+    // Dialog tự đóng sau khi ghi thành công (khác đường lỗi TC-08).
+    expect(document.body.querySelector('.modal[role="dialog"]')).toBeNull()
+    // Cha (MonitorLayout) refetch task để canvas vẽ lại theo pipeline vừa ghi.
+    expect(w.emitted('hitl-action')).toBeTruthy()
+    w.unmount()
+  })
+
+  it('TC-06: huỷ dialog mà không chọn/xác nhận → không gọi writePipelineConfig, pipeline task không đổi', async () => {
+    const task = { task_id: 'CA9', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.findAll('.canvas-corner-actions button.icon-btn')[1].trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('.modal[role="dialog"]')).not.toBeNull()
+
+    const cancelBtn = document.body.querySelector('.modal .btn-ghost') as HTMLButtonElement
+    cancelBtn.click()
+    await flushPromises()
+
+    expect(writePipelineConfig).not.toHaveBeenCalled()
+    expect(document.body.querySelector('.modal[role="dialog"]')).toBeNull()
+    expect(w.emitted('hitl-action')).toBeFalsy()
+    w.unmount()
+  })
+
+  it('TC-08: writePipelineConfig lỗi 400 (task archived/completed giữa lúc dialog mở) → hiện lỗi inline, dialog không tự đóng, không refetch', async () => {
+    vi.mocked(writePipelineConfig).mockRejectedValueOnce({ status: 400 })
+    const task = { task_id: 'CA10', current_phase: 'investigator', hitl_pending: null, artifacts: {} }
+    const w = mountPipeline(task)
+    await flushPromises()
+
+    await w.findAll('.canvas-corner-actions button.icon-btn')[1].trigger('click')
+    await flushPromises()
+    const select = document.body.querySelector('.modal select') as HTMLSelectElement
+    select.value = 'dev'
+    select.dispatchEvent(new Event('change'))
+    await flushPromises()
+
+    const applyBtn = document.body.querySelector('.modal .btn-primary') as HTMLButtonElement
+    applyBtn.click()
+    await flushPromises()
+
+    expect(document.body.querySelector('.modal[role="dialog"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('Task đã archived hoặc hoàn tất — không thể ghi pipeline mới.')
+    expect(w.emitted('hitl-action')).toBeFalsy()
     w.unmount()
   })
 })
