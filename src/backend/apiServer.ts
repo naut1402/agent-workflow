@@ -20,7 +20,7 @@ import { createCorsMiddleware } from './http/security/corsGuard.js'
 import { loadSecurityConfig } from '../features/settings/business/dashboardSettings.js'
 
 // createApiHandler(ctx) is the single entrypoint for /api/* on both transports
-// — no feature keeps its own node-res branch above it. See docs/architecture.md §2.
+// — no feature keeps its own node-res branch above it.
 
 type FeatureApiModule = {
   registerRoutes?: (app: Hono<HonoEnv>) => void
