@@ -60,7 +60,7 @@ function tagStyle(tag: KnowledgeTagFacetView) {
 
 <template>
   <div class="knowledge-side-menu">
-    <!-- Icon button, không text (docs/ui-buttons.md): 3 action của cả màn. -->
+    <!-- Icon button, không text (docs/architecture/4-code/ui-buttons.md): 3 action của cả màn. -->
     <div class="knowledge-side-actions">
       <button
         type="button"
@@ -297,7 +297,7 @@ function tagStyle(tag: KnowledgeTagFacetView) {
 </template>
 
 <style scoped lang="scss">
-/* Chuỗi overflow (docs/ui-overflow.md): mỗi nhóm có vùng cuộn RIÊNG, nên chuỗi
+/* Chuỗi overflow (docs/architecture/4-code/ui-overflow.md): mỗi nhóm có vùng cuộn RIÊNG, nên chuỗi
    flex phải đi xuyên qua `<details>` — đó đúng là ca bắt buộc khai
    `::details-content`. Lá duy nhất mang `overflow-y: auto` là `<ul>`. */
 .knowledge-side-menu {

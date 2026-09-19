@@ -190,7 +190,7 @@ export async function resetPipelineStepAssumingLock(
   state.doc_review_round = docReviewRound
 
   const mtime = await writeStateAtomic(stateFile, state)
-  // No dedicated `task.reset` type — event-catalog.md's convention is that
+  // No dedicated `task.reset` type — docs/architecture/4-code/event-catalog.md's convention is that
   // step-cursor changes go through `task.advanced` with a `reason` (same as
   // `review_retry` below), not a new `pipeline.*`/`step.*` type per action.
   emit('task.advanced', {

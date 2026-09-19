@@ -116,7 +116,7 @@ watch(
 </template>
 
 <style scoped lang="scss">
-/* Hợp đồng cuộn (docs/ui-overflow.md): xem `.catalog-panel` — panel chỉ giành
+/* Hợp đồng cuộn (docs/architecture/4-code/ui-overflow.md): xem `.catalog-panel` — panel chỉ giành
    chiều cao khi section của nó đang mở. Vùng cuộn duy nhất là `.rules-scroll`. */
 .rules-panel {
   min-height: 0;
@@ -128,7 +128,7 @@ watch(
 .rules-panel--open { flex: 1 1 0; }
 
 /* Ngân sách cố định của toolbar trừ thẳng vào `.rules-scroll` — giữ nó ở một
-   hàng, padding tối thiểu (docs/ui-overflow.md). */
+   hàng, padding tối thiểu (docs/architecture/4-code/ui-overflow.md). */
 .rules-toolbar {
   padding: 6px 8px;
   flex-shrink: 0;
