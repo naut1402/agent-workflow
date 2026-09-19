@@ -1,6 +1,6 @@
 # C4 · Cấp 2 — Container
 
-← [Cấp 1 · Context](../1-context/README.md) · [Cấp 3 · Component](../3-component/README.md)
+← [Danh mục kiến trúc (C4)](../README.md)
 
 ```mermaid
 C4Container
@@ -25,7 +25,7 @@ C4Container
 
 ## 1. Data root `.dev-team-agent/` — container dữ liệu trung tâm
 
-Mọi thao tác đọc/ghi của backend đều **scope vào một thư mục `.dev-team-agent/`** (gọi là "root"). Thư mục này thuộc sở hữu của orchestrator agent **chạy ngoài**, không phải repo này — dashboard chủ yếu quan sát nó. Ngoại lệ duy nhất: pipeline bật **node điều phối** (`orchestrator.enabled`) thì chính dashboard giữ quyền start step của task đó (xem [Cấp 3 · Component](../3-component/README.md) — feature `orchestrator`).
+Mọi thao tác đọc/ghi của backend đều **scope vào một thư mục `.dev-team-agent/`** (gọi là "root"). Thư mục này thuộc sở hữu của orchestrator agent **chạy ngoài**, không phải repo này — dashboard chủ yếu quan sát nó. Ngoại lệ duy nhất: pipeline bật **node điều phối** (`orchestrator.enabled`) thì chính dashboard giữ quyền start step của task đó (chi tiết ở cấp Component — feature `orchestrator`).
 
 Bên trong root:
 
@@ -48,7 +48,7 @@ Bên trong root:
 
 ## 2. Backend — "một app, nhiều transport"
 
-Backend là **một app Hono duy nhất** chạy trên **hai transport** khác nhau. Toàn bộ logic route viết một lần, cả hai transport cùng thừa hưởng. Tầng HTTP và cách route/business ghép nối thuộc **Cấp 3 · Component** — xem [Cấp 3 · Component §1](../3-component/README.md#1-backend-components).
+Backend là **một app Hono duy nhất** chạy trên **hai transport** khác nhau. Toàn bộ logic route viết một lần, cả hai transport cùng thừa hưởng. Tầng HTTP và cách route/business ghép nối thuộc cấp Component.
 
 ### 2.1 Shim tương thích
 
@@ -63,7 +63,7 @@ Backend là **một app Hono duy nhất** chạy trên **hai transport** khác n
 
 ## 3. Frontend SPA — container
 
-Vue 3 + Vite, mount 1 app duy nhất qua `ModeRegistry`. Chi tiết component/mode ở [Cấp 3 · Component §2](../3-component/README.md#2-frontend-components). Sơ đồ bootstrap DI/ModeRegistry: [`../../diagram/IoC.md`](../../diagram/IoC.md).
+Vue 3 + Vite, mount 1 app duy nhất qua `ModeRegistry`. Chi tiết component/mode ở cấp Component. Sơ đồ bootstrap DI/ModeRegistry: [`../../diagram/IoC.md`](../../diagram/IoC.md).
 
 ---
 
@@ -75,7 +75,7 @@ Vue 3 + Vite, mount 1 app duy nhất qua `ModeRegistry`. Chi tiết component/mo
 
 ## 5. `dashboard.sqlite` — container DB
 
-File SQLite dùng chung cho mọi subsystem cần lưu trữ có cấu trúc (thay vì file-based) — hiện gồm log driver `sqlite` và knowledge collection/tag. Vị trí: `registryHome()/dashboard.sqlite` — **nằm ngoài cây repo**, cùng chỗ với `projects.json`. Schema, migration — chi tiết ở [Cấp 4 · Code](../4-code/README.md#tầng-db-srcbackenddb).
+File SQLite dùng chung cho mọi subsystem cần lưu trữ có cấu trúc (thay vì file-based) — hiện gồm log driver `sqlite` và knowledge collection/tag. Vị trí: `registryHome()/dashboard.sqlite` — **nằm ngoài cây repo**, cùng chỗ với `projects.json`. Schema, migration — chi tiết ở cấp Code.
 
 ---
 

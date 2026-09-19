@@ -1,6 +1,6 @@
 # C4 · Cấp 3 — Component
 
-← [Cấp 2 · Container](../2-container/README.md) · [Cấp 4 · Code](../4-code/README.md)
+← [Danh mục kiến trúc (C4)](../README.md)
 
 ```mermaid
 C4Component
@@ -42,9 +42,9 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `backend/c
 
 - **Registry** (`src/backend/registry.ts`) — nguồn sự thật cho project registry, dùng chung bởi REST và MCP server.
 - **Pipeline / Catalog / Rules** (feature pipeline-editor) — pipeline config layered + merge; catalog agent/skill và rule project đọc theo convention, cộng thêm path khớp `settings.scanPatterns`.
-- **Knowledge** — entry lưu qua file driver đa root; **collection + tag** lưu ở `dashboard.sqlite` (khác driver với entry). Chi tiết: [Cấp 4 · Code](../4-code/README.md#tầng-db-srcbackenddb).
+- **Knowledge** — entry lưu qua file driver đa root; **collection + tag** lưu ở `dashboard.sqlite` (khác driver với entry). Chi tiết ở cấp Code.
 - **Logging** — hai driver `file` / `sqlite`, chọn qua `logging.driver`.
-- **Statistics** — aggregation từ log usage; có giới hạn khi driver log là `sqlite` — xem [Cấp 4 · Code](../4-code/README.md#tầng-db-srcbackenddb).
+- **Statistics** — aggregation từ log usage; có giới hạn khi driver log là `sqlite` — chi tiết ở cấp Code.
 - **Orchestrator** — **opt-in** qua `pipeline.orchestrator.enabled`; subscriber trên event bus quyết định step start/resume/dừng thay vì chuỗi tự nối cũ; quyền start step do feature Tasks (monitor) sở hữu. Tắt ⇒ không đổi hành vi.
 - **Automations** — rule đa trigger (timer/event) → chuỗi action chạy nền, biến tham chiếu output bước trước, có run ledger riêng ở data root.
 
@@ -54,7 +54,7 @@ Event bus nội bộ tại `src/backend/events/` (`emit` / `on` / `once`, `emitE
 
 ### 1.4 Config shell backend
 
-`src/backend/configs/` (đọc `package.json`, …) + `src/backend/lib/` (helper Node-only: `fileHelper`, `processHelper`, `yamlLib`, `dirModuleLoader`, `arrayUtils`, `dateUtils`). Không import HTTP kernel; domain/business import khi cần. Chi tiết từng file: [Cấp 4 · Code](../4-code/README.md#config-shell).
+`src/backend/configs/` (đọc `package.json`, …) + `src/backend/lib/` (helper Node-only: `fileHelper`, `processHelper`, `yamlLib`, `dirModuleLoader`, `arrayUtils`, `dateUtils`). Không import HTTP kernel; domain/business import khi cần. Chi tiết từng file ở cấp Code.
 
 ---
 
@@ -74,12 +74,10 @@ Mỗi feature đăng ký 1 mode qua `registerMode.ts` — danh sách mode + comp
 
 ### 2.2 API layer
 
-- **Server setup** (`src/backend/`): `apiServer.ts` + `devTeamApi.ts` — xem [Cấp 2 · Container](../2-container/README.md#2-backend---một-app-nhiều-transport).
+- **Server setup** (`src/backend/`): `apiServer.ts` + `devTeamApi.ts` — xem cấp Container.
 - **FE fetch**: `src/frontend/http/client.ts` (`apiGet`/`apiPost`/…). Fetch theo consumer ở `src/features/<mode>/scripts/`. Hono route đăng ký ở `features/*/api.ts`.
 - Suy diễn trạng thái phase (`PHASES`, `phasesFromPipeline`, `phaseStatus`) nằm ở `src/shared/lib/phase.ts`. Phase status **được suy từ sự tồn tại của artifact** + con trỏ live — phản chiếu đúng quy tắc của orchestrator.
 
 ### 2.3 Nền frontend + config shell
 
-Nền tảng FE/shell: `composables/*`, `lib/` (helper thuần browser), `ui/`, `shell/keys.ts`, `container/`, `http/client.ts`, `configs/` (preference shell). Suy diễn phase + helper chuỗi dùng chung ở `src/shared/lib/`. Schema domain ở `features/<name>/schemas/`. i18n cài qua `src/frontend/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`. Chi tiết từng file config shell (FE + BE + shared): [Cấp 4 · Code](../4-code/README.md#config-shell).
-
-Styling (SCSS entry, tự nạp theo feature): [Cấp 4 · Code](../4-code/README.md#styling).
+Nền tảng FE/shell: `composables/*`, `lib/` (helper thuần browser), `ui/`, `shell/keys.ts`, `container/`, `http/client.ts`, `configs/` (preference shell). Suy diễn phase + helper chuỗi dùng chung ở `src/shared/lib/`. Schema domain ở `features/<name>/schemas/`. i18n cài qua `src/frontend/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`. Chi tiết từng file config shell (FE + BE + shared) và styling (SCSS entry, tự nạp theo feature) ở cấp Code.

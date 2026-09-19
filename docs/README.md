@@ -8,7 +8,7 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Kiến trúc & vận hành
 
-- **[`architecture/`](architecture/)** — kiến trúc theo mô hình **C4**, 4 cấp trừu tượng thô → mịn: [`1-context/`](architecture/1-context/README.md), [`2-container/`](architecture/2-container/README.md) (kèm bất biến kiến trúc), [`3-component/`](architecture/3-component/README.md), [`4-code/`](architecture/4-code/README.md).
+- **[`architecture/`](architecture/README.md)** — kiến trúc theo mô hình **C4**, 4 cấp trừu tượng thô → mịn (Context, Container kèm bất biến kiến trúc, Component, Code) — danh mục ở [`architecture/README.md`](architecture/README.md).
 - **[`diagram/IoC.md`](diagram/IoC.md)** — hai sơ đồ giải thích service container (DI/IoC) và `ModeRegistry`: bootstrap lúc khởi động, và runtime khi người dùng chuyển mode.
 
 ## Dữ liệu & sự kiện

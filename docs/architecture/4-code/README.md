@@ -1,6 +1,6 @@
 # C4 · Cấp 4 — Code
 
-← [Cấp 3 · Component](../3-component/README.md)
+← [Danh mục kiến trúc (C4)](../README.md)
 
 Chi tiết implementation cụ thể: schema DB, danh sách file config shell, styling, và cây thư mục đầy đủ. Đây là cấp **thay đổi thường xuyên nhất** — khi sửa, đối chiếu lại với code thật thay vì tin nội dung cũ.
 
@@ -50,7 +50,7 @@ agent-workflow/
 │   ├── frontend/           # scope browser — app root, composables, ui, shell, plugins, styles
 │   ├── shared/             # dùng chung cả hai phía — logic/type thuần, không hạ tầng
 │   └── features/           # feature-module (giữ nguyên cấu trúc)
-├── mcp/                    # MCP stdio — xem docs/architecture/2-container/README.md §4
+├── mcp/                    # MCP stdio — chi tiết ở cấp Container
 ├── tests/                  # mirror: tests/src/server · tests/src/{backend,frontend,shared} · tests/mcp
 ├── test-e2e/
 ├── docs/
