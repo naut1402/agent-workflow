@@ -894,7 +894,7 @@ export class MonitorController extends AbstractController {
     if (!parsed.success) {
       return this.badRequest('invalid request', { details: parsed.error.flatten() })
     }
-    const { stepId, cascade } = parsed.data
+    const { stepId, resetScope, deleteScope } = parsed.data
 
     return withTaskLock(root, id, async () => {
       const stateFile = path.join(root, '.dev-state', `${id}.json`)
@@ -916,12 +916,16 @@ export class MonitorController extends AbstractController {
         return this.badRequest('invalid reset target', { taskId: id, stepId })
       }
 
-      const result = await resetPipelineStepAssumingLock(root, id, stateFile, stepId, cascade)
+      const result = await resetPipelineStepAssumingLock(root, id, stateFile, stepId, {
+        resetScope,
+        deleteScope,
+      })
       if ('error' in result) return this.json(result.status, { error: result.error, taskId: id })
 
       // `closeTaskSession` can't be called from state.ts (cycle through
       // business/index.js — see comment on `applyHitlAction`), so it runs
-      // here for every step whose artifacts were just deleted.
+      // here for every step the reset rolled back — kể cả khi không xoá file
+      // nào, vì step đó sắp chạy lại và phải có phiên CLI mới.
       for (const sid of result.removedSteps) {
         monitorBusiness.closeTaskSession(this.projectId || '', id, { stepId: sid })
       }
@@ -931,7 +935,13 @@ export class MonitorController extends AbstractController {
         entity: 'task-state',
         identifier: id,
         projectId: this.projectId,
-        detail: { action: 'reset-step', stepId, cascade, removedSteps: result.removedSteps },
+        detail: {
+          action: 'reset-step',
+          stepId,
+          resetScope,
+          deleteScope,
+          removedSteps: result.removedSteps,
+        },
       })
       emitEntity('updated', 'task-state', {
         id,

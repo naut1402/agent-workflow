@@ -17,7 +17,7 @@ Cột **Event** trên UI = giá trị `type` trong bảng dưới.
 | Event | Khi nào | Payload gợi ý | Nơi emit |
 |-------|---------|---------------|----------|
 | `task.created` | Tạo task (dialog / chat NL) | `taskId`, `projectId` | `monitor/controller.ts` `createTask` |
-| `task.advanced` | Đổi `current_phase` sau job success (không gate), `review_retry`, hoặc reset step (nút reset) | `taskId`, `stepId`, `currentPhase`, `devTeamRoot`, đôi khi `reason` (+ `cascade`, `removedSteps` khi `reason: reset`) | `monitor/business/tasks/state.ts` `advanceStepOnJobSuccess` / `resetPipelineStepAssumingLock` |
+| `task.advanced` | Đổi `current_phase` sau job success (không gate), `review_retry`, hoặc reset step (nút reset) | `taskId`, `stepId`, `currentPhase`, `devTeamRoot`, đôi khi `reason` (+ `resetScope`, `deleteScope`, `removedSteps` khi `reason: reset`) | `monitor/business/tasks/state.ts` `advanceStepOnJobSuccess` / `resetPipelineStepAssumingLock` |
 | `hitl.pending` | Step có `hitl.gate_id` — mở cổng chờ duyệt | `taskId`, `gateId`, `stepId`, `devTeamRoot` | `state.ts` `advanceStepOnJobSuccess` |
 | `hitl.resolved` | Approve / reject HITL | `taskId`, `gateId`, `action`, `currentPhase`, `stepId`, `projectId`, `devTeamRoot` | `state.ts` `applyHitlAction` |
 | `hitl.resolved` (`reason: pipeline_changed`) | Pipeline đổi khiến gate đang pending không còn được step hiện tại khai báo — hệ thống tự huỷ (`action: 'cancelled'`) hoặc chuẩn hoá legacy `true` về gate id (`action: 'normalized'`) | `taskId`, `gateId` (giá trị cũ, null nếu legacy `true`), `action`, `reason`, `currentPhase` | `state.ts` `reconcileGateStateAssumingLock` |
@@ -34,7 +34,7 @@ Cột **Event** trên UI = giá trị `type` trong bảng dưới.
 | Step có gate xong job | `hitl.pending` | `current_phase` giữ step hiện tại |
 | Duyệt / từ chối gate | `hitl.resolved` | Có thể kèm đổi phase |
 | Review-retry | `task.advanced` (`reason: review_retry`) | Quay `restart_from` |
-| Reset step (nút reset trên `PipelineNode`) | `task.advanced` (`reason: reset`) | Lùi `current_phase` về `stepId`; kèm `cascade`, `removedSteps` |
+| Reset step (nút reset trên `PipelineNode`) | `task.advanced` (`reason: reset`) | Lùi `current_phase` về `stepId`; kèm `resetScope`, `deleteScope`, `removedSteps` |
 
 Không emit `pipeline.created` / `step.started` / `task.reset` trên bus hiện tại — reset tái dùng `task.advanced` như review-retry, không cần type riêng.
 
