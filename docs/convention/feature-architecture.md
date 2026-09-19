@@ -132,5 +132,3 @@ Không làm:
 | Composable / component | vitest + `mountWithI18n` nếu có `t()` |
 | Helper `src/*/lib` dùng ở FE | `bun run build` nếu nghi `node:fs` lọt bundle |
 | Đổi overload `fileHelper` | `bun run typecheck` |
-
-Checklist thêm feature mới: [`docs/checklist/new-feature.md`](../checklist/new-feature.md).

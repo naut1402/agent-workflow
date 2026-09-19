@@ -93,9 +93,3 @@ Theo dõi nợ dài hạn ngoài gate này thì dùng GitHub Issue.
 - **Chỉ chạy khi** `pull_request` có **base** = `main` và **head** khớp `dev/<…>/main`.
 - **`bun run check:todo`** fail nếu `docs/todo` còn tồn tại.
 - **Nợ test có gate riêng** — `.github/workflows/release-test-gate.yml`, cùng loại PR, nhưng chặn bằng cách chạy thật (§2.1). `todo-debt.yml` **không** gánh việc đó.
-
----
-
-## 6. Checklist nhanh
-
-Tách sang [`docs/checklist/pr-todo-debt.md`](../checklist/pr-todo-debt.md).

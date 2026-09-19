@@ -2,7 +2,7 @@
 
 Cơ chế branch, dòng test, và PR phát hành **hiện hành** — gắn chặt CI/branching riêng của repo, không phải quy ước SWE chung nên không tách sang `docs/convention/`.
 
-Quy ước chung (không gắn CI riêng): [`docs/convention/git-hygiene.md`](../convention/git-hygiene.md) · [`docs/convention/git-commits.md`](../convention/git-commits.md) · [`docs/convention/commit-message.md`](../convention/commit-message.md) · [`docs/convention/pr-body.md`](../convention/pr-body.md). Checklist trước khi push: [`docs/checklist/pre-push.md`](../checklist/pre-push.md).
+Quy ước chung (không gắn CI riêng): [`docs/convention/git-hygiene.md`](../convention/git-hygiene.md) · [`docs/convention/git-commits.md`](../convention/git-commits.md) · [`docs/convention/commit-message.md`](../convention/commit-message.md) · [`docs/convention/pr-body.md`](../convention/pr-body.md).
 
 Worktree: [`git-worktree.md`](git-worktree.md). Nợ docs/test hoãn lại: [`pr-todo-debt.md`](pr-todo-debt.md).
 

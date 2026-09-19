@@ -2,7 +2,7 @@
 
 ← [`README.md`](README.md) (Cấp 4 · Code)
 
-Chi tiết implementation cho chiến lược tràn nội dung. Quy ước: [`docs/convention/ui-overflow.md`](../../convention/ui-overflow.md). Checklist: [`docs/checklist/ui-overflow.md`](../../checklist/ui-overflow.md).
+Chi tiết implementation cho chiến lược tràn nội dung. Quy ước: [`docs/convention/ui-overflow.md`](../../convention/ui-overflow.md).
 
 Class nền nằm ở `src/frontend/styles/_shell.scss` (entry `src/frontend/styles/main.scss`).
 

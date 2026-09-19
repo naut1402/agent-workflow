@@ -7,4 +7,4 @@
 3. **Cắt cụt tệ hơn cuộn.** Nội dung bị cắt không để lại dấu hiệu nào trên UI — người dùng không biết là còn mục phía dưới. Vùng cuộn ít nhất luôn tự tố cáo bằng thanh cuộn.
 4. **Một trục, một thanh cuộn.** Hai scroller lồng nhau trên cùng một trục là lỗi, không phải "cho chắc": chuột lăn rơi nhầm tầng và mục cuối vẫn có thể không tới được.
 
-Chi tiết implementation (chuỗi sizing chuẩn, cạm bẫy, ví dụ trong repo): [`docs/architecture/4-code/ui-overflow.md`](../architecture/4-code/ui-overflow.md). Checklist review: [`docs/checklist/ui-overflow.md`](../checklist/ui-overflow.md).
+Chi tiết implementation (chuỗi sizing chuẩn, cạm bẫy, ví dụ trong repo): [`docs/architecture/4-code/ui-overflow.md`](../architecture/4-code/ui-overflow.md).

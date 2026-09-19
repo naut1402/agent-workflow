@@ -15,4 +15,4 @@
 - **Sau khi move, `git status` phải toàn rename (R)** — không thừa "Added", không thiếu "Deleted".
 - **Test chỉ ở `tests/` / `test-e2e/`**, không co-locate.
 
-Checklist tự kiểm trước khi push: [`docs/checklist/pre-push.md`](../checklist/pre-push.md). Chi tiết cơ chế CI/branching: [`docs/agent-rules/git-pr.md`](../agent-rules/git-pr.md).
+Chi tiết cơ chế CI/branching: [`docs/agent-rules/git-pr.md`](../agent-rules/git-pr.md).

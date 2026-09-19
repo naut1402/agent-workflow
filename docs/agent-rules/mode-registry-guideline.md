@@ -59,12 +59,6 @@ Sơ đồ bootstrap và runtime: [`docs/architecture/3-component/ioc-bootstrap-r
 
 ---
 
-## 5. Checklist thêm mode mới
-
-Tách sang [`docs/checklist/new-mode.md`](../checklist/new-mode.md).
-
----
-
 ## 6. Ví dụ tối thiểu (mode không props)
 
 ```ts
