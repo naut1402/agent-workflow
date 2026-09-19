@@ -135,6 +135,17 @@ export default {
     orchestrator: 'Orchestrator',
     orchestratorHalted: 'Orchestration stopped — the pipeline is back to manual runs.',
     orchestratorStarted: 'Handed a turn to the orchestrator node.',
+    autoLayout: 'Auto-layout',
+    switchProfile: 'Switch pipeline profile',
+    switchProfileDialog: {
+      heading: 'Switch pipeline profile',
+      selectLabel: 'Choose a profile',
+      firstStep: 'First step: {step}',
+      noProfiles: 'This project has no pipeline profiles yet.',
+      hitlWarning: '⚠ This task has a pending HITL gate — overwriting the pipeline will cancel it.',
+      writeBlocked: 'Task is archived or completed — cannot write a new pipeline.',
+      apply: 'Apply',
+    },
   },
   pipelineNode: {
     clickToApprove: 'Click to approve',

@@ -136,6 +136,17 @@ export default {
     orchestrator: 'Điều phối',
     orchestratorHalted: 'Đã dừng điều phối — pipeline trở về chế độ chạy tay.',
     orchestratorStarted: 'Đã giao lượt cho node điều phối.',
+    autoLayout: 'Tự sắp xếp layout',
+    switchProfile: 'Đổi pipeline profile',
+    switchProfileDialog: {
+      heading: 'Đổi pipeline profile',
+      selectLabel: 'Chọn profile',
+      firstStep: 'Bước đầu: {step}',
+      noProfiles: 'Project chưa có pipeline profile nào.',
+      hitlWarning: '⚠ Task đang có gate HITL chờ duyệt — ghi đè pipeline sẽ huỷ gate đó.',
+      writeBlocked: 'Task đã archived hoặc hoàn tất — không thể ghi pipeline mới.',
+      apply: 'Áp dụng',
+    },
   },
   pipelineNode: {
     clickToApprove: 'Nhấn để duyệt',
