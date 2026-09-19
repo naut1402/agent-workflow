@@ -4,7 +4,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 
 - **Đánh dấu từng mục liên quan scope PR** — không bắt buộc tick hết nếu PR không đụng vùng đó.
 - **Thứ tự 3 khối theo luồng review** — code nằm đúng chỗ chưa → dữ liệu/an toàn có bị phá không → quy trình/tài liệu đã đủ chưa.
-- **Quy ước nền**: [`feature-architecture-guideline.md`](feature-architecture-guideline.md), [`coding-guideline.md`](coding-guideline.md), [`git-pr.md`](git-pr.md). Bất biến repo: [`docs/architecture.md` §6](../architecture.md#6-bất-biến-kiến-trúc).
+- **Quy ước nền**: [`feature-architecture-guideline.md`](feature-architecture-guideline.md), [`coding-guideline.md`](coding-guideline.md), [`git-pr.md`](git-pr.md). Bất biến repo: [`docs/architecture/2-container/` — Bất biến kiến trúc](../architecture/2-container/README.md#bất-biến-kiến-trúc).
 
 ---
 
@@ -75,7 +75,7 @@ Chi tiết type và nơi emit: [`docs/event-catalog.md`](../event-catalog.md).
 - [ ] **Tuân thủ commitlint** — commit/PR title đúng `type(scope): subject`, không trailer công cụ.
 - [ ] **Trình bày đúng nội dung PR** — phần riêng nhóm theo cây thư mục; fix/refactor có Logic trước → sau; phần chung nêu Core và/hoặc feature khác (hoặc *Không*).
 - [ ] **Dọn nợ trước merge `main`** — PR `dev/x.y.z/main` → `main` không còn thư mục `docs/todo/`, và dòng `test/x.y.z/main` của version tồn tại + xanh ([`pr-todo-debt.md`](pr-todo-debt.md) §2.1).
-- [ ] **Cập nhật quy ước khi đổi rule** — sửa file rule trong `docs/agent-rules/` và `docs/architecture.md` trong cùng thay đổi; mô tả **hiện hành**, không kể lịch sử issue.
+- [ ] **Cập nhật quy ước khi đổi rule** — sửa file rule trong `docs/agent-rules/` và `docs/architecture/` trong cùng thay đổi; mô tả **hiện hành**, không kể lịch sử issue.
 
 ---
 

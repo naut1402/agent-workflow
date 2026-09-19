@@ -170,8 +170,8 @@ Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ b�
 
 Chỉ **nơi sử dụng** trỏ tới **tài liệu dùng chung**. Không bao giờ thêm chiều ngược lại.
 
-- ✅ **Đúng** — `CLAUDE.md` → `AGENTS.md`; `docs/agent-rules/*` → `docs/architecture.md`.
-- 🚫 **Sai** — `AGENTS.md` liệt kê `CLAUDE.md`; `docs/architecture.md` trỏ ngược lên rule.
+- ✅ **Đúng** — `CLAUDE.md` → `AGENTS.md`; `docs/agent-rules/*` → `docs/architecture/`.
+- 🚫 **Sai** — `AGENTS.md` liệt kê `CLAUDE.md`; `docs/architecture/` trỏ ngược lên rule.
 
 **Vì sao:** tài liệu dùng chung không được biết ai đang dùng mình.
 

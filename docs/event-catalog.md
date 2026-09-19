@@ -2,7 +2,7 @@
 
 Tham chiếu nhanh các **domain event** phát trên event bus nội bộ (`src/backend/events/`). Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới.
 
-- Kernel / nguyên tắc: [`architecture.md`](architecture.md) §3.2
+- Kernel / nguyên tắc: [`architecture/3-component/`](architecture/3-component/README.md) §1.3
 - API: `emit(type, payload)` · `emitEntity(op, entity, payload)` → `entity.{created|updated|deleted}`
 - Quan sát: JSONL `~/.dev-team-dashboard/logs/events.jsonl` (prefs `logging.types.events`); UI Logs tab Events
 

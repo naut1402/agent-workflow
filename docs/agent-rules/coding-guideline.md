@@ -2,7 +2,7 @@
 
 Quy ước viết code **hiện hành** trong repo này.
 
-Kiến trúc và bất biến bắt buộc: [`docs/architecture.md` §6](../architecture.md#6-bất-biến-kiến-trúc). Đặt file theo feature: [`feature-architecture-guideline.md`](feature-architecture-guideline.md).
+Kiến trúc và bất biến bắt buộc: [`docs/architecture/2-container/` — Bất biến kiến trúc](../architecture/2-container/README.md#bất-biến-kiến-trúc). Đặt file theo feature: [`feature-architecture-guideline.md`](feature-architecture-guideline.md).
 
 ---
 

@@ -22,7 +22,7 @@
 - **Pipeline** — `DEFAULT_PIPELINE` ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`. Key `orchestrator` (opt-in, mặc định tắt) merge cùng 3 tầng như `doc_reviewer`.
 - **MCP** — `bun run mcp`, CRUD registry, không cần HTTP server.
 
-Chi tiết: [`docs/architecture.md`](docs/architecture.md).
+Chi tiết: [`docs/architecture/`](docs/architecture/) (mô hình C4, 4 cấp — xem bảng §3).
 
 ---
 
@@ -37,7 +37,7 @@ agent-workflow/
 └── docs/
     ├── agent-rules/   # rule cho mọi AI agent, theo category
     ├── template/      # agent + pipeline mẫu
-    └── architecture.md, event-catalog.md, i18n.md, ui-buttons.md, diagram/
+    └── architecture/{1-context,2-container,3-component,4-code}/, event-catalog.md, i18n.md, ui-buttons.md, diagram/
 ```
 
 ⚠️ Ngoại lệ cố ý còn `.js`: `src/features/agent-editor/business/agentMarkdown.js`, `src/backend/runner-cli.mjs`. Tooling `vite` / `vitest` / `playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
@@ -59,7 +59,7 @@ Tài liệu tra cứu kèm theo (không phải rule):
 | Chủ đề | Tài liệu |
 |--------|----------|
 | Quickstart | [`README.md`](README.md) |
-| Kiến trúc / cây thư mục chi tiết | [`docs/architecture.md`](docs/architecture.md) |
+| Kiến trúc (C4, 4 cấp: Context → Container → Component → Code) | [`docs/architecture/`](docs/architecture/) |
 | Mục lục domain event theo feature | [`docs/event-catalog.md`](docs/event-catalog.md) |
 | Sơ đồ bootstrap DI / ModeRegistry | [`docs/diagram/IoC.md`](docs/diagram/IoC.md) |
 | i18n chi tiết | [`docs/i18n.md`](docs/i18n.md) |
@@ -70,7 +70,7 @@ Tài liệu tra cứu kèm theo (không phải rule):
 
 ## 4. Bất biến bắt buộc giữ
 
-🚫 Nội dung đầy đủ: [`docs/architecture.md` §6](docs/architecture.md#6-bất-biến-kiến-trúc) — đọc trước khi thêm scan/endpoint mới.
+🚫 Nội dung đầy đủ: [`docs/architecture/2-container/README.md` — Bất biến kiến trúc](docs/architecture/2-container/README.md#bất-biến-kiến-trúc) — đọc trước khi thêm scan/endpoint mới.
 
 Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize tại feature sở hữu) · ghi registry atomic · `fetchUrlSafe` cho URL người dùng · ESM thuần · `ANTHROPIC_API_KEY` tuỳ chọn · `DASHBOARD_SECRET_KEY` bắt buộc cho vault.
 
@@ -122,5 +122,5 @@ Khi survey call chain đụng persist / lifecycle / CRUD domain:
 ### Implement — đổi quy ước
 
 - [ ] **Cập nhật rule** trong [`docs/agent-rules/`](docs/agent-rules/) ngay trong cùng thay đổi — rule lệch code là nợ, không phải chi tiết.
-- [ ] **Cập nhật tài liệu cho người** nếu quy ước đó cũng mô tả hệ thống — [`docs/architecture.md`](docs/architecture.md) và các file liên quan trong `docs/`.
+- [ ] **Cập nhật tài liệu cho người** nếu quy ước đó cũng mô tả hệ thống — [`docs/architecture/`](docs/architecture/) và các file liên quan trong `docs/`.
 - [ ] **Cập nhật file này** nếu bảng §3 / §5 không còn đúng.
