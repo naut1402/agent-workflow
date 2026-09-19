@@ -32,12 +32,10 @@ const RemoteFields = z.object({
 })
 
 export const McpServerUpsertSchema = z.discriminatedUnion('transport', [StdioFields, RemoteFields])
-export type McpServerUpsertInput = z.infer<typeof McpServerUpsertSchema>
 
 /** Test nhận cả bản nháp chưa lưu — `id` vẫn bắt buộc để `recordCheckResult` bám được. */
 export const McpServerTestSchema = z.object({
   server: McpServerUpsertSchema,
   listTools: z.boolean().optional(),
 })
-export type McpServerTestInput = z.infer<typeof McpServerTestSchema>
 
