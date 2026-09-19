@@ -10,6 +10,7 @@
 // "để dành cho phase sau" với "quên xoá". Phase sau cần gì thì mở thêm dòng đó.
 
 export {
+  MCP_MASK,
   sanitiseMcpServerId,
   maskSecretText,
   maskSecretValues,

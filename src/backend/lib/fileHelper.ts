@@ -251,12 +251,29 @@ export function copyFileSync(from: string, to: string): void {
  * transiently when rename targets an existing file — retry briefly, then fall
  * back to copy-over + unlink, which those filesystems do allow.
  */
-export function writeTextFileAtomicSync(file: string, data: string): void {
+export function writeTextFileAtomicSync(
+  file: string,
+  data: string,
+  opts?: { mode?: number },
+): void {
   const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, data)
-  if (renameOverExisting(tmp, file)) return
-  copyFileSync(tmp, file)
-  rmSync(tmp, { force: true })
+  writeTextFileSync(tmp, data, opts)
+  const renamed = renameOverExisting(tmp, file)
+  if (!renamed) {
+    // `copyFileSync` GIỮ mode của file đích khi đích đã tồn tại, nên nhánh này
+    // không thừa hưởng `mode` của temp — `chmodSync` bên dưới mới là thứ chốt.
+    copyFileSync(tmp, file)
+    rmSync(tmp, { force: true })
+  }
+  // Cả hai nhánh đều cần: file tạo từ lần chạy TRƯỚC khi có `mode` vẫn đang
+  // mang mode cũ, mà `writeFileSync` không đổi mode của file đã tồn tại.
+  if (opts?.mode != null) {
+    try {
+      chmodSync(file, opts.mode)
+    } catch {
+      /* win32 / FS không hỗ trợ POSIX mode — nội dung vẫn ghi đúng, không chặn luồng */
+    }
+  }
 }
 
 function renameOverExisting(from: string, to: string): boolean {

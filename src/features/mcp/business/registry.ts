@@ -120,6 +120,17 @@ export function loadMcpServers(): McpServersStore {
   }
 }
 
+/**
+ * Ghi 0600: `env`/`headers` ở đây có thể là secret literal người dùng gõ tay
+ * (dialog chỉ *cảnh báo* khi giá trị trông như secret, không chặn). Đây là chỗ
+ * duy nhất trong repo persist secret dạng thô — `credentials.json` chỉ giữ ref,
+ * giá trị thật nằm trong `secret-vault.json` đã mã hoá. Bản sao theo job của
+ * đúng những secret này đã là 0600 (`mcpJobConfig.ts`), nên để bản gốc theo
+ * umask (thường 0644, user khác trên máy đọc được) là lệch ngay trong một tính năng.
+ *
+ * 🚫 Không chmod `registryHome()`: thư mục đó dùng chung cho mọi feature, siết
+ * quyền ở đó là quyết định ngoài phạm vi. Mode của chính file đã đủ chặn đọc.
+ */
 export function saveMcpServers(store: McpServersStore): McpServersStore {
   const home = registryHome()
   mkdirSync(home, { recursive: true })
@@ -127,7 +138,7 @@ export function saveMcpServers(store: McpServersStore): McpServersStore {
     { version: store.version || MCP_SERVERS_VERSION, servers: store.servers || [] },
     null,
     2,
-  ))
+  ), { mode: 0o600 })
   return store
 }
 
@@ -144,6 +155,14 @@ export function getMcpServer(id: unknown): McpServerConfig | null {
 export function upsertMcpServer(input: any): McpMutationResult<{ server: McpServerConfig }> {
   const id = sanitiseMcpServerId(input?.id)
   if (!id) return { ok: false, status: 400, error: 'invalid mcp server id' }
+  // `sanitiseMcpServerId` là ánh xạ NHIỀU-MỘT (`my.server` và `my server` cùng
+  // ra `myserver`). Ở đường đọc thì vô hại, nhưng upsert ghi đè theo id đã
+  // chuẩn hoá: tạo mới `my.server` khi `myserver` đã tồn tại sẽ xoá sổ cấu hình
+  // kia mà không báo gì. Chỉ nhận id đã ở dạng canonical — người dùng thấy lỗi
+  // và tự sửa, thay vì mất dữ liệu trong im lặng.
+  if (String(input?.id ?? '').trim() !== id) {
+    return { ok: false, status: 400, error: `invalid mcp server id — dùng dạng chuẩn "${id}"` }
+  }
   const entry = normaliseMcpServer({ ...input, id })
   if (!entry) return { ok: false, status: 400, error: 'invalid mcp server config' }
 

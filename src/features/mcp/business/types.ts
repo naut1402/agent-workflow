@@ -139,11 +139,18 @@ function restoreMasked(
   return out
 }
 
-/** Thay mọi giá trị trong `secrets` bằng `***`. Dùng trước khi log / trả API. */
+/**
+ * Thay mọi giá trị trong `secrets` bằng `***`. Dùng trước khi log / trả API.
+ *
+ * Thay theo thứ tự DÀI → NGẮN: nếu một secret là tiền tố của secret khác, thay
+ * cái ngắn trước sẽ ăn mất phần đầu và để lộ phần đuôi — `abcdefgh` thay trước
+ * biến `abcdefghXYZ` thành `***XYZ`. Sắp xếp giảm dần theo độ dài là đủ để
+ * không ca nào che hụt ca nào.
+ */
 export function maskSecretText(text: string, secrets: readonly string[]): string {
   let out = text
-  for (const secret of secrets) {
-    if (!secret) continue
+  const ordered = [...new Set(secrets)].filter(Boolean).sort((a, b) => b.length - a.length)
+  for (const secret of ordered) {
     out = out.split(secret).join(MCP_MASK)
   }
   return out
