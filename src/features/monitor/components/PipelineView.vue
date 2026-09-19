@@ -7,6 +7,8 @@ import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, res
 import { fetchJob, fetchJobs, cancelJob } from '../../runner/scripts/runnerApi'
 import { phasesFromPipeline, phaseStatus } from '../../../shared/lib/phase'
 import PipelineNode from './PipelineNode.vue'
+import ProfileSwitchDialog from './ProfileSwitchDialog.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
 import ArtifactNode from '../../../frontend/ui/ArtifactNode.vue'
 import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
 import { buildArtifactNodesAndEdges } from '../../../frontend/lib/pipelineArtifactGraph'
@@ -74,6 +76,25 @@ const phaseKeys = computed(() => phases.value.map((p) => p.key))
 const orchestratorEnabled = computed(() => props.task.pipeline?.orchestrator?.enabled === true)
 const orchestratorHalted = computed(() => props.task.orchestrator_halted === true)
 const orchestrated = computed(() => orchestratorEnabled.value && !orchestratorHalted.value)
+
+// Copy có chủ đích từ PipelineEditor.vue:81 — phạm vi 1 file, chưa đủ lý do
+// tách shared lib cho 3 dòng dùng ở đúng 2 nơi.
+function isTaskEditable(task: any): boolean {
+  return !task?.archived && task?.current_phase !== 'completed'
+}
+const canEditTask = computed(() => isTaskEditable(props.task))
+const taskHitlPending = computed(() => Boolean(props.task.hitl_pending))
+
+const profileSwitchOpen = ref(false)
+
+function onAutoLayout() {
+  const updated = {
+    phases: phaseKeys.value.map((key, i) => ({ key, x: i * NODE_SPACING, y: NODE_Y })),
+  }
+  saveFlowProfile(props.task.task_id, updated).then(() => {
+    customProfile.value = updated
+  })
+}
 
 // Full `produces[]` for a step — unlike `phase.artifact` (first produced file
 // only), needed to delete/check every file a multi-produces step wrote
@@ -746,6 +767,26 @@ async function submitHitl() {
     </div>
 
     <div class="vflow-container">
+      <div v-if="canEditTask" class="canvas-corner-actions">
+        <button
+          type="button"
+          class="icon-btn"
+          :title="t('monitor.pipeline.autoLayout')"
+          :aria-label="t('monitor.pipeline.autoLayout')"
+          @click="onAutoLayout"
+        >
+          <Icon name="layout" />
+        </button>
+        <button
+          type="button"
+          class="icon-btn"
+          :title="t('monitor.pipeline.switchProfile')"
+          :aria-label="t('monitor.pipeline.switchProfile')"
+          @click="profileSwitchOpen = true"
+        >
+          <Icon name="swap" />
+        </button>
+      </div>
       <VueFlow
         :nodes="nodes"
         :edges="edges"
@@ -773,6 +814,15 @@ async function submitHitl() {
       </span>
     </section>
   </section>
+
+  <ProfileSwitchDialog
+    v-if="profileSwitchOpen"
+    :task-id="task.task_id"
+    :project-id="projectId"
+    :hitl-pending="taskHitlPending"
+    @close="profileSwitchOpen = false"
+    @applied="profileSwitchOpen = false; emit('hitl-action')"
+  />
 
   <!-- HITL approve modal -->
   <Teleport to="body">
@@ -933,6 +983,24 @@ async function submitHitl() {
 
 <style scoped lang="scss">
 .pipeline-wrap { margin-bottom: 14px; }
+
+.vflow-container { position: relative; }
+.canvas-corner-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.vflow-container:hover .canvas-corner-actions,
+.vflow-container:focus-within .canvas-corner-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
 
 /* bù gap của .modal bị mất khi bọc nội dung vào .modal-body */
 .modal-body {
