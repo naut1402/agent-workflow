@@ -1,14 +1,10 @@
-# Quy ước UI button
+# UI button — class chuẩn
 
 ← [`README.md`](README.md) (Cấp 4 · Code)
 
-Quy ước khi thêm/sửa nút trên dashboard. Class chuẩn nằm ở `src/frontend/styles/_shell.scss` (entry `src/frontend/styles/main.scss`).
+Chi tiết implementation cho quy ước nút. Quy ước: [`docs/convention/ui-buttons.md`](../../convention/ui-buttons.md).
 
-## Nguyên tắc
-
-1. **Ưu tiên icon button** hơn text button cho action UI (toolbar, row action, toggle, xóa/sửa/đóng).
-2. **Default không có viền**: nền trong suốt, không border, không box-shadow.
-3. **Hover scale up**: `transform: scale(1.15)` kèm đổi màu (muted → text), transition `0.12s ease`.
+Class chuẩn nằm ở `src/frontend/styles/_shell.scss` (entry `src/frontend/styles/main.scss`).
 
 ## Class chuẩn: `.icon-btn`
 
@@ -64,19 +60,3 @@ Nút **có nhãn chữ** (label bắt buộc) cho quick action — cùng triết
   {{ label }}
 </button>
 ```
-
-## Khi nào được dùng text button
-
-Chỉ khi nhãn chữ là bắt buộc để hiểu hành động:
-
-- CTA xác nhận trong modal (`Lưu` / `Hủy`) — `.btn-primary` / `.btn-ghost`
-- Submit form dài cần nhãn rõ
-- Link-style inline — `.btn-link`
-- Quick action có nhãn — `.btn-quick-action` (xem trên)
-
-Không thêm border mặc định cho action icon mới; không dùng `.btn-ghost` làm mặc định cho row/toolbar action có thể biểu diễn bằng icon.
-
-## Ngoài phạm vi
-
-- `.mode-btn` và rail sidebar: điều hướng layout, không phải row action — giữ pattern riêng.
-- Không bắt buộc migrate ngay mọi text button cũ sang icon; quy ước áp dụng cho code mới và khi sửa chỗ liên quan.

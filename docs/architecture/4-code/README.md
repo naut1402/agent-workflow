@@ -4,7 +4,7 @@
 
 Chi tiết implementation cụ thể: schema DB, danh sách file config shell, styling, và cây thư mục đầy đủ. Đây là cấp **thay đổi thường xuyên nhất** — khi sửa, đối chiếu lại với code thật thay vì tin nội dung cũ.
 
-Tài liệu con (chi tiết, tách riêng vì dài): [`events/`](events/README.md) — mục lục domain event theo mode (kèm state/flow chart) · [`i18n.md`](i18n.md) — quy ước message/locale · [`ui-buttons.md`](ui-buttons.md) — quy ước nút · [`ui-overflow.md`](ui-overflow.md) — chiến lược tràn nội dung.
+Tài liệu con (chi tiết, tách riêng vì dài): [`events/`](events/README.md) — mục lục domain event theo mode (kèm state/flow chart) · [`i18n.md`](i18n.md) — cấu trúc file/cách dùng i18n · [`ui-buttons.md`](ui-buttons.md) — class nút chuẩn · [`ui-overflow.md`](ui-overflow.md) — chuỗi sizing chống tràn. Quy ước + checklist tương ứng nằm ở [`../../convention/`](../../convention/) và [`../../checklist/`](../../checklist/), không lặp ở đây.
 
 ---
 

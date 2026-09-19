@@ -16,9 +16,12 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Giao diện
 
-- **[`architecture/4-code/i18n.md`](architecture/4-code/i18n.md)** — tổ chức message `vi` / `en`, namespace theo feature, cách thêm và đổi chuỗi UI.
-- **[`architecture/4-code/ui-buttons.md`](architecture/4-code/ui-buttons.md)** — quy ước nút và trạng thái trên UI, class chuẩn ở `src/frontend/styles/_shell.scss`.
-- **[`architecture/4-code/ui-overflow.md`](architecture/4-code/ui-overflow.md)** — chiến lược tràn cho danh sách và vùng nội dung dài: chuỗi sizing chuẩn, ví dụ trong repo, checklist review.
+- **[`convention/i18n.md`](convention/i18n.md)** · **[`convention/ui-buttons.md`](convention/ui-buttons.md)** · **[`convention/ui-overflow.md`](convention/ui-overflow.md)** — quy ước message/locale, nút, và chiến lược tràn nội dung. Chi tiết implementation ở `architecture/4-code/{i18n,ui-buttons,ui-overflow}.md`; checklist thao tác ở `checklist/`.
+
+## Quy ước & Checklist
+
+- **[`convention/`](convention/)** — quy ước theo chủ đề (nguyên tắc, không đi vào implementation).
+- **[`checklist/`](checklist/)** — checklist thao tác theo chủ đề, chạy trước khi báo hoàn thành.
 
 ## Mẫu dùng lại
 

@@ -2,14 +2,9 @@
 
 ← [`README.md`](README.md) (Cấp 4 · Code)
 
-Quy ước cho mọi vùng UI có chiều cao phụ thuộc dữ liệu (danh sách, cây, body dialog, panel log). Class nền nằm ở `src/frontend/styles/_shell.scss` (entry `src/frontend/styles/main.scss`).
+Chi tiết implementation cho chiến lược tràn nội dung. Quy ước: [`docs/convention/ui-overflow.md`](../../convention/ui-overflow.md). Checklist: [`docs/checklist/ui-overflow.md`](../../checklist/ui-overflow.md).
 
-## Phương châm
-
-1. **Chiến lược tràn là bắt buộc, không phải tuỳ chọn.** Vùng nội dung dài tuỳ dữ liệu phải có vùng cuộn giới hạn chiều cao **ngay từ lúc viết**, không đợi tới lúc có người báo "xem không hết".
-2. **Không giả định "dữ liệu chắc là ngắn".** Catalog 7 agent hôm nay là 70 agent sau khi thêm plugin; danh sách rule của project dài ra theo thời gian. Layout đúng phải chịu được cả dữ liệu dài lẫn dữ liệu rỗng.
-3. **Cắt cụt tệ hơn cuộn.** Nội dung bị cắt không để lại dấu hiệu nào trên UI — người dùng không biết là còn mục phía dưới. Vùng cuộn ít nhất luôn tự tố cáo bằng thanh cuộn.
-4. **Một trục, một thanh cuộn.** Hai scroller lồng nhau trên cùng một trục là lỗi, không phải "cho chắc": chuột lăn rơi nhầm tầng và mục cuối vẫn có thể không tới được.
+Class nền nằm ở `src/frontend/styles/_shell.scss` (entry `src/frontend/styles/main.scss`).
 
 ## Chuỗi sizing chuẩn
 
@@ -36,11 +31,3 @@ Khi một panel chỉ nên giành chiều cao lúc nội dung của nó đang m�
 **Task list ở Monitor** — `src/features/monitor/styles/TaskList.scss`. `.tasklist-panel` là `flex` + `min-height: 0` + `overflow: hidden`; `.tasklist` là lá mang `overflow-y: auto; flex: 1; min-height: 0`. Hai chế độ sizing là hai class khác nhau: `.tasklist--active` chia phần còn lại, `.tasklist--archived` cap `max-height: min(40vh, 280px)`.
 
 **Dialog `.modal`** — `src/frontend/styles/_shell.scss` ghi thẳng hợp đồng: *dialog dùng `.modal` PHẢI có đúng một `.modal-body` bọc phần nội dung*. `.modal` không khai báo `overflow`; nó dựa vào `.modal-body` (`flex: 1; min-height: 0; overflow-y: auto`) để hút phần cao quá `max-height: 88vh`. Đặt nội dung thẳng vào `.modal` thì khi vượt 88vh, hàng nút `.modal-actions` bị vẽ ra ngoài border dưới.
-
-## Checklist trước khi báo hoàn thành
-
-- [ ] Thử với **dữ liệu dài** (nhiều hơn số item thật hiện có) — cuộn được tới mục cuối cùng.
-- [ ] Thử với **dữ liệu rỗng** — empty state hiện đúng, khung không sụp về 0px.
-- [ ] Trên mỗi trục chỉ có **một** thanh cuộn; container ngoài không cuộn (`scrollHeight === clientHeight`).
-- [ ] Nội dung không tràn ra ngoài khung, không đè lên hàng nút / footer.
-- [ ] Lặp lại ở **viewport thấp** (thu cửa sổ còn ~500px chiều cao) và khi mở nhiều section cùng lúc.
