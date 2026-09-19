@@ -45,6 +45,7 @@ export const AUDIT_ENTITIES = [
   'provider-config',
   'credential',
   'command',
+  'mcp-server',
   'artifact',
   'artifact-actions',
   'task-state',

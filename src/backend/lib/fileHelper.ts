@@ -219,8 +219,9 @@ export function readTextFileSync(p: string): string {
   return fs.readFileSync(p, 'utf8')
 }
 
-export function writeTextFileSync(p: string, data: string): void {
-  fs.writeFileSync(p, data, 'utf8')
+/** `mode` chỉ có tác dụng khi file được TẠO — ghi đè giữ nguyên quyền cũ. */
+export function writeTextFileSync(p: string, data: string, opts?: { mode?: number }): void {
+  fs.writeFileSync(p, data, { encoding: 'utf8', ...(opts?.mode != null ? { mode: opts.mode } : {}) })
 }
 
 export function appendTextFileSync(p: string, data: string): void {
@@ -229,6 +230,11 @@ export function appendTextFileSync(p: string, data: string): void {
 
 export function mkdirSync(p: string, opts?: { recursive?: boolean }): string | undefined {
   return fs.mkdirSync(p, opts) ?? undefined
+}
+
+/** Đặt quyền POSIX. Trên win32 gần như vô nghĩa — đừng dựa vào nó làm rào duy nhất. */
+export function chmodSync(p: string, mode: number): void {
+  fs.chmodSync(p, mode)
 }
 
 export function renameSync(from: string, to: string): void {
@@ -245,12 +251,29 @@ export function copyFileSync(from: string, to: string): void {
  * transiently when rename targets an existing file — retry briefly, then fall
  * back to copy-over + unlink, which those filesystems do allow.
  */
-export function writeTextFileAtomicSync(file: string, data: string): void {
+export function writeTextFileAtomicSync(
+  file: string,
+  data: string,
+  opts?: { mode?: number },
+): void {
   const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, data)
-  if (renameOverExisting(tmp, file)) return
-  copyFileSync(tmp, file)
-  rmSync(tmp, { force: true })
+  writeTextFileSync(tmp, data, opts)
+  const renamed = renameOverExisting(tmp, file)
+  if (!renamed) {
+    // `copyFileSync` GIỮ mode của file đích khi đích đã tồn tại, nên nhánh này
+    // không thừa hưởng `mode` của temp — `chmodSync` bên dưới mới là thứ chốt.
+    copyFileSync(tmp, file)
+    rmSync(tmp, { force: true })
+  }
+  // Cả hai nhánh đều cần: file tạo từ lần chạy TRƯỚC khi có `mode` vẫn đang
+  // mang mode cũ, mà `writeFileSync` không đổi mode của file đã tồn tại.
+  if (opts?.mode != null) {
+    try {
+      chmodSync(file, opts.mode)
+    } catch {
+      /* win32 / FS không hỗ trợ POSIX mode — nội dung vẫn ghi đúng, không chặn luồng */
+    }
+  }
 }
 
 function renameOverExisting(from: string, to: string): boolean {

@@ -17,6 +17,7 @@ import {
   fetchOAuthStatus,
 } from '../scripts/ConnectionDialogApi'
 import { fetchProviderConfigs, saveProviderConfig, deleteProviderConfig } from '../scripts/ProviderDialogApi'
+import { fetchMcpServers } from '../../mcp/scripts/mcpApi'
 import { DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
 import type { ConnectionKind, ConnectionOption, ProviderConfigOption, ProviderEntry } from '../types'
 import CComboSelect from '../../../frontend/ui/CComboSelect.vue'
@@ -65,6 +66,9 @@ const selectedCommandId = ref('')
 const selectedModels = ref<string[]>([])
 /** Opt-in per-Connection extra tools (shell/git/search/web) beyond the base 4 file-ops — default empty, unchanged behavior. */
 const extraTools = ref<string[]>([])
+/** Opt-in per-Connection MCP servers — default empty, which leaves the CLI argv untouched. */
+const mcpServers = ref<string[]>([])
+const mcpOptions = ref<{ id: string; label: string }[]>([])
 const scanning = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -414,6 +418,17 @@ const commandSelectOptions = computed(() =>
   })),
 )
 
+const effectiveProviderId = computed(() =>
+  kind.value === 'local-console'
+    ? selectedCommand.value?.providerId || ''
+    : selectedProviderConfig.value?.providerId || '',
+)
+
+const mcpUnsupported = computed(() => {
+  const entry = props.providers.find((p) => p.id === effectiveProviderId.value)
+  return Boolean(entry) && entry?.mcpDelivery !== 'config-file-flag'
+})
+
 watch(
   kind,
   (k) => {
@@ -494,6 +509,9 @@ function applyConnectionPrefill() {
       : []
   extraTools.value = Array.isArray(c.config?.extraTools)
     ? c.config.extraTools.filter((t): t is string => typeof t === 'string')
+    : []
+  mcpServers.value = Array.isArray(c.config?.mcpServers)
+    ? c.config.mcpServers.filter((m): m is string => typeof m === 'string')
     : []
   if (kind.value === 'ai-provider') {
     credentialId.value = c.credentialId || ''
@@ -677,10 +695,13 @@ async function save() {
       }
       const resolvedProvider = cmd.providerId
       const id = buildConnectionId(resolvedProvider)
-      const config =
-        resolvedProvider === 'claude-code-cli' && selectedModels.value.length
-          ? { model: selectedModels.value[0] }
-          : undefined
+      const localConfig: Record<string, unknown> = {}
+      if (resolvedProvider === 'claude-code-cli' && selectedModels.value.length) {
+        localConfig.model = selectedModels.value[0]
+      }
+      // Chỉ ghi khi khác rỗng — connection cũ không được mọc khoá thừa.
+      if (mcpServers.value.length) localConfig.mcpServers = mcpServers.value
+      const config = Object.keys(localConfig).length ? localConfig : undefined
       const { connection } = await saveConnection({
         id,
         label: label.value.trim(),
@@ -717,6 +738,7 @@ async function save() {
     }
     if (pc.baseURL) config.baseURL = pc.baseURL
     if (extraTools.value.length) config.extraTools = extraTools.value
+    if (mcpServers.value.length) config.mcpServers = mcpServers.value
 
     const id = buildConnectionId(pc.providerId)
     const { connection } = await saveConnection({
@@ -749,10 +771,35 @@ function onKeydown(e: KeyboardEvent) {
   emit('close')
 }
 
+/**
+ * Id đã lưu trong Connection nhưng server đã tắt hoặc đã xoá vẫn phải hiện ra.
+ * Lọc chúng khỏi danh sách thì người dùng không có cách nào bỏ chọn, mà `save`
+ * vẫn ghi lại nguyên si — job sau đó chạy thiếu tool và chỉ cảnh báo trong log.
+ */
+const mcpChoices = computed(() => {
+  const known = new Set(mcpOptions.value.map((m) => m.id))
+  return [
+    ...mcpOptions.value.map((m) => ({ ...m, missing: false })),
+    ...mcpServers.value.filter((id) => !known.has(id)).map((id) => ({ id, label: id, missing: true })),
+  ]
+})
+
+async function loadMcpOptions() {
+  try {
+    const data = await fetchMcpServers()
+    mcpOptions.value = (data.servers || [])
+      .filter((s) => s.enabled)
+      .map((s) => ({ id: s.id, label: s.label || s.id }))
+  } catch {
+    /* danh sách rỗng — không chặn phần còn lại của dialog */
+  }
+}
+
 onMounted(() => {
   refreshScan()
   loadCredentials()
   loadOAuthCapabilities()
+  loadMcpOptions()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -1117,6 +1164,25 @@ onUnmounted(() => {
               </div>
             </div>
           </template>
+
+          <div class="field">
+            <span class="cfg-label label-with-hint">
+              {{ t('runner.connectionDialog.mcpServersLabel') }}
+              <InfoTooltip :text="t('runner.connectionDialog.mcpServersHint')" />
+            </span>
+            <p v-if="!mcpChoices.length" class="muted">{{ t('runner.connectionDialog.mcpEmpty') }}</p>
+            <div v-else class="extra-tools-group">
+              <label v-for="m in mcpChoices" :key="m.id" class="kind-radio">
+                <input v-model="mcpServers" type="checkbox" :value="m.id" />
+                <span :class="{ 'err-text': m.missing }">
+                  {{ m.label }}<template v-if="m.missing"> — {{ t('runner.connectionDialog.mcpMissing') }}</template>
+                </span>
+              </label>
+            </div>
+            <p v-if="mcpServers.length && mcpUnsupported" class="muted err-text">
+              {{ t('runner.connectionDialog.mcpUnsupported') }}
+            </p>
+          </div>
 
           <div class="modal-actions">
             <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>

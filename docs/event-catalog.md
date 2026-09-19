@@ -73,8 +73,13 @@ Không emit `pipeline.created` / `step.started` / `task.reset` trên bus hiện 
 | `entity.updated` / `entity.deleted` | `provider-config` | Upsert / xóa provider config (interface + baseURL, không còn bao gồm credential) |
 | `entity.updated` / `entity.deleted` | `command` | Upsert / xóa command |
 | `entity.updated` / `entity.deleted` | `credential` | Upsert / xóa credential profile |
+| `entity.updated` / `entity.deleted` | `mcp-server` | Upsert / xóa MCP server (`mcp/controller.ts`) |
 
-Nơi emit: `runner/controller.ts` (sau mutation OK).
+Nơi emit: `runner/controller.ts` (sau mutation OK); riêng `mcp-server` ở `mcp/controller.ts`.
+
+⚠️ **Payload `mcp-server` chỉ có `{ id, projectId: null }`** — `env`/`headers` có thể chứa
+token, mà event đi thẳng vào `events.jsonl`. Nút *Kiểm tra kết nối* **không** phát domain
+event (đo trạng thái, không đổi nghiệp vụ), chỉ ghi audit `detail: { action: 'test', ok }`.
 
 ---
 

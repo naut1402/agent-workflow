@@ -14,6 +14,16 @@ export type ConnectionKind = 'local-console' | 'ai-provider'
 /** Provider category — Agent CLI vs console argv vs remote API. */
 export type ProviderFamily = 'agent-cli' | 'console-command' | 'ai-api'
 
+/** How a provider receives the `mcpServers` config the dashboard declares. */
+export type McpDelivery =
+  /** Per-invocation flag: `--mcp-config <file> --strict-mcp-config` (claude). */
+  | 'config-file-flag'
+  /** File read from the workspace, with no flag pointing at it (cursor). */
+  | 'workspace-config-file'
+  /** Tools injected into the provider's own tool-use loop (ai-api). */
+  | 'bridge-tools'
+  | 'unsupported'
+
 export interface Connection {
   id: string
   label: string
@@ -35,6 +45,11 @@ export interface Connection {
    * which then get only the base tools (unchanged behavior). For
    * `local-console` with `providerId: 'claude-code-cli'`, `model` is read
    * as the `--model` argv value (see `claude-code-cli.ts`).
+   *
+   * `mcpServers?: string[]` lists the MCP server ids this Connection opts into
+   * (`features/mcp` store). Absent/empty — the default for every connection
+   * created before the key existed — means no MCP config file is written and
+   * the CLI argv is unchanged.
    */
   config?: Record<string, unknown>
 }
@@ -45,6 +60,8 @@ export interface ProviderCatalogEntry {
   label: string
   /** agent-cli may be set as default AI runner; console-command may not. */
   family: ProviderFamily
+  /** How this provider receives MCP config — `listProviderCatalog` fills it in. */
+  mcpDelivery?: McpDelivery
 }
 
 export interface ScannedCommand {
