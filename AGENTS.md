@@ -217,21 +217,6 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Trình bày đúng nội dung PR** — phần riêng nhóm theo cây thư mục; fix/refactor có Logic trước → sau; phần chung nêu Core và/hoặc feature khác (hoặc *Không*).
 - [ ] **Dọn nợ trước merge `main`** — PR `dev/x.y.z/main` → `main` không còn thư mục `docs/todo/`, và dòng `test/x.y.z/main` của version tồn tại + xanh (checklist PR dưới).
 
-Gợi ý comment review ngắn:
-
-| Vấn đề | Gợi ý phản hồi |
-|--------|----------------|
-| Tách `paths.ts` / `store.ts` mỏng | "Gộp theo nghiệp vụ X — xem docs/convention/feature-architecture.md §2." |
-| `import …/other/business/foo` từ controller | "Đưa re-export vào `business/index` của feature này." |
-| `import fs from 'node:fs'` trong business | "Dùng / mở rộng `fileHelper`." |
-| Copy `slugify` / YAML parse | "Dùng `stringUtils` / `yamlLib`." |
-| Sanitize mới đặt trong `core` | "Gắn module business sở hữu + export qua index." |
-| Persist/CRUD mới không thấy `emit` | "Cân nhắc emit — xem event catalog theo mode." |
-| Event mới nhưng catalog chưa cập nhật | "Cập nhật catalog cùng PR, hoặc nợ `docs/todo/` có lý do." |
-| Đổi chữ ký `fileHelper` | "Chạy typecheck xem call site có khớp không — đừng truyền arg thừa nếu helper đã cố định encoding." |
-| `styles/<Component>.scss` mới nhưng chỉ 1 component render selector gốc | "Đưa vào `<style scoped lang=\"scss\">` trong SFC." |
-| File SCSS chỉ có comment, 0 rule | "Xoá file + dòng `@use`; `styles/` rỗng theo thì xoá cả thư mục." |
-
 ### PR
 
 **Tự kiểm trước khi push** (quy ước: [`docs/convention/git-hygiene.md`](docs/convention/git-hygiene.md)):
@@ -243,7 +228,7 @@ Gợi ý comment review ngắn:
 
 **Không `git push` lại branch đã merged** (origin có thể đã xoá → tạo branch rác). Luôn tạo branch mới từ base mới nhất — `origin/main`, hoặc `origin/dev/x.y.z/main` nếu task gắn version release.
 
-**Todo debt** (bối cảnh: [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md) — `docs/todo/<issue>/<task-id>.md` hoãn cập nhật docs/convention hoặc bỏ tạm bước chất lượng, mang nợ trong dòng version; gate CI **Todo debt** chỉ chặn PR promote `dev/x.y.z/main` → `main`; nợ **test** đi đường khác, gác bằng `release-test-gate.yml`):
+**Todo debt** (bối cảnh đầy đủ: [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md)):
 
 - [ ] Có hoãn docs/convention? → đã có `docs/todo/<issue>/<task-id>.md`
 - [ ] PR feature → `dev/x.y.z/main`? → được mang nợ; Todo debt **không** chặn
