@@ -12,7 +12,7 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Dữ liệu & sự kiện
 
-- **[`architecture/4-code/event-catalog.md`](architecture/4-code/event-catalog.md)** — mục lục domain event theo feature: type, nơi emit, payload. Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới.
+- **[`architecture/4-code/events/`](architecture/4-code/events/README.md)** — mục lục domain event theo mode: type, nơi emit, payload, kèm state/flow chart. Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới.
 
 ## Giao diện
 

@@ -51,10 +51,10 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 
 ### 2.2 Domain events (khi đụng persist / lifecycle / CRUD)
 
-Chi tiết type và nơi emit: [`docs/architecture/4-code/event-catalog.md`](../architecture/4-code/event-catalog.md).
+Chi tiết type và nơi emit: [`docs/architecture/4-code/events/`](../architecture/4-code/events/README.md).
 
 - [ ] **Cân nhắc emit** — thêm/sửa/xoá `emit` / `emitEntity` sau persist; payload không chứa secret.
-- [ ] **Đồng bộ catalog với code** — `docs/architecture/4-code/event-catalog.md` khớp, hoặc nợ `docs/todo/` có lý do.
+- [ ] **Đồng bộ catalog với code** — file mode tương ứng trong `docs/architecture/4-code/events/` khớp, hoặc nợ `docs/todo/` có lý do.
 - [ ] **Cập nhật type** — `DashboardEventType` đổi theo khi type mới / đổi tên.
 
 ---
