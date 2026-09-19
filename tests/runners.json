@@ -9,6 +9,7 @@
     "tests/src/features/pipeline-editor/business",
     "tests/src/features/monitor/business",
     "tests/src/features/runner/business",
+    "tests/src/features/mcp/business",
     "tests/src/backend/lib/fileHelper.test.ts",
     "tests/src/shared/lib/phase.test.ts",
     "tests/src/backend/log",

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -7,6 +7,7 @@ import {
   buildClaudeInvocation,
   createLocalConsoleProvider,
 } from '../../../../../src/features/runner/business/providers/claude-code-cli.js'
+import { upsertMcpServer } from '../../../../../src/features/mcp/business/registry.js'
 import type { CredentialProfile, ResolvedAgent } from '../../../../../src/features/runner/business/types.js'
 
 // Runs the shared local-console provider against real short-lived shell
@@ -769,5 +770,297 @@ describe('claude-code-cli — env token/base URL cho job orchestrator (Bug A)', 
     const { env } = await runWith({ orchestratorJob: true, orchestratorToken: 'tok-abc-123' }, 'cursor-cli')
     expect(env.token).toBe('tok-abc-123')
     expect(env.baseUrl).toBe(SELF_BASE_URL)
+  })
+})
+
+/**
+ * TC-54…TC-61 · TC-98 · TC-99 — tiêu thụ MCP ở `claude-code-cli`.
+ *
+ * ⚠️ Provider này dùng chung cho CẢ 3 CLI, nên mọi job agent-cli (kể cả NL-chat
+ * và mọi bước pipeline) đi qua đường dựng argv dưới đây. TC-54 so sánh MẢNG
+ * ARGV ĐẦY ĐỦ chứ không dùng "chứa": đó là gate của bất biến "không bật MCP ⇒
+ * argv không đổi một byte".
+ */
+describe('claude-code-cli — argv MCP (buildClaudeInvocation)', () => {
+  const BASE_INPUT = {
+    flags: ['--bare'],
+    prompt: 'nội dung bất kỳ',
+    allowedTools: 'Read,Edit',
+    dangerouslySkipPermissions: true,
+    sessionId: 'sess-123',
+    model: 'opus',
+  }
+  /** argv hiện có, trước khi MCP tồn tại — giá trị tham chiếu của TC-54/55/56. */
+  const ARGV_WITHOUT_MCP = [
+    '--bare',
+    '-p',
+    '--allowedTools',
+    'Read,Edit',
+    '--dangerously-skip-permissions',
+    '--model',
+    'opus',
+    '--session-id',
+    'sess-123',
+  ]
+
+  // TC-54 — ⚠️ gate bắt buộc xanh
+  test('TC-54: không có `mcpConfigPath` ⇒ argv HỆT như trước', () => {
+    const invocation = buildClaudeInvocation(BASE_INPUT)
+    expect(invocation.args).toEqual(ARGV_WITHOUT_MCP)
+    expect(invocation.args).not.toContain('--mcp-config')
+    expect(invocation.args).not.toContain('--strict-mcp-config')
+  })
+
+  // TC-55
+  test('TC-55: `mcpConfigPath` rỗng hoặc không khai ⇒ coi như không có', () => {
+    expect(buildClaudeInvocation({ ...BASE_INPUT, mcpConfigPath: '' }).args).toEqual(ARGV_WITHOUT_MCP)
+    expect(buildClaudeInvocation({ ...BASE_INPUT, mcpConfigPath: undefined }).args).toEqual(ARGV_WITHOUT_MCP)
+  })
+
+  // TC-56
+  test('TC-56: có `mcpConfigPath` ⇒ đúng cờ, đúng vị trí (trước `--model`)', () => {
+    const configPath = path.join(os.tmpdir(), 'mcp-runtime', 'job-1.json')
+    const args = buildClaudeInvocation({ ...BASE_INPUT, mcpConfigPath: configPath }).args
+
+    expect(args).toEqual([
+      '--bare',
+      '-p',
+      '--allowedTools',
+      'Read,Edit',
+      '--dangerously-skip-permissions',
+      '--mcp-config',
+      configPath,
+      '--strict-mcp-config',
+      '--model',
+      'opus',
+      '--session-id',
+      'sess-123',
+    ])
+    // `--strict-mcp-config` đi kèm BẮT BUỘC: thiếu nó thì job còn ăn thêm MCP
+    // server cấu hình sẵn trên máy chạy dashboard.
+    expect(args.indexOf('--mcp-config')).toBeLessThan(args.indexOf('--model'))
+    expect(args[args.indexOf('--mcp-config') + 1]).toBe(configPath)
+    expect(args[args.indexOf('--mcp-config') + 2]).toBe('--strict-mcp-config')
+  })
+})
+
+describe('claude-code-cli — execute() với MCP', () => {
+  const CANARY = 'sk-CANARY-do-not-log-0123456789'
+  const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
+
+  let home: string
+  let workspace: string
+
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-mcp-exec-home-'))
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-mcp-exec-ws-'))
+    process.env.DEV_TEAM_DASHBOARD_HOME = home
+  })
+
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
+    else process.env.DEV_TEAM_DASHBOARD_HOME = prevHome
+    fs.rmSync(home, { recursive: true, force: true })
+    fs.rmSync(workspace, { recursive: true, force: true })
+  })
+
+  function runtimeDir(): string {
+    return path.join(home, 'mcp-runtime')
+  }
+  function runtimeFiles(): string[] {
+    try {
+      return fs.readdirSync(runtimeDir())
+    } catch {
+      return []
+    }
+  }
+  function seedServer(id: string, env: Record<string, string> = {}) {
+    upsertMcpServer({
+      id,
+      label: id,
+      enabled: true,
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', `@fake/${id}`],
+      env,
+    })
+  }
+
+  function mcpProvider(over: Partial<Parameters<typeof createLocalConsoleProvider>[0]> = {}) {
+    return createLocalConsoleProvider({
+      providerId: 'claude-code-cli',
+      defaultCliPath: process.execPath,
+      claudeStyleArgs: true,
+      ...over,
+    })
+  }
+
+  async function run(
+    provider: ReturnType<typeof createLocalConsoleProvider>,
+    runnerConfig: Record<string, any>,
+    opts: { logPath?: string; onLog?: (c: string) => void; timeoutMs?: number; jobId?: string } = {},
+  ) {
+    return provider.execute(
+      {
+        jobId: opts.jobId ?? 'job-mcp-1',
+        resolvedAgent,
+        userPrompt: 'chạy thử',
+        workspace,
+        produces: [],
+        timeoutMs: opts.timeoutMs ?? 10_000,
+        metadata: opts.logPath ? { logPath: opts.logPath } : {},
+      },
+      runnerConfig,
+      credential,
+      opts.onLog,
+    )
+  }
+
+  // TC-57 — E1: bất biến "không bật MCP ⇒ không file nào chạm đĩa"
+  test('TC-57: connection không khai `mcpServers` ⇒ không file nào được sinh, log không nhắc MCP', async () => {
+    seedServer('on1')
+    const logPath = makeLogPath(home)
+    const { cliPath, flags } = nodeCli('mcp-echo')
+
+    const result = await run(mcpProvider(), { cliPath, flags }, { logPath })
+
+    expect(result.ok).toBe(true)
+    expect(fs.existsSync(runtimeDir())).toBe(false)
+    expect(result.stdout).not.toContain('--mcp-config')
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).not.toContain('MCP')
+  })
+
+  // TC-58 — AC-3
+  test('TC-58: có MCP ⇒ cờ vào argv thật, file tồn tại LÚC CHẠY và biến mất sau khi xong', async () => {
+    seedServer('on1')
+    const { cliPath, flags } = nodeCli('mcp-echo')
+
+    const result = await run(mcpProvider(), { cliPath, flags, mcpServers: ['on1'] })
+
+    expect(result.ok).toBe(true)
+    // stdout của fake CLI = argv thật mà tiến trình con nhận được.
+    const argv = result.stdout!.trim().split('\n')
+    const idx = argv.indexOf('--mcp-config')
+    expect(idx).toBeGreaterThanOrEqual(0)
+    expect(argv[idx + 2]).toBe('--strict-mcp-config')
+    expect(argv).toContain('mcp-config-exists=true')
+
+    // Dọn ở `finally` — sau khi execute trả về, không còn file nào.
+    expect(runtimeFiles()).toEqual([])
+  })
+
+  // TC-59 — E4: dọn ở MỌI đường thoát
+  test('TC-59 (a): job thoát mã khác 0 ⇒ vẫn dọn, kết quả lỗi giữ nguyên ngữ nghĩa', async () => {
+    seedServer('on1')
+    const { cliPath, flags } = nodeCli('fail')
+
+    const result = await run(mcpProvider(), { cliPath, flags, mcpServers: ['on1'] })
+
+    expect(result.ok).toBe(false)
+    expect(result.exitCode).toBe(1)
+    expect(result.error).toContain('boom')
+    expect(runtimeFiles()).toEqual([])
+  })
+
+  test('TC-59 (b): `runProcess` ném ⇒ vẫn dọn, ExecuteResult mang lỗi', async () => {
+    seedServer('on1')
+    const cliPath = path.join(home, 'khong-ton-tai-binary')
+
+    const result = await run(mcpProvider(), { cliPath, flags: [], mcpServers: ['on1'] })
+
+    expect(result.ok).toBe(false)
+    expect(result.exitCode).toBeNull()
+    expect(String(result.error).length).toBeGreaterThan(0)
+    expect(runtimeFiles()).toEqual([])
+  })
+
+  test('TC-59 (c): job bị giết giữa chừng (timeout/cancel) ⇒ vẫn dọn', async () => {
+    seedServer('on1')
+    const { cliPath, flags } = nodeCli('hang')
+
+    const result = await run(mcpProvider(), { cliPath, flags, mcpServers: ['on1'] }, { timeoutMs: 600 })
+
+    expect(result.ok).toBe(false)
+    expect(result.timedOut).toBe(true)
+    expect(runtimeFiles()).toEqual([])
+  }, 20_000)
+
+  // TC-60 — G6
+  test('TC-60: log job chỉ lộ id + đường dẫn, 🚫 không canary, 🚫 không nội dung file', async () => {
+    seedServer('on1', { TOKEN: CANARY })
+    const logPath = makeLogPath(home)
+    const { cliPath, flags } = nodeCli('mcp-echo')
+
+    await run(mcpProvider(), { cliPath, flags, mcpServers: ['on1'] }, { logPath })
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    const mcpLines = log.split('\n').filter((l) => l.startsWith('[runner] MCP:'))
+    expect(mcpLines).toHaveLength(1)
+    expect(mcpLines[0]).toMatch(/^\[runner\] MCP: 1 server \(on1\) → .+job-.*\.json$/)
+    expect(log).not.toContain(CANARY)
+    // Nội dung JSON của file config không bao giờ được chép vào log.
+    expect(log).not.toContain('"mcpServers"')
+  })
+
+  // TC-61 — E3
+  test('TC-61: provider có delivery `unsupported` ⇒ argv không đổi, không file nào', async () => {
+    seedServer('on1')
+    const { cliPath, flags } = nodeCli('mcp-echo')
+
+    const result = await run(
+      mcpProvider({ mcpDelivery: 'unsupported' }),
+      { cliPath, flags, mcpServers: ['on1'] },
+    )
+
+    expect(result.ok).toBe(true)
+    const argv = result.stdout!.trim().split('\n')
+    expect(argv).not.toContain('--mcp-config')
+    expect(argv).not.toContain('--strict-mcp-config')
+    expect(fs.existsSync(runtimeDir())).toBe(false)
+  })
+
+  /**
+   * TC-98 / TC-99 — ⚠️ ca chống rò secret.
+   *
+   * TC-60 chỉ phủ dòng log do dashboard tự ghi; đường stdout/stderr của tiến
+   * trình con là kênh khác, và `ExecuteResult.error` là kênh thứ ba (chảy vào
+   * `jobs/<id>.json` + payload `job.failed` → events.jsonl → SSE). Ba ca không
+   * thay thế nhau.
+   */
+  describe('TC-98 / TC-99: tiến trình con in canary ra stderr', () => {
+    async function runLeaky() {
+      seedServer('on1', { TOKEN: CANARY })
+      const logPath = makeLogPath(home)
+      const chunks: string[] = []
+      const { cliPath, flags } = nodeCli('mcp-leak')
+      const result = await run(
+        mcpProvider(),
+        { cliPath, flags, mcpServers: ['on1'] },
+        { logPath, onLog: (c) => chunks.push(c) },
+      )
+      return { result, log: fs.readFileSync(logPath, 'utf8'), streamed: chunks.join('') }
+    }
+
+    test('TC-98: log job và `onLog` đều mask', async () => {
+      const { log, streamed } = await runLeaky()
+
+      expect(log).not.toContain(CANARY)
+      expect(log).toContain('***')
+      expect(log).toContain('401 Unauthorized: Bearer ***')
+      expect(streamed).not.toContain(CANARY)
+      expect(streamed).toContain('***')
+    })
+
+    test('TC-99: `ExecuteResult.error` cũng phải mask', async () => {
+      const { result } = await runLeaky()
+
+      expect(result.ok).toBe(false)
+      expect(String(result.error).length).toBeGreaterThan(0)
+      expect(result.error).toContain('***')
+      expect(result.error).not.toContain(CANARY)
+      // 🚫 Không assert gì về `result.stdout`: trường đó CỐ Ý để thô (payload
+      // chức năng) — xem comment tại `claude-code-cli.ts` và `review.md` [imo].
+    })
   })
 })
