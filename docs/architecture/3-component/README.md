@@ -36,28 +36,17 @@ C4Component
 
 > **Lưu ý routing:** **mọi** route `/api/*` đều đi qua Hono — không feature nào còn nhánh node-res chặn trước. `createApiHandler` là **điểm chốt duy nhất** ghi request log (fire-and-forget trong `finally`, không await vào response).
 
-### 1.2 Domain / business — bảng theo feature
+### 1.2 Domain / business — theo feature
 
-Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `backend/configs` + `backend/lib` + `shared/lib` → business → controller → `src/backend` (Hono setup). Registry ở `src/backend/registry.ts`; entry `src/backend/standalone.ts`. Trong feature, `business/` gom theo **nghiệp vụ đang xử lý cái gì** — tránh tách nhiều file theo loại thao tác kỹ thuật.
+Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `backend/configs` + `backend/lib` + `shared/lib` → business → controller → `src/backend` (Hono setup). Trong feature, `business/` gom theo **nghiệp vụ đang xử lý cái gì** — tránh tách nhiều file theo loại thao tác kỹ thuật. Danh sách feature cụ thể xem trực tiếp `src/features/` (đổi thường xuyên hơn kiến trúc, không lặp lại ở đây). Vài nhóm có hành vi **không hiển nhiên từ tên thư mục**, đáng ghi lại:
 
-| Module | Đường dẫn thật | Vai trò |
-|---|---|---|
-| Types | `src/backend/http/types.ts` | Nguồn type thống nhất (`HonoEnv`, registry types). |
-| Registry | `src/backend/registry.ts` | `projects.json`; REST + MCP. |
-| Settings | `src/features/settings/business/` | Autoscan, fs browse, github tokens config, scan patterns. |
-| Pipeline | `src/features/pipeline-editor/business/pipeline/` | Layered pipeline config + merge (một module). |
-| Catalog / Rules | `src/features/pipeline-editor/business/{catalog,rules}/` | Catalog skills/agents (+ scan); rule project. Nguồn mặc định theo convention, cộng thêm path khớp `settings.scanPatterns`. |
-| Agents | `src/features/agent-editor/business/` | `agents.ts` (CRUD/template/fetch) + NL generate. |
-| Tasks / artifacts | `src/features/monitor/business/` | Tasks, artifact actions, github issue, task chat. |
-| Knowledge | `src/features/knowledge/business/` | File driver đa root cho **entry**; **collection + metadata tag + alias tag** ở `dashboard.sqlite`. Chi tiết DB: [Cấp 4 · Code](../4-code/README.md#tầng-db-srcbackenddb). |
-| Logging | `src/backend/log/` (ghi + driver) + `src/features/logs/` (đọc UI, job log stream) | Request/audit/events/usage — hai backend `file`/`sqlite`, chọn bằng `logging.driver`. |
-| DB (SQLite) | `src/backend/db/` | Connection dùng chung `dashboard.sqlite` + schema Drizzle + migration. |
-| Statistics | `src/features/statistics/business/` | Aggregation token usage từ `usage.jsonl` (`GET /api/statistics/usage`). Giới hạn: [Cấp 4 · Code](../4-code/README.md#tầng-db-srcbackenddb). |
-| Runners | `src/features/runner/business/` | Job queue (+ reaper), connections, session ledger (+ capture), providers CLI. |
-| Orchestrator | `src/features/orchestrator/business/` | **Opt-in** (`pipeline.orchestrator.enabled`). Subscriber wildcard trên event bus quyết định step nào start/resume/dừng; `brief.ts` cấp bối cảnh, `decision.ts` đọc quyết định qua sentinel `ORCHESTRATOR_DECISION:`. Quyền start ở `monitor/business/tasks/startAuthority.ts`. Tắt ⇒ không đổi hành vi. |
-| Automations | `src/features/automations/business/` | Rule CRUD, scheduler tick, event trigger, action `runTask` chạy nền + biến `{{trigger.*}}`/`{{steps.N.*}}`, run ledger ở `registryHome()/automations/`. |
-| NL chat | `src/features/nl-chat/business/` | Session builder chat (prompt + parse trong cùng module). |
-| CLI | `src/backend/runner-cli.mjs` | Runner CLI entry. |
+- **Registry** (`src/backend/registry.ts`) — nguồn sự thật cho project registry, dùng chung bởi REST và MCP server.
+- **Pipeline / Catalog / Rules** (feature pipeline-editor) — pipeline config layered + merge; catalog agent/skill và rule project đọc theo convention, cộng thêm path khớp `settings.scanPatterns`.
+- **Knowledge** — entry lưu qua file driver đa root; **collection + tag** lưu ở `dashboard.sqlite` (khác driver với entry). Chi tiết: [Cấp 4 · Code](../4-code/README.md#tầng-db-srcbackenddb).
+- **Logging** — hai driver `file` / `sqlite`, chọn qua `logging.driver`.
+- **Statistics** — aggregation từ log usage; có giới hạn khi driver log là `sqlite` — xem [Cấp 4 · Code](../4-code/README.md#tầng-db-srcbackenddb).
+- **Orchestrator** — **opt-in** qua `pipeline.orchestrator.enabled`; subscriber trên event bus quyết định step start/resume/dừng thay vì chuỗi tự nối cũ; quyền start step do feature Tasks (monitor) sở hữu. Tắt ⇒ không đổi hành vi.
+- **Automations** — rule đa trigger (timer/event) → chuỗi action chạy nền, biến tham chiếu output bước trước, có run ledger riêng ở data root.
 
 ### 1.3 Event bus (kernel)
 
@@ -73,21 +62,15 @@ Event bus nội bộ tại `src/backend/events/` (`emit` / `on` / `once`, `emitE
 
 `src/frontend/main.ts` mount `src/frontend/App.vue`. `App.vue` là shell mỏng: `inject` 1 service container (`src/frontend/container/`, DI/IoC trên native Vue `provide/inject`) → `resolve` `ModeRegistry` (`src/frontend/shell/modeRegistry.ts`) → lặp `listModes()` để render sidebar nav / status text / main panel. `App.vue` **không** hard-code danh sách mode — mỗi feature tự đăng ký qua `src/features/<feature>/registerMode.ts`, `main.ts` tự quét bằng `import.meta.glob('../features/*/registerMode.ts', { eager: true })`. Sơ đồ bootstrap + diễn giải: [`../../diagram/IoC.md`](../../diagram/IoC.md). Mode `monitor` nhận task-list qua SSE `GET /api/tasks/stream` (`src/features/monitor/composables/useTaskPolling.ts`, fetch-based reader ở `src/frontend/lib/sseClient.ts`); kết nối giữ xuyên suốt mọi mode.
 
-### 2.1 Bảng mode (`ModeEntry.key`)
+### 2.1 Mode (`ModeEntry.key`)
 
-| Mode | Thư mục | Component / thành phần chính |
-|---|---|---|
-| `monitor` | `src/features/monitor/` | `MonitorLayout`, `TaskList`, `PipelineView`, `PipelineNode`, `QaPanel`, `ArtifactPanel`, `ProjectBar`, `SectionSaveIndicator`; composables `useTaskPolling.ts`, `useInlineMarkdownEdit.ts` |
-| `editor` (Pipeline Editor) | `src/features/pipeline-editor/` | `PipelineEditor`, `PipelineEditorNode`, `StepConfigDialog`, `CatalogPanel`, `RulesPanel`, `ProfileManager`; `lib/pipelineRoundTrip.ts` |
-| `agentEditor` | `src/features/agent-editor/` | `AgentEditor`, `AgentSectionEditor`, `WorkflowSectionEditor`, `AgentTemplatePicker`, `AgentNlWizard` |
-| `quickAction` | `src/features/quick-action/` | `QuickActionPanel` — chạy nhanh 1 action (agent/runner) trên artifact/task đang chọn |
-| `knowledge` | `src/features/knowledge/` | `KnowledgePanel` |
-| `runner` | `src/features/runner/` | `RunnerConfigPanel`, `ConnectionDialog` |
-| `automations` | `src/features/automations/` | `AutomationsPanel`, `AutomationFormDialog`; composable `useAutomations.ts` — rule đa trigger → chuỗi action `runTask`; chat NL tạo automation qua entity `'automation'` |
-| `logs` (Nhật ký) | `src/features/logs/` | `LogsPanel`, `TaskTimeline`; composable `useTaskTimeline.ts` |
-| `statistics` (Thống kê) | `src/features/statistics/` | `StatisticsPanel`, `ChartCard` (mermaid P0); `lib/mermaidChart.ts`; drill-down project → task → step → job |
+Mỗi feature đăng ký 1 mode qua `registerMode.ts` — danh sách mode + component cụ thể đổi theo tính năng, xem trực tiếp `src/features/<feature>/` thay vì liệt kê ở đây. Vài mode có hành vi khác biệt đáng ghi lại:
 
-- `src/features/notifications/` — không phải mode, mount xuyên suốt mọi mode trong `App.vue` (bell `sidebar-footer` và/hoặc `FloatingNotificationIcon`, chọn qua Settings › Thông báo › Vị trí hiển thị). Badge HITL-pending/QA-ready **client-only**, suy từ `tasks` ref nhận qua SSE (diff `hitl_pending`/`has_qa`) — không có endpoint/schema backend riêng. Composable `useNotifications.ts` đọc `src/frontend/configs/appSettings.ts` để bật/tắt notify, browser `Notification` API, âm thanh Web Audio API. Component dropdown dùng chung `components/NotificationList.vue`.
+- `monitor` — mode duy nhất giữ kết nối SSE theo dõi liên tục (§2 trên); mọi mode khác chỉ lấy dữ liệu 1 lần khi vào.
+- `automations` — rule đa trigger (timer/event) → chuỗi action; chat NL tạo automation dùng chung cơ chế NL chat.
+- `statistics` — chart render qua mermaid, drill-down project → task → step → job.
+
+`src/features/notifications/` — không phải mode, mount xuyên suốt mọi mode trong `App.vue` (vị trí hiển thị chọn qua Settings › Thông báo). Badge HITL-pending/QA-ready **client-only**, suy từ dữ liệu task nhận qua SSE (diff giữa các lần cập nhật) — không có endpoint/schema backend riêng.
 
 ### 2.2 API layer
 

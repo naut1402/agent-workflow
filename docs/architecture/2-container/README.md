@@ -7,7 +7,7 @@ C4Container
   title Container — dev-team-dashboard
   Person(user, "Dev / PM")
   System_Boundary(dashboard, "dev-team-dashboard") {
-    Container(spa, "Frontend SPA", "Vue 3 + Vite", "9 mode qua ModeRegistry — chi tiết ở Cấp 3")
+    Container(spa, "Frontend SPA", "Vue 3 + Vite", "Nhiều mode qua ModeRegistry — chi tiết ở Cấp 3")
     Container(backend, "Backend app", "Hono trên Bun/Node", "1 app Hono, 2 transport")
     Container(mcp, "MCP server", "Bun stdio", "CRUD project registry cho Claude Code")
     ContainerDb(sqlite, "dashboard.sqlite", "SQLite + Drizzle", "log_entries, knowledge_collections, tags")
@@ -52,18 +52,18 @@ Backend là **một app Hono duy nhất** chạy trên **hai transport** khác n
 
 ### 2.1 Shim tương thích
 
-`src/backend/devTeamApi.ts` (36 dòng) chỉ là **shim** giữ hợp đồng cũ: re-export `createApiHandler` + export Vite plugin `devTeamApi({root})`. Nó **không** còn chứa logic core.
+`src/backend/devTeamApi.ts` chỉ là **shim** giữ hợp đồng cũ: re-export `createApiHandler` + export Vite plugin `devTeamApi({root})`. Nó **không** còn chứa logic core.
 
 ### 2.2 Hai transport
 
-- **Vite middleware** (`bun run dev`): plugin `devTeamApi({root})` mount handler vào dev server (port 5174).
-- **Node standalone** (`src/backend/standalone.ts`, chạy bằng `bun run serve`, cần `dist/`): HTTP server phục vụ `dist/` (SPA fallback) + mount `createApiHandler`; `PORT = DEV_TEAM_DASHBOARD_PORT | PORT | 5174`. Binds `127.0.0.1` only.
+- **Vite middleware** (`bun run dev`): plugin `devTeamApi({root})` mount handler vào dev server.
+- **Node standalone** (`src/backend/standalone.ts`, chạy bằng `bun run serve`, cần `dist/`): HTTP server phục vụ `dist/` (SPA fallback) + mount `createApiHandler`; cổng lấy theo thứ tự ưu tiên env `DEV_TEAM_DASHBOARD_PORT` → `PORT` → mặc định nội bộ. Binds `127.0.0.1` only.
 
 ---
 
 ## 3. Frontend SPA — container
 
-Vue 3 + Vite, mount 1 app duy nhất qua `ModeRegistry` (9 mode). Chi tiết component/mode ở [Cấp 3 · Component §2](../3-component/README.md#2-frontend-components). Sơ đồ bootstrap DI/ModeRegistry: [`../../diagram/IoC.md`](../../diagram/IoC.md).
+Vue 3 + Vite, mount 1 app duy nhất qua `ModeRegistry`. Chi tiết component/mode ở [Cấp 3 · Component §2](../3-component/README.md#2-frontend-components). Sơ đồ bootstrap DI/ModeRegistry: [`../../diagram/IoC.md`](../../diagram/IoC.md).
 
 ---
 
@@ -75,7 +75,7 @@ Vue 3 + Vite, mount 1 app duy nhất qua `ModeRegistry` (9 mode). Chi tiết com
 
 ## 5. `dashboard.sqlite` — container DB
 
-File SQLite dùng chung cho mọi subsystem cần lưu trữ có cấu trúc (thay vì file-based). Vị trí: `registryHome()/dashboard.sqlite` — **nằm ngoài cây repo**, cùng chỗ với `projects.json`. Schema, migration, và 2 subsystem đang dùng (log driver `sqlite`, knowledge collection/tag) — chi tiết ở [Cấp 4 · Code](../4-code/README.md#tầng-db-srcbackenddb).
+File SQLite dùng chung cho mọi subsystem cần lưu trữ có cấu trúc (thay vì file-based) — hiện gồm log driver `sqlite` và knowledge collection/tag. Vị trí: `registryHome()/dashboard.sqlite` — **nằm ngoài cây repo**, cùng chỗ với `projects.json`. Schema, migration — chi tiết ở [Cấp 4 · Code](../4-code/README.md#tầng-db-srcbackenddb).
 
 ---
 

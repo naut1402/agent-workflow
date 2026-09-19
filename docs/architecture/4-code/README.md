@@ -8,7 +8,7 @@ Chi tiết implementation cụ thể: schema DB, danh sách file config shell, s
 
 ## Tầng DB `src/backend/db/`
 
-Một file SQLite dùng chung cho mọi subsystem chuyển khỏi lưu trữ file-based. Hai subsystem đang dùng: log backend `sqlite` (opt-in) và collection/tag của knowledge (luôn bật).
+Một file SQLite dùng chung cho mọi subsystem chuyển khỏi lưu trữ file-based — hiện gồm log backend `sqlite` (opt-in) và collection/tag của knowledge (luôn bật).
 
 - **Vị trí file**: `registryHome()/dashboard.sqlite` — **nằm ngoài cây repo**, cùng chỗ với `projects.json`. Không có file DB nào sinh trong repo, `.gitignore` không phải đụng.
 - **`client.ts`** giữ connection cache dùng chung (`getDb()`), bật `WAL` + `foreign_keys`, và chạy migration Drizzle khi mở lần đầu (idempotent). Migration chạy cho **mọi** subsystem dùng chung file, nên một migration hỏng kéo cả đường log xuống theo.

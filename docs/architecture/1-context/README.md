@@ -25,7 +25,7 @@ C4Context
 
 | Actor | Quan hệ với dashboard | Ghi chú |
 |---|---|---|
-| **Dev / PM** | Người dùng chính, thao tác qua trình duyệt | 9 mode (monitor, editor, agentEditor, …) — xem [Cấp 3 · Component](../3-component/README.md) |
+| **Dev / PM** | Người dùng chính, thao tác qua trình duyệt | Nhiều mode (monitor, editor, agentEditor, …) — xem [Cấp 3 · Component](../3-component/README.md) |
 | **Orchestrator agent** | Ghi `.dev-state/*.json` + artifact khi chạy pipeline; dashboard đọc để hiển thị | Ngoại lệ: pipeline bật `orchestrator.enabled` thì dashboard tự giữ quyền start step (`src/features/orchestrator/`) |
 | **Claude Code / AI provider** | Sinh nội dung khi người dùng bấm "generate" (agent draft, NL chat) | Không có `ANTHROPIC_API_KEY` → fallback heuristic, không chặn luồng |
 | **GitHub** | Liên kết issue với task, đọc/ghi qua REST API | Token cấu hình per-project trong Settings |
