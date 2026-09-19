@@ -5,13 +5,13 @@ import tseslint from 'typescript-eslint'
 
 const noEnum = {
   selector: 'TSEnumDeclaration',
-  message: 'Không dùng TypeScript enum — dùng union literal type (docs/agent-rules/coding-guideline.md).',
+  message: 'Không dùng TypeScript enum — dùng union literal type (docs/convention/coding.md).',
 }
 
 const noDefaultExport = {
   selector: 'ExportDefaultDeclaration',
   message:
-    'Không dùng default export trừ *.vue / vite.config.* / vitest.config.* / playwright.config.* / *.d.ts (docs/agent-rules/coding-guideline.md).',
+    'Không dùng default export trừ *.vue / vite.config.* / vitest.config.* / playwright.config.* / *.d.ts (docs/convention/coding.md).',
 }
 
 /** MVP: recommended giữ nguyên nhưng hạ error → warn để CI xanh (không --max-warnings 0). */

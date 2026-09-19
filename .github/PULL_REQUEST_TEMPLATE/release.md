@@ -9,7 +9,7 @@ Viết hướng người dùng cuối (tiếng Việt): người dùng thấy g�
    Fix/tinh chỉnh trong lúc làm ra nó KHÔNG tách dòng riêng ở `## Cải tiến` / `## Sửa lỗi`
    (người dùng chưa từng thấy bản lỗi) — gộp vào mô tả tính năng theo hành vi cuối cùng,
    dấu vết từng PR đã nằm ở `## PR đã merge`.
-Chi tiết: docs/agent-rules/git-pr.md §8.4
+Chi tiết: docs/agent-rules/git-pr.md §8
 -->
 
 ## Tính năng mới

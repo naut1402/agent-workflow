@@ -3,7 +3,7 @@
    Phải là class global: `<style scoped>` không gắn `data-v-…` vào HTML dựng
    lúc runtime, nên scoped style không với tới nội dung markdown.
    Chuyển nguyên văn từ `features/monitor/styles/ArtifactPanel.scss` khi số
-   feature dùng tới vượt 1 (feature-architecture-guideline.md §5). */
+   feature dùng tới vượt 1 (docs/convention/feature-architecture.md §5). */
 
 /* Block view */
 .block-list { display: flex; flex-direction: column; gap: 6px; }

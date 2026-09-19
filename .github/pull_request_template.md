@@ -1,10 +1,10 @@
 <!--
 PR template. Điền đầy đủ các mục.
 Title PR theo prefix: [<TASK>] <type>: <desc>  (type ∈ feat|fix|chore|docs|refactor|test) — gán label theo type.
-Quy ước hub: AGENTS.md. Chi tiết PR body: docs/agent-rules/git-pr.md (§8.1–§8.2).
-PR phát hành (main ← dev/x.y.z/main): dùng .github/PULL_REQUEST_TEMPLATE/release.md (mở PR kèm ?template=release.md) — bố cục ở docs/agent-rules/git-pr.md §8.4.
+Quy ước hub: AGENTS.md. Chi tiết PR body: docs/convention/pr-body.md.
+PR phát hành (main ← dev/x.y.z/main): dùng .github/PULL_REQUEST_TEMPLATE/release.md (mở PR kèm ?template=release.md) — bố cục ở docs/agent-rules/git-pr.md §8.
 PR dòng test (test/x.y.z/main ← test/x.y.z/{taskID}_{slug}): dùng .github/PULL_REQUEST_TEMPLATE/test.md (?template=test.md) — quy ước dòng test ở docs/agent-rules/git-pr.md §4.3.
-Kiến trúc + cấu trúc thư mục: docs/architecture/ · feature map: docs/agent-rules/feature-architecture-guideline.md.
+Kiến trúc + cấu trúc thư mục: docs/architecture/ · feature map: docs/convention/feature-architecture.md.
 -->
 
 ## Issue
@@ -64,9 +64,9 @@ Cổng `Release test gate` chặn PR phát hành nếu dòng test của version 
 - [ ] PR body: phần riêng theo cấu trúc thư mục; phần chung nêu Core / feature khác (hoặc *Không*)
 - [ ] Fix/refactor: đã có Logic trước → sau
 - [ ] **Suite hiện có** xanh local · CI/CD xanh (không hồi quy). Test *mới* cho thay đổi này thuộc PR dòng test
-- [ ] Tuân thủ `docs/agent-rules/coding-guideline.md` + `feature-architecture-guideline.md`
+- [ ] Tuân thủ `docs/convention/coding.md` + `docs/convention/feature-architecture.md`
 - [ ] Icon mới/sửa dùng `<Icon name="..." />` (`src/frontend/ui/Icon.vue`) — không tự vẽ tay `<svg>`/`<path>`
 - [ ] Dropdown mới dùng `CSelect`/`CComboSelect` (`src/frontend/ui/`) — không dùng `<select>` native
-- [ ] **Git hygiene** (`docs/agent-rules/git-pr.md`): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
+- [ ] **Git hygiene** (`docs/convention/git-hygiene.md`): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
 - [ ] Rename/move dùng `git mv`; KHÔNG còn bản cũ trùng (vd `.js` lẫn `.ts`)
-- [ ] Test không nằm trong PR này — dòng test của version đã hoạt động thì file dưới `tests/`·`test-e2e/` chuyển sang PR dòng test; **giai đoạn đệm** (dòng test chưa dựng cho version này) thì test vẫn ở đây nhưng phải đi commit `test:` riêng (`docs/agent-rules/git-pr.md` §6.2)
+- [ ] Test không nằm trong PR này — dòng test của version đã hoạt động thì file dưới `tests/`·`test-e2e/` chuyển sang PR dòng test; **giai đoạn đệm** (dòng test chưa dựng cho version này) thì test vẫn ở đây nhưng phải đi commit `test:` riêng (`docs/convention/git-commits.md`)

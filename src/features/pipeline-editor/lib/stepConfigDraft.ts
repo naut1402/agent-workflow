@@ -1,7 +1,7 @@
 /**
  * Chuyển đổi hai chiều giữa `data` của node canvas và draft phẳng mà
  * `StepConfigDialog` bind vào input. Nằm ở `lib/` thay vì trong `.vue` để test
- * được không cần render (`coding-guideline.md` §5).
+ * được không cần render (`docs/convention/coding.md` §5).
  *
  * `hitl` bị phẳng hoá thành `hitl_*` vì `v-model` không bind được vào object
  * lồng khi mode `none` không có các subfield còn lại.
