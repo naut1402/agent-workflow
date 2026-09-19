@@ -1,10 +1,6 @@
-# Coding guideline — ngôn ngữ, Zod, Vue, i18n
+# Quy ước — coding (ngôn ngữ, Zod, Vue, i18n, comment)
 
 Quy ước viết code **hiện hành** trong repo này.
-
-Kiến trúc và bất biến bắt buộc: [`docs/architecture/4-code/` — Bất biến kiến trúc](../architecture/4-code/README.md#bất-biến-kiến-trúc). Đặt file theo feature: [`feature-architecture-guideline.md`](feature-architecture-guideline.md).
-
----
 
 ## 1. Ngôn ngữ & module
 
@@ -22,15 +18,11 @@ Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`. ESLint (f
 | Không default export | `ExportDefaultDeclaration` + allowlist |
 | `<script setup lang="ts">` | `vue/block-lang` + `vue/component-api-style` |
 
----
-
 ## 2. Quirk TypeScript phải biết
 
 - **Discriminant kiểu boolean không narrow đúng** dưới `vue-tsc` (TS6) trong repo này — `{ok:true,…} | {ok:false,…}` với `if (!v.ok) return v` **không** hoạt động.
 - **Dùng `in` để narrow** — `if ('error' in v) return v`.
 - **Hoặc đổi discriminant sang string literal** — `kind: 'ok' | 'err'`.
-
----
 
 ## 3. Zod là nguồn chân lý cho type & validation
 
@@ -39,8 +31,6 @@ Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`. ESLint (f
 - **Parse fail → trả default, không throw** — giữ triết lý defensive.
 - **Schema domain ở `src/features/<feature>/schemas/`**; preference shell (`appSettings`) ở `src/frontend/configs/` để tránh `core` → `features`.
 
----
-
 ## 4. Kiến trúc & coupling — chỉ đi xuống
 
 - **Functional + ctx-injection** — dependency truyền qua tham số `ctx`, không class-DI / NestJS / OOP framework.
@@ -48,15 +38,13 @@ Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`. ESLint (f
 - **`business/` không biết HTTP** — nhận `root` / `ctx`, trả data thuần (`{ status, error }` khi lỗi).
 - **Controller mỏng** — parse request → gọi `XxxBusiness` → `this.json` / `ok`.
 
----
-
 ## 5. Frontend (Vue 3)
 
 - **`<script setup lang="ts">`** cho mọi SFC.
 - **Kéo logic suy diễn ra khỏi `.vue`** xuống composable / lib thuần TS để test không cần render.
 - **Cấu trúc feature-module** — `src/features/<mode>/{components,composables,scripts/*Api.ts,styles,locales,schemas}` + nền `src/frontend/{ui,composables,lib,shell}`; plugin app-scope ở `src/frontend/plugins/`.
-- **Quy ước button** (ưu tiên icon-btn, default không viền, hover scale) — [`docs/convention/ui-buttons.md`](../convention/ui-buttons.md).
-- **Chiến lược tràn là bắt buộc, không phải tuỳ chọn** — mọi danh sách / vùng nội dung dài tuỳ dữ liệu phải có vùng cuộn giới hạn chiều cao ngay từ lúc viết, không được giả định "dữ liệu chắc là ngắn" — [`docs/convention/ui-overflow.md`](../convention/ui-overflow.md).
+- **Quy ước button** (ưu tiên icon-btn, default không viền, hover scale) — [`ui-buttons.md`](ui-buttons.md).
+- **Chiến lược tràn là bắt buộc, không phải tuỳ chọn** — mọi danh sách / vùng nội dung dài tuỳ dữ liệu phải có vùng cuộn giới hạn chiều cao ngay từ lúc viết, không được giả định "dữ liệu chắc là ngắn" — [`ui-overflow.md`](ui-overflow.md).
 
 Primitive dùng chung trong `src/frontend/ui/`:
 
@@ -64,8 +52,6 @@ Primitive dùng chung trong `src/frontend/ui/`:
 - **Icon luôn qua `<Icon name="..." />`** (`src/frontend/ui/Icon.vue`) — **không** tự vẽ `<svg>` / `<path>` trong component feature. Icon chưa có thì thêm case mới vào `Icon.vue` (giữ nguyên viewBox/style gốc), không copy SVG ra file khác dù chỉ dùng 1 nơi.
 - **Dropdown mới không dùng `<select>` native** — dùng `CSelect` (option cố định) hoặc `CComboSelect` (nhiều option / creatable). Chỉ giữ `<select>` khi cần hành vi trình duyệt gốc không có API tương đương.
 - **Class truyền vào `CSelect`/`CComboSelect` chỉ lo kích thước** (`width` / `flex` / `min-width`). Truyền class control native (`cfg-input`, `cfg-textarea`) sẽ rơi vào `div` wrapper → hộp lồng hộp. Mẫu đúng: `cfg-select` / `cfg-combo-select`.
-
----
 
 ## 6. Ngôn ngữ UI (i18n)
 
@@ -76,9 +62,7 @@ Primitive dùng chung trong `src/frontend/ui/`:
 - **Trong `<script setup>` dùng `useI18nHelpers()`** (`src/frontend/composables/useI18nHelpers.ts`) — **không** import `useI18n` từ `vue-i18n`. Ngoài setup: `import { t } from '@/plugins/i18n'`.
 - **Locale hiện tại ở `AppSettings.locale`** (localStorage), đổi qua `useLocale()`.
 - **Test mount component có `t()`** dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`).
-- **Thêm/sửa text UI** — thêm key ở `vi`; `en` khuyến nghị nhưng không bắt buộc. Quy ước: [`docs/convention/i18n.md`](../convention/i18n.md).
-
----
+- **Thêm/sửa text UI** — thêm key ở `vi`; `en` khuyến nghị nhưng không bắt buộc. Quy ước: [`i18n.md`](i18n.md).
 
 ## 7. Comment code (KISS)
 
@@ -90,3 +74,5 @@ Primitive dùng chung trong `src/frontend/ui/`:
 - **Không thêm comment tường thuật thay đổi vừa làm** — cấm dạng `// sửa theo review`, `// fix CI`, `// đổi X vì lỗi Y`.
 - **Comment mô tả hành vi hiện hành**, không kể lịch sử, không trích số issue / số PR / tên người, không nhắc định danh nội bộ của quy trình (số đợt, tên khối việc, mã task) — code sống lâu hơn kế hoạch.
 - **Ngôn ngữ theo mật độ code xung quanh** — khối comment tiếng Anh thì viết tiếp tiếng Anh, không trộn nửa Anh nửa Việt.
+
+Kiến trúc và bất biến bắt buộc: [`docs/architecture/4-code/` — Bất biến kiến trúc](../architecture/4-code/README.md#bất-biến-kiến-trúc). Đặt file theo feature: [`feature-architecture.md`](feature-architecture.md).

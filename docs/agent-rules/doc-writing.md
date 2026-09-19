@@ -151,39 +151,7 @@ Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ b�
 
 ---
 
-## 5. Trình bày — scannability là ưu tiên số 1
-
-Áp dụng cho **mọi** markdown viết ra: artifact, tài liệu trong `docs/`, `README.md`, PR body, file rule.
-
-- **Đoạn văn tối đa 3 câu** — dài hơn thì tách đoạn hoặc chuyển thành list.
-- **Từ 3 ý trở lên thì bắt buộc dùng bullet** (`-`), tuyệt đối không viết tràn vào một đoạn văn.
-- **In đậm từ khoá ở đầu mỗi ý** (`**text**`) để người đọc lướt nhanh nắm được ý chính.
-- **Luôn có 1 dòng trống** giữa các đoạn văn, giữa đoạn văn và list, giữa list và heading.
-- **Bảng cho dữ liệu đối chiếu** — so sánh phương án, ánh xạ khoá, checklist theo cột. Đừng dùng bảng cho văn xuôi dài.
-- **Một đoạn = một ý** — không nhồi nhiều ý vào cùng một đoạn, kể cả khi mỗi ý chỉ một câu.
-- **Dùng emoji / ký hiệu làm mỏ neo thị giác** ở đầu dòng cho các mục cần quét nhanh: 📌 điểm chính · ⚠️ cảnh báo · 🚫 cấm · ✅ đạt · 🔍 khảo sát · 🛠️ implement · 🚀 phát hành. Mỗi ký hiệu mang **một** nghĩa cố định trong cùng tài liệu; không rải cho vui.
-- **Dùng dấu phân tách `·` cho danh sách ngắn cùng hạng** — vd `coding · doc-writing · test · git-pr`. Danh sách dài hoặc có mô tả thì xuống bullet.
-
----
-
-## 6. Tham chiếu một chiều
-
-Chỉ **nơi sử dụng** trỏ tới **tài liệu dùng chung**. Không bao giờ thêm chiều ngược lại.
-
-- ✅ **Đúng** — `CLAUDE.md` → `AGENTS.md`; `docs/agent-rules/*` → `docs/architecture/`.
-- 🚫 **Sai** — `AGENTS.md` liệt kê `CLAUDE.md`; `docs/architecture/` trỏ ngược lên rule.
-
-**Vì sao:** tài liệu dùng chung không được biết ai đang dùng mình.
-
-- **Bỏ một file chỉ dẫn** (vd không dùng `CLAUDE.md` nữa) → không phải sửa tài liệu chung.
-- **Thêm file chỉ dẫn của provider khác** (vd `GEMINI.md`, `.cursorrules`) → chỉ thêm file mới, tài liệu chung đứng yên.
-- **Tài liệu chung không phình ra** theo số công cụ đang dùng nó.
-
-Cách áp dụng:
-
-- **File chỉ dẫn của một công cụ** khai báo phụ thuộc bằng một dòng trỏ lên tài liệu chung, rồi chỉ viết phần đặc thù của mình.
-- **Tài liệu chung** chỉ trỏ xuống nội dung nó sở hữu (rule, kiến trúc), không trỏ ngang sang file của công cụ khác.
-- **Cùng một quy tắc chỉ viết ở một nơi** — nơi còn lại trỏ tới, không chép lại.
+Quy ước trình bày markdown (scannability) và tham chiếu một chiều giữa tài liệu — áp dụng chung cho mọi tài liệu, không riêng artifact pipeline — đã tách sang [`docs/convention/markdown-style.md`](../convention/markdown-style.md) và [`docs/convention/doc-references.md`](../convention/doc-references.md).
 
 ---
 

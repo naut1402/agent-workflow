@@ -1,10 +1,8 @@
-# Feature architecture guideline — đặt code vào đúng chỗ
+# Quy ước — đặt code vào đúng chỗ (feature architecture)
 
 Quy ước **hiện hành** khi task đụng `src/features/*`, tầng `business/`, hoặc logic dùng chung.
 
-Kiến trúc tổng quan và bất biến: [`docs/architecture/`](../architecture/). Quy ước ngôn ngữ / Zod / Vue: [`coding-guideline.md`](coding-guideline.md).
-
----
+Kiến trúc tổng quan và bất biến: [`docs/architecture/`](../architecture/). Quy ước ngôn ngữ / Zod / Vue: [`coding.md`](coding.md).
 
 ## 1. Bản đồ đặt file theo task
 
@@ -28,8 +26,6 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 
 - **Không tạo cây song song** kiểu `server/<domain>` hay helper "misc" ngoài convention.
 - **Feature tự mang `styles/index.scss` và `locales/{vi,en}.ts`** — glob eager ở `src/frontend/main.ts` tự nạp, không liệt kê tay, không sửa hub wiring.
-
----
 
 ## 2. Tổ chức `business/`
 
@@ -58,8 +54,6 @@ Helper nhỏ (sanitize tên, parse một format) **gắn vào module đang xử 
 - **Không import sâu** `../../other-feature/business/foo.js` từ controller hay module nội bộ — **trừ** khi đi qua index tạo vòng barrel.
 - **Tránh vòng barrel↔barrel** — khi cần, index A re-export từ **module sâu** của B.
 - **Sanitize / rule chỉ thuộc một feature** đặt trong module sở hữu; feature khác dùng qua index.
-
----
 
 ## 3. Logic dùng chung — mở rộng helper trước khi copy
 
@@ -91,8 +85,6 @@ Thứ tự quyết định:
 - **Preference shell** (`locale`, theme) → `src/frontend/configs` / `src/frontend/plugins`.
 - **Driver log ghi hạ tầng** → `src/backend/log`.
 
----
-
 ## 4. Hướng phụ thuộc
 
 ```
@@ -108,8 +100,6 @@ src/backend (setup) / src/frontend/main.ts (glob)
 - **Không vòng tròn**; `backend` / `frontend` / `shared` **không** import `features`.
 - **Ranh giới scope**: `frontend` 🚫 `backend` (và 🚫 `node:*` / `bun:*` / `hono` / `drizzle-orm`), `backend` 🚫 `frontend` (và 🚫 `vue`), `shared` 🚫 cả hai + 🚫 hạ tầng. Lint chặn, không whitelist.
 - **Zod một nguồn chân lý** tại `schemas/`; `safeParse` ở biên I/O; fail → default an toàn.
-
----
 
 ## 5. Tổ chức style (SCSS)
 
@@ -134,23 +124,7 @@ Không làm:
 - **Đặt tên `common.scss` cho nội dung chỉ một component dùng** — tên sai lệch còn tệ hơn phân mảnh.
 - **Định nghĩa primitive xuyên feature** (`.cfg-input`, `.chip`) trong `styles/` của một feature — feature khác sẽ phụ thuộc ngầm vào thứ tự glob; đưa lên `src/frontend/styles/`.
 
----
-
-## 6. Checklist thêm feature mới
-
-1. **Tạo `src/features/<name>/`** với `api.ts`, `controller.ts`, `business/`, và (tuỳ) `components`, `composables`, `scripts`, `styles/index.scss`, `locales/{vi,en}.ts`, `schemas/`.
-2. **Kế thừa abstract** — controller `extends AbstractController`; business `extends AbstractBusiness`.
-3. **Gom `business/` theo nghiệp vụ**; peer chỉ qua `business/index.ts`.
-4. **Không sửa `apiServer` registry tay** — để glob nạp.
-5. **Schema domain để trong feature**, đừng đẩy vào `src/frontend/configs` trừ shell preference thật sự.
-6. **Dùng `*Utils` / `*Lib` / `fileHelper` có sẵn**, mở rộng helper trước khi copy logic.
-7. **Business không import trực tiếp `node:fs` / `node:path`.**
-8. **Chạy `bun run typecheck` + `bun run build`** nếu đụng cả FE và Node.
-9. **Thêm mode ở FE shell** thì theo [`mode-registry-guideline.md`](mode-registry-guideline.md).
-
----
-
-## 7. Test gắn với chỗ đặt file
+## 6. Test gắn với chỗ đặt file
 
 | Đổi gì | Test tối thiểu |
 |--------|----------------|
@@ -158,3 +132,5 @@ Không làm:
 | Composable / component | vitest + `mountWithI18n` nếu có `t()` |
 | Helper `src/*/lib` dùng ở FE | `bun run build` nếu nghi `node:fs` lọt bundle |
 | Đổi overload `fileHelper` | `bun run typecheck` |
+
+Checklist thêm feature mới: [`docs/checklist/new-feature.md`](../checklist/new-feature.md).

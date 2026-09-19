@@ -1,10 +1,10 @@
-# Review checklist guideline — feature / business / helper
+# Checklist — review PR (feature / business / helper)
 
 Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**`, `src/shared/**`, hoặc tái cấu trúc tương tự.
 
 - **Đánh dấu từng mục liên quan scope PR** — không bắt buộc tick hết nếu PR không đụng vùng đó.
 - **Thứ tự 3 khối theo luồng review** — code nằm đúng chỗ chưa → dữ liệu/an toàn có bị phá không → quy trình/tài liệu đã đủ chưa.
-- **Quy ước nền**: [`feature-architecture-guideline.md`](feature-architecture-guideline.md), [`coding-guideline.md`](coding-guideline.md), [`git-pr.md`](git-pr.md). Bất biến repo: [`docs/architecture/4-code/` — Bất biến kiến trúc](../architecture/4-code/README.md#bất-biến-kiến-trúc).
+- **Quy ước nền**: [`docs/convention/feature-architecture.md`](../convention/feature-architecture.md), [`docs/convention/coding.md`](../convention/coding.md), [`docs/agent-rules/git-pr.md`](../agent-rules/git-pr.md). Bất biến repo: [`docs/architecture/4-code/` — Bất biến kiến trúc](../architecture/4-code/README.md#bất-biến-kiến-trúc).
 
 ---
 
@@ -18,7 +18,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Chuẩn hoá UI string & FE API** — string qua i18n (`locales/`); gọi API qua `scripts/*Api.ts` + `apiGet` / `apiPost`.
 - [ ] **Không wiring thủ công** — không thêm tay nếu glob/auto-load đã đủ (route / styles / locales / `registerMode`).
 - [ ] **Đặt style đúng tầng** — 1 component render selector gốc → `<style scoped>`; ≥2 cùng feature → `features/<f>/styles/`; xuyên feature → `src/frontend/styles/`. Không thêm file `styles/*.scss` chỉ-comment.
-- [ ] **Danh sách dài không bị cắt cụt** — vùng nội dung dài tuỳ dữ liệu đã thử với dữ liệu dài **và** rỗng: cuộn được tới mục cuối, chỉ có **một** thanh cuộn trên trục đó, nội dung không tràn ra ngoài khung. Checklist đầy đủ: [`docs/checklist/ui-overflow.md`](../checklist/ui-overflow.md).
+- [ ] **Danh sách dài không bị cắt cụt** — vùng nội dung dài tuỳ dữ liệu đã thử với dữ liệu dài **và** rỗng: cuộn được tới mục cuối, chỉ có **một** thanh cuộn trên trục đó, nội dung không tràn ra ngoài khung. Checklist đầy đủ: [`docs/checklist/ui-overflow.md`](ui-overflow.md).
 - [ ] **Tuân thủ mode-registry khi thêm/sửa mode** — không sửa `main.ts`, không đụng `App.vue` ngoài `shellContext`, `MODE_DEFS` trong `App.test.ts` đã cập nhật.
 
 ### 1.2 `business/` & helper dùng chung
@@ -64,8 +64,8 @@ Chi tiết type và nơi emit: [`docs/architecture/4-code/events/`](../architect
 ### 3.1 Test & CI
 
 - [ ] **Xác định bề mặt cần phủ** — mỗi vùng đổi có hàm/route/hành vi công khai test được. Không có bề mặt nào test được là vấn đề của **code**, không phải của test.
-- [ ] **PR dòng source: test KHÔNG nằm trong diff** — test đi ở PR dòng test ([`git-pr.md`](git-pr.md) §4.3). Thấy file `tests/`·`test-e2e/` trong diff PR code → yêu cầu chuyển sang PR dòng test.
-- [ ] **Suite hiện có không hồi quy** — "chọn ra 0 file test" KHÔNG phải "đã xanh" ([`testing.md`](testing.md) §3.1).
+- [ ] **PR dòng source: test KHÔNG nằm trong diff** — test đi ở PR dòng test ([`docs/agent-rules/git-pr.md`](../agent-rules/git-pr.md) §4.3). Thấy file `tests/`·`test-e2e/` trong diff PR code → yêu cầu chuyển sang PR dòng test.
+- [ ] **Suite hiện có không hồi quy** — "chọn ra 0 file test" KHÔNG phải "đã xanh" ([`docs/agent-rules/testing.md`](../agent-rules/testing.md) §3.1).
 - [ ] **PR dòng test: chọn đúng runner** — domain/fs → **bun test**; FE/component → vitest; khai path mới vào `tests/runners.json` và sinh lại `tests/CATALOG.md`.
 - [ ] **PR dòng test: nêu cặp ref đã overlay** (source ref + SHA) — không có nó thì "test lệch pha với source" không truy được.
 - [ ] **Giữ build xanh** — PR đụng helper FE+BE hoặc `fileHelper` → typecheck/build xanh cả local và CI.
@@ -74,8 +74,8 @@ Chi tiết type và nơi emit: [`docs/architecture/4-code/events/`](../architect
 
 - [ ] **Tuân thủ commitlint** — commit/PR title đúng `type(scope): subject`, không trailer công cụ.
 - [ ] **Trình bày đúng nội dung PR** — phần riêng nhóm theo cây thư mục; fix/refactor có Logic trước → sau; phần chung nêu Core và/hoặc feature khác (hoặc *Không*).
-- [ ] **Dọn nợ trước merge `main`** — PR `dev/x.y.z/main` → `main` không còn thư mục `docs/todo/`, và dòng `test/x.y.z/main` của version tồn tại + xanh ([`pr-todo-debt.md`](pr-todo-debt.md) §2.1).
-- [ ] **Cập nhật quy ước khi đổi rule** — sửa file rule trong `docs/agent-rules/` và `docs/architecture/` trong cùng thay đổi; mô tả **hiện hành**, không kể lịch sử issue.
+- [ ] **Dọn nợ trước merge `main`** — PR `dev/x.y.z/main` → `main` không còn thư mục `docs/todo/`, và dòng `test/x.y.z/main` của version tồn tại + xanh ([`docs/agent-rules/pr-todo-debt.md`](../agent-rules/pr-todo-debt.md) §2.1).
+- [ ] **Cập nhật quy ước khi đổi rule** — sửa file rule/convention/checklist liên quan và `docs/architecture/` trong cùng thay đổi; mô tả **hiện hành**, không kể lịch sử issue.
 
 ---
 
@@ -83,12 +83,12 @@ Chi tiết type và nơi emit: [`docs/architecture/4-code/events/`](../architect
 
 | Vấn đề | Gợi ý phản hồi |
 |--------|----------------|
-| Tách `paths.ts` / `store.ts` mỏng | "Gộp theo nghiệp vụ X — xem feature-architecture-guideline §2." |
+| Tách `paths.ts` / `store.ts` mỏng | "Gộp theo nghiệp vụ X — xem docs/convention/feature-architecture.md §2." |
 | `import …/other/business/foo` từ controller | "Đưa re-export vào `business/index` của feature này." |
 | `import fs from 'node:fs'` trong business | "Dùng / mở rộng `fileHelper`." |
 | Copy `slugify` / YAML parse | "Dùng `stringUtils` / `yamlLib`." |
 | Sanitize mới đặt trong `core` | "Gắn module business sở hữu + export qua index." |
-| Persist/CRUD mới không thấy `emit` | "Cân nhắc emit — xem event-catalog." |
+| Persist/CRUD mới không thấy `emit` | "Cân nhắc emit — xem event catalog theo mode." |
 | Event mới nhưng catalog chưa cập nhật | "Cập nhật catalog cùng PR, hoặc nợ `docs/todo/` có lý do." |
 | Đổi chữ ký `fileHelper` | "Chạy typecheck xem call site có khớp không — đừng truyền arg thừa nếu helper đã cố định encoding." |
 | `styles/<Component>.scss` mới nhưng chỉ 1 component render selector gốc | "Đưa vào `<style scoped lang=\"scss\">` trong SFC." |

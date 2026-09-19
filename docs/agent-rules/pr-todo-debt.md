@@ -98,8 +98,4 @@ Theo dõi nợ dài hạn ngoài gate này thì dùng GitHub Issue.
 
 ## 6. Checklist nhanh
 
-- [ ] Có hoãn docs/convention? → đã có `docs/todo/<issue>/<task-id>.md`
-- [ ] PR feature → `dev/x.y.z/main`? → được mang nợ; Todo debt **không** chặn
-- [ ] PR `dev/x.y.z/main` → `main`? → **không còn** thư mục `docs/todo/`; `bun run check:todo` xanh
-- [ ] Đã trả nợ? → đã xoá toàn bộ `docs/todo/`
-- [ ] Nợ **test**? → không ghi vào `docs/todo/`; dòng `test/x.y.z/main` phải tồn tại và xanh trước khi promote (§2.1)
+Tách sang [`docs/checklist/pr-todo-debt.md`](../checklist/pr-todo-debt.md).
