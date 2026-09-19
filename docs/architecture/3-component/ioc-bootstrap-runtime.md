@@ -1,6 +1,8 @@
 # IoC bootstrap + runtime flow — service container + ModeRegistry
 
-2 sơ đồ giải thích **khái niệm** vận hành của service container (DI/IoC) và danh sách mode (`ModeRegistry`) ở FE shell: **(1) bootstrap** — chuyện gì xảy ra lúc ứng dụng khởi động; **(2) runtime** — chuyện gì xảy ra mỗi khi người dùng chuyển mode. Tài liệu này viết theo hướng dễ hiểu ý tưởng, hạn chế trích code — muốn xem đúng dòng code/API cụ thể, xem bảng tham chiếu ở cuối. Kiến trúc frontend: [`../architecture/3-component/`](../architecture/3-component/README.md) §2.
+← [`README.md`](README.md) (Cấp 3 · Component §2)
+
+2 sơ đồ giải thích **khái niệm** vận hành của service container (DI/IoC) và danh sách mode (`ModeRegistry`) ở FE shell: **(1) bootstrap** — chuyện gì xảy ra lúc ứng dụng khởi động; **(2) runtime** — chuyện gì xảy ra mỗi khi người dùng chuyển mode. Tài liệu này viết theo hướng dễ hiểu ý tưởng, hạn chế trích code — muốn xem đúng dòng code/API cụ thể, xem cấp Code.
 
 ---
 
@@ -53,7 +55,7 @@ sequenceDiagram
 
 **2. Mỗi tính năng tự "giới thiệu" mode của mình.** Thông tin cần thiết (tên, icon, thứ tự hiển thị, giao diện tương ứng...) do chính tính năng khai báo, đẩy vào 1 danh sách dùng chung. Nếu 2 tính năng lỡ trùng tên mode, ứng dụng báo lỗi ngay lúc khởi động thay vì để lỗi âm thầm xuất hiện khi người dùng đang thao tác.
 
-**3. Container chỉ là nơi giữ chỗ, không tự tạo dữ liệu.** Service container không tự xây danh sách mode — nó chỉ giữ đường dẫn tới những thứ đã có sẵn. Nó giữ 2 thứ: **danh sách mode** (đã đầy đủ từ bước trước, luôn hoàn chỉnh trước khi container "biết" tới nó), và **bộ quyết định mode nào đang dùng được** (đọc cấu hình bật/tắt mode trong Cài đặt). Tách ra như vậy để sau này đổi nguồn quyết định sang phân quyền theo người dùng chỉ phải sửa đúng 1 dòng ở bước khởi động — xem [`../agent-rules/mode-registry-guideline.md`](../agent-rules/mode-registry-guideline.md) §7.
+**3. Container chỉ là nơi giữ chỗ, không tự tạo dữ liệu.** Service container không tự xây danh sách mode — nó chỉ giữ đường dẫn tới những thứ đã có sẵn. Nó giữ 2 thứ: **danh sách mode** (đã đầy đủ từ bước trước, luôn hoàn chỉnh trước khi container "biết" tới nó), và **bộ quyết định mode nào đang dùng được** (đọc cấu hình bật/tắt mode trong Cài đặt). Tách ra như vậy để sau này đổi nguồn quyết định sang phân quyền theo người dùng chỉ phải sửa đúng 1 dòng ở bước khởi động — xem [`../../agent-rules/mode-registry-guideline.md`](../../agent-rules/mode-registry-guideline.md) §7.
 
 **4. Container được gắn vào toàn bộ giao diện ở 1 chỗ duy nhất.** Bước cài đặt đưa container vào gốc của cây giao diện, để bất kỳ phần nào bên trong (ở đây là màn hình chính) cũng lấy được, không cần truyền tay qua nhiều lớp trung gian.
 
@@ -119,21 +121,4 @@ flowchart TD
 
 **6. Ẩn/hiện 1 mode khỏi sidebar là chuyện khác, không nằm trong flow này.** 1 mode có thể tự ẩn khỏi sidebar tuỳ theo cấu hình khác của ứng dụng (vd tắt 1 tính năng trong Cài đặt) — việc này xảy ra khi cấu hình đó đổi, không phải khi người dùng bấm chuyển mode như sơ đồ trên.
 
----
-
-## Tham chiếu code thật
-
-Bảng dưới dành cho ai cần xem đúng code — sơ đồ + diễn giải ở trên cố tình không trích code để dễ đọc.
-
-| Khái niệm trong sơ đồ | File |
-|---|---|
-| Tự quét + đăng ký mode lúc khởi động, tạo container | `src/frontend/main.ts` |
-| Danh sách mode (`ModeEntry`, `ModeRegistry`) | `src/frontend/shell/modeRegistry.ts` |
-| Bộ quyết định mode nào dùng được — giao diện + khoá (`canAccessMode`) | `src/frontend/shell/modeAccess.ts` |
-| Bản hiện thực đọc cấu hình bật/tắt mode trong Cài đặt | `src/features/settings/scripts/settingsModeAccess.ts` |
-| Service container (`register`/`resolve`) | `src/frontend/container/{index,types}.ts` |
-| Khoá để lấy container trong giao diện | `src/frontend/shell/containerKey.ts` |
-| Bước cài đặt container vào giao diện | `src/frontend/plugins/index.ts` |
-| Màn hình chính: lấy danh sách mode, vẽ sidebar/trạng thái/nội dung, xử lý theo dõi liên tục | `src/frontend/App.vue` |
-| Mỗi tính năng tự khai báo mode của mình | `src/features/<feature>/registerMode.ts` |
-| Theo dõi liên tục của mode Theo dõi (Monitor) | `src/features/monitor/composables/useTaskPolling.ts` |
+Tham chiếu đúng dòng code/file cho từng khái niệm ở trên — xem cấp Code.

@@ -8,18 +8,17 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Kiến trúc & vận hành
 
-- **[`architecture/`](architecture/README.md)** — kiến trúc theo mô hình **C4**, 4 cấp trừu tượng thô → mịn (Context, Container kèm bất biến kiến trúc, Component, Code) — danh mục ở [`architecture/README.md`](architecture/README.md).
-- **[`diagram/IoC.md`](diagram/IoC.md)** — hai sơ đồ giải thích service container (DI/IoC) và `ModeRegistry`: bootstrap lúc khởi động, và runtime khi người dùng chuyển mode.
+- **[`architecture/`](architecture/README.md)** — kiến trúc theo mô hình **C4**, 4 cấp trừu tượng thô → mịn (Context, Container, Component, Code). Tài liệu tra cứu chi tiết (sơ đồ IoC, event catalog, i18n, quy ước UI) nằm trong cấp tương ứng — xem danh mục.
 
 ## Dữ liệu & sự kiện
 
-- **[`event-catalog.md`](event-catalog.md)** — mục lục domain event theo feature: type, nơi emit, payload. Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới.
+- **[`architecture/4-code/event-catalog.md`](architecture/4-code/event-catalog.md)** — mục lục domain event theo feature: type, nơi emit, payload. Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới.
 
 ## Giao diện
 
-- **[`i18n.md`](i18n.md)** — tổ chức message `vi` / `en`, namespace theo feature, cách thêm và đổi chuỗi UI.
-- **[`ui-buttons.md`](ui-buttons.md)** — quy ước nút và trạng thái trên UI, class chuẩn ở `src/frontend/styles/_shell.scss`.
-- **[`ui-overflow.md`](ui-overflow.md)** — chiến lược tràn cho danh sách và vùng nội dung dài: chuỗi sizing chuẩn, ví dụ trong repo, checklist review.
+- **[`architecture/4-code/i18n.md`](architecture/4-code/i18n.md)** — tổ chức message `vi` / `en`, namespace theo feature, cách thêm và đổi chuỗi UI.
+- **[`architecture/4-code/ui-buttons.md`](architecture/4-code/ui-buttons.md)** — quy ước nút và trạng thái trên UI, class chuẩn ở `src/frontend/styles/_shell.scss`.
+- **[`architecture/4-code/ui-overflow.md`](architecture/4-code/ui-overflow.md)** — chiến lược tràn cho danh sách và vùng nội dung dài: chuỗi sizing chuẩn, ví dụ trong repo, checklist review.
 
 ## Mẫu dùng lại
 

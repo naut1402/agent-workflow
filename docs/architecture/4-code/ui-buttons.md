@@ -1,5 +1,7 @@
 # Quy ước UI button
 
+← [`README.md`](README.md) (Cấp 4 · Code)
+
 Quy ước khi thêm/sửa nút trên dashboard. Class chuẩn nằm ở `src/frontend/styles/_shell.scss` (entry `src/frontend/styles/main.scss`).
 
 ## Nguyên tắc

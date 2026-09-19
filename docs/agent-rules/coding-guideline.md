@@ -55,8 +55,8 @@ Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`. ESLint (f
 - **`<script setup lang="ts">`** cho mọi SFC.
 - **Kéo logic suy diễn ra khỏi `.vue`** xuống composable / lib thuần TS để test không cần render.
 - **Cấu trúc feature-module** — `src/features/<mode>/{components,composables,scripts/*Api.ts,styles,locales,schemas}` + nền `src/frontend/{ui,composables,lib,shell}`; plugin app-scope ở `src/frontend/plugins/`.
-- **Quy ước button** (ưu tiên icon-btn, default không viền, hover scale) — [`docs/ui-buttons.md`](../ui-buttons.md).
-- **Chiến lược tràn là bắt buộc, không phải tuỳ chọn** — mọi danh sách / vùng nội dung dài tuỳ dữ liệu phải có vùng cuộn giới hạn chiều cao ngay từ lúc viết, không được giả định "dữ liệu chắc là ngắn". Chuỗi sizing chuẩn (`overflow: hidden` ở container, `flex` + `min-height: 0` ở mỗi tầng, `overflow-y: auto` chỉ ở lá) — [`docs/ui-overflow.md`](../ui-overflow.md).
+- **Quy ước button** (ưu tiên icon-btn, default không viền, hover scale) — [`docs/architecture/4-code/ui-buttons.md`](../architecture/4-code/ui-buttons.md).
+- **Chiến lược tràn là bắt buộc, không phải tuỳ chọn** — mọi danh sách / vùng nội dung dài tuỳ dữ liệu phải có vùng cuộn giới hạn chiều cao ngay từ lúc viết, không được giả định "dữ liệu chắc là ngắn". Chuỗi sizing chuẩn (`overflow: hidden` ở container, `flex` + `min-height: 0` ở mỗi tầng, `overflow-y: auto` chỉ ở lá) — [`docs/architecture/4-code/ui-overflow.md`](../architecture/4-code/ui-overflow.md).
 
 Primitive dùng chung trong `src/frontend/ui/`:
 
@@ -76,7 +76,7 @@ Primitive dùng chung trong `src/frontend/ui/`:
 - **Trong `<script setup>` dùng `useI18nHelpers()`** (`src/frontend/composables/useI18nHelpers.ts`) — **không** import `useI18n` từ `vue-i18n`. Ngoài setup: `import { t } from '@/plugins/i18n'`.
 - **Locale hiện tại ở `AppSettings.locale`** (localStorage), đổi qua `useLocale()`.
 - **Test mount component có `t()`** dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`).
-- **Thêm/sửa text UI** — thêm key ở `vi`; `en` khuyến nghị nhưng không bắt buộc. Chi tiết: [`docs/i18n.md`](../i18n.md).
+- **Thêm/sửa text UI** — thêm key ở `vi`; `en` khuyến nghị nhưng không bắt buộc. Chi tiết: [`docs/architecture/4-code/i18n.md`](../architecture/4-code/i18n.md).
 
 ---
 

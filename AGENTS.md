@@ -37,7 +37,7 @@ agent-workflow/
 └── docs/
     ├── agent-rules/   # rule cho mọi AI agent, theo category
     ├── template/      # agent + pipeline mẫu
-    └── architecture/{1-context,2-container,3-component,4-code}/, event-catalog.md, i18n.md, ui-buttons.md, diagram/
+    └── architecture/{1-context,2-container,3-component,4-code}/  # 4-code/ kèm event-catalog.md, i18n.md, ui-buttons.md, ui-overflow.md
 ```
 
 ⚠️ Ngoại lệ cố ý còn `.js`: `src/features/agent-editor/business/agentMarkdown.js`, `src/backend/runner-cli.mjs`. Tooling `vite` / `vitest` / `playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
@@ -60,10 +60,10 @@ Tài liệu tra cứu kèm theo (không phải rule):
 |--------|----------|
 | Quickstart | [`README.md`](README.md) |
 | Kiến trúc (C4, 4 cấp: Context → Container → Component → Code) | [`docs/architecture/`](docs/architecture/) |
-| Mục lục domain event theo feature | [`docs/event-catalog.md`](docs/event-catalog.md) |
-| Sơ đồ bootstrap DI / ModeRegistry | [`docs/diagram/IoC.md`](docs/diagram/IoC.md) |
-| i18n chi tiết | [`docs/i18n.md`](docs/i18n.md) |
-| Quy ước UI button | [`docs/ui-buttons.md`](docs/ui-buttons.md) |
+| Mục lục domain event theo feature | [`docs/architecture/4-code/event-catalog.md`](docs/architecture/4-code/event-catalog.md) |
+| Sơ đồ bootstrap DI / ModeRegistry | [`docs/architecture/3-component/ioc-bootstrap-runtime.md`](docs/architecture/3-component/ioc-bootstrap-runtime.md) |
+| i18n chi tiết | [`docs/architecture/4-code/i18n.md`](docs/architecture/4-code/i18n.md) |
+| Quy ước UI button | [`docs/architecture/4-code/ui-buttons.md`](docs/architecture/4-code/ui-buttons.md) |
 | Template agent / pipeline | [`docs/template/`](docs/template/) |
 
 ---
@@ -101,7 +101,7 @@ Khi survey call chain đụng persist / lifecycle / CRUD domain:
 
 - [ ] **Cân nhắc emit** — thêm/sửa/xoá `emit` / `emitEntity` (sau persist OK; payload tối thiểu, không secret).
 - [ ] **Ghi kết luận** trong `investigate.md` (vd *Events: thêm … / sửa … / xoá … / không đổi — vì …*).
-- [ ] **Cập nhật catalog nếu chốt đổi event** — [`docs/event-catalog.md`](docs/event-catalog.md) (+ `DashboardEventType` nếu type mới/đổi tên) trong cùng thay đổi code, hoặc ghi nợ `docs/todo/`.
+- [ ] **Cập nhật catalog nếu chốt đổi event** — [`docs/architecture/4-code/event-catalog.md`](docs/architecture/4-code/event-catalog.md) (+ `DashboardEventType` nếu type mới/đổi tên) trong cùng thay đổi code, hoặc ghi nợ `docs/todo/`.
 
 ### Design / implement / review (khi scope đụng event)
 

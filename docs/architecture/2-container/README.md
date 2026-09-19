@@ -57,7 +57,7 @@ Transport Vite dev đi qua 1 **shim** mỏng giữ hợp đồng cũ — bản t
 
 ## 3. Frontend SPA — container
 
-Vue 3 + Vite, mount 1 app duy nhất qua `ModeRegistry`. Chi tiết component/mode ở cấp Component. Sơ đồ bootstrap DI/ModeRegistry: [`../../diagram/IoC.md`](../../diagram/IoC.md).
+Vue 3 + Vite, mount 1 app duy nhất qua `ModeRegistry`. Chi tiết component/mode + sơ đồ bootstrap DI/ModeRegistry ở cấp Component.
 
 ---
 

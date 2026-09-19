@@ -4,6 +4,27 @@
 
 Chi tiết implementation cụ thể: schema DB, danh sách file config shell, styling, và cây thư mục đầy đủ. Đây là cấp **thay đổi thường xuyên nhất** — khi sửa, đối chiếu lại với code thật thay vì tin nội dung cũ.
 
+Tài liệu con (chi tiết, tách riêng vì dài): [`event-catalog.md`](event-catalog.md) — mục lục domain event · [`i18n.md`](i18n.md) — quy ước message/locale · [`ui-buttons.md`](ui-buttons.md) — quy ước nút · [`ui-overflow.md`](ui-overflow.md) — chiến lược tràn nội dung.
+
+---
+
+## IoC — tham chiếu code (ModeRegistry, service container)
+
+Bảng dưới map khái niệm ở cấp Component (sơ đồ bootstrap/runtime flow của ModeRegistry + service container) sang đúng file.
+
+| Khái niệm | File |
+|---|---|
+| Tự quét + đăng ký mode lúc khởi động, tạo container | `src/frontend/main.ts` |
+| Danh sách mode (`ModeEntry`, `ModeRegistry`) | `src/frontend/shell/modeRegistry.ts` |
+| Bộ quyết định mode nào dùng được — giao diện + khoá (`canAccessMode`) | `src/frontend/shell/modeAccess.ts` |
+| Bản hiện thực đọc cấu hình bật/tắt mode trong Cài đặt | `src/features/settings/scripts/settingsModeAccess.ts` |
+| Service container (`register`/`resolve`) | `src/frontend/container/{index,types}.ts` |
+| Khoá để lấy container trong giao diện | `src/frontend/shell/containerKey.ts` |
+| Bước cài đặt container vào giao diện | `src/frontend/plugins/index.ts` |
+| Màn hình chính: lấy danh sách mode, vẽ sidebar/trạng thái/nội dung, xử lý theo dõi liên tục | `src/frontend/App.vue` |
+| Mỗi tính năng tự khai báo mode của mình | `src/features/<feature>/registerMode.ts` |
+| Theo dõi liên tục của mode Theo dõi (Monitor) | `src/features/monitor/composables/useTaskPolling.ts` |
+
 ---
 
 ## Data root `.dev-team-agent/` — schema chi tiết

@@ -1,5 +1,7 @@
 # Chiến lược tràn cho danh sách và vùng nội dung dài
 
+← [`README.md`](README.md) (Cấp 4 · Code)
+
 Quy ước cho mọi vùng UI có chiều cao phụ thuộc dữ liệu (danh sách, cây, body dialog, panel log). Class nền nằm ở `src/frontend/styles/_shell.scss` (entry `src/frontend/styles/main.scss`).
 
 ## Phương châm
