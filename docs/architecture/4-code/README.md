@@ -23,7 +23,32 @@ Bảng dưới map khái niệm ở cấp Component (sơ đồ bootstrap/runtime
 | Bước cài đặt container vào giao diện | `src/frontend/plugins/index.ts` |
 | Màn hình chính: lấy danh sách mode, vẽ sidebar/trạng thái/nội dung, xử lý theo dõi liên tục | `src/frontend/App.vue` |
 | Mỗi tính năng tự khai báo mode của mình | `src/features/<feature>/registerMode.ts` |
-| Theo dõi liên tục của mode Theo dõi (Monitor) | `src/features/monitor/composables/useTaskPolling.ts` |
+| Theo dõi liên tục của mode Theo dõi (Monitor) — nhận task-list qua SSE `GET /api/tasks/stream` | `src/features/monitor/composables/useTaskPolling.ts` |
+| Fetch-based SSE reader (tự gắn header `Authorization`, không dùng `EventSource` gốc) | `src/frontend/lib/sseClient.ts` |
+
+---
+
+## HTTP kernel — tham chiếu code
+
+- `src/backend/apiServer.ts` — `createApp(ctx)` dựng Hono + middleware resolve root từ `?project=` / tự duyệt `features/<name>/api.ts` (`registerFeatureRoutes`); `createApiHandler(ctx)` là **cầu nối Node ⇆ Hono** (lazy-await `createApp`), và là **điểm chốt duy nhất** ghi request log (fire-and-forget trong `finally`, không await vào response).
+- `src/backend/http/AbstractController.ts` — base controller (`json`/`ok`/`requireRoot`/`parseBody`/…) + `bind(Controller, method)`.
+- `src/backend/business/AbstractBusiness.ts` — base tầng domain (`requireRoot`/`fail`; không biết HTTP).
+- `src/features/<name>/controller.ts` — HTTP handler (extends `AbstractController`); gọi `XxxBusiness`.
+- `src/features/<name>/business/` — domain + class `XxxBusiness` (extends `AbstractBusiness`).
+- `src/features/<name>/api.ts` — map route → `bind(...)` + `routeOrder` / `registerRoutes`.
+- `src/backend/http/{responseHelper,types}.ts` — helper response (Node `json` + Hono `j`) + type tầng HTTP.
+
+## Event bus — chi tiết
+
+- `src/backend/events/` — API `emit(type, payload)` / `on(type, handler)` / `once(...)`, `emitEntity(op, entity, payload)` cho CRUD `entity.*`, trigger registry.
+- Nguyên tắc persist trước: `saveJob` / `writeStateAtomic` / `saveRegistry` → `emit` (không đảo thứ tự).
+- Handler lỗi bị nuốt + `console.warn`, không throw ngược lên luồng emit.
+- Rule đang bật tự đồng bộ vào trigger registry qua `syncTriggerRegistry` (feature automations).
+
+## Frontend API layer — tham chiếu code
+
+- `src/frontend/http/client.ts` — `apiGet`/`apiPost`/… dùng chung mọi feature; consumer đặt ở `src/features/<mode>/scripts/`.
+- `src/shared/lib/phase.ts` — `PHASES`, `phasesFromPipeline`, `phaseStatus` suy diễn trạng thái phase từ artifact + con trỏ live.
 
 ---
 

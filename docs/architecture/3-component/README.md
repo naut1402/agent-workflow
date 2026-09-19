@@ -26,15 +26,9 @@ C4Component
 
 ### 1.1 Tầng HTTP (Hono)
 
-- `src/backend/apiServer.ts` — `createApp(ctx)` dựng Hono + middleware resolve root từ `?project=` / tự duyệt `features/<name>/api.ts` (`registerFeatureRoutes`); `createApiHandler(ctx)` là **cầu nối Node ⇆ Hono** (lazy-await `createApp`).
-- `src/backend/http/AbstractController.ts` — base controller (json/ok/requireRoot/parseBody/…) + `bind(Controller, method)`.
-- `src/backend/business/AbstractBusiness.ts` — base tầng domain (requireRoot/fail; không biết HTTP).
-- `src/features/<name>/controller.ts` — HTTP handler (extends AbstractController); gọi `XxxBusiness`.
-- `src/features/<name>/business/` — domain + class `XxxBusiness` (extends AbstractBusiness).
-- `src/features/<name>/api.ts` — **chỉ** map route → `bind(...)` + `routeOrder` / `registerRoutes`. Feature mới có `api.ts` thì được nạp (không sửa registry tay).
-- `src/backend/http/{responseHelper,types}.ts` — helper response (Node `json` + Hono `j`) + type tầng HTTP. FE fetch client **không** ở đây: `src/frontend/http/client.ts` (§2).
+Component trung gian giữa route và business, dùng chung 1 pattern cho **mọi** feature: route khai trong `api.ts`, HTTP handler trong `controller.ts`, domain logic trong `business/`. Feature mới thêm `api.ts` thì tự được nạp — không sửa registry tay. **Mọi** route `/api/*` đều đi qua Hono, không feature nào còn nhánh chặn trước; điểm chốt ghi request log cũng nằm ở đây, không rải rác theo feature. FE fetch client là component riêng, không nằm trong tầng này (§2.2).
 
-> **Lưu ý routing:** **mọi** route `/api/*` đều đi qua Hono — không feature nào còn nhánh node-res chặn trước. `createApiHandler` là **điểm chốt duy nhất** ghi request log (fire-and-forget trong `finally`, không await vào response).
+Tên class/hàm cụ thể hiện thực pattern trên (`AbstractController`, `AbstractBusiness`, `createApiHandler`, …) — xem cấp Code.
 
 ### 1.2 Domain / business — theo feature
 
@@ -50,23 +44,23 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `backend/c
 
 ### 1.3 Event bus (kernel)
 
-Event bus nội bộ tại `src/backend/events/` (`emit` / `on` / `once`, `emitEntity` cho CRUD `entity.*`, trigger registry). Nguyên tắc: **persist rồi mới emit** (`saveJob` / `writeStateAtomic` / `saveRegistry` → `emit`); handler lỗi bị nuốt + `console.warn`. Runtime trigger (schedule tick + event subscriber) do feature **automations** wire — rule đang bật được đồng bộ vào trigger registry qua `syncTriggerRegistry`. Mục lục event theo feature — xem cấp Code.
+Event bus nội bộ giữ nguyên tắc **persist rồi mới emit** — không feature nào được emit trước khi ghi xong; lỗi trong handler không làm sập luồng chính đang emit. Runtime trigger (schedule tick + event subscriber) do feature **automations** sở hữu: rule đang bật tự động đồng bộ vào trigger registry, feature khác không tự đăng ký tay. Mục lục event theo feature + API/hàm cụ thể — xem cấp Code.
 
 ### 1.4 Config shell backend
 
-`src/backend/configs/` (đọc `package.json`, …) + `src/backend/lib/` (helper Node-only: `fileHelper`, `processHelper`, `yamlLib`, `dirModuleLoader`, `arrayUtils`, `dateUtils`). Không import HTTP kernel; domain/business import khi cần. Chi tiết từng file ở cấp Code.
+Preference/version shell + helper Node-only tách riêng khỏi domain — không import HTTP kernel; domain/business import khi cần. Danh sách file cụ thể — xem cấp Code.
 
 ---
 
 ## 2. Frontend components
 
-`src/frontend/main.ts` mount `src/frontend/App.vue`. `App.vue` là shell mỏng: `inject` 1 service container (`src/frontend/container/`, DI/IoC trên native Vue `provide/inject`) → `resolve` `ModeRegistry` (`src/frontend/shell/modeRegistry.ts`) → lặp `listModes()` để render sidebar nav / status text / main panel. `App.vue` **không** hard-code danh sách mode — mỗi feature tự đăng ký qua `src/features/<feature>/registerMode.ts`, `main.ts` tự quét bằng `import.meta.glob('../features/*/registerMode.ts', { eager: true })`. Sơ đồ bootstrap + diễn giải: [`ioc-bootstrap-runtime.md`](ioc-bootstrap-runtime.md). Mode `monitor` nhận task-list qua SSE `GET /api/tasks/stream` (`src/features/monitor/composables/useTaskPolling.ts`, fetch-based reader ở `src/frontend/lib/sseClient.ts`); kết nối giữ xuyên suốt mọi mode.
+`App.vue` là shell mỏng: dùng 1 service container (DI/IoC trên native Vue `provide`/`inject`) để lấy `ModeRegistry`, lặp danh sách mode để render sidebar/status/main panel. `App.vue` **không** hard-code danh sách mode — mỗi feature tự đăng ký, quét tự động lúc khởi động. Sơ đồ bootstrap + diễn giải: [`ioc-bootstrap-runtime.md`](ioc-bootstrap-runtime.md); tên file/API cụ thể — xem cấp Code.
 
 ### 2.1 Mode (`ModeEntry.key`)
 
 Mỗi feature đăng ký 1 mode qua `registerMode.ts` — danh sách mode + component cụ thể đổi theo tính năng, xem trực tiếp `src/features/<feature>/` thay vì liệt kê ở đây. Vài mode có hành vi khác biệt đáng ghi lại:
 
-- `monitor` — mode duy nhất giữ kết nối SSE theo dõi liên tục (§2 trên); mọi mode khác chỉ lấy dữ liệu 1 lần khi vào.
+- `monitor` — mode duy nhất giữ 1 kết nối SSE theo dõi liên tục (task-list), xuyên suốt mọi mode; mọi mode khác chỉ lấy dữ liệu 1 lần khi vào.
 - `automations` — rule đa trigger (timer/event) → chuỗi action; chat NL tạo automation dùng chung cơ chế NL chat.
 - `statistics` — chart render qua mermaid, drill-down project → task → step → job.
 
@@ -74,10 +68,10 @@ Mỗi feature đăng ký 1 mode qua `registerMode.ts` — danh sách mode + comp
 
 ### 2.2 API layer
 
-- **Server setup** (`src/backend/`): `apiServer.ts` + `devTeamApi.ts` — xem cấp Container.
-- **FE fetch**: `src/frontend/http/client.ts` (`apiGet`/`apiPost`/…). Fetch theo consumer ở `src/features/<mode>/scripts/`. Hono route đăng ký ở `features/*/api.ts`.
-- Suy diễn trạng thái phase (`PHASES`, `phasesFromPipeline`, `phaseStatus`) nằm ở `src/shared/lib/phase.ts`. Phase status **được suy từ sự tồn tại của artifact** + con trỏ live — phản chiếu đúng quy tắc của orchestrator.
+- **Server setup**: xem cấp Container.
+- **FE fetch**: 1 client dùng chung cho mọi feature, gọi theo consumer ở từng mode; route phía server đăng ký đồng nhất theo pattern `api.ts` (§1.1).
+- Trạng thái phase **được suy từ sự tồn tại của artifact** + con trỏ live, không bao giờ encode trực tiếp — phản chiếu đúng quy tắc của orchestrator. Tên hàm/file cụ thể — xem cấp Code.
 
 ### 2.3 Nền frontend + config shell
 
-Nền tảng FE/shell: `composables/*`, `lib/` (helper thuần browser), `ui/`, `shell/keys.ts`, `container/`, `http/client.ts`, `configs/` (preference shell). Suy diễn phase + helper chuỗi dùng chung ở `src/shared/lib/`. Schema domain ở `features/<name>/schemas/`. i18n cài qua `src/frontend/plugins` (`installPlugins`); message theo `features/<name>/locales/` + `plugins/i18n/locales/common/`. Chi tiết từng file config shell (FE + BE + shared) và styling (SCSS entry, tự nạp theo feature) ở cấp Code.
+Nền tảng FE/shell (composables, helper thuần browser, UI kit, preference shell) tách khỏi domain feature — domain import nền, nền không phụ thuộc ngược lại feature nào, cùng nguyên tắc với backend (§1.4). Schema domain khai trong từng feature, không đặt ở nền chung. i18n cài đặt tập trung 1 chỗ duy nhất, feature chỉ khai message theo namespace của mình. Danh sách file cụ thể (FE + BE + shared), cấu trúc plugin i18n, và styling — xem cấp Code.
