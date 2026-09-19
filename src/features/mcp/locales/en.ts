@@ -64,6 +64,7 @@ export default {
   },
   errors: {
     idRequired: 'Enter an id for the MCP server',
+    idExists: 'That id already belongs to another MCP server — pick a different one so it is not overwritten',
     commandRequired: 'Enter a command',
     urlRequired: 'Enter a URL',
     loadFailed: 'Could not load the MCP server list',

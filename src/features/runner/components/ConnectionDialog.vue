@@ -771,6 +771,19 @@ function onKeydown(e: KeyboardEvent) {
   emit('close')
 }
 
+/**
+ * Id đã lưu trong Connection nhưng server đã tắt hoặc đã xoá vẫn phải hiện ra.
+ * Lọc chúng khỏi danh sách thì người dùng không có cách nào bỏ chọn, mà `save`
+ * vẫn ghi lại nguyên si — job sau đó chạy thiếu tool và chỉ cảnh báo trong log.
+ */
+const mcpChoices = computed(() => {
+  const known = new Set(mcpOptions.value.map((m) => m.id))
+  return [
+    ...mcpOptions.value.map((m) => ({ ...m, missing: false })),
+    ...mcpServers.value.filter((id) => !known.has(id)).map((id) => ({ id, label: id, missing: true })),
+  ]
+})
+
 async function loadMcpOptions() {
   try {
     const data = await fetchMcpServers()
@@ -1157,11 +1170,13 @@ onUnmounted(() => {
               {{ t('runner.connectionDialog.mcpServersLabel') }}
               <InfoTooltip :text="t('runner.connectionDialog.mcpServersHint')" />
             </span>
-            <p v-if="!mcpOptions.length" class="muted">{{ t('runner.connectionDialog.mcpEmpty') }}</p>
+            <p v-if="!mcpChoices.length" class="muted">{{ t('runner.connectionDialog.mcpEmpty') }}</p>
             <div v-else class="extra-tools-group">
-              <label v-for="m in mcpOptions" :key="m.id" class="kind-radio">
+              <label v-for="m in mcpChoices" :key="m.id" class="kind-radio">
                 <input v-model="mcpServers" type="checkbox" :value="m.id" />
-                {{ m.label }}
+                <span :class="{ 'err-text': m.missing }">
+                  {{ m.label }}<template v-if="m.missing"> — {{ t('runner.connectionDialog.mcpMissing') }}</template>
+                </span>
               </label>
             </div>
             <p v-if="mcpServers.length && mcpUnsupported" class="muted err-text">

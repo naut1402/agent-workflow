@@ -146,6 +146,7 @@ export default {
     mcpServersHint: 'Only enabled MCP servers show up here. Pick none and the runner command line stays unchanged.',
     mcpUnsupported: 'This provider does not consume MCP config yet — the pick is still saved for later.',
     mcpEmpty: 'No enabled MCP server yet. Add one in the MCP tab.',
+    mcpMissing: 'disabled or deleted',
     connectViaBrowser: 'Connect via browser',
     oauthPendingHint: 'A new tab opened to sign in. If it can\'t reach this dashboard, copy the URL/code it shows and paste it below instead.',
     oauthPastePlaceholder: 'Paste the redirected URL or code here',

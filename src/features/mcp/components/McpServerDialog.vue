@@ -30,6 +30,13 @@ const props = defineProps<{
   server?: McpServerConfig | null
   /** Bản sao đã bị xoá giá trị secret — nhắc người dùng nhập lại trước khi lưu. */
   secretsCleared?: boolean
+  /**
+   * Bản sao: có `server` để prefill nhưng KHÔNG phải sửa bản đó, nên ô id
+   * phải mở để người dùng đặt tên khác.
+   */
+  isCopy?: boolean
+  /** Id đang có trong store — chặn tạo mới/sao chép đè lên server khác. */
+  takenIds?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -39,7 +46,9 @@ const emit = defineEmits<{
 
 const { t } = useI18nHelpers()
 
-const isEdit = computed(() => Boolean(props.server?.id))
+// Sao chép KHÔNG phải sửa: `upsertMcpServer` ghi đè theo id, nên khoá ô id ở
+// chế độ copy là đẩy người dùng vào chỗ ghi đè bản sao trước đó mà không hay.
+const isEdit = computed(() => Boolean(props.server?.id) && !props.isCopy)
 
 const id = ref('')
 const label = ref('')

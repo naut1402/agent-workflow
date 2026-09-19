@@ -64,6 +64,7 @@ export default {
   },
   errors: {
     idRequired: 'Nhập id cho MCP server',
+    idExists: 'Id này đã có MCP server khác dùng — đặt id khác để không ghi đè',
     commandRequired: 'Nhập command',
     urlRequired: 'Nhập URL',
     loadFailed: 'Không tải được danh sách MCP server',

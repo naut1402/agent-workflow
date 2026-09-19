@@ -145,6 +145,7 @@ export default {
     mcpServersHint: 'Chỉ MCP server đang bật mới hiện ở đây. Không chọn gì thì lệnh chạy runner không đổi.',
     mcpUnsupported: 'Provider này chưa nhận cấu hình MCP — lựa chọn vẫn được lưu để dùng sau.',
     mcpEmpty: 'Chưa có MCP server nào đang bật. Thêm ở tab MCP.',
+    mcpMissing: 'đã tắt hoặc đã xoá',
     connectViaBrowser: 'Connect via browser',
     oauthPendingHint: 'Đã mở tab mới để đăng nhập. Nếu tab đó không mở được dashboard này, copy URL/code nó hiện ra rồi dán vào ô bên dưới.',
     oauthPastePlaceholder: 'Dán URL redirect hoặc code vào đây',

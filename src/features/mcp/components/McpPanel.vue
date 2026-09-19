@@ -14,6 +14,7 @@ const error = ref('')
 const showDialog = ref(false)
 const editing = ref<McpServerConfig | null>(null)
 const copySecretsCleared = ref(false)
+const copyMode = ref(false)
 
 async function load() {
   error.value = ''
@@ -30,6 +31,7 @@ onMounted(load)
 function openNew() {
   editing.value = null
   copySecretsCleared.value = false
+  copyMode.value = false
   showDialog.value = true
   message.value = ''
 }
@@ -37,6 +39,7 @@ function openNew() {
 function openEdit(s: McpServerConfig) {
   editing.value = JSON.parse(JSON.stringify(s))
   copySecretsCleared.value = false
+  copyMode.value = false
   showDialog.value = true
   message.value = ''
 }
@@ -62,6 +65,7 @@ function openCopy(s: McpServerConfig, e: Event) {
   }
   editing.value = copy
   copySecretsCleared.value = cleared
+  copyMode.value = true
   showDialog.value = true
   message.value = ''
 }
@@ -174,6 +178,8 @@ function checkLabel(s: McpServerConfig): string {
       v-if="showDialog"
       :server="editing"
       :secrets-cleared="copySecretsCleared"
+      :is-copy="copyMode"
+      :taken-ids="servers.map((s) => s.id)"
       @close="closeDialog"
       @saved="onSaved"
     />
