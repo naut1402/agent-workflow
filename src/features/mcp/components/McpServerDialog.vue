@@ -28,6 +28,8 @@ interface KeyValueRow {
 const props = defineProps<{
   /** null — tạo mới. */
   server?: McpServerConfig | null
+  /** Bản sao đã bị xoá giá trị secret — nhắc người dùng nhập lại trước khi lưu. */
+  secretsCleared?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -265,6 +267,7 @@ onUnmounted(() => {
 
         <div class="modal-body">
           <div v-if="error" class="err-banner">{{ error }}</div>
+          <p v-if="secretsCleared" class="warn-text">{{ t('mcp.dialog.copySecretsCleared') }}</p>
 
           <div class="field">
             <label class="cfg-label">{{ t('mcp.dialog.idField') }}

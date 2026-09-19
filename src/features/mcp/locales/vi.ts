@@ -57,6 +57,7 @@ export default {
     listToolsHint: 'Bật sau khi kiểm tra kết nối thành công.',
     toolsCount: '{count} tool',
     secretLiteralWarning: 'Giá trị này trông như secret. Nên dùng credential profile hoặc «env:TEN_BIEN».',
+    copySecretsCleared: 'Bản sao không mang theo giá trị secret — nhập lại trước khi dùng.',
     save: 'Lưu MCP server',
     cancel: 'Huỷ',
     saving: 'Đang lưu…',

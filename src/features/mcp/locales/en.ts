@@ -57,6 +57,7 @@ export default {
     listToolsHint: 'Enabled once the connection check succeeds.',
     toolsCount: '{count} tools',
     secretLiteralWarning: 'This value looks like a secret. Prefer a credential profile or «env:VAR_NAME».',
+    copySecretsCleared: 'The copy does not carry secret values — enter them again before use.',
     save: 'Save MCP server',
     cancel: 'Cancel',
     saving: 'Saving…',

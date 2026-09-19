@@ -25,6 +25,12 @@ export interface PrepareMcpConfigInput {
   ids: unknown
   workspace: string
   jobId: string
+  /**
+   * Nhận cảnh báo ngay khi phát sinh, kể cả khi hàm trả `null`. Id bị tắt/xoá
+   * sau khi Connection đã chọn thì không còn handle nào để mang `warnings` ra,
+   * mà job chạy thiếu tool trong im lặng là thứ không ai truy ngược được.
+   */
+  onWarning?: (message: string) => void
 }
 
 /**
@@ -41,10 +47,24 @@ export function prepareMcpConfigForJob(input: PrepareMcpConfigInput): McpJobConf
   const ids = Array.isArray(input.ids) ? input.ids.filter((x): x is string => typeof x === 'string') : []
   if (!ids.length) return null
 
+  const warnings: string[] = []
+  const warn = (message: string) => {
+    warnings.push(message)
+    input.onWarning?.(message)
+  }
+
   const servers = listMcpServers().filter((s) => ids.includes(s.id) && s.enabled)
+  const resolvedIds = new Set(servers.map((s) => s.id))
+  for (const id of ids) {
+    if (resolvedIds.has(id)) continue
+    warn(`mcp ${id}: không tìm thấy hoặc đang tắt — job chạy không có server này`)
+  }
+
+  // Rụng hết thì vẫn `null` để giữ bất biến "không file nào chạm đĩa"; cảnh báo
+  // đã đi ra qua `onWarning` ở trên nên không im lặng tuyệt đối.
   if (!servers.length) return null
 
-  const { json, secrets, warnings } = serialiseMcpServers(servers, {
+  const serialised = serialiseMcpServers(servers, {
     workspace: input.workspace,
     secretFor: (credentialId) => {
       const resolved = resolveSecretRef(getCredential(credentialId))
@@ -52,6 +72,7 @@ export function prepareMcpConfigForJob(input: PrepareMcpConfigInput): McpJobConf
       return (resolved as { value?: string | null }).value ?? null
     },
   })
+  for (const message of serialised.warnings) warn(message)
 
   const dir = mcpRuntimeDir()
   mkdirSync(dir, { recursive: true })
@@ -60,14 +81,14 @@ export function prepareMcpConfigForJob(input: PrepareMcpConfigInput): McpJobConf
   // `mode` ngay lúc tạo, không chỉ `chmod` sau: chmod ở dòng kế tiếp vẫn để lại
   // một cửa sổ file 0644 chứa token đã giải. `tryChmod` giữ lại làm lưới cho
   // trường hợp file đã tồn tại (writeFileSync giữ mode cũ khi ghi đè).
-  writeTextFileSync(path, JSON.stringify(json, null, 2), { mode: 0o600 })
+  writeTextFileSync(path, JSON.stringify(serialised.json, null, 2), { mode: 0o600 })
   tryChmod(path, 0o600)
 
   return {
     path,
     count: servers.length,
     names: servers.map((s) => s.id),
-    secrets,
+    secrets: serialised.secrets,
     warnings,
     dispose() {
       try {

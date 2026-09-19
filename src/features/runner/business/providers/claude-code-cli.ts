@@ -429,6 +429,9 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
               ids: runnerConfig.mcpServers,
               workspace: req.workspace,
               jobId: req.jobId,
+              // Nhận ngay lúc phát sinh, vì id bị tắt/xoá hết thì hàm trả `null`
+              // và không còn handle nào mang warnings ra.
+              onWarning: (message) => appendLog(`[runner] MCP warning: ${message}\n`),
             })
           } catch (err: any) {
             // Chạy tiếp mà thiếu tool là kiểu hỏng tệ nhất: job fail vì lý do
@@ -494,13 +497,11 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         )
 
         // Chỉ id server + đường dẫn: nội dung file chứa env/header đã giải.
+        // Warnings đã ra log qua `onWarning` ở trên, không lặp lại ở đây.
         if (mcpHandle) {
           appendLog(
             `[runner] MCP: ${mcpHandle.count} server (${mcpHandle.names.join(', ')}) → ${mcpHandle.path}\n`,
           )
-          for (const warning of mcpHandle.warnings) {
-            appendLog(`[runner] MCP warning: ${warning}\n`)
-          }
         }
 
         // MCP server (hoặc chính CLI) in token ra stderr là chuyện thường —
@@ -536,7 +537,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
             exitCode: null,
             durationMs: Date.now() - started,
             logPath,
-            error: String(err.message || err),
+            error: maskLog(String(err.message || err)),
           }
           appendLog(describeResult(result))
           return result
@@ -582,8 +583,14 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
           durationMs: Date.now() - started,
           logPath,
           artifactsFound,
-          error: ok ? undefined : formatFailure(procResult, timeoutMs),
+          // `formatFailure` dựng error từ stderr THÔ, mà error chảy vào
+          // `jobs/<id>.json` (không 0600) và payload `job.failed` → events.jsonl
+          // → SSE. `redactPayload` chỉ lọc theo tên khoá nên khoá `error` lọt sạch.
+          error: ok ? undefined : maskLog(formatFailure(procResult, timeoutMs)),
           timedOut: procResult.killed,
+          // stdout KHÔNG mask: là payload chức năng (proposal ghép vào scratch, dòng
+          // ORCHESTRATOR_DECISION), mask mù sẽ cắt giữa artifact. `error` đã mask, và
+          // đó là nhánh duy nhất stderr của server MCP đi ra ngoài.
           stdout,
           sessionId: capturedSessionId,
           tokenUsage,

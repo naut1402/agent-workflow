@@ -2,7 +2,7 @@
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
 import { deleteMcpServer, fetchMcpServers, saveMcpServer } from '../scripts/mcpApi'
-import type { McpServerConfig } from '../business/types'
+import { MCP_MASK, type McpServerConfig } from '../business/types'
 import Icon from '../../../frontend/ui/Icon.vue'
 import McpServerDialog from './McpServerDialog.vue'
 
@@ -13,6 +13,7 @@ const message = ref('')
 const error = ref('')
 const showDialog = ref(false)
 const editing = ref<McpServerConfig | null>(null)
+const copySecretsCleared = ref(false)
 
 async function load() {
   error.value = ''
@@ -28,19 +29,39 @@ onMounted(load)
 
 function openNew() {
   editing.value = null
+  copySecretsCleared.value = false
   showDialog.value = true
   message.value = ''
 }
 
 function openEdit(s: McpServerConfig) {
   editing.value = JSON.parse(JSON.stringify(s))
+  copySecretsCleared.value = false
   showDialog.value = true
   message.value = ''
 }
 
+/**
+ * Bản sao mang id mới nên backend không có bản cũ để khôi phục giá trị sau
+ * `***` — khoá đó bị bỏ hẳn (đúng: ghi literal `***` xuống server con còn tệ
+ * hơn). Xoá value tại đây để ô hiện ra RỖNG: `***` trông như đã có giá trị,
+ * người dùng lưu rồi mới phát hiện ở lần job đầu tiên fail 401.
+ */
 function openCopy(s: McpServerConfig, e: Event) {
   e.stopPropagation()
-  editing.value = { ...JSON.parse(JSON.stringify(s)), id: `${s.id}-copy`, enabled: false, lastCheck: null }
+  const copy: McpServerConfig = JSON.parse(JSON.stringify(s))
+  copy.id = `${s.id}-copy`
+  copy.enabled = false
+  copy.lastCheck = null
+  const bag = copy.transport === 'stdio' ? copy.env : copy.headers
+  let cleared = false
+  for (const [k, v] of Object.entries(bag || {})) {
+    if (v !== MCP_MASK) continue
+    bag[k] = ''
+    cleared = true
+  }
+  editing.value = copy
+  copySecretsCleared.value = cleared
   showDialog.value = true
   message.value = ''
 }
@@ -152,6 +173,7 @@ function checkLabel(s: McpServerConfig): string {
     <McpServerDialog
       v-if="showDialog"
       :server="editing"
+      :secrets-cleared="copySecretsCleared"
       @close="closeDialog"
       @saved="onSaved"
     />

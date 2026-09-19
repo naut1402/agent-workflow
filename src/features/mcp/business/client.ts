@@ -8,6 +8,7 @@ import { resolveEnvRefs, resolveHeaders } from './resolveRefs.js'
 import {
   MCP_MAX_TOOL_DESCRIPTION_LENGTH,
   MCP_MAX_TOOL_NAMES,
+  isMaskableSecret,
   isStdioServer,
   maskSecretText,
   resolveTimeoutMs,
@@ -75,7 +76,10 @@ function buildTransport(server: McpServerConfig, opts: McpProbeOptions): Transpo
         cwd: server.cwd || opts.cwd || process.cwd(),
         stderr: 'pipe',
       }),
-      secrets: Object.values(resolved.env),
+      // Cùng ngưỡng với serialize.ts: giá trị env tầm thường (DEBUG=1, PORT) mà lọt
+      // vào danh sách mask thì thông điệp lỗi của nút Kiểm tra kết nối bị cắt vụn,
+      // mà đó là thứ duy nhất người dùng có để sửa cấu hình.
+      secrets: Object.values(resolved.env).filter(isMaskableSecret),
       warnings: resolved.warnings,
     }
   }
@@ -91,7 +95,7 @@ function buildTransport(server: McpServerConfig, opts: McpProbeOptions): Transpo
       server.transport === 'sse'
         ? new SSEClientTransport(url, common)
         : new StreamableHTTPClientTransport(url, common),
-    secrets: Object.values(headers),
+    secrets: Object.values(headers).filter(isMaskableSecret),
     warnings: resolved.warnings,
   }
 }
