@@ -131,13 +131,9 @@ agent-workflow/
 
 ## Bất biến kiến trúc
 
-Thêm scan / endpoint / feature mới không được phá các bất biến sau:
+Thêm scan / endpoint / feature mới không được phá các bất biến sau (mục đã thành checklist review — [`AGENTS.md`](../../../AGENTS.md) §6 Review — không lặp lại ở đây: đọc FS phòng thủ, chống path-traversal, ghi atomic, fetch qua wrapper an toàn):
 
-- **Đọc filesystem phải phòng thủ**: `safeReadDir`/`statSafe` (`fileHelper`) / `readYamlSafe` (`yamlLib`) / `readState`/`loadRegistry` nuốt lỗi, trả empty/false thay vì throw — một file state ghi dở không được làm sập request.
-- **Chống path-traversal**: mọi input từ request phải sanitize tại feature sở hữu (`resolveArtifact` + `fileHelper.resolvePathUnder`, `sanitiseProfileName`, `sanitiseAgentName`, `sanitiseSlug`, taskId regex); endpoint ghi file mới phải nghiêm ngặt tương đương. Hàm sanitize domain **không** nằm ở `src/backend` / `src/shared` — gắn vào module business liên quan và export qua `business/index.ts` nếu feature khác cần dùng.
 - **Pattern scan tuỳ chỉnh không escape project root**: pattern trong `settings.scanPatterns` bị loại ở `sanitiseScanPattern` (schema dùng chung FE/BE của feature `settings`), lại ở `expandScanPatterns` (bỏ qua mọi symlink), và mỗi match còn qua `resolvePathUnder(projectRoot, …)`.
-- **Ghi registry atomic** (temp file + rename trong `saveRegistry`).
-- **Fetch URL người dùng** phải qua `fetchUrlSafe` (https-only, chặn private host) — tránh SSRF.
 - **Ranh giới scope `src/backend` ⟂ `src/frontend`.** Code frontend **không** import `src/backend/**` hay `node:*` / `bun:*` / `hono` / `drizzle-orm` — kể cả gián tiếp qua một module `business/`. Code backend không import `src/frontend/**` hay `vue`. Thứ dùng thật ở cả hai phía đi vào `src/shared/**`, nơi bị cấm import hạ tầng lẫn hai bucket kia. Cả ba luật do `no-restricted-imports` trong `eslint.config.js` chặn, **không có whitelist** — xem `src/{backend,frontend,shared}/README.md`.
 - **ESM thuần**; phía server import module Node bằng dạng `node:`-prefixed.
 - **Module `bun:*` không được import tĩnh trên đường nạp `vite.config.ts`.** `bun run build` = `vite build` chạy dưới **Node**, mà Node ESM loader không hiểu scheme `bun:`. `vite.config.ts` kéo `src/backend/apiServer.ts` vào module graph, nên mọi file với tới được từ đó (hiện tại: `src/backend/db/client.ts`) phải nạp `bun:sqlite` và `drizzle-orm/bun-sqlite` bằng `await import(...)`, phần type dùng `import type`. Đổi về import tĩnh là làm đỏ build của **cả repo** — cửa chặn là step `Build` trong CI.
