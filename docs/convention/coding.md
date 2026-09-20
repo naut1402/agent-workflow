@@ -75,4 +75,4 @@ Primitive dùng chung trong `src/frontend/ui/`:
 - **Comment mô tả hành vi hiện hành**, không kể lịch sử, không trích số issue / số PR / tên người, không nhắc định danh nội bộ của quy trình (số đợt, tên khối việc, mã task) — code sống lâu hơn kế hoạch.
 - **Ngôn ngữ theo mật độ code xung quanh** — khối comment tiếng Anh thì viết tiếp tiếng Anh, không trộn nửa Anh nửa Việt.
 
-Kiến trúc và bất biến bắt buộc: [`docs/architecture/4-code/` — Bất biến kiến trúc](../architecture/4-code/README.md#bất-biến-kiến-trúc). Đặt file theo feature: [`feature-architecture.md`](feature-architecture.md).
+Kiến trúc: [`docs/architecture/`](../architecture/README.md). Bất biến bắt buộc giữ (checklist review): [`AGENTS.md`](../../AGENTS.md) §6 Review. Đặt file theo feature: [`feature-architecture.md`](feature-architecture.md).

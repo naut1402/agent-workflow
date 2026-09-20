@@ -61,6 +61,6 @@ Brown cũng cảnh báo trực tiếp trong cùng trang: tài liệu Component *
 
 **Nguyên tắc áp dụng vào repo này:**
 
-- Đây là cấp **duy nhất được phép** nêu tên file, hàm, bảng schema, đường dẫn cụ thể — đúng bản chất "code-level detail". Bao gồm cả **Bất biến kiến trúc** (đặt ở đây, không phải Container, vì nội dung thật của nó là tên hàm/file sanitize cụ thể).
-- Vì Brown đã cảnh báo cấp này **rỗng giá trị nếu tách rời code** và **luôn có nguy cơ lỗi thời**, file `4-code/README.md` tự ghi rõ ngay đầu: *"cấp thay đổi thường xuyên nhất — khi sửa, đối chiếu lại với code thật thay vì tin nội dung cũ"*.
+- Đây là cấp **duy nhất được phép** nêu tên file, hàm, bảng schema, đường dẫn cụ thể — đúng bản chất "code-level detail". Bất biến kiến trúc (tên hàm/file sanitize cụ thể) đã thành checklist review ở `AGENTS.md` §6, không đặt ở cấp này.
+- Vì Brown đã cảnh báo cấp này **rỗng giá trị nếu tách rời code** và **luôn có nguy cơ lỗi thời**, `architecture/README.md` §4 ghi rõ ngay đầu: *"cấp thay đổi thường xuyên nhất — khi sửa, đối chiếu lại với code thật thay vì tin nội dung cũ"*.
 - Chỉ document phần **không tự giải thích được qua tên file** (quirk, giới hạn đã biết, thứ tự migration, lý do giữ `.js`) — không chép lại toàn bộ cấu trúc source (source đã tự mô tả qua tên file/folder).

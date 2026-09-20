@@ -2,7 +2,7 @@
 
 Quy ước khi thêm/sửa **mode** (`monitor`, `editor`, `agentEditor`, …) trong shell `src/frontend/App.vue`.
 
-Sơ đồ bootstrap và runtime: [`docs/architecture/3-component/ioc-bootstrap-runtime.md`](../architecture/3-component/ioc-bootstrap-runtime.md). Kiến trúc frontend: [`docs/architecture/3-component/`](../architecture/3-component/README.md) §2.
+Kiến trúc frontend (component, DI/ModeRegistry): [`docs/architecture/README.md`](../architecture/README.md) §3.2.
 
 ---
 

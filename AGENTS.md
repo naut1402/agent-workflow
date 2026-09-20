@@ -38,7 +38,7 @@ agent-workflow/
     ├── agent-rules/   # rule cho mọi AI agent, theo category
     ├── convention/    # quy ước (nguyên tắc), theo chủ đề — không tham chiếu checklist
     ├── template/      # agent + pipeline mẫu
-    └── architecture/{1-context,2-container,3-component,4-code}/  # 4-code/ kèm events/, i18n.md, ui-buttons.md, ui-overflow.md (chi tiết implementation)
+    └── architecture/          # README.md gộp cấp 1-3 (Context/Container/Component); 4-code/ tách riêng (events/, i18n.md, ui-buttons.md, ui-overflow.md — chi tiết implementation)
 ```
 
 ⚠️ Ngoại lệ cố ý còn `.js`: `src/features/agent-editor/business/agentMarkdown.js`, `src/backend/runner-cli.mjs`. Tooling `vite` / `vitest` / `playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
@@ -62,7 +62,7 @@ Tài liệu tra cứu kèm theo (không phải rule):
 | Quickstart | [`README.md`](README.md) |
 | Kiến trúc (C4, 4 cấp: Context → Container → Component → Code) | [`docs/architecture/`](docs/architecture/) |
 | Mục lục domain event theo mode | [`docs/architecture/4-code/events/`](docs/architecture/4-code/events/README.md) |
-| Sơ đồ bootstrap DI / ModeRegistry | [`docs/architecture/3-component/ioc-bootstrap-runtime.md`](docs/architecture/3-component/ioc-bootstrap-runtime.md) |
+| Kiến trúc Component (backend/frontend, DI/ModeRegistry) | [`docs/architecture/README.md`](docs/architecture/README.md) §3 |
 | Quy ước i18n | [`docs/convention/i18n.md`](docs/convention/i18n.md) — chi tiết [`docs/architecture/4-code/i18n.md`](docs/architecture/4-code/i18n.md) |
 | Quy ước UI button | [`docs/convention/ui-buttons.md`](docs/convention/ui-buttons.md) — chi tiết [`docs/architecture/4-code/ui-buttons.md`](docs/architecture/4-code/ui-buttons.md) |
 | Quy ước tràn nội dung UI | [`docs/convention/ui-overflow.md`](docs/convention/ui-overflow.md) |
@@ -72,9 +72,9 @@ Tài liệu tra cứu kèm theo (không phải rule):
 
 ## 4. Bất biến bắt buộc giữ
 
-🚫 Nội dung đầy đủ: [`docs/architecture/4-code/README.md` — Bất biến kiến trúc](docs/architecture/4-code/README.md#bất-biến-kiến-trúc) — đọc trước khi thêm scan/endpoint mới.
+🚫 Checklist đầy đủ ở §6 Review (mục **Kiến trúc** + **Dữ liệu & An toàn**) — đọc trước khi thêm scan/endpoint mới.
 
-Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize tại feature sở hữu) · ghi registry atomic · `fetchUrlSafe` cho URL người dùng · ESM thuần · `ANTHROPIC_API_KEY` tuỳ chọn · `DASHBOARD_SECRET_KEY` bắt buộc cho vault.
+Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize tại feature sở hữu) · ghi registry atomic · `fetchUrlSafe` cho URL người dùng · ranh giới `src/backend` ⟂ `src/frontend` ⟂ `src/shared` · ESM thuần · không import tĩnh `bun:*` trên đường nạp `vite.config.ts` · pattern scan không escape project root · `ANTHROPIC_API_KEY` tuỳ chọn · `DASHBOARD_SECRET_KEY` bắt buộc cho vault.
 
 ---
 
@@ -185,6 +185,9 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Tuân thủ mode-registry khi thêm/sửa mode** — không sửa `main.ts`, không đụng `App.vue` ngoài `shellContext`, `MODE_DEFS` trong `App.test.ts` đã cập nhật.
 - [ ] **Gom module theo nghiệp vụ** — không tách file theo kiểu thao tác (`store` / `fetch` / `paths` / `scan` mỏng).
 - [ ] **Không phụ thuộc Hono** — `business/` không import Hono, không phụ thuộc `c.req`.
+- [ ] **Ranh giới `src/backend` ⟂ `src/frontend` ⟂ `src/shared` giữ nguyên** — FE không import `src/backend/**` hay `node:*`/`bun:*`/`hono`/`drizzle-orm` (kể cả gián tiếp qua một module `business/`); BE không import `src/frontend/**` hay `vue`; thứ dùng thật ở cả hai phía đi vào `src/shared/**` (cấm hạ tầng lẫn hai bucket kia). Cả ba luật do `no-restricted-imports` trong `eslint.config.js` chặn, không whitelist — xem `src/{backend,frontend,shared}/README.md`.
+- [ ] **ESM thuần** — phía server import module Node bằng dạng `node:`-prefixed.
+- [ ] **Không import tĩnh `bun:*` trên đường nạp `vite.config.ts`** — `bun run build` chạy `vite build` dưới Node, Node ESM loader không hiểu scheme `bun:`; file với tới được từ `src/backend/apiServer.ts` (hiện tại: `src/backend/db/client.ts`) phải nạp `bun:sqlite` / `drizzle-orm/bun-sqlite` bằng `await import(...)`, phần type dùng `import type` — import tĩnh làm đỏ build (step `Build` trong CI).
 - [ ] **Import peer qua index** — chỉ `business/index.ts` import cây `business` của feature khác.
 - [ ] **Cập nhật surface chia sẻ** — thêm gì mới đều cập nhật `business/index.ts`; tránh cycle barrel↔barrel.
 - [ ] **Gắn sanitize vào feature sở hữu** — export qua index khi chia sẻ, không đưa lên "sanitize chung" ở core.
@@ -201,6 +204,8 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Chống traversal** — input path từ user đã sanitize / `resolvePathUnder`.
 - [ ] **Ghi atomic** — file quan trọng ghi qua temp + rename (registry, runners, settings).
 - [ ] **Fetch qua wrapper an toàn** — URL người dùng qua `fetchUrlSafe` (https, chặn private host).
+- [ ] **Pattern scan tuỳ chỉnh không escape project root** — pattern trong `settings.scanPatterns` bị loại ở `sanitiseScanPattern` (schema dùng chung FE/BE của feature `settings`), lại ở `expandScanPatterns` (bỏ qua mọi symlink), và mỗi match còn qua `resolvePathUnder(projectRoot, …)`.
+- [ ] **Biến môi trường tuỳ chọn/bắt buộc đúng chỗ** — `ANTHROPIC_API_KEY` tuỳ chọn, bật NL agent-draft generation (`/api/custom-agents/generate`), không có key thì fallback heuristic; `DASHBOARD_SECRET_KEY` **bắt buộc** để dùng credential kiểu "dán secret trực tiếp" (`stored:`) hoặc "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` (mã hoá `secret-vault.json` qua `secretVault.ts`) — không set thì 2 luồng đó fail rõ ràng, các luồng khác (CLI, `env:`/`file:` secretRef) không bị ảnh hưởng.
 - [ ] **Cân nhắc emit** (khi đụng persist/lifecycle/CRUD) — thêm/sửa/xoá `emit` / `emitEntity` sau persist; payload không chứa secret. Chi tiết type/nơi emit: [`docs/architecture/4-code/events/`](docs/architecture/4-code/events/README.md).
 - [ ] **Đồng bộ catalog với code** — file mode tương ứng trong `docs/architecture/4-code/events/` khớp, hoặc nợ `docs/todo/` có lý do.
 - [ ] **Cập nhật type** — `DashboardEventType` đổi theo khi type mới / đổi tên.
