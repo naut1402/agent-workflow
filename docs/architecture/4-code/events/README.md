@@ -4,9 +4,11 @@
 
 Tham chiếu nhanh các **domain event** phát trên event bus nội bộ (`src/backend/events/`). Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới. Kernel / nguyên tắc emit — xem cấp Component.
 
-- API: `emit(type, payload)` · `emitEntity(op, entity, payload)` → `entity.{created|updated|deleted}`
+- API: `emit(type, payload)` · `on(type, handler)` · `once(...)` · `emitEntity(op, entity, payload)` → `entity.{created|updated|deleted}`
 - Quan sát: JSONL `~/.dev-team-dashboard/logs/events.jsonl` (prefs `logging.types.events`); UI Logs tab Events
-- **Quy ước:** emit **sau** persist thành công; payload tối thiểu (id / taskId / stepId …); không đưa secret. Không có type riêng `pipeline.*` / `step.*` — tiến trình step gắn qua `job.*` + `task.advanced` / `hitl.*`. Riêng nhóm `orchestrator.*` là quyết định **điều phối**, không phải tiến trình step.
+- **Quy ước:** emit **sau** persist thành công (`saveJob` / `writeStateAtomic` / `saveRegistry` → `emit`, không đảo thứ tự); payload tối thiểu (id / taskId / stepId …); không đưa secret. Không có type riêng `pipeline.*` / `step.*` — tiến trình step gắn qua `job.*` + `task.advanced` / `hitl.*`. Riêng nhóm `orchestrator.*` là quyết định **điều phối**, không phải tiến trình step.
+- **Lỗi handler** bị nuốt + `console.warn`, không throw ngược lên luồng emit.
+- **Trigger registry** — rule đang bật (feature automations) tự đồng bộ qua `syncTriggerRegistry`, feature khác không tự đăng ký tay.
 - Cột **Event** trên UI = giá trị `type` trong các bảng dưới.
 
 ## Theo mode
