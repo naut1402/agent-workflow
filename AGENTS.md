@@ -53,7 +53,7 @@ agent-workflow/
 | 🛠️ Implement | `coding` | [`docs/convention/coding.md`](docs/convention/coding.md) · [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) |
 | 🔎 Review | `coding` + `test` | [`testing.md`](docs/agent-rules/testing.md) — checklist review ở §6 dưới |
 | 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
-| 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, PR phát hành §8 · [`git-worktree.md`](docs/agent-rules/git-worktree.md) · [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md) · checklist PR ở §6 dưới |
+| 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6, todo debt §7, PR phát hành §8 · checklist PR ở §6 dưới |
 
 Tài liệu tra cứu kèm theo (không phải rule):
 
@@ -86,9 +86,9 @@ Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize t
 | Thêm mode mới ở FE shell (`App.vue`) | [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) — checklist ở §6 dưới |
 | Review PR | Checklist Review ở §6 dưới — mục **Dữ liệu & An toàn** có domain event khi đụng persist |
 | Test / CI | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test + `test:overlay` §3.1; mốc coverage + nợ test theo task §6 |
-| Commit / PR / docs | [`docs/convention/git-commits.md`](docs/convention/git-commits.md) khi PR nhiều xử lý; [`git-pr.md`](docs/agent-rules/git-pr.md) — branch task gắn version §4.2; **dòng test §4.3**; PR phát hành §8 |
-| Hoãn docs/test (hotfix, POC) | [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md) — gate CI chỉ khi PR `dev/x.y.z/main` → `main` |
-| Agent chạy song song | [`git-worktree.md`](docs/agent-rules/git-worktree.md) |
+| Commit / PR / docs | [`git-pr.md`](docs/agent-rules/git-pr.md) §2 khi PR nhiều xử lý; branch task gắn version §4.2; **dòng test §4.3**; PR phát hành §8 |
+| Hoãn docs/test (hotfix, POC) | [`git-pr.md`](docs/agent-rules/git-pr.md) §7 — gate CI chỉ khi PR `dev/x.y.z/main` → `main` |
+| Agent chạy song song | [`git-pr.md`](docs/agent-rules/git-pr.md) §6 |
 | Viết `investigate.md` / `design.md` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) |
 
 ---
@@ -224,7 +224,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 
 ### PR
 
-**Tự kiểm trước khi push** (quy ước: [`docs/convention/git-hygiene.md`](docs/convention/git-hygiene.md)):
+**Tự kiểm trước khi push** (quy ước: [`git-pr.md`](docs/agent-rules/git-pr.md) §1):
 
 1. **`git status`** — chỉ còn file đúng phạm vi PR?
 2. **`git diff --staged`** — không generated/export/lockfile lạ/file ngoài phạm vi?
@@ -233,7 +233,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 
 **Không `git push` lại branch đã merged** (origin có thể đã xoá → tạo branch rác). Luôn tạo branch mới từ base mới nhất — `origin/main`, hoặc `origin/dev/x.y.z/main` nếu task gắn version release.
 
-**Todo debt** (bối cảnh đầy đủ: [`pr-todo-debt.md`](docs/agent-rules/pr-todo-debt.md)):
+**Todo debt** (bối cảnh đầy đủ: [`git-pr.md`](docs/agent-rules/git-pr.md) §7):
 
 - [ ] Có hoãn docs/convention? → đã có `docs/todo/<issue>/<task-id>.md`
 - [ ] PR feature → `dev/x.y.z/main`? → được mang nợ; Todo debt **không** chặn

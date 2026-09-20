@@ -1,7 +1,7 @@
 <!--
 PR template. Điền đầy đủ các mục.
 Title PR theo prefix: [<TASK>] <type>: <desc>  (type ∈ feat|fix|chore|docs|refactor|test) — gán label theo type.
-Quy ước hub: AGENTS.md. Chi tiết PR body: docs/convention/pr-body.md.
+Quy ước hub: AGENTS.md. Chi tiết PR body: docs/agent-rules/git-pr.md §9.
 PR phát hành (main ← dev/x.y.z/main): dùng .github/PULL_REQUEST_TEMPLATE/release.md (mở PR kèm ?template=release.md) — bố cục ở docs/agent-rules/git-pr.md §8.
 PR dòng test (test/x.y.z/main ← test/x.y.z/{taskID}_{slug}): dùng .github/PULL_REQUEST_TEMPLATE/test.md (?template=test.md) — quy ước dòng test ở docs/agent-rules/git-pr.md §4.3.
 Kiến trúc + cấu trúc thư mục: docs/architecture/ · feature map: docs/convention/feature-architecture.md.
@@ -56,7 +56,7 @@ Cổng `Release test gate` chặn PR phát hành nếu dòng test của version 
 - Chưa mở (dự kiến: …)
 
 ## Todo debt (nếu PR `dev/x.y.z/main` → `main`)
-<!-- docs/agent-rules/pr-todo-debt.md — CI Todo debt chỉ gate promote lên main. -->
+<!-- docs/agent-rules/git-pr.md §7 — CI Todo debt chỉ gate promote lên main. -->
 - [ ] Không còn thư mục `docs/todo/` (đã đối ứng và xóa hết)
 - [ ] PR feature → `dev/x.y.z/main`: được mang nợ; không áp checklist này
 ## Checklist
@@ -67,6 +67,6 @@ Cổng `Release test gate` chặn PR phát hành nếu dòng test của version 
 - [ ] Tuân thủ `docs/convention/coding.md` + `docs/convention/feature-architecture.md`
 - [ ] Icon mới/sửa dùng `<Icon name="..." />` (`src/frontend/ui/Icon.vue`) — không tự vẽ tay `<svg>`/`<path>`
 - [ ] Dropdown mới dùng `CSelect`/`CComboSelect` (`src/frontend/ui/`) — không dùng `<select>` native
-- [ ] **Git hygiene** (`docs/convention/git-hygiene.md`): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
+- [ ] **Git hygiene** (`docs/agent-rules/git-pr.md` §1): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
 - [ ] Rename/move dùng `git mv`; KHÔNG còn bản cũ trùng (vd `.js` lẫn `.ts`)
-- [ ] Test không nằm trong PR này — dòng test của version đã hoạt động thì file dưới `tests/`·`test-e2e/` chuyển sang PR dòng test; **giai đoạn đệm** (dòng test chưa dựng cho version này) thì test vẫn ở đây nhưng phải đi commit `test:` riêng (`docs/convention/git-commits.md`)
+- [ ] Test không nằm trong PR này — dòng test của version đã hoạt động thì file dưới `tests/`·`test-e2e/` chuyển sang PR dòng test; **giai đoạn đệm** (dòng test chưa dựng cho version này) thì test vẫn ở đây nhưng phải đi commit `test:` riêng (`docs/agent-rules/git-pr.md` §2)
