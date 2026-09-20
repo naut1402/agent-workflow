@@ -1,6 +1,11 @@
 # Kiến trúc — danh mục C4
 
-Kiến trúc `dev-team-dashboard` viết theo mô hình **C4** (Simon Brown): 4 cấp trừu tượng, thô → mịn — gộp chung cả 4 cấp trong tài liệu này. Riêng chi tiết implementation của cấp 4 (Code) — nhiều module, đổi thường xuyên nhất — tách theo từng file trong [`4-code/`](4-code/).
+> **Tóm tắt trong 30 giây:** `dev-team-dashboard` là một **SPA quan sát** (đọc là chính) cho một orchestrator agent chạy ngoài, xoay quanh 3 trụ cột:
+> 1. **Observability** — đọc state/artifact từ `.dev-team-agent/` (filesystem ngoài, sở hữu bởi orchestrator).
+> 2. **Management** — quản lý project registry + config qua `~/.dev-team-dashboard/` (SQLite + JSON, dashboard tự sở hữu).
+> 3. **Integration** — expose MCP server (stdio) cho Claude Code CLI, REST + SSE cho Web UI.
+
+Kiến trúc viết theo mô hình **C4** (Simon Brown): 4 cấp trừu tượng, thô → mịn — gộp chung cả 4 cấp trong tài liệu này. Riêng chi tiết implementation của cấp 4 (Code) — nhiều module, đổi thường xuyên nhất — tách theo từng file trong [`4-code/`](4-code/).
 
 - Giới thiệu + hướng dẫn chạy nhanh: [`../../README.md`](../../README.md).
 - Danh mục tài liệu chung: [`../README.md`](../README.md).
@@ -22,11 +27,11 @@ C4Context
   System_Ext(github, "GitHub", "Issue/PR liên kết task")
   System_Ext(claudeCli, "Claude Code (CLI/IDE)", "Gọi MCP server để CRUD project registry")
 
-  Rel(user, dashboard, "Xem trạng thái, sửa pipeline/agent/knowledge", "HTTPS")
-  BiRel(dashboard, orchestrator, "Đọc/ghi state + artifact", "Filesystem .dev-team-agent/")
-  Rel(dashboard, claude, "Gọi API sinh nội dung", "HTTPS, key cấu hình tuỳ chọn")
-  BiRel(dashboard, github, "Đọc/ghi issue", "REST API, token cấu hình")
-  Rel(claudeCli, dashboard, "list/get/add/remove project", "MCP stdio")
+  Rel(user, dashboard, "Theo dõi, cấu hình", "HTTPS")
+  BiRel(dashboard, orchestrator, "Đọc/ghi state", "Filesystem")
+  Rel(dashboard, claude, "Sinh nội dung", "HTTPS")
+  BiRel(dashboard, github, "Đọc/ghi issue", "REST API")
+  Rel(claudeCli, dashboard, "CRUD project", "MCP stdio")
 ```
 
 ### Vai trò của từng actor
@@ -57,10 +62,10 @@ C4Container
   System_Ext(dataRoot, ".dev-team-agent/", "Filesystem — sở hữu bởi orchestrator ngoài", "state, artifact, config, knowledge")
 
   Rel(user, spa, "Dùng UI", "HTTPS")
-  Rel(spa, backend, "REST + SSE", "/api/*")
-  Rel(backend, dataRoot, "Đọc/ghi theo project root đang resolve")
-  Rel(backend, sqlite, "Drizzle ORM")
-  Rel(backend, registryFile, "Đọc/ghi registry")
+  Rel(spa, backend, "Gọi API", "REST + SSE")
+  Rel(backend, dataRoot, "Đọc/ghi state")
+  Rel(backend, sqlite, "Đọc/ghi", "Drizzle ORM")
+  Rel(backend, registryFile, "Đọc/ghi")
   Rel(mcp, registryFile, "CRUD project")
 ```
 
@@ -75,7 +80,7 @@ C4Container
 | **`projects.json`** | Registry project, dùng chung bởi backend và MCP |
 | **`.dev-team-agent/`** *(external)* | Data root của orchestrator ngoài — dashboard chủ yếu quan sát; ngoại lệ node điều phối (`orchestrator.enabled`) — xem §3 Component |
 
-`dashboard.sqlite` và `projects.json` cùng do dashboard sở hữu, tách biệt với `.dev-team-agent/` (sở hữu bởi orchestrator ngoài). Vị trí file, cách resolve root theo run mode, schema, transport cụ thể — đổi thường xuyên, xem §4 Code (module [`data-root/`](4-code/data-root/README.md), [`db/`](4-code/db/README.md), [`http/`](4-code/http/README.md)), không lặp ở đây.
+`dashboard.sqlite` và `projects.json` cùng do dashboard sở hữu, tách biệt với `.dev-team-agent/` (sở hữu bởi orchestrator ngoài). Vị trí file, cách resolve root theo run mode, schema, transport cụ thể — đổi thường xuyên, tra theo bảng **Module** ở §4, không lặp ở đây.
 
 ---
 
@@ -93,45 +98,53 @@ C4Component
     Component(registry, "Project registry", "registry.ts", "projects.json CRUD, resolveProjectRoot")
     Component(configShell, "Config shell", "backend/configs, backend/lib", "appVersion, fileHelper, yamlLib, …")
   }
-  Rel(apiServer, http, "dùng AbstractController/bind")
-  Rel(apiServer, business, "route (features/*/api.ts) → controller → business")
-  Rel(business, events, "emit sau persist")
-  Rel(business, db, "đọc/ghi (log driver sqlite, knowledge tag/collection)")
-  Rel(apiServer, registry, "resolve root theo ?project=")
-  Rel(business, configShell, "helper Node-only")
+  Rel(apiServer, http, "Dùng chung")
+  Rel(apiServer, business, "Route → business")
+  Rel(business, events, "Emit sau persist")
+  Rel(business, db, "Đọc/ghi")
+  Rel(apiServer, registry, "Resolve root")
+  Rel(business, configShell, "Dùng helper")
 ```
+
+Chi tiết implementation cụ thể (tên file/hàm) cho từng thành phần dưới đây — tra theo bảng **Module** ở §4, không nhắc lại ở mỗi mục.
 
 ### 3.1 Backend components
 
 #### 3.1.1 Tầng HTTP (Hono)
 
-Component trung gian giữa route và business, dùng chung 1 pattern cho **mọi** feature: route khai trong `api.ts`, HTTP handler trong `controller.ts`, domain logic trong `business/`. Feature mới thêm `api.ts` thì tự được nạp — không sửa registry tay. **Mọi** route `/api/*` đều đi qua Hono, không feature nào còn nhánh chặn trước; điểm chốt ghi request log cũng nằm ở đây, không rải rác theo feature. FE fetch client là component riêng, không nằm trong tầng này (§3.2.2).
-
-Tên class/hàm cụ thể hiện thực pattern trên (`AbstractController`, `AbstractBusiness`, `createApiHandler`, …) — xem [`4-code/http/`](4-code/http/README.md).
+Component trung gian giữa route và business, dùng chung 1 pattern cho **mọi** feature: route khai trong `api.ts`, HTTP handler trong `controller.ts`, domain logic trong `business/`. Feature mới thêm `api.ts` thì tự được nạp — không sửa registry tay. **Mọi** route `/api/*` đều đi qua Hono, không feature nào còn nhánh chặn trước; điểm chốt ghi request log cũng nằm ở đây, không rải rác theo feature. Pattern trên hiện thực qua `AbstractController` / `AbstractBusiness` / `createApiHandler`. FE fetch client là component riêng, không nằm trong tầng này (§3.2.2).
 
 #### 3.1.2 Domain / business — theo feature
 
-Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `backend/configs` + `backend/lib` + `shared/lib` → business → controller → `src/backend` (Hono setup). Trong feature, `business/` gom theo **nghiệp vụ đang xử lý cái gì** — tránh tách nhiều file theo loại thao tác kỹ thuật. Danh sách feature cụ thể xem trực tiếp `src/features/` (đổi thường xuyên hơn kiến trúc, không lặp lại ở đây). Vài nhóm có hành vi **không hiển nhiên từ tên thư mục**, đáng ghi lại:
+Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `backend/configs` + `backend/lib` + `shared/lib` → business → controller → `src/backend` (Hono setup). Trong feature, `business/` gom theo **nghiệp vụ đang xử lý cái gì** — tránh tách nhiều file theo loại thao tác kỹ thuật. Danh sách feature cụ thể xem trực tiếp `src/features/` (đổi thường xuyên hơn kiến trúc, không lặp lại ở đây). Vài nhóm có hành vi **không hiển nhiên từ tên thư mục**, đáng ghi lại — gom theo ý định nghiệp vụ:
+
+**Quan sát (đọc dữ liệu để hiển thị, không đổi state nghiệp vụ):**
+
+- **Logging** — hai driver `file` / `sqlite`, chọn qua `logging.driver`.
+- **Statistics** — aggregation từ log usage; có giới hạn khi driver log là `sqlite`.
+
+**Cấu hình / biên soạn (người dùng chỉnh sửa config, nội dung):**
 
 - **Registry** (`src/backend/registry.ts`) — nguồn sự thật cho project registry, dùng chung bởi REST và MCP server.
 - **Pipeline / Catalog / Rules** (feature pipeline-editor) — pipeline config layered + merge; catalog agent/skill và rule project đọc theo convention, cộng thêm path khớp `settings.scanPatterns`.
-- **Knowledge** — entry lưu qua file driver đa root; **collection + tag** lưu ở `dashboard.sqlite` (khác driver với entry). Chi tiết ở [`4-code/db/`](4-code/db/README.md).
-- **Logging** — hai driver `file` / `sqlite`, chọn qua `logging.driver`.
-- **Statistics** — aggregation từ log usage; có giới hạn khi driver log là `sqlite` — chi tiết ở [`4-code/db/`](4-code/db/README.md).
+- **Knowledge** — entry lưu qua file driver đa root; **collection + tag** lưu ở `dashboard.sqlite` (khác driver với entry).
+
+**Điều phối / tự động hoá (chạy nền, không do người dùng bấm trực tiếp mỗi lần):**
+
 - **Orchestrator** — **opt-in** qua `pipeline.orchestrator.enabled`; subscriber trên event bus quyết định step start/resume/dừng thay vì chuỗi tự nối cũ; quyền start step do feature Tasks (monitor) sở hữu. Tắt ⇒ không đổi hành vi.
 - **Automations** — rule đa trigger (timer/event) → chuỗi action chạy nền, biến tham chiếu output bước trước, có run ledger riêng ở data root.
 
 #### 3.1.3 Event bus (kernel)
 
-Event bus nội bộ giữ nguyên tắc **persist rồi mới emit** — không feature nào được emit trước khi ghi xong; lỗi trong handler không làm sập luồng chính đang emit. Runtime trigger (schedule tick + event subscriber) do feature **automations** sở hữu: rule đang bật tự động đồng bộ vào trigger registry, feature khác không tự đăng ký tay. Mục lục event theo feature + API/hàm cụ thể — xem [`4-code/events/`](4-code/events/README.md).
+Event bus nội bộ giữ nguyên tắc **persist rồi mới emit** — không feature nào được emit trước khi ghi xong; lỗi trong handler không làm sập luồng chính đang emit. Runtime trigger (schedule tick + event subscriber) do feature **automations** sở hữu: rule đang bật tự động đồng bộ vào trigger registry, feature khác không tự đăng ký tay.
 
 #### 3.1.4 Config shell backend
 
-Preference/version shell + helper Node-only tách riêng khỏi domain — không import HTTP kernel; domain/business import khi cần. Danh sách file cụ thể — xem [`4-code/config/`](4-code/config/README.md).
+Preference/version shell + helper Node-only tách riêng khỏi domain — không import HTTP kernel; domain/business import khi cần.
 
 ### 3.2 Frontend components
 
-`App.vue` là shell mỏng: dùng 1 service container (DI/IoC trên native Vue `provide`/`inject`) để lấy `ModeRegistry`, lặp danh sách mode để render sidebar/status/main panel. `App.vue` **không** hard-code danh sách mode — mỗi feature tự đăng ký, quét tự động lúc khởi động. Tên file/API cụ thể — xem [`4-code/frontend/`](4-code/frontend/README.md).
+`App.vue` là shell mỏng: dùng 1 service container (DI/IoC trên native Vue `provide`/`inject`) để lấy `ModeRegistry`, lặp danh sách mode để render sidebar/status/main panel. `App.vue` **không** hard-code danh sách mode — mỗi feature tự đăng ký, quét tự động lúc khởi động.
 
 #### 3.2.1 Mode (`ModeEntry.key`)
 
@@ -147,11 +160,11 @@ Mỗi feature đăng ký 1 mode qua `registerMode.ts` — danh sách mode + comp
 
 - **Server setup**: xem §2 Container.
 - **FE fetch**: 1 client dùng chung cho mọi feature, gọi theo consumer ở từng mode; route phía server đăng ký đồng nhất theo pattern `api.ts` (§3.1.1).
-- Trạng thái phase **được suy từ sự tồn tại của artifact** + con trỏ live, không bao giờ encode trực tiếp — phản chiếu đúng quy tắc của orchestrator. Tên hàm/file cụ thể — xem [`4-code/frontend/`](4-code/frontend/README.md).
+- Trạng thái phase **được suy từ sự tồn tại của artifact** + con trỏ live, không bao giờ encode trực tiếp — phản chiếu đúng quy tắc của orchestrator.
 
 #### 3.2.3 Nền frontend + config shell
 
-Nền tảng FE/shell (composables, helper thuần browser, UI kit, preference shell) tách khỏi domain feature — domain import nền, nền không phụ thuộc ngược lại feature nào, cùng nguyên tắc với backend (§3.1.4). Schema domain khai trong từng feature, không đặt ở nền chung. i18n cài đặt tập trung 1 chỗ duy nhất, feature chỉ khai message theo namespace của mình. Danh sách file cụ thể (FE + BE + shared), cấu trúc plugin i18n, và styling — xem [`4-code/styling/`](4-code/styling/README.md) và [`4-code/i18n.md`](4-code/i18n.md).
+Nền tảng FE/shell (composables, helper thuần browser, UI kit, preference shell) tách khỏi domain feature — domain import nền, nền không phụ thuộc ngược lại feature nào, cùng nguyên tắc với backend (§3.1.4). Schema domain khai trong từng feature, không đặt ở nền chung. i18n cài đặt tập trung 1 chỗ duy nhất, feature chỉ khai message theo namespace của mình.
 
 ---
 
