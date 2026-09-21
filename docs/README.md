@@ -8,7 +8,8 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Kiến trúc & vận hành
 
-- **[`architecture/`](architecture/README.md)** — kiến trúc theo mô hình **C4**, 4 cấp trừu tượng thô → mịn (Context, Container, Component, Code). Tài liệu tra cứu chi tiết (sơ đồ IoC, event catalog, i18n, quy ước UI) nằm trong cấp tương ứng — xem danh mục.
+- **[`architecture/`](architecture/README.md)** — kiến trúc theo mô hình **C4**, 4 cấp trừu tượng thô → mịn (Context, Container, Component, Code). Tài liệu tra cứu chi tiết (sơ đồ IoC, i18n, quy ước UI) nằm trong cấp tương ứng — xem danh mục.
+- **[`convention/architecture-doc-levels.md`](convention/architecture-doc-levels.md)** — chi tiết nào được phép đặt ở cấp nào. Đọc trước khi viết hoặc sửa file trong `architecture/`.
 
 ## Dữ liệu & sự kiện
 

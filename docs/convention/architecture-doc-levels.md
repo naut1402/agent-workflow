@@ -1,8 +1,8 @@
-# Nguyên lý phân cấp — mô hình C4
+# Quy ước — chi tiết nào thuộc cấp nào trong tài liệu kiến trúc
 
-> ⚠️ **Bản nháp — chưa commit.** Dùng để thống nhất nguyên lý trước khi áp lại vào 4 file cấp.
+Áp dụng khi viết hoặc sửa bất kỳ file nào trong `docs/architecture/`. Quyết định **một thông tin được phép đặt ở cấp nào** — đặt sai cấp là lỗi, không phải chuyện thẩm mỹ.
 
-Toàn bộ `docs/architecture/` viết theo **C4 model** của Simon Brown: [c4model.com](https://c4model.com) (và sách *"Software Architecture for Developers"`, cùng tác giả). Nguồn dẫn chứng cho từng cấp lấy trực tiếp từ trang chính thức, mục `Diagrams` — mỗi cấp có 1 nguyên lý cốt lõi + nguyên tắc áp dụng cụ thể vào repo này.
+Toàn bộ `docs/architecture/` viết theo **C4 model** của Simon Brown: [c4model.com](https://c4model.com) (và sách *Software Architecture for Developers*, cùng tác giả). Nguồn dẫn chứng cho từng cấp lấy trực tiếp từ trang chính thức, mục `Diagrams` — mỗi cấp có 1 nguyên lý cốt lõi + nguyên tắc áp dụng cụ thể vào repo này.
 
 ---
 
@@ -64,3 +64,5 @@ Brown cũng cảnh báo trực tiếp trong cùng trang: tài liệu Component *
 - Đây là cấp **duy nhất được phép** nêu tên file, hàm, bảng schema, đường dẫn cụ thể — đúng bản chất "code-level detail". Bất biến kiến trúc (tên hàm/file sanitize cụ thể) đã thành checklist review ở `AGENTS.md` §6, không đặt ở cấp này.
 - Vì Brown đã cảnh báo cấp này **rỗng giá trị nếu tách rời code** và **luôn có nguy cơ lỗi thời**, `architecture/README.md` §4 ghi rõ ngay đầu: *"cấp thay đổi thường xuyên nhất — khi sửa, đối chiếu lại với code thật thay vì tin nội dung cũ"*.
 - Chỉ document phần **không tự giải thích được qua tên file** (quirk, giới hạn đã biết, thứ tự migration, lý do giữ `.js`) — không chép lại toàn bộ cấu trúc source (source đã tự mô tả qua tên file/folder).
+
+Tài liệu áp dụng quy ước này: [`docs/architecture/`](../architecture/README.md). Quy ước trình bày markdown dùng chung: [`markdown-style.md`](markdown-style.md).

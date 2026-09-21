@@ -90,6 +90,7 @@ Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize t
 | Hoãn docs/test (hotfix, POC) | [`git-pr.md`](docs/agent-rules/git-pr.md) §7 — gate CI chỉ khi PR `dev/x.y.z/main` → `main` |
 | Agent chạy song song | [`git-pr.md`](docs/agent-rules/git-pr.md) §6 |
 | Viết `investigate.md` / `design.md` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) |
+| Viết/sửa tài liệu trong `docs/architecture/` | [`architecture-doc-levels.md`](docs/convention/architecture-doc-levels.md) — chi tiết nào thuộc cấp nào |
 
 ---
 
