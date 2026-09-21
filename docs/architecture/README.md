@@ -178,7 +178,7 @@ Chi tiết implementation cụ thể nằm dưới [`4-code/`](4-code/README.md)
 |---|---|---|
 | Frontend bootstrap & API | Thêm mode mới, đổi cách FE gọi server, hoặc lần theo bootstrap lúc app khởi động | [`4-code/#1-frontend`](4-code/README.md#1-frontend) |
 | HTTP kernel & entrypoint | Thêm/sửa endpoint API, hoặc cần biết vì sao server chạy được ở cả `bun run dev` lẫn `bun run serve` | [`4-code/#2-http-kernel`](4-code/README.md#2-http-kernel) |
-| Event bus | Viết subscriber, thêm emit mới, hoặc tra cứu 1 domain event cụ thể | [`4-code/events/`](4-code/events/README.md) |
+| Event bus | Viết subscriber, thêm emit mới, hoặc tra cứu 1 domain event cụ thể | [`events/`](events/README.md) |
 | Data root `.dev-team-agent/` | Cần biết chính xác 1 field/tên file mà orchestrator ghi/đọc | [`4-code/#3-data-root`](4-code/README.md#3-data-root) |
 | DB (SQLite) | Trước khi bật `logging.driver: sqlite` hoặc thêm bảng mới | [`4-code/#4-db-sqlite`](4-code/README.md#4-db-sqlite) |
 | Config shell | Không chắc 1 setting nên đặt ở preference shell hay schema business | [`4-code/#5-config-shell`](4-code/README.md#5-config-shell) |

@@ -1,6 +1,6 @@
 # Mục lục domain events — theo mode
 
-← [`../README.md`](../README.md) (Cấp 4 · Code)
+← [`../README.md`](../README.md) (Kiến trúc — danh mục C4)
 
 Tham chiếu nhanh các **domain event** phát trên event bus nội bộ (`src/backend/events/`). Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới. Kernel / nguyên tắc emit — xem cấp Component.
 

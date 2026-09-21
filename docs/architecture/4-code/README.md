@@ -12,7 +12,7 @@ Tham chiếu file/hàm thật cho các module nền. Đây là cấp **thay đ�
 | [4. DB (SQLite)](#4-db-sqlite) | Trước khi bật `logging.driver: sqlite` hoặc thêm bảng mới |
 | [5. Config shell](#5-config-shell) | Không chắc 1 setting nên đặt ở preference shell hay schema business |
 | [6. Styling](#6-styling) | Thêm style mới xuyên feature |
-| [`events/`](events/README.md) | Viết subscriber, thêm emit mới, tra cứu 1 domain event cụ thể |
+| [`../events/`](../events/README.md) | Viết subscriber, thêm emit mới, tra cứu 1 domain event cụ thể |
 | [`i18n.md`](i18n.md) | Thêm/sửa cách nạp locale, đăng ký locale mới |
 | [`ui-buttons.md`](ui-buttons.md) | Thêm nút mới, tra class chuẩn |
 | [`ui-overflow.md`](ui-overflow.md) | Vùng UI có chiều cao phụ thuộc dữ liệu |

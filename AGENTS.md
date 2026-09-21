@@ -38,7 +38,7 @@ agent-workflow/
     ├── agent-rules/   # rule cho mọi AI agent, theo category
     ├── convention/    # quy ước (nguyên tắc), theo chủ đề — không tham chiếu checklist
     ├── template/      # agent + pipeline mẫu
-    └── architecture/          # README.md gộp cấp 1-3 (Context/Container/Component); 4-code/ tách riêng (events/, i18n.md, ui-buttons.md, ui-overflow.md — chi tiết implementation)
+    └── architecture/  # README.md gộp cấp 1-3 (Context/Container/Component); events/ catalog domain event; 4-code/ chi tiết implementation
 ```
 
 ⚠️ Ngoại lệ cố ý còn `.js`: `src/features/agent-editor/business/agentMarkdown.js`, `src/backend/runner-cli.mjs`. Tooling `vite` / `vitest` / `playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
@@ -61,7 +61,7 @@ Tài liệu tra cứu kèm theo (không phải rule):
 |--------|----------|
 | Quickstart | [`README.md`](README.md) |
 | Kiến trúc (C4, 4 cấp: Context → Container → Component → Code) | [`docs/architecture/`](docs/architecture/) |
-| Mục lục domain event theo mode | [`docs/architecture/4-code/events/`](docs/architecture/4-code/events/README.md) |
+| Mục lục domain event theo mode | [`docs/architecture/events/`](docs/architecture/events/README.md) |
 | Kiến trúc Component (backend/frontend, DI/ModeRegistry) | [`docs/architecture/README.md`](docs/architecture/README.md) §3 |
 | Quy ước i18n | [`docs/convention/i18n.md`](docs/convention/i18n.md) — chi tiết [`docs/architecture/4-code/i18n.md`](docs/architecture/4-code/i18n.md) |
 | Quy ước UI button | [`docs/convention/ui-buttons.md`](docs/convention/ui-buttons.md) — chi tiết [`docs/architecture/4-code/ui-buttons.md`](docs/architecture/4-code/ui-buttons.md) |
@@ -103,7 +103,7 @@ Khi survey call chain đụng persist / lifecycle / CRUD domain:
 
 - [ ] **Cân nhắc emit** — thêm/sửa/xoá `emit` / `emitEntity` (sau persist OK; payload tối thiểu, không secret).
 - [ ] **Ghi kết luận** trong `investigate.md` (vd *Events: thêm … / sửa … / xoá … / không đổi — vì …*).
-- [ ] **Cập nhật catalog nếu chốt đổi event** — file mode tương ứng trong [`docs/architecture/4-code/events/`](docs/architecture/4-code/events/README.md) (+ `DashboardEventType` nếu type mới/đổi tên) trong cùng thay đổi code, hoặc ghi nợ `docs/todo/`.
+- [ ] **Cập nhật catalog nếu chốt đổi event** — file mode tương ứng trong [`docs/architecture/events/`](docs/architecture/events/README.md) (+ `DashboardEventType` nếu type mới/đổi tên) trong cùng thay đổi code, hoặc ghi nợ `docs/todo/`.
 
 ### Design
 
@@ -206,8 +206,8 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Fetch qua wrapper an toàn** — URL người dùng qua `fetchUrlSafe` (https, chặn private host).
 - [ ] **Pattern scan tuỳ chỉnh không escape project root** — pattern trong `settings.scanPatterns` bị loại ở `sanitiseScanPattern` (schema dùng chung FE/BE của feature `settings`), lại ở `expandScanPatterns` (bỏ qua mọi symlink), và mỗi match còn qua `resolvePathUnder(projectRoot, …)`.
 - [ ] **Biến môi trường tuỳ chọn/bắt buộc đúng chỗ** — `ANTHROPIC_API_KEY` tuỳ chọn, bật NL agent-draft generation (`/api/custom-agents/generate`), không có key thì fallback heuristic; `DASHBOARD_SECRET_KEY` **bắt buộc** để dùng credential kiểu "dán secret trực tiếp" (`stored:`) hoặc "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` (mã hoá `secret-vault.json` qua `secretVault.ts`) — không set thì 2 luồng đó fail rõ ràng, các luồng khác (CLI, `env:`/`file:` secretRef) không bị ảnh hưởng.
-- [ ] **Cân nhắc emit** (khi đụng persist/lifecycle/CRUD) — thêm/sửa/xoá `emit` / `emitEntity` sau persist; payload không chứa secret. Chi tiết type/nơi emit: [`docs/architecture/4-code/events/`](docs/architecture/4-code/events/README.md).
-- [ ] **Đồng bộ catalog với code** — file mode tương ứng trong `docs/architecture/4-code/events/` khớp, hoặc nợ `docs/todo/` có lý do.
+- [ ] **Cân nhắc emit** (khi đụng persist/lifecycle/CRUD) — thêm/sửa/xoá `emit` / `emitEntity` sau persist; payload không chứa secret. Chi tiết type/nơi emit: [`docs/architecture/events/`](docs/architecture/events/README.md).
+- [ ] **Đồng bộ catalog với code** — file mode tương ứng trong `docs/architecture/events/` khớp, hoặc nợ `docs/todo/` có lý do.
 - [ ] **Cập nhật type** — `DashboardEventType` đổi theo khi type mới / đổi tên.
 
 **Quy trình & Tài liệu:**
