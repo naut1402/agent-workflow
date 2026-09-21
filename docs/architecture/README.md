@@ -5,7 +5,7 @@
 > 2. **Management** — quản lý project registry + config qua `~/.dev-team-dashboard/` (SQLite + JSON, dashboard tự sở hữu).
 > 3. **Integration** — expose MCP server (stdio) cho Claude Code CLI, REST + SSE cho Web UI.
 
-Kiến trúc viết theo mô hình **C4** (Simon Brown): 4 cấp trừu tượng, thô → mịn — gộp chung cả 4 cấp trong tài liệu này. Riêng chi tiết implementation của cấp 4 (Code) — nhiều module, đổi thường xuyên nhất — tách theo từng file trong [`4-code/`](4-code/).
+Kiến trúc viết theo mô hình **C4** (Simon Brown): 4 cấp trừu tượng, thô → mịn — gộp chung cả 4 cấp trong tài liệu này. Riêng chi tiết implementation của cấp 4 (Code) — nhiều module, đổi thường xuyên nhất — tách theo từng file trong [`4-code/`](4-code/README.md).
 
 - Giới thiệu + hướng dẫn chạy nhanh: [`../../README.md`](../../README.md).
 - Danh mục tài liệu chung: [`../README.md`](../README.md).
@@ -170,19 +170,19 @@ Nền tảng FE/shell (composables, helper thuần browser, UI kit, preference s
 
 ## 4. Code
 
-Chi tiết implementation cụ thể — mỗi module tách 1 file/folder riêng để dễ tra, dưới [`4-code/`](4-code/). Đây là cấp **thay đổi thường xuyên nhất** — khi sửa, đối chiếu lại với code thật thay vì tin nội dung cũ.
+Chi tiết implementation cụ thể nằm dưới [`4-code/`](4-code/README.md): các module nền gộp chung 1 file, module lớn hoặc đổi độc lập (event catalog, i18n, quy ước UI) tách riêng. Đây là cấp **thay đổi thường xuyên nhất** — khi sửa, đối chiếu lại với code thật thay vì tin nội dung cũ.
 
 ### Module
 
 | Module | Đọc khi nào | Chi tiết |
 |---|---|---|
-| Frontend bootstrap & API | Thêm mode mới, đổi cách FE gọi server, hoặc lần theo bootstrap lúc app khởi động | [`4-code/frontend/`](4-code/frontend/README.md) |
-| HTTP kernel & entrypoint | Thêm/sửa endpoint API, hoặc cần biết vì sao server chạy được ở cả `bun run dev` lẫn `bun run serve` | [`4-code/http/`](4-code/http/README.md) |
+| Frontend bootstrap & API | Thêm mode mới, đổi cách FE gọi server, hoặc lần theo bootstrap lúc app khởi động | [`4-code/#1-frontend`](4-code/README.md#1-frontend) |
+| HTTP kernel & entrypoint | Thêm/sửa endpoint API, hoặc cần biết vì sao server chạy được ở cả `bun run dev` lẫn `bun run serve` | [`4-code/#2-http-kernel`](4-code/README.md#2-http-kernel) |
 | Event bus | Viết subscriber, thêm emit mới, hoặc tra cứu 1 domain event cụ thể | [`4-code/events/`](4-code/events/README.md) |
-| Data root `.dev-team-agent/` | Cần biết chính xác 1 field/tên file mà orchestrator ghi/đọc | [`4-code/data-root/`](4-code/data-root/README.md) |
-| DB (SQLite) | Trước khi bật `logging.driver: sqlite` hoặc thêm bảng mới | [`4-code/db/`](4-code/db/README.md) |
-| Config shell | Không chắc 1 setting nên đặt ở preference shell hay schema business | [`4-code/config/`](4-code/config/README.md) |
-| Styling | Thêm style mới xuyên feature | [`4-code/styling/`](4-code/styling/README.md) |
+| Data root `.dev-team-agent/` | Cần biết chính xác 1 field/tên file mà orchestrator ghi/đọc | [`4-code/#3-data-root`](4-code/README.md#3-data-root) |
+| DB (SQLite) | Trước khi bật `logging.driver: sqlite` hoặc thêm bảng mới | [`4-code/#4-db-sqlite`](4-code/README.md#4-db-sqlite) |
+| Config shell | Không chắc 1 setting nên đặt ở preference shell hay schema business | [`4-code/#5-config-shell`](4-code/README.md#5-config-shell) |
+| Styling | Thêm style mới xuyên feature | [`4-code/#6-styling`](4-code/README.md#6-styling) |
 | i18n | Thêm/sửa cách nạp locale, đăng ký locale mới | [`4-code/i18n.md`](4-code/i18n.md) |
 | UI button | Thêm nút mới, tra class chuẩn | [`4-code/ui-buttons.md`](4-code/ui-buttons.md) |
 | Chống tràn nội dung UI | Vùng UI có chiều cao phụ thuộc dữ liệu | [`4-code/ui-overflow.md`](4-code/ui-overflow.md) |
