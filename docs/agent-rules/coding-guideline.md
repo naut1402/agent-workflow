@@ -11,7 +11,9 @@ Mức độ ràng buộc đánh dấu bằng màu callout — bảng màu ở [`
 > [!NOTE]
 > <span style="color:#4493f8">Chưa bật strict toàn cục (`strict: false`, `checkJs: false`) — bật dần theo từng module đã có type vững, đừng coi cả repo đã strict.</span>
 
-- **ESM thuần** (`"type": "module"`); server import core Node có tiền tố `node:`.
+- **ESM thuần** — `package.json` khai `"type": "module"`; không `require()`, không `module.exports`, không file `.cjs`.
+- **Backend import built-in của Node có tiền tố `node:`** — `node:path`, không phải `path`. Áp cho `src/backend/`, `api.ts`, `controller.ts`, `business/`.
+- **Frontend không import built-in của Node ở bất kỳ dạng nào**, cũng không import `src/backend/**`. ESLint chặn `node:*` / `bun:*` / `hono` / `drizzle-orm` / `**/backend/**`; dạng trần như `path` lọt lưới lint nhưng vẫn không chạy được trên browser.
 - **TypeScript cho code mới/migrate** — còn ba ngoại lệ cố ý: `agentMarkdown.js` và `agentDraft.js` (`src/features/agent-editor/business/`), `src/backend/runner-cli.mjs`. Vì vậy `tsconfig.json` giữ `allowJs: true`.
 - **Không default export** trừ khi framework bắt buộc (Vue SFC, `vite`/`vitest`/`playwright.config.*`, `*.d.ts`).
 
