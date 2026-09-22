@@ -37,11 +37,10 @@ z.enum(KNOWLEDGE_SCOPES)                                        // validator ở
 KNOWLEDGE_SCOPES.map(...)                                       // danh sách để render
 ```
 
-Ba lý do, xếp theo sức nặng:
+Hai lý do:
 
 - **Một nguồn thay vì hai** — hệ quả trực tiếp của §3. Zod có `z.nativeEnum()` nên `enum` *dùng được*, nhưng khi đó danh sách để lặp phải lấy riêng qua `Object.values()`, tức là nuôi hai khai báo có thể lệch nhau.
 - **String enum là nominal** — biến kiểu `Scope` không nhận string `'project'` thường, phải cast. Repo này đọc mọi giá trị từ JSON state và YAML pipeline dưới dạng string thô, nên ma sát đó rải khắp biên I/O.
-- **`enum` là cú pháp TS duy nhất không xoá được** — nó sinh object runtime, khác `type` / `interface` / annotation. `tsconfig.json` bật `isolatedModules: true`, và `const enum` bị cấm hẳn dưới cờ đó.
 
 ---
 
