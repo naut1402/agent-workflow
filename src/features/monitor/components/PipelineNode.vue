@@ -277,7 +277,7 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
   width: 24px;
   height: 24px;
   padding: 0;
-  /* Borderless + hover scale, per docs/architecture/4-code/ui-buttons.md (.icon-btn). */
+  /* Borderless + hover scale, per docs/convention/ui-buttons.md (.icon-btn). */
   border: none;
   background: transparent;
   color: var(--muted);

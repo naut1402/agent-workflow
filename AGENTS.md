@@ -36,9 +36,9 @@ agent-workflow/
 ├── test-e2e/
 └── docs/
     ├── agent-rules/   # rule cho mọi AI agent, theo category
-    ├── convention/    # quy ước (nguyên tắc), theo chủ đề — không tham chiếu checklist
+    ├── convention/    # quy ước theo chủ đề: nguyên tắc + chi tiết class/file — không tham chiếu checklist
     ├── template/      # agent + pipeline mẫu
-    └── architecture/  # README.md gộp cấp 1-3 (Context/Container/Component); events/ catalog domain event; 4-code/ chi tiết implementation
+    └── architecture/  # README.md gộp cả 4 cấp C4 (Context/Container/Component/Code); events/ catalog domain event
 ```
 
 ⚠️ Ngoại lệ cố ý còn `.js`: `src/features/agent-editor/business/agentMarkdown.js`, `src/backend/runner-cli.mjs`. Tooling `vite` / `vitest` / `playwright` dùng `.ts`; `eslint.config.js` giữ `.js`.
@@ -63,8 +63,8 @@ Tài liệu tra cứu kèm theo (không phải rule):
 | Kiến trúc (C4, 4 cấp: Context → Container → Component → Code) | [`docs/architecture/`](docs/architecture/) |
 | Mục lục domain event theo mode | [`docs/architecture/events/`](docs/architecture/events/README.md) |
 | Kiến trúc Component (backend/frontend, DI/ModeRegistry) | [`docs/architecture/README.md`](docs/architecture/README.md) §3 |
-| Quy ước i18n | [`docs/convention/i18n.md`](docs/convention/i18n.md) — chi tiết [`docs/architecture/4-code/i18n.md`](docs/architecture/4-code/i18n.md) |
-| Quy ước UI button | [`docs/convention/ui-buttons.md`](docs/convention/ui-buttons.md) — chi tiết [`docs/architecture/4-code/ui-buttons.md`](docs/architecture/4-code/ui-buttons.md) |
+| Quy ước i18n | [`docs/convention/i18n.md`](docs/convention/i18n.md) |
+| Quy ước UI button | [`docs/convention/ui-buttons.md`](docs/convention/ui-buttons.md) |
 | Quy ước tràn nội dung UI | [`docs/convention/ui-overflow.md`](docs/convention/ui-overflow.md) |
 | Template agent / pipeline | [`docs/template/`](docs/template/) |
 

@@ -213,7 +213,7 @@ async function save() {
   overflow-y: auto;
 }
 /* Danh sách chọn có trần riêng: nó là lá cuộn, không được đẩy `.modal-foot` ra
-   ngoài viền dialog (docs/architecture/4-code/ui-overflow.md). */
+   ngoài viền dialog (docs/convention/ui-overflow.md). */
 .knowledge-pick-list {
   list-style: none;
   margin: 4px 0 0;

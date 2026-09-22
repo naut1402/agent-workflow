@@ -75,7 +75,7 @@ watch(skillSourceOptions, (opts) => resetIfGone(opts, skillSource))
 
 // Panel này gói 2 mục còn `RulesPanel` chỉ có 1; chia cột theo số panel sẽ cho
 // catalog chỉ nửa phần của Rules. Chia theo số mục đang mở để mọi mục mở được
-// phần bằng nhau (grow đổi, basis vẫn 0, docs/architecture/4-code/ui-overflow.md).
+// phần bằng nhau (grow đổi, basis vẫn 0, docs/convention/ui-overflow.md).
 const openCatalogCount = computed(
   () => ['agents', 'skills'].filter((k) => props.openSections.has(k)).length,
 )
@@ -209,7 +209,7 @@ function onDragStart(event, item, type) {
 </template>
 
 <style scoped lang="scss">
-/* Hợp đồng cuộn (docs/architecture/4-code/ui-overflow.md): panel chỉ giành chiều cao khi một trong
+/* Hợp đồng cuộn (docs/convention/ui-overflow.md): panel chỉ giành chiều cao khi một trong
    các section của nó đang mở — để basis 0 cố định thì panel đóng vẫn ăn nửa
    cột. Vùng cuộn duy nhất là `.catalog-list`. */
 .catalog-panel {
@@ -222,7 +222,7 @@ function onDragStart(event, item, type) {
 .catalog-panel--open { flex: 1 1 0; }
 
 /* Hàng công cụ xếp ngang, một hàng duy nhất — xếp dọc tốn ~70px/mục, đủ để
-   `.catalog-list` sụp còn vài px ở viewport thấp (docs/architecture/4-code/ui-overflow.md). Đổi lại
+   `.catalog-list` sụp còn vài px ở viewport thấp (docs/convention/ui-overflow.md). Đổi lại
    nhãn nguồn có thể bị ellipsis; `:title` trên select bù phần đọc đầy đủ. */
 .catalog-toolbar {
   display: flex;

@@ -1139,7 +1139,7 @@ const hasFanOut = computed(() => {
 .preview-banner-agent { color: var(--muted); font-size: 11px; }
 .preview-banner-hitl { color: var(--waiting); font-weight: 600; }
 
-/* Hợp đồng cuộn của Task list (docs/architecture/4-code/ui-overflow.md): container ngoài KHÔNG cuộn,
+/* Hợp đồng cuộn của Task list (docs/convention/ui-overflow.md): container ngoài KHÔNG cuộn,
    chỉ lá (`.catalog-list` / `.rules-scroll`) mới mang `overflow-y: auto`. Để
    `auto` ở đây là dựng scroller thứ hai và nuốt mất trách nhiệm cuộn của lá. */
 .editor-left-sections {

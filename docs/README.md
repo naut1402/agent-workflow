@@ -17,11 +17,11 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Giao diện
 
-- **[`convention/i18n.md`](convention/i18n.md)** · **[`convention/ui-buttons.md`](convention/ui-buttons.md)** · **[`convention/ui-overflow.md`](convention/ui-overflow.md)** — quy ước message/locale, nút, và chiến lược tràn nội dung. Chi tiết implementation ở `architecture/4-code/{i18n,ui-buttons,ui-overflow}.md`.
+- **[`convention/i18n.md`](convention/i18n.md)** · **[`convention/ui-buttons.md`](convention/ui-buttons.md)** · **[`convention/ui-overflow.md`](convention/ui-overflow.md)** — quy ước message/locale, nút, và chiến lược tràn nội dung; mỗi file gồm cả nguyên tắc lẫn chi tiết class/file.
 
 ## Quy ước
 
-- **[`convention/`](convention/)** — quy ước theo chủ đề (nguyên tắc, không đi vào implementation, không tham chiếu checklist). Checklist agent thực thi (theo giai đoạn pipeline) nằm ở [`../AGENTS.md`](../AGENTS.md) §6.
+- **[`convention/`](convention/)** — quy ước theo chủ đề: nguyên tắc kèm chi tiết class/file của chính chủ đề đó, không tham chiếu checklist. Checklist agent thực thi (theo giai đoạn pipeline) nằm ở [`../AGENTS.md`](../AGENTS.md) §6.
 
 ## Mẫu dùng lại
 
