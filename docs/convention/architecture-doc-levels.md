@@ -65,4 +65,4 @@ Brown cũng cảnh báo trực tiếp trong cùng trang: tài liệu Component *
 - Vì Brown đã cảnh báo cấp này **rỗng giá trị nếu tách rời code** và **luôn có nguy cơ lỗi thời**, `architecture/README.md` §4 ghi rõ ngay đầu: *"cấp thay đổi thường xuyên nhất — khi sửa, đối chiếu lại với code thật thay vì tin nội dung cũ"*.
 - Chỉ document phần **không tự giải thích được qua tên file** (quirk, giới hạn đã biết, thứ tự migration, lý do giữ `.js`) — không chép lại toàn bộ cấu trúc source (source đã tự mô tả qua tên file/folder).
 
-Tài liệu áp dụng quy ước này: [`docs/architecture/`](../architecture/README.md). Quy ước trình bày markdown dùng chung: [`writing-guideline.md`](../agent-rules/writing-guideline.md) §1.
+Tài liệu áp dụng quy ước này: [`docs/architecture/`](../architecture/README.md). Quy ước trình bày markdown dùng chung: [`writing-guideline.md`](../agent-rules/writing-guideline.md) §2.

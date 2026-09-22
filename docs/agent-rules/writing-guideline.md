@@ -2,27 +2,16 @@
 
 Áp dụng cho **mọi** markdown viết ra trong repo này: artifact pipeline, tài liệu trong `docs/`, `README.md`, PR body, file rule.
 
+§1 là tiền đề: nó quy định cách đánh dấu mức độ ràng buộc, và chính tài liệu này viết theo nó.
+
 ---
 
-## 1. Trình bày markdown
+## 1. Quy ước màu sắc
 
-Scannability là ưu tiên số 1.
+> [!NOTE]
+> <span style="color:#4493f8">Màu chọn theo câu hỏi **"vi phạm thì sao?"**, không theo cảm giác quan trọng.</span>
 
-- **Đoạn văn tối đa 3 câu** — dài hơn thì tách đoạn hoặc chuyển thành list.
-- **Từ 3 ý trở lên thì bắt buộc dùng bullet** (`-`), tuyệt đối không viết tràn vào một đoạn văn.
-- **In đậm từ khoá ở đầu mỗi ý** (`**text**`) để người đọc lướt nhanh nắm được ý chính.
-- **Luôn có 1 dòng trống** giữa các đoạn văn, giữa đoạn văn và list, giữa list và heading.
-- **Bảng cho dữ liệu đối chiếu** — so sánh phương án, ánh xạ khoá, checklist theo cột. Đừng dùng bảng cho văn xuôi dài.
-- **Một đoạn = một ý** — không nhồi nhiều ý vào cùng một đoạn, kể cả khi mỗi ý chỉ một câu.
-- **Dùng callout cho cả khối, emoji cho từng dòng** — callout (GitHub Alerts) đánh dấu một đoạn đứng riêng theo bậc ở bảng dưới; emoji chỉ neo một gạch đầu dòng trong list. Không lồng hai thứ vào nhau.
-- **Dùng emoji / ký hiệu làm mỏ neo thị giác** ở đầu dòng cho các mục cần quét nhanh: 📌 điểm chính · ⚠️ cảnh báo · 🚫 cấm · ✅ đạt · 🔍 khảo sát · 🛠️ implement · 🚀 phát hành. Mỗi ký hiệu mang **một** nghĩa cố định trong cùng tài liệu; không rải cho vui.
-- **Dùng dấu phân tách `·` cho danh sách ngắn cùng hạng** — vd `coding · doc-writing · test · git-pr`. Danh sách dài hoặc có mô tả thì xuống bullet.
-- **Không đặt checkbox trong ô bảng** — GFM chỉ render checkbox khi nó là *list item*. Cần checkbox thì viết thành list.
-- **Không đặt ngân sách độ dài bằng số dòng** — số dòng không nói lên độ khó đọc. Dùng tiêu chí định tính, vd *scan được trong ~1 màn hình*.
-
-### 1.1 Quy ước màu sắc
-
-Màu chọn theo câu hỏi **"vi phạm thì sao?"**, không theo cảm giác quan trọng. Xếp từ hậu quả nặng xuống nhẹ:
+Xếp từ hậu quả nặng xuống nhẹ:
 
 | Màu | Callout | Loại | Vi phạm thì sao |
 |---|---|---|---|
@@ -32,12 +21,10 @@ Màu chọn theo câu hỏi **"vi phạm thì sao?"**, không theo cảm giác q
 | 🔵 Xanh dương | `[!NOTE]` | **Phương châm** — chọn thế nào khi hai cái cùng đúng, hoặc khi xung đột | Không hỏng ngay, nhưng đi sai hướng ở mỗi ngã ba |
 | 🟢 Xanh lá | `[!TIP]` | **Quy ước** — thống nhất cho dễ đọc | Không sai, chỉ khó đọc và thiếu nhất quán |
 
-Hai ràng buộc khi dùng:
+> [!TIP]
+> <span style="color:#3fb950">Quá 2 callout trong một section là lạm dụng — phần còn lại viết thành bullet thường. Và không phải file nào cũng dùng đủ 5 màu: chỉ tô cái thật sự thuộc loại đó, không tô cho đủ bộ.</span>
 
-- **Quá 2 callout trong một section là lạm dụng** — phần còn lại viết thành bullet thường.
-- **Không phải file nào cũng dùng đủ 5 màu** — chỉ tô cái thật sự thuộc loại đó, không tô cho đủ bộ.
-
-#### Fallback khi renderer không hỗ trợ callout
+### 1.1 Fallback khi renderer không hỗ trợ callout
 
 Cú pháp `> [!CAUTION]` chỉ thành khối màu ở GitHub, VS Code và Obsidian. Dashboard render markdown bằng `marked` (`src/frontend/lib/markdownLib.ts`) — không hiểu cú pháp này nên hiện nguyên chữ `[!CAUTION]` trong một blockquote không màu.
 
@@ -73,9 +60,31 @@ Dùng `<span style>`, không dùng `<font color>`: `font` là thẻ đã bỏ t�
 
 ---
 
-## 2. Tham chiếu một chiều giữa tài liệu
+## 2. Trình bày markdown
 
-Chỉ **nơi sử dụng** trỏ tới **tài liệu dùng chung**. Không bao giờ thêm chiều ngược lại.
+> [!IMPORTANT]
+> <span style="color:#a371f7">Scannability là ưu tiên số 1. Người đọc lướt trước rồi mới đọc kỹ — mọi quy ước dưới đây phục vụ lần lướt đó.</span>
+
+- **Đoạn văn tối đa 3 câu** — dài hơn thì tách đoạn hoặc chuyển thành list.
+- **Từ 3 ý trở lên thì bắt buộc dùng bullet** (`-`), tuyệt đối không viết tràn vào một đoạn văn.
+- **In đậm từ khoá ở đầu mỗi ý** (`**text**`) để người đọc lướt nhanh nắm được ý chính.
+- **Luôn có 1 dòng trống** giữa các đoạn văn, giữa đoạn văn và list, giữa list và heading.
+- **Bảng cho dữ liệu đối chiếu** — so sánh phương án, ánh xạ khoá, checklist theo cột. Đừng dùng bảng cho văn xuôi dài.
+- **Một đoạn = một ý** — không nhồi nhiều ý vào cùng một đoạn, kể cả khi mỗi ý chỉ một câu.
+- **Dùng callout cho cả khối, emoji cho từng dòng** — callout đánh dấu một đoạn đứng riêng theo bậc ở §1; emoji chỉ neo một gạch đầu dòng trong list. Không lồng hai thứ vào nhau.
+- **Dùng emoji / ký hiệu làm mỏ neo thị giác** ở đầu dòng cho các mục cần quét nhanh: 📌 điểm chính · ⚠️ cảnh báo · 🚫 cấm · ✅ đạt · 🔍 khảo sát · 🛠️ implement · 🚀 phát hành. Mỗi ký hiệu mang **một** nghĩa cố định trong cùng tài liệu; không rải cho vui.
+- **Dùng dấu phân tách `·` cho danh sách ngắn cùng hạng** — vd `coding · doc-writing · test · git-pr`. Danh sách dài hoặc có mô tả thì xuống bullet.
+- **Không đặt ngân sách độ dài bằng số dòng** — số dòng không nói lên độ khó đọc. Dùng tiêu chí định tính, vd *scan được trong ~1 màn hình*.
+
+> [!CAUTION]
+> <span style="color:#e5534b">Không đặt checkbox trong ô bảng — GFM chỉ render checkbox khi nó là *list item*. Cần checkbox thì viết thành list.</span>
+
+---
+
+## 3. Tham chiếu một chiều giữa tài liệu
+
+> [!WARNING]
+> <span style="color:#d29922">Chỉ **nơi sử dụng** trỏ tới **tài liệu dùng chung**. Không bao giờ thêm chiều ngược lại.</span>
 
 - ✅ **Đúng** — `CLAUDE.md` → `AGENTS.md`; `docs/agent-rules/*` → `docs/architecture/`.
 - 🚫 **Sai** — `AGENTS.md` liệt kê `CLAUDE.md`; `docs/architecture/` trỏ ngược lên rule.
@@ -94,9 +103,10 @@ Cách áp dụng:
 
 ---
 
-## 3. Anti-pattern
+## 4. Anti-pattern
 
 | Hiện tượng | Vì sao hỏng | Thay bằng |
 |---|---|---|
 | Một đoạn văn 6 câu liệt kê 5 thứ | Không lướt được, phải đọc hết mới biết có gì | 5 bullet, mỗi bullet mở đầu bằng từ khoá in đậm |
 | `AGENTS.md` liệt kê `CLAUDE.md` trong bảng tài liệu | Thêm `GEMINI.md` là phải sửa tài liệu chung; bỏ `CLAUDE.md` để lại link chết | Chỉ `CLAUDE.md` trỏ lên `AGENTS.md`, chiều ngược lại bỏ hẳn |
+| Tô callout cho mọi mục trong một section | Màu mất tác dụng phân biệt, đọc như không tô | Giữ tối đa 2, phần còn lại là bullet thường |

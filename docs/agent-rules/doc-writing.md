@@ -12,7 +12,7 @@
 > [!IMPORTANT]
 > <span style="color:#a371f7">Artifact tồn tại để **ra quyết định**, không phải để lưu trữ mọi thứ đã đọc. Mọi quy tắc trong file này suy ra từ câu này.</span>
 
-Ý nghĩa màu của các khối callout: [`writing-guideline.md`](writing-guideline.md) §1.1.
+Ý nghĩa màu của các khối callout: [`writing-guideline.md`](writing-guideline.md) §1.
 
 - **Người duyệt chốt ở phần đầu** — Tech Lead / PM / Designer đọc §1–§2 là quyết được.
 - **Người code đọc phần cuối** — chi tiết định vị code dồn xuống section sau.
@@ -108,7 +108,7 @@ Một mục ở §4 mà kết thúc bằng câu hỏi mở cho người khác �
 
 ### 2.8 Câu hỏi blocking → `qa.md`
 
-- **Bảng §2 là kênh thông tin**, không phải control tương tác — bảng markdown không render được checkbox ([`writing-guideline.md`](writing-guideline.md) §1).
+- **Bảng §2 là kênh thông tin**, không phải control tương tác — bảng markdown không render được checkbox ([`writing-guideline.md`](writing-guideline.md) §2).
 - **Câu hỏi blocking** (không trả lời thì không đi tiếp được) tạo `qa.md` rồi dừng.
 - **Mỗi câu một block** — `## Q<n>` + `**Lựa chọn:**` (list `- A. …`) + `**Trả lời:**`. Đó là **dạng duy nhất** render thành radio; lệch khuôn thì người duyệt không bấm được.
 - **Mục non-blocking** chốt qua feedback ở HITL gate, không cần `qa.md`.
@@ -145,7 +145,7 @@ Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ b�
 
 ## 4. Bất biến chung mọi artifact
 
-Quy tắc trình bày markdown áp cho mọi tài liệu: [`writing-guideline.md`](writing-guideline.md) §1. Dưới đây chỉ những gì **riêng** của artifact pipeline.
+Quy tắc trình bày markdown áp cho mọi tài liệu: [`writing-guideline.md`](writing-guideline.md) §2. Dưới đây chỉ những gì **riêng** của artifact pipeline.
 
 > [!CAUTION]
 > - <span style="color:#e5534b">**Chỉ `##` mới là section** — viewer gập/sửa theo `##`; chi tiết bên trong dùng `###` trở xuống.</span>
@@ -154,7 +154,7 @@ Quy tắc trình bày markdown áp cho mọi tài liệu: [`writing-guideline.md
 - **`file:line` chỉ ở §4 và §6 của `investigate.md`, và §4 của `design.md`** — chỗ khác nêu tên file + tên hàm/component.
 - **Chốt tương tác đi qua `qa.md`**, không phải checkbox trong bảng — khuôn `qa.md` ở §2.8.
 - **Confidence High / Medium / Low** cho mọi phát hiện chưa chắc, kèm lý do khi Medium/Low.
-- **Ngân sách độ dài của artifact** — tiêu chí định tính ([`writing-guideline.md`](writing-guideline.md) §1): §1–§2 scan được trong ~1 màn hình.
+- **Ngân sách độ dài của artifact** — tiêu chí định tính ([`writing-guideline.md`](writing-guideline.md) §2): §1–§2 scan được trong ~1 màn hình.
 - **Không xoá section vì "không có gì để ghi"** — giữ đủ section, ghi empty state tường minh.
 - **Không migrate ngược artifact của task cũ** — quy ước áp cho task tạo từ thời điểm nó land.
 
