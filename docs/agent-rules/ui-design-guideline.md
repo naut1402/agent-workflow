@@ -1,6 +1,6 @@
-# Design guideline — giao diện và trình bày tài liệu
+# UI design — button & chiến lược tràn nội dung
 
-Quy tắc trình bày thứ người khác sẽ đọc: nút bấm và vùng cuộn trên dashboard (§1, §2), và markdown viết ra (§3).
+Áp dụng khi thêm/sửa giao diện dashboard: nút bấm, và mọi vùng có chiều cao phụ thuộc dữ liệu (danh sách, cây, body dialog, panel log).
 
 ---
 
@@ -123,20 +123,3 @@ Khi một panel chỉ nên giành chiều cao lúc nội dung của nó đang m�
 **Task list ở Monitor** — `src/features/monitor/styles/TaskList.scss`. `.tasklist-panel` là `flex` + `min-height: 0` + `overflow: hidden`; `.tasklist` là lá mang `overflow-y: auto; flex: 1; min-height: 0`. Hai chế độ sizing là hai class khác nhau: `.tasklist--active` chia phần còn lại, `.tasklist--archived` cap `max-height: min(40vh, 280px)`.
 
 **Dialog `.modal`** — `src/frontend/styles/_shell.scss` ghi thẳng hợp đồng: *dialog dùng `.modal` PHẢI có đúng một `.modal-body` bọc phần nội dung*. `.modal` không khai báo `overflow`; nó dựa vào `.modal-body` (`flex: 1; min-height: 0; overflow-y: auto`) để hút phần cao quá `max-height: 88vh`. Đặt nội dung thẳng vào `.modal` thì khi vượt 88vh, hàng nút `.modal-actions` bị vẽ ra ngoài border dưới.
-
----
-
-## 3. Trình bày markdown
-
-Scannability là ưu tiên số 1.
-
-Áp dụng cho **mọi** markdown viết ra: artifact, tài liệu trong `docs/`, `README.md`, PR body, file rule. Bố cục artifact `investigate.md` / `design.md`: [`doc-writing.md`](doc-writing.md).
-
-- **Đoạn văn tối đa 3 câu** — dài hơn thì tách đoạn hoặc chuyển thành list.
-- **Từ 3 ý trở lên thì bắt buộc dùng bullet** (`-`), tuyệt đối không viết tràn vào một đoạn văn.
-- **In đậm từ khoá ở đầu mỗi ý** (`**text**`) để người đọc lướt nhanh nắm được ý chính.
-- **Luôn có 1 dòng trống** giữa các đoạn văn, giữa đoạn văn và list, giữa list và heading.
-- **Bảng cho dữ liệu đối chiếu** — so sánh phương án, ánh xạ khoá, checklist theo cột. Đừng dùng bảng cho văn xuôi dài.
-- **Một đoạn = một ý** — không nhồi nhiều ý vào cùng một đoạn, kể cả khi mỗi ý chỉ một câu.
-- **Dùng emoji / ký hiệu làm mỏ neo thị giác** ở đầu dòng cho các mục cần quét nhanh: 📌 điểm chính · ⚠️ cảnh báo · 🚫 cấm · ✅ đạt · 🔍 khảo sát · 🛠️ implement · 🚀 phát hành. Mỗi ký hiệu mang **một** nghĩa cố định trong cùng tài liệu; không rải cho vui.
-- **Dùng dấu phân tách `·` cho danh sách ngắn cùng hạng** — vd `coding · doc-writing · test · git-pr`. Danh sách dài hoặc có mô tả thì xuống bullet.
