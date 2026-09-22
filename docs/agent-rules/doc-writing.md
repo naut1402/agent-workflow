@@ -151,7 +151,7 @@ Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ b�
 
 ---
 
-Quy ước trình bày markdown (scannability) và tham chiếu một chiều giữa tài liệu — áp dụng chung cho mọi tài liệu, không riêng artifact pipeline — đã tách sang [`docs/convention/markdown-style.md`](../convention/markdown-style.md) và [`docs/convention/doc-references.md`](../convention/doc-references.md).
+Quy ước trình bày markdown (scannability) và tham chiếu một chiều giữa tài liệu — áp dụng chung cho mọi tài liệu, không riêng artifact pipeline — nằm ở [`ui-design-guideline.md`](ui-design-guideline.md) §3 và [`docs/convention/doc-references.md`](../convention/doc-references.md).
 
 ---
 
