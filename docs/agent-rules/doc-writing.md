@@ -3,14 +3,14 @@
 Áp dụng cho artifact markdown của pipeline trong `.dev-team-agent/tasks/<id>/`. Quy ước trình bày markdown và tham chiếu giữa tài liệu — áp chung cho mọi markdown, không riêng artifact: [`writing-guideline.md`](writing-guideline.md).
 
 > [!NOTE]
-> Rule này **thắng** mọi template mặc định đi kèm công cụ sinh tài liệu: số section, tên section và thứ tự lấy từ đây.
+> 🔵 <span style="color:#4493f8"><b>PHƯƠNG CHÂM</b></span> — rule này **thắng** mọi template mặc định đi kèm công cụ sinh tài liệu: số section, tên section và thứ tự lấy từ đây.
 
 ---
 
 ## 1. Nguyên tắc — đảo phễu thông tin
 
 > [!IMPORTANT]
-> Artifact tồn tại để **ra quyết định**, không phải để lưu trữ mọi thứ đã đọc. Mọi quy tắc trong file này suy ra từ câu này.
+> 🟣 <span style="color:#a371f7"><b>TRIẾT LÝ</b></span> — artifact tồn tại để **ra quyết định**, không phải để lưu trữ mọi thứ đã đọc. Mọi quy tắc trong file này suy ra từ câu này.
 
 Ý nghĩa màu của các khối callout: [`writing-guideline.md`](writing-guideline.md) §1.1.
 
@@ -33,7 +33,7 @@
 ## 2. `investigate.md` — 6 section decision-first
 
 > [!CAUTION]
-> Đúng 6 heading `##`, đúng thứ tự, giữ nguyên tên — `pipeline-export.json` đọc §1/§5/§6 theo vị trí (§2.9), lệch tên hoặc thứ tự là export sai khoá.
+> 🔴 <span style="color:#e5534b"><b>QUY TẮC</b></span> — đúng 6 heading `##`, đúng thứ tự, giữ nguyên tên. `pipeline-export.json` đọc §1/§5/§6 theo vị trí (§2.9), lệch tên hoặc thứ tự là export sai khoá.
 
 1. **`## 1. Tổng quan`** — vấn đề đang giải, hướng giải quyết, phạm vi ở mức module (kèm số lượng), confidence tổng thể.
 2. **`## 2. Quyết định cần chốt`** — bảng `| # | Nhóm | Vấn đề | Đề xuất mặc định | Nếu chọn khác | Người chốt |`, đánh số `D1…Dn`.
@@ -148,6 +148,8 @@ Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ b�
 Quy tắc trình bày markdown áp cho mọi tài liệu: [`writing-guideline.md`](writing-guideline.md) §1. Dưới đây chỉ những gì **riêng** của artifact pipeline.
 
 > [!CAUTION]
+> 🔴 <span style="color:#e5534b"><b>QUY TẮC</b></span> — hai ràng buộc dưới đây có code đang parse.
+>
 > - **Chỉ `##` mới là section** — viewer gập/sửa theo `##`; chi tiết bên trong dùng `###` trở xuống.
 > - **Không để `##` ở đầu dòng bên trong code fence** — bước tách section không phân biệt fence nên sẽ cắt đôi khối code. Thụt 1 space, hoặc dùng `###` trở xuống.
 

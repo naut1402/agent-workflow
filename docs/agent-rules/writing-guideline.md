@@ -37,6 +37,35 @@ Hai ràng buộc khi dùng:
 - **Quá 2 callout trong một section là lạm dụng** — phần còn lại viết thành bullet thường.
 - **Không phải file nào cũng dùng đủ 5 màu** — chỉ tô cái thật sự thuộc loại đó, không tô cho đủ bộ.
 
+#### Fallback khi renderer không hỗ trợ callout
+
+Cú pháp `> [!CAUTION]` chỉ thành khối màu ở GitHub, VS Code và Obsidian. Dashboard render markdown bằng `marked` (`src/frontend/lib/markdownLib.ts`) — không hiểu cú pháp này, nên hiện nguyên chữ `[!CAUTION]` trong một blockquote không màu. Mỗi callout vì vậy mở đầu bằng **nhãn ba lớp**:
+
+```markdown
+> [!CAUTION]
+> 🔴 <span style="color:#e5534b"><b>QUY TẮC</b></span> — nội dung ràng buộc.
+```
+
+Ba lớp bù cho nhau, không lớp nào ăn ở mọi nơi:
+
+| Lớp | Ăn ở đâu | Bị bỏ ở đâu |
+|---|---|---|
+| `> [!CAUTION]` | GitHub · VS Code · Obsidian | `marked` → hiện raw chữ `[!CAUTION]` |
+| `<span style>` | Dashboard (DOMPurify giữ `style`) · VS Code · Obsidian | GitHub lọc `style` khỏi HTML người dùng |
+| 🔴 emoji | Mọi nơi, kể cả khi agent đọc raw text | — |
+
+Nhãn viết **in hoa**, mã màu chọn tông trung tính để đọc được trên cả nền sáng lẫn nền tối (dashboard mặc định nền tối):
+
+| Loại | Nhãn | Mã màu |
+|---|---|---|
+| Quy tắc | 🔴 `QUY TẮC` | `#e5534b` |
+| Nguyên tắc | 🟡 `NGUYÊN TẮC` | `#d29922` |
+| Triết lý | 🟣 `TRIẾT LÝ` | `#a371f7` |
+| Phương châm | 🔵 `PHƯƠNG CHÂM` | `#4493f8` |
+| Quy ước | 🟢 `QUY ƯỚC` | `#3fb950` |
+
+Dùng `<span style>`, không dùng `<font color>`: `font` là thẻ đã bỏ từ HTML5, và cả hai đều bị GitHub lọc như nhau nên không được gì thêm.
+
 ---
 
 ## 2. Tham chiếu một chiều giữa tài liệu
