@@ -12,8 +12,7 @@ Mức độ ràng buộc đánh dấu bằng màu callout — bảng màu ở [`
 > <span style="color:#4493f8">Chưa bật strict toàn cục (`strict: false`, `checkJs: false`) — bật dần theo từng module đã có type vững, đừng coi cả repo đã strict.</span>
 
 - **ESM thuần** (`"type": "module"`); server import core Node có tiền tố `node:`.
-- **TypeScript cho code mới/migrate** — chỉ còn `src/features/agent-editor/business/agentMarkdown.js` và `src/backend/runner-cli.mjs` chưa chuyển, nên `tsconfig.json` giữ `allowJs: true`.
-- **Không dùng `enum`** — ưu tiên union literal type (không cấm `z.enum`).
+- **TypeScript cho code mới/migrate** — còn ba ngoại lệ cố ý: `agentMarkdown.js` và `agentDraft.js` (`src/features/agent-editor/business/`), `src/backend/runner-cli.mjs`. Vì vậy `tsconfig.json` giữ `allowJs: true`.
 - **Không default export** trừ khi framework bắt buộc (Vue SFC, `vite`/`vitest`/`playwright.config.*`, `*.d.ts`).
 
 Lint/format: `bun run lint` / `bun run lint:fix` / `bun run format`. ESLint (flat) map quy ước ở mức `warn`:
@@ -23,6 +22,25 @@ Lint/format: `bun run lint` / `bun run lint:fix` / `bun run format`. ESLint (fla
 | Không TS `enum` | `no-restricted-syntax` → `TSEnumDeclaration` |
 | Không default export | `ExportDefaultDeclaration` + allowlist |
 | `<script setup lang="ts">` | `vue/block-lang` + `vue/component-api-style` |
+
+### 1.1 Không dùng `enum`
+
+**Kiểu liệt kê khai bằng mảng `as const`, không bằng `enum`.** Một khai báo cho ra cả ba thứ cần dùng, và khớp thẳng với Zod ở §3. Bản thân `z.enum()` không bị cấm — nó nhận mảng, không phải `enum`.
+
+```ts
+export const KNOWLEDGE_SCOPES = ['project', 'system', 'global'] as const
+export type KnowledgeScope = (typeof KNOWLEDGE_SCOPES)[number]  // type
+z.enum(KNOWLEDGE_SCOPES)                                        // validator ở biên I/O
+KNOWLEDGE_SCOPES.map(...)                                       // danh sách để render
+```
+
+Ba lý do, xếp theo sức nặng:
+
+- **Một nguồn thay vì hai** — hệ quả trực tiếp của §3. Zod có `z.nativeEnum()` nên `enum` *dùng được*, nhưng khi đó danh sách để lặp phải lấy riêng qua `Object.values()`, tức là nuôi hai khai báo có thể lệch nhau.
+- **String enum là nominal** — biến kiểu `Scope` không nhận string `'project'` thường, phải cast. Repo này đọc mọi giá trị từ JSON state và YAML pipeline dưới dạng string thô, nên ma sát đó rải khắp biên I/O.
+- **`enum` là cú pháp TS duy nhất không xoá được** — nó sinh object runtime, khác `type` / `interface` / annotation. `tsconfig.json` bật `isolatedModules: true`, và `const enum` bị cấm hẳn dưới cờ đó.
+
+Đây là **nguyên tắc phái sinh, không phải quy tắc cứng**: viết `enum` vẫn build và typecheck xanh, ESLint chỉ `warn`. Thứ hỏng là hai nguồn sự thật lệch nhau theo thời gian.
 
 ---
 
