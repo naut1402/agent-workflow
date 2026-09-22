@@ -103,7 +103,7 @@ Một mục ở §4 mà kết thúc bằng câu hỏi mở cho người khác �
 
 ### 2.8 Câu hỏi blocking → `qa.md`
 
-- **Bảng §2 là kênh thông tin**, không phải control tương tác — ô "phê duyệt" trong bảng markdown không render thành checkbox.
+- **Bảng §2 là kênh thông tin**, không phải control tương tác — bảng markdown không render được checkbox ([`writing-guideline.md`](writing-guideline.md) §1).
 - **Câu hỏi blocking** (không trả lời thì không đi tiếp được) tạo `qa.md` rồi dừng.
 - **Mỗi câu một block** — `## Q<n>` + `**Lựa chọn:**` (list `- A. …`) + `**Trả lời:**`. Đó là dạng duy nhất render thành radio.
 - **Mục non-blocking** chốt qua feedback ở HITL gate, không cần `qa.md`.
@@ -140,12 +140,14 @@ Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ b�
 
 ## 4. Bất biến chung mọi artifact
 
+Quy tắc trình bày markdown áp cho mọi tài liệu: [`writing-guideline.md`](writing-guideline.md) §1. Dưới đây chỉ những gì **riêng** của artifact pipeline.
+
 - **Chỉ `##` mới là section** — viewer gập/sửa theo `##`; chi tiết bên trong dùng `###` trở xuống.
 - **Không để `##` ở đầu dòng bên trong code fence** — bước tách section không phân biệt fence nên sẽ cắt đôi khối code. Thụt 1 space, hoặc dùng `###` trở xuống.
 - **`file:line` chỉ ở §4 và §6 của `investigate.md`, và §4 của `design.md`** — chỗ khác nêu tên file + tên hàm/component.
-- **Không checkbox trong ô bảng** — GFM chỉ render checkbox khi là *list item*. Cần chốt tương tác thì hướng sang `qa.md`.
+- **Chốt tương tác đi qua `qa.md`**, không phải checkbox trong bảng — khuôn `qa.md` ở §2.8.
 - **Confidence High / Medium / Low** cho mọi phát hiện chưa chắc, kèm lý do khi Medium/Low.
-- **Không đặt ngân sách độ dài bằng số dòng** — tiêu chí định tính: §1–§2 scan được trong ~1 màn hình.
+- **Ngân sách độ dài của artifact** — tiêu chí định tính ([`writing-guideline.md`](writing-guideline.md) §1): §1–§2 scan được trong ~1 màn hình.
 - **Không xoá section vì "không có gì để ghi"** — giữ đủ section, ghi empty state tường minh.
 - **Không migrate ngược artifact của task cũ** — quy ước áp cho task tạo từ thời điểm nó land.
 
