@@ -20,17 +20,22 @@ Scannability là ưu tiên số 1.
 - **Không đặt checkbox trong ô bảng** — GFM chỉ render checkbox khi nó là *list item*. Cần checkbox thì viết thành list.
 - **Không đặt ngân sách độ dài bằng số dòng** — số dòng không nói lên độ khó đọc. Dùng tiêu chí định tính, vd *scan được trong ~1 màn hình*.
 
-### 1.1 Bậc callout
+### 1.1 Quy ước màu sắc
 
-Chọn theo **hậu quả khi không tuân**, không theo cảm giác quan trọng. Một section có quá 2 callout là dấu hiệu lạm dụng — phần còn lại viết thành bullet thường.
+Màu chọn theo câu hỏi **"vi phạm thì sao?"**, không theo cảm giác quan trọng. Xếp từ hậu quả nặng xuống nhẹ:
 
-| Callout | Dùng cho | Hậu quả khi vỡ |
-|---|---|---|
-| `[!IMPORTANT]` | **Triết lý / phương châm** — lý do tồn tại của cả tài liệu; thứ tự ưu tiên khi xung đột | Mọi quy tắc bên dưới mất nghĩa, người viết tối ưu sai mục tiêu |
-| `[!CAUTION]` | **Hợp đồng công cụ** — thứ có code đang parse | Hỏng thật: viewer cắt đôi khối code, control không render, export sai khoá |
-| `[!WARNING]` | **Quy tắc cứng** — đúng/sai rõ ràng, không tranh cãi được | Sản phẩm sai khuôn, người duyệt không tìm được mục cần đọc |
-| `[!NOTE]` | **Phạm vi áp dụng / ngoại lệ** — rule này áp ở đâu, không áp ở đâu | Áp nhầm rule sang chỗ không thuộc phạm vi |
-| `[!TIP]` | **Quy ước** — khuyến nghị về cách trình bày | Không sai, chỉ khó đọc hơn |
+| Màu | Callout | Loại | Vi phạm thì sao |
+|---|---|---|---|
+| 🔴 Đỏ | `[!CAUTION]` | **Quy tắc** — đúng/sai máy móc, thường có code đang parse | **Hỏng thật**: công cụ đọc sai, viewer cắt đôi khối code, control không render |
+| 🟡 Vàng | `[!WARNING]` | **Nguyên tắc** — ràng buộc nền suy ra từ triết lý, cần đọc hiểu mới áp được | Sản phẩm sai cấu trúc; người duyệt không tìm được thứ cần đọc |
+| 🟣 Tím | `[!IMPORTANT]` | **Triết lý** — lý do tồn tại của cả tài liệu | Làm đúng hết mọi rule mà vẫn ra sản phẩm vô dụng: sai mục tiêu ngay từ đầu |
+| 🔵 Xanh dương | `[!NOTE]` | **Phương châm** — chọn thế nào khi hai cái cùng đúng, hoặc khi xung đột | Không hỏng ngay, nhưng đi sai hướng ở mỗi ngã ba |
+| 🟢 Xanh lá | `[!TIP]` | **Quy ước** — thống nhất cho dễ đọc | Không sai, chỉ khó đọc và thiếu nhất quán |
+
+Hai ràng buộc khi dùng:
+
+- **Quá 2 callout trong một section là lạm dụng** — phần còn lại viết thành bullet thường.
+- **Không phải file nào cũng dùng đủ 5 màu** — chỉ tô cái thật sự thuộc loại đó, không tô cho đủ bộ.
 
 ---
 

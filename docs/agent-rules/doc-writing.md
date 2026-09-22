@@ -1,9 +1,8 @@
 # Doc writing — artifact `investigate.md` / `design.md`
 
-> [!NOTE]
-> Áp dụng cho artifact markdown của pipeline trong `.dev-team-agent/tasks/<id>/`. Quy ước trình bày markdown và tham chiếu giữa tài liệu — áp chung cho mọi markdown, không riêng artifact: [`writing-guideline.md`](writing-guideline.md).
+Áp dụng cho artifact markdown của pipeline trong `.dev-team-agent/tasks/<id>/`. Quy ước trình bày markdown và tham chiếu giữa tài liệu — áp chung cho mọi markdown, không riêng artifact: [`writing-guideline.md`](writing-guideline.md).
 
-> [!IMPORTANT]
+> [!NOTE]
 > Rule này **thắng** mọi template mặc định đi kèm công cụ sinh tài liệu: số section, tên section và thứ tự lấy từ đây.
 
 ---
@@ -12,6 +11,8 @@
 
 > [!IMPORTANT]
 > Artifact tồn tại để **ra quyết định**, không phải để lưu trữ mọi thứ đã đọc. Mọi quy tắc trong file này suy ra từ câu này.
+
+Ý nghĩa màu của các khối callout: [`writing-guideline.md`](writing-guideline.md) §1.1.
 
 - **Người duyệt chốt ở phần đầu** — Tech Lead / PM / Designer đọc §1–§2 là quyết được.
 - **Người code đọc phần cuối** — chi tiết định vị code dồn xuống section sau.
@@ -31,8 +32,8 @@
 
 ## 2. `investigate.md` — 6 section decision-first
 
-> [!WARNING]
-> Đúng 6 heading `##`, đúng thứ tự, giữ nguyên tên.
+> [!CAUTION]
+> Đúng 6 heading `##`, đúng thứ tự, giữ nguyên tên — `pipeline-export.json` đọc §1/§5/§6 theo vị trí (§2.9), lệch tên hoặc thứ tự là export sai khoá.
 
 1. **`## 1. Tổng quan`** — vấn đề đang giải, hướng giải quyết, phạm vi ở mức module (kèm số lượng), confidence tổng thể.
 2. **`## 2. Quyết định cần chốt`** — bảng `| # | Nhóm | Vấn đề | Đề xuất mặc định | Nếu chọn khác | Người chốt |`, đánh số `D1…Dn`.
@@ -128,10 +129,7 @@ Khi task bật `export_json = true`, phần `phases.investigator` lấy nguồn 
 
 ## 3. `design.md` — 7 section
 
-> [!NOTE]
-> Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ bố cục riêng.
-
-Bố cục `design.md`:
+Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ bố cục riêng:
 
 1. `## §1. Tổng quan`
 2. `## §2. Investigation Summary`
@@ -147,12 +145,9 @@ Bố cục `design.md`:
 
 ## 4. Bất biến chung mọi artifact
 
-> [!NOTE]
-> Quy tắc trình bày markdown áp cho mọi tài liệu: [`writing-guideline.md`](writing-guideline.md) §1. Dưới đây chỉ những gì **riêng** của artifact pipeline.
+Quy tắc trình bày markdown áp cho mọi tài liệu: [`writing-guideline.md`](writing-guideline.md) §1. Dưới đây chỉ những gì **riêng** của artifact pipeline.
 
 > [!CAUTION]
-> Hai ràng buộc dưới đây có code đang parse — vỡ là hỏng thật, không phải doc xấu.
->
 > - **Chỉ `##` mới là section** — viewer gập/sửa theo `##`; chi tiết bên trong dùng `###` trở xuống.
 > - **Không để `##` ở đầu dòng bên trong code fence** — bước tách section không phân biệt fence nên sẽ cắt đôi khối code. Thụt 1 space, hoặc dùng `###` trở xuống.
 
