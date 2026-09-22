@@ -1,16 +1,22 @@
-# Quy ước — coding (ngôn ngữ, Zod, Vue, i18n, comment)
+# Coding guideline — ngôn ngữ, Zod, Vue, i18n, comment
 
 Quy ước viết code **hiện hành** trong repo này.
 
+Mức độ ràng buộc đánh dấu bằng màu callout — bảng màu ở [`writing-guideline.md`](writing-guideline.md) §5.
+
+---
+
 ## 1. Ngôn ngữ & module
+
+> [!NOTE]
+> <span style="color:#4493f8">Chưa bật strict toàn cục (`strict: false`, `checkJs: false`) — bật dần theo từng module đã có type vững, đừng coi cả repo đã strict.</span>
 
 - **ESM thuần** (`"type": "module"`); server import core Node có tiền tố `node:`.
 - **TypeScript cho code mới/migrate** — chỉ còn `src/features/agent-editor/business/agentMarkdown.js` và `src/backend/runner-cli.mjs` chưa chuyển, nên `tsconfig.json` giữ `allowJs: true`.
-- **Chưa bật strict toàn cục** (`strict: false`, `checkJs: false`) — bật dần theo từng module đã có type vững, đừng coi cả repo đã strict.
 - **Không dùng `enum`** — ưu tiên union literal type (không cấm `z.enum`).
 - **Không default export** trừ khi framework bắt buộc (Vue SFC, `vite`/`vitest`/`playwright.config.*`, `*.d.ts`).
 
-Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`. ESLint (flat) map quy ước ở mức `warn`:
+Lint/format: `bun run lint` / `bun run lint:fix` / `bun run format`. ESLint (flat) map quy ước ở mức `warn`:
 
 | Quy ước | Rule |
 |---------|------|
@@ -18,11 +24,17 @@ Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`. ESLint (f
 | Không default export | `ExportDefaultDeclaration` + allowlist |
 | `<script setup lang="ts">` | `vue/block-lang` + `vue/component-api-style` |
 
+---
+
 ## 2. Quirk TypeScript phải biết
 
-- **Discriminant kiểu boolean không narrow đúng** dưới `vue-tsc` (TS6) trong repo này — `{ok:true,…} | {ok:false,…}` với `if (!v.ok) return v` **không** hoạt động.
+> [!CAUTION]
+> <span style="color:#e5534b">Discriminant kiểu boolean không narrow đúng dưới `vue-tsc` (TS6) trong repo này — `{ok:true,…} | {ok:false,…}` với `if (!v.ok) return v` **không** hoạt động.</span>
+
 - **Dùng `in` để narrow** — `if ('error' in v) return v`.
 - **Hoặc đổi discriminant sang string literal** — `kind: 'ok' | 'err'`.
+
+---
 
 ## 3. Zod là nguồn chân lý cho type & validation
 
@@ -31,12 +43,18 @@ Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`. ESLint (f
 - **Parse fail → trả default, không throw** — giữ triết lý defensive.
 - **Schema domain ở `src/features/<feature>/schemas/`**; preference shell (`appSettings`) ở `src/frontend/configs/` để tránh `core` → `features`.
 
+---
+
 ## 4. Kiến trúc & coupling — chỉ đi xuống
 
+> [!WARNING]
+> <span style="color:#d29922">Phụ thuộc chỉ đi xuống, không bao giờ vòng tròn: ba bucket nền (`backend/lib`, `frontend/lib`, `shared/lib`) → `*/configs` + `backend/log` (không import feature) → domain module → `backend/http/` và feature controller.</span>
+
 - **Functional + ctx-injection** — dependency truyền qua tham số `ctx`, không class-DI / NestJS / OOP framework.
-- **Phụ thuộc một chiều** — `backend/lib` · `frontend/lib` · `shared/lib` → `*/configs` + `backend/log` không import feature → domain module chỉ import ba bucket đó → `backend/http/` / feature controller. Không vòng tròn.
 - **`business/` không biết HTTP** — nhận `root` / `ctx`, trả data thuần (`{ status, error }` khi lỗi).
 - **Controller mỏng** — parse request → gọi `XxxBusiness` → `this.json` / `ok`.
+
+---
 
 ## 5. Frontend (Vue 3)
 
@@ -52,6 +70,8 @@ Primitive dùng chung trong `src/frontend/ui/`:
 - **Icon luôn qua `<Icon name="..." />`** (`src/frontend/ui/Icon.vue`) — **không** tự vẽ `<svg>` / `<path>` trong component feature. Icon chưa có thì thêm case mới vào `Icon.vue` (giữ nguyên viewBox/style gốc), không copy SVG ra file khác dù chỉ dùng 1 nơi.
 - **Dropdown mới không dùng `<select>` native** — dùng `CSelect` (option cố định) hoặc `CComboSelect` (nhiều option / creatable). Chỉ giữ `<select>` khi cần hành vi trình duyệt gốc không có API tương đương.
 - **Class truyền vào `CSelect`/`CComboSelect` chỉ lo kích thước** (`width` / `flex` / `min-width`). Truyền class control native (`cfg-input`, `cfg-textarea`) sẽ rơi vào `div` wrapper → hộp lồng hộp. Mẫu đúng: `cfg-select` / `cfg-combo-select`.
+
+---
 
 ## 6. Ngôn ngữ UI (i18n)
 
@@ -117,9 +137,13 @@ installPlugins(createApp(App), { i18n: { locale } }).mount('#app')
 | Đổi locale | `useLocale()` hoặc `globalProperties.$setI18nLocale` |
 | Test component có `$t` | `mountWithI18n` (`tests/src/helpers/i18n.ts`) — cài cùng globalProperties |
 
+---
+
 ## 7. Comment code (KISS)
 
-- **Chỉ comment khi cần giải thích *why*** — constraint ẩn, workaround, invariant khó thấy. Không giải thích *what*: tên biến/hàm tốt đã đủ.
+> [!WARNING]
+> <span style="color:#d29922">Chỉ comment khi cần giải thích *why* — constraint ẩn, workaround, invariant khó thấy. Không giải thích *what*: tên biến/hàm tốt đã đủ.</span>
+
 - **Thử đổi tên trước khi thêm comment.** Comment giải thích một tên xấu là trả lãi mãi; đổi tên là trả gốc một lần. `BEFORE` → `TARGET_SHA` bỏ được cả câu giải thích nó là gì.
 - **Một why = một dòng.** Cần đoạn văn mới nói hết thì đó là dấu hiệu bối cảnh thuộc chỗ khác: PR body, hoặc `docs/`. Trong code để lại đúng câu chốt + link tới mục tài liệu.
 - **Không markup nhấn mạnh trong comment code** — `**bold**`, 🚫, ⚠️, khung `── ─` là ngôn ngữ của tài liệu và PR. Trong code chúng thành nhiễu, và khung rỗng kéo comment dài ra cho "xứng".
@@ -128,4 +152,6 @@ installPlugins(createApp(App), { i18n: { locale } }).mount('#app')
 - **Comment mô tả hành vi hiện hành**, không kể lịch sử, không trích số issue / số PR / tên người, không nhắc định danh nội bộ của quy trình (số đợt, tên khối việc, mã task) — code sống lâu hơn kế hoạch.
 - **Ngôn ngữ theo mật độ code xung quanh** — khối comment tiếng Anh thì viết tiếp tiếng Anh, không trộn nửa Anh nửa Việt.
 
-Kiến trúc: [`docs/architecture/`](../architecture/README.md). Bất biến bắt buộc giữ (checklist review): [`AGENTS.md`](../../AGENTS.md) §6 Review. Đặt file theo feature: [`docs/convention/feature-architecture.md`](../convention/feature-architecture.md).
+---
+
+Kiến trúc: [`docs/architecture/`](../architecture/README.md). Đặt file theo feature: [`docs/convention/feature-architecture.md`](../convention/feature-architecture.md).
