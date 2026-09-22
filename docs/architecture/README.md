@@ -182,8 +182,6 @@ Chi tiết implementation cụ thể — tên file, hàm, bảng schema. Đây l
 | [4.6 Styling](#46-styling) | Thêm style mới xuyên feature |
 | [`events/`](events/README.md) | Viết subscriber, thêm emit mới, tra cứu 1 domain event cụ thể |
 
-i18n, quy ước UI button và chiến lược tràn nội dung nằm cùng quy ước tương ứng trong [`../convention/`](../convention/) — nguyên tắc và chi tiết class/file đi liền một chỗ.
-
 ### 4.1 Frontend
 
 Bootstrap & API layer. Tham chiếu code cho 2 việc: **ModeRegistry/service container** khởi động ra sao, và **FE gọi API / suy diễn trạng thái** qua đâu.
