@@ -49,8 +49,8 @@ agent-workflow/
 
 | Bước | Category | Rule |
 |---|---|---|
-| 🔍 Investigate · Design | `doc-writing` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) — bố cục `investigate.md` / `design.md`, quy tắc trình bày |
-| 🛠️ Implement | `coding` | [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) · [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) · [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) |
+| 🔍 Investigate · Design | `doc-writing` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) — bố cục `investigate.md` / `design.md` · [`writing-guideline.md`](docs/agent-rules/writing-guideline.md) — trình bày markdown, tham chiếu tài liệu (category `coding`, đọc ở mọi bước viết tài liệu) |
+| 🛠️ Implement | `coding` | [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) · [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) · [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) · [`writing-guideline.md`](docs/agent-rules/writing-guideline.md) |
 | 🔎 Review | `coding` + `test` | [`testing.md`](docs/agent-rules/testing.md) — checklist review ở §6 dưới |
 | 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
 | 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6, todo debt §7, PR phát hành §8 · checklist PR ở §6 dưới |
@@ -86,7 +86,7 @@ Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize t
 | Commit / PR / docs | [`git-pr.md`](docs/agent-rules/git-pr.md) §2 khi PR nhiều xử lý; branch task gắn version §4.2; **dòng test §4.3**; PR phát hành §8 |
 | Hoãn docs/test (hotfix, POC) | [`git-pr.md`](docs/agent-rules/git-pr.md) §7 — gate CI chỉ khi PR `dev/x.y.z/main` → `main` |
 | Agent chạy song song | [`git-pr.md`](docs/agent-rules/git-pr.md) §6 |
-| Viết `investigate.md` / `design.md` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) |
+| Viết `investigate.md` / `design.md` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) + [`writing-guideline.md`](docs/agent-rules/writing-guideline.md) |
 | Viết/sửa tài liệu trong `docs/architecture/` | [`architecture-doc-levels.md`](docs/convention/architecture-doc-levels.md) — chi tiết nào thuộc cấp nào |
 
 ---
