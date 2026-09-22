@@ -17,7 +17,8 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Giao diện
 
-- **[`convention/i18n.md`](convention/i18n.md)** · **[`convention/ui-buttons.md`](convention/ui-buttons.md)** · **[`convention/ui-overflow.md`](convention/ui-overflow.md)** — quy ước message/locale, nút, và chiến lược tràn nội dung; mỗi file gồm cả nguyên tắc lẫn chi tiết class/file.
+- **[`convention/i18n.md`](convention/i18n.md)** — quy ước message/locale, kèm cấu trúc file và cách gọi `t()`.
+- **[`agent-rules/ui-design-guideline.md`](agent-rules/ui-design-guideline.md)** — nút bấm (§1) và chiến lược tràn nội dung (§2): nguyên tắc kèm class chuẩn.
 
 ## Quy ước
 

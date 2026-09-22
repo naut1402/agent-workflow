@@ -50,7 +50,7 @@ agent-workflow/
 | Bước | Category | Rule |
 |---|---|---|
 | 🔍 Investigate · Design | `doc-writing` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) — bố cục `investigate.md` / `design.md`, quy tắc trình bày |
-| 🛠️ Implement | `coding` | [`docs/convention/coding.md`](docs/convention/coding.md) · [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) |
+| 🛠️ Implement | `coding` | [`docs/convention/coding.md`](docs/convention/coding.md) · [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) · [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) |
 | 🔎 Review | `coding` + `test` | [`testing.md`](docs/agent-rules/testing.md) — checklist review ở §6 dưới |
 | 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
 | 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6, todo debt §7, PR phát hành §8 · checklist PR ở §6 dưới |
@@ -64,8 +64,6 @@ Tài liệu tra cứu kèm theo (không phải rule):
 | Mục lục domain event theo mode | [`docs/architecture/events/`](docs/architecture/events/README.md) |
 | Kiến trúc Component (backend/frontend, DI/ModeRegistry) | [`docs/architecture/README.md`](docs/architecture/README.md) §3 |
 | Quy ước i18n | [`docs/convention/i18n.md`](docs/convention/i18n.md) |
-| Quy ước UI button | [`docs/convention/ui-buttons.md`](docs/convention/ui-buttons.md) |
-| Quy ước tràn nội dung UI | [`docs/convention/ui-overflow.md`](docs/convention/ui-overflow.md) |
 | Template agent / pipeline | [`docs/template/`](docs/template/) |
 
 ---
@@ -162,7 +160,7 @@ Khi survey call chain đụng persist / lifecycle / CRUD domain:
 - [ ] **Test đụng filesystem / registry / agent / plugin** → chạy thêm một lượt với env đã tước (`HOME` rỗng, biến plugin trỏ path không tồn tại).
 - [ ] **Test viết trên dòng branch riêng** khi pipeline có bước `test-implementer` — [`testing.md`](docs/agent-rules/testing.md) §3.1. Đang ở dòng source thì `bun run test:overlay` trước khi chạy được suite nào.
 
-**Chiến lược tràn nội dung UI** — chạy trước khi báo hoàn thành 1 vùng UI có chiều cao phụ thuộc dữ liệu (quy ước: [`docs/convention/ui-overflow.md`](docs/convention/ui-overflow.md)):
+**Chiến lược tràn nội dung UI** — chạy trước khi báo hoàn thành 1 vùng UI có chiều cao phụ thuộc dữ liệu (rule: [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) §2):
 
 - [ ] Thử với **dữ liệu dài** (nhiều hơn số item thật hiện có) — cuộn được tới mục cuối cùng.
 - [ ] Thử với **dữ liệu rỗng** — empty state hiện đúng, khung không sụp về 0px.

@@ -147,7 +147,7 @@ const groups = computed(() =>
 </template>
 
 <style scoped lang="scss">
-/* Chuỗi overflow theo docs/convention/ui-overflow.md: chỉ `.agent-side-groups` là lá mang
+/* Chuỗi overflow theo docs/agent-rules/ui-design-guideline.md: chỉ `.agent-side-groups` là lá mang
    `overflow-y: auto`; mọi tầng trên nó `overflow: hidden` + `min-height: 0`. */
 .agent-side-menu {
   display: flex;
@@ -173,7 +173,7 @@ const groups = computed(() =>
   padding: 6px;
 }
 
-/* Cố ý KHÔNG khai `.agent-group::details-content`: chuỗi overflow đã dừng ở `.agent-side-groups`, không cần đi xuyên qua `<details>` (docs/convention/ui-overflow.md). */
+/* Cố ý KHÔNG khai `.agent-group::details-content`: chuỗi overflow đã dừng ở `.agent-side-groups`, không cần đi xuyên qua `<details>` (docs/agent-rules/ui-design-guideline.md). */
 .agent-group > summary {
   display: flex;
   align-items: center;

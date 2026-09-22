@@ -159,7 +159,7 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
 </template>
 
 <style scoped lang="scss">
-/* Toolbar cố định, chỉ `.c-md-body` cuộn (docs/convention/ui-overflow.md). */
+/* Toolbar cố định, chỉ `.c-md-body` cuộn (docs/agent-rules/ui-design-guideline.md). */
 .c-md-view {
   display: flex;
   flex-direction: column;
