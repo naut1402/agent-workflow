@@ -2,11 +2,55 @@
 
 Áp dụng cho **mọi** markdown viết ra trong repo này: artifact pipeline, tài liệu trong `docs/`, `README.md`, PR body, file rule.
 
-§1 là tiền đề: nó quy định cách đánh dấu mức độ ràng buộc, và chính tài liệu này viết theo nó.
+Mức độ ràng buộc của mỗi mục đánh dấu bằng màu callout — bảng màu ở §5.
 
 ---
 
-## 1. Quy ước màu sắc
+## 1. Triết lý
+
+> [!IMPORTANT]
+> <span style="color:#a371f7">Scannability là ưu tiên số 1. Người đọc lướt trước rồi mới đọc kỹ — mọi nguyên tắc, quy tắc và quy ước dưới đây phục vụ lần lướt đó.</span>
+
+---
+
+## 2. Nguyên tắc
+
+> [!WARNING]
+> <span style="color:#d29922">Đo cái người đọc thật sự chịu, đừng đo cái dễ đếm.</span>
+
+- **Một đoạn = một ý** — không nhồi nhiều ý vào cùng một đoạn, kể cả khi mỗi ý chỉ một câu.
+- **Không đặt ngân sách độ dài bằng số dòng** — số dòng không nói lên độ khó đọc. Dùng tiêu chí định tính, vd *scan được trong ~1 màn hình*.
+- **Mỗi ký hiệu mang đúng một nghĩa** trong cùng tài liệu — dùng lại một ký hiệu cho hai nghĩa thì nó thôi làm mỏ neo.
+
+---
+
+## 3. Quy tắc
+
+> [!CAUTION]
+> <span style="color:#e5534b">Hai mục dưới đây là hành vi renderer, không phải thẩm mỹ — viết sai thì nội dung hiện ra khác hẳn ý định.</span>
+
+- **Không để `---` ngay dưới một dòng chữ** — đó là cú pháp setext heading: dòng chữ thành `<h2>`, không phải đường kẻ ngang. Luôn chừa một dòng trống trước `---`.
+- **Không đặt checkbox trong ô bảng** — `[ ]` trong ô bảng hiện ra đúng chữ `[ ]`. GFM chỉ render checkbox khi nó là *list item*; cần checkbox thì viết thành list.
+
+---
+
+## 4. Quy ước
+
+> [!TIP]
+> <span style="color:#3fb950">Thống nhất cho dễ lướt. Vi phạm không sai, chỉ làm người đọc mất thêm một nhịp.</span>
+
+- **Đoạn văn tối đa 3 câu** — dài hơn thì tách đoạn hoặc chuyển thành list.
+- **Từ 3 ý trở lên thì dùng bullet** (`-`), không viết tràn vào một đoạn văn.
+- **In đậm từ khoá ở đầu mỗi ý** (`**text**`) để người đọc lướt nhanh nắm được ý chính.
+- **Chừa 1 dòng trống** giữa các đoạn văn, giữa đoạn văn và list, giữa list và heading — renderer vẫn hiểu khi thiếu, nhưng nguồn khó đọc và dễ dính bẫy setext ở §3.
+- **Bảng cho dữ liệu đối chiếu** — so sánh phương án, ánh xạ khoá, checklist theo cột. Đừng dùng bảng cho văn xuôi dài.
+- **Callout cho cả khối, emoji cho từng dòng** — callout đánh dấu một đoạn đứng riêng theo bậc ở §5; emoji chỉ neo một gạch đầu dòng trong list. Không lồng hai thứ vào nhau.
+- **Emoji làm mỏ neo thị giác** ở đầu dòng cho các mục cần quét nhanh: 📌 điểm chính · ⚠️ cảnh báo · 🚫 cấm · ✅ đạt · 🔍 khảo sát · 🛠️ implement · 🚀 phát hành.
+- **Dấu phân tách `·` cho danh sách ngắn cùng hạng** — vd `coding · doc-writing · test · git-pr`. Danh sách dài hoặc có mô tả thì xuống bullet.
+
+---
+
+## 5. Quy ước màu sắc
 
 > [!NOTE]
 > <span style="color:#4493f8">Màu chọn theo câu hỏi **"vi phạm thì sao?"**, không theo cảm giác quan trọng.</span>
@@ -21,10 +65,9 @@ Xếp từ hậu quả nặng xuống nhẹ:
 | 🔵 Xanh dương | `[!NOTE]` | **Phương châm** — chọn thế nào khi hai cái cùng đúng, hoặc khi xung đột | Không hỏng ngay, nhưng đi sai hướng ở mỗi ngã ba |
 | 🟢 Xanh lá | `[!TIP]` | **Quy ước** — thống nhất cho dễ đọc | Không sai, chỉ khó đọc và thiếu nhất quán |
 
-> [!TIP]
-> <span style="color:#3fb950">Quá 2 callout trong một section là lạm dụng — phần còn lại viết thành bullet thường. Và không phải file nào cũng dùng đủ 5 màu: chỉ tô cái thật sự thuộc loại đó, không tô cho đủ bộ.</span>
+Callout là **ngoại lệ**, không phải cách trình bày mặc định: tô tới mức người đọc không còn biết tô để làm gì thì phần lớn trong số đó chỉ là bullet thường. Không phải file nào cũng dùng đủ 5 màu — chỉ tô cái thật sự thuộc loại đó, không tô cho đủ bộ.
 
-### 1.1 Fallback khi renderer không hỗ trợ callout
+### 5.1 Fallback khi renderer không hỗ trợ callout
 
 Cú pháp `> [!CAUTION]` chỉ thành khối màu ở GitHub, VS Code và Obsidian. Dashboard render markdown bằng `marked` (`src/frontend/lib/markdownLib.ts`) — không hiểu cú pháp này nên hiện nguyên chữ `[!CAUTION]` trong một blockquote không màu.
 
@@ -60,28 +103,7 @@ Dùng `<span style>`, không dùng `<font color>`: `font` là thẻ đã bỏ t�
 
 ---
 
-## 2. Trình bày markdown
-
-> [!IMPORTANT]
-> <span style="color:#a371f7">Scannability là ưu tiên số 1. Người đọc lướt trước rồi mới đọc kỹ — mọi quy ước dưới đây phục vụ lần lướt đó.</span>
-
-- **Đoạn văn tối đa 3 câu** — dài hơn thì tách đoạn hoặc chuyển thành list.
-- **Từ 3 ý trở lên thì bắt buộc dùng bullet** (`-`), tuyệt đối không viết tràn vào một đoạn văn.
-- **In đậm từ khoá ở đầu mỗi ý** (`**text**`) để người đọc lướt nhanh nắm được ý chính.
-- **Luôn có 1 dòng trống** giữa các đoạn văn, giữa đoạn văn và list, giữa list và heading.
-- **Bảng cho dữ liệu đối chiếu** — so sánh phương án, ánh xạ khoá, checklist theo cột. Đừng dùng bảng cho văn xuôi dài.
-- **Một đoạn = một ý** — không nhồi nhiều ý vào cùng một đoạn, kể cả khi mỗi ý chỉ một câu.
-- **Dùng callout cho cả khối, emoji cho từng dòng** — callout đánh dấu một đoạn đứng riêng theo bậc ở §1; emoji chỉ neo một gạch đầu dòng trong list. Không lồng hai thứ vào nhau.
-- **Dùng emoji / ký hiệu làm mỏ neo thị giác** ở đầu dòng cho các mục cần quét nhanh: 📌 điểm chính · ⚠️ cảnh báo · 🚫 cấm · ✅ đạt · 🔍 khảo sát · 🛠️ implement · 🚀 phát hành. Mỗi ký hiệu mang **một** nghĩa cố định trong cùng tài liệu; không rải cho vui.
-- **Dùng dấu phân tách `·` cho danh sách ngắn cùng hạng** — vd `coding · doc-writing · test · git-pr`. Danh sách dài hoặc có mô tả thì xuống bullet.
-- **Không đặt ngân sách độ dài bằng số dòng** — số dòng không nói lên độ khó đọc. Dùng tiêu chí định tính, vd *scan được trong ~1 màn hình*.
-
-> [!CAUTION]
-> <span style="color:#e5534b">Không đặt checkbox trong ô bảng — GFM chỉ render checkbox khi nó là *list item*. Cần checkbox thì viết thành list.</span>
-
----
-
-## 3. Tham chiếu một chiều giữa tài liệu
+## 6. Tham chiếu một chiều giữa tài liệu
 
 > [!WARNING]
 > <span style="color:#d29922">Chỉ **nơi sử dụng** trỏ tới **tài liệu dùng chung**. Không bao giờ thêm chiều ngược lại.</span>
@@ -103,10 +125,10 @@ Cách áp dụng:
 
 ---
 
-## 4. Anti-pattern
+## 7. Anti-pattern
 
 | Hiện tượng | Vì sao hỏng | Thay bằng |
 |---|---|---|
 | Một đoạn văn 6 câu liệt kê 5 thứ | Không lướt được, phải đọc hết mới biết có gì | 5 bullet, mỗi bullet mở đầu bằng từ khoá in đậm |
 | `AGENTS.md` liệt kê `CLAUDE.md` trong bảng tài liệu | Thêm `GEMINI.md` là phải sửa tài liệu chung; bỏ `CLAUDE.md` để lại link chết | Chỉ `CLAUDE.md` trỏ lên `AGENTS.md`, chiều ngược lại bỏ hẳn |
-| Tô callout cho mọi mục trong một section | Màu mất tác dụng phân biệt, đọc như không tô | Giữ tối đa 2, phần còn lại là bullet thường |
+| Tô callout cho gần như mọi mục trong một section | Màu thôi phân biệt được gì, đọc như không tô | Giữ lại mục thật sự thuộc loại đó, phần còn lại là bullet thường |
