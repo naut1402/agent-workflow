@@ -2,8 +2,6 @@
 
 Áp dụng cho **mọi** markdown viết ra trong repo này: artifact pipeline, tài liệu trong `docs/`, `README.md`, PR body, file rule.
 
-Bố cục cụ thể của artifact `investigate.md` / `design.md`: [`doc-writing.md`](doc-writing.md).
-
 ---
 
 ## 1. Trình bày markdown
