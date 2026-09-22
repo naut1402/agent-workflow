@@ -115,7 +115,7 @@ function onDragStart(event, item, type) {
       @toggle="emit('toggle-section', 'agents')"
     >
       <!-- `<select>` native vì popup của nó vẽ ở tầng OS nên không bị các ancestor
-           `overflow: hidden` của mục/cột cắt (docs/convention/coding.md §5). -->
+           `overflow: hidden` của mục/cột cắt (docs/agent-rules/coding-guideline.md §5). -->
       <div class="catalog-toolbar">
         <select
           v-model="agentSource"

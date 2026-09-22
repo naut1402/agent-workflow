@@ -71,7 +71,7 @@ watch(
     >
       <!-- Control lọc thuộc về thân mục nó phục vụ; không có category nào thì
            không dựng control chết. `<select>` native vì popup của nó vẽ ở tầng
-           OS nên không bị các ancestor `overflow: hidden` cắt (docs/convention/coding.md §5). -->
+           OS nên không bị các ancestor `overflow: hidden` cắt (docs/agent-rules/coding-guideline.md §5). -->
       <div v-if="categories.length" class="rules-toolbar">
         <select
           v-model="categoryFilter"

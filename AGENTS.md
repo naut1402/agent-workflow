@@ -50,7 +50,7 @@ agent-workflow/
 | Bước | Category | Rule |
 |---|---|---|
 | 🔍 Investigate · Design | `doc-writing` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) — bố cục `investigate.md` / `design.md`, quy tắc trình bày |
-| 🛠️ Implement | `coding` | [`docs/convention/coding.md`](docs/convention/coding.md) · [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) · [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) |
+| 🛠️ Implement | `coding` | [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) · [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) · [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) |
 | 🔎 Review | `coding` + `test` | [`testing.md`](docs/agent-rules/testing.md) — checklist review ở §6 dưới |
 | 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
 | 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6, todo debt §7, PR phát hành §8 · checklist PR ở §6 dưới |
@@ -63,7 +63,6 @@ Tài liệu tra cứu kèm theo (không phải rule):
 | Kiến trúc (C4, 4 cấp: Context → Container → Component → Code) | [`docs/architecture/`](docs/architecture/) |
 | Mục lục domain event theo mode | [`docs/architecture/events/`](docs/architecture/events/README.md) |
 | Kiến trúc Component (backend/frontend, DI/ModeRegistry) | [`docs/architecture/README.md`](docs/architecture/README.md) §3 |
-| Quy ước i18n | [`docs/convention/i18n.md`](docs/convention/i18n.md) |
 | Template agent / pipeline | [`docs/template/`](docs/template/) |
 
 ---
@@ -80,7 +79,7 @@ Danh mục: đọc filesystem phòng thủ · chống path-traversal (sanitize t
 
 | Task | Đọc thêm |
 |------|----------|
-| Viết/sửa code feature | [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md) + [`docs/convention/coding.md`](docs/convention/coding.md) + bất biến §4 |
+| Viết/sửa code feature | [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md) + [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) + bất biến §4 |
 | Thêm mode mới ở FE shell (`App.vue`) | [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) — checklist ở §6 dưới |
 | Review PR | Checklist Review ở §6 dưới — mục **Dữ liệu & An toàn** có domain event khi đụng persist |
 | Test / CI | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test + `test:overlay` §3.1; mốc coverage + nợ test theo task §6 |
@@ -142,7 +141,7 @@ Khi survey call chain đụng persist / lifecycle / CRUD domain:
 - [ ] **Cập nhật `MODE_DEFS` trong `App.test.ts`** để mode mới được cover trong cả 3 test lặp qua `MODE_DEFS`.
 - [ ] **Giữ xanh trước khi PR** — `vue-tsc --noEmit`, `vitest run tests/src/App.test.ts`, và test riêng của feature.
 
-**Thêm/sửa text UI (i18n)** (quy ước: [`docs/convention/i18n.md`](docs/convention/i18n.md)):
+**Thêm/sửa text UI (i18n)** (quy ước: [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) §6):
 
 1. Xác định feature / namespace.
 2. Sửa `src/features/<feature>/locales/vi.ts` (hoặc `plugins/i18n/locales/common/vi.ts`).
@@ -170,7 +169,7 @@ Khi survey call chain đụng persist / lifecycle / CRUD domain:
 
 ### Review
 
-Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**`, `src/shared/**`, hoặc tái cấu trúc tương tự. Đánh dấu từng mục liên quan scope PR — không bắt buộc tick hết nếu PR không đụng vùng đó. Quy ước nền: [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md), [`docs/convention/coding.md`](docs/convention/coding.md), [`git-pr.md`](docs/agent-rules/git-pr.md). Bất biến repo: §4.
+Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**`, `src/shared/**`, hoặc tái cấu trúc tương tự. Đánh dấu từng mục liên quan scope PR — không bắt buộc tick hết nếu PR không đụng vùng đó. Quy ước nền: [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md), [`coding-guideline.md`](docs/agent-rules/coding-guideline.md), [`git-pr.md`](docs/agent-rules/git-pr.md). Bất biến repo: §4.
 
 **Kiến trúc — vị trí code & coupling:**
 

@@ -43,8 +43,8 @@ Lint/format: `bun run lint` · `bun run lint:fix` · `bun run format`. ESLint (f
 - **`<script setup lang="ts">`** cho mọi SFC.
 - **Kéo logic suy diễn ra khỏi `.vue`** xuống composable / lib thuần TS để test không cần render.
 - **Cấu trúc feature-module** — `src/features/<mode>/{components,composables,scripts/*Api.ts,styles,locales,schemas}` + nền `src/frontend/{ui,composables,lib,shell}`; plugin app-scope ở `src/frontend/plugins/`.
-- **Quy ước button** (ưu tiên icon-btn, default không viền, hover scale) — [`ui-design-guideline.md`](../agent-rules/ui-design-guideline.md) §1.
-- **Chiến lược tràn là bắt buộc, không phải tuỳ chọn** — mọi danh sách / vùng nội dung dài tuỳ dữ liệu phải có vùng cuộn giới hạn chiều cao ngay từ lúc viết, không được giả định "dữ liệu chắc là ngắn" — [`ui-design-guideline.md`](../agent-rules/ui-design-guideline.md) §2.
+- **Quy ước button** (ưu tiên icon-btn, default không viền, hover scale) — [`ui-design-guideline.md`](ui-design-guideline.md) §1.
+- **Chiến lược tràn là bắt buộc, không phải tuỳ chọn** — mọi danh sách / vùng nội dung dài tuỳ dữ liệu phải có vùng cuộn giới hạn chiều cao ngay từ lúc viết, không được giả định "dữ liệu chắc là ngắn" — [`ui-design-guideline.md`](ui-design-guideline.md) §2.
 
 Primitive dùng chung trong `src/frontend/ui/`:
 
@@ -62,7 +62,60 @@ Primitive dùng chung trong `src/frontend/ui/`:
 - **Trong `<script setup>` dùng `useI18nHelpers()`** (`src/frontend/composables/useI18nHelpers.ts`) — **không** import `useI18n` từ `vue-i18n`. Ngoài setup: `import { t } from '@/plugins/i18n'`.
 - **Locale hiện tại ở `AppSettings.locale`** (localStorage), đổi qua `useLocale()`.
 - **Test mount component có `t()`** dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`).
-- **Thêm/sửa text UI** — thêm key ở `vi`; `en` khuyến nghị nhưng không bắt buộc. Quy ước: [`i18n.md`](i18n.md).
+- **Thêm/sửa text UI** — thêm key ở `vi`; `en` khuyến nghị nhưng không bắt buộc.
+
+### 6.1 Cấu trúc file
+
+```
+src/frontend/plugins/
+├── index.ts                 # installPlugins(app)
+└── i18n/
+    ├── index.ts             # i18nPlugin, injectI18nHelpers, registerLocale, setI18nLocale
+    ├── loadLocales.ts       # glob feature + plugin locales
+    └── locales/common/      # namespace shell dùng chung
+        ├── vi.ts
+        └── en.ts
+
+src/features/<feature>/locales/
+├── vi.ts                    # export default { ... }  (namespace = camelCase tên feature)
+└── en.ts                    # tùy chọn; thiếu key → fallback vi
+```
+
+Ví dụ: `features/agent-editor/locales/vi.ts` → namespace `agentEditor`.
+
+Plugin tự nạp bằng `import.meta.glob` — feature mới chỉ cần thêm `locales/vi.ts` (và `en.ts` nếu muốn).
+
+### 6.2 Đăng ký locale mới (runtime)
+
+```ts
+import { registerLocale } from '@/plugins/i18n'
+
+registerLocale('ja', {
+  common: { /* ... */ },
+  monitor: { /* ... */ },
+})
+```
+
+`registerLocale` merge vào vue-i18n và cập nhật `getLocaleRegistry()` (inject app-scope qua `I18N_REGISTRY_KEY`). Locale preference persist vẫn theo `AppSettings.locale` — mở `LocalePreference` nếu thêm mã locale cố định vào Settings.
+
+### 6.3 Cách dùng trong code
+
+Plugin chỉ được gắn từ app root:
+
+```ts
+// src/frontend/main.ts
+installPlugins(createApp(App), { i18n: { locale } }).mount('#app')
+```
+
+`i18nPlugin` inject helpers lên Vue app (`$t` qua vue-i18n, kèm `$setI18nLocale` / `$localeRegistry`):
+
+| Ngữ cảnh | Cách gọi |
+|---|---|
+| Trong `<script setup>` / composable | `const { t } = useI18nHelpers()` (`src/frontend/composables/useI18nHelpers.ts`; **cấm** `import { useI18n } from 'vue-i18n'` ngoài `src/frontend/plugins`) |
+| Template | `$t('…')` (globalProperties) |
+| Ngoài setup (scripts / pure fn) | `import { t } from '@/plugins/i18n'` — đọc `$t` trên app sau `installPlugins` |
+| Đổi locale | `useLocale()` hoặc `globalProperties.$setI18nLocale` |
+| Test component có `$t` | `mountWithI18n` (`tests/src/helpers/i18n.ts`) — cài cùng globalProperties |
 
 ## 7. Comment code (KISS)
 
@@ -75,4 +128,4 @@ Primitive dùng chung trong `src/frontend/ui/`:
 - **Comment mô tả hành vi hiện hành**, không kể lịch sử, không trích số issue / số PR / tên người, không nhắc định danh nội bộ của quy trình (số đợt, tên khối việc, mã task) — code sống lâu hơn kế hoạch.
 - **Ngôn ngữ theo mật độ code xung quanh** — khối comment tiếng Anh thì viết tiếp tiếng Anh, không trộn nửa Anh nửa Việt.
 
-Kiến trúc: [`docs/architecture/`](../architecture/README.md). Bất biến bắt buộc giữ (checklist review): [`AGENTS.md`](../../AGENTS.md) §6 Review. Đặt file theo feature: [`feature-architecture.md`](feature-architecture.md).
+Kiến trúc: [`docs/architecture/`](../architecture/README.md). Bất biến bắt buộc giữ (checklist review): [`AGENTS.md`](../../AGENTS.md) §6 Review. Đặt file theo feature: [`docs/convention/feature-architecture.md`](../convention/feature-architecture.md).

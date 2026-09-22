@@ -64,7 +64,7 @@ Cổng `Release test gate` chặn PR phát hành nếu dòng test của version 
 - [ ] PR body: phần riêng theo cấu trúc thư mục; phần chung nêu Core / feature khác (hoặc *Không*)
 - [ ] Fix/refactor: đã có Logic trước → sau
 - [ ] **Suite hiện có** xanh local · CI/CD xanh (không hồi quy). Test *mới* cho thay đổi này thuộc PR dòng test
-- [ ] Tuân thủ `docs/convention/coding.md` + `docs/convention/feature-architecture.md`
+- [ ] Tuân thủ `docs/agent-rules/coding-guideline.md` + `docs/convention/feature-architecture.md`
 - [ ] Icon mới/sửa dùng `<Icon name="..." />` (`src/frontend/ui/Icon.vue`) — không tự vẽ tay `<svg>`/`<path>`
 - [ ] Dropdown mới dùng `CSelect`/`CComboSelect` (`src/frontend/ui/`) — không dùng `<select>` native
 - [ ] **Git hygiene** (`docs/agent-rules/git-pr.md` §1): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ

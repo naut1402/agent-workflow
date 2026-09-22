@@ -2,7 +2,7 @@
 
 Quy ước **hiện hành** khi task đụng `src/features/*`, tầng `business/`, hoặc logic dùng chung.
 
-Kiến trúc tổng quan và bất biến: [`docs/architecture/`](../architecture/). Quy ước ngôn ngữ / Zod / Vue: [`coding.md`](coding.md).
+Kiến trúc tổng quan và bất biến: [`docs/architecture/`](../architecture/). Quy ước ngôn ngữ / Zod / Vue: [`coding-guideline.md`](../agent-rules/coding-guideline.md).
 
 ## 1. Bản đồ đặt file theo task
 

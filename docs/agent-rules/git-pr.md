@@ -461,7 +461,7 @@ Luôn có mục này (ghi *Không* nếu không đụng) để reviewer thấy b
 
 ## 10. Ngôn ngữ & lối viết tài liệu
 
-- **Tài liệu và comment hướng người dùng/PR: tiếng Việt.** Comment kỹ thuật trong code: ngắn gọn, theo mật độ code xung quanh — quy ước đầy đủ ở [`docs/convention/coding.md`](../convention/coding.md) §7.
+- **Tài liệu và comment hướng người dùng/PR: tiếng Việt.** Comment kỹ thuật trong code: ngắn gọn, theo mật độ code xung quanh — quy ước đầy đủ ở [`coding-guideline.md`](coding-guideline.md) §7.
 - **Định danh thì tiếng Anh, nội dung thì tiếng Việt.** Tên job / step / check run của workflow là **định danh**: branch protection khớp required check theo đúng string đó, và `gh pr checks` in nó ra. Đặt tiếng Anh như tên biến. Còn thứ chúng *in ra* — job summary, thông điệp lỗi, `::error::` — theo tiếng Việt như mọi bề mặt người đọc khác.
 - **Đổi tên job đang là required check là breaking change** — protection trỏ vào tên cũ sẽ thành "expected — waiting". Đổi thì sửa protection cùng lượt.
 - **Tài liệu tham khảo mô tả quy tắc/hành vi hiện hành**, không thuật lại lịch sử thay đổi.

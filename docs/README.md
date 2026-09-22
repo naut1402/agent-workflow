@@ -17,7 +17,7 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Giao diện
 
-- **[`convention/i18n.md`](convention/i18n.md)** — quy ước message/locale, kèm cấu trúc file và cách gọi `t()`.
+- **[`agent-rules/coding-guideline.md`](agent-rules/coding-guideline.md)** — quy ước viết code; §6 là message/locale, kèm cấu trúc file và cách gọi `t()`.
 - **[`agent-rules/ui-design-guideline.md`](agent-rules/ui-design-guideline.md)** — nút bấm (§1) và chiến lược tràn nội dung (§2): nguyên tắc kèm class chuẩn.
 
 ## Quy ước

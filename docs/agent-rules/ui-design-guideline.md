@@ -48,7 +48,7 @@ Hover scale (`scale(1.15)`) chỉ dùng cho toolbar / standalone. Nút nằm c�
 - Luôn có `type="button"` (trừ khi đúng là submit form).
 - Luôn có `title` và `aria-label` qua `t(...)` — icon-only không có nhãn chữ nên phụ thuộc hai thuộc tính này.
 - Icon bên trong dùng component chung `<Icon name="..." />` (`src/frontend/ui/Icon.vue`) — **không** tự vẽ tay `<svg>`/`<path>`. `Icon.vue` tự đặt `aria-hidden="true"` trên `<svg>` gốc.
-- Không hardcode chuỗi UI — xem [`docs/convention/i18n.md`](../convention/i18n.md).
+- Không hardcode chuỗi UI — xem [`coding-guideline.md`](coding-guideline.md) §6.
 
 #### Ví dụ
 
