@@ -1,14 +1,17 @@
 # Doc writing — artifact `investigate.md` / `design.md`
 
-Áp dụng cho artifact markdown của pipeline trong `.dev-team-agent/tasks/<id>/`. Quy ước trình bày markdown và tham chiếu giữa tài liệu — áp chung cho mọi markdown, không riêng artifact: [`writing-guideline.md`](writing-guideline.md).
+> [!NOTE]
+> Áp dụng cho artifact markdown của pipeline trong `.dev-team-agent/tasks/<id>/`. Quy ước trình bày markdown và tham chiếu giữa tài liệu — áp chung cho mọi markdown, không riêng artifact: [`writing-guideline.md`](writing-guideline.md).
 
-Rule này **thắng** mọi template mặc định đi kèm công cụ sinh tài liệu: số section, tên section và thứ tự lấy từ đây.
+> [!IMPORTANT]
+> Rule này **thắng** mọi template mặc định đi kèm công cụ sinh tài liệu: số section, tên section và thứ tự lấy từ đây.
 
 ---
 
 ## 1. Nguyên tắc — đảo phễu thông tin
 
-Artifact tồn tại để **ra quyết định**, không phải để lưu trữ mọi thứ đã đọc.
+> [!IMPORTANT]
+> Artifact tồn tại để **ra quyết định**, không phải để lưu trữ mọi thứ đã đọc. Mọi quy tắc trong file này suy ra từ câu này.
 
 - **Người duyệt chốt ở phần đầu** — Tech Lead / PM / Designer đọc §1–§2 là quyết được.
 - **Người code đọc phần cuối** — chi tiết định vị code dồn xuống section sau.
@@ -28,7 +31,8 @@ Artifact tồn tại để **ra quyết định**, không phải để lưu tr�
 
 ## 2. `investigate.md` — 6 section decision-first
 
-Đúng 6 heading `##`, đúng thứ tự, giữ nguyên tên.
+> [!WARNING]
+> Đúng 6 heading `##`, đúng thứ tự, giữ nguyên tên.
 
 1. **`## 1. Tổng quan`** — vấn đề đang giải, hướng giải quyết, phạm vi ở mức module (kèm số lượng), confidence tổng thể.
 2. **`## 2. Quyết định cần chốt`** — bảng `| # | Nhóm | Vấn đề | Đề xuất mặc định | Nếu chọn khác | Người chốt |`, đánh số `D1…Dn`.
@@ -105,7 +109,7 @@ Một mục ở §4 mà kết thúc bằng câu hỏi mở cho người khác �
 
 - **Bảng §2 là kênh thông tin**, không phải control tương tác — bảng markdown không render được checkbox ([`writing-guideline.md`](writing-guideline.md) §1).
 - **Câu hỏi blocking** (không trả lời thì không đi tiếp được) tạo `qa.md` rồi dừng.
-- **Mỗi câu một block** — `## Q<n>` + `**Lựa chọn:**` (list `- A. …`) + `**Trả lời:**`. Đó là dạng duy nhất render thành radio.
+- **Mỗi câu một block** — `## Q<n>` + `**Lựa chọn:**` (list `- A. …`) + `**Trả lời:**`. Đó là **dạng duy nhất** render thành radio; lệch khuôn thì người duyệt không bấm được.
 - **Mục non-blocking** chốt qua feedback ở HITL gate, không cần `qa.md`.
 
 ### 2.9 Ánh xạ sang `pipeline-export.json`
@@ -124,7 +128,10 @@ Khi task bật `export_json = true`, phần `phases.investigator` lấy nguồn 
 
 ## 3. `design.md` — 7 section
 
-Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ bố cục riêng:
+> [!NOTE]
+> Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ bố cục riêng.
+
+Bố cục `design.md`:
 
 1. `## §1. Tổng quan`
 2. `## §2. Investigation Summary`
@@ -140,10 +147,15 @@ Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ b�
 
 ## 4. Bất biến chung mọi artifact
 
-Quy tắc trình bày markdown áp cho mọi tài liệu: [`writing-guideline.md`](writing-guideline.md) §1. Dưới đây chỉ những gì **riêng** của artifact pipeline.
+> [!NOTE]
+> Quy tắc trình bày markdown áp cho mọi tài liệu: [`writing-guideline.md`](writing-guideline.md) §1. Dưới đây chỉ những gì **riêng** của artifact pipeline.
 
-- **Chỉ `##` mới là section** — viewer gập/sửa theo `##`; chi tiết bên trong dùng `###` trở xuống.
-- **Không để `##` ở đầu dòng bên trong code fence** — bước tách section không phân biệt fence nên sẽ cắt đôi khối code. Thụt 1 space, hoặc dùng `###` trở xuống.
+> [!CAUTION]
+> Hai ràng buộc dưới đây có code đang parse — vỡ là hỏng thật, không phải doc xấu.
+>
+> - **Chỉ `##` mới là section** — viewer gập/sửa theo `##`; chi tiết bên trong dùng `###` trở xuống.
+> - **Không để `##` ở đầu dòng bên trong code fence** — bước tách section không phân biệt fence nên sẽ cắt đôi khối code. Thụt 1 space, hoặc dùng `###` trở xuống.
+
 - **`file:line` chỉ ở §4 và §6 của `investigate.md`, và §4 của `design.md`** — chỗ khác nêu tên file + tên hàm/component.
 - **Chốt tương tác đi qua `qa.md`**, không phải checkbox trong bảng — khuôn `qa.md` ở §2.8.
 - **Confidence High / Medium / Low** cho mọi phát hiện chưa chắc, kèm lý do khi Medium/Low.

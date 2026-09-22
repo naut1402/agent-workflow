@@ -14,10 +14,23 @@ Scannability là ưu tiên số 1.
 - **Luôn có 1 dòng trống** giữa các đoạn văn, giữa đoạn văn và list, giữa list và heading.
 - **Bảng cho dữ liệu đối chiếu** — so sánh phương án, ánh xạ khoá, checklist theo cột. Đừng dùng bảng cho văn xuôi dài.
 - **Một đoạn = một ý** — không nhồi nhiều ý vào cùng một đoạn, kể cả khi mỗi ý chỉ một câu.
+- **Dùng callout cho cả khối, emoji cho từng dòng** — callout (GitHub Alerts) đánh dấu một đoạn đứng riêng theo bậc ở bảng dưới; emoji chỉ neo một gạch đầu dòng trong list. Không lồng hai thứ vào nhau.
 - **Dùng emoji / ký hiệu làm mỏ neo thị giác** ở đầu dòng cho các mục cần quét nhanh: 📌 điểm chính · ⚠️ cảnh báo · 🚫 cấm · ✅ đạt · 🔍 khảo sát · 🛠️ implement · 🚀 phát hành. Mỗi ký hiệu mang **một** nghĩa cố định trong cùng tài liệu; không rải cho vui.
 - **Dùng dấu phân tách `·` cho danh sách ngắn cùng hạng** — vd `coding · doc-writing · test · git-pr`. Danh sách dài hoặc có mô tả thì xuống bullet.
 - **Không đặt checkbox trong ô bảng** — GFM chỉ render checkbox khi nó là *list item*. Cần checkbox thì viết thành list.
 - **Không đặt ngân sách độ dài bằng số dòng** — số dòng không nói lên độ khó đọc. Dùng tiêu chí định tính, vd *scan được trong ~1 màn hình*.
+
+### 1.1 Bậc callout
+
+Chọn theo **hậu quả khi không tuân**, không theo cảm giác quan trọng. Một section có quá 2 callout là dấu hiệu lạm dụng — phần còn lại viết thành bullet thường.
+
+| Callout | Dùng cho | Hậu quả khi vỡ |
+|---|---|---|
+| `[!IMPORTANT]` | **Triết lý / phương châm** — lý do tồn tại của cả tài liệu; thứ tự ưu tiên khi xung đột | Mọi quy tắc bên dưới mất nghĩa, người viết tối ưu sai mục tiêu |
+| `[!CAUTION]` | **Hợp đồng công cụ** — thứ có code đang parse | Hỏng thật: viewer cắt đôi khối code, control không render, export sai khoá |
+| `[!WARNING]` | **Quy tắc cứng** — đúng/sai rõ ràng, không tranh cãi được | Sản phẩm sai khuôn, người duyệt không tìm được mục cần đọc |
+| `[!NOTE]` | **Phạm vi áp dụng / ngoại lệ** — rule này áp ở đâu, không áp ở đâu | Áp nhầm rule sang chỗ không thuộc phạm vi |
+| `[!TIP]` | **Quy ước** — khuyến nghị về cách trình bày | Không sai, chỉ khó đọc hơn |
 
 ---
 
