@@ -39,30 +39,35 @@ Hai ràng buộc khi dùng:
 
 #### Fallback khi renderer không hỗ trợ callout
 
-Cú pháp `> [!CAUTION]` chỉ thành khối màu ở GitHub, VS Code và Obsidian. Dashboard render markdown bằng `marked` (`src/frontend/lib/markdownLib.ts`) — không hiểu cú pháp này, nên hiện nguyên chữ `[!CAUTION]` trong một blockquote không màu. Mỗi callout vì vậy mở đầu bằng **nhãn ba lớp**:
+Cú pháp `> [!CAUTION]` chỉ thành khối màu ở GitHub, VS Code và Obsidian. Dashboard render markdown bằng `marked` (`src/frontend/lib/markdownLib.ts`) — không hiểu cú pháp này nên hiện nguyên chữ `[!CAUTION]` trong một blockquote không màu.
+
+Bọc **chính nội dung** callout trong `<span style>` cùng màu. Không thêm nhãn chữ kiểu `QUY TẮC —`: khi callout render được thì nhãn thành thừa.
 
 ```markdown
 > [!CAUTION]
-> 🔴 <span style="color:#e5534b"><b>QUY TẮC</b></span> — nội dung ràng buộc.
+> <span style="color:#e5534b">Nội dung ràng buộc.</span>
 ```
 
-Ba lớp bù cho nhau, không lớp nào ăn ở mọi nơi:
+| Renderer | Người đọc thấy |
+|---|---|
+| GitHub | Khối đỏ; `style` bị lọc nên chữ bên trong màu thường |
+| Dashboard | Blockquote thường, chữ bên trong màu đỏ |
+| VS Code · Obsidian | Khối đỏ, chữ bên trong cũng đỏ |
 
-| Lớp | Ăn ở đâu | Bị bỏ ở đâu |
-|---|---|---|
-| `> [!CAUTION]` | GitHub · VS Code · Obsidian | `marked` → hiện raw chữ `[!CAUTION]` |
-| `<span style>` | Dashboard (DOMPurify giữ `style`) · VS Code · Obsidian | GitHub lọc `style` khỏi HTML người dùng |
-| 🔴 emoji | Mọi nơi, kể cả khi agent đọc raw text | — |
+Hai lưu ý khi bọc:
 
-Nhãn viết **in hoa**, mã màu chọn tông trung tính để đọc được trên cả nền sáng lẫn nền tối (dashboard mặc định nền tối):
+- **Callout chứa list thì bọc từng gạch đầu dòng**, không bọc cả khối — `<span>` là thẻ inline, không ôm được block.
+- **Markdown bên trong `<span>` vẫn parse** — `**đậm**` và `` `code` `` giữ nguyên tác dụng.
 
-| Loại | Nhãn | Mã màu |
-|---|---|---|
-| Quy tắc | 🔴 `QUY TẮC` | `#e5534b` |
-| Nguyên tắc | 🟡 `NGUYÊN TẮC` | `#d29922` |
-| Triết lý | 🟣 `TRIẾT LÝ` | `#a371f7` |
-| Phương châm | 🔵 `PHƯƠNG CHÂM` | `#4493f8` |
-| Quy ước | 🟢 `QUY ƯỚC` | `#3fb950` |
+Mã màu chọn tông trung tính để đọc được trên cả nền sáng lẫn nền tối (dashboard mặc định nền tối):
+
+| Loại | Mã màu |
+|---|---|
+| Quy tắc | `#e5534b` |
+| Nguyên tắc | `#d29922` |
+| Triết lý | `#a371f7` |
+| Phương châm | `#4493f8` |
+| Quy ước | `#3fb950` |
 
 Dùng `<span style>`, không dùng `<font color>`: `font` là thẻ đã bỏ từ HTML5, và cả hai đều bị GitHub lọc như nhau nên không được gì thêm.
 
