@@ -23,7 +23,7 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Quy ước
 
-- **[`convention/`](convention/)** — quy ước theo chủ đề: nguyên tắc kèm chi tiết class/file của chính chủ đề đó, không tham chiếu checklist. Checklist agent thực thi (theo giai đoạn pipeline) nằm ở [`../AGENTS.md`](../AGENTS.md) §6.
+- **[`convention/`](convention/)** — quy ước theo chủ đề: nguyên tắc kèm chi tiết class/file của chính chủ đề đó, không tham chiếu checklist. Checklist agent thực thi (theo giai đoạn pipeline) nằm ở [`../AGENTS.md`](../AGENTS.md) §4.
 
 ## Mẫu dùng lại
 

@@ -9,7 +9,7 @@ Kiến trúc viết theo mô hình **C4** (Simon Brown): 4 cấp trừu tượng
 
 - Giới thiệu + hướng dẫn chạy nhanh: [`../../README.md`](../../README.md).
 - Danh mục tài liệu chung: [`../README.md`](../README.md).
-- Bất biến kiến trúc bắt buộc giữ (checklist review): [`AGENTS.md`](../../AGENTS.md) §6 Review.
+- Bất biến kiến trúc bắt buộc giữ (checklist review): [`AGENTS.md`](../../AGENTS.md) §4 Review.
 
 ---
 

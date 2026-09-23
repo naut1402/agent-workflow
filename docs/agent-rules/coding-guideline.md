@@ -14,6 +14,7 @@ Mức độ ràng buộc đánh dấu bằng màu callout — bảng màu ở [`
 - **ESM thuần** — `package.json` khai `"type": "module"`; không `require()`, không `module.exports`, không file `.cjs`.
 - **Backend import built-in của Node có tiền tố `node:`** — `node:path`, không phải `path`. Áp cho `src/backend/`, `api.ts`, `controller.ts`, `business/`.
 - **Frontend không import gói phía server** — built-in Node (`node:path` lẫn `path`), `src/backend/**`, `hono`, `drizzle-orm`. Vite không polyfill built-in Node, và import xuyên scope kéo luôn code nghiệp vụ vào bundle trình duyệt.
+- **Không import tĩnh `bun:*` trên đường nạp `vite.config.ts`** — `bun run build` chạy `vite build` dưới Node, Node ESM loader không hiểu scheme `bun:`. File với tới được từ `src/backend/apiServer.ts` (hiện tại: `src/backend/db/client.ts`) nạp `bun:sqlite` / `drizzle-orm/bun-sqlite` bằng `await import(...)`, phần type dùng `import type` — import tĩnh làm đỏ step `Build` trong CI.
 - **TypeScript cho code mới/migrate** — còn ba ngoại lệ cố ý: `agentMarkdown.js` và `agentDraft.js` (`src/features/agent-editor/business/`), `src/backend/runner-cli.mjs`. Vì vậy `tsconfig.json` giữ `allowJs: true`.
 - **Không default export** trừ khi framework bắt buộc (Vue SFC, `vite`/`vitest`/`playwright.config.*`, `*.d.ts`).
 
