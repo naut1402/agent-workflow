@@ -114,6 +114,7 @@ export async function runTaskStep(
         (!j.metadata?.devTeamRoot || j.metadata.devTeamRoot === root) &&
         j.status === 'succeeded' &&
         !j.applyTarget &&
+        j.metadata?.respawn !== true &&
         j.metadata?.pipelineStepId === stepId &&
         (!resetAt || (typeof j.finishedAt === 'string' && j.finishedAt > resetAt)),
     )
