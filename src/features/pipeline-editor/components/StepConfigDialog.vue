@@ -220,7 +220,7 @@ function apply() {
   gap: 10px;
 }
 
-/* Class truyền vào CSelect chỉ lo kích thước — xem coding-guideline §5. */
+/* Class truyền vào CSelect chỉ lo kích thước — xem docs/agent-rules/coding-guideline.md §5. */
 .step-config-dialog .cfg-select { width: 100%; }
 
 .cfg-label-row { flex-direction: row; align-items: center; gap: 6px; }

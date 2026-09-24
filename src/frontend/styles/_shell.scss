@@ -221,7 +221,7 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .btn-primary:hover:not(:disabled) { opacity: 0.85; }
 .btn-primary:disabled { opacity: 0.4; cursor: default; }
 
-/* Icon action button — borderless default, scale on hover (see docs/ui-buttons.md) */
+/* Icon action button — borderless default, scale on hover (see docs/agent-rules/ui-design-guideline.md) */
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -265,7 +265,7 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   flex-shrink: 0;
 }
 
-/* Text quick-action trigger (docs/ui-buttons.md: label bắt buộc). Shared by
+/* Text quick-action trigger (docs/agent-rules/ui-design-guideline.md: label bắt buộc). Shared by
    Monitor ArtifactPanel + QuickActionMenuDropdown — keep global with .icon-btn. */
 .btn-quick-action {
   display: inline-flex;

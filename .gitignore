@@ -2,6 +2,9 @@ node_modules/
 dist/
 CLAUDE.local.md
 
+# Tài liệu quy ước giữ ở local, không track
+/docs/convention/
+
 # Docker local secrets / machine paths
 docker/.env
 .env

@@ -2,7 +2,7 @@ import fsSync from 'node:fs'
 import { createRegistryContext } from './registry.js'
 import { createApiHandler } from './apiServer.js'
 
-// Shim: re-exports createApiHandler + the Vite dev-mode plugin devTeamApi(). See docs/architecture.md §2.2.
+// Shim: re-exports createApiHandler + the Vite dev-mode plugin devTeamApi().
 
 export { createApiHandler }
 
