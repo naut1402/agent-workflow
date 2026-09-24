@@ -12,8 +12,7 @@ Part of #
 
 ## PR code liên quan
 <!--
-Link PR ở dòng dev mà PR test này phủ. Đây là nửa còn lại của liên kết hai
-chiều — PR code có mục `## PR test liên quan` trỏ về đây.
+Link PR ở dòng dev mà PR test này phủ.
 -->
 -
 

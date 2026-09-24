@@ -15,28 +15,62 @@ KHÔNG dùng Closes/Fixes/Resolves — merge PR KHÔNG được đóng issue tra
 -->
 Part of #
 
+## Tổng quan
+<!--
+Giữ đúng MỘT khối theo loại task, xoá khối còn lại.
+Task feature: Bối cảnh · Mong muốn · Phương châm thực hiện.
+Task fix bug: Hiện trạng · Trình tự tái hiện · Phương án chỉnh sửa.
+Chore / docs / refactor: chọn khối gần nhất.
+-->
+**Task feature**
+- **Bối cảnh:** …
+- **Mong muốn:** …
+- **Phương châm thực hiện:** …
+
+**Task fix bug**
+- **Hiện trạng:** …
+- **Trình tự tái hiện:**
+  1. …
+- **Phương án chỉnh sửa:** …
+
 ## Module / Phạm vi
 <!-- Feature / module chính, vd: src/features/settings, src/backend/log -->
 
 ## Nội dung thay đổi
-<!-- Tóm tắt 1–3 câu mục tiêu PR. Chi tiết theo § dưới — bám cây thư mục, không liệt kê phẳng. -->
-
-### Chi tiết chỉnh sửa (phần riêng)
 <!--
-Nhóm theo lớp của feature chính (chỉ mục có đổi):
-api/controller · business · schemas · components/composables/scripts/locales/styles
-Test KHÔNG thuộc PR này — nó ở PR dòng test (xem mục `## PR test liên quan`).
-Fix/refactor: bắt buộc Logic trước → sau.
+Mỗi thay đổi nghiệp vụ / logic quan trọng một mục, đánh số ①, ②, ③, …
+Mỗi mục: Logic thay đổi, rồi NGAY DƯỚI là thẻ <details> chi tiết chỉnh sửa của riêng mục đó — không gom chi tiết các mục về một chỗ.
+Logic — fix/refactor: bắt buộc Trước → Sau; feat thuần chưa có hành vi cũ: chỉ ghi Sau.
+Chi tiết — nhóm theo lớp của feature (chỉ lớp có đổi):
+api/controller · business · schemas · components/composables/scripts/locales/styles.
+Các mục ngăn cách bằng đường kẻ ngang `---` (để trống 1 dòng phía trên, nếu không `---` biến dòng trước thành heading).
+Test KHÔNG thuộc PR này — nó ở PR dòng test.
 -->
-
-#### `src/features/<feature>/`
-- …
-
-**Logic trước → sau** (bắt buộc với fix/refactor; feat thuần có thể bỏ):
+**① …**
 - Trước: …
 - Sau: …
 
-### Chi tiết chỉnh sửa (phần chung)
+<details>
+<summary>Chi tiết chỉnh sửa</summary>
+
+- `src/features/<feature>/…` — …
+
+</details>
+
+---
+
+**② …**
+- Trước: …
+- Sau: …
+
+<details>
+<summary>Chi tiết chỉnh sửa</summary>
+
+- `src/features/<feature>/…` — …
+
+</details>
+
+### Phần chung
 <!-- Luôn điền. Ghi "Không" nếu không đụng. -->
 - **Backend** (`src/backend/…`) / **Frontend** (`src/frontend/…`) / **Shared** (`src/shared/…`): …
 - **Feature khác**: … / Không
@@ -46,27 +80,18 @@ Fix/refactor: bắt buộc Logic trước → sau.
 |-------|-----|---------|
 |       |     |         |
 
-## PR test liên quan
+## Tài liệu liên quan
 <!--
-Test code sống ở dòng branch riêng (`test/x.y.z/{taskID}_{slug}`) — xem
-docs/agent-rules/git-pr.md §4.3. Điền link PR test, hoặc ghi
-"chưa mở (dự kiến: …)". Test view point & test case nằm ở PR test đó.
-Cổng `Release test gate` chặn PR phát hành nếu dòng test của version không có.
+Link tài liệu đã publish ở issue: investigate · design · test-spec · whitebox · review-result.
+CHỈ liệt kê tài liệu đã publish — xoá dòng chưa có, không để link trống.
 -->
-- Chưa mở (dự kiến: …)
+- **Investigate:** …
+- **Design:** …
+- **Test spec:** …
+- **Whitebox:** …
+- **Review result:** …
 
-## Todo debt (nếu PR `dev/x.y.z/main` → `main`)
-<!-- docs/agent-rules/git-pr.md §7 — CI Todo debt chỉ gate promote lên main. -->
-- [ ] Không còn thư mục `docs/todo/` (đã đối ứng và xóa hết)
-- [ ] PR feature → `dev/x.y.z/main`: được mang nợ; không áp checklist này
 ## Checklist
-- [ ] Không thay đổi hành vi public (hoặc đã ghi rõ thay đổi)
-- [ ] PR body: phần riêng theo cấu trúc thư mục; phần chung nêu Core / feature khác (hoặc *Không*)
-- [ ] Fix/refactor: đã có Logic trước → sau
-- [ ] **Suite hiện có** xanh local · CI/CD xanh (không hồi quy). Test *mới* cho thay đổi này thuộc PR dòng test
-- [ ] Tuân thủ `docs/agent-rules/coding-guideline.md` + `docs/convention/feature-architecture.md`
-- [ ] Icon mới/sửa dùng `<Icon name="..." />` (`src/frontend/ui/Icon.vue`) — không tự vẽ tay `<svg>`/`<path>`
-- [ ] Dropdown mới dùng `CSelect`/`CComboSelect` (`src/frontend/ui/`) — không dùng `<select>` native
-- [ ] **Git hygiene** (`docs/agent-rules/git-pr.md` §1): đã soát `git status` / `git diff --staged` — KHÔNG commit file ngoài phạm vi / generated / export / lockfile lạ
-- [ ] Rename/move dùng `git mv`; KHÔNG còn bản cũ trùng (vd `.js` lẫn `.ts`)
-- [ ] Test không nằm trong PR này — dòng test của version đã hoạt động thì file dưới `tests/`·`test-e2e/` chuyển sang PR dòng test; **giai đoạn đệm** (dòng test chưa dựng cho version này) thì test vẫn ở đây nhưng phải đi commit `test:` riêng (`docs/agent-rules/git-pr.md` §2)
+<!-- Chi tiết từng mục: AGENTS.md §4 (Review · PR). -->
+- [ ] Đã thực hiện checklist theo chỉ dẫn dành cho agent
+- [ ] Chưa thực kiểm thử thì đã dán nhãn `test-pending`

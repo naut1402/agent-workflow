@@ -425,12 +425,33 @@ Repo có **2 loại PR**, body khác nhau:
 Nội dung dưới đây áp dụng cho **PR feature**, theo `.github/pull_request_template.md`.
 
 - **Mục `## Issue` đặt ở đầu**, dùng từ khoá **không** auto-close (`Part of #<n>` / `Refs #<n>`). **Không** dùng `Closes` / `Fixes` / `Resolves`.
-- **Bắt buộc mục "Nội dung thay đổi"** theo cấu trúc 2 mục dưới đây, kèm bảng file TRƯỚC → SAU khi có rename/split.
-- **Liệt kê loại test đã thêm/migrate.**
+- **Thứ tự body cố định**: `## Issue` → `## Tổng quan` → `## Module / Phạm vi` → `## Nội dung thay đổi` (các mục ①, ②, … → phần chung → mapping file) → `## Tài liệu liên quan` → `## Checklist`.
+- **`## Tài liệu liên quan`** — link tài liệu đã publish ở issue (investigate · design · test-spec · whitebox · review-result). 🚫 Chỉ liệt kê tài liệu **đã publish**, không để dòng trống chờ điền.
+- **Checklist chỉ hai mục** — đã làm checklist agent (chi tiết ở `AGENTS.md` §4, 🚫 không chép lại từng mục vào PR body) · chưa thực kiểm thử thì đã dán nhãn `test-pending`.
 
-### 9.1 Chi tiết chỉnh sửa — phần riêng
+### 9.1 Tổng quan
 
-Mô tả PR nhóm theo **cùng bản đồ thư mục của code**, không liệt kê phẳng "đổi file A, B, C":
+Ngay dưới `## Issue`, giữ đúng **một** khối theo loại task:
+
+| Loại task | Nội dung |
+|---|---|
+| Feature | **Bối cảnh** · **Mong muốn** · **Phương châm thực hiện** |
+| Fix bug | **Hiện trạng** · **Trình tự tái hiện** (các bước đánh số) · **Phương án chỉnh sửa** |
+
+Chore / docs / refactor chọn khối gần nhất. Mỗi ý 1–3 câu — đủ để reviewer hiểu *vì sao* trước khi đọc *sửa gì*.
+
+### 9.2 Nội dung thay đổi
+
+- **Mỗi thay đổi nghiệp vụ / logic quan trọng một mục, đánh số ①, ②, ③, …**
+- **Mỗi mục gồm Logic thay đổi, rồi ngay dưới là một thẻ `<details>` chi tiết chỉnh sửa của riêng mục đó** — 🚫 không gom chi tiết các mục về một chỗ; reviewer đọc logic xong là thấy ngay file hiện thực nó.
+- **Các mục ngăn cách bằng đường kẻ ngang `---`** — để trống một dòng phía trên, không thì Markdown đọc `---` thành gạch chân heading của dòng trước.
+
+**Logic thay đổi**
+
+- **Fix / refactor bắt buộc có cặp Trước → Sau** (hành vi hoặc luồng), không chỉ tên hàm đổi chỗ.
+- **Feature mới thuần** chỉ ghi *Sau* nếu chưa có hành vi cũ để đối chiếu.
+
+**Chi tiết chỉnh sửa** — nhóm theo **cùng bản đồ thư mục của code**, không liệt kê phẳng "đổi file A, B, C":
 
 | Nhóm trong PR | Ví dụ path |
 |---------------|------------|
@@ -438,20 +459,20 @@ Mô tả PR nhóm theo **cùng bản đồ thư mục của code**, không liệ
 | Domain | `…/business/` |
 | Schema | `…/schemas/` |
 | UI / FE API / i18n / style | `…/components/`, `composables/`, `scripts/`, `locales/`, `styles/` |
-| Test | `tests/…` (mirror source), `test-e2e/` |
 
 - **Mỗi nhóm 1–vài gạch đầu dòng** — *làm gì* / *vì sao*, không dump toàn bộ diff.
-- **Fix / refactor bắt buộc có cặp Logic trước → Logic sau** (hành vi hoặc luồng), không chỉ tên hàm đổi chỗ.
-- **Feature mới thuần** có thể bỏ cặp này nếu chưa có hành vi cũ để đối chiếu.
+- **Test không thuộc PR này** — nó ở PR dòng test (§4.3).
 
-### 9.2 Chi tiết chỉnh sửa — phần chung
+### 9.3 Phần chung & mapping file
 
-Luôn có mục này (ghi *Không* nếu không đụng) để reviewer thấy blast radius:
+Đặt sau các mục ①, ②, …
 
-- **Backend / Frontend / Shared** (`src/backend/…`, `src/frontend/…`, `src/shared/…`) — đổi **logic** (hành vi helper, gate, schema dùng chung, middleware) thì nêu module + thay đổi; rename/import-only ghi một dòng ngắn hoặc *Không*.
-- **Feature khác** (`src/features/<peer>/…`) — sửa logic / API / contract của feature không phải phạm vi chính thì nêu feature + chỗ đụng.
+- **Phần chung** — luôn có (ghi *Không* nếu không đụng) để reviewer thấy blast radius:
+  - **Backend / Frontend / Shared** (`src/backend/…`, `src/frontend/…`, `src/shared/…`) — đổi **logic** (hành vi helper, gate, schema dùng chung, middleware) thì nêu module + thay đổi; rename/import-only ghi một dòng ngắn hoặc *Không*.
+  - **Feature khác** (`src/features/<peer>/…`) — sửa logic / API / contract của feature không phải phạm vi chính thì nêu feature + chỗ đụng.
+- **Mapping file** — bảng Trước → Sau khi có rename / split / migrate path.
 
-### 9.3 Test view point & kết quả
+### 9.4 Test view point & kết quả
 
 - **Test view point & test case** — tiếng Việt, checklist theo module/chức năng, **comment lên PR** (không chỉ để trong code); dài thì bọc `<details>`. Mỗi case nêu: đầu vào → hành vi mong đợi.
 - **Kết quả test** — đã chạy thật thì comment tổng pass/fail, coverage nếu có, link CI run. **Chưa chạy thật thì không comment kết quả giả.**

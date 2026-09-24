@@ -45,7 +45,7 @@ Theo convention git/PR (project rule ưu tiên, `create-pr` fallback):
 - Base PR là `test/x.y.z/main` (không phải `main`, không phải dòng `dev/**`)
 - Dùng template PR test của project nếu có (vd `?template=test.md`), không dùng template PR code
 - `type` của commit/PR title là `test`
-- Body phải nêu **cặp ref** (source ref + SHA đã overlay) và link sang PR code tương ứng — liên kết hai chiều giữa hai dòng
+- Body phải nêu **cặp ref** (source ref + SHA đã overlay) và link sang PR code tương ứng
 - Không mô tả thay đổi source: PR này chỉ chứa `tests/` + `test-e2e/`
 
 ### Bước 3: Amend commit message
