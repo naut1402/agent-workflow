@@ -35,5 +35,5 @@ if (files.length === 0) {
     console.error(`  - ${path.relative(process.cwd(), f).split(path.sep).join('/')}`)
   }
 }
-console.error('See docs/agent-rules/pr-todo-debt.md')
+console.error('See docs/agent-rules/git-pr.md §7')
 process.exit(1)

@@ -137,7 +137,7 @@ export function matchWorktreeForTask(entries: WorktreeEntry[], taskId: string): 
  * Second line of defence behind `git worktree remove` (which already refuses
  * paths it does not own): accept only worktrees inside the repo
  * (`<repo>/.claude/worktrees/<name>`, what the agent harness creates) or right
- * next to it (`../wt-<task>`, what `git-worktree.md` recommends).
+ * next to it (`../wt-<task>`, what `docs/agent-rules/git-pr.md` §6 recommends).
  */
 export function isRemovableWorktreePath(repoRoot: string, wtPath: string): boolean {
   if (!repoRoot || !wtPath) return false
