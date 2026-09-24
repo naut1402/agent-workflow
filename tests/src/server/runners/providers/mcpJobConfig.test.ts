@@ -273,3 +273,69 @@ describe('TC-100: prepareMcpConfigForJob — kênh onWarning', () => {
     expect(warnings).toEqual(handle!.warnings)
   })
 })
+
+/* ─── Tdad47b2b · TC-E06 · TC-C13 — từ file store tới file config của job ─── */
+
+/**
+ * TC-E06 là **ca chốt rủi ro hồi quy im lặng** của cả task: file `mcp-servers.json`
+ * còn ở v1 với `timeoutMs: 15000` (mặc định CŨ, chưa ai đụng) mà đi thẳng xuống
+ * `startupTimeoutSec: 15` là rút thời gian khởi động của job từ 120s xuống 15s —
+ * đúng lớp lỗi «kiểm tra fail nhưng agent vẫn lấy được tool» mà task này khép.
+ *
+ * Đo ở đây chứ 🚫 không ở `registry.test.ts`: chỉ khi ghép ĐỌC STORE + SINH FILE
+ * mới thấy hậu quả thật sự tới được job.
+ */
+describe('TC-E06 / TC-C13: store v1 → file config cho job', () => {
+  function writeV1Store(servers: Record<string, unknown>[]) {
+    fs.writeFileSync(
+      path.join(home, 'mcp-servers.json'),
+      JSON.stringify({ version: 1, servers }),
+      'utf8',
+    )
+  }
+
+  const V1_STDIO = {
+    id: 'on1',
+    label: 'on1',
+    enabled: true,
+    transport: 'stdio',
+    command: 'npx',
+    args: [],
+    env: {},
+  }
+
+  test('TC-E06: v1 với `timeoutMs: 15000` ⇒ entry 🚫 KHÔNG có khoá timeout khởi động (job dùng mặc định CLI)', () => {
+    writeV1Store([{ ...V1_STDIO, timeoutMs: 15_000 }])
+
+    const handle = prepareMcpConfigForJob({ ids: ['on1'], workspace: '/ws', jobId: 'job-1' })!
+    const entry = JSON.parse(fs.readFileSync(handle.path, 'utf8')).mcpServers.on1
+
+    expect(entry).not.toHaveProperty('startupTimeoutSec')
+    expect(Object.keys(entry)).toEqual(['type', 'command', 'args', 'env'])
+    // 🚫 Không con số 15 nào lọt xuống file dưới bất kỳ khoá nào.
+    expect(JSON.stringify(entry)).not.toContain('15')
+    expect(handle.warnings).toEqual([])
+  })
+
+  test('TC-E06 (đối chứng): giá trị v1 ≥ mặc định mới được giữ và ĐI XUỐNG file', () => {
+    writeV1Store([{ ...V1_STDIO, timeoutMs: 300_000 }])
+
+    const handle = prepareMcpConfigForJob({ ids: ['on1'], workspace: '/ws', jobId: 'job-1' })!
+    const entry = JSON.parse(fs.readFileSync(handle.path, 'utf8')).mcpServers.on1
+
+    expect(entry.startupTimeoutSec).toBe(300)
+  })
+
+  test('TC-C13: file config mang khoá timeout vẫn là JSON hợp lệ, quyền 0600', () => {
+    seed({ id: 'on1', timeoutMs: 120_000 })
+
+    const handle = prepareMcpConfigForJob({ ids: ['on1'], workspace: '/ws', jobId: 'job-1' })!
+    const raw = fs.readFileSync(handle.path, 'utf8')
+
+    expect(() => JSON.parse(raw)).not.toThrow()
+    expect(JSON.parse(raw).mcpServers.on1.startupTimeoutSec).toBe(120)
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(handle.path).mode & 0o777).toBe(0o600)
+    }
+  })
+})

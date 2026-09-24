@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
-import { mountWithI18n as mount } from '../../../helpers/i18n'
+import { mount } from '@vue/test-utils'
+import { createTestI18nPlugin } from '../../../helpers/i18n'
 import McpPanel from '@/features/mcp/components/McpPanel.vue'
 import McpServerDialog from '@/features/mcp/components/McpServerDialog.vue'
 import mcpVi from '@/features/mcp/locales/vi'
+import mcpEn from '@/features/mcp/locales/en'
 import { MCP_MASK, type McpServerConfig } from '@/features/mcp/business/types'
 
 /**
@@ -68,14 +70,26 @@ function buttonByLabel(label: string): HTMLButtonElement {
 function rows(): HTMLElement[] {
   return qa<HTMLElement>('.mcp-list li').filter((li) => !li.classList.contains('empty'))
 }
+/** Click THẬT — sau fix `CSelect` (Tdad47b2b) 🚫 không còn workaround `dispatchEvent`. */
 async function click(el: Element) {
-  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+  ;(el as HTMLElement).click()
   await flushPromises()
 }
 
-async function mountPanel(servers: McpServerConfig[]) {
+/** Dòng `Id: …` chỉ-đọc trong dialog (teleport ra `document.body`). */
+function shownId(dict: typeof mcpVi = mcpVi): string | null {
+  const el = document.body.querySelector('.id-hint')
+  if (!el) return null
+  const [prefix] = dict.dialog.idDerived.split('{id}')
+  return el.textContent!.trim().slice(prefix.length).trim()
+}
+
+async function mountPanel(servers: McpServerConfig[], locale: 'vi' | 'en' = 'vi') {
   vi.mocked(fetchMcpServers).mockResolvedValue({ servers } as any)
-  const w = mount(McpPanel, { attachTo: document.body })
+  const w = mount(McpPanel, {
+    attachTo: document.body,
+    global: { plugins: [createTestI18nPlugin(locale)] },
+  })
   await flushPromises()
   return w
 }
@@ -123,20 +137,85 @@ describe('McpPanel — danh sách', () => {
     expect(list[2].textContent).not.toMatch(/\d+ tool/)
   })
 
-  // TC-77
-  it('TC-77: sao chép ⇒ bản sao mang id `-copy`, tắt sẵn; bản gốc không đổi', async () => {
+  /**
+   * TC-77 / TC-A17 — sao chép.
+   *
+   * ⚠️ Kỳ vọng ĐỔI theo task Tdad47b2b: bản sao 🚫 không còn mang id
+   * `<id nguồn>-copy`. `openCopy` chỉ đổi LABEL; id được dialog suy lại từ chính
+   * label đó, nên người dùng nhìn thấy id trước khi lưu (dòng `Id: …`).
+   */
+  it('TC-77 / TC-A17: sao chép ⇒ dialog ở chế độ tạo, label mang hậu tố bản sao, id suy từ label, tắt sẵn', async () => {
     const w = await mountPanel([PLAYWRIGHT])
 
     await click(buttonByLabel(mcpVi.panel.copy))
 
-    const draft = w.findComponent(McpServerDialog).props('server') as McpServerConfig
-    expect(draft.id).toBe('playwright-copy')
+    const dialog = w.findComponent(McpServerDialog)
+    const draft = dialog.props('server') as McpServerConfig
+    expect(dialog.props('isCopy')).toBe(true)
+    expect(draft.label).toBe('Playwright MCP (bản sao)')
     expect(draft.enabled).toBe(false)
     expect(draft.lastCheck).toBeNull()
+
+    // Dialog mở ở chế độ TẠO (tiêu đề «Thêm»), id suy từ label của bản sao.
+    expect(document.body.textContent).toContain(mcpVi.dialog.title)
+    expect(shownId()).toBe('playwright-mcp-ban-sao')
+    expect(shownId()).not.toMatch(/-copy$/)
+
     // Bản gốc trong danh sách không bị đụng.
     expect(rows()[0].textContent).toContain('Playwright MCP')
     expect(PLAYWRIGHT.id).toBe('playwright')
     expect(PLAYWRIGHT.enabled).toBe(true)
+  })
+
+  // TC-A18
+  it('TC-A18: sao chép lần hai (bản sao lần 1 đã lưu) ⇒ id có hậu tố `-2`, 🚫 không ghi đè bản trước', async () => {
+    const firstCopy: McpServerConfig = {
+      ...PLAYWRIGHT,
+      id: 'playwright-mcp-ban-sao',
+      label: 'Playwright MCP (bản sao)',
+      enabled: false,
+      lastCheck: null,
+    }
+    await mountPanel([PLAYWRIGHT, firstCopy])
+
+    await click(buttonByLabel(mcpVi.panel.copy))
+
+    expect(shownId()).toBe('playwright-mcp-ban-sao-2')
+  })
+
+  // TC-A19
+  it('TC-A19: sao chép rồi Lưu ⇒ server nguồn giữ nguyên id, label, trạng thái và lastCheck', async () => {
+    const before = JSON.parse(JSON.stringify(PLAYWRIGHT))
+    await mountPanel([PLAYWRIGHT])
+
+    await click(buttonByLabel(mcpVi.panel.copy))
+    const saveBtn = Array.from(document.body.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === mcpVi.dialog.save,
+    )!
+    await click(saveBtn)
+
+    const payload = vi.mocked(saveMcpServer).mock.calls.at(-1)![0] as any
+    expect(payload.id).toBe('playwright-mcp-ban-sao')
+    expect(payload.id).not.toBe(before.id)
+    // Hằng fixture là bản gốc: lượt sao chép 🚫 không được sửa nó tại chỗ.
+    expect(PLAYWRIGHT).toEqual(before)
+  })
+
+  /**
+   * TC-G07 — hậu tố bản sao lấy từ i18n, và id suy ra đi theo locale. Người dùng
+   * NHÌN THẤY id trước khi lưu ở cả hai locale.
+   */
+  it.each([
+    ['vi', 'Playwright MCP (bản sao)', 'playwright-mcp-ban-sao'],
+    ['en', 'Playwright MCP (copy)', 'playwright-mcp-copy'],
+  ] as const)('TC-G07 (%s): hậu tố bản sao và preview id', async (locale, label, id) => {
+    const dict = locale === 'vi' ? mcpVi : mcpEn
+    const w = await mountPanel([PLAYWRIGHT], locale)
+
+    await click(buttonByLabel(dict.panel.copy))
+
+    expect((w.findComponent(McpServerDialog).props('server') as McpServerConfig).label).toBe(label)
+    expect(shownId(dict as unknown as typeof mcpVi)).toBe(id)
   })
 
   // TC-78
@@ -163,7 +242,7 @@ describe('McpPanel — danh sách', () => {
    */
   it('TC-79: API lỗi ⇒ err-banner, danh sách rỗng, component không ném', async () => {
     vi.mocked(fetchMcpServers).mockRejectedValueOnce(new Error('HTTP 500'))
-    const w = mount(McpPanel, { attachTo: document.body })
+    const w = mount(McpPanel, { attachTo: document.body, global: { plugins: [createTestI18nPlugin()] } })
     await flushPromises()
 
     expect(qa('.err-banner')).toHaveLength(1)
@@ -179,7 +258,7 @@ describe('McpPanel — danh sách', () => {
     // thấy (có banner, danh sách rỗng, 🚫 không ném) chứ không khoá chuỗi hiện
     // tại — xem mục "Bug phát hiện ở source" trong `test-result.md`.
     vi.mocked(fetchMcpServers).mockRejectedValueOnce(new Error(''))
-    mount(McpPanel, { attachTo: document.body })
+    mount(McpPanel, { attachTo: document.body, global: { plugins: [createTestI18nPlugin()] } })
     await flushPromises()
     expect(qa('.err-banner')).toHaveLength(1)
     expect(qa('.err-banner')[0].textContent!.trim().length).toBeGreaterThan(0)
