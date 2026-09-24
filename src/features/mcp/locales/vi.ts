@@ -15,6 +15,7 @@ export default {
     confirmDelete: 'Xóa MCP server {id}?',
     deleted: 'Đã xóa MCP server',
     saved: 'Đã lưu MCP server {id}',
+    copyLabelSuffix: '{label} (bản sao)',
   },
   transport: {
     stdio: 'stdio',
@@ -24,10 +25,12 @@ export default {
   dialog: {
     title: 'Thêm MCP server',
     editTitle: 'Sửa MCP server',
-    idField: 'Id',
-    idPlaceholder: 'vd. playwright',
-    idNormalised: 'Id sẽ được lưu thành «{id}» — chỉ nhận chữ, số, «-» và «_».',
     labelField: 'Tên hiển thị',
+    idDerived: 'Id: {id}',
+    idDerivedHint:
+      'Id được suy ra từ Tên hiển thị và dùng làm tiền tố tên tool (mcp__<id>__<tool>).',
+    idFrozenHint:
+      'Id không đổi sau lần lưu đầu để Connection đang trỏ tới server này không bị đứt.',
     transportField: 'Transport',
     enabledField: 'Bật server này',
     commandField: 'Command',
@@ -44,7 +47,8 @@ export default {
     authHeaderField: 'Header xác thực',
     authSchemeField: 'Scheme',
     headersField: 'Header tuỳ chỉnh',
-    timeoutField: 'Timeout (ms)',
+    timeoutField: 'Timeout khởi động (ms)',
+    timeoutHint: 'Áp dụng cho cả nút Kiểm tra kết nối và lúc job chạy server này.',
     keyPlaceholder: 'Tên',
     valuePlaceholder: 'Giá trị',
     addRow: 'Thêm dòng',
@@ -63,8 +67,7 @@ export default {
     saving: 'Đang lưu…',
   },
   errors: {
-    idRequired: 'Nhập id cho MCP server',
-    idExists: 'Id này đã có MCP server khác dùng — đặt id khác để không ghi đè',
+    labelRequired: 'Nhập tên hiển thị cho MCP server',
     commandRequired: 'Nhập command',
     urlRequired: 'Nhập URL',
     loadFailed: 'Không tải được danh sách MCP server',

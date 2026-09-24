@@ -10,12 +10,13 @@ import {
   MCP_DEFAULT_SSE_PATH,
   MCP_DEFAULT_TIMEOUT_MS,
   MCP_MAX_TIMEOUT_MS,
+  MCP_MIN_TIMEOUT_MS,
   MCP_TRANSPORTS,
   looksLikeSecretLiteral,
-  sanitiseMcpServerId,
   type McpServerConfig,
   type McpTransport,
 } from '../business/types'
+import { slugify } from '../../../shared/lib/stringUtils'
 import CSelect from '../../../frontend/ui/CSelect.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import InfoTooltip from '../../../frontend/ui/InfoTooltip.vue'
@@ -31,8 +32,8 @@ const props = defineProps<{
   /** Bản sao đã bị xoá giá trị secret — nhắc người dùng nhập lại trước khi lưu. */
   secretsCleared?: boolean
   /**
-   * Bản sao: có `server` để prefill nhưng KHÔNG phải sửa bản đó, nên ô id
-   * phải mở để người dùng đặt tên khác.
+   * Bản sao: có `server` để prefill nhưng KHÔNG phải sửa bản đó, nên id được
+   * derive LẠI từ Tên hiển thị của bản sao thay vì kế thừa id nguồn.
    */
   isCopy?: boolean
   /** Id đang có trong store — chặn tạo mới/sao chép đè lên server khác. */
@@ -46,11 +47,39 @@ const emit = defineEmits<{
 
 const { t } = useI18nHelpers()
 
-// Sao chép KHÔNG phải sửa: `upsertMcpServer` ghi đè theo id, nên khoá ô id ở
-// chế độ copy là đẩy người dùng vào chỗ ghi đè bản sao trước đó mà không hay.
+// Sao chép KHÔNG phải sửa: `upsertMcpServer` ghi đè theo id, nên coi bản sao là
+// server mới (id derive lại) thay vì kế thừa id nguồn và ghi đè bản gốc.
 const isEdit = computed(() => Boolean(props.server?.id) && !props.isCopy)
 
-const id = ref('')
+/**
+ * Id là khoá `mcpServers` trong file config và đi thẳng vào tên tool model nhìn
+ * thấy (`mcp__<id>__<tool>`), nên phải đọc được. `upsertMcpServer` chỉ nhận id ĐÃ
+ * canonical (`sanitiseMcpServerId` giữ `[a-zA-Z0-9_-]`, cắt 64) — sai một ký tự là
+ * 400, nên id phải sinh ra đã đúng dạng chứ không trông cậy backend cắt hộ.
+ * `slugify` chỉ sinh `[a-z0-9-]` nên luôn qua.
+ */
+const ID_MAX_LENGTH = 64
+
+/**
+ * `slugify` cắt ở `maxLength` TRƯỚC khi nối hậu tố, nên nối thẳng `-2` là vượt 64 ⇒
+ * backend cắt lại ⇒ id gửi lên khác id canonical ⇒ 400. Chừa sẵn chỗ cho hậu tố.
+ */
+function withSuffix(base: string, n: number): string {
+  const room = ID_MAX_LENGTH - String(n).length - 1
+  return `${base.slice(0, room).replace(/-+$/, '')}-${n}`
+}
+
+function deriveId(rawLabel: string, taken: Set<string>): string {
+  // `slugify` strip `-` hai đầu TRƯỚC khi `.slice(maxLength)`, nên nhãn đủ dài vẫn
+  // ra id kết thúc bằng `-`: hợp lệ nhưng xấu, và lộ vào tên tool.
+  const base = slugify(rawLabel, { maxLength: ID_MAX_LENGTH, fallback: 'mcp-server' })
+    .replace(/-+$/, '')
+  if (!taken.has(base)) return base
+  let n = 2
+  while (taken.has(withSuffix(base, n))) n++
+  return withSuffix(base, n)
+}
+
 const label = ref('')
 const enabled = ref(true)
 const transport = ref<McpTransport>('stdio')
@@ -85,15 +114,14 @@ const credentialOptions = computed(() => [
   ...credentials.value.map((c) => ({ value: c.id, label: c.label || c.id })),
 ])
 
+const derivedId = computed(() =>
+  label.value.trim() ? deriveId(label.value, new Set(props.takenIds || [])) : '',
+)
 /**
- * Id bị `sanitiseMcpServerId` loại ký tự lạ ở backend, và ô id khoá lại sau khi
- * lưu — gõ `my.server` mà im lặng thành `myserver` thì không sửa lại được nữa.
+ * Id của server ĐÃ LƯU đóng băng: `Connection.config.mcpServers` tham chiếu server
+ * theo id, đổi id theo label là đứt mọi Connection đang trỏ tới nó.
  */
-const normalisedId = computed(() => sanitiseMcpServerId(id.value) || '')
-const idWasNormalised = computed(() => {
-  const typed = id.value.trim()
-  return Boolean(typed) && normalisedId.value !== typed
-})
+const effectiveId = computed(() => (isEdit.value ? props.server!.id : derivedId.value))
 
 const secretLikeRows = computed(() => {
   const rows = isStdio.value ? envRows.value : headerRows.value
@@ -117,7 +145,6 @@ function fromRows(rows: KeyValueRow[]): Record<string, string> {
 function applyPrefill() {
   const s = props.server
   if (!s) return
-  id.value = s.id
   label.value = s.label || ''
   enabled.value = s.enabled !== false
   transport.value = s.transport
@@ -156,7 +183,8 @@ watch(credentialId, (next) => {
 })
 
 watch(
-  [id, transport, command, argsText, envRows, cwd, url, credentialId, authHeader, authScheme, headerRows, timeoutMs],
+  // `label` chứ không phải `id`: label đổi là id derive đổi là payload đổi.
+  [label, transport, command, argsText, envRows, cwd, url, credentialId, authHeader, authScheme, headerRows, timeoutMs],
   () => {
     testedOk.value = false
   },
@@ -172,14 +200,14 @@ function removeRow(rows: KeyValueRow[], index: number) {
 }
 
 function buildDraft(): McpServerConfig | null {
-  const cleanId = id.value.trim()
-  if (!cleanId) {
-    error.value = t('mcp.errors.idRequired')
+  const cleanLabel = label.value.trim()
+  if (!cleanLabel) {
+    error.value = t('mcp.errors.labelRequired')
     return null
   }
   const base = {
-    id: cleanId,
-    label: label.value.trim() || cleanId,
+    id: effectiveId.value,
+    label: cleanLabel,
     enabled: enabled.value,
     timeoutMs: Number(timeoutMs.value) || MCP_DEFAULT_TIMEOUT_MS,
   }
@@ -279,29 +307,31 @@ onUnmounted(() => {
           <p v-if="secretsCleared" class="warn-text">{{ t('mcp.dialog.copySecretsCleared') }}</p>
 
           <div class="field">
-            <label class="cfg-label">{{ t('mcp.dialog.idField') }}
-              <input v-model="id" class="cfg-input" :disabled="isEdit" :placeholder="t('mcp.dialog.idPlaceholder')" />
+            <label class="cfg-label">
+              <!-- `.cfg-label` là flex COLUMN: text nhãn và dấu `*` phải nằm chung một
+                   flex item, không thì `*` rơi xuống dòng riêng. Cùng lý do với
+                   `.label-with-hint` ở các trường có InfoTooltip. -->
+              <span class="label-with-hint">
+                {{ t('mcp.dialog.labelField') }}<span class="req" aria-hidden="true">*</span>
+              </span>
+              <input v-model="label" class="cfg-input" />
             </label>
-            <p v-if="!isEdit && idWasNormalised" class="warn-text">
-              {{ t('mcp.dialog.idNormalised', { id: normalisedId }) }}
+            <p v-if="effectiveId" class="muted id-hint">
+              {{ t('mcp.dialog.idDerived', { id: effectiveId }) }}
+              <InfoTooltip :text="isEdit ? t('mcp.dialog.idFrozenHint') : t('mcp.dialog.idDerivedHint')" />
             </p>
           </div>
 
+          <!-- CSelect KHÔNG bọc trong <label> (a11y + label-forwarding): tên accessible
+               đến từ `aria-label` trên trigger, bám mẫu ConnectionDialog. -->
           <div class="field">
-            <label class="cfg-label">{{ t('mcp.dialog.labelField') }}
-              <input v-model="label" class="cfg-input" />
-            </label>
-          </div>
-
-          <div class="field">
-            <label class="cfg-label">{{ t('mcp.dialog.transportField') }}
-              <CSelect
-                v-model="transport"
-                :options="transportOptions"
-                :aria-label="t('mcp.dialog.transportField')"
-                class="cfg-select"
-              />
-            </label>
+            <span class="cfg-label">{{ t('mcp.dialog.transportField') }}</span>
+            <CSelect
+              v-model="transport"
+              :options="transportOptions"
+              :aria-label="t('mcp.dialog.transportField')"
+              class="cfg-select"
+            />
           </div>
 
           <template v-if="isStdio">
@@ -353,14 +383,13 @@ onUnmounted(() => {
               </label>
             </div>
             <div class="field">
-              <label class="cfg-label">{{ t('mcp.dialog.credentialField') }}
-                <CSelect
-                  v-model="credentialId"
-                  :options="credentialOptions"
-                  :aria-label="t('mcp.dialog.credentialField')"
-                  class="cfg-select"
-                />
-              </label>
+              <span class="cfg-label">{{ t('mcp.dialog.credentialField') }}</span>
+              <CSelect
+                v-model="credentialId"
+                :options="credentialOptions"
+                :aria-label="t('mcp.dialog.credentialField')"
+                class="cfg-select"
+              />
             </div>
             <div class="field kv-row">
               <label class="cfg-label">{{ t('mcp.dialog.authHeaderField') }}
@@ -392,9 +421,19 @@ onUnmounted(() => {
           <p v-if="secretLikeRows.size" class="warn-text">{{ t('mcp.dialog.secretLiteralWarning') }}</p>
 
           <div class="field kv-row">
-            <label class="cfg-label">{{ t('mcp.dialog.timeoutField') }}
-              <input v-model.number="timeoutMs" type="number" class="cfg-input" min="1" :max="MCP_MAX_TIMEOUT_MS" />
-            </label>
+            <div class="timeout-field">
+              <span class="cfg-label label-with-hint">
+                {{ t('mcp.dialog.timeoutField') }}
+                <InfoTooltip :text="t('mcp.dialog.timeoutHint')" />
+              </span>
+              <input
+                v-model.number="timeoutMs"
+                type="number"
+                class="cfg-input"
+                :min="MCP_MIN_TIMEOUT_MS"
+                :max="MCP_MAX_TIMEOUT_MS"
+              />
+            </div>
             <label class="cfg-label checkbox-label">
               <input v-model="enabled" type="checkbox" />
               {{ t('mcp.dialog.enabledField') }}
@@ -457,6 +496,9 @@ onUnmounted(() => {
 .kv-row .cfg-input { flex: 1; min-width: 0; }
 .checkbox-label { display: inline-flex; align-items: center; gap: 0.35rem; flex-direction: row; }
 .label-with-hint { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; flex-direction: row; }
+.req { color: var(--danger); }
+.id-hint { display: inline-flex; align-items: center; gap: 0.3rem; margin: 0.25rem 0 0; }
+.timeout-field { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .probe-row { display: flex; gap: 0.5rem; margin: 0.5rem 0; }
 .probe-result { border-top: 1px solid var(--border); padding-top: 0.5rem; }
 .tool-list { list-style: none; padding: 0; margin: 0.35rem 0 0; max-height: 180px; overflow-y: auto; }
