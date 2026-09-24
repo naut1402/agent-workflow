@@ -5,11 +5,14 @@ import path from 'node:path'
 import {
   deleteMcpServer,
   listMcpServers,
+  loadMcpServers,
   recordCheckResult,
   upsertMcpServer,
 } from '../../../../../src/features/mcp/business/registry.js'
 import {
+  MCP_DEFAULT_TIMEOUT_MS,
   MCP_MASK,
+  MCP_SERVERS_VERSION,
   maskSecretValues,
   sanitiseMcpServerId,
   type McpServerConfig,
@@ -318,5 +321,217 @@ describe('mcp registry — sentinel `***` (chống ghi đè secret thật)', () 
     expect(env.TOKEN).toBe(CANARY)
     expect(env).not.toHaveProperty('NEW')
     expect(readStoreRaw()).not.toContain(MCP_MASK)
+  })
+})
+
+/* ─── Tdad47b2b · nhóm E — nâng phiên bản store + migrate `timeoutMs` ─────── */
+
+/**
+ * TC-E01…TC-E11 — ngữ nghĩa `timeoutMs` ĐỔI ở v2.
+ *
+ * v1: con số chỉ tác động nút Kiểm tra kết nối. v2: nó còn được ghi xuống
+ * `startupTimeoutSec` của file config, nên nó tác động cả lúc job chạy server.
+ * Vì thế migrate **bỏ trường ở MỌI bản ghi v1 có giá trị < mặc định mới** —
+ * người đặt `30000` ở v1 đang chọn «probe chờ 30s», họ chưa từng chọn «job cho
+ * server 30s để khởi động». Giá trị ≥ mặc định mới được GIỮ: nó chỉ làm job chờ
+ * lâu hơn, 🚫 không thuộc lớp hồi quy mà migrate này chặn.
+ */
+function writeStore(raw: unknown) {
+  fs.writeFileSync(storeFile(), typeof raw === 'string' ? raw : JSON.stringify(raw), 'utf8')
+}
+
+function v1Server(over: Record<string, unknown> = {}) {
+  return {
+    id: 'playwright',
+    label: 'Playwright MCP',
+    enabled: true,
+    transport: 'stdio',
+    command: 'npx',
+    args: ['-y', '@playwright/mcp@latest'],
+    env: {},
+    ...over,
+  }
+}
+
+describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
+  // TC-E01
+  test('TC-E01: v1 giữ mặc định cũ 15000 ⇒ BỎ trường, phiên bản store báo 2', () => {
+    writeStore({ version: 1, servers: [v1Server({ timeoutMs: 15_000 })] })
+
+    const store = loadMcpServers()
+    expect(store.version).toBe(MCP_SERVERS_VERSION)
+    expect(MCP_SERVERS_VERSION).toBe(2)
+    expect(store.servers[0]).not.toHaveProperty('timeoutMs')
+  })
+
+  /**
+   * TC-E02 — bản ghi v1 do người dùng tự đặt cũng bị bỏ trường.
+   *
+   * ⚠️ Áp dụng cho MỌI giá trị v1 < mặc định mới, không riêng `15000`: giữ lại
+   * `30000` là im lặng rút thời gian khởi động của job từ 120s xuống 30s.
+   */
+  test('TC-E02: mọi giá trị v1 dưới mặc định mới ⇒ BỎ trường', () => {
+    for (const timeoutMs of [1, 1000, 15_000, 30_000, 60_000, MCP_DEFAULT_TIMEOUT_MS - 1]) {
+      writeStore({ version: 1, servers: [v1Server({ timeoutMs })] })
+      expect(loadMcpServers().servers[0]).not.toHaveProperty('timeoutMs')
+    }
+  })
+
+  /**
+   * TC-E02b — giá trị v1 ≥ mặc định mới được GIỮ.
+   *
+   * Chỉ tới được bằng sửa tay file: trần của endpoint ở v1 là 60000. Đường ĐỌC
+   * file 🚫 không kẹp gì, nên con số như vậy vẫn vào tới đây — và xoá nó là vứt
+   * một giá trị người dùng cố ý ghi.
+   */
+  test('TC-E02b: v1 với 120000 / 300000 ⇒ GIỮ nguyên', () => {
+    for (const timeoutMs of [MCP_DEFAULT_TIMEOUT_MS, 300_000]) {
+      writeStore({ version: 1, servers: [v1Server({ timeoutMs })] })
+      expect(loadMcpServers().servers[0].timeoutMs).toBe(timeoutMs)
+    }
+  })
+
+  // TC-E03
+  test('TC-E03: ở v2, 15000 là lựa chọn có chủ ý ⇒ GIỮ nguyên', () => {
+    writeStore({ version: MCP_SERVERS_VERSION, servers: [v1Server({ timeoutMs: 15_000 })] })
+
+    expect(loadMcpServers().servers[0].timeoutMs).toBe(15_000)
+  })
+
+  // TC-E04
+  test('TC-E04: v1 🚫 không khai timeout ⇒ 🚫 không mất gì, phiên bản báo 2', () => {
+    writeStore({ version: 1, servers: [v1Server()] })
+
+    const store = loadMcpServers()
+    expect(store.version).toBe(MCP_SERVERS_VERSION)
+    expect(store.servers).toHaveLength(1)
+    expect(store.servers[0]).toMatchObject({ id: 'playwright', command: 'npx', enabled: true })
+    expect(store.servers[0]).not.toHaveProperty('timeoutMs')
+  })
+
+  // TC-E05 — thiếu / sai kiểu / `0` đều coi như v1; bỏ qua migrate ở đó là để lọt đúng ca đang chặn.
+  test('TC-E05: trường phiên bản thiếu hoặc không hợp lệ ⇒ coi như v1 và VẪN migrate', () => {
+    const variants: Record<string, unknown>[] = [
+      { servers: [v1Server({ timeoutMs: 15_000 })] },
+      { version: 'abc', servers: [v1Server({ timeoutMs: 15_000 })] },
+      { version: 0, servers: [v1Server({ timeoutMs: 15_000 })] },
+      { version: null, servers: [v1Server({ timeoutMs: 15_000 })] },
+    ]
+    for (const data of variants) {
+      writeStore(data)
+      const store = loadMcpServers()
+      expect(store.version).toBe(MCP_SERVERS_VERSION)
+      expect(store.servers[0]).not.toHaveProperty('timeoutMs')
+    }
+  })
+
+  // TC-E07
+  test('TC-E07: file v1 → một thao tác lưu ⇒ file lên `version: 2`, quyền 0600, 🚫 không mất bản ghi', () => {
+    writeStore({
+      version: 1,
+      servers: [v1Server({ timeoutMs: 15_000 }), v1Server({ id: 'serena', label: 'Serena', command: 'uvx' })],
+    })
+
+    upsertMcpServer(stdio({ id: 'them-moi', command: 'node' }))
+
+    const parsed = JSON.parse(readStoreRaw())
+    expect(parsed.version).toBe(MCP_SERVERS_VERSION)
+    expect(parsed.servers.map((s: any) => s.id).sort()).toEqual(['playwright', 'serena', 'them-moi'])
+    // Bản ghi đã migrate 🚫 không được ghi ngược `timeoutMs` xuống đĩa.
+    expect(parsed.servers.find((s: any) => s.id === 'playwright')).not.toHaveProperty('timeoutMs')
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(storeFile()).mode & 0o777).toBe(0o600)
+    }
+  })
+
+  // TC-E08 — migrate chạy ở đường ĐỌC nên phải idempotent và 🚫 không đụng đĩa.
+  test('TC-E08: đọc file v1 ba lần liên tiếp ⇒ cùng kết quả, file trên đĩa 🚫 không đổi', () => {
+    const raw = JSON.stringify({ version: 1, servers: [v1Server({ timeoutMs: 15_000 })] })
+    writeStore(raw)
+
+    const reads = [loadMcpServers(), loadMcpServers(), loadMcpServers()]
+    expect(reads[1]).toEqual(reads[0])
+    expect(reads[2]).toEqual(reads[0])
+    expect(readStoreRaw()).toBe(raw)
+  })
+
+  // TC-E09
+  test('TC-E09: migrate 🚫 không đụng trường nào ngoài `timeoutMs`', () => {
+    const lastCheck = { at: '2026-09-18T00:00:00.000Z', ok: true, toolCount: 21, toolNames: ['echo'] }
+    writeStore({
+      version: 1,
+      servers: [
+        v1Server({ timeoutMs: 15_000, env: { FOO: 'bar' }, cwd: '/srv/work', enabled: false, lastCheck }),
+        {
+          id: 'gh',
+          label: 'GitHub MCP',
+          enabled: true,
+          transport: 'http',
+          url: 'https://api.example.com/mcp',
+          headers: { 'X-Trace': 'abc' },
+          credentialId: 'cred-1',
+          authHeader: 'Authorization',
+          authScheme: 'Bearer',
+          timeoutMs: 15_000,
+        },
+      ],
+    })
+
+    const [pw, gh] = loadMcpServers().servers as any[]
+    expect(pw).toEqual({
+      id: 'playwright',
+      label: 'Playwright MCP',
+      enabled: false,
+      lastCheck,
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@playwright/mcp@latest'],
+      env: { FOO: 'bar' },
+      cwd: '/srv/work',
+    })
+    expect(gh).toEqual({
+      id: 'gh',
+      label: 'GitHub MCP',
+      enabled: true,
+      lastCheck: null,
+      transport: 'http',
+      url: 'https://api.example.com/mcp',
+      credentialId: 'cred-1',
+      authHeader: 'Authorization',
+      authScheme: 'Bearer',
+      headers: { 'X-Trace': 'abc' },
+    })
+  })
+
+  // TC-E10 — hành vi phòng thủ giữ nguyên (TC-01 / TC-02 khoá phần chung); ở đây chốt cờ version 🚫 không làm nó đổi.
+  test('TC-E10: file rỗng / JSON hỏng / chưa có file ⇒ store rỗng ở v2, 🚫 không crash, 🚫 không ghi đè', () => {
+    expect(loadMcpServers()).toEqual({ version: MCP_SERVERS_VERSION, servers: [] })
+    expect(fs.existsSync(storeFile())).toBe(false)
+
+    for (const raw of ['', '{', 'not json', '{"version":1}']) {
+      writeStore(raw)
+      expect(loadMcpServers()).toEqual({ version: MCP_SERVERS_VERSION, servers: [] })
+      expect(readStoreRaw()).toBe(raw)
+    }
+  })
+
+  // TC-E11
+  test('TC-E11: `servers` lẫn rác ⇒ phần tử hỏng bị loại, phần tử hợp lệ vẫn migrate đúng', () => {
+    writeStore({
+      version: 1,
+      servers: [
+        null,
+        'khong-phai-object',
+        { label: 'thiếu id', transport: 'stdio', command: 'npx' },
+        { id: 'thieu-command', transport: 'stdio' },
+        v1Server({ timeoutMs: 15_000 }),
+        v1Server({ id: 'giu-lai', timeoutMs: 300_000 }),
+      ],
+    })
+
+    const servers = loadMcpServers().servers
+    expect(servers.map((s) => s.id)).toEqual(['playwright', 'giu-lai'])
+    expect(servers[0]).not.toHaveProperty('timeoutMs')
+    expect(servers[1].timeoutMs).toBe(300_000)
   })
 })

@@ -8,6 +8,7 @@ import { on, _resetEventBusForTest } from '../../../../../src/backend/events/ind
 import type { DashboardEvent } from '../../../../../src/backend/events/index.js'
 import { resetLogDriver, setLogDriver } from '../../../../../src/backend/log/driver.js'
 import { AuditLogEntry, type LogEntry } from '../../../../../src/shared/log/schema.js'
+import { MCP_MAX_TIMEOUT_MS } from '../../../../../src/features/mcp/business/types.js'
 
 /**
  * TC-32…TC-43 — contract HTTP `/api/mcp-servers`. Đây là bề mặt quan sát chính
@@ -341,4 +342,89 @@ describe('POST /api/mcp-servers/test', () => {
     expect(body.error).not.toContain(CANARY)
     expect(raw).not.toContain(CANARY)
   }, 30_000)
+})
+
+/* ─── Tdad47b2b · nhóm F — hợp đồng endpoint lưu MCP server ───────────────── */
+
+/**
+ * TC-F01…TC-F08 — biên `timeoutMs` và dạng `id`.
+ *
+ * Hai điểm đáng nhớ:
+ *   - trần `timeoutMs` nới theo trần của CLI (600s), nhưng 🚫 KHÔNG có sàn ở tầng
+ *     validate: bản ghi v1 giữ giá trị dưới sàn phải lưu lại được, việc kẹp về
+ *     miền `[5s, 600s]` xảy ra lúc SINH file config (`serialize.test.ts` TC-C03);
+ *   - hợp đồng `id` 🚫 KHÔNG đổi trong task này. Id giờ do giao diện nội suy, và
+ *     đó chính là lý do nó phải sinh ra đã ở dạng canonical — sai một ký tự là 400.
+ */
+describe('POST /api/mcp-servers — biên timeoutMs và dạng id (nhóm F)', () => {
+  // TC-F01
+  test('TC-F01: `timeoutMs` bằng trần mới ⇒ 2xx, lưu đúng giá trị', async () => {
+    const res = await post('/api/mcp-servers', {
+      server: { ...STDIO_BODY, timeoutMs: MCP_MAX_TIMEOUT_MS },
+    })
+    expect(res.status).toBe(200)
+    expect(readStore().servers.find((s: any) => s.id === 'playwright').timeoutMs).toBe(MCP_MAX_TIMEOUT_MS)
+  })
+
+  // TC-F02
+  test('TC-F02: vượt trần ⇒ 400, 🚫 không ghi gì vào store', async () => {
+    const res = await post('/api/mcp-servers', {
+      server: { ...STDIO_BODY, timeoutMs: MCP_MAX_TIMEOUT_MS + 1 },
+    })
+    expect(res.status).toBe(400)
+    expect(fs.existsSync(storeFile())).toBe(false)
+  })
+
+  // TC-F03 — 🚫 KHÔNG đặt sàn ở tầng validate.
+  test('TC-F03: giá trị nhỏ (15000, 1000) vẫn lưu được ⇒ 2xx', async () => {
+    for (const timeoutMs of [15_000, 1000]) {
+      const res = await post('/api/mcp-servers', { server: { ...STDIO_BODY, timeoutMs } })
+      expect(res.status).toBe(200)
+      expect(readStore().servers.find((s: any) => s.id === 'playwright').timeoutMs).toBe(timeoutMs)
+    }
+  })
+
+  // TC-F04
+  test('TC-F04: id không chuẩn (khoảng trắng / chữ hoa lẫn dấu) ⇒ 400, hợp đồng id 🚫 không đổi', async () => {
+    for (const id of ['Playwright MCP', 'my.server', 'tên-có-dấu', 'a/b']) {
+      const res = await post('/api/mcp-servers', { server: { ...STDIO_BODY, id } })
+      expect(res.status).toBe(400)
+    }
+    expect(fs.existsSync(storeFile())).toBe(false)
+  })
+
+  // TC-F05 — giao diện luôn gửi id nội suy, nhưng backend vẫn đòi trường này.
+  test('TC-F05: body 🚫 không có `id` ⇒ 400', async () => {
+    const { id: _omit, ...withoutId } = STDIO_BODY
+    const res = await post('/api/mcp-servers', { server: withoutId })
+    expect(res.status).toBe(400)
+    expect(fs.existsSync(storeFile())).toBe(false)
+  })
+
+  // TC-F06 — upsert thuần: task này 🚫 không thêm chặn ghi đè (§6).
+  test('TC-F06: lưu hai lần cùng id ⇒ lần hai ghi đè, 🚫 không nhân đôi', async () => {
+    await post('/api/mcp-servers', { server: { ...STDIO_BODY, label: 'v1' } })
+    const second = await post('/api/mcp-servers', { server: { ...STDIO_BODY, label: 'v2' } })
+
+    expect(second.status).toBe(200)
+    const stored = readStore().servers.filter((s: any) => s.id === 'playwright')
+    expect(stored).toHaveLength(1)
+    expect(stored[0].label).toBe('v2')
+  })
+
+  // TC-F07 — biên trên chấp nhận được; đây là biên mà id nội suy bám sát (TC-A12/A13).
+  test('TC-F07: id đúng 64 ký tự hợp lệ ⇒ 2xx', async () => {
+    const id = 'a'.repeat(64)
+    const res = await post('/api/mcp-servers', { server: { ...STDIO_BODY, id } })
+    expect(res.status).toBe(200)
+    expect(readStore().servers.map((s: any) => s.id)).toContain(id)
+  })
+
+  // TC-F08
+  test('TC-F08: id 65 ký tự ⇒ 400, 🚫 không âm thầm cắt rồi lưu', async () => {
+    const id = 'a'.repeat(65)
+    const res = await post('/api/mcp-servers', { server: { ...STDIO_BODY, id } })
+    expect(res.status).toBe(400)
+    expect(fs.existsSync(storeFile())).toBe(false)
+  })
 })
