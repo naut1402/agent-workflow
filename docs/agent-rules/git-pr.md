@@ -136,7 +136,7 @@ git switch -c dev/1.1.2/T0000abcd_ten-task-ngan origin/dev/1.1.2/main
 - **Tên branch không được kết thúc bằng `/main`** — pattern `dev/**/main` là branch dòng version, được workflow sync tự cập nhật từ `main`.
 - **Dòng version chưa tồn tại trên remote thì không tự tạo** — mở dòng version là việc của release, hỏi người chốt trước.
 - **Commitlint** chạy trên PR base `dev/**/main` → PR title và **mọi** commit phải đúng format — xem §3.
-- **Epic branch (§5) thắng về base** — task vừa gắn version vừa thuộc epic thì cắt từ branch epic, tên branch vẫn theo §4.2.
+- **Branch chung của task lớn (§5.2) thắng về base** — task con cắt từ branch chung, tên branch vẫn theo §4.2.
 
 ### 4.3 Branch dòng test
 
@@ -209,14 +209,59 @@ git push origin <sha>:refs/heads/test/main
 
 ---
 
-## 5. Feature lớn — issue → branch → breakdown → plan
+## 5. Issue task — version, milestone, chia nhỏ
 
-Feature/epic lớn thì không code trước khi có issue + plan:
+Mỗi task có một issue GitHub, tạo theo một trong hai template (`gh issue create --template <file>`):
 
-1. **Issue** — tạo GitHub issue mô tả mục tiêu + scope (template `.github/ISSUE_TEMPLATE/`).
-2. **Feature branch** — branch chung cho epic, cắt từ `origin/main`.
-3. **Breakdown** — chẻ sub-task/vertical slice, mỗi sub có issue + branch riêng, PR target **branch epic** (`Part of #<epic>`); chỉ epic PR cuối merge vào `main`.
-4. **Plan** — có artifact kế hoạch (investigate/design/scope) trước khi code.
+| | `.github/ISSUE_TEMPLATE/feature.md` | `.github/ISSUE_TEMPLATE/bug.md` |
+|---|---|---|
+| Loại task | feat · refactor · docs · chore · test | fix |
+| Label | gán tay theo type | gán sẵn `bug` |
+| Tổng quan | Bối cảnh · Mong muốn | Hiện trạng · Trình tự tái hiện |
+| Kết quả điều tra | **Phương châm** đối ứng · Phạm vi thay đổi · Ngoài phạm vi · `### Chi tiết kỹ thuật` | **Phương án** đối ứng · Phạm vi thay đổi · Ngoài phạm vi · `### Chi tiết kỹ thuật` |
+| Kế hoạch (phạm vi lớn) | chia thành **sub issue** (§5.2) | chia thành **nhiều PR**, mỗi PR ghi `Part of #<issue>` (§5.2) |
+| Checklist | label · version · milestone · chia nhỏ | version · milestone · whitebox · blackbox |
+
+- **`### Chi tiết kỹ thuật` (trong `## Kết quả điều tra`) giống hệt nhau ở hai template** — 🚫 không đổi tên heading này, script publish (§11.3) tìm đúng chuỗi đó. Sửa phần dùng chung của một template thì sửa luôn template kia.
+- **`## Tài liệu liên quan` không bắt buộc** — agent tự quyết có thêm hay không. Chỉ dùng cho tài liệu của issue khác hoặc tài liệu yêu cầu nằm ngoài pipeline; tài liệu pipeline của chính task ở `### Chi tiết kỹ thuật`.
+- **Checklist của template chỉ nêu tên việc** — quy trình từng việc ở mục này.
+
+### 5.1 Release version & milestone
+
+**Release version** `x.y.z` là điểm checkout branch chung cho toàn bộ task — base là `origin/dev/x.y.z/main` (§4.2). **Milestone** tên đúng bằng version (`x.y.z`), dùng để quản lý các issue trong version đó. Xác định theo thứ tự:
+
+1. **Người dùng chỉ định version** → dùng version đó.
+2. **Không chỉ định** → suy từ các dòng version đang mở (`origin/dev/x.y.z/main` chưa release, tức version lớn hơn version trên `main`):
+   - Chỉ một dòng → dùng dòng đó.
+   - Nhiều dòng → chọn theo loại issue: **bug · cải thiện** → dòng **patch** (`x.y.z`, `z > 0`) gần nhất; **tính năng lớn** → dòng **minor / major** (`x.y.0`).
+   - Không có dòng phù hợp → hỏi người chốt; 🚫 không tự mở dòng version (§4.2).
+3. **Gắn milestone** `x.y.z` — đã có thì gắn vào; chưa có thì tạo mới rồi gắn.
+
+```bash
+gh api "repos/{owner}/{repo}/milestones?state=open" --jq '.[] | select(.title=="1.2.0") | .number'
+gh api -X POST "repos/{owner}/{repo}/milestones" -f title=1.2.0   # chỉ khi lệnh trên rỗng
+gh issue edit <n> --milestone 1.2.0
+```
+
+### 5.2 Chia nhỏ task lớn
+
+Task lớn thì không code trước khi có plan (investigate / design) và đã chia nhỏ. Cách chia khác nhau theo loại issue:
+
+- **Bug phạm vi lớn** → chia thành **nhiều PR chỉnh sửa**, 🚫 không tạo sub issue. Mỗi PR liệt kê ở `## Kế hoạch` và ghi `Part of #<issue>` trong body; các PR target thẳng `dev/x.y.z/main` theo §4.2, không cần branch chung.
+- **Feature / task lớn** → chia thành **sub issue**, theo các bước dưới:
+
+1. **Branch chung** — `dev/x.y.z/{issue-slug}`, cắt từ `origin/dev/x.y.z/main`. `x.y.z` theo §5.1; `{issue-slug}` là `kebab-case` 3–5 từ tóm tắt mục đích issue. 🚫 Không kết thúc bằng `/main` (§4.2).
+2. **Sub issue** — mỗi phần một issue nhỏ, liệt kê ở mục `## Kế hoạch` của issue cha và gắn làm **sub issue** của nó. Branch của task con theo §4.2 nhưng cắt từ branch chung; PR target branch chung, body ghi `Part of #<issue cha>`.
+3. **Blocked by** — issue cha **bị block bởi** từng sub issue, để issue cha chỉ đóng được khi mọi phần đã xong.
+4. **Gộp về dòng version** — chỉ PR cuối của branch chung merge vào `dev/x.y.z/main`.
+
+API sub issue và dependency nhận **id** của issue (`gh api …/issues/<số> --jq .id`), không phải số issue:
+
+```bash
+sub_id=$(gh api "repos/{owner}/{repo}/issues/<sub>" --jq .id)
+gh api -X POST "repos/{owner}/{repo}/issues/<cha>/sub_issues" -F sub_issue_id="$sub_id"
+gh api -X POST "repos/{owner}/{repo}/issues/<cha>/dependencies/blocked_by" -F issue_id="$sub_id"
+```
 
 ---
 
@@ -409,7 +454,7 @@ gh pr list --base dev/x.y.z/main --state merged --limit 300 \
   --json number,title --jq 'reverse | .[] | "- #\(.number) — \(.title)"'
 ```
 
-⚠️ Lệnh trên chỉ lấy PR nhắm thẳng `dev/x.y.z/main`. Dòng version có branch epic hoặc nhận merge từ dòng khác thì đối chiếu thêm `git log --merges origin/main..origin/dev/x.y.z/main` và bổ sung tay.
+⚠️ Lệnh trên chỉ lấy PR nhắm thẳng `dev/x.y.z/main`. Dòng version có branch chung của task lớn (§5.2) hoặc nhận merge từ dòng khác thì đối chiếu thêm `git log --merges origin/main..origin/dev/x.y.z/main` và bổ sung tay.
 
 ---
 
@@ -426,7 +471,7 @@ Nội dung dưới đây áp dụng cho **PR feature**, theo `.github/pull_reque
 
 - **Mục `## Issue` đặt ở đầu**, dùng từ khoá **không** auto-close (`Part of #<n>` / `Refs #<n>`). **Không** dùng `Closes` / `Fixes` / `Resolves`.
 - **Thứ tự body cố định**: `## Issue` → `## Tổng quan` → `## Module / Phạm vi` → `## Nội dung thay đổi` (các mục ①, ②, …) → `## Tài liệu liên quan` → `## Checklist`.
-- **`## Tài liệu liên quan`** — link comment tài liệu đã publish ở issue theo §11 (investigate · design · test-spec · whitebox · review-result). 🚫 Chỉ liệt kê tài liệu **đã publish**, không để dòng trống chờ điền.
+- **`## Tài liệu liên quan`** — link tới tài liệu đã publish ở mục `## Kết quả điều tra › ### Chi tiết kỹ thuật` của issue theo §11 (investigate · design · test-spec · whitebox · review-result). 🚫 Chỉ liệt kê tài liệu **đã publish**, không để dòng trống chờ điền.
 - **Checklist chỉ hai mục** — đã làm checklist agent (chi tiết ở `AGENTS.md` §4, 🚫 không chép lại từng mục vào PR body) · chưa thực kiểm thử thì đã dán nhãn `test-pending`.
 
 ### 9.1 Tổng quan
@@ -486,7 +531,7 @@ Chore / docs / refactor chọn khối gần nhất. Mỗi ý 1–3 câu — đ�
 
 ## 11. Publish tài liệu task vào issue
 
-Mỗi bước pipeline có tài liệu đầu ra thì **publish tài liệu đó lên issue của task** dưới dạng comment — người theo dõi issue đọc được kết quả từng bước mà không phải mở `.dev-team-agent/tasks/<task-id>/`, và `## Tài liệu liên quan` của PR (§9) trỏ thẳng vào các comment này.
+Mỗi bước pipeline có tài liệu đầu ra thì **publish tài liệu đó thẳng vào body issue của task**, mục `### Chi tiết kỹ thuật` trong `## Kết quả điều tra` — người theo dõi issue đọc được kết quả từng bước mà không phải mở `.dev-team-agent/tasks/<task-id>/`, và `## Tài liệu liên quan` của PR (§9) trỏ về issue này.
 
 | Bước | Tài liệu | Nhãn |
 |---|---|---|
@@ -501,12 +546,14 @@ Bước không có tài liệu đầu ra (implement, test implement) thì không
 ### 11.1 Khi nào publish
 
 - **Ngay khi tài liệu của bước đã chốt** — ghi file xong, trước khi báo DONE. Bước kết thúc `BLOCKED` (còn `qa.md` chờ người) thì **chưa** publish.
-- **Tài liệu sửa lại sau đó** (doc review, HITL yêu cầu sửa, chạy lại bước) → **cập nhật đúng comment cũ**, 🚫 không đăng comment mới — issue chỉ giữ bản cuối của mỗi tài liệu.
+- **Investigate / design cập nhật luôn phần tóm tắt của `## Kết quả điều tra`** — phương châm đối ứng (feature) hoặc phương án đối ứng (fix), phạm vi thay đổi, ngoài phạm vi — đủ để người đọc issue biết task sẽ tiến hành thế nào.
+- **Tài liệu sửa lại sau đó** (doc review, HITL yêu cầu sửa, chạy lại bước) → **thay đúng khối cũ** giữa cặp marker, 🚫 không thêm khối mới — issue chỉ giữ bản cuối của mỗi tài liệu.
+- **Đọc lại body ngay trước khi ghi** — `gh issue edit --body-file` ghi đè cả body; đọc từ bản cũ là xoá mất phần người khác vừa sửa.
 - **Issue của task** là issue GitHub nêu trong request của task — cũng là issue PR sẽ ghi ở `Part of #<n>`. Task không gắn issue GitHub, hoặc publish lỗi (hết quyền, mất mạng) → ghi rõ ở kết quả trả về của bước, 🚫 không chặn pipeline.
 
-### 11.2 Định dạng comment
+### 11.2 Định dạng khối
 
-Toàn bộ tài liệu bọc trong **một** thẻ `<details>`; dòng đầu là marker để tìm lại comment khi cập nhật:
+Mỗi tài liệu một khối, bọc trong **một** thẻ `<details>`, nằm giữa cặp marker để lượt sau tìm và thay:
 
 ```markdown
 <!-- task-doc: <task-id>/<nhãn> -->
@@ -516,25 +563,45 @@ Toàn bộ tài liệu bọc trong **một** thẻ `<details>`; dòng đầu là
 <nội dung design.md, giữ nguyên>
 
 </details>
+<!-- /task-doc: <task-id>/<nhãn> -->
 ```
 
 - **Để trống một dòng sau `</summary>` và trước `</details>`** — thiếu thì GitHub không render markdown bên trong.
 - **Nội dung giữ nguyên file** — không tóm tắt lại; whitebox chỉ có link spreadsheet.
-- **Vượt giới hạn 65.536 ký tự của comment** → tách nhiều comment, marker thêm hậu tố `-2`, `-3` (`<task-id>/design-2`), mỗi comment một thẻ `<details>` riêng.
+- **Thứ tự khối theo thứ tự bước** (bảng trên) — khối mới chèn sau khối cuối cùng đang có.
+- **Body vượt giới hạn 65.536 ký tự** → đăng tài liệu đó thành comment riêng (cùng định dạng), khối trong body chỉ còn `<details>` chứa link tới comment.
 - **Không secret, không dán diff dài** — cùng ràng buộc với file nợ (§7.3).
 
 ### 11.3 Lệnh
 
+`block.md` là khối `<details>…</details>` (không kèm marker), soạn trong thư mục tạm cùng `body.md` — 🚫 không ghi vào repo.
+
 ```bash
-marker='<!-- task-doc: T0000abcd/design -->'
-id=$(gh api "repos/{owner}/{repo}/issues/<n>/comments" --paginate \
-  --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
-
-if [ -n "$id" ]; then
-  gh api -X PATCH "repos/{owner}/{repo}/issues/comments/$id" -F body=@comment.md
-else
-  gh issue comment <n> --body-file comment.md
-fi
+gh issue view <n> --json body -q .body > body.md
+KEY='T0000abcd/design' BLOCK=block.md BODY=body.md bun -e '
+const fs = require("node:fs")
+const { KEY, BLOCK, BODY } = process.env
+const open = `<!-- task-doc: ${KEY} -->`, close = `<!-- /task-doc: ${KEY} -->`
+const block = `${open}\n${fs.readFileSync(BLOCK, "utf8").trim()}\n${close}`
+let body = fs.readFileSync(BODY, "utf8").replace(/\r\n/g, "\n")
+const i = body.indexOf(open), j = body.indexOf(close)
+if (i >= 0 && j > i) {
+  body = body.slice(0, i) + block + body.slice(j + close.length)
+} else {
+  const last = body.lastIndexOf("<!-- /task-doc: ")
+  const h = body.indexOf("\n### Chi tiết kỹ thuật\n")
+  let at = -1
+  if (last >= 0) at = body.indexOf("-->", last) + 3
+  else if (h >= 0) {
+    at = body.indexOf("\n", h + 1)
+    const m = body.slice(at).match(/^\s*<!--[\s\S]*?-->/)
+    if (m) at += m[0].length
+  }
+  body = at < 0
+    ? `${body.trimEnd()}\n\n### Chi tiết kỹ thuật\n\n${block}\n`
+    : `${body.slice(0, at)}\n\n${block}\n${body.slice(at)}`
+}
+fs.writeFileSync(BODY, body)
+'
+gh issue edit <n> --body-file body.md
 ```
-
-`comment.md` soạn trong thư mục tạm, 🚫 không ghi vào repo. URL comment (`html_url` trong kết quả `gh api`, hoặc URL `gh issue comment` in ra) là link dùng ở `## Tài liệu liên quan` của PR.

@@ -44,7 +44,7 @@ agent-workflow/
 | 🛠️ Implement | `coding` | [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) · [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) · [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) · [`writing-guideline.md`](docs/agent-rules/writing-guideline.md) |
 | 🔎 Review | `coding` + `test` | [`testing.md`](docs/agent-rules/testing.md) |
 | 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
-| 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6, todo debt §7, PR phát hành §8 · publish tài liệu vào issue §11 (mọi bước có tài liệu đầu ra) |
+| 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6, todo debt §7, PR phát hành §8 · issue task: version, milestone, chia nhỏ §5 · publish tài liệu vào issue §11 (mọi bước có tài liệu đầu ra) |
 
 Tra cứu (không phải rule): [`README.md`](README.md) quickstart · [`docs/architecture/`](docs/architecture/) kiến trúc C4 · [`docs/architecture/events/`](docs/architecture/events/README.md) domain event · [`docs/template/`](docs/template/) template agent / pipeline.
 
@@ -61,9 +61,10 @@ Template agent (`docs/template/agents/*`) chỉ có **bước cuối generic**: 
 
 Quy ước: [`git-pr.md`](docs/agent-rules/git-pr.md) §11.
 
-- [ ] **Publish ngay khi tài liệu của bước chốt** — `investigate.md` · `design.md` · `test-spec.md` · `review.md` · link whitebox, comment lên issue của task; bước `BLOCKED` thì chưa publish.
-- [ ] **Bọc toàn bộ nội dung trong một thẻ `<details>`**, dòng đầu là marker `<!-- task-doc: <task-id>/<nhãn> -->`.
-- [ ] **Tài liệu sửa lại → cập nhật đúng comment cũ** theo marker, không đăng comment mới.
+- [ ] **Publish ngay khi tài liệu của bước chốt** — `investigate.md` · `design.md` · `test-spec.md` · `review.md` · link whitebox, ghi thẳng vào mục `### Chi tiết kỹ thuật` (trong `## Kết quả điều tra`) của body issue task; bước `BLOCKED` thì chưa publish.
+- [ ] **Mỗi tài liệu một thẻ `<details>`**, nằm giữa cặp marker `<!-- task-doc: <task-id>/<nhãn> -->` … `<!-- /task-doc: <task-id>/<nhãn> -->`.
+- [ ] **Investigate / design cập nhật luôn tóm tắt `## Kết quả điều tra`** — phương châm (feature) / phương án (fix) đối ứng, phạm vi thay đổi, ngoài phạm vi.
+- [ ] **Tài liệu sửa lại → thay đúng khối cũ** theo marker, không thêm khối mới; đọc lại body ngay trước khi ghi.
 - [ ] **Không có issue / publish lỗi** → ghi ở kết quả trả về, không chặn pipeline.
 
 </details>

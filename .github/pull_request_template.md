@@ -73,7 +73,7 @@ Test KHÔNG thuộc PR này — nó ở PR dòng test.
 
 ## Tài liệu liên quan
 <!--
-Link tài liệu đã publish ở issue: investigate · design · test-spec · whitebox · review-result.
+Link tài liệu đã publish ở mục "Kết quả điều tra › Chi tiết kỹ thuật" của issue: investigate · design · test-spec · whitebox · review-result.
 CHỈ liệt kê tài liệu đã publish — xoá dòng chưa có, không để link trống.
 -->
 - **Investigate:** …
