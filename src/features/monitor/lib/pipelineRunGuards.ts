@@ -80,3 +80,14 @@ export function isResettableTarget(
   if (currentIdx < 0) return false
   return targetIdx <= currentIdx
 }
+
+/**
+ * True when `targetStepId` exists anywhere in the pipeline — no relation to
+ * `currentPhase` at all, unlike `isRunnableTarget`/`isResettableTarget`.
+ * `respawn` runs a brand-new session for a step regardless of where the
+ * cursor sits (including `completed`), so this guard structurally cannot
+ * depend on cursor position.
+ */
+export function isRespawnTarget(phaseKeys: string[], targetStepId: string): boolean {
+  return phaseKeys.includes(targetStepId)
+}

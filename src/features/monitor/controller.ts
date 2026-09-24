@@ -794,6 +794,7 @@ export class MonitorController extends AbstractController {
           j.metadata?.taskId === id &&
           j.status === 'succeeded' &&
           !j.applyTarget &&
+          j.metadata?.respawn !== true &&
           j.metadata?.pipelineStepId === stepId,
       )
       if (lastSucceeded && stepId) {

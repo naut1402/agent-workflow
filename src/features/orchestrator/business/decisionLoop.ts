@@ -25,6 +25,7 @@ import { applyOrchestratorHaltAction } from '../../monitor/business/tasks/state.
 import { listJobs, loadJob, loadTaskSessionLedger, submitJob } from '../../runner/business/index.js'
 import type { JobRecord } from '../../runner/business/index.js'
 import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
+import { isRespawnTarget } from '../../monitor/lib/pipelineRunGuards.js'
 import { resolveHitlPending, gateStepsFromConfig } from '../../../shared/lib/phase.js'
 import { ORCHESTRATOR_STEP_ID, type OrchestratorDecision } from '../schemas/orchestrator.js'
 import { composeStepBrief, type AgentContext, type DispatchReason } from './brief.js'
@@ -353,6 +354,85 @@ export async function resumeStep(ref: TaskRef, stepId: string, message: string):
   if (result.ok === false) await haltTask(ref, `resume failed: ${result.error}`)
 }
 
+/**
+ * Chạy một phiên MỚI cho `stepId` bất kỳ đã từng chạy xong (succeeded/failed),
+ * KHÔNG qua `runTaskStep` (nên không bị `isRunnableTarget` chặn), KHÔNG đổi
+ * `current_phase`/`hitl_pending`. Job được đánh dấu `metadata.respawn: true`
+ * để `advancePipelineStepChain` (jobQueue.ts) loại trừ tuyệt đối.
+ *
+ * `resume` vs `respawn`: `resume` tiêm tiếp (append) vào đúng session cũ;
+ * `respawn` luôn `sessionMode:'new'` với brief soạn lại từ đầu qua
+ * `composeStepBrief`.
+ */
+export async function respawnStep(
+  ref: TaskRef,
+  stepId: string,
+  agentContext?: AgentContext,
+): Promise<void> {
+  const pipeline = await loadPipelineConfig(ref.root, ref.taskId)
+  const phaseKeys = (pipeline.steps || []).map((s: any) => s?.id).filter(Boolean)
+  if (!isRespawnTarget(phaseKeys, stepId)) {
+    await haltTask(ref, `respawn failed: unknown step ${stepId}`)
+    return
+  }
+
+  const step = (pipeline.steps || []).find((s: any) => s.id === stepId)
+  if (!step?.agent) {
+    await haltTask(ref, `respawn failed: step ${stepId} has no agent configured`)
+    return
+  }
+
+  const hasFinishedJob = listJobs(200).some(
+    (j) =>
+      j.metadata?.taskId === ref.taskId &&
+      (!j.metadata?.devTeamRoot || j.metadata.devTeamRoot === ref.root) &&
+      j.metadata?.pipelineStepId === stepId &&
+      (j.status === 'succeeded' || j.status === 'failed'),
+  )
+  if (!hasFinishedJob) {
+    await haltTask(ref, `respawn failed: step ${stepId} has no finished job yet`)
+    return
+  }
+
+  let brief: string
+  try {
+    brief = await composeStepBrief({
+      root: ref.root,
+      taskId: ref.taskId,
+      stepId,
+      reason: 'agent_start',
+      agentContext,
+    })
+  } catch (err: any) {
+    await haltTask(ref, `cannot compose brief: ${String(err?.message ?? err)}`)
+    return
+  }
+
+  emitDispatched(ref, { stepId, action: 'respawn', reason: 'respawn' })
+
+  submitJob({
+    agentRef: step.agent,
+    workspace: joinPath(ref.root, 'tasks', ref.taskId),
+    userPrompt: brief,
+    produces: Array.isArray(step.produces) ? step.produces : undefined,
+    sessionMode: 'new',
+    metadata: {
+      projectRoot: dirname(ref.root),
+      devTeamRoot: ref.root,
+      projectId: ref.projectId || undefined,
+      taskId: ref.taskId,
+      pipelineStepId: stepId,
+      // Loại trừ khỏi advancePipelineStepChain — xem jobQueue.ts.
+      respawn: true,
+      // Vé đi qua lớp chặn đồng bộ của `submitJob` (`assertStartAllowedSync`) —
+      // không đi qua `runTaskStep` nên phải tự mang cờ này, giống `runStep.ts:201`,
+      // nếu không mọi respawn trên task đang có orchestrator bật (kịch bản duy
+      // nhất respawn tồn tại để phục vụ) sẽ bị ném lỗi "orchestrator owns this task".
+      orchestratorDispatch: true,
+    },
+  })
+}
+
 /** Dữ liệu thêm cho một lượt hỏi agent, ngoài trigger và phase. */
 export interface TurnInput {
   detail?: string
@@ -479,12 +559,18 @@ type DecisionHandler = (
   ctx: DecisionOutcomeContext,
 ) => Promise<void>
 
-/** Mỗi hành động một nhánh thi hành. `message` của `resume` đã được schema bắt buộc. */
+/**
+ * Mỗi hành động một nhánh thi hành. `message` của `resume` đã được schema bắt
+ * buộc. `respawn` cố ý không đọc `ctx` (không bị chặn bởi gate/`completed`,
+ * khác `start`) — điểm khác biệt cốt lõi so với `applyStart`.
+ */
 const ACTION_HANDLERS: Record<OrchestratorDecision['action'], DecisionHandler> = {
   halt: (ref, decision) => haltTask(ref, decision.reason || 'agent decided to halt'),
   summary: applySummary,
   resume: (ref, decision) => resumeStep(ref, decision.stepId as string, decision.message as string),
   start: applyStart,
+  respawn: (ref, decision) =>
+    respawnStep(ref, decision.stepId as string, { summary: decision.summary, context: decision.context }),
 }
 
 /** Thi hành quyết định đã parse. Mọi nhánh không hợp lệ đều đã bị chặn trước đó. */
@@ -839,6 +925,7 @@ export async function sweepStuckTasks(root: string, projectId: string): Promise<
         j.metadata?.taskId === taskId &&
         (!j.metadata?.devTeamRoot || j.metadata.devTeamRoot === root) &&
         j.metadata?.orchestratorJob !== true &&
+        j.metadata?.respawn !== true &&
         !j.applyTarget,
     )
 
