@@ -53,7 +53,10 @@ function openEdit(s: McpServerConfig) {
 function openCopy(s: McpServerConfig, e: Event) {
   e.stopPropagation()
   const copy: McpServerConfig = JSON.parse(JSON.stringify(s))
-  copy.id = `${s.id}-copy`
+  // 🚫 Không đặt `copy.id`: id đã suy từ Tên hiển thị, và dialog ở chế độ copy
+  // (`isEdit === false`) không đọc `props.server.id` nữa. Đổi LABEL là đủ để bản
+  // sao nhận id riêng — trùng thì dialog tự thêm hậu tố theo `takenIds`.
+  copy.label = t('mcp.panel.copyLabelSuffix', { label: s.label || s.id })
   copy.enabled = false
   copy.lastCheck = null
   const bag = copy.transport === 'stdio' ? copy.env : copy.headers
