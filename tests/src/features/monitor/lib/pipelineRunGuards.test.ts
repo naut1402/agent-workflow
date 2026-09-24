@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canRunWithTaskState,
   isResettableTarget,
+  isRespawnTarget,
   isRunnableTarget,
   taskNeedsStateRepair,
 } from '@/features/monitor/lib/pipelineRunGuards'
@@ -109,5 +110,23 @@ describe('isResettableTarget', () => {
   it('regression: does not mutate isRunnableTarget behavior (kept as a separate function)', () => {
     expect(isRunnableTarget(KEYS, 'implementer', 'reviewer')).toBe(true)
     expect(isRunnableTarget(KEYS, 'implementer', 'designer')).toBe(false)
+  })
+})
+
+// Td2be3c3e (design.md §4.2) — guard riêng cho action `respawn`: không nhận
+// `currentPhase` chút nào, khác cấu trúc `isRunnableTarget`/`isResettableTarget`.
+describe('isRespawnTarget', () => {
+  it('allows any step in the pipeline regardless of position (before/at/after an implicit cursor)', () => {
+    for (const k of KEYS) {
+      expect(isRespawnTarget(KEYS, k)).toBe(true)
+    }
+  })
+
+  it('rejects an id that is not a real step in the pipeline', () => {
+    expect(isRespawnTarget(KEYS, 'nope')).toBe(false)
+  })
+
+  it('rejects when phaseKeys is empty', () => {
+    expect(isRespawnTarget([], 'implementer')).toBe(false)
   })
 })

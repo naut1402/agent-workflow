@@ -43,6 +43,27 @@ function seedTask(taskId: string, state: Record<string, unknown>) {
   )
 }
 
+/** Ghi thẳng một job record — rẻ hơn và tất định hơn là chạy job thật. */
+function writeJob(id: string, metadata: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+  const dir = path.join(home, 'jobs')
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(
+    path.join(dir, `${id}.json`),
+    JSON.stringify({
+      id,
+      status: 'succeeded',
+      runnerId: 'r',
+      agentRef: 'a',
+      workspace: path.join(root, 'tasks', String(metadata.taskId ?? 'T')),
+      createdAt: new Date().toISOString(),
+      metadata: { devTeamRoot: root, ...metadata },
+      ...extra,
+    }),
+    'utf8',
+  )
+  return id
+}
+
 beforeAll(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-orch-sweep-home-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = home
@@ -131,5 +152,22 @@ describe('sweepStuckTasks — chỉ đụng task đang được điều phối',
     seedTask('OK', { current_phase: 'implementer', orchestrator_enabled: true })
     expect(await sweepStuckTasks(root, 'p1')).toBe(1)
     expect(dispatched).toHaveLength(1)
+  })
+
+  // Td2be3c3e [must, review.md] — job của `respawn` (metadata.respawn: true)
+  // KHÔNG được đóng vai "job thật của bước hiện tại đã xong" — nếu không, sweep
+  // sẽ tự đẩy `current_phase` dựa trên một phiên chạy thử riêng của agent, dù
+  // chưa có job THẬT nào chạy cho bước đó theo luồng pipeline chính (đúng bất
+  // biến `respawn` cam kết giữ — design.md §1/§4.4).
+  test('job respawn succeeded trùng phase hiện tại ⇒ vẫn coi là treo thật, KHÔNG tự advance (regression)', async () => {
+    writePipeline(true)
+    seedTask('RSP', { current_phase: 'implementer', orchestrator_enabled: true })
+    writeJob('rsp-1', { taskId: 'RSP', pipelineStepId: 'implementer', respawn: true }, { status: 'succeeded' })
+
+    expect(await sweepStuckTasks(root, 'p1')).toBe(1)
+    // Đúng hành vi "chưa có job nào" — dispatch resume lại CHÍNH implementer,
+    // không phải advance sang reviewer.
+    expect(dispatched).toHaveLength(1)
+    expect(dispatched[0]).toMatchObject({ stepId: 'implementer', reason: 'sweep_resume' })
   })
 })
