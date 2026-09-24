@@ -1,6 +1,7 @@
 import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
 import { registryHome } from '../../../backend/registry.js'
 import {
+  MCP_DEFAULT_TIMEOUT_MS,
   MCP_MAX_TOOL_NAMES,
   MCP_MAX_TOOL_NAME_LENGTH,
   MCP_SERVERS_VERSION,
@@ -99,6 +100,40 @@ export function normaliseMcpServer(raw: any): McpServerConfig | null {
   }
 }
 
+/**
+ * v1: `timeoutMs` chỉ tác động nút Kiểm tra kết nối. v2 ghi nó xuống
+ * `startupTimeoutSec` của file config, nên nó tác động cả lúc job chạy server.
+ *
+ * Vì thế migrate bỏ trường ở MỌI bản ghi v1, không riêng mặc định cũ `15000`: người
+ * đặt `30000` ở v1 đang chọn «probe chờ 30s», họ chưa từng chọn «job cho server 30s
+ * để khởi động». Giữ lại là im lặng rút thời gian khởi động của job từ 120s xuống —
+ * đúng lớp hồi quy hàm này sinh ra để chặn. Bỏ trường là trả về mặc định, không
+ * phải mất dữ liệu.
+ *
+ * ⚠️ Điều kiện `< MCP_DEFAULT_TIMEOUT_MS` chứ 🚫 không xoá vô điều kiện: trần v1 là
+ * 60s ở tầng endpoint (`schemas/mcpServer.ts` `.max()`), nhưng đường ĐỌC file không
+ * kẹp gì (`toPositiveInt` chỉ làm tròn), nên file sửa tay vẫn có thể mang giá trị
+ * vượt 120s. Giá trị như vậy chỉ làm job chờ LÂU hơn mặc định — không thuộc lớp lỗi
+ * đang chặn, và xoá nó là vứt một con số người dùng cố ý ghi vào file.
+ *
+ * Ở v2 mọi giá trị đều là lựa chọn có chủ ý ⇒ chỉ bản ghi còn mang cờ v1 mới bị
+ * đụng. Version thiếu/sai kiểu/`0` coi như v1: bỏ qua migrate ở đó là để lọt đúng
+ * ca đang muốn chặn.
+ *
+ * Chạy ở đường đọc nên idempotent — file chỉ thật sự lên `version: 2` ở lần
+ * `saveMcpServers` kế tiếp; dashboard chỉ đọc thì migrate lặp lại mỗi lần, vô hại.
+ */
+function migrateToV2(servers: McpServerConfig[], rawVersion: unknown): McpServerConfig[] {
+  const fileVersion = Number(rawVersion) || 1
+  if (fileVersion >= MCP_SERVERS_VERSION) return servers
+  for (const server of servers) {
+    if (server.timeoutMs !== undefined && server.timeoutMs < MCP_DEFAULT_TIMEOUT_MS) {
+      delete server.timeoutMs
+    }
+  }
+  return servers
+}
+
 export function loadMcpServers(): McpServersStore {
   const file = mcpServersFile()
   let raw: string
@@ -110,10 +145,8 @@ export function loadMcpServers(): McpServersStore {
   try {
     const data = JSON.parse(raw.replace(/^\uFEFF/, ''))
     if (!data || !Array.isArray(data.servers)) return emptyStore()
-    return {
-      version: data.version || MCP_SERVERS_VERSION,
-      servers: data.servers.map(normaliseMcpServer).filter(Boolean) as McpServerConfig[],
-    }
+    const servers = data.servers.map(normaliseMcpServer).filter(Boolean) as McpServerConfig[]
+    return { version: MCP_SERVERS_VERSION, servers: migrateToV2(servers, data.version) }
   } catch {
     console.warn(`[dev-team-dashboard] mcp-servers.json corrupt: ${file}`)
     return emptyStore()

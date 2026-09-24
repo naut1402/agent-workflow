@@ -1,9 +1,22 @@
 // Kiểu dữ liệu và helper thuần của feature `mcp`. Node-free: FE import trực
 // tiếp file này (`components/*.vue`), nên không được chạm `node:*`.
 
-export const MCP_SERVERS_VERSION = 1
-export const MCP_DEFAULT_TIMEOUT_MS = 15_000
-export const MCP_MAX_TIMEOUT_MS = 60_000
+/**
+ * Ngữ nghĩa `timeoutMs` đổi ở v2: v1 nó chỉ tác động nút Kiểm tra kết nối, v2 nó
+ * còn được ghi xuống `startupTimeoutSec` của file config CLI nên tác động cả lúc
+ * job chạy server. Không có cờ version thì không phân biệt được «15000 là mặc
+ * định cũ chưa ai đụng» với «15000 do người dùng cố ý đặt sau khi lên v2».
+ */
+export const MCP_SERVERS_VERSION = 2
+
+/**
+ * Khớp `startupTimeoutSec` của Claude Code CLI — đã đọc lại schema trên bản 2.1.267
+ * đang cài: `z.coerce.number().int().min(5).max(600).optional()`, `default: 120`,
+ * chỉ hiện với `transport === 'stdio'`.
+ */
+export const MCP_DEFAULT_TIMEOUT_MS = 120_000
+export const MCP_MAX_TIMEOUT_MS = 600_000
+export const MCP_MIN_TIMEOUT_MS = 5_000
 export const MCP_TRANSPORTS = ['stdio', 'http', 'sse'] as const
 export type McpTransport = (typeof MCP_TRANSPORTS)[number]
 export const MCP_DEFAULT_HTTP_PATH = '/mcp'

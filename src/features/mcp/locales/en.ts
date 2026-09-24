@@ -15,6 +15,7 @@ export default {
     confirmDelete: 'Delete MCP server {id}?',
     deleted: 'MCP server deleted',
     saved: 'MCP server {id} saved',
+    copyLabelSuffix: '{label} (copy)',
   },
   transport: {
     stdio: 'stdio',
@@ -24,10 +25,12 @@ export default {
   dialog: {
     title: 'Add MCP server',
     editTitle: 'Edit MCP server',
-    idField: 'Id',
-    idPlaceholder: 'e.g. playwright',
-    idNormalised: 'Id will be saved as «{id}» — letters, digits, «-» and «_» only.',
     labelField: 'Display name',
+    idDerived: 'Id: {id}',
+    idDerivedHint:
+      'The id is derived from the display name and prefixes every tool name (mcp__<id>__<tool>).',
+    idFrozenHint:
+      'The id is fixed after the first save so Connections pointing at this server keep working.',
     transportField: 'Transport',
     enabledField: 'Enable this server',
     commandField: 'Command',
@@ -44,7 +47,8 @@ export default {
     authHeaderField: 'Auth header',
     authSchemeField: 'Scheme',
     headersField: 'Custom headers',
-    timeoutField: 'Timeout (ms)',
+    timeoutField: 'Startup timeout (ms)',
+    timeoutHint: 'Applies both to the connection check and to the server while a job runs.',
     keyPlaceholder: 'Name',
     valuePlaceholder: 'Value',
     addRow: 'Add row',
@@ -63,8 +67,7 @@ export default {
     saving: 'Saving…',
   },
   errors: {
-    idRequired: 'Enter an id for the MCP server',
-    idExists: 'That id already belongs to another MCP server — pick a different one so it is not overwritten',
+    labelRequired: 'Enter a display name for the MCP server',
     commandRequired: 'Enter a command',
     urlRequired: 'Enter a URL',
     loadFailed: 'Could not load the MCP server list',

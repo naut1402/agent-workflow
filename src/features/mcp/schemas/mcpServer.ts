@@ -7,8 +7,11 @@ const baseFields = {
   id: z.string().min(1),
   label: z.string().min(1).max(128).optional(),
   enabled: z.boolean().optional(),
-  // Cắt ở biên thay vì lúc dùng: `resolveTimeoutMs` cắt trần âm thầm, nên người
-  // dùng gõ 120000, thấy lưu 120000, mà probe vẫn bỏ cuộc ở 60s.
+  // Cắt ở biên thay vì lúc dùng: `resolveTimeoutMs` cắt trần âm thầm, nên không
+  // chặn ở đây thì người dùng gõ quá trần, thấy lưu nguyên giá trị, mà probe vẫn
+  // bỏ cuộc sớm hơn. 🚫 Không thêm `.min()`: bản ghi v1 có thể giữ giá trị dưới sàn
+  // của CLI, chặn ở đây là biến một cú bấm Lưu thành lỗi khó hiểu — việc kẹp về
+  // miền `[5s, 600s]` xảy ra lúc sinh file config (`serialize.ts`).
   timeoutMs: z.number().int().positive().max(MCP_MAX_TIMEOUT_MS).optional(),
 }
 
