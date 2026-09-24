@@ -259,7 +259,6 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Xác định bề mặt cần phủ** — mỗi vùng đổi có hàm/route/hành vi công khai test được. Không có bề mặt nào test được là vấn đề của **code**, không phải của test.
 - [ ] **PR dòng source: test KHÔNG nằm trong diff** — test đi ở PR dòng test ([`git-pr.md`](docs/agent-rules/git-pr.md) §4.3). Thấy file `tests/`·`test-e2e/` trong diff PR code → yêu cầu chuyển sang PR dòng test.
 - [ ] **PR dòng test: chọn đúng runner** — domain/fs → **bun test**; FE/component → vitest; khai báo path theo checklist [Testing](#testing).
-- [ ] **PR dòng test: nêu cặp ref đã overlay** (source ref + SHA) — không có nó thì "test lệch pha với source" không truy được.
 - [ ] **Giữ build xanh** — PR đụng helper FE+BE hoặc `fileHelper` → typecheck/build xanh cả local và CI.
 - [ ] **Tuân thủ commitlint** — commit/PR title đúng `type(scope): subject`, không trailer công cụ.
 - [ ] **Trình bày đúng nội dung PR** — có Tổng quan theo loại task; mỗi thay đổi đánh số, fix/refactor có Logic trước → sau, chi tiết chỉnh sửa nhóm theo cây thư mục ([`git-pr.md`](docs/agent-rules/git-pr.md) §9).
