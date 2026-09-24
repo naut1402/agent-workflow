@@ -1,6 +1,6 @@
-# Git & PR — hygiene, commit, branch, worktree, todo debt, PR body, ngôn ngữ
+# Git & PR — hygiene, commit, branch, worktree, todo debt, PR body, ngôn ngữ, publish tài liệu
 
-Toàn bộ quy ước git/commit/PR gộp về **một file** — kể cả phần trước đây tách ở `docs/convention/` vì lý do "không gắn CI riêng". Cơ chế branch/CI hiện hành (§4, §5, §7, §8) gắn chặt repo này; các quy ước còn lại (§1–3, §6, §9, §10) là nguyên tắc SWE chung áp dụng lên trên cơ chế đó — không tách file nữa để khỏi phải nhảy qua lại.
+Toàn bộ quy ước git/commit/PR gộp về **một file** — kể cả phần trước đây tách ở `docs/convention/` vì lý do "không gắn CI riêng". Cơ chế branch/CI hiện hành (§4, §5, §7, §8) gắn chặt repo này; các quy ước còn lại (§1–3, §6, §9–11) là nguyên tắc SWE chung áp dụng lên trên cơ chế đó — không tách file nữa để khỏi phải nhảy qua lại.
 
 ---
 
@@ -426,7 +426,7 @@ Nội dung dưới đây áp dụng cho **PR feature**, theo `.github/pull_reque
 
 - **Mục `## Issue` đặt ở đầu**, dùng từ khoá **không** auto-close (`Part of #<n>` / `Refs #<n>`). **Không** dùng `Closes` / `Fixes` / `Resolves`.
 - **Thứ tự body cố định**: `## Issue` → `## Tổng quan` → `## Module / Phạm vi` → `## Nội dung thay đổi` (các mục ①, ②, … → phần chung → mapping file) → `## Tài liệu liên quan` → `## Checklist`.
-- **`## Tài liệu liên quan`** — link tài liệu đã publish ở issue (investigate · design · test-spec · whitebox · review-result). 🚫 Chỉ liệt kê tài liệu **đã publish**, không để dòng trống chờ điền.
+- **`## Tài liệu liên quan`** — link comment tài liệu đã publish ở issue theo §11 (investigate · design · test-spec · whitebox · review-result). 🚫 Chỉ liệt kê tài liệu **đã publish**, không để dòng trống chờ điền.
 - **Checklist chỉ hai mục** — đã làm checklist agent (chi tiết ở `AGENTS.md` §4, 🚫 không chép lại từng mục vào PR body) · chưa thực kiểm thử thì đã dán nhãn `test-pending`.
 
 ### 9.1 Tổng quan
@@ -489,3 +489,60 @@ Chore / docs / refactor chọn khối gần nhất. Mỗi ý 1–3 câu — đ�
 - **Không trích số issue, số PR, tên người, tên skill/agent** trong tài liệu tham khảo và comment code — thông tin nhất thời, dễ outdate.
 - **Vẫn khuyến khích trích dẫn tới nguồn ổn định** (tài liệu khác trong repo, spec) khi giúp đáng tin và dễ đọc hơn.
 - **Ngoại lệ**: PR body vẫn phải có `Part of #n` ở đầu — PR là artifact tạm thời, không phải tài liệu tham khảo lâu dài.
+
+---
+
+## 11. Publish tài liệu task vào issue
+
+Mỗi bước pipeline có tài liệu đầu ra thì **publish tài liệu đó lên issue của task** dưới dạng comment — người theo dõi issue đọc được kết quả từng bước mà không phải mở `.dev-team-agent/tasks/<task-id>/`, và `## Tài liệu liên quan` của PR (§9) trỏ thẳng vào các comment này.
+
+| Bước | Tài liệu | Nhãn |
+|---|---|---|
+| Investigate | `investigate.md` | `investigate` |
+| Design | `design.md` | `design` |
+| Test design | `test-spec.md` | `test-spec` |
+| Review | `review.md` | `review-result` |
+| PR | link spreadsheet whitebox | `whitebox` |
+
+Bước không có tài liệu đầu ra (implement, test implement) thì không publish.
+
+### 11.1 Khi nào publish
+
+- **Ngay khi tài liệu của bước đã chốt** — ghi file xong, trước khi báo DONE. Bước kết thúc `BLOCKED` (còn `qa.md` chờ người) thì **chưa** publish.
+- **Tài liệu sửa lại sau đó** (doc review, HITL yêu cầu sửa, chạy lại bước) → **cập nhật đúng comment cũ**, 🚫 không đăng comment mới — issue chỉ giữ bản cuối của mỗi tài liệu.
+- **Issue của task** là issue GitHub nêu trong request của task — cũng là issue PR sẽ ghi ở `Part of #<n>`. Task không gắn issue GitHub, hoặc publish lỗi (hết quyền, mất mạng) → ghi rõ ở kết quả trả về của bước, 🚫 không chặn pipeline.
+
+### 11.2 Định dạng comment
+
+Toàn bộ tài liệu bọc trong **một** thẻ `<details>`; dòng đầu là marker để tìm lại comment khi cập nhật:
+
+```markdown
+<!-- task-doc: <task-id>/<nhãn> -->
+<details>
+<summary><b>Design</b> — <task-id> · cập nhật YYYY-MM-DD</summary>
+
+<nội dung design.md, giữ nguyên>
+
+</details>
+```
+
+- **Để trống một dòng sau `</summary>` và trước `</details>`** — thiếu thì GitHub không render markdown bên trong.
+- **Nội dung giữ nguyên file** — không tóm tắt lại; whitebox chỉ có link spreadsheet.
+- **Vượt giới hạn 65.536 ký tự của comment** → tách nhiều comment, marker thêm hậu tố `-2`, `-3` (`<task-id>/design-2`), mỗi comment một thẻ `<details>` riêng.
+- **Không secret, không dán diff dài** — cùng ràng buộc với file nợ (§7.3).
+
+### 11.3 Lệnh
+
+```bash
+marker='<!-- task-doc: T0000abcd/design -->'
+id=$(gh api "repos/{owner}/{repo}/issues/<n>/comments" --paginate \
+  --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
+
+if [ -n "$id" ]; then
+  gh api -X PATCH "repos/{owner}/{repo}/issues/comments/$id" -F body=@comment.md
+else
+  gh issue comment <n> --body-file comment.md
+fi
+```
+
+`comment.md` soạn trong thư mục tạm, 🚫 không ghi vào repo. URL comment (`html_url` trong kết quả `gh api`, hoặc URL `gh issue comment` in ra) là link dùng ở `## Tài liệu liên quan` của PR.
