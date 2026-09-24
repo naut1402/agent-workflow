@@ -4,7 +4,7 @@ Title PR theo prefix: [<TASK>] <type>: <desc>  (type ∈ feat|fix|chore|docs|ref
 Quy ước hub: AGENTS.md. Chi tiết PR body: docs/agent-rules/git-pr.md §9.
 PR phát hành (main ← dev/x.y.z/main): dùng .github/PULL_REQUEST_TEMPLATE/release.md (mở PR kèm ?template=release.md) — bố cục ở docs/agent-rules/git-pr.md §8.
 PR dòng test (test/x.y.z/main ← test/x.y.z/{taskID}_{slug}): dùng .github/PULL_REQUEST_TEMPLATE/test.md (?template=test.md) — quy ước dòng test ở docs/agent-rules/git-pr.md §4.3.
-Kiến trúc + cấu trúc thư mục: docs/architecture/ · feature map: docs/convention/feature-architecture.md.
+Kiến trúc + cấu trúc thư mục: docs/architecture/ · feature map: docs/agent-rules/feature-architecture-guideline.md.
 -->
 
 ## Issue

@@ -175,4 +175,4 @@ installPlugins(createApp(App), { i18n: { locale } }).mount('#app')
 
 ---
 
-Kiến trúc: [`docs/architecture/`](../architecture/README.md). Đặt file theo feature: [`docs/convention/feature-architecture.md`](../convention/feature-architecture.md).
+Kiến trúc: [`docs/architecture/`](../architecture/README.md). Đặt file theo feature: [`feature-architecture-guideline.md`](feature-architecture-guideline.md).

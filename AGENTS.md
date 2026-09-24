@@ -41,7 +41,7 @@ agent-workflow/
 | Bước | Category | Rule |
 |---|---|---|
 | 🔍 Investigate · Design | `doc-writing` | [`doc-writing.md`](docs/agent-rules/doc-writing.md) — bố cục `investigate.md` / `design.md` · [`writing-guideline.md`](docs/agent-rules/writing-guideline.md) — trình bày markdown, tham chiếu tài liệu (category `coding`, đọc ở mọi bước viết tài liệu) |
-| 🛠️ Implement | `coding` | [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) · [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) · [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) · [`writing-guideline.md`](docs/agent-rules/writing-guideline.md) |
+| 🛠️ Implement | `coding` | [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) · [`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) · [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) · [`writing-guideline.md`](docs/agent-rules/writing-guideline.md) |
 | 🔎 Review | `coding` + `test` | [`testing.md`](docs/agent-rules/testing.md) |
 | 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
 | 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6, todo debt §7, PR phát hành §8 · issue task: version, milestone, chia nhỏ §5 · publish tài liệu vào issue §11 (mọi bước có tài liệu đầu ra) |
@@ -134,7 +134,7 @@ Chốt ngay trong `design.md` những gì Review sẽ kiểm — sai ở đây t
 <details>
 <summary><b>Thêm feature mới</b></summary>
 
-Quy ước: [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md). Nguyên tắc vị trí code & coupling: checklist Review › **Kiến trúc**.
+Quy ước: [`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md). Nguyên tắc vị trí code & coupling: checklist Review › **Kiến trúc**.
 
 - [ ] **Tạo `src/features/<name>/`** — `api.ts`, `controller.ts`, `business/`, và (tuỳ) `components`, `composables`, `scripts`, `styles/index.scss`, `locales/{vi,en}.ts`, `schemas/`.
 - [ ] **Kế thừa abstract** — controller `extends AbstractController`; business `extends AbstractBusiness`.
@@ -211,7 +211,7 @@ Chạy trước khi báo hoàn thành 1 vùng UI có chiều cao phụ thuộc d
 
 ### Review
 
-Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**`, `src/shared/**`, hoặc tái cấu trúc tương tự. Đánh dấu từng mục liên quan scope PR — không bắt buộc tick hết nếu PR không đụng vùng đó. Quy ước nền: [`docs/convention/feature-architecture.md`](docs/convention/feature-architecture.md), [`coding-guideline.md`](docs/agent-rules/coding-guideline.md), [`git-pr.md`](docs/agent-rules/git-pr.md).
+Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**`, `src/shared/**`, hoặc tái cấu trúc tương tự. Đánh dấu từng mục liên quan scope PR — không bắt buộc tick hết nếu PR không đụng vùng đó. Quy ước nền: [`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md), [`coding-guideline.md`](docs/agent-rules/coding-guideline.md), [`git-pr.md`](docs/agent-rules/git-pr.md).
 
 <details>
 <summary><b>Kiến trúc — vị trí code & coupling</b></summary>
