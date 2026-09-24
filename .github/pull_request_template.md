@@ -42,7 +42,8 @@ Mỗi thay đổi nghiệp vụ / logic quan trọng một mục, đánh số �
 Mỗi mục: Logic thay đổi, rồi NGAY DƯỚI là thẻ <details> chi tiết chỉnh sửa của riêng mục đó — không gom chi tiết các mục về một chỗ.
 Logic — fix/refactor: bắt buộc Trước → Sau; feat thuần chưa có hành vi cũ: chỉ ghi Sau.
 Chi tiết — nhóm theo lớp của feature (chỉ lớp có đổi):
-api/controller · business · schemas · components/composables/scripts/locales/styles.
+api/controller · business · schemas · components/composables/scripts/locales/styles;
+đụng src/backend · src/frontend · src/shared hay feature khác thì ghi luôn trong mục đó.
 Các mục ngăn cách bằng đường kẻ ngang `---` (để trống 1 dòng phía trên, nếu không `---` biến dòng trước thành heading).
 Test KHÔNG thuộc PR này — nó ở PR dòng test.
 -->
@@ -69,16 +70,6 @@ Test KHÔNG thuộc PR này — nó ở PR dòng test.
 - `src/features/<feature>/…` — …
 
 </details>
-
-### Phần chung
-<!-- Luôn điền. Ghi "Không" nếu không đụng. -->
-- **Backend** (`src/backend/…`) / **Frontend** (`src/frontend/…`) / **Shared** (`src/shared/…`): …
-- **Feature khác**: … / Không
-
-### Mapping file (khi rename / split / migrate path)
-| Trước | Sau | Ghi chú |
-|-------|-----|---------|
-|       |     |         |
 
 ## Tài liệu liên quan
 <!--

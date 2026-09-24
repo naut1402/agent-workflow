@@ -261,7 +261,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **PR dòng test: nêu cặp ref đã overlay** (source ref + SHA) — không có nó thì "test lệch pha với source" không truy được.
 - [ ] **Giữ build xanh** — PR đụng helper FE+BE hoặc `fileHelper` → typecheck/build xanh cả local và CI.
 - [ ] **Tuân thủ commitlint** — commit/PR title đúng `type(scope): subject`, không trailer công cụ.
-- [ ] **Trình bày đúng nội dung PR** — phần riêng nhóm theo cây thư mục; fix/refactor có Logic trước → sau; phần chung nêu Core và/hoặc feature khác (hoặc *Không*).
+- [ ] **Trình bày đúng nội dung PR** — có Tổng quan theo loại task; mỗi thay đổi đánh số, fix/refactor có Logic trước → sau, chi tiết chỉnh sửa nhóm theo cây thư mục ([`git-pr.md`](docs/agent-rules/git-pr.md) §9).
 
 </details>
 

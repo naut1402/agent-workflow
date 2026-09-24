@@ -364,7 +364,7 @@ Theo dõi nợ dài hạn ngoài gate này thì dùng GitHub Issue.
 
 ## 8. PR phát hành (`main` ← `dev/x.y.z/main`)
 
-PR promote dòng version lên `main` là **release note hướng người dùng cuối** — mô tả *người dùng thấy gì đổi*, không liệt kê file/hàm. **Không** áp dụng `## Issue`, bảng mapping file hay checklist PR feature (§9).
+PR promote dòng version lên `main` là **release note hướng người dùng cuối** — mô tả *người dùng thấy gì đổi*, không liệt kê file/hàm. **Không** áp dụng `## Issue` hay checklist PR feature (§9).
 
 - **Title** — `Release version x.y.z`, khớp `version` trong `package.json` của dòng đó.
 - **Body** — dùng 5 section sau, giữ nguyên tên và thứ tự:
@@ -425,7 +425,7 @@ Repo có **2 loại PR**, body khác nhau:
 Nội dung dưới đây áp dụng cho **PR feature**, theo `.github/pull_request_template.md`.
 
 - **Mục `## Issue` đặt ở đầu**, dùng từ khoá **không** auto-close (`Part of #<n>` / `Refs #<n>`). **Không** dùng `Closes` / `Fixes` / `Resolves`.
-- **Thứ tự body cố định**: `## Issue` → `## Tổng quan` → `## Module / Phạm vi` → `## Nội dung thay đổi` (các mục ①, ②, … → phần chung → mapping file) → `## Tài liệu liên quan` → `## Checklist`.
+- **Thứ tự body cố định**: `## Issue` → `## Tổng quan` → `## Module / Phạm vi` → `## Nội dung thay đổi` (các mục ①, ②, …) → `## Tài liệu liên quan` → `## Checklist`.
 - **`## Tài liệu liên quan`** — link comment tài liệu đã publish ở issue theo §11 (investigate · design · test-spec · whitebox · review-result). 🚫 Chỉ liệt kê tài liệu **đã publish**, không để dòng trống chờ điền.
 - **Checklist chỉ hai mục** — đã làm checklist agent (chi tiết ở `AGENTS.md` §4, 🚫 không chép lại từng mục vào PR body) · chưa thực kiểm thử thì đã dán nhãn `test-pending`.
 
@@ -459,20 +459,12 @@ Chore / docs / refactor chọn khối gần nhất. Mỗi ý 1–3 câu — đ�
 | Domain | `…/business/` |
 | Schema | `…/schemas/` |
 | UI / FE API / i18n / style | `…/components/`, `composables/`, `scripts/`, `locales/`, `styles/` |
+| Nền / feature khác | `src/backend/…`, `src/frontend/…`, `src/shared/…`, `src/features/<peer>/…` |
 
 - **Mỗi nhóm 1–vài gạch đầu dòng** — *làm gì* / *vì sao*, không dump toàn bộ diff.
 - **Test không thuộc PR này** — nó ở PR dòng test (§4.3).
 
-### 9.3 Phần chung & mapping file
-
-Đặt sau các mục ①, ②, …
-
-- **Phần chung** — luôn có (ghi *Không* nếu không đụng) để reviewer thấy blast radius:
-  - **Backend / Frontend / Shared** (`src/backend/…`, `src/frontend/…`, `src/shared/…`) — đổi **logic** (hành vi helper, gate, schema dùng chung, middleware) thì nêu module + thay đổi; rename/import-only ghi một dòng ngắn hoặc *Không*.
-  - **Feature khác** (`src/features/<peer>/…`) — sửa logic / API / contract của feature không phải phạm vi chính thì nêu feature + chỗ đụng.
-- **Mapping file** — bảng Trước → Sau khi có rename / split / migrate path.
-
-### 9.4 Test view point & kết quả
+### 9.3 Test view point & kết quả
 
 - **Test view point & test case** — tiếng Việt, checklist theo module/chức năng, **comment lên PR** (không chỉ để trong code); dài thì bọc `<details>`. Mỗi case nêu: đầu vào → hành vi mong đợi.
 - **Kết quả test** — đã chạy thật thì comment tổng pass/fail, coverage nếu có, link CI run. **Chưa chạy thật thì không comment kết quả giả.**
