@@ -298,17 +298,34 @@ Vì sao: dashboard map task → worktree theo **hai tầng** — tên thư mục
 
 Harness có sẵn cơ chế cô lập worktree thì dùng luôn — nguyên tắc 1-instance-1-worktree vẫn giữ.
 
-### 6.3 Làm việc & commit
+### 6.3 Luôn làm trên commit mới nhất
+
+Áp dụng cho bước **investigate**, **implement** và **test implement**. Điều tra trên code cũ cho ra kết luận phải sửa lại sau khi đồng bộ — phạm vi, call chain, file cần sửa đều có thể đã khác.
+
+- **`git fetch origin` ngay trước khi bắt đầu bước** — kể cả khi worktree vừa tạo; giữa hai bước có thể đã có PR khác merge (chờ HITL, chờ QA).
+- **Đứng đúng branch** — investigate đọc code của **base** task (`dev/x.y.z/main` theo §4.2, hoặc branch chung theo §5.2); implement làm trên branch task; test implement làm trên branch task dòng test (§4.3).
+- **Branch không được đi sau base** — `git rev-list --count HEAD..origin/<base>` phải ra `0`. Khác `0` thì đồng bộ trước khi làm tiếp:
+  - branch **chưa push** → `git rebase origin/<base>`;
+  - branch **đã push** → `git merge origin/<base>`, 🚫 không rebase rồi force-push branch đã push.
+- **Test implement lấy source mới nhất** — sau khi đồng bộ branch dòng test, chạy lại `bun run test:overlay` để cây test chấm trên code source mới nhất (§4.3).
+- **Đồng bộ ra xung đột, hoặc base đổi làm kết luận điều tra không còn đúng** → dừng, cập nhật lại tài liệu của bước trước rồi mới làm tiếp; 🚫 không làm tiếp trên kết luận cũ.
+
+```bash
+git fetch origin
+git rev-list --count HEAD..origin/dev/1.2.0/main   # phải là 0
+```
+
+### 6.4 Làm việc & commit
 
 - **Mọi git / commit / push thực hiện trong worktree đó.**
 - **Không `cd` về cây chính để sửa file task khác.**
 
-### 6.4 Tránh đụng tài nguyên runtime
+### 6.5 Tránh đụng tài nguyên runtime
 
 - **Cổng cố định dễ đụng** — dev `:5174`, e2e webServer `:4319`. Hai instance chạy song song thì override khác nhau (`DEV_TEAM_DASHBOARD_PORT`, `E2E_PORT`, hoặc `vite --port`).
 - **Registry / jobs store dùng chung `~/.dev-team-dashboard`** — ghi song song thì set riêng `DEV_TEAM_DASHBOARD_HOME` mỗi worktree (e2e đã làm sẵn trong `playwright.config.ts`).
 
-### 6.5 Dọn dẹp sau khi merge
+### 6.6 Dọn dẹp sau khi merge
 
 ```bash
 git worktree remove ../wt-<task>

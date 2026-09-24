@@ -44,7 +44,7 @@ agent-workflow/
 | 🛠️ Implement | `coding` | [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) · [`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md) · [`mode-registry-guideline.md`](docs/agent-rules/mode-registry-guideline.md) · [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) · [`writing-guideline.md`](docs/agent-rules/writing-guideline.md) |
 | 🔎 Review | `coding` + `test` | [`testing.md`](docs/agent-rules/testing.md) |
 | 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
-| 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6, todo debt §7, PR phát hành §8 · issue task: version, milestone, chia nhỏ §5 · publish tài liệu vào issue §11 (mọi bước có tài liệu đầu ra) |
+| 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6 (làm trên commit mới nhất §6.3), todo debt §7, PR phát hành §8 · issue task: version, milestone, chia nhỏ §5 · publish tài liệu vào issue §11 (mọi bước có tài liệu đầu ra) |
 
 Tra cứu (không phải rule): [`README.md`](README.md) quickstart · [`docs/architecture/`](docs/architecture/) kiến trúc C4 · [`docs/architecture/events/`](docs/architecture/events/README.md) domain event · [`docs/template/`](docs/template/) template agent / pipeline.
 
@@ -66,6 +66,19 @@ Quy ước: [`git-pr.md`](docs/agent-rules/git-pr.md) §11.
 - [ ] **Investigate / design cập nhật luôn tóm tắt `## Kết quả điều tra`** — phương châm (feature) / phương án (fix) đối ứng, phạm vi thay đổi, ngoài phạm vi.
 - [ ] **Tài liệu sửa lại → thay đúng khối cũ** theo marker, không thêm khối mới; đọc lại body ngay trước khi ghi.
 - [ ] **Không có issue / publish lỗi** → ghi ở kết quả trả về, không chặn pipeline.
+
+</details>
+
+---
+
+### Trước khi bắt đầu Investigate · Implement · Test implement
+
+<details>
+<summary><b>Làm trên commit mới nhất</b></summary>
+
+Quy ước: [`git-pr.md`](docs/agent-rules/git-pr.md) §6.3.
+
+- [ ] **Đã pull code mới nhất từ base branch**
 
 </details>
 
