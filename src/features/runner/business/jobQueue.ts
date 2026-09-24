@@ -869,7 +869,11 @@ async function runJob(job: JobRecord): Promise<void> {
   // nhưng nó LÀ lượt chạy lại của step đó — không cho advance thì pipeline đứng
   // ngay sau lần resume đầu tiên.
   const isOrchestratorResume = job.metadata?.orchestratorResume === true
-  if (result.ok && !isApprovalJob && (!isChatFeedback || isOrchestratorResume)) {
+  // `respawn` chạy một phiên mới cho một step đã xong — không bao giờ được
+  // đẩy `current_phase`, kể cả khi `pipelineStepId` trùng `current_phase`
+  // hiện tại (xem design.md §4.4 của task Td2be3c3e).
+  const isRespawn = job.metadata?.respawn === true
+  if (result.ok && !isApprovalJob && (!isChatFeedback || isOrchestratorResume) && !isRespawn) {
     try {
       await advancePipelineStepChain(job)
     } catch (err) {
