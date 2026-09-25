@@ -156,15 +156,24 @@ test('TC-03 Edge — nút của node chạm được ngay ở khung nhìn mặc 
   await openTask(page)
   await expect(orchestratorNode(page)).toBeVisible({ timeout: 15_000 })
 
-  const covering = await page.evaluate(() => {
-    const btn = document.querySelector('.pnode-orchestrator .pnode-run-btn') as HTMLElement | null
-    if (!btn) return 'không có nút Run'
-    const r = btn.getBoundingClientRect()
-    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) as HTMLElement | null
-    if (!hit) return 'điểm bấm nằm ngoài khung nhìn'
-    return btn.contains(hit) || hit.contains(btn) ? null : `${hit.tagName}.${hit.className}`
-  })
-  expect(covering, 'phần tử nhận cú bấm tại tâm nút Run').toBeNull()
+  // `fitView()` tự refit sau khi node điều phối xuất hiện, nhưng qua
+  // `setTimeout(…, 100)` (PipelineView.vue) — node "visible" trước khi khung
+  // nhìn kịp fit lại, nên đo tại thời điểm này còn có thể trúng vị trí cũ.
+  // Poll thay vì đọc một lần để không đua với độ trễ đó.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const btn = document.querySelector('.pnode-orchestrator .pnode-run-btn') as HTMLElement | null
+          if (!btn) return 'không có nút Run'
+          const r = btn.getBoundingClientRect()
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) as HTMLElement | null
+          if (!hit) return 'điểm bấm nằm ngoài khung nhìn'
+          return btn.contains(hit) || hit.contains(btn) ? null : `${hit.tagName}.${hit.className}`
+        }),
+      { message: 'phần tử nhận cú bấm tại tâm nút Run' },
+    )
+    .toBeNull()
 })
 
 // ① đầy-đủ — bấm Run trên node thật sự giao được một lượt, và sau đó node vẫn
