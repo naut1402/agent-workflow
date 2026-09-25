@@ -7,7 +7,10 @@ import { capturePage } from './_capture'
 
 test('sidebar switches across modes incl. runner (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   // Monitor (default) → active task list present.
   await expect(page.locator('.tasklist--active')).toBeVisible({ timeout: 15_000 })
@@ -45,10 +48,12 @@ test('sidebar switches across modes incl. runner (capture)', async ({ page }, te
 // active mode icon is now the only way to hide/show that mode's sub-sidebar.
 test('mode icon toggles the sub-sidebar of the active mode (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   const monitorBtn = page.locator('button[title^="Monitor"]')
-  const monitorLayout = page.locator('.monitor-layout')
   const subSidebar = page.locator('.monitor-sub-sidebar')
 
   await expect(page.locator('.tasklist--active')).toBeVisible({ timeout: 15_000 })
@@ -58,7 +63,7 @@ test('mode icon toggles the sub-sidebar of the active mode (capture)', async ({ 
 
   // Active mode + sub-sidebar showing → one click hides it, mode stays Monitor.
   await monitorBtn.click()
-  await expect(monitorLayout).toHaveClass(/monitor-layout--sub-collapsed/)
+  await expect(subSidebar).toHaveClass(/monitor-sub-sidebar--collapsed/)
   await expect(monitorBtn).toHaveAttribute('aria-expanded', 'false')
   await expect(monitorBtn).toHaveClass(/active/)
   await expect(page.locator('.tasklist--active')).toHaveCount(0)
@@ -69,25 +74,25 @@ test('mode icon toggles the sub-sidebar of the active mode (capture)', async ({ 
 
   // Click again → shows it back.
   await monitorBtn.click()
-  await expect(monitorLayout).not.toHaveClass(/monitor-layout--sub-collapsed/)
+  await expect(subSidebar).not.toHaveClass(/monitor-sub-sidebar--collapsed/)
   await expect(monitorBtn).toHaveAttribute('aria-expanded', 'true')
   await expect(page.locator('.tasklist--active')).toBeVisible()
 
   // Editor: selecting the mode must not toggle its panel; clicking again must.
   const editorBtn = page.locator('button[title^="Pipeline Editor"]')
   await editorBtn.click()
-  await expect(page.locator('.editor-left')).not.toHaveClass(/editor-left-collapsed/)
+  await expect(page.locator('.editor-target-panel')).not.toHaveClass(/is-collapsed/)
   await expect(page.locator('.editor-left-collapse-btn')).toHaveCount(0)
   await capturePage(page, testInfo, 'editor-sub-sidebar-expanded')
 
   await editorBtn.click()
-  await expect(page.locator('.editor-left')).toHaveClass(/editor-left-collapsed/)
+  await expect(page.locator('.editor-target-panel')).toHaveClass(/is-collapsed/)
   // Editor keeps its icon rail (Agents/Skills/Rules) instead of shrinking to zero.
   await expect(page.locator('.target-section-icon')).toHaveCount(3)
   await capturePage(page, testInfo, 'editor-sub-sidebar-collapsed')
 
   // Reopening from inside the panel keeps the mode icon's state in sync.
   await page.locator('.target-section-icon').first().click()
-  await expect(page.locator('.editor-left')).not.toHaveClass(/editor-left-collapsed/)
+  await expect(page.locator('.editor-target-panel')).not.toHaveClass(/is-collapsed/)
   await expect(editorBtn).toHaveAttribute('aria-expanded', 'true')
 })
