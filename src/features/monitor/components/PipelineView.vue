@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
-import { VueFlow } from '@vue-flow/core'
+import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, resetPipelineStep, startOrchestrator, stopOrchestrator } from '../scripts/PipelineViewApi'
 import { fetchJob, fetchJobs, cancelJob } from '../../runner/scripts/runnerApi'
@@ -30,6 +30,8 @@ const nodeTypes = {
   pipeline: markRaw(PipelineNode),
   artifact: markRaw(ArtifactNode),
 }
+
+const { fitView } = useVueFlow()
 
 // Custom flow profile for this task (null = use default PHASES).
 const customProfile = ref(null)
@@ -76,6 +78,31 @@ const phaseKeys = computed(() => phases.value.map((p) => p.key))
 const orchestratorEnabled = computed(() => props.task.pipeline?.orchestrator?.enabled === true)
 const orchestratorHalted = computed(() => props.task.orchestrator_halted === true)
 const orchestrated = computed(() => orchestratorEnabled.value && !orchestratorHalted.value)
+
+// Khoá đại diện "cấu trúc bộ node hiện có" — đổi khi số lượng/danh tính step
+// hoặc sự xuất hiện của node điều phối đổi, KHÔNG đổi khi chỉ toạ độ (drag)
+// hay trạng thái (status/running) đổi. `fitView-on-init` của VueFlow chỉ chạy
+// đúng 1 lần rồi khoá (`fitViewOnInitDone`) — batch đầu (trước khi SSE mang
+// `pipeline` thật về) không có node điều phối, nên phải tự fit lại mỗi khi
+// khoá này đổi, đúng pattern đã dùng ở PipelineEditor.vue.
+const nodeStructureKey = computed(
+  () => `${props.task.task_id}|${phaseKeys.value.join(',')}|${orchestratorEnabled.value}`,
+)
+
+watch(
+  nodeStructureKey,
+  () => {
+    // setTimeout (không phải nextTick): phải đợi VueFlow tự đo dimension của
+    // node vừa thêm/đổi rồi mới fitView() đúng khung — cùng độ trễ 100ms đã dùng
+    // ở PipelineEditor.vue:385/666.
+    setTimeout(() => fitView(), 100)
+  },
+  // `immediate` bắt buộc: khi `props.task.pipeline` đã đầy đủ ngay từ lần
+  // render đầu (không phải luôn qua 2 batch SSE — vd state nạp thẳng từ
+  // file), `nodeStructureKey` không đổi sau mount nên watch không có gì để
+  // so sánh và không bao giờ tự fire nếu thiếu cờ này.
+  { immediate: true },
+)
 
 // Copy có chủ đích từ PipelineEditor.vue:81 — phạm vi 1 file, chưa đủ lý do
 // tách shared lib cho 3 dòng dùng ở đúng 2 nơi.
