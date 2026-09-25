@@ -252,7 +252,11 @@ function printCatalog(testFiles: string[], graph: Map<string, string[]>, bunPref
   console.log('|---|---|---|---|---|')
   for (const suite of [...suites.keys()].sort()) {
     const files = suites.get(suite)!
-    const bun = isUnder(files[0], bunPrefixes)
+    // Mọi file phải thuộc bunPrefixes mới tính suite là bun — dùng files[0] (thứ
+    // tự tới từ fs.readdirSync, không đảm bảo ổn định giữa các máy/filesystem)
+    // làm suite lật runner ngẫu nhiên khi thư mục trộn file bun + vitest (vd
+    // `tests/src/backend/lib`, chỉ `fileHelper.test.ts` opt-in bun).
+    const bun = files.every((f) => isUnder(f, bunPrefixes))
     // Chỉ import trực tiếp: đủ để biết suite này "của" module nào, không lôi cả
     // closure (mọi suite đều chạm core/lib nên closure sẽ nhiễu hết bảng).
     const areas = new Map<string, number>()
