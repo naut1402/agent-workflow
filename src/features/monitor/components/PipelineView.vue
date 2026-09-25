@@ -89,13 +89,17 @@ const nodeStructureKey = computed(
   () => `${props.task.task_id}|${phaseKeys.value.join(',')}|${orchestratorEnabled.value}`,
 )
 
+let fitTimer: ReturnType<typeof setTimeout> | undefined
 watch(
   nodeStructureKey,
   () => {
     // setTimeout (không phải nextTick): phải đợi VueFlow tự đo dimension của
     // node vừa thêm/đổi rồi mới fitView() đúng khung — cùng độ trễ 100ms đã dùng
-    // ở PipelineEditor.vue:385/666.
-    setTimeout(() => fitView(), 100)
+    // ở PipelineEditor.vue:385/666. Huỷ timer cũ trước khi đặt cái mới: component
+    // này sống xuyên suốt nhiều lần đổi task (không unmount), nên đổi khoá dồn dập
+    // không được để nhiều `fitView()` trễ xếp hàng gọi sau khi component đã unmount.
+    clearTimeout(fitTimer)
+    fitTimer = setTimeout(() => fitView(), 100)
   },
   // `immediate` bắt buộc: khi `props.task.pipeline` đã đầy đủ ngay từ lần
   // render đầu (không phải luôn qua 2 batch SSE — vd state nạp thẳng từ
@@ -103,6 +107,7 @@ watch(
   // so sánh và không bao giờ tự fire nếu thiếu cờ này.
   { immediate: true },
 )
+onBeforeUnmount(() => clearTimeout(fitTimer))
 
 // Copy có chủ đích từ PipelineEditor.vue:81 — phạm vi 1 file, chưa đủ lý do
 // tách shared lib cho 3 dòng dùng ở đúng 2 nơi.
