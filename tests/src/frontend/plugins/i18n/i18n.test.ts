@@ -41,8 +41,8 @@ describe('i18n foundation', () => {
     expect(t('common.modes.logs')).toBe('Logs')
   })
 
-  it('named interpolation works for status.updated', () => {
-    expect(t('common.status.updated', { time: '10:00' })).toBe('cập nhật 10:00')
+  it('named interpolation works for sidebar.version', () => {
+    expect(t('common.sidebar.version', { version: '1.2.3' })).toBe('Phiên bản 1.2.3')
   })
 
   it('useLocale.setLocale persists the preference and flips the live locale', () => {
@@ -66,7 +66,7 @@ describe('i18n foundation', () => {
     registerLocale('xx', { common: { modes: { logs: 'XX' } } })
     setI18nLocale('xx' as any)
     // key không có trong xx → fallbackLocale=vi
-    expect(t('common.status.updated', { time: '10:00' })).toBe('cập nhật 10:00')
+    expect(t('common.sidebar.version', { version: '1.2.3' })).toBe('Phiên bản 1.2.3')
     setI18nLocale('vi')
   })
 })
