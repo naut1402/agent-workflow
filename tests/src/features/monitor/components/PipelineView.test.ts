@@ -59,10 +59,25 @@ vi.mock('@vue-flow/core', async (importOriginal) => {
   }
 })
 
+// `PipelineView` schedules a `setTimeout(() => fitView(), 100)` on mount
+// (watch(..., { immediate: true }), see src) — a wrapper never unmounted
+// leaves that timer pending, and if it fires after the file's jsdom
+// environment has torn down, Vitest's worker RPC crashes on the resulting
+// console output ("Closing rpc while onUserConsoleLog was pending"). Track
+// every mounted wrapper so `afterEach` can unmount it regardless of whether
+// the individual test also does so — double-unmount is harmless.
+const mountedWrappers: Array<{ unmount: () => void }> = []
+function track<T extends { unmount: () => void }>(w: T): T {
+  mountedWrappers.push(w)
+  return w
+}
+
 function mountPipeline(task: Record<string, any>) {
-  return mount(PipelineView, {
-    props: { task, projectId: null },
-  })
+  return track(
+    mount(PipelineView, {
+      props: { task, projectId: null },
+    }),
+  )
 }
 
 // Run-confirm / HITL modals are Teleported to <body> — not inside the
@@ -75,6 +90,13 @@ async function clickModalButton(selector: string) {
 }
 
 afterEach(() => {
+  for (const w of mountedWrappers.splice(0)) {
+    try {
+      w.unmount()
+    } catch {
+      // already unmounted by the test itself — harmless.
+    }
+  }
   vi.clearAllMocks()
   document.body.innerHTML = ''
 })
@@ -651,7 +673,7 @@ describe('PipelineView — dialog duyệt nội dung (HITL)', () => {
       artifacts: {},
       state_mtime: 1700,
     }
-    const w = mount(PipelineView, { props: { task, projectId: null }, attrs: { onHitlAction } })
+    const w = track(mount(PipelineView, { props: { task, projectId: null }, attrs: { onHitlAction } }))
     await flushPromises()
     await w.find('[data-testid="node-investigator"]').trigger('click')
     await flushPromises()
@@ -1122,7 +1144,7 @@ describe('PipelineView — dialog reset step', () => {
       artifacts: { 'phpstan.md': { exists: true } },
       pipeline: SAMPLE_PIPELINE,
     }
-    const w = mount(PipelineView, { props: { task, projectId: null }, attrs: { onHitlAction } })
+    const w = track(mount(PipelineView, { props: { task, projectId: null }, attrs: { onHitlAction } }))
     await flushPromises()
     nodeData(w, 'implementer').onReset()
     await flushPromises()
@@ -1271,7 +1293,7 @@ describe('PipelineView — convention hàng nút hai dialog (nhóm D)', () => {
     w.unmount()
     document.body.innerHTML = ''
 
-    const w2 = mountRaw(PipelineView, {
+    const w2 = track(mountRaw(PipelineView, {
       // Dialog duyệt cần một step có gate — SAMPLE_PIPELINE không khai gate nào,
       // nên phần này dùng pipeline mặc định như các test nhóm A.
       props: {
@@ -1279,7 +1301,7 @@ describe('PipelineView — convention hàng nút hai dialog (nhóm D)', () => {
         projectId: null,
       },
       global: { plugins: [createTestI18nPlugin('en')] },
-    })
+    }))
     await flushPromises()
     await w2.find('[data-testid="node-investigator"]').trigger('click')
     await flushPromises()
