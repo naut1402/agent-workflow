@@ -13,7 +13,10 @@ test('artifact view preference: Settings → open artifact (capture)', async ({ 
   }, STORAGE_KEY)
 
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   const row = page.locator('.task-row', { hasText: 'DEMO-1' })
   await expect(row).toBeVisible({ timeout: 15_000 })

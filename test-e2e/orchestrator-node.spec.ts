@@ -77,7 +77,10 @@ async function readState(): Promise<Record<string, any>> {
 
 async function openTask(page: Page) {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   const row = page.locator('.task-row', { hasText: TASK_ID })
   await expect(row).toBeVisible({ timeout: 15_000 })
   await row.click()
@@ -233,7 +236,10 @@ test('③ tắt rồi bật lại checkbox + Lưu ⇒ trạng thái node đượ
   await seedTask({ orchestrator_halted: true })
 
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await page.getByRole('button', { name: 'Pipeline Editor' }).click()
   await expect(page.locator('.vue-flow')).toBeVisible({ timeout: 15_000 })
 

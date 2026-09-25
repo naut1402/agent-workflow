@@ -6,7 +6,10 @@ import { capture } from './_capture'
 
 test('settings dialog: open/close expanded + collapsed (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   await expect(page.locator('.tasklist')).toBeVisible({ timeout: 15_000 })
 
@@ -53,7 +56,10 @@ test('settings dialog: open/close expanded + collapsed (capture)', async ({ page
 test('settings dialog: overflow body scroll at short viewport (capture)', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 400 })
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await expect(page.locator('.tasklist')).toBeVisible({ timeout: 15_000 })
 
   await page.locator('button[title="Cài đặt"]').click()

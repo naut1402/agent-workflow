@@ -32,7 +32,10 @@ test.afterEach(async () => {
 
 test('create task from Prompt tab (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   // Open CreateTaskDialog via TaskList header + button.
   await page.getByRole('button', { name: 'Tạo task mới' }).click()
@@ -92,7 +95,10 @@ test('stepper skips the optional steps straight to preview (capture)', async ({
   page,
 }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   await page.getByRole('button', { name: 'Tạo task mới' }).click()
   const dialog = page.getByRole('dialog', { name: 'Tạo task' })
