@@ -7,7 +7,10 @@ import { capturePage } from './_capture'
 
 test('runner config: mount + save runner roundtrip (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   await page.locator('button[title="Runner Config"]').click()
   await expect(page.locator('.runner-config')).toBeVisible({ timeout: 15_000 })
@@ -95,7 +98,10 @@ async function assertRowSelectStretches(dialog: Locator, rowSelector: string) {
 test('runner config: dropdown chỉ vẽ một hộp, thẳng hàng với ô nhập text', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 })
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   await page.locator('button[title="Runner Config"]').click()
   await expect(page.locator('.runner-config')).toBeVisible({ timeout: 15_000 })
@@ -130,7 +136,10 @@ test('runner config: dropdown của Connection/Provider dialog cũng chỉ vẽ 
 }) => {
   await page.setViewportSize({ width: 1280, height: 1000 })
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   await page.locator('button[title="Runner Config"]').click()
   await expect(page.locator('.runner-config')).toBeVisible({ timeout: 15_000 })

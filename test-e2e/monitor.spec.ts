@@ -10,7 +10,10 @@ import { capturePage } from './_capture'
 
 test('select task expands artifact list (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   const row = page.locator('.task-row', { hasText: 'DEMO-1' })
   await expect(row).toBeVisible({ timeout: 15_000 })
@@ -29,7 +32,10 @@ test('relative artifact link opens the target in the panel (capture)', async ({ 
   page.on('pageerror', (e) => errors.push(String(e)))
 
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   const url = page.url()
 
   const row = page.locator('.task-row', { hasText: 'DEMO-1' })
@@ -95,7 +101,10 @@ test('paste in the markdown editor keeps edit mode and saves (capture)', async (
 }, testInfo) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await page.locator('.task-row', { hasText: 'DEMO-1' }).click()
   await page.locator('.file-item .file-name', { hasText: 'paste-target.md' }).click()
   await expect(page.locator('.art-title')).toHaveText('paste-target.md')

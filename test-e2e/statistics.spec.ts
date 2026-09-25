@@ -51,7 +51,10 @@ test('statistics mode: gallery đa chart + settings + resize (capture)', async (
   fs.writeFileSync(path.join(logsDir, 'usage.jsonl'), `${lines.join('\n')}\n`)
 
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   await page.locator('button[title="Thống kê"]').click()
   await expect(page.locator('.statistics-panel')).toBeVisible({ timeout: 15_000 })
@@ -183,7 +186,10 @@ test('statistics mode: gallery đa chart + settings + resize (capture)', async (
 // dưới. Lỗi thuần hình học — chỉ browser thật đo được.
 test('statistics: hàng nút của dialog thiết lập biểu đồ nằm trong border dialog', async ({ page }) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await page.locator('button[title="Thống kê"]').click()
   await expect(page.locator('.statistics-panel')).toBeVisible({ timeout: 15_000 })
 
