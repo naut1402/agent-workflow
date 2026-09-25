@@ -1218,7 +1218,7 @@ describe('resetPipelineStepAssumingLock', () => {
     // AGENTS.md §6: đụng persist thì catalog event phải khớp code, không phải
     // "cập nhật sau". Đọc thẳng file catalog của repo thay vì chép lại nội dung.
     const catalog = await fs.readFile(
-      path.join(import.meta.dir, '../../../../docs/event-catalog.md'),
+      path.join(import.meta.dir, '../../../../docs/architecture/events/monitor.md'),
       'utf8',
     )
     expect(catalog).toContain('resetScope')
