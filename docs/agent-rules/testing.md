@@ -121,7 +121,7 @@ bun run test:status -- --version 1.1.4              # task nào đã merge mà d
 bun run test:anchor -- --baseline reports/coverage-baseline.json   # baseline đang neo ở commit nào
 ```
 
-- **Nguồn của "task nào đã merge"** là subject commit `[<taskID>]` ([`git-pr.md`](git-pr.md) §7) ở hai khoảng đối xứng: `main..dev/x.y.z/main` (đã merge) ↔ `test/main..test/x.y.z/main` (đã có test). Commit **không** mang `[<taskID>]` — §7 cho phép bỏ — thì không quy được về task nào: 🚫 không tính là thiếu test, nhưng cũng không bỏ qua im lặng, nó vào mục *không truy được task* để người duyệt tự xác nhận là không cần test.
+- **Nguồn của "task nào đã merge"** là subject commit `[<taskID>]` ([`git-pr.md`](git-pr.md) §3) ở hai khoảng đối xứng: `main..dev/x.y.z/main` (đã merge) ↔ `test/main..test/x.y.z/main` (đã có test). Commit **không** mang `[<taskID>]` — §3 cho phép bỏ — thì không quy được về task nào: 🚫 không tính là thiếu test, nhưng cũng không bỏ qua im lặng, nó vào mục *không truy được task* để người duyệt tự xác nhận là không cần test.
 - **Revert tính ở mức từng commit, không ở mức task** — task chỉ được miễn test khi **mọi** commit của nó đã bị revert. Còn một commit sống thì task vẫn nằm ở *thiếu test*, gắn nhãn *revert một phần*. Revert của revert là **khôi phục**, không phải revert hai lần.
 - **Báo cáo ở mức TỪNG task**, kèm cột type commit để thấy ngay ứng viên miễn trừ. 🚫 Cổng **không** tự miễn theo type — một `chore` vẫn sửa được code.
 - ⚠️ **`exit 0` của `test:status` KHÔNG phải "đã đủ test"** khi gọi trần — đó là chế độ *báo cáo*. Chế độ **chặn** là `--strict`, và nó đang bật ở `release-test-gate.yml` (§6): còn task thiếu test thì PR phát hành đỏ.

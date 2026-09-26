@@ -1,14 +1,18 @@
 # Doc writing — artifact `investigate.md` / `design.md`
 
-Áp dụng cho artifact markdown của pipeline trong `.dev-team-agent/tasks/<id>/`.
+Áp dụng cho artifact markdown của pipeline trong `.dev-team-agent/tasks/<id>/`. Quy ước trình bày markdown và tham chiếu giữa tài liệu — áp chung cho mọi markdown, không riêng artifact: [`writing-guideline.md`](writing-guideline.md).
 
-Rule này **thắng** mọi template mặc định đi kèm công cụ sinh tài liệu: số section, tên section và thứ tự lấy từ đây.
+> [!NOTE]
+> <span style="color:#4493f8">Rule này **thắng** mọi template mặc định đi kèm công cụ sinh tài liệu: số section, tên section và thứ tự lấy từ đây.</span>
 
 ---
 
 ## 1. Nguyên tắc — đảo phễu thông tin
 
-Artifact tồn tại để **ra quyết định**, không phải để lưu trữ mọi thứ đã đọc.
+> [!IMPORTANT]
+> <span style="color:#a371f7">Artifact tồn tại để **ra quyết định**, không phải để lưu trữ mọi thứ đã đọc. Mọi quy tắc trong file này suy ra từ câu này.</span>
+
+Ý nghĩa màu của các khối callout: [`writing-guideline.md`](writing-guideline.md) §5.
 
 - **Người duyệt chốt ở phần đầu** — Tech Lead / PM / Designer đọc §1–§2 là quyết được.
 - **Người code đọc phần cuối** — chi tiết định vị code dồn xuống section sau.
@@ -28,7 +32,8 @@ Artifact tồn tại để **ra quyết định**, không phải để lưu tr�
 
 ## 2. `investigate.md` — 6 section decision-first
 
-Đúng 6 heading `##`, đúng thứ tự, giữ nguyên tên.
+> [!CAUTION]
+> <span style="color:#e5534b">Đúng 6 heading `##`, đúng thứ tự, giữ nguyên tên. `pipeline-export.json` đọc §1/§5/§6 theo vị trí (§2.9), lệch tên hoặc thứ tự là export sai khoá.</span>
 
 1. **`## 1. Tổng quan`** — vấn đề đang giải, hướng giải quyết, phạm vi ở mức module (kèm số lượng), confidence tổng thể.
 2. **`## 2. Quyết định cần chốt`** — bảng `| # | Nhóm | Vấn đề | Đề xuất mặc định | Nếu chọn khác | Người chốt |`, đánh số `D1…Dn`.
@@ -103,9 +108,9 @@ Một mục ở §4 mà kết thúc bằng câu hỏi mở cho người khác �
 
 ### 2.8 Câu hỏi blocking → `qa.md`
 
-- **Bảng §2 là kênh thông tin**, không phải control tương tác — ô "phê duyệt" trong bảng markdown không render thành checkbox.
+- **Bảng §2 là kênh thông tin**, không phải control tương tác — bảng markdown không render được checkbox ([`writing-guideline.md`](writing-guideline.md) §3).
 - **Câu hỏi blocking** (không trả lời thì không đi tiếp được) tạo `qa.md` rồi dừng.
-- **Mỗi câu một block** — `## Q<n>` + `**Lựa chọn:**` (list `- A. …`) + `**Trả lời:**`. Đó là dạng duy nhất render thành radio.
+- **Mỗi câu một block** — `## Q<n>` + `**Lựa chọn:**` (list `- A. …`) + `**Trả lời:**`. Đó là **dạng duy nhất** render thành radio; lệch khuôn thì người duyệt không bấm được.
 - **Mục non-blocking** chốt qua feedback ở HITL gate, không cần `qa.md`.
 
 ### 2.9 Ánh xạ sang `pipeline-export.json`
@@ -140,54 +145,22 @@ Rule 6 section ở §2 **chỉ áp cho `investigate.md`**. `design.md` giữ b�
 
 ## 4. Bất biến chung mọi artifact
 
-- **Chỉ `##` mới là section** — viewer gập/sửa theo `##`; chi tiết bên trong dùng `###` trở xuống.
-- **Không để `##` ở đầu dòng bên trong code fence** — bước tách section không phân biệt fence nên sẽ cắt đôi khối code. Thụt 1 space, hoặc dùng `###` trở xuống.
+Quy tắc trình bày markdown áp cho mọi tài liệu: [`writing-guideline.md`](writing-guideline.md) §1–§4. Dưới đây chỉ những gì **riêng** của artifact pipeline.
+
+> [!CAUTION]
+> - <span style="color:#e5534b">**Chỉ `##` mới là section** — viewer gập/sửa theo `##`; chi tiết bên trong dùng `###` trở xuống.</span>
+> - <span style="color:#e5534b">**Không để `##` ở đầu dòng bên trong code fence** — bước tách section không phân biệt fence nên sẽ cắt đôi khối code. Thụt 1 space, hoặc dùng `###` trở xuống.</span>
+
 - **`file:line` chỉ ở §4 và §6 của `investigate.md`, và §4 của `design.md`** — chỗ khác nêu tên file + tên hàm/component.
-- **Không checkbox trong ô bảng** — GFM chỉ render checkbox khi là *list item*. Cần chốt tương tác thì hướng sang `qa.md`.
+- **Chốt tương tác đi qua `qa.md`**, không phải checkbox trong bảng — khuôn `qa.md` ở §2.8.
 - **Confidence High / Medium / Low** cho mọi phát hiện chưa chắc, kèm lý do khi Medium/Low.
-- **Không đặt ngân sách độ dài bằng số dòng** — tiêu chí định tính: §1–§2 scan được trong ~1 màn hình.
+- **Ngân sách độ dài của artifact** — tiêu chí định tính ([`writing-guideline.md`](writing-guideline.md) §2): §1–§2 scan được trong ~1 màn hình.
 - **Không xoá section vì "không có gì để ghi"** — giữ đủ section, ghi empty state tường minh.
 - **Không migrate ngược artifact của task cũ** — quy ước áp cho task tạo từ thời điểm nó land.
 
 ---
 
-## 5. Trình bày — scannability là ưu tiên số 1
-
-Áp dụng cho **mọi** markdown viết ra: artifact, tài liệu trong `docs/`, `README.md`, PR body, file rule.
-
-- **Đoạn văn tối đa 3 câu** — dài hơn thì tách đoạn hoặc chuyển thành list.
-- **Từ 3 ý trở lên thì bắt buộc dùng bullet** (`-`), tuyệt đối không viết tràn vào một đoạn văn.
-- **In đậm từ khoá ở đầu mỗi ý** (`**text**`) để người đọc lướt nhanh nắm được ý chính.
-- **Luôn có 1 dòng trống** giữa các đoạn văn, giữa đoạn văn và list, giữa list và heading.
-- **Bảng cho dữ liệu đối chiếu** — so sánh phương án, ánh xạ khoá, checklist theo cột. Đừng dùng bảng cho văn xuôi dài.
-- **Một đoạn = một ý** — không nhồi nhiều ý vào cùng một đoạn, kể cả khi mỗi ý chỉ một câu.
-- **Dùng emoji / ký hiệu làm mỏ neo thị giác** ở đầu dòng cho các mục cần quét nhanh: 📌 điểm chính · ⚠️ cảnh báo · 🚫 cấm · ✅ đạt · 🔍 khảo sát · 🛠️ implement · 🚀 phát hành. Mỗi ký hiệu mang **một** nghĩa cố định trong cùng tài liệu; không rải cho vui.
-- **Dùng dấu phân tách `·` cho danh sách ngắn cùng hạng** — vd `coding · doc-writing · test · git-pr`. Danh sách dài hoặc có mô tả thì xuống bullet.
-
----
-
-## 6. Tham chiếu một chiều
-
-Chỉ **nơi sử dụng** trỏ tới **tài liệu dùng chung**. Không bao giờ thêm chiều ngược lại.
-
-- ✅ **Đúng** — `CLAUDE.md` → `AGENTS.md`; `docs/agent-rules/*` → `docs/architecture.md`.
-- 🚫 **Sai** — `AGENTS.md` liệt kê `CLAUDE.md`; `docs/architecture.md` trỏ ngược lên rule.
-
-**Vì sao:** tài liệu dùng chung không được biết ai đang dùng mình.
-
-- **Bỏ một file chỉ dẫn** (vd không dùng `CLAUDE.md` nữa) → không phải sửa tài liệu chung.
-- **Thêm file chỉ dẫn của provider khác** (vd `GEMINI.md`, `.cursorrules`) → chỉ thêm file mới, tài liệu chung đứng yên.
-- **Tài liệu chung không phình ra** theo số công cụ đang dùng nó.
-
-Cách áp dụng:
-
-- **File chỉ dẫn của một công cụ** khai báo phụ thuộc bằng một dòng trỏ lên tài liệu chung, rồi chỉ viết phần đặc thù của mình.
-- **Tài liệu chung** chỉ trỏ xuống nội dung nó sở hữu (rule, kiến trúc), không trỏ ngang sang file của công cụ khác.
-- **Cùng một quy tắc chỉ viết ở một nơi** — nơi còn lại trỏ tới, không chép lại.
-
----
-
-## 7. Anti-pattern
+## 5. Anti-pattern
 
 | Hiện tượng | Vì sao hỏng | Thay bằng |
 |---|---|---|
@@ -198,5 +171,3 @@ Cách áp dụng:
 | Một chủ đề tách đôi ở hai section | Người duyệt phải tự ghép mới thấy đó là một quyết định | Một dòng ở §2, nhãn truy vết, chi tiết ở §4/§6 |
 | Xoá section vì "task này không có gì để ghi" | Không phân biệt được "không có" với "tác giả quên" | Giữ section, ghi empty state tường minh |
 | Rủi ro chỉ nêu vấn đề, không nói cách xử lý | Người thực thi phải điều tra lại từ đầu | Mỗi caveat kết thúc bằng hành động cụ thể |
-| Một đoạn văn 6 câu liệt kê 5 thứ | Không lướt được, phải đọc hết mới biết có gì | 5 bullet, mỗi bullet mở đầu bằng từ khoá in đậm |
-| `AGENTS.md` liệt kê `CLAUDE.md` trong bảng tài liệu | Thêm `GEMINI.md` là phải sửa tài liệu chung; bỏ `CLAUDE.md` để lại link chết | Chỉ `CLAUDE.md` trỏ lên `AGENTS.md`, chiều ngược lại bỏ hẳn |

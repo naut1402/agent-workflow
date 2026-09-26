@@ -71,7 +71,7 @@ watch(
     >
       <!-- Control lọc thuộc về thân mục nó phục vụ; không có category nào thì
            không dựng control chết. `<select>` native vì popup của nó vẽ ở tầng
-           OS nên không bị các ancestor `overflow: hidden` cắt (coding-guideline §5). -->
+           OS nên không bị các ancestor `overflow: hidden` cắt (docs/agent-rules/coding-guideline.md §5). -->
       <div v-if="categories.length" class="rules-toolbar">
         <select
           v-model="categoryFilter"
@@ -116,7 +116,7 @@ watch(
 </template>
 
 <style scoped lang="scss">
-/* Hợp đồng cuộn (docs/ui-overflow.md): xem `.catalog-panel` — panel chỉ giành
+/* Hợp đồng cuộn (docs/agent-rules/ui-design-guideline.md): xem `.catalog-panel` — panel chỉ giành
    chiều cao khi section của nó đang mở. Vùng cuộn duy nhất là `.rules-scroll`. */
 .rules-panel {
   min-height: 0;
@@ -128,7 +128,7 @@ watch(
 .rules-panel--open { flex: 1 1 0; }
 
 /* Ngân sách cố định của toolbar trừ thẳng vào `.rules-scroll` — giữ nó ở một
-   hàng, padding tối thiểu (docs/ui-overflow.md). */
+   hàng, padding tối thiểu (docs/agent-rules/ui-design-guideline.md). */
 .rules-toolbar {
   padding: 6px 8px;
   flex-shrink: 0;

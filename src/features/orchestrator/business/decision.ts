@@ -85,18 +85,22 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
     '- `resume` — gửi tiếp phản hồi cho step đã chạy (giữ nguyên `current_phase`). Đặt nội dung vào `message`.',
     '- `summary` — ghi nhận kết quả, không chạy step nào. Dùng khi cổng HITL đang chờ người, hoặc pipeline đã xong.',
     '- `halt` — dừng điều phối, trả quyền chạy tay lại cho người dùng.',
+    '- `respawn` — chạy một PHIÊN MỚI (bỏ hoàn toàn lịch sử hội thoại cũ) cho một step ĐÃ TỪNG chạy xong ' +
+      '(thành công hoặc thất bại), bất kể `current_phase` hiện tại là gì (kể cả khi pipeline đã `completed`). ' +
+      'KHÔNG đổi `current_phase`/gate/artifact của step khác. `stepId` phải nằm trong: ' + ctx.stepIds.join(', '),
   ]
   const constraints: string[] = []
   if (ctx.gatePending) {
     constraints.push(
-      `- Cổng \`${ctx.gatePending}\` đang chờ người duyệt: chỉ được trả \`summary\` hoặc \`halt\`.`,
+      `- Cổng \`${ctx.gatePending}\` đang chờ người duyệt: chỉ được trả \`summary\`, \`halt\`, hoặc \`respawn\` ` +
+        `(respawn không đụng gate đang chờ vì nó không đổi current_phase).`,
     )
   }
   if (ctx.trigger === 'pipeline_completed') {
     constraints.push('- Pipeline đã hoàn tất: tóm tắt toàn bộ quá trình rồi trả `summary`.')
   }
   constraints.push(
-    `- Với \`start\`, đặt phần bối cảnh bạn muốn step kế đọc vào \`context\` — nó sẽ nằm trong prompt của step đó.`,
+    `- Với \`start\`/\`respawn\`, đặt phần bối cảnh bạn muốn step kế đọc vào \`context\` — nó sẽ nằm trong prompt của step đó.`,
     `- Đặt tóm tắt bước vừa xong vào \`summary\`. Cả \`summary\` lẫn \`context\` tối đa ${MAX_AGENT_CONTEXT_BYTES} byte.`,
   )
 
@@ -172,7 +176,7 @@ export function validateDecision(raw: unknown, stepIds: string[]): ParsedDecisio
   if (!parsed.success) return { error: 'malformed decision' }
 
   const decision = parsed.data
-  const needsStep = decision.action === 'start' || decision.action === 'resume'
+  const needsStep = decision.action === 'start' || decision.action === 'resume' || decision.action === 'respawn'
   if (needsStep && !stepIds.includes(decision.stepId as string)) {
     return { error: `unknown stepId: ${decision.stepId}` }
   }

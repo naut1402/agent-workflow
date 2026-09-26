@@ -8,18 +8,21 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Kiến trúc & vận hành
 
-- **[`architecture.md`](architecture.md)** — nguồn chính cho kiến trúc: data root `.dev-team-agent/`, Hono trên hai transport, tầng `business/`, cấu trúc thư mục `src/`, bất biến kiến trúc.
-- **[`diagram/IoC.md`](diagram/IoC.md)** — hai sơ đồ giải thích service container (DI/IoC) và `ModeRegistry`: bootstrap lúc khởi động, và runtime khi người dùng chuyển mode.
+- **[`architecture/`](architecture/README.md)** — kiến trúc theo mô hình **C4**, 4 cấp trừu tượng thô → mịn (Context, Container, Component, Code). Tài liệu tra cứu chi tiết (sơ đồ IoC, i18n, quy ước UI) nằm trong cấp tương ứng — xem danh mục.
 
 ## Dữ liệu & sự kiện
 
-- **[`event-catalog.md`](event-catalog.md)** — mục lục domain event theo feature: type, nơi emit, payload. Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới.
+- **[`architecture/events/`](architecture/events/README.md)** — mục lục domain event theo mode: type, nơi emit, payload, kèm state/flow chart. Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới.
 
 ## Giao diện
 
-- **[`i18n.md`](i18n.md)** — tổ chức message `vi` / `en`, namespace theo feature, cách thêm và đổi chuỗi UI.
-- **[`ui-buttons.md`](ui-buttons.md)** — quy ước nút và trạng thái trên UI, class chuẩn ở `src/frontend/styles/_shell.scss`.
-- **[`ui-overflow.md`](ui-overflow.md)** — chiến lược tràn cho danh sách và vùng nội dung dài: chuỗi sizing chuẩn, ví dụ trong repo, checklist review.
+- **[`agent-rules/coding-guideline.md`](agent-rules/coding-guideline.md)** — quy ước viết code; §6 là message/locale, kèm cấu trúc file và cách gọi `t()`.
+- **[`agent-rules/writing-guideline.md`](agent-rules/writing-guideline.md)** — trình bày markdown và tham chiếu một chiều giữa tài liệu; áp cho mọi markdown viết ra.
+- **[`agent-rules/ui-design-guideline.md`](agent-rules/ui-design-guideline.md)** — nút bấm (§1) và chiến lược tràn nội dung (§2): nguyên tắc kèm class chuẩn.
+
+## Quy ước
+
+- **[`convention/`](convention/)** — quy ước theo chủ đề: nguyên tắc kèm chi tiết class/file của chính chủ đề đó, không tham chiếu checklist. Checklist agent thực thi (theo giai đoạn pipeline) nằm ở [`../AGENTS.md`](../AGENTS.md) §4.
 
 ## Mẫu dùng lại
 
