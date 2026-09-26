@@ -293,6 +293,136 @@ describe('TC-11 — chống double-dispatch với sentinel cùng lượt', () =>
   })
 })
 
+/*
+ * Td2be3c3e — action `respawn` cho orchestrator (điều tra treo T6ea40453).
+ * Bề mặt chấm: chính route `POST /api/orchestrator/decide` mà orchestrator
+ * gọi (design.md §6 — `respawn` cố ý KHÔNG đi qua chat-bridge/UI nào khác).
+ */
+describe('POST /api/orchestrator/decide {action: respawn} — Td2be3c3e', () => {
+  /** Job đã chạy xong (mặc định succeeded) cho một step — điều kiện bắt buộc của respawn. */
+  function seedFinishedJob(id: string, taskId: string, stepId: string, status: 'succeeded' | 'failed' = 'succeeded') {
+    return writeJob(id, { taskId, pipelineStepId: stepId }, { status })
+  }
+
+  async function settle(jobId: string) {
+    for (let i = 0; i < 400; i++) {
+      const j = loadJob(jobId)
+      if (j && j.status !== 'queued' && j.status !== 'running') return j
+      await new Promise((r) => setTimeout(r, 5))
+    }
+    throw new Error(`job ${jobId} never settled (status=${loadJob(jobId)?.status})`)
+  }
+
+  test('TC01: respawn cho step đã completed, pipeline đang currentPhase=completed — vẫn được chấp nhận, job mới chạy đúng stepId, currentPhase không đổi', async () => {
+    seedTask('TR1', { current_phase: 'completed' })
+    seedFinishedJob('r1-prev', 'TR1', 'implementer')
+
+    const res = await decide(tokenFor('TR1'), { action: 'respawn', stepId: 'implementer', context: 'revert filter' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ applied: 'respawn' })
+
+    const newJobs = listJobs(200).filter(
+      (j) => j.metadata?.taskId === 'TR1' && j.metadata?.pipelineStepId === 'implementer' && j.id !== 'r1-prev',
+    )
+    expect(newJobs.length).toBeGreaterThan(0)
+    expect(newJobs.some((j) => j.metadata?.respawn === true)).toBe(true)
+    expect(stateOf('TR1').current_phase).toBe('completed')
+  })
+
+  test('TC04: stepId có thật trong pipeline nhưng chưa từng có job succeeded/failed nào ⇒ không job mới, task bị halt', async () => {
+    seedTask('TR4')
+    const res = await decide(tokenFor('TR4'), { action: 'respawn', stepId: 'reviewer' })
+    // Chấp nhận cú pháp (giống hành vi `start` trên completed) — từ chối thật
+    // sự xảy ra bên trong respawnStep (haltTask), không phải ở validateDecision.
+    expect(res.status).toBe(200)
+    expect(listJobs(200).filter((j) => j.metadata?.taskId === 'TR4' && j.metadata?.pipelineStepId === 'reviewer')).toHaveLength(0)
+    expect(stateOf('TR4').orchestrator_halted).toBe(true)
+  })
+
+  test('TC05: stepId không tồn tại trong pipeline ⇒ 400, không dispatch', async () => {
+    seedTask('TR5')
+    const res = await decide(tokenFor('TR5'), { action: 'respawn', stepId: 'khong-co' })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('unknown stepId')
+    expect(listJobs(200).filter((j) => j.metadata?.taskId === 'TR5')).toHaveLength(0)
+  })
+
+  test('TC06: thiếu stepId ⇒ 400, không dispatch', async () => {
+    seedTask('TR6')
+    const res = await decide(tokenFor('TR6'), { action: 'respawn' })
+    expect(res.status).toBe(400)
+    expect(listJobs(200).filter((j) => j.metadata?.taskId === 'TR6')).toHaveLength(0)
+  })
+
+  test('TC07: gate đang chờ ở step khác — respawn cho stepId khác vẫn được chấp nhận, gate giữ nguyên', async () => {
+    seedTask('TR7', { current_phase: 'reviewer', hitl_pending: 'hitl-review' })
+    seedFinishedJob('r7-prev', 'TR7', 'implementer')
+
+    const res = await decide(tokenFor('TR7'), { action: 'respawn', stepId: 'implementer' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ applied: 'respawn' })
+
+    expect(
+      listJobs(200).some(
+        (j) => j.metadata?.taskId === 'TR7' && j.metadata?.pipelineStepId === 'implementer' && j.metadata?.respawn === true,
+      ),
+    ).toBe(true)
+    // Gate ở step khác (reviewer) không bị respawn đụng tới.
+    expect(stateOf('TR7').hitl_pending).toBe('hitl-review')
+    expect(stateOf('TR7').current_phase).toBe('reviewer')
+  })
+
+  test('TC08: job mới mang sessionMode "new" — phiên độc lập, không tiêm tiếp session cũ (khác resume)', async () => {
+    seedTask('TR8')
+    seedFinishedJob('r8-prev', 'TR8', 'implementer')
+
+    const res = await decide(tokenFor('TR8'), { action: 'respawn', stepId: 'implementer', context: 'bối cảnh mới' })
+    expect(res.status).toBe(200)
+
+    const newJob = listJobs(200).find(
+      (j) => j.metadata?.taskId === 'TR8' && j.metadata?.pipelineStepId === 'implementer' && j.id !== 'r8-prev',
+    )
+    expect(newJob).toBeTruthy()
+    expect(newJob?.metadata?.inputSessionMode).toBe('new')
+    expect(newJob?.userPrompt).toContain('bối cảnh mới')
+  })
+
+  test('TC09: respawn lần 2 sau khi lần 1 đã succeeded — vẫn hợp lệ, tạo job độc lập mới, currentPhase không đổi', async () => {
+    seedTask('TR9', { current_phase: 'reviewer' })
+    seedFinishedJob('r9-prev', 'TR9', 'implementer')
+
+    const first = await decide(tokenFor('TR9'), { action: 'respawn', stepId: 'implementer' })
+    expect(first.status).toBe(200)
+    const firstJob = listJobs(200).find(
+      (j) => j.metadata?.taskId === 'TR9' && j.metadata?.pipelineStepId === 'implementer' && j.id !== 'r9-prev',
+    )
+    expect(firstJob).toBeTruthy()
+    await settle(firstJob!.id)
+    expect(loadJob(firstJob!.id)?.status).toBe('succeeded')
+
+    const second = await decide(tokenFor('TR9'), { action: 'respawn', stepId: 'implementer' })
+    expect(second.status).toBe(200)
+    const secondJob = listJobs(200).find(
+      (j) =>
+        j.metadata?.taskId === 'TR9' &&
+        j.metadata?.pipelineStepId === 'implementer' &&
+        j.id !== 'r9-prev' &&
+        j.id !== firstJob!.id,
+    )
+    expect(secondJob).toBeTruthy()
+    expect(stateOf('TR9').current_phase).toBe('reviewer')
+  })
+
+  test('TC11 (regression): action start trên task completed vẫn giữ hành vi cũ — không tiến bước, không advance', async () => {
+    seedTask('TR11', { current_phase: 'completed' })
+    const res = await decide(tokenFor('TR11'), { action: 'start', stepId: 'implementer' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ applied: 'start' })
+    expect(stateOf('TR11').current_phase).toBe('completed')
+  })
+})
+
 describe('Xác thực token — TC-09/TC-10', () => {
   test('TC-09: không có token ⇒ 401 ở cả 3 route', async () => {
     seedTask('R0')

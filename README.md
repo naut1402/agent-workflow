@@ -91,6 +91,13 @@ bun run test:all     # typecheck → lint → test → test:fe → e2e
 bun run check:todo   # gate docs/todo (CI promote → main)
 ```
 
+### Biến môi trường
+
+| Biến | Bắt buộc? | Dùng cho | Khi không set |
+|------|-----------|----------|---------------|
+| `ANTHROPIC_API_KEY` | Tuỳ chọn | Sinh bản nháp agent từ mô tả (`/api/custom-agents/generate`) | Fallback heuristic |
+| `DASHBOARD_SECRET_KEY` | Bắt buộc cho vault | Mã hoá `secret-vault.json` (`secretVault.ts`) — credential kiểu "dán secret trực tiếp" (`stored:`) và "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` | 2 luồng đó fail rõ ràng; CLI và secretRef `env:` / `file:` không bị ảnh hưởng |
+
 ## Liên kết
 
 - [`docker/`](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example)

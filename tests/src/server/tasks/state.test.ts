@@ -864,13 +864,13 @@ describe('resetPipelineStepAssumingLock', () => {
     }
   }
 
-  test('non-cascade removes only the target step\'s own produces', async () => {
+  test('deleteScope "step" removes only the target step\'s own produces', async () => {
     const root = await tmp()
     await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
     const stateFile = await seedTask(root, 'RS1', { current_phase: 'completed' })
     await seedFiles(root, 'RS1', { 'phpstan.md': 'impl', 'review.md': 'r' })
 
-    const result = await resetPipelineStepAssumingLock(root, 'RS1', stateFile, 'implementer', false)
+    const result = await resetPipelineStepAssumingLock(root, 'RS1', stateFile, 'implementer', { resetScope: 'step', deleteScope: 'step' })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.removedSteps).toEqual(['implementer'])
@@ -878,7 +878,7 @@ describe('resetPipelineStepAssumingLock', () => {
     expect(await exists(root, 'RS1', 'review.md')).toBe(true)
   })
 
-  test('cascade removes the target and every step after it', async () => {
+  test('deleteScope "onward" removes the target and every step after it', async () => {
     const root = await tmp()
     await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
     const stateFile = await seedTask(root, 'RS2', { current_phase: 'completed' })
@@ -889,7 +889,7 @@ describe('resetPipelineStepAssumingLock', () => {
       'pr-desc.md': 'p',
     })
 
-    const result = await resetPipelineStepAssumingLock(root, 'RS2', stateFile, 'implementer', true)
+    const result = await resetPipelineStepAssumingLock(root, 'RS2', stateFile, 'implementer', { resetScope: 'onward', deleteScope: 'onward' })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.removedSteps).toEqual(['implementer', 'reviewer', 'pr-creator'])
@@ -904,13 +904,13 @@ describe('resetPipelineStepAssumingLock', () => {
     const stateFile = await seedTask(root, 'RS3', { current_phase: 'completed' })
     await seedFiles(root, 'RS3', { 'review.md': 'r', 'review-po.md': 'po', 'test-spec.md': 't' })
 
-    const result = await resetPipelineStepAssumingLock(root, 'RS3', stateFile, 'reviewer', false)
+    const result = await resetPipelineStepAssumingLock(root, 'RS3', stateFile, 'reviewer', { resetScope: 'step', deleteScope: 'step' })
     expect(result.ok).toBe(true)
     expect(await exists(root, 'RS3', 'review.md')).toBe(false)
     expect(await exists(root, 'RS3', 'review-po.md')).toBe(false)
   })
 
-  test('leaves qa.md and hitl-feedback.md untouched even on a full cascade', async () => {
+  test('leaves qa.md and hitl-feedback.md untouched even at the widest scope', async () => {
     const root = await tmp()
     await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
     const stateFile = await seedTask(root, 'RS4', { current_phase: 'completed' })
@@ -920,7 +920,7 @@ describe('resetPipelineStepAssumingLock', () => {
       'hitl-feedback.md': 'feedback history',
     })
 
-    const result = await resetPipelineStepAssumingLock(root, 'RS4', stateFile, 'investigator', true)
+    const result = await resetPipelineStepAssumingLock(root, 'RS4', stateFile, 'investigator', { resetScope: 'onward', deleteScope: 'onward' })
     expect(result.ok).toBe(true)
     expect(await exists(root, 'RS4', 'qa.md')).toBe(true)
     expect(await exists(root, 'RS4', 'hitl-feedback.md')).toBe(true)
@@ -931,7 +931,7 @@ describe('resetPipelineStepAssumingLock', () => {
     await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
     const stateFile = await seedTask(root, 'RS5', { current_phase: 'reviewer', hitl_pending: 'hitl-3' })
 
-    const result = await resetPipelineStepAssumingLock(root, 'RS5', stateFile, 'designer', false)
+    const result = await resetPipelineStepAssumingLock(root, 'RS5', stateFile, 'designer', { resetScope: 'step', deleteScope: 'step' })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.state.current_phase).toBe('designer')
@@ -947,7 +947,7 @@ describe('resetPipelineStepAssumingLock', () => {
     const stateFile = await seedTask(root, 'RS14', { current_phase: 'reviewer' })
 
     const before = new Date().toISOString()
-    const result = await resetPipelineStepAssumingLock(root, 'RS14', stateFile, 'designer', false)
+    const result = await resetPipelineStepAssumingLock(root, 'RS14', stateFile, 'designer', { resetScope: 'step', deleteScope: 'step' })
     const after = new Date().toISOString()
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -961,7 +961,7 @@ describe('resetPipelineStepAssumingLock', () => {
     await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
     const stateFile = await seedTask(root, 'RS6', { current_phase: 'completed', review_round: 2 })
 
-    const result = await resetPipelineStepAssumingLock(root, 'RS6', stateFile, 'implementer', false)
+    const result = await resetPipelineStepAssumingLock(root, 'RS6', stateFile, 'implementer', { resetScope: 'step', deleteScope: 'step' })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.state.review_round).toBe(0)
@@ -972,7 +972,7 @@ describe('resetPipelineStepAssumingLock', () => {
     await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
     const stateFile = await seedTask(root, 'RS7', { current_phase: 'completed', review_round: 2 })
 
-    const result = await resetPipelineStepAssumingLock(root, 'RS7', stateFile, 'pr-creator', false)
+    const result = await resetPipelineStepAssumingLock(root, 'RS7', stateFile, 'pr-creator', { resetScope: 'step', deleteScope: 'step' })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.state.review_round).toBe(2)
@@ -986,7 +986,7 @@ describe('resetPipelineStepAssumingLock', () => {
       doc_review_round: { investigate: 2, design: 1 },
     })
 
-    const result = await resetPipelineStepAssumingLock(root, 'RS8', stateFile, 'designer', true)
+    const result = await resetPipelineStepAssumingLock(root, 'RS8', stateFile, 'designer', { resetScope: 'onward', deleteScope: 'onward' })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     // Cascade from designer removes designer/implementer/reviewer/pr-creator —
@@ -999,7 +999,7 @@ describe('resetPipelineStepAssumingLock', () => {
     await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
     const stateFile = await seedTask(root, 'RS9', { current_phase: 'completed' })
 
-    const result = await resetPipelineStepAssumingLock(root, 'RS9', stateFile, 'investigator', false)
+    const result = await resetPipelineStepAssumingLock(root, 'RS9', stateFile, 'investigator', { resetScope: 'step', deleteScope: 'step' })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.state.doc_review_round).toEqual({ investigate: 0, design: 0 })
@@ -1010,7 +1010,7 @@ describe('resetPipelineStepAssumingLock', () => {
     await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
     const stateFile = await seedTask(root, 'RS10', { current_phase: 'completed' })
 
-    const result = await resetPipelineStepAssumingLock(root, 'RS10', stateFile, 'nope', false)
+    const result = await resetPipelineStepAssumingLock(root, 'RS10', stateFile, 'nope', { resetScope: 'step', deleteScope: 'step' })
     expect(result.ok).toBe(false)
     if ('error' in result) {
       expect(result.status).toBe(400)
@@ -1027,20 +1027,20 @@ describe('resetPipelineStepAssumingLock', () => {
       'RS11',
       path.join(root, '.dev-state', 'RS11.json'),
       'investigator',
-      false,
+      { resetScope: 'step', deleteScope: 'step' },
     )
     expect(result.ok).toBe(false)
     if ('error' in result) expect(result.status).toBe(404)
   })
 
-  test('cascade over steps that never produced anything is a no-op delete, still listed in removedSteps', async () => {
+  test('scope "onward" over steps that never produced anything is a no-op delete, still listed in removedSteps', async () => {
     const root = await tmp()
     await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
     const stateFile = await seedTask(root, 'RS12', { current_phase: 'implementer' })
     await seedFiles(root, 'RS12', { 'phpstan.md': 'impl' })
     // reviewer/pr-creator never ran — no files for them on disk.
 
-    const result = await resetPipelineStepAssumingLock(root, 'RS12', stateFile, 'implementer', true)
+    const result = await resetPipelineStepAssumingLock(root, 'RS12', stateFile, 'implementer', { resetScope: 'onward', deleteScope: 'onward' })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.removedSteps).toEqual(['implementer', 'reviewer', 'pr-creator'])
@@ -1055,7 +1055,7 @@ describe('resetPipelineStepAssumingLock', () => {
     on('task.advanced', (e) => {
       events.push(e.payload)
     })
-    const result = await resetPipelineStepAssumingLock(root, 'RS13', stateFile, 'designer', true)
+    const result = await resetPipelineStepAssumingLock(root, 'RS13', stateFile, 'designer', { resetScope: 'onward', deleteScope: 'onward' })
     expect(result.ok).toBe(true)
     expect(events).toEqual([
       {
@@ -1063,10 +1063,167 @@ describe('resetPipelineStepAssumingLock', () => {
         stepId: 'designer',
         currentPhase: 'designer',
         reason: 'reset',
-        cascade: true,
+        // TC-C13/TC-B3 — payload mang đủ hai trục phạm vi và 🚫 không còn `cascade`.
+        resetScope: 'onward',
+        deleteScope: 'onward',
         removedSteps: ['designer', 'implementer', 'reviewer', 'pr-creator'],
       },
     ])
+  })
+
+  // ---- Td16ee130 — hai trục phạm vi rời nhau (`test-spec.md` nhóm C) ----
+
+  test('TC-C01: deleteScope "none" không xoá file nào, con trỏ vẫn lùi về stepId', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS20', { current_phase: 'completed' })
+    await seedFiles(root, 'RS20', { 'phpstan.md': 'impl', 'review.md': 'r' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS20', stateFile, 'implementer', {
+      resetScope: 'step',
+      deleteScope: 'none',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.current_phase).toBe('implementer')
+    // `removedSteps` bám resetScope, không bám deleteScope — controller cần nó
+    // để đóng phiên CLI kể cả khi không xoá gì.
+    expect(result.removedSteps).toEqual(['implementer'])
+    expect(await exists(root, 'RS20', 'phpstan.md')).toBe(true)
+    expect(await exists(root, 'RS20', 'review.md')).toBe(true)
+  })
+
+  test('TC-C02: resetScope "onward" + deleteScope "none" — mọi step sau bị coi là chưa chạy, không file nào mất', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS21', { current_phase: 'completed' })
+    await seedFiles(root, 'RS21', { 'phpstan.md': 'impl', 'review.md': 'r', 'pr-desc.md': 'p' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS21', stateFile, 'implementer', {
+      resetScope: 'onward',
+      deleteScope: 'none',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.removedSteps).toEqual(['implementer', 'reviewer', 'pr-creator'])
+    for (const f of ['phpstan.md', 'review.md', 'pr-desc.md']) {
+      expect(await exists(root, 'RS21', f)).toBe(true)
+    }
+  })
+
+  test('hai trục rời nhau: resetScope "onward" + deleteScope "step" chỉ xoá artifact của step đích', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS22', {
+      current_phase: 'completed',
+      doc_review_round: { investigate: 2, design: 3 },
+    })
+    await seedFiles(root, 'RS22', { 'design.md': 'd', 'phpstan.md': 'impl', 'review.md': 'r' })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS22', stateFile, 'designer', {
+      resetScope: 'onward',
+      deleteScope: 'step',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.removedSteps).toEqual(['designer', 'implementer', 'reviewer', 'pr-creator'])
+    expect(await exists(root, 'RS22', 'design.md')).toBe(false)
+    expect(await exists(root, 'RS22', 'phpstan.md')).toBe(true)
+    expect(await exists(root, 'RS22', 'review.md')).toBe(true)
+    // `doc_review_round` bám removedSteps (resetScope), không bám deleteScope.
+    expect(result.state.doc_review_round).toEqual({ investigate: 2, design: 0 })
+  })
+
+  test('TC-C11/TC-C12: gọi lại lần hai (file đã mất) vẫn thành công và cho state giống hệt', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS23', { current_phase: 'completed' })
+    await seedFiles(root, 'RS23', { 'phpstan.md': 'impl' })
+
+    const first = await resetPipelineStepAssumingLock(root, 'RS23', stateFile, 'implementer', {
+      resetScope: 'step',
+      deleteScope: 'step',
+    })
+    const second = await resetPipelineStepAssumingLock(root, 'RS23', stateFile, 'implementer', {
+      resetScope: 'step',
+      deleteScope: 'step',
+    })
+    expect(first.ok).toBe(true)
+    expect(second.ok).toBe(true)
+    if (!first.ok || !second.ok) return
+    expect(second.state.current_phase).toBe(first.state.current_phase)
+    expect(second.removedSteps).toEqual(first.removedSteps)
+    expect(await exists(root, 'RS23', 'phpstan.md')).toBe(false)
+  })
+
+  test('TC-C14: reset step đầu với phạm vi onward — cả pipeline về đầu, artifact đầu vào của task còn nguyên', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS24', { current_phase: 'completed' })
+    await seedFiles(root, 'RS24', {
+      'request.md': 'yêu cầu gốc',
+      'investigate.md': 'i',
+      'design.md': 'd',
+      'phpstan.md': 'impl',
+      'review.md': 'r',
+      'test-spec.md': 't',
+      'pr-desc.md': 'p',
+    })
+
+    const result = await resetPipelineStepAssumingLock(root, 'RS24', stateFile, 'investigator', {
+      resetScope: 'onward',
+      deleteScope: 'onward',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.current_phase).toBe('investigator')
+    for (const f of ['investigate.md', 'design.md', 'phpstan.md', 'review.md', 'test-spec.md', 'pr-desc.md']) {
+      expect(await exists(root, 'RS24', f)).toBe(false)
+    }
+    // `request.md` là đầu vào của task, không step nào `produces` nó.
+    expect(await exists(root, 'RS24', 'request.md')).toBe(true)
+  })
+
+  test('TC-C13: payload task.advanced mang đúng phạm vi của từng tổ hợp, không mang nội dung file', async () => {
+    const root = await tmp()
+    await fs.writeFile(path.join(root, 'pipeline.yaml'), pipelineWithRetry, 'utf8')
+    const stateFile = await seedTask(root, 'RS25', { current_phase: 'completed' })
+    await seedFiles(root, 'RS25', { 'phpstan.md': 'nội dung bí mật' })
+
+    const events: Array<Record<string, unknown>> = []
+    on('task.advanced', (e) => {
+      events.push(e.payload)
+    })
+    await resetPipelineStepAssumingLock(root, 'RS25', stateFile, 'implementer', {
+      resetScope: 'step',
+      deleteScope: 'none',
+    })
+    await resetPipelineStepAssumingLock(root, 'RS25', stateFile, 'implementer', {
+      resetScope: 'onward',
+      deleteScope: 'step',
+    })
+
+    expect(events).toHaveLength(2)
+    expect(events[0]).toMatchObject({ resetScope: 'step', deleteScope: 'none' })
+    expect(events[1]).toMatchObject({ resetScope: 'onward', deleteScope: 'step' })
+    for (const payload of events) {
+      expect(Object.keys(payload).sort()).toEqual(
+        ['currentPhase', 'deleteScope', 'reason', 'removedSteps', 'resetScope', 'stepId', 'taskId'],
+      )
+      expect(JSON.stringify(payload)).not.toContain('nội dung bí mật')
+    }
+  })
+
+  test('docs/event-catalog.md mô tả đúng payload task.advanced sau khi bỏ cascade', async () => {
+    // AGENTS.md §6: đụng persist thì catalog event phải khớp code, không phải
+    // "cập nhật sau". Đọc thẳng file catalog của repo thay vì chép lại nội dung.
+    const catalog = await fs.readFile(
+      path.join(import.meta.dir, '../../../../docs/architecture/events/monitor.md'),
+      'utf8',
+    )
+    expect(catalog).toContain('resetScope')
+    expect(catalog).toContain('deleteScope')
+    expect(catalog).not.toContain('cascade')
   })
 })
 

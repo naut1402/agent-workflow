@@ -1,8 +1,0 @@
-{
-  "task_id": "ORCH-E2E",
-  "current_phase": "investigator",
-  "hitl_pending": null,
-  "review_round": 0,
-  "auto_review": false,
-  "orchestrator_enabled": true
-}

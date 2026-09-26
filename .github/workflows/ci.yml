@@ -48,7 +48,7 @@ jobs:
           fetch-depth: 0
 
       # Báo cáo, không gate: ngưỡng cứng báo oan với file nhỏ và file mở đầu bằng
-      # docblock dài. Người duyệt tự đọc số. Rule: coding-guideline.md §7.
+      # docblock dài. Người duyệt tự đọc số. Rule: docs/agent-rules/coding-guideline.md §7.
       - name: Comment ratio of changed files
         if: github.event_name == 'pull_request'
         env:
@@ -78,7 +78,7 @@ jobs:
                 echo "| \`$f\` | $cm | $tot | $((cm * 100 / tot))% |" >> "$GITHUB_STEP_SUMMARY"
               done
 
-          { echo ""; echo "Nền repo ~10–20%. Cao hơn nhiều thì soát lại theo \`coding-guideline.md\` §7."; } >> "$GITHUB_STEP_SUMMARY"
+          { echo ""; echo "Nền repo ~10–20%. Cao hơn nhiều thì soát lại theo \`docs/agent-rules/coding-guideline.md\` §7."; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

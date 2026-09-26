@@ -383,8 +383,9 @@ describe('getTaskChatState', () => {
     const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
     expect(state.transcriptFound).toBe(true)
     expect(state.transcriptProvider).toBe('cursor-cli')
-    expect(state.turns.map((t) => t.role)).toEqual(['user', 'assistant'])
-    expect(state.turns[1]?.text).toContain('Nội dung từ stdout')
+    // Turn 0 (role 'user') is the step's system prompt — hidden from chat.
+    expect(state.turns.map((t) => t.role)).toEqual(['assistant'])
+    expect(state.turns[0]?.text).toContain('Nội dung từ stdout')
   })
 
   test('job-fallback timeline includes chat-feedback rounds (stable indices)', () => {
@@ -420,9 +421,10 @@ describe('getTaskChatState', () => {
     })
 
     const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
-    expect(state.turns.map((t) => t.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
-    expect(state.turns[2]?.text).toBe('hello')
-    expect(state.turns[3]?.text).toContain('Chào từ feedback')
+    // Turn 0 (role 'user') is the step's system prompt — hidden from chat.
+    expect(state.turns.map((t) => t.role)).toEqual(['assistant', 'user', 'assistant'])
+    expect(state.turns[1]?.text).toBe('hello')
+    expect(state.turns[2]?.text).toContain('Chào từ feedback')
     expect(state.total).toBe(4)
     // Poll cursor: from=2 returns only the feedback round.
     const page = getTaskChatState(PROJECT, TASK, { stepId: 'designer', fromIndex: 2 })
@@ -451,7 +453,8 @@ describe('getTaskChatState', () => {
     })
 
     const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
-    expect(state.turns[1]?.text).toBe('Nội dung từ stdout.')
+    // Turn 0 (role 'user') is the step's system prompt — hidden from chat.
+    expect(state.turns[0]?.text).toBe('Nội dung từ stdout.')
   })
 
   test('falls back to job log Phản hồi section when stdout is not persisted', () => {
@@ -518,8 +521,9 @@ describe('getTaskChatState', () => {
     const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
     expect(state.transcriptFound).toBe(true)
     expect(state.transcriptProvider).toBe('openai-api')
-    expect(state.turns.map((t) => t.role)).toEqual(['user', 'tool', 'assistant'])
-    expect(state.turns[1]?.tool).toBe('write_file')
+    // Turn 0 (role 'user') is the step's system prompt — hidden from chat.
+    expect(state.turns.map((t) => t.role)).toEqual(['tool', 'assistant'])
+    expect(state.turns[0]?.tool).toBe('write_file')
   })
 
   test('an AgenticApiProvider job (anthropic-api) resolves the same way — no per-provider id list to fall out of sync', () => {
@@ -544,7 +548,8 @@ describe('getTaskChatState', () => {
     const state = getTaskChatState(PROJECT, TASK, { stepId: 'designer' })
     expect(state.transcriptFound).toBe(true)
     expect(state.transcriptProvider).toBe('anthropic-api')
-    expect(state.turns.map((t) => t.role)).toEqual(['user', 'tool', 'assistant'])
-    expect(state.turns[1]?.tool).toBe('str_replace_based_edit_tool')
+    // Turn 0 (role 'user') is the step's system prompt — hidden from chat.
+    expect(state.turns.map((t) => t.role)).toEqual(['tool', 'assistant'])
+    expect(state.turns[0]?.tool).toBe('str_replace_based_edit_tool')
   })
 })

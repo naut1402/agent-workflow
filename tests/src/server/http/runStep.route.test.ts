@@ -474,6 +474,50 @@ describe('POST /api/tasks/:id/run-step', () => {
     expect(sawSucceeded).toBe(true)
   })
 
+  // Td2be3c3e [must, review.md] — a `respawn` job (metadata.respawn: true) is a
+  // brand-new session for a step that already ran; it must NOT be mistaken for
+  // the "heal a stuck phase" signal below, or a respawn "succeeding" would
+  // silently advance current_phase with no real step ever running for it (the
+  // exact invariant `respawn` promises to hold — design.md §1/§4.4).
+  test('does not heal past current_phase using a respawn job (metadata.respawn) — Td2be3c3e', async () => {
+    seedTask('R18', { current_phase: 'implementer' })
+    const respawnJobId = crypto.randomUUID()
+    const jobsDir = path.join(root, '.home', 'jobs')
+    fs.mkdirSync(jobsDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(jobsDir, `${respawnJobId}.json`),
+      JSON.stringify({
+        id: respawnJobId,
+        status: 'succeeded',
+        runnerId: 'stub-runner-run-step',
+        agentRef: ' ',
+        workspace: path.join(root, 'tasks', 'R18'),
+        userPrompt: 'do the thing',
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        exitCode: 0,
+        pid: null,
+        metadata: {
+          taskId: 'R18',
+          pipelineStepId: 'implementer',
+          devTeamRoot: root,
+          respawn: true,
+        },
+      }),
+      'utf8',
+    )
+
+    const res = await app.request('/api/tasks/R18/run-step', {
+      method: 'POST',
+      body: JSON.stringify({ runnerId: 'stub-runner-run-step' }),
+    })
+    expect(res.status).toBe(201)
+    const { job } = await res.json()
+    // Must re-run implementer, NOT skip to reviewer using the respawn job.
+    expect(job.metadata.pipelineStepId).toBe('implementer')
+  })
+
   test('heals a stuck current_phase when a prior succeeded job already ran that step', async () => {
     seedTask('R9', { current_phase: 'implementer' })
     // Simulate crash-between-succeed-and-advance: job finished for

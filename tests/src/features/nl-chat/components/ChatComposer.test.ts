@@ -221,11 +221,12 @@ describe('ChatComposer — Enter behaviour', () => {
 })
 
 describe('ChatComposer — input row layout', () => {
-  it('opens on two lines', () => {
+  it('opens on one line', () => {
     const { textarea } = make()
-    // jsdom does not lay out, so this is the attribute half of the two-line
-    // floor; the CSS min-height half is pinned by the e2e suite.
-    expect(textarea.attributes('rows')).toBe('2')
+    // jsdom does not lay out, so this is the attribute half of the one-line
+    // floor (ChatWindow.scss `.nl-chat-input-row textarea`); the CSS
+    // min-height half is pinned by the e2e suite.
+    expect(textarea.attributes('rows')).toBe('1')
   })
 
   it('leads the row with the add menu, and keeps no standalone paperclip', async () => {

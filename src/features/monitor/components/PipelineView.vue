@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
-import { VueFlow } from '@vue-flow/core'
+import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, resetPipelineStep, startOrchestrator, stopOrchestrator } from '../scripts/PipelineViewApi'
 import { fetchJob, fetchJobs, cancelJob } from '../../runner/scripts/runnerApi'
 import { phasesFromPipeline, phaseStatus } from '../../../shared/lib/phase'
 import PipelineNode from './PipelineNode.vue'
+import ProfileSwitchDialog from './ProfileSwitchDialog.vue'
+import Icon from '../../../frontend/ui/Icon.vue'
 import ArtifactNode from '../../../frontend/ui/ArtifactNode.vue'
 import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
 import { buildArtifactNodesAndEdges } from '../../../frontend/lib/pipelineArtifactGraph'
@@ -28,6 +30,8 @@ const nodeTypes = {
   pipeline: markRaw(PipelineNode),
   artifact: markRaw(ArtifactNode),
 }
+
+const { fitView } = useVueFlow()
 
 // Custom flow profile for this task (null = use default PHASES).
 const customProfile = ref(null)
@@ -74,6 +78,55 @@ const phaseKeys = computed(() => phases.value.map((p) => p.key))
 const orchestratorEnabled = computed(() => props.task.pipeline?.orchestrator?.enabled === true)
 const orchestratorHalted = computed(() => props.task.orchestrator_halted === true)
 const orchestrated = computed(() => orchestratorEnabled.value && !orchestratorHalted.value)
+
+// Khoá đại diện "cấu trúc bộ node hiện có" — đổi khi số lượng/danh tính step
+// hoặc sự xuất hiện của node điều phối đổi, KHÔNG đổi khi chỉ toạ độ (drag)
+// hay trạng thái (status/running) đổi. `fitView-on-init` của VueFlow chỉ chạy
+// đúng 1 lần rồi khoá (`fitViewOnInitDone`) — batch đầu (trước khi SSE mang
+// `pipeline` thật về) không có node điều phối, nên phải tự fit lại mỗi khi
+// khoá này đổi, đúng pattern đã dùng ở PipelineEditor.vue.
+const nodeStructureKey = computed(
+  () => `${props.task.task_id}|${phaseKeys.value.join(',')}|${orchestratorEnabled.value}`,
+)
+
+let fitTimer: ReturnType<typeof setTimeout> | undefined
+watch(
+  nodeStructureKey,
+  () => {
+    // setTimeout (không phải nextTick): phải đợi VueFlow tự đo dimension của
+    // node vừa thêm/đổi rồi mới fitView() đúng khung — cùng độ trễ 100ms đã dùng
+    // ở PipelineEditor.vue:385/666. Huỷ timer cũ trước khi đặt cái mới: component
+    // này sống xuyên suốt nhiều lần đổi task (không unmount), nên đổi khoá dồn dập
+    // không được để nhiều `fitView()` trễ xếp hàng gọi sau khi component đã unmount.
+    clearTimeout(fitTimer)
+    fitTimer = setTimeout(() => fitView(), 100)
+  },
+  // `immediate` bắt buộc: khi `props.task.pipeline` đã đầy đủ ngay từ lần
+  // render đầu (không phải luôn qua 2 batch SSE — vd state nạp thẳng từ
+  // file), `nodeStructureKey` không đổi sau mount nên watch không có gì để
+  // so sánh và không bao giờ tự fire nếu thiếu cờ này.
+  { immediate: true },
+)
+onBeforeUnmount(() => clearTimeout(fitTimer))
+
+// Copy có chủ đích từ PipelineEditor.vue:81 — phạm vi 1 file, chưa đủ lý do
+// tách shared lib cho 3 dòng dùng ở đúng 2 nơi.
+function isTaskEditable(task: any): boolean {
+  return !task?.archived && task?.current_phase !== 'completed'
+}
+const canEditTask = computed(() => isTaskEditable(props.task))
+const taskHitlPending = computed(() => Boolean(props.task.hitl_pending))
+
+const profileSwitchOpen = ref(false)
+
+function onAutoLayout() {
+  const updated = {
+    phases: phaseKeys.value.map((key, i) => ({ key, x: i * NODE_SPACING, y: NODE_Y })),
+  }
+  saveFlowProfile(props.task.task_id, updated).then(() => {
+    customProfile.value = updated
+  })
+}
 
 // Full `produces[]` for a step — unlike `phase.artifact` (first produced file
 // only), needed to delete/check every file a multi-produces step wrote
@@ -252,9 +305,20 @@ const hitlGateId = ref('')
 const hitlLabel = ref('')
 const hitlMtime = ref<number | null>(null)
 const hitlFeedback = ref('')
+// Không preselect — người duyệt phải chủ động chọn, tránh bấm nhầm "Xác nhận"
+// mà không đọc.
+const hitlDecision = ref<'' | 'approve' | 'reject'>('')
 const hitlBusy = ref(false)
 const hitlError = ref('')
 const hitlToast = ref('')
+
+const hitlSubmitDisabled = computed(
+  () =>
+    hitlBusy.value ||
+    hitlDecision.value === '' ||
+    // Từ chối mà không ghi lý do là mất dấu vết cho lần chạy lại.
+    (hitlDecision.value === 'reject' && hitlFeedback.value.trim() === ''),
+)
 
 const waitingPhase = computed(() =>
   phases.value.find((p) => phaseStatus(p, props.task, phaseKeys.value) === 'waiting' && p.hitl),
@@ -267,6 +331,7 @@ function openHitlModal(phase: { key: string; label: string; hitl: string | null 
   hitlGateId.value = phase.hitl
   hitlLabel.value = phase.label || phase.key
   hitlFeedback.value = ''
+  hitlDecision.value = ''
   hitlError.value = ''
   hitlOpen.value = true
 }
@@ -550,30 +615,60 @@ function confirmRunStep(skipIntermediate = false) {
 // Reset-step confirmation (click the recycle button on an already-run step).
 const resetConfirmOpen = ref(false)
 const resetConfirmNode = ref<{ id: string; label: string } | null>(null)
-const resetConfirmOverwrite = ref<string[]>([])
-const resetConfirmCascadeLabels = ref<string[]>([])
-// Union of produces across target + every cascaded step, for the delete
-// warning shown when cascade is an available option — must list everything
-// that a cascade delete would remove, not just the clicked node's own files
-// (a partial list here is how someone accidentally nukes downstream artifacts
-// they didn't know were about to go).
-const resetConfirmCascadeFiles = ref<string[]>([])
+// Có step nào phía sau trong pipeline không — điều kiện hiện lựa chọn "onward"
+// cho CẢ HAI nhóm. Không gate theo "step sau còn artifact": `resetScope` còn
+// tác dụng ngoài việc xoá file (doc_review_round, closeTaskSession).
+const resetHasLaterSteps = ref(false)
+// File sẽ bị xoá, tách theo phạm vi để cảnh báo tính lại đúng theo lựa chọn.
+// Bản `onward` là union của target + mọi step sau: liệt kê thiếu ở đây là cách
+// người ta xoá nhầm artifact hạ nguồn mà không biết.
+const resetStepFiles = ref<string[]>([])
+const resetOnwardFiles = ref<string[]>([])
+const resetScopeEnabled = ref(false)
+const resetScope = ref<'step' | 'onward'>('step')
+const deleteScopeEnabled = ref(false)
+const deleteScope = ref<'step' | 'onward'>('step')
 const resetError = ref('')
 const resetToast = ref('')
+const resetBusy = ref(false)
+
+// Bỏ tick = về mặc định ít phá huỷ nhất: chỉ lùi đúng step, không xoá gì.
+const effectiveResetScope = computed(() => (resetScopeEnabled.value ? resetScope.value : 'step'))
+const effectiveDeleteScope = computed<'none' | 'step' | 'onward'>(() =>
+  deleteScopeEnabled.value ? deleteScope.value : 'none',
+)
+const resetFilesToDelete = computed(() => {
+  if (effectiveDeleteScope.value === 'none') return []
+  return effectiveDeleteScope.value === 'onward' ? resetOnwardFiles.value : resetStepFiles.value
+})
+// Không xoá tài liệu của step mà con trỏ vẫn coi là đã chạy — cùng ràng buộc
+// với `.refine` của `ResetStepRequest`.
+const deleteOnwardBlocked = computed(() => effectiveResetScope.value !== 'onward')
+
+// Hạ cấp `deleteScope` khi người dùng rút `resetScope` về 'step', nếu không
+// body gửi đi vi phạm refine và nhận 400.
+watch(effectiveResetScope, (v) => {
+  if (v === 'step' && deleteScope.value === 'onward') deleteScope.value = 'step'
+})
 
 function openResetConfirm(node: { id: string; label: string }) {
   resetConfirmNode.value = node
-  resetConfirmOverwrite.value = stepProduces(node.id).filter((f) => props.task.artifacts?.[f]?.exists)
   const keys = phaseKeys.value
   const idx = keys.indexOf(node.id)
   const afterKeys = idx >= 0 ? keys.slice(idx + 1) : []
-  resetConfirmCascadeLabels.value = afterKeys
-    .filter((k) => stepProduces(k).some((f) => props.task.artifacts?.[f]?.exists))
-    .map((k) => phases.value.find((p) => p.key === k)?.label || k)
-  const cascadeSteps = [node.id, ...afterKeys]
-  resetConfirmCascadeFiles.value = Array.from(
-    new Set(cascadeSteps.flatMap((k) => stepProduces(k).filter((f) => props.task.artifacts?.[f]?.exists))),
+  resetHasLaterSteps.value = afterKeys.length > 0
+  resetStepFiles.value = stepProduces(node.id).filter((f) => props.task.artifacts?.[f]?.exists)
+  resetOnwardFiles.value = Array.from(
+    new Set(
+      [node.id, ...afterKeys].flatMap((k) =>
+        stepProduces(k).filter((f) => props.task.artifacts?.[f]?.exists),
+      ),
+    ),
   )
+  resetScopeEnabled.value = false
+  resetScope.value = 'step'
+  deleteScopeEnabled.value = false
+  deleteScope.value = 'step'
   resetError.value = ''
   resetConfirmOpen.value = true
 }
@@ -581,15 +676,28 @@ function openResetConfirm(node: { id: string; label: string }) {
 function cancelResetConfirm() {
   resetConfirmOpen.value = false
   resetConfirmNode.value = null
-  resetConfirmOverwrite.value = []
-  resetConfirmCascadeLabels.value = []
-  resetConfirmCascadeFiles.value = []
+  resetHasLaterSteps.value = false
+  resetStepFiles.value = []
+  resetOnwardFiles.value = []
+  resetScopeEnabled.value = false
+  deleteScopeEnabled.value = false
 }
 
-async function doResetStep(node: { id: string; label: string }, cascade: boolean) {
+async function doResetStep(
+  node: { id: string; label: string },
+  scopes: { resetScope: 'step' | 'onward'; deleteScope: 'none' | 'step' | 'onward' },
+) {
+  resetBusy.value = true
   resetError.value = ''
   try {
-    await resetPipelineStep(props.task.task_id, { stepId: node.id, cascade }, props.projectId ?? undefined)
+    await resetPipelineStep(
+      props.task.task_id,
+      { stepId: node.id, ...scopes },
+      props.projectId ?? undefined,
+    )
+    // Đóng dialog CHỈ khi request đã thành công — đối xứng `submitHitl`. Đóng
+    // trước là ném mất hai nhóm phạm vi vừa tick khi server trả 409.
+    cancelResetConfirm()
     resetToast.value = t('monitor.pipeline.resetDone')
     emit('hitl-action')
     setTimeout(() => { resetToast.value = '' }, 3000)
@@ -599,17 +707,18 @@ async function doResetStep(node: { id: string; label: string }, cascade: boolean
     } else {
       resetError.value = String(e.message || e)
     }
+  } finally {
+    resetBusy.value = false
   }
 }
 
-function confirmReset(cascade: boolean) {
+function confirmReset() {
   const node = resetConfirmNode.value
-  resetConfirmOpen.value = false
-  resetConfirmNode.value = null
-  resetConfirmOverwrite.value = []
-  resetConfirmCascadeLabels.value = []
-  resetConfirmCascadeFiles.value = []
-  if (node) doResetStep(node, cascade)
+  if (!node || resetBusy.value) return
+  doResetStep(node, {
+    resetScope: effectiveResetScope.value,
+    deleteScope: effectiveDeleteScope.value,
+  })
 }
 
 function onNodeClick({ node }) {
@@ -641,7 +750,9 @@ function onNodeClick({ node }) {
   }
 }
 
-async function submitHitl(action: 'approve' | 'reject') {
+async function submitHitl() {
+  const action = hitlDecision.value
+  if (action === '') return
   if (hitlMtime.value == null) {
     hitlError.value = t('monitor.pipeline.missingMtime')
     return
@@ -654,7 +765,7 @@ async function submitHitl(action: 'approve' | 'reject') {
       {
         action,
         gate_id: hitlGateId.value,
-        feedback: action === 'reject' ? hitlFeedback.value : undefined,
+        feedback: action === 'reject' ? hitlFeedback.value.trim() : undefined,
         mtime: hitlMtime.value,
       },
       props.projectId ?? undefined,
@@ -688,6 +799,26 @@ async function submitHitl(action: 'approve' | 'reject') {
     </div>
 
     <div class="vflow-container">
+      <div v-if="canEditTask" class="canvas-corner-actions">
+        <button
+          type="button"
+          class="icon-btn"
+          :title="t('monitor.pipeline.autoLayout')"
+          :aria-label="t('monitor.pipeline.autoLayout')"
+          @click="onAutoLayout"
+        >
+          <Icon name="layout" />
+        </button>
+        <button
+          type="button"
+          class="icon-btn"
+          :title="t('monitor.pipeline.switchProfile')"
+          :aria-label="t('monitor.pipeline.switchProfile')"
+          @click="profileSwitchOpen = true"
+        >
+          <Icon name="swap" />
+        </button>
+      </div>
       <VueFlow
         :nodes="nodes"
         :edges="edges"
@@ -716,6 +847,15 @@ async function submitHitl(action: 'approve' | 'reject') {
     </section>
   </section>
 
+  <ProfileSwitchDialog
+    v-if="profileSwitchOpen"
+    :task-id="task.task_id"
+    :project-id="projectId"
+    :hitl-pending="taskHitlPending"
+    @close="profileSwitchOpen = false"
+    @applied="profileSwitchOpen = false; emit('hitl-action')"
+  />
+
   <!-- HITL approve modal -->
   <Teleport to="body">
     <div v-if="hitlOpen" class="modal-backdrop" @click.self="hitlOpen = false">
@@ -728,16 +868,28 @@ async function submitHitl(action: 'approve' | 'reject') {
           <p class="modal-hint">
             {{ t('monitor.pipeline.hitlWaiting') }} <code>{{ hitlGateId }}</code> {{ t('monitor.pipeline.hitlWaitingMid') }} <strong>{{ hitlTaskId }}</strong>.
           </p>
-          <label class="hitl-feedback-label">
+          <div class="cfg-choices">
+            <label class="cfg-choice">
+              <input v-model="hitlDecision" type="radio" name="hitl-decision" value="approve" />
+              <span>{{ t('monitor.pipeline.decisionApprove') }}</span>
+            </label>
+            <label class="cfg-choice">
+              <input v-model="hitlDecision" type="radio" name="hitl-decision" value="reject" />
+              <span>{{ t('monitor.pipeline.decisionReject') }}</span>
+            </label>
+          </div>
+          <label v-if="hitlDecision === 'reject'" class="cfg-label">
             {{ t('monitor.pipeline.feedbackLabel') }}
-            <textarea v-model="hitlFeedback" class="profile-editor hitl-feedback" rows="3" />
+            <textarea v-model="hitlFeedback" class="cfg-textarea" rows="4" />
           </label>
           <p v-if="hitlError" class="editor-error">{{ hitlError }}</p>
         </div>
         <div class="modal-actions">
-          <button class="btn-ghost" :disabled="hitlBusy" @click="submitHitl('reject')">{{ t('monitor.pipeline.reject') }}</button>
-          <button class="btn-primary" :disabled="hitlBusy" @click="submitHitl('approve')">
-            {{ hitlBusy ? t('monitor.pipeline.saving') : t('monitor.pipeline.approve') }}
+          <button class="btn-ghost" :disabled="hitlBusy" @click="hitlOpen = false">
+            {{ t('monitor.pipeline.cancel') }}
+          </button>
+          <button class="btn-primary" :disabled="hitlSubmitDisabled" @click="submitHitl()">
+            {{ hitlBusy ? t('monitor.pipeline.saving') : t('monitor.pipeline.confirm') }}
           </button>
         </div>
       </div>
@@ -800,34 +952,60 @@ async function submitHitl(action: 'approve' | 'reject') {
           <button class="modal-close" @click="cancelResetConfirm">✕</button>
         </div>
         <div class="modal-body">
-          <template v-if="resetConfirmCascadeLabels.length">
-            <p class="modal-hint">
-              {{ t('monitor.pipeline.resetConfirmCascadeBody', { label: resetConfirmNode?.label ?? '' }) }}
+          <p class="modal-hint">
+            {{ t('monitor.pipeline.resetConfirmBody', { label: resetConfirmNode?.label ?? '' }) }}
+          </p>
+
+          <label class="cfg-label cfg-label-row">
+            <input v-model="resetScopeEnabled" type="checkbox" />
+            {{ t('monitor.pipeline.resetScopeToggle') }}
+          </label>
+          <div v-if="resetScopeEnabled" class="cfg-choices cfg-choices-nested">
+            <label class="cfg-choice">
+              <input v-model="resetScope" type="radio" name="reset-scope" value="step" />
+              <span>{{ t('monitor.pipeline.resetScopeStep') }}</span>
+            </label>
+            <label v-if="resetHasLaterSteps" class="cfg-choice">
+              <input v-model="resetScope" type="radio" name="reset-scope" value="onward" />
+              <span>{{ t('monitor.pipeline.resetScopeOnward') }}</span>
+            </label>
+          </div>
+
+          <label class="cfg-label cfg-label-row">
+            <input v-model="deleteScopeEnabled" type="checkbox" />
+            {{ t('monitor.pipeline.deleteScopeToggle') }}
+          </label>
+          <div v-if="deleteScopeEnabled" class="cfg-choices cfg-choices-nested">
+            <label class="cfg-choice">
+              <input v-model="deleteScope" type="radio" name="delete-scope" value="step" />
+              <span>{{ t('monitor.pipeline.deleteScopeStep') }}</span>
+            </label>
+            <label v-if="resetHasLaterSteps" class="cfg-choice">
+              <input
+                v-model="deleteScope"
+                type="radio"
+                name="delete-scope"
+                value="onward"
+                :disabled="deleteOnwardBlocked"
+              />
+              <span>{{ t('monitor.pipeline.deleteScopeOnward') }}</span>
+            </label>
+            <p v-if="resetHasLaterSteps && deleteOnwardBlocked" class="modal-hint">
+              {{ t('monitor.pipeline.deleteScopeOnwardBlocked') }}
             </p>
-            <p v-if="resetConfirmCascadeFiles.length" class="editor-error">
-              {{ t('monitor.pipeline.resetConfirmDeleteWarning', { files: resetConfirmCascadeFiles.join(', ') }) }}
-            </p>
-          </template>
-          <template v-else>
-            <p class="modal-hint">{{ t('monitor.pipeline.resetConfirmBody', { label: resetConfirmNode?.label ?? '' }) }}</p>
-            <p v-if="resetConfirmOverwrite.length" class="editor-error">
-              {{ t('monitor.pipeline.resetConfirmDeleteWarning', { files: resetConfirmOverwrite.join(', ') }) }}
-            </p>
-          </template>
+          </div>
+
+          <p v-if="resetFilesToDelete.length" class="editor-error">
+            {{ t('monitor.pipeline.resetConfirmDeleteWarning', { files: resetFilesToDelete.join(', ') }) }}
+          </p>
+          <p v-if="resetError" class="editor-error">{{ resetError }}</p>
         </div>
-        <div v-if="resetConfirmCascadeLabels.length" class="modal-actions">
-          <button class="btn-ghost" @click="cancelResetConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
-          <button class="btn-ghost" @click="confirmReset(false)">
-            {{ t('monitor.pipeline.resetConfirmOnlyThis') }}
+        <div class="modal-actions">
+          <button class="btn-ghost" :disabled="resetBusy" @click="cancelResetConfirm">
+            {{ t('monitor.pipeline.cancel') }}
           </button>
-          <button class="btn-primary" @click="confirmReset(true)">
-            {{ t('monitor.pipeline.resetConfirmCascade', { steps: resetConfirmCascadeLabels.join(', ') }) }}
-          </button>
-        </div>
-        <div v-else class="modal-actions">
-          <button class="btn-ghost" @click="cancelResetConfirm">{{ t('monitor.pipeline.runConfirmCancel') }}</button>
-          <button class="btn-primary" @click="confirmReset(false)">
-            {{ t('monitor.pipeline.resetConfirmOnlyThis') }}
+          <button class="btn-primary" :disabled="resetBusy" @click="confirmReset()">
+            {{ resetBusy ? t('monitor.pipeline.saving') : t('monitor.pipeline.resetSubmit') }}
           </button>
         </div>
       </div>
@@ -837,6 +1015,24 @@ async function submitHitl(action: 'approve' | 'reject') {
 
 <style scoped lang="scss">
 .pipeline-wrap { margin-bottom: 14px; }
+
+.vflow-container { position: relative; }
+.canvas-corner-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.vflow-container:hover .canvas-corner-actions,
+.vflow-container:focus-within .canvas-corner-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
 
 /* bù gap của .modal bị mất khi bọc nội dung vào .modal-body */
 .modal-body {
@@ -867,4 +1063,20 @@ async function submitHitl(action: 'approve' | 'reject') {
   resize: vertical;
 }
 .editor-error { color: var(--danger); font-size: 12px; margin: 0; }
+
+/* Nhóm radio/checkbox trong dialog — giữ cục bộ theo tiền lệ `.cfg-label-row`
+   của StepConfigDialog.vue; mới hai nơi dùng, chưa đủ lý do nâng lên shell. */
+.cfg-choices { display: flex; flex-direction: column; gap: 6px; }
+.cfg-choices-nested { margin-left: 22px; }
+.cfg-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cfg-choice input[type='radio'] { margin-top: 2px; }
+.cfg-choice input[type='radio']:disabled { cursor: not-allowed; }
+.cfg-choice input[type='radio']:disabled + span { color: var(--muted); cursor: not-allowed; }
+.cfg-label-row { flex-direction: row; align-items: center; gap: 6px; cursor: pointer; }
 </style>

@@ -28,6 +28,7 @@ type IconName =
   | 'eye'
   | 'spinner'
   | 'send'
+  | 'swap'
 
 const props = withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 16 })
 
@@ -57,6 +58,7 @@ const VIEW_BOX: Record<IconName, string> = {
   // Same 24-grid as `info`: it replaces `info` in place, in the same button.
   spinner: '0 0 24 24',
   send: '0 0 16 16',
+  swap: '0 0 16 16',
 }
 
 const viewBox = VIEW_BOX[props.name]
@@ -193,6 +195,10 @@ const viewBox = VIEW_BOX[props.name]
     </template>
     <template v-else-if="name === 'send'">
       <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M14 2L2 7.5l4.7 1.8L8.5 14 14 2zM6.7 9.3L14 2" />
+    </template>
+    <template v-else-if="name === 'swap'">
+      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M3 5.5h8M8.5 3L11 5.5L8.5 8" />
+      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 10.5H5M7.5 8L5 10.5L7.5 13" />
     </template>
   </svg>
 </template>
