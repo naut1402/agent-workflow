@@ -106,12 +106,22 @@ export type ResetResult =
   | { ok: true; state: Record<string, unknown>; mtime: number; removedSteps: string[] }
   | { ok: false; error: string; status: number }
 
+/** Hai trục phạm vi của một lần reset — xem `schemas/resetStep.ts`. */
+export type ResetScopes = {
+  resetScope: 'step' | 'onward'
+  deleteScope: 'none' | 'step' | 'onward'
+}
+
 /**
- * Roll `current_phase` back to `stepId` and delete its artifacts (and, with
- * `cascade`, every step after it). The reverse of `jumpToPipelineStepAssumingLock`
- * — that one only ever moves the cursor forward (guarded by `isRunnableTarget`);
- * this one moves it backward (guarded by `isResettableTarget`), which is why it's
- * a separate function rather than a shared "jump" with a direction flag.
+ * Roll `current_phase` back to `stepId`. The reverse of
+ * `jumpToPipelineStepAssumingLock` — that one only ever moves the cursor forward
+ * (guarded by `isRunnableTarget`); this one moves it backward (guarded by
+ * `isResettableTarget`), which is why it's a separate function rather than a
+ * shared "jump" with a direction flag.
+ *
+ * `scopes.resetScope` (step nào bị coi là chưa chạy) và `scopes.deleteScope`
+ * (step nào bị xoá artifact) là hai trục rời nhau — lùi con trỏ không bắt buộc
+ * phải xoá file, và ngược lại.
  *
  * `qa.md`/`hitl-feedback.md` are deliberately left alone — they're task-wide
  * history, not a single step's artifact.
@@ -123,7 +133,7 @@ export async function resetPipelineStepAssumingLock(
   taskId: string,
   stateFile: string,
   stepId: string,
-  cascade: boolean,
+  scopes: ResetScopes,
 ): Promise<ResetResult> {
   const read = await readState(stateFile)
   if (!read.ok) return { ok: false, error: 'state not found', status: 404 }
@@ -135,9 +145,20 @@ export async function resetPipelineStepAssumingLock(
   const targetIdx = phaseKeys.indexOf(stepId)
   if (targetIdx < 0) return { ok: false, error: 'invalid stepId', status: 400 }
 
-  const removedSteps = cascade ? phaseKeys.slice(targetIdx) : [stepId]
+  // Step bị coi là chưa chạy — nuôi `doc_review_round` bên dưới và vòng
+  // `closeTaskSession` ở controller. KHÔNG bám `deleteScope`: reset mà không
+  // xoá file thì session CLI của step đó vẫn phải đóng, nếu không lần chạy
+  // lại nối tiếp vào phiên cũ.
+  const removedSteps = scopes.resetScope === 'onward' ? phaseKeys.slice(targetIdx) : [stepId]
+  // Step bị xoá artifact — tập rời với `removedSteps`, có thể rỗng.
+  const deletedSteps =
+    scopes.deleteScope === 'none'
+      ? []
+      : scopes.deleteScope === 'onward'
+        ? phaseKeys.slice(targetIdx)
+        : [stepId]
 
-  for (const sid of removedSteps) {
+  for (const sid of deletedSteps) {
     const step = steps.find((s: any) => s.id === sid)
     for (const file of step?.produces ?? []) {
       await rm(joinPath(root, 'tasks', taskId, file), { force: true })
@@ -169,7 +190,7 @@ export async function resetPipelineStepAssumingLock(
   state.doc_review_round = docReviewRound
 
   const mtime = await writeStateAtomic(stateFile, state)
-  // No dedicated `task.reset` type — event-catalog.md's convention is that
+  // No dedicated `task.reset` type — docs/architecture/events/monitor.md's convention is that
   // step-cursor changes go through `task.advanced` with a `reason` (same as
   // `review_retry` below), not a new `pipeline.*`/`step.*` type per action.
   emit('task.advanced', {
@@ -177,7 +198,8 @@ export async function resetPipelineStepAssumingLock(
     stepId,
     currentPhase: state.current_phase,
     reason: 'reset',
-    cascade,
+    resetScope: scopes.resetScope,
+    deleteScope: scopes.deleteScope,
     removedSteps,
   })
 
@@ -188,11 +210,11 @@ export async function resetPipelineStep(
   root: string,
   taskId: string,
   stepId: string,
-  cascade: boolean,
+  scopes: ResetScopes,
 ): Promise<ResetResult> {
   const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
   return withStateFileLock(stateFile, () =>
-    resetPipelineStepAssumingLock(root, taskId, stateFile, stepId, cascade),
+    resetPipelineStepAssumingLock(root, taskId, stateFile, stepId, scopes),
   )
 }
 

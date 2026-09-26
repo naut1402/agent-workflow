@@ -2,7 +2,7 @@
 #
 # Chỉ chạy khi PR: head = dev/<x.y.z>/main  →  base = main
 # Sau khi trả nợ: docs/todo phải không tồn tại (xóa cả thư mục).
-# Quy ước: docs/agent-rules/pr-todo-debt.md
+# Quy ước: docs/agent-rules/git-pr.md §7
 # Script: .github/scripts/check-todo-debt.ts
 
 name: Todo debt

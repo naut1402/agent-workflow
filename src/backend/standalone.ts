@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // Standalone dev-team-dashboard server (bun src/backend/standalone.ts) — a
 // neutral HTTP server not tied to any single `.dev-team-agent/` workspace.
-// Binds 127.0.0.1 only; MVP does not expose to the network. See docs/architecture.md §2.3.
+// Binds 127.0.0.1 only; MVP does not expose to the network.
 
 import http from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'

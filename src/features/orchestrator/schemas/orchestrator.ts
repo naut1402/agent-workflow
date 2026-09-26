@@ -23,23 +23,25 @@ export type OrchestratorConfig = z.infer<typeof OrchestratorConfig>
 /**
  * Quyết định của agent điều phối, đọc từ dòng `ORCHESTRATOR_DECISION: {json}`.
  *
- * `stepId` bắt buộc với `start`/`resume` (kiểm thêm "có trong pipeline" ở
- * `parseDecision`); `halt` và `summary` thì không cần. `message` là nội dung
- * gửi kèm khi resume — chính là kênh giao tiếp reviewer → implementer.
+ * `stepId` bắt buộc với `start`/`resume`/`respawn` (kiểm thêm "có trong
+ * pipeline" ở `parseDecision`); `halt` và `summary` thì không cần. `message`
+ * là nội dung gửi kèm khi resume — chính là kênh giao tiếp reviewer →
+ * implementer. `respawn` chạy một phiên mới cho một step đã từng chạy xong,
+ * bất kể `current_phase` — không yêu cầu `message` (khác `resume`).
  */
 export const OrchestratorDecision = z
   .object({
-    action: z.enum(['start', 'resume', 'halt', 'summary']),
+    action: z.enum(['start', 'resume', 'halt', 'summary', 'respawn']),
     stepId: z.string().min(1).optional(),
     reason: z.string().optional(),
     message: z.string().optional(),
     /** Tóm tắt kết quả bước vừa xong — hiện ở chat của node, đi vào brief bước kế. */
     summary: z.string().max(MAX_AGENT_CONTEXT_BYTES).optional(),
-    /** Bối cảnh agent soạn riêng cho step sắp chạy. Chỉ dùng cùng `start`. */
+    /** Bối cảnh agent soạn riêng cho step sắp chạy. Dùng cùng `start`/`respawn`. */
     context: z.string().max(MAX_AGENT_CONTEXT_BYTES).optional(),
   })
   .superRefine((d, ctx) => {
-    if ((d.action === 'start' || d.action === 'resume') && !d.stepId) {
+    if ((d.action === 'start' || d.action === 'resume' || d.action === 'respawn') && !d.stepId) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'stepId required', path: ['stepId'] })
     }
     // `resume` không có nội dung nghĩa là step nhận `userPrompt` rỗng — chặn ở

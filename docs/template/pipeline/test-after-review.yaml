@@ -10,7 +10,7 @@
 # task nghiêm ngặt tuần tự (`jobQueue` serial theo task), và `steps[]` là danh
 # sách phẳng, không có khái niệm nhánh. Muốn song song thật thì tách thành **hai
 # task riêng** (task code + task test), mỗi task một worktree — xem
-# docs/agent-rules/git-worktree.md. Chọn cách nào: xem điều kiện ở
+# docs/agent-rules/git-pr.md §6. Chọn cách nào: xem điều kiện ở
 # docs/agent-rules/testing.md §3.1.
 #
 # Cài đặt: copy file này vào `.dev-team-agent/pipeline-profiles/` của project.

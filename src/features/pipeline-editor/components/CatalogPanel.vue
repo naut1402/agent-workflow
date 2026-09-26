@@ -75,7 +75,7 @@ watch(skillSourceOptions, (opts) => resetIfGone(opts, skillSource))
 
 // Panel này gói 2 mục còn `RulesPanel` chỉ có 1; chia cột theo số panel sẽ cho
 // catalog chỉ nửa phần của Rules. Chia theo số mục đang mở để mọi mục mở được
-// phần bằng nhau (grow đổi, basis vẫn 0, docs/ui-overflow.md).
+// phần bằng nhau (grow đổi, basis vẫn 0, docs/agent-rules/ui-design-guideline.md).
 const openCatalogCount = computed(
   () => ['agents', 'skills'].filter((k) => props.openSections.has(k)).length,
 )
@@ -115,7 +115,7 @@ function onDragStart(event, item, type) {
       @toggle="emit('toggle-section', 'agents')"
     >
       <!-- `<select>` native vì popup của nó vẽ ở tầng OS nên không bị các ancestor
-           `overflow: hidden` của mục/cột cắt (coding-guideline §5). -->
+           `overflow: hidden` của mục/cột cắt (docs/agent-rules/coding-guideline.md §5). -->
       <div class="catalog-toolbar">
         <select
           v-model="agentSource"
@@ -209,7 +209,7 @@ function onDragStart(event, item, type) {
 </template>
 
 <style scoped lang="scss">
-/* Hợp đồng cuộn (docs/ui-overflow.md): panel chỉ giành chiều cao khi một trong
+/* Hợp đồng cuộn (docs/agent-rules/ui-design-guideline.md): panel chỉ giành chiều cao khi một trong
    các section của nó đang mở — để basis 0 cố định thì panel đóng vẫn ăn nửa
    cột. Vùng cuộn duy nhất là `.catalog-list`. */
 .catalog-panel {
@@ -222,7 +222,7 @@ function onDragStart(event, item, type) {
 .catalog-panel--open { flex: 1 1 0; }
 
 /* Hàng công cụ xếp ngang, một hàng duy nhất — xếp dọc tốn ~70px/mục, đủ để
-   `.catalog-list` sụp còn vài px ở viewport thấp (docs/ui-overflow.md). Đổi lại
+   `.catalog-list` sụp còn vài px ở viewport thấp (docs/agent-rules/ui-design-guideline.md). Đổi lại
    nhãn nguồn có thể bị ellipsis; `:title` trên select bù phần đọc đầy đủ. */
 .catalog-toolbar {
   display: flex;
