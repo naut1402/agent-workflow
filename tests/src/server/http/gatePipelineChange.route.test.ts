@@ -939,3 +939,57 @@ describe('reconcile ngay khi ghi pipeline scope task, KHÔNG cần run-step trư
     expect(['designer', 'implementer']).toContain(readStateFile(taskId).current_phase)
   })
 })
+
+/*
+ * Td2be3c3e [must, review.md] — `POST /api/tasks/:id/repair-state` có một truy
+ * vấn "lastSucceeded" RIÊNG (controller.ts, trước khi gọi `repairTaskState`
+ * của state.ts) để tự-chữa cursor khi job của bước hiện tại đã xong nhưng
+ * `current_phase` chưa đi. Job của `respawn` (metadata.respawn: true) là một
+ * phiên chạy thử riêng cho một bước ĐÃ từng xong — nó không phải job thật của
+ * lượt chạy hiện tại, nên KHÔNG được đóng vai job "vừa xong" ở đây, nếu không
+ * repair-state sẽ tự đẩy current_phase dựa trên một job mà pipeline chính
+ * chưa từng chạy (đúng bất biến respawn cam kết giữ — design.md §1/§4.4).
+ */
+describe('POST /api/tasks/:id/repair-state — bỏ qua job respawn (Td2be3c3e)', () => {
+  function writeSucceededJob(id: string, taskId: string, stepId: string, extraMeta: Record<string, unknown> = {}) {
+    const dir = path.join(root, '.home', 'jobs')
+    fs.mkdirSync(dir, { recursive: true })
+    const now = new Date().toISOString()
+    fs.writeFileSync(
+      path.join(dir, `${id}.json`),
+      JSON.stringify({
+        id,
+        status: 'succeeded',
+        runnerId: RUNNER_ID,
+        agentRef: ' ',
+        workspace: path.join(root, 'tasks', taskId),
+        createdAt: now,
+        startedAt: now,
+        finishedAt: now,
+        exitCode: 0,
+        pid: null,
+        metadata: { taskId, pipelineStepId: stepId, devTeamRoot: root, ...extraMeta },
+      }),
+      'utf8',
+    )
+    return id
+  }
+
+  test('job respawn succeeded trùng current_phase ⇒ repair-state KHÔNG tự advance (regression)', async () => {
+    seedTask('TRP1', { current_phase: 'implementer' })
+    writeSucceededJob('trp1-respawn', 'TRP1', 'implementer', { respawn: true })
+
+    const res = await app.request('/api/tasks/TRP1/repair-state', { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(readStateFile('TRP1').current_phase).toBe('implementer')
+  })
+
+  test('đối chứng — job THƯỜNG (không respawn) succeeded trùng current_phase ⇒ repair-state advance như thiết kế', async () => {
+    seedTask('TRP2', { current_phase: 'implementer' })
+    writeSucceededJob('trp2-normal', 'TRP2', 'implementer')
+
+    const res = await app.request('/api/tasks/TRP2/repair-state', { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(readStateFile('TRP2').current_phase).not.toBe('implementer')
+  })
+})

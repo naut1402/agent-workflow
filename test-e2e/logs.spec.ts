@@ -8,7 +8,10 @@ import { capture } from './_capture'
 
 test('logs mode: mount + tab switch (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   await page.locator('button[title="Nhật ký"]').click()
   await expect(page.locator('.logs-panel')).toBeVisible({ timeout: 15_000 })

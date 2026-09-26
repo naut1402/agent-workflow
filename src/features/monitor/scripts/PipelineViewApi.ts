@@ -22,7 +22,7 @@ export async function runPipelineStep(
 
 export async function resetPipelineStep(
   id: string,
-  body: { stepId: string; cascade: boolean },
+  body: { stepId: string; resetScope: 'step' | 'onward'; deleteScope: 'none' | 'step' | 'onward' },
   projectId?: string,
 ) {
   return apiPost(`/api/tasks/${encodeURIComponent(id)}/reset-step`, body, {

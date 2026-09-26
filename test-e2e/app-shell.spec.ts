@@ -9,7 +9,10 @@ import { capturePage } from './_capture'
 
 test('monitor mode renders the fixture task (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   // The fixture task id flows through /api/tasks → api client → TaskList.
   const taskId = page.locator('.tasklist .id', { hasText: 'DEMO-1' })

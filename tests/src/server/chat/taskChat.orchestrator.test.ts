@@ -210,7 +210,9 @@ describe('getTaskChatState — panel của node điều phối (TC-13, TC-14)', 
     const state = getTaskChatState(PROJECT, TASK, { stepId: ORCHESTRATOR_STEP_ID })
     const texts = state.turns.map((t) => t.text).join('\n')
     expect(state.sessionId).toBe('s-orch')
-    expect(texts).toContain('PING-abc123')
+    // Turn 0 (role 'user', 'PING-abc123') is the node's fresh-session system
+    // trigger — hidden from chat, same as any other step's first turn.
+    expect(texts).not.toContain('PING-abc123')
     expect(texts).toContain('Pipeline đang chờ người duyệt cổng.')
     expect(texts).not.toContain('PING-step-1')
   })
@@ -232,8 +234,10 @@ describe('getTaskChatState — panel của node điều phối (TC-13, TC-14)', 
     })
 
     const texts = getTaskChatState(PROJECT, TASK, { stepId: ORCHESTRATOR_STEP_ID }).turns.map((t) => t.text)
-    expect(texts.indexOf('CAU-1')).toBeGreaterThanOrEqual(0)
-    expect(texts.indexOf('CAU-1')).toBeLessThan(texts.indexOf('CAU-2'))
+    // Turn 0 (role 'user', 'CAU-1') is the fresh session's first user turn —
+    // hidden from chat, so the visible sequence starts at 'đáp 1'.
+    expect(texts).toEqual(['đáp 1', 'CAU-2', 'đáp 2'])
+    expect(texts.indexOf('CAU-2')).toBeLessThan(texts.indexOf('đáp 2'))
   })
 
   // Dòng quyết định là lệnh máy, không phải câu nói — người dùng đọc nhật ký

@@ -9,7 +9,10 @@ import { capturePage } from './_capture'
 // entry thì `hideMain` thu `main` về 0, nên neo đặt ở đó sẽ không bao giờ visible.
 test('knowledge mode mounts the panel (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await page.getByRole('button', { name: 'Knowledge' }).click()
   await expect(page.locator('.knowledge-panel')).toBeVisible({ timeout: 15_000 })
   // Cột trái là sub-menu với 3 nhóm collapse; chưa chọn entry ⇒ main thu về 0.
@@ -29,7 +32,10 @@ test('chọn entry ⇒ main hiện markdown; bỏ chọn ⇒ main thu lại', as
 
   try {
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+    // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+    // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+    // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
     await page.getByRole('button', { name: 'Knowledge' }).click()
     await expect(page.locator('.knowledge-panel')).toBeVisible({ timeout: 15_000 })
 
@@ -69,7 +75,10 @@ test('khứ hồi tag: tạo → gắn màu → lọc theo tag', async ({ page, 
     )
 
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+    // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+    // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+    // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
     await page.getByRole('button', { name: 'Knowledge' }).click()
     await expect(page.locator('.knowledge-panel')).toBeVisible({ timeout: 15_000 })
 

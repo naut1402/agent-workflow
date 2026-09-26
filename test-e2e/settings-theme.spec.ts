@@ -3,7 +3,10 @@ import { capture } from './_capture'
 
 test('settings theme: light/dark persist + data-theme (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await expect(page.locator('.tasklist')).toBeVisible({ timeout: 15_000 })
 
   await page.locator('button[title="Cài đặt"]').click()
@@ -25,7 +28,10 @@ test('settings theme: light/dark persist + data-theme (capture)', async ({ page 
   // Persist across reload
   await page.locator('.settings-dialog .modal-close').click()
   await page.reload()
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
 
   const stored = await page.evaluate(() =>

@@ -12,7 +12,10 @@ import { capture } from './_capture'
 
 test('nl chat: themed window docks to the draggable icon (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   const fab = page.locator('.nl-chat-fab')
   await expect(fab).toBeVisible({ timeout: 15_000 })
@@ -63,7 +66,10 @@ test('nl chat: themed window docks to the draggable icon (capture)', async ({ pa
 
 test('nl chat: message sides, status indicator and minimize (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   // The chat plane is stubbed at the network edge so a real turn renders
   // without submitting a job to whatever runner the shared e2e home dir has
@@ -94,18 +100,18 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
   await expect(win.locator('.nl-chat-badge')).toHaveCount(0)
   await expect(win.locator('.nl-chat-status')).toHaveCount(0)
 
-  // Two-line composer. The empty box already stands two lines tall, and that is
-  // a FLOOR: typing must never shrink it back to one line (the box auto-grows by
+  // One-line composer. The empty box already stands one line tall, and that is
+  // a FLOOR: typing must never shrink it below that (the box auto-grows by
   // writing an inline height, which the CSS min-height has to outrank).
   const composer = win.locator('.nl-chat-input-row textarea')
-  const twoLines = (await composer.boundingBox())!.height
-  expect(twoLines).toBeGreaterThanOrEqual(40)
+  const oneLine = (await composer.boundingBox())!.height
+  expect(oneLine).toBeGreaterThanOrEqual(20)
 
   await composer.click()
   await composer.type('a')
-  expect((await composer.boundingBox())!.height).toBe(twoLines)
+  expect((await composer.boundingBox())!.height).toBe(oneLine)
 
-  // Past two lines it grows again; Shift+Enter is still the newline key.
+  // Past one line it grows again; Shift+Enter is still the newline key.
   await composer.fill('')
   await composer.type('dòng 1')
   await composer.press('Shift+Enter')
@@ -113,18 +119,18 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
   await composer.press('Shift+Enter')
   await composer.type('dòng 3')
   expect(await composer.inputValue()).toContain('\n')
-  expect((await composer.boundingBox())!.height).toBeGreaterThan(twoLines)
+  expect((await composer.boundingBox())!.height).toBeGreaterThan(oneLine)
 
   // Clearing it drops back to the floor, not below.
   await composer.fill('')
-  expect((await composer.boundingBox())!.height).toBe(twoLines)
+  expect((await composer.boundingBox())!.height).toBe(oneLine)
 
   await composer.fill('tạo task sửa bug đăng nhập')
   await composer.press('Enter')
 
   // Sending resets the box — and the reset must land on the floor too.
   await expect(composer).toHaveValue('')
-  expect((await composer.boundingBox())!.height).toBe(twoLines)
+  expect((await composer.boundingBox())!.height).toBe(oneLine)
 
   // While the turn is in flight the title takes the busy colour; no spinner is
   // left anywhere in the header.
@@ -190,7 +196,10 @@ test('pipeline node popover opens a step-scoped runner chat (capture)', async ({
   })
 
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await page.locator('.task-row', { hasText: 'DEMO-1' }).click()
 
   const node = page.locator('.pnode', { hasText: 'Design' }).first()
@@ -308,7 +317,10 @@ test('nl chat: the + menu leads the input row and opens upward (capture)', async
   page,
 }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await page.locator('.nl-chat-fab').click()
 
   const win = page.locator('.nl-chat-window')
@@ -393,7 +405,10 @@ test('step node corner actions: run opens the confirm dialog, chat sits next to 
   page,
 }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await page.locator('.task-row', { hasText: 'DEMO-1' }).click()
 
   // The fixture task's current phase is `designer`, so that node is runnable.
@@ -423,7 +438,10 @@ test('step node corner actions: run opens the confirm dialog, chat sits next to 
 
 test('nl chat: resize by dragging corners, size persists across reloads (capture)', async ({ page }, testInfo) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await page.locator('.nl-chat-fab').click()
 
   const win = page.locator('.nl-chat-window')
@@ -464,7 +482,10 @@ test('nl chat: resize by dragging corners, size persists across reloads (capture
   // Size survives a reload (localStorage), like the icon position.
   const resized = await dragCorner('tl', -120, -90)
   await page.reload()
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await page.locator('.nl-chat-fab').click()
   const restored = (await page.locator('.nl-chat-window').boundingBox())!
   expect(Math.round(restored.width)).toBe(Math.round(resized.width))
@@ -494,7 +515,10 @@ test('nl chat: an unsubmitted draft survives switching to a step chat and back',
   })
 
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await page.locator('.task-row', { hasText: 'DEMO-1' }).click()
 
   // Session A: the creation assistant, with a draft left unsent.
@@ -535,7 +559,10 @@ test('nl chat: × hides the window, with one session and with several', async ({
   // The session registry drops the closed session AND the window must go away.
   // Re-seeding the registry once it empties must not bounce the window open.
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
 
   const win = page.locator('.nl-chat-window')
   const closeBtn = win.locator('.nl-chat-icon-btn[title="Đóng"]')
@@ -560,7 +587,10 @@ test('nl chat: the info popover carries the dashboard connection state in builde
   page,
 }) => {
   await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
+  // timeout dù trang đã render xong. Locator wait bên dưới (`.click()` /
+  // `toBeVisible()` / …) tự chờ phần tử actionable, không cần networkidle.
   await page.locator('.nl-chat-fab').click()
 
   const win = page.locator('.nl-chat-window')

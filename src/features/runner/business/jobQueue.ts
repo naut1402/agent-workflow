@@ -107,9 +107,10 @@ async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): 
     // `current_phase` right back past it before any job is submitted. Use
     // `resetPipelineStep` instead — it sets `last_reset_at` (so the heal
     // fallback no longer treats this as stuck) and clears the step's stale
-    // artifacts. `cascade: false` limits the reset to just the decided step,
-    // and only for a stepId that's actually in this pipeline (`resetPipelineStep`
-    // 400s otherwise, which the `res.ok === false` branch below logs).
+    // artifacts. Cả hai scope đều là `'step'`: chỉ đụng đúng step được quyết
+    // định, không lùi và không xoá gì của các step sau — và chỉ với stepId có
+    // thật trong pipeline (`resetPipelineStep` 400 nếu không, nhánh
+    // `res.ok === false` bên dưới log lại).
     const stateFile = joinPath(devTeamRoot, '.dev-state', `${taskId}.json`)
     const { readState } = await import('../../monitor/business/tasks/index.js')
     const read = await readState(stateFile)
@@ -118,7 +119,10 @@ async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): 
       const phaseKeys = (pipeline.steps || []).map((s: any) => s.id).filter(Boolean)
       if (phaseKeys.includes(decision.stepId)) {
         const { resetPipelineStep } = await import('../../monitor/business/tasks/state.js')
-        await resetPipelineStep(devTeamRoot, taskId, decision.stepId, false)
+        await resetPipelineStep(devTeamRoot, taskId, decision.stepId, {
+          resetScope: 'step',
+          deleteScope: 'step',
+        })
       }
     }
 
@@ -869,7 +873,11 @@ async function runJob(job: JobRecord): Promise<void> {
   // nhưng nó LÀ lượt chạy lại của step đó — không cho advance thì pipeline đứng
   // ngay sau lần resume đầu tiên.
   const isOrchestratorResume = job.metadata?.orchestratorResume === true
-  if (result.ok && !isApprovalJob && (!isChatFeedback || isOrchestratorResume)) {
+  // `respawn` chạy một phiên mới cho một step đã xong — không bao giờ được
+  // đẩy `current_phase`, kể cả khi `pipelineStepId` trùng `current_phase`
+  // hiện tại (xem design.md §4.4 của task Td2be3c3e).
+  const isRespawn = job.metadata?.respawn === true
+  if (result.ok && !isApprovalJob && (!isChatFeedback || isOrchestratorResume) && !isRespawn) {
     try {
       await advancePipelineStepChain(job)
     } catch (err) {

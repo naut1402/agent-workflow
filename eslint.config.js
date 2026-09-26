@@ -120,8 +120,8 @@ export default tseslint.config(
     // `files` phải phủ TRỌN phần frontend của feature, không chỉ 3 thư mục hiển nhiên:
     // `lib/` · `schemas/` · `locales/` · `registerMode.ts` cũng là FE, và trước đây chúng
     // rơi vào vùng chết của cả hai hàng rào (rule BE chỉ nhận `api.ts`/`controller.ts`/
-    // `business/**`). `schemas/` đặc biệt đáng phủ: architecture.md §6 mô tả nó là schema
-    // dùng chung FE/BE, nên nó là đường ngắn nhất để một component kéo `src/backend/**` vào.
+    // `business/**`). `schemas/` đặc biệt đáng phủ: nó là schema dùng chung FE/BE,
+    // nên nó là đường ngắn nhất để một component kéo `src/backend/**` vào.
     files: [
       'src/frontend/**/*.{ts,vue}',
       'src/features/**/{components,composables,scripts,lib,schemas,locales}/**/*.{ts,vue}',

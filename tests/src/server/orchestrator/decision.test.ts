@@ -50,6 +50,38 @@ describe('parseDecision — quyết định hợp lệ', () => {
   })
 })
 
+// Td2be3c3e TC06/TC05 (đọc qua schema) — `respawn` bắt buộc `stepId` như
+// `start`/`resume`, nhưng KHÔNG bắt buộc `message` (khác `resume`), và stepId
+// phải nằm trong pipeline hiện tại — cùng cơ chế `start`/`resume` đã có.
+describe('parseDecision — respawn (Td2be3c3e)', () => {
+  test('respawn kèm stepId hợp lệ, không kèm message — hợp lệ', () => {
+    const d = parseDecision(line('{"action":"respawn","stepId":"implementer"}'), STEPS)
+    expect(d).toEqual({ action: 'respawn', stepId: 'implementer' })
+  })
+
+  test('respawn mang context/summary cho brief mới', () => {
+    const d = parseDecision(
+      line('{"action":"respawn","stepId":"implementer","summary":"S","context":"revert filter"}'),
+      STEPS,
+    )
+    expect(d).toEqual({ action: 'respawn', stepId: 'implementer', summary: 'S', context: 'revert filter' })
+  })
+
+  test('respawn thiếu stepId ⇒ malformed decision (TC06)', () => {
+    expect(parseDecision(line('{"action":"respawn"}'), STEPS)).toEqual({ error: 'malformed decision' })
+  })
+
+  test('respawn với stepId rỗng ⇒ malformed decision (TC06)', () => {
+    expect(parseDecision(line('{"action":"respawn","stepId":""}'), STEPS)).toEqual({ error: 'malformed decision' })
+  })
+
+  test('respawn với stepId không có trong pipeline ⇒ unknown stepId (TC05)', () => {
+    expect(parseDecision(line('{"action":"respawn","stepId":"pr-creator"}'), STEPS)).toEqual({
+      error: 'unknown stepId: pr-creator',
+    })
+  })
+})
+
 describe('parseDecision — mọi nhánh hỏng đều trả error (⇒ halt), không đoán', () => {
   test('không có dòng sentinel', () => {
     expect(parseDecision('chỉ là một câu trả lời bình thường', STEPS)).toEqual({ error: 'no decision line' })
@@ -190,7 +222,10 @@ describe('buildDecisionPrompt — bối cảnh đủ cho AC-3/AC-4', () => {
   })
 
   // TC-21 — bất biến an toàn: node điều phối KHÔNG được tự duyệt cổng thay người.
-  test('cổng đang chờ người ⇒ prompt chỉ cho phép summary/halt', () => {
+  // Td2be3c3e: `respawn` cố ý KHÔNG bị chặn bởi gate (nó không đổi
+  // `current_phase`) — prompt phải liệt kê nó cạnh `summary`/`halt`, không
+  // phải một danh sách hai action như trước khi có `respawn`.
+  test('cổng đang chờ người ⇒ prompt chỉ cho phép summary/halt/respawn', () => {
     const prompt = buildDecisionPrompt({
       taskId: 'T1',
       currentPhase: 'reviewer',
@@ -199,7 +234,7 @@ describe('buildDecisionPrompt — bối cảnh đủ cho AC-3/AC-4', () => {
       gatePending: 'hitl-review',
     })
     expect(prompt).toContain('hitl-review')
-    expect(prompt).toMatch(/chỉ được trả `summary` hoặc `halt`/)
+    expect(prompt).toMatch(/chỉ được trả `summary`, `halt`, hoặc `respawn`/)
   })
 
   test('pipeline đã xong ⇒ prompt yêu cầu tóm tắt rồi summary', () => {

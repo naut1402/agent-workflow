@@ -3,7 +3,7 @@
  */
 
 import { asArray } from '../../../backend/lib/arrayUtils.ts'
-import { loadYaml, dumpYaml } from '../../../backend/lib/yamlLib.ts'
+import { loadYaml, dumpYaml } from '../../../shared/lib/yamlLib'
 import { slugifySectionKey } from '../../../shared/lib/stringUtils.ts'
 import {
   DEFAULT_SECTION_ORDER,
