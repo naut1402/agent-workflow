@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
-import { mountWithI18n as mount } from '../../../helpers/i18n'
+import { mount as mountRaw } from '@vue/test-utils'
+import {
+  createTestI18n,
+  createTestI18nPlugin,
+  mountWithI18n as mount,
+} from '../../../helpers/i18n'
 import SettingsDialog from '@/features/settings/components/SettingsDialog.vue'
 import {
   STORAGE_KEY,
@@ -466,5 +471,237 @@ describe('SettingsDialog — scan patterns', () => {
     const pane = await openProjects()
     await addPattern('agents', '.agents')
     expect(pane.textContent).toContain('boom')
+  })
+})
+
+/**
+ * [T0c6725e9] Khối Artifact — 2 preference trạng thái section.
+ *
+ * Bất biến chốt của nhóm này (AC-2b): accordion ép AC-1 ở **giá trị hiệu dụng**, KHÔNG
+ * ghi đè giá trị đã lưu. Vì vậy control AC-1 bind theo giá trị ĐÃ LƯU: accordion bật
+ * vẫn hiện đúng lựa chọn cũ của người dùng (và bị khoá), tắt lại là dùng được ngay.
+ * TC-17 + TC-18 là hai case duy nhất phân biệt cài đặt đúng với cài đặt phá dữ liệu.
+ */
+describe('SettingsDialog — trạng thái section artifact (AC-1, AC-2)', () => {
+  const i18n = createTestI18n('vi')
+  const t = (key: string) => (i18n.global.t as any)(key)
+
+  function sectionRadios() {
+    return {
+      expanded: document.querySelector(
+        'input[name="artifactSectionDefault"][value="expanded"]',
+      ) as HTMLInputElement,
+      collapsed: document.querySelector(
+        'input[name="artifactSectionDefault"][value="collapsed"]',
+      ) as HTMLInputElement,
+    }
+  }
+
+  function accordionCheckbox() {
+    const label = Array.from(document.querySelectorAll('label.settings-checkbox')).find((l) =>
+      l.textContent?.includes(t('settings.artifact.accordion')),
+    )
+    return label?.querySelector('input[type="checkbox"]') as HTMLInputElement
+  }
+
+  /** Tìm theo radio bên trong, không theo nhãn — nhãn đổi theo ngôn ngữ (TC-28). */
+  function sectionRadioGroup() {
+    return document
+      .querySelector('input[name="artifactSectionDefault"]')
+      ?.closest('[role="radiogroup"]') as HTMLElement
+  }
+
+  const forcedHintShown = () =>
+    Array.from(document.querySelectorAll('.settings-section-desc')).some((p) =>
+      p.textContent?.includes(t('settings.artifact.sectionForcedHint')),
+    )
+
+  /** Bấm checkbox accordion đúng như người dùng, rồi chờ Vue ghi xong. */
+  async function clickAccordion() {
+    accordionCheckbox().click()
+    await flushPromises()
+  }
+
+  function seed(prefs?: Record<string, unknown>) {
+    localStorage.clear()
+    if (prefs) localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs))
+    useAppSettings().load()
+  }
+
+  const stored = () => JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+
+  it('TC-02: cài đặt sạch ⇒ accordion BẬT, AC-1 hiện "mở tất cả" nhưng bị KHOÁ', () => {
+    seed()
+    mount(SettingsDialog, { attachTo: document.body })
+
+    expect(accordionCheckbox().checked).toBe(true)
+
+    const { expanded, collapsed } = sectionRadios()
+    // Cố ý hiện "mở tất cả" dù hành vi thực tế đang là đóng: "đóng" là do accordion
+    // ép, không phải lựa chọn của người dùng (cặp bất biến với TC-17).
+    expect(expanded.checked).toBe(true)
+    expect(collapsed.checked).toBe(false)
+    expect(expanded.disabled).toBe(true)
+    expect(collapsed.disabled).toBe(true)
+
+    // Mở dialog không được tự ghi gì xuống storage.
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+
+  /**
+   * TC-15 · TC-29 — "khoá" phải ở mức THUỘC TÍNH của phần tử form, không phải bằng CSS:
+   * radio khoá bằng style vẫn đổi được bằng chuột/bàn phím và vẫn ghi xuống storage.
+   */
+  it('TC-15/TC-29: accordion bật ⇒ 2 radio disabled thật, bấm và focus đều không đổi được', () => {
+    seed()
+    mount(SettingsDialog, { attachTo: document.body })
+    const { expanded, collapsed } = sectionRadios()
+
+    expect(collapsed.hasAttribute('disabled')).toBe(true)
+    expect(sectionRadioGroup().getAttribute('aria-disabled')).toBe('true')
+
+    // Chuột: phần tử form disabled không phát click/change (jsdom theo đúng spec).
+    collapsed.click()
+    expect(collapsed.checked).toBe(false)
+    expect(expanded.checked).toBe(true)
+
+    // Bàn phím: radio disabled bị loại khỏi vòng focus nên mũi tên không tới được.
+    collapsed.focus()
+    expect(document.activeElement).not.toBe(collapsed)
+
+    expect(stored().artifactSectionDefault).toBeUndefined()
+  })
+
+  it('TC-16: accordion bật ⇒ có dòng hint nêu lý do; tắt ⇒ hint biến mất', async () => {
+    seed()
+    mount(SettingsDialog, { attachTo: document.body })
+    expect(forcedHintShown()).toBe(true)
+
+    await clickAccordion() // tắt
+    expect(forcedHintShown()).toBe(false)
+    expect(sectionRadios().expanded.disabled).toBe(false)
+
+    await clickAccordion() // bật lại
+    expect(forcedHintShown()).toBe(true)
+  })
+
+  /**
+   * TC-17 · E10 — TC chốt của cả nhóm. `request.md` nói AC-1 "bị ép về đóng tất cả"
+   * mà không nói ép ở tầng nào; spec chốt ép ở giá trị hiệu dụng. Cách cài còn lại
+   * (ghi đè giá trị đã lưu khi bật accordion) xanh ở MỌI case khác — chỉ đường
+   * bật-rồi-tắt dưới đây mới phân biệt được.
+   */
+  it('TC-17: đã lưu "đóng tất cả" ⇒ bật rồi tắt accordion KHÔNG ghi đè lựa chọn đó', async () => {
+    seed({ artifactSectionAccordion: false, artifactSectionDefault: 'collapsed' })
+    mount(SettingsDialog, { attachTo: document.body })
+    expect(sectionRadios().collapsed.checked).toBe(true)
+
+    await clickAccordion() // bật accordion ⇒ AC-1 bị khoá
+    expect(sectionRadios().collapsed.disabled).toBe(true)
+    expect(sectionRadios().collapsed.checked).toBe(true)
+    expect(stored().artifactSectionDefault).toBe('collapsed')
+
+    await clickAccordion() // tắt lại
+    expect(sectionRadios().collapsed.checked).toBe(true)
+    expect(sectionRadios().collapsed.disabled).toBe(false)
+    expect(stored()).toEqual({
+      artifactSectionAccordion: false,
+      artifactSectionDefault: 'collapsed',
+    })
+  })
+
+  // TC-18: cùng bất biến với TC-17 nhưng ở nhánh CHƯA có giá trị lưu — chỗ mà một
+  // cài đặt "bật thì ghi đè" để lại dấu vết rõ nhất ('collapsed' đọng lại).
+  it('TC-18: chưa từng chỉnh AC-1 ⇒ round trip accordion vẫn để AC-1 ở "mở tất cả"', async () => {
+    seed()
+    mount(SettingsDialog, { attachTo: document.body })
+
+    await clickAccordion() // tắt
+    expect(sectionRadios().expanded.checked).toBe(true)
+
+    await clickAccordion() // bật
+    expect(sectionRadios().expanded.checked).toBe(true)
+
+    await clickAccordion() // tắt lại
+    expect(sectionRadios().expanded.checked).toBe(true)
+    expect(sectionRadios().collapsed.checked).toBe(false)
+    expect(stored().artifactSectionDefault).toBeUndefined()
+  })
+
+  it('TC-08/TC-15: accordion TẮT ⇒ chọn "đóng tất cả" ghi xuống storage và sống sót qua tải lại', async () => {
+    seed({ artifactSectionAccordion: false })
+    const first = mount(SettingsDialog, { attachTo: document.body })
+
+    const { collapsed } = sectionRadios()
+    expect(collapsed.disabled).toBe(false)
+    collapsed.click()
+    await flushPromises()
+
+    expect(stored()).toEqual({
+      artifactSectionAccordion: false,
+      artifactSectionDefault: 'collapsed',
+    })
+
+    // Tải lại ứng dụng: dựng lại store từ storage rồi mount dialog mới.
+    first.unmount()
+    document.body.innerHTML = ''
+    useAppSettings().load()
+    mount(SettingsDialog, { attachTo: document.body })
+
+    expect(sectionRadios().collapsed.checked).toBe(true)
+    expect(sectionRadios().expanded.checked).toBe(false)
+    // Nửa còn lại của TC-08 — "tài liệu mở ra đóng hết" — nằm ở TC-05 của 2 suite
+    // viewer, seed đúng shape storage này.
+  })
+
+  /**
+   * TC-20 · E3 — "tắt tường minh" phải thực sự xuống storage chứ không chỉ sống trong
+   * phiên: vắng khoá và khoá `false` cho hai hành vi NGƯỢC nhau (TC-01 vs TC-04).
+   */
+  it('TC-20: tắt accordion ⇒ persist `false` và sống sót qua tải lại ứng dụng', async () => {
+    seed()
+    const first = mount(SettingsDialog, { attachTo: document.body })
+
+    await clickAccordion()
+    expect(stored().artifactSectionAccordion).toBe(false)
+
+    // Tải lại: dựng lại store từ storage rồi mount dialog mới.
+    first.unmount()
+    document.body.innerHTML = ''
+    useAppSettings().load()
+    mount(SettingsDialog, { attachTo: document.body })
+
+    expect(accordionCheckbox().checked).toBe(false)
+    expect(sectionRadios().expanded.disabled).toBe(false)
+    expect(sectionRadios().collapsed.disabled).toBe(false)
+    expect(forcedHintShown()).toBe(false)
+  })
+
+  // TC-28: thiếu một khoá ở một ngôn ngữ là lỗi im lặng — chỉ lộ khi đổi ngôn ngữ.
+  it.each(['vi', 'en'] as const)('TC-28: nhãn của cả 3 control có đủ ở %s', (locale) => {
+    seed()
+    const messages = createTestI18n(locale)
+    const tr = (key: string) => (messages.global.t as any)(key)
+
+    mountRaw(SettingsDialog, {
+      attachTo: document.body,
+      global: { plugins: [createTestI18nPlugin(locale)] },
+    })
+
+    const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
+    const text = pane.textContent ?? ''
+    for (const key of [
+      'settings.artifact.accordion',
+      'settings.artifact.sectionDesc',
+      'settings.artifact.sectionExpanded',
+      'settings.artifact.sectionCollapsed',
+      'settings.artifact.sectionForcedHint',
+    ]) {
+      expect(text).toContain(tr(key))
+      expect(tr(key)).not.toContain('settings.artifact.') // không rò khoá i18n thô
+    }
+    expect(sectionRadioGroup().getAttribute('aria-label')).toBe(
+      tr('settings.artifact.sectionGroupLabel'),
+    )
   })
 })

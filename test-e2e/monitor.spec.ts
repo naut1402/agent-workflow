@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { capturePage } from './_capture'
+import { seedArtifactSectionsExpanded } from './_appSettings'
 
 // E2E capture for the features/monitor module. Confirms the moved monitor
 // components (TaskList → file list → ArtifactPanel) still wire up after the
@@ -31,6 +32,9 @@ test('relative artifact link opens the target in the panel (capture)', async ({ 
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(String(e)))
 
+  // Bấm link nằm trong THÂN section ⇒ cần section mở sẵn (accordion mặc định bật
+  // từ T0c6725e9 làm tài liệu mở ra đóng hết).
+  await seedArtifactSectionsExpanded(page)
   await page.goto('/')
   // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
   // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
@@ -100,6 +104,8 @@ test('paste in the markdown editor keeps edit mode and saves (capture)', async (
   context,
 }, testInfo) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  // dblclick để sửa section ⇒ cần section mở sẵn (xem ghi chú ở test link phía trên).
+  await seedArtifactSectionsExpanded(page)
   await page.goto('/')
   // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
   // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn
