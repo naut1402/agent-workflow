@@ -12,7 +12,7 @@ import * as schema from './schema.js'
  *
  * Bun-only modules are imported dynamically because `vite build` loads
  * `vite.config.ts` under Node, which cannot resolve the `bun:` scheme — static
- * imports here break `bun run build` (`docs/architecture.md` §6).
+ * imports here break `bun run build`.
  */
 
 export type Db = BunSQLiteDatabase<typeof schema>

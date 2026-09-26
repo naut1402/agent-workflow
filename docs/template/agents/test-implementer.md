@@ -67,7 +67,7 @@ bun run test:overlay test/x.y.z/main
 - Bỏ tham số thì script tự suy dòng test từ tên branch đang đứng.
 - Cây test đang có thay đổi chưa commit thì script **dừng** thay vì ghi đè; `FORCE=1` để ép.
 
-**Ghi lại cặp ref (source SHA, test SHA)** — nó đi vào `test-result.md` và PR body. Đây là dữ liệu duy nhất truy được về sau khi cần biết test viết cho version nào.
+**Ghi lại cặp ref (source SHA, test SHA)** — nó đi vào `test-result.md`. Đây là dữ liệu duy nhất truy được về sau khi cần biết test viết cho version nào.
 
 ### Bước 4: Viết test
 
