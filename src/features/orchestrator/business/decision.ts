@@ -40,6 +40,10 @@ export interface DecisionContext {
   stepResult?: StepResult
   /** Gate đang chờ người (`state.hitl_pending`) — agent không được start khi có. */
   gatePending?: string
+  /** `orchestrator.system_prompt` từ pipeline.yaml — hướng dẫn tự do do người vận hành cấu hình. */
+  extraSystemPrompt?: string
+  /** Bundle knowledge đã render, ứng với `orchestrator.knowledge_inputs`. */
+  knowledgeText?: string
 }
 
 const TRIGGER_BRIEF: Record<DecisionTrigger, string> = {
@@ -108,9 +112,13 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
     `# Quyết định điều phối — task ${ctx.taskId}`,
     `**Bước hiện tại:** \`${ctx.currentPhase || '(chưa có)'}\``,
     `**Tình huống:** ${TRIGGER_BRIEF[ctx.trigger]}`,
+    ctx.extraSystemPrompt?.trim()
+      ? `## Hướng dẫn bổ sung (cấu hình orchestrator)\n\n${ctx.extraSystemPrompt.trim()}`
+      : '',
     ctx.stepResult ? renderStepResult(ctx.stepResult) : '',
     ctx.detail?.trim() ? `## Chi tiết\n\n${ctx.detail.trim()}` : '',
     ctx.recent?.length ? `## Event gần đây\n\n${ctx.recent.map((r) => `- ${r}`).join('\n')}` : '',
+    ctx.knowledgeText?.trim() ? `## Knowledge\n\n${ctx.knowledgeText.trim()}` : '',
     `## Hành động cho phép\n\n${actions.join('\n')}`,
     `## Ràng buộc\n\n${constraints.join('\n')}`,
     [

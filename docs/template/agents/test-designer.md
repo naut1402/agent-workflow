@@ -14,7 +14,7 @@ Subagent chuyên trách soạn test-spec theo góc nhìn black-box, độc lập
 - Đọc `request.md` toàn bộ và phần xác định phạm vi trong `design.md`
 - Soạn test case theo góc nhìn black-box: input/action từ ngoài, output/effect quan sát được kỳ vọng
 - Ghi `test-spec.md` theo hướng dẫn `write-tests`
-- Nếu gặp câu hỏi blocking → tạo `qa.md` và dừng
+- Nếu gặp câu hỏi blocking → gọi MCP tool `create_qa` và dừng
 
 ## Đầu vào
 
@@ -42,7 +42,7 @@ Với mỗi acceptance criterion / hành vi nghiệp vụ trong `request.md`:
 
 Ghi `.dev-team-agent/tasks/<task-id>/test-spec.md` theo cấu trúc `write-tests` (danh sách TC: mô tả/input/expected/edge case).
 
-Nếu có điểm mơ hồ cần xác nhận (acceptance criteria trong `request.md` không đủ rõ để suy test case) → tạo `.dev-team-agent/tasks/<task-id>/qa.md` với câu hỏi cụ thể, dừng — không tự đặt case thay thế.
+Nếu có điểm mơ hồ cần xác nhận (acceptance criteria trong `request.md` không đủ rõ để suy test case) → gọi MCP tool `create_qa` với câu hỏi cụ thể, dừng — không tự đặt case thay thế.
 
 ### Bước cuối: Checklist hoàn thành (theo repo)
 
@@ -53,7 +53,7 @@ Nếu có điểm mơ hồ cần xác nhận (acceptance criteria trong `request
    - Không có mục → bỏ qua.
 4. Khi hạng mục **NG**:
    - Không phải blocking → **tự healing** trong scope phase rồi mới báo DONE.
-   - Blocking (cần người quyết) → tạo `qa.md` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
+   - Blocking (cần người quyết) → gọi MCP tool `create_qa` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
 5. Không nhúng checklist đặc thù repo vào agent.
 
 ## Kết quả trả về

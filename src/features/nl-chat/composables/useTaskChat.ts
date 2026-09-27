@@ -2,6 +2,8 @@ import { computed, ref } from 'vue'
 import { fetchTaskChat, sendTaskFeedback } from '../../monitor/scripts/monitorApi'
 import { resolveChatFeedbackMode } from '../../../frontend/configs/appSettings'
 import { useAppSettings } from '../../../frontend/composables/useAppSettings'
+import { openSseStream, type SseStream } from '../../../frontend/lib/sseClient'
+import { ensureDashboardTransport, isSseEnabled } from '../../../frontend/lib/dashboardTransport'
 
 /**
  * Chat with the runner of a task's pipeline step: replays the CLI session's own
@@ -81,6 +83,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
   const idlePollMs = opts.idlePollMs ?? 6000
 
   let timer: ReturnType<typeof setTimeout> | null = null
+  let stream: SseStream | null = null
   let stopped = false
   /**
    * Bumped by every `start` and every `stop`. A poll chain carries the value it
@@ -218,6 +221,34 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     }, delay)
   }
 
+  /** SSE branch of `start()` — server tails its own interval, client only appends. */
+  function startSse(gen: number): void {
+    const taskId = opts.getTaskId()
+    if (!taskId) return
+    prepareFetchWindow(false)
+    let firstPush = true
+    stream = openSseStream(
+      `/api/tasks/${encodeURIComponent(taskId)}/chat/stream`,
+      { project: opts.getProjectId(), stepId: opts.getStepId() },
+      {
+        onEvent: (type, data) => {
+          if (gen !== generation || type !== 'chat') return
+          // First push is a full snapshot (fromIndex=0); later pushes only carry
+          // turns since the server's own cursor — `applyState`'s seen-index dedup
+          // makes appending safe either way.
+          applyState(data, !firstPush)
+          firstPush = false
+          error.value = null
+          loading.value = false
+        },
+        onError: (e: any) => {
+          if (gen !== generation) return
+          error.value = String(e?.message || e)
+        },
+      },
+    )
+  }
+
   async function start(): Promise<void> {
     // Idempotent: the body calls start() from mount, from the re-scope watcher
     // and from the active watcher — without clearing first, switching sessions
@@ -227,6 +258,12 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     stop()
     const gen = ++generation
     stopped = false
+    const transport = await ensureDashboardTransport()
+    if (gen !== generation) return
+    if (isSseEnabled(transport)) {
+      startSse(gen)
+      return
+    }
     await refresh(false, gen)
     if (gen !== generation) return
     scheduleNext(gen)
@@ -237,6 +274,8 @@ export function useTaskChat(opts: UseTaskChatOptions) {
     generation++
     if (timer) clearTimeout(timer)
     timer = null
+    stream?.close()
+    stream = null
     // Nothing is fetching once the chain is cancelled, and the cancelled chain
     // will not clear this itself — it can no longer tell whether a newer chain
     // has since set it.

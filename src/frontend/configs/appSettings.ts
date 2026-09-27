@@ -8,6 +8,10 @@ export const AppSettingsSchema = z
   .object({
     // Reserved names (optional) — UI controls land in later sub-tasks.
     artifactViewMode: z.enum(['block', 'full']).optional(),
+    /** Section state when a document opens (block mode only). Missing → 'expanded'. */
+    artifactSectionDefault: z.enum(['expanded', 'collapsed']).optional(),
+    /** Only one section open at a time. Missing → true; forces the effective default to 'collapsed'. */
+    artifactSectionAccordion: z.boolean().optional(),
     theme: z.enum(['system', 'light', 'dark']).optional(),
     locale: z.enum(['vi', 'en']).optional(),
     hideMissingArtifacts: z.boolean().optional(),
@@ -29,6 +33,7 @@ export const AppSettingsSchema = z
   .passthrough()
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>
+export type ArtifactSectionDefault = 'expanded' | 'collapsed'
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type LocalePreference = 'vi' | 'en'
 export type NotificationUiPlacement = 'sidebar' | 'floating' | 'both'
@@ -46,6 +51,35 @@ export function resolveArtifactViewMode(
   settings: Pick<AppSettings, 'artifactViewMode'> | null | undefined,
 ): 'block' | 'full' {
   return settings?.artifactViewMode === 'full' ? 'full' : 'block'
+}
+
+/** Effective "only one section open at a time": missing → true (accordion on by default). */
+export function resolveArtifactSectionAccordion(
+  settings: Pick<AppSettings, 'artifactSectionAccordion'> | null | undefined,
+): boolean {
+  return settings?.artifactSectionAccordion !== false
+}
+
+/**
+ * Stored section-default preference, WITHOUT the accordion override.
+ * Settings controls bind to this so turning accordion off restores the user's own choice.
+ */
+export function readArtifactSectionDefault(
+  settings: Pick<AppSettings, 'artifactSectionDefault'> | null | undefined,
+): ArtifactSectionDefault {
+  return settings?.artifactSectionDefault === 'collapsed' ? 'collapsed' : 'expanded'
+}
+
+/**
+ * Effective section state when a document opens.
+ * Accordion on ⇒ always 'collapsed' (the stored value is left untouched) — viewers bind to this.
+ */
+export function resolveArtifactSectionDefault(
+  settings:
+    Pick<AppSettings, 'artifactSectionDefault' | 'artifactSectionAccordion'> | null | undefined,
+): ArtifactSectionDefault {
+  if (resolveArtifactSectionAccordion(settings)) return 'collapsed'
+  return readArtifactSectionDefault(settings)
 }
 
 /** Effective theme preference: missing → 'system'. */
