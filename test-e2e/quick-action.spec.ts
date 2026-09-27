@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { capture } from './_capture'
+import { seedArtifactSectionsExpanded } from './_appSettings'
 
 // E2E for Correction B (F0005): the QuickAction mode CRUD panel, and the two
 // places a saved action surfaces in Monitor's ArtifactPanel — the artifact
@@ -14,6 +15,9 @@ import { capture } from './_capture'
 // approval checkboxes. There is no id field — the id is derived from the label.
 
 test('quick action: CRUD → title button + selection toolbar (capture)', async ({ page }, testInfo) => {
+  // Toolbar chọn chữ cần bôi đen nội dung TRONG section ⇒ section phải mở sẵn
+  // (accordion mặc định bật từ T0c6725e9 làm tài liệu mở ra đóng hết).
+  await seedArtifactSectionsExpanded(page)
   await page.goto('/')
   // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
   // giữ kết nối mở vô thời hạn nên network không bao giờ "idle", chờ nó luôn

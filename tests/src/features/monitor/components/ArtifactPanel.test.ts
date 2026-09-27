@@ -109,14 +109,26 @@ const task = {
   },
 }
 
-function seedSettings(mode?: 'block' | 'full') {
+/**
+ * [T0c6725e9] `extra` mang preference `artifactSection*`. Phải vào storage TRƯỚC khi
+ * mount: panel seed trạng thái section ngay trong `load()`, nên đặt setting sau khi
+ * panel đã nạp tài liệu là đo nhầm sang ngữ cảnh TC-19.
+ *
+ * Sau task này "không seed gì" nghĩa là *accordion bật ⇒ đóng hết* (TC-01), nên mọi
+ * TC muốn "mở hết" phải nói rõ accordion tắt.
+ */
+function seedSettings(mode?: 'block' | 'full', extra?: Record<string, unknown>) {
   localStorage.clear()
-  if (mode) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ artifactViewMode: mode }))
+  const stored = { ...(mode ? { artifactViewMode: mode } : {}), ...(extra ?? {}) }
+  if (Object.keys(stored).length) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
   }
   const { load } = useAppSettings()
   load()
 }
+
+/** Accordion tắt + mở tất cả — tức hành vi viewer trước task này. */
+const SECTION_LEGACY = { artifactSectionAccordion: false, artifactSectionDefault: 'expanded' }
 
 async function mountPanel(openArtifact: { taskId: string; name: string } | null) {
   const w = mount(ArtifactPanel, {
@@ -240,10 +252,12 @@ describe('ArtifactPanel — block mode toggle all', () => {
       content: MARKDOWN_FOUR,
       mtime: 1,
     }))
-    seedSettings('block')
+    // [T0c6725e9] Cả nhóm này chạy dưới accordion TẮT: nút gập/bung toàn bộ chỉ tồn
+    // tại ở chế độ đó (TC-13), và "mở hết" giờ phải khai tường minh (TC-04).
+    seedSettings('block', SECTION_LEGACY)
   })
 
-  it('opens every block by default when block mode is enabled (mục 4)', async () => {
+  it('opens every block by default when block mode is enabled (mục 4 · TC-04)', async () => {
     const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
     expect(detailsOpenStates(w)).toEqual([true, true, true, true])
   })
@@ -774,5 +788,501 @@ Plain paragraph text
 
     await clickEl(anchor(w, 'design.md'))
     expect(message(w)).toBe('')
+  })
+})
+
+/**
+ * [T0c6725e9] Nhánh **panel artifact (Monitor)** của 2 setting trạng thái section.
+ *
+ * Logic gập section ở đây là bản cài ĐỘC LẬP với `frontend/ui/CMarkdownView.vue`
+ * (design §2.1/D2), nên nhóm này soi đúng những TC mà suite `CMarkdownView` soi —
+ * "sửa một viewer, quên viewer kia" là rủi ro số 1 của task (E12).
+ *
+ * ⚠️ Harness riêng với **mtime khác nhau cho từng artifact**. Phần còn lại của file
+ * dùng `mtime: 1` cho mọi artifact; với ranh giới "đổi tài liệu ⇒ áp lại mặc định"
+ * thì `mtime` bằng nhau **che mất** ca thật, vì đổi artifact làm watcher `openArtifact`
+ * và watcher `mtime` cùng gọi `load()` cho một khoá trong cùng một flush.
+ */
+describe('ArtifactPanel — trạng thái section mặc định (AC-1, AC-2)', () => {
+  const MD_A = '## A1\nnội dung A1\n\n## A2\nnội dung A2\n\n## A3\nnội dung A3\n'
+  const MD_B = '## B1\nnội dung B1\n\n## B2\nnội dung B2\n\n## B3\nnội dung B3\n'
+
+  /** `b.md` có mtime KHÁC `a.md` — xem ghi chú harness ở đầu nhóm. */
+  const sectionTask = {
+    task_id: 'T1',
+    artifacts: {
+      'a.md': { exists: true, mtime: 1 },
+      'b.md': { exists: true, mtime: 77 },
+    },
+  }
+
+  const CONTENT_BY_NAME: Record<string, { content: string; mtime: number }> = {
+    'a.md': { content: MD_A, mtime: 1 },
+    'b.md': { content: MD_B, mtime: 77 },
+  }
+
+  function openStates(w: Awaited<ReturnType<typeof mountPanel>>): boolean[] {
+    return w.findAll('.block-item').map((d) => (d.element as HTMLDetailsElement).open)
+  }
+
+  /** Bấm mở/đóng một `<details>` đúng như trình duyệt: đổi `open` rồi bắn `toggle`. */
+  async function toggleBlock(
+    w: Awaited<ReturnType<typeof mountPanel>>,
+    i: number,
+    open: boolean,
+  ) {
+    const item = w.findAll('.block-item')[i]
+    ;(item.element as HTMLDetailsElement).open = open
+    await item.trigger('toggle')
+  }
+
+  function toggleAllButton(w: Awaited<ReturnType<typeof mountPanel>>) {
+    return w
+      .findAll('button')
+      .find((b) => ['Mở tất cả block', 'Đóng tất cả block'].includes(b.attributes('title') ?? ''))
+  }
+
+  async function mountSection(
+    name = 'a.md',
+    task: Record<string, unknown> = sectionTask,
+  ) {
+    const w = mount(ArtifactPanel, {
+      props: { task, openArtifact: { taskId: 'T1', name }, projectId: null },
+      global: { stubs: { MarkdownTextEditor: MarkdownTextEditorStub } },
+    })
+    await flushPromises()
+    return w
+  }
+
+  beforeEach(() => {
+    vi.mocked(fetchArtifact).mockImplementation(async (_taskId: string, name: string) =>
+      CONTENT_BY_NAME[name] ?? { content: MD_A, mtime: 1 },
+    )
+  })
+
+  it('TC-01: cài đặt sạch ⇒ mọi section đóng (accordion mặc định bật ép AC-1)', async () => {
+    seedSettings('block')
+    expect(openStates(await mountSection())).toEqual([false, false, false])
+  })
+
+  it('TC-03: preference không đọc được / sai kiểu ⇒ vẫn ra đúng TC-01, không crash', async () => {
+    for (const raw of ['{khong-phai-json', JSON.stringify({ artifactSectionAccordion: 'yes' })]) {
+      localStorage.clear()
+      localStorage.setItem(STORAGE_KEY, raw)
+      useAppSettings().load()
+      const w = await mountSection()
+      expect(w.find('.block-list').exists()).toBe(true)
+      expect(openStates(w)).toEqual([false, false, false])
+    }
+  })
+
+  it('TC-04: accordion tắt + "mở tất cả" (tường minh HOẶC vắng mặt) ⇒ mở hết', async () => {
+    seedSettings('block', { artifactSectionAccordion: false, artifactSectionDefault: 'expanded' })
+    expect(openStates(await mountSection())).toEqual([true, true, true])
+
+    seedSettings('block', { artifactSectionAccordion: false })
+    expect(openStates(await mountSection())).toEqual([true, true, true])
+  })
+
+  it('TC-05/TC-14: accordion tắt + "đóng tất cả" ⇒ đóng hết, và mở được NHIỀU section', async () => {
+    seedSettings('block', { artifactSectionAccordion: false, artifactSectionDefault: 'collapsed' })
+    const w = await mountSection()
+    expect(openStates(w)).toEqual([false, false, false])
+
+    await toggleBlock(w, 0, true)
+    await toggleBlock(w, 1, true)
+    expect(openStates(w)).toEqual([true, true, false])
+  })
+
+  /**
+   * TC-06 ở tầng quy tắc thuần nằm trong suite `tests/src/frontend/configs` (đúng
+   * phân tầng của test-spec §6). Nhìn từ tầng storage thì ca đó không tới được
+   * resolver: `parseAppSettings` all-or-nothing (bất biến sẵn có, cùng đường với
+   * `theme: 'neon'`) nên một khoá rác làm hỏng cả object ⇒ mất luôn
+   * `artifactSectionAccordion: false` đi kèm ⇒ rơi về đúng TC-01/TC-03.
+   */
+  it('TC-03/TC-06: AC-1 rác trong storage ⇒ hỏng cả object ⇒ về mặc định đóng hết', async () => {
+    seedSettings('block', { artifactSectionAccordion: false, artifactSectionDefault: 'open' })
+    expect(openStates(await mountSection())).toEqual([false, false, false])
+  })
+})
+
+describe('ArtifactPanel — chế độ accordion (AC-2a)', () => {
+  const MD_THREE = '## A\nnội dung A\n\n## B\nnội dung B\n\n## C\nnội dung C\n'
+
+  function openStates(w: Awaited<ReturnType<typeof mountPanel>>): boolean[] {
+    return w.findAll('.block-item').map((d) => (d.element as HTMLDetailsElement).open)
+  }
+
+  async function toggleBlock(
+    w: Awaited<ReturnType<typeof mountPanel>>,
+    i: number,
+    open: boolean,
+  ) {
+    const item = w.findAll('.block-item')[i]
+    ;(item.element as HTMLDetailsElement).open = open
+    await item.trigger('toggle')
+  }
+
+  function toggleAllButton(w: Awaited<ReturnType<typeof mountPanel>>) {
+    return w
+      .findAll('button')
+      .find((b) => ['Mở tất cả block', 'Đóng tất cả block'].includes(b.attributes('title') ?? ''))
+  }
+
+  beforeEach(() => {
+    vi.mocked(fetchArtifact).mockImplementation(async () => ({ content: MD_THREE, mtime: 1 }))
+  })
+
+  it('TC-09: mở A rồi mở B ⇒ chỉ còn B, và trạng thái đứng yên (E5)', async () => {
+    seedSettings('block')
+    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+
+    await toggleBlock(w, 0, true)
+    expect(openStates(w)).toEqual([true, false, false])
+
+    await toggleBlock(w, 1, true)
+    expect(openStates(w)).toEqual([false, true, false])
+
+    // Hội tụ: `toggle` vọng lại từ A bị đóng chỉ `delete`, không mở thêm gì.
+    await flushPromises()
+    expect(openStates(w)).toEqual([false, true, false])
+  })
+
+  it('TC-10: bấm lại chính section đang mở ⇒ không còn section nào mở (E4)', async () => {
+    seedSettings('block')
+    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+
+    await toggleBlock(w, 1, true)
+    await toggleBlock(w, 1, false)
+
+    expect(openStates(w)).toEqual([false, false, false])
+  })
+
+  it('TC-11: tài liệu 1 section ⇒ mở/đóng bình thường', async () => {
+    vi.mocked(fetchArtifact).mockImplementation(async () => ({
+      content: '## Chỉ một\nnội dung\n',
+      mtime: 1,
+    }))
+    seedSettings('block')
+    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+    expect(openStates(w)).toEqual([false])
+
+    await toggleBlock(w, 0, true)
+    expect(openStates(w)).toEqual([true])
+
+    await toggleBlock(w, 0, false)
+    expect(openStates(w)).toEqual([false])
+  })
+
+  it('TC-12: tài liệu rỗng ⇒ không block nào, không nút gập/bung, không lỗi', async () => {
+    vi.mocked(fetchArtifact).mockImplementation(async () => ({ content: '', mtime: 1 }))
+    seedSettings('block')
+    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+
+    expect(w.findAll('.block-item')).toHaveLength(0)
+    expect(toggleAllButton(w)).toBeUndefined()
+    expect(w.find('.art-view').exists()).toBe(true)
+  })
+
+  // TC-13/E7: "mở tất cả" mâu thuẫn trực tiếp với "chỉ mở một" — nút phải biến mất,
+  // và khi đó TC-10 là lối duy nhất còn lại để thu gọn toàn bộ tài liệu.
+  it('TC-13: accordion bật ⇒ KHÔNG có điều khiển gập/bung toàn bộ; tắt thì có lại (TC-07)', async () => {
+    seedSettings('block')
+    expect(toggleAllButton(await mountPanel({ taskId: 'T1', name: 'design.md' }))).toBeUndefined()
+
+    seedSettings('block', { artifactSectionAccordion: false, artifactSectionDefault: 'collapsed' })
+    expect(toggleAllButton(await mountPanel({ taskId: 'T1', name: 'design.md' }))).toBeDefined()
+  })
+
+  /**
+   * TC-19 — đổi setting khi đang mở tài liệu: áp từ lần nạp kế tiếp, KHÔNG phá chỗ
+   * đang đọc. `accordionMode` là computed nên quy tắc bấm đổi ngay (b), còn tập
+   * section đang mở giữ nguyên tới lần `load()` sau (a).
+   */
+  it('TC-19: bật accordion giữa phiên ⇒ không đóng sập, nhưng lần bấm kế đã theo accordion', async () => {
+    seedSettings('block', { artifactSectionAccordion: false, artifactSectionDefault: 'expanded' })
+    const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+    expect(openStates(w)).toEqual([true, true, true])
+
+    // (a) người dùng bật accordion trong Settings rồi quay lại viewer
+    useAppSettings().update({ artifactSectionAccordion: true })
+    await flushPromises()
+    expect(openStates(w)).toEqual([true, true, true])
+
+    // (b) từ lần bấm này trở đi chỉ còn một section mở
+    await toggleBlock(w, 1, true)
+    expect(openStates(w)).toEqual([false, true, false])
+  })
+})
+
+/**
+ * Nhóm F — ranh giới sống của task: **nạp lại cùng tài liệu** thì GIỮ, **đổi sang
+ * tài liệu khác** thì ÁP LẠI. Cài đặt sai ranh giới này thì đúng một trong hai
+ * nhóm dưới đây đỏ (E8).
+ */
+describe('ArtifactPanel — nạp lại cùng tài liệu ⇒ giữ nguyên (TC-23…TC-25)', () => {
+  const MD_THREE = '## A\nnội dung A\n\n## B\nnội dung B\n\n## C\nnội dung C\n'
+  const MD_THREE_V2 = '## A\nnội dung A đã sửa\n\n## B\nnội dung B\n\n## C\nnội dung C\n'
+  const MD_TWO = '## A\nnội dung A\n\n## B\nnội dung B\n'
+
+  const task1 = { task_id: 'T1', artifacts: { 'design.md': { exists: true, mtime: 1 } } }
+
+  function openStates(w: any): boolean[] {
+    return w.findAll('.block-item').map((d: any) => (d.element as HTMLDetailsElement).open)
+  }
+
+  async function toggleBlock(w: any, i: number, open: boolean) {
+    const item = w.findAll('.block-item')[i]
+    ;(item.element as HTMLDetailsElement).open = open
+    await item.trigger('toggle')
+  }
+
+  async function mountDesign(task: Record<string, unknown> = task1) {
+    const w = mount(ArtifactPanel, {
+      props: { task, openArtifact: { taskId: 'T1', name: 'design.md' }, projectId: null },
+      global: { stubs: { MarkdownTextEditor: MarkdownTextEditorStub } },
+    })
+    await flushPromises()
+    return w
+  }
+
+  /** Giả lập polling: file đổi ngoài UI ⇒ `task.artifacts[].mtime` mới ⇒ panel tự `load()`. */
+  async function pollReload(w: any, next: { content: string; mtime: number }) {
+    vi.mocked(fetchArtifact).mockResolvedValue(next)
+    await w.setProps({
+      task: { ...task1, artifacts: { 'design.md': { exists: true, mtime: next.mtime } } },
+    })
+    await flushPromises()
+  }
+
+  beforeEach(() => {
+    vi.mocked(fetchArtifact).mockResolvedValue({ content: MD_THREE, mtime: 1 })
+  })
+
+  /**
+   * TC-23 · E6 — đây cũng là case bảo vệ chính bản sửa cờ seed trong `load()`: cờ
+   * được BẬT theo khoá tài liệu, nên một lần `load()` mới của **cùng** khoá không
+   * được seed lại. Seed tràn sang đây là người đọc mất chỗ đang đọc mỗi lần file đổi.
+   */
+  it('TC-23: accordion bật, file đổi ngoài UI ⇒ section đang mở vẫn mở', async () => {
+    seedSettings('block')
+    const w = await mountDesign()
+
+    await toggleBlock(w, 1, true)
+    expect(openStates(w)).toEqual([false, true, false])
+
+    await pollReload(w, { content: MD_THREE_V2, mtime: 2 })
+
+    expect(w.text()).toContain('nội dung A đã sửa')
+    expect(openStates(w)).toEqual([false, true, false])
+  })
+
+  it('TC-23: accordion tắt, đã tự gập bớt ⇒ nạp lại KHÔNG bung lại hết', async () => {
+    seedSettings('block', SECTION_LEGACY)
+    const w = await mountDesign()
+
+    await toggleBlock(w, 0, false)
+    await toggleBlock(w, 2, false)
+    expect(openStates(w)).toEqual([false, true, false])
+
+    await pollReload(w, { content: MD_THREE_V2, mtime: 2 })
+
+    expect(openStates(w)).toEqual([false, true, false])
+  })
+
+  // TC-24/E9: giữ trạng thái theo thứ tự section chỉ hợp lệ khi tập còn bao được.
+  it('TC-24: nạp lại với ÍT section hơn ⇒ index thừa bị loại, không có section ma', async () => {
+    seedSettings('block', SECTION_LEGACY)
+    const w = await mountDesign()
+    expect(openStates(w)).toEqual([true, true, true])
+
+    await pollReload(w, { content: MD_TWO, mtime: 2 })
+
+    expect(w.findAll('.block-item')).toHaveLength(2)
+    expect(openStates(w)).toEqual([true, true])
+  })
+
+  it('TC-25: lưu inline edit một section ⇒ không bung lại toàn bộ tài liệu', async () => {
+    seedSettings('block')
+    vi.mocked(saveArtifact).mockImplementation(async (_t, _n, content) => ({
+      content,
+      mtime: 9,
+    }))
+    const w = await mountDesign()
+
+    await toggleBlock(w, 1, true)
+    expect(openStates(w)).toEqual([false, true, false])
+
+    await w.findAll('.block-content.md-editable')[1].trigger('dblclick')
+    await flushPromises()
+    // Sửa block giữ nguyên heading — bỏ heading là tự gộp section, đổi mất phép đo.
+    await w.get('.mock-md-editor').setValue('## B\nnội dung B đã sửa')
+    await w.get('.mock-md-editor').trigger('blur')
+    await flushPromises()
+
+    expect(saveArtifact).toHaveBeenCalled()
+    expect(openStates(w)).toEqual([false, true, false])
+  })
+})
+
+describe('ArtifactPanel — đổi sang tài liệu khác ⇒ áp lại mặc định (TC-26, TC-27)', () => {
+  const MD_A = '## A1\nnội dung A1\n\n## A2\nnội dung A2\n\n## A3\nnội dung A3\n'
+  const MD_B = '## B1\nnội dung B1\n\n## B2\nnội dung B2\n\n## B3\nnội dung B3\n'
+
+  /**
+   * ⚠️ `mtime` của hai artifact **khác nhau** — đây mới là ca thật. Đổi artifact làm
+   * watcher `openArtifact` và watcher `mtime` cùng gọi `load()` cho một khoá trong
+   * cùng một flush; `mtime` bằng nhau thì `load()` thứ hai không xảy ra và ca hai-lần-load
+   * bị che mất hoàn toàn.
+   */
+  const pairTask = {
+    task_id: 'T1',
+    artifacts: {
+      'a.md': { exists: true, mtime: 1 },
+      'b.md': { exists: true, mtime: 77 },
+    },
+  }
+
+  function openStates(w: any): boolean[] {
+    return w.findAll('.block-item').map((d: any) => (d.element as HTMLDetailsElement).open)
+  }
+
+  async function toggleBlock(w: any, i: number, open: boolean) {
+    const item = w.findAll('.block-item')[i]
+    ;(item.element as HTMLDetailsElement).open = open
+    await item.trigger('toggle')
+  }
+
+  function mockPair(contentB = MD_B) {
+    vi.mocked(fetchArtifact).mockImplementation(async (_taskId: string, name: string) =>
+      name === 'b.md' ? { content: contentB, mtime: 77 } : { content: MD_A, mtime: 1 },
+    )
+  }
+
+  async function mountA() {
+    const w = mount(ArtifactPanel, {
+      props: { task: pairTask, openArtifact: { taskId: 'T1', name: 'a.md' }, projectId: null },
+      global: { stubs: { MarkdownTextEditor: MarkdownTextEditorStub } },
+    })
+    await flushPromises()
+    return w
+  }
+
+  /** 3 cấu hình của TC-21/TC-26 → trạng thái mong đợi khi tài liệu mới mở ra. */
+  const CONFIGS: Array<[string, Record<string, unknown> | undefined, boolean]> = [
+    ['sạch / accordion bật', undefined, false],
+    ['accordion tắt + mở tất cả', { artifactSectionAccordion: false, artifactSectionDefault: 'expanded' }, true],
+    ['accordion tắt + đóng tất cả', { artifactSectionAccordion: false, artifactSectionDefault: 'collapsed' }, false],
+  ]
+
+  beforeEach(() => {
+    mockPair()
+  })
+
+  it.each(CONFIGS)('TC-26 (%s): trạng thái tay của X không rò sang Y', async (_label, prefs, expected) => {
+    seedSettings('block', prefs)
+    const w = await mountA()
+    expect(openStates(w)).toEqual([expected, expected, expected])
+
+    // Người dùng đảo trạng thái bằng tay trên a.md.
+    await toggleBlock(w, 0, !expected)
+    expect(openStates(w)[0]).toBe(!expected)
+
+    await w.setProps({ openArtifact: { taskId: 'T1', name: 'b.md' } })
+    await flushPromises()
+
+    expect(w.text()).toContain('nội dung B1')
+    expect(openStates(w)).toEqual([expected, expected, expected])
+  })
+
+  /**
+   * Hai artifact nội dung **byte-identical**, `mtime` khác nhau. `watch(content)` chỉ
+   * chạy khi giá trị ĐỔI (design §3.2), nên gán một chuỗi trùng khít không bắn watcher:
+   * đây là ca duy nhất phân biệt "seed theo khoá tài liệu" với "seed theo nội dung".
+   */
+  it('TC-26: nội dung trùng khít từng byte vẫn seed lại theo tài liệu', async () => {
+    mockPair(MD_A) // b.md có nội dung y hệt a.md
+    seedSettings('block', SECTION_LEGACY)
+    const w = await mountA()
+
+    await toggleBlock(w, 1, false)
+    expect(openStates(w)).toEqual([true, false, true])
+
+    await w.setProps({ openArtifact: { taskId: 'T1', name: 'b.md' } })
+    await flushPromises()
+
+    expect(openStates(w)).toEqual([true, true, true])
+  })
+
+  /**
+   * TC-19(c) — nhánh cuối của "đổi setting giữa phiên đang đọc": trạng thái đang đọc
+   * được giữ (TC-19 a/b ở nhóm accordion), nhưng tài liệu MỞ KẾ TIẾP phải theo setting
+   * mới. Chạy trên cặp artifact khác `mtime` để không né mất ca hai-lần-`load()`.
+   */
+  it('TC-19c: bật accordion giữa phiên ⇒ tài liệu mở kế tiếp đóng hết', async () => {
+    seedSettings('block', SECTION_LEGACY)
+    const w = await mountA()
+    expect(openStates(w)).toEqual([true, true, true])
+
+    useAppSettings().update({ artifactSectionAccordion: true })
+    await flushPromises()
+    expect(openStates(w)).toEqual([true, true, true]) // không đóng sập chỗ đang đọc
+
+    await w.setProps({ openArtifact: { taskId: 'T1', name: 'b.md' } })
+    await flushPromises()
+
+    expect(openStates(w)).toEqual([false, false, false])
+  })
+
+  it('TC-27: đổi tài liệu khi đang sửa dở ⇒ không crash, Y mở ở trạng thái mặc định', async () => {
+    seedSettings('block')
+    const w = await mountA()
+
+    await toggleBlock(w, 0, true)
+    await w.findAll('.block-content.md-editable')[0].trigger('dblclick')
+    await flushPromises()
+    expect(w.find('.mock-md-editor').exists()).toBe(true)
+
+    await w.setProps({ openArtifact: { taskId: 'T1', name: 'b.md' } })
+    await flushPromises()
+
+    expect(w.find('.mock-md-editor').exists()).toBe(false)
+    expect(w.text()).toContain('nội dung B1')
+    expect(openStates(w)).toEqual([false, false, false])
+  })
+})
+
+describe('ArtifactPanel — chế độ xem toàn văn (TC-30)', () => {
+  const MD_THREE = '## A\nnội dung A\n\n## B\nnội dung B\n\n## C\nnội dung C\n'
+
+  beforeEach(() => {
+    vi.mocked(fetchArtifact).mockImplementation(async () => ({ content: MD_THREE, mtime: 1 }))
+  })
+
+  it('2 setting không gây tác dụng phụ ở chế độ toàn văn, quay lại block vẫn áp đúng', async () => {
+    for (const [prefs, expected] of [
+      [undefined, false],
+      [{ artifactSectionAccordion: false, artifactSectionDefault: 'expanded' }, true],
+      [{ artifactSectionAccordion: false, artifactSectionDefault: 'collapsed' }, false],
+    ] as Array<[Record<string, unknown> | undefined, boolean]>) {
+      seedSettings('full', prefs)
+      const w = await mountPanel({ taskId: 'T1', name: 'design.md' })
+
+      expect(w.find('.block-list').exists()).toBe(false)
+      expect(w.text()).toContain('nội dung A')
+      expect(
+        w
+          .findAll('button')
+          .some((b) => ['Mở tất cả block', 'Đóng tất cả block'].includes(b.attributes('title') ?? '')),
+      ).toBe(false)
+
+      await w.find('.btn-view-mode').trigger('click')
+      await flushPromises()
+
+      expect(
+        w.findAll('.block-item').map((d) => (d.element as HTMLDetailsElement).open),
+      ).toEqual([expected, expected, expected])
+    }
   })
 })
