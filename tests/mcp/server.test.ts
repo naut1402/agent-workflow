@@ -63,7 +63,10 @@ afterEach(() => {
 })
 
 const payload = (r: any) => JSON.parse(r.content[0].text)
-const codeOf = (r: any) => r.structuredContent?.error?.code
+// Hợp đồng lỗi (bản vá B1, commit 900d78d): mã lỗi ở `_meta.error`, KHÔNG phải
+// `structuredContent.error` — khoá `structuredContent` ở nhánh lỗi là đúng cái
+// làm validator phía client ném `McpError -32602` (§5.1 của test-spec).
+const codeOf = (r: any) => r._meta?.error?.code
 
 const REPO_ROOT = path.resolve(import.meta.dir, '..', '..')
 
@@ -144,20 +147,33 @@ describe('envelope ok / fail — hợp đồng cũ và mới song song (D6/D14)'
     expect('structuredContent' in fail('boom')).toBe(false)
   })
 
-  test('TC-04: fail(code, message) giữ nguyên text, thêm mã máy đọc', () => {
+  test('TC-04: fail(code, message) giữ nguyên text, thêm mã máy đọc ở _meta', () => {
     const res = fail('not_found', 'unknown project: zzz')
+    // Vế 1 — tương thích ngược (D14): client 1.1.x đọc `content[0].text` phải
+    // thấy đúng chuỗi cũ. KHÔNG tiền tố `not_found:` (chọn D1', không phải D2').
     expect(res.isError).toBe(true)
-    // KHÔNG có tiền tố `not_found:` trong text (chọn D1', không phải D2').
     expect(res.content[0].text).toBe('unknown project: zzz')
-    expect(res.structuredContent.error).toEqual({
+    // Vế 2 — mã máy đọc (AC-07/L10). Deep-equal cả object để bắt cả ca thiếu
+    // `message` lẫn ca thừa khoá.
+    expect(res._meta.error).toEqual({
       code: 'not_found',
       message: 'unknown project: zzz',
     })
   })
 
+  test('TC-04b: nhánh lỗi hai-tham-số KHÔNG có khoá structuredContent', () => {
+    // Assert quan trọng nhất của nhóm envelope. Chính sự CÓ MẶT của khoá này ở
+    // nhánh lỗi làm `client/index.js:508` ném `McpError -32602` (hồi quy B1).
+    for (const res of [fail('not_found', 'unknown project: zzz'), fail('invalid_input', 'bad path')]) {
+      expect('structuredContent' in res).toBe(false)
+    }
+  })
+
   test('TC-05: bốn mã lỗi đi nguyên vẹn', () => {
     for (const code of ['not_found', 'invalid_input', 'forbidden_in_mode', 'internal'] as const) {
-      expect(fail(code, 'x').structuredContent.error.code).toBe(code)
+      const res = fail(code, 'x')
+      expect(res._meta.error.code).toBe(code)
+      expect('structuredContent' in res).toBe(false)
     }
   })
 
@@ -167,10 +183,12 @@ describe('envelope ok / fail — hợp đồng cũ và mới song song (D6/D14)'
     const one = fail(undefined)
     expect(one.content[0].text).toBe('undefined')
     expect('structuredContent' in one).toBe(false)
+    expect('_meta' in one).toBe(false)
     // Hai tham số với tham số thứ hai `undefined` → overload HAI tham số (Q1).
     const two = fail('internal', undefined)
     expect(two.content[0].text).toBe('undefined')
-    expect(two.structuredContent.error).toEqual({ code: 'internal', message: 'undefined' })
+    expect(two._meta.error).toEqual({ code: 'internal', message: 'undefined' })
+    expect('structuredContent' in two).toBe(false)
   })
 })
 
@@ -237,7 +255,10 @@ describe('get_knowledge_bundle', () => {
     await withInMemoryClient(async (client) => {
       const res: any = await client.callTool({ name: 'get_knowledge_bundle', arguments: { ids } })
       expect(res.isError).toBe(true)
-      expect('structuredContent' in res).toBe(false)
+      expect(res.structuredContent).toBeUndefined()
+      // Tầng T1 (validate input của SDK): handler chưa chạy nên không có
+      // `_meta.error` nào được dựng — đó là dấu phân biệt T1 với T2.
+      expect(res._meta?.error).toBeUndefined()
       expect(String(res.content[0].text)).toMatch(/\b(most|max|large|many|element)/i)
     })
   })
@@ -616,21 +637,58 @@ describe('audit + event cho đường ghi (L7 / D5)', () => {
   })
 })
 
-// ═══ Nhánh lỗi nhìn từ CLIENT THẬT ════════════════════════════════════════════
+// ═══ TC-22b · nhánh LỖI nhìn từ CLIENT THẬT ═══════════════════════════════════
 
-describe('nhánh lỗi của tool có outputSchema, nhìn từ client thật', () => {
-  test('lỗi phải về dưới dạng CallToolResult đọc được, không phải McpError bị ném', async () => {
-    // AC-07/L10: mục đích của `fail(code, message)` là agent ĐỌC ĐƯỢC mã lỗi để
-    // tự phục hồi. `Client.callTool` (SDK 1.29.0, client/index.js:504) validate
-    // `structuredContent` theo `outputSchema` KỂ CẢ khi `isError` — khác hẳn
-    // phía server, vốn thoát sớm ở `if (result.isError) return`.
-    // Hệ quả: với mọi client đã gọi `tools/list` trước (Claude Code luôn vậy),
-    // 7 tool có `outputSchema` ném `McpError -32602` thay vì trả mã lỗi.
+describe('TC-22b: nhánh lỗi của tool có outputSchema, nhìn từ client thật', () => {
+  test('mọi lượt trả CallToolResult đọc được — không lượt nào ném', async () => {
+    // 🔴 Ca đắt giá nhất của spec: nó đã bắt được hồi quy B1 ở lượt S7 trước.
+    // Gọi THẲNG handler không bao giờ lộ bug — validator nằm ở
+    // `client/index.js:508`, phía client, và chỉ chạy khi client đã biết
+    // `outputSchema`. Vì thế `tools/list` ở dưới là BẮT BUỘC: bỏ nó đi thì bộ
+    // đệm validator rỗng, không có gì validate, và test xanh giả.
+    const root = workspace()
+    fs.mkdirSync(path.join(root, '.dev-state'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'tasks', 'task-a'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, '.dev-state', 'task-a.json'),
+      JSON.stringify({ task_id: 'task-a', current_phase: 'implementer' }),
+    )
+    process.env.DEV_TEAM_ROOT = root
+
+    const cases: Array<[string, Record<string, unknown>, string]> = [
+      ['get_project', { id: 'nope' }, 'not_found'],
+      ['add_project', { path: 'relative/x' }, 'invalid_input'],
+      ['remove_project', { id: 'nope' }, 'not_found'],
+      ['get_task_state', { taskId: 'khong-co' }, 'not_found'],
+      ['list_tasks', { project: 'khong-co' }, 'not_found'],
+      // ⚠️ `taskId` là tham số BẮT BUỘC của `list_artifacts`; spec ghi thiếu nó
+      // ở bảng TC-22b, mà thiếu thì lượt gọi rơi xuống T1 (validate input) và
+      // không còn `_meta.error` nào để đọc — xem test-result.md › Lệch spec.
+      ['list_artifacts', { taskId: 'task-a', project: 'khong-co' }, 'not_found'],
+      ['read_artifact', { taskId: 'task-a', name: '..' }, 'invalid_input'],
+    ]
+
     await withInMemoryClient(async (client) => {
       await client.listTools()
-      const res: any = await client.callTool({ name: 'get_project', arguments: { id: 'nope' } })
-      expect(res.isError).toBe(true)
-      expect(res.structuredContent?.error?.code).toBe('not_found')
+      for (const [name, args, code] of cases) {
+        // "Không ném" phải assert TƯỜNG MINH: lượt gọi ném thì mọi assert sau
+        // nó không bao giờ chạy tới, và ca đỏ sẽ đọc như một lỗi khác hẳn.
+        let res: any
+        try {
+          res = await client.callTool({ name, arguments: args })
+        } catch (err: any) {
+          throw new Error(
+            `${name} ném thay vì trả CallToolResult — hồi quy B1 quay lại: ${err?.code} ${err?.message}`,
+            { cause: err },
+          )
+        }
+        expect(res.isError).toBe(true)
+        expect(typeof res.content[0].text).toBe('string')
+        expect(res._meta?.error?.code).toBe(code)
+        // Khoá `structuredContent` chính là ngòi nổ của B1 — nó phải vắng mặt
+        // sau khi đi qua giao thức, không chỉ ở chỗ dựng envelope (TC-04b).
+        expect(res.structuredContent).toBeUndefined()
+      }
     })
   })
 })

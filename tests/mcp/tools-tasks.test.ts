@@ -127,7 +127,8 @@ function useRoot(spec?: RootSpec): string {
 }
 
 const payload = (r: any) => JSON.parse(r.content[0].text)
-const codeOf = (r: any) => r.structuredContent?.error?.code
+// Hợp đồng lỗi (bản vá B1, commit 900d78d): mã lỗi ở `_meta.error`.
+const codeOf = (r: any) => r._meta?.error?.code
 
 /** Client MCP in-memory — cần khi muốn quan sát TẦNG VALIDATE INPUT. */
 async function withClient<T>(fn: (client: Client) => Promise<T>, mode: 'readonly' | 'full' = 'full'): Promise<T> {
@@ -143,20 +144,37 @@ async function withClient<T>(fn: (client: Client) => Promise<T>, mode: 'readonly
   }
 }
 
-/**
- * Gọi tool qua giao thức mà KHÔNG nạp validator output phía client (không
- * `listTools`), để kết quả nhánh lỗi đi ra dưới dạng `CallToolResult` thay vì
- * bị `Client.callTool` ném — xem test-result.md › Bug phát hiện ở source.
- */
 async function callRaw(client: Client, name: string, args: Record<string, unknown>): Promise<any> {
   return client.callTool({ name, arguments: args })
 }
 
-/** Lời gọi bị chặn ở tầng validate input: có `isError`, KHÔNG có `structuredContent`. */
-function expectRejectedByValidation(res: any) {
+/**
+ * **Tầng T1 — validate input của SDK.** Đầu vào vi phạm `TASK_ID_PATTERN` hoặc
+ * biên schema bị chặn TRƯỚC khi handler chạy.
+ *
+ * ⚠️ Spec mô tả T1 là `callTool` **ném** và bảo assert bằng `.rejects`. Thực tế
+ * SDK 1.29.0 **không ném**: `server/mcp.js` bắt `McpError` của
+ * `validateToolInput` ngay trong cùng `try` rồi trả `createToolError(...)`, nên
+ * client nhận một `CallToolResult` có `isError` và chuỗi `-32602 Input
+ * validation error` nằm TRONG `content[0].text`. Xem test-result.md › Lệch spec.
+ *
+ * Helper nhận cả hai hình dạng — cùng một bất biến "bị chặn ở T1" — nhưng assert
+ * chặt trong từng nhánh: cấm `ok`, cấm `_meta.error` (handler chưa chạy nên
+ * không có envelope `fail` nào được dựng), và thông điệp phải nói về validate.
+ */
+async function expectT1(call: Promise<any>) {
+  let res: any
+  try {
+    res = await call
+  } catch (err: any) {
+    expect(err?.code).toBe(-32602)
+    expect(String(err?.message)).toContain('Input validation error')
+    return
+  }
   expect(res.isError).toBe(true)
-  // Handler chưa chạy ⇒ không có envelope `fail(code, …)` nào được dựng.
-  expect('structuredContent' in res).toBe(false)
+  expect(res.structuredContent).toBeUndefined()
+  expect(res._meta?.error).toBeUndefined()
+  expect(String(res.content[0].text)).toContain('Input validation error')
 }
 
 // ── C.1 · list_tasks ──────────────────────────────────────────────────────────
@@ -296,7 +314,7 @@ describe('list_tasks', () => {
         expect(res.isError).toBeFalsy()
       }
       for (const limit of [0, 201, 1.5, -1]) {
-        expectRejectedByValidation(await callRaw(client, 'list_tasks', { limit }))
+        await expectT1(callRaw(client, 'list_tasks', { limit }))
       }
     })
   })
@@ -368,13 +386,20 @@ describe('get_task_state', () => {
     expect(res.content[0].text.length).toBeGreaterThan(0)
   })
 
-  test('TC-66b: state parse ra không phải object → not_found, không để SDK ném', async () => {
-    useRoot({ states: { 'task-arr': '[1,2,3]' } })
-    const res = await handleGetTaskState({ taskId: 'task-arr' })
-    expect(codeOf(res)).toBe('not_found')
+  test('TC-66b: state parse được nhưng không phải object → not_found', async () => {
+    // "Parse được" ≠ "state hợp lệ". Chỉ chặn ở `try/catch` quanh `JSON.parse`
+    // thì các ca này lọt xuống nhánh `ok` và client nhận `state` sai kiểu so
+    // với `outputSchema` ⇒ `McpError` phía client.
+    useRoot({ states: { 'task-g': '"chuoi"', 'task-arr': '[]', 'task-num': '42' } })
+    for (const taskId of ['task-g', 'task-arr', 'task-num']) {
+      const res = await handleGetTaskState({ taskId })
+      expect(res.isError).toBe(true)
+      expect(codeOf(res)).toBe('not_found')
+      expect(res.structuredContent).toBeUndefined()
+    }
   })
 
-  test('TC-67: path-traversal qua taskId — dạng ../', async () => {
+  test('TC-67: path-traversal qua taskId — dạng ../ (gọi thẳng handler ⇒ T2)', async () => {
     useRoot()
     for (const taskId of ['../../../etc/passwd', '..', '../secret', '.', '../..']) {
       const res = await handleGetTaskState({ taskId })
@@ -383,19 +408,30 @@ describe('get_task_state', () => {
     }
   })
 
-  test('TC-68: path-traversal qua taskId — absolute và separator', async () => {
+  test('TC-67b: cùng các giá trị đó qua tools/call — bị chặn ở T1, không lượt nào ok', async () => {
     useRoot()
+    await withClient(async (client) => {
+      for (const taskId of ['../../../etc/passwd', '..', '../secret', '../..']) {
+        await expectT1(callRaw(client, 'get_task_state', { taskId }))
+      }
+    })
+  })
+
+  test('TC-68: path-traversal qua taskId — absolute và separator (T1 qua tools/call)', async () => {
+    useRoot()
+    // Cả bốn chuỗi đều chứa ký tự ngoài `TASK_ID_PATTERN` (`/`, `\`, `%`) ⇒ T1.
+    await withClient(async (client) => {
+      for (const taskId of ['/etc/passwd', 'a/b', 'a\\b', 'a%2f..%2fb']) {
+        await expectT1(callRaw(client, 'get_task_state', { taskId }))
+      }
+    })
+    // Đường thứ hai — gọi thẳng handler thì T1 không tồn tại, rơi xuống T2.
     for (const taskId of ['/etc/passwd', 'a/b', 'a\\b', 'a%2f..%2fb']) {
       const res = await handleGetTaskState({ taskId })
       expect(res.isError).toBe(true)
       expect(codeOf(res)).toBe('invalid_input')
+      expect(JSON.stringify(res)).not.toContain(SECRET)
     }
-    // Cùng các giá trị đó qua giao thức: bị chặn sớm hơn, ở tầng validate input.
-    await withClient(async (client) => {
-      for (const taskId of ['/etc/passwd', 'a/b', 'a\\b', '..']) {
-        expectRejectedByValidation(await callRaw(client, 'get_task_state', { taskId }))
-      }
-    })
   })
 
   test('TC-69: biên độ dài taskId', async () => {
@@ -403,11 +439,11 @@ describe('get_task_state', () => {
     await withClient(async (client) => {
       for (const len of [1, 200]) {
         const res: any = await callRaw(client, 'get_task_state', { taskId: 'a'.repeat(len) })
-        // Qua được validate, rồi trả not_found vì không có task đó.
-        expect(res.structuredContent?.error?.code).toBe('not_found')
+        // Qua được T1, tới handler, rồi trả not_found vì không có task đó.
+        expect(res._meta?.error?.code).toBe('not_found')
       }
       for (const taskId of ['a'.repeat(201), '']) {
-        expectRejectedByValidation(await callRaw(client, 'get_task_state', { taskId }))
+        await expectT1(callRaw(client, 'get_task_state', { taskId }))
       }
     })
   })
@@ -470,7 +506,7 @@ describe('list_artifacts', () => {
     for (const meta of Object.values<any>(artifacts)) expect(meta.exists).toBe(false)
   })
 
-  test('TC-75: path-traversal qua taskId', async () => {
+  test('TC-75: path-traversal qua taskId (gọi thẳng handler ⇒ T2)', async () => {
     const root = useRoot()
     for (const taskId of ['../..', '/etc', '../../tasks', '..']) {
       const res = await handleListArtifacts({ taskId })
@@ -479,6 +515,15 @@ describe('list_artifacts', () => {
       expect(JSON.stringify(res)).not.toContain('secret.txt')
       expect(JSON.stringify(res)).not.toContain(path.basename(root))
     }
+  })
+
+  test('TC-75b: cùng các giá trị đó qua tools/call — bị chặn ở T1', async () => {
+    useRoot()
+    await withClient(async (client) => {
+      for (const taskId of ['../..', '/etc', '../../tasks']) {
+        await expectT1(callRaw(client, 'list_artifacts', { taskId }))
+      }
+    })
   })
 
   test('TC-76: structuredContent và content[0].text không lệch nhau', async () => {
@@ -535,21 +580,29 @@ describe('read_artifact', () => {
     }
   })
 
-  test('TC-81: path-traversal qua taskId dù name hợp lệ', async () => {
+  test('TC-81: path-traversal qua taskId dù name hợp lệ (T2 ở handler, T1 qua giao thức)', async () => {
     useRoot()
     const res = await handleReadArtifact({ taskId: '../.dev-state', name: 'task-a.json' })
     expect(codeOf(res)).toBe('invalid_input')
     expect(JSON.stringify(res)).not.toContain('current_phase')
+    // Chặn `name` mà quên `taskId` vẫn thoát được thư mục — phủ cả hai tầng.
+    await withClient(async (client) => {
+      await expectT1(callRaw(client, 'read_artifact', { taskId: '../.dev-state', name: 'task-a.json' }))
+    })
   })
 
   test('TC-82: name rỗng hoặc chứa byte null bị từ chối', async () => {
     useRoot()
+    // Gọi thẳng handler: cả hai rơi xuống T2.
     expect(codeOf(await handleReadArtifact({ taskId: 'task-a', name: '' }))).toBe('invalid_input')
     expect(codeOf(await handleReadArtifact({ taskId: 'task-a', name: 'a\0b' }))).toBe('invalid_input')
     await withClient(async (client) => {
-      expectRejectedByValidation(await callRaw(client, 'read_artifact', { taskId: 'task-a', name: '' }))
+      // `name: ''` vi phạm `.min(1)` của schema ⇒ T1.
+      await expectT1(callRaw(client, 'read_artifact', { taskId: 'task-a', name: '' }))
+      // Byte null lọt qua schema ⇒ T2, handler tự chặn.
       const res: any = await callRaw(client, 'read_artifact', { taskId: 'task-a', name: 'a\0b' })
       expect(res.isError).toBe(true)
+      expect(res._meta?.error?.code).toBe('invalid_input')
     })
   })
 
@@ -595,5 +648,12 @@ describe('read_artifact', () => {
     ).toBe('noi dung two\n')
     // Đối chứng: cùng tên file đó KHÔNG có ở project default.
     expect(codeOf(await handleReadArtifact({ taskId: 'task-a', name: 'only-two.md' }))).toBe('not_found')
+
+    // Biến thể phủ định — `project` là id lạ: cùng hợp đồng lỗi với TC-62 trên
+    // cả bốn tool, mã lỗi ở `_meta.error`.
+    expect(codeOf(await handleListTasks({ project: 'khong-co' }))).toBe('not_found')
+    expect(codeOf(await handleGetTaskState({ taskId: 'task-a', project: 'khong-co' }))).toBe('not_found')
+    expect(codeOf(await handleListArtifacts({ taskId: 'task-a', project: 'khong-co' }))).toBe('not_found')
+    expect(codeOf(await handleReadArtifact({ taskId: 'task-a', name: 'x.md', project: 'khong-co' }))).toBe('not_found')
   })
 })
