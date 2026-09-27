@@ -1,6 +1,20 @@
 import { AbstractController } from '../../backend/http/AbstractController.js'
+import { on } from '../../backend/events/index.js'
+import { sseResponse } from '../../backend/http/sseHelper.js'
 import * as logsBusiness from './business/index.js'
 import type { LogType } from '../../shared/log/schema.js'
+
+/** Event vòng đời job nào đẩy sớm snapshot log, thay vì đợi tick interval. */
+const JOB_STREAM_EVENTS = new Set([
+  'job.queued',
+  'job.started',
+  'job.finished',
+  'job.failed',
+  'job.cancelled',
+  'job.awaiting_recovery',
+  'job.retry_scheduled',
+  'job.recovered',
+])
 
 export class LogsController extends AbstractController {
   private biz() {
@@ -38,6 +52,47 @@ export class LogsController extends AbstractController {
     const r = await biz.getJobLog(id)
     if ('error' in r) return this.json(r.status, { error: r.error })
     return this.ok({ id, text: r.text, size: r.size, truncated: r.truncated })
+  }
+
+  /**
+   * SSE thay REST poll. Log là file do tiến trình con ghi (không có event
+   * nguồn cho "vừa ghi thêm dòng") — route tự tail bằng interval nội bộ, event
+   * vòng đời job chỉ đẩy sớm hơn chứ không thay được cho interval.
+   */
+  streamJobLog() {
+    const id = logsBusiness.sanitiseJobId(this.c.req.param('id'))
+    if (!id) return this.badRequest('invalid job id')
+    const biz = this.biz()
+
+    return sseResponse((send) => {
+      let offset = 0
+      const pushDelta = async () => {
+        const r = await biz.getJobLogDelta(id, { offset, waitMs: 0 })
+        if (!r.ok) return
+        offset = r.size
+        send('log', {
+          text: r.text,
+          size: r.size,
+          reset: r.reset,
+          hasMore: r.hasMore,
+          status: 'status' in r ? r.status : undefined,
+          exitCode: 'exitCode' in r ? r.exitCode : null,
+          eof: r.eof,
+        })
+      }
+      const safePushDelta = () => {
+        pushDelta().catch((err) => console.warn('[logs] streamJobLog pushDelta failed:', err))
+      }
+      safePushDelta()
+      const tick = setInterval(safePushDelta, 2500)
+      const offEvents = on('*', (event) => {
+        if (JOB_STREAM_EVENTS.has(event.type)) safePushDelta()
+      })
+      return () => {
+        clearInterval(tick)
+        offEvents()
+      }
+    })
   }
 
   async getTaskJobLog() {
