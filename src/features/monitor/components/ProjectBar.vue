@@ -2,10 +2,15 @@
 // Sidebar project selector + CRUD. Two entry points after title:
 // ＋ local path, Git clone (separate forms under the header).
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { addProject, removeProject } from '../scripts/monitorApi'
 import FolderPickerDialog from '../../../frontend/ui/FolderPickerDialog.vue'
+
+const MENU_GAP = 2
+const VIEWPORT_MARGIN = 8
+const MENU_CAP = 220
+const MENU_MIN = 80
 
 const { t } = useI18nHelpers()
 
@@ -30,6 +35,9 @@ const pickerOpen = ref(false)
 const selectOpen = ref(false)
 const selectHovering = ref(false)
 const selectRootRef = ref<HTMLElement | null>(null)
+const triggerRef = ref<HTMLElement | null>(null)
+const menuRef = ref<HTMLElement | null>(null)
+const menuStyle = ref<Record<string, string>>({})
 
 const selectedProject = computed(
   () => props.projects.find((p) => p.id === props.selectedId) ?? null,
@@ -41,6 +49,56 @@ const selectedIndex = computed(() =>
 
 onClickOutside(selectRootRef, () => {
   selectOpen.value = false
+}, { ignore: [menuRef] })
+
+function updateMenuPosition() {
+  if (!selectOpen.value || !triggerRef.value) return
+  const rect = triggerRef.value.getBoundingClientRect()
+
+  const spaceBelow = window.innerHeight - rect.bottom - MENU_GAP - VIEWPORT_MARGIN
+  const spaceAbove = rect.top - MENU_GAP - VIEWPORT_MARGIN
+  const openUp = spaceBelow < MENU_MIN && spaceAbove > spaceBelow
+
+  const available = Math.max(openUp ? spaceAbove : spaceBelow, MENU_MIN)
+
+  menuStyle.value = {
+    left: `${rect.left}px`,
+    width: `${rect.width}px`,
+    maxHeight: `${Math.min(MENU_CAP, available)}px`,
+    ...(openUp
+      ? { bottom: `${window.innerHeight - rect.top + MENU_GAP}px`, top: 'auto' }
+      : { top: `${rect.bottom + MENU_GAP}px`, bottom: 'auto' }),
+  }
+}
+
+let rafId = 0
+function onViewportChange() {
+  if (rafId) return
+  rafId = requestAnimationFrame(() => {
+    rafId = 0
+    updateMenuPosition()
+  })
+}
+function addPositionListeners() {
+  window.addEventListener('resize', onViewportChange)
+  window.addEventListener('scroll', onViewportChange, true)
+}
+function removePositionListeners() {
+  window.removeEventListener('resize', onViewportChange)
+  window.removeEventListener('scroll', onViewportChange, true)
+  if (rafId) {
+    cancelAnimationFrame(rafId)
+    rafId = 0
+  }
+}
+
+watch(selectOpen, (open) => {
+  if (open) {
+    updateMenuPosition()
+    addPositionListeners()
+  } else {
+    removePositionListeners()
+  }
 })
 
 function clearFields() {
@@ -133,6 +191,7 @@ function onSelectLeave() {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onHoverKeydown)
+  removePositionListeners()
 })
 
 async function submitLocal() {
@@ -318,6 +377,7 @@ async function onRemove(project) {
         @wheel.prevent="onSelectWheel"
       >
         <button
+          ref="triggerRef"
           type="button"
           class="project-select-trigger"
           :aria-label="t('monitor.projectBar.selectLabel')"
@@ -332,29 +392,38 @@ async function onRemove(project) {
           </span>
         </button>
 
-        <ul v-if="selectOpen" class="project-select-menu" role="listbox" :aria-label="t('monitor.projectBar.selectLabel')">
-          <li
-            v-for="p in projects"
-            :key="p.id"
-            role="option"
-            class="project-item"
-            :class="{ active: p.id === selectedId }"
-            :aria-selected="p.id === selectedId"
+        <Teleport to="body">
+          <ul
+            v-if="selectOpen"
+            ref="menuRef"
+            class="project-select-menu"
+            :style="menuStyle"
+            role="listbox"
+            :aria-label="t('monitor.projectBar.selectLabel')"
           >
-            <button type="button" class="project-pick" @click="pickProject(p.id)">
-              <span class="project-name">{{ p.name }}</span>
-              <span v-if="p.default" class="project-default-badge">default</span>
-            </button>
-            <button
-              type="button"
-              class="project-remove"
-              :title="t('monitor.projectBar.removeTitle')"
-              :aria-label="t('monitor.projectBar.removeTitle')"
-              :disabled="busy"
-              @click.stop="onRemove(p)"
-            >×</button>
-          </li>
-        </ul>
+            <li
+              v-for="p in projects"
+              :key="p.id"
+              role="option"
+              class="project-item"
+              :class="{ active: p.id === selectedId }"
+              :aria-selected="p.id === selectedId"
+            >
+              <button type="button" class="project-pick" @click="pickProject(p.id)">
+                <span class="project-name">{{ p.name }}</span>
+                <span v-if="p.default" class="project-default-badge">default</span>
+              </button>
+              <button
+                type="button"
+                class="project-remove"
+                :title="t('monitor.projectBar.removeTitle')"
+                :aria-label="t('monitor.projectBar.removeTitle')"
+                :disabled="busy"
+                @click.stop="onRemove(p)"
+              >×</button>
+            </li>
+          </ul>
+        </Teleport>
       </div>
 
       <div class="project-nav">
@@ -503,11 +572,8 @@ async function onRemove(project) {
   overflow: hidden;
 }
 .project-select-menu {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
-  right: 0;
-  z-index: 30;
+  position: fixed;
+  z-index: 50;
   margin: 0;
   padding: 4px;
   list-style: none;
@@ -515,7 +581,6 @@ async function onRemove(project) {
   border: 1px solid var(--border, #2a2a35);
   border-radius: 6px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  max-height: 220px;
   overflow-y: auto;
 }
 .project-nav {
