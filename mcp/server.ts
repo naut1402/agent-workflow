@@ -13,8 +13,9 @@
 //   remove_project { id }                  → { removed: true }
 //   get_project    { id }                  → { project }
 //   get_knowledge_bundle { ids, project? } → { bundle }   (knowledge_inputs → nội dung)
+//   create_qa { taskId, questions, project? } → { ok, path, created } (qa.md dạng chọn đáp án)
 //
-// Design ref: U0001 design.md §4.4.
+// Design ref: U0001 design.md §4.4; T6f61d951 design.md §4.2 (create_qa).
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -22,6 +23,7 @@ import { z } from 'zod'
 import { APP_VERSION } from '../src/backend/configs/appVersion.js'
 import { list, get, add, remove, resolveProjectRoot } from '../src/backend/registry.js'
 import { loadKnowledgeBundle } from '../src/features/knowledge/business/index.js'
+import { createQa } from '../src/features/monitor/business/tasks/index.js'
 
 // Return `any` to stay decoupled from the SDK's literal content-type unions.
 export function ok(payload: unknown): any {
@@ -66,6 +68,33 @@ export async function handleGetKnowledgeBundle({ ids, project }: { ids: string[]
   const root = resolveProjectRoot(project ?? null)
   if (!root) return fail(`unknown project: ${project}`)
   return ok({ bundle: await loadKnowledgeBundle(root, ids) })
+}
+
+/**
+ * Đường vào tạo `qa.md` cho agent không nói HTTP. Song song với
+ * `POST /api/tasks/:id/qa` — cùng gọi `createQa`, nên hai đường không lệch
+ * định dạng "chọn đáp án" với nhau.
+ *
+ * `questions` khai optional field ở type — SDK đã validate đúng schema bắt buộc
+ * trước khi gọi callback, đây chỉ là quirk suy kiểu của `server.tool()` với
+ * mảng object lồng nhau (nested array-of-object narrows properties thành
+ * optional qua `ShapeOutput`/`SchemaOutput`, không phản ánh dữ liệu runtime
+ * thật). `createQa()` tự `safeParse` lại nên vẫn an toàn nếu field thiếu.
+ */
+export async function handleCreateQa({
+  taskId,
+  questions,
+  project,
+}: {
+  taskId: string
+  questions: Array<{ prompt?: string; choices?: string[] }>
+  project?: string
+}): Promise<any> {
+  const root = resolveProjectRoot(project ?? null)
+  if (!root) return fail(`unknown project: ${project}`)
+  const result = await createQa(root, taskId, { questions })
+  if ('error' in result) return fail(result.error)
+  return ok(result)
 }
 
 // ── Server wiring ──────────────────────────────────────────────────────────────
@@ -116,6 +145,27 @@ export function createMcpServer(): McpServer {
       project: z.string().optional().describe('Project id (from list_projects); omit for the default project.'),
     },
     async ({ ids, project }) => handleGetKnowledgeBundle({ ids, project }),
+  )
+
+  server.tool(
+    'create_qa',
+    'Tạo hoặc bổ sung câu hỏi blocking vào qa.md của một task, theo khuôn chọn-đáp-án chuẩn '
+      + '(## Q<n> / **Lựa chọn:** / **Trả lời:**). Dùng thay vì tự viết qa.md bằng tay — đảm bảo '
+      + 'đúng định dạng để QaPanel render được radio.',
+    {
+      taskId: z.string().describe('Task id (thư mục dưới tasks/<id>).'),
+      questions: z
+        .array(
+          z.object({
+            prompt: z.string().describe('Nội dung câu hỏi.'),
+            choices: z.array(z.string()).min(2).max(10).describe('Danh sách đáp án (≥2).'),
+          }),
+        )
+        .min(1)
+        .max(20),
+      project: z.string().optional().describe('Project id; omit cho default project.'),
+    },
+    async ({ taskId, questions, project }) => handleCreateQa({ taskId, questions, project }),
   )
 
   return server

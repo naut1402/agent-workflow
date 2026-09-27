@@ -15,6 +15,8 @@ export const OrchestratorConfig = z
   .object({
     enabled: z.boolean().optional(),
     agent: z.string().optional(),
+    system_prompt: z.string().optional(),
+    knowledge_inputs: z.array(z.string()).optional(),
   })
   .passthrough()
 

@@ -29,6 +29,8 @@ export interface Orchestration {
   /** `enabled && !halted` — điều kiện duy nhất mà guard đọc. */
   active: boolean
   agent?: string
+  system_prompt?: string
+  knowledge_inputs?: string[]
 }
 
 export type StartDecision = { allowed: true } | { allowed: false; status: number; error: string }
@@ -125,6 +127,11 @@ export async function resolveOrchestration(
     halted,
     active: enabled && !halted,
     agent: typeof cfg?.orchestrator?.agent === 'string' ? cfg.orchestrator.agent : undefined,
+    system_prompt:
+      typeof cfg?.orchestrator?.system_prompt === 'string' ? cfg.orchestrator.system_prompt : undefined,
+    knowledge_inputs: Array.isArray(cfg?.orchestrator?.knowledge_inputs)
+      ? cfg.orchestrator.knowledge_inputs.filter((x: unknown) => typeof x === 'string')
+      : undefined,
   }
 }
 

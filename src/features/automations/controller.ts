@@ -1,7 +1,8 @@
 import { joinPath, readdirSync } from '../../backend/lib/fileHelper.js'
 import { AbstractController } from '../../backend/http/AbstractController.js'
 import { emitAudit } from '../../backend/log/store.js'
-import { emitEntity } from '../../backend/events/index.js'
+import { emitEntity, on } from '../../backend/events/index.js'
+import { sseResponse } from '../../backend/http/sseHelper.js'
 import { getConnection, listRunners, providerFamilyOf } from '../runner/business/index.js'
 import { profilesDir } from '../monitor/business/index.js'
 import {
@@ -12,19 +13,26 @@ import {
 } from './schemas/automation.js'
 import * as automationsBusiness from './business/index.js'
 
+/** Event type nào kích hoạt đẩy lại snapshot automations qua SSE. */
+const AUTOMATION_STREAM_EVENTS = new Set([
+  'automation.triggered',
+  'automation.run_succeeded',
+  'automation.run_failed',
+  'entity.created',
+  'entity.updated',
+  'entity.deleted',
+])
+
 /**
  * Automations mode (#233): CRUD rule (triggers[] → actions[]) + run now +
  * history. Config theo project (data root `automations/`); runtime state ở
  * registryHome — xem business/runLedger.ts.
  */
 export class AutomationsController extends AbstractController {
-  async listAutomations() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate.error
-    const { root } = gate
-
+  /** Shared snapshot shape giữa `GET /api/automations` (REST) và `/stream` (SSE). */
+  private automationsSnapshot(root: string) {
     const now = new Date()
-    const automations = automationsBusiness.listAutomations(root).map((rule) => {
+    return automationsBusiness.listAutomations(root).map((rule) => {
       const state = automationsBusiness.getRuleState(this.projectId, rule.id)
       const evaluation = automationsBusiness.evaluateRuleTriggers(rule.triggers, state, now)
       return {
@@ -38,7 +46,34 @@ export class AutomationsController extends AbstractController {
         nextRunAt: evaluation.nextRunAt,
       }
     })
-    return this.ok({ automations })
+  }
+
+  async listAutomations() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    return this.ok({ automations: this.automationsSnapshot(root) })
+  }
+
+  /** SSE thay REST poll — event bus đã đủ (`automation.*`, `entity.*`), không cần interval. */
+  streamAutomations() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const projectId = this.projectId
+
+    return sseResponse((send) => {
+      const pushSnapshot = () => {
+        send('automations', {
+          automations: this.automationsSnapshot(root),
+          runs: automationsBusiness.listRuns(projectId, 50),
+        })
+      }
+      pushSnapshot()
+      return on('*', (event) => {
+        if (AUTOMATION_STREAM_EVENTS.has(event.type)) pushSnapshot()
+      })
+    })
   }
 
   async listEventTypes() {

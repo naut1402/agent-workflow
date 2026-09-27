@@ -2,7 +2,11 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18nHelpers } from '../composables/useI18nHelpers'
 import { useAppSettings } from '../composables/useAppSettings'
-import { resolveArtifactViewMode } from '../configs/appSettings'
+import {
+  resolveArtifactViewMode,
+  resolveArtifactSectionAccordion,
+  resolveArtifactSectionDefault,
+} from '../configs/appSettings'
 import { parseMarkdown, renderMermaid } from '../lib/markdownLib'
 import { buildMarkdownBlocks, fenceYaml } from '../lib/markdownBlocks'
 
@@ -19,7 +23,8 @@ const props = withDefaults(
     content: string
     withFrontmatter?: boolean
     /**
-     * Khoá định danh tài liệu — đổi giá trị này là mở lại mọi block.
+     * Khoá định danh tài liệu — đổi giá trị này là seed lại trạng thái section
+     * theo preference `artifactSection*`.
      *
      * Không dùng `title` làm khoá: title của knowledge entry không duy
      * nhất (chính vì thế driver mới phải thêm hậu tố cho slug khi trùng), nên
@@ -34,8 +39,10 @@ const props = withDefaults(
 const { t } = useI18nHelpers()
 const { settings } = useAppSettings()
 
-// Dùng lại `artifactViewMode` sẵn có thay vì thêm khoá AppSettings riêng.
+// Dùng lại `artifactViewMode` + `artifactSection*` sẵn có thay vì thêm khoá AppSettings riêng.
+// Logic gập section ở đây là bản sao độc lập của ArtifactPanel.vue — sửa một bên thì sửa cả hai.
 const blockMode = ref(resolveArtifactViewMode(settings.value) === 'block')
+const accordionMode = computed(() => resolveArtifactSectionAccordion(settings.value))
 const openBlocks = ref<Set<number>>(new Set())
 const viewRoot = ref<HTMLElement | null>(null)
 
@@ -64,12 +71,15 @@ async function scheduleMermaid() {
 function onBlockToggle(i: number, ev: Event) {
   const el = ev.target as HTMLDetailsElement
   if (el.open) {
-    openBlocks.value.add(i)
+    // Accordion: mở block i ⇒ tập mở chỉ còn {i}. Các block anh em bị Vue đóng sẽ
+    // bắn `toggle` vọng lại, rơi vào nhánh dưới và chỉ `delete` — idempotent, không lặp.
+    openBlocks.value = accordionMode.value ? new Set([i]) : new Set(openBlocks.value).add(i)
     scheduleMermaid()
   } else {
-    openBlocks.value.delete(i)
+    const next = new Set(openBlocks.value)
+    next.delete(i)
+    openBlocks.value = next
   }
-  openBlocks.value = new Set(openBlocks.value) // ép reactivity — cùng pattern ArtifactPanel
 }
 
 function toggleAllBlocks() {
@@ -81,11 +91,14 @@ function toggleAllBlocks() {
   }
 }
 
-// Đổi tài liệu → mở lại tất cả block: index của tài liệu trước không còn cùng ý nghĩa.
+// Đổi tài liệu → seed lại theo preference: index của tài liệu trước không còn cùng ý nghĩa.
 watch(
   () => props.docKey || props.title,
   () => {
-    openBlocks.value = new Set(blocks.value.map((_, i) => i))
+    openBlocks.value =
+      resolveArtifactSectionDefault(settings.value) === 'expanded'
+        ? new Set(blocks.value.map((_, i) => i))
+        : new Set()
   },
   { immediate: true },
 )
@@ -97,7 +110,7 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
   <div class="c-md-view">
     <div class="c-md-toolbar">
       <button
-        v-if="blockMode && blocks.length"
+        v-if="blockMode && blocks.length && !accordionMode"
         type="button"
         class="icon-btn"
         :title="allBlocksOpen ? t('common.markdownView.collapseAll') : t('common.markdownView.expandAll')"

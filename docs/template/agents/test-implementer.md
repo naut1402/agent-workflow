@@ -36,7 +36,7 @@ Vì sao tách: khi test nằm cùng branch với code, mỗi vòng review sửa 
 - `git log --oneline -5` + `git show <commit>` — diff code đã được duyệt
 - Đọc "Rule test" từ chỉ dẫn agent của project — `CLAUDE.md` / `AGENTS.md` ở root repo, rồi file rule test mà hub đó trỏ tới; rule project ưu tiên hơn khi xung đột. Không nguồn nào đọc được thì dùng `write-tests` làm fallback — **không dừng pipeline** chỉ vì thiếu rule project
 
-Thiếu `test-spec.md` → tạo `qa.md`, dừng. **Không** tự đặt case thay thế.
+Thiếu `test-spec.md` → gọi MCP tool `create_qa`, dừng. **Không** tự đặt case thay thế.
 
 ### Bước 2: Đứng trên worktree dòng source, mở dòng test nếu chưa có
 
@@ -132,7 +132,7 @@ Ghi `.dev-team-agent/tasks/<task-id>/test-result.md`:
    - Không có mục → bỏ qua.
 4. Khi hạng mục **NG**:
    - Không phải blocking → **tự healing** trong scope phase rồi mới báo DONE.
-   - Blocking (cần người quyết) → tạo `qa.md` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
+   - Blocking (cần người quyết) → gọi MCP tool `create_qa` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
 5. Không nhúng checklist đặc thù repo vào agent.
 
 ## Kết quả trả về

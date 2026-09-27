@@ -11,6 +11,7 @@ import {
 } from '../../../../src/features/orchestrator/business/decisionLoop.js'
 import { DECISION_SENTINEL } from '../../../../src/features/orchestrator/schemas/orchestrator.js'
 import { listJobs } from '../../../../src/features/runner/business/index.js'
+import { createFileDriver } from '../../../../src/features/knowledge/business/fileDriver.js'
 
 // Bảng quyết định §4.2.4 + các bất biến chống vòng lặp. Chấm bằng event phát ra
 // (`orchestrator.dispatched` / `orchestrator.halted`) — đúng bề mặt mà
@@ -679,6 +680,148 @@ describe('lượt agent hỏng ⇒ pipeline KHÔNG kẹt (TC-35)', () => {
       { status: 'succeeded', stdout: `${DECISION_SENTINEL} {khong-phai-json` },
     )
     await handleEvent(ev('job.finished', { jobId: id, taskId: 'V3', devTeamRoot: root }))
+    expect(dispatched()).toHaveLength(0)
+  })
+})
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * T8eb14482 — cấu hình `orchestrator.system_prompt`/`knowledge_inputs`.
+ *
+ * `writePipeline()` của file này chỉ nhận `enabled` + agent cố định, nên các
+ * case dưới đây ghi `pipeline.yaml` riêng thay vì mở rộng hàm chung.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+function writePipelineWithOrchConfig(extra: string) {
+  fs.writeFileSync(
+    path.join(root, 'pipeline.yaml'),
+    [
+      'version: 1',
+      `orchestrator: { enabled: true, agent: "a:orch", ${extra} }`,
+      'steps:',
+      '  - { id: implementer, name: Implement, agent: "a:impl" }',
+      '  - { id: reviewer, name: Review, agent: "a:rev", hitl: { mode: manual, gate_id: hitl-review } }',
+    ].join('\n'),
+    'utf8',
+  )
+}
+
+describe('cấu hình orchestrator (system_prompt/knowledge_inputs) — T8eb14482', () => {
+  test('TC-CFG-01: system_prompt trong pipeline.yaml ⇒ userPrompt của lượt mới chứa đúng nội dung', async () => {
+    writePipelineWithOrchConfig(
+      'system_prompt: "Review có PO thì tự quay lại implementer để xử lý tiếp, không dừng chờ người."',
+    )
+    seedTask('CFG1', { current_phase: 'reviewer' })
+    await handleEvent(ev('orchestrator.start_requested', { taskId: 'CFG1', devTeamRoot: root }))
+
+    const turns = turnsOf('CFG1')
+    expect(turns).toHaveLength(1)
+    expect(turns[0].userPrompt).toContain(
+      'Review có PO thì tự quay lại implementer để xử lý tiếp, không dừng chờ người.',
+    )
+  })
+
+  test('TC-CFG-02: pipeline.yaml không khai 2 field mới ⇒ prompt không có phần hướng dẫn/knowledge bổ sung', async () => {
+    writePipeline(true) // pipeline chuẩn của suite — không có system_prompt/knowledge_inputs
+    seedTask('CFG2', { current_phase: 'reviewer' })
+    await handleEvent(ev('orchestrator.start_requested', { taskId: 'CFG2', devTeamRoot: root }))
+
+    const turns = turnsOf('CFG2')
+    expect(turns).toHaveLength(1)
+    expect(turns[0].userPrompt).not.toContain('Hướng dẫn bổ sung')
+    expect(turns[0].userPrompt).not.toContain('## Knowledge')
+  })
+
+  test('TC-CFG-03: knowledge_inputs trộn id hợp lệ + không tồn tại ⇒ không crash, cả hai phần đều thấy được', async () => {
+    await createFileDriver(root).write({
+      slug: 'huong-dan-po',
+      scope: 'project',
+      content: 'Nội dung knowledge hợp lệ về xử lý PO.',
+    })
+    writePipelineWithOrchConfig('knowledge_inputs: ["project/huong-dan-po", "project/khong-ton-tai"]')
+    seedTask('CFG3', { current_phase: 'reviewer' })
+    await handleEvent(ev('orchestrator.start_requested', { taskId: 'CFG3', devTeamRoot: root }))
+
+    const turns = turnsOf('CFG3')
+    expect(turns).toHaveLength(1)
+    expect(turns[0].userPrompt).toContain('Nội dung knowledge hợp lệ về xử lý PO.')
+    expect(turns[0].userPrompt).toContain('not found')
+  })
+})
+
+// TC-AUTO-01/02 — khi orchestrator có system_prompt hướng dẫn xử lý case lặp,
+// một quyết định hợp lệ ở gate_rejected/job_failed phải dispatch bình thường,
+// KHÔNG bị coi là bất thường hay bị chặn bởi việc mới thêm config. Đây là cơ
+// chế MÀ auto-navigate dựa vào (agent đọc guidance rồi trả quyết định) —
+// output thật của LLM không tất định nên không mô phỏng được trong unit test;
+// phần "agent có tuân theo guidance hay không" ghi ở test-result.md mục kiểm
+// chứng thủ công.
+describe('TC-AUTO-01/02 — quyết định hợp lệ ở gate_rejected/job_failed vẫn dispatch bình thường khi có guidance', () => {
+  test('TC-AUTO-01: review có PO (gate_rejected) + system_prompt cấu hình ⇒ quyết định resume implementer được dispatch, không halt', async () => {
+    writePipelineWithOrchConfig('system_prompt: "Review có PO thì quay lại implementer."')
+    seedTask('AUTO1')
+    const id = writeJob(
+      'auto1',
+      { taskId: 'AUTO1', orchestratorJob: true, orchestratorTrigger: 'gate_rejected' },
+      {
+        status: 'succeeded',
+        stdout: `${DECISION_SENTINEL} {"action":"start","stepId":"implementer","reason":"review có PO, quay lại xử lý"}`,
+      },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'AUTO1', devTeamRoot: root }))
+    expect(haltReasons()).toHaveLength(0)
+    expect(dispatched().filter((e) => e.payload.stepId === 'implementer')).toHaveLength(1)
+  })
+
+  test('TC-AUTO-02: test phát hiện bug (job_failed) + system_prompt cấu hình ⇒ quyết định resume implementer được dispatch, không halt', async () => {
+    writePipelineWithOrchConfig('system_prompt: "Test phát hiện bug thì quay lại implementer để sửa."')
+    seedTask('AUTO2')
+    const id = writeJob(
+      'auto2',
+      { taskId: 'AUTO2', orchestratorJob: true, orchestratorTrigger: 'job_failed' },
+      {
+        status: 'succeeded',
+        stdout: `${DECISION_SENTINEL} {"action":"start","stepId":"implementer","reason":"test phát hiện bug, quay lại sửa"}`,
+      },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'AUTO2', devTeamRoot: root }))
+    expect(haltReasons()).toHaveLength(0)
+    expect(dispatched().filter((e) => e.payload.stepId === 'implementer')).toHaveLength(1)
+  })
+
+  // Edge case của TC-AUTO-01/02: không cấu hình system_prompt ⇒ giữ hành vi cũ
+  // (không phải hồi quy) — đã phủ bởi describe TC-SAFE ngay dưới đây và bởi
+  // "lượt agent hỏng ⇒ pipeline KHÔNG kẹt (TC-35)" phía trên (không có config
+  // orchestrator mới nào trong các case đó).
+})
+
+// TC-SAFE-01/02 — bất biến an toàn: dù orchestrator ĐÃ có system_prompt/
+// knowledge_inputs cấu hình cho đúng case gate_rejected/job_failed, output
+// hỏng/rỗng của agent quyết định vẫn phải halt — cấu hình mới không được che
+// mất guard này (giữ nguyên `FALLBACK_TRIGGERS`/`recoverFromBadTurn`, D1).
+describe('TC-SAFE-01/02 — guard halt KHÔNG bị cấu hình orchestrator mới che mất', () => {
+  test('TC-SAFE-01: gate_rejected, có system_prompt, JSON hỏng ⇒ vẫn halt', async () => {
+    writePipelineWithOrchConfig('system_prompt: "Review có PO thì quay lại implementer."')
+    seedTask('SAFE1', { current_phase: 'reviewer' })
+    const id = writeJob(
+      'safe1',
+      { taskId: 'SAFE1', orchestratorJob: true, orchestratorTrigger: 'gate_rejected' },
+      { status: 'succeeded', stdout: `${DECISION_SENTINEL} {khong-phai-json` },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'SAFE1', devTeamRoot: root }))
+    expect(haltReasons().some((r) => r.includes('invalid decision'))).toBe(true)
+    expect(dispatched().filter((e) => e.payload.action === 'start')).toHaveLength(0)
+  })
+
+  test('TC-SAFE-02: job_failed, có system_prompt, output rỗng ⇒ vẫn halt', async () => {
+    writePipelineWithOrchConfig('system_prompt: "Test phát hiện bug thì quay lại implementer."')
+    seedTask('SAFE2')
+    const id = writeJob(
+      'safe2',
+      { taskId: 'SAFE2', orchestratorJob: true, orchestratorTrigger: 'job_failed' },
+      { status: 'succeeded' },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'SAFE2', devTeamRoot: root }))
+    expect(haltReasons()).toContain('decision output unavailable')
     expect(dispatched()).toHaveLength(0)
   })
 })
