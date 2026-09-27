@@ -99,6 +99,30 @@ describe('collectTasks', () => {
     expect(await collectTasks(await tmp())).toEqual([])
   })
 
+  test('has_qa false khi task đã hoàn thành (completed và/hoặc archived), true khi đang chạy dở (TC-B1/B2/B3/B4/B5)', async () => {
+    const root = await tmp()
+    await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })
+    await fs.writeFile(path.join(root, '.dev-state', 'C1.json'), '{"current_phase":"completed"}')
+    await fs.writeFile(path.join(root, '.dev-state', 'C2.json'), '{"current_phase":"design","archived":true}')
+    await fs.writeFile(path.join(root, '.dev-state', 'C3.json'), '{"current_phase":"completed","archived":true}')
+    await fs.writeFile(path.join(root, '.dev-state', 'C4.json'), '{"current_phase":"design"}')
+    await fs.writeFile(path.join(root, '.dev-state', 'C5.json'), '{"current_phase":"completed"}')
+    for (const id of ['C1', 'C2', 'C3', 'C4']) {
+      await fs.mkdir(path.join(root, 'tasks', id), { recursive: true })
+      await fs.writeFile(path.join(root, 'tasks', id, 'qa.md'), '## Q1\n?\n\n**Lựa chọn:**\n- A. x\n- B. y\n\n**Trả lời:**')
+    }
+    // C5: completed, không có qa.md nào — case đã đúng từ trước, giữ nguyên.
+
+    const tasks = await collectTasks(root)
+    const byId = (id: string) => tasks.find((t) => t.task_id === id)!
+
+    expect(byId('C1').has_qa).toBe(false) // TC-B1: completed, còn QA chưa trả lời
+    expect(byId('C2').has_qa).toBe(false) // TC-B2: archived (chưa completed), còn QA chưa trả lời
+    expect(byId('C3').has_qa).toBe(false) // TC-B3: completed + archived cùng lúc
+    expect(byId('C4').has_qa).toBe(true) // TC-B4 (regression baseline): đang chạy dở, còn QA
+    expect(byId('C5').has_qa).toBe(false) // TC-B5: completed, không có QA nào
+  })
+
   test('exposes name from state, normalises blank/missing to null', async () => {
     const root = await tmp()
     await fs.mkdir(path.join(root, '.dev-state'), { recursive: true })

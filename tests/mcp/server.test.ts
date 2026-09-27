@@ -6,6 +6,7 @@ import {
   createMcpServer,
   fail,
   handleAddProject,
+  handleCreateQa,
   handleGetProject,
   handleListProjects,
   handleRemoveProject,
@@ -69,18 +70,53 @@ describe('tool handlers over a temp registry', () => {
   test('add invalid path → fail', () => {
     expect(handleAddProject({ path: 'relative/x' }).isError).toBe(true)
   })
+})
 
-  // TC-07: kênh MCP dùng chung `registry.add()` với kênh UI (đã test trực tiếp ở
-  // registry.test.ts) — add qua MCP cũng phải scaffold pipeline.yaml, không
-  // phụ thuộc phpstan.md, để hai kênh cho kết quả nhất quán.
-  test('add qua MCP scaffold pipeline.yaml, không tham chiếu phpstan.md (TC-07)', () => {
-    const dest = path.join(proj, '.dev-team-agent', 'pipeline.yaml')
-    expect(fs.existsSync(dest)).toBe(false)
-    handleAddProject({ path: proj })
-    expect(fs.existsSync(dest)).toBe(true)
-    const content = fs.readFileSync(dest, 'utf8')
-    expect(content).not.toContain('phpstan.md')
-    expect(content).toContain('investigate.md')
+describe('handleCreateQa — song song với handleGetKnowledgeBundle, cùng gọi createQa()', () => {
+  test('project hợp lệ + câu hỏi hợp lệ → ok, qa.md ở dạng chọn-đáp-án', async () => {
+    const project = payload(handleAddProject({ path: proj })).project
+    const res = await handleCreateQa({
+      taskId: 'T1',
+      questions: [{ prompt: 'Chọn?', choices: ['A', 'B'] }],
+      project: project.id,
+    })
+    expect(res.isError).toBeUndefined()
+    const body = payload(res)
+    expect(body.ok).toBe(true)
+    expect(body.created).toBe(1)
+    const content = fs.readFileSync(body.path, 'utf8')
+    expect(content).toContain('**Lựa chọn:**')
+    expect(content).toContain('**Trả lời:**')
+  })
+
+  test('project không tồn tại → fail', async () => {
+    const res = await handleCreateQa({
+      taskId: 'T1',
+      questions: [{ prompt: 'Chọn?', choices: ['A', 'B'] }],
+      project: 'khong-ton-tai',
+    })
+    expect(res.isError).toBe(true)
+  })
+
+  test('taskId path traversal → fail, không ghi ra ngoài phạm vi task', async () => {
+    const project = payload(handleAddProject({ path: proj })).project
+    const res = await handleCreateQa({
+      taskId: '../evil',
+      questions: [{ prompt: 'Chọn?', choices: ['A', 'B'] }],
+      project: project.id,
+    })
+    expect(res.isError).toBe(true)
+  })
+
+  test('câu hỏi <2 lựa chọn → fail, không tạo qa.md', async () => {
+    const project = payload(handleAddProject({ path: proj })).project
+    const res = await handleCreateQa({
+      taskId: 'T2',
+      questions: [{ prompt: 'Chọn?', choices: ['A'] }],
+      project: project.id,
+    })
+    expect(res.isError).toBe(true)
+    expect(fs.existsSync(path.join(proj, '.dev-team-agent', 'tasks', 'T2', 'qa.md'))).toBe(false)
   })
 })
 

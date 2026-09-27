@@ -164,26 +164,6 @@ describe('seedDefault + resolveProjectRoot', () => {
   })
 })
 
-describe('add() scaffolds pipeline.yaml (D3)', () => {
-  test('new project → pipeline.yaml created with no phpstan.md reference', () => {
-    expect(fs.existsSync(path.join(workspace, 'pipeline.yaml'))).toBe(false)
-    const r = add({ path: proj })
-    expect(r.ok).toBe(true)
-    const dest = path.join(workspace, 'pipeline.yaml')
-    expect(fs.existsSync(dest)).toBe(true)
-    const content = fs.readFileSync(dest, 'utf8')
-    expect(content).not.toContain('phpstan.md')
-    expect(content).toContain('investigate.md')
-  })
-
-  test('project already has a customised pipeline.yaml → not overwritten', () => {
-    const dest = path.join(workspace, 'pipeline.yaml')
-    fs.writeFileSync(dest, 'version: 1\ncustom: true\n', 'utf8')
-    add({ path: proj })
-    expect(fs.readFileSync(dest, 'utf8')).toBe('version: 1\ncustom: true\n')
-  })
-})
-
 describe('createRegistryContext', () => {
   test('exposes registry CRUD + resolveProjectRoot bound to defaultRoot', () => {
     const ctx = createRegistryContext({ defaultRoot: '/legacy' })

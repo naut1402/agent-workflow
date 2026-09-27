@@ -40,7 +40,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/logs/composables` | vitest | `features/logs/composables`, `shared/log`, `backend/log` | 3 | `npx vitest run tests/src/features/logs/composables` |
 | `tests/src/features/logs/scripts` | vitest | `features/logs/scripts` | 1 | `npx vitest run tests/src/features/logs/scripts` |
 | `tests/src/features/monitor` | vitest | `features/monitor/locales`, `features/monitor/composables` | 3 | `npx vitest run tests/src/features/monitor/*.test.ts` |
-| `tests/src/features/monitor/business` | bun | `features/monitor/business`, `backend/lib`, `features/runner/business` | 5 | `bun test tests/src/features/monitor/business` |
+| `tests/src/features/monitor/business` | bun | `features/monitor/business`, `backend/lib`, `features/runner/business` | 6 | `bun test tests/src/features/monitor/business` |
 | `tests/src/features/monitor/components` | vitest | `features/monitor/components`, `features/monitor/locales`, `features/monitor/scripts` | 12 | `npx vitest run tests/src/features/monitor/components` |
 | `tests/src/features/monitor/composables` | vitest | `features/monitor/composables`, `features/runner/scripts` | 6 | `npx vitest run tests/src/features/monitor/composables` |
 | `tests/src/features/monitor/lib` | vitest | `features/monitor/lib` | 5 | `npx vitest run tests/src/features/monitor/lib` |
@@ -89,8 +89,8 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/http` | bun | `backend/apiServer.ts`, `backend/http`, `features/runner/business` | 39 | `bun test tests/src/server/http` |
 | `tests/src/server/knowledge` | bun | `backend/apiServer.ts`, `backend/db`, `backend/events` | 1 | `bun test tests/src/server/knowledge` |
 | `tests/src/server/lib` | bun | `backend/lib` | 1 | `bun test tests/src/server/lib` |
-| `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/orchestrator/schemas`, `features/runner/business` | 8 | `bun test tests/src/server/orchestrator` |
-| `tests/src/server/pipeline` | bun | `features/pipeline-editor/business`, `shared/lib` | 2 | `bun test tests/src/server/pipeline` |
+| `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/orchestrator/schemas`, `features/runner/business` | 7 | `bun test tests/src/server/orchestrator` |
+| `tests/src/server/pipeline` | bun | `features/pipeline-editor/business` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
 | `tests/src/server/runners` | bun | `features/runner/business`, `backend/events`, `backend/log` | 22 | `bun test tests/src/server/runners` |
 | `tests/src/server/settings` | bun | `features/settings/business` | 2 | `bun test tests/src/server/settings` |
