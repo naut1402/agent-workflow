@@ -78,6 +78,9 @@ const TASK_STREAM_EVENTS = new Set([
   'entity.deleted',
 ])
 
+/** Event vòng đời job nào đẩy sớm snapshot chat, thay vì đợi tick interval. */
+const JOB_LIFECYCLE_EVENTS = new Set(['job.started', 'job.finished', 'job.failed', 'job.cancelled'])
+
 export class MonitorController extends AbstractController {
   // Project registry CRUD — no per-project root needed (Monitor owns project ↔ task UX).
   getProjects() {
@@ -1092,6 +1095,39 @@ export class MonitorController extends AbstractController {
       includeToolActivity: this.c.req.query('tools') !== '0',
     })
     return this.ok(state)
+  }
+
+  /**
+   * SSE thay REST poll cho chat. Transcript/job stdout không có event nguồn
+   * riêng ("CLI ghi thêm dòng" không đi qua event bus) — route tự tail bằng
+   * interval nội bộ (giữ nguyên nhịp poll cũ), event vòng đời job chỉ đẩy sớm
+   * hơn chứ không thay được cho interval.
+   */
+  streamTaskChat() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const id = this.c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+    const stepId = this.c.req.query('stepId') || undefined
+    const projectId = this.projectId || ''
+
+    return sseResponse((send) => {
+      let lastTotal = 0
+      const pushSnapshot = (fromIndex: number) => {
+        const state = getTaskChatState(projectId, id, { stepId, fromIndex, includeToolActivity: true })
+        send('chat', state)
+        lastTotal = typeof state.total === 'number' ? state.total : lastTotal
+      }
+      pushSnapshot(0)
+      const tick = setInterval(() => pushSnapshot(lastTotal), 2500)
+      const offEvents = on('*', (event) => {
+        if (JOB_LIFECYCLE_EVENTS.has(event.type)) pushSnapshot(lastTotal)
+      })
+      return () => {
+        clearInterval(tick)
+        offEvents()
+      }
+    })
   }
 
   async postGithubIssue() {
