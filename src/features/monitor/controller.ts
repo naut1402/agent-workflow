@@ -4,7 +4,7 @@ import { AbstractController } from '../../backend/http/AbstractController.js'
 import { resolveArtifact } from './business/tasks/index.js'
 import { resolveOrchestration } from './business/tasks/startAuthority.js'
 import { ORCHESTRATOR_STEP_ID } from '../../shared/lib/orchestrator.js'
-import { collectTasks, flowProfilePath, createTask, readState } from './business/tasks/index.js'
+import { collectTasks, flowProfilePath, createTask, readState, createQa } from './business/tasks/index.js'
 import { runTaskStep as runTaskStepCore } from './business/tasks/index.js'
 import {
   advanceStepOnJobSuccess,
@@ -29,6 +29,7 @@ import { mintTaskId } from './lib/createTaskForm.js'
 import { RunStepRequest } from './schemas/runStep.js'
 import { ResetStepRequest } from './schemas/resetStep.js'
 import { TaskFeedbackRequest } from './schemas/taskFeedback.js'
+import { CreateQaRequest } from './schemas/qa.js'
 import { fetchGithubIssue, listOpenGithubIssues } from './business/github/index.js'
 import { parseGithubRepoRef } from '../settings/schemas/githubTokens.js'
 import { getTaskChatState } from './business/taskChat.js'
@@ -77,6 +78,9 @@ const TASK_STREAM_EVENTS = new Set([
   'entity.updated',
   'entity.deleted',
 ])
+
+/** Event vòng đời job nào đẩy sớm snapshot chat, thay vì đợi tick interval. */
+const JOB_LIFECYCLE_EVENTS = new Set(['job.started', 'job.finished', 'job.failed', 'job.cancelled'])
 
 export class MonitorController extends AbstractController {
   // Project registry CRUD — no per-project root needed (Monitor owns project ↔ task UX).
@@ -1078,6 +1082,25 @@ export class MonitorController extends AbstractController {
     return this.created({ job: result.job })
   }
 
+  async postCreateQa() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const id = this.c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON body')
+    const parsed = CreateQaRequest.safeParse(b.value)
+    if (!parsed.success) {
+      return this.badRequest('invalid request', { details: parsed.error.flatten() })
+    }
+
+    const result = await createQa(root, id, parsed.data)
+    if ('error' in result) return this.badRequest(result.error)
+    return this.ok(result)
+  }
+
   getTaskChat() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
@@ -1092,6 +1115,39 @@ export class MonitorController extends AbstractController {
       includeToolActivity: this.c.req.query('tools') !== '0',
     })
     return this.ok(state)
+  }
+
+  /**
+   * SSE thay REST poll cho chat. Transcript/job stdout không có event nguồn
+   * riêng ("CLI ghi thêm dòng" không đi qua event bus) — route tự tail bằng
+   * interval nội bộ (giữ nguyên nhịp poll cũ), event vòng đời job chỉ đẩy sớm
+   * hơn chứ không thay được cho interval.
+   */
+  streamTaskChat() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const id = this.c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+    const stepId = this.c.req.query('stepId') || undefined
+    const projectId = this.projectId || ''
+
+    return sseResponse((send) => {
+      let lastTotal = 0
+      const pushSnapshot = (fromIndex: number) => {
+        const state = getTaskChatState(projectId, id, { stepId, fromIndex, includeToolActivity: true })
+        send('chat', state)
+        lastTotal = typeof state.total === 'number' ? state.total : lastTotal
+      }
+      pushSnapshot(0)
+      const tick = setInterval(() => pushSnapshot(lastTotal), 2500)
+      const offEvents = on('*', (event) => {
+        if (JOB_LIFECYCLE_EVENTS.has(event.type)) pushSnapshot(lastTotal)
+      })
+      return () => {
+        clearInterval(tick)
+        offEvents()
+      }
+    })
   }
 
   async postGithubIssue() {

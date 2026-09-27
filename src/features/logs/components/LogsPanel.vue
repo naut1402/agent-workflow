@@ -598,7 +598,7 @@ onUnmounted(() => {
 <style scoped lang="scss">
 .logs-panel {
   padding: 1rem 1.25rem;
-  max-width: 1200px;
+  max-width: none;
   display: flex;
   flex-direction: column;
   min-height: 0;

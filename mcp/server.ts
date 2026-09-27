@@ -25,8 +25,9 @@
 //   full only
 //     add_project          { path, name? }                      → { project }
 //     remove_project       { id }                               → { removed: true }
+//     create_qa            { taskId, questions, project? }      → { ok, path, created }
 //
-// Design ref: Tb4241005 design.md §4.
+// Design ref: Tb4241005 design.md §4; T6f61d951 design.md §4.2 (create_qa).
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -40,6 +41,8 @@ import { DEFAULT_MODE, isToolEnabled, resolveMode, type McpMode } from './modes.
 import {
   addProjectInput,
   addProjectOutput,
+  createQaInput,
+  createQaOutput,
   getKnowledgeBundleInput,
   getProjectInput,
   getProjectOutput,
@@ -56,6 +59,7 @@ import {
   removeProjectOutput,
 } from './schemas.js'
 import {
+  handleCreateQa,
   handleGetTaskState,
   handleListArtifacts,
   handleListTasks,
@@ -64,7 +68,7 @@ import {
 } from './tools/tasks.js'
 
 export { ok, fail, type McpErrorCode } from './envelope.js'
-export { handleGetTaskState, handleListArtifacts, handleListTasks, handleReadArtifact } from './tools/tasks.js'
+export { handleCreateQa, handleGetTaskState, handleListArtifacts, handleListTasks, handleReadArtifact } from './tools/tasks.js'
 
 // ── Tool handlers (exported for unit testing) ──────────────────────────────────
 
@@ -251,6 +255,21 @@ export function createMcpServer(opts: { mode?: McpMode } = {}): McpServer {
     async ({ id }: any) => handleRemoveProject({ id }),
   )
 
+  register(
+    'create_qa',
+    {
+      title: 'Create QA questions',
+      description:
+        'Tạo hoặc bổ sung câu hỏi blocking vào `qa.md` của một task, theo khuôn chọn-đáp-án '
+        + 'chuẩn mà QaPanel render được thành radio. Dùng thay vì tự viết `qa.md` bằng tay. '
+        + 'Đánh số tiếp từ block Q lớn nhất đang có.',
+      inputSchema: createQaInput,
+      outputSchema: createQaOutput,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ taskId, questions, project }: any) => handleCreateQa({ taskId, questions, project }),
+  )
+
   return server
 }
 
@@ -267,6 +286,24 @@ async function main() {
   const mode = resolveMode()
   // `stderr`, không phải `stdout`: `stdout` là kênh JSON-RPC của stdio transport.
   process.stderr.write(`[dev-team-dashboard mcp] mode=${mode} version=${APP_VERSION}\n`)
+  // F3/R3: 8 template ở `docs/template/agents/*.md` dạy agent "gọi MCP tool
+  // `create_qa` rồi dừng", nhưng mặc định `readonly` không đăng ký tool đó và
+  // KHÔNG chỗ nào trong `src/` đặt `DEVTEAM_MCP_MODE` — dashboard không tự bật
+  // `full` khi spawn agent của chính nó. Agent không thấy tool thì ứng biến, tự
+  // viết `qa.md` bằng tay, sai khuôn `## Q<n>` và `QaPanel` không render radio
+  // được — một triệu chứng không trỏ về nguyên nhân. Log job bắt stderr của
+  // tiến trình con nên dòng này rơi đúng chỗ người vận hành đang nhìn.
+  //
+  // Điều kiện bám `isToolEnabled` chứ không phải tên mode: thứ đang cảnh báo là
+  // "tool không được đăng ký", không phải "mode tên là readonly".
+  if (!isToolEnabled(mode, 'create_qa')) {
+    process.stderr.write(
+      `[dev-team-dashboard mcp] mode=${mode}: create_qa KHÔNG được đăng ký, `
+      + 'nhưng docs/template/agents/* hướng dẫn agent gọi nó. '
+      + 'Đặt DEVTEAM_MCP_MODE=full nếu chạy pipeline agent.\n',
+    )
+  }
+
   const transport = new StdioServerTransport()
   await createMcpServer({ mode }).connect(transport)
 }

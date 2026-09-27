@@ -11,8 +11,7 @@ steps:
     agent: dev-agent-teams:investigator
     skills: [survey-codebase]
     rule_category: doc-writing
-    rule_required: false
-    rule_fallback_skill: survey-codebase
+    rule_required: true
     produces: [investigate.md]
     knowledge_inputs: []
     export_key: investigator
@@ -26,8 +25,7 @@ steps:
     agent: dev-agent-teams:designer
     skills: [write-design]
     rule_category: doc-writing
-    rule_required: false
-    rule_fallback_skill: write-design
+    rule_required: true
     produces: [design.md]
     export_key: designer
     hitl:
@@ -38,11 +36,11 @@ steps:
   - id: implementer
     name: Implement
     agent: dev-agent-teams:implementer
-    skills: [coding-rules, run-phpstan]
+    skills: [coding-rules]
     rule_category: coding
     rule_required: false
     rule_fallback_skill: coding-rules
-    produces: [phpstan.md]
+    produces: []
     export_key: implementer
     hitl:
       mode: none

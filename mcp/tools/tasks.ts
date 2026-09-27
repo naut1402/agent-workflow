@@ -1,5 +1,6 @@
-// 4 tool đọc nhóm task/artifact (P2). Toàn bộ read-only — 1.2.0 không mở đường
-// ghi nào cho task (D8).
+// 4 tool đọc nhóm task/artifact (P2) + 1 tool ghi `create_qa` kế thừa từ 1.1.8.
+// Đường ghi duy nhất cho task là `create_qa`; `write_artifact` / `decide_hitl`
+// vẫn hoãn sang 1.3.0 (Tb4241005 D8).
 //
 // Import `monitor/business/tasks/reads.js` chứ KHÔNG phải `tasks/index.js`:
 // barrel đầy đủ re-export `runStep.js` → runner → job queue + sqlite +
@@ -12,6 +13,7 @@
 import { resolveProjectRoot } from '../../src/backend/registry.js'
 import { readTextFile, resolvePathUnder, statSafe } from '../../src/backend/lib/fileHelper.js'
 import { knownArtifactsFor, loadPipelineConfig } from '../../src/features/monitor/business/peers.js'
+import { createQa } from '../../src/features/monitor/business/tasks/qa.js'
 import {
   collectTasks,
   listArtifacts,
@@ -168,4 +170,30 @@ export async function handleReadArtifact({
 
   // G8: không `structuredContent` — artifact có thể lớn, nhân đôi qua stdio là lãng phí.
   return ok({ name, content, mtime: meta.mtime }, { structured: false })
+}
+
+/**
+ * Điểm vào MCP cho `create_qa` — cùng gọi `createQa()` với `POST /api/tasks/:id/qa`
+ * nên hai đường không lệch khuôn `qa.md`.
+ *
+ * `questions` khai lỏng ở type vì nested array-of-object bị `ShapeOutput` của SDK
+ * narrow thành optional, không phản ánh dữ liệu runtime thật. `createQa()` tự
+ * `safeParse` lại nên vẫn an toàn khi field thiếu.
+ */
+export async function handleCreateQa({
+  taskId,
+  questions,
+  project,
+}: {
+  taskId: string
+  questions: Array<{ prompt?: string; choices?: string[] }>
+  project?: string
+}): Promise<any> {
+  const bad = badTaskId(taskId)
+  if (bad) return bad
+  const gate = rootOrFail(project)
+  if ('error' in gate) return gate.error
+  const result = await createQa(gate.root, taskId, { questions })
+  if ('error' in result) return fail('invalid_input', result.error)
+  return ok(result)
 }
