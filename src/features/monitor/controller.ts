@@ -4,7 +4,7 @@ import { AbstractController } from '../../backend/http/AbstractController.js'
 import { resolveArtifact } from './business/tasks/index.js'
 import { resolveOrchestration } from './business/tasks/startAuthority.js'
 import { ORCHESTRATOR_STEP_ID } from '../../shared/lib/orchestrator.js'
-import { collectTasks, flowProfilePath, createTask, readState } from './business/tasks/index.js'
+import { collectTasks, flowProfilePath, createTask, readState, createQa } from './business/tasks/index.js'
 import { runTaskStep as runTaskStepCore } from './business/tasks/index.js'
 import {
   advanceStepOnJobSuccess,
@@ -29,6 +29,7 @@ import { mintTaskId } from './lib/createTaskForm.js'
 import { RunStepRequest } from './schemas/runStep.js'
 import { ResetStepRequest } from './schemas/resetStep.js'
 import { TaskFeedbackRequest } from './schemas/taskFeedback.js'
+import { CreateQaRequest } from './schemas/qa.js'
 import { fetchGithubIssue, listOpenGithubIssues } from './business/github/index.js'
 import { parseGithubRepoRef } from '../settings/schemas/githubTokens.js'
 import { getTaskChatState } from './business/taskChat.js'
@@ -1079,6 +1080,25 @@ export class MonitorController extends AbstractController {
     })
 
     return this.created({ job: result.job })
+  }
+
+  async postCreateQa() {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+    const { root } = gate
+    const id = this.c.req.param('id')
+    if (!id || /[^\w\-]/.test(id)) return this.badRequest('invalid task id')
+
+    const b = await this.parseBody()
+    if (!b.ok) return this.badRequest('invalid JSON body')
+    const parsed = CreateQaRequest.safeParse(b.value)
+    if (!parsed.success) {
+      return this.badRequest('invalid request', { details: parsed.error.flatten() })
+    }
+
+    const result = await createQa(root, id, parsed.data)
+    if ('error' in result) return this.badRequest(result.error)
+    return this.ok(result)
   }
 
   getTaskChat() {

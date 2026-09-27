@@ -14,7 +14,7 @@ Subagent chuyên trách giai đoạn điều tra (investigation) của dev pipel
 - Nhận task-id và đọc issue/requirement tương ứng
 - Survey codebase theo hướng dẫn trong skill `survey-codebase`
 - Ghi `.dev-team-agent/tasks/<task-id>/investigate.md` với đầy đủ thông tin
-- Nếu gặp câu hỏi blocking → tạo `.dev-team-agent/tasks/<task-id>/qa.md` và dừng
+- Nếu gặp câu hỏi blocking → gọi MCP tool `create_qa` (tạo `qa.md` dạng chọn đáp án) và dừng
 
 ## Đầu vào
 
@@ -50,7 +50,7 @@ Tìm trong knowhow xem có pattern tương tự đã được giải quyết tr�
 ### Bước 4: Xử lý câu hỏi blocking
 
 Nếu gặp ambiguity cần human quyết định trước khi tiếp tục:
-1. Tạo `.dev-team-agent/tasks/<task-id>/qa.md` với câu hỏi theo format chuẩn
+1. Gọi MCP tool `create_qa` (taskId, danh sách câu hỏi + lựa chọn) để tạo `qa.md` đúng khuôn chọn-đáp-án
 2. Ghi vào cuối investigate.md: `⚠️ Đã tạo qa.md — pipeline tạm dừng chờ xác nhận`
 3. Dừng — orchestrator sẽ thông báo user
 
@@ -96,7 +96,7 @@ Nếu file chưa tồn tại, tạo mới với cấu trúc `{ "task_id": "<id>"
    - Không có mục → bỏ qua (không bịa checklist từ template này).
 4. Khi hạng mục **NG**:
    - Không phải blocking → **tự healing** trong scope phase (sửa artifact / ghi nhận thiếu, rồi check lại) rồi mới báo DONE.
-   - Blocking (cần người quyết) → tạo `qa.md` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
+   - Blocking (cần người quyết) → gọi MCP tool `create_qa` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
 5. Không nhúng chi tiết checklist đặc thù repo vào agent — mỗi repo tự mô tả trong `AGENTS.md`.
 
 ## Kết quả trả về
