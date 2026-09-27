@@ -260,3 +260,48 @@ describe('buildDecisionPrompt — bối cảnh đủ cho AC-3/AC-4', () => {
     expect(prompt).toContain('hitl.pending')
   })
 })
+
+// T8eb14482 — TC-CFG-01/02/04: `orchestrator.system_prompt`/`knowledge_inputs`
+// (qua `resolveOrchestration`) nối vào prompt bằng đúng 2 field mới của
+// `DecisionContext`. Test ở đây chấm mức unit (input field ⇒ output prompt);
+// đường nối thật từ pipeline.yaml → `askAgent` được chấm ở `decisionLoop.test.ts`.
+describe('buildDecisionPrompt — cấu hình orchestrator (TC-CFG-01/02/04)', () => {
+  test('TC-CFG-01: có extraSystemPrompt + knowledgeText ⇒ cả hai đều nằm trong prompt', () => {
+    const prompt = buildDecisionPrompt({
+      taskId: 'T1',
+      currentPhase: 'reviewer',
+      stepIds: STEPS,
+      trigger: 'step_finished',
+      extraSystemPrompt: 'Review có PO thì quay lại implementer.',
+      knowledgeText: 'Nội dung knowledge đã render.',
+    })
+    expect(prompt).toContain('## Hướng dẫn bổ sung (cấu hình orchestrator)')
+    expect(prompt).toContain('Review có PO thì quay lại implementer.')
+    expect(prompt).toContain('## Knowledge')
+    expect(prompt).toContain('Nội dung knowledge đã render.')
+  })
+
+  test('TC-CFG-02/04: không khai (undefined) ⇒ không sinh heading nào', () => {
+    const prompt = buildDecisionPrompt({
+      taskId: 'T1',
+      currentPhase: 'reviewer',
+      stepIds: STEPS,
+      trigger: 'step_finished',
+    })
+    expect(prompt).not.toContain('Hướng dẫn bổ sung')
+    expect(prompt).not.toContain('## Knowledge')
+  })
+
+  test('TC-CFG-04: chuỗi rỗng/toàn khoảng trắng ⇒ tương đương không khai', () => {
+    const prompt = buildDecisionPrompt({
+      taskId: 'T1',
+      currentPhase: 'reviewer',
+      stepIds: STEPS,
+      trigger: 'step_finished',
+      extraSystemPrompt: '   ',
+      knowledgeText: '',
+    })
+    expect(prompt).not.toContain('Hướng dẫn bổ sung')
+    expect(prompt).not.toContain('## Knowledge')
+  })
+})

@@ -72,6 +72,25 @@ describe('merge 3 tầng (TC-09)', () => {
     writeTask('T5', ['orchestrator: { agent: "a:khac" }'])
     expect((await loadPipelineConfig(root, 'T5')).orchestrator).toMatchObject({ enabled: true, agent: 'a:khac' })
   })
+
+  // T8eb14482 — TC-CFG-01: `system_prompt`/`knowledge_inputs` merge đúng khuôn
+  // `agent` (task đè project), không đụng field khác.
+  test('task khai system_prompt/knowledge_inputs riêng ⇒ đè lên project, giữ nguyên agent thừa kế', async () => {
+    writeGlobal(['version: 1', 'orchestrator: { enabled: true, agent: "a:orch", system_prompt: "chung" }', ...STEPS])
+    writeTask('T6', ['orchestrator: { system_prompt: "riêng của task", knowledge_inputs: ["k1", "k2"] }'])
+    expect((await loadPipelineConfig(root, 'T6')).orchestrator).toMatchObject({
+      enabled: true,
+      agent: 'a:orch',
+      system_prompt: 'riêng của task',
+      knowledge_inputs: ['k1', 'k2'],
+    })
+    // Project không có file riêng vẫn thấy config của chính nó, không bị nhiễm bởi task khác.
+    expect((await loadPipelineConfig(root, 'T7')).orchestrator).toMatchObject({
+      enabled: true,
+      agent: 'a:orch',
+      system_prompt: 'chung',
+    })
+  })
 })
 
 describe('loadPipelineConfig là tầng ĐỌC — không tự sửa config của người dùng', () => {
