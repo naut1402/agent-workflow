@@ -20,7 +20,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | Suite | Runner | Vùng source phủ | Số file | Lệnh chạy |
 |---|---|---|---|---|
 | `tests/architecture` | bun | — | 1 | `bun test tests/architecture` |
-| `tests/mcp` | bun | `mcp` | 1 | `bun test tests/mcp` |
+| `tests/mcp` | bun | `mcp`, `backend/log`, `backend/events` | 3 | `bun test tests/mcp` |
 | `tests/src` | vitest | — | 1 | `npx vitest run tests/src/*.test.ts` |
 | `tests/src/backend/configs` | vitest | `backend/configs` | 1 | `npx vitest run tests/src/backend/configs` |
 | `tests/src/backend/db` | bun | `backend/db`, `features/knowledge/business` | 1 | `bun test tests/src/backend/db` |
@@ -43,7 +43,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/mcp/business` | bun | `features/mcp/business`, `features/agent-editor/business` | 4 | `bun test tests/src/features/mcp/business` |
 | `tests/src/features/mcp/components` | vitest | `features/mcp/locales`, `features/mcp/components`, `features/mcp/business` | 2 | `npx vitest run tests/src/features/mcp/components` |
 | `tests/src/features/monitor` | vitest | `features/monitor/locales`, `features/monitor/composables` | 3 | `npx vitest run tests/src/features/monitor/*.test.ts` |
-| `tests/src/features/monitor/business` | bun | `features/monitor/business`, `backend/lib`, `features/runner/business` | 5 | `bun test tests/src/features/monitor/business` |
+| `tests/src/features/monitor/business` | bun | `features/monitor/business`, `backend/lib`, `features/runner/business` | 6 | `bun test tests/src/features/monitor/business` |
 | `tests/src/features/monitor/components` | vitest | `features/monitor/components`, `features/monitor/locales`, `features/monitor/scripts` | 12 | `npx vitest run tests/src/features/monitor/components` |
 | `tests/src/features/monitor/composables` | vitest | `features/monitor/composables`, `features/runner/scripts` | 6 | `npx vitest run tests/src/features/monitor/composables` |
 | `tests/src/features/monitor/lib` | vitest | `features/monitor/lib` | 5 | `npx vitest run tests/src/features/monitor/lib` |
