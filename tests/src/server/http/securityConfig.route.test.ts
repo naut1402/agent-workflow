@@ -103,3 +103,48 @@ describe('HTTP security-config', () => {
     expect((await res.json()).jwtEnabled).toBe(true)
   })
 })
+
+// test-spec.md TC01-TC03 (Nhóm 1) — `transport` lộ qua đúng endpoint đã có
+// (tiền lệ `jwtEnabled`), không route riêng. D1.
+describe('field `transport` trong /api/security-config', () => {
+  const savedTransport = process.env.DEV_TEAM_DASHBOARD_TRANSPORT
+
+  afterEach(() => {
+    if (savedTransport === undefined) delete process.env.DEV_TEAM_DASHBOARD_TRANSPORT
+    else process.env.DEV_TEAM_DASHBOARD_TRANSPORT = savedTransport
+  })
+
+  test('TC01: không set env → transport mặc định sse', async () => {
+    delete process.env.DEV_TEAM_DASHBOARD_TRANSPORT
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const res = await app.request('/api/security-config')
+    expect(res.status).toBe(200)
+    expect((await res.json()).transport).toBe('sse')
+  })
+
+  test('TC02: env=sse → transport phản ánh đúng sse', async () => {
+    process.env.DEV_TEAM_DASHBOARD_TRANSPORT = 'sse'
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const res = await app.request('/api/security-config')
+    expect((await res.json()).transport).toBe('sse')
+  })
+
+  test('TC03: env=polling → transport phản ánh đúng polling', async () => {
+    process.env.DEV_TEAM_DASHBOARD_TRANSPORT = 'polling'
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const res = await app.request('/api/security-config')
+    expect((await res.json()).transport).toBe('polling')
+  })
+
+  test('PUT /api/security-config (đổi rateLimit/cors) không đụng field transport', async () => {
+    process.env.DEV_TEAM_DASHBOARD_TRANSPORT = 'polling'
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const put = await app.request('/api/security-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rateLimit: { enabled: true, windowMs: 10_000, max: 5, routes: [] } }),
+    })
+    expect(put.status).toBe(200)
+    expect((await put.json()).transport).toBe('polling')
+  })
+})

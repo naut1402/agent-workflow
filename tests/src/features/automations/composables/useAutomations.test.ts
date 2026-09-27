@@ -14,6 +14,15 @@ vi.mock('@/features/automations/scripts/automationsApi', () => ({
   fetchAllAutomationRuns: vi.fn(),
 }))
 
+// `startPolling()` reads the transport flag before doing anything else
+// (Tfe0c91ca — SSE migration). Mặc định ép 'polling' để suite `polling` bên
+// dưới (viết từ trước task này) tiếp tục phủ đúng nhánh REST-interval cũ
+// (test-spec TC15); case SSE riêng (describe cuối file) override lại 'sse'.
+vi.mock('@/frontend/lib/dashboardTransport', () => ({
+  ensureDashboardTransport: vi.fn().mockResolvedValue('polling'),
+  isSseEnabled: (t: string) => t !== 'polling',
+}))
+
 import {
   createAutomation,
   deleteAutomation,
@@ -26,6 +35,8 @@ import {
   updateAutomation,
 } from '@/features/automations/scripts/automationsApi'
 import { useAutomations } from '@/features/automations/composables/useAutomations'
+import { ensureDashboardTransport } from '@/frontend/lib/dashboardTransport'
+import { makeSseStream } from '../../../helpers/sseStream'
 
 /**
  * Trạng thái danh sách rule ở FE (TC-31) — quan sát qua state công khai của
@@ -107,6 +118,7 @@ afterEach(() => {
   while (mounted.length) mounted.pop()!.unmount()
   vi.useRealTimers()
   vi.clearAllMocks()
+  vi.mocked(ensureDashboardTransport).mockResolvedValue('polling')
 })
 
 describe('load()', () => {
@@ -349,6 +361,68 @@ describe('polling', () => {
 
     expect(api.list).toHaveBeenCalledTimes(1)
     a.stopPolling()
+  })
+})
+
+// TC08/TC09/TC10 (test-spec.md Nhóm 3) — nhánh SSE của startPolling(): áp dụng
+// khi `ensureDashboardTransport()` không trả về 'polling'.
+describe('startPolling — SSE transport', () => {
+  afterEach(() => {
+    vi.mocked(ensureDashboardTransport).mockResolvedValue('polling')
+  })
+
+  it('TC08: mở danh sách automation ở chế độ SSE nhận dữ liệu hiện có ngay khi kết nối', async () => {
+    vi.mocked(ensureDashboardTransport).mockResolvedValue('sse')
+    const sse = makeSseStream()
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => ({ ok: true, body: sse.stream }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const a = makeAutomations(() => 'P1')
+    await flush()
+    a.startPolling()
+    sse.push('automations', { automations: [rule('r1')], runs: [{ runId: 'run-1' } as any] })
+    await vi.waitUntil(() => a.automations.value.length > 0)
+
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/api/automations/stream')
+    expect(a.automations.value.map((r) => r.id)).toEqual(['r1'])
+    expect(a.runs.value).toHaveLength(1)
+    a.stopPolling()
+  })
+
+  it('TC09: tạo/sửa/xoá automation ở nơi khác → server đẩy frame mới, danh sách tự cập nhật', async () => {
+    vi.mocked(ensureDashboardTransport).mockResolvedValue('sse')
+    const sse = makeSseStream()
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL) => ({ ok: true, body: sse.stream })))
+
+    const a = makeAutomations(() => 'P1')
+    await flush()
+    a.startPolling()
+    sse.push('automations', { automations: [rule('r1')], runs: [] })
+    await vi.waitUntil(() => a.automations.value.length === 1)
+
+    // Một entity khác vừa được tạo → server tự đẩy lại snapshot (không cần refresh tay).
+    sse.push('automations', { automations: [rule('r1'), rule('r2')], runs: [{ runId: 'run-2' } as any] })
+    await vi.waitUntil(() => a.automations.value.length === 2)
+    expect(a.automations.value.map((r) => r.id).sort()).toEqual(['r1', 'r2'])
+    expect(a.runs.value).toHaveLength(1)
+    a.stopPolling()
+  })
+
+  it('TC10: điều hướng đi rồi quay lại (stop→start) nhiều lần — mỗi lần nhận đúng snapshot mới, không tồn dữ liệu cũ', async () => {
+    vi.mocked(ensureDashboardTransport).mockResolvedValue('sse')
+    const a = makeAutomations(() => 'P1')
+    await flush()
+
+    for (const id of ['r1', 'r2', 'r3']) {
+      const sse = makeSseStream()
+      vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL) => ({ ok: true, body: sse.stream })))
+      a.startPolling()
+      sse.push('automations', { automations: [rule(id)], runs: [] })
+      await vi.waitUntil(() => a.automations.value.length === 1 && a.automations.value[0].id === id)
+      a.stopPolling()
+    }
+
+    expect(a.automations.value.map((r) => r.id)).toEqual(['r3'])
   })
 })
 
