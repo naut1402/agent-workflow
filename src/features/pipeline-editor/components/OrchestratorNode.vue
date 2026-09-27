@@ -65,6 +65,8 @@ const emit = defineEmits(['edit'])
   padding: 0 3px;
   font-size: 12px;
   line-height: 1;
+  /* vue-flow gán pointer-events:none cho div cha khi node không selectable/draggable */
+  pointer-events: auto;
 }
 .node-btn:hover { color: var(--text); }
 .onode-agent {
