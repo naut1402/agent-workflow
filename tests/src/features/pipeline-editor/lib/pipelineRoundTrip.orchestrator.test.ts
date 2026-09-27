@@ -59,6 +59,47 @@ describe('khứ hồi khoá orchestrator', () => {
   })
 })
 
+// T8eb14482 — TC-UI-04/07: `system_prompt`/`knowledge_inputs` (ghi qua dialog
+// cấu hình orchestrator ở Pipeline Editor) phải sống sót qua round-trip
+// save/export y hệt `enabled`/`agent` — không field mới nào bị lọc bỏ riêng.
+describe('khứ hồi system_prompt/knowledge_inputs (T8eb14482)', () => {
+  const WITH_NEW_FIELDS = {
+    ...FULL,
+    orchestrator: {
+      enabled: true,
+      agent: 'a:orch',
+      system_prompt: 'Review có PO thì quay lại implementer.',
+      knowledge_inputs: ['global/a', 'project/b'],
+    },
+  }
+
+  it('giữ nguyên system_prompt + knowledge_inputs qua một vòng mở/lưu', () => {
+    expect(roundTrip(WITH_NEW_FIELDS).orchestrator).toEqual({
+      enabled: true,
+      agent: 'a:orch',
+      system_prompt: 'Review có PO thì quay lại implementer.',
+      knowledge_inputs: ['global/a', 'project/b'],
+    })
+  })
+
+  it('ổn định qua 3 vòng mở/lưu liên tiếp', () => {
+    let cur: Record<string, unknown> = WITH_NEW_FIELDS
+    for (let i = 0; i < 3; i++) cur = roundTrip(cur)
+    expect(cur.orchestrator).toMatchObject({
+      system_prompt: 'Review có PO thì quay lại implementer.',
+      knowledge_inputs: ['global/a', 'project/b'],
+    })
+  })
+
+  it('knowledge_inputs rỗng ⇒ giữ mảng rỗng, không rụng thành undefined', () => {
+    const out = roundTrip({
+      ...FULL,
+      orchestrator: { enabled: true, agent: 'a:orch', system_prompt: '', knowledge_inputs: [] },
+    })
+    expect(out.orchestrator).toEqual({ enabled: true, agent: 'a:orch', system_prompt: '', knowledge_inputs: [] })
+  })
+})
+
 describe('extractPipelineMeta', () => {
   it('sao chép khoá orchestrator, không giữ tham chiếu tới object gốc', () => {
     const src = { ...FULL }

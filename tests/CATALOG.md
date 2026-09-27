@@ -52,7 +52,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/notifications/composables` | vitest | `features/notifications/lib`, `features/notifications/composables`, `frontend/composables` | 1 | `npx vitest run tests/src/features/notifications/composables` |
 | `tests/src/features/notifications/lib` | vitest | `features/notifications/lib` | 2 | `npx vitest run tests/src/features/notifications/lib` |
 | `tests/src/features/pipeline-editor/business` | bun | `features/pipeline-editor/business` | 4 | `bun test tests/src/features/pipeline-editor/business` |
-| `tests/src/features/pipeline-editor/components` | vitest | `features/pipeline-editor/components`, `features/pipeline-editor/scripts` | 6 | `npx vitest run tests/src/features/pipeline-editor/components` |
+| `tests/src/features/pipeline-editor/components` | vitest | `features/pipeline-editor/components`, `features/pipeline-editor/scripts` | 8 | `npx vitest run tests/src/features/pipeline-editor/components` |
 | `tests/src/features/pipeline-editor/composables` | vitest | `features/pipeline-editor/composables`, `features/pipeline-editor/scripts` | 1 | `npx vitest run tests/src/features/pipeline-editor/composables` |
 | `tests/src/features/pipeline-editor/lib` | vitest | `features/pipeline-editor/lib`, `frontend/lib` | 5 | `npx vitest run tests/src/features/pipeline-editor/lib` |
 | `tests/src/features/pipeline-editor/scripts` | vitest | `features/pipeline-editor/scripts` | 2 | `npx vitest run tests/src/features/pipeline-editor/scripts` |
