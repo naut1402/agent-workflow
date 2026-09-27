@@ -70,6 +70,19 @@ describe('tool handlers over a temp registry', () => {
   test('add invalid path → fail', () => {
     expect(handleAddProject({ path: 'relative/x' }).isError).toBe(true)
   })
+
+  // TC-07: kênh MCP dùng chung `registry.add()` với kênh UI (đã test trực tiếp ở
+  // registry.test.ts) — add qua MCP cũng phải scaffold pipeline.yaml, không
+  // phụ thuộc phpstan.md, để hai kênh cho kết quả nhất quán.
+  test('add qua MCP scaffold pipeline.yaml, không tham chiếu phpstan.md (TC-07)', () => {
+    const dest = path.join(proj, '.dev-team-agent', 'pipeline.yaml')
+    expect(fs.existsSync(dest)).toBe(false)
+    handleAddProject({ path: proj })
+    expect(fs.existsSync(dest)).toBe(true)
+    const content = fs.readFileSync(dest, 'utf8')
+    expect(content).not.toContain('phpstan.md')
+    expect(content).toContain('investigate.md')
+  })
 })
 
 describe('handleCreateQa — song song với handleGetKnowledgeBundle, cùng gọi createQa()', () => {
