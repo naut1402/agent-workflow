@@ -28,7 +28,8 @@ import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/inde
 import { isRespawnTarget } from '../../monitor/lib/pipelineRunGuards.js'
 import { resolveHitlPending, gateStepsFromConfig } from '../../../shared/lib/phase.js'
 import { ORCHESTRATOR_STEP_ID, type OrchestratorDecision } from '../schemas/orchestrator.js'
-import { composeStepBrief, type AgentContext, type DispatchReason } from './brief.js'
+import { loadKnowledgeBundle } from '../../knowledge/business/index.js'
+import { composeStepBrief, renderBundle, type AgentContext, type DispatchReason } from './brief.js'
 import {
   buildDecisionPrompt,
   hasDecisionLine,
@@ -488,6 +489,7 @@ async function askAgent(
   // được sau (job file là snapshot) — mint muộn hơn nghĩa là job không bao giờ
   // biết token của chính nó.
   const orchestratorToken = mintOrchestratorToken(ref)
+  const knowledgeBundle = await loadKnowledgeBundle(ref.root, orch.knowledge_inputs ?? [])
   const job = submitJob({
     agentRef: orch.agent,
     workspace: joinPath(ref.root, 'tasks', ref.taskId),
@@ -500,6 +502,8 @@ async function askAgent(
       stepResult: extra.stepResult,
       gatePending: extra.gatePending,
       recent: recentOf(ref.root, ref.taskId),
+      extraSystemPrompt: orch.system_prompt,
+      knowledgeText: renderBundle(knowledgeBundle),
     }),
     sessionMode: hasOwnSession ? 'resume' : 'new',
     metadata: {

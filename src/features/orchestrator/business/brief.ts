@@ -105,7 +105,7 @@ export function summarizeExport(
   return blocks.length ? blocks.join('\n\n') : '(các bước trước chưa ghi dữ liệu export)'
 }
 
-function renderBundle(bundle: any[]): string {
+export function renderBundle(bundle: any[]): string {
   if (!bundle?.length) return ''
   return bundle
     .map((entry) =>
