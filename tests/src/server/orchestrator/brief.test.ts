@@ -245,3 +245,76 @@ describe('composeStepBrief — bối cảnh do node điều phối soạn (TC-15
     expect(brief).toContain('phản hồi nguyên văn của người duyệt')
   })
 })
+
+// D4 — step.rule_category giờ đi vào brief qua `.dev-team-agent/project-rules.md`
+// (sinh runtime nếu chưa có). Dùng workspace riêng (không phải `root` chung ở
+// trên) vì cần kiểm soát `dirname(root)` — nơi `AGENTS.md`/`docs/agent-rules`
+// được quét.
+describe('composeStepBrief — Rule của project (D4, TC-09/TC-11/TC-12)', () => {
+  let projRoot: string
+  let wsRoot: string
+
+  beforeAll(() => {
+    projRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-orch-brief-rule-'))
+    wsRoot = path.join(projRoot, '.dev-team-agent')
+    fs.mkdirSync(wsRoot, { recursive: true })
+    fs.writeFileSync(
+      path.join(wsRoot, 'pipeline.yaml'),
+      [
+        'version: 1',
+        'steps:',
+        '  - { id: implementer, name: Implement, agent: "a:implementer", export_key: implementer, produces: [], rule_category: coding }',
+        '  - { id: reviewer, name: Review, agent: "a:reviewer", export_key: reviewer, produces: [], rule_category: [coding, test] }',
+        '  - { id: investigator, name: Investigate, agent: "a:investigator", export_key: investigator, produces: [] }',
+      ].join('\n'),
+      'utf8',
+    )
+  })
+  afterAll(() => fs.rmSync(projRoot, { recursive: true, force: true }))
+
+  function seedRuleTask(taskId: string) {
+    const dir = path.join(wsRoot, 'tasks', taskId)
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'request.md'), '# r', 'utf8')
+  }
+
+  test('step không khai rule_category ⇒ brief không có mục "Rule của project"', async () => {
+    seedRuleTask('RN1')
+    const brief = await composeStepBrief({ root: wsRoot, taskId: 'RN1', stepId: 'investigator', reason: 'advance' })
+    expect(brief).not.toContain('Rule của project')
+  })
+
+  test('có rule_category nhưng project không có rule nào ⇒ nêu rõ "Chưa thiết lập", không im lặng (TC-11)', async () => {
+    seedRuleTask('R1')
+    const brief = await composeStepBrief({ root: wsRoot, taskId: 'R1', stepId: 'implementer', reason: 'advance' })
+    expect(brief).toContain('Rule của project')
+    expect(brief).toContain('Chưa thiết lập rule cho category này.')
+  })
+
+  test('rule nhúng trong AGENTS.md ⇒ nội dung thật xuất hiện trong brief (TC-09/TC-10)', async () => {
+    fs.writeFileSync(path.join(projRoot, 'AGENTS.md'), '## Coding convention\n\nDùng 2 space, không tab.\n', 'utf8')
+    fs.rmSync(path.join(wsRoot, 'project-rules.md'), { force: true }) // step trước đã sinh sẵn — xoá để test lại từ đầu
+    seedRuleTask('R2')
+    const brief = await composeStepBrief({ root: wsRoot, taskId: 'R2', stepId: 'implementer', reason: 'advance' })
+    expect(brief).toContain('Dùng 2 space, không tab.')
+  })
+
+  test('rule_category là mảng ⇒ brief chứa đủ cả hai category, không mất category nào (TC-12)', async () => {
+    fs.rmSync(path.join(wsRoot, 'project-rules.md'), { force: true })
+    fs.mkdirSync(path.join(projRoot, 'docs', 'agent-rules'), { recursive: true })
+    fs.writeFileSync(path.join(projRoot, 'docs', 'agent-rules', 'testing.md'), 'Nội dung rule test.', 'utf8')
+    seedRuleTask('R3')
+    const brief = await composeStepBrief({ root: wsRoot, taskId: 'R3', stepId: 'reviewer', reason: 'advance' })
+    expect(brief).toContain('Dùng 2 space, không tab.') // coding — vẫn còn từ AGENTS.md ở test trước
+    expect(brief).toContain('Nội dung rule test.') // test — từ docs/agent-rules
+  })
+
+  test('project-rules.md do đường điều phối khác ghi trước ⇒ đọc nguyên văn, không bị ghi đè (TC-13)', async () => {
+    const dest = path.join(wsRoot, 'project-rules.md')
+    fs.writeFileSync(dest, '# Project Convention Rules\n\n## Rule coding\n**Nguồn**: CLI ngoài\nRule do CLI ngoài ghi.\n', 'utf8')
+    seedRuleTask('R4')
+    const brief = await composeStepBrief({ root: wsRoot, taskId: 'R4', stepId: 'implementer', reason: 'advance' })
+    expect(brief).toContain('Rule do CLI ngoài ghi.')
+    expect(fs.readFileSync(dest, 'utf8')).toContain('Rule do CLI ngoài ghi.')
+  })
+})
