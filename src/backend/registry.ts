@@ -15,7 +15,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { writeTextFileAtomicSync } from './lib/fileHelper.js'
+import { existsSync, mkdirSync, writeTextFileAtomicSync } from './lib/fileHelper.js'
+import { dumpYaml } from './lib/yamlLib.js'
+import { DEFAULT_PIPELINE } from '../features/pipeline-editor/business/pipeline/index.js'
 
 const REGISTRY_VERSION = 1
 
@@ -139,6 +141,25 @@ function shortHash(input: unknown): string {
   return crypto.createHash('sha1').update(String(input)).digest('hex').slice(0, 8)
 }
 
+/**
+ * Scaffold `.dev-team-agent/pipeline.yaml` for a newly-added project so it never
+ * silently falls back to the built-in `DEFAULT_PIPELINE` just because nobody ran
+ * `/dev-dashboard` yet. Idempotent (never overwrites an existing file, including
+ * a hand-tuned one from before the project was removed and re-added) and
+ * best-effort (a write failure here must not roll back `add()`).
+ */
+function scaffoldPipelineYaml(projectPath: string): void {
+  const dest = path.join(projectPath, 'pipeline.yaml')
+  if (existsSync(dest)) return
+  try {
+    mkdirSync(projectPath, { recursive: true })
+    const { version, defaults, steps, doc_reviewer } = DEFAULT_PIPELINE
+    writeTextFileAtomicSync(dest, dumpYaml({ version, defaults, steps, doc_reviewer }))
+  } catch (err) {
+    console.warn(`[dev-team-dashboard] scaffold pipeline.yaml failed for ${projectPath}: ${err}`)
+  }
+}
+
 // ── Validation (shared by REST + MCP)
 
 // Validate + canonicalise a user-supplied project path. Returns
@@ -245,6 +266,7 @@ export function add({ path: inputPath, name }: { path?: string; name?: string } 
   }
   reg.projects.push(project)
   saveRegistry(reg)
+  scaffoldPipelineYaml(v.path)
   return { ok: true, project }
 }
 
