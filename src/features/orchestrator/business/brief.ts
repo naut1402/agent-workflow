@@ -3,14 +3,18 @@
  * thô: mỗi step là một session CLI mới, không có brief thì node nào cũng phải
  * tự đọc lại repo để dựng lại bối cảnh.
  *
- * Thuần I/O đọc — không ghi file nào (brief đi trong `job.userPrompt`, truy vết
- * được ở job record), nên `MACHINE_FILES` không đổi.
+ * Chủ yếu I/O đọc (brief đi trong `job.userPrompt`, truy vết được ở job
+ * record) — ngoại lệ duy nhất: `ensureProjectRulesFile` ghi
+ * `.dev-team-agent/project-rules.md` một lần nếu file chưa tồn tại (best-effort,
+ * không throw), nên `MACHINE_FILES` không cần khai thêm file này (không phải
+ * artifact do người dùng chỉnh tay).
  */
 
 import { joinPath, readDir, readTextFile } from '../../../backend/lib/fileHelper.js'
 import { loadKnowledgeBundle } from '../../knowledge/business/index.js'
 import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
 import { MAX_BRIEF_BYTES } from '../schemas/orchestrator.js'
+import { ensureProjectRulesFile, extractRuleSection } from './projectRules.js'
 
 /** Vì sao step này được gọi — quyết định phần "Việc của bạn" nói gì. */
 export type DispatchReason =
@@ -139,6 +143,7 @@ function renderAssignment(step: any, input: StepBriefInput): string {
 }
 
 const SECTION_CONTEXT = 'Bối cảnh task'
+const SECTION_RULE = 'Rule của project'
 const SECTION_ORCHESTRATOR = 'Tóm tắt của node điều phối'
 const SECTION_PREVIOUS = 'Kết quả các bước trước'
 const SECTION_KNOWLEDGE = 'Knowledge'
@@ -193,8 +198,15 @@ export async function composeStepBrief(input: StepBriefInput): Promise<string> {
   const fallbackArtifacts = await listTaskMarkdown(input.root, input.taskId)
   const bundle = await loadKnowledgeBundle(input.root, step.knowledge_inputs ?? [])
 
+  const ruleBody = step.rule_category
+    ? await ensureProjectRulesFile(input.root)
+        .then((md) => extractRuleSection(md, step.rule_category) ?? '⚠️ Chưa thiết lập rule cho category này.')
+        .catch(() => '⚠️ Chưa thiết lập rule cho category này.')
+    : ''
+
   const parts = [
     { title: SECTION_CONTEXT, body: request.trim() },
+    { title: SECTION_RULE, body: ruleBody },
     { title: SECTION_ORCHESTRATOR, body: agentPart(input.agentContext, 'summary') },
     { title: SECTION_PREVIOUS, body: summarizeExport(exportJson, steps, input.stepId, fallbackArtifacts) },
     { title: SECTION_KNOWLEDGE, body: renderBundle(bundle) },
