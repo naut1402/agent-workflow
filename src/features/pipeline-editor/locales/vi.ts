@@ -56,6 +56,11 @@ export default {
     nodeLabel: 'Điều phối',
     nodeTitle: 'Node điều phối — gỡ bằng cách bỏ tick "Có node điều phối"',
     noAgent: 'chưa chọn agent',
+    editButton: 'Chỉnh sửa node điều phối',
+    editTitle: 'Cấu hình node điều phối',
+    systemPromptLabel: 'Hướng dẫn bổ sung (system prompt)',
+    systemPromptPlaceholder: 'Vd: Review có PO → tự động quay lại bước liên quan...',
+    knowledgeLabel: 'Knowledge liên quan',
   },
   sections: {
     agents: 'Agents',
