@@ -49,7 +49,7 @@ Với mỗi giải pháp: xác định ưu/nhược điểm và lý do chọn/lo
 - DB changes nếu có
 - Edge cases và cách xử lý
 
-Nếu gặp điểm cần xác nhận → tạo `.dev-team-agent/tasks/<task-id>/qa.md` và dừng.
+Nếu gặp điểm cần xác nhận → gọi MCP tool `create_qa` và dừng.
 
 ### Bước 4: Ghi design.md
 
@@ -65,7 +65,7 @@ Nếu gặp điểm cần xác nhận → tạo `.dev-team-agent/tasks/<task-id>
    - Không có mục → bỏ qua.
 4. Khi hạng mục **NG**:
    - Không phải blocking → **tự healing** trong scope phase rồi mới báo DONE.
-   - Blocking (cần người quyết) → tạo `qa.md` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
+   - Blocking (cần người quyết) → gọi MCP tool `create_qa` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
 5. Không nhúng checklist đặc thù repo vào agent.
 
 ## Kết quả trả về

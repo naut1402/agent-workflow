@@ -109,8 +109,8 @@ Một mục ở §4 mà kết thúc bằng câu hỏi mở cho người khác �
 ### 2.8 Câu hỏi blocking → `qa.md`
 
 - **Bảng §2 là kênh thông tin**, không phải control tương tác — bảng markdown không render được checkbox ([`writing-guideline.md`](writing-guideline.md) §3).
-- **Câu hỏi blocking** (không trả lời thì không đi tiếp được) tạo `qa.md` rồi dừng.
-- **Mỗi câu một block** — `## Q<n>` + `**Lựa chọn:**` (list `- A. …`) + `**Trả lời:**`. Đó là **dạng duy nhất** render thành radio; lệch khuôn thì người duyệt không bấm được.
+- **Câu hỏi blocking** (không trả lời thì không đi tiếp được) gọi MCP tool `create_qa` rồi dừng — **không** tự viết `qa.md` bằng tay, mọi step (Investigate/Design/Implement/Test-designer/Test-implementer/Review/PR/Doc-review) đều đi qua tool này để đảm bảo cùng một định dạng.
+- **Mỗi câu một block** — `## Q<n>` + `**Lựa chọn:**` (list `- A. …`) + `**Trả lời:**`. Đó là **dạng duy nhất** render thành radio; `create_qa` tự render đúng khuôn này (tham chiếu khi cần biết `qa.md` được tạo ra như thế nào).
 - **Mục non-blocking** chốt qua feedback ở HITL gate, không cần `qa.md`.
 
 ### 2.9 Ánh xạ sang `pipeline-export.json`
