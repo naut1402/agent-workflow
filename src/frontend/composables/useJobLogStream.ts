@@ -1,5 +1,7 @@
 import { onUnmounted, ref, watch, type Ref } from 'vue'
 import { fetchJobLog } from '../../features/logs/scripts/logsApi'
+import { openSseStream, type SseStream } from '../lib/sseClient'
+import { ensureDashboardTransport, isSseEnabled } from '../lib/dashboardTransport'
 
 export interface JobLogStreamOptions {
   /** Long-poll wait hint passed to the server (ms). */
@@ -29,6 +31,8 @@ export function useJobLogStream(jobId: Ref<string | null>, opts: JobLogStreamOpt
 
   const waitMs = opts.waitMs ?? 3000
   let stopRequested = false
+  let stream: SseStream | null = null
+  let generation = 0
 
   function resetBuffer() {
     text.value = ''
@@ -39,9 +43,15 @@ export function useJobLogStream(jobId: Ref<string | null>, opts: JobLogStreamOpt
     error.value = null
   }
 
-  async function pollOnce(id: string): Promise<boolean> {
-    const data = await fetchJobLog(id, { offset: offset.value, wait: waitMs })
-
+  /** Reducer shared by the poll loop (REST) and the SSE branch. */
+  function applyLogDelta(data: {
+    reset?: boolean
+    text?: string
+    size?: number
+    status?: string
+    exitCode?: number | null
+    eof?: boolean
+  }): void {
     if (data.reset) {
       text.value = data.text || ''
       offset.value = typeof data.size === 'number' ? data.size : text.value.length
@@ -56,11 +66,11 @@ export function useJobLogStream(jobId: Ref<string | null>, opts: JobLogStreamOpt
     if ('exitCode' in data) exitCode.value = data.exitCode ?? null
     if (data.eof != null) eof.value = Boolean(data.eof)
     else if (isJobLogTerminal(data.status)) eof.value = true
+  }
 
-    // Legacy tail endpoint: no delta fields — treat first chunk as full tail.
-    if (data.truncated && !data.text && offset.value === 0 && typeof data.size === 'number') {
-      /* size-only heartbeat */
-    }
+  async function pollOnce(id: string): Promise<boolean> {
+    const data = await fetchJobLog(id, { offset: offset.value, wait: waitMs })
+    applyLogDelta(data)
 
     if (data.hasMore) return true
     if (isJobLogTerminal(data.status)) return false
@@ -96,16 +106,44 @@ export function useJobLogStream(jobId: Ref<string | null>, opts: JobLogStreamOpt
     }
   }
 
+  function startSse(id: string, gen: number): void {
+    polling.value = true
+    error.value = null
+    stream = openSseStream(`/api/jobs/${encodeURIComponent(id)}/log/stream`, undefined, {
+      onEvent: (type, data) => {
+        if (gen !== generation || type !== 'log') return
+        applyLogDelta(data as Parameters<typeof applyLogDelta>[0])
+        error.value = null
+      },
+      onError: (e: any) => {
+        if (gen !== generation) return
+        error.value = String(e?.message || e)
+      },
+    })
+  }
+
   function start() {
     stop()
     const id = jobId.value
     if (!id) return
     stopRequested = false
-    void runLoop(id)
+    const gen = ++generation
+    void ensureDashboardTransport().then((transport) => {
+      if (gen !== generation) return
+      if (isSseEnabled(transport)) {
+        startSse(id, gen)
+        return
+      }
+      void runLoop(id)
+    })
   }
 
   function stop() {
     stopRequested = true
+    generation++
+    stream?.close()
+    stream = null
+    polling.value = false
   }
 
   watch(

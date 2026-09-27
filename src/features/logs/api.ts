@@ -9,5 +9,6 @@ export const routeOrder = 60
 export function registerRoutes(app: Hono<HonoEnv>): void {
   app.get('/api/logs', bind(LogsController, 'listLogs'))
   app.get('/api/jobs/:id/log', bind(LogsController, 'getJobLog'))
+  app.get('/api/jobs/:id/log/stream', bind(LogsController, 'streamJobLog'))
   app.get('/api/tasks/:taskId/job-log', bind(LogsController, 'getTaskJobLog'))
 }
