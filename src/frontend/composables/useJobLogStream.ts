@@ -114,6 +114,7 @@ export function useJobLogStream(jobId: Ref<string | null>, opts: JobLogStreamOpt
         if (gen !== generation || type !== 'log') return
         applyLogDelta(data as Parameters<typeof applyLogDelta>[0])
         error.value = null
+        if (eof.value) stop()
       },
       onError: (e: any) => {
         if (gen !== generation) return
