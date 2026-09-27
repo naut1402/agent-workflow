@@ -22,6 +22,13 @@ export default {
     groupLabel: 'Chế độ xem artifact mặc định',
     block: 'Block theo H2',
     full: 'Full',
+    accordion: 'Chỉ mở một section tại một thời điểm',
+    sectionDesc: 'Trạng thái section khi mở tài liệu (chỉ áp cho chế độ Block).',
+    sectionGroupLabel: 'Trạng thái section mặc định',
+    sectionExpanded: 'Mở tất cả',
+    sectionCollapsed: 'Đóng tất cả',
+    sectionForcedHint:
+      'Đang bật "chỉ mở một section" nên tài liệu luôn mở ở trạng thái đóng tất cả.',
   },
   chatFeedback: {
     title: 'Chat khi step đang chạy',

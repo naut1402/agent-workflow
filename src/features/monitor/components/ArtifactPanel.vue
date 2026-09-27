@@ -19,7 +19,11 @@ import type { ArtifactMenuNode } from '../schemas/artifactAction'
 import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 import { attachMermaidControls } from '../../../frontend/composables/useMermaidControls'
 import { canNavigateToModeKey, navigateToModeKey } from '../../../frontend/shell/keys'
-import { resolveArtifactViewMode } from '../../../frontend/configs/appSettings'
+import {
+  resolveArtifactViewMode,
+  resolveArtifactSectionAccordion,
+  resolveArtifactSectionDefault,
+} from '../../../frontend/configs/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
 import { classifyArtifactHref } from '../lib/artifactLink'
@@ -49,6 +53,12 @@ const loadedKey = ref<string | null>(null)
 const loadedMtime = ref<number | null>(null)
 const blockMode = ref(resolveArtifactViewMode(settings.value) === 'block')
 const openBlocks = ref<Set<number>>(new Set())
+// Accordion đọc reactive từ settings: đổi setting là đổi luôn cách bấm section,
+// còn trạng thái đang mở thì giữ tới lần nạp tài liệu kế tiếp.
+// Logic gập section ở đây là bản sao độc lập của frontend/ui/CMarkdownView.vue — sửa một bên thì sửa cả hai.
+const accordionMode = computed(() => resolveArtifactSectionAccordion(settings.value))
+// Cờ "lần nạp đầu của tài liệu này" — chỉ lần đó mới seed lại `openBlocks`.
+const seedSectionsOnNextContent = ref(true)
 const message = ref('')
 const externalChange = ref(false)
 const viewRoot = ref<HTMLElement | null>(null)
@@ -333,6 +343,10 @@ async function handleBlur() {
 
 async function load(taskId: string, name: string) {
   const key = `${taskId}/${name}`
+  // Chỉ BẬT, không bao giờ hạ: đổi artifact làm watcher `openArtifact` và watcher
+  // `mtime` cùng gọi load() cho một key trong một flush, gán đè sẽ nuốt mất cờ và
+  // tài liệu mới thừa hưởng `openBlocks` của tài liệu trước.
+  if (loadedKey.value !== key) seedSectionsOnNextContent.value = true
   loadedKey.value = key
   cancelEdit()
   message.value = ''
@@ -342,6 +356,10 @@ async function load(taskId: string, name: string) {
     if (loadedKey.value === key) {
       content.value = res.content
       loadedMtime.value = res.mtime
+      // Seed tại đây chứ không chờ `watch(content)`: watcher chỉ bắn khi giá trị
+      // ĐỔI, nên mở tài liệu khác mà nội dung trùng khít sẽ giữ nguyên trạng thái
+      // section của tài liệu trước. `blocks` là computed nên đã theo content mới.
+      seedSectionsIfPending()
     }
   } catch {
     // Artifact trong thư mục con không có entry ở `task.artifacts` nên link tới nó
@@ -433,12 +451,37 @@ function onViewClick(ev: MouseEvent) {
 function onBlockToggle(i: number, ev: Event) {
   const el = ev.target as HTMLDetailsElement
   if (el.open) {
-    openBlocks.value.add(i)
+    // Accordion: mở block i ⇒ tập mở chỉ còn {i}. Các block anh em bị Vue đóng sẽ
+    // bắn `toggle` vọng lại, rơi vào nhánh dưới và chỉ `delete` — idempotent, không lặp.
+    openBlocks.value = accordionMode.value ? new Set([i]) : new Set(openBlocks.value).add(i)
     scheduleMermaid()
   } else {
-    openBlocks.value.delete(i)
+    const next = new Set(openBlocks.value)
+    next.delete(i)
+    openBlocks.value = next
   }
-  openBlocks.value = new Set(openBlocks.value) // force reactivity — cùng pattern TaskList.vue
+}
+
+// Nơi DUY NHẤT seed `openBlocks` từ preference. Accordion bật ⇒ resolver trả 'collapsed'.
+function applyDefaultSectionState() {
+  openBlocks.value =
+    resolveArtifactSectionDefault(settings.value) === 'expanded'
+      ? new Set(blocks.value.map((_, i) => i))
+      : new Set()
+  if (openBlocks.value.size) scheduleMermaid()
+}
+
+// Tiêu thụ cờ seed — lần gọi đầu thắng, các lần sau là no-op.
+function seedSectionsIfPending() {
+  if (!seedSectionsOnNextContent.value) return
+  seedSectionsOnNextContent.value = false
+  applyDefaultSectionState()
+}
+
+// Giữ nguyên lựa chọn của người dùng, chỉ bỏ index không còn block tương ứng.
+function pruneOpenBlocks() {
+  const max = blocks.value.length
+  openBlocks.value = new Set([...openBlocks.value].filter((i) => i < max))
 }
 
 function openAllBlocks() {
@@ -495,11 +538,9 @@ watch(
   },
 )
 
-// Mở toàn bộ block mỗi khi content được (nạp) lại — cùng gốc dữ liệu với
-// `blocks` computed, nên seed lại khi artifact load xong.
-watch(content, () => {
-  openBlocks.value = new Set(blocks.value.map((_, i) => i))
-})
+// Nạp lại cùng tài liệu (polling `mtime`, lưu inline edit, 409 conflict): giữ nguyên
+// section đang đọc, chỉ bỏ index không còn block tương ứng.
+watch(content, pruneOpenBlocks)
 
 watch(
   () => {
@@ -537,7 +578,7 @@ onUpdated(() => scheduleMermaid())
         <!-- Thu gọn/mở rộng toàn bộ block đặt bên trái toolbar, cùng vị trí với
              nút collapse của sub-sidebar và panel trái Pipeline Editor. -->
         <button
-          v-if="blockMode"
+          v-if="blockMode && !accordionMode"
           type="button"
           class="icon-btn btn-toggle-all-blocks"
           :disabled="isEditing() || !!runningActionId"
