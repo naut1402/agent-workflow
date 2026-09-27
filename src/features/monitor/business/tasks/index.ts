@@ -1,5 +1,6 @@
 import { joinPath, readDir, readFile, readTextFile, resolvePathUnder, statSafe } from '../../../../backend/lib/fileHelper.js'
 import { resolveHitlPending, gateStepsFromConfig } from '../../../../shared/lib/phase.js'
+import { isFinishedTaskState } from '../../lib/pipelineRunGuards.js'
 import { knownArtifactsFor, loadPipelineConfig } from '../peers.js'
 
 /**
@@ -137,7 +138,11 @@ export async function collectTasks(root: string): Promise<any[]> {
       artifacts,
       subtasks,
       pipeline: cfg,
-      has_qa: !!(artifacts['qa.md'] && artifacts['qa.md'].exists),
+      // Task đã hoàn thành (completed hoặc archived) không còn ai quay lại trả
+      // lời — ẩn QA/bỏ highlight tại nguồn để mọi consumer (title highlight,
+      // QaPanel, notification badge) tự đồng bộ mà không cần patch từng nơi.
+      has_qa: !isFinishedTaskState({ current_phase: state?.current_phase ?? null, archived: state?.archived ?? false })
+        && !!(artifacts['qa.md'] && artifacts['qa.md'].exists),
       qa_count,
       qa,
     })
@@ -154,6 +159,8 @@ export { createTask, renderRequestMarkdown } from './create.js'
 export type { CreateTaskInput, CreateTaskResult, CreatedTask } from './create.js'
 export { runTaskStep } from './runStep.js'
 export type { RunTaskStepInput, RunTaskStepResult } from './runStep.js'
+export { createQa } from './qa.js'
+export type { CreateQaResult } from './qa.js'
 // `startAuthority` cố ý không re-export ở đây: mọi caller — `runner/business/index.ts`,
 // `orchestrator/business/`, và test — đều import thẳng `./startAuthority.js`, nên lớp
 // trung gian này là dead weight mà audit gate bắt đúng.
