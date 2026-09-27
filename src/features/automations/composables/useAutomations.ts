@@ -13,6 +13,8 @@ import {
   type AutomationFormOptions,
   type AutomationListItem,
 } from '../scripts/automationsApi'
+import { openSseStream, type SseStream } from '../../../frontend/lib/sseClient'
+import { ensureDashboardTransport, isSseEnabled } from '../../../frontend/lib/dashboardTransport'
 
 /**
  * State machine cho AutomationsPanel (#233): list + CRUD + run-now + history,
@@ -170,20 +172,41 @@ export function useAutomations(getProjectId: () => string | undefined) {
     }
   }
 
-  // Poll nhẹ theo project — panel mount/unmount điều khiển vòng đời.
+  // Panel mount/unmount điều khiển vòng đời — SSE (event bus đã đủ automation.*/
+  // entity.*) khi bật, fallback poll nhẹ (10s) khi transport = polling.
   let timer: ReturnType<typeof setInterval> | null = null
+  let stream: SseStream | null = null
+  let generation = 0
 
   function startPolling(): void {
     stopPolling()
-    timer = setInterval(() => {
-      void load()
-      void loadRuns()
-    }, POLL_MS)
+    const gen = ++generation
+    void ensureDashboardTransport().then((transport) => {
+      if (gen !== generation) return
+      if (isSseEnabled(transport)) {
+        stream = openSseStream('/api/automations/stream', { project: getProjectId() }, {
+          onEvent: (type, data) => {
+            if (gen !== generation || type !== 'automations') return
+            const payload = data as { automations?: unknown; runs?: unknown }
+            automations.value = Array.isArray(payload.automations) ? (payload.automations as AutomationListItem[]) : []
+            runs.value = Array.isArray(payload.runs) ? (payload.runs as AutomationRun[]) : []
+          },
+        })
+        return
+      }
+      timer = setInterval(() => {
+        void load()
+        void loadRuns()
+      }, POLL_MS)
+    })
   }
 
   function stopPolling(): void {
+    generation++
     if (timer) clearInterval(timer)
     timer = null
+    stream?.close()
+    stream = null
   }
 
   watch(
