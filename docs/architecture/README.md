@@ -3,7 +3,7 @@
 > **Tóm tắt trong 30 giây:** `dev-team-dashboard` là một **SPA quan sát** (đọc là chính) cho một orchestrator agent chạy ngoài, xoay quanh 3 trụ cột:
 > 1. **Observability** — đọc state/artifact từ `.dev-team-agent/` (filesystem ngoài, sở hữu bởi orchestrator).
 > 2. **Management** — quản lý project registry + config qua `~/.dev-team-dashboard/` (SQLite + JSON, dashboard tự sở hữu).
-> 3. **Integration** — expose MCP server (stdio) cho Claude Code CLI, REST + SSE cho Web UI.
+> 3. **Integration** — expose MCP server (stdio, có mode `readonly` / `full`) cho Claude Code CLI, REST + SSE cho Web UI.
 
 Kiến trúc viết theo mô hình **C4** (Simon Brown): 4 cấp trừu tượng, thô → mịn — gộp chung cả 4 cấp trong tài liệu này. Riêng mục lục domain event tách sang [`events/`](events/README.md) vì tra cứu độc lập với cấp.
 
@@ -25,13 +25,13 @@ C4Context
   System_Ext(orchestrator, "Orchestrator agent", "Tiến trình chạy ngoài repo này, sở hữu vòng đời task")
   System_Ext(claude, "Claude Code / AI provider", "Sinh nội dung NL: agent draft, chat, review")
   System_Ext(github, "GitHub", "Issue/PR liên kết task")
-  System_Ext(claudeCli, "Claude Code (CLI/IDE)", "Gọi MCP server để CRUD project registry")
+  System_Ext(claudeCli, "Claude Code (CLI/IDE)", "Gọi MCP server để đọc task/artifact/knowledge và CRUD project registry")
 
   Rel(user, dashboard, "Theo dõi, cấu hình", "HTTPS")
   BiRel(dashboard, orchestrator, "Đọc/ghi state", "Filesystem")
   Rel(dashboard, claude, "Sinh nội dung", "HTTPS")
   BiRel(dashboard, github, "Đọc/ghi issue", "REST API")
-  Rel(claudeCli, dashboard, "CRUD project", "MCP stdio")
+  Rel(claudeCli, dashboard, "Đọc task/artifact · CRUD project", "MCP stdio")
 ```
 
 ### Vai trò của từng actor
@@ -42,7 +42,7 @@ C4Context
 | **Orchestrator agent** | Ghi trạng thái + artifact khi chạy pipeline; dashboard đọc để hiển thị | Ngoại lệ: pipeline bật tuỳ chọn điều phối thì dashboard tự giữ quyền điều khiển bước chạy |
 | **Claude Code / AI provider** | Sinh nội dung khi người dùng yêu cầu (agent draft, NL chat) | Không cấu hình provider → fallback heuristic, không chặn luồng |
 | **GitHub** | Liên kết issue với task, đọc/ghi qua REST API | Token cấu hình theo từng project |
-| **Claude Code (CLI/IDE)** | Gọi MCP server để CRUD project registry | Không cần HTTP server chạy — chi tiết ở §2 Container |
+| **Claude Code (CLI/IDE)** | Gọi MCP server để đọc task / artifact / knowledge và CRUD project registry | Không cần HTTP server chạy — chi tiết ở §2 Container |
 
 ---
 
@@ -55,7 +55,7 @@ C4Container
   System_Boundary(dashboard, "dev-team-dashboard") {
     Container(spa, "Frontend SPA", "Vue 3 + Vite", "Nhiều mode qua ModeRegistry — chi tiết ở §3 Component")
     Container(backend, "Backend app", "Hono trên Bun/Node", "1 app, nhiều transport — chi tiết ở §3 Component")
-    Container(mcp, "MCP server", "Bun stdio", "CRUD project registry cho Claude Code")
+    Container(mcp, "MCP server", "Bun stdio", "Đọc task/artifact/knowledge + CRUD project registry cho Claude Code")
     ContainerDb(sqlite, "dashboard.sqlite", "SQLite + Drizzle", "Lưu trữ có cấu trúc dùng chung")
     ContainerDb(registryFile, "projects.json", "JSON file", "Registry danh sách project")
   }
@@ -66,7 +66,7 @@ C4Container
   Rel(backend, dataRoot, "Đọc/ghi state")
   Rel(backend, sqlite, "Đọc/ghi", "Drizzle ORM")
   Rel(backend, registryFile, "Đọc/ghi")
-  Rel(mcp, registryFile, "CRUD project")
+  Rel(mcp, registryFile, "CRUD project (mode full)")
 ```
 
 ### Vai trò từng container
@@ -75,7 +75,7 @@ C4Container
 |---|---|
 | **Frontend SPA** | UI người dùng, nhiều mode — chi tiết §3 Component |
 | **Backend app** | Xử lý mọi route API — chi tiết §3 Component |
-| **MCP server** | Expose project registry cho Claude Code qua stdio |
+| **MCP server** | Expose project registry + nhóm tool đọc task/artifact/knowledge cho Claude Code qua stdio. Mode vận hành (`DEVTEAM_MCP_MODE`, mặc định `readonly`) quyết định tool nào được đăng ký — tool ghi chỉ có ở `full`. Chi tiết tool ở [README](../../README.md#mcp-server) |
 | **`dashboard.sqlite`** | DB có cấu trúc, dùng chung nhiều subsystem |
 | **`projects.json`** | Registry project, dùng chung bởi backend và MCP |
 | **`.dev-team-agent/`** *(external)* | Data root của orchestrator ngoài — dashboard chủ yếu quan sát; ngoại lệ node điều phối (`orchestrator.enabled`) — xem §3 Component |

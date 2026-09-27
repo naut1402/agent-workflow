@@ -28,7 +28,7 @@
 - **Runtime & build** — [Bun](https://bun.sh) (dev server, test, script), [Vite](https://vitejs.dev) cho SPA và dev middleware.
 - **Frontend** — [Vue 3](https://vuejs.org) `<script setup>`, DI/IoC bằng `provide/inject` thuần + `ModeRegistry` (mỗi mode tự đăng ký), `vue-i18n` (vi/en, glob theo feature), [Vue Flow](https://vueflow.dev) cho pipeline canvas, Toast UI Editor + Mermaid cho markdown & sơ đồ, SCSS token tập trung.
 - **Backend** — [Hono](https://hono.dev) trên **hai transport** (Vite middleware khi dev, `src/backend/standalone.ts` khi chạy Node/Bun), route tự nạp từ `src/features/*/api.ts`, [Zod](https://zod.dev) validate biên I/O, không database — filesystem là nguồn sự thật.
-- **Tích hợp AI** — Anthropic SDK cho wizard sinh agent bằng ngôn ngữ tự nhiên; MCP server stdio (`bun run mcp`) cho Claude Code.
+- **Tích hợp AI** — Anthropic SDK cho wizard sinh agent bằng ngôn ngữ tự nhiên; MCP server stdio (`bun run mcp`) cho Claude Code, có mode vận hành `readonly` / `full`.
 - **Chất lượng** — TypeScript (`vue-tsc`), ESLint, Prettier, Commitlint, `bun test` (domain/API), Vitest + coverage (frontend), Playwright (e2e).
 - **Đóng gói** — Docker Compose + Dockerfile kèm `install.sh` (xem [`docker/`](docker/)).
 
@@ -43,7 +43,7 @@
 - **Quick action** — chạy nhanh một action lên task/artifact đang chọn, không cần tạo task đầy đủ; menu lồng nhau.
 - **Logs** — soi lại chuyện đã xảy ra: audit thao tác, request HTTP, log job; bật/tắt từng loại trong Settings.
 - **Statistics** — thống kê drill-down project → task → step → job, biểu đồ pie / xychart.
-- **MCP** — CRUD project registry qua stdio (`bun run mcp`), không cần HTTP server chạy.
+- **MCP** — đường vào cho agent không nói HTTP qua stdio (`bun run mcp`), không cần HTTP server chạy. Đọc project registry, task, artifact và knowledge bundle; CRUD registry chỉ mở ở mode `full`. Xem [MCP server](#mcp-server).
 
 ## Data root `.dev-team-agent/`
 
@@ -75,7 +75,7 @@ bun run dev          # Vite :5174 — single-project
 bun run build        # SPA → dist/
 bun run serve        # Node standalone (cần dist/) :5174
 bun run start        # build + serve
-bun run mcp          # MCP stdio — project registry
+bun run mcp          # MCP stdio — mặc định readonly; --mode=full để mở tool ghi
 ```
 
 ### Lệnh hữu ích
@@ -97,6 +97,43 @@ bun run check:todo   # gate docs/todo (CI promote → main)
 |------|-----------|----------|---------------|
 | `ANTHROPIC_API_KEY` | Tuỳ chọn | Sinh bản nháp agent từ mô tả (`/api/custom-agents/generate`) | Fallback heuristic |
 | `DASHBOARD_SECRET_KEY` | Bắt buộc cho vault | Mã hoá `secret-vault.json` (`secretVault.ts`) — credential kiểu "dán secret trực tiếp" (`stored:`) và "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` | 2 luồng đó fail rõ ràng; CLI và secretRef `env:` / `file:` không bị ảnh hưởng |
+| `DEVTEAM_MCP_MODE` | Tuỳ chọn | Mode vận hành của MCP server — `readonly` hoặc `full` | Mặc định `readonly` (chỉ tool đọc). Giá trị lạ → cảnh báo ra `stderr` rồi lùi về `readonly` |
+
+## MCP server
+
+`bun run mcp` chạy dashboard ở **vai server** (Claude Code gọi vào qua stdio). Vai ngược lại — dashboard **gọi** MCP server khác — là mode **MCP** trên UI, không liên quan phần này.
+
+### Mode vận hành
+
+Mode cố định lúc spawn và quyết định **tool nào được đăng ký**, nên tool ngoài quyền không xuất hiện trong `tools/list` chứ không phải hiện ra rồi bị từ chối. Chọn qua env `DEVTEAM_MCP_MODE`; CLI `--mode=<x>` ghi đè env. Dòng `stderr` lúc khởi động báo mode đang chạy.
+
+| Mode | Tool được đăng ký |
+|------|-------------------|
+| `readonly` (mặc định) | `list_projects` · `get_project` · `get_knowledge_bundle` · `list_tasks` · `get_task_state` · `list_artifacts` · `read_artifact` |
+| `full` | Tất cả tool trên + `add_project` · `remove_project` |
+
+> ⚠️ **Nâng từ 1.1.x**: mặc định đổi thành `readonly`, nên `add_project` / `remove_project` biến khỏi `tools/list` nếu không khai gì. Giữ hành vi cũ bằng cách thêm `"env": { "DEVTEAM_MCP_MODE": "full" }` vào entry `mcpServers` của client.
+
+### Tool
+
+| Tool | Input | Output |
+|------|-------|--------|
+| `list_projects` | `{}` | `{ projects, defaultId }` |
+| `get_project` | `{ id }` | `{ project }` |
+| `get_knowledge_bundle` | `{ ids, project? }` | `{ bundle }` |
+| `list_tasks` | `{ project?, status?, limit? }` | `{ tasks, total }` |
+| `get_task_state` | `{ taskId, project? }` | `{ state }` |
+| `list_artifacts` | `{ taskId, project? }` | `{ artifacts, subtasks }` |
+| `read_artifact` | `{ taskId, name, project? }` | `{ name, content, mtime }` |
+| `add_project` (mode `full`) | `{ path, name? }` | `{ project }` |
+| `remove_project` (mode `full`) | `{ id }` | `{ removed: true }` |
+
+Kết quả trả song song `content[0].text` (JSON) và `structuredContent`. Hai tool payload lớn — `get_knowledge_bundle` và `read_artifact` — cố ý **không** phát `structuredContent` để khỏi nhân đôi payload trên stdio. Lỗi mang mã máy đọc được ở `_meta.error.code` (`not_found` · `invalid_input` · `forbidden_in_mode` · `internal`).
+
+### Giới hạn đã biết
+
+- Thao tác ghi từ MCP **có** vào audit log và `events.jsonl`, nhưng **không** tới SSE của dashboard — event bus là in-process, MCP server và dashboard là hai tiến trình khác nhau. Dashboard đang mở phải refresh tay.
+- Chỉ transport stdio. HTTP/SSE chưa hỗ trợ.
 
 ## Liên kết
 
