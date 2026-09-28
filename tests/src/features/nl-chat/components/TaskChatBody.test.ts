@@ -1,6 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n } from '../../../helpers/i18n'
+
+// `useTaskChat().start()` reads the transport flag before doing anything else
+// (Tfe0c91ca — SSE migration). This file pins REST-poll response handling
+// (`stubChat` only understands `/chat`, not `/chat/stream`) — force 'polling'
+// so the underlying composable keeps taking the REST branch these cases
+// actually exercise.
+vi.mock('@/frontend/lib/dashboardTransport', () => ({
+  ensureDashboardTransport: vi.fn().mockResolvedValue('polling'),
+  isSseEnabled: (t: string) => t !== 'polling',
+}))
+
 import TaskChatBody from '@/features/nl-chat/components/TaskChatBody.vue'
 
 /**

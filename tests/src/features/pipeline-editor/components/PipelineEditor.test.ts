@@ -928,3 +928,125 @@ describe('PipelineEditor — xem markdown agent/skill/rule', () => {
     expect(canvasVisible(w)).toBe(false)
   })
 })
+
+// T8eb14482 — TC-UI-02/04/05/06/07: dialog cấu hình orchestrator ghi thẳng
+// `pipelineMeta.orchestrator` (không qua `applyStepUpdate`), phải sống sót
+// qua sync canvas và không đụng cấu hình step khác. VueFlow là stub phẳng
+// (`template: '<div />'`) nên không click được nút ✎ thật trên canvas — gọi
+// thẳng `openOrchestratorConfig()` qua `vm`, cùng khuôn với `openConfig()` ở
+// các test 'f'/'g' phía trên (dòng ~379-397 của file này).
+describe('PipelineEditor — orchestrator config dialog (T8eb14482)', () => {
+  const PIPELINE_WITH_ORCHESTRATOR = {
+    version: 1,
+    orchestrator: { enabled: true, agent: 'a:orch' },
+    steps: [
+      { id: 'investigator', name: 'Investigate', agent: 'dev:investigator', produces: ['investigate.md'] },
+      { id: 'designer', name: 'Design', agent: 'dev:designer', produces: ['design.md'] },
+    ],
+  }
+
+  async function mountWithOrchestrator() {
+    vi.mocked(fetchPipelineConfig).mockResolvedValue({ pipeline: PIPELINE_WITH_ORCHESTRATOR } as any)
+    const w = mountEditor({ scope: 'task', taskId: 'T1', tasks: [{ task_id: 'T1' }] })
+    await flushPromises()
+    return w
+  }
+
+  it('TC-UI-02: gọi openOrchestratorConfig ⇒ mở OrchestratorConfigDialog với đúng config hiện tại', async () => {
+    const w = await mountWithOrchestrator()
+    expect(w.findComponent({ name: 'OrchestratorConfigDialog' }).exists()).toBe(false)
+
+    ;(w.vm as any).openOrchestratorConfig()
+    await flushPromises()
+
+    const dialog = w.findComponent({ name: 'OrchestratorConfigDialog' })
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('orchestrator')).toMatchObject({ enabled: true, agent: 'a:orch' })
+  })
+
+  it('TC-UI-04/06: apply patch ⇒ cập nhật pipelineMeta.orchestrator, KHÔNG đụng data node step khác, dialog đóng lại', async () => {
+    const w = await mountWithOrchestrator()
+    const stepBefore = { ...flowStore.current.getNodes.value.find((n: any) => n.id === 'investigator').data }
+
+    ;(w.vm as any).openOrchestratorConfig()
+    await flushPromises()
+    await w
+      .findComponent({ name: 'OrchestratorConfigDialog' })
+      .vm.$emit('update', { system_prompt: 'Review có PO thì quay lại implementer.', knowledge_inputs: ['project/a'] })
+    await flushPromises()
+
+    expect((w.vm as any).pipelineMeta.orchestrator).toMatchObject({
+      enabled: true,
+      agent: 'a:orch',
+      system_prompt: 'Review có PO thì quay lại implementer.',
+      knowledge_inputs: ['project/a'],
+    })
+    expect((w.vm as any).orchestratorConfigOpen).toBe(false)
+
+    const stepAfter = flowStore.current.getNodes.value.find((n: any) => n.id === 'investigator').data
+    expect(stepAfter).toEqual(stepBefore)
+  })
+
+  it('TC-UI-04: Save sau khi apply ⇒ YAML mang đúng system_prompt/knowledge_inputs, steps khác giữ nguyên', async () => {
+    const w = await mountWithOrchestrator()
+    ;(w.vm as any).openOrchestratorConfig()
+    await flushPromises()
+    await w
+      .findComponent({ name: 'OrchestratorConfigDialog' })
+      .vm.$emit('update', { system_prompt: 'guidance', knowledge_inputs: ['project/a'] })
+    await flushPromises()
+
+    await w.findComponent({ name: 'EditorTargetPanel' }).vm.$emit('save')
+    await flushPromises()
+
+    expect(writePipelineConfig).toHaveBeenCalledTimes(1)
+    const pipeline = vi.mocked(writePipelineConfig).mock.calls[0][1] as any
+    expect(pipeline.orchestrator).toMatchObject({
+      enabled: true,
+      agent: 'a:orch',
+      system_prompt: 'guidance',
+      knowledge_inputs: ['project/a'],
+    })
+    // Editor tự chuẩn hoá default (`hitl`, `knowledge_inputs: []`) cho step —
+    // không liên quan tính năng này; chỉ chấm rằng step vẫn đúng nguyên bản
+    // (id/agent/produces), không nhiễm field mới của orchestrator.
+    expect(pipeline.steps.map((s: any) => ({ id: s.id, agent: s.agent, produces: s.produces }))).toEqual(
+      PIPELINE_WITH_ORCHESTRATOR.steps.map((s) => ({ id: s.id, agent: s.agent, produces: s.produces })),
+    )
+    expect(pipeline.steps.every((s: any) => !('system_prompt' in s))).toBe(true)
+  })
+
+  it('TC-UI-05: đóng dialog bằng "close" (huỷ) ⇒ pipelineMeta.orchestrator KHÔNG đổi', async () => {
+    const w = await mountWithOrchestrator()
+    ;(w.vm as any).openOrchestratorConfig()
+    await flushPromises()
+    await w.findComponent({ name: 'OrchestratorConfigDialog' }).vm.$emit('close')
+    await flushPromises()
+
+    expect((w.vm as any).orchestratorConfigOpen).toBe(false)
+    expect((w.vm as any).pipelineMeta.orchestrator).toMatchObject({ enabled: true, agent: 'a:orch' })
+    expect((w.vm as any).pipelineMeta.orchestrator.system_prompt).toBeUndefined()
+  })
+
+  it('TC-UI-07: xoá một step KHÔNG liên quan (kích hoạt syncDerivedGraph) ⇒ cấu hình orchestrator đã lưu vẫn nguyên vẹn', async () => {
+    const w = await mountWithOrchestrator()
+    ;(w.vm as any).openOrchestratorConfig()
+    await flushPromises()
+    await w
+      .findComponent({ name: 'OrchestratorConfigDialog' })
+      .vm.$emit('update', { system_prompt: 'giữ nguyên qua sync', knowledge_inputs: ['project/a'] })
+    await flushPromises()
+
+    // Thao tác canvas không liên quan tới orchestrator, lặp vài lần liên tiếp
+    // (edge case TC-UI-07): xoá "designer" — node duy nhất không phải orchestrator.
+    flowStore.current.removeNodes(['designer'])
+    await flushPromises()
+    flowStore.current.removeNodes(['khong-ton-tai'])
+    await flushPromises()
+
+    expect((w.vm as any).pipelineMeta.orchestrator).toMatchObject({
+      system_prompt: 'giữ nguyên qua sync',
+      knowledge_inputs: ['project/a'],
+    })
+  })
+})

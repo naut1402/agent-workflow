@@ -1,4 +1,11 @@
 {
   "$comment": "Miễn trừ test tường minh, đọc bởi .github/scripts/test-coverage-status.ts. BẤT BIẾN: mỗi bản ghi phải đủ taskId + version + reason + approved_by; không wildcard, không miễn cấp version. Sai định dạng là ĐỎ, không phải 'miễn hết'. File sống ở dòng test.",
-  "exemptions": []
+  "exemptions": [
+    {
+      "taskId": "T7f7dab4a",
+      "version": "1.1.8",
+      "reason": "Chỉ đổi CSS thuần (bỏ max-width cố định trên LogsPanel/StatisticsPanel), không đổi markup/logic/behavior; test hiện có (LogsPanel.test.ts, StatisticsPanel.test.ts) không assert CSS width và jsdom không chạy layout thật nên không thêm được assertion có ý nghĩa — theo kết luận G4 investigate.md và §5 design.md/test-spec.md",
+      "approved_by": "@tttuan"
+    }
+  ]
 }

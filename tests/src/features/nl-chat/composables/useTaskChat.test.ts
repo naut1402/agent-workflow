@@ -1,9 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+// `start()` reads the transport flag before doing anything else (T fe0c91ca —
+// SSE migration). Đa số case ở file này đặc tả nhánh REST-poll đã có từ trước,
+// nên mặc định ép 'polling' để không phải tự stub `/api/security-config` ở mọi
+// test — case SSE riêng (describe cuối file) override lại thành 'sse'.
+vi.mock('@/frontend/lib/dashboardTransport', () => ({
+  ensureDashboardTransport: vi.fn().mockResolvedValue('polling'),
+  isSseEnabled: (t: string) => t !== 'polling',
+}))
+
 import { useTaskChat } from '@/features/nl-chat/composables/useTaskChat'
+import { ensureDashboardTransport } from '@/frontend/lib/dashboardTransport'
+import { makeSseStream } from '../../../helpers/sseStream'
 
 // Endpoints exercised:
 //   GET  /api/tasks/:id/chat?stepId=&from=  → { turns, total, canSend, blockedReason, running, ... }
 //   POST /api/tasks/:id/feedback            → 201 | 409 (step running)
+//   SSE  /api/tasks/:id/chat/stream         → event 'chat' (D1/D2, toggle transport=sse mặc định)
 
 function stubApi(states: any[], opts: { sendStatus?: number } = {}) {
   let call = 0
@@ -56,6 +69,7 @@ const READY = {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  vi.mocked(ensureDashboardTransport).mockResolvedValue('polling')
 })
 
 describe('useTaskChat', () => {
@@ -322,6 +336,11 @@ describe('useTaskChat', () => {
 
     const c = make()
     const pending = c.start()
+    // `start()` now awaits `ensureDashboardTransport()` (mocked, but still a
+    // microtask) before the REST fetch fires — wait for the fetch to actually
+    // be in flight before cancelling, otherwise stop() wins the race before
+    // any request was ever sent.
+    await vi.waitUntil(() => release !== null)
     c.stop()
     release!()
     await pending
@@ -352,7 +371,14 @@ describe('useTaskChat', () => {
 
     const c = make()
     const first = c.start()
+    // `start()` now awaits `ensureDashboardTransport()` before its own fetch —
+    // calling `second = c.start()` back-to-back (no await) cancels `first`
+    // at that gate before it ever fetches (its `stop()` bumps `generation`
+    // first). Wait for `first`'s fetch to actually be in flight before firing
+    // `second`, so both chains really race at the fetch stage like before.
+    await vi.waitUntil(() => releases.length === 1)
     const second = c.start()
+    await vi.waitUntil(() => releases.length === 2)
     // The first request answers LAST — the ordering that makes a stale write win.
     releases[1]()
     releases[0]()
@@ -360,5 +386,73 @@ describe('useTaskChat', () => {
 
     expect(c.sessionId.value).toBe('mới')
     expect(c.turns.value.map((t: any) => t.text)).toEqual(['phiên mới'])
+  })
+})
+
+// TC05/TC06/TC07 (test-spec.md Nhóm 2) — nhánh SSE của start(): áp dụng khi
+// `ensureDashboardTransport()` không trả về 'polling'.
+describe('start — SSE transport', () => {
+  afterEach(() => {
+    vi.mocked(ensureDashboardTransport).mockResolvedValue('polling')
+  })
+
+  it('TC05: mở chat ở chế độ SSE hiển thị đầy đủ lịch sử ngay từ frame đầu, không cần đợi poll', async () => {
+    vi.mocked(ensureDashboardTransport).mockResolvedValue('sse')
+    const sse = makeSseStream()
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => ({ ok: true, body: sse.stream }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const c = make()
+    await c.start()
+    sse.push('chat', READY)
+    await vi.waitUntil(() => c.turns.value.length > 0)
+
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/api/tasks/DEMO-1/chat/stream')
+    expect(c.turns.value).toHaveLength(2)
+    expect(c.sessionId.value).toBe('s1')
+    expect(c.canSend.value).toBe(true)
+    c.stop()
+  })
+
+  it('TC06: job đổi trạng thái trong lúc đang mở → server đẩy frame mới, chat tự cập nhật không cần thao tác', async () => {
+    vi.mocked(ensureDashboardTransport).mockResolvedValue('sse')
+    const sse = makeSseStream()
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL) => ({ ok: true, body: sse.stream })))
+
+    const c = make()
+    await c.start()
+    sse.push('chat', READY)
+    await vi.waitUntil(() => c.turns.value.length === 2)
+
+    sse.push('chat', {
+      ...READY,
+      turns: [{ index: 2, role: 'assistant', text: 'job vừa xong' }],
+      total: 3,
+      running: null,
+    })
+    await vi.waitUntil(() => c.turns.value.length === 3)
+    expect(c.turns.value.map((t) => t.text)).toEqual(['chạy step design', 'xong rồi', 'job vừa xong'])
+    c.stop()
+  })
+
+  it('TC07: stop() đóng kết nối SSE — không còn state nào được áp dụng sau khi rời trang', async () => {
+    vi.mocked(ensureDashboardTransport).mockResolvedValue('sse')
+    const sse = makeSseStream()
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => ({ ok: true, body: sse.stream }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const c = make()
+    await c.start()
+    sse.push('chat', READY)
+    await vi.waitUntil(() => c.turns.value.length > 0)
+
+    c.stop()
+    const callsAtStop = fetchMock.mock.calls.length
+    sse.push('chat', { ...READY, turns: [...READY.turns, { index: 2, role: 'assistant', text: 'sau khi đóng' }], total: 3 })
+    await new Promise((r) => setTimeout(r, 20))
+
+    // Frame gửi sau stop() không được áp dụng, và không mở thêm kết nối nào.
+    expect(c.turns.value).toHaveLength(2)
+    expect(fetchMock.mock.calls.length).toBe(callsAtStop)
   })
 })
