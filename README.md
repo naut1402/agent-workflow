@@ -110,9 +110,9 @@ Mode cố định lúc spawn và quyết định **tool nào được đăng ký
 | Mode | Tool được đăng ký |
 |------|-------------------|
 | `readonly` (mặc định) | `list_projects` · `get_project` · `get_knowledge_bundle` · `list_tasks` · `get_task_state` · `list_artifacts` · `read_artifact` |
-| `full` | Tất cả tool trên + `add_project` · `remove_project` |
+| `full` | Tất cả tool trên + `add_project` · `create_qa` · `remove_project` |
 
-> ⚠️ **Nâng từ 1.1.x**: mặc định đổi thành `readonly`, nên `add_project` / `remove_project` biến khỏi `tools/list` nếu không khai gì. Giữ hành vi cũ bằng cách thêm `"env": { "DEVTEAM_MCP_MODE": "full" }` vào entry `mcpServers` của client.
+> ⚠️ **Nâng từ 1.1.x**: mặc định đổi thành `readonly`, nên `add_project` / `create_qa` / `remove_project` biến khỏi `tools/list` nếu không khai gì. Riêng `create_qa` là tool mà template agent của 1.1.8 được dạy gọi — ở mặc định mới agent sẽ **không nhìn thấy** nó. Giữ hành vi cũ bằng cách thêm `"env": { "DEVTEAM_MCP_MODE": "full" }` vào entry `mcpServers` của client.
 
 ### Tool
 
@@ -127,6 +127,7 @@ Mode cố định lúc spawn và quyết định **tool nào được đăng ký
 | `read_artifact` | `{ taskId, name, project? }` | `{ name, content, mtime }` |
 | `add_project` (mode `full`) | `{ path, name? }` | `{ project }` |
 | `remove_project` (mode `full`) | `{ id }` | `{ removed: true }` |
+| `create_qa` (mode `full`) | `{ taskId, questions, project? }` | `{ ok, path, created }` |
 
 Kết quả trả song song `content[0].text` (JSON) và `structuredContent`. Hai tool payload lớn — `get_knowledge_bundle` và `read_artifact` — cố ý **không** phát `structuredContent` để khỏi nhân đôi payload trên stdio. Lỗi mang mã máy đọc được ở `_meta.error.code` (`not_found` · `invalid_input` · `forbidden_in_mode` · `internal`).
 

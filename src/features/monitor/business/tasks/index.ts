@@ -15,6 +15,8 @@ export { createTask, renderRequestMarkdown } from './create.js'
 export type { CreateTaskInput, CreateTaskResult, CreatedTask } from './create.js'
 export { runTaskStep } from './runStep.js'
 export type { RunTaskStepInput, RunTaskStepResult } from './runStep.js'
+export { createQa } from './qa.js'
+export type { CreateQaResult } from './qa.js'
 // `startAuthority` cố ý không re-export ở đây: mọi caller — `runner/business/index.ts`,
 // `orchestrator/business/`, và test — đều import thẳng `./startAuthority.js`, nên lớp
 // trung gian này là dead weight mà audit gate bắt đúng.

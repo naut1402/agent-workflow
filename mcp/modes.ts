@@ -26,7 +26,7 @@ export const READ_TOOLS = [
   'read_artifact',
 ] as const
 
-export const WRITE_TOOLS = ['add_project', 'remove_project'] as const
+export const WRITE_TOOLS = ['add_project', 'create_qa', 'remove_project'] as const
 
 export const TOOL_ALLOWLIST: Record<McpMode, readonly string[]> = {
   readonly: READ_TOOLS,

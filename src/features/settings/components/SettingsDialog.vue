@@ -6,6 +6,8 @@ import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 import { useLocale } from '../../../frontend/composables/useLocale'
 import { reloadProjectsKey } from '../../../frontend/shell/keys'
 import {
+  readArtifactSectionDefault,
+  resolveArtifactSectionAccordion,
   resolveArtifactViewMode,
   resolveChatFeedbackMode,
   resolveChatEnterToSend,
@@ -19,6 +21,7 @@ import {
   resolveNotificationUiPlacement,
   resolveNotifySoundEnabled,
   resolveThemePreference,
+  type ArtifactSectionDefault,
   type ChatFeedbackMode,
   type NotificationUiPlacement,
   type ThemePreference,
@@ -89,6 +92,20 @@ const collapseMonitorSubSidebarOnOutside = computed(() =>
 function setArtifactViewMode(mode: 'block' | 'full') {
   if (artifactViewMode.value === mode) return
   update({ artifactViewMode: mode })
+}
+
+// Radio bind theo giá trị ĐÃ LƯU, không phải giá trị đã resolve — tắt accordion là
+// thấy lại đúng lựa chọn cũ.
+const artifactSectionDefault = computed(() => readArtifactSectionDefault(settings.value))
+const artifactSectionAccordion = computed(() => resolveArtifactSectionAccordion(settings.value))
+
+function setArtifactSectionDefault(mode: ArtifactSectionDefault) {
+  if (artifactSectionDefault.value === mode) return
+  update({ artifactSectionDefault: mode })
+}
+
+function toggleArtifactSectionAccordion() {
+  update({ artifactSectionAccordion: !artifactSectionAccordion.value })
 }
 
 const chatFeedbackMode = computed(() => resolveChatFeedbackMode(settings.value))
@@ -816,6 +833,47 @@ onUnmounted(() => {
                     {{ t('settings.artifact.full') }}
                   </label>
                 </div>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="artifactSectionAccordion"
+                    @change="toggleArtifactSectionAccordion"
+                  />
+                  {{ t('settings.artifact.accordion') }}
+                </label>
+                <p class="settings-section-desc">{{ t('settings.artifact.sectionDesc') }}</p>
+                <div
+                  class="settings-radio-group"
+                  role="radiogroup"
+                  :aria-label="t('settings.artifact.sectionGroupLabel')"
+                  :aria-disabled="artifactSectionAccordion"
+                >
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="artifactSectionDefault"
+                      value="expanded"
+                      :checked="artifactSectionDefault === 'expanded'"
+                      :disabled="artifactSectionAccordion"
+                      @change="setArtifactSectionDefault('expanded')"
+                    />
+                    {{ t('settings.artifact.sectionExpanded') }}
+                  </label>
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="artifactSectionDefault"
+                      value="collapsed"
+                      :checked="artifactSectionDefault === 'collapsed'"
+                      :disabled="artifactSectionAccordion"
+                      @change="setArtifactSectionDefault('collapsed')"
+                    />
+                    {{ t('settings.artifact.sectionCollapsed') }}
+                  </label>
+                </div>
+                <p v-if="artifactSectionAccordion" class="settings-section-desc">
+                  ⓘ {{ t('settings.artifact.sectionForcedHint') }}
+                </p>
               </section>
               <section class="settings-section">
                 <h3 class="settings-section-title">{{ t('settings.chatFeedback.title') }}</h3>
@@ -1494,6 +1552,14 @@ onUnmounted(() => {
 .settings-checkbox input[type='checkbox'] {
   margin: 0;
   accent-color: var(--accent);
+}
+
+/* Control bị khoá (vd radio trạng thái section khi accordion bật) — dùng chung cho
+   mọi nhóm setting, không tạo class riêng. */
+.settings-radio:has(input:disabled),
+.settings-checkbox:has(input:disabled) {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .settings-mode-row {
