@@ -17,6 +17,8 @@ export type StepConfigDraft = {
   hitl_optional_doc_review: boolean
   hitl_blocking: boolean
   knowledge_inputs: string[]
+  /** Runner pin cho step — '' = theo mặc định hệ thống. */
+  runner_id: string
 }
 
 /** Payload gửi qua emit `update` — khớp `data` của node canvas. */
@@ -26,6 +28,12 @@ export type StepConfigUpdate = {
   produces: string[]
   knowledge_inputs: string[]
   hitl: Record<string, unknown>
+  /**
+   * **Luôn** có mặt, kể cả ''. `applyStepUpdate` merge node bằng
+   * `{ ...n.data, ...updatedData }` — bỏ key khi rỗng thì gỡ pin không xoá được
+   * giá trị cũ trên node.
+   */
+  runner_id: string
 }
 
 /** `null` khi chưa chọn node — dialog dùng chính giá trị này để quyết định render. */
@@ -41,6 +49,7 @@ export function buildStepConfigDraft(step: any): StepConfigDraft | null {
     hitl_optional_doc_review: hitl.optional_doc_review ?? false,
     hitl_blocking: hitl.blocking ?? false,
     knowledge_inputs: [...(step.knowledge_inputs || [])],
+    runner_id: step.runner_id || '',
   }
 }
 
@@ -62,5 +71,6 @@ export function buildStepUpdateFromDraft(draft: StepConfigDraft, stepId: string)
     produces: draft.produces,
     knowledge_inputs: draft.knowledge_inputs,
     hitl: buildHitlFromDraft(draft, stepId),
+    runner_id: draft.runner_id,
   }
 }

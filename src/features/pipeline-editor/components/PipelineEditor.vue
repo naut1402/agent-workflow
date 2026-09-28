@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { ref, computed, markRaw, onMounted, watch } from 'vue'
+import { ref, computed, markRaw, onMounted, provide, watch } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import {
@@ -39,6 +39,8 @@ import {
   type PipelineMeta,
   type StepPreservedMap,
 } from '../lib/pipelineRoundTrip'
+import { fetchRunners } from '../../runner/scripts/runnerApi'
+import { buildRunnerModelOptions } from '../../runner/lib/runnerModelOptions'
 
 const { t } = useI18nHelpers()
 
@@ -234,6 +236,29 @@ async function loadCatalog() {
   }
 }
 
+/**
+ * Danh mục runner để dựng control "Model" của StepConfigDialog. Nạp lỗi ⇒ danh
+ * sách rỗng ⇒ control tự ẩn (dialog ẩn khi ≤ 1 option), không chặn editor.
+ */
+const runnerCatalog = ref<any>({ runners: [], connections: [], providers: [] })
+
+async function loadRunners() {
+  try {
+    runnerCatalog.value = await fetchRunners()
+  } catch {
+    // no-op
+  }
+}
+
+const runnerModelOptions = computed(() => buildRunnerModelOptions(runnerCatalog.value))
+
+// Vue Flow chỉ truyền `data` xuống node, không truyền prop tuỳ ý — `provide` là
+// đường duy nhất để badge trên node đọc được nhãn model.
+provide(
+  'pipelineRunnerModelLabels',
+  computed(() => new Map(runnerModelOptions.value.map((o) => [o.value, o.label]))),
+)
+
 async function loadRules() {
   try {
     rulesData.value = await fetchRules(props.projectId ?? undefined)
@@ -318,6 +343,7 @@ function buildFlowFromPipeline(pipeline) {
       produces: Array.isArray(step.produces) ? step.produces : [],
       knowledge_inputs: Array.isArray(step.knowledge_inputs) ? step.knowledge_inputs : [],
       hitl: step.hitl || { mode: 'none' },
+      runner_id: typeof step.runner_id === 'string' ? step.runner_id : '',
     },
   }))
 
@@ -382,7 +408,7 @@ onConnect((params) => {
 })
 
 onMounted(async () => {
-  await Promise.all([loadCatalog(), loadRules(), loadConfig(), refreshProfiles()])
+  await Promise.all([loadCatalog(), loadRules(), loadConfig(), refreshProfiles(), loadRunners()])
   setTimeout(() => fitView(), 100)
 })
 
@@ -466,6 +492,7 @@ function onDropOnCanvas(event) {
       produces: [],
       knowledge_inputs: [],
       hitl: { mode: 'none' },
+      runner_id: '',
     },
   }
   setStepNodes([...stepNodesOf(getNodes.value), newNode])
@@ -1074,6 +1101,7 @@ const hasFanOut = computed(() => {
       :step="selectedNodeData"
       :catalog="catalog"
       :project-id="projectId"
+      :runner-options="runnerModelOptions"
       @update="applyStepUpdate"
       @close="closeConfig"
     />

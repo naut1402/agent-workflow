@@ -22,7 +22,7 @@ import {
   type Orchestration,
 } from '../../monitor/business/tasks/startAuthority.js'
 import { applyOrchestratorHaltAction } from '../../monitor/business/tasks/state.js'
-import { listJobs, loadJob, loadTaskSessionLedger, submitJob } from '../../runner/business/index.js'
+import { listJobs, loadJob, loadTaskSessionLedger, resolveStepRunnerId, submitJob } from '../../runner/business/index.js'
 import type { JobRecord } from '../../runner/business/index.js'
 import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
 import { isRespawnTarget } from '../../monitor/lib/pipelineRunGuards.js'
@@ -412,6 +412,8 @@ export async function respawnStep(
   emitDispatched(ref, { stepId, action: 'respawn', reason: 'respawn' })
 
   submitJob({
+    // Respawn không có khái niệm "caller chỉ định runner" nên không cần `??`.
+    runnerId: resolveStepRunnerId(step).runnerId,
     agentRef: step.agent,
     workspace: joinPath(ref.root, 'tasks', ref.taskId),
     userPrompt: brief,

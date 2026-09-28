@@ -11,6 +11,8 @@ const props = defineProps({
   step: { type: Object as () => any, default: null },  // current step data
   catalog: { type: Object as () => any, required: true },
   projectId: { type: String, default: null },
+  /** Option model dựng từ `GET /api/runners` — `value` là runner id. */
+  runnerOptions: { type: Array as () => CSelectOption[], default: () => [] },
 })
 
 const emit = defineEmits(['update', 'close'])
@@ -38,6 +40,27 @@ watch(
   (s) => { draft.value = buildStepConfigDraft(s) },
   { immediate: true },
 )
+
+/**
+ * Ẩn control khi ≤ 1 model — "chỉ cho chỉ định khi có nhiều hơn 1 runner".
+ * Ẩn **không** đồng nghĩa xoá: `draft.runner_id` vẫn đi qua `buildStepUpdateFromDraft`,
+ * nên mở dialog sửa tên step trên máy chỉ còn 1 runner không làm mất pin cũ.
+ */
+const showModelSelect = computed(() => props.runnerOptions.length > 1)
+
+const modelOptions = computed<CSelectOption[]>(() => {
+  const opts: CSelectOption[] = [
+    { value: '', label: t('pipelineEditor.stepConfig.modelDefault') },
+    ...props.runnerOptions,
+  ]
+  // Pin trỏ tới runner đã bị xoá/disable: vẫn hiện một dòng để người dùng thấy
+  // và gỡ được, thay vì CSelect hiển thị trần id thô không ai hiểu.
+  const pinned = draft.value?.runner_id
+  if (pinned && !opts.some((o) => o.value === pinned)) {
+    opts.push({ value: pinned, label: t('pipelineEditor.stepConfig.modelUnknown', { id: pinned }) })
+  }
+  return opts
+})
 
 const hitlModeOptions = computed<CSelectOption[]>(() => [
   { value: 'none', label: t('pipelineEditor.stepConfig.hitlNone') },
@@ -121,6 +144,19 @@ function apply() {
               <option v-for="a in (catalog.agents || [])" :key="a.id" :value="a.id">{{ a.name }}</option>
             </datalist>
           </label>
+
+          <!-- Model — cùng nhóm "step này chạy bằng gì" với Agent -->
+          <div v-if="showModelSelect" class="cfg-label">
+            {{ t('pipelineEditor.stepConfig.model') }}
+            <CSelect
+              id="step-config-runner"
+              class="cfg-select"
+              v-model="draft.runner_id"
+              :options="modelOptions"
+              :aria-label="t('pipelineEditor.stepConfig.model')"
+            />
+            <span class="cfg-hint">{{ t('pipelineEditor.stepConfig.modelHint') }}</span>
+          </div>
 
           <!-- Produces -->
           <label class="cfg-label">
@@ -222,6 +258,9 @@ function apply() {
 
 /* Class truyền vào CSelect chỉ lo kích thước — xem docs/agent-rules/coding-guideline.md §5. */
 .step-config-dialog .cfg-select { width: 100%; }
+
+/* Dòng gợi ý dưới control — nhạt hơn label để không tranh chỗ với chính nhãn. */
+.step-config-dialog .cfg-hint { font-size: 11px; opacity: 0.75; }
 
 .cfg-label-row { flex-direction: row; align-items: center; gap: 6px; }
 </style>
