@@ -56,7 +56,8 @@ bun run mcp
 ```
 
 - `env` là chỗ đặt mode. `--mode=<x>` trên argv **ghi đè** `env` — xem §3.
-- Root của project resolve theo `DEV_TEAM_ROOT` / `DEV_TEAM_DASHBOARD_HOME`, hoặc project mặc định trong registry (`mcp/tools/tasks.ts`).
+- Root của project resolve theo thứ tự (`src/backend/registry.ts` `resolveProjectRoot`): (1) entry `default: true` trong registry → (2) env `DEV_TEAM_ROOT` → (3) không có ⇒ `not_found` kèm thông điệp ở [§4.11](#411-thiếu-project-mặc-định). Khai `project` tường minh thì bỏ qua cả chuỗi này.
+- `DEV_TEAM_DASHBOARD_HOME` đổi nơi đặt registry (`~/.dev-team-dashboard/` → path khác), 🚫 không phải đổi root của project.
 
 ### 2.3 Bật tool ghi — `DEVTEAM_MCP_MODE=full`
 
@@ -97,7 +98,7 @@ Mỗi tool gồm 5 phần: mô tả · bảng input · output · mã lỗi thự
 
 ### 4.1 `list_projects`
 
-List all dev-team workspaces registered in the dashboard project registry.
+Liệt kê mọi workspace dev-team đã đăng ký trong project registry của dashboard.
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|---|---|---|
@@ -111,7 +112,7 @@ List all dev-team workspaces registered in the dashboard project registry.
 
 ### 4.2 `get_project`
 
-Get one registered project by its id.
+Lấy một project đã đăng ký theo `id`.
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|---|---|---|
@@ -123,7 +124,7 @@ Get one registered project by its id.
 
 ### 4.3 `get_knowledge_bundle`
 
-Read knowledge entries by id (`<scope>/<slug>`, ví dụ `global/coding-convention`). Resolve đúng các id liệt ở `knowledge_inputs` của task.
+Đọc các entry knowledge theo id (`<scope>/<slug>`, ví dụ `global/coding-convention`). Dùng để giải đúng danh sách id khai ở `knowledge_inputs` của task.
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|---|---|---|
@@ -138,7 +139,7 @@ Read knowledge entries by id (`<scope>/<slug>`, ví dụ `global/coding-conventi
 
 ### 4.4 `list_tasks`
 
-List tasks in a dev-team workspace with their current phase and pending HITL gate.
+Liệt kê task trong một workspace dev-team, kèm phase hiện tại và HITL gate đang chờ.
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|---|---|---|
@@ -158,7 +159,7 @@ List tasks in a dev-team workspace with their current phase and pending HITL gat
 
 ### 4.5 `get_task_state`
 
-Read the machine state file (`.dev-state/<taskId>.json`) of one task.
+Đọc file state máy đọc (`.dev-state/<taskId>.json`) của một task.
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|---|---|---|
@@ -173,7 +174,7 @@ Regex là **lớp phòng thủ thứ hai** cho path traversal, cộng thêm `res
 
 ### 4.6 `list_artifacts`
 
-List a task's markdown artifacts (và cả những artifact known chưa được tạo) cộng danh sách thư mục subtask.
+Liệt kê artifact markdown của một task (kể cả artifact known chưa được tạo) cộng danh sách thư mục subtask.
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|---|---|---|
@@ -188,7 +189,7 @@ List a task's markdown artifacts (và cả những artifact known chưa được
 
 ### 4.7 `read_artifact`
 
-Read one artifact file of a task (ví dụ `design.md`).
+Đọc một file artifact của task (ví dụ `design.md`).
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|---|---|---|
@@ -204,7 +205,7 @@ Read one artifact file of a task (ví dụ `design.md`).
 
 ### 4.8 `add_project`
 
-*(chỉ mode `full`)* Register a dev-team workspace. Idempotent.
+*(chỉ mode `full`)* Đăng ký một workspace dev-team vào registry. Thao tác idempotent.
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|---|---|---|
@@ -219,7 +220,7 @@ Read one artifact file of a task (ví dụ `design.md`).
 
 ### 4.9 `remove_project`
 
-*(chỉ mode `full`)* Remove a project from the registry by id.
+*(chỉ mode `full`)* Gỡ một project khỏi registry theo `id`.
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|---|---|---|
