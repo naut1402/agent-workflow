@@ -121,7 +121,7 @@ Thêm hai chi tiết:
 `prepareMcpConfigForJob` (`src/features/runner/business/providers/mcpJobConfig.ts`) sinh file `mcpServers` cho **từng job**:
 
 - **Vị trí**: `registryHome()/mcp-runtime/job-<jobId>.json` — 🚫 **không** trong workspace người dùng. File chứa secret đã giải; nằm trong repo thì lọt `git status` của chính agent.
-- **Quyền**: thư mục `0700`, file `0600` — `mode` set ngay lúc tạo chứ không `chmod` sau, vì chmod ở dòng kế tiếp vẫn để lại một cửa sổ file `0644` chứa token đã giải.
+- **Quyền**: thư mục `0700`, file `0600` — `mode` set ngay lúc tạo (`writeFileSync` với `{ mode }`) nên không có cửa sổ file `0644` chứa token đã giải; thêm một `chmod` ngay sau để phủ ca ghi đè, vì `writeFileSync` giữ nguyên mode cũ khi file đã tồn tại.
 - **Truyền vào CLI**: `claude-code-cli.ts` thêm `--mcp-config <path>` **và** `--strict-mcp-config`. Cờ thứ hai là bắt buộc đi kèm — không có nó, job còn ăn thêm MCP từ cấu hình khác.
 - **Dọn**: `dispose()` xoá file trong `finally` của job; `cleanupOrphanedMcpConfigs()` quét sạch lúc bootstrap cho ca dashboard bị kill giữa chừng.
 - **`startupTimeoutSec`** chỉ ghi cho entry `stdio` (schema CLI gắn khoá này sau predicate `transport === 'stdio'`), kẹp về `[5, 600]` **giây** và làm tròn về số nguyên giây. Server không khai `timeoutMs` ⇒ 🚫 không khai khoá ⇒ CLI dùng mặc định 120s của nó.
