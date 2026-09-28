@@ -56,6 +56,11 @@ export default {
     nodeLabel: 'Orchestrator',
     nodeTitle: 'Orchestrator node — remove it by unticking "Add orchestrator node"',
     noAgent: 'no agent selected',
+    editButton: 'Edit orchestrator node',
+    editTitle: 'Orchestrator configuration',
+    systemPromptLabel: 'Additional instructions (system prompt)',
+    systemPromptPlaceholder: 'e.g. Review has PO → automatically go back to the related step...',
+    knowledgeLabel: 'Related knowledge',
   },
   sections: {
     agents: 'Agents',

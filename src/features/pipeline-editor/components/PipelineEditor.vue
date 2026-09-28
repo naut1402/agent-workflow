@@ -20,6 +20,7 @@ import RulesPanel from './RulesPanel.vue'
 import StepConfigDialog from './StepConfigDialog.vue'
 import EditorTargetPanel from './EditorTargetPanel.vue'
 import OrchestratorNode from './OrchestratorNode.vue'
+import OrchestratorConfigDialog from './OrchestratorConfigDialog.vue'
 import ArtifactNode from '../../../frontend/ui/ArtifactNode.vue'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import { usePipelineProfiles } from '../composables/usePipelineProfiles'
@@ -485,6 +486,32 @@ function openConfig(nodeId, data) {
 function closeConfig() {
   selectedNodeId.value = null
   selectedNodeData.value = null
+}
+
+const orchestratorConfigOpen = ref(false)
+
+function openOrchestratorConfig() {
+  // Dialog teleport ra <body> nên rule `.preview-active …` không với tới nó —
+  // phải chặn bằng logic, không dựa vào CSS. Cùng khuôn với `openConfig`.
+  if (previewing.value || viewingDoc.value) return
+  orchestratorConfigOpen.value = true
+}
+
+function closeOrchestratorConfig() {
+  orchestratorConfigOpen.value = false
+}
+
+function updateOrchestratorMeta(patch) {
+  pipelineMeta.value = {
+    ...pipelineMeta.value,
+    orchestrator: { ...(pipelineMeta.value.orchestrator ?? {}), ...patch },
+  }
+  syncDerivedGraph()
+}
+
+function applyOrchestratorConfig(patch) {
+  updateOrchestratorMeta(patch)
+  closeOrchestratorConfig()
 }
 
 function onPaneClick() {
@@ -1020,7 +1047,7 @@ const hasFanOut = computed(() => {
               <ArtifactNode v-bind="nodeProps" />
             </template>
             <template #node-orchestrator="nodeProps">
-              <OrchestratorNode v-bind="nodeProps" />
+              <OrchestratorNode v-bind="nodeProps" @edit="openOrchestratorConfig" />
             </template>
           </VueFlow>
 
@@ -1049,6 +1076,14 @@ const hasFanOut = computed(() => {
       :project-id="projectId"
       @update="applyStepUpdate"
       @close="closeConfig"
+    />
+
+    <OrchestratorConfigDialog
+      v-if="orchestratorConfigOpen"
+      :orchestrator="pipelineMeta.orchestrator"
+      :project-id="projectId"
+      @update="applyOrchestratorConfig"
+      @close="closeOrchestratorConfig"
     />
   </div>
 </template>

@@ -113,6 +113,24 @@ export const readArtifactInput = {
   project: ProjectRef.optional(),
 }
 
+// Shape của tool ghi `create_qa` (mode `full`). `TaskId` chứ không phải
+// `z.string()`: đây là lớp phòng thủ path traversal thứ hai, đồng nhất với 4
+// tool task còn lại.
+export const createQaInput = {
+  taskId: TaskId,
+  questions: z
+    .array(
+      z.object({
+        prompt: z.string().min(1).describe('Nội dung câu hỏi.'),
+        choices: z.array(z.string().min(1)).min(2).max(10).describe('Danh sách đáp án (≥2).'),
+      }),
+    )
+    .min(1)
+    .max(20)
+    .describe('Danh sách câu hỏi blocking cần người trả lời.'),
+  project: ProjectRef.optional(),
+}
+
 // ── Output shapes (chỉ cho tool payload nhỏ — C1/G8) ──────────────────────────
 
 // Object ở gốc, KHÔNG phải mảng trần: SDK chạy `normalizeObjectSchema` trên
@@ -146,4 +164,10 @@ export const listArtifactsOutput = {
     z.object({ exists: z.boolean(), mtime: z.number().nullable(), size: z.number() }),
   ),
   subtasks: z.array(z.string()),
+}
+
+export const createQaOutput = {
+  ok: z.literal(true),
+  path: z.string(),
+  created: z.number().int(),
 }
