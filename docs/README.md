@@ -14,6 +14,10 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 - **[`architecture/events/`](architecture/events/README.md)** — mục lục domain event theo mode: type, nơi emit, payload, kèm state/flow chart. Dùng khi đọc tab **Logs › Events**, viết subscriber, hoặc thêm emit mới.
 
+## Tích hợp
+
+- **[`mcp/`](mcp/README.md)** — tài liệu MCP hai vai: dashboard **làm** MCP server (`bun run mcp` — 10 tool, mode `readonly`/`full`) và dashboard **gọi** MCP server khác (tab MCP của Runner Config). Dùng khi khai `mcpServers` cho Claude Code, hoặc khi cần field/ràng buộc/mã lỗi của một tool cụ thể.
+
 ## Giao diện
 
 - **[`agent-rules/coding-guideline.md`](agent-rules/coding-guideline.md)** — quy ước viết code; §6 là message/locale, kèm cấu trúc file và cách gọi `t()`.
@@ -22,7 +26,7 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Quy ước
 
-- **[`convention/`](convention/)** — quy ước theo chủ đề: nguyên tắc kèm chi tiết class/file của chính chủ đề đó, không tham chiếu checklist. Checklist agent thực thi (theo giai đoạn pipeline) nằm ở [`../AGENTS.md`](../AGENTS.md) §4.
+- **[`agent-rules/`](agent-rules/)** — quy ước theo chủ đề: nguyên tắc kèm chi tiết class/file của chính chủ đề đó, không tham chiếu checklist. Checklist agent thực thi (theo giai đoạn pipeline) nằm ở [`../AGENTS.md`](../AGENTS.md) §4.
 
 ## Mẫu dùng lại
 
