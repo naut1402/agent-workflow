@@ -8,7 +8,8 @@ import RunnerDialog from './RunnerDialog.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import McpPanel from '../../mcp/components/McpPanel.vue'
-import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderConfigOption, ProviderFamily } from '../types'
+import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderConfigOption } from '../types'
+import { familyOfProviderId } from '../lib/runnerModelOptions'
 
 const { t } = useI18nHelpers()
 
@@ -34,22 +35,10 @@ function connectionOf(r: RunnerDraft): ConnectionOption | undefined {
   return connections.value.find((c) => c.id === r.connectionId)
 }
 
-function familyOfProviderId(providerId: string | undefined): ProviderFamily {
-  if (!providerId) return 'console-command'
-  if (providerId === 'console-command') return 'console-command'
-  if (providerId === 'anthropic-api' || providerId.endsWith('-api')) return 'ai-api'
-  if (providerId === 'claude-code-cli' || providerId === 'cursor-cli' || providerId === 'codex-cli') {
-    return 'agent-cli'
-  }
-  const fromCatalog = providers.value.find((p) => p.id === providerId)?.family
-  if (fromCatalog) return fromCatalog
-  return 'console-command'
-}
-
 /** Only Agent CLI / AI API runners may be the default AI runner. */
 function canBeDefaultAi(r: RunnerDraft): boolean {
   const conn = connectionOf(r)
-  const family = familyOfProviderId(conn?.providerId)
+  const family = familyOfProviderId(conn?.providerId, providers.value)
   return family === 'agent-cli' || family === 'ai-api'
 }
 

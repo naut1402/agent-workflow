@@ -23,7 +23,11 @@ export {
   setDefaultRunner,
   substituteConfig,
   normalizeRunner,
+  resolveStepRunnerId,
 } from './registry.js'
+export type { StepRunnerReason, StepRunnerResolution } from './registry.js'
+/** Đường ghi pipeline dùng cùng hàm chuẩn hoá với đường giải pin lúc execute. */
+export { sanitiseRunnerId } from './types.js'
 export {
   loadCredentials,
   saveCredentials,

@@ -679,7 +679,8 @@ export class MonitorController extends AbstractController {
         })
       }
       job = monitorBusiness.submitJob({
-        runnerId: body.runnerId ?? undefined,
+        // Caller thắng pin của step (mẫu `runnerId ?? action.runner_id` của artifact action).
+        runnerId: body.runnerId ?? monitorBusiness.resolveStepRunnerId(result.firstStep).runnerId,
         agentRef,
         workspace: path.join(root, 'tasks', result.taskId),
         userPrompt: result.requestContent,
