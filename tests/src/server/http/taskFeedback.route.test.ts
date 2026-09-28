@@ -14,7 +14,7 @@ import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../
 // the very first step. Driven via Hono's app.request, same style as
 // runStep.route.test.ts.
 
-const PROVIDER_ID = 'stub-task-feedback-route'
+const PROVIDER_ID = 'stub-task-feedback-route-api'
 
 let resolveGate: (() => void) | null = null
 let gated = false

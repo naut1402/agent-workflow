@@ -37,7 +37,7 @@ import { on } from '../../../../src/backend/events/index.js'
  * the job queue's chain-on-success hook runs within `settle()` polling.
  */
 
-const PROVIDER_ID = 'stub-gate-pipeline-change'
+const PROVIDER_ID = 'stub-gate-pipeline-change-api'
 const RUNNER_ID = 'stub-runner-gate-change'
 
 let resolveGate: (() => void) | null = null

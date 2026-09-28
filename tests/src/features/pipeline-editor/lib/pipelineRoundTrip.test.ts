@@ -171,3 +171,153 @@ describe('assemblePipeline', () => {
     expect(pipeline).toEqual({ version: 1, steps: [{ id: 's1', name: 'S1' }] })
   })
 })
+
+// ---------------------------------------------------------------------------
+// Tbfb52394 · nhóm D của test-spec — `runner_id` (model pin cho step) đi khứ hồi.
+//
+// `runner_id` nằm trong CANVAS_STEP_KEYS nên nó KHÔNG còn đường `preserved`:
+// giá trị ghi ra hoàn toàn do node canvas quyết định. Đó là điều kiện để gỡ pin
+// trên UI có tác dụng (D06) — nhưng cũng là lý do phải ghi CÓ ĐIỀU KIỆN, nếu
+// không mọi step của mọi pipeline mọc thêm `runner_id: ''` (D02/D07).
+// ---------------------------------------------------------------------------
+
+/** Mirror `buildFlowFromPipeline` của PipelineEditor.vue — YAML step → data của node. */
+function nodeDataFromStep(step: Record<string, any>): Record<string, any> {
+  return {
+    label: step.name || step.id,
+    agent: step.agent || '',
+    produces: Array.isArray(step.produces) ? step.produces : [],
+    knowledge_inputs: Array.isArray(step.knowledge_inputs) ? step.knowledge_inputs : [],
+    hitl: step.hitl || { mode: 'none' },
+    runner_id: typeof step.runner_id === 'string' ? step.runner_id : '',
+  }
+}
+
+/** Mở YAML vào canvas rồi lưu lại — không sửa gì, trừ patch node do test chỉ định. */
+function roundTrip(pipeline: any, patchNode: (id: string, data: any) => void = () => {}) {
+  const meta = extractPipelineMeta(pipeline)
+  const preservedMap = extractStepPreservedMap(pipeline.steps)
+  const steps = pipeline.steps.map((step: any) => {
+    const data = nodeDataFromStep(step)
+    patchNode(step.id, data)
+    return buildStepFromNode(data, step.id, preservedMap[step.id])
+  })
+  return assemblePipeline(meta, steps)
+}
+
+describe('buildStepFromNode — runner_id (model pin)', () => {
+  const NODE = { label: 'Review', agent: 'a', produces: [], knowledge_inputs: [], hitl: { mode: 'none' } }
+
+  it('TC-D01: node có runner_id ⇒ step ghi ra mang đúng giá trị đó', () => {
+    const step = buildStepFromNode({ ...NODE, runner_id: 'gemini-api-runner' }, 'reviewer')
+    expect(step.runner_id).toBe('gemini-api-runner')
+  })
+
+  it('TC-D02: runner_id rỗng ⇒ KHÔNG ghi key nào — 7 step không được mọc `runner_id: \'\'`', () => {
+    const step = buildStepFromNode({ ...NODE, runner_id: '' }, 'reviewer')
+    expect(step).not.toHaveProperty('runner_id')
+    expect(Object.keys(step)).toEqual(['id', 'name', 'agent', 'produces', 'knowledge_inputs', 'hitl'])
+  })
+
+  it('TC-D03: runner_id toàn khoảng trắng ⇒ như D02, không ghi key', () => {
+    expect(buildStepFromNode({ ...NODE, runner_id: '   ' }, 'reviewer')).not.toHaveProperty('runner_id')
+    expect(buildStepFromNode({ ...NODE, runner_id: '\t' }, 'reviewer')).not.toHaveProperty('runner_id')
+  })
+
+  it('TC-D03b: runner_id không phải string / thiếu hẳn ⇒ không ghi key, không throw', () => {
+    expect(buildStepFromNode(NODE, 'reviewer')).not.toHaveProperty('runner_id')
+    expect(buildStepFromNode({ ...NODE, runner_id: 123 } as any, 'reviewer')).not.toHaveProperty('runner_id')
+    expect(buildStepFromNode({ ...NODE, runner_id: null } as any, 'reviewer')).not.toHaveProperty('runner_id')
+  })
+
+  it('TC-D04: khoảng trắng thừa bị trim trước khi ghi', () => {
+    const step = buildStepFromNode({ ...NODE, runner_id: '  gemini-api-runner  ' }, 'reviewer')
+    expect(step.runner_id).toBe('gemini-api-runner')
+  })
+
+  it('runner_id KHÔNG rơi vào preserved — nếu rơi thì D06 không bao giờ gỡ được pin', () => {
+    const map = extractStepPreservedMap([
+      { id: 'reviewer', name: 'Review', runner_id: 'gemini-api-runner', export_key: 'reviewer' },
+    ])
+    expect(map.reviewer).toEqual({ export_key: 'reviewer' })
+  })
+})
+
+describe('round-trip pipeline với runner_id', () => {
+  /** Bản rút gọn của pipeline mặc định: đủ export_key / skills / rule_* / hitl.retry. */
+  const PIPELINE: any = {
+    version: 1,
+    defaults: { review_retry_max: 2, auto_review: false, export_json: false },
+    steps: [
+      {
+        id: 'investigator', name: 'Investigate', agent: 'dev-agent-teams:investigator',
+        skills: ['survey-codebase'], rule_category: 'doc-writing', rule_required: true,
+        produces: ['investigate.md'], knowledge_inputs: [], export_key: 'investigator',
+        hitl: { mode: 'manual', gate_id: 'hitl-1', optional_doc_review: true },
+      },
+      {
+        id: 'implementer', name: 'Implement', agent: 'dev-agent-teams:implementer',
+        skills: ['coding-rules'], rule_category: 'coding', rule_required: false,
+        rule_fallback_skill: 'coding-rules', produces: [], knowledge_inputs: [],
+        export_key: 'implementer', hitl: { mode: 'none' },
+      },
+      {
+        id: 'reviewer', name: 'Review', agent: 'dev-agent-teams:reviewer',
+        skills: ['coding-rules', 'write-tests'], rule_category: ['coding', 'test'],
+        rule_required: false, rule_fallback_skill: 'coding-rules',
+        produces: ['review.md', 'test-spec.md'], knowledge_inputs: [], export_key: 'reviewer',
+        hitl: {
+          mode: 'manual', gate_id: 'hitl-3', blocking: true,
+          retry: { on: 'must_fix', restart_from: 'implementer', max: 2 },
+        },
+      },
+    ],
+    doc_reviewer: { agent: 'dev-agent-teams:doc-reviewer', skills: ['doc-review'] },
+    orchestrator: { enabled: true, agent: 'dev-agent-teams:orchestrator' },
+  }
+
+  function pinned(stepId: string, runnerId: string) {
+    return {
+      ...PIPELINE,
+      steps: PIPELINE.steps.map((s: any) => (s.id === stepId ? { ...s, runner_id: runnerId } : s)),
+    }
+  }
+
+  it('TC-D07: pipeline không pin — mở rồi lưu không sửa gì ⇒ ra BẰNG vào', () => {
+    expect(roundTrip(PIPELINE)).toEqual(PIPELINE)
+  })
+
+  it('TC-D05: step đã pin — mở rồi lưu không sửa gì ⇒ pin còn nguyên, không step nào mọc thêm', () => {
+    const input = pinned('reviewer', 'gemini-api-runner')
+    const out: any = roundTrip(input)
+    expect(out).toEqual(input)
+    expect(out.steps.filter((s: any) => 'runner_id' in s).map((s: any) => s.id)).toEqual(['reviewer'])
+  })
+
+  it('TC-D06: gỡ pin trên UI ⇒ key runner_id BIẾN MẤT khỏi YAML', () => {
+    const input = pinned('reviewer', 'gemini-api-runner')
+    const out: any = roundTrip(input, (id, data) => {
+      if (id === 'reviewer') data.runner_id = ''
+    })
+    expect(out.steps.some((s: any) => 'runner_id' in s)).toBe(false)
+    // Mọi thứ còn lại của step đó không được đụng vào.
+    const reviewer = out.steps.find((s: any) => s.id === 'reviewer')
+    expect(reviewer.skills).toEqual(['coding-rules', 'write-tests'])
+    expect(reviewer.hitl.retry).toEqual({ on: 'must_fix', restart_from: 'implementer', max: 2 })
+  })
+
+  it('TC-D06b: đổi pin sang runner khác ⇒ giá trị mới thắng, preserved không dội ngược', () => {
+    const input = pinned('reviewer', 'cu')
+    const out: any = roundTrip(input, (id, data) => {
+      if (id === 'reviewer') data.runner_id = 'moi'
+    })
+    expect(out.steps.find((s: any) => s.id === 'reviewer').runner_id).toBe('moi')
+  })
+
+  it('pin thêm cho một step chưa pin ⇒ chỉ step đó có key', () => {
+    const out: any = roundTrip(PIPELINE, (id, data) => {
+      if (id === 'implementer') data.runner_id = 'gemini-api-runner'
+    })
+    expect(out.steps.filter((s: any) => 'runner_id' in s).map((s: any) => s.id)).toEqual(['implementer'])
+  })
+})
