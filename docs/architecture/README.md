@@ -75,7 +75,7 @@ C4Container
 |---|---|
 | **Frontend SPA** | UI người dùng, nhiều mode — chi tiết §3 Component |
 | **Backend app** | Xử lý mọi route API — chi tiết §3 Component |
-| **MCP server** | Expose project registry + nhóm tool đọc task/artifact/knowledge cho Claude Code qua stdio. Mode vận hành (`DEVTEAM_MCP_MODE`, mặc định `readonly`) quyết định tool nào được đăng ký — tool ghi chỉ có ở `full`. Chi tiết tool ở [README](../../README.md#mcp-server) |
+| **MCP server** | Expose project registry + nhóm tool đọc task/artifact/knowledge cho Claude Code qua stdio. Mode vận hành (`DEVTEAM_MCP_MODE`, mặc định `readonly`) quyết định tool nào được đăng ký — tool ghi chỉ có ở `full`. Chi tiết tool ở [`docs/mcp/server.md`](../mcp/server.md) |
 | **`dashboard.sqlite`** | DB có cấu trúc, dùng chung nhiều subsystem |
 | **`projects.json`** | Registry project, dùng chung bởi backend và MCP |
 | **`.dev-team-agent/`** *(external)* | Data root của orchestrator ngoài — dashboard chủ yếu quan sát; ngoại lệ node điều phối (`orchestrator.enabled`) — xem §3 Component |
