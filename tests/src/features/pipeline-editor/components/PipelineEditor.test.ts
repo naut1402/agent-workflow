@@ -12,6 +12,7 @@ import {
   writePipelineConfig,
 } from '@/features/pipeline-editor/scripts/pipelineEditorApi'
 import { fetchPipelineProfile, savePipelineProfile, deletePipelineProfile } from '@/features/pipeline-editor/scripts/ProfileManagerApi'
+import { fetchRunners } from '@/features/runner/scripts/runnerApi'
 
 // Regression for Tb8e8ad44: Catalog/Rules tabs kept showing the default
 // project's agents/skills/rules when the dashboard's selected project was
@@ -27,6 +28,14 @@ vi.mock('@/features/pipeline-editor/scripts/pipelineEditorApi', () => ({
   fetchSkillContent: vi.fn(),
   fetchRuleContent: vi.fn(),
   writePipelineConfig: vi.fn(),
+}))
+
+// Tbfb52394 — editor nạp thêm danh mục runner lúc mount; thiếu mock thì test
+// gọi `fetch` thật dưới jsdom. Giữ nguyên các export khác của module (nhiều
+// component con dùng chung `runnerApi`).
+vi.mock('@/features/runner/scripts/runnerApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/runner/scripts/runnerApi')>()),
+  fetchRunners: vi.fn(async () => ({ runners: [], connections: [], providers: [] })),
 }))
 
 vi.mock('@/features/pipeline-editor/scripts/ProfileManagerApi', () => ({
@@ -78,6 +87,7 @@ function canvasEdgeIds(): string[] {
 beforeEach(() => {
   vi.mocked(fetchPipelineConfig).mockResolvedValue({ pipeline: { steps: [] } } as any)
   vi.mocked(fetchPipelineProfile).mockResolvedValue({ pipeline: { steps: [] } } as any)
+  vi.mocked(fetchRunners).mockResolvedValue({ runners: [], connections: [], providers: [] } as any)
 })
 
 afterEach(() => {
@@ -1048,5 +1058,115 @@ describe('PipelineEditor — orchestrator config dialog (T8eb14482)', () => {
       system_prompt: 'giữ nguyên qua sync',
       knowledge_inputs: ['project/a'],
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tbfb52394 · nhóm G của test-spec — editor nạp danh mục runner để dựng control
+// "Model" của StepConfigDialog.
+//
+// `loadRunners()` nuốt lỗi trong `catch {}`, nên suite này xanh được cả khi
+// `fetchRunners` chưa mock — nhưng lúc đó nó xanh nhờ fetch *thất bại* dưới
+// jsdom chứ không phải nhờ được kiểm soát (R8 của test-spec). Mock ở đây để
+// phủ được cả hai nhánh: có ≥ 2 model ⇒ control hiện, nạp lỗi ⇒ control ẩn.
+// ---------------------------------------------------------------------------
+
+const RUNNER_CATALOG = {
+  runners: [
+    { id: 'r-gemini', name: 'Gemini', connectionId: 'c-gemini', enabled: true },
+    { id: 'r-sonnet', name: 'Sonnet', connectionId: 'c-sonnet', enabled: true },
+  ],
+  connections: [
+    { id: 'c-gemini', providerId: 'gemini-api', config: { model: 'gemini-2.5-pro' } },
+    { id: 'c-sonnet', providerId: 'anthropic-api', config: { model: 'claude-sonnet-5' } },
+  ],
+  providers: [],
+}
+
+const PIPELINE_WITH_PIN = {
+  version: 1,
+  steps: [
+    { id: 'investigator', name: 'Investigate', agent: 'dev:investigator', runner_id: 'r-gemini' },
+    { id: 'designer', name: 'Design', agent: 'dev:designer' },
+  ],
+}
+
+describe('PipelineEditor — danh mục runner cho control Model', () => {
+  async function mountWithRunners(pipeline: any = PIPELINE_WITH_PIN) {
+    vi.mocked(fetchPipelineConfig).mockResolvedValue({ pipeline } as any)
+    vi.mocked(fetchRunners).mockResolvedValue(RUNNER_CATALOG as any)
+    // Tab Task: Save ở tab Global đi qua confirm() của set-as-default.
+    const w = mountEditor({ scope: 'task', taskId: 'T1', tasks: [{ task_id: 'T1' }] })
+    await flushPromises()
+    return w
+  }
+
+  it('TC-G10: mount ⇒ gọi fetchRunners, editor render bình thường', async () => {
+    const w = await mountWithRunners()
+    expect(fetchRunners).toHaveBeenCalled()
+    expect(w.find('.c-screen-layout__body').exists()).toBe(true)
+  })
+
+  it('TC-G10b: 2 runner AI ⇒ dialog nhận đủ 2 option, value là runner id', async () => {
+    const w = await mountWithRunners()
+    ;(w.vm as any).openConfig('investigator', { label: 'Investigate', runner_id: 'r-gemini' })
+    await flushPromises()
+
+    const dialog = w.findComponent({ name: 'StepConfigDialog' })
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('runnerOptions')).toEqual([
+      { value: 'r-gemini', label: 'gemini-2.5-pro' },
+      { value: 'r-sonnet', label: 'claude-sonnet-5' },
+    ])
+  })
+
+  it('TC-G11: fetchRunners reject ⇒ editor vẫn render, danh sách option rỗng ⇒ control tự ẩn', async () => {
+    vi.mocked(fetchPipelineConfig).mockResolvedValue({ pipeline: PIPELINE_WITH_PIN } as any)
+    vi.mocked(fetchRunners).mockRejectedValue(new Error('network down'))
+
+    const w = mountEditor()
+    // Không có unhandled rejection: `loadRunners` nuốt lỗi ngay trong onMounted.
+    await flushPromises()
+
+    expect(w.find('.c-screen-layout__body').exists()).toBe(true)
+    ;(w.vm as any).openConfig('investigator', { label: 'Investigate', runner_id: 'r-gemini' })
+    await flushPromises()
+    expect(w.findComponent({ name: 'StepConfigDialog' }).props('runnerOptions')).toEqual([])
+  })
+
+  it('TC-G12: node dựng từ YAML giữ runner_id; node kéo-thả mới có runner_id rỗng', async () => {
+    const w = await mountWithRunners()
+
+    const nodeOf = (id: string) => flowStore.current.getNodes.value.find((n: any) => n.id === id)
+    expect(nodeOf('investigator').data.runner_id).toBe('r-gemini')
+    // Step không khai `runner_id` phải ra chuỗi rỗng, không phải undefined —
+    // CSelect cần giá trị xác định để bind.
+    expect(nodeOf('designer').data.runner_id).toBe('')
+
+    ;(w.vm as any).onDropOnCanvas({
+      preventDefault() {},
+      clientX: 10,
+      clientY: 10,
+      dataTransfer: {
+        getData: () => JSON.stringify({ _type: 'agent', id: 'dev:reviewer', name: 'reviewer' }),
+      },
+    })
+    await flushPromises()
+
+    const created = flowStore.current.getNodes.value.find((n: any) => n.id.startsWith('step-reviewer'))
+    expect(created).toBeTruthy()
+    expect(created.data.runner_id).toBe('')
+  })
+
+  it('TC-G12b: lưu lại pipeline ⇒ chỉ step đã pin mang runner_id trong YAML', async () => {
+    const w = await mountWithRunners()
+
+    await w.findComponent({ name: 'EditorTargetPanel' }).vm.$emit('save')
+    await flushPromises()
+
+    const [, payload] = vi.mocked(writePipelineConfig).mock.calls.at(-1) as any[]
+    const steps = (payload.pipeline ?? payload).steps
+    expect(steps.find((s: any) => s.id === 'investigator').runner_id).toBe('r-gemini')
+    expect(steps.find((s: any) => s.id === 'designer')).not.toHaveProperty('runner_id')
   })
 })

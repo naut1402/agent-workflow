@@ -18,7 +18,7 @@ import { on } from '../../../../src/backend/events/index.js'
 // job-queue's chain-on-success hook (jobQueue.ts advancePipelineStepChain)
 // runs synchronously enough for `settle()` polling to observe it.
 
-const PROVIDER_ID = 'stub-run-step-route'
+const PROVIDER_ID = 'stub-run-step-route-api'
 
 let resolveGate: (() => void) | null = null
 let gated = false
