@@ -20,7 +20,7 @@
 - **Shared** — `src/shared/`: chỉ logic/type thuần dùng thật ở cả hai phía.
 - **Data root** — `.dev-team-agent/`; standalone qua `ProjectRegistry` (`?project=<id>`).
 - **Pipeline** — `DEFAULT_PIPELINE` ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`. Key `orchestrator` (opt-in, mặc định tắt) merge cùng 3 tầng như `doc_reviewer`.
-- **MCP** — `bun run mcp`, CRUD registry, không cần HTTP server.
+- **MCP** — `bun run mcp`, CRUD registry, không cần HTTP server. Tham chiếu tool + vai client: [`docs/mcp/`](docs/mcp/README.md).
 
 ---
 
@@ -31,7 +31,7 @@ agent-workflow/
 ├── src/     # backend/ (Node), frontend/ (browser), shared/ (cả hai), features/
 ├── mcp/
 ├── tests/   # unit (bun + vitest) · test-e2e/ — Playwright
-└── docs/    # agent-rules/ · convention/ · template/ · architecture/ — xem docs/README.md
+└── docs/    # agent-rules/ · mcp/ · template/ · architecture/ — xem docs/README.md
 ```
 
 ---
@@ -46,7 +46,7 @@ agent-workflow/
 | 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
 | 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6 (làm trên commit mới nhất §6.3), todo debt §7, PR phát hành §8 · issue task: version, milestone, chia nhỏ §5 · publish tài liệu vào issue §11 (mọi bước có tài liệu đầu ra) |
 
-Tra cứu (không phải rule): [`README.md`](README.md) quickstart · [`docs/architecture/`](docs/architecture/) kiến trúc C4 · [`docs/architecture/events/`](docs/architecture/events/README.md) domain event · [`docs/template/`](docs/template/) template agent / pipeline.
+Tra cứu (không phải rule): [`README.md`](README.md) quickstart · [`docs/architecture/`](docs/architecture/) kiến trúc C4 · [`docs/architecture/events/`](docs/architecture/events/README.md) domain event · [`docs/template/`](docs/template/) template agent / pipeline · [`docs/mcp/`](docs/mcp/README.md) bộ tool MCP server + vai client.
 
 ---
 
@@ -300,7 +300,7 @@ Quy ước: [`git-pr.md`](docs/agent-rules/git-pr.md) §1.
 
 Bối cảnh đầy đủ: [`git-pr.md`](docs/agent-rules/git-pr.md) §7.
 
-- [ ] **Hoãn docs/convention** — đã có `docs/todo/<issue>/<task-id>.md`.
+- [ ] **Hoãn tài liệu docs** — đã có `docs/todo/<issue>/<task-id>.md`.
 - [ ] **PR feature → `dev/x.y.z/main`** — được mang nợ; Todo debt **không** chặn.
 - [ ] **PR `dev/x.y.z/main` → `main`** — **không còn** thư mục `docs/todo/`; `bun run check:todo` xanh.
 - [ ] **Đã trả nợ** — đã xoá toàn bộ `docs/todo/`.

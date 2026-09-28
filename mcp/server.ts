@@ -13,19 +13,9 @@
 // Mode vận hành quyết định tool nào được đăng ký; mặc định `readonly` (D7).
 // Xem `mcp/modes.ts`.
 //
-// Tools (design §4.2.6):
-//   readonly + full
-//     list_projects        {}                                  → { projects, defaultId }
-//     get_project          { id }                               → { project }
-//     get_knowledge_bundle { ids, project? }                    → { bundle }
-//     list_tasks           { project?, status?, limit? }        → { tasks, total }
-//     get_task_state       { taskId, project? }                 → { state }
-//     list_artifacts       { taskId, project? }                 → { artifacts, subtasks }
-//     read_artifact        { taskId, name, project? }           → { name, content, mtime }
-//   full only
-//     add_project          { path, name? }                      → { project }
-//     remove_project       { id }                               → { removed: true }
-//     create_qa            { taskId, questions, project? }      → { ok, path, created }
+// Tools: 7 tool đọc (`readonly` + `full`) + 3 tool ghi (chỉ `full`).
+// Allowlist thật — nguồn cho MÁY: `mcp/modes.ts`.
+// Bảng field / output / mã lỗi — nguồn cho NGƯỜI: `docs/mcp/server.md`.
 //
 // Design ref: Tb4241005 design.md §4; T6f61d951 design.md §4.2 (create_qa).
 
