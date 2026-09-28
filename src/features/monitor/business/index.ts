@@ -22,6 +22,7 @@ export {
   stepIdOf,
 } from '../../runner/business/index.js'
 export { getRunner } from '../../runner/business/index.js'
+export { resolveStepRunnerId } from '../../runner/business/index.js'
 export { getConnection } from '../../runner/business/index.js'
 export { providerFamilyOf } from '../../runner/business/index.js'
 export { loadTaskSessionLedger, closeTaskSession, parseCursorJsonOutput } from '../../runner/business/index.js'

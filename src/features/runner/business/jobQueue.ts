@@ -5,7 +5,7 @@ import os from 'node:os'
 import { registryHome } from '../../../backend/registry.js'
 import { isLogTypeEnabled } from '../../../backend/log/loggingPrefsIo.js'
 import { emit } from '../../../backend/events/index.js'
-import { getRunner, getDefaultRunner, substituteConfig, getProvider } from './registry.js'
+import { getRunner, getDefaultRunner, resolveStepRunnerId, substituteConfig, getProvider } from './registry.js'
 import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
@@ -1035,7 +1035,9 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   } = job.metadata || {}
 
   submitJob({
-    runnerId: job.runnerId === 'unknown' ? undefined : job.runnerId,
+    // Mỗi step tự giải runner của chính nó. Kế thừa `job.runnerId` làm pin của một
+    // step lây sang mọi step sau nó trong chain — đúng thứ task này phải sửa.
+    runnerId: resolveStepRunnerId(nextStep).runnerId,
     agentRef: nextStep.agent,
     workspace,
     userPrompt,

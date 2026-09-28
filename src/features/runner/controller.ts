@@ -312,14 +312,22 @@ export class RunnerController extends AbstractController {
     // `POST /api/jobs` spread nguyên metadata của caller, nên nó là một đường
     // start step đầy đủ — phải qua cùng cửa quyền như run-step/chain/automation.
     const taskId = parsed.metadata?.taskId
+    // Cũng là đường start step ⇒ phải áp `steps[].runner_id` như 5 đường còn lại,
+    // nếu không cùng một pipeline chạy ra hai model khác nhau tuỳ ai bấm nút.
+    let pinnedRunnerId: string | undefined
     if (parsed.metadata?.pipelineStepId && typeof taskId === 'string' && taskId) {
       const check = await runnerStore.assertStartAllowed(root, taskId, 'api')
       if ('error' in check) return this.json(check.status, { error: check.error, taskId })
+
+      const pipeline = await runnerStore.loadPipelineConfig(root, taskId)
+      const step = (pipeline.steps || []).find((s: any) => s.id === parsed.metadata.pipelineStepId)
+      pinnedRunnerId = runnerStore.resolveStepRunnerId(step).runnerId
     }
 
     const projectRoot = path.dirname(root)
     const job = runnerStore.submitJob({
-      runnerId: parsed.runnerId,
+      // Caller thắng pin — cùng mẫu với `input.runnerId ?? …` của run-step.
+      runnerId: parsed.runnerId ?? pinnedRunnerId,
       agentRef: parsed.agentRef,
       workspace: path.isAbsolute(parsed.workspace)
         ? parsed.workspace

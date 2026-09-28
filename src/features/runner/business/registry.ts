@@ -269,3 +269,40 @@ export function getProvider(providerId: string): RunnerProvider | null {
 export function listProviderIds(): string[] {
   return [...providers.keys()]
 }
+
+/** Vì sao step pin không dùng được — dùng cho log, không đổi hành vi (luôn fallback default). */
+export type StepRunnerReason = 'unpinned' | 'pinned' | 'missing' | 'disabled' | 'ineligible'
+
+export type StepRunnerResolution = { runnerId: string | undefined; reason: StepRunnerReason }
+
+/**
+ * Giải `steps[].runner_id` của một step thành runner id dùng được cho `submitJob`.
+ *
+ * `undefined` = để `submitJob` rơi về `getDefaultRunner()`. Mọi ca pin hỏng (runner
+ * đã xoá / bị disable / không phải runner AI) đều về `undefined` thay vì fail cứng:
+ * dọn danh sách runner không được làm đứng pipeline đang chạy.
+ */
+export function resolveStepRunnerId(step: unknown): StepRunnerResolution {
+  const raw = (step as { runner_id?: unknown } | null)?.runner_id
+  if (typeof raw !== 'string' || !raw.trim()) return { runnerId: undefined, reason: 'unpinned' }
+
+  // So sánh bằng chứ không dùng bản đã gọt: `getRunner` sanitise bên trong, nên
+  // một id rác kiểu `gem.ini` sẽ khớp nhầm sang runner `gemini`, và một id dài
+  // hơn 64 ký tự sẽ bị cắt rồi khớp sang một runner khác hẳn.
+  if (sanitiseRunnerId(raw) !== raw) return warnStepRunner(step, raw, 'missing')
+
+  const runner = getRunner(raw)
+  if (!runner) return warnStepRunner(step, raw, 'missing')
+  if (runner.enabled === false) return warnStepRunner(step, raw, 'disabled')
+  // Cùng điều kiện `getDefaultRunner` dùng — runner console-command không chạy agent được.
+  if (!isEligibleDefaultAiRunner(runner)) return warnStepRunner(step, raw, 'ineligible')
+
+  return { runnerId: runner.id, reason: 'pinned' }
+}
+
+/** Log nằm trong helper (không ở từng call site) để mọi đường start job cùng một thông điệp. */
+function warnStepRunner(step: unknown, raw: string, reason: StepRunnerReason): StepRunnerResolution {
+  const stepId = (step as { id?: unknown } | null)?.id
+  console.warn(`[pipeline] step "${String(stepId)}" pinned runner "${raw}" ${reason} — dùng runner mặc định`)
+  return { runnerId: undefined, reason }
+}
