@@ -152,7 +152,10 @@ describe('ChatWindow header — status lives in the title', () => {
 
     expect(wrapper.findAll('.nl-chat-badge')).toHaveLength(0)
     expect(wrapper.findAll('.nl-chat-status')).toHaveLength(0)
-    expect(wrapper.findAll('.nl-chat-spinner')).toHaveLength(0)
+    // Selector cũ ở dòng này là `.nl-chat-spinner` — class thật chưa bao giờ có
+    // chữ "er", nên nó trả 0 ở MỌI trạng thái và không bảo vệ gì. Icon xoay nay
+    // dùng class chung `c-spin`; ca dương ở describe bên dưới là phần còn thiếu.
+    expect(wrapper.findAll('.c-spin')).toHaveLength(0)
     expect(wrapper.find('.nl-chat-header').findAll('.dot')).toHaveLength(0)
   })
 })
@@ -288,5 +291,31 @@ describe('ChatWindow header — the + button moved out', () => {
     // Minimize and close stayed behind.
     expect(titles).toContain('Thu nhỏ')
     expect(titles).toContain('Đóng')
+  })
+})
+
+describe('ChatWindow header — icon xoay (TC-27)', () => {
+  it('trạng thái busy render đúng MỘT icon spinner mang class `c-spin`', async () => {
+    const wrapper = mountWindow({ connected: true })
+    await setStatus(wrapper, { kind: 'busy', text: 'Agent đang suy nghĩ…' })
+
+    const spinning = wrapper.findAll('.c-spin')
+    expect(spinning).toHaveLength(1)
+    // Class dùng chung `c-spin` (kèm cặp `@keyframes` gom về một chỗ) thay cho
+    // `nl-chat-spin` riêng của feature — icon vẫn phải là `spinner`.
+    expect(spinning[0].element.tagName.toLowerCase()).toBe('svg')
+    expect(wrapper.find('.nl-chat-info button svg').classes()).toContain('c-spin')
+  })
+
+  it('rời khỏi busy thì icon xoay biến mất', async () => {
+    const wrapper = mountWindow({ connected: true })
+    await setStatus(wrapper, { kind: 'busy', text: 'Agent đang suy nghĩ…' })
+    expect(wrapper.findAll('.c-spin')).toHaveLength(1)
+
+    await setStatus(wrapper, { kind: 'error', text: 'Có lỗi' })
+    expect(wrapper.findAll('.c-spin')).toHaveLength(0)
+
+    await setStatus(wrapper, { kind: 'done', text: 'Hoàn tất' })
+    expect(wrapper.findAll('.c-spin')).toHaveLength(0)
   })
 })
