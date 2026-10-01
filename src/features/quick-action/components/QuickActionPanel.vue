@@ -5,6 +5,7 @@ import { slugify } from '../../../shared/lib/stringUtils'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import QuickActionMenuDialog from './QuickActionMenuDialog.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
@@ -489,137 +490,140 @@ async function removeAction(a: QuickActionDraft) {
         </div>
         <p v-if="formError" class="err">{{ formError }}</p>
 
-        <div class="qa-form-body">
-          <label class="cfg-label">
-            label
-            <input v-model="draft.label" class="cfg-input" :placeholder="t('quickAction.form.labelPlaceholder')" />
-          </label>
-          <label class="cfg-label">
-            {{ t('quickAction.form.patternsLabel') }}
-            <input v-model="patternsText" class="cfg-input" placeholder="design.md, investigate.md, *.md" />
-          </label>
-          <label class="cfg-label">
-            {{ t('quickAction.form.runnerLabel') }}
-            <select v-model="draft.runner_id" class="cfg-input">
-              <option :value="undefined">{{ t('quickAction.runnerDefault') }}</option>
-              <option v-for="r in runners" :key="r.id" :value="r.id">{{ r.name || r.id }}</option>
-            </select>
-          </label>
-          <p v-if="isConsoleCommandRunner" class="muted qa-menu-select-hint">
-            {{ t('quickAction.form.consoleRunnerHint') }}
-          </p>
-          <label v-if="!isConsoleCommandRunner" class="cfg-label">
-            {{ t('quickAction.form.agentLabel') }}
-            <select v-model="draft.agent_ref" class="cfg-input">
-              <option value="">{{ t('quickAction.form.agentNone') }}</option>
-              <option
-                v-if="draft.agent_ref && !agentIds.has(draft.agent_ref)"
-                :value="draft.agent_ref"
-              >{{ t('quickAction.form.agentCurrent', { ref: draft.agent_ref }) }}</option>
-              <option v-for="a in agents" :key="a.id" :value="a.id">
-                {{ a.name ? `${a.name} — ${a.id}` : a.id }}
-              </option>
-            </select>
-          </label>
-          <label class="cfg-label">
-            <span class="qa-prompt-label-row">
-              {{ isConsoleCommandRunner ? t('quickAction.form.consoleArgsLabel') : 'prompt_template' }}
-              <button
-                ref="helpBtnRef"
-                type="button"
-                class="icon-btn btn-help-icon"
-                :title="t('quickAction.form.promptHelpTitleAttr')"
-                :aria-label="t('quickAction.form.promptHelpAria')"
-                :aria-expanded="showPromptHelp"
-                @click="togglePromptHelp"
-              >
-                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                  <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" />
-                  <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M8 7.2v3.3M8 5.2v.8" />
-                </svg>
-              </button>
-              <div v-if="showPromptHelp" ref="promptHelpRef" class="qa-prompt-help" role="dialog">
-                <p class="qa-prompt-help-title">
-                  {{
-                    isConsoleCommandRunner
-                      ? t('quickAction.promptHelp.consoleHeading')
-                      : t('quickAction.promptHelp.heading')
-                  }}
-                </p>
-                <dl>
-                  <div v-for="ph in PROMPT_PLACEHOLDERS" :key="ph.token" class="qa-prompt-help-item">
-                    <dt><code>{{ ph.token }}</code></dt>
-                    <dd>
-                      {{ ph.desc }}
-                      <span v-if="ph.selectionOnly" class="qa-prompt-help-note">
-                        {{ t('quickAction.promptHelp.selectionNote') }}
-                      </span>
-                    </dd>
-                  </div>
-                </dl>
-                <p class="qa-prompt-help-note qa-prompt-help-write">
-                  {{
-                    isConsoleCommandRunner
-                      ? t('quickAction.promptHelp.consoleWriteNote')
-                      : t('quickAction.promptHelp.writeNote')
-                  }}
-                </p>
-              </div>
-            </span>
-            <textarea
-              v-model="draft.prompt_template"
-              class="cfg-textarea"
-              rows="4"
-              :placeholder="
-                isConsoleCommandRunner
-                  ? t('quickAction.form.consoleArgsPlaceholder')
-                  : t('quickAction.form.promptPlaceholder')
-              "
-            />
-          </label>
-          <fieldset class="qa-attach-fieldset">
-            <legend>{{ t('quickAction.attachPoints') }}</legend>
-            <label v-for="opt in ATTACH_OPTIONS" :key="opt.value" class="qa-attach-option">
-              <input
-                type="checkbox"
-                :checked="draft.attach_points.includes(opt.value)"
-                @change="toggleAttach(opt.value, ($event.target as HTMLInputElement).checked)"
-              />
-              {{ opt.label }}
+        <div class="c-loading-host">
+          <CLoadingOverlay :active="catalog.saving.value" />
+          <div class="qa-form-body">
+            <label class="cfg-label">
+              label
+              <input v-model="draft.label" class="cfg-input" :placeholder="t('quickAction.form.labelPlaceholder')" />
             </label>
-          </fieldset>
-          <div class="qa-menu-select-row">
-            <label class="cfg-label qa-menu-select-field">
-              {{ t('quickAction.form.menuLabel') }}
-              <select v-model="draftMenuId" class="cfg-input" data-testid="qa-menu-select">
-                <option value="">{{ t('quickAction.form.menuNone') }}</option>
-                <option v-for="opt in menuGroupOptions" :key="opt.id" :value="opt.id">
-                  {{ menuOptionLabel(opt) }}
+            <label class="cfg-label">
+              {{ t('quickAction.form.patternsLabel') }}
+              <input v-model="patternsText" class="cfg-input" placeholder="design.md, investigate.md, *.md" />
+            </label>
+            <label class="cfg-label">
+              {{ t('quickAction.form.runnerLabel') }}
+              <select v-model="draft.runner_id" class="cfg-input">
+                <option :value="undefined">{{ t('quickAction.runnerDefault') }}</option>
+                <option v-for="r in runners" :key="r.id" :value="r.id">{{ r.name || r.id }}</option>
+              </select>
+            </label>
+            <p v-if="isConsoleCommandRunner" class="muted qa-menu-select-hint">
+              {{ t('quickAction.form.consoleRunnerHint') }}
+            </p>
+            <label v-if="!isConsoleCommandRunner" class="cfg-label">
+              {{ t('quickAction.form.agentLabel') }}
+              <select v-model="draft.agent_ref" class="cfg-input">
+                <option value="">{{ t('quickAction.form.agentNone') }}</option>
+                <option
+                  v-if="draft.agent_ref && !agentIds.has(draft.agent_ref)"
+                  :value="draft.agent_ref"
+                >{{ t('quickAction.form.agentCurrent', { ref: draft.agent_ref }) }}</option>
+                <option v-for="a in agents" :key="a.id" :value="a.id">
+                  {{ a.name ? `${a.name} — ${a.id}` : a.id }}
                 </option>
               </select>
             </label>
-            <button
-              type="button"
-              class="icon-btn"
-              :title="t('quickAction.form.addMenu')"
-              :aria-label="t('quickAction.form.addMenu')"
-              data-testid="qa-add-menu"
-              @click="openCreateMenuDialog"
-            >
-              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M8 3.5v9M3.5 8h9" />
-              </svg>
-            </button>
+            <label class="cfg-label">
+              <span class="qa-prompt-label-row">
+                {{ isConsoleCommandRunner ? t('quickAction.form.consoleArgsLabel') : 'prompt_template' }}
+                <button
+                  ref="helpBtnRef"
+                  type="button"
+                  class="icon-btn btn-help-icon"
+                  :title="t('quickAction.form.promptHelpTitleAttr')"
+                  :aria-label="t('quickAction.form.promptHelpAria')"
+                  :aria-expanded="showPromptHelp"
+                  @click="togglePromptHelp"
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+                    <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M8 7.2v3.3M8 5.2v.8" />
+                  </svg>
+                </button>
+                <div v-if="showPromptHelp" ref="promptHelpRef" class="qa-prompt-help" role="dialog">
+                  <p class="qa-prompt-help-title">
+                    {{
+                      isConsoleCommandRunner
+                        ? t('quickAction.promptHelp.consoleHeading')
+                        : t('quickAction.promptHelp.heading')
+                    }}
+                  </p>
+                  <dl>
+                    <div v-for="ph in PROMPT_PLACEHOLDERS" :key="ph.token" class="qa-prompt-help-item">
+                      <dt><code>{{ ph.token }}</code></dt>
+                      <dd>
+                        {{ ph.desc }}
+                        <span v-if="ph.selectionOnly" class="qa-prompt-help-note">
+                          {{ t('quickAction.promptHelp.selectionNote') }}
+                        </span>
+                      </dd>
+                    </div>
+                  </dl>
+                  <p class="qa-prompt-help-note qa-prompt-help-write">
+                    {{
+                      isConsoleCommandRunner
+                        ? t('quickAction.promptHelp.consoleWriteNote')
+                        : t('quickAction.promptHelp.writeNote')
+                    }}
+                  </p>
+                </div>
+              </span>
+              <textarea
+                v-model="draft.prompt_template"
+                class="cfg-textarea"
+                rows="4"
+                :placeholder="
+                  isConsoleCommandRunner
+                    ? t('quickAction.form.consoleArgsPlaceholder')
+                    : t('quickAction.form.promptPlaceholder')
+                "
+              />
+            </label>
+            <fieldset class="qa-attach-fieldset">
+              <legend>{{ t('quickAction.attachPoints') }}</legend>
+              <label v-for="opt in ATTACH_OPTIONS" :key="opt.value" class="qa-attach-option">
+                <input
+                  type="checkbox"
+                  :checked="draft.attach_points.includes(opt.value)"
+                  @change="toggleAttach(opt.value, ($event.target as HTMLInputElement).checked)"
+                />
+                {{ opt.label }}
+              </label>
+            </fieldset>
+            <div class="qa-menu-select-row">
+              <label class="cfg-label qa-menu-select-field">
+                {{ t('quickAction.form.menuLabel') }}
+                <select v-model="draftMenuId" class="cfg-input" data-testid="qa-menu-select">
+                  <option value="">{{ t('quickAction.form.menuNone') }}</option>
+                  <option v-for="opt in menuGroupOptions" :key="opt.id" :value="opt.id">
+                    {{ menuOptionLabel(opt) }}
+                  </option>
+                </select>
+              </label>
+              <button
+                type="button"
+                class="icon-btn"
+                :title="t('quickAction.form.addMenu')"
+                :aria-label="t('quickAction.form.addMenu')"
+                data-testid="qa-add-menu"
+                @click="openCreateMenuDialog"
+              >
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M8 3.5v9M3.5 8h9" />
+                </svg>
+              </button>
+            </div>
+            <p class="muted qa-menu-select-hint">{{ t('quickAction.form.menuHint') }}</p>
+            <label class="qa-attach-option">
+              <input v-model="draft.confirm" type="checkbox" />
+              {{ t('quickAction.form.confirmOption') }}
+            </label>
+            <label class="qa-attach-option">
+              <input v-model="draft.require_approval" type="checkbox" />
+              {{ t('quickAction.form.approvalOption') }}
+            </label>
           </div>
-          <p class="muted qa-menu-select-hint">{{ t('quickAction.form.menuHint') }}</p>
-          <label class="qa-attach-option">
-            <input v-model="draft.confirm" type="checkbox" />
-            {{ t('quickAction.form.confirmOption') }}
-          </label>
-          <label class="qa-attach-option">
-            <input v-model="draft.require_approval" type="checkbox" />
-            {{ t('quickAction.form.approvalOption') }}
-          </label>
         </div>
 
         <div class="nl-actions">
@@ -750,7 +754,9 @@ async function removeAction(a: QuickActionDraft) {
   min-width: 0;
 }
 .qa-form-head .icon-btn { flex-shrink: 0; }
-/* The fields scroll inside the dialog so the header/footer stay put. */
+/* The fields scroll inside the dialog so the header/footer stay put. The
+   overlay anchors to the `.c-loading-host` wrapper outside this box, not here —
+   see the comment on `.c-loading-host` in `_shell.scss`. */
 .qa-form-body {
   flex: 1 1 auto;
   overflow-y: auto;

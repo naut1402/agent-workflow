@@ -8,6 +8,7 @@
  */
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, ref } from 'vue'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import CSelect from '../../../frontend/ui/CSelect.vue'
 import type { CSelectOption } from '../../../frontend/ui/CSelect.vue'
@@ -191,6 +192,7 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
 
 <template>
   <div class="editor-target-panel" :class="{ 'is-collapsed': collapsed }">
+    <CLoadingOverlay :active="saving" />
     <!-- Select đối tượng: profile ở tab Profile, task ở tab Task -->
     <template v-if="!collapsed">
       <template v-if="isProfileTab">
@@ -298,15 +300,18 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
     </div>
 
     <template v-else>
-      <div v-if="saving" class="target-msg">{{ t('pipelineEditor.target.saving') }}</div>
-      <div v-else-if="message" class="target-msg">{{ message }}</div>
+      <!-- Không còn dòng chữ "đang lưu" ở đây: `CLoadingOverlay` phía trên đã là
+           nguồn tín hiệu bận duy nhất, ba tín hiệu chồng nhau chỉ gây ồn. -->
+      <div v-if="message" class="target-msg">{{ message }}</div>
       <div v-if="warning" class="target-warning" role="status">{{ warning }}</div>
     </template>
   </div>
 </template>
 
 <style scoped lang="scss">
+/* `position: relative` là containing block cho `CLoadingOverlay`. */
 .editor-target-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 5px;

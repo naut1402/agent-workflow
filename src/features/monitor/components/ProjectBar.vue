@@ -6,6 +6,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { addProject, removeProject } from '../scripts/monitorApi'
 import FolderPickerDialog from '../../../frontend/ui/FolderPickerDialog.vue'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 
 const MENU_GAP = 2
 const VIEWPORT_MARGIN = 8
@@ -28,7 +30,10 @@ const newPath = ref('')
 const newName = ref('')
 const gitUrl = ref('')
 const gitBranch = ref('main')
-const busy = ref(false)
+// MỘT instance dùng chung cho cả ba handler (thêm local / clone git / xoá) —
+// giữ đúng ngữ nghĩa cờ `busy` cũ, và thêm: đang thêm project thì bấm xoá bị
+// guard chặn. 🚫 Không tách ba instance, làm thế là nới lỏng so với hiện tại.
+const { pending: busy, run: runProjectAction } = useApiAction()
 const errorMsg = ref('')
 const pickerOpen = ref(false)
 
@@ -199,21 +204,20 @@ async function submitLocal() {
     errorMsg.value = t('monitor.projectBar.pathRequired')
     return
   }
-  busy.value = true
-  errorMsg.value = ''
-  try {
-    const { project } = await addProject({
-      path: newPath.value.trim(),
-      name: newName.value.trim() || undefined,
-    })
-    closeForms()
-    emit('changed')
-    if (project?.id) emit('select', project.id)
-  } catch (e) {
-    errorMsg.value = String((e as Error).message || e)
-  } finally {
-    busy.value = false
-  }
+  await runProjectAction(async () => {
+    errorMsg.value = ''
+    try {
+      const { project } = await addProject({
+        path: newPath.value.trim(),
+        name: newName.value.trim() || undefined,
+      })
+      closeForms()
+      emit('changed')
+      if (project?.id) emit('select', project.id)
+    } catch (e) {
+      errorMsg.value = String((e as Error).message || e)
+    }
+  })
 }
 
 async function submitGit() {
@@ -222,22 +226,21 @@ async function submitGit() {
     errorMsg.value = t('monitor.projectBar.gitUrlRequired')
     return
   }
-  busy.value = true
-  errorMsg.value = ''
-  try {
-    const { project } = await addProject({
-      gitUrl: url,
-      branch: gitBranch.value.trim() || 'main',
-      name: newName.value.trim() || undefined,
-    })
-    closeForms()
-    emit('changed')
-    if (project?.id) emit('select', project.id)
-  } catch (e) {
-    errorMsg.value = String((e as Error).message || e)
-  } finally {
-    busy.value = false
-  }
+  await runProjectAction(async () => {
+    errorMsg.value = ''
+    try {
+      const { project } = await addProject({
+        gitUrl: url,
+        branch: gitBranch.value.trim() || 'main',
+        name: newName.value.trim() || undefined,
+      })
+      closeForms()
+      emit('changed')
+      if (project?.id) emit('select', project.id)
+    } catch (e) {
+      errorMsg.value = String((e as Error).message || e)
+    }
+  })
 }
 
 async function onRemove(project) {
@@ -245,22 +248,22 @@ async function onRemove(project) {
     ? t('monitor.projectBar.confirmRemoveDefault', { name: project.name })
     : t('monitor.projectBar.confirmRemove', { name: project.name })
   if (!window.confirm(confirmMsg)) return
-  busy.value = true
-  errorMsg.value = ''
-  try {
-    await removeProject(project.id)
-    emit('changed')
-    if (props.selectedId === project.id) emit('select', null)
-  } catch (e) {
-    errorMsg.value = String((e as Error).message || e)
-  } finally {
-    busy.value = false
-  }
+  await runProjectAction(async () => {
+    errorMsg.value = ''
+    try {
+      await removeProject(project.id)
+      emit('changed')
+      if (props.selectedId === project.id) emit('select', null)
+    } catch (e) {
+      errorMsg.value = String((e as Error).message || e)
+    }
+  })
 }
 </script>
 
 <template>
   <div class="project-bar">
+    <CLoadingOverlay :active="busy" />
     <div class="project-bar-head">
       <span class="project-bar-title">Projects</span>
       <div class="project-bar-actions">
@@ -465,7 +468,9 @@ async function onRemove(project) {
 </template>
 
 <style scoped lang="scss">
+/* `position: relative` là containing block cho `CLoadingOverlay`. */
 .project-bar {
+  position: relative;
   border-bottom: 1px solid var(--border, #2a2a35);
   font-size: 13px;
   flex-shrink: 0;

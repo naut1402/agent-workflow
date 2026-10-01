@@ -3,6 +3,8 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, onMounted, watch } from 'vue'
 import { fetchPipelineProfiles, fetchPipelineProfile } from '../../pipeline-editor/scripts/ProfileManagerApi'
 import { writePipelineConfig } from '../../pipeline-editor/scripts/pipelineEditorApi'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 
 const { t } = useI18nHelpers()
 
@@ -13,7 +15,7 @@ const profiles = ref<{ name: string }[]>([])
 const selected = ref('')
 const previewFirstStep = ref<string | null>(null)
 const loadedPipeline = ref<unknown>(null)
-const busy = ref(false)
+const { pending: busy, run: runApply } = useApiAction()
 const error = ref('')
 
 onMounted(async () => {
@@ -41,16 +43,15 @@ watch(selected, async (name) => {
 
 async function apply() {
   if (!selected.value || !loadedPipeline.value) return
-  busy.value = true
-  error.value = ''
-  try {
-    await writePipelineConfig('task', loadedPipeline.value, props.taskId, props.projectId ?? undefined)
-    emit('applied')
-  } catch (e: any) {
-    error.value = e?.status === 400 ? t('monitor.pipeline.switchProfileDialog.writeBlocked') : String(e.message || e)
-  } finally {
-    busy.value = false
-  }
+  await runApply(async () => {
+    error.value = ''
+    try {
+      await writePipelineConfig('task', loadedPipeline.value, props.taskId, props.projectId ?? undefined)
+      emit('applied')
+    } catch (e: any) {
+      error.value = e?.status === 400 ? t('monitor.pipeline.switchProfileDialog.writeBlocked') : String(e.message || e)
+    }
+  })
 }
 </script>
 
@@ -62,24 +63,27 @@ async function apply() {
           <span>{{ t('monitor.pipeline.switchProfileDialog.heading') }}</span>
           <button type="button" class="modal-close" @click="emit('close')">✕</button>
         </div>
-        <div class="modal-body">
-          <p v-if="!profiles.length" class="modal-hint">
-            {{ t('monitor.pipeline.switchProfileDialog.noProfiles') }}
-          </p>
-          <label v-else class="cfg-label">
-            {{ t('monitor.pipeline.switchProfileDialog.selectLabel') }}
-            <select v-model="selected" class="cfg-input">
-              <option value=""></option>
-              <option v-for="p in profiles" :key="p.name" :value="p.name">{{ p.name }}</option>
-            </select>
-          </label>
-          <p v-if="previewFirstStep" class="muted">
-            {{ t('monitor.pipeline.switchProfileDialog.firstStep', { step: previewFirstStep }) }}
-          </p>
-          <p v-if="props.hitlPending && selected" class="editor-error">
-            {{ t('monitor.pipeline.switchProfileDialog.hitlWarning') }}
-          </p>
-          <p v-if="error" class="editor-error">{{ error }}</p>
+        <div class="c-loading-host">
+          <CLoadingOverlay :active="busy" />
+          <div class="modal-body">
+            <p v-if="!profiles.length" class="modal-hint">
+              {{ t('monitor.pipeline.switchProfileDialog.noProfiles') }}
+            </p>
+            <label v-else class="cfg-label">
+              {{ t('monitor.pipeline.switchProfileDialog.selectLabel') }}
+              <select v-model="selected" class="cfg-input">
+                <option value=""></option>
+                <option v-for="p in profiles" :key="p.name" :value="p.name">{{ p.name }}</option>
+              </select>
+            </label>
+            <p v-if="previewFirstStep" class="muted">
+              {{ t('monitor.pipeline.switchProfileDialog.firstStep', { step: previewFirstStep }) }}
+            </p>
+            <p v-if="props.hitlPending && selected" class="editor-error">
+              {{ t('monitor.pipeline.switchProfileDialog.hitlWarning') }}
+            </p>
+            <p v-if="error" class="editor-error">{{ error }}</p>
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn-ghost" :disabled="busy" @click="emit('close')">

@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
 import type { CreateTaskRequest, TaskSource } from '../schemas/taskCreate.js'
 import {
   createTask,
@@ -52,7 +53,8 @@ export interface UseCreateTaskOptions {
 export function useCreateTask(opts: UseCreateTaskOptions) {
   const step = ref(1)
   const form = ref(emptyCreateTaskForm())
-  const loading = ref(false)
+  // Một instance cho cả `fetchIssue` và `submit` — giữ đúng ngữ nghĩa cờ cũ.
+  const { pending: loading, run: runTaskAction } = useApiAction()
   const error = ref<string | null>(null)
   const issuePreview = ref<{ title: string; body: string | null; url: string; prompt: string } | null>(
     null,
@@ -114,7 +116,8 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
   function reset() {
     step.value = 1
     form.value = emptyCreateTaskForm()
-    loading.value = false
+    // 🚫 Không reset `loading` ở đây: vòng đời cờ do `runTaskAction` sở hữu và
+    // luôn nhả ở `finally`. Reset tay chỉ che được lỗi, không sửa được lỗi.
     error.value = null
     issuePreview.value = null
     issueLoaded.value = false
@@ -220,18 +223,17 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     issuePreview.value = null
     const url = form.value.issueUrl.trim()
     if (!url) return
-    loading.value = true
-    try {
-      const data = await fetchGithubIssue(url, opts.getProjectId() ?? undefined)
-      const issue = data.issue
-      issuePreview.value = issue
-      form.value.prompt = promptFromIssue(issue)
-      issueLoaded.value = true
-    } catch (e: unknown) {
-      error.value = String((e as Error)?.message ?? e)
-    } finally {
-      loading.value = false
-    }
+    await runTaskAction(async () => {
+      try {
+        const data = await fetchGithubIssue(url, opts.getProjectId() ?? undefined)
+        const issue = data.issue
+        issuePreview.value = issue
+        form.value.prompt = promptFromIssue(issue)
+        issueLoaded.value = true
+      } catch (e: unknown) {
+        error.value = String((e as Error)?.message ?? e)
+      }
+    })
   }
 
   function next() {
@@ -268,35 +270,37 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
 
   async function submit(): Promise<{ taskId: string; jobId: string | null } | null> {
     error.value = null
-    loading.value = true
-    try {
-      const name = form.value.source === 'issue' ? issuePreview.value?.title?.trim() || undefined : undefined
-      const payload: CreateTaskRequest = {
-        taskId: form.value.taskId.trim(),
-        source: form.value.source,
-        name,
-        prompt: form.value.prompt.trim(),
-        issueUrl: form.value.source === 'issue' ? form.value.issueUrl.trim() : undefined,
-        profileName: form.value.profileName?.trim() || undefined,
-        knowledgeInputs: [...form.value.knowledgeInputs],
-        autoReview: form.value.autoReview,
-        exportJson: form.value.exportJson,
-        run: form.value.run,
-        runnerId: form.value.run ? form.value.runnerId || undefined : undefined,
+    // Lời gọi bị guard bỏ qua trả `undefined` → quy về `null`, cùng nghĩa
+    // "không tạo được task" mà consumer đã xử lý sẵn.
+    const result = await runTaskAction(async () => {
+      try {
+        const name = form.value.source === 'issue' ? issuePreview.value?.title?.trim() || undefined : undefined
+        const payload: CreateTaskRequest = {
+          taskId: form.value.taskId.trim(),
+          source: form.value.source,
+          name,
+          prompt: form.value.prompt.trim(),
+          issueUrl: form.value.source === 'issue' ? form.value.issueUrl.trim() : undefined,
+          profileName: form.value.profileName?.trim() || undefined,
+          knowledgeInputs: [...form.value.knowledgeInputs],
+          autoReview: form.value.autoReview,
+          exportJson: form.value.exportJson,
+          run: form.value.run,
+          runnerId: form.value.run ? form.value.runnerId || undefined : undefined,
+        }
+        const data = await createTask(payload, opts.getProjectId() ?? undefined)
+        const taskId = data.task?.taskId ?? payload.taskId
+        createdTaskId.value = taskId
+        const jobId = data.job?.id ?? null
+        submittedJobId.value = jobId
+        if (form.value.run && jobId) step.value = CREATE_TASK_STEPS
+        return { taskId, jobId }
+      } catch (e: unknown) {
+        error.value = String((e as Error)?.message ?? e)
+        return null
       }
-      const data = await createTask(payload, opts.getProjectId() ?? undefined)
-      const taskId = data.task?.taskId ?? payload.taskId
-      createdTaskId.value = taskId
-      const jobId = data.job?.id ?? null
-      submittedJobId.value = jobId
-      if (form.value.run && jobId) step.value = CREATE_TASK_STEPS
-      return { taskId, jobId }
-    } catch (e: unknown) {
-      error.value = String((e as Error)?.message ?? e)
-      return null
-    } finally {
-      loading.value = false
-    }
+    })
+    return result ?? null
   }
 
   return {

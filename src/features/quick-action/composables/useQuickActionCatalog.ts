@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
 import { fetchArtifactActionsCatalog, saveArtifactActionsCatalog } from '../scripts/QuickActionPanelApi'
 import { t } from '../../../frontend/plugins/i18n'
 import type { ArtifactMenuNode } from '../../monitor/schemas/artifactAction'
@@ -36,7 +37,8 @@ export function useQuickActionCatalog(_opts?: { getProjectId?: () => string | nu
   const actions = ref<QuickActionDraft[]>([])
   const menus = ref<ArtifactMenuNode[]>([])
   const loading = ref(false)
-  const saving = ref(false)
+  // 🚫 Không đụng `loading` ở trên: đó là load catalog (luồng đọc).
+  const { pending: saving, run: runPersist } = useApiAction()
   const error = ref<string | null>(null)
 
   async function load(): Promise<void> {
@@ -58,25 +60,27 @@ export function useQuickActionCatalog(_opts?: { getProjectId?: () => string | nu
     nextActions?: QuickActionDraft[],
     nextMenus?: ArtifactMenuNode[],
   ): Promise<boolean> {
-    saving.value = true
-    error.value = null
-    const actionsToSave = nextActions ?? actions.value
-    const menusToSave = nextMenus ?? menus.value
-    try {
-      const res = await saveArtifactActionsCatalog({
-        version: version.value,
-        actions: actionsToSave,
-        menus: menusToSave,
-      })
-      actions.value = Array.isArray(res?.actions) ? res.actions : actionsToSave
-      menus.value = Array.isArray(res?.menus) ? res.menus : menusToSave
-      return true
-    } catch (e: any) {
-      error.value = String(e?.message || e)
-      return false
-    } finally {
-      saving.value = false
-    }
+    // Lời gọi bị guard bỏ qua trả `undefined` — với consumer thì "không làm gì"
+    // tương đương "chưa lưu được".
+    const ok = await runPersist(async () => {
+      error.value = null
+      const actionsToSave = nextActions ?? actions.value
+      const menusToSave = nextMenus ?? menus.value
+      try {
+        const res = await saveArtifactActionsCatalog({
+          version: version.value,
+          actions: actionsToSave,
+          menus: menusToSave,
+        })
+        actions.value = Array.isArray(res?.actions) ? res.actions : actionsToSave
+        menus.value = Array.isArray(res?.menus) ? res.menus : menusToSave
+        return true
+      } catch (e: any) {
+        error.value = String(e?.message || e)
+        return false
+      }
+    })
+    return ok ?? false
   }
 
   /** Validate + insert/replace a draft by id in local state (does not save). */

@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import CComboSelect from '../../../frontend/ui/CComboSelect.vue'
 import type { CComboSelectOption } from '../../../frontend/ui/CComboSelect.vue'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import { varsSkeletonForStep } from '../lib/vars'
 import type { AutomationListItem } from '../scripts/automationsApi'
@@ -520,323 +521,326 @@ function submit(): void {
         </button>
       </div>
 
-      <div class="modal-body automation-form-body">
-        <label class="field">
-          <span class="field-label">{{ t('automations.form.name') }}</span>
-          <input v-model="form.name" type="text" :placeholder="t('automations.form.namePlaceholder')" />
-        </label>
+      <div class="c-loading-host">
+        <CLoadingOverlay :active="props.saving" />
+        <div class="modal-body automation-form-body">
+          <label class="field">
+            <span class="field-label">{{ t('automations.form.name') }}</span>
+            <input v-model="form.name" type="text" :placeholder="t('automations.form.namePlaceholder')" />
+          </label>
 
-        <label class="field">
-          <span class="field-label">{{ t('automations.form.description') }}</span>
-          <input v-model="form.description" type="text" />
-        </label>
+          <label class="field">
+            <span class="field-label">{{ t('automations.form.description') }}</span>
+            <input v-model="form.description" type="text" />
+          </label>
 
-        <!-- ── Triggers: nhiều nguồn, rule chạy khi BẤT KỲ nguồn nào khớp ── -->
-        <fieldset class="field-group">
-          <legend>{{ t('automations.trigger.header') }}</legend>
-          <p class="field-hint">{{ t('automations.trigger.anyMatchHint') }}</p>
+          <!-- ── Triggers: nhiều nguồn, rule chạy khi BẤT KỲ nguồn nào khớp ── -->
+          <fieldset class="field-group">
+            <legend>{{ t('automations.trigger.header') }}</legend>
+            <p class="field-hint">{{ t('automations.trigger.anyMatchHint') }}</p>
 
-          <div v-for="(row, i) in form.triggers" :key="i" class="trigger-row">
-            <div class="trigger-row-head">
-              <span class="trigger-row-index">{{ i + 1 }}</span>
-              <div class="trigger-kind-row">
-                <label class="chip-select" :class="{ active: row.kind === 'timer' }">
-                  <input v-model="row.kind" type="radio" :value="`timer`" :name="`trigger-kind-${i}`" />
-                  {{ t('automations.trigger.timer') }}
-                </label>
-                <label class="chip-select" :class="{ active: row.kind === 'event' }">
-                  <input v-model="row.kind" type="radio" :value="`event`" :name="`trigger-kind-${i}`" />
-                  {{ t('automations.trigger.event') }}
-                </label>
-              </div>
-              <button
-                type="button"
-                class="icon-btn icon-btn-inline danger"
-                :title="t('automations.trigger.remove')"
-                :aria-label="t('automations.trigger.remove')"
-                :disabled="form.triggers.length <= 1"
-                @click="removeTrigger(i)"
-              >
-                <Icon name="trash" :size="14" />
-              </button>
-            </div>
-
-            <template v-if="row.kind === 'timer'">
-              <label class="field">
-                <span class="field-label">{{ t('automations.trigger.startAt') }}</span>
-                <input v-model="row.startAt" type="datetime-local" />
-              </label>
-              <div class="trigger-kind-row">
-                <label class="chip-select" :class="{ active: row.repeatMode === 'once' }">
-                  <input v-model="row.repeatMode" type="radio" value="once" :name="`repeat-${i}`" />
-                  {{ t('automations.trigger.once') }}
-                </label>
-                <label class="chip-select" :class="{ active: row.repeatMode === 'interval' }">
-                  <input v-model="row.repeatMode" type="radio" value="interval" :name="`repeat-${i}`" />
-                  {{ t('automations.trigger.interval') }}
-                </label>
-                <label class="chip-select" :class="{ active: row.repeatMode === 'cron' }">
-                  <input v-model="row.repeatMode" type="radio" value="cron" :name="`repeat-${i}`" />
-                  {{ t('automations.trigger.cron') }}
-                </label>
-              </div>
-              <div v-if="row.repeatMode === 'interval'" class="field interval-row">
-                <span class="field-label">{{ t('automations.trigger.intervalEvery') }}</span>
-                <span class="interval-inputs">
-                  <input v-model.number="row.intervalValue" type="number" min="1" />
-                  <select v-model="row.intervalUnit">
-                    <option value="minute">{{ t('automations.trigger.intervalMinute') }}</option>
-                    <option value="hour">{{ t('automations.trigger.intervalHour') }}</option>
-                    <option value="day">{{ t('automations.trigger.intervalDay') }}</option>
-                  </select>
-                </span>
-              </div>
-              <label v-else-if="row.repeatMode === 'cron'" class="field">
-                <span class="field-label">{{ t('automations.trigger.cronExpr') }}</span>
-                <input v-model="row.cronExpr" type="text" placeholder="0 9 * * 1-5" spellcheck="false" />
-                <span class="field-hint">{{ t('automations.trigger.cronHint') }}</span>
-              </label>
-            </template>
-
-            <div v-else class="field">
-              <span class="field-label">{{ t('automations.trigger.eventType') }}</span>
-              <CComboSelect
-                v-model="row.eventType"
-                :options="eventOptions"
-                creatable
-                :aria-label="t('automations.trigger.eventType')"
-                :placeholder="t('automations.trigger.eventTypePlaceholder')"
-              />
-              <span class="field-hint">{{ t('automations.trigger.eventTypeHint') }}</span>
-            </div>
-
-            <p v-if="triggerErrors[i]" class="form-error">{{ triggerErrors[i] }}</p>
-          </div>
-
-          <button
-            type="button"
-            class="btn-ghost btn-sm add-row-btn"
-            :disabled="form.triggers.length >= MAX_TRIGGERS"
-            @click="addTrigger"
-          >
-            + {{ t('automations.trigger.add') }}
-          </button>
-        </fieldset>
-
-        <!-- ── Actions: timeline tuần tự, bước sau dùng biến của bước trước ── -->
-        <fieldset class="field-group">
-          <legend>{{ t('automations.action.header') }}</legend>
-          <p class="field-hint">{{ t('automations.action.sequenceHint') }}</p>
-
-          <ol class="action-timeline">
-            <li v-for="(row, i) in form.actions" :key="i" class="action-step">
-              <div class="step-rail" aria-hidden="true">
-                <span class="step-dot">{{ i + 1 }}</span>
-                <span v-if="i < form.actions.length - 1" class="step-line" />
-              </div>
-
-              <div class="step-body">
-                <div class="step-head">
-                  <input
-                    v-model="row.name"
-                    type="text"
-                    class="step-name-input"
-                    :placeholder="t('automations.action.stepNamePlaceholder', { n: i + 1 })"
-                  />
-                  <button
-                    type="button"
-                    class="icon-btn icon-btn-inline"
-                    :class="{ active: varsOpenFor === i + 1 }"
-                    :title="t('automations.vars.toggle')"
-                    :aria-label="t('automations.vars.toggle')"
-                    @click="varsOpenFor = varsOpenFor === i + 1 ? null : i + 1"
-                  >
-                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <circle cx="8" cy="8" r="6" />
-                      <path d="M6.2 6.2a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.2v.3" />
-                      <circle cx="8" cy="11.6" r="0.5" fill="currentColor" stroke="none" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn icon-btn-inline danger"
-                    :title="t('automations.action.remove')"
-                    :aria-label="t('automations.action.remove')"
-                    @click="removeAction(i)"
-                  >
-                    <Icon name="trash" :size="14" />
-                  </button>
-                </div>
-
-                <label class="field">
-                  <span class="field-label">{{ t('automations.action.stepDescription') }}</span>
-                  <input v-model="row.description" type="text" />
-                </label>
-
+            <div v-for="(row, i) in form.triggers" :key="i" class="trigger-row">
+              <div class="trigger-row-head">
+                <span class="trigger-row-index">{{ i + 1 }}</span>
                 <div class="trigger-kind-row">
-                  <label class="chip-select" :class="{ active: row.kind === 'runTask' }">
-                    <input v-model="row.kind" type="radio" value="runTask" :name="`action-kind-${i}`" />
-                    {{ t('automations.action.runTaskKind') }}
+                  <label class="chip-select" :class="{ active: row.kind === 'timer' }">
+                    <input v-model="row.kind" type="radio" :value="`timer`" :name="`trigger-kind-${i}`" />
+                    {{ t('automations.trigger.timer') }}
                   </label>
-                  <label class="chip-select" :class="{ active: row.kind === 'httpRequest' }">
-                    <input v-model="row.kind" type="radio" value="httpRequest" :name="`action-kind-${i}`" />
-                    {{ t('automations.action.httpRequest') }}
-                  </label>
-                  <label class="chip-select" :class="{ active: row.kind === 'runCommand' }">
-                    <input v-model="row.kind" type="radio" value="runCommand" :name="`action-kind-${i}`" />
-                    {{ t('automations.action.runCommand') }}
+                  <label class="chip-select" :class="{ active: row.kind === 'event' }">
+                    <input v-model="row.kind" type="radio" :value="`event`" :name="`trigger-kind-${i}`" />
+                    {{ t('automations.trigger.event') }}
                   </label>
                 </div>
+                <button
+                  type="button"
+                  class="icon-btn icon-btn-inline danger"
+                  :title="t('automations.trigger.remove')"
+                  :aria-label="t('automations.trigger.remove')"
+                  :disabled="form.triggers.length <= 1"
+                  @click="removeTrigger(i)"
+                >
+                  <Icon name="trash" :size="14" />
+                </button>
+              </div>
 
-                <template v-if="row.kind === 'runTask'">
-                  <div class="trigger-kind-row">
-                    <label class="chip-select" :class="{ active: row.mode === 'create' }">
-                      <input v-model="row.mode" type="radio" value="create" :name="`action-mode-${i}`" />
-                      {{ t('automations.action.create') }}
-                    </label>
-                    <label class="chip-select" :class="{ active: row.mode === 'existing' }">
-                      <input v-model="row.mode" type="radio" value="existing" :name="`action-mode-${i}`" />
-                      {{ t('automations.action.existing') }}
-                    </label>
-                  </div>
-
-                  <!-- Ngoài mọi v-if mode: project đích áp cho cả create lẫn existing. -->
-                  <div class="field">
-                    <span class="field-label">{{ t('automations.action.targetProject') }}</span>
-                    <CComboSelect
-                      :model-value="row.projectId"
-                      :options="projectOptions"
-                      :aria-label="t('automations.action.targetProject')"
-                      :placeholder="t('automations.action.targetProjectPlaceholder')"
-                      @update:model-value="onTargetProjectChange(row, $event)"
-                    />
-                    <span class="field-hint">{{ t('automations.action.targetProjectHint') }}</span>
-                  </div>
-
-                  <label v-if="row.mode === 'create'" class="field">
-                    <span class="field-label">{{ t('automations.action.prompt') }}</span>
-                    <textarea v-model="row.prompt" rows="4" :placeholder="t('automations.action.promptPlaceholder')" />
+              <template v-if="row.kind === 'timer'">
+                <label class="field">
+                  <span class="field-label">{{ t('automations.trigger.startAt') }}</span>
+                  <input v-model="row.startAt" type="datetime-local" />
+                </label>
+                <div class="trigger-kind-row">
+                  <label class="chip-select" :class="{ active: row.repeatMode === 'once' }">
+                    <input v-model="row.repeatMode" type="radio" value="once" :name="`repeat-${i}`" />
+                    {{ t('automations.trigger.once') }}
                   </label>
-                  <div v-if="row.mode === 'create'" class="field">
-                    <span class="field-label">{{ t('automations.action.profileName') }}</span>
-                    <CComboSelect
-                      v-model="row.profileName"
-                      :options="profileOptionsOf(row)"
-                      creatable
-                      :aria-label="t('automations.action.profileName')"
-                      :placeholder="t('automations.action.profileNamePlaceholder')"
-                    />
-                  </div>
-                  <div v-else class="field">
-                    <span class="field-label">{{ t('automations.action.taskId') }}</span>
-                    <CComboSelect
-                      v-model="row.taskId"
-                      :options="taskOptionsOf(row)"
-                      creatable
-                      :aria-label="t('automations.action.taskId')"
-                      :placeholder="t('automations.action.taskIdPlaceholder')"
-                    />
-                  </div>
-
-                  <div class="field">
-                    <span class="field-label">{{ t('automations.action.runnerId') }}</span>
-                    <CComboSelect
-                      v-model="row.runnerId"
-                      :options="runnerOptionsOf(row)"
-                      creatable
-                      :aria-label="t('automations.action.runnerId')"
-                      :placeholder="t('automations.action.runnerIdPlaceholder')"
-                    />
-                  </div>
-                </template>
-
-                <template v-else-if="row.kind === 'httpRequest'">
-                  <div class="field">
-                    <span class="field-label">{{ t('automations.action.method') }}</span>
-                    <CComboSelect
-                      v-model="row.method"
-                      :options="httpMethodOptions"
-                      :aria-label="t('automations.action.method')"
-                    />
-                  </div>
-                  <label class="field">
-                    <span class="field-label">{{ t('automations.action.url') }}</span>
-                    <input v-model="row.url" type="text" :placeholder="t('automations.action.urlPlaceholder')" />
+                  <label class="chip-select" :class="{ active: row.repeatMode === 'interval' }">
+                    <input v-model="row.repeatMode" type="radio" value="interval" :name="`repeat-${i}`" />
+                    {{ t('automations.trigger.interval') }}
                   </label>
-                  <label class="field">
-                    <span class="field-label">{{ t('automations.action.headers') }}</span>
-                    <textarea v-model="row.headersText" rows="3" :placeholder="t('automations.action.headersPlaceholder')" />
-                    <span class="field-hint">{{ t('automations.action.headersHint') }}</span>
+                  <label class="chip-select" :class="{ active: row.repeatMode === 'cron' }">
+                    <input v-model="row.repeatMode" type="radio" value="cron" :name="`repeat-${i}`" />
+                    {{ t('automations.trigger.cron') }}
                   </label>
-                  <label class="field">
-                    <span class="field-label">{{ t('automations.action.body') }}</span>
-                    <textarea v-model="row.body" rows="4" :placeholder="t('automations.action.bodyPlaceholder')" />
-                  </label>
-                </template>
+                </div>
+                <div v-if="row.repeatMode === 'interval'" class="field interval-row">
+                  <span class="field-label">{{ t('automations.trigger.intervalEvery') }}</span>
+                  <span class="interval-inputs">
+                    <input v-model.number="row.intervalValue" type="number" min="1" />
+                    <select v-model="row.intervalUnit">
+                      <option value="minute">{{ t('automations.trigger.intervalMinute') }}</option>
+                      <option value="hour">{{ t('automations.trigger.intervalHour') }}</option>
+                      <option value="day">{{ t('automations.trigger.intervalDay') }}</option>
+                    </select>
+                  </span>
+                </div>
+                <label v-else-if="row.repeatMode === 'cron'" class="field">
+                  <span class="field-label">{{ t('automations.trigger.cronExpr') }}</span>
+                  <input v-model="row.cronExpr" type="text" placeholder="0 9 * * 1-5" spellcheck="false" />
+                  <span class="field-hint">{{ t('automations.trigger.cronHint') }}</span>
+                </label>
+              </template>
 
-                <template v-else>
-                  <div class="field">
-                    <span class="field-label">{{ t('automations.action.runnerId') }}</span>
-                    <CComboSelect
-                      v-model="row.runnerId"
-                      :options="commandRunnerOptions"
-                      creatable
-                      :aria-label="t('automations.action.runnerId')"
-                      :placeholder="t('automations.action.runnerIdPlaceholder')"
+              <div v-else class="field">
+                <span class="field-label">{{ t('automations.trigger.eventType') }}</span>
+                <CComboSelect
+                  v-model="row.eventType"
+                  :options="eventOptions"
+                  creatable
+                  :aria-label="t('automations.trigger.eventType')"
+                  :placeholder="t('automations.trigger.eventTypePlaceholder')"
+                />
+                <span class="field-hint">{{ t('automations.trigger.eventTypeHint') }}</span>
+              </div>
+
+              <p v-if="triggerErrors[i]" class="form-error">{{ triggerErrors[i] }}</p>
+            </div>
+
+            <button
+              type="button"
+              class="btn-ghost btn-sm add-row-btn"
+              :disabled="form.triggers.length >= MAX_TRIGGERS"
+              @click="addTrigger"
+            >
+              + {{ t('automations.trigger.add') }}
+            </button>
+          </fieldset>
+
+          <!-- ── Actions: timeline tuần tự, bước sau dùng biến của bước trước ── -->
+          <fieldset class="field-group">
+            <legend>{{ t('automations.action.header') }}</legend>
+            <p class="field-hint">{{ t('automations.action.sequenceHint') }}</p>
+
+            <ol class="action-timeline">
+              <li v-for="(row, i) in form.actions" :key="i" class="action-step">
+                <div class="step-rail" aria-hidden="true">
+                  <span class="step-dot">{{ i + 1 }}</span>
+                  <span v-if="i < form.actions.length - 1" class="step-line" />
+                </div>
+
+                <div class="step-body">
+                  <div class="step-head">
+                    <input
+                      v-model="row.name"
+                      type="text"
+                      class="step-name-input"
+                      :placeholder="t('automations.action.stepNamePlaceholder', { n: i + 1 })"
                     />
-                  </div>
-                  <label class="field">
-                    <span class="field-label">{{ t('automations.action.params') }}</span>
-                    <textarea v-model="row.params" rows="3" :placeholder="t('automations.action.paramsPlaceholder')" />
-                  </label>
-                </template>
-
-                <p v-if="actionErrors[i]" class="form-error">{{ actionErrors[i] }}</p>
-
-                <div v-if="varsOpenFor === i + 1" class="vars-panel">
-                  <p class="field-hint">
-                    {{ t('automations.vars.hint') }}
-                    <span v-if="copiedVar" class="vars-copied">{{ t('automations.vars.copied') }}</span>
-                  </p>
-                  <div class="vars-chips">
                     <button
-                      v-for="path in varPathsFor(i + 1)"
-                      :key="path"
                       type="button"
-                      class="chip-select vars-chip"
-                      :title="varToken(path)"
-                      @click="copyVar(path)"
+                      class="icon-btn icon-btn-inline"
+                      :class="{ active: varsOpenFor === i + 1 }"
+                      :title="t('automations.vars.toggle')"
+                      :aria-label="t('automations.vars.toggle')"
+                      @click="varsOpenFor = varsOpenFor === i + 1 ? null : i + 1"
                     >
-                      {{ varToken(path) }}
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="8" cy="8" r="6" />
+                        <path d="M6.2 6.2a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.2v.3" />
+                        <circle cx="8" cy="11.6" r="0.5" fill="currentColor" stroke="none" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="icon-btn icon-btn-inline danger"
+                      :title="t('automations.action.remove')"
+                      :aria-label="t('automations.action.remove')"
+                      @click="removeAction(i)"
+                    >
+                      <Icon name="trash" :size="14" />
                     </button>
                   </div>
-                  <pre class="vars-overview">{{ varsOverviewFor(i + 1) }}</pre>
+
+                  <label class="field">
+                    <span class="field-label">{{ t('automations.action.stepDescription') }}</span>
+                    <input v-model="row.description" type="text" />
+                  </label>
+
+                  <div class="trigger-kind-row">
+                    <label class="chip-select" :class="{ active: row.kind === 'runTask' }">
+                      <input v-model="row.kind" type="radio" value="runTask" :name="`action-kind-${i}`" />
+                      {{ t('automations.action.runTaskKind') }}
+                    </label>
+                    <label class="chip-select" :class="{ active: row.kind === 'httpRequest' }">
+                      <input v-model="row.kind" type="radio" value="httpRequest" :name="`action-kind-${i}`" />
+                      {{ t('automations.action.httpRequest') }}
+                    </label>
+                    <label class="chip-select" :class="{ active: row.kind === 'runCommand' }">
+                      <input v-model="row.kind" type="radio" value="runCommand" :name="`action-kind-${i}`" />
+                      {{ t('automations.action.runCommand') }}
+                    </label>
+                  </div>
+
+                  <template v-if="row.kind === 'runTask'">
+                    <div class="trigger-kind-row">
+                      <label class="chip-select" :class="{ active: row.mode === 'create' }">
+                        <input v-model="row.mode" type="radio" value="create" :name="`action-mode-${i}`" />
+                        {{ t('automations.action.create') }}
+                      </label>
+                      <label class="chip-select" :class="{ active: row.mode === 'existing' }">
+                        <input v-model="row.mode" type="radio" value="existing" :name="`action-mode-${i}`" />
+                        {{ t('automations.action.existing') }}
+                      </label>
+                    </div>
+
+                    <!-- Ngoài mọi v-if mode: project đích áp cho cả create lẫn existing. -->
+                    <div class="field">
+                      <span class="field-label">{{ t('automations.action.targetProject') }}</span>
+                      <CComboSelect
+                        :model-value="row.projectId"
+                        :options="projectOptions"
+                        :aria-label="t('automations.action.targetProject')"
+                        :placeholder="t('automations.action.targetProjectPlaceholder')"
+                        @update:model-value="onTargetProjectChange(row, $event)"
+                      />
+                      <span class="field-hint">{{ t('automations.action.targetProjectHint') }}</span>
+                    </div>
+
+                    <label v-if="row.mode === 'create'" class="field">
+                      <span class="field-label">{{ t('automations.action.prompt') }}</span>
+                      <textarea v-model="row.prompt" rows="4" :placeholder="t('automations.action.promptPlaceholder')" />
+                    </label>
+                    <div v-if="row.mode === 'create'" class="field">
+                      <span class="field-label">{{ t('automations.action.profileName') }}</span>
+                      <CComboSelect
+                        v-model="row.profileName"
+                        :options="profileOptionsOf(row)"
+                        creatable
+                        :aria-label="t('automations.action.profileName')"
+                        :placeholder="t('automations.action.profileNamePlaceholder')"
+                      />
+                    </div>
+                    <div v-else class="field">
+                      <span class="field-label">{{ t('automations.action.taskId') }}</span>
+                      <CComboSelect
+                        v-model="row.taskId"
+                        :options="taskOptionsOf(row)"
+                        creatable
+                        :aria-label="t('automations.action.taskId')"
+                        :placeholder="t('automations.action.taskIdPlaceholder')"
+                      />
+                    </div>
+
+                    <div class="field">
+                      <span class="field-label">{{ t('automations.action.runnerId') }}</span>
+                      <CComboSelect
+                        v-model="row.runnerId"
+                        :options="runnerOptionsOf(row)"
+                        creatable
+                        :aria-label="t('automations.action.runnerId')"
+                        :placeholder="t('automations.action.runnerIdPlaceholder')"
+                      />
+                    </div>
+                  </template>
+
+                  <template v-else-if="row.kind === 'httpRequest'">
+                    <div class="field">
+                      <span class="field-label">{{ t('automations.action.method') }}</span>
+                      <CComboSelect
+                        v-model="row.method"
+                        :options="httpMethodOptions"
+                        :aria-label="t('automations.action.method')"
+                      />
+                    </div>
+                    <label class="field">
+                      <span class="field-label">{{ t('automations.action.url') }}</span>
+                      <input v-model="row.url" type="text" :placeholder="t('automations.action.urlPlaceholder')" />
+                    </label>
+                    <label class="field">
+                      <span class="field-label">{{ t('automations.action.headers') }}</span>
+                      <textarea v-model="row.headersText" rows="3" :placeholder="t('automations.action.headersPlaceholder')" />
+                      <span class="field-hint">{{ t('automations.action.headersHint') }}</span>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">{{ t('automations.action.body') }}</span>
+                      <textarea v-model="row.body" rows="4" :placeholder="t('automations.action.bodyPlaceholder')" />
+                    </label>
+                  </template>
+
+                  <template v-else>
+                    <div class="field">
+                      <span class="field-label">{{ t('automations.action.runnerId') }}</span>
+                      <CComboSelect
+                        v-model="row.runnerId"
+                        :options="commandRunnerOptions"
+                        creatable
+                        :aria-label="t('automations.action.runnerId')"
+                        :placeholder="t('automations.action.runnerIdPlaceholder')"
+                      />
+                    </div>
+                    <label class="field">
+                      <span class="field-label">{{ t('automations.action.params') }}</span>
+                      <textarea v-model="row.params" rows="3" :placeholder="t('automations.action.paramsPlaceholder')" />
+                    </label>
+                  </template>
+
+                  <p v-if="actionErrors[i]" class="form-error">{{ actionErrors[i] }}</p>
+
+                  <div v-if="varsOpenFor === i + 1" class="vars-panel">
+                    <p class="field-hint">
+                      {{ t('automations.vars.hint') }}
+                      <span v-if="copiedVar" class="vars-copied">{{ t('automations.vars.copied') }}</span>
+                    </p>
+                    <div class="vars-chips">
+                      <button
+                        v-for="path in varPathsFor(i + 1)"
+                        :key="path"
+                        type="button"
+                        class="chip-select vars-chip"
+                        :title="varToken(path)"
+                        @click="copyVar(path)"
+                      >
+                        {{ varToken(path) }}
+                      </button>
+                    </div>
+                    <pre class="vars-overview">{{ varsOverviewFor(i + 1) }}</pre>
+                  </div>
                 </div>
-              </div>
-            </li>
-          </ol>
+              </li>
+            </ol>
 
-          <p v-if="form.actions.length === 0" class="muted field-hint">{{ t('automations.action.empty') }}</p>
+            <p v-if="form.actions.length === 0" class="muted field-hint">{{ t('automations.action.empty') }}</p>
 
-          <button
-            type="button"
-            class="btn-ghost btn-sm add-row-btn"
-            :disabled="form.actions.length >= MAX_ACTIONS"
-            @click="addAction"
-          >
-            + {{ t('automations.action.add') }}
-          </button>
-        </fieldset>
+            <button
+              type="button"
+              class="btn-ghost btn-sm add-row-btn"
+              :disabled="form.actions.length >= MAX_ACTIONS"
+              @click="addAction"
+            >
+              + {{ t('automations.action.add') }}
+            </button>
+          </fieldset>
 
-        <label class="field checkbox-field">
-          <input v-model="form.enabled" type="checkbox" />
-          <span>{{ t('automations.form.enabled') }}</span>
-        </label>
+          <label class="field checkbox-field">
+            <input v-model="form.enabled" type="checkbox" />
+            <span>{{ t('automations.form.enabled') }}</span>
+          </label>
 
-        <p v-if="validationError" class="form-error">{{ validationError }}</p>
-        <p v-else-if="props.serverError" class="form-error">{{ props.serverError }}</p>
+          <p v-if="validationError" class="form-error">{{ validationError }}</p>
+          <p v-else-if="props.serverError" class="form-error">{{ props.serverError }}</p>
 
-        <p class="field-hint pending-hint">{{ t('automations.pending.webhook') }}</p>
+          <p class="field-hint pending-hint">{{ t('automations.pending.webhook') }}</p>
+        </div>
       </div>
 
       <div class="modal-foot">
