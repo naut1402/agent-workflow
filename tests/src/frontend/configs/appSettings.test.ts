@@ -21,7 +21,9 @@ import {
   resolveNotifyShowFloating,
   resolveNotifyShowSidebar,
   resolveNotifySoundEnabled,
+  resolveLocale,
   resolveThemePreference,
+  DEFAULT_LOCALE,
 } from '@/frontend/configs/appSettings'
 
 describe('parseAppSettings', () => {
@@ -415,5 +417,70 @@ describe('AppSettingsSchema — khoá artifactSection* (T0c6725e9)', () => {
 
   it('bản cũ không có 2 khoá mới vẫn parse được', () => {
     expect(AppSettingsSchema.safeParse({ theme: 'dark' }).success).toBe(true)
+  })
+})
+
+/**
+ * [T94b6ee41] Nhóm I của `test-spec.md` — `resolveLocale` + schema `locale`.
+ *
+ * Bề mặt đổi kiểu: `locale` từ `z.enum(['vi','en'])` thành `z.string()`, vì tập locale
+ * hợp lệ đến từ manifest server LÚC CHẠY, không từ hằng số build-time. Hai bất biến đi
+ * kèm: dữ liệu người dùng cũ vẫn parse (🚫 không cần migrate localStorage), và mã không
+ * còn phục vụ được thì rơi về mặc định thay vì để UI trống chữ.
+ */
+describe('resolveLocale — locale hiệu dụng', () => {
+  it('TC-I01: thiếu / rỗng ⇒ vi', () => {
+    expect(resolveLocale(null)).toBe('vi')
+    expect(resolveLocale(undefined)).toBe('vi')
+    expect(resolveLocale({})).toBe('vi')
+    expect(resolveLocale({ locale: '' })).toBe('vi')
+    expect(DEFAULT_LOCALE).toBe('vi')
+  })
+
+  it('TC-I02: không truyền `allowed` ⇒ chỉ kiểm non-empty (boot, manifest chưa về)', () => {
+    expect(resolveLocale({ locale: 'en' })).toBe('en')
+    expect(resolveLocale({ locale: 'ja' })).toBe('ja')
+  })
+
+  it('TC-I03: locale đã biến mất khỏi đĩa ⇒ rơi về vi (G-C14)', () => {
+    expect(resolveLocale({ locale: 'ja' }, ['vi', 'en'])).toBe('vi')
+    expect(resolveLocale({ locale: 'en' }, ['vi'])).toBe('vi')
+  })
+
+  it('TC-I04: locale thứ ba hoạt động mà KHÔNG phải sửa code', () => {
+    expect(resolveLocale({ locale: 'ja' }, ['vi', 'en', 'ja'])).toBe('ja')
+    expect(resolveLocale({ locale: 'pt-BR' }, ['vi', 'en', 'pt-BR'])).toBe('pt-BR')
+  })
+
+  it('TC-I05: kiểu sai ⇒ vi, 🚫 không ném', () => {
+    expect(resolveLocale({ locale: 123 } as never)).toBe('vi')
+    expect(resolveLocale({ locale: null } as never)).toBe('vi')
+    expect(resolveLocale({ locale: {} } as never)).toBe('vi')
+    expect(resolveLocale({ locale: ['vi'] } as never)).toBe('vi')
+  })
+
+  it('TC-I03b: `allowed` rỗng ⇒ mọi giá trị rơi về vi', () => {
+    expect(resolveLocale({ locale: 'en' }, [])).toBe('vi')
+  })
+})
+
+describe('AppSettingsSchema — trường `locale`', () => {
+  it('TC-I06: dữ liệu người dùng cũ vẫn parse — 🚫 không cần migrate localStorage', () => {
+    expect(AppSettingsSchema.safeParse({ locale: 'vi' }).success).toBe(true)
+    expect(AppSettingsSchema.safeParse({ locale: 'en' }).success).toBe(true)
+    expect(parseAppSettings({ locale: 'en' }).locale).toBe('en')
+  })
+
+  it('TC-I07: giá trị mới parse được (`z.enum` cũ sẽ fail ở đây — đó là điểm của ca này)', () => {
+    expect(AppSettingsSchema.safeParse({ locale: 'ja' }).success).toBe(true)
+    expect(AppSettingsSchema.safeParse({ locale: 'pt-BR' }).success).toBe(true)
+    expect(parseAppSettings({ locale: 'ja' }).locale).toBe('ja')
+  })
+
+  it('TC-I08: kiểu sai bị chặn ở schema', () => {
+    expect(AppSettingsSchema.safeParse({ locale: 5 }).success).toBe(false)
+    expect(AppSettingsSchema.safeParse({ locale: true }).success).toBe(false)
+    // …và khi schema fail thì `parseAppSettings` đi đúng đường "vắng mặt".
+    expect(resolveLocale(parseAppSettings({ locale: 5 }))).toBe('vi')
   })
 })
