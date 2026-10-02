@@ -4,6 +4,18 @@ Bucket **hẹp có chủ đích**: chỉ logic/type thuần, không hạ tầng.
 `lib/phase.ts`, `lib/stringUtils.ts`, `log/schema.ts` và `log/loggingPrefs.ts` — cả bốn đều
 chỉ import `zod` hoặc không import gì, và đều có importer thật ở cả hai phía.
 
+## `locales/` — dữ liệu, không phải module
+
+`locales/<locale>/<namespace>.json` là **nguồn sự thật của chuỗi dịch**: JSON thuần, không
+phải code. Nó ở đây vì có consumer thật ở **cả hai phía** — backend `src/features/i18n/`
+đọc từ đĩa để serve `GET /api/i18n/:locale`, frontend `plugins/i18n/loadLocales.ts` glob
+cùng cây đó làm fallback đồng bộ. Ba điều kiện dưới vẫn thoả: JSON không import gì cả.
+
+Lint `no-restricted-imports` chỉ áp `src/shared/**/*.ts` nên JSON không bị chặn — và cũng
+không cần chặn, vì không có gì để import.
+
+🚫 Đây **không** phải lời mời đặt dữ liệu khác vào `shared/`. Quy tắc vẫn là 3 điều kiện bên dưới.
+
 ## Đặt file mới ở đây khi — và chỉ khi — cả 3 điều đúng
 
 1. Có importer thật ở **cả** `src/backend/**` và `src/frontend/**` (hoặc `src/features/**`

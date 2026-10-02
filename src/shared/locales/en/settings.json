@@ -1,0 +1,185 @@
+{
+  "artifact": {
+    "accordion": "Only one section open at a time",
+    "block": "Block by H2",
+    "desc": "Default view mode when opening a new document.",
+    "full": "Full",
+    "groupLabel": "Default artifact view mode",
+    "sectionCollapsed": "Collapse all",
+    "sectionDesc": "Section state when a document opens (block mode only).",
+    "sectionExpanded": "Expand all",
+    "sectionForcedHint": "While \"only one section open at a time\" is on, documents always open fully collapsed.",
+    "sectionGroupLabel": "Default section state",
+    "title": "Artifact"
+  },
+  "autoscan": {
+    "addPath": "Add",
+    "browse": "Browse folder",
+    "desc": "Automatically scan whitelist folders and add projects that contain `.dev-team-agent`.",
+    "enabled": "Enable autoscan",
+    "enabledInfo": "When enabled, the dashboard scans the whitelist every 60 seconds while the app is open. Changing the interval in the UI is not supported yet.",
+    "enabledInfoAria": "Autoscan interval information",
+    "loadError": "Could not load autoscan config.",
+    "pathPlaceholder": "Absolute path",
+    "pathRequired": "Enter an absolute path.",
+    "removePath": "Remove from whitelist",
+    "resultAdded": "Added {count} project(s).",
+    "resultExisting": "{count} already registered.",
+    "resultNone": "No new projects found.",
+    "save": "Save",
+    "saved": "Saved.",
+    "saving": "Saving…",
+    "scanNow": "Scan now",
+    "scanning": "Scanning…",
+    "title": "Project autoscan",
+    "whitelistDesc": "Each entry is a parent folder — scans itself and one level of children.",
+    "whitelistTitle": "Folder whitelist"
+  },
+  "chatEnter": {
+    "desc": "Whether Enter sends the message or inserts a new line. Ctrl/⌘+Enter always sends.",
+    "groupLabel": "In the chat box, pressing Enter",
+    "newline": "Inserts a new line (Ctrl/⌘+Enter sends)",
+    "send": "Sends the message (Shift+Enter for a new line)",
+    "title": "Enter key in the chat box"
+  },
+  "chatFeedback": {
+    "desc": "How to handle feedback sent while a step is running.",
+    "groupLabel": "While a step is running, send feedback",
+    "immediate": "Send now (cancels the running step)",
+    "queue": "Queue (wait for the current step)",
+    "title": "Chat while a step is running"
+  },
+  "close": "Close",
+  "githubTokens": {
+    "add": "Add",
+    "cancelEdit": "Cancel",
+    "desc": "Add a PAT for each private repo so issue fetch works when creating tasks. Per-repo tokens win; otherwise falls back to the GITHUB_TOKEN env var.",
+    "edit": "Edit",
+    "empty": "No tokens yet.",
+    "loadError": "Could not load GitHub token config.",
+    "remove": "Remove token",
+    "repoInvalid": "Could not recognise the repo — use owner/repo or a github.com URL.",
+    "repoPlaceholder": "owner/repo or https://github.com/owner/repo",
+    "repoRequired": "Enter a GitHub repo slug or URL.",
+    "saveEdit": "Update",
+    "saved": "Saved.",
+    "title": "GitHub tokens per repo",
+    "tokenPlaceholder": "ghp_… or github_pat_…",
+    "tokenRequired": "Enter a GitHub token.",
+    "tokenSet": "Token saved"
+  },
+  "groups": {
+    "general": "General",
+    "modes": "Modes",
+    "notifications": "Notifications",
+    "projects": "Projects"
+  },
+  "language": {
+    "loadFailed": "Could not load translations — keeping the current language.",
+    "loading": "Loading translations…"
+  },
+  "logging": {
+    "desc": "Show or hide the Logs mode in the sidebar. When shown, choose which log types are written and displayed.",
+    "loadError": "Could not load logging config.",
+    "saved": "Saved.",
+    "showTab": "Show Logs tab",
+    "title": "Logs",
+    "types": {
+      "audit": "Audit (config changes)",
+      "events": "Events (domain event bus)",
+      "jobs": "Jobs (runner stdout)",
+      "request": "Request (HTTP /api)",
+      "toolCall": "Tool call (per-job tool invocations — for statistics)",
+      "usage": "Usage (LLM tokens)"
+    },
+    "typesDesc": "Log types (off = do not write and do not show in Logs)."
+  },
+  "modes": {
+    "alwaysOnHint": "Default dashboard mode — cannot be turned off.",
+    "desc": "Turn each sidebar mode on or off. A disabled mode is hidden from the sidebar and cannot be opened from anywhere else.",
+    "loadError": "Could not load mode config.",
+    "logsAlsoHiddenHint": "Also hidden by the \"Show Logs mode\" switch in the Logs group.",
+    "maturity": {
+      "beta": "Beta",
+      "experimental": "Experimental"
+    },
+    "saved": "Saved.",
+    "title": "Visible modes"
+  },
+  "notifications": {
+    "browser": {
+      "enabled": "Enable native browser notifications",
+      "permissionDenied": "The browser denied notification permission — grant it in your browser settings.",
+      "title": "Browser notifications"
+    },
+    "desc": "Turn notifications on/off and pick which events you want to receive.",
+    "enabled": "Enable notifications",
+    "events": {
+      "hitlPending": "HITL pending",
+      "qaReady": "QA ready",
+      "title": "Event types"
+    },
+    "position": {
+      "both": "Both sidebar and floating",
+      "desc": "Choose where notification icons appear.",
+      "floating": "Floating icon only (top-right)",
+      "sidebar": "Sidebar only",
+      "title": "Display position"
+    },
+    "sound": {
+      "enabled": "Play a sound on new notifications",
+      "title": "Sound"
+    },
+    "title": "Notifications"
+  },
+  "recovery": {
+    "desc": "Auto-recover jobs interrupted by usage-limit, network loss, or a process crash instead of marking them failed right away.",
+    "enabled": "Enable auto-recovery",
+    "loadError": "Could not load recovery config.",
+    "maxAttempts": "Max retry attempts (process crash)",
+    "saved": "Saved.",
+    "title": "Job recovery"
+  },
+  "scanPatterns": {
+    "add": "Add",
+    "defaults": {
+      "agents": "Defaults: .claude/agents/, plugin agents/, ~/.claude/agents/",
+      "rules": "Defaults: docs/agent-rules/, .claude/rules/, ~/.cursor/rules/",
+      "skills": "Defaults: .claude/skills/<slug>/SKILL.md, plugin skills/, ~/.claude/skills/, ~/.cursor/skills-cursor/"
+    },
+    "desc": "Paths relative to the project root, with * and ** support. A matched directory is scanned as a whole; a matched file is loaded on its own.",
+    "empty": "No patterns yet — defaults are in use.",
+    "hint": "Patterns are added to the default sources, they do not replace them. * and ** never match dot-names — type .claude out in full to reach it.",
+    "invalid": "Invalid pattern — use a relative path, no \"..\" and no absolute paths.",
+    "kind": {
+      "agents": "Agents",
+      "rules": "Rules",
+      "skills": "Skills"
+    },
+    "loadError": "Could not load scan pattern config.",
+    "placeholder": "e.g. .agents/*.md or packages/*/skills",
+    "remove": "Remove pattern",
+    "saved": "Saved.",
+    "title": "Scan patterns for agents / skills / rules",
+    "tooMany": "At most {max} patterns per kind."
+  },
+  "sidebar": {
+    "collapseAppOnOutsideClick": "Auto-collapse the main sidebar on outside click",
+    "collapseMonitorSubOnOutsideClick": "Auto-collapse the Monitor sub-sidebar on outside click",
+    "desc": "Auto-collapse sidebars when clicking outside the sidebar area.",
+    "title": "Sidebar"
+  },
+  "taskList": {
+    "collapseOnOutsideClick": "Auto-collapse the file list on outside click",
+    "desc": "Task list behaviour preferences in Monitor mode.",
+    "title": "Task list"
+  },
+  "theme": {
+    "dark": "Dark",
+    "desc": "Choose a light, dark, or system theme.",
+    "light": "Light",
+    "system": "System",
+    "title": "Appearance"
+  },
+  "title": "Settings"
+}

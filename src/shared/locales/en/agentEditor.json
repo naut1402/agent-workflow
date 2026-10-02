@@ -1,0 +1,129 @@
+{
+  "actions": {
+    "buildNl": "Build from description",
+    "close": "Close",
+    "download": "Download agent",
+    "export": "Export",
+    "save": "Save",
+    "templateCopy": "Template / Copy",
+    "upload": "Upload agent"
+  },
+  "build": {
+    "describeRequired": "Enter an agent description before generating a draft.",
+    "draftFailed": "Could not create draft: {message}",
+    "draftNameRequired": "Draft agent is missing a name — edit it before saving.",
+    "jobCancelled": "Job was cancelled.",
+    "jobFailed": "Job failed.",
+    "jobFailedWithError": "Job failed: {error}",
+    "jobMissing": "Job does not exist",
+    "jobTimeout": "Timed out waiting for job",
+    "loadRunnersFailed": "Could not load runners: {message}",
+    "noJobId": "Did not receive a job id from the server.",
+    "noRunner": "No runner available. Enable or configure a runner on the Runner tab and try again.",
+    "smokePrompt": "This is a smoke test. Reply with exactly one line: OK"
+  },
+  "fields": {
+    "description": "Description",
+    "descriptionPlaceholder": "Short description",
+    "name": "Name",
+    "recommendedModel": "Recommended model",
+    "scope": "Scope",
+    "scopeGlobal": "Global (every project)",
+    "scopeProject": "Current project"
+  },
+  "form": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "createTitle": "Create agent",
+    "editTitle": "Edit agent — {name}"
+  },
+  "list": {
+    "delete": "Delete agent",
+    "download": "Download agent",
+    "duplicate": "Duplicate agent",
+    "edit": "Edit agent",
+    "empty": "No custom agents yet",
+    "exportHint": "Select an agent before exporting",
+    "groupGlobal": "Global agents",
+    "groupProject": "Project agents",
+    "newButton": "+ New agent",
+    "view": "View content"
+  },
+  "messages": {
+    "confirmDelete": "Delete agent \"{name}\"?",
+    "confirmOverwrite": "File already exists. Overwrite?",
+    "deleted": "Deleted",
+    "exported": "Exported → {path}",
+    "saved": "Saved {name}"
+  },
+  "nl": {
+    "applyEditor": "Apply to editor",
+    "back": "← Back",
+    "cancel": "Cancel",
+    "close": "Close",
+    "describeHint": "Describe the agent in Vietnamese/English. The system creates a draft (heuristic or API if",
+    "describePlaceholder": "e.g. PHP code review agent following coding conventions, check SQL/XSS…",
+    "descriptionLabel": "Description",
+    "editDraft": "← Edit draft",
+    "generate": "Generate draft",
+    "generating": "Generating…",
+    "nameLabel": "Agent name",
+    "noRunner": "No runner available.",
+    "noRunnerParen": "(no runner available)",
+    "noRunnerSuffix": "to enable/configure, then try again.",
+    "openRunner": "Open Runner",
+    "previewHint": "Review and edit the draft before saving.",
+    "runnerModeOff": "Runner mode is turned off in Settings — enable it to open",
+    "saveAndRun": "Save & smoke-run →",
+    "skillsLabel": "Skills (comma-separated)",
+    "statusInit": "initializing…",
+    "statusOk": "succeeded",
+    "stepDescribe": "1. Describe",
+    "stepPreview": "2. Review draft",
+    "stepRun": "3. Save & smoke-run",
+    "success": "Agent saved and smoke-run succeeded.",
+    "title": "Build from description (NL)",
+    "waitingRunner": "Waiting for the runner to finish…"
+  },
+  "section": {
+    "confirmDelete": "Delete section \"{title}\"?",
+    "deleteTitle": "Delete section",
+    "dragTitle": "Drag to reorder",
+    "emptyTemplate": "Section \"{title}\" is empty — cannot save template",
+    "fixed": "fixed",
+    "promptNewTitle": "New section name:",
+    "promptTemplateName": "Section template name:",
+    "saveTemplate": "Save template",
+    "saveTemplateTitle": "Save section as template",
+    "savedTemplate": "Saved section template → {name}"
+  },
+  "template": {
+    "confirmDelete": "Delete template \"{name}\"?",
+    "copyFallback": "Copy fallback (could not read source file): {message}",
+    "deleteTemplate": "Delete template",
+    "fromCatalog": "Copy from catalog",
+    "fromTemplate": "From template",
+    "fromUrl": "From URL (https)",
+    "namePlaceholder": "Template name (optional)",
+    "useTemplate": "Use template"
+  },
+  "viewer": {
+    "empty": "Pick an agent on the left to view it",
+    "loading": "Loading agent content…"
+  },
+  "workflow": {
+    "add": "Add",
+    "addEmpty": "+ Empty step",
+    "defaultStepTitle": "Step {n}",
+    "directInput": "Type directly",
+    "empty": "No steps yet — add from pipeline, template, or an empty step.",
+    "emptyStepError": "Empty step — cannot save template",
+    "fromPipeline": "+ From pipeline step…",
+    "fromTemplate": "+ From template step…",
+    "promptTemplateName": "Workflow step template name:",
+    "saveTemplate": "Save template",
+    "savedTemplate": "Saved workflow step template → {name}",
+    "stepNum": "Step {n}",
+    "titlePlaceholder": "Step title"
+  }
+}

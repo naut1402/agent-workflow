@@ -37,6 +37,8 @@ const messagesRef = ref<HTMLElement | null>(null)
 const displayTurns = computed(() =>
   chat.timeline.value.map((turn) => ({
     ...turn,
+    // Backend cắt text và trả cờ `truncated`; nhãn là chữ hiển thị nên ghép ở đây.
+    text: turn.truncated ? `${turn.text}\n${t('orchestrator.transcript.truncated')}` : turn.text,
     clampable: turn.role === 'user' && turn.text.length > COLLAPSE_CHARS,
     roleLabel: turn.pending ? 'Bạn · đang gửi' : turn.role === 'user' ? 'Bạn' : 'Runner',
     bubbleRole: turn.role === 'assistant' ? ('assistant' as const) : ('user' as const),

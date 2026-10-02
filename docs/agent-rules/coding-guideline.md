@@ -97,36 +97,66 @@ Primitive dùng chung trong `src/frontend/ui/`:
 ## 6. Ngôn ngữ UI (i18n)
 
 - **Mọi UI string đi qua `vue-i18n`** — không hardcode trong `.vue` / `.ts`.
-- **`vi` là locale mặc định và fallback** (`fallbackLocale: 'vi'`) — locale khác thiếu key thì hiện bản `vi`, không bắt typecheck đối ứng đủ.
-- **Message theo feature** — `src/features/<feature>/locales/{vi,en}.ts` (+ `common` ở `src/frontend/plugins/i18n/locales/common/`), plugin **glob** tự nạp. Namespace = camelCase tên feature (`agent-editor` → `agentEditor`).
+- **`vi` là locale mặc định và fallback** (`fallbackLocale: 'vi'`) — locale khác thiếu key thì hiện bản `vi`, không bắt typecheck đối ứng đủ. Lưới an toàn cho việc này là **test parity khoá toàn cục**, không phải kỷ luật thủ công.
+- **Nguồn sự thật là JSON tập trung** — `src/shared/locales/<locale>/<namespace>.json`. Tên file **chính là** namespace (`agentEditor.json` → `agentEditor`). 🚫 Không còn `src/features/<feature>/locales/*.ts`.
+- **Khoá không được chứa dấu chấm** — `.` là ký tự phân cấp path của vue-i18n. Viết `{ "job": { "failed": "…" } }`, không viết `{ "job.failed": "…" }`; khoá có dấu chấm làm vòng export/import cho vendor mất tính bijective.
+- **Overlay sửa gấp không cần deploy** — `<data-root>/.dev-team-agent/locales/<locale>/<namespace>.json` deep-merge **đè** lên bản repo. Không commit, không bắt buộc tồn tại.
+- **Client nạp qua API + store** — `GET /api/i18n/:locale` (feature `src/features/i18n/`), cache-first trong `useLocaleMessages()`. `loadLocaleMessages()` (glob build-time) giữ vai trò **fallback đồng bộ** khi API chết.
+- **Danh sách locale đến từ manifest server**, không từ hằng số — `SUPPORTED_LOCALES` là chính mảng của `getLocaleRegistry()`. Thêm ngôn ngữ = thêm thư mục JSON, 🚫 không sửa code.
 - **Plugin chỉ gắn từ `main.ts`** qua `installPlugins`; `registerLocale` để bổ sung locale vào registry app-scope.
 - **Trong `<script setup>` dùng `useI18nHelpers()`** (`src/frontend/composables/useI18nHelpers.ts`) — **không** import `useI18n` từ `vue-i18n`. Ngoài setup: `import { t } from '@/plugins/i18n'`.
-- **Locale hiện tại ở `AppSettings.locale`** (localStorage), đổi qua `useLocale()`.
+- **Locale hiện tại ở `AppSettings.locale`** (localStorage), đổi qua `useLocale()`. `setLocale` là **async**: locale chưa nạp phải lấy messages trước; locale đã nạp đổi ngay, không chạm mạng.
 - **Test mount component có `t()`** dùng `mountWithI18n` (`tests/src/helpers/i18n.ts`).
 - **Thêm/sửa text UI** — thêm key ở `vi`; `en` khuyến nghị nhưng không bắt buộc.
+
+### 6.0 Ranh giới: chữ hiển thị ⟷ prompt agent
+
+> [!IMPORTANT]
+> **Chỉ dịch chữ người dùng đọc.** Prompt gửi cho LLM **không** đi qua `t()` — đổi chữ trong prompt là đổi **hành vi model**, không phải đổi giao diện.
+
+Ba chỗ dưới đây là prompt, 🚫 **cấm** i18n hoá:
+
+| File | Là gì |
+|---|---|
+| `src/features/orchestrator/business/brief.ts` | Brief gửi subagent |
+| `src/features/nl-chat/business/nlChatCatalog.ts` | System prompt của chat builder |
+| `src/features/monitor/business/artifactActions/index.ts` | Prompt thao tác artifact |
+
+Hệ quả cho backend: chuỗi **hiển thị** mà backend sinh ra thì trả **mã/cờ**, để FE dịch. Ví dụ `sessionTranscript.ts` / `apiAgentTranscript.ts` trả `truncated: true` thay vì ghép sẵn chuỗi "đã cắt bớt".
 
 ### 6.1 Cấu trúc file
 
 ```
-src/frontend/plugins/
-├── index.ts                 # installPlugins(app)
-└── i18n/
-    ├── index.ts             # i18nPlugin, injectI18nHelpers, registerLocale, setI18nLocale
-    ├── loadLocales.ts       # glob feature + plugin locales
-    └── locales/common/      # namespace shell dùng chung
-        ├── vi.ts
-        └── en.ts
+src/shared/locales/            # NGUỒN SỰ THẬT — JSON thuần, gửi thẳng cho vendor
+├── vi/
+│   ├── common.json            # namespace shell dùng chung
+│   ├── agentEditor.json       # tên file = namespace
+│   └── …                      # một file / feature
+└── en/
+    └── …                      # cùng tập khoá với vi (test parity bắt buộc)
 
-src/features/<feature>/locales/
-├── vi.ts                    # export default { ... }  (namespace = camelCase tên feature)
-└── en.ts                    # tùy chọn; thiếu key → fallback vi
+src/frontend/plugins/
+├── index.ts                   # installPlugins(app)
+└── i18n/
+    ├── index.ts               # i18nPlugin, injectI18nHelpers, registerLocale, setI18nLocale
+    └── loadLocales.ts         # glob src/shared/locales/*/*.json — fallback đồng bộ
+
+src/features/i18n/             # backend serve bundle + manifest, có ETag
+src/frontend/composables/useLocaleMessages.ts   # store cache-first + initLocale()
 ```
 
-Ví dụ: `features/agent-editor/locales/vi.ts` → namespace `agentEditor`.
+Ví dụ: `src/shared/locales/vi/agentEditor.json` → namespace `agentEditor`, gọi `t('agentEditor.a.b')`.
 
-Plugin tự nạp bằng `import.meta.glob` — feature mới chỉ cần thêm `locales/vi.ts` (và `en.ts` nếu muốn).
+### 6.2 Gửi file cho người biên dịch
 
-### 6.2 Đăng ký locale mới (runtime)
+```bash
+bun run i18n:export                       # → out/i18n/<locale>.json (một file phẳng / locale)
+bun run i18n:import --locale=en out/i18n/en.json   # ghi ngược về src/shared/locales/en/
+```
+
+Import **chỉ ghi đè khoá có trong file vendor** — khoá vắng mặt giữ nguyên giá trị cũ, và namespace lạ bị bỏ qua kèm cảnh báo. File đầu vào hỏng → không ghi gì.
+
+### 6.3 Đăng ký locale mới (runtime)
 
 ```ts
 import { registerLocale } from '@/plugins/i18n'
@@ -137,9 +167,11 @@ registerLocale('ja', {
 })
 ```
 
-`registerLocale` merge vào vue-i18n và cập nhật `getLocaleRegistry()` (inject app-scope qua `I18N_REGISTRY_KEY`). Locale preference persist vẫn theo `AppSettings.locale` — mở `LocalePreference` nếu thêm mã locale cố định vào Settings.
+`registerLocale` merge vào vue-i18n và cập nhật `getLocaleRegistry()` (inject app-scope qua `I18N_REGISTRY_KEY`) — `SUPPORTED_LOCALES` và selector ở Settings thấy ngay. Locale preference persist theo `AppSettings.locale`, kiểu `string`: 🚫 **không** phải mở enum nào khi thêm mã locale mới.
 
-### 6.3 Cách dùng trong code
+Đường thường dùng là **thả thư mục JSON vào `src/shared/locales/<locale>/`** rồi để manifest server công bố; `registerLocale` trực tiếp chỉ dành cho locale nạp động ngoài cây đó.
+
+### 6.4 Cách dùng trong code
 
 Plugin chỉ được gắn từ app root:
 

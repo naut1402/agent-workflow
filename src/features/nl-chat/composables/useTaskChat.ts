@@ -21,6 +21,8 @@ export interface TaskChatTurn {
   text: string
   at?: string
   tool?: string
+  /** Backend đã cắt bớt `text`; nhãn hiển thị do FE dịch, không ghép ở backend. */
+  truncated?: boolean
 }
 
 /** `sortedTurns` entry merged with an in-flight optimistic echo, in send order. */

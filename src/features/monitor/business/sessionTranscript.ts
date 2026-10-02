@@ -28,6 +28,11 @@ export interface TranscriptTurn {
   at?: string
   /** Tool name, for `role: 'tool'` activity turns. */
   tool?: string
+  /**
+   * Text đã bị cắt vì vượt `MAX_TURN_CHARS`. Backend trả CỜ chứ không ghép sẵn nhãn —
+   * nhãn là chữ hiển thị nên thuộc về FE (`orchestrator.transcript.truncated`).
+   */
+  truncated?: boolean
 }
 
 /** Per-turn text cap — a single agent reply can be enormous. */
@@ -75,9 +80,11 @@ export function findTranscriptFile(sessionId: string, workspace?: string): strin
   return null
 }
 
-function clip(text: string): string {
+/** Cắt text quá dài; nhãn "đã cắt bớt" do FE dịch, không ghép ở đây. */
+function clip(text: string): { text: string; truncated?: boolean } {
   const t = text.trim()
-  return t.length > MAX_TURN_CHARS ? `${t.slice(0, MAX_TURN_CHARS)}\n…(đã cắt bớt)` : t
+  if (t.length <= MAX_TURN_CHARS) return { text: t }
+  return { text: t.slice(0, MAX_TURN_CHARS), truncated: true }
 }
 
 /** One-line summary of a tool call — the "agent đang làm gì" signal. */
@@ -155,7 +162,7 @@ export function readTranscript(file: string, opts: ReadTranscriptOptions = {}): 
     const { text, tools } = textOfContent(message?.content)
 
     if (text.trim()) {
-      all.push({ index: all.length, role: type, text: clip(text), at })
+      all.push({ index: all.length, role: type, ...clip(text), at })
     }
     if (includeTools) {
       for (const t of tools) {

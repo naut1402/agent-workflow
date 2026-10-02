@@ -1,0 +1,14 @@
+{
+  "bell": {
+    "empty": "No notifications yet.",
+    "markAllRead": "Mark all read",
+    "title": "Notifications"
+  },
+  "flag": {
+    "unread": "Unread"
+  },
+  "message": {
+    "hitlPending": "Task {taskId} is waiting for approval (HITL)",
+    "qaReady": "Task {taskId} has QA ready"
+  }
+}
