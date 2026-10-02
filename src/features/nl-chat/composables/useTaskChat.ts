@@ -21,6 +21,7 @@ export interface TaskChatTurn {
   text: string
   at?: string
   tool?: string
+  truncated?: boolean
 }
 
 /** `sortedTurns` entry merged with an in-flight optimistic echo, in send order. */

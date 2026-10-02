@@ -34,6 +34,8 @@
     "lint:fix": "eslint . --fix",
     "lint:commit": "commitlint",
     "check:todo": "bun .github/scripts/check-todo-debt.ts",
+    "i18n:export": "bun scripts/i18n-export.ts",
+    "i18n:import": "bun scripts/i18n-import.ts",
     "format": "prettier --write .",
     "test": "bun .github/scripts/run-bun-tests.ts",
     "test:fe": "vitest run --coverage",
