@@ -4,6 +4,18 @@ import { flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { compileWorkflowMarkdown, parseWorkflowMarkdown } from '@/frontend/lib/workflowSteps'
 import WorkflowSectionEditor from '@/features/agent-editor/components/WorkflowSectionEditor.vue'
+import agentEditorVi from '@/features/agent-editor/locales/vi'
+
+// Luồng "Lưu template" đi qua module API chứ không qua `fetch` trần — mock ở
+// tầng module để `stubApi` bên dưới chỉ còn phải lo `/api/pipeline`.
+vi.mock('@/features/agent-editor/scripts/WorkflowSectionEditorApi', () => ({
+  fetchWorkflowStepTemplates: vi.fn(async () => ({ templates: [] })),
+  fetchWorkflowStepTemplate: vi.fn(async () => ({ template: null })),
+  saveWorkflowStepTemplate: vi.fn(async (tpl: any) => ({ name: tpl.name })),
+  deleteWorkflowStepTemplate: vi.fn(async () => ({ deleted: true })),
+}))
+
+import { saveWorkflowStepTemplate } from '@/features/agent-editor/scripts/WorkflowSectionEditorApi'
 
 /** Lightweight stub — avoid mounting Toast UI Editor in jsdom. */
 const MarkdownTextEditorStub = defineComponent({
@@ -126,5 +138,68 @@ describe('WorkflowSectionEditor', () => {
     expect(emitted?.length).toBeGreaterThan(0)
     const last = emitted![emitted!.length - 1][0] as string
     expect(parseWorkflowMarkdown(last)).toEqual(parseWorkflowMarkdown(initial))
+  })
+})
+
+/** Cổng mở bằng tay — giữ request "Lưu template" treo mà không cần fake timer. */
+function gate() {
+  let release!: () => void
+  const p = new Promise<void>((r) => {
+    release = r
+  })
+  return { wait: () => p, release }
+}
+
+const SAVE_LABEL = agentEditorVi.workflow.saveTemplate
+const BUSY_LABEL = '…'
+
+async function openBuilder(w: ReturnType<typeof mountWorkflow>) {
+  await flushPromises()
+  await w.findAll('button.workflow-tab').find((b) => b.text() === 'Builder')!.trigger('click')
+  await flushPromises()
+}
+
+function stepSaveButtons(w: ReturnType<typeof mountWorkflow>) {
+  return w
+    .findAll('.workflow-builder-step .section-head-actions button')
+    .filter((b) => b.text() === SAVE_LABEL || b.text() === BUSY_LABEL)
+}
+
+describe('WorkflowSectionEditor — TC-20 · lưu template của step index 0', () => {
+  afterEach(() => {
+    vi.mocked(saveWorkflowStepTemplate).mockReset()
+    vi.mocked(saveWorkflowStepTemplate).mockImplementation(async (tpl: any) => ({ name: tpl.name }))
+    vi.restoreAllMocks()
+  })
+
+  it('đánh dấu bận đúng step 0, step 1 không bị lây', async () => {
+    const g = gate()
+    vi.mocked(saveWorkflowStepTemplate).mockImplementation(async (tpl: any) => {
+      await g.wait()
+      return { name: tpl.name }
+    })
+    vi.spyOn(window, 'prompt').mockReturnValue('step-tpl')
+
+    const w = mountWorkflow('### Bước 1: A\n\nbody A\n\n### Bước 2: B\n\nbody B')
+    await openBuilder(w)
+
+    const [first, second] = stepSaveButtons(w)
+    expect(second).toBeTruthy()
+
+    await first.trigger('click')
+    await flushPromises()
+
+    // Ca `index === 0` là ca duy nhất phân biệt `pendingKey === String(index)`
+    // với mọi biến thể dựa trên truthiness: sentinel cũ là `-1`, và một cài đặt
+    // khởi tạo `''` vẫn sai đúng ở hàng đầu mà lint không bắt.
+    expect(first.attributes('disabled')).toBeDefined()
+    expect(first.text()).toBe(BUSY_LABEL)
+    expect(second.attributes('disabled')).toBeUndefined()
+    expect(second.text()).toBe(SAVE_LABEL)
+    expect(saveWorkflowStepTemplate).toHaveBeenCalledTimes(1)
+
+    g.release()
+    await flushPromises()
+    expect(stepSaveButtons(w)[0].attributes('disabled')).toBeUndefined()
   })
 })

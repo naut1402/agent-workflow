@@ -1071,3 +1071,141 @@ describe('ConnectionDialog — MCP servers', () => {
     w.unmount()
   })
 })
+
+/** Cổng mở bằng tay — giữ request lưu treo mà không cần fake timer. */
+function gate() {
+  let release!: () => void
+  const p = new Promise<void>((r) => {
+    release = r
+  })
+  return { wait: () => p, release }
+}
+
+const OVERLAY = '.c-loading-overlay'
+const HOST = '.c-loading-host'
+
+/** Connection đã đủ dữ liệu để `save()` đi thẳng tới API, không qua bước chọn. */
+const READY_CONNECTION = {
+  id: 'existing-api',
+  label: 'Existing API',
+  kind: 'ai-provider',
+  providerId: 'gemini-api',
+  credentialId: 'cred-gemini',
+  config: { providerConfigId: 'pc-gemini' },
+}
+
+async function mountReadyToSave() {
+  const w = mount(ConnectionDialog, {
+    props: { providers: PROVIDERS, providerConfigs: PROVIDER_CONFIGS, connection: READY_CONNECTION },
+    attachTo: document.body,
+  })
+  await flushPromises()
+  return w
+}
+
+/** Nhãn nút Lưu đổi khi đang chạy, nên không tra được bằng một chuỗi cố định. */
+function saveButton(): HTMLButtonElement {
+  const labels = [runnerVi.connectionDialog.saveConnection, runnerVi.actions.saving]
+  const btn = qa<HTMLButtonElement>('button').find((b) => labels.includes(b.textContent?.trim() ?? ''))
+  if (!btn) throw new Error('save button not found')
+  return btn
+}
+
+function clickTwiceInOneTick(el: Element) {
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+}
+
+describe('ConnectionDialog — overlay chặn thao tác lúc lưu', () => {
+  afterEach(() => {
+    // `beforeEach` chỉ `mockClear`, không gỡ implementation — trả lại bản mặc
+    // định để ca sau không thừa hưởng promise treo của ca này.
+    vi.mocked(saveConnection).mockImplementation(async (connection: any) => ({ connection }))
+  })
+
+  it('TC-21: bấm Lưu hai lần trong một lượt chỉ gửi một request', async () => {
+    const g = gate()
+    vi.mocked(saveConnection).mockImplementation(async (connection: any) => {
+      await g.wait()
+      return { connection }
+    })
+    const w = await mountReadyToSave()
+
+    clickTwiceInOneTick(saveButton())
+    await flushPromises()
+
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    expect(saveButton().disabled).toBe(true)
+
+    // Cấu trúc sau khi sửa F1: overlay là ANH EM đứng trước `.modal-body`, cả
+    // hai nằm trong `.c-loading-host`. Neo vào chính hộp cuộn là lỗi cũ —
+    // `inset: 0` khi đó lấy cỡ bằng padding box nhưng neo vào gốc nội dung, nên
+    // cuộn xuống là overlay trôi khỏi vùng nhìn thấy.
+    const overlay = document.body.querySelector(OVERLAY)
+    expect(overlay).not.toBe(null)
+    // Chính node overlay phải nằm NGOÀI hộp cuộn — đây là mệnh đề mạnh, và là
+    // mệnh đề duy nhất bắt được lỗi F1 ở dạng "giữ `.c-loading-host` nhưng vẫn
+    // nhét overlay vào trong `.modal-body`".
+    expect(overlay!.closest('.modal-body')).toBe(null)
+    expect(overlay!.closest('.qa-form-body')).toBe(null)
+    const host = overlay!.closest(HOST)
+    expect(host).not.toBe(null)
+    expect(host!.closest('.modal-body')).toBe(null)
+    expect(host!.querySelector('.modal-body')).not.toBe(null)
+
+    // Nút đóng ở `.modal-head` nằm ngoài overlay — người dùng vẫn thoát được.
+    expect(document.body.querySelector(`.modal-head ${OVERLAY}`)).toBe(null)
+
+    g.release()
+    await flushPromises()
+    w.unmount()
+  })
+
+  it('TC-22: API lỗi thì overlay tắt, nút mở lại, thông điệp lỗi giữ nguyên', async () => {
+    const boom = Object.assign(new Error('Conflict'), { status: 409 })
+    vi.mocked(saveConnection).mockRejectedValueOnce(boom)
+    const w = await mountReadyToSave()
+
+    await click(saveButton())
+
+    expect(document.body.querySelector(OVERLAY)).toBe(null)
+    expect(document.body.querySelector('.err-banner')?.textContent).toBe('Conflict')
+    expect(saveButton().disabled).toBe(false)
+
+    // Mở lại được thật, không chỉ "trông như mở lại".
+    await click(saveButton())
+    expect(saveConnection).toHaveBeenCalledTimes(2)
+
+    w.unmount()
+  })
+
+  it.each(['resolve', 'reject'])('TC-25: đóng dialog giữa lúc request đang bay (%s) rồi mở lại thì không kẹt', async (mode) => {
+    const g = gate()
+    vi.mocked(saveConnection).mockImplementation(async (connection: any) => {
+      await g.wait()
+      if (mode === 'reject') throw Object.assign(new Error('Gone'), { status: 410 })
+      return { connection }
+    })
+
+    const first = await mountReadyToSave()
+    await click(saveButton())
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    expect(document.body.querySelector(OVERLAY)).not.toBe(null)
+
+    // "Huỷ" trong task này chỉ có nghĩa là người dùng rời khỏi vùng đang bận
+    // (design D5 cố ý không thêm `AbortController`).
+    first.unmount()
+    g.release()
+    await flushPromises()
+
+    vi.mocked(saveConnection).mockImplementation(async (connection: any) => ({ connection }))
+    const second = await mountReadyToSave()
+
+    expect(document.body.querySelector(OVERLAY)).toBe(null)
+    expect(saveButton().disabled).toBe(false)
+
+    await click(saveButton())
+    expect(saveConnection).toHaveBeenCalledTimes(2)
+    second.unmount()
+  })
+})
