@@ -11,6 +11,7 @@ import {
   MAX_STEP_RESULT_BYTES,
   OrchestratorDecision,
 } from '../schemas/orchestrator.js'
+import { stripBalancedFence } from '../../../shared/lib/orchestrator.js'
 
 /** Vì sao orchestrator phải hỏi agent. */
 export type DecisionTrigger =
@@ -193,9 +194,10 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
 function lastDecisionLine(stdout: string): string | null {
   const lines = String(stdout ?? '').split(/\r?\n/)
   for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim()
     // Fence ```…``` quanh dòng quyết định là thói quen rất hay gặp của agent CLI.
-    const unfenced = line.replace(/^`+/, '').replace(/`+$/, '').trim()
+    // Chỉ bóc khi fence CÂN hai đầu — cùng quy ước với `stepSummaryOf`, để một
+    // backtick kết câu (code span) không bị ăn mất.
+    const unfenced = stripBalancedFence(lines[i])
     if (unfenced.startsWith(DECISION_SENTINEL)) return unfenced
   }
   return null

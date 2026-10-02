@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /** Nguồn duy nhất — dùng chung với canvas và khung chat, xem `shared/lib/orchestrator.ts`. */
-export { DECISION_SENTINEL, ORCHESTRATOR_STEP_ID } from '../../../shared/lib/orchestrator.js'
+export { DECISION_SENTINEL, ORCHESTRATOR_STEP_ID, STEP_SUMMARY_PREFIX } from '../../../shared/lib/orchestrator.js'
 
 /** Ngân sách brief — bằng `CHAT_STDOUT_LIMIT` của jobQueue. */
 export const MAX_BRIEF_BYTES = 64 * 1024
@@ -16,9 +16,6 @@ export const MAX_AGENT_CONTEXT_BYTES = 8 * 1024
  * step xong là một lần cộng dồn vào cùng một cuộc hội thoại.
  */
 export const MAX_STEP_RESULT_BYTES = 2 * 1024
-
-/** Giao thức con → cha: tiền tố dòng cuối output của nút con. */
-export const STEP_SUMMARY_PREFIX = 'STEP_SUMMARY:'
 
 /** Key `orchestrator` trong `pipeline.yaml`. Thiếu key ⇒ `enabled: false` ⇒ pipeline chạy như cũ. */
 export const OrchestratorConfig = z

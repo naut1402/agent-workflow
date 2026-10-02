@@ -16,6 +16,7 @@ import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js
 import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
 import type { RunTaskStepResult } from '../../monitor/business/tasks/runStep.js'
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
+import { stepSummaryOf } from '../../../shared/lib/orchestrator.js'
 import {
   advanceStepOnJobSuccess,
   assertStartAllowedSync,
@@ -168,6 +169,24 @@ function shouldPersistStdout(job: JobRecord, providerId: string | undefined): bo
   // pipeline đứng im — kết cục tệ hơn hẳn một lần halt tường minh.
   if (job.metadata?.orchestratorJob) return true
   return Boolean(providerId && isAgentCliProviderId(providerId))
+}
+
+/**
+ * Chốt `STEP_SUMMARY` của nút con vào `metadata`, đọc từ `result.stdout` ĐẦY ĐỦ.
+ *
+ * Đây là kênh con → cha của node điều phối, nên nó không được phụ thuộc vào
+ * `job.stdout`: `shouldPersistStdout` chỉ persist stdout cho provider agent-CLI
+ * (connection `*-api` / `console-command` không có), và khi CÓ persist thì
+ * `CHAT_STDOUT_LIMIT` cắt từ ĐẦU — đúng phần đuôi nơi `STEP_SUMMARY` nằm bị bỏ
+ * trước tiên. Cả hai ca đều biến "nút con đã trả tóm tắt" thành "nút con không
+ * trả", mà phía cha không có cách nào phân biệt. Chốt ở đây thoát cả hai.
+ *
+ * Không có tóm tắt thì KHÔNG ghi field — `fromTail` phía cha giữ nguyên nghĩa
+ * "nút con không in `STEP_SUMMARY`".
+ */
+function withStepSummary(record: JobRecord, stdout: string | undefined): JobRecord {
+  const summary = stepSummaryOf(stdout)
+  return summary ? { ...record, metadata: { ...record.metadata, stepSummary: summary } } : record
 }
 
 /**
@@ -902,7 +921,7 @@ async function runJob(job: JobRecord): Promise<void> {
       console.error('[jobQueue] advancePipelineStepChain failed', err)
     } finally {
       saveJob({
-        ...(loadJob(job.id) as JobRecord),
+        ...withStepSummary(loadJob(job.id) as JobRecord, result.stdout),
         status: 'succeeded',
         finishedAt: new Date().toISOString(),
         exitCode: result.exitCode,
@@ -923,7 +942,7 @@ async function runJob(job: JobRecord): Promise<void> {
 
   const finalStatus = result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed'
   saveJob({
-    ...(loadJob(job.id) as JobRecord),
+    ...withStepSummary(loadJob(job.id) as JobRecord, result.stdout),
     status: finalStatus,
     finishedAt: new Date().toISOString(),
     exitCode: result.exitCode,

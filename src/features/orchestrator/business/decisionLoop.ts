@@ -22,16 +22,13 @@ import {
   type Orchestration,
 } from '../../monitor/business/tasks/startAuthority.js'
 import { applyOrchestratorHaltAction } from '../../monitor/business/tasks/state.js'
-import { listJobs, loadJob, parseCursorJsonOutput, resolveStepRunnerId, submitJob } from '../../runner/business/index.js'
+import { listJobs, loadJob, resolveStepRunnerId, submitJob } from '../../runner/business/index.js'
 import type { JobRecord } from '../../runner/business/index.js'
 import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
 import { isRespawnTarget } from '../../monitor/lib/pipelineRunGuards.js'
 import { resolveHitlPending, gateStepsFromConfig } from '../../../shared/lib/phase.js'
-import {
-  ORCHESTRATOR_STEP_ID,
-  STEP_SUMMARY_PREFIX,
-  type OrchestratorDecision,
-} from '../schemas/orchestrator.js'
+import { ORCHESTRATOR_STEP_ID, type OrchestratorDecision } from '../schemas/orchestrator.js'
+import { stepSummaryOf } from '../../../shared/lib/orchestrator.js'
 import { loadKnowledgeBundle } from '../../knowledge/business/index.js'
 import { composeStepBrief, renderBundle, type AgentContext, type DispatchReason } from './brief.js'
 import {
@@ -705,28 +702,14 @@ function stdoutOf(job: JobRecord | null): string {
   return typeof job?.stdout === 'string' ? job.stdout : ''
 }
 
-/** Câu trả lời cuối của nút con — bỏ khung JSON của provider `parse-json`. */
-function finalTextOf(job: JobRecord | null): string {
-  const raw = stdoutOf(job)
-  // cursor-agent trả JSON: `result` là câu trả lời cuối, phần còn lại là khung.
-  return parseCursorJsonOutput(raw).result?.trim() || raw
-}
-
 /**
- * Dòng `STEP_SUMMARY:` cuối cùng có nội dung — nút con có thể "nghĩ" nhiều dòng
- * trước đó. Cùng quy ước nhận dạng với `lastDecisionLine`: dòng sau `trim()`
- * phải BẮT ĐẦU bằng tiền tố, nên tiền tố nằm giữa câu không được tính.
+ * Tóm tắt do `runJob` chốt sẵn từ `result.stdout` ĐẦY ĐỦ, trước cả
+ * `shouldPersistStdout` lẫn `CHAT_STDOUT_LIMIT` — xem `jobQueue.captureStepSummary`.
+ * Đây là đường chính; đọc lại từ `job.stdout` chỉ là lưới cho job ghi trước fix.
  */
-function stepSummaryOf(text: string): string | null {
-  const lines = String(text ?? '').split(/\r?\n/)
-  for (let i = lines.length - 1; i >= 0; i--) {
-    // Fence ```…``` quanh dòng là thói quen rất hay gặp của agent CLI.
-    const line = lines[i].trim().replace(/^`+/, '').replace(/`+$/, '').trim()
-    if (!line.startsWith(STEP_SUMMARY_PREFIX)) continue
-    const body = line.slice(STEP_SUMMARY_PREFIX.length).trim()
-    if (body) return body
-  }
-  return null
+function pinnedSummaryOf(job: JobRecord | null): string | null {
+  const pinned = job?.metadata?.stepSummary
+  return typeof pinned === 'string' && pinned.trim() ? pinned.trim() : null
 }
 
 /**
@@ -744,8 +727,12 @@ export function stepResultOf(
   stepId: string,
   status: StepResult['status'],
 ): StepResult {
-  const text = finalTextOf(job)
-  const summary = stepSummaryOf(text)
+  // `job.stdout` ĐÃ được provider bóc khỏi khung JSON (`parse-json` làm việc đó
+  // ở `providers/claude-code-cli.ts`), nên ở đây nó luôn là text thuần. Bóc lần
+  // thứ hai từng rơi vào nhánh "cắt từ `{` đầu tới `}` cuối" và vứt mất chính
+  // dòng `STEP_SUMMARY` thật khi nút con có in một khối JSON trong câu trả lời.
+  const text = stdoutOf(job)
+  const summary = pinnedSummaryOf(job) ?? stepSummaryOf(text)
   return {
     stepId,
     status,

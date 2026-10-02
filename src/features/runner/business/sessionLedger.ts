@@ -261,7 +261,13 @@ export function recordSessionUsage(input: RecordSessionInput): void {
   if (input.forceNew || input.staleReason) {
     for (const s of ledger.sessions) {
       if (s.status !== 'open') continue
-      if (input.stepId && !s.stepIds?.includes(input.stepId)) continue
+      // Đối xứng với `findOwnedOpenEntry`: có `stepId` thì chỉ chạm entry CÙNG
+      // node; KHÔNG có `stepId` thì chỉ được chạm entry "vô chủ". Bỏ nhánh
+      // `else` là mở lại đúng đường quét chéo đã sinh ra bug gốc — một job
+      // không mang `stepId` sẽ đóng luôn phiên của nút điều phối.
+      if (input.stepId) {
+        if (!s.stepIds?.includes(input.stepId)) continue
+      } else if (s.stepIds?.length) continue
       s.status = 'stale'
       s.staleReason = input.staleReason || 'superseded'
       s.lastUsedAt = now
@@ -290,10 +296,12 @@ export function recordSessionUsage(input: RecordSessionInput): void {
   } else {
     own.sessionId = input.sessionId ?? own.sessionId
     own.lastUsedAt = now
+    // Ledger cũ (trước khi có `stepIds`) thiếu field — vẫn phải vá.
+    // Không `push` thêm node vào đây: `findOwnedOpenEntry` chỉ trả entry ĐÃ
+    // chứa `stepId` (hoặc entry vô chủ khi không có `stepId`), nên entry lai
+    // không còn đường hình thành. Giữ lại một nhánh chết ở đúng chỗ vừa sửa
+    // bug chỉ làm người đọc sau tưởng nó vẫn chạy được.
     if (!Array.isArray(own.stepIds)) own.stepIds = []
-    if (input.stepId && !own.stepIds.includes(input.stepId)) {
-      own.stepIds.push(input.stepId)
-    }
   }
 
   saveTaskSessionLedger(projectId, ledger)
