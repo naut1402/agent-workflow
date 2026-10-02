@@ -113,8 +113,21 @@ describe('sessionLedger', () => {
     expect(check.reason).toBe('session archived')
   })
 
-  test('recordSessionUsage forceNew marks prior open entry stale', () => {
-    seedOpenSession()
+  // T6427b18c: `forceNew` KHÔNG kèm `stepId` chỉ được stale entry "vô chủ"
+  // (`stepIds` rỗng/thiếu), đối xứng với `findOwnedOpenEntry`. Bản cũ của case
+  // này quét sạch mọi entry `open` — đó đúng là đường đã sinh ra bug gốc (một
+  // job không mang `stepId` đóng luôn phiên của nút điều phối). Ý định gốc
+  // ("forceNew có stale thật") giữ nguyên, chỉ đổi entry trước đó thành vô chủ.
+  test('recordSessionUsage forceNew marks prior OWNERLESS open entry stale', () => {
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'single',
+      sessions: [
+        seedEntry({ sessionId: 'sess-adhoc', stepIds: [], status: 'open' }),
+        seedEntry({ sessionId: 'sess-cua-step', stepIds: ['investigate'], status: 'open' }),
+      ],
+    })
     recordSessionUsage({
       projectId: PROJECT,
       taskId: TASK,
@@ -127,8 +140,15 @@ describe('sessionLedger', () => {
       staleReason: 'provider changed',
     })
     const ledger = loadTaskSessionLedger(PROJECT, TASK)
+    const byId = Object.fromEntries(ledger.sessions.map((s) => [String(s.sessionId), s]))
+
     expect(ledger.sessions.filter((s) => s.status === 'stale').length).toBe(1)
-    expect(ledger.sessions.find((s) => s.status === 'open')?.sessionId).toBe('sess-new-2')
+    expect(byId['sess-adhoc']).toMatchObject({ status: 'stale', staleReason: 'provider changed' })
+    expect(byId['sess-new-2']).toMatchObject({ status: 'open' })
+
+    // Đối chứng: entry đã thuộc một node KHÔNG bị chạm — nửa còn lại của bug gốc.
+    expect(byId['sess-cua-step'].status).toBe('open')
+    expect(byId['sess-cua-step'].staleReason).toBeUndefined()
   })
 
   test('sessionMode none → no resume id', () => {

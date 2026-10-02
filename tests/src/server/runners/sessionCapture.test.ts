@@ -6,13 +6,11 @@ import { buildClaudeInvocation } from '../../../../src/features/runner/business/
 import {
   buildCursorJsonArgs,
   buildCursorJsonInvocation,
-  getToolCallCursor,
   getUsageCursor,
   mintSessionId,
   parseCursorJsonOutput,
   prepareSessionInvocation,
   saveTaskSessionLedger,
-  setToolCallCursor,
   setUsageCursor,
   type SessionEntry,
 } from '../../../../src/features/runner/business/sessionLedger.js'
@@ -182,9 +180,10 @@ describe('sessionCapture', () => {
  * T6427b18c TC-R4 — cursor tìm đúng entry khi ledger có NHIỀU entry.
  *
  * Cách ly phiên theo node làm số entry trong một file ledger tăng hẳn (tối đa
- * một `open` cho mỗi node, cộng các entry `stale` cũ). `usageCursor` và
- * `toolCallCursor` tra theo `sessionId`, nên phải chứng minh chúng không lây
- * sang entry hàng xóm.
+ * một `open` cho mỗi node, cộng các entry `stale` cũ). `usageCursor` tra theo
+ * `sessionId`, nên phải chứng minh nó không lây sang entry hàng xóm.
+ *
+ * Nửa `toolCallCursor` của TC-R4 hiện KHÔNG chạy được — xem case (c) bên dưới.
  */
 describe('cursor theo sessionId trên ledger nhiều entry (TC-R4)', () => {
   const PROJECT = 'P-cursor'
@@ -239,16 +238,16 @@ describe('cursor theo sessionId trên ledger nhiều entry (TC-R4)', () => {
     expect(getUsageCursor(PROJECT, TASK, 's-old2')).toEqual({ mainLines: 99, subagentFiles: ['x.jsonl'] })
   })
 
-  test('(c) toolCallCursor trỏ đúng entry, tách hẳn khỏi usageCursor', () => {
-    setToolCallCursor(PROJECT, TASK, 's-a', { mainLines: 5 })
-    expect(getToolCallCursor(PROJECT, TASK, 's-a')).toEqual({ mainLines: 5 })
-    // Khoá riêng: ghi toolCallCursor không được đụng usageCursor của cùng entry.
-    expect(getUsageCursor(PROJECT, TASK, 's-a')).toEqual({ mainLines: 42, subagentFiles: [] })
-    expect(getToolCallCursor(PROJECT, TASK, 's-orch')).toBeNull()
-  })
+  // SKIP: `getToolCallCursor`/`setToolCallCursor` không tồn tại ở BẤT KỲ ref nào
+  // (branch test, `05bfa9e`, `dev/1.2.0/main`) — cả cụm tool-call capture đã bị gỡ
+  // khỏi `sessionLedger`, trong khi `test-spec.md` §1.1 vẫn kê nó ở `sessionCapture`:
+  // spec và code lệch nhau ở đây, không phải test sai. 🚫 Không stub một hàm không
+  // tồn tại để test xanh. Khôi phục case này khi API có thật; nó phải assert
+  // `toolCallCursor` trỏ đúng entry theo `sessionId` và KHÔNG đụng `usageCursor`
+  // của cùng entry (hai khoá cố ý tách rời).
+  test.skip('(c) toolCallCursor trỏ đúng entry, tách hẳn khỏi usageCursor', () => {})
 
   test('sessionId không có trong ledger ⇒ null, không throw', () => {
     expect(getUsageCursor(PROJECT, TASK, 'khong-ton-tai')).toBeNull()
-    expect(getToolCallCursor(PROJECT, TASK, 'khong-ton-tai')).toBeNull()
   })
 })
