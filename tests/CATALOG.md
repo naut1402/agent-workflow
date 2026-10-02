@@ -39,7 +39,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/logs/components` | vitest | `features/logs/components`, `features/settings/scripts` | 1 | `npx vitest run tests/src/features/logs/components` |
 | `tests/src/features/logs/composables` | vitest | `features/logs/composables`, `shared/log`, `backend/log` | 3 | `npx vitest run tests/src/features/logs/composables` |
 | `tests/src/features/logs/scripts` | vitest | `features/logs/scripts` | 1 | `npx vitest run tests/src/features/logs/scripts` |
-| `tests/src/features/mcp` | vitest | `features/mcp/locales` | 1 | `npx vitest run tests/src/features/mcp/*.test.ts` |
+| `tests/src/features/mcp` | vitest | — | 1 | `npx vitest run tests/src/features/mcp/*.test.ts` |
 | `tests/src/features/mcp/business` | bun | `features/mcp/business`, `features/agent-editor/business` | 4 | `bun test tests/src/features/mcp/business` |
 | `tests/src/features/mcp/components` | vitest | `features/mcp/locales`, `features/mcp/components`, `features/mcp/business` | 2 | `npx vitest run tests/src/features/mcp/components` |
 | `tests/src/features/monitor` | vitest | `features/monitor/locales`, `features/monitor/composables` | 3 | `npx vitest run tests/src/features/monitor/*.test.ts` |
@@ -48,7 +48,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/monitor/composables` | vitest | `features/monitor/composables`, `features/runner/scripts` | 6 | `npx vitest run tests/src/features/monitor/composables` |
 | `tests/src/features/monitor/lib` | vitest | `features/monitor/lib` | 5 | `npx vitest run tests/src/features/monitor/lib` |
 | `tests/src/features/monitor/schemas` | vitest | `features/monitor/schemas` | 2 | `npx vitest run tests/src/features/monitor/schemas` |
-| `tests/src/features/nl-chat/components` | vitest | `features/nl-chat/components`, `features/nl-chat/composables`, `frontend/composables` | 4 | `npx vitest run tests/src/features/nl-chat/components` |
+| `tests/src/features/nl-chat/components` | vitest | `features/nl-chat/components`, `features/nl-chat/composables`, `frontend/composables` | 5 | `npx vitest run tests/src/features/nl-chat/components` |
 | `tests/src/features/nl-chat/composables` | vitest | `features/nl-chat/composables`, `frontend/lib` | 3 | `npx vitest run tests/src/features/nl-chat/composables` |
 | `tests/src/features/nl-chat/lib` | vitest | `features/nl-chat/lib` | 3 | `npx vitest run tests/src/features/nl-chat/lib` |
 | `tests/src/features/notifications/components` | vitest | `features/notifications/components`, `features/notifications/lib` | 3 | `npx vitest run tests/src/features/notifications/components` |
@@ -65,23 +65,23 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/quick-action/lib` | vitest | `features/quick-action/lib` | 1 | `npx vitest run tests/src/features/quick-action/lib` |
 | `tests/src/features/runner/business` | bun | `features/runner/business` | 8 | `bun test tests/src/features/runner/business` |
 | `tests/src/features/runner/components` | vitest | `features/runner/scripts`, `features/runner/components`, `features/runner/locales` | 3 | `npx vitest run tests/src/features/runner/components` |
-| `tests/src/features/runner/lib` | vitest | `features/runner/lib` | 1 | `npx vitest run tests/src/features/runner/lib` |
+| `tests/src/features/runner/lib` | vitest | — | 1 | `npx vitest run tests/src/features/runner/lib` |
 | `tests/src/features/runner/scripts` | vitest | `features/runner/scripts` | 1 | `npx vitest run tests/src/features/runner/scripts` |
 | `tests/src/features/running-jobs/components` | vitest | `features/running-jobs/components`, `features/running-jobs/lib` | 1 | `npx vitest run tests/src/features/running-jobs/components` |
 | `tests/src/features/running-jobs/composables` | vitest | `features/runner/scripts`, `features/running-jobs/composables` | 1 | `npx vitest run tests/src/features/running-jobs/composables` |
 | `tests/src/features/running-jobs/lib` | vitest | `features/running-jobs/lib` | 1 | `npx vitest run tests/src/features/running-jobs/lib` |
-| `tests/src/features/settings/components` | vitest | `features/settings/components`, `features/settings/scripts`, `frontend/composables` | 2 | `npx vitest run tests/src/features/settings/components` |
+| `tests/src/features/settings/components` | vitest | `frontend/composables`, `features/settings/components`, `features/settings/scripts` | 2 | `npx vitest run tests/src/features/settings/components` |
 | `tests/src/features/settings/schemas` | vitest | `features/settings/schemas` | 6 | `npx vitest run tests/src/features/settings/schemas` |
 | `tests/src/features/settings/scripts` | vitest | `features/settings/scripts`, `frontend/shell` | 1 | `npx vitest run tests/src/features/settings/scripts` |
 | `tests/src/features/statistics/business` | bun | `features/statistics/business`, `shared/log` | 1 | `bun test tests/src/features/statistics/business` |
 | `tests/src/features/statistics/components` | vitest | `features/statistics/components`, `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/components` |
 | `tests/src/features/statistics/lib` | vitest | `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/lib` |
 | `tests/src/frontend` | vitest | `frontend/shell`, `features/logs/components`, `features/monitor/components` | 2 | `npx vitest run tests/src/frontend/*.test.ts` |
-| `tests/src/frontend/composables` | vitest | `frontend/composables`, `features/logs/scripts`, `frontend/lib` | 6 | `npx vitest run tests/src/frontend/composables` |
+| `tests/src/frontend/composables` | vitest | `frontend/composables`, `frontend/plugins`, `features/logs/scripts` | 8 | `npx vitest run tests/src/frontend/composables` |
 | `tests/src/frontend/configs` | vitest | `frontend/configs` | 1 | `npx vitest run tests/src/frontend/configs` |
 | `tests/src/frontend/container` | vitest | `frontend/container` | 1 | `npx vitest run tests/src/frontend/container` |
 | `tests/src/frontend/lib` | vitest | `frontend/lib`, `backend/configs`, `features/monitor/composables` | 10 | `npx vitest run tests/src/frontend/lib` |
-| `tests/src/frontend/plugins` | vitest | `frontend/composables`, `frontend/configs`, `frontend/plugins` | 1 | `npx vitest run tests/src/frontend/plugins` |
+| `tests/src/frontend/plugins` | vitest | `frontend/composables`, `frontend/plugins`, `frontend/configs` | 3 | `npx vitest run tests/src/frontend/plugins` |
 | `tests/src/frontend/shell` | vitest | `frontend/shell` | 3 | `npx vitest run tests/src/frontend/shell` |
 | `tests/src/frontend/ui` | vitest | `frontend/ui`, `frontend/composables`, `frontend/lib` | 6 | `npx vitest run tests/src/frontend/ui` |
 | `tests/src/server` | bun | `features/settings/business`, `backend/registry.ts`, `backend/apiServer.ts` | 3 | `bun test tests/src/server/*.test.ts` |
@@ -93,6 +93,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/features` | bun | `backend/apiServer.ts`, `backend/events`, `backend/http` | 1 | `bun test tests/src/server/features` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `backend/apiServer.ts`, `backend/registry.ts` | 2 | `bun test tests/src/server/github` |
 | `tests/src/server/http` | bun | `backend/apiServer.ts`, `backend/http`, `features/runner/business` | 41 | `bun test tests/src/server/http` |
+| `tests/src/server/i18n` | bun | `backend/apiServer.ts`, `backend/registry.ts`, `features/i18n/business` | 3 | `bun test tests/src/server/i18n` |
 | `tests/src/server/knowledge` | bun | `backend/apiServer.ts`, `backend/db`, `backend/events` | 1 | `bun test tests/src/server/knowledge` |
 | `tests/src/server/lib` | bun | `backend/lib` | 1 | `bun test tests/src/server/lib` |
 | `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/orchestrator/schemas`, `features/runner/business` | 8 | `bun test tests/src/server/orchestrator` |
