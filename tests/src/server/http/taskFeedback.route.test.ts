@@ -123,7 +123,10 @@ async function runStep(taskId: string, body: Record<string, unknown> = {}) {
 }
 
 describe('run-step wiring: sessionMode resume', () => {
-  test('a chain through gate-less steps leaves exactly one open ledger entry', async () => {
+  // T6427b18c: ledger khoá entry theo NODE, nên một chain qua 2 step để lại 2
+  // entry `open` — mỗi step một phiên. Bất biến còn lại (và là bất biến thật)
+  // là: mỗi node ĐÚNG MỘT entry `open`, và không entry nào thuộc hai node.
+  test('a chain through gate-less steps leaves exactly one open ledger entry PER NODE', async () => {
     seedTask('W1', { current_phase: 'implementer' })
     const first = await runStep('W1')
     expect(first.status).toBe(201)
@@ -136,7 +139,12 @@ describe('run-step wiring: sessionMode resume', () => {
 
     const ledger = loadTaskSessionLedger(PROJECT_ID, 'W1')
     const openEntries = ledger.sessions.filter((s) => s.status === 'open')
-    expect(openEntries.length).toBe(1)
+    const owners = openEntries.map((s) => (s.stepIds ?? []).join(','))
+    expect(owners.sort()).toEqual(['implementer', 'reviewer'])
+    // Một node không được giữ hai entry `open`, và một entry không được thuộc
+    // hai node — đó là hai nửa của bug gốc.
+    expect(new Set(owners).size).toBe(owners.length)
+    expect(openEntries.every((s) => (s.stepIds ?? []).length === 1)).toBe(true)
   })
 })
 
