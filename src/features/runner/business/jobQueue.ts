@@ -643,6 +643,21 @@ async function runJob(job: JobRecord): Promise<void> {
     sessionStaleReason = plan.staleReason
     if (plan.sessionMode === 'resume' && plan.resumeSessionId) {
       execResumeSessionId = plan.resumeSessionId
+      // Ghi nhận quyền sở hữu NGAY lúc start. Trước đây entry chỉ được ghi khi
+      // job xong, nên trong suốt lượt chạy node này không có entry nào mang
+      // `stepId` của nó — và lúc ghi, lookup bắt nhầm entry `open` của node khác.
+      // KHÔNG `forceNew`: đây là nối tiếp một phiên đang mở, không phải mở mới.
+      recordSessionUsage({
+        projectId,
+        taskId,
+        sessionId: plan.resumeSessionId,
+        providerId: connection.providerId,
+        runnerId: runner.id,
+        connectionId: connection.id,
+        workspace: job.workspace,
+        model: resolvedAgent.model,
+        stepId: jobStepId,
+      })
     } else if (plan.sessionMode === 'new') {
       execSessionId = plan.sessionId || mintSessionId()
       recordSessionUsage({
@@ -1359,14 +1374,20 @@ export async function sendTaskFeedback(
   }
   if (!parent) return { ok: false, status: 400, error: 'no completed job to give feedback on' }
 
-  const ledger = loadTaskSessionLedger(projectId, taskId)
-  const hasOpenSession = ledger.sessions.some((s) => s.status === 'open')
-
   // The step may have changed agent since `parent` ran (pipeline edited via
   // chat, or advanced past a retry loop) — re-resolve from the pipeline
   // config that's live NOW rather than trusting the old job's `agentRef`.
   let agentRef = parent.agentRef
   const parentStepId = stepIdOf(parent)
+
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  // Lọc theo node: "còn phiên mở" phải là phiên CỦA STEP NÀY. Không lọc thì
+  // phản hồi gửi cho step A resume vào phiên đang mở của nút điều phối, và từ
+  // đó hai node dùng chung một phiên CLI. Parent không có `stepId` (job ad-hoc
+  // gắn vào task) giữ nguyên nghĩa cũ — "có entry mở nào đó thì nối tiếp".
+  const hasOpenSession = ledger.sessions.some(
+    (s) => s.status === 'open' && (!parentStepId || s.stepIds?.includes(parentStepId)),
+  )
   const devTeamRoot = typeof parent.metadata?.devTeamRoot === 'string' ? parent.metadata.devTeamRoot : undefined
   if (parentStepId && devTeamRoot) {
     const pipeline = await loadPipelineConfig(devTeamRoot, taskId)

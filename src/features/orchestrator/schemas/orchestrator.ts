@@ -10,6 +10,16 @@ export const MAX_BRIEF_BYTES = 64 * 1024
 // `CHAT_STDOUT_LIMIT` — phần agent tự soạn vượt trần này làm JSON đứt.
 export const MAX_AGENT_CONTEXT_BYTES = 8 * 1024
 
+/**
+ * Ngân sách cho KẾT QUẢ một bước đi vào prompt điều phối. Nhỏ hơn hẳn
+ * `MAX_AGENT_CONTEXT_BYTES` vì phiên điều phối được resume qua nhiều lượt: mỗi
+ * step xong là một lần cộng dồn vào cùng một cuộc hội thoại.
+ */
+export const MAX_STEP_RESULT_BYTES = 2 * 1024
+
+/** Giao thức con → cha: tiền tố dòng cuối output của nút con. */
+export const STEP_SUMMARY_PREFIX = 'STEP_SUMMARY:'
+
 /** Key `orchestrator` trong `pipeline.yaml`. Thiếu key ⇒ `enabled: false` ⇒ pipeline chạy như cũ. */
 export const OrchestratorConfig = z
   .object({

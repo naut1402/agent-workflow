@@ -22,12 +22,16 @@ import {
   type Orchestration,
 } from '../../monitor/business/tasks/startAuthority.js'
 import { applyOrchestratorHaltAction } from '../../monitor/business/tasks/state.js'
-import { listJobs, loadJob, loadTaskSessionLedger, resolveStepRunnerId, submitJob } from '../../runner/business/index.js'
+import { listJobs, loadJob, parseCursorJsonOutput, resolveStepRunnerId, submitJob } from '../../runner/business/index.js'
 import type { JobRecord } from '../../runner/business/index.js'
 import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
 import { isRespawnTarget } from '../../monitor/lib/pipelineRunGuards.js'
 import { resolveHitlPending, gateStepsFromConfig } from '../../../shared/lib/phase.js'
-import { ORCHESTRATOR_STEP_ID, type OrchestratorDecision } from '../schemas/orchestrator.js'
+import {
+  ORCHESTRATOR_STEP_ID,
+  STEP_SUMMARY_PREFIX,
+  type OrchestratorDecision,
+} from '../schemas/orchestrator.js'
 import { loadKnowledgeBundle } from '../../knowledge/business/index.js'
 import { composeStepBrief, renderBundle, type AgentContext, type DispatchReason } from './brief.js'
 import {
@@ -479,14 +483,6 @@ async function askAgent(
   const pipeline = await loadPipelineConfig(ref.root, ref.taskId)
   const stepIds = (pipeline.steps || []).map((s: any) => s?.id).filter(Boolean)
 
-  // `resolveSessionPlan` với `resume` sẽ bắt entry open MỚI NHẤT khi chưa có
-  // entry nào mang `stepId` cần tìm — tức là session của một step. Vì vậy lượt
-  // đầu của orchestrator luôn phải là `new`.
-  const ledger = loadTaskSessionLedger(ref.projectId, ref.taskId)
-  const hasOwnSession = ledger.sessions.some(
-    (s) => s.status === 'open' && s.stepIds?.includes(ORCHESTRATOR_STEP_ID),
-  )
-
   // Mint NGAY TRƯỚC submitJob: metadata đi vào job lúc submit và không sửa lại
   // được sau (job file là snapshot) — mint muộn hơn nghĩa là job không bao giờ
   // biết token của chính nó.
@@ -507,7 +503,11 @@ async function askAgent(
       extraSystemPrompt: orch.system_prompt,
       knowledgeText: renderBundle(knowledgeBundle),
     }),
-    sessionMode: hasOwnSession ? 'resume' : 'new',
+    // Luôn `resume`: ledger khoá entry theo `stepId`, và job này mang
+    // `metadata.stepId = ORCHESTRATOR_STEP_ID` ⇒ lượt đầu tự ra `new` (node chưa
+    // có entry), lượt sau resume vào ĐÚNG phiên của nó. Guard `hasOwnSession` cũ
+    // ở đây chỉ che một triệu chứng của ledger dùng chung một ô session.
+    sessionMode: 'resume',
     metadata: {
       projectRoot: dirname(ref.root),
       devTeamRoot: ref.root,
@@ -705,13 +705,54 @@ function stdoutOf(job: JobRecord | null): string {
   return typeof job?.stdout === 'string' ? job.stdout : ''
 }
 
-/** Kết quả một lượt chạy step, gói lại cho prompt của agent. */
-function stepResultOf(
+/** Câu trả lời cuối của nút con — bỏ khung JSON của provider `parse-json`. */
+function finalTextOf(job: JobRecord | null): string {
+  const raw = stdoutOf(job)
+  // cursor-agent trả JSON: `result` là câu trả lời cuối, phần còn lại là khung.
+  return parseCursorJsonOutput(raw).result?.trim() || raw
+}
+
+/**
+ * Dòng `STEP_SUMMARY:` cuối cùng có nội dung — nút con có thể "nghĩ" nhiều dòng
+ * trước đó. Cùng quy ước nhận dạng với `lastDecisionLine`: dòng sau `trim()`
+ * phải BẮT ĐẦU bằng tiền tố, nên tiền tố nằm giữa câu không được tính.
+ */
+function stepSummaryOf(text: string): string | null {
+  const lines = String(text ?? '').split(/\r?\n/)
+  for (let i = lines.length - 1; i >= 0; i--) {
+    // Fence ```…``` quanh dòng là thói quen rất hay gặp của agent CLI.
+    const line = lines[i].trim().replace(/^`+/, '').replace(/`+$/, '').trim()
+    if (!line.startsWith(STEP_SUMMARY_PREFIX)) continue
+    const body = line.slice(STEP_SUMMARY_PREFIX.length).trim()
+    if (body) return body
+  }
+  return null
+}
+
+/**
+ * Kết quả một lượt chạy step, gói lại cho prompt của agent điều phối.
+ *
+ * Cố ý KHÔNG mang stdout thô: context làm việc của nút con phải ở lại phiên của
+ * nút con. Cha nhận `STEP_SUMMARY` do chính con soạn, và chỉ khi không có mới
+ * rơi về đuôi output (`fromTail`) — chi tiết đầy đủ nằm ở artifact.
+ *
+ * Export thuần để test gọi thẳng, cùng quy ước với `identifyTask` /
+ * `isOrchestratorJob`: đây là hợp đồng con → cha, phải đo được không cần bus.
+ */
+export function stepResultOf(
   job: JobRecord | null,
   stepId: string,
   status: StepResult['status'],
 ): StepResult {
-  return { stepId, status, artifacts: job?.artifactsFound ?? [], output: stdoutOf(job) }
+  const text = finalTextOf(job)
+  const summary = stepSummaryOf(text)
+  return {
+    stepId,
+    status,
+    artifacts: job?.artifactsFound ?? [],
+    result: summary ?? text,
+    fromTail: !summary,
+  }
 }
 
 /* Subscriber */
