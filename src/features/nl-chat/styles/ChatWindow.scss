@@ -84,20 +84,9 @@
 .nl-chat-info .icon-btn:hover:not(:disabled) {
   color: var(--accent);
 }
-/* The info button swaps its icon for this while a step/job is busy — `Icon.vue`
-   draws the shape only, the caller owns the animation (see Icon.vue's spinner
-   comment). */
-.nl-chat-spin {
-  animation: nl-chat-spin 0.9s linear infinite;
-}
-@keyframes nl-chat-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+/* The info button swaps its icon for the `spinner` shape while a step/job is
+   busy; the animation comes from the shared `.c-spin` utility in `_shell.scss`
+   — this file used to carry a second, identical copy of those keyframes. */
 /* Anchored left now that the icon leads the header; the ceiling keeps it inside
    the window at its 260px minimum width. */
 .nl-chat-info-popover {

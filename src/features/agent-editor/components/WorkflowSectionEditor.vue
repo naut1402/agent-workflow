@@ -3,6 +3,7 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, onMounted, watch } from 'vue'
 import { parseWorkflowMarkdown, compileWorkflowMarkdown } from '../../../frontend/lib/workflowSteps'
 import { useSortable } from '../../../frontend/composables/useSortable'
+import { useKeyedApiAction } from '../../../frontend/composables/useApiAction'
 import { slugifySectionKey } from '../../../shared/lib/stringUtils'
 import { fetchPipelineConfig } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { fetchWorkflowStepTemplates, fetchWorkflowStepTemplate, saveWorkflowStepTemplate } from '../scripts/WorkflowSectionEditorApi'
@@ -22,7 +23,10 @@ const pipelineSteps = ref([])
 const templates = ref([])
 const selectedPipelineStep = ref('')
 const selectedTemplate = ref('')
-const savingIdx = ref(-1)
+// Keyed theo `String(index)`, rảnh là `null` (sentinel `-1` cũ biến mất).
+// So sánh phải là `=== String(index)`: hàng đầu danh sách có `index === 0`,
+// mọi biến thể dựa truthiness sẽ sai đúng ở hàng đó.
+const { pendingKey: savingKey, run: runSaveTemplate } = useKeyedApiAction()
 
 const stepsOrder = computed({
   get: () => steps.value,
@@ -148,22 +152,20 @@ async function saveStepTemplate(index) {
   const defaultName = `step-${slugifySectionKey(step.title || `buoc-${index + 1}`)}`
   const name = prompt(t('agentEditor.workflow.promptTemplateName'), defaultName)
   if (!name?.trim()) return
-
-  savingIdx.value = index
-  try {
-    const result = await saveWorkflowStepTemplate({
-      name: name.trim(),
-      title: step.title || t('agentEditor.workflow.defaultStepTitle', { n: index + 1 }),
-      body: step.body || '',
-      pipeline_step_id: step.pipelineStepId || '',
-    })
-    await loadTemplates()
-    emit('message', t('agentEditor.workflow.savedTemplate', { name: result.name }))
-  } catch (e) {
-    emit('error', String(e.message || e))
-  } finally {
-    savingIdx.value = -1
-  }
+  await runSaveTemplate(String(index), async () => {
+    try {
+      const result = await saveWorkflowStepTemplate({
+        name: name.trim(),
+        title: step.title || t('agentEditor.workflow.defaultStepTitle', { n: index + 1 }),
+        body: step.body || '',
+        pipeline_step_id: step.pipelineStepId || '',
+      })
+      await loadTemplates()
+      emit('message', t('agentEditor.workflow.savedTemplate', { name: result.name }))
+    } catch (e) {
+      emit('error', String(e.message || e))
+    }
+  })
 }
 </script>
 
@@ -238,10 +240,10 @@ async function saveStepTemplate(index) {
             <button
               type="button"
               class="btn-ghost btn-sm"
-              :disabled="savingIdx === index"
+              :disabled="savingKey === String(index)"
               @click="saveStepTemplate(index)"
             >
-              {{ savingIdx === index ? '…' : t('agentEditor.workflow.saveTemplate') }}
+              {{ savingKey === String(index) ? '…' : t('agentEditor.workflow.saveTemplate') }}
             </button>
             <button type="button" class="btn-ghost btn-sm btn-danger" @click="removeStep(index)">✕</button>
           </div>

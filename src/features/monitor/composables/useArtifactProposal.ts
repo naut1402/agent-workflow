@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
 import { diffLines } from '../../../frontend/lib/diffLib'
 import { fetchProposal, approveJob, discardJob, sendActionFeedback, fetchJob } from '../../runner/scripts/runnerApi'
 import { t } from '../../../frontend/plugins/i18n'
@@ -44,7 +45,10 @@ export function useArtifactProposal(opts: UseArtifactProposalOptions) {
   const before = ref('')
   const after = ref('')
   const loading = ref(false)
-  const busy = ref(false)
+  // MỘT instance cho cả `approve` / `discard` / `sendFeedback` — giữ đúng ngữ
+  // nghĩa cờ `busy` cũ, và thêm: đang approve thì bấm discard bị guard chặn.
+  // 🚫 Không đụng `loading` ở trên: đó là load proposal (luồng đọc).
+  const { pending: busy, run: runProposalAction } = useApiAction()
   const statusText = ref('')
   const error = ref<string | null>(null)
 
@@ -79,35 +83,39 @@ export function useArtifactProposal(opts: UseArtifactProposalOptions) {
   }
 
   async function approve(): Promise<boolean> {
-    busy.value = true
-    error.value = null
-    statusText.value = t('monitor.proposal.approving')
-    try {
-      await approveJob(currentJobId.value)
-      return true
-    } catch (e: any) {
-      error.value = String(e?.message || e)
-      return false
-    } finally {
-      busy.value = false
-      statusText.value = ''
-    }
+    // Lời gọi bị guard bỏ qua trả `undefined`; với consumer thì "không làm gì"
+    // tương đương "chưa thành công".
+    const ok = await runProposalAction(async () => {
+      error.value = null
+      statusText.value = t('monitor.proposal.approving')
+      try {
+        await approveJob(currentJobId.value)
+        return true
+      } catch (e: any) {
+        error.value = String(e?.message || e)
+        return false
+      } finally {
+        statusText.value = ''
+      }
+    })
+    return ok ?? false
   }
 
   async function discard(): Promise<boolean> {
-    busy.value = true
-    error.value = null
-    statusText.value = t('monitor.proposal.discarding')
-    try {
-      await discardJob(currentJobId.value)
-      return true
-    } catch (e: any) {
-      error.value = String(e?.message || e)
-      return false
-    } finally {
-      busy.value = false
-      statusText.value = ''
-    }
+    const ok = await runProposalAction(async () => {
+      error.value = null
+      statusText.value = t('monitor.proposal.discarding')
+      try {
+        await discardJob(currentJobId.value)
+        return true
+      } catch (e: any) {
+        error.value = String(e?.message || e)
+        return false
+      } finally {
+        statusText.value = ''
+      }
+    })
+    return ok ?? false
   }
 
   // Wait for a freshly-spawned feedback job to settle back at
@@ -135,30 +143,30 @@ export function useArtifactProposal(opts: UseArtifactProposalOptions) {
       error.value = t('monitor.proposal.feedbackRequired')
       return
     }
-    busy.value = true
-    error.value = null
-    statusText.value = t('monitor.proposal.sendingFeedback')
-    try {
-      const res = await sendActionFeedback(currentJobId.value, text)
-      const newJobId: string | undefined = res?.job?.id
-      if (!newJobId) throw new Error(t('monitor.proposal.noJobId'))
-      statusText.value = t('monitor.proposal.processingFeedback')
-      const outcome = await pollUntilAwaiting(newJobId)
-      if (outcome !== 'awaiting_approval') {
-        error.value =
-          outcome === 'timeout'
-            ? t('monitor.proposal.feedbackTimeout')
-            : t('monitor.proposal.feedbackOutcome', { outcome })
-        return
+    await runProposalAction(async () => {
+      error.value = null
+      statusText.value = t('monitor.proposal.sendingFeedback')
+      try {
+        const res = await sendActionFeedback(currentJobId.value, text)
+        const newJobId: string | undefined = res?.job?.id
+        if (!newJobId) throw new Error(t('monitor.proposal.noJobId'))
+        statusText.value = t('monitor.proposal.processingFeedback')
+        const outcome = await pollUntilAwaiting(newJobId)
+        if (outcome !== 'awaiting_approval') {
+          error.value =
+            outcome === 'timeout'
+              ? t('monitor.proposal.feedbackTimeout')
+              : t('monitor.proposal.feedbackOutcome', { outcome })
+          return
+        }
+        currentJobId.value = newJobId
+        await load()
+      } catch (e: any) {
+        error.value = String(e?.message || e)
+      } finally {
+        statusText.value = ''
       }
-      currentJobId.value = newJobId
-      await load()
-    } catch (e: any) {
-      error.value = String(e?.message || e)
-    } finally {
-      busy.value = false
-      statusText.value = ''
-    }
+    })
   }
 
   return {

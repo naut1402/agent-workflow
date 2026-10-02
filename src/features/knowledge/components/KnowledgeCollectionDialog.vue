@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import {
   createKnowledgeCollection,
   fetchKnowledgeList,
@@ -36,7 +38,9 @@ const selectedTags = ref<string[]>([...(props.collection?.tags ?? [])])
 const selectedIds = ref<string[]>([...(props.collection?.entry_ids ?? [])])
 
 const entryQuery = ref('')
-const saving = ref(false)
+// `saving` giờ do `run` sở hữu: bật ngay ms đầu, luôn nhả ở `finally`, và
+// lời gọi thứ hai lúc chưa xong bị bỏ qua — thay cho guard tay `|| saving.value`.
+const { pending: saving, run: runSave } = useApiAction()
 const error = ref('')
 
 const isEdit = computed(() => !!props.collection)
@@ -82,26 +86,25 @@ function tagStyle(tag: KnowledgeTagFacetView) {
 }
 
 async function save() {
-  if (!name.value.trim() || saving.value) return
-  saving.value = true
-  error.value = ''
-  try {
-    const payload = {
-      name: name.value.trim(),
-      description: description.value,
-      scope: scope.value,
-      tags: selectedTags.value,
-      entryIds: selectedIds.value,
+  if (!name.value.trim()) return
+  await runSave(async () => {
+    error.value = ''
+    try {
+      const payload = {
+        name: name.value.trim(),
+        description: description.value,
+        scope: scope.value,
+        tags: selectedTags.value,
+        entryIds: selectedIds.value,
+      }
+      const data = props.collection
+        ? await saveKnowledgeCollection(props.collection.id, payload, props.projectId)
+        : await createKnowledgeCollection(payload, props.projectId)
+      emit('saved', data.collection.id, !props.collection)
+    } catch (e: any) {
+      error.value = String(e.message || e)
     }
-    const data = props.collection
-      ? await saveKnowledgeCollection(props.collection.id, payload, props.projectId)
-      : await createKnowledgeCollection(payload, props.projectId)
-    emit('saved', data.collection.id, !props.collection)
-  } catch (e: any) {
-    error.value = String(e.message || e)
-  } finally {
-    saving.value = false
-  }
+  })
 }
 </script>
 
@@ -125,70 +128,73 @@ async function save() {
         </button>
       </div>
 
-      <div class="modal-body knowledge-collection-body">
-        <label class="cfg-label">
-          {{ t('knowledge.collections.dialog.name') }}
-          <input v-model="name" class="cfg-input" />
-        </label>
-        <label class="cfg-label">
-          {{ t('knowledge.collections.dialog.description') }}
-          <input v-model="description" class="cfg-input" />
-        </label>
-        <label class="cfg-label">
-          {{ t('knowledge.collections.scope') }}
-          <!-- Khoá khi sửa: đổi scope là đổi store, tức đổi con trỏ của mọi nơi
-               đang tham chiếu nhóm — backend cũng từ chối. -->
-          <select v-model="scope" class="cfg-input" :disabled="isEdit">
-            <option value="project">project</option>
-            <option value="global">global</option>
-          </select>
-        </label>
+      <div class="c-loading-host">
+        <CLoadingOverlay :active="saving" />
+        <div class="modal-body knowledge-collection-body">
+          <label class="cfg-label">
+            {{ t('knowledge.collections.dialog.name') }}
+            <input v-model="name" class="cfg-input" />
+          </label>
+          <label class="cfg-label">
+            {{ t('knowledge.collections.dialog.description') }}
+            <input v-model="description" class="cfg-input" />
+          </label>
+          <label class="cfg-label">
+            {{ t('knowledge.collections.scope') }}
+            <!-- Khoá khi sửa: đổi scope là đổi store, tức đổi con trỏ của mọi nơi
+                 đang tham chiếu nhóm — backend cũng từ chối. -->
+            <select v-model="scope" class="cfg-input" :disabled="isEdit">
+              <option value="project">project</option>
+              <option value="global">global</option>
+            </select>
+          </label>
 
-        <div class="cfg-label">
-          <span>{{ t('knowledge.collections.dialog.byEntries') }}</span>
-          <input
-            v-model="entryQuery"
-            class="cfg-input cfg-input-sm"
-            :placeholder="t('knowledge.collections.dialog.entrySearchPlaceholder')"
-          />
-          <ul class="knowledge-pick-list">
-            <li v-if="!filteredEntries.length" class="muted knowledge-pick-msg">
-              {{ t('knowledge.collections.dialog.entriesEmpty') }}
-            </li>
-            <li v-for="e in filteredEntries" :key="e.id" class="knowledge-pick-item">
-              <label>
-                <input
-                  type="checkbox"
-                  :checked="selectedIds.includes(e.id)"
-                  @change="toggleId(e.id)"
-                />
-                <span class="knowledge-pick-title">{{ e.title }}</span>
-                <span class="muted">{{ e.id }}</span>
-              </label>
-            </li>
-          </ul>
-          <p class="muted knowledge-pick-count">
-            {{ t('knowledge.collections.dialog.selectedCount', { count: selectedIds.length }) }}
-          </p>
-        </div>
-
-        <div class="cfg-label">
-          <span>{{ t('knowledge.collections.dialog.byTags') }}</span>
-          <div class="tag-row">
-            <span v-if="!tags.length" class="muted">{{ t('knowledge.collections.dialog.tagsEmpty') }}</span>
-            <button
-              v-for="tag in tags"
-              :key="tag.tag"
-              type="button"
-              class="chip chip-tag knowledge-tag-toggle"
-              :class="{ active: selectedTags.includes(tag.tag) }"
-              :style="tagStyle(tag)"
-              @click="toggleTag(tag.tag)"
-            >{{ tag.tag }}</button>
+          <div class="cfg-label">
+            <span>{{ t('knowledge.collections.dialog.byEntries') }}</span>
+            <input
+              v-model="entryQuery"
+              class="cfg-input cfg-input-sm"
+              :placeholder="t('knowledge.collections.dialog.entrySearchPlaceholder')"
+            />
+            <ul class="knowledge-pick-list">
+              <li v-if="!filteredEntries.length" class="muted knowledge-pick-msg">
+                {{ t('knowledge.collections.dialog.entriesEmpty') }}
+              </li>
+              <li v-for="e in filteredEntries" :key="e.id" class="knowledge-pick-item">
+                <label>
+                  <input
+                    type="checkbox"
+                    :checked="selectedIds.includes(e.id)"
+                    @change="toggleId(e.id)"
+                  />
+                  <span class="knowledge-pick-title">{{ e.title }}</span>
+                  <span class="muted">{{ e.id }}</span>
+                </label>
+              </li>
+            </ul>
+            <p class="muted knowledge-pick-count">
+              {{ t('knowledge.collections.dialog.selectedCount', { count: selectedIds.length }) }}
+            </p>
           </div>
-        </div>
 
-        <p v-if="error" class="err">{{ error }}</p>
+          <div class="cfg-label">
+            <span>{{ t('knowledge.collections.dialog.byTags') }}</span>
+            <div class="tag-row">
+              <span v-if="!tags.length" class="muted">{{ t('knowledge.collections.dialog.tagsEmpty') }}</span>
+              <button
+                v-for="tag in tags"
+                :key="tag.tag"
+                type="button"
+                class="chip chip-tag knowledge-tag-toggle"
+                :class="{ active: selectedTags.includes(tag.tag) }"
+                :style="tagStyle(tag)"
+                @click="toggleTag(tag.tag)"
+              >{{ tag.tag }}</button>
+            </div>
+          </div>
+
+          <p v-if="error" class="err">{{ error }}</p>
+        </div>
       </div>
 
       <div class="modal-foot">

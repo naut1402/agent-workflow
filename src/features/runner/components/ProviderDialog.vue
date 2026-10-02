@@ -5,6 +5,8 @@ import { slugify } from '../../../shared/lib/stringUtils'
 import { saveProviderConfig, deleteProviderConfig } from '../scripts/ProviderDialogApi'
 import { DEFAULT_BASE_URLS } from '../scripts/agenticProviderDefaults'
 import type { ProviderConfigOption, ProviderEntry } from '../types'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import CSelect from '../../../frontend/ui/CSelect.vue'
 import InfoTooltip from '../../../frontend/ui/InfoTooltip.vue'
 
@@ -26,7 +28,7 @@ const isEdit = computed(() => Boolean(props.providerConfig?.id))
 const label = ref('')
 const providerId = ref('')
 const baseURL = ref('')
-const saving = ref(false)
+const { pending: saving, run: runSave } = useApiAction()
 const error = ref('')
 const baseUrlPlaceholder = computed(() => DEFAULT_BASE_URLS[providerId.value] || '')
 
@@ -45,33 +47,32 @@ async function remove() {
 }
 
 async function save() {
-  saving.value = true
-  error.value = ''
-  try {
-    if (!label.value.trim()) {
-      error.value = t('runner.providerDialog.labelRequired')
-      return
+  await runSave(async () => {
+    error.value = ''
+    try {
+      if (!label.value.trim()) {
+        error.value = t('runner.providerDialog.labelRequired')
+        return
+      }
+      if (!providerId.value) {
+        error.value = t('runner.providerDialog.interfaceRequired')
+        return
+      }
+      const id = isEdit.value && props.providerConfig?.id
+        ? props.providerConfig.id
+        : slugify(label.value, { maxLength: 40, fallback: 'provider' })
+      const { providerConfig } = await saveProviderConfig({
+        id,
+        label: label.value.trim(),
+        providerId: providerId.value,
+        ...(baseURL.value.trim() ? { baseURL: baseURL.value.trim() } : {}),
+      })
+      emit('saved', providerConfig.id)
+      emit('close')
+    } catch (e: any) {
+      error.value = String(e.message || e)
     }
-    if (!providerId.value) {
-      error.value = t('runner.providerDialog.interfaceRequired')
-      return
-    }
-    const id = isEdit.value && props.providerConfig?.id
-      ? props.providerConfig.id
-      : slugify(label.value, { maxLength: 40, fallback: 'provider' })
-    const { providerConfig } = await saveProviderConfig({
-      id,
-      label: label.value.trim(),
-      providerId: providerId.value,
-      ...(baseURL.value.trim() ? { baseURL: baseURL.value.trim() } : {}),
-    })
-    emit('saved', providerConfig.id)
-    emit('close')
-  } catch (e: any) {
-    error.value = String(e.message || e)
-  } finally {
-    saving.value = false
-  }
+  })
 }
 
 function applyPrefill() {
@@ -116,49 +117,52 @@ onUnmounted(() => {
           <button type="button" class="modal-close" :aria-label="t('runner.a11y.close')" @click="emit('close')">✕</button>
         </div>
 
-        <div class="modal-body">
-          <div v-if="error" class="err-banner">{{ error }}</div>
-          <p class="muted dialog-intro">{{ t('runner.providerDialog.intro') }}</p>
+        <div class="c-loading-host">
+          <CLoadingOverlay :active="saving" />
+          <div class="modal-body">
+            <div v-if="error" class="err-banner">{{ error }}</div>
+            <p class="muted dialog-intro">{{ t('runner.providerDialog.intro') }}</p>
 
-          <div class="field">
-            <label class="cfg-label">{{ t('runner.providerDialog.labelField') }}
-              <input v-model="label" class="cfg-input" :placeholder="t('runner.providerDialog.labelPlaceholder')" />
-            </label>
-          </div>
+            <div class="field">
+              <label class="cfg-label">{{ t('runner.providerDialog.labelField') }}
+                <input v-model="label" class="cfg-input" :placeholder="t('runner.providerDialog.labelPlaceholder')" />
+              </label>
+            </div>
 
-          <div class="field">
-            <label class="cfg-label">{{ t('runner.providerDialog.interfaceField') }}
-              <CSelect
-                v-model="providerId"
-                :options="aiProviderSelectOptions"
-                :aria-label="t('runner.providerDialog.interfaceField')"
-                class="cfg-select"
-              />
-            </label>
-          </div>
+            <div class="field">
+              <label class="cfg-label">{{ t('runner.providerDialog.interfaceField') }}
+                <CSelect
+                  v-model="providerId"
+                  :options="aiProviderSelectOptions"
+                  :aria-label="t('runner.providerDialog.interfaceField')"
+                  class="cfg-select"
+                />
+              </label>
+            </div>
 
-          <div class="field">
-            <span class="cfg-label label-with-hint">
-              {{ t('runner.connectionDialog.baseUrlField') }}
-              <InfoTooltip :text="t('runner.connectionDialog.baseUrlHint')" />
-            </span>
-            <input v-model="baseURL" class="cfg-input" :placeholder="baseUrlPlaceholder" />
-          </div>
+            <div class="field">
+              <span class="cfg-label label-with-hint">
+                {{ t('runner.connectionDialog.baseUrlField') }}
+                <InfoTooltip :text="t('runner.connectionDialog.baseUrlHint')" />
+              </span>
+              <input v-model="baseURL" class="cfg-input" :placeholder="baseUrlPlaceholder" />
+            </div>
 
-          <div class="modal-actions">
-            <button
-              v-if="isEdit"
-              type="button"
-              class="btn-danger btn-sm"
-              @click="remove"
-            >
-              {{ t('runner.actions.delete') }}
-            </button>
-            <span class="spacer" />
-            <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
-            <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
-              {{ saving ? t('runner.actions.saving') : t('runner.providerDialog.save') }}
-            </button>
+            <div class="modal-actions">
+              <button
+                v-if="isEdit"
+                type="button"
+                class="btn-danger btn-sm"
+                @click="remove"
+              >
+                {{ t('runner.actions.delete') }}
+              </button>
+              <span class="spacer" />
+              <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
+              <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
+                {{ saving ? t('runner.actions.saving') : t('runner.providerDialog.save') }}
+              </button>
+            </div>
           </div>
         </div>
       </div>

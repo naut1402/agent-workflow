@@ -2,6 +2,7 @@
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { onMounted, ref } from 'vue'
 import { useArtifactProposal } from '../composables/useArtifactProposal'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 
 // Review UI for a require_approval quick action: shows the proposed diff
 // (before = real file, after = agent's edit in the scratch copy) and lets the
@@ -46,6 +47,7 @@ async function onSendFeedback() {
   <Teleport to="body">
     <div class="proposal-overlay" @click.self="emit('close')">
       <div class="proposal-modal" role="dialog" aria-modal="true">
+        <CLoadingOverlay :active="proposal.busy.value" />
         <header class="proposal-head">
           <span class="proposal-title">
             {{ t('monitor.proposal.reviewTitle') }} <code>{{ proposal.artifactName.value || artifactName }}</code>
@@ -121,7 +123,9 @@ async function onSendFeedback() {
   z-index: 1000;
   padding: 24px;
 }
+/* `position: relative` là containing block cho `CLoadingOverlay`. */
 .proposal-modal {
+  position: relative;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;

@@ -14,6 +14,7 @@ import {
 } from '../scripts/pipelineEditorApi'
 import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
 import { useLocalToggle } from '../../../frontend/composables/useLocalToggle'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
 import PipelineEditorNode from './PipelineEditorNode.vue'
 import CatalogPanel from './CatalogPanel.vue'
 import RulesPanel from './RulesPanel.vue'
@@ -765,7 +766,9 @@ watch(() => props.projectId, () => {
   taskProfileName.value = ''
 })
 
-const saving = ref(false)
+// Một instance dùng chung cho `handleSave` và `handleSetDefault` — giữ đúng
+// ngữ nghĩa cờ `saving` cũ (hai nút này vốn chia nhau một cờ).
+const { pending: saving, run: runSave } = useApiAction()
 const saveMsg = ref('')
 
 function flashSaved(msg: string) {
@@ -777,43 +780,42 @@ function flashSaved(msg: string) {
 
 /** "Save" và "Save to file" gộp làm một, rẽ nhánh theo tab đang mở. */
 async function handleSave() {
-  saving.value = true
-  saveMsg.value = ''
-  try {
-    if (tab.value === 'profile') {
-      const name = profileName.value.trim()
-      if (!name) {
-        saveMsg.value = t('pipelineEditor.target.needProfileName')
-        return
+  await runSave(async () => {
+    saveMsg.value = ''
+    try {
+      if (tab.value === 'profile') {
+        const name = profileName.value.trim()
+        if (!name) {
+          saveMsg.value = t('pipelineEditor.target.needProfileName')
+          return
+        }
+        const ok = await saveProfile(name, buildFullPipeline())
+        if (!ok) {
+          saveMsg.value = `✗ ${profileError.value}`
+          return
+        }
+        await refreshProfiles()
+        lastLoadedSnapshot.value = snapshotCanvas()
+        // Canvas ĐANG là nội dung vừa ghi — nạp lại từ server chỉ tốn một vòng
+        // request và làm mất vị trí node người dùng vừa sắp.
+        if (profileSelected.value !== name) setSelectionSilently(profileSelected, name)
+      } else {
+        if (taskWriteBlocked.value) {
+          saveMsg.value = t('pipelineEditor.target.taskWriteBlocked')
+          return
+        }
+        if (!props.taskId?.trim()) {
+          saveMsg.value = t('pipelineEditor.target.needTask')
+          return
+        }
+        await writePipelineConfig('task', buildFullPipeline(), props.taskId, props.projectId ?? undefined)
+        lastLoadedSnapshot.value = snapshotCanvas()
       }
-      const ok = await saveProfile(name, buildFullPipeline())
-      if (!ok) {
-        saveMsg.value = `✗ ${profileError.value}`
-        return
-      }
-      await refreshProfiles()
-      lastLoadedSnapshot.value = snapshotCanvas()
-      // Canvas ĐANG là nội dung vừa ghi — nạp lại từ server chỉ tốn một vòng
-      // request và làm mất vị trí node người dùng vừa sắp.
-      if (profileSelected.value !== name) setSelectionSilently(profileSelected, name)
-    } else {
-      if (taskWriteBlocked.value) {
-        saveMsg.value = t('pipelineEditor.target.taskWriteBlocked')
-        return
-      }
-      if (!props.taskId?.trim()) {
-        saveMsg.value = t('pipelineEditor.target.needTask')
-        return
-      }
-      await writePipelineConfig('task', buildFullPipeline(), props.taskId, props.projectId ?? undefined)
-      lastLoadedSnapshot.value = snapshotCanvas()
+      flashSaved(t('pipelineEditor.target.saved'))
+    } catch (e) {
+      saveMsg.value = `✗ ${e.message}`
     }
-    flashSaved(t('pipelineEditor.target.saved'))
-  } catch (e) {
-    saveMsg.value = `✗ ${e.message}`
-  } finally {
-    saving.value = false
-  }
+  })
 }
 
 async function handleDeleteProfile() {
@@ -874,16 +876,15 @@ async function handleImportProfileFile(e: Event) {
 async function handleSetDefault() {
   if (!currentSteps.value.length) return
   if (!confirm(t('pipelineEditor.target.confirmSetDefault'))) return
-  saving.value = true
-  saveMsg.value = ''
-  try {
-    await writePipelineConfig('global', buildFullPipeline(), undefined, props.projectId ?? undefined)
-    flashSaved(t('pipelineEditor.target.defaultSet'))
-  } catch (e) {
-    saveMsg.value = `✗ ${e.message}`
-  } finally {
-    saving.value = false
-  }
+  await runSave(async () => {
+    saveMsg.value = ''
+    try {
+      await writePipelineConfig('global', buildFullPipeline(), undefined, props.projectId ?? undefined)
+      flashSaved(t('pipelineEditor.target.defaultSet'))
+    } catch (e) {
+      saveMsg.value = `✗ ${e.message}`
+    }
+  })
 }
 
 /**

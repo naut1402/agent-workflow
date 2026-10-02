@@ -405,7 +405,7 @@ async function onCloseClick(): Promise<void> {
           <Icon
             :name="status.kind === 'busy' ? 'spinner' : 'info'"
             :size="14"
-            :class="{ 'nl-chat-spin': status.kind === 'busy' }"
+            :class="{ 'c-spin': status.kind === 'busy' }"
           />
         </button>
         <div v-if="infoOpen" class="nl-chat-info-popover" role="tooltip">
