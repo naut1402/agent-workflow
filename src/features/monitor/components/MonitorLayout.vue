@@ -21,6 +21,8 @@ import { isFinishedTaskState, taskNeedsStateRepair } from '../lib/pipelineRunGua
 import { hasInFlightJob } from '../lib/taskInFlight'
 import { taskDisplayName } from '../lib/taskDisplay'
 import { useAppSettings } from '../../../frontend/composables/useAppSettings'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import {
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
@@ -57,7 +59,7 @@ const emit = defineEmits([
 ])
 
 const archiveError = ref('')
-const deleting = ref(false)
+const { pending: deleting, run: runDelete } = useApiAction()
 const needsRepair = computed(() => taskNeedsStateRepair(props.selected))
 
 const worktree = ref<any>(null)
@@ -167,26 +169,25 @@ async function repairSelected() {
 
 async function deleteSelected() {
   if (!props.selected) return
-  // `deleting` chặn double-click: handler async (dò job trước khi hỏi) nên không
-  // có guard thì mỗi cú click là một hộp confirm + một lượt DELETE.
-  if (deleting.value) return
-  archiveError.value = ''
-  deleting.value = true
-  // Chụp id ngay đầu handler: poll 1.5s có thể đổi `selected` giữa hai lần await.
-  const taskId = props.selected.task_id
-  try {
-    const running = await hasInFlightJob(taskId, props.selectedProjectId)
-    const messageKey = running
-      ? 'monitor.layout.confirmDeleteRunning'
-      : 'monitor.layout.confirmDelete'
-    if (!confirm(t(messageKey))) return
-    await deleteTask(taskId, props.selectedProjectId ?? undefined)
-    emit('task-deleted', taskId)
-  } catch (e: any) {
-    archiveError.value = String(e.message || e)
-  } finally {
-    deleting.value = false
-  }
+  await runDelete(async () => {
+    // Guard chống double-click nay do `runDelete` giữ: handler async (dò job
+    // trước khi hỏi) nên không có guard thì mỗi cú click là một hộp confirm +
+    // một lượt DELETE.
+    archiveError.value = ''
+    // Chụp id ngay đầu handler: poll 1.5s có thể đổi `selected` giữa hai lần await.
+    const taskId = props.selected.task_id
+    try {
+      const running = await hasInFlightJob(taskId, props.selectedProjectId)
+      const messageKey = running
+        ? 'monitor.layout.confirmDeleteRunning'
+        : 'monitor.layout.confirmDelete'
+      if (!confirm(t(messageKey))) return
+      await deleteTask(taskId, props.selectedProjectId ?? undefined)
+      emit('task-deleted', taskId)
+    } catch (e: any) {
+      archiveError.value = String(e.message || e)
+    }
+  })
 }
 
 /** Text of the destructive confirm — stronger wording while a job is in flight. */
@@ -260,6 +261,7 @@ async function cleanWorktreeSelected() {
     <section class="monitor-content">
       <template v-if="selected">
         <div class="task-head">
+          <CLoadingOverlay :active="deleting" />
           <h2 :title="selected.task_id">
             {{ taskDisplayName(selected) }}
             <span v-if="selected.parent_task_id" class="subtask">{{ t('monitor.layout.subtaskOf', { id: selected.parent_task_id }) }}</span>

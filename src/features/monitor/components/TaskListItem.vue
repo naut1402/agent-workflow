@@ -6,6 +6,8 @@ import { taskNeedsStateRepair } from '../lib/pipelineRunGuards'
 import { hasInFlightJob } from '../lib/taskInFlight'
 import { taskDisplayName } from '../lib/taskDisplay'
 import Icon from '../../../frontend/ui/Icon.vue'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -21,7 +23,7 @@ const emit = defineEmits([
 
 const { t } = useI18nHelpers()
 const archiveError = ref('')
-const deleting = ref(false)
+const { pending: deleting, run: runDelete } = useApiAction()
 const needsRepair = computed(() => taskNeedsStateRepair(props.task))
 const renaming = ref(false)
 const draftName = ref('')
@@ -92,26 +94,25 @@ async function toggleArchive() {
 }
 
 async function removeTask() {
-  // `deleting` chặn double-click: handler async (dò job trước khi hỏi) nên không
-  // có guard thì mỗi cú click là một hộp confirm + một lượt DELETE.
-  if (deleting.value) return
-  archiveError.value = ''
-  deleting.value = true
-  // Chụp id ngay đầu handler: poll 1.5s có thể thay props giữa hai lần await.
-  const taskId = props.task.task_id
-  try {
-    const running = await hasInFlightJob(taskId, props.projectId)
-    const messageKey = running
-      ? 'monitor.taskItem.confirmDeleteRunning'
-      : 'monitor.taskItem.confirmDelete'
-    if (!confirm(t(messageKey))) return
-    await deleteTask(taskId, props.projectId ?? undefined)
-    emit('task-deleted', taskId)
-  } catch (e: any) {
-    archiveError.value = String(e.message || e || t('monitor.taskItem.deleteError'))
-  } finally {
-    deleting.value = false
-  }
+  await runDelete(async () => {
+    // Guard chống double-click nay do `runDelete` giữ: handler async (dò job
+    // trước khi hỏi) nên không có guard thì mỗi cú click là một hộp confirm +
+    // một lượt DELETE.
+    archiveError.value = ''
+    // Chụp id ngay đầu handler: poll 1.5s có thể thay props giữa hai lần await.
+    const taskId = props.task.task_id
+    try {
+      const running = await hasInFlightJob(taskId, props.projectId)
+      const messageKey = running
+        ? 'monitor.taskItem.confirmDeleteRunning'
+        : 'monitor.taskItem.confirmDelete'
+      if (!confirm(t(messageKey))) return
+      await deleteTask(taskId, props.projectId ?? undefined)
+      emit('task-deleted', taskId)
+    } catch (e: any) {
+      archiveError.value = String(e.message || e || t('monitor.taskItem.deleteError'))
+    }
+  })
 }
 
 async function repairState() {
@@ -193,6 +194,7 @@ function hiddenCount(task: any) {
     class="task-entry"
     :class="{ active: task.task_id === selectedId, attention: task.has_qa }"
   >
+    <CLoadingOverlay :active="deleting" />
     <div class="task-row" @click="selectTask">
       <span
         class="expand-chevron"

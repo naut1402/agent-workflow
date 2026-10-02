@@ -3,6 +3,8 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { onMounted, ref } from 'vue'
 import { fetchCustomAgent, saveCustomAgent, type AgentScope } from '../scripts/agentEditorApi'
 import { emptyDraft } from '../business/agentDraft.js'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import AgentSectionEditor from './AgentSectionEditor.vue'
 
 const props = defineProps<{
@@ -22,7 +24,7 @@ const draft = ref(emptyDraft())
 const scope = ref<AgentScope>('project')
 const selectedName = ref('')
 const loading = ref(false)
-const saving = ref(false)
+const { pending: saving, run: runSave } = useApiAction()
 const message = ref('')
 const error = ref('')
 
@@ -49,19 +51,18 @@ onMounted(async () => {
 })
 
 async function save() {
-  saving.value = true
-  error.value = ''
-  message.value = ''
-  try {
-    const result = await saveCustomAgent(draft.value, props.projectId ?? undefined, scope.value)
-    selectedName.value = result.name
-    message.value = t('agentEditor.messages.saved', { name: result.name })
-    emit('saved', result.name)
-  } catch (e: any) {
-    error.value = String(e.message || e)
-  } finally {
-    saving.value = false
-  }
+  await runSave(async () => {
+    error.value = ''
+    message.value = ''
+    try {
+      const result = await saveCustomAgent(draft.value, props.projectId ?? undefined, scope.value)
+      selectedName.value = result.name
+      message.value = t('agentEditor.messages.saved', { name: result.name })
+      emit('saved', result.name)
+    } catch (e: any) {
+      error.value = String(e.message || e)
+    }
+  })
 }
 
 </script>
@@ -82,39 +83,42 @@ async function save() {
         </button>
       </div>
 
-      <div class="modal-body agent-form-body">
-        <p v-if="message" class="ok-msg">{{ message }}</p>
-        <p v-if="error" class="err">{{ error }}</p>
+      <div class="c-loading-host">
+        <CLoadingOverlay :active="saving" />
+        <div class="modal-body agent-form-body">
+          <p v-if="message" class="ok-msg">{{ message }}</p>
+          <p v-if="error" class="err">{{ error }}</p>
 
-        <div class="agent-basic-fields">
-          <label class="cfg-label">
-            {{ t('agentEditor.fields.name') }}
-            <input v-model="draft.name" class="cfg-input" placeholder="agent-name" />
-          </label>
-          <label class="cfg-label">
-            {{ t('agentEditor.fields.description') }}
-            <input v-model="draft.description" class="cfg-input" :placeholder="t('agentEditor.fields.descriptionPlaceholder')" />
-          </label>
-          <label class="cfg-label">
-            {{ t('agentEditor.fields.recommendedModel') }}
-            <input v-model="draft.model" class="cfg-input" placeholder="claude-sonnet-4-6" />
-          </label>
-          <label class="cfg-label">
-            {{ t('agentEditor.fields.scope') }}
-            <select v-model="scope" class="cfg-input">
-              <option value="project">{{ t('agentEditor.fields.scopeProject') }}</option>
-              <option value="global">{{ t('agentEditor.fields.scopeGlobal') }}</option>
-            </select>
-          </label>
+          <div class="agent-basic-fields">
+            <label class="cfg-label">
+              {{ t('agentEditor.fields.name') }}
+              <input v-model="draft.name" class="cfg-input" placeholder="agent-name" />
+            </label>
+            <label class="cfg-label">
+              {{ t('agentEditor.fields.description') }}
+              <input v-model="draft.description" class="cfg-input" :placeholder="t('agentEditor.fields.descriptionPlaceholder')" />
+            </label>
+            <label class="cfg-label">
+              {{ t('agentEditor.fields.recommendedModel') }}
+              <input v-model="draft.model" class="cfg-input" placeholder="claude-sonnet-4-6" />
+            </label>
+            <label class="cfg-label">
+              {{ t('agentEditor.fields.scope') }}
+              <select v-model="scope" class="cfg-input">
+                <option value="project">{{ t('agentEditor.fields.scopeProject') }}</option>
+                <option value="global">{{ t('agentEditor.fields.scopeGlobal') }}</option>
+              </select>
+            </label>
+          </div>
+
+          <AgentSectionEditor
+            :draft="draft"
+            :catalog="catalog"
+            @update:draft="draft = $event"
+            @message="message = $event; error = ''"
+            @error="error = $event; message = ''"
+          />
         </div>
-
-        <AgentSectionEditor
-          :draft="draft"
-          :catalog="catalog"
-          @update:draft="draft = $event"
-          @message="message = $event; error = ''"
-          @error="error = $event; message = ''"
-        />
       </div>
 
       <div class="modal-foot">
