@@ -115,8 +115,7 @@ describe('SettingsDialog', () => {
 
     expect(saveLoggingConfig).toHaveBeenCalledWith({
       showLogsTab: false,
-      // Tbefa5f4c: payload mang thêm khoá gạch nối 'tool-call' (mặc định tắt).
-      types: { audit: true, request: true, jobs: true, events: false, usage: true, 'tool-call': false },
+      types: { audit: true, request: true, jobs: true, events: false, usage: true },
     })
     expect(pane.textContent).not.toContain('Loại log')
     expect(pane.textContent).not.toContain('Audit (thay đổi cấu hình)')
@@ -704,111 +703,5 @@ describe('SettingsDialog — trạng thái section artifact (AC-1, AC-2)', () =>
     expect(sectionRadioGroup().getAttribute('aria-label')).toBe(
       tr('settings.artifact.sectionGroupLabel'),
     )
-  })
-})
-
-// ── Tbefa5f4c · Nhóm L (TC-L01 … TC-L04) — toggle log type `tool-call` (F17) ──
-//
-// Toggle này là cái công tắc duy nhất bật cả đường đo. Hai thứ dễ sai: khoá lưu
-// phải là chuỗi gạch nối (`'tool-call'`, không phải `toolCall`), và nhãn phải đi
-// qua i18n ở cả hai locale.
-describe('Nhóm L — toggle log type tool-call', () => {
-  /** Checkbox mang nhãn chứa `text` trong pane Settings. */
-  function checkboxByLabel(text: string): HTMLInputElement | undefined {
-    const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
-    return Array.from(pane.querySelectorAll('label.settings-checkbox'))
-      .find((el) => el.textContent?.includes(text))
-      ?.querySelector('input') as HTMLInputElement | undefined
-  }
-
-  it('TC-L01: có control cho `tool-call`, mặc định TẮT', async () => {
-    mount(SettingsDialog, { attachTo: document.body })
-    await flushPromises()
-
-    const box = checkboxByLabel('Tool call')
-    expect(box).toBeTruthy()
-    expect(box!.checked).toBe(false)
-  })
-
-  it('TC-L02: bật toggle ghi đúng khoá gạch nối, KHÔNG sinh khoá camelCase', async () => {
-    mount(SettingsDialog, { attachTo: document.body })
-    await flushPromises()
-
-    const box = checkboxByLabel('Tool call')!
-    box.checked = true
-    box.dispatchEvent(new Event('change', { bubbles: true }))
-    await flushPromises()
-
-    expect(saveLoggingConfig).toHaveBeenCalledTimes(1)
-    const payload = vi.mocked(saveLoggingConfig).mock.calls[0][0] as {
-      types: Record<string, boolean>
-    }
-    expect(payload.types['tool-call']).toBe(true)
-    expect(Object.keys(payload.types)).not.toContain('toolCall')
-  })
-
-  it('TC-L02b: prefs trả về true thì toggle hiện đang BẬT', async () => {
-    vi.mocked(fetchLoggingConfig).mockResolvedValueOnce({
-      config: {
-        showLogsTab: true,
-        types: { audit: true, request: true, jobs: true, events: false, usage: true, 'tool-call': true },
-      },
-    })
-    mount(SettingsDialog, { attachTo: document.body })
-    await flushPromises()
-
-    expect(checkboxByLabel('Tool call')!.checked).toBe(true)
-  })
-
-  it.each(['vi', 'en'] as const)('TC-L03: ⚠️ nhãn có i18n ở locale %s', async (locale) => {
-    const messages = createTestI18n(locale)
-    const label = (messages.global.t as any)('settings.logging.types.toolCall') as string
-
-    mountRaw(SettingsDialog, {
-      attachTo: document.body,
-      global: { plugins: [createTestI18nPlugin(locale)] },
-    })
-    await flushPromises()
-
-    const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
-    const text = pane.textContent ?? ''
-    expect(label).toBeTruthy()
-    // 🚫 Không phải key thô, 🚫 không hardcode.
-    expect(label).not.toBe('settings.logging.types.toolCall')
-    expect(text).toContain(label)
-    expect(text).not.toContain('settings.logging.types.toolCall')
-  })
-
-  it('TC-L03b: hai locale cho hai chuỗi KHÁC nhau', () => {
-    const vi = (createTestI18n('vi').global.t as any)('settings.logging.types.toolCall')
-    const en = (createTestI18n('en').global.t as any)('settings.logging.types.toolCall')
-    expect(vi).not.toBe(en)
-  })
-
-  it('TC-L04: hồi quy — mọi toggle log type cũ vẫn hiện và lưu đúng', async () => {
-    mount(SettingsDialog, { attachTo: document.body })
-    await flushPromises()
-
-    for (const label of ['Audit', 'Request', 'Jobs', 'Events', 'Usage']) {
-      expect(checkboxByLabel(label)).toBeTruthy()
-    }
-    expect(checkboxByLabel('Events')!.checked).toBe(false)
-    expect(checkboxByLabel('Usage')!.checked).toBe(true)
-
-    checkboxByLabel('Events')!.dispatchEvent(new Event('change', { bubbles: true }))
-    await flushPromises()
-
-    const payload = vi.mocked(saveLoggingConfig).mock.calls[0][0] as {
-      showLogsTab: boolean
-      types: Record<string, boolean>
-    }
-    expect(payload.types).toEqual({
-      audit: true,
-      request: true,
-      jobs: true,
-      events: true,
-      usage: true,
-      'tool-call': false,
-    })
   })
 })

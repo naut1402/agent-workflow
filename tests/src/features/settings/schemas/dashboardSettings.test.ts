@@ -70,8 +70,7 @@ describe('parseDashboardSettings', () => {
     })
     expect(parsed.logging).toEqual({
       showLogsTab: false,
-      // Tbefa5f4c: khoá log type thứ 6 — gạch nối, mặc định tắt.
-      types: { audit: false, request: true, jobs: false, events: false, usage: true, 'tool-call': false },
+      types: { audit: false, request: true, jobs: false, events: false, usage: true },
       driver: 'file',
     })
   })
@@ -100,7 +99,6 @@ describe('resolveLoggingFromDashboard', () => {
       jobs: true,
       events: false,
       usage: true,
-      'tool-call': false,
     })
   })
 })

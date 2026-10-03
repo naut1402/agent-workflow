@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { DEFAULT_LOGGING_CONFIG, parseLoggingConfig } from '../../../../src/shared/log/loggingPrefs.js'
+import { parseLoggingConfig } from '../../../../src/shared/log/loggingPrefs.js'
 import {
   invalidateLoggingPrefsCache,
   isLogTypeEnabled,
@@ -48,7 +48,7 @@ describe('parseLoggingConfig', () => {
   test('defaults audit/request/jobs on; events off; usage on', () => {
     expect(parseLoggingConfig(undefined)).toEqual({
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: false, usage: true, 'tool-call': false },
+      types: { audit: true, request: true, jobs: true, events: false, usage: true },
       driver: 'file',
     })
   })
@@ -61,7 +61,7 @@ describe('parseLoggingConfig', () => {
       }),
     ).toEqual({
       showLogsTab: false,
-      types: { audit: false, request: true, jobs: false, events: false, usage: true, 'tool-call': false },
+      types: { audit: false, request: true, jobs: false, events: false, usage: true },
       driver: 'file',
     })
     expect(
@@ -70,7 +70,7 @@ describe('parseLoggingConfig', () => {
       }),
     ).toEqual({
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: true, usage: false, 'tool-call': false },
+      types: { audit: true, request: true, jobs: true, events: true, usage: false },
       driver: 'file',
     })
   })
@@ -173,56 +173,5 @@ describe('write gate', () => {
       event: 'entity.created',
       projectId: 'p1',
     })
-  })
-})
-
-// ── Tbefa5f4c · Nhóm B (TC-B01 … TC-B07) — khoá log type `tool-call` ──────────
-//
-// Khoá là chuỗi gạch nối `'tool-call'`. Một khoá camelCase lọt vào đây sẽ làm
-// gate ở `appendLog` bật/tắt nhầm mà không suite nào khác nhìn thấy.
-describe('Nhóm B — parseLoggingConfig · tool-call', () => {
-  test('TC-B01: mặc định TẮT', () => {
-    expect(parseLoggingConfig({}).types['tool-call']).toBe(false)
-  })
-
-  test('TC-B02: DEFAULT_LOGGING_CONFIG tắt tool-call và khai đủ 6 khoá', () => {
-    expect(DEFAULT_LOGGING_CONFIG.types['tool-call']).toBe(false)
-    expect(Object.keys(DEFAULT_LOGGING_CONFIG.types).sort()).toEqual(
-      ['audit', 'events', 'jobs', 'request', 'tool-call', 'usage'].sort(),
-    )
-  })
-
-  test('TC-B03: chỉ `=== true` mới bật', () => {
-    expect(parseLoggingConfig({ types: { 'tool-call': true } }).types['tool-call']).toBe(true)
-  })
-
-  test('TC-B04: giá trị truthy khác KHÔNG bật', () => {
-    expect(parseLoggingConfig({ types: { 'tool-call': 'true' } }).types['tool-call']).toBe(false)
-    expect(parseLoggingConfig({ types: { 'tool-call': 1 } }).types['tool-call']).toBe(false)
-  })
-
-  test('TC-B05: ⚠️ prefs CŨ (5 khoá, không có tool-call) vẫn parse đủ', () => {
-    const parsed = parseLoggingConfig({
-      types: { audit: true, request: true, jobs: true, events: true, usage: false },
-    })
-    expect(parsed.types.audit).toBe(true)
-    expect(parsed.types.request).toBe(true)
-    expect(parsed.types.jobs).toBe(true)
-    expect(parsed.types.events).toBe(true)
-    expect(parsed.types.usage).toBe(false)
-    expect(parsed.types['tool-call']).toBe(false)
-    expect(Object.keys(parsed.types).length).toBe(6)
-  })
-
-  test('TC-B06: khoá thừa bị bỏ qua', () => {
-    const parsed = parseLoggingConfig({ types: { 'tool-call': true, toolCall: true, bogus: true } })
-    expect(parsed.types['tool-call']).toBe(true)
-    expect(Object.keys(parsed.types)).not.toContain('toolCall')
-    expect(Object.keys(parsed.types)).not.toContain('bogus')
-  })
-
-  test('TC-B07: round-trip — ghi lại prefs không mất khoá mới', () => {
-    const once = parseLoggingConfig({ types: { 'tool-call': true } })
-    expect(parseLoggingConfig(once)).toEqual(once)
   })
 })

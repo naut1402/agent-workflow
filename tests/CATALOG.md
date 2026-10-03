@@ -20,7 +20,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | Suite | Runner | Vùng source phủ | Số file | Lệnh chạy |
 |---|---|---|---|---|
 | `tests/architecture` | bun | — | 2 | `bun test tests/architecture` |
-| `tests/mcp` | bun | `mcp`, `backend/log`, `backend/events` | 3 | `bun test tests/mcp` |
+| `tests/mcp` | bun | `mcp`, `backend/log`, `backend/events` | 4 | `bun test tests/mcp` |
 | `tests/src` | vitest | — | 1 | `npx vitest run tests/src/*.test.ts` |
 | `tests/src/backend/configs` | vitest | `backend/configs` | 1 | `npx vitest run tests/src/backend/configs` |
 | `tests/src/backend/db` | bun | `backend/db`, `features/knowledge/business` | 1 | `bun test tests/src/backend/db` |
@@ -73,7 +73,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/settings/components` | vitest | `features/settings/components`, `features/settings/scripts`, `frontend/composables` | 2 | `npx vitest run tests/src/features/settings/components` |
 | `tests/src/features/settings/schemas` | vitest | `features/settings/schemas` | 6 | `npx vitest run tests/src/features/settings/schemas` |
 | `tests/src/features/settings/scripts` | vitest | `features/settings/scripts`, `frontend/shell` | 1 | `npx vitest run tests/src/features/settings/scripts` |
-| `tests/src/features/statistics/business` | bun | `backend/log`, `features/statistics/business`, `shared/log` | 3 | `bun test tests/src/features/statistics/business` |
+| `tests/src/features/statistics/business` | bun | `features/statistics/business`, `shared/log` | 1 | `bun test tests/src/features/statistics/business` |
 | `tests/src/features/statistics/components` | vitest | `features/statistics/components`, `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/components` |
 | `tests/src/features/statistics/lib` | vitest | `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/lib` |
 | `tests/src/frontend` | vitest | `frontend/shell`, `features/logs/components`, `features/monitor/components` | 2 | `npx vitest run tests/src/frontend/*.test.ts` |
@@ -98,9 +98,9 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/orchestrator/schemas`, `features/runner/business` | 8 | `bun test tests/src/server/orchestrator` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business`, `shared/lib` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
-| `tests/src/server/runners` | bun | `features/runner/business`, `backend/log`, `backend/registry.ts` | 30 | `bun test tests/src/server/runners` |
+| `tests/src/server/runners` | bun | `features/runner/business`, `backend/events`, `features/mcp/business` | 25 | `bun test tests/src/server/runners` |
 | `tests/src/server/settings` | bun | `features/settings/business` | 2 | `bun test tests/src/server/settings` |
 | `tests/src/server/tasks` | bun | `features/monitor/business`, `features/runner/business`, `backend/events` | 4 | `bun test tests/src/server/tasks` |
 | `tests/src/shared/lib` | bun | `frontend/http`, `shared/lib` | 1 | `bun test tests/src/shared/lib` |
-| `tests/src/shared/log` | vitest | `shared/log` | 2 | `npx vitest run tests/src/shared/log` |
+| `tests/src/shared/log` | vitest | `shared/log` | 1 | `npx vitest run tests/src/shared/log` |
 | `tests/tools` | bun | `tooling` | 9 | `bun test tests/tools` |
