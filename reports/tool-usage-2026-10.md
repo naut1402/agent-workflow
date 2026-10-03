@@ -124,7 +124,7 @@ Nguyên nhân gốc nằm trong prompt: chuỗi `curl` mẫu được viết s�
 |---|---|---|---|---|
 | 1 | `get_task_context` | **P0** | 21/25 phiên mở đầu bằng đúng chuỗi `cd` + `cat request.md` + `cat pipeline.yaml` + `ls -la` (§3.3). Gộp 4 nguồn → tiết kiệm 3–5 lượt mở màn ở hầu hết job, và nhận `taskId` nên xoá luôn phần `cd` (§2.2) | ✅ **Đã giao** trong task này |
 | 2 | `search_code` | **P0** | 69,1% cặp lệnh là vòng lặp `read`/`grep` (§3.1), tập trung ở 10 phiên nặng chiếm 88% lượt Bash (§3.2). Gộp grep + read cắt đúng pattern đắt nhất | ⏸️ Hoãn — cần máy quét file hoàn chỉnh (ignore rule, nhị phân, trần kết quả, hiệu năng), repo chưa có helper nào gần. |
-| 3 | `orchestrator_decide` / `orchestrator_status` | P1 | 24 lượt `curl` / 14 phiên (§3.4). Bỏ được cả header auth lẫn biến môi trường `DASHBOARD_ORCHESTRATOR_*` agent đang phải tự kiểm | ⏸️ Hoãn — tập trung ở MỘT vai (orchestrator) và nguyên nhân nằm trong prompt; sửa prompt rẻ hơn nhiều, mà tool ghi lại kéo theo câu hỏi mode `full` |
+| 3 | `orchestrator_decide` / `orchestrator_status` | P1 | 24 lượt `curl` / 14 phiên (§3.4). Bỏ được cả header auth lẫn biến môi trường `DASHBOARD_ORCHESTRATOR_*` agent đang phải tự kiểm | 🔁 **Không làm tool — sửa prompt.** `buildDecisionPrompt` tiêm sẵn trạng thái (cổng chờ duyệt, step đang chạy) và bỏ khối `curl` mẫu; agent ra lệnh bằng dòng `ORCHESTRATOR_DECISION` |
 | 4 | `validate_artifact` | P1 | 13 lượt `awk`/`grep` tự chế kiểm rule doc-writing (§3.5) | ⏸️ Hoãn — phải nhúng toàn bộ rule doc-writing thành luật máy chạy được; đó là một thiết kế riêng |
 | 5 | `get_tool_stats` | P2 | Nhu cầu của người vận hành, không phải của agent trong phiên | ❌ Bỏ — task không giữ đường đo liên tục |
 
