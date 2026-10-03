@@ -1,6 +1,6 @@
 # Quy ước — đặt code vào đúng chỗ (feature architecture)
 
-Quy ước **hiện hành** khi task đụng `src/features/*`, tầng `business/`, hoặc logic dùng chung.
+Quy ước **hiện hành** khi task đụng `src/features/*`, tầng `business/`, logic dùng chung, hoặc MCP server (`mcp/`).
 
 Kiến trúc tổng quan và bất biến: [`docs/architecture/`](../architecture/). Quy ước ngôn ngữ / Zod / Vue: [`coding-guideline.md`](coding-guideline.md).
 
@@ -132,3 +132,19 @@ Không làm:
 | Composable / component | vitest + `mountWithI18n` nếu có `t()` |
 | Helper `src/*/lib` dùng ở FE | `bun run build` nếu nghi `node:fs` lọt bundle |
 | Đổi overload `fileHelper` | `bun run typecheck` |
+
+## 7. MCP server (`mcp/`)
+
+`mcp/` là transport thứ hai song song `apiServer` — handler đóng vai controller, gọi `business/` của feature. Chia file theo class, không theo capability.
+
+| Thay đổi | Đặt ở |
+|---|---|
+| Hành vi chung mọi server (lọc tool, `instructions`, vòng đời) | `mcp/AbstractMcpServer.ts` |
+| Helper chung mọi nhóm tool (`ok` / `fail` / `requireRoot`, `ToolDef`) | `mcp/AbstractMcpTools.ts` |
+| Chọn nhóm tool, preamble, cảnh báo khởi động của dashboard | `mcp/DashboardMcpServer.ts` |
+| Tool mới / sửa tool | `ToolDef` + method trong `mcp/tools/<Feature>Tools.ts` của feature được gọi tới |
+
+- **Một file = một class**, tên file trùng tên class. Ngoại lệ duy nhất: entry `mcp/server.ts`.
+- **Một tool = một `ToolDef`** — tên, `access`, schema, mô tả, handler, `hint` khai cùng chỗ; 🚫 không tách schema / allowlist / hướng dẫn sang file khác.
+- **Nhóm tool `extends AbstractMcpTools`**, handler là method public (test gọi thẳng); logic domain ở `business/` của feature, 🚫 không viết lại trong handler.
+- **Chi tiết và ràng buộc cài đặt**: [`docs/mcp/server.md`](../mcp/server.md) §8.
