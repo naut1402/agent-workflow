@@ -29,7 +29,39 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 
 ## 2. Tổ chức `business/`
 
-### 2.1 Chia theo nghiệp vụ, không theo kiểu thao tác
+> [!IMPORTANT]
+> <span style="color:#a371f7">File trong `business/` chia theo **quan hệ abstraction ↔ hiện thực**, không theo capability (kiểu thao tác, loại dữ liệu).</span>
+
+**Phạm vi**: `src/features/*/business/` và `mcp/`. 🚫 Không áp cho `src/{backend,frontend,shared}/lib` (`*Utils`, `*Lib`, `fileHelper`), `components/`, `styles/`, `locales/`, `schemas/`, `scripts/*Api.ts` — nhóm này giữ quy ước riêng ở §1, §3, §5.
+
+### 2.1 Phân biệt logic trừu tượng và logic chi tiết
+
+| | Logic trừu tượng | Logic chi tiết |
+|---|---|---|
+| **Là gì** | Hợp đồng và quy trình nghiệp vụ dựa vào | Cách hiện thực hợp đồng bằng một cơ chế cụ thể |
+| **Dạng** | `interface` vai trò · lớp `Abstract*` giữ trình tự cố định (template method) · rule nghiệp vụ thuần không I/O | Lớp / hàm gọi CLI, HTTP, SDK, file, DB, YAML cụ thể · tên env var, path, tên nhà cung cấp, định dạng thông điệp |
+| **Ví dụ trong repo** | `RunnerProvider`, `AgentCliProvider`, `*Store` (`runner`) · `AgenticApiProvider` · `AbstractMcpTools`, `ToolDef` | `claude-code-cli.ts`, `codex-cli.ts`, `anthropic-compatible-api.ts` · `tools/TaskTools.ts` |
+| **Tần suất đổi** | Thấp nhất — đổi là đổi mọi hiện thực | Cao — đổi riêng từng hiện thực |
+
+Ba câu hỏi để xếp một đoạn logic:
+
+- **Thay cơ chế thì có phải sửa không?** Đổi CLI → API, file → DB, YAML → JSON mà đoạn này vẫn đứng yên → trừu tượng.
+- **Có ≥ 2 hiện thực không?** Tính cả hiện thực thật và test double thay ở biên I/O. Chỉ có một và không phải biên I/O → chưa cần tách abstraction.
+- **Nó có biết tên một thứ cụ thể không?** Biết tên binary, env var, path, định dạng, nhà cung cấp → chi tiết, kể cả khi đang nằm trong lớp abstract.
+
+### 2.2 Chia file theo quan hệ abstraction
+
+- **Một abstraction = một file**, tên file trùng tên kiểu: `RunnerProvider.ts`, `AbstractMcpTools.ts`.
+- **Một hiện thực = một file**, đặt cạnh abstraction hoặc trong thư mục con mang tên vai trò (`providers/`, `tools/`). Tên = biến thể + vai trò: `ClaudeCliProvider.ts`, `TaskTools.ts`.
+- **Interface nằm cùng file với abstraction của nó**, 🚫 không gom vào `types.ts` chung — gom theo "là type" là chia theo capability. Type dữ liệu thuần dùng chung đi qua `schemas/` (`z.infer`).
+- **Phụ thuộc một chiều: chi tiết → abstraction.** Caller (business khác, controller) chỉ biết abstraction; đúng **một** chỗ lắp ráp (factory / registry / composition root) biết hiện thực cụ thể.
+- **Abstraction không chứa chi tiết** — tên env var, path, prefix thông điệp, tên nhà cung cấp đẩy xuống hiện thực hoặc truyền vào qua tham số / hook.
+- **Không tạo abstraction trước nhu cầu** — một hiện thực, không phải biên I/O thì viết module thường theo §2.3. Tách ra khi xuất hiện hiện thực thứ hai.
+- **Đổi chữ ký abstraction là thay đổi lớn** — ghi trong `design.md` §4 kèm danh sách hiện thực bị ảnh hưởng.
+
+### 2.3 Module không có quan hệ abstraction
+
+Logic đơn lẻ (một hiện thực, không phải biên I/O) gom theo nghiệp vụ, không theo kiểu thao tác:
 
 | Nên | Tránh |
 |-----|--------|
@@ -37,17 +69,21 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 | `dashboardSettings.ts` / `autoscan.ts` | `autoscan/config.ts` + `scan.ts` khi cùng một cụm settings nhỏ |
 | Tách `catalog/scan.ts` khi scan đã lớn và biên rõ với `buildCatalog` | Tách `builtins.ts` / `dedupe.ts` 20 dòng chỉ vì "loại helper" |
 
-**Mục tiêu: ít file, ít phân tán.** Chỉ tách khi biên capability rõ với người đọc domain, **hoặc** file đã đủ lớn / đủ độc lập để review và test riêng.
+- **Ít file, ít phân tán** — chỉ tách khi biên rõ với người đọc domain, hoặc file đủ lớn / đủ độc lập để review và test riêng.
+- **Helper nhỏ** (sanitize tên, parse một format) gắn vào module đang dùng nó — không tạo file riêng chỉ vì "là sanitize" / "là parse".
 
-Helper nhỏ (sanitize tên, parse một format) **gắn vào module đang xử lý capability đó** — không tạo file riêng chỉ vì "là sanitize" / "là parse".
+### 2.4 Áp dụng cho code hiện có
 
-### 2.2 Ranh giới HTTP
+- **Không đổi tên / tách hàng loạt.** Code đang có (`runner/business/types.ts`, `providers/claude-code-cli.ts`…) giữ nguyên tới khi task sửa đáng kể vùng đó.
+- **Task tạo mới hoặc sửa đáng kể một vùng có abstraction** — đưa vùng đó về §2.2 trong cùng thay đổi, hoặc ghi nợ `docs/todo/`.
+
+### 2.5 Ranh giới HTTP
 
 - **`business/` không import Hono**, không biết `c.req`.
 - **Nhận `root` / dữ liệu đã parse**, trả data thuần hoặc `{ status, error }` / discriminated result.
 - **Facade `XxxBusiness extends AbstractBusiness` mỏng** — `requireRoot` → gọi hàm domain.
 
-### 2.3 Cross-feature (peer)
+### 2.6 Cross-feature (peer)
 
 - **Chỉ `features/<A>/business/index.ts`** được import từ `features/<B>/business/**`.
 - **Trong feature A**, controller và các `business/*.ts` import peer qua `./business/index.js` (hoặc `./index.js` trong cùng `business/`).
@@ -135,7 +171,7 @@ Không làm:
 
 ## 7. MCP server (`mcp/`)
 
-`mcp/` là transport thứ hai song song `apiServer` — handler đóng vai controller, gọi `business/` của feature. Chia file theo class, không theo capability.
+`mcp/` là transport thứ hai song song `apiServer` — handler đóng vai controller, gọi `business/` của feature. Chia file theo quan hệ abstraction ↔ hiện thực như §2.2.
 
 | Thay đổi | Đặt ở |
 |---|---|

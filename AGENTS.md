@@ -111,6 +111,7 @@ Chốt ngay trong `design.md` những gì Review sẽ kiểm — sai ở đây t
 - [ ] **Chốt scope `backend` / `frontend` / `shared`** — chỉ logic dùng thật ở cả hai phía mới đưa vào `src/shared/`.
 - [ ] **Route & schema** — route mới ở `api.ts` + `controller.ts` của feature nào; schema Zod đặt ở `features/<f>/schemas/`.
 - [ ] **Dùng lại helper có sẵn** — nêu `*Utils` / `*Lib` / `fileHelper` sẽ dùng hoặc mở rộng, thay vì viết mới.
+- [ ] **Abstraction ↔ chi tiết** — trong `business/`: thứ nào là abstraction (interface / `Abstract*`), thứ nào là hiện thực, chỗ lắp ráp ở đâu ([`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md) §2).
 
 </details>
 
@@ -239,7 +240,8 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Đặt style đúng tầng** — 1 component render selector gốc → `<style scoped>`; ≥2 cùng feature → `features/<f>/styles/`; xuyên feature → `src/frontend/styles/`. Không thêm file `styles/*.scss` chỉ-comment.
 - [ ] **Danh sách dài không bị cắt cụt** — xem checklist **Chiến lược tràn nội dung UI** ở [Testing](#testing).
 - [ ] **Tuân thủ mode-registry khi thêm/sửa mode** — đối chiếu checklist Implement › **Thêm mode mới ở FE shell**.
-- [ ] **Gom module theo nghiệp vụ** — không tách file theo kiểu thao tác (`store` / `fetch` / `paths` / `scan` mỏng).
+- [ ] **Chia file theo abstraction ↔ hiện thực** — trong `business/` / `mcp/`: một abstraction một file, một hiện thực một file; abstraction không chứa chi tiết (env var, path, tên nhà cung cấp); không gom interface vào `types.ts` chung.
+- [ ] **Module không có abstraction thì gom theo nghiệp vụ** — không tách file theo kiểu thao tác (`store` / `fetch` / `paths` / `scan` mỏng).
 - [ ] **Không phụ thuộc Hono** — `business/` không import Hono, không phụ thuộc `c.req`.
 - [ ] **Ranh giới `src/backend` ⟂ `src/frontend` ⟂ `src/shared` giữ nguyên** — lint chặn, không whitelist; chi tiết ở `src/{backend,frontend,shared}/README.md`.
 - [ ] **ESM thuần, không import tĩnh `bun:*` trên đường nạp `vite.config.ts`** — [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) §1.
