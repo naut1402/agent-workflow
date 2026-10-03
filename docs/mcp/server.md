@@ -335,7 +335,7 @@ Mã lỗi **thực sự phát ra**:
 | `not_found` | Project / task / artifact không tồn tại; không có project mặc định; state file không đọc được hoặc không phải JSON object |
 | `invalid_input` | `taskId` sai khuôn; path thoát khỏi project root hoặc thư mục task; `name` rỗng hoặc chứa null byte; `add_project` / `create_qa` bị business layer từ chối |
 
-Kiểu `McpErrorCode` (`mcp/envelope.ts`) còn khai **2 mã dự phòng chưa nơi nào phát ra**: `forbidden_in_mode` — không phát vì mode lọc ngay ở khâu đăng ký, tool ngoài quyền biến khỏi `tools/list` chứ không bị từ chối lúc gọi (§3) — và `internal`, hiện chỉ xuất hiện trong comment của `envelope.ts`. 🚫 Đừng viết client bám vào hai mã này.
+Kiểu `McpErrorCode` (`mcp/envelope.ts`) còn khai **2 mã dự phòng chưa nơi nào phát ra**: `forbidden_in_mode` — không phát vì mode lọc ngay ở khâu đăng ký, tool ngoài quyền biến khỏi `tools/list` chứ không bị từ chối lúc gọi (§3) — và `internal`. 🚫 Đừng viết client bám vào hai mã này.
 
 ### 5.3 Ba tool không phát `structuredContent`
 
@@ -410,5 +410,42 @@ Mã nằm ở `_meta.error.code`. Object trả về 🚫 không có khoá `struc
 ## 7. Giới hạn đã biết
 
 - **Chỉ transport stdio.** HTTP / SSE chưa hỗ trợ ở vai server. (Vai client thì có — xem [`client.md`](client.md) §3.3.)
+- **Đường ghi task duy nhất là `create_qa`.** Không có tool ghi artifact hay quyết HITL gate.
 - **Thao tác ghi không tới SSE của dashboard.** `add_project` / `remove_project` **có** vào audit log và `events.jsonl` (`installEventLogSubscriber` chạy trong `main()`), nhưng event bus là **in-process** và MCP server là tiến trình khác với dashboard. Dashboard đang mở phải refresh tay.
 - **Danh sách tool tồn tại ở nhiều bản sao.** Nguồn cho máy là `mcp/modes.ts`; nguồn cho người là trang này. Thêm / đổi / xoá một tool phải sửa [§1](#1-bảng-tool), §3 của trang này **và** bảng mode ở [`README.md`](README.md) của chủ đề; 🚫 không có test nào bắt được lệch. Root `README.md` 🚫 không chép bảng tool — chỉ trỏ về `docs/mcp/`.
+
+---
+
+## 8. Ràng buộc cài đặt
+
+Các ràng buộc dưới đây không hiện ra trong hợp đồng tool. Sửa sai thì server hỏng lúc khởi động hoặc mở lỗ path traversal.
+
+### 8.1 Module và import
+
+- **`mcp/envelope.ts` tách khỏi `server.ts`** — `tools/*.ts` cần `ok` / `fail`, còn `server.ts` import handler từ `tools/*`; để chung một file là vòng import. `server.ts` re-export `ok` / `fail` / `McpErrorCode`.
+- **`tools/tasks.ts` import `monitor/business/tasks/reads.js`**, 🚫 không import barrel `tasks/index.js` — barrel re-export `runStep.js`, kéo runner, job queue, sqlite và `node:child_process` vào tiến trình stdio và giữ event loop sống.
+- **`createMcpServer({ mode })` không đọc env** — `main()` gọi `resolveMode()` rồi truyền vào; test truyền mode thẳng.
+- **`fail()` phân nhánh theo số tham số**, không theo `message === undefined` — `fail('internal', undefined)` vẫn là ca hai tham số. Ca một tham số trả object không có `_meta`.
+
+### 8.2 Path
+
+- **🚫 Không `joinPath` trong `mcp/`.** Path dựng từ input agent đi qua `resolvePathUnder` hoặc `resolveArtifact` (trả `null` khi thoát base), cộng `isSafeTaskId` ở lớp thứ hai. 🚫 Không dùng `stateFileOf` — nó dựng path bằng `joinPath`.
+- **Cần cả hai lớp** — `resolvePathUnder(root, 'tasks', '../.dev-state')` vẫn nằm trong root nên lớp một không chặn; regex `taskId` ([§4.5](#45-get_task_state)) chặn `..`.
+- **`project-rules.md` realpath cả root lẫn file rồi kiểm lại** — `resolvePathUnder` so path theo chữ, symlink trỏ ra ngoài vẫn qua. Caller đọc đúng `file` đã kiểm, 🚫 không dựng lại path.
+- **Thiếu root thì `fail`**, 🚫 không đoán bằng `cwd/..` — MCP chạy không có cwd cố định.
+
+### 8.3 Schema và SDK
+
+Áp dụng cho `@modelcontextprotocol/sdk` 1.29.0.
+
+- **`registerTool` nhận raw shape** (object các field Zod), không phải `z.object(...)`. Schema I/O của giao thức nằm ở `mcp/schemas.ts`, không ở `src/features/*/schemas/`.
+- **Gốc `outputSchema` là object** — SDK chạy `normalizeObjectSchema`, mảng ở gốc hỏng lúc đăng ký.
+- **`questions` của `create_qa` khai lỏng ở type handler** — `ShapeOutput` của SDK narrow mảng object lồng thành optional. `createQa()` tự `safeParse` lại.
+- **Lỗi dữ liệu thành `fail` trước khi tới SDK** — state file không phải object (`outputSchema` khai `state` là object) và lỗi đọc artifact (EISDIR) đều trả `fail`, 🚫 không để SDK ném `McpError`.
+
+### 8.4 Vòng đời tiến trình và event
+
+- **`initLogDriverFromPrefs()` gọi trong `main()`**, 🚫 không top-level — đặt top-level thì test import `createMcpServer` cũng đổi log driver toàn cục.
+- **`installEventLogSubscriber()` gọi trong `main()`** — event bus in-process, thiếu subscriber thì `emitEntity` không vào `events.jsonl`. Giới hạn SSE ở [§7](#7-giới-hạn-đã-biết).
+- **`add_project` / `remove_project` không gọi `MonitorController`** — controller cần `Context` của Hono. Handler tự `emitAudit` + `emitEntity` với cùng shape mà `src/features/monitor/controller.ts` phát.
+- **`main()` chỉ chạy khi `import.meta.main`** — test import module không khởi động stdio transport.

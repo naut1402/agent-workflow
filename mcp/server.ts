@@ -1,23 +1,4 @@
 #!/usr/bin/env bun
-// MCP (Model Context Protocol) stdio server for the dev-team-dashboard project
-// registry. Spawned by Claude Code via local MCP config (.claude/settings.local.json).
-//
-// It exposes CRUD over the SAME projects.json the REST/standalone server uses
-// (via the shared backend/registry.ts) — so projects added from Claude Code and
-// from the dashboard UI stay consistent. The MCP server operates directly on
-// the registry file and does NOT require the HTTP server to be running.
-//
-// Đây là vai INBOUND (dashboard LÀM MCP server). Vai client — dashboard GỌI MCP
-// server khác — nằm ở `src/features/mcp/`, không liên quan file này (D1/D2).
-//
-// Mode vận hành quyết định tool nào được đăng ký; mặc định `readonly` (D7).
-// Xem `mcp/modes.ts`.
-//
-// Tools: 8 tool đọc (`readonly` + `full`) + 3 tool ghi (chỉ `full`).
-// Allowlist thật — nguồn cho MÁY: `mcp/modes.ts`.
-// Bảng field / output / mã lỗi — nguồn cho NGƯỜI: `docs/mcp/server.md`.
-//
-// Design ref: Tb4241005 design.md §4; T6f61d951 design.md §4.2 (create_qa).
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -69,8 +50,6 @@ export {
   handleReadArtifact,
 } from './tools/tasks.js'
 
-// ── Tool handlers (exported for unit testing) ──────────────────────────────────
-
 export function handleListProjects(): any {
   return ok(list())
 }
@@ -83,14 +62,8 @@ export function handleGetProject({ id }: { id: string }): any {
 
 export function handleAddProject({ path: inputPath, name }: { path: string; name?: string }): any {
   const result = add({ path: inputPath, name })
-  // `in`-narrowing (boolean-discriminant narrowing misbehaves under vue-tsc).
   if ('error' in result) return fail('invalid_input', result.error)
   const id = result.project?.id ?? null
-  // G9: KHÔNG gọi `MonitorController.addProject` — controller bám `Context` của
-  // Hono, MCP không có request HTTP nào để dựng `Context`. Phát trực tiếp, với
-  // ĐÚNG shape mà `src/features/monitor/controller.ts:141-148` đang phát, để
-  // hai đường ghi không lệch dấu vết. Emit SAU khi persist thành công
-  // (AGENTS.md §4); nhánh lỗi ở trên không phát gì.
   emitAudit({ op: 'create', entity: 'project', identifier: id, projectId: id })
   emitEntity('created', 'project', { id, projectId: id })
   return ok({ project: result.project })
@@ -99,26 +72,16 @@ export function handleAddProject({ path: inputPath, name }: { path: string; name
 export function handleRemoveProject({ id }: { id: string }): any {
   const result = remove(id)
   if ('error' in result) return fail('not_found', result.error)
-  // Đối ứng `src/features/monitor/controller.ts:169-170` — xem ghi chú G9 ở trên.
   emitAudit({ op: 'delete', entity: 'project', identifier: id, projectId: id })
   emitEntity('deleted', 'project', { id, projectId: id })
   return ok({ removed: true as const })
 }
 
-/**
- * Đường vào knowledge cho agent không nói HTTP. Song song với
- * `GET /api/knowledge/bundle` — cùng gọi `loadKnowledgeBundle`, nên hai đường
- * không lệch nhau.
- */
 export async function handleGetKnowledgeBundle({ ids, project }: { ids: string[]; project?: string }): Promise<any> {
   const gate = rootOrFail(project)
   if ('error' in gate) return gate.error
-  // G8: bundle có trần 1 MiB — không phát `structuredContent` để khỏi nhân đôi
-  // payload trên stdio. Tool này cũng không khai `outputSchema`.
   return ok({ bundle: await loadKnowledgeBundle(gate.root, ids) }, { structured: false })
 }
-
-// ── Server wiring ──────────────────────────────────────────────────────────────
 
 const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, openWorldHint: false } as const
 
@@ -161,15 +124,12 @@ export function buildServerInstructions(mode: McpMode): string {
 }
 
 export function createMcpServer(opts: { mode?: McpMode } = {}): McpServer {
-  // Thuần: KHÔNG tự đọc env ở đây — `main()` quyết mode, test truyền thẳng.
   const mode = opts.mode ?? DEFAULT_MODE
   const server = new McpServer(
     { name: 'dev-team-dashboard', version: APP_VERSION },
     { instructions: buildServerInstructions(mode) },
   )
 
-  // A1: lọc ngay ở khâu đăng ký ⇒ tool ngoài allowlist không xuất hiện trong
-  // `tools/list`, chứ không phải hiện ra rồi bị từ chối lúc gọi.
   const register = (name: string, config: any, cb: any) => {
     if (!isToolEnabled(mode, name)) return
     server.registerTool(name, config, cb)
@@ -208,7 +168,6 @@ export function createMcpServer(opts: { mode?: McpMode } = {}): McpServer {
         + 'Resolves the ids listed in a task `knowledge_inputs`. Unknown ids come back as '
         + '{ id, error } instead of failing the whole call.',
       inputSchema: getKnowledgeBundleInput,
-      // Cố ý không có `outputSchema` (G8) — payload tới 1 MiB.
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async ({ ids, project }: any) => handleGetKnowledgeBundle({ ids, project }),
@@ -244,8 +203,6 @@ export function createMcpServer(opts: { mode?: McpMode } = {}): McpServer {
     'get_task_context',
     {
       title: 'Get task context',
-      // The description IS the adoption lever: 10 MCP tools shipped with 0 calls
-      // because nothing told the agent what they replace. Say it outright.
       description:
         'Read a task\'s whole context in ONE call: `request.md`, the pipeline config '
         + '(current step + next step), the artifact list with mtime/size, and the machine '
@@ -255,7 +212,6 @@ export function createMcpServer(opts: { mode?: McpMode } = {}): McpServer {
         + '`rules` (project-rules.md) is off by default because the orchestrator already '
         + 'injects it into the step prompt.',
       inputSchema: getTaskContextInput,
-      // Cố ý không có `outputSchema` (G8) — payload mang nội dung file.
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async ({ taskId, project, include }: any) => handleGetTaskContext({ taskId, project, include }),
@@ -282,7 +238,6 @@ export function createMcpServer(opts: { mode?: McpMode } = {}): McpServer {
         'Read one artifact file of a task (e.g. `design.md`). Names that escape the task '
         + 'directory are rejected.',
       inputSchema: readArtifactInput,
-      // Cố ý không có `outputSchema` (G8) — artifact có thể lớn.
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async ({ taskId, name, project }: any) => handleReadArtifact({ taskId, name, project }),
@@ -335,28 +290,12 @@ export function createMcpServer(opts: { mode?: McpMode } = {}): McpServer {
 }
 
 async function main() {
-  // D10/G3: PHẢI ở trong main(), không top-level — đặt top-level thì
-  // `import { createMcpServer }` trong test cũng đổi log driver toàn cục.
+  // xem docs/mcp/server.md §8.4
   initLogDriverFromPrefs()
-  // D9/G2: event bus là in-process; tiến trình MCP không có subscriber nào.
-  // Không gọi cái này thì `emitEntity` chạy vào chỗ không ai nghe và không vào
-  // `events.jsonl`. Lưu ý giới hạn đã biết: event KHÔNG tới SSE của dashboard
-  // (hai tiến trình khác nhau) — dashboard đang mở không tự refresh.
   installEventLogSubscriber()
 
   const mode = resolveMode()
-  // `stderr`, không phải `stdout`: `stdout` là kênh JSON-RPC của stdio transport.
   process.stderr.write(`[dev-team-dashboard mcp] mode=${mode} version=${APP_VERSION}\n`)
-  // F3/R3: 8 template ở `docs/template/agents/*.md` dạy agent "gọi MCP tool
-  // `create_qa` rồi dừng", nhưng mặc định `readonly` không đăng ký tool đó và
-  // KHÔNG chỗ nào trong `src/` đặt `DEVTEAM_MCP_MODE` — dashboard không tự bật
-  // `full` khi spawn agent của chính nó. Agent không thấy tool thì ứng biến, tự
-  // viết `qa.md` bằng tay, sai khuôn `## Q<n>` và `QaPanel` không render radio
-  // được — một triệu chứng không trỏ về nguyên nhân. Log job bắt stderr của
-  // tiến trình con nên dòng này rơi đúng chỗ người vận hành đang nhìn.
-  //
-  // Điều kiện bám `isToolEnabled` chứ không phải tên mode: thứ đang cảnh báo là
-  // "tool không được đăng ký", không phải "mode tên là readonly".
   if (!isToolEnabled(mode, 'create_qa')) {
     process.stderr.write(
       `[dev-team-dashboard mcp] mode=${mode}: create_qa KHÔNG được đăng ký, `
@@ -369,7 +308,6 @@ async function main() {
   await createMcpServer({ mode }).connect(transport)
 }
 
-// Only start the stdio server when run directly (not when imported by tests).
 if (import.meta.main) {
   main().catch((err) => {
     console.error(`[dev-team-dashboard mcp] fatal: ${err && err.stack ? err.stack : err}`)
