@@ -1,0 +1,129 @@
+{
+  "actions": {
+    "buildNl": "Tạo từ mô tả",
+    "close": "Đóng",
+    "download": "Download agent",
+    "export": "Export",
+    "save": "Lưu",
+    "templateCopy": "Template / Sao chép",
+    "upload": "Upload agent"
+  },
+  "build": {
+    "describeRequired": "Nhập mô tả agent trước khi tạo draft.",
+    "draftFailed": "Không tạo được draft: {message}",
+    "draftNameRequired": "Draft agent thiếu tên — vui lòng chỉnh sửa trước khi lưu.",
+    "jobCancelled": "Job đã bị huỷ.",
+    "jobFailed": "Job thất bại.",
+    "jobFailedWithError": "Job thất bại: {error}",
+    "jobMissing": "Job không tồn tại",
+    "jobTimeout": "Hết thời gian chờ job",
+    "loadRunnersFailed": "Không tải được danh sách runner: {message}",
+    "noJobId": "Không nhận được job id từ server.",
+    "noRunner": "Chưa có runner khả dụng. Hãy bật hoặc cấu hình một runner ở tab Runner rồi thử lại.",
+    "smokePrompt": "Đây là smoke test. Hãy trả lời đúng một dòng: OK"
+  },
+  "fields": {
+    "description": "Mô tả",
+    "descriptionPlaceholder": "Mô tả ngắn",
+    "name": "Tên",
+    "recommendedModel": "Model khuyến nghị",
+    "scope": "Phạm vi",
+    "scopeGlobal": "Toàn cục (mọi project)",
+    "scopeProject": "Project hiện tại"
+  },
+  "form": {
+    "cancel": "Hủy",
+    "close": "Đóng",
+    "createTitle": "Tạo agent mới",
+    "editTitle": "Sửa agent — {name}"
+  },
+  "list": {
+    "delete": "Xóa agent",
+    "download": "Download agent",
+    "duplicate": "Sao chép agent",
+    "edit": "Chỉnh sửa agent",
+    "empty": "Chưa có agent tùy chỉnh",
+    "exportHint": "Chọn một agent trước khi export",
+    "groupGlobal": "Agent toàn cục",
+    "groupProject": "Agent của project",
+    "newButton": "+ Agent mới",
+    "view": "Xem nội dung"
+  },
+  "messages": {
+    "confirmDelete": "Xóa agent \"{name}\"?",
+    "confirmOverwrite": "File đã tồn tại. Ghi đè?",
+    "deleted": "Đã xóa",
+    "exported": "Đã export → {path}",
+    "saved": "Đã lưu {name}"
+  },
+  "nl": {
+    "applyEditor": "Áp dụng vào editor",
+    "back": "← Quay lại",
+    "cancel": "Hủy",
+    "close": "Đóng",
+    "describeHint": "Nhập mô tả agent bằng tiếng Việt/Anh. Hệ thống tạo draft (heuristic hoặc API nếu có",
+    "describePlaceholder": "Ví dụ: Agent review code PHP theo coding conventions, kiểm tra bảo mật SQL/XSS…",
+    "descriptionLabel": "Mô tả",
+    "editDraft": "← Sửa draft",
+    "generate": "Generate draft",
+    "generating": "Đang tạo…",
+    "nameLabel": "Tên agent",
+    "noRunner": "Chưa có runner khả dụng.",
+    "noRunnerParen": "(chưa có runner khả dụng)",
+    "noRunnerSuffix": "để bật/cấu hình, rồi thử lại.",
+    "openRunner": "Mở Runner",
+    "previewHint": "Kiểm tra và chỉnh sửa draft trước khi lưu.",
+    "runnerModeOff": "Chế độ Runner đang tắt trong Cài đặt — bật lại để mở",
+    "saveAndRun": "Lưu & chạy thử →",
+    "skillsLabel": "Skills (phân tách bằng dấu phẩy)",
+    "statusInit": "đang khởi tạo…",
+    "statusOk": "thành công",
+    "stepDescribe": "1. Mô tả",
+    "stepPreview": "2. Xem lại draft",
+    "stepRun": "3. Lưu & chạy thử",
+    "success": "Agent đã lưu và chạy thử thành công.",
+    "title": "Build từ mô tả (NL)",
+    "waitingRunner": "Đang chờ runner hoàn tất…"
+  },
+  "section": {
+    "confirmDelete": "Xóa section \"{title}\"?",
+    "deleteTitle": "Xóa section",
+    "dragTitle": "Kéo để sắp xếp",
+    "emptyTemplate": "Section \"{title}\" trống — không lưu được template",
+    "fixed": "cố định",
+    "promptNewTitle": "Tên section mới:",
+    "promptTemplateName": "Tên template section:",
+    "saveTemplate": "Lưu template",
+    "saveTemplateTitle": "Lưu section làm template",
+    "savedTemplate": "Đã lưu template section → {name}"
+  },
+  "template": {
+    "confirmDelete": "Xóa template \"{name}\"?",
+    "copyFallback": "Copy fallback (không đọc được file gốc): {message}",
+    "deleteTemplate": "Xóa template",
+    "fromCatalog": "Sao chép từ catalog",
+    "fromTemplate": "Từ template",
+    "fromUrl": "Từ URL (https)",
+    "namePlaceholder": "Tên template (optional)",
+    "useTemplate": "Dùng template"
+  },
+  "viewer": {
+    "empty": "Chọn một agent ở danh sách bên trái để xem nội dung",
+    "loading": "Đang tải nội dung agent…"
+  },
+  "workflow": {
+    "add": "Thêm",
+    "addEmpty": "+ Step trống",
+    "defaultStepTitle": "Bước {n}",
+    "directInput": "Nhập trực tiếp",
+    "empty": "Chưa có bước — thêm từ pipeline, template hoặc step trống.",
+    "emptyStepError": "Step trống — không lưu được template",
+    "fromPipeline": "+ Từ pipeline step…",
+    "fromTemplate": "+ Từ template step…",
+    "promptTemplateName": "Tên template workflow step:",
+    "saveTemplate": "Lưu template",
+    "savedTemplate": "Đã lưu workflow step template → {name}",
+    "stepNum": "Bước {n}",
+    "titlePlaceholder": "Tiêu đề bước"
+  }
+}

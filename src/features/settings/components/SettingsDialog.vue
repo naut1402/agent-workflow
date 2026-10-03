@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { computed, inject, onMounted, onUnmounted, ref, type Ref } from 'vue'
+import { computed, inject, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 import { useLocale } from '../../../frontend/composables/useLocale'
+import { supportedLocales } from '../../../frontend/plugins/i18n'
 import { reloadProjectsKey } from '../../../frontend/shell/keys'
 import {
   readArtifactSectionDefault,
@@ -46,7 +47,37 @@ const emit = defineEmits<{ close: [] }>()
 
 const { t } = useI18nHelpers()
 const { settings, load, update } = useAppSettings()
-const { locale, setLocale } = useLocale()
+const { locale, setLocale, pending: localePending, lastError: localeError } = useLocale()
+// Danh sách ngôn ngữ đến từ registry (manifest server), KHÔNG phải hằng số trong file này
+// — thêm locale thứ ba là thêm thư mục JSON, không sửa component nào. Registry reactive nên
+// manifest về SAU khi dialog đã mở vẫn đẩy được locale mới vào danh sách.
+const availableLocales = computed(() => supportedLocales())
+
+/** Nhãn ngôn ngữ lấy từ `common.language.names.<code>`; chưa có khoá thì hiện chính mã. */
+function localeLabel(code: string): string {
+  const key = `common.language.names.${code}`
+  const label = t(key)
+  return label === key ? code : label
+}
+
+/**
+ * Lựa chọn ĐANG HIỂN THỊ của nhóm radio, tách khỏi `locale` (locale đang áp dụng thật).
+ *
+ * Buộc phải có biến riêng: trình duyệt tự check radio vừa bấm, nên nếu bind thẳng
+ * `:checked="locale === code"` mà lượt nạp thất bại thì `locale` không đổi ⇒ vnode prop
+ * cũng không đổi ⇒ Vue không patch lại DOM, radio kẹt ở ngôn ngữ chưa hề được áp dụng.
+ * Cho nó đổi đi rồi đổi về thì prop thật sự đảo hai chiều và DOM được đồng bộ lại.
+ */
+const selectedLocale = ref<string>(locale.value)
+watch(locale, (v) => {
+  selectedLocale.value = v
+})
+
+async function pickLocale(code: string) {
+  selectedLocale.value = code // lạc quan — khớp với cái trình duyệt vừa check
+  await setLocale(code)
+  selectedLocale.value = locale.value // nạp hỏng → kéo lựa chọn về locale đang dùng
+}
 
 /** Optional: App.vue provides this so scan can refresh the project list. */
 const reloadProjects = inject(reloadProjectsKey, undefined)
@@ -782,27 +813,24 @@ onUnmounted(() => {
                   role="radiogroup"
                   :aria-label="t('common.language.title')"
                 >
-                  <label class="settings-radio">
+                  <label v-for="code in availableLocales" :key="code" class="settings-radio">
                     <input
                       type="radio"
                       name="locale"
-                      value="vi"
-                      :checked="locale === 'vi'"
-                      @change="setLocale('vi')"
+                      :value="code"
+                      :checked="selectedLocale === code"
+                      :disabled="localePending !== null"
+                      @change="pickLocale(code)"
                     />
-                    {{ t('common.language.vi') }}
-                  </label>
-                  <label class="settings-radio">
-                    <input
-                      type="radio"
-                      name="locale"
-                      value="en"
-                      :checked="locale === 'en'"
-                      @change="setLocale('en')"
-                    />
-                    {{ t('common.language.en') }}
+                    {{ localeLabel(code) }}
                   </label>
                 </div>
+                <p v-if="localePending" class="settings-section-desc" aria-live="polite">
+                  {{ t('settings.language.loading') }}
+                </p>
+                <p v-else-if="localeError" class="settings-section-desc settings-error" role="alert">
+                  {{ t('settings.language.loadFailed') }}
+                </p>
               </section>
               <section class="settings-section">
                 <h3 class="settings-section-title">{{ t('settings.artifact.title') }}</h3>
@@ -1516,6 +1544,10 @@ onUnmounted(() => {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--muted);
+}
+
+.settings-section-desc.settings-error {
+  color: var(--danger);
 }
 
 .settings-radio-group {

@@ -1,0 +1,131 @@
+{
+  "catalog": {
+    "filterAgentSource": "Lọc agent theo nguồn",
+    "filterSkillSource": "Lọc skill theo nguồn",
+    "noAgents": "Không có agent nào",
+    "noSkills": "Không có skill nào",
+    "searchAgents": "Tìm agent…",
+    "searchSkills": "Tìm skill…",
+    "sourceAll": "Tất cả nguồn",
+    "sourceCursor": "Cursor",
+    "sourceDashboard": "Dashboard",
+    "sourcePlugin": "Plugin",
+    "sourceProject": "Project",
+    "sourceRepo": "Repo",
+    "sourceUser": "User"
+  },
+  "docView": {
+    "close": "Đóng",
+    "loadError": "Không tải được nội dung.",
+    "loading": "Đang tải nội dung…"
+  },
+  "orchestrator": {
+    "checkbox": "Có node điều phối",
+    "checkboxTitle": "Thêm node orchestrator: mọi bước sẽ do nó quyết định start, thay vì pipeline tự nối bước. Bỏ tick là cách duy nhất gỡ node.",
+    "editButton": "Chỉnh sửa node điều phối",
+    "editTitle": "Cấu hình node điều phối",
+    "knowledgeLabel": "Knowledge liên quan",
+    "noAgent": "chưa chọn agent",
+    "nodeLabel": "Điều phối",
+    "nodeTitle": "Node điều phối — gỡ bằng cách bỏ tick \"Có node điều phối\"",
+    "systemPromptLabel": "Hướng dẫn bổ sung (system prompt)",
+    "systemPromptPlaceholder": "Vd: Review có PO → tự động quay lại bước liên quan..."
+  },
+  "preview": {
+    "status": {
+      "active": "▶ Đang chạy",
+      "done": "✓ Xong",
+      "hitl": "⏸ HITL",
+      "pending": "⏳ Chờ"
+    },
+    "waitingHitl": "— chờ HITL"
+  },
+  "rules": {
+    "categoryAll": "Tất cả category",
+    "empty": "Không có rule nào",
+    "emptyFiltered": "Không có rule nào khớp filter",
+    "filterCategory": "Lọc rule theo category",
+    "scopeGlobal": "Global",
+    "scopeProject": "Project"
+  },
+  "scope": {
+    "manualEntry": "Nhập thủ công…",
+    "selectTask": "— Chọn task —",
+    "taskIdPlaceholder": "Mã task"
+  },
+  "sections": {
+    "agents": "Agents",
+    "agentsOpenTitle": "Agents — mở panel",
+    "rules": "Rules",
+    "rulesOpenTitle": "Rules — mở panel",
+    "skills": "Skills",
+    "skillsOpenTitle": "Skills — mở panel"
+  },
+  "stepConfig": {
+    "add": "Thêm",
+    "agent": "Agent",
+    "agentPlaceholder": "plugin:agent-name",
+    "apply": "Áp dụng",
+    "blocking": "Blocking (bắt buộc người duyệt kể cả khi --auto-review)",
+    "cancel": "Huỷ",
+    "close": "Đóng",
+    "gateId": "Gate ID",
+    "hitlAuto": "Tự động",
+    "hitlGate": "HITL gate",
+    "hitlManual": "Thủ công",
+    "hitlNone": "Không",
+    "knowledgeInputs": "Knowledge inputs",
+    "knowledgePick": "Chọn knowledge…",
+    "model": "Model",
+    "modelDefault": "Theo mặc định hệ thống",
+    "modelHint": "Bỏ trống để dùng runner mặc định",
+    "modelUnknown": "{id} (không còn khả dụng)",
+    "name": "Tên",
+    "namePlaceholder": "Tên step",
+    "optionalDocReview": "Doc review tuỳ chọn ở gate này",
+    "produces": "Sản phẩm (artifact)",
+    "producesPlaceholder": "vd. investigate.md",
+    "title": "Cấu hình step"
+  },
+  "tabs": {
+    "ariaLabel": "Loại pipeline đang sửa",
+    "profile": "Profile",
+    "task": "Task"
+  },
+  "target": {
+    "autoLayout": "Tự sắp xếp",
+    "confirmDeleteProfile": "Xoá profile \"{name}\"? Thao tác này không hoàn tác được.",
+    "confirmDiscardChanges": "Canvas có thay đổi chưa lưu. Nạp pipeline khác và bỏ thay đổi?",
+    "confirmOverwriteProfile": "Đã có profile \"{name}\". Ghi đè bằng nội dung file vừa chọn?",
+    "confirmSetDefault": "Ghi pipeline đang có trên canvas vào pipeline.yaml mặc định? Nội dung cũ sẽ bị thay thế.",
+    "defaultSet": "✓ Đã đặt làm mặc định",
+    "deleteProfile": "Xoá profile",
+    "downloadProfile": "Tải về",
+    "downloadProfileTitle": "Tải profile này về máy (.yaml)",
+    "hitlPendingWarning": "⚠ Task đang chờ gate — lưu pipeline sẽ huỷ gate đang chờ",
+    "importInvalidSteps": "File thiếu \"steps\" dạng danh sách",
+    "importInvalidYaml": "File không phải YAML hợp lệ",
+    "importProfile": "Nạp từ file",
+    "importProfileTitle": "Nạp profile từ file .yaml trên máy",
+    "needProfileName": "✗ Nhập tên profile trước khi lưu",
+    "needTask": "✗ Chọn task trước khi lưu",
+    "preview": "Chạy thử",
+    "profileLabel": "Profile",
+    "save": "Lưu",
+    "saveAsPlaceholder": "Tên profile…",
+    "saveTitle": "Lưu pipeline trên canvas",
+    "saved": "✓ Đã lưu",
+    "saving": "Đang lưu…",
+    "selectProfile": "— Chọn profile —",
+    "setDefault": "Đặt làm mặc định",
+    "setDefaultTitle": "Đặt pipeline này làm mặc định (ghi pipeline.yaml)",
+    "stop": "Dừng",
+    "taskLabel": "Task",
+    "taskProfileLabel": "Profile áp cho task",
+    "taskProfileNone": "— Giữ pipeline hiện tại —",
+    "taskWriteBlocked": "✗ Task đã lưu trữ hoặc đã hoàn tất"
+  },
+  "toolbar": {
+    "fanOutWarning": "Orchestrator chạy tuần tự — nhánh song song sẽ được sắp xếp theo thứ tự topo khi lưu"
+  }
+}

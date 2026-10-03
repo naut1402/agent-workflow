@@ -1,0 +1,193 @@
+{
+  "action": {
+    "add": "Thêm bước",
+    "body": "Body (tuỳ chọn)",
+    "bodyPlaceholder": "Nội dung body request…",
+    "create": "Tạo task mới",
+    "empty": "Chưa có bước action nào — bấm \"+ Thêm bước\" để thêm.",
+    "existing": "Chạy task có sẵn",
+    "header": "Action (các bước chạy theo trình tự)",
+    "headers": "Headers (tuỳ chọn)",
+    "headersHint": "Mỗi dòng một header dạng \"Key: Value\"",
+    "headersPlaceholder": "Content-Type: application/json",
+    "httpRequest": "HTTP request",
+    "method": "Method",
+    "mode": "Kiểu chạy",
+    "params": "Tham số (argv, tuỳ chọn)",
+    "paramsPlaceholder": "vd: --flag value",
+    "profileName": "Pipeline profile (tuỳ chọn)",
+    "profileNamePlaceholder": "Chọn hoặc gõ tên profile",
+    "prompt": "Prompt của task (request.md)",
+    "promptPlaceholder": "Mô tả công việc task cần làm…",
+    "promptRequired": "Bước \"tạo task mới\" cần prompt",
+    "remove": "Bỏ bước này",
+    "runCommand": "Gọi command",
+    "runTaskKind": "Chạy task",
+    "runnerId": "Runner (tuỳ chọn)",
+    "runnerIdPlaceholder": "Chọn hoặc gõ runner — mặc định chọn sẵn có",
+    "runnerRequired": "Cần chọn runner",
+    "sequenceHint": "Các bước chạy tuần tự — bước sau chờ bước trước xong và tham chiếu được output qua biến steps.N.stdout (xem \"?\" ở từng bước).",
+    "stepDescription": "Mô tả bước (tuỳ chọn)",
+    "stepNamePlaceholder": "Tên bước {n}",
+    "targetProject": "Project đích (tuỳ chọn)",
+    "targetProjectDefaultTag": "mặc định",
+    "targetProjectHint": "Để trống thì bước này chạy trên project đang chọn. Chọn project khác để tạo/chạy task ở đó.",
+    "targetProjectInvalid": "Project đích không hợp lệ",
+    "targetProjectPlaceholder": "Mặc định: project đang chọn",
+    "taskId": "Task ID",
+    "taskIdInvalid": "Task ID không hợp lệ",
+    "taskIdPlaceholder": "Chọn hoặc gõ task id",
+    "taskIdRequired": "Bước \"chạy task có sẵn\" cần Task ID",
+    "url": "URL",
+    "urlHttpsOnly": "Chỉ chấp nhận URL https",
+    "urlPlaceholder": "https://example.com/webhook",
+    "urlRequired": "Cần nhập URL"
+  },
+  "create": "Tạo automation",
+  "empty": "Chưa có automation nào",
+  "emptyHint": "Tạo rule để chạy task theo lịch định trước, định kỳ, theo cron, hoặc khi có domain event trong dự án — chuỗi nhiều bước, bước sau dùng được output bước trước.",
+  "eventNames": {
+    "entity": {
+      "created": "Đối tượng được tạo",
+      "deleted": "Đối tượng bị xoá",
+      "updated": "Đối tượng được cập nhật"
+    },
+    "hitl": {
+      "pending": "Chờ duyệt HITL",
+      "resolved": "HITL đã duyệt/từ chối"
+    },
+    "job": {
+      "awaiting_recovery": "Job chờ phục hồi",
+      "cancelled": "Job bị huỷ",
+      "failed": "Job thất bại",
+      "finished": "Job kết thúc",
+      "queued": "Job vào hàng đợi",
+      "recovered": "Job đã phục hồi",
+      "retry_scheduled": "Job lên lịch thử lại",
+      "started": "Job bắt đầu chạy"
+    },
+    "task": {
+      "advanced": "Task sang bước kế",
+      "created": "Task được tạo"
+    },
+    "usage": {
+      "recorded": "Ghi nhận token usage"
+    },
+    "webhook": {
+      "received": "Webhook nhận được",
+      "triggered": "Webhook kích hoạt"
+    }
+  },
+  "form": {
+    "actionRequired": "Cần ít nhất một bước action",
+    "cancel": "Huỷ",
+    "close": "Đóng",
+    "createTitle": "Tạo automation",
+    "cronRequired": "Cần nhập biểu thức cron",
+    "description": "Mô tả (tuỳ chọn)",
+    "editTitle": "Sửa automation",
+    "enabled": "Bật ngay sau khi lưu",
+    "eventTypeRequired": "Cần chọn event type",
+    "intervalRequired": "Chu kỳ lặp tối thiểu 1 phút",
+    "name": "Tên",
+    "namePlaceholder": "vd Nightly build check",
+    "nameRequired": "Cần nhập tên",
+    "save": "Lưu",
+    "saving": "Đang lưu…",
+    "timeAtInvalid": "Mốc bắt đầu không hợp lệ",
+    "timeAtRequired": "Cần chọn mốc bắt đầu",
+    "triggerRequired": "Cần ít nhất một trigger"
+  },
+  "history": {
+    "allRules": "Tất cả automation",
+    "empty": "Chưa có lần chạy nào",
+    "loading": "Đang tải…",
+    "noInput": "(không có input)",
+    "noResult": "(chưa có kết quả)",
+    "outcome": "Kết quả",
+    "ruleColumn": "Automation",
+    "ruleFilter": "Automation",
+    "source": "Nguồn",
+    "stepInput": "Input",
+    "stepResult": "Kết quả",
+    "time": "Thời điểm"
+  },
+  "list": {
+    "colActions": "Hành động",
+    "colName": "Tên",
+    "colRun": "Chạy kế/gần nhất",
+    "colSteps": "Các bước",
+    "colTrigger": "Trigger"
+  },
+  "loadError": "Không tải được danh sách automation",
+  "outcome": {
+    "failed": "lỗi",
+    "running": "đang chạy",
+    "skipped": "bỏ qua (task đang bận)",
+    "succeeded": "thành công"
+  },
+  "pending": {
+    "webhook": "Webhook (Slack/GitHub gọi vào) và trigger từ integration (comment PR/issue, mention, CI/CD fail, Slack DM) sẽ có ở giai đoạn sau — issue #233."
+  },
+  "refresh": "Làm mới",
+  "rule": {
+    "delete": "Xoá automation",
+    "deleteConfirm": "Xoá automation \"{name}\"? Lịch sử chạy cũng sẽ bị xoá.",
+    "disabled": "Đang tắt",
+    "edit": "Sửa automation",
+    "enabled": "Đang bật",
+    "history": "Lịch sử chạy",
+    "inFlight": "Đang chạy…",
+    "lastRun": "Chạy gần nhất: {time}",
+    "neverRun": "Chưa chạy lần nào",
+    "nextRun": "Chạy kế: {time}",
+    "noNextRun": "Không có lịch chạy kế",
+    "oneShotDone": "One-shot đã chạy",
+    "runNow": "Chạy thử ngay",
+    "toggleOff": "Tắt automation",
+    "toggleOn": "Bật automation"
+  },
+  "runSource": {
+    "event": "event",
+    "manual": "thủ công",
+    "schedule": "lịch"
+  },
+  "subtitle": "Trigger (lịch / cron / event) → các bước action chạy task theo trình tự",
+  "tabs": {
+    "history": "Lịch sử thực thi",
+    "list": "Danh sách"
+  },
+  "title": "Automations",
+  "trigger": {
+    "add": "Thêm trigger",
+    "anyMatchHint": "Rule chạy khi BẤT KỲ trigger nào khớp — thêm nhiều nguồn bằng nút \"+\" bên dưới.",
+    "cron": "Cron",
+    "cronExpr": "Biểu thức cron (5 field)",
+    "cronHint": "phút giờ ngày tháng thứ — vd \"0 9 * * 1-5\" = 9h sáng các ngày trong tuần",
+    "cronInvalid": "Biểu thức cron không hợp lệ",
+    "event": "Event",
+    "eventType": "Event type",
+    "eventTypeHint": "Chỉ khớp event phát ra từ chính project này",
+    "eventTypePlaceholder": "Chọn hoặc gõ mã event, vd job.failed",
+    "header": "Trigger (nguồn kích hoạt)",
+    "interval": "Định kỳ",
+    "intervalDay": "ngày",
+    "intervalEvery": "Chu kỳ lặp",
+    "intervalHour": "giờ",
+    "intervalMinute": "phút",
+    "once": "Một lần",
+    "remove": "Bỏ trigger này",
+    "startAt": "Mốc bắt đầu",
+    "summaryCron": "Cron: {expr}",
+    "summaryEvent": "Khi có event {type}",
+    "summaryInterval": "Mỗi {value} {unit}",
+    "summaryTime": "Một lần lúc {time}",
+    "timeAt": "Thời điểm chạy",
+    "timer": "Thời gian"
+  },
+  "vars": {
+    "copied": "Đã sao chép!",
+    "hint": "Bấm vào biến để sao chép rồi dán vào ô nhập (prompt, task, profile, runner…):",
+    "toggle": "Xem biến có thể tham chiếu"
+  }
+}

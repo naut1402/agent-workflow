@@ -1,0 +1,117 @@
+{
+  "actions": {
+    "create": "Tạo entry mới",
+    "delete": "Xóa",
+    "download": "Tải danh sách đang lọc (.md)",
+    "downloadHint": "Không có entry nào để tải",
+    "save": "Lưu",
+    "upload": "Upload tài liệu"
+  },
+  "collections": {
+    "add": "Thêm collection",
+    "confirmDelete": "Xoá collection \"{id}\"? Tài liệu bên trong vẫn giữ nguyên.",
+    "created": "Đã tạo collection {id}",
+    "delete": "Xoá collection (không xoá tài liệu)",
+    "deleted": "Đã xoá collection {id}",
+    "dialog": {
+      "byEntries": "Chọn tài liệu thủ công",
+      "byTags": "Hoặc gom theo tag (entry phải mang đủ mọi tag đã chọn)",
+      "createTitle": "Thêm collection",
+      "description": "Mô tả",
+      "editTitle": "Sửa collection — {id}",
+      "entriesEmpty": "Không có tài liệu nào khớp.",
+      "entrySearchPlaceholder": "Lọc tài liệu…",
+      "name": "Tên",
+      "selectedCount": "Đã chọn {count} tài liệu",
+      "tagsEmpty": "Chưa có tag nào."
+    },
+    "edit": "Sửa collection",
+    "empty": "Chưa có collection.",
+    "emptyHint": "Nếu vừa nâng cấp, chạy `bun run scripts/migrate-knowledge-to-sqlite.ts` để chuyển collection cũ từ collections.yaml sang.",
+    "loadFailed": "Không đọc được collection/tag từ dashboard.sqlite: {error}. Sửa xong tải lại — tạm khoá thao tác nhóm để không ghi đè mất dữ liệu cũ.",
+    "scope": "Phạm vi collection",
+    "title": "Collection",
+    "updated": "Đã cập nhật collection {id}"
+  },
+  "fields": {
+    "addTagPlaceholder": "Thêm tag…",
+    "content": "Nội dung (Markdown)",
+    "scope": "Scope",
+    "tags": "Tags",
+    "title": "Title"
+  },
+  "filters": {
+    "allTags": "Tất cả tags",
+    "searchPlaceholder": "Tìm…"
+  },
+  "form": {
+    "cancel": "Hủy",
+    "close": "Đóng",
+    "createTitle": "Tạo entry mới",
+    "editTitle": "Sửa entry — {id}"
+  },
+  "list": {
+    "delete": "Xoá entry",
+    "download": "Tải entry này (.md)",
+    "edit": "Chỉnh sửa entry",
+    "empty": "Chưa có entry.",
+    "loading": "Đang tải…",
+    "title": "Tài liệu",
+    "view": "Xem nội dung"
+  },
+  "messages": {
+    "confirmDelete": "Xóa \"{id}\"?",
+    "deleted": "Đã xóa",
+    "downloadPartial": "Đã tải, nhưng {count} entry không lấy được nội dung (xem chú thích trong file).",
+    "saved": "Đã lưu {id}",
+    "uploaded": "Đã upload {id}"
+  },
+  "scopeTabs": {
+    "global": "Global",
+    "project": "Project",
+    "system": "System"
+  },
+  "tags": {
+    "add": "Thêm tag",
+    "colors": {
+      "amber": "Hổ phách",
+      "blue": "Xanh dương",
+      "green": "Xanh lá",
+      "pink": "Hồng",
+      "purple": "Tím",
+      "red": "Đỏ",
+      "slate": "Xám",
+      "teal": "Xanh ngọc"
+    },
+    "created": "Đã tạo tag {tag}",
+    "dialog": {
+      "color": "Màu",
+      "createTitle": "Thêm tag",
+      "description": "Mô tả",
+      "editTitle": "Sửa tag — {tag}",
+      "name": "Tên tag",
+      "namePlaceholder": "chỉ a-z, 0-9, \"-\" và \"_\"",
+      "renameHint": "Bỏ trống = giữ nguyên tên. Đổi tên sẽ ghi lại tag trên mọi entry đang mang nó.",
+      "renameTo": "Đổi tên thành",
+      "scope": "Phạm vi"
+    },
+    "edit": "Sửa tag (tên, màu)",
+    "empty": "Chưa có tag.",
+    "renamed": "Đã cập nhật {count} entry",
+    "renamedNoMeta": "Đã đổi tên {count} entry; tag giữ nguyên màu cũ vì chưa lưu được màu mới: {error}",
+    "title": "Tag",
+    "updated": "Đã cập nhật tag {tag}"
+  },
+  "title": "Knowledge",
+  "upload": {
+    "file": "File (.md, .txt)",
+    "scope": "Scope",
+    "tags": "Tags (phân cách bằng dấu phẩy)",
+    "title": "Upload tài liệu",
+    "uploading": "Đang upload…"
+  },
+  "viewer": {
+    "empty": "Chọn một entry ở danh sách bên trái để xem nội dung",
+    "loading": "Đang tải nội dung entry…"
+  }
+}

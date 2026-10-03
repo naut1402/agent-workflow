@@ -55,3 +55,6 @@ test-e2e/fixtures/project/.dev-team-agent/automations/
 # Plugin Claude Code cài ở root — luôn là rác cục bộ / rò rỉ từ máy dev.
 # Neo `/` để KHÔNG nuốt src/plugins/ (i18n thật).
 /plugins/
+
+# Đầu ra `i18n:export` gửi người biên dịch — sinh lại được, không commit.
+/out/

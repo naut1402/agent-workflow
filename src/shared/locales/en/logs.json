@@ -1,0 +1,69 @@
+{
+  "columns": {
+    "agent": "Agent",
+    "cacheReadTokens": "Cache read",
+    "cacheWriteTokens": "Cache write",
+    "entity": "Entity",
+    "event": "Event",
+    "identifier": "Identifier",
+    "inputTokens": "Input",
+    "jobId": "Job",
+    "level": "Level",
+    "method": "Method",
+    "model": "Model",
+    "ms": "ms",
+    "op": "Operation",
+    "outputTokens": "Output",
+    "path": "Path",
+    "payload": "Payload",
+    "project": "Project",
+    "provider": "Provider",
+    "query": "Params",
+    "response": "Response",
+    "status": "Status",
+    "stepId": "Step",
+    "taskId": "Task",
+    "time": "Time",
+    "totalTokens": "Total",
+    "traceId": "Trace"
+  },
+  "copy": {
+    "hint": "Click to copy"
+  },
+  "empty": {
+    "allDisabled": "All log types are disabled — enable them in Settings › General › Logs.",
+    "job": "No jobs yet.",
+    "log": "No logs yet."
+  },
+  "filters": {
+    "clear": "Clear",
+    "level": "Log level",
+    "levelAll": "All",
+    "q": "Quick filter…",
+    "sortHint": "Click to sort; Shift+click to add sort columns",
+    "traceId": "Trace id…",
+    "useTrace": "Filter by this trace id"
+  },
+  "jobs": {
+    "logEmpty": "(empty log)",
+    "truncated": "(head truncated)",
+    "viewLog": "View log"
+  },
+  "subtitle": "Centralized logs (global ~/.dev-team-dashboard/logs/)",
+  "tabs": {
+    "audit": "Audit",
+    "events": "Events",
+    "jobs": "Jobs",
+    "request": "Request",
+    "usage": "Usage"
+  },
+  "timeline": {
+    "artifactDetail": "created artifact",
+    "empty": "No activity yet.",
+    "heading": "Activity timeline",
+    "hitlDetail": "awaiting approval",
+    "now": "now",
+    "phaseDetail": "running"
+  },
+  "title": "Logs"
+}

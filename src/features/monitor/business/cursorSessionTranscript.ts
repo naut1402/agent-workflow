@@ -31,9 +31,11 @@ function cursorHome(): string {
   return joinPath(os.homedir(), '.cursor')
 }
 
-function clip(text: string): string {
+/** Cắt text quá dài; nhãn "đã cắt bớt" do FE dịch, không ghép ở đây. */
+function clip(text: string): { text: string; truncated?: boolean } {
   const t = text.trim()
-  return t.length > MAX_TURN_CHARS ? `${t.slice(0, MAX_TURN_CHARS)}\n…(đã cắt bớt)` : t
+  if (t.length <= MAX_TURN_CHARS) return { text: t }
+  return { text: t.slice(0, MAX_TURN_CHARS), truncated: true }
 }
 
 /** Read at most the last `maxBytes` of a file (UTF-8); drops a partial leading line. */
@@ -203,7 +205,7 @@ export function readCursorTranscript(file: string, opts: ReadTranscriptOptions =
     if (entry.isSidechain === true) continue
     const { role, text, at } = textFromCursorEntry(entry)
     if (!role || !text.trim()) continue
-    all.push({ index: all.length, role, text: clip(text), at })
+    all.push({ index: all.length, role, ...clip(text), at })
   }
 
   const windowed = all.slice(Math.max(0, all.length - MAX_TURNS))

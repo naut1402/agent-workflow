@@ -1,0 +1,13 @@
+{
+  "icon": {
+    "title": "Job đang chạy"
+  },
+  "list": {
+    "empty": "Không có job nào đang chạy.",
+    "jobCount": "{n} đang chạy",
+    "title": "Job đang chạy",
+    "truncated": "Và {n} task nữa…",
+    "unknownStep": "Step không xác định",
+    "unknownTask": "Chưa gán task"
+  }
+}

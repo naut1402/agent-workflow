@@ -13,7 +13,9 @@ export const AppSettingsSchema = z
     /** Only one section open at a time. Missing → true; forces the effective default to 'collapsed'. */
     artifactSectionAccordion: z.boolean().optional(),
     theme: z.enum(['system', 'light', 'dark']).optional(),
-    locale: z.enum(['vi', 'en']).optional(),
+    /** Mã locale UI. `z.string()` chứ không phải `z.enum` — danh sách locale đến từ
+     * manifest server lúc chạy, không phải từ hằng số build-time. */
+    locale: z.string().optional(),
     hideMissingArtifacts: z.boolean().optional(),
     collapseTaskExpandOnOutside: z.boolean().optional(),
     collapseAppSidebarOnOutside: z.boolean().optional(),
@@ -35,7 +37,8 @@ export const AppSettingsSchema = z
 export type AppSettings = z.infer<typeof AppSettingsSchema>
 export type ArtifactSectionDefault = 'expanded' | 'collapsed'
 export type ThemePreference = 'system' | 'light' | 'dark'
-export type LocalePreference = 'vi' | 'en'
+/** Mã locale bất kỳ — tập hợp lệ do manifest server quyết định lúc chạy. */
+export type LocalePreference = string
 export type NotificationUiPlacement = 'sidebar' | 'floating' | 'both'
 export type ChatFeedbackMode = 'queue' | 'immediate'
 
@@ -91,11 +94,20 @@ export function resolveThemePreference(
   return 'system'
 }
 
-/** Effective UI locale: missing / invalid-at-runtime → 'vi' (default locale). */
+export const DEFAULT_LOCALE: LocalePreference = 'vi'
+
+/**
+ * Effective UI locale: missing / sai kiểu / không nằm trong `allowed` → 'vi'.
+ * `allowed` là `registry.locales` lúc chạy; không truyền thì chỉ kiểm non-empty
+ * (dùng ở boot, trước khi manifest về).
+ */
 export function resolveLocale(
   settings: Pick<AppSettings, 'locale'> | null | undefined,
+  allowed?: readonly string[],
 ): LocalePreference {
-  return settings?.locale === 'en' ? 'en' : 'vi'
+  const v = settings?.locale
+  if (typeof v === 'string' && v && (!allowed || allowed.includes(v))) return v
+  return DEFAULT_LOCALE
 }
 
 /** Effective "hide missing artifacts" preference: missing → true (hide by default). */

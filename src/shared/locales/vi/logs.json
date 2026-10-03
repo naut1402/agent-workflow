@@ -1,0 +1,69 @@
+{
+  "columns": {
+    "agent": "Agent",
+    "cacheReadTokens": "Cache read",
+    "cacheWriteTokens": "Cache write",
+    "entity": "Đối tượng",
+    "event": "Event",
+    "identifier": "Định danh",
+    "inputTokens": "Input",
+    "jobId": "Job",
+    "level": "Level",
+    "method": "Method",
+    "model": "Model",
+    "ms": "ms",
+    "op": "Thao tác",
+    "outputTokens": "Output",
+    "path": "Path",
+    "payload": "Payload",
+    "project": "Project",
+    "provider": "Provider",
+    "query": "Params",
+    "response": "Response",
+    "status": "Status",
+    "stepId": "Step",
+    "taskId": "Task",
+    "time": "Thời gian",
+    "totalTokens": "Total",
+    "traceId": "Trace"
+  },
+  "copy": {
+    "hint": "Click để copy"
+  },
+  "empty": {
+    "allDisabled": "Mọi loại log đang tắt — bật lại trong Cài đặt › Chung › Logs.",
+    "job": "Chưa có job.",
+    "log": "Chưa có log."
+  },
+  "filters": {
+    "clear": "Xóa lọc",
+    "level": "Mức log",
+    "levelAll": "Tất cả",
+    "q": "Lọc nhanh…",
+    "sortHint": "Click để sort; Shift+click để sort thêm cột",
+    "traceId": "Trace id…",
+    "useTrace": "Lọc theo trace id này"
+  },
+  "jobs": {
+    "logEmpty": "(log trống)",
+    "truncated": "(đã cắt phần đầu)",
+    "viewLog": "Xem log"
+  },
+  "subtitle": "Log tập trung (global ~/.dev-team-dashboard/logs/)",
+  "tabs": {
+    "audit": "Kiểm toán",
+    "events": "Events",
+    "jobs": "Jobs",
+    "request": "Yêu cầu",
+    "usage": "Usage"
+  },
+  "timeline": {
+    "artifactDetail": "tạo artifact",
+    "empty": "Chưa có hoạt động nào.",
+    "heading": "Dòng thời gian hoạt động",
+    "hitlDetail": "chờ duyệt",
+    "now": "hiện tại",
+    "phaseDetail": "đang chạy"
+  },
+  "title": "Nhật ký"
+}

@@ -180,14 +180,14 @@ watch([() => messages.value.length, () => sending.value], async () => {
     <div ref="messagesRef" class="nl-chat-messages" :class="{ 'is-drop-over': isOverDropZone }">
       <p v-if="isOverDropZone" class="nl-chat-drop-hint">{{ t('nlChat.attachment.dropHint') }}</p>
       <p v-if="messages.length === 0" class="nl-chat-hint">
-        Mô tả điều bạn muốn — mình sẽ hỏi thêm nếu thiếu, rồi dựng draft Task, Pipeline hoặc Agent cho bạn.
+        {{ t('nlChat.builder.hint') }}
       </p>
       <div v-for="(m, i) in messages" :key="i" class="nl-chat-row" :class="`nl-chat-row-${m.role}`">
-        <span class="nl-chat-role">{{ m.role === 'user' ? 'Bạn' : 'Trợ lý' }}</span>
+        <span class="nl-chat-role">{{ m.role === 'user' ? t('nlChat.builder.roleUser') : t('nlChat.builder.roleAssistant') }}</span>
         <ChatMessageBubble :role="m.role === 'user' ? 'user' : 'assistant'" :text="m.text" />
       </div>
       <div v-if="sending" class="nl-chat-row nl-chat-row-assistant">
-        <span class="nl-chat-role">Trợ lý</span>
+        <span class="nl-chat-role">{{ t('nlChat.builder.roleAssistant') }}</span>
         <p class="nl-chat-message nl-chat-message-assistant nl-chat-typing" aria-live="polite">
           <span class="nl-chat-dot"></span>
           <span class="nl-chat-dot"></span>
@@ -196,10 +196,10 @@ watch([() => messages.value.length, () => sending.value], async () => {
         </p>
       </div>
       <p v-if="showLongChatNudge" class="nl-chat-nudge">
-        Có thể mô tả gọn lại giúp mình không?
+        {{ t('nlChat.builder.nudge') }}
       </p>
       <p v-if="error" class="nl-chat-error">{{ error }}</p>
-      <p v-if="step === 'done'" class="nl-chat-done">Đã tạo thành công.</p>
+      <p v-if="step === 'done'" class="nl-chat-done">{{ t('nlChat.builder.done') }}</p>
     </div>
     <ChatComposer :composer="composer" placeholder="Nhập tin nhắn..." />
   </template>

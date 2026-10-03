@@ -1,0 +1,60 @@
+{
+  "attachment": {
+    "dropHint": "Thả tập tin vào đây để đính kèm",
+    "pick": "Đính kèm tập tin",
+    "remove": "Bỏ tập tin",
+    "tooLarge": "{name} vượt quá {max}.",
+    "tooMany": "Tối đa {max} tập tin mỗi lượt gửi.",
+    "unsupported": "{name} thuộc loại không được hỗ trợ.",
+    "uploadFailed": "Không upload được tập tin: {error}"
+  },
+  "builder": {
+    "done": "Đã tạo thành công.",
+    "hint": "Mô tả điều bạn muốn — mình sẽ hỏi thêm nếu thiếu, rồi dựng draft Task, Pipeline hoặc Agent cho bạn.",
+    "nudge": "Có thể mô tả gọn lại giúp mình không?",
+    "roleAssistant": "Trợ lý",
+    "roleUser": "Bạn"
+  },
+  "composer": {
+    "addMenu": "Thêm",
+    "enterToNewline": "Enter để xuống dòng, Ctrl/⌘+Enter để gửi",
+    "enterToSend": "Enter để gửi, Shift+Enter để xuống dòng",
+    "send": "Gửi"
+  },
+  "knowledge": {
+    "pick": "Chọn knowledge",
+    "resolveFailed": "Không đọc được knowledge, đã gửi message không kèm: {error}"
+  },
+  "message": {
+    "collapse": "Thu lại",
+    "copy": "Copy nội dung",
+    "expand": "Xem thêm"
+  },
+  "window": {
+    "builderTitle": "Trợ lý tạo mới",
+    "chatModeBuilder": "Tạo mới bằng chat (chưa gắn task)",
+    "close": "Đóng",
+    "connected": "Dashboard đang kết nối",
+    "disconnected": "Dashboard mất kết nối",
+    "infoChatMode": "Chế độ chat",
+    "infoConnection": "Kết nối",
+    "infoProject": "Project",
+    "infoRunner": "Runner",
+    "infoShellMode": "Mode dashboard",
+    "infoShellTask": "Task đang chọn",
+    "infoStep": "Step",
+    "infoTask": "Task",
+    "infoTitle": "Thông tin context",
+    "minimize": "Thu nhỏ",
+    "newSession": "Phiên chat mới",
+    "nextSession": "Phiên sau",
+    "prevSession": "Phiên trước",
+    "runnerDisabled": "đã tắt",
+    "runnerReady": "sẵn sàng",
+    "runnerRunning": "đang chạy",
+    "statusBusy": "Đang xử lý",
+    "statusDone": "Hoàn tất",
+    "statusError": "Có lỗi",
+    "statusReady": "Sẵn sàng"
+  }
+}

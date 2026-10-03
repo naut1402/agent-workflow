@@ -1,0 +1,14 @@
+{
+  "bell": {
+    "empty": "Chưa có thông báo nào.",
+    "markAllRead": "Đánh dấu đã đọc tất cả",
+    "title": "Thông báo"
+  },
+  "flag": {
+    "unread": "Chưa đọc"
+  },
+  "message": {
+    "hitlPending": "Task {taskId} đang chờ duyệt (HITL)",
+    "qaReady": "Task {taskId} đã có QA sẵn sàng"
+  }
+}

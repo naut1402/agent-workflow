@@ -1,0 +1,117 @@
+{
+  "actions": {
+    "create": "Create an entry",
+    "delete": "Delete",
+    "download": "Download the filtered list (.md)",
+    "downloadHint": "No entry to download",
+    "save": "Save",
+    "upload": "Upload a document"
+  },
+  "collections": {
+    "add": "Add a collection",
+    "confirmDelete": "Delete collection \"{id}\"? The documents stay.",
+    "created": "Created collection {id}",
+    "delete": "Delete the collection (keeps the documents)",
+    "deleted": "Deleted collection {id}",
+    "dialog": {
+      "byEntries": "Pick documents manually",
+      "byTags": "Or gather by tag (an entry must carry every selected tag)",
+      "createTitle": "Add a collection",
+      "description": "Description",
+      "editTitle": "Edit collection — {id}",
+      "entriesEmpty": "No matching document.",
+      "entrySearchPlaceholder": "Filter documents…",
+      "name": "Name",
+      "selectedCount": "{count} documents selected",
+      "tagsEmpty": "No tag yet."
+    },
+    "edit": "Edit the collection",
+    "empty": "No collection yet.",
+    "emptyHint": "Just upgraded? Run `bun run scripts/migrate-knowledge-to-sqlite.ts` to move existing collections over from collections.yaml.",
+    "loadFailed": "Cannot read collections/tags from dashboard.sqlite: {error}. Fix it and reload — collection actions are disabled so nothing overwrites the old data.",
+    "scope": "Collection scope",
+    "title": "Collections",
+    "updated": "Updated collection {id}"
+  },
+  "fields": {
+    "addTagPlaceholder": "Add tag…",
+    "content": "Content (Markdown)",
+    "scope": "Scope",
+    "tags": "Tags",
+    "title": "Title"
+  },
+  "filters": {
+    "allTags": "All tags",
+    "searchPlaceholder": "Search…"
+  },
+  "form": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "createTitle": "Create entry",
+    "editTitle": "Edit entry — {id}"
+  },
+  "list": {
+    "delete": "Delete entry",
+    "download": "Download this entry (.md)",
+    "edit": "Edit entry",
+    "empty": "No entries yet.",
+    "loading": "Loading…",
+    "title": "Documents",
+    "view": "View content"
+  },
+  "messages": {
+    "confirmDelete": "Delete \"{id}\"?",
+    "deleted": "Deleted",
+    "downloadPartial": "Downloaded, but {count} entries had no content (see the notes in the file).",
+    "saved": "Saved {id}",
+    "uploaded": "Uploaded {id}"
+  },
+  "scopeTabs": {
+    "global": "Global",
+    "project": "Project",
+    "system": "System"
+  },
+  "tags": {
+    "add": "Add a tag",
+    "colors": {
+      "amber": "Amber",
+      "blue": "Blue",
+      "green": "Green",
+      "pink": "Pink",
+      "purple": "Purple",
+      "red": "Red",
+      "slate": "Slate",
+      "teal": "Teal"
+    },
+    "created": "Created tag {tag}",
+    "dialog": {
+      "color": "Colour",
+      "createTitle": "Add a tag",
+      "description": "Description",
+      "editTitle": "Edit tag — {tag}",
+      "name": "Tag name",
+      "namePlaceholder": "a-z, 0-9, \"-\" and \"_\" only",
+      "renameHint": "Empty = keep the name. Renaming rewrites the tag on every entry carrying it.",
+      "renameTo": "Rename to",
+      "scope": "Scope"
+    },
+    "edit": "Edit the tag (name, colour)",
+    "empty": "No tag yet.",
+    "renamed": "Updated {count} entries",
+    "renamedNoMeta": "Renamed {count} entries; the tag kept its previous colour because the new one was not saved: {error}",
+    "title": "Tags",
+    "updated": "Updated tag {tag}"
+  },
+  "title": "Knowledge",
+  "upload": {
+    "file": "File (.md, .txt)",
+    "scope": "Scope",
+    "tags": "Tags (comma-separated)",
+    "title": "Upload a document",
+    "uploading": "Uploading…"
+  },
+  "viewer": {
+    "empty": "Pick an entry on the left to view it",
+    "loading": "Loading entry content…"
+  }
+}

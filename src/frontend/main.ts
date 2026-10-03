@@ -4,8 +4,9 @@ import './styles/main.scss'
 // Auto-load features/<name>/styles/index.scss — new features need no main.scss edit.
 import.meta.glob('../features/*/styles/index.scss', { eager: true })
 import { useAppSettings } from './composables/useAppSettings'
+import { initLocale } from './composables/useLocaleMessages'
 import { applyThemeToDocument, watchSystemTheme } from './lib/theme'
-import { resolveThemePreference, resolveLocale } from './configs/appSettings'
+import { resolveThemePreference } from './configs/appSettings'
 import { installPlugins, setI18nLocale } from './plugins'
 import { createContainer } from './container'
 import { createModeRegistry, modeRegistryToken, type ModeRegistry } from './shell/modeRegistry'
@@ -14,8 +15,6 @@ import { createSettingsModeAccess } from '../features/settings/scripts/settingsM
 
 const { settings, load } = useAppSettings()
 load()
-const locale = resolveLocale(settings.value)
-setI18nLocale(locale)
 
 watchSystemTheme(() => {
   if (resolveThemePreference(settings.value) === 'system') {
@@ -40,4 +39,18 @@ container.register(modeRegistryToken, () => modeRegistry)
 const modeAccess = createSettingsModeAccess(modeRegistry)
 container.register(modeAccessToken, () => modeAccess)
 
-installPlugins(createApp(App), { i18n: { locale }, container }).mount('#app')
+/**
+ * Boot async CHỈ vì chuỗi dịch: `initLocale` trả ngay khi cache có chữ, và chỉ chặn
+ * đúng một lượt fetch ở lần chạy đầu (cache rỗng). API chết → rơi về bản build-time,
+ * app vẫn có chữ.
+ *
+ * Mọi thứ đồng bộ ở trên — glob `registerMode.ts`, mode registry, container — CỐ Ý ở
+ * lại module scope: chúng đang được dựa vào là chạy xong trước `mount()`.
+ */
+async function bootstrap(): Promise<void> {
+  const locale = await initLocale(settings.value)
+  setI18nLocale(locale)
+  installPlugins(createApp(App), { i18n: { locale }, container }).mount('#app')
+}
+
+void bootstrap()

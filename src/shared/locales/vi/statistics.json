@@ -1,0 +1,141 @@
+{
+  "addCard": "Thêm thẻ (chart / report)",
+  "addChart": "Thêm chart",
+  "chartType": {
+    "bar": "Cột",
+    "label": "Loại biểu đồ",
+    "line": "Đường",
+    "pie": "Tròn"
+  },
+  "drill": {
+    "clear": "Nhấn để xoá lọc từ bậc này trở xuống",
+    "label": "Đường drill-down",
+    "project": "Project",
+    "step": "Step",
+    "task": "Task"
+  },
+  "emptyChart": "Không có dữ liệu usage trong khoảng đã chọn.",
+  "groupBy": {
+    "date": "Theo ngày",
+    "job": "Job",
+    "label": "Nhóm theo",
+    "model": "Model",
+    "project": "Project",
+    "provider": "Provider",
+    "source": "Nguồn (main/subagent)",
+    "step": "Step",
+    "task": "Task"
+  },
+  "kind": {
+    "chart": "Biểu đồ",
+    "label": "Loại thẻ",
+    "report": "Báo cáo xếp hạng"
+  },
+  "loading": "Đang tải…",
+  "metric": {
+    "cacheReadTokens": "Cache read",
+    "cacheWriteTokens": "Cache write",
+    "inputTokens": "Input tokens",
+    "label": "Chỉ số",
+    "outputTokens": "Output tokens",
+    "totalTokens": "Total tokens"
+  },
+  "noAttribution": "(không gắn nhãn)",
+  "numberFormat": {
+    "compact": "Rút gọn (1,234.5K)",
+    "full": "Đầy đủ (1,234,567)",
+    "label": "Định dạng số"
+  },
+  "other": "(còn lại)",
+  "range": {
+    "all": "Tất cả",
+    "days": "{n} ngày",
+    "label": "Khoảng thời gian"
+  },
+  "refresh": "Tải lại",
+  "removeChart": "Bỏ chart này",
+  "report": {
+    "direction": "Xếp theo",
+    "directionBottom": "Nhỏ nhất",
+    "directionTop": "Lớn nhất",
+    "footer": "{n} mục · lớn nhất {max} · trung bình {avg}",
+    "topN": "Top N"
+  },
+  "scope": {
+    "all": "Tất cả project",
+    "label": "Phạm vi",
+    "project": "Project hiện tại"
+  },
+  "settings": {
+    "addColor": "Thêm màu",
+    "autoLabel": "Tự động theo chỉ số",
+    "chartColor": "Màu biểu đồ",
+    "chartTitle": "Tiêu đề chart (để trống thì ẩn)",
+    "close": "Đóng",
+    "done": "Xong",
+    "height": "Chiều cao (px)",
+    "hint": "Thay đổi áp dụng ngay. Chỉ gồm thuộc tính mà trình render hiện tại (mermaid) hỗ trợ.",
+    "noTitle": "(không hiển thị tiêu đề)",
+    "none": "(không)",
+    "open": "Thiết lập biểu đồ",
+    "pieColors": "Bảng màu section",
+    "pieShowLabels": "Nhãn section (legend)",
+    "pieShowPercent": "Phần trăm trên section",
+    "pieShowValues": "Giá trị trên section",
+    "removeColor": "Bỏ màu này",
+    "reset": "Mặc định",
+    "resizeHint": "Kéo để đổi kích thước biểu đồ",
+    "title": "Thiết lập biểu đồ",
+    "width": "Chiều rộng (px)",
+    "xAxisTitle": "Tiêu đề trục X",
+    "yAxisLabel": "Nhãn trục Y"
+  },
+  "stats": {
+    "avgDuration": "Avg thời lượng",
+    "avgTokens": "Avg",
+    "maxDuration": "Max thời lượng",
+    "maxTokens": "Max",
+    "minDuration": "Min thời lượng",
+    "minTokens": "Min"
+  },
+  "subtitle": "Token usage theo project / task / step / job — tổng hợp từ logs usage",
+  "summary": {
+    "colAvg": "Trung bình",
+    "colMax": "Lớn nhất",
+    "colMetric": "Chỉ số (tokens)",
+    "colMin": "Nhỏ nhất",
+    "entryHint": "Entry = 1 dòng usage log; một job có thể ghi nhiều entry (snapshot tăng dần)",
+    "overviewLine": "{entries} lần ghi nhận · nhóm theo {dimension} · tổng {tokens} tokens · {jobs} jobs",
+    "rowEntryDuration": "Thời lượng mỗi lần ghi nhận",
+    "rowEntryTokens": "Tổng token mỗi lần ghi nhận (entry)",
+    "rowMetric": "{metric} mỗi {dimension}",
+    "rowStepTokens": "Tổng token mỗi step",
+    "title": "Tổng quan thống kê"
+  },
+  "table": {
+    "cacheRead": "Cache read",
+    "cacheWrite": "Cache write",
+    "drillHint": "Nhấn để xem chi tiết cấp dưới",
+    "duration": "Thời lượng",
+    "entries": "Mục",
+    "input": "Input",
+    "jobs": "Jobs",
+    "key": "Nhóm",
+    "lastTs": "Cuối cùng",
+    "output": "Output",
+    "searchPlaceholder": "Tìm nhóm (tên task/step/model…)",
+    "shown": "Đang xem {shown}/{total} nhóm",
+    "total": "Total"
+  },
+  "title": "Thống kê",
+  "totals": {
+    "duration": "Thời lượng tích luỹ",
+    "entries": "Mục log",
+    "jobs": "Jobs",
+    "tokens": "Tổng token"
+  },
+  "truncated": "Đã giới hạn 200 group nặng nhất — thu hẹp khoảng thời gian để xem đủ.",
+  "zoomIn": "Phóng to",
+  "zoomOut": "Thu nhỏ",
+  "zoomReset": "Về kích thước gốc"
+}

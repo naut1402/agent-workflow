@@ -1,0 +1,13 @@
+{
+  "icon": {
+    "title": "Running jobs"
+  },
+  "list": {
+    "empty": "No jobs running.",
+    "jobCount": "{n} running",
+    "title": "Running jobs",
+    "truncated": "And {n} more tasks…",
+    "unknownStep": "Unknown step",
+    "unknownTask": "Unassigned"
+  }
+}

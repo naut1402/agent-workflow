@@ -1,0 +1,86 @@
+{
+  "artifactNode": {
+    "exists": "Đã có",
+    "fromStep": "→ {stepId}",
+    "knowledgeTitle": "Knowledge",
+    "missing": "Thiếu",
+    "producesTitle": "Đầu ra"
+  },
+  "brand": "Dev Team",
+  "copy": {
+    "done": "Đã copy",
+    "fail": "Copy thất bại"
+  },
+  "errors": {
+    "archiveTask": "Không thể lưu trữ task (mã lỗi {status})",
+    "cleanWorktree": "Không thể dọn worktree (mã lỗi {status})",
+    "deleteTask": "Không thể xoá task (mã lỗi {status})",
+    "renameTask": "Không thể đổi tên task (mã lỗi {status})",
+    "repairTaskState": "Không thể vá state task (mã lỗi {status})",
+    "saveCustomAgent": "Không lưu được custom agent (server không trả về tên).",
+    "updateTaskStatus": "Không thể cập nhật trạng thái task (mã lỗi {status})"
+  },
+  "folderPicker": {
+    "cancel": "Huỷ",
+    "close": "Đóng",
+    "empty": "Không có thư mục con.",
+    "loading": "Đang tải…",
+    "roots": "Ổ đĩa / gốc",
+    "select": "Chọn thư mục này",
+    "selectDirRequired": "Hãy mở một thư mục trước khi chọn.",
+    "title": "Chọn thư mục",
+    "up": "Lên thư mục cha"
+  },
+  "language": {
+    "desc": "Chọn ngôn ngữ hiển thị của giao diện.",
+    "names": {
+      "en": "English",
+      "vi": "Tiếng Việt"
+    },
+    "title": "Ngôn ngữ"
+  },
+  "markdownView": {
+    "collapseAll": "Thu gọn tất cả",
+    "expandAll": "Mở tất cả",
+    "metadata": "Metadata",
+    "toBlock": "Xem theo block",
+    "toFull": "Xem toàn văn",
+    "untitledSection": "Phần không tiêu đề"
+  },
+  "modeDesc": {
+    "agentEditor": "Quản lý custom agent và template agent.",
+    "automations": "Lịch chạy và automation theo sự kiện.",
+    "editor": "Soạn và sửa pipeline cho project hoặc từng task.",
+    "knowledge": "Kho tri thức dùng chung cho agent.",
+    "logs": "Nhật ký audit, request, jobs và event.",
+    "monitor": "Theo dõi task và pipeline đang chạy.",
+    "quickAction": "Chạy nhanh một agent lẻ ngoài pipeline.",
+    "runner": "Cấu hình runner và provider chạy agent.",
+    "statistics": "Thống kê usage, thời gian chạy và chi phí."
+  },
+  "modes": {
+    "agentEditor": "Agent Editor",
+    "automations": "Automations",
+    "knowledge": "Knowledge",
+    "logs": "Nhật ký",
+    "monitor": "Monitor",
+    "pipelineEditor": "Pipeline Editor",
+    "quickAction": "Quick Action",
+    "runner": "Runner",
+    "runnerConfig": "Runner Config",
+    "statistics": "Thống kê"
+  },
+  "select": {
+    "empty": "Không có tuỳ chọn."
+  },
+  "sidebar": {
+    "collapse": "Thu gọn sidebar",
+    "collapseSubSidebar": "Thu gọn panel",
+    "connected": "live",
+    "disconnected": "disconnected",
+    "expand": "Mở sidebar",
+    "expandSubSidebar": "Mở panel",
+    "settings": "Cài đặt",
+    "version": "Phiên bản {version}"
+  }
+}

@@ -1,0 +1,141 @@
+{
+  "addCard": "Add card (chart / report)",
+  "addChart": "Add chart",
+  "chartType": {
+    "bar": "Bar",
+    "label": "Chart type",
+    "line": "Line",
+    "pie": "Pie"
+  },
+  "drill": {
+    "clear": "Click to clear this filter and below",
+    "label": "Drill-down path",
+    "project": "Project",
+    "step": "Step",
+    "task": "Task"
+  },
+  "emptyChart": "No usage data in the selected range.",
+  "groupBy": {
+    "date": "By day",
+    "job": "Job",
+    "label": "Group by",
+    "model": "Model",
+    "project": "Project",
+    "provider": "Provider",
+    "source": "Source (main/subagent)",
+    "step": "Step",
+    "task": "Task"
+  },
+  "kind": {
+    "chart": "Chart",
+    "label": "Card type",
+    "report": "Ranking report"
+  },
+  "loading": "Loading…",
+  "metric": {
+    "cacheReadTokens": "Cache read",
+    "cacheWriteTokens": "Cache write",
+    "inputTokens": "Input tokens",
+    "label": "Metric",
+    "outputTokens": "Output tokens",
+    "totalTokens": "Total tokens"
+  },
+  "noAttribution": "(unattributed)",
+  "numberFormat": {
+    "compact": "Compact (1,234.5K)",
+    "full": "Full (1,234,567)",
+    "label": "Number format"
+  },
+  "other": "(others)",
+  "range": {
+    "all": "All",
+    "days": "{n} days",
+    "label": "Time range"
+  },
+  "refresh": "Refresh",
+  "removeChart": "Remove this chart",
+  "report": {
+    "direction": "Rank by",
+    "directionBottom": "Smallest",
+    "directionTop": "Largest",
+    "footer": "{n} items · max {max} · average {avg}",
+    "topN": "Top N"
+  },
+  "scope": {
+    "all": "All projects",
+    "label": "Scope",
+    "project": "Current project"
+  },
+  "settings": {
+    "addColor": "Add color",
+    "autoLabel": "Auto from metric",
+    "chartColor": "Chart color",
+    "chartTitle": "Chart title (leave empty to hide)",
+    "close": "Close",
+    "done": "Done",
+    "height": "Height (px)",
+    "hint": "Changes apply immediately. Limited to properties supported by the current renderer (mermaid).",
+    "noTitle": "(no title shown)",
+    "none": "(none)",
+    "open": "Chart settings",
+    "pieColors": "Section palette",
+    "pieShowLabels": "Section labels (legend)",
+    "pieShowPercent": "Percentages on sections",
+    "pieShowValues": "Values on sections",
+    "removeColor": "Remove this color",
+    "reset": "Defaults",
+    "resizeHint": "Drag to resize the chart",
+    "title": "Chart settings",
+    "width": "Width (px)",
+    "xAxisTitle": "X-axis title",
+    "yAxisLabel": "Y-axis label"
+  },
+  "stats": {
+    "avgDuration": "Avg duration",
+    "avgTokens": "Avg",
+    "maxDuration": "Max duration",
+    "maxTokens": "Max",
+    "minDuration": "Min duration",
+    "minTokens": "Min"
+  },
+  "subtitle": "Token usage by project / task / step / job — aggregated from usage logs",
+  "summary": {
+    "colAvg": "Average",
+    "colMax": "Max",
+    "colMetric": "Metric (tokens)",
+    "colMin": "Min",
+    "entryHint": "Entry = 1 usage log line; a job can record several entries (incremental snapshots)",
+    "overviewLine": "{entries} recorded entries · grouped by {dimension} · total {tokens} tokens · {jobs} jobs",
+    "rowEntryDuration": "Duration per recorded entry",
+    "rowEntryTokens": "Total tokens per recorded entry",
+    "rowMetric": "{metric} per {dimension}",
+    "rowStepTokens": "Total tokens per step",
+    "title": "Statistics overview"
+  },
+  "table": {
+    "cacheRead": "Cache read",
+    "cacheWrite": "Cache write",
+    "drillHint": "Click to drill down",
+    "duration": "Duration",
+    "entries": "Entries",
+    "input": "Input",
+    "jobs": "Jobs",
+    "key": "Group",
+    "lastTs": "Last",
+    "output": "Output",
+    "searchPlaceholder": "Search groups (task/step/model…)",
+    "shown": "Showing {shown}/{total} groups",
+    "total": "Total"
+  },
+  "title": "Statistics",
+  "totals": {
+    "duration": "Accumulated duration",
+    "entries": "Entries",
+    "jobs": "Jobs",
+    "tokens": "Total tokens"
+  },
+  "truncated": "Capped at the 200 largest groups — narrow the time range to see more.",
+  "zoomIn": "Zoom in",
+  "zoomOut": "Zoom out",
+  "zoomReset": "Reset zoom"
+}

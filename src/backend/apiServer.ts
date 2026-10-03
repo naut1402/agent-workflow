@@ -70,9 +70,16 @@ export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
   app.use('/api/*', createCorsMiddleware(() => loadSecurityConfig().cors))
   app.use('/api/*', createRateLimitMiddleware(() => loadSecurityConfig().rateLimit))
   // Route orchestrator dùng token riêng theo job (không phải Authorization) nên loại khỏi JWT dashboard.
+  // Route i18n phải mở: màn đăng nhập cần chuỗi dịch TRƯỚC khi có token. Payload chỉ là
+  // chuỗi UI công khai, và vẫn nằm sau CORS + rate-limit ở trên.
   const jwtMiddleware = createJwtMiddleware()
   app.use('/api/*', async (c, next) => {
-    if (c.req.path.startsWith('/api/orchestrator/')) return next()
+    if (
+      c.req.path.startsWith('/api/orchestrator/') ||
+      c.req.path.startsWith('/api/i18n/')
+    ) {
+      return next()
+    }
     return jwtMiddleware(c, next)
   })
 

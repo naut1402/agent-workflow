@@ -1,0 +1,131 @@
+{
+  "catalog": {
+    "filterAgentSource": "Filter agents by source",
+    "filterSkillSource": "Filter skills by source",
+    "noAgents": "No agents found",
+    "noSkills": "No skills found",
+    "searchAgents": "Search agents…",
+    "searchSkills": "Search skills…",
+    "sourceAll": "All sources",
+    "sourceCursor": "Cursor",
+    "sourceDashboard": "Dashboard",
+    "sourcePlugin": "Plugin",
+    "sourceProject": "Project",
+    "sourceRepo": "Repo",
+    "sourceUser": "User"
+  },
+  "docView": {
+    "close": "Close",
+    "loadError": "Failed to load content.",
+    "loading": "Loading content…"
+  },
+  "orchestrator": {
+    "checkbox": "Add orchestrator node",
+    "checkboxTitle": "Add the orchestrator node: it decides when each step starts, instead of the pipeline chaining steps itself. Unticking is the only way to remove the node.",
+    "editButton": "Edit orchestrator node",
+    "editTitle": "Orchestrator configuration",
+    "knowledgeLabel": "Related knowledge",
+    "noAgent": "no agent selected",
+    "nodeLabel": "Orchestrator",
+    "nodeTitle": "Orchestrator node — remove it by unticking \"Add orchestrator node\"",
+    "systemPromptLabel": "Additional instructions (system prompt)",
+    "systemPromptPlaceholder": "e.g. Review has PO → automatically go back to the related step..."
+  },
+  "preview": {
+    "status": {
+      "active": "▶ Running",
+      "done": "✓ Done",
+      "hitl": "⏸ HITL",
+      "pending": "⏳ Waiting"
+    },
+    "waitingHitl": "— waiting for HITL"
+  },
+  "rules": {
+    "categoryAll": "All categories",
+    "empty": "No rules found",
+    "emptyFiltered": "No rules match the filter",
+    "filterCategory": "Filter rules by category",
+    "scopeGlobal": "Global",
+    "scopeProject": "Project"
+  },
+  "scope": {
+    "manualEntry": "Enter manually…",
+    "selectTask": "— Select task —",
+    "taskIdPlaceholder": "Task ID"
+  },
+  "sections": {
+    "agents": "Agents",
+    "agentsOpenTitle": "Agents — open panel",
+    "rules": "Rules",
+    "rulesOpenTitle": "Rules — open panel",
+    "skills": "Skills",
+    "skillsOpenTitle": "Skills — open panel"
+  },
+  "stepConfig": {
+    "add": "Add",
+    "agent": "Agent",
+    "agentPlaceholder": "plugin:agent-name",
+    "apply": "Apply",
+    "blocking": "Blocking (requires a human even with --auto-review)",
+    "cancel": "Cancel",
+    "close": "Close",
+    "gateId": "Gate ID",
+    "hitlAuto": "Auto",
+    "hitlGate": "HITL gate",
+    "hitlManual": "Manual",
+    "hitlNone": "None",
+    "knowledgeInputs": "Knowledge inputs",
+    "knowledgePick": "Pick knowledge…",
+    "model": "Model",
+    "modelDefault": "System default",
+    "modelHint": "Leave empty to use the default runner",
+    "modelUnknown": "{id} (no longer available)",
+    "name": "Name",
+    "namePlaceholder": "Step name",
+    "optionalDocReview": "Optional doc review at this gate",
+    "produces": "Produces (artifacts)",
+    "producesPlaceholder": "e.g. investigate.md",
+    "title": "Configure step"
+  },
+  "tabs": {
+    "ariaLabel": "Pipeline kind being edited",
+    "profile": "Profile",
+    "task": "Task"
+  },
+  "target": {
+    "autoLayout": "Auto-layout",
+    "confirmDeleteProfile": "Delete profile \"{name}\"? This cannot be undone.",
+    "confirmDiscardChanges": "The canvas has unsaved changes. Load another pipeline and discard them?",
+    "confirmOverwriteProfile": "Profile \"{name}\" already exists. Overwrite it with the selected file?",
+    "confirmSetDefault": "Write the pipeline on the canvas to the default pipeline.yaml? The previous content is replaced.",
+    "defaultSet": "✓ Set as default",
+    "deleteProfile": "Delete profile",
+    "downloadProfile": "Download",
+    "downloadProfileTitle": "Download this profile to your machine (.yaml)",
+    "hitlPendingWarning": "⚠ Task is waiting at a gate — saving the pipeline cancels that gate",
+    "importInvalidSteps": "File is missing a \"steps\" list",
+    "importInvalidYaml": "File is not valid YAML",
+    "importProfile": "Import from file",
+    "importProfileTitle": "Load a profile from a .yaml file on your machine",
+    "needProfileName": "✗ Enter a profile name before saving",
+    "needTask": "✗ Select a task before saving",
+    "preview": "Preview",
+    "profileLabel": "Profile",
+    "save": "Save",
+    "saveAsPlaceholder": "Profile name…",
+    "saveTitle": "Save the pipeline on the canvas",
+    "saved": "✓ Saved",
+    "saving": "Saving…",
+    "selectProfile": "— Select profile —",
+    "setDefault": "Set as default",
+    "setDefaultTitle": "Set this pipeline as the default (writes pipeline.yaml)",
+    "stop": "Stop",
+    "taskLabel": "Task",
+    "taskProfileLabel": "Profile applied to task",
+    "taskProfileNone": "— Keep current pipeline —",
+    "taskWriteBlocked": "✗ Task is archived or completed"
+  },
+  "toolbar": {
+    "fanOutWarning": "Orchestrator runs sequentially — parallel branches are ordered topologically on save"
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "artifactNode": {
+    "exists": "Exists",
+    "fromStep": "→ {stepId}",
+    "knowledgeTitle": "Knowledge",
+    "missing": "Missing",
+    "producesTitle": "Artifacts"
+  },
+  "brand": "Dev Team",
+  "copy": {
+    "done": "Copied",
+    "fail": "Copy failed"
+  },
+  "errors": {
+    "archiveTask": "Could not archive task (error {status})",
+    "cleanWorktree": "Could not clean the worktree (error {status})",
+    "deleteTask": "Could not delete task (error {status})",
+    "renameTask": "Could not rename task (error {status})",
+    "repairTaskState": "Could not repair task state (error {status})",
+    "saveCustomAgent": "Could not save custom agent (server returned no name).",
+    "updateTaskStatus": "Could not update task status (error {status})"
+  },
+  "folderPicker": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "empty": "No subfolders.",
+    "loading": "Loading…",
+    "roots": "Drives / roots",
+    "select": "Select this folder",
+    "selectDirRequired": "Open a folder before selecting.",
+    "title": "Choose folder",
+    "up": "Go up"
+  },
+  "language": {
+    "desc": "Choose the display language of the interface.",
+    "names": {
+      "en": "English",
+      "vi": "Tiếng Việt"
+    },
+    "title": "Language"
+  },
+  "markdownView": {
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
+    "metadata": "Metadata",
+    "toBlock": "Switch to block view",
+    "toFull": "Switch to full view",
+    "untitledSection": "Untitled section"
+  },
+  "modeDesc": {
+    "agentEditor": "Manage custom agents and agent templates.",
+    "automations": "Scheduled and event-driven automations.",
+    "editor": "Author and edit pipelines per project or per task.",
+    "knowledge": "Shared knowledge base for agents.",
+    "logs": "Audit, request, job and event logs.",
+    "monitor": "Watch running tasks and pipelines.",
+    "quickAction": "Run a single agent outside a pipeline.",
+    "runner": "Configure the runner and agent providers.",
+    "statistics": "Usage, runtime and cost statistics."
+  },
+  "modes": {
+    "agentEditor": "Agent Editor",
+    "automations": "Automations",
+    "knowledge": "Knowledge",
+    "logs": "Logs",
+    "monitor": "Monitor",
+    "pipelineEditor": "Pipeline Editor",
+    "quickAction": "Quick Action",
+    "runner": "Runner",
+    "runnerConfig": "Runner Config",
+    "statistics": "Statistics"
+  },
+  "select": {
+    "empty": "No options."
+  },
+  "sidebar": {
+    "collapse": "Collapse sidebar",
+    "collapseSubSidebar": "Collapse panel",
+    "connected": "live",
+    "disconnected": "disconnected",
+    "expand": "Expand sidebar",
+    "expandSubSidebar": "Expand panel",
+    "settings": "Settings",
+    "version": "Version {version}"
+  }
+}

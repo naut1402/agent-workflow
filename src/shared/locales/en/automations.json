@@ -1,0 +1,193 @@
+{
+  "action": {
+    "add": "Add step",
+    "body": "Body (optional)",
+    "bodyPlaceholder": "Request body content…",
+    "create": "Create a new task",
+    "empty": "No action steps yet — click \"+ Add step\" to add one.",
+    "existing": "Run an existing task",
+    "header": "Actions (sequential steps)",
+    "headers": "Headers (optional)",
+    "headersHint": "One header per line, \"Key: Value\"",
+    "headersPlaceholder": "Content-Type: application/json",
+    "httpRequest": "HTTP request",
+    "method": "Method",
+    "mode": "Run mode",
+    "params": "Params (argv, optional)",
+    "paramsPlaceholder": "e.g. --flag value",
+    "profileName": "Pipeline profile (optional)",
+    "profileNamePlaceholder": "Pick or type a profile name",
+    "prompt": "Task prompt (request.md)",
+    "promptPlaceholder": "Describe what the task should do…",
+    "promptRequired": "Create-step needs a prompt",
+    "remove": "Remove this step",
+    "runCommand": "Run command",
+    "runTaskKind": "Run task",
+    "runnerId": "Runner (optional)",
+    "runnerIdPlaceholder": "Pick or type a runner — defaults to any available",
+    "runnerRequired": "Pick a runner",
+    "sequenceHint": "Steps run in order — a step waits for the previous one and can reference its output via the steps.N.stdout variable (see \"?\" on each step).",
+    "stepDescription": "Step description (optional)",
+    "stepNamePlaceholder": "Step {n} name",
+    "targetProject": "Target project (optional)",
+    "targetProjectDefaultTag": "default",
+    "targetProjectHint": "Leave empty to run this step on the current project. Pick another project to create/run the task there.",
+    "targetProjectInvalid": "Invalid target project",
+    "targetProjectPlaceholder": "Defaults to the current project",
+    "taskId": "Task ID",
+    "taskIdInvalid": "Invalid task id",
+    "taskIdPlaceholder": "Pick or type a task id",
+    "taskIdRequired": "Existing-step needs a Task ID",
+    "url": "URL",
+    "urlHttpsOnly": "Only https URLs are allowed",
+    "urlPlaceholder": "https://example.com/webhook",
+    "urlRequired": "URL is required"
+  },
+  "create": "New automation",
+  "empty": "No automations yet",
+  "emptyHint": "Create a rule to run tasks at a set time, on an interval, by cron, or when a project event fires — multi-step chains where later steps can use earlier outputs.",
+  "eventNames": {
+    "entity": {
+      "created": "Entity created",
+      "deleted": "Entity deleted",
+      "updated": "Entity updated"
+    },
+    "hitl": {
+      "pending": "HITL approval pending",
+      "resolved": "HITL resolved"
+    },
+    "job": {
+      "awaiting_recovery": "Job awaiting recovery",
+      "cancelled": "Job cancelled",
+      "failed": "Job failed",
+      "finished": "Job finished",
+      "queued": "Job queued",
+      "recovered": "Job recovered",
+      "retry_scheduled": "Job retry scheduled",
+      "started": "Job started"
+    },
+    "task": {
+      "advanced": "Task advanced",
+      "created": "Task created"
+    },
+    "usage": {
+      "recorded": "Token usage recorded"
+    },
+    "webhook": {
+      "received": "Webhook received",
+      "triggered": "Webhook fired"
+    }
+  },
+  "form": {
+    "actionRequired": "At least one action step is required",
+    "cancel": "Cancel",
+    "close": "Close",
+    "createTitle": "New automation",
+    "cronRequired": "Cron expression is required",
+    "description": "Description (optional)",
+    "editTitle": "Edit automation",
+    "enabled": "Enable right after saving",
+    "eventTypeRequired": "Pick an event type",
+    "intervalRequired": "Repeat interval must be at least 1 minute",
+    "name": "Name",
+    "namePlaceholder": "e.g. Nightly build check",
+    "nameRequired": "Name is required",
+    "save": "Save",
+    "saving": "Saving…",
+    "timeAtInvalid": "Invalid start time",
+    "timeAtRequired": "Pick a start time",
+    "triggerRequired": "At least one trigger is required"
+  },
+  "history": {
+    "allRules": "All automations",
+    "empty": "No runs yet",
+    "loading": "Loading…",
+    "noInput": "(no input)",
+    "noResult": "(no result yet)",
+    "outcome": "Outcome",
+    "ruleColumn": "Automation",
+    "ruleFilter": "Automation",
+    "source": "Source",
+    "stepInput": "Input",
+    "stepResult": "Result",
+    "time": "When"
+  },
+  "list": {
+    "colActions": "Actions",
+    "colName": "Name",
+    "colRun": "Next/last run",
+    "colSteps": "Steps",
+    "colTrigger": "Trigger"
+  },
+  "loadError": "Failed to load automations",
+  "outcome": {
+    "failed": "failed",
+    "running": "running",
+    "skipped": "skipped (task busy)",
+    "succeeded": "succeeded"
+  },
+  "pending": {
+    "webhook": "Webhooks (Slack/GitHub calling in) and integration triggers (PR/issue comments, mentions, CI/CD failures, Slack DMs) arrive in a later phase — issue #233."
+  },
+  "refresh": "Refresh",
+  "rule": {
+    "delete": "Delete automation",
+    "deleteConfirm": "Delete automation \"{name}\"? Its run history is deleted too.",
+    "disabled": "Disabled",
+    "edit": "Edit automation",
+    "enabled": "Enabled",
+    "history": "Run history",
+    "inFlight": "Running…",
+    "lastRun": "Last run: {time}",
+    "neverRun": "Never run",
+    "nextRun": "Next run: {time}",
+    "noNextRun": "No upcoming run",
+    "oneShotDone": "One-shot already fired",
+    "runNow": "Run now",
+    "toggleOff": "Disable automation",
+    "toggleOn": "Enable automation"
+  },
+  "runSource": {
+    "event": "event",
+    "manual": "manual",
+    "schedule": "schedule"
+  },
+  "subtitle": "Trigger (schedule / cron / event) → sequential run-task steps",
+  "tabs": {
+    "history": "Execution history",
+    "list": "List"
+  },
+  "title": "Automations",
+  "trigger": {
+    "add": "Add trigger",
+    "anyMatchHint": "The rule fires when ANY trigger matches — add more sources with the \"+\" button below.",
+    "cron": "Cron",
+    "cronExpr": "Cron expression (5 fields)",
+    "cronHint": "minute hour day month weekday — e.g. \"0 9 * * 1-5\" = 9am on weekdays",
+    "cronInvalid": "Invalid cron expression",
+    "event": "Event",
+    "eventType": "Event type",
+    "eventTypeHint": "Only matches events emitted by this project",
+    "eventTypePlaceholder": "Pick or type an event code, e.g. job.failed",
+    "header": "Triggers (firing sources)",
+    "interval": "Interval",
+    "intervalDay": "days",
+    "intervalEvery": "Repeat every",
+    "intervalHour": "hours",
+    "intervalMinute": "minutes",
+    "once": "Once",
+    "remove": "Remove this trigger",
+    "startAt": "Start at",
+    "summaryCron": "Cron: {expr}",
+    "summaryEvent": "On event {type}",
+    "summaryInterval": "Every {value} {unit}",
+    "summaryTime": "Once at {time}",
+    "timeAt": "Run at",
+    "timer": "Time"
+  },
+  "vars": {
+    "copied": "Copied!",
+    "hint": "Click a variable to copy, then paste it into any input (prompt, task, profile, runner…):",
+    "toggle": "Show referenceable variables"
+  }
+}

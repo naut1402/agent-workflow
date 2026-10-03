@@ -1,3 +1,4 @@
+import { reactive } from 'vue'
 import type { App, InjectionKey, Plugin } from 'vue'
 import { createI18n } from 'vue-i18n'
 import type { LocalePreference } from '../../configs/appSettings'
@@ -35,10 +36,16 @@ export type I18nHelpers = {
   registry: LocaleRegistry
 }
 
-const localeRegistry: LocaleRegistry = {
+/**
+ * `reactive` chứ không phải plain object: `registerLocale()` mutate `locales` lúc chạy
+ * (manifest server về sau khi app đã mount), và consumer đọc nó trong `computed` —
+ * plain object thì computed không có dependency nào, cache vĩnh viễn, locale mới
+ * KHÔNG BAO GIỜ hiện ra cho tới khi reload.
+ */
+const localeRegistry: LocaleRegistry = reactive({
   locales: [],
   defaultLocale: DEFAULT_LOCALE,
-}
+})
 
 export function getLocaleRegistry(): LocaleRegistry {
   return localeRegistry
@@ -55,7 +62,17 @@ localeRegistry.locales = initialLocales.includes('en')
   ? ['vi', 'en', ...initialLocales.filter((l) => l !== 'vi' && l !== 'en')]
   : initialLocales
 
-export const SUPPORTED_LOCALES: readonly AppLocale[] = ['vi', 'en']
+/**
+ * Mã locale đang hỗ trợ, đọc tại thời điểm gọi — thêm ngôn ngữ thứ ba là thêm thư mục
+ * JSON, không sửa hằng số nào. Trả **bản sao** nên caller không mutate được registry.
+ *
+ * Là hàm chứ không phải hằng: `const` chỉ chụp được giá trị lúc module load, mà
+ * `registerLocale()` còn bổ sung locale sau đó. Gọi trong `computed` thì reactive
+ * (xem `localeRegistry`).
+ */
+export function supportedLocales(): readonly AppLocale[] {
+  return [...localeRegistry.locales]
+}
 
 export const i18n = createI18n({
   legacy: false,
