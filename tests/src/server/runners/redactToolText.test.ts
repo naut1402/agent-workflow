@@ -257,23 +257,76 @@ describe('Nhóm F · §5.F.4 — thứ tự rule và ngưỡng', () => {
 
   test('TC-F27: 🆕 ngưỡng `token` trần — ca ĐẠT ngưỡng', () => {
     // 8 ký tự · có chữ số · không `/` · không đuôi file.
-    const out = redactToolText(`--data 'token=ab12cdef'`)
+    const out = redactToolText(`token ab12cdef`)
     expect(out).not.toContain('ab12cdef')
     expect(out).toContain('[redacted]')
+    // Dạng `token=…` không đi qua ngưỡng này — xem TC-F28.
+    expect(redactToolText(`--data 'token=ab12cdef'`)).toBe(`--data 'token=[redacted]'`)
   })
 
-  test('TC-F28: 🆕 ⚠️ ngưỡng `token` trần — 4 ca cận biên, mỗi ca phá đúng 1 điều kiện', () => {
+  test('TC-F28: 🔧 ngưỡng `token` CHỈ áp cho dạng cách bởi dấu cách, `token=` redact vô điều kiện', () => {
+    // ⚠️ Spec gốc chờ cả 4 ca `token=<value yếu>` giữ NGUYÊN VĂN. Đó là spec cho
+    // phép rò: `token` là khoá nhạy cảm nên `KEY_VALUE_RE` phải redact bất kể
+    // value trông "yếu" tới đâu — một PAT ngắn vẫn là PAT. Case sửa theo hành vi
+    // an toàn, KHÔNG nới code cho test cũ xanh.
+    //
+    // Ngưỡng `looksLikeCredential` tồn tại cho dạng `token <value>` (AUTH_SCHEME_RE),
+    // nơi `token` còn là một từ tiếng Anh bình thường — `grep -n token schema.ts`
+    // không được thành `token [redacted]`.
+    const spaced = [
+      'token ab12cde', // 7 ký tự
+      'token abcdefgh', // không chữ số
+      'token ab12/cdef', // có `/`
+      'token ab12cd.ts', // có đuôi file
+    ]
     // Bốn điều kiện là AND. Chấm cả bốn trong MỘT assertion để biết điều kiện nào
     // gãy, thay vì dừng ở ca đầu tiên.
-    const cases = [
-      'token=ab12cde', // 7 ký tự
-      'token=abcdefgh', // không chữ số
-      'token=ab12/cdef', // có `/`
-      'token=ab12cd.ts', // có đuôi file
-    ]
-    expect(Object.fromEntries(cases.map((c) => [c, redactToolText(c)]))).toEqual(
-      Object.fromEntries(cases.map((c) => [c, c])),
+    expect(Object.fromEntries(spaced.map((c) => [c, redactToolText(c)]))).toEqual(
+      Object.fromEntries(spaced.map((c) => [c, c])),
     )
+
+    // Cùng 4 value đó sau `token=` thì redact hết — trừ ca `/` vì `looksLikePath`
+    // giữ lại đường dẫn (mất path là mất chính dữ liệu bảng lệnh cần đếm).
+    expect(Object.fromEntries(spaced.map((c) => c.replace(' ', '=')).map((c) => [c, redactToolText(c)]))).toEqual({
+      'token=ab12cde': 'token=[redacted]',
+      'token=abcdefgh': 'token=[redacted]',
+      'token=ab12/cdef': 'token=ab12/cdef',
+      'token=ab12cd.ts': 'token=[redacted]',
+    })
+  })
+
+  test('TC-F29: 🆕 ⚠️ khoá nhạy cảm sau khoá KHÔNG nhạy cảm — match ngoài không được nuốt mất', () => {
+    // Lỗ rò thật: `KEY_VALUE_RE` global khớp tại khoá đầu tiên (`https`), và span
+    // đã khớp thì không bao giờ được xét lại ⇒ `api_key=abc123` lọt nguyên văn.
+    // Bản vá rescan value của khoá không nhạy cảm, nên ca này phải xanh mãi.
+    const out = redactToolText(`curl "https://api.x.com/v1?api_key=abc123"`)
+    expect(out).not.toContain('abc123')
+    expect(out).toBe(`curl "https://api.x.com/v1?api_key=[redacted]"`)
+
+    // Cùng hình dạng, khoá nhạy cảm nằm giữa query string.
+    expect(redactToolText(`curl -s "http://h/p?token=abc12345&page=2"`)).toBe(
+      `curl -s "http://h/p?token=[redacted]&page=2"`,
+    )
+  })
+
+  test('TC-F30: 🆕 ⚠️ `curl -u user:pass` — credential ở flag basic-auth', () => {
+    expect(redactToolText('curl -u user:pass https://api.x.com')).toBe('curl -u [redacted] https://api.x.com')
+    expect(redactToolText(`curl -u 'admin:s3cret' https://api.x.com`)).not.toContain('s3cret')
+    expect(redactToolText('curl --user admin:s3cret https://api.x.com')).toBe(
+      'curl --user [redacted] https://api.x.com',
+    )
+    expect(redactToolText('curl --user=admin:s3cret https://api.x.com')).toBe(
+      'curl --user=[redacted] https://api.x.com',
+    )
+  })
+
+  test('TC-F31: 🆕 ⚠️ userinfo trong URL — `scheme://user:pass@host`', () => {
+    expect(redactToolText('git clone https://user:pass@github.com/org/repo.git')).toBe(
+      'git clone https://[redacted]@github.com/org/repo.git',
+    )
+    // Không chỉ http(s): scheme nào cũng mang được userinfo.
+    expect(redactToolText('psql postgres://admin:p4ssw0rd@db.internal:5432/app')).not.toContain('p4ssw0rd')
+    expect(redactToolText('ssh://deploy:hunter2@git.example.com:22/repo')).not.toContain('hunter2')
   })
 
   test('TC-F11: 🔧 đúng MỘT `SENSITIVE_KEY_RE`, có biên — không bản sao, không tách tên', () => {

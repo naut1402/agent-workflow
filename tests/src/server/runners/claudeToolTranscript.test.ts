@@ -156,6 +156,36 @@ describe('Nhóm D — readNewToolCalls (transcript Claude CLI)', () => {
     expect(result!.totalLines).toBe(4)
   })
 
+  test('TC-D06b: 🆕 ⚠️ dòng hỏng ở GIỮA file KHÔNG giữ con trỏ — chống ghi lặp mỗi lần resume', async () => {
+    // Chỉ dòng vật lý CUỐI mới có thể còn dở dang. Giữ con trỏ ở một dòng hỏng
+    // giữa file thì mọi lượt phía sau nó được thu lại ở MỌI job resume cùng
+    // session — vòng lặp vẫn chạy tiếp, nên lượt vừa trả về cũng chính là lượt
+    // lần sau trả về lần nữa.
+    const rows = [FX_CLI[0], '{"type":"assistant","mess', FX_CLI[2], FX_CLI[3]]
+    writeLines(rows)
+
+    const first = await readNewToolCalls(file, 0)
+    expect(first!.calls).toHaveLength(3)
+    // 4 dòng vật lý, dòng hỏng ở index 1 — con trỏ phải vượt qua hết.
+    expect(first!.totalLines).toBe(4)
+
+    // Job thứ hai trên cùng transcript không đổi: 0 lượt mới, không ghi lặp.
+    const second = await readNewToolCalls(file, first!.totalLines)
+    expect(second!.calls).toHaveLength(0)
+    expect(second!.totalLines).toBe(4)
+  })
+
+  test('TC-D06c: 🆕 dòng hỏng giữa file + dòng cuối dở dang → con trỏ dừng ở dòng cuối', async () => {
+    // Hai ca trên không loại trừ nhau: dòng hỏng giữa file bị bỏ qua, dòng cuối
+    // dở dang vẫn phải giữ được con trỏ.
+    writeLines([FX_CLI[0], '{"type":"assistant","mess', FX_CLI[2], '{"type":"assist'], {
+      trailingNewline: false,
+    })
+    const result = await readNewToolCalls(file, 0)
+    expect(result!.calls).toHaveLength(2)
+    expect(result!.totalLines).toBe(3)
+  })
+
   test('TC-D07: dòng rỗng giữa file bị skip, số lượt không đổi', async () => {
     writeLines([FX_CLI[0], '', FX_CLI[2], FX_CLI[3]])
     const result = await readNewToolCalls(file, 0)

@@ -343,7 +343,11 @@ describe('Nhóm G — ingestJobToolCalls', () => {
     expect(sdk.calls[0].text).toBe('ls -la')
   })
 
-  test('TC-G12: ⚠️ khử trùng cho nguồn agent-sdk (E14) — callsTotal là số SAU khử trùng', async () => {
+  test('TC-G12: ⚠️ agent-sdk KHÔNG khử trùng — lượt lặp là lượt thật, resume do con trỏ lo', async () => {
+    // 🔧 Bản 3: cơ chế khử trùng `(name, text)` đã bỏ. Nó đếm thiếu lượt thật —
+    // một agent chạy `ls -la` hai lần trong cùng job mất hẳn một lượt — và lý do
+    // duy nhất nó tồn tại (resume ghi đè file) nay do `fromCursor` lo đúng hơn:
+    // cắt theo SỐ LƯỢT đã đọc, không đoán theo nội dung.
     seedLedger()
     writeSdkSession(SESSION, [
       ['Bash', 'ls -la'],
@@ -352,10 +356,39 @@ describe('Nhóm G — ingestJobToolCalls', () => {
 
     await ingestJobToolCalls(job(), SESSION, 'openai')
     const entry = toolCallEntries()[0]
-    expect(entry.calls).toHaveLength(1)
-    // §7-Q2: trùng ở đây là ảo ảnh do resume ghi đè file, không phải lượt bị cắt —
-    // nên `callsTotal > calls.length` giữ đúng MỘT nghĩa là "đã cắt trần".
-    expect(entry.callsTotal).toBe(1)
+    expect(entry.calls).toHaveLength(2)
+    expect(entry.calls.map((c) => c.text)).toEqual(['ls -la', 'ls -la'])
+    // `callsTotal` = số lượt đọc được. `callsTotal > calls.length` vì thế giữ đúng
+    // MỘT nghĩa duy nhất: đã cắt trần `TOOL_CALL_MAX_CALLS`.
+    expect(entry.callsTotal).toBe(2)
+    expect(cursorOf()).toBe(2)
+  })
+
+  test('TC-G12b: 🆕 job sau trên cùng session chỉ lấy lượt MỚI — không ghi lặp phần cũ', async () => {
+    // Phần "chống đếm lặp khi resume" mà khử trùng từng gánh: kiểm thẳng ở con trỏ.
+    // Lượt mới trùng y hệt lượt cũ vẫn phải được ghi — chỉ phần ĐÃ đọc bị bỏ.
+    seedLedger()
+    writeSdkSession(SESSION, [
+      ['Bash', 'ls -la'],
+      ['Bash', 'ls -la'],
+    ])
+    await ingestJobToolCalls(job(), SESSION, 'openai')
+
+    written = []
+    // Agent-SDK ghi đè nguyên file: 2 lượt cũ + 1 lượt mới, lượt mới trùng nội dung.
+    writeSdkSession(SESSION, [
+      ['Bash', 'ls -la'],
+      ['Bash', 'ls -la'],
+      ['Bash', 'ls -la'],
+    ])
+    await ingestJobToolCalls(job({ id: 'j2' }), SESSION, 'openai')
+
+    const entries = toolCallEntries()
+    expect(entries).toHaveLength(1)
+    expect(entries[0].jobId).toBe('j2')
+    expect(entries[0].calls).toHaveLength(1)
+    expect(entries[0].callsTotal).toBe(1)
+    expect(cursorOf()).toBe(3)
   })
 
   test('TC-G13: ⚠️ KHÔNG khử trùng cho nguồn CLI — lặp lệnh thật là dữ liệu', async () => {
