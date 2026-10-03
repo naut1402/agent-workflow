@@ -6,18 +6,26 @@
 // TC-48): máy dev đặt `full` sẽ làm case "mặc định readonly" xanh/đỏ giả.
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import {
-  DEFAULT_MODE,
-  MCP_MODES,
-  MODE_ENV_VAR,
-  READ_TOOLS,
-  TOOL_ALLOWLIST,
-  WRITE_TOOLS,
-  isMcpMode,
-  isToolEnabled,
-  parseModeArg,
-  resolveMode,
-} from '../../mcp/modes'
+import { DashboardMcpServer } from '../../mcp/DashboardMcpServer'
+import { AbstractMcpServer, DEFAULT_MODE, MCP_MODES, MODE_ENV_VAR, type McpMode } from '../../mcp/AbstractMcpServer'
+
+const { isMcpMode, isToolEnabled, parseModeArg, resolveMode } = AbstractMcpServer
+
+const READ_TOOLS = [
+  'get_knowledge_bundle',
+  'get_project',
+  'get_task_context',
+  'get_task_state',
+  'list_artifacts',
+  'list_projects',
+  'list_tasks',
+  'read_artifact',
+]
+const WRITE_TOOLS = ['add_project', 'create_qa', 'remove_project']
+
+function toolNames(mode: McpMode): string[] {
+  return new DashboardMcpServer(mode).tools().map((t) => t.name).sort()
+}
 
 // ── Cô lập env (§1.4) ─────────────────────────────────────────────────────────
 
@@ -190,42 +198,24 @@ describe('parseModeArg — phân biệt "không khai" với "khai sai"', () => {
   })
 })
 
-describe('allowlist theo mode', () => {
-  test('TC-44: isToolEnabled — bảng quyết định', () => {
-    for (const tool of READ_TOOLS) {
-      expect(isToolEnabled('readonly', tool)).toBe(true)
-      expect(isToolEnabled('full', tool)).toBe(true)
-    }
-    for (const tool of WRITE_TOOLS) {
-      expect(isToolEnabled('readonly', tool)).toBe(false)
-      expect(isToolEnabled('full', tool)).toBe(true)
-    }
+describe('quyền theo mode', () => {
+  test('TC-44: isToolEnabled — bảng quyết định theo quyền', () => {
+    expect(isToolEnabled('readonly', 'read')).toBe(true)
+    expect(isToolEnabled('readonly', 'write')).toBe(false)
+    expect(isToolEnabled('full', 'read')).toBe(true)
+    expect(isToolEnabled('full', 'write')).toBe(true)
   })
 
-  test('TC-45: tên tool không tồn tại → false (allowlist, không phải denylist)', () => {
-    // `write_artifact` / `decide_hitl` hoãn 1.3.0 (D8) — case này chốt chúng
-    // không lọt vào 1.2.0 qua một nhánh nào đó.
-    expect(isToolEnabled('readonly', 'write_artifact')).toBe(false)
-    expect(isToolEnabled('full', 'write_artifact')).toBe(false)
-    expect(isToolEnabled('full', 'decide_hitl')).toBe(false)
-    expect(isToolEnabled('full', '')).toBe(false)
+  test('TC-45: quyền không tồn tại → false', () => {
+    expect(isToolEnabled('full', 'admin' as never)).toBe(false)
+    expect(isToolEnabled('full', '' as never)).toBe(false)
   })
 
-  test('TC-46: TOOL_ALLOWLIST — quan hệ tập hợp', () => {
-    const ro = TOOL_ALLOWLIST.readonly
-    const full = TOOL_ALLOWLIST.full
-    // Tbefa5f4c thêm `get_task_context` vào READ_TOOLS (7 → 8); `create_qa`
-    // vào WRITE_TOOLS là của T8e2886e0.
-    expect(ro).toHaveLength(8)
-    expect(full).toHaveLength(11)
-    expect(new Set(ro).size).toBe(ro.length)
-    expect(new Set(full).size).toBe(full.length)
-    for (const tool of ro) expect(full).toContain(tool)
-    expect([...full].filter((t) => !ro.includes(t)).sort()).toEqual([
-      'add_project',
-      'create_qa',
-      'remove_project',
-    ])
+  test('TC-46: tập tool đăng ký theo mode', () => {
+    expect(toolNames('readonly')).toEqual(READ_TOOLS)
+    expect(toolNames('full')).toEqual([...READ_TOOLS, ...WRITE_TOOLS].sort())
+    expect(toolNames('full')).not.toContain('write_artifact')
+    expect(toolNames('full')).not.toContain('decide_hitl')
   })
 
   test('TC-47: MCP_MODES chỉ có hai giá trị (guard chống land nửa vời P3)', () => {
@@ -244,34 +234,17 @@ describe('allowlist theo mode', () => {
   })
 })
 
-// ── Tbefa5f4c · Nhóm K — đăng ký `get_task_context` (F15/F16) ────────────────
-describe('Nhóm K — allowlist của get_task_context', () => {
-  test('TC-K16: `isToolEnabled` true ở CẢ HAI mode', () => {
-    expect(isToolEnabled('readonly', 'get_task_context')).toBe(true)
-    expect(isToolEnabled('full', 'get_task_context')).toBe(true)
+describe('Nhóm K — đăng ký get_task_context', () => {
+  test('TC-K16: get_task_context có ở CẢ HAI mode', () => {
+    expect(toolNames('readonly')).toContain('get_task_context')
+    expect(toolNames('full')).toContain('get_task_context')
   })
 
-  test('TC-K19: ⚠️ hồi quy đăng ký — tool đọc tăng đúng 1, tool ghi KHÔNG đổi', () => {
-    // Danh sách trước Tbefa5f4c (sau khi T8e2886e0 port `create_qa`).
-    const READ_BEFORE = [
-      'list_projects',
-      'get_project',
-      'get_knowledge_bundle',
-      'list_tasks',
-      'get_task_state',
-      'list_artifacts',
-      'read_artifact',
-    ]
-    expect([...READ_TOOLS].filter((t) => !READ_BEFORE.includes(t))).toEqual(['get_task_context'])
-    expect(READ_TOOLS).toHaveLength(READ_BEFORE.length + 1)
-    // Mọi tool đọc cũ vẫn có mặt, đúng mode cũ.
-    for (const tool of READ_BEFORE) {
-      expect(isToolEnabled('readonly', tool)).toBe(true)
-      expect(isToolEnabled('full', tool)).toBe(true)
-    }
-    // `create_qa` vẫn CHỈ ở `full`.
-    expect([...WRITE_TOOLS]).toEqual(['add_project', 'create_qa', 'remove_project'])
-    expect(isToolEnabled('readonly', 'create_qa')).toBe(false)
-    expect(isToolEnabled('full', 'create_qa')).toBe(true)
+  test('TC-K19: tool ghi chỉ có ở full', () => {
+    const readonly = toolNames('readonly')
+    const full = toolNames('full')
+    expect(full.filter((t) => !readonly.includes(t))).toEqual(WRITE_TOOLS)
+    expect(readonly).not.toContain('create_qa')
+    expect(full).toContain('create_qa')
   })
 })

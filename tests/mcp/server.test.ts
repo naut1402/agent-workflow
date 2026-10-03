@@ -1,7 +1,7 @@
 // Tb4241005 · TC-01 … TC-30 + TC-88 … TC-92 — MCP server (vai inbound).
 //
 // 6 case gốc của 1.1.x được GIỮ NGUYÊN làm mốc không-hồi-quy; chỉ case
-// "createMcpServer dựng được" được mở rộng thành TC-15 (assert nội dung
+// "DashboardMcpServer dựng được" được mở rộng thành TC-15 (assert nội dung
 // `tools/list` thay vì chỉ "dựng được").
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
@@ -16,16 +16,30 @@ import { on } from '../../src/backend/events/index.js'
 import { resetLogDriver, setLogDriver } from '../../src/backend/log/index.js'
 import { invalidateLoggingPrefsCache } from '../../src/backend/log/loggingPrefsIo.js'
 import { MAX_BUNDLE_IDS } from '../../src/features/knowledge/schemas/knowledge.js'
-import {
-  createMcpServer,
-  fail,
-  handleAddProject,
-  handleGetKnowledgeBundle,
-  handleGetProject,
-  handleListProjects,
-  handleRemoveProject,
-  ok,
-} from '../../mcp/server'
+import { AbstractMcpTools, type McpErrorCode } from '../../mcp/AbstractMcpTools'
+import { DashboardMcpServer } from '../../mcp/DashboardMcpServer'
+import { KnowledgeTools } from '../../mcp/tools/KnowledgeTools'
+import { ProjectTools } from '../../mcp/tools/ProjectTools'
+
+class EnvelopeProbe extends AbstractMcpTools {
+  definitions() {
+    return []
+  }
+
+  callOk(payload: unknown, opts?: { structured?: boolean }) {
+    return this.ok(payload, opts)
+  }
+
+  callFail(...args: [unknown] | [McpErrorCode, unknown]) {
+    return args.length < 2 ? this.fail(args[0]) : this.fail(args[0] as McpErrorCode, args[1])
+  }
+}
+
+const envelope = new EnvelopeProbe()
+const ok = (payload: unknown, opts?: { structured?: boolean }) => envelope.callOk(payload, opts)
+const fail = (...args: [unknown] | [McpErrorCode, unknown]) => envelope.callFail(...args)
+const projectTools = new ProjectTools()
+const knowledgeTools = new KnowledgeTools()
 
 let home: string
 let proj: string
@@ -100,25 +114,25 @@ describe('ok / fail envelopes', () => {
 
 describe('tool handlers over a temp registry', () => {
   test('add → list → get → remove flow', () => {
-    const added = handleAddProject({ path: proj })
+    const added = projectTools.addProject({ path: proj })
     const project = payload(added).project
     expect(project.default).toBe(true)
 
-    expect(payload(handleListProjects()).projects).toHaveLength(1)
-    expect(payload(handleGetProject({ id: project.id })).project.id).toBe(project.id)
+    expect(payload(projectTools.listProjects()).projects).toHaveLength(1)
+    expect(payload(projectTools.getProject({ id: project.id })).project.id).toBe(project.id)
 
     // removing the (only, default) project succeeds, leaving an empty registry
-    const rm = handleRemoveProject({ id: project.id })
+    const rm = projectTools.removeProject({ id: project.id })
     expect(rm.isError).toBeUndefined()
-    expect(payload(handleListProjects()).projects).toHaveLength(0)
+    expect(payload(projectTools.listProjects()).projects).toHaveLength(0)
   })
 
   test('get unknown id → fail', () => {
-    expect(handleGetProject({ id: 'nope' }).isError).toBe(true)
+    expect(projectTools.getProject({ id: 'nope' }).isError).toBe(true)
   })
 
   test('add invalid path → fail', () => {
-    expect(handleAddProject({ path: 'relative/x' }).isError).toBe(true)
+    expect(projectTools.addProject({ path: 'relative/x' }).isError).toBe(true)
   })
 
   // TC-07: kênh MCP dùng chung `registry.add()` với kênh UI (đã test trực tiếp ở
@@ -127,7 +141,7 @@ describe('tool handlers over a temp registry', () => {
   test('add qua MCP scaffold pipeline.yaml, không tham chiếu phpstan.md (TC-07)', () => {
     const dest = path.join(proj, '.dev-team-agent', 'pipeline.yaml')
     expect(fs.existsSync(dest)).toBe(false)
-    handleAddProject({ path: proj })
+    projectTools.addProject({ path: proj })
     expect(fs.existsSync(dest)).toBe(true)
     const content = fs.readFileSync(dest, 'utf8')
     expect(content).not.toContain('phpstan.md')
@@ -205,7 +219,7 @@ describe('envelope ok / fail — hợp đồng cũ và mới song song (D6/D14)'
   })
 })
 
-// ═══ Nhóm A · handleGetKnowledgeBundle (TC-07 … TC-14) ════════════════════════
+// ═══ Nhóm A · KnowledgeTools.getKnowledgeBundle (TC-07 … TC-14) ════════════════════════
 
 describe('get_knowledge_bundle', () => {
   beforeEach(() => {
@@ -215,7 +229,7 @@ describe('get_knowledge_bundle', () => {
   })
 
   test('TC-07: bundle hợp lệ mang đúng nội dung từng entry', async () => {
-    const res = await handleGetKnowledgeBundle({ ids: ['project/k1', 'project/k2'] })
+    const res = await knowledgeTools.getKnowledgeBundle({ ids: ['project/k1', 'project/k2'] })
     expect(res.isError).toBeUndefined()
     const bundle = payload(res).bundle
     expect(bundle).toHaveLength(2)
@@ -224,12 +238,12 @@ describe('get_knowledge_bundle', () => {
   })
 
   test('TC-08: get_knowledge_bundle KHÔNG có structuredContent (G8)', async () => {
-    const res = await handleGetKnowledgeBundle({ ids: ['project/k1'] })
+    const res = await knowledgeTools.getKnowledgeBundle({ ids: ['project/k1'] })
     expect('structuredContent' in res).toBe(false)
   })
 
   test('TC-09: id lạ là lỗi TỪNG PHẦN TỬ, không hỏng cả lượt gọi', async () => {
-    const res = await handleGetKnowledgeBundle({ ids: ['project/k1', 'project/khong-ton-tai'] })
+    const res = await knowledgeTools.getKnowledgeBundle({ ids: ['project/k1', 'project/khong-ton-tai'] })
     expect(res.isError).toBeFalsy()
     const bundle = payload(res).bundle
     expect(bundle[0].content).toContain('noi dung k1')
@@ -238,7 +252,7 @@ describe('get_knowledge_bundle', () => {
   })
 
   test('TC-10: mọi id đều lạ — vẫn không phải lỗi cả lượt', async () => {
-    const res = await handleGetKnowledgeBundle({ ids: ['project/x', 'project/y'] })
+    const res = await knowledgeTools.getKnowledgeBundle({ ids: ['project/x', 'project/y'] })
     expect(res.isError).toBeFalsy()
     for (const entry of payload(res).bundle) {
       expect(typeof entry.id).toBe('string')
@@ -247,7 +261,7 @@ describe('get_knowledge_bundle', () => {
   })
 
   test('TC-11: project không tồn tại → not_found', async () => {
-    const res = await handleGetKnowledgeBundle({ ids: ['project/k1'], project: 'khong-co-project-nay' })
+    const res = await knowledgeTools.getKnowledgeBundle({ ids: ['project/k1'], project: 'khong-co-project-nay' })
     expect(res.isError).toBe(true)
     expect(codeOf(res)).toBe('not_found')
     expect(res.content[0].text).toContain('khong-co-project-nay')
@@ -277,7 +291,7 @@ describe('get_knowledge_bundle', () => {
   })
 
   test('TC-14: ids rỗng → bundle rỗng', async () => {
-    const res = await handleGetKnowledgeBundle({ ids: [] })
+    const res = await knowledgeTools.getKnowledgeBundle({ ids: [] })
     expect(res.isError).toBeFalsy()
     expect(payload(res).bundle).toEqual([])
   })
@@ -309,7 +323,7 @@ async function withInMemoryClient<T>(
   fn: (client: Client) => Promise<T>,
   mode: 'readonly' | 'full' = 'full',
 ): Promise<T> {
-  const server = createMcpServer({ mode })
+  const server = new DashboardMcpServer(mode).build()
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const client = new Client({ name: 'server-test', version: '1.0.0' })
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
@@ -322,7 +336,7 @@ async function withInMemoryClient<T>(
 }
 
 async function toolsOf(mode?: 'readonly' | 'full'): Promise<any[]> {
-  const server = mode ? createMcpServer({ mode }) : createMcpServer()
+  const server = mode ? new DashboardMcpServer(mode).build() : new DashboardMcpServer().build()
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const client = new Client({ name: 'server-test', version: '1.0.0' })
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
@@ -334,9 +348,9 @@ async function toolsOf(mode?: 'readonly' | 'full'): Promise<any[]> {
   }
 }
 
-describe('createMcpServer', () => {
+describe('DashboardMcpServer.build', () => {
   test('builds a server without connecting a transport', () => {
-    expect(createMcpServer()).toBeTruthy()
+    expect(new DashboardMcpServer().build()).toBeTruthy()
   })
 
   test('TC-15: không tham số → đúng 8 tool đọc, KHÔNG có tool ghi (D7)', async () => {
@@ -520,7 +534,7 @@ describe('audit + event cho đường ghi (L7 / D5)', () => {
   test('TC-24: add_project thành công phát ĐÚNG 1 audit + 1 event', async () => {
     const cap = capture()
     try {
-      const res = handleAddProject({ path: proj, name: 'demo' })
+      const res = projectTools.addProject({ path: proj, name: 'demo' })
       await settle()
       expect(res.isError).toBeUndefined()
       const id = res.structuredContent.project.id
@@ -546,7 +560,7 @@ describe('audit + event cho đường ghi (L7 / D5)', () => {
   test('TC-25: payload event không chứa đường dẫn hay bí mật', async () => {
     const cap = capture()
     try {
-      const res = handleAddProject({ path: proj, name: 'demo' })
+      const res = projectTools.addProject({ path: proj, name: 'demo' })
       await settle()
       const id = res.structuredContent.project.id
       const created = cap.events.find((e) => e.type === 'entity.created')!
@@ -560,7 +574,7 @@ describe('audit + event cho đường ghi (L7 / D5)', () => {
   test('TC-26: add_project thất bại KHÔNG phát gì', async () => {
     const cap = capture()
     try {
-      const res = handleAddProject({ path: `/khong/ton/tai/${Math.random().toString(36).slice(2)}` })
+      const res = projectTools.addProject({ path: `/khong/ton/tai/${Math.random().toString(36).slice(2)}` })
       await settle()
       expect(res.isError).toBe(true)
       expect(codeOf(res)).toBe('invalid_input')
@@ -572,11 +586,11 @@ describe('audit + event cho đường ghi (L7 / D5)', () => {
   })
 
   test('TC-27: remove_project thành công phát ĐÚNG 1 audit + 1 event', async () => {
-    const id = handleAddProject({ path: proj }).structuredContent.project.id
+    const id = projectTools.addProject({ path: proj }).structuredContent.project.id
     await settle()
     const cap = capture()
     try {
-      const res = handleRemoveProject({ id })
+      const res = projectTools.removeProject({ id })
       await settle()
       expect(res.isError).toBeUndefined()
       expect(res.structuredContent.removed).toBe(true)
@@ -598,7 +612,7 @@ describe('audit + event cho đường ghi (L7 / D5)', () => {
   test('TC-28: remove_project id lạ KHÔNG phát gì', async () => {
     const cap = capture()
     try {
-      const res = handleRemoveProject({ id: 'khong-ton-tai' })
+      const res = projectTools.removeProject({ id: 'khong-ton-tai' })
       await settle()
       expect(codeOf(res)).toBe('not_found')
       expect(cap.audits).toHaveLength(0)
@@ -623,11 +637,11 @@ describe('audit + event cho đường ghi (L7 / D5)', () => {
     const offCreate = on('entity.created', () => void (idsAtCreate = readIds()))
     const offDelete = on('entity.deleted', () => void (idsAtDelete = readIds()))
     try {
-      const id = handleAddProject({ path: proj }).structuredContent.project.id
+      const id = projectTools.addProject({ path: proj }).structuredContent.project.id
       // Bất biến AGENTS.md §4: lúc subscriber chạy, đĩa ĐÃ có project mới.
       expect(idsAtCreate).toContain(id)
 
-      handleRemoveProject({ id })
+      projectTools.removeProject({ id })
       expect(idsAtDelete).not.toContain(id)
     } finally {
       offCreate()
@@ -643,11 +657,11 @@ describe('audit + event cho đường ghi (L7 / D5)', () => {
     invalidateLoggingPrefsCache()
     const cap = capture()
     try {
-      const res = handleAddProject({ path: proj })
+      const res = projectTools.addProject({ path: proj })
       await settle()
       // Audit là tầng QUAN SÁT, không được thành điểm gãy của đường ghi (E13).
       expect(res.isError).toBeUndefined()
-      expect(payload(handleListProjects()).projects).toHaveLength(1)
+      expect(payload(projectTools.listProjects()).projects).toHaveLength(1)
       expect(cap.audits).toHaveLength(0)
     } finally {
       cap.stop()
