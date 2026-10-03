@@ -180,7 +180,8 @@ Không làm:
 | Chọn nhóm tool, preamble, cảnh báo khởi động của dashboard | `mcp/DashboardMcpServer.ts` |
 | Tool mới / sửa tool | `ToolDef` + method trong `mcp/tools/<Feature>Tools.ts` của feature được gọi tới |
 
-- **Một file = một class**, tên file trùng tên class. Ngoại lệ duy nhất: entry `mcp/server.ts`.
+- **Một file = một class**, tên file trùng tên class. Ngoại lệ duy nhất: entry theo transport `mcp/<transport>.ts` (hiện có `mcp/stdio.ts`).
+- **Thêm transport = thêm một entry** — `mcp/<transport>.ts` dựng transport rồi gọi `start(…)`; 🚫 không rẽ nhánh transport trong entry có sẵn hay trong lớp `Abstract*`.
 - **Một tool = một `ToolDef`** — tên, `access`, schema, mô tả, handler, `hint` khai cùng chỗ; 🚫 không tách schema / allowlist / hướng dẫn sang file khác.
 - **Nhóm tool `extends AbstractMcpTools`**, handler là method public (test gọi thẳng); logic domain ở `business/` của feature, 🚫 không viết lại trong handler.
 - **Chi tiết và ràng buộc cài đặt**: [`docs/mcp/server.md`](../mcp/server.md) §8.

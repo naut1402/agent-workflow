@@ -33,7 +33,7 @@ Nguồn của mọi con số trong trang này là code: `mcp/AbstractMcpServer.t
 bun run mcp
 ```
 
-- Script `mcp` trỏ `mcp/server.ts` (`package.json`) — entry gọi `new DashboardMcpServer(DashboardMcpServer.resolveMode()).start(new StdioServerTransport())`.
+- Script `mcp` trỏ `mcp/stdio.ts` (`package.json`) — entry gọi `new DashboardMcpServer(DashboardMcpServer.resolveMode()).start(new StdioServerTransport())`.
 - Transport là **stdio** — 🚫 không cần HTTP server của dashboard chạy. MCP server thao tác thẳng trên `projects.json` dùng chung với REST.
 - Dòng banner lúc khởi động ghi ra **`stderr`**, 🚫 không phải `stdout` (`stdout` là kênh JSON-RPC của stdio transport, một dòng log lạc vào đó hỏng cả phiên):
 
@@ -424,7 +424,7 @@ Các ràng buộc dưới đây không hiện ra trong hợp đồng tool. Sửa
 
 ### 8.1 Cấu trúc class
 
-Mỗi file trong `mcp/` là một class; ngoại lệ duy nhất là entry `server.ts`.
+Mỗi file trong `mcp/` là một class; ngoại lệ duy nhất là entry theo transport (`mcp/<transport>.ts`).
 
 | File | Class | Trách nhiệm |
 |---|---|---|
@@ -432,11 +432,11 @@ Mỗi file trong `mcp/` là một class; ngoại lệ duy nhất là entry `serv
 | `AbstractMcpTools.ts` | `AbstractMcpTools` | Base nhóm tool: `ok` / `fail` / `requireRoot` (qua `RootResolver` tiêm vào constructor); kèm `ToolDef`, `READ_ONLY_ANNOTATIONS` |
 | `DashboardMcpServer.ts` | `DashboardMcpServer` | Chi tiết của dashboard: tên server, `MODE_ENV_VAR`, `resolveRoot` (registry), chọn nhóm tool, preamble `instructions`, cảnh báo khởi động, `onStart()` |
 | `tools/TaskTools.ts` · `tools/KnowledgeTools.ts` · `tools/ProjectTools.ts` | `*Tools` | Khai `ToolDef` và handler là method; chia theo feature được gọi tới |
-| `server.ts` | — | Entry: chọn transport stdio, `new DashboardMcpServer(DashboardMcpServer.resolveMode()).start(…)` |
+| `stdio.ts` | — | Entry transport stdio: `new DashboardMcpServer(DashboardMcpServer.resolveMode()).start(new StdioServerTransport())`. Transport khác = thêm `mcp/<transport>.ts` |
 
 - **Một tool = một `ToolDef`** trong `definitions()` của nhóm — tên, `access`, schema input/output, annotations, handler, `hint`, `unavailableHint`. Thêm tool chỉ sửa nhóm đó và §1 của trang này.
 - **Server chứa `McpServer` của SDK**, 🚫 không kế thừa nó.
-- **Lớp `Abstract*` không chứa chi tiết của dashboard** — env var, nhãn, registry, transport do `DashboardMcpServer` / `server.ts` truyền vào.
+- **Lớp `Abstract*` không chứa chi tiết của dashboard** — env var, nhãn, registry, transport do `DashboardMcpServer` / entry `stdio.ts` truyền vào.
 - **`ProjectRef`** (schema `project`) thuộc `tools/ProjectTools.ts`; `TaskTools` / `KnowledgeTools` import từ đó.
 - **`tools/TaskTools.ts` import `monitor/business/tasks/reads.js`**, 🚫 không import barrel `tasks/index.js` — barrel re-export `runStep.js`, kéo runner, job queue, sqlite và `node:child_process` vào tiến trình stdio và giữ event loop sống.
 - **`fail()` phân nhánh theo số tham số**, không theo `message === undefined` — `fail('internal', undefined)` vẫn là ca hai tham số. Ca một tham số trả object không có `_meta`.
@@ -462,4 +462,4 @@ Mỗi file trong `mcp/` là một class; ngoại lệ duy nhất là entry `serv
 - **`initLogDriverFromPrefs()` gọi trong `DashboardMcpServer.onStart()`**, 🚫 không top-level hay constructor — test dựng `new DashboardMcpServer(mode).build()` không được đổi log driver toàn cục.
 - **`installEventLogSubscriber()` gọi trong `onStart()`** — event bus in-process, thiếu subscriber thì `emitEntity` không vào `events.jsonl`. Giới hạn SSE ở [§7](#7-giới-hạn-đã-biết).
 - **`add_project` / `remove_project` không gọi `MonitorController`** — controller cần `Context` của Hono. Handler tự `emitAudit` + `emitEntity` với cùng shape mà `src/features/monitor/controller.ts` phát.
-- **`server.ts` chỉ gọi `start()` khi `import.meta.main`** — test import class không khởi động stdio transport.
+- **`stdio.ts` chỉ gọi `start()` khi `import.meta.main`** — test import class không khởi động stdio transport.
