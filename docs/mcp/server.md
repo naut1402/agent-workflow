@@ -16,6 +16,7 @@ Nguồn của mọi con số trong trang này là code: `mcp/modes.ts` · `mcp/s
 | `get_knowledge_bundle` | mọi mode | `{ ids, project? }` | `{ bundle }` | [§4.3](#43-get_knowledge_bundle) |
 | `list_tasks` | mọi mode | `{ project?, status?, limit? }` | `{ tasks, total }` | [§4.4](#44-list_tasks) |
 | `get_task_state` | mọi mode | `{ taskId, project? }` | `{ state }` | [§4.5](#45-get_task_state) |
+| `get_task_context` | mọi mode | `{ taskId, project?, include? }` | `{ taskId, task, request, pipeline, artifacts, subtasks, state, rules }` | [§4.12](#412-get_task_context) |
 | `list_artifacts` | mọi mode | `{ taskId, project? }` | `{ artifacts, subtasks }` | [§4.6](#46-list_artifacts) |
 | `read_artifact` | mọi mode | `{ taskId, name, project? }` | `{ name, content, mtime }` | [§4.7](#47-read_artifact) |
 | `add_project` | chỉ `full` | `{ path, name? }` | `{ project }` | [§4.8](#48-add_project) |
@@ -80,8 +81,10 @@ Dòng cảnh báo để `grep` trong log job (`mcp/server.ts`, ghi **`stderr`**)
 
 | Mode | Tool được đăng ký |
 |---|---|
-| `readonly` (mặc định) | 7 tool đọc — `list_projects` · `get_project` · `get_knowledge_bundle` · `list_tasks` · `get_task_state` · `list_artifacts` · `read_artifact` |
-| `full` | 7 tool trên + 3 tool ghi — `add_project` · `create_qa` · `remove_project` |
+| `readonly` (mặc định) | 8 tool đọc — `list_projects` · `get_project` · `get_knowledge_bundle` · `list_tasks` · `get_task_state` · `get_task_context` · `list_artifacts` · `read_artifact` |
+| `full` | 8 tool trên + 3 tool ghi — `add_project` · `create_qa` · `remove_project` |
+
+> ⚠️ **Nâng từ 1.1.x**: mặc định đổi thành `readonly`, nên `add_project` / `create_qa` / `remove_project` biến khỏi `tools/list` nếu không khai gì. Riêng `create_qa` là tool mà template agent của 1.1.8 được dạy gọi — ở mặc định mới agent sẽ **không nhìn thấy** nó. Giữ hành vi cũ bằng `"env": { "DEVTEAM_MCP_MODE": "full" }` trong entry `mcpServers` của client (§2.2).
 
 - **Mặc định là `readonly`** — `DEFAULT_MODE` (`mcp/modes.ts`). An toàn theo mặc định; `full` phải bật chủ động.
 - **Biến môi trường**: `DEVTEAM_MCP_MODE` (`MODE_ENV_VAR`).
@@ -131,7 +134,7 @@ Lấy một project đã đăng ký theo `id`.
 | `ids` | string[] | ✅ | tối đa **50** phần tử (`MAX_BUNDLE_IDS`) | Danh sách entry id cần đọc |
 | `project` | string | — | `min(1)` | Bỏ trống ⇒ project mặc định |
 
-- **Output** — `{ bundle }`. 🚫 **Không** khai `outputSchema`, 🚫 **không** phát `structuredContent` — xem [§5.3](#53-hai-tool-không-phát-structuredcontent).
+- **Output** — `{ bundle }`. 🚫 **Không** khai `outputSchema`, 🚫 **không** phát `structuredContent` — xem [§5.3](#53-ba-tool-không-phát-structuredcontent).
 - **Mã lỗi** — `not_found` (qua `rootOrFail`: project lạ, hoặc không có project mặc định).
 - **Annotations** — `{ readOnlyHint: true, openWorldHint: false }`
 
@@ -197,7 +200,7 @@ Liệt kê artifact markdown của một task (kể cả artifact known chưa đ
 | `name` | string | ✅ | `min(1)`, 🚫 **không chứa null byte** | Tên file artifact, ví dụ `design.md` |
 | `project` | string | — | `min(1)` | Bỏ trống ⇒ project mặc định |
 
-- **Output** — `{ name, content, mtime }`. 🚫 **Không** khai `outputSchema`, 🚫 **không** phát `structuredContent` — xem [§5.3](#53-hai-tool-không-phát-structuredcontent).
+- **Output** — `{ name, content, mtime }`. 🚫 **Không** khai `outputSchema`, 🚫 **không** phát `structuredContent` — xem [§5.3](#53-ba-tool-không-phát-structuredcontent).
 - **Mã lỗi** — `invalid_input` (`taskId` sai khuôn · `name` rỗng hoặc chứa null byte · path thoát khỏi thư mục task) · `not_found` (qua `rootOrFail` · artifact không tồn tại · không đọc được, ví dụ `name` trỏ vào một thư mục).
 - **Annotations** — `{ readOnlyHint: true, openWorldHint: false }`
 
@@ -262,6 +265,25 @@ no default project — call list_projects, or set DEV_TEAM_ROOT / DEV_TEAM_DASHB
 
 Khai `project` mà id lạ thì thông điệp là `unknown project: <project>`. Cả hai đều mang mã `not_found`.
 
+### 4.12 `get_task_context`
+
+Đọc toàn bộ context của một task trong **một** lượt gọi: `request.md`, pipeline (bước hiện tại + bước kế), danh sách artifact và machine state. Thay cho chuỗi `cd <task-dir> && cat request.md && cat pipeline.yaml && ls -la` đầu phiên — tool nhận `taskId` nên không cần `cd`, không cần biết cwd.
+
+| Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
+|---|---|---|---|---|
+| `taskId` | string | ✅ | như [§4.5](#45-get_task_state) | Task id |
+| `project` | string | — | `min(1)` | Bỏ trống ⇒ project mặc định |
+| `include` | enum[] | — | phần tử thuộc `request` · `pipeline` · `artifacts` · `state` · `rules` (`TASK_CONTEXT_SECTIONS`) | Thu hẹp phần trả về; **mặc định** `['request','pipeline','artifacts','state']` — `rules` là opt-in |
+
+- **Output** — `{ taskId, task, request, pipeline, artifacts, subtasks, state, rules }`; section không được hỏi hoặc không đọc được là `null`. 🚫 **Không** khai `outputSchema`, 🚫 **không** phát `structuredContent` — xem [§5.3](#53-ba-tool-không-phát-structuredcontent).
+  - `task` — `{ id, name, phase, hitlPending }`, `null` khi state không đọc được.
+  - `pipeline` — `{ steps: [{ id, name, agent, produces }], currentStepId, nextStepId }`; `currentStepId` lấy từ `current_phase` của state. `pipeline.yaml` có mà không đọc được (`untrusted`) thì trả `null`, 🚫 không trả pipeline mặc định như thể là của task.
+  - `request` — `{ name: 'request.md', mtime, content, truncated }`; `rules` — `{ name: 'project-rules.md', content, truncated }`. Nội dung cắt ở **64 KiB** ký tự (`TASK_CONTEXT_MAX_CHARS`) và `truncated` nói rõ có cắt hay không.
+- **Mã lỗi** — `invalid_input` (`taskId` sai khuôn · `include` chứa section lạ · `project-rules.md` resolve — kể cả qua symlink — ra ngoài project root) · `not_found` (qua `rootOrFail`).
+- **Annotations** — `{ readOnlyHint: true, openWorldHint: false }`
+
+**Một section hỏng không làm hỏng cả lời gọi.** Các section đọc song song, mỗi nhánh tự nuốt lỗi của mình và về `null` — task chưa có `request.md` hay `pipeline.yaml` hỏng là trạng thái hợp lệ. `rules` mặc định tắt vì orchestrator đã tiêm `project-rules.md` vào prompt từng bước.
+
 ---
 
 ## 5. Hợp đồng kết quả (envelope)
@@ -303,14 +325,14 @@ Mã lỗi **thực sự phát ra**:
 
 Kiểu `McpErrorCode` (`mcp/envelope.ts`) còn khai **2 mã dự phòng chưa nơi nào phát ra**: `forbidden_in_mode` — không phát vì mode lọc ngay ở khâu đăng ký, tool ngoài quyền biến khỏi `tools/list` chứ không bị từ chối lúc gọi (§3) — và `internal`, hiện chỉ xuất hiện trong comment của `envelope.ts`. 🚫 Đừng viết client bám vào hai mã này.
 
-### 5.3 Hai tool không phát `structuredContent`
+### 5.3 Ba tool không phát `structuredContent`
 
-Đúng **hai** tool: `get_knowledge_bundle` và `read_artifact`.
+Đúng **ba** tool: `get_knowledge_bundle`, `read_artifact` và `get_task_context`.
 
 - **Hợp đồng cho client**: đọc `content[0].text` rồi `JSON.parse`.
 - `structuredContent` là **khoá bị bỏ hẳn** khỏi object trả về — 🚫 không phải gán `undefined`.
-- Hai tool này cũng cố ý 🚫 **không** khai `outputSchema`, nhất quán với bảng ở [§4.3](#43-get_knowledge_bundle) và [§4.7](#47-read_artifact).
-- Lý do: payload lớn — bundle có trần 1 MiB, nhân đôi qua stdio là 2 MiB cho một lời gọi.
+- Ba tool này cũng cố ý 🚫 **không** khai `outputSchema`, nhất quán với bảng ở [§4.3](#43-get_knowledge_bundle), [§4.7](#47-read_artifact) và [§4.12](#412-get_task_context).
+- Lý do: payload mang nội dung file — bundle có trần 1 MiB, nhân đôi qua stdio là 2 MiB cho một lời gọi.
 
 8 tool còn lại phát đủ cả `content` lẫn `structuredContent`.
 
@@ -377,12 +399,4 @@ Mã nằm ở `_meta.error.code`. Object trả về 🚫 không có khoá `struc
 
 - **Chỉ transport stdio.** HTTP / SSE chưa hỗ trợ ở vai server. (Vai client thì có — xem [`client.md`](client.md) §3.3.)
 - **Thao tác ghi không tới SSE của dashboard.** `add_project` / `remove_project` **có** vào audit log và `events.jsonl` (`installEventLogSubscriber` chạy trong `main()`), nhưng event bus là **in-process** và MCP server là tiến trình khác với dashboard. Dashboard đang mở phải refresh tay.
-- **Danh sách tool tồn tại ở nhiều bản sao.** Nguồn cho máy là `mcp/modes.ts`; nguồn cho người là trang này.
-
-### 7.1 Sai lệch đã biết với root `README.md`
-
-Section `## MCP server` của root [`README.md`](../../README.md) liệt kê **4** mã lỗi `not_found` · `invalid_input` · `forbidden_in_mode` · `internal` như thể đều gặp được. Bản chính xác là [§5.2](#52-kết-quả-lỗi-và-mã-lỗi) của file này: chỉ `not_found` và `invalid_input` thực sự phát ra.
-
-Sai lệch được giữ lại **có chủ đích** vì root `README.md` nằm ngoài phạm vi sửa của task tạo ra tài liệu này. **File này là nguồn đúng.**
-
-Bảng tool cũng tồn tại **song song ở hai nơi** — root `README.md` và [§1](#1-bảng-tool) của file này. Thêm / đổi / xoá một tool phải sửa **cả hai**; 🚫 không có test nào bắt được lệch.
+- **Danh sách tool tồn tại ở nhiều bản sao.** Nguồn cho máy là `mcp/modes.ts`; nguồn cho người là trang này. Thêm / đổi / xoá một tool phải sửa [§1](#1-bảng-tool), §3 của trang này **và** bảng mode ở [`README.md`](README.md) của chủ đề; 🚫 không có test nào bắt được lệch. Root `README.md` 🚫 không chép bảng tool — chỉ trỏ về `docs/mcp/`.

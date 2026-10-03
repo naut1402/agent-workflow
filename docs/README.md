@@ -16,7 +16,7 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Tích hợp
 
-- **[`mcp/`](mcp/README.md)** — tài liệu MCP hai vai: dashboard **làm** MCP server (`bun run mcp` — 10 tool, mode `readonly`/`full`) và dashboard **gọi** MCP server khác (tab MCP của Runner Config). Dùng khi khai `mcpServers` cho Claude Code, hoặc khi cần field/ràng buộc/mã lỗi của một tool cụ thể.
+- **[`mcp/`](mcp/README.md)** — tài liệu MCP hai vai: dashboard **làm** MCP server (`bun run mcp` — 11 tool, mode `readonly`/`full`) và dashboard **gọi** MCP server khác (tab MCP của Runner Config). Dùng khi khai `mcpServers` cho Claude Code, hoặc khi cần field/ràng buộc/mã lỗi của một tool cụ thể.
 
 ## Giao diện
 

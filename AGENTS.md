@@ -5,6 +5,7 @@
 - 📖 **Đọc file này trước**, rồi mở rule tương ứng với bước đang làm (bảng §3).
 - 📐 **Rule chi tiết ở [`docs/agent-rules/`](docs/agent-rules/)** — mỗi file một category, dashboard quét qua `GET /api/rules` và gắn cho từng bước pipeline.
 - 📚 **Tài liệu mô tả hệ thống ở [`docs/`](docs/)** — kiến trúc, domain event, i18n, quy ước UI.
+- 🚫 **Không sửa root [`README.md`](README.md) trực tiếp** — tuyệt đối. Cần đổi thì ghi đề xuất vào file todo debt (`docs/todo/`, loại nợ `readme`) chờ người duyệt sửa — [`git-pr.md`](docs/agent-rules/git-pr.md) §7.2.2.
 - ⚖️ **Bất biến repo = checklist Review §4** (nhóm **Kiến trúc** + **Dữ liệu & An toàn**) — xung đột về bất biến hoặc coupling tối thiểu thì coi file này là đúng.
 
 ---
@@ -141,6 +142,7 @@ Chốt ngay trong `design.md` những gì Review sẽ kiểm — sai ở đây t
 - [ ] **Cập nhật rule** trong [`docs/agent-rules/`](docs/agent-rules/) ngay trong cùng thay đổi — rule lệch code là nợ, không phải chi tiết.
 - [ ] **Cập nhật tài liệu cho người** nếu quy ước đó cũng mô tả hệ thống — [`docs/architecture/`](docs/architecture/) và các file liên quan trong `docs/`.
 - [ ] **Cập nhật file này** nếu bảng §3 không còn đúng.
+- [ ] **🚫 Không sửa root `README.md`** — cần đổi thì ghi đề xuất vào `docs/todo/<issue>/<task-id>.md` (loại nợ `readme`) chờ người duyệt ([`git-pr.md`](docs/agent-rules/git-pr.md) §7.2.2).
 
 </details>
 
@@ -272,6 +274,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Xác định bề mặt cần phủ** — mỗi vùng đổi có hàm/route/hành vi công khai test được. Không có bề mặt nào test được là vấn đề của **code**, không phải của test.
 - [ ] **PR dòng source: test KHÔNG nằm trong diff** — test đi ở PR dòng test ([`git-pr.md`](docs/agent-rules/git-pr.md) §4.3). Thấy file `tests/`·`test-e2e/` trong diff PR code → yêu cầu chuyển sang PR dòng test.
 - [ ] **PR dòng test: chọn đúng runner** — domain/fs → **bun test**; FE/component → vitest; khai báo path theo checklist [Testing](#testing).
+- [ ] **Root `README.md` không nằm trong diff** — trừ commit của người duyệt; agent sửa thì yêu cầu bỏ ra, chuyển thành đề xuất `docs/todo/` loại nợ `readme` ([`git-pr.md`](docs/agent-rules/git-pr.md) §7.2.2).
 - [ ] **Giữ build xanh** — PR đụng helper FE+BE hoặc `fileHelper` → typecheck/build xanh cả local và CI.
 - [ ] **Tuân thủ commitlint** — commit/PR title đúng `type(scope): subject`, không trailer công cụ.
 - [ ] **Trình bày đúng nội dung PR** — có Tổng quan theo loại task; mỗi thay đổi đánh số, fix/refactor có Logic trước → sau, chi tiết chỉnh sửa nhóm theo cây thư mục ([`git-pr.md`](docs/agent-rules/git-pr.md) §9).
@@ -301,6 +304,7 @@ Quy ước: [`git-pr.md`](docs/agent-rules/git-pr.md) §1.
 Bối cảnh đầy đủ: [`git-pr.md`](docs/agent-rules/git-pr.md) §7.
 
 - [ ] **Hoãn tài liệu docs** — đã có `docs/todo/<issue>/<task-id>.md`.
+- [ ] **Đề xuất sửa `README.md`** — ghi ở file nợ loại `readme`, không sửa thẳng; người duyệt sửa rồi xoá file nợ.
 - [ ] **PR feature → `dev/x.y.z/main`** — được mang nợ; Todo debt **không** chặn.
 - [ ] **PR `dev/x.y.z/main` → `main`** — **không còn** thư mục `docs/todo/`; `bun run check:todo` xanh.
 - [ ] **Đã trả nợ** — đã xoá toàn bộ `docs/todo/`.

@@ -43,7 +43,7 @@
 - **Quick action** — chạy nhanh một action lên task/artifact đang chọn, không cần tạo task đầy đủ; menu lồng nhau.
 - **Logs** — soi lại chuyện đã xảy ra: audit thao tác, request HTTP, log job; bật/tắt từng loại trong Settings.
 - **Statistics** — thống kê drill-down project → task → step → job, biểu đồ pie / xychart.
-- **MCP** — đường vào cho agent không nói HTTP qua stdio (`bun run mcp`), không cần HTTP server chạy. Đọc project registry, task, artifact và knowledge bundle; CRUD registry chỉ mở ở mode `full`. Xem [MCP server](#mcp-server).
+- **MCP** — đường vào cho agent không nói HTTP qua stdio (`bun run mcp`), không cần HTTP server chạy. Đọc project registry, task, artifact và knowledge bundle; CRUD registry chỉ mở ở mode `full`. Xem [`docs/mcp/`](docs/mcp/README.md).
 
 ## Data root `.dev-team-agent/`
 
@@ -97,51 +97,12 @@ bun run check:todo   # gate docs/todo (CI promote → main)
 |------|-----------|----------|---------------|
 | `ANTHROPIC_API_KEY` | Tuỳ chọn | Sinh bản nháp agent từ mô tả (`/api/custom-agents/generate`) | Fallback heuristic |
 | `DASHBOARD_SECRET_KEY` | Bắt buộc cho vault | Mã hoá `secret-vault.json` (`secretVault.ts`) — credential kiểu "dán secret trực tiếp" (`stored:`) và "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` | 2 luồng đó fail rõ ràng; CLI và secretRef `env:` / `file:` không bị ảnh hưởng |
-| `DEVTEAM_MCP_MODE` | Tuỳ chọn | Mode vận hành của MCP server — `readonly` hoặc `full` | Mặc định `readonly` (chỉ tool đọc). Giá trị lạ → cảnh báo ra `stderr` rồi lùi về `readonly` |
-
-## MCP server
-
-`bun run mcp` chạy dashboard ở **vai server** (Claude Code gọi vào qua stdio). Vai ngược lại — dashboard **gọi** MCP server khác — là mode **MCP** trên UI, không liên quan phần này.
-
-### Mode vận hành
-
-Mode cố định lúc spawn và quyết định **tool nào được đăng ký**, nên tool ngoài quyền không xuất hiện trong `tools/list` chứ không phải hiện ra rồi bị từ chối. Chọn qua env `DEVTEAM_MCP_MODE`; CLI `--mode=<x>` ghi đè env. Dòng `stderr` lúc khởi động báo mode đang chạy.
-
-| Mode | Tool được đăng ký |
-|------|-------------------|
-| `readonly` (mặc định) | `list_projects` · `get_project` · `get_knowledge_bundle` · `list_tasks` · `get_task_state` · `get_task_context` · `list_artifacts` · `read_artifact` |
-| `full` | Tất cả tool trên + `add_project` · `create_qa` · `remove_project` |
-
-> ⚠️ **Nâng từ 1.1.x**: mặc định đổi thành `readonly`, nên `add_project` / `create_qa` / `remove_project` biến khỏi `tools/list` nếu không khai gì. Riêng `create_qa` là tool mà template agent của 1.1.8 được dạy gọi — ở mặc định mới agent sẽ **không nhìn thấy** nó. Giữ hành vi cũ bằng cách thêm `"env": { "DEVTEAM_MCP_MODE": "full" }` vào entry `mcpServers` của client.
-
-### Tool
-
-| Tool | Input | Output |
-|------|-------|--------|
-| `list_projects` | `{}` | `{ projects, defaultId }` |
-| `get_project` | `{ id }` | `{ project }` |
-| `get_knowledge_bundle` | `{ ids, project? }` | `{ bundle }` |
-| `list_tasks` | `{ project?, status?, limit? }` | `{ tasks, total }` |
-| `get_task_state` | `{ taskId, project? }` | `{ state }` |
-| `get_task_context` | `{ taskId, project?, include? }` | `{ task, request, pipeline, artifacts, subtasks, state, rules }` |
-| `list_artifacts` | `{ taskId, project? }` | `{ artifacts, subtasks }` |
-| `read_artifact` | `{ taskId, name, project? }` | `{ name, content, mtime }` |
-| `add_project` (mode `full`) | `{ path, name? }` | `{ project }` |
-| `remove_project` (mode `full`) | `{ id }` | `{ removed: true }` |
-| `create_qa` (mode `full`) | `{ taskId, questions, project? }` | `{ ok, path, created }` |
-
-`get_task_context` gộp bootstrap đầu phiên vào một lượt: nó trả `request.md`, pipeline (bước hiện tại + bước kế), danh sách artifact và machine state, thay cho chuỗi `cd <task-dir> && cat request.md && cat pipeline.yaml && ls -la`. `include` thu hẹp phần trả về; `rules` (`project-rules.md`) mặc định tắt vì orchestrator đã tiêm rule vào prompt từng bước. `request` và `rules` đều trả `{ content, truncated }` — nội dung cắt ở 64 KiB và `truncated` nói rõ có cắt hay không.
-
-Kết quả trả song song `content[0].text` (JSON) và `structuredContent`. Ba tool payload lớn — `get_knowledge_bundle`, `read_artifact` và `get_task_context` — cố ý **không** phát `structuredContent` để khỏi nhân đôi payload trên stdio. Lỗi mang mã máy đọc được ở `_meta.error.code` (`not_found` · `invalid_input` · `forbidden_in_mode` · `internal`).
-
-### Giới hạn đã biết
-
-- Thao tác ghi từ MCP **có** vào audit log và `events.jsonl`, nhưng **không** tới SSE của dashboard — event bus là in-process, MCP server và dashboard là hai tiến trình khác nhau. Dashboard đang mở phải refresh tay.
-- Chỉ transport stdio. HTTP/SSE chưa hỗ trợ.
+| `DEVTEAM_MCP_MODE` | Tuỳ chọn | Mode vận hành của MCP server — `readonly` hoặc `full` | Mặc định `readonly` (chỉ tool đọc). Giá trị lạ → cảnh báo ra `stderr` rồi lùi về `readonly`. Chi tiết: [`docs/mcp/server.md`](docs/mcp/server.md) §3 |
 
 ## Liên kết
 
 - [`docker/`](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example)
+- MCP server (`bun run mcp`) — [`docs/mcp/`](docs/mcp/README.md): mode vận hành, bảng tool, khai `mcpServers`, mã lỗi
 - Liên quan — [plugin Claude Code (bộ agent template)](docs/template/agents/) · [Issues](https://github.com/naut1402/agent-workflow/issues) · [Pull requests](https://github.com/naut1402/agent-workflow/pulls)
 - Tài liệu — [danh mục đầy đủ trong `docs/`](docs/README.md): kiến trúc, domain event, i18n, quy ước UI, template pipeline
 
