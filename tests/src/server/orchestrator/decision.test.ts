@@ -4,7 +4,14 @@ import {
   hasDecisionLine,
   parseDecision,
 } from '../../../../src/features/orchestrator/business/decision.js'
-import { DECISION_SENTINEL } from '../../../../src/features/orchestrator/schemas/orchestrator.js'
+import type { StepResult } from '../../../../src/features/orchestrator/business/decision.js'
+import { stepResultOf } from '../../../../src/features/orchestrator/business/decisionLoop.js'
+import {
+  DECISION_SENTINEL,
+  MAX_AGENT_CONTEXT_BYTES,
+  MAX_STEP_RESULT_BYTES,
+  STEP_SUMMARY_PREFIX,
+} from '../../../../src/features/orchestrator/schemas/orchestrator.js'
 
 // D1 của design: output agent không đọc được thì pipeline **halt tường minh**,
 // không đoán. Mọi case ở đây chấm đúng một thứ quan sát được — giá trị trả về
@@ -192,7 +199,7 @@ describe('buildDecisionPrompt — bối cảnh đủ cho AC-3/AC-4', () => {
         stepId: 'implementer',
         status: 'succeeded',
         artifacts: ['design.md', 'review.md'],
-        output: 'M2-marker ở cuối output',
+        result: 'M2-marker ở cuối output',
       },
     })
     expect(prompt).toContain('implementer')
@@ -213,7 +220,7 @@ describe('buildDecisionPrompt — bối cảnh đủ cho AC-3/AC-4', () => {
         stepId: 'implementer',
         status: 'succeeded',
         artifacts: [],
-        output: `${'x'.repeat(300_000)}\n${marker}`,
+        result: `${'x'.repeat(300_000)}\n${marker}`,
       },
     })
     expect(prompt).toContain(marker)
@@ -303,5 +310,141 @@ describe('buildDecisionPrompt — cấu hình orchestrator (TC-CFG-01/02/04)', (
     })
     expect(prompt).not.toContain('Hướng dẫn bổ sung')
     expect(prompt).not.toContain('## Knowledge')
+  })
+})
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * T6427b18c — nhóm C: kênh con → cha chỉ mang KẾT QUẢ.
+ *
+ * Trước fix, cả `job.stdout` thô của nút con đi vào prompt điều phối với ngân
+ * sách 8 KB, và phiên điều phối được resume qua nhiều lượt nên mỗi step xong là
+ * một lần cộng dồn log của con vào cùng cuộc hội thoại. Bề mặt chấm ở đây là
+ * CHUỖI PROMPT — đúng thứ đi vào `job.userPrompt` của lượt điều phối.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+function promptWith(over: Partial<StepResult> = {}): string {
+  return buildDecisionPrompt({
+    taskId: 'T1',
+    currentPhase: 'reviewer',
+    stepIds: STEPS,
+    trigger: 'step_finished',
+    stepResult: {
+      stepId: 'investigator',
+      status: 'succeeded',
+      artifacts: ['investigate.md'],
+      result: 'Đã khảo sát 3 module, ghi investigate.md.',
+      fromTail: false,
+      ...over,
+    },
+  })
+}
+
+/** Nội dung bên trong fence ```text — khối kết quả thật sự gửi cho nút cha. */
+function resultBlock(prompt: string): string {
+  const m = prompt.match(/```text\n([\s\S]*?)\n```/)
+  if (!m) throw new Error('prompt không có khối kết quả ```text')
+  return m[1]
+}
+
+describe('T6427b18c nhóm C — khối kết quả trong prompt điều phối', () => {
+  test('TC-26: giá trị hằng ngân sách', () => {
+    expect(MAX_STEP_RESULT_BYTES).toBe(2 * 1024)
+    expect(STEP_SUMMARY_PREFIX).toBe('STEP_SUMMARY:')
+    // Ngân sách của `agentContext` (cha → con) KHÔNG đổi theo task này.
+    expect(MAX_AGENT_CONTEXT_BYTES).toBe(8 * 1024)
+  })
+
+  test('TC-27: prompt mang stepId + artifact, KHÔNG mang log thô của nút con', () => {
+    const prompt = promptWith()
+    expect(prompt).toContain('investigator')
+    expect(prompt).toContain('investigate.md')
+    expect(prompt).toContain('Đã khảo sát 3 module, ghi investigate.md.')
+    expect(prompt).toContain('### Kết quả bước vừa xong')
+    expect(prompt).toContain('**Nguồn:** `STEP_SUMMARY` do nút con trả về')
+
+    // Phép đo trực tiếp của AC-3: chuỗi mồi nằm trong stdout của nút con nhưng
+    // NGOÀI dòng `STEP_SUMMARY` thì không được xuất hiện ở prompt của nút cha.
+    const leak = '__CHILD_CONTEXT_LEAK__'
+    const job = { stdout: `${leak}\nđang sửa file…\nSTEP_SUMMARY: xong phần khảo sát` } as any
+    const viaJob = buildDecisionPrompt({
+      taskId: 'T1',
+      currentPhase: 'reviewer',
+      stepIds: STEPS,
+      trigger: 'step_finished',
+      stepResult: stepResultOf(job, 'investigator', 'succeeded'),
+    })
+    expect(viaJob).toContain('xong phần khảo sát')
+    expect(viaJob).not.toContain(leak)
+  })
+
+  test('TC-28: kết quả quá dài bị cắt theo ngân sách, giữ ĐUÔI', () => {
+    const head = 'H'.repeat(200)
+    const tail = '<<<TAIL_MARKER>>>'.repeat(12)
+    const prompt = promptWith({ result: `${head}${'x'.repeat(300_000)}${tail}` })
+    const block = resultBlock(prompt)
+
+    expect(block).toContain('<<<TAIL_MARKER>>>')
+    expect(block).not.toContain(head)
+    expect(block).toContain('(đã cắt phần đầu)')
+    // Nhãn cắt là phần thêm vào, phần nội dung phải nằm trong ngân sách.
+    expect(Buffer.byteLength(block, 'utf8')).toBeLessThanOrEqual(
+      MAX_STEP_RESULT_BYTES + Buffer.byteLength('…(đã cắt phần đầu)\n', 'utf8'),
+    )
+  })
+
+  test('TC-29: biên ngân sách — vừa đủ thì không cắt', () => {
+    // (a) đúng 2048 byte ASCII ⇒ nguyên vẹn
+    const exact = 'a'.repeat(MAX_STEP_RESULT_BYTES)
+    const a = resultBlock(promptWith({ result: exact }))
+    expect(a).toBe(exact)
+    expect(a).not.toContain('(đã cắt phần đầu)')
+
+    // (b) thêm đúng 1 byte ⇒ cắt, giữ đuôi
+    const b = resultBlock(promptWith({ result: `Z${exact}` }))
+    expect(b).toContain('(đã cắt phần đầu)')
+    expect(b).not.toContain('Z' + 'a'.repeat(10))
+    expect(b.endsWith('a'.repeat(10))).toBe(true)
+
+    // (c) tiếng Việt nhiều byte: điểm cắt rơi đúng ranh giới ký tự
+    const c = resultBlock(promptWith({ result: 'á'.repeat(1200) }))
+    expect(c).toContain('(đã cắt phần đầu)')
+    expect(c).not.toContain('�')
+  })
+
+  test('TC-30: fromTail: true ⇒ prompt khai rõ nguồn là đuôi output', () => {
+    const prompt = promptWith({ fromTail: true })
+    expect(prompt).toContain('**Nguồn:** đuôi output (nút con không trả `STEP_SUMMARY`)')
+    expect(prompt).not.toContain('**Nguồn:** `STEP_SUMMARY` do nút con trả về')
+  })
+
+  test('TC-31: fromTail vắng mặt xử như false', () => {
+    const prompt = buildDecisionPrompt({
+      taskId: 'T1',
+      currentPhase: 'reviewer',
+      stepIds: STEPS,
+      trigger: 'step_finished',
+      stepResult: { stepId: 'investigator', status: 'succeeded', artifacts: [], result: 'xong' },
+    })
+    expect(prompt).toContain('**Nguồn:** `STEP_SUMMARY` do nút con trả về')
+  })
+
+  test('TC-32: không có artifact', () => {
+    expect(promptWith({ artifacts: [] })).toContain('**Artifact ghi được:** (không có)')
+  })
+
+  test('TC-33: nút con không trả gì ⇒ nói thẳng, không để khối rỗng', () => {
+    const block = resultBlock(promptWith({ result: '   \n  ', fromTail: true }))
+    expect(block).toBe('(nút con không trả kết quả)')
+  })
+
+  test('TC-34: step thất bại hiển thị đúng trạng thái', () => {
+    expect(promptWith({ status: 'failed' })).toContain('— thất bại')
+    expect(promptWith({ status: 'succeeded' })).toContain('— thành công')
+  })
+
+  test('TC-35: GET /output vẫn còn, và được mô tả là kênh CHỈ gọi khi cần', () => {
+    const prompt = promptWith()
+    expect(prompt).toContain('/api/orchestrator/output')
+    expect(prompt).toContain('CHỈ gọi khi')
   })
 })

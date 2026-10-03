@@ -7,6 +7,7 @@ import {
   listJobs,
   loadJob,
   registerProvider,
+  loadTaskSessionLedger,
   submitJob,
   upsertConnection,
   upsertRunner,
@@ -214,5 +215,42 @@ describe('đường chạy tay vẫn giữ nguyên hành vi tự-chữa', () => 
     if ('error' in res) throw new Error(res.error)
     // Hành vi cũ: nhận ra implementer đã xong rồi chạy tiếp reviewer.
     expect(res.stepId).toBe('reviewer')
+  })
+})
+
+/*
+ * T6427b18c TC-45 / TC-R5 — pipeline TẮT điều phối chạy y như trước.
+ *
+ * Giao thức `STEP_SUMMARY` là phần của brief, và brief chỉ do
+ * `composeStepBrief` (chỉ gọi từ `decisionLoop`) sinh ra. Đường chạy thường
+ * đọc thẳng `request.md`, nên prompt gửi nút con không được nhiễm gì của task
+ * này — đây là cam kết nền của một tính năng opt-in.
+ */
+describe('T6427b18c — pipeline tắt điều phối không nhiễm giao thức STEP_SUMMARY', () => {
+  test('TC-45: step chạy đường thường ⇒ userPrompt là request.md thô, không có "### Khi xong"', async () => {
+    fs.writeFileSync(
+      path.join(root, 'pipeline.yaml'),
+      [
+        'version: 1',
+        'orchestrator: { enabled: false }',
+        'steps:',
+        '  - { id: investigator, name: Investigate, agent: "a:inv" }',
+        '  - { id: implementer, name: Implement, agent: "a:impl" }',
+      ].join('\n'),
+      'utf8',
+    )
+    seedTask('NOORCH', 'implementer', { orchestrator_enabled: false })
+
+    const res = await runTaskStep(root, 'P1', 'NOORCH', { targetStepId: 'implementer', skipIntermediate: true })
+    if ('error' in res) throw new Error(res.error)
+
+    expect(res.job.userPrompt).toBe('# request thô\n')
+    expect(res.job.userPrompt).not.toContain('### Khi xong')
+    expect(res.job.userPrompt).not.toContain('STEP_SUMMARY:')
+  })
+
+  test('TC-R5: ledger của lượt chạy đó không mang entry nào của nút điều phối', async () => {
+    const ledger = loadTaskSessionLedger('P1', 'NOORCH')
+    expect(ledger.sessions.some((s) => s.stepIds?.includes('__orchestrator__'))).toBe(false)
   })
 })
