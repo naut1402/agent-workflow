@@ -1,4 +1,4 @@
-// Tbefa5f4c · Nhóm F (TC-F01 … TC-F29) — `redactToolText`.
+// Tbefa5f4c · Nhóm F (TC-F01 … TC-F32) — `redactToolText`.
 //
 // ⚠️ Expected của nhóm này lấy NGUYÊN từ `test-spec.md` §5.F.1/§5.F.2/§5.F.3 —
 // không ca nào được sinh bằng cách chạy hàm rồi chép output. Hàm này đã rò hai
@@ -295,7 +295,7 @@ describe('Nhóm F · §5.F.4 — thứ tự rule và ngưỡng', () => {
     })
   })
 
-  test('TC-F29: 🆕 ⚠️ khoá nhạy cảm sau khoá KHÔNG nhạy cảm — match ngoài không được nuốt mất', () => {
+  test('TC-F30: 🆕 ⚠️ khoá nhạy cảm sau khoá KHÔNG nhạy cảm — match ngoài không được nuốt mất', () => {
     // Lỗ rò thật: `KEY_VALUE_RE` global khớp tại khoá đầu tiên (`https`), và span
     // đã khớp thì không bao giờ được xét lại ⇒ `api_key=abc123` lọt nguyên văn.
     // Bản vá rescan value của khoá không nhạy cảm, nên ca này phải xanh mãi.
@@ -309,7 +309,7 @@ describe('Nhóm F · §5.F.4 — thứ tự rule và ngưỡng', () => {
     )
   })
 
-  test('TC-F30: 🆕 ⚠️ `curl -u user:pass` — credential ở flag basic-auth', () => {
+  test('TC-F31: 🆕 ⚠️ `curl -u user:pass` — credential ở flag basic-auth', () => {
     expect(redactToolText('curl -u user:pass https://api.x.com')).toBe('curl -u [redacted] https://api.x.com')
     expect(redactToolText(`curl -u 'admin:s3cret' https://api.x.com`)).not.toContain('s3cret')
     expect(redactToolText('curl --user admin:s3cret https://api.x.com')).toBe(
@@ -320,7 +320,7 @@ describe('Nhóm F · §5.F.4 — thứ tự rule và ngưỡng', () => {
     )
   })
 
-  test('TC-F31: 🆕 ⚠️ userinfo trong URL — `scheme://user:pass@host`', () => {
+  test('TC-F32: 🆕 ⚠️ userinfo trong URL — `scheme://user:pass@host`', () => {
     expect(redactToolText('git clone https://user:pass@github.com/org/repo.git')).toBe(
       'git clone https://[redacted]@github.com/org/repo.git',
     )
