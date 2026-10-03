@@ -14,6 +14,14 @@ export const LoggingTypesSchema = z.object({
   /** Domain events JSONL — opt-in (default off; volume/noise when debugging). */
   events: z.boolean().optional(),
   usage: z.boolean().optional(),
+  /**
+   * Tool calls per job — opt-in (default off: analysis data, not operations).
+   *
+   * The key is the hyphenated string, NOT `toolCall`: `readLogsFromSqlite` /
+   * `readLogsFromFile` pass a `LogType` straight into `isLogTypeEnabled`, which
+   * takes a `LoggingTypeKey`. The two key sets must keep matching.
+   */
+  'tool-call': z.boolean().optional(),
 })
 
 /** Storage backends for the log write/read path. */
@@ -36,6 +44,7 @@ export type LoggingTypes = {
   jobs: boolean
   events: boolean
   usage: boolean
+  'tool-call': boolean
 }
 
 export type LoggingConfig = {
@@ -48,7 +57,7 @@ export type LoggingTypeKey = keyof LoggingTypes
 
 export const DEFAULT_LOGGING_CONFIG: LoggingConfig = {
   showLogsTab: true,
-  types: { audit: true, request: true, jobs: true, events: false, usage: true },
+  types: { audit: true, request: true, jobs: true, events: false, usage: true, 'tool-call': false },
   driver: 'file',
 }
 
@@ -65,6 +74,8 @@ export function parseLoggingConfig(raw: unknown): LoggingConfig {
       // Opt-in: missing/undefined → off (unlike audit/request/jobs).
       events: d.types?.events === true,
       usage: d.types?.usage !== false,
+      // Opt-in as well — prefs saved before this key existed stay valid and off.
+      'tool-call': d.types?.['tool-call'] === true,
     },
     driver: d.driver === 'sqlite' ? 'sqlite' : 'file',
   }

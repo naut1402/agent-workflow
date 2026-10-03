@@ -107,6 +107,30 @@ export const getTaskStateInput = { taskId: TaskId, project: ProjectRef.optional(
 
 export const listArtifactsInput = { taskId: TaskId, project: ProjectRef.optional() }
 
+/**
+ * Sections `get_task_context` can return. Kept as an array so the enum, the type
+ * and the handler's allowlist all come from one declaration.
+ */
+export const TASK_CONTEXT_SECTIONS = ['request', 'pipeline', 'artifacts', 'state', 'rules'] as const
+export type TaskContextSection = (typeof TASK_CONTEXT_SECTIONS)[number]
+
+/** Sections returned when `include` is omitted — `rules` is NOT one of them. */
+export const DEFAULT_TASK_CONTEXT_SECTIONS: readonly TaskContextSection[] = [
+  'request',
+  'pipeline',
+  'artifacts',
+  'state',
+]
+
+export const getTaskContextInput = {
+  taskId: TaskId,
+  project: ProjectRef.optional(),
+  include: z
+    .array(z.enum(TASK_CONTEXT_SECTIONS))
+    .optional()
+    .describe("Defaults to ['request','pipeline','artifacts','state'] — 'rules' is opt-in."),
+}
+
 export const readArtifactInput = {
   taskId: TaskId,
   name: z.string().min(1).describe('Artifact file name, e.g. `design.md`.'),

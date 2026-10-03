@@ -23,11 +23,22 @@ export interface SessionEntry {
   staleReason?: string
   /** Cursor for Claude transcript usage capture across resume jobs. */
   usageCursor?: UsageCursor
+  /**
+   * Cursor for tool-call ingest. Deliberately a SEPARATE key from `usageCursor`:
+   * sharing `mainLines` would let whichever ingest ran first consume the lines the
+   * other one still has to read, which happens for real whenever one of the two
+   * log types is on and the other is off.
+   */
+  toolCallCursor?: ToolCallCursor
 }
 
 export interface UsageCursor {
   mainLines: number
   subagentFiles: string[]
+}
+
+export interface ToolCallCursor {
+  mainLines: number
 }
 
 export interface TaskSessionLedger {
@@ -354,6 +365,43 @@ export function setUsageCursor(
       mainLines: Math.max(0, cursor.mainLines),
       subagentFiles: [...cursor.subagentFiles],
     }
+    s.lastUsedAt = new Date().toISOString()
+    changed = true
+    break
+  }
+  if (changed) saveTaskSessionLedger(projectId, ledger)
+}
+
+/** Read tool-call cursor for a session id on the task ledger (null if missing). */
+export function getToolCallCursor(
+  projectId: string,
+  taskId: string,
+  sessionId: string,
+): ToolCallCursor | null {
+  if (!projectId || !taskId || !sessionId) return null
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
+    const s = ledger.sessions[i]
+    if (s.sessionId !== sessionId) continue
+    return s.toolCallCursor ? { ...s.toolCallCursor } : null
+  }
+  return null
+}
+
+/** Persist tool-call cursor onto the matching session entry (no-op if not found). */
+export function setToolCallCursor(
+  projectId: string,
+  taskId: string,
+  sessionId: string,
+  cursor: ToolCallCursor,
+): void {
+  if (!projectId || !taskId || !sessionId) return
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  let changed = false
+  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
+    const s = ledger.sessions[i]
+    if (s.sessionId !== sessionId) continue
+    s.toolCallCursor = { mainLines: Math.max(0, cursor.mainLines) }
     s.lastUsedAt = new Date().toISOString()
     changed = true
     break

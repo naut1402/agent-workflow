@@ -1,4 +1,4 @@
-// 4 tool đọc nhóm task/artifact (P2) + 1 tool ghi `create_qa` kế thừa từ 1.1.8.
+// 5 tool đọc nhóm task/artifact (P2) + 1 tool ghi `create_qa` kế thừa từ 1.1.8.
 // Đường ghi duy nhất cho task là `create_qa`; `write_artifact` / `decide_hitl`
 // vẫn hoãn sang 1.3.0 (Tb4241005 D8).
 //
@@ -21,7 +21,7 @@ import {
   resolveArtifact,
 } from '../../src/features/monitor/business/tasks/reads.js'
 import { fail, ok } from '../envelope.js'
-import { isSafeTaskId } from '../schemas.js'
+import { DEFAULT_TASK_CONTEXT_SECTIONS, isSafeTaskId, TASK_CONTEXT_SECTIONS } from '../schemas.js'
 
 const DEFAULT_TASK_LIMIT = 50
 
@@ -196,4 +196,143 @@ export async function handleCreateQa({
   const result = await createQa(gate.root, taskId, { questions })
   if ('error' in result) return fail('invalid_input', result.error)
   return ok(result)
+}
+
+// ── get_task_context ─────────────────────────────────────────────────────────
+
+/**
+ * Cap on `request.md` / `project-rules.md` content, in characters. Same reasoning
+ * as the artifact cap: the payload crosses stdio, so an unbounded file would make
+ * one tool call cost more than the Bash chain it replaces.
+ */
+const TASK_CONTEXT_MAX_CHARS = 64 * 1024
+
+/**
+ * Unwrap a tool envelope into its payload, or `null` when the branch failed.
+ *
+ * Branch failures are deliberately swallowed: a task with no `request.md` yet, or
+ * a broken `pipeline.yaml`, is a valid state that must not take the whole tool
+ * down with it.
+ */
+function payloadOf(result: any): any {
+  if (!result || result.isError) return null
+  if (result.structuredContent) return result.structuredContent
+  const text = result.content?.[0]?.text
+  if (typeof text !== 'string') return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
+function capped(content: string): { content: string; truncated: boolean } {
+  if (content.length <= TASK_CONTEXT_MAX_CHARS) return { content, truncated: false }
+  return { content: content.slice(0, TASK_CONTEXT_MAX_CHARS), truncated: true }
+}
+
+/** Step list reduced to what an agent needs to know about where it is. */
+function summarisePipeline(cfg: any, state: any): any {
+  const steps = Array.isArray(cfg?.steps) ? cfg.steps : []
+  const slim = steps.map((s: any) => ({
+    id: s?.id ?? null,
+    name: s?.name ?? null,
+    agent: s?.agent ?? null,
+    produces: Array.isArray(s?.produces) ? s.produces : [],
+  }))
+  const currentStepId =
+    state && typeof state.current_phase === 'string' && state.current_phase
+      ? state.current_phase
+      : null
+  const idx = currentStepId ? slim.findIndex((s: any) => s.id === currentStepId) : -1
+  const nextStepId = idx >= 0 && idx + 1 < slim.length ? slim[idx + 1].id : null
+  return { steps: slim, currentStepId, nextStepId }
+}
+
+/**
+ * Whole context of one task in ONE call: `request.md`, the pipeline (current +
+ * next step), the artifact listing, and the machine state.
+ *
+ * No new algorithm — it is a fan-out over handlers that already exist. The value
+ * is in the round trips it removes: 21 of 25 measured sessions opened with the
+ * exact `cd <task-dir> && cat request.md && cat pipeline.yaml && ls -la` chain
+ * this replaces, and because the tool takes a `taskId` there is no `cd` at all.
+ */
+export async function handleGetTaskContext({
+  taskId,
+  project,
+  include,
+}: { taskId: string; project?: string; include?: string[] }): Promise<any> {
+  const bad = badTaskId(taskId)
+  if (bad) return bad
+
+  const sections: readonly string[] = include ?? DEFAULT_TASK_CONTEXT_SECTIONS
+  if (!Array.isArray(sections)) return fail('invalid_input', 'include must be an array')
+  for (const section of sections) {
+    if (!(TASK_CONTEXT_SECTIONS as readonly string[]).includes(section)) {
+      return fail(
+        'invalid_input',
+        `unknown include section: ${JSON.stringify(section)} — expected one of ${TASK_CONTEXT_SECTIONS.join(', ')}`,
+      )
+    }
+  }
+
+  const gate = rootOrFail(project)
+  if ('error' in gate) return gate.error
+  const root = gate.root
+  const wants = (section: string) => sections.includes(section)
+
+  // 🚫 No `joinPath` in `mcp/` — `resolvePathUnder` returns null when the target
+  // escapes the root, and that is a `fail`, not a silent read somewhere else.
+  const rulesFile = wants('rules') ? resolvePathUnder(root, 'project-rules.md') : null
+  if (wants('rules') && !rulesFile) {
+    return fail('invalid_input', 'rules path escapes the project root')
+  }
+
+  const [state, artifacts, request, pipelineCfg, rules] = await Promise.all([
+    wants('state') ? handleGetTaskState({ taskId, project }).then(payloadOf, () => null) : null,
+    wants('artifacts') ? handleListArtifacts({ taskId, project }).then(payloadOf, () => null) : null,
+    wants('request')
+      ? handleReadArtifact({ taskId, name: 'request.md', project }).then(payloadOf, () => null)
+      : null,
+    wants('pipeline') ? loadPipelineConfig(root, taskId).catch(() => null) : null,
+    rulesFile ? readTextFile(rulesFile).catch(() => null) : null,
+  ])
+
+  const stateObj = state?.state ?? null
+  // `untrusted` means the YAML was there but unreadable. Reporting the built-in
+  // default as if it were the task's pipeline would be worse than saying nothing.
+  const pipeline =
+    pipelineCfg && !pipelineCfg.untrusted ? summarisePipeline(pipelineCfg, stateObj) : null
+
+  const requestBody = typeof request?.content === 'string' ? capped(request.content) : null
+
+  return ok(
+    {
+      taskId,
+      task: stateObj
+        ? {
+            id: taskId,
+            name: stateObj.name ?? null,
+            phase: stateObj.current_phase ?? null,
+            hitlPending: stateObj.hitl_pending ?? null,
+          }
+        : null,
+      request: requestBody
+        ? { name: 'request.md', mtime: request.mtime ?? null, ...requestBody }
+        : null,
+      pipeline,
+      artifacts: artifacts?.artifacts ?? null,
+      subtasks: artifacts?.subtasks ?? null,
+      state: stateObj,
+      // Same `{ content, truncated }` shape as `request`: an agent handed a
+      // silently clipped `project-rules.md` has no way to tell, and one branch of
+      // the payload reporting truncation while its neighbour hides it is worse
+      // than neither doing so.
+      rules: typeof rules === 'string' ? { name: 'project-rules.md', ...capped(rules) } : null,
+    },
+    // G8: same reasoning as `read_artifact` — the payload carries file contents,
+    // and `structuredContent` would send every byte of it twice over stdio.
+    { structured: false },
+  )
 }

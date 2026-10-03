@@ -22,6 +22,7 @@ export const READ_TOOLS = [
   'get_knowledge_bundle',
   'list_tasks',
   'get_task_state',
+  'get_task_context',
   'list_artifacts',
   'read_artifact',
 ] as const

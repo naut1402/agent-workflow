@@ -178,9 +178,10 @@ Chi tiết implementation cụ thể — tên file, hàm, bảng schema. Đây l
 | [4.1 Frontend](#41-frontend) | Thêm mode mới, đổi cách FE gọi server, lần theo bootstrap lúc app khởi động |
 | [4.2 HTTP kernel](#42-http-kernel) | Thêm/sửa endpoint API, hoặc cần biết vì sao server chạy được ở cả `bun run dev` lẫn `bun run serve` |
 | [4.3 Data root](#43-data-root) | Cần biết chính xác 1 field/tên file mà orchestrator ghi/đọc |
-| [4.4 DB (SQLite)](#44-db-sqlite) | Trước khi bật `logging.driver: sqlite` hoặc thêm bảng mới |
-| [4.5 Config shell](#45-config-shell) | Không chắc 1 setting nên đặt ở preference shell hay schema business |
-| [4.6 Styling](#46-styling) | Thêm style mới xuyên feature |
+| [4.4 Log `tool-call` và thống kê tool](#44-log-tool-call-và-thống-kê-tool) | Trước khi đụng ingest tool-call, `scripts/tool-usage-stats.ts`, hoặc thêm log type mới |
+| [4.5 DB (SQLite)](#45-db-sqlite) | Trước khi bật `logging.driver: sqlite` hoặc thêm bảng mới |
+| [4.6 Config shell](#46-config-shell) | Không chắc 1 setting nên đặt ở preference shell hay schema business |
+| [4.7 Styling](#47-styling) | Thêm style mới xuyên feature |
 | [`events/`](events/README.md) | Viết subscriber, thêm emit mới, tra cứu 1 domain event cụ thể |
 
 ### 4.1 Frontend
@@ -250,7 +251,25 @@ Schema chi tiết `.dev-team-agent/` — tên file/field thật mà orchestrator
 | Knowledge store (driver `file`) | `knowledge.config.yaml`, `knowledge/{project,system}/*.md`, sidecar `knowledge/collections.yaml` | Scope `global` **không** nằm ở đây — ở `registryHome()/knowledge/global/`, dùng chung mọi project |
 | Resolve root theo run mode (Dev / Standalone) | `src/backend/registry.ts` | Hàm `resolveProjectRoot` |
 
-### 4.4 DB (SQLite)
+### 4.4 Log `tool-call` và thống kê tool
+
+Log type opt-in ghi **một entry mỗi JOB** (không phải mỗi lượt gọi) liệt kê các tool mà job đó đã gọi. Mục đích: trả lời "agent đang dùng tool nào, tốn bao nhiêu lượt" bằng số liệu bền, thay vì quét `~/.claude/projects/**` — transcript bị prune nên chỉ 2,9% job còn đọc được.
+
+| Chủ đề | Chi tiết |
+|---|---|
+| **Bật/tắt** | Settings › Logging › "Tool call". **Mặc định tắt** (như `events`): đây là dữ liệu phân tích, không phải vận hành. Khoá prefs là chuỗi `'tool-call'`, không phải `toolCall` — `isLogTypeEnabled` nhận thẳng `LogType`. |
+| **Đường ghi** | `captureJobToolCalls` (`features/runner/business/toolCallCapture.ts`) chạy fire-and-forget cạnh `captureJobUsage` khi job kết thúc. Không giới hạn provider: `claude-code-cli` đọc transcript JSONL theo con trỏ dòng, provider còn lại đọc `agent-sdk-sessions/<id>.json`. |
+| **Idempotency** | Hai đường độc lập — con trỏ `toolCallCursor` trên `SessionEntry` (runtime) và dedupe theo `jobId` (backfill thủ công). Con trỏ tách riêng khỏi `usageCursor`: dùng chung thì hai đường ingest ăn mất phần đọc của nhau. |
+| **Redact** | Bắt buộc, chạy trước khi cắt độ dài, dùng lại `SENSITIVE_KEY_RE` export từ `src/shared/log/schema.ts`. Path và SHA git **không** bị redact — redact mù làm hỏng toàn bộ phân tích lệnh. |
+| **Trần** | `TOOL_CALL_MAX_CALLS` 500 · `TOOL_CALL_TEXT_MAX_CHARS` 2.048 · `TOOL_CALL_TEXT_BUDGET` 65.536. `callsTotal > calls.length` mang đúng MỘT nghĩa: entry bị cắt trần. |
+| **Đọc + thống kê** | `features/statistics/business/toolCallStats.ts` qua `readLogs` nên **đi đúng driver đang active** (khác `readUsageEntries`, xem giới hạn ở §4.5). Phân loại ý định lệnh Bash ở `features/statistics/lib/bashIntent.ts` (thuần, heredoc-aware, tôn trọng chuỗi trích dẫn). |
+| **Nhãn bigram: `cd` không được làm đại diện** | Một lượt Bash mang nhiều ý định, nhưng chuỗi lệnh (bigram) cần ĐÚNG MỘT nhãn mỗi lượt. `primaryIntentOf` lấy ý định đầu tiên **khác `cd`**, chỉ rơi về `cd` khi cả lượt không làm gì khác. Lý do: 74,1% lượt Bash mở đầu bằng `cd` tuyệt đối chỉ vì cwd reset sau mỗi lượt — đó là artefact môi trường, không phải việc agent định làm. Lấy nó làm nhãn thì gần như mọi cặp thành `cd → cd` và vòng lặp khảo sát `read`/`grep` (69,1%, căn cứ cho `search_code`) biến mất khỏi báo cáo. `classifyBashCall().intents` thì NGƯỢC LẠI — vẫn giữ `cd` để bảng tần suất ý định báo đúng 74,1%. |
+| **CLI** | `bun run scripts/tool-usage-stats.ts` — mặc định đọc log đã ingest; `--from-transcripts --ingest` nạp ngược từ transcript còn sót (idempotent theo `jobId`); `--format=markdown` đổ thẳng vào `reports/`. Phiên đang chạy script bị loại mặc định qua `$CLAUDE_SESSION_ID`. |
+| **Không đụng DB** | Driver `file` tự sinh `logs/tool-call.jsonl`; driver `sqlite` dùng bảng `log_entries` sẵn có. Không migration mới. |
+
+Báo cáo gần nhất: [`reports/tool-usage-2026-10.md`](../../reports/tool-usage-2026-10.md).
+
+### 4.5 DB (SQLite)
 
 Tầng `src/backend/db/` — một file SQLite dùng chung cho mọi subsystem cần lưu trữ có cấu trúc thay vì file-based, hiện gồm log backend `sqlite` (opt-in) và collection/tag của knowledge (luôn bật).
 
@@ -265,7 +284,7 @@ Tầng `src/backend/db/` — một file SQLite dùng chung cho mọi subsystem c
 | **Giới hạn đã biết** | `logging.driver = 'sqlite'` làm mode Thống kê rỗng. `readUsageEntries()` (`src/features/statistics/business/`) đọc `usage.jsonl` vô điều kiện, không hỏi `activeLogDriverKind()`, nên khi driver là `sqlite` thì entry `usage` chỉ vào `log_entries` và `GET /api/statistics/usage` trả 0 mà không báo lỗi. Chỉ bật `sqlite` để thử PoC, đừng bật khi cần số liệu usage. |
 | **Backend không dùng được** | `getDb()` in `[db] sqlite unavailable` ra stderr lần đầu mở thất bại (vd chạy dưới Node, không có `bun:sqlite`). Hai consumer xử lý khác nhau: **đường log** nuốt lỗi để giữ bất biến *append không bao giờ throw* (log rỗng trông y hệt "chưa có log" nếu không để ý dòng cảnh báo); **knowledge** thì ném `KnowledgeDbError` → 500. |
 
-### 4.5 Config shell
+### 4.6 Config shell
 
 Preference/version shell tách theo scope chạy: `src/frontend/configs/` cho preference đọc trên browser, `src/backend/configs/` cho thứ phải đọc `package.json`. Không import HTTP kernel; domain/business import configs + `lib` + `registry` khi cần.
 
@@ -281,7 +300,7 @@ Preference/version shell tách theo scope chạy: `src/frontend/configs/` cho pr
 
 Sanitize / peer API gắn vào business hiện có và **re-export qua `business/index.ts`** khi feature khác cần dùng. Feature tiêu thụ chỉ import peer từ **index của chính nó**, không import thẳng `features/<khác>/business/...` (trừ khi tránh vòng barrel — xem feature-organization-rule).
 
-### 4.6 Styling
+### 4.7 Styling
 
 Đọc khi thêm style mới xuyên feature, hoặc cần biết vì sao đổi 1 token lại ảnh hưởng toàn bộ giao diện.
 

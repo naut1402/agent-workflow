@@ -4,19 +4,21 @@ import { z } from 'zod'
  * Log entry schema (request/audit JSONL). Write path: `src/backend/log` (driver + append).
  * Read UI: `src/features/logs/business`.
  *
- * Four kinds, discriminated by `type`:
- *  - `request` — one line per `/api/*` request (method/path/status/duration).
- *  - `audit`   — one line per config mutation (op/entity/identifier).
- *  - `events`  — one line per domain event from the in-process bus (`event` field
- *                holds DashboardEvent.type; do not confuse with this discriminant).
- *  - `usage`   — one line per job LLM token snapshot (`UsageSnapshot` + source).
+ * Five kinds, discriminated by `type`:
+ *  - `request`   — one line per `/api/*` request (method/path/status/duration).
+ *  - `audit`     — one line per config mutation (op/entity/identifier).
+ *  - `events`    — one line per domain event from the in-process bus (`event` field
+ *                  holds DashboardEvent.type; do not confuse with this discriminant).
+ *  - `usage`     — one line per job LLM token snapshot (`UsageSnapshot` + source).
+ *  - `tool-call` — one line per JOB (not per call) listing the tool calls that job
+ *                  made. Opt-in; feeds `scripts/tool-usage-stats.ts`.
  *
  * Parsing is intentionally defensive: a malformed JSONL line yields `null` and
  * is skipped rather than throwing, mirroring the codebase's defensive-reads rule.
  *
  * `level` + `traceId` default when missing so older JSONL rows still parse.
  */
-export const LOG_TYPES = ['request', 'audit', 'events', 'usage'] as const
+export const LOG_TYPES = ['request', 'audit', 'events', 'usage', 'tool-call'] as const
 export type LogType = (typeof LOG_TYPES)[number]
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const
@@ -137,19 +139,92 @@ export const UsageLogEntry = z.object({
   agentType: z.string().nullable().optional(),
 })
 
-export const LogEntry = z.discriminatedUnion('type', [RequestLogEntry, AuditLogEntry, EventLogEntry, UsageLogEntry])
+/**
+ * One tool invocation inside a job. `text` is the command / primary argument —
+ * redacted and capped by the writer, but newlines are KEPT: intent analysis needs
+ * the whole `&&` chain and the heredoc body, unlike `describeToolUse()` in
+ * `sessionTranscript.ts` which deliberately keeps only the first line.
+ */
+export const ToolCallSchema = z.object({
+  /** `Bash` | `Read` | `mcp__agent-workflow__list_tasks` | `search_files` | … */
+  name: z.string(),
+  /** ISO timestamp of the block; `null` for sources that keep no per-call time. */
+  at: z.string().nullable().default(null),
+  text: z.string().default(''),
+  /** `true` = the call came from a subagent (`isSidechain`). */
+  sidechain: z.boolean().default(false),
+})
+export type ToolCall = z.infer<typeof ToolCallSchema>
+
+/**
+ * One entry per JOB, not per call. Per-call rows would push ~30k lines through the
+ * 5 MB file-driver rotation (which keeps a single `.1` backup) and lose exactly the
+ * history this log exists to keep — the problem transcript pruning already caused.
+ */
+export const ToolCallLogEntry = z.object({
+  type: z.literal('tool-call'),
+  ts: z.number(),
+  iso: z.string(),
+  level: levelField,
+  traceId: traceIdField,
+  jobId: z.string(),
+  sessionId: z.string().nullable().default(null),
+  taskId: z.string().nullable().default(null),
+  projectId: z.string().nullable().default(null),
+  stepId: z.string().nullable().default(null),
+  agentRef: z.string().nullable().default(null),
+  /** `connection.providerId` of the job that produced these calls. */
+  provider: z.string().default(''),
+  source: z.enum(['cli-transcript', 'agent-sdk-session']).default('cli-transcript'),
+  /**
+   * Calls seen BEFORE the `TOOL_CALL_MAX_CALLS` cap, so `callsTotal > calls.length`
+   * means exactly one thing — "this entry was truncated" — which is what
+   * `coverage.truncatedEntries` reports. Agent-SDK dedupe happens BEFORE this count:
+   * resume rewrites the whole session file, so those repeats are an artefact of the
+   * storage format, not calls that were dropped.
+   */
+  callsTotal: z.number(),
+  calls: z.array(ToolCallSchema),
+})
+
+export const LogEntry = z.discriminatedUnion('type', [
+  RequestLogEntry,
+  AuditLogEntry,
+  EventLogEntry,
+  UsageLogEntry,
+  ToolCallLogEntry,
+])
 export type LogEntry = z.infer<typeof LogEntry>
 export type RequestLogEntry = z.infer<typeof RequestLogEntry>
 export type AuditLogEntry = z.infer<typeof AuditLogEntry>
 export type EventLogEntry = z.infer<typeof EventLogEntry>
 export type UsageLogEntry = z.infer<typeof UsageLogEntry>
+export type ToolCallLogEntry = z.infer<typeof ToolCallLogEntry>
 
 /** Cap stored query/response previews so JSONL stays bounded. */
 export const LOG_QUERY_MAX_CHARS = 2_048
 export const LOG_RESPONSE_MAX_CHARS = 4_096
 
-/** Keys that must never land in request/response log previews. */
-const SENSITIVE_KEY_RE = /(token|pat|secret|password|api[-_]?key|authorization)/i
+/**
+ * Caps for one `tool-call` entry. The heaviest session measured was 63 calls, so
+ * `TOOL_CALL_MAX_CALLS` is headroom rather than a real limit — but when it does
+ * bite, `callsTotal` keeps the true number so the report says "truncated" instead
+ * of silently under-counting.
+ */
+export const TOOL_CALL_MAX_CALLS = 500
+/** Per-call `text` cap, in characters (ellipsis included). */
+export const TOOL_CALL_TEXT_MAX_CHARS = 2_048
+/** Total `text` budget per entry; calls past it keep `name` + `at` and drop `text`. */
+export const TOOL_CALL_TEXT_BUDGET = 65_536
+
+/**
+ * Keys that must never land in log previews.
+ *
+ * Exported so the tool-call redactor reuses THIS regex: two drifting sets of
+ * redaction rules is guaranteed debt (see `redactToolText` in
+ * `src/features/runner/business/toolCallCapture.ts`).
+ */
+export const SENSITIVE_KEY_RE = /(token|pat|secret|password|api[-_]?key|authorization)/i
 
 export function truncateForLog(text: string, max: number): string {
   if (text.length <= max) return text

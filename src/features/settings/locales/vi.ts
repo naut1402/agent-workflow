@@ -78,6 +78,7 @@ export default {
       jobs: 'Jobs (stdout runner)',
       events: 'Events (domain event bus)',
       usage: 'Usage (token LLM)',
+      toolCall: 'Tool call (lượt gọi tool mỗi job — cho thống kê)',
     },
     saved: 'Đã lưu.',
     loadError: 'Không tải được cấu hình logging.',

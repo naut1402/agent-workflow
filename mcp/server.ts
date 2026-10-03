@@ -13,7 +13,7 @@
 // Mode vận hành quyết định tool nào được đăng ký; mặc định `readonly` (D7).
 // Xem `mcp/modes.ts`.
 //
-// Tools: 7 tool đọc (`readonly` + `full`) + 3 tool ghi (chỉ `full`).
+// Tools: 8 tool đọc (`readonly` + `full`) + 3 tool ghi (chỉ `full`).
 // Allowlist thật — nguồn cho MÁY: `mcp/modes.ts`.
 // Bảng field / output / mã lỗi — nguồn cho NGƯỜI: `docs/mcp/server.md`.
 //
@@ -36,6 +36,7 @@ import {
   getKnowledgeBundleInput,
   getProjectInput,
   getProjectOutput,
+  getTaskContextInput,
   getTaskStateInput,
   getTaskStateOutput,
   listArtifactsInput,
@@ -50,6 +51,7 @@ import {
 } from './schemas.js'
 import {
   handleCreateQa,
+  handleGetTaskContext,
   handleGetTaskState,
   handleListArtifacts,
   handleListTasks,
@@ -58,7 +60,14 @@ import {
 } from './tools/tasks.js'
 
 export { ok, fail, type McpErrorCode } from './envelope.js'
-export { handleCreateQa, handleGetTaskState, handleListArtifacts, handleListTasks, handleReadArtifact } from './tools/tasks.js'
+export {
+  handleCreateQa,
+  handleGetTaskContext,
+  handleGetTaskState,
+  handleListArtifacts,
+  handleListTasks,
+  handleReadArtifact,
+} from './tools/tasks.js'
 
 // ── Tool handlers (exported for unit testing) ──────────────────────────────────
 
@@ -188,6 +197,27 @@ export function createMcpServer(opts: { mode?: McpMode } = {}): McpServer {
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async ({ taskId, project }: any) => handleGetTaskState({ taskId, project }),
+  )
+
+  register(
+    'get_task_context',
+    {
+      title: 'Get task context',
+      // The description IS the adoption lever: 10 MCP tools shipped with 0 calls
+      // because nothing told the agent what they replace. Say it outright.
+      description:
+        'Read a task\'s whole context in ONE call: `request.md`, the pipeline config '
+        + '(current step + next step), the artifact list with mtime/size, and the machine '
+        + 'state. Use this instead of the `cd <task-dir> && cat request.md && cat '
+        + 'pipeline.yaml && ls -la` chain at the start of a session. Takes a `taskId`, so '
+        + 'there is no `cd` and no need to know the cwd. `include` narrows the sections; '
+        + '`rules` (project-rules.md) is off by default because the orchestrator already '
+        + 'injects it into the step prompt.',
+      inputSchema: getTaskContextInput,
+      // Cố ý không có `outputSchema` (G8) — payload mang nội dung file.
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    async ({ taskId, project, include }: any) => handleGetTaskContext({ taskId, project, include }),
   )
 
   register(

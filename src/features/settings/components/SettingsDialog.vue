@@ -270,6 +270,7 @@ const logTypeRequest = ref(true)
 const logTypeJobs = ref(true)
 const logTypeEvents = ref(false)
 const logTypeUsage = ref(true)
+const logTypeToolCall = ref(false)
 const loggingBusy = ref(false)
 const loggingMsg = ref('')
 const loggingErr = ref('')
@@ -285,6 +286,7 @@ async function loadLogging() {
     logTypeJobs.value = cfg.types?.jobs !== false
     logTypeEvents.value = cfg.types?.events === true
     logTypeUsage.value = cfg.types?.usage !== false
+    logTypeToolCall.value = cfg.types?.['tool-call'] === true
   } catch {
     loggingErr.value = t('settings.logging.loadError')
   }
@@ -303,6 +305,7 @@ async function persistLogging() {
         jobs: logTypeJobs.value,
         events: logTypeEvents.value,
         usage: logTypeUsage.value,
+        'tool-call': logTypeToolCall.value,
       },
     })
     const cfg = data.config || {}
@@ -312,6 +315,7 @@ async function persistLogging() {
     logTypeJobs.value = cfg.types?.jobs !== false
     logTypeEvents.value = cfg.types?.events === true
     logTypeUsage.value = cfg.types?.usage !== false
+    logTypeToolCall.value = cfg.types?.['tool-call'] === true
     loggingMsg.value = t('settings.logging.saved')
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {
@@ -323,6 +327,7 @@ async function persistLogging() {
             jobs: logTypeJobs.value,
             events: logTypeEvents.value,
             usage: logTypeUsage.value,
+            'tool-call': logTypeToolCall.value,
           },
         },
       }),
@@ -361,6 +366,11 @@ function toggleLogTypeEvents() {
 
 function toggleLogTypeUsage() {
   logTypeUsage.value = !logTypeUsage.value
+  void persistLogging()
+}
+
+function toggleLogTypeToolCall() {
+  logTypeToolCall.value = !logTypeToolCall.value
   void persistLogging()
 }
 
@@ -1025,6 +1035,15 @@ onUnmounted(() => {
                       @change="toggleLogTypeUsage"
                     />
                     {{ t('settings.logging.types.usage') }}
+                  </label>
+                  <label class="settings-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="logTypeToolCall"
+                      :disabled="loggingBusy"
+                      @change="toggleLogTypeToolCall"
+                    />
+                    {{ t('settings.logging.types.toolCall') }}
                   </label>
                 </template>
                 <p v-if="loggingMsg" class="settings-autoscan-msg">{{ loggingMsg }}</p>
