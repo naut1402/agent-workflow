@@ -3,7 +3,7 @@
 
 Dashboard **làm** MCP server: Claude Code spawn `bun run mcp` qua stdio và gọi vào bộ tool đọc project / task / artifact / knowledge, cộng 3 tool ghi khi mở mode `full`. Vai ngược lại — dashboard **gọi** MCP server khác — ở [`client.md`](client.md), không liên quan file này.
 
-Nguồn của mọi con số trong trang này là code: `mcp/modes.ts` · `mcp/schemas.ts` · `mcp/envelope.ts` · `mcp/server.ts` · `mcp/tools/tasks.ts`.
+Nguồn của mọi con số trong trang này là code: `mcp/AbstractMcpServer.ts` · `mcp/AbstractMcpTools.ts` · `mcp/DashboardMcpServer.ts` · `mcp/tools/*Tools.ts`. Cấu trúc class: [§8.1](#81-cấu-trúc-class).
 
 ---
 
@@ -33,7 +33,7 @@ Nguồn của mọi con số trong trang này là code: `mcp/modes.ts` · `mcp/s
 bun run mcp
 ```
 
-- Script `mcp` trỏ `mcp/server.ts` (`package.json`).
+- Script `mcp` trỏ `mcp/server.ts` (`package.json`) — entry gọi `new DashboardMcpServer(AbstractMcpServer.resolveMode()).start()`.
 - Transport là **stdio** — 🚫 không cần HTTP server của dashboard chạy. MCP server thao tác thẳng trên `projects.json` dùng chung với REST.
 - Dòng banner lúc khởi động ghi ra **`stderr`**, 🚫 không phải `stdout` (`stdout` là kênh JSON-RPC của stdio transport, một dòng log lạc vào đó hỏng cả phiên):
 
@@ -63,17 +63,17 @@ bun run mcp
 ### 2.3 Bật tool ghi — `DEVTEAM_MCP_MODE=full`
 
 > [!CAUTION]
-> <span style="color:#e5534b">`create_qa` nằm trong `WRITE_TOOLS` (`mcp/modes.ts`) nên **vắng mặt hoàn toàn** ở mode mặc định `readonly`.</span>
+> <span style="color:#e5534b">`create_qa` khai `access: 'write'` (`mcp/tools/TaskTools.ts`) nên **vắng mặt hoàn toàn** ở mode mặc định `readonly`.</span>
 > <span style="color:#e5534b">🚫 **Không chỗ nào trong `src/` đặt `DEVTEAM_MCP_MODE`** — dashboard **không** tự bật `full` khi spawn agent của chính nó. Chạy pipeline agent thì phải tự khai `env` như §2.2.</span>
 > <span style="color:#e5534b">Triệu chứng khi quên: agent được `docs/template/agents/*` dạy gọi `create_qa` nhưng `tools/list` không có tool này; `instructions` ở mode `readonly` ([§3.1](#31-instructions)) bảo agent báo `BLOCKED` kèm câu hỏi trong kết quả trả về.</span>
 
-Dòng cảnh báo để `grep` trong log job (`mcp/server.ts`, ghi **`stderr`**):
+Dòng cảnh báo để `grep` trong log job (`DashboardMcpServer.startupWarnings()`, ghi **`stderr`**):
 
 ```text
 [dev-team-dashboard mcp] mode=<mode>: create_qa KHÔNG được đăng ký, nhưng docs/template/agents/* hướng dẫn agent gọi nó. Đặt DEVTEAM_MCP_MODE=full nếu chạy pipeline agent.
 ```
 
-Điều kiện phát cảnh báo bám `isToolEnabled(mode, 'create_qa')` chứ không bám tên mode — thứ đang cảnh báo là "tool không được đăng ký".
+Điều kiện phát cảnh báo bám `hasTool('create_qa')` chứ không bám tên mode — thứ đang cảnh báo là "tool không được đăng ký".
 
 ---
 
@@ -86,23 +86,25 @@ Dòng cảnh báo để `grep` trong log job (`mcp/server.ts`, ghi **`stderr`**)
 
 > ⚠️ **Nâng từ 1.1.x**: mặc định đổi thành `readonly`, nên `add_project` / `create_qa` / `remove_project` biến khỏi `tools/list` nếu không khai gì. Riêng `create_qa` là tool mà template agent của 1.1.8 được dạy gọi — ở mặc định mới agent sẽ **không nhìn thấy** nó. Giữ hành vi cũ bằng `"env": { "DEVTEAM_MCP_MODE": "full" }` trong entry `mcpServers` của client (§2.2).
 
-- **Mặc định là `readonly`** — `DEFAULT_MODE` (`mcp/modes.ts`). An toàn theo mặc định; `full` phải bật chủ động.
+- **Mặc định là `readonly`** — `DEFAULT_MODE` (`mcp/AbstractMcpServer.ts`). An toàn theo mặc định; `full` phải bật chủ động.
 - **Biến môi trường**: `DEVTEAM_MCP_MODE` (`MODE_ENV_VAR`).
 - **Thứ tự ưu tiên**: CLI `--mode=<x>` (hoặc `--mode <x>`) → env `DEVTEAM_MCP_MODE` → `readonly`.
-- **CLI sai KHÔNG rơi ngược về env.** Giá trị không thuộc `MCP_MODES` — kể cả chuỗi rỗng và sai hoa thường — chỉ sinh một dòng cảnh báo ra `stderr` rồi lùi về `readonly`. Một lỗi gõ phím không được lặng lẽ nâng quyền lên `full`. Ngược lại, **không khai `--mode`** thì mới rơi về env: `parseModeArg` trả `null` khi vắng flag và chuỗi rỗng khi có flag mà thiếu giá trị.
-- **Lọc ở khâu đăng ký**, không phải lúc gọi (`mcp/server.ts`): tool ngoài quyền **biến khỏi `tools/list`**. Agent không thấy thì không thử, không tiêu token, và bề mặt tấn công thu nhỏ thật — 🚫 không phải hiện ra rồi bị từ chối lúc gọi.
-- `isToolEnabled` là **allowlist**, không phải denylist: tên lạ luôn `false`.
+- **CLI sai KHÔNG rơi ngược về env.** Giá trị không thuộc `MCP_MODES` — kể cả chuỗi rỗng và sai hoa thường — chỉ sinh một dòng cảnh báo ra `stderr` rồi lùi về `readonly`. Một lỗi gõ phím không được lặng lẽ nâng quyền lên `full`. Ngược lại, **không khai `--mode`** thì mới rơi về env: `AbstractMcpServer.parseModeArg` trả `null` khi vắng flag và chuỗi rỗng khi có flag mà thiếu giá trị.
+- **Lọc ở khâu đăng ký**, không phải lúc gọi (`AbstractMcpServer.tools()`): tool ngoài quyền **biến khỏi `tools/list`**. Agent không thấy thì không thử, không tiêu token, và bề mặt tấn công thu nhỏ thật — 🚫 không phải hiện ra rồi bị từ chối lúc gọi.
+- **Mode cấp quyền, tool khai quyền** — `MODE_ACCESS` (`mcp/AbstractMcpServer.ts`): `readonly` → `read`, `full` → `read` + `write`. Mỗi `ToolDef` khai `access`; `AbstractMcpServer.isToolEnabled(mode, access)` là allowlist, quyền lạ luôn `false`.
 
 ### 3.1 `instructions`
 
-Server trả `instructions` trong kết quả `initialize`, sinh bởi `buildServerInstructions(mode)` (`mcp/server.ts`).
+Server trả `instructions` trong kết quả `initialize`, sinh bởi `AbstractMcpServer.instructions()`.
 
 | Mode | Nội dung |
 |---|---|
-| `readonly` | Câu "có tool tương đương thì gọi nó thay vì Bash" + 1 dòng cho mỗi nhóm `get_task_context` · `read_artifact`/`list_artifacts` · `get_task_state`/`list_tasks` · `get_knowledge_bundle` + câu "`create_qa` KHÔNG có ở mode `readonly` — báo `BLOCKED`, không tự viết `qa.md`" |
-| `full` | Như `readonly`, thay câu cuối bằng dòng `create_qa` |
+| `readonly` | Preamble ("có tool tương đương thì gọi nó thay vì Bash") + 1 dòng cho mỗi tool `get_task_context` · `read_artifact` · `list_artifacts` · `get_task_state` · `list_tasks` · `get_knowledge_bundle` + câu "`create_qa` KHÔNG có ở mode `readonly` — báo `BLOCKED`, không tự viết `qa.md`" |
+| `full` | Như `readonly`, thêm dòng `create_qa`, bỏ câu cuối |
 
-- **Danh sách tool** lấy từ `TOOL_HINTS`, lọc qua `isToolEnabled(mode, …)`.
+- **Preamble** — `DashboardMcpServer.instructionsPreamble()`.
+- **Dòng tool** — `hint` của mỗi `ToolDef` đang được đăng ký, theo thứ tự `toolGroups()` rồi thứ tự `definitions()`. Tool không có `hint` (nhóm project) không có dòng.
+- **Câu tool vắng** — `unavailableHint` của `ToolDef` bị lọc khỏi mode hiện tại.
 - **Template `docs/template/agents/*`** không liệt kê tool MCP — chỉ gọi tên tool ở bước cần dùng (vd `create_qa`).
 
 ---
@@ -147,7 +149,7 @@ Lấy một project đã đăng ký theo `id`.
 | `project` | string | — | `min(1)` | Bỏ trống ⇒ project mặc định |
 
 - **Output** — `{ bundle }`. 🚫 **Không** khai `outputSchema`, 🚫 **không** phát `structuredContent` — xem [§5.3](#53-ba-tool-không-phát-structuredcontent).
-- **Mã lỗi** — `not_found` (qua `rootOrFail`: project lạ, hoặc không có project mặc định).
+- **Mã lỗi** — `not_found` (qua `requireRoot`: project lạ, hoặc không có project mặc định).
 - **Annotations** — `{ readOnlyHint: true, openWorldHint: false }`
 
 **Id hỏng không làm hỏng cả lời gọi.** Entry không đọc được trả về `{ id, error: 'not found' }` **trong** bundle, phần còn lại vẫn tới tay agent. Vượt trần kích thước bundle thì entry đó là `{ id, error: 'bundle size limit' }` — tổng byte cộng **sau** khi nhận từng entry, nên một entry to không đẩy mọi entry đứng sau nó vào lỗi.
@@ -163,7 +165,7 @@ Liệt kê task trong một workspace dev-team, kèm phase hiện tại và HITL
 | `limit` | number | — | integer, **min 1**, **max 200**, **mặc định 50** | Số task trả về |
 
 - **Output** — `{ tasks: [{ id, name, phase, hitlPending, updatedAt }], total }`; 4 field sau đều nullable, `updatedAt` là number. Có `outputSchema`.
-- **Mã lỗi** — `not_found` (qua `rootOrFail`).
+- **Mã lỗi** — `not_found` (qua `requireRoot`).
 - **Annotations** — `{ readOnlyHint: true, openWorldHint: false }`
 
 **`total` đếm SAU khi lọc `status`, TRƯỚC khi cắt `limit`** — agent cần biết còn bao nhiêu ngoài trang này. Ghi ngược thứ tự này là client phân trang sai mà không có gì báo.
@@ -197,7 +199,7 @@ Liệt kê artifact markdown của một task (kể cả artifact known chưa đ
 | `project` | string | — | `min(1)` | Bỏ trống ⇒ project mặc định |
 
 - **Output** — `{ artifacts: Record<string, { exists, mtime, size }>, subtasks: string[] }`. Có `outputSchema`.
-- **Mã lỗi** — `invalid_input` (`taskId` sai khuôn · path thoát khỏi project root) · `not_found` (qua `rootOrFail`).
+- **Mã lỗi** — `invalid_input` (`taskId` sai khuôn · path thoát khỏi project root) · `not_found` (qua `requireRoot`).
 - **Annotations** — `{ readOnlyHint: true, openWorldHint: false }`
 
 **Task chưa có thư mục artifact KHÔNG phải lỗi** — 🚫 không phát `not_found`. Nhưng nó cũng 🚫 **không** trả danh sách artifact known: `listArtifacts` thoát sớm ngay khi `readDir` ném, nên thứ đi ra là map **rỗng**. Agent phân biệt "task chưa có gì" với "task có artifact" qua chính việc map rỗng.
@@ -213,7 +215,7 @@ Liệt kê artifact markdown của một task (kể cả artifact known chưa đ
 | `project` | string | — | `min(1)` | Bỏ trống ⇒ project mặc định |
 
 - **Output** — `{ name, content, mtime }`. 🚫 **Không** khai `outputSchema`, 🚫 **không** phát `structuredContent` — xem [§5.3](#53-ba-tool-không-phát-structuredcontent).
-- **Mã lỗi** — `invalid_input` (`taskId` sai khuôn · `name` rỗng hoặc chứa null byte · path thoát khỏi thư mục task) · `not_found` (qua `rootOrFail` · artifact không tồn tại · không đọc được, ví dụ `name` trỏ vào một thư mục).
+- **Mã lỗi** — `invalid_input` (`taskId` sai khuôn · `name` rỗng hoặc chứa null byte · path thoát khỏi thư mục task) · `not_found` (qua `requireRoot` · artifact không tồn tại · không đọc được, ví dụ `name` trỏ vào một thư mục).
 - **Annotations** — `{ readOnlyHint: true, openWorldHint: false }`
 
 ⚠️ `name` rỗng và null byte phát **`invalid_input`**, 🚫 không phải `not_found` — hai ca đó là input sai, không phải file vắng. Path thoát thư mục task (`name = '../../.dev-state/x.json'`) bị `resolveArtifact` chặn và cũng là `invalid_input`.
@@ -262,14 +264,14 @@ Liệt kê artifact markdown của một task (kể cả artifact known chưa đ
 | `project` | string | — | `min(1)` | Bỏ trống ⇒ project mặc định |
 
 - **Output** — `{ ok: true, path, created }`. Có `outputSchema`.
-- **Mã lỗi** — `invalid_input` (`taskId` sai khuôn · `createQa` từ chối input) · `not_found` (qua `rootOrFail`).
+- **Mã lỗi** — `invalid_input` (`taskId` sai khuôn · `createQa` từ chối input) · `not_found` (qua `requireRoot`).
 - **Annotations** — `{ readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }`
 
 Cùng gọi `createQa()` với `POST /api/tasks/:id/qa` nên hai đường không lệch khuôn `qa.md`.
 
 ### 4.11 Thiếu project mặc định
 
-Mọi tool nhóm task đi qua `rootOrFail`. Khi không resolve được root và lời gọi **không** khai `project`, thông điệp tự nêu cách phục hồi:
+Mọi tool nhóm task và knowledge đi qua `AbstractMcpTools.requireRoot`. Khi không resolve được root và lời gọi **không** khai `project`, thông điệp tự nêu cách phục hồi:
 
 ```text
 no default project — call list_projects, or set DEV_TEAM_ROOT / DEV_TEAM_DASHBOARD_HOME for this process
@@ -291,7 +293,7 @@ Khai `project` mà id lạ thì thông điệp là `unknown project: <project>`.
   - `task` — `{ id, name, phase, hitlPending }`, `null` khi state không đọc được.
   - `pipeline` — `{ steps: [{ id, name, agent, produces }], currentStepId, nextStepId }`; `currentStepId` lấy từ `current_phase` của state. `pipeline.yaml` có mà không đọc được (`untrusted`) thì trả `null`, 🚫 không trả pipeline mặc định như thể là của task.
   - `request` — `{ name: 'request.md', mtime, content, truncated }`; `rules` — `{ name: 'project-rules.md', content, truncated }`. Nội dung cắt ở **64 KiB** ký tự (`TASK_CONTEXT_MAX_CHARS`) và `truncated` nói rõ có cắt hay không.
-- **Mã lỗi** — `invalid_input` (`taskId` sai khuôn · `include` chứa section lạ · `project-rules.md` resolve — kể cả qua symlink — ra ngoài project root) · `not_found` (qua `rootOrFail`).
+- **Mã lỗi** — `invalid_input` (`taskId` sai khuôn · `include` chứa section lạ · `project-rules.md` resolve — kể cả qua symlink — ra ngoài project root) · `not_found` (qua `requireRoot`).
 - **Annotations** — `{ readOnlyHint: true, openWorldHint: false }`
 
 **Một section hỏng không làm hỏng cả lời gọi.** Các section đọc song song, mỗi nhánh tự nuốt lỗi của mình và về `null` — task chưa có `request.md` hay `pipeline.yaml` hỏng là trạng thái hợp lệ. `rules` mặc định tắt vì orchestrator đã tiêm `project-rules.md` vào prompt từng bước.
@@ -302,7 +304,7 @@ Khai `project` mà id lạ thì thông điệp là `unknown project: <project>`.
 
 ### 5.1 Kết quả thành công
 
-`ok()` trả **song song** `content[0].text` (payload đã `JSON.stringify(payload, null, 2)`) và `structuredContent` (`mcp/envelope.ts`):
+`ok()` trả **song song** `content[0].text` (payload đã `JSON.stringify(payload, null, 2)`) và `structuredContent` (`AbstractMcpTools.ok`):
 
 ```json
 {
@@ -335,7 +337,7 @@ Mã lỗi **thực sự phát ra**:
 | `not_found` | Project / task / artifact không tồn tại; không có project mặc định; state file không đọc được hoặc không phải JSON object |
 | `invalid_input` | `taskId` sai khuôn; path thoát khỏi project root hoặc thư mục task; `name` rỗng hoặc chứa null byte; `add_project` / `create_qa` bị business layer từ chối |
 
-Kiểu `McpErrorCode` (`mcp/envelope.ts`) còn khai **2 mã dự phòng chưa nơi nào phát ra**: `forbidden_in_mode` — không phát vì mode lọc ngay ở khâu đăng ký, tool ngoài quyền biến khỏi `tools/list` chứ không bị từ chối lúc gọi (§3) — và `internal`. 🚫 Đừng viết client bám vào hai mã này.
+Kiểu `McpErrorCode` (`mcp/AbstractMcpTools.ts`) còn khai **2 mã dự phòng chưa nơi nào phát ra**: `forbidden_in_mode` — không phát vì mode lọc ngay ở khâu đăng ký, tool ngoài quyền biến khỏi `tools/list` chứ không bị từ chối lúc gọi (§3) — và `internal`. 🚫 Đừng viết client bám vào hai mã này.
 
 ### 5.3 Ba tool không phát `structuredContent`
 
@@ -411,8 +413,8 @@ Mã nằm ở `_meta.error.code`. Object trả về 🚫 không có khoá `struc
 
 - **Chỉ transport stdio.** HTTP / SSE chưa hỗ trợ ở vai server. (Vai client thì có — xem [`client.md`](client.md) §3.3.)
 - **Đường ghi task duy nhất là `create_qa`.** Không có tool ghi artifact hay quyết HITL gate.
-- **Thao tác ghi không tới SSE của dashboard.** `add_project` / `remove_project` **có** vào audit log và `events.jsonl` (`installEventLogSubscriber` chạy trong `main()`), nhưng event bus là **in-process** và MCP server là tiến trình khác với dashboard. Dashboard đang mở phải refresh tay.
-- **Danh sách tool tồn tại ở nhiều bản sao.** Nguồn cho máy là `mcp/modes.ts`; nguồn cho người là trang này. Thêm / đổi / xoá một tool phải sửa [§1](#1-bảng-tool), §3 của trang này **và** bảng mode ở [`README.md`](README.md) của chủ đề; 🚫 không có test nào bắt được lệch. Root `README.md` 🚫 không chép bảng tool — chỉ trỏ về `docs/mcp/`.
+- **Thao tác ghi không tới SSE của dashboard.** `add_project` / `remove_project` **có** vào audit log và `events.jsonl` (`installEventLogSubscriber` chạy trong `DashboardMcpServer.onStart()`), nhưng event bus là **in-process** và MCP server là tiến trình khác với dashboard. Dashboard đang mở phải refresh tay.
+- **Danh sách tool tồn tại ở nhiều bản sao.** Nguồn cho máy là `definitions()` của các class trong `mcp/tools/`; nguồn cho người là trang này. Thêm / đổi / xoá một tool phải sửa [§1](#1-bảng-tool), §3 của trang này **và** bảng mode ở [`README.md`](README.md) của chủ đề; 🚫 không có test nào bắt được lệch. Root `README.md` 🚫 không chép bảng tool — chỉ trỏ về `docs/mcp/`.
 
 ---
 
@@ -420,11 +422,21 @@ Mã nằm ở `_meta.error.code`. Object trả về 🚫 không có khoá `struc
 
 Các ràng buộc dưới đây không hiện ra trong hợp đồng tool. Sửa sai thì server hỏng lúc khởi động hoặc mở lỗ path traversal.
 
-### 8.1 Module và import
+### 8.1 Cấu trúc class
 
-- **`mcp/envelope.ts` tách khỏi `server.ts`** — `tools/*.ts` cần `ok` / `fail`, còn `server.ts` import handler từ `tools/*`; để chung một file là vòng import. `server.ts` re-export `ok` / `fail` / `McpErrorCode`.
-- **`tools/tasks.ts` import `monitor/business/tasks/reads.js`**, 🚫 không import barrel `tasks/index.js` — barrel re-export `runStep.js`, kéo runner, job queue, sqlite và `node:child_process` vào tiến trình stdio và giữ event loop sống.
-- **`createMcpServer({ mode })` không đọc env** — `main()` gọi `resolveMode()` rồi truyền vào; test truyền mode thẳng.
+Mỗi file trong `mcp/` là một class; ngoại lệ duy nhất là entry `server.ts`.
+
+| File | Class | Trách nhiệm |
+|---|---|---|
+| `AbstractMcpServer.ts` | `AbstractMcpServer` | `McpMode` + giải mode từ argv/env (static `resolveMode`), lọc tool theo mode, sinh `instructions`, `build()` ra `McpServer` của SDK, `start()` nối transport |
+| `AbstractMcpTools.ts` | `AbstractMcpTools` | Base nhóm tool: `ok` / `fail` / `requireRoot`; kèm `ToolDef`, `ProjectRef`, `READ_ONLY_ANNOTATIONS` |
+| `DashboardMcpServer.ts` | `DashboardMcpServer` | Chọn nhóm tool, preamble `instructions`, cảnh báo khởi động, `onStart()` |
+| `tools/TaskTools.ts` · `tools/KnowledgeTools.ts` · `tools/ProjectTools.ts` | `*Tools` | Khai `ToolDef` và handler là method; chia theo feature được gọi tới |
+| `server.ts` | — | Entry: `new DashboardMcpServer(AbstractMcpServer.resolveMode()).start()` |
+
+- **Một tool = một `ToolDef`** trong `definitions()` của nhóm — tên, `access`, schema input/output, annotations, handler, `hint`, `unavailableHint`. Thêm tool chỉ sửa nhóm đó và §1 của trang này.
+- **Server chứa `McpServer` của SDK**, 🚫 không kế thừa nó.
+- **`tools/TaskTools.ts` import `monitor/business/tasks/reads.js`**, 🚫 không import barrel `tasks/index.js` — barrel re-export `runStep.js`, kéo runner, job queue, sqlite và `node:child_process` vào tiến trình stdio và giữ event loop sống.
 - **`fail()` phân nhánh theo số tham số**, không theo `message === undefined` — `fail('internal', undefined)` vẫn là ca hai tham số. Ca một tham số trả object không có `_meta`.
 
 ### 8.2 Path
@@ -438,14 +450,14 @@ Các ràng buộc dưới đây không hiện ra trong hợp đồng tool. Sửa
 
 Áp dụng cho `@modelcontextprotocol/sdk` 1.29.0.
 
-- **`registerTool` nhận raw shape** (object các field Zod), không phải `z.object(...)`. Schema I/O của giao thức nằm ở `mcp/schemas.ts`, không ở `src/features/*/schemas/`.
+- **`registerTool` nhận raw shape** (object các field Zod), không phải `z.object(...)`. Schema I/O của giao thức khai ngay trong `ToolDef` của nhóm tool, không ở `src/features/*/schemas/`.
 - **Gốc `outputSchema` là object** — SDK chạy `normalizeObjectSchema`, mảng ở gốc hỏng lúc đăng ký.
 - **`questions` của `create_qa` khai lỏng ở type handler** — `ShapeOutput` của SDK narrow mảng object lồng thành optional. `createQa()` tự `safeParse` lại.
 - **Lỗi dữ liệu thành `fail` trước khi tới SDK** — state file không phải object (`outputSchema` khai `state` là object) và lỗi đọc artifact (EISDIR) đều trả `fail`, 🚫 không để SDK ném `McpError`.
 
 ### 8.4 Vòng đời tiến trình và event
 
-- **`initLogDriverFromPrefs()` gọi trong `main()`**, 🚫 không top-level — đặt top-level thì test import `createMcpServer` cũng đổi log driver toàn cục.
-- **`installEventLogSubscriber()` gọi trong `main()`** — event bus in-process, thiếu subscriber thì `emitEntity` không vào `events.jsonl`. Giới hạn SSE ở [§7](#7-giới-hạn-đã-biết).
+- **`initLogDriverFromPrefs()` gọi trong `DashboardMcpServer.onStart()`**, 🚫 không top-level hay constructor — test dựng `new DashboardMcpServer(mode).build()` không được đổi log driver toàn cục.
+- **`installEventLogSubscriber()` gọi trong `onStart()`** — event bus in-process, thiếu subscriber thì `emitEntity` không vào `events.jsonl`. Giới hạn SSE ở [§7](#7-giới-hạn-đã-biết).
 - **`add_project` / `remove_project` không gọi `MonitorController`** — controller cần `Context` của Hono. Handler tự `emitAudit` + `emitEntity` với cùng shape mà `src/features/monitor/controller.ts` phát.
-- **`main()` chỉ chạy khi `import.meta.main`** — test import module không khởi động stdio transport.
+- **`server.ts` chỉ gọi `start()` khi `import.meta.main`** — test import class không khởi động stdio transport.

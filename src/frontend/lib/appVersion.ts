@@ -2,5 +2,5 @@
 // Đổi version chỉ cần sửa `package.json` → `version`.
 //
 // Không gộp với `src/backend/configs/appVersion.ts`: bản đó đọc thẳng
-// `package.json` (chỉ chạy được trên Bun/Node, dùng cho `mcp/server.ts`).
+// `package.json` (chỉ chạy được trên Bun/Node, dùng cho `mcp/DashboardMcpServer.ts`).
 export const APP_VERSION: string = __APP_VERSION__

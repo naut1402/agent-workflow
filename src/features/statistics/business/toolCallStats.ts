@@ -411,7 +411,7 @@ export interface IngestFromTranscriptsResult {
  * `startRecoverPoller()` at load time, which both keeps the event loop alive (a
  * CLI that never exits) and starts recovering jobs from a process whose only job
  * is to count things. Same reasoning as the import note at the top of
- * `mcp/tools/tasks.ts`.
+ * `mcp/tools/TaskTools.ts`.
  */
 async function readJobRecords(limit?: number): Promise<JobRecord[]> {
   const dir = joinPath(registryHome(), 'jobs')

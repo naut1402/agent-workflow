@@ -12,7 +12,7 @@ Repo này dính tới MCP theo **hai vai ngược chiều nhau**. Phân biệt t
 | **Server (inbound)** | Dashboard **làm** MCP server; Claude Code gọi vào qua stdio | Chạy `bun run mcp`, khai ở `mcpServers` của client (§Quickstart) | [`server.md`](server.md) |
 | **Client (outbound)** | Dashboard **gọi** MCP server khác (playwright, serena…) | Tab **MCP** của Runner Config | [`client.md`](client.md) |
 
-Tách ngay đầu trang vì đây là chỗ người đọc hay đi nhầm nhánh: comment header `mcp/server.ts` phải dành riêng một đoạn để đính chính. Hai vai không dùng chung một dòng code nào — `mcp/` là vai server, `src/features/mcp/` là vai client.
+Tách ngay đầu trang vì đây là chỗ người đọc hay đi nhầm nhánh. Hai vai không dùng chung một dòng code nào — `mcp/` là vai server, `src/features/mcp/` là vai client.
 
 ---
 
