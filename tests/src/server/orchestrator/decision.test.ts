@@ -442,9 +442,37 @@ describe('T6427b18c nhóm C — khối kết quả trong prompt điều phối',
     expect(promptWith({ status: 'succeeded' })).toContain('— thành công')
   })
 
-  test('TC-35: GET /output vẫn còn, và được mô tả là kênh CHỈ gọi khi cần', () => {
+  test('TC-35: prompt không dạy gọi API điều phối bằng curl — ra lệnh bằng dòng JSON cuối', () => {
     const prompt = promptWith()
-    expect(prompt).toContain('/api/orchestrator/output')
-    expect(prompt).toContain('CHỈ gọi khi')
+    expect(prompt).not.toContain('curl -s')
+    expect(prompt).not.toContain('/api/orchestrator/')
+    expect(prompt).not.toContain('DASHBOARD_ORCHESTRATOR_TOKEN')
+    expect(prompt).toContain('KHÔNG gọi API điều phối bằng shell')
+  })
+})
+
+describe('buildDecisionPrompt — trạng thái hiện tại được tiêm vào prompt', () => {
+  const base = { taskId: 'T1', currentPhase: 'design', stepIds: ['investigate', 'design'], trigger: 'chat' as const }
+
+  test('có step đang chạy và cổng đang chờ ⇒ nêu cả hai', () => {
+    const prompt = buildDecisionPrompt({
+      ...base,
+      gatePending: 'design-review',
+      activeStep: { stepId: 'design', status: 'running' },
+    })
+    expect(prompt).toContain('## Trạng thái hiện tại')
+    expect(prompt).toContain('- **Cổng chờ duyệt:** `design-review`')
+    expect(prompt).toContain('- **Step đang chạy:** `design` — running')
+  })
+
+  test('không có step đang chạy, không cổng ⇒ nói thẳng, không bỏ trống', () => {
+    const prompt = buildDecisionPrompt({ ...base, activeStep: null })
+    expect(prompt).toContain('- **Cổng chờ duyệt:** không có')
+    expect(prompt).toContain('- **Step đang chạy:** không có step nào đang chạy')
+  })
+
+  test('job không mang pipelineStepId ⇒ vẫn báo đang chạy', () => {
+    const prompt = buildDecisionPrompt({ ...base, activeStep: { stepId: null, status: 'queued' } })
+    expect(prompt).toContain('- **Step đang chạy:** `(không rõ step)` — queued')
   })
 })
