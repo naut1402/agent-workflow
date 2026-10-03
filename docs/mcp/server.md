@@ -65,7 +65,7 @@ bun run mcp
 > [!CAUTION]
 > <span style="color:#e5534b">`create_qa` nằm trong `WRITE_TOOLS` (`mcp/modes.ts`) nên **vắng mặt hoàn toàn** ở mode mặc định `readonly`.</span>
 > <span style="color:#e5534b">🚫 **Không chỗ nào trong `src/` đặt `DEVTEAM_MCP_MODE`** — dashboard **không** tự bật `full` khi spawn agent của chính nó. Chạy pipeline agent thì phải tự khai `env` như §2.2.</span>
-> <span style="color:#e5534b">Triệu chứng khi quên: agent được `docs/template/agents/*` dạy gọi `create_qa`, không thấy tool, ứng biến tự viết `qa.md` bằng tay, sai khuôn `## Q<n>`, và `QaPanel` không render được radio — một triệu chứng không trỏ về nguyên nhân.</span>
+> <span style="color:#e5534b">Triệu chứng khi quên: agent được `docs/template/agents/*` dạy gọi `create_qa` nhưng `tools/list` không có tool này; `instructions` ở mode `readonly` ([§3.1](#31-instructions)) bảo agent báo `BLOCKED` kèm câu hỏi trong kết quả trả về.</span>
 
 Dòng cảnh báo để `grep` trong log job (`mcp/server.ts`, ghi **`stderr`**):
 
@@ -92,6 +92,18 @@ Dòng cảnh báo để `grep` trong log job (`mcp/server.ts`, ghi **`stderr`**)
 - **CLI sai KHÔNG rơi ngược về env.** Giá trị không thuộc `MCP_MODES` — kể cả chuỗi rỗng và sai hoa thường — chỉ sinh một dòng cảnh báo ra `stderr` rồi lùi về `readonly`. Một lỗi gõ phím không được lặng lẽ nâng quyền lên `full`. Ngược lại, **không khai `--mode`** thì mới rơi về env: `parseModeArg` trả `null` khi vắng flag và chuỗi rỗng khi có flag mà thiếu giá trị.
 - **Lọc ở khâu đăng ký**, không phải lúc gọi (`mcp/server.ts`): tool ngoài quyền **biến khỏi `tools/list`**. Agent không thấy thì không thử, không tiêu token, và bề mặt tấn công thu nhỏ thật — 🚫 không phải hiện ra rồi bị từ chối lúc gọi.
 - `isToolEnabled` là **allowlist**, không phải denylist: tên lạ luôn `false`.
+
+### 3.1 `instructions`
+
+Server trả `instructions` trong kết quả `initialize`, sinh bởi `buildServerInstructions(mode)` (`mcp/server.ts`).
+
+| Mode | Nội dung |
+|---|---|
+| `readonly` | Câu "có tool tương đương thì gọi nó thay vì Bash" + 1 dòng cho mỗi nhóm `get_task_context` · `read_artifact`/`list_artifacts` · `get_task_state`/`list_tasks` · `get_knowledge_bundle` + câu "`create_qa` KHÔNG có ở mode `readonly` — báo `BLOCKED`, không tự viết `qa.md`" |
+| `full` | Như `readonly`, thay câu cuối bằng dòng `create_qa` |
+
+- **Danh sách tool** lấy từ `TOOL_HINTS`, lọc qua `isToolEnabled(mode, …)`.
+- **Template `docs/template/agents/*`** không liệt kê tool MCP — chỉ gọi tên tool ở bước cần dùng (vd `create_qa`).
 
 ---
 

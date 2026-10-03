@@ -122,10 +122,51 @@ export async function handleGetKnowledgeBundle({ ids, project }: { ids: string[]
 
 const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, openWorldHint: false } as const
 
+// xem docs/mcp/server.md §3.1
+const TOOL_HINTS: { tools: string[]; hint: string }[] = [
+  {
+    tools: ['get_task_context'],
+    hint: 'ĐỌC ĐẦU PHIÊN. Thay cho `cat request.md` + `cat pipeline.yaml` + `ls -la`.',
+  },
+  { tools: ['read_artifact', 'list_artifacts'], hint: 'đọc artifact của task theo tên, không cần biết cwd.' },
+  { tools: ['get_task_state', 'list_tasks'], hint: 'trạng thái task.' },
+  { tools: ['get_knowledge_bundle'], hint: 'resolve `knowledge_inputs`.' },
+  {
+    tools: ['create_qa'],
+    hint: 'tạo câu hỏi blocking vào `qa.md` đúng khuôn chọn-đáp-án — không tự viết `qa.md` bằng tay.',
+  },
+]
+
+export function buildServerInstructions(mode: McpMode): string {
+  const lines = TOOL_HINTS.flatMap(({ tools, hint }) => {
+    const enabled = tools.filter((t) => isToolEnabled(mode, t))
+    return enabled.length ? [`- ${enabled.map((t) => `\`${t}\``).join(', ')} — ${hint}`] : []
+  })
+
+  const parts = [
+    'Server state của dev-team-dashboard: task, artifact, knowledge của pipeline agent.',
+    'Có tool tương đương thì gọi nó thay vì Bash: tool nhận `taskId` (và `project` tuỳ chọn) '
+      + 'nên không phải `cd`, và kết quả là JSON có cấu trúc thay vì text phải tự parse.',
+    lines.join('\n'),
+  ]
+
+  if (!isToolEnabled(mode, 'create_qa')) {
+    parts.push(
+      `\`create_qa\` KHÔNG có ở mode \`${mode}\`. Gặp câu hỏi blocking: ghi câu hỏi vào kết quả `
+        + 'trả về và báo `BLOCKED`, không tự viết `qa.md`.',
+    )
+  }
+
+  return parts.join('\n\n')
+}
+
 export function createMcpServer(opts: { mode?: McpMode } = {}): McpServer {
   // Thuần: KHÔNG tự đọc env ở đây — `main()` quyết mode, test truyền thẳng.
   const mode = opts.mode ?? DEFAULT_MODE
-  const server = new McpServer({ name: 'dev-team-dashboard', version: APP_VERSION })
+  const server = new McpServer(
+    { name: 'dev-team-dashboard', version: APP_VERSION },
+    { instructions: buildServerInstructions(mode) },
+  )
 
   // A1: lọc ngay ở khâu đăng ký ⇒ tool ngoài allowlist không xuất hiện trong
   // `tools/list`, chứ không phải hiện ra rồi bị từ chối lúc gọi.

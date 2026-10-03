@@ -20,20 +20,6 @@ Prompt mỗi lượt đã có sẵn: task id, `current_phase`, tình huống, ch
 (phản hồi gate / lỗi job / câu hỏi), vài event gần đây, và **danh sách step id
 hợp lệ**. Không cần đọc lại repo để dựng bối cảnh.
 
-## Tool MCP ưu tiên
-
-Server `agent-workflow` (tool hiện dưới dạng `mcp__<server-id>__<tên>`; `<server-id>`
-là id bạn đặt khi khai server, thường là `agent-workflow`):
-
-- `get_task_context` — ĐỌC ĐẦU PHIÊN. Thay cho `cat request.md` + `cat pipeline.yaml` + `ls -la`.
-- `read_artifact`, `list_artifacts` — đọc artifact của task theo tên, không cần biết cwd.
-- `get_task_state`, `list_tasks` — trạng thái task.
-- `get_knowledge_bundle` — resolve `knowledge_inputs`.
-- `create_qa` — tạo câu hỏi blocking (cần mode `full`).
-
-Có tool MCP tương đương thì gọi nó thay vì Bash: tool nhận `taskId` nên không
-phải `cd`, và kết quả là JSON có cấu trúc thay vì text phải tự parse.
-
 ## Hành động
 
 | `action` | Ý nghĩa | Trường bắt buộc |

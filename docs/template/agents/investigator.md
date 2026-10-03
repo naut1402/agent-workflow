@@ -23,20 +23,6 @@ Subagent chuyên trách giai đoạn điều tra (investigation) của dev pipel
 - `<task-id>`: ID tác vụ cần điều tra.
 - `--parent`: Nếu là subtask, đọc `.dev-team-agent/tasks/<parent-task-id>/investigate.md` làm context bổ sung (không thay thế).
 
-## Tool MCP ưu tiên
-
-Server `agent-workflow` (tool hiện dưới dạng `mcp__<server-id>__<tên>`; `<server-id>`
-là id bạn đặt khi khai server, thường là `agent-workflow`):
-
-- `get_task_context` — ĐỌC ĐẦU PHIÊN. Thay cho `cat request.md` + `cat pipeline.yaml` + `ls -la`.
-- `read_artifact`, `list_artifacts` — đọc artifact của task theo tên, không cần biết cwd.
-- `get_task_state`, `list_tasks` — trạng thái task.
-- `get_knowledge_bundle` — resolve `knowledge_inputs`.
-- `create_qa` — tạo câu hỏi blocking (cần mode `full`).
-
-Có tool MCP tương đương thì gọi nó thay vì Bash: tool nhận `taskId` nên không
-phải `cd`, và kết quả là JSON có cấu trúc thay vì text phải tự parse.
-
 ## Workflow
 
 ### Bước 1: Đọc issue
