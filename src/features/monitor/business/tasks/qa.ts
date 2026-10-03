@@ -29,7 +29,7 @@ export async function createQa(root: string, taskId: string, input: unknown): Pr
   // dưới root"). Route HTTP có regex này ở controller, nhưng MCP tool gọi
   // thẳng `createQa()` không đi qua đó — validate ngay tại đây để bất biến
   // "không ghi ra ngoài phạm vi task" áp dụng cho mọi caller như nhau.
-  // R4: regex này CHẶT HƠN `TASK_ID_PATTERN` của MCP (`mcp/tools/TaskTools.ts`) — nó
+  // R4: regex này CHẶT HƠN `TASK_ID_PATTERN` của MCP (`mcp/schemas.ts`) — nó
   // không nhận dấu `.`. Giữ nguyên độ chặt, nhưng thông điệp phải nêu đúng ràng
   // buộc: một id như `20260927.001` hợp lệ với `list_tasks`/`read_artifact` mà
   // bị đây từ chối, nói trống "invalid task id" làm caller tưởng mình đọc sai id
