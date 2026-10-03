@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /** Nguồn duy nhất — dùng chung với canvas và khung chat, xem `shared/lib/orchestrator.ts`. */
-export { DECISION_SENTINEL, ORCHESTRATOR_STEP_ID } from '../../../shared/lib/orchestrator.js'
+export { DECISION_SENTINEL, ORCHESTRATOR_STEP_ID, STEP_SUMMARY_PREFIX } from '../../../shared/lib/orchestrator.js'
 
 /** Ngân sách brief — bằng `CHAT_STDOUT_LIMIT` của jobQueue. */
 export const MAX_BRIEF_BYTES = 64 * 1024
@@ -9,6 +9,13 @@ export const MAX_BRIEF_BYTES = 64 * 1024
 // Dòng quyết định là một dòng JSON nằm trong stdout, mà stdout bị cắt ở
 // `CHAT_STDOUT_LIMIT` — phần agent tự soạn vượt trần này làm JSON đứt.
 export const MAX_AGENT_CONTEXT_BYTES = 8 * 1024
+
+/**
+ * Ngân sách cho KẾT QUẢ một bước đi vào prompt điều phối. Nhỏ hơn hẳn
+ * `MAX_AGENT_CONTEXT_BYTES` vì phiên điều phối được resume qua nhiều lượt: mỗi
+ * step xong là một lần cộng dồn vào cùng một cuộc hội thoại.
+ */
+export const MAX_STEP_RESULT_BYTES = 2 * 1024
 
 /** Key `orchestrator` trong `pipeline.yaml`. Thiếu key ⇒ `enabled: false` ⇒ pipeline chạy như cũ. */
 export const OrchestratorConfig = z
