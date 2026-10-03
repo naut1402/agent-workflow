@@ -8,7 +8,6 @@ export {
   EventLogEntry,
   UsageSnapshotSchema,
   UsageLogEntry,
-  ToolCallSchema,
   ToolCallLogEntry,
   LogEntry,
   parseLogLine,
@@ -16,16 +15,11 @@ export {
   formatRequestQuery,
   formatResponsePreview,
   truncateForLog,
-  SENSITIVE_KEY_RE,
-  TOOL_CALL_MAX_CALLS,
-  TOOL_CALL_TEXT_MAX_CHARS,
-  TOOL_CALL_TEXT_BUDGET,
   type LogType,
   type LogLevel,
   type AuditOp,
   type AuditEntity,
   type UsageSnapshot,
-  type ToolCall,
 } from '../../shared/log/schema.js'
 
 export { getLogDriver, setLogDriver, resetLogDriver, activeLogDriverKind, type LogDriver } from './driver.js'

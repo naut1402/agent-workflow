@@ -9,7 +9,7 @@ import { isLogTypeEnabled } from '../../../backend/log/loggingPrefsIo.js'
 import { registryHome } from '../../../backend/registry.js'
 import type { ToolCallEntryPayload } from '../../runner/business/toolCallCapture.js'
 import type { JobRecord } from '../../runner/business/types.js'
-import type { ToolCall, ToolCallLogEntry } from '../../../shared/log/schema.js'
+import type { LogEntry, ToolCall, ToolCallLogEntry } from '../../../shared/log/schema.js'
 import { readLogs } from '../../logs/business/store.js'
 import { classifyBashCall, primaryIntentOf } from '../lib/bashIntent.js'
 import type {
@@ -68,28 +68,68 @@ export async function readToolCallEntries(
   if (!isLogTypeEnabled('tool-call')) return []
 
   const entries = await readLogs({ type: 'tool-call', limit: opts.limit ?? DEFAULT_ENTRY_LIMIT })
-  const fromMs = opts.from ? parseTimeBoundMs(opts.from) : null
-  const toMs = opts.to ? parseTimeBoundMs(opts.to) : null
-  const excluded = new Set(opts.excludeSessionIds?.filter(Boolean) ?? [])
+  return filterToolCallEntries(entries, opts)
+}
 
+/** The filters, pre-resolved once so the per-entry test stays a flat conjunction. */
+type ResolvedEntryFilters = {
+  fromMs: number | null
+  toMs: number | null
+  excluded: Set<string>
+  projectId?: string
+  taskId?: string
+  agentRef?: string
+}
+
+/** Parse the time bounds and session-exclusion set a single time, not per entry. */
+function resolveEntryFilters(opts: ReadToolCallEntriesOptions): ResolvedEntryFilters {
+  return {
+    fromMs: opts.from ? parseTimeBoundMs(opts.from) : null,
+    toMs: opts.to ? parseTimeBoundMs(opts.to) : null,
+    excluded: new Set(opts.excludeSessionIds?.filter(Boolean) ?? []),
+    projectId: opts.projectId,
+    taskId: opts.taskId,
+    agentRef: opts.agentRef,
+  }
+}
+
+/** Does one `tool-call` entry survive every active filter? */
+function entryMatches(entry: ToolCallLogEntry, f: ResolvedEntryFilters): boolean {
+  if (f.fromMs !== null && entry.ts < f.fromMs) return false
+  if (f.toMs !== null && entry.ts > f.toMs) return false
+  if (f.projectId && entry.projectId !== f.projectId) return false
+  if (f.taskId && entry.taskId !== f.taskId) return false
+  if (f.agentRef && entry.agentRef !== f.agentRef) return false
+  // G7: the session running this analysis writes tool calls while it reads them;
+  // counting itself was a measured source of drift during the investigation.
+  if (entry.sessionId && f.excluded.has(entry.sessionId)) return false
+  return true
+}
+
+/**
+ * Apply the CLI filters to already-read entries.
+ *
+ * Split out of `readToolCallEntries` so `--from-transcripts` runs the SAME filters:
+ * that branch used to pass its entries straight through, so `--from` / `--project` /
+ * `--exclude-session` were silently ignored there and the script counted its own
+ * session.
+ */
+export function filterToolCallEntries(
+  entries: LogEntry[],
+  opts: ReadToolCallEntriesOptions = {},
+): ToolCallLogEntry[] {
+  const filters = resolveEntryFilters(opts)
   const out: ToolCallLogEntry[] = []
   for (const entry of entries) {
     if (entry.type !== 'tool-call') continue
-    if (fromMs !== null && entry.ts < fromMs) continue
-    if (toMs !== null && entry.ts > toMs) continue
-    if (opts.projectId && entry.projectId !== opts.projectId) continue
-    if (opts.taskId && entry.taskId !== opts.taskId) continue
-    if (opts.agentRef && entry.agentRef !== opts.agentRef) continue
-    // G7: the session running this analysis writes tool calls while it reads them;
-    // counting itself was a measured source of drift during the investigation.
-    if (entry.sessionId && excluded.has(entry.sessionId)) continue
-    out.push(entry)
+    if (entryMatches(entry, filters)) out.push(entry)
   }
   return out
 }
 
 // ── Aggregation helpers ──────────────────────────────────────────────────────
 
+/** The calls of one entry, with subagent turns dropped unless asked for. */
 function callsOf(entry: ToolCallLogEntry, includeSidechain: boolean): ToolCall[] {
   return includeSidechain ? entry.calls : entry.calls.filter((c) => !c.sidechain)
 }
@@ -99,10 +139,12 @@ function sessionKeyOf(entry: ToolCallLogEntry): string {
   return entry.sessionId || entry.jobId
 }
 
+/** `part / whole`, with an empty denominator reported as 0 rather than `NaN`. */
 function shareOf(part: number, whole: number): number {
   return whole > 0 ? part / whole : 0
 }
 
+/** Counts + session spread as report rows, heaviest first, ties broken by name. */
 function frequencyRows(
   counts: Map<string, number>,
   sessions: Map<string, Set<string>>,
@@ -140,6 +182,7 @@ function fileNamesIn(text: string): string[] {
   return [...out]
 }
 
+/** Median of `values` (0 when empty); averages the middle pair on an even count. */
 function median(values: number[]): number {
   if (values.length === 0) return 0
   const sorted = [...values].sort((a, b) => a - b)
@@ -148,6 +191,183 @@ function median(values: number[]): number {
 }
 
 // ── Aggregation ──────────────────────────────────────────────────────────────
+
+/** `map[key] += 1`, treating a missing key as 0. */
+function bump(map: Map<string, number>, key: string): void {
+  map.set(key, (map.get(key) ?? 0) + 1)
+}
+
+/** `map[key] ∪= {value}`, creating the set on first use. */
+function addToSet(map: Map<string, Set<string>>, key: string, value: string): void {
+  let set = map.get(key)
+  if (!set) {
+    set = new Set()
+    map.set(key, set)
+  }
+  set.add(value)
+}
+
+/** Every running total the entry walk touches. One object so the walk can be split up. */
+type UsageAcc = {
+  toolCalls: Map<string, number>
+  toolSessions: Map<string, Set<string>>
+  intentCalls: Map<string, number>
+  bigramCounts: Map<string, number>
+  bootstrapReads: Map<string, number>
+  bootstrapSessions: Map<string, Set<string>>
+  bashBySession: Map<string, number>
+  mcpByTool: Map<string, number>
+  mcpByToolSessions: Map<string, Set<string>>
+  jobIds: Set<string>
+  totalCalls: number
+  bashCalls: number
+  mcpCalls: number
+  totalPairs: number
+  surveyPairs: number
+  truncatedEntries: number
+  firstTs: number | null
+  lastTs: number | null
+}
+
+/** A zeroed accumulator — every map and counter the entry walk expects to exist. */
+function emptyAcc(): UsageAcc {
+  return {
+    toolCalls: new Map(),
+    toolSessions: new Map(),
+    intentCalls: new Map(),
+    bigramCounts: new Map(),
+    bootstrapReads: new Map(),
+    bootstrapSessions: new Map(),
+    bashBySession: new Map(),
+    mcpByTool: new Map(),
+    mcpByToolSessions: new Map(),
+    jobIds: new Set(),
+    totalCalls: 0,
+    bashCalls: 0,
+    mcpCalls: 0,
+    totalPairs: 0,
+    surveyPairs: 0,
+    truncatedEntries: 0,
+    firstTs: null,
+    lastTs: null,
+  }
+}
+
+/** One call: the per-tool totals, plus the MCP and Bash sub-tallies. */
+function countCall(acc: UsageAcc, call: ToolCall, session: string): void {
+  acc.totalCalls++
+  bump(acc.toolCalls, call.name)
+  addToSet(acc.toolSessions, call.name, session)
+
+  if (call.name.startsWith(MCP_PREFIX)) {
+    acc.mcpCalls++
+    bump(acc.mcpByTool, call.name)
+    addToSet(acc.mcpByToolSessions, call.name, session)
+  }
+
+  if (call.name === 'Bash') {
+    acc.bashCalls++
+    bump(acc.bashBySession, session)
+    for (const intent of classifyBashCall(call.text).intents) bump(acc.intentCalls, intent)
+  }
+}
+
+/**
+ * Adjacent call pairs within ONE entry.
+ *
+ * One entry is one job, so the entry boundary IS the sequence boundary — no pair
+ * may bridge two jobs, however close together they ran.
+ */
+function countBigrams(acc: UsageAcc, calls: ToolCall[]): void {
+  const labels = calls.map(sequenceLabelOf)
+  for (let i = 1; i < labels.length; i++) {
+    bump(acc.bigramCounts, `${labels[i - 1]}\t${labels[i]}`)
+    acc.totalPairs++
+    if (SURVEY_LABELS.has(labels[i - 1]) && SURVEY_LABELS.has(labels[i])) acc.surveyPairs++
+  }
+}
+
+/** Files named in the first few calls of a job — the evidence for `get_task_context`. */
+function countBootstrap(acc: UsageAcc, calls: ToolCall[], session: string): void {
+  for (const call of calls.slice(0, BOOTSTRAP_CALLS)) {
+    for (const file of fileNamesIn(call.text)) {
+      bump(acc.bootstrapReads, file)
+      addToSet(acc.bootstrapSessions, file, session)
+    }
+  }
+}
+
+/** Fold one log entry into the accumulator. */
+function ingestEntry(acc: UsageAcc, entry: ToolCallLogEntry, includeSidechain: boolean): void {
+  acc.jobIds.add(entry.jobId)
+  if (entry.callsTotal > entry.calls.length) acc.truncatedEntries++
+  if (acc.firstTs === null || entry.ts < acc.firstTs) acc.firstTs = entry.ts
+  if (acc.lastTs === null || entry.ts > acc.lastTs) acc.lastTs = entry.ts
+
+  const session = sessionKeyOf(entry)
+  const calls = callsOf(entry, includeSidechain)
+
+  for (const call of calls) countCall(acc, call, session)
+  countBigrams(acc, calls)
+  countBootstrap(acc, calls, session)
+}
+
+/** Per-session Bash cost — says whether to optimise long surveys or short jobs. */
+function perSessionOf(acc: UsageAcc): ToolUsageReport['perSession'] {
+  const bashPerSession = [...acc.bashBySession.values()]
+  const heaviest = [...bashPerSession].sort((a, b) => b - a).slice(0, HEAVY_SESSIONS)
+  return {
+    // `bashSessions`, not `sessions`: this map only gets a key when a session
+    // made a Bash call, while `byTool[].sessions` counts every session. Two
+    // columns called "sessions" meaning different things is a trap that widens
+    // as soon as the MCP tools start replacing Bash.
+    bashSessions: acc.bashBySession.size,
+    medianBashCalls: median(bashPerSession),
+    maxBashCalls: bashPerSession.length ? Math.max(...bashPerSession) : 0,
+    top10Share: shareOf(
+      heaviest.reduce((sum, n) => sum + n, 0),
+      acc.bashCalls,
+    ),
+  }
+}
+
+/** Shape the accumulator into the report. */
+function reportOf(acc: UsageAcc, entryCount: number): ToolUsageReport {
+  const bigrams: Bigram[] = [...acc.bigramCounts.entries()]
+    .map(([key, count]) => {
+      const [from, to] = key.split('\t')
+      return { from, to, count, share: shareOf(count, acc.totalPairs) }
+    })
+    .sort((a, b) => b.count - a.count || a.from.localeCompare(b.from))
+
+  const bootstrap: BootstrapFile[] = [...acc.bootstrapReads.entries()]
+    .map(([file, reads]) => ({ file, reads, sessions: acc.bootstrapSessions.get(file)?.size ?? 0 }))
+    .sort((a, b) => b.reads - a.reads || a.file.localeCompare(b.file))
+
+  return {
+    byTool: frequencyRows(acc.toolCalls, acc.toolSessions, acc.totalCalls),
+    bashIntents: [...acc.intentCalls.entries()]
+      .map(([intent, calls]) => ({ intent, calls, share: shareOf(calls, acc.bashCalls) }))
+      .sort((a, b) => b.calls - a.calls || a.intent.localeCompare(b.intent)),
+    bigrams,
+    surveyLoopShare: shareOf(acc.surveyPairs, acc.totalPairs),
+    perSession: perSessionOf(acc),
+    bootstrap,
+    mcpAdoption: {
+      mcpCalls: acc.mcpCalls,
+      totalCalls: acc.totalCalls,
+      share: shareOf(acc.mcpCalls, acc.totalCalls),
+      byTool: frequencyRows(acc.mcpByTool, acc.mcpByToolSessions, acc.totalCalls),
+    },
+    coverage: {
+      entries: entryCount,
+      jobs: acc.jobIds.size,
+      firstTs: acc.firstTs,
+      lastTs: acc.lastTs,
+      truncatedEntries: acc.truncatedEntries,
+    },
+  }
+}
 
 /**
  * Turn entries into the report `request.md` asks for: what gets called, what the
@@ -159,126 +379,9 @@ export function aggregateToolUsage(
   opts: AggregateOptions = {},
 ): ToolUsageReport {
   const includeSidechain = opts.includeSidechain === true
-
-  const toolCalls = new Map<string, number>()
-  const toolSessions = new Map<string, Set<string>>()
-  const intentCalls = new Map<string, number>()
-  const bigramCounts = new Map<string, number>()
-  const bootstrapReads = new Map<string, number>()
-  const bootstrapSessions = new Map<string, Set<string>>()
-  const bashBySession = new Map<string, number>()
-
-  let totalCalls = 0
-  let bashCalls = 0
-  let mcpCalls = 0
-  let totalPairs = 0
-  let surveyPairs = 0
-  let truncatedEntries = 0
-  let firstTs: number | null = null
-  let lastTs: number | null = null
-  const jobIds = new Set<string>()
-  const mcpByTool = new Map<string, number>()
-  const mcpByToolSessions = new Map<string, Set<string>>()
-
-  for (const entry of entries) {
-    jobIds.add(entry.jobId)
-    if (entry.callsTotal > entry.calls.length) truncatedEntries++
-    if (firstTs === null || entry.ts < firstTs) firstTs = entry.ts
-    if (lastTs === null || entry.ts > lastTs) lastTs = entry.ts
-
-    const session = sessionKeyOf(entry)
-    const calls = callsOf(entry, includeSidechain)
-
-    for (const call of calls) {
-      totalCalls++
-      toolCalls.set(call.name, (toolCalls.get(call.name) ?? 0) + 1)
-      if (!toolSessions.has(call.name)) toolSessions.set(call.name, new Set())
-      toolSessions.get(call.name)!.add(session)
-
-      if (call.name.startsWith(MCP_PREFIX)) {
-        mcpCalls++
-        mcpByTool.set(call.name, (mcpByTool.get(call.name) ?? 0) + 1)
-        if (!mcpByToolSessions.has(call.name)) mcpByToolSessions.set(call.name, new Set())
-        mcpByToolSessions.get(call.name)!.add(session)
-      }
-
-      if (call.name === 'Bash') {
-        bashCalls++
-        bashBySession.set(session, (bashBySession.get(session) ?? 0) + 1)
-        for (const intent of classifyBashCall(call.text).intents) {
-          intentCalls.set(intent, (intentCalls.get(intent) ?? 0) + 1)
-        }
-      }
-    }
-
-    // One entry is one job, so the entry boundary IS the sequence boundary — no
-    // pair may bridge two jobs, however close together they ran.
-    const labels = calls.map(sequenceLabelOf)
-    for (let i = 1; i < labels.length; i++) {
-      const key = `${labels[i - 1]}\t${labels[i]}`
-      bigramCounts.set(key, (bigramCounts.get(key) ?? 0) + 1)
-      totalPairs++
-      if (SURVEY_LABELS.has(labels[i - 1]) && SURVEY_LABELS.has(labels[i])) surveyPairs++
-    }
-
-    for (const call of calls.slice(0, BOOTSTRAP_CALLS)) {
-      for (const file of fileNamesIn(call.text)) {
-        bootstrapReads.set(file, (bootstrapReads.get(file) ?? 0) + 1)
-        if (!bootstrapSessions.has(file)) bootstrapSessions.set(file, new Set())
-        bootstrapSessions.get(file)!.add(session)
-      }
-    }
-  }
-
-  const bigrams: Bigram[] = [...bigramCounts.entries()]
-    .map(([key, count]) => {
-      const [from, to] = key.split('\t')
-      return { from, to, count, share: shareOf(count, totalPairs) }
-    })
-    .sort((a, b) => b.count - a.count || a.from.localeCompare(b.from))
-
-  const bootstrap: BootstrapFile[] = [...bootstrapReads.entries()]
-    .map(([file, reads]) => ({ file, reads, sessions: bootstrapSessions.get(file)?.size ?? 0 }))
-    .sort((a, b) => b.reads - a.reads || a.file.localeCompare(b.file))
-
-  const bashPerSession = [...bashBySession.values()]
-  const heaviest = [...bashPerSession].sort((a, b) => b - a).slice(0, HEAVY_SESSIONS)
-
-  return {
-    byTool: frequencyRows(toolCalls, toolSessions, totalCalls),
-    bashIntents: [...intentCalls.entries()]
-      .map(([intent, calls]) => ({ intent, calls, share: shareOf(calls, bashCalls) }))
-      .sort((a, b) => b.calls - a.calls || a.intent.localeCompare(b.intent)),
-    bigrams,
-    surveyLoopShare: shareOf(surveyPairs, totalPairs),
-    perSession: {
-      // `bashSessions`, not `sessions`: this map only gets a key when a session
-      // made a Bash call, while `byTool[].sessions` counts every session. Two
-      // columns called "sessions" meaning different things is a trap that widens
-      // as soon as the MCP tools start replacing Bash.
-      bashSessions: bashBySession.size,
-      medianBashCalls: median(bashPerSession),
-      maxBashCalls: bashPerSession.length ? Math.max(...bashPerSession) : 0,
-      top10Share: shareOf(
-        heaviest.reduce((sum, n) => sum + n, 0),
-        bashCalls,
-      ),
-    },
-    bootstrap,
-    mcpAdoption: {
-      mcpCalls,
-      totalCalls,
-      share: shareOf(mcpCalls, totalCalls),
-      byTool: frequencyRows(mcpByTool, mcpByToolSessions, totalCalls),
-    },
-    coverage: {
-      entries: entries.length,
-      jobs: jobIds.size,
-      firstTs,
-      lastTs,
-      truncatedEntries,
-    },
-  }
+  const acc = emptyAcc()
+  for (const entry of entries) ingestEntry(acc, entry, includeSidechain)
+  return reportOf(acc, entries.length)
 }
 
 // ── Backfill ─────────────────────────────────────────────────────────────────
@@ -331,13 +434,14 @@ async function readJobRecords(limit?: number): Promise<JobRecord[]> {
 /**
  * Which adapter a finished job's session belongs to.
  *
- * `metadata.providerId` does NOT exist — measured: 0 of 1.457 job files carry it.
+ * `metadata.providerId` is not stored on job records.
  * The provider lives on the `connection`, resolved from `runnerId` at run time,
  * which is why `jobQueue` has to pass `connection.providerId` into
  * `captureJobToolCalls` rather than reading it off the record.
  *
  * Two lookups, in this order, because neither alone is enough. Measured 2026-10-01
- * over 1.469 job files, 82 of which have an `agent-sdk-sessions` file:
+ * over the same snapshot §1 of `reports/tool-usage-2026-10.md` reports — 1.437 job
+ * records — of which 82 have an `agent-sdk-sessions` file:
  *   1. `runnerId` → runner → connection. Gives the real provider id, and covers 49
  *      of the 82 — but the other 33 ran on runners that have since been deleted,
  *      so the connection lookup yields nothing at all for them.
@@ -462,7 +566,7 @@ export async function ingestFromTranscripts(
   // Full dedupe window on purpose: `opts.limit` caps JOBS, while log entries are
   // ordered by ingest time and jobs by `createdAt`. Sharing one cap could leave a
   // job's own entry outside the window and ingest it a second time.
-  const existing = await readToolCallEntries({})
+  const existing = await readToolCallEntries({ limit: Number.MAX_SAFE_INTEGER })
   const known = new Set(existing.map((e) => e.jobId))
 
   const { appendToolCallLog } = await import('../../../backend/log/store.js')

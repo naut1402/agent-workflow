@@ -76,6 +76,24 @@
       // của task state.
       "file": "src/features/monitor/business/tasks/startAuthority.ts",
       "exports": ["setOrchestratorEnabledFlag"]
+    },
+    {
+      // Barrel `backend/log`. Hai tên này là bộ MẶT của log type `tool-call`:
+      // `tests/src/backend/log/driver.test.ts` (TC-C07) và hai suite
+      // `toolCallCapture*` import THẲNG từ barrel, không từ `store.js` /
+      // `shared/log/schema.js`. Các tên tool-call còn lại (`ToolCallSchema`,
+      // `SENSITIVE_KEY_RE`, `TOOL_CALL_*`, `ToolCall`) đã được GỠ khỏi barrel —
+      // mọi consumer, kể cả test, import từ `shared/log/schema.js`, nên re-export
+      // của chúng là dead thật chứ không phải false positive.
+      "file": "src/backend/log/index.ts",
+      "exports": ["appendToolCallLog", "ToolCallLogEntry"]
+    },
+    {
+      // `toolCallStatsSchema` — alias của `ToolUsageReportSchema` theo tên file.
+      // Dòng source không validate payload đã in; `toolCallStats.test.ts` dùng nó
+      // để khẳng định `aggregateToolUsage` luôn trả đúng hình dạng schema.
+      "file": "src/features/statistics/schemas/toolCallStats.ts",
+      "exports": ["toolCallStatsSchema"]
     }
   ],
 

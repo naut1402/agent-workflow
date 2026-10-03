@@ -11,7 +11,7 @@
 // `null` khi target thoát khỏi base — CỘNG `isSafeTaskId` ở lớp thứ hai.
 
 import { resolveProjectRoot } from '../../src/backend/registry.js'
-import { readTextFile, resolvePathUnder, statSafe } from '../../src/backend/lib/fileHelper.js'
+import { readTextFile, realpathSync, resolvePathUnder, statSafe } from '../../src/backend/lib/fileHelper.js'
 import { knownArtifactsFor, loadPipelineConfig } from '../../src/features/monitor/business/peers.js'
 import { createQa } from '../../src/features/monitor/business/tasks/qa.js'
 import {
@@ -142,7 +142,7 @@ export async function handleReadArtifact({
   taskId,
   name,
   project,
-}: { taskId: string; name: string; project?: string }): Promise<any> {
+}: { taskId: string; name: string; project?: string }, maxChars?: number): Promise<any> {
   const bad = badTaskId(taskId)
   if (bad) return bad
   if (typeof name !== 'string' || !name || name.includes('\0')) {
@@ -161,7 +161,7 @@ export async function handleReadArtifact({
 
   let content: string
   try {
-    content = await readTextFile(file)
+    content = await readTextFile(file, maxChars)
   } catch (err: any) {
     // `name` trỏ thư mục (EISDIR) hoặc file không đọc được — trả `fail` chứ
     // không để lỗi thoát ra thành `McpError`.
@@ -226,6 +226,12 @@ function payloadOf(result: any): any {
   }
 }
 
+/**
+ * Clip a file body to the context budget and SAY whether it was clipped.
+ *
+ * The flag is the point: an agent handed a silently truncated `request.md` would
+ * act on half a spec without ever knowing a second half existed.
+ */
 function capped(content: string): { content: string; truncated: boolean } {
   if (content.length <= TASK_CONTEXT_MAX_CHARS) return { content, truncated: false }
   return { content: content.slice(0, TASK_CONTEXT_MAX_CHARS), truncated: true }
@@ -250,6 +256,143 @@ function summarisePipeline(cfg: any, state: any): any {
 }
 
 /**
+ * `include` may only name sections this tool knows.
+ *
+ * An unknown name is a client bug, and answering it with a payload that silently
+ * omits the section would hide that bug behind an empty-looking task.
+ *
+ * Returns a `fail` payload, or `null` when every section is known.
+ */
+function badContextSections(sections: readonly string[]): any | null {
+  if (!Array.isArray(sections)) return fail('invalid_input', 'include must be an array')
+  for (const section of sections) {
+    if (!(TASK_CONTEXT_SECTIONS as readonly string[]).includes(section)) {
+      return fail(
+        'invalid_input',
+        `unknown include section: ${JSON.stringify(section)} — expected one of ${TASK_CONTEXT_SECTIONS.join(', ')}`,
+      )
+    }
+  }
+  return null
+}
+
+/**
+ * Resolve `project-rules.md` to a path proven to sit inside the project root.
+ *
+ * Two checks, not one. `resolvePathUnder` compares the LEXICAL path, so a
+ * `project-rules.md` that is a symlink out of the root passes it and `readTextFile`
+ * would then happily return a file from anywhere on disk. Resolving BOTH sides with
+ * `realpathSync` and re-checking is what actually closes that, and the caller must
+ * read the returned `file` — re-deriving the path would drop the proof.
+ *
+ * `{ file: null }` means "no rules to report" (missing file, broken symlink);
+ * `{ error }` means the path escaped and the whole call must fail.
+ */
+function resolveRulesFile(root: string): { file: string | null } | { error: any } {
+  // 🚫 No `joinPath` in `mcp/` — `resolvePathUnder` returns null when the target
+  // escapes the root, and that is a `fail`, not a silent read somewhere else.
+  const direct = resolvePathUnder(root, 'project-rules.md')
+  if (!direct) return { error: fail('invalid_input', 'rules path escapes the project root') }
+
+  try {
+    const realRoot = realpathSync(root)
+    const realFile = realpathSync(direct)
+    if (!resolvePathUnder(realRoot, realFile)) {
+      return { error: fail('invalid_input', 'rules path escapes the project root') }
+    }
+    return { file: realFile }
+  } catch {
+    return { file: null }
+  }
+}
+
+/** `{ content, truncated }` for a file section, or `null` when it was not read. */
+function fileSection(name: string, content: unknown, extra?: Record<string, unknown>): any {
+  return typeof content === 'string' ? { name, ...extra, ...capped(content) } : null
+}
+
+/** The four task fields the bootstrap call needs, or `null` when state is unreadable. */
+function taskSummary(taskId: string, stateObj: any): any {
+  if (!stateObj) return null
+  return {
+    id: taskId,
+    name: stateObj.name ?? null,
+    phase: stateObj.current_phase ?? null,
+    hitlPending: stateObj.hitl_pending ?? null,
+  }
+}
+
+/** What `loadContextParts` fans out to — one slot per section, `null` when not asked for. */
+type TaskContextParts = {
+  state: any
+  artifacts: any
+  request: any
+  pipelineCfg: any
+  rules: string | null
+}
+
+/**
+ * Fan out the four existing handlers plus the rules read, in parallel.
+ *
+ * Every branch swallows its own rejection: one unreadable section must degrade to
+ * `null` in that slot rather than fail the whole bootstrap call, which is the only
+ * reason an agent would still have to fall back to `cd && cat`.
+ */
+async function loadContextParts(
+  taskId: string,
+  project: string | undefined,
+  root: string,
+  rulesFile: string | null,
+  wants: (section: string) => boolean,
+): Promise<TaskContextParts> {
+  // `state` is loaded for `pipeline` too — `summarisePipeline` needs `current_phase`
+  // to say which step is current — but it is only REPORTED when asked for.
+  const needState = wants('state') || wants('pipeline')
+  const [state, artifacts, request, pipelineCfg, rules] = await Promise.all([
+    needState ? handleGetTaskState({ taskId, project }).then(payloadOf, () => null) : null,
+    wants('artifacts') ? handleListArtifacts({ taskId, project }).then(payloadOf, () => null) : null,
+    wants('request')
+      ? handleReadArtifact(
+          { taskId, name: 'request.md', project },
+          TASK_CONTEXT_MAX_CHARS + 1,
+        ).then(payloadOf, () => null)
+      : null,
+    wants('pipeline') ? loadPipelineConfig(root, taskId).catch(() => null) : null,
+    rulesFile ? readTextFile(rulesFile, TASK_CONTEXT_MAX_CHARS + 1).catch(() => null) : null,
+  ])
+  return { state, artifacts, request, pipelineCfg, rules: rules ?? null }
+}
+
+/** Shape the fanned-out parts into the wire payload. */
+function buildContextPayload(
+  taskId: string,
+  parts: TaskContextParts,
+  wants: (section: string) => boolean,
+): any {
+  const { state, artifacts, request, pipelineCfg, rules } = parts
+  const stateObj = state?.state ?? null
+  // `untrusted` means the YAML was there but unreadable. Reporting the built-in
+  // default as if it were the task's pipeline would be worse than saying nothing.
+  const pipeline =
+    pipelineCfg && !pipelineCfg.untrusted ? summarisePipeline(pipelineCfg, stateObj) : null
+
+  return {
+    taskId,
+    task: taskSummary(taskId, stateObj),
+    request: fileSection('request.md', request?.content, { mtime: request?.mtime ?? null }),
+    pipeline,
+    artifacts: artifacts?.artifacts ?? null,
+    subtasks: artifacts?.subtasks ?? null,
+    state: wants('state') ? stateObj : null,
+    // Same `{ content, truncated }` shape as `request`: an agent handed a
+    // silently clipped `project-rules.md` has no way to tell, and one branch of
+    // the payload reporting truncation while its neighbour hides it is worse
+    // than neither doing so.
+    rules: fileSection('project-rules.md', rules),
+  }
+}
+
+/**
  * Whole context of one task in ONE call: `request.md`, the pipeline (current +
  * next step), the artifact listing, and the machine state.
  *
@@ -267,70 +410,25 @@ export async function handleGetTaskContext({
   if (bad) return bad
 
   const sections: readonly string[] = include ?? DEFAULT_TASK_CONTEXT_SECTIONS
-  if (!Array.isArray(sections)) return fail('invalid_input', 'include must be an array')
-  for (const section of sections) {
-    if (!(TASK_CONTEXT_SECTIONS as readonly string[]).includes(section)) {
-      return fail(
-        'invalid_input',
-        `unknown include section: ${JSON.stringify(section)} — expected one of ${TASK_CONTEXT_SECTIONS.join(', ')}`,
-      )
-    }
-  }
+  const badSection = badContextSections(sections)
+  if (badSection) return badSection
 
   const gate = rootOrFail(project)
   if ('error' in gate) return gate.error
   const root = gate.root
   const wants = (section: string) => sections.includes(section)
 
-  // 🚫 No `joinPath` in `mcp/` — `resolvePathUnder` returns null when the target
-  // escapes the root, and that is a `fail`, not a silent read somewhere else.
-  const rulesFile = wants('rules') ? resolvePathUnder(root, 'project-rules.md') : null
-  if (wants('rules') && !rulesFile) {
-    return fail('invalid_input', 'rules path escapes the project root')
+  let rulesFile: string | null = null
+  if (wants('rules')) {
+    const resolved = resolveRulesFile(root)
+    if ('error' in resolved) return resolved.error
+    rulesFile = resolved.file
   }
 
-  const [state, artifacts, request, pipelineCfg, rules] = await Promise.all([
-    wants('state') ? handleGetTaskState({ taskId, project }).then(payloadOf, () => null) : null,
-    wants('artifacts') ? handleListArtifacts({ taskId, project }).then(payloadOf, () => null) : null,
-    wants('request')
-      ? handleReadArtifact({ taskId, name: 'request.md', project }).then(payloadOf, () => null)
-      : null,
-    wants('pipeline') ? loadPipelineConfig(root, taskId).catch(() => null) : null,
-    rulesFile ? readTextFile(rulesFile).catch(() => null) : null,
-  ])
-
-  const stateObj = state?.state ?? null
-  // `untrusted` means the YAML was there but unreadable. Reporting the built-in
-  // default as if it were the task's pipeline would be worse than saying nothing.
-  const pipeline =
-    pipelineCfg && !pipelineCfg.untrusted ? summarisePipeline(pipelineCfg, stateObj) : null
-
-  const requestBody = typeof request?.content === 'string' ? capped(request.content) : null
+  const parts = await loadContextParts(taskId, project, root, rulesFile, wants)
 
   return ok(
-    {
-      taskId,
-      task: stateObj
-        ? {
-            id: taskId,
-            name: stateObj.name ?? null,
-            phase: stateObj.current_phase ?? null,
-            hitlPending: stateObj.hitl_pending ?? null,
-          }
-        : null,
-      request: requestBody
-        ? { name: 'request.md', mtime: request.mtime ?? null, ...requestBody }
-        : null,
-      pipeline,
-      artifacts: artifacts?.artifacts ?? null,
-      subtasks: artifacts?.subtasks ?? null,
-      state: stateObj,
-      // Same `{ content, truncated }` shape as `request`: an agent handed a
-      // silently clipped `project-rules.md` has no way to tell, and one branch of
-      // the payload reporting truncation while its neighbour hides it is worse
-      // than neither doing so.
-      rules: typeof rules === 'string' ? { name: 'project-rules.md', ...capped(rules) } : null,
-    },
+    buildContextPayload(taskId, parts, wants),
     // G8: same reasoning as `read_artifact` — the payload carries file contents,
     // and `structuredContent` would send every byte of it twice over stdio.
     { structured: false },

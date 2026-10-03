@@ -27,6 +27,7 @@
 import {
   aggregateToolUsage,
   collectFromTranscripts,
+  filterToolCallEntries,
   ingestFromTranscripts,
   readToolCallEntries,
 } from '../src/features/statistics/business/toolCallStats.js'
@@ -50,6 +51,7 @@ interface Args {
   ingest: boolean
 }
 
+/** Parse CLI flags, ignoring unknown flags and retaining defaults for invalid format/top values. */
 function parseArgs(argv: string[]): Args {
   const args: Args = {
     format: 'table',
@@ -82,10 +84,12 @@ function parseArgs(argv: string[]): Args {
   return args
 }
 
+/** Format a fractional share as a percentage with one decimal place. */
 function pct(share: number): string {
   return `${(share * 100).toFixed(1)}%`
 }
 
+/** Align plain-text columns to the widest header or cell without trailing padding. */
 function renderTable(rows: string[][], headers: string[]): string {
   const widths = headers.map((h, i) =>
     Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)),
@@ -94,6 +98,7 @@ function renderTable(rows: string[][], headers: string[]): string {
   return [line(headers), line(widths.map((w) => '-'.repeat(w))), ...rows.map(line)].join('\n')
 }
 
+/** Build a Markdown table from cells that are already safe to embed without escaping. */
 function markdownTable(rows: string[][], headers: string[]): string {
   return [
     `| ${headers.join(' | ')} |`,
@@ -108,6 +113,7 @@ interface Section {
   rows: string[][]
 }
 
+/** Limit each report section to its first `top` rows, preserving the aggregation order. */
 function sectionsOf(report: ToolUsageReport, top: number): Section[] {
   return [
     {
@@ -144,6 +150,7 @@ function sectionsOf(report: ToolUsageReport, top: number): Section[] {
   ]
 }
 
+/** Summarize coverage, session counts and adoption, using `n/a` when either time bound is absent. */
 function summaryLines(report: ToolUsageReport): string[] {
   const { coverage, perSession, mcpAdoption } = report
   const span =
@@ -159,6 +166,7 @@ function summaryLines(report: ToolUsageReport): string[] {
   ]
 }
 
+/** Write the report to stdout; JSON retains all rows while text formats apply `top`. */
 function print(report: ToolUsageReport, args: Args): void {
   if (args.format === 'json') {
     console.log(JSON.stringify(report, null, 2))
@@ -182,6 +190,7 @@ function print(report: ToolUsageReport, args: Args): void {
   }
 }
 
+/** Dispatch log reporting or transcript collection/backfill; return 2 for an invalid ingest mode, otherwise 0. */
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2))
 
@@ -190,6 +199,21 @@ async function main(): Promise<number> {
   if (args.ingest && !args.fromTranscripts) {
     console.error('--ingest requires --from-transcripts (it backfills the log from transcripts).')
     return 2
+  }
+
+  // G7/E8: the session running this script also writes tool calls. Excluding it is
+  // the default, not an opt-in flag — counting yourself was a measured error.
+  const excludeSessionIds = [...args.excludeSessions]
+  const own = process.env.CLAUDE_SESSION_ID
+  if (own) excludeSessionIds.push(own)
+
+  const filters = {
+    from: args.from,
+    to: args.to,
+    projectId: args.project,
+    taskId: args.task,
+    agentRef: args.agent,
+    excludeSessionIds,
   }
 
   // The transcript scan never touches the log, so it runs regardless of the log
@@ -208,7 +232,7 @@ async function main(): Promise<number> {
       `[from-transcripts] jobs with entries=${summary.ingested} skipped=${summary.skipped} `
       + `noTranscript=${summary.noTranscript} (nothing written — add --ingest to persist)`,
     )
-    print(aggregateToolUsage(entries, { includeSidechain: args.includeSidechain }), args)
+    print(aggregateToolUsage(filterToolCallEntries(entries, filters), { includeSidechain: args.includeSidechain }), args)
     return 0
   }
 
@@ -221,20 +245,7 @@ async function main(): Promise<number> {
     return 0
   }
 
-  // G7/E8: the session running this script also writes tool calls. Excluding it is
-  // the default, not an opt-in flag — counting yourself was a measured error.
-  const excludeSessionIds = [...args.excludeSessions]
-  const own = process.env.CLAUDE_SESSION_ID
-  if (own) excludeSessionIds.push(own)
-
-  const entries = await readToolCallEntries({
-    from: args.from,
-    to: args.to,
-    projectId: args.project,
-    taskId: args.task,
-    agentRef: args.agent,
-    excludeSessionIds,
-  })
+  const entries = await readToolCallEntries(filters)
 
   print(aggregateToolUsage(entries, { includeSidechain: args.includeSidechain }), args)
   return 0

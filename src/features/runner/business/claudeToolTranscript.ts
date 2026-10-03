@@ -45,6 +45,7 @@ export function textOfToolInput(input: unknown): string {
   }
 }
 
+/** Tool calls on one `assistant` row of the JSONL transcript. */
 function callsFromRow(row: Record<string, unknown>): ToolCall[] {
   const message = row.message
   if (!message || typeof message !== 'object') return []
@@ -87,30 +88,49 @@ export async function readNewToolCalls(
 
   const lines = raw.split('\n')
   // A trailing newline yields a final empty segment that is not a line.
-  const physicalLines = raw.endsWith('\n') ? Math.max(0, lines.length - 1) : lines.length
+  const physicalLines = raw === '' ? 0 : raw.endsWith('\n') ? lines.length - 1 : lines.length
   const start = Math.max(0, Math.floor(fromLine))
 
   const calls: ToolCall[] = []
-  // The cursor stops at the first unparseable line rather than past it: that line
-  // is normally the one the CLI is still writing, and a cursor that jumped over it
-  // would drop its calls for good once it is complete. Parsing still continues so
-  // one bad line in the middle does not hide everything after it.
-  let firstBadLine = -1
+  // Only the final physical line can still be completed by an append.
+  let pendingFinalLine = -1
   for (let i = start; i < physicalLines; i++) {
-    const line = lines[i]
-    if (!line || !line.trim()) continue
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(line)
-    } catch {
-      if (firstBadLine < 0) firstBadLine = i
+    const row = parseAssistantRow(lines[i])
+    if (row) {
+      calls.push(...callsFromRow(row))
       continue
     }
-    if (!parsed || typeof parsed !== 'object') continue
-    const row = parsed as Record<string, unknown>
-    if (row.type !== 'assistant') continue
-    calls.push(...callsFromRow(row))
+    // A line that will not parse is only worth re-reading if it is the LAST one —
+    // there the CLI may still be mid-append. Holding the cursor on a broken line in
+    // the MIDDLE would re-read every line after it on the next pass and log those
+    // calls again on every resume of the session.
+    if (row === null && i === physicalLines - 1 && !isBlank(lines[i])) pendingFinalLine = i
   }
 
-  return { calls, totalLines: firstBadLine >= 0 ? firstBadLine : physicalLines }
+  return { calls, totalLines: pendingFinalLine >= 0 ? pendingFinalLine : physicalLines }
+}
+
+/** `true` for an empty or whitespace-only JSONL line — skipped, never a parse failure. */
+function isBlank(line: string | undefined): boolean {
+  return !line || !line.trim()
+}
+
+/**
+ * One JSONL line → the `assistant` row it holds.
+ *
+ * `undefined` means "nothing here to read" (blank, or a well-formed row of another
+ * type); `null` means the line did not parse, which is the only case the cursor
+ * cares about.
+ */
+function parseAssistantRow(line: string | undefined): Record<string, unknown> | null | undefined {
+  if (isBlank(line)) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(line as string)
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object') return undefined
+  const row = parsed as Record<string, unknown>
+  return row.type === 'assistant' ? row : undefined
 }

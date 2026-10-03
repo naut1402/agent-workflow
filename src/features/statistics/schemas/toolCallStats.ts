@@ -30,7 +30,6 @@ export const BashIntentShareSchema = z.object({
   calls: z.number().int().nonnegative(),
   share: z.number().nonnegative(),
 })
-export type BashIntentShare = z.infer<typeof BashIntentShareSchema>
 
 /** One adjacent pair of call labels within a single entry. */
 export const BigramSchema = z.object({
@@ -50,7 +49,6 @@ export const PerSessionSchema = z.object({
   /** Share of all Bash calls made by the 10 heaviest sessions, 0..1. */
   top10Share: z.number().nonnegative(),
 })
-export type PerSession = z.infer<typeof PerSessionSchema>
 
 /** A file read in the first few calls of a job — the evidence for `get_task_context`. */
 export const BootstrapFileSchema = z.object({
@@ -71,7 +69,6 @@ export const McpAdoptionSchema = z.object({
   share: z.number().nonnegative(),
   byTool: z.array(ToolFrequencySchema),
 })
-export type McpAdoption = z.infer<typeof McpAdoptionSchema>
 
 /** How much data the numbers above rest on — including what was cut off. */
 export const ToolUsageCoverageSchema = z.object({
@@ -82,7 +79,6 @@ export const ToolUsageCoverageSchema = z.object({
   /** Entries whose `callsTotal` exceeded `calls.length` — i.e. hit the cap. */
   truncatedEntries: z.number().int().nonnegative(),
 })
-export type ToolUsageCoverage = z.infer<typeof ToolUsageCoverageSchema>
 
 export const ToolUsageReportSchema = z.object({
   byTool: z.array(ToolFrequencySchema),

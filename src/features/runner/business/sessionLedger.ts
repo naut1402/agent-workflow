@@ -332,20 +332,59 @@ export function closeTaskSession(projectId: string, taskId: string, opts?: { ste
   if (changed) saveTaskSessionLedger(projectId, ledger)
 }
 
+/**
+ * Newest ledger entry for `sessionId`, or `null`.
+ *
+ * Scanned newest-first, not oldest-first: a session id can appear more than once on
+ * one task, and the cursors must always track the most recent run of it.
+ */
+function findSessionEntry(
+  projectId: string,
+  taskId: string,
+  sessionId: string,
+): SessionEntry | null {
+  if (!projectId || !taskId || !sessionId) return null
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
+    if (ledger.sessions[i].sessionId === sessionId) return ledger.sessions[i]
+  }
+  return null
+}
+
+/**
+ * Apply `mutate` to the newest entry for `sessionId`, stamp `lastUsedAt`, and save.
+ *
+ * No-op when the session is not on the ledger — a cursor for a session nobody
+ * recorded has nothing to attach to, and inventing an entry here would hide the bug
+ * that produced the unknown id.
+ */
+function updateSessionEntry(
+  projectId: string,
+  taskId: string,
+  sessionId: string,
+  mutate: (entry: SessionEntry) => void,
+): void {
+  if (!projectId || !taskId || !sessionId) return
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
+    const s = ledger.sessions[i]
+    if (s.sessionId !== sessionId) continue
+    mutate(s)
+    s.lastUsedAt = new Date().toISOString()
+    saveTaskSessionLedger(projectId, ledger)
+    return
+  }
+}
+
 /** Read usage cursor for a session id on the task ledger (null if missing). */
 export function getUsageCursor(
   projectId: string,
   taskId: string,
   sessionId: string,
 ): UsageCursor | null {
-  if (!projectId || !taskId || !sessionId) return null
-  const ledger = loadTaskSessionLedger(projectId, taskId)
-  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
-    const s = ledger.sessions[i]
-    if (s.sessionId === sessionId && s.usageCursor) return { ...s.usageCursor, subagentFiles: [...s.usageCursor.subagentFiles] }
-    if (s.sessionId === sessionId) return null
-  }
-  return null
+  const cursor = findSessionEntry(projectId, taskId, sessionId)?.usageCursor
+  if (!cursor) return null
+  return { ...cursor, subagentFiles: [...cursor.subagentFiles] }
 }
 
 /** Persist usage cursor onto the matching session entry (no-op if not found). */
@@ -355,21 +394,12 @@ export function setUsageCursor(
   sessionId: string,
   cursor: UsageCursor,
 ): void {
-  if (!projectId || !taskId || !sessionId) return
-  const ledger = loadTaskSessionLedger(projectId, taskId)
-  let changed = false
-  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
-    const s = ledger.sessions[i]
-    if (s.sessionId !== sessionId) continue
+  updateSessionEntry(projectId, taskId, sessionId, (s) => {
     s.usageCursor = {
       mainLines: Math.max(0, cursor.mainLines),
       subagentFiles: [...cursor.subagentFiles],
     }
-    s.lastUsedAt = new Date().toISOString()
-    changed = true
-    break
-  }
-  if (changed) saveTaskSessionLedger(projectId, ledger)
+  })
 }
 
 /** Read tool-call cursor for a session id on the task ledger (null if missing). */
@@ -378,14 +408,8 @@ export function getToolCallCursor(
   taskId: string,
   sessionId: string,
 ): ToolCallCursor | null {
-  if (!projectId || !taskId || !sessionId) return null
-  const ledger = loadTaskSessionLedger(projectId, taskId)
-  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
-    const s = ledger.sessions[i]
-    if (s.sessionId !== sessionId) continue
-    return s.toolCallCursor ? { ...s.toolCallCursor } : null
-  }
-  return null
+  const cursor = findSessionEntry(projectId, taskId, sessionId)?.toolCallCursor
+  return cursor ? { ...cursor } : null
 }
 
 /** Persist tool-call cursor onto the matching session entry (no-op if not found). */
@@ -395,18 +419,9 @@ export function setToolCallCursor(
   sessionId: string,
   cursor: ToolCallCursor,
 ): void {
-  if (!projectId || !taskId || !sessionId) return
-  const ledger = loadTaskSessionLedger(projectId, taskId)
-  let changed = false
-  for (let i = ledger.sessions.length - 1; i >= 0; i--) {
-    const s = ledger.sessions[i]
-    if (s.sessionId !== sessionId) continue
+  updateSessionEntry(projectId, taskId, sessionId, (s) => {
     s.toolCallCursor = { mainLines: Math.max(0, cursor.mainLines) }
-    s.lastUsedAt = new Date().toISOString()
-    changed = true
-    break
-  }
-  if (changed) saveTaskSessionLedger(projectId, ledger)
+  })
 }
 
 // ── CLI session capture helpers ────────────────────────────────────────────

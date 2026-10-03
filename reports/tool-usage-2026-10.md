@@ -13,11 +13,11 @@
 |---|---|
 | Job đã chạy | 1.437 |
 | Job có `sessionId` | 1.424 |
-| Job còn truy được transcript | **41 (2,9%)** |
+| Job còn truy được transcript | **41/1.437 (2,9%)** |
 | Transcript còn trên đĩa | 35 file · 25 phiên có tool call |
 | Lượt gọi tool đếm được | **499** |
 
-Theo tháng: 2026-08 có 626 job → **0** transcript; 2026-09 có 797 → 37; 2026-10 có 13 → 4.
+Theo tháng: 2026-08 có 626 job → **0** transcript; 2026-09 có 797 → 37; 2026-10 có 13 → 4. Ba hàng cộng thành **1.436 job**, thiếu 1 so với tổng 1.437 đã ghi; chưa có snapshot gốc để xác định tháng của job chênh lệch. Tỷ lệ theo job trong báo cáo dùng chung mẫu số **1.437** (tổng đã ghi), không dùng tổng các hàng tháng hay 1.424 job có session.
 
 🚫 **Đây là lý do báo cáo này không thể lặp lại bằng cách "đọc lại log".** Transcript bị prune; job tháng 8 không còn gì để đọc. Một lần quét transcript nữa sau vài tuần sẽ cho mẫu nhỏ hơn, không lớn hơn — nên deliverable thật của task là **đường ingest**, không phải con số dưới đây.
 
@@ -40,7 +40,9 @@ Theo tháng: 2026-08 có 626 job → **0** transcript; 2026-09 có 797 → 37; 2
 
 **10 MCP tool đã đăng ký, 0 lượt gọi.** Smoke test xác nhận server chạy và trả dữ liệu thật, nên đây là vấn đề *adoption*, không phải *thiếu tool*. 267 job có đính `--mcp-config` mà vẫn 0 lượt.
 
-⚠️ 1.305/1.435 job chạy `--dangerously-skip-permissions`, và ở chế độ đó harness chủ động dặn agent ưu tiên Bash. **91,2% là triệu chứng, không phải nguyên nhân** — đừng dùng con số này một mình để biện minh cho một tool thay 1-1 cho `cat`/`grep`.
+⚠️ 1.305/1.437 job chạy `--dangerously-skip-permissions`, và ở chế độ đó harness chủ động dặn agent ưu tiên Bash. **91,2% là triệu chứng, không phải nguyên nhân** — đừng dùng con số này một mình để biện minh cho một tool thay 1-1 cho `cat`/`grep`.
+
+> Mẫu số 1.435 ở bản cũ không có nguồn xác nhận phạm vi riêng; đã thống nhất về tổng 1.437 của §1. Đây là hiệu chỉnh cách trình bày snapshot, chưa phải kết quả đo lại.
 
 ### 2.2 Bash làm gì
 
@@ -105,14 +107,14 @@ Nguyên nhân gốc nằm trong prompt: chuỗi `curl` mẫu được viết s�
 
 ### 3.5 Agent tự kiểm tài liệu của chính mình
 
-61/483 lượt Bash đụng artifact của chính task; trong đó **13 lượt** grep heading markdown kèm máy trạng thái `awk` tự chế để kiểm rule doc-writing. Cùng một logic bị viết lại bằng tay ở nhiều phiên.
+61/455 lượt Bash (13,4%) đụng artifact của chính task; trong đó **13 lượt** grep heading markdown kèm máy trạng thái `awk` tự chế để kiểm rule doc-writing. Cùng một logic bị viết lại bằng tay ở nhiều phiên.
 
 ### 3.6 Nhánh runner API (bộ tool khác)
 
 `agent-sdk-sessions/`: 120 file, 25 file có tool call — `search_files` 32 · `list_directory` 29 · `read_file` 17 · `write_file` 4. Cùng hình dạng với nhánh CLI: tìm > liệt kê > đọc.
 
 > [!NOTE]
-> Đây là số **thô trên file**. Chạy `--from-transcripts --ingest` ra `search_files` 16 · `list_directory` 16 · `read_file` 10 · `write_file` 4 — thấp hơn vì hai bước lọc cố ý: (1) chỉ 13/25 file session nối được về một job record qua `sessionId`, phần còn lại không có job để gắn; (2) khử trùng `(name, text)` theo §4.4-E14 của `design.md` — runner API ghi đè nguyên file mỗi lượt nên lượt cũ xuất hiện lại ở mỗi lần resume. Số sau khi lọc mới là số dùng được; số thô ở trên giữ lại để đối chiếu.
+> Đây là số **thô trên file**, tách khỏi mẫu CLI 499 lượt / 455 Bash ở §1–§3.5. Lần ingest cũ ghi `search_files` 16 · `list_directory` 16 · `read_file` 10 · `write_file` 4: chỉ 13/25 file session nối được về job record, và bộ đọc còn khử trùng `(name, text)`, làm mất cả lượt gọi lặp hợp lệ. Các số ingest cũ không dùng làm số đã hiệu chỉnh; cần đo lại từ snapshot gốc. Bộ đọc hiện giữ thứ tự và mọi lượt gọi, dùng cursor theo số lượt để tránh đếm lại khi resume.
 
 ---
 

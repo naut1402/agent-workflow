@@ -47,6 +47,7 @@ export type BuildToolCallResult =
   | { status: 'empty'; nextCursor: number }
   | { status: 'ok'; payload: ToolCallEntryPayload; nextCursor: number }
 
+/** A non-empty string from `job.metadata`, or `null` — missing and `''` are the same here. */
 function metaString(job: JobRecord, key: string): string | null {
   const v = job.metadata?.[key]
   return typeof v === 'string' && v ? v : null
@@ -165,6 +166,39 @@ function looksLikeCredential(value: string): boolean {
  * the token to.
  */
 export function redactToolText(raw: string): string {
+  return redactAtDepth(raw, 0)
+}
+
+/**
+ * How deep the non-sensitive-key rescan may nest.
+ *
+ * The rescan below recurses on the VALUE of a non-sensitive key, which shrinks by at
+ * least the key and separator each time — so it terminates, but `a=a=a=…` nests once
+ * per pair and ~2 500 of them overflowed the stack. `prepareCalls` redacts BEFORE
+ * capping text, so the input length is whatever the agent ran, not `TOOL_CALL_TEXT_MAX_CHARS`;
+ * the backfill path (`walkTranscripts`) has no try/catch, so an overflow there aborts
+ * `--ingest` outright. Real commands nest once or twice — a URL inside a quoted JSON
+ * value is depth 2 — so 8 is far above anything measured.
+ */
+const MAX_REDACT_DEPTH = 8
+
+/**
+ * A value the rescan ran out of depth on — kept only if it holds no sensitive word.
+ *
+ * Tested with the bare `SENSITIVE_KEY_RE` rather than `isSensitiveName`, which anchors
+ * the word to `-`/`_`/string edges and so would answer "not sensitive" for exactly the
+ * nested shape that got us here (`a=api_key=…` has `=` on both sides). This is the
+ * fail-closed branch, so the loose test is the right one.
+ */
+function cappedValue(value: string): string {
+  return SENSITIVE_KEY_RE.test(value) ? REDACTED : value
+}
+
+/**
+ * The redaction pipeline itself. `depth` tracks the non-sensitive-key rescan below
+ * and is the ONLY reason this is not simply `redactToolText` — see `MAX_REDACT_DEPTH`.
+ */
+function redactAtDepth(raw: string, depth: number): string {
   if (typeof raw !== 'string' || !raw) return ''
 
   let out = raw.replace(AUTH_SCHEME_RE, (match, scheme: string, value: string) => {
@@ -191,8 +225,16 @@ export function redactToolText(raw: string): string {
   out = out.replace(
     KEY_VALUE_RE,
     (match, openQuote: string, key: string, sep: string, valQuote: string, quoted: string, bare: string) => {
-      if (!isSensitiveName(key)) return match
       const value = valQuote ? quoted : bare
+      if (!isSensitiveName(key)) {
+        // `String.replace` collects every match BEFORE calling this, so rescanning
+        // the value here cannot disturb the outer pass. Without it a secret behind a
+        // harmless key is skipped whole: in `curl "https://x/v1?api_key=abc"` the
+        // match starts at the key `https`, and the matched span is never re-examined.
+        const prefix = `${openQuote}${key}${openQuote}${sep}`
+        const inner = depth >= MAX_REDACT_DEPTH ? cappedValue(value) : redactAtDepth(value, depth + 1)
+        return `${prefix}${valQuote || ''}${inner}${valQuote || ''}`
+      }
       if (!value || looksLikePath(value)) return match
       // The rules above already ran; re-redacting their output would nest brackets.
       if (value.startsWith('[redacted')) return match
@@ -201,6 +243,10 @@ export function redactToolText(raw: string): string {
         : `${openQuote}${key}${openQuote}${sep}${REDACTED}`
     },
   )
+
+  out = out.replace(/((?:^|\s)(?:-u\s*|--user(?:=|\s+)))(?:"[^"]*"|'[^']*'|[^\s"']+)/g, `$1${REDACTED}`)
+  out = out.replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@"']+@/gi, `$1${REDACTED}@`)
+  out = out.replace(/(^|[\s"'=])[^\s/:@"']+:[^\s/@"']+@/g, `$1${REDACTED}@`)
 
   return out
 }
@@ -211,27 +257,6 @@ export function redactToolText(raw: string): string {
 function capText(text: string, max: number): string {
   if (text.length <= max) return text
   return `${text.slice(0, max - 1)}…`
-}
-
-/**
- * Agent-SDK sessions are rewritten whole on every resume, so the same call shows
- * up again in a later read. That repeat is a storage artefact, not a real second
- * invocation — drop it, and let `callsTotal` count what is left, so
- * `callsTotal > calls.length` keeps meaning "hit the cap" and nothing else.
- *
- * CLI transcripts are append-only, so a repeated `(name, text)` there IS two real
- * calls and must be kept.
- */
-function dedupeCalls(calls: ToolCall[]): ToolCall[] {
-  const seen = new Set<string>()
-  const out: ToolCall[] = []
-  for (const call of calls) {
-    const key = JSON.stringify([call.name, call.text])
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push(call)
-  }
-  return out
 }
 
 /**
@@ -289,7 +314,7 @@ async function readCalls(
     return { calls: result.calls, source: 'cli-transcript', nextCursor: result.totalLines }
   }
 
-  const all = dedupeCalls(await readSessionToolCalls(sessionId))
+  const all = await readSessionToolCalls(sessionId)
   if (all.length === 0) {
     // `readSessionToolCalls` returns [] for BOTH "no such file" and "file with no
     // tool calls". Only the first is `no-source`; probing keeps the counters

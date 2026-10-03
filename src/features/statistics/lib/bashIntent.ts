@@ -99,17 +99,54 @@ function heredocBodyEnd(command: string, start: number, pending: PendingHeredoc)
 }
 
 /**
- * Split a command into shell segments.
+ * Length of the segment separator starting at `i`, or 0 when there is none.
  *
- * Two traps the naive `split(/&&|\|\||;|\|/)` falls into, both measured:
- *   - a heredoc body gets counted as commands (`// grep` inside an embedded
- *     script becomes a `grep` segment),
- *   - an operator inside quotes splits a single command (`grep 'a|b' f` is ONE
- *     command in a real shell, and regex alternation is common in these calls).
+ * `|` is deliberately one separator whether or not it is doubled: a pipe and an
+ * `||` both end the current segment, and only the width differs.
  */
-export function splitCommandSegments(command: string): string[] {
-  if (typeof command !== 'string' || !command) return []
+function separatorLength(command: string, i: number): number {
+  const ch = command[i]
+  if (ch === '&' && command[i + 1] === '&') return 2
+  if (ch === '|') return command[i + 1] === '|' ? 2 : 1
+  if (ch === ';') return 1
+  return 0
+}
 
+/**
+ * Characters that must be copied through without ever being read as syntax:
+ * anything inside quotes, and anything escaped by a backslash.
+ *
+ * Returns how many characters were consumed (0 when `i` is not such a run) plus the
+ * quote still open afterwards, so the caller keeps one `quote` variable and no
+ * nested branching.
+ */
+function consumeLiteral(
+  command: string,
+  i: number,
+  quote: string | null,
+): { taken: number; quote: string | null } | null {
+  const ch = command[i]
+  if (quote) return { taken: 1, quote: ch === quote ? null : quote }
+  if (ch === '\\' && i + 1 < command.length) return { taken: 2, quote: null }
+  if (ch === "'" || ch === '"') return { taken: 1, quote: ch }
+  return null
+}
+
+/** The heredoc opener starting at `i`, or `null` — `<` is the only thing that can start one. */
+function heredocAt(command: string, i: number): RegExpExecArray | null {
+  return command[i] === '<' ? HEREDOC_RE.exec(command.slice(i)) : null
+}
+
+/**
+ * Index just past the newline at `i` — or past the whole heredoc body when one is
+ * pending, since the body and its terminator belong to the command that opened it.
+ */
+function lineEnd(command: string, i: number, pending: PendingHeredoc | null): number {
+  return pending ? heredocBodyEnd(command, i + 1, pending) : i + 1
+}
+
+/** The raw split, before assignment prefixes are stripped and blanks dropped. */
+function scanRawSegments(command: string): string[] {
   const raw: string[] = []
   let current = ''
   let quote: string | null = null
@@ -124,66 +161,36 @@ export function splitCommandSegments(command: string): string[] {
   while (i < command.length) {
     const ch = command[i]
 
-    if (quote) {
-      current += ch
-      if (ch === quote) quote = null
-      i++
+    const literal = consumeLiteral(command, i, quote)
+    if (literal) {
+      current += command.slice(i, i + literal.taken)
+      quote = literal.quote
+      i += literal.taken
       continue
     }
 
-    if (ch === '\\' && i + 1 < command.length) {
-      current += ch + command[i + 1]
-      i += 2
+    const heredoc = heredocAt(command, i)
+    if (heredoc) {
+      pending = { label: heredoc[3], dash: heredoc[1] === '-' }
+      current += heredoc[0]
+      i += heredoc[0].length
       continue
-    }
-
-    if (ch === "'" || ch === '"') {
-      quote = ch
-      current += ch
-      i++
-      continue
-    }
-
-    if (ch === '<') {
-      const match = HEREDOC_RE.exec(command.slice(i))
-      if (match) {
-        pending = { label: match[3], dash: match[1] === '-' }
-        current += match[0]
-        i += match[0].length
-        continue
-      }
     }
 
     if (ch === '\n') {
-      if (pending) {
-        // The body (and its terminator) belong to the command that opened it.
-        const end = heredocBodyEnd(command, i + 1, pending)
-        current += command.slice(i, end)
-        pending = null
-        i = end
-        flush()
-        continue
-      }
+      const end = lineEnd(command, i, pending)
+      // Keep the heredoc body on the opening command; a bare newline just ends it.
+      if (pending) current += command.slice(i, end)
+      pending = null
+      i = end
       flush()
-      i++
       continue
     }
 
-    if (ch === '&' && command[i + 1] === '&') {
+    const sep = separatorLength(command, i)
+    if (sep) {
       flush()
-      i += 2
-      continue
-    }
-
-    if (ch === '|') {
-      flush()
-      i += command[i + 1] === '|' ? 2 : 1
-      continue
-    }
-
-    if (ch === ';') {
-      flush()
-      i++
+      i += sep
       continue
     }
 
@@ -191,9 +198,25 @@ export function splitCommandSegments(command: string): string[] {
     i++
   }
   flush()
+  return raw
+}
+
+/**
+ * Split a command into shell segments.
+ *
+ * Two traps the naive `split(/&&|\|\||;|\|/)` falls into, both measured:
+ *   - a heredoc body gets counted as commands (`// grep` inside an embedded
+ *     script becomes a `grep` segment),
+ *   - an operator inside quotes splits a single command (`grep 'a|b' f` is ONE
+ *     command in a real shell, and regex alternation is common in these calls).
+ *
+ * The scan itself is `scanRawSegments`; this adds the normalisation pass.
+ */
+export function splitCommandSegments(command: string): string[] {
+  if (typeof command !== 'string' || !command) return []
 
   const out: string[] = []
-  for (const segment of raw) {
+  for (const segment of scanRawSegments(command)) {
     const trimmed = segment.trim()
     if (!trimmed) continue
     // `FOO=bar cmd -x` is a run of `cmd -x`; a bare `TOKEN=abc` is not a command

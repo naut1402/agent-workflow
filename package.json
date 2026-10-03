@@ -33,6 +33,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:commit": "commitlint",
+    "stats:tools": "bun scripts/tool-usage-stats.ts",
     "check:todo": "bun .github/scripts/check-todo-debt.ts",
     "format": "prettier --write .",
     "test": "bun .github/scripts/run-bun-tests.ts",

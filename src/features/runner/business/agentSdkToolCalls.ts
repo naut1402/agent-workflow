@@ -43,35 +43,55 @@ function textOfArguments(args: unknown): string {
   }
 }
 
-function callsFromMessage(raw: unknown): ToolCall[] {
-  if (!raw || typeof raw !== 'object') return []
-  const msg = raw as Record<string, unknown>
+/** `entry` as a plain object, or `null` for anything that is not one. */
+function asRecord(entry: unknown): Record<string, unknown> | null {
+  return entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : null
+}
+
+/** A non-empty `name` string, or `''` — the one test that rejects a malformed call. */
+function nameOf(source: Record<string, unknown>): string {
+  return typeof source.name === 'string' ? source.name : ''
+}
+
+/** OpenAI shape: `message.tool_calls[].function` = `{ name, arguments }`. */
+function callsFromToolCalls(toolCalls: unknown[]): ToolCall[] {
   const out: ToolCall[] = []
-
-  if (Array.isArray(msg.tool_calls)) {
-    for (const entry of msg.tool_calls) {
-      if (!entry || typeof entry !== 'object') continue
-      const fn = (entry as Record<string, unknown>).function
-      if (!fn || typeof fn !== 'object') continue
-      const f = fn as Record<string, unknown>
-      const name = typeof f.name === 'string' ? f.name : ''
-      if (!name) continue
-      out.push({ name, at: null, text: textOfArguments(f.arguments), sidechain: false })
-    }
+  for (const entry of toolCalls) {
+    const fn = asRecord(asRecord(entry)?.function)
+    if (!fn) continue
+    const name = nameOf(fn)
+    if (!name) continue
+    out.push({ name, at: null, text: textOfArguments(fn.arguments), sidechain: false })
   }
-
-  if (Array.isArray(msg.content)) {
-    for (const entry of msg.content) {
-      if (!entry || typeof entry !== 'object') continue
-      const block = entry as Record<string, unknown>
-      if (block.type !== 'tool_use') continue
-      const name = typeof block.name === 'string' ? block.name : ''
-      if (!name) continue
-      out.push({ name, at: null, text: textOfToolInput(block.input), sidechain: false })
-    }
-  }
-
   return out
+}
+
+/** Anthropic shape: `message.content[]` blocks of `type: 'tool_use'`. */
+function callsFromContent(content: unknown[]): ToolCall[] {
+  const out: ToolCall[] = []
+  for (const entry of content) {
+    const block = asRecord(entry)
+    if (!block || block.type !== 'tool_use') continue
+    const name = nameOf(block)
+    if (!name) continue
+    out.push({ name, at: null, text: textOfToolInput(block.input), sidechain: false })
+  }
+  return out
+}
+
+/**
+ * Tool calls on one stored message.
+ *
+ * Both shapes are read, not one or the other: the runner API persists whichever the
+ * provider returned, and a session file can hold a mix after a provider switch.
+ */
+function callsFromMessage(raw: unknown): ToolCall[] {
+  const msg = asRecord(raw)
+  if (!msg) return []
+  return [
+    ...(Array.isArray(msg.tool_calls) ? callsFromToolCalls(msg.tool_calls) : []),
+    ...(Array.isArray(msg.content) ? callsFromContent(msg.content) : []),
+  ]
 }
 
 /**
@@ -79,7 +99,7 @@ function callsFromMessage(raw: unknown): ToolCall[] {
  *
  * Reads the WHOLE file rather than a cursor slice: `saveSessionMessages` rewrites
  * it in full on every turn, so there is no stable line offset to resume from.
- * Dedupe of the repeats that causes lives in `toolCallCapture.ts`.
+ * The call-count cursor in `toolCallCapture.ts` selects calls added on resume.
  */
 export async function readSessionToolCalls(sessionId: string): Promise<ToolCall[]> {
   const file = agentSdkSessionPath(sessionId)

@@ -275,18 +275,28 @@ const loggingBusy = ref(false)
 const loggingMsg = ref('')
 const loggingErr = ref('')
 
+/**
+ * Mirror the server's logging config onto the refs.
+ *
+ * `events` and `tool-call` default OFF (`=== true`) while the rest default ON
+ * (`!== false`), so a config that omits a key still lands on the same value the
+ * backend would use.
+ */
+function applyLoggingConfig(cfg: Record<string, any>) {
+  showLogsTab.value = cfg.showLogsTab !== false
+  logTypeAudit.value = cfg.types?.audit !== false
+  logTypeRequest.value = cfg.types?.request !== false
+  logTypeJobs.value = cfg.types?.jobs !== false
+  logTypeEvents.value = cfg.types?.events === true
+  logTypeUsage.value = cfg.types?.usage !== false
+  logTypeToolCall.value = cfg.types?.['tool-call'] === true
+}
+
 async function loadLogging() {
   loggingErr.value = ''
   try {
     const data = await fetchLoggingConfig()
-    const cfg = data.config || {}
-    showLogsTab.value = cfg.showLogsTab !== false
-    logTypeAudit.value = cfg.types?.audit !== false
-    logTypeRequest.value = cfg.types?.request !== false
-    logTypeJobs.value = cfg.types?.jobs !== false
-    logTypeEvents.value = cfg.types?.events === true
-    logTypeUsage.value = cfg.types?.usage !== false
-    logTypeToolCall.value = cfg.types?.['tool-call'] === true
+    applyLoggingConfig(data.config || {})
   } catch {
     loggingErr.value = t('settings.logging.loadError')
   }
@@ -308,14 +318,7 @@ async function persistLogging() {
         'tool-call': logTypeToolCall.value,
       },
     })
-    const cfg = data.config || {}
-    showLogsTab.value = cfg.showLogsTab !== false
-    logTypeAudit.value = cfg.types?.audit !== false
-    logTypeRequest.value = cfg.types?.request !== false
-    logTypeJobs.value = cfg.types?.jobs !== false
-    logTypeEvents.value = cfg.types?.events === true
-    logTypeUsage.value = cfg.types?.usage !== false
-    logTypeToolCall.value = cfg.types?.['tool-call'] === true
+    applyLoggingConfig(data.config || {})
     loggingMsg.value = t('settings.logging.saved')
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {
@@ -369,6 +372,7 @@ function toggleLogTypeUsage() {
   void persistLogging()
 }
 
+/** Flip the `tool-call` log type and persist immediately — no separate Save step. */
 function toggleLogTypeToolCall() {
   logTypeToolCall.value = !logTypeToolCall.value
   void persistLogging()
