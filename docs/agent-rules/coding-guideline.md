@@ -162,15 +162,16 @@ installPlugins(createApp(App), { i18n: { locale } }).mount('#app')
 
 ## 7. Comment code (KISS)
 
-> [!WARNING]
-> <span style="color:#d29922">Chỉ comment khi cần giải thích *why* — constraint ẩn, workaround, invariant khó thấy. Không giải thích *what*: tên biến/hàm tốt đã đủ.</span>
+> [!CAUTION]
+> <span style="color:#e5534b">🚫 Cấm giải thích trong code — cả *what* lẫn *why*. Lý do, bối cảnh, constraint ẩn, workaround thuộc `docs/` hoặc PR body, không thuộc comment.</span>
 
-- **Thử đổi tên trước khi thêm comment.** Comment giải thích một tên xấu là trả lãi mãi; đổi tên là trả gốc một lần. `BEFORE` → `TARGET_SHA` bỏ được cả câu giải thích nó là gì.
-- **Một why = một dòng.** Cần đoạn văn mới nói hết thì đó là dấu hiệu bối cảnh thuộc chỗ khác: PR body, hoặc `docs/`. Trong code để lại đúng câu chốt + link tới mục tài liệu.
+- **Code tự nói *what*** — tên biến/hàm/type đủ rõ thì không cần comment. Thử đổi tên trước: `BEFORE` → `TARGET_SHA` bỏ được cả câu giải thích nó là gì.
+- **Bối cảnh *why* ghi vào `docs/`** — mục tài liệu của feature, hoặc PR body nếu chỉ có giá trị lúc review.
+- **Được phép giữ lại** — một dòng link tới mục tài liệu (`// xem docs/mcp/server.md §3.1`), directive cho công cụ (`// eslint-disable-next-line …`, `// @ts-expect-error …`), `TODO` kèm link nợ.
 - **Không markup nhấn mạnh trong comment code** — `**bold**`, 🚫, ⚠️, khung `── ─` là ngôn ngữ của tài liệu và PR. Trong code chúng thành nhiễu, và khung rỗng kéo comment dài ra cho "xứng".
 - **Sửa nhỏ lẻ thì giữ nguyên comment cũ** — chỉ sửa khi nó đã outdate/sai so với code hiện tại.
 - **Không thêm comment tường thuật thay đổi vừa làm** — cấm dạng `// sửa theo review`, `// fix CI`, `// đổi X vì lỗi Y`.
-- **Comment mô tả hành vi hiện hành**, không kể lịch sử, không trích số issue / số PR / tên người, không nhắc định danh nội bộ của quy trình (số đợt, tên khối việc, mã task) — code sống lâu hơn kế hoạch.
+- **Comment mô tả hành vi hiện hành**, không kể lịch sử, không trích số issue / số PR / tên người, không nhắc định danh nội bộ của quy trình (số đợt, tên khối việc, mã task, mã quyết định / finding trong design · review như `D3`, `G8`, `TC-D8`) — code sống lâu hơn kế hoạch.
 - **Ngôn ngữ theo mật độ code xung quanh** — khối comment tiếng Anh thì viết tiếp tiếng Anh, không trộn nửa Anh nửa Việt.
 
 ---
