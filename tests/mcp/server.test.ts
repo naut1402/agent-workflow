@@ -729,7 +729,7 @@ describe('TC-22b: nhánh lỗi của tool có outputSchema, nhìn từ client th
 
 /** Spawn tiến trình MCP thật, thu `stdout`/`stderr` thô. */
 function spawnMcp(env: Record<string, string | undefined>) {
-  const child = spawn('bun', ['mcp/server.ts'], {
+  const child = spawn('bun', ['mcp/stdio.ts'], {
     cwd: REPO_ROOT,
     env: { ...process.env, ...env } as NodeJS.ProcessEnv,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -750,7 +750,7 @@ async function waitFor(check: () => boolean, ms = 8_000): Promise<boolean> {
   return check()
 }
 
-/** Client MCP nối vào tiến trình `bun mcp/server.ts` thật qua stdio. */
+/** Client MCP nối vào tiến trình `bun mcp/stdio.ts` thật qua stdio. */
 async function withStdioClient<T>(
   env: Record<string, string>,
   args: string[],
@@ -759,7 +759,7 @@ async function withStdioClient<T>(
   const chunks: string[] = []
   const transport = new StdioClientTransport({
     command: 'bun',
-    args: ['mcp/server.ts', ...args],
+    args: ['mcp/stdio.ts', ...args],
     cwd: REPO_ROOT,
     env: { ...process.env, ...env } as Record<string, string>,
     stderr: 'pipe',
