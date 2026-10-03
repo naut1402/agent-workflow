@@ -8,7 +8,6 @@ export {
   EventLogEntry,
   UsageSnapshotSchema,
   UsageLogEntry,
-  ToolCallLogEntry,
   LogEntry,
   parseLogLine,
   levelFromHttpStatus,
@@ -31,7 +30,7 @@ export {
   type LogDriverKind,
 } from '../../shared/log/loggingPrefs.js'
 export { getLogDriverPref } from './loggingPrefsIo.js'
-export { appendLog, appendRequestLog, appendUsageLog, appendToolCallLog, emitAudit } from './store.js'
+export { appendLog, appendRequestLog, appendUsageLog, emitAudit } from './store.js'
 export {
   installEventLogSubscriber,
   uninstallEventLogSubscriberForTest,

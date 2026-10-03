@@ -1,9 +1,9 @@
 # Tool usage của agent — 2026-10
 
-**Task:** `Tbefa5f4c` · **Nguồn số liệu:** snapshot `~/.claude/projects/**/*.jsonl` + `agent-sdk-sessions/` đo ở bước điều tra (2026-10-01) · **Cách tái lập:** `bun run scripts/tool-usage-stats.ts`
+**Task:** `Tbefa5f4c` · **Nguồn số liệu:** snapshot `~/.claude/projects/**/*.jsonl` + `agent-sdk-sessions/` đo ở bước điều tra (2026-10-01)
 
 > [!IMPORTANT]
-> Mọi con số trong §1–§3 là **snapshot một lần** từ transcript còn sót lại, không phải số liệu liên tục. Đường đo bền (log type `tool-call`) được giao cùng báo cáo này nhưng **mặc định tắt** — bật ở Settings › Logging › "Tool call" rồi chạy lại script sau 2 tuần để có số liệu không phụ thuộc transcript.
+> Mọi con số trong §1–§3 là **snapshot một lần** phân tích tĩnh từ transcript còn sót lại. Task dùng snapshot này để chọn tool, không giữ lại đường đo liên tục.
 
 ---
 
@@ -19,7 +19,7 @@
 
 Theo tháng: 2026-08 có 626 job → **0** transcript; 2026-09 có 797 → 37; 2026-10 có 13 → 4. Ba hàng cộng thành **1.436 job**, thiếu 1 so với tổng 1.437 đã ghi; chưa có snapshot gốc để xác định tháng của job chênh lệch. Tỷ lệ theo job trong báo cáo dùng chung mẫu số **1.437** (tổng đã ghi), không dùng tổng các hàng tháng hay 1.424 job có session.
 
-🚫 **Đây là lý do báo cáo này không thể lặp lại bằng cách "đọc lại log".** Transcript bị prune; job tháng 8 không còn gì để đọc. Một lần quét transcript nữa sau vài tuần sẽ cho mẫu nhỏ hơn, không lớn hơn — nên deliverable thật của task là **đường ingest**, không phải con số dưới đây.
+🚫 **Báo cáo này không lặp lại được bằng cách đọc lại transcript.** Transcript bị prune; job tháng 8 không còn gì để đọc.
 
 ---
 
@@ -114,7 +114,7 @@ Nguyên nhân gốc nằm trong prompt: chuỗi `curl` mẫu được viết s�
 `agent-sdk-sessions/`: 120 file, 25 file có tool call — `search_files` 32 · `list_directory` 29 · `read_file` 17 · `write_file` 4. Cùng hình dạng với nhánh CLI: tìm > liệt kê > đọc.
 
 > [!NOTE]
-> Đây là số **thô trên file**, tách khỏi mẫu CLI 499 lượt / 455 Bash ở §1–§3.5. Lần ingest cũ ghi `search_files` 16 · `list_directory` 16 · `read_file` 10 · `write_file` 4: chỉ 13/25 file session nối được về job record, và bộ đọc còn khử trùng `(name, text)`, làm mất cả lượt gọi lặp hợp lệ. Các số ingest cũ không dùng làm số đã hiệu chỉnh; cần đo lại từ snapshot gốc. Bộ đọc hiện giữ thứ tự và mọi lượt gọi, dùng cursor theo số lượt để tránh đếm lại khi resume.
+> Đây là số **thô trên file**, tách khỏi mẫu CLI 499 lượt / 455 Bash ở §1–§3.5. Lần ingest cũ ghi `search_files` 16 · `list_directory` 16 · `read_file` 10 · `write_file` 4: chỉ 13/25 file session nối được về job record, và bộ đọc còn khử trùng `(name, text)`, làm mất cả lượt gọi lặp hợp lệ. Các số ingest cũ không dùng làm số đã hiệu chỉnh.
 
 ---
 
@@ -123,48 +123,14 @@ Nguyên nhân gốc nằm trong prompt: chuỗi `curl` mẫu được viết s�
 | # | Tool | Ưu tiên | Căn cứ số liệu | Trạng thái |
 |---|---|---|---|---|
 | 1 | `get_task_context` | **P0** | 21/25 phiên mở đầu bằng đúng chuỗi `cd` + `cat request.md` + `cat pipeline.yaml` + `ls -la` (§3.3). Gộp 4 nguồn → tiết kiệm 3–5 lượt mở màn ở hầu hết job, và nhận `taskId` nên xoá luôn phần `cd` (§2.2) | ✅ **Đã giao** trong task này |
-| 2 | `search_code` | **P0** | 69,1% cặp lệnh là vòng lặp `read`/`grep` (§3.1), tập trung ở 10 phiên nặng chiếm 88% lượt Bash (§3.2). Gộp grep + read cắt đúng pattern đắt nhất | ⏸️ Hoãn — cần máy quét file hoàn chỉnh (ignore rule, nhị phân, trần kết quả, hiệu năng), repo chưa có helper nào gần. Mở khoá khi `mcpAdoption.share > 0` |
+| 2 | `search_code` | **P0** | 69,1% cặp lệnh là vòng lặp `read`/`grep` (§3.1), tập trung ở 10 phiên nặng chiếm 88% lượt Bash (§3.2). Gộp grep + read cắt đúng pattern đắt nhất | ⏸️ Hoãn — cần máy quét file hoàn chỉnh (ignore rule, nhị phân, trần kết quả, hiệu năng), repo chưa có helper nào gần. |
 | 3 | `orchestrator_decide` / `orchestrator_status` | P1 | 24 lượt `curl` / 14 phiên (§3.4). Bỏ được cả header auth lẫn biến môi trường `DASHBOARD_ORCHESTRATOR_*` agent đang phải tự kiểm | ⏸️ Hoãn — tập trung ở MỘT vai (orchestrator) và nguyên nhân nằm trong prompt; sửa prompt rẻ hơn nhiều, mà tool ghi lại kéo theo câu hỏi mode `full` |
 | 4 | `validate_artifact` | P1 | 13 lượt `awk`/`grep` tự chế kiểm rule doc-writing (§3.5) | ⏸️ Hoãn — phải nhúng toàn bộ rule doc-writing thành luật máy chạy được; đó là một thiết kế riêng |
-| 5 | `get_tool_stats` | P2 | Nhu cầu của người vận hành, không phải của agent trong phiên | ⏸️ Hoãn — `scripts/tool-usage-stats.ts` đã phục vụ đúng việc này |
+| 5 | `get_tool_stats` | P2 | Nhu cầu của người vận hành, không phải của agent trong phiên | ❌ Bỏ — task không giữ đường đo liên tục |
 
 ### 4.1 Vì sao chỉ giao một tool
 
 Thêm tool thứ hai trước khi biết tool thứ nhất có được gọi hay không là lặp lại đúng tình huống hiện tại: 10 tool, 0 lượt. Thay đổi kèm theo trong task này nhắm thẳng vào adoption:
 
 - **Mô tả tool nói rõ nó thay cái gì** — `get_task_context` ghi thẳng chuỗi `cd … && cat request.md && cat pipeline.yaml && ls -la` trong `description`.
-- **9 template ở `docs/template/agents/*`** có khối "Tool MCP ưu tiên" liệt kê tên đầy đủ `mcp__<server-id>__<tên>`. Trước đó 8/9 template chỉ viết *"gọi MCP tool `create_qa`"* mà không nói tool nằm ở server nào — agent không nối được tên trần với tên trong `tools/list`.
-- **`mcpAdoption` trong báo cáo** trả lời bằng số câu "có ai gọi không".
-
-### 4.2 Mốc kiểm chứng
-
-Bật log type `tool-call`, chạy 2 tuần, rồi:
-
-```bash
-bun run scripts/tool-usage-stats.ts --from=<ngày phát hành>
-```
-
-| Chỉ số | Nếu đạt | Nếu không |
-|---|---|---|
-| `mcpAdoption.share > 0` | D1 đúng — mở khoá `search_code` (#2) | Nguyên nhân KHÔNG nằm ở bộ tool; dừng mọi tool P1/P2 cho tới khi tìm ra nguyên nhân thật |
-| `bootstrap` tụt khỏi nhóm đầu | `get_task_context` đang được dùng thật | Mô tả tool / template chưa tới được agent |
-
----
-
-## §5. Cách lấy lại số liệu
-
-```bash
-# Số liệu từ log đã ingest (mặc định — không đọc lại transcript)
-bun run scripts/tool-usage-stats.ts
-
-# Giới hạn phạm vi
-bun run scripts/tool-usage-stats.ts --from=2026-10-01 --project=<id> --task=<id> --agent=investigator
-
-# Xuất thẳng vào reports/
-bun run scripts/tool-usage-stats.ts --format=markdown > reports/tool-usage-<kỳ>.md
-
-# Nạp ngược từ transcript còn sót (idempotent theo jobId)
-bun run scripts/tool-usage-stats.ts --from-transcripts --ingest
-```
-
-Phiên đang chạy script bị loại **mặc định** (`$CLAUDE_SESSION_ID`) — trong bước điều tra, đếm lại nhiều lần ra 513 → 489 lượt khác nhau vì transcript của chính phiên đo dài thêm theo từng lượt.
+- **Hướng dẫn dùng tool đi kèm server** — MCP server trả `instructions` theo mode (`docs/mcp/server.md` §3.1) thay cho khối chép tay trong từng template agent.

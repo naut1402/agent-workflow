@@ -12,7 +12,6 @@ import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
 import { isAgentCliProviderId } from './providers/agentCli.js'
 import { cleanupOrphanedMcpConfigs } from './providers/mcpJobConfig.js'
-import { captureJobToolCalls } from './toolCallCapture.js'
 import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js'
 import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
 import type { RunTaskStepResult } from '../../monitor/business/tasks/runStep.js'
@@ -194,9 +193,6 @@ function withStepSummary(record: JobRecord, stdout: string | undefined): JobReco
  * The pipeline step a job belongs to. Pipeline run-step jobs tag
  * `pipelineStepId`; ad-hoc/quick-action jobs use `stepId`.
  */
-// ⚠️ Second copy in `toolCallCapture.ts` (deliberate — importing THIS module runs
-// `startRecoverPoller()`, which the read-only backfill CLI must not do). Adding a
-// key here means adding it there too.
 export function stepIdOf(job: JobRecord): string | undefined {
   const meta = job.metadata || {}
   if (typeof meta.stepId === 'string' && meta.stepId) return meta.stepId
@@ -771,18 +767,6 @@ async function runJob(job: JobRecord): Promise<void> {
   if (capturedSessionId && connection.providerId === 'claude-code-cli') {
     const current = loadJob(job.id) || job
     void captureJobUsage(
-      { ...current, sessionId: capturedSessionId },
-      capturedSessionId,
-      connection.providerId,
-    ).catch(() => {})
-  }
-
-  // Tool-call ingest, same fire-and-forget contract — but NOT gated on
-  // `claude-code-cli`: `captureJobToolCalls` picks the agent-SDK adapter for every
-  // other provider, and the chat-box jobs run on those.
-  if (capturedSessionId) {
-    const current = loadJob(job.id) || job
-    void captureJobToolCalls(
       { ...current, sessionId: capturedSessionId },
       capturedSessionId,
       connection.providerId,

@@ -32,14 +32,7 @@ export async function fetchLoggingConfig() {
 
 export async function saveLoggingConfig(config: {
   showLogsTab?: boolean
-  types?: {
-    audit?: boolean
-    request?: boolean
-    jobs?: boolean
-    events?: boolean
-    usage?: boolean
-    'tool-call'?: boolean
-  }
+  types?: { audit?: boolean; request?: boolean; jobs?: boolean; events?: boolean; usage?: boolean }
 }) {
   return apiRequest('PUT', '/api/logging-config', { body: config })
 }

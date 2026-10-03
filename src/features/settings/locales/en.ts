@@ -77,7 +77,6 @@ export default {
       jobs: 'Jobs (runner stdout)',
       events: 'Events (domain event bus)',
       usage: 'Usage (LLM tokens)',
-      toolCall: 'Tool call (per-job tool invocations — for statistics)',
     },
     saved: 'Saved.',
     loadError: 'Could not load logging config.',

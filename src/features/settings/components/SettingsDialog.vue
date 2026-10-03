@@ -270,33 +270,21 @@ const logTypeRequest = ref(true)
 const logTypeJobs = ref(true)
 const logTypeEvents = ref(false)
 const logTypeUsage = ref(true)
-const logTypeToolCall = ref(false)
 const loggingBusy = ref(false)
 const loggingMsg = ref('')
 const loggingErr = ref('')
-
-/**
- * Mirror the server's logging config onto the refs.
- *
- * `events` and `tool-call` default OFF (`=== true`) while the rest default ON
- * (`!== false`), so a config that omits a key still lands on the same value the
- * backend would use.
- */
-function applyLoggingConfig(cfg: Record<string, any>) {
-  showLogsTab.value = cfg.showLogsTab !== false
-  logTypeAudit.value = cfg.types?.audit !== false
-  logTypeRequest.value = cfg.types?.request !== false
-  logTypeJobs.value = cfg.types?.jobs !== false
-  logTypeEvents.value = cfg.types?.events === true
-  logTypeUsage.value = cfg.types?.usage !== false
-  logTypeToolCall.value = cfg.types?.['tool-call'] === true
-}
 
 async function loadLogging() {
   loggingErr.value = ''
   try {
     const data = await fetchLoggingConfig()
-    applyLoggingConfig(data.config || {})
+    const cfg = data.config || {}
+    showLogsTab.value = cfg.showLogsTab !== false
+    logTypeAudit.value = cfg.types?.audit !== false
+    logTypeRequest.value = cfg.types?.request !== false
+    logTypeJobs.value = cfg.types?.jobs !== false
+    logTypeEvents.value = cfg.types?.events === true
+    logTypeUsage.value = cfg.types?.usage !== false
   } catch {
     loggingErr.value = t('settings.logging.loadError')
   }
@@ -315,10 +303,15 @@ async function persistLogging() {
         jobs: logTypeJobs.value,
         events: logTypeEvents.value,
         usage: logTypeUsage.value,
-        'tool-call': logTypeToolCall.value,
       },
     })
-    applyLoggingConfig(data.config || {})
+    const cfg = data.config || {}
+    showLogsTab.value = cfg.showLogsTab !== false
+    logTypeAudit.value = cfg.types?.audit !== false
+    logTypeRequest.value = cfg.types?.request !== false
+    logTypeJobs.value = cfg.types?.jobs !== false
+    logTypeEvents.value = cfg.types?.events === true
+    logTypeUsage.value = cfg.types?.usage !== false
     loggingMsg.value = t('settings.logging.saved')
     window.dispatchEvent(
       new CustomEvent('dev-dashboard:logging-changed', {
@@ -330,7 +323,6 @@ async function persistLogging() {
             jobs: logTypeJobs.value,
             events: logTypeEvents.value,
             usage: logTypeUsage.value,
-            'tool-call': logTypeToolCall.value,
           },
         },
       }),
@@ -369,12 +361,6 @@ function toggleLogTypeEvents() {
 
 function toggleLogTypeUsage() {
   logTypeUsage.value = !logTypeUsage.value
-  void persistLogging()
-}
-
-/** Flip the `tool-call` log type and persist immediately — no separate Save step. */
-function toggleLogTypeToolCall() {
-  logTypeToolCall.value = !logTypeToolCall.value
   void persistLogging()
 }
 
@@ -1039,15 +1025,6 @@ onUnmounted(() => {
                       @change="toggleLogTypeUsage"
                     />
                     {{ t('settings.logging.types.usage') }}
-                  </label>
-                  <label class="settings-checkbox">
-                    <input
-                      type="checkbox"
-                      :checked="logTypeToolCall"
-                      :disabled="loggingBusy"
-                      @change="toggleLogTypeToolCall"
-                    />
-                    {{ t('settings.logging.types.toolCall') }}
                   </label>
                 </template>
                 <p v-if="loggingMsg" class="settings-autoscan-msg">{{ loggingMsg }}</p>
