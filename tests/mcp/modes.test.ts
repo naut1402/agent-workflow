@@ -214,12 +214,18 @@ describe('allowlist theo mode', () => {
   test('TC-46: TOOL_ALLOWLIST — quan hệ tập hợp', () => {
     const ro = TOOL_ALLOWLIST.readonly
     const full = TOOL_ALLOWLIST.full
-    expect(ro).toHaveLength(7)
-    expect(full).toHaveLength(9)
+    // Tbefa5f4c thêm `get_task_context` vào READ_TOOLS (7 → 8); `create_qa`
+    // vào WRITE_TOOLS là của T8e2886e0.
+    expect(ro).toHaveLength(8)
+    expect(full).toHaveLength(11)
     expect(new Set(ro).size).toBe(ro.length)
     expect(new Set(full).size).toBe(full.length)
     for (const tool of ro) expect(full).toContain(tool)
-    expect([...full].filter((t) => !ro.includes(t)).sort()).toEqual(['add_project', 'remove_project'])
+    expect([...full].filter((t) => !ro.includes(t)).sort()).toEqual([
+      'add_project',
+      'create_qa',
+      'remove_project',
+    ])
   })
 
   test('TC-47: MCP_MODES chỉ có hai giá trị (guard chống land nửa vời P3)', () => {
@@ -235,5 +241,37 @@ describe('allowlist theo mode', () => {
     for (const bad of ['project-scoped', '', 'FULL', null, undefined, 1, {}]) {
       expect(isMcpMode(bad)).toBe(false)
     }
+  })
+})
+
+// ── Tbefa5f4c · Nhóm K — đăng ký `get_task_context` (F15/F16) ────────────────
+describe('Nhóm K — allowlist của get_task_context', () => {
+  test('TC-K16: `isToolEnabled` true ở CẢ HAI mode', () => {
+    expect(isToolEnabled('readonly', 'get_task_context')).toBe(true)
+    expect(isToolEnabled('full', 'get_task_context')).toBe(true)
+  })
+
+  test('TC-K19: ⚠️ hồi quy đăng ký — tool đọc tăng đúng 1, tool ghi KHÔNG đổi', () => {
+    // Danh sách trước Tbefa5f4c (sau khi T8e2886e0 port `create_qa`).
+    const READ_BEFORE = [
+      'list_projects',
+      'get_project',
+      'get_knowledge_bundle',
+      'list_tasks',
+      'get_task_state',
+      'list_artifacts',
+      'read_artifact',
+    ]
+    expect([...READ_TOOLS].filter((t) => !READ_BEFORE.includes(t))).toEqual(['get_task_context'])
+    expect(READ_TOOLS).toHaveLength(READ_BEFORE.length + 1)
+    // Mọi tool đọc cũ vẫn có mặt, đúng mode cũ.
+    for (const tool of READ_BEFORE) {
+      expect(isToolEnabled('readonly', tool)).toBe(true)
+      expect(isToolEnabled('full', tool)).toBe(true)
+    }
+    // `create_qa` vẫn CHỈ ở `full`.
+    expect([...WRITE_TOOLS]).toEqual(['add_project', 'create_qa', 'remove_project'])
+    expect(isToolEnabled('readonly', 'create_qa')).toBe(false)
+    expect(isToolEnabled('full', 'create_qa')).toBe(true)
   })
 })

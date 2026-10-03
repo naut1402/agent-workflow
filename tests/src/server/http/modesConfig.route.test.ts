@@ -1,3 +1,8 @@
+// Tbefa5f4c · TC-N02 — literal `LoggingTypes` truyền vào `saveLoggingConfig`
+// phải khai đủ khoá `'tool-call'`.
+//
+// ⚠️ Lỗi này KHÔNG lộ ra ở `bun test`: nó chỉ đỏ ở `bun run typecheck`. Bỏ khoá
+// đó đi là `vue-tsc` báo TS2739 ngay tại hai literal bên dưới.
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -100,7 +105,7 @@ describe('HTTP modes-config', () => {
   test('TC-C8: ghi modes không mất nhóm cấu hình khác, và ngược lại', async () => {
     saveLoggingConfig({
       showLogsTab: false,
-      types: { audit: false, request: true, jobs: true, events: false, usage: true },
+      types: { audit: false, request: true, jobs: true, events: false, usage: true, 'tool-call': false },
       driver: 'file',
     })
     invalidateLoggingPrefsCache()
@@ -208,7 +213,7 @@ describe('HTTP modes-config', () => {
   test('TC-C13: PUT thành công ghi đúng 1 audit; PUT lỗi thì không ghi', async () => {
     saveLoggingConfig({
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: false, usage: true },
+      types: { audit: true, request: true, jobs: true, events: false, usage: true, 'tool-call': false },
       driver: 'file',
     })
     invalidateLoggingPrefsCache()

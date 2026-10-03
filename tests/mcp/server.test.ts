@@ -288,13 +288,15 @@ describe('get_knowledge_bundle', () => {
 const READ_TOOL_NAMES = [
   'get_knowledge_bundle',
   'get_project',
+  // Tbefa5f4c: tool đọc thứ 8 — có mặt ở CẢ HAI mode (TC-K15/TC-K16).
+  'get_task_context',
   'get_task_state',
   'list_artifacts',
   'list_projects',
   'list_tasks',
   'read_artifact',
 ]
-const ALL_TOOL_NAMES = [...READ_TOOL_NAMES, 'add_project', 'remove_project'].sort()
+const ALL_TOOL_NAMES = [...READ_TOOL_NAMES, 'add_project', 'create_qa', 'remove_project'].sort()
 
 /**
  * Client MCP qua in-memory transport.
@@ -337,7 +339,7 @@ describe('createMcpServer', () => {
     expect(createMcpServer()).toBeTruthy()
   })
 
-  test('TC-15: không tham số → đúng 7 tool đọc, KHÔNG có tool ghi (D7)', async () => {
+  test('TC-15: không tham số → đúng 8 tool đọc, KHÔNG có tool ghi (D7)', async () => {
     const names = (await toolsOf()).map((t) => t.name).sort()
     expect(names).toEqual(READ_TOOL_NAMES)
     expect(names).not.toContain('add_project')
@@ -348,7 +350,7 @@ describe('createMcpServer', () => {
     expect((await toolsOf('readonly')).map((t) => t.name).sort()).toEqual(READ_TOOL_NAMES)
   })
 
-  test('TC-17: mode full → đủ 9 tool', async () => {
+  test('TC-17: mode full → đủ 11 tool', async () => {
     expect((await toolsOf('full')).map((t) => t.name).sort()).toEqual(ALL_TOOL_NAMES)
   })
 
@@ -371,11 +373,12 @@ describe('createMcpServer', () => {
     expect(byName.remove_project.annotations?.openWorldHint).toBe(false)
   })
 
-  test('TC-19: outputSchema có mặt đúng 7 tool', async () => {
+  test('TC-19: outputSchema có mặt đúng 8 tool', async () => {
     const tools = await toolsOf('full')
     const withSchema = tools.filter((t) => 'outputSchema' in t).map((t) => t.name).sort()
     expect(withSchema).toEqual([
       'add_project',
+      'create_qa',
       'get_project',
       'get_task_state',
       'list_artifacts',
@@ -383,8 +386,10 @@ describe('createMcpServer', () => {
       'list_tasks',
       'remove_project',
     ])
-    // G8: hai tool payload lớn cố ý KHÔNG khai — assert vắng mặt.
-    for (const name of ['get_knowledge_bundle', 'read_artifact']) {
+    // G8: ba tool payload lớn cố ý KHÔNG khai — assert vắng mặt.
+    // `get_task_context` mang nội dung file nên cùng lý do với `read_artifact`
+    // (TC-K14): `structuredContent` sẽ đẩy từng byte đi hai lần qua stdio.
+    for (const name of ['get_knowledge_bundle', 'read_artifact', 'get_task_context']) {
       expect('outputSchema' in tools.find((t) => t.name === name)!).toBe(false)
     }
   })
@@ -780,7 +785,7 @@ describe('tiến trình bun run mcp (stdio thật)', () => {
     })
   }, 20_000)
 
-  test('TC-90: tools/list thật qua stdio, không đặt mode → 7 tool đọc', async () => {
+  test('TC-90: tools/list thật qua stdio, không đặt mode → 8 tool đọc', async () => {
     await withStdioClient({ DEV_TEAM_DASHBOARD_HOME: home, DEVTEAM_MCP_MODE: '' }, [], async (client) => {
       const names = (await client.listTools()).tools.map((t) => t.name).sort()
       expect(names).toEqual(READ_TOOL_NAMES)

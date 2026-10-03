@@ -36,7 +36,7 @@ describe('HTTP logging-config + gated log read', () => {
     expect(await get0.json()).toEqual({
       config: {
         showLogsTab: true,
-        types: { audit: true, request: true, jobs: true, events: false, usage: true },
+        types: { audit: true, request: true, jobs: true, events: false, usage: true, 'tool-call': false },
         driver: 'file',
       },
     })
@@ -53,14 +53,14 @@ describe('HTTP logging-config + gated log read', () => {
     expect(await put.json()).toEqual({
       config: {
         showLogsTab: false,
-        types: { audit: false, request: true, jobs: false, events: false, usage: true },
+        types: { audit: false, request: true, jobs: false, events: false, usage: true, 'tool-call': false },
         driver: 'file',
       },
     })
 
     expect(loadLoggingConfig()).toEqual({
       showLogsTab: false,
-      types: { audit: false, request: true, jobs: false, events: false, usage: true },
+      types: { audit: false, request: true, jobs: false, events: false, usage: true, 'tool-call': false },
       driver: 'file',
     })
 
@@ -71,7 +71,7 @@ describe('HTTP logging-config + gated log read', () => {
   test('GET /api/logs returns empty when type disabled', async () => {
     saveLoggingConfig({
       showLogsTab: true,
-      types: { audit: true, request: true, jobs: true, events: false, usage: true },
+      types: { audit: true, request: true, jobs: true, events: false, usage: true, 'tool-call': false },
       driver: 'file',
     })
     invalidateLoggingPrefsCache()
@@ -87,7 +87,7 @@ describe('HTTP logging-config + gated log read', () => {
 
     saveLoggingConfig({
       showLogsTab: true,
-      types: { audit: false, request: true, jobs: true, events: false, usage: true },
+      types: { audit: false, request: true, jobs: true, events: false, usage: true, 'tool-call': false },
       driver: 'file',
     })
     invalidateLoggingPrefsCache()
@@ -96,5 +96,31 @@ describe('HTTP logging-config + gated log read', () => {
     const res = await app.request('/api/logs?type=audit')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ entries: [] })
+  })
+})
+
+// ── Tbefa5f4c · Nhóm N (TC-N01) — hồi quy route logging-config ───────────────
+//
+// 🆕 Khoá `'tool-call'` làm snapshot mặc định (5 khoá) của suite này đỏ. Bỏ qua
+// thì `tests/src/server/http` đỏ ở chỗ trông như "lỗi của người khác".
+describe('Nhóm N — snapshot mặc định của /api/logging-config', () => {
+  test('TC-N01: ⚠️ `types` có ĐÚNG 6 khoá và `tool-call` mặc định false', async () => {
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const res = await app.request('/api/logging-config')
+    expect(res.status).toBe(200)
+
+    const { config } = (await res.json()) as { config: { types: Record<string, boolean> } }
+    // 🚫 Không nới assertion thành "chứa ít nhất": đúng 6 khoá, không hơn.
+    expect(Object.keys(config.types).sort()).toEqual([
+      'audit',
+      'events',
+      'jobs',
+      'request',
+      'tool-call',
+      'usage',
+    ])
+    expect(config.types['tool-call']).toBe(false)
+    // Khoá camelCase 🚫 không được sinh ra song song.
+    expect(Object.keys(config.types)).not.toContain('toolCall')
   })
 })

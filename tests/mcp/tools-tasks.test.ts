@@ -13,6 +13,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { add } from '../../src/backend/registry'
 import {
   createMcpServer,
+  handleGetTaskContext,
   handleGetTaskState,
   handleListArtifacts,
   handleListTasks,
@@ -655,5 +656,306 @@ describe('read_artifact', () => {
     expect(codeOf(await handleGetTaskState({ taskId: 'task-a', project: 'khong-co' }))).toBe('not_found')
     expect(codeOf(await handleListArtifacts({ taskId: 'task-a', project: 'khong-co' }))).toBe('not_found')
     expect(codeOf(await handleReadArtifact({ taskId: 'task-a', name: 'x.md', project: 'khong-co' }))).toBe('not_found')
+  })
+})
+
+// ── Tbefa5f4c · Nhóm K (TC-K01 … TC-K21) — `get_task_context` ────────────────
+//
+// Tool này gom `cd <task-dir> && cat request.md && cat pipeline.yaml && ls -la`
+// — chuỗi mở đầu của 21/25 phiên đo được — vào MỘT lời gọi. Giá trị nằm ở số
+// vòng nó bỏ đi, nên hai thứ phải đúng: nhánh nào lỗi KHÔNG được khoá cả tool
+// (TC-K05/K12), và `request` ⟂ `rules` phải CÙNG DẠNG (TC-K21).
+describe('Nhóm K — handleGetTaskContext', () => {
+  const RULES = '# Rule của project\nKhông commit secret.\n'
+
+  function contextRoot(): string {
+    const root = makeRoot({
+      states: {
+        'task-a': { task_id: 'task-a', name: 'Task A', current_phase: 'implementer' },
+        'task-d': '{ broken',
+        'task-empty': { task_id: 'task-empty', name: 'Task rỗng', current_phase: 'investigator' },
+      },
+      tasks: {
+        'task-a': {
+          'request.md': '# Yêu cầu\nNội dung có dấu tiếng Việt\n',
+          'design.md': '# Thiết kế\n',
+        },
+      },
+      loose: {
+        'secret.txt': SECRET,
+        // `pipeline.yaml` ở GỐC root: `loadPipelineConfig` thay nguyên mảng
+        // `steps` ở tầng này, nên danh sách step là xác định. Bản per-task thì
+        // patch theo id vào `DEFAULT_PIPELINE`, không thay thế.
+        'pipeline.yaml':
+          'steps:\n'
+          + '  - id: investigate\n'
+          + '    name: Investigate\n'
+          + '    agent: investigator\n'
+          + '    produces: [investigate.md]\n'
+          + '  - id: implementer\n'
+          + '    name: Implement\n'
+          + '    agent: implementer\n'
+          + '    produces: [src]\n'
+          + '  - id: reviewer\n'
+          + '    name: Review\n'
+          + '    agent: reviewer\n'
+          + '    produces: [review.md]\n',
+      },
+    })
+    process.env.DEV_TEAM_ROOT = root
+    return root
+  }
+
+  test('TC-K01: 🔧 happy path — `request` là object {name, content, truncated}', async () => {
+    contextRoot()
+    const res = await handleGetTaskContext({ taskId: 'task-a' })
+    expect(res.isError).toBeFalsy()
+    const p = payload(res)
+
+    expect(p.taskId).toBe('task-a')
+    expect(p.task).toMatchObject({ id: 'task-a', name: 'Task A', phase: 'implementer' })
+
+    // `request` KHÔNG còn là chuỗi.
+    expect(typeof p.request).toBe('object')
+    expect(typeof p.request.name).toBe('string')
+    expect(p.request.content).toContain('Nội dung có dấu tiếng Việt')
+    expect(p.request.truncated).toBe(false)
+
+    expect(p.pipeline.steps.map((s: any) => s.id)).toEqual(['investigate', 'implementer', 'reviewer'])
+    expect(p.pipeline.steps[0]).toMatchObject({ name: 'Investigate', agent: 'investigator' })
+    expect(p.pipeline.steps[0].produces).toEqual(['investigate.md'])
+    expect(p.pipeline.currentStepId).toBe('implementer')
+    expect(p.pipeline.nextStepId).toBe('reviewer')
+
+    expect(Object.keys(p.artifacts)).toContain('request.md')
+    const artifact = p.artifacts['request.md']
+    expect(artifact).toHaveProperty('mtime')
+    expect(artifact).toHaveProperty('size')
+
+    expect(p.state).toMatchObject({ task_id: 'task-a' })
+    // `rules` tắt mặc định.
+    expect(p.rules).toBeNull()
+  })
+
+  test('TC-K02: ⚠️ taskId thoát thư mục (E12) — và KHÔNG đọc file ngoài root', async () => {
+    contextRoot()
+    for (const taskId of ['../x', '../../etc', 'T1/../../y']) {
+      const res = await handleGetTaskContext({ taskId })
+      expect(codeOf(res)).toBe('invalid_input')
+      expect(JSON.stringify(res)).not.toContain(SECRET)
+    }
+  })
+
+  test('TC-K03: taskId sai định dạng khác', async () => {
+    contextRoot()
+    for (const taskId of ['', 'a b', 'T1%2f..']) {
+      expect(codeOf(await handleGetTaskContext({ taskId }))).toBe('invalid_input')
+    }
+  })
+
+  test('TC-K04: ⚠️ task chưa có artifact → ok, KHÔNG fail (E11)', async () => {
+    contextRoot()
+    const res = await handleGetTaskContext({ taskId: 'task-empty' })
+    expect(res.isError).toBeFalsy()
+    const p = payload(res)
+    expect(p.request).toBeNull()
+    expect(p.artifacts == null || Object.keys(p.artifacts).length === 0).toBe(true)
+    expect(p.state).toMatchObject({ task_id: 'task-empty' })
+  })
+
+  test('TC-K05: ⚠️ `pipeline.yaml` hỏng (E13) → pipeline null, nhánh khác VẪN có dữ liệu', async () => {
+    const root = makeRoot({
+      states: { 'task-y': { task_id: 'task-y', name: 'Task Y', current_phase: 'implementer' } },
+      tasks: { 'task-y': { 'request.md': '# Y\n' } },
+      loose: { 'pipeline.yaml': 'steps: [ - id: a\n  bad: : :\n' },
+    })
+    process.env.DEV_TEAM_ROOT = root
+
+    const res = await handleGetTaskContext({ taskId: 'task-y' })
+    expect(res.isError).toBeFalsy()
+    const p = payload(res)
+    expect(p.pipeline).toBeNull()
+    expect(p.request.content).toContain('# Y')
+    expect(p.state).toMatchObject({ task_id: 'task-y' })
+    expect(Object.keys(p.artifacts)).toContain('request.md')
+  })
+
+  test('TC-K06: `rules` mặc định TẮT, các nhánh mặc định khác đều có', async () => {
+    const root = contextRoot()
+    fs.writeFileSync(path.join(root, 'project-rules.md'), RULES)
+
+    const p = payload(await handleGetTaskContext({ taskId: 'task-a' }))
+    expect(p.rules).toBeNull()
+    expect(p.request).not.toBeNull()
+    expect(p.pipeline).not.toBeNull()
+    expect(p.artifacts).not.toBeNull()
+    expect(p.state).not.toBeNull()
+  })
+
+  test('TC-K07: 🔧 `include: [rules]` trả object {name, content, truncated}', async () => {
+    const root = contextRoot()
+    fs.writeFileSync(path.join(root, 'project-rules.md'), RULES)
+
+    const p = payload(await handleGetTaskContext({ taskId: 'task-a', include: ['rules'] }))
+    expect(typeof p.rules).toBe('object')
+    expect(typeof p.rules).not.toBe('string')
+    expect(p.rules.name).toBe('project-rules.md')
+    expect(p.rules.content).toBe(RULES)
+    expect(p.rules.truncated).toBe(false)
+  })
+
+  test('TC-K08: `include` thu hẹp đúng', async () => {
+    contextRoot()
+    const p = payload(await handleGetTaskContext({ taskId: 'task-a', include: ['request'] }))
+    expect(p.request).not.toBeNull()
+    expect(p.state).toBeNull()
+    expect(p.artifacts).toBeNull()
+    expect(p.pipeline).toBeNull()
+    expect(p.rules).toBeNull()
+  })
+
+  test('TC-K09: `include` giá trị lạ → invalid_input', async () => {
+    contextRoot()
+    expect(codeOf(await handleGetTaskContext({ taskId: 'task-a', include: ['bogus'] }))).toBe(
+      'invalid_input',
+    )
+    // Và enum ở schema chặn ngay tầng validate input của SDK.
+    await withClient(async (client) => {
+      const res = await callRaw(client, 'get_task_context', { taskId: 'task-a', include: ['bogus'] })
+      expect(res.isError).toBe(true)
+    })
+  })
+
+  test('TC-K10: `project-rules.md` không tồn tại → ok, rules null (không fail)', async () => {
+    contextRoot()
+    const res = await handleGetTaskContext({ taskId: 'task-a', include: ['rules'] })
+    expect(res.isError).toBeFalsy()
+    expect(payload(res).rules).toBeNull()
+  })
+
+  test('TC-K11: project không tồn tại → fail, không throw', async () => {
+    contextRoot()
+    const res = await handleGetTaskContext({ taskId: 'task-a', project: 'khong-co' })
+    expect(codeOf(res)).toBe('not_found')
+  })
+
+  test('TC-K12: một nhánh lỗi KHÔNG khoá cả tool', async () => {
+    // `.dev-state/task-d.json` là JSON hỏng ⇒ nhánh `state` không đọc được.
+    const root = contextRoot()
+    fs.mkdirSync(path.join(root, 'tasks', 'task-d'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'tasks', 'task-d', 'request.md'), '# D\n')
+
+    const res = await handleGetTaskContext({ taskId: 'task-d' })
+    expect(res.isError).toBeFalsy()
+    const p = payload(res)
+    expect(p.state).toBeNull()
+    expect(p.task).toBeNull()
+    expect(p.request.content).toContain('# D')
+    expect(Object.keys(p.artifacts)).toContain('request.md')
+  })
+
+  test('TC-K13: 🔧 vượt trần 64 KiB — CÙNG một ngưỡng cho cả `request` lẫn `rules`', async () => {
+    const root = contextRoot()
+    const big = 'x'.repeat(70 * 1024)
+    fs.writeFileSync(path.join(root, 'tasks', 'task-a', 'request.md'), big)
+    fs.writeFileSync(path.join(root, 'project-rules.md'), big)
+
+    const p = payload(await handleGetTaskContext({ taskId: 'task-a', include: ['request', 'rules'] }))
+    for (const branch of [p.request, p.rules]) {
+      expect(branch.truncated).toBe(true)
+      expect(branch.content.length).toBe(64 * 1024)
+      expect(typeof branch.name).toBe('string')
+      expect(branch.name.length).toBeGreaterThan(0)
+    }
+
+    // File nhỏ → truncated false ở cả hai nhánh.
+    fs.writeFileSync(path.join(root, 'tasks', 'task-a', 'request.md'), '# nhỏ\n')
+    fs.writeFileSync(path.join(root, 'project-rules.md'), RULES)
+    const small = payload(await handleGetTaskContext({ taskId: 'task-a', include: ['request', 'rules'] }))
+    expect(small.request.truncated).toBe(false)
+    expect(small.rules.truncated).toBe(false)
+  })
+
+  test('TC-K14: trả `structured: false` — payload nằm trong content text JSON', async () => {
+    contextRoot()
+    const res = await handleGetTaskContext({ taskId: 'task-a' })
+    expect(res.structuredContent).toBeUndefined()
+    expect(typeof res.content[0].text).toBe('string')
+    expect(JSON.parse(res.content[0].text).taskId).toBe('task-a')
+
+    const tools = await withClient(async (client) => (await client.listTools()).tools)
+    expect('outputSchema' in tools.find((t: any) => t.name === 'get_task_context')!).toBe(false)
+  })
+
+  test('TC-K15: ⚠️ có mặt ở CẢ HAI mode', async () => {
+    contextRoot()
+    for (const mode of ['readonly', 'full'] as const) {
+      const names = await withClient(
+        async (client) => (await client.listTools()).tools.map((t: any) => t.name),
+        mode,
+      )
+      expect(names).toContain('get_task_context')
+    }
+  })
+
+  test('TC-K17 + TC-K18 + TC-K20: annotation, inputSchema và description', async () => {
+    contextRoot()
+    const tool = await withClient(
+      async (client) => (await client.listTools()).tools.find((t: any) => t.name === 'get_task_context'),
+      'readonly',
+    )
+    expect(tool.annotations?.readOnlyHint).toBe(true)
+    expect(tool.annotations?.openWorldHint).toBe(false)
+
+    const schema = tool.inputSchema as any
+    expect(schema.required).toEqual(['taskId'])
+    expect(Object.keys(schema.properties).sort()).toEqual(['include', 'project', 'taskId'])
+    expect(schema.properties.include.items.enum).toEqual([
+      'request',
+      'pipeline',
+      'artifacts',
+      'state',
+      'rules',
+    ])
+
+    // D1: mô tả PHẢI nói nó thay cho chuỗi nào — 10 tool MCP từng ship với 0 lượt
+    // gọi vì không có gì nói cho agent biết chúng thay được cái gì.
+    expect(tool.description).toBeTruthy()
+    expect(tool.description).toContain('request.md')
+    expect(tool.description).toContain('cd ')
+    expect(tool.description).toContain('cat ')
+    expect(tool.description).toContain('ls ')
+  })
+
+  test('TC-K21: 🆕 ⚠️ `rules` đối xứng `request` ở MỌI nhánh', async () => {
+    const root = contextRoot()
+    const CONTRACT = ['content', 'name', 'truncated']
+
+    // (1) có file.
+    fs.writeFileSync(path.join(root, 'project-rules.md'), RULES)
+    const withFile = payload(await handleGetTaskContext({ taskId: 'task-a', include: ['request', 'rules'] }))
+    expect(Object.keys(withFile.rules).sort()).toEqual(CONTRACT)
+    // `request` mang thêm `mtime` (xem test-result.md › Lệch spec) nhưng ba khoá
+    // hợp đồng phải CÙNG kiểu ở hai nhánh.
+    for (const key of CONTRACT) {
+      expect(typeof withFile.request[key]).toBe(typeof withFile.rules[key])
+    }
+
+    // (2) không có file → null ở cả hai nhánh, KHÔNG phải `{content: null}`, không fail.
+    fs.unlinkSync(path.join(root, 'project-rules.md'))
+    fs.unlinkSync(path.join(root, 'tasks', 'task-a', 'request.md'))
+    const missing = await handleGetTaskContext({ taskId: 'task-a', include: ['request', 'rules'] })
+    expect(missing.isError).toBeFalsy()
+    expect(payload(missing).rules).toBeNull()
+    expect(payload(missing).request).toBeNull()
+
+    // (3) file rỗng → content '' và truncated false ở cả hai nhánh.
+    fs.writeFileSync(path.join(root, 'project-rules.md'), '')
+    fs.writeFileSync(path.join(root, 'tasks', 'task-a', 'request.md'), '')
+    const empty = payload(await handleGetTaskContext({ taskId: 'task-a', include: ['request', 'rules'] }))
+    expect(empty.rules.content).toBe('')
+    expect(empty.rules.truncated).toBe(false)
+    expect(empty.request.content).toBe('')
+    expect(empty.request.truncated).toBe(false)
   })
 })

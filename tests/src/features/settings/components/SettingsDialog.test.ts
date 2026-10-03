@@ -6,6 +6,11 @@ import {
   createTestI18nPlugin,
   mountWithI18n as mount,
 } from '../../../helpers/i18n'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { registerLocale, supportedLocales } from '@/frontend/plugins/i18n'
+import { useLocaleMessages } from '@/frontend/composables/useLocaleMessages'
 import SettingsDialog from '@/features/settings/components/SettingsDialog.vue'
 import {
   STORAGE_KEY,
@@ -115,7 +120,8 @@ describe('SettingsDialog', () => {
 
     expect(saveLoggingConfig).toHaveBeenCalledWith({
       showLogsTab: false,
-      types: { audit: true, request: true, jobs: true, events: false, usage: true },
+      // Tbefa5f4c: payload mang thêm khoá gạch nối 'tool-call' (mặc định tắt).
+      types: { audit: true, request: true, jobs: true, events: false, usage: true, 'tool-call': false },
     })
     expect(pane.textContent).not.toContain('Loại log')
     expect(pane.textContent).not.toContain('Audit (thay đổi cấu hình)')
@@ -703,5 +709,261 @@ describe('SettingsDialog — trạng thái section artifact (AC-1, AC-2)', () =>
     expect(sectionRadioGroup().getAttribute('aria-label')).toBe(
       tr('settings.artifact.sectionGroupLabel'),
     )
+  })
+})
+
+/**
+ * [T94b6ee41] Nhóm J của `test-spec.md` — chọn ngôn ngữ ở Settings.
+ *
+ * Trước task này radio ngôn ngữ KHÔNG có lưới nào: cả `SettingsDialog.test.ts` lẫn
+ * `SettingsDialog.modes.test.ts` đều không assert `value="vi"` hay nhãn ngôn ngữ. Đây là
+ * lần đầu vùng đó được phủ, không phải "sửa assert cứng".
+ *
+ * Bất biến chốt của nhóm: danh sách render từ REGISTRY (reactive), nhãn và chữ trạng thái
+ * lấy từ khoá i18n. Thêm locale thứ ba là thêm thư mục JSON — 🚫 không sửa component nào.
+ */
+describe('SettingsDialog — chọn ngôn ngữ render từ registry', () => {
+  /** Chữ `vi` đúng như bundle đang có — ca chốt "chữ này đến TỪ khoá", không chép tay. */
+  const viI18n = createTestI18n('vi')
+  const viText = (key: string) => (viI18n.global.t as (k: string) => string)(key)
+
+  const COMPONENT_SOURCE = readFileSync(
+    path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '../../../../../src/features/settings/components/SettingsDialog.vue',
+    ),
+    'utf8',
+  )
+
+  function localeRadios(): HTMLInputElement[] {
+    return Array.from(document.querySelectorAll('input[type="radio"][name="locale"]'))
+  }
+
+  function localeGroup(): HTMLElement {
+    return localeRadios()[0].closest('.settings-radio-group') as HTMLElement
+  }
+
+  function languageSection(): HTMLElement {
+    return localeGroup().closest('.settings-section') as HTMLElement
+  }
+
+  afterEach(() => {
+    const store = useLocaleMessages()
+    store.pending.value = null
+    store.lastError.value = null
+    store.loadedLocales.value = []
+    vi.unstubAllGlobals()
+  })
+
+  it('TC-J01: render đúng một radio cho mỗi locale đang hỗ trợ, 🚫 không hardcode', () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    const radios = localeRadios()
+    expect(radios.map((r) => r.value)).toEqual([...supportedLocales()])
+    expect(radios.length).toBe(supportedLocales().length)
+  })
+
+  it('TC-J02: nhãn lấy từ `common.language.names.<code>`, 🚫 không chuỗi cứng trong component', () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    const group = localeGroup()
+    expect(group.textContent).toContain('Tiếng Việt')
+    expect(group.textContent).toContain('English')
+    // Chữ hiện ra đúng, nhưng phải đến TỪ khoá i18n — component 🚫 không được chứa nó.
+    expect(COMPONENT_SOURCE).not.toContain('Tiếng Việt')
+    expect(COMPONENT_SOURCE).not.toContain('>English<')
+    expect(COMPONENT_SOURCE).toContain('common.language.names.')
+    // Và 🚫 không lộ khoá thô ra DOM khi khoá tồn tại.
+    expect(group.textContent).not.toContain('common.language')
+  })
+
+  it('TC-J03: locale đăng ký lúc chạy hiện ra mà KHÔNG phải sửa code hay reload (G-C13)', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    expect(localeRadios().map((r) => r.value)).not.toContain('ja')
+
+    // Đúng thứ `ensureManifest()` làm khi manifest server về SAU lúc dialog đã mount.
+    registerLocale('ja', { common: { language: { names: { ja: '日本語' } } } })
+    await flushPromises()
+
+    // Đỏ khi `localeRegistry` không reactive: computed cache vĩnh viễn, 'ja' không bao giờ hiện.
+    expect(localeRadios().map((r) => r.value)).toContain('ja')
+
+    // Nhãn đọc từ locale ĐANG hiển thị (`vi`), mà bản `vi` chưa có tên tiếng Nhật →
+    // hiện chính mã thay vì lộ khoá thô. Dịch tên là việc của bundle `vi`.
+    const label = localeRadios()
+      .find((r) => r.value === 'ja')!
+      .closest('.settings-radio') as HTMLElement
+    expect(label.textContent?.trim()).toBe('ja')
+    expect(label.textContent).not.toContain('common.language')
+  })
+
+  it('TC-J04: chọn một ngôn ngữ ⇒ đổi đúng một lần sang mã đó', async () => {
+    const calls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        calls.push(String(input))
+        return new Response(JSON.stringify({ locale: 'en', messages: { common: { ok: 'OK' } } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ETag: '"e1"' },
+        })
+      }),
+    )
+
+    mount(SettingsDialog, { attachTo: document.body })
+    const en = localeRadios().find((r) => r.value === 'en')!
+    expect(en.checked).toBe(false)
+
+    en.click()
+    await flushPromises()
+
+    expect(calls).toEqual(['/api/i18n/en'])
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).locale).toBe('en')
+    expect(localeRadios().find((r) => r.value === 'en')!.checked).toBe(true)
+  })
+
+  it('TC-J05: đang nạp ⇒ hiện trạng thái chờ và KHOÁ lựa chọn (chặn double-submit)', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    expect(localeRadios().every((r) => r.disabled)).toBe(false)
+
+    useLocaleMessages().pending.value = 'en'
+    await flushPromises()
+
+    expect(localeRadios().every((r) => r.disabled)).toBe(true)
+    expect(languageSection().textContent).toContain(viText('settings.language.loading'))
+  })
+
+  it('TC-J06: nạp lỗi ⇒ báo ngay tại control, lựa chọn QUAY VỀ locale đang dùng', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('boom', { status: 500 })))
+
+    mount(SettingsDialog, { attachTo: document.body })
+    // `de` chưa có messages build-time → nạp hỏng là thật sự không đổi được.
+    registerLocale('de', {})
+    await flushPromises()
+    localeRadios().find((r) => r.value === 'de')!.click()
+    await flushPromises()
+
+    const section = languageSection()
+    expect(section.querySelector('[role="alert"]')).not.toBeNull()
+    expect(section.textContent).toContain(viText('settings.language.loadFailed'))
+    // 🚫 Không "giả vờ đã đổi": lựa chọn hiển thị vẫn là locale đang dùng.
+    expect(localeRadios().find((r) => r.value === 'vi')!.checked).toBe(true)
+    expect(localeRadios().find((r) => r.value === 'de')!.checked).toBe(false)
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}').locale).toBeUndefined()
+  })
+
+  it('TC-J07: nhãn loading/lỗi cũng i18n hoá, 🚫 không hardcode trong component', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    useLocaleMessages().lastError.value = 'i18n 500'
+    await flushPromises()
+
+    expect(languageSection().textContent).toContain(viText('settings.language.loadFailed'))
+    expect(COMPONENT_SOURCE).toContain("t('settings.language.loading')")
+    expect(COMPONENT_SOURCE).toContain("t('settings.language.loadFailed')")
+    expect(COMPONENT_SOURCE).not.toContain(viText('settings.language.loadFailed'))
+  })
+})
+
+// ── Tbefa5f4c · Nhóm L (TC-L01 … TC-L04) — toggle log type `tool-call` (F17) ──
+//
+// Toggle này là cái công tắc duy nhất bật cả đường đo. Hai thứ dễ sai: khoá lưu
+// phải là chuỗi gạch nối (`'tool-call'`, không phải `toolCall`), và nhãn phải đi
+// qua i18n ở cả hai locale.
+describe('Nhóm L — toggle log type tool-call', () => {
+  /** Checkbox mang nhãn chứa `text` trong pane Settings. */
+  function checkboxByLabel(text: string): HTMLInputElement | undefined {
+    const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
+    return Array.from(pane.querySelectorAll('label.settings-checkbox'))
+      .find((el) => el.textContent?.includes(text))
+      ?.querySelector('input') as HTMLInputElement | undefined
+  }
+
+  it('TC-L01: có control cho `tool-call`, mặc định TẮT', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    await flushPromises()
+
+    const box = checkboxByLabel('Tool call')
+    expect(box).toBeTruthy()
+    expect(box!.checked).toBe(false)
+  })
+
+  it('TC-L02: bật toggle ghi đúng khoá gạch nối, KHÔNG sinh khoá camelCase', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    await flushPromises()
+
+    const box = checkboxByLabel('Tool call')!
+    box.checked = true
+    box.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    expect(saveLoggingConfig).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(saveLoggingConfig).mock.calls[0][0] as {
+      types: Record<string, boolean>
+    }
+    expect(payload.types['tool-call']).toBe(true)
+    expect(Object.keys(payload.types)).not.toContain('toolCall')
+  })
+
+  it('TC-L02b: prefs trả về true thì toggle hiện đang BẬT', async () => {
+    vi.mocked(fetchLoggingConfig).mockResolvedValueOnce({
+      config: {
+        showLogsTab: true,
+        types: { audit: true, request: true, jobs: true, events: false, usage: true, 'tool-call': true },
+      },
+    })
+    mount(SettingsDialog, { attachTo: document.body })
+    await flushPromises()
+
+    expect(checkboxByLabel('Tool call')!.checked).toBe(true)
+  })
+
+  it.each(['vi', 'en'] as const)('TC-L03: ⚠️ nhãn có i18n ở locale %s', async (locale) => {
+    const messages = createTestI18n(locale)
+    const label = (messages.global.t as any)('settings.logging.types.toolCall') as string
+
+    mountRaw(SettingsDialog, {
+      attachTo: document.body,
+      global: { plugins: [createTestI18nPlugin(locale)] },
+    })
+    await flushPromises()
+
+    const pane = document.querySelector('.settings-pane.modal-body') as HTMLElement
+    const text = pane.textContent ?? ''
+    expect(label).toBeTruthy()
+    // 🚫 Không phải key thô, 🚫 không hardcode.
+    expect(label).not.toBe('settings.logging.types.toolCall')
+    expect(text).toContain(label)
+    expect(text).not.toContain('settings.logging.types.toolCall')
+  })
+
+  it('TC-L03b: hai locale cho hai chuỗi KHÁC nhau', () => {
+    const vi = (createTestI18n('vi').global.t as any)('settings.logging.types.toolCall')
+    const en = (createTestI18n('en').global.t as any)('settings.logging.types.toolCall')
+    expect(vi).not.toBe(en)
+  })
+
+  it('TC-L04: hồi quy — mọi toggle log type cũ vẫn hiện và lưu đúng', async () => {
+    mount(SettingsDialog, { attachTo: document.body })
+    await flushPromises()
+
+    for (const label of ['Audit', 'Request', 'Jobs', 'Events', 'Usage']) {
+      expect(checkboxByLabel(label)).toBeTruthy()
+    }
+    expect(checkboxByLabel('Events')!.checked).toBe(false)
+    expect(checkboxByLabel('Usage')!.checked).toBe(true)
+
+    checkboxByLabel('Events')!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    const payload = vi.mocked(saveLoggingConfig).mock.calls[0][0] as {
+      showLogsTab: boolean
+      types: Record<string, boolean>
+    }
+    expect(payload.types).toEqual({
+      audit: true,
+      request: true,
+      jobs: true,
+      events: true,
+      usage: true,
+      'tool-call': false,
+    })
   })
 })
