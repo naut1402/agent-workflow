@@ -12,7 +12,7 @@ Repo này dính tới MCP theo **hai vai ngược chiều nhau**. Phân biệt t
 | **Server (inbound)** | Dashboard **làm** MCP server; Claude Code gọi vào qua stdio | Chạy `bun run mcp`, khai ở `mcpServers` của client (§Quickstart) | [`server.md`](server.md) |
 | **Client (outbound)** | Dashboard **gọi** MCP server khác (playwright, serena…) | Tab **MCP** của Runner Config | [`client.md`](client.md) |
 
-Tách ngay đầu trang vì đây là chỗ người đọc hay đi nhầm nhánh: cả comment header `mcp/server.ts` lẫn root `README.md` đều phải dành riêng một đoạn để đính chính. Hai vai không dùng chung một dòng code nào — `mcp/` là vai server, `src/features/mcp/` là vai client.
+Tách ngay đầu trang vì đây là chỗ người đọc hay đi nhầm nhánh. Hai vai không dùng chung một dòng code nào — `mcp/` là vai server, `src/features/mcp/` là vai client.
 
 ---
 
@@ -58,8 +58,8 @@ Tách ngay đầu trang vì đây là chỗ người đọc hay đi nhầm nhán
 
 | Mode | Tool được đăng ký |
 |---|---|
-| `readonly` (mặc định) | 7 tool đọc — `list_projects` · `get_project` · `get_knowledge_bundle` · `list_tasks` · `get_task_state` · `list_artifacts` · `read_artifact` |
-| `full` | 7 tool trên + 3 tool ghi — `add_project` · `create_qa` · `remove_project` |
+| `readonly` (mặc định) | 8 tool đọc — `list_projects` · `get_project` · `get_knowledge_bundle` · `list_tasks` · `get_task_state` · `get_task_context` · `list_artifacts` · `read_artifact` |
+| `full` | 8 tool trên + 3 tool ghi — `add_project` · `create_qa` · `remove_project` |
 
 Mode **lọc ở khâu đăng ký**, không phải lúc gọi: tool ngoài quyền **biến khỏi `tools/list`** chứ không hiện ra rồi bị từ chối. Thứ tự ưu tiên và cách xử lý giá trị sai ở [`server.md`](server.md) §3.
 
@@ -69,5 +69,5 @@ Mode **lọc ở khâu đăng ký**, không phải lúc gọi: tool ngoài quy�
 
 | File | Nội dung |
 |---|---|
-| [`server.md`](server.md) | Vai inbound: bảng 10 tool, cách chạy và khai `mcpServers`, mode vận hành, tham chiếu field / output / mã lỗi / annotations từng tool, hợp đồng envelope, ví dụ, giới hạn |
+| [`server.md`](server.md) | Vai inbound: bảng 11 tool, cách chạy và khai `mcpServers`, mode vận hành, tham chiếu field / output / mã lỗi / annotations từng tool, hợp đồng envelope, ví dụ, giới hạn |
 | [`client.md`](client.md) | Vai outbound: store `mcp-servers.json`, 3 transport, chốt endpoint, masking secret, 4 route API, cách runner tiêu thụ |

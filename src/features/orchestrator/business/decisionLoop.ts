@@ -485,6 +485,7 @@ async function askAgent(
   // biết token của chính nó.
   const orchestratorToken = mintOrchestratorToken(ref)
   const knowledgeBundle = await loadKnowledgeBundle(ref.root, orch.knowledge_inputs ?? [])
+  const liveStep = liveJobsOfTask(ref.root, ref.taskId).find((j) => !isOrchestratorJob(j))
   const job = submitJob({
     agentRef: orch.agent,
     workspace: joinPath(ref.root, 'tasks', ref.taskId),
@@ -496,6 +497,9 @@ async function askAgent(
       detail: extra.detail,
       stepResult: extra.stepResult,
       gatePending: extra.gatePending,
+      activeStep: liveStep
+        ? { stepId: (liveStep.metadata?.pipelineStepId as string | undefined) ?? null, status: liveStep.status }
+        : null,
       recent: recentOf(ref.root, ref.taskId),
       extraSystemPrompt: orch.system_prompt,
       knowledgeText: renderBundle(knowledgeBundle),

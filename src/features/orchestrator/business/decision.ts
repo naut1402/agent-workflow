@@ -49,6 +49,8 @@ export interface DecisionContext {
   stepResult?: StepResult
   /** Gate đang chờ người (`state.hitl_pending`) — agent không được start khi có. */
   gatePending?: string
+  /** Job step đang chạy của task lúc giao lượt (không tính job điều phối); `null` khi không có. */
+  activeStep?: { stepId: string | null; status: string } | null
   /** `orchestrator.system_prompt` từ pipeline.yaml — hướng dẫn tự do do người vận hành cấu hình. */
   extraSystemPrompt?: string
   /** Bundle knowledge đã render, ứng với `orchestrator.knowledge_inputs`. */
@@ -107,6 +109,21 @@ function renderStepResult(result: StepResult): string {
   ].join('\n')
 }
 
+function renderCurrentState(ctx: DecisionContext): string {
+  const gate = ctx.gatePending ? `\`${ctx.gatePending}\`` : 'không có'
+  const active = ctx.activeStep
+    ? `\`${ctx.activeStep.stepId ?? '(không rõ step)'}\` — ${ctx.activeStep.status}`
+    : 'không có step nào đang chạy'
+  return [
+    '## Trạng thái hiện tại',
+    '',
+    'Snapshot lúc giao lượt này — đủ để quyết, không cần hỏi lại dashboard.',
+    '',
+    `- **Cổng chờ duyệt:** ${gate}`,
+    `- **Step đang chạy:** ${active}`,
+  ].join('\n')
+}
+
 /**
  * Prompt cho lượt quyết định. Cố ý mô tả định dạng trả lời trước, vì guard
  * phía sau không đoán: sai định dạng là pipeline halt tường minh.
@@ -143,6 +160,7 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
     ctx.extraSystemPrompt?.trim()
       ? `## Hướng dẫn bổ sung (cấu hình orchestrator)\n\n${ctx.extraSystemPrompt.trim()}`
       : '',
+    renderCurrentState(ctx),
     ctx.stepResult ? renderStepResult(ctx.stepResult) : '',
     ctx.detail?.trim() ? `## Chi tiết\n\n${ctx.detail.trim()}` : '',
     ctx.recent?.length ? `## Event gần đây\n\n${ctx.recent.map((r) => `- ${r}`).join('\n')}` : '',
@@ -161,30 +179,8 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
       'Không có dòng này, hoặc JSON hỏng, hoặc `stepId` không nằm trong danh sách trên',
       '⇒ orchestrator tự chuyển tiếp theo thứ tự pipeline mà không có bối cảnh bạn soạn.',
       '',
-      'Nếu 2 biến môi trường DASHBOARD_ORCHESTRATOR_TOKEN và DASHBOARD_ORCHESTRATOR_BASE_URL',
-      'có mặt, bạn có thể gọi TRỰC TIẾP API điều phối bằng lệnh shell, giữa lượt — biết ngay',
-      'kết quả (dispatch được hay không) và không cần đợi hết lượt:',
-      '',
-      '```',
-      '# Trạng thái thật của task — step đang chạy (nếu có), gate đang chờ, event gần đây',
-      'curl -s "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/status" \\',
-      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN"',
-      '',
-      '# Log thô của step đang/đã chạy — kênh gỡ kẹt, CHỈ gọi khi kết quả ở trên',
-      '# không đủ để quyết. Nội dung này là context làm việc của nút con, kéo về',
-      '# nhiều là phiên điều phối phình theo.',
-      'curl -s "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/output?offset=0" \\',
-      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN"',
-      '',
-      '# Ra lệnh start/resume/halt/summary — cùng ngữ nghĩa với dòng JSON ở trên',
-      'curl -s -X POST "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/decide" \\',
-      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN" \\',
-      '  -H "Content-Type: application/json" \\',
-      '  -d \'{"action":"start","stepId":"..."}\'',
-      '```',
-      '',
-      'Gọi API rồi thì KHÔNG in lại dòng ORCHESTRATOR_DECISION nữa (double-dispatch).',
-      'Không có 2 biến môi trường trên (agent CLI khác) thì vẫn dùng dòng JSON như trên.',
+      'Ra lệnh bằng đúng dòng này. Trạng thái task, kết quả bước vừa xong và event gần đây',
+      'đã nằm trong prompt — KHÔNG gọi API điều phối bằng shell (`curl`) để lấy lại hay để ra lệnh.',
     ].join('\n'),
   ]
   return parts.filter(Boolean).join('\n\n')

@@ -28,7 +28,7 @@
     "preview": "vite preview",
     "serve": "bun src/backend/standalone.ts",
     "start": "vite build && bun src/backend/standalone.ts",
-    "mcp": "bun mcp/server.ts",
+    "mcp": "bun mcp/stdio.ts",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
