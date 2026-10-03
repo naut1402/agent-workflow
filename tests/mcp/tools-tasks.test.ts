@@ -11,13 +11,10 @@ import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { add } from '../../src/backend/registry'
-import {
-  createMcpServer,
-  handleGetTaskState,
-  handleListArtifacts,
-  handleListTasks,
-  handleReadArtifact,
-} from '../../mcp/server'
+import { DashboardMcpServer } from '../../mcp/DashboardMcpServer'
+import { TaskTools } from '../../mcp/tools/TaskTools'
+
+const taskTools = new TaskTools(DashboardMcpServer.resolveRoot)
 
 // ── Cô lập env — BỐN biến (§1.4) ──────────────────────────────────────────────
 
@@ -132,7 +129,7 @@ const codeOf = (r: any) => r._meta?.error?.code
 
 /** Client MCP in-memory — cần khi muốn quan sát TẦNG VALIDATE INPUT. */
 async function withClient<T>(fn: (client: Client) => Promise<T>, mode: 'readonly' | 'full' = 'full'): Promise<T> {
-  const server = createMcpServer({ mode })
+  const server = new DashboardMcpServer(mode).build()
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const client = new Client({ name: 'tools-tasks-test', version: '1.0.0' })
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
@@ -182,7 +179,7 @@ async function expectT1(call: Promise<any>) {
 describe('list_tasks', () => {
   test('TC-49: liệt kê mặc định — đúng bộ khoá, có total', async () => {
     useRoot()
-    const res = await handleListTasks({})
+    const res = await taskTools.listTasks({})
     expect(res.isError).toBeUndefined()
     const sc = res.structuredContent
     expect(sc.total).toBe(5)
@@ -198,7 +195,7 @@ describe('list_tasks', () => {
 
   test("TC-50: status 'waiting' — chỉ task có gate đang chờ", async () => {
     useRoot()
-    const ids = (await handleListTasks({ status: 'waiting' })).structuredContent.tasks.map((t: any) => t.id)
+    const ids = (await taskTools.listTasks({ status: 'waiting' })).structuredContent.tasks.map((t: any) => t.id)
     expect(ids).toContain('task-c')
     expect(ids).not.toContain('task-a')
     expect(ids).not.toContain('task-b')
@@ -206,7 +203,7 @@ describe('list_tasks', () => {
 
   test("TC-51: status 'completed'", async () => {
     useRoot()
-    const ids = (await handleListTasks({ status: 'completed' })).structuredContent.tasks.map((t: any) => t.id)
+    const ids = (await taskTools.listTasks({ status: 'completed' })).structuredContent.tasks.map((t: any) => t.id)
     expect(ids).toContain('task-b')
     expect(ids).not.toContain('task-a')
     expect(ids).not.toContain('task-c')
@@ -214,7 +211,7 @@ describe('list_tasks', () => {
 
   test("TC-52: status 'running' — phần còn lại", async () => {
     useRoot()
-    const ids = (await handleListTasks({ status: 'running' })).structuredContent.tasks.map((t: any) => t.id)
+    const ids = (await taskTools.listTasks({ status: 'running' })).structuredContent.tasks.map((t: any) => t.id)
     expect(ids).toContain('task-a')
     expect(ids).toContain('task-e')
     expect(ids).not.toContain('task-b')
@@ -233,11 +230,11 @@ describe('list_tasks', () => {
         'task-f': { task_id: 'task-f', current_phase: 'completed', hitl_pending: 'hitl-3' },
       },
     })
-    const all = (await handleListTasks({})).structuredContent.tasks
+    const all = (await taskTools.listTasks({})).structuredContent.tasks
     expect(all.find((t: any) => t.id === 'task-f').hitlPending).toBeNull()
 
     const idsIn = async (status: 'running' | 'waiting' | 'completed') =>
-      (await handleListTasks({ status })).structuredContent.tasks.map((t: any) => t.id)
+      (await taskTools.listTasks({ status })).structuredContent.tasks.map((t: any) => t.id)
     expect(await idsIn('completed')).toContain('task-f')
     expect(await idsIn('waiting')).not.toContain('task-f')
     expect(await idsIn('running')).not.toContain('task-f')
@@ -245,10 +242,10 @@ describe('list_tasks', () => {
 
   test('TC-54: ba nhánh status rời nhau và phủ kín', async () => {
     useRoot()
-    const all = (await handleListTasks({})).structuredContent.tasks.map((t: any) => t.id)
+    const all = (await taskTools.listTasks({})).structuredContent.tasks.map((t: any) => t.id)
     const buckets = await Promise.all(
       (['running', 'waiting', 'completed'] as const).map(async (status) =>
-        (await handleListTasks({ status })).structuredContent.tasks.map((t: any) => t.id),
+        (await taskTools.listTasks({ status })).structuredContent.tasks.map((t: any) => t.id),
       ),
     )
     const union = buckets.flat()
@@ -268,7 +265,7 @@ describe('list_tasks', () => {
       fs.utimesSync(path.join(stateDir, `${id}.json`), when, when)
     })
 
-    const tasks = (await handleListTasks({})).structuredContent.tasks
+    const tasks = (await taskTools.listTasks({})).structuredContent.tasks
     const times = tasks.map((t: any) => t.updatedAt)
     const nonNull = times.filter((v: number | null) => v !== null)
     expect(nonNull).toEqual([...nonNull].sort((a: number, b: number) => b - a))
@@ -278,7 +275,7 @@ describe('list_tasks', () => {
 
   test('TC-56: limit cắt danh sách nhưng KHÔNG đổi total', async () => {
     useRoot()
-    const res = await handleListTasks({ limit: 2 })
+    const res = await taskTools.listTasks({ limit: 2 })
     expect(res.structuredContent.tasks).toHaveLength(2)
     expect(res.structuredContent.total).toBe(5)
   })
@@ -293,7 +290,7 @@ describe('list_tasks', () => {
         c1: { current_phase: 'completed' },
       },
     })
-    const res = await handleListTasks({ status: 'waiting', limit: 1 })
+    const res = await taskTools.listTasks({ status: 'waiting', limit: 1 })
     expect(res.structuredContent.tasks).toHaveLength(1)
     // Không phải 5 (chưa lọc), cũng không phải 1 (đã cắt).
     expect(res.structuredContent.total).toBe(3)
@@ -301,7 +298,7 @@ describe('list_tasks', () => {
 
   test('TC-58: limit lớn hơn số task', async () => {
     useRoot()
-    const res = await handleListTasks({ limit: 200 })
+    const res = await taskTools.listTasks({ limit: 200 })
     expect(res.structuredContent.tasks).toHaveLength(5)
     expect(res.structuredContent.total).toBe(5)
   })
@@ -321,14 +318,14 @@ describe('list_tasks', () => {
 
   test('TC-60: root rỗng hoàn toàn → { tasks: [], total: 0 }, không ném', async () => {
     useRoot({})
-    const res = await handleListTasks({})
+    const res = await taskTools.listTasks({})
     expect(res.isError).toBeUndefined()
     expect(res.structuredContent).toEqual({ tasks: [], total: 0 })
   })
 
   test('TC-61: state hỏng JSON vẫn được liệt kê, phase null', async () => {
     useRoot()
-    const res = await handleListTasks({})
+    const res = await taskTools.listTasks({})
     expect(res.isError).toBeUndefined()
     const broken = res.structuredContent.tasks.find((t: any) => t.id === 'task-d')
     expect(broken).toBeTruthy()
@@ -337,7 +334,7 @@ describe('list_tasks', () => {
 
   test('TC-62: project không tồn tại → not_found, text nhắc tên project', async () => {
     useRoot()
-    const res = await handleListTasks({ project: 'khong-co' })
+    const res = await taskTools.listTasks({ project: 'khong-co' })
     expect(res.isError).toBe(true)
     expect(codeOf(res)).toBe('not_found')
     expect(res.content[0].text).toContain('khong-co')
@@ -348,7 +345,7 @@ describe('list_tasks', () => {
     // `DEV_TEAM_ROOT` không đặt. Chốt luôn: KHÔNG có fallback ngầm sang cwd,
     // kể cả khi cwd của tiến trình test là một dev-team root thật.
     delete process.env.DEV_TEAM_ROOT
-    const res = await handleListTasks({})
+    const res = await taskTools.listTasks({})
     expect(res.isError).toBe(true)
     expect(codeOf(res)).toBe('not_found')
     const text: string = res.content[0].text
@@ -363,7 +360,7 @@ describe('list_tasks', () => {
 describe('get_task_state', () => {
   test('TC-64: đọc state hợp lệ', async () => {
     useRoot()
-    const res = await handleGetTaskState({ taskId: 'task-a' })
+    const res = await taskTools.getTaskState({ taskId: 'task-a' })
     expect(res.isError).toBeUndefined()
     expect(res.structuredContent.state).toEqual({
       task_id: 'task-a',
@@ -374,13 +371,13 @@ describe('get_task_state', () => {
 
   test('TC-65: state file không tồn tại → not_found', async () => {
     useRoot()
-    const res = await handleGetTaskState({ taskId: 'khong-co-task' })
+    const res = await taskTools.getTaskState({ taskId: 'khong-co-task' })
     expect(codeOf(res)).toBe('not_found')
   })
 
   test('TC-66: state hỏng JSON → not_found kèm thông điệp đọc được', async () => {
     useRoot()
-    const res = await handleGetTaskState({ taskId: 'task-d' })
+    const res = await taskTools.getTaskState({ taskId: 'task-d' })
     expect(codeOf(res)).toBe('not_found')
     expect(typeof res.content[0].text).toBe('string')
     expect(res.content[0].text.length).toBeGreaterThan(0)
@@ -392,7 +389,7 @@ describe('get_task_state', () => {
     // với `outputSchema` ⇒ `McpError` phía client.
     useRoot({ states: { 'task-g': '"chuoi"', 'task-arr': '[]', 'task-num': '42' } })
     for (const taskId of ['task-g', 'task-arr', 'task-num']) {
-      const res = await handleGetTaskState({ taskId })
+      const res = await taskTools.getTaskState({ taskId })
       expect(res.isError).toBe(true)
       expect(codeOf(res)).toBe('not_found')
       expect(res.structuredContent).toBeUndefined()
@@ -402,7 +399,7 @@ describe('get_task_state', () => {
   test('TC-67: path-traversal qua taskId — dạng ../ (gọi thẳng handler ⇒ T2)', async () => {
     useRoot()
     for (const taskId of ['../../../etc/passwd', '..', '../secret', '.', '../..']) {
-      const res = await handleGetTaskState({ taskId })
+      const res = await taskTools.getTaskState({ taskId })
       expect(codeOf(res)).toBe('invalid_input')
       expect(JSON.stringify(res)).not.toContain(SECRET)
     }
@@ -427,7 +424,7 @@ describe('get_task_state', () => {
     })
     // Đường thứ hai — gọi thẳng handler thì T1 không tồn tại, rơi xuống T2.
     for (const taskId of ['/etc/passwd', 'a/b', 'a\\b', 'a%2f..%2fb']) {
-      const res = await handleGetTaskState({ taskId })
+      const res = await taskTools.getTaskState({ taskId })
       expect(res.isError).toBe(true)
       expect(codeOf(res)).toBe('invalid_input')
       expect(JSON.stringify(res)).not.toContain(SECRET)
@@ -451,17 +448,17 @@ describe('get_task_state', () => {
   test('TC-70: định dạng id thật đang dùng trong repo không bị chặn nhầm', async () => {
     useRoot()
     for (const taskId of ['20260927_001', 'Tb4241005', 'auto-0bdc9595', '202608_003']) {
-      const res = await handleGetTaskState({ taskId })
+      const res = await taskTools.getTaskState({ taskId })
       expect(codeOf(res)).not.toBe('invalid_input')
     }
   })
 
   test('TC-71: bắc cầu list_tasks → get_task_state (id server phát ra, server phải nhận lại)', async () => {
     useRoot()
-    const ids = (await handleListTasks({})).structuredContent.tasks.map((t: any) => t.id)
+    const ids = (await taskTools.listTasks({})).structuredContent.tasks.map((t: any) => t.id)
     expect(ids.length).toBeGreaterThan(0)
     for (const id of ids) {
-      const res = await handleGetTaskState({ taskId: id })
+      const res = await taskTools.getTaskState({ taskId: id })
       expect(codeOf(res)).not.toBe('invalid_input')
     }
   })
@@ -472,7 +469,7 @@ describe('get_task_state', () => {
 describe('list_artifacts', () => {
   test('TC-72: artifact đã tạo và artifact known chưa tạo', async () => {
     useRoot()
-    const res = await handleListArtifacts({ taskId: 'task-a' })
+    const res = await taskTools.listArtifacts({ taskId: 'task-a' })
     expect(res.isError).toBeUndefined()
     const { artifacts, subtasks } = res.structuredContent
     expect(artifacts['request.md']).toMatchObject({ exists: true })
@@ -491,7 +488,7 @@ describe('list_artifacts', () => {
     const expectedBytes = Buffer.byteLength(content, 'utf8')
     expect(expectedBytes).toBeGreaterThan(content.length) // có dấu ⇒ byte > ký tự
 
-    const { artifacts } = (await handleListArtifacts({ taskId: 'task-a' })).structuredContent
+    const { artifacts } = (await taskTools.listArtifacts({ taskId: 'task-a' })).structuredContent
     expect(artifacts['request.md'].size).toBe(expectedBytes)
     expect(artifacts['request.md'].mtime).toBeGreaterThanOrEqual(before - 5_000)
     expect(artifacts['request.md'].mtime).toBeLessThanOrEqual(Date.now() + 5_000)
@@ -499,7 +496,7 @@ describe('list_artifacts', () => {
 
   test('TC-74: task không có thư mục artifact → ok, không entry nào exists', async () => {
     useRoot()
-    const res = await handleListArtifacts({ taskId: 'task-d' })
+    const res = await taskTools.listArtifacts({ taskId: 'task-d' })
     expect(res.isError).toBeUndefined()
     const { artifacts, subtasks } = res.structuredContent
     expect(subtasks).toEqual([])
@@ -509,7 +506,7 @@ describe('list_artifacts', () => {
   test('TC-75: path-traversal qua taskId (gọi thẳng handler ⇒ T2)', async () => {
     const root = useRoot()
     for (const taskId of ['../..', '/etc', '../../tasks', '..']) {
-      const res = await handleListArtifacts({ taskId })
+      const res = await taskTools.listArtifacts({ taskId })
       expect(codeOf(res)).toBe('invalid_input')
       // Không liệt kê được nội dung thư mục nào ngoài `<root>/tasks/`.
       expect(JSON.stringify(res)).not.toContain('secret.txt')
@@ -529,9 +526,9 @@ describe('list_artifacts', () => {
   test('TC-76: structuredContent và content[0].text không lệch nhau', async () => {
     useRoot()
     const results = [
-      await handleListTasks({}),
-      await handleGetTaskState({ taskId: 'task-a' }),
-      await handleListArtifacts({ taskId: 'task-a' }),
+      await taskTools.listTasks({}),
+      await taskTools.getTaskState({ taskId: 'task-a' }),
+      await taskTools.listArtifacts({ taskId: 'task-a' }),
     ]
     for (const res of results) {
       expect(res.structuredContent).toEqual(payload(res))
@@ -546,7 +543,7 @@ describe('read_artifact', () => {
     const root = useRoot()
     const content = '# Yêu cầu\nNội dung có dấu tiếng Việt\n'
     fs.writeFileSync(path.join(root, 'tasks', 'task-a', 'request.md'), content)
-    const res = await handleReadArtifact({ taskId: 'task-a', name: 'request.md' })
+    const res = await taskTools.readArtifact({ taskId: 'task-a', name: 'request.md' })
     expect(res.isError).toBeUndefined()
     const body = payload(res)
     expect(body.name).toBe('request.md')
@@ -556,14 +553,14 @@ describe('read_artifact', () => {
 
   test('TC-78: read_artifact KHÔNG có structuredContent ở nhánh thành công', async () => {
     useRoot()
-    const res = await handleReadArtifact({ taskId: 'task-a', name: 'request.md' })
+    const res = await taskTools.readArtifact({ taskId: 'task-a', name: 'request.md' })
     // Assert VẮNG MẶT, không phải `toBeUndefined()`: gán `undefined` cũng xanh.
     expect('structuredContent' in res).toBe(false)
   })
 
   test('TC-79: file không tồn tại → not_found, không ném', async () => {
     useRoot()
-    const res = await handleReadArtifact({ taskId: 'task-a', name: 'khong-co.md' })
+    const res = await taskTools.readArtifact({ taskId: 'task-a', name: 'khong-co.md' })
     expect(res.isError).toBe(true)
     expect(codeOf(res)).toBe('not_found')
   })
@@ -571,7 +568,7 @@ describe('read_artifact', () => {
   test('TC-80: path-traversal qua name — và file ngoài root KHÔNG bị đọc', async () => {
     useRoot()
     for (const name of ['../../.dev-state/task-a.json', '../../secret.txt', '/etc/passwd', '..']) {
-      const res = await handleReadArtifact({ taskId: 'task-a', name })
+      const res = await taskTools.readArtifact({ taskId: 'task-a', name })
       expect(codeOf(res)).toBe('invalid_input')
       expect(res.content[0].text).toContain('escapes')
       // Assert phủ định trên NỘI DUNG thật — `invalid_input` một mình không
@@ -582,7 +579,7 @@ describe('read_artifact', () => {
 
   test('TC-81: path-traversal qua taskId dù name hợp lệ (T2 ở handler, T1 qua giao thức)', async () => {
     useRoot()
-    const res = await handleReadArtifact({ taskId: '../.dev-state', name: 'task-a.json' })
+    const res = await taskTools.readArtifact({ taskId: '../.dev-state', name: 'task-a.json' })
     expect(codeOf(res)).toBe('invalid_input')
     expect(JSON.stringify(res)).not.toContain('current_phase')
     // Chặn `name` mà quên `taskId` vẫn thoát được thư mục — phủ cả hai tầng.
@@ -594,8 +591,8 @@ describe('read_artifact', () => {
   test('TC-82: name rỗng hoặc chứa byte null bị từ chối', async () => {
     useRoot()
     // Gọi thẳng handler: cả hai rơi xuống T2.
-    expect(codeOf(await handleReadArtifact({ taskId: 'task-a', name: '' }))).toBe('invalid_input')
-    expect(codeOf(await handleReadArtifact({ taskId: 'task-a', name: 'a\0b' }))).toBe('invalid_input')
+    expect(codeOf(await taskTools.readArtifact({ taskId: 'task-a', name: '' }))).toBe('invalid_input')
+    expect(codeOf(await taskTools.readArtifact({ taskId: 'task-a', name: 'a\0b' }))).toBe('invalid_input')
     await withClient(async (client) => {
       // `name: ''` vi phạm `.min(1)` của schema ⇒ T1.
       await expectT1(callRaw(client, 'read_artifact', { taskId: 'task-a', name: '' }))
@@ -608,7 +605,7 @@ describe('read_artifact', () => {
 
   test('TC-83: name trỏ thư mục → not_found (Q5), tuyệt đối không ok', async () => {
     useRoot()
-    const res = await handleReadArtifact({ taskId: 'task-a', name: 'sub-1' })
+    const res = await taskTools.readArtifact({ taskId: 'task-a', name: 'sub-1' })
     expect(res.isError).toBe(true)
     expect(codeOf(res)).toBe('not_found')
   })
@@ -635,25 +632,326 @@ describe('read_artifact', () => {
     expect((first as any).project.default).toBe(true)
 
     expect(
-      (await handleListTasks({ project: secondId })).structuredContent.tasks[0].name,
+      (await taskTools.listTasks({ project: secondId })).structuredContent.tasks[0].name,
     ).toBe('Task two')
     expect(
-      (await handleGetTaskState({ taskId: 'task-a', project: secondId })).structuredContent.state.name,
+      (await taskTools.getTaskState({ taskId: 'task-a', project: secondId })).structuredContent.state.name,
     ).toBe('Task two')
     expect(
-      Object.keys((await handleListArtifacts({ taskId: 'task-a', project: secondId })).structuredContent.artifacts),
+      Object.keys((await taskTools.listArtifacts({ taskId: 'task-a', project: secondId })).structuredContent.artifacts),
     ).toContain('only-two.md')
     expect(
-      payload(await handleReadArtifact({ taskId: 'task-a', name: 'only-two.md', project: secondId })).content,
+      payload(await taskTools.readArtifact({ taskId: 'task-a', name: 'only-two.md', project: secondId })).content,
     ).toBe('noi dung two\n')
     // Đối chứng: cùng tên file đó KHÔNG có ở project default.
-    expect(codeOf(await handleReadArtifact({ taskId: 'task-a', name: 'only-two.md' }))).toBe('not_found')
+    expect(codeOf(await taskTools.readArtifact({ taskId: 'task-a', name: 'only-two.md' }))).toBe('not_found')
 
     // Biến thể phủ định — `project` là id lạ: cùng hợp đồng lỗi với TC-62 trên
     // cả bốn tool, mã lỗi ở `_meta.error`.
-    expect(codeOf(await handleListTasks({ project: 'khong-co' }))).toBe('not_found')
-    expect(codeOf(await handleGetTaskState({ taskId: 'task-a', project: 'khong-co' }))).toBe('not_found')
-    expect(codeOf(await handleListArtifacts({ taskId: 'task-a', project: 'khong-co' }))).toBe('not_found')
-    expect(codeOf(await handleReadArtifact({ taskId: 'task-a', name: 'x.md', project: 'khong-co' }))).toBe('not_found')
+    expect(codeOf(await taskTools.listTasks({ project: 'khong-co' }))).toBe('not_found')
+    expect(codeOf(await taskTools.getTaskState({ taskId: 'task-a', project: 'khong-co' }))).toBe('not_found')
+    expect(codeOf(await taskTools.listArtifacts({ taskId: 'task-a', project: 'khong-co' }))).toBe('not_found')
+    expect(codeOf(await taskTools.readArtifact({ taskId: 'task-a', name: 'x.md', project: 'khong-co' }))).toBe('not_found')
+  })
+})
+
+// ── Tbefa5f4c · Nhóm K (TC-K01 … TC-K21) — `get_task_context` ────────────────
+//
+// Tool này gom `cd <task-dir> && cat request.md && cat pipeline.yaml && ls -la`
+// — chuỗi mở đầu của 21/25 phiên đo được — vào MỘT lời gọi. Giá trị nằm ở số
+// vòng nó bỏ đi, nên hai thứ phải đúng: nhánh nào lỗi KHÔNG được khoá cả tool
+// (TC-K05/K12), và `request` ⟂ `rules` phải CÙNG DẠNG (TC-K21).
+describe('Nhóm K — TaskTools.getTaskContext', () => {
+  const RULES = '# Rule của project\nKhông commit secret.\n'
+
+  function contextRoot(): string {
+    const root = makeRoot({
+      states: {
+        'task-a': { task_id: 'task-a', name: 'Task A', current_phase: 'implementer' },
+        'task-d': '{ broken',
+        'task-empty': { task_id: 'task-empty', name: 'Task rỗng', current_phase: 'investigator' },
+      },
+      tasks: {
+        'task-a': {
+          'request.md': '# Yêu cầu\nNội dung có dấu tiếng Việt\n',
+          'design.md': '# Thiết kế\n',
+        },
+      },
+      loose: {
+        'secret.txt': SECRET,
+        // `pipeline.yaml` ở GỐC root: `loadPipelineConfig` thay nguyên mảng
+        // `steps` ở tầng này, nên danh sách step là xác định. Bản per-task thì
+        // patch theo id vào `DEFAULT_PIPELINE`, không thay thế.
+        'pipeline.yaml':
+          'steps:\n'
+          + '  - id: investigate\n'
+          + '    name: Investigate\n'
+          + '    agent: investigator\n'
+          + '    produces: [investigate.md]\n'
+          + '  - id: implementer\n'
+          + '    name: Implement\n'
+          + '    agent: implementer\n'
+          + '    produces: [src]\n'
+          + '  - id: reviewer\n'
+          + '    name: Review\n'
+          + '    agent: reviewer\n'
+          + '    produces: [review.md]\n',
+      },
+    })
+    process.env.DEV_TEAM_ROOT = root
+    return root
+  }
+
+  test('TC-K01: 🔧 happy path — `request` là object {name, content, truncated}', async () => {
+    contextRoot()
+    const res = await taskTools.getTaskContext({ taskId: 'task-a' })
+    expect(res.isError).toBeFalsy()
+    const p = payload(res)
+
+    expect(p.taskId).toBe('task-a')
+    expect(p.task).toMatchObject({ id: 'task-a', name: 'Task A', phase: 'implementer' })
+
+    // `request` KHÔNG còn là chuỗi.
+    expect(typeof p.request).toBe('object')
+    expect(typeof p.request.name).toBe('string')
+    expect(p.request.content).toContain('Nội dung có dấu tiếng Việt')
+    expect(p.request.truncated).toBe(false)
+
+    expect(p.pipeline.steps.map((s: any) => s.id)).toEqual(['investigate', 'implementer', 'reviewer'])
+    expect(p.pipeline.steps[0]).toMatchObject({ name: 'Investigate', agent: 'investigator' })
+    expect(p.pipeline.steps[0].produces).toEqual(['investigate.md'])
+    expect(p.pipeline.currentStepId).toBe('implementer')
+    expect(p.pipeline.nextStepId).toBe('reviewer')
+
+    expect(Object.keys(p.artifacts)).toContain('request.md')
+    const artifact = p.artifacts['request.md']
+    expect(artifact).toHaveProperty('mtime')
+    expect(artifact).toHaveProperty('size')
+
+    expect(p.state).toMatchObject({ task_id: 'task-a' })
+    // `rules` tắt mặc định.
+    expect(p.rules).toBeNull()
+  })
+
+  test('TC-K02: ⚠️ taskId thoát thư mục (E12) — và KHÔNG đọc file ngoài root', async () => {
+    contextRoot()
+    for (const taskId of ['../x', '../../etc', 'T1/../../y']) {
+      const res = await taskTools.getTaskContext({ taskId })
+      expect(codeOf(res)).toBe('invalid_input')
+      expect(JSON.stringify(res)).not.toContain(SECRET)
+    }
+  })
+
+  test('TC-K03: taskId sai định dạng khác', async () => {
+    contextRoot()
+    for (const taskId of ['', 'a b', 'T1%2f..']) {
+      expect(codeOf(await taskTools.getTaskContext({ taskId }))).toBe('invalid_input')
+    }
+  })
+
+  test('TC-K04: ⚠️ task chưa có artifact → ok, KHÔNG fail (E11)', async () => {
+    contextRoot()
+    const res = await taskTools.getTaskContext({ taskId: 'task-empty' })
+    expect(res.isError).toBeFalsy()
+    const p = payload(res)
+    expect(p.request).toBeNull()
+    expect(p.artifacts == null || Object.keys(p.artifacts).length === 0).toBe(true)
+    expect(p.state).toMatchObject({ task_id: 'task-empty' })
+  })
+
+  test('TC-K05: ⚠️ `pipeline.yaml` hỏng (E13) → pipeline null, nhánh khác VẪN có dữ liệu', async () => {
+    const root = makeRoot({
+      states: { 'task-y': { task_id: 'task-y', name: 'Task Y', current_phase: 'implementer' } },
+      tasks: { 'task-y': { 'request.md': '# Y\n' } },
+      loose: { 'pipeline.yaml': 'steps: [ - id: a\n  bad: : :\n' },
+    })
+    process.env.DEV_TEAM_ROOT = root
+
+    const res = await taskTools.getTaskContext({ taskId: 'task-y' })
+    expect(res.isError).toBeFalsy()
+    const p = payload(res)
+    expect(p.pipeline).toBeNull()
+    expect(p.request.content).toContain('# Y')
+    expect(p.state).toMatchObject({ task_id: 'task-y' })
+    expect(Object.keys(p.artifacts)).toContain('request.md')
+  })
+
+  test('TC-K06: `rules` mặc định TẮT, các nhánh mặc định khác đều có', async () => {
+    const root = contextRoot()
+    fs.writeFileSync(path.join(root, 'project-rules.md'), RULES)
+
+    const p = payload(await taskTools.getTaskContext({ taskId: 'task-a' }))
+    expect(p.rules).toBeNull()
+    expect(p.request).not.toBeNull()
+    expect(p.pipeline).not.toBeNull()
+    expect(p.artifacts).not.toBeNull()
+    expect(p.state).not.toBeNull()
+  })
+
+  test('TC-K07: 🔧 `include: [rules]` trả object {name, content, truncated}', async () => {
+    const root = contextRoot()
+    fs.writeFileSync(path.join(root, 'project-rules.md'), RULES)
+
+    const p = payload(await taskTools.getTaskContext({ taskId: 'task-a', include: ['rules'] }))
+    expect(typeof p.rules).toBe('object')
+    expect(typeof p.rules).not.toBe('string')
+    expect(p.rules.name).toBe('project-rules.md')
+    expect(p.rules.content).toBe(RULES)
+    expect(p.rules.truncated).toBe(false)
+  })
+
+  test('TC-K08: `include` thu hẹp đúng', async () => {
+    contextRoot()
+    const p = payload(await taskTools.getTaskContext({ taskId: 'task-a', include: ['request'] }))
+    expect(p.request).not.toBeNull()
+    expect(p.state).toBeNull()
+    expect(p.artifacts).toBeNull()
+    expect(p.pipeline).toBeNull()
+    expect(p.rules).toBeNull()
+  })
+
+  test('TC-K09: `include` giá trị lạ → invalid_input', async () => {
+    contextRoot()
+    expect(codeOf(await taskTools.getTaskContext({ taskId: 'task-a', include: ['bogus'] }))).toBe(
+      'invalid_input',
+    )
+    // Và enum ở schema chặn ngay tầng validate input của SDK.
+    await withClient(async (client) => {
+      const res = await callRaw(client, 'get_task_context', { taskId: 'task-a', include: ['bogus'] })
+      expect(res.isError).toBe(true)
+    })
+  })
+
+  test('TC-K10: `project-rules.md` không tồn tại → ok, rules null (không fail)', async () => {
+    contextRoot()
+    const res = await taskTools.getTaskContext({ taskId: 'task-a', include: ['rules'] })
+    expect(res.isError).toBeFalsy()
+    expect(payload(res).rules).toBeNull()
+  })
+
+  test('TC-K11: project không tồn tại → fail, không throw', async () => {
+    contextRoot()
+    const res = await taskTools.getTaskContext({ taskId: 'task-a', project: 'khong-co' })
+    expect(codeOf(res)).toBe('not_found')
+  })
+
+  test('TC-K12: một nhánh lỗi KHÔNG khoá cả tool', async () => {
+    // `.dev-state/task-d.json` là JSON hỏng ⇒ nhánh `state` không đọc được.
+    const root = contextRoot()
+    fs.mkdirSync(path.join(root, 'tasks', 'task-d'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'tasks', 'task-d', 'request.md'), '# D\n')
+
+    const res = await taskTools.getTaskContext({ taskId: 'task-d' })
+    expect(res.isError).toBeFalsy()
+    const p = payload(res)
+    expect(p.state).toBeNull()
+    expect(p.task).toBeNull()
+    expect(p.request.content).toContain('# D')
+    expect(Object.keys(p.artifacts)).toContain('request.md')
+  })
+
+  test('TC-K13: 🔧 vượt trần 64 KiB — CÙNG một ngưỡng cho cả `request` lẫn `rules`', async () => {
+    const root = contextRoot()
+    const big = 'x'.repeat(70 * 1024)
+    fs.writeFileSync(path.join(root, 'tasks', 'task-a', 'request.md'), big)
+    fs.writeFileSync(path.join(root, 'project-rules.md'), big)
+
+    const p = payload(await taskTools.getTaskContext({ taskId: 'task-a', include: ['request', 'rules'] }))
+    for (const branch of [p.request, p.rules]) {
+      expect(branch.truncated).toBe(true)
+      expect(branch.content.length).toBe(64 * 1024)
+      expect(typeof branch.name).toBe('string')
+      expect(branch.name.length).toBeGreaterThan(0)
+    }
+
+    // File nhỏ → truncated false ở cả hai nhánh.
+    fs.writeFileSync(path.join(root, 'tasks', 'task-a', 'request.md'), '# nhỏ\n')
+    fs.writeFileSync(path.join(root, 'project-rules.md'), RULES)
+    const small = payload(await taskTools.getTaskContext({ taskId: 'task-a', include: ['request', 'rules'] }))
+    expect(small.request.truncated).toBe(false)
+    expect(small.rules.truncated).toBe(false)
+  })
+
+  test('TC-K14: trả `structured: false` — payload nằm trong content text JSON', async () => {
+    contextRoot()
+    const res = await taskTools.getTaskContext({ taskId: 'task-a' })
+    expect(res.structuredContent).toBeUndefined()
+    expect(typeof res.content[0].text).toBe('string')
+    expect(JSON.parse(res.content[0].text).taskId).toBe('task-a')
+
+    const tools = await withClient(async (client) => (await client.listTools()).tools)
+    expect('outputSchema' in tools.find((t: any) => t.name === 'get_task_context')!).toBe(false)
+  })
+
+  test('TC-K15: ⚠️ có mặt ở CẢ HAI mode', async () => {
+    contextRoot()
+    for (const mode of ['readonly', 'full'] as const) {
+      const names = await withClient(
+        async (client) => (await client.listTools()).tools.map((t: any) => t.name),
+        mode,
+      )
+      expect(names).toContain('get_task_context')
+    }
+  })
+
+  test('TC-K17 + TC-K18 + TC-K20: annotation, inputSchema và description', async () => {
+    contextRoot()
+    const tool = await withClient(
+      async (client) => (await client.listTools()).tools.find((t: any) => t.name === 'get_task_context'),
+      'readonly',
+    )
+    expect(tool.annotations?.readOnlyHint).toBe(true)
+    expect(tool.annotations?.openWorldHint).toBe(false)
+
+    const schema = tool.inputSchema as any
+    expect(schema.required).toEqual(['taskId'])
+    expect(Object.keys(schema.properties).sort()).toEqual(['include', 'project', 'taskId'])
+    expect(schema.properties.include.items.enum).toEqual([
+      'request',
+      'pipeline',
+      'artifacts',
+      'state',
+      'rules',
+    ])
+
+    // D1: mô tả PHẢI nói nó thay cho chuỗi nào — 10 tool MCP từng ship với 0 lượt
+    // gọi vì không có gì nói cho agent biết chúng thay được cái gì.
+    expect(tool.description).toBeTruthy()
+    expect(tool.description).toContain('request.md')
+    expect(tool.description).toContain('cd ')
+    expect(tool.description).toContain('cat ')
+    expect(tool.description).toContain('ls ')
+  })
+
+  test('TC-K21: 🆕 ⚠️ `rules` đối xứng `request` ở MỌI nhánh', async () => {
+    const root = contextRoot()
+    const CONTRACT = ['content', 'name', 'truncated']
+
+    // (1) có file.
+    fs.writeFileSync(path.join(root, 'project-rules.md'), RULES)
+    const withFile = payload(await taskTools.getTaskContext({ taskId: 'task-a', include: ['request', 'rules'] }))
+    expect(Object.keys(withFile.rules).sort()).toEqual(CONTRACT)
+    // `request` mang thêm `mtime` (xem test-result.md › Lệch spec) nhưng ba khoá
+    // hợp đồng phải CÙNG kiểu ở hai nhánh.
+    for (const key of CONTRACT) {
+      expect(typeof withFile.request[key]).toBe(typeof withFile.rules[key])
+    }
+
+    // (2) không có file → null ở cả hai nhánh, KHÔNG phải `{content: null}`, không fail.
+    fs.unlinkSync(path.join(root, 'project-rules.md'))
+    fs.unlinkSync(path.join(root, 'tasks', 'task-a', 'request.md'))
+    const missing = await taskTools.getTaskContext({ taskId: 'task-a', include: ['request', 'rules'] })
+    expect(missing.isError).toBeFalsy()
+    expect(payload(missing).rules).toBeNull()
+    expect(payload(missing).request).toBeNull()
+
+    // (3) file rỗng → content '' và truncated false ở cả hai nhánh.
+    fs.writeFileSync(path.join(root, 'project-rules.md'), '')
+    fs.writeFileSync(path.join(root, 'tasks', 'task-a', 'request.md'), '')
+    const empty = payload(await taskTools.getTaskContext({ taskId: 'task-a', include: ['request', 'rules'] }))
+    expect(empty.rules.content).toBe('')
+    expect(empty.rules.truncated).toBe(false)
+    expect(empty.request.content).toBe('')
+    expect(empty.request.truncated).toBe(false)
   })
 })
