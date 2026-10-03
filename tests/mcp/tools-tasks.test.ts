@@ -14,7 +14,7 @@ import { add } from '../../src/backend/registry'
 import { DashboardMcpServer } from '../../mcp/DashboardMcpServer'
 import { TaskTools } from '../../mcp/tools/TaskTools'
 
-const taskTools = new TaskTools()
+const taskTools = new TaskTools(DashboardMcpServer.resolveRoot)
 
 // ── Cô lập env — BỐN biến (§1.4) ──────────────────────────────────────────────
 

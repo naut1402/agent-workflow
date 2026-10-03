@@ -35,11 +35,11 @@ class EnvelopeProbe extends AbstractMcpTools {
   }
 }
 
-const envelope = new EnvelopeProbe()
+const envelope = new EnvelopeProbe(DashboardMcpServer.resolveRoot)
 const ok = (payload: unknown, opts?: { structured?: boolean }) => envelope.callOk(payload, opts)
 const fail = (...args: [unknown] | [McpErrorCode, unknown]) => envelope.callFail(...args)
-const projectTools = new ProjectTools()
-const knowledgeTools = new KnowledgeTools()
+const projectTools = new ProjectTools(DashboardMcpServer.resolveRoot)
+const knowledgeTools = new KnowledgeTools(DashboardMcpServer.resolveRoot)
 
 let home: string
 let proj: string

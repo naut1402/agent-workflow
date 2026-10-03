@@ -7,9 +7,11 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { DashboardMcpServer } from '../../mcp/DashboardMcpServer'
-import { AbstractMcpServer, DEFAULT_MODE, MCP_MODES, MODE_ENV_VAR, type McpMode } from '../../mcp/AbstractMcpServer'
+import { AbstractMcpServer, DEFAULT_MODE, MCP_MODES, type McpMode, type ModeSource } from '../../mcp/AbstractMcpServer'
 
-const { isMcpMode, isToolEnabled, parseModeArg, resolveMode } = AbstractMcpServer
+const { isMcpMode, isToolEnabled, parseModeArg } = AbstractMcpServer
+const resolveMode = (opts?: ModeSource) => DashboardMcpServer.resolveMode(opts)
+const MODE_ENV_VAR = DashboardMcpServer.MODE_ENV_VAR
 
 const READ_TOOLS = [
   'get_knowledge_bundle',
