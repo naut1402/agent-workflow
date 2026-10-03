@@ -16,6 +16,7 @@ import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js
 import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
 import type { RunTaskStepResult } from '../../monitor/business/tasks/runStep.js'
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
+import { stepSummaryOf } from '../../../shared/lib/orchestrator.js'
 import {
   advanceStepOnJobSuccess,
   assertStartAllowedSync,
@@ -168,6 +169,24 @@ function shouldPersistStdout(job: JobRecord, providerId: string | undefined): bo
   // pipeline đứng im — kết cục tệ hơn hẳn một lần halt tường minh.
   if (job.metadata?.orchestratorJob) return true
   return Boolean(providerId && isAgentCliProviderId(providerId))
+}
+
+/**
+ * Chốt `STEP_SUMMARY` của nút con vào `metadata`, đọc từ `result.stdout` ĐẦY ĐỦ.
+ *
+ * Đây là kênh con → cha của node điều phối, nên nó không được phụ thuộc vào
+ * `job.stdout`: `shouldPersistStdout` chỉ persist stdout cho provider agent-CLI
+ * (connection `*-api` / `console-command` không có), và khi CÓ persist thì
+ * `CHAT_STDOUT_LIMIT` cắt từ ĐẦU — đúng phần đuôi nơi `STEP_SUMMARY` nằm bị bỏ
+ * trước tiên. Cả hai ca đều biến "nút con đã trả tóm tắt" thành "nút con không
+ * trả", mà phía cha không có cách nào phân biệt. Chốt ở đây thoát cả hai.
+ *
+ * Không có tóm tắt thì KHÔNG ghi field — `fromTail` phía cha giữ nguyên nghĩa
+ * "nút con không in `STEP_SUMMARY`".
+ */
+function withStepSummary(record: JobRecord, stdout: string | undefined): JobRecord {
+  const summary = stepSummaryOf(stdout)
+  return summary ? { ...record, metadata: { ...record.metadata, stepSummary: summary } } : record
 }
 
 /**
@@ -643,6 +662,21 @@ async function runJob(job: JobRecord): Promise<void> {
     sessionStaleReason = plan.staleReason
     if (plan.sessionMode === 'resume' && plan.resumeSessionId) {
       execResumeSessionId = plan.resumeSessionId
+      // Ghi nhận quyền sở hữu NGAY lúc start. Trước đây entry chỉ được ghi khi
+      // job xong, nên trong suốt lượt chạy node này không có entry nào mang
+      // `stepId` của nó — và lúc ghi, lookup bắt nhầm entry `open` của node khác.
+      // KHÔNG `forceNew`: đây là nối tiếp một phiên đang mở, không phải mở mới.
+      recordSessionUsage({
+        projectId,
+        taskId,
+        sessionId: plan.resumeSessionId,
+        providerId: connection.providerId,
+        runnerId: runner.id,
+        connectionId: connection.id,
+        workspace: job.workspace,
+        model: resolvedAgent.model,
+        stepId: jobStepId,
+      })
     } else if (plan.sessionMode === 'new') {
       execSessionId = plan.sessionId || mintSessionId()
       recordSessionUsage({
@@ -887,7 +921,7 @@ async function runJob(job: JobRecord): Promise<void> {
       console.error('[jobQueue] advancePipelineStepChain failed', err)
     } finally {
       saveJob({
-        ...(loadJob(job.id) as JobRecord),
+        ...withStepSummary(loadJob(job.id) as JobRecord, result.stdout),
         status: 'succeeded',
         finishedAt: new Date().toISOString(),
         exitCode: result.exitCode,
@@ -908,7 +942,7 @@ async function runJob(job: JobRecord): Promise<void> {
 
   const finalStatus = result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed'
   saveJob({
-    ...(loadJob(job.id) as JobRecord),
+    ...withStepSummary(loadJob(job.id) as JobRecord, result.stdout),
     status: finalStatus,
     finishedAt: new Date().toISOString(),
     exitCode: result.exitCode,
@@ -1359,14 +1393,20 @@ export async function sendTaskFeedback(
   }
   if (!parent) return { ok: false, status: 400, error: 'no completed job to give feedback on' }
 
-  const ledger = loadTaskSessionLedger(projectId, taskId)
-  const hasOpenSession = ledger.sessions.some((s) => s.status === 'open')
-
   // The step may have changed agent since `parent` ran (pipeline edited via
   // chat, or advanced past a retry loop) — re-resolve from the pipeline
   // config that's live NOW rather than trusting the old job's `agentRef`.
   let agentRef = parent.agentRef
   const parentStepId = stepIdOf(parent)
+
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  // Lọc theo node: "còn phiên mở" phải là phiên CỦA STEP NÀY. Không lọc thì
+  // phản hồi gửi cho step A resume vào phiên đang mở của nút điều phối, và từ
+  // đó hai node dùng chung một phiên CLI. Parent không có `stepId` (job ad-hoc
+  // gắn vào task) giữ nguyên nghĩa cũ — "có entry mở nào đó thì nối tiếp".
+  const hasOpenSession = ledger.sessions.some(
+    (s) => s.status === 'open' && (!parentStepId || s.stepIds?.includes(parentStepId)),
+  )
   const devTeamRoot = typeof parent.metadata?.devTeamRoot === 'string' ? parent.metadata.devTeamRoot : undefined
   if (parentStepId && devTeamRoot) {
     const pipeline = await loadPipelineConfig(devTeamRoot, taskId)

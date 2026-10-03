@@ -5,7 +5,13 @@
  * không cần bus, không cần job, không cần LLM.
  */
 
-import { DECISION_SENTINEL, MAX_AGENT_CONTEXT_BYTES, OrchestratorDecision } from '../schemas/orchestrator.js'
+import {
+  DECISION_SENTINEL,
+  MAX_AGENT_CONTEXT_BYTES,
+  MAX_STEP_RESULT_BYTES,
+  OrchestratorDecision,
+} from '../schemas/orchestrator.js'
+import { stripBalancedFence } from '../../../shared/lib/orchestrator.js'
 
 /** Vì sao orchestrator phải hỏi agent. */
 export type DecisionTrigger =
@@ -22,7 +28,10 @@ export interface StepResult {
   stepId: string
   status: 'succeeded' | 'failed'
   artifacts: string[]
-  output: string
+  /** Kết quả nút con trả về — KHÔNG phải log/context làm việc của nó. */
+  result: string
+  /** True khi nút con không trả `STEP_SUMMARY` và đây chỉ là đuôi output. */
+  fromTail?: boolean
 }
 
 export interface DecisionContext {
@@ -57,25 +66,44 @@ const TRIGGER_BRIEF: Record<DecisionTrigger, string> = {
 }
 
 /** Đuôi giữ nguyên: kết luận của một agent CLI nằm ở cuối output, không ở đầu. */
-function tailOf(text: string): string {
+function tailOf(text: string, limit: number): string {
   const raw = String(text ?? '')
-  if (Buffer.byteLength(raw, 'utf8') <= MAX_AGENT_CONTEXT_BYTES) return raw
+  if (Buffer.byteLength(raw, 'utf8') <= limit) return raw
   const buf = Buffer.from(raw, 'utf8')
-  return `…(đã cắt phần đầu)\n${buf.subarray(buf.length - MAX_AGENT_CONTEXT_BYTES).toString('utf8')}`
+  let start = buf.length - limit
+  // Ngân sách tính bằng byte, nhưng điểm cắt phải rơi vào ranh giới ký tự: cắt
+  // giữa một ký tự nhiều byte (tiếng Việt là chuyện thường ngày ở đây) thì
+  // `toString` trả về U+FFFD. Bỏ qua các byte nối (10xxxxxx) ở đầu lát cắt.
+  while (start < buf.length && (buf[start] & 0xc0) === 0x80) start++
+  return `…(đã cắt phần đầu)\n${buf.subarray(start).toString('utf8')}`
 }
 
+/**
+ * Khối kết quả của nút con. Cố ý KHÔNG mang log thô: context làm việc của nút
+ * con ở lại phiên của nút con, cha chỉ nhận `STEP_SUMMARY` nó tự soạn (hoặc
+ * đuôi output khi nó không trả) cùng danh sách artifact để đọc chi tiết.
+ *
+ * Heading `###` chứ không `##`: khối này nằm lồng giữa các mục `##` khác của
+ * prompt, và tài liệu artifact có thể nhúng lại prompt rồi cắt theo section.
+ */
 function renderStepResult(result: StepResult): string {
   const artifacts = result.artifacts.length ? result.artifacts.join(', ') : '(không có)'
-  const output = tailOf(result.output).trim() || '(không có output)'
+  const body = tailOf(result.result, MAX_STEP_RESULT_BYTES).trim() || '(nút con không trả kết quả)'
   return [
-    `## Kết quả bước vừa xong`,
+    `### Kết quả bước vừa xong`,
     '',
     `**Step:** \`${result.stepId}\` — ${result.status === 'succeeded' ? 'thành công' : 'thất bại'}`,
     `**Artifact ghi được:** ${artifacts}`,
+    result.fromTail
+      ? '**Nguồn:** đuôi output (nút con không trả `STEP_SUMMARY`)'
+      : '**Nguồn:** `STEP_SUMMARY` do nút con trả về',
     '',
     '```text',
-    output,
+    body,
     '```',
+    '',
+    'Chi tiết đầy đủ nằm trong artifact ở thư mục task — đọc file khi cần,',
+    'đừng suy đoán từ đoạn trên.',
   ].join('\n')
 }
 
@@ -142,7 +170,9 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
       'curl -s "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/status" \\',
       '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN"',
       '',
-      '# Output hiện tại của step đang/đã chạy — không cần chờ job đó kết thúc',
+      '# Log thô của step đang/đã chạy — kênh gỡ kẹt, CHỈ gọi khi kết quả ở trên',
+      '# không đủ để quyết. Nội dung này là context làm việc của nút con, kéo về',
+      '# nhiều là phiên điều phối phình theo.',
       'curl -s "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/output?offset=0" \\',
       '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN"',
       '',
@@ -164,9 +194,10 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
 function lastDecisionLine(stdout: string): string | null {
   const lines = String(stdout ?? '').split(/\r?\n/)
   for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim()
     // Fence ```…``` quanh dòng quyết định là thói quen rất hay gặp của agent CLI.
-    const unfenced = line.replace(/^`+/, '').replace(/`+$/, '').trim()
+    // Chỉ bóc khi fence CÂN hai đầu — cùng quy ước với `stepSummaryOf`, để một
+    // backtick kết câu (code span) không bị ăn mất.
+    const unfenced = stripBalancedFence(lines[i])
     if (unfenced.startsWith(DECISION_SENTINEL)) return unfenced
   }
   return null
