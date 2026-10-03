@@ -1,5 +1,4 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import type { AbstractMcpTools, ToolAccess, ToolDef } from './AbstractMcpTools.js'
 
@@ -8,7 +7,11 @@ export type McpMode = (typeof MCP_MODES)[number]
 
 export const DEFAULT_MODE: McpMode = 'readonly'
 
-export const MODE_ENV_VAR = 'DEVTEAM_MCP_MODE'
+export type ModeSource = {
+  argv?: readonly string[]
+  env?: Record<string, string | undefined>
+  warn?: (msg: string) => void
+}
 
 const MODE_ACCESS: Record<McpMode, readonly ToolAccess[]> = {
   readonly: ['read'],
@@ -35,21 +38,17 @@ export abstract class AbstractMcpServer {
     return null
   }
 
-  static resolveMode(opts: {
-    argv?: readonly string[]
-    env?: Record<string, string | undefined>
-    warn?: (msg: string) => void
-  } = {}): McpMode {
+  static resolveMode(opts: ModeSource & { envVar: string; label: string }): McpMode {
     const argv = opts.argv ?? process.argv.slice(2)
     const env = opts.env ?? process.env
     const warn = opts.warn ?? ((msg: string) => void process.stderr.write(`${msg}\n`))
 
-    const raw = AbstractMcpServer.parseModeArg(argv) ?? env[MODE_ENV_VAR] ?? null
+    const raw = AbstractMcpServer.parseModeArg(argv) ?? env[opts.envVar] ?? null
     if (raw === null) return DEFAULT_MODE
     if (AbstractMcpServer.isMcpMode(raw)) return raw
 
     warn(
-      `[dev-team-dashboard mcp] unknown mode ${JSON.stringify(raw)} — expected one of `
+      `[${opts.label} mcp] unknown mode ${JSON.stringify(raw)} — expected one of `
         + `${MCP_MODES.join(', ')}; falling back to ${DEFAULT_MODE}`,
     )
     return DEFAULT_MODE
@@ -109,7 +108,7 @@ export abstract class AbstractMcpServer {
     return server
   }
 
-  async start(transport: Transport = new StdioServerTransport()): Promise<void> {
+  async start(transport: Transport): Promise<void> {
     this.onStart()
     process.stderr.write(`[${this.name} mcp] mode=${this.mode} version=${this.version}\n`)
     for (const warning of this.startupWarnings()) process.stderr.write(`[${this.name} mcp] ${warning}\n`)

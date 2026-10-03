@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { loadKnowledgeBundle } from '../../src/features/knowledge/business/index.js'
 import { MAX_BUNDLE_IDS } from '../../src/features/knowledge/schemas/knowledge.js'
-import { AbstractMcpTools, ProjectRef, READ_ONLY_ANNOTATIONS, type ToolDef } from '../AbstractMcpTools.js'
+import { AbstractMcpTools, READ_ONLY_ANNOTATIONS, type ToolDef } from '../AbstractMcpTools.js'
+import { ProjectRef } from './ProjectTools.js'
 
 export class KnowledgeTools extends AbstractMcpTools {
   definitions(): ToolDef[] {

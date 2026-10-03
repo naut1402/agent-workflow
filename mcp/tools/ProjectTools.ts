@@ -4,6 +4,11 @@ import { emitAudit } from '../../src/backend/log/index.js'
 import { add, get, list, remove } from '../../src/backend/registry.js'
 import { AbstractMcpTools, READ_ONLY_ANNOTATIONS, type ToolDef } from '../AbstractMcpTools.js'
 
+export const ProjectRef = z
+  .string()
+  .min(1)
+  .describe('Project id (from list_projects); omit for the default project.')
+
 // xem docs/mcp/server.md §4.1
 const ProjectOut = z
   .object({

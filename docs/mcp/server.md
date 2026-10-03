@@ -33,7 +33,7 @@ Nguồn của mọi con số trong trang này là code: `mcp/AbstractMcpServer.t
 bun run mcp
 ```
 
-- Script `mcp` trỏ `mcp/server.ts` (`package.json`) — entry gọi `new DashboardMcpServer(AbstractMcpServer.resolveMode()).start()`.
+- Script `mcp` trỏ `mcp/server.ts` (`package.json`) — entry gọi `new DashboardMcpServer(DashboardMcpServer.resolveMode()).start(new StdioServerTransport())`.
 - Transport là **stdio** — 🚫 không cần HTTP server của dashboard chạy. MCP server thao tác thẳng trên `projects.json` dùng chung với REST.
 - Dòng banner lúc khởi động ghi ra **`stderr`**, 🚫 không phải `stdout` (`stdout` là kênh JSON-RPC của stdio transport, một dòng log lạc vào đó hỏng cả phiên):
 
@@ -87,7 +87,7 @@ Dòng cảnh báo để `grep` trong log job (`DashboardMcpServer.startupWarning
 > ⚠️ **Nâng từ 1.1.x**: mặc định đổi thành `readonly`, nên `add_project` / `create_qa` / `remove_project` biến khỏi `tools/list` nếu không khai gì. Riêng `create_qa` là tool mà template agent của 1.1.8 được dạy gọi — ở mặc định mới agent sẽ **không nhìn thấy** nó. Giữ hành vi cũ bằng `"env": { "DEVTEAM_MCP_MODE": "full" }` trong entry `mcpServers` của client (§2.2).
 
 - **Mặc định là `readonly`** — `DEFAULT_MODE` (`mcp/AbstractMcpServer.ts`). An toàn theo mặc định; `full` phải bật chủ động.
-- **Biến môi trường**: `DEVTEAM_MCP_MODE` (`MODE_ENV_VAR`).
+- **Biến môi trường**: `DEVTEAM_MCP_MODE` (`DashboardMcpServer.MODE_ENV_VAR`). `AbstractMcpServer.resolveMode` nhận tên env var và nhãn cảnh báo qua tham số.
 - **Thứ tự ưu tiên**: CLI `--mode=<x>` (hoặc `--mode <x>`) → env `DEVTEAM_MCP_MODE` → `readonly`.
 - **CLI sai KHÔNG rơi ngược về env.** Giá trị không thuộc `MCP_MODES` — kể cả chuỗi rỗng và sai hoa thường — chỉ sinh một dòng cảnh báo ra `stderr` rồi lùi về `readonly`. Một lỗi gõ phím không được lặng lẽ nâng quyền lên `full`. Ngược lại, **không khai `--mode`** thì mới rơi về env: `AbstractMcpServer.parseModeArg` trả `null` khi vắng flag và chuỗi rỗng khi có flag mà thiếu giá trị.
 - **Lọc ở khâu đăng ký**, không phải lúc gọi (`AbstractMcpServer.tools()`): tool ngoài quyền **biến khỏi `tools/list`**. Agent không thấy thì không thử, không tiêu token, và bề mặt tấn công thu nhỏ thật — 🚫 không phải hiện ra rồi bị từ chối lúc gọi.
@@ -271,7 +271,7 @@ Cùng gọi `createQa()` với `POST /api/tasks/:id/qa` nên hai đường khôn
 
 ### 4.11 Thiếu project mặc định
 
-Mọi tool nhóm task và knowledge đi qua `AbstractMcpTools.requireRoot`. Khi không resolve được root và lời gọi **không** khai `project`, thông điệp tự nêu cách phục hồi:
+Mọi tool nhóm task và knowledge đi qua `AbstractMcpTools.requireRoot`, gọi resolver được tiêm qua constructor — ở dashboard là `DashboardMcpServer.resolveRoot` (registry `resolveProjectRoot`). Khi không resolve được root và lời gọi **không** khai `project`, thông điệp tự nêu cách phục hồi:
 
 ```text
 no default project — call list_projects, or set DEV_TEAM_ROOT / DEV_TEAM_DASHBOARD_HOME for this process
@@ -428,14 +428,16 @@ Mỗi file trong `mcp/` là một class; ngoại lệ duy nhất là entry `serv
 
 | File | Class | Trách nhiệm |
 |---|---|---|
-| `AbstractMcpServer.ts` | `AbstractMcpServer` | `McpMode` + giải mode từ argv/env (static `resolveMode`), lọc tool theo mode, sinh `instructions`, `build()` ra `McpServer` của SDK, `start()` nối transport |
-| `AbstractMcpTools.ts` | `AbstractMcpTools` | Base nhóm tool: `ok` / `fail` / `requireRoot`; kèm `ToolDef`, `ProjectRef`, `READ_ONLY_ANNOTATIONS` |
-| `DashboardMcpServer.ts` | `DashboardMcpServer` | Chọn nhóm tool, preamble `instructions`, cảnh báo khởi động, `onStart()` |
+| `AbstractMcpServer.ts` | `AbstractMcpServer` | `McpMode` + giải mode từ argv/env (static `resolveMode`, env var và nhãn truyền vào), lọc tool theo mode, sinh `instructions`, `build()` ra `McpServer` của SDK, `start(transport)` |
+| `AbstractMcpTools.ts` | `AbstractMcpTools` | Base nhóm tool: `ok` / `fail` / `requireRoot` (qua `RootResolver` tiêm vào constructor); kèm `ToolDef`, `READ_ONLY_ANNOTATIONS` |
+| `DashboardMcpServer.ts` | `DashboardMcpServer` | Chi tiết của dashboard: tên server, `MODE_ENV_VAR`, `resolveRoot` (registry), chọn nhóm tool, preamble `instructions`, cảnh báo khởi động, `onStart()` |
 | `tools/TaskTools.ts` · `tools/KnowledgeTools.ts` · `tools/ProjectTools.ts` | `*Tools` | Khai `ToolDef` và handler là method; chia theo feature được gọi tới |
-| `server.ts` | — | Entry: `new DashboardMcpServer(AbstractMcpServer.resolveMode()).start()` |
+| `server.ts` | — | Entry: chọn transport stdio, `new DashboardMcpServer(DashboardMcpServer.resolveMode()).start(…)` |
 
 - **Một tool = một `ToolDef`** trong `definitions()` của nhóm — tên, `access`, schema input/output, annotations, handler, `hint`, `unavailableHint`. Thêm tool chỉ sửa nhóm đó và §1 của trang này.
 - **Server chứa `McpServer` của SDK**, 🚫 không kế thừa nó.
+- **Lớp `Abstract*` không chứa chi tiết của dashboard** — env var, nhãn, registry, transport do `DashboardMcpServer` / `server.ts` truyền vào.
+- **`ProjectRef`** (schema `project`) thuộc `tools/ProjectTools.ts`; `TaskTools` / `KnowledgeTools` import từ đó.
 - **`tools/TaskTools.ts` import `monitor/business/tasks/reads.js`**, 🚫 không import barrel `tasks/index.js` — barrel re-export `runStep.js`, kéo runner, job queue, sqlite và `node:child_process` vào tiến trình stdio và giữ event loop sống.
 - **`fail()` phân nhánh theo số tham số**, không theo `message === undefined` — `fail('internal', undefined)` vẫn là ca hai tham số. Ca một tham số trả object không có `_meta`.
 

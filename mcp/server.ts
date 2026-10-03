@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
-import { AbstractMcpServer } from './AbstractMcpServer.js'
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { DashboardMcpServer } from './DashboardMcpServer.js'
 
 if (import.meta.main) {
-  new DashboardMcpServer(AbstractMcpServer.resolveMode()).start().catch((err) => {
-    console.error(`[dev-team-dashboard mcp] fatal: ${err && err.stack ? err.stack : err}`)
+  new DashboardMcpServer(DashboardMcpServer.resolveMode()).start(new StdioServerTransport()).catch((err) => {
+    console.error(`[${DashboardMcpServer.SERVER_NAME} mcp] fatal: ${err && err.stack ? err.stack : err}`)
     process.exit(1)
   })
 }

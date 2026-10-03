@@ -1,17 +1,40 @@
 import { APP_VERSION } from '../src/backend/configs/appVersion.js'
 import { initLogDriverFromPrefs, installEventLogSubscriber } from '../src/backend/log/index.js'
-import { AbstractMcpServer } from './AbstractMcpServer.js'
-import type { AbstractMcpTools } from './AbstractMcpTools.js'
+import { resolveProjectRoot } from '../src/backend/registry.js'
+import { AbstractMcpServer, type McpMode, type ModeSource } from './AbstractMcpServer.js'
+import type { AbstractMcpTools, RootResolver } from './AbstractMcpTools.js'
 import { KnowledgeTools } from './tools/KnowledgeTools.js'
 import { ProjectTools } from './tools/ProjectTools.js'
 import { TaskTools } from './tools/TaskTools.js'
 
 export class DashboardMcpServer extends AbstractMcpServer {
-  protected readonly name = 'dev-team-dashboard'
+  static readonly SERVER_NAME = 'dev-team-dashboard'
+  static readonly MODE_ENV_VAR = 'DEVTEAM_MCP_MODE'
+
+  static resolveMode(opts: ModeSource = {}): McpMode {
+    return super.resolveMode({
+      ...opts,
+      envVar: DashboardMcpServer.MODE_ENV_VAR,
+      label: DashboardMcpServer.SERVER_NAME,
+    })
+  }
+
+  static readonly resolveRoot: RootResolver = (project) => {
+    const root = resolveProjectRoot(project ?? null)
+    if (root) return { root }
+    return {
+      error: project
+        ? `unknown project: ${project}`
+        : 'no default project — call list_projects, or set DEV_TEAM_ROOT / DEV_TEAM_DASHBOARD_HOME for this process',
+    }
+  }
+
+  protected readonly name = DashboardMcpServer.SERVER_NAME
   protected readonly version = APP_VERSION
 
   protected toolGroups(): AbstractMcpTools[] {
-    return [new TaskTools(), new KnowledgeTools(), new ProjectTools()]
+    const resolveRoot = DashboardMcpServer.resolveRoot
+    return [new TaskTools(resolveRoot), new KnowledgeTools(resolveRoot), new ProjectTools(resolveRoot)]
   }
 
   protected instructionsPreamble(): string[] {
@@ -27,7 +50,7 @@ export class DashboardMcpServer extends AbstractMcpServer {
     return [
       `mode=${this.mode}: create_qa KHÔNG được đăng ký, `
         + 'nhưng docs/template/agents/* hướng dẫn agent gọi nó. '
-        + 'Đặt DEVTEAM_MCP_MODE=full nếu chạy pipeline agent.',
+        + `Đặt ${DashboardMcpServer.MODE_ENV_VAR}=full nếu chạy pipeline agent.`,
     ]
   }
 

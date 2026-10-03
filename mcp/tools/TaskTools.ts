@@ -9,7 +9,8 @@ import {
   readState,
   resolveArtifact,
 } from '../../src/features/monitor/business/tasks/reads.js'
-import { AbstractMcpTools, ProjectRef, READ_ONLY_ANNOTATIONS, type ToolDef } from '../AbstractMcpTools.js'
+import { AbstractMcpTools, READ_ONLY_ANNOTATIONS, type ToolDef } from '../AbstractMcpTools.js'
+import { ProjectRef } from './ProjectTools.js'
 
 // xem docs/mcp/server.md §4.5, §8.2
 const TASK_ID_PATTERN =/^(?!\.+$)[A-Za-z0-9._-]+$/
