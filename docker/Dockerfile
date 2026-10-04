@@ -96,6 +96,8 @@ USER root
 COPY --from=build --chown=dashboard:dashboard /app/dist ./dist
 COPY --from=build --chown=dashboard:dashboard /app/src ./src
 COPY --from=build --chown=dashboard:dashboard /app/tsconfig.json ./tsconfig.json
+# MCP server stdio (`bun run mcp`) — import thẳng `src/`, nên nằm cạnh `./src`.
+COPY --chown=dashboard:dashboard mcp ./mcp
 COPY --chown=dashboard:dashboard docs/template/agents /opt/bundled-plugins/dev-agent-teams/agents
 COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
