@@ -41,6 +41,16 @@ bun run mcp
   [dev-team-dashboard mcp] mode=<mode> version=<APP_VERSION>
   ```
 
+- **Trong Docker** — image chép `mcp/` vào `/app/mcp` (`docker/Dockerfile`), `WORKDIR /app` nên `bun run mcp` chạy được ngay trong container dashboard; `DEV_TEAM_ROOT` và `DEV_TEAM_DASHBOARD_HOME` lấy từ env của service (`docker/compose.yml`):
+
+  ```bash
+  docker compose -f docker/compose.yml exec -T -u "${PUID:-1001}" dashboard bun run mcp
+  ```
+
+  - `-T` bắt buộc — TTY chèn ký tự điều khiển vào `stdout`, hỏng kênh JSON-RPC.
+  - `-u` khớp `PUID` — `docker exec` mặc định chạy `root` và không qua entrypoint, file ghi vào `/data/dashboard-home` sẽ thuộc `root`.
+  - Khai ở client: `"command": "docker"`, `"args"` là phần còn lại của lệnh trên (tách từng token, đường dẫn `-f` tuyệt đối).
+
 ### 2.2 Khai `mcpServers`
 
 ```json
