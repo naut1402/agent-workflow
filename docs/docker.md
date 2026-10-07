@@ -65,3 +65,19 @@ $DCR exec -u 1001 dashboard rtk gain
 - Runner họ API (`anthropic-compatible-api`, `openai-compatible-api`) gọi thẳng Messages API, không có
   Bash tool nên không có hook để bắn.
 
+### Cơ chế trong container
+
+- `setup_rtk()` chạy **sau** `sync_claude_auth`, vì bước đó `cp` đè `settings.json` từ mount
+  `/mnt/host-claude` và sẽ xoá mất hook nếu đăng ký trước.
+- `rtk init --global --hook-only --auto-patch` merge additive (giữ hook sẵn có, ghi backup `.bak`)
+  và idempotent, nên chạy lại mỗi lần start là an toàn.
+- rtk v0.51.0 **ưu tiên** `$CLAUDE_CONFIG_DIR`, chỉ lùi về `$HOME/.claude` khi biến đó rỗng.
+  `entrypoint.sh` truyền biến tường minh qua `runuser`, trùng giá trị mà tiến trình `claude`
+  nhận ở cuối file — hai bên luôn patch/đọc cùng một `settings.json`.
+- Toàn bộ bước này **fail-open**: rtk thiếu trong `PATH`, không tạo được thư mục dữ liệu, hay
+  `rtk init` lỗi đều chỉ in WARNING rồi container vẫn start bình thường. Vì `rtk init` trả 0
+  không chứng minh entry nằm đúng file, entrypoint `grep` lại `settings.json` rồi mới log
+  `rtk hook registered`.
+- Service toolbox `rtk` không khai `depends_on`: `rtk gain` đọc báo cáo offline từ volume
+  `rtk-data`, không cần dashboard đang chạy.
+

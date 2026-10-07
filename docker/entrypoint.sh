@@ -276,15 +276,7 @@ sync_cursor_cli_auth() {
   fi
 }
 
-# rtk: đăng ký PreToolUse hook cho Claude Code CLI.
-# PHẢI chạy sau sync_claude_auth — bước đó cp đè settings.json từ /mnt/host-claude.
-# rtk merge additive (giữ hook sẵn có, ghi backup .bak) và idempotent, nên chạy mỗi start là an toàn.
-# Đích patch: rtk v0.51.0 ưu tiên $CLAUDE_CONFIG_DIR, chỉ lùi về $HOME/.claude khi biến đó rỗng
-# (đo bằng `rtk init --dry-run` — ngược với design.md §2.3 A2, xem evidence/f1-local-verify.md §4).
-# Truyền tường minh để không phụ thuộc việc runuser có giữ env hay không. Giá trị luôn là hằng
-# /home/dashboard/.claude vì CLAUDE_CONFIG_DIR được export vô điều kiện ngay trước lời gọi hàm này
-# — trùng đúng giá trị mà `exec runuser` cuối file truyền cho tiến trình `claude`, nên rtk và claude
-# luôn patch/đọc cùng một file.
+# Phải chạy sau sync_claude_auth: bước đó cp đè settings.json từ /mnt/host-claude. Xem docs/docker.md.
 setup_rtk() {
   if [ "${RTK_HOOK_ENABLED:-1}" != "1" ]; then
     echo "[dev-team-dashboard] rtk hook disabled (RTK_HOOK_ENABLED=${RTK_HOOK_ENABLED})"
@@ -295,9 +287,8 @@ setup_rtk() {
     return 0
   fi
 
-  # Volume rtk-data do Docker tạo thuộc root:root; phải chown trước khi drop privileges.
-  # mkdir phải guard: file đang `set -e`, mount :ro / bind nhầm kiểu / hết inode sẽ giết
-  # entrypoint trước `exec` → container không start chỉ vì một tính năng phụ trợ.
+  # Volume rtk-data do Docker tạo thuộc root:root — chown trước khi drop privileges.
+  # Guard mkdir: `set -e` đang bật, không để tính năng phụ trợ chặn container start.
   if ! mkdir -p /home/dashboard/.local/share/rtk 2>/dev/null; then
     echo "[dev-team-dashboard] WARNING: cannot create rtk data dir — skip token compression hook" >&2
     return 0
@@ -313,9 +304,6 @@ setup_rtk() {
   then
     rtk_ver=$(runuser -u "$RUN_NAME" -- env HOME=/home/dashboard PATH="$PATH" \
       rtk --version 2>/dev/null || true)
-    # exit 0 chỉ chứng minh lệnh chạy xong, không chứng minh entry nằm đúng file mà `claude`
-    # sẽ đọc. TC-29 còn DEFERRED nên dòng log này là tín hiệu vận hành duy nhất — grep để nó
-    # là bằng chứng thật, không phải suy đoán từ exit code.
     if grep -q 'rtk hook claude' \
       "${CLAUDE_CONFIG_DIR:-/home/dashboard/.claude}/settings.json" 2>/dev/null
     then
@@ -346,14 +334,11 @@ export USER="$RUN_NAME"
 export CLAUDE_CONFIG_DIR=/home/dashboard/.claude
 export PATH="/home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-# Không cột vào công tắc rtk: sync_cursor_cli_auth mkdir ~/.config dưới root nhưng chỉ chown
-# trong nhánh tìm thấy Cursor auth, nên luồng không dùng Cursor để lại ~/.config thuộc root:root.
-# ~/.cache cũng vậy (hook rtk cache kết quả version check ở đó). `own /home/dashboard` ở đầu file
-# chạy trước sync_* nên không cứu được.
+# sync_cursor_cli_auth tạo ~/.config dưới root ở nhánh không có Cursor auth, và `own` đầu file
+# chạy trước nó. Không gắn vào công tắc rtk.
 own /home/dashboard/.config /home/dashboard/.cache
 
-# `|| true`: ép bất biến fail-open bằng cú pháp thay vì bằng kỷ luật đọc mã — thêm một lệnh
-# có thể trả khác 0 vào cuối setup_rtk sẽ không bao giờ giết được entrypoint trước `exec`.
+# `|| true`: fail-open — hook là tính năng phụ trợ, không được chặn `exec` ở cuối file.
 setup_rtk || true
 
 if command -v git >/dev/null 2>&1; then
