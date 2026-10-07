@@ -375,6 +375,9 @@ Test code sống ở dòng branch riêng (§4.3), nên nợ test có bề mặt 
 
 #### 7.2.2 Root `README.md` — 🚫 cấm agent sửa trực tiếp
 
+> [!NOTE]
+> <span style="color:#4493f8">Mục này là **nguồn chân lý**, nhưng phạm vi áp dụng là **mọi bước pipeline**, không riêng bước PR. Vì mỗi bước chỉ được nạp rule theo `rule_category` của nó, bản trỏ link đặt thêm ở [`coding-guideline.md`](coding-guideline.md), [`doc-writing.md`](doc-writing.md), [`testing.md`](testing.md) và [`AGENTS.md`](../../AGENTS.md) §3–§4. Sửa nội dung thì sửa ở đây, các file kia chỉ trỏ link.</span>
+
 Root [`README.md`](../../README.md) là trang giới thiệu dự án cho người ngoài, do **người** giữ giọng văn và phạm vi. Agent 🚫 **tuyệt đối không** sửa, thêm, xoá dòng nào trong file này — kể cả sửa link gãy, sửa số liệu lệch code, hay chép thêm tài liệu tham chiếu.
 
 | Việc | Làm |
