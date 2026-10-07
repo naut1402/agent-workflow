@@ -64,10 +64,14 @@ async function load() {
       fetchProviderConfigs(),
     ])
     runners.value = rData.runners || []
-    // Payload cũ (mock test, client chưa cập nhật) không có trường dẫn xuất ⇒ rơi
-    // về id đã ghi nhận, giữ nguyên hành vi cũ thay vì mất dấu sao.
+    // Phân biệt *vắng mặt* với *null*, 🚫 không gộp bằng `??`:
+    // `undefined` = payload cũ chưa có trường dẫn xuất ⇒ rơi về id đã ghi nhận.
+    // `null`      = BE nói "không runner nào chạy được" ⇒ phải để trống, nếu
+    //               không thì sao vẫn sáng trên runner mà job sẽ fail.
     effectiveDefaultRunnerId.value =
-      rData.effectiveDefaultRunnerId ?? rData.defaultRunnerId ?? ''
+      rData.effectiveDefaultRunnerId !== undefined
+        ? (rData.effectiveDefaultRunnerId ?? '')
+        : (rData.defaultRunnerId ?? '')
     defaultRunnerIssue.value = rData.defaultRunnerIssue ?? null
     providers.value = (rData.providers || cData.providers || []) as ProviderEntry[]
     connections.value = cData.connections || rData.connections || []

@@ -152,10 +152,12 @@ async function save() {
       emit('saved', payload.id)
       emit('close')
     } catch (e: any) {
-      const msg = String(e?.message || e)
-      error.value = msg.includes('đã tồn tại')
-        ? t('runner.errors.idTaken', { id: payloadId.value })
-        : msg
+      // Nhận diện bằng status, 🚫 không so chuỗi message của BE: message đó là
+      // chuỗi cho log/dev, i18n-hoá nó không được làm chết nhánh này.
+      error.value =
+        e?.status === 409
+          ? t('runner.errors.idTaken', { id: payloadId.value })
+          : String(e?.message || e)
     }
   })
 }

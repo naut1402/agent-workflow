@@ -172,6 +172,14 @@ export function resolveDefaultRunner(store: RunnersStore = loadRunners()): Defau
 /** Throttle theo cặp (id, reason) — hàm này chạy ở mọi lần submit job, không được spam log. */
 let lastDefaultWarn = ''
 
+/**
+ * Đưa throttle về trạng thái biết trước. Chỉ dùng cho test: biến trên sống xuyên
+ * process nên hai ca đo số dòng log trong cùng file sẽ ảnh hưởng nhau.
+ */
+export function resetDefaultRunnerWarn(): void {
+  lastDefaultWarn = ''
+}
+
 export function getDefaultRunner(): RunnerConfig | null {
   const res = resolveDefaultRunner()
   if (res.reason !== 'ok') {
@@ -197,6 +205,18 @@ export function isEligibleDefaultAiRunner(r: RunnerConfig): boolean {
 export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig }> {
   const id = sanitiseRunnerId(runner?.id)
   if (!id) return { ok: false, error: 'invalid runner id' }
+
+  // `create: true` chỉ do dialog "tạo mới" của FE gửi. Caller lập trình (test,
+  // migration, automation) không gửi cờ này ⇒ giữ nguyên hành vi upsert-merge.
+  // Id suy từ slugify(tên) nên trùng tên = trùng id: không chặn thì bản ghi mới
+  // thay chỗ bản ghi cũ mà không ai thấy.
+  //
+  // Chặn TRƯỚC mọi tác dụng phụ: `ensureLegacyConnection` bên dưới ghi đĩa, nên
+  // guard đặt sau nó sẽ để lại một connection mới rồi mới trả 409. 409 phải là
+  // một no-op hoàn toàn.
+  if (runner?.create === true && loadRunners().runners.some((r) => r.id === id)) {
+    return { ok: false, status: 409, error: `runner id "${id}" đã tồn tại` }
+  }
 
   let connectionId = sanitiseConnectionId(runner.connectionId)
   // Accept legacy payload during transition.
@@ -224,13 +244,6 @@ export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig
   }
 
   const idx = store.runners.findIndex((r) => r.id === id)
-  // `create: true` chỉ do dialog "tạo mới" của FE gửi. Caller lập trình (test,
-  // migration, automation) không gửi cờ này ⇒ giữ nguyên hành vi upsert-merge.
-  // Id suy từ slugify(tên) nên trùng tên = trùng id: không chặn thì bản ghi mới
-  // thay chỗ bản ghi cũ mà không ai thấy.
-  if (idx >= 0 && runner?.create === true) {
-    return { ok: false, status: 409, error: `runner id "${id}" đã tồn tại` }
-  }
   if (idx >= 0) store.runners[idx] = { ...store.runners[idx], ...entry }
   else store.runners.push(entry)
 

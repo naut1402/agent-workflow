@@ -768,10 +768,11 @@ async function save() {
       emit('saved', connection.id)
       emit('close')
     } catch (e: any) {
-      const msg = String(e?.message || e)
-      error.value = msg.includes('đã tồn tại')
-        ? t('runner.errors.connIdTaken', { id: previewConnectionId.value })
-        : msg
+      // Như `RunnerDialog.save()` — status là hợp đồng, message BE thì không.
+      error.value =
+        e?.status === 409
+          ? t('runner.errors.connIdTaken', { id: previewConnectionId.value })
+          : String(e?.message || e)
     }
   })
 }

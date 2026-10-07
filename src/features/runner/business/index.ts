@@ -19,6 +19,7 @@ export {
   getRunner,
   getDefaultRunner,
   resolveDefaultRunner,
+  resetDefaultRunnerWarn,
   upsertRunner,
   deleteRunner,
   setDefaultRunner,

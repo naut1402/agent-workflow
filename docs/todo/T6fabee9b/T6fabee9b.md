@@ -1,7 +1,7 @@
 # Todo — T6fabee9b
 
 - **Issue / epic:** adhoc (task nội bộ — `issue_url: null`)
-- **Loại nợ:** other
+- **Loại nợ:** feature — theo phân loại của design §6 (D6 là `feature`; ba mục còn lại là `refactor`, ghi loại nặng nhất ở header)
 - **Branch / PR tạo nợ:** `dev/1.2.0/T6fabee9b_fix-job-chay-sai-runner`
 - **Ngày tạo:** 2026-10-07
 
