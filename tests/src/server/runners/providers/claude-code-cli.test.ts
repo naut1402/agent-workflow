@@ -1064,3 +1064,311 @@ describe('claude-code-cli — execute() với MCP', () => {
     })
   })
 })
+
+/**
+ * ═══ Tf2f484e2 · TC-D01 … TC-D06 — job điều phối thật sự có MCP ═════════════
+ *
+ * Bề mặt quan sát: argv thật mà tiến trình con nhận, NỘI DUNG file khai MCP lúc
+ * chạy (fake CLI mode `mcp-dump` chép ra chỗ khác vì file bị dọn ở `finally`),
+ * và log job.
+ *
+ * ⚠️ Đường này dùng chung cho MỌI job agent-CLI. TC-D03 là lý do duy nhất cho
+ * phép đụng vào nó: nó chốt job thường không đổi một byte nào.
+ */
+describe('claude-code-cli — self-MCP cho job điều phối (Tf2f484e2)', () => {
+  const TOKEN = 'orch-tok-CANARY-0123456789'
+  const SELF_BASE_URL = 'http://127.0.0.1:54999'
+  const SELF_ID = 'dev-team-dashboard'
+  const REPO_ROOT = path.resolve(import.meta.dir, '../../../../..')
+
+  const savedEnv = { ...process.env }
+  let home: string
+  let workspace: string
+  let dumpPath: string
+
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-selfmcp-home-'))
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-selfmcp-ws-'))
+    dumpPath = path.join(home, 'mcp-config-dump.json')
+    process.env.DEV_TEAM_DASHBOARD_HOME = home
+    process.env.DEV_TEAM_SELF_BASE_URL = SELF_BASE_URL
+    process.env.MCP_CONFIG_DUMP = dumpPath
+  })
+
+  afterEach(() => {
+    process.env = { ...savedEnv }
+    fs.rmSync(home, { recursive: true, force: true })
+    fs.rmSync(workspace, { recursive: true, force: true })
+  })
+
+  function runtimeDir(): string {
+    return path.join(home, 'mcp-runtime')
+  }
+
+  function dumped(): any | null {
+    try {
+      return JSON.parse(fs.readFileSync(dumpPath, 'utf8'))
+    } catch {
+      return null
+    }
+  }
+
+  /** Job điều phối mặc định — tuyến `mcp`, có token, base URL đã set ở env. */
+  function orchestratorMeta(over: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      orchestratorJob: true,
+      orchestratorMcpRoute: 'mcp',
+      orchestratorToken: TOKEN,
+      stepId: '__orchestrator__',
+      ...over,
+    }
+  }
+
+  async function runJob(
+    metadata: Record<string, unknown>,
+    runnerOver: Record<string, unknown> = {},
+    opts: { logPath?: string; mode?: string } = {},
+  ) {
+    const { cliPath, flags } = nodeCli(opts.mode ?? 'mcp-dump')
+    const provider = createLocalConsoleProvider({
+      providerId: 'claude-code-cli',
+      defaultCliPath: process.execPath,
+      claudeStyleArgs: true,
+    })
+    const result = await provider.execute(
+      {
+        jobId: 'job-orch-mcp',
+        resolvedAgent,
+        userPrompt: 'quyết định điều phối',
+        workspace,
+        produces: [],
+        timeoutMs: 15_000,
+        metadata: opts.logPath ? { ...metadata, logPath: opts.logPath } : metadata,
+      },
+      { cliPath, flags, ...runnerOver },
+      credential,
+    )
+    return { result, argv: String(result.stdout ?? '').trim().split('\n') }
+  }
+
+  // ── TC-D01 ────────────────────────────────────────────────────────────────
+  test('TC-D01: tuyến `mcp` ⇒ argv có cờ, file khai mang entry dashboard mode full', async () => {
+    const { result, argv } = await runJob(orchestratorMeta())
+    expect(result.ok).toBe(true)
+
+    // (a) cờ trỏ file khai, kèm `--strict-mcp-config` ngay sau.
+    const idx = argv.indexOf('--mcp-config')
+    expect(idx).toBeGreaterThanOrEqual(0)
+    expect(argv[idx + 2]).toBe('--strict-mcp-config')
+    expect(argv).toContain('mcp-config-exists=true')
+
+    // (b) entry `dev-team-dashboard` với mode `full` + token + base URL.
+    const json = dumped()
+    expect(Object.keys(json.mcpServers)).toEqual([SELF_ID])
+    const entry = json.mcpServers[SELF_ID]
+    expect(entry.type).toBe('stdio')
+    expect(entry.env.DEVTEAM_MCP_MODE).toBe('full')
+    expect(entry.env.DASHBOARD_ORCHESTRATOR_TOKEN).toBe(TOKEN)
+    expect(entry.env.DASHBOARD_ORCHESTRATOR_BASE_URL).toBe(SELF_BASE_URL)
+    // `env` giữ ở mức TỐI THIỂU: mọi giá trị ở đây bị gom vào danh sách mask,
+    // nên khai thêm một đường dẫn là log nuốt mất đường dẫn đó (review [should]).
+    expect(Object.keys(entry.env).sort()).toEqual([
+      'DASHBOARD_ORCHESTRATOR_BASE_URL',
+      'DASHBOARD_ORCHESTRATOR_TOKEN',
+      'DEVTEAM_MCP_MODE',
+    ])
+
+    // (c) `command` + `args` trỏ entrypoint CÓ THẬT, và mode cũng khai trên argv
+    // — `resolveMode` đọc argv TRƯỚC env nên đây mới là bảo đảm chắc chắn.
+    expect(entry.command).toBe(process.execPath)
+    expect(fs.existsSync(entry.args[0])).toBe(true)
+    expect(path.resolve(entry.args[0])).toBe(path.join(REPO_ROOT, 'mcp', 'stdio.ts'))
+    expect(entry.args).toContain('--mode=full')
+  }, 30_000)
+
+  // ── TC-D02 ────────────────────────────────────────────────────────────────
+  test('TC-D02: tuyến `sentinel` / thiếu base URL / thiếu token ⇒ 🚫 không gắn gì, 🚫 không file nào chạm đĩa', async () => {
+    const variants: Array<[string, () => Record<string, unknown>]> = [
+      ['route sentinel', () => orchestratorMeta({ orchestratorMcpRoute: 'sentinel' })],
+      ['thiếu token', () => orchestratorMeta({ orchestratorToken: undefined })],
+      [
+        'thiếu base URL',
+        () => {
+          delete process.env.DEV_TEAM_SELF_BASE_URL
+          return orchestratorMeta()
+        },
+      ],
+    ]
+    for (const [label, build] of variants) {
+      const { result, argv } = await runJob(build())
+      expect(result.ok).toBe(true)
+      expect(argv, label).not.toContain('--mcp-config')
+      expect(argv, label).not.toContain('--strict-mcp-config')
+      // Bất biến cũ: không khai server nào ⇒ không file nào chạm đĩa.
+      expect(fs.existsSync(runtimeDir()), label).toBe(false)
+      expect(dumped()).toBeNull()
+      process.env.DEV_TEAM_SELF_BASE_URL = SELF_BASE_URL
+    }
+  }, 60_000)
+
+  // ── TC-D03 ── guard: job THƯỜNG không đổi một chút nào ────────────────────
+  test('TC-D03 (a): job step thường, runner KHÔNG khai mcpServers ⇒ argv + đĩa y như cũ', async () => {
+    const logPath = makeLogPath(home)
+    const { result, argv } = await runJob({ pipelineStepId: 'implementer' }, {}, { logPath })
+
+    expect(result.ok).toBe(true)
+    expect(argv).not.toContain('--mcp-config')
+    expect(fs.existsSync(runtimeDir())).toBe(false)
+    expect(fs.readFileSync(logPath, 'utf8')).not.toContain('MCP')
+  }, 30_000)
+
+  test('TC-D03 (b): job step thường, runner CÓ khai mcpServers ⇒ chỉ server người dùng, 🚫 không entry dashboard', async () => {
+    upsertMcpServer({
+      id: 'nguoi-dung',
+      label: 'nguoi-dung',
+      enabled: true,
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@fake/nguoi-dung'],
+      env: {},
+    })
+    const { result, argv } = await runJob({ pipelineStepId: 'implementer' }, { mcpServers: ['nguoi-dung'] })
+
+    expect(result.ok).toBe(true)
+    expect(argv).toContain('--mcp-config')
+    expect(Object.keys(dumped().mcpServers)).toEqual(['nguoi-dung'])
+    expect(dumped().mcpServers).not.toHaveProperty(SELF_ID)
+  }, 30_000)
+
+  test('TC-D03 (c): job điều phối tuyến `mcp` + runner có server riêng ⇒ CẢ HAI entry cùng vào file', async () => {
+    upsertMcpServer({
+      id: 'nguoi-dung',
+      label: 'nguoi-dung',
+      enabled: true,
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@fake/nguoi-dung'],
+      env: {},
+    })
+    const { result } = await runJob(orchestratorMeta(), { mcpServers: ['nguoi-dung'] })
+
+    expect(result.ok).toBe(true)
+    expect(Object.keys(dumped().mcpServers).sort()).toEqual([SELF_ID, 'nguoi-dung'].sort())
+  }, 30_000)
+
+  // ── TC-D04 ── trùng id với server người vận hành đã khai ──────────────────
+  test('TC-D04: người dùng đã khai id `dev-team-dashboard` ⇒ đúng MỘT entry (của dashboard) + cảnh báo vào log', async () => {
+    upsertMcpServer({
+      id: SELF_ID,
+      label: 'bản của người dùng',
+      enabled: true,
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@nguoi-dung/khac'],
+      env: {},
+    })
+    const logPath = makeLogPath(home)
+    const { result } = await runJob(orchestratorMeta(), { mcpServers: [SELF_ID] }, { logPath })
+
+    expect(result.ok).toBe(true)
+    // Map khoá theo id ⇒ 🚫 không cộng dồn: đúng một entry, và nó là của dashboard.
+    const servers = dumped().mcpServers
+    expect(Object.keys(servers)).toEqual([SELF_ID])
+    expect(servers[SELF_ID].command).toBe(process.execPath)
+    expect(servers[SELF_ID].env.DEVTEAM_MCP_MODE).toBe('full')
+
+    // Ghi đè IM LẶNG là thứ không ai truy ngược được — phải có dòng log.
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log).toContain('entry của người dùng bị entry tự gắn của dashboard ghi đè')
+    expect(log).toContain(SELF_ID)
+  }, 30_000)
+
+  // ── TC-D05 ── token không lọt ra log dạng chữ rõ ──────────────────────────
+  test('TC-D05: token đã mask trong log; file khai nằm trong thư mục dashboard, quyền chỉ chủ sở hữu', async () => {
+    const logPath = makeLogPath(home)
+    // Giữ lại file config để chấm quyền: `mcp-echo` không dọn, nhưng provider
+    // dọn ở `finally`, nên quyền được chấm trên bản DUMP cùng thư mục + trên
+    // chính thư mục `mcp-runtime` (không bị dọn).
+    await runJob(orchestratorMeta(), {}, { logPath })
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    expect(log.length).toBeGreaterThan(0)
+    expect(log).not.toContain(TOKEN)
+    // Dòng `[runner] MCP:` vẫn phải có (truy ngược được), chỉ là đã mask.
+    expect(log).toContain('[runner] MCP:')
+    expect(log).toContain(SELF_ID)
+    // Nội dung file config 🚫 không bao giờ được chép vào log.
+    expect(log).not.toContain('"mcpServers"')
+
+    // Thư mục nằm dưới registryHome(), KHÔNG dưới workspace người dùng.
+    expect(runtimeDir().startsWith(home)).toBe(true)
+    expect(runtimeDir().startsWith(workspace)).toBe(false)
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(runtimeDir()).mode & 0o777).toBe(0o700)
+    }
+  }, 30_000)
+
+  test('TC-D05 (b): file khai có quyền 0600 LÚC CHẠY và biến mất sau khi job xong', async () => {
+    // Quyền phải đúng lúc file còn sống — chấm sau khi job xong là chấm vào hư không.
+    const probe = path.join(home, 'perm-probe.mjs')
+    fs.writeFileSync(
+      probe,
+      [
+        "import fs from 'node:fs'",
+        "const i = process.argv.indexOf('--mcp-config')",
+        'const f = i >= 0 ? process.argv[i + 1] : null',
+        "process.stdout.write('MODE:' + (f ? (fs.statSync(f).mode & 0o777).toString(8) : 'none') + '\\n')",
+        'process.stdin.resume()',
+        "process.stdin.on('end', () => process.exit(0))",
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+    const provider = createLocalConsoleProvider({
+      providerId: 'claude-code-cli',
+      defaultCliPath: process.execPath,
+      claudeStyleArgs: true,
+    })
+    const result = await provider.execute(
+      {
+        jobId: 'job-perm',
+        resolvedAgent,
+        userPrompt: 'x',
+        workspace,
+        produces: [],
+        timeoutMs: 15_000,
+        metadata: orchestratorMeta(),
+      },
+      { cliPath: process.execPath, flags: [probe] },
+      credential,
+    )
+    expect(result.ok).toBe(true)
+    if (process.platform !== 'win32') {
+      expect(String(result.stdout)).toContain('MODE:600')
+    }
+    // Dọn ở `finally`: không còn file nào sau khi execute trả về.
+    expect(fs.readdirSync(runtimeDir())).toEqual([])
+  }, 30_000)
+
+  // ── TC-D06 ── tương thích ngược với job ghi trước thay đổi này ────────────
+  test('TC-D06: job metadata THIẾU khoá tuyến ⇒ xử như sentinel, 🚫 không gắn entry', async () => {
+    const meta = orchestratorMeta()
+    delete meta.orchestratorMcpRoute
+    const { result, argv } = await runJob(meta)
+
+    expect(result.ok).toBe(true)
+    expect(argv).not.toContain('--mcp-config')
+    expect(fs.existsSync(runtimeDir())).toBe(false)
+  }, 30_000)
+
+  // ── TC-F02 (ở cùng bề mặt runner) ── giá trị tuyến LẠ trong job file ──────
+  test('TC-F02: giá trị `orchestratorMcpRoute` ngoài 2 giá trị hợp lệ ⇒ fail-safe về sentinel, 🚫 không ném', async () => {
+    // File job là JSON tự do, không schema — người/công cụ khác sửa được.
+    for (const bogus of ['MCP', 'mcp ', '', 'true', 0, null, {}, ['mcp']]) {
+      const { result, argv } = await runJob(orchestratorMeta({ orchestratorMcpRoute: bogus }))
+      expect(result.ok).toBe(true)
+      expect(argv).not.toContain('--mcp-config')
+      expect(fs.existsSync(runtimeDir())).toBe(false)
+    }
+  }, 90_000)
+})

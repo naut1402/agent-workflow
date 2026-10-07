@@ -32,6 +32,25 @@ if (mode === 'mcp-echo') {
   process.exit(0)
 }
 
+if (mode === 'mcp-dump') {
+  // Tf2f484e2: chép NGUYÊN VĂN file `--mcp-config` ra `MCP_CONFIG_DUMP` (env kế
+  // thừa từ tiến trình cha) rồi echo argv. File bị dọn ở `finally` của job nên
+  // đây là cách duy nhất đọc được nội dung nó LÚC CHẠY; 🚫 không in ra stdout vì
+  // file chứa token đã giải.
+  for (const a of rest) console.log(a)
+  const file = mcpConfigPath()
+  const dump = process.env.MCP_CONFIG_DUMP
+  if (file && dump) {
+    try {
+      fs.writeFileSync(dump, fs.readFileSync(file, 'utf8'))
+    } catch {
+      /* ca âm: không có file thì dump cũng không tồn tại */
+    }
+  }
+  console.log(`mcp-config-exists=${file ? fs.existsSync(file) : 'none'}`)
+  process.exit(0)
+}
+
 if (mode === 'mcp-leak') {
   // MCP server (hoặc chính CLI) in token ra stderr rồi hỏng — đúng hình dạng
   // `401 Unauthorized: Bearer sk-…` mà bộ lọc log phải chặn.

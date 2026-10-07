@@ -19,8 +19,8 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 
 | Suite | Runner | Vùng source phủ | Số file | Lệnh chạy |
 |---|---|---|---|---|
-| `tests/architecture` | bun | — | 2 | `bun test tests/architecture` |
-| `tests/mcp` | bun | `mcp`, `backend/log`, `backend/events` | 4 | `bun test tests/mcp` |
+| `tests/architecture` | bun | `features/orchestrator/schemas`, `mcp`, `shared/lib` | 3 | `bun test tests/architecture` |
+| `tests/mcp` | bun | `mcp`, `backend/log`, `backend/events` | 6 | `bun test tests/mcp` |
 | `tests/src` | vitest | — | 1 | `npx vitest run tests/src/*.test.ts` |
 | `tests/src/backend/configs` | vitest | `backend/configs` | 1 | `npx vitest run tests/src/backend/configs` |
 | `tests/src/backend/db` | bun | `backend/db`, `features/knowledge/business` | 1 | `bun test tests/src/backend/db` |
@@ -95,7 +95,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/http` | bun | `backend/apiServer.ts`, `backend/http`, `features/runner/business` | 41 | `bun test tests/src/server/http` |
 | `tests/src/server/knowledge` | bun | `backend/apiServer.ts`, `backend/db`, `backend/events` | 1 | `bun test tests/src/server/knowledge` |
 | `tests/src/server/lib` | bun | `backend/lib` | 1 | `bun test tests/src/server/lib` |
-| `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/orchestrator/schemas`, `features/runner/business` | 8 | `bun test tests/src/server/orchestrator` |
+| `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/runner/business`, `backend/events` | 10 | `bun test tests/src/server/orchestrator` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business`, `shared/lib` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
 | `tests/src/server/runners` | bun | `features/runner/business`, `backend/events`, `features/mcp/business` | 25 | `bun test tests/src/server/runners` |
