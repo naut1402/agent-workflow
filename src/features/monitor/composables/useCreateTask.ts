@@ -151,7 +151,10 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
       profiles.value = (profData.profiles || []).map((p: { name: string }) => ({ name: p.name }))
       runners.value = (runData.runners || []).filter((r: { enabled?: boolean }) => r.enabled !== false)
       // Luôn gắn lại default khi mở dialog (kể cả sau reset form).
-      form.value.runnerId = pickDefaultRunnerId(runners.value, runData.defaultRunnerId)
+      form.value.runnerId = pickDefaultRunnerId(
+        runners.value,
+        runData.effectiveDefaultRunnerId ?? runData.defaultRunnerId,
+      )
       if (!form.value.profileName) form.value.profileName = ''
     } catch (e: unknown) {
       profiles.value = []

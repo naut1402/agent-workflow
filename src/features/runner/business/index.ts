@@ -18,6 +18,7 @@ export {
   listRunners,
   getRunner,
   getDefaultRunner,
+  resolveDefaultRunner,
   upsertRunner,
   deleteRunner,
   setDefaultRunner,
@@ -26,6 +27,7 @@ export {
   resolveStepRunnerId,
 } from './registry.js'
 export type { StepRunnerReason, StepRunnerResolution } from './registry.js'
+export type { DefaultRunnerReason, DefaultRunnerResolution } from './types.js'
 /** Đường ghi pipeline dùng cùng hàm chuẩn hoá với đường giải pin lúc execute. */
 export { sanitiseRunnerId } from './types.js'
 export {

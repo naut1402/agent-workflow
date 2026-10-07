@@ -149,6 +149,12 @@ export function upsertConnection(input: any): MutationResult<{ connection: Conne
 
   const store = loadConnections()
   const idx = store.connections.findIndex((c) => c.id === id)
+  // Cùng lý do với `upsertRunner`: `create` là cờ opt-in của dialog tạo mới.
+  // Ghi đè ở đây nguy hiểm hơn vì connection giữ cả providerId/model/credential —
+  // một connection trùng slug sẽ đổi hẳn thứ mà runner mặc định thật sự chạy.
+  if (idx >= 0 && input?.create === true) {
+    return { ok: false, status: 409, error: `connection id "${id}" đã tồn tại` }
+  }
   if (idx >= 0) store.connections[idx] = entry
   else store.connections.push(entry)
   saveConnections(store)

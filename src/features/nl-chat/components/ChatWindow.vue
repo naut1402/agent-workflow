@@ -88,9 +88,11 @@ async function loadDefaultRunner(): Promise<void> {
   try {
     const data = await fetchRunners()
     const runners: any[] = Array.isArray(data?.runners) ? data.runners : []
+    // Đọc thẳng default thật từ BE thay vì tự đoán: "runner enabled đầu tiên" là
+    // một luật khác với luật của `submitJob`, nên popover nêu một runner mà job
+    // sẽ không chạy. Không có default dùng được ⇒ bỏ dòng runner, không đoán.
     const picked =
-      runners.find((r) => r?.id === data?.defaultRunnerId) ??
-      runners.find((r) => r?.enabled !== false)
+      runners.find((r) => r?.id === (data?.effectiveDefaultRunnerId ?? data?.defaultRunnerId)) ?? null
     if (picked) {
       defaultRunner.value = {
         id: picked.id,

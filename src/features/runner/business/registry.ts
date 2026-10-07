@@ -13,6 +13,8 @@ import {
   RUNNERS_VERSION,
   sanitiseConnectionId,
   sanitiseRunnerId,
+  type DefaultRunnerReason,
+  type DefaultRunnerResolution,
   type RunnerConfig,
   type RunnersStore,
   type MutationResult,
@@ -113,9 +115,22 @@ export function saveRunners(store: RunnersStore): RunnersStore {
   return store
 }
 
-export function listRunners(): { defaultRunnerId: string | null; runners: RunnerConfig[] } {
+export function listRunners(): {
+  defaultRunnerId: string | null
+  effectiveDefaultRunnerId: string | null
+  defaultRunnerIssue: { runnerId: string | null; reason: DefaultRunnerReason } | null
+  runners: RunnerConfig[]
+} {
   const store = loadRunners()
-  return { defaultRunnerId: store.defaultRunnerId, runners: store.runners }
+  const d = resolveDefaultRunner(store)
+  return {
+    // `defaultRunnerId` giữ nguyên nghĩa cũ (id người dùng đã chốt); hai trường
+    // dẫn xuất bên dưới cho UI biết runner nào job KHÔNG pin sẽ thật sự chạy.
+    defaultRunnerId: store.defaultRunnerId,
+    effectiveDefaultRunnerId: d.runner?.id ?? null,
+    defaultRunnerIssue: d.reason === 'ok' ? null : { runnerId: d.runnerId, reason: d.reason },
+    runners: store.runners,
+  }
 }
 
 export function getRunner(id: unknown): RunnerConfig | null {
@@ -124,21 +139,59 @@ export function getRunner(id: unknown): RunnerConfig | null {
   return loadRunners().runners.find((r) => r.id === clean) || null
 }
 
+/** Vì sao một runner KHÔNG đủ điều kiện làm default AI; `null` = đủ điều kiện. */
+function defaultRunnerIssueOf(r: RunnerConfig): 'disabled' | 'no-connection' | 'not-ai' | null {
+  if (r.enabled === false) return 'disabled'
+  const conn = getConnection(r.connectionId)
+  if (!conn?.providerId) return 'no-connection'
+  const family = providerFamilyOf(conn.providerId)
+  return family === 'agent-cli' || family === 'ai-api' ? null : 'not-ai'
+}
+
+/**
+ * Nguồn sự thật duy nhất cho "runner nào chạy khi job không pin".
+ *
+ * Chỉ xét **đúng** runner đã được ghi nhận làm mặc định — không rơi về "runner hợp
+ * lệ đầu tiên" nữa: rơi như vậy làm step chạy bằng runner người dùng chưa bao giờ
+ * chọn. Thà đứng lại với lý do đọc được còn hơn chạy sai runner.
+ *
+ * `store` truyền vào để call site đã load rồi không phải đọc lại file.
+ */
+export function resolveDefaultRunner(store: RunnersStore = loadRunners()): DefaultRunnerResolution {
+  if (!store.runners.length) return { runner: null, runnerId: null, reason: 'no-runners' }
+  const id = store.defaultRunnerId
+  if (!id) return { runner: null, runnerId: null, reason: 'unset' }
+  const r = store.runners.find((x) => x.id === id)
+  if (!r) return { runner: null, runnerId: id, reason: 'missing' }
+  const issue = defaultRunnerIssueOf(r)
+  return issue
+    ? { runner: null, runnerId: id, reason: issue }
+    : { runner: r, runnerId: id, reason: 'ok' }
+}
+
+/** Throttle theo cặp (id, reason) — hàm này chạy ở mọi lần submit job, không được spam log. */
+let lastDefaultWarn = ''
+
 export function getDefaultRunner(): RunnerConfig | null {
-  const store = loadRunners()
-  const hit =
-    store.runners.find((r) => r.id === store.defaultRunnerId && isEligibleDefaultAiRunner(r)) ||
-    store.runners.find((r) => isEligibleDefaultAiRunner(r))
-  return hit || null
+  const res = resolveDefaultRunner()
+  if (res.reason !== 'ok') {
+    const key = `${res.runnerId ?? '-'}:${res.reason}`
+    if (key !== lastDefaultWarn) {
+      lastDefaultWarn = key
+      console.warn(
+        `[runner] không có runner mặc định dùng được (${res.runnerId ?? 'chưa đặt'}: ${res.reason})`,
+      )
+    }
+  } else {
+    // Về `ok` thì xoá dấu, để lần hỏng sau vẫn được log một lần.
+    lastDefaultWarn = ''
+  }
+  return res.runner
 }
 
 /** Agent CLI / AI API only — never console-command or unknown/missing provider. */
 export function isEligibleDefaultAiRunner(r: RunnerConfig): boolean {
-  if (r.enabled === false) return false
-  const conn = getConnection(r.connectionId)
-  if (!conn?.providerId) return false
-  const family = providerFamilyOf(conn.providerId)
-  return family === 'agent-cli' || family === 'ai-api'
+  return defaultRunnerIssueOf(r) === null
 }
 
 export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig }> {
@@ -171,6 +224,13 @@ export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig
   }
 
   const idx = store.runners.findIndex((r) => r.id === id)
+  // `create: true` chỉ do dialog "tạo mới" của FE gửi. Caller lập trình (test,
+  // migration, automation) không gửi cờ này ⇒ giữ nguyên hành vi upsert-merge.
+  // Id suy từ slugify(tên) nên trùng tên = trùng id: không chặn thì bản ghi mới
+  // thay chỗ bản ghi cũ mà không ai thấy.
+  if (idx >= 0 && runner?.create === true) {
+    return { ok: false, status: 409, error: `runner id "${id}" đã tồn tại` }
+  }
   if (idx >= 0) store.runners[idx] = { ...store.runners[idx], ...entry }
   else store.runners.push(entry)
 

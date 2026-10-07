@@ -91,6 +91,20 @@ export default {
     credentialSecretRequired: 'Dán secret value, Connect via browser, hoặc điền secretRef (advanced)',
     providerConfigRequired: 'Chọn provider (hoặc cấu hình provider mới)',
     credentialRequired: 'Chọn hoặc tạo credential',
+    idTaken: 'Id "{id}" đã được dùng — đổi tên runner khác',
+    connIdTaken: 'Id "{id}" đã được dùng — đổi tên kết nối khác',
+  },
+  hints: {
+    generatedId: 'Id sẽ tạo: {id}',
+  },
+  // Khớp đúng tập `DefaultRunnerReason` của backend.
+  defaultIssue: {
+    'no-runners': 'Chưa có runner nào — job không pin runner sẽ lỗi.',
+    unset: 'Chưa đặt runner mặc định — job không pin runner sẽ lỗi.',
+    missing: 'Runner mặc định "{id}" không còn trong danh sách — chọn runner mặc định khác.',
+    disabled: 'Runner mặc định "{id}" đang tắt — job không pin runner sẽ lỗi.',
+    'no-connection': 'Runner mặc định "{id}" trỏ vào connection không còn — sửa connection hoặc chọn runner khác.',
+    'not-ai': 'Runner mặc định "{id}" không phải runner AI — chọn một runner Agent CLI hoặc AI API.',
   },
   connectionDialog: {
     title: 'Thêm connection',
