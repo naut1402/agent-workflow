@@ -16,6 +16,8 @@ vi.mock('@/features/runner/scripts/runnerApi', () => ({
 
 import { CREATE_TASK_STEPS, useCreateTask } from '@/features/monitor/composables/useCreateTask'
 import { createTask } from '@/features/monitor/scripts/CreateTaskDialogApi'
+import { fetchPipelineProfiles } from '@/features/pipeline-editor/scripts/ProfileManagerApi'
+import { fetchRunners } from '@/features/runner/scripts/runnerApi'
 
 function setup() {
   return useCreateTask({ getProjectId: () => 'p1' })
@@ -174,5 +176,55 @@ describe('useCreateTask — TC-24 · vòng đời cờ `loading` sau khi gỡ d�
 
     vi.mocked(createTask).mockResolvedValue({ task: { taskId: 'F0010' }, job: null } as any)
     expect(await c.submit()).toEqual({ taskId: 'F0010', jobId: null })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T6fabee9b TC-D41 — giá trị preselect của ô runner.
+//
+// Khác với popover chat và ngôi sao ở màn Runner, đây là một giá trị trong form
+// mà người dùng SỬA ĐƯỢC, nên vế `?? defaultRunnerId` ở đây là cố ý: payload cũ
+// (mock chưa có trường mới) 🚫 không được làm ô runner trống.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('useCreateTask — TC-D41: preselect theo runner default THẬT', () => {
+  const RUNNERS = [
+    { id: 'a', name: 'A', enabled: true },
+    { id: 'b', name: 'B', enabled: true },
+  ]
+
+  function stub(runnerPayload: Record<string, unknown>) {
+    vi.mocked(fetchPipelineProfiles).mockResolvedValueOnce({ profiles: [] } as any)
+    vi.mocked(fetchRunners).mockResolvedValueOnce({ runners: RUNNERS, ...runnerPayload } as any)
+  }
+
+  it('effectiveDefaultRunnerId THẮNG defaultRunnerId', async () => {
+    stub({ defaultRunnerId: 'a', effectiveDefaultRunnerId: 'b' })
+    const c = setup()
+
+    await c.loadMeta()
+
+    expect(c.form.value.runnerId).toBe('b')
+  })
+
+  it('effectiveDefaultRunnerId VẮNG MẶT (payload cũ) ⇒ rơi về defaultRunnerId', async () => {
+    stub({ defaultRunnerId: 'a' })
+    const c = setup()
+
+    await c.loadMeta()
+
+    expect(c.form.value.runnerId).toBe('a')
+  })
+
+  it('effectiveDefaultRunnerId = null ⇒ vẫn rơi về defaultRunnerId, ô form 🚫 không trống', async () => {
+    // Khác hẳn popover chat (TC-D40), nơi im lặng mới đúng: ở đây người dùng
+    // đang đứng trước một ô select và sửa được, nên để trống là bắt họ đoán.
+    // `defaultRunnerId` cố ý KHÔNG phải option đầu, để phân biệt với nhánh
+    // "rơi về runners[0]" của `pickDefaultRunnerId`.
+    stub({ defaultRunnerId: 'b', effectiveDefaultRunnerId: null })
+    const c = setup()
+
+    await c.loadMeta()
+
+    expect(c.form.value.runnerId).toBe('b')
   })
 })

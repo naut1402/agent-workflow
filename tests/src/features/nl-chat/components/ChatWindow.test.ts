@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n } from '../../../helpers/i18n'
 
 /**
@@ -317,5 +318,58 @@ describe('ChatWindow header — icon xoay (TC-27)', () => {
 
     await setStatus(wrapper, { kind: 'done', text: 'Hoàn tất' })
     expect(wrapper.findAll('.c-spin')).toHaveLength(0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T6fabee9b TC-D40 — popover builder nêu runner mà job sẽ chạy, 🚫 không đoán.
+//
+// Trước fix, chỗ này tự tính default bằng một luật RIÊNG ("runner enabled đầu
+// tiên") khác hẳn luật của `submitJob`. Kết quả: popover nêu một runner, job
+// chạy bằng runner khác — hoặc không chạy. Nay nó đọc thẳng
+// `effectiveDefaultRunnerId` của BE, và `null` nghĩa là bỏ hẳn dòng runner.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('ChatWindow — dòng runner của popover builder', () => {
+  function stubRunnersPayload(payload: Record<string, unknown>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => payload })),
+    )
+  }
+
+  const RUNNERS = [
+    { id: 'a', name: 'Runner A', enabled: false },
+    { id: 'b', name: 'Runner B', enabled: true },
+  ]
+
+  async function openPopover() {
+    const wrapper = mountWindow()
+    await wrapper.find('.nl-chat-info').trigger('pointerenter')
+    await flushPromises()
+    return wrapper
+  }
+
+  it('TC-D40: effectiveDefaultRunnerId = null ⇒ bỏ dòng runner, 🚫 không đoán runner khác', async () => {
+    stubRunnersPayload({ runners: RUNNERS, defaultRunnerId: 'a', effectiveDefaultRunnerId: null })
+
+    const wrapper = await openPopover()
+
+    const labels = wrapper.findAll('.nl-chat-info-label').map((l) => l.text())
+    expect(labels).not.toContain('Runner')
+    // Vế phủ định: 🚫 không rơi về `defaultRunnerId`, 🚫 không lấy runner enabled
+    // đầu tiên — cả hai đều là đoán, chỉ đoán bằng hai giá trị khác nhau.
+    const text = wrapper.find('.nl-chat-info-popover').text()
+    expect(text).not.toContain('Runner A')
+    expect(text).not.toContain('Runner B')
+  })
+
+  it('effectiveDefaultRunnerId có giá trị ⇒ hiện đúng runner đó', async () => {
+    stubRunnersPayload({ runners: RUNNERS, defaultRunnerId: 'a', effectiveDefaultRunnerId: 'b' })
+
+    const wrapper = await openPopover()
+
+    const labels = wrapper.findAll('.nl-chat-info-label').map((l) => l.text())
+    expect(labels).toContain('Runner')
+    expect(wrapper.find('.nl-chat-info-popover').text()).toContain('Runner B')
   })
 })

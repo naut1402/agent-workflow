@@ -5,6 +5,7 @@ import path from 'node:path'
 import {
   loadJob,
   registerProvider,
+  setDefaultRunner,
   submitJob,
   upsertConnection,
   upsertRunner,
@@ -98,6 +99,22 @@ beforeAll(() => {
   registerProvider(stubProvider)
   upsertConnection({ id: 'stub-conn-respawn-gating', kind: 'local-console', providerId: PROVIDER_ID, cliPath: 'stub' })
   upsertRunner({ id: RUNNER_ID, connectionId: 'stub-conn-respawn-gating', config: {} })
+  // T6fabee9b: cùng lý do với `resetStep.route.test.ts` — `RUNNER_ID` thuộc họ
+  // `console-command` nên default tự suy của store không đủ điều kiện. Mọi job
+  // ở đây đều pin, nhưng seed default tường minh để log sạch và để suite không
+  // đỏ bất ngờ ở lần ai đó bỏ pin.
+  upsertConnection({
+    id: 'stub-conn-respawn-gating-default',
+    kind: 'local-console',
+    providerId: 'stub-respawn-gating-default-api',
+    cliPath: 'stub',
+  })
+  upsertRunner({
+    id: 'stub-runner-respawn-gating-default',
+    connectionId: 'stub-conn-respawn-gating-default',
+    config: {},
+  })
+  setDefaultRunner('stub-runner-respawn-gating-default')
   fs.writeFileSync(
     path.join(root, 'pipeline.yaml'),
     ['version: 1', 'steps:', "  - id: implementer", "    agent: ' '", '  - id: reviewer', "    agent: ' '"].join('\n'),

@@ -282,3 +282,33 @@ describe('QuickActionPanel', () => {
     ])
   })
 })
+
+// T6fabee9b TC-D41 (vế QuickActionPanel) — runner preselect của form đọc default
+// THẬT. `effectiveProviderId` phụ thuộc runner đang chọn, nên chọn nhầm runner
+// không chỉ hiển thị sai: nó đổi hẳn các field được render.
+describe('QuickActionPanel — preselect runner theo default thật', () => {
+  it('TC-D41: effectiveDefaultRunnerId THẮNG defaultRunnerId', async () => {
+    const { fetchRunners } = await import('@/features/runner/scripts/runnerApi')
+    vi.mocked(fetchRunners).mockResolvedValueOnce({
+      runners: [
+        { id: 'sh1', name: 'Shell', connectionId: 'conn-sh' },
+        { id: 'ai1', name: 'AI', connectionId: 'conn-ai' },
+      ],
+      connections: [
+        { id: 'conn-sh', providerId: 'console-command' },
+        { id: 'conn-ai', providerId: 'claude-code-cli' },
+      ],
+      defaultRunnerId: 'sh1',
+      effectiveDefaultRunnerId: 'ai1',
+    } as any)
+
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    await flushPromises()
+    await w.get('button.btn-primary.btn-sm').trigger('click')
+
+    // Rơi về `sh1` thì đây là một runner console-command ⇒ ô agent biến mất và
+    // panel in ra 'console-command'. Đó chính là hình dạng hỏng cần bắt.
+    expect(w.text()).not.toContain('console-command')
+    expect(w.findAll('.qa-form select.cfg-input')).toHaveLength(3)
+  })
+})

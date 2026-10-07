@@ -45,7 +45,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/monitor` | vitest | `features/monitor/locales`, `features/monitor/composables` | 3 | `npx vitest run tests/src/features/monitor/*.test.ts` |
 | `tests/src/features/monitor/business` | bun | `features/monitor/business`, `backend/lib`, `features/runner/business` | 6 | `bun test tests/src/features/monitor/business` |
 | `tests/src/features/monitor/components` | vitest | `features/monitor/components`, `features/monitor/locales`, `features/monitor/scripts` | 12 | `npx vitest run tests/src/features/monitor/components` |
-| `tests/src/features/monitor/composables` | vitest | `features/monitor/composables`, `features/monitor/scripts`, `features/runner/scripts` | 6 | `npx vitest run tests/src/features/monitor/composables` |
+| `tests/src/features/monitor/composables` | vitest | `features/monitor/composables`, `features/runner/scripts`, `features/monitor/scripts` | 6 | `npx vitest run tests/src/features/monitor/composables` |
 | `tests/src/features/monitor/lib` | vitest | `features/monitor/lib` | 5 | `npx vitest run tests/src/features/monitor/lib` |
 | `tests/src/features/monitor/schemas` | vitest | `features/monitor/schemas` | 2 | `npx vitest run tests/src/features/monitor/schemas` |
 | `tests/src/features/nl-chat/components` | vitest | `features/nl-chat/components`, `features/nl-chat/composables`, `frontend/composables` | 4 | `npx vitest run tests/src/features/nl-chat/components` |
@@ -92,13 +92,13 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/chat` | bun | `features/runner/business`, `features/nl-chat/business`, `features/monitor/business` | 8 | `bun test tests/src/server/chat` |
 | `tests/src/server/features` | bun | `backend/apiServer.ts`, `backend/events`, `backend/http` | 1 | `bun test tests/src/server/features` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `backend/apiServer.ts`, `backend/registry.ts` | 2 | `bun test tests/src/server/github` |
-| `tests/src/server/http` | bun | `backend/apiServer.ts`, `backend/http`, `features/runner/business` | 41 | `bun test tests/src/server/http` |
+| `tests/src/server/http` | bun | `backend/apiServer.ts`, `backend/http`, `features/runner/business` | 42 | `bun test tests/src/server/http` |
 | `tests/src/server/knowledge` | bun | `backend/apiServer.ts`, `backend/db`, `backend/events` | 1 | `bun test tests/src/server/knowledge` |
 | `tests/src/server/lib` | bun | `backend/lib` | 1 | `bun test tests/src/server/lib` |
 | `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/orchestrator/schemas`, `features/runner/business` | 8 | `bun test tests/src/server/orchestrator` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business`, `shared/lib` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
-| `tests/src/server/runners` | bun | `features/runner/business`, `backend/events`, `features/mcp/business` | 25 | `bun test tests/src/server/runners` |
+| `tests/src/server/runners` | bun | `features/runner/business`, `backend/events`, `features/mcp/business` | 28 | `bun test tests/src/server/runners` |
 | `tests/src/server/settings` | bun | `features/settings/business` | 2 | `bun test tests/src/server/settings` |
 | `tests/src/server/tasks` | bun | `features/monitor/business`, `features/runner/business`, `backend/events` | 4 | `bun test tests/src/server/tasks` |
 | `tests/src/shared/lib` | bun | `frontend/http`, `shared/lib` | 1 | `bun test tests/src/shared/lib` |
