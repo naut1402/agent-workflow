@@ -11,6 +11,7 @@ import type { CredentialProfile, ExecuteRequest, ExecuteResult, ResolvedAgent, R
 import type { AgentCliProvider, McpDelivery } from './agentCli.js'
 import { mcpDeliveryOf } from './agentCli.js'
 import { prepareMcpConfigForJob, type McpJobConfigHandle } from './mcpJobConfig.js'
+import { buildSelfMcpEntry } from './selfMcpConfig.js'
 import { maskSecretText } from '../../../mcp/business/index.js'
 import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 
@@ -425,10 +426,39 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
       try {
         if (useMcpConfigFile) {
           try {
+            // Điều kiện lặp lại ĐÚNG bộ guard của `buildChildEnv` nên hai nơi
+            // không thể lệch: `buildChildEnv` không bơm env ⇒ `selfEntry` cũng
+            // `null`, không bao giờ có job mang tool mà thiếu token của nó.
+            const selfEntry =
+              req.metadata?.orchestratorJob === true
+              && req.metadata?.orchestratorMcpRoute === 'mcp'
+              && typeof req.metadata?.orchestratorToken === 'string'
+              && process.env.DEV_TEAM_SELF_BASE_URL
+                ? buildSelfMcpEntry({
+                    orchestratorToken: req.metadata.orchestratorToken as string,
+                    baseUrl: process.env.DEV_TEAM_SELF_BASE_URL,
+                  })
+                : null
+
+            // `--mcp-config` kéo theo `--strict-mcp-config` (buildClaudeInvocation),
+            // nên khi entry tự gắn là lý do DUY NHẤT sinh file, node điều phối
+            // mất mọi MCP server khai sẵn ở `~/.claude.json` của máy. Phần lớn
+            // là nâng cấp, nhưng nó im lặng và không tất định (chỉ xảy ra khi
+            // tuyến ra `mcp`) — phải có một dòng để truy ngược.
+            if (selfEntry && !runnerConfig.mcpServers?.length) {
+              appendLog(
+                '[runner] MCP: job điều phối tự gắn dev-team-dashboard ⇒ chạy với --strict-mcp-config, '
+                + 'MCP server cấu hình sẵn trên máy KHÔNG được nạp cho lượt này\n',
+              )
+            }
+
             mcpHandle = prepareMcpConfigForJob({
               ids: runnerConfig.mcpServers,
               workspace: req.workspace,
               jobId: req.jobId,
+              // Job thường ⇒ `[]` ⇒ mọi hành vi cũ nguyên vẹn, kể cả bất biến
+              // "không khai server nào ⇒ trả null, không file nào chạm đĩa".
+              extraServers: selfEntry ? [selfEntry] : [],
               // Nhận ngay lúc phát sinh, vì id bị tắt/xoá hết thì hàm trả `null`
               // và không còn handle nào mang warnings ra.
               onWarning: (message) => appendLog(`[runner] MCP warning: ${message}\n`),

@@ -8,6 +8,7 @@ import {
 } from '../../../../backend/lib/fileHelper.js'
 import { registryHome } from '../../../../backend/registry.js'
 import { listMcpServers, sanitiseMcpServerId, serialiseMcpServers } from '../../../mcp/business/index.js'
+import type { McpServerConfig } from '../../../mcp/business/types.js'
 import { getCredential, isDirectSecretType, resolveSecretRef } from '../credentials.js'
 
 export interface McpJobConfigHandle {
@@ -25,6 +26,12 @@ export interface PrepareMcpConfigInput {
   ids: unknown
   workspace: string
   jobId: string
+  /**
+   * Server do dashboard TỰ gắn, không nằm trong registry MCP của người dùng
+   * (hiện chỉ có job điều phối dùng). Ghi SAU `ids` nên trùng khoá thì entry
+   * này thắng — job điều phối phải chắc chắn nói chuyện với dashboard này.
+   */
+  extraServers?: McpServerConfig[]
   /**
    * Nhận cảnh báo ngay khi phát sinh, kể cả khi hàm trả `null`. Id bị tắt/xoá
    * sau khi Connection đã chọn thì không còn handle nào để mang `warnings` ra,
@@ -45,7 +52,10 @@ export interface PrepareMcpConfigInput {
  */
 export function prepareMcpConfigForJob(input: PrepareMcpConfigInput): McpJobConfigHandle | null {
   const ids = Array.isArray(input.ids) ? input.ids.filter((x): x is string => typeof x === 'string') : []
-  if (!ids.length) return null
+  const extras = input.extraServers ?? []
+  // Bất biến: KHÔNG id nào VÀ không entry tự gắn nào ⇒ vẫn `null`, không file
+  // nào chạm đĩa, argv CLI không đổi. Đây là đường mặc định của mọi job thường.
+  if (!ids.length && !extras.length) return null
 
   const warnings: string[] = []
   const warn = (message: string) => {
@@ -60,11 +70,23 @@ export function prepareMcpConfigForJob(input: PrepareMcpConfigInput): McpJobConf
     warn(`mcp ${id}: không tìm thấy hoặc đang tắt — job chạy không có server này`)
   }
 
+  // Ghi đè im lặng là thứ không ai truy ngược được từ log job. So trên khoá ĐÃ
+  // sanitise vì file dedup theo khoá đó: id `dev team dashboard` sanitise về
+  // đúng `dev-team-dashboard` và bị ghi đè thật, so id thô sẽ bỏ sót.
+  const extraKeys = new Set(extras.map((s) => sanitiseMcpServerId(s.id)).filter(Boolean))
+  for (const server of servers) {
+    if (!extraKeys.has(sanitiseMcpServerId(server.id))) continue
+    warn(`mcp ${server.id}: entry của người dùng bị entry tự gắn của dashboard ghi đè cho job điều phối`)
+  }
+
   // Rụng hết thì vẫn `null` để giữ bất biến "không file nào chạm đĩa"; cảnh báo
   // đã đi ra qua `onWarning` ở trên nên không im lặng tuyệt đối.
-  if (!servers.length) return null
+  if (!servers.length && !extras.length) return null
 
-  const serialised = serialiseMcpServers(servers, {
+  // `extras` sau `servers`: `serialiseMcpServers` ghi theo thứ tự nên trùng
+  // khoá thì entry tự gắn thắng.
+  const all = [...servers, ...extras]
+  const serialised = serialiseMcpServers(all, {
     workspace: input.workspace,
     secretFor: (credentialId) => {
       const resolved = resolveSecretRef(getCredential(credentialId))
@@ -84,10 +106,22 @@ export function prepareMcpConfigForJob(input: PrepareMcpConfigInput): McpJobConf
   writeTextFileSync(path, JSON.stringify(serialised.json, null, 2), { mode: 0o600 })
   tryChmod(path, 0o600)
 
+  // Một tên cho mỗi entry THẬT trong file: id trùng nhau chỉ sinh một entry
+  // (báo 2 là báo sai thứ job nhận được), và server có id sanitise ra `null`
+  // không vào file nên không được đếm. Nhưng tên hiển thị vẫn là id NGƯỜI DÙNG
+  // gõ, 🚫 không phải khoá đã sanitise — giữ nguyên hợp đồng dòng log cũ để
+  // tên khớp với tab MCP. Khoá trùng ⇒ lấy id của server thắng (ghi sau).
+  const idByKey = new Map<string, string>()
+  for (const server of all) {
+    const key = sanitiseMcpServerId(server.id)
+    if (key) idByKey.set(key, server.id)
+  }
+  const names = Object.keys(serialised.json.mcpServers).map((key) => idByKey.get(key) ?? key)
+
   return {
     path,
-    count: servers.length,
-    names: servers.map((s) => s.id),
+    count: names.length,
+    names,
     secrets: serialised.secrets,
     warnings,
     dispose() {

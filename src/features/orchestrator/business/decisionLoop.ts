@@ -38,6 +38,7 @@ import {
   type DecisionTrigger,
   type StepResult,
 } from './decision.js'
+import { resolveDecisionRoute } from './mcpRoute.js'
 import { mintOrchestratorToken, revokeOrchestratorTokensFor } from './orchestratorTokens.js'
 
 /** Quét lại task treo mỗi 60s — lưới cứu khi event bus (in-process) mất tín hiệu. */
@@ -484,6 +485,10 @@ async function askAgent(
   // được sau (job file là snapshot) — mint muộn hơn nghĩa là job không bao giờ
   // biết token của chính nó.
   const orchestratorToken = mintOrchestratorToken(ref)
+  // Chốt tuyến NGAY TRƯỚC submitJob, cùng lý do với mint token: metadata là
+  // snapshot không sửa lại được sau. Một giá trị — prompt và runner cùng đọc,
+  // nên không có cửa sổ "prompt dạy gọi tool mà job không có tool".
+  const { route: mcpRoute } = resolveDecisionRoute()
   const knowledgeBundle = await loadKnowledgeBundle(ref.root, orch.knowledge_inputs ?? [])
   const liveStep = liveJobsOfTask(ref.root, ref.taskId).find((j) => !isOrchestratorJob(j))
   const job = submitJob({
@@ -503,6 +508,7 @@ async function askAgent(
       recent: recentOf(ref.root, ref.taskId),
       extraSystemPrompt: orch.system_prompt,
       knowledgeText: renderBundle(knowledgeBundle),
+      route: mcpRoute,
     }),
     // Luôn `resume`: ledger khoá entry theo `stepId`, và job này mang
     // `metadata.stepId = ORCHESTRATOR_STEP_ID` ⇒ lượt đầu tự ra `new` (node chưa
@@ -522,6 +528,10 @@ async function askAgent(
       // quyết định là sự cố phải xử lý, ở lượt chat thì chỉ là im lặng.
       orchestratorTrigger: trigger,
       orchestratorToken,
+      // Runner đọc lại ĐÚNG giá trị prompt đã dùng để quyết định có gắn MCP của
+      // dashboard vào job hay không. Job cũ thiếu khoá này ⇒ `undefined` ⇒
+      // `!== 'mcp'` ⇒ không gắn: tương thích ngược hoàn toàn.
+      orchestratorMcpRoute: mcpRoute,
     },
   })
   return { job }
