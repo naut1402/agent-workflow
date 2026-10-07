@@ -5,6 +5,10 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        # Build-time, KHÔNG phải env runtime: đổi giá trị bắt buộc kèm rebuild.
+        RTK_VERSION: "${RTK_VERSION:-}"
+        RTK_REFRESH: "${RTK_REFRESH:-}"
     image: dev-team-dashboard:local
     ports:
       # Default: loopback only. Opt-in LAN: DEV_TEAM_DASHBOARD_BIND=0.0.0.0
@@ -27,10 +31,43 @@ services:
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
       GH_TOKEN: ${GH_TOKEN:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-${GH_TOKEN:-}}
+      RTK_TELEMETRY_DISABLED: "${RTK_TELEMETRY_DISABLED:-1}"
+      RTK_HOOK_ENABLED: "${RTK_HOOK_ENABLED:-1}"
     volumes:
       - ${DEV_TEAM_PROJECT_PATH:-${HOME}/workspace}:/data/project
       - dashboard-home:/data/dashboard-home
+      - rtk-data:/home/dashboard/.local/share/rtk
     restart: unless-stopped
+
+  # Toolbox, không phải service thường trực: rtk là CLI, không có port và không có
+  # process foreground. `profiles` giữ nó ngoài `docker compose up` mặc định.
+  # Dùng: docker compose --profile tools run --rm rtk gain
+  # Không khai depends_on: đây là lệnh đọc báo cáo offline từ volume rtk-data,
+  # không cần dashboard đang chạy. Không khai ports: rtk không listen gì.
+  rtk:
+    profiles: ["tools"]
+    image: dev-team-dashboard:local
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        RTK_VERSION: "${RTK_VERSION:-}"
+        RTK_REFRESH: "${RTK_REFRESH:-}"
+    # Mirror PUID/PGID của dashboard để file trong rtk-data cùng owner. Lưu ý: service này
+    # bỏ qua entrypoint nên KHÔNG có fallback PUID=0 → 1001 như entrypoint.sh; đặt PUID=0
+    # trong docker/.env sẽ chạy toolbox dưới root và để lại file root-owned trong volume.
+    user: "${PUID:-1001}:${PGID:-1001}"
+    # Bỏ qua docker-entrypoint.sh: script đó cần uid 0 cho useradd/runuser,
+    # còn service này chạy non-root.
+    entrypoint: ["rtk"]
+    command: ["gain"]
+    environment:
+      HOME: /home/dashboard
+      RTK_TELEMETRY_DISABLED: "${RTK_TELEMETRY_DISABLED:-1}"
+    volumes:
+      - rtk-data:/home/dashboard/.local/share/rtk
+    restart: "no"
 
 volumes:
   dashboard-home:
+  rtk-data:

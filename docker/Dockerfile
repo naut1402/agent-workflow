@@ -85,6 +85,22 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
   && command -v claude \
   && (command -v agent || command -v cursor-agent)
 
+# rtk (Rust Token Killer) — nén output lệnh shell trước khi vào context LLM.
+# Dùng install.sh upstream: tự detect arch, verify SHA-256 (từ chối nếu thiếu
+# checksums.txt) và chặn path traversal trong tar — không cần script tự viết.
+# RTK_VERSION trống = resolve latest lúc build, script lấy từ nhánh mặc định `develop`;
+# có giá trị = pin cả script lẫn binary theo đúng tag. Đổi RTK_REFRESH để phá cache layer này.
+ARG RTK_VERSION=""
+ARG RTK_REFRESH=""
+RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
+  && ref="${RTK_VERSION:+refs/tags/$RTK_VERSION}" \
+  && curl -fsSL "https://raw.githubusercontent.com/rtk-ai/rtk/${ref:-refs/heads/develop}/install.sh" \
+     | RTK_REFRESH="$RTK_REFRESH" \
+       RTK_VERSION="$RTK_VERSION" \
+       RTK_INSTALL_DIR=/home/dashboard/.local/bin \
+       sh \
+  && command -v rtk
+
 COPY --chown=dashboard:dashboard package.json bun.lock ./
 RUN --mount=type=cache,id=bun-cache-runtime,target=/tmp/bun-cache,uid=1001,gid=1001 \
     if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
