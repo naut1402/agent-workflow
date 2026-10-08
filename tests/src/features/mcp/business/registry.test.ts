@@ -535,3 +535,90 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
     expect(servers[1].timeoutMs).toBe(300_000)
   })
 })
+
+/* ═══ #386 · Tdf943817 — tách `normaliseMcpServer` là HÀNH VI-TRUNG TÍNH ═══════
+ *
+ * TC-CX-01 … TC-CX-06.
+ *
+ * ⚠️ Khối này **CHỈ ĐƯỢC THÊM VÀO CUỐI FILE**. TC-01…TC-10, TC-96, TC-97 ở trên
+ * phải có diff **RỖNG** — đó chính là bằng chứng của CX-2, và sửa dù chỉ một
+ * dòng format của chúng là làm hỏng bằng chứng. Vì vậy `import` của khối này
+ * cũng nằm **ở đây** chứ 🚫 gộp lên khối import đầu file: thêm một dòng trên đó
+ * là dời số dòng của mọi ca phía dưới.
+ */
+import { normaliseMcpServer } from '../../../../../src/features/mcp/business/registry.js'
+import { NORMALISE_FIXTURES } from './normaliseFixtures.mjs'
+
+describe('#386 — normaliseMcpServer sau khi tách hàm con', () => {
+  // TC-CX-02
+  test('TC-CX-02: stdio thiếu `command` (3 biến thể) ⇒ null', () => {
+    expect(normaliseMcpServer({ id: 'a', transport: 'stdio' })).toBeNull()
+    expect(normaliseMcpServer({ id: 'a', transport: 'stdio', command: '' })).toBeNull()
+    expect(normaliseMcpServer({ id: 'a', transport: 'stdio', command: '   ' })).toBeNull()
+  })
+
+  // TC-CX-03
+  test('TC-CX-03: http/sse thiếu `url` ⇒ null', () => {
+    for (const transport of ['http', 'sse']) {
+      expect(normaliseMcpServer({ id: 'a', transport })).toBeNull()
+      expect(normaliseMcpServer({ id: 'a', transport, url: '' })).toBeNull()
+      expect(normaliseMcpServer({ id: 'a', transport, url: '  ' })).toBeNull()
+    }
+  })
+
+  /**
+   * TC-CX-04 — thứ tự kiểm 🚫 được đổi: `id` sai ⇒ `null` NGAY, 🚫 phụ thuộc
+   * field của transport. Hai guard `null` nằm TRONG hàm con chính là để thứ tự
+   * này giữ nguyên sau khi tách.
+   */
+  test('TC-CX-04: `id` không hợp lệ VÀ thiếu `command` cùng lúc ⇒ null, 🚫 ném', () => {
+    expect(() => normaliseMcpServer({ id: '///', transport: 'stdio' })).not.toThrow()
+    expect(normaliseMcpServer({ id: '///', transport: 'stdio' })).toBeNull()
+    // `id` sai một mình cũng đủ ⇒ null, dù transport và field của nó đều hợp lệ.
+    expect(normaliseMcpServer({ id: '///', transport: 'http', url: 'https://a.example' })).toBeNull()
+    expect(normaliseMcpServer({ transport: 'stdio', command: 'npx' })).toBeNull()
+  })
+
+  // TC-CX-05
+  test('TC-CX-05: transport lạ ⇒ null', () => {
+    for (const transport of ['ws', '', undefined, 3, null, {}]) {
+      expect(normaliseMcpServer({ id: 'a', transport, command: 'npx', url: 'https://a.example' })).toBeNull()
+    }
+  })
+
+  /**
+   * TC-CX-06 ⭐ — **Golden**. Snapshot chụp trên base `4c58b44` TRƯỚC khi sửa code
+   * (`test-spec.md` A-6) và đi kèm PR test; ca này chỉ so, 🚫 sinh lại. Snapshot
+   * sinh sau khi refactor 🚫 chứng minh được gì.
+   *
+   * So bằng `JSON.stringify` chứ 🚫 `toEqual`: nó bắt luôn **thứ tự khoá**, mà
+   * thứ tự khoá chính là hình dạng `mcp-servers.json` ghi xuống đĩa.
+   */
+  test('TC-CX-06: golden ≥15 fixture khớp TUYỆT ĐỐI snapshot của base 4c58b44', () => {
+    const snapshotPath = path.join(import.meta.dir, 'normaliseMcpServer.base-4c58b44.json')
+    const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8')) as {
+      baseSha: string
+      entries: { name: string; result: unknown }[]
+    }
+
+    expect(snapshot.baseSha).toBe('4c58b44')
+    expect(snapshot.entries.length).toBeGreaterThanOrEqual(15)
+    expect(snapshot.entries.map((e) => e.name)).toEqual(
+      (NORMALISE_FIXTURES as { name: string }[]).map((f) => f.name),
+    )
+
+    const actual = (NORMALISE_FIXTURES as { name: string; raw: unknown }[]).map(({ name, raw }) => ({
+      name,
+      result: normaliseMcpServer(raw),
+    }))
+
+    // So từng fixture trước để thông điệp đỏ chỉ đúng ca lệch…
+    for (let i = 0; i < actual.length; i++) {
+      expect(JSON.stringify(actual[i].result), `fixture «${actual[i].name}»`).toBe(
+        JSON.stringify(snapshot.entries[i].result),
+      )
+    }
+    // …rồi so nguyên bộ, để 🚫 lọt ca thừa/thiếu.
+    expect(JSON.stringify(actual)).toBe(JSON.stringify(snapshot.entries))
+  })
+})
