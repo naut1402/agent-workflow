@@ -1209,3 +1209,146 @@ describe('ConnectionDialog — overlay chặn thao tác lúc lưu', () => {
     second.unmount()
   })
 })
+
+/* ═══ #378 · #379 · Tdf943817 — cảnh báo theo cách giao MCP của provider ══════ */
+
+import runnerEn from '@/features/runner/locales/en'
+import { mcpDeliveryOf } from '@/features/runner/business/providers/agentCli'
+
+/**
+ * TC-P5-25 · TC-P5-26 (+ vế UI của #379).
+ *
+ * ⚠️ Lệch so với `design.md` §4.1 và `test-spec.md` §2.1: cảnh báo nằm ở
+ * **`ConnectionDialog.vue`**, 🚫 phải `RunnerConfigPanel.vue` — ô chọn MCP server
+ * thật sự ở đây, và P5-8 đòi người dùng thấy *TRƯỚC KHI BẬT* (`implement.md`
+ * §4 "Sai lệch 2"). TC đi theo bề mặt thật.
+ *
+ * 📌 Catalog ở đây lấy `mcpDelivery` từ **chính `mcpDeliveryOf`**, 🚫 hằng gõ
+ * tay: fixture gõ tay là thứ vẫn xanh sau khi giá trị thật đã đổi — đúng cái bẫy
+ * mà TC-62 vừa rơi vào.
+ */
+describe('ConnectionDialog — cảnh báo theo mcpDelivery (#378 / #379)', () => {
+  const MCP_SERVERS = [
+    { id: 'playwright', label: 'Playwright MCP', enabled: true, transport: 'stdio', command: 'npx', args: [], env: {} },
+  ]
+
+  const REAL_PROVIDERS: ProviderEntry[] = [
+    { id: 'claude-code-cli', kind: 'local-console', label: 'Claude Code CLI', family: 'agent-cli', mcpDelivery: mcpDeliveryOf('claude-code-cli') },
+    { id: 'cursor-cli', kind: 'local-console', label: 'Cursor CLI', family: 'agent-cli', mcpDelivery: mcpDeliveryOf('cursor-cli') },
+    { id: 'codex-cli', kind: 'local-console', label: 'Codex CLI', family: 'agent-cli', mcpDelivery: mcpDeliveryOf('codex-cli') },
+    ...PROVIDERS.map((p) => ({ ...p, mcpDelivery: mcpDeliveryOf(p.id) })),
+  ] as ProviderEntry[]
+
+  const LOCAL_COMMANDS_REAL = [
+    { id: 'claude', command: 'claude', path: 'claude', available: true, providerId: 'claude-code-cli', flags: [] },
+    { id: 'cursor-agent', command: 'cursor-agent', path: 'cursor-agent', available: true, providerId: 'cursor-cli', flags: [] },
+    { id: 'codex', command: 'codex', path: 'codex', available: true, providerId: 'codex-cli', flags: [] },
+  ]
+
+  async function mountReal(connection: any = null) {
+    vi.mocked(scanLocalCommands).mockResolvedValue({ commands: LOCAL_COMMANDS_REAL })
+    const w = mount(ConnectionDialog, {
+      props: { providers: REAL_PROVIDERS, providerConfigs: PROVIDER_CONFIGS, connection },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    return w
+  }
+  async function tick(id: string) {
+    const box = qa<HTMLInputElement>(`input[type="checkbox"][value="${id}"]`)[0]
+    if (!box) throw new Error(`mcp checkbox not found: ${id}`)
+    box.checked = true
+    box.dispatchEvent(new Event('change'))
+    await flushPromises()
+  }
+  async function chooseCmd(label: string) {
+    await pickCSelectOption(cSelectRootByLabel('Command'), label)
+  }
+
+  beforeEach(() => {
+    vi.mocked(fetchMcpServers).mockClear()
+    vi.mocked(fetchMcpServers).mockResolvedValue({ servers: [...MCP_SERVERS] } as any)
+  })
+
+  // TC-P5-25 ⭐
+  it('TC-P5-25: cursor-cli + có server bật ⇒ cảnh báo file nằm TRONG workspace', async () => {
+    const w = await mountReal()
+    await chooseCmd('cursor-agent')
+    await tick('playwright')
+
+    const text = document.body.textContent ?? ''
+    expect(text).toContain(runnerVi.connectionDialog.mcpWorkspaceFile)
+    // Nội dung phải nói đủ hai điều người dùng cần biết TRƯỚC khi bật.
+    expect(runnerVi.connectionDialog.mcpWorkspaceFile).toContain('.cursor/mcp.json')
+    expect(runnerVi.connectionDialog.mcpWorkspaceFile).toContain('~/.cursor')
+    // …và 🚫 còn báo sai rằng cursor không dùng được MCP (bug kéo theo đã sửa).
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpUnsupported)
+
+    w.unmount()
+  })
+
+  it('TC-P5-25 (b): claude-code-cli ⇒ 🚫 cảnh báo workspace-file', async () => {
+    const w = await mountReal()
+    await chooseCmd('claude')
+    await tick('playwright')
+
+    const text = document.body.textContent ?? ''
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpWorkspaceFile)
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpUnsupported)
+    w.unmount()
+  })
+
+  it('TC-P5-25 (c): 🚫 chọn server nào ⇒ 🚫 cảnh báo nào, kể cả với cursor', async () => {
+    const w = await mountReal()
+    await chooseCmd('cursor-agent')
+
+    const text = document.body.textContent ?? ''
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpWorkspaceFile)
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpUnsupported)
+    w.unmount()
+  })
+
+  it('TC-P5-25 (d): codex-cli vẫn là `unsupported` ⇒ giữ nguyên cảnh báo cũ', async () => {
+    const w = await mountReal()
+    await chooseCmd('codex')
+    await tick('playwright')
+
+    const text = document.body.textContent ?? ''
+    expect(text).toContain(runnerVi.connectionDialog.mcpUnsupported)
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpWorkspaceFile)
+    w.unmount()
+  })
+
+  /** #379 vế UI — họ `ai-api` nạp tool thẳng vào vòng tool-use, 🚫 qua file. */
+  it('TC-P6-UI: provider `ai-api` ⇒ nói đúng là tool nạp vào vòng tool-use, 🚫 báo unsupported', async () => {
+    const w = await mountReal()
+    const aiRadio = q<HTMLInputElement>('input[type="radio"][value="ai-provider"]')
+    aiRadio.checked = true
+    aiRadio.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await chooseProviderConfig('pc-anthropic')
+    await flushPromises()
+    await tick('playwright')
+
+    const text = document.body.textContent ?? ''
+    expect(text).toContain(runnerVi.connectionDialog.mcpToolBridge)
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpUnsupported)
+    expect(runnerVi.connectionDialog.mcpToolBridge).toContain('mcp__')
+    w.unmount()
+  })
+
+  // TC-P5-26 — i18n: khoá mới có đủ ở CẢ hai locale và 🚫 rỗng.
+  it('TC-P5-26: khoá `mcpWorkspaceFile` / `mcpToolBridge` có đủ ở vi và en', () => {
+    for (const [name, dict] of [['vi', runnerVi], ['en', runnerEn]] as const) {
+      for (const key of ['mcpWorkspaceFile', 'mcpToolBridge'] as const) {
+        const value = (dict.connectionDialog as Record<string, unknown>)[key]
+        expect(typeof value, `${name}.${key}`).toBe('string')
+        expect(String(value).trim().length, `${name}.${key}`).toBeGreaterThan(0)
+      }
+    }
+    // Hai locale 🚫 được chép nguyên văn của nhau (dấu hiệu quên dịch).
+    expect(runnerEn.connectionDialog.mcpWorkspaceFile).not.toBe(
+      runnerVi.connectionDialog.mcpWorkspaceFile,
+    )
+  })
+})
