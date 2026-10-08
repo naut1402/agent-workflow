@@ -12,7 +12,7 @@ import type { AgentCliProvider, McpDelivery } from './agentCli.js'
 import { mcpDeliveryOf } from './agentCli.js'
 import { prepareMcpConfigForJob, type McpJobConfigHandle } from './mcpJobConfig.js'
 import { buildSelfMcpEntry } from './selfMcpConfig.js'
-import { maskSecretText } from '../../../mcp/business/index.js'
+import { createSecretStreamMasker, maskSecretText } from '../../../mcp/business/index.js'
 import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 
 interface ProcResult {
@@ -537,11 +537,21 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         // MCP server (hoặc chính CLI) in token ra stderr là chuyện thường —
         // `401 Unauthorized: Bearer sk-…`. File config được bảo vệ 0600 mà log job
         // thì không, nên lọc ở đúng một chỗ trước khi chunk đi bất cứ đâu.
-        const wrappedOnLog = (chunk: string) => {
-          const text = maskLog(chunk)
+        //
+        // Bộ lọc phải CÓ TRẠNG THÁI: `maskLog` là split/join từng chunk, nên một
+        // secret bị tiến trình con xuất làm hai chunk lọt qua cả hai lần gọi.
+        // Đổi lại, log trễ `max(len(secret)) - 1` ký tự ⇒ `flushStream()` là bắt
+        // buộc ở CẢ nhánh thành công lẫn nhánh lỗi, nếu không là nuốt đuôi log.
+        const streamMasker = createSecretStreamMasker(mcpHandle?.secrets ?? [])
+        const emitLog = (text: string) => {
+          if (!text) return
           onLog?.(text)
           appendLog(text)
         }
+        const wrappedOnLog = (chunk: string) => emitLog(streamMasker.push(chunk))
+        // Gọi NGAY sau khi `runProcess` trả về / ném, TRƯỚC mọi `describeResult` —
+        // nếu không thì dòng tổng kết chen lên trước phần đuôi của log stream.
+        const flushStream = () => emitLog(streamMasker.flush())
 
         const wrappedOnStart = (info: { pid: number | null }) => {
           onStart?.(info)
@@ -562,6 +572,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
             stdinInput,
           })
         } catch (err: any) {
+          flushStream()
           const result: ExecuteResult = {
             ok: false,
             exitCode: null,
@@ -572,6 +583,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
           appendLog(describeResult(result))
           return result
         }
+        flushStream()
 
         const artifactsFound: string[] = []
         if (req.produces?.length) {
@@ -618,10 +630,14 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
           // → SSE. `redactPayload` chỉ lọc theo tên khoá nên khoá `error` lọt sạch.
           error: ok ? undefined : maskLog(formatFailure(procResult, timeoutMs)),
           timedOut: procResult.killed,
-          // stdout KHÔNG mask: là payload chức năng (proposal ghép vào scratch, dòng
-          // ORCHESTRATOR_DECISION), mask mù sẽ cắt giữa artifact. `error` đã mask, và
-          // đó là nhánh duy nhất stderr của server MCP đi ra ngoài.
+          // stdout THÔ: là payload chức năng (proposal ghép vào scratch, dòng
+          // ORCHESTRATOR_DECISION), mask mù sẽ cắt giữa artifact.
           stdout,
+          // …còn bản ĐÃ MASK đi kèm cho biên persist/API (`JobRecord.stdout`,
+          // `GET /api/jobs`). Hai đường tách hẳn nhau: đường chức năng đọc `stdout`,
+          // đường ghi đĩa đọc `maskedStdout ?? stdout` (`jobQueue.persistStdout`).
+          // 🚫 Không mask thẳng `stdout` — xem design §3.4.
+          ...(mcpHandle?.secrets.length ? { maskedStdout: maskLog(stdout) } : {}),
           sessionId: capturedSessionId,
           tokenUsage,
         }

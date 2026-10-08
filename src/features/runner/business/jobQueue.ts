@@ -161,6 +161,18 @@ function backoffMsFor(attemptCount: number, schedule: number[]): number {
 const jobAbortControllers = new Map<string, AbortController>()
 
 /** Persist agent reply on the job record for chat UI (NL + pipeline task chat). */
+/**
+ * Giá trị `stdout` cho BIÊN PERSIST/API — `jobs/<id>.json` không 0600 và chảy
+ * thẳng ra `GET /api/jobs`, nên nó phải là bản đã mask secret MCP khi có.
+ *
+ * 🚫 Không dùng ở đường chức năng. `foldProposalIntoScratch` và
+ * `tryDispatchOrchestratorDecision` cố ý giữ `result.stdout` THÔ: mask là
+ * split/join mù, nó cắt giữa artifact đang fold và giữa dòng `ORCHESTRATOR_DECISION`.
+ */
+function persistStdout(result: ExecuteResult): string | undefined {
+  return result.maskedStdout ?? result.stdout
+}
+
 function shouldPersistStdout(job: JobRecord, providerId: string | undefined): boolean {
   if (job.metadata?.isNlChat) return true
   // Với job quyết định của orchestrator, stdout LÀ kênh truyền lệnh (dòng
@@ -921,7 +933,7 @@ async function runJob(job: JobRecord): Promise<void> {
       console.error('[jobQueue] advancePipelineStepChain failed', err)
     } finally {
       saveJob({
-        ...withStepSummary(loadJob(job.id) as JobRecord, result.stdout),
+        ...withStepSummary(loadJob(job.id) as JobRecord, persistStdout(result)),
         status: 'succeeded',
         finishedAt: new Date().toISOString(),
         exitCode: result.exitCode,
@@ -930,7 +942,7 @@ async function runJob(job: JobRecord): Promise<void> {
         artifactsFound: result.artifactsFound,
         pid: null,
         ...(shouldPersistStdout(job, connection.providerId)
-          ? { stdout: (result.stdout ?? '').slice(0, CHAT_STDOUT_LIMIT) }
+          ? { stdout: (persistStdout(result) ?? '').slice(0, CHAT_STDOUT_LIMIT) }
           : {}),
         ...(capturedSessionId ? { sessionId: capturedSessionId } : {}),
       })
@@ -942,7 +954,7 @@ async function runJob(job: JobRecord): Promise<void> {
 
   const finalStatus = result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed'
   saveJob({
-    ...withStepSummary(loadJob(job.id) as JobRecord, result.stdout),
+    ...withStepSummary(loadJob(job.id) as JobRecord, persistStdout(result)),
     status: finalStatus,
     finishedAt: new Date().toISOString(),
     exitCode: result.exitCode,
@@ -953,7 +965,7 @@ async function runJob(job: JobRecord): Promise<void> {
     // Task/NL chat read the agent's reply from here: the log file also contains
     // the payload/prompt framing, which must never be shown as the chat answer.
     ...(shouldPersistStdout(job, connection.providerId)
-      ? { stdout: (result.stdout ?? '').slice(0, CHAT_STDOUT_LIMIT) }
+      ? { stdout: (persistStdout(result) ?? '').slice(0, CHAT_STDOUT_LIMIT) }
       : {}),
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
   })
