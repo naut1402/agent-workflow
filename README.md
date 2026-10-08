@@ -91,17 +91,9 @@ bun run test:all     # typecheck → lint → test → test:fe → e2e
 bun run check:todo   # gate docs/todo (CI promote → main)
 ```
 
-### Biến môi trường
-
-| Biến | Bắt buộc? | Dùng cho | Khi không set |
-|------|-----------|----------|---------------|
-| `ANTHROPIC_API_KEY` | Tuỳ chọn | Sinh bản nháp agent từ mô tả (`/api/custom-agents/generate`) | Fallback heuristic |
-| `DASHBOARD_SECRET_KEY` | Bắt buộc cho vault | Mã hoá `secret-vault.json` (`secretVault.ts`) — credential kiểu "dán secret trực tiếp" (`stored:`) và "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` | 2 luồng đó fail rõ ràng; CLI và secretRef `env:` / `file:` không bị ảnh hưởng |
-| `DEVTEAM_MCP_MODE` | Tuỳ chọn | Mode vận hành của MCP server — `readonly` hoặc `full` | Mặc định `readonly` (chỉ tool đọc). Giá trị lạ → cảnh báo ra `stderr` rồi lùi về `readonly`. Chi tiết: [`docs/mcp/server.md`](docs/mcp/server.md) §3 |
-
 ## Liên kết
 
-- [`docker/`](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example)
+- [`docker/`](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example) · [`docs/docker.md`](docs/docker.md): biến môi trường, vận hành rtk trong container
 - MCP server (`bun run mcp`) — [`docs/mcp/`](docs/mcp/README.md): mode vận hành, bảng tool, khai `mcpServers`, mã lỗi
 - Liên quan — [plugin Claude Code (bộ agent template)](docs/template/agents/) · [Issues](https://github.com/naut1402/agent-workflow/issues) · [Pull requests](https://github.com/naut1402/agent-workflow/pulls)
 - Tài liệu — [danh mục đầy đủ trong `docs/`](docs/README.md): kiến trúc, domain event, i18n, quy ước UI, template pipeline

@@ -47,6 +47,8 @@ agent-workflow/
 | 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
 | 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6 (làm trên commit mới nhất §6.3), todo debt §7, PR phát hành §8 · issue task: version, milestone, chia nhỏ §5 · publish tài liệu vào issue §11 (mọi bước có tài liệu đầu ra) |
 
+**Áp cho mọi bước, mọi category** (không riêng `git-pr`): 🚫 agent không sửa root [`README.md`](README.md) — quy ước đầy đủ và cách ghi đề xuất ở [`git-pr.md`](docs/agent-rules/git-pr.md) §7.2.2, checklist ở §4 dưới.
+
 Tra cứu (không phải rule): [`README.md`](README.md) quickstart · [`docs/architecture/`](docs/architecture/) kiến trúc C4 · [`docs/architecture/events/`](docs/architecture/events/README.md) domain event · [`docs/template/`](docs/template/) template agent / pipeline · [`docs/mcp/`](docs/mcp/README.md) bộ tool MCP server + vai client.
 
 ---
@@ -54,6 +56,22 @@ Tra cứu (không phải rule): [`README.md`](README.md) quickstart · [`docs/ar
 ## 4. Checklist hoàn thành workflow
 
 Template agent (`docs/template/agents/*`) chỉ có **bước cuối generic**: đọc mục này. Checklist nhóm theo giai đoạn pipeline (bảng §3).
+
+### Mọi bước
+
+<details>
+<summary><b>🚫 Không sửa root <code>README.md</code></b></summary>
+
+Quy ước: [`git-pr.md`](docs/agent-rules/git-pr.md) §7.2.2. Áp cho **mọi** bước pipeline — investigate, design, implement, test, review, PR.
+
+- [ ] **Không sửa / thêm / xoá dòng nào trong root `README.md`** — kể cả sửa link gãy hay số liệu lệch code.
+- [ ] **Cần đổi README → ghi đề xuất** vào `docs/todo/<issue>/<task-id>.md`, **Loại nợ:** `readme`; người duyệt tự sửa rồi xoá file nợ.
+- [ ] **Tài liệu chi tiết viết vào `docs/<chủ đề>/`** — root `README.md` chỉ trỏ link sang. Đó là chỗ agent được sửa.
+- [ ] **Review**: thấy `README.md` trong diff mà không phải commit của người duyệt → yêu cầu bỏ ra.
+
+</details>
+
+---
 
 ### Mọi bước có tài liệu đầu ra
 
