@@ -138,3 +138,43 @@ describe('RunnerConfigPanel — cấu trúc tab (AC-2)', () => {
     expect(consoleErrors).toEqual([])
   })
 })
+
+/**
+ * TC-CX-07 · TC-CX-08 (#386, Tdf943817) — CX-3: cấu trúc DOM mà e2e và
+ * TC-80…TC-83 bám vào 🚫 ĐƯỢC ĐỔI.
+ *
+ * `#386` đụng file này ở phần `<script setup>` bằng đúng một dòng
+ * `fallow-ignore-file` (🚫 chẻ component, 🚫 đụng `<template>` — `implement.md`
+ * §3 PR 2). Ca dưới khoá thẳng bất biến đó ở mức DOM, để nếu một vòng dọn
+ * complexity sau này chẻ component thật thì nó đỏ ở ĐÂY — trong 2 giây — chứ
+ * 🚫 phải ở `test-e2e/runner.spec.ts` sau 15 giây timeout.
+ *
+ * 🚫 Sửa TC-80…TC-83 ở trên: khối này CHỈ THÊM ca mới (`test-spec.md` §2.1).
+ */
+describe('#386 — bất biến DOM `.runner-config` (CX-3)', () => {
+  // TC-CX-08
+  it('TC-CX-08: `.runner-config` là gốc DUY NHẤT của tab Runner, e2e bám được', async () => {
+    await mountPanel()
+
+    const roots = qa('.runner-config')
+    expect(roots).toHaveLength(1)
+    // e2e chờ `.runner-config` **visible** rồi thao tác `.runner-list li` bên trong.
+    expect(roots[0].querySelectorAll('.runner-list').length).toBeGreaterThanOrEqual(1)
+    // Gốc nằm trong panel, 🚫 bị teleport ra ngoài — `page.locator` của e2e
+    // tìm theo cây DOM của trang chứ 🚫 theo wrapper.
+    expect(document.body.contains(roots[0])).toBe(true)
+  })
+
+  // TC-CX-07 — hai tab vẫn đổi qua lại được và 🚫 lỗi console sau khi tách.
+  it('TC-CX-07: đổi tab qua lại ⇒ `.runner-config` xuất hiện/biến mất đúng, 🚫 lỗi console', async () => {
+    await mountPanel()
+
+    expect(qa('.runner-config')).toHaveLength(1)
+    await click(tabByLabel(runnerVi.tabs.mcp))
+    expect(qa('.runner-config')).toHaveLength(0)
+    await click(tabByLabel(runnerVi.tabs.runner))
+    expect(qa('.runner-config')).toHaveLength(1)
+
+    expect(consoleErrors).toEqual([])
+  })
+})
