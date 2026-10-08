@@ -528,3 +528,223 @@ describe('AnthropicCompatibleProvider — job log: system prompt + tool-call out
     expect(log).toMatch(/\[tool\] str_replace_based_edit_tool .* → FAIL:/)
   })
 })
+
+/* ═══ #379 · Tdf943817 — bridge tool MCP vào vòng tool-use (anthropic SDK) ════ */
+
+// `beforeEach` 🚫 có trong khối import đầu file — khai thêm ở ĐÂY thay vì sửa
+// dòng đó, để diff của khối này 🚫 chạm phần trên.
+import { beforeEach } from 'bun:test'
+import { upsertMcpServer } from '../../../../../../src/features/mcp/business/registry.js'
+
+/**
+ * TC-P6-01 · TC-P6-03 · TC-P6-04 · TC-P6-06 · TC-P6-10 (vế "built-in vẫn thắng").
+ *
+ * Bề mặt: **body request thật gửi lên SDK** — `tools` và `system`. Đây là thứ
+ * model nhìn thấy; mọi phát biểu của #379 nói về nó.
+ *
+ * ⚠️ Baseline byte-identical chụp trên base `4c58b44` (`aiApiTools.base-4c58b44.json`,
+ * `test-spec.md` A-6). So với một bản sinh lại trên HEAD 🚫 chứng minh được gì.
+ */
+describe('AnthropicCompatibleProvider — tool MCP (#379)', () => {
+  const MCP_CANARY = 'sk-test-LEAKCANARY-0123456789'
+  const FIXTURE = path.join(
+    import.meta.dir,
+    '../../../../features/mcp/business/fake-mcp-server.mjs',
+  )
+  const BASELINE = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dir, 'aiApiTools.base-4c58b44.json'), 'utf8'),
+  ) as { baseSha: string; snapshots: Record<string, { tools: unknown; system: unknown }> }
+
+  let mcpWorkspace: string
+  let mcpHome: string
+  const prevBrave = process.env.BRAVE_SEARCH_API_KEY
+
+  beforeEach(() => {
+    mcpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-p6-anthropic-home-'))
+    mcpWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-p6-anthropic-ws-'))
+    process.env.DEV_TEAM_DASHBOARD_HOME = mcpHome
+    delete process.env.BRAVE_SEARCH_API_KEY
+  })
+
+  afterEach(() => {
+    process.env.DEV_TEAM_DASHBOARD_HOME = home
+    if (prevBrave === undefined) delete process.env.BRAVE_SEARCH_API_KEY
+    else process.env.BRAVE_SEARCH_API_KEY = prevBrave
+    fs.rmSync(mcpHome, { recursive: true, force: true })
+    fs.rmSync(mcpWorkspace, { recursive: true, force: true })
+  })
+
+  function seedMcp(id: string, env: Record<string, string> = {}) {
+    upsertMcpServer({
+      id,
+      label: id,
+      enabled: true,
+      transport: 'stdio',
+      command: process.execPath,
+      args: [FIXTURE, 'ok'],
+      env: { FAKE_MCP_SERVER_NAME: id, ...env },
+    })
+  }
+
+  /** Request đúng y hệt bản sinh baseline — 🚫 lệch một field nào. */
+  function baselineRequest(): ExecuteRequest {
+    return {
+      jobId: 'job-baseline',
+      resolvedAgent: { ref: 'agent', name: 'agent', description: '', systemPrompt: 'be helpful', skills: [] },
+      userPrompt: 'xin chào',
+      workspace: mcpWorkspace,
+    }
+  }
+
+  /** Chạy một lượt, trả body request ĐẦU TIÊN gửi lên SDK. */
+  async function captureBody(runnerConfig: Record<string, unknown>, req = baselineRequest()) {
+    const bodies: any[] = []
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body ?? '{}')))
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'xong' }], { input_tokens: 1, output_tokens: 1 }))
+    }) as unknown as typeof fetch
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const result = await provider.execute(req, { model: 'm', ...runnerConfig }, credential)
+    return { bodies, result }
+  }
+
+  // TC-P6-01 ⭐
+  test('TC-P6-01: 🚫 bật MCP, `orchestratorJob !== true` ⇒ `tools` + preamble BYTE-IDENTICAL base', async () => {
+    seedMcp('on1') // có server trong store nhưng Connection 🚫 bật ⇒ bridge null
+    const { bodies, result } = await captureBody({})
+
+    expect(result.ok).toBe(true)
+    expect(BASELINE.baseSha).toBe('4c58b44')
+    expect(JSON.stringify(bodies[0].tools)).toBe(
+      JSON.stringify(BASELINE.snapshots['anthropic.noExtras'].tools),
+    )
+    expect(JSON.stringify(bodies[0].system)).toBe(
+      JSON.stringify(BASELINE.snapshots['anthropic.noExtras'].system),
+    )
+  }, 30_000)
+
+  // TC-P6-03 — `extraTools` bật ⇒ bridge `null` vẫn 🚫 đụng đường tool sẵn có.
+  test('TC-P6-03: có `extraTools` mà 🚫 MCP ⇒ vẫn byte-identical base', async () => {
+    const { bodies } = await captureBody({ extraTools: ['shell', 'git', 'search', 'web'] })
+
+    expect(JSON.stringify(bodies[0].tools)).toBe(
+      JSON.stringify(BASELINE.snapshots['anthropic.withExtras'].tools),
+    )
+    expect(JSON.stringify(bodies[0].system)).toBe(
+      JSON.stringify(BASELINE.snapshots['anthropic.withExtras'].system),
+    )
+  }, 30_000)
+
+  // TC-P6-04 ⭐ · TC-P6-06 ⭐
+  test('TC-P6-04 / TC-P6-06: 1 server 2 tool ⇒ `tools` thêm 2 entry đúng khuôn + preamble liệt kê', async () => {
+    seedMcp('fs-local', { FAKE_MCP_TOOLS: 'read_file,ping' })
+    const { bodies } = await captureBody({ mcpServers: ['fs-local'] })
+
+    const baseTools = BASELINE.snapshots['anthropic.noExtras'].tools as any[]
+    const tools = bodies[0].tools as any[]
+    expect(tools).toHaveLength(baseTools.length + 2)
+    // Tool sẵn có giữ NGUYÊN và đứng TRƯỚC — 🚫 chen, 🚫 đổi thứ tự.
+    expect(JSON.stringify(tools.slice(0, baseTools.length))).toBe(JSON.stringify(baseTools))
+
+    const added = tools.slice(baseTools.length)
+    expect(added.map((t) => t.name).sort()).toEqual([
+      'mcp__fs-local__ping',
+      'mcp__fs-local__read_file',
+    ])
+    for (const tool of added) {
+      // Khuôn của SDK Anthropic: `{ name, description, input_schema }`.
+      expect(Object.keys(tool).sort()).toEqual(['description', 'input_schema', 'name'])
+      expect(typeof tool.description).toBe('string')
+      expect(tool.input_schema).toBeTruthy()
+      expect((tool.input_schema as any).type).toBe('object')
+    }
+
+    // TC-P6-06 — preamble BẮT BUỘC liệt kê tên ĐÃ PREFIX + mô tả: dòng tiêu đề
+    // ngay trên nói với model rằng danh sách này là DUY NHẤT.
+    const system = String(bodies[0].system)
+    for (const tool of added) {
+      expect(system).toContain(`- ${tool.name}: `)
+      expect(system).toContain(tool.description)
+    }
+  }, 30_000)
+
+  /**
+   * TC-P6-10 ⭐ (vế "built-in vẫn thắng") — server MCP khai tool TRÙNG TÊN tool
+   * sẵn có. `list_directory` built-in phải vẫn chạy built-in; bản MCP chỉ gọi
+   * được qua tên đã prefix. 🚫 Tool nào bị che.
+   */
+  test('TC-P6-10: tool MCP trùng tên built-in ⇒ built-in vẫn chạy built-in', async () => {
+    seedMcp('srv', { FAKE_MCP_TOOLS: 'list_directory' })
+    fs.mkdirSync(path.join(mcpWorkspace, 'thu-muc'), { recursive: true })
+    fs.writeFileSync(path.join(mcpWorkspace, 'thu-muc', 'ben-trong.md'), 'x', 'utf8')
+
+    const bodies: any[] = []
+    let call = 0
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body ?? '{}')))
+      call++
+      if (call === 1) {
+        return jsonResponse(
+          anthropicMessage([
+            { type: 'tool_use', id: 'tu_1', name: 'list_directory', input: { path: 'thu-muc' } },
+          ]),
+        )
+      }
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'xong' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const result = await provider.execute(
+      baselineRequest(),
+      { model: 'm', mcpServers: ['srv'] },
+      credential,
+    )
+
+    expect(result.ok).toBe(true)
+    // Hai tên cùng tồn tại, 🚫 cái nào bị che.
+    const names = (bodies[0].tools as any[]).map((t) => t.name)
+    expect(names).toContain('list_directory')
+    expect(names).toContain('mcp__srv__list_directory')
+
+    // Lời gọi tên TRẦN đi vào sandbox built-in ⇒ kết quả là entry của workspace.
+    const toolResult = JSON.stringify(
+      (bodies[1].messages as any[]).flatMap((m: any) => (Array.isArray(m.content) ? m.content : [])),
+    )
+    expect(toolResult).toContain('ben-trong.md')
+  }, 30_000)
+
+  // TC-P6-20 (vế provider) — kết quả tool MCP chứa canary ⇒ 🚫 lọt vào ExecuteResult/log.
+  test('TC-P6-20: kết quả tool MCP chứa canary ⇒ 🚫 lọt vào ExecuteResult', async () => {
+    seedMcp('srv', { FAKE_MCP_TOOLS: 'echo', FAKE_MCP_TOOL_SECRET: MCP_CANARY })
+    const logPath = path.join(mcpHome, 'job.log')
+    fs.writeFileSync(logPath, '', 'utf8')
+
+    let call = 0
+    const bodies: any[] = []
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body ?? '{}')))
+      call++
+      if (call === 1) {
+        return jsonResponse(
+          anthropicMessage([
+            { type: 'tool_use', id: 'tu_1', name: 'mcp__srv__echo', input: { text: 'noi dung' } },
+          ]),
+        )
+      }
+      return jsonResponse(anthropicMessage([{ type: 'text', text: 'xong' }]))
+    }) as unknown as typeof fetch
+
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const result = await provider.execute(
+      { ...baselineRequest(), metadata: { logPath } },
+      { model: 'm', mcpServers: ['srv'] },
+      credential,
+    )
+
+    expect(result.ok).toBe(true)
+    expect(JSON.stringify(result)).not.toContain(MCP_CANARY)
+    expect(fs.readFileSync(logPath, 'utf8')).not.toContain(MCP_CANARY)
+    // Kết quả tool gửi lại cho model cũng đã mask.
+    expect(JSON.stringify(bodies[1])).not.toContain(MCP_CANARY)
+  }, 30_000)
+})

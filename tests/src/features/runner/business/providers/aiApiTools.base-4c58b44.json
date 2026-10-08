@@ -1,0 +1,445 @@
+{
+  "baseSha": "4c58b44",
+  "snapshots": {
+    "anthropic.noExtras": {
+      "tools": [
+        {
+          "type": "text_editor_20250728",
+          "name": "str_replace_based_edit_tool"
+        },
+        {
+          "name": "list_directory",
+          "description": "List entries of a directory under the workspace.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Directory path relative to the workspace, defaults to \".\""
+              }
+            }
+          }
+        }
+      ],
+      "system": "## Tool khả dụng (DUY NHẤT — bỏ qua mọi tên tool khác được nhắc ở phần hướng dẫn bên dưới)\n- str_replace_based_edit_tool(command, path, ...) — đọc/tạo/sửa file qua 1 tool duy nhất, command: \"view\" (đọc file), \"create\" (tạo/ghi đè, cần file_text), \"str_replace\" (thay old_str bằng new_str, cần duy nhất 1 chỗ khớp), \"insert\" (chèn new_str sau dòng insert_line)\n- list_directory(path?) — liệt kê entry của 1 thư mục trong workspace\n\nHướng dẫn bên dưới có thể nhắc tới các công cụ không tồn tại ở đây (vd find_symbol, Serena MCP, Skill, Write, Read, Edit, TaskCreate...) — đó là tài liệu viết cho môi trường khác, KHÔNG áp dụng. Chỉ gọi đúng tên tool trong danh sách trên.\n\nQuy ước path: workspace hiện tại CHÍNH LÀ thư mục task (nơi chứa request.md), không phải root repo. Mọi path truyền cho tool ở trên phải tương đối ngay trong workspace này — ví dụ dùng `qa.md`, `investigate.md`, KHÔNG dùng `.dev-team-agent/tasks/<task-id>/qa.md` hay bất kỳ tiền tố thư mục nào khác dù hướng dẫn bên dưới viết path đầy đủ như vậy (path đó viết cho môi trường có cwd ở root repo).\n\nbe helpful"
+    },
+    "openai.noExtras": {
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "description": "Read a text file under the workspace.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "File path relative to the workspace."
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "write_file",
+            "description": "Write (create or overwrite) a text file under the workspace.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "File path relative to the workspace."
+                },
+                "content": {
+                  "type": "string",
+                  "description": "Full file content to write."
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "edit_file",
+            "description": "Replace one unique occurrence of old_string with new_string in a workspace file.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "File path relative to the workspace."
+                },
+                "old_string": {
+                  "type": "string"
+                },
+                "new_string": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "old_string",
+                "new_string"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "list_directory",
+            "description": "List entries of a directory under the workspace.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Directory path relative to the workspace, defaults to \".\""
+                }
+              }
+            }
+          }
+        }
+      ],
+      "system": [
+        "## Tool khả dụng (DUY NHẤT — bỏ qua mọi tên tool khác được nhắc ở phần hướng dẫn bên dưới)\n- read_file(path) — đọc nội dung 1 file text trong workspace\n- write_file(path, content) — tạo mới/ghi đè 1 file text trong workspace\n- edit_file(path, old_string, new_string) — thay 1 đoạn text duy nhất trong file\n- list_directory(path?) — liệt kê entry của 1 thư mục trong workspace\n\nHướng dẫn bên dưới có thể nhắc tới các công cụ không tồn tại ở đây (vd find_symbol, Serena MCP, Skill, Write, Read, Edit, TaskCreate...) — đó là tài liệu viết cho môi trường khác, KHÔNG áp dụng. Chỉ gọi đúng tên tool trong danh sách trên.\n\nQuy ước path: workspace hiện tại CHÍNH LÀ thư mục task (nơi chứa request.md), không phải root repo. Mọi path truyền cho tool ở trên phải tương đối ngay trong workspace này — ví dụ dùng `qa.md`, `investigate.md`, KHÔNG dùng `.dev-team-agent/tasks/<task-id>/qa.md` hay bất kỳ tiền tố thư mục nào khác dù hướng dẫn bên dưới viết path đầy đủ như vậy (path đó viết cho môi trường có cwd ở root repo).\n\nbe helpful"
+      ]
+    },
+    "anthropic.withExtras": {
+      "tools": [
+        {
+          "type": "text_editor_20250728",
+          "name": "str_replace_based_edit_tool"
+        },
+        {
+          "name": "list_directory",
+          "description": "List entries of a directory under the workspace.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Directory path relative to the workspace, defaults to \".\""
+              }
+            }
+          }
+        },
+        {
+          "name": "run_command",
+          "description": "Run a shell command in the workspace. Only these binaries are allowed: bun, npm, npx, node.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "Binary to run — must be in the allowlist."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Argument list, passed verbatim (no shell interpretation)."
+              }
+            },
+            "required": [
+              "command"
+            ]
+          }
+        },
+        {
+          "name": "git_status",
+          "description": "Show git status (porcelain) of the workspace.",
+          "input_schema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "git_diff",
+          "description": "Show git diff of the workspace or a single file.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "File path relative to the workspace (optional)."
+              },
+              "staged": {
+                "type": "boolean",
+                "description": "Diff staged changes instead of the working tree."
+              }
+            }
+          }
+        },
+        {
+          "name": "git_log",
+          "description": "Show recent commit log (oneline, capped at 50).",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": "number",
+                "description": "Max commits to show (1-50, default 20)."
+              }
+            }
+          }
+        },
+        {
+          "name": "search_files",
+          "description": "Search for a literal substring (not a regex) across text files in the workspace.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "description": "Literal substring to search for."
+              },
+              "path": {
+                "type": "string",
+                "description": "Directory to search under, relative to the workspace (optional)."
+              }
+            },
+            "required": [
+              "pattern"
+            ]
+          }
+        },
+        {
+          "name": "fetch_url",
+          "description": "Fetch the text content of a public https URL (private/loopback hosts are blocked).",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ]
+          }
+        }
+      ],
+      "system": "## Tool khả dụng (DUY NHẤT — bỏ qua mọi tên tool khác được nhắc ở phần hướng dẫn bên dưới)\n- str_replace_based_edit_tool(command, path, ...) — đọc/tạo/sửa file qua 1 tool duy nhất, command: \"view\" (đọc file), \"create\" (tạo/ghi đè, cần file_text), \"str_replace\" (thay old_str bằng new_str, cần duy nhất 1 chỗ khớp), \"insert\" (chèn new_str sau dòng insert_line)\n- list_directory(path?) — liệt kê entry của 1 thư mục trong workspace\n- run_command(command, args[]) — chạy 1 lệnh shell trong workspace, chỉ cho phép: bun, npm, npx, node\n- git_status() — trạng thái git (porcelain) của workspace\n- git_diff(path?, staged?) — diff của workspace hoặc 1 file\n- git_log(limit?) — lịch sử commit gần nhất (oneline, tối đa 50)\n- search_files(pattern, path?) — tìm 1 chuỗi con (không phải regex) trong các file text của workspace\n- fetch_url(url) — tải nội dung 1 URL https công khai (chặn host nội bộ/private)\n\nHướng dẫn bên dưới có thể nhắc tới các công cụ không tồn tại ở đây (vd find_symbol, Serena MCP, Skill, Write, Read, Edit, TaskCreate...) — đó là tài liệu viết cho môi trường khác, KHÔNG áp dụng. Chỉ gọi đúng tên tool trong danh sách trên.\n\nQuy ước path: workspace hiện tại CHÍNH LÀ thư mục task (nơi chứa request.md), không phải root repo. Mọi path truyền cho tool ở trên phải tương đối ngay trong workspace này — ví dụ dùng `qa.md`, `investigate.md`, KHÔNG dùng `.dev-team-agent/tasks/<task-id>/qa.md` hay bất kỳ tiền tố thư mục nào khác dù hướng dẫn bên dưới viết path đầy đủ như vậy (path đó viết cho môi trường có cwd ở root repo).\n\nbe helpful"
+    },
+    "openai.withExtras": {
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "description": "Read a text file under the workspace.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "File path relative to the workspace."
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "write_file",
+            "description": "Write (create or overwrite) a text file under the workspace.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "File path relative to the workspace."
+                },
+                "content": {
+                  "type": "string",
+                  "description": "Full file content to write."
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "edit_file",
+            "description": "Replace one unique occurrence of old_string with new_string in a workspace file.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "File path relative to the workspace."
+                },
+                "old_string": {
+                  "type": "string"
+                },
+                "new_string": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "old_string",
+                "new_string"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "list_directory",
+            "description": "List entries of a directory under the workspace.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Directory path relative to the workspace, defaults to \".\""
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "run_command",
+            "description": "Run a shell command in the workspace. Only these binaries are allowed: bun, npm, npx, node.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "Binary to run — must be in the allowlist."
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Argument list, passed verbatim (no shell interpretation)."
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "git_status",
+            "description": "Show git status (porcelain) of the workspace.",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "git_diff",
+            "description": "Show git diff of the workspace or a single file.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "File path relative to the workspace (optional)."
+                },
+                "staged": {
+                  "type": "boolean",
+                  "description": "Diff staged changes instead of the working tree."
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "git_log",
+            "description": "Show recent commit log (oneline, capped at 50).",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "limit": {
+                  "type": "number",
+                  "description": "Max commits to show (1-50, default 20)."
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "search_files",
+            "description": "Search for a literal substring (not a regex) across text files in the workspace.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "Literal substring to search for."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Directory to search under, relative to the workspace (optional)."
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "fetch_url",
+            "description": "Fetch the text content of a public https URL (private/loopback hosts are blocked).",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url"
+              ]
+            }
+          }
+        }
+      ],
+      "system": [
+        "## Tool khả dụng (DUY NHẤT — bỏ qua mọi tên tool khác được nhắc ở phần hướng dẫn bên dưới)\n- read_file(path) — đọc nội dung 1 file text trong workspace\n- write_file(path, content) — tạo mới/ghi đè 1 file text trong workspace\n- edit_file(path, old_string, new_string) — thay 1 đoạn text duy nhất trong file\n- list_directory(path?) — liệt kê entry của 1 thư mục trong workspace\n- run_command(command, args[]) — chạy 1 lệnh shell trong workspace, chỉ cho phép: bun, npm, npx, node\n- git_status() — trạng thái git (porcelain) của workspace\n- git_diff(path?, staged?) — diff của workspace hoặc 1 file\n- git_log(limit?) — lịch sử commit gần nhất (oneline, tối đa 50)\n- search_files(pattern, path?) — tìm 1 chuỗi con (không phải regex) trong các file text của workspace\n- fetch_url(url) — tải nội dung 1 URL https công khai (chặn host nội bộ/private)\n\nHướng dẫn bên dưới có thể nhắc tới các công cụ không tồn tại ở đây (vd find_symbol, Serena MCP, Skill, Write, Read, Edit, TaskCreate...) — đó là tài liệu viết cho môi trường khác, KHÔNG áp dụng. Chỉ gọi đúng tên tool trong danh sách trên.\n\nQuy ước path: workspace hiện tại CHÍNH LÀ thư mục task (nơi chứa request.md), không phải root repo. Mọi path truyền cho tool ở trên phải tương đối ngay trong workspace này — ví dụ dùng `qa.md`, `investigate.md`, KHÔNG dùng `.dev-team-agent/tasks/<task-id>/qa.md` hay bất kỳ tiền tố thư mục nào khác dù hướng dẫn bên dưới viết path đầy đủ như vậy (path đó viết cho môi trường có cwd ở root repo).\n\nbe helpful"
+      ]
+    }
+  }
+}
