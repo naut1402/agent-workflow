@@ -1,5 +1,9 @@
 import { z } from 'zod'
-import { MCP_MAX_TIMEOUT_MS } from '../business/types.js'
+import {
+  MCP_MAX_TIMEOUT_MS,
+  MCP_WARN_ARGS_SECRET_LITERAL,
+  collectSecretArgs,
+} from '../business/types.js'
 
 const stringRecord = z.record(z.string(), z.string())
 
@@ -35,6 +39,22 @@ const RemoteFields = z.object({
 })
 
 export const McpServerUpsertSchema = z.discriminatedUnion('transport', [StdioFields, RemoteFields])
+
+/**
+ * Cảnh báo cấu hình — 🚫 KHÔNG chặn.
+ *
+ * Vì sao không phải `.superRefine`: mọi issue Zod thêm vào đều làm `safeParse`
+ * trả `success: false`, tức biến cảnh báo thành 400. Mà literal secret trong
+ * `args` là thứ ĐÃ nằm trong cấu hình người dùng đang chạy — chặn ở đây nghĩa là
+ * một server đang chạy bỗng không bấm Lưu lại được nữa. Đó là một bước migrate,
+ * không phải một bản vá (design §3.3). Nên: parse xong thì gọi hàm này, cảnh báo
+ * đi kèm response 2xx và người dùng tự quyết có chuyển sang credential profile không.
+ */
+export function collectMcpServerWarnings(input: unknown): string[] {
+  const server = input as { transport?: string; args?: string[] } | null
+  if (server?.transport !== 'stdio') return []
+  return collectSecretArgs(server.args).length ? [MCP_WARN_ARGS_SECRET_LITERAL] : []
+}
 
 /** Test nhận cả bản nháp chưa lưu — `id` vẫn bắt buộc để `recordCheckResult` bám được. */
 export const McpServerTestSchema = z.object({
