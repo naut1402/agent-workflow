@@ -61,10 +61,17 @@ export default {
     listToolsHint: 'Enabled once the connection check succeeds.',
     toolsCount: '{count} tools',
     secretLiteralWarning: 'This value looks like a secret. Prefer a credential profile or «env:VAR_NAME».',
+    savedWithWarnings: 'Saved. Read the warnings above, then press Cancel to close.',
     copySecretsCleared: 'The copy does not carry secret values — enter them again before use.',
     save: 'Save MCP server',
     cancel: 'Cancel',
     saving: 'Saving…',
+  },
+  warnings: {
+    argsSecretLiteral:
+      'An argument looks like a secret literal. Prefer a credential profile or «env:VAR_NAME» — arguments are stored as plain text.',
+    argsSecretDropped:
+      'A masked argument could not be matched to the saved value and was dropped. Enter the secret again.',
   },
   errors: {
     labelRequired: 'Enter a display name for the MCP server',

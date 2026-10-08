@@ -14,7 +14,9 @@ export async function fetchMcpServers(): Promise<{ servers: McpServerConfig[] }>
   return apiGet('/api/mcp-servers')
 }
 
-export async function saveMcpServer(server: unknown): Promise<{ saved: boolean; server: McpServerConfig }> {
+export async function saveMcpServer(
+  server: unknown,
+): Promise<{ saved: boolean; server: McpServerConfig; warnings?: string[] }> {
   return apiPost('/api/mcp-servers', { server })
 }
 

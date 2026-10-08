@@ -142,6 +142,18 @@ export interface ExecuteResult {
    * a reviewable change. See jobQueue.ts runJob.
    */
   stdout?: string
+  /**
+   * Bản `stdout` đã mask secret MCP — DÀNH RIÊNG cho biên persist/API
+   * (`JobRecord.stdout`, `metadata.stepSummary`, `GET /api/jobs`).
+   *
+   * 🚫 Không dùng cho đường chức năng: `foldProposalIntoScratch` và
+   * `parseOrchestratorDecision` đọc `stdout` THÔ — mask là split/join mù, nó cắt
+   * giữa artifact và giữa dòng `ORCHESTRATOR_DECISION`.
+   *
+   * Không set khi job không bật MCP server nào ⇒ caller rơi về `stdout`, hành vi
+   * cũ không đổi một byte.
+   */
+  maskedStdout?: string
   /** Captured CLI session id (preset-uuid or parse-json providers). */
   sessionId?: string | null
   /** True when runProcess() killed the child after timeoutMs elapsed (SIGTERM).

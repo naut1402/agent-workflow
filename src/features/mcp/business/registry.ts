@@ -185,7 +185,9 @@ export function getMcpServer(id: unknown): McpServerConfig | null {
   return loadMcpServers().servers.find((s) => s.id === clean) || null
 }
 
-export function upsertMcpServer(input: any): McpMutationResult<{ server: McpServerConfig }> {
+export function upsertMcpServer(
+  input: any,
+): McpMutationResult<{ server: McpServerConfig; warnings: string[] }> {
   const id = sanitiseMcpServerId(input?.id)
   if (!id) return { ok: false, status: 400, error: 'invalid mcp server id' }
   // `sanitiseMcpServerId` là ánh xạ NHIỀU-MỘT (`my.server` và `my server` cùng
@@ -205,12 +207,13 @@ export function upsertMcpServer(input: any): McpMutationResult<{ server: McpServ
   // `lastCheck` là kết quả đo, không phải thứ form gửi lên — giữ lại bản cũ.
   // `***` ở env/headers cũng vậy: đó là bản mask client nhận từ API, không phải
   // giá trị người dùng vừa nhập.
-  const merged = mergeMaskedSecrets(entry, previous)
+  const warnings: string[] = []
+  const merged = mergeMaskedSecrets(entry, previous, warnings)
   merged.lastCheck = entry.lastCheck ?? previous?.lastCheck ?? null
   if (previous) store.servers[idx] = merged
   else store.servers.push(merged)
   saveMcpServers(store)
-  return { ok: true, server: merged }
+  return { ok: true, server: merged, warnings: [...new Set(warnings)] }
 }
 
 /**

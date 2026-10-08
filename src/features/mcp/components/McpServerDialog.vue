@@ -5,6 +5,7 @@ import { saveMcpServer, testMcpServer, type McpProbeResponse } from '../scripts/
 import { fetchCredentials } from '../../runner/scripts/ConnectionDialogApi'
 import {
   MCP_DEFAULT_AUTH_HEADER,
+  MCP_MASK,
   MCP_DEFAULT_AUTH_SCHEME,
   MCP_DEFAULT_HTTP_PATH,
   MCP_DEFAULT_SSE_PATH,
@@ -12,6 +13,9 @@ import {
   MCP_MAX_TIMEOUT_MS,
   MCP_MIN_TIMEOUT_MS,
   MCP_TRANSPORTS,
+  MCP_WARN_ARGS_SECRET_DROPPED,
+  MCP_WARN_ARGS_SECRET_LITERAL,
+  collectSecretArgs,
   looksLikeSecretLiteral,
   type McpServerConfig,
   type McpTransport,
@@ -125,6 +129,67 @@ const derivedId = computed(() =>
  */
 const effectiveId = computed(() => (isEdit.value ? props.server!.id : derivedId.value))
 
+/**
+ * Mã cảnh báo gắn vào ô `args` → khoá i18n. Backend trả MÃ chứ không trả chuỗi
+ * đã dịch — nó không biết người dùng đang xem ngôn ngữ nào.
+ *
+ * 🚫 Không khoá nút Lưu theo danh sách này: literal secret trong `args` là cảnh
+ * báo, không phải lỗi (design D4) — cấu hình đã lưu vẫn phải lưu lại được.
+ */
+const ARGS_WARNING_I18N: Record<string, string> = {
+  [MCP_WARN_ARGS_SECRET_LITERAL]: 'mcp.warnings.argsSecretLiteral',
+  [MCP_WARN_ARGS_SECRET_DROPPED]: 'mcp.warnings.argsSecretDropped',
+}
+
+/** Một nguồn duy nhất cho `args` đã tách dòng — `buildDraft` đọc đúng mảng này. */
+const parsedArgs = computed(() =>
+  argsText.value.split('\n').map((a) => a.trim()).filter(Boolean),
+)
+
+/**
+ * Cảnh báo TRẠNG THÁI, tính TẠI CHỖ — 🚫 không đợi một vòng API.
+ *
+ * `argsSecretLiteral` nói về trạng thái cấu hình chứ không phải về một sự kiện,
+ * nên nó phải đọc được NGAY lúc mở dialog và trong lúc gõ. Nếu chỉ trông vào
+ * `apiWarnings`: `apiWarnings` khởi tạo rỗng và `McpPanel` gắn dialog bằng
+ * `v-if` nên mở lại luôn là component mới ⇒ ô cảnh báo trống; còn luồng Lưu thì
+ * `emit('close')` huỷ component ngay trong cùng tick nên cảnh báo gán ở đó
+ * 🚫 không bao giờ kịp vẽ. Tức là 🚫 không còn đường nào tới người dùng.
+ *
+ * 📌 Dùng CHÍNH `collectSecretArgs` mà backend dùng (`collectMcpServerWarnings`)
+ * để hai tầng 🚫 không lệch ngưỡng. 🚫 KHÔNG thay bằng `looksLikeSecretLiteral`
+ * quét từng phần tử rời: `collectSecretArgs` là hàm CÓ VỊ TRÍ — dạng
+ * `--token <value>` chỉ bắt được nhờ nhìn phần tử `i-1`, và nó loại `MCP_MASK`
+ * để vòng round-trip 🚫 báo động giả.
+ *
+ * `isStdio` giữ đúng tiền đề của backend: `collectMcpServerWarnings` trả `[]`
+ * cho mọi transport 🚫 phải `stdio`.
+ */
+const localArgsWarnings = computed(() => {
+  if (!isStdio.value) return []
+  // Hai bằng chứng khác nhau của CÙNG một trạng thái "có secret dạng chữ thường
+  // nằm trong `args`" — phải nhận cả hai, vì chúng phủ hai thời điểm khác nhau:
+  //
+  //  1. `collectSecretArgs` — người dùng đang GÕ/DÁN literal ngay lúc này.
+  //  2. Sentinel `***` — secret ĐÃ LƯU từ trước. Bản prefill đi qua `publicView`
+  //     nên literal về tới dialog dưới dạng `***`, và `collectSecretArgs` cố ý
+  //     bỏ qua sentinel (để vòng round-trip không báo động giả) ⇒ CHỈ dựa vào
+  //     nó thì mở dialog một server đã lưu sẽ 🚫 không cảnh báo gì, đúng ca cần
+  //     cảnh báo nhất.
+  const typingLiteral = collectSecretArgs(parsedArgs.value).length > 0
+  const storedLiteral = parsedArgs.value.some((a) => a === MCP_MASK || a.endsWith(`=${MCP_MASK}`))
+  return typingLiteral || storedLiteral ? [MCP_WARN_ARGS_SECRET_LITERAL] : []
+})
+
+const apiWarnings = ref<string[]>([])
+/** Đã lưu xong nhưng giữ dialog mở để người dùng đọc cảnh báo — xem `save()`. */
+const savedWithWarnings = ref(false)
+const argsWarnings = computed(() =>
+  [...new Set([...localArgsWarnings.value, ...apiWarnings.value])]
+    .filter((code) => code in ARGS_WARNING_I18N)
+    .map((code) => ARGS_WARNING_I18N[code]),
+)
+
 const secretLikeRows = computed(() => {
   const rows = isStdio.value ? envRows.value : headerRows.value
   return new Set(rows.filter((r) => looksLikeSecretLiteral(r.key, r.value)).map((r) => r.key))
@@ -189,6 +254,8 @@ watch(
   [label, transport, command, argsText, envRows, cwd, url, credentialId, authHeader, authScheme, headerRows, timeoutMs],
   () => {
     testedOk.value = false
+    // Sửa tiếp thì thông báo "đã lưu" của lượt trước không còn đúng nữa.
+    savedWithWarnings.value = false
   },
   { deep: true },
 )
@@ -222,7 +289,7 @@ function buildDraft(): McpServerConfig | null {
       ...base,
       transport: 'stdio',
       command: command.value.trim(),
-      args: argsText.value.split('\n').map((a) => a.trim()).filter(Boolean),
+      args: parsedArgs.value,
       env: fromRows(envRows.value),
       ...(cwd.value.trim() ? { cwd: cwd.value.trim() } : {}),
     }
@@ -249,6 +316,7 @@ async function runTest(listTools: boolean) {
   testing.value = true
   try {
     probe.value = await testMcpServer(draft, listTools)
+    apiWarnings.value = probe.value.warnings ?? []
     testedOk.value = probe.value.ok
   } catch (e: any) {
     error.value = String(e.message || e)
@@ -264,8 +332,31 @@ async function save() {
   if (!draft) return
   await runSave(async () => {
     try {
-      const { server } = await saveMcpServer(draft)
+      const { server, warnings } = await saveMcpServer(draft)
+      apiWarnings.value = warnings ?? []
       emit('saved', server.id)
+      // 📌 `McpPanel` gắn dialog bằng `v-if`, nên `emit('close')` huỷ component
+      // ngay trong cùng tick và mọi cảnh báo vừa gán biến mất trước khi vẽ.
+      //
+      // Chỉ hoãn đóng với nhóm PHÁ HUỶ — `argsSecretDropped` nghĩa là một secret
+      // ĐÃ BỊ BỎ khỏi cấu hình, xảy ra một lần, và đây là kênh duy nhất báo để
+      // người dùng nhập lại; đóng mất là họ chỉ phát hiện khi job sau fail.
+      //
+      // 🚫 KHÔNG hoãn với `argsSecretLiteral`: đó là lời khuyên về TRẠNG THÁI cấu
+      // hình nên nó phát lại ở mọi lần lưu. Hoãn theo nó thì đúng nhóm người dùng
+      // #385 muốn hướng sang credential profile lại không bao giờ Lưu-và-đóng
+      // bằng một cú bấm nữa, sinh phản xạ bấm Huỷ cho qua — và lần
+      // `argsSecretDropped` thật sự xuất hiện thì bị lướt.
+      //
+      // Bỏ qua được là vì `localArgsWarnings` đã hiện nó TẠI CHỖ từ lúc mở dialog
+      // và trong lúc gõ — 🚫 không phụ thuộc `apiWarnings` của lượt Lưu này.
+      //
+      // Lưu ĐÃ thành công (`saved` đã emit, danh sách đã refresh); chỉ hoãn việc
+      // đóng lại cho người dùng tự bấm.
+      if (apiWarnings.value.includes(MCP_WARN_ARGS_SECRET_DROPPED)) {
+        savedWithWarnings.value = true
+        return
+      }
       emit('close')
     } catch (e: any) {
       error.value = String(e.message || e) || t('mcp.errors.saveFailed')
@@ -349,6 +440,7 @@ onUnmounted(() => {
                   <InfoTooltip :text="t('mcp.dialog.argsHint')" />
                 </span>
                 <textarea v-model="argsText" class="cfg-textarea" rows="3"></textarea>
+                <p v-for="key in argsWarnings" :key="key" class="warn-text">{{ t(key) }}</p>
               </div>
               <div class="field">
                 <span class="cfg-label label-with-hint">
@@ -464,7 +556,9 @@ onUnmounted(() => {
                   ? t('mcp.dialog.testOk', { server: probe.serverInfo ? ` — ${probe.serverInfo.name}` : '' })
                   : `${t('mcp.dialog.testFailed')}: ${probe.error}` }}
               </p>
-              <p v-for="w in probe.warnings" :key="w" class="warn-text">{{ w }}</p>
+              <p v-for="w in probe.warnings.filter((x) => !(x in ARGS_WARNING_I18N))" :key="w" class="warn-text">
+                {{ w }}
+              </p>
               <template v-if="probe.tools.length">
                 <p class="muted">{{ t('mcp.dialog.toolsCount', { count: probe.tools.length }) }}</p>
                 <ul class="tool-list">
@@ -475,6 +569,8 @@ onUnmounted(() => {
                 </ul>
               </template>
             </div>
+
+            <p v-if="savedWithWarnings" class="ok-text">{{ t('mcp.dialog.savedWithWarnings') }}</p>
 
             <div class="modal-actions">
               <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('mcp.dialog.cancel') }}</button>

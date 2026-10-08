@@ -12,6 +12,7 @@
 export {
   MCP_MASK,
   sanitiseMcpServerId,
+  collectSecretValues,
   maskSecretText,
   maskSecretValues,
   mergeMaskedSecrets,
@@ -30,3 +31,5 @@ export {
 export { assertMcpEndpoint } from './endpointGuard.js'
 export { serialiseMcpServers } from './serialize.js'
 export { probeMcpServer } from './client.js'
+export { createSecretStreamMasker } from './secretStream.js'
+export type { SecretStreamMasker } from './secretStream.js'
