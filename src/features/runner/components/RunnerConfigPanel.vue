@@ -22,7 +22,13 @@ const tabs = computed(() => [
 ])
 
 const runners = ref<RunnerDraft[]>([])
-const defaultRunnerId = ref('')
+/**
+ * Runner job KHÔNG pin sẽ thật sự chạy — rỗng khi default đã ghi nhận đang hỏng.
+ * Dùng cho cả ngôi sao lẫn `:disabled` của nút đặt-default: default hỏng thì sao
+ * phải trống, và người dùng phải bấm lại được chính runner đó sau khi sửa xong.
+ */
+const effectiveDefaultRunnerId = ref('')
+const defaultRunnerIssue = ref<{ runnerId: string | null; reason: string } | null>(null)
 const connections = ref<ConnectionOption[]>([])
 const providers = ref<ProviderEntry[]>([])
 const providerConfigs = ref<ProviderConfigOption[]>([])
@@ -30,6 +36,13 @@ const message = ref('')
 const error = ref('')
 const showRunnerDialog = ref(false)
 const editingRunner = ref<RunnerDraft | null>(null)
+const dialogMode = ref<'create' | 'edit' | 'copy'>('create')
+
+const defaultIssueText = computed(() => {
+  const issue = defaultRunnerIssue.value
+  if (!issue) return ''
+  return t(`runner.defaultIssue.${issue.reason}`, { id: issue.runnerId ?? '' })
+})
 
 function connectionOf(r: RunnerDraft): ConnectionOption | undefined {
   return connections.value.find((c) => c.id === r.connectionId)
@@ -51,7 +64,15 @@ async function load() {
       fetchProviderConfigs(),
     ])
     runners.value = rData.runners || []
-    defaultRunnerId.value = rData.defaultRunnerId || ''
+    // Phân biệt *vắng mặt* với *null*, 🚫 không gộp bằng `??`:
+    // `undefined` = payload cũ chưa có trường dẫn xuất ⇒ rơi về id đã ghi nhận.
+    // `null`      = BE nói "không runner nào chạy được" ⇒ phải để trống, nếu
+    //               không thì sao vẫn sáng trên runner mà job sẽ fail.
+    effectiveDefaultRunnerId.value =
+      rData.effectiveDefaultRunnerId !== undefined
+        ? (rData.effectiveDefaultRunnerId ?? '')
+        : (rData.defaultRunnerId ?? '')
+    defaultRunnerIssue.value = rData.defaultRunnerIssue ?? null
     providers.value = (rData.providers || cData.providers || []) as ProviderEntry[]
     connections.value = cData.connections || rData.connections || []
     providerConfigs.value = pData.providerConfigs || []
@@ -68,19 +89,39 @@ onMounted(load)
 
 function openNew() {
   editingRunner.value = null
+  dialogMode.value = 'create'
   showRunnerDialog.value = true
   message.value = ''
 }
 
 function openEdit(r: RunnerDraft) {
   editingRunner.value = JSON.parse(JSON.stringify(r))
+  dialogMode.value = 'edit'
   showRunnerDialog.value = true
   message.value = ''
 }
 
+/**
+ * `<id>-copy`, `<id>-copy-2`… Cắt base TRƯỚC khi nối hậu tố để `sanitiseRunnerId`
+ * (cắt 64 ký tự) không cắt mất chính phần làm nên khác biệt rồi trùng id trở lại.
+ */
+function uniqueRunnerId(baseId: string): string {
+  const ids = new Set(runners.value.map((r) => r.id))
+  const base = baseId.slice(0, 48)
+  let candidate = `${base}-copy`
+  let n = 2
+  while (ids.has(candidate)) candidate = `${base}-copy-${n++}`
+  return candidate
+}
+
 function openCopy(r: RunnerDraft, e: Event) {
   e.stopPropagation()
-  editingRunner.value = { ...JSON.parse(JSON.stringify(r)), id: '', name: `${r.name} (copy)` }
+  editingRunner.value = {
+    ...JSON.parse(JSON.stringify(r)),
+    id: uniqueRunnerId(r.id),
+    name: `${r.name} (copy)`,
+  }
+  dialogMode.value = 'copy'
   showRunnerDialog.value = true
   message.value = ''
 }
@@ -158,6 +199,8 @@ async function remove(r: RunnerDraft, e: Event) {
 
     <div v-if="error" class="err-banner">{{ error }}</div>
     <div v-if="message" class="ok-banner">{{ message }}</div>
+    <!-- Default hỏng = job không pin runner sẽ fail. Nói ra lý do để sửa được trong một bước. -->
+    <div v-if="defaultIssueText" class="warn-banner">{{ defaultIssueText }}</div>
 
     <div class="runner-toolbar">
       <button type="button" class="btn-primary btn-sm" @click="openNew">{{ t('runner.panel.addRunner') }}</button>
@@ -205,8 +248,8 @@ async function remove(r: RunnerDraft, e: Event) {
           <button
             type="button"
             class="icon-btn"
-            :class="{ active: r.id === defaultRunnerId }"
-            :disabled="r.id === defaultRunnerId || !canBeDefaultAi(r)"
+            :class="{ active: r.id === effectiveDefaultRunnerId }"
+            :disabled="r.id === effectiveDefaultRunnerId || !canBeDefaultAi(r)"
             :title="canBeDefaultAi(r) ? t('runner.panel.makeDefault') : t('runner.messages.consoleNotDefault')"
             :aria-label="canBeDefaultAi(r) ? t('runner.panel.makeDefault') : t('runner.messages.consoleNotDefault')"
             @click="makeDefault(r, $event)"
@@ -214,7 +257,7 @@ async function remove(r: RunnerDraft, e: Event) {
             <!-- star -->
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
               <path
-                :fill="r.id === defaultRunnerId ? 'currentColor' : 'none'"
+                :fill="r.id === effectiveDefaultRunnerId ? 'currentColor' : 'none'"
                 stroke="currentColor"
                 stroke-width="1.4"
                 stroke-linejoin="round"
@@ -247,6 +290,7 @@ async function remove(r: RunnerDraft, e: Event) {
     <RunnerDialog
       v-if="showRunnerDialog"
       :runner="editingRunner"
+      :mode="dialogMode"
       :connections="connections"
       :providers="providers"
       :providerConfigs="providerConfigs"
@@ -301,6 +345,14 @@ async function remove(r: RunnerDraft, e: Event) {
   background: rgba(63, 185, 80, 0.12);
   border: 1px solid var(--done);
   color: var(--done);
+  padding: 0.5rem;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+}
+.warn-banner {
+  background: rgba(var(--tag-amber-rgb), 0.12);
+  border: 1px solid var(--tag-amber);
+  color: var(--tag-amber);
   padding: 0.5rem;
   border-radius: 6px;
   margin: 0.5rem 0;

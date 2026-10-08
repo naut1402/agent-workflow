@@ -244,6 +244,26 @@ export interface RunnersStore {
   runners: RunnerConfig[]
 }
 
+/** Vì sao runner mặc định đã ghi nhận không dùng được; `ok` = dùng được. */
+export type DefaultRunnerReason =
+  | 'ok'
+  | 'no-runners'
+  | 'unset'
+  | 'missing'
+  | 'disabled'
+  | 'no-connection'
+  | 'not-ai'
+
+/**
+ * Kết quả giải runner mặc định. `runnerId` giữ id **đã ghi nhận** kể cả khi runner
+ * đó không dùng được, để log và UI nêu đúng runner nào đang hỏng.
+ */
+export interface DefaultRunnerResolution {
+  runner: RunnerConfig | null
+  runnerId: string | null
+  reason: DefaultRunnerReason
+}
+
 export interface CredentialsStore {
   version: number
   profiles: CredentialProfile[]

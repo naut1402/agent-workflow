@@ -92,6 +92,20 @@ export default {
     credentialSecretRequired: 'Paste a secret value, connect via browser, or fill in the advanced secretRef',
     providerConfigRequired: 'Select a provider (or configure a new one)',
     credentialRequired: 'Select or create a credential',
+    idTaken: 'Runner id "{id}" is already taken — pick another name',
+    connIdTaken: 'Connection id "{id}" is already taken — pick another name',
+  },
+  hints: {
+    generatedId: 'Will be saved as: {id}',
+  },
+  // Mirrors the backend `DefaultRunnerReason` set exactly.
+  defaultIssue: {
+    'no-runners': 'No runners yet — jobs without a pinned runner will fail.',
+    unset: 'No default runner set — jobs without a pinned runner will fail.',
+    missing: 'Default runner "{id}" is no longer in the list — pick another default.',
+    disabled: 'Default runner "{id}" is disabled — jobs without a pinned runner will fail.',
+    'no-connection': 'Default runner "{id}" points at a missing connection — fix the connection or pick another runner.',
+    'not-ai': 'Default runner "{id}" is not an AI runner — pick an Agent CLI or AI API runner.',
   },
   connectionDialog: {
     title: 'Add connection',

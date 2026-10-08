@@ -568,7 +568,14 @@ export class MonitorController extends AbstractController {
       selectionEndLine: spliceRange?.end ?? selectionEndLine,
     })
 
-    const resolvedRunnerId = runnerId ?? action.runner_id
+    // Qua cùng helper với 6 đường start job còn lại: pin trỏ runner đã xoá/tắt
+    // phải rơi về default, không mang id rác vào job record.
+    const resolvedRunnerId =
+      runnerId ??
+      monitorBusiness.resolveStepRunnerId({
+        id: `artifact-action:${actionId}`,
+        runner_id: action.runner_id,
+      }).runnerId
     const jobInput = {
       runnerId: resolvedRunnerId,
       agentRef: action.agent_ref,

@@ -461,6 +461,18 @@ function buildConnectionId(resolvedProvider: string): string {
   return `${base}-${suffix}`.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
 }
 
+/**
+ * Id sẽ gửi lên BE, hiện ngay dưới ô Nhãn. Chưa chọn được provider thì chưa đoán
+ * được hậu tố nên trả rỗng và dòng hint tự ẩn.
+ */
+const previewConnectionId = computed(() => {
+  const resolvedProvider =
+    kind.value === 'local-console'
+      ? selectedCommand.value?.providerId
+      : selectedProviderConfig.value?.providerId
+  return resolvedProvider ? buildConnectionId(resolvedProvider) : ''
+})
+
 function inferProviderFromPath(pathOrCmd: string): string {
   const base =
     pathOrCmd
@@ -712,6 +724,7 @@ async function save() {
           cliPath: cmd.path || cmd.command,
           flags: cmd.flags || [],
           ...(config ? { config } : {}),
+          ...(isEdit.value ? {} : { create: true }),
         })
         emit('saved', connection.id)
         emit('close')
@@ -750,11 +763,16 @@ async function save() {
         providerId: pc.providerId,
         credentialId: credentialId.value,
         config,
+        ...(isEdit.value ? {} : { create: true }),
       })
       emit('saved', connection.id)
       emit('close')
     } catch (e: any) {
-      error.value = String(e.message || e)
+      // Như `RunnerDialog.save()` — status là hợp đồng, message BE thì không.
+      error.value =
+        e?.status === 409
+          ? t('runner.errors.connIdTaken', { id: previewConnectionId.value })
+          : String(e?.message || e)
     }
   })
 }
@@ -835,6 +853,9 @@ onUnmounted(() => {
               <label class="cfg-label">{{ t('runner.connectionDialog.labelField') }}
                 <input v-model="label" class="cfg-input" placeholder="vd. Claude local" />
               </label>
+              <p v-if="!isEdit && previewConnectionId" class="cfg-hint">
+                {{ t('runner.hints.generatedId', { id: previewConnectionId }) }}
+              </p>
             </div>
 
             <div class="field">
@@ -1265,6 +1286,7 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .connection-dialog { max-width: 520px; width: min(520px, 94vw); min-height: 560px; }
+.connection-dialog .cfg-hint { margin: 0.2rem 0 0; font-size: 11px; opacity: 0.75; }
 .register-command-dialog { max-width: 440px; width: min(440px, 92vw); }
 .nested-backdrop { z-index: 1100; }
 .kind-radios { display: flex; gap: 1rem; margin-top: 0.35rem; flex-wrap: wrap; }

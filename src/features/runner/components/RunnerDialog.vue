@@ -16,6 +16,12 @@ const props = defineProps<{
   connections: ConnectionOption[]
   providers: ProviderEntry[]
   providerConfigs: ProviderConfigOption[]
+  /**
+   * `copy` mang sẵn một id đã mint nên không suy id từ tên như `create`, nhưng vẫn
+   * là một bản ghi mới ⇒ vẫn gửi cờ `create`. Không có `mode` thì suy từ `runner.id`
+   * (giữ tương thích với call site cũ).
+   */
+  mode?: 'create' | 'edit' | 'copy'
 }>()
 
 const emit = defineEmits<{
@@ -42,7 +48,9 @@ function formatJobStatus(status: string | undefined): string {
 }
 
 const draft = ref(emptyDraft())
-const isEdit = computed(() => Boolean(props.runner?.id))
+const isEdit = computed(() =>
+  props.mode ? props.mode === 'edit' : Boolean(props.runner?.id),
+)
 const { pending: saving, run: runSave } = useApiAction()
 const testing = ref(false)
 const error = ref('')
@@ -100,6 +108,13 @@ watch(
   { immediate: true },
 )
 
+/** Id sẽ gửi lên BE — hiện ngay dưới ô Tên để người dùng thấy trước khi va chạm. */
+const payloadId = computed(() =>
+  isEdit.value || props.mode === 'copy'
+    ? draft.value.id
+    : slugify(draft.value.name, { fallback: 'runner' }),
+)
+
 function buildSavePayload(): RunnerDraft {
   const config: RunnerDraft['config'] = {
     timeoutMs: draft.value.config?.timeoutMs ?? 600000,
@@ -110,9 +125,12 @@ function buildSavePayload(): RunnerDraft {
   }
   return {
     ...draft.value,
-    id: isEdit.value ? draft.value.id : slugify(draft.value.name, { fallback: 'runner' }),
+    id: payloadId.value,
     name: draft.value.name.trim(),
     config,
+    // Opt-in: chỉ dialog tạo mới / copy gửi cờ này, để BE chặn ghi đè bản ghi
+    // trùng id thay vì thay chỗ nó trong im lặng.
+    ...(isEdit.value ? {} : { create: true }),
   }
 }
 
@@ -134,13 +152,20 @@ async function save() {
       emit('saved', payload.id)
       emit('close')
     } catch (e: any) {
-      error.value = String(e.message || e)
+      // Nhận diện bằng status, 🚫 không so chuỗi message của BE: message đó là
+      // chuỗi cho log/dev, i18n-hoá nó không được làm chết nhánh này.
+      error.value =
+        e?.status === 409
+          ? t('runner.errors.idTaken', { id: payloadId.value })
+          : String(e?.message || e)
     }
   })
 }
 
 async function smokeTest() {
-  if (!draft.value.id) {
+  // Mode `copy` mang sẵn một id đã mint nhưng BE chưa có bản ghi đó — chạy thử
+  // sẽ submit job vào một runner không tồn tại. Chỉ cho test khi đang sửa.
+  if (!isEdit.value || !draft.value.id) {
     error.value = t('runner.errors.saveBeforeTest')
     return
   }
@@ -261,6 +286,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <label class="cfg-label">{{ t('runner.fields.name') }}
                 <input v-model="draft.name" class="cfg-input" placeholder="vd. Claude local" />
               </label>
+              <p v-if="!isEdit" class="cfg-hint">{{ t('runner.hints.generatedId', { id: payloadId }) }}</p>
             </div>
 
             <div class="field">
@@ -400,6 +426,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 <style scoped lang="scss">
 .runner-dialog { max-width: 520px; width: min(520px, 94vw); }
+.runner-dialog .cfg-hint { margin: 0.2rem 0 0; font-size: 11px; opacity: 0.75; }
 .field { margin-bottom: 0.75rem; }
 .field .cfg-input,
 .field .cfg-select { width: 100%; }
