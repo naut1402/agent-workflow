@@ -635,3 +635,92 @@ describe('T6427b18c — hồi quy nền dùng chung (TC-R1, TC-R3)', () => {
     expect(rawLedger(T)).toEqual(before)
   })
 })
+
+/* ═══ #378 · Tdf943817 — argv cursor khi job có MCP (TC-P5-18…TC-P5-21) ═══════ */
+
+import { buildCursorJsonInvocation } from '../../../../src/features/runner/business/sessionLedger.js'
+
+/**
+ * `--approve-mcps`: headless, cursor mặc định CHỜ người dùng phê duyệt từng MCP
+ * server ⇒ job treo tới timeout. Cờ chỉ được thêm khi job THẬT SỰ có server.
+ *
+ * ⚠️ Bất biến argv đo bằng **snapshot chụp trên base `4c58b44`**
+ * (`cursorArgv.base-4c58b44.json`), 🚫 bằng cách gọi lại chính hàm đang sửa với
+ * tham số tắt — so một hàm với chính nó 🚫 chứng minh được gì (`test-spec.md` A-6).
+ */
+describe('#378 — buildCursorJsonInvocation · --approve-mcps', () => {
+  const baseArgv = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dir, 'cursorArgv.base-4c58b44.json'), 'utf8'),
+  ) as { baseSha: string; cases: { name: string; args: string[] }[] }
+
+  const CASES: Record<string, Record<string, unknown>> = {
+    'flags rỗng': { flags: [], prompt: 'xin chào' },
+    'flags người dùng': { flags: ['--model', 'auto'], prompt: 'xin chào' },
+    'có resume': { flags: [], prompt: 'xin chào', resumeSessionId: 's-1' },
+    'người dùng tự gõ --approve-mcps': { flags: ['--approve-mcps'], prompt: 'xin chào' },
+    'người dùng đã khai --sandbox/--force/--trust': {
+      flags: ['--sandbox', 'danger', '--force', '--trust'],
+      prompt: 'xin chào',
+    },
+  }
+
+  // TC-P5-18 ⭐
+  test('TC-P5-18: `mcpEnabled` ⇒ `--approve-mcps` xuất hiện ĐÚNG 1 lần', () => {
+    const args = buildCursorJsonInvocation({ flags: [], prompt: 'p', mcpEnabled: true }).args
+    expect(args.filter((a) => a === '--approve-mcps')).toHaveLength(1)
+  })
+
+  // TC-P5-19 ⭐ — mẫu "có rồi thì 🚫 thêm", y hệt `--force`/`--trust`.
+  test('TC-P5-19: người dùng TỰ GÕ `--approve-mcps` + mcpEnabled ⇒ vẫn ĐÚNG 1 lần', () => {
+    const args = buildCursorJsonInvocation({
+      flags: ['--approve-mcps'],
+      prompt: 'p',
+      mcpEnabled: true,
+    }).args
+    expect(args.filter((a) => a === '--approve-mcps')).toHaveLength(1)
+  })
+
+  /**
+   * TC-P5-20 ⭐ — `mcpEnabled === false` (và `undefined`) ⇒ argv **byte-identical
+   * với base**, kể cả thứ tự cờ. Đây là bất biến "🚫 bật MCP ⇒ argv 🚫 đổi một byte".
+   */
+  test('TC-P5-20: mcpEnabled false/undefined ⇒ argv khớp TUYỆT ĐỐI snapshot base 4c58b44', () => {
+    expect(baseArgv.baseSha).toBe('4c58b44')
+    expect(baseArgv.cases).toHaveLength(Object.keys(CASES).length)
+
+    for (const snapshot of baseArgv.cases) {
+      const input = CASES[snapshot.name]
+      expect(input, `thiếu input cho ca «${snapshot.name}»`).toBeDefined()
+      for (const mcpEnabled of [undefined, false]) {
+        const args = buildCursorJsonInvocation({ ...(input as any), mcpEnabled }).args
+        expect(args, `${snapshot.name} · mcpEnabled=${String(mcpEnabled)}`).toEqual(snapshot.args)
+      }
+    }
+  })
+
+  // TC-P5-21 ⭐ — cờ của claude 🚫 được lọt sang cursor.
+  test('TC-P5-21: argv cursor 🚫 BAO GIỜ chứa `--mcp-config` / `--strict-mcp-config`', () => {
+    for (const mcpEnabled of [true, false, undefined]) {
+      const args = buildCursorJsonInvocation({
+        flags: ['--model', 'auto'],
+        prompt: 'p',
+        resumeSessionId: 's-1',
+        mcpEnabled,
+      }).args
+      expect(args).not.toContain('--mcp-config')
+      expect(args).not.toContain('--strict-mcp-config')
+    }
+  })
+
+  test('TC-P5-18 (b): `--approve-mcps` đứng TRƯỚC `--resume` (resume luôn ở cuối)', () => {
+    const args = buildCursorJsonInvocation({
+      flags: [],
+      prompt: 'p',
+      resumeSessionId: 's-1',
+      mcpEnabled: true,
+    }).args
+    expect(args.indexOf('--approve-mcps')).toBeLessThan(args.indexOf('--resume'))
+    expect(args.at(-2)).toBe('--resume')
+    expect(args.at(-1)).toBe('s-1')
+  })
+})

@@ -42,14 +42,22 @@ describe('agentCli family', () => {
 
 /**
  * TC-62…TC-64 — capabilities MCP. `mcpDeliveryOf` là nguồn sự thật duy nhất cho
- * cả provider lẫn UI, nên ba ca dưới khoá đúng giá trị **hiện tại**: cursor và
- * codex là `unsupported` TRONG TASK NÀY (P5 ngoài scope), 🚫 không đoán trước.
+ * cả provider lẫn UI, nên ba ca dưới khoá đúng giá trị **hiện tại**.
+ *
+ * 📌 Cập nhật ở Tdf943817 (#378 — P5 cursor): `cursor-cli` 🚫 không còn
+ * `unsupported`. Nó nhận MCP qua `<workspace>/.cursor/mcp.json` ⇒
+ * `'workspace-config-file'` (`test-spec.md` TC-P5-01 khoá giá trị mới). Chú
+ * thích cũ ghi *"cursor … unsupported TRONG TASK NÀY (P5 ngoài scope)"* đã hết
+ * đúng — P5 chính là task này. `codex-cli` vẫn `unsupported`: chưa cài được CLI
+ * để xác minh (`test-spec.md` §8).
  */
 describe('agentCli — MCP delivery', () => {
-  // TC-62
+  // TC-62 · TC-P5-01 · TC-P5-02
   test('TC-62: mcpDeliveryOf', () => {
     expect(mcpDeliveryOf('claude-code-cli')).toBe('config-file-flag')
-    expect(mcpDeliveryOf('cursor-cli')).toBe('unsupported')
+    // TC-P5-01 — giá trị mới của #378.
+    expect(mcpDeliveryOf('cursor-cli')).toBe('workspace-config-file')
+    // TC-P5-02 — 🚫 không đổi gì ngoài cursor.
     expect(mcpDeliveryOf('codex-cli')).toBe('unsupported')
     expect(mcpDeliveryOf('')).toBe('unsupported')
     expect(mcpDeliveryOf('provider-la-hoac-chua-ton-tai')).toBe('unsupported')

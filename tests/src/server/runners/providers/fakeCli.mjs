@@ -84,6 +84,41 @@ if (mode === 'two-chunks') {
   process.exit(0)
 }
 
+if (mode === 'cursor-mcp-json') {
+  // #378: cursor đọc `<cwd>/.cursor/mcp.json` chứ 🚫 nhận cờ nào trỏ vào file.
+  // In argv THẬT + sự tồn tại + nội dung file NGAY LÚC CHẠY (file bị dọn ở
+  // `finally` nên đây là cách duy nhất quan sát được nó).
+  const cfg = `${process.cwd()}/.cursor/mcp.json`
+  const exists = fs.existsSync(cfg)
+  process.stdout.write(`ARGV:${JSON.stringify(rest)}\n`)
+  process.stdout.write(`cursor-config-exists=${exists}\n`)
+  const dump = process.env.CURSOR_CONFIG_DUMP
+  if (exists && dump) {
+    try {
+      fs.writeFileSync(dump, fs.readFileSync(cfg, 'utf8'))
+    } catch {
+      /* ca âm: không có file thì dump cũng không tồn tại */
+    }
+  }
+  // Top-level await: chặn hẳn phần còn lại của file, nếu không mode này rơi
+  // xuống nhánh `else` cuối và thoát mã 2. 🚫 Sửa mode sẵn có.
+  await new Promise((resolve) => {
+    process.stdin.setEncoding('utf8')
+    process.stdin.on('data', () => {})
+    process.stdin.on('end', resolve)
+  })
+  process.stdout.write(
+    `${JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      result: 'xong',
+      session_id: 'cursor-sess-1',
+    })}\n`,
+  )
+  process.exit(0)
+}
+
 if (mode === 'ok') {
   console.log('ok')
   process.exit(0)
