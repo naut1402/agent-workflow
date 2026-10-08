@@ -1455,3 +1455,178 @@ describe('claude-code-cli — self-MCP cho job điều phối (Tf2f484e2)', () =
     }
   }, 90_000)
 })
+
+/**
+ * ═══ #378 · Tdf943817 — cursor nhận MCP qua `<workspace>/.cursor/mcp.json` ═══
+ *
+ * TC-P5-05 (vế tích hợp) · TC-P5-22 · TC-P5-03 (vế tích hợp) · TC-P5-23.
+ *
+ * Bề mặt: argv THẬT mà tiến trình con nhận, sự tồn tại + NỘI DUNG file config
+ * NGAY LÚC CHẠY (fake CLI chép ra chỗ khác vì file bị dọn ở `finally`), trạng
+ * thái `<workspace>/.cursor/` sau khi job xong, và log job.
+ */
+describe('cursor-cli — MCP qua workspace config file (#378)', () => {
+  const CURSOR_CANARY = 'sk-test-LEAKCANARY-0123456789'
+  const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
+
+  let home: string
+  let workspace: string
+
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-cursor-exec-home-'))
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-cursor-exec-ws-'))
+    process.env.DEV_TEAM_DASHBOARD_HOME = home
+  })
+
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
+    else process.env.DEV_TEAM_DASHBOARD_HOME = prevHome
+    delete process.env.CURSOR_CONFIG_DUMP
+    fs.rmSync(home, { recursive: true, force: true })
+    fs.rmSync(workspace, { recursive: true, force: true })
+  })
+
+  function cursorProvider() {
+    return createLocalConsoleProvider({
+      providerId: 'cursor-cli',
+      defaultCliPath: process.execPath,
+      claudeStyleArgs: false,
+      sessionCapture: 'parse-json',
+    })
+  }
+
+  function seedServer(id: string, env: Record<string, string> = {}) {
+    upsertMcpServer({
+      id,
+      label: id,
+      enabled: true,
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', `@fake/${id}`],
+      env,
+    })
+  }
+
+  async function runCursor(
+    runnerConfig: Record<string, any>,
+    opts: { logPath?: string; onLog?: (c: string) => void } = {},
+  ) {
+    return cursorProvider().execute(
+      {
+        jobId: 'job-cursor-mcp',
+        resolvedAgent,
+        userPrompt: 'chạy thử',
+        workspace,
+        produces: [],
+        timeoutMs: 10_000,
+        metadata: opts.logPath ? { logPath: opts.logPath } : {},
+      },
+      runnerConfig,
+      credential,
+      opts.onLog,
+    )
+  }
+
+  function argvOf(stdoutOrLog: string): string[] {
+    const line = stdoutOrLog.split('\n').find((l) => l.startsWith('ARGV:'))
+    if (!line) throw new Error('🚫 thấy dòng ARGV trong output')
+    return JSON.parse(line.slice('ARGV:'.length)) as string[]
+  }
+
+  // TC-P5-05 ⭐ (vế tích hợp) · TC-P5-18 · TC-P5-21
+  test('TC-P5-05: file tồn tại LÚC CHẠY, argv có `--approve-mcps` và 🚫 `--mcp-config`', async () => {
+    seedServer('on1', { TOKEN: CURSOR_CANARY })
+    const dump = path.join(home, 'cursor-config-dump.json')
+    process.env.CURSOR_CONFIG_DUMP = dump
+    const { cliPath, flags } = nodeCli('cursor-mcp-json')
+    const chunks: string[] = []
+
+    const result = await runCursor(
+      { cliPath, flags, mcpServers: ['on1'] },
+      { onLog: (c) => chunks.push(c) },
+    )
+    const output = chunks.join('')
+
+    expect(result.ok).toBe(true)
+    expect(output).toContain('cursor-config-exists=true')
+
+    const argv = argvOf(output)
+    expect(argv.filter((a) => a === '--approve-mcps')).toHaveLength(1)
+    expect(argv).not.toContain('--mcp-config')
+    expect(argv).not.toContain('--strict-mcp-config')
+    // 🚫 Đường dẫn file config lọt vào argv ở bất kỳ dạng nào.
+    expect(argv.some((a) => a.includes('.cursor'))).toBe(false)
+
+    // Nội dung file lúc chạy là `{"mcpServers":{…}}` và mang giá trị ĐÃ GIẢI.
+    const dumped = JSON.parse(fs.readFileSync(dump, 'utf8'))
+    expect(Object.keys(dumped.mcpServers)).toEqual(['on1'])
+    expect(JSON.stringify(dumped)).toContain(CURSOR_CANARY)
+
+    // Dọn ở `finally` — workspace trở lại sạch.
+    expect(fs.existsSync(path.join(workspace, '.cursor'))).toBe(false)
+    expect(fs.readdirSync(workspace)).toEqual([])
+  }, 20_000)
+
+  /**
+   * TC-P5-22 — dòng truy ngược. `--approve-mcps` ghi server vào danh sách phê
+   * duyệt cục bộ `~/.cursor`, và tác dụng phụ đó TỒN TẠI SAU khi job kết thúc.
+   * Đúng MỘT dòng: lặp lại là nhiễu, thiếu là người dùng 🚫 biết.
+   */
+  test('TC-P5-22: log có ĐÚNG 1 dòng truy ngược nêu workspace + tác dụng phụ ~/.cursor', async () => {
+    seedServer('on1', { TOKEN: CURSOR_CANARY })
+    const logPath = makeLogPath(home)
+    const { cliPath, flags } = nodeCli('cursor-mcp-json')
+
+    await runCursor({ cliPath, flags, mcpServers: ['on1'] }, { logPath })
+
+    const log = fs.readFileSync(logPath, 'utf8')
+    const mcpLines = log.split('\n').filter((l) => l.startsWith('[runner] MCP:'))
+    // Hai dòng, mỗi dòng một việc: (1) dòng đếm/đường dẫn dùng chung với nhánh
+    // claude, (2) dòng TRUY NGƯỢC riêng của cursor. Ca này khoá vế (2) là ĐÚNG MỘT.
+    expect(mcpLines).toHaveLength(2)
+    expect(mcpLines[0]).toMatch(/^\[runner\] MCP: 1 server \(on1\) → .+[/\\]\.cursor[/\\]mcp\.json$/)
+
+    const traceLines = mcpLines.filter((l) => l.includes('--approve-mcps'))
+    expect(traceLines).toHaveLength(1)
+    expect(traceLines[0]).toContain('.cursor/mcp.json')
+    expect(traceLines[0]).toContain('~/.cursor')
+    expect(traceLines[0]).toContain('TỒN TẠI SAU')
+
+    // TC-P5-23 — log 🚫 chứa canary, 🚫 chép nội dung file.
+    expect(log).not.toContain(CURSOR_CANARY)
+    expect(log).not.toContain('"mcpServers"')
+  }, 20_000)
+
+  /**
+   * TC-P5-03 (vế tích hợp) — khai rõ `orchestratorJob !== true` **và** 🚫 `mcpServers`
+   * ⇒ 🚫 ids VÀ 🚫 extras ⇒ argv 🚫 đổi một byte, 🚫 file nào chạm đĩa.
+   */
+  test('TC-P5-03: 🚫 MCP, 🚫 orchestratorJob ⇒ 🚫 `--approve-mcps`, 🚫 `.cursor`, 🚫 dòng log MCP', async () => {
+    seedServer('on1')
+    const logPath = makeLogPath(home)
+    const { cliPath, flags } = nodeCli('cursor-mcp-json')
+    const chunks: string[] = []
+
+    const result = await runCursor({ cliPath, flags }, { logPath, onLog: (c) => chunks.push(c) })
+    const output = chunks.join('')
+
+    expect(result.ok).toBe(true)
+    expect(output).toContain('cursor-config-exists=false')
+    expect(argvOf(output)).not.toContain('--approve-mcps')
+    expect(fs.existsSync(path.join(workspace, '.cursor'))).toBe(false)
+    expect(fs.readdirSync(workspace)).toEqual([])
+    expect(fs.readFileSync(logPath, 'utf8')).not.toContain('[runner] MCP:')
+  }, 20_000)
+
+  // TC-P5-13 (vế tích hợp) — job hỏng ⇒ `finally` vẫn dọn.
+  test('TC-P5-13: tiến trình con lỗi ⇒ `.cursor` vẫn được dọn sạch', async () => {
+    seedServer('on1', { TOKEN: CURSOR_CANARY })
+    const { cliPath, flags } = nodeCli('fail')
+
+    const result = await runCursor({ cliPath, flags, mcpServers: ['on1'] })
+
+    expect(result.ok).toBe(false)
+    expect(fs.existsSync(path.join(workspace, '.cursor'))).toBe(false)
+    expect(fs.readdirSync(workspace)).toEqual([])
+  }, 20_000)
+})
