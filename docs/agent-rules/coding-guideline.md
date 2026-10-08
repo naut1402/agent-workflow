@@ -4,6 +4,9 @@ Quy ước viết code **hiện hành** trong repo này.
 
 Mức độ ràng buộc đánh dấu bằng màu callout — bảng màu ở [`writing-guideline.md`](writing-guideline.md) §5.
 
+> [!CAUTION]
+> <span style="color:#e5534b">🚫 Không sửa root [`README.md`](../../README.md) — ở bất kỳ bước nào. Cần đổi thì ghi đề xuất vào `docs/todo/<issue>/<task-id>.md` (**Loại nợ:** `readme`) để người duyệt tự sửa. Tài liệu chi tiết viết vào `docs/<chủ đề>/`. Nguyên văn: [`git-pr.md`](git-pr.md) §7.2.2.</span>
+
 ---
 
 ## 1. Ngôn ngữ & module

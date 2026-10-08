@@ -5,6 +5,9 @@
 > [!NOTE]
 > <span style="color:#4493f8">Rule này **thắng** mọi template mặc định đi kèm công cụ sinh tài liệu: số section, tên section và thứ tự lấy từ đây.</span>
 
+> [!CAUTION]
+> <span style="color:#e5534b">🚫 Không sửa root [`README.md`](../../README.md) — ở bất kỳ bước nào, kể cả khi design đề xuất đổi tài liệu. Cần đổi thì ghi đề xuất vào `docs/todo/<issue>/<task-id>.md` (**Loại nợ:** `readme`) để người duyệt tự sửa. Tài liệu chi tiết viết vào `docs/<chủ đề>/`. Nguyên văn: [`git-pr.md`](git-pr.md) §7.2.2.</span>
+
 ---
 
 ## 1. Nguyên tắc — đảo phễu thông tin
