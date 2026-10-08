@@ -276,7 +276,7 @@ sync_cursor_cli_auth() {
   fi
 }
 
-# Phải chạy sau sync_claude_auth: bước đó cp đè settings.json từ /mnt/host-claude. Xem docs/docker.md.
+# Phải chạy sau sync_claude_auth: bước đó cp đè settings.json từ /mnt/host-claude.
 setup_rtk() {
   if [ "${RTK_HOOK_ENABLED:-1}" != "1" ]; then
     echo "[dev-team-dashboard] rtk hook disabled (RTK_HOOK_ENABLED=${RTK_HOOK_ENABLED})"

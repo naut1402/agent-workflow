@@ -85,7 +85,7 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
   && command -v claude \
   && (command -v agent || command -v cursor-agent)
 
-# rtk — nén output lệnh shell trước khi vào context LLM. Xem docs/docker.md.
+# rtk — nén output lệnh shell trước khi vào context LLM.
 # install.sh upstream đã detect arch và verify SHA-256, không cần script tự viết.
 ARG RTK_VERSION=""
 ARG RTK_REFRESH=""

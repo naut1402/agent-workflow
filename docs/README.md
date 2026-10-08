@@ -35,7 +35,7 @@ Giới thiệu sản phẩm và hướng dẫn chạy nhanh: [`../README.md`](..
 
 ## Vận hành & triển khai
 
-- **[`docker.md`](docker.md)** — biến môi trường bắt buộc/tuỳ chọn khi chạy bằng Docker, và rtk (nén output lệnh trong container): build, kiểm tra hook đã đăng ký, rollback.
+- **[`docker.md`](docker.md)** — biến môi trường bắt buộc/tuỳ chọn khi chạy bằng Docker, kể cả nhóm `RTK_*`.
 - **[`../docker/`](../docker/)** — Docker Compose, Dockerfile, `install.sh` và [`.env.example`](../docker/.env.example).
 
 ---

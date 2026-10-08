@@ -1,8 +1,6 @@
-# Docker — biến môi trường và vận hành
+# Docker — biến môi trường
 
 Cấu hình môi trường khi chạy dashboard bằng Docker. Chạy nhanh: [`../README.md`](../README.md). Compose, Dockerfile, `install.sh`: [`../docker/`](../docker/) kèm [`.env.example`](../docker/.env.example).
-
-Mọi lệnh dưới đây chạy từ **thư mục gốc repo**.
 
 ---
 
@@ -17,71 +15,3 @@ Mọi lệnh dưới đây chạy từ **thư mục gốc repo**.
 | `RTK_REFRESH` | Tuỳ chọn | Phá cache layer cài rtk — truyền từ dòng lệnh lúc build, không đặt trong `.env` | Trống; Docker tái dùng layer cũ |
 | `RTK_HOOK_ENABLED` | Tuỳ chọn | Bật/tắt hook nén output của rtk trong container | Mặc định `1` (bật) |
 | `RTK_TELEMETRY_DISABLED` | Tuỳ chọn | Chặn cứng telemetry của rtk | Mặc định `1` (chặn) |
-
-## rtk — nén output lệnh trong container
-
-Image dashboard bake sẵn [rtk](https://github.com/rtk-ai/rtk) (CLI, không phải
-service). `entrypoint.sh` đăng ký PreToolUse hook cho Claude Code CLI, nên lệnh
-shell mà agent chạy trong container được nén trước khi vào context LLM. Không có
-port nào được mở, không cần secret nào.
-
-Build và chạy:
-
-```bash
-./docker/install.sh --runners --build          # build + up (pin: RTK_VERSION trong docker/.env)
-
-# Quy ước cho mọi lệnh compose dưới đây — giữ ĐỦ các -f của luồng đang chạy.
-# Bỏ bớt một -f rồi `up -d` sẽ recreate dashboard theo cấu hình hẹp hơn và vứt mất
-# mount auth của host (compose.runners.yml) — xem cảnh báo ở mục rollback bên dưới.
-export DCR="docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.runners.yml"
-
-$DCR exec dashboard rtk --version
-$DCR logs dashboard | grep rtk
-```
-
-Kiểm tra hook đã đăng ký và số liệu tiết kiệm:
-
-```bash
-$DCR exec dashboard grep -o 'rtk hook claude' /home/dashboard/.claude/settings.json
-
-# -u dashboard = user trong container (uid 1001); dashboard thứ hai là tên service
-$DCR exec -u dashboard dashboard rtk gain
-```
-
-> `exec dashboard` vào bằng **root** (image kết thúc ở `USER root` để entrypoint có uid 0), nên
-> `rtk gain` không có `-u` sẽ để lại file `root:root` trong volume `rtk-data` và agent ở uid `PUID`
-> gặp `EACCES` cho tới lần start sau.
->
-> `-u dashboard` đúng với `PUID` mặc định (1001). Nếu bạn đặt `PUID` khác trong `docker/.env`,
-> entrypoint tạo user tên **`abc`** ở uid đó và dữ liệu rtk thuộc về nó — dùng `-u abc`
-> (hoặc `-u "$PUID"`, nhớ giá trị nở ở shell HOST chứ không đọc `docker/.env`).
-
-- Đổi `RTK_VERSION` **bắt buộc kèm rebuild** — binary bake lúc build, không phải env runtime.
-- `RTK_VERSION` trống = lấy latest **lúc build layer đó**; Docker tái dùng layer cũ nên lần build sau
-  vẫn ra bản cũ. Ép lấy latest: `RTK_REFRESH=$(date +%s) ./docker/install.sh --build` (hoặc `--no-cache`).
-- Tắt nhanh không cần rebuild: `RTK_HOOK_ENABLED=0` trong `docker/.env` rồi `./docker/install.sh --runners`
-  — phải **recreate** container, `docker compose restart` giữ nguyên env cũ nên không có tác dụng.
-  Nếu gọi compose trực tiếp, **phải giữ đủ các `-f` đang dùng** (`$DCR up -d`); bỏ
-  `compose.runners.yml` sẽ recreate dashboard không còn mount auth của host.
-- Hiện chỉ đăng ký hook cho runner **`claude-code-cli`**. rtk cũng hỗ trợ `cursor-cli` (`--agent cursor`)
-  và `codex-cli` (`--codex`) nhưng image này chưa bật — mở rộng là task riêng.
-- Runner họ API (`anthropic-compatible-api`, `openai-compatible-api`) gọi thẳng Messages API, không có
-  Bash tool nên không có hook để bắn.
-
-### Cơ chế trong container
-
-- `setup_rtk()` chạy **sau** `sync_claude_auth`, vì bước đó `cp` đè `settings.json` từ mount
-  `/mnt/host-claude` và sẽ xoá mất hook nếu đăng ký trước.
-- `rtk init --global --hook-only --auto-patch` merge additive (giữ hook sẵn có, ghi backup `.bak`)
-  và idempotent, nên chạy lại mỗi lần start là an toàn.
-- rtk v0.51.0 **ưu tiên** `$CLAUDE_CONFIG_DIR`, chỉ lùi về `$HOME/.claude` khi biến đó rỗng.
-  `entrypoint.sh` truyền biến tường minh qua `runuser`, trùng giá trị mà tiến trình `claude`
-  nhận ở cuối file — hai bên luôn patch/đọc cùng một `settings.json`.
-- Toàn bộ bước này **fail-open**: rtk thiếu trong `PATH`, không tạo được thư mục dữ liệu, hay
-  `rtk init` lỗi đều chỉ in WARNING rồi container vẫn start bình thường. Vì `rtk init` trả 0
-  không chứng minh entry nằm đúng file, entrypoint `grep` lại `settings.json` rồi mới log
-  `rtk hook registered`.
-- Compose **không** có service `rtk`: rtk là CLI single-binary, không listen port nào, nên
-  một service riêng chỉ để chạy `rtk gain` không thêm được gì so với `exec` vào dashboard.
-  Dữ liệu nằm ở volume `rtk-data` nên lệnh `exec` đọc được cả báo cáo của những lần chạy trước.
-
