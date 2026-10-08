@@ -50,7 +50,7 @@ Tách ngay đầu trang vì đây là chỗ người đọc hay đi nhầm nhán
    }
    ```
 
-3. Mặc định là mode `readonly` — **tool ghi chỉ xuất hiện khi đặt `DEVTEAM_MCP_MODE=full`**. Chạy pipeline agent mà quên bật thì `create_qa` không tồn tại; chi tiết triệu chứng ở [`server.md`](server.md) §2.3.
+3. Mặc định là mode `readonly` — **tool ghi chỉ xuất hiện khi đặt `DEVTEAM_MCP_MODE=full`**. Chạy pipeline agent mà quên bật thì `create_qa` không tồn tại; chi tiết triệu chứng ở [`server.md`](server.md) §2.3. Riêng job điều phối không cần khai gì: dashboard tự gắn entry MCP của chính nó kèm `--mode=full`.
 
 ---
 
@@ -59,7 +59,7 @@ Tách ngay đầu trang vì đây là chỗ người đọc hay đi nhầm nhán
 | Mode | Tool được đăng ký |
 |---|---|
 | `readonly` (mặc định) | 8 tool đọc — `list_projects` · `get_project` · `get_knowledge_bundle` · `list_tasks` · `get_task_state` · `get_task_context` · `list_artifacts` · `read_artifact` |
-| `full` | 8 tool trên + 3 tool ghi — `add_project` · `create_qa` · `remove_project` |
+| `full` | 8 tool trên + 4 tool ghi — `add_project` · `create_qa` · `remove_project` · `orchestrator_decide` |
 
 Mode **lọc ở khâu đăng ký**, không phải lúc gọi: tool ngoài quyền **biến khỏi `tools/list`** chứ không hiện ra rồi bị từ chối. Thứ tự ưu tiên và cách xử lý giá trị sai ở [`server.md`](server.md) §3.
 
@@ -69,5 +69,5 @@ Mode **lọc ở khâu đăng ký**, không phải lúc gọi: tool ngoài quy�
 
 | File | Nội dung |
 |---|---|
-| [`server.md`](server.md) | Vai inbound: bảng 11 tool, cách chạy và khai `mcpServers`, mode vận hành, tham chiếu field / output / mã lỗi / annotations từng tool, hợp đồng envelope, ví dụ, giới hạn |
+| [`server.md`](server.md) | Vai inbound: bảng 12 tool, cách chạy và khai `mcpServers`, mode vận hành, tham chiếu field / output / mã lỗi / annotations từng tool, hợp đồng envelope, ví dụ, giới hạn |
 | [`client.md`](client.md) | Vai outbound: store `mcp-servers.json`, 3 transport, chốt endpoint, masking secret, 4 route API, cách runner tiêu thụ |
