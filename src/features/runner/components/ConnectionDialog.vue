@@ -431,10 +431,25 @@ const selectedProviderEntry = computed(() =>
 )
 const mcpDeliveryOfSelected = computed(() => selectedProviderEntry.value?.mcpDelivery)
 
+/**
+ * Họ `ai-api` nạp tool MCP thẳng vào vòng tool-use của chính nó
+ * (`mcpToolBridge`), 🚫 KHÔNG qua file cấu hình — nên `mcpDeliveryOf` cố ý vẫn
+ * trả `'unsupported'` cho chúng (giả định A-4). Đó là giá trị đúng cho câu hỏi
+ * "giao cấu hình kiểu gì", nhưng là câu trả lời SAI cho câu hỏi người dùng đang
+ * hỏi ở đây — "bật cái này có tác dụng không". Có.
+ */
+const mcpViaToolBridge = computed(
+  () =>
+    selectedProviderEntry.value?.family === 'ai-api'
+    || Boolean(effectiveProviderId.value) && effectiveProviderId.value.endsWith('-api'),
+)
+
 // 📌 So với `'unsupported'`, 🚫 không so "khác `config-file-flag`": từ khi
 // cursor nhận cấu hình qua `workspace-config-file`, cách so cũ báo sai rằng
-// provider không dùng được MCP.
-const mcpUnsupported = computed(() => mcpDeliveryOfSelected.value === 'unsupported')
+// provider không dùng được MCP. Trừ tiếp họ `ai-api` — xem `mcpViaToolBridge`.
+const mcpUnsupported = computed(
+  () => mcpDeliveryOfSelected.value === 'unsupported' && !mcpViaToolBridge.value,
+)
 
 /**
  * Cursor đọc `<workspace>/.cursor/mcp.json`, tức file cấu hình nằm TRONG repo
@@ -1220,6 +1235,9 @@ onUnmounted(() => {
               </p>
               <p v-if="mcpServers.length && mcpWorkspaceFile" class="muted warn-text">
                 {{ t('runner.connectionDialog.mcpWorkspaceFile') }}
+              </p>
+              <p v-if="mcpServers.length && mcpViaToolBridge" class="muted">
+                {{ t('runner.connectionDialog.mcpToolBridge') }}
               </p>
             </div>
 
