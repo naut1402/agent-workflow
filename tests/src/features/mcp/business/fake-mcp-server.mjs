@@ -90,17 +90,75 @@ if (mode === 'hang') {
   const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js')
   const { z } = await import('zod')
 
-  const server = new McpServer({ name: 'fake-mcp-server', version: '9.9.9' })
-  server.registerTool(
-    'echo',
-    { description: 'Trả lại chuỗi đã nhận', inputSchema: { text: z.string() } },
-    async ({ text }) => ({ content: [{ type: 'text', text }] }),
-  )
-  server.registerTool(
-    'ping',
-    { description: 'Trả lại pong', inputSchema: {} },
-    async () => ({ content: [{ type: 'text', text: 'pong' }] }),
-  )
+  // ── Mở rộng cho #379 (bridge tool MCP). Mọi thứ dưới đây đều OPT-IN qua env:
+  // 🚫 đặt biến nào thì server khai đúng `echo` + `ping` như trước, 🚫 đổi một
+  // byte hành vi của các suite đang dùng mode `ok`.
+  //
+  //   FAKE_MCP_TOOLS        — danh sách tool, phân tách bằng dấu phẩy (mặc định `echo,ping`)
+  //   FAKE_MCP_TOOL_ERROR   — tên tool trả `isError: true`
+  //   FAKE_MCP_TOOL_HANG    — tên tool KHÔNG BAO GIỜ trả lời (đo timeout)
+  //   FAKE_MCP_TOOL_SECRET  — chuỗi mà mọi tool vọng lại trong kết quả (đo mask)
+  //   FAKE_MCP_TOOL_THROW   — tên tool ném lỗi mang `FAKE_MCP_TOOL_SECRET`
+  //   FAKE_MCP_CALL_LOG     — file JSONL ghi `{ server, tool, args }` mỗi lời gọi
+  //                           (bằng chứng DUY NHẤT cho "route về ĐÚNG server")
+  //   FAKE_MCP_SERVER_NAME  — tên server, để phân biệt hai tiến trình trong call log
+  //   FAKE_MCP_DIE_AFTER_LIST — thoát NGAY sau `tools/list` (server chết giữa vòng tool-use)
+  const serverName = process.env.FAKE_MCP_SERVER_NAME || 'fake-mcp-server'
+  const toolNames = (process.env.FAKE_MCP_TOOLS || 'echo,ping')
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean)
+  const errorTool = process.env.FAKE_MCP_TOOL_ERROR || ''
+  const hangTool = process.env.FAKE_MCP_TOOL_HANG || ''
+  const throwTool = process.env.FAKE_MCP_TOOL_THROW || ''
+  const secret = process.env.FAKE_MCP_TOOL_SECRET || ''
+  const callLog = process.env.FAKE_MCP_CALL_LOG || ''
+
+  // `FAKE_MCP_TOOLS=' '` ⇒ 0 tool. Phải KHAI capability `tools` tường minh, nếu
+  // không `McpServer` chỉ bật capability khi có tool đầu tiên và `tools/list` trả
+  // lỗi "server does not support tools" — đó là ca KHÁC (TC-P6-14/15), 🚫 phải
+  // "server khai 0 tool" của TC-P6-07.
+  const server = new McpServer({ name: serverName, version: '9.9.9' }, { capabilities: { tools: {} } })
+  for (const name of toolNames) {
+    server.registerTool(
+      name,
+      {
+        description: name === 'ping' ? 'Trả lại pong' : `Tool ${name} của ${serverName}`,
+        inputSchema: name === 'ping' ? {} : { text: z.string() },
+      },
+      async (args) => {
+        if (callLog) {
+          fs.appendFileSync(callLog, `${JSON.stringify({ server: serverName, tool: name, args })}\n`)
+        }
+        if (name === hangTool) await new Promise(() => {})
+        if (name === throwTool) throw new Error(`fake-mcp: tool hỏng ${secret}`)
+        if (name === errorTool) {
+          return { isError: true, content: [{ type: 'text', text: `fake-mcp: lỗi tool ${secret}` }] }
+        }
+        const body = name === 'ping' ? 'pong' : String(args?.text ?? '')
+        return { content: [{ type: 'text', text: secret ? `${body} ${secret}` : body }] }
+      },
+    )
+  }
+
+  // 0 tool: `McpServer` chỉ ĐĂNG KÝ handler `tools/list` khi có tool đầu tiên,
+  // nên khai capability thôi 🚫 đủ — `tools/list` trả `Method not found`. Đăng ký
+  // một tool rồi gỡ ngay: handler ở lại, danh sách rỗng. Đó mới đúng hình dạng
+  // "server CÓ hỗ trợ tool nhưng 🚫 khai cái nào" của TC-P6-07.
+  if (!toolNames.length) {
+    const tmp = server.registerTool('__tam__', { description: 'tạm', inputSchema: {} }, async () => ({
+      content: [{ type: 'text', text: '' }],
+    }))
+    tmp.remove()
+  }
 
   await server.connect(new StdioServerTransport())
+
+  if (process.env.FAKE_MCP_DIE_AFTER_LIST) {
+    // Chết NGAY sau khi trả `tools/list`: bridge đã có tool trong tay, lời gọi
+    // sau đó phải trả lỗi ĐÃ XỬ LÝ chứ 🚫 ném ra ngoài vòng tool-use.
+    process.stdin.on('data', (chunk) => {
+      if (String(chunk).includes('tools/list')) setTimeout(() => process.exit(9), 50)
+    })
+  }
 }

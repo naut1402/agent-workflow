@@ -1036,3 +1036,201 @@ describe('AgenticApiProvider — webSearch() / fetchUrl()', () => {
     expect(result.content).toBe('page content')
   })
 })
+
+/* ═══ #379 · Tdf943817 — bridge mở/đóng theo job + preamble (base class) ══════ */
+
+// `beforeEach` 🚫 có trong khối import đầu file — khai thêm ở ĐÂY thay vì sửa
+// dòng đó, để diff của khối này 🚫 chạm phần trên.
+import { beforeEach } from 'bun:test'
+import { upsertMcpServer } from '../../../../../../src/features/mcp/business/registry.js'
+import type { McpBridgeTool } from '../../../../../../src/features/runner/business/providers/mcpToolBridge.js'
+
+/**
+ * TC-P6-06 (vế đơn vị) · TC-P6-07 · TC-P6-18 · TC-P6-19.
+ *
+ * `AgenticApiProvider` là nơi bridge được mở TRƯỚC `runConversation` và đóng
+ * trong `finally` của CÙNG khối — một đường thoát quên `close()` là rò tiến
+ * trình con stdio theo từng job, nên ca ở đây đo bằng **PID tiến trình con thật**.
+ */
+class PreambleProvider extends FakeAgenticProvider {
+  /** Bản 2 tham số — `preamble()` sẵn có chỉ phơi bản 1 tham số. */
+  preambleWithMcp(tools: string[], mcpTools: McpBridgeTool[]) {
+    return this.buildToolUsagePreamble(tools, mcpTools)
+  }
+}
+
+describe('AgenticApiProvider — preamble có tool MCP (#379)', () => {
+  const MCP_TOOLS: McpBridgeTool[] = [
+    { name: 'mcp__fs-local__read_file', description: 'Đọc file qua MCP', inputSchema: { type: 'object' } },
+    { name: 'mcp__fs-local__ping', description: 'Trả lại pong', inputSchema: { type: 'object' } },
+  ]
+
+  // TC-P6-06 ⭐
+  test('TC-P6-06: preamble liệt kê TÊN ĐÃ PREFIX + mô tả, nằm TRONG danh sách "DUY NHẤT"', () => {
+    const p = new PreambleProvider()
+    const text = p.preambleWithMcp(['list_directory'], MCP_TOOLS)
+
+    const header = '## Tool khả dụng (DUY NHẤT'
+    expect(text).toContain(header)
+    for (const tool of MCP_TOOLS) {
+      expect(text).toContain(`- ${tool.name}: ${tool.description}`)
+      // Phải nằm SAU dòng tiêu đề "DUY NHẤT" — ngoài danh sách đó thì model
+      // được bảo là tool 🚫 tồn tại, và nó sẽ 🚫 gọi.
+      expect(text.indexOf(`- ${tool.name}`)).toBeGreaterThan(text.indexOf(header))
+    }
+    // Tool sẵn có vẫn còn và vẫn đứng trước.
+    expect(text.indexOf('- list_directory')).toBeLessThan(text.indexOf(`- ${MCP_TOOLS[0].name}`))
+  })
+
+  /**
+   * TC-P6-07 — bridge mở nhưng server 🚫 khai tool nào ⇒ preamble BYTE-IDENTICAL
+   * bản 🚫 có MCP: 🚫 mục rỗng, 🚫 dấu gạch đầu dòng lủng lẳng, 🚫 ném.
+   */
+  test('TC-P6-07: mcpTools rỗng ⇒ preamble byte-identical bản 1 tham số, 🚫 mục lủng lẳng', () => {
+    const p = new PreambleProvider()
+    const withEmpty = p.preambleWithMcp(['list_directory'], [])
+    const without = p.preamble(['list_directory'])
+
+    expect(withEmpty).toBe(without)
+    expect(() => p.preambleWithMcp([], [])).not.toThrow()
+    expect(withEmpty).not.toContain('- \n')
+    expect(withEmpty).not.toContain('- :')
+  })
+})
+
+describe('AgenticApiProvider — vòng đời bridge theo job (#379)', () => {
+  const FIXTURE = path.join(
+    import.meta.dir,
+    '../../../../features/mcp/business/fake-mcp-server.mjs',
+  )
+
+  let mcpHome: string
+  let mcpWorkspace: string
+
+  beforeEach(() => {
+    mcpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-p6-base-home-'))
+    mcpWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-p6-base-ws-'))
+    process.env.DEV_TEAM_DASHBOARD_HOME = mcpHome
+  })
+  afterEach(() => {
+    process.env.DEV_TEAM_DASHBOARD_HOME = home
+    fs.rmSync(mcpHome, { recursive: true, force: true })
+    fs.rmSync(mcpWorkspace, { recursive: true, force: true })
+  })
+
+  function seedMcp(id: string, env: Record<string, string> = {}) {
+    upsertMcpServer({
+      id,
+      label: id,
+      enabled: true,
+      transport: 'stdio',
+      command: process.execPath,
+      args: [FIXTURE, 'ok'],
+      env: { FAKE_MCP_SERVER_NAME: id, ...env },
+    })
+  }
+  function alive(pid: number): boolean {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+  async function waitDead(pid: number, ms = 5000): Promise<boolean> {
+    const until = Date.now() + ms
+    while (Date.now() < until) {
+      if (!alive(pid)) return true
+      await new Promise((r) => setTimeout(r, 25))
+    }
+    return !alive(pid)
+  }
+
+  // TC-P6-18 ⭐
+  test('TC-P6-18: job kết thúc BÌNH THƯỜNG ⇒ phiên MCP đã đóng, tiến trình con đã thoát', async () => {
+    const pidFile = path.join(mcpHome, 'child.pid')
+    seedMcp('srv', { FAKE_MCP_PID_FILE: pidFile })
+
+    const p = new FakeAgenticProvider()
+    let seenBridgeTools = -1
+    let pidDuringRun = 0
+    p.runConversationImpl = async (ctx) => {
+      seenBridgeTools = ctx.mcpBridge?.tools.length ?? -1
+      pidDuringRun = Number(fs.readFileSync(pidFile, 'utf8'))
+      expect(alive(pidDuringRun)).toBe(true)
+      return { finalText: 'ok', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    const result = await p.execute(
+      baseRequest({ workspace: mcpWorkspace }),
+      { mcpServers: ['srv'] },
+      credential(),
+    )
+
+    expect(result.ok).toBe(true)
+    expect(seenBridgeTools).toBe(2)
+    expect(await waitDead(pidDuringRun)).toBe(true)
+  }, 30_000)
+
+  // TC-P6-19 ⭐
+  test('TC-P6-19: `runConversation` NÉM ⇒ phiên vẫn đóng ở `finally`, 🚫 rò tiến trình', async () => {
+    const pidFile = path.join(mcpHome, 'child.pid')
+    seedMcp('srv', { FAKE_MCP_PID_FILE: pidFile })
+
+    const p = new FakeAgenticProvider()
+    let pidDuringRun = 0
+    p.runConversationImpl = async () => {
+      pidDuringRun = Number(fs.readFileSync(pidFile, 'utf8'))
+      throw new Error('model exploded')
+    }
+
+    const result = await p.execute(
+      baseRequest({ workspace: mcpWorkspace }),
+      { mcpServers: ['srv'] },
+      credential(),
+    )
+
+    // Lỗi của job vẫn nổi lên nguyên nghĩa…
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe('model exploded')
+    // …và tiến trình con vẫn được dọn.
+    expect(await waitDead(pidDuringRun)).toBe(true)
+  }, 30_000)
+
+  /** TC-P6-07 (vế end-to-end) — server khai 0 tool ⇒ bridge mở, 🚫 ném, 🚫 tool nào. */
+  test('TC-P6-07: server 🚫 khai tool nào ⇒ bridge vẫn mở, tools rỗng, job vẫn ok', async () => {
+    seedMcp('rong', { FAKE_MCP_TOOLS: ' ' })
+
+    const p = new FakeAgenticProvider()
+    let bridgeToolCount = -1
+    p.runConversationImpl = async (ctx) => {
+      bridgeToolCount = ctx.mcpBridge?.tools.length ?? -1
+      return { finalText: 'ok', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    const result = await p.execute(
+      baseRequest({ workspace: mcpWorkspace }),
+      { mcpServers: ['rong'] },
+      credential(),
+    )
+
+    expect(result.ok).toBe(true)
+    expect(bridgeToolCount).toBe(0)
+  }, 30_000)
+
+  /** TC-P6-01 (vế base class) — 🚫 khai `mcpServers` ⇒ `ctx.mcpBridge` là `null`. */
+  test('TC-P6-01: 🚫 `mcpServers` ⇒ `ctx.mcpBridge === null`, 🚫 tiến trình con nào', async () => {
+    seedMcp('srv')
+    const p = new FakeAgenticProvider()
+    let bridge: unknown = 'chua-gan'
+    p.runConversationImpl = async (ctx) => {
+      bridge = ctx.mcpBridge
+      return { finalText: 'ok', usage: {}, toolCalls: [], rawMessages: [] }
+    }
+
+    const result = await p.execute(baseRequest({ workspace: mcpWorkspace }), {}, credential())
+
+    expect(result.ok).toBe(true)
+    expect(bridge).toBeNull()
+  }, 30_000)
+})
