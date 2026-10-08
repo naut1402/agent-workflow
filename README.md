@@ -91,11 +91,9 @@ bun run test:all     # typecheck → lint → test → test:fe → e2e
 bun run check:todo   # gate docs/todo (CI promote → main)
 ```
 
-Biến môi trường (`ANTHROPIC_API_KEY`, `DASHBOARD_SECRET_KEY`, `DEVTEAM_MCP_MODE`, `RTK_*`) và cách vận hành rtk trong container: [`docs/docker.md`](docs/docker.md).
-
 ## Liên kết
 
-- [`docker/`](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example)
+- [`docker/`](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example) · [`docs/docker.md`](docs/docker.md): biến môi trường, vận hành rtk trong container
 - MCP server (`bun run mcp`) — [`docs/mcp/`](docs/mcp/README.md): mode vận hành, bảng tool, khai `mcpServers`, mã lỗi
 - Liên quan — [plugin Claude Code (bộ agent template)](docs/template/agents/) · [Issues](https://github.com/naut1402/agent-workflow/issues) · [Pull requests](https://github.com/naut1402/agent-workflow/pulls)
 - Tài liệu — [danh mục đầy đủ trong `docs/`](docs/README.md): kiến trúc, domain event, i18n, quy ước UI, template pipeline
