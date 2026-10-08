@@ -310,7 +310,14 @@ const READ_TOOL_NAMES = [
   'list_tasks',
   'read_artifact',
 ]
-const ALL_TOOL_NAMES = [...READ_TOOL_NAMES, 'add_project', 'create_qa', 'remove_project'].sort()
+// Tf2f484e2: tool ghi thứ 4 — `orchestrator_decide` (xem `tools-orchestrator.test.ts`).
+const ALL_TOOL_NAMES = [
+  ...READ_TOOL_NAMES,
+  'add_project',
+  'create_qa',
+  'orchestrator_decide',
+  'remove_project',
+].sort()
 
 /**
  * Client MCP qua in-memory transport.
@@ -364,8 +371,9 @@ describe('DashboardMcpServer.build', () => {
     expect((await toolsOf('readonly')).map((t) => t.name).sort()).toEqual(READ_TOOL_NAMES)
   })
 
-  test('TC-17: mode full → đủ 11 tool', async () => {
+  test('TC-17: mode full → đủ 12 tool', async () => {
     expect((await toolsOf('full')).map((t) => t.name).sort()).toEqual(ALL_TOOL_NAMES)
+    expect(ALL_TOOL_NAMES).toHaveLength(12)
   })
 
   test('TC-18: annotations khớp bảng vai trò đọc/ghi', async () => {
@@ -387,7 +395,7 @@ describe('DashboardMcpServer.build', () => {
     expect(byName.remove_project.annotations?.openWorldHint).toBe(false)
   })
 
-  test('TC-19: outputSchema có mặt đúng 8 tool', async () => {
+  test('TC-19: outputSchema có mặt đúng 9 tool', async () => {
     const tools = await toolsOf('full')
     const withSchema = tools.filter((t) => 'outputSchema' in t).map((t) => t.name).sort()
     expect(withSchema).toEqual([
@@ -398,6 +406,9 @@ describe('DashboardMcpServer.build', () => {
       'list_artifacts',
       'list_projects',
       'list_tasks',
+      // Tf2f484e2 — `{ applied }`. Nhánh thành công phải phát `structuredContent`
+      // kèm theo, nếu không SDK ném `McpError` runtime (ca TC-A10).
+      'orchestrator_decide',
       'remove_project',
     ])
     // G8: ba tool payload lớn cố ý KHÔNG khai — assert vắng mặt.

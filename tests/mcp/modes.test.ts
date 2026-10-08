@@ -23,7 +23,10 @@ const READ_TOOLS = [
   'list_tasks',
   'read_artifact',
 ]
-const WRITE_TOOLS = ['add_project', 'create_qa', 'remove_project']
+// Tf2f484e2 · TC-A01/TC-A02: `orchestrator_decide` là tool GHI thứ 4 (`access:
+// 'write'`) nên chỉ được đăng ký ở mode `full`. Danh sách giữ thứ tự ĐÃ SẮP XẾP
+// vì TC-K19 so thẳng với hiệu của hai tập đã `.sort()`.
+const WRITE_TOOLS = ['add_project', 'create_qa', 'orchestrator_decide', 'remove_project']
 
 function toolNames(mode: McpMode): string[] {
   return new DashboardMcpServer(mode).tools().map((t) => t.name).sort()
@@ -248,5 +251,38 @@ describe('Nhóm K — đăng ký get_task_context', () => {
     expect(full.filter((t) => !readonly.includes(t))).toEqual(WRITE_TOOLS)
     expect(readonly).not.toContain('create_qa')
     expect(full).toContain('create_qa')
+  })
+})
+
+// Tf2f484e2 — tuyến điều phối qua MCP. Hai ca dưới chốt ĐÚNG một thứ ở tầng
+// đăng ký: tool ra lệnh phải vắng khỏi mode đọc. Phần hợp đồng của chính tool
+// (schema, envelope, mã lỗi) ở `tools-orchestrator.test.ts`.
+describe('Nhóm A — đăng ký orchestrator_decide theo mode', () => {
+  test('TC-A01: mode full có orchestrator_decide, và nó khai access ghi', () => {
+    expect(toolNames('full')).toContain('orchestrator_decide')
+    const def = new DashboardMcpServer('full').tools().find((t) => t.name === 'orchestrator_decide')!
+    expect(def.access).toBe('write')
+  })
+
+  test('TC-A02: mode đọc KHÔNG có orchestrator_decide, và tập tool đọc không đổi', () => {
+    // Hai chiều: tool mới vắng mặt, VÀ danh sách đọc vẫn đúng 8 tên cũ — ca này
+    // là lưới chống "thêm tool ghi làm xê dịch mode readonly".
+    for (const names of [toolNames('readonly'), new DashboardMcpServer().tools().map((t) => t.name).sort()]) {
+      expect(names).not.toContain('orchestrator_decide')
+      expect(names).toEqual(READ_TOOLS)
+    }
+  })
+
+  test('TC-A03: instructions chỉ đường theo mode — gọi tool ở full, dòng cuối output ở readonly', () => {
+    const full = new DashboardMcpServer('full').instructions()
+    const readonly = new DashboardMcpServer('readonly').instructions()
+
+    expect(full).toContain('`orchestrator_decide` —')
+    // `unavailableHint` chỉ phát khi tool bị lọc — ở `full` không được có.
+    expect(full).not.toContain('KHÔNG có ở mode')
+
+    expect(readonly).not.toContain('`orchestrator_decide` —')
+    expect(readonly).toContain('`orchestrator_decide` KHÔNG có ở mode `readonly`')
+    expect(readonly).toContain('ORCHESTRATOR_DECISION')
   })
 })
