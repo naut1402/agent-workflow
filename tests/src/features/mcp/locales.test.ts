@@ -95,3 +95,43 @@ describe('i18n feature mcp — khoá chết và cân bằng hai locale', () => {
     }
   })
 })
+
+/**
+ * TC-SEC-40 (#385, Tdf943817) — khoá i18n của cảnh báo `args`.
+ *
+ * Backend trả **MÃ** (`args.secretLiteral`, `args.secretDropped`), FE map sang
+ * `mcp.warnings.*`. Thiếu một bên là người dùng thấy khoá thô; thừa một bên là
+ * khoá chết. TC-G02 đã bắt "lệch giữa vi/en", ca này bắt "cả hai cùng thiếu".
+ */
+describe('i18n feature mcp — cảnh báo secret trong `args` (#385)', () => {
+  const WARNING_KEYS = ['warnings.argsSecretLiteral', 'warnings.argsSecretDropped'] as const
+
+  // TC-SEC-40
+  it.each([
+    ['vi', mcpVi],
+    ['en', mcpEn],
+  ] as const)('TC-SEC-40 (%s): khoá cảnh báo có đủ và 🚫 rỗng', (_locale, dict) => {
+    const keys = flatKeys(dict)
+    for (const key of WARNING_KEYS) {
+      expect(keys).toContain(key)
+    }
+    expect(dict.warnings.argsSecretLiteral.trim().length).toBeGreaterThan(0)
+    expect(dict.warnings.argsSecretDropped.trim().length).toBeGreaterThan(0)
+  })
+
+  it('TC-SEC-40: khoá `savedWithWarnings` (hoãn đóng dialog) có ở cả hai locale', () => {
+    expect(flatKeys(mcpVi)).toContain('dialog.savedWithWarnings')
+    expect(flatKeys(mcpEn)).toContain('dialog.savedWithWarnings')
+  })
+
+  // Vế "🚫 khoá thừa": mọi khoá dưới `warnings.*` phải được source của feature dùng thật.
+  it('TC-SEC-40: 🚫 khoá thừa dưới `mcp.warnings.*`', () => {
+    const source = featureSource()
+    const declared = flatKeys(mcpVi).filter((k) => k.startsWith('warnings.'))
+
+    expect(declared.sort()).toEqual([...WARNING_KEYS].sort())
+    for (const key of declared) {
+      expect(source).toContain(`mcp.${key}`)
+    }
+  })
+})

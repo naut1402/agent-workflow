@@ -60,6 +60,30 @@ if (mode === 'mcp-leak') {
   }
   process.exit(7)
 }
+if (mode === 'mcp-split-leak') {
+  // #385 TC-SEC-49: secret bị xuất làm HAI chunk rồi tiến trình thoát mã khác 0.
+  // Bộ lọc mask có trạng thái giữ lại `max(len)-1` ký tự, nên phần ĐUÔI chỉ ra
+  // được nếu `flushStream()` chạy ở nhánh lỗi — đó chính là thứ ca này đo.
+  const file = mcpConfigPath()
+  const secret = mcpConfigValues(file)[0] ?? ''
+  const half = Math.ceil(secret.length / 2)
+  process.stderr.write(`401 Unauthorized: Bearer ${secret.slice(0, half)}`)
+  await new Promise((r) => setTimeout(r, 80))
+  process.stderr.write(`${secret.slice(half)}\nDUOI-LOG-CUOI-CUNG\n`)
+  await new Promise((r) => setTimeout(r, 80))
+  process.exit(7)
+}
+
+if (mode === 'two-chunks') {
+  // #385 TC-SEC-50: hai lần ghi tách biệt về thời gian ⇒ hai chunk `onLog` riêng.
+  // Dùng để chứng minh job KHÔNG bật MCP 🚫 bị bộ lọc giữ lại/ghép lại ký tự nào.
+  process.stdout.write('CHUNK-MOT\n')
+  await new Promise((r) => setTimeout(r, 120))
+  process.stdout.write('CHUNK-HAI\n')
+  await new Promise((r) => setTimeout(r, 80))
+  process.exit(0)
+}
+
 if (mode === 'ok') {
   console.log('ok')
   process.exit(0)

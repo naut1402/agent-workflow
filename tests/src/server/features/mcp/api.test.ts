@@ -428,3 +428,258 @@ describe('POST /api/mcp-servers — biên timeoutMs và dạng id (nhóm F)', ()
     expect(fs.existsSync(storeFile())).toBe(false)
   })
 })
+
+/**
+ * TC-SEC-30…TC-SEC-38 + TC-SEC-DEST — biên API cho secret literal trong
+ * `stdio.args` (#385 SEC-5 / SEC-7 / SEC-14, PR 1).
+ *
+ * Canary riêng, khác `CANARY` ở đầu file: ca ở đây quét **toàn văn** body
+ * response nên chuỗi phải là duy nhất và dễ `grep` (`test-spec.md` §2.3).
+ */
+const ARGS_CANARY = 'sk-test-LEAKCANARY-0123456789'
+
+/** Server stdio có secret literal nằm ở `args` — nguyên liệu chung của nhóm. */
+const SECRET_ARGS_BODY = {
+  id: 'args-secret',
+  label: 'Args secret',
+  enabled: true,
+  transport: 'stdio',
+  command: 'npx',
+  args: ['-y', '@modelcontextprotocol/server-filesystem', '--token', ARGS_CANARY],
+}
+
+async function bodyText(res: Response): Promise<string> {
+  return await res.text()
+}
+
+describe('Secret literal trong `stdio.args` — biên API (#385)', () => {
+  // TC-SEC-30 ⭐
+  test('TC-SEC-30: GET /api/mcp-servers ⇒ body 🚫 chứa canary, `args` hiện `***`', async () => {
+    expect((await post('/api/mcp-servers', { server: SECRET_ARGS_BODY })).status).toBe(200)
+
+    const res = await app.request('/api/mcp-servers')
+    const raw = await bodyText(res)
+
+    expect(res.status).toBe(200)
+    expect(raw).not.toContain(ARGS_CANARY)
+    const server = JSON.parse(raw).servers.find((s: any) => s.id === 'args-secret')
+    expect(server.args).toEqual([
+      '-y',
+      '@modelcontextprotocol/server-filesystem',
+      '--token',
+      '***',
+    ])
+  })
+
+  /**
+   * TC-SEC-31 — 🚫 KHÔNG có route `GET /api/mcp-servers/<id>` (xem
+   * `src/features/mcp/api.ts`: 4 route + 1 fallback). Nên "mọi route trả
+   * `McpServerConfig`" ở đây là **ba** đường, và cả ba đều phải assert — assert
+   * một rồi suy ra hai cái kia đúng là thứ §2.3 cấm.
+   */
+  test('TC-SEC-31: MỌI route trả McpServerConfig đều đã mask', async () => {
+    // (1) Response của chính lượt lưu.
+    const saveRes = await post('/api/mcp-servers', { server: SECRET_ARGS_BODY })
+    const saveRaw = await bodyText(saveRes)
+    expect(saveRaw).not.toContain(ARGS_CANARY)
+    expect(JSON.parse(saveRaw).server.args).toContain('***')
+
+    // (2) Route danh sách.
+    expect(await bodyText(await app.request('/api/mcp-servers'))).not.toContain(ARGS_CANARY)
+
+    // (3) Route kiểm tra kết nối (trả `tools` + `warnings`, 🚫 trả lại cấu hình).
+    const testRaw = await bodyText(
+      await post('/api/mcp-servers/test', { server: SECRET_ARGS_BODY, listTools: false }),
+    )
+    expect(testRaw).not.toContain(ARGS_CANARY)
+
+    // (4) Route 405 và route xoá cũng 🚫 được vọng lại gì.
+    expect(await bodyText(await app.request('/api/mcp-servers', { method: 'PUT' }))).not.toContain(
+      ARGS_CANARY,
+    )
+  })
+
+  // TC-SEC-32 ⭐ — round-trip THẬT, đo trên file registry trên đĩa.
+  test('TC-SEC-32: GET → gửi nguyên body đó đi lưu ⇒ file trên đĩa vẫn giữ secret THẬT', async () => {
+    await post('/api/mcp-servers', { server: SECRET_ARGS_BODY })
+    const listed = JSON.parse(await bodyText(await app.request('/api/mcp-servers')))
+    const masked = listed.servers.find((s: any) => s.id === 'args-secret')
+    expect(masked.args).toContain('***')
+
+    // Gửi NGUYÊN bản đã mask ngược lên — đúng thứ dialog làm khi bấm Lưu mà 🚫 sửa gì.
+    const again = await post('/api/mcp-servers', { server: masked })
+    expect(again.status).toBe(200)
+
+    const onDisk = fs.readFileSync(storeFile(), 'utf8')
+    expect(onDisk).toContain(ARGS_CANARY)
+    expect(onDisk).not.toContain('***')
+  })
+
+  // TC-SEC-33 ⭐
+  test('TC-SEC-33: Kiểm tra kết nối với bản nháp Y HỆT bản đã lưu ⇒ 🚫 báo đổi đích', async () => {
+    const draft = fakeStdioDraft('ok', {
+      id: 'same-target',
+      args: [FAKE_MCP, 'ok', '--token', ARGS_CANARY],
+    })
+    await post('/api/mcp-servers', { server: draft })
+
+    const listed = JSON.parse(await bodyText(await app.request('/api/mcp-servers')))
+    const masked = listed.servers.find((s: any) => s.id === 'same-target')
+    expect(masked.args).toContain('***')
+
+    const res = await post('/api/mcp-servers/test', { server: masked, listTools: true })
+    const raw = await bodyText(res)
+
+    expect(res.status).toBe(200)
+    expect(raw).not.toContain('đích kết nối đã đổi')
+    expect(raw).not.toContain(ARGS_CANARY)
+    // Probe dùng giá trị THẬT ⇒ server giả chạy được và trả tool.
+    expect(JSON.parse(raw).ok).toBe(true)
+  }, 30_000)
+
+  // TC-SEC-34 — tính chất bảo mật của guard 🚫 bị nới cùng lúc.
+  test('TC-SEC-34: đổi `command` / đổi một arg KHÔNG phải secret ⇒ 400 báo đổi đích', async () => {
+    const draft = fakeStdioDraft('ok', {
+      id: 'moved-target',
+      args: [FAKE_MCP, 'ok', '--token', ARGS_CANARY],
+    })
+    await post('/api/mcp-servers', { server: draft })
+    const listed = JSON.parse(await bodyText(await app.request('/api/mcp-servers')))
+    const masked = listed.servers.find((s: any) => s.id === 'moved-target')
+
+    const movedCommand = await post('/api/mcp-servers/test', {
+      server: { ...masked, command: '/bin/echo' },
+    })
+    expect(movedCommand.status).toBe(400)
+    expect(await bodyText(movedCommand)).toContain('đích kết nối đã đổi')
+
+    const movedArg = await post('/api/mcp-servers/test', {
+      server: { ...masked, args: [FAKE_MCP, 'hang', '--token', '***'] },
+    })
+    expect(movedArg.status).toBe(400)
+    expect(await bodyText(movedArg)).toContain('đích kết nối đã đổi')
+  })
+
+  /**
+   * TC-SEC-DEST (review vòng 1) — chống hồi quy cho `destinationOf`.
+   * Khai thác: đổi giá trị đứng sau `--auth` nhưng GIỮ `--token: ***`. Nếu
+   * `destinationOf` so trên bản đã MASK thì hai vế bằng nhau ⇒ secret thật được
+   * khôi phục rồi probe tới đích của kẻ gửi. Guard phải CHẶN.
+   */
+  test('TC-SEC-DEST: đổi giá trị sau `--auth`, giữ `--token: ***` ⇒ 400, 🚫 probe', async () => {
+    const saved = fakeStdioDraft('ok', {
+      id: 'dest-guard',
+      args: [FAKE_MCP, 'ok', '--auth', 'https://internal.example', '--token', ARGS_CANARY],
+    })
+    await post('/api/mcp-servers', { server: saved })
+
+    const attack = await post('/api/mcp-servers/test', {
+      server: {
+        ...saved,
+        args: [FAKE_MCP, 'ok', '--auth', 'https://attacker.example', '--token', '***'],
+      },
+    })
+    const raw = await bodyText(attack)
+
+    expect(attack.status).toBe(400)
+    expect(raw).toContain('đích kết nối đã đổi')
+    expect(raw).not.toContain(ARGS_CANARY)
+  })
+
+  /**
+   * TC-SEC-35 — server MỚI (🚫 có bản cũ) mà `args` chứa `***`. Hai đường vào, và
+   * chúng **🚫 cùng một kết luận** — phải khoá cả hai, 🚫 assert một rồi suy ra:
+   *   - `POST /test` ⇒ **400** "đích kết nối đã đổi" (🚫 có bản lưu để khôi phục);
+   *   - `POST` (lưu) ⇒ **2xx** nhưng ô `***` bị **BỎ HẲN** + cảnh báo
+   *     `args.secretDropped`. Đây là lựa chọn có chủ ý: chặn lượt Lưu nghĩa là
+   *     một cấu hình đang chạy 🚫 bấm Lưu lại được nữa (D4). Điều bắt buộc —
+   *     và là điều ca này canh — là literal `***` 🚫 BAO GIỜ chạm store.
+   */
+  test('TC-SEC-35: server MỚI mà `args` chứa `***` ⇒ 🚫 ghi literal `***` xuống store', async () => {
+    const res = await post('/api/mcp-servers/test', {
+      server: { ...SECRET_ARGS_BODY, id: 'brand-new', args: ['-y', 'pkg', '--token', '***'] },
+    })
+
+    expect(res.status).toBe(400)
+    expect(await bodyText(res)).toContain('đích kết nối đã đổi')
+    expect(readStore().servers.map((s: any) => s.id)).not.toContain('brand-new')
+
+    const saved = await post('/api/mcp-servers', {
+      server: { ...SECRET_ARGS_BODY, id: 'brand-new', args: ['-y', 'pkg', '--token', '***'] },
+    })
+    const body = JSON.parse(await bodyText(saved))
+
+    expect(saved.status).toBe(200)
+    expect(body.warnings).toContain('args.secretDropped')
+    expect(body.server.args).toEqual(['-y', 'pkg', '--token'])
+    expect(fs.readFileSync(storeFile(), 'utf8')).not.toContain('***')
+  })
+
+  // TC-SEC-36
+  test('TC-SEC-36: payload audit + domain event 🚫 chứa canary', async () => {
+    await post('/api/mcp-servers', { server: SECRET_ARGS_BODY })
+
+    expect(events.length).toBeGreaterThan(0)
+    expect(JSON.stringify(events)).not.toContain(ARGS_CANARY)
+    expect(logEntries.length).toBeGreaterThan(0)
+    expect(JSON.stringify(logEntries)).not.toContain(ARGS_CANARY)
+  })
+
+  // TC-SEC-37 ⭐ — CẢNH BÁO, 🚫 CHẶN. Cấu hình đang chạy vẫn phải lưu lại được.
+  test('TC-SEC-37: `args` có literal nghi secret ⇒ 2xx kèm cảnh báo, 🚫 4xx', async () => {
+    const res = await post('/api/mcp-servers', { server: SECRET_ARGS_BODY })
+    const body = JSON.parse(await bodyText(res))
+
+    expect(res.status).toBe(200)
+    expect(body.saved).toBe(true)
+    expect(body.warnings).toContain('args.secretLiteral')
+    // Lưu lại lần nữa (bản đã mask) vẫn 2xx — cấu hình đã lưu 🚫 bị kẹt.
+    const listed = JSON.parse(await bodyText(await app.request('/api/mcp-servers')))
+    const masked = listed.servers.find((s: any) => s.id === 'args-secret')
+    expect((await post('/api/mcp-servers', { server: masked })).status).toBe(200)
+  })
+
+  // TC-SEC-38 — 🚫 báo động giả.
+  test('TC-SEC-38: `args` 🚫 có gì nghi secret ⇒ 🚫 cảnh báo', async () => {
+    const res = await post('/api/mcp-servers', {
+      server: {
+        ...SECRET_ARGS_BODY,
+        id: 'clean-args',
+        args: [
+          '-y',
+          '@modelcontextprotocol/server-filesystem',
+          '/home/user/projects/agent-workflow/.dev-team-agent',
+          '--port',
+          '8080',
+        ],
+      },
+    })
+    const body = JSON.parse(await bodyText(res))
+
+    expect(res.status).toBe(200)
+    expect(body.warnings).toEqual([])
+  })
+
+  /**
+   * TC-SEC-DLG (review vòng 1), vế backend — lưu một server mà ô `***` neo LỆCH
+   * ⇒ response phải mang `args.secretDropped` để dialog còn thứ để hiển thị.
+   * Vế FE (dialog 🚫 đóng mất) nằm ở `McpServerDialog.test.ts`.
+   */
+  test('TC-SEC-DLG: lưu với ô `***` neo lệch ⇒ response mang `args.secretDropped`', async () => {
+    await post('/api/mcp-servers', { server: SECRET_ARGS_BODY })
+
+    const shifted = await post('/api/mcp-servers', {
+      server: {
+        ...SECRET_ARGS_BODY,
+        args: ['-y', '@modelcontextprotocol/server-filesystem', '--extra', '--token', '***'],
+      },
+    })
+    const body = JSON.parse(await bodyText(shifted))
+
+    expect(shifted.status).toBe(200)
+    expect(body.warnings).toContain('args.secretDropped')
+    // Ô `***` bị BỎ HẲN — 🚫 ghi literal `***` xuống store.
+    expect(body.server.args).not.toContain('***')
+    expect(fs.readFileSync(storeFile(), 'utf8')).not.toContain('"***"')
+  })
+})
