@@ -18,13 +18,12 @@ export interface SecretStreamMasker {
  * một secret bị tiến trình con xuất làm hai chunk (`"sk-test-LEAK"` + `"CANARY"`)
  * lọt qua cả hai lần gọi — mỗi nửa không khớp chuỗi nào nên không bị thay.
  *
- * Cách chữa: giữ lại `max(len(secret)) - 1` ký tự cuối sau mỗi lần quét.
- *   - Mọi lần xuất hiện nằm TRỌN trong `buf` đã bị thay trước khi cắt.
- *   - Lần xuất hiện vắt qua cuối `buf` chỉ có thể bắt đầu trong `max(len) - 1`
- *     ký tự cuối ⇒ nằm trọn trong `pending`, không ký tự nào của nó được phát.
+ * Cách chữa: giữ ít nhất `max(len(secret)) - 1` ký tự RAW ở cuối buffer.
+ * Nếu điểm cắt nằm trong secret hoàn chỉnh, lùi về đầu secret trước khi mask
+ * và phát phần đầu. `pending` chưa mask để chunk sau còn nhận diện secret dài hơn.
  *
- * ⚠️ Đánh đổi thật, không phải refactor thuần: log stream TRỄ lại tối đa
- * `max(len) - 1` ký tự cho tới `flush()`. Không flush ở nhánh lỗi là nuốt mất
+ * ⚠️ Đánh đổi thật, không phải refactor thuần: log stream TRỄ phần đuôi
+ * cho tới chunk sau hoặc `flush()`. Không flush ở nhánh lỗi là nuốt mất
  * đuôi log — đúng đoạn người dùng cần để biết job hỏng vì sao.
  */
 export function createSecretStreamMasker(secrets: readonly string[]): SecretStreamMasker {
@@ -42,10 +41,15 @@ export function createSecretStreamMasker(secrets: readonly string[]): SecretStre
     push(chunk) {
       // Không secret nào ⇒ đường cũ y nguyên: không buffer, không trễ một ký tự.
       if (!hasSecret) return chunk
-      const masked = maskSecretText(pending + chunk, list)
-      const cut = Math.max(0, masked.length - keep)
-      pending = masked.slice(cut)
-      return masked.slice(0, cut)
+      const buffer = pending + chunk
+      let cut = Math.max(0, buffer.length - keep)
+      for (let i = cut - 1; i >= 0; i--) {
+        if (list.some((secret) => i + secret.length > cut && buffer.startsWith(secret, i))) {
+          cut = i
+        }
+      }
+      pending = buffer.slice(cut)
+      return maskSecretText(buffer.slice(0, cut), list)
     },
     flush() {
       const out = maskSecretText(pending, list)

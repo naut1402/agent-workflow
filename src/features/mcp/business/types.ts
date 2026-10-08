@@ -249,7 +249,8 @@ function restoreMasked(
  *
  * Nên mỗi dạng mask phải có một NEO chứng minh hai mảng đang nói về cùng tham số:
  *   - dạng gộp `--flag=***` ⇒ `previous[i]` phải bắt đầu bằng đúng `\`${flag}=\``
- *   - dạng vị trí `***`     ⇒ `previous[i - 1]` phải trùng `next[i - 1]` (cờ đứng trước)
+ *   - dạng vị trí `***`     ⇒ `maskArgs(previous)[i - 1]` phải trùng `next[i - 1]`
+ *     và bản cũ phải có secret ở đúng vị trí `i`
  *   - dạng vị trí ở `i === 0` ⇒ không có cờ nào đứng trước để neo, nên neo bằng
  *     "bản cũ CŨNG đang giữ secret ở đúng ô 0". `collectSecretArgs` nhận secret
  *     theo HÌNH DẠNG giá trị (`ghp_…`) ở mọi vị trí, kể cả 0 — thiếu nhánh này
@@ -268,13 +269,14 @@ function restoreMaskedArgs(
   const out: string[] = []
   const list = next ?? []
   const previousHits = new Set(collectSecretArgs(previous).map((hit) => hit.index))
+  const maskedPrevious = maskArgs(previous)
   for (let i = 0; i < list.length; i++) {
     const arg = list[i]
     const inline = /^(--?[^=]+)=\*\*\*$/.exec(arg)
 
     if (arg === MCP_MASK) {
-      const anchorOk = i > 0 ? previous?.[i - 1] === list[i - 1] : previousHits.has(0)
-      if (anchorOk && previous?.[i] !== undefined) out.push(previous[i])
+      const anchorOk = i === 0 || maskedPrevious[i - 1] === list[i - 1]
+      if (anchorOk && previousHits.has(i) && previous?.[i] !== undefined) out.push(previous[i])
       else warnings?.push(MCP_WARN_ARGS_SECRET_DROPPED)
       continue
     }
