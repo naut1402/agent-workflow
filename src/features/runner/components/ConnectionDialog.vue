@@ -426,10 +426,22 @@ const effectiveProviderId = computed(() =>
     : selectedProviderConfig.value?.providerId || '',
 )
 
-const mcpUnsupported = computed(() => {
-  const entry = props.providers.find((p) => p.id === effectiveProviderId.value)
-  return Boolean(entry) && entry?.mcpDelivery !== 'config-file-flag'
-})
+const selectedProviderEntry = computed(() =>
+  props.providers.find((p) => p.id === effectiveProviderId.value),
+)
+const mcpDeliveryOfSelected = computed(() => selectedProviderEntry.value?.mcpDelivery)
+
+// 📌 So với `'unsupported'`, 🚫 không so "khác `config-file-flag`": từ khi
+// cursor nhận cấu hình qua `workspace-config-file`, cách so cũ báo sai rằng
+// provider không dùng được MCP.
+const mcpUnsupported = computed(() => mcpDeliveryOfSelected.value === 'unsupported')
+
+/**
+ * Cursor đọc `<workspace>/.cursor/mcp.json`, tức file cấu hình nằm TRONG repo
+ * của người dùng suốt vòng đời job, và `--approve-mcps` ghi vào `~/.cursor` một
+ * tác dụng phụ sống SAU job. Người dùng phải thấy cả hai TRƯỚC khi bật.
+ */
+const mcpWorkspaceFile = computed(() => mcpDeliveryOfSelected.value === 'workspace-config-file')
 
 watch(
   kind,
@@ -1205,6 +1217,9 @@ onUnmounted(() => {
               </div>
               <p v-if="mcpServers.length && mcpUnsupported" class="muted err-text">
                 {{ t('runner.connectionDialog.mcpUnsupported') }}
+              </p>
+              <p v-if="mcpServers.length && mcpWorkspaceFile" class="muted warn-text">
+                {{ t('runner.connectionDialog.mcpWorkspaceFile') }}
               </p>
             </div>
 
