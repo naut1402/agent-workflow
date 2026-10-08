@@ -439,6 +439,11 @@ export interface CursorJsonInvocationInput {
   flags: string[]
   prompt: string
   resumeSessionId?: string
+  /**
+   * Job này có MCP server nào không. Mặc định `false` ⇒ argv 🚫 không đổi một
+   * byte so với trước, kể cả thứ tự cờ — xem `buildCursorJsonInvocation`.
+   */
+  mcpEnabled?: boolean
 }
 
 export interface CursorJsonInvocation {
@@ -473,6 +478,13 @@ export function buildCursorJsonInvocation(input: CursorJsonInvocationInput): Cur
     base.includes('--yolo') || base.includes('-f') || base.includes('--force')
   if (!hasForce) base.push('--force')
   if (!base.includes('--trust')) base.push('--trust')
+  // Headless: cursor mặc định CHỜ người dùng phê duyệt từng MCP server, tức job
+  // treo cho tới khi timeout. Theo đúng mẫu "có rồi thì không thêm" của
+  // `--force`/`--trust`/`--sandbox` ở trên.
+  //
+  // 🚫 Không thêm vô điều kiện: job không bật MCP server nào thì argv phải giữ
+  // nguyên từng byte (bất biến argv).
+  if (input.mcpEnabled && !base.includes('--approve-mcps')) base.push('--approve-mcps')
   if (input.resumeSessionId) base.push('--resume', input.resumeSessionId)
   return { args: base, stdinInput: input.prompt }
 }

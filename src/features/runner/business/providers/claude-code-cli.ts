@@ -10,6 +10,7 @@ import {
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ResolvedAgent, RunnerProvider } from '../types.js'
 import type { AgentCliProvider, McpDelivery } from './agentCli.js'
 import { mcpDeliveryOf } from './agentCli.js'
+import { prepareCursorMcpWorkspace } from './cursorMcpWorkspace.js'
 import { prepareMcpConfigForJob, type McpJobConfigHandle } from './mcpJobConfig.js'
 import { buildSelfMcpEntry } from './selfMcpConfig.js'
 import { createSecretStreamMasker, maskSecretText } from '../../../mcp/business/index.js'
@@ -417,8 +418,12 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
       // Một biểu thức quyết định cả "có sinh file" lẫn "có đẩy cờ": cờ chỉ được
       // thêm trong nhánh claude-style, nên sinh file ngoài nhánh đó là ghi rồi xoá
       // một file không ai đọc.
-      const useMcpConfigFile =
-        (opts.mcpDelivery ?? mcpDeliveryOf(opts.providerId)) === 'config-file-flag' && useClaudeStyle
+      const delivery = opts.mcpDelivery ?? mcpDeliveryOf(opts.providerId)
+      const useMcpConfigFile = delivery === 'config-file-flag' && useClaudeStyle
+      // Nhánh thứ hai, SONG SONG chứ không thay thế: cursor đọc
+      // `<workspace>/.cursor/mcp.json` theo cwd, không có cờ nào trỏ vào nó.
+      const useWorkspaceConfigFile =
+        delivery === 'workspace-config-file' && sessionCapture === 'parse-json'
 
       // try/finally phải ôm TOÀN BỘ phần còn lại, kể cả lời gọi sinh file và nhánh
       // trả ExecuteResult sớm khi runProcess ném — nếu không, file 0600 chứa secret
@@ -476,6 +481,25 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
             appendLog(describeResult(result))
             return result
           }
+        } else if (useWorkspaceConfigFile) {
+          try {
+            mcpHandle = prepareCursorMcpWorkspace({
+              ids: runnerConfig.mcpServers,
+              workspace: req.workspace,
+              jobId: req.jobId,
+              onWarning: (message) => appendLog(`[runner] MCP warning: ${message}\n`),
+            })
+          } catch (err: any) {
+            const result: ExecuteResult = {
+              ok: false,
+              exitCode: null,
+              durationMs: Date.now() - started,
+              logPath,
+              error: `không sinh được file cấu hình MCP: ${String(err?.message ?? err)}`,
+            }
+            appendLog(describeResult(result))
+            return result
+          }
         }
 
         let args: string[]
@@ -489,7 +513,9 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
             sessionId: sessionPlan.sessionId,
             resumeSessionId: sessionPlan.resumeSessionId,
             model: runnerConfig.model,
-            mcpConfigPath: mcpHandle?.path,
+            // 📌 Chỉ nhánh cờ mới đẩy đường dẫn vào argv. Nhánh cursor dùng cùng
+            // kiểu handle nhưng CLI tự đọc theo cwd — đẩy vào là argv sai.
+            mcpConfigPath: mcpHandle?.kind === 'config-file-flag' ? mcpHandle.path : undefined,
           })
           args = invocation.args
           stdinInput = invocation.stdinInput
@@ -501,6 +527,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
             flags,
             prompt,
             resumeSessionId: sessionPlan.resumeSessionId,
+            mcpEnabled: Boolean(mcpHandle),
           })
           args = invocation.args
           stdinInput = invocation.stdinInput
@@ -531,6 +558,13 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         if (mcpHandle) {
           appendLog(
             `[runner] MCP: ${mcpHandle.count} server (${mcpHandle.names.join(', ')}) → ${mcpHandle.path}\n`,
+          )
+        }
+        if (mcpHandle?.kind === 'workspace-config-file') {
+          appendLog(
+            '[runner] MCP: cursor nhận cấu hình qua <workspace>/.cursor/mcp.json và chạy với '
+            + '--approve-mcps ⇒ các server trên được GHI vào danh sách phê duyệt cục bộ '
+            + '(~/.cursor), tác dụng phụ này TỒN TẠI SAU khi job kết thúc\n',
           )
         }
 

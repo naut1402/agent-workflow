@@ -159,6 +159,8 @@ export default {
     mcpServersLabel: 'MCP servers',
     mcpServersHint: 'Only enabled MCP servers show up here. Pick none and the runner command line stays unchanged.',
     mcpUnsupported: 'This provider does not consume MCP config yet — the pick is still saved for later.',
+    mcpWorkspaceFile:
+      'With cursor-cli the MCP config file is written INSIDE the workspace («.cursor/mcp.json») for the duration of the run and then removed — an existing file of yours is backed up and restored. The job also runs with «--approve-mcps», so these servers are added to the local approval list («~/.cursor») and that side effect outlives the job.',
     mcpEmpty: 'No enabled MCP server yet. Add one in the MCP tab.',
     mcpMissing: 'disabled or deleted',
     connectViaBrowser: 'Connect via browser',
