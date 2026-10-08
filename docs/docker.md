@@ -44,14 +44,17 @@ Kiểm tra hook đã đăng ký và số liệu tiết kiệm:
 ```bash
 $DCR exec dashboard grep -o 'rtk hook claude' /home/dashboard/.claude/settings.json
 
-$DCR --profile tools run --rm rtk gain    # khuyến nghị: service toolbox chạy sẵn non-root
-# exec: cờ -u nở ở shell HOST, không đọc docker/.env — thay 1001 bằng đúng PUID bạn đặt ở đó
-$DCR exec -u 1001 dashboard rtk gain
+# -u dashboard = user trong container (uid 1001); dashboard thứ hai là tên service
+$DCR exec -u dashboard dashboard rtk gain
 ```
 
 > `exec dashboard` vào bằng **root** (image kết thúc ở `USER root` để entrypoint có uid 0), nên
 > `rtk gain` không có `-u` sẽ để lại file `root:root` trong volume `rtk-data` và agent ở uid `PUID`
-> gặp `EACCES` cho tới lần start sau. Biến thể `run --rm rtk` đã chạy non-root sẵn.
+> gặp `EACCES` cho tới lần start sau.
+>
+> `-u dashboard` đúng với `PUID` mặc định (1001). Nếu bạn đặt `PUID` khác trong `docker/.env`,
+> entrypoint tạo user tên **`abc`** ở uid đó và dữ liệu rtk thuộc về nó — dùng `-u abc`
+> (hoặc `-u "$PUID"`, nhớ giá trị nở ở shell HOST chứ không đọc `docker/.env`).
 
 - Đổi `RTK_VERSION` **bắt buộc kèm rebuild** — binary bake lúc build, không phải env runtime.
 - `RTK_VERSION` trống = lấy latest **lúc build layer đó**; Docker tái dùng layer cũ nên lần build sau
@@ -78,6 +81,7 @@ $DCR exec -u 1001 dashboard rtk gain
   `rtk init` lỗi đều chỉ in WARNING rồi container vẫn start bình thường. Vì `rtk init` trả 0
   không chứng minh entry nằm đúng file, entrypoint `grep` lại `settings.json` rồi mới log
   `rtk hook registered`.
-- Service toolbox `rtk` không khai `depends_on`: `rtk gain` đọc báo cáo offline từ volume
-  `rtk-data`, không cần dashboard đang chạy.
+- Compose **không** có service `rtk`: rtk là CLI single-binary, không listen port nào, nên
+  một service riêng chỉ để chạy `rtk gain` không thêm được gì so với `exec` vào dashboard.
+  Dữ liệu nằm ở volume `rtk-data` nên lệnh `exec` đọc được cả báo cáo của những lần chạy trước.
 

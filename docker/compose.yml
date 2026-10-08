@@ -39,30 +39,6 @@ services:
       - rtk-data:/home/dashboard/.local/share/rtk
     restart: unless-stopped
 
-  # Toolbox một lần, không phải service thường trực — rtk là CLI, không listen gì.
-  # Dùng: docker compose --profile tools run --rm rtk gain
-  rtk:
-    profiles: ["tools"]
-    image: dev-team-dashboard:local
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      args:
-        RTK_VERSION: "${RTK_VERSION:-}"
-        RTK_REFRESH: "${RTK_REFRESH:-}"
-    # Khớp owner của rtk-data với dashboard. Không qua entrypoint.sh nên không có
-    # fallback PUID=0 → 1001: đặt PUID=0 sẽ để lại file root-owned trong volume.
-    user: "${PUID:-1001}:${PGID:-1001}"
-    # entrypoint.sh cần uid 0 cho useradd/runuser, service này chạy non-root.
-    entrypoint: ["rtk"]
-    command: ["gain"]
-    environment:
-      HOME: /home/dashboard
-      RTK_TELEMETRY_DISABLED: "${RTK_TELEMETRY_DISABLED:-1}"
-    volumes:
-      - rtk-data:/home/dashboard/.local/share/rtk
-    restart: "no"
-
 volumes:
   dashboard-home:
   rtk-data:
