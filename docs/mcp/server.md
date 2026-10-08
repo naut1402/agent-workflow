@@ -1,7 +1,7 @@
 # MCP server — vai inbound
 ← [`./README.md`](./README.md) (MCP — tài liệu chủ đề)
 
-Dashboard **làm** MCP server: Claude Code spawn `bun run mcp` qua stdio và gọi vào bộ tool đọc project / task / artifact / knowledge, cộng 3 tool ghi khi mở mode `full`. Vai ngược lại — dashboard **gọi** MCP server khác — ở [`client.md`](client.md), không liên quan file này.
+Dashboard **làm** MCP server: Claude Code spawn `bun run mcp` qua stdio và gọi vào bộ tool đọc project / task / artifact / knowledge, cộng 4 tool ghi khi mở mode `full`. Vai ngược lại — dashboard **gọi** MCP server khác — ở [`client.md`](client.md), không liên quan file này.
 
 Nguồn của mọi con số trong trang này là code: `mcp/AbstractMcpServer.ts` · `mcp/AbstractMcpTools.ts` · `mcp/DashboardMcpServer.ts` · `mcp/tools/*Tools.ts`. Cấu trúc class: [§8.1](#81-cấu-trúc-class).
 
@@ -22,6 +22,7 @@ Nguồn của mọi con số trong trang này là code: `mcp/AbstractMcpServer.t
 | `add_project` | chỉ `full` | `{ path, name? }` | `{ project }` | [§4.8](#48-add_project) |
 | `remove_project` | chỉ `full` | `{ id }` | `{ removed: true }` | [§4.9](#49-remove_project) |
 | `create_qa` | chỉ `full` | `{ taskId, questions, project? }` | `{ ok, path, created }` | [§4.10](#410-create_qa) |
+| `orchestrator_decide` | chỉ `full` | `{ action, stepId?, reason?, message?, summary?, context? }` | `{ applied }` | [§4.13](#413-orchestrator_decide) |
 
 ---
 
@@ -80,10 +81,24 @@ bun run mcp
 Dòng cảnh báo để `grep` trong log job (`DashboardMcpServer.startupWarnings()`, ghi **`stderr`**):
 
 ```text
-[dev-team-dashboard mcp] mode=<mode>: create_qa KHÔNG được đăng ký, nhưng docs/template/agents/* hướng dẫn agent gọi nó. Đặt DEVTEAM_MCP_MODE=full nếu chạy pipeline agent.
+[dev-team-dashboard mcp] mode=<mode>: create_qa, orchestrator_decide KHÔNG được đăng ký, nhưng docs/template/agents/* và prompt điều phối hướng dẫn agent gọi chúng. Đặt DEVTEAM_MCP_MODE=full nếu chạy pipeline agent.
 ```
 
-Điều kiện phát cảnh báo bám `hasTool('create_qa')` chứ không bám tên mode — thứ đang cảnh báo là "tool không được đăng ký".
+Danh sách tool trong câu là **những tool đang thiếu thật**, không cố định: thiếu một thì chỉ nêu một. Điều kiện phát cảnh báo bám `hasTool(...)` chứ không bám tên mode — thứ đang cảnh báo là "tool không được đăng ký".
+
+> [!NOTE]
+> Job điều phối là ngoại lệ của câu "🚫 không chỗ nào trong `src/` đặt `DEVTEAM_MCP_MODE`" ở trên: dashboard **tự gắn** một entry MCP trỏ vào chính nó cho job điều phối, và entry đó tự khai `--mode=full` trên argv (`src/features/runner/business/providers/selfMcpConfig.ts`). Đó là đường duy nhất `full` được bật mà người vận hành không phải khai gì — và nó chỉ áp cho job điều phối, 🚫 không áp cho job step thường.
+
+> [!WARNING]
+> **Entry tự gắn kéo theo `--strict-mcp-config`.** `--mcp-config` luôn đi kèm `--strict-mcp-config` (`buildClaudeInvocation`), nên ở lượt điều phối đi tuyến `mcp`, `claude` **chỉ** nạp đúng các server trong file config — MCP server khai sẵn ở `~/.claude.json` của máy **không** được nạp cho lượt đó.
+>
+> Trước thay đổi này, runner không khai `mcpServers` nào ⇒ không sinh file ⇒ không có cờ nào ⇒ `claude` vẫn dùng cấu hình máy. Hành vi mới thu hẹp đúng ý đồ của `--strict-mcp-config`, nhưng nó **không tất định**: chỉ xảy ra khi `resolveDecisionRoute()` ra `mcp`, nên cùng một máy có thể hôm nay mất tool mà hôm qua còn.
+>
+> Cần MCP server khác cho node điều phối thì **khai nó vào `mcpServers` của runner** (tab MCP), đừng dựa vào `~/.claude.json`. Dòng để `grep` trong log job khi ca này xảy ra:
+>
+> ```text
+> [runner] MCP: job điều phối tự gắn dev-team-dashboard ⇒ chạy với --strict-mcp-config, MCP server cấu hình sẵn trên máy KHÔNG được nạp cho lượt này
+> ```
 
 ---
 
@@ -92,7 +107,7 @@ Dòng cảnh báo để `grep` trong log job (`DashboardMcpServer.startupWarning
 | Mode | Tool được đăng ký |
 |---|---|
 | `readonly` (mặc định) | 8 tool đọc — `list_projects` · `get_project` · `get_knowledge_bundle` · `list_tasks` · `get_task_state` · `get_task_context` · `list_artifacts` · `read_artifact` |
-| `full` | 8 tool trên + 3 tool ghi — `add_project` · `create_qa` · `remove_project` |
+| `full` | 8 tool trên + 4 tool ghi — `add_project` · `create_qa` · `remove_project` · `orchestrator_decide` |
 
 > ⚠️ **Nâng từ 1.1.x**: mặc định đổi thành `readonly`, nên `add_project` / `create_qa` / `remove_project` biến khỏi `tools/list` nếu không khai gì. Riêng `create_qa` là tool mà template agent của 1.1.8 được dạy gọi — ở mặc định mới agent sẽ **không nhìn thấy** nó. Giữ hành vi cũ bằng `"env": { "DEVTEAM_MCP_MODE": "full" }` trong entry `mcpServers` của client (§2.2).
 
@@ -109,8 +124,8 @@ Server trả `instructions` trong kết quả `initialize`, sinh bởi `Abstract
 
 | Mode | Nội dung |
 |---|---|
-| `readonly` | Preamble ("có tool tương đương thì gọi nó thay vì Bash") + 1 dòng cho mỗi tool `get_task_context` · `read_artifact` · `list_artifacts` · `get_task_state` · `list_tasks` · `get_knowledge_bundle` + câu "`create_qa` KHÔNG có ở mode `readonly` — báo `BLOCKED`, không tự viết `qa.md`" |
-| `full` | Như `readonly`, thêm dòng `create_qa`, bỏ câu cuối |
+| `readonly` | Preamble ("có tool tương đương thì gọi nó thay vì Bash") + 1 dòng cho mỗi tool `get_task_context` · `read_artifact` · `list_artifacts` · `get_task_state` · `list_tasks` · `get_knowledge_bundle` + câu "`create_qa` KHÔNG có ở mode `readonly` — báo `BLOCKED`, không tự viết `qa.md`" + câu tương ứng cho `orchestrator_decide` (ra lệnh bằng dòng cuối output) |
+| `full` | Như `readonly`, thêm dòng `create_qa` và `orchestrator_decide`, bỏ hai câu cuối |
 
 - **Preamble** — `DashboardMcpServer.instructionsPreamble()`.
 - **Dòng tool** — `hint` của mỗi `ToolDef` đang được đăng ký, theo thứ tự `toolGroups()` rồi thứ tự `definitions()`. Tool không có `hint` (nhóm project) không có dòng.
@@ -308,6 +323,28 @@ Khai `project` mà id lạ thì thông điệp là `unknown project: <project>`.
 
 **Một section hỏng không làm hỏng cả lời gọi.** Các section đọc song song, mỗi nhánh tự nuốt lỗi của mình và về `null` — task chưa có `request.md` hay `pipeline.yaml` hỏng là trạng thái hợp lệ. `rules` mặc định tắt vì orchestrator đã tiêm `project-rules.md` vào prompt từng bước.
 
+### 4.13 `orchestrator_decide`
+
+Ra lệnh điều phối cho task đang chạy, **có hiệu lực ngay** — thay cho việc in dòng `ORCHESTRATOR_DECISION: {json}` ở cuối output. Chỉ node điều phối gọi; prompt của lượt điều phối tự chỉ định dùng tool này hay dùng dòng sentinel, tuỳ tuyến dashboard chốt lúc runtime.
+
+| Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
+|---|---|---|---|---|
+| `action` | enum | ✅ | `start` · `resume` · `halt` · `summary` · `respawn` | Hành động điều phối |
+| `stepId` | string | — | `min(1)`; **bắt buộc** với `start`/`resume`/`respawn`, và phải là step có trong pipeline | Step đích |
+| `reason` | string | — | — | Lý do, để người đọc log hiểu |
+| `message` | string | — | **bắt buộc** với `resume` | Nội dung gửi cho step |
+| `summary` | string | — | ≤ 8 KiB (`MAX_AGENT_CONTEXT_BYTES`) | Tóm tắt bước vừa xong |
+| `context` | string | — | ≤ 8 KiB | Bối cảnh cho step sắp chạy |
+
+- 🚫 **Không** nhận `taskId` / `project`: task được xác định bằng token của chính lượt điều phối, không phải bằng tham số — một phiên không ra lệnh được cho task khác.
+- **Output** — `{ applied }`, giá trị là `action` đã thi hành.
+- **Annotations** — `{ readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }`. `openWorldHint: true` vì tool gọi ra ngoài tiến trình.
+- **Mã lỗi** — `invalid_input` (dashboard trả 400: quyết định không hợp lệ, `stepId` lạ, thiếu `message` khi `resume` — nguyên văn lý do được chuyển tiếp) · `internal` (thiếu env của lượt điều phối · token hết hạn/401 · không gọi được dashboard, kể cả timeout · dashboard trả mã khác).
+
+**Cài đặt là lớp vỏ mỏng quanh REST.** Handler `fetch` tới `POST /api/orchestrator/decide` của dashboard, kèm header `X-Dashboard-Orchestrator-Token`; token và base URL đọc từ `DASHBOARD_ORCHESTRATOR_TOKEN` / `DASHBOARD_ORCHESTRATOR_BASE_URL` — dashboard tự khai hai biến này vào entry MCP nó tự gắn cho job điều phối. 🚫 **Không** gọi `applyDecision` in-process: tiến trình MCP là tiến trình khác với dashboard, gọi thẳng sẽ thi hành vào một job queue khác hẳn (§8.1). Lời gọi có timeout 15s — thiếu nó, một dashboard treo làm CLI chờ vô hạn.
+
+**Mọi nhánh lỗi đều kèm lối thoát sentinel** trong `message`, vì đó là lưới an toàn duy nhất khi tuyến MCP hỏng giữa lượt.
+
 ---
 
 ## 5. Hợp đồng kết quả (envelope)
@@ -345,9 +382,10 @@ Mã lỗi **thực sự phát ra**:
 | Mã | Khi nào |
 |---|---|
 | `not_found` | Project / task / artifact không tồn tại; không có project mặc định; state file không đọc được hoặc không phải JSON object |
-| `invalid_input` | `taskId` sai khuôn; path thoát khỏi project root hoặc thư mục task; `name` rỗng hoặc chứa null byte; `add_project` / `create_qa` bị business layer từ chối |
+| `invalid_input` | `taskId` sai khuôn; path thoát khỏi project root hoặc thư mục task; `name` rỗng hoặc chứa null byte; `add_project` / `create_qa` bị business layer từ chối; `orchestrator_decide` bị dashboard từ chối (400) |
+| `internal` | **Chỉ `orchestrator_decide`** ([§4.13](#413-orchestrator_decide)): thiếu env của lượt điều phối · token hết hạn (401) · không gọi được dashboard, kể cả timeout · dashboard trả mã khác. Đây là mã duy nhất phát ra từ một lỗi *hạ tầng* chứ không phải lỗi tham số, nên client đọc nó nên hiểu là "thử lại hoặc rơi về đường dự phòng", 🚫 không phải "sửa tham số rồi gọi lại" |
 
-Kiểu `McpErrorCode` (`mcp/AbstractMcpTools.ts`) còn khai **2 mã dự phòng chưa nơi nào phát ra**: `forbidden_in_mode` — không phát vì mode lọc ngay ở khâu đăng ký, tool ngoài quyền biến khỏi `tools/list` chứ không bị từ chối lúc gọi (§3) — và `internal`. 🚫 Đừng viết client bám vào hai mã này.
+Kiểu `McpErrorCode` (`mcp/AbstractMcpTools.ts`) còn khai **1 mã dự phòng chưa nơi nào phát ra**: `forbidden_in_mode` — không phát vì mode lọc ngay ở khâu đăng ký, tool ngoài quyền biến khỏi `tools/list` chứ không bị từ chối lúc gọi (§3). 🚫 Đừng viết client bám vào mã này.
 
 ### 5.3 Ba tool không phát `structuredContent`
 
@@ -358,7 +396,7 @@ Kiểu `McpErrorCode` (`mcp/AbstractMcpTools.ts`) còn khai **2 mã dự phòng 
 - Ba tool này cũng cố ý 🚫 **không** khai `outputSchema`, nhất quán với bảng ở [§4.3](#43-get_knowledge_bundle), [§4.7](#47-read_artifact) và [§4.12](#412-get_task_context).
 - Lý do: payload mang nội dung file — bundle có trần 1 MiB, nhân đôi qua stdio là 2 MiB cho một lời gọi.
 
-8 tool còn lại phát đủ cả `content` lẫn `structuredContent`.
+9 tool còn lại phát đủ cả `content` lẫn `structuredContent`.
 
 ---
 

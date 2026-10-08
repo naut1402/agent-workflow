@@ -4,6 +4,7 @@ import { resolveProjectRoot } from '../src/backend/registry.js'
 import { AbstractMcpServer, type McpMode, type ModeSource } from './AbstractMcpServer.js'
 import type { AbstractMcpTools, RootResolver } from './AbstractMcpTools.js'
 import { KnowledgeTools } from './tools/KnowledgeTools.js'
+import { OrchestratorTools } from './tools/OrchestratorTools.js'
 import { ProjectTools } from './tools/ProjectTools.js'
 import { TaskTools } from './tools/TaskTools.js'
 
@@ -34,7 +35,14 @@ export class DashboardMcpServer extends AbstractMcpServer {
 
   protected toolGroups(): AbstractMcpTools[] {
     const resolveRoot = DashboardMcpServer.resolveRoot
-    return [new TaskTools(resolveRoot), new KnowledgeTools(resolveRoot), new ProjectTools(resolveRoot)]
+    return [
+      new TaskTools(resolveRoot),
+      new KnowledgeTools(resolveRoot),
+      new ProjectTools(resolveRoot),
+      // Không dùng `requireRoot` (token của lượt đã xác định task), vẫn nhận
+      // `resolveRoot` cho đồng dạng với ba nhóm trên.
+      new OrchestratorTools(resolveRoot),
+    ]
   }
 
   protected instructionsPreamble(): string[] {
@@ -46,10 +54,11 @@ export class DashboardMcpServer extends AbstractMcpServer {
   }
 
   protected startupWarnings(): string[] {
-    if (this.hasTool('create_qa')) return []
+    const missing = ['create_qa', 'orchestrator_decide'].filter((name) => !this.hasTool(name))
+    if (!missing.length) return []
     return [
-      `mode=${this.mode}: create_qa KHÔNG được đăng ký, `
-        + 'nhưng docs/template/agents/* hướng dẫn agent gọi nó. '
+      `mode=${this.mode}: ${missing.join(', ')} KHÔNG được đăng ký, `
+        + 'nhưng docs/template/agents/* và prompt điều phối hướng dẫn agent gọi chúng. '
         + `Đặt ${DashboardMcpServer.MODE_ENV_VAR}=full nếu chạy pipeline agent.`,
     ]
   }

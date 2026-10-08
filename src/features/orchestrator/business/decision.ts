@@ -12,6 +12,7 @@ import {
   OrchestratorDecision,
 } from '../schemas/orchestrator.js'
 import { stripBalancedFence } from '../../../shared/lib/orchestrator.js'
+import type { DecisionRoute } from './mcpRoute.js'
 
 /** Vì sao orchestrator phải hỏi agent. */
 export type DecisionTrigger =
@@ -55,6 +56,11 @@ export interface DecisionContext {
   extraSystemPrompt?: string
   /** Bundle knowledge đã render, ứng với `orchestrator.knowledge_inputs`. */
   knowledgeText?: string
+  /**
+   * Tuyến ra lệnh đã chốt cho lượt này (`resolveDecisionRoute`). Vắng ⇒
+   * `'sentinel'`: mọi caller/test cũ giữ nguyên hành vi, ký tự với ký tự.
+   */
+  route?: DecisionRoute
 }
 
 const TRIGGER_BRIEF: Record<DecisionTrigger, string> = {
@@ -125,8 +131,65 @@ function renderCurrentState(ctx: DecisionContext): string {
 }
 
 /**
+ * Giao thức sentinel — ra lệnh bằng dòng JSON cuối output.
+ *
+ * ⚠️ Nội dung giữ Y NGUYÊN bản trước khi tách hàm: đây là đường mặc định của
+ * mọi lượt không có MCP, và test characterization chốt nó ký tự với ký tự.
+ */
+function renderSentinelProtocol(): string {
+  return [
+    '## Định dạng trả lời (bắt buộc)',
+    '',
+    'Dòng **cuối cùng** của output phải đúng dạng sau, JSON một dòng:',
+    '',
+    '```',
+    `${DECISION_SENTINEL} {"action":"resume","stepId":"implementer","reason":"...","message":"..."}`,
+    '```',
+    '',
+    'Không có dòng này, hoặc JSON hỏng, hoặc `stepId` không nằm trong danh sách trên',
+    '⇒ orchestrator tự chuyển tiếp theo thứ tự pipeline mà không có bối cảnh bạn soạn.',
+    '',
+    'Ra lệnh bằng đúng dòng này. Trạng thái task, kết quả bước vừa xong và event gần đây',
+    'đã nằm trong prompt — KHÔNG gọi API điều phối bằng shell (`curl`) để lấy lại hay để ra lệnh.',
+  ].join('\n')
+}
+
+/**
+ * Giao thức MCP — ra lệnh bằng tool `orchestrator_decide`.
+ *
+ * Hai dòng fallback cuối là phần *runtime* của yêu cầu "không kết nối được thì
+ * dùng cách cũ", 🚫 không phải thừa: `route` chốt ở server chỉ nói job SẼ có
+ * tool, còn việc CLI có kết nối được tới MCP server hay không xảy ra sau đó và
+ * server không biết. Thiếu hai dòng này, một lần MCP rụng giữa lượt là pipeline
+ * đứng im không lý do. Chi phí ~35 token, so với ~250 token của khối sentinel.
+ *
+ * Agent gọi tool RỒI in thêm dòng sentinel cũng không thi hành hai lần: chốt
+ * `directDecisionApplied` được đóng trước khi `applyDecision` chạy.
+ */
+function renderMcpProtocol(): string {
+  return [
+    '## Cách ra lệnh (bắt buộc)',
+    '',
+    'Gọi tool MCP `orchestrator_decide`. Tool có hiệu lực NGAY, không cần chờ hết lượt.',
+    'Tham số đúng bằng các trường đã mô tả ở "Hành động cho phép" và "Ràng buộc" bên trên.',
+    '',
+    'Gọi tool xong thì KHÔNG in thêm dòng JSON nào — lệnh đã được thi hành.',
+    '',
+    'Nếu `orchestrator_decide` KHÔNG có trong danh sách tool của bạn, hoặc gọi nó trả lỗi:',
+    // Ví dụ phải CHẠY ĐƯỢC, không phải placeholder: agent chỉ đọc tới đây khi
+    // tuyến chính đã hỏng — đúng lúc cần ít mơ hồ nhất. Chép nguyên ví dụ có
+    // `…` vào JSON là `validateDecision` từ chối rồi `recoverFromBadTurn`.
+    `in dòng cuối cùng của output đúng dạng \`${DECISION_SENTINEL} {"action":"resume","stepId":"implementer","reason":"...","message":"..."}\``,
+    'để dashboard thi hành thay — KHÔNG gọi API điều phối bằng shell (`curl`).',
+  ].join('\n')
+}
+
+/**
  * Prompt cho lượt quyết định. Cố ý mô tả định dạng trả lời trước, vì guard
  * phía sau không đoán: sai định dạng là pipeline halt tường minh.
+ *
+ * Khối giao thức chọn theo `ctx.route` — đây là chỗ hiện thực "quyết định ở
+ * runtime theo trạng thái MCP", 🚫 không chép cứng một định dạng vào template.
  */
 export function buildDecisionPrompt(ctx: DecisionContext): string {
   const actions = [
@@ -167,21 +230,7 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
     ctx.knowledgeText?.trim() ? `## Knowledge\n\n${ctx.knowledgeText.trim()}` : '',
     `## Hành động cho phép\n\n${actions.join('\n')}`,
     `## Ràng buộc\n\n${constraints.join('\n')}`,
-    [
-      '## Định dạng trả lời (bắt buộc)',
-      '',
-      'Dòng **cuối cùng** của output phải đúng dạng sau, JSON một dòng:',
-      '',
-      '```',
-      `${DECISION_SENTINEL} {"action":"resume","stepId":"implementer","reason":"...","message":"..."}`,
-      '```',
-      '',
-      'Không có dòng này, hoặc JSON hỏng, hoặc `stepId` không nằm trong danh sách trên',
-      '⇒ orchestrator tự chuyển tiếp theo thứ tự pipeline mà không có bối cảnh bạn soạn.',
-      '',
-      'Ra lệnh bằng đúng dòng này. Trạng thái task, kết quả bước vừa xong và event gần đây',
-      'đã nằm trong prompt — KHÔNG gọi API điều phối bằng shell (`curl`) để lấy lại hay để ra lệnh.',
-    ].join('\n'),
+    ctx.route === 'mcp' ? renderMcpProtocol() : renderSentinelProtocol(),
   ]
   return parts.filter(Boolean).join('\n\n')
 }
