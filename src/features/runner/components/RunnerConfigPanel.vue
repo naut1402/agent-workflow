@@ -1,4 +1,9 @@
 <script setup lang="ts">
+// fallow-ignore-file complexity -- cognitive 28 của <template> đến từ các nhánh
+// v-if theo tab và theo provider, không từ logic lồng sâu. test-e2e/runner.spec.ts
+// và TC-80…TC-83 bám vào cấu trúc DOM hiện tại — đặc biệt bất biến `.runner-config`
+// là gốc nội dung tab Runner — nên chẻ sub-component là đổi thiết kế kèm rủi ro
+// e2e, không phải dọn dẹp. Xem #386 và investigate.md G12.
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, ref, onMounted } from 'vue'
 import { fetchRunners } from '../scripts/runnerApi'
