@@ -1,4 +1,10 @@
 <script setup lang="ts">
+// fallow-ignore-file complexity -- cognitive 30 của <template> đến từ các nhánh
+// v-if theo transport (stdio / http / sse), không từ logic lồng sâu. Chẻ sub-component
+// là THAY ĐỔI THIẾT KẾ chứ không phải dọn dẹp, mà test-e2e/mcp.spec.ts +
+// McpServerDialog.test.ts đang bám vào cấu trúc DOM hiện tại. Fallow tự ghi
+// "Splitting relocates branching, so it lowers this function's score without
+// lowering the total" — tách ở đây chỉ làm đẹp số. Xem #386 và investigate.md G12.
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { saveMcpServer, testMcpServer, type McpProbeResponse } from '../scripts/mcpApi'

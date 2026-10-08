@@ -31,7 +31,9 @@ export class RunnerController extends AbstractController {
     const b = await this.requireJsonBody()
     if ('error' in b) return b.error
     const result = runnerStore.upsertRunner(b.value.runner || b.value)
-    if ('error' in result) return this.badRequest(result.error)
+    // 409 khi tạo mới trùng id phải tới được client — ép hết về 400 thì FE không
+    // phân biệt được "payload sai" với "id đã có người dùng".
+    if ('error' in result) return this.json(result.status || 400, { error: result.error })
     emitAudit({ op: 'update', entity: 'runner', identifier: result.runner?.id ?? null, projectId: null })
     emitEntity('updated', 'runner', { id: result.runner?.id ?? null, projectId: null })
     return this.ok({ saved: true, runner: result.runner })
@@ -83,7 +85,7 @@ export class RunnerController extends AbstractController {
     const b = await this.requireJsonBody()
     if ('error' in b) return b.error
     const result = runnerStore.upsertConnection(b.value.connection || b.value)
-    if ('error' in result) return this.badRequest(result.error)
+    if ('error' in result) return this.json(result.status || 400, { error: result.error })
     emitAudit({
       op: 'update',
       entity: 'connection',

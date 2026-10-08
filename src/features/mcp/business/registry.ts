@@ -66,27 +66,56 @@ export function normaliseMcpServer(raw: any): McpServerConfig | null {
   const transport = String(raw?.transport || '') as McpTransport
   if (!(MCP_TRANSPORTS as readonly string[]).includes(transport)) return null
 
-  const base = {
+  const base = normaliseBase(raw, id)
+  return transport === 'stdio'
+    ? normaliseStdio(raw, base)
+    : normaliseRemote(raw, base, transport)
+}
+
+/** Phần chung của mọi transport — `normaliseStdio`/`normaliseRemote` spread lên trên. */
+interface McpServerBaseFields {
+  id: string
+  label: string
+  enabled: boolean
+  timeoutMs?: number
+  lastCheck: McpCheckSummary | null
+}
+
+function normaliseBase(raw: any, id: string): McpServerBaseFields {
+  const timeoutMs = toPositiveInt(raw.timeoutMs)
+  return {
     id,
     label: String(raw.label || id).slice(0, 128),
     enabled: raw.enabled !== false,
-    ...(toPositiveInt(raw.timeoutMs) ? { timeoutMs: toPositiveInt(raw.timeoutMs) } : {}),
+    ...(timeoutMs ? { timeoutMs } : {}),
     lastCheck: normaliseCheckSummary(raw.lastCheck),
   }
+}
 
-  if (transport === 'stdio') {
-    const command = String(raw.command || '').trim()
-    if (!command) return null
-    return {
-      ...base,
-      transport,
-      command,
-      args: Array.isArray(raw.args) ? raw.args.filter((a: unknown): a is string => typeof a === 'string') : [],
-      env: toStringRecord(raw.env),
-      ...(typeof raw.cwd === 'string' && raw.cwd.trim() ? { cwd: raw.cwd.trim() } : {}),
-    }
+/**
+ * 📌 Guard `command` rỗng ⇒ `null` PHẢI nằm ở đây, 🚫 không được nâng lên hàm
+ * cha. Nâng lên là đổi THỨ TỰ kiểm tra, tức đổi cái gì được coi là cấu hình hợp
+ * lệ — và hàm này là cổng bảo mật: mọi bản ghi đọc từ đĩa đi qua nó.
+ */
+function normaliseStdio(raw: any, base: McpServerBaseFields): McpServerConfig | null {
+  const command = String(raw.command || '').trim()
+  if (!command) return null
+  return {
+    ...base,
+    transport: 'stdio',
+    command,
+    args: Array.isArray(raw.args) ? raw.args.filter((a: unknown): a is string => typeof a === 'string') : [],
+    env: toStringRecord(raw.env),
+    ...(typeof raw.cwd === 'string' && raw.cwd.trim() ? { cwd: raw.cwd.trim() } : {}),
   }
+}
 
+/** 📌 Guard `url` rỗng ⇒ `null` ở đây, cùng lý do với `normaliseStdio`. */
+function normaliseRemote(
+  raw: any,
+  base: McpServerBaseFields,
+  transport: Exclude<McpTransport, 'stdio'>,
+): McpServerConfig | null {
   const url = String(raw.url || '').trim()
   if (!url) return null
   return {

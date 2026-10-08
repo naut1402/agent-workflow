@@ -156,7 +156,7 @@ async function loadRunnerOptions() {
     const res = await fetchRunners()
     runners.value = Array.isArray(res?.runners) ? res.runners : []
     connections.value = Array.isArray(res?.connections) ? res.connections : []
-    defaultRunnerId.value = res?.defaultRunnerId || null
+    defaultRunnerId.value = res?.effectiveDefaultRunnerId ?? res?.defaultRunnerId ?? null
   } catch {
     runners.value = []
     connections.value = []
