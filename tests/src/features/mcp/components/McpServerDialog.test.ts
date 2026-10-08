@@ -801,3 +801,173 @@ function collectSuffixes(base: string, n: number): string[] {
   const room = 64 - String(n).length - 1
   return [`${base.slice(0, room).replace(/-+$/, '')}-${n}`]
 }
+
+/* ─── #385 · Tdf943817 — cảnh báo secret literal ở ô `args` ────────────────── */
+
+/**
+ * TC-SEC-39 · TC-SEC-DLG · TC-UI-LITERAL-VISIBLE · TC-UI-DROPPED-DEFER.
+ *
+ * Hai nhóm cảnh báo, hai vòng đời khác hẳn nhau và TC phải tách theo:
+ *   - `argsSecretLiteral` — lời khuyên về **TRẠNG THÁI** cấu hình. Phải đọc được
+ *     NGAY lúc mở dialog và trong lúc gõ, 🚫 chờ một vòng API; Lưu xong thì
+ *     dialog đóng một cú bấm.
+ *   - `argsSecretDropped` — **SỰ KIỆN PHÁ HUỶ** (một secret vừa bị bỏ khỏi cấu
+ *     hình), xảy ra một lần. Dialog phải GIỮ MỞ để người dùng còn đọc được.
+ *
+ * 📌 Prefill đi qua `publicView` nên secret đã lưu về tới dialog dưới dạng
+ * `***`, mà `collectSecretArgs` cố ý BỎ QUA sentinel (để round-trip 🚫 báo động
+ * giả). Vì vậy bằng chứng của ca "server đã lưu" là **sentinel**, 🚫 phải literal —
+ * xem `implement.md` §4f.
+ */
+
+/** Khối `.field` chứa ô Arguments — cảnh báo của ô này là con của chính nó. */
+function argsField(): HTMLElement {
+  const el = labelNode(mcpVi.dialog.argsField)
+  const field = el?.closest('.field') as HTMLElement | null
+  if (!field) throw new Error('args field not found')
+  return field
+}
+function argsWarningTexts(): string[] {
+  return Array.from(argsField().querySelectorAll('.warn-text')).map((p) => p.textContent!.trim())
+}
+function argsTextarea(): HTMLTextAreaElement {
+  return argsField().querySelector('textarea')!
+}
+function savedWithWarningsShown(): boolean {
+  return Array.from(document.body.querySelectorAll('.ok-text')).some(
+    (p) => p.textContent!.trim() === mcpVi.dialog.savedWithWarnings,
+  )
+}
+
+describe('McpServerDialog — cảnh báo secret literal trong `args` (#385)', () => {
+  /**
+   * TC-UI-LITERAL-VISIBLE (review vòng 3) — mở dialog cho server stdio ĐÃ LƯU có
+   * secret trong `args`, **chưa bấm Kiểm tra** ⇒ cảnh báo đã phải hiện.
+   */
+  it('TC-UI-LITERAL-VISIBLE: server đã lưu có secret trong args ⇒ cảnh báo hiện ngay khi mở', async () => {
+    await mountDialog({
+      server: editableServer({ args: ['-y', '@x/srv', '--token', MCP_MASK] }),
+    })
+
+    expect(argsTextarea().value).toContain(MCP_MASK)
+    expect(argsWarningTexts()).toContain(mcpVi.warnings.argsSecretLiteral)
+    // 🚫 đi qua một vòng API nào: nút Kiểm tra chưa hề được bấm.
+    expect(vi.mocked(testMcpServer)).not.toHaveBeenCalled()
+  })
+
+  it('TC-UI-LITERAL-VISIBLE (b): đang GÕ literal ⇒ hiện ngay, 🚫 cần Lưu/Kiểm tra', async () => {
+    await mountDialog()
+    await fillMinimalStdio('Có secret')
+
+    expect(argsWarningTexts()).toEqual([])
+    await setValue(argsTextarea(), ['-y', 'pkg', '--token', 'sk-test-LEAKCANARY-0123456789'].join('\n'))
+
+    expect(argsWarningTexts()).toContain(mcpVi.warnings.argsSecretLiteral)
+    expect(vi.mocked(testMcpServer)).not.toHaveBeenCalled()
+    expect(vi.mocked(saveMcpServer)).not.toHaveBeenCalled()
+  })
+
+  it('TC-UI-LITERAL-VISIBLE (c): tên gói + đường dẫn dài ⇒ 🚫 báo động giả', async () => {
+    await mountDialog()
+    await fillMinimalStdio('Sạch')
+    await setValue(
+      argsTextarea(),
+      [
+        '-y',
+        '@modelcontextprotocol/server-filesystem',
+        '/home/user/projects/agent-workflow/.dev-team-agent',
+        '--port',
+        '8080',
+      ].join('\n'),
+    )
+
+    expect(argsWarningTexts()).toEqual([])
+  })
+
+  it('TC-UI-LITERAL-VISIBLE (d): transport 🚫 phải stdio ⇒ 🚫 cảnh báo (khớp tiền đề backend)', async () => {
+    await mountDialog()
+    await setValue(inputByLabel(mcpVi.dialog.labelField), 'Remote')
+    await chooseTransport('http')
+
+    // Ô Arguments 🚫 còn tồn tại ở transport remote ⇒ 🚫 có cảnh báo nào của nó.
+    expect(hasLabel(mcpVi.dialog.argsField)).toBe(false)
+  })
+
+  /**
+   * TC-SEC-39 — cảnh báo đến từ API phải gắn đúng ô `args`, và nút Lưu **vẫn bấm
+   * được**: literal secret là cảnh báo, 🚫 phải lỗi (D4).
+   */
+  it('TC-SEC-39: cảnh báo từ API gắn đúng ô `args`, nút Lưu vẫn bấm được', async () => {
+    vi.mocked(testMcpServer).mockResolvedValue({
+      ok: true,
+      tools: [],
+      warnings: ['args.secretLiteral'],
+      durationMs: 1,
+    } as any)
+
+    await mountDialog()
+    await fillMinimalStdio('Có cảnh báo')
+    await click(buttonByText(mcpVi.dialog.test))
+
+    expect(argsWarningTexts()).toContain(mcpVi.warnings.argsSecretLiteral)
+    // 🚫 In mã thô ra khối kết quả probe — mã đã được map sang i18n ở ô `args`.
+    expect(document.body.textContent).not.toContain('args.secretLiteral')
+    expect(buttonByText(mcpVi.dialog.save).disabled).toBe(false)
+  })
+
+  /**
+   * TC-SEC-DLG (review vòng 1) + TC-UI-DROPPED-DEFER ca 1 — lưu với ô `***` neo
+   * lệch ⇒ cảnh báo `argsSecretDropped` **đọc được**, dialog 🚫 đóng mất.
+   */
+  it('TC-SEC-DLG / TC-UI-DROPPED-DEFER (1): `argsSecretDropped` ⇒ dialog GIỮ MỞ + hiện savedWithWarnings', async () => {
+    vi.mocked(saveMcpServer).mockResolvedValue({
+      saved: true,
+      server: { ...editableServer(), args: ['-y', 'pkg', '--extra', '--token'] },
+      warnings: ['args.secretDropped'],
+    } as any)
+
+    const w = await mountDialog()
+    await fillMinimalStdio('Neo lệch')
+    await setValue(argsTextarea(), ['-y', 'pkg', '--extra', '--token', MCP_MASK].join('\n'))
+    await click(buttonByText(mcpVi.dialog.save))
+
+    expect(vi.mocked(saveMcpServer)).toHaveBeenCalledTimes(1)
+    expect(w.emitted('saved')).toBeTruthy()
+    // Lưu ĐÃ thành công, chỉ hoãn việc đóng.
+    expect(w.emitted('close')).toBeFalsy()
+    expect(savedWithWarningsShown()).toBe(true)
+    expect(argsWarningTexts()).toContain(mcpVi.warnings.argsSecretDropped)
+  })
+
+  /** TC-UI-DROPPED-DEFER ca 2 — chỉ `argsSecretLiteral` ⇒ đóng một cú bấm. */
+  it('TC-UI-DROPPED-DEFER (2): chỉ `argsSecretLiteral` ⇒ dialog đóng một cú bấm', async () => {
+    vi.mocked(saveMcpServer).mockResolvedValue({
+      saved: true,
+      server: editableServer(),
+      warnings: ['args.secretLiteral'],
+    } as any)
+
+    const w = await mountDialog()
+    await fillMinimalStdio('Chỉ lời khuyên')
+    await setValue(argsTextarea(), ['-y', 'pkg', '--token', 'sk-test-LEAKCANARY-0123456789'].join('\n'))
+    await click(buttonByText(mcpVi.dialog.save))
+
+    expect(w.emitted('close')).toBeTruthy()
+    expect(savedWithWarningsShown()).toBe(false)
+  })
+
+  it('TC-UI-DROPPED-DEFER (3): 🚫 cảnh báo nào ⇒ dialog vẫn đóng một cú bấm', async () => {
+    vi.mocked(saveMcpServer).mockResolvedValue({
+      saved: true,
+      server: editableServer(),
+      warnings: [],
+    } as any)
+
+    const w = await mountDialog()
+    await fillMinimalStdio('Sạch')
+    await click(buttonByText(mcpVi.dialog.save))
+
+    expect(w.emitted('close')).toBeTruthy()
+    expect(savedWithWarningsShown()).toBe(false)
+  })
+})

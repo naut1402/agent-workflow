@@ -1052,6 +1052,89 @@ describe('claude-code-cli — execute() với MCP', () => {
       expect(streamed).toContain('***')
     })
 
+    /**
+     * TC-SEC-49 ⭐ (#385 SEC-10) — bộ lọc mask CÓ TRẠNG THÁI giữ lại
+     * `max(len(secret)) - 1` ký tự, nên 🚫 `flush()` ở nhánh LỖI là nuốt mất
+     * đuôi log — đúng đoạn người dùng cần để biết job hỏng vì sao.
+     *
+     * Hai vế trong cùng một ca: (a) đuôi log có mặt ở cả `onLog` lẫn file log;
+     * (b) dòng tổng kết kết quả đứng SAU đuôi đó — thứ tự dòng 🚫 đảo.
+     */
+    test('TC-SEC-49: tiến trình con lỗi giữa chừng ⇒ đuôi log 🚫 bị nuốt, thứ tự 🚫 đảo', async () => {
+      seedServer('on1', { TOKEN: CANARY })
+      const logPath = makeLogPath(home)
+      const chunks: string[] = []
+      const { cliPath, flags } = nodeCli('mcp-split-leak')
+
+      const result = await run(
+        mcpProvider(),
+        { cliPath, flags, mcpServers: ['on1'] },
+        { logPath, onLog: (c) => chunks.push(c) },
+      )
+      const streamed = chunks.join('')
+      const log = fs.readFileSync(logPath, 'utf8')
+
+      expect(result.ok).toBe(false)
+      // (a) đuôi có mặt, và secret vắt qua HAI chunk vẫn 🚫 lọt mảnh nào.
+      expect(streamed).toContain('DUOI-LOG-CUOI-CUNG')
+      expect(log).toContain('DUOI-LOG-CUOI-CUNG')
+      expect(streamed).not.toContain(CANARY)
+      expect(log).not.toContain(CANARY)
+      expect(log).not.toContain(CANARY.slice(0, 12))
+      expect(log).toContain('401 Unauthorized: Bearer ***')
+      // (b) dòng tổng kết nằm SAU đuôi log.
+      expect(log.indexOf('DUOI-LOG-CUOI-CUNG')).toBeLessThan(log.indexOf('exitCode'))
+    }, 20_000)
+
+    /**
+     * TC-SEC-50 (#385 SEC-11) — job 🚫 bật MCP ⇒ chuỗi log y hệt hành vi cũ.
+     *
+     * 📌 Khai rõ theo `test-spec.md` §2.3: 🚫 `mcpServers` **và** 🚫 `orchestratorJob`
+     * (job điều phối tự gắn entry `dev-team-dashboard`, #453), nên bất biến thật
+     * là *🚫 ids VÀ 🚫 extras*.
+     *
+     * Bề mặt đo: SỐ LẦN gọi `onLog` và NỘI DUNG từng chunk. Bộ lọc rỗng phải trả
+     * nguyên chunk tức thì — giữ lại một ký tự thôi là hai chunk bị ghép làm một.
+     */
+    test('TC-SEC-50: 🚫 MCP, 🚫 orchestratorJob ⇒ `onLog` nhận đúng từng chunk, 🚫 trễ', async () => {
+      seedServer('on1', { TOKEN: CANARY })
+      const chunks: string[] = []
+      const { cliPath, flags } = nodeCli('two-chunks')
+
+      const result = await provider0ChunkRun(cliPath, flags, chunks)
+
+      expect(result.ok).toBe(true)
+      expect(result.maskedStdout).toBeUndefined()
+      // Hai lần ghi tách biệt ⇒ hai chunk riêng, 🚫 ghép, 🚫 giữ lại ký tự nào.
+      expect(chunks.length).toBeGreaterThanOrEqual(2)
+      expect(chunks.join('')).toContain('CHUNK-MOT\n')
+      expect(chunks.join('')).toContain('CHUNK-HAI\n')
+      expect(chunks.some((c) => c.includes('CHUNK-MOT') && !c.includes('CHUNK-HAI'))).toBe(true)
+      expect(chunks.join('')).not.toContain('***')
+    }, 20_000)
+
+    /** Lượt chạy 🚫 khai `mcpServers` và 🚫 `orchestratorJob` — xem TC-SEC-50. */
+    async function provider0ChunkRun(
+      cliPath: string,
+      flags: string[],
+      chunks: string[],
+    ) {
+      return mcpProvider().execute(
+        {
+          jobId: 'job-no-mcp',
+          resolvedAgent,
+          userPrompt: 'chạy thử',
+          workspace,
+          produces: [],
+          timeoutMs: 10_000,
+          metadata: {},
+        },
+        { cliPath, flags },
+        credential,
+        (c: string) => chunks.push(c),
+      )
+    }
+
     test('TC-99: `ExecuteResult.error` cũng phải mask', async () => {
       const { result } = await runLeaky()
 
