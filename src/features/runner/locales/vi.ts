@@ -158,6 +158,8 @@ export default {
     mcpServersLabel: 'MCP server',
     mcpServersHint: 'Chỉ MCP server đang bật mới hiện ở đây. Không chọn gì thì lệnh chạy runner không đổi.',
     mcpUnsupported: 'Provider này chưa nhận cấu hình MCP — lựa chọn vẫn được lưu để dùng sau.',
+    mcpWorkspaceFile:
+      'Với cursor-cli, file cấu hình MCP được ghi TRONG workspace («.cursor/mcp.json») suốt lượt chạy rồi xoá đi — file sẵn có của bạn được sao lưu và trả lại nguyên trạng. Job còn chạy với «--approve-mcps», nên các server trên được ghi vào danh sách phê duyệt cục bộ («~/.cursor») và tác dụng phụ đó tồn tại sau khi job kết thúc.',
     mcpEmpty: 'Chưa có MCP server nào đang bật. Thêm ở tab MCP.',
     mcpMissing: 'đã tắt hoặc đã xoá',
     connectViaBrowser: 'Connect via browser',

@@ -9,9 +9,17 @@ import {
 import { registryHome } from '../../../../backend/registry.js'
 import { listMcpServers, sanitiseMcpServerId, serialiseMcpServers } from '../../../mcp/business/index.js'
 import type { McpServerConfig } from '../../../mcp/business/types.js'
+import type { McpDelivery } from '../types.js'
 import { getCredential, isDirectSecretType, resolveSecretRef } from '../credentials.js'
 
 export interface McpJobConfigHandle {
+  /**
+   * Cách file đến được CLI. `config-file-flag` ⇒ đường dẫn đi vào argv
+   * (`--mcp-config`); `workspace-config-file` ⇒ CLI tự đọc theo cwd và đường dẫn
+   * 🚫 KHÔNG được lọt vào argv. Caller phân biệt bằng field này, không đoán theo
+   * hình dạng `path`.
+   */
+  kind: Extract<McpDelivery, 'config-file-flag' | 'workspace-config-file'>
   path: string
   count: number
   /** Id server — an toàn để log; không bao giờ là giá trị env/header. */
@@ -40,17 +48,22 @@ export interface PrepareMcpConfigInput {
   onWarning?: (message: string) => void
 }
 
+export interface ResolvedJobMcp {
+  json: { mcpServers: Record<string, unknown> }
+  names: string[]
+  secrets: string[]
+  warnings: string[]
+}
+
 /**
- * Sinh file cấu hình `mcpServers` cho một job, hoặc `null` khi job không dùng
- * MCP — `null` là đường mặc định và phải giữ nguyên: không Connection nào bật
- * MCP thì argv của CLI không đổi và không file nào chạm đĩa.
+ * Phần CHUNG của mọi cách giao cấu hình MCP cho job: lọc server đang bật, cảnh
+ * báo id rụng, serialise ra JSON. Chưa chạm đĩa một byte nào.
  *
- * File đặt dưới `registryHome()/mcp-runtime/`, KHÔNG trong workspace người dùng:
- * nó chứa secret đã giải, và ở trong repo thì lọt `git status` của chính agent.
- * Quyền `0600` là rào chính trên POSIX; trên win32 `chmod` gần như vô nghĩa nên
- * vị trí file (thư mục hồ sơ người dùng) mới là thứ bảo vệ.
+ * Tách ra để nhánh cursor (`cursorMcpWorkspace.ts`) dùng lại NGUYÊN VẸN thay vì
+ * chép — kể cả bất biến `null`: không `ids` VÀ không `extras` ⇒ `null`, nên cả
+ * hai nhánh cùng hưởng "không bật MCP ⇒ argv không đổi, không file nào chạm đĩa".
  */
-export function prepareMcpConfigForJob(input: PrepareMcpConfigInput): McpJobConfigHandle | null {
+export function resolveJobMcpServers(input: PrepareMcpConfigInput): ResolvedJobMcp | null {
   const ids = Array.isArray(input.ids) ? input.ids.filter((x): x is string => typeof x === 'string') : []
   const extras = input.extraServers ?? []
   // Bất biến: KHÔNG id nào VÀ không entry tự gắn nào ⇒ vẫn `null`, không file
@@ -96,16 +109,6 @@ export function prepareMcpConfigForJob(input: PrepareMcpConfigInput): McpJobConf
   })
   for (const message of serialised.warnings) warn(message)
 
-  const dir = mcpRuntimeDir()
-  mkdirSync(dir, { recursive: true })
-  tryChmod(dir, 0o700)
-  const path = joinPath(dir, `job-${sanitiseMcpServerId(input.jobId) ?? 'unknown'}.json`)
-  // `mode` ngay lúc tạo, không chỉ `chmod` sau: chmod ở dòng kế tiếp vẫn để lại
-  // một cửa sổ file 0644 chứa token đã giải. `tryChmod` giữ lại làm lưới cho
-  // trường hợp file đã tồn tại (writeFileSync giữ mode cũ khi ghi đè).
-  writeTextFileSync(path, JSON.stringify(serialised.json, null, 2), { mode: 0o600 })
-  tryChmod(path, 0o600)
-
   // Một tên cho mỗi entry THẬT trong file: id trùng nhau chỉ sinh một entry
   // (báo 2 là báo sai thứ job nhận được), và server có id sanitise ra `null`
   // không vào file nên không được đếm. Nhưng tên hiển thị vẫn là id NGƯỜI DÙNG
@@ -118,12 +121,40 @@ export function prepareMcpConfigForJob(input: PrepareMcpConfigInput): McpJobConf
   }
   const names = Object.keys(serialised.json.mcpServers).map((key) => idByKey.get(key) ?? key)
 
+  return { json: serialised.json, names, secrets: serialised.secrets, warnings }
+}
+
+/**
+ * Sinh file cấu hình `mcpServers` cho một job, hoặc `null` khi job không dùng
+ * MCP — `null` là đường mặc định và phải giữ nguyên: không Connection nào bật
+ * MCP thì argv của CLI không đổi và không file nào chạm đĩa.
+ *
+ * File đặt dưới `registryHome()/mcp-runtime/`, KHÔNG trong workspace người dùng:
+ * nó chứa secret đã giải, và ở trong repo thì lọt `git status` của chính agent.
+ * Quyền `0600` là rào chính trên POSIX; trên win32 `chmod` gần như vô nghĩa nên
+ * vị trí file (thư mục hồ sơ người dùng) mới là thứ bảo vệ.
+ */
+export function prepareMcpConfigForJob(input: PrepareMcpConfigInput): McpJobConfigHandle | null {
+  const resolved = resolveJobMcpServers(input)
+  if (!resolved) return null
+
+  const dir = mcpRuntimeDir()
+  mkdirSync(dir, { recursive: true })
+  tryChmod(dir, 0o700)
+  const path = joinPath(dir, `job-${sanitiseMcpServerId(input.jobId) ?? 'unknown'}.json`)
+  // `mode` ngay lúc tạo, không chỉ `chmod` sau: chmod ở dòng kế tiếp vẫn để lại
+  // một cửa sổ file 0644 chứa token đã giải. `tryChmod` giữ lại làm lưới cho
+  // trường hợp file đã tồn tại (writeFileSync giữ mode cũ khi ghi đè).
+  writeTextFileSync(path, JSON.stringify(resolved.json, null, 2), { mode: 0o600 })
+  tryChmod(path, 0o600)
+
   return {
+    kind: 'config-file-flag',
     path,
-    count: names.length,
-    names,
-    secrets: serialised.secrets,
-    warnings,
+    count: resolved.names.length,
+    names: resolved.names,
+    secrets: resolved.secrets,
+    warnings: resolved.warnings,
     dispose() {
       try {
         rmSync(path, { force: true })
@@ -162,7 +193,7 @@ export function cleanupOrphanedMcpConfigs(): void {
   }
 }
 
-function tryChmod(target: string, mode: number): void {
+export function tryChmod(target: string, mode: number): void {
   try {
     chmodSync(target, mode)
   } catch {
