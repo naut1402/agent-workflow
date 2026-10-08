@@ -26,6 +26,13 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 export interface McpProbeTool {
   name: string
   description: string
+  /**
+   * JSON Schema của tham số, CHỈ `openMcpSession` điền. `probeMcpServer` để
+   * trống có chủ ý: kết quả probe chảy thẳng ra `GET /api/mcp-servers/test` và
+   * được persist vào `lastCheck`, mà schema tool là payload lớn, không ai đọc ở
+   * đó. Vòng tool-use thì bắt buộc có nó để khai tool với SDK.
+   */
+  inputSchema?: unknown
 }
 
 export interface McpProbeResult {
@@ -44,6 +51,15 @@ export interface McpProbeOptions {
   cwd?: string
   /** Secret đã giải từ credential profile — caller (controller/runner) tiêm vào. */
   secret?: string | null
+  /**
+   * Nhận cảnh báo lúc DỰNG transport, ngay khi phát sinh.
+   *
+   * 📌 Phải là callback chứ 🚫 không thể chỉ nằm trong giá trị trả về: cảnh báo
+   * quan trọng nhất ("credential … không giải được secret — bỏ header xác thực")
+   * sinh ra TRƯỚC `connect()`, và chính nó là nguyên nhân làm `connect()` ném
+   * 401/timeout. Đường trả về 🚫 không bao giờ chạy ở đúng ca cần giải thích nhất.
+   */
+  onWarning?: (message: string) => void
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -296,5 +312,58 @@ export async function probeMcpServer(
     }
   } finally {
     await client?.close().catch(() => {})
+  }
+}
+
+/**
+ * Phiên MCP sống theo JOB, khác `probeMcpServer` (mở–đo–đóng trong một lần gọi).
+ * Vòng tool-use của `ai-api` cần giữ client mở suốt cuộc hội thoại để gọi tool
+ * nhiều lần, nên vòng đời do caller quản — và `close()` PHẢI ở trong `finally`:
+ * transport stdio là một tiến trình con, quên đóng là rò tiến trình theo từng job.
+ *
+ * Dùng lại `buildTransport` nguyên vẹn ⇒ guard endpoint, danh sách mask và cách
+ * dựng env của phiên này giống hệt đường probe, không có bản thứ hai để lệch.
+ */
+export interface McpSession {
+  tools: McpProbeTool[]
+  /** Giá trị cần mask trước khi ghi bất cứ thứ gì của phiên này vào log. */
+  secrets: string[]
+  callTool(name: string, args: Record<string, unknown>): Promise<unknown>
+  close(): Promise<void>
+}
+
+export async function openMcpSession(
+  server: McpServerConfig,
+  opts: McpProbeOptions = {},
+): Promise<McpSession> {
+  // 📌 `opts.listTools` KHÔNG áp dụng ở đây: phiên này sinh ra để nối tool vào
+  // vòng tool-use, mà không có `tools/list` thì 🚫 không có gì để nối. Caller
+  // muốn chỉ thử kết nối thì dùng `probeMcpServer`.
+  const timeoutMs = resolveTimeoutMs(opts.timeoutMs, server.timeoutMs)
+  const plan = buildTransport(server, opts)
+  // Đẩy ra NGAY, trước `connect()` — xem `McpProbeOptions.onWarning`.
+  for (const message of plan.warnings) opts.onWarning?.(message)
+  const client = new Client(CLIENT_INFO, { capabilities: {} })
+
+  try {
+    await withTimeout(client.connect(plan.transport), timeoutMs, 'connect')
+    const listed = await withTimeout(client.listTools(), timeoutMs, 'tools/list')
+    const tools: McpProbeTool[] = (listed.tools ?? []).slice(0, MCP_MAX_TOOL_NAMES).map((tool) => ({
+      name: String(tool.name ?? ''),
+      description: String(tool.description ?? '').slice(0, MCP_MAX_TOOL_DESCRIPTION_LENGTH),
+      inputSchema: tool.inputSchema,
+    }))
+
+    return {
+      tools,
+      secrets: plan.secrets,
+      callTool: (name, args) => client.callTool({ name, arguments: args }),
+      close: () => client.close().catch(() => {}),
+    }
+  } catch (err) {
+    // Mở hụt thì đóng ngay tại đây: caller nhận exception và không có handle nào
+    // để gọi `close()`, nên tiến trình con của transport stdio sẽ ở lại mãi.
+    await client.close().catch(() => {})
+    throw err
   }
 }
