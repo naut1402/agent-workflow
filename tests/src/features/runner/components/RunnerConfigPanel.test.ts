@@ -3,6 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n as mount } from '../../../helpers/i18n'
 import RunnerConfigPanel from '@/features/runner/components/RunnerConfigPanel.vue'
 import runnerVi from '@/features/runner/locales/vi'
+import runnerEn from '@/features/runner/locales/en'
 import mcpVi from '@/features/mcp/locales/vi'
 
 /**
@@ -136,5 +137,160 @@ describe('RunnerConfigPanel — cấu trúc tab (AC-2)', () => {
     expect(qa('.mcp-panel')).toHaveLength(1)
 
     expect(consoleErrors).toEqual([])
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T6fabee9b · nhóm F của test-spec — màn Runner phải nói đúng runner nào job
+// KHÔNG pin sẽ thật sự chạy.
+//
+// `defaultRunnerId` (id người dùng đã chốt) và `effectiveDefaultRunnerId` (runner
+// thật sự chạy được) là HAI thứ khác nhau, và chúng lệch nhau đúng lúc có sự cố.
+// Panel phải đọc trường thứ hai: ngôi sao sáng trên một runner mà job sẽ fail là
+// chính loại lệch pha giữa "cái UI nói" và "cái hệ thống làm" mà task này đóng.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const AI_CONNECTIONS = [
+  { id: 'conn-a', providerId: 'anthropic-api' },
+  { id: 'conn-b', providerId: 'anthropic-api' },
+]
+const TWO_RUNNERS = [
+  { id: 'a', name: 'Runner A', connectionId: 'conn-a', enabled: false },
+  { id: 'b', name: 'Runner B', connectionId: 'conn-b', enabled: true },
+]
+
+/** Nút đặt-default của một runner — tra theo aria-label, 🚫 không theo thứ tự DOM. */
+function starButtons(): HTMLButtonElement[] {
+  return qa<HTMLButtonElement>('.runner-list .icon-btn').filter(
+    (b) => b.getAttribute('aria-label') === runnerVi.panel.makeDefault,
+  )
+}
+function starFills(): (string | null)[] {
+  return starButtons().map((b) => b.querySelector('svg path')?.getAttribute('fill') ?? null)
+}
+
+async function mountWithPayload(runnerPayload: Record<string, unknown>, connections = AI_CONNECTIONS) {
+  vi.mocked(fetchRunners).mockResolvedValueOnce({ providers: [], connections: [], ...runnerPayload } as any)
+  vi.mocked(fetchConnections).mockResolvedValueOnce({ connections, providers: [] } as any)
+  return mountPanel()
+}
+
+describe('RunnerConfigPanel — default thật vs default đã ghi nhận', () => {
+  it('TC-D34: effectiveDefaultRunnerId = null ⇒ 🚫 không ngôi sao nào sáng', async () => {
+    await mountWithPayload({
+      runners: TWO_RUNNERS,
+      defaultRunnerId: 'a',
+      effectiveDefaultRunnerId: null,
+      defaultRunnerIssue: { runnerId: 'a', reason: 'disabled' },
+    })
+
+    expect(starButtons()).toHaveLength(2)
+    // Sao chỉ đúng runner job sẽ chạy. `null` nghĩa là KHÔNG runner nào.
+    expect(starFills()).toEqual(['none', 'none'])
+  })
+
+  it('TC-D35: defaultRunnerIssue ⇒ banner mang nội dung của key reason kèm id', async () => {
+    await mountWithPayload({
+      runners: TWO_RUNNERS,
+      defaultRunnerId: 'a',
+      effectiveDefaultRunnerId: null,
+      defaultRunnerIssue: { runnerId: 'a', reason: 'disabled' },
+    })
+
+    const banner = qa('.warn-banner')
+    expect(banner).toHaveLength(1)
+    expect(banner[0].textContent).toBe(runnerVi.defaultIssue.disabled.replace('{id}', 'a'))
+  })
+
+  it('TC-D36: nút đặt-default trên chính runner hỏng VẪN bấm được', async () => {
+    await mountWithPayload({
+      runners: TWO_RUNNERS,
+      defaultRunnerId: 'a',
+      effectiveDefaultRunnerId: null,
+      defaultRunnerIssue: { runnerId: 'a', reason: 'disabled' },
+    })
+
+    // Người dùng bật lại runner `a` rồi phải chốt lại được nó làm default —
+    // khoá nút ở đây là nhốt họ trong trạng thái hỏng.
+    expect(starButtons().map((b) => b.disabled)).toEqual([false, false])
+  })
+
+  it('payload cũ KHÔNG có effectiveDefaultRunnerId ⇒ rơi về defaultRunnerId (không vỡ mock cũ)', async () => {
+    // `undefined` (thiếu trường) khác hẳn `null` (BE nói "không có runner nào
+    // chạy được") — gộp hai thứ đó bằng `??` là xoá sạch tác dụng của TC-D34.
+    await mountWithPayload({ runners: TWO_RUNNERS, defaultRunnerId: 'b' })
+
+    expect(starFills()).toEqual(['none', 'currentColor'])
+    expect(qa('.warn-banner')).toHaveLength(0)
+  })
+})
+
+describe('RunnerConfigPanel — Copy mint id chưa dùng', () => {
+  function hintText(): string {
+    const hint = qa('.runner-dialog .cfg-hint')[0]
+    if (!hint) throw new Error('không thấy dòng hint id trong RunnerDialog')
+    return hint.textContent?.trim() ?? ''
+  }
+
+  it('TC-D37: copy khi `r-copy` đã tồn tại ⇒ đề xuất `r-copy-2`', async () => {
+    await mountWithPayload(
+      {
+        runners: [
+          { id: 'r', name: 'R', connectionId: 'conn-a' },
+          { id: 'r-copy', name: 'R (copy)', connectionId: 'conn-a' },
+        ],
+        defaultRunnerId: 'r',
+        effectiveDefaultRunnerId: 'r',
+        defaultRunnerIssue: null,
+      },
+    )
+
+    const copyBtn = qa<HTMLButtonElement>('.runner-list .icon-btn').find(
+      (b) => b.getAttribute('aria-label') === runnerVi.panel.copyRunner,
+    )!
+    await click(copyBtn)
+
+    expect(hintText()).toBe(runnerVi.hints.generatedId.replace('{id}', 'r-copy-2'))
+  })
+
+  it('TC-D37b: id dài ⇒ base bị cắt còn 48 TRƯỚC khi nối hậu tố', async () => {
+    const long = 'a'.repeat(60)
+    await mountWithPayload({
+      runners: [{ id: long, name: 'Dài', connectionId: 'conn-a' }],
+      defaultRunnerId: long,
+      effectiveDefaultRunnerId: long,
+      defaultRunnerIssue: null,
+    })
+
+    const copyBtn = qa<HTMLButtonElement>('.runner-list .icon-btn').find(
+      (b) => b.getAttribute('aria-label') === runnerVi.panel.copyRunner,
+    )!
+    await click(copyBtn)
+
+    const minted = hintText().replace(runnerVi.hints.generatedId.replace('{id}', ''), '')
+    // Cắt SAU khi nối thì `sanitiseRunnerId` (64 ký tự) ăn mất chính hậu tố làm
+    // nên khác biệt, và id "copy" lại trùng id gốc.
+    expect(minted).toBe(`${'a'.repeat(48)}-copy`)
+    expect(minted.length).toBeLessThanOrEqual(56)
+  })
+})
+
+describe('TC-D42: locale phủ đủ tập reason của backend', () => {
+  // `DefaultRunnerReason` của BE là union 7 giá trị; `ok` không có text nên FE
+  // cần đúng 6 key. Thiếu một key thì banner hiện ra chính chuỗi khoá.
+  const REASONS = ['no-runners', 'unset', 'missing', 'disabled', 'no-connection', 'not-ai'] as const
+
+  it.each([
+    ['vi', runnerVi],
+    ['en', runnerEn],
+  ])('%s: đủ 6 key defaultIssue.* + idTaken / connIdTaken / generatedId', (_locale, messages) => {
+    expect(Object.keys((messages as any).defaultIssue).sort()).toEqual([...REASONS].sort())
+    for (const reason of REASONS) {
+      expect(typeof (messages as any).defaultIssue[reason]).toBe('string')
+      expect((messages as any).defaultIssue[reason].length).toBeGreaterThan(0)
+    }
+    expect((messages as any).errors.idTaken).toContain('{id}')
+    expect((messages as any).errors.connIdTaken).toContain('{id}')
+    expect((messages as any).hints.generatedId).toContain('{id}')
   })
 })

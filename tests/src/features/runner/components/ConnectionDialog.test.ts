@@ -1161,8 +1161,12 @@ describe('ConnectionDialog — overlay chặn thao tác lúc lưu', () => {
     w.unmount()
   })
 
+  // T6fabee9b: ca này dùng 409 làm đại diện cho "lỗi bất kỳ", nhưng 409 nay
+  // mang nghĩa riêng "id đã tồn tại" và được ánh xạ sang message i18n. Đổi sang
+  // một status trung tính để nó tiếp tục chốt đúng thứ nó sinh ra để chốt (vòng
+  // đời overlay + nút), rồi ca TC-D39 ngay dưới phủ riêng nghĩa mới của 409.
   it('TC-22: API lỗi thì overlay tắt, nút mở lại, thông điệp lỗi giữ nguyên', async () => {
-    const boom = Object.assign(new Error('Conflict'), { status: 409 })
+    const boom = Object.assign(new Error('Conflict'), { status: 500 })
     vi.mocked(saveConnection).mockRejectedValueOnce(boom)
     const w = await mountReadyToSave()
 
@@ -1175,6 +1179,24 @@ describe('ConnectionDialog — overlay chặn thao tác lúc lưu', () => {
     // Mở lại được thật, không chỉ "trông như mở lại".
     await click(saveButton())
     expect(saveConnection).toHaveBeenCalledTimes(2)
+
+    w.unmount()
+  })
+
+  it('TC-D39: 409 ⇒ hiện message i18n "đổi tên khác", 🚫 không hiện chuỗi thô của BE', async () => {
+    // Nhận diện bằng status, 🚫 không so chuỗi tiếng Việt của tầng business.
+    vi.mocked(saveConnection).mockRejectedValueOnce(
+      Object.assign(new Error('connection id "existing-api" đã tồn tại'), { status: 409 }),
+    )
+    const w = await mountReadyToSave()
+
+    await click(saveButton())
+
+    const banner = document.body.querySelector('.err-banner')
+    expect(banner?.textContent?.trim()).toBe(
+      runnerVi.errors.connIdTaken.replace('{id}', 'existing-api'),
+    )
+    expect(banner?.textContent).not.toContain('connection id')
 
     w.unmount()
   })
