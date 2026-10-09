@@ -1,6 +1,7 @@
 import { APP_VERSION } from '../src/backend/configs/appVersion.js'
 import { initLogDriverFromPrefs, installEventLogSubscriber } from '../src/backend/log/index.js'
 import { resolveProjectRoot } from '../src/backend/registry.js'
+import { SelfMcpServer } from '../src/features/mcp/business/index.js'
 import { AbstractMcpServer, type McpMode, type ModeSource } from './AbstractMcpServer.js'
 import type { AbstractMcpTools, RootResolver } from './AbstractMcpTools.js'
 import { KnowledgeTools } from './tools/KnowledgeTools.js'
@@ -9,8 +10,10 @@ import { ProjectTools } from './tools/ProjectTools.js'
 import { TaskTools } from './tools/TaskTools.js'
 
 export class DashboardMcpServer extends AbstractMcpServer {
-  static readonly SERVER_NAME = 'dev-team-dashboard'
-  static readonly MODE_ENV_VAR = 'DEVTEAM_MCP_MODE'
+  // Hợp đồng với dashboard — bên ghi entry `--mcp-config` cho job điều phối.
+  // Đọc từ `SelfMcpServer` để hai tiến trình không thể lệch tên.
+  static readonly SERVER_NAME = SelfMcpServer.SERVER_ID
+  static readonly MODE_ENV_VAR = SelfMcpServer.MODE_ENV_VAR
 
   static resolveMode(opts: ModeSource = {}): McpMode {
     return super.resolveMode({

@@ -1,5 +1,6 @@
 // xem docs/mcp/server.md §4.13, §5.2, §8.1
 import { z } from 'zod'
+import { SelfMcpServer } from '../../src/features/mcp/business/index.js'
 import { OrchestratorDecisionShape } from '../../src/features/orchestrator/schemas/orchestrator.js'
 import { AbstractMcpTools, type ToolDef } from '../AbstractMcpTools.js'
 
@@ -21,7 +22,8 @@ const FALLBACK_HINT = 'Ra lệnh bằng dòng cuối output: `ORCHESTRATOR_DECIS
  * 🚫 KHÔNG import gì từ `src/features/orchestrator/business/`: tiến trình MCP là
  * tiến trình KHÁC với dashboard, nên gọi `applyDecision` in-process sẽ thi hành
  * vào một job queue khác hẳn và làm stdio server treo không thoát. Chỉ mượn
- * `schemas/` cho raw shape (zod thuần, không side effect).
+ * `schemas/` cho raw shape (zod thuần, không side effect), và tên hai biến env
+ * từ `SelfMcpServer` (barrel `mcp`, không side effect lúc nạp).
  */
 export class OrchestratorTools extends AbstractMcpTools {
   definitions(): ToolDef[] {
@@ -57,12 +59,13 @@ export class OrchestratorTools extends AbstractMcpTools {
   }
 
   async decide(args: unknown): Promise<any> {
-    const token = process.env.DASHBOARD_ORCHESTRATOR_TOKEN
-    const base = process.env.DASHBOARD_ORCHESTRATOR_BASE_URL
+    // Dashboard khai hai biến này vào entry tự gắn (`SelfMcpServer.forJob`).
+    const token = process.env[SelfMcpServer.TOKEN_ENV]
+    const base = process.env[SelfMcpServer.BASE_URL_ENV]
     if (!token || !base) {
       return this.fail(
         'internal',
-        'thiếu DASHBOARD_ORCHESTRATOR_TOKEN/DASHBOARD_ORCHESTRATOR_BASE_URL — tiến trình này '
+        `thiếu ${SelfMcpServer.TOKEN_ENV}/${SelfMcpServer.BASE_URL_ENV} — tiến trình này `
         + `không gắn với lượt điều phối nào. ${FALLBACK_HINT}`,
       )
     }

@@ -3,8 +3,12 @@ import { MCP_MAX_TOOL_DESCRIPTION_LENGTH, MCP_MAX_TOOL_NAMES } from '../schemas/
 import type { CredentialResolver } from './CredentialResolver.js'
 import type { McpServer } from './McpServer.js'
 import { SecretMasker } from './SecretMasker.js'
+// Không thành vòng: `SelfMcpServer` → `StdioMcpServer` → `McpServer` 🚫 import
+// file này, nên hằng đã khởi tạo xong trước khi dòng dưới chạy.
+import { SelfMcpServer } from './SelfMcpServer.js'
 
-const CLIENT_INFO = { name: 'dev-team-dashboard', version: '1.0.0' }
+/** Dashboard tự xưng cùng một tên ở cả hai vai — client và server stdio. */
+const CLIENT_INFO = { name: SelfMcpServer.SERVER_ID, version: '1.0.0' }
 const MAX_ERROR_LENGTH = 500
 
 export interface McpProbeTool {
