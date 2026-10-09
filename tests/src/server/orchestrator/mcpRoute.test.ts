@@ -14,9 +14,9 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { SelfMcpServer } from '../../../../src/features/mcp/business/index.js'
 import { resolveDecisionRoute } from '../../../../src/features/orchestrator/business/mcpRoute.js'
 import {
-  canAttachSelfMcp,
   setDefaultRunner,
   upsertConnection,
   upsertRunner,
@@ -163,12 +163,14 @@ describe('TC-B08: chốt tuyến không có tác dụng phụ', () => {
 /**
  * TC-B06 — entrypoint MCP không có trên đĩa (bản đóng gói thiếu `mcp/`).
  *
- * `canAttachSelfMcp()` định vị `mcp/stdio.ts` tương đối với `import.meta.url`
- * của `selfMcpConfig.ts`, nên không mô phỏng được bằng env hay mock trong tiến
- * trình này (repo luôn có `mcp/`). Thay vào đó dựng một CÂY FILE tối thiểu
- * trong thư mục tạm — `selfMcpConfig.ts` chỉ phụ thuộc `fileHelper.ts` (toàn
- * node builtin) và một `import type` bị xoá lúc transpile — rồi chạy trong một
- * tiến trình `bun` riêng, một lượt CÓ `mcp/stdio.ts` và một lượt KHÔNG.
+ * `SelfMcpServer.canAttach()` định vị `mcp/stdio.ts` tương đối với
+ * `import.meta.url` của `SelfMcpServer.ts`, nên không mô phỏng được bằng env hay
+ * mock trong tiến trình này (repo luôn có `mcp/`). Thay vào đó dựng một CÂY FILE
+ * tối thiểu trong thư mục tạm — đúng chuỗi import của `SelfMcpServer.ts`
+ * (`StdioMcpServer` → `McpServer` → `SecretMasker` → `schemas/mcpServer.ts`,
+ * cộng `fileHelper.ts`), `node_modules` trỏ junction về repo cho SDK + zod — rồi
+ * chạy trong một tiến trình `bun` riêng, một lượt CÓ `mcp/stdio.ts` và một lượt
+ * KHÔNG.
  *
  * Bất biến được chốt: 🚫 không bao giờ dạy agent gọi một tool chắc chắn không
  * tồn tại.
@@ -181,9 +183,13 @@ describe('TC-B06: entrypoint MCP không có trên đĩa', () => {
       fs.mkdirSync(path.dirname(dest), { recursive: true })
       fs.copyFileSync(path.join(REPO_ROOT, rel), dest)
     }
-    copy('src/features/runner/business/providers/selfMcpConfig.ts')
+    for (const name of ['SelfMcpServer', 'StdioMcpServer', 'McpServer', 'SecretMasker', 'CredentialResolver']) {
+      copy(`src/features/mcp/business/${name}.ts`)
+    }
     copy('src/backend/lib/fileHelper.ts')
     copy('src/features/mcp/schemas/mcpServer.ts')
+    // Junction (Windows) / symlink thư mục (POSIX) — 🚫 copy cả node_modules.
+    fs.symlinkSync(path.join(REPO_ROOT, 'node_modules'), path.join(dir, 'node_modules'), 'junction')
     if (withEntrypoint) copy('mcp/stdio.ts')
     return dir
   }
@@ -193,18 +199,20 @@ describe('TC-B06: entrypoint MCP không có trên đĩa', () => {
     fs.writeFileSync(
       script,
       [
-        "import { canAttachSelfMcp, buildSelfMcpEntry } from './src/features/runner/business/providers/selfMcpConfig.ts'",
-        "const entry = buildSelfMcpEntry({ orchestratorToken: 't', baseUrl: 'http://x' })",
-        'process.stdout.write(JSON.stringify({ canAttach: canAttachSelfMcp(), entry }))',
+        "import { SelfMcpServer } from './src/features/mcp/business/SelfMcpServer.ts'",
+        "process.env.DEV_TEAM_SELF_BASE_URL = 'http://x'",
+        "const server = SelfMcpServer.forJob({ orchestratorJob: true, orchestratorMcpRoute: 'mcp', orchestratorToken: 't' })",
+        'process.stdout.write(JSON.stringify({ canAttach: SelfMcpServer.canAttach(), entry: server ? server.config : null }))',
       ].join('\n'),
       'utf8',
     )
-    const run = spawnSync('bun', [script], { cwd: dir, encoding: 'utf8', timeout: 30_000 })
+    const run = spawnSync(process.execPath, [script], { cwd: dir, encoding: 'utf8', timeout: 30_000 })
+    expect(run.stderr).toBe('')
     expect(run.status).toBe(0)
     return JSON.parse(run.stdout)
   }
 
-  test('thiếu `mcp/stdio.ts` ⇒ canAttachSelfMcp false và 🚫 không dựng được entry', () => {
+  test('thiếu `mcp/stdio.ts` ⇒ SelfMcpServer.canAttach false và 🚫 không dựng được entry', () => {
     const withEntry = stageTree(true)
     const without = stageTree(false)
     try {
@@ -212,6 +220,8 @@ describe('TC-B06: entrypoint MCP không có trên đĩa', () => {
       const good = probe(withEntry)
       expect(good.canAttach).toBe(true)
       expect(good.entry).toBeTruthy()
+      // Entry trỏ đúng file trong cây tạm, 🚫 không lẫn sang repo thật.
+      expect(String((good.entry as any).args[0])).toBe(fs.realpathSync(path.join(withEntry, 'mcp', 'stdio.ts')))
 
       const bad = probe(without)
       expect(bad.canAttach).toBe(false)
@@ -223,7 +233,7 @@ describe('TC-B06: entrypoint MCP không có trên đĩa', () => {
   }, 60_000)
 
   test('trong repo này entrypoint CÓ thật — nhánh dương của TC-B01 không xanh giả', () => {
-    expect(canAttachSelfMcp()).toBe(true)
+    expect(SelfMcpServer.canAttach()).toBe(true)
     expect(fs.existsSync(path.join(REPO_ROOT, 'mcp', 'stdio.ts'))).toBe(true)
   })
 })

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { sanitiseAgentName } from '@/features/agent-editor/business/agents'
-import { isPrivateHostname } from '@/features/agent-editor/business/agents'
 
 describe('sanitiseAgentName', () => {
   it('allows only alnum, underscore and dash (no dots/spaces)', () => {
@@ -12,13 +11,5 @@ describe('sanitiseAgentName', () => {
   })
 })
 
-describe('isPrivateHostname', () => {
-  it.each(['localhost', 'foo.local', '127.0.0.1', '10.1.2.3', '192.168.0.1', '172.16.0.1', '172.31.255.255'])(
-    'treats %s as private',
-    (h) => expect(isPrivateHostname(h)).toBe(true),
-  )
-  it.each(['example.com', '8.8.8.8', '172.32.0.1', '11.0.0.1'])(
-    'treats %s as public',
-    (h) => expect(isPrivateHostname(h)).toBe(false),
-  )
-})
+// `isPrivateHostname` đã dời về `src/backend/lib/netUtils.ts` (Tcebe274e-P3) —
+// bộ ca của nó ở `tests/src/backend/lib/netUtils.test.ts`.
