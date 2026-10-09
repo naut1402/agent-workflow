@@ -1,7 +1,7 @@
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js'
-import { isPrivateHostname } from '../../agent-editor/business/index.js'
+import { isPrivateHostname } from '../../../backend/lib/netUtils.js'
 import {
   MCP_DEFAULT_AUTH_HEADER,
   MCP_DEFAULT_AUTH_SCHEME,

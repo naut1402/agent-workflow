@@ -1,6 +1,7 @@
 // Shared types for the runner execution plane (U0005).
 
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
+import type { McpJobDelivery } from './mcpDelivery/McpJobDelivery.js'
 
 export interface CredentialProfile {
   id: string
@@ -60,7 +61,10 @@ export interface ProviderCatalogEntry {
   label: string
   /** agent-cli may be set as default AI runner; console-command may not. */
   family: ProviderFamily
-  /** How this provider receives MCP config — `listProviderCatalog` fills it in. */
+  /**
+   * How this provider receives MCP config — `listProviderCatalog` (registry.ts)
+   * fills it in from `RunnerProvider.mcpDelivery.kind`.
+   */
   mcpDelivery?: McpDelivery
 }
 
@@ -299,6 +303,12 @@ export interface RunnerProvider {
   providerId: string
   /** Defaults inferred from providerId when omitted (legacy providers). */
   family?: ProviderFamily
+  /**
+   * How this provider receives the job's MCP servers. Omitted ⇒ the provider
+   * takes no MCP (catalog reports `'unsupported'`) — console-command and test
+   * stubs registered via `registerProvider`. Assembled in `registry.ts`.
+   */
+  mcpDelivery?: McpJobDelivery<unknown>
   validateRunnerConfig(config: Record<string, unknown> | undefined): { ok: boolean; errors: string[] }
   validateCredential(profile: CredentialProfile | undefined): { ok: boolean; errors: string[] }
   capabilities(): { supportsAgentFile: boolean; supportsStreaming: boolean; maxConcurrency: number }

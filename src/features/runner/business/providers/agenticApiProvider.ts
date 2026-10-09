@@ -18,7 +18,9 @@ import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 import { ensureFreshOAuthToken } from '../oauthCredentials.js'
 import { mintSessionId } from '../sessionLedger.js'
 import { appendTranscriptTurn, loadSessionMessages, saveSessionMessages } from './agentTranscriptStore.js'
-import { openMcpToolBridge, type McpBridgeTool, type McpToolBridge } from './mcpToolBridge.js'
+import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
+import { NoMcpDelivery } from '../mcpDelivery/NoMcpDelivery.js'
+import type { McpBridgeTool, McpToolBridge } from '../mcpDelivery/ToolBridgeMcpDelivery.js'
 import { shouldSendAgentInstructions } from './claude-code-cli.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ProviderFamily, RunnerProvider } from '../types.js'
 
@@ -231,6 +233,13 @@ function countOccurrences(haystack: string, needle: string): number {
 export abstract class AgenticApiProvider implements RunnerProvider {
   abstract readonly providerId: string
   readonly family: ProviderFamily = 'ai-api'
+
+  /**
+   * @param mcpDelivery nối tool MCP của job vào vòng tool-use — lắp ráp ở
+   *   `registry.ts` (`ToolBridgeMcpDelivery`). Thiếu ⇒ `NoMcpDelivery`: bridge
+   *   luôn `null`, `tools` và preamble y hệt bản trước khi có MCP.
+   */
+  constructor(readonly mcpDelivery: McpJobDelivery<McpToolBridge> = new NoMcpDelivery()) {}
 
   /** The only method a subclass must implement — the model-specific tool-use loop. */
   protected abstract runConversation(ctx: AgenticRunContext): Promise<AgenticRunResult>
@@ -642,9 +651,11 @@ export abstract class AgenticApiProvider implements RunnerProvider {
     // trình theo từng job. Mở hụt 🚫 không làm hỏng job — chỉ mất tool.
     let mcpBridge: McpToolBridge | null = null
     try {
-      mcpBridge = await openMcpToolBridge({
+      mcpBridge = await this.mcpDelivery.prepare({
         ids: runnerConfig?.mcpServers,
         workspace: req.workspace,
+        jobId: req.jobId,
+        metadata: req.metadata,
         onWarning: (message) => appendLog(`[runner] MCP warning: ${message}\n`),
       })
     } catch (err: any) {

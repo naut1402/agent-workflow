@@ -74,7 +74,7 @@ Dialog gợi ý sẵn path khi đổi transport — `MCP_DEFAULT_HTTP_PATH` = `/
 `RemoteMcpServer.assertEndpoint` (`business/RemoteMcpServer.ts`) chạy ở cả `upsertServer` (trên URL thô của payload, trước khi chuẩn hoá) lẫn `testServer` (`server.assertEndpoint()`) cho mọi transport khác `stdio`, và chạy lại ở **mọi hop** redirect khi kết nối (`guardedFetch`):
 
 - **`https`** — chấp nhận **mọi host**.
-- **`http`** — **chỉ** loopback / private: `isPrivateHostname(host)` hoặc một trong các literal `::1` · `[::1]` · `0.0.0.0`.
+- **`http`** — **chỉ** loopback / private: `isPrivateHostname(host)` (`src/backend/lib/netUtils.ts`, dùng chung với `fetchUrlSafe` và `sanitiseGitUrl`) hoặc một trong các literal `::1` · `[::1]` · `0.0.0.0`.
 - Protocol khác, hoặc URL không parse được → ném `Error`, controller trả `400`.
 
 > [!NOTE]
@@ -118,14 +118,29 @@ Thêm hai chi tiết:
 
 ## 7. Tiêu thụ ở runner
 
-`prepareMcpConfigForJob` (`src/features/runner/business/providers/mcpJobConfig.ts`) chọn server qua `mcpRegistry.select` rồi sinh file `mcpServers` bằng `McpServerSet.toCliConfig` cho **từng job**:
+Mỗi provider mang **một cách giao MCP** — `RunnerProvider.mcpDelivery`, một hiện thực của `McpJobDelivery` (`src/features/runner/business/mcpDelivery/`). Chỗ lắp ráp duy nhất là `runner/business/registry.ts`; provider không khai delivery thì không nhận MCP.
 
-- **Vị trí**: `registryHome()/mcp-runtime/job-<jobId>.json` — 🚫 **không** trong workspace người dùng. File chứa secret đã giải; nằm trong repo thì lọt `git status` của chính agent.
-- **Quyền**: thư mục `0700`, file `0600` — `mode` set ngay lúc tạo (`writeFileSync` với `{ mode }`) nên không có cửa sổ file `0644` chứa token đã giải; thêm một `chmod` ngay sau để phủ ca ghi đè, vì `writeFileSync` giữ nguyên mode cũ khi file đã tồn tại.
-- **Truyền vào CLI**: `claude-code-cli.ts` thêm `--mcp-config <path>` **và** `--strict-mcp-config`. Cờ thứ hai là bắt buộc đi kèm — không có nó, job còn ăn thêm MCP từ cấu hình khác.
-- **Dọn**: `dispose()` xoá file trong `finally` của job; `cleanupOrphanedMcpConfigs()` quét sạch lúc bootstrap cho ca dashboard bị kill giữa chừng.
+| `kind` (catalog) | Lớp | Provider | Đến CLI / model bằng cách nào |
+|---|---|---|---|
+| `config-file-flag` | `ConfigFlagMcpDelivery` | `claude-code-cli` | File `registryHome()/mcp-runtime/job-<jobId>.json`, argv thêm `--mcp-config <path>` **và** `--strict-mcp-config` |
+| `workspace-config-file` | `WorkspaceFileMcpDelivery` | `cursor-cli` | File `<workspace>/.cursor/mcp.json` CLI tự đọc theo cwd, argv chỉ thêm `--approve-mcps` |
+| `bridge-tools` | `ToolBridgeMcpDelivery` | `openai-api` · `gemini-api` · `xai-api` · `anthropic-api` | Dashboard tự mở phiên MCP cho từng server, khai tool `mcp__<server>__<tool>` vào vòng tool-use |
+| `unsupported` | `NoMcpDelivery` / không khai | `codex-cli` · `console-command` | — |
+
+- **Trình tự cố định** (`McpJobDelivery.prepare`, Template Method): entry tự gắn (`extraServers`) → chọn server (`mcpRegistry.select`) → giao (`attach`). Hai cách giao bằng file dùng chung `FileMcpDelivery`: dựng nội dung từ `McpServerSet.toCliConfig`, hiện thực chỉ quyết file nằm đâu và dọn ra sao.
+- **Không Connection nào bật MCP** ⇒ `prepare` trả `null` trước `attach`: argv không đổi, 🚫 không file nào chạm đĩa, không phiên nào mở. Mọi server được chọn đều rụng (tắt / đã xoá) cũng vẫn trả `null` để giữ đúng bất biến đó.
+- **Credential**: một `RunnerCredentialResolver` (adapter của port `CredentialResolver` trên kho credential của runner) dùng chung cho cả ba cách giao, nên `credentialId` của server từ xa giải giống hệt nhau ở mọi đường. `registry.ts` còn đăng ký đúng instance đó bằng `useCredentialResolver` lúc nạp; *Kiểm tra kết nối* (`mcp/controller.ts`) lấy lại bằng `credentialResolver()` nên `mcp` 🚫 import `runner`. Tiến trình chưa nạp `runner` (stdio `mcp/stdio.ts`, test chỉ nạp `mcp`) nhận `null` ⇒ server từ xa chạy không header xác thực, kèm cảnh báo `credential … không giải được secret — bỏ header xác thực`.
+- **Catalog** (`listProviderCatalog`, `registry.ts`): `mcpDelivery` lấy thẳng `provider.mcpDelivery.kind` — 🚫 không có bảng tra riêng theo `providerId` để lệch khỏi thứ job thật sự nhận.
+- **Node điều phối**: chỉ delivery có `acceptsSelfServer` (hiện là `ConfigFlagMcpDelivery`) mới tự gắn entry `dev-team-dashboard` cho job điều phối; `resolveDecisionRoute` đọc cùng cờ đó, cộng `SelfMcpServer.canAttach()`, để chốt tuyến `mcp` hay `sentinel`. Entry dựng bằng `SelfMcpServer.forJob(metadata)` — cùng guard với env điều phối mà `claude-code-cli` bơm cho CLI (`SelfMcpServer.childEnv`), nên không có job mang tool mà thiếu token. Entry giữ env tối thiểu: `command` = `process.execPath`, `args` = `[<mcp/stdio.ts>, '--mode=full']`, env chỉ `DEVTEAM_MCP_MODE` + token + base URL.
+
+File cấu hình job của claude:
+
+- **Vị trí**: `registryHome()/mcp-runtime/` — 🚫 **không** trong workspace người dùng. File chứa secret đã giải; nằm trong repo thì lọt `git status` của chính agent.
+- **Quyền**: thư mục `0700`, file `0600` — `mode` set ngay lúc tạo (`writeFileSync` với `{ mode }`) nên không có cửa sổ file `0644` chứa token đã giải; thêm một `chmodSafe` ngay sau để phủ ca ghi đè, vì `writeFileSync` giữ nguyên mode cũ khi file đã tồn tại.
+- **`--strict-mcp-config`** bắt buộc đi kèm — không có nó, job còn ăn thêm MCP từ cấu hình khác.
 - **`startupTimeoutSec`** chỉ ghi cho entry `stdio` (schema CLI gắn khoá này sau predicate `transport === 'stdio'`), kẹp về `[5, 600]` **giây** và làm tròn về số nguyên giây. Server không khai `timeoutMs` ⇒ 🚫 không khai khoá ⇒ CLI dùng mặc định 120s của nó.
-- **Không Connection nào bật MCP** ⇒ hàm trả `null`, argv không đổi, 🚫 không file nào chạm đĩa. Mọi server được chọn đều rụng (tắt / đã xoá) cũng vẫn trả `null` để giữ đúng bất biến đó.
+
+Dọn: `dispose()` của handle chạy trong `finally` của job. Ca dashboard bị kill giữa chừng do `cleanupOrphanedMcpDeliveries()` (`registry.ts`) lo lúc bootstrap — gọi `cleanupOrphans()` một lần cho mỗi `kind`: claude xoá file `job-*.json`, cursor duyệt ledger `mcp-runtime/cursor-workspaces.json` để khôi phục `.cursor/mcp.json` gốc và nhả khoá treo.
 
 ---
 
@@ -150,6 +165,7 @@ Vai client nằm ở `src/features/mcp/business/`, mỗi abstraction một file 
 | `McpServerSet.ts` | Bộ server của một job (`McpRegistry.select`) → `toCliConfig` sinh nội dung file `mcpServers` (§7) |
 | `McpClient.ts` | `McpClient.probe` (*Kiểm tra kết nối*) · `McpClient.open` → `McpSession` (phiên sống theo job của họ `ai-api`) |
 | `SecretMasker.ts` | Value object che secret (§5): `mask` · `maskDeep` · `stream`, cùng quy tắc nhận diện secret trong `args`. **Node-free** — dialog dùng chung quy tắc này |
-| `CredentialResolver.ts` | Cổng giải secret của credential profile — `runner` hiện thực, `mcp` 🚫 biết credential store |
+| `CredentialResolver.ts` | Cổng giải secret của credential profile — `runner` hiện thực và đăng ký (`useCredentialResolver`), `mcp` 🚫 biết credential store; caller không nhận resolver qua tham số lấy bằng `credentialResolver()` |
+| `SelfMcpServer.ts` | `extends StdioMcpServer` — entry trỏ vào chính dashboard cho job điều phối (`forJob`, `canAttach`, `childEnv`) và **nguồn hằng hợp đồng xuyên process** với `mcp/stdio.ts` ([`server.md`](server.md) §8.1) |
 
 Kiểu dữ liệu và hằng một nguồn ở `src/features/mcp/schemas/mcpServer.ts` (schema Zod, type `z.infer`). FE chỉ import `schemas/mcpServer.ts` và `SecretMasker.ts` — các lớp còn lại kéo SDK MCP nên chỉ chạy ở backend.
