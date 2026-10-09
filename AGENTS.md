@@ -257,6 +257,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Không wiring thủ công** — không thêm tay nếu glob/auto-load đã đủ (route / `apiServer` registry / styles / locales / `registerMode`).
 - [ ] **Đặt style đúng tầng** — 1 component render selector gốc → `<style scoped>`; ≥2 cùng feature → `features/<f>/styles/`; xuyên feature → `src/frontend/styles/`. Không thêm file `styles/*.scss` chỉ-comment.
 - [ ] **Danh sách dài không bị cắt cụt** — xem checklist **Chiến lược tràn nội dung UI** ở [Testing](#testing).
+- [ ] **Dialog modal qua `CDialog`** — không tự dựng `Teleport` / `.modal-backdrop` / handler `Escape` trong feature; [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) §3.
 - [ ] **Tuân thủ mode-registry khi thêm/sửa mode** — đối chiếu checklist Implement › **Thêm mode mới ở FE shell**.
 - [ ] **Chia file theo abstraction ↔ hiện thực** — trong `business/` / `mcp/`: một abstraction một file, một hiện thực một file; abstraction không chứa chi tiết (env var, path, tên nhà cung cấp); không gom interface vào `types.ts` chung.
 - [ ] **Module không có abstraction thì gom theo nghiệp vụ** — không tách file theo kiểu thao tác (`store` / `fetch` / `paths` / `scan` mỏng).

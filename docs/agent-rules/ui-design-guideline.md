@@ -1,6 +1,6 @@
-# UI design — button & chiến lược tràn nội dung
+# UI design — button, chiến lược tràn nội dung & dialog
 
-Áp dụng khi thêm/sửa giao diện dashboard: nút bấm, và mọi vùng có chiều cao phụ thuộc dữ liệu (danh sách, cây, body dialog, panel log).
+Áp dụng khi thêm/sửa giao diện dashboard: nút bấm, mọi vùng có chiều cao phụ thuộc dữ liệu (danh sách, cây, body dialog, panel log), và dialog modal.
 
 ---
 
@@ -122,4 +122,59 @@ Khi một panel chỉ nên giành chiều cao lúc nội dung của nó đang m�
 
 **Task list ở Monitor** — `src/features/monitor/styles/TaskList.scss`. `.tasklist-panel` là `flex` + `min-height: 0` + `overflow: hidden`; `.tasklist` là lá mang `overflow-y: auto; flex: 1; min-height: 0`. Hai chế độ sizing là hai class khác nhau: `.tasklist--active` chia phần còn lại, `.tasklist--archived` cap `max-height: min(40vh, 280px)`.
 
-**Dialog `.modal`** — `src/frontend/styles/_shell.scss` ghi thẳng hợp đồng: *dialog dùng `.modal` PHẢI có đúng một `.modal-body` bọc phần nội dung*. `.modal` không khai báo `overflow`; nó dựa vào `.modal-body` (`flex: 1; min-height: 0; overflow-y: auto`) để hút phần cao quá `max-height: 88vh`. Đặt nội dung thẳng vào `.modal` thì khi vượt 88vh, hàng nút `.modal-actions` bị vẽ ra ngoài border dưới.
+**Dialog `.modal`** — `src/frontend/styles/_shell.scss` ghi thẳng hợp đồng: *dialog dùng `.modal` PHẢI có đúng một `.modal-body` bọc phần nội dung*. `.modal` không khai báo `overflow`; nó dựa vào `.modal-body` (`flex: 1; min-height: 0; overflow-y: auto`) để hút phần cao quá `max-height: 88vh`. Đặt nội dung thẳng vào `.modal` thì khi vượt 88vh, hàng nút `.modal-actions` bị vẽ ra ngoài border dưới. `CDialog` dựng sẵn đúng chuỗi này — xem §3.
+
+---
+
+## 3. Dialog
+
+### 3.1 Dùng `CDialog`, không dựng khung tay
+
+Dialog modal mới — và dialog cũ khi sửa tới — dùng `CDialog` (`src/frontend/ui/CDialog.vue`). Component lo phần khung mà trước đây mỗi dialog tự chép lại:
+
+| Phần | `CDialog` lo |
+|---|---|
+| Khung | `Teleport` ra `body` › `.modal-backdrop` › `.modal` › `.modal-head` + `.modal-body` |
+| A11y | `role="dialog"`, `aria-modal`, `aria-labelledby` trỏ vào tiêu đề |
+| Đóng | Nút ✕, click backdrop, `Escape` — cả ba emit `close` |
+| Loading | `.c-loading-host` + `CLoadingOverlay` phủ vùng body khi `loading` |
+
+Feature chỉ viết phần thân: nội dung vào slot mặc định (nằm trong `.modal-body` — vùng cuộn duy nhất, sẵn là flex column), hàng nút vào slot `footer`.
+
+```html
+<CDialog
+  class="runner-dialog"
+  :title="t('runner.dialog.addTitle')"
+  :loading="saving"
+  width="min(520px, 94vw)"
+  @close="emit('close')"
+>
+  <div class="field">…</div>
+
+  <template #footer>
+    <div class="modal-foot">…</div>
+  </template>
+</CDialog>
+```
+
+### 3.2 Prop & slot
+
+| Prop / slot | Dùng khi |
+|---|---|
+| `title` · slot `title` | Tiêu đề; dùng slot khi tiêu đề có markup (vd `<code>`) |
+| Slot `head` | Phần phụ trên header, đứng giữa tiêu đề và nút ✕ (vd bộ đếm bước) |
+| Slot `subhead` | Vùng cố định giữa header và body, không cuộn (stepper, lỗi của cả form) |
+| Slot `footer` | Hàng nút — nằm ngoài vùng cuộn và ngoài overlay |
+| `loading` · `loadingLabel` | Cờ `pending` của `useApiAction` |
+| `closeOnEscape` | `false` khi một lớp phủ không phải `CDialog` (picker, popover) đang mở và tự nghe `Escape` |
+| `closeDisabled` | Chặn cả ba đường đóng trong lúc action chưa xong |
+| `width` · `height` · `minHeight` · `maxHeight` | Giá trị CSS, ghi đè kích thước mặc định của `.modal` |
+| `resizable` | Cho kéo góc đổi kích thước, vẫn giới hạn trong khung nhìn |
+| `closeLabel` | Ghi đè nhãn nút ✕ — mặc định `common.dialog.close` |
+
+### 3.3 Quy tắc
+
+- **Kích thước qua prop, không qua class.** `.modal` nằm trong template của `CDialog` nên không mang scope id của feature: `<style scoped>` khai `.runner-dialog { width: … }` không bao giờ khớp. Class truyền vào `CDialog` (rơi xuống `.modal`) vẫn dùng được làm **tổ tiên** cho selector con (`.runner-dialog .cfg-hint`) và làm móc cho test.
+- **Layout phần thân thì bọc một lớp.** `.modal-body` cũng thuộc `CDialog`, nên `.modal-body { gap: … }` trong style của feature không khớp. Cần `gap` riêng thì đặt một `div` (vd `.knowledge-tag-body`) làm con của slot mặc định, và **không** khai `overflow` cho nó — vùng cuộn vẫn chỉ là `.modal-body` (§2.1 mục 4).
+- **Dialog lồng nhau không cần cờ chặn `Escape`.** `CDialog` giữ một stack theo thứ tự mount (`useDialogStack`), chỉ dialog trên cùng nhận `Escape`. Phím `Escape` đã bị control con `preventDefault` (vd `CSelect` đóng menu) thì dialog bỏ qua.
+- **Thứ tự chồng theo DOM.** Mọi `CDialog` teleport ra cuối `body` lúc mount nên dialog mở sau tự nằm trên; không thêm `z-index` riêng (`.nested-backdrop`).
