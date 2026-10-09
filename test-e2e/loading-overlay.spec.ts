@@ -219,3 +219,68 @@ test('request lỗi cũng không kẹt loading', async ({ page }) => {
   await expect(save).toBeEnabled()
   await expect(dialog).toContainText('E2E conflict')
 })
+
+test('SettingsDialog: overlay neo ở .settings-layout, phủ pane đã cuộn, chừa nút đóng', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 400 })
+  await page.goto('/')
+  await expect(page.locator('.tasklist')).toBeVisible({ timeout: 15_000 })
+  await page.locator('button[title="Cài đặt"]').click()
+  const dialog = page.getByRole('dialog', { name: 'Cài đặt' })
+  await expect(dialog).toBeVisible()
+
+  const host = dialog.locator('.settings-layout.c-loading-host')
+  const pane = dialog.locator('.settings-pane.modal-body')
+  const overlay = dialog.locator('.c-loading-overlay')
+  await expect(host).toHaveCount(1)
+  await expect(host.locator('.settings-pane.modal-body')).toHaveCount(1)
+
+  await pane.evaluate((el) => el.scrollTo(0, el.scrollHeight))
+  const scroll = await pane.evaluate((el) => ({ top: el.scrollTop, overflow: el.scrollHeight - el.clientHeight }))
+  expect(scroll.overflow, '.settings-pane phải thật sự tràn, nếu không ca này không đo gì cả').toBeGreaterThan(0)
+  expect(scroll.top).toBeGreaterThan(0)
+
+  let releaseSave: () => void = () => {}
+  const held = new Promise<void>((resolve) => {
+    releaseSave = resolve
+  })
+  await page.route('**/api/recovery-config', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback()
+    await held
+    await route.continue()
+  })
+
+  const recovery = dialog.getByLabel('Bật tự phục hồi')
+  await expect(recovery).toBeVisible()
+  const before = await recovery.isChecked()
+  await recovery.click()
+
+  await expect(overlay).toHaveCount(1)
+  await expect(overlay).toHaveClass(/is-visible/, { timeout: 5_000 })
+
+  expect(await pane.evaluate((el) => getComputedStyle(el).position)).toBe('static')
+  expect(await host.evaluate((el) => getComputedStyle(el).position)).toBe('relative')
+  expect(await host.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row')
+
+  const overlayBox = (await overlay.boundingBox())!
+  const hostBox = (await host.boundingBox())!
+  const paneBox = (await pane.boundingBox())!
+  expect(Math.abs(overlayBox.x - hostBox.x)).toBeLessThanOrEqual(2)
+  expect(Math.abs(overlayBox.y - hostBox.y)).toBeLessThanOrEqual(2)
+  expect(Math.abs(overlayBox.width - hostBox.width)).toBeLessThanOrEqual(2)
+  expect(Math.abs(overlayBox.height - hostBox.height)).toBeLessThanOrEqual(2)
+  expect(paneBox.y).toBeGreaterThanOrEqual(overlayBox.y - 2)
+  expect(paneBox.y + paneBox.height).toBeLessThanOrEqual(overlayBox.y + overlayBox.height + 2)
+
+  expect(await topElementAtCenterOf(page, recovery)).toContain('c-loading-overlay')
+  const closeBtn = dialog.locator('.modal-head .modal-close')
+  expect(await topElementAtCenterOf(page, closeBtn)).not.toContain('c-loading-overlay')
+
+  releaseSave()
+  await expect(overlay).toHaveCount(0, { timeout: 10_000 })
+  await expect(recovery).toBeEnabled()
+  if ((await recovery.isChecked()) !== before) {
+    await page.unroute('**/api/recovery-config')
+    await recovery.click()
+    await expect(recovery).toBeChecked({ checked: before, timeout: 10_000 })
+  }
+})
