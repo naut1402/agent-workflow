@@ -1,15 +1,6 @@
 import { joinPath, readTextFile } from '../../../backend/lib/fileHelper.js'
 import { loadYaml } from '../../../backend/lib/yamlLib.js'
 
-/**
- * Đọc sidecar `collections.yaml` — chỉ còn lệnh migrate
- * (`src/backend/db/migrateKnowledge.ts`) gọi tới.
- *
- * Từ khi collection và tag lên `dashboard.sqlite`, file này thôi là nguồn sự
- * thật. Nó ở lại trên đĩa làm bản lưu (đúng cách `migrateLogs` đối xử với
- * JSONL nguồn), nên module này cố ý chỉ đọc: không còn đường ghi nào.
- */
-
 export const COLLECTIONS_FILE = 'collections.yaml'
 
 export interface YamlCollection {
@@ -43,13 +34,7 @@ function emptyDoc(): CollectionsDoc {
   return { version: 1, collections: [], tag_aliases: {} }
 }
 
-/**
- * Thiếu file → doc rỗng (sidecar vốn là tuỳ chọn). Parse hỏng → ném.
- *
- * Hai ca này không được gộp: coi file hỏng là rỗng thì lệnh migrate báo
- * "0 collection" và người dùng tưởng project không có gì để chuyển, trong khi
- * dữ liệu vẫn nằm nguyên trên đĩa.
- */
+/** Thiếu file → doc rỗng (sidecar vốn là tuỳ chọn). Parse hỏng → ném. */
 export async function readCollectionsFile(base: string): Promise<CollectionsDoc> {
   let raw: string
   try {

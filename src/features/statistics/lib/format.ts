@@ -1,6 +1,3 @@
-/** Format số liệu thống kê cho bảng/tổng/chart — dùng ở FE (không import node:*). */
-
-/** Đặt dấu phẩy ngăn cách hàng nghìn trong phần nguyên: 1234567.8 → "1,234,567.8". */
 function groupIntegerPart(intPart: string): string {
   return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }

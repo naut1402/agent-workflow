@@ -1,7 +1,3 @@
-// Global dashboard settings under ~/.dev-team-dashboard/settings.json.
-// Autoscan lives at settings.autoscan; legacy autoscan.json is still read once
-// for migration so existing installs keep working.
-
 import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
 import {
   DEFAULT_DASHBOARD_SETTINGS,
@@ -53,7 +49,6 @@ export function loadDashboardSettings(): DashboardSettings {
   const primary = readJsonFile(dashboardSettingsFile())
   if (primary != null) return parseDashboardSettings(primary)
 
-  // Migrate legacy autoscan.json → in-memory settings shape (persisted on next save).
   const legacy = readJsonFile(autoscanFile())
   if (legacy != null) {
     return parseDashboardSettings({
@@ -184,5 +179,4 @@ export function saveSecurityConfig(config: SecurityConfig): SecurityConfig {
   return resolveSecurityFromDashboard(saved)
 }
 
-// Re-export default shape for callers that only need the empty template.
 export { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SECURITY_CONFIG }

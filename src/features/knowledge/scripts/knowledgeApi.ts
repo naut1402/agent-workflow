@@ -1,10 +1,5 @@
 import { apiGet, apiPost, apiRequest } from '../../../frontend/http/client'
 
-/**
- * Hình dạng dữ liệu mà panel nhận về — khai ở tầng client để component không
- * phải import type của backend (ranh giới `src/features/<mode>` ↔ `src/backend`).
- */
-
 /** Entry đã tước `content`/`path` — đúng thứ `driver.list()` trả. */
 export interface KnowledgeEntryMeta {
   id: string
@@ -99,8 +94,6 @@ export async function uploadKnowledgeFile(
     skipJsonContentType: true,
   })
 }
-
-// ── collection & tag admin
 
 export interface CollectionPayload {
   name: string

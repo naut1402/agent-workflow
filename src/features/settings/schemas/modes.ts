@@ -1,20 +1,12 @@
 import { z } from 'zod'
 
-/**
- * Bật/tắt từng mode của shell, lưu ở nhánh `modes` trong settings.json.
- *
- * Chia sẻ giữa server và UI nên file này phải sạch `node:*` / fileHelper.
- * Chỉ chứa cấu hình — quyết định hiển thị nằm ở `core/shell/modeAccess.ts`.
- */
-
 /** Server không biết ModeRegistry (registry ở FE) nên chỉ chặn key dị dạng, không validate danh sách. */
 export const MODE_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/
 
-/** Chặn settings.json phình do client hỏng ghi bừa; 9 mode hiện tại còn rất xa mức này. */
+/** Chặn settings.json phình do client hỏng ghi bừa. */
 export const MODES_MAX_KEYS = 64
 
-// `unknown` chứ không `boolean`: một entry sai kiểu phải bị bỏ riêng nó ở
-// parseModesConfig, không làm safeParse hỏng cả map (xem doc bên dưới).
+// xem docs/architecture/code/settings.md §1
 export const ModesConfigSchema = z
   .object({
     enabled: z.record(z.unknown()).optional(),

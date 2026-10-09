@@ -11,12 +11,7 @@ import {
 } from '../scripts/KnowledgePanelApi'
 import { TAG_COLORS } from '../schemas/knowledge'
 
-/**
- * Tạo / sửa tag: tên + màu + mô tả. Gộp luôn cụm "đổi tên tag" vốn nằm rời ở
- * cột trái — đổi tên là một thuộc tính của tag, không phải một công cụ riêng.
- */
 const props = defineProps<{
-  /** `null` = tạo mới. */
   tag: KnowledgeTagFacetView | null
   projectId?: string
 }>()
@@ -24,7 +19,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   saved: [tag: string, created: boolean]
-  /** Có rewrite front-matter: cha phải nạp lại danh sách entry, không chỉ tag. */
   renamed: [count: number, metaError: string]
 }>()
 
@@ -36,8 +30,7 @@ const name = ref(props.tag?.tag ?? '')
 const renameTo = ref('')
 const color = ref<string>(props.tag?.color ?? 'slate')
 const description = ref(props.tag?.description ?? '')
-// Sửa tag phải ghi lại đúng store đang giữ metadata, nếu không một tag global
-// sẽ đẻ thêm một hàng project mang cùng tên và màu của nó thắng ở mọi project.
+// xem docs/architecture/code/knowledge.md §7
 const scope = ref(props.tag?.scope ?? 'project')
 const { pending: saving, run: runSave } = useApiAction()
 const error = ref('')
@@ -70,10 +63,7 @@ async function save() {
         return
       }
 
-      // `rename` đã tự dời metadata sang tên mới (cùng transaction), nên bước
-      // `PUT` sau đây chỉ để áp màu người dùng vừa chọn. Hỏng bước hai thì
-      // tag mới giữ nguyên màu cũ — không entry nào mất, không hàng mồ côi —
-      // nên báo ra rồi vẫn coi là thành công.
+      // xem docs/architecture/code/knowledge.md §6
       const renamed = await renameKnowledgeTag(props.tag.tag, next, props.projectId)
       let metaError = ''
       try {
@@ -116,8 +106,6 @@ async function save() {
 
       <div class="cfg-label">
         <span>{{ t('knowledge.tags.dialog.color') }}</span>
-        <!-- Palette token cố định: mỗi token khai hai giá trị theo `[data-theme]`
-             nên chip tương phản đúng ở cả hai theme. Giá trị gửi lên là TÊN token. -->
         <div class="knowledge-color-row">
           <button
             v-for="c in TAG_COLORS"

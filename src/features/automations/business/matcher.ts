@@ -1,12 +1,4 @@
-/**
- * Pure trigger matching cho automations (#233): cron 5-field, interval, one-shot.
- * Không fs / không HTTP — unit-test trực tiếp.
- *
- * Cron theo local timezone (Date getter local), ngữ nghĩa Unix vixie-cron:
- * - field: `*`, bước-n (`*` chia n, a-b chia n), `a`, `a-b`, list `a,b,c`;
- *   month/dow nhận tên viết tắt (jan..dec, sun..sat).
- * - dom + dow cùng bị giới hạn → OR (chuẩn cron), còn lại AND.
- */
+// xem docs/architecture/code/automations.md §3
 
 import type { AutomationTrigger } from '../schemas/automation.js'
 
@@ -55,7 +47,6 @@ function parseField(
     let lo: number
     let hi: number
     if (rangePart === '*') {
-      // `*` và `*/n` (kể cả `*/1`) đều hợp lệ — wildcard chỉ khi bare `*`.
       lo = min
       hi = max
       if (part === '*') wildcard = true
@@ -69,7 +60,6 @@ function parseField(
     } else {
       const v = tokenToValue(rangePart, min, max, names)
       if (v === null) return null
-      // `a/n` của cron = bắt đầu từ a, bước n đến max.
       lo = v
       hi = stepPart !== undefined ? max : v
     }
@@ -87,7 +77,6 @@ export function parseCronExpr(expr: string): CronSpec | null {
   const hour = parseField(fields[1], 0, 23)
   const dom = parseField(fields[2], 1, 31)
   const month = parseField(fields[3], 1, 12, MONTH_NAMES)
-  // dow 0-7, 7 ≡ 0 (Chủ nhật) — chuẩn hoá về 0-6.
   const dowRaw = parseField(fields[4], 0, 7, DOW_NAMES)
   if (!minute || !hour || !dom || !month || !dowRaw) return null
   const dowSet = new Set<number>()
@@ -99,7 +88,6 @@ export function parseCronExpr(expr: string): CronSpec | null {
 function matchesDay(spec: CronSpec, d: Date): boolean {
   const domOk = spec.dom.set.has(d.getDate())
   const dowOk = spec.dow.set.has(d.getDay())
-  // Vixie-cron: cả hai cùng restrict → OR; chỉ một restrict → field đó phải khớp.
   const domRestricted = !spec.dom.wildcard
   const dowRestricted = !spec.dow.wildcard
   if (domRestricted && dowRestricted) return domOk || dowOk
@@ -111,7 +99,7 @@ function matchesDay(spec: CronSpec, d: Date): boolean {
 const MINUTE_MS = 60_000
 
 /**
- * Lần khớp cron đầu tiên **sau** thời điểm `after` (local tz), hoặc null khi
+ * Lần khớp cron đầu tiên sau thời điểm `after` (local tz), hoặc null khi
  * không có lần nào trong tầm tìm (tối đa ~4 năm — chặn lịch không thể khớp
  * như "31 2 30 2 *").
  */
@@ -119,7 +107,6 @@ export function nextCronAfter(expr: string, after: Date): Date | null {
   const spec = parseCronExpr(expr)
   if (!spec) return null
 
-  // Duyệt theo ngày (rẻ), trong ngày duyệt giờ/phút của field set (đã sắp xếp).
   const hours = [...spec.hour.set].sort((a, b) => a - b)
   const minutes = [...spec.minute.set].sort((a, b) => a - b)
 
@@ -151,8 +138,6 @@ export function nextCronAfter(expr: string, after: Date): Date | null {
   return null
 }
 
-// ── Đánh giá trigger thời gian (due + next-run) ─────────────────────────────
-
 export interface TriggerRuntimeState {
   /** Lần chạy gần nhất của rule (ISO) — null khi chưa chạy lần nào. */
   lastRunAt: string | null
@@ -167,11 +152,11 @@ export interface TriggerEvaluation {
 }
 
 /**
- * Đánh giá một trigger **thời gian** tại `now` — mọi mode cùng mốc `startAt`:
+ * Đánh giá một trigger thời gian tại `now` — mọi mode cùng mốc `startAt`:
  * - `once`: due đúng một lần khi tới `startAt` và chưa fired.
  * - `interval`: slot chạy = startAt + k·everyMs. Lần đầu due tại `startAt`;
  *   sau mỗi lần chạy, slot kế = slot liền sau `lastRunAt`. Downtime lỡ nhiều
- *   slot → **chạy bù đúng một lần** rồi tính lại.
+ *   slot → chạy bù đúng một lần rồi tính lại.
  * - `cron`: lần khớp đầu tiên sau `lastRunAt` (hoặc `startAt` nếu chưa chạy);
  *   downtime lỡ nhiều lịch → chạy bù một lần.
  */
@@ -194,7 +179,6 @@ export function evaluateTimerTrigger(
   if (trigger.repeat.mode === 'interval') {
     const everyMs = trigger.repeat.everyMs
     if (everyMs <= 0) return { due: false, nextRunAt: null }
-    // Slot kế = slot đầu tiên còn nằm sau lần chạy gần nhất (chưa chạy → startAt).
     let next: number
     if (lastRun === null || Number.isNaN(lastRun)) {
       next = startAt
@@ -205,7 +189,6 @@ export function evaluateTimerTrigger(
     return { due: next <= now.getTime(), nextRunAt: new Date(next).toISOString() }
   }
 
-  // cron — ref = lastRunAt ?? startAt
   const refRaw = state.lastRunAt ?? trigger.startAt
   const ref = Date.parse(refRaw)
   if (Number.isNaN(ref)) return { due: false, nextRunAt: null }
@@ -223,7 +206,7 @@ export interface RuleTriggerEvaluation {
 }
 
 /**
- * Đánh giá toàn bộ trigger của rule tại `now`: rule due khi **bất kỳ** trigger
+ * Đánh giá toàn bộ trigger của rule tại `now`: rule due khi bất kỳ trigger
  * thời gian nào due (event trigger do subscriber xử, không due theo tick).
  */
 export function evaluateRuleTriggers(

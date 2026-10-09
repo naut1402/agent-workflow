@@ -1,9 +1,7 @@
 import { z } from 'zod'
 
-/** `owner/repo` — GitHub repository slug used to look up a PAT. */
 const REPO_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 
-/** Accepts https://github.com/owner/repo[...], git@github.com:owner/repo.git, or owner/repo. */
 const GITHUB_HTTPS_RE =
   /^https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/#?\s]+?)(?:\.git)?(?:\/.*)?(?:[?#].*)?$/i
 const GITHUB_SSH_RE = /^git@github\.com:([^/]+)\/([^/#?\s]+?)(?:\.git)?$/i
@@ -75,7 +73,6 @@ export function parseGithubTokensConfig(raw: unknown): GithubTokensConfig {
   const parsed = GithubTokensConfigSchema.safeParse(raw)
   if (!parsed.success) return { repos: [] }
 
-  // Dedupe by normalised slug — last entry wins; skip invalid refs.
   const bySlug = new Map<string, GithubRepoToken>()
   for (const entry of parsed.data.repos) {
     const repo = parseGithubRepoRef(entry.repo)

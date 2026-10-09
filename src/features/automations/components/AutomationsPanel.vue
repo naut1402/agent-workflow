@@ -39,14 +39,11 @@ const {
 } = useAutomations(() => props.projectId)
 
 const activeTab = ref<'list' | 'history'>('list')
-/** '' = tất cả rule. */
 const historyRuleFilter = ref('')
 const expandedRunId = ref<string | null>(null)
 
 const showForm = ref(false)
 const editRule = ref<AutomationListItem | null>(null)
-// Cặp gán cũ (`saving = true` … `saving = false`) nằm NGOÀI mọi `try`: một
-// lần `create`/`update` ném là kẹt loading vĩnh viễn. `run` nhả ở `finally`.
 const { pending: saving, run: runSave } = useApiAction()
 
 const formServerError = ref('')
@@ -82,7 +79,6 @@ async function onFormSubmit(payload: {
 
 async function onRunNow(rule: AutomationListItem): Promise<void> {
   const run = await runNow(rule.id)
-  // Chuỗi chạy nền — mở tab lịch sử, lọc theo rule và bung sẵn run vừa tạo để theo dõi từng bước.
   historyRuleFilter.value = rule.id
   expandedRunId.value = run?.runId ?? null
   activeTab.value = 'history'
@@ -123,7 +119,6 @@ function toggleRunExpand(runId: string): void {
   expandedRunId.value = expandedRunId.value === runId ? null : runId
 }
 
-/** Tên thân thiện cho outcome/step status, fallback về mã gốc nếu chưa có nhãn (vd job 'cancelled'). */
 function outcomeLabel(code: string): string {
   const key = `automations.outcome.${code}`
   const label = t(key)
@@ -135,7 +130,6 @@ interface StepInputEntry {
   value: string
 }
 
-/** Input đã resolve biến của step — hiển thị lại để người dùng xác nhận đã chạy đúng cấu hình. */
 function stepInputEntries(step: AutomationStepResult): StepInputEntry[] {
   if (!step.input) return []
   return Object.entries(step.input).map(([key, value]) => ({
@@ -157,7 +151,6 @@ function formatTime(iso: string | null): string {
   return d.toLocaleString()
 }
 
-/** Tên thân thiện cho event type: "Job thất bại (job.failed)". */
 function eventLabel(code: string): string {
   const key = `automations.eventNames.${code}`
   const label = t(key)
@@ -206,18 +199,14 @@ function stepLabel(rule: AutomationListItem, index: number): string {
   }
   const name = action.name?.trim() || t(action.mode === 'create' ? 'automations.action.create' : 'automations.action.existing')
   const detail = action.mode === 'existing' && action.taskId ? ` · ${action.taskId}` : ''
-  // Rule sống ở project này nhưng bước có thể chạy ở project khác — nói rõ để
-  // người đọc không nhầm task nằm ở đâu.
   const target = action.projectId ? ` · → ${projectName(action.projectId)}` : ''
   return `${name}${detail}${target}`
 }
 
-/** Tên hiển thị của project đích; chưa nạp được registry thì hiện thẳng id. */
 function projectName(id: string): string {
   return formOptions.value.projects.find((p) => p.id === id)?.name || id
 }
 
-/** Mọi timer một lần đã chạy và không còn lịch nào → hiển thị "one-shot đã chạy". */
 function oneShotDone(rule: AutomationListItem): boolean {
   const timers = rule.triggers.filter((tr) => tr.kind === 'timer')
   if (!timers.length) return false
@@ -527,8 +516,6 @@ onMounted(() => {
   height: 100%;
   padding: 16px;
 
-  /* `.pending-hint`: từ `styles/common.scss` (đã xoá) — class duy nhất ở đó mà
-     panel này render (`class="muted pending-hint"`); `.muted` vẫn do `_shell.scss` lo. */
   .pending-hint {
     border-left: 2px solid var(--border);
     padding-left: 8px;
@@ -578,7 +565,7 @@ onMounted(() => {
 
   .rule-table-wrap {
     flex: 1;
-    min-height: 0; // bắt buộc để flex-child scroll được thay vì tràn cha
+    min-height: 0;
     overflow-y: auto;
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -676,7 +663,6 @@ onMounted(() => {
     }
   }
 
-  /* Mini timeline các bước action trên card. */
   .rule-steps {
     display: flex;
     flex-direction: column;

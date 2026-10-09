@@ -10,14 +10,7 @@ import type {
   UsageTotals,
 } from '../schemas/usageStats.js'
 
-/**
- * Aggregation token usage cho mode Thống kê. Đọc `usage.jsonl` defensive (file
- * thiếu / dòng hỏng → bỏ qua, không throw) rồi group/sum theo dimension có sẵn
- * trên `UsageLogEntry` (projectId/taskId/stepId/jobId/…).
- *
- * `readUsageEntries()` là đơn vị đọc duy nhất của feature, và nó chỉ đọc JSONL —
- * chưa rẽ theo `logging.driver`, nên bật driver `sqlite` là mode Thống kê rỗng.
- */
+// xem docs/architecture/README.md §4.4
 
 /** Số group tối đa trả về — tránh xychart/pie nổ khi có hàng trăm task/job. */
 export const MAX_GROUPS = 200
@@ -53,7 +46,6 @@ export async function readUsageEntries(): Promise<UsageLogEntry[]> {
       if (entry && entry.type === 'usage') entries.push(entry)
     }
   } catch {
-    // File chưa tồn tại / đọc lỗi → empty (bất biến đọc phòng thủ).
     entryCache = null
     return []
   }
@@ -86,7 +78,6 @@ function groupKeyOf(entry: UsageLogEntry, groupBy: UsageGroupBy): string {
     case 'source':
       return entry.source ?? ''
     case 'date':
-      // Bucket UTC `YYYY-MM-DD` — deterministic, không lệch theo TZ server.
       return new Date(entry.ts).toISOString().slice(0, 10)
   }
 }
@@ -104,8 +95,6 @@ function emptyAccumulator(key: string) {
     durationMs: 0,
     firstTs: Number.POSITIVE_INFINITY,
     lastTs: Number.NEGATIVE_INFINITY,
-    // Mốc min/max/avg theo từng entry — min/max để POSITIVE/NEGATIVE_INFINITY
-    // làm sentinel; durationMs null được map riêng (entry không có duration).
     minTotalTokens: Number.POSITIVE_INFINITY,
     maxTotalTokens: 0,
     minDurationMs: Number.POSITIVE_INFINITY,
@@ -173,8 +162,6 @@ function totalsOf(accs: Accumulator[]): UsageTotals {
     durationMs: total.durationMs,
     firstTs: Number.isFinite(total.firstTs) ? total.firstTs : null,
     lastTs: Number.isFinite(total.lastTs) ? total.lastTs : null,
-    // Entry-level: min/max gộp từ các group, avg chia trên TOÀN bộ entry.
-    // accs rỗng → sentinel Infinity về 0.
     minTotalTokens: Number.isFinite(total.minTotalTokens) ? total.minTotalTokens : 0,
     maxTotalTokens: total.maxTotalTokens,
     avgTotalTokens: total.entries ? total.totalTokens / total.entries : 0,
@@ -240,8 +227,6 @@ export function aggregateUsage(
   }
 
   const all = [...byKey.values()]
-  // `date` giữ thứ tự thời gian tăng dần cho line chart; dimension khác thì
-  // giảm dần theo totalTokens (group "nặng nhất" lên đầu bảng + biểu đồ).
   if (opts.groupBy === 'date') all.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
   else all.sort((a, b) => b.totalTokens - a.totalTokens)
 

@@ -16,12 +16,6 @@ import {
 import { openSseStream, type SseStream } from '../../../frontend/lib/sseClient'
 import { ensureDashboardTransport, isSseEnabled } from '../../../frontend/lib/dashboardTransport'
 
-/**
- * State machine cho AutomationsPanel (#233): list + CRUD + run-now + history,
- * poll nhẹ (10s) để làm mới last-run/next-run khi panel đang mở.
- * Composable thuần (không render) — unit-test được bằng cách mock API script.
- */
-
 const POLL_MS = 10_000
 
 const EMPTY_OPTIONS: AutomationFormOptions = { tasks: [], profiles: [], runners: [], projects: [] }
@@ -29,18 +23,12 @@ const EMPTY_OPTIONS: AutomationFormOptions = { tasks: [], profiles: [], runners:
 export function useAutomations(getProjectId: () => string | undefined) {
   const automations = ref<AutomationListItem[]>([])
   const eventTypes = ref<string[]>([])
-  /**
-   * Options theo project — khoá `''` là project đang chọn (hành vi cũ), các khoá
-   * khác là project đích của một bước action runTask.
-   */
   const optionsByProject = ref<Record<string, AutomationFormOptions>>({})
-  /** Options của project đang chọn — giữ nguyên tên/kiểu cho call site cũ. */
   const formOptions = computed<AutomationFormOptions>(() => optionsByProject.value[''] ?? EMPTY_OPTIONS)
   const loading = ref(false)
   const error = ref('')
   const actionError = ref('')
 
-  /** Lịch sử thực thi toàn project (mọi rule) — tab "Lịch sử thực thi". */
   const runs = ref<AutomationRun[]>([])
   const runsLoading = ref(false)
   const runningIds = ref<Set<string>>(new Set())
@@ -70,10 +58,6 @@ export function useAutomations(getProjectId: () => string | undefined) {
     }
   }
 
-  /**
-   * Options cho combobox task/profile/runner — load lại mỗi lần mở form.
-   * `targetId` rỗng/không truyền = project đang chọn.
-   */
   async function loadFormOptions(targetId?: string): Promise<void> {
     const key = (targetId ?? '').trim()
     try {
@@ -81,16 +65,13 @@ export function useAutomations(getProjectId: () => string | undefined) {
       optionsByProject.value = { ...optionsByProject.value, [key]: data }
     } catch {
       const next = { ...optionsByProject.value }
-      // Không cache kết quả lỗi của project đích: `ensureFormOptions` thấy khoá đã
-      // tồn tại là thôi fetch, nên một lần lỗi mạng sẽ làm combobox của project đó
-      // rỗng suốt phiên. Khoá '' vẫn ghi rỗng — call site cũ cần giá trị để render.
+      // xem docs/architecture/code/automations.md §4
       if (key) delete next[key]
       else next[key] = { ...EMPTY_OPTIONS }
       optionsByProject.value = next
     }
   }
 
-  /** Nạp options của một project đích nếu chưa có — dialog gọi khi một bước đổi project. */
   async function ensureFormOptions(targetId: string): Promise<void> {
     const key = targetId.trim()
     if (!key || optionsByProject.value[key]) return
@@ -159,7 +140,6 @@ export function useAutomations(getProjectId: () => string | undefined) {
     }
   }
 
-  /** Lịch sử thực thi toàn project (mọi rule) — tab "Lịch sử thực thi". */
   async function loadRuns(): Promise<void> {
     runsLoading.value = true
     try {
@@ -172,8 +152,6 @@ export function useAutomations(getProjectId: () => string | undefined) {
     }
   }
 
-  // Panel mount/unmount điều khiển vòng đời — SSE (event bus đã đủ automation.*/
-  // entity.*) khi bật, fallback poll nhẹ (10s) khi transport = polling.
   let timer: ReturnType<typeof setInterval> | null = null
   let stream: SseStream | null = null
   let generation = 0
@@ -212,9 +190,6 @@ export function useAutomations(getProjectId: () => string | undefined) {
   watch(
     () => getProjectId(),
     () => {
-      // Options cũ thuộc project trước — bỏ hết rồi nạp lại ngay khoá project đang
-      // chọn: badge "project đích" ở bảng rule cần `projects` để đổi id sang tên,
-      // không đợi tới lúc người dùng mở dialog.
       optionsByProject.value = {}
       void load()
       void loadEventTypes()

@@ -3,11 +3,7 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref } from 'vue'
 import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
 
-/**
- * Không còn `slug`: nó là phần nội suy từ title (driver tự sinh và tự
- * chống trùng), đúng như mọi chỗ khác trong dashboard. Ở đường sửa thì slug vốn
- * đã lấy từ `id` và giá trị client gửi bị bỏ qua, nên ô này chưa bao giờ có tác dụng.
- */
+/** Không có `slug`: driver tự nội suy từ title và tự chống trùng. */
 export interface KnowledgeDraft {
   title: string
   scope: string
@@ -24,7 +20,6 @@ defineProps<{
 
 const draft = defineModel<KnowledgeDraft>('draft', { required: true })
 
-// Không còn `delete`: nút xoá đã chuyển ra hàng danh sách ở cột trái.
 const emit = defineEmits<{ close: []; save: [] }>()
 
 const { t } = useI18nHelpers()
@@ -64,8 +59,6 @@ function removeTag(i: number) {
         </label>
         <label class="cfg-label">
           {{ t('knowledge.fields.scope') }}
-          <!-- Khoá khi sửa: scope nằm trong id, đổi scope là đổi id và phá mọi
-               `knowledge_inputs` đang trỏ tới entry này. -->
           <select v-model="draft.scope" class="cfg-input" :disabled="!!selectedId">
             <option value="project">project</option>
             <option value="system">system</option>
@@ -102,7 +95,6 @@ function removeTag(i: number) {
         </div>
       </div>
 
-      <!-- `Lưu` đứng TRƯỚC `Hủy`, đúng thứ tự `AgentFormDialog` đã land. -->
       <div class="modal-foot">
         <span v-if="message" class="save-msg">{{ message }}</span>
         <span v-if="error" class="err">{{ error }}</span>
@@ -124,13 +116,10 @@ function removeTag(i: number) {
   max-height: min(76vh, 760px);
   overflow-y: auto;
 }
-/* flex:1 + min-height:<content> lets the label shrink below Toast UI height,
-   so the editor overflows and covers the actions row (esp. visible in light theme). */
+// xem docs/architecture/code/knowledge.md §7
 .knowledge-content-label {
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
 }
-/* Không khai `.modal-foot` cục bộ nữa — padding và thứ tự lấy bản chung ở
-   `_shell.scss`, để mọi dialog của dashboard canh giống nhau. */
 </style>

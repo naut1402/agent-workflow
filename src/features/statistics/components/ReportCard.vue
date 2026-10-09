@@ -3,11 +3,6 @@ import { computed } from 'vue'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { formatNumber, type NumberFormat } from '../lib/format'
 
-/**
- * Thẻ report xếp hạng top-N: các item theo metric được chọn, hướng lớn/nhớn
- * nhất điều khiển bởi config. Vẽ bằng table thuần + bar tỷ lệ — không dùng
- * chart.js. Sống trong ChartTile nên co giãn như chart.
- */
 const props = withDefaults(
   defineProps<{
     labels: string[]
@@ -15,7 +10,6 @@ const props = withDefaults(
     topN: number
     direction: 'top' | 'bottom'
     numberFormat?: NumberFormat
-    /** Nhãn metric cho cột giá trị (vd "Input tokens"). */
     metricLabel?: string
     loading?: boolean
   }>(),
@@ -28,14 +22,14 @@ interface RankRow {
   rank: number
   label: string
   value: number
-  ratio: number // 0..1 so với max trong danh sách
+  ratio: number
 }
 
 const ranking = computed<RankRow[]>(() => {
   const pairs = props.labels
     .map((label, i) => ({ label, value: props.values[i] ?? 0 }))
     .filter((p) => p.label !== '')
-  pairs.sort((a, b) => b.value - a.value) // desc
+  pairs.sort((a, b) => b.value - a.value)
   const sliced = props.direction === 'top' ? pairs.slice(0, props.topN) : pairs.slice(-props.topN).reverse()
   const max = sliced.length ? Math.max(...sliced.map((p) => p.value)) : 0
   return sliced.map((p, i) => ({

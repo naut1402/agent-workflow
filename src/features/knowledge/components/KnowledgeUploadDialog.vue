@@ -5,7 +5,6 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import { uploadKnowledgeFile } from '../scripts/KnowledgePanelApi'
 
-/** Hộp upload inline cũ, chuyển nguyên nội dung vào dialog (trigger là icon button). */
 const props = defineProps<{ projectId?: string }>()
 
 const emit = defineEmits<{ close: []; uploaded: [id: string] }>()
@@ -34,7 +33,6 @@ async function onFileUpload(event: Event) {
     } catch (e: any) {
       error.value = String(e.message || e)
     } finally {
-      // Reset để chọn lại đúng file vừa hỏng vẫn bắn `change`.
       input.value = ''
     }
   })

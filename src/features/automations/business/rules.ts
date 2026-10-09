@@ -1,12 +1,3 @@
-/**
- * CRUD automation rule — persist `<root>/automations/<id>.yaml` (data root,
- * cùng pattern `pipeline-profiles/`). Defensive read (file hỏng → skip) +
- * atomic write (temp + rename) theo bất biến AGENTS.md §4.
- *
- * Đọc file cũ (trigger/action đơn) được chuẩn hoá sang shape hiện hành qua
- * `normaliseAutomationDoc` — ghi lại luôn theo shape mới.
- */
-
 import {
   existsSync,
   joinPath,
@@ -55,11 +46,9 @@ export function sanitiseAutomationId(name: unknown): string {
     .replace(/-+$/g, '')
 }
 
-/** Ngữ nghĩa trigger mà Zod không đo được (cron parse được; id trùng nhau). */
 function validateTriggersSemantics(triggers: AutomationTrigger[]): string | null {
   const ids = new Set<string>()
   for (const trigger of triggers) {
-    // Trigger thiếu id được mint sau — chỉ tính trùng với id đã gửi.
     if (trigger.id) {
       if (ids.has(trigger.id)) return 'duplicate trigger id'
       ids.add(trigger.id)
@@ -71,7 +60,6 @@ function validateTriggersSemantics(triggers: AutomationTrigger[]): string | null
   return null
 }
 
-/** Sinh id ổn định cho trigger thiếu id (`t1`, `t2`… — không trùng trong rule). */
 function withTriggerIds(triggers: AutomationTrigger[]): AutomationTrigger[] {
   const used = new Set<string>()
   let n = 1
@@ -88,7 +76,6 @@ function withTriggerIds(triggers: AutomationTrigger[]): AutomationTrigger[] {
   })
 }
 
-/** Đọc một file rule — parse hỏng trả null (defensive), không throw. */
 function loadRule(root: string, id: string): AutomationRuleRecordType | null {
   let raw: unknown
   try {
@@ -109,7 +96,6 @@ function writeRuleAtomic(root: string, rule: AutomationRuleRecordType): void {
   renameSync(tmp, file)
 }
 
-/** Liệt kê file rule `.yaml` (bỏ tmp) — thư mục chưa có / lỗi → []. */
 function listRuleFiles(dir: string): string[] {
   try {
     return readdirSync(dir).filter((f) => f.endsWith('.yaml') && !f.endsWith('.tmp'))
@@ -227,13 +213,10 @@ export function deleteAutomation(root: string, id: string): { ok: true } | { ok:
 
 /**
  * Rule thuần one-shot (mọi trigger đều timer `once`) đã tới hạn thì ghi
- * `enabled: false` VÀO FILE YAML — state runtime ở registryHome có thể mất
- * khi redeploy docker (container mới), nhưng rule file nằm ở data root
- * (volume mount) nên cấm chạy lại một cách bền vững. Trả true nếu đã disable.
+ * `enabled: false` vào file YAML. Trả true nếu đã disable.
+ * xem docs/architecture/code/automations.md §2
  */
 export function disableIfAllOnceTriggersSpent(root: string, rule: AutomationRuleRecordType): boolean {
-  // Đọc lại từ file — object truyền vào có thể là bản cũ trong bộ nhớ
-  // (run kéo dài, container khác vừa ghi…).
   const current = loadRule(root, rule.id)
   if (!current || !current.enabled || current.triggers.length === 0) return false
   const now = Date.now()
@@ -244,11 +227,6 @@ export function disableIfAllOnceTriggersSpent(root: string, rule: AutomationRule
   const result = setAutomationEnabled(root, rule.id, false)
   return !('error' in result)
 }
-
-// ── Epic D trigger registry (contract-only stub) ─────────────────────────────
-//
-// Đồng bộ rule đang bật vào registry để `listTriggers()` phản ánh đúng "trigger
-// đang sống" — runtime thật vẫn là scheduler/event subscriber của feature này.
 
 export function syncTriggerRegistry(root: string, projectId: string): void {
   const rules = listAutomations(root)

@@ -3,25 +3,15 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import Icon from '../../../frontend/ui/Icon.vue'
 import type { KnowledgeCollectionView, KnowledgeEntryMeta, KnowledgeTagFacetView } from '../scripts/KnowledgePanelApi'
 
-/**
- * Cột trái của màn knowledge: cụm icon action + tab scope + ô tìm (neo cố định),
- * dưới là 3 nhóm `<details>` — tài liệu · collection · tag — mỗi nhóm cuộn riêng.
- *
- * Thuần trình bày: mọi thao tác đi lên `KnowledgePanel` qua emit, component này
- * không gọi API.
- */
 const props = defineProps<{
   entries: KnowledgeEntryMeta[]
   loading: boolean
   collections: KnowledgeCollectionView[]
-  /** Lỗi đọc DB — hiện ra và khoá đường ghi của nhóm collection/tag. */
   collectionsError: string
   activeCollection: string
   tags: KnowledgeTagFacetView[]
   tagFilter: string[]
-  /** Entry đang hiển thị ở main — null khi chưa chọn. */
   viewingId: string | null
-  /** Entry đang xoá dở; chặn double-click ngay ở nút. */
   busyId: string | null
 }>()
 
@@ -49,7 +39,6 @@ const { t } = useI18nHelpers()
 
 const SCOPE_TABS = ['project', 'system', 'global'] as const
 
-/** Màu tag đi vào CSS qua biến inline; `.chip-tag` ở `_shell.scss` đọc chúng. */
 function tagStyle(tag: KnowledgeTagFacetView) {
   return {
     '--tag-c': `var(--tag-${tag.color})`,
@@ -60,7 +49,6 @@ function tagStyle(tag: KnowledgeTagFacetView) {
 
 <template>
   <div class="knowledge-side-menu">
-    <!-- Icon button, không text (docs/agent-rules/ui-design-guideline.md): 3 action của cả màn. -->
     <div class="knowledge-side-actions">
       <button
         type="button"
@@ -114,7 +102,6 @@ function tagStyle(tag: KnowledgeTagFacetView) {
     </div>
 
     <div class="knowledge-side-groups">
-      <!-- ── Tài liệu ────────────────────────────────────────────────────── -->
       <details class="knowledge-group" open>
         <summary>
           <span>{{ t('knowledge.list.title') }}</span>
@@ -163,7 +150,6 @@ function tagStyle(tag: KnowledgeTagFacetView) {
               >
                 <Icon name="download" :size="14" />
               </button>
-              <!-- Xoá đứng cuối: action phá huỷ không nằm cạnh action thường. -->
               <button
                 type="button"
                 class="icon-btn icon-btn-inline danger"
@@ -179,13 +165,11 @@ function tagStyle(tag: KnowledgeTagFacetView) {
         </ul>
       </details>
 
-      <!-- ── Collection ──────────────────────────────────────────────────── -->
       <details class="knowledge-group">
         <summary>
           <span>{{ t('knowledge.collections.title') }}</span>
           <span class="muted">({{ collections.length }})</span>
-          <!-- `<button>` trong `<summary>` mặc định VẪN toggle `<details>` —
-               thiếu `.stop.prevent` là bấm `+` vừa mở dialog vừa gập nhóm. -->
+          <!-- xem docs/architecture/code/knowledge.md §7 -->
           <button
             type="button"
             class="icon-btn icon-btn-inline knowledge-group-add"
@@ -215,8 +199,6 @@ function tagStyle(tag: KnowledgeTagFacetView) {
               @click="emit('select-collection', c.id)"
             >
               {{ c.name }}
-              <!-- Nhóm rỗng vẫn hiện kèm số `0`: từ khi lên DB đó là trạng thái
-                   hợp lệ, lọc mất là vừa tạo xong đã không thấy đâu. -->
               <span class="muted">({{ c.entryCount }} · {{ c.scope }})</span>
             </button>
             <div class="icon-btn-group">
@@ -245,7 +227,6 @@ function tagStyle(tag: KnowledgeTagFacetView) {
         </ul>
       </details>
 
-      <!-- ── Tag ─────────────────────────────────────────────────────────── -->
       <details class="knowledge-group">
         <summary>
           <span>{{ t('knowledge.tags.title') }}</span>
@@ -297,9 +278,7 @@ function tagStyle(tag: KnowledgeTagFacetView) {
 </template>
 
 <style scoped lang="scss">
-/* Chuỗi overflow (docs/agent-rules/ui-design-guideline.md): mỗi nhóm có vùng cuộn RIÊNG, nên chuỗi
-   flex phải đi xuyên qua `<details>` — đó đúng là ca bắt buộc khai
-   `::details-content`. Lá duy nhất mang `overflow-y: auto` là `<ul>`. */
+// xem docs/agent-rules/ui-design-guideline.md §2.2
 .knowledge-side-menu {
   display: flex;
   flex-direction: column;
@@ -366,7 +345,6 @@ function tagStyle(tag: KnowledgeTagFacetView) {
   overflow: hidden;
   flex: 0 0 auto;
 }
-/* Chỉ nhóm đang mở mới giành chiều cao — ba nhóm đóng thì summary xếp sát nhau. */
 .knowledge-group[open] { flex: 1 1 0; }
 .knowledge-group::details-content {
   display: flex;
@@ -394,9 +372,6 @@ function tagStyle(tag: KnowledgeTagFacetView) {
 .knowledge-group[open] > summary::before { transform: rotate(90deg); color: var(--accent); }
 .knowledge-group-add { margin-left: auto; }
 
-/* Lá DUY NHẤT cuộn. Không cap `max-height` ở đây: phần chiều cao mà
-   `.knowledge-group[open]` giành được ĐÃ là trần rồi, thêm cap nữa chỉ tạo
-   khoảng chết bên trong nhóm và đẩy hai nhóm còn lại xuống đáy cột. */
 .knowledge-list {
   list-style: none;
   margin: 0;

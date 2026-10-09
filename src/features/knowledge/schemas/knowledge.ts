@@ -1,13 +1,9 @@
 import { z } from 'zod'
 
 /**
- * Zod là nguồn chân lý cho bề mặt HTTP của knowledge — controller parse mọi
- * query/body qua đây, driver không tin request nữa.
- *
  * `KNOWLEDGE_SCOPES` là nguồn duy nhất của danh sách scope: `fileDriver` tra
- * bảng `scope → base` theo đúng thứ tự này, nên thêm scope là sửa một chỗ.
- * Scope nằm trong id (`<scope>/<slug>`) nên chỉ được *thêm* giá trị mới,
- * đổi giá trị cũ là đổi id của mọi entry đang tồn tại.
+ * bảng `scope → base` theo đúng thứ tự này.
+ * xem docs/architecture/code/knowledge.md §2
  */
 export const KNOWLEDGE_SCOPES = ['project', 'system', 'global'] as const
 
@@ -57,10 +53,7 @@ export const TagRenameBody = z.object({ from: z.string().min(1), to: z.string().
 
 /**
  * Palette màu tag — DB lưu tên token, không lưu hex.
- *
- * Mỗi token khai hai giá trị trong `_tokens.scss` theo `[data-theme]` nên chip
- * tương phản đúng ở cả hai theme; hex tự do thì màu chọn ở theme tối thành
- * không đọc được ở theme sáng. Đổi bảng màu sau này không phải migrate dữ liệu.
+ * Mỗi token khai hai giá trị trong `_tokens.scss` theo `[data-theme]`.
  */
 export const TAG_COLORS = [
   'slate',

@@ -1,5 +1,3 @@
-// Strings for the `knowledge` feature module (left sub-menu: icon action, 3
-// collapse groups; main markdown viewer; edit/upload/collection/tag dialogs).
 export default {
   title: 'Knowledge',
   actions: {
@@ -50,7 +48,6 @@ export default {
       editTitle: 'Sửa collection — {id}',
       name: 'Tên',
       description: 'Mô tả',
-      // Hai cơ chế gom thành viên, cộng dồn chứ không loại trừ nhau.
       byEntries: 'Chọn tài liệu thủ công',
       byTags: 'Hoặc gom theo tag (entry phải mang đủ mọi tag đã chọn)',
       entrySearchPlaceholder: 'Lọc tài liệu…',
@@ -67,7 +64,6 @@ export default {
     created: 'Đã tạo tag {tag}',
     updated: 'Đã cập nhật tag {tag}',
     renamed: 'Đã cập nhật {count} entry',
-    // Đổi tên xong nhưng bước áp màu mới hỏng — entry an toàn, tag giữ màu cũ.
     renamedNoMeta: 'Đã đổi tên {count} entry; tag giữ nguyên màu cũ vì chưa lưu được màu mới: {error}',
     dialog: {
       createTitle: 'Thêm tag',
@@ -116,8 +112,6 @@ export default {
     deleted: 'Đã xóa',
     uploaded: 'Đã upload {id}',
     confirmDelete: 'Xóa "{id}"?',
-    // Bundle trả `{ id, error }` cho item vượt trần — ghi vào file gộp VÀ báo
-    // lên UI, không bỏ im lặng.
     downloadPartial: 'Đã tải, nhưng {count} entry không lấy được nội dung (xem chú thích trong file).',
   },
 }

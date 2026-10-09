@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 /** Server-side job-recovery block inside global dashboard settings.json. */
 export const RecoverySettingsSchema = z.object({
-  /** Master switch — off falls back to pre-#209 behaviour (every failure → `failed`). */
+  /** Master switch — off means every failure → `failed`. */
   enabled: z.boolean().default(true),
   /** Max retry attempts for `process_crash` before giving up (`failed`). */
   maxAttempts: z.number().int().min(1).max(10).optional(),

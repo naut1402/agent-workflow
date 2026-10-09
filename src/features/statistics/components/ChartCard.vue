@@ -6,20 +6,10 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { formatNumber, type NumberFormat } from '../lib/format'
 import type { ChartKind, ChartStyleConfig } from '../lib/chartConfig'
 
-// Nhãn trên section pie (giá trị/phần trăm) — bật/tắt theo styleConfig.
 Chart.register(ChartDataLabels)
 
-/**
- * Wrapper chart cho statistics (issue #231 quyết định 1): nhận DATA + config,
- * nội bộ render bằng chart.js. Trước đây dùng mermaid — đổi renderer chỉ sửa
- * file này, consumers và test không đổi.
- *
- * Chart vẽ full panel (responsive theo container, height = style.height).
- * Không chứa nút bấm — ChartTile (cha) sở hữu action group theo con trỏ.
- */
 const props = withDefaults(
   defineProps<{
-    /** Tiêu đề VẼ TRONG chart; rỗng → không vẽ. */
     title?: string
     chartType: ChartKind
     labels: string[]
@@ -39,7 +29,6 @@ const hasData = computed(
   () => props.labels.length > 0 && props.values.some((v) => Number.isFinite(v) && v > 0),
 )
 
-/** Màu chữ/line theo theme shell — đọc CSS var, cập nhật khi data-theme đổi. */
 function themeColors() {
   const styles = getComputedStyle(document.documentElement)
   return {
@@ -76,8 +65,6 @@ function buildOptions() {
         color: colors.text,
         font: { size: 13 },
       },
-      // chartjs-plugin-datalabels: chỉ bật trên pie theo checkbox setting;
-      // bar/line tắt hẳn để không dán số lên cột.
       datalabels: {
         display: showSliceValues || showSlicePercent,
         color: '#fff',
@@ -181,8 +168,6 @@ function buildChartConfig() {
 function ensureChart() {
   if (!canvasRef.value || !hasData.value) return
   destroyChart()
-  // Plugin datalabels không nằm trong type options của chart.js → cast qua
-  // ChartConfiguration thay vì nới type của builder.
   chart = new Chart(canvasRef.value, buildChartConfig() as unknown as ChartConfiguration)
 }
 
@@ -195,7 +180,6 @@ let themeObserver: MutationObserver | null = null
 
 onMounted(() => {
   ensureChart()
-  // Theme shell đổi `data-theme` trên <html> — vẽ lại theo màu mới.
   themeObserver = new MutationObserver(() => {
     if (chart) {
       chart.options = buildOptions() as unknown as typeof chart.options

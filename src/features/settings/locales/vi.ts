@@ -1,5 +1,3 @@
-// Strings for the settings module (SettingsDialog). The language section
-// reuses common.language.* — those keys are NOT duplicated here.
 export default {
   title: 'Cài đặt',
   close: 'Đóng',

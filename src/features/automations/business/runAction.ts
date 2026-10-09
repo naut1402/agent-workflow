@@ -1,12 +1,3 @@
-/**
- * Thực thi chuỗi action của automation rule. Action chạy tuần tự; mỗi bước
- * chờ job của nó kết thúc rồi capture stdout + artifacts làm biến
- * (`{{steps.N.stdout}}`, `{{steps.N.artifacts.<name>}}`) cho bước sau.
- *
- * Chuỗi chạy nền (fire-and-forget) để không chặn tick scheduler — `inFlight`
- * chặn event-trigger chạy chồng. Thất bại nằm trong run record, không ném lỗi lên caller.
- */
-
 import { joinPath, mkdirSync, randomBytes, randomUUID, readTextFileSync, readdirSync } from '../../../backend/lib/fileHelper.js'
 import { emit } from '../../../backend/events/index.js'
 import { get as getProject } from '../../../backend/registry.js'
@@ -59,7 +50,6 @@ const ARTIFACT_EACH_CAP = 32_000
 const ARTIFACT_TOTAL_CAP = 128_000
 const INPUT_FIELD_CAP = 4_000
 
-/** Tóm tắt input đã resolve biến của action — lưu vào step để xác nhận lại sau khi chạy. */
 function buildStepInput(action: AutomationAction): Record<string, unknown> {
   if (action.kind === 'httpRequest') {
     return {
@@ -96,15 +86,7 @@ interface ActionTarget {
   projectId: string | null
 }
 
-/**
- * Project mà một action `runTask` thực sự chạy trên đó.
- * - Không set / rỗng → project sở hữu rule (hành vi trước khi có field này).
- * - Trùng project của rule → cũng dùng thẳng `input`: rule có thể chạy với
- *   `projectId` không nằm trong registry (test, `DEV_TEAM_ROOT` seed), không
- *   được biến trường hợp đó thành lỗi.
- * - Id lạ / registry đọc hỏng (`loadRegistry` nuốt lỗi trả rỗng) → lỗi tường
- *   minh, KHÔNG fallback: chạy nhầm project là thứ field này phải chặn.
- */
+// xem docs/architecture/code/automations.md §1
 function resolveActionTarget(
   input: RunAutomationInput,
   action: RunTaskAction,
@@ -117,7 +99,6 @@ function resolveActionTarget(
   return { root: project.path, projectId: project.id }
 }
 
-/** Task id do automation sinh — tuân TASK_ID_PATTERN, dễ nhận diện nguồn. */
 function mintAutomationTaskId(): string {
   return `auto-${randomBytes(4).toString('hex')}`
 }
@@ -126,7 +107,6 @@ function cap(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}\n…[truncated]` : text
 }
 
-/** stdout của job: ưu tiên `job.stdout` (persist cho agent-CLI), fallback log file. */
 function stdoutOf(job: JobRecord): string {
   if (typeof job.stdout === 'string' && job.stdout.trim()) return cap(job.stdout, STDOUT_CAP)
   if (!job.logPath) return ''
@@ -137,7 +117,6 @@ function stdoutOf(job: JobRecord): string {
   }
 }
 
-/** Đọc artifacts `tasks/<id>/*.md` — key = tên file bỏ `.md`, cap kích thước. */
 function artifactsOf(root: string, taskId: string): Record<string, string> {
   const dir = joinPath(root, 'tasks', taskId)
   let files: string[] = []
@@ -176,9 +155,7 @@ export async function waitJobTerminal(jobId: string, timeoutMs: number): Promise
 interface StepExecution {
   taskId?: string
   jobId?: string
-  /** Data root mà bước này thực sự chạy trên đó — đọc artifacts theo đúng project đích. */
   root?: string
-  /** Có giá trị khi action không tạo job — kết quả chạy đồng bộ (httpRequest). */
   stdout?: string
   skipped?: boolean
   error?: string
@@ -193,11 +170,10 @@ async function executeCreateAction(
     return { error: 'action misconfigured: prompt required for mode=create' }
   }
 
-  // Resolve trước khi tạo bất cứ thứ gì — project đích hỏng thì không để lại task rác.
+  // xem docs/architecture/code/automations.md §1
   const target = resolveActionTarget(input, action)
   if ('error' in target) return { error: target.error }
 
-  // Mint + retry: id gần như không trùng, nhưng 409 thì thử lại vài lần thay vì fail cả run.
   let created: Awaited<ReturnType<typeof createTask>> | null = null
   for (let attempt = 0; attempt < 3; attempt++) {
     const result = await createTask(target.root, {
@@ -222,8 +198,6 @@ async function executeCreateAction(
     return { taskId: created.taskId, root: target.root, error: 'pipeline has no first-step agent' }
   }
 
-  // Pipeline có node điều phối ⇒ giao cho nó (như nhánh "Chạy ngay" của createTask);
-  // không có jobId để chờ, tiến độ theo dõi qua event `orchestrator.*`.
   const orchestration = await resolveOrchestration(target.root, created.taskId)
   if (orchestration.active) {
     await dispatchOrchestrator(target.root, target.projectId, created.taskId, 'task_created')
@@ -231,7 +205,6 @@ async function executeCreateAction(
   }
 
   const job = submitJob({
-    // Action khai runner tường minh thì thắng pin của step đầu.
     runnerId: action.runnerId ?? resolveStepRunnerId(created.firstStep).runnerId,
     agentRef,
     workspace: joinPath(target.root, 'tasks', created.taskId),
@@ -243,7 +216,6 @@ async function executeCreateAction(
       taskId: created.taskId,
       pipelineStepId: created.firstStep.id,
       createTaskRun: true,
-      // Rule vẫn thuộc project gốc — đây là đường truy vết ngược job → rule.
       automationId: input.rule.id,
       automationRunId: runId,
     },
@@ -266,12 +238,9 @@ async function executeExistingAction(
     origin: 'automation',
   })
   if ('error' in result) {
-    // 409 = task đang có job chạy — không phải lỗi cấu hình, ghi skipped.
     if (result.status === 409) {
       return { taskId: action.taskId, root: target.root, skipped: true, error: 'task busy — step already running' }
     }
-    // 403 = task do orchestrator điều phối — ghi `skipped` (không `failed`) để không
-    // biến automation đang chạy tốt thành đỏ hàng loạt; phát tín hiệu để orchestrator tự quyết.
     if (result.status === 403) {
       emit('orchestrator.start_requested', {
         taskId: action.taskId,
@@ -366,7 +335,6 @@ async function executeSequence(
   try {
     for (let i = 0; i < input.rule.actions.length; i++) {
       const rawAction = input.rule.actions[i]
-      // Thay biến trong các trường input của action trước khi thực thi (theo kind).
       const substFields =
         rawAction.kind === 'httpRequest'
           ? ['name', 'description', 'url', 'body']
@@ -408,7 +376,6 @@ async function executeSequence(
       }
 
       if (executed.jobId) {
-        // Có job thật (runTask hoặc runCommand) — chờ tới trạng thái terminal như cũ.
         const job = await waitJobTerminal(executed.jobId, stepTimeoutMs())
         if (!job) {
           step.status = 'failed'
@@ -425,16 +392,14 @@ async function executeSequence(
           break
         }
         step.stdout = stdoutOf(job)
-        // Artifact đọc theo root của CHÍNH bước đó — bước cross-project nằm ở data root khác.
+        // xem docs/architecture/code/automations.md §1
         if (step.taskId) step.artifacts = artifactsOf(executed.root ?? input.root, step.taskId)
       } else {
-        // Không tạo job — kết quả chạy đồng bộ (httpRequest).
         step.status = 'succeeded'
         step.stdout = executed.stdout ?? ''
       }
       ctx.steps.push(step)
 
-      // Progress ghi dần để history poll thấy từng bước.
       saveRun(run)
     }
   } catch (err: any) {
@@ -482,8 +447,7 @@ export function runAutomation(input: RunAutomationInput): AutomationRun {
   const startedAt = new Date().toISOString()
   const runId = randomUUID()
 
-  // Đánh dấu chạy trước khi execute: lastRunAt neo lịch due kế tiếp, inFlight chặn
-  // trigger chạy chồng, one-shot `once` tới hạn coi như đã kích hoạt dù action fail.
+  // xem docs/architecture/code/automations.md §2
   const prevState = getRuleState(projectId, rule.id)
   const triggerFired = {
     ...(prevState.triggerFired ?? {}),
@@ -497,8 +461,7 @@ export function runAutomation(input: RunAutomationInput): AutomationRun {
   }
   setRuleState(projectId, rule.id, state)
 
-  // One-shot đã chạy → disable ngay trong file YAML: runtime state ở registryHome
-  // mất khi redeploy docker, còn rule file ở data root (volume mount) nên bền vững.
+  // xem docs/architecture/code/automations.md §2
   if (disableIfAllOnceTriggersSpent(input.root, rule)) {
     syncTriggerRegistry(input.root, String(projectId || ''))
     emit('entity.updated', {
@@ -533,7 +496,6 @@ export function runAutomation(input: RunAutomationInput): AutomationRun {
     source,
   })
 
-  // Nền — scheduler tick không chờ chuỗi dài (job agent tính bằng phút).
   void executeSequence(input, run, { lastRunAt: startedAt }).catch((err) => {
     console.warn(`[automations] sequence crashed for ${rule.id}:`, err)
   })

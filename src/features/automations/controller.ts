@@ -13,7 +13,6 @@ import {
 } from './schemas/automation.js'
 import * as automationsBusiness from './business/index.js'
 
-/** Event type nào kích hoạt đẩy lại snapshot automations qua SSE. */
 const AUTOMATION_STREAM_EVENTS = new Set([
   'automation.triggered',
   'automation.run_succeeded',
@@ -24,12 +23,11 @@ const AUTOMATION_STREAM_EVENTS = new Set([
 ])
 
 /**
- * Automations mode (#233): CRUD rule (triggers[] → actions[]) + run now +
+ * Automations mode: CRUD rule (triggers[] → actions[]) + run now +
  * history. Config theo project (data root `automations/`); runtime state ở
  * registryHome — xem business/runLedger.ts.
  */
 export class AutomationsController extends AbstractController {
-  /** Shared snapshot shape giữa `GET /api/automations` (REST) và `/stream` (SSE). */
   private automationsSnapshot(root: string) {
     const now = new Date()
     return automationsBusiness.listAutomations(root).map((rule) => {
@@ -120,8 +118,6 @@ export class AutomationsController extends AbstractController {
       /* registry runner hỏng — combobox rỗng, vẫn gõ tay được */
     }
 
-    // Registry là global (không theo `?project=`) — dùng cho combobox "project đích"
-    // của action runTask, nên mọi lần fetch đều trả cùng danh sách.
     let projects: Array<{ id: string; name: string; default: boolean }> = []
     try {
       projects = this.ctx.registry.list().projects.map((p) => ({
@@ -256,7 +252,6 @@ export class AutomationsController extends AbstractController {
       projectId: this.projectId,
       detail: { action: 'run-now' },
     })
-    // Chuỗi action chạy nền — trả run đang `running`, kết quả qua history poll.
     const run = automationsBusiness.runAutomation({ root, projectId: this.projectId, rule, source: 'manual' })
     return this.ok({ run })
   }

@@ -22,13 +22,7 @@ import KnowledgeUploadDialog from './KnowledgeUploadDialog.vue'
 import KnowledgeCollectionDialog from './KnowledgeCollectionDialog.vue'
 import KnowledgeTagDialog from './KnowledgeTagDialog.vue'
 
-/**
- * Orchestrator màn knowledge: cột trái là sub-menu, `main` là viewer markdown.
- *
- * `projectId` phải xuống tới mọi lời gọi: nhóm và tag có đường ghi
- * (`renameTag` rewrite front-matter hàng loạt, `deleteCollection`), nên chạy
- * nhầm root không còn là xem sai danh sách mà là hỏng dữ liệu project khác.
- */
+// xem docs/architecture/code/knowledge.md §7
 const props = defineProps<{
   projectId?: string
   subSidebarCollapsed?: boolean
@@ -37,7 +31,6 @@ const props = defineProps<{
 const { t } = useI18nHelpers()
 
 const scope = ref('project')
-/** Đa chọn: entry phải mang đủ mọi tag đang bật, giống filter phía driver. */
 const tagFilter = ref<string[]>([])
 const query = ref('')
 const entries = ref<KnowledgeEntryMeta[]>([])
@@ -49,11 +42,6 @@ const loading = ref(false)
 const error = ref('')
 const message = ref('')
 
-/**
- * Hai state tách hẳn nhau — trước đây bấm một dòng vừa chọn vừa mở dialog:
- * `viewingId` là entry hiển thị ở `main` (icon eye / bấm tên), `editingId` là
- * entry đang mở trong dialog (icon pencil).
- */
 const viewingId = ref<string | null>(null)
 const viewingEntry = ref<any>(null)
 const viewLoading = ref(false)
@@ -84,10 +72,6 @@ const filteredEntries = computed(() => {
   return list
 })
 
-/**
- * Một request cho cả entry lẫn facet tag (`include=tags`) — trước đây là hai,
- * và cái thứ hai (`/tags`) walk lại toàn bộ store.
- */
 async function loadList() {
   loading.value = true
   error.value = ''
@@ -107,12 +91,7 @@ async function loadList() {
   }
 }
 
-/**
- * DB hỏng không được làm chết cả panel — entry đọc từ file nên vẫn xem/sửa được.
- *
- * Nhưng cũng không được hiện thành "chưa có nhóm nào": người dùng tạo nhóm
- * mới ngay lúc đó là ghi đè mất dữ liệu cũ. Lỗi hiện ra và khoá đường ghi.
- */
+// xem docs/architecture/README.md §4.4
 async function loadCollections() {
   collectionsError.value = ''
   try {
@@ -134,8 +113,6 @@ function selectCollection(id: string) {
   activeCollection.value = activeCollection.value === id ? '' : id
 }
 
-// ── viewer
-
 async function openViewer(id: string) {
   viewingId.value = id
   viewLoading.value = true
@@ -144,8 +121,6 @@ async function openViewer(id: string) {
     const data = await fetchKnowledgeEntry(id, props.projectId)
     viewingEntry.value = data.entry
   } catch (e: any) {
-    // Entry có thể vừa bị xoá ngoài dashboard — trả `main` về empty state thay
-    // vì kẹt ở spinner; lỗi hiện bên cột trái.
     error.value = String(e.message || e)
     viewingId.value = null
     viewingEntry.value = null
@@ -153,8 +128,6 @@ async function openViewer(id: string) {
     viewLoading.value = false
   }
 }
-
-// ── editor
 
 async function openEditor(id: string) {
   message.value = ''
@@ -180,7 +153,6 @@ function closeDialog() {
   showDialog.value = false
 }
 
-/** Không gửi `slug`: driver nội suy từ title và tự chống trùng. */
 async function save() {
   error.value = ''
   message.value = ''
@@ -198,7 +170,6 @@ async function save() {
     editingId.value = data.entry.id
     message.value = t('knowledge.messages.saved', { id: data.entry.id })
     await loadList()
-    // Đang xem chính entry vừa sửa thì viewer phải theo kịp, không hiện bản cũ.
     if (viewingId.value === data.entry.id) await openViewer(data.entry.id)
   } catch (e: any) {
     error.value = String(e.message || e)
@@ -206,14 +177,13 @@ async function save() {
 }
 
 async function removeEntry(id: string) {
-  if (deletingId.value) return // chặn double-click
+  if (deletingId.value) return
   if (!confirm(t('knowledge.messages.confirmDelete', { id }))) return
   deletingId.value = id
   error.value = ''
   try {
     await deleteKnowledgeEntry(id, props.projectId)
     message.value = t('knowledge.messages.deleted')
-    // Xoá entry đang xem → `main` thu về 0, cột trái chiếm full width.
     if (viewingId.value === id) {
       viewingId.value = null
       viewingEntry.value = null
@@ -227,9 +197,6 @@ async function removeEntry(id: string) {
   }
 }
 
-// ── download
-
-/** Blob → `<a download>` → revoke, đúng mẫu đã có ở `PipelineEditor`. */
 function saveBlob(text: string, filename: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }))
   const a = document.createElement('a')
@@ -245,16 +212,9 @@ function stamp() {
   return new Date().toISOString().slice(0, 10)
 }
 
-/**
- * `JSON.stringify` cho mọi giá trị: YAML nhận double-quoted scalar, nên một
- * title chứa `:`, xuống dòng hay chính dòng `---` không cắt đôi được khối
- * front-matter của file tải về.
- */
 const yamlStr = (v: unknown) => JSON.stringify(String(v ?? ''))
 
 function toMarkdownSection(item: any): string {
-  // Item vượt trần 1MB của bundle trả `{ id, error }` — ghi thành chú thích
-  // trong file gộp, không bỏ im lặng.
   if (item.error) return `<!-- ${item.id}: ${item.error} -->`
   const tags = (item.tags || []).map(yamlStr).join(', ')
   return [
@@ -268,7 +228,6 @@ function toMarkdownSection(item: any): string {
   ].join('\n')
 }
 
-/** Gộp entry đang lọc thành một file. Chia lô 50 — đúng trần `MAX_BUNDLE_IDS`. */
 async function downloadFiltered() {
   const ids = filteredEntries.value.map((e) => e.id)
   if (!ids.length) return
@@ -297,8 +256,6 @@ async function downloadEntry(id: string) {
   }
 }
 
-// ── collection
-
 function newCollection() {
   editingCollection.value = null
   showCollectionDialog.value = true
@@ -318,7 +275,6 @@ async function onCollectionSaved(id: string, created: boolean) {
   if (activeCollection.value) await loadList()
 }
 
-/** Xoá nhóm — tài liệu bên trong không bị xoá; câu xác nhận phải nói rõ. */
 async function removeCollection(id: string) {
   if (!confirm(t('knowledge.collections.confirmDelete', { id }))) return
   error.value = ''
@@ -332,8 +288,6 @@ async function removeCollection(id: string) {
     error.value = String(e.message || e)
   }
 }
-
-// ── tag
 
 function newTag() {
   editingTag.value = null
@@ -353,7 +307,6 @@ async function onTagSaved(tag: string, created: boolean) {
   await loadList()
 }
 
-/** Đổi tên tag rewrite front-matter hàng loạt → nạp lại cả entry lẫn nhóm. */
 async function onTagRenamed(count: number, metaError: string) {
   showTagDialog.value = false
   const from = editingTag.value?.tag
@@ -367,7 +320,6 @@ async function onTagRenamed(count: number, metaError: string) {
 }
 
 watch([scope, activeCollection], () => loadList())
-// Đổi project là đổi cả cây entry lẫn cây nhóm — reset lựa chọn rồi nạp lại cả hai.
 watch(
   () => props.projectId,
   async () => {
@@ -386,9 +338,6 @@ onMounted(async () => {
 </script>
 
 <template>
-  <!-- Class `.knowledge-panel` ở ROOT chứ 🚫 không trên `main`: `hideMain` thu
-       `main` về 0 khi chưa chọn entry, spec e2e chờ nó visible sẽ đỏ ngay lúc
-       mở màn. Đây đúng cách `AgentEditor` giữ neo `.agent-editor`. -->
   <CScreenLayout
     class="knowledge-panel knowledge-layout"
     :sub-sidebar-collapsed="subSidebarCollapsed"
@@ -432,17 +381,10 @@ onMounted(async () => {
 
     <template #main>
       <div class="knowledge-main">
-        <!-- Sub-menu thu về rail thì cột trái rộng 0, nên chỗ duy nhất còn thấy
-             được là main. Hai trạng thái loại trừ nhau nên thông báo không bao
-             giờ render hai lần. -->
         <template v-if="subSidebarCollapsed">
           <p v-if="error" class="err knowledge-msg">{{ error }}</p>
           <p v-if="message" class="ok-msg knowledge-msg">{{ message }}</p>
         </template>
-        <!-- 🚫 `with-frontmatter`: `driver.read()` đã bóc front-matter sẵn, nên
-             chỉ còn phần text — đúng yêu cầu "không hiển thị siêu dữ liệu". -->
-        <!-- `doc-key` là id chứ không phải title: hai entry trùng title là ca
-             thật (driver phải thêm hậu tố slug chính vì thế). -->
         <CMarkdownView
           v-if="viewingId && viewingEntry && !viewLoading"
           :title="viewingEntry.title"
@@ -455,7 +397,6 @@ onMounted(async () => {
     </template>
   </CScreenLayout>
 
-  <!-- 4 dialog là modal ngang hàng, đứng ngoài CScreenLayout. -->
   <KnowledgeFormDialog
     v-if="showDialog"
     v-model:draft="draft"
@@ -505,8 +446,6 @@ onMounted(async () => {
   min-height: 0;
   overflow: hidden;
 }
-// Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là một
-// cột xám rỗng. Selector đích nằm TRÊN slot "left" nên override neo vào gốc.
 .knowledge-layout :deep(.c-screen-layout__body--left-collapsed) {
   grid-template-columns: 0 1fr;
 }
@@ -522,7 +461,6 @@ onMounted(async () => {
   height: 100%;
   min-height: 0;
 }
-// Root của component con nhận luôn scope id của cha, nên không cần `:deep`.
 .knowledge-main > .c-md-view {
   flex: 1;
   min-height: 0;

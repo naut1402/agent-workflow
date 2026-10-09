@@ -1,12 +1,6 @@
 import { z } from 'zod'
 
-/**
- * Zod là nguồn chân lý cho query + response thống kê usage (issue #231).
- * Dùng chung BE (controller validate) và FE (type response) — KHÔNG import
- * `node:*` ở đây vì FE cũng consume module này.
- */
-
-/** Dimension grouping. `tool-call` là P2 (parse transcript) — chưa có ở đây. */
+/** Dimension grouping. */
 export const USAGE_GROUP_BYS = [
   'project',
   'task',
@@ -29,7 +23,7 @@ export const USAGE_METRICS = [
 ] as const
 export type UsageMetric = (typeof USAGE_METRICS)[number]
 
-/** Chuỗi filter ngắn, không ký tự điều khiển — không dựng path từ giá trị này. */
+// xem docs/architecture/code/statistics.md §3
 const filterString = z
   .string()
   .trim()
@@ -85,7 +79,7 @@ export const UsageTotalsSchema = z.object({
   durationMs: z.number().nonnegative(),
   firstTs: z.number().nullable(),
   lastTs: z.number().nullable(),
-  /** Thống kê theo TỪNG ENTRY trên toàn phạm vi (đã filter) — cho card summary. */
+  /** Thống kê theo từng entry trên toàn phạm vi (đã filter) — cho card summary. */
   minTotalTokens: z.number().nonnegative(),
   maxTotalTokens: z.number().nonnegative(),
   avgTotalTokens: z.number().nonnegative(),

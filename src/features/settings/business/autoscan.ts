@@ -1,6 +1,3 @@
-// Scan whitelist directories for project roots that contain `.dev-team-agent`
-// and register them via ProjectRegistry.add (idempotent on canonical path).
-
 import {
   basename,
   isAbsolutePath,
@@ -42,7 +39,6 @@ function isDevTeamAgentDir(dir: string): boolean {
   return basename(dir) === '.dev-team-agent'
 }
 
-/** Collect candidate project roots under one whitelist entry (depth 1). */
 async function collectCandidates(root: string): Promise<string[]> {
   let abs: string
   try {
@@ -127,7 +123,6 @@ export async function runAutoscan(
       continue
     }
     const project = result.project
-    // After validate, registry stores canonical `.dev-team-agent` path.
     const wasKnown = knownPaths.has(project.path)
     if (wasKnown) {
       report.hits.push({ path: candidate, project, status: 'existing' })

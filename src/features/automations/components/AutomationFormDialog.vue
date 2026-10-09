@@ -12,12 +12,9 @@ import type { CreateAutomationRequest, UpdateAutomationRequest } from '../schema
 
 const props = defineProps<{
   visible: boolean
-  /** Rule đang sửa — null khi tạo mới. */
   editRule: AutomationListItem | null
   eventTypes: string[]
-  /** Options của project đang chọn. */
   formOptions: AutomationFormOptions
-  /** Options theo project đích của từng bước — khoá là project id. */
   optionsByProject: Record<string, AutomationFormOptions>
   saving: boolean
   serverError: string
@@ -26,7 +23,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   submit: [{ mode: 'create' | 'edit'; id?: string; body: CreateAutomationRequest | UpdateAutomationRequest }]
-  /** Bước nào đó trỏ tới project này — nhờ panel nạp options của nó. */
   'request-options': [projectId: string]
 }>()
 
@@ -41,7 +37,6 @@ type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 interface TriggerRow {
   kind: TriggerKind
-  /** timer — datetime-local (local tz). */
   startAt: string
   repeatMode: RepeatMode
   intervalValue: number
@@ -54,28 +49,23 @@ interface ActionRow {
   kind: ActionKind
   name: string
   description: string
-  // runTask
   mode: ActionMode
   prompt: string
   profileName: string
   runnerId: string
   taskId: string
-  /** Project đích — '' = project đang chọn. */
   projectId: string
-  // httpRequest
   method: HttpMethod
   url: string
-  /** textarea "Key: Value" mỗi dòng — parse khi submit. */
   headersText: string
   body: string
-  // runCommand
   params: string
 }
 
 const MAX_TRIGGERS = 5
 const MAX_ACTIONS = 10
 
-/** Bản sao FE của `PROJECT_ID_PATTERN` (schemas/automation.ts) — báo lỗi tại chỗ thay vì đợi 400. */
+// xem docs/architecture/code/automations.md §1
 const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 const form = reactive({
@@ -86,9 +76,7 @@ const form = reactive({
   actions: [] as ActionRow[],
 })
 
-/** Step nào đang mở overview biến (index 1-based). */
 const varsOpenFor = ref<number | null>(null)
-/** Biến vừa copy — hiện feedback ngắn. */
 const copiedVar = ref('')
 
 function newTriggerRow(): TriggerRow {
@@ -137,8 +125,6 @@ function textToHeaders(text: string): Record<string, string> | undefined {
   return Object.keys(out).length ? out : undefined
 }
 
-// ── Chuyển đổi datetime / interval ──────────────────────────────────────────
-
 const UNIT_TO_MS: Record<IntervalUnit, number> = {
   minute: 60_000,
   hour: 3_600_000,
@@ -151,12 +137,10 @@ function everyMsOf(row: TriggerRow): number {
   return value * UNIT_TO_MS[row.intervalUnit]
 }
 
-/** datetime-local (local tz) → ISO cho server. */
 function localInputToIso(value: string): string {
   return new Date(value).toISOString()
 }
 
-/** ISO → giá trị cho <input type="datetime-local"> (local tz). */
 function isoToLocalInput(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
@@ -169,8 +153,6 @@ function splitEveryMs(ms: number): { value: number; unit: IntervalUnit } {
   if (ms >= 3_600_000 && ms % 3_600_000 === 0) return { value: ms / 3_600_000, unit: 'hour' }
   return { value: Math.max(1, Math.round(ms / 60_000)), unit: 'minute' }
 }
-
-// ── Prefill khi mở dialog ───────────────────────────────────────────────────
 
 watch(
   () => [props.visible, props.editRule] as const,
@@ -236,8 +218,6 @@ watch(
   { immediate: true },
 )
 
-// ── Validation ──────────────────────────────────────────────────────────────
-
 const triggerErrors = computed(() =>
   form.triggers.map((row): string => {
     if (row.kind === 'timer') {
@@ -265,7 +245,6 @@ const actionErrors = computed(() =>
         if (!row.taskId.trim()) return t('automations.action.taskIdRequired')
         if (!/^[A-Za-z0-9][\w-]{0,63}$/.test(row.taskId.trim())) return t('automations.action.taskIdInvalid')
       }
-      // Chặn giá trị rác khi rule được sửa tay ngoài UI rồi mở lại form.
       if (row.projectId.trim() && !PROJECT_ID_RE.test(row.projectId.trim())) {
         return t('automations.action.targetProjectInvalid')
       }
@@ -290,9 +269,6 @@ const validationError = computed(() => {
   return ''
 })
 
-// ── Options cho combobox ────────────────────────────────────────────────────
-
-/** Tên thân thiện cho event type: "Job thất bại (job.failed)" — thiếu i18n thì hiện mã. */
 function eventLabel(code: string): string {
   const key = `automations.eventNames.${code}`
   const label = t(key)
@@ -303,11 +279,7 @@ const eventOptions = computed<CComboSelectOption[]>(() =>
   props.eventTypes.map((code) => ({ value: code, label: eventLabel(code) })),
 )
 
-/**
- * Options của một bước: theo project đích của chính bước đó, mặc định là
- * project đang chọn. Project đích chưa nạp xong → task/profile/runner rỗng
- * (không mượn của project khác), riêng `projects` là global nên giữ nguyên.
- */
+// xem docs/architecture/code/automations.md §4
 function optionsOf(row: ActionRow): AutomationFormOptions {
   const key = row.projectId.trim()
   if (!key) return props.formOptions
@@ -333,7 +305,6 @@ function taskOptionsOf(row: ActionRow): CComboSelectOption[] {
   return optionsOf(row).tasks.map((id) => ({ value: id, label: id }))
 }
 
-/** Danh sách project lấy từ registry (global) — luôn đọc từ options của project đang chọn. */
 const projectOptions = computed<CComboSelectOption[]>(() =>
   props.formOptions.projects.map((p) => ({
     value: p.id,
@@ -341,10 +312,6 @@ const projectOptions = computed<CComboSelectOption[]>(() =>
   })),
 )
 
-/**
- * Đổi project đích: task/profile/runner đã chọn thuộc project cũ nên không còn
- * hợp lệ — xoá thay vì để người dùng lưu một tổ hợp chắc chắn fail lúc chạy.
- */
 function onTargetProjectChange(row: ActionRow, value: string): void {
   if (row.projectId === value) return
   row.projectId = value
@@ -353,8 +320,6 @@ function onTargetProjectChange(row: ActionRow, value: string): void {
   row.runnerId = ''
 }
 
-// Bước nào trỏ project khác thì nhờ panel nạp options của project đó (kể cả khi
-// prefill từ rule đang sửa) — panel cache lại nên gọi lặp không tốn request.
 watch(
   () => form.actions.map((a) => (a.kind === 'runTask' ? a.projectId.trim() : '')).join('|'),
   () => {
@@ -374,11 +339,8 @@ const commandRunnerOptions = computed<CComboSelectOption[]>(() =>
     .map((r) => ({ value: r.id, label: r.label || r.id })),
 )
 
-// ── Biến tham chiếu ─────────────────────────────────────────────────────────
-
 const hasEventTrigger = computed(() => form.triggers.some((row) => row.kind === 'event' && row.eventType.trim()))
 
-/** Danh sách path biến dùng được tại bước N (1-based) — chips copy được. */
 function varPathsFor(stepIndex: number): string[] {
   const paths = ['trigger.kind', 'trigger.type', 'trigger.payload']
   for (let i = 1; i < stepIndex; i++) {
@@ -391,7 +353,6 @@ function varsOverviewFor(stepIndex: number): string {
   return JSON.stringify(varsSkeletonForStep(stepIndex, hasEventTrigger.value), null, 2)
 }
 
-/** `steps.1.stdout` → token `{{…}}` — dựng trong script để template parser không nhầm interpolation. */
 function varToken(path: string): string {
   return `{{${path}}}`
 }
@@ -409,8 +370,6 @@ async function copyVar(path: string): Promise<void> {
   }
 }
 
-// ── Thêm / xoá dòng ─────────────────────────────────────────────────────────
-
 function addTrigger(): void {
   if (form.triggers.length < MAX_TRIGGERS) form.triggers.push(newTriggerRow())
 }
@@ -426,8 +385,6 @@ function addAction(): void {
 function removeAction(index: number): void {
   form.actions.splice(index, 1)
 }
-
-// ── Submit ──────────────────────────────────────────────────────────────────
 
 function buildTriggers(): CreateAutomationRequest['triggers'] {
   return form.triggers.map((row) => {
@@ -480,7 +437,6 @@ function buildActions(): CreateAutomationRequest['actions'] {
           }
         : { taskId: row.taskId.trim() }),
       ...(row.runnerId.trim() ? { runnerId: row.runnerId.trim() } : {}),
-      // Rỗng = không gửi khoá: rule cũ round-trip không mọc field mới.
       ...(row.projectId.trim() ? { projectId: row.projectId.trim() } : {}),
     }
   })
@@ -524,7 +480,6 @@ function submit(): void {
       <input v-model="form.description" type="text" />
     </label>
 
-    <!-- ── Triggers: nhiều nguồn, rule chạy khi BẤT KỲ nguồn nào khớp ── -->
     <fieldset class="field-group">
       <legend>{{ t('automations.trigger.header') }}</legend>
       <p class="field-hint">{{ t('automations.trigger.anyMatchHint') }}</p>
@@ -616,7 +571,6 @@ function submit(): void {
       </button>
     </fieldset>
 
-    <!-- ── Actions: timeline tuần tự, bước sau dùng biến của bước trước ── -->
     <fieldset class="field-group">
       <legend>{{ t('automations.action.header') }}</legend>
       <p class="field-hint">{{ t('automations.action.sequenceHint') }}</p>
@@ -693,7 +647,6 @@ function submit(): void {
                 </label>
               </div>
 
-              <!-- Ngoài mọi v-if mode: project đích áp cho cả create lẫn existing. -->
               <div class="field">
                 <span class="field-label">{{ t('automations.action.targetProject') }}</span>
                 <CComboSelect
@@ -851,19 +804,13 @@ function submit(): void {
 
 <style scoped lang="scss">
 .automation-form {
-  /* ── [A] từ `styles/common.scss` (đã xoá), phần chỉ form này dùng. PHẢI đứng
-     TRƯỚC [B]: `.field` và `.checkbox-field` cùng specificity (0,2,0) và cùng set
-     `flex-direction`/`gap`; `.checkbox-field` chỉ thắng nhờ `index.scss` `@use`
-     `./common` trước `./AutomationFormDialog`. `.muted` không copy — trùng nguyên
-     văn `_shell.scss`. ── */
+  // xem docs/architecture/code/automations.md §4
   .field {
     display: flex;
     flex-direction: column;
     gap: 4px;
     margin: 0 0 10px;
 
-    /* Chỉ style element con TRỰC TIẾP — tránh đè lên input bên trong
-       CComboSelect (`.c-combo-input` nằm sâu trong wrapper riêng). */
     > input[type='text'],
     > input[type='number'],
     > input[type='datetime-local'],
@@ -889,7 +836,6 @@ function submit(): void {
       min-height: 72px;
     }
 
-    /* Input lồng trong `.interval-inputs` (cháu của .field, vẫn là control native). */
     .interval-inputs > input,
     .interval-inputs > select {
       background: var(--panel-2);
@@ -972,7 +918,6 @@ function submit(): void {
     padding-left: 8px;
   }
 
-  /* ── [B] từ `styles/AutomationFormDialog.scss` (đã xoá) ── */
   .interval-row .interval-inputs {
     display: flex;
     gap: 8px;
@@ -994,7 +939,6 @@ function submit(): void {
     }
   }
 
-  /* ── Trigger rows ── */
   .trigger-row {
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -1031,7 +975,6 @@ function submit(): void {
     align-self: flex-start;
   }
 
-  /* ── Action timeline ── */
   .action-timeline {
     display: flex;
     flex-direction: column;
@@ -1109,7 +1052,6 @@ function submit(): void {
     }
   }
 
-  /* ── Vars panel ── */
   .vars-panel {
     background: var(--panel-2);
     border: 1px dashed var(--border);

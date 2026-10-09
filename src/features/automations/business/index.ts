@@ -1,11 +1,3 @@
-/**
- * Public business surface cho automations. Controller + cross-feature
- * (nl-chat draft confirm) import từ đây.
- *
- * Nạp qua api.ts: bơm runner thật + khởi động scheduler/event subscriber,
- * trừ khi `bun test` (test tự điều khiển tick / bind stub runner).
- */
-
 import { bindAutomationRunner, startAutomationScheduler } from './scheduler.js'
 import { startEventTriggers } from './eventTrigger.js'
 import { runAutomation } from './runAction.js'

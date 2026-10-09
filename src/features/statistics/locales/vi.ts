@@ -1,5 +1,3 @@
-// Strings cho feature `statistics` (mode Thống kê — issue #231). vi là nguồn
-// chân lý; giữ key đồng bộ với en.ts.
 export default {
   title: 'Thống kê',
   subtitle: 'Token usage theo project / task / step / job — tổng hợp từ logs usage',

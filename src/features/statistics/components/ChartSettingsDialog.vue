@@ -16,11 +16,6 @@ import {
 } from '../lib/chartConfig'
 import { USAGE_GROUP_BYS, USAGE_METRICS } from '../schemas/usageStats'
 
-/**
- * Dialog thiết lập MỘT chart instance: gom nhóm / chỉ số / loại biểu đồ /
- * tiêu đề (rỗng → chart không vẽ title) / nhãn trục / màu / kích thước.
- * Sửa trực tiếp vào model (live-apply) — thay đổi áp dụng ngay phía sau dialog.
- */
 const props = defineProps<{ allowProjectGroup: boolean }>()
 
 const model = defineModel<ChartConfig>({ required: true })
@@ -318,7 +313,6 @@ function resetDefaults() {
   width: min(560px, 94vw);
   gap: 0.75rem;
 }
-/* bù gap của .modal bị mất khi bọc nội dung vào .modal-body */
 .chart-settings-dialog > .modal-body {
   display: flex;
   flex-direction: column;

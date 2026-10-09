@@ -42,7 +42,6 @@ import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import FolderPickerDialog from '../../../frontend/ui/FolderPickerDialog.vue'
 import CSelect from '../../../frontend/ui/CSelect.vue'
 
-/** Catalog do App.vue truyền xuống — dialog không tự resolve ModeRegistry. */
 const props = defineProps<{ modeCatalog?: ModeEntry[] }>()
 const emit = defineEmits<{ close: [] }>()
 
@@ -50,7 +49,6 @@ const { t } = useI18nHelpers()
 const { settings, load, update } = useAppSettings()
 const { locale, setLocale } = useLocale()
 
-/** Optional: App.vue provides this so scan can refresh the project list. */
 const reloadProjects = inject(reloadProjectsKey, undefined)
 
 type SettingsGroupId = 'general' | 'modes' | 'projects' | 'notifications'
@@ -96,8 +94,6 @@ function setArtifactViewMode(mode: 'block' | 'full') {
   update({ artifactViewMode: mode })
 }
 
-// Radio bind theo giá trị ĐÃ LƯU, không phải giá trị đã resolve — tắt accordion là
-// thấy lại đúng lựa chọn cũ.
 const artifactSectionDefault = computed(() => readArtifactSectionDefault(settings.value))
 const artifactSectionAccordion = computed(() => resolveArtifactSectionAccordion(settings.value))
 
@@ -142,8 +138,6 @@ function toggleCollapseMonitorSubSidebarOnOutside() {
     collapseMonitorSubSidebarOnOutside: !collapseMonitorSubSidebarOnOutside.value,
   })
 }
-
-// ── Notifications
 
 const notificationsEnabled = computed(() => resolveNotificationsEnabled(settings.value))
 const notifyHitlPending = computed(() => resolveNotifyHitlPending(settings.value))
@@ -197,14 +191,11 @@ function onNotificationUiPlacementUpdate(value: string) {
   }
 }
 
-// ── Modes (server-backed)
-
 const modeCatalog = computed(() => props.modeCatalog ?? [])
 const modesEnabled = ref<Record<string, boolean>>({})
 const { pending: modesBusy, run: runModes } = useApiAction()
 const modesMsg = ref('')
 const modesErr = ref('')
-/** Nạp lỗi thì các toggle đang hiện mặc định của catalog, không phải giá trị thật → khoá thao tác. */
 const modesLoaded = ref(false)
 
 function syncModesFromConfig(raw: unknown) {
@@ -216,8 +207,6 @@ function syncModesFromConfig(raw: unknown) {
   modesEnabled.value = next
 }
 
-// Hiện mặc định catalog ngay từ nhịp render đầu: `{}` sẽ render "tắt hết" trong
-// khi mọi mode thật vẫn bật.
 syncModesFromConfig(undefined)
 
 async function loadModes() {
@@ -234,7 +223,6 @@ async function loadModes() {
   }
 }
 
-/** Gửi delta 1 key — controller merge theo key, nên settings.json chỉ chứa mode đã đụng tới. */
 async function persistMode(key: string, prev: Record<string, boolean>) {
   await runModes(async () => {
     modesMsg.value = ''
@@ -243,13 +231,11 @@ async function persistMode(key: string, prev: Record<string, boolean>) {
       const data = await saveModesConfig({ enabled: { [key]: modesEnabled.value[key] } })
       syncModesFromConfig(data.config)
       modesMsg.value = t('settings.modes.saved')
-      // Không có store dùng chung giữa dialog và shell — phát tán như logging-changed.
-      // Phát `data.config` (bản đã merge ở server), không phải map cục bộ 1 key.
+      // xem docs/architecture/code/settings.md §2
       window.dispatchEvent(
         new CustomEvent('dev-dashboard:modes-changed', { detail: data.config }),
       )
     } catch (e) {
-      // Ghi hỏng thì không để checkbox nói một đằng, server và sidebar nói một nẻo.
       modesEnabled.value = prev
       modesErr.value = String((e as Error).message || e)
     }
@@ -262,8 +248,6 @@ function toggleMode(m: ModeEntry) {
   modesEnabled.value = { ...prev, [m.key]: !prev[m.key] }
   void persistMode(m.key, prev)
 }
-
-// ── Logging (server-backed)
 
 const showLogsTab = ref(true)
 const logTypeAudit = ref(true)
@@ -370,8 +354,6 @@ function toggleLogTypeUsage() {
   void persistLogging()
 }
 
-// ── Recovery (server-backed)
-
 const recoveryEnabled = ref(true)
 const recoveryMaxAttempts = ref(3)
 const { pending: recoveryBusy, run: runRecovery } = useApiAction()
@@ -414,8 +396,6 @@ function toggleRecoveryEnabled() {
   recoveryEnabled.value = !recoveryEnabled.value
   void persistRecovery()
 }
-
-// ── Autoscan (server-backed)
 
 const autoscanEnabled = ref(false)
 const whitelist: Ref<string[]> = ref([])
@@ -492,7 +472,6 @@ async function scanNow() {
     autoscanMsg.value = ''
     autoscanErr.value = ''
     try {
-      // Persist first so server whitelist matches UI.
       await saveAutoscanConfig({
         enabled: autoscanEnabled.value,
         whitelist: whitelist.value,
@@ -515,8 +494,6 @@ async function scanNow() {
     }
   })
 }
-
-// ── Scan patterns (server-backed)
 
 const scanPatterns = ref<Record<ScanPatternKind, string[]>>({ agents: [], skills: [], rules: [] })
 const scanPatternDraft = ref<Record<ScanPatternKind, string>>({ agents: '', skills: '', rules: '' })
@@ -579,14 +556,11 @@ function removeScanPattern(kind: ScanPatternKind, pattern: string) {
   void persistScanPatterns()
 }
 
-// ── GitHub repo tokens (server-backed)
-
 type GithubTokenRow = { repo: string; token: string }
 
 const githubTokenRows: Ref<GithubTokenRow[]> = ref([])
 const draftRepo = ref('')
 const draftToken = ref('')
-/** When set, the add form updates this existing slug instead of only appending. */
 const editingRepo = ref<string | null>(null)
 const { pending: githubTokensBusy, run: runGithubTokens } = useApiAction()
 const githubTokensMsg = ref('')
@@ -1105,7 +1079,6 @@ onUnmounted(() => {
                     class="settings-mode-badge"
                   >{{ t(`settings.modes.maturity.${m.maturity}`) }}</span>
                   <span v-if="m.descriptionKey" class="settings-mode-desc">{{ t(m.descriptionKey) }}</span>
-                  <!-- `logs` có 2 công tắc (mode + cờ cũ showLogsTab) — nói rõ vì sao sidebar vẫn thiếu. -->
                   <span v-if="m.key === 'logs' && !showLogsTab" class="settings-mode-desc">
                     ⚠ {{ t('settings.modes.logsAlsoHiddenHint') }}
                   </span>
@@ -1462,7 +1435,6 @@ onUnmounted(() => {
 <style scoped lang="scss">
 .settings-dialog {
   width: min(760px, 94vw);
-  /* Cố định chiều cao — đổi group không làm dialog nhảy size. */
   height: min(560px, 88vh);
 }
 
@@ -1575,8 +1547,6 @@ onUnmounted(() => {
   accent-color: var(--accent);
 }
 
-/* Control bị khoá (vd radio trạng thái section khi accordion bật) — dùng chung cho
-   mọi nhóm setting, không tạo class riêng. */
 .settings-radio:has(input:disabled),
 .settings-checkbox:has(input:disabled) {
   opacity: 0.55;
@@ -1602,7 +1572,6 @@ onUnmounted(() => {
 
 .settings-mode-desc {
   flex: 1 1 100%;
-  /* Thụt bằng bề ngang checkbox + gap để mô tả thẳng hàng với label. */
   padding-left: 22px;
   font-size: 12px;
   color: var(--muted);
@@ -1756,7 +1725,6 @@ onUnmounted(() => {
 
 .settings-select-wrap {
   margin-top: 10px;
-  /* giữ bề rộng cũ sau khi .c-select bỏ cap max-width: 360px */
   max-width: 360px;
 }
 

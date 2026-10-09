@@ -7,22 +7,6 @@ import { createFileDriver, sanitiseTags } from './fileDriver.js'
 import { knowledgeDb, storeKeysOf, type KnowledgeStoreKeys } from './knowledgeDb.js'
 import { moveTagMetaInTx, readTagMetaRows } from './tags.js'
 
-/**
- * Collection = nhóm knowledge, lưu ở bảng `knowledge_collections` của
- * `dashboard.sqlite` (trước đây là sidecar `collections.yaml` cạnh cây entry).
- *
- * Vì sao không phải thư mục con hay front-matter:
- * - Thư mục con sẽ đổi id của mọi entry (`slug` thành `collection/slug`) và
- *   phá mọi `knowledge_inputs` đang trỏ tới.
- * - Front-matter thì collection rỗng không tồn tại được, và liệt kê
- *   collection phải đọc toàn bộ file `.md`.
- *
- * Thành viên = hợp của `entry_ids` và `tags`, resolve lúc đọc — nên entry
- * bị xoá tay ngoài dashboard chỉ đơn giản biến mất khỏi nhóm, không cần job dọn.
- * Đó cũng là lý do `tags`/`entry_ids` là cột JSON chứ không phải bảng liên kết:
- * repo không có truy vấn "collection nào chứa entry X".
- */
-
 export interface KnowledgeCollection {
   id: string
   name: string
@@ -39,7 +23,6 @@ export interface KnowledgeCollection {
 
 type CollectionRow = typeof knowledgeCollections.$inferSelect
 
-/** Cột JSON người dùng sửa tay được → parse phòng thủ, hỏng thì coi là rỗng. */
 function parseList(raw: string): string[] {
   try {
     const v = JSON.parse(raw)
@@ -75,7 +58,6 @@ export function resolveCollectionEntries<T extends { id: string; tags: string[] 
   return entries.filter((e) => byId.has(e.id) || (want.length > 0 && want.every((t) => e.tags.includes(t))))
 }
 
-/** Mọi truy vấn lọc theo `store_key`: một bảng dùng chung cho mọi project. */
 async function rowsOf(keys: KnowledgeStoreKeys): Promise<CollectionRow[]> {
   if (!keys.all.length) return []
   const db = await knowledgeDb()
@@ -86,7 +68,6 @@ async function rowsOf(keys: KnowledgeStoreKeys): Promise<CollectionRow[]> {
     .all()
 }
 
-/** Lọc ở DB chứ không ở tầng app — hàm này nằm trên đường đọc danh sách entry. */
 async function findRow(keys: KnowledgeStoreKeys, id: string): Promise<CollectionRow | null> {
   if (!keys.all.length) return null
   const db = await knowledgeDb()
@@ -152,8 +133,7 @@ export async function createCollection(
   const keys = storeKeysOf(devTeamRoot)
   const storeKey = keys.byScope[body.scope]
   if (!storeKey) return { status: 400 as const, error: `invalid scope: ${body.scope}` }
-  // `slugify` chứ không `sanitiseSlug`: bản sau băm nát tiếng Việt
-  // (`nhóm-kiến-trúc` → `nh-m-ki-n-tr-c`), id nhóm phải còn đọc được.
+  // xem docs/architecture/code/knowledge.md §3
   const id = slugify(body.name, { maxLength: 80, fallback: '' })
   if (!id) return { status: 400 as const, error: 'invalid collection name' }
   if (await findRow(keys, id)) return { status: 400 as const, error: `collection already exists: ${id}` }
@@ -199,8 +179,6 @@ export async function updateCollection(
   const row = await findRow(keys, id)
   if (!row) return { status: 404 as const, error: `unknown collection: ${id}` }
 
-  // Đổi scope là đổi store, tức đổi con trỏ của mọi nơi tham chiếu nhóm →
-  // từ chối thẳng thay vì nhận 200 rồi im lặng không đổi gì.
   if (body.scope && body.scope !== row.scope) {
     return {
       status: 400 as const,
@@ -248,14 +226,8 @@ export async function deleteCollection(devTeamRoot: string, id: string) {
  *
  * `to` bỏ trống = xoá tag khỏi mọi entry, không tạo alias.
  *
- * Lỗi giữa chừng thì dừng tại đó và trả phần đã xong — chạy lại là an toàn vì
- * entry đã đổi không còn `from` nên lần sau bị bỏ qua.
- *
- * Phần DB — alias, metadata tag, tag của collection — đi cùng một
- * transaction sau khi rewrite file xong. Không dựng được transaction xuyên
- * file + DB, nên thứ tự là: file trước (thứ có thể chạy lại an toàn), DB sau
- * (thứ nguyên tử). Hỏng ở bước DB thì entry đã mang tên mới còn alias chưa có
- * — chạy lại lệnh đổi tên là hết, không entry nào mất.
+ * Lỗi giữa chừng thì dừng tại đó và trả phần đã xong.
+ * xem docs/architecture/code/knowledge.md §6
  */
 export async function renameTag(devTeamRoot: string, { from, to }: z.infer<typeof TagRenameBody>) {
   const src = sanitiseTags([from])[0]
@@ -283,8 +255,6 @@ export async function renameTag(devTeamRoot: string, { from, to }: z.infer<typeo
       })
       touched.push(entry.id)
     } catch (e) {
-      // Dừng tại entry hỏng và trả kèm phần đã xong: người dùng phải biết kho
-      // đang ở trạng thái nửa chừng nào mới quyết được chạy lại hay khôi phục.
       return {
         status: 500 as const,
         error: `đổi tag thất bại tại ${meta.id}: ${(e as Error)?.message ?? e}`,
@@ -295,19 +265,11 @@ export async function renameTag(devTeamRoot: string, { from, to }: z.infer<typeo
     }
   }
 
-  // Phạm vi bên DB là mọi store, không phải store có entry bị chạm.
-  //
-  // `driver.list({ scope: 'all' })` ở trên vốn đã quét mọi scope; và từ khi tag
-  // là thực thể, "tag 0 entry" là trạng thái hợp lệ thường gặp — bám theo
-  // `touched` thì đúng lúc alias + metadata là thứ duy nhất cần sửa lại là lúc
-  // không có gì được ghi, trong khi hàm vẫn trả `alias` như đã ghi xong.
   if (keys.all.length) {
     const db = await knowledgeDb()
     const rows = await rowsOf(keys)
     const tagRows = await readTagMetaRows(devTeamRoot)
     const now = new Date().toISOString()
-    // Một transaction cho cả ba bảng: nửa vời ở đây nghĩa là alias trỏ tới tag
-    // mà không nhóm nào còn mang, hoặc metadata mồ côi mang tên đã biến mất.
     db.transaction((tx) => {
       for (const storeKey of keys.all) {
         if (dst) {

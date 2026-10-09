@@ -1,4 +1,3 @@
-// English mirror of statistics vi.ts (fallback is vi when a key is missing).
 export default {
   title: 'Statistics',
   subtitle: 'Token usage by project / task / step / job — aggregated from usage logs',

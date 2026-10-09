@@ -77,7 +77,7 @@ export function snapChartHeight(height: number): number {
 /** Config một chart instance trong danh sách chart của mode Thống kê. */
 export interface ChartConfig {
   id: string
-  /** Tiêu đề VẼ TRONG chart; rỗng → không vẽ. */
+  /** Tiêu đề vẽ trong chart; rỗng → không vẽ. */
   title: string
   groupBy: UsageGroupBy
   metric: UsageMetric

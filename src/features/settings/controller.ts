@@ -14,7 +14,6 @@ import * as settingsBusiness from './business/index.js'
 export class SettingsController extends AbstractController {
   /** Local filesystem directory browser (folder picker). */
   async browseFs() {
-    // Missing query → default home; explicit empty / __roots__ handled in browseDirectory.
     const pathParam = this.c.req.query('path')
     const outcome = await settingsBusiness.browseDirectory(pathParam === undefined ? undefined : pathParam)
     if ('error' in outcome) return this.json(outcome.status || 400, { error: outcome.error })
@@ -39,8 +38,6 @@ export class SettingsController extends AbstractController {
 
   async runAutoscan() {
     const config = settingsBusiness.loadAutoscanConfig()
-    // Optional body may override whitelist for a one-shot run (settings "scan now"
-    // with unsaved edits); otherwise use persisted whitelist.
     const b = await this.parseBody()
     let whitelist = config.whitelist
     if (b.ok && Array.isArray(b.value?.whitelist)) {
@@ -110,7 +107,7 @@ export class SettingsController extends AbstractController {
   async updateModes() {
     const b = await this.parseBody()
     if (!b.ok) return this.badRequest('invalid JSON')
-    // Merge per key: PUT một phần không xoá cấu hình của mode khác (như logging.types).
+    // xem docs/architecture/code/settings.md §1
     const current = settingsBusiness.loadModesConfig()
     const next = parseModesConfig({
       enabled: {
@@ -146,7 +143,6 @@ export class SettingsController extends AbstractController {
   async updateScanPatterns() {
     const b = await this.parseBody()
     if (!b.ok) return this.badRequest('invalid JSON')
-    // Merge per kind so a body carrying only one kind leaves the other two alone.
     const next = mergeScanPatternsConfig(settingsBusiness.loadScanPatternsConfig(), b.value)
     const saved = settingsBusiness.saveScanPatternsConfig(next)
     emitAudit({ op: 'update', entity: 'scan-patterns', identifier: 'config', projectId: null })

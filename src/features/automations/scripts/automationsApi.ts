@@ -1,8 +1,3 @@
-/**
- * FE API client cho automations (#233) — mọi call gắn `?project=` theo
- * pattern monitorApi.
- */
-
 import { apiGet, apiPost, apiRequest } from '../../../frontend/http/client.js'
 import type {
   AutomationAction,

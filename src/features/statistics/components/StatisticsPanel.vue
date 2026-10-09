@@ -25,17 +25,9 @@ import {
 } from '../lib/chartConfig'
 import { formatDuration, formatNumber, formatTs, signedNumber } from '../lib/format'
 
-/**
- * Mode Thống kê (issue #231): gallery chart 4 cột — mỗi chart một card
- * (ChartTile) với config riêng (groupBy/metric/loại/tiêu đề/span/height/định
- * dạng số/style) lưu localStorage. Card summary tách riêng khỏi bảng; bảng +
- * drill-down theo chart đang active (chart cuối được tương tác).
- */
-
 const PREFS_KEY = 'dev-dashboard-statistics-prefs'
 const DAY_MS = 86_400_000
-const RANGE_OPTIONS = [7, 30, 90, 0] as const // 0 = tất cả
-/** Giữ số cột trục X trong mức đọc được — dư gộp vào "(còn lại)". */
+const RANGE_OPTIONS = [7, 30, 90, 0] as const
 const MAX_CHART_ITEMS = 12
 
 type Scope = 'project' | 'all'
@@ -44,25 +36,20 @@ const props = defineProps<{ projectId?: string | null; defaultProjectId?: string
 
 const { t } = useI18nHelpers()
 
-// ── Config hiển thị (persist localStorage) ───────────────────────────────────
 const scope = ref<Scope>('project')
 const rangeDays = ref<number>(30)
 const charts = ref<ChartConfig[]>([makeDefaultChartConfig()])
 
-// ── Trạng thái runtime ───────────────────────────────────────────────────────
 const results = ref<Record<string, UsageStatsResult>>({})
 const activeChartId = ref('')
 const settingsFor = ref('')
 const loading = ref(false)
 const error = ref('')
-// Drill-down: project (scope all) → task → step; áp cho query của mọi chart.
 const drillProject = ref('')
 const drillTaskId = ref('')
 const drillStepId = ref('')
 
-/** Card summary co giãn chiều cao như chart tile (snap bước 20px). */
 const summaryHeight = ref(200)
-/** Card summary co giãn chiều rộng theo grid span (1-4 cột). */
 const summarySpan = ref(4)
 
 function loadPrefs(): void {
@@ -84,7 +71,7 @@ function loadPrefs(): void {
       const parsed = p.charts.map(sanitizeChartConfig).filter((c): c is ChartConfig => !!c)
       if (parsed.length) charts.value = parsed
     } else if (p.groupBy || p.metric || p.chartType || p.chart) {
-      // Prefs bản đơn chart — migrate thành danh sách 1 phần tử.
+      // xem docs/architecture/code/statistics.md §2
       const legacy = sanitizeChartConfig({
         id: 'migrated',
         groupBy: p.groupBy,
@@ -123,19 +110,15 @@ function persistPrefs(): void {
 watch([scope, rangeDays, summaryHeight, summarySpan], persistPrefs)
 watch(charts, persistPrefs, { deep: true })
 
-// ── Toolbar options ──────────────────────────────────────────────────────────
 const scopeOptions = computed<CSelectOption[]>(() => [
   { value: 'project' as Scope, label: t('statistics.scope.project') },
   { value: 'all' as Scope, label: t('statistics.scope.all') },
 ])
 
-/** Project param hiệu dụng: project đang chọn ở shell (null → default project,
- * cùng semantics với monitor), hoặc project đang drill khi scope all. */
 const effectiveProject = computed(() =>
   scope.value === 'all' ? drillProject.value || '' : props.projectId || props.defaultProjectId || '',
 )
 
-// ── Chart đang active (bảng + drill-down theo chart này) ────────────────────
 const activeChart = computed(
   () => charts.value.find((c) => c.id === activeChartId.value) ?? charts.value[0],
 )
@@ -144,7 +127,6 @@ const activeResult = computed(() => (activeChart.value ? results.value[activeCha
 
 const rows = computed(() => activeResult.value?.groups ?? [])
 
-/** Định dạng số theo chart đang active (bảng + summary dùng chung). */
 const activeNumberFormat = computed(() => activeChart.value?.numberFormat ?? 'compact')
 
 function activateChart(id: string) {
@@ -168,7 +150,6 @@ function updateChart(next: ChartConfig) {
   if (idx >= 0) charts.value[idx] = next
 }
 
-/** Menu thêm thẻ: biểu đồ hoặc report xếp hạng. */
 const addMenuOpen = ref(false)
 
 function addCard(kind: 'chart' | 'report') {
@@ -176,7 +157,7 @@ function addCard(kind: 'chart' | 'report') {
   const chart = makeDefaultChartConfig({ kind, span: kind === 'report' ? 1 : 2 })
   charts.value.push(chart)
   activateChart(chart.id)
-  settingsFor.value = chart.id // mở luôn dialog để cấu hình thẻ mới
+  settingsFor.value = chart.id
 }
 
 function removeChart(id: string) {
@@ -191,8 +172,6 @@ function onTileResize(chart: ChartConfig, span: number, height: number) {
   updateChart({ ...chart, span, style: { ...chart.style, height } })
 }
 
-// ── Data mỗi chart ───────────────────────────────────────────────────────────
-/** Series cho biểu đồ — cap 12 item + gộp còn lại để trục không dồn. */
 function cardSeries(chart: ChartConfig): { labels: string[]; values: number[] } {
   const groups = results.value[chart.id]?.groups ?? []
   const labels = groups.map((g) => (g.key === '' ? t('statistics.noAttribution') : g.key))
@@ -205,7 +184,6 @@ function cardSeries(chart: ChartConfig): { labels: string[]; values: number[] } 
   }
 }
 
-/** Series cho report — đầy đủ, ReportCard tự cắt top-N. */
 function reportSeries(chart: ChartConfig): { labels: string[]; values: number[] } {
   const groups = results.value[chart.id]?.groups ?? []
   return {
@@ -214,7 +192,6 @@ function reportSeries(chart: ChartConfig): { labels: string[]; values: number[] 
   }
 }
 
-// ── Bảng chi tiết: lọc theo tên + offset ±avg ngay trong cột ────────────────
 const tableFilter = ref('')
 
 const filteredRows = computed(() => {
@@ -223,7 +200,6 @@ const filteredRows = computed(() => {
   return rows.value.filter((g) => g.key.toLowerCase().includes(q))
 })
 
-/** Trung bình MỖI CỘT token trên các dòng đang hiển thị (đã lọc). */
 const columnAvgs = computed(() => {
   const metrics = USAGE_METRICS as readonly UsageMetric[]
   const out = {} as Record<UsageMetric, number>
@@ -240,17 +216,14 @@ function offsetClass(offset: number): string {
   return 'is-avg'
 }
 
-// ── Card summary (min/max/avg — table, co giãn được) ─────────────────────────
 const entryStats = computed(() => activeResult.value?.totals ?? null)
 
-/** spread min/max/avg từ danh sách giá trị (null khi rỗng). */
 function spreadOf(values: number[]): { min: number; max: number; avg: number } | null {
   if (!values.length) return null
   const sum = values.reduce((s, v) => s + v, 0)
   return { min: Math.min(...values), max: Math.max(...values), avg: sum / values.length }
 }
 
-/** min/max/avg MỖI METRIC (input/output/cache/total) giữa các group đang xem. */
 const metricSpreads = computed(() =>
   USAGE_METRICS.map((metric) => ({
     metric,
@@ -258,10 +231,8 @@ const metricSpreads = computed(() =>
   })),
 )
 
-/** Tổng token mỗi step — query summary riêng, luôn có bất kể chart nào. */
 const stepSpread = computed(() => spreadOf((stepSummary.value?.groups ?? []).map((g) => g.totalTokens)))
 
-/** Card summary co giãn cả CHIỀU RỘNG (grid span) LẪN chiều cao — như tile. */
 const summaryDragPreview = ref<{ span: number; height: number } | null>(null)
 const summaryRef = ref<HTMLElement | null>(null)
 const summaryHandleRef = ref<HTMLElement | null>(null)
@@ -334,7 +305,6 @@ const summaryStyle = computed(() => ({
   height: `${summaryDragPreview.value?.height ?? summaryHeight.value}px`,
 }))
 
-// ── Drill-down ───────────────────────────────────────────────────────────────
 const drillable = computed(() => {
   const g = activeChart.value?.groupBy
   if (g === 'task' && !drillTaskId.value) return 'task' as const
@@ -375,7 +345,6 @@ function drillTo(kind: 'project' | 'task' | 'step', key: string): void {
   }
 }
 
-/** Xoá drill ở bậc `kind` và mọi bậc dưới nó. */
 function clearDrill(kind: 'project' | 'task' | 'step'): void {
   if (kind === 'project') {
     drillProject.value = ''
@@ -399,14 +368,11 @@ function onRowClick(group: { key?: string }): void {
   drillTo(drillable.value, key)
 }
 
-/** Offset thời lượng so với avg: "+1h 2m" / "−30s" / "±0". */
 function signedDuration(offsetMs: number): string {
   if (!Number.isFinite(offsetMs) || Math.abs(offsetMs) < 500) return '±0'
   return `${offsetMs > 0 ? '+' : '−'}${formatDuration(Math.abs(offsetMs))}`
 }
 
-// ── Load ─────────────────────────────────────────────────────────────────────
-/** Summary token theo step — query riêng, độc lập groupBy của các chart. */
 const stepSummary = ref<UsageStatsResult | null>(null)
 
 async function load(): Promise<void> {
@@ -421,7 +387,7 @@ async function load(): Promise<void> {
     from,
   }
   try {
-    // Fetch step summary trước, charts sau — test dùng lastUrl() vẫn trúng chart cuối.
+    // xem docs/architecture/code/statistics.md §1
     const [stepRes, ...replies] = await Promise.all([
       fetchUsageStats({ ...query, groupBy: 'step' }).catch(() => null),
       ...charts.value.map((chart) =>
@@ -437,14 +403,11 @@ async function load(): Promise<void> {
   }
 }
 
-// Reload khi query đổi: scope/project, drill, range, hoặc bộ groupBy của charts
-// (đổi metric/title/style chỉ re-render, không refetch).
 const groupBySignature = computed(() => charts.value.map((c) => `${c.id}:${c.groupBy}`).join('|'))
 watch([effectiveProject, drillTaskId, drillStepId, rangeDays, groupBySignature], () => {
   void load()
 })
 
-// Scope hẹp lại trong khi chart đang group theo project → về task (option ẩn).
 watch(scope, () => {
   if (scope.value === 'project') {
     for (const chart of charts.value) {
@@ -541,7 +504,6 @@ onMounted(() => {
       </button>
     </nav>
 
-    <!-- Card summary: table min/max/avg — co giãn rộng (grid span) + cao như tile -->
     <div v-if="activeResult" ref="summaryGridRef" class="statistics-summary-grid">
       <section ref="summaryRef" class="statistics-summary-card" :style="summaryStyle">
         <header class="summary-card-head">
@@ -566,7 +528,6 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody>
-              <!-- Mỗi metric token: spread giữa các group của dimension đang xem -->
               <tr v-for="row in metricSpreads" v-show="row.spread" :key="row.metric">
                 <td class="summary-metric">
                   🧩 {{ t('statistics.summary.rowMetric', {
@@ -740,8 +701,6 @@ onMounted(() => {
   min-height: 0;
   height: 100%;
   box-sizing: border-box;
-  /* Shell `.main-editor` overflow:hidden — panel tự scroll toàn trang
-     (header + chart + bảng vượt viewport thì cuộn dọc ở đây). */
   overflow-y: auto;
 }
 .statistics-head h2 {
@@ -887,7 +846,6 @@ onMounted(() => {
 .statistics-crumb-x {
   opacity: 0.7;
 }
-/* Card summary — grid 4 cột riêng để co giãn CHIỀU RỘNG theo span như tile. */
 .statistics-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -899,7 +857,6 @@ onMounted(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-/* Card summary — table min/max/avg, co giãn chiều cao như chart tile. */
 .statistics-summary-card {
   position: relative;
   border: 1px solid var(--border);
@@ -979,7 +936,6 @@ onMounted(() => {
   opacity: 1;
   border-color: var(--accent);
 }
-/* Màu highlight: dưới avg (xanh) / avg (accent) / trên avg (đỏ cam). */
 .statistics-table .is-below,
 .summary-table .is-below {
   color: #2ecc71;
@@ -999,7 +955,6 @@ onMounted(() => {
   font-weight: 500;
   opacity: 0.85;
 }
-/* Gallery 4 cột — tile mặc định span 2 (thuộc tính grid-column do ChartTile set). */
 .statistics-charts {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

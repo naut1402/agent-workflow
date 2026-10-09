@@ -1,15 +1,3 @@
-/**
- * Biến tham chiếu giữa trigger ↔ các bước action (#233):
- * - `{{trigger.kind}}`, `{{trigger.type}}`, `{{trigger.payload.<path>}}` —
- *   context trigger (event mang payload gốc; timer mang lịch).
- * - `{{steps.N.taskId}}`, `{{steps.N.jobId}}`, `{{steps.N.status}}`,
- *   `{{steps.N.stdout}}`, `{{steps.N.artifacts.<name>}}` — output bước thứ N
- *   (N bắt đầu từ 1, theo thứ tự actions).
- *
- * Pure — unit-test trực tiếp. Path không tra được → giữ nguyên literal để dễ
- * nhận ra trong output thay vì im lặng thay bằng rỗng.
- */
-
 import type { AutomationRun, AutomationStepResult } from '../schemas/automation.js'
 
 export interface TriggerContext {
@@ -56,7 +44,6 @@ function stringify(value: unknown): string {
 /** Thay mọi `{{path}}` trong chuỗi bằng giá trị từ context (lệch → giữ nguyên). */
 export function substituteVars(input: string, ctx: AutomationVarsContext): string {
   return input.replace(VAR_PATTERN, (match, path: string) => {
-    // `steps.N` là 1-based theo doc — map về index mảng 0-based.
     const normalised = path.replace(/^steps\.(\d+)(\.|$)/, (_m, n: string, rest: string) =>
       `steps.${Number(n) - 1}${rest}`,
     )

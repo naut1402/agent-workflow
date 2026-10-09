@@ -7,10 +7,7 @@ import { KnowledgeController } from './controller.js'
 export const routeOrder = 85
 
 export function registerRoutes(app: Hono<HonoEnv>): void {
-  // Hono match theo thứ tự đăng ký → route con phải đứng trước route gốc.
   app.get('/api/knowledge/tags', bind(KnowledgeController, 'listTags'))
-  // `/tags/rename` phải đứng TRƯỚC `/tags/:tag`, nếu không `rename` bị nuốt
-  // thành một giá trị `:tag`.
   app.post('/api/knowledge/tags/rename', bind(KnowledgeController, 'renameTag'))
   app.post('/api/knowledge/tags', bind(KnowledgeController, 'createTag'))
   app.put('/api/knowledge/tags/:tag', bind(KnowledgeController, 'updateTag'))
@@ -21,11 +18,9 @@ export function registerRoutes(app: Hono<HonoEnv>): void {
   app.delete('/api/knowledge/collections/:id', bind(KnowledgeController, 'deleteCollection'))
   app.post('/api/knowledge/upload', bind(KnowledgeController, 'uploadEntry'))
 
-  // `?id=` phân biệt read và list — id chứa `/` nên không tách thành path param.
   app.get('/api/knowledge', bind(KnowledgeController, 'listOrReadEntry'))
   app.post('/api/knowledge', bind(KnowledgeController, 'createEntry'))
   app.put('/api/knowledge', bind(KnowledgeController, 'updateEntry'))
   app.delete('/api/knowledge', bind(KnowledgeController, 'deleteEntry'))
-  // 405 thay vì rơi xuống 404 cho method lạ — theo tiền lệ `runner/api.ts`.
   app.all('/api/knowledge', bind(KnowledgeController, 'entryMethodNotAllowed'))
 }

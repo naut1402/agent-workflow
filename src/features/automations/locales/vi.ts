@@ -1,4 +1,3 @@
-// Strings cho feature `automations` (#233). vi là nguồn chân lý; en đối ứng.
 export default {
   title: 'Automations',
   subtitle: 'Trigger (lịch / cron / event) → các bước action chạy task theo trình tự',
@@ -172,7 +171,6 @@ export default {
     webhook: 'Webhook (Slack/GitHub gọi vào) và trigger từ integration (comment PR/issue, mention, CI/CD fail, Slack DM) sẽ có ở giai đoạn sau — issue #233.',
   },
 
-  // Tên thân thiện cho event type — hiển thị "Tên (mã)" trong combobox.
   eventNames: {
     'job.queued': 'Job vào hàng đợi',
     'job.started': 'Job bắt đầu chạy',

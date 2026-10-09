@@ -1,4 +1,3 @@
-// English translations for the `knowledge` namespace — keys mirror vi/knowledge.ts.
 export default {
   title: 'Knowledge',
   actions: {

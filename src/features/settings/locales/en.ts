@@ -1,4 +1,3 @@
-// Strings for the settings module. Typed against the vi schema via en/index.ts.
 export default {
   title: 'Settings',
   close: 'Close',

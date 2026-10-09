@@ -1,17 +1,6 @@
 import { z } from 'zod'
 
 /**
- * Automation rule = triggers[] → actions[] (#233).
- * Zod là nguồn chân lý — persist YAML + request body đều parse qua đây.
- *
- * - Nhiều trigger: rule chạy khi **bất kỳ** trigger nào khớp (OR).
- * - Trigger thời gian gom về một loại `timer` với mốc `startAt` chung —
- *   khác nhau ở `repeat`: một lần / định kỳ / cron.
- * - Nhiều action: chạy **tuần tự** theo thứ tự mảng; bước sau tham chiếu
- *   output bước trước qua biến `{{steps.N.…}}` / `{{trigger.…}}`.
- */
-
-/**
  * Id charset cho rule file `automations/<id>.yaml` — chặn path-traversal:
  * slug thường, không separator/.., tối đa 64 ký tự.
  */
@@ -19,17 +8,12 @@ export const AUTOMATION_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export const AutomationIdSchema = z.string().regex(AUTOMATION_ID_PATTERN, 'invalid automation id')
 
-/**
- * Charset id project trong registry — `makeId()` sinh dạng `<slug>-<sha1_8>`,
- * slug đã lowercase + gạch nối. Regex chặt để id không bao giờ trở thành mảnh
- * path; path thật luôn lấy từ `registry.get(id).path` (đã canonical hoá).
- */
+// xem docs/architecture/code/automations.md §1
 const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export const AUTOMATION_TRIGGER_KINDS = ['timer', 'event'] as const
 export type AutomationTriggerKind = (typeof AUTOMATION_TRIGGER_KINDS)[number]
 
-/** Cron 5 field (minute hour dom month dow) — ngữ nghĩa kiểm tra ở matcher. */
 const CRON_SHAPE = /^\s*\S+\s+\S+\s+\S+\s+\S+\s+\S+\s*$/
 
 const IsoDateTime = z
@@ -37,15 +21,8 @@ const IsoDateTime = z
   .min(1)
   .refine((v) => !Number.isNaN(Date.parse(v)), 'invalid ISO datetime')
 
-/** Id ổn định của trigger trong rule (neo state fired/lastRun theo trigger). */
 const TriggerId = z.string().regex(/^t\d{1,3}$/, 'invalid trigger id')
 
-/**
- * Trigger thời gian — mốc `startAt` dùng chung:
- * - `once`: chạy đúng một lần tại `startAt`.
- * - `interval`: chạy tại `startAt` và lặp lại mỗi `everyMs`.
- * - `cron`: lịch cron tính từ `startAt` (mốc tham chiếu lần đầu).
- */
 const TimerOnce = z.object({ mode: z.literal('once') })
 const TimerInterval = z.object({
   mode: z.literal('interval'),
@@ -85,11 +62,6 @@ export const MAX_ACTIONS = 10
  * - `existing`: chạy task có sẵn theo pipeline hiện tại (đường run-step)
  * Các trường text hỗ trợ biến `{{trigger.…}}` / `{{steps.N.…}}` (thay khi chạy).
  */
-/**
- * Object thuần (không `.superRefine`) — bắt buộc để dùng làm nhánh trong
- * `z.discriminatedUnion` (yêu cầu `ZodObject`, không nhận `ZodEffects`).
- * Validate `mode`↔`prompt`/`taskId` áp ở `AutomationAction.superRefine` bên dưới.
- */
 const RunTaskAction = z.object({
   kind: z.literal('runTask'),
   /** Nhãn bước trên timeline (hiển thị). */
@@ -106,7 +78,7 @@ const RunTaskAction = z.object({
   /**
    * Project đích của bước (registry project id) — áp cho cả `create` và
    * `existing`. Không set/`null` → chạy trên project sở hữu rule (mặc định).
-   * Không nhận biến `{{…}}`: `{`/`}` trượt regex, giống `taskId` hôm nay.
+   * Không nhận biến `{{…}}`: `{`/`}` trượt regex.
    */
   projectId: z.string().regex(PROJECT_ID_PATTERN, 'invalid project id').nullish(),
 })
@@ -195,8 +167,6 @@ export const ToggleAutomationRequest = z.object({
   enabled: z.boolean(),
 })
 
-// ── Legacy → shape mới (rule tạo trước khi gom timer / mảng hoá) ────────────
-
 /**
  * Chuẩn hoá document cũ sang shape hiện hành trước khi safeParse:
  * - `trigger` đơn (time|interval|cron|event) → `triggers: [timer|event]`
@@ -208,7 +178,7 @@ export function normaliseAutomationDoc(raw: unknown): Record<string, any> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
   const doc: Record<string, any> = { ...(raw as Record<string, any>) }
 
-  // YAML 1.1 có thể parse timestamp ISO thành Date — chuẩn về chuỗi ISO.
+  // xem docs/architecture/code/automations.md §3
   const asIso = (v: unknown): unknown => (v instanceof Date ? v.toISOString() : v)
   if (doc.createdAt) doc.createdAt = asIso(doc.createdAt)
   if (doc.updatedAt) doc.updatedAt = asIso(doc.updatedAt)
@@ -250,9 +220,6 @@ export function normaliseAutomationDoc(raw: unknown): Record<string, any> {
   delete doc.action
   return doc
 }
-
-// ── Runtime state / run history (FE + BE dùng chung — persist ở
-// registryHome/automations, xem business/runLedger.ts) ─────────────────────
 
 export type AutomationRunOutcome = 'running' | 'succeeded' | 'failed' | 'skipped'
 

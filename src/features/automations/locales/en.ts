@@ -1,4 +1,3 @@
-// English slice for the `automations` feature. vi is the source of truth.
 export default {
   title: 'Automations',
   subtitle: 'Trigger (schedule / cron / event) → sequential run-task steps',
@@ -172,7 +171,6 @@ export default {
     webhook: 'Webhooks (Slack/GitHub calling in) and integration triggers (PR/issue comments, mentions, CI/CD failures, Slack DMs) arrive in a later phase — issue #233.',
   },
 
-  // Friendly names for event types — shown as "Name (code)" in the combobox.
   eventNames: {
     'job.queued': 'Job queued',
     'job.started': 'Job started',

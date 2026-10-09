@@ -25,12 +25,7 @@ import {
   TagUpdateBody,
 } from './schemas/knowledge.js'
 
-/**
- * Bề mặt HTTP của knowledge: entry CRUD + tag + collection + bundle.
- *
- * CORS, rate-limit và JWT không xuất hiện ở đây — middleware `/api/*` của
- * Hono đã lo cả ba; trước migrate feature này tự áp tay từng cái một.
- */
+/** Bề mặt HTTP của knowledge: entry CRUD + tag + collection + bundle. */
 export class KnowledgeController extends AbstractController {
   private async driverFor() {
     const gate = this.requireRoot()
@@ -39,13 +34,7 @@ export class KnowledgeController extends AbstractController {
     return { driver, root: gate.root }
   }
 
-  /**
-   * Không mở được `dashboard.sqlite` là lỗi hạ tầng, không phải lỗi request
-   * → 500 kèm nguyên nhân để người dùng sửa được.
-   *
-   * Không nuốt thành danh sách rỗng: người dùng đọc đó là "chưa có nhóm nào"
-   * rồi tạo mới, và ghi đè mất dữ liệu cũ.
-   */
+  // xem docs/architecture/README.md §4.4
   private async knowledgeDbOp(run: () => Promise<Response>): Promise<Response> {
     try {
       return await run()
@@ -172,11 +161,7 @@ export class KnowledgeController extends AbstractController {
     })
   }
 
-  /**
-   * Multipart qua `c.req.formData()` — cùng khuôn `readAttachmentForm` của
-   * nl-chat. An toàn nhị phân có sẵn vì bridge node→Web gom body thành Buffer
-   * chứ không phải string như bản parse tay trước đây.
-   */
+  /** Multipart qua `c.req.formData()`. */
   async uploadEntry() {
     const d = await this.driverFor()
     if ('error' in d) return d.error
@@ -214,8 +199,6 @@ export class KnowledgeController extends AbstractController {
   entryMethodNotAllowed() {
     return this.methodNotAllowed()
   }
-
-  // ── collection
 
   async listCollections() {
     const gate = this.requireRoot()
@@ -282,8 +265,6 @@ export class KnowledgeController extends AbstractController {
     if (!parsed.success) return this.badRequest('invalid body')
     return this.knowledgeDbOp(async () => {
       const result = await renameTag(gate.root, parsed.data)
-      // Rename hỏng giữa chừng vẫn đã ghi được một phần → emit cho đúng những
-      // entry đó và trả cả danh sách, đừng để client tưởng không có gì đổi.
       for (const id of 'entries' in result ? result.entries : []) {
         emitEntity('updated', 'knowledge', { id, projectId: this.projectId })
       }
@@ -292,16 +273,12 @@ export class KnowledgeController extends AbstractController {
     })
   }
 
-  // ── bundle
-
   /** Resolve `knowledge_inputs` (id) → nội dung cho agent chạy ngoài repo. */
   async getBundle() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
     const parsed = BundleQuery.safeParse(this.c.req.query())
     if (!parsed.success) return this.badRequest('invalid query')
-    // Id lặp gộp lại, quá ngưỡng thì từ chối — cắt bớt im lặng nghĩa là
-    // agent nhận bundle thiếu mà không có tín hiệu nào để tự phát hiện.
     const ids = [
       ...new Set(
         parsed.data.ids

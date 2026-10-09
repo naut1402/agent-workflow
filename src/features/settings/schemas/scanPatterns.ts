@@ -1,13 +1,5 @@
 import { z } from 'zod'
 
-/**
- * Custom scan patterns let a repo that ignores the default Claude Code / Cursor
- * conventions still expose its agents, skills and rules to the dashboard.
- *
- * Shared by server and UI, so this file must stay free of `node:*` / fileHelper
- * imports — every path check below is plain string work.
- */
-
 export const SCAN_PATTERN_KINDS = ['agents', 'skills', 'rules'] as const
 
 export type ScanPatternKind = (typeof SCAN_PATTERN_KINDS)[number]
@@ -15,10 +7,7 @@ export type ScanPatternKind = (typeof SCAN_PATTERN_KINDS)[number]
 export const SCAN_PATTERN_MAX_LENGTH = 200
 export const SCAN_PATTERN_MAX_COUNT = 20
 
-/**
- * Tolerant on input: a junk entry is dropped on its own instead of failing the
- * whole list, so one bad line hand-edited into settings.json cannot wipe the rest.
- */
+// xem docs/architecture/code/settings.md §1
 const PatternList = z.preprocess((raw) => sanitiseList(raw), z.array(z.string()))
 
 /** Custom scan patterns block inside global dashboard settings.json. */
@@ -80,14 +69,8 @@ export function hasAnyScanPattern(config: ScanPatternsConfig | null | undefined)
 }
 
 /**
- * Merge a partial patch over the stored config, one kind at a time: a `PUT` body
- * carrying only `agents` must leave `skills` and `rules` untouched rather than
- * resetting them to empty.
- *
- * Only an actual array counts as "the caller means to set this kind". A wrong
- * type (`"a,b"`, `{}`, `null`) would otherwise be sanitised down to `[]` and
- * silently wipe the stored list; keeping `current` makes it a no-op instead. An
- * explicit `[]` still clears the list — that one is a real intent.
+ * Merge a partial patch over the stored config, one kind at a time: only an
+ * array replaces a kind (`[]` clears it); anything else keeps the stored list.
  */
 export function mergeScanPatternsConfig(
   current: ScanPatternsConfig,

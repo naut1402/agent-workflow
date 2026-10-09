@@ -1,15 +1,3 @@
-/**
- * Runtime state + run history cho automations — đặt ở registryHome
- * (`~/.dev-team-dashboard/automations/<projectKey>/`) cùng vùng với `jobs/`,
- * `recover/` vì đây là state của dashboard, không phải config project.
- *
- * - `state.json`: per-rule runtime state (lastRunAt / fired / inFlight) —
- *   sống sót qua restart, scheduler dựa vào đây tính due.
- * - `runs/<runId>.json`: lịch sử chạy, prune giữ N bản gần nhất.
- *
- * Đồng bộ fs (atomic temp+rename) — khối lượng nhỏ, tick 30s.
- */
-
 import {
   joinPath,
   mkdirSync,

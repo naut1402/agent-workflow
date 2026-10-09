@@ -1,13 +1,3 @@
-/**
- * Automation scheduler (#233) — tick định kỳ quét automation của mọi project
- * trong registry, đánh giá trigger thời gian (timer: once/interval/cron) và
- * chạy action do hệ thống bơm vào (`bindAutomationRunner`, pattern
- * recoverPoller: module này không kéo monitor/runner khi unit-test).
- *
- * Sống sót qua restart: rule config ở data root, runtime state ở
- * `registryHome()/automations/` — khi boot quét lại là tính tiếp due.
- */
-
 import { loadRegistry } from '../../../backend/registry.js'
 import type { AutomationRuleRecord } from '../schemas/automation.js'
 import { evaluateRuleTriggers } from './matcher.js'
@@ -27,7 +17,6 @@ export interface AutomationRunnerInput {
 
 export type AutomationRunnerFn = (input: AutomationRunnerInput) => Promise<unknown> | unknown
 
-/** Default noop — business/index.ts bơm `runAutomation` thật khi nạp server. */
 let boundRunner: AutomationRunnerFn = async () => undefined
 
 export function bindAutomationRunner(fn: AutomationRunnerFn): void {
@@ -49,7 +38,6 @@ interface ProjectLike {
   path: string
 }
 
-/** Mọi project trong registry + fallback `default` từ DEV_TEAM_ROOT (dev mode). */
 function activeProjects(): ProjectLike[] {
   const { projects } = loadRegistry()
   if (projects.length) return projects.map((p) => ({ id: p.id, path: p.path }))
@@ -100,7 +88,6 @@ export function startAutomationScheduler(): void {
   if (schedulerStarted) return
   schedulerStarted = true
 
-  // Startup sweep: xoá inFlight kẹt từ lần chạy trước + đồng bộ trigger registry.
   for (const project of activeProjects()) {
     try {
       clearStaleInFlight(project.id)

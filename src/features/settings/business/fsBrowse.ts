@@ -1,6 +1,3 @@
-// Directory browser for the local folder-picker UI. Lists directories only —
-// never file contents. Defensive: missing/unreadable paths → empty entries.
-
 import os from 'node:os'
 import { type Stats, dirname, existsSync, homeDir, isAbsolutePath, joinPath, parsePath, realpathSync, resolvePath, safeReadDir, statSync } from '../../../backend/lib/fileHelper.js'
 
@@ -24,7 +21,6 @@ export type BrowseOutcome =
 
 const ROOTS_SENTINEL = ''
 
-/** List Windows drive letters that currently exist (C:\, D:\, …). */
 function windowsDrives(): BrowseEntry[] {
   const out: BrowseEntry[] = []
   for (let i = 65; i <= 90; i++) {
@@ -55,9 +51,7 @@ function listRoots(): BrowseResult {
 
 function parentOf(abs: string): string | null {
   const parent = dirname(abs)
-  // At filesystem root (/, C:\): next "up" is the roots list.
   if (parent === abs) return ROOTS_SENTINEL
-  // Windows: dirname('C:\\') === 'C:\\'
   if (process.platform === 'win32') {
     const parsed = parsePath(abs)
     if (parsed.root === abs) return ROOTS_SENTINEL
@@ -71,11 +65,9 @@ function parentOf(abs: string): string | null {
  * - Special: path exactly matching roots sentinel after navigating "up" from a drive root.
  */
 export async function browseDirectory(input: unknown): Promise<BrowseOutcome> {
-  // Explicit roots listing (empty string after "up" from drive root).
   if (input === ROOTS_SENTINEL || input === null || input === undefined) {
     const home = homeDir() || os.homedir()
     if (!home) return { ok: true, result: listRoots() }
-    // Default landing: home directory.
     return browseAbsolute(resolvePath(home))
   }
 
@@ -90,8 +82,6 @@ export async function browseDirectory(input: unknown): Promise<BrowseOutcome> {
     return browseAbsolute(resolvePath(home))
   }
 
-  // Client may send the roots sentinel as empty after trim — already handled.
-  // Allow an explicit "__roots__" token for the picker "Computer" button.
   if (raw === '__roots__') {
     return { ok: true, result: listRoots() }
   }
@@ -108,7 +98,6 @@ async function browseAbsolute(abs: string): Promise<BrowseOutcome> {
   try {
     canonical = realpathSync(abs)
   } catch {
-    // Path may not exist yet / broken symlink — still try listing if it's a dir.
     canonical = abs
   }
 
@@ -126,7 +115,6 @@ async function browseAbsolute(abs: string): Promise<BrowseOutcome> {
   const entries: BrowseEntry[] = []
   for (const d of dirents) {
     if (!d.isDirectory()) continue
-    // Skip common noise / inaccessible.
     if (d.name === '.' || d.name === '..') continue
     entries.push({
       name: d.name,

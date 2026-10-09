@@ -12,15 +12,7 @@ import {
   type KnowledgeTagFacetView,
 } from '../scripts/KnowledgePanelApi'
 
-/**
- * Tạo / sửa collection. Thành viên gom bằng hai cơ chế cộng dồn trong cùng
- * một form: chọn tài liệu thủ công (`entryIds`) và chọn tag (`tags`).
- *
- * Backend resolve hợp của hai tập lúc đọc (`resolveCollectionEntries`), nên ở
- * đây không phải tính trước danh sách thành viên.
- */
 const props = defineProps<{
-  /** `null` = tạo mới. */
   collection: KnowledgeCollectionView | null
   tags: KnowledgeTagFacetView[]
   projectId?: string
@@ -32,24 +24,16 @@ const { t } = useI18nHelpers()
 
 const name = ref(props.collection?.name ?? '')
 const description = ref(props.collection?.description ?? '')
-// Scope quyết định store chứa nhóm → khoá khi sửa, đúng như backend từ chối đổi.
 const scope = ref(props.collection?.scope ?? 'project')
 const selectedTags = ref<string[]>([...(props.collection?.tags ?? [])])
 const selectedIds = ref<string[]>([...(props.collection?.entry_ids ?? [])])
 
 const entryQuery = ref('')
-// `saving` giờ do `run` sở hữu: bật ngay ms đầu, luôn nhả ở `finally`, và
-// lời gọi thứ hai lúc chưa xong bị bỏ qua — thay cho guard tay `|| saving.value`.
 const { pending: saving, run: runSave } = useApiAction()
 const error = ref('')
 
 const isEdit = computed(() => !!props.collection)
 
-/**
- * Nguồn chọn thủ công là entry của mọi scope, không phải tab scope đang mở:
- * một nhóm gom được entry của nhiều scope, nên lọc theo tab đang mở sẽ giấu mất
- * đúng những entry người dùng định thêm.
- */
 const allEntries = ref<KnowledgeEntryMeta[]>([])
 
 onMounted(async () => {
@@ -129,8 +113,6 @@ async function save() {
       </label>
       <label class="cfg-label">
         {{ t('knowledge.collections.scope') }}
-        <!-- Khoá khi sửa: đổi scope là đổi store, tức đổi con trỏ của mọi nơi
-             đang tham chiếu nhóm — backend cũng từ chối. -->
         <select v-model="scope" class="cfg-input" :disabled="isEdit">
           <option value="project">project</option>
           <option value="global">global</option>
@@ -201,8 +183,6 @@ async function save() {
   flex-direction: column;
   gap: 8px;
 }
-/* Danh sách chọn có trần riêng: nó là lá cuộn, không được đẩy `.modal-foot` ra
-   ngoài viền dialog (docs/agent-rules/ui-design-guideline.md). */
 .knowledge-pick-list {
   list-style: none;
   margin: 4px 0 0;

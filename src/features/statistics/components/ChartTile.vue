@@ -4,17 +4,10 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import Icon from '../../../frontend/ui/Icon.vue'
 import { TILE_MIN_SPAN, TILE_MAX_SPAN, snapChartHeight } from '../lib/chartConfig'
 
-/**
- * Vật chứa một chart trong gallery grid 4 cột: sở hữu grid span (1-4), chiều
- * cao card (snap bước 20px), MỘT action group duy nhất (settings / remove /
- * zoom in-out-reset) hiện ở GÓC TRÊN BÊN PHẢI khi hover chart. Zoom áp CSS
- * transform lên nội dung — tràn thì scroll ngang/dọc.
- */
 const props = withDefaults(
   defineProps<{
     span: number
     height: number
-    /** Ẩn nút remove khi gallery chỉ còn 1 chart. */
     removable?: boolean
   }>(),
   { removable: false },
@@ -30,7 +23,6 @@ const { t } = useI18nHelpers()
 
 const tileRef = ref<HTMLElement | null>(null)
 
-// ── Zoom nội dung chart ─────────────────────────────────────────────────────
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 3
 const zoom = ref(1)
@@ -48,7 +40,6 @@ const zoomStyle = computed(() => ({
   transformOrigin: 'top left',
 }))
 
-// ── Kéo handle: ngang → snap cột (span), dọc → snap bước 20px ───────────────
 const GRID_GAP = 12
 const dragPreview = ref<{ span: number; height: number } | null>(null)
 
@@ -112,7 +103,6 @@ function onResizeStart(down: PointerEvent) {
   }
 }
 
-/** Bề rộng 1 cột grid từ container thật (repeat(4, 1fr) + gap 12). */
 function gridColumnWidth(grid: HTMLElement | null): number {
   if (!grid) return 240
   return Math.max(80, (grid.clientWidth - 3 * GRID_GAP) / 4)
@@ -209,7 +199,6 @@ onBeforeUnmount(() => {
   padding: 0.5rem 0.5rem 0.6rem;
   min-width: 0;
 }
-/* MỘT action group duy nhất — cố định GÓC TRÊN BÊN PHẢI, hiện khi hover chart. */
 .chart-tile-actions {
   position: absolute;
   top: 6px;

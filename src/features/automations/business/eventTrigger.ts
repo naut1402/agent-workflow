@@ -1,13 +1,4 @@
-/**
- * Trigger theo domain event (#233): một subscriber wildcard duy nhất trên event
- * bus, mỗi event đối chiếu rule `kind: event` của mọi project.
- *
- * - Match khi `event.payload.projectId` **bằng** project của rule — event không
- *   mang projectId không khớp rule nào (tránh chạy chéo project).
- * - Bỏ qua `automation.*` chính nó — chống vòng lặp rule → run → event → rule.
- * - Coalesce: bỏ qua khi rule đang inFlight hoặc vừa chạy trong
- *   `MIN_EVENT_REFIRE_MS` (10s) — chặn storm job.* liên tiếp.
- */
+// xem docs/architecture/events/automations.md
 
 import { on, type DashboardEvent } from '../../../backend/events/index.js'
 import { loadRegistry } from '../../../backend/registry.js'
@@ -23,11 +14,7 @@ export function isAutomationFeedbackEvent(type: string): boolean {
   return type === 'automation.triggered' || type.startsWith('automation.run_')
 }
 
-/**
- * Đối chiếu một event với mọi rule `kind: event` của project phát event.
- * Export để test trực tiếp (deterministic) — subscription thật ở
- * `startEventTriggers`.
- */
+/** Đối chiếu một event với mọi rule `kind: event` của project phát event. */
 export async function handleEvent(event: DashboardEvent): Promise<void> {
   if (isAutomationFeedbackEvent(event.type)) return
 
@@ -41,7 +28,6 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
   const run = getBoundAutomationRunner()
   for (const rule of listAutomations(project.path)) {
     if (!rule.enabled) continue
-    // Nhiều trigger: khớp **bất kỳ** trigger event nào của rule.
     const matched = rule.triggers.find(
       (t) => t.kind === 'event' && t.eventType === event.type,
     )
