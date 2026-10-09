@@ -175,4 +175,4 @@ Cấp **Code** của [`../README.md`](../README.md) §4 cho feature `src/feature
 
 ## 31. Containing block cho `CLoadingOverlay`
 
-- **`position: relative` bắt buộc** — `.task-entry`, `.task-head` (`styles/TaskList.scss`), `.qa-panel` (`QaPanel.vue`) và `.project-bar` (`ProjectBar.vue`) khai `position: relative` làm containing block cho `CLoadingOverlay`; thiếu nó overlay leo lên tổ tiên định vị gần nhất và phủ cả trang.
+- **`position: relative` bắt buộc** — `.task-entry`, `.task-head` (`styles/TaskList.scss`), `.qa-panel` (`QaPanel.vue`) và `.project-bar` (`ProjectBar.vue`) khai `position: relative` làm containing block cho `CLoadingOverlay`; thiếu nó overlay leo lên tổ tiên định vị gần nhất và phủ cả trang. Hợp đồng chung của overlay: [`frontend.md`](frontend.md) §1.
