@@ -6,6 +6,11 @@ import { SecretMasker } from '../business/SecretMasker'
 import type { McpServerConfig } from '../schemas/mcpServer'
 import Icon from '../../../frontend/ui/Icon.vue'
 import McpServerDialog from './McpServerDialog.vue'
+import type { McpCredentialOption } from '../scripts/mcpApi'
+
+defineProps<{
+  credentials?: McpCredentialOption[]
+}>()
 
 const { t } = useI18nHelpers()
 
@@ -184,6 +189,7 @@ function checkLabel(s: McpServerConfig): string {
       :secrets-cleared="copySecretsCleared"
       :is-copy="copyMode"
       :taken-ids="servers.map((s) => s.id)"
+      :credentials="credentials"
       @close="closeDialog"
       @saved="onSaved"
     />

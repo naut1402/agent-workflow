@@ -13,7 +13,7 @@ import {
   canAttachSelfMcp,
   getConnection,
   getDefaultRunner,
-  mcpDeliveryOf,
+  getProvider,
 } from '../../runner/business/index.js'
 
 /** `mcp` = ra lệnh bằng tool; `sentinel` = ra lệnh bằng dòng JSON cuối output. */
@@ -47,8 +47,9 @@ export function resolveDecisionRoute(): DecisionRouteResult {
     const conn = getConnection(runner.connectionId)
     if (!conn) return sentinel(`connection ${runner.connectionId} không tồn tại`)
 
-    // Chỉ provider claude-style mới nhận `--mcp-config`.
-    if (mcpDeliveryOf(conn.providerId) !== 'config-file-flag') {
+    // Chỉ cách giao nhận được entry tự gắn (file `--mcp-config` riêng theo job
+    // của claude) mới mang được tool `orchestrator_decide`.
+    if (!getProvider(conn.providerId)?.mcpDelivery?.acceptsSelfServer) {
       return sentinel(`provider ${conn.providerId} không nhận --mcp-config`)
     }
 

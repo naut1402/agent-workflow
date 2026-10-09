@@ -3,7 +3,7 @@
 // qua `CredentialResolver`.
 //
 // Chỉ mở đúng thứ đang có consumer ngoài file khai nó — `controller.ts` của
-// feature này và `runner/business/providers/*`. Module trong `business/` và
+// feature này và `runner/business/{mcpDelivery,providers}/*`. Module trong `business/` và
 // component gọi thẳng file khai (`./McpServer.js`, `../business/SecretMasker`, …),
 // nên re-export thêm ở đây là export chết: không ai import, mà `unused-export` thì
 // không phân biệt được "để dành cho phase sau" với "quên xoá". Phase sau cần gì

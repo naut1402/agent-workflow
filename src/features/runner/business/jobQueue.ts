@@ -12,14 +12,13 @@ import {
   resolveStepRunnerId,
   substituteConfig,
   getProvider,
+  cleanupOrphanedMcpDeliveries,
 } from './registry.js'
 import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
 import { isAgentCliProviderId } from './providers/agentCli.js'
-import { cleanupOrphanedCursorMcpWorkspaces } from './providers/cursorMcpWorkspace.js'
-import { cleanupOrphanedMcpConfigs } from './providers/mcpJobConfig.js'
 import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js'
 import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
 import type { RunTaskStepResult } from '../../monitor/business/tasks/runStep.js'
@@ -266,12 +265,10 @@ bindRecoverPoller({ loadJob, saveJob, requeueJob })
 
 // Reap orphaned running jobs once when the module loads (server restart).
 reapOrphanedRunningJobs()
-// Cùng lý do, cho file cấu hình MCP: `dispose()` không chạy được khi tiến trình
-// bị kill, và file bỏ lại chứa token đã giải ở dạng plaintext.
-cleanupOrphanedMcpConfigs()
-// Nhánh cursor còn tệ hơn: file bỏ lại nằm TRONG repo của người dùng, kèm bản sao
-// lưu `.cursor/mcp.json` gốc của họ. Ledger giữ đủ thông tin để hoàn tác.
-cleanupOrphanedCursorMcpWorkspaces()
+// Cùng lý do, cho cách giao MCP bằng file: `dispose()` không chạy được khi tiến
+// trình bị kill, và file bỏ lại chứa token đã giải ở dạng plaintext — với cursor
+// còn nằm TRONG repo người dùng kèm bản sao lưu `.cursor/mcp.json` gốc của họ.
+cleanupOrphanedMcpDeliveries()
 startRecoverPoller()
 
 function jobsDir(): string {
