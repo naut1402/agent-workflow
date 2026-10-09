@@ -74,7 +74,7 @@ Dialog gợi ý sẵn path khi đổi transport — `MCP_DEFAULT_HTTP_PATH` = `/
 `RemoteMcpServer.assertEndpoint` (`business/RemoteMcpServer.ts`) chạy ở cả `upsertServer` (trên URL thô của payload, trước khi chuẩn hoá) lẫn `testServer` (`server.assertEndpoint()`) cho mọi transport khác `stdio`, và chạy lại ở **mọi hop** redirect khi kết nối (`guardedFetch`):
 
 - **`https`** — chấp nhận **mọi host**.
-- **`http`** — **chỉ** loopback / private: `isPrivateHostname(host)` hoặc một trong các literal `::1` · `[::1]` · `0.0.0.0`.
+- **`http`** — **chỉ** loopback / private: `isPrivateHostname(host)` (`src/backend/lib/netUtils.ts`, dùng chung với `fetchUrlSafe` và `sanitiseGitUrl`) hoặc một trong các literal `::1` · `[::1]` · `0.0.0.0`.
 - Protocol khác, hoặc URL không parse được → ném `Error`, controller trả `400`.
 
 > [!NOTE]
@@ -129,9 +129,9 @@ Mỗi provider mang **một cách giao MCP** — `RunnerProvider.mcpDelivery`, m
 
 - **Trình tự cố định** (`McpJobDelivery.prepare`, Template Method): entry tự gắn (`extraServers`) → chọn server (`mcpRegistry.select`) → giao (`attach`). Hai cách giao bằng file dùng chung `FileMcpDelivery`: dựng nội dung từ `McpServerSet.toCliConfig`, hiện thực chỉ quyết file nằm đâu và dọn ra sao.
 - **Không Connection nào bật MCP** ⇒ `prepare` trả `null` trước `attach`: argv không đổi, 🚫 không file nào chạm đĩa, không phiên nào mở. Mọi server được chọn đều rụng (tắt / đã xoá) cũng vẫn trả `null` để giữ đúng bất biến đó.
-- **Credential**: một `RunnerCredentialResolver` (adapter của port `CredentialResolver` trên kho credential của runner) dùng chung cho cả ba cách giao, nên `credentialId` của server từ xa giải giống hệt nhau ở mọi đường.
+- **Credential**: một `RunnerCredentialResolver` (adapter của port `CredentialResolver` trên kho credential của runner) dùng chung cho cả ba cách giao, nên `credentialId` của server từ xa giải giống hệt nhau ở mọi đường. `registry.ts` còn đăng ký đúng instance đó bằng `useCredentialResolver` lúc nạp; *Kiểm tra kết nối* (`mcp/controller.ts`) lấy lại bằng `credentialResolver()` nên `mcp` 🚫 import `runner`. Tiến trình chưa nạp `runner` (stdio `mcp/stdio.ts`, test chỉ nạp `mcp`) nhận `null` ⇒ server từ xa chạy không header xác thực, kèm cảnh báo `credential … không giải được secret — bỏ header xác thực`.
 - **Catalog** (`listProviderCatalog`, `registry.ts`): `mcpDelivery` lấy thẳng `provider.mcpDelivery.kind` — 🚫 không có bảng tra riêng theo `providerId` để lệch khỏi thứ job thật sự nhận.
-- **Node điều phối**: chỉ delivery có `acceptsSelfServer` (hiện là `ConfigFlagMcpDelivery`) mới tự gắn entry `dev-team-dashboard` cho job điều phối; `resolveDecisionRoute` đọc cùng cờ đó để chốt tuyến `mcp` hay `sentinel`.
+- **Node điều phối**: chỉ delivery có `acceptsSelfServer` (hiện là `ConfigFlagMcpDelivery`) mới tự gắn entry `dev-team-dashboard` cho job điều phối; `resolveDecisionRoute` đọc cùng cờ đó, cộng `SelfMcpServer.canAttach()`, để chốt tuyến `mcp` hay `sentinel`. Entry dựng bằng `SelfMcpServer.forJob(metadata)` — cùng guard với env điều phối mà `claude-code-cli` bơm cho CLI (`SelfMcpServer.childEnv`), nên không có job mang tool mà thiếu token. Entry giữ env tối thiểu: `command` = `process.execPath`, `args` = `[<mcp/stdio.ts>, '--mode=full']`, env chỉ `DEVTEAM_MCP_MODE` + token + base URL.
 
 File cấu hình job của claude:
 
@@ -165,6 +165,7 @@ Vai client nằm ở `src/features/mcp/business/`, mỗi abstraction một file 
 | `McpServerSet.ts` | Bộ server của một job (`McpRegistry.select`) → `toCliConfig` sinh nội dung file `mcpServers` (§7) |
 | `McpClient.ts` | `McpClient.probe` (*Kiểm tra kết nối*) · `McpClient.open` → `McpSession` (phiên sống theo job của họ `ai-api`) |
 | `SecretMasker.ts` | Value object che secret (§5): `mask` · `maskDeep` · `stream`, cùng quy tắc nhận diện secret trong `args`. **Node-free** — dialog dùng chung quy tắc này |
-| `CredentialResolver.ts` | Cổng giải secret của credential profile — `runner` hiện thực, `mcp` 🚫 biết credential store |
+| `CredentialResolver.ts` | Cổng giải secret của credential profile — `runner` hiện thực và đăng ký (`useCredentialResolver`), `mcp` 🚫 biết credential store; caller không nhận resolver qua tham số lấy bằng `credentialResolver()` |
+| `SelfMcpServer.ts` | `extends StdioMcpServer` — entry trỏ vào chính dashboard cho job điều phối (`forJob`, `canAttach`, `childEnv`) và **nguồn hằng hợp đồng xuyên process** với `mcp/stdio.ts` ([`server.md`](server.md) §8.1) |
 
 Kiểu dữ liệu và hằng một nguồn ở `src/features/mcp/schemas/mcpServer.ts` (schema Zod, type `z.infer`). FE chỉ import `schemas/mcpServer.ts` và `SecretMasker.ts` — các lớp còn lại kéo SDK MCP nên chỉ chạy ở backend.

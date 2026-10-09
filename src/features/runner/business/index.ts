@@ -87,7 +87,6 @@ export {
   isAgentCliProvider,
 } from './providers/agentCli.js'
 export type { AgentCliProvider, AgentCliCapabilities, TokenUsage, ProviderFamily as AgentProviderFamily } from './providers/agentCli.js'
-export { SELF_MCP_SERVER_ID, buildSelfMcpEntry, canAttachSelfMcp } from './providers/selfMcpConfig.js'
 export {
   submitJob,
   submitAndWait,

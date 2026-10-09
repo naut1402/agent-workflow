@@ -1,28 +1,14 @@
 import { AbstractController } from '../../backend/http/AbstractController.js'
 import { emitAudit } from '../../backend/log/store.js'
 import { emitEntity } from '../../backend/events/index.js'
-import { getCredential, isDirectSecretType, resolveSecretRef } from '../runner/business/index.js'
 import { McpServerTestSchema, McpServerUpsertSchema } from './schemas/mcpServer.js'
 import {
   McpClient,
   McpRegistry,
   RemoteMcpServer,
+  credentialResolver,
   mcpRegistry,
-  type CredentialResolver,
 } from './business/index.js'
-
-/**
- * Credential của server từ xa vẫn giải qua `runner` (vault + `credentials.json`).
- * Dựng tại chỗ thành `CredentialResolver` để `mcp/business` chỉ thấy cổng, 🚫 không
- * thấy store — cạnh `controller` → `runner` này được cắt ở phần sau của #468.
- */
-const runnerCredentials: CredentialResolver = {
-  secretFor(credentialId) {
-    const resolved = resolveSecretRef(getCredential(credentialId))
-    if (!isDirectSecretType(resolved.type)) return null
-    return (resolved as { value?: string | null }).value ?? null
-  },
-}
 
 export class McpController extends AbstractController {
   /** Secret không bao giờ rời tiến trình qua response — mọi cấu hình trả về đều mask. */
@@ -119,7 +105,9 @@ export class McpController extends AbstractController {
 
     const result = await McpClient.probe(server, {
       listTools: parsed.data.listTools !== false,
-      credentials: runnerCredentials,
+      // Hiện thực do `runner` đăng ký lúc nạp — controller 🚫 import `runner`.
+      // Chưa đăng ký ⇒ `null` ⇒ server từ xa chạy không header xác thực, kèm cảnh báo.
+      credentials: credentialResolver(),
     })
 
     // Chỉ ghi `lastCheck` khi vừa đo đúng cấu hình đang lưu. Bản nháp (đổi url
