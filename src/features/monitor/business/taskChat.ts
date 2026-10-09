@@ -141,7 +141,7 @@ function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | 
 
 export type TaskChatBlockedReason = 'noCompletedJob'
 
-// `providerFamilyOf(id) === 'ai-api'` (agentCli.ts) is the source of truth for
+// `providerFamilyOf(id) === 'ai-api'` (runner registry.ts) is the source of truth for
 // `AgenticApiProvider` ids — no separate list to keep in sync here.
 export type TranscriptProviderHint = 'claude-code-cli' | 'cursor-cli' | 'unknown' | (string & {})
 

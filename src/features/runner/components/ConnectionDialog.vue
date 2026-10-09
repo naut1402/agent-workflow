@@ -19,6 +19,7 @@ import {
 import { fetchProviderConfigs, saveProviderConfig, deleteProviderConfig } from '../scripts/ProviderDialogApi'
 import { fetchMcpServers } from '../../mcp/scripts/mcpApi'
 import { DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
+import { familyOfProviderId } from '../lib/runnerModelOptions'
 import type { ConnectionKind, ConnectionOption, ProviderConfigOption, ProviderEntry } from '../types'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
 import CComboSelect from '../../../frontend/ui/CComboSelect.vue'
@@ -439,9 +440,7 @@ const mcpDeliveryOfSelected = computed(() => selectedProviderEntry.value?.mcpDel
  * hỏi ở đây — "bật cái này có tác dụng không". Có.
  */
 const mcpViaToolBridge = computed(
-  () =>
-    selectedProviderEntry.value?.family === 'ai-api'
-    || Boolean(effectiveProviderId.value) && effectiveProviderId.value.endsWith('-api'),
+  () => familyOfProviderId(effectiveProviderId.value, props.providers) === 'ai-api',
 )
 
 // 📌 So với `'unsupported'`, 🚫 không so "khác `config-file-flag`": từ khi
