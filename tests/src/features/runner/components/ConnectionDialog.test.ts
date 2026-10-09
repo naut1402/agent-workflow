@@ -1238,7 +1238,7 @@ describe('ConnectionDialog — overlay chặn thao tác lúc lưu', () => {
 /* ═══ #378 · #379 · Tdf943817 — cảnh báo theo cách giao MCP của provider ══════ */
 
 import runnerEn from '@/features/runner/locales/en'
-import { mcpDeliveryOf } from '@/features/runner/business/providers/agentCli'
+import { listProviderCatalog } from '@/features/runner/business/registry'
 
 /**
  * TC-P5-25 · TC-P5-26 (+ vế UI của #379).
@@ -1248,14 +1248,21 @@ import { mcpDeliveryOf } from '@/features/runner/business/providers/agentCli'
  * thật sự ở đây, và P5-8 đòi người dùng thấy *TRƯỚC KHI BẬT* (`implement.md`
  * §4 "Sai lệch 2"). TC đi theo bề mặt thật.
  *
- * 📌 Catalog ở đây lấy `mcpDelivery` từ **chính `mcpDeliveryOf`**, 🚫 hằng gõ
- * tay: fixture gõ tay là thứ vẫn xanh sau khi giá trị thật đã đổi — đúng cái bẫy
- * mà TC-62 vừa rơi vào.
+ * 📌 Catalog ở đây lấy `mcpDelivery` từ **chính `listProviderCatalog()`** (kind
+ * của delivery gắn với provider), 🚫 hằng gõ tay: fixture gõ tay là thứ vẫn xanh
+ * sau khi giá trị thật đã đổi — đúng cái bẫy mà TC-62 vừa rơi vào.
  */
 describe('ConnectionDialog — cảnh báo theo mcpDelivery (#378 / #379)', () => {
   const MCP_SERVERS = [
     { id: 'playwright', label: 'Playwright MCP', enabled: true, transport: 'stdio', command: 'npx', args: [], env: {} },
   ]
+
+  const CATALOG = listProviderCatalog()
+  function mcpDeliveryOf(providerId: string): ProviderEntry['mcpDelivery'] {
+    const entry = CATALOG.find((e) => e.id === providerId)
+    if (!entry) throw new Error(`provider không có trong catalog: ${providerId}`)
+    return entry.mcpDelivery
+  }
 
   const REAL_PROVIDERS: ProviderEntry[] = [
     { id: 'claude-code-cli', kind: 'local-console', label: 'Claude Code CLI', family: 'agent-cli', mcpDelivery: mcpDeliveryOf('claude-code-cli') },
@@ -1375,5 +1382,95 @@ describe('ConnectionDialog — cảnh báo theo mcpDelivery (#378 / #379)', () =
     expect(runnerEn.connectionDialog.mcpWorkspaceFile).not.toBe(
       runnerVi.connectionDialog.mcpWorkspaceFile,
     )
+  })
+})
+
+/* ═══ Tcebe274e-P4 · #483 — cách giao MCP đọc thẳng từ catalog ════════════════ */
+
+/**
+ * Catalog provider (`ProviderEntry.mcpDelivery`) là nguồn duy nhất; dialog 🚫 đoán
+ * lại theo `family` hay đuôi `-api` của `providerId`. Fixture cố ý ghép những tổ
+ * hợp mà phép đoán cũ trả lời KHÁC catalog — xanh ở đây nghĩa là dialog đọc
+ * catalog, 🚫 đọc tên provider.
+ */
+describe('ConnectionDialog — thông báo MCP theo `mcpDelivery` của catalog (#483)', () => {
+  const MCP_SERVERS = [
+    { id: 'playwright', label: 'Playwright MCP', enabled: true, transport: 'stdio', command: 'npx', args: [], env: {} },
+  ]
+
+  async function tickPlaywright() {
+    const box = qa<HTMLInputElement>('input[type="checkbox"][value="playwright"]')[0]
+    if (!box) throw new Error('mcp checkbox not found: playwright')
+    box.checked = true
+    box.dispatchEvent(new Event('change'))
+    await flushPromises()
+  }
+  /** Connection AI API `anthropic-api` (họ `ai-api`) với `mcpDelivery` do catalog quyết. */
+  async function mountAiApiWith(mcpDelivery: ProviderEntry['mcpDelivery']) {
+    const providers = PROVIDERS.map((p) => (p.id === 'anthropic-api' ? { ...p, mcpDelivery } : p))
+    const w = mount(ConnectionDialog, {
+      props: { providers, providerConfigs: PROVIDER_CONFIGS, connection: null },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    const aiRadio = q<HTMLInputElement>('input[type="radio"][value="ai-provider"]')
+    aiRadio.checked = true
+    aiRadio.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await chooseProviderConfig('pc-anthropic')
+    await tickPlaywright()
+    return w
+  }
+  function shown() {
+    const text = document.body.textContent ?? ''
+    return {
+      unsupported: text.includes(runnerVi.connectionDialog.mcpUnsupported),
+      toolBridge: text.includes(runnerVi.connectionDialog.mcpToolBridge),
+      workspaceFile: text.includes(runnerVi.connectionDialog.mcpWorkspaceFile),
+    }
+  }
+
+  beforeEach(() => {
+    vi.mocked(fetchMcpServers).mockClear()
+    vi.mocked(fetchMcpServers).mockResolvedValue({ servers: [...MCP_SERVERS] } as any)
+  })
+
+  it('TC-P4-11: họ `ai-api`, catalog `bridge-tools` ⇒ chỉ thông báo nạp tool vào vòng tool-use', async () => {
+    const w = await mountAiApiWith('bridge-tools')
+
+    expect(shown()).toEqual({ unsupported: false, toolBridge: true, workspaceFile: false })
+    w.unmount()
+  })
+
+  it('TC-P4-12: họ `ai-api` nhưng catalog `unsupported` ⇒ báo không hỗ trợ, 🚫 đoán là tool bridge', async () => {
+    const w = await mountAiApiWith('unsupported')
+
+    expect(shown()).toEqual({ unsupported: true, toolBridge: false, workspaceFile: false })
+    w.unmount()
+  })
+
+  it('TC-P4-13: catalog chưa có `mcpDelivery` ⇒ 🚫 thông báo nào, kể cả với provider đuôi `-api`', async () => {
+    const w = await mountAiApiWith(undefined)
+
+    expect(shown()).toEqual({ unsupported: false, toolBridge: false, workspaceFile: false })
+    w.unmount()
+  })
+
+  it('TC-P4-14: provider `agent-cli` mà catalog trả `bridge-tools` ⇒ vẫn theo catalog', async () => {
+    vi.mocked(scanLocalCommands).mockResolvedValue({ commands: LOCAL_COMMANDS })
+    const providers: ProviderEntry[] = [
+      ...PROVIDERS,
+      { id: 'claude-code-cli', kind: 'local-console', label: 'Claude Code CLI', family: 'agent-cli', mcpDelivery: 'bridge-tools' },
+    ]
+    const w = mount(ConnectionDialog, {
+      props: { providers, providerConfigs: PROVIDER_CONFIGS, connection: null },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    await chooseCommand('claude')
+    await tickPlaywright()
+
+    expect(shown()).toEqual({ unsupported: false, toolBridge: true, workspaceFile: false })
+    w.unmount()
   })
 })
