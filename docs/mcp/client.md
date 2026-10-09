@@ -118,14 +118,29 @@ Thêm hai chi tiết:
 
 ## 7. Tiêu thụ ở runner
 
-`prepareMcpConfigForJob` (`src/features/runner/business/providers/mcpJobConfig.ts`) chọn server qua `mcpRegistry.select` rồi sinh file `mcpServers` bằng `McpServerSet.toCliConfig` cho **từng job**:
+Mỗi provider mang **một cách giao MCP** — `RunnerProvider.mcpDelivery`, một hiện thực của `McpJobDelivery` (`src/features/runner/business/mcpDelivery/`). Chỗ lắp ráp duy nhất là `runner/business/registry.ts`; provider không khai delivery thì không nhận MCP.
 
-- **Vị trí**: `registryHome()/mcp-runtime/job-<jobId>.json` — 🚫 **không** trong workspace người dùng. File chứa secret đã giải; nằm trong repo thì lọt `git status` của chính agent.
-- **Quyền**: thư mục `0700`, file `0600` — `mode` set ngay lúc tạo (`writeFileSync` với `{ mode }`) nên không có cửa sổ file `0644` chứa token đã giải; thêm một `chmod` ngay sau để phủ ca ghi đè, vì `writeFileSync` giữ nguyên mode cũ khi file đã tồn tại.
-- **Truyền vào CLI**: `claude-code-cli.ts` thêm `--mcp-config <path>` **và** `--strict-mcp-config`. Cờ thứ hai là bắt buộc đi kèm — không có nó, job còn ăn thêm MCP từ cấu hình khác.
-- **Dọn**: `dispose()` xoá file trong `finally` của job; `cleanupOrphanedMcpConfigs()` quét sạch lúc bootstrap cho ca dashboard bị kill giữa chừng.
+| `kind` (catalog) | Lớp | Provider | Đến CLI / model bằng cách nào |
+|---|---|---|---|
+| `config-file-flag` | `ConfigFlagMcpDelivery` | `claude-code-cli` | File `registryHome()/mcp-runtime/job-<jobId>.json`, argv thêm `--mcp-config <path>` **và** `--strict-mcp-config` |
+| `workspace-config-file` | `WorkspaceFileMcpDelivery` | `cursor-cli` | File `<workspace>/.cursor/mcp.json` CLI tự đọc theo cwd, argv chỉ thêm `--approve-mcps` |
+| `bridge-tools` | `ToolBridgeMcpDelivery` | `openai-api` · `gemini-api` · `xai-api` · `anthropic-api` | Dashboard tự mở phiên MCP cho từng server, khai tool `mcp__<server>__<tool>` vào vòng tool-use |
+| `unsupported` | `NoMcpDelivery` / không khai | `codex-cli` · `console-command` | — |
+
+- **Trình tự cố định** (`McpJobDelivery.prepare`, Template Method): entry tự gắn (`extraServers`) → chọn server (`mcpRegistry.select`) → giao (`attach`). Hai cách giao bằng file dùng chung `FileMcpDelivery`: dựng nội dung từ `McpServerSet.toCliConfig`, hiện thực chỉ quyết file nằm đâu và dọn ra sao.
+- **Không Connection nào bật MCP** ⇒ `prepare` trả `null` trước `attach`: argv không đổi, 🚫 không file nào chạm đĩa, không phiên nào mở. Mọi server được chọn đều rụng (tắt / đã xoá) cũng vẫn trả `null` để giữ đúng bất biến đó.
+- **Credential**: một `RunnerCredentialResolver` (adapter của port `CredentialResolver` trên kho credential của runner) dùng chung cho cả ba cách giao, nên `credentialId` của server từ xa giải giống hệt nhau ở mọi đường.
+- **Catalog** (`listProviderCatalog`, `registry.ts`): `mcpDelivery` lấy thẳng `provider.mcpDelivery.kind` — 🚫 không có bảng tra riêng theo `providerId` để lệch khỏi thứ job thật sự nhận.
+- **Node điều phối**: chỉ delivery có `acceptsSelfServer` (hiện là `ConfigFlagMcpDelivery`) mới tự gắn entry `dev-team-dashboard` cho job điều phối; `resolveDecisionRoute` đọc cùng cờ đó để chốt tuyến `mcp` hay `sentinel`.
+
+File cấu hình job của claude:
+
+- **Vị trí**: `registryHome()/mcp-runtime/` — 🚫 **không** trong workspace người dùng. File chứa secret đã giải; nằm trong repo thì lọt `git status` của chính agent.
+- **Quyền**: thư mục `0700`, file `0600` — `mode` set ngay lúc tạo (`writeFileSync` với `{ mode }`) nên không có cửa sổ file `0644` chứa token đã giải; thêm một `chmodSafe` ngay sau để phủ ca ghi đè, vì `writeFileSync` giữ nguyên mode cũ khi file đã tồn tại.
+- **`--strict-mcp-config`** bắt buộc đi kèm — không có nó, job còn ăn thêm MCP từ cấu hình khác.
 - **`startupTimeoutSec`** chỉ ghi cho entry `stdio` (schema CLI gắn khoá này sau predicate `transport === 'stdio'`), kẹp về `[5, 600]` **giây** và làm tròn về số nguyên giây. Server không khai `timeoutMs` ⇒ 🚫 không khai khoá ⇒ CLI dùng mặc định 120s của nó.
-- **Không Connection nào bật MCP** ⇒ hàm trả `null`, argv không đổi, 🚫 không file nào chạm đĩa. Mọi server được chọn đều rụng (tắt / đã xoá) cũng vẫn trả `null` để giữ đúng bất biến đó.
+
+Dọn: `dispose()` của handle chạy trong `finally` của job. Ca dashboard bị kill giữa chừng do `cleanupOrphanedMcpDeliveries()` (`registry.ts`) lo lúc bootstrap — gọi `cleanupOrphans()` một lần cho mỗi `kind`: claude xoá file `job-*.json`, cursor duyệt ledger `mcp-runtime/cursor-workspaces.json` để khôi phục `.cursor/mcp.json` gốc và nhả khoá treo.
 
 ---
 

@@ -275,7 +275,7 @@ export class McpRegistry {
    * (dialog chỉ *cảnh báo* khi giá trị trông như secret, không chặn). Đây là chỗ
    * duy nhất trong repo persist secret dạng thô — `credentials.json` chỉ giữ ref,
    * giá trị thật nằm trong `secret-vault.json` đã mã hoá. Bản sao theo job của
-   * đúng những secret này đã là 0600 (`mcpJobConfig.ts`), nên để bản gốc theo
+   * đúng những secret này đã là 0600 (`ConfigFlagMcpDelivery` ở `runner`), nên để bản gốc theo
    * umask (thường 0644, user khác trên máy đọc được) là lệch ngay trong một tính năng.
    *
    * 🚫 Không chmod `registryHome()`: thư mục đó dùng chung cho mọi feature, siết

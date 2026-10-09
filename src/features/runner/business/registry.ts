@@ -1,6 +1,9 @@
 import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
 import { registryHome } from '../../../backend/registry.js'
-import { catalogFamilyOf, ensureLegacyConnection, getConnection } from './connections.js'
+import { PROVIDER_CATALOG, catalogFamilyOf, ensureLegacyConnection, getConnection } from './connections.js'
+import { ConfigFlagMcpDelivery } from './mcpDelivery/ConfigFlagMcpDelivery.js'
+import { ToolBridgeMcpDelivery } from './mcpDelivery/ToolBridgeMcpDelivery.js'
+import { WorkspaceFileMcpDelivery } from './mcpDelivery/WorkspaceFileMcpDelivery.js'
 import { createClaudeCodeCliProvider } from './providers/claude-code-cli.js'
 import { createCursorCliProvider } from './providers/cursor-cli.js'
 import { createCodexCliProvider } from './providers/codex-cli.js'
@@ -8,6 +11,7 @@ import { createConsoleCommandProvider } from './providers/console-command.js'
 import { createOpenAiCompatibleProvider } from './providers/openai-compatible-api.js'
 import { createAnthropicCompatibleProvider } from './providers/anthropic-compatible-api.js'
 import { providerFamilyFromId } from './providers/agentCli.js'
+import { RunnerCredentialResolver } from './RunnerCredentialResolver.js'
 import {
   DEFAULT_CONNECTION_ID,
   RUNNERS_VERSION,
@@ -15,6 +19,8 @@ import {
   sanitiseRunnerId,
   type DefaultRunnerReason,
   type DefaultRunnerResolution,
+  type McpDelivery,
+  type ProviderCatalogEntry,
   type ProviderFamily,
   type RunnerConfig,
   type RunnersStore,
@@ -317,14 +323,25 @@ function register(provider: RunnerProvider): void {
   providers.set(provider.providerId, provider)
 }
 
-register(createClaudeCodeCliProvider())
-register(createCursorCliProvider())
+// ── Lắp ráp cách giao MCP ──────────────────────────────────────────────────
+// Chỗ DUY NHẤT biết provider nào nhận MCP bằng cách nào. Provider không được
+// truyền delivery (codex ⇒ `NoMcpDelivery`, console ⇒ không khai) không nhận MCP.
+//
+// Một adapter credential dùng chung: cả ba cách giao giải `credentialId` của
+// server từ xa giống hệt nhau.
+const mcpCredentials = new RunnerCredentialResolver()
+/** File cấu hình job (claude) và ledger workspace (cursor) — 🚫 trong workspace người dùng. */
+const mcpRuntimeDir = () => joinPath(registryHome(), 'mcp-runtime')
+const mcpToolBridge = new ToolBridgeMcpDelivery(mcpCredentials)
+
+register(createClaudeCodeCliProvider({ mcpDelivery: new ConfigFlagMcpDelivery(mcpRuntimeDir, mcpCredentials) }))
+register(createCursorCliProvider({ mcpDelivery: new WorkspaceFileMcpDelivery(mcpRuntimeDir, mcpCredentials) }))
 register(createCodexCliProvider())
 register(createConsoleCommandProvider())
-register(createOpenAiCompatibleProvider('openai-api', 'https://api.openai.com/v1'))
-register(createOpenAiCompatibleProvider('gemini-api', 'https://generativelanguage.googleapis.com/v1beta/openai'))
-register(createOpenAiCompatibleProvider('xai-api', 'https://api.x.ai/v1'))
-register(createAnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.com'))
+register(createOpenAiCompatibleProvider('openai-api', 'https://api.openai.com/v1', mcpToolBridge))
+register(createOpenAiCompatibleProvider('gemini-api', 'https://generativelanguage.googleapis.com/v1beta/openai', mcpToolBridge))
+register(createOpenAiCompatibleProvider('xai-api', 'https://api.x.ai/v1', mcpToolBridge))
+register(createAnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.com', mcpToolBridge))
 
 /**
  * Register (or replace) a provider at runtime. Built-in providers are registered
@@ -346,6 +363,37 @@ export function providerFamilyOf(providerId: string): ProviderFamily {
 
 export function listProviderIds(): string[] {
   return [...providers.keys()]
+}
+
+/**
+ * Catalog provider cho UI. `mcpDelivery` lấy thẳng từ delivery đã lắp ráp vào
+ * provider — 🚫 bảng tra riêng theo `providerId`, nên catalog không lệch được
+ * khỏi thứ job thật sự nhận. Provider không khai delivery ⇒ `'unsupported'`.
+ *
+ * Nằm ở đây chứ 🚫 ở `connections.ts`: file này đã import `connections.ts`, nên
+ * gọi ngược `getProvider` từ đó là vòng import.
+ */
+export function listProviderCatalog(): ProviderCatalogEntry[] {
+  return PROVIDER_CATALOG.map((e) => ({
+    ...e,
+    mcpDelivery: getProvider(e.id)?.mcpDelivery?.kind ?? 'unsupported',
+  }))
+}
+
+/**
+ * Dọn dấu vết giao MCP mồ côi lúc bootstrap (tiến trình trước bị kill giữa job):
+ * file token plaintext dưới `mcp-runtime/`, `.cursor/mcp.json` trong repo người
+ * dùng kèm khoá treo. Một lượt cho mỗi `kind` — nhiều provider dùng chung một
+ * cách giao thì dọn chung một lần.
+ */
+export function cleanupOrphanedMcpDeliveries(): void {
+  const done = new Set<McpDelivery>()
+  for (const provider of providers.values()) {
+    const delivery = provider.mcpDelivery
+    if (!delivery || done.has(delivery.kind)) continue
+    done.add(delivery.kind)
+    delivery.cleanupOrphans()
+  }
 }
 
 /** Vì sao step pin không dùng được — dùng cho log, không đổi hành vi (luôn fallback default). */

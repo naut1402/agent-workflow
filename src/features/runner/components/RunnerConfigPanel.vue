@@ -5,14 +5,16 @@
 // là gốc nội dung tab Runner — nên chẻ sub-component là đổi thiết kế kèm rủi ro
 // e2e, không phải dọn dẹp. Xem #386 và investigate.md G12.
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { fetchRunners } from '../scripts/runnerApi'
 import { saveRunner, deleteRunner, setDefaultRunner, fetchConnections } from '../scripts/RunnerConfigPanelApi'
 import { fetchProviderConfigs } from '../scripts/ProviderDialogApi'
+import { fetchCredentials } from '../scripts/ConnectionDialogApi'
 import RunnerDialog from './RunnerDialog.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import McpPanel from '../../mcp/components/McpPanel.vue'
+import type { McpCredentialOption } from '../../mcp/scripts/mcpApi'
 import type { ProviderEntry, RunnerDraft, ConnectionOption, ProviderConfigOption } from '../types'
 import { familyOfProviderId } from '../lib/runnerModelOptions'
 
@@ -91,6 +93,17 @@ async function load() {
 }
 
 onMounted(load)
+
+const mcpCredentials = ref<McpCredentialOption[]>([])
+
+async function loadMcpCredentials() {
+  const data = await fetchCredentials().catch(() => null)
+  mcpCredentials.value = data?.profiles || []
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'mcp') loadMcpCredentials()
+})
 
 function openNew() {
   editingRunner.value = null
@@ -304,7 +317,7 @@ async function remove(r: RunnerDraft, e: Event) {
       @refreshed="load"
     />
   </div>
-  <McpPanel v-else />
+  <McpPanel v-else :credentials="mcpCredentials" />
   </template>
   </CScreenLayout>
 </template>

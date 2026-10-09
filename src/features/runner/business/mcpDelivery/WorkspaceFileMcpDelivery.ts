@@ -20,6 +20,7 @@
 
 import crypto from 'node:crypto'
 import {
+  chmodSafe,
   existsSync,
   joinPath,
   mkdirSync,
@@ -30,14 +31,9 @@ import {
   writeTextFileSync,
   writeTextFileAtomicSync,
 } from '../../../../backend/lib/fileHelper.js'
-import { registryHome } from '../../../../backend/registry.js'
-import { McpServer } from '../../../mcp/business/index.js'
-import {
-  resolveJobMcpServers,
-  tryChmod,
-  type McpJobConfigHandle,
-  type PrepareMcpConfigInput,
-} from './mcpJobConfig.js'
+import { McpServer, type McpCliConfig } from '../../../mcp/business/index.js'
+import { FileMcpDelivery, type McpConfigHandle } from './FileMcpDelivery.js'
+import type { McpJobInput } from './McpJobDelivery.js'
 
 const CURSOR_DIR = '.cursor'
 const CURSOR_CONFIG = 'mcp.json'
@@ -87,6 +83,169 @@ interface CursorWorkspaceEntry {
   sha256: string
 }
 
+/**
+ * Cursor: `<workspace>/.cursor/mcp.json`, CLI tự đọc theo cwd — đường dẫn 🚫 vào
+ * argv; argv chỉ thêm `--approve-mcps` (`buildCursorJsonInvocation`).
+ */
+export class WorkspaceFileMcpDelivery extends FileMcpDelivery {
+  readonly kind = 'workspace-config-file' as const
+
+  protected write(config: McpCliConfig, input: McpJobInput): McpConfigHandle | null {
+    const jobKey = McpServer.sanitiseId(input.jobId) ?? 'unknown'
+    const dir = joinPath(input.workspace, CURSOR_DIR)
+    const path = joinPath(dir, CURSOR_CONFIG)
+    const gitignorePath = joinPath(dir, CURSOR_GITIGNORE)
+    const lock = joinPath(dir, CURSOR_LOCK)
+
+    // Chụp TRƯỚC khi `mkdir`: sau đó thì thư mục luôn tồn tại và không còn phân
+    // biệt được "của người dùng" với "của ta".
+    const dirExisted = existsSync(dir)
+    mkdirSync(dir, { recursive: true })
+
+    const lockedEntry = (over: Partial<CursorWorkspaceEntry>): CursorWorkspaceEntry => ({
+      jobId: input.jobId,
+      stage: 'locked',
+      dir,
+      path,
+      lock,
+      backup: null,
+      dirExisted,
+      gitignoreCreated: false,
+      sha256: '',
+      ...over,
+    })
+
+    if (!acquireWorkspaceLock(lock)) {
+      // Thư mục ta vừa tạo mà không chiếm được khoá thì trả lại hiện trạng —
+      // nhưng chỉ khi nó rỗng, vì lượt đang giữ khoá có file nằm trong đó.
+      if (!dirExisted) tryRemoveEmptyDir(dir)
+      input.onWarning?.(
+        `mcp: ${dir} đang được một job khác dùng — job này chạy KHÔNG có MCP server `
+        + '(🚫 không ghi đè cấu hình của lượt đang chạy)',
+      )
+      return null
+    }
+
+    // 📌 Dấu vết phải có NGAY, trước cả lần `existsSync` đầu tiên: từ giây giành
+    // được khoá, thư mục khoá đã nằm trên đĩa. Chết trong khoảng giữa "giành khoá"
+    // và "ghi ledger đầy đủ" mà 🚫 không có entry nào trỏ tới thì `cleanupOrphans()`
+    // — vốn chỉ duyệt ledger — 🚫 không thấy gì để gỡ, và workspace đó chạy cursor
+    // KHÔNG MCP vĩnh viễn với một dòng warning "đang được job khác dùng" trong khi
+    // 🚫 không job nào chạy.
+    //
+    // Cửa sổ hẹp (vài lời gọi đồng bộ) nhưng hậu quả vĩnh viễn và im lặng, nên trả
+    // bằng một lần ghi ledger thừa là xứng đáng. Lần ghi đầy đủ bên dưới ghi đè
+    // bản tạm này — `rememberLedger` lọc theo `jobId`.
+    this.rememberLedger(lockedEntry({}))
+
+    // Quyền chỉ đụng vào thư mục CHÍNH TA tạo. `.cursor/` sẵn có của người dùng
+    // thường là 0755 và `restoreWorkspace` không khôi phục mode được, nên hạ nó
+    // xuống 0700 là một tác dụng phụ vĩnh viễn — đúng thứ chuỗi i18n
+    // `mcpWorkspaceFile` đang hứa là KHÔNG xảy ra. Rào thật là 0600 trên `mcp.json`.
+    if (!dirExisted) chmodSafe(dir, 0o700)
+
+    const content = JSON.stringify(config.json, null, 2)
+    const backup = existsSync(path) ? `${path}.dashboard-backup-${jobKey}` : null
+    const entry = lockedEntry({
+      stage: 'written',
+      backup,
+      gitignoreCreated: !existsSync(gitignorePath),
+      sha256: sha256(content),
+    })
+
+    // Nâng bản tạm thành bản đầy đủ, vẫn TRƯỚC khi chạm file: mọi field đều tính
+    // được mà không cần ghi gì, nên `kill -9` ở BẤT KỲ điểm nào bên dưới cũng để
+    // lại dấu vết dọn được. Ghi sau là có một cửa sổ mà file secret đã nằm trong
+    // repo người dùng còn ledger thì chưa biết gì về nó.
+    this.rememberLedger(entry)
+
+    try {
+      if (backup) renameSync(path, backup)
+      writeTextFileSync(path, content, { mode: 0o600 })
+      chmodSafe(path, 0o600)
+      if (entry.gitignoreCreated) writeTextFileSync(gitignorePath, '*\n')
+    } catch (err) {
+      // Ghi hụt giữa chừng ⇒ hoàn tác ngay, 🚫 không để lại nửa vời rồi mới ném.
+      // Dọn hụt ⇒ GIỮ entry cho đường bootstrap thử tiếp (xem `dispose`).
+      if (restoreWorkspace(entry)) this.forgetLedger(entry.jobId)
+      throw err
+    }
+
+    const forget = (jobId: string) => this.forgetLedger(jobId)
+    return {
+      kind: this.kind,
+      path,
+      count: config.names.length,
+      names: config.names,
+      masker: config.masker,
+      warnings: config.warnings,
+      dispose() {
+        // 📌 Chỉ quên entry khi đã dọn SẠCH. Dọn hụt mà vẫn `forgetLedger` là tự
+        // tay vứt lưới cuối đúng lúc cần nó nhất — `cleanupOrphans()` sẽ 🚫 không
+        // còn gì để dọn. Giữ entry an toàn: `restoreWorkspace` idempotent và
+        // `isOurConfig` tự chặn xoá nhầm.
+        if (restoreWorkspace(entry)) forget(entry.jobId)
+      },
+    }
+  }
+
+  /**
+   * Dọn lượt ghi mồ côi lúc bootstrap: `dispose()` chỉ chạy trong `finally` của
+   * job, nên tiến trình bị `kill -9` để lại file secret plaintext TRONG repo người
+   * dùng — kèm cả bản sao lưu file gốc của họ, và một khoá không ai nhả.
+   *
+   * 📌 Đây cũng là đường DUY NHẤT gỡ khoá treo: không có nó thì một lần `kill -9`
+   * là workspace đó vĩnh viễn chạy cursor không MCP. Chạy trước khi job đầu tiên
+   * của tiến trình mới vào hàng (`cleanupOrphanedMcpDeliveries`).
+   */
+  override cleanupOrphans(): void {
+    const entries = this.readLedger()
+    if (!entries.length) return
+    // 📌 GIỮ lại entry nào chưa dọn sạch, 🚫 không `writeLedger([])` vô điều kiện:
+    // xoá sạch là vứt đúng cái lưới này ở ca duy nhất nó còn việc để làm. Entry ở
+    // lại thì lần bootstrap sau thử tiếp — `restoreWorkspace` idempotent nên chạy
+    // lại 🚫 không hại gì, và `isOurConfig` vẫn chặn xoá nhầm.
+    const stuck = entries.filter((entry) => {
+      let clean = false
+      attempt(() => {
+        clean = restoreWorkspace(entry)
+      })
+      return !clean
+    })
+    this.writeLedger(stuck)
+  }
+
+  private ledgerPath(): string {
+    return joinPath(this.runtimeDir(), LEDGER_FILE)
+  }
+
+  private readLedger(): CursorWorkspaceEntry[] {
+    try {
+      const parsed = JSON.parse(readTextFileSync(this.ledgerPath()))
+      return Array.isArray(parsed?.entries) ? (parsed.entries as CursorWorkspaceEntry[]) : []
+    } catch {
+      return []
+    }
+  }
+
+  private writeLedger(entries: CursorWorkspaceEntry[]): void {
+    attempt(() => {
+      const dir = this.runtimeDir()
+      mkdirSync(dir, { recursive: true })
+      chmodSafe(dir, 0o700)
+      writeTextFileAtomicSync(this.ledgerPath(), JSON.stringify({ entries }, null, 2), { mode: 0o600 })
+    })
+  }
+
+  private rememberLedger(entry: CursorWorkspaceEntry): void {
+    this.writeLedger([...this.readLedger().filter((e) => e.jobId !== entry.jobId), entry])
+  }
+
+  private forgetLedger(jobId: string): void {
+    this.writeLedger(this.readLedger().filter((e) => e.jobId !== jobId))
+  }
+}
+
 function sha256(text: string): string {
   return crypto.createHash('sha256').update(text).digest('hex')
 }
@@ -110,108 +269,6 @@ function acquireWorkspaceLock(lock: string): boolean {
     return true
   } catch {
     return false
-  }
-}
-
-export function prepareCursorMcpWorkspace(input: PrepareMcpConfigInput): McpJobConfigHandle | null {
-  const resolved = resolveJobMcpServers(input)
-  // Bất biến argv: không `ids` VÀ không `extras` ⇒ không file nào chạm đĩa.
-  if (!resolved) return null
-
-  const jobKey = McpServer.sanitiseId(input.jobId) ?? 'unknown'
-  const dir = joinPath(input.workspace, CURSOR_DIR)
-  const path = joinPath(dir, CURSOR_CONFIG)
-  const gitignorePath = joinPath(dir, CURSOR_GITIGNORE)
-  const lock = joinPath(dir, CURSOR_LOCK)
-
-  // Chụp TRƯỚC khi `mkdir`: sau đó thì thư mục luôn tồn tại và không còn phân
-  // biệt được "của người dùng" với "của ta".
-  const dirExisted = existsSync(dir)
-  mkdirSync(dir, { recursive: true })
-
-  const lockedEntry = (over: Partial<CursorWorkspaceEntry>): CursorWorkspaceEntry => ({
-    jobId: input.jobId,
-    stage: 'locked',
-    dir,
-    path,
-    lock,
-    backup: null,
-    dirExisted,
-    gitignoreCreated: false,
-    sha256: '',
-    ...over,
-  })
-
-  if (!acquireWorkspaceLock(lock)) {
-    // Thư mục ta vừa tạo mà không chiếm được khoá thì trả lại hiện trạng —
-    // nhưng chỉ khi nó rỗng, vì lượt đang giữ khoá có file nằm trong đó.
-    if (!dirExisted) tryRemoveEmptyDir(dir)
-    input.onWarning?.(
-      `mcp: ${dir} đang được một job khác dùng — job này chạy KHÔNG có MCP server `
-      + '(🚫 không ghi đè cấu hình của lượt đang chạy)',
-    )
-    return null
-  }
-
-  // 📌 Dấu vết phải có NGAY, trước cả lần `existsSync` đầu tiên: từ giây giành
-  // được khoá, thư mục khoá đã nằm trên đĩa. Chết trong khoảng giữa "giành khoá"
-  // và "ghi ledger đầy đủ" mà 🚫 không có entry nào trỏ tới thì
-  // `cleanupOrphanedCursorMcpWorkspaces()` — vốn chỉ duyệt ledger — 🚫 không
-  // thấy gì để gỡ, và workspace đó chạy cursor KHÔNG MCP vĩnh viễn với một dòng
-  // warning "đang được job khác dùng" trong khi 🚫 không job nào chạy.
-  //
-  // Cửa sổ hẹp (vài lời gọi đồng bộ) nhưng hậu quả vĩnh viễn và im lặng, nên trả
-  // bằng một lần ghi ledger thừa là xứng đáng. Lần ghi đầy đủ bên dưới ghi đè
-  // bản tạm này — `rememberLedger` lọc theo `jobId`.
-  rememberLedger(lockedEntry({}))
-
-  // Quyền chỉ đụng vào thư mục CHÍNH TA tạo. `.cursor/` sẵn có của người dùng
-  // thường là 0755 và `restoreWorkspace` không khôi phục mode được, nên hạ nó
-  // xuống 0700 là một tác dụng phụ vĩnh viễn — đúng thứ chuỗi i18n
-  // `mcpWorkspaceFile` đang hứa là KHÔNG xảy ra. Rào thật là 0600 trên `mcp.json`.
-  if (!dirExisted) tryChmod(dir, 0o700)
-
-  const content = JSON.stringify(resolved.json, null, 2)
-  const backup = existsSync(path) ? `${path}.dashboard-backup-${jobKey}` : null
-  const entry = lockedEntry({
-    stage: 'written',
-    backup,
-    gitignoreCreated: !existsSync(gitignorePath),
-    sha256: sha256(content),
-  })
-
-  // Nâng bản tạm thành bản đầy đủ, vẫn TRƯỚC khi chạm file: mọi field đều tính
-  // được mà không cần ghi gì, nên `kill -9` ở BẤT KỲ điểm nào bên dưới cũng để
-  // lại dấu vết dọn được. Ghi sau là có một cửa sổ mà file secret đã nằm trong
-  // repo người dùng còn ledger thì chưa biết gì về nó.
-  rememberLedger(entry)
-
-  try {
-    if (backup) renameSync(path, backup)
-    writeTextFileSync(path, content, { mode: 0o600 })
-    tryChmod(path, 0o600)
-    if (entry.gitignoreCreated) writeTextFileSync(gitignorePath, '*\n')
-  } catch (err) {
-    // Ghi hụt giữa chừng ⇒ hoàn tác ngay, 🚫 không để lại nửa vời rồi mới ném.
-    // Dọn hụt ⇒ GIỮ entry cho đường bootstrap thử tiếp (xem `dispose`).
-    if (restoreWorkspace(entry)) forgetLedger(entry.jobId)
-    throw err
-  }
-
-  return {
-    kind: 'workspace-config-file',
-    path,
-    count: resolved.names.length,
-    names: resolved.names,
-    secrets: resolved.secrets,
-    warnings: resolved.warnings,
-    dispose() {
-      // 📌 Chỉ quên entry khi đã dọn SẠCH. Dọn hụt mà vẫn `forgetLedger` là tự
-      // tay vứt lưới cuối đúng lúc cần nó nhất — `cleanupOrphanedCursorMcpWorkspaces()`
-      // sẽ 🚫 không còn gì để dọn. Giữ entry an toàn: `restoreWorkspace`
-      // idempotent và `isOurConfig` tự chặn xoá nhầm.
-      if (restoreWorkspace(entry)) forgetLedger(entry.jobId)
-    },
   }
 }
 
@@ -302,62 +359,6 @@ function isOurConfig(entry: CursorWorkspaceEntry): boolean {
 
 function tryRemoveEmptyDir(dir: string): void {
   if (readdirSync(dir).length === 0) rmSync(dir, { recursive: true, force: true })
-}
-
-/**
- * Dọn lượt ghi mồ côi lúc bootstrap: `dispose()` chỉ chạy trong `finally` của
- * job, nên tiến trình bị `kill -9` để lại file secret plaintext TRONG repo người
- * dùng — kèm cả bản sao lưu file gốc của họ, và một khoá không ai nhả.
- *
- * 📌 Đây cũng là đường DUY NHẤT gỡ khoá treo: không có nó thì một lần `kill -9`
- * là workspace đó vĩnh viễn chạy cursor không MCP. Chạy cạnh
- * `cleanupOrphanedMcpConfigs()`, trước khi job đầu tiên của tiến trình mới vào hàng.
- */
-export function cleanupOrphanedCursorMcpWorkspaces(): void {
-  const entries = readLedger()
-  if (!entries.length) return
-  // 📌 GIỮ lại entry nào chưa dọn sạch, 🚫 không `writeLedger([])` vô điều kiện:
-  // xoá sạch là vứt đúng cái lưới này ở ca duy nhất nó còn việc để làm. Entry ở
-  // lại thì lần bootstrap sau thử tiếp — `restoreWorkspace` idempotent nên chạy
-  // lại 🚫 không hại gì, và `isOurConfig` vẫn chặn xoá nhầm.
-  const stuck = entries.filter((entry) => {
-    let clean = false
-    attempt(() => {
-      clean = restoreWorkspace(entry)
-    })
-    return !clean
-  })
-  writeLedger(stuck)
-}
-
-function ledgerPath(): string {
-  return joinPath(registryHome(), 'mcp-runtime', LEDGER_FILE)
-}
-
-function readLedger(): CursorWorkspaceEntry[] {
-  try {
-    const parsed = JSON.parse(readTextFileSync(ledgerPath()))
-    return Array.isArray(parsed?.entries) ? (parsed.entries as CursorWorkspaceEntry[]) : []
-  } catch {
-    return []
-  }
-}
-
-function writeLedger(entries: CursorWorkspaceEntry[]): void {
-  attempt(() => {
-    const dir = joinPath(registryHome(), 'mcp-runtime')
-    mkdirSync(dir, { recursive: true })
-    tryChmod(dir, 0o700)
-    writeTextFileAtomicSync(ledgerPath(), JSON.stringify({ entries }, null, 2), { mode: 0o600 })
-  })
-}
-
-function rememberLedger(entry: CursorWorkspaceEntry): void {
-  writeLedger([...readLedger().filter((e) => e.jobId !== entry.jobId), entry])
-}
-
-function forgetLedger(jobId: string): void {
-  writeLedger(readLedger().filter((e) => e.jobId !== jobId))
 }
 
 function attempt(fn: () => void): void {

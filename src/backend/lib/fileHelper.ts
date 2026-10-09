@@ -257,6 +257,19 @@ export function chmodSync(p: string, mode: number): void {
   fs.chmodSync(p, mode)
 }
 
+/**
+ * `chmodSync` không ném — cho chỗ quyền chỉ là lớp rào phụ. Rào chính phải nằm
+ * ở chỗ khác: `mode` ngay lúc tạo file, hoặc vị trí file dưới thư mục hồ sơ
+ * người dùng.
+ */
+export function chmodSafe(target: string, mode: number): void {
+  try {
+    chmodSync(target, mode)
+  } catch {
+    /* filesystem không hỗ trợ (win32, bind mount) */
+  }
+}
+
 export function renameSync(from: string, to: string): void {
   fs.renameSync(from, to)
 }
