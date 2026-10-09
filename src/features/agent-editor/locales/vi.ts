@@ -30,7 +30,6 @@ export default {
     createTitle: 'Tạo agent mới',
     editTitle: 'Sửa agent — {name}',
     cancel: 'Hủy',
-    close: 'Đóng',
   },
   fields: {
     name: 'Tên',

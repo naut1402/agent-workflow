@@ -2,7 +2,7 @@
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { onMounted, ref } from 'vue'
 import { useArtifactProposal } from '../composables/useArtifactProposal'
-import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
+import CDialog from '../../../frontend/ui/CDialog.vue'
 
 // Review UI for a require_approval quick action: shows the proposed diff
 // (before = real file, after = agent's edit in the scratch copy) and lets the
@@ -44,106 +44,76 @@ async function onSendFeedback() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="proposal-overlay" @click.self="emit('close')">
-      <div class="proposal-modal" role="dialog" aria-modal="true">
-        <CLoadingOverlay :active="proposal.busy.value" />
-        <header class="proposal-head">
-          <span class="proposal-title">
-            {{ t('monitor.proposal.reviewTitle') }} <code>{{ proposal.artifactName.value || artifactName }}</code>
-          </span>
-          <button type="button" class="btn-link" :disabled="proposal.busy.value" @click="emit('close')">✕</button>
-        </header>
+  <CDialog
+    class="proposal-dialog"
+    :loading="proposal.busy.value"
+    :close-disabled="proposal.busy.value"
+    width="min(860px, 94vw)"
+    max-height="90vh"
+    @close="emit('close')"
+  >
+    <template #title>
+      {{ t('monitor.proposal.reviewTitle') }} <code>{{ proposal.artifactName.value || artifactName }}</code>
+    </template>
 
-        <p v-if="proposal.error.value" class="proposal-error">{{ proposal.error.value }}</p>
-        <p v-if="proposal.statusText.value" class="proposal-status">⏳ {{ proposal.statusText.value }}</p>
+    <p v-if="proposal.error.value" class="proposal-error">{{ proposal.error.value }}</p>
+    <p v-if="proposal.statusText.value" class="proposal-status">⏳ {{ proposal.statusText.value }}</p>
 
-        <div class="proposal-body">
-          <p v-if="proposal.loading.value" class="proposal-muted">{{ t('monitor.proposal.loading') }}</p>
-          <div v-else class="diff-view">
-            <p v-if="!proposal.diffRows.value.length" class="proposal-muted">
-              {{ t('monitor.proposal.noChanges') }}
-            </p>
-            <pre v-else class="diff-pre"><code
-            ><span
-                v-for="(row, i) in proposal.diffRows.value"
-                :key="i"
-                class="diff-line"
-                :class="{
-                  'diff-add': row.type === 'add',
-                  'diff-del': row.type === 'del',
-                  'diff-context': row.type === 'context',
-                }"
-              >{{ row.type === 'add' ? '+' : row.type === 'del' ? '-' : ' ' }} {{ row.text }}
+    <div class="proposal-body">
+      <p v-if="proposal.loading.value" class="proposal-muted">{{ t('monitor.proposal.loading') }}</p>
+      <div v-else class="diff-view">
+        <p v-if="!proposal.diffRows.value.length" class="proposal-muted">
+          {{ t('monitor.proposal.noChanges') }}
+        </p>
+        <pre v-else class="diff-pre"><code
+        ><span
+            v-for="(row, i) in proposal.diffRows.value"
+            :key="i"
+            class="diff-line"
+            :class="{
+              'diff-add': row.type === 'add',
+              'diff-del': row.type === 'del',
+              'diff-context': row.type === 'context',
+            }"
+          >{{ row.type === 'add' ? '+' : row.type === 'del' ? '-' : ' ' }} {{ row.text }}
 </span></code></pre>
-          </div>
-        </div>
-
-        <div class="proposal-feedback">
-          <label class="cfg-label">
-            {{ t('monitor.proposal.feedbackLabel') }}
-            <textarea
-              v-model="feedbackText"
-              class="cfg-textarea"
-              rows="3"
-              :disabled="proposal.busy.value"
-              :placeholder="t('monitor.proposal.feedbackPlaceholder')"
-            />
-          </label>
-          <button
-            type="button"
-            class="btn-ghost btn-sm"
-            :disabled="proposal.busy.value || !feedbackText.trim()"
-            @click="onSendFeedback"
-          >{{ t('monitor.proposal.sendFeedback') }}</button>
-        </div>
-
-        <footer class="proposal-actions">
-          <button type="button" class="btn-primary" :disabled="proposal.busy.value || proposal.loading.value" @click="onApprove">
-            {{ t('monitor.proposal.approve') }}
-          </button>
-          <button type="button" class="btn-ghost btn-danger" :disabled="proposal.busy.value" @click="onDiscard">
-            {{ t('monitor.proposal.discard') }}
-          </button>
-          <button type="button" class="btn-ghost" :disabled="proposal.busy.value" @click="emit('close')">{{ t('monitor.proposal.close') }}</button>
-        </footer>
       </div>
     </div>
-  </Teleport>
+
+    <template #footer>
+      <div class="proposal-feedback">
+        <label class="cfg-label">
+          {{ t('monitor.proposal.feedbackLabel') }}
+          <textarea
+            v-model="feedbackText"
+            class="cfg-textarea"
+            rows="3"
+            :disabled="proposal.busy.value"
+            :placeholder="t('monitor.proposal.feedbackPlaceholder')"
+          />
+        </label>
+        <button
+          type="button"
+          class="btn-ghost btn-sm"
+          :disabled="proposal.busy.value || !feedbackText.trim()"
+          @click="onSendFeedback"
+        >{{ t('monitor.proposal.sendFeedback') }}</button>
+      </div>
+
+      <div class="proposal-actions">
+        <button type="button" class="btn-primary" :disabled="proposal.busy.value || proposal.loading.value" @click="onApprove">
+          {{ t('monitor.proposal.approve') }}
+        </button>
+        <button type="button" class="btn-ghost btn-danger" :disabled="proposal.busy.value" @click="onDiscard">
+          {{ t('monitor.proposal.discard') }}
+        </button>
+        <button type="button" class="btn-ghost" :disabled="proposal.busy.value" @click="emit('close')">{{ t('monitor.proposal.close') }}</button>
+      </div>
+    </template>
+  </CDialog>
 </template>
 
 <style scoped lang="scss">
-.proposal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 24px;
-}
-/* `position: relative` là containing block cho `CLoadingOverlay`. */
-.proposal-modal {
-  position: relative;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  width: min(860px, 100%);
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
-}
-.proposal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.proposal-title { font-size: 14px; font-weight: 600; }
 .proposal-error {
   margin: 0;
   color: var(--danger);
@@ -153,6 +123,7 @@ async function onSendFeedback() {
 .proposal-muted { color: var(--muted); font-size: 13px; }
 .proposal-body {
   flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 6px;

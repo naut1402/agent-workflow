@@ -81,7 +81,4 @@ export default {
     saveFailed: 'Không lưu được MCP server',
     deleteFailed: 'Không xóa được MCP server',
   },
-  a11y: {
-    close: 'Đóng',
-  },
 }

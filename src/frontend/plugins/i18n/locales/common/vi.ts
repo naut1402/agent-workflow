@@ -74,6 +74,10 @@ export default {
   loadingOverlay: {
     label: 'Đang xử lý…',
   },
+  // Khung dialog dùng chung (`CDialog`).
+  dialog: {
+    close: 'Đóng',
+  },
   // Viewer markdown dùng chung (`CMarkdownView`) — agent editor + knowledge.
   markdownView: {
     metadata: 'Metadata',

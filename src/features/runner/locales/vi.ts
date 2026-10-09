@@ -64,9 +64,6 @@ export default {
     addTitle: 'Thêm runner',
     editTitle: 'Sửa runner',
   },
-  a11y: {
-    close: 'Đóng',
-  },
   messages: {
     saved: 'Đã lưu {id}',
     enabled: 'Đã bật {id}',

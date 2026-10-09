@@ -65,9 +65,6 @@ export default {
     addTitle: 'Add runner',
     editTitle: 'Edit runner',
   },
-  a11y: {
-    close: 'Close',
-  },
   messages: {
     saved: 'Saved {id}',
     enabled: 'Enabled {id}',
