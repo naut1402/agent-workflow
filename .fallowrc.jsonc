@@ -76,6 +76,13 @@
       // của task state.
       "file": "src/features/monitor/business/tasks/startAuthority.ts",
       "exports": ["setOrchestratorEnabledFlag"]
+    },
+    {
+      // `registerProvider` — seam để test thay provider bằng stub (không spawn CLI
+      // thật); `listProviderIds` — test khẳng định bộ provider đã đăng ký.
+      // Production chỉ đăng ký nội bộ trong `registry.ts`.
+      "file": "src/features/runner/business/index.ts",
+      "exports": ["registerProvider", "listProviderIds"]
     }
   ],
 

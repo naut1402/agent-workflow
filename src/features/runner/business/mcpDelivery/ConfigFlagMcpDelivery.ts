@@ -25,6 +25,7 @@ export class ConfigFlagMcpDelivery extends FileMcpDelivery {
   readonly kind = 'config-file-flag' as const
 
   /** File riêng theo job ⇒ gắn thêm entry của chính dashboard mà không đụng cấu hình người dùng. */
+  // fallow-ignore-next-line unused-class-member -- gọi đa hình qua `RunnerProvider.mcpDelivery?.acceptsSelfServer` (`orchestrator/business/mcpRoute.ts`)
   override get acceptsSelfServer(): boolean {
     return true
   }
@@ -95,6 +96,7 @@ export class ConfigFlagMcpDelivery extends FileMcpDelivery {
    * trình mới dùng lại file của tiến trình cũ, nên xoá sạch lúc bootstrap là đúng
    * — không cần so mtime.
    */
+  // fallow-ignore-next-line unused-class-member -- gọi đa hình qua `provider.mcpDelivery.cleanupOrphans()` (`cleanupOrphanedMcpDeliveries`, `registry.ts`)
   override cleanupOrphans(): void {
     const dir = this.runtimeDir()
     let entries: string[]

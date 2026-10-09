@@ -198,6 +198,7 @@ export class WorkspaceFileMcpDelivery extends FileMcpDelivery {
    * là workspace đó vĩnh viễn chạy cursor không MCP. Chạy trước khi job đầu tiên
    * của tiến trình mới vào hàng (`cleanupOrphanedMcpDeliveries`).
    */
+  // fallow-ignore-next-line unused-class-member -- gọi đa hình qua `provider.mcpDelivery.cleanupOrphans()` (`cleanupOrphanedMcpDeliveries`, `registry.ts`)
   override cleanupOrphans(): void {
     const entries = this.readLedger()
     if (!entries.length) return
