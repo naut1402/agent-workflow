@@ -273,7 +273,7 @@ Preference/version shell tách theo scope chạy: `src/frontend/configs/` cho pr
 | File / thư mục | Vai trò |
 |---|---|
 | `src/frontend/configs/appSettings.ts` | Preference shell (theme/locale/notifications UI); core/plugins dùng. **Không** nhầm với schema business của feature `settings` (`autoscan`, `dashboardSettings`, `githubTokens`, `scanPatterns` ở `features/settings/schemas/`). |
-| `src/backend/configs/appVersion.ts` | Semver từ `package.json`. |
+| `src/backend/configs/appVersion.ts` | Semver đọc thẳng `package.json` (chỉ chạy trên Bun/Node — MCP server dùng). **Không gộp** với `src/frontend/lib/appVersion.ts`: bản FE đọc `__APP_VERSION__` do Vite `define` bơm vào lúc build, vì browser không có `package.json`. Nguồn chân lý của cả hai là `package.json` → `version`. |
 | `src/features/<feature>/schemas/` | Schema domain (task, log, autoscan, …) — Zod + `z.infer`, validate biên I/O của feature đó. |
 | `src/backend/lib/` | Helper Node-only: `fileHelper` (`resolvePathUnder`), `processHelper`, `yamlLib`, `dirModuleLoader`, `arrayUtils`, `dateUtils`. |
 | `src/frontend/lib/` | Helper thuần browser: `theme`, `markdownLib`, `diffLib`, `authToken`, `workflowSteps`, `pipelineArtifactGraph`, `appVersion`. |
