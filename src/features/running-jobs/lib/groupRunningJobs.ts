@@ -50,7 +50,6 @@ export function groupRunningJobs(jobs: JobLite[]): {
     step.jobs.push(job)
   }
 
-  // Known tasks in first-seen order; unknown bucket last.
   const orderedKeys = [
     ...taskOrder.filter((k) => k !== UNKNOWN_TASK_KEY),
     ...(byTask.has(UNKNOWN_TASK_KEY) ? [UNKNOWN_TASK_KEY] : []),

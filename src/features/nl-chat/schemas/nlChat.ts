@@ -1,21 +1,11 @@
 import { z } from 'zod'
 
-/**
- * Schemas for the NL chat surface (F0012): a floating chat that generates a
- * Task / Pipeline / Agent draft via the agent runner CLI (see
- * server/chat/nlChatSession.ts), instead of calling an LLM API directly.
- */
-
 export const NL_CHAT_ENTITY_TYPES = ['task', 'pipeline', 'agent', 'automation'] as const
 export type NlChatEntityType = (typeof NL_CHAT_ENTITY_TYPES)[number]
 
 /**
  * Body for `POST /api/nl-chat/sessions` (starts a new chat session).
- *
- * `entityType` is optional: the chat surface opens as a normal conversation
- * and lets the agent infer what the user wants to create (task / pipeline /
- * agent / automation) — see design.md F0012 §4.2 "auto mode". Callers that
- * already know the target entity may still pin it.
+ * `entityType` is optional: when omitted, the agent infers what to create.
  */
 export const StartNlChatRequest = z.object({
   entityType: z.enum(NL_CHAT_ENTITY_TYPES).nullish(),
@@ -30,9 +20,7 @@ export const NlChatMessageRequest = z.object({
 })
 export type NlChatMessageRequest = z.infer<typeof NlChatMessageRequest>
 
-// ── Chat attachments (POST /api/nl-chat/attachments) ───────────────────────
-// One source of truth for the limits: the composer rejects up front, the route
-// rejects again — a FE-only check is not a guard.
+// xem docs/architecture/code/nl-chat.md §3
 
 /** Per-file size ceiling. */
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
@@ -41,7 +29,6 @@ export const MAX_ATTACHMENTS_PER_TURN = 5
 
 const ALLOWED_MIME_PREFIXES = ['image/', 'text/'] as const
 const ALLOWED_MIME_EXACT = ['application/pdf', 'application/json'] as const
-/** Browsers report an empty `type` for some extensions (`.md`) — fall back to these. */
 const ALLOWED_EXTENSIONS = ['.md', '.txt', '.json', '.pdf', '.log', '.csv', '.yaml', '.yml'] as const
 
 export function isAllowedAttachment(name: string, mime: string): boolean {

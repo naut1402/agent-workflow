@@ -5,11 +5,6 @@ import { useCopyText } from '../../../frontend/composables/useCopyText'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import Icon from '../../../frontend/ui/Icon.vue'
 
-/**
- * One chat message, shared by both bodies (builder + task) — the only place in the feature that renders HTML.
- * User turns render markdown too, since a step's system prompt arrives as a user turn. Long turns are clamped with CSS rather than by slicing the source, since slicing mid-fence renders broken markup.
- */
-
 const props = defineProps<{
   role: 'user' | 'assistant'
   /** Source text — also what the copy button puts on the clipboard. */
@@ -25,12 +20,9 @@ const { copyFlash, copyText } = useCopyText()
 
 const html = computed(() => parseMarkdown(props.text))
 const expanded = ref(false)
+// xem docs/architecture/code/nl-chat.md §9
 const clamped = computed(() => props.clampable === true && !expanded.value)
 
-/**
- * Heuristic "looks like markdown" — a user turn is plain chat text far more often than not, so this only flips for lines that actually carry markdown syntax.
- * Only decides whether a USER bubble keeps its right alignment (design §D2) — right-aligned list/heading markup reads backwards.
- */
 function looksLikeMarkdown(text: string): boolean {
   return text
     .split('\n')

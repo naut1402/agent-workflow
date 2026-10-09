@@ -1,4 +1,3 @@
-// Short beep via Web Audio API — no binary asset to keep in the repo/bundle.
 let sharedCtx: AudioContext | null = null
 
 export function playNotificationSound(): void {

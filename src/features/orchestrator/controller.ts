@@ -14,17 +14,13 @@ import {
 } from './business/decisionLoop.js'
 import { resolveOrchestratorToken } from './business/orchestratorTokens.js'
 
-/** Header riêng cho token của orchestrator — KHÔNG dùng `Authorization`, tránh
- * `createJwtMiddleware()` (đọc `Authorization` cho JWT dashboard) chặn nhầm.
- * Tên header case-insensitive theo chuẩn HTTP — phải khớp giá trị được
- * `claude-code-cli.ts` cấp vào env `DASHBOARD_ORCHESTRATOR_TOKEN` cho tiến
- * trình con, và giá trị agent tự đọc lại khi chạy `curl`. */
+/**
+ * Header mang token của orchestrator cho API gọi ngược.
+ * xem docs/architecture/code/orchestrator.md §8
+ */
 export const ORCHESTRATOR_TOKEN_HEADER = 'X-Dashboard-Orchestrator-Token'
 
-/**
- * Job orchestrator đang chạy CỦA ĐÚNG `ref` — tự soi lại `devTeamRoot` (G3 +
- * `resolveTaskJobId` không lọc theo root, chỉ so `taskId`).
- */
+// xem docs/architecture/code/orchestrator.md §8
 function currentOrchestratorJobId(ref: TaskRef): string | null {
   const jobId = resolveTaskJobId(ref.taskId)
   if (!jobId) return null
@@ -34,10 +30,8 @@ function currentOrchestratorJobId(ref: TaskRef): string | null {
 }
 
 /**
- * API REST cho orchestrator gọi ngược vào chính server này giữa lượt (§3.1/§4.2
- * design.md, bản v2 — KHÔNG phải MCP). Xác thực bằng token 1-lần/1-job
- * (`orchestratorTokens.ts`), không phải JWT dashboard. Agent gọi 3 route này
- * bằng shell command (`curl`) — hướng dẫn nằm trong `buildDecisionPrompt`.
+ * API REST cho orchestrator gọi ngược vào server giữa lượt, xác thực bằng token
+ * theo job (`orchestratorTokens.ts`).
  */
 export class OrchestratorController extends AbstractController {
   private resolveRef(): TaskRef | null {
@@ -70,7 +64,7 @@ export class OrchestratorController extends AbstractController {
     const offset = Number(this.c.req.query('offset') ?? 0)
     const jobId = resolveTaskJobId(ref.taskId)
     const job = jobId ? loadJob(jobId) : null
-    // Job thuộc root khác (taskId trùng tên giữa 2 project) — không lộ output chéo task (G3).
+    // xem docs/architecture/code/orchestrator.md §8
     if (!job || job.metadata?.devTeamRoot !== ref.root) return this.json(200, { text: '', eof: true })
     const delta = await readJobLogDelta(jobId as string, { offset: Number.isFinite(offset) ? offset : 0, waitMs: 0 })
     return this.json(200, delta)
@@ -89,10 +83,7 @@ export class OrchestratorController extends AbstractController {
     const decision = validateDecision(body.value, stepIds)
     if ('error' in decision) return this.json(400, { error: decision.error })
 
-    // Đánh dấu TRƯỚC KHI thi hành: `applyDecision` (action `start`) tạo ngay một
-    // job step mới, và `resolveTaskJobId` ưu tiên job MỚI NHẤT — đánh dấu sau sẽ
-    // vô tình gắn cờ lên job step đó thay vì job orchestrator đang gọi API này
-    // (chống double-dispatch với sentinel cuối output).
+    // xem docs/architecture/code/orchestrator.md §4
     const currentJobId = currentOrchestratorJobId(ref)
     if (currentJobId) markDirectDecisionApplied(currentJobId)
 

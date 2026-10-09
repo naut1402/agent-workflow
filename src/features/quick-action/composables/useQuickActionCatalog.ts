@@ -4,15 +4,7 @@ import { fetchArtifactActionsCatalog, saveArtifactActionsCatalog } from '../scri
 import { t } from '../../../frontend/plugins/i18n'
 import type { ArtifactMenuNode } from '../../monitor/schemas/artifactAction'
 
-
-// Drives the QuickAction CRUD panel: loads the full artifact-actions catalog
-// (`GET /api/artifact-actions` without `?artifact=`), lets the caller
-// upsert/remove entries in local state, then persists the whole array back
-// via `PUT /api/artifact-actions` (full-catalog replace — the server is the
-// schema source of truth, this composable only does cheap client-side
-// uniqueness/required-field checks before sending).
-// Catalog scope is dashboard-global: `~/.dev-team-dashboard/artifact-actions.yaml`
-// (actions + nested menus), shared across projects — same home as runners.
+// xem docs/architecture/code/quick-action.md §1
 
 export interface QuickActionDraft {
   id: string
@@ -37,7 +29,6 @@ export function useQuickActionCatalog(_opts?: { getProjectId?: () => string | nu
   const actions = ref<QuickActionDraft[]>([])
   const menus = ref<ArtifactMenuNode[]>([])
   const loading = ref(false)
-  // 🚫 Không đụng `loading` ở trên: đó là load catalog (luồng đọc).
   const { pending: saving, run: runPersist } = useApiAction()
   const error = ref<string | null>(null)
 
@@ -60,8 +51,6 @@ export function useQuickActionCatalog(_opts?: { getProjectId?: () => string | nu
     nextActions?: QuickActionDraft[],
     nextMenus?: ArtifactMenuNode[],
   ): Promise<boolean> {
-    // Lời gọi bị guard bỏ qua trả `undefined` — với consumer thì "không làm gì"
-    // tương đương "chưa lưu được".
     const ok = await runPersist(async () => {
       error.value = null
       const actionsToSave = nextActions ?? actions.value
@@ -83,7 +72,6 @@ export function useQuickActionCatalog(_opts?: { getProjectId?: () => string | nu
     return ok ?? false
   }
 
-  /** Validate + insert/replace a draft by id in local state (does not save). */
   function upsert(draft: QuickActionDraft, editingId: string | null): UpsertResult {
     const id = draft.id.trim()
     if (!id) return { ok: false, error: t('quickAction.errors.idRequired') }

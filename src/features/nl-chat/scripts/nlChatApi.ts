@@ -31,9 +31,8 @@ export async function cancelNlChat(chatSessionId: string, projectId?: string) {
 }
 
 /**
- * Upload the composer's attachments. Multipart (not JSON) so binaries survive;
- * the response paths are what gets appended to the outgoing message.
- * `taskId` writes into that task's directory — the agent CLI's own cwd.
+ * Upload the composer's attachments as multipart and return the saved files.
+ * `taskId` writes into that task's directory.
  */
 export async function uploadChatAttachments(
   files: File[],

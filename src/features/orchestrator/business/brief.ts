@@ -1,15 +1,3 @@
-/**
- * Soạn brief — prompt mà orchestrator cấp cho một step, thay cho `request.md`
- * thô: mỗi step là một session CLI mới, không có brief thì node nào cũng phải
- * tự đọc lại repo để dựng lại bối cảnh.
- *
- * Chủ yếu I/O đọc (brief đi trong `job.userPrompt`, truy vết được ở job
- * record) — ngoại lệ duy nhất: `ensureProjectRulesFile` ghi
- * `.dev-team-agent/project-rules.md` một lần nếu file chưa tồn tại (best-effort,
- * không throw), nên `MACHINE_FILES` không cần khai thêm file này (không phải
- * artifact do người dùng chỉnh tay).
- */
-
 import { joinPath, readDir, readTextFile } from '../../../backend/lib/fileHelper.js'
 import { loadKnowledgeBundle } from '../../knowledge/business/index.js'
 import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
@@ -35,7 +23,7 @@ export interface StepBriefInput {
   reason: DispatchReason
   /** Phản hồi gate / verdict reviewer / `job.error` — nguyên văn, không tóm tắt. */
   detail?: string
-  /** Phần do agent điều phối soạn. Rỗng ⇒ brief giữ nguyên hình dạng cũ. */
+  /** Phần do agent điều phối soạn; rỗng thì brief không có mục này. */
   agentContext?: AgentContext
 }
 
@@ -66,7 +54,6 @@ async function readExportJson(root: string, taskId: string): Promise<any | null>
   }
 }
 
-/** Vài field cố định, chọn sẵn — brief là tóm tắt, không phải bản sao artifact. */
 const EXPORT_FIELDS = ['overall_confidence', 'files_to_modify', 'open_questions', 'entry_points']
 
 function renderExportValue(value: unknown): string {
@@ -75,9 +62,8 @@ function renderExportValue(value: unknown): string {
 }
 
 /**
- * Tóm tắt kết quả các step trước `stepId` từ `pipeline-export.json`.
- * Không có file (task cũ, `export_json: false`) ⇒ nói thẳng là chưa có, kèm
- * danh sách artifact `.md` đang tồn tại — degrade rõ ràng, không im lặng.
+ * Tóm tắt kết quả các step trước `stepId` từ `pipeline-export.json`. Không có
+ * file thì nêu rõ là chưa có, kèm danh sách artifact `.md` đang tồn tại.
  */
 export function summarizeExport(
   exportJson: any | null,
@@ -100,7 +86,6 @@ export function summarizeExport(
     const lines: string[] = []
     for (const field of EXPORT_FIELDS) {
       if (phase[field] == null) continue
-      // Mảng rỗng không mang thông tin gì — để lại chỉ tốn chỗ trong ngân sách brief.
       if (Array.isArray(phase[field]) && phase[field].length === 0) continue
       lines.push(`- **${field}**:\n${renderExportValue(phase[field])}`)
     }
@@ -120,7 +105,6 @@ export function renderBundle(bundle: any[]): string {
     .join('\n\n')
 }
 
-/** Phần agent điều phối soạn, đã chuẩn hoá — rỗng khi pipeline không bật điều phối. */
 function agentPart(ctx: AgentContext | undefined, key: keyof AgentContext): string {
   return ctx?.[key]?.trim() ?? ''
 }
@@ -134,13 +118,9 @@ function renderAssignment(step: any, input: StepBriefInput): string {
     `**Cần tạo:** ${produces}`,
     `**Lý do được gọi:** ${REASON_TEXT[input.reason]}`,
   ]
-  // Phản hồi của reviewer / người duyệt đi nguyên văn xuống đây — ĐÂY là kênh
-  // giao tiếp giữa hai node mà đề bài yêu cầu, đừng tóm tắt mất chi tiết.
   if (input.detail?.trim()) lines.push(`\n### Nội dung cần xử lý\n\n${input.detail.trim()}`)
   const agentNote = agentPart(input.agentContext, 'context')
   if (agentNote) lines.push(`\n### Bối cảnh từ node điều phối\n\n${agentNote}`)
-  // Kênh con → cha. Node điều phối chạy trong phiên riêng và chỉ đọc dòng này
-  // + danh sách artifact, nên context làm việc của nút con không tràn sang nó.
   lines.push(
     '\n### Khi xong\n\n' +
       'Kết thúc output bằng MỘT dòng cuối cùng đúng dạng:\n\n' +
@@ -162,9 +142,8 @@ function byteLength(text: string): number {
 }
 
 /**
- * Hai nấc ngân sách — không bao giờ cắt im lặng:
- *  1. rút gọn tất định phần "Kết quả các bước trước";
- *  2. gắn nhãn `ĐÃ LƯỢC BỎ` lên đầu và bỏ các mục nặng nhất.
+ * Ghép brief trong ngân sách `MAX_BRIEF_BYTES`, không cắt im lặng: rút gọn mục
+ * "Kết quả các bước trước" trước, rồi bỏ mục nặng và gắn nhãn `ĐÃ LƯỢC BỎ`.
  */
 export async function applyBudget(
   parts: { title: string; body: string }[],
@@ -176,7 +155,6 @@ export async function applyBudget(
   let text = join(parts)
   if (byteLength(text) <= MAX_BRIEF_BYTES) return text
 
-  // Nấc 1 — phần export là thứ phình to nhất và cũng là thứ tóm tắt được.
   const trimmed = parts.map((p) =>
     p.title === SECTION_PREVIOUS
       ? { ...p, body: p.body.split('\n').filter((l) => l.startsWith('###') || l.includes('overall_confidence')).join('\n') }
@@ -185,7 +163,6 @@ export async function applyBudget(
   text = join(trimmed)
   if (byteLength(text) <= MAX_BRIEF_BYTES) return text
 
-  // Nấc 2 — bỏ mục nặng, nhưng nói rõ đã bỏ gì.
   const kept: { title: string; body: string }[] = []
   const dropped: string[] = []
   for (const part of trimmed) {

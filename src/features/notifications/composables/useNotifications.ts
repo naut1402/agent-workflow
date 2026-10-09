@@ -35,13 +35,9 @@ function saveReadIds(ids: Set<string>) {
 
 
 /**
- * Derives HITL-pending / QA-ready notifications from the polled `tasks` list
- * (no backend endpoint — both orchestrator- and dashboard-run tasks already
- * surface these flags through `.dev-state/<id>.json` via `/api/tasks`).
- * Only edge transitions (flag flips to true) produce a NotificationEvent, so
- * a task that stays `hitl_pending` across many poll ticks doesn't re-notify.
- * Respects the user's notification settings (master switch, per-event-kind
- * opt-out, native browser notification, sound).
+ * Derives HITL-pending / QA-ready notifications from the polled `tasks` list.
+ * Only edge transitions (flag flips to true) produce a NotificationEvent;
+ * respects the user's notification settings.
  */
 export function useNotifications(tasks: Ref<any[]>) {
   const { settings } = useAppSettings()

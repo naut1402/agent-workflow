@@ -1,16 +1,3 @@
-/**
- * Vòng lặp điều phối — một subscriber wildcard duy nhất trên event bus.
- *
- * Agent được hỏi ở mọi chuyển tiếp: mốc duy nhất là `job.finished` của một
- * job step, vì chỉ ở đó cursor đã dịch và `stdout`/`artifactsFound` đã được ghi.
- * Dispatch tất định vẫn còn, nhưng lùi về làm lưới an toàn khi lượt agent không
- * dùng được — pipeline không dừng vì một output hỏng.
- *
- * Chống tự-kích + coalesce theo mẫu đã chạy thật của feature `automations`
- * (`eventTrigger.ts`): bỏ mọi event `orchestrator.*`, khoá `inFlight` theo
- * `${root}::${taskId}`, guard `BUN_TEST`, `handleEvent` export thuần để test.
- */
-
 import { dirname, joinPath, readDir, readTextFile, stat } from '../../../backend/lib/fileHelper.js'
 import { emit, on, type DashboardEvent } from '../../../backend/events/index.js'
 import { loadRegistry } from '../../../backend/registry.js'
@@ -44,32 +31,14 @@ import { mintOrchestratorToken, revokeOrchestratorTokensFor } from './orchestrat
 /** Quét lại task treo mỗi 60s — lưới cứu khi event bus (in-process) mất tín hiệu. */
 export const SWEEP_INTERVAL_MS = 60_000
 
-/** Số event gần nhất giữ lại cho mỗi task, làm bối cảnh cho lượt hỏi agent. */
 const OBSERVATION_LIMIT = 50
 
-/** Số task giữ ring buffer cùng lúc — dashboard chạy dài có thể thấy hàng nghìn task. */
 const OBSERVED_TASK_LIMIT = 200
 
-/**
- * Số lần được hỏi agent vì job lỗi cho mỗi `(task, step)` trước khi dừng hẳn.
- * Không có mốc này thì một step lỗi cố định (agent ref sai, worktree hỏng) sẽ
- * đốt một lượt LLM + một lượt job mỗi vòng, vô hạn. Đặt bằng `review_retry_max`
- * mặc định để hai cơ chế lùi-bước có cùng độ kiên nhẫn.
- */
 const MAX_FAILURE_ASKS = 2
 
-/**
- * Số lượt agent tự động cho mỗi `(task, phase)` trước khi dừng hẳn. Agent trả
- * `start` trỏ lại chính step vừa xong là một vòng vô hạn tốn LLM. Bằng 2×
- * `review_retry_max` mặc định, cộng dư cho lượt tóm tắt tại cổng.
- */
 const MAX_TURNS_PER_PHASE = 6
 
-/**
- * Event khiến orchestrator hành động. Nó vẫn nghe mọi event và ghi vào ring
- * buffer. `job.finished` của một job step là mốc "bước xong" duy nhất;
- * `task.advanced` ở đây chỉ để dọn khi pipeline hoàn tất, không tốn lượt LLM.
- */
 const ACTIONABLE = new Set([
   'job.finished',
   'job.failed',
@@ -78,11 +47,7 @@ const ACTIONABLE = new Set([
   'orchestrator.start_requested',
 ])
 
-/**
- * Trigger mà bước kế là tất định — lượt agent hỏng thì chuyển tiếp theo thứ tự
- * pipeline. Với `gate_rejected` / `job_failed` thì không: ở đó không có bước kế
- * nào đúng, đoán bừa là chạy sai mà không ai thấy.
- */
+// xem docs/architecture/events/orchestrator.md
 const FALLBACK_TRIGGERS = new Set<DecisionTrigger>(['step_finished', 'manual_start', 'gate_approved'])
 
 const inFlight = new Set<string>()
@@ -102,8 +67,7 @@ function recordObservation(root: string, taskId: string, event: DashboardEvent):
   const detail = event.payload?.error ?? event.payload?.reason ?? event.payload?.currentPhase
   list.push(`${event.at} ${event.type}${detail ? ` — ${String(detail)}` : ''}`)
   if (list.length > OBSERVATION_LIMIT) list.splice(0, list.length - OBSERVATION_LIMIT)
-  // Ghi lại khoá (delete rồi set) để Map giữ đúng thứ tự dùng gần nhất — task
-  // im lặng lâu nhất là task bị loại đầu tiên.
+  // xem docs/architecture/code/orchestrator.md §6
   observations.delete(key)
   observations.set(key, list)
   while (observations.size > OBSERVED_TASK_LIMIT) {
@@ -113,7 +77,6 @@ function recordObservation(root: string, taskId: string, event: DashboardEvent):
   }
 }
 
-/** Task kết thúc / dừng điều phối thì không còn gì để nhớ. */
 function forgetTask(root: string, taskId: string): void {
   const key = keyOf(root, taskId)
   observations.delete(key)
@@ -128,7 +91,6 @@ export function recentOf(root: string, taskId: string, count = 8): string[] {
   return (observations.get(keyOf(root, taskId)) ?? []).slice(-count)
 }
 
-/** Data root của một project, tra ngược từ path (event mang root, không mang id). */
 function projectIdOfRoot(root: string): string {
   try {
     return loadRegistry().projects.find((p) => p.path === root)?.id ?? ''
@@ -173,17 +135,11 @@ export function isOrchestratorJob(job: JobRecord | null): boolean {
   return job?.metadata?.orchestratorJob === true
 }
 
-/**
- * Lượt không đẩy cursor pipeline: job approval, hoặc lượt chat của người dùng —
- * lượt chat kế thừa `pipelineStepId` của job cha (cùng quy tắc `runJob` dùng để
- * bỏ qua advance). Lượt orchestrator resume thì LÀ lượt chạy lại của step.
- */
 function isNonAdvancingTurn(job: JobRecord): boolean {
   const meta = job.metadata ?? {}
   return Boolean(job.applyTarget) || (meta.isChatFeedback === true && meta.orchestratorResume !== true)
 }
 
-/** Job của một step thật — mốc duy nhất mở một lượt agent. */
 function isStepJob(job: JobRecord): boolean {
   const meta = job.metadata ?? {}
   return Boolean(meta.pipelineStepId) && meta.orchestratorJob !== true && !isNonAdvancingTurn(job)
@@ -193,7 +149,7 @@ function isLiveStatus(status: string | undefined): boolean {
   return status === 'queued' || status === 'running' || status === 'awaiting_recovery'
 }
 
-/** `devTeamRoot` thiếu ở job cũ — coi như thuộc root đang xét. */
+// xem docs/architecture/code/orchestrator.md §5
 function jobBelongsToTask(job: JobRecord, root: string, taskId: string): boolean {
   const meta = job.metadata ?? {}
   return meta.taskId === taskId && (!meta.devTeamRoot || meta.devTeamRoot === root)
@@ -203,12 +159,10 @@ export function liveJobsOfTask(root: string, taskId: string): JobRecord[] {
   return listJobs(50).filter((j) => isLiveStatus(j.status) && jobBelongsToTask(j, root, taskId))
 }
 
-/** Job đang sống của task — bỏ qua job quyết định của chính orchestrator. */
 function hasActiveStepJob(root: string, taskId: string): boolean {
   return liveJobsOfTask(root, taskId).some((j) => !isOrchestratorJob(j))
 }
 
-/** Lượt agent đang chạy dở. Hai job cùng `resume` một session là hỏng transcript. */
 function hasActiveOrchestratorJob(root: string, taskId: string): boolean {
   return liveJobsOfTask(root, taskId).some(isOrchestratorJob)
 }
@@ -218,10 +172,8 @@ async function readStateRecord(root: string, taskId: string): Promise<Record<str
   return read.ok ? (read.state as Record<string, unknown>) : null
 }
 
-/** Ảnh chụp cursor của task — nguồn chung cho mọi nhánh cần "đang ở bước nào". */
 interface TaskPhase {
   phase: string
-  /** Gate đang chờ người duyệt, nếu có. */
   gatePending?: string
 }
 
@@ -242,8 +194,6 @@ function refOf(root: string, projectId: string | null, taskId: string): TaskRef 
   return { root, taskId, projectId: projectId || projectIdOfRoot(root) }
 }
 
-/* Hành động */
-
 function emitDispatched(
   ref: TaskRef,
   detail: { stepId?: string; action: string; reason?: string },
@@ -256,21 +206,14 @@ function emitDispatched(
   })
 }
 
-/**
- * Dừng điều phối và trả quyền chạy tay cho người dùng: `assertStartAllowed`
- * đọc `enabled && !halted`, nên sau halt thì Run/Reset trên node step hiện lại.
- * Đây là lối thoát duy nhất khi orchestrator không quyết được — không đoán bừa.
- */
+/** Dừng điều phối task, trả quyền chạy tay cho người dùng và phát `orchestrator.halted`. */
 export async function haltTask(ref: TaskRef, reason: string): Promise<void> {
   forgetTask(ref.root, ref.taskId)
-  // `applyOrchestratorHaltAction` kiểm mtime để chặn ghi đè một thay đổi song
-  // song — ở đây không có "phiên bản người dùng đang xem", nên đọc mtime hiện
-  // tại ngay trước khi ghi.
   let mtime: number
   try {
     mtime = (await stat(stateFileOf(ref.root, ref.taskId))).mtimeMs
   } catch {
-    return // task không còn state file — không có gì để halt
+    return
   }
   await applyOrchestratorHaltAction(ref.root, ref.taskId, { halted: true, mtime })
   emit('orchestrator.halted', {
@@ -282,14 +225,7 @@ export async function haltTask(ref: TaskRef, reason: string): Promise<void> {
   revokeOrchestratorTokensFor(ref)
 }
 
-/**
- * Start một step. Luôn đi qua `runTaskStep` — đó là nơi giữ khoá task, guard
- * 409 và auto-advance; gọi thẳng `submitJob` là bỏ hết những thứ đó.
- *
- * Import động: `runStep.js` kéo theo barrel runner, mà runner lại re-export
- * module của monitor — dynamic import giữ vòng đó không chạy lúc module-eval
- * (cùng lý do với `state.ts`).
- */
+/** Start một step qua `runTaskStep`. Lỗi soạn brief hoặc lỗi dispatch (trừ 409) thì halt task. */
 export async function dispatchStep(
   ref: TaskRef,
   stepId: string,
@@ -314,21 +250,15 @@ export async function dispatchStep(
 
   emitDispatched(ref, { stepId, action: 'start', reason })
 
+  // xem docs/architecture/code/orchestrator.md §1
   const { runTaskStep } = await import('../../monitor/business/tasks/runStep.js')
   const result = await runTaskStep(ref.root, ref.projectId || null, ref.taskId, {
     origin: 'orchestrator',
     userPrompt: brief,
-    // Pin step: nếu không truyền thì `runTaskStep` chọn step theo `current_phase`
-    // và theo khối tự-chữa của nó — brief soạn cho step này mà job lại chạy step
-    // khác. `skipIntermediate` để step đích được nhảy tới tường minh (và bị từ
-    // chối tường minh khi nó nằm phía sau cursor).
     targetStepId: stepId,
     skipIntermediate: true,
   })
   if (result.ok === false) {
-    // 409 = task đang có job step chạy. Đó là "thử lại sau", không phải "không
-    // quyết được" — halt ở đây sẽ dừng pipeline vì một lần chạy chồng vô hại;
-    // `sweepStuckTasks` nhặt lại nếu bước kế thật sự bị bỏ quên.
     if (result.status === 409) {
       console.warn(`[orchestrator] dispatch deferred for ${ref.taskId}/${stepId}: ${result.error}`)
       return
@@ -337,11 +267,7 @@ export async function dispatchStep(
   }
 }
 
-/**
- * Gửi tiếp cho step đang chạy dở — cơ chế *resume* của đề bài.
- * KHÔNG dùng `resetPipelineStep*`: đường đó lùi con trỏ pipeline và (tuỳ
- * `deleteScope`) xoá artifact của step.
- */
+/** Gửi tiếp `message` vào session của step đã chạy. Lỗi thì halt task. */
 export async function resumeStep(ref: TaskRef, stepId: string, message: string): Promise<void> {
   emitDispatched(ref, { stepId, action: 'resume', reason: 'resume' })
 
@@ -350,22 +276,15 @@ export async function resumeStep(ref: TaskRef, stepId: string, message: string):
     stepId,
     source: 'orchestrator',
     orchestratorResume: true,
-    // Resume một step chưa từng chạy là quyết định sai của agent — halt kèm lý
-    // do, đừng để phản hồi rơi vào session của step khác.
+    // xem docs/architecture/code/orchestrator.md §2
     requireStepMatch: true,
   })
   if (result.ok === false) await haltTask(ref, `resume failed: ${result.error}`)
 }
 
 /**
- * Chạy một phiên MỚI cho `stepId` bất kỳ đã từng chạy xong (succeeded/failed),
- * KHÔNG qua `runTaskStep` (nên không bị `isRunnableTarget` chặn), KHÔNG đổi
- * `current_phase`/`hitl_pending`. Job được đánh dấu `metadata.respawn: true`
- * để `advancePipelineStepChain` (jobQueue.ts) loại trừ tuyệt đối.
- *
- * `resume` vs `respawn`: `resume` tiêm tiếp (append) vào đúng session cũ;
- * `respawn` luôn `sessionMode:'new'` với brief soạn lại từ đầu qua
- * `composeStepBrief`.
+ * Chạy một phiên mới cho step đã từng chạy xong, không đổi `current_phase` /
+ * `hitl_pending`. Step không hợp lệ hoặc chưa có job xong thì halt task.
  */
 export async function respawnStep(
   ref: TaskRef,
@@ -414,7 +333,6 @@ export async function respawnStep(
   emitDispatched(ref, { stepId, action: 'respawn', reason: 'respawn' })
 
   submitJob({
-    // Respawn không có khái niệm "caller chỉ định runner" nên không cần `??`.
     runnerId: resolveStepRunnerId(step).runnerId,
     agentRef: step.agent,
     workspace: joinPath(ref.root, 'tasks', ref.taskId),
@@ -427,12 +345,8 @@ export async function respawnStep(
       projectId: ref.projectId || undefined,
       taskId: ref.taskId,
       pipelineStepId: stepId,
-      // Loại trừ khỏi advancePipelineStepChain — xem jobQueue.ts.
+      // xem docs/architecture/code/orchestrator.md §2
       respawn: true,
-      // Vé đi qua lớp chặn đồng bộ của `submitJob` (`assertStartAllowedSync`) —
-      // không đi qua `runTaskStep` nên phải tự mang cờ này, giống `runStep.ts:201`,
-      // nếu không mọi respawn trên task đang có orchestrator bật (kịch bản duy
-      // nhất respawn tồn tại để phục vụ) sẽ bị ném lỗi "orchestrator owns this task".
       orchestratorDispatch: true,
     },
   })
@@ -447,11 +361,6 @@ export interface TurnInput {
 
 export type TurnResult = { job: JobRecord } | { error: string; status: number }
 
-/**
- * Một lượt hỏi agent. Không chặn ở đây: quyết định đọc lại ở `job.finished` của
- * chính job này (vòng lặp tự nhận lại), nên một lượt suy nghĩ dài không giữ
- * khoá `inFlight` của task.
- */
 async function askAgent(
   ref: TaskRef,
   orch: Orchestration,
@@ -466,8 +375,6 @@ async function askAgent(
   if (hasActiveOrchestratorJob(ref.root, ref.taskId)) {
     return { error: 'orchestrator busy', status: 409 }
   }
-  // Lượt do người khởi xướng không đếm: nó cần một thao tác tay mỗi lần, nên
-  // không tự nuôi được vòng lặp mà mốc này sinh ra để chặn.
   if (trigger !== 'chat' && trigger !== 'manual_start') {
     const key = `${keyOf(ref.root, ref.taskId)}::${currentPhase}`
     const turns = (turnsAtPhase.get(key) ?? 0) + 1
@@ -481,13 +388,8 @@ async function askAgent(
   const pipeline = await loadPipelineConfig(ref.root, ref.taskId)
   const stepIds = (pipeline.steps || []).map((s: any) => s?.id).filter(Boolean)
 
-  // Mint NGAY TRƯỚC submitJob: metadata đi vào job lúc submit và không sửa lại
-  // được sau (job file là snapshot) — mint muộn hơn nghĩa là job không bao giờ
-  // biết token của chính nó.
+  // xem docs/architecture/code/orchestrator.md §3
   const orchestratorToken = mintOrchestratorToken(ref)
-  // Chốt tuyến NGAY TRƯỚC submitJob, cùng lý do với mint token: metadata là
-  // snapshot không sửa lại được sau. Một giá trị — prompt và runner cùng đọc,
-  // nên không có cửa sổ "prompt dạy gọi tool mà job không có tool".
   const { route: mcpRoute } = resolveDecisionRoute()
   const knowledgeBundle = await loadKnowledgeBundle(ref.root, orch.knowledge_inputs ?? [])
   const liveStep = liveJobsOfTask(ref.root, ref.taskId).find((j) => !isOrchestratorJob(j))
@@ -510,34 +412,22 @@ async function askAgent(
       knowledgeText: renderBundle(knowledgeBundle),
       route: mcpRoute,
     }),
-    // Luôn `resume`: ledger khoá entry theo `stepId`, và job này mang
-    // `metadata.stepId = ORCHESTRATOR_STEP_ID` ⇒ lượt đầu tự ra `new` (node chưa
-    // có entry), lượt sau resume vào ĐÚNG phiên của nó. Guard `hasOwnSession` cũ
-    // ở đây chỉ che một triệu chứng của ledger dùng chung một ô session.
     sessionMode: 'resume',
     metadata: {
       projectRoot: dirname(ref.root),
       devTeamRoot: ref.root,
       projectId: ref.projectId || undefined,
       taskId: ref.taskId,
-      // KHÔNG đặt `pipelineStepId`: job này không phải một step, và đặt vào là
-      // `advancePipelineStepChain` sẽ đẩy cursor khi nó xong.
       stepId: ORCHESTRATOR_STEP_ID,
       orchestratorJob: true,
-      // Phân biệt "lượt quyết định" với "lượt trò chuyện": output rỗng ở lượt
-      // quyết định là sự cố phải xử lý, ở lượt chat thì chỉ là im lặng.
       orchestratorTrigger: trigger,
       orchestratorToken,
-      // Runner đọc lại ĐÚNG giá trị prompt đã dùng để quyết định có gắn MCP của
-      // dashboard vào job hay không. Job cũ thiếu khoá này ⇒ `undefined` ⇒
-      // `!== 'mcp'` ⇒ không gắn: tương thích ngược hoàn toàn.
       orchestratorMcpRoute: mcpRoute,
     },
   })
   return { job }
 }
 
-/** Bối cảnh thi hành một quyết định — đọc từ state ngay trước khi áp dụng. */
 interface DecisionOutcomeContext {
   gatePending?: string
   completed: boolean
@@ -557,9 +447,6 @@ async function applyStart(
   decision: OrchestratorDecision,
   ctx: DecisionOutcomeContext,
 ): Promise<void> {
-  // `start` khi cổng đang chờ người là quyết định không thi hành được
-  // (`runTaskStep` trả 400) — hạ xuống `summary`: pipeline đang chờ đúng quy
-  // trình, không phải lỗi.
   if (ctx.gatePending) {
     emitDispatched(ref, { action: 'summary', reason: 'gate_pending' })
     return
@@ -576,11 +463,7 @@ type DecisionHandler = (
   ctx: DecisionOutcomeContext,
 ) => Promise<void>
 
-/**
- * Mỗi hành động một nhánh thi hành. `message` của `resume` đã được schema bắt
- * buộc. `respawn` cố ý không đọc `ctx` (không bị chặn bởi gate/`completed`,
- * khác `start`) — điểm khác biệt cốt lõi so với `applyStart`.
- */
+// xem docs/architecture/code/orchestrator.md §2
 const ACTION_HANDLERS: Record<OrchestratorDecision['action'], DecisionHandler> = {
   halt: (ref, decision) => haltTask(ref, decision.reason || 'agent decided to halt'),
   summary: applySummary,
@@ -599,10 +482,6 @@ export function applyDecision(
   return ACTION_HANDLERS[decision.action](ref, decision, ctx)
 }
 
-/**
- * Lượt agent không dùng được ⇒ chuyển tiếp theo thứ tự pipeline thay vì dừng.
- * Chỉ gọi với trigger mà bước kế là tất định (xem `FALLBACK_TRIGGERS`).
- */
 async function fallbackDispatch(ref: TaskRef, reason: string): Promise<void> {
   const at = await readTaskPhase(ref.root, ref.taskId)
   if (!hasPendingStep(at) || at.gatePending) return
@@ -610,7 +489,6 @@ async function fallbackDispatch(ref: TaskRef, reason: string): Promise<void> {
   await dispatchStep(ref, at.phase, 'advance')
 }
 
-/** Lượt agent hỏng: chuyển tiếp tất định nếu bước kế biết trước, còn lại thì halt. */
 async function recoverFromBadTurn(
   ref: TaskRef,
   trigger: DecisionTrigger | undefined,
@@ -622,8 +500,6 @@ async function recoverFromBadTurn(
   }
   await haltTask(ref, reason)
 }
-
-/* Bảng quyết định */
 
 async function readFeedbackFile(root: string, taskId: string): Promise<string> {
   try {
@@ -646,8 +522,6 @@ export async function decide(
   const payload = (event.payload ?? {}) as Record<string, unknown>
 
   if (event.type === 'task.advanced') {
-    // Lượt tóm tắt cuối do `job.finished` của step cuối lo; ở đây chỉ còn việc
-    // phát mốc kết thúc và quên task.
     const currentPhase = String(payload.currentPhase ?? '')
     if (!currentPhase || currentPhase === 'completed') {
       emitDispatched(ref, { action: 'idle', reason: 'pipeline completed' })
@@ -660,7 +534,6 @@ export async function decide(
     const job = eventJob ?? jobOfEvent(event)
     if (!job || !isStepJob(job)) return
     const at = await readTaskPhase(ref.root, ref.taskId)
-    // Pipeline tiến được một bước ⇒ chuỗi lỗi (nếu có) của step đó đã được gỡ.
     const stepId = String(job.metadata?.pipelineStepId ?? '')
     failureAsks.delete(`${keyOf(ref.root, ref.taskId)}::${stepId}`)
     const trigger = hasPendingStep(at) ? 'step_finished' : 'pipeline_completed'
@@ -672,8 +545,6 @@ export async function decide(
   }
 
   if (event.type === 'orchestrator.start_requested') {
-    // Automation bị từ chối (409) vì task đang được điều phối — xin một lượt
-    // quyết định thay vì tự chạy step.
     const at = await readTaskPhase(ref.root, ref.taskId)
     if (!hasPendingStep(at) || at.gatePending) return
     await askAgent(ref, orch, 'manual_start', at.phase, { gatePending: at.gatePending })
@@ -681,8 +552,6 @@ export async function decide(
   }
 
   if (event.type === 'hitl.resolved') {
-    // Gate bị hệ thống tự huỷ vì pipeline đổi hình dạng — không phải quyết định
-    // của người, không có gì để điều phối.
     if (payload.reason === 'pipeline_changed') return
 
     const currentPhase = String(payload.currentPhase ?? '')
@@ -716,35 +585,21 @@ function stdoutOf(job: JobRecord | null): string {
   return typeof job?.stdout === 'string' ? job.stdout : ''
 }
 
-/**
- * Tóm tắt do `runJob` chốt sẵn từ `result.stdout` ĐẦY ĐỦ, trước cả
- * `shouldPersistStdout` lẫn `CHAT_STDOUT_LIMIT` — xem `jobQueue.captureStepSummary`.
- * Đây là đường chính; đọc lại từ `job.stdout` chỉ là lưới cho job ghi trước fix.
- */
 function pinnedSummaryOf(job: JobRecord | null): string | null {
   const pinned = job?.metadata?.stepSummary
   return typeof pinned === 'string' && pinned.trim() ? pinned.trim() : null
 }
 
 /**
- * Kết quả một lượt chạy step, gói lại cho prompt của agent điều phối.
- *
- * Cố ý KHÔNG mang stdout thô: context làm việc của nút con phải ở lại phiên của
- * nút con. Cha nhận `STEP_SUMMARY` do chính con soạn, và chỉ khi không có mới
- * rơi về đuôi output (`fromTail`) — chi tiết đầy đủ nằm ở artifact.
- *
- * Export thuần để test gọi thẳng, cùng quy ước với `identifyTask` /
- * `isOrchestratorJob`: đây là hợp đồng con → cha, phải đo được không cần bus.
+ * Kết quả một lượt chạy step cho prompt của agent điều phối: `STEP_SUMMARY` của
+ * step nếu có, không thì đuôi output (`fromTail`).
  */
 export function stepResultOf(
   job: JobRecord | null,
   stepId: string,
   status: StepResult['status'],
 ): StepResult {
-  // `job.stdout` ĐÃ được provider bóc khỏi khung JSON (`parse-json` làm việc đó
-  // ở `providers/claude-code-cli.ts`), nên ở đây nó luôn là text thuần. Bóc lần
-  // thứ hai từng rơi vào nhánh "cắt từ `{` đầu tới `}` cuối" và vứt mất chính
-  // dòng `STEP_SUMMARY` thật khi nút con có in một khối JSON trong câu trả lời.
+  // xem docs/architecture/code/orchestrator.md §4
   const text = stdoutOf(job)
   const summary = pinnedSummaryOf(job) ?? stepSummaryOf(text)
   return {
@@ -756,27 +611,17 @@ export function stepResultOf(
   }
 }
 
-/* Subscriber */
-
-/**
- * Điểm vào duy nhất từ event bus. Export thuần (không tự đăng ký) để test gọi
- * thẳng — đăng ký thật nằm ở `startOrchestratorLoop`.
- */
+/** Điểm vào từ event bus. Không tự đăng ký — `startOrchestratorLoop` đăng ký. */
 export async function handleEvent(event: DashboardEvent): Promise<void> {
-  // Chống tự-kích: mọi thứ orchestrator phát ra đều không được quay lại nó —
-  // trừ `orchestrator.start_requested`, event automation xin một lượt quyết định.
+  // xem docs/architecture/events/orchestrator.md
   if (event.type !== 'orchestrator.start_requested' && String(event.type).startsWith('orchestrator.')) return
 
-  // Một lần `loadJob` cho cả `identifyTask` lẫn các nhánh bên dưới — hàm này
-  // chạy trên MỌI event của bus, nên mỗi lần đọc đĩa thừa là thừa toàn cục.
   const job = jobOfEvent(event)
   const ref = identifyTask(event, job)
   if (!ref) return
   recordObservation(ref.root, ref.taskId, event)
 
-  // Job quyết định của chính orchestrator: đây là chỗ đọc kết quả một lượt hỏi.
-  // Nhánh này phải đứng TRƯỚC `ACTIONABLE`, nếu không `job.finished` của chính
-  // lượt agent sẽ tự kích một lượt mới — đó là cách sinh bão job.
+  // xem docs/architecture/events/orchestrator.md
   if (isOrchestratorJob(job)) {
     if (event.type === 'job.failed') {
       const trigger = job?.metadata?.orchestratorTrigger as DecisionTrigger | undefined
@@ -795,11 +640,9 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
 
   const orch = await resolveOrchestration(ref.root, ref.taskId)
   if (!orch.active) return
-  // Đã thấy một task đang được điều phối ⇒ từ giờ mới cần quét định kỳ.
   ensureSweepScheduled()
 
-  // `task.advanced` chỉ dọn dẹp, không dispatch. Giữ khoá cho nó là chặn mất
-  // lượt `job.finished` mà cùng lần chạy job phát ra ngay sau đó.
+  // xem docs/architecture/code/orchestrator.md §5
   if (event.type === 'task.advanced') {
     await decide(ref, orch, event, job)
     return
@@ -815,15 +658,8 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
   }
 }
 
-/**
- * Đọc quyết định từ output của job orchestrator.
- *
- * Output không có dòng sentinel ⇒ đây chỉ là một lượt hội thoại (người dùng
- * chat với node), không làm gì. Có sentinel nhưng hỏng ⇒ lưới tất định.
- */
 async function consumeAgentDecision(ref: TaskRef, job: JobRecord): Promise<void> {
-  // G4 — agent đã thi hành quyết định qua `POST /api/orchestrator/decide` giữa
-  // lượt; đọc lại sentinel cuối output ở đây sẽ áp dụng quyết định đó LẦN NỮA.
+  // xem docs/architecture/code/orchestrator.md §4
   if (job.metadata?.directDecisionApplied === true) return
 
   const orch = await resolveOrchestration(ref.root, ref.taskId)
@@ -832,8 +668,6 @@ async function consumeAgentDecision(ref: TaskRef, job: JobRecord): Promise<void>
   const stdout = stdoutOf(job)
   const trigger = job.metadata?.orchestratorTrigger as DecisionTrigger | undefined
 
-  // "Không có output" ≠ "chỉ là hội thoại". Một lượt quyết định mà không đọc
-  // được gì thì task treo mà người dùng không thấy lý do.
   if (!stdout.trim() && trigger && trigger !== 'chat') {
     await recoverFromBadTurn(ref, trigger, 'decision output unavailable')
     return
@@ -853,8 +687,8 @@ async function consumeAgentDecision(ref: TaskRef, job: JobRecord): Promise<void>
 }
 
 /**
- * Giao một lượt cho agent điều phối. Đường vào của nút Run trên node, của
- * "Chạy ngay" lúc tạo task, và của automation `mode: create`.
+ * Giao một lượt cho agent điều phối ở bước hiện tại. `null` khi task không được
+ * điều phối hoặc không còn bước nào.
  */
 export async function startOrchestratorTurn(
   root: string,
@@ -873,9 +707,8 @@ export async function startOrchestratorTurn(
 }
 
 /**
- * Một lượt chat của người dùng với node điều phối. Không đi qua
- * `sendTaskFeedback`: hàm đó chọn "job step xong gần nhất" làm job cha, nên
- * phản hồi rơi vào session của step đầu thay vì session của node.
+ * Một lượt chat của người dùng với node điều phối.
+ * xem docs/architecture/code/orchestrator.md §3
  */
 export async function chatWithOrchestrator(
   root: string,
@@ -893,11 +726,8 @@ export async function chatWithOrchestrator(
 }
 
 /**
- * Cấp lượt điều phối cho bước hiện tại của một task — đường vào dùng cho
- * "Chạy ngay" lúc tạo task và automation `mode: create`.
- *
- * Chưa cấu hình `orchestrator.agent` thì lùi về dispatch tất định, để pipeline
- * vẫn chạy được thay vì đứng ở bước đầu.
+ * Cấp lượt điều phối cho bước hiện tại của task. Chưa cấu hình
+ * `orchestrator.agent` thì dispatch tất định bước hiện tại.
  */
 export async function dispatchOrchestrator(
   root: string,
@@ -916,15 +746,7 @@ export async function dispatchOrchestrator(
   await dispatchStep(refOf(root, projectId, taskId), at.phase, reason)
 }
 
-/**
- * Task có thể đang được điều phối, đọc từ cờ cache trong `.dev-state`.
- *
- * Cố ý không dùng `collectTasks`: hàm đó quét thêm thư mục artifact và
- * `loadPipelineConfig` cho từng task, tức là áp một vòng I/O mỗi phút lên cả
- * người dùng chưa bao giờ tick checkbox — trong khi cam kết nền của tính năng
- * là "tắt ⇒ chạy y hệt hiện tại". Cờ cache đủ để lọc; sự thật vẫn được
- * `resolveOrchestration` xác nhận lại cho từng ứng viên.
- */
+// xem docs/architecture/code/orchestrator.md §7
 async function orchestratedCandidates(root: string): Promise<Record<string, unknown>[]> {
   const stateDir = joinPath(root, '.dev-state')
   let files: string[] = []
@@ -945,12 +767,8 @@ async function orchestratedCandidates(root: string): Promise<Record<string, unkn
 }
 
 /**
- * Nhặt lại task đang đứng: event bus là in-process và không bền (D12), nên một
- * lần restart dashboard đủ làm mất tín hiệu chuyển bước. Đây cũng là chỗ cấy
- * lại đường tự-chữa mà `runTaskStep` vốn có nhưng nay bị guard chặn.
- *
- * Trả về số task đã thấy đang được điều phối — caller dùng nó để quyết định có
- * cần hẹn giờ quét tiếp hay không.
+ * Nhặt lại task đang được điều phối mà bị đứng. Trả về số task đang được điều
+ * phối đã thấy.
  */
 export async function sweepStuckTasks(root: string, projectId: string): Promise<number> {
   let orchestratedSeen = 0
@@ -959,12 +777,11 @@ export async function sweepStuckTasks(root: string, projectId: string): Promise<
     const orch = await resolveOrchestration(root, taskId)
     if (!orch.active) continue
     orchestratedSeen++
-    if (task.hitl_pending) continue // đang chờ người, không phải treo
+    if (task.hitl_pending) continue
     if (task.archived === true) continue
     const phase = String(task.current_phase ?? '')
     if (!phase || phase === 'completed') continue
     if (hasActiveStepJob(root, taskId)) continue
-    // Agent đang nghĩ: dispatch tất định lúc này là đè lên lượt của nó.
     if (hasActiveOrchestratorJob(root, taskId)) continue
 
     const ref: TaskRef = { root, taskId, projectId }
@@ -978,12 +795,10 @@ export async function sweepStuckTasks(root: string, projectId: string): Promise<
     )
 
     if (last?.status === 'succeeded' && last.metadata?.pipelineStepId === phase) {
-      // Job của bước hiện tại đã xong nhưng cursor chưa đi (`task.advanced` bị
-      // mất) — đẩy cursor tường minh ở đây vì `runTaskStep` không tự-chữa việc
-      // này cho lượt dispatch pin.
+      // xem docs/architecture/code/orchestrator.md §7
       const advanced = await advanceStepOnJobSuccess(root, taskId, phase)
       const nextPhase = String(advanced?.state?.current_phase ?? '')
-      if (!advanced || advanced.state.hitl_pending) continue // gate vừa mở — chờ người
+      if (!advanced || advanced.state.hitl_pending) continue
       if (!nextPhase || nextPhase === 'completed') continue
       await dispatchStep(ref, nextPhase, 'advance')
       continue
@@ -1012,17 +827,12 @@ async function sweepAllProjects(): Promise<number> {
 }
 
 /**
- * Hẹn giờ quét — chỉ bật khi đã biết chắc có task đang được điều phối.
- *
- * Dashboard không ai bật checkbox thì sau một lượt quét lúc khởi động (readdir
- * `.dev-state` mỗi project) sẽ không còn I/O định kỳ nào. `handleEvent` và
- * đường lưu pipeline gọi lại hàm này ngay khi thấy task orchestrated đầu tiên,
- * nên bật checkbox giữa chừng không phải restart dashboard.
+ * Hẹn giờ quét task treo; đã có timer thì bỏ qua.
+ * xem docs/architecture/code/orchestrator.md §7
  */
 export function ensureSweepScheduled(): void {
   if (sweepTimer) return
   sweepTimer = setInterval(() => void sweepAllProjects(), SWEEP_INTERVAL_MS)
-  // Không giữ process sống chỉ vì timer quét.
   sweepTimer.unref?.()
 }
 

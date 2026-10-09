@@ -7,17 +7,12 @@ import Icon from '../../../frontend/ui/Icon.vue'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import type { UseChatComposer } from '../composables/useChatComposer'
 
-/**
- * Attachment chips + the input row — identical markup in both chat bodies apart from the placeholder, so it lives here once instead of twice.
- * Takes the composer object whole rather than a dozen props, so adding a composable field doesn't mean threading one more prop through both call sites; fields are refs, so the template reads `.value`.
- */
 const props = defineProps<{ composer: UseChatComposer; placeholder: string }>()
 const c = props.composer
 
 const { t } = useI18nHelpers()
 const showKnowledgePicker = ref(false)
 
-/** The textarea lives here, but `autoGrow` measures it from the composable. */
 function bindInput(el: unknown): void {
   c.inputRef.value = (el as HTMLTextAreaElement) ?? null
 }
@@ -28,7 +23,7 @@ function removeKnowledge(id: string): void {
 </script>
 
 <template>
-  <!-- `disabled` tracks `uploading` only, not `canAttach`: `canAttach` folds in `canSend`, which the server flips off mid-poll and would strand staged chips as unremovable. -->
+  <!-- xem docs/architecture/code/nl-chat.md §4 -->
   <ChatAttachmentBar
     :items="c.attachments.items.value"
     :error="c.attachments.error.value"
@@ -36,7 +31,6 @@ function removeKnowledge(id: string): void {
     @remove="c.attachments.remove"
   />
 
-  <!-- Knowledge chips: ids only — paths are resolved at send time, so a chip here doesn't pin the content it had when picked. -->
   <div v-if="c.knowledgeIds.value.length || c.knowledgeError.value" class="nl-chat-knowledge-bar">
     <span v-for="id in c.knowledgeIds.value" :key="id" class="chip chip-rm" @click="removeKnowledge(id)">
       {{ id }} ✕
@@ -45,7 +39,6 @@ function removeKnowledge(id: string): void {
   </div>
 
   <form class="nl-chat-input-row" @submit.prevent="c.onSend">
-    <!-- The add menu leads the row: "+" sits at the head of the chat box. -->
     <ChatComposerMenu
       :disabled="!c.canAttach.value"
       :knowledge-disabled="!c.canPickKnowledge.value"

@@ -1,14 +1,3 @@
-/**
- * Parse the `nl-chat-builder` agent's raw stdout into either a follow-up
- * question (still gathering info) or a ready draft. See design.md §4.2
- * "Output contract của agent nl-chat-builder".
- *
- * Contract: if the agent has enough information to finalize a draft, the
- * FIRST line of its (trimmed) output must be exactly `===DRAFT_READY===`,
- * followed by a fenced ```json block containing the draft. Anything else is
- * treated as a plain-text follow-up question.
- */
-
 export type NlChatEntityType = 'task' | 'pipeline' | 'agent' | 'automation'
 
 export type BuilderTurn =
@@ -17,7 +6,6 @@ export type BuilderTurn =
 
 const DRAFT_READY_SENTINEL = '===DRAFT_READY==='
 
-/** Fallback shown to the user when the sentinel is present but JSON parsing fails. */
 const DRAFT_PARSE_ERROR_MESSAGE = 'Draft sinh lỗi, vui lòng thử lại.'
 
 export function parseBuilderOutput(stdout: string): BuilderTurn {
@@ -47,11 +35,6 @@ function isEntityType(v: unknown): v is NlChatEntityType {
   return v === 'task' || v === 'pipeline' || v === 'agent' || v === 'automation'
 }
 
-/**
- * In auto mode (no `entityType` pinned by the caller) the agent wraps its
- * draft as `{ entityType, draft }` so the client knows which create API to
- * call. A bare draft object (pinned mode) is returned as-is.
- */
 function unwrapDraft(parsed: Record<string, unknown>): BuilderTurn {
   const { entityType, draft } = parsed as { entityType?: unknown; draft?: unknown }
   if (isEntityType(entityType) && draft && typeof draft === 'object' && !Array.isArray(draft)) {
@@ -61,11 +44,7 @@ function unwrapDraft(parsed: Record<string, unknown>): BuilderTurn {
 }
 
 export interface BuildTurnPromptInput {
-  /**
-   * Target entity, when the caller pinned one. Omitted (auto mode) for the
-   * floating chat surface: the user just chats, and the agent decides which
-   * of task/pipeline/agent the draft is for.
-   */
+  /** Target entity when the caller pinned one; omitted in auto mode, where the agent infers it. */
   entityType?: NlChatEntityType | null
   /** 1-based turn counter within the chat session. */
   turnIndex: number
@@ -91,7 +70,7 @@ const AUTO_MODE_HEADER = [
   'Khi chốt draft, JSON trong code block phải là wrapper: { "entityType": "task" | "pipeline" | "agent" | "automation", "draft": { ...draft đúng schema của entityType đó... } }.',
 ].join('\n')
 
-// Đồng bộ thủ công với KNOWN_AUTOMATION_EVENT_TYPES (automations/business/index.ts) — không import vì hằng đó nằm cùng barrel với side-effect scheduler.
+// xem docs/architecture/code/nl-chat.md §10
 const AUTOMATION_EVENT_TYPES_HINT = [
   'job.queued',
   'job.started',
@@ -201,11 +180,10 @@ export function buildTurnPrompt(input: BuildTurnPromptInput): string {
       : 'wrapper { "entityType": ..., "draft": ... } đúng schema của entityType bạn đã suy ra'
     parts.push(`(Nhắc lại ngắn gọn output contract: nếu đủ thông tin, dòng đầu tiên phải là ${'`'}===DRAFT_READY===${'`'} theo sau là fenced ${'```'}json chứa ${draftShape}; nếu chưa đủ, chỉ hỏi lại bằng văn bản thuần.)`)
     if (input.extraContext?.trim()) {
-      // Thứ tự bắt buộc: nhắc contract → catalog → message, để rule "không khớp thì hỏi lại" còn ràng buộc câu hỏi vừa nhận.
+      // xem docs/architecture/code/nl-chat.md §1
       parts.push('')
       parts.push(input.extraContext.trim())
     } else {
-      // Caller không cấp catalog (facade `NlChatBusiness`): vẫn phải chặn bịa ref, chỉ là không có danh sách để đối chiếu.
       parts.push('(Nhắc lại: chỉ dùng ref/tên có trong catalog đã được cung cấp; không khớp hoặc mơ hồ thì hỏi lại, không tự bịa.)')
     }
     parts.push('')
@@ -237,12 +215,10 @@ function mintChatSessionId(): string {
   return `${CHAT_SESSION_PREFIX}${crypto.randomBytes(4).toString('hex')}`
 }
 
-/** Scratch workspace for a chat session — no real project file is ever touched. */
 function scratchWorkspace(chatSessionId: string): string {
   return joinPath(registryHome(), 'nlchat-scratch', chatSessionId)
 }
 
-/** Jobs tagged with this chat session, oldest first. */
 function findChatJobs(chatSessionId: string): JobRecord[] {
   return listJobs(200)
     .filter((j) => j.metadata?.taskId === chatSessionId)
@@ -272,10 +248,9 @@ export interface NlChatSessionStarted {
 }
 
 /**
- * Start a new NL chat session: mint a `nlchat-<hex>` id (shaped like a real
- * task id, per TASK_ID_PATTERN) used purely as the lookup key for
- * `submitJob`/`sendTaskFeedback` — it is never written to `tasks/<id>/` or
- * `.dev-state/<id>.json`. See design.md §4.2.
+ * Start a new NL chat session: mint a `nlchat-<hex>` id used purely as the
+ * lookup key for `submitJob`/`sendTaskFeedback` — it is never written to
+ * `tasks/<id>/` or `.dev-state/<id>.json`.
  */
 export function startNlChatSession(input: StartNlChatSessionInput): NlChatSessionStarted {
   const chatSessionId = mintChatSessionId()
@@ -308,16 +283,14 @@ export function startNlChatSession(input: StartNlChatSessionInput): NlChatSessio
   return { chatSessionId, job }
 }
 
-/** Dựng khối catalog cho lượt sắp gửi — business biết `entityType` nhưng không được đọc `root`/settings, nên hỏi ngược caller (controller cầm cả hai). */
+/** Dựng khối catalog cho lượt sắp gửi theo `entityType`; caller giữ `root`/settings. */
 export type NlChatExtraContextBuilder = (
   entityType: NlChatEntityType | null,
 ) => Promise<string | undefined>
 
 /**
- * Continue an existing chat session with a follow-up message. Does not
- * re-implement any resume logic — delegates entirely to `sendTaskFeedback`
- * (F0011), which resumes the CLI session recorded in the chat session's
- * ledger entry.
+ * Continue an existing chat session with a follow-up message; resuming the CLI
+ * session is delegated entirely to `sendTaskFeedback`.
  */
 export async function continueNlChatSession(
   chatSessionId: string,
@@ -326,11 +299,9 @@ export async function continueNlChatSession(
   buildExtraContext?: NlChatExtraContextBuilder,
 ): Promise<MutationResult<{ job: JobRecord }>> {
   const jobs = findChatJobs(chatSessionId)
-  // A session is known by having at least one tagged job — `entityType` may be absent (auto mode), so it can't double as the existence check.
   if (jobs.length === 0) return { ok: false, status: 404, error: 'unknown chat session' }
   const entityType = entityTypeOf(jobs[jobs.length - 1])
 
-  // Dựng SAU guard 404: phiên không tồn tại thì không tốn một lượt quét đĩa.
   const extraContext = buildExtraContext ? await buildExtraContext(entityType) : undefined
 
   const prompt = buildTurnPrompt({
@@ -339,7 +310,7 @@ export async function continueNlChatSession(
     message,
     extraContext,
   })
-  // Chat sessions here are scratch-only (no `.dev-state` file), so `sendTaskFeedback` never returns `{ queued: true }` for one — an active job stays a "busy" error.
+  // xem docs/architecture/code/nl-chat.md §1
   const result = await sendTaskFeedback(chatSessionId, projectId, prompt)
   if ('error' in result) return result
   if ('job' in result) return { ok: true, job: result.job }
@@ -367,7 +338,7 @@ export function getNlChatTurn(chatSessionId: string): NlChatTurnResult {
 const RESPONSE_HEADER = '=== Phản hồi của runner (stdout/stderr) ==='
 const RESULT_HEADER = '=== Kết quả ==='
 
-/** The agent's own answer for this turn; falls back to the log file (older jobs) with its payload/prompt framing stripped so the chat surface doesn't echo the whole runner log. */
+// xem docs/architecture/code/nl-chat.md §1
 function agentStdoutOf(job: JobRecord): string {
   if (typeof job.stdout === 'string' && job.stdout.trim()) return job.stdout
 

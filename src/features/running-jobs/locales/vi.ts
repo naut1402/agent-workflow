@@ -1,5 +1,3 @@
-// Running jobs — floating icon + hover list (global running jobs).
-// vi is the source of truth for the message schema. `{param}` = named interpolation.
 export default {
   icon: {
     title: 'Job đang chạy',

@@ -1,7 +1,4 @@
-// QuickAction module — CRUD panel for the artifact-actions catalog (F0005).
-// vi is the source of truth for the message schema (see en/quickAction.ts).
-// `{param}` = named interpolation; `{'{'}` = a literal brace (the prompt help
-// tokens are shown verbatim, so their braces are escaped).
+// xem docs/architecture/code/quick-action.md §2
 export default {
   title: 'Quick Action',
   subtitle: 'CRUD các quick action gắn vào artifact viewer (title toolbar / selection toolbar).',

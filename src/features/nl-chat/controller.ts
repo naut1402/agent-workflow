@@ -23,21 +23,13 @@ import {
 } from './business/index.js'
 import type { IncomingAttachment, NlChatEntityType } from './business/index.js'
 
-/** `taskId` field of an upload — absent or empty means "not task-scoped". */
 function readTaskIdField(form: FormData): string | undefined {
   const field = form.get('taskId')
   if (typeof field !== 'string' || !field) return undefined
   return field
 }
 
-/**
- * Multipart body → the attachments `saveChatAttachments` takes, or the refusal to
- * answer with.
- *
- * The count / size / type gate runs on the `File` metadata BEFORE `arrayBuffer()`:
- * reading first would put an oversized upload entirely in memory just to reject it
- * afterwards. Split out of the route so neither half carries the other's branches.
- */
+// xem docs/architecture/code/nl-chat.md §3
 async function readAttachmentForm(
   c: Context<HonoEnv>,
 ): Promise<{ files: IncomingAttachment[]; taskId?: string } | { status: number; error: string }> {
@@ -65,20 +57,12 @@ async function readAttachmentForm(
 }
 
 /**
- * NL chat surface (F0012): a floating chat that generates a Task / Pipeline /
- * Agent draft by driving the real agent runner CLI (`submitJob`/
- * `sendTaskFeedback`), instead of calling an LLM API directly from a route
- * (see design.md §2 quyết định #2). Kept separate from tasks — the `:id` here
- * is a chat session id (`nlchat-<hex>`), never a real task id, and
- * `POST /api/tasks/:id/feedback` intentionally 404s on it (readState guard).
+ * NL chat surface: a floating chat that generates a Task / Pipeline / Agent draft
+ * by driving the agent runner CLI (`submitJob` / `sendTaskFeedback`). The `:id`
+ * here is a chat session id (`nlchat-<hex>`), never a real task id.
  */
 export class NlChatController extends AbstractController {
-  /**
-   * Khối catalog cho MỘT lượt chat — đọc đĩa tại thời điểm gọi, nên lượt 2
-   * thấy pipeline tạo sau lượt 1. Không ném: catalog hỏng chỉ làm agent mất
-   * danh sách (đã có fallback trong `buildTurnPrompt`), không được làm hỏng
-   * cả lượt chat.
-   */
+  // xem docs/architecture/code/nl-chat.md §2
   private async renderCatalogContext(
     root: string,
     entityType?: NlChatEntityType | null,
@@ -90,9 +74,6 @@ export class NlChatController extends AbstractController {
       })
       return renderNlChatCatalog(catalog, entityType) || undefined
     } catch (e) {
-      // Vẫn không ném, nhưng phải để lại dấu vết: không có dòng này thì một
-      // project settings hỏng sẽ chat bình thường mà agent không có catalog
-      // nào suốt phiên — triệu chứng gần giống hệt bug đang sửa.
       console.warn(`[nl-chat] không dựng được catalog: ${String((e as Error)?.message || e)}`)
       return undefined
     }
@@ -114,9 +95,6 @@ export class NlChatController extends AbstractController {
 
     const projectId = this.projectId || ''
     const entityType = parsed.data.entityType ?? undefined
-    // Mọi entityType đều cần catalog, không riêng 'pipeline': draft `task` tham
-    // chiếu `profileName`, draft `agent` tham chiếu `skills`, draft `automation`
-    // tham chiếu cả hai. `renderNlChatCatalog` tự lọc section theo entityType.
     const extraContext = await this.renderCatalogContext(root, entityType)
 
     const { chatSessionId, job } = startNlChatSession({
@@ -155,8 +133,6 @@ export class NlChatController extends AbstractController {
     }
 
     const projectId = this.projectId || ''
-    // `entityType` do business suy ra từ job cuối của phiên, nên section được
-    // lọc y hệt lượt 1 — draft `agent` vẫn không phải gánh danh sách pipeline.
     const result = await continueNlChatSession(id, projectId, parsed.data.message, (entityType) =>
       this.renderCatalogContext(root, entityType),
     )
@@ -209,12 +185,9 @@ export class NlChatController extends AbstractController {
   }
 
   /**
-   * Files dropped into the chat composer. They are written under the data root
-   * and the FE appends their paths to the message, so the agent reads them from
-   * disk — no attachment field on the message/feedback schemas.
-   *
-   * Body is parsed with `c.req.formData()`: the hand-rolled multipart parsers
-   * in knowledge/agent-editor coerce the body to a string and corrupt binaries.
+   * Files dropped into the chat composer, written under the data root; the FE
+   * appends their paths to the message.
+   * xem docs/architecture/code/nl-chat.md §3
    */
   async uploadAttachments() {
     const gate = this.requireRoot()
@@ -226,7 +199,6 @@ export class NlChatController extends AbstractController {
     const result = await saveChatAttachments(gate.root, parsed.files, { taskId: parsed.taskId })
     if ('error' in result) return this.json(result.status, { error: result.error })
 
-    // Audit carries the sanitized names + sizes only — never file contents.
     emitAudit({
       op: 'create',
       entity: 'nl-chat-attachment',

@@ -18,9 +18,6 @@ import {
 
 const { t } = useI18nHelpers()
 
-// CRUD panel for the artifact-actions catalog — quick actions render as
-// buttons on the artifact title/selection toolbars in Monitor's ArtifactPanel.
-
 const props = defineProps<{
   projectId?: string | null
 }>()
@@ -45,7 +42,6 @@ const isCopyDraft = ref(false)
 const formError = ref('')
 const message = ref('')
 const showPromptHelp = ref(false)
-/** Empty string = independent flat button on Monitor toolbar. */
 const draftMenuId = ref('')
 const createMenuLabel = ref('')
 const createMenuParentId = ref('')
@@ -57,9 +53,7 @@ function menuOptionLabel(opt: { label: string; depth: number }): string {
   return `${'— '.repeat(opt.depth)}${opt.label}`
 }
 
-// Danh sách placeholder hỗ trợ trong `prompt_template`, khớp với
-// `substitutePrompt()` (server/artifactActions/index.ts); `{{selection}}` và
-// `{{selection_lines}}` chỉ có giá trị khi chạy từ selection toolbar, ngược lại rỗng.
+// xem docs/architecture/code/quick-action.md §2
 const PROMPT_PLACEHOLDERS = computed<Array<{ token: string; desc: string; selectionOnly?: boolean }>>(() => [
   { token: '{{artifact_name}}', desc: t('quickAction.promptHelp.placeholders.artifactName') },
   { token: '{{artifact_base}}', desc: t('quickAction.promptHelp.placeholders.artifactBase') },
@@ -75,7 +69,6 @@ const PROMPT_PLACEHOLDERS = computed<Array<{ token: string; desc: string; select
   },
 ])
 
-// Floating popover for the prompt_template placeholders (overlay, not inline).
 const promptHelpRef = ref<HTMLElement | null>(null)
 const helpBtnRef = ref<HTMLElement | null>(null)
 
@@ -89,7 +82,7 @@ function onDocKey(e: KeyboardEvent) {
 }
 function openPromptHelp() {
   showPromptHelp.value = true
-  // Defer binding — otherwise the opening click also triggers the capture-phase outside-click handler.
+  // xem docs/architecture/code/quick-action.md §2
   nextTick(() => {
     document.addEventListener('click', onDocClick, true)
     document.addEventListener('keydown', onDocKey)
@@ -125,7 +118,6 @@ function emptyDraft(): QuickActionDraft {
 const draft = ref<QuickActionDraft>(emptyDraft())
 const patternsText = ref('')
 
-/** Effective runner for the draft (explicit pick, else system default). */
 const effectiveRunnerId = computed(
   () => draft.value.runner_id || defaultRunnerId.value || runners.value[0]?.id || '',
 )
@@ -136,11 +128,9 @@ const effectiveProviderId = computed(() => {
   return connections.value.find((c) => c.id === runner.connectionId)?.providerId || ''
 })
 
-/** Console-command runners: no agent_ref / system prompt — prompt is extra CLI argv. */
 const isConsoleCommandRunner = computed(() => effectiveProviderId.value === 'console-command')
 
-// Action id is derived from the label — only when creating; an edited action
-// keeps its original id so its identity stays stable.
+// xem docs/architecture/code/quick-action.md §1
 function deriveId(label: string): string {
   const base = slugify(label, { maxLength: 80, fallback: 'quick-action' })
   const taken = new Set(catalog.actions.value.map((a) => a.id))
@@ -203,7 +193,6 @@ function openCopy(a: QuickActionDraft) {
     require_approval: a.require_approval ?? false,
   }
   patternsText.value = (a.artifact_patterns ?? []).join(', ')
-  // Copy does not inherit menu membership — user picks again (or leave independent).
   draftMenuId.value = ''
   formError.value = ''
   message.value = ''
@@ -322,12 +311,10 @@ async function saveForm() {
     .map((s) => s.trim())
     .filter(Boolean)
 
-  // Console-command runners cannot bind an agent (no system prompt merge).
   if (isConsoleCommandRunner.value) {
     draft.value.agent_ref = ''
   }
 
-  // id is derived from the label (create) or kept as-is (edit).
   draft.value.id = editingId.value ?? deriveId(draft.value.label)
 
   const result = catalog.upsert({ ...draft.value }, editingId.value)
@@ -732,7 +719,6 @@ async function removeAction(a: QuickActionDraft) {
   gap: 10px;
 }
 .qa-prompt-label-row { position: relative; display: inline-flex; align-items: center; gap: 4px; }
-/* Floating popover: overlays adjacent fields (does not push them down). */
 .qa-prompt-help {
   position: absolute;
   top: 100%;

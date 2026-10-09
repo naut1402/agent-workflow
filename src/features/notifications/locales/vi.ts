@@ -1,6 +1,3 @@
-// Notifications module — floating icon + bell derived from polled task flags
-// (hitl_pending/has_qa). vi is the source of truth for the message schema
-// (see en/notifications.ts). `{param}` = named interpolation.
 export default {
   bell: {
     title: 'Thông báo',

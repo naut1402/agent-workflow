@@ -16,8 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18nHelpers()
-/** Deep-clone menu tree. `toRaw` only unwraps the top proxy; nested nodes stay
- * reactive and break `structuredClone` — use JSON round-trip so reopen works. */
+// xem docs/architecture/code/quick-action.md §3
 function cloneMenus(menus: ArtifactMenuNode[]): ArtifactMenuNode[] {
   return JSON.parse(JSON.stringify(toRaw(menus))) as ArtifactMenuNode[]
 }

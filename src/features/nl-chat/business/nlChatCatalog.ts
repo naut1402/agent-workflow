@@ -1,24 +1,4 @@
 // fallow-ignore-file unused-file -- consumer là `controller.ts` qua barrel `business/index.ts`
-/**
- * Catalog "những gì đang có trong hệ thống" cho agent `nl-chat-builder`.
- *
- * Tách đôi có chủ đích:
- * - `buildNlChatCatalog` — nửa dữ liệu: gộp 4 nguồn đã có sẵn trên server,
- *   trả object JSON-serializable, KHÔNG cap, KHÔNG cắt chữ. Tiến trình khác
- *   (vd tool MCP về sau) dùng lại được nguyên trạng.
- * - `renderNlChatCatalog` — nửa prompt: lọc theo `entityType`, cap số mục,
- *   cắt mô tả, ghép khối "quy tắc dùng catalog".
- *
- * Vì sao bơm vào prompt thay vì để agent tự đọc đĩa: workspace của một phiên
- * chat là `nlchat-scratch/<id>` (không thấy `pipeline-profiles/`), và 2 provider
- * API thuần không có tool nào — prompt là đường duy nhất chạy được với mọi
- * runner.
- *
- * Khối này được dựng lại ở MỖI lượt chat (`createSession` và `postMessage`
- * của `controller.ts`), không phải snapshot của cả phiên: pipeline/agent tạo
- * ra giữa phiên phải vào được prompt của lượt kế tiếp.
- */
-
 import { existsSync, joinPath } from '../../../backend/lib/fileHelper.js'
 import type { NlChatEntityType } from './nlChatSession.js'
 import {
@@ -57,14 +37,10 @@ export interface NlChatCatalog {
   skills: NlChatCatalogSkill[]
   /** Tên profile — dùng nguyên văn cho `profileName`. */
   pipelineProfiles: string[]
-  /** `<root>/pipeline.yaml` có tồn tại hay không. KHÔNG phải ref (design §3.3). */
+  /** `<root>/pipeline.yaml` có tồn tại hay không; không phải ref. */
   hasGlobalPipeline: boolean
   automations: NlChatCatalogAutomation[]
-  /**
-   * Nhóm mà nguồn đọc HỎNG, khác hẳn nhóm rỗng thật. Render phải nói ra:
-   * im lặng coi nguồn hỏng là rỗng thì builder sẽ khẳng định với người dùng
-   * rằng pipeline họ nhắc không tồn tại — đúng triệu chứng đang đi sửa.
-   */
+  /** Nhóm mà nguồn đọc hỏng — khác nhóm rỗng thật. */
   unreadable: NlChatCatalogSection[]
 }
 
@@ -73,10 +49,6 @@ export interface NlChatCatalogDeps {
   scanPatterns?: CatalogScanPatterns | null
 }
 
-/**
- * Một nguồn hỏng (quyền đọc, symlink vòng, YAML rác) không được kéo cả catalog
- * xuống — bất biến "đọc filesystem phòng thủ" của AGENTS.md §4.
- */
 async function safely<T>(
   load: () => Promise<T> | T,
   fallback: T,
@@ -88,12 +60,7 @@ async function safely<T>(
   }
 }
 
-/**
- * Gộp mọi khoảng trắng về một space. Khối catalog là văn bản THEO DÒNG, còn
- * `description`/`name` đến từ frontmatter của file `.md` bên thứ ba
- * (`~/.claude/skills`, plugin cache) — một mô tả nhiều dòng sẽ chèn được dòng
- * `- <ref giả>` nằm ngang hàng mục thật, hoặc cả câu ghi đè khối quy tắc.
- */
+// xem docs/architecture/code/nl-chat.md §2
 function textOf(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
 }
@@ -102,10 +69,7 @@ function skillNamesOf(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((s): s is string => typeof s === 'string' && !!s) : []
 }
 
-/**
- * Gộp 4 nguồn thành catalog thuần dữ liệu. `deps` được controller inject —
- * business không tự đọc settings, giống hợp đồng của `buildCatalog`.
- */
+/** Gộp 4 nguồn thành catalog thuần dữ liệu; `deps` do caller inject. */
 // fallow-ignore-next-line unused-export
 export async function buildNlChatCatalog(
   root: string,
@@ -117,7 +81,6 @@ export async function buildNlChatCatalog(
     safely(() => listAutomations(root), [] as any[]),
   ])
 
-  // `buildCatalog` là nguồn chung của cả agent lẫn skill → hỏng thì hỏng cả hai.
   const unreadable: NlChatCatalogSection[] = [
     ...(catalog.failed ? (['agents', 'skills'] as const) : []),
     ...(pipelineProfiles.failed ? (['pipelineProfiles'] as const) : []),
@@ -125,8 +88,6 @@ export async function buildNlChatCatalog(
   ]
 
   return {
-    // Item không có `id` bị loại: ref hợp lệ của `steps[].agent` là id đầy đủ
-    // (`source:name`), tên trần không resolve được.
     agents: (catalog.value.agents || [])
       .filter((a: any) => typeof a?.id === 'string' && a.id.length > 0)
       .map((a: any) => ({
@@ -136,7 +97,6 @@ export async function buildNlChatCatalog(
         description: textOf(a.description),
         skills: skillNamesOf(a.skills),
       })),
-    // Draft agent ghi `skills[]` bằng TÊN (xem agentMarkdown), không phải ref.
     skills: (catalog.value.skills || [])
       .filter((s: any) => typeof s?.name === 'string' && s.name.length > 0)
       .map((s: any) => ({
@@ -153,13 +113,6 @@ export async function buildNlChatCatalog(
   }
 }
 
-// ── render
-
-/**
- * Trần số mục mỗi section. `buildCatalog` quét `~/.claude/skills`, plugin cache
- * và `.claude/` của project nên số mục có thể hàng trăm — cap ở đây, KHÔNG sửa
- * `buildCatalog` (dùng chung với `GET /api/catalog`).
- */
 const CAPS = { agents: 60, skills: 80, pipelineProfiles: 50, automations: 30 }
 const DESC_MAX = 100
 
@@ -174,7 +127,6 @@ const CATALOG_RULES = [
   '5. Danh sách trên được cấp LẠI ở mỗi lượt và luôn là trạng thái mới nhất tại thời điểm này — MỌI khối catalog xuất hiện ở các lượt TRƯỚC đã hết hiệu lực, KHÔNG được lấy ref từ chúng (mục biến mất khỏi danh sách mới nghĩa là nó đã bị xoá hoặc đổi tên). Người dùng khẳng định có đối tượng mới hơn mà danh sách không có → nói rõ bạn vừa đọc lại và vẫn không thấy nó, hỏi lại tên chính xác, KHÔNG tự điền.',
 ].join('\n')
 
-/** Section nào thật sự được draft của từng `entityType` tham chiếu tới. */
 type SectionKey = NlChatCatalogSection
 
 const SECTIONS_BY_ENTITY: Record<NlChatEntityType, SectionKey[]> = {
@@ -193,22 +145,12 @@ const SECTION_HEADERS: Record<SectionKey, string> = {
   automations: '[AUTOMATION RULE ĐANG CÓ] — chỉ để tránh tạo trùng, KHÔNG phải ref:',
 }
 
-/**
- * Mô tả dài làm phình prompt mà không thêm thông tin phân biệt — cắt ở
- * `DESC_MAX`. Gộp khoảng trắng lần nữa ở đây (dù `buildNlChatCatalog` đã làm)
- * vì nửa render là hàm thuần, gọi được với catalog do người khác dựng.
- */
 function clampDesc(desc: string): string {
   const flat = textOf(desc)
   if (flat.length <= DESC_MAX) return flat
   return `${flat.slice(0, DESC_MAX)}…`
 }
 
-/**
- * `- <ref>` khi không có mô tả: dấu `—` treo lủng làm model tưởng mô tả bị mất.
- * `label` cũng đi qua `textOf`: `ref`/`name` đến từ file bên thứ ba như
- * `description`, nên cùng đường chèn dòng giả.
- */
 function bullet(label: string, desc: string): string {
   const clamped = clampDesc(desc)
   return clamped ? `- ${textOf(label)} — ${clamped}` : `- ${textOf(label)}`
@@ -233,15 +175,11 @@ function renderSection(catalog: NlChatCatalog, key: SectionKey): string {
   const parts = [SECTION_HEADERS[key]]
   const all = linesOf(catalog, key)
   if (catalog.unreadable.includes(key)) {
-    // Nguồn hỏng KHÁC nguồn rỗng. Nói "chưa có mục nào" ở đây là để builder
-    // khẳng định pipeline người dùng nhắc không tồn tại, rồi bỏ trống
-    // `profileName` → task rơi về pipeline mặc định, đúng bug đang đi sửa.
+    // xem docs/architecture/code/nl-chat.md §2
     parts.push(
       '- (KHÔNG đọc được nguồn này — ĐỪNG kết luận là không tồn tại. Người dùng nhắc tên thuộc nhóm này thì hỏi lại để họ xác nhận.)',
     )
   } else if (all.length === 0) {
-    // Phân biệt "không có mục nào" với "không được cho biết" — im lặng thì
-    // model tự do suy diễn, đúng cái task này đi sửa.
     parts.push('- (chưa có mục nào)')
   } else {
     const cap = CAPS[key]
@@ -253,9 +191,7 @@ function renderSection(catalog: NlChatCatalog, key: SectionKey): string {
     }
   }
   if (key === 'pipelineProfiles') {
-    // KHÔNG in ref `@global`: `sanitiseProfileName('@global')` → `global` →
-    // đọc `pipeline-profiles/global.yaml` không thấy → task âm thầm rơi về
-    // pipeline mặc định (design §3.3).
+    // xem docs/architecture/code/nl-chat.md §2
     parts.push(
       catalog.hasGlobalPipeline
         ? '(Project có pipeline mặc định riêng (`pipeline.yaml`) nhưng nó KHÔNG có ref: muốn dùng thì BỎ TRỐNG `profileName`.)'
@@ -265,11 +201,7 @@ function renderSection(catalog: NlChatCatalog, key: SectionKey): string {
   return parts.join('\n')
 }
 
-/**
- * Khối văn bản bơm vào `extraContext` của MỘT lượt bất kỳ. `entityType` quyết định
- * section nào được in — draft `agent` chỉ tham chiếu skill nên không cần
- * gánh cả danh sách pipeline.
- */
+/** Khối văn bản bơm vào `extraContext` của một lượt; `entityType` quyết định section nào được in. */
 // fallow-ignore-next-line unused-export
 export function renderNlChatCatalog(
   catalog: NlChatCatalog,
@@ -277,7 +209,5 @@ export function renderNlChatCatalog(
 ): string {
   const keys = entityType ? SECTIONS_BY_ENTITY[entityType] : ALL_SECTIONS
   const blocks = ALL_SECTIONS.filter((k) => keys.includes(k)).map((k) => renderSection(catalog, k))
-  // Khối rule luôn đi kèm, kể cả khi mọi section rỗng — đó là lúc rule #2
-  // (không khớp thì hỏi lại) quan trọng nhất.
   return [CATALOG_HEADER, '', ...blocks.flatMap((b) => [b, '']), CATALOG_RULES].join('\n')
 }

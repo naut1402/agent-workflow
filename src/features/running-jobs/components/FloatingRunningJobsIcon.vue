@@ -35,9 +35,6 @@ function clearLeaveTimer() {
   }
 }
 
-// Hover stays as a mouse convenience; the trigger button below is the
-// keyboard/click path (`aria-expanded` + toggle) so a mouse-less user can
-// open the dropdown and reach the running-job list at all.
 function onEnter() {
   clearLeaveTimer()
   open.value = true
@@ -118,7 +115,7 @@ onUnmounted(() => {
 .floating-running-jobs {
   position: fixed;
   top: 16px;
-  right: 60px; /* 16 + 36 + 8 — left of notification */
+  right: 60px;
   z-index: 50;
 }
 .floating-running-jobs-btn {

@@ -1,17 +1,3 @@
-/**
- * `.dev-team-agent/project-rules.md` — hợp đồng file dùng chung giữa CLI
- * orchestrator ngoài (skill `read-project-rules`, ghi file này một lần ở đầu
- * pipeline) và dashboard (đọc lại để nhét rule vào brief). Không tự bịa cơ chế
- * riêng: cùng tên file, cùng format section, để hai đường điều phối hiểu nhau.
- *
- * Thứ tự tìm rule cho một category (khớp skill `read-project-rules`):
- *   1. Section trong `AGENTS.md`/`CLAUDE.md` ở project root (dừng ở file đầu
- *      tiên đọc được).
- *   2. File rule trong `docs/agent-rules/` hoặc `.claude/rules/` (qua
- *      `buildRules` có sẵn).
- *   3. Không tìm thấy → liệt kê ở section "Không tìm thấy", không bịa nội dung.
- */
-
 import {
   dirname,
   joinPath,
@@ -40,7 +26,6 @@ interface RootRuleSection {
   body: string
 }
 
-/** Split markdown into `##`/`###` heading sections (heading text → body until next heading). */
 function splitHeadingSections(md: string): { heading: string; body: string }[] {
   const lines = md.split('\n')
   const sections: { heading: string; body: string[] }[] = []
@@ -58,10 +43,8 @@ function splitHeadingSections(md: string): { heading: string; body: string }[] {
 }
 
 /**
- * Rule sections nhúng trực tiếp trong `AGENTS.md`/`CLAUDE.md` ở project root —
- * dừng ở file đầu tiên đọc được (đúng thứ tự ưu tiên của `read-project-rules`).
- * Phân loại heading theo category dùng lại chính `inferRuleCategory` (không
- * định nghĩa keyword mới).
+ * Rule section nhúng trong `AGENTS.md`/`CLAUDE.md` ở project root (dừng ở file
+ * đầu tiên đọc được), phân loại heading bằng `inferRuleCategory`.
  */
 export async function scanRootRuleSections(
   projectRoot: string,
@@ -90,10 +73,9 @@ export async function scanRootRuleSections(
 }
 
 /**
- * Sinh (idempotent) `.dev-team-agent/project-rules.md`. `root` là thư mục
- * `.dev-team-agent` (cùng tham số `root` mọi nơi khác trong orchestrator).
- * File do CLI ngoài ghi trước thì đọc nguyên văn, không ghi đè — kể cả khi
- * format khác bản dashboard tự sinh.
+ * Sinh (idempotent) `.dev-team-agent/project-rules.md` rồi trả nội dung. `root` là
+ * thư mục `.dev-team-agent`; file đã có thì trả nguyên văn, không ghi đè.
+ * xem docs/architecture/code/orchestrator.md §10
  */
 export async function ensureProjectRulesFile(root: string): Promise<string> {
   const dest = joinPath(root, 'project-rules.md')

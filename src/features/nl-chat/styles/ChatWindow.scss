@@ -1,13 +1,5 @@
-// Floating chat surface (nl-chat feature): the window chrome plus the message
-// bubbles. Global rather than scoped because the window shell and its two
-// bodies (creation-flow builder, task/runner chat) are separate components that
-// must share one look.
-/* Theme tokens only (see src/frontend/styles/_tokens.scss) — the panel must follow the
-   light/dark theme instead of the previous hardcoded white surface. */
 .nl-chat-window {
   position: fixed;
-  /* Width/height come from the inline resize state (ChatWindow.vue); these are
-     only the pre-mount fallback. */
   width: 340px;
   height: 60vh;
   max-width: calc(100vw - 16px);
@@ -36,10 +28,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The title IS the status indicator now — the header carries no status icon
-   any more. Palette taken over from the dropped `.nl-chat-status` rules;
-   `is-idle` is deliberately absent so it inherits the window's --text. Busy is
-   --waiting, not --accent: --accent already means "info icon" in this header. */
 .nl-chat-title.is-busy {
   color: var(--waiting);
 }
@@ -49,8 +37,6 @@
 .nl-chat-title.is-error {
   color: var(--danger);
 }
-/* Status as text for screen readers: colour alone would make the status
-   unreadable for anyone who cannot tell the three apart (WCAG 1.4.1). */
 .nl-chat-sr-only {
   position: absolute;
   width: 1px;
@@ -62,33 +48,23 @@
   white-space: nowrap;
   border: 0;
 }
-/* Which session of how many, between the title and the → arrow. */
 .nl-chat-session-counter {
   flex: none;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
-/* Info affordance: leads the header (where the connection dot used to be) and
-   hover reveals which project/task/step/runner this chat is bound to, without
-   spending header width on it. */
 .nl-chat-info {
   position: relative;
   display: flex;
   align-items: center;
   flex: none;
 }
-/* Blue, in both themes (--accent is #4aa3ff dark / #0969da light). The hover
-   state needs its own rule: the global .icon-btn:hover pulls it back to --text. */
+// xem docs/architecture/code/nl-chat.md §9
 .nl-chat-info .icon-btn,
 .nl-chat-info .icon-btn:hover:not(:disabled) {
   color: var(--accent);
 }
-/* The info button swaps its icon for the `spinner` shape while a step/job is
-   busy; the animation comes from the shared `.c-spin` utility in `_shell.scss`
-   — this file used to carry a second, identical copy of those keyframes. */
-/* Anchored left now that the icon leads the header; the ceiling keeps it inside
-   the window at its 260px minimum width. */
 .nl-chat-info-popover {
   position: absolute;
   top: calc(100% + 6px);
@@ -133,14 +109,11 @@
 }
 .nl-chat-body {
   padding: 10px 12px;
-  /* Takes the height the user resized to; the message list scrolls inside. */
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-/* One per open session — all mounted, only the active one displayed, so an
-   unsubmitted draft survives switching to another chat. */
 .nl-chat-session {
   display: flex;
   flex-direction: column;
@@ -160,8 +133,6 @@
   color: var(--muted);
   font-size: 12px;
 }
-/* User right, assistant left — the offset (plus max-width and the role label)
-   is what makes the two sides readable at a glance. */
 .nl-chat-row {
   display: flex;
   flex-direction: column;
@@ -173,9 +144,6 @@
   align-items: flex-end;
   text-align: right;
 }
-/* A user bubble detected as markdown (ChatMessageBubble's `looksLikeMarkdown`)
-   keeps its position on the right but reads left-to-right inside — a
-   right-aligned list/heading looks broken, plain chat text does not. */
 .nl-chat-row-user .nl-chat-message.is-markdown {
   text-align: left;
 }
@@ -191,8 +159,6 @@
 }
 .nl-chat-message {
   padding: 6px 10px;
-  /* Explicit size: without it a plain-text bubble inherited the app font while
-     the rendered-markdown one had its own, so user messages looked oversized. */
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -206,13 +172,10 @@
   background: var(--panel-2);
   border-radius: 10px 10px 10px 2px;
 }
-/* Runner replies render as markdown through the shared `.md` styles
-   (src/frontend/styles/_monitor.scss) — scaled down for the chat bubble. */
 .nl-chat-message.md {
   font-size: 12px;
   line-height: 1.5;
-  /* The plain-text bubble keeps newlines with pre-wrap; on rendered HTML that
-     would turn every newline BETWEEN tags into a blank line. */
+  // xem docs/architecture/code/nl-chat.md §9
   white-space: normal;
 }
 .nl-chat-message.md :first-child {
@@ -230,8 +193,6 @@
   padding-left: 18px;
   margin: 4px 0;
 }
-/* marked emits <p> inside <li> for loose lists — its default margins turn a
-   3-item list into a wall of gaps inside a small bubble. */
 .nl-chat-message.md li {
   margin: 2px 0;
 }
@@ -247,15 +208,13 @@
   font-size: 13px;
   margin: 6px 0 4px;
 }
-/* Clamp long user turns with CSS instead of slicing the source: slicing a code
-   fence or list in half renders broken markup (design §3.3). */
+// xem docs/architecture/code/nl-chat.md §9
 .nl-chat-message.is-clamped .nl-chat-message-md {
   max-height: 7.5em;
   overflow: hidden;
   mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
   -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
 }
-/* Moved out of TaskChatBody's scoped block when the bubble became shared. */
 .task-chat-more {
   background: none;
   border: none;
@@ -267,7 +226,6 @@
 .nl-chat-message.is-pending {
   opacity: 0.6;
 }
-/* Copy / expand row under a bubble — inherits the row's user/assistant side. */
 .nl-chat-message-actions {
   display: flex;
   align-items: center;
@@ -277,7 +235,6 @@
   font-size: 10px;
   color: var(--muted);
 }
-/* Drag-and-drop target is the message list itself. */
 .nl-chat-messages.is-drop-over {
   outline: 1px dashed var(--accent);
   outline-offset: -2px;
@@ -288,7 +245,6 @@
   font-size: 11px;
   color: var(--accent);
 }
-/* Composer attachment strip: paperclip + one chip per staged file. */
 .nl-chat-attach {
   display: flex;
   align-items: center;
@@ -371,15 +327,10 @@
     transform: translateY(-2px);
   }
 }
-/* One bordered shell around "+", the textarea and the send button — they used
-   to be three visually separate blocks (own border each); the children below
-   go flat/borderless so this box reads as the single input it already was
-   structurally (one <form>). */
 .nl-chat-input-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  /* Anchor for the "+" menu, which is absolutely positioned inside this row. */
   position: relative;
   background: var(--input-surface);
   border: 1px solid var(--border);
@@ -393,8 +344,6 @@
   position: relative;
   flex: none;
 }
-/* Opens UPWARD: the composer sits at the bottom edge of a floating window, so a
-   menu dropped below it would fall outside the viewport. */
 .nl-chat-composer-menu {
   position: absolute;
   bottom: calc(100% + 4px);
@@ -409,9 +358,6 @@
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
-/* Both buttons left standing in the row ("+" trigger, send) are `.icon-btn` —
-   flat/borderless, so they read as part of the one shell instead of stacking
-   another box inside it. */
 .nl-chat-input-row .icon-btn {
   padding: 0;
   background: none;
@@ -431,8 +377,7 @@
   background: var(--hover-surface);
   color: var(--accent);
 }
-/* The row prefix above outranks the shared `button:disabled` rule further down,
-   so the disabled cursor has to be restated at this specificity. */
+// xem docs/architecture/code/nl-chat.md §9
 .nl-chat-input-row .nl-chat-composer-menu button:disabled {
   cursor: not-allowed;
 }
@@ -444,13 +389,7 @@
   border-radius: 6px;
   padding: 5px 8px;
 }
-/* Multi-line composer: grows with the text (Enter sends, Shift+Enter newline).
-   One line is the FLOOR, not just the starting size — `autoGrow()` writes an
-   inline `height` on every input, which a CSS `min-height` outranks. That also
-   covers the reset after sending, where the box would otherwise drop back
-   below one line. 1 × 1.45em + padding 5px×2, with box-sizing: border-box — no
-   border of its own now, the shell (`.nl-chat-input-row`) carries the one
-   visible border. */
+// xem docs/architecture/code/nl-chat.md §9
 .nl-chat-input-row textarea {
   flex: 1;
   min-width: 0;
@@ -467,8 +406,6 @@
   min-height: calc(1.45em * 1 + 10px);
   max-height: 120px;
 }
-/* Only the draft preview's "Xác nhận & tạo" / "Huỷ" keep the boxed look now —
-   the input row has nothing plain left to style (see `.icon-btn` note above). */
 .nl-chat-preview-actions button {
   background: var(--panel-2);
   color: var(--text);
@@ -498,9 +435,6 @@
   min-height: 120px;
 }
 
-/* Resize grips, one per corner. The window is anchored bottom-right, so the
-   bottom/right corners shift the anchor offset while growing — see
-   ChatWindow.vue onResizeMove(). */
 .nl-chat-resize {
   position: absolute;
   width: 14px;

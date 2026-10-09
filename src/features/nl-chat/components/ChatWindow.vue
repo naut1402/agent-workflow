@@ -8,10 +8,6 @@ import { closeTaskChatSession } from '../../monitor/scripts/monitorApi'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import Icon from '../../../frontend/ui/Icon.vue'
 
-// Shell of the floating chat window: position (docked to the draggable icon), header, and the bodies of every open session
-// (builder → create a Task/Pipeline/Agent by chatting (F0012); task → chat straight into the CLI session of a pipeline step).
-// Every session's body stays mounted and only the active one is shown, so a half-written builder draft survives a detour into a step's chat.
-
 const props = defineProps<{
   projectId?: string | null
   /** Live position of the floating icon — the window docks above it and follows while dragging. */
@@ -36,7 +32,6 @@ const { t } = useI18nHelpers()
 const { sessions, activeId, activeIndex, nextSession, prevSession } = useChatSurface()
 const context = computed<ChatContext>(() => props.context ?? { mode: 'builder' })
 
-/** Body instances by session id — × needs the ACTIVE one to end its session. */
 const bodyRefs = reactive<Record<string, any>>({})
 function bindBody(id: string, el: unknown): void {
   if (el) bodyRefs[id] = el
@@ -44,7 +39,6 @@ function bindBody(id: string, el: unknown): void {
 }
 const activeBody = computed(() => bodyRefs[activeId.value ?? ''] ?? null)
 
-// Task mode identifies itself by the task + step it is scoped to (the title itself carries the status meaning, so no prose title).
 const title = computed(() => {
   const ctx = context.value
   if (ctx.mode !== 'task') return t('nlChat.window.builderTitle')
@@ -61,13 +55,11 @@ interface RunnerInfo {
   enabled: boolean
 }
 
-// Status/runner are per session: switching sessions reads another key instead of leaving the previous body's state on screen.
 const statuses = reactive<Record<string, Status>>({})
 const runners = reactive<Record<string, RunnerInfo | null>>({})
 const status = computed<Status>(() => statuses[activeId.value ?? ''] ?? idleStatus())
 const stepRunner = computed<RunnerInfo | null>(() => runners[activeId.value ?? ''] ?? null)
 
-// Drop the entries of sessions that left the registry, so the maps don't grow with every chat ever opened.
 watch(
   sessions,
   (list) => {
@@ -78,7 +70,6 @@ watch(
   { deep: true },
 )
 
-/** Runner a builder job would use — `submitJob` with no runnerId takes the default. */
 const defaultRunner = ref<RunnerInfo | null>(null)
 const runnerLoaded = ref(false)
 
@@ -88,10 +79,7 @@ async function loadDefaultRunner(): Promise<void> {
   try {
     const data = await fetchRunners()
     const runners: any[] = Array.isArray(data?.runners) ? data.runners : []
-    // Đọc thẳng default thật từ BE thay vì tự đoán: "runner enabled đầu tiên" là
-    // một luật khác với luật của `submitJob`, nên popover nêu một runner mà job
-    // sẽ không chạy. Không có default dùng được ⇒ bỏ dòng runner, 🚫 không rơi
-    // về `defaultRunnerId` — đó lại là đoán, chỉ đoán bằng một giá trị khác.
+    // xem docs/architecture/code/nl-chat.md §6
     const picked = runners.find((r) => r?.id === data?.effectiveDefaultRunnerId) ?? null
     if (picked) {
       defaultRunner.value = {
@@ -105,17 +93,15 @@ async function loadDefaultRunner(): Promise<void> {
   }
 }
 
+// xem docs/architecture/code/nl-chat.md §6
 const infoOpen = ref(false)
-/** The popover opens on hover AND on click and needs different closing rules for each: without this flag, moving the mouse off a clicked-open popover would yank it away — and it must stay readable without hover for touch devices. */
 const infoPinned = ref(false)
 const infoRef = ref<HTMLElement | null>(null)
 const infoTriggerRef = ref<HTMLButtonElement | null>(null)
-/** Plain `let`, not a ref: it is only read inside the synchronous focus() call. */
 let infoRefocusing = false
 
 function openInfo(): void {
   infoOpen.value = true
-  // Only the builder needs a lookup — task mode gets its runner from the body.
   if (context.value.mode !== 'task') void loadDefaultRunner()
 }
 
@@ -125,17 +111,14 @@ function closeInfo(): void {
 }
 
 function onInfoEnter(): void {
-  // Escape hands focus back to the trigger, which fires `focusin` here — without the guard it would reopen what Escape just shut.
   if (infoRefocusing) return
   openInfo()
 }
 
-/** Hover/focus leaving only closes what hover/focus opened. */
 function onInfoLeave(): void {
   if (!infoPinned.value) infoOpen.value = false
 }
 
-/** Click pins, a second click unpins — keyed off `infoPinned`, not `infoOpen`: `pointerenter` already opened the popover before the click lands, so toggling on `infoOpen` would never let the first click open anything. */
 function onInfoToggle(): void {
   if (infoPinned.value) {
     closeInfo()
@@ -145,7 +128,6 @@ function onInfoToggle(): void {
   openInfo()
 }
 
-/** Capture phase, so a click on the trigger is seen before its own handler. */
 function onInfoDocClick(e: MouseEvent): void {
   if (!infoOpen.value) return
   if (infoRef.value?.contains(e.target as Node)) return
@@ -173,18 +155,15 @@ const runnerStatusText = computed(() => {
     : t('nlChat.window.runnerReady')
 })
 
-// Rows of the info popover: pushed conditionally, so an unknown value hides its row instead of showing a placeholder next to a label.
 const infoRows = computed(() => {
   const rows: { label: string; value: string }[] = []
   if (props.projectId) rows.push({ label: t('nlChat.window.infoProject'), value: props.projectId })
-  // Dashboard context: the mode and task currently selected in the shell.
   if (props.shellModeLabel) {
     rows.push({ label: t('nlChat.window.infoShellMode'), value: props.shellModeLabel })
   }
   if (props.shellTaskId) {
     rows.push({ label: t('nlChat.window.infoShellTask'), value: props.shellTaskId })
   }
-  // This chat's own context.
   const ctx = context.value
   if (ctx.mode === 'task') {
     rows.push({ label: t('nlChat.window.infoTask'), value: ctx.taskId })
@@ -202,7 +181,6 @@ const infoRows = computed(() => {
       value: `${activeRunner.value.name} (${runnerStatusText.value})`,
     })
   }
-  // Last row is about the dashboard, not the chat session — unconditional, since Vue casts an absent Boolean prop to `false` (no "unknown" state to hide it for).
   rows.push({
     label: t('nlChat.window.infoConnection'),
     value: props.connected ? t('nlChat.window.connected') : t('nlChat.window.disconnected'),
@@ -210,7 +188,6 @@ const infoRows = computed(() => {
   return rows
 })
 
-/** The title is the status indicator: colour-coded by `status.kind`, with the status text appended as its tooltip. Idle adds nothing, so a long title keeps its plain-title tooltip. */
 const titleTooltip = computed(() =>
   status.value.kind === 'idle' ? title.value : `${title.value} — ${status.value.text}`,
 )
@@ -222,21 +199,19 @@ const STATUS_ANNOUNCEMENT: Record<Status['kind'], string> = {
   error: 'nlChat.window.statusError',
 }
 
-/** What the live region announces — the KIND, not `status.text`: the builder chat's busy text ticks a seconds counter, which a polite live region would otherwise re-read every second. */
+// xem docs/architecture/code/nl-chat.md §7
 const statusAnnouncement = computed(() => t(STATUS_ANNOUNCEMENT[status.value.kind]))
 
 const DEFAULT_WIDTH = 340
 const DEFAULT_HEIGHT_RATIO = 0.6
 const MIN_WIDTH = 260
 const MIN_HEIGHT = 220
-/** Vertical space taken by the icon itself plus a small gap. */
 const ANCHOR_OFFSET = 48
 const VIEWPORT_MARGIN = 8
 const SIZE_KEY = 'dev-dashboard-nlchat-size'
 
 const windowRef = ref<HTMLElement | null>(null)
 
-/** Resize state. The window anchors to the icon's right/bottom, so growing it would only ever extend up/left — `offset` shifts the anchored edges instead, letting the bottom/right corners drag outward too. Persisted like the icon position. */
 interface ChatSize {
   width: number
   height: number
@@ -311,7 +286,6 @@ function onResizeMove(e: PointerEvent): void {
   if (!resizing) return
   const dx = e.clientX - startX
   const dy = e.clientY - startY
-  // Dragging left/up always grows the window; the right/bottom corners keep their opposite edge still by shifting the anchor offset by the same amount.
   const growLeft = resizing === 'tl' || resizing === 'bl'
   const growUp = resizing === 'tl' || resizing === 'tr'
 
@@ -342,7 +316,6 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onInfoKeydown)
 })
 
-// Anchored to the (draggable) icon rather than the viewport corner, so moving the icon moves the chat with it; clamped so it never leaves the viewport.
 const anchorStyle = computed(() => {
   const anchor = props.anchor ?? { right: 24, bottom: 24 }
   const right = anchor.right + size.offsetX
@@ -357,7 +330,6 @@ const anchorStyle = computed(() => {
   }
 })
 
-/** End the active chat session (NL scratch or task ledger) — used by × to forget it for good. */
 async function dismissActiveSession(): Promise<void> {
   const ctx = context.value
   if (ctx.mode === 'builder') {
@@ -386,7 +358,6 @@ async function onCloseClick(): Promise<void> {
     :style="anchorStyle"
   >
     <header class="nl-chat-header">
-      <!-- Info popover: which project/mode/task/step/runner this chat is bound to, plus the dashboard connection state. -->
       <span
         ref="infoRef"
         class="nl-chat-info"
@@ -429,11 +400,10 @@ async function onCloseClick(): Promise<void> {
         <Icon name="chevronLeft" :size="14" />
       </button>
 
-      <!-- The title itself is colour-coded and spells the status out in its tooltip. -->
       <span class="nl-chat-title" :class="`is-${status.kind}`" :title="titleTooltip">{{
         title
       }}</span>
-      <!-- Colour must never be the only channel (WCAG 1.4.1): the same status text again, for screen readers. -->
+      <!-- xem docs/architecture/code/nl-chat.md §7 -->
       <span class="nl-chat-sr-only" role="status">{{ statusAnnouncement }}</span>
 
       <template v-if="sessions.length > 1">
@@ -449,7 +419,6 @@ async function onCloseClick(): Promise<void> {
         </button>
       </template>
 
-      <!-- Minimize hides the whole window (keeping this chat), matching what clicking the floating icon does — a header-only strip looked broken. -->
       <button
         type="button"
         class="nl-chat-icon-btn"
@@ -479,7 +448,7 @@ async function onCloseClick(): Promise<void> {
     ></div>
 
     <div class="nl-chat-body">
-      <!-- Every session stays mounted; only the active one is shown. `v-show` sits on this wrapper because BuilderChatBody's root is a fragment. -->
+      <!-- xem docs/architecture/code/nl-chat.md §6 -->
       <div v-for="s in sessions" v-show="s.id === activeId" :key="s.id" class="nl-chat-session">
         <TaskChatBody
           v-if="s.context.mode === 'task'"

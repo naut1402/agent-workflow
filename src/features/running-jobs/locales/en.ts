@@ -1,4 +1,3 @@
-// Running jobs floating icon — English. Typed against the vi schema.
 export default {
   icon: {
     title: 'Running jobs',

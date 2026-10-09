@@ -3,9 +3,8 @@ import { fetchJobs } from '../../runner/scripts/runnerApi'
 import { groupRunningJobs, type JobLite } from '../lib/groupRunningJobs'
 import { openSseStream, type SseStream } from '../../../frontend/lib/sseClient'
 
-// Backed by SSE (`/api/jobs/stream`, global — không scope theo project) thay
-// vì polling. `poll()` giữ lại là 1 lần fetch REST cho call site cần refresh
-// ngay sau hành động của chính user.
+// SSE `/api/jobs/stream` (global, không scope theo project); `poll()` là một lần
+// fetch REST cho call site cần refresh ngay sau hành động của chính user.
 export function useRunningJobs() {
   const jobs = ref<JobLite[]>([])
   const error = ref<string | null>(null)
@@ -18,7 +17,6 @@ export function useRunningJobs() {
       error.value = null
     } catch (e: any) {
       error.value = String(e.message || e)
-      // keep previous jobs — do not clear badge on a single poll failure
     }
   }
 
@@ -41,7 +39,6 @@ export function useRunningJobs() {
       },
       onError: (e: any) => {
         error.value = String(e?.message || e)
-        // keep previous jobs — do not clear badge on a single stream failure
       },
     })
   }

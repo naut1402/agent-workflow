@@ -4,20 +4,12 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import Icon from '../../../frontend/ui/Icon.vue'
 import type { ChatAttachmentItem } from '../composables/useChatAttachments'
 
-/**
- * Composer strip: one chip per staged file. Files are only uploaded when the
- * message is sent, so chips are removable until then. Picking files moved to
- * the composer's "+" menu (`ChatComposerMenu`), so this strip is now purely a
- * display of what is staged — and shows nothing at all when nothing is.
- */
-
 const props = defineProps<{
   items: ChatAttachmentItem[]
   error?: string | null
   /**
-   * True only while an upload is in flight. Deliberately not `canAttach`: that
-   * also folds in `canSend`, which the server flips off mid-poll — chips staged
-   * just before would then be neither sendable nor removable.
+   * True only while an upload is in flight.
+   * xem docs/architecture/code/nl-chat.md §4
    */
   disabled?: boolean
 }>()
@@ -27,7 +19,6 @@ const emit = defineEmits<{
 
 const { t } = useI18nHelpers()
 
-/** Object URLs must be revoked or the browser keeps every previewed file alive. */
 const previews = new Map<string, string>()
 
 function previewUrl(item: ChatAttachmentItem): string | null {
@@ -49,16 +40,12 @@ function releasePreview(id: string): void {
 }
 
 function onRemove(id: string): void {
-  // Guarded here too, not just via the button's `disabled`: a chip removed
-  // mid-upload would drop a file the upload is already carrying.
   if (props.disabled) return
   releasePreview(id)
   emit('remove', id)
 }
 
-// Sync on the list itself, not on the remove event: sending a message clears all
-// chips at once (`attachments.clear()`) without going through `onRemove`, and the
-// body now lives as long as its session, so those blobs would never be released.
+// xem docs/architecture/code/nl-chat.md §4
 watch(
   () => props.items,
   (list) => {
@@ -81,8 +68,6 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- No picker button left, so an empty strip has nothing to show: it must not
-       keep taking up a row above the input. -->
   <div v-if="items.length || error" class="nl-chat-attach">
     <ul v-if="items.length" class="nl-chat-chips">
       <li v-for="item in items" :key="item.id" class="nl-chat-chip">

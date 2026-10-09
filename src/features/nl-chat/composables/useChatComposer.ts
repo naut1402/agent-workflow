@@ -12,11 +12,6 @@ import { resolveChatEnterToSend } from '../../../frontend/configs/appSettings'
  * The composer half of a chat body: attachment chips, the drop zone bound to the
  * message list, the Enter-to-send setting, and the guard deciding when a send is
  * allowed at all.
- *
- * `BuilderChatBody` and `TaskChatBody` grew this verbatim in both files. They
- * differ in only two things — what "can send" means for that surface, and where
- * the composed text goes — so those are the callbacks; everything else lives
- * here once.
  */
 export interface ChatComposerOptions {
   /** The scrollable message list: it doubles as the file drop zone. */
@@ -38,7 +33,6 @@ export function useChatComposer(opts: ChatComposerOptions) {
 
   const inputText = ref('')
   const inputRef = ref<HTMLTextAreaElement | null>(null)
-  /** Id knowledge đã chọn — con trỏ, resolve thành đường dẫn lúc gửi. */
   const knowledgeIds = ref<string[]>([])
   const knowledgeError = ref('')
 
@@ -47,19 +41,10 @@ export function useChatComposer(opts: ChatComposerOptions) {
     getTaskId: opts.getTaskId,
   })
 
-  /**
-   * Also false while an upload is in flight: `attachments.upload()` snapshots
-   * the list it is uploading, so a file staged mid-upload never reaches the
-   * server yet gets cleared with the rest once the send completes — it vanishes
-   * with no error anywhere.
-   */
+  // xem docs/architecture/code/nl-chat.md §4
   const canAttach = computed(
     () => opts.canSend() && !opts.sending() && !attachments.uploading.value,
   )
-  /**
-   * Chọn knowledge không upload gì, nên nó không chờ `attachments.uploading`
-   * như `canAttach`. Cùng một cổng cho hai việc khác nhau chỉ khoá nhầm nút.
-   */
   const canPickKnowledge = computed(() => opts.canSend() && !opts.sending())
   const { isOverDropZone } = useDrop(opts.dropZone, (files) => {
     if (!canAttach.value) return
@@ -71,11 +56,6 @@ export function useChatComposer(opts: ChatComposerOptions) {
     enterToSend.value ? t('nlChat.composer.enterToSend') : t('nlChat.composer.enterToNewline'),
   )
 
-  /**
-   * The single answer to "is the Gửi button live?" — the two bodies each spelled
-   * this out again inside a four-term `:disabled` expression. An empty box with
-   * no chips is not a message, so it does not count as sendable.
-   */
   const canSubmit = computed(
     () =>
       opts.canSend() &&
@@ -85,14 +65,13 @@ export function useChatComposer(opts: ChatComposerOptions) {
   )
 
   function onEnterKey(e: KeyboardEvent): void {
-    // Vietnamese IME: Enter commits the word being typed — never a send.
+    // xem docs/architecture/code/nl-chat.md §4
     if (e.isComposing) return
-    if (!enterToSend.value) return // no preventDefault → the textarea inserts a newline
+    if (!enterToSend.value) return
     e.preventDefault()
     void onSend()
   }
 
-  /** Grow with the text up to the CSS max-height, then scroll. */
   function autoGrow(): void {
     const el = inputRef.value
     if (!el) return
@@ -104,13 +83,9 @@ export function useChatComposer(opts: ChatComposerOptions) {
     if (!canSubmit.value) return
 
     const uploaded = await attachments.upload()
-    if (uploaded === null) return // upload failed — keep text + chips so it can be retried
+    if (uploaded === null) return
 
-    // Resolve id → path at send time, not at pick time: knowledge edited between
-    // two turns then reaches the next turn in its new state, which is the whole
-    // point of `knowledge_inputs` being a pointer.
-    // Không chọn knowledge thì không thêm await nào — đường gửi thường giữ
-    // nguyên số microtask, thứ mà cả UI lẫn test đang dựa vào.
+    // xem docs/architecture/code/nl-chat.md §4
     const bundle = knowledgeIds.value.length ? await resolveKnowledge() : []
     const text = appendKnowledge(appendAttachments(inputText.value.trim(), uploaded), bundle)
 
@@ -121,11 +96,6 @@ export function useChatComposer(opts: ChatComposerOptions) {
     opts.send(text)
   }
 
-  /**
-   * A failed bundle must not eat the turn: the message still goes out, just
-   * without the knowledge block, and the warning stays on screen. Losing what
-   * the user typed is worse than sending it without the paths.
-   */
   async function resolveKnowledge(): Promise<{ id: string; title?: string; path?: string }[]> {
     knowledgeError.value = ''
     if (!knowledgeIds.value.length) return []

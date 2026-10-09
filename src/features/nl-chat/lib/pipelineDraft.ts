@@ -1,21 +1,7 @@
-/**
- * Normalize a pipeline draft coming from the `nl-chat-builder` agent into the
- * shape the Pipeline Editor can actually open.
- *
- * `POST /api/pipeline-profiles` only checks that `steps` is an array, so a
- * draft whose steps carry just `{ agent }` saves fine but is unopenable:
- * `buildFlowFromPipeline()` maps each step to a Vue Flow node keyed by
- * `step.id`, and `extractStepPreservedMap()` skips steps without one — so an
- * id-less profile renders as broken/empty nodes. The agent is asked for
- * `id`/`name` in the prompt; this fills them in deterministically when it
- * doesn't comply, and is applied to the (user-editable) draft before saving.
- */
-
 import { slugify as slugifyBase } from '../../../shared/lib/stringUtils'
 
 const DEFAULT_VERSION = 1
 
-/** `plugin:dev-agent-teams:implementer` → `implementer`; keeps [a-z0-9-] only. */
 function slugify(raw: string): string {
   const tail = raw.split(':').pop() ?? raw
   return slugifyBase(tail, { maxLength: 80, fallback: '' })
@@ -35,7 +21,10 @@ function stepId(step: Record<string, unknown>, index: number): string {
   return `step-${index + 1}`
 }
 
-/** Returns a new pipeline object; the input is never mutated. */
+/**
+ * Returns a new pipeline object; the input is never mutated.
+ * xem docs/architecture/code/nl-chat.md §5
+ */
 export function normalizePipelineDraft(draft: unknown): Record<string, unknown> {
   const src = asRecord(draft) ?? {}
   const rawSteps = Array.isArray(src.steps) ? src.steps : []
@@ -44,7 +33,6 @@ export function normalizePipelineDraft(draft: unknown): Record<string, unknown> 
   const steps = rawSteps.map((rawStep, i) => {
     const step = { ...(asRecord(rawStep) ?? {}) }
     let id = stepId(step, i)
-    // Vue Flow node ids must be unique — a duplicate would silently drop a node.
     for (let n = 2; used.has(id); n += 1) id = `${stepId(step, i)}-${n}`
     used.add(id)
     step.id = id

@@ -1,5 +1,3 @@
-// Notifications module — English messages. Typed against the vi schema, so
-// keys must match vi/notifications.ts exactly.
 export default {
   bell: {
     title: 'Notifications',

@@ -6,8 +6,6 @@ import ChatMessageBubble from './ChatMessageBubble.vue'
 import ChatComposer from './ChatComposer.vue'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 
-// Body of the floating chat window when scoped to a pipeline step: the runner's own conversation history (CLI session transcript) plus an input that resumes that exact session.
-
 const props = defineProps<{
   taskId: string
   stepId?: string
@@ -28,12 +26,10 @@ const chat = useTaskChat({
 })
 
 const { t } = useI18nHelpers()
-/** Above this, a user turn gets a "Xem thêm" toggle — step prompts are whole files. */
 const COLLAPSE_CHARS = 240
 
 const messagesRef = ref<HTMLElement | null>(null)
 
-/** Display-ordered turns (real + pending, interleaved by send time) — only decides which turns fold and how they're labelled, so the template keeps no branching of its own. */
 const displayTurns = computed(() =>
   chat.timeline.value.map((turn) => ({
     ...turn,
@@ -43,7 +39,6 @@ const displayTurns = computed(() =>
   })),
 )
 
-/** Why the runner's transcript could not be read, once we know a session exists. */
 function transcriptMissingHint(): string {
   return (
     chat.transcriptMissingReason.value ||
@@ -51,7 +46,6 @@ function transcriptMissingHint(): string {
   )
 }
 
-/** Reasons an existing-but-empty list stays empty. Only reached with zero turns. */
 function noTurnsHint(): string | null {
   if (!chat.sessionId.value) return 'Step này chưa có phiên CLI nào — chạy step trước rồi quay lại đây.'
   if (!chat.transcriptFound.value) return transcriptMissingHint()
@@ -59,7 +53,6 @@ function noTurnsHint(): string | null {
   return null
 }
 
-/** The one line shown in place of a transcript, or null when there is one — resolves the mutually exclusive reasons here so the template keeps a single `v-if`. */
 const emptyHint = computed<string | null>(() => {
   if (chat.loading.value) return 'Đang tải hội thoại của runner…'
   if (chat.turns.value.length > 0) return null
@@ -72,17 +65,14 @@ async function scrollToEnd(): Promise<void> {
   if (el) el.scrollTop = el.scrollHeight
 }
 
-/** Within this many px of the bottom counts as "still following the live tail". */
 const SCROLL_BOTTOM_THRESHOLD = 48
 
-/** Measured before the watcher's new turn/tool-activity is patched into the DOM. */
 function isNearBottom(): boolean {
   const el = messagesRef.value
   if (!el) return true
   return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD
 }
 
-// Attachments, drop zone, Enter behaviour and the send guard — shared with BuilderChatBody, which only differs in what blocks a send and where text goes.
 const composer = useChatComposer({
   dropZone: messagesRef,
   getProjectId: () => props.projectId ?? undefined,
@@ -99,10 +89,7 @@ const placeholder = computed(() => {
   return 'Nhập tin nhắn cho runner…'
 })
 
-// Header status: a running step is the interesting state — that is the whole
-// point of watching a runner live.
 const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string }>(() => {
-  // The message itself, not just "Có lỗi": the title's tooltip is the only place the error is described.
   if (chat.error.value) return { kind: 'error', text: `Có lỗi: ${chat.error.value}` }
   if (chat.sending.value) return { kind: 'busy', text: 'Đang gửi…' }
   if (chat.running.value) {
@@ -115,12 +102,11 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
 watch(status, (s) => emit('status', s), { immediate: true })
 watch(chat.runner, (r) => emit('runner', r), { immediate: true })
 
-// Tool-activity turns arrive every 2s while a step runs (sessionTranscript.ts), so only follow the tail when already at it — an unconditional scroll would yank the user back while reading older history.
+// xem docs/architecture/code/nl-chat.md §7
 watch([() => chat.turns.value.length, () => chat.pending.value.length], () => {
   if (isNearBottom()) void scrollToEnd()
 })
 
-// Re-scope (and restart polling) when the user opens the chat from another step.
 watch(
   () => `${props.taskId}::${props.stepId ?? ''}`,
   () => {
@@ -129,8 +115,6 @@ watch(
   },
 )
 
-// Minimized: the component stays mounted (so the conversation is still there on
-// reopen) but must not keep polling in the background.
 watch(
   () => props.active !== false,
   (visible) => {
@@ -182,7 +166,6 @@ onUnmounted(() => chat.stop())
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* Fills the (resizable) window body; the message list scrolls inside. */
   flex: 1 1 auto;
   min-height: 0;
 }

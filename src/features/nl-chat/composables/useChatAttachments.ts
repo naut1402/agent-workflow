@@ -8,21 +8,12 @@ import {
   type UploadedAttachment,
 } from '../schemas/nlChat'
 
-/**
- * The composer's attachment chips: picked/dropped files held client-side until
- * the message is actually sent, then uploaded in one request. Limits are the
- * shared constants from `schemas/nlChat` — rejecting here is for the user's
- * benefit; the route re-checks the same numbers.
- */
-
 export interface ChatAttachmentItem {
   id: string
   file: File
 }
 
-// Not `crypto.randomUUID()`: that only exists in a secure context, and the
-// dashboard is reachable over plain http on a LAN IP. The id only has to be
-// unique among the chips of one draft.
+// xem docs/architecture/code/nl-chat.md §4
 let idSeq = 0
 function nextItemId(): string {
   return `att-${Date.now().toString(36)}-${(idSeq += 1)}`
@@ -65,8 +56,6 @@ export function useChatAttachments(opts: {
     error.value = null
   }
 
-  /** `[]` when there is nothing to send, `null` when the upload failed — the
-   *  caller must then keep the text AND the chips so the user can retry. */
   async function upload(): Promise<UploadedAttachment[] | null> {
     if (items.value.length === 0) return []
     uploading.value = true

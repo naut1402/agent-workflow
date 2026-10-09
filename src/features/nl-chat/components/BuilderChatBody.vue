@@ -6,8 +6,6 @@ import ChatMessageBubble from './ChatMessageBubble.vue'
 import ChatComposer from './ChatComposer.vue'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 
-// Body of the floating chat window for the creation flow (F0012). The window shell (position, header, minimize) lives in ChatWindow.vue; this component only reports status up to it.
-
 const props = defineProps<{ projectId?: string | null }>()
 const emit = defineEmits<{
   close: []
@@ -45,10 +43,8 @@ watch(draft, (d) => {
 
 const { t } = useI18nHelpers()
 
-// Keep the newest message in view as the conversation grows; also the drop zone.
 const messagesRef = ref<HTMLElement | null>(null)
 
-// Attachments, drop zone, Enter behaviour and the send guard — shared with TaskChatBody, which only differs in what blocks a send and where text goes.
 const composer = useChatComposer({
   dropZone: messagesRef,
   getProjectId: () => props.projectId ?? undefined,
@@ -58,7 +54,6 @@ const composer = useChatComposer({
 })
 const { isOverDropZone } = composer
 
-// design.md §4.4: re-parses the (possibly user-edited) draftText live so the confirm button reacts as soon as the user fixes/breaks an agent ref, not just when the draft first arrived.
 const pipelineAgentError = computed<string | null>(() => {
   if (entityType.value !== 'pipeline' || step.value !== 'previewDraft') return null
   if (catalogError.value) return catalogError.value
@@ -67,21 +62,19 @@ const pipelineAgentError = computed<string | null>(() => {
   try {
     parsed = JSON.parse(draftText.value)
   } catch {
-    // Invalid JSON is already surfaced via draftParseError on confirm attempt.
     return null
   }
   const invalid = findInvalidPipelineAgentRefs(parsed)
   return invalid.length > 0 ? `Agent không tồn tại trong catalog: ${invalid.join(', ')}` : null
 })
 
-// Cùng lối với `pipelineAgentError`, cho `profileName` của draft task/automation — `profileNameError` giữ luôn thông điệp vì i18n của nl-chat chưa migrate.
 const taskProfileError = computed<string | null>(() => {
   if (step.value !== 'previewDraft') return null
   if (entityType.value !== 'task' && entityType.value !== 'automation') return null
   try {
     return profileNameError(JSON.parse(draftText.value), entityType.value)
   } catch {
-    return null // JSON sai đã được draftParseError báo ở lúc bấm Xác nhận
+    return null
   }
 })
 
@@ -118,7 +111,6 @@ const ENTITY_LABELS: Record<NlChatEntityType, string> = {
   automation: 'Automation',
 }
 
-// A turn is a CLI round trip that can take tens of seconds, so "đang suy nghĩ" alone reads as frozen — the elapsed counter is the progress signal.
 const waitingSeconds = ref(0)
 let waitTimer: ReturnType<typeof setInterval> | null = null
 
@@ -147,7 +139,6 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
         : `Agent đang suy nghĩ… ${waitingSeconds.value}s`,
     }
   }
-  // `step === 'error'` can arrive without any message, hence the fallback text.
   if (step.value === 'error' || error.value) {
     return { kind: 'error', text: error.value ? `Có lỗi: ${error.value}` : 'Có lỗi' }
   }
@@ -157,7 +148,6 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
 
 watch(status, (s) => emit('status', s), { immediate: true })
 
-/** Within this many px of the bottom counts as "still following the tail" (see TaskChatBody.vue). */
 const SCROLL_BOTTOM_THRESHOLD = 48
 
 function isNearBottom(): boolean {
@@ -166,7 +156,7 @@ function isNearBottom(): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD
 }
 
-// Measured before the new message/typing-dots are patched into the DOM (default `watch` flush is 'pre') — only follow the tail when already at it, so reading older history isn't fought.
+// xem docs/architecture/code/nl-chat.md §7
 watch([() => messages.value.length, () => sending.value], async () => {
   if (!isNearBottom()) return
   await nextTick()

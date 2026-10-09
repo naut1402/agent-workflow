@@ -1,5 +1,4 @@
-// QuickAction module — English messages. Typed against the vi schema, so keys
-// must match vi/quickAction.ts exactly. `{'{'}` escapes a literal brace.
+// xem docs/architecture/code/quick-action.md §2
 export default {
   title: 'Quick Action',
   subtitle: 'CRUD the quick actions attached to the artifact viewer (title toolbar / selection toolbar).',

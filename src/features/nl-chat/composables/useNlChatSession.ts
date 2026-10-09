@@ -10,13 +10,9 @@ import { createAutomation } from '../../automations/scripts/automationsApi'
 import { mintTaskId } from '../../monitor/lib/createTaskForm'
 import { TASK_ID_PATTERN } from '../../monitor/schemas/taskCreate'
 
-// Drives the floating NL chat surface end to end: chat with the `nl-chat-builder` agent until it hands back a draft, then persist it through the SAME create APIs the existing dialogs use (design.md F0012 §4.2).
-// Kept as a composable (no render needed) so the state machine is unit-testable by mocking the API client, same pattern as useAgentBuild.ts.
-
 export type NlChatEntityType = 'task' | 'pipeline' | 'agent' | 'automation'
 export type NlChatStep = 'chatting' | 'previewDraft' | 'confirming' | 'done' | 'error'
 
-/** Loại draft `confirm()` biết persist — draft ngoài danh sách này quay lại chat. */
 const PERSISTABLE_ENTITY_TYPES: readonly NlChatEntityType[] = ['task', 'pipeline', 'agent', 'automation']
 export type NlChatAgentScope = 'project' | 'global'
 
@@ -36,7 +32,7 @@ export interface UseNlChatSessionOptions {
   runnerId?: string
   pollMs?: number
   maxWaitMs?: number
-  /** Soft nudge threshold (design.md §4.4 "quá nhiều turn") — not a hard cap. */
+  /** Soft nudge threshold — not a hard cap. */
   nudgeAfterTurns?: number
 }
 
@@ -54,7 +50,6 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   const messages = ref<NlChatMessage[]>([])
   const draft = ref<Record<string, unknown> | null>(null)
   const pipelineName = ref('')
-  // Explicit choice re-confirmed at "previewDraft" for an `agent` draft — `getProjectId()` alone isn't trusted for where to save it, since a null project context previously made `saveCustomAgent` silently fall back to whatever project has `default: true`.
   const agentScope = ref<NlChatAgentScope>('project')
 
   const chatSessionId = ref<string | null>(null)
@@ -64,12 +59,11 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   const turnCount = ref(0)
   const showLongChatNudge = ref(false)
 
-  // design.md §4.4: `CreateTaskPipeline` stays `.passthrough()` (no Zod tightening — §3.1), so this client-side guard is the ONLY thing stopping a pipeline draft with a bogus `steps[].agent` ref from reaching "Xác nhận".
+  // xem docs/architecture/code/nl-chat.md §5
   const catalogAgentIds = ref<Set<string> | null>(null)
   const catalogError = ref<string | null>(null)
   const loadingCatalog = ref(false)
 
-  // Cùng lý do với `catalogAgentIds`, cho `profileName`: `profileName` không tồn tại trên đĩa vẫn là body hợp lệ, task chỉ ÂM THẦM rơi về pipeline mặc định — không có gate nào ở server.
   const catalogProfileNames = ref<Set<string> | null>(null)
   const profileError = ref<string | null>(null)
   const loadingProfiles = ref(false)
@@ -78,7 +72,6 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   const maxWaitMs = opts.maxWaitMs ?? 5 * 60 * 1000
   const nudgeAfterTurns = opts.nudgeAfterTurns ?? 8
 
-  /** Pin the entity type up front (optional — the agent otherwise infers it). */
   function selectEntity(type: NlChatEntityType): void {
     entityType.value = type
     step.value = 'chatting'
@@ -97,7 +90,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     }
   }
 
-  // Không cache theo phiên: agent/pipeline tạo ở tab khác giữa phiên phải soát được ngay. `inflight` chỉ gộp lời gọi CHỒNG NHAU, và nằm trong closure của composable (không phải module scope) để hai instance không dùng chung.
+  // xem docs/architecture/code/nl-chat.md §5
   let catalogInflight: Promise<void> | null = null
   let profilesInflight: Promise<void> | null = null
 
@@ -116,7 +109,6 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
           : []
         catalogAgentIds.value = new Set(ids)
       } catch {
-        // Giữ nguyên set cũ: guard ref agent đã fail-closed theo `catalogError`, nên không cần xoá dữ liệu để chặn.
         catalogError.value = 'Không tải được danh sách agent để kiểm tra — vui lòng thử lại.'
       }
     })().finally(() => {
@@ -141,7 +133,6 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
           : []
         catalogProfileNames.value = new Set(names)
       } catch {
-        // Giữ nguyên set cũ: `profileNameError` đã fail-closed theo `profileError` nên không cần xoá dữ liệu để chặn.
         profileError.value = 'Không tải được danh sách pipeline profile để kiểm tra — vui lòng thử lại.'
       }
     })().finally(() => {
@@ -151,12 +142,10 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     return profilesInflight
   }
 
-  /** Tên đã trim, hoặc null khi không phải một `profileName` dùng được. */
   function trimmedProfileName(value: unknown): string | null {
     return typeof value === 'string' && value.trim() ? value.trim() : null
   }
 
-  /** Các `profileName` mà draft này thật sự tham chiếu (task: 1; automation: mỗi action runTask). */
   function referencedProfileNames(
     d: Record<string, unknown> | null,
     type: NlChatEntityType | null,
@@ -171,7 +160,6 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     return raw.map(trimmedProfileName).filter((n): n is string => n !== null)
   }
 
-  /** Lỗi hiển thị cho draft đang xem, hoặc null khi mọi ref đều khớp. So khớp CHÍNH XÁC vì `pipeline-profiles/` phân biệt hoa thường trên Linux. */
   function profileNameError(
     d: Record<string, unknown> | null,
     type: NlChatEntityType | null = entityType.value,
@@ -187,7 +175,6 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
       : null
   }
 
-  /** Returns the `steps[].agent` refs in `pipelineDraft` that are not in the loaded catalog. */
   function findInvalidPipelineAgentRefs(pipelineDraft: Record<string, unknown> | null): string[] {
     if (!pipelineDraft || !catalogAgentIds.value) return []
     const steps = Array.isArray((pipelineDraft as { steps?: unknown }).steps)
@@ -231,10 +218,8 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
       showLongChatNudge.value = turnCount.value >= nudgeAfterTurns
 
       if (turn.kind === 'draft') {
-        // In free-chat mode the agent reports which entity the draft is for; a pinned entityType (selectEntity) still wins if the agent omits it.
         const resolved = (turn.entityType ?? entityType.value) as NlChatEntityType | null | undefined
         if (!resolved || !PERSISTABLE_ENTITY_TYPES.includes(resolved)) {
-          // Draft with no usable entity type — stay in chat and ask, instead of stranding the user on a preview we cannot persist.
           messages.value.push({
             role: 'assistant',
             text: 'Mình chưa rõ bạn muốn tạo Task, Pipeline, Agent hay Automation — bạn nói rõ giúp mình nhé?',
@@ -243,13 +228,12 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         }
         entityType.value = resolved
         const raw = (turn.draft ?? {}) as Record<string, unknown>
-        // Normalize before preview so what the user reviews is exactly what gets saved — an id-less pipeline profile cannot be reopened in the Pipeline Editor (see lib/pipelineDraft.ts).
         draft.value = resolved === 'pipeline' ? normalizePipelineDraft(raw) : raw
         step.value = 'previewDraft'
         if (resolved === 'pipeline') {
           void loadCatalog()
         }
-        // Nạp theo LOẠI draft, không theo nội dung lúc nhận: nếu chờ đến khi draft có `profileName`, `profileNameError` kẹt ở "đang kiểm tra" và không còn code path nào nạp danh sách nữa.
+        // xem docs/architecture/code/nl-chat.md §5
         if (resolved === 'task' || resolved === 'automation') {
           void loadProfiles()
         }
@@ -266,11 +250,9 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
 
   async function confirm(editedDraft: Record<string, unknown>): Promise<void> {
     if (confirming.value || !entityType.value) return
-    // Hard safety net (design.md §4.4): even if the UI button is somehow clickable, never let a pipeline draft with an invalid agent ref reach savePipelineProfile() — re-check against the actual edited draft.
+    // xem docs/architecture/code/nl-chat.md §5
     if (entityType.value === 'pipeline') {
-      // Đối xứng với nhánh `profileName` bên dưới: nạp lại ngay trước khi soát, vì agent có thể vừa được tạo ở tab khác sau lúc nhận draft.
       await loadCatalog()
-      // Fail-closed cả khi set cũ còn đó nhưng lần nạp gần nhất hỏng, vì `catalogAgentIds` có thể là dữ liệu cũ hơn thực tế.
       if (catalogError.value || !catalogAgentIds.value) {
         error.value = catalogError.value || 'Chưa kiểm tra được danh sách agent hợp lệ — vui lòng thử lại.'
         step.value = 'previewDraft'
@@ -283,7 +265,6 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         return
       }
     }
-    // Cùng thái độ fail-closed với guard agent ref ở trên: draft có `profileName` mà chưa soát được thì chặn, vì rơi về pipeline mặc định âm thầm chính là lỗi cần tránh.
     if (referencedProfileNames(editedDraft, entityType.value).length > 0) {
       await loadProfiles()
     }
@@ -311,7 +292,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
             : { ...editedDraft, taskId: mintTaskId() }
         await createTask(payload, projectId)
       } else if (entityType.value === 'pipeline') {
-        // Re-normalize: the preview textarea is editable, so a user can drop the step ids the Pipeline Editor needs back out of the draft.
+        // xem docs/architecture/code/nl-chat.md §5
         await savePipelineProfile(pipelineName.value, normalizePipelineDraft(editedDraft), projectId)
       } else if (entityType.value === 'automation') {
         await createAutomation(editedDraft as never, projectId)
@@ -357,13 +338,11 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     catalogProfileNames.value = null
     profileError.value = null
     loadingProfiles.value = false
-    // Bỏ luôn request đang bay của phiên cũ: nếu `*Inflight` không được xoá, lần nạp đầu tiên sau `cancel()` sẽ dùng lại chính request đó.
     catalogInflight = null
     profilesInflight = null
   }
 
   return {
-    // state
     step,
     entityType,
     messages,
@@ -382,7 +361,6 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     catalogProfileNames,
     profileError,
     loadingProfiles,
-    // actions
     selectEntity,
     sendMessage,
     confirm,

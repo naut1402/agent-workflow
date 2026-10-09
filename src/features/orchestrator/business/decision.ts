@@ -1,10 +1,3 @@
-/**
- * Prompt + parser cho lượt phán đoán của node điều phối.
- *
- * Tách khỏi `decisionLoop` để test được toàn bộ phần "đọc hiểu output agent" mà
- * không cần bus, không cần job, không cần LLM.
- */
-
 import {
   DECISION_SENTINEL,
   MAX_AGENT_CONTEXT_BYTES,
@@ -29,7 +22,7 @@ export interface StepResult {
   stepId: string
   status: 'succeeded' | 'failed'
   artifacts: string[]
-  /** Kết quả nút con trả về — KHÔNG phải log/context làm việc của nó. */
+  /** Kết quả nút con trả về, không phải log làm việc của nó. */
   result: string
   /** True khi nút con không trả `STEP_SUMMARY` và đây chỉ là đuôi output. */
   fromTail?: boolean
@@ -56,10 +49,7 @@ export interface DecisionContext {
   extraSystemPrompt?: string
   /** Bundle knowledge đã render, ứng với `orchestrator.knowledge_inputs`. */
   knowledgeText?: string
-  /**
-   * Tuyến ra lệnh đã chốt cho lượt này (`resolveDecisionRoute`). Vắng ⇒
-   * `'sentinel'`: mọi caller/test cũ giữ nguyên hành vi, ký tự với ký tự.
-   */
+  /** Tuyến ra lệnh đã chốt cho lượt này (`resolveDecisionRoute`); vắng ⇒ `'sentinel'`. */
   route?: DecisionRoute
 }
 
@@ -73,27 +63,16 @@ const TRIGGER_BRIEF: Record<DecisionTrigger, string> = {
   pipeline_completed: 'Pipeline đã hoàn tất. Không còn bước nào để chạy.',
 }
 
-/** Đuôi giữ nguyên: kết luận của một agent CLI nằm ở cuối output, không ở đầu. */
 function tailOf(text: string, limit: number): string {
   const raw = String(text ?? '')
   if (Buffer.byteLength(raw, 'utf8') <= limit) return raw
   const buf = Buffer.from(raw, 'utf8')
   let start = buf.length - limit
-  // Ngân sách tính bằng byte, nhưng điểm cắt phải rơi vào ranh giới ký tự: cắt
-  // giữa một ký tự nhiều byte (tiếng Việt là chuyện thường ngày ở đây) thì
-  // `toString` trả về U+FFFD. Bỏ qua các byte nối (10xxxxxx) ở đầu lát cắt.
+  // xem docs/architecture/code/orchestrator.md §10
   while (start < buf.length && (buf[start] & 0xc0) === 0x80) start++
   return `…(đã cắt phần đầu)\n${buf.subarray(start).toString('utf8')}`
 }
 
-/**
- * Khối kết quả của nút con. Cố ý KHÔNG mang log thô: context làm việc của nút
- * con ở lại phiên của nút con, cha chỉ nhận `STEP_SUMMARY` nó tự soạn (hoặc
- * đuôi output khi nó không trả) cùng danh sách artifact để đọc chi tiết.
- *
- * Heading `###` chứ không `##`: khối này nằm lồng giữa các mục `##` khác của
- * prompt, và tài liệu artifact có thể nhúng lại prompt rồi cắt theo section.
- */
 function renderStepResult(result: StepResult): string {
   const artifacts = result.artifacts.length ? result.artifacts.join(', ') : '(không có)'
   const body = tailOf(result.result, MAX_STEP_RESULT_BYTES).trim() || '(nút con không trả kết quả)'
@@ -130,12 +109,7 @@ function renderCurrentState(ctx: DecisionContext): string {
   ].join('\n')
 }
 
-/**
- * Giao thức sentinel — ra lệnh bằng dòng JSON cuối output.
- *
- * ⚠️ Nội dung giữ Y NGUYÊN bản trước khi tách hàm: đây là đường mặc định của
- * mọi lượt không có MCP, và test characterization chốt nó ký tự với ký tự.
- */
+// xem docs/architecture/code/orchestrator.md §9
 function renderSentinelProtocol(): string {
   return [
     '## Định dạng trả lời (bắt buộc)',
@@ -154,18 +128,7 @@ function renderSentinelProtocol(): string {
   ].join('\n')
 }
 
-/**
- * Giao thức MCP — ra lệnh bằng tool `orchestrator_decide`.
- *
- * Hai dòng fallback cuối là phần *runtime* của yêu cầu "không kết nối được thì
- * dùng cách cũ", 🚫 không phải thừa: `route` chốt ở server chỉ nói job SẼ có
- * tool, còn việc CLI có kết nối được tới MCP server hay không xảy ra sau đó và
- * server không biết. Thiếu hai dòng này, một lần MCP rụng giữa lượt là pipeline
- * đứng im không lý do. Chi phí ~35 token, so với ~250 token của khối sentinel.
- *
- * Agent gọi tool RỒI in thêm dòng sentinel cũng không thi hành hai lần: chốt
- * `directDecisionApplied` được đóng trước khi `applyDecision` chạy.
- */
+// xem docs/architecture/code/orchestrator.md §9
 function renderMcpProtocol(): string {
   return [
     '## Cách ra lệnh (bắt buộc)',
@@ -176,21 +139,12 @@ function renderMcpProtocol(): string {
     'Gọi tool xong thì KHÔNG in thêm dòng JSON nào — lệnh đã được thi hành.',
     '',
     'Nếu `orchestrator_decide` KHÔNG có trong danh sách tool của bạn, hoặc gọi nó trả lỗi:',
-    // Ví dụ phải CHẠY ĐƯỢC, không phải placeholder: agent chỉ đọc tới đây khi
-    // tuyến chính đã hỏng — đúng lúc cần ít mơ hồ nhất. Chép nguyên ví dụ có
-    // `…` vào JSON là `validateDecision` từ chối rồi `recoverFromBadTurn`.
     `in dòng cuối cùng của output đúng dạng \`${DECISION_SENTINEL} {"action":"resume","stepId":"implementer","reason":"...","message":"..."}\``,
     'để dashboard thi hành thay — KHÔNG gọi API điều phối bằng shell (`curl`).',
   ].join('\n')
 }
 
-/**
- * Prompt cho lượt quyết định. Cố ý mô tả định dạng trả lời trước, vì guard
- * phía sau không đoán: sai định dạng là pipeline halt tường minh.
- *
- * Khối giao thức chọn theo `ctx.route` — đây là chỗ hiện thực "quyết định ở
- * runtime theo trạng thái MCP", 🚫 không chép cứng một định dạng vào template.
- */
+/** Prompt cho lượt quyết định; khối giao thức chọn theo `ctx.route`. */
 export function buildDecisionPrompt(ctx: DecisionContext): string {
   const actions = [
     `- \`start\` — chạy một step mới. \`stepId\` phải nằm trong: ${ctx.stepIds.join(', ')}`,
@@ -235,13 +189,9 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
   return parts.filter(Boolean).join('\n\n')
 }
 
-/** Dòng cuối cùng bắt đầu bằng sentinel — agent có thể "nghĩ" nhiều dòng trước đó. */
 function lastDecisionLine(stdout: string): string | null {
   const lines = String(stdout ?? '').split(/\r?\n/)
   for (let i = lines.length - 1; i >= 0; i--) {
-    // Fence ```…``` quanh dòng quyết định là thói quen rất hay gặp của agent CLI.
-    // Chỉ bóc khi fence CÂN hai đầu — cùng quy ước với `stepSummaryOf`, để một
-    // backtick kết câu (code span) không bị ăn mất.
     const unfenced = stripBalancedFence(lines[i])
     if (unfenced.startsWith(DECISION_SENTINEL)) return unfenced
   }
@@ -251,9 +201,8 @@ function lastDecisionLine(stdout: string): string | null {
 export type ParsedDecision = OrchestratorDecision | { error: string }
 
 /**
- * Kiểm tra một quyết định đã ở dạng object (JSON đã parse) — dùng chung cho cả
- * đường sentinel (text, qua `parseDecision`) lẫn đường `POST /api/orchestrator/decide`
- * (object đã parse từ JSON body, không qua text).
+ * Kiểm tra một quyết định ở dạng object, dùng chung cho đường sentinel
+ * (`parseDecision`) và `POST /api/orchestrator/decide`.
  */
 export function validateDecision(raw: unknown, stepIds: string[]): ParsedDecision {
   const parsed = OrchestratorDecision.safeParse(raw)
@@ -267,12 +216,7 @@ export function validateDecision(raw: unknown, stepIds: string[]): ParsedDecisio
   return decision
 }
 
-/**
- * Đọc quyết định từ output agent.
- *
- * Mọi nhánh `{ error }` là tín hiệu không dùng được lượt này; caller quyết
- * định halt hay chuyển tiếp tất định — đoán ý một output hỏng thì không.
- */
+/** Đọc quyết định từ dòng sentinel cuối output agent; `{ error }` khi không dùng được. */
 export function parseDecision(stdout: string, stepIds: string[]): ParsedDecision {
   const line = lastDecisionLine(stdout)
   if (!line) return { error: 'no decision line' }
