@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, useId } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, useId } from 'vue'
 import CLoadingOverlay from './CLoadingOverlay.vue'
 import Icon from './Icon.vue'
 import { useDialogStack } from '../composables/useDialogStack'
@@ -42,6 +42,8 @@ const emit = defineEmits<{ close: [] }>()
 const { t } = useI18nHelpers()
 const { isTop } = useDialogStack()
 const titleId = useId()
+const dialogRef = ref<HTMLElement | null>(null)
+let returnFocusTo: HTMLElement | null = null
 
 const closeText = computed(() => props.closeLabel || t('common.dialog.close'))
 const sizeStyle = computed(() => ({
@@ -62,8 +64,24 @@ function onKeydown(e: KeyboardEvent) {
   requestClose()
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+function isFocusLost(): boolean {
+  const active = document.activeElement
+  return !active || active === document.body
+}
+
+onMounted(() => {
+  returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  window.addEventListener('keydown', onKeydown)
+  void nextTick(() => {
+    const el = dialogRef.value
+    if (el && !el.contains(document.activeElement)) el.focus()
+  })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  if (isFocusLost()) returnFocusTo?.focus()
+})
 </script>
 
 <template>
@@ -71,7 +89,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     <div class="modal-backdrop" @click.self="requestClose">
       <div
         v-bind="$attrs"
+        ref="dialogRef"
         class="modal c-dialog"
+        tabindex="-1"
         :class="{ 'c-dialog--resizable': resizable }"
         :style="sizeStyle"
         role="dialog"
@@ -116,6 +136,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   font: inherit;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.c-dialog:focus {
+  outline: none;
 }
 
 .c-dialog-body {
