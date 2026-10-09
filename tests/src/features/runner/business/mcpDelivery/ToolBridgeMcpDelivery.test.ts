@@ -2,18 +2,18 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { McpClient, McpRegistry, mcpRegistry } from '../../../../../../src/features/mcp/business/index.js'
+import { upsertCredential } from '../../../../../../src/features/runner/business/credentials.js'
 import {
   MCP_TOOL_CALL_TIMEOUT_MS,
-  openMcpToolBridge,
-} from '../../../../../../src/features/runner/business/providers/mcpToolBridge.js'
-import { mcpRegistry } from '../../../../../../src/features/mcp/business/McpRegistry.js'
-import { upsertCredential } from '../../../../../../src/features/runner/business/credentials.js'
-import { McpClient, McpRegistry } from '../../../../../../src/features/mcp/business/index.js'
+  ToolBridgeMcpDelivery,
+} from '../../../../../../src/features/runner/business/mcpDelivery/ToolBridgeMcpDelivery.js'
+import { RunnerCredentialResolver } from '../../../../../../src/features/runner/business/RunnerCredentialResolver.js'
 
 /**
  * TC-P6-08 … TC-P6-22 + TC-P6-CRED — bridge tool MCP cho họ `ai-api` (#379, PR 4).
  *
- * Bề mặt: `openMcpToolBridge()` chạy với **MCP server THẬT** (`fake-mcp-server.mjs`
+ * Bề mặt: `ToolBridgeMcpDelivery.prepare()` chạy với **MCP server THẬT** (`fake-mcp-server.mjs`
  * qua `node`). 🚫 Mock transport: ba thứ phải chứng minh — lời gọi route về đúng
  * tiến trình nào, tiến trình con có thoát không, và secret có rời hàm không —
  * đều chỉ quan sát được khi có tiến trình thật.
@@ -56,8 +56,15 @@ function callLog(): { server: string; tool: string; args: Record<string, unknown
   }
 }
 
-function open(ids: unknown, over: Record<string, unknown> = {}) {
-  return openMcpToolBridge({ ids, workspace, ...over } as any)
+const credentials = new RunnerCredentialResolver()
+
+function open(ids: unknown, over: { onWarning?: (m: string) => void; callTimeoutMs?: number } = {}) {
+  return new ToolBridgeMcpDelivery(credentials, over.callTimeoutMs).prepare({
+    ids,
+    workspace,
+    jobId: 'job-bridge',
+    onWarning: over.onWarning,
+  })
 }
 
 /** Tiến trình `pid` còn sống không — `kill(pid, 0)` 🚫 gửi tín hiệu nào. */
@@ -92,7 +99,13 @@ afterEach(() => {
   fs.rmSync(workspace, { recursive: true, force: true })
 })
 
-describe('openMcpToolBridge — đường mặc định `null`', () => {
+describe('ToolBridgeMcpDelivery — đường mặc định `null`', () => {
+  test('kind `bridge-tools` (catalog họ `ai-api`), 🚫 nhận entry tự gắn', () => {
+    const delivery = new ToolBridgeMcpDelivery(credentials)
+    expect(delivery.kind).toBe('bridge-tools')
+    expect(delivery.acceptsSelfServer).toBe(false)
+  })
+
   test('TC-P6-01 (vế bridge): 🚫 `ids` ⇒ null, 🚫 tiến trình con nào được spawn', async () => {
     seed('on1')
     for (const ids of [undefined, null, [], 'khong-phai-mang', {}, [1, true]]) {
@@ -118,7 +131,7 @@ describe('openMcpToolBridge — đường mặc định `null`', () => {
   })
 })
 
-describe('openMcpToolBridge — khai tool, prefix, route', () => {
+describe('ToolBridgeMcpDelivery — khai tool, prefix, route', () => {
   // TC-P6-08 ⭐
   test('TC-P6-08: tên tool theo khuôn `mcp__<serverKey>__<tool>` và hợp lệ với CẢ hai SDK', async () => {
     seed('fs-local', { FAKE_MCP_TOOLS: 'read_file' })
@@ -249,7 +262,7 @@ describe('openMcpToolBridge — khai tool, prefix, route', () => {
   })
 })
 
-describe('openMcpToolBridge — hỏng hóc 🚫 làm chết job', () => {
+describe('ToolBridgeMcpDelivery — hỏng hóc 🚫 làm chết job', () => {
   /**
    * TC-P6-13 ⭐ — "tool trả lỗi" ở MCP là **cờ `isError` trong tool result**, 🚫
    * phải một JSON-RPC error: handler ném ở phía server vẫn trả về một result hợp
@@ -349,7 +362,7 @@ describe('openMcpToolBridge — hỏng hóc 🚫 làm chết job', () => {
   }, 30_000)
 })
 
-describe('openMcpToolBridge — vòng đời phiên', () => {
+describe('ToolBridgeMcpDelivery — vòng đời phiên', () => {
   // TC-P6-18 ⭐
   test('TC-P6-18: `close()` ⇒ tiến trình con của transport stdio ĐÃ THOÁT', async () => {
     const pidFile = path.join(home, 'child.pid')
@@ -406,13 +419,13 @@ describe('openMcpToolBridge — vòng đời phiên', () => {
   }, 30_000)
 })
 
-describe('openMcpToolBridge — secret 🚫 rời hàm (A-3)', () => {
+describe('ToolBridgeMcpDelivery — secret 🚫 rời hàm (A-3)', () => {
   // TC-P6-20 ⭐
   test('TC-P6-20: kết quả tool CHỨA canary ⇒ outcome đã mask (đệ quy)', async () => {
     seed('srv', { FAKE_MCP_TOOLS: 'echo', FAKE_MCP_TOOL_SECRET: CANARY })
     const bridge = (await open(['srv']))!
     try {
-      expect(bridge.secrets).toContain(CANARY)
+      expect(bridge.masker.values).toContain(CANARY)
 
       const outcome = await bridge.call('mcp__srv__echo', { text: 'noi dung' })
       expect(outcome.ok).toBe(true)
@@ -463,7 +476,7 @@ describe('openMcpToolBridge — secret 🚫 rời hàm (A-3)', () => {
  * thực ⇒ 401 ⇒ bridge `null` ⇒ #379 vô hiệu với đúng cấu hình mà cảnh báo
  * `argsSecretLiteral` đang khuyên dùng.
  */
-describe('openMcpToolBridge — credential của server remote (TC-P6-CRED)', () => {
+describe('ToolBridgeMcpDelivery — credential của server remote (TC-P6-CRED)', () => {
   test('TC-P6-CRED: credential giải được ⇒ bridge mở được và header mang secret đã giải', async () => {
     const { startFakeMcpHttp } = await import(
       '../../../../features/mcp/business/fake-mcp-http.mjs'
@@ -488,18 +501,14 @@ describe('openMcpToolBridge — credential của server remote (TC-P6-CRED)', ()
       })
 
       const warnings: string[] = []
-      const bridge = await openMcpToolBridge({
-        ids: ['rem'],
-        workspace,
-        onWarning: (m) => warnings.push(m),
-      })
+      const bridge = await open(['rem'], { onWarning: (m) => warnings.push(m) })
 
       expect(bridge).not.toBeNull()
       expect(bridge!.tools.map((t) => t.name).sort()).toEqual(['mcp__rem__echo', 'mcp__rem__ping'])
       // Header xác thực ĐƯỢC GỬI THẬT, mang giá trị đã giải.
       expect(srv.hops[0]?.headers.authorization).toBe(`Bearer ${CANARY}`)
       // …và nó nằm trong danh sách mask của job.
-      expect(bridge!.secrets).toContain(CANARY)
+      expect(bridge!.masker.values).toContain(CANARY)
       expect(warnings.join('\n')).not.toContain('không giải được secret')
 
       await bridge!.close()
@@ -526,11 +535,7 @@ describe('openMcpToolBridge — credential của server remote (TC-P6-CRED)', ()
       })
 
       const warnings: string[] = []
-      const bridge = await openMcpToolBridge({
-        ids: ['rem'],
-        workspace,
-        onWarning: (m) => warnings.push(m),
-      })
+      const bridge = await open(['rem'], { onWarning: (m) => warnings.push(m) })
 
       // Cảnh báo NGUYÊN NHÂN phải có mặt — nó phát ra TRƯỚC `connect()`.
       expect(warnings.join('\n')).toContain('không giải được secret')

@@ -2,14 +2,17 @@ import { describe, expect, test } from 'bun:test'
 import {
   AGENT_CLI_PROVIDER_IDS,
   isAgentCliProviderId,
-  mcpDeliveryOf,
   providerFamilyFromId,
+  type AgentCliProvider,
 } from '../../../../../src/features/runner/business/providers/agentCli.js'
 import {
   createClaudeCodeCliProvider,
   createLocalConsoleProvider,
 } from '../../../../../src/features/runner/business/providers/claude-code-cli.js'
-import { listProviderCatalog } from '../../../../../src/features/runner/business/connections.js'
+import { getProvider, listProviderCatalog } from '../../../../../src/features/runner/business/registry.js'
+import { ConfigFlagMcpDelivery } from '../../../../../src/features/runner/business/mcpDelivery/ConfigFlagMcpDelivery.js'
+import { NoMcpDelivery } from '../../../../../src/features/runner/business/mcpDelivery/NoMcpDelivery.js'
+import { RunnerCredentialResolver } from '../../../../../src/features/runner/business/RunnerCredentialResolver.js'
 import { createConsoleCommandProvider } from '../../../../../src/features/runner/business/providers/console-command.js'
 import { isAgentCliProvider } from '../../../../../src/features/runner/business/providers/agentCli.js'
 
@@ -41,47 +44,52 @@ describe('agentCli family', () => {
 })
 
 /**
- * TC-62…TC-64 — capabilities MCP. `mcpDeliveryOf` là nguồn sự thật duy nhất cho
- * cả provider lẫn UI, nên ba ca dưới khoá đúng giá trị **hiện tại**.
+ * TC-62…TC-64 — capabilities MCP. Cách giao MCP gắn vào provider
+ * (`RunnerProvider.mcpDelivery`, lắp ráp ở `registry.ts`); catalog và
+ * `agentCapabilities()` cùng đọc `mcpDelivery.kind` nên ba ca dưới khoá đúng
+ * giá trị **hiện tại** từ provider đã đăng ký.
  *
- * 📌 Cập nhật ở Tdf943817 (#378 — P5 cursor): `cursor-cli` 🚫 không còn
- * `unsupported`. Nó nhận MCP qua `<workspace>/.cursor/mcp.json` ⇒
- * `'workspace-config-file'` (`test-spec.md` TC-P5-01 khoá giá trị mới). Chú
- * thích cũ ghi *"cursor … unsupported TRONG TASK NÀY (P5 ngoài scope)"* đã hết
- * đúng — P5 chính là task này. `codex-cli` vẫn `unsupported`: chưa cài được CLI
- * để xác minh (`test-spec.md` §8).
+ * `cursor-cli` nhận MCP qua `<workspace>/.cursor/mcp.json` ⇒
+ * `'workspace-config-file'` (TC-P5-01). `codex-cli` vẫn `unsupported`: chưa cài
+ * được CLI để xác minh. Họ `ai-api` ⇒ `'bridge-tools'` (D2 — trước đây
+ * `unsupported` theo giả định A-4).
  */
 describe('agentCli — MCP delivery', () => {
   // TC-62 · TC-P5-01 · TC-P5-02
-  test('TC-62: mcpDeliveryOf', () => {
-    expect(mcpDeliveryOf('claude-code-cli')).toBe('config-file-flag')
-    // TC-P5-01 — giá trị mới của #378.
-    expect(mcpDeliveryOf('cursor-cli')).toBe('workspace-config-file')
-    // TC-P5-02 — 🚫 không đổi gì ngoài cursor.
-    expect(mcpDeliveryOf('codex-cli')).toBe('unsupported')
-    expect(mcpDeliveryOf('')).toBe('unsupported')
-    expect(mcpDeliveryOf('provider-la-hoac-chua-ton-tai')).toBe('unsupported')
+  test('TC-62: provider đã đăng ký mang đúng cách giao', () => {
+    expect(getProvider('claude-code-cli')!.mcpDelivery!.kind).toBe('config-file-flag')
+    // TC-P5-01
+    expect(getProvider('cursor-cli')!.mcpDelivery!.kind).toBe('workspace-config-file')
+    // TC-P5-02 — 🚫 không đổi gì ngoài cursor ở họ agent-cli.
+    expect(getProvider('codex-cli')!.mcpDelivery!.kind).toBe('unsupported')
+    expect(getProvider('provider-la-hoac-chua-ton-tai')).toBeNull()
   })
 
   // TC-63
-  test('TC-63: agentCapabilities().mcpDelivery — mặc định theo id, override thắng', () => {
-    expect(createClaudeCodeCliProvider().agentCapabilities().mcpDelivery).toBe('config-file-flag')
-
+  test('TC-63: agentCapabilities().mcpDelivery — theo delivery đã gắn, mặc định `unsupported`', () => {
     for (const providerId of ['claude-code-cli', 'cursor-cli', 'codex-cli']) {
-      const provider = createLocalConsoleProvider({ providerId, defaultCliPath: 'x' })
-      expect(provider.agentCapabilities().mcpDelivery).toBe(mcpDeliveryOf(providerId))
+      const provider = getProvider(providerId) as AgentCliProvider
+      expect(provider.agentCapabilities().mcpDelivery).toBe(provider.mcpDelivery!.kind)
     }
 
+    // Dựng tay 🚫 truyền delivery ⇒ Null Object, 🚫 suy theo `providerId` nữa (G12).
+    for (const providerId of ['claude-code-cli', 'cursor-cli', 'codex-cli']) {
+      const provider = createLocalConsoleProvider({ providerId, defaultCliPath: 'x' })
+      expect(provider.agentCapabilities().mcpDelivery).toBe('unsupported')
+      expect(provider.mcpDelivery).toBeInstanceOf(NoMcpDelivery)
+    }
+    expect(createClaudeCodeCliProvider().agentCapabilities().mcpDelivery).toBe('unsupported')
+
     const forced = createLocalConsoleProvider({
-      providerId: 'claude-code-cli',
+      providerId: 'codex-cli',
       defaultCliPath: 'x',
-      mcpDelivery: 'unsupported',
+      mcpDelivery: new ConfigFlagMcpDelivery(() => 'khong-dung', new RunnerCredentialResolver()),
     })
-    expect(forced.agentCapabilities().mcpDelivery).toBe('unsupported')
+    expect(forced.agentCapabilities().mcpDelivery).toBe('config-file-flag')
   })
 
   // TC-64 — chỉ THÊM trường, 🚫 không thêm/bớt provider nào.
-  test('TC-64: listProviderCatalog phơi mcpDelivery cho mọi entry', () => {
+  test('TC-64: listProviderCatalog phơi mcpDelivery cho mọi entry = kind của provider', () => {
     const catalog = listProviderCatalog()
     expect(catalog).toHaveLength(8)
     expect(catalog.map((e) => e.id)).toEqual([
@@ -96,7 +104,11 @@ describe('agentCli — MCP delivery', () => {
     ])
     for (const entry of catalog) {
       expect(entry).toHaveProperty('mcpDelivery')
-      expect(entry.mcpDelivery).toBe(mcpDeliveryOf(entry.id))
+      expect(entry.mcpDelivery).toBe(getProvider(entry.id)?.mcpDelivery?.kind ?? 'unsupported')
     }
+    // D2 — họ `ai-api` nạp tool vào vòng tool-use.
+    expect(catalog.filter((e) => e.family === 'ai-api').map((e) => e.mcpDelivery)).toEqual(
+      Array(4).fill('bridge-tools'),
+    )
   })
 })
