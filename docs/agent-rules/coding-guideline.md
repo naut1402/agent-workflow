@@ -170,8 +170,9 @@ installPlugins(createApp(App), { i18n: { locale } }).mount('#app')
 > <span style="color:#e5534b">🚫 Cấm giải thích trong code — cả *what* lẫn *why*. Lý do, bối cảnh, constraint ẩn, workaround thuộc `docs/` hoặc PR body, không thuộc comment.</span>
 
 - **Code tự nói *what*** — tên biến/hàm/type đủ rõ thì không cần comment. Thử đổi tên trước: `BEFORE` → `TARGET_SHA` bỏ được cả câu giải thích nó là gì.
-- **Bối cảnh *why* ghi vào `docs/`** — mục tài liệu của feature, hoặc PR body nếu chỉ có giá trị lúc review.
+- **Bối cảnh *why* ghi vào `docs/`** — mục tài liệu của feature (quirk, ràng buộc ẩn, lý do giữ một hành vi trông như thừa → cấp Code `docs/architecture/code/<feature>.md`), hoặc PR body nếu chỉ có giá trị lúc review.
 - **Được phép giữ lại** — một dòng link tới mục tài liệu (`// xem docs/mcp/server.md §3.1`), directive cho công cụ (`// eslint-disable-next-line …`, `// @ts-expect-error …`), `TODO` kèm link nợ.
+- **JSDoc ngay trên `export` được giữ, nhưng chỉ là contract ngắn** — hàm/type làm gì, nhận gì, trả gì, ném gì; IDE hiện nó khi hover. Field của type/interface được export cũng tính là một phần contract đó; JSDoc của hàm/biến **không** export thì không được giữ. Các quy tắc còn lại của mục này vẫn áp vào bên trong JSDoc: không lịch sử, không mã task / mã quyết định, không số issue/PR, không markup nhấn mạnh. Lý do dài thì chuyển sang `docs/` và để lại một dòng `xem docs/…`. JSDoc kiểu (`@param {…}`, `@type`) trong file `.js`/`.mjs` là chú thích kiểu, không phải giải thích — giữ.
 - **Không markup nhấn mạnh trong comment code** — `**bold**`, 🚫, ⚠️, khung `── ─` là ngôn ngữ của tài liệu và PR. Trong code chúng thành nhiễu, và khung rỗng kéo comment dài ra cho "xứng".
 - **Sửa nhỏ lẻ thì giữ nguyên comment cũ** — chỉ sửa khi nó đã outdate/sai so với code hiện tại.
 - **Không thêm comment tường thuật thay đổi vừa làm** — cấm dạng `// sửa theo review`, `// fix CI`, `// đổi X vì lỗi Y`.
