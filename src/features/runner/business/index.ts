@@ -79,7 +79,7 @@ export {
   deleteCustomCommand,
 } from './commands.js'
 export { resolveAgent, resolveAgentFilePath, normalizeAgentRef, describeAgentSearchPaths } from './agentResolver.js'
-export { getProvider, listProviderIds, registerProvider } from './registry.js'
+export { getProvider, listProviderIds, providerFamilyOf, registerProvider } from './registry.js'
 export { listAvailableModels } from './modelCatalog.js'
 export type { ListModelsInput, ListModelsResult } from './modelCatalog.js'
 export {
@@ -87,7 +87,6 @@ export {
   isAgentCliProviderId,
   isAgentCliProvider,
   mcpDeliveryOf,
-  providerFamilyOf,
 } from './providers/agentCli.js'
 export type { AgentCliProvider, AgentCliCapabilities, TokenUsage, ProviderFamily as AgentProviderFamily } from './providers/agentCli.js'
 export { SELF_MCP_SERVER_ID, buildSelfMcpEntry, canAttachSelfMcp } from './providers/selfMcpConfig.js'

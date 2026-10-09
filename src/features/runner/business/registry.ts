@@ -1,13 +1,13 @@
 import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
 import { registryHome } from '../../../backend/registry.js'
-import { ensureLegacyConnection, getConnection } from './connections.js'
+import { catalogFamilyOf, ensureLegacyConnection, getConnection } from './connections.js'
 import { createClaudeCodeCliProvider } from './providers/claude-code-cli.js'
 import { createCursorCliProvider } from './providers/cursor-cli.js'
 import { createCodexCliProvider } from './providers/codex-cli.js'
 import { createConsoleCommandProvider } from './providers/console-command.js'
 import { createOpenAiCompatibleProvider } from './providers/openai-compatible-api.js'
 import { createAnthropicCompatibleProvider } from './providers/anthropic-compatible-api.js'
-import { providerFamilyOf } from './providers/agentCli.js'
+import { providerFamilyFromId } from './providers/agentCli.js'
 import {
   DEFAULT_CONNECTION_ID,
   RUNNERS_VERSION,
@@ -15,6 +15,7 @@ import {
   sanitiseRunnerId,
   type DefaultRunnerReason,
   type DefaultRunnerResolution,
+  type ProviderFamily,
   type RunnerConfig,
   type RunnersStore,
   type MutationResult,
@@ -337,6 +338,10 @@ export function registerProvider(provider: RunnerProvider): void {
 
 export function getProvider(providerId: string): RunnerProvider | null {
   return providers.get(providerId) || null
+}
+
+export function providerFamilyOf(providerId: string): ProviderFamily {
+  return catalogFamilyOf(providerId) ?? providers.get(providerId)?.family ?? providerFamilyFromId(providerId)
 }
 
 export function listProviderIds(): string[] {

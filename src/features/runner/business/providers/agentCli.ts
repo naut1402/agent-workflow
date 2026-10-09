@@ -54,7 +54,7 @@ export function isAgentCliProvider(provider: RunnerProvider | null | undefined):
   return isAgentCliProviderId(provider.providerId)
 }
 
-export function providerFamilyOf(providerId: string): ProviderFamily {
+export function providerFamilyFromId(providerId: string): ProviderFamily {
   if (providerId === 'console-command') return 'console-command'
   if (providerId === 'anthropic-api' || providerId.endsWith('-api')) return 'ai-api'
   if (isAgentCliProviderId(providerId)) return 'agent-cli'
