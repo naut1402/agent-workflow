@@ -10,6 +10,7 @@
 // thì mở thêm dòng đó.
 
 export type { McpServerConfig, McpStdioServer } from '../schemas/mcpServer.js'
+export { credentialResolver, useCredentialResolver } from './CredentialResolver.js'
 export type { CredentialResolver } from './CredentialResolver.js'
 export { SecretMasker } from './SecretMasker.js'
 export { McpServer } from './McpServer.js'
