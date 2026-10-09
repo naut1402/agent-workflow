@@ -1216,12 +1216,14 @@ onUnmounted(() => {
       </p>
     </div>
 
-    <div class="modal-actions">
-      <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
-      <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
-        {{ saving ? t('runner.actions.saving') : t('runner.connectionDialog.saveConnection') }}
-      </button>
-    </div>
+    <template #footer>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost btn-sm" :disabled="saving" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
+        <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
+          {{ saving ? t('runner.actions.saving') : t('runner.connectionDialog.saveConnection') }}
+        </button>
+      </div>
+    </template>
   </CDialog>
 
   <CDialog
@@ -1251,12 +1253,14 @@ onUnmounted(() => {
         <input v-model="registerDraft.flagsText" class="cfg-input" placeholder="vd. --print" />
       </label>
     </div>
-    <div class="modal-actions">
-      <button type="button" class="btn-ghost btn-sm" @click="showRegisterCommand = false">{{ t('runner.actions.cancel') }}</button>
-      <button type="button" class="btn-primary btn-sm" @click="confirmRegisterCommand">
-        {{ editingCommandId ? t('runner.actions.save') : t('runner.registerDialog.addToList') }}
-      </button>
-    </div>
+    <template #footer>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost btn-sm" @click="showRegisterCommand = false">{{ t('runner.actions.cancel') }}</button>
+        <button type="button" class="btn-primary btn-sm" @click="confirmRegisterCommand">
+          {{ editingCommandId ? t('runner.actions.save') : t('runner.registerDialog.addToList') }}
+        </button>
+      </div>
+    </template>
   </CDialog>
 
   <ProviderDialog
@@ -1323,7 +1327,7 @@ onUnmounted(() => {
 .advanced-secret-ref { margin-bottom: 0.75rem; }
 .advanced-secret-ref summary { cursor: pointer; font-size: 0.8rem; }
 .advanced-secret-ref .field { margin-top: 0.5rem; margin-bottom: 0; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: auto; padding-top: 1rem; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; padding-top: 1rem; }
 .err-banner {
   background: rgba(248, 81, 73, 0.12);
   border: 1px solid var(--danger);

@@ -376,22 +376,24 @@ function closeConnectionDialog() {
       <span class="muted">{{ draft.enabled ? t('runner.status.on') : t('runner.status.off') }}</span>
     </div>
 
-    <div class="modal-actions">
-      <button
-        v-if="isEdit"
-        type="button"
-        class="btn-ghost btn-sm"
-        :disabled="testing"
-        @click="smokeTest"
-      >
-        {{ testing ? t('runner.actions.testing') : t('runner.actions.test') }}
-      </button>
-      <span class="spacer" />
-      <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
-      <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
-        {{ saving ? t('runner.actions.saving') : t('runner.actions.save') }}
-      </button>
-    </div>
+    <template #footer>
+      <div class="modal-actions">
+        <button
+          v-if="isEdit"
+          type="button"
+          class="btn-ghost btn-sm"
+          :disabled="testing || saving"
+          @click="smokeTest"
+        >
+          {{ testing ? t('runner.actions.testing') : t('runner.actions.test') }}
+        </button>
+        <span class="spacer" />
+        <button type="button" class="btn-ghost btn-sm" :disabled="saving" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
+        <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
+          {{ saving ? t('runner.actions.saving') : t('runner.actions.save') }}
+        </button>
+      </div>
+    </template>
   </CDialog>
 
   <ConnectionDialog
@@ -428,7 +430,6 @@ function closeConnectionDialog() {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-top: auto;
   padding-top: 1rem;
 }
 .spacer { flex: 1; }

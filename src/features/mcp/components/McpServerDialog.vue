@@ -564,12 +564,14 @@ onMounted(async () => {
 
     <p v-if="savedWithWarnings" class="ok-text">{{ t('mcp.dialog.savedWithWarnings') }}</p>
 
-    <div class="modal-actions">
-      <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('mcp.dialog.cancel') }}</button>
-      <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
-        {{ saving ? t('mcp.dialog.saving') : t('mcp.dialog.save') }}
-      </button>
-    </div>
+    <template #footer>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost btn-sm" :disabled="saving" @click="emit('close')">{{ t('mcp.dialog.cancel') }}</button>
+        <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
+          {{ saving ? t('mcp.dialog.saving') : t('mcp.dialog.save') }}
+        </button>
+      </div>
+    </template>
   </CDialog>
 </template>
 
@@ -593,7 +595,7 @@ onMounted(async () => {
 .ok-text { color: var(--done); font-size: 0.85rem; margin: 0; }
 .err-text { color: var(--danger); font-size: 0.85rem; margin: 0; }
 .warn-text { color: var(--warn, var(--muted)); font-size: 0.8rem; margin: 0.25rem 0 0; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: auto; padding-top: 1rem; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; padding-top: 1rem; }
 .err-banner {
   background: rgba(248, 81, 73, 0.12);
   border: 1px solid var(--danger);

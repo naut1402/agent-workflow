@@ -125,21 +125,24 @@ onMounted(applyPrefill)
       <input v-model="baseURL" class="cfg-input" :placeholder="baseUrlPlaceholder" />
     </div>
 
-    <div class="modal-actions">
-      <button
-        v-if="isEdit"
-        type="button"
-        class="btn-danger btn-sm"
-        @click="remove"
-      >
-        {{ t('runner.actions.delete') }}
-      </button>
-      <span class="spacer" />
-      <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
-      <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
-        {{ saving ? t('runner.actions.saving') : t('runner.providerDialog.save') }}
-      </button>
-    </div>
+    <template #footer>
+      <div class="modal-actions">
+        <button
+          v-if="isEdit"
+          type="button"
+          class="btn-danger btn-sm"
+          :disabled="saving"
+          @click="remove"
+        >
+          {{ t('runner.actions.delete') }}
+        </button>
+        <span class="spacer" />
+        <button type="button" class="btn-ghost btn-sm" :disabled="saving" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
+        <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
+          {{ saving ? t('runner.actions.saving') : t('runner.providerDialog.save') }}
+        </button>
+      </div>
+    </template>
   </CDialog>
 </template>
 
@@ -150,7 +153,7 @@ onMounted(applyPrefill)
 .field .cfg-select { width: 100%; }
 .label-with-hint { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; flex-direction: row; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: auto; padding-top: 1rem; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; padding-top: 1rem; }
 .modal-actions .spacer { flex: 1; }
 .err-banner {
   background: rgba(248, 81, 73, 0.12);
