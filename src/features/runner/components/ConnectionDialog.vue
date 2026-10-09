@@ -22,7 +22,7 @@ import { DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenti
 import type { ConnectionKind, ConnectionOption, ProviderConfigOption, ProviderEntry } from '../types'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
 import CComboSelect from '../../../frontend/ui/CComboSelect.vue'
-import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
+import CDialog from '../../../frontend/ui/CDialog.vue'
 import CSelect from '../../../frontend/ui/CSelect.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import InfoTooltip from '../../../frontend/ui/InfoTooltip.vue'
@@ -804,19 +804,6 @@ async function save() {
   })
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.key !== 'Escape') return
-  if (showProviderDialog.value) {
-    showProviderDialog.value = false
-    return
-  }
-  if (showRegisterCommand.value) {
-    showRegisterCommand.value = false
-    return
-  }
-  emit('close')
-}
-
 /**
  * Id đã lưu trong Connection nhưng server đã tắt hoặc đã xoá vẫn phải hiện ra.
  * Lọc chúng khỏi danh sách thì người dùng không có cách nào bỏ chọn, mà `save`
@@ -846,482 +833,443 @@ onMounted(() => {
   loadCredentials()
   loadOAuthCapabilities()
   loadMcpOptions()
-  window.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
   stopOAuthPolling()
-  window.removeEventListener('keydown', onKeydown)
 })
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="modal-backdrop" @click.self="emit('close')">
-      <div
-        class="modal connection-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="connection-dialog-title"
-      >
-        <div class="modal-head">
-          <span id="connection-dialog-title">{{
-            isEdit ? t('runner.connectionDialog.editTitle') : t('runner.connectionDialog.title')
-          }}</span>
-          <button type="button" class="modal-close" :aria-label="t('runner.a11y.close')" @click="emit('close')">✕</button>
-        </div>
+  <CDialog
+    class="connection-dialog"
+    :title="isEdit ? t('runner.connectionDialog.editTitle') : t('runner.connectionDialog.title')"
+    :loading="saving"
+    width="min(520px, 94vw)"
+    min-height="560px"
+    @close="emit('close')"
+  >
+    <div v-if="error" class="err-banner">{{ error }}</div>
 
-        <div class="c-loading-host">
-          <CLoadingOverlay :active="saving" />
-          <div class="modal-body">
-            <div v-if="error" class="err-banner">{{ error }}</div>
+    <div class="field">
+      <label class="cfg-label">{{ t('runner.connectionDialog.labelField') }}
+        <input v-model="label" class="cfg-input" placeholder="vd. Claude local" />
+      </label>
+      <p v-if="!isEdit && previewConnectionId" class="cfg-hint">
+        {{ t('runner.hints.generatedId', { id: previewConnectionId }) }}
+      </p>
+    </div>
 
-            <div class="field">
-              <label class="cfg-label">{{ t('runner.connectionDialog.labelField') }}
-                <input v-model="label" class="cfg-input" placeholder="vd. Claude local" />
-              </label>
-              <p v-if="!isEdit && previewConnectionId" class="cfg-hint">
-                {{ t('runner.hints.generatedId', { id: previewConnectionId }) }}
-              </p>
-            </div>
-
-            <div class="field">
-              <span class="cfg-label">{{ t('runner.connectionDialog.kind') }}</span>
-              <div class="kind-radios" role="radiogroup" :aria-label="t('runner.connectionDialog.kindGroup')">
-                <label class="kind-radio">
-                  <input v-model="kind" type="radio" value="local-console" :disabled="isEdit" />
-                  Local console
-                </label>
-                <label class="kind-radio">
-                  <input v-model="kind" type="radio" value="ai-provider" :disabled="isEdit" />
-                  AI provider
-                </label>
-              </div>
-            </div>
-
-            <template v-if="kind === 'local-console'">
-              <div class="field">
-                <div class="row-actions">
-                  <label class="cfg-label">Command</label>
-                  <div class="row-btns">
-                    <button type="button" class="btn-ghost btn-sm" :disabled="scanning" @click="refreshScan">
-                      {{ scanning ? t('runner.connectionDialog.scanning') : t('runner.actions.refresh') }}
-                    </button>
-                    <button type="button" class="btn-ghost btn-sm" @click="openRegisterCommand">
-                      {{ t('runner.connectionDialog.register') }}
-                    </button>
-                  </div>
-                </div>
-                <div class="command-row">
-                  <CSelect
-                    v-model="selectedCommandId"
-                    :options="commandSelectOptions"
-                    :placeholder="t('runner.connectionDialog.commandPlaceholder')"
-                    aria-label="Command"
-                    class="cfg-select"
-                  />
-                  <div v-if="selectedCommand?.custom" class="icon-btn-group">
-                    <button
-                      type="button"
-                      class="icon-btn icon-btn-inline"
-                      :title="t('runner.connectionDialog.editCommand')"
-                      :aria-label="t('runner.connectionDialog.editCommand')"
-                      @click="openEditCommand(selectedCommand)"
-                    >
-                      <Icon name="pencil" />
-                    </button>
-                    <button
-                      type="button"
-                      class="icon-btn icon-btn-inline danger"
-                      :title="t('runner.connectionDialog.deleteCommand')"
-                      :aria-label="t('runner.connectionDialog.deleteCommand')"
-                      @click="removeCustomCommand(selectedCommand)"
-                    >
-                      <Icon name="trash" />
-                    </button>
-                  </div>
-                </div>
-                <p
-                  v-if="selectedCommand?.path && selectedCommand.path !== selectedCommand.command"
-                  class="muted path-hint"
-                >
-                  {{ selectedCommand.path }}
-                </p>
-              </div>
-
-              <div class="field" v-if="isClaudeCliSelected">
-                <div class="row-actions">
-                  <span class="cfg-label label-with-hint">
-                    {{ t('runner.connectionDialog.modelField') }}
-                    <InfoTooltip :text="t('runner.connectionDialog.modelHint')" />
-                  </span>
-                </div>
-                <div class="command-row">
-                  <CComboSelect
-                    v-model="selectedModel"
-                    :options="modelSelectOptions"
-                    :placeholder="t('runner.connectionDialog.modelSelectPlaceholder')"
-                    :aria-label="t('runner.connectionDialog.modelField')"
-                    class="cfg-combo-select"
-                    creatable
-                  />
-                  <button
-                    type="button"
-                    class="icon-btn icon-btn-inline"
-                    :disabled="loadingModels || !canFetchModels"
-                    :title="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
-                    :aria-label="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
-                    @click="loadModels"
-                  >
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 8a5 5 0 1 1-1.6-3.6" />
-                      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 2.8v3.4h-3.4" />
-                    </svg>
-                  </button>
-                </div>
-                <p v-if="modelFetchError" class="muted err-text">{{ modelFetchError }}</p>
-                <p v-else-if="modelOptions.length" class="muted path-hint">
-                  {{ t('runner.connectionDialog.modelsLoaded', { count: modelOptions.length }) }}
-                </p>
-              </div>
-            </template>
-
-            <template v-else>
-              <div class="field">
-                <div class="row-actions">
-                  <span class="cfg-label label-with-hint">
-                    {{ t('runner.connectionDialog.providerField') }}
-                    <InfoTooltip :text="t('runner.connectionDialog.providerHint')" />
-                  </span>
-                </div>
-                <div class="command-row">
-                  <CSelect
-                    v-model="selectedProviderConfigId"
-                    :options="providerConfigSelectOptions"
-                    :placeholder="t('runner.connectionDialog.providerPlaceholder')"
-                    :aria-label="t('runner.connectionDialog.providerField')"
-                    class="cfg-select"
-                  />
-                  <div class="icon-btn-group">
-                    <button
-                      type="button"
-                      class="icon-btn icon-btn-inline"
-                      :title="t('runner.providerDialog.title')"
-                      :aria-label="t('runner.providerDialog.title')"
-                      @click="openNewProviderConfig"
-                    >
-                      <Icon name="plus" />
-                    </button>
-                    <button
-                      type="button"
-                      class="icon-btn icon-btn-inline"
-                      :disabled="!selectedProviderConfig"
-                      :title="t('runner.providerDialog.editTitle')"
-                      :aria-label="t('runner.providerDialog.editTitle')"
-                      @click="openEditProviderConfig"
-                    >
-                      <Icon name="pencil" />
-                    </button>
-                    <button
-                      type="button"
-                      class="icon-btn icon-btn-inline danger"
-                      :disabled="!selectedProviderConfig"
-                      :title="t('runner.connectionDialog.deleteProvider')"
-                      :aria-label="t('runner.connectionDialog.deleteProvider')"
-                      @click="removeSelectedProviderConfig"
-                    >
-                      <Icon name="trash" />
-                    </button>
-                  </div>
-                </div>
-                <p v-if="!providerConfigList.length" class="muted path-hint">
-                  {{ t('runner.connectionDialog.noProviderConfigs') }}
-                </p>
-              </div>
-
-              <div class="field">
-                <label class="cfg-label">{{ t('runner.connectionDialog.credentialField') }}</label>
-                <div class="credential-row">
-                  <CSelect
-                    v-model="credentialId"
-                    :options="credentialSelectOptions"
-                    :placeholder="t('runner.connectionDialog.credentialPlaceholder')"
-                    :aria-label="t('runner.connectionDialog.credentialField')"
-                    class="cfg-select"
-                  />
-                  <div class="icon-btn-group">
-                    <button
-                      type="button"
-                      class="icon-btn icon-btn-inline"
-                      :class="{ active: showNewCredential && !editingCredentialId }"
-                      :title="t('runner.connectionDialog.addCredential')"
-                      :aria-label="t('runner.connectionDialog.addCredential')"
-                      @click="toggleNewCredential"
-                    >
-                      <Icon name="plus" />
-                    </button>
-                    <button
-                      type="button"
-                      class="icon-btn icon-btn-inline"
-                      :disabled="!selectedCredential"
-                      :title="t('runner.connectionDialog.editCredential')"
-                      :aria-label="t('runner.connectionDialog.editCredential')"
-                      @click="openEditCredential"
-                    >
-                      <Icon name="pencil" />
-                    </button>
-                    <button
-                      type="button"
-                      class="icon-btn icon-btn-inline danger"
-                      :disabled="!selectedCredential"
-                      :title="t('runner.connectionDialog.deleteCredential')"
-                      :aria-label="t('runner.connectionDialog.deleteCredential')"
-                      @click="removeSelectedCredential"
-                    >
-                      <Icon name="trash" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div v-if="showNewCredential" class="new-cred">
-                <div class="field">
-                  <label class="cfg-label">{{ t('runner.connectionDialog.credLabelField') }}
-                    <input v-model="newCred.label" class="cfg-input" />
-                  </label>
-                </div>
-
-                <div v-if="canConnectOAuth" class="field oauth-block">
-                  <button
-                    type="button"
-                    class="btn-primary btn-sm"
-                    :disabled="oauthFlow.status === 'starting' || oauthFlow.status === 'pending' || oauthFlow.status === 'exchanging'"
-                    @click="startConnectViaBrowser"
-                  >
-                    {{ t('runner.connectionDialog.connectViaBrowser') }}
-                  </button>
-                  <p v-if="oauthFlow.status === 'pending'" class="muted path-hint">
-                    {{ t('runner.connectionDialog.oauthPendingHint') }}
-                  </p>
-                  <div v-if="oauthFlow.status === 'pending' || oauthFlow.status === 'exchanging'" class="oauth-paste-row">
-                    <input
-                      v-model="oauthPasteInput"
-                      class="cfg-input"
-                      :placeholder="t('runner.connectionDialog.oauthPastePlaceholder')"
-                    />
-                    <button
-                      type="button"
-                      class="btn-ghost btn-sm"
-                      :disabled="!oauthPasteInput.trim() || oauthFlow.status === 'exchanging'"
-                      @click="submitOAuthPaste"
-                    >
-                      {{ t('runner.connectionDialog.oauthPasteSubmit') }}
-                    </button>
-                  </div>
-                  <p v-if="oauthFlow.status === 'error'" class="muted err-text">{{ oauthFlow.error }}</p>
-                  <p class="muted path-hint">{{ t('runner.connectionDialog.orPasteSecretBelow') }}</p>
-                </div>
-
-                <p v-if="!vaultConfigured" class="err-text vault-warning">
-                  {{ t('runner.connectionDialog.vaultNotConfigured') }}
-                </p>
-                <div class="field">
-                  <label class="cfg-label">{{ t('runner.connectionDialog.secretValueField') }}
-                    <input
-                      v-model="newCred.secretValue"
-                      type="password"
-                      class="cfg-input"
-                      autocomplete="off"
-                      :disabled="!vaultConfigured"
-                    />
-                  </label>
-                  <p class="muted path-hint">
-                    {{ editingCredentialId ? t('runner.connectionDialog.secretValueEditHint') : t('runner.connectionDialog.secretValueHint') }}
-                  </p>
-                </div>
-                <details class="advanced-secret-ref">
-                  <summary class="muted">{{ t('runner.connectionDialog.advancedSecretRef') }}</summary>
-                  <div class="field">
-                    <label class="cfg-label">{{ t('runner.connectionDialog.secretRefField') }}
-                      <input v-model="newCred.secretRef" class="cfg-input" :placeholder="secretRefPlaceholder" />
-                    </label>
-                  </div>
-                </details>
-                <button type="button" class="btn-primary btn-sm" @click="saveNewCredential">
-                  {{ editingCredentialId ? t('runner.actions.save') : t('runner.connectionDialog.saveCredential') }}
-                </button>
-              </div>
-
-              <div class="field">
-                <div class="row-actions">
-                  <span class="cfg-label label-with-hint">
-                    {{ t('runner.connectionDialog.modelField') }}
-                    <InfoTooltip :text="t('runner.connectionDialog.modelHint')" />
-                  </span>
-                </div>
-                <div class="command-row">
-                  <CComboSelect
-                    v-model="selectedModel"
-                    :options="modelSelectOptions"
-                    :placeholder="modelPlaceholder || t('runner.connectionDialog.modelSelectPlaceholder')"
-                    :aria-label="t('runner.connectionDialog.modelField')"
-                    class="cfg-combo-select"
-                    creatable
-                  />
-                  <button
-                    type="button"
-                    class="icon-btn icon-btn-inline"
-                    :disabled="loadingModels || !canFetchModels"
-                    :title="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
-                    :aria-label="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
-                    @click="loadModels"
-                  >
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 8a5 5 0 1 1-1.6-3.6" />
-                      <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 2.8v3.4h-3.4" />
-                    </svg>
-                  </button>
-                </div>
-                <p v-if="modelFetchError" class="muted err-text">{{ modelFetchError }}</p>
-                <p v-else-if="modelOptions.length" class="muted path-hint">
-                  {{ t('runner.connectionDialog.modelsLoaded', { count: modelOptions.length }) }}
-                </p>
-              </div>
-              <div class="field">
-                <span class="cfg-label label-with-hint">
-                  {{ t('runner.connectionDialog.extraToolsLabel') }}
-                  <InfoTooltip :text="t('runner.connectionDialog.extraToolsHint')" />
-                </span>
-                <div class="extra-tools-group">
-                  <label class="kind-radio">
-                    <input v-model="extraTools" type="checkbox" value="shell" />
-                    {{ t('runner.connectionDialog.extraToolShell') }}
-                    <InfoTooltip :text="t('runner.connectionDialog.extraToolShellHint')" />
-                  </label>
-                  <label class="kind-radio">
-                    <input v-model="extraTools" type="checkbox" value="git" />
-                    {{ t('runner.connectionDialog.extraToolGit') }}
-                    <InfoTooltip :text="t('runner.connectionDialog.extraToolGitHint')" />
-                  </label>
-                  <label class="kind-radio">
-                    <input v-model="extraTools" type="checkbox" value="search" />
-                    {{ t('runner.connectionDialog.extraToolSearch') }}
-                    <InfoTooltip :text="t('runner.connectionDialog.extraToolSearchHint')" />
-                  </label>
-                  <label class="kind-radio">
-                    <input v-model="extraTools" type="checkbox" value="web" />
-                    {{ t('runner.connectionDialog.extraToolWeb') }}
-                    <InfoTooltip :text="t('runner.connectionDialog.extraToolWebHint')" />
-                  </label>
-                </div>
-              </div>
-            </template>
-
-            <div class="field">
-              <span class="cfg-label label-with-hint">
-                {{ t('runner.connectionDialog.mcpServersLabel') }}
-                <InfoTooltip :text="t('runner.connectionDialog.mcpServersHint')" />
-              </span>
-              <p v-if="!mcpChoices.length" class="muted">{{ t('runner.connectionDialog.mcpEmpty') }}</p>
-              <div v-else class="extra-tools-group">
-                <label v-for="m in mcpChoices" :key="m.id" class="kind-radio">
-                  <input v-model="mcpServers" type="checkbox" :value="m.id" />
-                  <span :class="{ 'err-text': m.missing }">
-                    {{ m.label }}<template v-if="m.missing"> — {{ t('runner.connectionDialog.mcpMissing') }}</template>
-                  </span>
-                </label>
-              </div>
-              <p v-if="mcpServers.length && mcpUnsupported" class="muted err-text">
-                {{ t('runner.connectionDialog.mcpUnsupported') }}
-              </p>
-              <p v-if="mcpServers.length && mcpWorkspaceFile" class="muted warn-text">
-                {{ t('runner.connectionDialog.mcpWorkspaceFile') }}
-              </p>
-              <p v-if="mcpServers.length && mcpViaToolBridge" class="muted">
-                {{ t('runner.connectionDialog.mcpToolBridge') }}
-              </p>
-            </div>
-
-            <div class="modal-actions">
-              <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
-              <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
-                {{ saving ? t('runner.actions.saving') : t('runner.connectionDialog.saveConnection') }}
-              </button>
-            </div>
-          </div>
-        </div>
+    <div class="field">
+      <span class="cfg-label">{{ t('runner.connectionDialog.kind') }}</span>
+      <div class="kind-radios" role="radiogroup" :aria-label="t('runner.connectionDialog.kindGroup')">
+        <label class="kind-radio">
+          <input v-model="kind" type="radio" value="local-console" :disabled="isEdit" />
+          Local console
+        </label>
+        <label class="kind-radio">
+          <input v-model="kind" type="radio" value="ai-provider" :disabled="isEdit" />
+          AI provider
+        </label>
       </div>
     </div>
 
-    <div
-      v-if="showRegisterCommand"
-      class="modal-backdrop nested-backdrop"
-      @click.self="showRegisterCommand = false"
-    >
-      <div
-        class="modal register-command-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="register-command-title"
-      >
-        <div class="modal-head">
-          <span id="register-command-title">{{
-            editingCommandId ? t('runner.registerDialog.editTitle') : t('runner.registerDialog.title')
-          }}</span>
+    <template v-if="kind === 'local-console'">
+      <div class="field">
+        <div class="row-actions">
+          <label class="cfg-label">Command</label>
+          <div class="row-btns">
+            <button type="button" class="btn-ghost btn-sm" :disabled="scanning" @click="refreshScan">
+              {{ scanning ? t('runner.connectionDialog.scanning') : t('runner.actions.refresh') }}
+            </button>
+            <button type="button" class="btn-ghost btn-sm" @click="openRegisterCommand">
+              {{ t('runner.connectionDialog.register') }}
+            </button>
+          </div>
+        </div>
+        <div class="command-row">
+          <CSelect
+            v-model="selectedCommandId"
+            :options="commandSelectOptions"
+            :placeholder="t('runner.connectionDialog.commandPlaceholder')"
+            aria-label="Command"
+            class="cfg-select"
+          />
+          <div v-if="selectedCommand?.custom" class="icon-btn-group">
+            <button
+              type="button"
+              class="icon-btn icon-btn-inline"
+              :title="t('runner.connectionDialog.editCommand')"
+              :aria-label="t('runner.connectionDialog.editCommand')"
+              @click="openEditCommand(selectedCommand)"
+            >
+              <Icon name="pencil" />
+            </button>
+            <button
+              type="button"
+              class="icon-btn icon-btn-inline danger"
+              :title="t('runner.connectionDialog.deleteCommand')"
+              :aria-label="t('runner.connectionDialog.deleteCommand')"
+              @click="removeCustomCommand(selectedCommand)"
+            >
+              <Icon name="trash" />
+            </button>
+          </div>
+        </div>
+        <p
+          v-if="selectedCommand?.path && selectedCommand.path !== selectedCommand.command"
+          class="muted path-hint"
+        >
+          {{ selectedCommand.path }}
+        </p>
+      </div>
+
+      <div class="field" v-if="isClaudeCliSelected">
+        <div class="row-actions">
+          <span class="cfg-label label-with-hint">
+            {{ t('runner.connectionDialog.modelField') }}
+            <InfoTooltip :text="t('runner.connectionDialog.modelHint')" />
+          </span>
+        </div>
+        <div class="command-row">
+          <CComboSelect
+            v-model="selectedModel"
+            :options="modelSelectOptions"
+            :placeholder="t('runner.connectionDialog.modelSelectPlaceholder')"
+            :aria-label="t('runner.connectionDialog.modelField')"
+            class="cfg-combo-select"
+            creatable
+          />
           <button
             type="button"
-            class="modal-close"
-            :aria-label="t('runner.a11y.close')"
-            @click="showRegisterCommand = false"
+            class="icon-btn icon-btn-inline"
+            :disabled="loadingModels || !canFetchModels"
+            :title="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
+            :aria-label="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
+            @click="loadModels"
           >
-            ✕
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 8a5 5 0 1 1-1.6-3.6" />
+              <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 2.8v3.4h-3.4" />
+            </svg>
           </button>
         </div>
-        <div class="modal-body">
-          <div v-if="registerError" class="err-banner">{{ registerError }}</div>
-          <div class="field">
-            <label class="cfg-label">{{ t('runner.registerDialog.commandField') }}
-              <input v-model="registerDraft.command" class="cfg-input" :placeholder="t('runner.registerDialog.commandPlaceholder')" />
-            </label>
+        <p v-if="modelFetchError" class="muted err-text">{{ modelFetchError }}</p>
+        <p v-else-if="modelOptions.length" class="muted path-hint">
+          {{ t('runner.connectionDialog.modelsLoaded', { count: modelOptions.length }) }}
+        </p>
+      </div>
+    </template>
+
+    <template v-else>
+      <div class="field">
+        <div class="row-actions">
+          <span class="cfg-label label-with-hint">
+            {{ t('runner.connectionDialog.providerField') }}
+            <InfoTooltip :text="t('runner.connectionDialog.providerHint')" />
+          </span>
+        </div>
+        <div class="command-row">
+          <CSelect
+            v-model="selectedProviderConfigId"
+            :options="providerConfigSelectOptions"
+            :placeholder="t('runner.connectionDialog.providerPlaceholder')"
+            :aria-label="t('runner.connectionDialog.providerField')"
+            class="cfg-select"
+          />
+          <div class="icon-btn-group">
+            <button
+              type="button"
+              class="icon-btn icon-btn-inline"
+              :title="t('runner.providerDialog.title')"
+              :aria-label="t('runner.providerDialog.title')"
+              @click="openNewProviderConfig"
+            >
+              <Icon name="plus" />
+            </button>
+            <button
+              type="button"
+              class="icon-btn icon-btn-inline"
+              :disabled="!selectedProviderConfig"
+              :title="t('runner.providerDialog.editTitle')"
+              :aria-label="t('runner.providerDialog.editTitle')"
+              @click="openEditProviderConfig"
+            >
+              <Icon name="pencil" />
+            </button>
+            <button
+              type="button"
+              class="icon-btn icon-btn-inline danger"
+              :disabled="!selectedProviderConfig"
+              :title="t('runner.connectionDialog.deleteProvider')"
+              :aria-label="t('runner.connectionDialog.deleteProvider')"
+              @click="removeSelectedProviderConfig"
+            >
+              <Icon name="trash" />
+            </button>
           </div>
-          <div class="field">
-            <label class="cfg-label">CLI path
-              <input
-                v-model="registerDraft.path"
-                class="cfg-input"
-                :placeholder="t('runner.registerDialog.pathPlaceholder')"
-              />
-            </label>
-          </div>
-          <div class="field">
-            <label class="cfg-label">{{ t('runner.registerDialog.flagsField') }}
-              <input v-model="registerDraft.flagsText" class="cfg-input" placeholder="vd. --print" />
-            </label>
-          </div>
-          <div class="modal-actions">
-            <button type="button" class="btn-ghost btn-sm" @click="showRegisterCommand = false">{{ t('runner.actions.cancel') }}</button>
-            <button type="button" class="btn-primary btn-sm" @click="confirmRegisterCommand">
-              {{ editingCommandId ? t('runner.actions.save') : t('runner.registerDialog.addToList') }}
+        </div>
+        <p v-if="!providerConfigList.length" class="muted path-hint">
+          {{ t('runner.connectionDialog.noProviderConfigs') }}
+        </p>
+      </div>
+
+      <div class="field">
+        <label class="cfg-label">{{ t('runner.connectionDialog.credentialField') }}</label>
+        <div class="credential-row">
+          <CSelect
+            v-model="credentialId"
+            :options="credentialSelectOptions"
+            :placeholder="t('runner.connectionDialog.credentialPlaceholder')"
+            :aria-label="t('runner.connectionDialog.credentialField')"
+            class="cfg-select"
+          />
+          <div class="icon-btn-group">
+            <button
+              type="button"
+              class="icon-btn icon-btn-inline"
+              :class="{ active: showNewCredential && !editingCredentialId }"
+              :title="t('runner.connectionDialog.addCredential')"
+              :aria-label="t('runner.connectionDialog.addCredential')"
+              @click="toggleNewCredential"
+            >
+              <Icon name="plus" />
+            </button>
+            <button
+              type="button"
+              class="icon-btn icon-btn-inline"
+              :disabled="!selectedCredential"
+              :title="t('runner.connectionDialog.editCredential')"
+              :aria-label="t('runner.connectionDialog.editCredential')"
+              @click="openEditCredential"
+            >
+              <Icon name="pencil" />
+            </button>
+            <button
+              type="button"
+              class="icon-btn icon-btn-inline danger"
+              :disabled="!selectedCredential"
+              :title="t('runner.connectionDialog.deleteCredential')"
+              :aria-label="t('runner.connectionDialog.deleteCredential')"
+              @click="removeSelectedCredential"
+            >
+              <Icon name="trash" />
             </button>
           </div>
         </div>
       </div>
+      <div v-if="showNewCredential" class="new-cred">
+        <div class="field">
+          <label class="cfg-label">{{ t('runner.connectionDialog.credLabelField') }}
+            <input v-model="newCred.label" class="cfg-input" />
+          </label>
+        </div>
+
+        <div v-if="canConnectOAuth" class="field oauth-block">
+          <button
+            type="button"
+            class="btn-primary btn-sm"
+            :disabled="oauthFlow.status === 'starting' || oauthFlow.status === 'pending' || oauthFlow.status === 'exchanging'"
+            @click="startConnectViaBrowser"
+          >
+            {{ t('runner.connectionDialog.connectViaBrowser') }}
+          </button>
+          <p v-if="oauthFlow.status === 'pending'" class="muted path-hint">
+            {{ t('runner.connectionDialog.oauthPendingHint') }}
+          </p>
+          <div v-if="oauthFlow.status === 'pending' || oauthFlow.status === 'exchanging'" class="oauth-paste-row">
+            <input
+              v-model="oauthPasteInput"
+              class="cfg-input"
+              :placeholder="t('runner.connectionDialog.oauthPastePlaceholder')"
+            />
+            <button
+              type="button"
+              class="btn-ghost btn-sm"
+              :disabled="!oauthPasteInput.trim() || oauthFlow.status === 'exchanging'"
+              @click="submitOAuthPaste"
+            >
+              {{ t('runner.connectionDialog.oauthPasteSubmit') }}
+            </button>
+          </div>
+          <p v-if="oauthFlow.status === 'error'" class="muted err-text">{{ oauthFlow.error }}</p>
+          <p class="muted path-hint">{{ t('runner.connectionDialog.orPasteSecretBelow') }}</p>
+        </div>
+
+        <p v-if="!vaultConfigured" class="err-text vault-warning">
+          {{ t('runner.connectionDialog.vaultNotConfigured') }}
+        </p>
+        <div class="field">
+          <label class="cfg-label">{{ t('runner.connectionDialog.secretValueField') }}
+            <input
+              v-model="newCred.secretValue"
+              type="password"
+              class="cfg-input"
+              autocomplete="off"
+              :disabled="!vaultConfigured"
+            />
+          </label>
+          <p class="muted path-hint">
+            {{ editingCredentialId ? t('runner.connectionDialog.secretValueEditHint') : t('runner.connectionDialog.secretValueHint') }}
+          </p>
+        </div>
+        <details class="advanced-secret-ref">
+          <summary class="muted">{{ t('runner.connectionDialog.advancedSecretRef') }}</summary>
+          <div class="field">
+            <label class="cfg-label">{{ t('runner.connectionDialog.secretRefField') }}
+              <input v-model="newCred.secretRef" class="cfg-input" :placeholder="secretRefPlaceholder" />
+            </label>
+          </div>
+        </details>
+        <button type="button" class="btn-primary btn-sm" @click="saveNewCredential">
+          {{ editingCredentialId ? t('runner.actions.save') : t('runner.connectionDialog.saveCredential') }}
+        </button>
+      </div>
+
+      <div class="field">
+        <div class="row-actions">
+          <span class="cfg-label label-with-hint">
+            {{ t('runner.connectionDialog.modelField') }}
+            <InfoTooltip :text="t('runner.connectionDialog.modelHint')" />
+          </span>
+        </div>
+        <div class="command-row">
+          <CComboSelect
+            v-model="selectedModel"
+            :options="modelSelectOptions"
+            :placeholder="modelPlaceholder || t('runner.connectionDialog.modelSelectPlaceholder')"
+            :aria-label="t('runner.connectionDialog.modelField')"
+            class="cfg-combo-select"
+            creatable
+          />
+          <button
+            type="button"
+            class="icon-btn icon-btn-inline"
+            :disabled="loadingModels || !canFetchModels"
+            :title="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
+            :aria-label="loadingModels ? t('runner.connectionDialog.loadingModels') : t('runner.connectionDialog.loadModels')"
+            @click="loadModels"
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 8a5 5 0 1 1-1.6-3.6" />
+              <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13 2.8v3.4h-3.4" />
+            </svg>
+          </button>
+        </div>
+        <p v-if="modelFetchError" class="muted err-text">{{ modelFetchError }}</p>
+        <p v-else-if="modelOptions.length" class="muted path-hint">
+          {{ t('runner.connectionDialog.modelsLoaded', { count: modelOptions.length }) }}
+        </p>
+      </div>
+      <div class="field">
+        <span class="cfg-label label-with-hint">
+          {{ t('runner.connectionDialog.extraToolsLabel') }}
+          <InfoTooltip :text="t('runner.connectionDialog.extraToolsHint')" />
+        </span>
+        <div class="extra-tools-group">
+          <label class="kind-radio">
+            <input v-model="extraTools" type="checkbox" value="shell" />
+            {{ t('runner.connectionDialog.extraToolShell') }}
+            <InfoTooltip :text="t('runner.connectionDialog.extraToolShellHint')" />
+          </label>
+          <label class="kind-radio">
+            <input v-model="extraTools" type="checkbox" value="git" />
+            {{ t('runner.connectionDialog.extraToolGit') }}
+            <InfoTooltip :text="t('runner.connectionDialog.extraToolGitHint')" />
+          </label>
+          <label class="kind-radio">
+            <input v-model="extraTools" type="checkbox" value="search" />
+            {{ t('runner.connectionDialog.extraToolSearch') }}
+            <InfoTooltip :text="t('runner.connectionDialog.extraToolSearchHint')" />
+          </label>
+          <label class="kind-radio">
+            <input v-model="extraTools" type="checkbox" value="web" />
+            {{ t('runner.connectionDialog.extraToolWeb') }}
+            <InfoTooltip :text="t('runner.connectionDialog.extraToolWebHint')" />
+          </label>
+        </div>
+      </div>
+    </template>
+
+    <div class="field">
+      <span class="cfg-label label-with-hint">
+        {{ t('runner.connectionDialog.mcpServersLabel') }}
+        <InfoTooltip :text="t('runner.connectionDialog.mcpServersHint')" />
+      </span>
+      <p v-if="!mcpChoices.length" class="muted">{{ t('runner.connectionDialog.mcpEmpty') }}</p>
+      <div v-else class="extra-tools-group">
+        <label v-for="m in mcpChoices" :key="m.id" class="kind-radio">
+          <input v-model="mcpServers" type="checkbox" :value="m.id" />
+          <span :class="{ 'err-text': m.missing }">
+            {{ m.label }}<template v-if="m.missing"> — {{ t('runner.connectionDialog.mcpMissing') }}</template>
+          </span>
+        </label>
+      </div>
+      <p v-if="mcpServers.length && mcpUnsupported" class="muted err-text">
+        {{ t('runner.connectionDialog.mcpUnsupported') }}
+      </p>
+      <p v-if="mcpServers.length && mcpWorkspaceFile" class="muted warn-text">
+        {{ t('runner.connectionDialog.mcpWorkspaceFile') }}
+      </p>
+      <p v-if="mcpServers.length && mcpViaToolBridge" class="muted">
+        {{ t('runner.connectionDialog.mcpToolBridge') }}
+      </p>
     </div>
 
-    <ProviderDialog
-      v-if="showProviderDialog"
-      :providers="providers"
-      :providerConfig="editingProviderConfig"
-      @close="showProviderDialog = false"
-      @saved="onProviderConfigSaved"
-    />
-  </Teleport>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
+      <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
+        {{ saving ? t('runner.actions.saving') : t('runner.connectionDialog.saveConnection') }}
+      </button>
+    </div>
+  </CDialog>
+
+  <CDialog
+    v-if="showRegisterCommand"
+    class="register-command-dialog"
+    :title="editingCommandId ? t('runner.registerDialog.editTitle') : t('runner.registerDialog.title')"
+    width="min(440px, 92vw)"
+    @close="showRegisterCommand = false"
+  >
+    <div v-if="registerError" class="err-banner">{{ registerError }}</div>
+    <div class="field">
+      <label class="cfg-label">{{ t('runner.registerDialog.commandField') }}
+        <input v-model="registerDraft.command" class="cfg-input" :placeholder="t('runner.registerDialog.commandPlaceholder')" />
+      </label>
+    </div>
+    <div class="field">
+      <label class="cfg-label">CLI path
+        <input
+          v-model="registerDraft.path"
+          class="cfg-input"
+          :placeholder="t('runner.registerDialog.pathPlaceholder')"
+        />
+      </label>
+    </div>
+    <div class="field">
+      <label class="cfg-label">{{ t('runner.registerDialog.flagsField') }}
+        <input v-model="registerDraft.flagsText" class="cfg-input" placeholder="vd. --print" />
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost btn-sm" @click="showRegisterCommand = false">{{ t('runner.actions.cancel') }}</button>
+      <button type="button" class="btn-primary btn-sm" @click="confirmRegisterCommand">
+        {{ editingCommandId ? t('runner.actions.save') : t('runner.registerDialog.addToList') }}
+      </button>
+    </div>
+  </CDialog>
+
+  <ProviderDialog
+    v-if="showProviderDialog"
+    :providers="providers"
+    :providerConfig="editingProviderConfig"
+    @close="showProviderDialog = false"
+    @saved="onProviderConfigSaved"
+  />
 </template>
 
 <style scoped lang="scss">
-.connection-dialog { max-width: 520px; width: min(520px, 94vw); min-height: 560px; }
 .connection-dialog .cfg-hint { margin: 0.2rem 0 0; font-size: 11px; opacity: 0.75; }
-.register-command-dialog { max-width: 440px; width: min(440px, 92vw); }
-.nested-backdrop { z-index: 1100; }
 .kind-radios { display: flex; gap: 1rem; margin-top: 0.35rem; flex-wrap: wrap; }
 .extra-tools-group { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.35rem; }
 .kind-radio {
@@ -1375,7 +1323,6 @@ onUnmounted(() => {
 .advanced-secret-ref { margin-bottom: 0.75rem; }
 .advanced-secret-ref summary { cursor: pointer; font-size: 0.8rem; }
 .advanced-secret-ref .field { margin-top: 0.5rem; margin-bottom: 0; }
-.modal-body { display: flex; flex-direction: column; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: auto; padding-top: 1rem; }
 .err-banner {
   background: rgba(248, 81, 73, 0.12);

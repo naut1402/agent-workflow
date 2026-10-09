@@ -4,7 +4,7 @@ import { ref, onMounted, watch } from 'vue'
 import { fetchPipelineProfiles, fetchPipelineProfile } from '../../pipeline-editor/scripts/ProfileManagerApi'
 import { writePipelineConfig } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
-import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
+import CDialog from '../../../frontend/ui/CDialog.vue'
 
 const { t } = useI18nHelpers()
 
@@ -56,49 +56,45 @@ async function apply() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="modal-backdrop" @click.self="emit('close')">
-      <div class="modal" role="dialog" aria-modal="true" :aria-label="t('monitor.pipeline.switchProfileDialog.heading')">
-        <div class="modal-head">
-          <span>{{ t('monitor.pipeline.switchProfileDialog.heading') }}</span>
-          <button type="button" class="modal-close" @click="emit('close')">✕</button>
-        </div>
-        <div class="c-loading-host">
-          <CLoadingOverlay :active="busy" />
-          <div class="modal-body">
-            <p v-if="!profiles.length" class="modal-hint">
-              {{ t('monitor.pipeline.switchProfileDialog.noProfiles') }}
-            </p>
-            <label v-else class="cfg-label">
-              {{ t('monitor.pipeline.switchProfileDialog.selectLabel') }}
-              <select v-model="selected" class="cfg-input">
-                <option value=""></option>
-                <option v-for="p in profiles" :key="p.name" :value="p.name">{{ p.name }}</option>
-              </select>
-            </label>
-            <p v-if="previewFirstStep" class="muted">
-              {{ t('monitor.pipeline.switchProfileDialog.firstStep', { step: previewFirstStep }) }}
-            </p>
-            <p v-if="props.hitlPending && selected" class="editor-error">
-              {{ t('monitor.pipeline.switchProfileDialog.hitlWarning') }}
-            </p>
-            <p v-if="error" class="editor-error">{{ error }}</p>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn-ghost" :disabled="busy" @click="emit('close')">
-            {{ t('monitor.pipeline.cancel') }}
-          </button>
-          <button type="button" class="btn-primary" :disabled="!selected || busy" @click="apply">
-            {{ busy ? t('monitor.pipeline.saving') : t('monitor.pipeline.switchProfileDialog.apply') }}
-          </button>
-        </div>
-      </div>
+  <CDialog
+    :title="t('monitor.pipeline.switchProfileDialog.heading')"
+    :loading="busy"
+    @close="emit('close')"
+  >
+    <div class="profile-switch-fields">
+      <p v-if="!profiles.length" class="modal-hint">
+        {{ t('monitor.pipeline.switchProfileDialog.noProfiles') }}
+      </p>
+      <label v-else class="cfg-label">
+        {{ t('monitor.pipeline.switchProfileDialog.selectLabel') }}
+        <select v-model="selected" class="cfg-input">
+          <option value=""></option>
+          <option v-for="p in profiles" :key="p.name" :value="p.name">{{ p.name }}</option>
+        </select>
+      </label>
+      <p v-if="previewFirstStep" class="muted">
+        {{ t('monitor.pipeline.switchProfileDialog.firstStep', { step: previewFirstStep }) }}
+      </p>
+      <p v-if="props.hitlPending && selected" class="editor-error">
+        {{ t('monitor.pipeline.switchProfileDialog.hitlWarning') }}
+      </p>
+      <p v-if="error" class="editor-error">{{ error }}</p>
     </div>
-  </Teleport>
+
+    <template #footer>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" :disabled="busy" @click="emit('close')">
+          {{ t('monitor.pipeline.cancel') }}
+        </button>
+        <button type="button" class="btn-primary" :disabled="!selected || busy" @click="apply">
+          {{ busy ? t('monitor.pipeline.saving') : t('monitor.pipeline.switchProfileDialog.apply') }}
+        </button>
+      </div>
+    </template>
+  </CDialog>
 </template>
 
 <style scoped>
 .editor-error { color: var(--danger); font-size: 12px; margin: 0; }
-.modal-body { display: flex; flex-direction: column; gap: 10px; }
+.profile-switch-fields { display: flex; flex-direction: column; gap: 10px; }
 </style>

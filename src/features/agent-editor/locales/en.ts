@@ -29,7 +29,6 @@ export default {
     createTitle: 'Create agent',
     editTitle: 'Edit agent — {name}',
     cancel: 'Cancel',
-    close: 'Close',
   },
   fields: {
     name: 'Name',

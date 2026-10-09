@@ -6,7 +6,7 @@
 // "Splitting relocates branching, so it lowers this function's score without
 // lowering the total" — tách ở đây chỉ làm đẹp số. Xem #386 và investigate.md G12.
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { saveMcpServer, testMcpServer, type McpProbeResponse } from '../scripts/mcpApi'
 import { fetchCredentials } from '../../runner/scripts/ConnectionDialogApi'
 import {
@@ -28,7 +28,7 @@ import {
 } from '../business/types'
 import { slugify } from '../../../shared/lib/stringUtils'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
-import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
+import CDialog from '../../../frontend/ui/CDialog.vue'
 import CSelect from '../../../frontend/ui/CSelect.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import InfoTooltip from '../../../frontend/ui/InfoTooltip.vue'
@@ -370,14 +370,8 @@ async function save() {
   })
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.key !== 'Escape') return
-  emit('close')
-}
-
 onMounted(async () => {
   applyPrefill()
-  window.addEventListener('keydown', onKeydown)
   try {
     const data = await fetchCredentials()
     credentials.value = data.profiles || []
@@ -385,215 +379,201 @@ onMounted(async () => {
     /* danh sách credential rỗng vẫn dùng được dialog */
   }
 })
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
-})
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="modal-backdrop" @click.self="emit('close')">
-      <div class="modal mcp-dialog" role="dialog" aria-modal="true" aria-labelledby="mcp-dialog-title">
-        <div class="modal-head">
-          <span id="mcp-dialog-title">{{ isEdit ? t('mcp.dialog.editTitle') : t('mcp.dialog.title') }}</span>
-          <button type="button" class="modal-close" :aria-label="t('mcp.a11y.close')" @click="emit('close')">✕</button>
-        </div>
+  <CDialog
+    class="mcp-dialog"
+    :title="isEdit ? t('mcp.dialog.editTitle') : t('mcp.dialog.title')"
+    :loading="saving"
+    width="min(620px, 94vw)"
+    @close="emit('close')"
+  >
+    <div v-if="error" class="err-banner">{{ error }}</div>
+    <p v-if="secretsCleared" class="warn-text">{{ t('mcp.dialog.copySecretsCleared') }}</p>
 
-        <div class="c-loading-host">
-          <CLoadingOverlay :active="saving" />
-          <div class="modal-body">
-            <div v-if="error" class="err-banner">{{ error }}</div>
-            <p v-if="secretsCleared" class="warn-text">{{ t('mcp.dialog.copySecretsCleared') }}</p>
-
-            <div class="field">
-              <label class="cfg-label">
-                <!-- `.cfg-label` là flex COLUMN: text nhãn và dấu `*` phải nằm chung một
-                     flex item, không thì `*` rơi xuống dòng riêng. Cùng lý do với
-                     `.label-with-hint` ở các trường có InfoTooltip. -->
-                <span class="label-with-hint">
-                  {{ t('mcp.dialog.labelField') }}<span class="req" aria-hidden="true">*</span>
-                </span>
-                <input v-model="label" class="cfg-input" />
-              </label>
-              <p v-if="effectiveId" class="muted id-hint">
-                {{ t('mcp.dialog.idDerived', { id: effectiveId }) }}
-                <InfoTooltip :text="isEdit ? t('mcp.dialog.idFrozenHint') : t('mcp.dialog.idDerivedHint')" />
-              </p>
-            </div>
-
-            <!-- CSelect KHÔNG bọc trong <label> (a11y + label-forwarding): tên accessible
-                 đến từ `aria-label` trên trigger, bám mẫu ConnectionDialog. -->
-            <div class="field">
-              <span class="cfg-label">{{ t('mcp.dialog.transportField') }}</span>
-              <CSelect
-                v-model="transport"
-                :options="transportOptions"
-                :aria-label="t('mcp.dialog.transportField')"
-                class="cfg-select"
-              />
-            </div>
-
-            <template v-if="isStdio">
-              <div class="field">
-                <label class="cfg-label">{{ t('mcp.dialog.commandField') }}
-                  <input v-model="command" class="cfg-input" :placeholder="t('mcp.dialog.commandPlaceholder')" />
-                </label>
-              </div>
-              <div class="field">
-                <span class="cfg-label label-with-hint">
-                  {{ t('mcp.dialog.argsField') }}
-                  <InfoTooltip :text="t('mcp.dialog.argsHint')" />
-                </span>
-                <textarea v-model="argsText" class="cfg-textarea" rows="3"></textarea>
-                <p v-for="key in argsWarnings" :key="key" class="warn-text">{{ t(key) }}</p>
-              </div>
-              <div class="field">
-                <span class="cfg-label label-with-hint">
-                  {{ t('mcp.dialog.envField') }}
-                  <InfoTooltip :text="t('mcp.dialog.envHint')" />
-                </span>
-                <div v-for="(row, i) in envRows" :key="`env-${i}`" class="kv-row">
-                  <input v-model="row.key" class="cfg-input" :placeholder="t('mcp.dialog.keyPlaceholder')" />
-                  <input v-model="row.value" class="cfg-input" :placeholder="t('mcp.dialog.valuePlaceholder')" />
-                  <button
-                    type="button"
-                    class="icon-btn danger"
-                    :title="t('mcp.dialog.removeRow')"
-                    :aria-label="t('mcp.dialog.removeRow')"
-                    @click="removeRow(envRows, i)"
-                  >
-                    <Icon name="trash" />
-                  </button>
-                </div>
-                <button type="button" class="btn-ghost btn-sm" @click="addRow(envRows)">{{ t('mcp.dialog.addRow') }}</button>
-              </div>
-              <div class="field">
-                <span class="cfg-label label-with-hint">
-                  {{ t('mcp.dialog.cwdField') }}
-                  <InfoTooltip :text="t('mcp.dialog.cwdHint')" />
-                </span>
-                <input v-model="cwd" class="cfg-input" />
-              </div>
-            </template>
-
-            <template v-else>
-              <div class="field">
-                <label class="cfg-label">{{ t('mcp.dialog.urlField') }}
-                  <input v-model="url" class="cfg-input" />
-                </label>
-              </div>
-              <div class="field">
-                <span class="cfg-label">{{ t('mcp.dialog.credentialField') }}</span>
-                <CSelect
-                  v-model="credentialId"
-                  :options="credentialOptions"
-                  :aria-label="t('mcp.dialog.credentialField')"
-                  class="cfg-select"
-                />
-              </div>
-              <div class="field kv-row">
-                <label class="cfg-label">{{ t('mcp.dialog.authHeaderField') }}
-                  <input v-model="authHeader" class="cfg-input" />
-                </label>
-                <label class="cfg-label">{{ t('mcp.dialog.authSchemeField') }}
-                  <input v-model="authScheme" class="cfg-input" />
-                </label>
-              </div>
-              <div class="field">
-                <span class="cfg-label">{{ t('mcp.dialog.headersField') }}</span>
-                <div v-for="(row, i) in headerRows" :key="`hdr-${i}`" class="kv-row">
-                  <input v-model="row.key" class="cfg-input" :placeholder="t('mcp.dialog.keyPlaceholder')" />
-                  <input v-model="row.value" class="cfg-input" :placeholder="t('mcp.dialog.valuePlaceholder')" />
-                  <button
-                    type="button"
-                    class="icon-btn danger"
-                    :title="t('mcp.dialog.removeRow')"
-                    :aria-label="t('mcp.dialog.removeRow')"
-                    @click="removeRow(headerRows, i)"
-                  >
-                    <Icon name="trash" />
-                  </button>
-                </div>
-                <button type="button" class="btn-ghost btn-sm" @click="addRow(headerRows)">{{ t('mcp.dialog.addRow') }}</button>
-              </div>
-            </template>
-
-            <p v-if="secretLikeRows.size" class="warn-text">{{ t('mcp.dialog.secretLiteralWarning') }}</p>
-
-            <div class="field kv-row">
-              <div class="timeout-field">
-                <span class="cfg-label label-with-hint">
-                  {{ t('mcp.dialog.timeoutField') }}
-                  <InfoTooltip :text="t('mcp.dialog.timeoutHint')" />
-                </span>
-                <input
-                  v-model.number="timeoutMs"
-                  type="number"
-                  class="cfg-input"
-                  :min="MCP_MIN_TIMEOUT_MS"
-                  :max="MCP_MAX_TIMEOUT_MS"
-                />
-              </div>
-              <label class="cfg-label checkbox-label">
-                <input v-model="enabled" type="checkbox" />
-                {{ t('mcp.dialog.enabledField') }}
-              </label>
-            </div>
-
-            <div class="probe-row">
-              <button type="button" class="btn-ghost btn-sm" :disabled="testing" @click="runTest(false)">
-                {{ testing ? t('mcp.dialog.testing') : t('mcp.dialog.test') }}
-              </button>
-              <button
-                type="button"
-                class="btn-ghost btn-sm"
-                :disabled="testing || !testedOk"
-                :title="t('mcp.dialog.listToolsHint')"
-                @click="runTest(true)"
-              >
-                {{ t('mcp.dialog.listTools') }}
-              </button>
-            </div>
-
-            <div v-if="probe" class="probe-result">
-              <p :class="probe.ok ? 'ok-text' : 'err-text'">
-                {{ probe.ok
-                  ? t('mcp.dialog.testOk', { server: probe.serverInfo ? ` — ${probe.serverInfo.name}` : '' })
-                  : `${t('mcp.dialog.testFailed')}: ${probe.error}` }}
-              </p>
-              <p v-for="w in probe.warnings.filter((x) => !(x in ARGS_WARNING_I18N))" :key="w" class="warn-text">
-                {{ w }}
-              </p>
-              <template v-if="probe.tools.length">
-                <p class="muted">{{ t('mcp.dialog.toolsCount', { count: probe.tools.length }) }}</p>
-                <ul class="tool-list">
-                  <li v-for="tool in probe.tools" :key="tool.name">
-                    <strong>{{ tool.name }}</strong>
-                    <span class="muted">{{ tool.description }}</span>
-                  </li>
-                </ul>
-              </template>
-            </div>
-
-            <p v-if="savedWithWarnings" class="ok-text">{{ t('mcp.dialog.savedWithWarnings') }}</p>
-
-            <div class="modal-actions">
-              <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('mcp.dialog.cancel') }}</button>
-              <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
-                {{ saving ? t('mcp.dialog.saving') : t('mcp.dialog.save') }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="field">
+      <label class="cfg-label">
+        <!-- `.cfg-label` là flex COLUMN: text nhãn và dấu `*` phải nằm chung một
+             flex item, không thì `*` rơi xuống dòng riêng. Cùng lý do với
+             `.label-with-hint` ở các trường có InfoTooltip. -->
+        <span class="label-with-hint">
+          {{ t('mcp.dialog.labelField') }}<span class="req" aria-hidden="true">*</span>
+        </span>
+        <input v-model="label" class="cfg-input" />
+      </label>
+      <p v-if="effectiveId" class="muted id-hint">
+        {{ t('mcp.dialog.idDerived', { id: effectiveId }) }}
+        <InfoTooltip :text="isEdit ? t('mcp.dialog.idFrozenHint') : t('mcp.dialog.idDerivedHint')" />
+      </p>
     </div>
-  </Teleport>
+
+    <!-- CSelect KHÔNG bọc trong <label> (a11y + label-forwarding): tên accessible
+         đến từ `aria-label` trên trigger, bám mẫu ConnectionDialog. -->
+    <div class="field">
+      <span class="cfg-label">{{ t('mcp.dialog.transportField') }}</span>
+      <CSelect
+        v-model="transport"
+        :options="transportOptions"
+        :aria-label="t('mcp.dialog.transportField')"
+        class="cfg-select"
+      />
+    </div>
+
+    <template v-if="isStdio">
+      <div class="field">
+        <label class="cfg-label">{{ t('mcp.dialog.commandField') }}
+          <input v-model="command" class="cfg-input" :placeholder="t('mcp.dialog.commandPlaceholder')" />
+        </label>
+      </div>
+      <div class="field">
+        <span class="cfg-label label-with-hint">
+          {{ t('mcp.dialog.argsField') }}
+          <InfoTooltip :text="t('mcp.dialog.argsHint')" />
+        </span>
+        <textarea v-model="argsText" class="cfg-textarea" rows="3"></textarea>
+        <p v-for="key in argsWarnings" :key="key" class="warn-text">{{ t(key) }}</p>
+      </div>
+      <div class="field">
+        <span class="cfg-label label-with-hint">
+          {{ t('mcp.dialog.envField') }}
+          <InfoTooltip :text="t('mcp.dialog.envHint')" />
+        </span>
+        <div v-for="(row, i) in envRows" :key="`env-${i}`" class="kv-row">
+          <input v-model="row.key" class="cfg-input" :placeholder="t('mcp.dialog.keyPlaceholder')" />
+          <input v-model="row.value" class="cfg-input" :placeholder="t('mcp.dialog.valuePlaceholder')" />
+          <button
+            type="button"
+            class="icon-btn danger"
+            :title="t('mcp.dialog.removeRow')"
+            :aria-label="t('mcp.dialog.removeRow')"
+            @click="removeRow(envRows, i)"
+          >
+            <Icon name="trash" />
+          </button>
+        </div>
+        <button type="button" class="btn-ghost btn-sm" @click="addRow(envRows)">{{ t('mcp.dialog.addRow') }}</button>
+      </div>
+      <div class="field">
+        <span class="cfg-label label-with-hint">
+          {{ t('mcp.dialog.cwdField') }}
+          <InfoTooltip :text="t('mcp.dialog.cwdHint')" />
+        </span>
+        <input v-model="cwd" class="cfg-input" />
+      </div>
+    </template>
+
+    <template v-else>
+      <div class="field">
+        <label class="cfg-label">{{ t('mcp.dialog.urlField') }}
+          <input v-model="url" class="cfg-input" />
+        </label>
+      </div>
+      <div class="field">
+        <span class="cfg-label">{{ t('mcp.dialog.credentialField') }}</span>
+        <CSelect
+          v-model="credentialId"
+          :options="credentialOptions"
+          :aria-label="t('mcp.dialog.credentialField')"
+          class="cfg-select"
+        />
+      </div>
+      <div class="field kv-row">
+        <label class="cfg-label">{{ t('mcp.dialog.authHeaderField') }}
+          <input v-model="authHeader" class="cfg-input" />
+        </label>
+        <label class="cfg-label">{{ t('mcp.dialog.authSchemeField') }}
+          <input v-model="authScheme" class="cfg-input" />
+        </label>
+      </div>
+      <div class="field">
+        <span class="cfg-label">{{ t('mcp.dialog.headersField') }}</span>
+        <div v-for="(row, i) in headerRows" :key="`hdr-${i}`" class="kv-row">
+          <input v-model="row.key" class="cfg-input" :placeholder="t('mcp.dialog.keyPlaceholder')" />
+          <input v-model="row.value" class="cfg-input" :placeholder="t('mcp.dialog.valuePlaceholder')" />
+          <button
+            type="button"
+            class="icon-btn danger"
+            :title="t('mcp.dialog.removeRow')"
+            :aria-label="t('mcp.dialog.removeRow')"
+            @click="removeRow(headerRows, i)"
+          >
+            <Icon name="trash" />
+          </button>
+        </div>
+        <button type="button" class="btn-ghost btn-sm" @click="addRow(headerRows)">{{ t('mcp.dialog.addRow') }}</button>
+      </div>
+    </template>
+
+    <p v-if="secretLikeRows.size" class="warn-text">{{ t('mcp.dialog.secretLiteralWarning') }}</p>
+
+    <div class="field kv-row">
+      <div class="timeout-field">
+        <span class="cfg-label label-with-hint">
+          {{ t('mcp.dialog.timeoutField') }}
+          <InfoTooltip :text="t('mcp.dialog.timeoutHint')" />
+        </span>
+        <input
+          v-model.number="timeoutMs"
+          type="number"
+          class="cfg-input"
+          :min="MCP_MIN_TIMEOUT_MS"
+          :max="MCP_MAX_TIMEOUT_MS"
+        />
+      </div>
+      <label class="cfg-label checkbox-label">
+        <input v-model="enabled" type="checkbox" />
+        {{ t('mcp.dialog.enabledField') }}
+      </label>
+    </div>
+
+    <div class="probe-row">
+      <button type="button" class="btn-ghost btn-sm" :disabled="testing" @click="runTest(false)">
+        {{ testing ? t('mcp.dialog.testing') : t('mcp.dialog.test') }}
+      </button>
+      <button
+        type="button"
+        class="btn-ghost btn-sm"
+        :disabled="testing || !testedOk"
+        :title="t('mcp.dialog.listToolsHint')"
+        @click="runTest(true)"
+      >
+        {{ t('mcp.dialog.listTools') }}
+      </button>
+    </div>
+
+    <div v-if="probe" class="probe-result">
+      <p :class="probe.ok ? 'ok-text' : 'err-text'">
+        {{ probe.ok
+          ? t('mcp.dialog.testOk', { server: probe.serverInfo ? ` — ${probe.serverInfo.name}` : '' })
+          : `${t('mcp.dialog.testFailed')}: ${probe.error}` }}
+      </p>
+      <p v-for="w in probe.warnings.filter((x) => !(x in ARGS_WARNING_I18N))" :key="w" class="warn-text">
+        {{ w }}
+      </p>
+      <template v-if="probe.tools.length">
+        <p class="muted">{{ t('mcp.dialog.toolsCount', { count: probe.tools.length }) }}</p>
+        <ul class="tool-list">
+          <li v-for="tool in probe.tools" :key="tool.name">
+            <strong>{{ tool.name }}</strong>
+            <span class="muted">{{ tool.description }}</span>
+          </li>
+        </ul>
+      </template>
+    </div>
+
+    <p v-if="savedWithWarnings" class="ok-text">{{ t('mcp.dialog.savedWithWarnings') }}</p>
+
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('mcp.dialog.cancel') }}</button>
+      <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
+        {{ saving ? t('mcp.dialog.saving') : t('mcp.dialog.save') }}
+      </button>
+    </div>
+  </CDialog>
 </template>
 
 <style scoped lang="scss">
-.mcp-dialog { max-width: 620px; width: min(620px, 94vw); }
-.modal-body { display: flex; flex-direction: column; overflow-y: auto; }
 .field { margin-bottom: 0.75rem; }
 .field .cfg-input,
 .field .cfg-textarea,
