@@ -182,6 +182,7 @@ Chi tiết implementation cụ thể — tên file, hàm, bảng schema. Đây l
 | [4.5 Config shell](#45-config-shell) | Không chắc 1 setting nên đặt ở preference shell hay schema business |
 | [4.6 Styling](#46-styling) | Thêm style mới xuyên feature |
 | [`code/runner.md`](code/runner.md) | Sửa id runner/connection, runner mặc định, hoặc cách phân loại family của provider |
+| [`code/`](code/README.md) | Gặp `// xem docs/architecture/code/<file>.md §N` trong code, hoặc trước khi sửa một vùng có bất biến ẩn — mục lục theo feature |
 | [`events/`](events/README.md) | Viết subscriber, thêm emit mới, tra cứu 1 domain event cụ thể |
 
 ### 4.1 Frontend
