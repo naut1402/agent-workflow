@@ -6,7 +6,8 @@ import McpPanel from '@/features/mcp/components/McpPanel.vue'
 import McpServerDialog from '@/features/mcp/components/McpServerDialog.vue'
 import mcpVi from '@/features/mcp/locales/vi'
 import mcpEn from '@/features/mcp/locales/en'
-import { MCP_MASK, type McpServerConfig } from '@/features/mcp/business/types'
+import { SecretMasker } from '@/features/mcp/business/SecretMasker'
+import type { McpServerConfig } from '@/features/mcp/schemas/mcpServer'
 
 /**
  * TC-75…TC-79 (+ TC-101) — panel danh sách MCP.
@@ -279,7 +280,7 @@ describe('TC-101: McpPanel — openCopy và cờ secrets-cleared', () => {
   const WITH_SECRETS: McpServerConfig = {
     ...PLAYWRIGHT,
     // Bản public từ API: giá trị thật đã bị mask, `env:NAME` giữ nguyên.
-    env: { TOKEN: MCP_MASK, PLAIN: 'env:MY_VAR' },
+    env: { TOKEN: SecretMasker.MASK, PLAIN: 'env:MY_VAR' },
   }
 
   it('TC-101 (a): copy giữ KEY `TOKEN` với value rỗng, 🚫 không đụng `PLAIN`, cờ bật', async () => {
@@ -309,7 +310,7 @@ describe('TC-101: McpPanel — openCopy và cờ secrets-cleared', () => {
     const draft = dialog.props('server') as any
     expect(dialog.props('secretsCleared')).toBe(false)
     expect(draft.id).toBe('playwright')
-    expect(draft.env.TOKEN).toBe(MCP_MASK)
+    expect(draft.env.TOKEN).toBe(SecretMasker.MASK)
     expect(document.body.textContent).not.toContain(mcpVi.dialog.copySecretsCleared)
   })
 })

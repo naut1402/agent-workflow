@@ -6,13 +6,9 @@ import McpServerDialog from '@/features/mcp/components/McpServerDialog.vue'
 import CSelect from '@/frontend/ui/CSelect.vue'
 import mcpVi from '@/features/mcp/locales/vi'
 import mcpEn from '@/features/mcp/locales/en'
-import {
-  MCP_DEFAULT_TIMEOUT_MS,
-  MCP_MASK,
-  MCP_MIN_TIMEOUT_MS,
-  looksLikeSecretLiteral,
-  sanitiseMcpServerId,
-} from '@/features/mcp/business/types'
+import { MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS } from '@/features/mcp/schemas/mcpServer'
+import { McpServer } from '@/features/mcp/business/McpServer'
+import { SecretMasker } from '@/features/mcp/business/SecretMasker'
 
 /**
  * TC-65…TC-74 (khai báo MCP server) + TC-A01…TC-A22 · TC-B01/B02/B11 ·
@@ -383,7 +379,7 @@ describe('McpServerDialog — cảnh báo secret literal', () => {
 
       expect(warningShown()).toBe(c.warn)
       // Ngưỡng là hàm dùng chung — 🚫 không chép luật vào test.
-      expect(looksLikeSecretLiteral(c.key, c.value)).toBe(c.warn)
+      expect(SecretMasker.looksLikeSecretLiteral(c.key, c.value)).toBe(c.warn)
 
       // 🚫 Không chặn cứng: mọi ca vẫn lưu được.
       await click(buttonByText(mcpVi.dialog.save))
@@ -546,7 +542,7 @@ describe('McpServerDialog — id nội suy từ Tên hiển thị (nhóm A)', ()
     expect(id.length).toBeLessThanOrEqual(64)
     expect(id.endsWith('-')).toBe(false)
     // Điều kiện đủ để backend nhận nguyên văn: id đã ở dạng canonical.
-    expect(sanitiseMcpServerId(id)).toBe(id)
+    expect(McpServer.sanitiseId(id)).toBe(id)
 
     await click(buttonByText(mcpVi.dialog.save))
     expect(savedPayload().id).toBe(id)
@@ -571,7 +567,7 @@ describe('McpServerDialog — id nội suy từ Tên hiển thị (nhóm A)', ()
       const id = shownId()!
       expect(id.endsWith(`-${upTo}`)).toBe(true)
       expect(id.length).toBeLessThanOrEqual(64)
-      expect(sanitiseMcpServerId(id)).toBe(id)
+      expect(McpServer.sanitiseId(id)).toBe(id)
       document.body.innerHTML = ''
     }
   })
@@ -649,12 +645,12 @@ describe('McpServerDialog — id nội suy từ Tên hiển thị (nhóm A)', ()
    * `registry.test.ts` TC-96 (b) khoá.
    */
   it('TC-A22: sửa tên server có credential ⇒ payload giữ nguyên sentinel `***`', async () => {
-    await mountDialog({ server: editableServer({ env: { TOKEN: MCP_MASK, PLAIN: 'env:MY_VAR' } }) })
+    await mountDialog({ server: editableServer({ env: { TOKEN: SecretMasker.MASK, PLAIN: 'env:MY_VAR' } }) })
 
     await setValue(inputByLabel(mcpVi.dialog.labelField), 'Playwright Mới')
     await click(buttonByText(mcpVi.dialog.save))
 
-    expect(savedPayload().env).toEqual({ TOKEN: MCP_MASK, PLAIN: 'env:MY_VAR' })
+    expect(savedPayload().env).toEqual({ TOKEN: SecretMasker.MASK, PLAIN: 'env:MY_VAR' })
   })
 })
 
@@ -815,7 +811,7 @@ function collectSuffixes(base: string, n: number): string[] {
  *     hình), xảy ra một lần. Dialog phải GIỮ MỞ để người dùng còn đọc được.
  *
  * 📌 Prefill đi qua `publicView` nên secret đã lưu về tới dialog dưới dạng
- * `***`, mà `collectSecretArgs` cố ý BỎ QUA sentinel (để round-trip 🚫 báo động
+ * `***`, mà `SecretMasker.secretArgs` cố ý BỎ QUA sentinel (để round-trip 🚫 báo động
  * giả). Vì vậy bằng chứng của ca "server đã lưu" là **sentinel**, 🚫 phải literal —
  * xem `implement.md` §4f.
  */
@@ -846,10 +842,10 @@ describe('McpServerDialog — cảnh báo secret literal trong `args` (#385)', (
    */
   it('TC-UI-LITERAL-VISIBLE: server đã lưu có secret trong args ⇒ cảnh báo hiện ngay khi mở', async () => {
     await mountDialog({
-      server: editableServer({ args: ['-y', '@x/srv', '--token', MCP_MASK] }),
+      server: editableServer({ args: ['-y', '@x/srv', '--token', SecretMasker.MASK] }),
     })
 
-    expect(argsTextarea().value).toContain(MCP_MASK)
+    expect(argsTextarea().value).toContain(SecretMasker.MASK)
     expect(argsWarningTexts()).toContain(mcpVi.warnings.argsSecretLiteral)
     // 🚫 đi qua một vòng API nào: nút Kiểm tra chưa hề được bấm.
     expect(vi.mocked(testMcpServer)).not.toHaveBeenCalled()
@@ -928,7 +924,7 @@ describe('McpServerDialog — cảnh báo secret literal trong `args` (#385)', (
 
     const w = await mountDialog()
     await fillMinimalStdio('Neo lệch')
-    await setValue(argsTextarea(), ['-y', 'pkg', '--extra', '--token', MCP_MASK].join('\n'))
+    await setValue(argsTextarea(), ['-y', 'pkg', '--extra', '--token', SecretMasker.MASK].join('\n'))
     await click(buttonByText(mcpVi.dialog.save))
 
     expect(vi.mocked(saveMcpServer)).toHaveBeenCalledTimes(1)

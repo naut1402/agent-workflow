@@ -8,8 +8,8 @@ import {
   prepareCursorMcpWorkspace,
 } from '../../../../../src/features/runner/business/providers/cursorMcpWorkspace.js'
 import { prepareMcpConfigForJob, resolveJobMcpServers } from '../../../../../src/features/runner/business/providers/mcpJobConfig.js'
-import { upsertMcpServer } from '../../../../../src/features/mcp/business/registry.js'
-import type { McpStdioServer } from '../../../../../src/features/mcp/business/types.js'
+import { mcpRegistry } from '../../../../../src/features/mcp/business/McpRegistry.js'
+import type { McpStdioServer } from '../../../../../src/features/mcp/schemas/mcpServer.js'
 
 /**
  * TC-P5-03 … TC-P5-17 · TC-P5-23 · TC-P5-24 + 6 TC do review đề xuất
@@ -80,7 +80,7 @@ function filesWithCanary(dir = workspace): string[] {
 }
 
 function seed(over: Partial<McpStdioServer> & { id: string }) {
-  upsertMcpServer({
+  mcpRegistry.upsert({
     label: over.id,
     enabled: true,
     transport: 'stdio',

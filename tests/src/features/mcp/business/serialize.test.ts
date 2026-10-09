@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { serialiseMcpServers } from '../../../../../src/features/mcp/business/serialize.js'
+import { McpServerSet } from '../../../../../src/features/mcp/business/McpServerSet.js'
 import {
   MCP_DEFAULT_TIMEOUT_MS,
   MCP_MAX_TIMEOUT_MS,
@@ -7,7 +7,23 @@ import {
   type McpRemoteServer,
   type McpServerConfig,
   type McpStdioServer,
-} from '../../../../../src/features/mcp/business/types.js'
+} from '../../../../../src/features/mcp/schemas/mcpServer.js'
+import { toMcpServer } from './toMcpServer.js'
+
+/**
+ * `McpServerSet.toCliConfig` cho một danh sách bản ghi. `secretFor` được bọc thành
+ * `CredentialResolver`; `secrets` là `masker.values` để các ca assert thẳng trên mảng.
+ */
+function toCliConfig(
+  servers: McpServerConfig[],
+  ctx: { workspace: string; secretFor?: (credentialId: string) => string | null },
+) {
+  const config = new McpServerSet(servers.map((s) => toMcpServer(s))).toCliConfig({
+    workspace: ctx.workspace,
+    credentials: ctx.secretFor ? { secretFor: ctx.secretFor } : null,
+  })
+  return { json: config.json, secrets: [...config.masker.values], warnings: config.warnings }
+}
 
 /**
  * TC-19…TC-27 — serializer sinh nội dung `mcpServers` cho `--mcp-config`.
@@ -53,7 +69,7 @@ afterEach(() => {
   }
 })
 
-describe('serialiseMcpServers — stdio', () => {
+describe('McpServerSet.toCliConfig — stdio', () => {
   /**
    * TC-19 — ⚠️ ĐIỀU KIỆN của ca này, 🚫 KHÔNG phải bất biến của entry stdio:
    * `stdio()` 🚫 không set `timeoutMs`, và chỉ vì vậy entry mới có đúng bốn khoá.
@@ -64,7 +80,7 @@ describe('serialiseMcpServers — stdio', () => {
    * Ca «không khai timeout» chỉ tới được bằng file store sửa tay hoặc migrate v1→v2.
    */
   test('TC-19: stdio KHÔNG khai timeout ⇒ đúng bốn khoá, 🚫 không có `cwd`; cwd lệch ⇒ 1 warning', () => {
-    const result = serialiseMcpServers(
+    const result = toCliConfig(
       [
         stdio({
           id: 'playwright',
@@ -96,7 +112,7 @@ describe('serialiseMcpServers — stdio', () => {
   test('TC-20: cwd không khai / rỗng / trùng workspace ⇒ 0 warning, vẫn đúng bốn khoá (🚫 không có timeoutMs)', () => {
     const cases: (Partial<McpStdioServer>)[] = [{}, { cwd: '' }, { cwd: '/ws' }]
     for (const over of cases) {
-      const result = serialiseMcpServers(
+      const result = toCliConfig(
         [stdio({ id: 'playwright', args: ['-y', 'pkg'], env: { FOO: 'bar' }, ...over })],
         { workspace: '/ws' },
       )
@@ -108,11 +124,11 @@ describe('serialiseMcpServers — stdio', () => {
   })
 })
 
-describe('serialiseMcpServers — http / sse', () => {
+describe('McpServerSet.toCliConfig — http / sse', () => {
   // TC-21
   test('TC-21: shape remote + header auth dựng từ `secretFor`', () => {
     for (const transport of ['http', 'sse'] as const) {
-      const result = serialiseMcpServers(
+      const result = toCliConfig(
         [
           remote({
             id: 'gh',
@@ -148,7 +164,7 @@ describe('serialiseMcpServers — http / sse', () => {
    * `undefined`. Chi tiết ở `test-result.md`.
    */
   test('TC-22: authScheme rỗng ⇒ fallback `Bearer`, 🚫 không space thừa / `undefined`', () => {
-    const result = serialiseMcpServers(
+    const result = toCliConfig(
       [
         remote({
           id: 'gh',
@@ -169,7 +185,7 @@ describe('serialiseMcpServers — http / sse', () => {
 
   // TC-25
   test('TC-25: credential không resolve được ⇒ bỏ hẳn header auth + warning không mang secret', () => {
-    const result = serialiseMcpServers(
+    const result = toCliConfig(
       [
         remote({
           id: 'gh',
@@ -190,11 +206,11 @@ describe('serialiseMcpServers — http / sse', () => {
   })
 })
 
-describe('serialiseMcpServers — tham chiếu env:', () => {
+describe('McpServerSet.toCliConfig — tham chiếu env:', () => {
   // TC-23
   test('TC-23: `env:` trỏ biến không tồn tại ⇒ bỏ khoá + warning, 🚫 không ghi literal', () => {
     delete process.env.MY_TOKEN
-    const result = serialiseMcpServers(
+    const result = toCliConfig(
       [stdio({ id: 'playwright', env: { TOKEN: 'env:MY_TOKEN', KEEP: 'plain' } })],
       { workspace: '/ws' },
     )
@@ -210,7 +226,7 @@ describe('serialiseMcpServers — tham chiếu env:', () => {
   // TC-24
   test('TC-24: `env:` trỏ biến có tồn tại ⇒ resolve và vào danh sách mask', () => {
     process.env.MY_TOKEN = 'sk-CANARY-9'
-    const result = serialiseMcpServers([stdio({ id: 'playwright', env: { TOKEN: 'env:MY_TOKEN' } })], {
+    const result = toCliConfig([stdio({ id: 'playwright', env: { TOKEN: 'env:MY_TOKEN' } })], {
       workspace: '/ws',
     })
 
@@ -221,15 +237,15 @@ describe('serialiseMcpServers — tham chiếu env:', () => {
   })
 })
 
-describe('serialiseMcpServers — khoá và danh sách rỗng', () => {
+describe('McpServerSet.toCliConfig — khoá và danh sách rỗng', () => {
   // TC-26
   test('TC-26: khoá của `mcpServers` là id đã sanitise', () => {
     const servers: McpServerConfig[] = [
       stdio({ id: 'ok-1' }),
-      // Id chứa `/` — `sanitiseMcpServerId` từ chối (TC-07 nhóm A).
+      // Id chứa `/` — `McpServer.sanitiseId` từ chối (TC-07 nhóm A).
       stdio({ id: '../../etc/passwd' }),
     ]
-    const result = serialiseMcpServers(servers, { workspace: '/ws' })
+    const result = toCliConfig(servers, { workspace: '/ws' })
 
     const keys = Object.keys(result.json.mcpServers)
     expect(keys).toContain('ok-1')
@@ -243,7 +259,7 @@ describe('serialiseMcpServers — khoá và danh sách rỗng', () => {
 
   // TC-27
   test('TC-27: danh sách rỗng ⇒ `{ mcpServers: {} }`, không ném', () => {
-    const result = serialiseMcpServers([], { workspace: '/ws' })
+    const result = toCliConfig([], { workspace: '/ws' })
     expect(result.json).toEqual({ mcpServers: {} })
     expect(result.secrets).toEqual([])
     expect(result.warnings).toEqual([])
@@ -268,11 +284,11 @@ const MAX_SEC = MCP_MAX_TIMEOUT_MS / 1000
 const KEY = 'startupTimeoutSec'
 
 function entryFor(timeoutMs: number | undefined, id = 'playwright') {
-  const result = serialiseMcpServers([stdio({ id, timeoutMs })], { workspace: '/ws' })
+  const result = toCliConfig([stdio({ id, timeoutMs })], { workspace: '/ws' })
   return { entry: result.json.mcpServers[id] as Record<string, unknown>, warnings: result.warnings }
 }
 
-describe('serialiseMcpServers — timeout khởi động (nhóm C)', () => {
+describe('McpServerSet.toCliConfig — timeout khởi động (nhóm C)', () => {
   // TC-C01
   test('TC-C01: 🚫 không khai timeout ⇒ 🚫 không có khoá timeout khởi động, 0 warning', () => {
     const { entry, warnings } = entryFor(undefined)
@@ -352,7 +368,7 @@ describe('serialiseMcpServers — timeout khởi động (nhóm C)', () => {
    */
   test('TC-C08: entry remote có timeoutMs ⇒ 🚫 không có khoá đó, shape giữ `type`/`url`/`headers`', () => {
     for (const transport of ['http', 'sse'] as const) {
-      const result = serialiseMcpServers(
+      const result = toCliConfig(
         [remote({ id: 'gh', transport, timeoutMs: MCP_DEFAULT_TIMEOUT_MS })],
         { workspace: '/ws' },
       )
@@ -382,7 +398,7 @@ describe('serialiseMcpServers — timeout khởi động (nhóm C)', () => {
 
   // TC-C10
   test('TC-C10: 3 server (hợp lệ / dưới sàn / trên trần) ⇒ đúng 2 warning, mỗi cái trỏ đúng id', () => {
-    const result = serialiseMcpServers(
+    const result = toCliConfig(
       [
         stdio({ id: 'ok', timeoutMs: MCP_DEFAULT_TIMEOUT_MS }),
         stdio({ id: 'thap', timeoutMs: 1000 }),
@@ -422,7 +438,7 @@ describe('serialiseMcpServers — timeout khởi động (nhóm C)', () => {
    */
   test('TC-C12: env + cwd + khoá cần chuẩn hoá đi cùng timeout ⇒ mọi hành vi cũ giữ nguyên', () => {
     process.env.MCP_TEST_TOKEN = 'sk-CANARY-12345'
-    const result = serialiseMcpServers(
+    const result = toCliConfig(
       [
         stdio({
           id: 'playwright',

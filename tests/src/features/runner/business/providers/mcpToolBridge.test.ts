@@ -6,9 +6,9 @@ import {
   MCP_TOOL_CALL_TIMEOUT_MS,
   openMcpToolBridge,
 } from '../../../../../../src/features/runner/business/providers/mcpToolBridge.js'
-import { upsertMcpServer } from '../../../../../../src/features/mcp/business/registry.js'
+import { mcpRegistry } from '../../../../../../src/features/mcp/business/McpRegistry.js'
 import { upsertCredential } from '../../../../../../src/features/runner/business/credentials.js'
-import { openMcpSession } from '../../../../../../src/features/mcp/business/index.js'
+import { McpClient, McpRegistry } from '../../../../../../src/features/mcp/business/index.js'
 
 /**
  * TC-P6-08 … TC-P6-22 + TC-P6-CRED — bridge tool MCP cho họ `ai-api` (#379, PR 4).
@@ -30,7 +30,7 @@ let workspace: string
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
 
 function seed(id: string, over: Record<string, string> = {}, mode = 'ok') {
-  upsertMcpServer({
+  mcpRegistry.upsert({
     id,
     label: id,
     enabled: true,
@@ -101,7 +101,7 @@ describe('openMcpToolBridge — đường mặc định `null`', () => {
   })
 
   test('TC-P6-15: id trỏ server 🚫 tồn tại / đang tắt ⇒ null + cảnh báo nêu từng id', async () => {
-    upsertMcpServer({
+    mcpRegistry.upsert({
       id: 'tat',
       label: 'tat',
       enabled: false,
@@ -141,8 +141,8 @@ describe('openMcpToolBridge — khai tool, prefix, route', () => {
   test('TC-P6-04: `inputSchema` bằng đúng schema server MCP khai', async () => {
     seed('fs-local', { FAKE_MCP_TOOLS: 'read_file,ping' })
     const bridge = (await open(['fs-local']))!
-    const session = await openMcpSession(
-      {
+    const session = await McpClient.open(
+      McpRegistry.normalise({
         id: 'fs-local',
         label: 'fs-local',
         enabled: true,
@@ -150,7 +150,7 @@ describe('openMcpToolBridge — khai tool, prefix, route', () => {
         command: process.execPath,
         args: [FIXTURE, 'ok'],
         env: { FAKE_MCP_SERVER_NAME: 'fs-local', FAKE_MCP_TOOLS: 'read_file,ping' },
-      } as any,
+      })!,
       { cwd: workspace },
     )
     try {
@@ -477,7 +477,7 @@ describe('openMcpToolBridge — credential của server remote (TC-P6-CRED)', ()
         label: 'MCP token',
         secretRef: 'env:BRIDGE_CRED_SECRET',
       })
-      upsertMcpServer({
+      mcpRegistry.upsert({
         id: 'rem',
         label: 'rem',
         enabled: true,
@@ -515,7 +515,7 @@ describe('openMcpToolBridge — credential của server remote (TC-P6-CRED)', ()
     )
     const srv = await startFakeMcpHttp({ mode: 'http' })
     try {
-      upsertMcpServer({
+      mcpRegistry.upsert({
         id: 'rem',
         label: 'rem',
         enabled: true,

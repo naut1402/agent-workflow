@@ -534,7 +534,7 @@ describe('AnthropicCompatibleProvider — job log: system prompt + tool-call out
 // `beforeEach` 🚫 có trong khối import đầu file — khai thêm ở ĐÂY thay vì sửa
 // dòng đó, để diff của khối này 🚫 chạm phần trên.
 import { beforeEach } from 'bun:test'
-import { upsertMcpServer } from '../../../../../../src/features/mcp/business/registry.js'
+import { mcpRegistry } from '../../../../../../src/features/mcp/business/McpRegistry.js'
 
 /**
  * TC-P6-01 · TC-P6-03 · TC-P6-04 · TC-P6-06 · TC-P6-10 (vế "built-in vẫn thắng").
@@ -575,7 +575,7 @@ describe('AnthropicCompatibleProvider — tool MCP (#379)', () => {
   })
 
   function seedMcp(id: string, env: Record<string, string> = {}) {
-    upsertMcpServer({
+    mcpRegistry.upsert({
       id,
       label: id,
       enabled: true,

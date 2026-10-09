@@ -13,7 +13,7 @@ import {
 import { parseOrchestratorDecision } from '../../../../src/features/runner/business/jobQueue.js'
 import { createApp } from '../../../../src/backend/apiServer.js'
 import type { RegistryContext } from '../../../../src/backend/http/types.js'
-import { maskSecretText } from '../../../../src/features/mcp/business/types.js'
+import { SecretMasker } from '../../../../src/features/mcp/business/SecretMasker.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
 /**
@@ -124,7 +124,7 @@ describe('persistStdout — biên persist của JobRecord', () => {
   // TC-SEC-51 ⭐
   test('TC-SEC-51: có `maskedStdout` ⇒ JobRecord.stdout và stepSummary đều lấy bản ĐÃ MASK', async () => {
     const raw = `dòng đầu\n401 Unauthorized: Bearer ${CANARY}\nSTEP_SUMMARY: xong, token ${CANARY}`
-    nextResult = { stdout: raw, maskedStdout: maskSecretText(raw, [CANARY]) }
+    nextResult = { stdout: raw, maskedStdout: new SecretMasker([CANARY]).mask(raw) }
 
     const done = await settle(nlChatJob().id)
 
@@ -154,7 +154,7 @@ describe('persistStdout — biên persist của JobRecord', () => {
     const filler = 'x'.repeat(CHAT_STDOUT_LIMIT + 10)
     const raw = `${filler}\n401 Unauthorized: Bearer ${CANARY}\n`
     expect(raw.length).toBeGreaterThan(CHAT_STDOUT_LIMIT)
-    nextResult = { stdout: raw, maskedStdout: maskSecretText(raw, [CANARY]) }
+    nextResult = { stdout: raw, maskedStdout: new SecretMasker([CANARY]).mask(raw) }
 
     const done = await settle(nlChatJob().id)
 
@@ -180,7 +180,7 @@ describe('persistStdout — biên persist của JobRecord', () => {
     const stepId = 'implementer-sk-test-LEAKCANARY-0123456789'
     const decision = `ORCHESTRATOR_DECISION: {"action":"start","stepId":"${stepId}"}`
     const raw = `suy nghĩ…\n401 Unauthorized: Bearer ${CANARY}\n${decision}\n`
-    const masked = maskSecretText(raw, [CANARY])
+    const masked = new SecretMasker([CANARY]).mask(raw)
     nextResult = { stdout: raw, maskedStdout: masked }
 
     const done = await settle(nlChatJob().id)
@@ -211,7 +211,7 @@ describe('persistStdout — biên persist của JobRecord', () => {
     ].join('\n')
     nextResult = {
       stdout: artifact,
-      maskedStdout: maskSecretText(artifact, [CANARY]),
+      maskedStdout: new SecretMasker([CANARY]).mask(artifact),
       // Job approval 🚫 đi qua `isNlChat`; persist stdout ở đây 🚫 cần thiết cho ca.
     }
 
@@ -255,7 +255,7 @@ describe('persistStdout — biên persist của JobRecord', () => {
   // TC-SEC-57
   test('TC-SEC-57: GET /api/jobs?id=<id> ⇒ body 🚫 chứa canary', async () => {
     const raw = `Bearer ${CANARY}\n`
-    nextResult = { stdout: raw, maskedStdout: maskSecretText(raw, [CANARY]) }
+    nextResult = { stdout: raw, maskedStdout: new SecretMasker([CANARY]).mask(raw) }
     const job = await settle(nlChatJob().id)
 
     const byQuery = await app.request(`/api/jobs?id=${job.id}`)
@@ -277,7 +277,7 @@ describe('persistStdout — biên persist của JobRecord', () => {
    */
   test('TC-SEC-58: cả hai chỗ persist (job xanh và job đỏ) đều mask', async () => {
     const raw = `Bearer ${CANARY}\n`
-    const masked = maskSecretText(raw, [CANARY])
+    const masked = new SecretMasker([CANARY]).mask(raw)
 
     // (1) job thành công.
     nextResult = { ok: true, stdout: raw, maskedStdout: masked }
