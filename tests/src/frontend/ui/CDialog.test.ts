@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, onMounted, ref } from 'vue'
 import type { VueWrapper } from '@vue/test-utils'
 import { mountWithI18n } from '../../helpers/i18n'
 import CDialog from '@/frontend/ui/CDialog.vue'
@@ -212,5 +212,72 @@ describe('CDialog — loading & kích thước', () => {
   it('resizable gắn modifier c-dialog--resizable', () => {
     mountDialog({ resizable: true })
     expect(q('.modal')!.classList.contains('c-dialog--resizable')).toBe(true)
+  })
+})
+
+describe('CDialog — focus', () => {
+  function focusTrigger(cls = 'trigger') {
+    const btn = document.createElement('button')
+    btn.className = cls
+    document.body.appendChild(btn)
+    btn.focus()
+    return btn
+  }
+
+  it('mở dialog thì focus chuyển vào .modal', async () => {
+    focusTrigger()
+    const w = mountDialog()
+    await w.vm.$nextTick()
+    expect(document.activeElement).toBe(q('.modal'))
+    expect(q('.modal')!.getAttribute('tabindex')).toBe('-1')
+  })
+
+  it('nội dung đã tự focus một field bên trong thì không bị giành focus', async () => {
+    focusTrigger()
+    const inputRef = ref<HTMLInputElement | null>(null)
+    const WithAutofocus = defineComponent({
+      setup() {
+        onMounted(() => inputRef.value?.focus())
+        return () => h(CDialog, { title: 't' }, { default: () => h('input', { ref: inputRef, class: 'auto' }) })
+      },
+    })
+    const w = mountWithI18n(WithAutofocus, { attachTo: document.body })
+    mounted.push(w)
+    await w.vm.$nextTick()
+    expect(document.activeElement).toBe(q('.auto'))
+  })
+
+  it('đóng dialog thì focus trả về phần tử đang focus lúc mở', async () => {
+    const trigger = focusTrigger()
+    const w = mountDialog()
+    await w.vm.$nextTick()
+    mounted.splice(mounted.indexOf(w), 1)
+    w.unmount()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('lúc đóng mà focus đã sang chỗ khác ngoài dialog thì không kéo focus về', async () => {
+    focusTrigger()
+    const w = mountDialog()
+    await w.vm.$nextTick()
+    const elsewhere = focusTrigger('elsewhere')
+    mounted.splice(mounted.indexOf(w), 1)
+    w.unmount()
+    expect(document.activeElement).toBe(elsewhere)
+  })
+
+  it('dialog lồng: đóng dialog trong thì focus về lại phần tử đã mở nó trong dialog ngoài', async () => {
+    focusTrigger()
+    const outer = mountDialog({ title: 'ngoài' }, { default: '<button class="open-inner">mở</button>' })
+    await outer.vm.$nextTick()
+    const openInner = q<HTMLButtonElement>('.open-inner')!
+    openInner.focus()
+    const inner = mountDialog({ title: 'trong' })
+    await inner.vm.$nextTick()
+    expect(document.activeElement?.closest('.modal')?.textContent).toContain('trong')
+
+    mounted.splice(mounted.indexOf(inner), 1)
+    inner.unmount()
+    expect(document.activeElement).toBe(openInner)
   })
 })

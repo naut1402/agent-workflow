@@ -101,15 +101,17 @@ describe('RunnerDialog — cấu trúc chống regression UI', () => {
 
   // Đúng một vùng cuộn: 2 .modal-body lồng nhau sinh scrollbar kép, 0 thì hàng
   // nút bị vẽ ra ngoài border dưới khi nội dung vượt max-height của .modal.
-  // Dialog này cố ý đặt .modal-actions *trong* .modal-body (margin-top: auto),
-  // nên chỉ assert .modal-head nằm ngoài.
-  it('dialog có đúng một .modal-body và .modal-head nằm ngoài nó', () => {
+  // Hàng nút đi qua slot `footer` của CDialog: ngoài vùng cuộn, ngoài overlay.
+  it('dialog có đúng một .modal-body; .modal-head và .modal-actions nằm ngoài nó', () => {
     mountDialog()
     const modal = document.querySelector('.modal')!
     const bodies = modal.querySelectorAll('.modal-body')
     expect(bodies).toHaveLength(1)
     expect(bodies[0].querySelector('.modal-head')).toBeNull()
-    expect(modal.querySelectorAll('.modal-actions button').length).toBeGreaterThan(0)
+    const actions = modal.querySelector('.modal-actions')!
+    expect(actions.querySelectorAll('button').length).toBeGreaterThan(0)
+    expect(actions.closest('.modal-body')).toBeNull()
+    expect(actions.closest('.c-loading-host')).toBeNull()
   })
 })
 

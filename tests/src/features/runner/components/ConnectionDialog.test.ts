@@ -923,7 +923,10 @@ describe('ConnectionDialog / ProviderDialog — cấu trúc chống regression U
     const bodies = modal.querySelectorAll('.modal-body')
     expect(bodies).toHaveLength(1)
     expect(bodies[0].querySelector('.modal-head')).toBeNull()
-    expect(modal.querySelectorAll('.modal-actions button').length).toBeGreaterThan(0)
+    const actions = modal.querySelector('.modal-actions')!
+    expect(actions.querySelectorAll('button').length).toBeGreaterThan(0)
+    expect(actions.closest('.modal-body')).toBeNull()
+    expect(actions.closest('.c-loading-host')).toBeNull()
   }
 
   it('ConnectionDialog không truyền class control native vào CSelect', async () => {
