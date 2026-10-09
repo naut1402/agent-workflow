@@ -1,5 +1,3 @@
-// Shell + shared UI strings (sidebar, status, language switcher, API error
-// fallbacks). Feature-specific strings live in their own namespace file.
 export default {
   brand: 'Dev Team',
   sidebar: {
@@ -53,7 +51,6 @@ export default {
   select: {
     empty: 'Không có tuỳ chọn.',
   },
-  // Copy-to-clipboard flash — dùng chung mọi nút copy (useCopyText).
   copy: {
     done: 'Đã copy',
     fail: 'Copy thất bại',
@@ -69,16 +66,12 @@ export default {
     select: 'Chọn thư mục này',
     selectDirRequired: 'Hãy mở một thư mục trước khi chọn.',
   },
-  // Overlay chặn thao tác lúc một action API đang chạy (`CLoadingOverlay`).
-  // "Đang xử lý" chứ không phải "Đang tải": overlay này phủ luồng GHI.
   loadingOverlay: {
     label: 'Đang xử lý…',
   },
-  // Khung dialog dùng chung (`CDialog`).
   dialog: {
     close: 'Đóng',
   },
-  // Viewer markdown dùng chung (`CMarkdownView`) — agent editor + knowledge.
   markdownView: {
     metadata: 'Metadata',
     untitledSection: 'Phần không tiêu đề',
@@ -87,7 +80,6 @@ export default {
     expandAll: 'Mở tất cả',
     collapseAll: 'Thu gọn tất cả',
   },
-  // Node artifact/knowledge trên canvas VueFlow — dùng chung Monitor + Pipeline Editor.
   artifactNode: {
     producesTitle: 'Đầu ra',
     knowledgeTitle: 'Knowledge',

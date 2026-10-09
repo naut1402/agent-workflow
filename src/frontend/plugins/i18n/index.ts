@@ -67,7 +67,6 @@ export const i18n = createI18n({
 export const I18N_REGISTRY_KEY: InjectionKey<LocaleRegistry> = Symbol('dev-team-i18n-registry')
 export const I18N_HELPERS_KEY: InjectionKey<I18nHelpers> = Symbol('dev-team-i18n-helpers')
 
-/** App đã `install` plugin — dùng cho helper ngoài setup (scripts/pure fn). */
 let installedApp: App | null = null
 
 /** Đổi locale đang active (không persist — xem useLocale). */
@@ -121,7 +120,7 @@ export function registerLocale(locale: string, messages: Record<string, unknown>
 
 /**
  * Tạo helpers và gắn lên app instance (provide + `$t` / `$setI18nLocale` global).
- * Chỉ gọi từ `i18nPlugin.install` — feature dùng `useI18nHelpers()` (core/composables).
+ * Chỉ gọi từ `i18nPlugin.install` — feature dùng `useI18nHelpers()`.
  */
 export function injectI18nHelpers(app: App): I18nHelpers {
   const helpers: I18nHelpers = {
@@ -131,7 +130,6 @@ export function injectI18nHelpers(app: App): I18nHelpers {
   }
   app.provide(I18N_HELPERS_KEY, helpers)
   app.provide(I18N_REGISTRY_KEY, localeRegistry)
-  // vue-i18n đã gắn `$t`; bổ sung helper app-scope còn lại.
   Object.assign(app.config.globalProperties, {
     $localeRegistry: localeRegistry,
     $setI18nLocale: setI18nLocale,

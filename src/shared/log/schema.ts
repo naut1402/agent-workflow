@@ -1,20 +1,9 @@
 import { z } from 'zod'
 
 /**
- * Log entry schema (request/audit JSONL). Write path: `src/backend/log` (driver + append).
- * Read UI: `src/features/logs/business`.
- *
- * Four kinds, discriminated by `type`:
- *  - `request` — one line per `/api/*` request (method/path/status/duration).
- *  - `audit`   — one line per config mutation (op/entity/identifier).
- *  - `events`  — one line per domain event from the in-process bus (`event` field
- *                holds DashboardEvent.type; do not confuse with this discriminant).
- *  - `usage`   — one line per job LLM token snapshot (`UsageSnapshot` + source).
- *
- * Parsing is intentionally defensive: a malformed JSONL line yields `null` and
- * is skipped rather than throwing, mirroring the codebase's defensive-reads rule.
- *
- * `level` + `traceId` default when missing so older JSONL rows still parse.
+ * Log entry kinds, discriminated by `type`: `request` (one per `/api/*` request), `audit`
+ * (config mutation), `events` (domain event; its `event` field holds `DashboardEvent.type`),
+ * `usage` (job token snapshot). `level` / `traceId` default when missing.
  */
 export const LOG_TYPES = ['request', 'audit', 'events', 'usage'] as const
 export type LogType = (typeof LOG_TYPES)[number]
@@ -103,7 +92,7 @@ export const EventLogEntry = z.object({
 })
 
 
-/** Long-lived token/cost boundary schema (P0: estimatedCostUsd always null). */
+/** Token/cost snapshot schema; `estimatedCostUsd` is currently always null. */
 export const UsageSnapshotSchema = z.object({
   inputTokens: z.number().nonnegative(),
   outputTokens: z.number().nonnegative(),
@@ -148,7 +137,6 @@ export type UsageLogEntry = z.infer<typeof UsageLogEntry>
 export const LOG_QUERY_MAX_CHARS = 2_048
 export const LOG_RESPONSE_MAX_CHARS = 4_096
 
-/** Keys that must never land in request/response log previews. */
 const SENSITIVE_KEY_RE = /(token|pat|secret|password|api[-_]?key|authorization)/i
 
 export function truncateForLog(text: string, max: number): string {
@@ -213,7 +201,6 @@ export function formatResponsePreview(buf: Buffer, contentType: string | null | 
   if (!textual) {
     return truncateForLog(`[binary ${ct || 'unknown'} ${buf.length}b]`, LOG_RESPONSE_MAX_CHARS)
   }
-  // Max UTF-8 char is 4 bytes — enough prefix for LOG_RESPONSE_MAX_CHARS without decoding whole body.
   const slice = buf.subarray(0, LOG_RESPONSE_MAX_CHARS * 4)
   return truncateForLog(redactResponseText(slice.toString('utf8')), LOG_RESPONSE_MAX_CHARS)
 }

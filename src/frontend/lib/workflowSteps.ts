@@ -1,5 +1,3 @@
-// Parse / compile workflow section markdown ↔ builder steps.
-
 export interface WorkflowStep {
   title: string
   body: string

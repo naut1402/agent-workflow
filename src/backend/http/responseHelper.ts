@@ -11,7 +11,7 @@ export function json(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload)
 }
 
-// Hono side: JSON body + `Cache-Control: no-store` (the dashboard polls; never cache).
+/** JSON response with no-store caching (Hono). */
 export function j(c: Context<HonoEnv>, status: number, body: unknown): Response {
   c.header('Cache-Control', 'no-store')
   return c.json(body as any, status as any)
@@ -22,7 +22,7 @@ export function unknownProject(c: Context<HonoEnv>): Response {
   return j(c, 404, { error: 'unknown project', project: c.get('projectId') ?? null })
 }
 
-/** Parse a JSON request body, mirroring the manual `JSON.parse(body)` + 400 path. */
+/** Parse a JSON request body; `{ ok: false }` on invalid JSON. */
 export async function parseBody(
   c: Context<HonoEnv>,
 ): Promise<{ ok: true; value: any } | { ok: false }> {

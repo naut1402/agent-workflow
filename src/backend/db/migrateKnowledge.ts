@@ -21,23 +21,17 @@ export type KnowledgeMigrationResult = {
   skipped: number
 }
 
-/** Mọi store base có thể chứa `collections.yaml`, đã khử trùng lặp. */
 function storesToScan(): { storeKey: string; scope: string }[] {
   const stores: { storeKey: string; scope: string }[] = []
   for (const project of loadRegistry().projects) {
-    // `project.path` chính là thư mục `.dev-team-agent`; `knowledgeRoot()` là
-    // cùng hàm mà driver dùng, nên khoá sinh ra ở đây khớp tuyệt đối với khoá
-    // mà runtime tra sau này.
     stores.push({ storeKey: knowledgeRoot(project.path), scope: 'project' })
   }
-  // Project mặc định qua `DEV_TEAM_ROOT` có thể chưa đăng ký trong registry —
-  // bỏ sót nó là dashboard chạy xong migrate mà vẫn trống collection.
   const envRoot = process.env.DEV_TEAM_ROOT?.trim()
   if (envRoot) stores.push({ storeKey: knowledgeRoot(resolvePath(envRoot)), scope: 'project' })
   try {
     stores.push({ storeKey: globalKnowledgeRoot(), scope: 'global' })
   } catch {
-    /* registry home không dựng được → bỏ store global, store khác vẫn chạy */
+    /* ignore */
   }
   return [...new Map(stores.map((s) => [s.storeKey, s])).values()]
 }
@@ -50,24 +44,12 @@ async function countRows(db: Awaited<ReturnType<typeof getDb>>, storeKey: string
     .all().length
 }
 
-/**
- * Chuyển collection + tag alias từ sidecar `collections.yaml` vào
- * `dashboard.sqlite`. Chạy tay: `bun run scripts/migrate-knowledge-to-sqlite.ts`.
- *
- * Idempotent — `UNIQUE(store_key, collection_id)` + `onConflictDoNothing()`:
- * chạy lại không thêm gì, và bản ghi đã sửa trên dashboard không bị YAML cũ
- * ghi đè. (Khác `migrateLogs`, vốn không có khoá ổn định nào để chống trùng.)
- *
- * Chỉ đọc nguồn — `collections.yaml` ở lại trên đĩa làm bản lưu, đúng cách
- * `migrateLogs` đối xử với JSONL nguồn.
- */
+/** Chuyển collection + tag alias từ `collections.yaml` vào `dashboard.sqlite`; idempotent, chỉ đọc nguồn. */
 export async function migrateKnowledgeToSqlite(): Promise<KnowledgeMigrationResult[]> {
   const db = await getDb()
   const results: KnowledgeMigrationResult[] = []
 
   for (const { storeKey, scope } of storesToScan()) {
-    // Sidecar vốn là tuỳ chọn: store chưa từng có nhóm nào thì bỏ qua im lặng,
-    // đừng báo thành lỗi.
     try {
       await access(joinPath(storeKey, COLLECTIONS_FILE))
     } catch {
@@ -79,8 +61,6 @@ export async function migrateKnowledgeToSqlite(): Promise<KnowledgeMigrationResu
     try {
       doc = await readCollectionsFile(storeKey)
     } catch (e) {
-      // Sidecar hỏng: báo ra rồi đi tiếp — một project hỏng không được chặn
-      // mọi project còn lại.
       console.warn(`[knowledge] bỏ qua ${storeKey}: ${(e as Error)?.message ?? e}`)
       results.push({ storeKey, sourceExists: false, collections: 0, aliases: 0, skipped: 0 })
       continue
@@ -92,7 +72,6 @@ export async function migrateKnowledgeToSqlite(): Promise<KnowledgeMigrationResu
     const before = await countRows(db, storeKey)
     const now = new Date().toISOString()
 
-    // Một transaction cho mỗi store: hỏng giữa chừng không để lại store nửa vời.
     db.transaction((tx) => {
       for (const c of doc.collections) {
         if (!c?.id) continue

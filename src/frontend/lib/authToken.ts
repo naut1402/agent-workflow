@@ -16,7 +16,7 @@ export function setApiToken(token: string): void {
     if (!trimmed) return
     globalThis?.localStorage?.setItem?.(STORAGE_KEY, trimmed)
   } catch {
-    // ignore (storage not available)
+    // ignore
   }
 }
 
@@ -24,7 +24,7 @@ export function clearApiToken(): void {
   try {
     globalThis?.localStorage?.removeItem?.(STORAGE_KEY)
   } catch {
-    // ignore (storage not available)
+    // ignore
   }
 }
 

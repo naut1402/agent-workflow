@@ -1,9 +1,3 @@
-/**
- * Phân runner theo path — **một** nguồn sự thật cho cả `run-bun-tests.ts` (CI +
- * local) và `test-scope.ts` (chọn phạm vi). Danh sách sống ở `tests/runners.json`,
- * tức là ở **dòng test**, không ở `package.json`: sau khi cắt `tests/` khỏi dòng
- * source thì thêm/bớt thư mục test không còn phải sửa file nào ở dòng source.
- */
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -14,7 +8,7 @@ export interface Runners {
   bunTest: string[]
 }
 
-/** Đọc `tests/runners.json`; thiếu file ⇒ cây test chưa được ghép, không phải "không có test". */
+/** Đọc `tests/runners.json`; ném lỗi khi thiếu file, sai định dạng hoặc `bunTest` rỗng. */
 export function readRunners(root: string): Runners {
   const file = path.join(root, RUNNERS_FILE)
   let raw: string
@@ -35,8 +29,7 @@ export function readRunners(root: string): Runners {
   if (!Array.isArray(bunTest) || bunTest.some((p) => typeof p !== 'string' || !p)) {
     throw new Error(`${RUNNERS_FILE} thiếu khoá "bunTest" dạng string[] — sửa file ở dòng test.`)
   }
-  // Rỗng phải là lỗi: `bun test` không path sẽ quét **toàn bộ** repo và chạy cả
-  // file test thuộc runner khác. Đúng cái bất biến "rỗng là đỏ, không phải xanh".
+  // xem docs/architecture/code/tooling.md §3
   if (bunTest.length === 0) {
     throw new Error(`${RUNNERS_FILE} có "bunTest" rỗng — khai ít nhất một path, hoặc xoá hẳn file nếu dòng test chưa có suite bun.`)
   }

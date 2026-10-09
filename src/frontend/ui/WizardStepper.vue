@@ -34,7 +34,6 @@ function stateOf(index: number) {
   return n < props.current ? 'done' : 'ahead'
 }
 
-/** Backward is always open; forward only up to the last satisfied gate. */
 function isNavigable(index: number) {
   const n = index + 1
   if (props.disabled || n === props.current) return false
@@ -88,8 +87,6 @@ function onGo(index: number) {
   flex: 1;
 }
 
-/* Connector between steps — drawn on the item, not the button, so the hit area
-   stays tight around the label. */
 .wizard-stepper-item + .wizard-stepper-item::before {
   content: '';
   flex: 0 0 8px;

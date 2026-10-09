@@ -1,11 +1,7 @@
 import { splitMarkdownSections } from './markdownSections'
 
 /**
- * Một khối hiển thị trong viewer markdown dùng chung (`CMarkdownView`).
- *
- * `frontmatter` tách riêng khỏi `section` vì nó không phải markdown: đẩy thẳng
- * `--- … ---` vào marked thì ra hai thẻ `<hr>`, nên viewer bọc nó thành fence
- * yaml trước khi parse.
+ * Một khối hiển thị trong `CMarkdownView`; khối `frontmatter` được bọc thành fence yaml trước khi parse.
  */
 export interface MarkdownBlock {
   /** Tiêu đề `##` đã bỏ dấu; `null` khi khối không mở đầu bằng heading cấp 2. */
@@ -15,16 +11,12 @@ export interface MarkdownBlock {
 }
 
 /**
- * Tách frontmatter `---` … `---` ở đầu file khỏi phần body.
- *
- * Không dùng `business/agentMarkdown.js` — module đó kéo theo `yamlLib` chỉ
- * chạy được ở Node, còn hàm này phải chạy trong browser.
+ * Tách frontmatter `---` … `---` ở đầu nội dung khỏi body; mở mà không đóng thì cả nội dung là body.
  */
 export function splitFrontmatter(content: string): { frontmatter: string | null; body: string } {
   const lines = (content || '').split(/\r?\n/)
   if (lines[0]?.trim() !== '---') return { frontmatter: null, body: content || '' }
   const end = lines.findIndex((l, i) => i > 0 && l.trim() === '---')
-  // Mở mà không đóng → coi cả file là body, thay vì nuốt tất cả vào một khối code.
   if (end < 0) return { frontmatter: null, body: content || '' }
   return {
     frontmatter: lines.slice(0, end + 1).join('\n'),
@@ -34,11 +26,7 @@ export function splitFrontmatter(content: string): { frontmatter: string | null;
 
 export interface BuildMarkdownBlocksOptions {
   /**
-   * Tách khối `---` ở đầu nội dung thành block metadata riêng.
-   *
-   * Mặc định `false`: knowledge nạp qua `driver.read()` vốn đã bóc front-matter
-   * sẵn, nên một entry mở đầu bằng `---` là nội dung thật của người dùng chứ
-   * không phải meta. Agent editor đọc nguyên file `.md` nên bật `true`.
+   * Tách khối `---` ở đầu nội dung thành block metadata riêng; chỉ bật cho nguồn đọc nguyên file `.md`.
    */
   withFrontmatter?: boolean
 }

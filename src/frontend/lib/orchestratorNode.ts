@@ -1,8 +1,3 @@
-/**
- * Vị trí + định danh của node điều phối trên canvas. Thuần tính toán, dùng chung
- * cho cả hai canvas (pipeline editor và monitor) — hai bên vẽ cùng một node thì
- * phải cùng một phép tính, nếu không node nhảy chỗ khi chuyển màn.
- */
 import { ORCHESTRATOR_STEP_ID } from '../../shared/lib/orchestrator'
 import { NODE_Y, type PhasePosition } from './pipelineArtifactGraph'
 
@@ -10,8 +5,8 @@ import { NODE_Y, type PhasePosition } from './pipelineArtifactGraph'
 export const ORCHESTRATOR_NODE_ID = ORCHESTRATOR_STEP_ID
 
 /**
- * Đẩy lên trên cả node knowledge (`KNOWLEDGE_Y_OFFSET = -70`) để hai loại node
- * phái sinh không chồng nhau.
+ * Độ lệch tung độ của node điều phối, cao hơn node knowledge (`KNOWLEDGE_Y_OFFSET`)
+ * để không chồng nhau.
  */
 export const ORCHESTRATOR_Y_OFFSET = -150
 

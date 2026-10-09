@@ -1,6 +1,4 @@
 <script setup lang="ts">
-// Modal directory browser backed by GET /api/fs/browse. Used by ProjectBar
-// (add project) and Settings (autoscan whitelist).
 import { useI18nHelpers } from '../composables/useI18nHelpers'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { browseFs } from '../../features/settings/scripts/settingsApi'
@@ -42,7 +40,6 @@ async function load(dir?: string) {
 
 function goUp() {
   if (parentPath.value === null) return
-  // Empty string sentinel → roots listing
   void load(parentPath.value === '' ? '__roots__' : parentPath.value)
 }
 

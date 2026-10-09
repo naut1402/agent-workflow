@@ -1,18 +1,12 @@
-// Commitlint — khớp docs/agent-rules/git-pr.md §7.
-// Format: `[<TASK>]? <type>(<scope>)?: <subject>`
-// Type: feat | fix | chore | docs | refactor | test
-// Breaking: `type!:` / `type(scope)!:` hoặc footer `BREAKING CHANGE:`
-
+// xem docs/agent-rules/git-pr.md §3
 /** @type {import('@commitlint/types').UserConfig} */
 const config = {
-  // Bỏ qua merge / fixup / squash commit mặc định khi lint range.
   defaultIgnores: true,
   parserPreset: {
     parserOpts: {
       headerPattern:
         /^(?:\[([A-Za-z0-9][A-Za-z0-9_-]*)\]\s)?(feat|fix|chore|docs|refactor|test)(?:\(([a-z0-9-]+)\))?(!)?:\s(.+)$/,
       headerCorrespondence: ['ticket', 'type', 'scope', 'breaking', 'subject'],
-      // Footer breaking — chuẩn Conventional Commits (cho release tool sau này).
       noteKeywords: ['BREAKING CHANGE', 'BREAKING-CHANGE'],
     },
   },
@@ -21,7 +15,6 @@ const config = {
     'type-enum': [2, 'always', ['feat', 'fix', 'chore', 'docs', 'refactor', 'test']],
     'scope-case': [2, 'always', 'kebab-case'],
     'subject-empty': [2, 'never'],
-    // Subject tiếng Việt / mixed case — không siết sentence-case.
     'subject-case': [0],
     'subject-full-stop': [2, 'never', '.'],
     'header-max-length': [2, 'always', 120],

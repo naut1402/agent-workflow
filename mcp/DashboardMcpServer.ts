@@ -39,8 +39,6 @@ export class DashboardMcpServer extends AbstractMcpServer {
       new TaskTools(resolveRoot),
       new KnowledgeTools(resolveRoot),
       new ProjectTools(resolveRoot),
-      // Không dùng `requireRoot` (token của lượt đã xác định task), vẫn nhận
-      // `resolveRoot` cho đồng dạng với ba nhóm trên.
       new OrchestratorTools(resolveRoot),
     ]
   }

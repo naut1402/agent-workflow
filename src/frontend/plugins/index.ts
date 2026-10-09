@@ -8,12 +8,7 @@ export type InstallPluginsOptions = {
   container?: Container
 }
 
-/**
- * Cài thư viện/plugin app-scope tại một chỗ (i18n, service container, …).
- * Chỉ gọi từ app root (`main.ts`). Feature không import `createI18n` / `vue-i18n`.
- * Sau khi cài: trong setup dùng `useI18nHelpers()` (`src/frontend/composables`),
- * `inject(containerKey)` (`src/frontend/shell/containerKey`) để resolve service.
- */
+/** Cài plugin app-scope (i18n, service container) tại một chỗ; chỉ gọi từ `main.ts`. */
 export function installPlugins(app: App, options: InstallPluginsOptions = {}): App {
   app.use(i18nPlugin, options.i18n ?? {})
   if (options.container) {

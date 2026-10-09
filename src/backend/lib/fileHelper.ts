@@ -1,10 +1,7 @@
 import fsPromises from 'node:fs/promises'
 import fs from 'node:fs'
 import path from 'node:path'
-// Namespace imports — named `from 'node:*'` is rewritten by Vite to property
-// access at module init (`ext["fileURLToPath"]` / `ext["randomBytes"]`), which
-// throws in the browser if this file is ever pulled into the client graph.
-// Defer access to call sites.
+// xem docs/architecture/code/backend.md §2
 import * as nodeUrl from 'node:url'
 import * as nodeCrypto from 'node:crypto'
 import * as nodeUtil from 'node:util'
@@ -22,8 +19,6 @@ export type { Dirent, Stats, FSWatcher, FileHandle }
 export function homeDir(): string {
   return process.env.USERPROFILE || process.env.HOME || ''
 }
-
-// ── path wrappers
 
 export function joinPath(...parts: string[]): string {
   return path.join(...parts)
@@ -92,8 +87,6 @@ export function resolvePathUnder(baseDir: string, ...segments: string[]): string
   if (target !== base && !target.startsWith(base + path.sep)) return null
   return target
 }
-
-// ── async fs
 
 /** Read a directory, returning [] instead of throwing on any error. */
 export async function safeReadDir(dir: string): Promise<Dirent[]> {
@@ -212,11 +205,7 @@ export async function openFile(
   return fsPromises.open(p, flags)
 }
 
-/**
- * Bản async của `writeTextFileAtomicSync` — cho business không muốn chặn event
- * loop. Temp file mang pid + random nên hai ghi song song không giẫm lên nhau;
- * ghi hỏng thì dọn temp và ném tiếp, không để lại file rách.
- */
+/** Bản async của `writeTextFileAtomicSync`: ghi temp (pid + random) rồi rename; lỗi thì dọn temp và ném tiếp. */
 export async function writeTextFileAtomic(target: string, data: string): Promise<void> {
   await mkdir(dirname(target), { recursive: true })
   const tmp = `${target}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
@@ -228,8 +217,6 @@ export async function writeTextFileAtomic(target: string, data: string): Promise
     throw err
   }
 }
-
-// ── sync fs
 
 export function existsSync(p: string): boolean {
   return fs.existsSync(p)
@@ -266,10 +253,8 @@ export function copyFileSync(from: string, to: string): void {
 }
 
 /**
- * Best-effort atomic text write: temp file + rename. Some filesystems (Docker
- * bind mounts, SMB/NFS shares, antivirus-scanned dirs) return EBUSY/EPERM
- * transiently when rename targets an existing file — retry briefly, then fall
- * back to copy-over + unlink, which those filesystems do allow.
+ * Best-effort atomic text write: temp file + rename. On transient EBUSY/EPERM/EACCES
+ * (bind mounts, SMB/NFS, antivirus) retry briefly, then fall back to copy-over + unlink.
  */
 export function writeTextFileAtomicSync(
   file: string,
@@ -280,18 +265,15 @@ export function writeTextFileAtomicSync(
   writeTextFileSync(tmp, data, opts)
   const renamed = renameOverExisting(tmp, file)
   if (!renamed) {
-    // `copyFileSync` GIỮ mode của file đích khi đích đã tồn tại, nên nhánh này
-    // không thừa hưởng `mode` của temp — `chmodSync` bên dưới mới là thứ chốt.
+    // xem docs/architecture/code/backend.md §3
     copyFileSync(tmp, file)
     rmSync(tmp, { force: true })
   }
-  // Cả hai nhánh đều cần: file tạo từ lần chạy TRƯỚC khi có `mode` vẫn đang
-  // mang mode cũ, mà `writeFileSync` không đổi mode của file đã tồn tại.
   if (opts?.mode != null) {
     try {
       chmodSync(file, opts.mode)
     } catch {
-      /* win32 / FS không hỗ trợ POSIX mode — nội dung vẫn ghi đúng, không chặn luồng */
+      /* ignore */
     }
   }
 }

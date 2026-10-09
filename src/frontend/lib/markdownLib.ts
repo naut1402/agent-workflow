@@ -5,21 +5,8 @@ const MERMAID_PRE =
   /<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g
 
 /**
- * Parse markdown to HTML; mermaid fenced blocks become `.mermaid` divs.
- *
- * The output goes straight into `v-html` on four surfaces (chat bubble,
- * artifact panel, QA panel, log dialog), so it is sanitised here — one hop
- * instead of one per surface.
- *
- * Sanitising runs before the mermaid swap so the sanitiser only ever sees
- * `marked`'s own output. `class` survives DOMPurify's default allowlist, so
- * the fenced mermaid block is still matchable afterwards.
- *
- * The invariant that actually keeps this safe is that the diagram body stays
- * HTML-escaped: `renderMermaid` reads it back through `node.textContent`,
- * which the browser decodes exactly once. Decoding it here by hand instead
- * would turn `&lt;img onerror=…&gt;` inside a mermaid fence into a live tag,
- * outside the sanitiser's reach — the fence is diagram source, not markup.
+ * Parse markdown to sanitised HTML (DOMPurify); mermaid fenced blocks become `.mermaid` divs.
+ * xem docs/architecture/code/frontend.md §2
  */
 export function parseMarkdown(source: string): string {
   const html = DOMPurify.sanitize(marked.parse(source || '') as string)
@@ -43,24 +30,18 @@ export async function renderMermaid(rootEl: HTMLElement | null | undefined): Pro
 
   const theme = mermaidTheme()
 
-  // Short-circuit: skip nodes already rendered with the same source + same
-  // theme. Needed because ArtifactPanel calls this on EVERY re-render
-  // (onUpdated), including re-renders caused by the `task` prop changing
-  // identity every ~1500ms poll tick rather than the mermaid content actually
-  // changing — previously every such tick destroyed and redrew the existing
-  // SVG unconditionally, causing a visible flicker.
   const toRender: HTMLElement[] = []
   for (const node of nodes) {
     const hasSvg = !!node.querySelector('svg')
     const knownSrc = node.getAttribute('data-mermaid-src')
     const knownTheme = node.getAttribute('data-mermaid-theme')
-    if (hasSvg && knownSrc && knownTheme === theme) continue // unchanged, keep the existing SVG
+    if (hasSvg && knownSrc && knownTheme === theme) continue
 
     const src = knownSrc ?? node.textContent?.trim() ?? ''
     if (!src) continue
     node.setAttribute('data-mermaid-src', src)
     node.setAttribute('data-mermaid-theme', theme)
-    if (hasSvg) node.textContent = src // source or theme really changed — reset before redrawing
+    if (hasSvg) node.textContent = src
     node.removeAttribute('data-processed')
     toRender.push(node)
   }

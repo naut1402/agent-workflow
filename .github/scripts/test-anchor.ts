@@ -1,34 +1,4 @@
 #!/usr/bin/env bun
-/**
- * Cổng neo SHA — trả lời đúng một câu: *số coverage và lượt test xanh trong
- * baseline được đo trên commit source nào, và commit đó có phải cái đang phát
- * hành không?*
- *
- * Vì sao cần: `coverage-baseline.json` trước đây chỉ lưu tên branch
- * (`source_ref: "dev/1.1.3/main"`), mà tên branch thì di chuyển. "Test xanh"
- * đọc từ đó không nói được nó xanh trên cây nào ⇒ PR phát hành có thể merge một
- * cây source chưa lượt test nào chạy qua, mà không cổng nào thấy.
- *
- * Bảy kết luận, mỗi cái một nguyên nhân và một cách xử lý khác nhau:
- *
- *   match          neo == head PR                       → exit 0
- *   behind         neo là tổ tiên của head              → test viết cho ref cũ
- *   ahead          head là tổ tiên của neo              → test chờ source
- *   diverged       neo tồn tại, không có quan hệ tổ tiên → không so được khoảng cách
- *   other-version  neo thuộc dòng version khác          → version này chưa có lượt test nào
- *   no-anchor      baseline chưa có khoá neo            → chưa so được
- *   anchor-gone    SHA neo không còn tồn tại            → exit 1
- *
- * Bất biến: không nhánh nào in "đạt" ngoài `match`. "Không so được" là
- * cảnh báo hoặc chặn, không bao giờ là kết luận đạt — đó đúng là cái lỗ mà
- * force-push (`TC-E9`) chui qua.
- *
- * Mặc định chỉ `anchor-gone` chặn; `--strict` làm mọi kết luận khác `match`
- * chặn. Siết cổng về sau = thêm một cờ ở workflow, không sửa lại script.
- *
- *   bun run test:anchor -- --baseline reports/coverage-baseline.json
- *   bun run test:anchor -- --head-sha "$(git rev-parse HEAD)" --head-ref dev/1.1.4/main --strict
- */
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -38,7 +8,7 @@ import { versionOf } from './test-ref.js'
 
 const ROOT = path.resolve(import.meta.dir, '..', '..')
 
-/** Danh sách commit trong cảnh báo là để người đọc *nhận ra* khoảng chênh, không phải để đọc hết. */
+/** Số commit tối đa liệt kê trong báo cáo. */
 export const COMMIT_LIMIT = 20
 
 export type AnchorVerdict = 'match' | 'behind' | 'ahead' | 'diverged' | 'other-version' | 'no-anchor' | 'anchor-gone'
@@ -61,18 +31,14 @@ export interface AnchorInput {
 }
 
 /**
- * Thứ tự nhánh là phần quan trọng nhất của hàm này: nhánh sau không được
- * che nhánh trước. Cụ thể `!exists` phải nằm trên mọi phép so quan hệ tổ tiên —
- * `merge-base` với object không tồn tại trả về "false", tức là trông giống
- * `diverged` (cảnh báo, exit 0) trong khi thực tế là `anchor-gone` (chặn).
+ * Phân loại neo thành một trong bảy kết luận. `!exists` phải xét trước mọi phép so
+ * quan hệ tổ tiên, nếu không neo mất tích bị đọc thành `diverged`.
  */
 export function classifyAnchor(i: AnchorInput): AnchorVerdict {
   if (!i.anchorSha) return 'no-anchor'
   if (!i.exists) return 'anchor-gone'
   if (i.anchorSha === i.headSha) return 'match'
 
-  // Version suy được ở cả hai phía mà lệch nhau ⇒ nói thẳng "dòng test chưa
-  // chạy cho version này", đừng bắt người đọc tự luận ra từ hai SHA lạ.
   const anchorVersion = i.anchorRef ? versionOf(i.anchorRef) : null
   const headVersion = versionOf(i.headRef)
   if (anchorVersion && headVersion && anchorVersion !== headVersion) return 'other-version'
@@ -82,11 +48,7 @@ export function classifyAnchor(i: AnchorInput): AnchorVerdict {
   return 'diverged'
 }
 
-/**
- * `anchor-gone` chặn ở mọi chế độ: không biết neo ở đâu thì không kết luận được
- * gì, và "không kết luận được" ở cổng chặn merge cuối cùng phải là đỏ.
- * `--strict` (siết về sau) chặn mọi thứ khác `match`.
- */
+/** `anchor-gone` chặn ở mọi chế độ; `strict` chặn mọi kết luận khác `match`. */
 export function isBlocking(v: AnchorVerdict, strict: boolean): boolean {
   if (v === 'anchor-gone') return true
   return strict && v !== 'match'
@@ -160,7 +122,6 @@ const EXPLAIN: Record<AnchorVerdict, string[]> = {
   ],
 }
 
-/** Bảng "cổng đã so cái gì" — người đọc phải kiểm chứng lại được kết luận, không chỉ thấy chữ OK. */
 function anchorTable(i: AnchorInput): string[] {
   const cell = (v: string | undefined) => (v ? `\`${v}\`` : '— **thiếu**')
   return [
@@ -175,7 +136,6 @@ function anchorTable(i: AnchorInput): string[] {
 export function renderAnchor(v: AnchorVerdict, i: AnchorInput, commits: string[]): string {
   const lines = [HEADLINE[v], '', ...anchorTable(i), '', ...EXPLAIN[v]]
 
-  // E18: nửa neo cũng phải nói ra — phần có vẫn so, phần thiếu vẫn cảnh báo.
   if (i.anchorSha && !i.testAnchorSha) {
     lines.push('', '⚠️ Baseline có `source_sha` nhưng thiếu `test_sha` — không truy được cây test đã dùng.')
   }
@@ -217,11 +177,6 @@ interface GitResult {
   out: string
 }
 
-/**
- * `repo` là tham số chứ không phải `ROOT` cố định: cổng này chỉ đúng/sai theo
- * contract của git thật (object còn hay mất, quan hệ tổ tiên), nên test phải
- * dựng được repo + origin tạm để chạy, không mock lại git theo giả định.
- */
 function git(repo: string, ...args: string[]): GitResult {
   const r = spawnSync('git', args, { cwd: repo, encoding: 'utf8' })
   return { ok: r.status === 0, status: r.status, out: (r.stdout ?? '').trim() }
@@ -233,29 +188,13 @@ export interface Anchor {
   source_ref?: string
 }
 
-/**
- * Đọc `source_sha` / `test_sha` mà không validate phần số của baseline —
- * phần số là mốc tham chiếu, không phải cổng (`testing.md` §6), nên số hỏng
- * không được làm hỏng kết luận về neo. Nhưng file không parse được thì phải là
- * lỗi công cụ (exit 2), không được suy thành `no-anchor`.
- */
 const SHA_RE = /^[0-9a-f]{40}$/i
 
 export function readAnchor(raw: string, file: string): Anchor {
   const b = parseJsonObject(raw, `Không đọc được neo: ${file}`)
   const str = (k: string) => (typeof b[k] === 'string' && b[k] ? (b[k] as string) : undefined)
 
-  /**
-   * Đường đọc phải cùng ràng buộc với đường ghi (`normalizeSha` ở
-   * `coverage-gate.ts`). Baseline là file người sửa được, nên SHA viết tắt vào
-   * được file qua đường khác. Khi đó `cat-file -e` thành công
-   * (git resolve viết tắt) và `merge-base` cũng đúng ⇒ `exists: true`, nhưng phép so
-   * `anchorSha === headSha` là so chuỗi nên luôn false ⇒ verdict `behind` kèm
-   * "0 commit source sau neo": cảnh báo sai chỗ, không ai truy ra được vì sao.
-   *
-   * Không suy thành `no-anchor` — đó là "baseline cũ chưa có cơ chế neo", khác hẳn
-   * "neo có nhưng không dùng được". Đây là lỗi công cụ ⇒ exit 2.
-   */
+  // xem docs/architecture/code/tooling.md §1
   const sha = (k: 'source_sha' | 'test_sha') => {
     const v = str(k)
     if (v && !SHA_RE.test(v)) {
@@ -274,24 +213,15 @@ function summary(text: string): void {
   if (f) fs.appendFileSync(f, `${text}\n`)
 }
 
-/**
- * Object có tới được không — sau khi đã thử fetch một lượt.
- *
- * `actions/checkout` chỉ lấy đủ history của head ref, nên neo nằm ở dòng version
- * trước (vd `dev/1.1.3/main`) thì `cat-file` fail dù commit vẫn còn trên remote.
- * Kết luận `anchor-gone` mà không thử fetch là báo động giả ở mọi release
- * đầu version.
- */
+// xem docs/architecture/code/tooling.md §1
 function anchorExists(repo: string, sha: string): boolean {
   if (git(repo, 'cat-file', '-e', `${sha}^{commit}`).ok) return true
   git(repo, 'fetch', '--no-tags', '--quiet', 'origin', sha)
   return git(repo, 'cat-file', '-e', `${sha}^{commit}`).ok
 }
 
-/** Lỗi "cổng không đọc được dữ liệu" ⇒ exit 2, tách hẳn khỏi "cổng kết luận đỏ" (exit 1). */
 class ToolError extends Error {}
 
-/** Baseline có mặt và đọc được neo ra — thiếu file là exit 2, không phải "đạt". */
 function loadAnchor(repo: string, baseline: string): Anchor {
   const file = path.isAbsolute(baseline) ? baseline : path.join(repo, baseline)
   if (!fs.existsSync(file)) {
@@ -304,14 +234,6 @@ function loadAnchor(repo: string, baseline: string): Anchor {
   return readAnchor(fs.readFileSync(file, 'utf8'), baseline)
 }
 
-/**
- * Neo mất tích *và* remote không tới được là hai chuyện khác nhau: một cái là kết
- * luận của cổng (exit 1), một cái là công cụ không đọc được dữ liệu (exit 2).
- * Kết luận `anchor-gone` phải theo cái remote thấy được, không theo cái
- * workspace này tình cờ còn — nên chỉ kết luận khi đã hỏi được remote.
- * `ls-remote --exit-code` thoát 2 = remote tới được nhưng KHÔNG có ref nào
- * (remote rỗng ⇒ neo thật sự không còn), khác hẳn lỗi mạng/quyền.
- */
 function anchorReachable(repo: string, sha: string | undefined): boolean {
   if (!sha) return false
   if (anchorExists(repo, sha)) return true

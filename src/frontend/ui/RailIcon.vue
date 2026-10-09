@@ -23,13 +23,11 @@ withDefaults(
     stroke-linejoin="round"
     aria-hidden="true"
   >
-    <!-- Sidebar đang mở → thu gọn -->
     <template v-if="name === 'panelCollapse'">
       <rect x="2" y="2.5" width="12" height="11" rx="1" />
       <path d="M6 2.5v11" />
       <path d="M4 8H5" />
     </template>
-    <!-- Sidebar đang thu → mở rộng -->
     <template v-else-if="name === 'panelExpand'">
       <rect x="2" y="2.5" width="12" height="11" rx="1" />
       <path d="M6 2.5v11" />
@@ -90,7 +88,6 @@ withDefaults(
       <path d="M5 13.5V9.5M8 13.5V5.5M11 13.5V7.5" />
     </template>
     <template v-else-if="name === 'settings'">
-      <!-- Gear: vòng răng (dasharray tạo 8 răng) + lỗ tâm -->
       <circle cx="8" cy="8" r="5.4" fill="none" stroke-width="2.6" stroke-dasharray="1.9 2.24" />
       <circle cx="8" cy="8" r="2.2" />
     </template>

@@ -1,7 +1,3 @@
-/**
- * Persist domain bus events to `events.jsonl` when `logging.types.events` is on.
- * Part of observability (#195 read UI + #196 write/prefs).
- */
 import { on, type DashboardEvent } from '../events/eventBus.js'
 import { nowStamp } from '../lib/dateUtils.js'
 import { isLogTypeEnabled } from './loggingPrefsIo.js'

@@ -1,9 +1,3 @@
-/**
- * Pure builder for VueFlow artifact / knowledge nodes and data-flow edges.
- * Control-flow (step→step) stays in PipelineView — this module only returns
- * dashed data-flow edges so compose never double-counts.
- */
-
 export const NODE_SPACING = 200
 export const NODE_Y = 40
 export const ARTIFACT_Y_OFFSET = 100

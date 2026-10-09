@@ -19,7 +19,7 @@ export const sqliteLogDriver: LogDriver = {
         })
         .run()
     } catch {
-      /* swallow — append must never throw (AGENTS.md §4) */
+      /* swallow */
     }
   },
 }

@@ -1,10 +1,5 @@
 import { getApiToken } from '../lib/authToken.js'
 
-/**
- * FE HTTP client helpers (browser). Không import từ Node/server setup.
- * Server Hono dùng AbstractController / respond / types cùng thư mục này.
- */
-
 /** Query string helper — bỏ null/undefined/'' và encode value (`?project=`). */
 export function qs(params: Record<string, any> | null | undefined): string {
   const parts: string[] = []

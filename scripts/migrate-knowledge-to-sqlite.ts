@@ -1,9 +1,4 @@
 #!/usr/bin/env bun
-// One-off migration: copy `collections.yaml` (collection + tag alias) of every
-// registered project and of the global store into `dashboard.sqlite`.
-// Run manually: `bun run scripts/migrate-knowledge-to-sqlite.ts`.
-// Only reads the YAML files — they stay on disk as a backup.
-// Idempotent: re-running inserts nothing (UNIQUE(store_key, collection_id)).
 import { migrateKnowledgeToSqlite } from '../src/backend/db/migrateKnowledge.js'
 
 const results = await migrateKnowledgeToSqlite()

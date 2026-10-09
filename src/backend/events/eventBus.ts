@@ -1,12 +1,3 @@
-/**
- * In-process event bus — nền cho automation (schedule / webhook / HITL).
- * Sync publish; handlers must not throw (errors are swallowed + logged).
- *
- * State lives on `globalThis` so Vite dev (plugin graph) + `import(fileURL)`
- * feature loaders share one bus. Module-local Maps would split: subscriber
- * registers on copy A while jobQueue `emit` hits copy B → Events tab stays empty.
- */
-
 export type DashboardEventType =
   | 'job.queued'
   | 'job.started'
@@ -48,6 +39,7 @@ type BusState = {
   triggers: Map<string, TriggerRegistration>
 }
 
+// xem docs/architecture/code/backend.md §4
 const BUS_KEY = '__devTeamDashboardEventBus__'
 
 function busState(): BusState {
@@ -121,9 +113,7 @@ export function _resetEventBusForTest(): void {
 }
 
 /**
- * Registry cho trigger (schedule / event / webhook) — quan sát "trigger đang sống".
- * Runtime thật nằm ở feature automations: scheduler tick + event subscriber
- * đồng bộ rule đang bật vào đây qua `syncTriggerRegistry`.
+ * Loại trigger trong registry quan sát "trigger đang sống"; runtime nằm ở feature automations.
  */
 export type TriggerKind = 'schedule' | 'event' | 'webhook'
 

@@ -31,12 +31,7 @@ const emit = defineEmits<{ 'update:activeTabKey': [key: string] }>()
 const slots = useSlots()
 
 const hasLeft = computed(() => !!slots.left)
-/**
- * `--left-collapsed` wins over `hideMain`: with `left` shrunk to a rail there
- * would be nothing left to look at, so `main` comes back to carry the empty
- * state. Resolved here instead of in CSS source order, so the losing modifier
- * is never emitted at all.
- */
+// xem docs/architecture/code/frontend.md §7
 const hideMainEffective = computed(
   () => props.hideMain && hasLeft.value && !props.subSidebarCollapsed,
 )
@@ -143,10 +138,7 @@ function selectTab(key: string) {
 .c-screen-layout__body--no-left {
   grid-template-columns: 1fr;
 }
-/* `1fr 0`, not the single-column `1fr` of `--no-left`: `main` is always
-   rendered, so a one-track grid would wrap it onto a second row instead of
-   hiding it. Zero width + main's own overflow clips it, and the shared grid
-   transition still animates the collapse. */
+/* xem docs/architecture/code/frontend.md §7 */
 .c-screen-layout__body--no-main {
   grid-template-columns: 1fr 0;
 }

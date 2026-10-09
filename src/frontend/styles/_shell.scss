@@ -16,7 +16,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   overflow: hidden;
 }
 
-/* Sidebar */
 .sidebar {
   width: 280px;
   flex-shrink: 0;
@@ -138,10 +137,7 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   justify-content: center;
   z-index: 1000;
 }
-/* Hợp đồng: dialog dùng .modal PHẢI có đúng một .modal-body bọc phần nội dung.
-   .modal không khai báo overflow — nó dựa vào .modal-body (flex: 1; min-height: 0;
-   overflow-y: auto) để hút phần cao quá max-height. Đặt nội dung thẳng vào .modal
-   thì khi vượt 88vh, hàng nút sẽ bị vẽ ra ngoài border dưới. */
+// xem docs/architecture/code/frontend.md §4
 .modal {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -161,9 +157,7 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   font-size: 15px;
   flex-shrink: 0;
 }
-/* 🚫 KHÔNG thêm `position: relative` vào đây để làm chỗ neo cho
-   `CLoadingOverlay`: `.modal-body` là vùng CUỘN, xem `.c-loading-host` bên
-   dưới để biết vì sao neo vào scroller là sai. */
+// xem docs/architecture/code/frontend.md §1
 .modal-body {
   flex: 1;
   min-height: 0;
@@ -171,20 +165,7 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   overflow-x: hidden;
 }
 
-/* Chỗ neo của `CLoadingOverlay`: một lớp bọc KHÔNG cuộn, nằm NGOÀI scroller.
-
-   Vì sao không neo thẳng vào `.modal-body`: containing block của một phần tử
-   `position: absolute` là PADDING BOX của tổ tiên định vị gần nhất, và padding
-   box của một scroll container nằm trong hệ toạ độ ĐÃ CUỘN. Nên `inset: 0`
-   cho ra đúng kích thước khung nhìn nhưng neo vào GỐC NỘI DUNG: `scrollTop = 0`
-   thì phủ đúng, người dùng cuộn xuống rồi bấm action thì overlay đã trôi lên
-   trên khung nhìn — không scrim, không icon xoay, không chặn con trỏ. Muốn ghim
-   vào khung nhìn của scroller thì phải `position: sticky`, hoặc — như ở đây —
-   đặt chỗ neo ra một hộp không cuộn.
-
-   Dùng cho mọi vùng bận mà phần nội dung bên trong tự cuộn. Vùng KHÔNG cuộn
-   (`.qa-panel`, `.project-bar`, `.task-entry`…) không cần lớp này, chỉ cần
-   `position: relative` tại chỗ. */
+// xem docs/architecture/code/frontend.md §1
 .c-loading-host {
   position: relative;
   display: flex;
@@ -205,8 +186,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
 
-/* Chân dialog có đường kẻ ngăn với .modal-body — dùng chung cho mọi dialog
-   thay vì mỗi feature tự khai lại (agent-editor, knowledge, automations). */
 .modal-foot {
   display: flex;
   gap: 8px;
@@ -216,14 +195,9 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
-/* Action phá huỷ tách hẳn về mép trái, không đứng cạnh CTA xác nhận. */
 .modal-foot > .btn-danger { margin-right: auto; }
 
-/* Animation xoay dùng chung. `Icon.vue` cố ý chỉ vẽ hình, caller sở hữu hiệu
-   ứng — xem comment ở nhánh `spinner` của Icon.vue. Lên tầng shell vì có ≥2
-   component dùng: `CLoadingOverlay` (frontend/ui) và `ChatWindow` (nl-chat).
-   Khai GLOBAL ở đây là an toàn cho `<style scoped>`: compiler-sfc chỉ rewrite
-   tên keyframes được khai trong CHÍNH block đó, tên lạ giữ nguyên. */
+// xem docs/architecture/code/frontend.md §5
 .c-spin {
   animation: c-spin 0.9s linear infinite;
 }
@@ -268,7 +242,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .btn-primary:hover:not(:disabled) { opacity: 0.85; }
 .btn-primary:disabled { opacity: 0.4; cursor: default; }
 
-/* Icon action button — borderless default, scale on hover (see docs/agent-rules/ui-design-guideline.md) */
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -295,7 +268,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   cursor: default;
 }
 
-/* Inline row actions inside lists — no hover scale (overflow/scrollbar). */
 .icon-btn.icon-btn-inline {
   width: 24px;
   height: 24px;
@@ -312,8 +284,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   flex-shrink: 0;
 }
 
-/* Text quick-action trigger (docs/agent-rules/ui-design-guideline.md: label bắt buộc). Shared by
-   Monitor ArtifactPanel + QuickActionMenuDropdown — keep global with .icon-btn. */
 .btn-quick-action {
   display: inline-flex;
   align-items: center;
@@ -336,7 +306,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 }
 .btn-quick-action:disabled { opacity: 0.45; cursor: default; }
 
-/* ── Mode toggle (sidebar) ──────────────────────────────────────────────── */
 .mode-toggle {
   display: flex;
   flex-direction: column;
@@ -367,7 +336,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .mode-btn:hover:not(.active) { border-color: var(--accent); color: var(--text); }
 
-/* ── Extra button sizes ─────────────────────────────────────────────────── */
 .btn-sm { padding: 4px 10px; font-size: 12px; }
 .btn-xs { padding: 2px 8px; font-size: 11px; }
 .btn-danger {
@@ -384,9 +352,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 
 .muted { color: var(--muted); font-size: 12px; }
 
-/* Main content area (all modes).
-   Mode editor (monitor/pipeline/…) để con tự cuộn — tránh 2 scrollbar
-   (viewport + .monitor-content). Mode thường giữ overflow-y trên .main. */
 .main {
   flex: 1;
   min-height: 0;
@@ -404,8 +369,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   min-height: 0;
 }
 
-/* ── Form control dùng chung (label / input / textarea) ─────────────────────
-   Dùng ở nhiều feature — giữ ở tầng shell, không đặt trong styles/ của feature. */
 .cfg-label {
   display: flex;
   flex-direction: column;
@@ -437,7 +400,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   resize: vertical;
 }
 
-/* ── Chip + hàng tag ────────────────────────────────────────────────────── */
 .chip {
   font-size: 11px; color: var(--muted); background: var(--panel);
   border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px;
@@ -448,10 +410,6 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .chip-rm:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 .chip-skill { background: rgba(var(--accent-rgb),0.12); border: 1px solid rgba(var(--accent-rgb),0.3); color: var(--accent); }
 .chip-xs { font-size: 9px; padding: 1px 5px; }
-/* Chip tag knowledge — màu đọc từ biến inline `--tag-c` / `--tag-c-rgb` mà
-   component set theo token trong DB. Nằm ở tầng chung chứ không trong feature:
-   chip tag hiện ở cả side menu, dialog collection và dialog tag.
-   Không khai token nào → rơi về `--tag-slate`, không bao giờ ra chip mất màu. */
 .chip-tag {
   color: var(--tag-c, var(--tag-slate));
   background: rgba(var(--tag-c-rgb, var(--tag-slate-rgb)), 0.12);
@@ -460,13 +418,10 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 .tag-row { display: flex; flex-wrap: wrap; gap: 4px; min-height: 20px; }
 .tag-input-row { display: flex; gap: 5px; align-items: center; }
 
-/* ── Hàng nút + thông báo ok của wizard/panel ───────────────────────────── */
 .nl-actions { display: flex; gap: 8px; margin-top: 10px; }
 .ok-msg { color: var(--ok); font-size: 12px; }
 
-/* ── Mermaid zoom/fullscreen ────────────────────────────────────────────────
-   Element do `core/composables/useMermaidControls.ts` tạo lúc chạy nên không có
-   scope-id — bắt buộc giữ global, không inline được vào SFC. */
+// xem docs/architecture/code/frontend.md §5
 .mermaid-wrap {
   position: relative;
   overflow: auto;
@@ -513,8 +468,7 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 
 .save-msg { font-size: 12px; color: var(--done); }
 
-/* ── VueFlow canvas (monitor PipelineView + pipeline-editor) ────────────────
-   `.vue-flow__*` do thư viện sinh lúc chạy nên không có scope-id — giữ global. */
+// xem docs/architecture/code/frontend.md §5
 .vflow-container {
   height: 280px;
   background: var(--panel);

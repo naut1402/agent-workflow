@@ -14,12 +14,7 @@ async function fetchTransport(): Promise<DashboardTransport> {
   }
 }
 
-/**
- * Cờ transport (env Docker `DEV_TEAM_DASHBOARD_TRANSPORT`, lộ qua
- * `/api/security-config`) — cached cho cả phiên trang (module-level singleton),
- * nên đổi env giữa lúc phiên đang mở chỉ áp dụng sau khi tải lại trang. Fetch
- * lỗi / field thiếu (client cache cũ) → mặc định 'sse', khớp default backend.
- */
+/** Cờ transport lấy từ `/api/security-config`, cache cho cả phiên trang; lỗi hoặc thiếu field → `'sse'`. */
 export function ensureDashboardTransport(): Promise<DashboardTransport> {
   if (cached) return Promise.resolve(cached)
   if (!inflight) {

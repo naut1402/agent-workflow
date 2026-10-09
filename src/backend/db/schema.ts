@@ -1,14 +1,8 @@
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 /**
- * Drizzle schema — kept SQLite/Postgres-portable (no SQLite-only feature) so a
- * later switch to Postgres only swaps the driver.
- *
- * `payload` holds the full JSON-serialised `LogEntry` (schema.ts in core/log);
- * per-type fields stay in there so they never force a wide, mostly-NULL table.
- * `type`/`ts`/`project_id` are lifted out and indexed because `readLogs()`
- * filters and sorts on them; `level`/`trace_id` are spare columns for filters
- * that do not exist yet, so nothing reads them.
+ * Log entries. `payload` holds the full JSON-serialised `LogEntry`; `type` / `ts` /
+ * `project_id` are lifted out and indexed for `readLogs()`.
  */
 export const logEntries = sqliteTable(
   'log_entries',
@@ -28,22 +22,8 @@ export const logEntries = sqliteTable(
 )
 
 /**
- * Collection + tag của knowledge — rời sidecar `collections.yaml` về đây để
- * một collection/tag rỗng cũng tồn tại được (điều kiện để "tạo tag + chọn
- * màu" có nghĩa), và để một đường ghi duy nhất.
- *
- * `store_key` là đường dẫn tuyệt đối của store base (`<root>/knowledge`
- * cho project+system, `globalKnowledgeRoot()` cho global) — đúng thứ đang mang
- * nghĩa phân vùng hôm nay: `collections.yaml` nằm ở đâu thì hàng thuộc về đó.
- * Không dùng `project_id` như `log_entries`: nó `null` khi request không
- * truyền `?project=`, nên cùng một thư mục sinh ra hai khoá khác nhau — và
- * `UNIQUE` với cột NULL trong SQLite không ràng buộc được gì, khiến lệnh
- * migrate nhân đôi dữ liệu mỗi lần chạy lại.
- *
- * `tags` / `entry_ids` là cột TEXT chứa JSON, đúng tiền lệ `log_entries.payload`:
- * thành viên collection luôn resolve trong bộ nhớ lúc đọc
- * (`resolveCollectionEntries`), repo không có truy vấn "collection nào chứa
- * entry X" nên chuẩn hoá thành bảng liên kết chỉ thêm join mà không thêm gì.
+ * Collection của knowledge, phân vùng theo `store_key` — đường dẫn tuyệt đối của store base.
+ * xem docs/architecture/code/backend.md §1
  */
 export const knowledgeCollections = sqliteTable(
   'knowledge_collections',
@@ -66,11 +46,7 @@ export const knowledgeCollections = sqliteTable(
   (table) => [uniqueIndex('uq_knowledge_collections').on(table.storeKey, table.collectionId)],
 )
 
-/**
- * Metadata của tag (màu, mô tả). Gán tag cho entry vẫn ở front-matter —
- * bảng này cố ý không có cột nào trỏ tới entry, nên bundle gửi cho agent chạy
- * ngoài repo không đổi một byte.
- */
+/** Metadata của tag (màu, mô tả); gán tag cho entry vẫn ở front-matter, bảng không trỏ tới entry. */
 export const knowledgeTags = sqliteTable(
   'knowledge_tags',
   {

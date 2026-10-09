@@ -54,15 +54,9 @@ const { state: sidebarCollapsed, toggle: toggleSidebar } = useLocalToggle(false)
 const sidebarRef = ref<HTMLElement | null>(null)
 const { settings } = useAppSettings()
 
-// Sub-sidebar của từng mode (monitor/editor) — state ở shell vì cú click toggle
-// nằm trên `.mode-btn` dưới đây, còn panel chỉ mount khi mode đang active.
 const allModes = modeRegistry.listModes()
 const subSidebar = useSubSidebarCollapse(allModes)
 
-/**
- * 3 trạng thái của cú click mode icon: mode chưa chọn → chọn mode; mode đang
- * chọn + có sub-sidebar → toggle sub-sidebar; còn lại → no-op.
- */
 function onModeClick(m: ModeEntry) {
   if (mode.value !== m.key) {
     setMode(m.key)
@@ -71,17 +65,11 @@ function onModeClick(m: ModeEntry) {
   subSidebar.toggle(m.key)
 }
 
-/**
- * `aria-expanded` chỉ có nghĩa khi nút đang thật sự điều khiển một vùng đóng/mở:
- * mode đang active + có sub-sidebar. Ngoài ra trả `undefined` để Vue bỏ hẳn
- * attribute, không tuyên bố disclosure không tồn tại.
- */
 function modeBtnExpanded(m: ModeEntry): boolean | undefined {
   if (mode.value !== m.key || !subSidebar.has(m.key)) return undefined
   return !subSidebar.isCollapsed(m.key)
 }
 
-/** Mode đang active + có sub-sidebar thì tooltip gợi ý luôn hành động toggle. */
 function modeBtnTitle(m: ModeEntry): string {
   const label = t(m.titleKey ?? m.labelKey)
   if (mode.value !== m.key || !subSidebar.has(m.key)) return label
@@ -91,7 +79,6 @@ function modeBtnTitle(m: ModeEntry): string {
   return `${label} — ${action}`
 }
 
-// Ignore teleported modals so clicks inside them do not collapse the rail.
 onClickOutside(
   sidebarRef,
   () => {
@@ -100,23 +87,16 @@ onClickOutside(
   { ignore: ['.modal-backdrop'] },
 )
 
-// Central mode switch, so nested panels can navigate without bubbling a
-// custom event through every intermediate component.
 provide(navigateToModeKey, setMode)
 
-// Cùng điều kiện với `setMode`, nhưng hỏi được trước khi bấm — để call site disable nút.
 provide(canNavigateToModeKey, isModeReachable)
 
-// `selectedProjectId` (null = default project) drives which project's tasks
-// the monitor view polls; persisted to localStorage.
 const projects = ref([])
 const defaultProjectId = ref(null)
 const selectedProjectId = ref(loadSelectedProject())
 const openArtifact = ref(null)
 const createTaskOpen = ref(false)
 
-// Task list (root/tasks/selectedId + connection state) lives in a composable,
-// backed by SSE, so the shell stays thin and the logic is unit-testable.
 const { root, tasks, selectedId, error, lastUpdated, connected, poll, start, stop } =
   useTaskPolling(() => selectedProjectId.value)
 
@@ -124,9 +104,6 @@ const selected = computed(
   () => tasks.value.find((t) => t.task_id === selectedId.value) || null,
 )
 
-// HITL-pending / QA-ready notifications, derived from the same polled `tasks`
-// list — flags surface via `.dev-state/<id>.json` through `/api/tasks`, no
-// separate transport needed.
 const { history, unreadCount, markRead, markAllRead } = useNotifications(tasks)
 
 const {
@@ -177,20 +154,17 @@ async function loadProjects() {
     const data = await fetchProjects()
     projects.value = data.projects || []
     defaultProjectId.value = data.defaultId || null
-    // Drop a stale selection (e.g. project removed in another tab).
     if (selectedProjectId.value && !projects.value.some((p) => p.id === selectedProjectId.value)) {
       selectedProjectId.value = null
     }
   } catch {
-    // Registry endpoint may be absent in the legacy single-project dev mode —
-    // ignore and fall back to the default project.
     projects.value = []
   }
 }
 
 function onSelectProject(id) {
   selectedProjectId.value = id
-  selectedId.value = null // reset task selection when switching project
+  selectedId.value = null
   poll()
 }
 
@@ -210,7 +184,6 @@ function onUpdateTaskId(taskId: string) {
   editorTaskId.value = taskId
 }
 
-/** Exposed so SettingsDialog can refresh the sidebar after an autoscan run. */
 provide(reloadProjectsKey, loadProjects)
 
 let autoscanTimer: ReturnType<typeof setInterval> | null = null
@@ -223,7 +196,7 @@ async function tickAutoscan() {
     await runAutoscan()
     await loadProjects()
   } catch {
-    /* ignore — autoscan must not break the shell */
+    /* ignore */
   }
 }
 
@@ -315,8 +288,6 @@ async function onTaskCreated({ taskId }: { taskId: string; jobId: string | null 
   selectedId.value = taskId
 }
 
-// State/hàm shell sở hữu, mode đọc/gọi qua `bindings(ctx)` của chính feature —
-// App.vue không còn biết mode nào cần props/listener gì (xem registerMode.ts).
 const shellContext = computed<ShellContext>(() => ({
   projects: projects.value,
   tasks: tasks.value,
@@ -352,37 +323,23 @@ const modes = computed(() =>
   ),
 )
 
-/** `modes` đã AND `canAccessMode` với `visible(ctx)` — một điều kiện duy nhất cho cả điều hướng lẫn trạng thái nút. */
 function isModeReachable(key: string): boolean {
   return modes.value.some((m) => m.key === key)
 }
 
-/**
- * Lối vào mode duy nhất — sidebar và `navigateToMode` đều đi qua đây; repo không
- * có router nên đây là chỗ tương đương route guard.
- */
 function setMode(key: string): void {
   if (!isModeReachable(key)) return
   mode.value = key
 }
 
-/**
- * Watch chuỗi key, không watch thẳng `modes`: shellContext dựng object mới mỗi
- * nhịp poll 1500ms nên `modes` đổi identity liên tục dù nội dung không đổi.
- */
 const reachableModeKeys = computed(() => modes.value.map((m) => m.key).join('|'))
 
-// Ghi thẳng `mode.value` (không che ở template) để `watch(mode)` bên dưới vẫn
-// stop/start polling khi mode đang mở bị tắt.
 watch(reachableModeKeys, () => {
   if (!modes.value.some((m) => m.key === mode.value)) setMode(FALLBACK_MODE)
 })
 const activeMode = computed(() => modeRegistry.getMode(mode.value))
-/** Shell context the chat window shows in its info popover — null hides the row. */
 const chatShellModeLabel = computed(() => (activeMode.value ? t(activeMode.value.labelKey) : null))
 
-// Stream mở cố định theo project lúc `start()` — đổi project phải đóng/mở lại
-// stream, nếu không sidebar tiếp tục hiện task của project cũ.
 watch(selectedProjectId, () => {
   stop()
   start()

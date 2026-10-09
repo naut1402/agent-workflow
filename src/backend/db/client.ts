@@ -6,15 +6,6 @@ import { dirnameFromImportMeta, resolvePath } from '../lib/fileHelper.js'
 import { registryHome } from '../registry.js'
 import * as schema from './schema.js'
 
-/**
- * Shared `dashboard.sqlite` connection — one file for every subsystem that moves
- * off file-based storage. WAL lets readers run alongside the single writer.
- *
- * Bun-only modules are imported dynamically because `vite build` loads
- * `vite.config.ts` under Node, which cannot resolve the `bun:` scheme — static
- * imports here break `bun run build`.
- */
-
 export type Db = BunSQLiteDatabase<typeof schema>
 
 let cached: { db: Db; sqlite: Database } | null = null
@@ -29,6 +20,7 @@ function migrationsFolder(): string {
   return resolvePath(dirnameFromImportMeta(import.meta.url), 'migrations')
 }
 
+// xem docs/agent-rules/coding-guideline.md §1
 async function openDb(): Promise<Db> {
   const { Database: BunDatabase } = await import('bun:sqlite')
   const { drizzle } = await import('drizzle-orm/bun-sqlite')
@@ -49,10 +41,7 @@ export function getDb(): Promise<Db> {
   if (!opening) {
     opening = openDb()
       .catch((err: unknown) => {
-        // Two consumers, two failure modes — name both: the log path swallows
-        // failures to stay non-throwing (an unusable backend reads exactly like
-        // "no logs yet"), while knowledge surfaces `KnowledgeDbError` as a 500.
-        // A message about logs alone sends knowledge debugging the wrong way.
+        // xem docs/architecture/README.md §4.4
         if (!warnedUnavailable) {
           warnedUnavailable = true
           console.error(

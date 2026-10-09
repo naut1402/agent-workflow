@@ -1,9 +1,4 @@
 #!/usr/bin/env bun
-/**
- * CI gate: fail if docs/todo exists at all.
- * When deferred debt is cleared, the docs/todo directory must be removed entirely.
- * Invoked by workflow Todo debt (PR targeting version main) via `bun run check:todo`.
- */
 import fs from 'node:fs'
 import path from 'node:path'
 

@@ -1,12 +1,4 @@
 #!/usr/bin/env bun
-/**
- * `bun run test` — chạy đúng những path mà runner bun sở hữu, đọc từ
- * `tests/runners.json` (xem `lib/runners.ts`). Trước đây danh sách này là một
- * chuỗi dài trong script `test` của `package.json`; chuyển sang file dữ liệu để
- * nó đi theo cây test thay vì đi theo dòng source.
- *
- * Đối số truyền thêm được chuyển thẳng cho `bun test` (vd `--coverage`).
- */
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import process from 'node:process'

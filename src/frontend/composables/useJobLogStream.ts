@@ -43,7 +43,6 @@ export function useJobLogStream(jobId: Ref<string | null>, opts: JobLogStreamOpt
     error.value = null
   }
 
-  /** Reducer shared by the poll loop (REST) and the SSE branch. */
   function applyLogDelta(data: {
     reset?: boolean
     text?: string
@@ -97,7 +96,6 @@ export function useJobLogStream(jobId: Ref<string | null>, opts: JobLogStreamOpt
         }
         if (!again) break
         if (!stopRequested && !(opts.active && !opts.active.value)) {
-          // Immediate follow-up when the server capped the chunk.
           continue
         }
       }

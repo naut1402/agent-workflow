@@ -14,13 +14,8 @@ export type LogMigrationResult = {
 }
 
 /**
- * One-off migration: copy existing JSONL log files into `log_entries`.
- * Read-only against the source files — they stay as a backup. Not run
- * automatically; invoked manually via `scripts/migrate-logs-to-sqlite.ts`.
- *
- * Not idempotent: running twice inserts duplicate rows (no unique constraint —
- * `ts` can collide across entries). Truncate `log_entries` before re-running
- * if a clean re-migration is needed.
+ * One-off migration: copy JSONL log files into `log_entries`; read-only against the sources.
+ * Not idempotent — running twice inserts duplicate rows.
  */
 export async function migrateLogsToSqlite(): Promise<LogMigrationResult[]> {
   const db = await getDb()
@@ -51,7 +46,6 @@ export async function migrateLogsToSqlite(): Promise<LogMigrationResult[]> {
         payload: JSON.stringify(entry),
       })
     }
-    // One transaction per source file: a crash mid-file leaves no half-migrated type behind.
     db.transaction((tx) => {
       for (const row of rows) tx.insert(logEntries).values(row).run()
     })

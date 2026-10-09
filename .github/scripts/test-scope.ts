@@ -1,25 +1,4 @@
 #!/usr/bin/env bun
-/**
- * Chạy đúng những suite unit test dính tới thay đổi hiện tại — vòng lặp local.
- * CI vẫn chạy full (`bun run test` + `bun run test:fe`), nên script này được
- * phép chọn hẹp; đổi lại nó phải chọn **đủ**: bỏ sót một test là bug lọt tới CI.
- *
- * Cách chọn: dựng đồ thị import của `src/` + `mcp/` + `tests/` rồi lấy mọi test
- * file *đi tới được* file đã đổi (transitive, nên sửa một helper sâu vẫn kéo theo
- * test của module gọi nó). Không đoán theo tên thư mục — tên trùng nhau giữa
- * `tests/src/server/<x>` và `src/features/<x>` chỉ đúng một phần, và đồ thị thì
- * luôn đúng.
- *
- * Runner nào chạy file nào: đọc `tests/runners.json` (xem `lib/runners.ts`) —
- * path list của `bun test`, phần còn lại dưới `tests/src/**` là vitest. Một
- * nguồn sự thật, và nó sống ở **dòng test** nên thêm/bớt thư mục test không
- * phải sửa file nào ở dòng source.
- *
- *   bun run test:scope                  # thay đổi chưa commit (staged + unstaged + untracked)
- *   bun run test:scope --base origin/dev/1.1.1/main   # + các commit so với base
- *   bun run test:scope src/features/automations       # ép phạm vi theo path
- *   bun run test:scope --list           # chỉ in ra sẽ chạy gì, không chạy
- */
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -37,7 +16,6 @@ export const GLOBAL_FILES = [
   'tsconfig.json',
   'playwright.config.ts',
   'eslint.config.js',
-  // Đổi phân runner ⇒ mọi suite có thể đổi chủ, không suy được phạm vi hẹp.
   RUNNERS_FILE,
 ]
 
@@ -68,7 +46,6 @@ function git(...args: string[]): string {
   return r.status === 0 ? r.stdout : ''
 }
 
-/** File đã đổi: working tree (staged + unstaged + untracked) và, nếu có base, cả commit trên nhánh. */
 function changedFiles(base: string | null): string[] {
   const out = new Set<string>()
   const add = (raw: string) => {
@@ -80,7 +57,6 @@ function changedFiles(base: string | null): string[] {
   add(git('diff', '--name-only', 'HEAD'))
   add(git('ls-files', '--others', '--exclude-standard'))
   if (base) add(git('diff', '--name-only', `${base}...HEAD`))
-  // File đã xoá thì không còn gì để map — test của nó (nếu có) cũng đã xoá cùng.
   return [...out].filter((f) => fs.existsSync(path.join(ROOT, f)))
 }
 
@@ -112,7 +88,6 @@ export function resolveSpecifier(fromFile: string, spec: string): string | null 
   else if (spec.startsWith('@/')) base = path.join(ROOT, 'src', spec.slice(2))
   else return null
 
-  // Repo import kiểu ESM (`./x.js` trỏ tới `x.ts`) — thử các biến thể theo thứ tự.
   const candidates = [
     base,
     ...(base.endsWith('.js') ? [base.replace(/\.js$/, '.ts'), base.replace(/\.js$/, '.vue')] : []),
@@ -127,18 +102,12 @@ export function resolveSpecifier(fromFile: string, spec: string): string | null 
   return null
 }
 
-/**
- * Cạnh không có trong text: `apiServer.ts` nạp `features/<name>/api.ts` bằng
- * `loadModulesUnder` (quét thư mục lúc chạy), nên regex import không thấy gì —
- * mà mọi route test đều dựng app qua đó. Thiếu cạnh này thì sửa controller/api
- * của một feature sẽ *không* kéo theo route test của chính nó.
- */
+/** Cạnh import không thấy trong text: `apiServer.ts` nạp mọi `features/<name>/api.ts` lúc chạy. */
 export function virtualEdges(files: string[]): Map<string, string[]> {
   const featureApis = files.filter((f) => /^src\/features\/[^/]+\/api\.ts$/.test(f))
   return new Map([['src/backend/apiServer.ts', featureApis]])
 }
 
-/** file → các file trong repo mà nó import. */
 function buildImportGraph(files: string[]): Map<string, string[]> {
   const graph = new Map<string, string[]>()
   const extra = virtualEdges(files)
@@ -176,11 +145,6 @@ export function reaches(start: string, graph: Map<string, string[]>, targets: Se
   return false
 }
 
-/**
- * Path list mà `bun test` sở hữu — lấy từ `tests/runners.json`, cùng nguồn với
- * `run-bun-tests.ts`. Thiếu file ⇒ cây test chưa ghép, và đó là lỗi phải nói ra
- * chứ không phải "không có test nào".
- */
 function bunOwnedPrefixes(): string[] {
   return readRunners(ROOT).bunTest
 }
@@ -189,11 +153,7 @@ export function isUnder(file: string, prefixes: string[]): boolean {
   return prefixes.some((p) => file === p || file.startsWith(`${p}/`))
 }
 
-/**
- * Suite = thư mục gom test. Feature cần thêm một tầng (`business` chạy bun còn
- * `components` chạy vitest — cùng feature, khác runner), phần còn lại gom ở
- * tầng khu vực.
- */
+/** Suite = thư mục gom test; với feature lấy thêm một tầng (`business`, `components`, …). */
 export function suiteOf(testFile: string): string {
   const seg = testFile.split('/')
   if (seg[1] === 'mcp' || seg.length <= 3) return seg.slice(0, -1).join('/')
@@ -211,12 +171,6 @@ export function areaOf(sourceFile: string): string | null {
   return seg.slice(1, 3).join('/')
 }
 
-/**
- * Phần mở đầu của `tests/CATALOG.md`. Nằm ở đây chứ không nằm trong file: lệnh
- * sinh lại được tài liệu hoá là `--catalog > tests/CATALOG.md`, nên header nào
- * chỉ sống trong file sẽ bị chính lệnh đó xoá ở lần chạy thứ hai. Cùng khuôn với
- * `HISTORY_HEADER` của `coverage-gate.ts`.
- */
 const CATALOG_HEADER = [
   '# Danh mục suite test',
   '',
@@ -239,7 +193,6 @@ const CATALOG_HEADER = [
   '',
 ]
 
-/** Bảng tra suite — ghi vào `tests/CATALOG.md`, sinh lại khi thêm thư mục test mới. */
 function printCatalog(testFiles: string[], graph: Map<string, string[]>, bunPrefixes: string[]): void {
   const suites = new Map<string, string[]>()
   for (const t of testFiles) {
@@ -252,13 +205,7 @@ function printCatalog(testFiles: string[], graph: Map<string, string[]>, bunPref
   console.log('|---|---|---|---|---|')
   for (const suite of [...suites.keys()].sort()) {
     const files = suites.get(suite)!
-    // Mọi file phải thuộc bunPrefixes mới tính suite là bun — dùng files[0] (thứ
-    // tự tới từ fs.readdirSync, không đảm bảo ổn định giữa các máy/filesystem)
-    // làm suite lật runner ngẫu nhiên khi thư mục trộn file bun + vitest (vd
-    // `tests/src/backend/lib`, chỉ `fileHelper.test.ts` opt-in bun).
     const bun = files.every((f) => isUnder(f, bunPrefixes))
-    // Chỉ import trực tiếp: đủ để biết suite này "của" module nào, không lôi cả
-    // closure (mọi suite đều chạm core/lib nên closure sẽ nhiễu hết bảng).
     const areas = new Map<string, number>()
     for (const f of files) {
       for (const dep of graph.get(f) ?? []) {
@@ -271,8 +218,6 @@ function printCatalog(testFiles: string[], graph: Map<string, string[]>, bunPref
       .slice(0, 3)
       .map(([a]) => `\`${a}\``)
       .join(', ')
-    // Suite còn có suite con bên dưới (vd `tests/src/server`) — trỏ thẳng thư mục
-    // sẽ kéo cả cây con, nên dùng glob để lệnh khớp đúng số file của dòng này.
     const hasChildSuite = [...suites.keys()].some((k) => k !== suite && k.startsWith(`${suite}/`))
     const target = hasChildSuite ? `${suite}/*.test.ts` : suite
     const cmd = bun ? `bun test ${target}` : `npx vitest run ${target}`
@@ -280,11 +225,7 @@ function printCatalog(testFiles: string[], graph: Map<string, string[]>, bunPref
   }
 }
 
-/**
- * Chọn test file cho một tập file đã đổi, tách sẵn theo runner. Hàm thuần —
- * đây là quyết định quan trọng nhất của script nên phải test trực tiếp được,
- * không đi vòng qua git/child_process.
- */
+/** Chọn test file cho một tập file đã đổi, tách sẵn theo runner. */
 export function selectTests(
   testFiles: string[],
   graph: Map<string, string[]>,
@@ -309,7 +250,6 @@ export function expandTargets(changed: string[], listDir: (abs: string) => strin
   return targets
 }
 
-/** Quét file + dựng đồ thị — dùng chung cho cả chế độ chạy và `--catalog`. */
 function scanRepo(): { graph: Map<string, string[]>; testFiles: string[] } {
   const allFiles = SOURCE_DIRS.flatMap((d) => walk(path.join(ROOT, d)))
   return {
@@ -376,9 +316,6 @@ function main(): number {
   return code
 }
 
-// Chạy như CLI thì thoát theo mã lỗi; import từ test thì chỉ lấy hàm, không chạy gì.
-// Lỗi đọc phân runner (chưa overlay cây test) phải ra thông điệp đọc được và
-// **mã lỗi khác 0** — im lặng trả 0 ở đây là đúng cái bẫy "0 test = đã xanh".
 if (import.meta.main) {
   try {
     process.exit(main())

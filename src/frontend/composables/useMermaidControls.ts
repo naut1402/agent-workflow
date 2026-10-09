@@ -1,8 +1,4 @@
-// Thao tác DOM thuần để gắn control zoom + fullscreen cho các node `.mermaid`
-// sau khi renderMermaid() vẽ xong. Cố ý KHÔNG chạm vào attribute mà
-// renderMermaid() dựa vào (`data-mermaid-src`, `data-mermaid-theme`,
-// `data-processed`) — chỉ bọc thêm phần tử xung quanh — để giữ nguyên cơ chế
-// chống-flicker khi poll 1500ms (xem shared/markdown.ts).
+// xem docs/architecture/code/frontend.md §2
 export interface MermaidControlsOptions {
   onToggleFullscreen: (wrapEl: HTMLElement) => void
 }

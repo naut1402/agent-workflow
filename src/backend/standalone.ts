@@ -1,8 +1,4 @@
 #!/usr/bin/env bun
-// Standalone dev-team-dashboard server (bun src/backend/standalone.ts) — a
-// neutral HTTP server not tied to any single `.dev-team-agent/` workspace.
-// Binds 127.0.0.1 only; MVP does not expose to the network.
-
 import http from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import fs from 'node:fs'
@@ -40,7 +36,6 @@ function contentType(filePath: string): string {
   return CONTENT_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream'
 }
 
-// Resolve a request pathname to a file inside distDir, blocking traversal.
 function resolveStatic(pathname: string): string | null {
   const clean = decodeURIComponent(pathname.split('?')[0])
   const rel = clean === '/' ? 'index.html' : clean.replace(/^\/+/, '')
@@ -53,7 +48,6 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
   const url = new URL(req.url || '/', 'http://localhost')
   let target = resolveStatic(url.pathname)
 
-  // SPA fallback: unknown non-asset path → index.html (so client routing works).
   if (target) {
     try {
       const stat = await fsp.stat(target)
@@ -78,7 +72,6 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
 }
 
 function main(): void {
-  // Seed default project from DEV_TEAM_ROOT when the registry is empty.
   if (process.env.DEV_TEAM_ROOT) {
     try {
       const seeded = seedDefault(path.resolve(process.env.DEV_TEAM_ROOT))
@@ -108,13 +101,7 @@ function main(): void {
   })
 
   server.listen(PORT, HOST, () => {
-    // Cho `claude-code-cli.ts` biết base URL gọi ngược vào chính server này
-    // (route MCP orchestrator) — spawn con kế thừa qua `buildChildEnv` (spread
-    // `process.env`) sẵn có, không cần plumbing thêm. Luôn `127.0.0.1`, KHÔNG
-    // dùng `HOST` cấu hình được: child process gọi ngược luôn nằm trên cùng máy
-    // bất kể server bind ra interface nào cho client bên ngoài (vd `0.0.0.0`
-    // không phải một địa chỉ đích hợp lệ để tự kết nối) — cùng cách `devTeamApi.ts`
-    // (transport Vite dev) đã xử lý cho cùng nhu cầu.
+    // xem docs/architecture/code/backend.md §6
     process.env.DEV_TEAM_SELF_BASE_URL = `http://127.0.0.1:${PORT}`
     const { projects } = list()
     if (!fs.existsSync(distDir)) {

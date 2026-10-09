@@ -7,10 +7,8 @@ import { useAppSettings } from './useAppSettings'
 import { setI18nLocale as setI18nLocaleFallback } from '../plugins/i18n'
 
 /**
- * Reactive UI-locale preference backed by the shared app-settings store
- * (persisted to localStorage, same as theme). Switching updates both the
- * persisted preference and the live vue-i18n locale
- * (`getCurrentInstance()!.appContext.config.globalProperties.$setI18nLocale`).
+ * Reactive UI-locale preference backed by app settings (localStorage); switching updates
+ * both the stored preference and the live vue-i18n locale.
  */
 export function useLocale(): {
   locale: ComputedRef<LocalePreference>

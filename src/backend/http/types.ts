@@ -1,7 +1,4 @@
-/**
- * Nguồn type thống nhất cho kernel core (HTTP + registry).
- * Import type từ `src/backend/http/types.js` — một nguồn duy nhất.
- */
+/** Nguồn type thống nhất cho kernel (HTTP + registry). */
 export type {
   Project,
   Registry,
@@ -12,7 +9,7 @@ export type {
 
 export type { BusinessError } from '../business/AbstractBusiness.js'
 
-/** Per-request variables set by the root-resolution middleware (app.ts). */
+/** Per-request variables set by the root-resolution middleware (`apiServer.ts`). */
 export type HonoEnv = {
   Variables: {
     root: string | null

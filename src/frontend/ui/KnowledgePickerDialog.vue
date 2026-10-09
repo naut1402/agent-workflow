@@ -1,5 +1,4 @@
 <script setup lang="ts">
-// Reusable knowledge multi-select + upload dialog for create-task and pipeline editor.
 import { useI18nHelpers } from '../composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { fetchKnowledgeList, uploadKnowledgeFile } from '../../features/knowledge/scripts/knowledgeApi'
@@ -25,7 +24,6 @@ const loading = ref(false)
 const error = ref('')
 const uploading = ref(false)
 const uploadTags = ref('')
-/** `global` dùng chung mọi project — chọn được ngay ở picker, không phải mở panel. */
 const uploadScope = ref('project')
 
 const selected = computed({

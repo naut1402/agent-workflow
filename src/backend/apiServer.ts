@@ -19,9 +19,6 @@ import { createRateLimitMiddleware } from './http/security/rateLimiter.js'
 import { createCorsMiddleware } from './http/security/corsGuard.js'
 import { loadSecurityConfig } from '../features/settings/business/dashboardSettings.js'
 
-// createApiHandler(ctx) is the single entrypoint for /api/* on both transports
-// — no feature keeps its own node-res branch above it.
-
 type FeatureApiModule = {
   registerRoutes?: (app: Hono<HonoEnv>) => void
   routeOrder?: number
@@ -51,9 +48,7 @@ export async function registerFeatureRoutes(app: Hono<HonoEnv>): Promise<void> {
 }
 
 export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
-  // Domain events → events.jsonl (prefs-gated). Idempotent across createApp calls.
   installEventLogSubscriber()
-  // Switch to the SQLite log driver when configured. Idempotent across createApp calls.
   initLogDriverFromPrefs()
 
   const app = new Hono<HonoEnv>()
@@ -66,10 +61,9 @@ export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
     await next()
   })
 
-  // Thứ tự bắt buộc: CORS → rate-limit (áp dụng cả khi chưa auth) → JWT; cả 3 no-op mặc định.
+  // xem docs/architecture/code/backend.md §5
   app.use('/api/*', createCorsMiddleware(() => loadSecurityConfig().cors))
   app.use('/api/*', createRateLimitMiddleware(() => loadSecurityConfig().rateLimit))
-  // Route orchestrator dùng token riêng theo job (không phải Authorization) nên loại khỏi JWT dashboard.
   const jwtMiddleware = createJwtMiddleware()
   app.use('/api/*', async (c, next) => {
     if (c.req.path.startsWith('/api/orchestrator/')) return next()
@@ -94,7 +88,7 @@ async function nodeToWebRequest(req: IncomingMessage, url: URL): Promise<Request
     if (Array.isArray(v)) for (const item of v) headers.append(k, item)
     else headers.set(k, String(v))
   }
-  // Ghi đè SAU khi copy header gốc — chống client tự set header trùng tên để giả mạo IP.
+  // xem docs/architecture/code/backend.md §5
   headers.set('x-dtd-client-ip', (req.socket as any)?.remoteAddress || 'unknown')
   const method = (req.method || 'GET').toUpperCase()
   let body: Buffer | undefined
@@ -112,7 +106,6 @@ function writeWebResponse(res: ServerResponse, status: number, headers: Headers,
   res.end(buf)
 }
 
-/** Pipe SSE Response xuống Node `res` theo chunk (không buffer arrayBuffer); resolve khi client đóng kết nối hoặc stream tự kết thúc. */
 function streamSseResponse(
   req: IncomingMessage,
   res: ServerResponse,
@@ -143,7 +136,6 @@ function streamSseResponse(
           res.write(Buffer.from(value))
         }
       } catch (err) {
-        // `closed` đã true ⇒ client tự đóng kết nối, không phải lỗi thật — không throw lên `handle()` (response đã bắt đầu stream).
         if (!closed) streamError = String(err instanceof Error ? err.message : err)
       } finally {
         if (!res.writableEnded) res.end()
@@ -154,7 +146,6 @@ function streamSseResponse(
 }
 
 export function createApiHandler(ctx: RegistryContext) {
-  // Lazy init, memoized; reset on failure so a transient error doesn't pin every later request to 500.
   let appPromise: Promise<Awaited<ReturnType<typeof createApp>>> | null = null
   const getApp = () => {
     if (!appPromise) {
@@ -169,7 +160,6 @@ export function createApiHandler(ctx: RegistryContext) {
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url || '/', 'http://localhost')
     if (!url.pathname.startsWith('/api/')) return false
-    // Request logging is fire-and-forget in `finally`, never awaited into the response.
     const started = Date.now()
     const projectId = url.searchParams.get('project') || null
     const traceId = resolveTraceIdFromRequest(req)
@@ -178,16 +168,13 @@ export function createApiHandler(ctx: RegistryContext) {
       let responsePreview = ''
       const query = formatRequestQuery(url.search)
       try {
-        // Set early so clients can correlate even if the handler throws later.
         if (!res.headersSent) res.setHeader('X-Trace-Id', traceId)
         const app = await getApp()
         const response = await app.fetch(await nodeToWebRequest(req, url))
-        // Prefer inbound/minted id on the wire (overwrite if Hono also set one).
         const headers = new Headers(response.headers)
         headers.set('X-Trace-Id', traceId)
         const contentType = headers.get('content-type') || ''
         if (contentType.startsWith('text/event-stream')) {
-          // durationMs ở `finally` tính luôn thời gian sống của kết nối SSE — chấp nhận vì route stream không dùng số này việc khác.
           responsePreview = '[sse stream]'
           errored = await streamSseResponse(req, res, response, headers)
         } else {

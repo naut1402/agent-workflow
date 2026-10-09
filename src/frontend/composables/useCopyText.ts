@@ -1,14 +1,7 @@
 import { onUnmounted, ref } from 'vue'
 import { useI18nHelpers } from './useI18nHelpers'
 
-/**
- * Copy-to-clipboard with a short "đã copy" flash — the pattern LogsPanel.vue
- * grew first, lifted here so the chat message bubbles reuse it instead of a
- * second copy of the `execCommand` fallback.
- *
- * Strings live in the `common.copy.*` namespace: a `core` composable must not
- * depend on a feature's namespace (`logs.copy.*`).
- */
+/** Copy-to-clipboard kèm thông báo ngắn (`copyFlash`); fallback `execCommand` khi không có Clipboard API. */
 export function useCopyText(opts?: { flashMs?: number }) {
   const { t } = useI18nHelpers()
   const copyFlash = ref('')
@@ -21,7 +14,6 @@ export function useCopyText(opts?: { flashMs?: number }) {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(value)
       } else {
-        // Fallback for insecure origins / older browsers, same as LogsPanel.
         const ta = document.createElement('textarea')
         ta.value = value
         ta.style.position = 'fixed'

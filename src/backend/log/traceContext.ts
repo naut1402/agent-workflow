@@ -4,9 +4,7 @@ import type { IncomingMessage } from 'node:http'
 
 type TraceStore = { traceId: string }
 
-// Lazy ALS — named `from 'node:async_hooks'` / eager `new AsyncLocalStorage` is
-// rewritten by Vite to property access at module init and throws if this file
-// ever lands in the client graph.
+// xem docs/architecture/code/backend.md §2
 let als: asyncHooks.AsyncLocalStorage<TraceStore> | undefined
 function traceAls(): asyncHooks.AsyncLocalStorage<TraceStore> {
   if (!als) als = new asyncHooks.AsyncLocalStorage<TraceStore>()
@@ -27,9 +25,9 @@ export async function runWithTraceIdAsync<T>(traceId: string, fn: () => Promise<
   return traceAls().run({ traceId }, fn)
 }
 
-/** Prefer inbound `X-Trace-Id` / `X-Request-Id`, else mint a UUID. */
 const SAFE_TRACE_ID = /^[A-Za-z0-9._:\-]{1,128}$/
 
+/** Prefer inbound `X-Trace-Id` / `X-Request-Id` (when safe), else mint a UUID. */
 export function resolveTraceIdFromRequest(req: IncomingMessage): string {
   const raw = req.headers['x-trace-id'] ?? req.headers['x-request-id']
   const v = Array.isArray(raw) ? raw[0] : raw

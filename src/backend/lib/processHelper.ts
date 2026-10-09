@@ -1,10 +1,4 @@
-/**
- * Thin wrappers around `node:child_process`.
- *
- * Namespace import — named `from 'node:child_process'` is rewritten by Vite to
- * property access at module init (`ext["spawnSync"]`), which throws if a
- * server-only module leaks into the client graph. Defer access to call sites.
- */
+// xem docs/architecture/code/backend.md §2
 import * as childProcess from 'node:child_process'
 import type {
   ChildProcess,
@@ -15,7 +9,7 @@ import type {
 
 export type { ChildProcess, SpawnOptions, SpawnSyncOptions, SpawnSyncReturns }
 
-/** `child_process.spawn` — deferred so Vite client external stubs do not throw at import. */
+/** `child_process.spawn`. */
 export function spawn(
   command: string,
   args: ReadonlyArray<string>,
@@ -24,7 +18,7 @@ export function spawn(
   return childProcess.spawn(command, args as string[], options)
 }
 
-/** `child_process.spawnSync` — deferred (same Vite rationale as `spawn`). */
+/** `child_process.spawnSync`. */
 export function spawnSync(
   command: string,
   args: ReadonlyArray<string>,

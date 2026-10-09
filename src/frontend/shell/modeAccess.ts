@@ -1,20 +1,7 @@
 import { createToken, type ContainerToken } from '../container'
 import type { ModeEntry, ModeRegistry, ShellContext } from './modeRegistry'
 
-/**
- * Lớp "quyết định hiển thị mode", tách khỏi lớp "nguồn cấu hình".
- *
- * Chỉ interface + token nằm ở core; implementation đọc settings.json nằm ở
- * `features/settings/scripts/settingsModeAccess.ts` (core không import xuống
- * features). Đổi nguồn sang role/permission trong DB = đổi 1 dòng
- * `container.register` ở `main.ts` — đường nâng cấp đầy đủ:
- * `docs/agent-rules/mode-registry-guideline.md` §7.
- */
-
-/**
- * Ngữ cảnh quyết định. Hôm nay chỉ có `shell`; provider theo user sẽ đọc thêm
- * `user`. Là object nên thêm field không phá chữ ký của canAccessMode.
- */
+/** Ngữ cảnh quyết định hiển thị mode. */
 export interface ModeAccessContext {
   shell?: ShellContext
   /** Điền khi có auth. Luật kết hợp: docs/agent-rules/mode-registry-guideline.md §7. */

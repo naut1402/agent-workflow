@@ -1,9 +1,5 @@
 <script setup lang="ts">
-/**
- * Shared Markdown editor for durable Markdown content (artifact, knowledge, agent sections).
- * Feature modules must use this wrapper — do not import `@toast-ui/*` directly.
- * Plain text / JSON / prompt templates should keep `<textarea>`.
- */
+// xem docs/architecture/code/frontend.md §6
 import {
   computed,
   nextTick,
@@ -57,7 +53,6 @@ function readDocumentTheme(): 'light' | 'dark' {
 }
 
 function applyEditorTheme(theme: 'light' | 'dark') {
-  // Theme option only applies at construct; runtime follow `data-theme` via CSS class.
   const ui = rootEl.value?.querySelector('.toastui-editor-defaultUI')
   if (!ui) return
   if (theme === 'dark') ui.classList.add('toastui-editor-dark')
@@ -69,18 +64,7 @@ function emitMarkdown() {
   emit('update:modelValue', editor.getMarkdown())
 }
 
-/**
- * Toast UI's markdown editor focuses a hidden `pseudo-clipboard` textarea when it
- * sees Ctrl/Cmd+V, which fires a real `blur` on the editing surface before the
- * pasted text lands. Callers wire `@blur` to auto-save-on-blur, so re-emitting
- * that blur tears the editor down mid-paste and the paste is lost.
- *
- * Track whether focus is anywhere inside our root and only re-emit once focus has
- * truly left it. `focusout` is watched alongside Toast's own `blur` event because
- * an empty clipboard leaves focus parked on the hidden textarea — Toast never
- * fires `blur` again from there, so without `focusout` the editor would be stuck
- * in edit mode until the user clicked back in.
- */
+// xem docs/architecture/code/frontend.md §6
 let focusInside = false
 
 function onEditorFocusIn() {
@@ -89,7 +73,6 @@ function onEditorFocusIn() {
 
 function handleEditorBlur() {
   queueMicrotask(() => {
-    // Unmounted while the microtask was queued — Vue clears the template ref.
     if (!rootEl.value) return
     if (rootEl.value.contains(document.activeElement)) return
     if (!focusInside) return
@@ -106,8 +89,6 @@ function handleEditorFocus() {
 async function createEditor() {
   if (!rootEl.value) return
   const { default: ToastEditor } = await import('@toast-ui/editor')
-  // Component may have unmounted while the editor bundle was still loading —
-  // `rootEl` (template ref) is cleared by Vue on unmount, re-check before construct.
   if (!rootEl.value) return
   const theme = readDocumentTheme()
   editor = new ToastEditor({
@@ -233,12 +214,7 @@ const rootClass = computed(() => ({
   border-radius: 6px;
 }
 
-/* height=auto still leaves ProseMirror/preview at overflow-y:auto +
-   height:calc(100% - 36px), which nests a second scrollbar beside the
-   page scroller (e.g. .monitor-content). Grow with content instead.
-   !important: Toast UI stylesheet can win the cascade depending on load
-   order; also overflow must set both axes (if overflow-x stays non-visible,
-   overflow-y:visible computes back to auto). */
+// xem docs/architecture/code/frontend.md §6
 .md-text-editor :deep(.auto-height) {
   .ProseMirror {
     overflow: visible !important;

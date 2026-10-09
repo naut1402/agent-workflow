@@ -8,11 +8,6 @@ import {
   type LogDriverKind,
 } from '../../shared/log/loggingPrefs.js'
 
-/**
- * Server-only logging prefs I/O (`~/.dev-team-dashboard/settings.json`).
- * Keep out of Vite client graph — import from controllers/business/store only.
- */
-
 function settingsFilePath(): string {
   return joinPath(registryHome(), 'settings.json')
 }
@@ -28,14 +23,12 @@ export function invalidateLoggingPrefsCache(): void {
 
 /**
  * Read logging prefs from settings.json. Missing/invalid → defaults.
- * Small file; caches until invalidate or mtime changes.
+ * Small file; caches until invalidated or the file length changes.
  */
 export function loadLoggingPrefs(): LoggingConfig {
   try {
     const file = settingsFilePath()
     const rawText = readTextFileSync(file)
-    // Cheap fingerprint: length + first/last chars — avoid importing stat just for cache.
-    // Prefer re-read; invalidateLoggingPrefsCache after writes is the primary path.
     if (cached && cachedMtime === rawText.length) return cached
     const json = JSON.parse(rawText) as { logging?: unknown }
     cached = parseLoggingConfig(json?.logging)

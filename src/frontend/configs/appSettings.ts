@@ -1,12 +1,8 @@
 import { z } from 'zod'
 
-/**
- * Client preference object (localStorage).
- * Skeleton + passthrough — later tasks add named fields without changing the storage key.
- */
+/** Client preference object (localStorage); passthrough keeps unknown keys. */
 export const AppSettingsSchema = z
   .object({
-    // Reserved names (optional) — UI controls land in later sub-tasks.
     artifactViewMode: z.enum(['block', 'full']).optional(),
     /** Section state when a document opens (block mode only). Missing → 'expanded'. */
     artifactSectionDefault: z.enum(['expanded', 'collapsed']).optional(),
@@ -193,7 +189,7 @@ export function resolveChatFeedbackMode(
   return settings?.chatFeedbackMode === 'immediate' ? 'immediate' : 'queue'
 }
 
-/** Effective "Enter sends the message" preference: missing → true (keeps the previous behaviour). */
+/** Effective "Enter sends the message" preference: missing → true. */
 export function resolveChatEnterToSend(
   settings: Pick<AppSettings, 'chatEnterToSend'> | null | undefined,
 ): boolean {

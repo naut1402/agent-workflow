@@ -10,26 +10,13 @@ import {
 import { parseMarkdown, renderMermaid } from '../lib/markdownLib'
 import { buildMarkdownBlocks, fenceYaml } from '../lib/markdownBlocks'
 
-/**
- * Viewer markdown dùng chung (agent editor + knowledge) — thuần trình bày,
- * không gọi API: `content` do cha nạp và truyền xuống.
- *
- * `withFrontmatter` chỉ bật cho nguồn đọc nguyên file `.md`; nguồn đã bóc
- * front-matter sẵn mà bật là nuốt mất phần đầu nội dung thật.
- */
 const props = withDefaults(
   defineProps<{
     title: string
     content: string
     withFrontmatter?: boolean
     /**
-     * Khoá định danh tài liệu — đổi giá trị này là seed lại trạng thái section
-     * theo preference `artifactSection*`.
-     *
-     * Không dùng `title` làm khoá: title của knowledge entry không duy
-     * nhất (chính vì thế driver mới phải thêm hậu tố cho slug khi trùng), nên
-     * chuyển giữa hai entry cùng tên sẽ giữ nguyên trạng thái gập của tài liệu
-     * trước. Bỏ trống thì rơi về `title`, đủ cho nguồn có tên duy nhất.
+     * Khoá định danh tài liệu — đổi giá trị là seed lại trạng thái section; bỏ trống thì dùng `title`.
      */
     docKey?: string
   }>(),
@@ -39,8 +26,7 @@ const props = withDefaults(
 const { t } = useI18nHelpers()
 const { settings } = useAppSettings()
 
-// Dùng lại `artifactViewMode` + `artifactSection*` sẵn có thay vì thêm khoá AppSettings riêng.
-// Logic gập section ở đây là bản sao độc lập của ArtifactPanel.vue — sửa một bên thì sửa cả hai.
+// xem docs/architecture/code/frontend.md §3
 const blockMode = ref(resolveArtifactViewMode(settings.value) === 'block')
 const accordionMode = computed(() => resolveArtifactSectionAccordion(settings.value))
 const openBlocks = ref<Set<number>>(new Set())
@@ -71,8 +57,6 @@ async function scheduleMermaid() {
 function onBlockToggle(i: number, ev: Event) {
   const el = ev.target as HTMLDetailsElement
   if (el.open) {
-    // Accordion: mở block i ⇒ tập mở chỉ còn {i}. Các block anh em bị Vue đóng sẽ
-    // bắn `toggle` vọng lại, rơi vào nhánh dưới và chỉ `delete` — idempotent, không lặp.
     openBlocks.value = accordionMode.value ? new Set([i]) : new Set(openBlocks.value).add(i)
     scheduleMermaid()
   } else {
@@ -91,7 +75,6 @@ function toggleAllBlocks() {
   }
 }
 
-// Đổi tài liệu → seed lại theo preference: index của tài liệu trước không còn cùng ý nghĩa.
 watch(
   () => props.docKey || props.title,
   () => {
@@ -138,7 +121,6 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
         :aria-label="blockMode ? t('common.markdownView.toFull') : t('common.markdownView.toBlock')"
         @click="blockMode = !blockMode"
       >
-        <!-- đang ở block mode → icon "toàn văn", bấm là chuyển sang full -->
         <svg v-if="blockMode" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
           <rect x="3" y="2" width="10" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4" />
           <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" />
@@ -172,7 +154,6 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
 </template>
 
 <style scoped lang="scss">
-/* Toolbar cố định, chỉ `.c-md-body` cuộn (docs/agent-rules/ui-design-guideline.md). */
 .c-md-view {
   display: flex;
   flex-direction: column;

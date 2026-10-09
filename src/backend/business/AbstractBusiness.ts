@@ -1,10 +1,4 @@
-/**
- * Base cho tầng business (domain) của từng feature — không biết HTTP.
- * FE không import module này.
- *
- * Kết quả lỗi dùng shape `{ status, error }` (controller check `'error' in r`)
- * để khớp convention sẵn có trong domain modules.
- */
+/** Lỗi của tầng business (domain, không biết HTTP); controller narrow bằng `'error' in r`. */
 export type BusinessError = {
   status: number
   error: string
@@ -18,10 +12,7 @@ export abstract class AbstractBusiness {
     return this.root
   }
 
-  /**
-   * Root bắt buộc. Narrow bằng `'error' in gate` (tránh boolean discriminant
-   * dưới vue-tsc / TS quirk của repo).
-   */
+  /** Root bắt buộc; narrow kết quả bằng `'error' in gate`. */
   protected requireRoot(): { root: string } | BusinessError {
     if (!this.root) return { status: 404, error: 'unknown project' }
     return { root: this.root }

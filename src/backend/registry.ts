@@ -43,11 +43,7 @@ export interface RegistryContext {
   resolveProjectRoot: (projectId: string | null) => string | null
 }
 
-// ── Locations
-
-// Config home for the registry. Override with DEV_TEAM_DASHBOARD_HOME so the
-// store can live somewhere else (tests, multi-instance). Falls back to
-// `~/.dev-team-dashboard`.
+/** Config home for the registry: `DEV_TEAM_DASHBOARD_HOME` if set, else `~/.dev-team-dashboard`. */
 export function registryHome(): string {
   const override = process.env.DEV_TEAM_DASHBOARD_HOME
   if (override && override.trim()) return path.resolve(override.trim())
@@ -58,16 +54,10 @@ export function registryFile(): string {
   return path.join(registryHome(), 'projects.json')
 }
 
-/**
- * Store của knowledge scope `global` — dùng chung mọi project nên nằm ở
- * registry home (đúng tiền lệ của log, automations ledger, settings.json),
- * không dưới project nào.
- */
+/** Store của knowledge scope `global`, dùng chung mọi project, nằm ở registry home. */
 export function globalKnowledgeRoot(): string {
   return path.join(registryHome(), 'knowledge')
 }
-
-// ── Load / save
 
 function emptyRegistry(): Registry {
   return { version: REGISTRY_VERSION, projects: [] }
@@ -88,14 +78,11 @@ export function loadRegistry(): Registry {
     }
     return { version: data.version || REGISTRY_VERSION, projects: data.projects }
   } catch {
-    // Corrupt JSON — warn and degrade gracefully instead of crashing.
     console.warn(`[dev-team-dashboard] projects.json corrupt, treating as empty: ${file}`)
     return emptyRegistry()
   }
 }
 
-// Persist the registry atomically (write temp + rename), creating the config
-// home directory if it does not exist (idempotent).
 export function saveRegistry(reg: Registry): Registry {
   const home = registryHome()
   fs.mkdirSync(home, { recursive: true })
@@ -110,8 +97,6 @@ export function saveRegistry(reg: Registry): Registry {
   return reg
 }
 
-// ── Helpers
-
 function slug(name: unknown): string {
   return String(name || '')
     .trim()
@@ -125,13 +110,6 @@ function shortHash(input: unknown): string {
   return crypto.createHash('sha1').update(String(input)).digest('hex').slice(0, 8)
 }
 
-/**
- * Scaffold `.dev-team-agent/pipeline.yaml` for a newly-added project so it never
- * silently falls back to the built-in `DEFAULT_PIPELINE` just because nobody ran
- * `/dev-dashboard` yet. Idempotent (never overwrites an existing file, including
- * a hand-tuned one from before the project was removed and re-added) and
- * best-effort (a write failure here must not roll back `add()`).
- */
 function scaffoldPipelineYaml(projectPath: string): void {
   const dest = path.join(projectPath, 'pipeline.yaml')
   if (existsSync(dest)) return
@@ -144,23 +122,20 @@ function scaffoldPipelineYaml(projectPath: string): void {
   }
 }
 
-// ── Validation (shared by REST + MCP)
-
-// Validate + canonicalise a user-supplied project path. Returns
-//   { ok: true, path: <canonical .dev-team-agent dir>, name: <derived> }
-// or { ok: false, status, error } on rejection. See design §4.2.
+/**
+ * Validate + canonicalise a user-supplied project path: absolute, an existing directory,
+ * either `.dev-team-agent` itself or a project root containing one.
+ */
 export function validateProjectPath(input: unknown, name?: unknown): ValidateResult {
   if (typeof input !== 'string' || !input.trim()) {
     return { ok: false, status: 400, error: 'path is required' }
   }
   const raw = input.trim()
 
-  // 1. Must be absolute.
   if (!path.isAbsolute(raw)) {
     return { ok: false, status: 400, error: 'path must be absolute' }
   }
 
-  // 2. Resolve canonical path (guards against symlink escape, .. segments).
   let abs: string
   try {
     abs = fs.realpathSync(path.resolve(raw))
@@ -168,7 +143,6 @@ export function validateProjectPath(input: unknown, name?: unknown): ValidateRes
     return { ok: false, status: 400, error: 'path not found' }
   }
 
-  // Must be a directory.
   let stat: fs.Stats
   try {
     stat = fs.statSync(abs)
@@ -179,8 +153,6 @@ export function validateProjectPath(input: unknown, name?: unknown): ValidateRes
     return { ok: false, status: 400, error: 'path must be a directory' }
   }
 
-  // 3. Either the path itself IS `.dev-team-agent`, or it contains one
-  //    (allow pointing at a project root — we then descend into it).
   let workspace: string
   if (path.basename(abs) === '.dev-team-agent') {
     workspace = abs
@@ -196,8 +168,6 @@ export function validateProjectPath(input: unknown, name?: unknown): ValidateRes
     workspace = innerCanonical
   }
 
-  // Derive display name: explicit name wins, else basename of the project root
-  // (the directory holding `.dev-team-agent`).
   const projectRoot = path.dirname(workspace)
   const derivedName = (typeof name === 'string' && name.trim())
     ? name.trim()
@@ -210,33 +180,25 @@ function makeId(name: string, canonicalPath: string): string {
   return `${slug(name)}-${shortHash(canonicalPath)}`
 }
 
-// ── CRUD
-
-// List all registered projects + the default project id (if any).
 export function list(): { projects: Project[]; defaultId: string | null } {
   const reg = loadRegistry()
   const def = reg.projects.find((p) => p.default)
   return { projects: reg.projects, defaultId: def ? def.id : null }
 }
 
-// Get one project by id (or null).
 export function get(id: string | null | undefined): Project | null {
   if (!id) return null
   const reg = loadRegistry()
   return reg.projects.find((p) => p.id === id) || null
 }
 
-// Add a project. Validates + canonicalises the path; idempotent on canonical
-// path (returns the existing entry instead of duplicating). Returns
-//   { ok: true, project } | { ok: false, status, error }
+/** Add a project; idempotent on the canonical path. The first project becomes default. */
 export function add({ path: inputPath, name }: { path?: string; name?: string } = {}): AddResult {
   const v = validateProjectPath(inputPath, name)
-  // `in`-operator narrowing (boolean-discriminant narrowing misbehaves under vue-tsc here).
   if ('error' in v) return v
 
   const reg = loadRegistry()
 
-  // Idempotent: same canonical path → return existing entry.
   const existing = reg.projects.find((p) => p.path === v.path)
   if (existing) return { ok: true, project: existing }
 
@@ -246,7 +208,7 @@ export function add({ path: inputPath, name }: { path?: string; name?: string } 
     kind: 'local',
     path: v.path,
     addedAt: new Date().toISOString(),
-    default: reg.projects.length === 0, // first project becomes default
+    default: reg.projects.length === 0,
   }
   reg.projects.push(project)
   saveRegistry(reg)
@@ -254,12 +216,7 @@ export function add({ path: inputPath, name }: { path?: string; name?: string } 
   return { ok: true, project }
 }
 
-// Remove a project from the registry by id. Does NOT touch the project's
-// filesystem — only the registry entry. Removing the default project promotes
-// the next remaining project (if any) to default so a default stays set
-// whenever the registry is non-empty; removing the last project leaves an
-// empty (still valid) registry. Returns
-//   { ok: true, removed: true } | { ok: false, status, error }
+/** Remove a project entry by id (project files are untouched); removing the default promotes the next project. */
 export function remove(
   id: string | null | undefined,
 ): { ok: true; removed: true } | { ok: false; status: number; error: string } {
@@ -274,9 +231,7 @@ export function remove(
   return { ok: true, removed: true }
 }
 
-// Seed a default project from an explicit `.dev-team-agent` root (e.g.
-// DEV_TEAM_ROOT) when the registry is empty. Idempotent: does nothing if any
-// project is already registered. Returns the seeded project or null.
+/** Seed a default project from `devTeamRoot` when the registry is empty; returns the seeded project or null. */
 export function seedDefault(devTeamRoot: string | null | undefined): Project | null {
   if (!devTeamRoot) return null
   const reg = loadRegistry()
@@ -285,16 +240,10 @@ export function seedDefault(devTeamRoot: string | null | undefined): Project | n
   return res.ok ? res.project : null
 }
 
-// ── Root resolution (backward-compat)
-
-// Resolve a projectId to an absolute `.dev-team-agent/` path.
-//   - explicit, known id → that project's path
-//   - explicit, unknown id → null (caller returns 404)
-//   - null/empty id → the DEFAULT project:
-//       1. registry entry with default: true
-//       2. DEV_TEAM_ROOT env (if set)
-//       3. opts.defaultRoot (e.g. Vite cwd/..)
-// Design §4.3.
+/**
+ * Resolve a projectId to an absolute `.dev-team-agent/` path. Unknown id → null;
+ * no id → registry default, then `DEV_TEAM_ROOT`, then `opts.defaultRoot`.
+ */
 export function resolveProjectRoot(
   projectId: string | null | undefined,
   opts: { defaultRoot?: string | null } = {},
@@ -304,7 +253,6 @@ export function resolveProjectRoot(
     return project ? project.path : null
   }
 
-  // No project → default.
   const { defaultId, projects } = list()
   if (defaultId) {
     const def = projects.find((p) => p.id === defaultId)
@@ -318,9 +266,7 @@ export function resolveProjectRoot(
   return null
 }
 
-// Build a `ctx` object for createApiHandler / MCP. `defaultRoot` is the legacy
-// fallback used when no project is selected and neither DEV_TEAM_ROOT nor a
-// registry default exists (preserves the old Vite `cwd/..` behaviour).
+/** Build the `ctx` for createApiHandler / MCP; `defaultRoot` is the last fallback of `resolveProjectRoot`. */
 export function createRegistryContext(
   { defaultRoot }: { defaultRoot?: string | null } = {},
 ): RegistryContext {

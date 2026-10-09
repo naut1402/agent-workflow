@@ -1,12 +1,7 @@
-/**
- * SSE response builder dùng chung cho các route stream (`/api/tasks/stream`,
- * `/api/jobs/stream`). `subscribe` chạy ngay khi client mở kết nối — thường
- * push snapshot đầu tiên rồi đăng ký lắng nghe event bus — và trả về hàm
- * unsubscribe, gọi khi client đóng kết nối (`ReadableStream.cancel`).
- */
 export type SseSend = (type: string, data: unknown) => void
 export type SseSubscribe = (send: SseSend) => () => void
 
+/** SSE response cho route stream: `subscribe` chạy khi client mở kết nối, hàm nó trả về chạy khi client đóng. */
 export function sseResponse(subscribe: SseSubscribe): Response {
   const encoder = new TextEncoder()
   let unsubscribe: (() => void) | null = null
@@ -31,7 +26,6 @@ export function sseResponse(subscribe: SseSubscribe): Response {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-store',
       Connection: 'keep-alive',
-      // Phòng khi có reverse proxy phía trước (chưa có deployment thực tế để kiểm chứng).
       'X-Accel-Buffering': 'no',
     },
   })

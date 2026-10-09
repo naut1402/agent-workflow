@@ -1,12 +1,5 @@
 import { z } from 'zod'
 
-/**
- * Logging prefs schema + parse — thuần, dùng ở cả hai phía.
- * FS read of settings.json lives in `src/backend/log/loggingPrefsIo.ts` — do not import
- * Node I/O here: bucket `src/shared/` bị ESLint cấm `node:*`/`bun:*`/hạ tầng, và
- * `src/features/settings/schemas/` dựa vào module này để `SettingsDialog.vue` dùng lại được.
- */
-
 export const LoggingTypesSchema = z.object({
   audit: z.boolean().optional(),
   request: z.boolean().optional(),
@@ -22,7 +15,7 @@ export type LogDriverKind = (typeof LOG_DRIVER_KINDS)[number]
 
 export const LoggingConfigSchema = z
   .object({
-    /** @deprecated Nguồn chính đã đổi sang `modes.enabled.logs`; giữ để AND thêm điều kiện cũ. */
+    /** @deprecated Dùng `modes.enabled.logs`; vẫn được AND thêm khi quyết định hiện tab Logs. */
     showLogsTab: z.boolean().optional(),
     types: LoggingTypesSchema.optional(),
     /** Log storage backend — invalid/missing falls back to `'file'`. */
@@ -62,7 +55,6 @@ export function parseLoggingConfig(raw: unknown): LoggingConfig {
       audit: d.types?.audit !== false,
       request: d.types?.request !== false,
       jobs: d.types?.jobs !== false,
-      // Opt-in: missing/undefined → off (unlike audit/request/jobs).
       events: d.types?.events === true,
       usage: d.types?.usage !== false,
     },

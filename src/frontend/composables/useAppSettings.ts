@@ -29,7 +29,7 @@ function persist(): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings.value))
   } catch {
-    /* ignore — private mode / quota */
+    /* ignore */
   }
 }
 

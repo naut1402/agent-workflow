@@ -14,7 +14,6 @@ const noDefaultExport = {
     'Không dùng default export trừ *.vue / vite.config.* / vitest.config.* / playwright.config.* / *.d.ts (docs/agent-rules/coding-guideline.md).',
 }
 
-/** MVP: recommended giữ nguyên nhưng hạ error → warn để CI xanh (không --max-warnings 0). */
 const warnFirstRecommended = {
   '@typescript-eslint/no-explicit-any': 'warn',
   '@typescript-eslint/no-unused-vars': 'warn',
@@ -110,18 +109,8 @@ export default tseslint.config(
     },
   },
 
-  // ── Ranh giới scope: src/backend ⟂ src/frontend, src/shared thuần ──────────
-  //
-  // `no-restricted-imports` khớp minimatch trên **chuỗi specifier**, nên pattern
-  // `**/backend/**` bắt được cả dạng relative (`../../backend/log/store.js`) —
-  // không cần alias theo bucket. Mức `warn` để đồng bộ triết lý của file này
-  // (recommended hạ error → warn, CI không dùng `--max-warnings 0`).
+  // xem docs/architecture/code/tooling.md §6
   {
-    // `files` phải phủ TRỌN phần frontend của feature, không chỉ 3 thư mục hiển nhiên:
-    // `lib/` · `schemas/` · `locales/` · `registerMode.ts` cũng là FE, và trước đây chúng
-    // rơi vào vùng chết của cả hai hàng rào (rule BE chỉ nhận `api.ts`/`controller.ts`/
-    // `business/**`). `schemas/` đặc biệt đáng phủ: nó là schema dùng chung FE/BE,
-    // nên nó là đường ngắn nhất để một component kéo `src/backend/**` vào.
     files: [
       'src/frontend/**/*.{ts,vue}',
       'src/features/**/{components,composables,scripts,lib,schemas,locales}/**/*.{ts,vue}',

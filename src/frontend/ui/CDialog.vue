@@ -5,7 +5,7 @@ import Icon from './Icon.vue'
 import { useDialogStack } from '../composables/useDialogStack'
 import { useI18nHelpers } from '../composables/useI18nHelpers'
 
-/** Dialog modal dùng chung — xem docs/agent-rules/ui-design-guideline.md §3. */
+// xem docs/agent-rules/ui-design-guideline.md §3
 defineOptions({ inheritAttrs: false })
 
 const props = withDefaults(

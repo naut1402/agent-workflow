@@ -4,7 +4,7 @@ import { registryHome } from '../registry.js'
 import { statSafe } from '../lib/fileHelper.js'
 import type { LogEntry, LogType } from '../../shared/log/schema.js'
 
-const MAX_BYTES = 5 * 1024 * 1024 // 5MB per file; one .1 backup on rotation.
+const MAX_BYTES = 5 * 1024 * 1024
 
 export function logsDir(): string {
   return path.join(registryHome(), 'logs')
@@ -20,7 +20,7 @@ async function rotateIfNeeded(file: string): Promise<void> {
     try {
       await fs.rename(file, `${file}.1`)
     } catch {
-      /* keep appending rather than lose the write */
+      /* ignore */
     }
   }
 }

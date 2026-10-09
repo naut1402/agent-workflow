@@ -1,12 +1,3 @@
-/**
- * Ghép messages từ:
- * - `src/frontend/plugins/i18n/locales/<namespace>/<locale>.ts` (vd common)
- * - `src/features/<feature>/locales/<locale>.ts`
- *
- * Namespace feature = kebab-case folder → camelCase (`agent-editor` → `agentEditor`).
- * Mỗi file `export default { ... }` là object message của namespace đó.
- */
-
 function kebabToCamel(kebab: string): string {
   return kebab.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
 }
@@ -20,16 +11,12 @@ function takeDefault(mod: unknown): Record<string, unknown> {
 
 type LocaleBucket = Record<string, Record<string, unknown>>
 
-/**
- * Eager glob — Vite/Vitest transform. Pattern cố định (không dùng biến).
- * Tránh chuỗi đóng block-comment trong JSDoc.
- */
+/** Ghép messages i18n của shell và mọi feature (eager `import.meta.glob`, pattern phải là literal). */
 export function loadLocaleMessages(): Record<string, LocaleBucket> {
   const byLocale: Record<string, LocaleBucket> = {}
 
   const pluginMods = import.meta.glob('./locales/*/*.ts', { eager: true })
   for (const [filePath, mod] of Object.entries(pluginMods)) {
-    // ./locales/common/vi.ts
     const m = filePath.match(/\/locales\/([^/]+)\/([^/]+)\.ts$/)
     if (!m) continue
     const namespace = m[1]
@@ -40,7 +27,6 @@ export function loadLocaleMessages(): Record<string, LocaleBucket> {
 
   const featureMods = import.meta.glob('../../../features/*/locales/*.ts', { eager: true })
   for (const [filePath, mod] of Object.entries(featureMods)) {
-    // .../features/agent-editor/locales/vi.ts
     const m = filePath.match(/\/features\/([^/]+)\/locales\/([^/]+)\.ts$/)
     if (!m) continue
     const namespace = kebabToCamel(m[1])

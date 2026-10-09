@@ -1,12 +1,4 @@
 #!/usr/bin/env node
-/**
- * CLI entry for orchestrator — submit agent jobs to JobQueue.
- *
- * Usage:
- *   node runner-cli.mjs submit --agent dev-agent-teams:investigator \
- *     --workspace /path/to/project/.dev-team-agent/tasks/U0005 \
- *     --prompt-file /path/to/prompt.txt --wait
- */
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { submitAndWait, submitJob, loadJob } from '../features/runner/business/jobQueue.js'

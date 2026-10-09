@@ -1,32 +1,4 @@
 #!/usr/bin/env bun
-/**
- * Trạng thái test theo từng task của một version — cổng phát hành hiện có
- * chỉ biết dòng test *tồn tại / rỗng* ở mức version, nên "version có 12 task,
- * test viết cho 9" là một trạng thái không ai đọc ra được.
- *
- * Cách suy: đối xứng hai dòng branch, cả hai lấy mốc ở nhánh đã release.
- *
- *   dòng source:  origin/main       .. dev/<version>/main   → task ĐÃ MERGE
- *   dòng test:    origin/test/main  .. test/<version>/main   → task ĐÃ CÓ TEST
- *
- * Nguồn định danh task là subject commit (`[T0313a84c] feat(ci): …`) —
- * format bắt buộc ở `docs/agent-rules/git-pr.md` §7. Không có bảng tra
- * task↔branch nào để đối chiếu, nên commit không mang định danh phải được **nêu
- * ra** (`untagged`), không im lặng bỏ: im lặng bỏ đúng là loại xanh giả mà epic
- * tách test đang diệt.
- *
- * Miễn trừ (`tests/exemptions.json`) là bề mặt cứng cho task cố ý không cần
- * test. Ba mệnh đề bắt buộc: người duyệt thấy được lý do · task được miễn
- * không làm cổng đỏ · không miễn cả version (không wildcard, không
- * khoá cấp version — `version` là field bắt buộc và phải khớp version đang chấm).
- *
- * Đợt đầu là báo cáo: mặc định exit 0 kèm . `--strict` biến "còn task
- * thiếu test" thành đỏ — siết cổng về sau là thêm một cờ, không sửa lại script.
- * exit 0 ở đây không có nghĩa "đã đủ test".
- *
- *   bun run test:status -- --version 1.1.4
- *   bun run test:status -- --version 1.1.4 --source-ref "$PR_HEAD_SHA" --strict
- */
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -38,23 +10,12 @@ const ROOT = path.resolve(import.meta.dir, '..', '..')
 
 export const EXEMPTIONS_FILE = 'tests/exemptions.json'
 
-/** Lý do một chữ ("wip", "n/a") không phải lý do — người duyệt không quyết được gì với nó. */
+/** Độ dài tối thiểu của `reason` trong một miễn trừ. */
 export const MIN_REASON = 10
 
-/**
- * Đúng regex định danh task của `git-pr.md` §7 và `commitlint.config.js` —
- * gồm cả `_`, vì task do dashboard sinh có dạng `20260911_001`. Ba nguồn lệch
- * nhau từng làm `[B202608_2201] feat(log): …` qua commitlint mà rơi vào mục
- * *không truy được task* ⇒ một PR tính năng biến mất khỏi sổ nợ test.
- *
- * Không nhân bản hằng này: nó là nguồn duy nhất cho CẢ HAI đường — nhận diện
- * commit (`taskIdOf`) và validate `tests/exemptions.json` (`parseEntry`).
- *
- * Phần sau (`feat(ci): …`, hậu tố `(#123)` của squash) không ảnh hưởng.
- */
+// xem docs/agent-rules/git-pr.md §3
 const TASK_RE = /^\[([A-Za-z0-9][A-Za-z0-9_-]*)\]\s/
 
-/** Có `[…]` ở đầu subject — dùng để tách *sai format* khỏi *không mang định danh*. */
 const BRACKET_RE = /^\[[^\]]*\]/
 const REVERT_RE = /^Revert\s+"(.+)"\s*$/
 const TYPE_RE = /^\[[^\]]+\]\s+([a-z]+)(?:\([^)]*\))?!?:/
@@ -65,11 +26,7 @@ export function taskIdOf(subject: string): string | null {
 
 /**
  * Bóc mọi lớp `Revert "…"` lồng nhau, trả về subject gốc + số lớp.
- *
- * Cần số lớp, không chỉ cần biết "có phải revert": revert của một revert là
- * khôi phục. Lớp lẻ ⇒ subject gốc đang bị huỷ, lớp chẵn ⇒ đang sống lại.
- * Chỉ đếm "có commit revert" thì ca re-revert bị đọc thành "đã revert" ⇒ cổng
- * miễn test cho code đang sống.
+ * Lớp lẻ ⇒ subject gốc đang bị huỷ, lớp chẵn ⇒ đang sống lại.
  */
 export function unwrapRevert(subject: string): { base: string; depth: number } {
   let base = subject.trim()
@@ -82,11 +39,7 @@ export function unwrapRevert(subject: string): { base: string; depth: number } {
   }
 }
 
-/**
- * Commit revert do GitHub tạo mang subject `Revert "<subject gốc>"`, nên định
- * danh task nằm bên trong dấu ngoặc kép. Không bóc ra thì công việc đã bị
- * revert vẫn bị đòi test, và bản thân commit revert lại rơi vào `untagged`.
- */
+/** Định danh task bên trong subject `Revert "<subject gốc>"`; `null` nếu không phải commit revert. */
 export function revertedTaskIdOf(subject: string): string | null {
   const { base, depth } = unwrapRevert(subject)
   return depth > 0 ? taskIdOf(base) : null
@@ -106,12 +59,6 @@ export interface Exemption {
 
 const REQUIRED = ['taskId', 'version', 'reason', 'approved_by'] as const
 
-/**
- * Bất biến: sai định dạng là ĐỎ, không phải "coi như không có miễn trừ".
- * Fallback im lặng theo chiều nào cũng là kết luận âm thầm, mà đây đúng là chỗ
- * người ta sẽ thử nới cổng.
- */
-/** Bốn field bắt buộc, đủ và không rỗng — miễn trừ khuyết không được chấp nhận. */
 function requireFields(rec: Record<string, unknown>, at: string): Exemption {
   for (const k of REQUIRED) {
     const v = rec[k]
@@ -127,12 +74,10 @@ function requireFields(rec: Record<string, unknown>, at: string): Exemption {
   }
 }
 
-/** Một entry hợp lệ: đúng định danh task, đúng một version, lý do người đọc được. */
 function parseEntry(item: unknown, at: string): Exemption {
   if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error(`${at} phải là object.`)
   const e = requireFields(item as Record<string, unknown>, at)
 
-  // Chặn miễn cả version: wildcard là cách âm thầm tắt cổng cho toàn bộ dòng.
   if (e.taskId.includes('*') || !TASK_RE.test(`[${e.taskId}] x: y`)) {
     throw new Error(`${at} có taskId "${e.taskId}" không phải định danh task — 🚫 không miễn trừ cấp version, không wildcard.`)
   }
@@ -198,24 +143,13 @@ export interface StatusReport {
   reverted: TaskEntry[]
   /**
    * Task bị revert một phần: có commit đã revert nhưng vẫn còn commit sống.
-   * Vẫn nằm trong `missing` — đây là chỗ mà "có revert ⇒ miễn test" cho xanh giả.
+   * Vẫn nằm trong `missing`.
    */
   partialRevert: Set<string>
   /** Miễn trừ trỏ tới task không có trên dòng version — rác cần dọn. */
   orphanExempt: Exemption[]
 }
 
-/**
- * Revert được cân bằng ở mức subject, không ở mức task.
- *
- * Vì sao: gom vào một `Set` theo taskID thì task 3 commit mà chỉ 1 commit bị
- * revert cũng bị coi là "đã revert" ⇒ hai commit còn sống trên dòng version
- * không bị đòi test nữa, và báo cáo đóng bằng dấu . Đúng loại xanh giả mà
- * `TC-E6` sinh ra để chặn.
- *
- * Lớp lẻ = huỷ (+1), lớp chẵn = khôi phục (−1); tổng > 0 mới là "đang bị revert".
- */
-/** Ba loại subject mà `collect` cần phân biệt — tách ra để chỗ gom không phải vừa phân loại vừa cộng dồn. */
 type Classified =
   | { kind: 'revert'; base: string; delta: number }
   | { kind: 'task'; id: string; subject: string }
@@ -224,15 +158,12 @@ type Classified =
 function classifySubject(subject: string): Classified {
   const { base, depth } = unwrapRevert(subject)
   if (depth > 0) {
-    // Revert của commit không mang định danh task thì cũng không quy được về
-    // task nào — nêu ra như commit thường, không bỏ qua im lặng.
     return taskIdOf(base) ? { kind: 'revert', base, delta: depth % 2 === 1 ? 1 : -1 } : { kind: 'untagged', subject }
   }
   const id = taskIdOf(subject)
   return id ? { kind: 'task', id, subject } : { kind: 'untagged', subject }
 }
 
-/** E13: một task nhiều commit vẫn tính MỘT task, nhưng giữ đủ subject làm căn cứ. */
 function addTaskCommit(byId: Map<string, TaskEntry>, id: string, subject: string): void {
   const entry = byId.get(id) ?? { taskId: id, subjects: [], types: [] }
   entry.subjects.push(subject)
@@ -257,7 +188,6 @@ function collect(subjects: string[]): { tasks: TaskEntry[]; untagged: string[]; 
   }
 
   const revertedSubjects = new Set([...balance].filter(([, n]) => n > 0).map(([subject]) => subject))
-  // Thứ tự xác định: báo cáo phải diff/dán được vào PR, không đổi giữa hai lượt.
   return { tasks: [...byId.values()].sort((a, b) => a.taskId.localeCompare(b.taskId)), untagged, revertedSubjects }
 }
 
@@ -275,8 +205,6 @@ export function computeStatus(input: {
   const exemptIds = new Set(exempt.map((e) => e.taskId))
   const tested = new Set(test.tasks.map((t) => t.taskId))
 
-  // Chỉ miễn test khi KHÔNG còn commit nào sống. Còn một commit sống thì task
-  // vẫn phải có test — và được gắn nhãn `partialRevert` để người duyệt biết vì sao.
   const isReverted = (s: string) => source.revertedSubjects.has(s)
   const reverted = source.tasks.filter((t) => t.subjects.every(isReverted))
   const revertedIds = new Set(reverted.map((t) => t.taskId))
@@ -319,7 +247,6 @@ function taskRow(t: TaskEntry, note: string): string {
   return `| \`${t.taskId}\` | ${types} | ${t.subjects.length} | ${note} |`
 }
 
-/** Khoảng commit đã đọc — người đọc phải kiểm chứng được kết luận, không chỉ tin con số. */
 function sectionRanges(opts: RenderOpts): string[] {
   if (!opts.sourceRange && !opts.testRange) return []
   const lines = ['| Dòng | Khoảng commit đã đọc |', '|---|---|']
@@ -328,7 +255,6 @@ function sectionRanges(opts: RenderOpts): string[] {
   return [...lines, '']
 }
 
-/** Hai ca khuyết dữ liệu phải nói ra lý do, nếu không "thiếu test" bị đọc sai nguyên nhân. */
 function sectionCaveats(opts: RenderOpts): string[] {
   const lines: string[] = []
   if (opts.testLineMissing) {
@@ -406,7 +332,6 @@ function sectionMissing(r: StatusReport, opts: RenderOpts): string[] {
   return lines
 }
 
-/** Kết luận "đã có test" phải kèm căn cứ — chính commit ở dòng test, không chỉ chữ OK. */
 function sectionTested(r: StatusReport): string[] {
   if (!r.testedDetail.length) return []
   return [
@@ -438,8 +363,6 @@ function sectionExempt(r: StatusReport, opts: RenderOpts): string[] {
       '',
     )
   }
-  // Miễn trừ của version khác tích lại theo từng release, nên chỉ đếm — liệt kê
-  // từng entry biến mục này thành một dòng dài dằng dặc về task không liên quan.
   if (r.staleExempt.length) {
     lines.push(
       `⚠️ **${r.staleExempt.length} miễn trừ của version khác — KHÔNG áp dụng ở lượt này.** ` +
@@ -462,14 +385,6 @@ function sectionReverted(r: StatusReport): string[] {
   ]
 }
 
-/**
- * Hai ca rất khác nhau, không gộp một thông điệp: sau khi `TASK_RE` đã nới cho
- * `_`, một subject vẫn lọt ra ngoài mà lại có `[…]` thì đó là sai format,
- * không phải "được phép bỏ định danh". Gộp chung là nói sai sự thật về đúng loại
- * commit đang lặng lẽ rơi khỏi sổ nợ test.
- *
- * Exit code không đổi: `badTag` là báo cáo, `--strict` vẫn chỉ chặn theo `missing`.
- */
 function sectionUntagged(r: StatusReport): string[] {
   if (!r.untagged.length) return []
   const noTag = r.untagged.filter((s) => !BRACKET_RE.test(s))
@@ -502,10 +417,6 @@ function sectionUntagged(r: StatusReport): string[] {
   return out
 }
 
-/**
- * Không có task nào thì KHÔNG được đóng bằng dấu : 0 task nghĩa là không có
- * gì để chấm, mà "chọn ra 0 thứ" chưa bao giờ là "đã xanh".
- */
 function closingLine(r: StatusReport, opts: RenderOpts): string {
   if (r.missing.length) {
     return opts.strict
@@ -556,11 +467,6 @@ interface GitResult {
   out: string
 }
 
-/**
- * `repo` là tham số chứ không phải `ROOT` cố định: nguồn sự thật của lệnh này
- * là lịch sử commit của hai dòng branch, nên test phải dựng được repo + origin
- * tạm với commit/branch thật thay vì mock lại `git log`.
- */
 function git(repo: string, ...args: string[]): GitResult {
   const r = spawnSync('git', args, { cwd: repo, encoding: 'utf8' })
   return { ok: r.status === 0, out: (r.stdout ?? '').trim() }
@@ -573,20 +479,8 @@ function summary(text: string): void {
 
 class ToolError extends Error {}
 
-/**
- * Kết luận ĐỎ của cổng (exit 1) — tách hẳn khỏi `ToolError` (exit 2, "cổng không
- * đọc được dữ liệu"). Nhờ hai lớp lỗi này `main()` chỉ còn một `try` duy nhất mà
- * vẫn giữ nguyên contract exit code đã ghi trong `testing.md` §3.1.
- */
 class GateError extends Error {}
 
-/**
- * Ref dùng được ở local — có sẵn thì dùng, thiếu thì hỏi remote rồi mới kết luận.
- *
- * Ba kết quả phải tách bạch (bất biến `testing.md` §3.1): ref có · ref **chưa
- * tồn tại · không kéo được** (mất mạng / mất quyền). Trộn hai ca cuối là
- * đọc "không kéo được dòng test" thành "thiếu test".
- */
 function resolveRef(repo: string, ref: string): string | null {
   const local = git(repo, 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${ref}`)
   if (local.ok && local.out) return `origin/${ref}`
@@ -613,17 +507,14 @@ function subjectsOf(repo: string, range: string, paths?: string[]): string[] {
   return r.out.split('\n').filter(Boolean)
 }
 
-/** Sync bê commit dòng source sang dòng test, nên "có tên task" ≠ "có test" — chỉ commit chạm cây test mới tính. */
 const TEST_PATHS = ['tests', 'test-e2e']
 
 function readExemptions(repo: string, file: string): Exemption[] {
   const abs = path.isAbsolute(file) ? file : path.join(repo, file)
-  // E8: đa số version không có miễn trừ nào — thiếu file là hợp lệ, không phải lỗi.
   if (!fs.existsSync(abs)) return []
   try {
     return parseExemptions(fs.readFileSync(abs, 'utf8'), file)
   } catch (e) {
-    // Miễn trừ sai định dạng là ĐỎ: đây là chỗ người ta sẽ thử nới cổng.
     throw new GateError(e instanceof Error ? e.message : String(e))
   }
 }
@@ -633,22 +524,13 @@ interface Scope {
   testRange: string | null
   testLineMissing: boolean
   noTestTrunk: boolean
-  /** `dev/<version>/main` không có trên origin ⇒ đã phải đếm trên `HEAD`, không phải dòng version. */
   sourceFallback: boolean
 }
 
-/**
- * Hai khoảng đối xứng để đếm, cả hai neo ở nhánh đã release. Tách khỏi `main()`
- * vì đây là phần duy nhất hỏi remote — ba ca (`có` / `chưa tồn tại` / `không kéo
- * được`) phải tách bạch, còn `main()` chỉ nối dây và chọn exit code.
- */
 function resolveScope(repo: string, version: string, sourceRef: string | undefined): Scope {
   const mainRef = resolveRef(repo, 'main')
   if (!mainRef) throw new ToolError('Không thấy `main` trên origin — không có mốc nào để đếm task đã merge.')
 
-  // Biết được là đã fallback thì phải nói ra: `HEAD` là cây đang đứng (branch task),
-  // không phải dòng version — báo cáo vẫn mang tiêu đề version nên người đọc dễ tin
-  // là đã chấm trên dòng version.
   const versionRef = resolveRef(repo, `dev/${version}/main`)
   const sourceHead = sourceRef?.trim() || versionRef || 'HEAD'
   const testLineRef = resolveRef(repo, testLineOf(`dev/${version}/main`))
@@ -663,7 +545,6 @@ function resolveScope(repo: string, version: string, sourceRef: string | undefin
   }
 }
 
-/** Version của lượt chấm: cờ trước, rồi mới suy từ branch đang đứng. */
 function resolveVersion(repo: string, argVersion: string | undefined): string {
   const version = argVersion?.trim() || versionOf(git(repo, 'branch', '--show-current').out)
   if (!version) {

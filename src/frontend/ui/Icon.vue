@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/**
- * Shared action/status icon set — extends the `RailIcon.vue` pattern (name-prop +
- * switch/case inline SVG) beyond the sidebar rail. Each icon keeps the viewBox and
- * fill-or-stroke treatment of whichever original hand-drawn SVG it replaces, so no
- * path was redrawn when an icon moved here.
- */
 type IconName =
   | 'chatBubble'
   | 'close'
@@ -49,13 +43,10 @@ const VIEW_BOX: Record<IconName, string> = {
   chevronLeft: '0 0 16 16',
   chevronRight: '0 0 16 16',
   paperclip: '0 0 16 16',
-  // 24-grid, unlike the 16-grid icons around it — path kept verbatim from the
-  // original hand-drawn SVG.
   info: '0 0 24 24',
   download: '0 0 16 16',
   upload: '0 0 16 16',
   eye: '0 0 16 16',
-  // Same 24-grid as `info`: it replaces `info` in place, in the same button.
   spinner: '0 0 24 24',
   send: '0 0 16 16',
   swap: '0 0 16 16',
@@ -169,7 +160,6 @@ const viewBox = VIEW_BOX[props.name]
         d="M11.5 7.5l-4.2 4.2a2.4 2.4 0 0 1-3.4-3.4l5-5a1.7 1.7 0 0 1 2.4 2.4l-5 5a.9.9 0 0 1-1.3-1.3l4.2-4.2"
       />
     </template>
-    <!-- fill/stroke sit on each child, not the shared <svg>, unlike the icons above. -->
     <template v-else-if="name === 'info'">
       <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" />
       <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 11v5.5" />
@@ -187,8 +177,6 @@ const viewBox = VIEW_BOX[props.name]
       <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M1.5 8s2.4-4 6.5-4 6.5 4 6.5 4-2.4 4-6.5 4-6.5-4-6.5-4z" />
       <circle cx="8" cy="8" r="1.8" fill="none" stroke="currentColor" stroke-width="1.4" />
     </template>
-    <!-- Track + one arc, same 24-grid as `info` — the caller applies the spin
-         animation (this component adds no effect classes of its own). -->
     <template v-else-if="name === 'spinner'">
       <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" opacity="0.25" />
       <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 12a9 9 0 0 0-9-9" />

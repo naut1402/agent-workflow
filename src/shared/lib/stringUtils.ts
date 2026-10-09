@@ -1,5 +1,3 @@
-/** Generic string helpers (slug, …). */
-
 export type SlugifyOptions = {
   maxLength?: number
   fallback?: string
@@ -14,7 +12,6 @@ export function slugify(text: string, opts: SlugifyOptions = {}): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    // đ/Đ không tách được bằng NFD — map tay trước khi strip non-ascii.
     .replace(/\u0111/g, 'd')
     .replace(/\u0110/g, 'd')
     .replace(/[^a-z0-9]+/g, '-')

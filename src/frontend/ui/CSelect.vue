@@ -24,7 +24,6 @@ const { t } = useI18nHelpers()
 
 const open = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
-/** Roving highlight for arrow-key navigation — independent of `modelValue` while the menu is open. */
 const highlightedIndex = ref(0)
 
 const selectedLabel = computed(() => {
@@ -119,13 +118,7 @@ function onTriggerKeydown(e: KeyboardEvent) {
       </span>
     </button>
 
-    <!--
-      `.prevent` trên <li>: khi CSelect nằm trong một <label>, activation behavior
-      của label dội một click tổng hợp lên `.c-select-trigger` và mở lại menu vừa
-      đóng. Behavior đó chỉ chạy khi event chưa bị canceled nên preventDefault là đủ.
-      🚫 Không dùng `.stop` — chặn bubbling sẽ giết `onClickOutside` và handler của
-      component cha; <li> không có default action riêng để mất.
-    -->
+    <!-- xem docs/architecture/code/frontend.md §8 -->
     <ul v-if="open" class="c-select-menu" role="listbox" :aria-label="ariaLabel">
       <li v-if="!options.length" class="c-select-empty">{{ t('common.select.empty') }}</li>
       <li

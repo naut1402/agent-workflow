@@ -1,10 +1,5 @@
 import { apiFetch, qs, type ApiQuery } from '../http/client'
 
-/**
- * Fetch-based SSE reader — không dùng `EventSource` gốc vì nó không set được
- * header `Authorization`, cần cho JWT khi `DASHBOARD_JWT_SECRET` bật.
- * `apiFetch()` đã tự gắn header đó, reader chỉ việc tái dùng.
- */
 export interface SseStreamHandlers {
   onEvent: (type: string, data: unknown) => void
   onOpen?: () => void
@@ -22,7 +17,6 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Tách 1 khối SSE (`event:`/`data:` phân cách `\n`) thành `[type, data]`. */
 function parseSseBlock(block: string): [string, string] | null {
   let type = ''
   let data = ''

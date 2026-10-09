@@ -1,5 +1,3 @@
-/** Thin date helpers for timestamps. */
-
 export function nowMs(): number {
   return Date.now()
 }

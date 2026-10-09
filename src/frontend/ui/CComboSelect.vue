@@ -24,7 +24,6 @@ function labelFor(value: string): string {
 }
 
 const open = ref(false)
-/** False right after opening — filter stays off until the user actually types, so opening shows the full list. */
 const filtering = ref(false)
 const inputRef = ref<HTMLInputElement | null>(null)
 const text = ref(props.modelValue ? labelFor(props.modelValue) : '')
@@ -66,7 +65,6 @@ function pick(opt: CComboSelectOption) {
   if (opt.value !== props.modelValue) emit('update:modelValue', opt.value)
 }
 
-/** Commits whatever is currently typed: exact option match wins, else a free-typed value when `creatable`, else revert. */
 function commitTyped() {
   const raw = text.value.trim()
   if (!raw) {
