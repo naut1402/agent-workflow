@@ -3,7 +3,7 @@ import {
   AGENT_CLI_PROVIDER_IDS,
   isAgentCliProviderId,
   mcpDeliveryOf,
-  providerFamilyOf,
+  providerFamilyFromId,
 } from '../../../../../src/features/runner/business/providers/agentCli.js'
 import {
   createClaudeCodeCliProvider,
@@ -19,8 +19,8 @@ describe('agentCli family', () => {
     expect(AGENT_CLI_PROVIDER_IDS).toContain('cursor-cli')
     expect(AGENT_CLI_PROVIDER_IDS).toContain('codex-cli')
     expect(isAgentCliProviderId('console-command')).toBe(false)
-    expect(providerFamilyOf('console-command')).toBe('console-command')
-    expect(providerFamilyOf('cursor-cli')).toBe('agent-cli')
+    expect(providerFamilyFromId('console-command')).toBe('console-command')
+    expect(providerFamilyFromId('cursor-cli')).toBe('agent-cli')
   })
 
   test('AgentCliProvider vs console-command', () => {

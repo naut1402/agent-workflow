@@ -214,6 +214,29 @@ describe('familyOfProviderId — cùng quy tắc với providerFamilyOf của ba
     expect(familyOfProviderId(providerId)).toBe(family)
   })
 
+  it('TC-G6-08: family khai trong catalog thắng quy tắc theo id', () => {
+    expect(familyOfProviderId('weird-api', [{ id: 'weird-api', family: 'agent-cli' }] as any)).toBe('agent-cli')
+    expect(familyOfProviderId('la-ai', [{ id: 'la-ai', family: 'ai-api' }] as any)).toBe('ai-api')
+    expect(familyOfProviderId('weird-api', [{ id: 'weird-api' }] as any)).toBe('ai-api')
+  })
+
+  it('TC-G6-09: catalog có sẵn của backend cho cùng family dù có hay không truyền providers', () => {
+    const catalog = [
+      { id: 'claude-code-cli', family: 'agent-cli' },
+      { id: 'cursor-cli', family: 'agent-cli' },
+      { id: 'codex-cli', family: 'agent-cli' },
+      { id: 'console-command', family: 'console-command' },
+      { id: 'anthropic-api', family: 'ai-api' },
+      { id: 'openai-api', family: 'ai-api' },
+      { id: 'gemini-api', family: 'ai-api' },
+      { id: 'xai-api', family: 'ai-api' },
+    ]
+    for (const e of catalog) {
+      expect(familyOfProviderId(e.id, catalog as any)).toBe(e.family)
+      expect(familyOfProviderId(e.id)).toBe(e.family)
+    }
+  })
+
   it('provider id trống/không biết ⇒ console-command (mặc định an toàn)', () => {
     expect(familyOfProviderId(undefined)).toBe('console-command')
     expect(familyOfProviderId('')).toBe('console-command')
