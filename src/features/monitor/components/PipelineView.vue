@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { fetchFlowProfile, saveFlowProfile, patchTaskState, runPipelineStep, resetPipelineStep, startOrchestrator, stopOrchestrator } from '../scripts/PipelineViewApi'
@@ -10,6 +11,7 @@ import PipelineNode from './PipelineNode.vue'
 import ProfileSwitchDialog from './ProfileSwitchDialog.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import ArtifactNode from '../../../frontend/ui/ArtifactNode.vue'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import { canRunWithTaskState, isRunnableTarget } from '../lib/pipelineRunGuards'
 import { buildArtifactNodesAndEdges } from '../../../frontend/lib/pipelineArtifactGraph'
 import {
@@ -308,7 +310,7 @@ const hitlFeedback = ref('')
 // Không preselect — người duyệt phải chủ động chọn, tránh bấm nhầm "Xác nhận"
 // mà không đọc.
 const hitlDecision = ref<'' | 'approve' | 'reject'>('')
-const hitlBusy = ref(false)
+const { pending: hitlBusy, run: runHitl } = useApiAction()
 const hitlError = ref('')
 const hitlToast = ref('')
 
@@ -630,7 +632,7 @@ const deleteScopeEnabled = ref(false)
 const deleteScope = ref<'step' | 'onward'>('step')
 const resetError = ref('')
 const resetToast = ref('')
-const resetBusy = ref(false)
+const { pending: resetBusy, run: runReset } = useApiAction()
 
 // Bỏ tick = về mặc định ít phá huỷ nhất: chỉ lùi đúng step, không xoá gì.
 const effectiveResetScope = computed(() => (resetScopeEnabled.value ? resetScope.value : 'step'))
@@ -687,34 +689,33 @@ async function doResetStep(
   node: { id: string; label: string },
   scopes: { resetScope: 'step' | 'onward'; deleteScope: 'none' | 'step' | 'onward' },
 ) {
-  resetBusy.value = true
-  resetError.value = ''
-  try {
-    await resetPipelineStep(
-      props.task.task_id,
-      { stepId: node.id, ...scopes },
-      props.projectId ?? undefined,
-    )
-    // Đóng dialog CHỈ khi request đã thành công — đối xứng `submitHitl`. Đóng
-    // trước là ném mất hai nhóm phạm vi vừa tick khi server trả 409.
-    cancelResetConfirm()
-    resetToast.value = t('monitor.pipeline.resetDone')
-    emit('hitl-action')
-    setTimeout(() => { resetToast.value = '' }, 3000)
-  } catch (e: any) {
-    if (e?.status === 409) {
-      resetError.value = t('monitor.pipeline.stepAlreadyRunning')
-    } else {
-      resetError.value = String(e.message || e)
+  await runReset(async () => {
+    resetError.value = ''
+    try {
+      await resetPipelineStep(
+        props.task.task_id,
+        { stepId: node.id, ...scopes },
+        props.projectId ?? undefined,
+      )
+      // Đóng dialog CHỈ khi request đã thành công — đối xứng `submitHitl`. Đóng
+      // trước là ném mất hai nhóm phạm vi vừa tick khi server trả 409.
+      cancelResetConfirm()
+      resetToast.value = t('monitor.pipeline.resetDone')
+      emit('hitl-action')
+      setTimeout(() => { resetToast.value = '' }, 3000)
+    } catch (e: any) {
+      if (e?.status === 409) {
+        resetError.value = t('monitor.pipeline.stepAlreadyRunning')
+      } else {
+        resetError.value = String(e.message || e)
+      }
     }
-  } finally {
-    resetBusy.value = false
-  }
+  })
 }
 
 function confirmReset() {
   const node = resetConfirmNode.value
-  if (!node || resetBusy.value) return
+  if (!node) return
   doResetStep(node, {
     resetScope: effectiveResetScope.value,
     deleteScope: effectiveDeleteScope.value,
@@ -757,34 +758,34 @@ async function submitHitl() {
     hitlError.value = t('monitor.pipeline.missingMtime')
     return
   }
-  hitlBusy.value = true
-  hitlError.value = ''
-  try {
-    await patchTaskState(
-      hitlTaskId.value,
-      {
-        action,
-        gate_id: hitlGateId.value,
-        feedback: action === 'reject' ? hitlFeedback.value.trim() : undefined,
-        mtime: hitlMtime.value,
-      },
-      props.projectId ?? undefined,
-    )
-    hitlOpen.value = false
-    hitlToast.value = action === 'approve' ? t('monitor.pipeline.approved') : t('monitor.pipeline.rejected')
-    emit('hitl-action')
-    setTimeout(() => { hitlToast.value = '' }, 3000)
-  } catch (e: any) {
-    if (e?.status === 409) {
-      hitlError.value = t('monitor.pipeline.stateChanged')
-      hitlMtime.value = e?.body?.mtime ?? props.task.state_mtime ?? null
+  const mtime = hitlMtime.value
+  await runHitl(async () => {
+    hitlError.value = ''
+    try {
+      await patchTaskState(
+        hitlTaskId.value,
+        {
+          action,
+          gate_id: hitlGateId.value,
+          feedback: action === 'reject' ? hitlFeedback.value.trim() : undefined,
+          mtime,
+        },
+        props.projectId ?? undefined,
+      )
+      hitlOpen.value = false
+      hitlToast.value = action === 'approve' ? t('monitor.pipeline.approved') : t('monitor.pipeline.rejected')
       emit('hitl-action')
-    } else {
-      hitlError.value = String(e.message || e)
+      setTimeout(() => { hitlToast.value = '' }, 3000)
+    } catch (e: any) {
+      if (e?.status === 409) {
+        hitlError.value = t('monitor.pipeline.stateChanged')
+        hitlMtime.value = e?.body?.mtime ?? props.task.state_mtime ?? null
+        emit('hitl-action')
+      } else {
+        hitlError.value = String(e.message || e)
+      }
     }
-  } finally {
-    hitlBusy.value = false
-  }
+  })
 }
 </script>
 
@@ -864,25 +865,28 @@ async function submitHitl() {
           <span>{{ t('monitor.pipeline.hitlHeading', { label: hitlLabel }) }}</span>
           <button class="modal-close" @click="hitlOpen = false">✕</button>
         </div>
-        <div class="modal-body">
-          <p class="modal-hint">
-            {{ t('monitor.pipeline.hitlWaiting') }} <code>{{ hitlGateId }}</code> {{ t('monitor.pipeline.hitlWaitingMid') }} <strong>{{ hitlTaskId }}</strong>.
-          </p>
-          <div class="cfg-choices">
-            <label class="cfg-choice">
-              <input v-model="hitlDecision" type="radio" name="hitl-decision" value="approve" />
-              <span>{{ t('monitor.pipeline.decisionApprove') }}</span>
+        <div class="c-loading-host">
+          <CLoadingOverlay :active="hitlBusy" />
+          <div class="modal-body">
+            <p class="modal-hint">
+              {{ t('monitor.pipeline.hitlWaiting') }} <code>{{ hitlGateId }}</code> {{ t('monitor.pipeline.hitlWaitingMid') }} <strong>{{ hitlTaskId }}</strong>.
+            </p>
+            <div class="cfg-choices">
+              <label class="cfg-choice">
+                <input v-model="hitlDecision" type="radio" name="hitl-decision" value="approve" />
+                <span>{{ t('monitor.pipeline.decisionApprove') }}</span>
+              </label>
+              <label class="cfg-choice">
+                <input v-model="hitlDecision" type="radio" name="hitl-decision" value="reject" />
+                <span>{{ t('monitor.pipeline.decisionReject') }}</span>
+              </label>
+            </div>
+            <label v-if="hitlDecision === 'reject'" class="cfg-label">
+              {{ t('monitor.pipeline.feedbackLabel') }}
+              <textarea v-model="hitlFeedback" class="cfg-textarea" rows="4" />
             </label>
-            <label class="cfg-choice">
-              <input v-model="hitlDecision" type="radio" name="hitl-decision" value="reject" />
-              <span>{{ t('monitor.pipeline.decisionReject') }}</span>
-            </label>
+            <p v-if="hitlError" class="editor-error">{{ hitlError }}</p>
           </div>
-          <label v-if="hitlDecision === 'reject'" class="cfg-label">
-            {{ t('monitor.pipeline.feedbackLabel') }}
-            <textarea v-model="hitlFeedback" class="cfg-textarea" rows="4" />
-          </label>
-          <p v-if="hitlError" class="editor-error">{{ hitlError }}</p>
         </div>
         <div class="modal-actions">
           <button class="btn-ghost" :disabled="hitlBusy" @click="hitlOpen = false">
@@ -951,54 +955,57 @@ async function submitHitl() {
           <span>{{ t('monitor.pipeline.resetConfirmHeading', { label: resetConfirmNode?.label ?? '' }) }}</span>
           <button class="modal-close" @click="cancelResetConfirm">✕</button>
         </div>
-        <div class="modal-body">
-          <p class="modal-hint">
-            {{ t('monitor.pipeline.resetConfirmBody', { label: resetConfirmNode?.label ?? '' }) }}
-          </p>
-
-          <label class="cfg-label cfg-label-row">
-            <input v-model="resetScopeEnabled" type="checkbox" />
-            {{ t('monitor.pipeline.resetScopeToggle') }}
-          </label>
-          <div v-if="resetScopeEnabled" class="cfg-choices cfg-choices-nested">
-            <label class="cfg-choice">
-              <input v-model="resetScope" type="radio" name="reset-scope" value="step" />
-              <span>{{ t('monitor.pipeline.resetScopeStep') }}</span>
-            </label>
-            <label v-if="resetHasLaterSteps" class="cfg-choice">
-              <input v-model="resetScope" type="radio" name="reset-scope" value="onward" />
-              <span>{{ t('monitor.pipeline.resetScopeOnward') }}</span>
-            </label>
-          </div>
-
-          <label class="cfg-label cfg-label-row">
-            <input v-model="deleteScopeEnabled" type="checkbox" />
-            {{ t('monitor.pipeline.deleteScopeToggle') }}
-          </label>
-          <div v-if="deleteScopeEnabled" class="cfg-choices cfg-choices-nested">
-            <label class="cfg-choice">
-              <input v-model="deleteScope" type="radio" name="delete-scope" value="step" />
-              <span>{{ t('monitor.pipeline.deleteScopeStep') }}</span>
-            </label>
-            <label v-if="resetHasLaterSteps" class="cfg-choice">
-              <input
-                v-model="deleteScope"
-                type="radio"
-                name="delete-scope"
-                value="onward"
-                :disabled="deleteOnwardBlocked"
-              />
-              <span>{{ t('monitor.pipeline.deleteScopeOnward') }}</span>
-            </label>
-            <p v-if="resetHasLaterSteps && deleteOnwardBlocked" class="modal-hint">
-              {{ t('monitor.pipeline.deleteScopeOnwardBlocked') }}
+        <div class="c-loading-host">
+          <CLoadingOverlay :active="resetBusy" />
+          <div class="modal-body">
+            <p class="modal-hint">
+              {{ t('monitor.pipeline.resetConfirmBody', { label: resetConfirmNode?.label ?? '' }) }}
             </p>
-          </div>
 
-          <p v-if="resetFilesToDelete.length" class="editor-error">
-            {{ t('monitor.pipeline.resetConfirmDeleteWarning', { files: resetFilesToDelete.join(', ') }) }}
-          </p>
-          <p v-if="resetError" class="editor-error">{{ resetError }}</p>
+            <label class="cfg-label cfg-label-row">
+              <input v-model="resetScopeEnabled" type="checkbox" />
+              {{ t('monitor.pipeline.resetScopeToggle') }}
+            </label>
+            <div v-if="resetScopeEnabled" class="cfg-choices cfg-choices-nested">
+              <label class="cfg-choice">
+                <input v-model="resetScope" type="radio" name="reset-scope" value="step" />
+                <span>{{ t('monitor.pipeline.resetScopeStep') }}</span>
+              </label>
+              <label v-if="resetHasLaterSteps" class="cfg-choice">
+                <input v-model="resetScope" type="radio" name="reset-scope" value="onward" />
+                <span>{{ t('monitor.pipeline.resetScopeOnward') }}</span>
+              </label>
+            </div>
+
+            <label class="cfg-label cfg-label-row">
+              <input v-model="deleteScopeEnabled" type="checkbox" />
+              {{ t('monitor.pipeline.deleteScopeToggle') }}
+            </label>
+            <div v-if="deleteScopeEnabled" class="cfg-choices cfg-choices-nested">
+              <label class="cfg-choice">
+                <input v-model="deleteScope" type="radio" name="delete-scope" value="step" />
+                <span>{{ t('monitor.pipeline.deleteScopeStep') }}</span>
+              </label>
+              <label v-if="resetHasLaterSteps" class="cfg-choice">
+                <input
+                  v-model="deleteScope"
+                  type="radio"
+                  name="delete-scope"
+                  value="onward"
+                  :disabled="deleteOnwardBlocked"
+                />
+                <span>{{ t('monitor.pipeline.deleteScopeOnward') }}</span>
+              </label>
+              <p v-if="resetHasLaterSteps && deleteOnwardBlocked" class="modal-hint">
+                {{ t('monitor.pipeline.deleteScopeOnwardBlocked') }}
+              </p>
+            </div>
+
+            <p v-if="resetFilesToDelete.length" class="editor-error">
+              {{ t('monitor.pipeline.resetConfirmDeleteWarning', { files: resetFilesToDelete.join(', ') }) }}
+            </p>
+            <p v-if="resetError" class="editor-error">{{ resetError }}</p>
+          </div>
         </div>
         <div class="modal-actions">
           <button class="btn-ghost" :disabled="resetBusy" @click="cancelResetConfirm">
