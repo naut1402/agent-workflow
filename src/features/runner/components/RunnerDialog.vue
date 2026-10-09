@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { slugify } from '../../../shared/lib/stringUtils'
 import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
 import { deleteConnection } from '../scripts/ConnectionDialogApi'
 import ConnectionDialog from './ConnectionDialog.vue'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
-import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
+import CDialog from '../../../frontend/ui/CDialog.vue'
 import CSelect from '../../../frontend/ui/CSelect.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import type { ConnectionOption, ProviderEntry, ProviderConfigOption, RunnerDraft } from '../types'
@@ -253,179 +253,160 @@ function closeConnectionDialog() {
   showConnectionDialog.value = false
   editingConnection.value = null
 }
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && !showConnectionDialog.value) emit('close')
-}
-
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="modal-backdrop" @click.self="emit('close')">
-      <div
-        class="modal runner-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="runner-dialog-title"
-      >
-        <div class="modal-head">
-          <span id="runner-dialog-title">{{ isEdit ? t('runner.dialog.editTitle') : t('runner.dialog.addTitle') }}</span>
-          <button type="button" class="modal-close" :aria-label="t('runner.a11y.close')" @click="emit('close')">✕</button>
-        </div>
+  <CDialog
+    class="runner-dialog"
+    :title="isEdit ? t('runner.dialog.editTitle') : t('runner.dialog.addTitle')"
+    :loading="saving"
+    width="min(520px, 94vw)"
+    @close="emit('close')"
+  >
+    <div v-if="error" class="err-banner">{{ error }}</div>
+    <div v-if="message" class="ok-banner">{{ message }}</div>
 
-        <div class="c-loading-host">
-          <CLoadingOverlay :active="saving" />
-          <div class="modal-body">
-            <div v-if="error" class="err-banner">{{ error }}</div>
-            <div v-if="message" class="ok-banner">{{ message }}</div>
-
-            <div class="field">
-              <label class="cfg-label">{{ t('runner.fields.name') }}
-                <input v-model="draft.name" class="cfg-input" placeholder="vd. Claude local" />
-              </label>
-              <p v-if="!isEdit" class="cfg-hint">{{ t('runner.hints.generatedId', { id: payloadId }) }}</p>
-            </div>
-
-            <div class="field">
-              <label class="cfg-label">Connection</label>
-              <div class="connection-row">
-                <CSelect
-                  v-model="draft.connectionId"
-                  :options="connectionSelectOptions"
-                  :placeholder="t('runner.fields.connectionPlaceholder')"
-                  aria-label="Connection"
-                  class="cfg-select"
-                />
-                <div class="icon-btn-group">
-                  <button
-                    type="button"
-                    class="icon-btn icon-btn-inline"
-                    :title="t('runner.connectionDialog.title')"
-                    :aria-label="t('runner.connectionDialog.title')"
-                    @click="openNewConnection"
-                  >
-                    <Icon name="plus" />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn icon-btn-inline"
-                    :disabled="!selectedConnection"
-                    :title="t('runner.connectionDialog.editTitle')"
-                    :aria-label="t('runner.connectionDialog.editTitle')"
-                    @click="openEditConnection"
-                  >
-                    <Icon name="pencil" />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn icon-btn-inline"
-                    :disabled="!selectedConnection"
-                    :title="t('runner.connectionDialog.copyConnection')"
-                    :aria-label="t('runner.connectionDialog.copyConnection')"
-                    @click="openCopyConnection"
-                  >
-                    <Icon name="copy" />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn icon-btn-inline danger"
-                    :disabled="!selectedConnection"
-                    :title="t('runner.connectionDialog.deleteConnection')"
-                    :aria-label="t('runner.connectionDialog.deleteConnection')"
-                    @click="removeConnection"
-                  >
-                    <Icon name="trash" />
-                  </button>
-                </div>
-              </div>
-              <p v-if="isConsoleCommand" class="muted hint">{{ t('runner.fields.consoleHint') }}</p>
-            </div>
-
-            <div v-if="showsAllowedTools" class="field">
-              <label class="cfg-label">{{ t('runner.fields.allowedTools') }}
-                <input v-model="draft.config.allowedTools" class="cfg-input" />
-              </label>
-            </div>
-
-            <div class="field">
-              <label class="cfg-label">{{ t('runner.fields.timeoutMs') }}
-                <CSelect
-                  v-model="timeoutModel"
-                  :options="timeoutSelectOptions"
-                  :aria-label="t('runner.fields.timeoutMs')"
-                  class="cfg-select"
-                />
-              </label>
-              <p class="muted hint">{{ t('runner.fields.timeoutMsHint') }}</p>
-            </div>
-
-            <div class="field enable-row">
-              <span class="cfg-label">{{ t('runner.fields.status') }}</span>
-              <button
-                type="button"
-                class="icon-btn"
-                :class="{ active: draft.enabled }"
-                :title="draft.enabled ? t('runner.toggle.disable') : t('runner.toggle.enable')"
-                :aria-label="draft.enabled ? t('runner.toggle.disable') : t('runner.toggle.enable')"
-                @click="draft.enabled = !draft.enabled"
-              >
-                <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
-                  <path
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    d="M8 2.5v5"
-                  />
-                  <path
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    d="M5.2 4.2a4.5 4.5 0 1 0 5.6 0"
-                  />
-                </svg>
-              </button>
-              <span class="muted">{{ draft.enabled ? t('runner.status.on') : t('runner.status.off') }}</span>
-            </div>
-
-            <div class="modal-actions">
-              <button
-                v-if="isEdit"
-                type="button"
-                class="btn-ghost btn-sm"
-                :disabled="testing"
-                @click="smokeTest"
-              >
-                {{ testing ? t('runner.actions.testing') : t('runner.actions.test') }}
-              </button>
-              <span class="spacer" />
-              <button type="button" class="btn-ghost btn-sm" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
-              <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
-                {{ saving ? t('runner.actions.saving') : t('runner.actions.save') }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="field">
+      <label class="cfg-label">{{ t('runner.fields.name') }}
+        <input v-model="draft.name" class="cfg-input" placeholder="vd. Claude local" />
+      </label>
+      <p v-if="!isEdit" class="cfg-hint">{{ t('runner.hints.generatedId', { id: payloadId }) }}</p>
     </div>
 
-    <ConnectionDialog
-      v-if="showConnectionDialog"
-      :providers="providers"
-      :providerConfigs="providerConfigs"
-      :connection="editingConnection"
-      @close="closeConnectionDialog"
-      @saved="onConnectionSaved"
-    />
-  </Teleport>
+    <div class="field">
+      <label class="cfg-label">Connection</label>
+      <div class="connection-row">
+        <CSelect
+          v-model="draft.connectionId"
+          :options="connectionSelectOptions"
+          :placeholder="t('runner.fields.connectionPlaceholder')"
+          aria-label="Connection"
+          class="cfg-select"
+        />
+        <div class="icon-btn-group">
+          <button
+            type="button"
+            class="icon-btn icon-btn-inline"
+            :title="t('runner.connectionDialog.title')"
+            :aria-label="t('runner.connectionDialog.title')"
+            @click="openNewConnection"
+          >
+            <Icon name="plus" />
+          </button>
+          <button
+            type="button"
+            class="icon-btn icon-btn-inline"
+            :disabled="!selectedConnection"
+            :title="t('runner.connectionDialog.editTitle')"
+            :aria-label="t('runner.connectionDialog.editTitle')"
+            @click="openEditConnection"
+          >
+            <Icon name="pencil" />
+          </button>
+          <button
+            type="button"
+            class="icon-btn icon-btn-inline"
+            :disabled="!selectedConnection"
+            :title="t('runner.connectionDialog.copyConnection')"
+            :aria-label="t('runner.connectionDialog.copyConnection')"
+            @click="openCopyConnection"
+          >
+            <Icon name="copy" />
+          </button>
+          <button
+            type="button"
+            class="icon-btn icon-btn-inline danger"
+            :disabled="!selectedConnection"
+            :title="t('runner.connectionDialog.deleteConnection')"
+            :aria-label="t('runner.connectionDialog.deleteConnection')"
+            @click="removeConnection"
+          >
+            <Icon name="trash" />
+          </button>
+        </div>
+      </div>
+      <p v-if="isConsoleCommand" class="muted hint">{{ t('runner.fields.consoleHint') }}</p>
+    </div>
+
+    <div v-if="showsAllowedTools" class="field">
+      <label class="cfg-label">{{ t('runner.fields.allowedTools') }}
+        <input v-model="draft.config.allowedTools" class="cfg-input" />
+      </label>
+    </div>
+
+    <div class="field">
+      <label class="cfg-label">{{ t('runner.fields.timeoutMs') }}
+        <CSelect
+          v-model="timeoutModel"
+          :options="timeoutSelectOptions"
+          :aria-label="t('runner.fields.timeoutMs')"
+          class="cfg-select"
+        />
+      </label>
+      <p class="muted hint">{{ t('runner.fields.timeoutMsHint') }}</p>
+    </div>
+
+    <div class="field enable-row">
+      <span class="cfg-label">{{ t('runner.fields.status') }}</span>
+      <button
+        type="button"
+        class="icon-btn"
+        :class="{ active: draft.enabled }"
+        :title="draft.enabled ? t('runner.toggle.disable') : t('runner.toggle.enable')"
+        :aria-label="draft.enabled ? t('runner.toggle.disable') : t('runner.toggle.enable')"
+        @click="draft.enabled = !draft.enabled"
+      >
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            d="M8 2.5v5"
+          />
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            d="M5.2 4.2a4.5 4.5 0 1 0 5.6 0"
+          />
+        </svg>
+      </button>
+      <span class="muted">{{ draft.enabled ? t('runner.status.on') : t('runner.status.off') }}</span>
+    </div>
+
+    <template #footer>
+      <div class="modal-actions">
+        <button
+          v-if="isEdit"
+          type="button"
+          class="btn-ghost btn-sm"
+          :disabled="testing || saving"
+          @click="smokeTest"
+        >
+          {{ testing ? t('runner.actions.testing') : t('runner.actions.test') }}
+        </button>
+        <span class="spacer" />
+        <button type="button" class="btn-ghost btn-sm" :disabled="saving" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
+        <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
+          {{ saving ? t('runner.actions.saving') : t('runner.actions.save') }}
+        </button>
+      </div>
+    </template>
+  </CDialog>
+
+  <ConnectionDialog
+    v-if="showConnectionDialog"
+    :providers="providers"
+    :providerConfigs="providerConfigs"
+    :connection="editingConnection"
+    @close="closeConnectionDialog"
+    @saved="onConnectionSaved"
+  />
 </template>
 
 <style scoped lang="scss">
-.runner-dialog { max-width: 520px; width: min(520px, 94vw); }
 .runner-dialog .cfg-hint { margin: 0.2rem 0 0; font-size: 11px; opacity: 0.75; }
 .field { margin-bottom: 0.75rem; }
 .field .cfg-input,
@@ -444,13 +425,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   gap: 0.5rem;
 }
 .enable-row .cfg-label { margin: 0; }
-.modal-body { display: flex; flex-direction: column; }
 .modal-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-top: auto;
   padding-top: 1rem;
 }
 .spacer { flex: 1; }

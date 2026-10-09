@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
-import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
+import CDialog from '../../../frontend/ui/CDialog.vue'
 import {
   createKnowledgeTag,
   renameKnowledgeTag,
@@ -94,73 +94,61 @@ async function save() {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
-    <div class="modal knowledge-tag-dialog" role="dialog" aria-modal="true">
-      <div class="modal-head">
-        <h3>
-          {{ isEdit
-            ? t('knowledge.tags.dialog.editTitle', { tag: tag?.tag })
-            : t('knowledge.tags.dialog.createTitle') }}
-        </h3>
-        <button
-          type="button"
-          class="modal-close"
-          :title="t('knowledge.form.close')"
-          :aria-label="t('knowledge.form.close')"
-          @click="emit('close')"
-        >
-          ✕
-        </button>
-      </div>
+  <CDialog
+    class="knowledge-tag-dialog"
+    :title="isEdit
+      ? t('knowledge.tags.dialog.editTitle', { tag: tag?.tag })
+      : t('knowledge.tags.dialog.createTitle')"
+    :loading="saving"
+    width="min(480px, calc(100vw - 32px))"
+    @close="emit('close')"
+  >
+    <div class="knowledge-tag-body">
+      <label v-if="!isEdit" class="cfg-label">
+        {{ t('knowledge.tags.dialog.name') }}
+        <input v-model="name" class="cfg-input" :placeholder="t('knowledge.tags.dialog.namePlaceholder')" />
+      </label>
+      <label v-else class="cfg-label">
+        {{ t('knowledge.tags.dialog.renameTo') }}
+        <input v-model="renameTo" class="cfg-input" :placeholder="tag?.tag" />
+        <span class="muted knowledge-tag-hint">{{ t('knowledge.tags.dialog.renameHint') }}</span>
+      </label>
 
-      <div class="c-loading-host">
-        <CLoadingOverlay :active="saving" />
-        <div class="modal-body knowledge-tag-body">
-          <label v-if="!isEdit" class="cfg-label">
-            {{ t('knowledge.tags.dialog.name') }}
-            <input v-model="name" class="cfg-input" :placeholder="t('knowledge.tags.dialog.namePlaceholder')" />
-          </label>
-          <label v-else class="cfg-label">
-            {{ t('knowledge.tags.dialog.renameTo') }}
-            <input v-model="renameTo" class="cfg-input" :placeholder="tag?.tag" />
-            <span class="muted knowledge-tag-hint">{{ t('knowledge.tags.dialog.renameHint') }}</span>
-          </label>
-
-          <div class="cfg-label">
-            <span>{{ t('knowledge.tags.dialog.color') }}</span>
-            <!-- Palette token cố định: mỗi token khai hai giá trị theo `[data-theme]`
-                 nên chip tương phản đúng ở cả hai theme. Giá trị gửi lên là TÊN token. -->
-            <div class="knowledge-color-row">
-              <button
-                v-for="c in TAG_COLORS"
-                :key="c"
-                type="button"
-                class="icon-btn knowledge-color-swatch"
-                :class="{ active: color === c }"
-                :style="colorStyle(c)"
-                :title="t(`knowledge.tags.colors.${c}`)"
-                :aria-label="t(`knowledge.tags.colors.${c}`)"
-                @click="color = c"
-              />
-            </div>
-          </div>
-
-          <label class="cfg-label">
-            {{ t('knowledge.tags.dialog.description') }}
-            <input v-model="description" class="cfg-input" />
-          </label>
-          <label class="cfg-label">
-            {{ t('knowledge.tags.dialog.scope') }}
-            <select v-model="scope" class="cfg-input">
-              <option value="project">project</option>
-              <option value="global">global</option>
-            </select>
-          </label>
-
-          <p v-if="error" class="err">{{ error }}</p>
+      <div class="cfg-label">
+        <span>{{ t('knowledge.tags.dialog.color') }}</span>
+        <!-- Palette token cố định: mỗi token khai hai giá trị theo `[data-theme]`
+             nên chip tương phản đúng ở cả hai theme. Giá trị gửi lên là TÊN token. -->
+        <div class="knowledge-color-row">
+          <button
+            v-for="c in TAG_COLORS"
+            :key="c"
+            type="button"
+            class="icon-btn knowledge-color-swatch"
+            :class="{ active: color === c }"
+            :style="colorStyle(c)"
+            :title="t(`knowledge.tags.colors.${c}`)"
+            :aria-label="t(`knowledge.tags.colors.${c}`)"
+            @click="color = c"
+          />
         </div>
       </div>
 
+      <label class="cfg-label">
+        {{ t('knowledge.tags.dialog.description') }}
+        <input v-model="description" class="cfg-input" />
+      </label>
+      <label class="cfg-label">
+        {{ t('knowledge.tags.dialog.scope') }}
+        <select v-model="scope" class="cfg-input">
+          <option value="project">project</option>
+          <option value="global">global</option>
+        </select>
+      </label>
+
+      <p v-if="error" class="err">{{ error }}</p>
+    </div>
+
+    <template #footer>
       <div class="modal-foot">
         <button
           type="button"
@@ -170,20 +158,15 @@ async function save() {
         >{{ t('knowledge.actions.save') }}</button>
         <button type="button" class="btn-ghost" @click="emit('close')">{{ t('knowledge.form.cancel') }}</button>
       </div>
-    </div>
-  </div>
+    </template>
+  </CDialog>
 </template>
 
 <style scoped lang="scss">
-.knowledge-tag-dialog {
-  width: min(480px, calc(100vw - 32px));
-}
 .knowledge-tag-body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: min(76vh, 760px);
-  overflow-y: auto;
 }
 .knowledge-tag-hint { font-size: 11px; }
 .knowledge-color-row { display: flex; flex-wrap: wrap; gap: 4px; }

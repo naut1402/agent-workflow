@@ -81,7 +81,4 @@ export default {
     saveFailed: 'Could not save the MCP server',
     deleteFailed: 'Could not delete the MCP server',
   },
-  a11y: {
-    close: 'Close',
-  },
 }

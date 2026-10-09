@@ -94,6 +94,7 @@ Primitive dùng chung trong `src/frontend/ui/`:
 - **Icon luôn qua `<Icon name="..." />`** (`src/frontend/ui/Icon.vue`) — **không** tự vẽ `<svg>` / `<path>` trong component feature. Icon chưa có thì thêm case mới vào `Icon.vue` (giữ nguyên viewBox/style gốc), không copy SVG ra file khác dù chỉ dùng 1 nơi.
 - **Dropdown mới không dùng `<select>` native** — dùng `CSelect` (option cố định) hoặc `CComboSelect` (nhiều option / creatable). Chỉ giữ `<select>` khi cần hành vi trình duyệt gốc không có API tương đương.
 - **Class truyền vào `CSelect`/`CComboSelect` chỉ lo kích thước** (`width` / `flex` / `min-width`). Truyền class control native (`cfg-input`, `cfg-textarea`) sẽ rơi vào `div` wrapper → hộp lồng hộp. Mẫu đúng: `cfg-select` / `cfg-combo-select`.
+- **Dialog modal mới dùng `CDialog`** — không tự dựng `Teleport` + `.modal-backdrop` + handler `Escape` trong feature. Kích thước truyền qua prop, không qua class scoped — [`ui-design-guideline.md`](ui-design-guideline.md) §3.
 
 ---
 
