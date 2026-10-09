@@ -12,17 +12,8 @@ const props = defineProps({
 const { t } = useI18nHelpers()
 const { openTaskChat } = useChatSurface()
 
-// Actions sit on the node's border and stay always visible — a hover-only
-// popover outside the node lost hover as the cursor travelled to it, so the
-// button vanished before it could be clicked.
-// Chat only appears once a step has actually run (`data.executed`) — a step
-// that never ran has no CLI session to replay.
 const hasRunHistory = computed(() => Boolean(props.data.taskId) && Boolean(props.data.executed))
 
-/**
- * Biến thể node điều phối: chat + một nút hành động — Run khi rảnh, Stop khi
- * đang có lượt chạy. Không có Reset: trạng thái của node chỉ là cờ halt.
- */
 const isOrchestrator = computed(() => props.data.kind === 'orchestrator')
 
 const ORCHESTRATOR_ICON: Record<string, string> = {
@@ -84,9 +75,7 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
     ]"
   >
     <div class="pnode-actions">
-      <!-- Rảnh thì Run, bận thì Stop. Chỉ có Stop thì ở trạng thái `halted`
-           node trắng nút, mà Run/Reset trên mọi step cũng đã ẩn — người dùng mất
-           sạch lối thoát đúng lúc cần nó nhất. -->
+      <!-- xem docs/architecture/code/monitor.md §20 -->
       <button
         v-if="isOrchestrator && !data.orchestratorBusy"
         type="button"
@@ -199,8 +188,6 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
   border: 2px solid var(--border);
   border-radius: 10px;
   padding: 8px 14px;
-  // Wide enough that the top-right action buttons (run/chat) never crowd the
-  // centred status bubble.
   min-width: 110px;
   text-align: center;
   cursor: default;
@@ -257,8 +244,6 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
 .pnode {
   position: relative;
 }
-/* Always reachable (no hover race): the buttons straddle the node's top border,
-   which passes through their vertical middle. */
 .pnode-actions {
   position: absolute;
   inset: 0;
@@ -267,8 +252,6 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
 }
 .pnode-action {
   position: absolute;
-  /* The containing block is the padding box, so -1px lifts the button by half
-     the node's 2px border — its middle then lands on the border line. */
   top: -1px;
   pointer-events: auto;
   display: flex;
@@ -277,7 +260,6 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
   width: 24px;
   height: 24px;
   padding: 0;
-  /* Borderless + hover scale, per docs/agent-rules/ui-design-guideline.md (.icon-btn). */
   border: none;
   background: transparent;
   color: var(--muted);
@@ -287,8 +269,6 @@ function bubbleTitle(data: Record<string, any>): string | undefined {
 .pnode-action:hover {
   color: var(--text);
 }
-/* The positioning transform is repeated in each hover rule so the scale
-   composes with it instead of replacing it. */
 .pnode-action-center {
   left: 50%;
   transform: translate(-50%, -50%);

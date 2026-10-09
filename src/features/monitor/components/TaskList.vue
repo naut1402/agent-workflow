@@ -8,14 +8,13 @@ import { resolveHideMissingArtifacts } from '../../../frontend/configs/appSettin
 const props = defineProps({
   tasks: { type: Array as () => any[], required: true },
   selectedId: { type: String, default: null },
-  openArtifact: { type: Object, default: null }, // { taskId, name }
+  openArtifact: { type: Object, default: null },
   projectId: { type: String, default: null },
 })
 const emit = defineEmits(['select', 'open-artifact', 'task-archived', 'task-deleted', 'create-task'])
 const { t } = useI18nHelpers()
 const { settings, update } = useAppSettings()
 
-// Track which tasks have their file list expanded.
 const expanded = ref(new Set())
 
 function toggleExpand(taskId: string) {
@@ -24,12 +23,9 @@ function toggleExpand(taskId: string) {
   } else {
     expanded.value.add(taskId)
   }
-  // Force reactivity on Set mutation.
   expanded.value = new Set(expanded.value)
 }
 
-/** Collapse every expanded task's file list — exposed for MonitorLayout's
- * click-outside handling (setting-gated, mục 7). */
 function collapseAll() {
   expanded.value = new Set()
 }
@@ -40,9 +36,6 @@ function toggleHideMissing() {
   update({ hideMissingArtifacts: !hideMissing.value })
 }
 
-// Archived tasks no longer appear in the main list — they're grouped in a
-// collapsible section at the bottom instead. Non-archived order is preserved
-// (no re-sort) since it's a plain filter over props.tasks.
 const activeTasks = computed(() => props.tasks.filter((t) => !t.archived))
 const archivedTasks = computed(() => props.tasks.filter((t) => t.archived))
 </script>

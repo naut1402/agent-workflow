@@ -1,7 +1,3 @@
-/**
- * Clone a git repo into dashboard workspace and register as a project.
- */
-
 import fs from 'node:fs'
 import path from 'node:path'
 import { formatGitFailure, runGit, GIT_CLONE_TIMEOUT_MS } from '../git.js'
@@ -13,7 +9,6 @@ import {
   resolveGithubTokenForRepo,
 } from '../../../settings/business/index.js'
 
-/** Git metadata kept on registry JSON without extending core Project. */
 type ProjectGitMeta = Project & {
   gitUrl?: string
   defaultBranch?: string
@@ -28,11 +23,11 @@ function sanitiseBranch(branch: unknown): string | null {
   return b.slice(0, 200)
 }
 
-/** Reject private/loopback hosts (same policy spirit as fetchUrlSafe). Exported for tests. */
+/** Accept an https or SSH git URL to a public host; null otherwise. */
 export function sanitiseGitUrl(url: unknown): string | null {
   if (typeof url !== 'string' || !url.trim()) return null
   const u = url.trim().slice(0, 500)
-  // https://host/owner/repo — no userinfo (@); blocks SSRF to private hosts.
+  // xem docs/architecture/code/monitor.md §15
   if (/^https:\/\/[^\s/@]+\/[^\s/]+\/[^\s/]+/i.test(u)) {
     try {
       const host = new URL(u).hostname
@@ -42,7 +37,6 @@ export function sanitiseGitUrl(url: unknown): string | null {
       return null
     }
   }
-  // git@host:owner/repo.git
   const ssh = u.match(/^git@([\w.-]+):[\w./-]+\.git$/i)
   if (ssh) {
     if (isPrivateHostname(ssh[1])) return null
@@ -66,7 +60,6 @@ function ensureDevTeamAgent(repoDir: string): string {
   return fs.realpathSync(inner)
 }
 
-/** Last path segment of URL / SSH ref, without `.git`. */
 function deriveRepoName(gitUrl: string): string {
   const slug = parseGithubRepoRef(gitUrl)
   if (slug) {
@@ -91,10 +84,6 @@ function sanitiseDestSegment(raw: string): string {
   )
 }
 
-/**
- * Folder under clones/: prefer `repo-branch`; if exists append base36 timestamp
- * so same repo + other branch (or re-clone) still works.
- */
 function allocateCloneDest(
   clonesRoot: string,
   opts: { destName?: string; repoName: string; branch: string },
@@ -108,11 +97,7 @@ function allocateCloneDest(
   return path.join(clonesRoot, `${base}-${Date.now().toString(36)}`.slice(0, 64))
 }
 
-/**
- * Canonical HTTPS clone URL from already-parsed owner/repo.
- * Exported for unit tests — do not re-match the path with a non-anchored
- * non-greedy regex (that truncated `agent-workflow` → `a`).
- */
+/** Canonical HTTPS clone URL from already-parsed owner/repo. */
 export function normaliseGithubCloneUrl(gitUrl: string, owner: string, repo: string): string {
   if (/^git@github\.com:/i.test(gitUrl) || /^https:\/\/github\.com\//i.test(gitUrl)) {
     return `https://github.com/${owner}/${repo}.git`
@@ -121,9 +106,8 @@ export function normaliseGithubCloneUrl(gitUrl: string, owner: string, repo: str
 }
 
 /**
- * GitHub git Smart HTTP rejects `Authorization: Bearer` (`remote: invalid credentials`).
- * Use Basic with username `x-access-token` (token stays out of the remote URL).
- * Exported for unit tests.
+ * `http.extraHeader` value authenticating GitHub git over HTTPS with `token`.
+ * xem docs/architecture/code/monitor.md §15
  */
 export function githubGitAuthExtraHeader(token: string): string {
   const safeToken = token.replace(/[\r\n]/g, '').split(String.fromCharCode(0)).join('').trim()
@@ -137,7 +121,7 @@ export function resolveCloneAuth(gitUrl: string): {
   extraHeader: string | null
   usedToken: boolean
 } {
-  // Defense in depth: never send PAT to a non-github host even if slug parse matches.
+  // xem docs/architecture/code/monitor.md §15
   if (!isGithubGitRemote(gitUrl)) {
     return { cloneUrl: gitUrl, extraHeader: null, usedToken: false }
   }

@@ -1,22 +1,7 @@
 import { existsSync, joinPath, readTextFileSync, readdirSync } from '../../../backend/lib/fileHelper.js'
 import os from 'node:os'
 
-/**
- * Read a Claude Code CLI session transcript — the conversation history the CLI
- * itself keeps, which is what the dashboard chat surface replays (design: chat
- * trực tiếp với runner, F0013).
- *
- * Layout written by the CLI:
- *   <config>/projects/<cwd with every non-alphanumeric char → '-'>/<sessionId>.jsonl
- * one JSON object per line. Only `type: 'user' | 'assistant'` lines carry
- * conversation content; the rest (`queue-operation`, `attachment`,
- * `last-prompt`, `ai-title`, `summary`, `system`) are CLI bookkeeping. Lines
- * with `isSidechain: true` belong to a subagent's own conversation, not this
- * one.
- *
- * The file grows while the job runs, so polling it is also how the dashboard
- * monitors a runner mid-flight instead of only seeing the final result.
- */
+// xem docs/architecture/code/monitor.md §13
 
 export type TranscriptRole = 'user' | 'assistant' | 'tool'
 
@@ -30,11 +15,8 @@ export interface TranscriptTurn {
   tool?: string
 }
 
-/** Per-turn text cap — a single agent reply can be enormous. */
 const MAX_TURN_CHARS = 4000
-/** Newest-N turns returned, to bound both memory and payload size. */
 const MAX_TURNS = 200
-/** Directories scanned when the encoded-path lookup misses. */
 const MAX_SCAN_DIRS = 400
 
 function transcriptRoot(): string {
@@ -49,9 +31,8 @@ export function encodeWorkspacePath(workspace: string): string {
 }
 
 /**
- * Locate `<sessionId>.jsonl`. The encoded workspace directory is tried first;
- * the bounded scan covers drive-letter case differences and jobs whose cwd the
- * caller no longer knows exactly.
+ * Locate `<sessionId>.jsonl`: the encoded workspace directory first, then a
+ * bounded scan of every project directory.
  */
 export function findTranscriptFile(sessionId: string, workspace?: string): string | null {
   if (!sessionId || /[^\w-]/.test(sessionId)) return null
@@ -80,7 +61,6 @@ function clip(text: string): string {
   return t.length > MAX_TURN_CHARS ? `${t.slice(0, MAX_TURN_CHARS)}\n…(đã cắt bớt)` : t
 }
 
-/** One-line summary of a tool call — the "agent đang làm gì" signal. */
 function describeToolUse(block: Record<string, unknown>): string {
   const input = block.input as Record<string, unknown> | undefined
   for (const key of ['file_path', 'path', 'pattern', 'command', 'description', 'prompt'] as const) {
@@ -106,9 +86,6 @@ function textOfContent(content: unknown): { text: string; tools: { tool: string;
     else if (block.type === 'tool_use') {
       tools.push({ tool: typeof block.name === 'string' ? block.name : 'tool', text: describeToolUse(block) })
     }
-    // `thinking` and `tool_result` blocks are deliberately dropped: the former
-    // is not part of the conversation, the latter is tool plumbing that would
-    // bury the actual dialogue.
   }
   return { text: parts.join('\n'), tools }
 }
@@ -144,7 +121,7 @@ export function readTranscript(file: string, opts: ReadTranscriptOptions = {}): 
     try {
       entry = JSON.parse(line)
     } catch {
-      continue // a half-written trailing line while the CLI is streaming
+      continue
     }
     if (entry.isSidechain === true) continue
     const type = entry.type
@@ -164,8 +141,6 @@ export function readTranscript(file: string, opts: ReadTranscriptOptions = {}): 
     }
   }
 
-  // Re-index after the newest-N window so `index` stays a stable cursor into
-  // the returned sequence.
   const windowed = all.slice(Math.max(0, all.length - MAX_TURNS))
   const total = all.length
   const from = opts.fromIndex ?? 0

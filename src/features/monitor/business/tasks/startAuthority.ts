@@ -1,17 +1,4 @@
-/**
- * Quyền start step của một task — nguồn chân lý duy nhất cho câu hỏi "đường này
- * có được phép submit job cho step không".
- *
- * Đặt ở `monitor` (chủ sở hữu task state) chứ không ở feature `orchestrator`:
- * runner và automations đều phải gọi tới, để guard ở orchestrator thì hai
- * feature đó phải import ngược vào nó và sinh vòng barrel.
- *
- * Hai tầng:
- * - `assertStartAllowed` (async) — đọc `pipeline.yaml` + state thật, dùng ở mọi
- *   call-site có thể `await`. Đây là guard thật.
- * - `assertStartAllowedSync` — lưới an toàn cuối trong `submitJob` (đồng bộ,
- *   không `await loadPipelineConfig` được), đọc cờ cache đã ghi sẵn trong state.
- */
+// xem docs/architecture/code/monitor.md §5
 
 import { joinPath, readTextFileSync } from '../../../../backend/lib/fileHelper.js'
 import { loadPipelineConfig } from '../peers.js'
@@ -39,10 +26,6 @@ export function stateFileOf(root: string, taskId: string): string {
   return joinPath(root, '.dev-state', `${taskId}.json`)
 }
 
-/**
- * Đọc state dưới khoá task rồi áp phần `build` trả về. `build` trả `null` nghĩa
- * là không có gì đổi — không ghi, để `state_mtime` mà UI đang giữ khỏi nhảy.
- */
 async function patchOrchestratorFlags(
   root: string,
   taskId: string,
@@ -69,10 +52,8 @@ export async function setOrchestratorEnabledFlag(
 }
 
 /**
- * Lưu pipeline scope `task` ⇒ đồng bộ `.dev-state` với YAML vừa ghi.
- *
- * Ghi cờ cache `orchestrator_enabled` (điều kiện để lượt quét nhặt được task) và
- * xoá cờ halt: lưu lại checkbox là cách người dùng reset node điều phối.
+ * Đồng bộ `.dev-state` sau khi lưu pipeline scope `task`: ghi cờ cache
+ * `orchestrator_enabled` và xoá cờ halt.
  */
 export async function applyOrchestratorConfigChange(
   root: string,
@@ -87,9 +68,8 @@ export async function applyOrchestratorConfigChange(
 }
 
 /**
- * Trạng thái điều phối của một task, đọc từ pipeline thật + state thật.
- * Đồng thời tự chữa cờ cache khi nó lệch với pipeline (pipeline được bật/tắt
- * giữa chừng): đường async đúng ngay, cờ cache chỉ lệch tới lần gọi kế tiếp.
+ * Trạng thái điều phối của một task, đọc từ pipeline + state thật; ghi lại cờ
+ * cache `orchestrator_enabled` khi nó lệch với pipeline.
  */
 export async function resolveOrchestration(
   root: string,
@@ -97,13 +77,8 @@ export async function resolveOrchestration(
   pipeline?: any,
   opts: {
     /**
-     * `await` lượt ghi cờ cache thay vì để nó chạy nền.
-     *
-     * Bắt buộc với caller không giữ khoá task mà ngay sau đó sẽ `submitJob`
-     * (đường chain): backstop đồng bộ đọc chính cờ này và ném lỗi, nên một cờ
-     * `true` cũ chưa kịp ghi lại sẽ làm `submitJob` throw đúng lúc người dùng
-     * vừa tắt điều phối. Caller đang ở trong `withTaskLock` thì KHÔNG được bật —
-     * chờ một lượt khoá mới của cùng state file từ trong khoá đó là deadlock.
+     * `await` lượt ghi cờ cache thay vì để nó chạy nền; không bật khi đang ở
+     * trong `withTaskLock`. xem docs/architecture/code/monitor.md §5
      */
     awaitFlagSync?: boolean
   } = {},
@@ -113,10 +88,6 @@ export async function resolveOrchestration(
   const read = await readState(stateFileOf(root, taskId))
   const state = read.ok ? (read.state as Record<string, unknown>) : null
   const halted = state?.orchestrator_halted === true
-  // Mặc định KHÔNG `await`: guard được gọi cả từ bên trong `withTaskLock` (vd
-  // `runTaskStep`), và chờ một lượt khoá mới của cùng state file từ trong
-  // khoá đó là deadlock. Caller sắp `submitJob` ngay sau đây phải bật
-  // `awaitFlagSync` — xem ghi chú ở `opts`.
   if (state && state.orchestrator_enabled !== enabled) {
     const write = setOrchestratorEnabledFlag(root, taskId, enabled)
     if (opts.awaitFlagSync) await write.catch(() => {})
@@ -136,11 +107,8 @@ export async function resolveOrchestration(
 }
 
 /**
- * Đường `origin` này có được start step của `taskId` không.
- *
- * Điều phối tắt (hoặc đã halt) ⇒ mọi đường được phép, y như trước khi có tính
- * năng này. Điều phối bật ⇒ chỉ `origin: 'orchestrator'`; các đường khác nhận
- * 403 tường minh thay vì im lặng không làm gì.
+ * Đường `origin` có được start step của `taskId` không: điều phối tắt hoặc đã
+ * halt ⇒ mọi đường; điều phối bật ⇒ chỉ `orchestrator`, đường khác nhận 403.
  */
 export async function assertStartAllowed(
   root: string,
@@ -157,7 +125,6 @@ export async function assertStartAllowed(
   }
 }
 
-/** Đọc state đồng bộ, nuốt mọi lỗi — backstop không được làm hỏng `submitJob`. */
 function readStateSyncSafe(root: string, taskId: string): Record<string, unknown> | null {
   try {
     return JSON.parse(readTextFileSync(stateFileOf(root, taskId))) as Record<string, unknown>
@@ -167,11 +134,8 @@ function readStateSyncSafe(root: string, taskId: string): Record<string, unknown
 }
 
 /**
- * Lưới an toàn cuối trong `submitJob`. Chỉ soi job của một step pipeline; chat
- * (`isChatFeedback`) là ngoại lệ không giới hạn theo yêu cầu đề bài.
- *
- * Ném lỗi chứ không lọc im lặng: mọi call-site hợp lệ đã qua `assertStartAllowed`,
- * nên chạm được vào đây nghĩa là còn một đường start bị bỏ sót — phải đỏ to.
+ * Lưới an toàn cuối trong `submitJob` cho job của step pipeline (trừ chat);
+ * ném lỗi khi điều phối đang giữ task.
  */
 export function assertStartAllowedSync(metadata: Record<string, any> | undefined): void {
   if (!metadata?.pipelineStepId || !metadata?.taskId || !metadata?.devTeamRoot) return

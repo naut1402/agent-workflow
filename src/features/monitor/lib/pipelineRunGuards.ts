@@ -1,8 +1,3 @@
-/**
- * Pure guards for "click a pipeline node to run/chain".
- * Kept out of PipelineView so unit tests don't need VueFlow.
- */
-
 /** True when the task state file is readable enough to drive a run. */
 export function canRunWithTaskState(task: { state_ok?: boolean } | null | undefined): boolean {
   return task?.state_ok !== false
@@ -10,8 +5,7 @@ export function canRunWithTaskState(task: { state_ok?: boolean } | null | undefi
 
 /**
  * True when the task needs a state repair: unreadable state file, or
- * `current_phase` points at a step that is no longer in the pipeline
- * (common after a pipeline edit left a finished task stranded).
+ * `current_phase` points at a step that is no longer in the pipeline.
  */
 export function taskNeedsStateRepair(task: {
   state_ok?: boolean
@@ -27,11 +21,7 @@ export function taskNeedsStateRepair(task: {
   return !steps.some((s) => s && s.id === phase)
 }
 
-/**
- * True when the task has reached an end state — pipeline finished, or archived.
- * "Merged" is not observable without the GitHub API, so this is the local
- * stand-in used to gate destructive per-task cleanup (worktree removal).
- */
+/** True when the task has reached an end state — pipeline finished, or archived. */
 export function isFinishedTaskState(task: {
   current_phase?: string | null
   archived?: boolean
@@ -40,12 +30,7 @@ export function isFinishedTaskState(task: {
   return task.current_phase === 'completed' || task.archived === true
 }
 
-/**
- * Only the current phase and phases after it may be clicked to run.
- * A past pending/done node must not submit — the server always starts from
- * `current_phase`, so clicking a past id would re-run the current step and
- * look like "I clicked design but implement ran".
- */
+/** Only the current phase and phases after it may be clicked to run. */
 export function isRunnableTarget(
   phaseKeys: string[],
   currentPhase: string | null | undefined,
@@ -60,13 +45,7 @@ export function isRunnableTarget(
   return targetIdx >= currentIdx
 }
 
-/**
- * Only a phase at or before the current phase may be reset — the reverse
- * direction of `isRunnableTarget`. Kept as a separate function (not a
- * `direction` flag on `isRunnableTarget`) because the two guards protect
- * opposite invariants: Run must never go backwards, Reset must never go
- * forwards past what has actually run.
- */
+/** Only a phase at or before the current phase may be reset. */
 export function isResettableTarget(
   phaseKeys: string[],
   currentPhase: string | null | undefined,
@@ -81,13 +60,7 @@ export function isResettableTarget(
   return targetIdx <= currentIdx
 }
 
-/**
- * True when `targetStepId` exists anywhere in the pipeline — no relation to
- * `currentPhase` at all, unlike `isRunnableTarget`/`isResettableTarget`.
- * `respawn` runs a brand-new session for a step regardless of where the
- * cursor sits (including `completed`), so this guard structurally cannot
- * depend on cursor position.
- */
+/** True when `targetStepId` exists anywhere in the pipeline, whatever the cursor position. */
 export function isRespawnTarget(phaseKeys: string[], targetStepId: string): boolean {
   return phaseKeys.includes(targetStepId)
 }

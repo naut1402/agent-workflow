@@ -40,7 +40,6 @@ export type CreateTaskResult =
   | ({ ok: true } & CreatedTask)
   | { ok: false; status: number; error: string }
 
-/** Atomic write: unique temp file in the target dir + rename. */
 async function writeFileAtomic(target: string, content: string): Promise<void> {
   await mkdir(dirname(target), { recursive: true })
   const tmp = `${target}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
@@ -78,7 +77,6 @@ export function renderRequestMarkdown(input: {
   return `---\n${front}---\n\n${body}\n`
 }
 
-/** Resolve the per-task pipeline override to write, or null when there is none. */
 async function resolvePipelineOverride(
   root: string,
   input: CreateTaskInput,
@@ -94,11 +92,8 @@ async function resolvePipelineOverride(
 
 /**
  * Scaffold a new task under `<root>`: `tasks/<id>/request.md`, an optional
- * `tasks/<id>/pipeline.yaml`, and the orchestrator state at
- * `.dev-state/<id>.json` with `current_phase` = first step of the merged config.
- *
- * Never overwrites an existing task (409) — the orchestrator owns whatever is
- * already on disk.
+ * `tasks/<id>/pipeline.yaml`, and `.dev-state/<id>.json` at the first step.
+ * Never overwrites an existing task (409).
  */
 export async function createTask(root: string, input: CreateTaskInput): Promise<CreateTaskResult> {
   if (!TASK_ID_PATTERN.test(input.taskId)) {
@@ -119,8 +114,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
     /* no state file — free to create */
   }
 
-  // mkdir without `recursive` is the atomic half of the exists check: two
-  // concurrent creates race here and the loser gets EEXIST → 409.
+  // xem docs/architecture/code/monitor.md §3
   await mkdir(dirname(taskDir), { recursive: true })
   try {
     await mkdir(taskDir)
@@ -163,8 +157,7 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
         dumpYaml({ ...override.doc, steps, steps_replace: override.replace }),
       )
     } else if (knowledgeInputs.length) {
-      // No profile chosen: keep the inherited flow and only patch knowledge onto
-      // its first step (patch-by-id, so `steps_replace` must stay off).
+      // xem docs/architecture/code/monitor.md §3
       const inherited = await loadPipelineConfig(root, null)
       const firstId = inherited.steps?.[0]?.id
       if (firstId) {
@@ -186,16 +179,11 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       hitl_pending: null,
       review_round: 0,
       auto_review: input.autoReview ?? pipeline.defaults?.auto_review ?? false,
-      // Brief của orchestrator tóm tắt các bước trước từ `pipeline-export.json`,
-      // nên bật điều phối thì bật luôn export cho task này — lựa chọn tường minh
-      // của người dùng (`input.exportJson`) vẫn thắng. Đặt ở đây chứ không ở
-      // `loadPipelineConfig` (tầng ĐỌC): sửa giá trị trả về ở đó sẽ bị ghi bền
-      // ngược vào `pipeline.yaml` lần Save kế tiếp qua editor.
+      // xem docs/architecture/code/monitor.md §3
       export_json:
         input.exportJson ??
         (orchestratorEnabled ? true : (pipeline.defaults?.export_json ?? false)),
-      // Cờ cache cho lớp chặn đồng bộ trong `submitJob` — nguồn chân lý vẫn là
-      // `pipeline.yaml`, `resolveOrchestration` làm tươi lại mỗi khi thấy lệch.
+      // xem docs/architecture/code/monitor.md §5
       orchestrator_enabled: orchestratorEnabled,
       doc_review_round: { investigate: 0, design: 0 },
       inherit_from_parent: [],
@@ -218,8 +206,6 @@ export async function createTask(root: string, input: CreateTaskInput): Promise<
       mtime,
     }
   } catch (err: any) {
-    // Roll back the scaffold so a failed create doesn't leave a half task that
-    // would 409 on retry.
     await rm(taskDir, { recursive: true, force: true }).catch(() => {})
     await rm(stateFile, { force: true }).catch(() => {})
     return { ok: false, status: 500, error: String(err?.message ?? err) }

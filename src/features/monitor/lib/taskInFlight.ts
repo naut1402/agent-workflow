@@ -1,11 +1,8 @@
 import { fetchJobs } from '../../runner/scripts/runnerApi'
 
 /**
- * Status mà `GET /api/jobs?status=` chấp nhận VÀ nghĩa là job còn sống.
- * Cố tình KHÔNG có `awaiting_recovery`: `listOrGetJobs` (`features/runner/controller.ts`)
- * có allow-list riêng thiếu status đó nên query sẽ trả 400 — biết hạn chế này và
- * chấp nhận false-negative thay vì làm hỏng cả lời gọi còn lại.
- * `awaiting_approval` bị loại vì job đã dừng, chỉ chờ người duyệt proposal.
+ * Status job còn sống mà `GET /api/jobs?status=` chấp nhận.
+ * xem docs/architecture/code/monitor.md §21
  */
 export const IN_FLIGHT_JOB_STATUSES = ['running', 'queued'] as const
 
@@ -14,11 +11,8 @@ function normalizeProjectId(v: unknown): string | null {
 }
 
 /**
- * Job này có thuộc task đang xét không?
- * `projectId` chỉ dùng để LOẠI khi cả hai phía đều có giá trị và khác nhau —
- * job submit ở project mặc định ghi `metadata.projectId: undefined`
- * (`monitor/controller.ts`: `projectId: this.projectId || undefined`), so sánh
- * chặt sẽ bỏ sót đúng nhóm job của project mặc định.
+ * Job này có thuộc task đang xét không; `projectId` chỉ loại khi cả hai phía có giá trị và khác nhau.
+ * xem docs/architecture/code/monitor.md §21
  */
 export function jobBelongsToTask(job: any, taskId: string, projectId?: string | null): boolean {
   if (!job || job.metadata?.taskId !== taskId) return false
@@ -27,11 +21,7 @@ export function jobBelongsToTask(job: any, taskId: string, projectId?: string | 
   return !(jobProject && uiProject && jobProject !== uiProject)
 }
 
-/**
- * true nếu task còn job queued/running. Best-effort: mọi lỗi mạng/parse đều trả
- * false để KHÔNG chặn xoá — nút xoá vẫn phải là lối thoát khi backend lỗi.
- * `allSettled` (không phải `all`): một status lỗi vẫn để status còn lại cảnh báo được.
- */
+/** true nếu task còn job queued/running; lỗi mạng/parse trả false (best-effort). */
 export async function hasInFlightJob(taskId: string, projectId?: string | null): Promise<boolean> {
   if (!taskId) return false
   const settled = await Promise.allSettled(

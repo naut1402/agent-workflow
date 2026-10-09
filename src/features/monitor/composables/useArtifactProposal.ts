@@ -4,14 +4,6 @@ import { diffLines } from '../../../frontend/lib/diffLib'
 import { fetchProposal, approveJob, discardJob, sendActionFeedback, fetchJob } from '../../runner/scripts/runnerApi'
 import { t } from '../../../frontend/plugins/i18n'
 
-// Drives ArtifactProposalReview: fetches the before/after of an
-// `awaiting_approval` job, exposes a line-diff for rendering, and handles the
-// approve / discard / feedback actions. Feedback re-runs the same CLI session
-// (server-side, via --resume) and yields a NEW job that itself reaches
-// `awaiting_approval`; this composable polls it and swaps to it so the review
-// keeps showing the current proposal. Kept separate from the component so the
-// poll/diff logic is unit-testable without rendering.
-
 export interface DiffRow {
   type: 'add' | 'del' | 'context'
   text: string
@@ -27,9 +19,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// Split a diff chunk into individual lines. `diffLines` keeps the trailing
-// newline on each chunk, so a naive split leaves a spurious empty last element —
-// drop it, but keep genuine blank lines in the middle.
 function toLines(value: string): string[] {
   const lines = value.split('\n')
   if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop()
@@ -45,17 +34,10 @@ export function useArtifactProposal(opts: UseArtifactProposalOptions) {
   const before = ref('')
   const after = ref('')
   const loading = ref(false)
-  // MỘT instance cho cả `approve` / `discard` / `sendFeedback` — giữ đúng ngữ
-  // nghĩa cờ `busy` cũ, và thêm: đang approve thì bấm discard bị guard chặn.
-  // 🚫 Không đụng `loading` ở trên: đó là load proposal (luồng đọc).
   const { pending: busy, run: runProposalAction } = useApiAction()
   const statusText = ref('')
   const error = ref<string | null>(null)
 
-  // Normalize CRLF→LF before diffing so a pure line-ending mismatch (common
-  // when the real file is CRLF on Windows but the agent writes LF) doesn't make
-  // every line show as changed. Only affects the displayed diff — approve still
-  // applies the server's raw scratch content (which preserves the real EOL).
   const normalizeEol = (s: string): string => s.replace(/\r\n/g, '\n')
 
   const diffRows = computed<DiffRow[]>(() => {
@@ -83,8 +65,6 @@ export function useArtifactProposal(opts: UseArtifactProposalOptions) {
   }
 
   async function approve(): Promise<boolean> {
-    // Lời gọi bị guard bỏ qua trả `undefined`; với consumer thì "không làm gì"
-    // tương đương "chưa thành công".
     const ok = await runProposalAction(async () => {
       error.value = null
       statusText.value = t('monitor.proposal.approving')
@@ -118,8 +98,6 @@ export function useArtifactProposal(opts: UseArtifactProposalOptions) {
     return ok ?? false
   }
 
-  // Wait for a freshly-spawned feedback job to settle back at
-  // `awaiting_approval` (or surface its failure).
   async function pollUntilAwaiting(jobId: string): Promise<'awaiting_approval' | string> {
     const deadline = Date.now() + maxWaitMs
     for (;;) {

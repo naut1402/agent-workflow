@@ -7,22 +7,12 @@ import {
   type TranscriptTurn,
 } from './sessionTranscript.js'
 
-/**
- * Read Cursor Agent CLI / IDE session transcripts.
- *
- * Cursor stores agent transcripts under project folders, e.g.:
- *   ~/.cursor/projects/<slug>/agent-transcripts/<sessionId>.jsonl
- *   ~/.cursor/projects/<slug>/agent-transcripts/<uuid>/<uuid>.jsonl
- *
- * Format varies (Claude-like JSONL or `{role, message|text, type}`). Missing
- * files return empty turns — never throw (chat UI shows transcriptFound: false).
- */
+// xem docs/architecture/code/monitor.md §13
 
 const MAX_TURN_CHARS = 4000
 const MAX_TURNS = 200
 const MAX_SCAN_DIRS = 400
 const MAX_SCAN_FILES = 800
-/** Cap I/O — only the tail of the transcript is loaded for chat UI. */
 const MAX_READ_BYTES = 512 * 1024
 
 function cursorHome(): string {
@@ -82,7 +72,6 @@ export function findCursorTranscriptFile(sessionId: string, _workspace?: string)
     if (existsSync(c)) return c
   }
 
-  // Bounded deep scan: match filename containing session id
   let scanned = 0
   for (const proj of projectDirs.slice(0, MAX_SCAN_DIRS)) {
     const base = joinPath(root, proj, 'agent-transcripts')
@@ -99,7 +88,6 @@ export function findCursorTranscriptFile(sessionId: string, _workspace?: string)
         if (name.endsWith('.jsonl') && existsSync(full)) return full
         const nested = joinPath(full, `${sessionId}.jsonl`)
         if (existsSync(nested)) return nested
-        // directory of many jsonl — pick first matching
         try {
           for (const f of readdirSync(full)) {
             if (f.includes(sessionId) && f.endsWith('.jsonl')) {
@@ -118,11 +106,8 @@ export function findCursorTranscriptFile(sessionId: string, _workspace?: string)
 }
 
 /**
- * Cursor CLI writes user turns wrapped as `<timestamp>…</timestamp><user_query>…</user_query>`
- * (sometimes without the `<timestamp>` prefix) — strip it so the chat UI shows
- * plain text instead of the raw framing. No-op (returns `text` unchanged) when
- * the string doesn't match the expected wrapper exactly, so a CLI format change
- * degrades to "shows the wrapper" rather than losing/mangling content.
+ * Strip the `<timestamp>…</timestamp><user_query>…</user_query>` wrapper Cursor CLI
+ * puts around user turns; returns `text` unchanged when it doesn't match exactly.
  */
 export function stripCursorUserWrapper(text: string): string {
   const full = text.match(/^<timestamp>[\s\S]*?<\/timestamp>\s*<user_query>([\s\S]*?)<\/user_query>\s*$/)
@@ -140,7 +125,6 @@ function textFromCursorEntry(entry: Record<string, unknown>): { role: 'user' | '
         ? entry.createdAt
         : undefined
 
-  // Claude-compatible shape
   if (entry.type === 'user' || entry.type === 'assistant') {
     const message = entry.message as Record<string, unknown> | undefined
     const content = message?.content
@@ -155,7 +139,6 @@ function textFromCursorEntry(entry: Record<string, unknown>): { role: 'user' | '
     }
   }
 
-  // Flat Cursor / agent-transcript style
   const roleRaw = typeof entry.role === 'string' ? entry.role : typeof entry.type === 'string' ? entry.type : ''
   let role: 'user' | 'assistant' | null = null
   if (roleRaw === 'user' || roleRaw === 'human') role = 'user'
@@ -166,7 +149,6 @@ function textFromCursorEntry(entry: Record<string, unknown>): { role: 'user' | '
   if (typeof entry.message === 'string') return { role, text: stripCursorUserWrapper(entry.message), at }
   if (typeof entry.content === 'string') return { role, text: stripCursorUserWrapper(entry.content), at }
 
-  // Nested `{ message: { content: string | blocks[] } }` (Cursor agent-transcript)
   const message = entry.message && typeof entry.message === 'object' ? (entry.message as Record<string, unknown>) : null
   const nested = message?.content ?? entry.content
   if (typeof nested === 'string') return { role, text: stripCursorUserWrapper(nested), at }

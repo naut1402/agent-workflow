@@ -1,9 +1,6 @@
 import { z } from 'zod'
 
-/**
- * Một câu hỏi blocking dạng chọn đáp án — bất biến "≥2 lựa chọn" là ràng buộc
- * duy nhất khiến `create_qa` không có nhánh free-text (coding-guideline §2.8).
- */
+/** Một câu hỏi blocking dạng chọn đáp án. */
 export const QaQuestionInput = z.object({
   prompt: z.string().min(1),
   choices: z.array(z.string().min(1)).min(2).max(10),

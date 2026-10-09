@@ -1,12 +1,5 @@
 import { ref } from 'vue'
 
-// Drives the floating "selection toolbar" in ArtifactPanel: tracks the current
-// text selection inside the artifact viewer and exposes just enough state
-// (visible / text / rect) for the component to render a Teleported toolbar
-// near the selection. Kept as a composable, separate from window event wiring
-// in the caller, so the selection→toolbar logic is unit-testable without a
-// real browser selection (jsdom's `Selection` API is limited).
-
 export interface SelectionRect {
   top: number
   left: number
@@ -19,8 +12,7 @@ export interface SelectionLines {
   end: number
 }
 
-/** Per-block raw-source metadata, indexed to match each block's rendered
- * `data-block-index` attribute — see ArtifactPanel.vue's `blockLineRanges`. */
+/** Per-block raw-source line range, indexed like the rendered `data-block-index` attribute. */
 export interface BlockLineRange {
   startLine: number
   endLine: number
@@ -28,20 +20,11 @@ export interface BlockLineRange {
 }
 
 export interface UseArtifactSelectionToolbarOptions {
-  // Element the selection must be inside to count (the markdown viewer root).
   getContainer: () => HTMLElement | null
-  // True while editing a section, or when no artifact is open — selection
-  // toolbar never shows in either case.
   isBlocked: () => boolean
-  // Optional: per-block line-range metadata used to compute `lines` below.
-  // Omit (or return []) to skip line-range computation entirely.
   getBlockRanges?: () => BlockLineRange[]
 }
 
-/** Walk up from a selection endpoint to the block element carrying
- * `data-block-index` (rendered once per markdown block in both Block and
- * Full view modes), so a selection can be traced back to a raw-source range
- * even though it was made against rendered (transformed) HTML. */
 function findBlockIndex(node: Node | null): number | null {
   const el: Element | null = node instanceof Element ? node : node?.parentElement ?? null
   const found = el?.closest('[data-block-index]')
@@ -50,19 +33,7 @@ function findBlockIndex(node: Node | null): number | null {
   return Number.isFinite(idx) ? idx : null
 }
 
-/**
- * Fallback for when a range endpoint's container isn't inside any single
- * block element — this is real, observed behavior (not just a hypothetical):
- * browsers normalize a Range's start/end container to a shared ancestor
- * rather than a specific descendant whenever the endpoint lands "between"
- * children rather than inside one (e.g. Ctrl+A "select all" over the whole
- * viewer, or dragging from just above the first block's text to just below
- * the last one). When that ancestor sits *above* every `[data-block-index]`
- * element (e.g. the viewer root itself), `findBlockIndex`'s `closest()` walk
- * silently comes up empty even though the selection clearly overlaps real
- * blocks. Recover by scanning every block element under `root` and keeping
- * the ones the range actually intersects.
- */
+// xem docs/architecture/code/monitor.md §23
 function findBlockIndicesInRange(range: Range, root: HTMLElement): number[] {
   if (typeof range.intersectsNode !== 'function') return []
   const indices: number[] = []
@@ -74,15 +45,6 @@ function findBlockIndicesInRange(range: Range, root: HTMLElement): number[] {
   return indices
 }
 
-/**
- * Best-effort line range for a selection: exact when it's fully inside one
- * block and the plain selected text can be found verbatim in that block's
- * raw markdown source (the common case — plain prose, no emphasis/links
- * inside the selection); falls back to the containing block's own full line
- * range otherwise (rendering strips markdown syntax from visible/selectable
- * text, so an exact character offset isn't always recoverable). A selection
- * spanning multiple blocks always uses the coarser first-to-last-block range.
- */
 function computeSelectionLines(
   range: Range,
   text: string,
@@ -132,7 +94,6 @@ export function useArtifactSelectionToolbar(opts: UseArtifactSelectionToolbarOpt
     return container.contains(range.commonAncestorContainer)
   }
 
-  /** Re-evaluate `window.getSelection()` and show/hide the toolbar accordingly. */
   function onSelectionChange(): void {
     if (opts.isBlocked()) {
       hide()

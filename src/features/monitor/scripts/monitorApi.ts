@@ -111,11 +111,7 @@ export async function cleanupTaskWorktree(id: string, projectId?: string) {
   })
 }
 
-/**
- * The server returns an error *code* (`worktree_dirty`, …), never a display
- * string — wording lives in i18n on this side. `apiRequest` attaches the
- * response body to `err.data`.
- */
+/** Map the worktree error code in `err.data.error` to a localized message. */
 export function describeWorktreeError(err: any): string {
   const data = err?.data ?? {}
   switch (data.error) {

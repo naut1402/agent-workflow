@@ -1,11 +1,3 @@
-/**
- * Worktree capability for monitor: read the git worktree bound to a task and
- * remove it on demand (`git worktree remove` + `prune`).
- *
- * Never removes the branch — the branch is what keeps unmerged commits safe,
- * which is why removal does not have to prove the task was merged.
- */
-
 import {
   basename,
   dirname,
@@ -35,12 +27,6 @@ export interface WorktreeEntry {
   isMain: boolean
 }
 
-/**
- * Parse `git worktree list --porcelain` (verified against git 2.47.3): blocks
- * separated by a blank line, each line `<key> <rest>`; `detached` / `bare` /
- * `prunable` / `locked` may appear without a value.
- */
-/** One setter per porcelain key; unknown keys are ignored (git adds new ones). */
 const WORKTREE_FIELDS: Record<string, (entry: WorktreeEntry, value: string) => void> = {
   worktree: (e, v) => {
     e.path = v
@@ -66,7 +52,6 @@ const WORKTREE_FIELDS: Record<string, (entry: WorktreeEntry, value: string) => v
   },
 }
 
-/** Apply one `<key> <value>` line of a porcelain block onto its entry. */
 function applyWorktreeField(entry: WorktreeEntry, line: string): void {
   const sp = line.indexOf(' ')
   const key = sp === -1 ? line : line.slice(0, sp)
@@ -93,8 +78,6 @@ export function parseWorktreeList(stdout: string): WorktreeEntry[] {
       isMain: entries.length === 0,
     }
     for (const line of lines) applyWorktreeField(entry, line)
-    // A block without a path is not a worktree — `isMain` must not shift, so
-    // only blocks that made it into `entries` count as "first".
     if (!entry.path) continue
     entries.push(entry)
   }
@@ -109,10 +92,8 @@ export interface WorktreeMatch {
 }
 
 /**
- * Map a task to its worktree in two tiers: exact directory name first, then
- * task id inside the branch name (`fix/T1/foo`, `dev/1.1.2/T1_bar`).
- * `taskId` must already be `/[\w-]+/` (controller guard) so it is safe to
- * interpolate into a RegExp.
+ * Map a task to its worktree: exact directory name first, then task id inside
+ * the branch name. `taskId` must already match `/[\w-]+/`.
  */
 export function matchWorktreeForTask(entries: WorktreeEntry[], taskId: string): WorktreeMatch {
   const usable = entries.filter((e) => !e.isMain && !e.bare)
@@ -134,10 +115,8 @@ export function matchWorktreeForTask(entries: WorktreeEntry[], taskId: string): 
 }
 
 /**
- * Second line of defence behind `git worktree remove` (which already refuses
- * paths it does not own): accept only worktrees inside the repo
- * (`<repo>/.claude/worktrees/<name>`, what the agent harness creates) or right
- * next to it (`../wt-<task>`, what `docs/agent-rules/git-pr.md` §6 recommends).
+ * Accept only worktrees inside the repo or right next to it.
+ * xem docs/architecture/code/monitor.md §16
  */
 export function isRemovableWorktreePath(repoRoot: string, wtPath: string): boolean {
   if (!repoRoot || !wtPath) return false
@@ -145,7 +124,6 @@ export function isRemovableWorktreePath(repoRoot: string, wtPath: string): boole
   const target = resolvePath(wtPath)
 
   if (target === base) return false
-  // Ancestor of the repo — removing it would take the main worktree with it.
   if (resolvePathUnder(target, relativePath(target, base))) return false
   if (resolvePathUnder(base, relativePath(base, target))) return true
   return dirname(target) === dirname(base)
@@ -170,12 +148,10 @@ export type FindWorktreeResult =
   | { ok: true; worktree: WorktreeView | null; ambiguous: boolean; candidates: string[] }
   | { ok: false; status: 500; error: 'git_failed'; detail: string }
 
-/** `strict: false` in tsconfig — narrow with `'error' in read`, not a boolean flag. */
 type DirtyRead = { lines: string[] } | { error: string }
 
-/** Uncommitted changes in a worktree. A failed `git status` is not "0 changes". */
 function readDirtyLines(wtPath: string): DirtyRead {
-  // --no-optional-locks: never write index.lock into a worktree someone else uses.
+  // xem docs/architecture/code/monitor.md §16
   const res = runGit(['--no-optional-locks', '-C', wtPath, 'status', '--porcelain'], {
     timeout: GIT_READ_TIMEOUT_MS,
   })
@@ -183,11 +159,7 @@ function readDirtyLines(wtPath: string): DirtyRead {
   return { lines: String(res.stdout ?? '').split(/\r?\n/).filter(Boolean) }
 }
 
-/**
- * Removability facts of a matched entry. On the read path a failed `git status`
- * still shows as dirty — the badge must not claim a worktree is safe to drop
- * when its state could not be read.
- */
+/** Removability facts of a matched entry; a failed `git status` counts as dirty. */
 export function buildWorktreeView(repoRoot: string, entry: WorktreeEntry): WorktreeView {
   const exists = existsSync(entry.path)
   const read: DirtyRead = exists ? readDirtyLines(entry.path) : { lines: [] }
@@ -268,16 +240,13 @@ export type RemoveWorktreeResult =
       detail: string
     }
 
-/** Max dirty paths echoed back to the UI — the list is a hint, not a report. */
 const DIRTY_SAMPLE_LIMIT = 10
 
 type RemovalBlocker = Extract<RemoveWorktreeResult, { ok: false }>
 
 /**
- * Everything that must stop a removal, in the order git itself would refuse:
- * outside the allowed paths, locked, detached, uncommitted changes. A failed
- * `git status` gets its own code — "cannot confirm this worktree is clean" must
- * not reach the user as "0 uncommitted changes", which points at the wrong fix.
+ * First reason that must stop a removal — outside policy, locked, detached,
+ * uncommitted changes; a failed `git status` returns `git_failed`.
  */
 export function findRemovalBlocker(wt: WorktreeView): RemovalBlocker | null {
   if (!wt.removable) {
@@ -292,16 +261,12 @@ export function findRemovalBlocker(wt: WorktreeView): RemovalBlocker | null {
       lockReason: wt.lockReason,
     }
   }
-  // Deliberately ahead of the `!wt.exists` bail: with no branch attached, the
-  // `HEAD` ref under `.git/worktrees/<name>/` is the only thing holding those
-  // commits, and `git worktree prune` at the end of a removal drops it. The
-  // error message points at the CLI as the way out.
+  // xem docs/architecture/code/monitor.md §16
   if (wt.detached) {
     return { ok: false, status: 409, error: 'worktree_detached', path: wt.path }
   }
   if (!wt.exists) return null
 
-  // Re-run status here (instead of reusing the count) to name the files.
   const read = readDirtyLines(wt.path)
   if ('error' in read) {
     return { ok: false, status: 500, error: 'git_failed', path: wt.path, detail: read.error }
@@ -320,8 +285,9 @@ export function findRemovalBlocker(wt: WorktreeView): RemovalBlocker | null {
 }
 
 /**
- * Remove the worktree of `taskId`. The target is resolved here from git, never
- * taken from the caller — a client-supplied path would be an attack surface.
+ * Remove the worktree of `taskId` (the branch is kept); the target is resolved
+ * from git, never taken from the caller.
+ * xem docs/architecture/code/monitor.md §16
  */
 export function removeTaskWorktree(repoRoot: string, taskId: string): RemoveWorktreeResult {
   const found = findTaskWorktree(repoRoot, taskId)
@@ -352,7 +318,6 @@ export function removeTaskWorktree(repoRoot: string, taskId: string): RemoveWork
     }
   }
 
-  // Prune always runs; a prune failure does not undo a successful removal.
   const pruned = runGit(['-C', repoRoot, 'worktree', 'prune'], { timeout: GIT_WRITE_TIMEOUT_MS })
   if (pruned.status !== 0) {
     console.warn('[monitor] git worktree prune failed:', formatGitFailure(pruned, 'git worktree prune'))

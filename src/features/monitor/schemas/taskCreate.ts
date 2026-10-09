@@ -1,14 +1,8 @@
 import { z } from 'zod'
 
 /**
- * Body for creating a task from the dashboard (`POST /api/tasks`).
- * Zod is the single source of truth — server types come from `z.infer`.
- */
-
-/**
- * Task id charset. Stricter than the `/[^\w\-]/` guard the read/update routes
- * use: a created id must also start alphanumeric and stay within 64 chars, so
- * no separator, dot or leading dash can ever reach `path.join`.
+ * Charset of a newly created task id: alphanumeric start, `[\w-]`, max 64 chars.
+ * xem docs/architecture/code/monitor.md §2
  */
 export const TASK_ID_PATTERN = /^[A-Za-z0-9][\w-]{0,63}$/
 
@@ -27,7 +21,7 @@ export const CreateTaskPipeline = z
 export type CreateTaskPipeline = z.infer<typeof CreateTaskPipeline>
 
 export const CreateTaskRequest = z.object({
-  /** Optional — server mints a random id when omitted (NL chat without taskId). */
+  /** Optional — server mints a random id when omitted. */
   taskId: TaskIdSchema.optional(),
   source: z.enum(TASK_SOURCES).default('prompt'),
   /** Human-readable task title; defaults to `task_id` in the UI when absent. */
@@ -47,7 +41,7 @@ export const CreateTaskRequest = z.object({
   /** Submit the first step to a runner right after scaffolding. */
   run: z.boolean().default(false),
   runnerId: z.string().min(1).nullish(),
-  /** Preferred git branch for this task (metadata; worktree policy later). */
+  /** Preferred git branch for this task. */
   branch: z
     .string()
     .regex(/^[A-Za-z0-9._/-]+$/, 'invalid branch')

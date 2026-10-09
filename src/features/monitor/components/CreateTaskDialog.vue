@@ -95,7 +95,6 @@ watch(
   },
 )
 
-/** Step 1 with source=issue only stores a URL — the prompt arrives via fetch. */
 function needsIssueFetch() {
   return step.value === 1 && form.value.source === 'issue' && !issueLoaded.value
 }
@@ -109,10 +108,6 @@ async function handleNext() {
   next()
 }
 
-/**
- * Stepper click. Leaving step 1 forward on the issue tab must still fetch first,
- * otherwise the jump lands on preview with an empty prompt.
- */
 async function handleStepJump(target: number) {
   if (target > step.value && needsIssueFetch()) {
     await fetchIssue()
@@ -160,7 +155,6 @@ onUnmounted(() => {
     @close="emit('close')"
   >
     <template #head>
-      <!-- Step name lives in the stepper below; keep the head to title + counter. -->
       <span class="create-task-step">{{ step }}/{{ CREATE_TASK_STEPS }}</span>
     </template>
 
@@ -180,7 +174,6 @@ onUnmounted(() => {
     <div class="create-task-body">
       <div v-if="error" class="err-banner">⚠ {{ error }}</div>
 
-      <!-- Step 1: source -->
       <template v-if="step === 1">
         <label class="cfg-label">
           {{ t('monitor.createTask.taskId') }}
@@ -294,7 +287,6 @@ onUnmounted(() => {
         </template>
       </template>
 
-      <!-- Step 2: pipeline -->
       <template v-else-if="step === 2">
         <p class="modal-hint">{{ t('monitor.createTask.pipelineHint') }}</p>
         <label class="cfg-label">
@@ -321,7 +313,6 @@ onUnmounted(() => {
         </div>
       </template>
 
-      <!-- Step 3: knowledge -->
       <template v-else-if="step === 3">
         <p class="modal-hint">{{ t('monitor.createTask.knowledgeHint') }}</p>
         <ul v-if="form.knowledgeInputs.length" class="create-task-knowledge-chips">
@@ -344,7 +335,6 @@ onUnmounted(() => {
         </button>
       </template>
 
-      <!-- Step 4: preview -->
       <template v-else>
         <template v-if="!showingLog">
           <dl class="create-task-preview">
@@ -448,7 +438,6 @@ onUnmounted(() => {
   opacity: 0.65;
 }
 
-/* Sits between head and the scrollable body — must not shrink or scroll away. */
 .create-task-stepper {
   flex: 0 0 auto;
   padding: 6px 0 8px;

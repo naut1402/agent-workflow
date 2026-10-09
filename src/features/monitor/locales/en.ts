@@ -1,4 +1,3 @@
-// English translations for the `monitor` namespace — keys mirror vi/monitor.ts.
 export default {
   layout: {
     subtaskOf: '↳ subtask of {id}',

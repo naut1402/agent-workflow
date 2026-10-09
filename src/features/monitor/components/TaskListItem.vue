@@ -12,7 +12,7 @@ import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 const props = defineProps({
   task: { type: Object, required: true },
   selectedId: { type: String, default: null },
-  openArtifact: { type: Object, default: null }, // { taskId, name }
+  openArtifact: { type: Object, default: null },
   isExpanded: { type: Boolean, default: false },
   projectId: { type: String, default: null },
   hideMissing: { type: Boolean, default: true },
@@ -31,7 +31,6 @@ const renameInput = ref<HTMLInputElement | null>(null)
 const idEl = ref<HTMLElement | null>(null)
 const marqueeDistance = ref(0)
 
-/** Measure overflow on hover so the marquee travels exactly far enough to reveal the tail — 0 when the name already fits. */
 function onIdMouseEnter() {
   const el = idEl.value
   if (!el) return
@@ -95,11 +94,8 @@ async function toggleArchive() {
 
 async function removeTask() {
   await runDelete(async () => {
-    // Guard chống double-click nay do `runDelete` giữ: handler async (dò job
-    // trước khi hỏi) nên không có guard thì mỗi cú click là một hộp confirm +
-    // một lượt DELETE.
     archiveError.value = ''
-    // Chụp id ngay đầu handler: poll 1.5s có thể thay props giữa hai lần await.
+    // xem docs/architecture/code/monitor.md §21
     const taskId = props.task.task_id
     try {
       const running = await hasInFlightJob(taskId, props.projectId)
@@ -140,7 +136,6 @@ function taskStatusKey(task: any): 'error' | 'waiting' | 'done' | 'active' | 'pe
 
 function statusIcon(task: any): string {
   if (task.state_ok === false || needsRepair.value) return '⚠'
-  // has_qa: SVG chat icon in template (not a text glyph)
   if (task.has_qa) return ''
   if (task.hitl_pending) return '⏸'
   if (task.current_phase === 'completed') return '✓'
@@ -182,8 +177,6 @@ function sortedArtifacts(task: any) {
   return props.hideMissing ? all.filter((it) => it.exists) : all
 }
 
-// Always counted against the UNFILTERED list so the toggle keeps reporting
-// how many files are hidden even while hideMissing is on.
 function hiddenCount(task: any) {
   return allSortedArtifacts(task).length - sortedArtifacts(task).length
 }

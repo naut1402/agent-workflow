@@ -8,23 +8,13 @@ import {
   type ArtifactMenuNode,
 } from '../../schemas/artifactAction.js'
 
-// Built-in default catalog, used when the dashboard-global
-// `artifact-actions.yaml` (under `~/.dev-team-dashboard/`) is missing. Kept as a
-// self-contained literal for the same reason as DEFAULT_PIPELINE — the viewer is
-// copied out of the plugin tree and can't read a bundled asset at runtime. A
-// valid global YAML fully replaces this list (declarative override).
+// xem docs/architecture/code/monitor.md §18
 export const DEFAULT_ARTIFACT_ACTIONS: ArtifactAction[] = [
   {
     id: 'improve-doc',
     label: '✨ Cải thiện tài liệu',
     artifact_patterns: ['investigate.md', 'design.md', 'review.md'],
-    // No agent_ref on purpose: prompt_template is a fully self-contained,
-    // free-form instruction ("rewrite this file in place"). The dev-agent-teams
-    // pipeline agents (e.g. doc-reviewer) each have a narrow, fixed role — the
-    // doc-reviewer one explicitly refuses to edit the file it reviews and
-    // expects `$ARGUMENTS = <task-id> --doc=...` — binding one of them here
-    // sends the runner two contradictory instructions and it just asks for
-    // clarification instead of doing the edit.
+    // xem docs/architecture/code/monitor.md §18
     agent_ref: '',
     prompt_template: [
       'Cải thiện độ rõ ràng, cấu trúc câu và văn phong tiếng Việt, giữ nguyên ý',
@@ -40,26 +30,13 @@ export const DEFAULT_ARTIFACT_ACTIONS: ArtifactAction[] = [
     ].join('\n'),
     produces: [],
     confirm: true,
-    // Runs on both the title toolbar (whole document) and the selection toolbar.
-    // The agent RESPONDS with the improved text (stdout); the server captures
-    // that as the proposed content. For a selection run it is spliced back into
-    // only the selected line range so no other line changes — the user reviews
-    // the diff before it's applied (see jobQueue approval flow).
     attach_points: ['artifact-title', 'artifact-selection'],
-    // Never writes straight to the real file: the agent edits a scratch copy and
-    // the user reviews the diff before it's applied (see jobQueue approval flow).
     require_approval: true,
   },
 ]
 
 const DEFAULT_CATALOG_VERSION = 1
 const DEFAULT_MENUS: ArtifactMenuNode[] = []
-
-// Domain module for artifact quick-actions. Catalog is dashboard-global
-// (`~/.dev-team-dashboard/artifact-actions.yaml`, override via
-// DEV_TEAM_DASHBOARD_HOME) — shared across projects, like runners.json.
-// HTTP routes that *run* an action still need the project `.dev-team-agent/`
-// root to resolve the artifact file / agent.
 
 function catalogFile(): string {
   return joinPath(registryHome(), 'artifact-actions.yaml')
@@ -88,8 +65,7 @@ export function matchActions(actions: ArtifactAction[], artifactName: string): A
 
 /**
  * Filter actions that both match the artifact filename and are attached to the
- * given attach point (`artifact-title` | `artifact-selection`). An action with
- * no `attach_points` (pre-migration hand-edit) is treated as title-only.
+ * given attach point; an action with no `attach_points` counts as title-only.
  */
 export function matchByAttach(
   actions: ArtifactAction[],
@@ -113,10 +89,8 @@ export function artifactBase(name: string): string {
 
 /**
  * Substitute `{{artifact_name}}` / `{{artifact_base}}` / `{{selection}}` /
- * `{{selection_lines}}` placeholders in a template. `selection_lines` is a
- * plain "start-end" (or "start" when they're equal) string, empty when the
- * line range wasn't computed — quick actions that want to always mention it
- * should phrase around a possibly-empty value (e.g. "gần dòng {{selection_lines}}").
+ * `{{selection_lines}}` placeholders; `selection_lines` is `start-end` (or
+ * `start`), empty when the line range is unknown.
  */
 export function substitutePrompt(
   template: string,
@@ -155,25 +129,12 @@ export function toActionView(a: ArtifactAction): ArtifactActionView {
   return view
 }
 
-/**
- * Fill in `attach_points` for an action loaded from a pre-migration YAML (or a
- * hand-edit that cleared the array): defaults to title-only, matching the
- * historical (pre-QuickAction) behaviour where every action showed on the
- * title toolbar.
- */
+/** Default `attach_points` to title-only when missing or empty. */
 export function normalizeAction(a: ArtifactAction): ArtifactAction {
   if (a.attach_points && a.attach_points.length > 0) return a
   return { ...a, attach_points: ['artifact-title'] }
 }
 
-/**
- * Load & validate the dashboard-global catalog
- * (`~/.dev-team-dashboard/artifact-actions.yaml`). Falls back to the built-in
- * DEFAULT_ARTIFACT_ACTIONS when the file is missing, unreadable, or fails
- * schema validation — a broken/absent config must never crash a request nor
- * leave the toolbar empty. A valid YAML fully replaces the default
- * (declarative override) — never merged with the built-in seed.
- */
 function emptyCatalog(): ArtifactActionsFile {
   return {
     version: DEFAULT_CATALOG_VERSION,
@@ -182,6 +143,10 @@ function emptyCatalog(): ArtifactActionsFile {
   }
 }
 
+/**
+ * Load & validate the dashboard-global catalog; falls back to
+ * `DEFAULT_ARTIFACT_ACTIONS` when the file is missing, unreadable or invalid.
+ */
 export async function loadArtifactActionsFile(): Promise<ArtifactActionsFile> {
   const raw = await readYamlSafe(catalogFile())
   if (!raw) return emptyCatalog()
@@ -204,11 +169,8 @@ export type SaveArtifactActionsResult =
   | { ok: false; error: string }
 
 /**
- * Validate + persist a full-catalog replace (`PUT /api/artifact-actions`).
- * Rejects a schema-invalid body or duplicate action ids without touching disk;
- * on success, writes `registryHome()/artifact-actions.yaml` atomically
- * (temp file + rename), mirroring `saveRunners`.
- * Scope: dashboard-global (shared across projects), not per-project / per-task.
+ * Validate + persist a full-catalog replace (`PUT /api/artifact-actions`);
+ * rejects an invalid body or duplicate action ids without touching disk.
  */
 export async function saveArtifactActions(body: unknown): Promise<SaveArtifactActionsResult> {
   const parsed = ArtifactActionsFile.safeParse(body)

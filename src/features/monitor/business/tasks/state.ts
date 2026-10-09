@@ -23,7 +23,6 @@ export type HitlApplyResult =
 
 const stateFileChains = new Map<string, Promise<unknown>>()
 
-/** Serialize read-check-write per state file (single-process MVP). */
 function withStateFileLock<T>(stateFile: string, fn: () => Promise<T>): Promise<T> {
   const prev = stateFileChains.get(stateFile) ?? Promise.resolve()
   const run = prev.catch(() => {}).then(fn)
@@ -32,12 +31,8 @@ function withStateFileLock<T>(stateFile: string, fn: () => Promise<T>): Promise<
 }
 
 /**
- * Serialize an entire multi-step operation (read → validate → write, possibly
- * spanning several state mutations and a job submission) per task. Callers
- * already inside this lock must use the `AssumingLock` function variants below
- * instead of the normal exported ones — re-entering `withStateFileLock` for
- * the same file from within its own callback deadlocks (the outer call never
- * resolves, so the inner call waits forever for its turn).
+ * Serialize a multi-step operation per task. Callers already inside this lock
+ * must use the `AssumingLock` variants — re-entering it for the same file deadlocks.
  */
 export function withTaskLock<T>(root: string, taskId: string, fn: () => Promise<T>): Promise<T> {
   return withStateFileLock(joinPath(root, '.dev-state', `${taskId}.json`), fn)
@@ -66,14 +61,12 @@ export async function writeStateAtomic(
   return s.mtimeMs
 }
 
-/**
- * Jump the pipeline cursor to `targetStepId` without running intermediate
- * steps. Caller must validate the target is in-pipeline and runnable; does
- * not clear an open HITL gate (run-step rejects those earlier).
- */
 type JumpResult = { ok: true; state: Record<string, unknown> } | { ok: false; error: string; status: number }
 
-/** Core of `jumpToPipelineStep` — caller must already hold the task's lock (`withTaskLock`). */
+/**
+ * Jump the cursor to `targetStepId` without running intermediate steps; the
+ * caller holds the task lock and has validated the target.
+ */
 export async function jumpToPipelineStepAssumingLock(
   stateFile: string,
   targetStepId: string,
@@ -113,20 +106,9 @@ export type ResetScopes = {
 }
 
 /**
- * Roll `current_phase` back to `stepId`. The reverse of
- * `jumpToPipelineStepAssumingLock` — that one only ever moves the cursor forward
- * (guarded by `isRunnableTarget`); this one moves it backward (guarded by
- * `isResettableTarget`), which is why it's a separate function rather than a
- * shared "jump" with a direction flag.
- *
- * `scopes.resetScope` (step nào bị coi là chưa chạy) và `scopes.deleteScope`
- * (step nào bị xoá artifact) là hai trục rời nhau — lùi con trỏ không bắt buộc
- * phải xoá file, và ngược lại.
- *
- * `qa.md`/`hitl-feedback.md` are deliberately left alone — they're task-wide
- * history, not a single step's artifact.
- *
- * Core of `resetPipelineStep` — caller must already hold the task's lock (`withTaskLock`).
+ * Roll `current_phase` back to `stepId`; `scopes` picks the steps counted as
+ * un-run and whose artifacts get deleted. Caller must already hold the task lock.
+ * xem docs/architecture/code/monitor.md §10
  */
 export async function resetPipelineStepAssumingLock(
   root: string,
@@ -145,12 +127,8 @@ export async function resetPipelineStepAssumingLock(
   const targetIdx = phaseKeys.indexOf(stepId)
   if (targetIdx < 0) return { ok: false, error: 'invalid stepId', status: 400 }
 
-  // Step bị coi là chưa chạy — nuôi `doc_review_round` bên dưới và vòng
-  // `closeTaskSession` ở controller. KHÔNG bám `deleteScope`: reset mà không
-  // xoá file thì session CLI của step đó vẫn phải đóng, nếu không lần chạy
-  // lại nối tiếp vào phiên cũ.
+  // xem docs/architecture/code/monitor.md §10
   const removedSteps = scopes.resetScope === 'onward' ? phaseKeys.slice(targetIdx) : [stepId]
-  // Step bị xoá artifact — tập rời với `removedSteps`, có thể rỗng.
   const deletedSteps =
     scopes.deleteScope === 'none'
       ? []
@@ -167,10 +145,6 @@ export async function resetPipelineStepAssumingLock(
     }
   }
 
-  // Distinguishes an active reset from the "heal stuck phase" fallback in
-  // `runTaskStep` (controller.ts): a `succeeded` job for this step that finished
-  // BEFORE this timestamp is stale (belongs to the run being reset away from),
-  // not a signal to auto-advance past the freshly reset step.
   state.last_reset_at = new Date().toISOString()
   state.current_phase = stepId
   state.hitl_pending = null
@@ -190,9 +164,6 @@ export async function resetPipelineStepAssumingLock(
   state.doc_review_round = docReviewRound
 
   const mtime = await writeStateAtomic(stateFile, state)
-  // No dedicated `task.reset` type — docs/architecture/events/monitor.md's convention is that
-  // step-cursor changes go through `task.advanced` with a `reason` (same as
-  // `review_retry` below), not a new `pipeline.*`/`step.*` type per action.
   emit('task.advanced', {
     taskId,
     stepId,
@@ -320,30 +291,20 @@ export async function applyHitlAction(
       devTeamRoot: root,
     })
 
-    // Điều phối bật ⇒ KHÔNG gửi phản hồi ở đây: orchestrator nghe `hitl.resolved`,
-    // đọc `hitl-feedback.md` rồi tự quyết resume step nào và gửi gì. Gửi cả hai
-    // nơi thì step bị reject nhận phản hồi hai lần. Tính tại chỗ từ `pipeline` +
-    // `state` đã có sẵn — bằng đúng thứ `resolveOrchestration` đọc, mà không kéo
-    // `startAuthority` vào đây (module đó import ngược lại chính file này).
+    // xem docs/architecture/code/monitor.md §9
     const orchestratorActive =
       pipeline?.orchestrator?.enabled === true && state.orchestrator_halted !== true
 
     if (patch.action === 'reject' && patch.feedback?.trim() && currentStep && !orchestratorActive) {
-      // `sendTaskFeedback` lives behind the full `../index.js` barrel, which
-      // re-exports runner — and runner re-exports this module. Import it lazily
-      // so the cycle never runs at module-eval time (that's why the static
-      // import above goes through `../peers.js`).
+      // xem docs/architecture/code/monitor.md §9
       const feedback = patch.feedback.trim()
       const stepId = currentStep.id
       void import('../index.js')
         .then(({ sendTaskFeedback }) =>
-          // `source: 'gate'` để nếu phản hồi này phải xếp hàng (step còn job đang
-          // chạy), lượt resubmit sau đó biết bỏ nó khi orchestrator đã cầm lái.
           sendTaskFeedback(taskId, projectId, feedback, { stepId, source: 'gate' }),
         )
         .catch(() => {
-          // Best-effort: reject already persisted OK even if feedback dispatch fails
-          // (step "cooled down", job busy, etc).
+          // Best-effort: the reject is already persisted.
         })
     }
 
@@ -352,24 +313,15 @@ export async function applyHitlAction(
 }
 
 /**
- * Bring `hitl_pending` back in line with the pipeline the task runs under now.
- * Writes (and emits) ONLY when the value actually changes — reconcile runs on
- * every run-step, and a no-op must not bump `state_mtime` (an open HITL modal
- * uses mtime for its 409 conflict check).
- *
- * Core of `reconcileGateState` — caller must already hold the task's lock
- * (`withTaskLock`).
- *
- * Returns null when nothing changed.
+ * Bring `hitl_pending` back in line with the current pipeline; writes and emits
+ * only when the value changes, returns null otherwise. Caller must already hold
+ * the task lock.
+ * xem docs/architecture/code/monitor.md §8
  */
 export async function reconcileGateStateAssumingLock(
   root: string,
   taskId: string,
   stateFile: string,
-  // Callers on the hot path (run-step, every job success) have usually just
-  // read one or both of these under the same lock. Reusing them keeps this
-  // reconcile free of extra I/O and, as a bonus, makes caller and reconcile
-  // decide against the very same pipeline snapshot.
   preloaded?: { state?: Record<string, unknown>; pipeline?: any },
 ): Promise<{
   state: Record<string, unknown>
@@ -386,16 +338,10 @@ export async function reconcileGateStateAssumingLock(
 
   const state = { ...raw }
   const before = state.hitl_pending
-  // Same definition of "not blocked" as `resolveHitlPending` — anything falsy,
-  // `''` included. A looser guard here would let an empty-string pending reach
-  // the write below and bump `state_mtime` (breaking an open HITL modal's 409
-  // check) plus emit an audit line for a gate that never existed.
-  if (!before) return null // not blocked → skip loading the pipeline
+  if (!before) return null
 
   const pipeline = preloaded?.pipeline ?? (await loadPipelineConfig(root, taskId))
-  // `gateStepsFromConfig` yields null for an unreadable pipeline, which makes
-  // `resolveHitlPending` keep the gate — releasing one on a guess would walk a
-  // job straight past a human approval nobody gave.
+  // xem docs/architecture/code/monitor.md §8
   const after = resolveHitlPending(gateStepsFromConfig(pipeline), state.current_phase, before)
   if (after === before) return null
 
@@ -403,16 +349,12 @@ export async function reconcileGateStateAssumingLock(
   state.gate_reconciled_at = new Date().toISOString()
   const mtime = await writeStateAtomic(stateFile, state)
 
-  // Emit after persist (event-catalog convention). No new `pipeline.*` type —
-  // reuse `hitl.resolved`, the way reset reuses `task.advanced`.
   emit('hitl.resolved', {
     taskId,
     gateId: typeof before === 'string' ? before : null,
     action: after ? 'normalized' : 'cancelled',
     reason: 'pipeline_changed',
     currentPhase: state.current_phase,
-    // Read by the orchestrator to decide the next step; it runs off-request,
-    // so it must carry its own data root.
     devTeamRoot: root,
   })
   return { state, mtime, from: before, to: after }
@@ -426,23 +368,16 @@ export async function reconcileGateState(root: string, taskId: string) {
 }
 
 /**
- * Update task state after a dashboard-triggered "run step" job succeeds —
- * fills the bookkeeping gap the external orchestrator CLI used to cover.
- * No-ops (returns null) if `current_phase` no longer matches `stepId` (raced
- * by another action) or a gate is already pending — callers should treat a
- * null result as "nothing to do", not an error.
+ * Advance task state after a dashboard-run step job succeeds; returns null
+ * (nothing to do) when `current_phase` no longer matches `stepId` or a gate is
+ * pending. Caller must already hold the task lock.
  */
-/** Core of `advanceStepOnJobSuccess` — caller must already hold the task's lock (`withTaskLock`). */
 export async function advanceStepOnJobSuccessAssumingLock(
   root: string,
   taskId: string,
   stepId: string,
   stateFile: string,
 ): Promise<{ state: Record<string, unknown>; mtime: number } | null> {
-  // A gate left over from an older pipeline shape makes the `hitl_pending`
-  // guard below bail out forever (and `advancePipelineStepChain` with it) —
-  // clear it first so a just-edited pipeline takes effect. State and pipeline
-  // are read once here and handed to reconcile, since we need both anyway.
   const read = await readState(stateFile)
   if (!read.ok) return null
   const pipeline = await loadPipelineConfig(root, taskId)
@@ -460,11 +395,6 @@ export async function advanceStepOnJobSuccessAssumingLock(
   const currentStep = stepIdx >= 0 ? steps[stepIdx] : null
   if (!currentStep) return null
 
-  // A step opting into `hitl.retry` (e.g. `reviewer` in DEFAULT_PIPELINE) gets
-  // its artifact's verdict checked BEFORE the gate/advance below — a
-  // `NEEDS_CHANGES`-style verdict loops back to `retry.restart_from` without
-  // ever bothering the human gate; only an approve verdict (or exhausting
-  // `retry.max`) falls through to the existing behavior.
   const retry = currentStep.hitl?.retry
   const restartStepExists = retry ? steps.some((s: any) => s.id === retry.restart_from) : false
   if (retry && restartStepExists) {
@@ -485,9 +415,6 @@ export async function advanceStepOnJobSuccessAssumingLock(
         })
         return { state, mtime }
       }
-      // Past `retry.max`: fall through to the gate/advance logic below —
-      // for a step with `hitl.gate_id` (like `reviewer`), that opens the
-      // human gate instead of leaving the task silently re-runnable.
     }
   }
 
@@ -516,9 +443,6 @@ export async function advanceStepOnJobSuccess(
   const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
 
   return withStateFileLock(stateFile, async () => {
-    // Same reason as in `advanceStepOnJobSuccessAssumingLock`: drop a gate the
-    // current pipeline no longer declares before it blocks the advance for good.
-    // We are inside the state file lock already, hence the `AssumingLock` variant.
     const read = await readState(stateFile)
     if (!read.ok) return null
     const pipeline = await loadPipelineConfig(root, taskId)
@@ -536,11 +460,6 @@ export async function advanceStepOnJobSuccess(
     const currentStep = stepIdx >= 0 ? steps[stepIdx] : null
     if (!currentStep) return null
 
-    // A step opting into `hitl.retry` (e.g. `reviewer` in DEFAULT_PIPELINE) gets
-    // its artifact's verdict checked BEFORE the gate/advance below — a
-    // `NEEDS_CHANGES`-style verdict loops back to `retry.restart_from` without
-    // ever bothering the human gate; only an approve verdict (or exhausting
-    // `retry.max`) falls through to the existing behavior.
     const retry = currentStep.hitl?.retry
     const restartStepExists = retry ? steps.some((s: any) => s.id === retry.restart_from) : false
     if (retry && restartStepExists) {
@@ -557,15 +476,10 @@ export async function advanceStepOnJobSuccess(
             stepId,
             currentPhase: state.current_phase,
             reason: 'review_retry',
-            // Read by the orchestrator to decide the next step; it runs
-            // off-request, so it must carry its own data root.
             devTeamRoot: root,
           })
           return { state, mtime }
         }
-        // Past `retry.max`: fall through to the gate/advance logic below —
-        // for a step with `hitl.gate_id` (like `reviewer`), that opens the
-        // human gate instead of leaving the task silently re-runnable.
       }
     }
 
@@ -577,9 +491,6 @@ export async function advanceStepOnJobSuccess(
       state.current_phase = next ? next.id : 'completed'
     }
 
-    // Emit after persist so listeners never read stale state, and read the
-    // state we just wrote rather than `gateId` alone — `auto_review` still
-    // advances the cursor on a gated step, and the event must say so.
     const mtime = await writeStateAtomic(stateFile, state)
     if (state.hitl_pending) {
       emit('hitl.pending', { taskId, gateId, stepId, devTeamRoot: root })
@@ -593,24 +504,14 @@ export async function advanceStepOnJobSuccess(
 export interface PendingFeedback {
   feedback: string
   stepId?: string
-  /**
-   * Ai xếp hàng phản hồi này. `gate` là phản hồi sinh ra từ một lần reject cổng
-   * HITL — khi orchestrator đang điều phối thì chính nó quyết định gửi gì cho
-   * step bị reject, nên mục `gate` còn sót lại không được tự gửi.
-   */
+  /** Ai xếp hàng phản hồi này; mục `gate` không tự gửi khi orchestrator đang điều phối. */
   source?: 'chat' | 'gate' | 'orchestrator'
 }
 
 /**
- * Record feedback sent while its target step's job is still `running` —
- * `runJob` collects this once that job finishes and resubmits it via
- * `sendTaskFeedback`. A second call before the job finishes overwrites the
- * first; only the latest feedback for a task is kept (test-spec §3.8).
- *
- * Returns `false` (and writes nothing) when `taskId` has no `.dev-state`
- * file — callers must not report `queued: true` in that case, since nothing
- * will ever resubmit it (e.g. nl-chat's scratch sessions, which reuse this
- * same feedback path but aren't dashboard pipeline tasks).
+ * Record feedback for a step whose job is still running; `runJob` resubmits it
+ * once the job finishes. Only the latest feedback per task is kept. Returns
+ * `false` (writes nothing) when the task has no `.dev-state` file.
  */
 export async function queuePendingFeedback(
   root: string,
@@ -641,12 +542,7 @@ export async function takePendingFeedback(root: string, taskId: string): Promise
   })
 }
 
-/**
- * Archive/unarchive a task. Separate from `applyHitlAction` on purpose: archiving
- * is not a HITL gate decision, so it doesn't validate `gate_id`/`hitl_pending` —
- * the server accepts archiving any task regardless of `current_phase` (the
- * completed-only restriction is a UI affordance, not a server-side invariant).
- */
+/** Archive/unarchive a task, whatever its `current_phase`; no gate validation. */
 export async function applyArchiveAction(
   root: string,
   taskId: string,
@@ -687,14 +583,7 @@ export async function applyArchiveAction(
   })
 }
 
-/**
- * Bấm Stop trên node orchestrator: ghi `orchestrator_halted`. Cùng hình dạng
- * khoá / kiểm mtime / ghi atomic như `applyArchiveAction`.
- *
- * Halt không chỉ là tắt điều phối — nó trả quyền start về chế độ tay
- * (`assertStartAllowed` đọc `enabled && !halted`), nên sau khi Stop thì Run/Reset
- * trên node step hiện lại và người dùng chạy tay tiếp được.
- */
+/** Bấm Stop trên node orchestrator: ghi `orchestrator_halted`, trả quyền start về chế độ tay. */
 export async function applyOrchestratorHaltAction(
   root: string,
   taskId: string,
@@ -729,7 +618,7 @@ export async function applyOrchestratorHaltAction(
   })
 }
 
-/** Rename a task. Mirrors applyArchiveAction's lock/mtime-check/write shape. */
+/** Rename a task. */
 export async function applyRenameAction(
   root: string,
   taskId: string,
@@ -769,12 +658,7 @@ export async function applyRenameAction(
   })
 }
 
-/**
- * Permanently delete a task's files. Unlike applyArchiveAction, this does NOT
- * require readState() to succeed first — it exists specifically to remove
- * tasks whose state file is missing/corrupt and therefore have no other
- * available action.
- */
+/** Permanently delete a task's files; works even when the state file is missing or corrupt. */
 export async function deleteTask(
   root: string,
   taskId: string,
@@ -795,9 +679,6 @@ export async function deleteTask(
  *   `completed` (task finished under an older pipeline shape).
  * - Stale `hitl_pending` that the step at `current_phase` no longer declares →
  *   clear it (`resolveHitlPending`).
- *
- * Callers that also want "heal stuck phase after a succeeded job" should run
- * `advanceStepOnJobSuccess` first (same pattern as `runTaskStep`).
  */
 export async function repairTaskState(
   root: string,
@@ -831,17 +712,7 @@ export async function repairTaskState(
         state.current_phase = 'completed'
         state.hitl_pending = null
       }
-      // Runs AFTER the `current_phase` normalisation above, because a gate is
-      // only meaningful relative to a valid cursor. Sharing `resolveHitlPending`
-      // means repair now also catches a gate moved to a different step.
-      //
-      // Deliberately passes `steps` raw rather than `gateStepsFromConfig(pipeline)`:
-      // reconcile refuses to judge an unreadable pipeline, so repair — an explicit
-      // button a human presses on a task they can see is stuck — is the one place
-      // that rules on the pipeline it CAN resolve. Silent paths stay conservative;
-      // the manual override stays an override. (When even the fallback declares
-      // the gate, repair keeps it and the way out is re-saving the pipeline,
-      // which overwrites the unparseable file.)
+      // xem docs/architecture/code/monitor.md §8
       const pending = state.hitl_pending
       if (pending != null) {
         state.hitl_pending = resolveHitlPending(steps, state.current_phase, pending)

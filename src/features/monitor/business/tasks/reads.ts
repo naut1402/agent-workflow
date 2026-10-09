@@ -1,11 +1,4 @@
-/**
- * Read-only task helpers, tách khỏi `./index.js`.
- *
- * `index.ts` re-export `runStep.js` (→ runner → job queue + sqlite + node:child_process)
- * và ESM re-export nạp eager, nên mọi caller chỉ cần ĐỌC — đặc biệt tiến trình
- * stdio ở `mcp/` — không được đi qua barrel đó. Public surface không đổi:
- * `index.ts` re-export lại toàn bộ file này.
- */
+// xem docs/architecture/code/monitor.md §4
 
 import { joinPath, readDir, readFile, readTextFile, resolvePathUnder, statSafe } from '../../../../backend/lib/fileHelper.js'
 import { resolveHitlPending, gateStepsFromConfig } from '../../../../shared/lib/phase.js'
@@ -22,7 +15,6 @@ export function resolveArtifact(root: string, id: string, name: string): string 
   return resolvePathUnder(taskDir, name)
 }
 
-// pipeline-export.json is machine-readable only — excluded from the UI artifact list.
 export const MACHINE_FILES = new Set(['pipeline-export.json'])
 
 /** List a task dir's .md artifacts (+ known not-yet-created ones) and subtask dirs. */
@@ -49,7 +41,6 @@ export async function listArtifacts(
       out[e.name] = { exists: true, mtime: meta.mtime, size: meta.size }
     }
   }
-  // Ensure known artifacts always appear (as not-yet-created) for a stable UI.
   for (const name of knownArtifacts) {
     if (!(name in out)) out[name] = { exists: false, mtime: null, size: 0 }
   }
@@ -81,8 +72,6 @@ export async function collectTasks(root: string): Promise<any[]> {
     stateFiles = []
   }
 
-  // Build the set of task ids from state files first, then fold in any task
-  // directories that have artifacts but no state yet (e.g. legacy / mid-init).
   const ids = new Set(stateFiles.map((f) => f.replace(/\.json$/, '')))
   try {
     for (const e of await readDir(tasksDir, { withFileTypes: true })) {
@@ -108,7 +97,6 @@ export async function collectTasks(root: string): Promise<any[]> {
     if (artifacts['qa.md'] && artifacts['qa.md'].exists) {
       try {
         qa = await readFile(joinPath(taskDir, 'qa.md'), 'utf8')
-        // Count Q&A items: each question starts with a level-2 heading "## Q"
         qa_count = (qa.match(/^##\s+Q\d/gm) || []).length
       } catch {
         qa = null
@@ -120,13 +108,9 @@ export async function collectTasks(root: string): Promise<any[]> {
       state_ok: ok,
       state_error: ok ? null : error,
       state_mtime: stateMeta.mtime,
-      // Spread known state fields with safe defaults so the UI never crashes on
-      // a partially-written file.
       parent_task_id: state?.parent_task_id ?? null,
       current_phase: state?.current_phase ?? null,
-      // Recompute against the CURRENT pipeline so the UI never contradicts a
-      // stale gate; same `gateStepsFromConfig` as the write side, so an
-      // unreadable YAML keeps the gate on both ends.
+      // xem docs/architecture/code/monitor.md §8
       hitl_pending: resolveHitlPending(
         gateStepsFromConfig(cfg),
         state?.current_phase,
@@ -139,17 +123,12 @@ export async function collectTasks(root: string): Promise<any[]> {
       export_json: state?.export_json ?? false,
       archived: state?.archived ?? false,
       archived_at: state?.archived_at ?? null,
-      // Canvas monitor dựng node điều phối từ `pipeline.orchestrator`, còn trạng
-      // thái dừng/chạy của nó nằm ở state — cả hai phải cùng đi ra ở đây.
       orchestrator_halted: state?.orchestrator_halted ?? false,
       orchestrator_halted_at: state?.orchestrator_halted_at ?? null,
       name: typeof state?.name === 'string' && state.name.trim() ? state.name.trim() : null,
       artifacts,
       subtasks,
       pipeline: cfg,
-      // Task đã hoàn thành (completed hoặc archived) không còn ai quay lại trả
-      // lời — ẩn QA/bỏ highlight tại nguồn để mọi consumer (title highlight,
-      // QaPanel, notification badge) tự đồng bộ mà không cần patch từng nơi.
       has_qa: !isFinishedTaskState({ current_phase: state?.current_phase ?? null, archived: state?.archived ?? false })
         && !!(artifacts['qa.md'] && artifacts['qa.md'].exists),
       qa_count,

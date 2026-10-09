@@ -15,10 +15,8 @@ export type CreateQaResult =
   | { ok: false; error: string; details?: unknown }
 
 /**
- * Điểm vào dùng chung cho tạo/bổ sung `qa.md` — gọi từ cả `POST /api/tasks/:id/qa`
- * (dashboard) và MCP tool `create_qa` (agent), theo pattern `loadKnowledgeBundle`.
- * Luôn render đúng khuôn `## Q<n>` / `**Lựa chọn:**` / `**Trả lời:**` bằng code,
- * không phụ thuộc LLM tự soạn markdown tay.
+ * Tạo/bổ sung các block câu hỏi `## Q<n>` vào `qa.md` của task; dùng chung cho
+ * route `POST /api/tasks/:id/qa` và MCP tool `create_qa`.
  */
 export async function createQa(root: string, taskId: string, input: unknown): Promise<CreateQaResult> {
   const parsed = CreateQaRequest.safeParse(input)
@@ -39,8 +37,6 @@ export async function createQa(root: string, taskId: string, input: unknown): Pr
     existing = ''
   }
 
-  // Tiếp số từ block Q<n> lớn nhất đang có, kể cả khi file cũ không đúng khuôn
-  // (ví dụ được tạo trước khi có `create_qa`) — chỉ cần regex nhận diện heading.
   const existingNumbers = [...existing.matchAll(/^##\s+Q(\d+)/gm)].map((m) => Number(m[1]))
   const startAt = existingNumbers.length ? Math.max(...existingNumbers) : 0
 

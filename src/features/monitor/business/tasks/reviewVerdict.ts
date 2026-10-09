@@ -2,11 +2,8 @@ import { readTextFile } from '../../../../backend/lib/fileHelper.js'
 import { resolveArtifact } from './index.js'
 
 /**
- * Parse a review-style step's artifact for its `Recommendation:` line and
- * decide whether the step's `hitl.retry` should fire. Fail-safe by design —
- * any read/parse miss returns `{ retry: false }` so a step without a working
- * verdict line falls back to the pre-existing advance/gate behavior instead
- * of getting stuck.
+ * Parse a review step's artifact for its `Recommendation:` line and decide
+ * whether `hitl.retry` should fire; any read/parse miss returns `{ retry: false }`.
  */
 export async function checkReviewRetry(
   root: string,

@@ -1,7 +1,3 @@
-/**
- * Shared git process helpers for the monitor feature (clone, worktree, …).
- */
-
 import type { SpawnSyncReturns } from '../../../backend/lib/processHelper.js'
 import { spawnSync } from '../../../backend/lib/processHelper.js'
 import { existsSync, joinPath } from '../../../backend/lib/fileHelper.js'
@@ -10,10 +6,10 @@ import { existsSync, joinPath } from '../../../backend/lib/fileHelper.js'
 export const GIT_READ_TIMEOUT_MS = 10_000
 /** Local write command (`worktree remove`, `prune`) — may delete a large tree. */
 export const GIT_WRITE_TIMEOUT_MS = 30_000
-/** Clone over the network — the original cloneProject budget. */
+/** Clone over the network. */
 export const GIT_CLONE_TIMEOUT_MS = 300_000
 
-/** Prefer real git.exe on Windows when PATH is incomplete (IDE-launched servers). */
+// xem docs/architecture/code/monitor.md §14
 function resolveGitCommand(): string {
   if (process.platform !== 'win32') return 'git'
   const candidates = [
@@ -34,15 +30,13 @@ function resolveGitCommand(): string {
 
 export interface RunGitOptions {
   cwd?: string
-  /** Defaults to GIT_READ_TIMEOUT_MS — write/network call sites MUST pass their own. */
+  /** Defaults to `GIT_READ_TIMEOUT_MS`; write/network calls pass their own. */
   timeout?: number
   env?: NodeJS.ProcessEnv
 }
 
 export function runGit(args: string[], opts: RunGitOptions = {}): SpawnSyncReturns<string> {
-  // Never shell:true — argv is joined into a shell string and user-controlled
-  // cloneUrl / extraHeader / worktree path would become command-injection
-  // / token-leak surfaces.
+  // xem docs/architecture/code/monitor.md §14
   return spawnSync(resolveGitCommand(), args, {
     encoding: 'utf8' as const,
     windowsHide: true,

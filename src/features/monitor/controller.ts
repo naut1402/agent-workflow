@@ -46,7 +46,6 @@ import {
 } from './business/artifactActions/index.js'
 import { RunArtifactActionRequest } from './schemas/artifactAction.js'
 
-/** Serialize concurrent PUT /api/artifact for the same target (in-process). */
 const artifactWriteLocks = new Map<string, Promise<void>>()
 
 async function withArtifactWriteLock<T>(target: string, fn: () => Promise<T>): Promise<T> {
@@ -66,7 +65,6 @@ async function withArtifactWriteLock<T>(target: string, fn: () => Promise<T>): P
   }
 }
 
-/** Event type nào kích hoạt đẩy lại snapshot task-list qua SSE. */
 const TASK_STREAM_EVENTS = new Set([
   'task.created',
   'task.advanced',
@@ -79,11 +77,9 @@ const TASK_STREAM_EVENTS = new Set([
   'entity.deleted',
 ])
 
-/** Event vòng đời job nào đẩy sớm snapshot chat, thay vì đợi tick interval. */
 const JOB_LIFECYCLE_EVENTS = new Set(['job.started', 'job.finished', 'job.failed', 'job.cancelled'])
 
 export class MonitorController extends AbstractController {
-  // Project registry CRUD — no per-project root needed (Monitor owns project ↔ task UX).
   getProjects() {
     const { registry } = this.ctx
     const id = this.c.req.query('id')
@@ -103,7 +99,6 @@ export class MonitorController extends AbstractController {
     } catch {
       return this.badRequest('invalid JSON')
     }
-    // Clone remote repo when gitUrl is provided.
     if (parsed.gitUrl) {
       const cloned = monitorBusiness.cloneProject({
         gitUrl: parsed.gitUrl,
@@ -126,7 +121,6 @@ export class MonitorController extends AbstractController {
     }
     const result = registry.add({ path: parsed.path, name: parsed.name })
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
-    // Optional branch metadata on local projects.
     if (parsed.branch && result.project?.id) {
       monitorBusiness.setProjectBranch(result.project.id, parsed.branch)
       const updated = registry.get(result.project.id)
@@ -183,16 +177,14 @@ export class MonitorController extends AbstractController {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
     const { root } = gate
-    // Backward-compat shape: { root, tasks }, plus project id when requested.
     const payload: any = { root, tasks: await collectTasks(root) }
     if (this.projectId) payload.project = this.projectId
     return this.ok(payload)
   }
 
   /**
-   * SSE thay REST poll. Không lọc theo `payload.projectId` của event (nhiều
-   * event vòng đời không mang field này) — mỗi kết nối tự `collectTasks` lại
-   * đúng `root` của chính nó bất kể event nổ ra từ project nào.
+   * SSE snapshot task-list của project hiện tại.
+   * xem docs/architecture/code/monitor.md §19
    */
   streamTasks() {
     const gate = this.requireRoot()
@@ -204,10 +196,7 @@ export class MonitorController extends AbstractController {
       const pushSnapshot = async () => {
         send('tasks', { root, tasks: await collectTasks(root), ...(projectId ? { project: projectId } : {}) })
       }
-      // `void pushSnapshot()` discards the promise, so its rejection never
-      // reaches `eventBus.ts`'s `run()` wrapper (it only catches when the
-      // handler *returns* the promise) — an unhandled rejection here can
-      // crash the whole process. Catch locally instead.
+      // xem docs/architecture/code/monitor.md §19
       const safePushSnapshot = () => {
         pushSnapshot().catch((err) => {
           console.warn('[monitor] streamTasks pushSnapshot failed:', err)
@@ -568,8 +557,6 @@ export class MonitorController extends AbstractController {
       selectionEndLine: spliceRange?.end ?? selectionEndLine,
     })
 
-    // Qua cùng helper với 6 đường start job còn lại: pin trỏ runner đã xoá/tắt
-    // phải rơi về default, không mang id rác vào job record.
     const resolvedRunnerId =
       runnerId ??
       monitorBusiness.resolveStepRunnerId({
@@ -663,10 +650,7 @@ export class MonitorController extends AbstractController {
       if (typeof agentRef !== 'string' || !agentRef) {
         return this.badRequest('pipeline has no first-step agent', { taskId: result.taskId })
       }
-      // Pipeline có node điều phối ⇒ quyền start là của nó: giao task cho
-      // orchestrator thay vì submit thẳng step đầu (nếu không thì step đầu chạy
-      // với `request.md` thô và orchestrator mất luôn quyền điều phối bước sau).
-      // Import động: monitor → orchestrator → monitor là vòng nếu nối tĩnh.
+      // xem docs/architecture/code/monitor.md §20
       const orchestration = await resolveOrchestration(root, result.taskId)
       if (orchestration.active) {
         const { dispatchOrchestrator } = await import('../orchestrator/business/index.js')
@@ -686,7 +670,6 @@ export class MonitorController extends AbstractController {
         })
       }
       job = monitorBusiness.submitJob({
-        // Caller thắng pin của step (mẫu `runnerId ?? action.runner_id` của artifact action).
         runnerId: body.runnerId ?? monitorBusiness.resolveStepRunnerId(result.firstStep).runnerId,
         agentRef,
         workspace: path.join(root, 'tasks', result.taskId),
@@ -730,11 +713,7 @@ export class MonitorController extends AbstractController {
     return this.ok({ id, deleted: true })
   }
 
-  /**
-   * `requireRoot` + task id guard, shared by the per-task worktree routes.
-   * `repoRoot` is `dirname(root)`: `root` is `<repo>/.dev-team-agent`, git needs
-   * the repo itself. The id guard runs before any value reaches a git argument.
-   */
+  // xem docs/architecture/code/monitor.md §16
   private worktreeGate(): { error: Response } | { root: string; repoRoot: string; id: string } {
     const gate = this.requireRoot()
     if ('error' in gate) return gate
@@ -765,8 +744,6 @@ export class MonitorController extends AbstractController {
     if ('error' in gate) return gate.error
     const { root, repoRoot, id } = gate
 
-    // Both guards (task finished, no job in flight) live in business so they
-    // run under the same task lock as the removal itself.
     const result = await monitorBusiness.cleanupTaskWorktreeForTask(root, repoRoot, id)
     if ('error' in result) {
       const { ok: _ok, status, ...rest } = result
@@ -866,9 +843,6 @@ export class MonitorController extends AbstractController {
 
     const body = parsed.data
 
-    // Core (per-task lock, HITL gate, busy 409, auto-advance incl. the
-    // `last_reset_at` guard, submit) lives in business `runTaskStep` — shared
-    // with automations.
     const result = await runTaskStepCore(root, this.projectId, id, {
       runnerId: body.runnerId ?? null,
       targetStepId: body.targetStepId ?? null,
@@ -935,10 +909,7 @@ export class MonitorController extends AbstractController {
       })
       if ('error' in result) return this.json(result.status, { error: result.error, taskId: id })
 
-      // `closeTaskSession` can't be called from state.ts (cycle through
-      // business/index.js — see comment on `applyHitlAction`), so it runs
-      // here for every step the reset rolled back — kể cả khi không xoá file
-      // nào, vì step đó sắp chạy lại và phải có phiên CLI mới.
+      // xem docs/architecture/code/monitor.md §10
       for (const sid of result.removedSteps) {
         monitorBusiness.closeTaskSession(this.projectId || '', id, { stepId: sid })
       }
@@ -966,10 +937,8 @@ export class MonitorController extends AbstractController {
   }
 
   /**
-   * Nút Run/Stop của node orchestrator. Halt trả quyền start về chế độ tay,
-   * nên đây cũng là lối thoát khi điều phối kẹt: sau khi Stop, Run/Reset trên
-   * node step hiện lại và người dùng chạy tay tiếp được. Bỏ halt thì ngược lại —
-   * giao ngay một lượt cho agent, vì không còn đường nào khác cấp lượt đầu tiên.
+   * Nút Run/Stop của node orchestrator.
+   * xem docs/architecture/code/monitor.md §20
    */
   async putTaskOrchestrator() {
     const gate = this.requireRoot()
@@ -1007,12 +976,9 @@ export class MonitorController extends AbstractController {
         devTeamRoot: root,
         reason: 'user_stop',
       })
-      // Đường Stop này KHÔNG đi qua `haltTask()` của decisionLoop (đường riêng) —
-      // thu hồi token ngay, không đợi job quyết định của agent tự thoát.
       const { revokeOrchestratorTokensFor } = await import('../orchestrator/business/index.js')
       revokeOrchestratorTokensFor({ root, taskId: id })
     } else {
-      // Không `await`: lượt agent là một job, kết quả đọc ở `job.finished`.
       const { startOrchestratorTurn } = await import('../orchestrator/business/index.js')
       void startOrchestratorTurn(root, this.projectId, id).catch((err) =>
         console.warn('[monitor] orchestrator start failed', err),
@@ -1039,15 +1005,12 @@ export class MonitorController extends AbstractController {
     const read = await readState(stateFile)
     if (!read.ok) return this.notFound('task not found', { taskId: id })
 
-    // Chat với node điều phối là cách bật lại sau khi Stop — nói chuyện được
-    // với nó nghĩa là người dùng muốn nó cầm lái tiếp.
+    // xem docs/architecture/code/monitor.md §20
     if (parsed.data.stepId === ORCHESTRATOR_STEP_ID) {
       if (read.state?.orchestrator_halted === true) {
         const mtime = (await fs.stat(stateFile)).mtimeMs
         await applyOrchestratorHaltAction(root, id, { halted: false, mtime })
       }
-      // Không đi qua `sendTaskFeedback`: hàm đó chọn "job step xong gần nhất"
-      // làm job cha, nên phản hồi rơi vào session của step đầu.
       const { chatWithOrchestrator } = await import('../orchestrator/business/index.js')
       const turn = await chatWithOrchestrator(root, this.projectId, id, parsed.data.feedback)
       if ('error' in turn) return this.json(turn.status || 400, { error: turn.error, taskId: id })
@@ -1126,10 +1089,8 @@ export class MonitorController extends AbstractController {
   }
 
   /**
-   * SSE thay REST poll cho chat. Transcript/job stdout không có event nguồn
-   * riêng ("CLI ghi thêm dòng" không đi qua event bus) — route tự tail bằng
-   * interval nội bộ (giữ nguyên nhịp poll cũ), event vòng đời job chỉ đẩy sớm
-   * hơn chứ không thay được cho interval.
+   * SSE snapshot chat của task.
+   * xem docs/architecture/code/monitor.md §19
    */
   streamTaskChat() {
     const gate = this.requireRoot()

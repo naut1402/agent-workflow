@@ -40,12 +40,9 @@ const emit = defineEmits<{ 'open-artifact': [{ taskId: string; name: string }] }
 
 const { settings } = useAppSettings()
 
-// Provided by App.vue — lets the runner gate below send the user to Runner
-// mode without bubbling a custom event through Monitor/App.
 const navigateToMode = inject(navigateToModeKey, undefined)
 const canNavigateToMode = inject(canNavigateToModeKey, undefined)
 
-// Không có shell (mount lẻ trong unit test) ⇒ coi như tới được, giữ hành vi cũ.
 const runnerReachable = computed(() => canNavigateToMode?.('runner') ?? true)
 
 const content = ref('')
@@ -53,11 +50,8 @@ const loadedKey = ref<string | null>(null)
 const loadedMtime = ref<number | null>(null)
 const blockMode = ref(resolveArtifactViewMode(settings.value) === 'block')
 const openBlocks = ref<Set<number>>(new Set())
-// Accordion đọc reactive từ settings: đổi setting là đổi luôn cách bấm section,
-// còn trạng thái đang mở thì giữ tới lần nạp tài liệu kế tiếp.
-// Logic gập section ở đây là bản sao độc lập của frontend/ui/CMarkdownView.vue — sửa một bên thì sửa cả hai.
+// xem docs/architecture/code/monitor.md §24
 const accordionMode = computed(() => resolveArtifactSectionAccordion(settings.value))
-// Cờ "lần nạp đầu của tài liệu này" — chỉ lần đó mới seed lại `openBlocks`.
 const seedSectionsOnNextContent = ref(true)
 const message = ref('')
 const externalChange = ref(false)
@@ -91,9 +85,7 @@ const {
   setContent: (v) => { content.value = v },
   onSave: async (nextContent) => {
     if (!props.openArtifact) return
-    // Clicking a link while editing runs blur→save and the navigation in the same
-    // gesture; without this key the save response would overwrite the artifact the
-    // link just opened.
+    // xem docs/architecture/code/monitor.md §25
     const key = loadedKey.value
     message.value = ''
     const res = await saveArtifact(
@@ -111,7 +103,6 @@ const {
   },
 })
 
-// ── Quick actions (title toolbar + selection toolbar) ───────────────────────
 interface QuickActionView {
   id: string
   label: string
@@ -121,9 +112,6 @@ interface QuickActionView {
   runner_id?: string
 }
 
-// All actions matching the open artifact by pattern (unfiltered by attach
-// point); title/selection lists below split on `attach_points` client-side so
-// one fetch covers both toolbars.
 const actions = ref<QuickActionView[]>([])
 const menus = ref<ArtifactMenuNode[]>([])
 
@@ -137,8 +125,6 @@ const selectionActions = computed(() =>
 const titleToolbar = computed(() => splitActionsByMenu(titleActions.value, menus.value))
 const selectionToolbarMenu = computed(() => splitActionsByMenu(selectionActions.value, menus.value))
 
-// Runner "usable" gate for QuickAction (decision §4.2.1 #8): mirrors the Agent
-// Editor Build NL gate — a runner is usable unless explicitly disabled.
 const runners = ref<Array<{ id: string; name: string; enabled?: boolean }>>([])
 const hasUsableRunner = computed(() => runners.value.some((r) => r.enabled !== false))
 const gateError = ref('')
@@ -166,8 +152,6 @@ const {
   clearPendingApproval,
 } = useArtifactAction({
   getProjectId: () => props.projectId ?? null,
-  // Only reload when the job's artifact is still the one on screen — the user
-  // may have switched artifacts while the job was polling.
   onReload: (target) => {
     if (
       props.openArtifact &&
@@ -177,12 +161,8 @@ const {
       reloadExternal()
     }
   },
-  // A require_approval job settled against a scratch copy — the diff-review modal
-  // opens off `pendingApproval` (set by the composable); nothing extra to do here.
 })
 
-// True when the pending-approval job still targets the artifact on screen, so a
-// stale review (user switched artifacts mid-run) doesn't pop open.
 const showProposalReview = computed(
   () =>
     !!pendingApproval.value &&
@@ -199,8 +179,6 @@ function onProposalDiscarded() {
   clearPendingApproval()
 }
 
-// Action running for the artifact currently on screen (null if the in-flight
-// job belongs to a different artifact), so the spinner lands on the right button.
 const runningHereActionId = computed(() =>
   props.openArtifact
     ? runningActionFor(props.openArtifact.taskId, props.openArtifact.name)
@@ -243,7 +221,6 @@ async function onMenuSelectionRun(actionId: string) {
   if (action) await onSelectionActionClick(action)
 }
 
-// ── Selection toolbar ────────────────────────────────────────────────────────
 const selectionToolbar = useArtifactSelectionToolbar({
   getContainer: () => viewRoot.value,
   isBlocked: () => isEditing() || !props.openArtifact || !!runningActionId.value,
@@ -304,13 +281,7 @@ const blocks = computed(() => {
   })
 })
 
-// 1-indexed start/end line of each block within the raw `content`, used to
-// give the selection toolbar a line range for the selected text (see
-// useArtifactSelectionToolbar's computeSelectionLines). `splitMarkdownSections`
-// slices `content` via a lookahead split (no characters consumed), so each
-// block's `source` is a literal, in-order substring of `content` — searching
-// sequentially from the previous block's end keeps this correct even if two
-// blocks happen to share identical text.
+// xem docs/architecture/code/monitor.md §23
 const blockLineRanges = computed(() => {
   const full = content.value
   let searchFrom = 0
@@ -343,9 +314,7 @@ async function handleBlur() {
 
 async function load(taskId: string, name: string) {
   const key = `${taskId}/${name}`
-  // Chỉ BẬT, không bao giờ hạ: đổi artifact làm watcher `openArtifact` và watcher
-  // `mtime` cùng gọi load() cho một key trong một flush, gán đè sẽ nuốt mất cờ và
-  // tài liệu mới thừa hưởng `openBlocks` của tài liệu trước.
+  // xem docs/architecture/code/monitor.md §24
   if (loadedKey.value !== key) seedSectionsOnNextContent.value = true
   loadedKey.value = key
   cancelEdit()
@@ -356,14 +325,9 @@ async function load(taskId: string, name: string) {
     if (loadedKey.value === key) {
       content.value = res.content
       loadedMtime.value = res.mtime
-      // Seed tại đây chứ không chờ `watch(content)`: watcher chỉ bắn khi giá trị
-      // ĐỔI, nên mở tài liệu khác mà nội dung trùng khít sẽ giữ nguyên trạng thái
-      // section của tài liệu trước. `blocks` là computed nên đã theo content mới.
       seedSectionsIfPending()
     }
   } catch {
-    // Artifact trong thư mục con không có entry ở `task.artifacts` nên link tới nó
-    // không kiểm tồn tại trước được — đây là chỗ duy nhất biết nó không mở được.
     if (loadedKey.value !== key) return
     content.value = ''
     message.value = t('monitor.artifact.linkMissing', { name })
@@ -382,7 +346,6 @@ async function scheduleMermaid() {
   attachMermaidControls(viewRoot.value, { onToggleFullscreen: onToggleMermaidFullscreen })
 }
 
-// ── Link tương đối giữa các artifact ─────────────────────────────────────────
 const LINK_ERROR_KEY = {
   escape: 'monitor.artifact.linkOutsideTask',
   'not-markdown': 'monitor.artifact.linkNotArtifact',
@@ -391,9 +354,7 @@ const LINK_ERROR_KEY = {
 
 function openLinkedArtifact(name: string) {
   if (!props.openArtifact) return
-  if (name === props.openArtifact.name) return // trỏ về chính nó — no-op
-  // `task.artifacts` chỉ liệt kê .md phẳng ở gốc task; path subtask ('Tsub/x.md')
-  // không có entry nên bỏ qua bước kiểm tồn tại, để GET /api/artifact quyết định.
+  if (name === props.openArtifact.name) return
   if (!name.includes('/') && !props.task?.artifacts?.[name]?.exists) {
     message.value = t('monitor.artifact.linkMissing', { name })
     return
@@ -402,22 +363,14 @@ function openLinkedArtifact(name: string) {
   emit('open-artifact', { taskId: props.openArtifact.taskId, name })
 }
 
-/** Thẻ `a` mà click này nhắm tới, hoặc `null` nếu không phải link điều hướng. */
 function navigableAnchor(ev: MouseEvent): HTMLAnchorElement | null {
   if (ev.defaultPrevented || ev.button !== 0) return null
   const anchor = (ev.target as HTMLElement | null)?.closest?.('a') as HTMLAnchorElement | null
   if (!anchor || !viewRoot.value?.contains(anchor)) return null
-  // Editor sống bên trong `viewRoot`; thẻ `a` ở tab Preview / surface WYSIWYG của
-  // Toast UI là nội dung đang soạn, không phải link điều hướng của artifact — bắt
-  // chúng sẽ mở artifact khác và vứt luôn draft chưa lưu.
   if (anchor.closest('.art-editor, .toastui-editor-defaultUI')) return null
   return anchor
 }
 
-/**
- * Phím bổ trợ chỉ có nghĩa với link web thật (tab/cửa sổ mới, tải về). Href của
- * artifact là đường dẫn file — nhường trình duyệt sẽ mở tab trỏ tới URL rác.
- */
 function leaveToBrowser(ev: MouseEvent, target: ArtifactLinkTarget): boolean {
   if (target.kind !== 'external') return false
   return ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey
@@ -433,9 +386,7 @@ function followLink(target: ArtifactLinkTarget, href: string) {
   }
 }
 
-// Markdown được render qua `v-html`, không có router — nếu để trình duyệt đi
-// theo href tương đối thì cả SPA điều hướng sang một URL rác. Delegate ở
-// `viewRoot` phủ mọi block ở cả hai view mode với một listener.
+// xem docs/architecture/code/monitor.md §25
 function onViewClick(ev: MouseEvent) {
   const anchor = navigableAnchor(ev)
   if (!anchor || !props.openArtifact) return
@@ -451,8 +402,6 @@ function onViewClick(ev: MouseEvent) {
 function onBlockToggle(i: number, ev: Event) {
   const el = ev.target as HTMLDetailsElement
   if (el.open) {
-    // Accordion: mở block i ⇒ tập mở chỉ còn {i}. Các block anh em bị Vue đóng sẽ
-    // bắn `toggle` vọng lại, rơi vào nhánh dưới và chỉ `delete` — idempotent, không lặp.
     openBlocks.value = accordionMode.value ? new Set([i]) : new Set(openBlocks.value).add(i)
     scheduleMermaid()
   } else {
@@ -462,7 +411,6 @@ function onBlockToggle(i: number, ev: Event) {
   }
 }
 
-// Nơi DUY NHẤT seed `openBlocks` từ preference. Accordion bật ⇒ resolver trả 'collapsed'.
 function applyDefaultSectionState() {
   openBlocks.value =
     resolveArtifactSectionDefault(settings.value) === 'expanded'
@@ -471,14 +419,12 @@ function applyDefaultSectionState() {
   if (openBlocks.value.size) scheduleMermaid()
 }
 
-// Tiêu thụ cờ seed — lần gọi đầu thắng, các lần sau là no-op.
 function seedSectionsIfPending() {
   if (!seedSectionsOnNextContent.value) return
   seedSectionsOnNextContent.value = false
   applyDefaultSectionState()
 }
 
-// Giữ nguyên lựa chọn của người dùng, chỉ bỏ index không còn block tương ứng.
 function pruneOpenBlocks() {
   const max = blocks.value.length
   openBlocks.value = new Set([...openBlocks.value].filter((i) => i < max))
@@ -538,8 +484,6 @@ watch(
   },
 )
 
-// Nạp lại cùng tài liệu (polling `mtime`, lưu inline edit, 409 conflict): giữ nguyên
-// section đang đọc, chỉ bỏ index không còn block tương ứng.
 watch(content, pruneOpenBlocks)
 
 watch(
@@ -575,8 +519,6 @@ onUpdated(() => scheduleMermaid())
         <span>{{ t('monitor.artifact.running') }}</span>
       </div>
       <div class="art-toolbar">
-        <!-- Thu gọn/mở rộng toàn bộ block đặt bên trái toolbar, cùng vị trí với
-             nút collapse của sub-sidebar và panel trái Pipeline Editor. -->
         <button
           v-if="blockMode && !accordionMode"
           type="button"
@@ -630,12 +572,10 @@ onUpdated(() => scheduleMermaid())
             :aria-label="blockMode ? t('monitor.artifact.toFull') : t('monitor.artifact.toBlock')"
             @click="blockMode = !blockMode"
           >
-            <!-- full view (document) when in block mode — click switches to full -->
             <svg v-if="blockMode" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
               <rect x="3" y="2" width="10" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4" />
               <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" />
             </svg>
-            <!-- block view (stacked sections) when in full mode — click switches to blocks -->
             <svg v-else viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
               <rect x="2.5" y="2.5" width="11" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
               <rect x="2.5" y="9.5" width="11" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />

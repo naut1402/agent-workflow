@@ -17,8 +17,7 @@ const CHOICE_BLOCK_RE = /^\*\*Lựa chọn:\*\*[ \t]*\r?\n((?:^-\s*[A-Z]\.\s.+\r
 const CHOICE_ITEM_RE = /^-\s*([A-Z])\.\s*(.+)$/gm
 const ANSWER_LINE_RE = /^\*\*Trả lời:\*\*.*$/m
 
-/** Parse `qa.md` into per-question blocks; `choices` is empty for blocks that
- * don't follow the `**Lựa chọn:**` convention (free-text, unchanged behavior). */
+/** Parse `qa.md` into per-question blocks; `choices` is empty when a block has no `Lựa chọn:` list. */
 export function parseQaBlocks(source: string): QaBlock[] {
   return splitMarkdownSections(source).map((raw, index) => {
     const idMatch = /^##\s*(Q\d+)/.exec(raw)
@@ -33,7 +32,7 @@ export function parseQaBlocks(source: string): QaBlock[] {
   })
 }
 
-/** Write `answerText` into the `**Trả lời:**` line of the given block only. */
+/** Write `answerText` into the `Trả lời:` line of the given block only. */
 export function applyAnswer(source: string, blockIndex: number, answerText: string): string {
   const parts = splitMarkdownSections(source)
   if (blockIndex < 0 || blockIndex >= parts.length) return source

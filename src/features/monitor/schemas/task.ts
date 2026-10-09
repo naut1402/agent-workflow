@@ -1,13 +1,5 @@
 import { z } from 'zod'
 
-/**
- * Live per-task state, persisted by the orchestrator at
- * `.dev-state/<task-id>.json`. The dashboard only reads it.
- *
- * The schema is intentionally permissive (`.passthrough()`, all fields optional)
- * to honour the defensive rule that a half-written state file must never crash a
- * request. Use `parseTaskState` to obtain a record with safe UI defaults applied.
- */
 export const DocReviewRound = z
   .object({
     investigate: z.number().default(0),
@@ -15,6 +7,10 @@ export const DocReviewRound = z
   })
   .passthrough()
 
+/**
+ * Live per-task state at `.dev-state/<task-id>.json`; permissive so a
+ * half-written file never crashes a request. Use `parseTaskState` for UI defaults.
+ */
 export const TaskState = z
   .object({
     parent_task_id: z.string().nullable().optional(),
@@ -30,9 +26,8 @@ export const TaskState = z
     /** Human-readable task title, written by the orchestrator or the create flow. */
     name: z.string().optional(),
     /**
-     * Cờ cache của `pipeline.orchestrator.enabled` — nguồn chân lý vẫn là
-     * `pipeline.yaml`; cờ này tồn tại để `submitJob` (đồng bộ, không await
-     * được `loadPipelineConfig`) có cái để đọc ở lớp chặn cuối.
+     * Cờ cache của `pipeline.orchestrator.enabled`; nguồn chân lý là `pipeline.yaml`.
+     * xem docs/architecture/code/monitor.md §5
      */
     orchestrator_enabled: z.boolean().optional(),
     /** Người bấm Stop / agent trả `halt` — trả quyền start về chế độ tay. */
@@ -96,11 +91,8 @@ export interface TaskStateView {
 }
 
 /**
- * Project an unknown raw value into a TaskStateView with safe defaults.
- * Mirrors the raw field defaulting of the `/api/tasks` handler — NOT its gate
- * reconciliation: that handler additionally runs `hitl_pending` through
- * `resolveHitlPending` against the task's live pipeline, which needs I/O this
- * pure projection has no access to.
+ * Project an unknown raw value into a TaskStateView with safe defaults;
+ * `hitl_pending` is not reconciled against the pipeline.
  */
 export function parseTaskState(raw: unknown): TaskStateView {
   const parsed = TaskState.safeParse(raw)

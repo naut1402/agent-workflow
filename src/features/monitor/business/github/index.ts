@@ -54,10 +54,7 @@ export function buildIssuePrompt(issue: {
   return parts.join('\n')
 }
 
-/**
- * Resolve auth token for a repo: per-repo dashboard setting first, then `GITHUB_TOKEN`.
- * Exported for unit tests.
- */
+/** Resolve auth token for a repo: per-repo dashboard setting first, then `GITHUB_TOKEN`. */
 export function resolveIssueFetchToken(owner: string, repo: string): string | null {
   return resolveGithubTokenForRepo(
     loadGithubTokensConfig(),
@@ -67,11 +64,7 @@ export function resolveIssueFetchToken(owner: string, repo: string): string | nu
   )
 }
 
-/**
- * Fetch a GitHub issue for preview before scaffolding a task.
- * Uses `fetchUrlSafe` (https-only, SSRF guards) against the REST API.
- * Private repos need a token (Settings → GitHub tokens, or env `GITHUB_TOKEN`).
- */
+/** Fetch a GitHub issue for preview via `fetchUrlSafe`; private repos need a token. */
 export async function fetchGithubIssue(url: string): Promise<FetchGithubIssueResult> {
   const parsed = parseGithubIssueUrl(url)
   if (!parsed) {
@@ -129,11 +122,7 @@ export async function fetchGithubIssue(url: string): Promise<FetchGithubIssueRes
   }
 }
 
-/**
- * List open issues for `owner/repo` (page of up to 50) for the create-task issue
- * picker. GitHub's `/issues` endpoint also returns pull requests — filtered out
- * here since dashboard tasks only ever scaffold from an issue.
- */
+/** List open issues for `owner/repo` (page of up to 50), pull requests excluded. */
 export async function listOpenGithubIssues(
   owner: string,
   repo: string,

@@ -1,6 +1,4 @@
 <script setup lang="ts">
-// Sidebar project selector + CRUD. Two entry points after title:
-// ＋ local path, Git clone (separate forms under the header).
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
@@ -30,9 +28,6 @@ const newPath = ref('')
 const newName = ref('')
 const gitUrl = ref('')
 const gitBranch = ref('main')
-// MỘT instance dùng chung cho cả ba handler (thêm local / clone git / xoá) —
-// giữ đúng ngữ nghĩa cờ `busy` cũ, và thêm: đang thêm project thì bấm xoá bị
-// guard chặn. 🚫 Không tách ba instance, làm thế là nới lỏng so với hiện tại.
 const { pending: busy, run: runProjectAction } = useApiAction()
 const errorMsg = ref('')
 const pickerOpen = ref(false)
@@ -468,7 +463,7 @@ async function onRemove(project) {
 </template>
 
 <style scoped lang="scss">
-/* `position: relative` là containing block cho `CLoadingOverlay`. */
+// xem docs/architecture/code/monitor.md §31
 .project-bar {
   position: relative;
   border-bottom: 1px solid var(--border, #2a2a35);

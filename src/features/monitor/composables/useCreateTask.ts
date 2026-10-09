@@ -53,7 +53,6 @@ export interface UseCreateTaskOptions {
 export function useCreateTask(opts: UseCreateTaskOptions) {
   const step = ref(1)
   const form = ref(emptyCreateTaskForm())
-  // Một instance cho cả `fetchIssue` và `submit` — giữ đúng ngữ nghĩa cờ cũ.
   const { pending: loading, run: runTaskAction } = useApiAction()
   const error = ref<string | null>(null)
   const issuePreview = ref<{ title: string; body: string | null; url: string; prompt: string } | null>(
@@ -106,18 +105,11 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     return false
   })
 
-  /**
-   * Highest step reachable by a forward jump. Step 1 is the only real gate —
-   * pipeline (2) and knowledge (3) are optional and always advance — so once the
-   * source step is satisfied, every later step is fair game.
-   */
   const maxReachableStep = computed(() => (sourceStepSatisfied.value ? CREATE_TASK_STEPS : 1))
 
   function reset() {
     step.value = 1
     form.value = emptyCreateTaskForm()
-    // 🚫 Không reset `loading` ở đây: vòng đời cờ do `runTaskAction` sở hữu và
-    // luôn nhả ở `finally`. Reset tay chỉ che được lỗi, không sửa được lỗi.
     error.value = null
     issuePreview.value = null
     issueLoaded.value = false
@@ -150,7 +142,6 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
       ])
       profiles.value = (profData.profiles || []).map((p: { name: string }) => ({ name: p.name }))
       runners.value = (runData.runners || []).filter((r: { enabled?: boolean }) => r.enabled !== false)
-      // Luôn gắn lại default khi mở dialog (kể cả sau reset form).
       form.value.runnerId = pickDefaultRunnerId(
         runners.value,
         runData.effectiveDefaultRunnerId ?? runData.defaultRunnerId,
@@ -164,7 +155,6 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     }
   }
 
-  /** Khi bật "Chạy ngay", đảm bảo runnerId khớp option thật (tránh select trống). */
   function ensureRunnerSelected() {
     if (!form.value.run) return
     if (form.value.runnerId && runners.value.some((r) => r.id === form.value.runnerId)) return
@@ -184,7 +174,6 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     }
   }
 
-  /** `owner/repo` actually queried — the picked dropdown entry, or the manual field when "Other…" is picked. */
   function effectiveRepo(): string {
     return selectedRepo.value === MANUAL_REPO_OPTION ? manualRepo.value.trim() : selectedRepo.value
   }
@@ -248,10 +237,6 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
     if (step.value > 1) step.value -= 1
   }
 
-  /**
-   * Jump straight to a step (stepper click). Backward is always allowed; forward
-   * only within `maxReachableStep`. Returns false when the jump was rejected.
-   */
   function goToStep(target: number): boolean {
     if (!Number.isInteger(target) || target < 1 || target > CREATE_TASK_STEPS) return false
     if (target === step.value) return false
@@ -273,8 +258,6 @@ export function useCreateTask(opts: UseCreateTaskOptions) {
 
   async function submit(): Promise<{ taskId: string; jobId: string | null } | null> {
     error.value = null
-    // Lời gọi bị guard bỏ qua trả `undefined` → quy về `null`, cùng nghĩa
-    // "không tạo được task" mà consumer đã xử lý sẵn.
     const result = await runTaskAction(async () => {
       try {
         const name = form.value.source === 'issue' ? issuePreview.value?.title?.trim() || undefined : undefined

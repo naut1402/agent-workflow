@@ -30,7 +30,6 @@ const message = ref('')
 const viewRoot = ref<HTMLElement | null>(null)
 
 const OTHER_VALUE = '__other__'
-/** Per quiz-block choice — keyed by `QaBlock.index`. */
 const selections = reactive<Record<number, { choice: string | null; other: string }>>({})
 const { pending: submitting, run: runSubmit } = useApiAction()
 const submitError = ref('')
@@ -38,8 +37,6 @@ const submitError = ref('')
 const blocks = computed<QaBlock[]>(() => parseQaBlocks(content.value))
 const hasQuizBlocks = computed(() => blocks.value.some((b) => b.choices.length > 0))
 function blockHtml(block: QaBlock): string {
-  // Strip the machine-readable "**Lựa chọn:**" list from the rendered view —
-  // its choices already have dedicated radio UI below.
   const withoutChoices = block.raw.replace(
     /^\*\*Lựa chọn:\*\*[ \t]*\r?\n(?:^-\s*[A-Z]\.\s.+\r?\n?)+/m,
     '',
@@ -286,9 +283,7 @@ onUpdated(() => scheduleMermaid())
 </template>
 
 <style scoped lang="scss">
-/* `position: relative` là containing block cho `CLoadingOverlay` (xem hợp đồng
-   ở đầu CLoadingOverlay.vue) — thiếu nó thì overlay leo lên tổ tiên định vị
-   gần nhất và phủ cả trang. */
+// xem docs/architecture/code/monitor.md §31
 .qa-panel {
   position: relative;
   background: rgba(227,179,65,0.08);

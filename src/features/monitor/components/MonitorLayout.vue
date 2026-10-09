@@ -67,38 +67,27 @@ const worktreeAmbiguous = ref(false)
 const worktreeError = ref('')
 const cleaning = ref(false)
 
-// Cleanup is offered only for tasks that already ended — a running step may
-// still be writing into that worktree. The server enforces the same rule.
 const canCleanWorktree = computed(
   () => !!worktree.value && !worktreeAmbiguous.value && isFinishedTaskState(props.selected),
 )
 
-/**
- * `projectId` travels as an argument, never read off the prop after an `await`:
- * a task id alone does not identify a worktree — two projects can hold the same
- * id, so a response for the old project would otherwise paint over the new one.
- */
+// xem docs/architecture/code/monitor.md §26
 async function loadWorktree(taskId: string | null, projectId: string | null) {
   worktree.value = null
   worktreeAmbiguous.value = false
   if (!taskId) return
   try {
     const r: any = await fetchTaskWorktree(taskId, projectId ?? undefined)
-    // Poll 1.5s may have switched task or project between the two awaits — drop stale data.
     if (props.selected?.task_id !== taskId) return
     if ((props.selectedProjectId ?? null) !== projectId) return
     worktree.value = r?.worktree ?? null
     worktreeAmbiguous.value = !!r?.ambiguous
   } catch {
-    // Swallowed on purpose: this is auxiliary info. Surfacing it would blink a
-    // warning in `.task-head` on every task switch when the backend has no git.
     worktree.value = null
   }
 }
 
-// An array OF getters, not a getter returning an array: the latter builds a new
-// array every run, so `Object.is` always reports "changed" and the callback would
-// re-fire on every 1.5s poll — wiping `worktreeError` before anyone can read it.
+// xem docs/architecture/code/monitor.md §26
 watch(
   [() => props.selected?.task_id ?? null, () => props.selectedProjectId ?? null],
   ([id, projectId]) => {
@@ -108,17 +97,11 @@ watch(
   { immediate: true },
 )
 
-// Setting mục 7 — auto-collapse file-list mở của TaskList khi click ra ngoài
-// vùng .monitor-sub-sidebar (kể cả click vào artifact panel bên phải).
 const subSidebarRef = ref<HTMLElement | null>(null)
 const taskListRef = ref<InstanceType<typeof TaskList> | null>(null)
 const { settings } = useAppSettings()
 
-// Mode icon (trong `.sidebar`) giờ chính là nút toggle sub-sidebar, mà listener
-// capture của onClickOutside chạy TRƯỚC @click của nút: nếu collapse ở đây thì
-// @click sẽ toggle mở lại ⇒ nhánh "đang hiện → ẩn" chết. Chặn đúng nhánh đó chứ
-// KHÔNG đưa '.sidebar' vào `ignore` — `ignore` triệt tiêu cả callback, kéo theo
-// nhánh collapseTaskExpandOnOutside (setting độc lập) chết oan.
+// xem docs/architecture/code/monitor.md §27
 function isFromRailSidebar(event: Event) {
   return event.composedPath().some((el) => el instanceof Element && el.classList.contains('sidebar'))
 }
@@ -131,9 +114,7 @@ onClickOutside(
       emit('update:subSidebarCollapsed', true)
     }
   },
-  // Ignore teleported modals (FolderPicker, Settings, …): clicks there are outside
-  // the sub-sidebar DOM but must not collapse it — otherwise v-if unmounts ProjectBar
-  // and closes the picker mid-navigation.
+  // xem docs/architecture/code/monitor.md §27
   { ignore: ['.modal-backdrop'] },
 )
 
@@ -170,11 +151,8 @@ async function repairSelected() {
 async function deleteSelected() {
   if (!props.selected) return
   await runDelete(async () => {
-    // Guard chống double-click nay do `runDelete` giữ: handler async (dò job
-    // trước khi hỏi) nên không có guard thì mỗi cú click là một hộp confirm +
-    // một lượt DELETE.
     archiveError.value = ''
-    // Chụp id ngay đầu handler: poll 1.5s có thể đổi `selected` giữa hai lần await.
+    // xem docs/architecture/code/monitor.md §21
     const taskId = props.selected.task_id
     try {
       const running = await hasInFlightJob(taskId, props.selectedProjectId)
@@ -190,7 +168,6 @@ async function deleteSelected() {
   })
 }
 
-/** Text of the destructive confirm — stronger wording while a job is in flight. */
 async function worktreeConfirmMessage(
   taskId: string,
   projectId: string | null,
@@ -206,10 +183,7 @@ async function worktreeConfirmMessage(
 async function cleanWorktreeSelected() {
   const wt = worktree.value
   if (!wt || cleaning.value) return
-  // Same reason as deleteSelected: the handler awaits, `selected` may move —
-  // and `confirm()` holds it open for as long as the user takes to read it, so
-  // both halves of the identity are snapshotted before that and re-checked
-  // after, rather than read off the props at request time.
+  // xem docs/architecture/code/monitor.md §26
   const taskId = props.selected?.task_id
   if (!taskId) return
   const projectId = props.selectedProjectId ?? null
@@ -348,9 +322,6 @@ async function cleanWorktreeSelected() {
   flex: 1;
   height: 100%;
 }
-// Thu về 0 chứ không 48px mặc định của CScreenLayout: dải đó chỉ chứa nút
-// thu/phóng đã bỏ, giữ lại sẽ là một cột xám rỗng. Editor vẫn giữ dải icon
-// vì còn Catalog/Rules.
 .monitor-layout :deep(.c-screen-layout__body--left-collapsed) {
   grid-template-columns: 0 1fr;
 }

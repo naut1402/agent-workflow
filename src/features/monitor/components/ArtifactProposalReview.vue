@@ -4,12 +4,6 @@ import { onMounted, ref } from 'vue'
 import { useArtifactProposal } from '../composables/useArtifactProposal'
 import CDialog from '../../../frontend/ui/CDialog.vue'
 
-// Review UI for a require_approval quick action: shows the proposed diff
-// (before = real file, after = agent's edit in the scratch copy) and lets the
-// user approve (apply to the real file), discard (throw the scratch away), or
-// send follow-up feedback into the same CLI session. Opened by ArtifactPanel
-// when a run settles at `awaiting_approval`.
-
 const { t } = useI18nHelpers()
 const props = defineProps<{
   jobId: string

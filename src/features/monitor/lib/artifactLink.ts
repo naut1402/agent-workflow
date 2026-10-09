@@ -1,10 +1,3 @@
-/**
- * Phân loại href của một link trong artifact đã render, để `ArtifactPanel` biết
- * nên mở artifact khác trong cùng task, mở tab mới, hay chặn kèm thông báo.
- *
- * Hàm thuần: không import Vue, không đụng DOM, không gọi API.
- */
-
 /** Kết quả phân loại một href trong artifact đã render. */
 export type ArtifactLinkTarget =
   /** Neo `#`, href rỗng, scheme vô hại khác — để trình duyệt tự xử lý. */
@@ -17,11 +10,7 @@ export type ArtifactLinkTarget =
 
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i
 const UNSAFE_SCHEMES = ['javascript:', 'data:', 'vbscript:']
-/**
- * Bỏ khoảng trắng + ký tự điều khiển trước khi dò scheme — trình duyệt vẫn chạy
- * `java\tscript:alert(1)`. Viết bằng vòng lặp thay vì lớp ký tự trong regex vì
- * `no-control-regex` chặn cách viết đó.
- */
+// xem docs/architecture/code/monitor.md §22
 function stripBlanks(s: string): string {
   let out = ''
   for (const ch of s) {
@@ -30,22 +19,17 @@ function stripBlanks(s: string): string {
   return out
 }
 
-/** `'Tsub/design.md'` -> `'Tsub'` ; `'design.md'` -> `''` */
 function dirOf(name: string): string {
   const at = name.lastIndexOf('/')
   return at < 0 ? '' : name.slice(0, at)
 }
 
-/**
- * Ghép `baseDir` + `relative` rồi rút gọn `.` và `..`.
- * Trả `null` nếu `..` vượt ra ngoài gốc thư mục task, hoặc kết quả rỗng.
- */
 function normalizeArtifactPath(baseDir: string, relative: string): string | null {
   const stack: string[] = []
   for (const seg of [...baseDir.split('/'), ...relative.split('/')]) {
     if (seg === '' || seg === '.') continue
     if (seg === '..') {
-      if (stack.length === 0) return null // thoát khỏi thư mục task
+      if (stack.length === 0) return null
       stack.pop()
       continue
     }
@@ -54,10 +38,7 @@ function normalizeArtifactPath(baseDir: string, relative: string): string | null
   return stack.length ? stack.join('/') : null
 }
 
-/**
- * Tên hợp lệ với `putArtifact` (`monitor/controller.ts`): kết thúc `.md`, không
- * chứa `..` (đã rút gọn ở trên), không có segment ẩn nào bắt đầu bằng `.`.
- */
+// xem docs/architecture/code/monitor.md §22
 function isArtifactName(name: string): boolean {
   if (!name.endsWith('.md')) return false
   return !name.split('/').some((seg) => seg.startsWith('.'))
@@ -79,7 +60,6 @@ export function classifyArtifactHref(
     return { kind: 'invalid', reason: 'unsafe' }
   }
   if (/^https?:/i.test(raw) || raw.startsWith('//')) return { kind: 'external', href: raw }
-  // `mailto:`, `tel:`, `vscode:`… — mặc định trình duyệt không phá SPA.
   if (SCHEME_RE.test(raw)) return { kind: 'ignore' }
 
   const cut = raw.search(/[#?]/)
@@ -93,7 +73,6 @@ export function classifyArtifactHref(
     decoded = pathPart
   }
 
-  // Path tuyệt đối là path của web server, không phải path trong thư mục task.
   if (decoded.startsWith('/')) return { kind: 'invalid', reason: 'escape' }
 
   const name = normalizeArtifactPath(dirOf(currentName), decoded)

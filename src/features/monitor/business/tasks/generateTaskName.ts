@@ -9,7 +9,6 @@ export function buildHeuristicTaskName(prompt: string): string {
   return cleaned.length > MAX_NAME_LENGTH ? `${cleaned.slice(0, MAX_NAME_LENGTH - 3)}…` : cleaned
 }
 
-/** Ask the Anthropic API for a short task title — null on missing key/error/empty result. */
 async function callLlmForName(prompt: string): Promise<string | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey || !prompt.trim()) return null
@@ -43,9 +42,8 @@ async function callLlmForName(prompt: string): Promise<string | null> {
 }
 
 /**
- * Fire-and-forget: derive a task name from its prompt and patch it in, without
- * blocking task creation. Guards on `expectedMtime` so a rename the user made
- * while this was running is never clobbered — a 409 there just means "skip".
+ * Fire-and-forget: derive a task name from its prompt and patch it in; skipped
+ * when the state changed since `expectedMtime`.
  */
 export async function generateAndApplyTaskName(
   root: string,

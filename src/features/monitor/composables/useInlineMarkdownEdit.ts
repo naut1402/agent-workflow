@@ -17,9 +17,6 @@ export function bindFocusableEditRef(
   }
 }
 
-// Hai hàm thuần đã chuyển sang `frontend/lib/markdownSections` (tầng dưới, dùng
-// chung với agent-editor). Re-export để mọi import cũ qua composable này giữ
-// nguyên đường dẫn.
 export { splitMarkdownSections, joinMarkdownSections }
 
 export function useInlineMarkdownEdit(options: {

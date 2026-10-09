@@ -2,15 +2,6 @@ import { joinPath, readTextFileSync } from '../../../backend/lib/fileHelper.js'
 import { registryHome } from '../../../backend/registry.js'
 import type { TranscriptResult, TranscriptTurn } from './sessionTranscript.js'
 
-/**
- * Read the transcript an `AgenticApiProvider` subclass (openai/gemini/xai/anthropic
- * — see runner/business/providers/agenticApiProvider.ts) wrote for a job, so task
- * chat can surface its tool-calls the same way it does for a CLI's own on-disk
- * transcript (sessionTranscript.ts / cursorSessionTranscript.ts). Read-only
- * counterpart of `agentTranscriptStore.ts::appendTranscriptTurn` — kept in
- * `monitor` (not `runner`) to match where the other transcript readers live.
- */
-
 const MAX_TURN_CHARS = 4000
 const MAX_TURNS = 200
 
@@ -51,7 +42,7 @@ export function readApiAgentTranscript(
     try {
       entry = JSON.parse(line)
     } catch {
-      continue // half-written trailing line while the job is still running
+      continue
     }
     const role = entry.role
     if (role !== 'user' && role !== 'assistant' && role !== 'tool') continue

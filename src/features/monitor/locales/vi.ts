@@ -1,5 +1,3 @@
-// Strings for the `monitor` feature module. vi is the source of truth for the
-// message schema; keep keys in sync with en/monitor.ts.
 export default {
   layout: {
     subtaskOf: '↳ subtask của {id}',
