@@ -33,7 +33,7 @@ const savedEnv = { ...process.env }
 const warnings: string[] = []
 const realWarn = console.warn
 
-/** Provider họ `ai-api` — `providerFamilyOf` xét hậu tố `-api`, không xét gì khác. */
+/** Provider họ `ai-api` — không đăng ký, không có trong catalog ⇒ `providerFamilyOf` rơi về quy tắc theo id (đuôi `-api`). */
 const AI_PROVIDER = 'stub-default-resolve-api'
 /** Hậu tố lạ ⇒ rơi về họ `console-command` ⇒ 🚫 không đủ điều kiện làm default. */
 const SHELL_PROVIDER = 'stub-default-resolve-shell'
