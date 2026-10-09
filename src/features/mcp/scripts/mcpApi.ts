@@ -10,6 +10,11 @@ export interface McpProbeResponse {
   durationMs: number
 }
 
+export interface McpCredentialOption {
+  id: string
+  label?: string
+}
+
 export async function fetchMcpServers(): Promise<{ servers: McpServerConfig[] }> {
   return apiGet('/api/mcp-servers')
 }

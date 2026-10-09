@@ -7,8 +7,7 @@
 // lowering the total" — tách ở đây chỉ làm đẹp số. Xem #386 và investigate.md G12.
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, onMounted, ref, watch } from 'vue'
-import { saveMcpServer, testMcpServer, type McpProbeResponse } from '../scripts/mcpApi'
-import { fetchCredentials } from '../../runner/scripts/ConnectionDialogApi'
+import { saveMcpServer, testMcpServer, type McpCredentialOption, type McpProbeResponse } from '../scripts/mcpApi'
 import {
   MCP_DEFAULT_AUTH_HEADER,
   MCP_DEFAULT_AUTH_SCHEME,
@@ -46,6 +45,7 @@ const props = defineProps<{
   isCopy?: boolean
   /** Id đang có trong store — chặn tạo mới/sao chép đè lên server khác. */
   takenIds?: string[]
+  credentials?: McpCredentialOption[]
 }>()
 
 const emit = defineEmits<{
@@ -105,7 +105,6 @@ const authHeader = ref('')
 const authScheme = ref('')
 const headerRows = ref<KeyValueRow[]>([])
 
-const credentials = ref<{ id: string; label: string }[]>([])
 const { pending: saving, run: runSave } = useApiAction()
 const testing = ref(false)
 const error = ref('')
@@ -119,7 +118,7 @@ const transportOptions = computed(() =>
 )
 const credentialOptions = computed(() => [
   { value: '', label: t('mcp.dialog.credentialNone') },
-  ...credentials.value.map((c) => ({ value: c.id, label: c.label || c.id })),
+  ...(props.credentials || []).map((c) => ({ value: c.id, label: c.label || c.id })),
 ])
 
 const derivedId = computed(() =>
@@ -368,15 +367,7 @@ async function save() {
   })
 }
 
-onMounted(async () => {
-  applyPrefill()
-  try {
-    const data = await fetchCredentials()
-    credentials.value = data.profiles || []
-  } catch {
-    /* danh sách credential rỗng vẫn dùng được dialog */
-  }
-})
+onMounted(applyPrefill)
 </script>
 
 <template>
