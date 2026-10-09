@@ -26,6 +26,11 @@ vi.mock('@/features/mcp/scripts/mcpApi', () => ({
   testMcpServer: vi.fn(async () => ({ ok: true, tools: [], warnings: [], durationMs: 1 })),
 }))
 
+/**
+ * Danh sách credential đi vào dialog qua prop `credentials` (#483). Mock này chỉ
+ * còn là spy canh gác: dialog 🚫 được tự gọi API credential của `runner` — gọi
+ * lại là vòng FE `mcp` ⇄ `runner` quay về (TC-P4-10).
+ */
 vi.mock('@/features/runner/scripts/ConnectionDialogApi', () => ({
   fetchCredentials: vi.fn(async () => ({ profiles: [] })),
 }))
@@ -128,9 +133,13 @@ async function chooseTransport(kind: 'stdio' | 'http' | 'sse') {
   await pickOption(mcpVi.dialog.transportField, mcpVi.transport[kind])
 }
 
+/**
+ * Mặc định truyền `CREDENTIALS` như `RunnerConfigPanel` → `McpPanel` làm thật.
+ * Ca cần dialog KHÔNG có credential thì truyền tường minh `credentials: undefined`.
+ */
 async function mountDialog(props: Record<string, unknown> = {}, locale: 'vi' | 'en' = 'vi') {
   const w = mount(McpServerDialog, {
-    props,
+    props: { credentials: [...CREDENTIALS], ...props },
     attachTo: document.body,
     global: { plugins: [createTestI18nPlugin(locale)] },
   })
@@ -152,7 +161,6 @@ beforeEach(() => {
   vi.mocked(saveMcpServer).mockClear()
   vi.mocked(testMcpServer).mockClear()
   vi.mocked(fetchCredentials).mockClear()
-  vi.mocked(fetchCredentials).mockResolvedValue({ profiles: [...CREDENTIALS] } as any)
   vi.mocked(testMcpServer).mockResolvedValue({ ok: true, tools: [], warnings: [], durationMs: 1 } as any)
 })
 
@@ -997,5 +1005,105 @@ describe('McpServerDialog — hàng nút ở footer của CDialog', () => {
 
     release()
     await flushPromises()
+  })
+})
+
+/* ─── Tcebe274e-P4 · #483 — credential nhận qua props ─────────────────────── */
+
+/** Server `http` đã lưu, gắn credential `cred-1` — mở dialog ở chế độ sửa. */
+function httpServerWithCredential() {
+  return {
+    id: 'gh',
+    label: 'GitHub MCP',
+    enabled: true,
+    transport: 'http',
+    url: 'https://api.example.com/mcp',
+    credentialId: 'cred-1',
+    authHeader: 'Authorization',
+    authScheme: 'Bearer',
+    headers: {},
+  }
+}
+/** Mở menu credential rồi đọc nhãn mọi option (menu để mở). */
+async function credentialOptionLabels(): Promise<string[]> {
+  await openSelect(mcpVi.dialog.credentialField)
+  return Array.from(
+    cSelectRoot(mcpVi.dialog.credentialField).querySelectorAll<HTMLLIElement>('.c-select-option'),
+  ).map((li) => li.textContent!.trim())
+}
+function credentialValue(): string {
+  return cSelectRoot(mcpVi.dialog.credentialField).querySelector('.c-select-value')!.textContent!.trim()
+}
+
+describe('McpServerDialog — credential nhận qua props (#483)', () => {
+  it('TC-P4-06: option = "không dùng credential" + đúng các credential truyền vào; thiếu nhãn thì hiện id', async () => {
+    await mountDialog({ credentials: [...CREDENTIALS, { id: 'cred-no-label' }] })
+    await chooseTransport('http')
+
+    expect(await credentialOptionLabels()).toEqual([
+      mcpVi.dialog.credentialNone,
+      'GitHub MCP token',
+      'cred-no-label',
+    ])
+  })
+
+  it('TC-P4-07: không truyền credential ⇒ chỉ còn "không dùng credential", vẫn lưu được với `credentialId: null`', async () => {
+    await mountDialog({ credentials: undefined })
+    await setValue(inputByLabel(mcpVi.dialog.labelField), 'gh')
+    await chooseTransport('http')
+
+    expect(await credentialOptionLabels()).toEqual([mcpVi.dialog.credentialNone])
+    await click(
+      Array.from(
+        cSelectRoot(mcpVi.dialog.credentialField).querySelectorAll<HTMLLIElement>('.c-select-option'),
+      )[0],
+    )
+
+    await click(buttonByText(mcpVi.dialog.save))
+    expect(savedPayload().credentialId).toBeNull()
+  })
+
+  it('TC-P4-08: sửa server có `credentialId` ⇒ ô credential prefill đúng nhãn, lưu giữ nguyên `credentialId`', async () => {
+    await mountDialog({ server: httpServerWithCredential() })
+
+    expect(credentialValue()).toBe('GitHub MCP token')
+
+    await click(buttonByText(mcpVi.dialog.save))
+    expect(savedPayload().credentialId).toBe('cred-1')
+  })
+
+  /**
+   * `RunnerConfigPanel` nạp credential bất đồng bộ lúc mở tab MCP, nên người dùng
+   * có thể mở dialog trước khi danh sách về. Prop phải phản ứng — 🚫 chỉ đọc một
+   * lần lúc mount — và `credentialId` đã prefill 🚫 bị xoá trong lúc chờ.
+   */
+  it('TC-P4-09: danh sách credential tới SAU khi dialog mở ⇒ option và nhãn prefill cập nhật theo', async () => {
+    const w = await mountDialog({ credentials: [], server: httpServerWithCredential() })
+    expect(credentialValue()).toBe('cred-1')
+
+    await w.setProps({ credentials: [...CREDENTIALS] })
+    await flushPromises()
+
+    expect(credentialValue()).toBe('GitHub MCP token')
+    expect(await credentialOptionLabels()).toEqual([mcpVi.dialog.credentialNone, 'GitHub MCP token'])
+    await click(
+      Array.from(
+        cSelectRoot(mcpVi.dialog.credentialField).querySelectorAll<HTMLLIElement>('.c-select-option'),
+      )[1],
+    )
+    await click(buttonByText(mcpVi.dialog.save))
+    expect(savedPayload().credentialId).toBe('cred-1')
+  })
+
+  it('TC-P4-10: dialog 🚫 tự gọi API credential của `runner` — mở, chọn credential, kiểm tra, lưu', async () => {
+    await mountDialog()
+    await setValue(inputByLabel(mcpVi.dialog.labelField), 'gh')
+    await chooseTransport('http')
+    await pickOption(mcpVi.dialog.credentialField, 'GitHub MCP token')
+    await click(buttonByText(mcpVi.dialog.test))
+    await click(buttonByText(mcpVi.dialog.save))
+
+    expect(savedPayload().credentialId).toBe('cred-1')
+    expect(fetchCredentials).not.toHaveBeenCalled()
   })
 })
