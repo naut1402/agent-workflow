@@ -694,6 +694,11 @@ describe('OpenAiCompatibleProvider — job log: system prompt + tool-call outcom
 // dòng đó, để diff của khối này 🚫 chạm phần trên.
 import { beforeEach } from 'bun:test'
 import { mcpRegistry } from '../../../../../../src/features/mcp/business/McpRegistry.js'
+import { ToolBridgeMcpDelivery } from '../../../../../../src/features/runner/business/mcpDelivery/ToolBridgeMcpDelivery.js'
+import { RunnerCredentialResolver } from '../../../../../../src/features/runner/business/RunnerCredentialResolver.js'
+
+/** Bridge y hệt bản `registry.ts` lắp cho họ `ai-api` — provider dựng tay mặc định `NoMcpDelivery`. */
+const mcpToolBridge = new ToolBridgeMcpDelivery(new RunnerCredentialResolver())
 
 /**
  * TC-P6-02 · TC-P6-05 · TC-P6-06 (vế openai) · TC-P6-10 · TC-P6-20.
@@ -765,7 +770,7 @@ describe('OpenAiCompatibleProvider — tool MCP (#379)', () => {
       bodies.push(JSON.parse(String(init?.body ?? '{}')))
       return finalTurn()
     }) as unknown as typeof fetch
-    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test')
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test', mcpToolBridge)
     const result = await provider.execute(req, { model: 'm', ...runnerConfig }, credential)
     return { bodies, result }
   }
@@ -853,7 +858,7 @@ describe('OpenAiCompatibleProvider — tool MCP (#379)', () => {
       return finalTurn()
     }) as unknown as typeof fetch
 
-    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test')
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test', mcpToolBridge)
     const result = await provider.execute(
       baselineRequest(),
       { model: 'm', mcpServers: ['srv'] },
@@ -897,7 +902,7 @@ describe('OpenAiCompatibleProvider — tool MCP (#379)', () => {
       return finalTurn()
     }) as unknown as typeof fetch
 
-    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test')
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test', mcpToolBridge)
     const result = await provider.execute(
       { ...baselineRequest(), metadata: { logPath } },
       { model: 'm', mcpServers: ['srv'] },

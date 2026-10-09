@@ -108,14 +108,17 @@ describe('resolveDecisionRoute — mọi nhánh thiếu điều kiện rơi về
 
   // TC-B05
   test('TC-B05: provider không nhận file khai MCP ⇒ sentinel', () => {
-    // `cursor-cli` / `codex-cli` vẫn là runner AI hợp lệ (được chọn làm mặc
-    // định) nhưng `mcpDeliveryOf` trả `unsupported` — gắn file khai vào job của
-    // chúng là vô nghĩa.
-    for (const providerId of ['cursor-cli', 'codex-cli']) {
+    // `cursor-cli` / `codex-cli` / họ `ai-api` vẫn là runner AI hợp lệ (được chọn
+    // làm mặc định) nhưng delivery của chúng 🚫 `acceptsSelfServer` — chỉ file
+    // `--mcp-config` riêng theo job của claude mang được entry tự gắn.
+    for (const providerId of ['cursor-cli', 'codex-cli', 'openai-api', 'anthropic-api']) {
       fs.rmSync(runnersFile(), { force: true })
       fs.rmSync(path.join(home, 'connections.json'), { force: true })
       seedDefaultRunner(providerId)
-      expect(resolveDecisionRoute().route).toBe('sentinel')
+      const res = resolveDecisionRoute()
+      expect(res.route, providerId).toBe('sentinel')
+      // Đúng lý do — 🚫 rơi về sentinel vì một điều kiện khác (runner, base URL…).
+      expect(res.reason, providerId).toBe(`provider ${providerId} không nhận --mcp-config`)
     }
   })
 
