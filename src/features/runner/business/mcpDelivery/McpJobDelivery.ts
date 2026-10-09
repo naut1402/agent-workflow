@@ -38,6 +38,7 @@ export abstract class McpJobDelivery<THandle> {
    * Cách giao này có mang được entry MCP trỏ vào chính dashboard không — tuyến
    * `mcp` của node điều phối (`resolveDecisionRoute`) đọc cờ này.
    */
+  // fallow-ignore-next-line unused-class-member -- gọi đa hình qua `RunnerProvider.mcpDelivery?.acceptsSelfServer` (`orchestrator/business/mcpRoute.ts`)
   get acceptsSelfServer(): boolean {
     return false
   }
@@ -63,5 +64,6 @@ export abstract class McpJobDelivery<THandle> {
    * Dọn dấu vết của lượt giao mồ côi (tiến trình bị kill giữa job) lúc bootstrap.
    * Mặc định không có gì để dọn. 🚫 Không được ném — chạy lúc nạp module.
    */
+  // fallow-ignore-next-line unused-class-member -- gọi đa hình qua `provider.mcpDelivery.cleanupOrphans()` (`cleanupOrphanedMcpDeliveries`, `registry.ts`)
   cleanupOrphans(): void {}
 }
