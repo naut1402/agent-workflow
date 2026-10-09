@@ -61,7 +61,7 @@ function rule(over: Record<string, unknown> = {}) {
 }
 
 async function mountPanel() {
-  const wrapper = mountWithI18n(AutomationsPanel, { props: { projectId: 'P1' } })
+  const wrapper = mountWithI18n(AutomationsPanel, { props: { projectId: 'P1' }, global: { stubs: { teleport: true } } })
   await flushPromises()
   return wrapper
 }

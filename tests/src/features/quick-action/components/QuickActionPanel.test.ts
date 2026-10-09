@@ -3,6 +3,9 @@ import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n } from '../../../helpers/i18n'
 import QuickActionPanel from '@/features/quick-action/components/QuickActionPanel.vue'
 
+/** Dialog của panel teleport ra `body` — stub để `wrapper.find` thấy nội dung dialog. */
+const TELEPORT_STUB = { stubs: { teleport: true } }
+
 vi.mock('@/features/quick-action/scripts/QuickActionPanelApi', () => ({
   fetchArtifactActionsCatalog: vi.fn(async () => ({
     version: 1,
@@ -52,7 +55,7 @@ afterEach(() => vi.clearAllMocks())
 // silently showed the registry default project's agents instead.
 describe('QuickActionPanel — forward projectId khi nạp danh sách agent (TC-G01)', () => {
   it('mount với projectId cụ thể → dropdown agent nạp catalog theo đúng project', async () => {
-    mountWithI18n(QuickActionPanel, { props: { projectId: 'P1' } })
+    mountWithI18n(QuickActionPanel, { props: { projectId: 'P1' }, global: TELEPORT_STUB })
     await flushPromises()
     expect(fetchCatalog).toHaveBeenCalledWith('P1')
   })
@@ -60,7 +63,7 @@ describe('QuickActionPanel — forward projectId khi nạp danh sách agent (TC-
 
 describe('QuickActionPanel', () => {
   it('lists the loaded catalog (label / agent / attach, no id column)', async () => {
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
     await flushPromises()
 
     expect(w.text()).toContain('✨ Cải thiện tài liệu')
@@ -69,11 +72,11 @@ describe('QuickActionPanel', () => {
   })
 
   it('+ New opens the editor dialog; save validates a missing label', async () => {
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click') // "+ New"
-    expect(w.find('.qa-modal-overlay').exists()).toBe(true)
+    expect(w.find('.modal-backdrop').exists()).toBe(true)
     expect(w.find('.qa-form').exists()).toBe(true)
 
     await w.get('.qa-form .btn-primary').trigger('click') // Lưu, with an empty draft
@@ -82,7 +85,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('creates a new quick action, deriving the id from the label, and persists the catalog', async () => {
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -102,7 +105,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('binds agent_ref from the agent dropdown', async () => {
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -130,7 +133,7 @@ describe('QuickActionPanel', () => {
       defaultRunnerId: 'sh1',
     } as any)
 
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -156,7 +159,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('prompt help popover toggles a placeholder reference, hidden by default', async () => {
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click') // "+ New"
@@ -183,7 +186,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('prompt help popover closes on an outside click', async () => {
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, attachTo: document.body })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB, attachTo: document.body })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -198,7 +201,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('prompt help popover closes on Escape', async () => {
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, attachTo: document.body })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB, attachTo: document.body })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -213,7 +216,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('persists require_approval when the checkbox is checked', async () => {
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -236,7 +239,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('prompt help resets to hidden when the form is reopened', async () => {
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
     await flushPromises()
 
     await w.get('button.btn-primary.btn-sm').trigger('click')
@@ -249,7 +252,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('menu manager dialog can open, close, and reopen without error', async () => {
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
     await flushPromises()
 
     const manageBtn = w.get('button[aria-label="Quản lý menu"]')
@@ -264,7 +267,7 @@ describe('QuickActionPanel', () => {
   })
 
   it('persists menus in the same catalog save', async () => {
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
     await flushPromises()
 
     await w.get('button[aria-label="Quản lý menu"]').trigger('click')
@@ -302,7 +305,7 @@ describe('QuickActionPanel — preselect runner theo default thật', () => {
       effectiveDefaultRunnerId: 'ai1',
     } as any)
 
-    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null } })
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
     await flushPromises()
     await w.get('button.btn-primary.btn-sm').trigger('click')
 

@@ -25,7 +25,7 @@ vi.mock('@/features/knowledge/scripts/KnowledgePanelApi', () => ({
 const TAG = { tag: 'alpha', count: 2, color: 'blue', description: 'mô tả', scope: 'project' }
 
 const mountDialog = (tag: Record<string, unknown> | null = null, props: Record<string, unknown> = {}) =>
-  mount(KnowledgeTagDialog, { props: { tag, ...props } })
+  mount(KnowledgeTagDialog, { props: { tag, ...props }, global: { stubs: { teleport: true } } })
 
 const save = async (w: ReturnType<typeof mountDialog>) => {
   await w.find('.modal-foot .btn-primary').trigger('click')
