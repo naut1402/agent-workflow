@@ -1,6 +1,6 @@
 import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
 import { registryHome } from '../../../backend/registry.js'
-import { PROVIDER_CATALOG, ensureLegacyConnection, getConnection } from './connections.js'
+import { PROVIDER_CATALOG, catalogFamilyOf, ensureLegacyConnection, getConnection } from './connections.js'
 import { ConfigFlagMcpDelivery } from './mcpDelivery/ConfigFlagMcpDelivery.js'
 import { ToolBridgeMcpDelivery } from './mcpDelivery/ToolBridgeMcpDelivery.js'
 import { WorkspaceFileMcpDelivery } from './mcpDelivery/WorkspaceFileMcpDelivery.js'
@@ -10,7 +10,7 @@ import { createCodexCliProvider } from './providers/codex-cli.js'
 import { createConsoleCommandProvider } from './providers/console-command.js'
 import { createOpenAiCompatibleProvider } from './providers/openai-compatible-api.js'
 import { createAnthropicCompatibleProvider } from './providers/anthropic-compatible-api.js'
-import { providerFamilyOf } from './providers/agentCli.js'
+import { providerFamilyFromId } from './providers/agentCli.js'
 import { RunnerCredentialResolver } from './RunnerCredentialResolver.js'
 import {
   DEFAULT_CONNECTION_ID,
@@ -21,6 +21,7 @@ import {
   type DefaultRunnerResolution,
   type McpDelivery,
   type ProviderCatalogEntry,
+  type ProviderFamily,
   type RunnerConfig,
   type RunnersStore,
   type MutationResult,
@@ -354,6 +355,10 @@ export function registerProvider(provider: RunnerProvider): void {
 
 export function getProvider(providerId: string): RunnerProvider | null {
   return providers.get(providerId) || null
+}
+
+export function providerFamilyOf(providerId: string): ProviderFamily {
+  return catalogFamilyOf(providerId) ?? providers.get(providerId)?.family ?? providerFamilyFromId(providerId)
 }
 
 export function listProviderIds(): string[] {

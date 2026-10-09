@@ -181,6 +181,7 @@ Chi tiết implementation cụ thể — tên file, hàm, bảng schema. Đây l
 | [4.4 DB (SQLite)](#44-db-sqlite) | Trước khi bật `logging.driver: sqlite` hoặc thêm bảng mới |
 | [4.5 Config shell](#45-config-shell) | Không chắc 1 setting nên đặt ở preference shell hay schema business |
 | [4.6 Styling](#46-styling) | Thêm style mới xuyên feature |
+| [`code/runner.md`](code/runner.md) | Sửa id runner/connection, runner mặc định, hoặc cách phân loại family của provider |
 | [`events/`](events/README.md) | Viết subscriber, thêm emit mới, tra cứu 1 domain event cụ thể |
 
 ### 4.1 Frontend

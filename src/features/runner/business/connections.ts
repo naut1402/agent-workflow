@@ -11,6 +11,7 @@ import {
   type ConnectionsStore,
   type MutationResult,
   type ProviderCatalogEntry,
+  type ProviderFamily,
   type ScannedCommand,
 } from './types.js'
 
@@ -214,6 +215,10 @@ export function ensureLegacyConnection(legacy: {
     return DEFAULT_CONNECTION_ID
   }
   return result.connection.id
+}
+
+export function catalogFamilyOf(providerId: string): ProviderFamily | undefined {
+  return PROVIDER_CATALOG.find((e) => e.id === providerId)?.family
 }
 
 function resolveCommandPath(command: string): string | null {
