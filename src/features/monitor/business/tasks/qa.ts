@@ -24,16 +24,7 @@ export async function createQa(root: string, taskId: string, input: unknown): Pr
   const parsed = CreateQaRequest.safeParse(input)
   if (!parsed.success) return { ok: false, error: 'invalid request', details: parsed.error.flatten() }
 
-  // `resolveArtifact` chỉ chặn thoát khỏi `root`, không chặn thoát khỏi
-  // `root/tasks/<id>` khi bản thân `id` chứa `..`/`/` (vd `../evil` vẫn "nằm
-  // dưới root"). Route HTTP có regex này ở controller, nhưng MCP tool gọi
-  // thẳng `createQa()` không đi qua đó — validate ngay tại đây để bất biến
-  // "không ghi ra ngoài phạm vi task" áp dụng cho mọi caller như nhau.
-  // R4: regex này CHẶT HƠN `TASK_ID_PATTERN` của MCP (`mcp/schemas.ts`) — nó
-  // không nhận dấu `.`. Giữ nguyên độ chặt, nhưng thông điệp phải nêu đúng ràng
-  // buộc: một id như `20260927.001` hợp lệ với `list_tasks`/`read_artifact` mà
-  // bị đây từ chối, nói trống "invalid task id" làm caller tưởng mình đọc sai id
-  // rồi thử lại vô hạn.
+  // xem docs/architecture/code/monitor.md §1
   if (!taskId || /[^\w-]/.test(taskId)) {
     return { ok: false, error: `invalid task id — qa.md chỉ nhận [A-Za-z0-9_-]: ${JSON.stringify(taskId)}` }
   }
