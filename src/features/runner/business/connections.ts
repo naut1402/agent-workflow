@@ -2,7 +2,6 @@ import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '
 import { spawnSync } from '../../../backend/lib/processHelper.js'
 import { registryHome } from '../../../backend/registry.js'
 import { listCustomCommands } from './commands.js'
-import { mcpDeliveryOf } from './providers/agentCli.js'
 import {
   CONNECTIONS_VERSION,
   DEFAULT_CONNECTION_ID,
@@ -21,7 +20,12 @@ const LOCAL_COMMANDS: Array<{ id: string; command: string; providerId: string; l
   { id: 'codex', command: 'codex', providerId: 'codex-cli', label: 'Codex CLI' },
 ]
 
-const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
+/**
+ * Danh mục provider tĩnh (chưa có `mcpDelivery`). `listProviderCatalog` ở
+ * `registry.ts` gắn thêm `mcpDelivery` từ provider đã lắp ráp — 🚫 import
+ * `registry.ts` từ file này (vòng import, `registry.ts` đã import file này).
+ */
+export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
   { id: 'claude-code-cli', kind: 'local-console', label: 'Claude Code CLI', family: 'agent-cli' },
   { id: 'cursor-cli', kind: 'local-console', label: 'Cursor CLI', family: 'agent-cli' },
   { id: 'codex-cli', kind: 'local-console', label: 'Codex CLI', family: 'agent-cli' },
@@ -210,10 +214,6 @@ export function ensureLegacyConnection(legacy: {
     return DEFAULT_CONNECTION_ID
   }
   return result.connection.id
-}
-
-export function listProviderCatalog(): ProviderCatalogEntry[] {
-  return PROVIDER_CATALOG.map((e) => ({ ...e, mcpDelivery: mcpDeliveryOf(e.id) }))
 }
 
 function resolveCommandPath(command: string): string | null {
