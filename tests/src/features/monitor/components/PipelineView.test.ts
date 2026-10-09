@@ -767,6 +767,27 @@ describe('PipelineView — dialog duyệt nội dung (HITL)', () => {
     await flushPromises()
   })
 
+  it('TC-40: đang gửi quyết định HITL → overlay neo ngoài .modal-body và bật; xong thì tắt', async () => {
+    let release: (() => void) | null = null
+    vi.mocked(patchTaskState).mockImplementation(
+      () => new Promise((r) => { release = () => r({} as any) }) as any,
+    )
+    await openHitlDialog()
+    const host = document.body.querySelector('.modal .c-loading-host') as HTMLElement
+    expect(host).not.toBeNull()
+    expect(host.closest('.modal-body')).toBeNull()
+    expect(host.querySelector(':scope > .modal-body')).not.toBeNull()
+
+    await toggle(radio('hitl-decision', 'approve')!)
+    primaryButton().click()
+    await nextTick()
+    expect(host.querySelector(':scope > .c-loading-overlay')).not.toBeNull()
+
+    release?.()
+    await flushPromises()
+    expect(document.body.querySelector('.c-loading-overlay')).toBeNull()
+  })
+
   it('TC-A13: lỗi từ server — dialog không đóng, có thông báo lỗi, lựa chọn và lý do giữ nguyên', async () => {
     vi.mocked(patchTaskState).mockRejectedValue(new Error('internal server error'))
     await openHitlDialog()
@@ -1111,6 +1132,27 @@ describe('PipelineView — dialog reset step', () => {
     expect(resetPipelineStep).toHaveBeenCalledTimes(1)
     release?.()
     await flushPromises()
+  })
+
+  it('TC-41: đang reset → overlay neo ngoài .modal-body và bật; lỗi thì tắt, dialog giữ nguyên', async () => {
+    let fail: ((e: unknown) => void) | null = null
+    vi.mocked(resetPipelineStep).mockImplementation(
+      () => new Promise((_, rej) => { fail = rej }) as any,
+    )
+    await openResetDialog({ task_id: 'RS41' })
+    const host = document.body.querySelector('.modal .c-loading-host') as HTMLElement
+    expect(host).not.toBeNull()
+    expect(host.closest('.modal-body')).toBeNull()
+
+    primaryButton().click()
+    await nextTick()
+    expect(host.querySelector(':scope > .c-loading-overlay')).not.toBeNull()
+
+    fail?.(new Error('boom'))
+    await flushPromises()
+    expect(document.body.querySelector('.c-loading-overlay')).toBeNull()
+    expect(modalOpen()).toBe(true)
+    expect(modalText()).toContain('boom')
   })
 
   it('TC-B18: lỗi từ server — dialog không đóng, hiện thông báo lỗi, các tuỳ chọn đã tick giữ nguyên', async () => {
