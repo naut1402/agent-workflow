@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n as mount } from '../../../helpers/i18n'
 import RunnerConfigPanel from '@/features/runner/components/RunnerConfigPanel.vue'
+import McpPanel from '@/features/mcp/components/McpPanel.vue'
+import McpServerDialog from '@/features/mcp/components/McpServerDialog.vue'
 import runnerVi from '@/features/runner/locales/vi'
 import runnerEn from '@/features/runner/locales/en'
 import mcpVi from '@/features/mcp/locales/vi'
@@ -40,10 +42,18 @@ vi.mock('@/features/mcp/scripts/mcpApi', () => ({
   testMcpServer: vi.fn(async () => ({ ok: true, tools: [], warnings: [], durationMs: 1 })),
 }))
 
+// Panel nạp credential cho tab MCP (#483). Giữ bản thật cho các hàm còn lại —
+// RunnerDialog / ConnectionDialog import chúng từ cùng module.
+vi.mock('@/features/runner/scripts/ConnectionDialogApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/runner/scripts/ConnectionDialogApi')>()),
+  fetchCredentials: vi.fn(async () => ({ profiles: [] })),
+}))
+
 import { fetchRunners } from '@/features/runner/scripts/runnerApi'
 import { fetchConnections } from '@/features/runner/scripts/RunnerConfigPanelApi'
 import { fetchProviderConfigs } from '@/features/runner/scripts/ProviderDialogApi'
 import { fetchMcpServers } from '@/features/mcp/scripts/mcpApi'
+import { fetchCredentials } from '@/features/runner/scripts/ConnectionDialogApi'
 
 function qa<T extends Element = HTMLElement>(selector: string): T[] {
   return Array.from(document.body.querySelectorAll<T>(selector))
@@ -75,9 +85,10 @@ beforeEach(() => {
   consoleSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
     consoleErrors.push(args)
   })
-  for (const fn of [fetchRunners, fetchConnections, fetchProviderConfigs, fetchMcpServers]) {
+  for (const fn of [fetchRunners, fetchConnections, fetchProviderConfigs, fetchMcpServers, fetchCredentials]) {
     vi.mocked(fn as any).mockClear()
   }
+  vi.mocked(fetchCredentials).mockResolvedValue({ profiles: [] })
 })
 
 afterEach(() => {
@@ -332,5 +343,67 @@ describe('#386 — bất biến DOM `.runner-config` (CX-3)', () => {
     expect(qa('.runner-config')).toHaveLength(1)
 
     expect(consoleErrors).toEqual([])
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tcebe274e-P4 · #483 — credential thuộc `runner`, nên panel `runner` nạp rồi
+// truyền xuống `McpPanel` → `McpServerDialog` qua props; feature `mcp` 🚫 gọi
+// ngược API của `runner`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('RunnerConfigPanel — credential cho tab MCP (#483)', () => {
+  const PROFILES = [
+    { id: 'cred-1', label: 'GitHub MCP token' },
+    { id: 'cred-2', label: 'Sentry' },
+  ]
+
+  it('TC-P4-01: chưa mở tab MCP ⇒ chưa gọi `/api/credentials`; mở ⇒ đúng 1 lần, `McpPanel` nhận danh sách', async () => {
+    vi.mocked(fetchCredentials).mockResolvedValue({ profiles: PROFILES })
+    const w = await mountPanel()
+    expect(fetchCredentials).not.toHaveBeenCalled()
+
+    await click(tabByLabel(runnerVi.tabs.mcp))
+
+    expect(fetchCredentials).toHaveBeenCalledTimes(1)
+    expect(w.findComponent(McpPanel).props('credentials')).toEqual(PROFILES)
+  })
+
+  it('TC-P4-02: mỗi lần quay lại tab MCP ⇒ nạp lại, credential vừa tạo ở tab Runner hiện ra', async () => {
+    vi.mocked(fetchCredentials).mockResolvedValueOnce({ profiles: [PROFILES[0]] })
+    const w = await mountPanel()
+    await click(tabByLabel(runnerVi.tabs.mcp))
+    expect(w.findComponent(McpPanel).props('credentials')).toEqual([PROFILES[0]])
+
+    vi.mocked(fetchCredentials).mockResolvedValueOnce({ profiles: PROFILES })
+    await click(tabByLabel(runnerVi.tabs.runner))
+    await click(tabByLabel(runnerVi.tabs.mcp))
+
+    expect(fetchCredentials).toHaveBeenCalledTimes(2)
+    expect(w.findComponent(McpPanel).props('credentials')).toEqual(PROFILES)
+  })
+
+  it('TC-P4-03: `/api/credentials` lỗi ⇒ tab MCP vẫn dùng được, danh sách rỗng, 🚫 lỗi console', async () => {
+    vi.mocked(fetchCredentials).mockRejectedValueOnce(new Error('HTTP 500'))
+    const w = await mountPanel()
+
+    await click(tabByLabel(runnerVi.tabs.mcp))
+
+    expect(qa('.mcp-panel')).toHaveLength(1)
+    expect(w.findComponent(McpPanel).props('credentials')).toEqual([])
+    expect(consoleErrors).toEqual([])
+  })
+
+  it('TC-P4-04: mở dialog thêm MCP server từ tab MCP ⇒ dialog nhận đúng credential panel đã nạp', async () => {
+    vi.mocked(fetchCredentials).mockResolvedValue({ profiles: PROFILES })
+    const w = await mountPanel()
+    await click(tabByLabel(runnerVi.tabs.mcp))
+
+    await click(qa<HTMLButtonElement>('.mcp-toolbar button')[0])
+
+    const dialog = w.findComponent(McpServerDialog)
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('credentials')).toEqual(PROFILES)
+    expect(fetchCredentials).toHaveBeenCalledTimes(1)
   })
 })
