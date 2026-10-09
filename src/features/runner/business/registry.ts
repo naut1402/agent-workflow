@@ -12,6 +12,7 @@ import { createOpenAiCompatibleProvider } from './providers/openai-compatible-ap
 import { createAnthropicCompatibleProvider } from './providers/anthropic-compatible-api.js'
 import { providerFamilyFromId } from './providers/agentCli.js'
 import { RunnerCredentialResolver } from './RunnerCredentialResolver.js'
+import { useCredentialResolver } from '../../mcp/business/index.js'
 import {
   DEFAULT_CONNECTION_ID,
   RUNNERS_VERSION,
@@ -330,6 +331,9 @@ function register(provider: RunnerProvider): void {
 // Một adapter credential dùng chung: cả ba cách giao giải `credentialId` của
 // server từ xa giống hệt nhau.
 const mcpCredentials = new RunnerCredentialResolver()
+// Cùng instance cho caller không nhận resolver qua tham số (`mcp/controller.ts`
+// lấy lại bằng `credentialResolver()`) — nhờ vậy `mcp` 🚫 import `runner`.
+useCredentialResolver(mcpCredentials)
 /** File cấu hình job (claude) và ledger workspace (cursor) — 🚫 trong workspace người dùng. */
 const mcpRuntimeDir = () => joinPath(registryHome(), 'mcp-runtime')
 const mcpToolBridge = new ToolBridgeMcpDelivery(mcpCredentials)

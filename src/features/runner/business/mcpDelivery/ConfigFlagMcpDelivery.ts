@@ -6,8 +6,7 @@ import {
   rmSync,
   writeTextFileSync,
 } from '../../../../backend/lib/fileHelper.js'
-import { McpRegistry, McpServer, type McpCliConfig } from '../../../mcp/business/index.js'
-import { buildSelfMcpEntry } from '../providers/selfMcpConfig.js'
+import { McpServer, SelfMcpServer, type McpCliConfig } from '../../../mcp/business/index.js'
 import { FileMcpDelivery, type McpConfigHandle } from './FileMcpDelivery.js'
 import type { McpJobInput } from './McpJobDelivery.js'
 
@@ -30,18 +29,10 @@ export class ConfigFlagMcpDelivery extends FileMcpDelivery {
   }
 
   protected override extraServers(input: McpJobInput): McpServer[] {
-    const metadata = input.metadata
-    const baseUrl = process.env.DEV_TEAM_SELF_BASE_URL
-    // Điều kiện lặp lại ĐÚNG bộ guard của `buildChildEnv` (claude-code-cli.ts)
-    // nên hai nơi không thể lệch: `buildChildEnv` không bơm env ⇒ `selfEntry`
-    // cũng `null`, không bao giờ có job mang tool mà thiếu token của nó.
-    const selfEntry =
-      metadata?.orchestratorJob === true
-      && metadata?.orchestratorMcpRoute === 'mcp'
-      && typeof metadata?.orchestratorToken === 'string'
-      && baseUrl
-        ? buildSelfMcpEntry({ orchestratorToken: metadata.orchestratorToken as string, baseUrl })
-        : null
+    // `forJob` dùng CHUNG guard với `SelfMcpServer.childEnv` (env bơm cho CLI ở
+    // `buildChildEnv`): không bơm env ⇒ cũng không có entry, nên không bao giờ
+    // có job mang tool mà thiếu token của nó.
+    const selfEntry = SelfMcpServer.forJob(input.metadata)
 
     // `--mcp-config` kéo theo `--strict-mcp-config` (buildClaudeInvocation), nên
     // khi entry tự gắn là lý do DUY NHẤT sinh file, node điều phối mất mọi MCP
@@ -57,8 +48,7 @@ export class ConfigFlagMcpDelivery extends FileMcpDelivery {
 
     // Job thường ⇒ `[]` ⇒ mọi hành vi cũ nguyên vẹn, kể cả bất biến "không
     // khai server nào ⇒ trả null, không file nào chạm đĩa".
-    const self = selfEntry ? McpRegistry.normalise(selfEntry) : null
-    return self ? [self] : []
+    return selfEntry ? [selfEntry] : []
   }
 
   protected write(config: McpCliConfig, input: McpJobInput): McpConfigHandle {

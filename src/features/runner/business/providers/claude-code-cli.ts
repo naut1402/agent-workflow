@@ -9,7 +9,7 @@ import {
 } from '../sessionLedger.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ResolvedAgent, RunnerProvider } from '../types.js'
 import type { AgentCliProvider } from './agentCli.js'
-import { SecretMasker } from '../../../mcp/business/index.js'
+import { SecretMasker, SelfMcpServer } from '../../../mcp/business/index.js'
 import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 import type { McpConfigHandle } from '../mcpDelivery/FileMcpDelivery.js'
 import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
@@ -122,6 +122,9 @@ function resolveEffectiveFlags(flags: unknown, credential: CredentialProfile): s
  * text nên không có vấn đề Windows argv-quoting, và model không "nhìn thấy"
  * giá trị thật của token trong context/transcript (chỉ viết literal tên biến
  * trong lệnh `curl`, shell mới thay giá trị lúc thực thi).
+ *
+ * Tên biến và guard thuộc `SelfMcpServer` — cùng guard với entry MCP tự gắn
+ * (`SelfMcpServer.forJob`), nên env và tool không thể lệch nhau.
  */
 function buildChildEnv(credential: CredentialProfile, metadata?: Record<string, unknown>): NodeJS.ProcessEnv {
   const env = { ...process.env }
@@ -129,14 +132,7 @@ function buildChildEnv(credential: CredentialProfile, metadata?: Record<string, 
   if (auth.type === 'env' && auth.key && auth.value) {
     env[auth.key] = auth.value
   }
-  if (
-    metadata?.orchestratorJob === true
-    && typeof metadata.orchestratorToken === 'string'
-    && process.env.DEV_TEAM_SELF_BASE_URL
-  ) {
-    env.DASHBOARD_ORCHESTRATOR_TOKEN = metadata.orchestratorToken
-    env.DASHBOARD_ORCHESTRATOR_BASE_URL = process.env.DEV_TEAM_SELF_BASE_URL
-  }
+  Object.assign(env, SelfMcpServer.childEnv(metadata))
   return env
 }
 

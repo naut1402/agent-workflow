@@ -11,6 +11,7 @@ import {
   safeReadDir,
   writeTextFile,
 } from '../../../backend/lib/fileHelper.js'
+import { isPrivateHostname } from '../../../backend/lib/netUtils.js'
 // Peer sâu, y như barrel `agent-editor/business/index.ts` đang làm: đi qua
 // `pipeline-editor/business/index.js` sẽ thành vòng vì barrel đó re-export lại
 // chính agent-editor.
@@ -216,15 +217,6 @@ export interface FetchUrlSafeOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   /** Request body — only meaningful for non-GET methods. */
   body?: string
-}
-
-/** True for hostnames that resolve to private / loopback ranges (SSRF guard). */
-export function isPrivateHostname(hostname: string): boolean {
-  const h = (hostname || '').toLowerCase()
-  if (h === 'localhost' || h.endsWith('.local')) return true
-  if (/^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h)) return true
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true
-  return false
 }
 
 /**

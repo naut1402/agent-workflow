@@ -87,7 +87,7 @@ Dòng cảnh báo để `grep` trong log job (`DashboardMcpServer.startupWarning
 Danh sách tool trong câu là **những tool đang thiếu thật**, không cố định: thiếu một thì chỉ nêu một. Điều kiện phát cảnh báo bám `hasTool(...)` chứ không bám tên mode — thứ đang cảnh báo là "tool không được đăng ký".
 
 > [!NOTE]
-> Job điều phối là ngoại lệ của câu "🚫 không chỗ nào trong `src/` đặt `DEVTEAM_MCP_MODE`" ở trên: dashboard **tự gắn** một entry MCP trỏ vào chính nó cho job điều phối, và entry đó tự khai `--mode=full` trên argv (`src/features/runner/business/providers/selfMcpConfig.ts`). Đó là đường duy nhất `full` được bật mà người vận hành không phải khai gì — và nó chỉ áp cho job điều phối, 🚫 không áp cho job step thường.
+> Job điều phối là ngoại lệ của câu "🚫 không chỗ nào trong `src/` đặt `DEVTEAM_MCP_MODE`" ở trên: dashboard **tự gắn** một entry MCP trỏ vào chính nó cho job điều phối, và entry đó tự khai `--mode=full` trên argv (`SelfMcpServer.forJob`, `src/features/mcp/business/SelfMcpServer.ts`). Đó là đường duy nhất `full` được bật mà người vận hành không phải khai gì — và nó chỉ áp cho job điều phối, 🚫 không áp cho job step thường.
 
 > [!WARNING]
 > **Entry tự gắn kéo theo `--strict-mcp-config`.** `--mcp-config` luôn đi kèm `--strict-mcp-config` (`buildClaudeInvocation`), nên ở lượt điều phối đi tuyến `mcp`, `claude` **chỉ** nạp đúng các server trong file config — MCP server khai sẵn ở `~/.claude.json` của máy **không** được nạp cho lượt đó.
@@ -112,7 +112,7 @@ Danh sách tool trong câu là **những tool đang thiếu thật**, không c�
 > ⚠️ **Nâng từ 1.1.x**: mặc định đổi thành `readonly`, nên `add_project` / `create_qa` / `remove_project` biến khỏi `tools/list` nếu không khai gì. Riêng `create_qa` là tool mà template agent của 1.1.8 được dạy gọi — ở mặc định mới agent sẽ **không nhìn thấy** nó. Giữ hành vi cũ bằng `"env": { "DEVTEAM_MCP_MODE": "full" }` trong entry `mcpServers` của client (§2.2).
 
 - **Mặc định là `readonly`** — `DEFAULT_MODE` (`mcp/AbstractMcpServer.ts`). An toàn theo mặc định; `full` phải bật chủ động.
-- **Biến môi trường**: `DEVTEAM_MCP_MODE` (`DashboardMcpServer.MODE_ENV_VAR`). `AbstractMcpServer.resolveMode` nhận tên env var và nhãn cảnh báo qua tham số.
+- **Biến môi trường**: `DEVTEAM_MCP_MODE` (`DashboardMcpServer.MODE_ENV_VAR`, lấy từ `SelfMcpServer.MODE_ENV_VAR` — §8.1). `AbstractMcpServer.resolveMode` nhận tên env var và nhãn cảnh báo qua tham số.
 - **Thứ tự ưu tiên**: CLI `--mode=<x>` (hoặc `--mode <x>`) → env `DEVTEAM_MCP_MODE` → `readonly`.
 - **CLI sai KHÔNG rơi ngược về env.** Giá trị không thuộc `MCP_MODES` — kể cả chuỗi rỗng và sai hoa thường — chỉ sinh một dòng cảnh báo ra `stderr` rồi lùi về `readonly`. Một lỗi gõ phím không được lặng lẽ nâng quyền lên `full`. Ngược lại, **không khai `--mode`** thì mới rơi về env: `AbstractMcpServer.parseModeArg` trả `null` khi vắng flag và chuỗi rỗng khi có flag mà thiếu giá trị.
 - **Lọc ở khâu đăng ký**, không phải lúc gọi (`AbstractMcpServer.tools()`): tool ngoài quyền **biến khỏi `tools/list`**. Agent không thấy thì không thử, không tiêu token, và bề mặt tấn công thu nhỏ thật — 🚫 không phải hiện ra rồi bị từ chối lúc gọi.
@@ -341,7 +341,7 @@ Ra lệnh điều phối cho task đang chạy, **có hiệu lực ngay** — th
 - **Annotations** — `{ readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }`. `openWorldHint: true` vì tool gọi ra ngoài tiến trình.
 - **Mã lỗi** — `invalid_input` (dashboard trả 400: quyết định không hợp lệ, `stepId` lạ, thiếu `message` khi `resume` — nguyên văn lý do được chuyển tiếp) · `internal` (thiếu env của lượt điều phối · token hết hạn/401 · không gọi được dashboard, kể cả timeout · dashboard trả mã khác).
 
-**Cài đặt là lớp vỏ mỏng quanh REST.** Handler `fetch` tới `POST /api/orchestrator/decide` của dashboard, kèm header `X-Dashboard-Orchestrator-Token`; token và base URL đọc từ `DASHBOARD_ORCHESTRATOR_TOKEN` / `DASHBOARD_ORCHESTRATOR_BASE_URL` — dashboard tự khai hai biến này vào entry MCP nó tự gắn cho job điều phối. 🚫 **Không** gọi `applyDecision` in-process: tiến trình MCP là tiến trình khác với dashboard, gọi thẳng sẽ thi hành vào một job queue khác hẳn (§8.1). Lời gọi có timeout 15s — thiếu nó, một dashboard treo làm CLI chờ vô hạn.
+**Cài đặt là lớp vỏ mỏng quanh REST.** Handler `fetch` tới `POST /api/orchestrator/decide` của dashboard, kèm header `X-Dashboard-Orchestrator-Token`; token và base URL đọc từ `DASHBOARD_ORCHESTRATOR_TOKEN` / `DASHBOARD_ORCHESTRATOR_BASE_URL` (`SelfMcpServer.TOKEN_ENV` / `BASE_URL_ENV`) — dashboard tự khai hai biến này vào entry MCP nó tự gắn cho job điều phối. 🚫 **Không** gọi `applyDecision` in-process: tiến trình MCP là tiến trình khác với dashboard, gọi thẳng sẽ thi hành vào một job queue khác hẳn (§8.1). Lời gọi có timeout 15s — thiếu nó, một dashboard treo làm CLI chờ vô hạn.
 
 **Mọi nhánh lỗi đều kèm lối thoát sentinel** trong `message`, vì đó là lưới an toàn duy nhất khi tuyến MCP hỏng giữa lượt.
 
@@ -478,7 +478,7 @@ Mỗi file trong `mcp/` là một class; ngoại lệ duy nhất là entry theo 
 |---|---|---|
 | `AbstractMcpServer.ts` | `AbstractMcpServer` | `McpMode` + giải mode từ argv/env (static `resolveMode`, env var và nhãn truyền vào), lọc tool theo mode, sinh `instructions`, `build()` ra `McpServer` của SDK, `start(transport)` |
 | `AbstractMcpTools.ts` | `AbstractMcpTools` | Base nhóm tool: `ok` / `fail` / `requireRoot` (qua `RootResolver` tiêm vào constructor); kèm `ToolDef`, `READ_ONLY_ANNOTATIONS` |
-| `DashboardMcpServer.ts` | `DashboardMcpServer` | Chi tiết của dashboard: tên server, `MODE_ENV_VAR`, `resolveRoot` (registry), chọn nhóm tool, preamble `instructions`, cảnh báo khởi động, `onStart()` |
+| `DashboardMcpServer.ts` | `DashboardMcpServer` | Chi tiết của dashboard: tên server và `MODE_ENV_VAR` (đọc từ `SelfMcpServer`), `resolveRoot` (registry), chọn nhóm tool, preamble `instructions`, cảnh báo khởi động, `onStart()` |
 | `tools/TaskTools.ts` · `tools/KnowledgeTools.ts` · `tools/ProjectTools.ts` | `*Tools` | Khai `ToolDef` và handler là method; chia theo feature được gọi tới |
 | `stdio.ts` | — | Entry transport stdio: `new DashboardMcpServer(DashboardMcpServer.resolveMode()).start(new StdioServerTransport())`. Transport khác = thêm `mcp/<transport>.ts` |
 
@@ -486,6 +486,7 @@ Mỗi file trong `mcp/` là một class; ngoại lệ duy nhất là entry theo 
 - **Server chứa `McpServer` của SDK**, 🚫 không kế thừa nó.
 - **Lớp `Abstract*` không chứa chi tiết của dashboard** — env var, nhãn, registry, transport do `DashboardMcpServer` / entry `stdio.ts` truyền vào.
 - **`ProjectRef`** (schema `project`) thuộc `tools/ProjectTools.ts`; `TaskTools` / `KnowledgeTools` import từ đó.
+- **Hằng hợp đồng với dashboard khai một chỗ ở `SelfMcpServer`** (`src/features/mcp/business/SelfMcpServer.ts`) — `SERVER_ID`, `MODE_ENV_VAR`, `MODE_FULL_ARG`, `TOKEN_ENV`, `BASE_URL_ENV`. Dashboard dùng chúng để ghi entry tự gắn và bơm env cho CLI; `DashboardMcpServer` và `tools/OrchestratorTools.ts` đọc lại qua barrel `mcp`, 🚫 không viết literal. Vì tiến trình stdio nạp barrel đó, mọi module trong `src/features/mcp/business/` 🚫 được có side effect lúc nạp (timer, I/O, import `runner`) — spawn `bun mcp/stdio.ts` rồi đóng stdin thì tiến trình phải thoát.
 - **`tools/TaskTools.ts` import `monitor/business/tasks/reads.js`**, 🚫 không import barrel `tasks/index.js` — barrel re-export `runStep.js`, kéo runner, job queue, sqlite và `node:child_process` vào tiến trình stdio và giữ event loop sống.
 - **`fail()` phân nhánh theo số tham số**, không theo `message === undefined` — `fail('internal', undefined)` vẫn là ca hai tham số. Ca một tham số trả object không có `_meta`.
 

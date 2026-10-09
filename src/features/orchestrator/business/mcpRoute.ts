@@ -8,13 +8,10 @@
  */
 // Qua barrel, 🚫 không import sâu: `feature-architecture-guideline.md` §2.6.
 // Ngoại lệ "vòng barrel" không áp dụng — `decisionLoop.ts` (caller của file này)
-// và `controller.ts` đã import chính barrel đó mà không sinh vòng.
-import {
-  canAttachSelfMcp,
-  getConnection,
-  getDefaultRunner,
-  getProvider,
-} from '../../runner/business/index.js'
+// và `controller.ts` đã import chính barrel `runner` mà không sinh vòng; barrel
+// `mcp` không import ngược `orchestrator` hay `runner`.
+import { SelfMcpServer } from '../../mcp/business/index.js'
+import { getConnection, getDefaultRunner, getProvider } from '../../runner/business/index.js'
 
 /** `mcp` = ra lệnh bằng tool; `sentinel` = ra lệnh bằng dòng JSON cuối output. */
 export type DecisionRoute = 'mcp' | 'sentinel'
@@ -33,9 +30,10 @@ export interface DecisionRouteResult {
 export function resolveDecisionRoute(): DecisionRouteResult {
   const sentinel = (reason: string): DecisionRouteResult => ({ route: 'sentinel', reason })
   try {
-    // Thiếu biến này thì `buildChildEnv` của claude-code-cli KHÔNG bơm token
-    // xuống tiến trình con ⇒ tool chắc chắn 401. Đừng dạy agent gọi một tool
-    // chắc chắn hỏng.
+    // Thiếu biến này thì `SelfMcpServer.childEnv` KHÔNG bơm token xuống tiến
+    // trình con ⇒ tool chắc chắn 401. Đừng dạy agent gọi một tool chắc chắn hỏng.
+    // Đọc thẳng env ở đây là cố ý: đây là cấu hình của CHÍNH tiến trình dashboard
+    // (`standalone.ts` đặt), 🚫 không thuộc hợp đồng xuyên process của `SelfMcpServer`.
     const baseUrl = process.env.DEV_TEAM_SELF_BASE_URL?.trim()
     if (!baseUrl) return sentinel('DEV_TEAM_SELF_BASE_URL chưa set')
 
@@ -53,7 +51,7 @@ export function resolveDecisionRoute(): DecisionRouteResult {
       return sentinel(`provider ${conn.providerId} không nhận --mcp-config`)
     }
 
-    if (!canAttachSelfMcp()) return sentinel('không định vị được mcp/stdio.ts')
+    if (!SelfMcpServer.canAttach()) return sentinel('không định vị được mcp/stdio.ts')
 
     return { route: 'mcp', reason: 'dashboard tự gắn MCP server của chính nó' }
   } catch (err: any) {
