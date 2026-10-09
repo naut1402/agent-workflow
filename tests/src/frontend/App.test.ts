@@ -79,9 +79,13 @@ function buildContainer() {
   return container
 }
 
+// App mở SSE `/api/tasks/stream` và tự reconnect sau 1s khi stream kết thúc.
+// Wrapper không unmount sẽ reconnect qua `fetch` stub của test SAU → dư lượt gọi.
+const mountedWrappers: ReturnType<typeof mount>[] = []
+
 function mountApp(options: Record<string, any> = {}) {
   const { global: g = {}, ...rest } = options
-  return mount(App, {
+  const wrapper = mount(App, {
     attachTo: document.body,
     ...rest,
     global: {
@@ -89,6 +93,14 @@ function mountApp(options: Record<string, any> = {}) {
       provide: { [containerKey]: buildContainer(), ...(g.provide ?? {}) },
     },
   })
+  mountedWrappers.push(wrapper)
+  return wrapper
+}
+
+function unmountLeftoverWrappers() {
+  for (const wrapper of mountedWrappers.splice(0)) {
+    if (!wrapper.vm.$.isUnmounted) wrapper.unmount()
+  }
 }
 
 describe('App', () => {
@@ -114,6 +126,7 @@ describe('App', () => {
   })
 
   afterEach(() => {
+    unmountLeftoverWrappers()
     localStorage.clear()
     document.body.innerHTML = ''
     errorSpy.mockRestore()
